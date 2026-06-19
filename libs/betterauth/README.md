@@ -74,16 +74,16 @@ guarantees CI can only ever touch this app in avenCEO.
 fly orgs list                      # find avenCEO -> e.g. "avenceo"
 
 # 1. Create the app IN the avenCEO org (name must match fly.toml's `app`).
-fly apps create aven-api-next --org avenceo
+fly apps create api-next-aven-ceo --org avenceo
 
 # 2. Custom domain + TLS.
-fly certs add --app aven-api-next api.next.aven.ceo
+fly certs add --app api-next-aven-ceo api.next.aven.ceo
 #   then add the DNS record fly prints — typically:
-#   CNAME  api.next  aven-api-next.fly.dev   (+ the _acme-challenge record fly shows)
+#   CNAME  api.next  api-next-aven-ceo.fly.dev   (+ the _acme-challenge record fly shows)
 
 # 3. App-scoped deploy token -> store as FLY_API_TOKEN in the `next` GitHub Environment.
 #    App-scoped (not org/personal) so CI is confined to THIS app in avenCEO.
-fly tokens create deploy -a aven-api-next
+fly tokens create deploy -a api-next-aven-ceo
 ```
 
 Runtime secrets are NOT set by hand — CI stages them onto the app from the `next` GitHub
@@ -96,7 +96,7 @@ the `deploy-auth` job stages these onto the fly app, then deploys. Add:
 
 | Secret | Notes |
 | --- | --- |
-| `FLY_API_TOKEN` | deploy auth — `fly tokens create deploy -a aven-api-next` |
+| `FLY_API_TOKEN` | deploy auth — `fly tokens create deploy -a api-next-aven-ceo` |
 | `BETTER_AUTH_SECRET` | session/token signing key — generate ONCE (`openssl rand -base64 32`) and keep STABLE; changing it logs everyone out |
 | `NEON_PG_KEY` | Postgres connection string |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth web client |
@@ -110,8 +110,11 @@ Non-secret config (`BETTER_AUTH_URL`, `PUBLIC_BETTER_AUTH_URL`, `POLAR_SERVER`) 
 
 - Bake **`PUBLIC_BETTER_AUTH_URL=https://api.next.aven.ceo`** into the `next` app builds
   (it currently defaults to `http://localhost:8787` for local dev).
-- Add **`https://api.next.aven.ceo/api/auth/callback/google`** as an authorized redirect URI
-  on the Google OAuth client.
+- Google: the desktop app uses the **native idToken flow** (Google "Desktop app" client,
+  loopback redirect — no redirect URI to register). The server verifies the idToken's
+  audience against `GOOGLE_CLIENT_ID`, so the server's `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+  MUST be the same Desktop client the app ships. Only a future **web** build needs
+  `https://api.next.aven.ceo/api/auth/callback/google` added as an authorized redirect URI.
 - The prod Tauri origins (`tauri://localhost`, `http://tauri.localhost`) are already in
   `TRUSTED_ORIGINS`; add any new web origin there if one ships.
 

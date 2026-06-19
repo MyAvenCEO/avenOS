@@ -1,7 +1,7 @@
 # betterauth — Bun + Hono auth/API server for the avenOS mainnet (Alberobello).
 #
 # Build context is the REPO ROOT (the workspace dep @avenos/aven-vibes is path-linked):
-#   docker build -f libs/betterauth/Dockerfile -t aven-api-next .
+#   docker build -f libs/betterauth/Dockerfile -t api-next-aven-ceo .
 #
 # Stateless: all state lives in Neon Postgres and the schema self-bootstraps on boot
 # (src/bootstrap.ts). Runtime config comes entirely from env (Fly secrets) — see fly.toml.

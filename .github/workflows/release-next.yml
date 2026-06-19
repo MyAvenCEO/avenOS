@@ -119,7 +119,7 @@ jobs:
         # Build context is the repo root; --ha=false provisions exactly ONE machine.
         run: |
           set -euo pipefail
-          APP=aven-api-next
+          APP=api-next-aven-ceo
           args=(
             "BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET"
             "NEON_PG_KEY=$NEON_PG_KEY"

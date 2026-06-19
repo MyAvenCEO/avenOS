@@ -1,4 +1,4 @@
-# fly.toml — aven-api-next: the betterauth (Bun + Hono) auth/API server for the avenOS
+# fly.toml — api-next-aven-ceo: the betterauth (Bun + Hono) auth/API server for the avenOS
 # mainnet (Alberobello), next/staging channel. Serves https://api.next.aven.ceo.
 #
 # SINGLE MACHINE by design — deploy with `--ha=false` so exactly one machine is created,
@@ -12,7 +12,7 @@
 # App lives in the avenCEO fly.io org (NOT the legacy "maia city" org). The org is bound at
 # `fly apps create --org avenceo`; CI uses an app-scoped deploy token so it can't touch
 # anything outside this app/org. See README "Deploy" for the one-time setup.
-app = "aven-api-next"
+app = "api-next-aven-ceo"
 primary_region = "fra"   # near the Neon eu-central-1 Postgres
 
 [build]
