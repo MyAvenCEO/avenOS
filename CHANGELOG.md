@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.4...v) (2026-06-19)
+
+
+### Features
+
+* **app:** in-app "Copy debug logs" + capture fetch/error failures ([09fc808](https://github.com/MyAvenCEO/avenOS/commit/09fc80826fc4881ce4ac407ebc719a7e9b3db1d7))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.3...v) (2026-06-19)
 
 
