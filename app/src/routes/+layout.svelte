@@ -250,28 +250,31 @@ function isFilesDrag(dt: DataTransfer | null): boolean {
 $effect(() => {
 	if (!browser || shellLocked) return
 	const onDragEnter = (e: DragEvent) => {
-		if (!isFilesDrag(e.dataTransfer)) return
+		// Always preventDefault so the webview never falls back to its default
+		// "open the dropped file" navigation. On WebKitGTK (Linux) dataTransfer.types
+		// does not reliably expose 'Files' during drag, so gating preventDefault on
+		// isFilesDrag() let WebKitGTK navigate to the file:// URL with no way back.
 		e.preventDefault()
-		dragDepth += 1
+		if (isFilesDrag(e.dataTransfer)) dragDepth += 1
 	}
 	const onDragLeave = (e: DragEvent) => {
-		if (!isFilesDrag(e.dataTransfer)) return
 		e.preventDefault()
-		dragDepth = Math.max(0, dragDepth - 1)
+		if (isFilesDrag(e.dataTransfer)) dragDepth = Math.max(0, dragDepth - 1)
 	}
 	const onDragOver = (e: DragEvent) => {
-		const dt = e.dataTransfer
-		if (!dt || !isFilesDrag(dt)) return
+		// Critical: preventDefault on dragover is what suppresses the webview's
+		// default file-drop navigation. Must run on every dragover, files or not.
 		e.preventDefault()
-		dt.dropEffect = 'copy'
+		const dt = e.dataTransfer
+		if (dt && isFilesDrag(dt)) dt.dropEffect = 'copy'
 	}
 	const resetDragOverlay = () => {
 		dragDepth = 0
 	}
 	const onDrop = (e: DragEvent) => {
-		if (!isFilesDrag(e.dataTransfer)) return
 		e.preventDefault()
 		resetDragOverlay()
+		if (!isFilesDrag(e.dataTransfer)) return
 		const list = e.dataTransfer?.files
 		if (!list?.length) return
 		const files = Array.from(list)

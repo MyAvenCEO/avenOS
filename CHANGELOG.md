@@ -1,3 +1,32 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.18...v) (2026-06-19)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.17...v) (2026-06-19)
+
+
+### Bug Fixes
+
+* **auth:** expose set-auth-token via CORS so the Tauri app keeps its session ([aa8720a](https://github.com/MyAvenCEO/avenOS/commit/aa8720a3b90330673fd11897adfcf3efc5405c48))
+
+
+### Features
+
+* **admin:** genesis admin via Neon, admin UI manages other users' roles ([b696e6b](https://github.com/MyAvenCEO/avenOS/commit/b696e6b8dcfa4c8f24bb7c4c88a5e26da8458179))
+* **app:** back-to-Select-Network link on both network entry screens ([5aa12bb](https://github.com/MyAvenCEO/avenOS/commit/5aa12bb4ffca16476604662deda92621d1e96173))
+* **app:** Select Network intro gates testnet vs mainnet ([96326d5](https://github.com/MyAvenCEO/avenOS/commit/96326d58b8d953a0f72d5a66b1bf33908cc06033))
+* **auth:** native Tauri Google sign-in (idToken + bearer) ([2323271](https://github.com/MyAvenCEO/avenOS/commit/2323271eab458879775351f575838dbf5faf9d83))
+* **betterauth:** avenCITY tier + $3/week hard AI credit cap ([2fe07ae](https://github.com/MyAvenCEO/avenOS/commit/2fe07ae9daedcfe365e70b4a817e25090dca119b))
+* **betterauth:** native Google sign-in verified end-to-end in the Tauri app ([6a1a58b](https://github.com/MyAvenCEO/avenOS/commit/6a1a58b1107d66bed716380cde19688cfd3df7e3))
+* **betterauth:** per-user token usage tracking + pricing + usage card ([4f1db64](https://github.com/MyAvenCEO/avenOS/commit/4f1db64c690ae07747b1649097a60f620c26c665))
+* **betterauth:** persist AI chat sessions + messages per user ([0456e29](https://github.com/MyAvenCEO/avenOS/commit/0456e29bff269d5b50e7fa6cee7fc6c61599ec40))
+* **betterauth:** roles + admin (slice 1 of board 0052) ([84746f6](https://github.com/MyAvenCEO/avenOS/commit/84746f624925cf70c1eb4c19bfc11029489ce21a))
+* **betterauth:** self-hosted Better Auth gates the mainnet chat with Google ([8530ee7](https://github.com/MyAvenCEO/avenOS/commit/8530ee7c04ff4d9eafc12091b6a7c10e27f64d13))
+* **betterauth:** standalone server + Polar account link ([7e580d9](https://github.com/MyAvenCEO/avenOS/commit/7e580d99329206581ffefe955db0a4043e8908b3))
+* **billing:** display credits as MINDS (1 USD = 10 MINDS); avenCITY allowance = half the tier price ([726d390](https://github.com/MyAvenCEO/avenOS/commit/726d390c02eaac8a5761550fef867b90c3f720e4))
+* **billing:** show '<0.01 MINDS' for tiny non-zero amounts instead of rounding to 0 ([2cf52a0](https://github.com/MyAvenCEO/avenOS/commit/2cf52a081f6d444e291da9683309b9d9ce6fbfc3))
+* **mainnet:** authenticated Tinfoil AI proxy with streaming ([d8eb623](https://github.com/MyAvenCEO/avenOS/commit/d8eb6238adcf11fb7e58c34b65b3d3824808c0c7))
+* **mainnet:** left session switcher to browse + select conversations ([dc1a2ae](https://github.com/MyAvenCEO/avenOS/commit/dc1a2aeb193717766dff631e10d1b2804c02e932))
+* **mainnet:** log out button returns to Select Network ([6550402](https://github.com/MyAvenCEO/avenOS/commit/65504023e7fc3cb30a70754430a8859f28725d5f))
+* **mainnet:** surface voice transcription errors in the mocked chat ([ce19c2e](https://github.com/MyAvenCEO/avenOS/commit/ce19c2ecbb7b6b41ce4d038c3ec0c09aabcf0739))
+* **mainnet:** usage card shows MINDS only (drop token counts); clearer no-reply msg ([fc367d8](https://github.com/MyAvenCEO/avenOS/commit/fc367d80f453cbd1d10f23078253acca2f5e5bf6))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.16...v) (2026-06-15)
 
 
