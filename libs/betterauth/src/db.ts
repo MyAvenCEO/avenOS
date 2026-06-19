@@ -72,6 +72,32 @@ export interface DataValueTable {
 	updated_at: Generated<Date>
 }
 
+export type DataHistoryOperation = 'UPDATE' | 'DELETE'
+
+export interface DataSchemaHistoryTable {
+	history_id: Generated<number>
+	history_operation: DataHistoryOperation
+	history_at: Generated<Date>
+	id: string
+	user_id: string
+	name: string
+	json_schema: unknown
+	created_at: Date
+	updated_at: Date
+}
+
+export interface DataValueHistoryTable {
+	history_id: Generated<number>
+	history_operation: DataHistoryOperation
+	history_at: Generated<Date>
+	id: string
+	user_id: string
+	schema_id: string
+	data: unknown
+	created_at: Date
+	updated_at: Date
+}
+
 export interface Database {
 	ai_usage: AiUsageTable
 	model_pricing: ModelPricingTable
@@ -80,6 +106,8 @@ export interface Database {
 	user: UserTable
 	data_schema: DataSchemaTable
 	data_value: DataValueTable
+	data_schema_history: DataSchemaHistoryTable
+	data_value_history: DataValueHistoryTable
 }
 
 let cached: Kysely<Database> | null = null
