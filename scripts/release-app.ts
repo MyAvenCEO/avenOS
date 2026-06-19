@@ -48,6 +48,8 @@ type TargetSpec = {
 	altoolPlatform: 'macos' | 'ios'
 	/** Build script under `scripts/` */
 	buildScript: string
+	/** Optional repo-root env file loaded for this target build. */
+	envFile?: string
 	/** Build-number env var the build script reads */
 	bundleVersionEnv: 'AVEN_MAC_CF_BUNDLE_VERSION' | 'AVEN_IOS_CF_BUNDLE_VERSION'
 	distDir: string
@@ -59,6 +61,7 @@ const SPECS: Record<Target, TargetSpec> = {
 		target: 'mac',
 		altoolPlatform: 'macos',
 		buildScript: 'build-appstore-macos.ts',
+		envFile: '.env.samuel',
 		bundleVersionEnv: 'AVEN_MAC_CF_BUNDLE_VERSION',
 		distDir: path.join(repoRoot, 'dist', 'macos-appstore'),
 		artifactExt: '.pkg'
@@ -146,11 +149,22 @@ function resolveBundleVersion(target: Target, positional?: string): string | und
 	return per || shared || undefined
 }
 
-function runScript(script: string, env: Record<string, string>): number {
-	const r = spawnSync('bun', [path.join(repoRoot, 'scripts', script)], {
+function runScript(spec: TargetSpec, env: Record<string, string>): number {
+	const args = spec.envFile
+		? [`--env-file=${spec.envFile}`, path.join(repoRoot, 'scripts', spec.buildScript)]
+		: [path.join(repoRoot, 'scripts', spec.buildScript)]
+	const targetEnv = { ...process.env, ...env }
+	if (spec.envFile) {
+		targetEnv.AVENOS_ENV_FILE ??= spec.envFile
+		targetEnv.AVENOS_APP_ENV_FILE ??= path.relative(
+			path.join(repoRoot, 'app'),
+			path.join(repoRoot, spec.envFile)
+		)
+	}
+	const r = spawnSync('bun', args, {
 		cwd: repoRoot,
 		stdio: 'inherit',
-		env: { ...process.env, ...env }
+		env: targetEnv
 	})
 	return r.status ?? 1
 }
@@ -372,7 +386,7 @@ function main(): void {
 			const env: Record<string, string> = {}
 			if (resolved) env[spec.bundleVersionEnv] = resolved
 			const tBuild = Date.now()
-			const buildStatus = runScript(spec.buildScript, env)
+			const buildStatus = runScript(spec, env)
 			buildSecs = fmtSecs(Date.now() - tBuild)
 			if (buildStatus !== 0) {
 				results.push({ target, build: buildLabel, buildSecs, uploaded: false, ok: false })

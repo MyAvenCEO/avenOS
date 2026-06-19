@@ -18,6 +18,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const bun = process.execPath
 const bunDir = path.dirname(bun)
 const authDir = path.join(repoRoot, 'libs', 'betterauth')
+const appDir = path.join(repoRoot, 'app')
 
 type DesktopPlatform = 'darwin' | 'linux'
 
@@ -50,6 +51,12 @@ function desktopEnv(platform: DesktopPlatform): Record<string, string> {
 	return env
 }
 
+function selectedEnvFileRelativeTo(cwd: string, env: Record<string, string>): string {
+	const selected = env.AVENOS_ENV_FILE?.trim() || '.env'
+	const absolute = path.isAbsolute(selected) ? selected : path.join(repoRoot, selected)
+	return path.relative(cwd, absolute)
+}
+
 function authPort(env: Record<string, string>): number {
 	return Number(new URL(env.BETTER_AUTH_URL ?? env.PUBLIC_BETTER_AUTH_URL).port || 8787)
 }
@@ -58,12 +65,15 @@ async function startAuthService(env: Record<string, string>) {
 	const port = authPort(env)
 	freeDevServerPort(port)
 	console.log(`[auth] Starting Better Auth on ${env.PUBLIC_BETTER_AUTH_URL}`)
-	const auth = Bun.spawn([bun, '--env-file=../../.env', 'src/server.ts'], {
-		cwd: authDir,
-		stdout: 'inherit',
-		stderr: 'inherit',
-		env
-	})
+	const auth = Bun.spawn(
+		[bun, `--env-file=${selectedEnvFileRelativeTo(authDir, env)}`, 'src/server.ts'],
+		{
+			cwd: authDir,
+			stdout: 'inherit',
+			stderr: 'inherit',
+			env
+		}
+	)
 	await waitForPort(port, 60_000)
 	console.log(`[auth] Better Auth ready on ${env.PUBLIC_BETTER_AUTH_URL}`)
 	return auth
@@ -106,9 +116,18 @@ export async function runDesktopDev(requestedPlatform = currentDesktopPlatform()
 	env.AVENOS_SERVER_WS_URL = wsUrl
 
 	const child = Bun.spawn(
-		[bun, '--env-file=../.env', '--bun', 'x', 'tauri', 'dev', '--features', 'desktop-ai'],
+		[
+			bun,
+			`--env-file=${selectedEnvFileRelativeTo(appDir, env)}`,
+			'--bun',
+			'x',
+			'tauri',
+			'dev',
+			'--features',
+			'desktop-ai'
+		],
 		{
-			cwd: path.join(repoRoot, 'app'),
+			cwd: appDir,
 			stdout: 'inherit',
 			stderr: 'inherit',
 			stdin: 'inherit',

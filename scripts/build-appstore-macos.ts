@@ -185,6 +185,11 @@ async function main() {
 	// must not run here (Apple re-processes after Transporter upload). Strip API creds so Tauri skips it.
 	const cargoTargetDir = path.join(repoRoot, 'target/rust')
 	const tauriEnv = { ...process.env }
+	if (!tauriEnv.AVENOS_APP_ENV_FILE && tauriEnv.AVENOS_ENV_FILE) {
+		const envFile = tauriEnv.AVENOS_ENV_FILE.trim()
+		const absoluteEnvFile = path.isAbsolute(envFile) ? envFile : path.join(repoRoot, envFile)
+		tauriEnv.AVENOS_APP_ENV_FILE = path.relative(appDir, absoluteEnvFile)
+	}
 	delete tauriEnv.CARGO_TARGET_DIR
 	for (const key of [
 		'APPLE_API_ISSUER',

@@ -1,3 +1,18 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.26...v) (2026-06-19)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.25...v) (2026-06-19)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.24...v) (2026-06-19)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.23...v) (2026-06-19)
+
+
+### Bug Fixes
+
+* **vibes:** todos row gap targets the $each wrapper div ([b5e6eaf](https://github.com/MyAvenCEO/avenOS/commit/b5e6eafee81728865fec7533370f2c43792bd017))
+
+
+### Features
+
+* **mainnet:** admin as a left-nav screen, identity in nav, no nav divider ([1df5c88](https://github.com/MyAvenCEO/avenOS/commit/1df5c881bfb8f604218505c5555303fe8a239bf4))
+* **mainnet:** Schemas + DB nav tabs (schema viewer + data tables) ([4bbe1ea](https://github.com/MyAvenCEO/avenOS/commit/4bbe1ea697a5e1eefa5356970257766efdfd250e))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.22...v) (2026-06-19)
 
 

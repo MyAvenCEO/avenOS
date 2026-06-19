@@ -9,11 +9,18 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 ensureLinuxNativeDeps('build:app:linux')
 
 const env: NodeJS.ProcessEnv = { ...process.env }
+if (!env.AVENOS_APP_ENV_FILE && env.AVENOS_ENV_FILE) {
+	const envFile = env.AVENOS_ENV_FILE.trim()
+	const absoluteEnvFile = path.isAbsolute(envFile) ? envFile : path.join(repoRoot, envFile)
+	env.AVENOS_APP_ENV_FILE = path.relative(path.join(repoRoot, 'app'), absoluteEnvFile)
+}
 
 try {
 	env.AVENOS_ORT_DYLIB = ensureOnnxruntimeDylib(process.arch === 'x64' ? 'x86_64' : 'arm64')
 } catch (e) {
-	console.warn(`[build:app:linux] onnxruntime provisioning skipped: ${e instanceof Error ? e.message : e}`)
+	console.warn(
+		`[build:app:linux] onnxruntime provisioning skipped: ${e instanceof Error ? e.message : e}`
+	)
 }
 
 const child = Bun.spawn(['bun', 'run', '--cwd', 'app', 'tauri:build:linux'], {
