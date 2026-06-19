@@ -11,6 +11,8 @@ type ChatMessage = {
 	role: 'user' | 'assistant'
 	text: string
 	pending?: boolean
+	/** When set, this message renders a live vibe card for the named schema instead of text. */
+	vibe?: string
 }
 
 type SessionRow = { id: string; title: string }
@@ -104,7 +106,7 @@ $effect(() => {
 function toOpenAi(history: ChatMessage[]): { role: string; content: string }[] {
 	return [
 		{ role: 'system', content: SYSTEM_PROMPT },
-		...history.filter((m) => !m.pending).map((m) => ({ role: m.role, content: m.text }))
+		...history.filter((m) => !m.pending && !m.vibe).map((m) => ({ role: m.role, content: m.text }))
 	]
 }
 
@@ -116,7 +118,8 @@ function toOpenAi(history: ChatMessage[]): { role: string; content: string }[] {
  */
 async function streamTinfoil(
 	history: ChatMessage[],
-	onDelta: (chunk: string) => void
+	onDelta: (chunk: string) => void,
+	onVibe: (schema: string) => void
 ): Promise<void> {
 	if (!AI_BASE) throw new Error('auth server URL not configured')
 	const token = getBearerToken()
@@ -160,7 +163,11 @@ async function streamTinfoil(
 			const payload = dataLine.slice(5).trim()
 			if (payload === '[DONE]') return
 			try {
-				const json = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] }
+				const json = JSON.parse(payload) as {
+					choices?: { delta?: { content?: string } }[]
+					aven_vibe?: { schema?: string }
+				}
+				if (json.aven_vibe?.schema) onVibe(json.aven_vibe.schema)
 				const delta = json.choices?.[0]?.delta?.content
 				if (delta) onDelta(delta)
 			} catch {
@@ -187,12 +194,27 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 	scrollToBottom()
 	busy = true
 	let acc = ''
+	// One live vibe card per touched schema per turn, inserted just above the streaming reply.
+	const turnVibes = new Set<string>()
+	const insertVibe = (schema: string): void => {
+		if (turnVibes.has(schema)) return
+		turnVibes.add(schema)
+		const card: ChatMessage = { id: nextId++, role: 'assistant', text: '', vibe: schema }
+		const idx = messages.findIndex((m) => m.id === pendingId)
+		messages =
+			idx < 0 ? [...messages, card] : [...messages.slice(0, idx), card, ...messages.slice(idx)]
+		scrollToBottom()
+	}
 	try {
-		await streamTinfoil(messages, (chunk) => {
-			acc += chunk
-			messages = messages.map((m) => (m.id === pendingId ? { ...m, text: acc } : m))
-			scrollToBottom()
-		})
+		await streamTinfoil(
+			messages,
+			(chunk) => {
+				acc += chunk
+				messages = messages.map((m) => (m.id === pendingId ? { ...m, text: acc } : m))
+				scrollToBottom()
+			},
+			insertVibe
+		)
 		const finalText = acc.trim() || t('mainnet.chat.noReply')
 		messages = messages.map((m) =>
 			m.id === pendingId ? { ...m, text: finalText, pending: false } : m
@@ -264,13 +286,6 @@ function handleTranscribeError(message: string): void {
 
 	<!-- Right: the conversation -->
 	<div class="flex min-h-0 flex-1 flex-col pt-2">
-		<!-- The unified todos vibe in the chat stream (same component as the Vibes tab). -->
-		<div class="h-64 shrink-0 px-4 pb-2">
-			<div class="mx-auto h-full w-full max-w-2xl">
-				<TodosVibe containerName="aven-vibes-chat-todos" />
-			</div>
-		</div>
-
 		<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
 			<div class="mx-auto flex w-full max-w-2xl flex-col gap-3 py-4">
 				{#if messages.length === 0}
@@ -279,18 +294,31 @@ function handleTranscribeError(message: string): void {
 					</div>
 				{/if}
 				{#each messages as message (message.id)}
-					<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
-						<div
-							class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-sm leading-relaxed {message.role ===
-						'user'
-							? 'bg-primary text-primary-foreground'
-							: 'border-border bg-card text-foreground border'}{message.pending
-							? ' animate-pulse italic opacity-60'
-							: ''}"
-						>
-							{message.text}
+					{#if message.vibe}
+						<!-- A live vibe card flowed into the stream for the schema this turn touched. -->
+						<div class="flex justify-start">
+							<div
+								class="border-border bg-card h-72 w-full max-w-[80%] overflow-hidden rounded-[var(--radius-lg)] border p-2"
+							>
+								{#if message.vibe === 'todos'}
+									<TodosVibe containerName={`aven-vibes-chat-${message.id}`} />
+								{/if}
+							</div>
 						</div>
-					</div>
+					{:else}
+						<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
+							<div
+								class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-sm leading-relaxed {message.role ===
+							'user'
+								? 'bg-primary text-primary-foreground'
+								: 'border-border bg-card text-foreground border'}{message.pending
+								? ' animate-pulse italic opacity-60'
+								: ''}"
+							>
+								{message.text}
+							</div>
+						</div>
+					{/if}
 				{/each}
 			</div>
 		</div>

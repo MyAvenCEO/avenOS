@@ -207,13 +207,24 @@ function streamWithTools(opts: {
 						}))
 					})
 					for (const tc of callList) {
+						let parsed: Record<string, unknown> = {}
+						try {
+							parsed = JSON.parse(tc.args || '{}')
+						} catch {
+							/* leave empty; executeDataTool will report the error */
+						}
 						let result: unknown
 						try {
-							result = await executeDataTool(userId, JSON.parse(tc.args || '{}'))
+							result = await executeDataTool(userId, parsed)
 						} catch (e) {
 							result = { ok: false, error: e instanceof Error ? e.message : String(e) }
 						}
 						msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) })
+						// Signal the client to flow a live vibe card for the touched schema into the
+						// message stream (the same data this CRUD just changed). board 0054.
+						if (typeof parsed.schema === 'string' && parsed.schema) {
+							emit({ aven_vibe: { schema: parsed.schema } })
+						}
 					}
 				}
 			} catch (e) {
