@@ -1,7 +1,7 @@
 <script lang="ts">
 import { tick } from 'svelte'
 import { getBearerToken } from '$lib/auth/auth-client'
-import { fmtMinds } from '$lib/billing/minds'
+import { refreshUsage } from '$lib/data/usage-store'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
@@ -13,14 +13,10 @@ type ChatMessage = {
 	pending?: boolean
 }
 
-type UsageStat = { tokens: number; costUsd: number }
-type Credit = { tier: string; allowanceUsd: number; spentUsd: number; remainingUsd: number }
-type UsageStats = { total: UsageStat; week: UsageStat; credit?: Credit }
 type SessionRow = { id: string; title: string }
 
 let messages = $state<ChatMessage[]>([])
 let busy = $state(false)
-let usage = $state<UsageStats | null>(null)
 let sessions = $state<SessionRow[]>([])
 let currentSessionId = $state<string | null>(null)
 let nextId = 0
@@ -35,23 +31,6 @@ function scrollToBottom(): void {
 	void tick().then(() => {
 		if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight
 	})
-}
-
-// Pull the signed-in user's token-usage stats (all-time total + current week) from the
-// session-gated endpoint. Refreshed on mount and after each completion.
-async function refreshUsage(): Promise<void> {
-	if (!AI_BASE) return
-	const token = getBearerToken()
-	if (!token) return
-	try {
-		const res = await fetch(`${AI_BASE}/api/ai/usage`, {
-			credentials: 'include',
-			headers: { Authorization: `Bearer ${token}` }
-		})
-		if (res.ok) usage = (await res.json()) as UsageStats
-	} catch {
-		/* leave the card hidden on failure */
-	}
 }
 
 // Refresh the user's session list (most-recent first) for the left switcher.
@@ -285,56 +264,6 @@ function handleTranscribeError(message: string): void {
 
 	<!-- Right: the conversation -->
 	<div class="flex min-h-0 flex-1 flex-col pt-2">
-		{#if usage}
-			<div class="shrink-0 px-4 pb-2">
-				<div
-					class="border-border bg-card mx-auto w-full max-w-2xl overflow-hidden rounded-[var(--radius-lg)] border"
-				>
-					{#if usage.credit}
-						<div
-							class="border-border flex items-center justify-between gap-2 border-b px-3 py-1.5 text-xs"
-						>
-							<span
-								class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {usage
-									.credit.tier === 'avenCITY'
-									? 'bg-primary/15 text-primary'
-									: 'bg-muted text-muted-foreground'}"
-							>
-								{usage.credit.tier}
-							</span>
-							<span class="text-muted-foreground tabular-nums">
-								{t('mainnet.chat.credits')}:
-								<span
-									class={usage.credit.remainingUsd <= 0 ? 'text-destructive' : 'text-foreground'}
-								>
-									{fmtMinds(usage.credit.remainingUsd)}
-								</span>
-								/ {fmtMinds(usage.credit.allowanceUsd)} {t('mainnet.chat.creditsLeft')}
-							</span>
-						</div>
-					{/if}
-					<div class="flex items-stretch divide-x divide-border text-center">
-						<div class="flex-1 px-3 py-2">
-							<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
-								{t('mainnet.chat.usageWeek')}
-							</div>
-							<div class="text-primary mt-0.5 text-sm font-medium tabular-nums">
-								{fmtMinds(usage.week.costUsd)}
-							</div>
-						</div>
-						<div class="flex-1 px-3 py-2">
-							<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
-								{t('mainnet.chat.usageTotal')}
-							</div>
-							<div class="text-primary mt-0.5 text-sm font-medium tabular-nums">
-								{fmtMinds(usage.total.costUsd)}
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-		{/if}
-
 		<!-- The unified todos vibe in the chat stream (same component as the Vibes tab). -->
 		<div class="h-64 shrink-0 px-4 pb-2">
 			<div class="mx-auto h-full w-full max-w-2xl">

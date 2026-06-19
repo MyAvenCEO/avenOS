@@ -1,14 +1,23 @@
 <script lang="ts">
 import { authClient, setBearerToken } from '$lib/auth/auth-client'
+import { fmtMinds } from '$lib/billing/minds'
+import { refreshUsage, usage } from '$lib/data/usage-store'
 import { t } from '$lib/i18n'
 import { clearNetwork } from '$lib/settings/network-store'
 import AdminPanel from '$lib/shell/AdminPanel.svelte'
 import MainnetChat from '$lib/shell/MainnetChat.svelte'
 import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
 
-// Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes on the left, Admin / Log out
-// on the right (same line + style) — over the active view. board 0054.
+// Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes on the left, weekly credits
+// + Admin / Log out on the right (same line + style) — over the active view. board 0054.
 let tab = $state<'chat' | 'vibes'>('chat')
+let usageStarted = false
+
+$effect(() => {
+	if (usageStarted) return
+	usageStarted = true
+	void refreshUsage()
+})
 
 const sessionStore = authClient.useSession()
 const isAdmin = $derived(
@@ -53,6 +62,11 @@ async function logout(): Promise<void> {
 		</button>
 
 		<div class="ml-auto flex items-center gap-3">
+			{#if $usage?.credit}
+				<span class="tabular-nums opacity-60" title={t('mainnet.chat.credits')}>
+					{fmtMinds($usage.credit.remainingUsd)} {t('mainnet.chat.creditsLeft')}
+				</span>
+			{/if}
 			{#if isAdmin}
 				<button
 					type="button"
