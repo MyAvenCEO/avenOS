@@ -65,14 +65,25 @@ Stateless — the schema self-bootstraps on boot, so every deploy is safe.
 
 ### One-time setup (infra only — NO secrets here)
 
+This app lives in the **avenCEO** fly.io org (NOT the legacy "maia city" org). The org is
+fixed at app-creation time, and the CI deploy token below is app-scoped — together that
+guarantees CI can only ever touch this app in avenCEO.
+
 ```sh
-# 1. Create the app (name must match fly.toml's `app`).
-fly apps create aven-api-next
+# 0. Confirm the avenCEO org slug (the create flag needs the slug, not the display name).
+fly orgs list                      # find avenCEO -> e.g. "avenceo"
+
+# 1. Create the app IN the avenCEO org (name must match fly.toml's `app`).
+fly apps create aven-api-next --org avenceo
 
 # 2. Custom domain + TLS.
 fly certs add --app aven-api-next api.next.aven.ceo
 #   then add the DNS record fly prints — typically:
 #   CNAME  api.next  aven-api-next.fly.dev   (+ the _acme-challenge record fly shows)
+
+# 3. App-scoped deploy token -> store as FLY_API_TOKEN in the `next` GitHub Environment.
+#    App-scoped (not org/personal) so CI is confined to THIS app in avenCEO.
+fly tokens create deploy -a aven-api-next
 ```
 
 Runtime secrets are NOT set by hand — CI stages them onto the app from the `next` GitHub

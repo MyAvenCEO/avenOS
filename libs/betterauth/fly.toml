@@ -9,6 +9,9 @@
 #   BETTER_AUTH_SECRET, NEON_PG_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
 #   TINFOIL_API_KEY, POLAR_API_KEY.
 
+# App lives in the avenCEO fly.io org (NOT the legacy "maia city" org). The org is bound at
+# `fly apps create --org avenceo`; CI uses an app-scoped deploy token so it can't touch
+# anything outside this app/org. See README "Deploy" for the one-time setup.
 app = "aven-api-next"
 primary_region = "fra"   # near the Neon eu-central-1 Postgres
 
