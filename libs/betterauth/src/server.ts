@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { aiChat, aiSessionMessages, aiSessions, aiSetTier, aiUsage } from './ai'
 import { auth, TRUSTED_ORIGINS } from './auth'
+import { bootstrapSchema } from './bootstrap'
 import {
 	createSchema,
 	createValue,
@@ -50,6 +51,11 @@ app.patch('/api/data/values/:id', updateValue)
 app.delete('/api/data/values/:id', deleteValue)
 
 app.get('/', (c) => c.text('avenOS betterauth server'))
+
+// Self-bootstrap the schema before serving any request, so a fresh Neon DB works with
+// no manual migrate step. Awaited at module load — Bun finishes evaluating this module
+// (top-level await) before it starts the server below. board 0050.
+await bootstrapSchema()
 
 // Best-effort: refresh per-model pricing from Tinfoil on boot (recordUsage also
 // lazily syncs if a model is unseen). Never blocks startup.
