@@ -13,7 +13,8 @@
 	},
 	"scripts": {
 		"build": "bun -e \"console.log('@avenos/aven-vibes: Svelte source, no build step')\"",
-		"check": "tsc -p tsconfig.json --noEmit"
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "bun test tests"
 	},
 	"dependencies": {
 		"dompurify": "^3.3.3",

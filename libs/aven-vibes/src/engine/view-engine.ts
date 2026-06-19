@@ -2,7 +2,11 @@ import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import {
 	BOOLEAN_ATTRS,
+	ALLOWED_EVENTS,
 	SAFE_TAGS,
+	assertSafeClassValue,
+	isAllowedAttribute,
+	isSafeUrl,
 	sanitizeAttributeWhitelist,
 	sanitizePayloadForValidation,
 	URL_ATTRS
@@ -28,9 +32,13 @@ async function renderMarkdown(rawText: unknown): Promise<string> {
 function setAttr(element: HTMLElement, name: string, value: unknown): void {
 	if (value === undefined || value === null) return
 	const lower = name.toLowerCase()
+	const tag = element.localName.toLowerCase()
+	if (!isAllowedAttribute(tag, lower)) {
+		throw new Error(`[aven-ui] Forbidden attribute "${name}" on <${tag}>`)
+	}
 	if (URL_ATTRS.has(lower)) {
 		const urlStr = String(value)
-		if (/^(https?:|blob:|data:image\/|mailto:|tel:|\/|#)/.test(urlStr) || !urlStr.includes(':')) {
+		if (isSafeUrl(urlStr)) {
 			element.setAttribute(name, sanitizeAttributeWhitelist(urlStr))
 		}
 		return
@@ -139,12 +147,14 @@ export class ViewEngine {
 		if (!node) return null
 
 		const rawTag = (node.tag || 'div').toLowerCase()
-		const tag = SAFE_TAGS.has(rawTag) ? rawTag : 'div'
+		if (!SAFE_TAGS.has(rawTag)) throw new Error(`[aven-ui] Forbidden tag "${rawTag}"`)
+		const tag = rawTag
 		const element = document.createElement(tag)
 		element.setAttribute('data-aven-path', path)
 
 		if (node.class) {
 			const classValue = await this.evaluator.evaluate(node.class, data)
+			assertSafeClassValue(classValue, 'runtime class')
 			if (classValue) element.className = sanitizeAttributeWhitelist(classValue)
 		}
 
@@ -231,6 +241,7 @@ export class ViewEngine {
 		data: RenderData
 	): void {
 		for (const [eventName, eventDef] of Object.entries(events)) {
+			if (!ALLOWED_EVENTS.has(eventName)) throw new Error(`[aven-ui] Forbidden event "${eventName}"`)
 			element.addEventListener(eventName, (domEvent) => {
 				if (eventName === 'submit') {
 					domEvent.preventDefault()

@@ -1,4 +1,26 @@
-import { FORBIDDEN_PATH_KEYS } from './security.js'
+import {
+	ALLOWED_EVENTS,
+	FORBIDDEN_PATH_KEYS,
+	SAFE_TAGS,
+	SLOT_REF_PATTERN,
+	assertSafeAttributeValue,
+	assertSafeClassValue,
+	isAllowedAttribute
+} from './security.js'
+
+const VIEW_NODE_KEYS = new Set([
+	'tag',
+	'class',
+	'text',
+	'value',
+	'format',
+	'attrs',
+	'children',
+	'$each',
+	'$slot',
+	'$on',
+	'content'
+])
 
 const CONDITIONAL_OPS = [
 	'$if',
@@ -40,6 +62,26 @@ function rejectValue(value: unknown, path: string, propName: string): void {
 	}
 }
 
+function assertPlainRecord(value: unknown, path: string): asserts value is Record<string, unknown> {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new Error(`[aven-ui] Expected object at ${path}`)
+	}
+}
+
+function validateEvents(events: unknown, path: string): void {
+	assertPlainRecord(events, path)
+	for (const [eventName, eventDef] of Object.entries(events)) {
+		if (!ALLOWED_EVENTS.has(eventName)) {
+			throw new Error(`[aven-ui] Forbidden event "${eventName}" at ${path}`)
+		}
+		assertPlainRecord(eventDef, `${path}.${eventName}`)
+		if (typeof eventDef.send !== 'string' || !/^[A-Za-z][A-Za-z0-9_:-]{0,80}$/.test(eventDef.send)) {
+			throw new Error(`[aven-ui] Invalid event send at ${path}.${eventName}`)
+		}
+		if (eventDef.payload !== undefined) assertPlainRecord(eventDef.payload, `${path}.${eventName}.payload`)
+	}
+}
+
 function validateViewNode(node: unknown, path = 'view'): void {
 	if (node == null || typeof node !== 'object') return
 	if (Array.isArray(node)) {
@@ -49,13 +91,36 @@ function validateViewNode(node: unknown, path = 'view'): void {
 		return
 	}
 	const n = node as Record<string, unknown>
-	if (n.class !== undefined) rejectValue(n.class, path, 'class')
+	for (const key of Object.keys(n)) {
+		if (!VIEW_NODE_KEYS.has(key)) throw new Error(`[aven-ui] Forbidden view field "${key}" at ${path}`)
+	}
+	const rawTag = typeof n.tag === 'string' ? n.tag.toLowerCase() : 'div'
+	if (n.tag !== undefined && (typeof n.tag !== 'string' || !SAFE_TAGS.has(rawTag))) {
+		throw new Error(`[aven-ui] Forbidden tag "${String(n.tag)}" at ${path}`)
+	}
+	if (n.class !== undefined) {
+		rejectValue(n.class, path, 'class')
+		assertSafeClassValue(n.class, `${path}.class`)
+	}
 	if (n.value !== undefined) rejectValue(n.value, path, 'value')
 	if (n.text !== undefined) rejectValue(n.text, path, 'text')
+	if (n.format !== undefined && n.format !== 'md' && n.format !== 'markdown') {
+		throw new Error(`[aven-ui] Forbidden text format at ${path}.format`)
+	}
 	if (n.attrs && typeof n.attrs === 'object') {
 		for (const [attrName, attrValue] of Object.entries(n.attrs as Record<string, unknown>)) {
-			if (attrName !== 'data') rejectValue(attrValue, `${path}.attrs.${attrName}`, attrName)
+			if (!isAllowedAttribute(rawTag, attrName)) {
+				throw new Error(`[aven-ui] Forbidden attribute "${attrName}" on <${rawTag}> at ${path}.attrs`)
+			}
+			rejectValue(attrValue, `${path}.attrs.${attrName}`, attrName)
+			assertSafeAttributeValue(rawTag, attrName, attrValue, `${path}.attrs`)
 		}
+	} else if (n.attrs !== undefined) {
+		throw new Error(`[aven-ui] Expected object at ${path}.attrs`)
+	}
+	if (n.$on !== undefined) validateEvents(n.$on, `${path}.$on`)
+	if (n.$slot !== undefined && (typeof n.$slot !== 'string' || !SLOT_REF_PATTERN.test(n.$slot))) {
+		throw new Error(`[aven-ui] Forbidden slot reference at ${path}.$slot`)
 	}
 	if (Array.isArray(n.children)) {
 		for (let i = 0; i < n.children.length; i++) {
@@ -67,9 +132,15 @@ function validateViewNode(node: unknown, path = 'view'): void {
 			}
 			validateViewNode(child, `${path}.children[${i}]`)
 		}
+	} else if (n.children !== undefined) {
+		throw new Error(`[aven-ui] Expected array at ${path}.children`)
 	}
-	if (n.$each && typeof n.$each === 'object') {
-		validateViewNode((n.$each as { template: unknown }).template, `${path}.$each.template`)
+	if (n.$each) {
+		assertPlainRecord(n.$each, `${path}.$each`)
+		if (typeof n.$each.items !== 'string' || !n.$each.items.startsWith('$')) {
+			throw new Error(`[aven-ui] Invalid each items expression at ${path}.$each.items`)
+		}
+		validateViewNode(n.$each.template, `${path}.$each.template`)
 	}
 }
 
