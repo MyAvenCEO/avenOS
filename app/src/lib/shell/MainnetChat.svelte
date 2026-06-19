@@ -28,6 +28,9 @@ let initialized = false
 const AI_BASE = import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined
 const SYSTEM_PROMPT =
 	'You are a helpful assistant inside the avenOS Alberobello chat. Be concise and friendly.'
+// Sentinel content the server persists for a vibe-card marker message (must match
+// VIBE_MARKER in libs/betterauth/src/ai.ts). Re-hydrated into a vibe card on load.
+const VIBE_MARKER = '\u200baven-vibe:'
 
 function scrollToBottom(): void {
 	void tick().then(() => {
@@ -69,11 +72,22 @@ async function loadSessionMessages(id: string): Promise<void> {
 			messages: { role: string; content: string }[]
 		}
 		currentSessionId = id
-		messages = rows.map((r) => ({
-			id: nextId++,
-			role: r.role === 'assistant' ? 'assistant' : 'user',
-			text: r.content
-		}))
+		messages = rows.map((r) => {
+			// Re-hydrate a persisted vibe marker back into a live vibe card.
+			if (r.role === 'assistant' && r.content.startsWith(VIBE_MARKER)) {
+				return {
+					id: nextId++,
+					role: 'assistant' as const,
+					text: '',
+					vibe: r.content.slice(VIBE_MARKER.length)
+				}
+			}
+			return {
+				id: nextId++,
+				role: r.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+				text: r.content
+			}
+		})
 		scrollToBottom()
 	} catch {
 		/* ignore */

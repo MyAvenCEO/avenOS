@@ -19,6 +19,14 @@ import { getUsageStats, recordUsage, type TokenUsage } from './usage'
 const TINFOIL_BASE_URL = process.env.TINFOIL_BASE_URL ?? 'https://inference.tinfoil.sh/v1'
 const TINFOIL_MODEL = process.env.TINFOIL_MODEL ?? 'gemma4-31b'
 
+/**
+ * Sentinel content for a persisted vibe-card marker message: `<ZWSP>aven-vibe:<schema>`.
+ * A real assistant reply never starts with this, and the zero-width space keeps it
+ * Postgres-text-safe (no null bytes). The client re-hydrates it into a vibe card and
+ * never sends it back to the model. board 0054.
+ */
+export const VIBE_MARKER = '\u200baven-vibe:'
+
 export async function aiChat(c: Context): Promise<Response> {
 	const session = await auth.api.getSession({ headers: c.req.raw.headers })
 	if (!session) return c.json({ error: 'unauthorized' }, 401)
@@ -130,6 +138,7 @@ function streamWithTools(opts: {
 			let assistant = ''
 			let promptTokens = 0
 			let completionTokens = 0
+			const emittedVibes = new Set<string>()
 			try {
 				// Tell the model the exact schema field names so data_crud writes validate.
 				const hint = await schemasPromptHint(userId).catch(() => '')
@@ -221,9 +230,21 @@ function streamWithTools(opts: {
 						}
 						msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) })
 						// Signal the client to flow a live vibe card for the touched schema into the
-						// message stream (the same data this CRUD just changed). board 0054.
-						if (typeof parsed.schema === 'string' && parsed.schema) {
+						// message stream (the same data this CRUD just changed), and persist a marker
+						// message so the card reappears when the session is reloaded. One per schema
+						// per turn. board 0054.
+						if (
+							typeof parsed.schema === 'string' &&
+							parsed.schema &&
+							!emittedVibes.has(parsed.schema)
+						) {
+							emittedVibes.add(parsed.schema)
 							emit({ aven_vibe: { schema: parsed.schema } })
+							await persistMessage(
+								chatSessionId,
+								'assistant',
+								`${VIBE_MARKER}${parsed.schema}`
+							).catch((e) => console.error('[ai] persist vibe marker failed:', e))
 						}
 					}
 				}
