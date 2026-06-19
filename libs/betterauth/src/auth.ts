@@ -41,16 +41,24 @@ const polarToken = optionalEnv('POLAR_API_KEY') ?? optionalEnv('POLAR_ACCESS_TOK
 if (!polarToken) {
 	console.warn('[betterauth] POLAR_API_KEY not set — Polar account link disabled')
 }
-const polarPlugins = polarToken
+// Shared Polar client, reused by both the plugin (checkout/portal later) and our own
+// best-effort customer link below. null when Polar isn't configured.
+const polarClient = polarToken
+	? new Polar({
+			accessToken: polarToken,
+			// Default to production (polar.sh) — tokens minted there 401 against sandbox.
+			// Set POLAR_SERVER=sandbox explicitly for sandbox.polar.sh tokens.
+			server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'production'
+		})
+	: null
+const polarPlugins = polarClient
 	? [
 			polar({
-				client: new Polar({
-					accessToken: polarToken,
-					// Default to production (polar.sh) — tokens minted there 401 against sandbox.
-					// Set POLAR_SERVER=sandbox explicitly for sandbox.polar.sh tokens.
-					server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'production'
-				}),
-				createCustomerOnSignUp: true,
+				client: polarClient,
+				// We link the customer ourselves (see linkPolarCustomer) so a Polar hiccup or a
+				// stale customer (e.g. after a DB reset) can NEVER block signup. The plugin's own
+				// create-on-signup throws on an external_id conflict, so we keep it off. board 0052.
+				createCustomerOnSignUp: false,
 				// Account link only — products/checkout/portal come later. The plugin's types
 				// (1.8.4) require a non-empty `use`, but the runtime accepts [] (per the docs).
 				// @ts-expect-error empty `use` is valid at runtime for account-connection-only
@@ -58,6 +66,35 @@ const polarPlugins = polarToken
 			})
 		]
 	: []
+
+/**
+ * Best-effort: link a Polar customer to this user, returning whether the link is confirmed.
+ * NEVER throws — a failure just means `polarLinked` stays false for later reconciliation.
+ * Creates the customer WITH `external_id` in one call (the plugin instead created it then
+ * tried to UPDATE external_id, which Polar forbids — the bug that blocked signup). If a
+ * customer already exists for the email, it's "linked" only if its external_id already
+ * matches this user (external_id is immutable). board 0052.
+ */
+async function linkPolarCustomer(user: {
+	id: string
+	email: string
+	name?: string
+}): Promise<boolean> {
+	if (!polarClient || !user.email) return false
+	try {
+		const { result } = await polarClient.customers.list({ email: user.email })
+		const existing = result.items[0]
+		if (existing) return existing.externalId === user.id
+		await polarClient.customers.create({ email: user.email, name: user.name, externalId: user.id })
+		return true
+	} catch (e) {
+		console.error(
+			'[betterauth] Polar customer link failed (non-fatal):',
+			e instanceof Error ? e.message : e
+		)
+		return false
+	}
+}
 
 /**
  * Self-hosted Better Auth instance. Database is Neon Postgres via the community
@@ -85,14 +122,18 @@ export const auth = betterAuth({
 	// AI credit allowance. `input: false` so it can't be set by the client at sign-up. board 0052.
 	user: {
 		additionalFields: {
-			tier: { type: 'string', required: false, defaultValue: 'free', input: false }
+			tier: { type: 'string', required: false, defaultValue: 'free', input: false },
+			// True once we've confirmed a linked Polar customer for this user. Defaults false;
+			// users left at false are the ones to reconcile later (Polar was down, conflict,
+			// or not configured). `input: false` — server-managed only. board 0052.
+			polarLinked: { type: 'boolean', required: false, defaultValue: false, input: false }
 		}
 	},
-	// Bootstrap the very first user to sign up as admin — and ONLY the first. Every later
-	// signup keeps the default role. Replaces the manual "first admin in Neon" step. board 0052.
 	databaseHooks: {
 		user: {
 			create: {
+				// Bootstrap the very first user to sign up as admin — and ONLY the first. Every
+				// later signup keeps the default role. Replaces the manual "first admin in Neon".
 				before: async (user) => {
 					try {
 						const row = await db()
@@ -106,6 +147,20 @@ export const auth = betterAuth({
 						console.error('[betterauth] first-admin bootstrap check failed:', e)
 					}
 					return { data: user }
+				},
+				// Best-effort Polar customer link; flip `polarLinked` true only on confirmed
+				// success. Never throws — signup must not depend on the billing provider.
+				after: async (user) => {
+					const u = user as { id: string; email: string; name?: string }
+					const linked = await linkPolarCustomer(u)
+					if (linked) {
+						await db()
+							.updateTable('user')
+							.set({ polarLinked: true })
+							.where('id', '=', u.id)
+							.execute()
+							.catch((e) => console.error('[betterauth] set polarLinked failed:', e))
+					}
 				}
 			}
 		}

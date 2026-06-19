@@ -49,6 +49,7 @@ export interface UserTable {
 	email: string
 	role: string | null
 	tier: string | null
+	polarLinked: boolean | null
 }
 
 // Generic schema-driven data (board 0053). JSONB columns are typed `unknown`; writes
