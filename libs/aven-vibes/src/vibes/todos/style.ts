@@ -161,6 +161,13 @@ const selectors: StyleDef['selectors'] = {
 		flexDirection: 'column',
 		gap: '12px'
 	},
+	// The view engine wraps `$each` rows in a single <div>, so a gap on `.td-list` only
+	// spaces that wrapper — never the rows. Put the row gap on the wrapper itself. board 0054.
+	'.td-list > div': {
+		display: 'flex',
+		flexDirection: 'column',
+		gap: '12px'
+	},
 	'.td-list li.empty': {
 		textAlign: 'center',
 		color: 'var(--muted)',
@@ -179,6 +186,9 @@ const selectors: StyleDef['selectors'] = {
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-md)',
 		background: 'var(--tech-fill)',
+		// Never let flexbox compress a row when the list is height-constrained — that's the
+		// "task list squeezes itself" look; rows keep their natural height + the list gap.
+		flexShrink: '0',
 		animation: 'td-slide-in 0.18s ease-out'
 	},
 	'.td-row input[type="checkbox"]': {
