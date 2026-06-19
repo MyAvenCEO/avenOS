@@ -4,7 +4,6 @@ import { getBearerToken } from '$lib/auth/auth-client'
 import { fmtMinds } from '$lib/billing/minds'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
-import TodosCard from '$lib/shell/TodosCard.svelte'
 
 type ChatMessage = {
 	id: number
@@ -284,14 +283,7 @@ function handleTranscribeError(message: string): void {
 	</aside>
 
 	<!-- Right: the conversation -->
-	<div class="flex min-h-0 flex-1 flex-col">
-		<header class="shrink-0 px-4 pt-2 pb-2 text-center">
-			<p class="text-primary text-[10px] font-bold tracking-[0.18em] uppercase">
-				{t('mainnet.chat.tag')}
-			</p>
-			<h1 class="font-display text-lg font-medium tracking-tight">{t('mainnet.chat.title')}</h1>
-		</header>
-
+	<div class="flex min-h-0 flex-1 flex-col pt-2">
 		{#if usage}
 			<div class="shrink-0 px-4 pb-2">
 				<div
@@ -341,8 +333,6 @@ function handleTranscribeError(message: string): void {
 				</div>
 			</div>
 		{/if}
-
-		<TodosCard />
 
 		<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
 			<div class="mx-auto flex w-full max-w-2xl flex-col gap-3 py-4">

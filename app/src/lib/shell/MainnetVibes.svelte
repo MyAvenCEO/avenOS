@@ -13,8 +13,9 @@ import {
 import { t } from '$lib/i18n'
 
 // Mainnet "Vibes" view: the todos vibe (from @avenos/aven-vibes) rendered via the JSON
-// view/style engine + QuickJS sandbox, but its CRUD wired to the betterauth /api/data
-// store (same 'todos' schema the chat's TodosCard uses). board 0054.
+// view/style engine + QuickJS sandbox, its CRUD wired to the betterauth /api/data store.
+// This dynamic vibe is the single source of truth for the todos UI (the hardcoded chat
+// card was removed). board 0054.
 type Todo = { title: string; done: boolean }
 
 const TODOS_SCHEMA = {

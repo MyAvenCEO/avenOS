@@ -1,8 +1,9 @@
 import { withBrand } from '../../brand-style.js'
 import type { StyleDef } from '../../engine/types.js'
 
-// Shared brand layer provides colours/radii/fonts/ink. Todos keeps its navy
-// action accent and the row divider.
+// Shared brand layer provides colours/radii/fonts/ink. Todos keeps its navy action accent
+// and the row divider. Scale is intentionally COMPACT (tight gaps/padding/text) — closer
+// to the chat todos card, brand-styled. board 0054.
 const tokens: StyleDef['tokens'] = {
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
 	'brand-accent': '#1e293b',
@@ -20,7 +21,7 @@ const selectors: StyleDef['selectors'] = {
 		border: 'none',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: 'var(--gap-section)',
+		gap: '0.5rem',
 		boxSizing: 'border-box',
 		fontFamily: 'var(--font-sans)',
 		color: 'var(--text)',
@@ -30,12 +31,12 @@ const selectors: StyleDef['selectors'] = {
 		background: 'var(--surface)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-card)',
-		padding: 'var(--pad-card)',
+		padding: '0.7rem 0.8rem',
 		marginBottom: '0'
 	},
 	'.td-card:last-child': { marginBottom: '0' },
 	'.td-card h4': {
-		margin: '0 0 10px 0',
+		margin: '0 0 6px 0',
 		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '600',
 		color: 'var(--muted)',
@@ -46,22 +47,22 @@ const selectors: StyleDef['selectors'] = {
 	'.td-banner-grid': {
 		display: 'grid',
 		gridTemplateColumns: '1fr auto',
-		gap: '12px 24px',
+		gap: '4px 16px',
 		alignItems: 'end'
 	},
 	'.td-eyebrow': {
 		display: 'block',
-		fontSize: 'var(--fs-eyebrow)',
+		fontSize: 'var(--fs-micro)',
 		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.08em',
 		opacity: '0.55',
-		marginBottom: '6px'
+		marginBottom: '3px'
 	},
 	'.td-banner-title': {
 		margin: '0',
-		fontSize: 'var(--fs-lead)',
+		fontSize: 'var(--fs-title)',
 		fontWeight: '600',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
@@ -74,12 +75,12 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
-		marginBottom: '4px'
+		marginBottom: '3px'
 	},
 	'.td-banner-stat': { textAlign: 'right' },
 	'.td-banner-stat .td-field-label': { textAlign: 'right' },
 	'.td-banner-accent': {
-		fontSize: 'var(--fs-hero)',
+		fontSize: 'var(--fs-lead)',
 		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
@@ -92,14 +93,13 @@ const selectors: StyleDef['selectors'] = {
 		display: 'flex',
 		flexDirection: 'column',
 		marginBottom: '0',
-		// Each task item is its own dashed mini-card now — drop the container's border/padding.
 		border: 'none',
 		background: 'transparent',
 		padding: '0'
 	},
 	'.td-add-form': {
 		display: 'flex',
-		gap: '10px',
+		gap: '6px',
 		flexWrap: 'wrap',
 		alignItems: 'stretch'
 	},
@@ -107,11 +107,12 @@ const selectors: StyleDef['selectors'] = {
 		flex: '1',
 		minWidth: '140px',
 		font: 'inherit',
+		fontSize: 'var(--fs-body)',
 		color: 'inherit',
 		background: 'var(--tech-fill-inner)',
 		border: '1px solid var(--border-soft)',
 		borderRadius: 'var(--radius-md)',
-		padding: '0.55rem 0.85rem',
+		padding: '0.4rem 0.6rem',
 		outline: 'none'
 	},
 	'.td-input:focus': {
@@ -122,7 +123,7 @@ const selectors: StyleDef['selectors'] = {
 		font: 'inherit',
 		cursor: 'pointer',
 		borderRadius: 'var(--radius-md)',
-		padding: '0.5rem 0.85rem',
+		padding: '0.35rem 0.7rem',
 		fontWeight: '500',
 		fontSize: 'var(--fs-body)',
 		transition: 'background 0.15s ease, border-color 0.15s ease, filter 0.15s ease'
@@ -143,9 +144,9 @@ const selectors: StyleDef['selectors'] = {
 		border: 'none',
 		background: 'transparent',
 		color: 'var(--muted)',
-		fontSize: 'var(--fs-hero)',
+		fontSize: 'var(--fs-lead)',
 		lineHeight: '1',
-		padding: '0.2rem 0.45rem',
+		padding: '0.1rem 0.35rem',
 		fontWeight: '400'
 	},
 	'.td-btn--icon:hover': { color: '#dc2626' },
@@ -154,16 +155,16 @@ const selectors: StyleDef['selectors'] = {
 		margin: '0',
 		padding: '0',
 		flex: '1',
-		minHeight: '120px',
+		minHeight: '48px',
 		overflowY: 'auto',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: 'var(--gap)'
+		gap: '5px'
 	},
 	'.td-list li.empty': {
 		textAlign: 'center',
 		color: 'var(--muted)',
-		padding: '1.5rem 1rem',
+		padding: '0.85rem',
 		fontSize: 'var(--fs-body)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-md)',
@@ -173,8 +174,8 @@ const selectors: StyleDef['selectors'] = {
 	'.td-row': {
 		display: 'flex',
 		alignItems: 'center',
-		gap: '0.85rem',
-		padding: '12px 14px',
+		gap: '0.6rem',
+		padding: '7px 10px',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-md)',
 		background: 'var(--tech-fill)',
@@ -183,8 +184,8 @@ const selectors: StyleDef['selectors'] = {
 	'.td-row input[type="checkbox"]': {
 		appearance: 'none',
 		WebkitAppearance: 'none',
-		width: '1.4rem',
-		height: '1.4rem',
+		width: '1.05rem',
+		height: '1.05rem',
 		margin: '0',
 		flexShrink: '0',
 		borderRadius: '50%',
@@ -201,8 +202,8 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.td-row input[type="checkbox"]::after': {
 		content: '""',
-		width: '0.32rem',
-		height: '0.58rem',
+		width: '0.26rem',
+		height: '0.5rem',
 		border: 'solid var(--brand-accent-fg)',
 		borderWidth: '0 2px 2px 0',
 		transform: 'rotate(45deg) translate(-0.5px, -1px)',
@@ -213,9 +214,9 @@ const selectors: StyleDef['selectors'] = {
 	'.td-row-text': {
 		flex: '1',
 		outline: 'none',
-		padding: '0.2rem 0.35rem',
+		padding: '0.05rem 0.2rem',
 		borderRadius: '0.35rem',
-		fontSize: 'var(--fs-title)',
+		fontSize: 'var(--fs-body)',
 		whiteSpace: 'pre-wrap',
 		wordBreak: 'break-word'
 	},
@@ -226,8 +227,8 @@ const selectors: StyleDef['selectors'] = {
 	'.td-list-footer': {
 		display: 'flex',
 		justifyContent: 'flex-end',
-		marginTop: '12px',
-		paddingTop: '12px',
+		marginTop: '8px',
+		paddingTop: '8px',
 		borderTop: '1px solid color-mix(in srgb, var(--text) 10%, transparent)',
 		flexShrink: '0'
 	},
