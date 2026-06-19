@@ -120,11 +120,11 @@ jobs:
         run: |
           set -euo pipefail
           APP=api-next-aven-ceo
-          # flyctl reads the env var FLY_API_TOKEN; it's sourced from the GitHub secret
-          # FLY_API_KEY (org-wide token for the avenCEO org). Fail clearly if it's missing,
-          # else flyctl dies with a cryptic "You must be authenticated to view this".
+          # flyctl reads FLY_API_TOKEN — the org-wide GitHub secret of the same name, holding
+          # an avenCEO org token. Fail clearly if it's missing, else flyctl dies with a cryptic
+          # "You must be authenticated to view this".
           if [ -z "${FLY_API_TOKEN:-}" ]; then
-            echo "::error::FLY_API_TOKEN is empty (GitHub secret FLY_API_KEY). Create an avenCEO token: fly tokens create org -o avenceo"
+            echo "::error::FLY_API_TOKEN is empty. Set the org secret FLY_API_TOKEN to an avenCEO token: fly tokens create org -o avenceo"
             exit 1
           fi
           # Verify the token can actually see this app (catches a wrong-org token early).
@@ -144,7 +144,7 @@ jobs:
           if [ ${#args[@]} -gt 0 ]; then flyctl secrets set --app "$APP" --stage "${args[@]}"; fi
           flyctl deploy --remote-only --ha=false --config libs/betterauth/fly.toml --dockerfile libs/betterauth/Dockerfile .
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_KEY }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           NEON_PG_KEY: ${{ secrets.NEON_PG_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}

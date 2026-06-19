@@ -96,7 +96,7 @@ the `deploy-auth` job stages these onto the fly app, then deploys. Add:
 
 | Secret | Notes |
 | --- | --- |
-| `FLY_API_KEY` | avenCEO org token — `fly tokens create org -o avenceo` (mapped to `FLY_API_TOKEN` for flyctl in the job). Must be the avenCEO org, or flyctl can't see the app. |
+| `FLY_API_TOKEN` | avenCEO org token — `fly tokens create org -o avenceo`. Must be the avenCEO org, or flyctl can't see the app. Can live as an org-wide GitHub secret. |
 | `BETTER_AUTH_SECRET` | session/token signing key — generate ONCE (`openssl rand -base64 32`) and keep STABLE; changing it logs everyone out |
 | `NEON_PG_KEY` | Postgres connection string |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth web client |
