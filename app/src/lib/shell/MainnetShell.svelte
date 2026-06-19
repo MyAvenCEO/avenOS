@@ -6,11 +6,21 @@ import { t } from '$lib/i18n'
 import { clearNetwork } from '$lib/settings/network-store'
 import AdminPanel from '$lib/shell/AdminPanel.svelte'
 import MainnetChat from '$lib/shell/MainnetChat.svelte'
+import MainnetDb from '$lib/shell/MainnetDb.svelte'
+import MainnetSchemas from '$lib/shell/MainnetSchemas.svelte'
 import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
 
-// Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes on the left, weekly credits
-// + Admin / Log out on the right (same line + style) — over the active view. board 0054.
-let tab = $state<'chat' | 'vibes'>('chat')
+// Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | Schemas | DB on the left,
+// weekly credits + Admin / Log out on the right (same line + style) — over the active view.
+// board 0053/0054.
+type Tab = 'chat' | 'vibes' | 'schemas' | 'db'
+const TABS: { id: Tab; label: string }[] = [
+	{ id: 'chat', label: t('mainnet.nav.chat') },
+	{ id: 'vibes', label: t('mainnet.nav.vibes') },
+	{ id: 'schemas', label: t('mainnet.nav.schemas') },
+	{ id: 'db', label: t('mainnet.nav.db') }
+]
+let tab = $state<Tab>('chat')
 let usageStarted = false
 
 $effect(() => {
@@ -43,23 +53,19 @@ async function logout(): Promise<void> {
 		class="border-border flex shrink-0 items-center gap-2 border-b px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-1.5 text-[10px] font-bold tracking-wider uppercase"
 		aria-label="Mainnet sections"
 	>
-		<button
-			type="button"
-			class="transition-opacity hover:opacity-80 {tab === 'chat' ? 'opacity-95' : 'opacity-40'}"
-			aria-current={tab === 'chat' ? 'page' : undefined}
-			onclick={() => (tab = 'chat')}
-		>
-			{t('mainnet.nav.chat')}
-		</button>
-		<span class="select-none opacity-25" aria-hidden="true">|</span>
-		<button
-			type="button"
-			class="transition-opacity hover:opacity-80 {tab === 'vibes' ? 'opacity-95' : 'opacity-40'}"
-			aria-current={tab === 'vibes' ? 'page' : undefined}
-			onclick={() => (tab = 'vibes')}
-		>
-			{t('mainnet.nav.vibes')}
-		</button>
+		{#each TABS as item, i (item.id)}
+			{#if i > 0}
+				<span class="select-none opacity-25" aria-hidden="true">|</span>
+			{/if}
+			<button
+				type="button"
+				class="transition-opacity hover:opacity-80 {tab === item.id ? 'opacity-95' : 'opacity-40'}"
+				aria-current={tab === item.id ? 'page' : undefined}
+				onclick={() => (tab = item.id)}
+			>
+				{item.label}
+			</button>
+		{/each}
 
 		<div class="ml-auto flex items-center gap-3">
 			{#if $usage?.credit}
@@ -92,7 +98,11 @@ async function logout(): Promise<void> {
 
 	{#if tab === 'chat'}
 		<MainnetChat />
-	{:else}
+	{:else if tab === 'vibes'}
 		<MainnetVibes />
+	{:else if tab === 'schemas'}
+		<MainnetSchemas />
+	{:else}
+		<MainnetDb />
 	{/if}
 </div>

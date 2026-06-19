@@ -39,6 +39,14 @@ export async function ensureSchema(name: string, jsonSchema: unknown): Promise<s
 	return id
 }
 
+export type DataSchema = { id: string; name: string; jsonSchema: unknown }
+
+/** The signed-in user's schemas (definitions only). */
+export async function listSchemas(): Promise<DataSchema[]> {
+	const { schemas } = await api<{ schemas: DataSchema[] }>('/api/data/schemas')
+	return schemas
+}
+
 export type DataValue<T> = { id: string; data: T }
 
 export async function listValues<T>(schemaId: string): Promise<DataValue<T>[]> {

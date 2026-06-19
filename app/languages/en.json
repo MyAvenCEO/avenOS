@@ -998,10 +998,22 @@
 	"mainnet": {
 		"nav": {
 			"chat": "Chat",
-			"vibes": "Vibes"
+			"vibes": "Vibes",
+			"schemas": "Schemas",
+			"db": "DB"
 		},
 		"vibes": {
 			"select": "Select vibe"
+		},
+		"schemas": {
+			"select": "Select schema",
+			"title": "JSON Schema",
+			"empty": "No schemas yet."
+		},
+		"db": {
+			"empty": "No data yet.",
+			"emptyTable": "No entries for this schema yet.",
+			"rows": "rows"
 		},
 		"auth": {
 			"tag": "mainnet / alberobello",
