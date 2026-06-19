@@ -120,26 +120,31 @@ jobs:
         run: |
           set -euo pipefail
           APP=api-next-aven-ceo
-          # Fail clearly if the deploy token is missing/empty in the `next` Environment
-          # (otherwise flyctl dies with a cryptic "You must be authenticated to view this").
+          # flyctl reads the env var FLY_API_TOKEN; it's sourced from the GitHub secret
+          # FLY_API_KEY (org-wide token for the avenCEO org). Fail clearly if it's missing,
+          # else flyctl dies with a cryptic "You must be authenticated to view this".
           if [ -z "${FLY_API_TOKEN:-}" ]; then
-            echo "::error::FLY_API_TOKEN is empty. Add an app-scoped deploy token to the 'next' GitHub Environment: fly tokens create deploy -a ${APP}"
+            echo "::error::FLY_API_TOKEN is empty (GitHub secret FLY_API_KEY). Create an avenCEO token: fly tokens create org -o avenceo"
             exit 1
           fi
-          # Verify the token actually authenticates against this app before staging secrets.
+          # Verify the token can actually see this app (catches a wrong-org token early).
           flyctl secrets list --app "$APP" >/dev/null
-          args=(
-            "BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET"
-            "NEON_PG_KEY=$NEON_PG_KEY"
-            "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
-            "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET"
-            "TINFOIL_API_KEY=$TINFOIL_API_KEY"
-          )
-          if [ -n "${POLAR_API_KEY:-}" ]; then args+=("POLAR_API_KEY=$POLAR_API_KEY"); fi
-          flyctl secrets set --app "$APP" --stage "${args[@]}"
+          # Stage only the secrets that are actually provided — a missing one is left as-is on
+          # the app (so the deploy never fails on an unset value, and present ones still sync).
+          args=()
+          for kv in \
+            "BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}" \
+            "NEON_PG_KEY=${NEON_PG_KEY:-}" \
+            "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}" \
+            "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}" \
+            "TINFOIL_API_KEY=${TINFOIL_API_KEY:-}" \
+            "POLAR_API_KEY=${POLAR_API_KEY:-}"; do
+            [ -n "${kv#*=}" ] && args+=("$kv")
+          done
+          if [ ${#args[@]} -gt 0 ]; then flyctl secrets set --app "$APP" --stage "${args[@]}"; fi
           flyctl deploy --remote-only --ha=false --config libs/betterauth/fly.toml --dockerfile libs/betterauth/Dockerfile .
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_KEY }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           NEON_PG_KEY: ${{ secrets.NEON_PG_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
