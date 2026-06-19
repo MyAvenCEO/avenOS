@@ -55,3 +55,53 @@ The app side reads `PUBLIC_BETTER_AUTH_URL` (same value as `BETTER_AUTH_URL`).
 - The app runs on a different origin than this server, so sessions use
   `SameSite=None; Secure` cookies and CORS reflects only `TRUSTED_ORIGINS`.
 - The desktop (Tauri) OAuth callback origin still needs validation — see board 0050.
+
+## Deploy (fly.io, `next` channel)
+
+The `next`-branch CI (`.github/workflows/release-next.yml` → `deploy-auth`) deploys this
+server to fly.io as a **single machine** (`--ha=false`) serving `https://api.next.aven.ceo`.
+Config: [`fly.toml`](./fly.toml) + [`Dockerfile`](./Dockerfile) (build context = repo root).
+Stateless — the schema self-bootstraps on boot, so every deploy is safe.
+
+### One-time setup
+
+```sh
+# 1. Create the app (name must match fly.toml's `app`).
+fly apps create aven-api-next
+
+# 2. Runtime secrets (NOT in git / not in GitHub — set directly on the app).
+fly secrets set --app aven-api-next \
+  BETTER_AUTH_SECRET="$(openssl rand -base64 32)" \
+  NEON_PG_KEY="postgresql://…neon…/neondb?sslmode=require" \
+  GOOGLE_CLIENT_ID="…" \
+  GOOGLE_CLIENT_SECRET="…" \
+  TINFOIL_API_KEY="…" \
+  POLAR_API_KEY="…"            # optional; omit to disable the Polar link
+
+# 3. Custom domain + TLS.
+fly certs add --app aven-api-next api.next.aven.ceo
+#   then add the DNS record fly prints — typically:
+#   CNAME  api.next  aven-api-next.fly.dev   (+ the _acme-challenge record fly shows)
+```
+
+### CI / GitHub
+
+- **`FLY_API_TOKEN`** — add to the **`next` GitHub Environment** (Settings → Environments →
+  next → secrets). Mint with `fly tokens create deploy -a aven-api-next`. CI uses only this;
+  all other config lives in `fly.toml` (`[env]`) or `fly secrets`.
+
+### Also required for the app to actually use it
+
+- Bake **`PUBLIC_BETTER_AUTH_URL=https://api.next.aven.ceo`** into the `next` app builds
+  (it currently defaults to `http://localhost:8787` for local dev).
+- Add **`https://api.next.aven.ceo/api/auth/callback/google`** as an authorized redirect URI
+  on the Google OAuth client.
+- The prod Tauri origins (`tauri://localhost`, `http://tauri.localhost`) are already in
+  `TRUSTED_ORIGINS`; add any new web origin there if one ships.
+
+### Manual deploy
+
+```sh
+flyctl deploy --remote-only --ha=false \
+  --config libs/betterauth/fly.toml --dockerfile libs/betterauth/Dockerfile .
+```

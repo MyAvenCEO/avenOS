@@ -6,6 +6,9 @@ name: release-next
 #   2. deploy-relay  — rebuild the aven-node relay on its Sprite at the release commit and
 #                      recreate it from a WIPED store (WIPE=1). `next` is a throwaway dev/staging
 #                      channel, so every deploy resets the relay to a clean slate.
+#   2b. deploy-auth  — deploy the betterauth (Bun/Hono) API to fly.io as a single machine
+#                      (https://api.next.aven.ceo). Stateless — schema self-bootstraps; the
+#                      `next` GitHub Environment supplies FLY_API_TOKEN.
 #   3. release-macos — build the signed Mac App Store .pkg on a macOS runner and upload it to
 #                      TestFlight (CFBundleVersion = github.run_number). Apple creds are
 #                      REPOSITORY secrets (cross-channel: next AND main); see job for the list.
@@ -89,6 +92,28 @@ jobs:
           AVEN_SERVER_BUILD: "1"
           # Staging: wipe + recreate the durable store on every deploy.
           WIPE: "1"
+
+  deploy-auth:
+    name: deploy betterauth API (fly.io)
+    needs: release
+    runs-on: ubuntu-latest
+    # FLY_API_TOKEN comes from the `next` GitHub Environment (same env as deploy-relay).
+    environment: next
+    steps:
+      - name: Checkout next at the release commit
+        uses: actions/checkout@v5
+        with:
+          ref: next
+
+      - name: Set up flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to fly (single machine)
+        # Build context is the repo root; config + Dockerfile live in libs/betterauth.
+        # --ha=false provisions exactly ONE machine (no high-availability pair).
+        run: flyctl deploy --remote-only --ha=false --config libs/betterauth/fly.toml --dockerfile libs/betterauth/Dockerfile .
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
   release-macos:
     name: macOS build → TestFlight
