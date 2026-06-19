@@ -120,6 +120,14 @@ jobs:
         run: |
           set -euo pipefail
           APP=api-next-aven-ceo
+          # Fail clearly if the deploy token is missing/empty in the `next` Environment
+          # (otherwise flyctl dies with a cryptic "You must be authenticated to view this").
+          if [ -z "${FLY_API_TOKEN:-}" ]; then
+            echo "::error::FLY_API_TOKEN is empty. Add an app-scoped deploy token to the 'next' GitHub Environment: fly tokens create deploy -a ${APP}"
+            exit 1
+          fi
+          # Verify the token actually authenticates against this app before staging secrets.
+          flyctl secrets list --app "$APP" >/dev/null
           args=(
             "BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET"
             "NEON_PG_KEY=$NEON_PG_KEY"
