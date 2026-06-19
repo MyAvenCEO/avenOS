@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.30...v) (2026-06-19)
+
+
+### Bug Fixes
+
+* **app:** bake Google OAuth client into shipped builds (compile-time) ([fd16f31](https://github.com/MyAvenCEO/avenOS/commit/fd16f315888c23175b2f5ecde04bf0e2692b8409))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.29...v) (2026-06-19)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.28...v) (2026-06-19)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.27...v) (2026-06-19)
