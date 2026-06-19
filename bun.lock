@@ -94,6 +94,17 @@
         "marked": "^15.0.12",
       },
     },
+    "libs/aven-vibes": {
+      "name": "@avenos/aven-vibes",
+      "version": "26.6.1-next.17",
+      "dependencies": {
+        "dompurify": "^3.3.3",
+        "marked": "^15.0.12",
+      },
+      "devDependencies": {
+        "typescript": "^5.7.2",
+      },
+    },
     "libs/aven-website": {
       "name": "@avenos/aven-website",
       "version": "26.6.1-next.17",
@@ -140,6 +151,8 @@
     "@avenos/aven-skills": ["@avenos/aven-skills@workspace:libs/aven-skills"],
 
     "@avenos/aven-ui": ["@avenos/aven-ui@workspace:libs/aven-ui"],
+
+    "@avenos/aven-vibes": ["@avenos/aven-vibes@workspace:libs/aven-vibes"],
 
     "@avenos/aven-website": ["@avenos/aven-website@workspace:libs/aven-website"],
 
@@ -1232,6 +1245,8 @@
     "zimmerframe": ["zimmerframe@1.1.4", "", {}, "sha512-B58NGBEoc8Y9MWWCQGl/gq9xBCe4IiKM0a2x7GZdQKOW5Exr8S1W24J6OgM1njK8xCRGvAJIL/MxXHf6SkmQKQ=="],
 
     "zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
+
+    "@avenos/aven-vibes/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "@avenos/betterauth/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 

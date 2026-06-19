@@ -1,0 +1,24 @@
+{
+	"name": "@avenos/aven-vibes",
+	"private": true,
+	"version": "26.6.1-next.17",
+	"type": "module",
+	"description": "Standalone vibes engine (JSON view/style + QuickJS sandbox) + the todos vibe, wired to the betterauth /api/data store, with generic CRUD tools for the LLM. Copied from @avenos/aven-ui. board 0054.",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./AvenVibeView.svelte": "./src/AvenVibeView.svelte"
+	},
+	"scripts": {
+		"build": "bun -e \"console.log('@avenos/aven-vibes: Svelte source, no build step')\"",
+		"check": "tsc -p tsconfig.json --noEmit"
+	},
+	"dependencies": {
+		"dompurify": "^3.3.3",
+		"marked": "^15.0.12"
+	},
+	"devDependencies": {
+		"typescript": "^5.7.2"
+	}
+}

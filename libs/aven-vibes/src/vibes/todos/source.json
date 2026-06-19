@@ -1,0 +1,20 @@
+{
+	"title": "Arbeitsaufträge",
+	"items": [
+		{ "id": "1", "text": "Vibe-App-Sandbox ausliefern", "done": true },
+		{ "id": "2", "text": "Jazz-gestützte Artefakte anbinden", "done": false },
+		{ "id": "3", "text": "CSP für Produktion schärfen", "done": false }
+	],
+	"labels": {
+		"listEyebrow": "Aufgabenliste",
+		"openLabel": "Offen",
+		"newSection": "Neu",
+		"entriesSection": "Einträge",
+		"addPlaceholder": "Aufgabe beschreiben …",
+		"addButton": "Hinzufügen",
+		"clearDone": "Erledigte löschen",
+		"toggleAria": "Als erledigt markieren",
+		"deleteAria": "Löschen",
+		"emptyList": "Noch keine Aufgaben — oben hinzufügen."
+	}
+}
