@@ -1,0 +1,190 @@
+import { randomUUID } from 'node:crypto'
+import Ajv from 'ajv'
+import type { Context } from 'hono'
+import { sql } from 'kysely'
+import { auth } from './auth'
+import { db } from './db'
+
+// Generic, schema-driven user data store. `data_schema` rows are JSON Schema definitions;
+// `data_value` rows reference a schema and hold a JSONB value validated against it on write.
+// Everything is scoped to the authenticated user. board 0053.
+
+const ajv = new Ajv({ allErrors: true, strict: false })
+
+/** jsonb reads come back as objects on the pg/Neon driver; be defensive about strings. */
+function asJson(v: unknown): unknown {
+	return typeof v === 'string' ? JSON.parse(v) : v
+}
+
+/** A jsonb write: JSON-encode + cast, so it works regardless of driver param handling. */
+function jsonb(value: unknown) {
+	return sql<unknown>`${JSON.stringify(value)}::jsonb`
+}
+
+async function userId(c: Context): Promise<string | null> {
+	const session = await auth.api.getSession({ headers: c.req.raw.headers })
+	return session?.user?.id ?? null
+}
+
+/** Validate `data` against a JSON Schema; returns an array of error strings, or null if valid. */
+function validate(jsonSchema: unknown, data: unknown): string[] | null {
+	let check: ReturnType<typeof ajv.compile>
+	try {
+		check = ajv.compile(jsonSchema as object)
+	} catch (e) {
+		return [`invalid schema: ${e instanceof Error ? e.message : String(e)}`]
+	}
+	if (check(data)) return null
+	return (check.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? 'invalid'}`.trim())
+}
+
+// ── Schemas ──────────────────────────────────────────────────────────────────
+
+/** POST /api/data/schemas — create or update (by name) a schema. */
+export async function createSchema(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const body = (await c.req.json().catch(() => null)) as {
+		name?: string
+		jsonSchema?: unknown
+	} | null
+	if (!body?.name || typeof body.jsonSchema !== 'object' || body.jsonSchema === null) {
+		return c.json({ error: 'name and jsonSchema (object) required' }, 400)
+	}
+	try {
+		ajv.compile(body.jsonSchema as object) // reject a malformed schema up front
+	} catch (e) {
+		return c.json({ error: `invalid jsonSchema: ${e instanceof Error ? e.message : e}` }, 400)
+	}
+	const existing = await db()
+		.selectFrom('data_schema')
+		.select('id')
+		.where('user_id', '=', uid)
+		.where('name', '=', body.name)
+		.executeTakeFirst()
+	const id = existing?.id ?? randomUUID()
+	if (existing) {
+		await db()
+			.updateTable('data_schema')
+			.set({ json_schema: jsonb(body.jsonSchema), updated_at: new Date() })
+			.where('id', '=', id)
+			.execute()
+	} else {
+		await db()
+			.insertInto('data_schema')
+			.values({
+				id,
+				user_id: uid,
+				name: body.name,
+				json_schema: jsonb(body.jsonSchema),
+				created_at: new Date(),
+				updated_at: new Date()
+			})
+			.execute()
+	}
+	return c.json({ id, name: body.name, jsonSchema: body.jsonSchema })
+}
+
+/** GET /api/data/schemas — the user's schemas. */
+export async function listSchemas(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const rows = await db()
+		.selectFrom('data_schema')
+		.select(['id', 'name', 'json_schema'])
+		.where('user_id', '=', uid)
+		.orderBy('name', 'asc')
+		.execute()
+	return c.json({
+		schemas: rows.map((r) => ({ id: r.id, name: r.name, jsonSchema: asJson(r.json_schema) }))
+	})
+}
+
+// ── Values ───────────────────────────────────────────────────────────────────
+
+async function loadOwnedSchema(uid: string, schemaId: string) {
+	return db()
+		.selectFrom('data_schema')
+		.select(['id', 'json_schema'])
+		.where('id', '=', schemaId)
+		.where('user_id', '=', uid)
+		.executeTakeFirst()
+}
+
+/** POST /api/data/schemas/:schemaId/values — create a value (validated against the schema). */
+export async function createValue(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const schemaId = c.req.param('schemaId')
+	if (!schemaId) return c.json({ error: 'schemaId required' }, 400)
+	const schema = await loadOwnedSchema(uid, schemaId)
+	if (!schema) return c.json({ error: 'schema not found' }, 404)
+	const body = (await c.req.json().catch(() => null)) as { data?: unknown } | null
+	const errors = validate(asJson(schema.json_schema), body?.data)
+	if (errors) return c.json({ error: 'validation', details: errors }, 400)
+	const id = randomUUID()
+	await db()
+		.insertInto('data_value')
+		.values({
+			id,
+			user_id: uid,
+			schema_id: schemaId,
+			data: jsonb(body?.data),
+			created_at: new Date(),
+			updated_at: new Date()
+		})
+		.execute()
+	return c.json({ id, schemaId, data: body?.data })
+}
+
+/** GET /api/data/schemas/:schemaId/values — the user's values for a schema (oldest first). */
+export async function listValues(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const schemaId = c.req.param('schemaId')
+	if (!schemaId) return c.json({ error: 'schemaId required' }, 400)
+	const rows = await db()
+		.selectFrom('data_value')
+		.select(['id', 'data', 'created_at'])
+		.where('user_id', '=', uid)
+		.where('schema_id', '=', schemaId)
+		.orderBy('created_at', 'asc')
+		.execute()
+	return c.json({ values: rows.map((r) => ({ id: r.id, data: asJson(r.data) })) })
+}
+
+/** PATCH /api/data/values/:id — replace a value's data (re-validated against its schema). */
+export async function updateValue(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const id = c.req.param('id')
+	if (!id) return c.json({ error: 'id required' }, 400)
+	const row = await db()
+		.selectFrom('data_value')
+		.select(['id', 'schema_id'])
+		.where('id', '=', id)
+		.where('user_id', '=', uid)
+		.executeTakeFirst()
+	if (!row) return c.json({ error: 'not found' }, 404)
+	const schema = await loadOwnedSchema(uid, row.schema_id)
+	if (!schema) return c.json({ error: 'schema not found' }, 404)
+	const body = (await c.req.json().catch(() => null)) as { data?: unknown } | null
+	const errors = validate(asJson(schema.json_schema), body?.data)
+	if (errors) return c.json({ error: 'validation', details: errors }, 400)
+	await db()
+		.updateTable('data_value')
+		.set({ data: jsonb(body?.data), updated_at: new Date() })
+		.where('id', '=', id)
+		.execute()
+	return c.json({ id, data: body?.data })
+}
+
+/** DELETE /api/data/values/:id — remove a value the user owns. */
+export async function deleteValue(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const id = c.req.param('id')
+	if (!id) return c.json({ error: 'id required' }, 400)
+	await db().deleteFrom('data_value').where('id', '=', id).where('user_id', '=', uid).execute()
+	return c.json({ ok: true, id })
+}

@@ -6,6 +6,7 @@ import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { clearNetwork } from '$lib/settings/network-store'
 import AdminPanel from '$lib/shell/AdminPanel.svelte'
+import TodosCard from '$lib/shell/TodosCard.svelte'
 
 type ChatMessage = {
 	id: number
@@ -387,6 +388,8 @@ async function logout(): Promise<void> {
 				</div>
 			</div>
 		{/if}
+
+		<TodosCard />
 
 		<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
 			<div class="mx-auto flex w-full max-w-2xl flex-col gap-3 py-4">

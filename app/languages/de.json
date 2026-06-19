@@ -1009,6 +1009,12 @@
 			"creditsLeft": "übrig",
 			"outOfCredits": "Kein KI-Guthaben mehr diese Woche — dein Kontingent wird montags zurückgesetzt.",
 			"adminTier": "Stufe"
+		},
+		"todos": {
+			"title": "Aufgaben",
+			"empty": "Noch keine Aufgaben.",
+			"placeholder": "Neue Aufgabe…",
+			"add": "Hinzufügen"
 		}
 	}
 }

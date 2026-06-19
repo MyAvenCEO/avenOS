@@ -2,6 +2,14 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { aiChat, aiSessionMessages, aiSessions, aiSetTier, aiUsage } from './ai'
 import { auth, TRUSTED_ORIGINS } from './auth'
+import {
+	createSchema,
+	createValue,
+	deleteValue,
+	listSchemas,
+	listValues,
+	updateValue
+} from './data'
 import { syncPricing } from './usage'
 
 const app = new Hono()
@@ -12,7 +20,7 @@ const app = new Hono()
 const corsOptions = {
 	origin: (origin: string) => (TRUSTED_ORIGINS.includes(origin) ? origin : ''),
 	allowHeaders: ['Content-Type', 'Authorization'],
-	allowMethods: ['POST', 'GET', 'OPTIONS'],
+	allowMethods: ['POST', 'GET', 'PATCH', 'DELETE', 'OPTIONS'],
 	// `set-auth-token` MUST be exposed so the app (cross-origin) can read the bearer token
 	// the bearer plugin returns and persist it — WKWebView drops the cross-site cookie, so
 	// this token is how the desktop app stays signed in. board 0050/0052.
@@ -22,6 +30,7 @@ const corsOptions = {
 app.use('/api/auth/*', cors(corsOptions))
 app.use('/api/ai/*', cors(corsOptions))
 app.use('/api/admin/*', cors(corsOptions))
+app.use('/api/data/*', cors(corsOptions))
 
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
@@ -31,6 +40,14 @@ app.get('/api/ai/usage', aiUsage)
 app.get('/api/ai/sessions', aiSessions)
 app.get('/api/ai/sessions/:id/messages', aiSessionMessages)
 app.post('/api/admin/set-tier', aiSetTier)
+
+// Generic schema-driven user data (board 0053): schemas + schema-validated values.
+app.post('/api/data/schemas', createSchema)
+app.get('/api/data/schemas', listSchemas)
+app.post('/api/data/schemas/:schemaId/values', createValue)
+app.get('/api/data/schemas/:schemaId/values', listValues)
+app.patch('/api/data/values/:id', updateValue)
+app.delete('/api/data/values/:id', deleteValue)
 
 app.get('/', (c) => c.text('avenOS betterauth server'))
 

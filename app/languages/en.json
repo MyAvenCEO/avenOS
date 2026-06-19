@@ -1032,6 +1032,12 @@
 			"creditsLeft": "left",
 			"outOfCredits": "Out of AI credits for this week — your allowance resets on Monday.",
 			"adminTier": "Tier"
+		},
+		"todos": {
+			"title": "Todos",
+			"empty": "No todos yet.",
+			"placeholder": "New todo…",
+			"add": "Add"
 		}
 	}
 }

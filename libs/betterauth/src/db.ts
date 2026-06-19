@@ -51,12 +51,34 @@ export interface UserTable {
 	tier: string | null
 }
 
+// Generic schema-driven data (board 0053). JSONB columns are typed `unknown`; writes
+// pass JS objects (the driver serializes), reads come back as parsed objects.
+export interface DataSchemaTable {
+	id: string
+	user_id: string
+	name: string
+	json_schema: unknown
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
+export interface DataValueTable {
+	id: string
+	user_id: string
+	schema_id: string
+	data: unknown
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
 export interface Database {
 	ai_usage: AiUsageTable
 	model_pricing: ModelPricingTable
 	ai_chat_session: AiChatSessionTable
 	ai_message: AiMessageTable
 	user: UserTable
+	data_schema: DataSchemaTable
+	data_value: DataValueTable
 }
 
 let cached: Kysely<Database> | null = null
