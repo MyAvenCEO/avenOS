@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.1...v) (2026-06-19)
+
+
+### Bug Fixes
+
+* **app:** move .env.production into Vite's envDir (app/) so the API URL bakes ([be1a6cc](https://github.com/MyAvenCEO/avenOS/commit/be1a6cc3bcaa33918ae7ed0add852fa024584555))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.32...v) (2026-06-19)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.31...v) (2026-06-19)
 
