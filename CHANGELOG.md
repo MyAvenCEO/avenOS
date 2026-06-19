@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.3...v) (2026-06-19)
+
+
+### Bug Fixes
+
+* **app:** allow the auth API in the CSP connect-src (fixes "Load failed") ([f9e772a](https://github.com/MyAvenCEO/avenOS/commit/f9e772af0d18bc60e8f75bb8ce5e69a1900f2e10))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.2...v) (2026-06-19)
 
 
