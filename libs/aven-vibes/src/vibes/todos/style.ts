@@ -159,14 +159,14 @@ const selectors: StyleDef['selectors'] = {
 		overflowY: 'auto',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '12px'
+		gap: '6px'
 	},
 	// The view engine wraps `$each` rows in a single <div>, so a gap on `.td-list` only
 	// spaces that wrapper — never the rows. Put the row gap on the wrapper itself. board 0054.
 	'.td-list > div': {
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '12px'
+		gap: '6px'
 	},
 	'.td-list li.empty': {
 		textAlign: 'center',
