@@ -1,5 +1,5 @@
 <script lang="ts">
-import { invoke } from '@tauri-apps/api/core'
+import * as tauriCore from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { onMount, tick } from 'svelte'
 import { browser } from '$app/environment'
@@ -104,6 +104,15 @@ const outlineBtnClass =
 const localeChoiceClass =
 	'hover:bg-accent/10 flex w-full cursor-pointer rounded-lg border border-border/60 bg-background/97 px-4 py-3 text-left shadow-sm backdrop-blur-sm transition-[background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-wait disabled:opacity-70'
 
+const signerOptionBaseClass =
+	'flex w-full items-center gap-3 rounded-lg border bg-background/97 px-4 py-3 text-left shadow-sm backdrop-blur-sm transition-[background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-55'
+const signerOptionActiveClass = 'border-primary ring-2 ring-primary/30'
+const signerOptionIdleClass = 'border-border/60 hover:bg-accent/10'
+
+function signerOptionClass(id: SignerType): string {
+	return `${signerOptionBaseClass} ${signerType === id ? signerOptionActiveClass : signerOptionIdleClass}`
+}
+
 function applyVaultLocaleFromList(list: VaultListEntry[], slug?: string): void {
 	const entry = slug
 		? list.find((v) => v.usernameSlug === slug)
@@ -198,7 +207,7 @@ onMount(() => {
 		if (cancelled) return
 
 		try {
-			const st = await invoke<PeerStatus>('plugin:self|peer_status', {
+			const st = await tauriCore.invoke<PeerStatus>('plugin:self|peer_status', {
 				slot: DEVICE_PEER_SLOT
 			})
 			if (!cancelled && st.unlocked) {
@@ -240,8 +249,8 @@ async function runUnlockPipeline(): Promise<void> {
 	err = undefined
 	let unlockedRust = false
 	try {
-		await invoke('plugin:self|register', { slot: DEVICE_PEER_SLOT })
-		await invoke('plugin:self|unlock', {
+		await tauriCore.invoke('plugin:self|register', { slot: DEVICE_PEER_SLOT })
+		await tauriCore.invoke('plugin:self|unlock', {
 			slot: DEVICE_PEER_SLOT
 		})
 		unlockedRust = true
@@ -264,7 +273,7 @@ async function runUnlockPipeline(): Promise<void> {
 				// Bootstrap failed after we already forwarded — re-lock and
 				// surface the error back on the lock screen.
 				err = e instanceof Error ? e.message : String(e)
-				void invoke('plugin:self|lock').catch(() => {})
+				void tauriCore.invoke('plugin:self|lock').catch(() => {})
 				applyLockedFrontendState()
 			})
 		return
@@ -272,7 +281,7 @@ async function runUnlockPipeline(): Promise<void> {
 		err = e instanceof Error ? e.message : String(e)
 		if (unlockedRust) {
 			try {
-				await invoke('plugin:self|lock')
+				await tauriCore.invoke('plugin:self|lock')
 			} catch {
 				/* swallow */
 			}
@@ -314,7 +323,7 @@ async function selectAndUnlock(slug: string): Promise<void> {
 async function resolveDeviceLabel(): Promise<void> {
 	if (!browser || !isTauriRuntime()) return
 	try {
-		const label = (await invoke<string>('plugin:self|host_device_label')).trim()
+		const label = (await tauriCore.invoke<string>('plugin:self|host_device_label')).trim()
 		if (label) signerName = label
 	} catch {
 		// leave blank — user names the signer on the seal step
@@ -533,10 +542,7 @@ async function finalizeCreate(): Promise<void> {
 							{#each signerOptions.filter((o) => o.available) as opt (opt.id)}
 								<button
 									type="button"
-									class="flex w-full items-center gap-3 rounded-lg border bg-background/97 px-4 py-3 text-left shadow-sm backdrop-blur-sm transition-[background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-55 {signerType ===
-									opt.id
-										? 'border-primary ring-2 ring-primary/30'
-										: 'border-border/60 hover:bg-accent/10'}"
+									class={signerOptionClass(opt.id)}
 									disabled={!opt.available || loading}
 									aria-pressed={signerType === opt.id}
 									onclick={() => {

@@ -5,9 +5,9 @@
 	"type": "module",
 	"scripts": {
 		"predev": "bun ../scripts/free-dev-server-port.ts",
-		"dev": "AVENOS_DEV_INSTANCE=A bun --env-file=../.env x --bun vite dev",
-		"build": "bun --env-file=../.env x vite build",
-		"preview": "bun --env-file=../.env x --bun vite preview",
+		"dev": "AVENOS_DEV_INSTANCE=A bun --env-file=${AVENOS_APP_ENV_FILE:-../.env} x --bun vite dev",
+		"build": "bun --env-file=${AVENOS_APP_ENV_FILE:-../.env} x vite build",
+		"preview": "bun --env-file=${AVENOS_APP_ENV_FILE:-../.env} x --bun vite preview",
 		"prepare": "[ -e node_modules ] || ln -sf ../node_modules node_modules; bun --bun x svelte-kit sync || echo ''",
 		"check": "bun --bun x svelte-kit sync && bun --bun x svelte-check --tsconfig ./tsconfig.json && bun run docs:words",
 		"test": "bun test tests",
