@@ -4,7 +4,7 @@ import { authClient, setBearerToken } from '$lib/auth/auth-client'
 import { syncBilling } from '$lib/billing/checkout'
 import { fmtMinds } from '$lib/billing/minds'
 import { t } from '$lib/i18n'
-import { POLL_MS, qk } from '$lib/query/client'
+import { qk } from '$lib/query/client'
 import { fetchUsage } from '$lib/query/usage'
 import { clearNetwork } from '$lib/settings/network-store'
 import AdminPanel from '$lib/shell/AdminPanel.svelte'
@@ -25,11 +25,7 @@ let justUpgraded = $state(false)
 // Weekly credit (MINDS) for the nav — live via TanStack Query; the SSE 'usage'/'billing'
 // events invalidate it, so no manual refresh. board 0055.
 const queryClient = useQueryClient()
-const usageQuery = createQuery(() => ({
-	queryKey: qk.usage,
-	queryFn: fetchUsage,
-	refetchInterval: POLL_MS.usage
-}))
+const usageQuery = createQuery(() => ({ queryKey: qk.usage, queryFn: fetchUsage }))
 
 $effect(() => {
 	if (checkoutHandled) return

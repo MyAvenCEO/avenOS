@@ -13,7 +13,7 @@ import {
 } from '$lib/billing/checkout'
 import { weeklyMindsLabel } from '$lib/billing/minds'
 import { getLocale, t } from '$lib/i18n'
-import { POLL_MS, qk } from '$lib/query/client'
+import { qk } from '$lib/query/client'
 
 // Pricing + full self-service plan management in OUR own UI (no Polar-hosted portal). Paid tiers
 // are data-driven (TIER_LIST); each card computes book / upgrade / downgrade / current from the
@@ -34,11 +34,7 @@ const queryClient = useQueryClient()
 
 // Subscriptions + orders + tier, live via TanStack Query. The SSE 'billing' event (published on
 // every server-side billing change incl. the webhook) invalidates this — no manual reload. board 0055.
-const billingQuery = createQuery(() => ({
-	queryKey: qk.billing,
-	queryFn: fetchBillingState,
-	refetchInterval: POLL_MS.billing
-}))
+const billingQuery = createQuery(() => ({ queryKey: qk.billing, queryFn: fetchBillingState }))
 const billing = $derived<BillingState | null>(billingQuery.data ?? null)
 
 // Current tier from the live billing state (server-reconciled), falling back to the session.

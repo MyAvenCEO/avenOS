@@ -12,6 +12,7 @@ import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
 import { queryClient } from '$lib/query/client'
+import { startRealtime } from '$lib/query/events'
 import { attachAvenosRuntimeBridge, avendbSessionReady } from '$lib/runtime/avendb-runtime'
 import { copyToClipboard } from '$lib/runtime/clipboard'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -93,6 +94,14 @@ const sessionKind = $derived($deviceSession.kind)
 $effect(() => {
 	if (!browser || !isTauriRuntime()) return
 	initLocale('en')
+})
+
+// Realtime: one SSE stream → TanStack Query invalidation (the "subscription" transport for all
+// betterauth reads). Idempotent + waits for the bearer token internally, so starting it once here
+// is safe pre-sign-in. Polling would be far more expensive. board 0055.
+$effect(() => {
+	if (!browser) return
+	startRealtime()
 })
 
 let vaults = $state<VaultListEntry[]>([])

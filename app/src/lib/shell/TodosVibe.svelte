@@ -12,7 +12,7 @@ import {
 	updateValue
 } from '$lib/data/client'
 import { t } from '$lib/i18n'
-import { POLL_MS, qk } from '$lib/query/client'
+import { qk } from '$lib/query/client'
 
 // The unified todos vibe: the aven-vibes todos vibe (JSON view/style + QuickJS) with its
 // CRUD wired to the betterauth /api/data store. Single source of truth for the todos UI —
@@ -54,8 +54,7 @@ $effect(() => {
 const valuesQuery = createQuery(() => ({
 	queryKey: schemaId ? qk.values(schemaId) : ['data', 'values', 'pending'],
 	queryFn: () => listValues<Todo>(schemaId as string),
-	enabled: !!schemaId,
-	refetchInterval: POLL_MS.data
+	enabled: !!schemaId
 }))
 const rows = $derived<DataValue<Todo>[]>(valuesQuery.data ?? [])
 

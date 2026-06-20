@@ -3,33 +3,23 @@ import { QueryClient } from '@tanstack/svelte-query'
 /**
  * App-wide TanStack Query client for betterauth server state. board 0055.
  *
- * Realtime model: SHORT-INTERVAL POLLING + mutation invalidation — deliberately NOT a long-lived
- * SSE/EventSource connection. In WKWebView (the Tauri shell) a permanent streaming `fetch` holds
- * one of the ~6 per-host HTTP/1.1 connections open forever, which starved the AI chat's own
- * streaming POST (stalled "Thinking…", incomplete tool calls) and often didn't even deliver
- * events. Short polling requests are released immediately, so they never contend with the AI
- * stream. Each query sets its own `refetchInterval` (see POLL_MS); the acting user's own writes
- * still invalidate instantly via createMutation.
+ * Realtime model: a single SSE stream (see ./events) pushes per-user change events that invalidate
+ * the matching query keys — TanStack Query "subscriptions". NO polling (refetchInterval) and NO
+ * per-query timers: the server tells us when data changed, so queries stay fresh on push alone.
+ * The acting user's own writes also invalidate instantly via createMutation.
  */
 export const queryClient = new QueryClient({
 	defaultOptions: {
 		queries: {
-			staleTime: 2_000,
+			staleTime: 30_000,
 			retry: 1,
 			refetchOnWindowFocus: true
 		}
 	}
 })
 
-// Per-entity poll cadence. Cheap Neon reads poll briskly; billing hits the Polar API so it polls
-// slowly (user actions invalidate it instantly anyway). board 0055.
-export const POLL_MS = {
-	data: 3_000,
-	usage: 5_000,
-	billing: 20_000
-} as const
-
-// Query keys — prefixes group related queries so a mutation can invalidate a whole entity. board 0055.
+// Query keys — prefixes matter: the SSE consumer invalidates by prefix (`['data']`, `['usage']`,
+// `['billing']`), so every key below MUST start with its entity name. board 0055.
 export const qk = {
 	usage: ['usage'] as const,
 	billing: ['billing', 'state'] as const,
