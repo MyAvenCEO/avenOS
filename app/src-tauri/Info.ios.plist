@@ -14,5 +14,18 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<!-- Native Google sign-in: the Google Sign-In iOS SDK requires the reversed-client-ID URL
+	     scheme so it can receive the OAuth callback. This is the reverse of GOOGLE_CLIENT_ID
+	     (the next-channel Google Desktop client) — public (not the secret), standard practice.
+	     Tauri merges Info.ios.plist into the generated iOS Info.plist. board 0050. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.623539759782-6bs3mljak2uecmav9mcppadmf0qmcdpt</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
