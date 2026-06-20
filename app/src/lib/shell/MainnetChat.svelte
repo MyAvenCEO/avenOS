@@ -4,6 +4,7 @@ import { tick } from 'svelte'
 import { getBearerToken } from '$lib/auth/auth-client'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
+import { consumeSse } from '$lib/net/sse'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
 type ChatMessage = {
@@ -174,22 +175,16 @@ async function streamTinfoil(
 			err?.error ? `${err.error}${err.detail ? `: ${err.detail}` : ''}` : `HTTP ${res.status}`
 		)
 	}
-	const reader = res.body.getReader()
-	const decoder = new TextDecoder()
-	let buf = ''
+	// Same SSE reader the realtime subscription uses (DRY). onChunk resets the idle watchdog; the
+	// server sends `[DONE]` then closes, so the loop ends naturally — no early return needed.
+	const bumpIdle = (): void => {
+		clearTimeout(idle)
+		idle = setTimeout(() => ac.abort(), CLIENT_IDLE_MS)
+	}
 	try {
-		while (true) {
-			const { done, value } = await reader.read()
-			if (done) break
-			clearTimeout(idle)
-			idle = setTimeout(() => ac.abort(), CLIENT_IDLE_MS)
-			buf += decoder.decode(value, { stream: true })
-			const events = buf.split('\n\n')
-			buf = events.pop() ?? ''
-			for (const event of events) {
-				const dataLine = event.split('\n').find((l) => l.startsWith('data:'))
-				if (!dataLine) continue
-				const payload = dataLine.slice(5).trim()
+		await consumeSse(
+			res,
+			(payload) => {
 				if (payload === '[DONE]') return
 				try {
 					const json = JSON.parse(payload) as {
@@ -202,8 +197,9 @@ async function streamTinfoil(
 				} catch {
 					/* skip keep-alives / partial frames */
 				}
-			}
-		}
+			},
+			bumpIdle
+		)
 	} finally {
 		clearTimeout(idle)
 	}

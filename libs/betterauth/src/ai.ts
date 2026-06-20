@@ -146,9 +146,18 @@ function streamWithTools(opts: {
 			let completionTokens = 0
 			const emittedVibes = new Set<string>()
 			try {
-				// Tell the model the exact schema field names so data_crud writes validate.
+				// Tell the model the exact schema field names so data_crud writes validate. MERGE the
+				// hint into the existing leading system message — a SECOND system message makes Tinfoil
+				// 400 (only the first turn worked, before any schema existed → no hint). board 0055.
 				const hint = await schemasPromptHint(userId).catch(() => '')
-				if (hint) msgs.unshift({ role: 'system', content: hint })
+				if (hint) {
+					const first = msgs[0] as { role?: string; content?: string } | undefined
+					if (first?.role === 'system') {
+						first.content = `${first.content ?? ''}\n\n${hint}`.trim()
+					} else {
+						msgs.unshift({ role: 'system', content: hint })
+					}
+				}
 				for (let round = 0; round < 5; round++) {
 					// Abort a round that stalls (no bytes for STREAM_IDLE_MS) so a hung Tinfoil upstream
 					// can't wedge the whole stream open forever — that left the client stuck on
@@ -174,6 +183,8 @@ function streamWithTools(opts: {
 					}
 					if (!res.ok || !res.body) {
 						clearTimeout(idle)
+						const detail = await res.text().catch(() => '')
+						console.error(`[ai] tinfoil ${res.status} (round ${round}):`, detail.slice(0, 400))
 						emit({ choices: [{ delta: { content: `\n[ai error ${res.status}]` } }] })
 						break
 					}
