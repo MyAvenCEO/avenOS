@@ -44,13 +44,14 @@ async function toggleRole(u: AdminUser): Promise<void> {
 	}
 }
 
-// Flip a user's product tier (free <-> avenCITY) via the admin-gated endpoint.
+// Flip a user's comp tier (free <-> early-bird, the 10-MINDS early-adopter grant) via the
+// admin-gated endpoint. board 0055.
 async function toggleTier(u: AdminUser): Promise<void> {
 	if (pendingId || !AI_BASE) return
 	pendingId = u.id
 	error = null
 	try {
-		const tier = u.tier === 'avenCITY' ? 'free' : 'avenCITY'
+		const tier = u.tier === 'early-bird' ? 'free' : 'early-bird'
 		const token = getBearerToken()
 		const res = await fetch(`${AI_BASE}/api/admin/set-tier`, {
 			method: 'POST',
@@ -108,7 +109,7 @@ $effect(() => {
 							</button>
 							<span
 								class="ml-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {u.tier ===
-								'avenCITY'
+								'early-bird'
 									? 'bg-primary/15 text-primary'
 									: 'bg-muted text-muted-foreground'}"
 							>
@@ -120,7 +121,7 @@ $effect(() => {
 								onclick={() => void toggleTier(u)}
 								disabled={pendingId !== null}
 							>
-								→ {u.tier === 'avenCITY' ? 'free' : 'avenCITY'}
+								→ {u.tier === 'early-bird' ? 'free' : 'early-bird'}
 							</button>
 						</div>
 					</div>

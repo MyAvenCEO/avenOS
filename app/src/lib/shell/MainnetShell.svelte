@@ -1,30 +1,31 @@
 <script lang="ts">
 import { createQuery, useQueryClient } from '@tanstack/svelte-query'
-import { authClient, setBearerToken } from '$lib/auth/auth-client'
+import { authClient } from '$lib/auth/auth-client'
 import { syncBilling } from '$lib/billing/checkout'
 import { fmtMinds } from '$lib/billing/minds'
 import { t } from '$lib/i18n'
 import { qk } from '$lib/query/client'
 import { fetchUsage } from '$lib/query/usage'
-import { clearNetwork } from '$lib/settings/network-store'
-import AdminPanel from '$lib/shell/AdminPanel.svelte'
+import AccountSettings from '$lib/shell/AccountSettings.svelte'
 import MainnetChat from '$lib/shell/MainnetChat.svelte'
 import MainnetDb from '$lib/shell/MainnetDb.svelte'
 import MainnetFly from '$lib/shell/MainnetFly.svelte'
 import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
-import PricingPanel from '$lib/shell/PricingPanel.svelte'
 
-// Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | Schemas | DB (+ Admin for
-// admins) on the left, weekly credits + signed-in identity + Log out on the right — over the
-// active view. Every section (incl. Admin) is a normal in-place view, not a modal. board 0053/0054.
-type Tab = 'chat' | 'vibes' | 'db' | 'plan' | 'fly' | 'admin'
+// Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | DB | Fly on the left; weekly
+// MINDS + the signed-in account NAME on the right. Clicking the name opens the Account Settings
+// view (profile, plans & billing, vault keys, Admin for admins, log out). board 0053/0054/0055.
+type Tab = 'chat' | 'vibes' | 'db' | 'fly'
+type SettingsCategory = 'profile' | 'plans' | 'vault' | 'admin'
 let tab = $state<Tab>('chat')
+let settings = $state(false)
+let settingsCategory = $state<SettingsCategory>('profile')
 let checkoutHandled = false
 // Shown briefly after returning from a successful Polar checkout (?checkout=success).
 let justUpgraded = $state(false)
 
-// Weekly credit (MINDS) for the nav — live via TanStack Query; the SSE 'usage'/'billing'
-// events invalidate it, so no manual refresh. board 0055.
+// Weekly credit (MINDS) for the nav — live via TanStack Query; the SSE 'usage'/'billing' events
+// invalidate it, so no manual refresh. board 0055.
 const queryClient = useQueryClient()
 const usageQuery = createQuery(() => ({ queryKey: qk.usage, queryFn: fetchUsage }))
 
@@ -33,11 +34,12 @@ $effect(() => {
 	checkoutHandled = true
 	void (async () => {
 		// Returned from Polar checkout? Reconcile the entitlement so the new plan + weekly MINDS
-		// appear at once (no wait on a webhook), land on the Plan tab, and clear the flag so a
+		// appear at once (no wait on a webhook), open Settings → Plans, and clear the flag so a
 		// reload doesn't re-trigger.
 		const params = new URLSearchParams(window.location.search)
 		if (params.get('checkout') === 'success') {
-			tab = 'plan'
+			settings = true
+			settingsCategory = 'plans'
 			justUpgraded = true
 			await syncBilling()
 			void queryClient.invalidateQueries({ queryKey: ['billing'] })
@@ -57,29 +59,18 @@ const sessionStore = authClient.useSession()
 const user = $derived(
 	$sessionStore.data?.user as { name?: string; email?: string; role?: string } | undefined
 )
-const isAdmin = $derived(user?.role === 'admin')
 const displayName = $derived(user?.name || user?.email || '')
 
-// Left-nav tabs; Admin only shows for admins (and is the only tab they can leave for/return to).
 const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'chat', label: t('mainnet.nav.chat') },
 	{ id: 'vibes', label: t('mainnet.nav.vibes') },
 	{ id: 'db', label: t('mainnet.nav.db') },
-	{ id: 'plan', label: t('mainnet.nav.plan') },
-	{ id: 'fly', label: t('mainnet.nav.fly') },
-	...(isAdmin ? [{ id: 'admin' as Tab, label: t('mainnet.nav.admin') }] : [])
+	{ id: 'fly', label: t('mainnet.nav.fly') }
 ])
 
-// Sign out of Better Auth (best-effort), drop the bearer token, and forget the network
-// choice so the app returns to the Select Network intro.
-async function logout(): Promise<void> {
-	try {
-		await authClient.signOut()
-	} catch {
-		/* sign out locally regardless of a network error */
-	}
-	setBearerToken(null)
-	clearNetwork()
+function openTab(id: Tab): void {
+	tab = id
+	settings = false
 }
 </script>
 
@@ -94,9 +85,11 @@ async function logout(): Promise<void> {
 			{/if}
 			<button
 				type="button"
-				class="transition-opacity hover:opacity-80 {tab === item.id ? 'opacity-95' : 'opacity-40'}"
-				aria-current={tab === item.id ? 'page' : undefined}
-				onclick={() => (tab = item.id)}
+				class="transition-opacity hover:opacity-80 {tab === item.id && !settings
+					? 'opacity-95'
+					: 'opacity-40'}"
+				aria-current={tab === item.id && !settings ? 'page' : undefined}
+				onclick={() => openTab(item.id)}
 			>
 				{item.label}
 			</button>
@@ -109,17 +102,18 @@ async function logout(): Promise<void> {
 				</span>
 			{/if}
 			{#if displayName}
-				<span class="max-w-[14rem] truncate normal-case opacity-60" title={user?.email}>
+				<button
+					type="button"
+					class="max-w-[14rem] truncate normal-case transition-opacity hover:opacity-80 {settings
+						? 'text-foreground opacity-95'
+						: 'opacity-60'}"
+					title={user?.email}
+					aria-current={settings ? 'page' : undefined}
+					onclick={() => (settings = !settings)}
+				>
 					{displayName}
-				</span>
+				</button>
 			{/if}
-			<button
-				type="button"
-				class="transition-opacity hover:opacity-80 opacity-40"
-				onclick={() => void logout()}
-			>
-				{t('mainnet.chat.logout')}
-			</button>
 		</div>
 	</nav>
 
@@ -141,16 +135,14 @@ async function logout(): Promise<void> {
 		</div>
 	{/if}
 
-	{#if tab === 'chat'}
+	{#if settings}
+		<AccountSettings category={settingsCategory} />
+	{:else if tab === 'chat'}
 		<MainnetChat />
 	{:else if tab === 'vibes'}
 		<MainnetVibes />
-	{:else if tab === 'plan'}
-		<PricingPanel />
 	{:else if tab === 'fly'}
 		<MainnetFly />
-	{:else if tab === 'admin' && isAdmin}
-		<AdminPanel />
 	{:else}
 		<MainnetDb />
 	{/if}

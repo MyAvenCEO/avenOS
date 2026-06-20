@@ -23,7 +23,16 @@ function tierPriceEur(tier: string): number {
 // (The € figure is treated 1:1 as the USD basis for now — a real FX rate would slot in here.)
 export const ALLOWANCE_FRACTION = 0.5
 
+// Free / comp tiers grant a FIXED weekly allowance (not derived from a Polar price). `early-bird`
+// is the early-adopter comp role an admin grants: 10 MINDS/week of usage (1 USD = 10 MINDS, see
+// app/src/lib/billing/minds.ts). board 0055.
+export const FIXED_ALLOWANCE_USD: Record<string, number> = {
+	'early-bird': 1 // 10 MINDS
+}
+
 export function weeklyAllowanceUsd(tier: string): number {
+	const fixed = FIXED_ALLOWANCE_USD[tier]
+	if (fixed !== undefined) return fixed
 	return tierPriceEur(tier) * ALLOWANCE_FRACTION
 }
 

@@ -1,13 +1,10 @@
 <script lang="ts">
 import { type App, listApps, listMachines, listOrgs, type Machine, type Org } from '$lib/fly/client'
-import { connectFlyToken, loadFlyToken } from '$lib/vault/store'
+import { loadFlyToken } from '$lib/vault/store'
 
-// Fly read-only management (board 0055). Paste a Fly token → it's encrypted in the passkey vault
-// (server-blind) → decrypted on-device to list orgs/apps/machines. Locally the DEV-fallback key
-// powers the whole roundtrip without a signed build.
+// Fly read-only machine view (board 0055). READS the Fly token from the vault (set up in Account
+// Settings → Vault keys) and lists orgs → apps → machines. No vault/token setup here.
 let token = $state<string | null>(null)
-let tokenInput = $state('')
-let connecting = $state(false)
 let loading = $state(true)
 let err = $state<string | null>(null)
 
@@ -32,22 +29,6 @@ async function init(): Promise<void> {
 		err = e instanceof Error ? e.message : String(e)
 	} finally {
 		loading = false
-	}
-}
-
-async function connect(): Promise<void> {
-	if (!tokenInput.trim()) return
-	connecting = true
-	err = null
-	try {
-		await connectFlyToken(tokenInput.trim())
-		token = await loadFlyToken()
-		tokenInput = ''
-		if (token) orgs = await listOrgs(token)
-	} catch (e) {
-		err = e instanceof Error ? e.message : String(e)
-	} finally {
-		connecting = false
 	}
 }
 
@@ -79,8 +60,7 @@ async function toggleApp(name: string): Promise<void> {
 		<header class="flex flex-col gap-1">
 			<h2 class="text-foreground text-base font-semibold">Fly.io</h2>
 			<p class="text-muted-foreground text-[13px] leading-relaxed">
-				Bring your own Fly API token — stored end-to-end encrypted in your passkey vault (the server
-				only ever sees ciphertext). Read-only: your orgs, apps, and machines.
+				Read-only view of your Fly orgs, apps, and machines.
 			</p>
 		</header>
 
@@ -91,49 +71,12 @@ async function toggleApp(name: string): Promise<void> {
 		{#if loading}
 			<p class="text-muted-foreground text-[13px]">Loading…</p>
 		{:else if !token}
-			<label class="flex flex-col gap-1">
-				<span class="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
-					Fly API token
-				</span>
-				<input
-					class="border-border bg-card text-foreground rounded-[var(--radius)] border px-3 py-1.5 text-[13px]"
-					bind:value={tokenInput}
-					type="password"
-					placeholder="FlyV1 fm2_…"
-					autocapitalize="off"
-					autocorrect="off"
-					spellcheck="false"
-				>
-			</label>
-			<div>
-				<button
-					type="button"
-					disabled={connecting || !tokenInput.trim()}
-					class="bg-primary text-primary-foreground rounded-[var(--radius)] px-3 py-1.5 text-[13px] font-medium transition-opacity hover:opacity-90 disabled:opacity-40"
-					onclick={() => void connect()}
-				>
-					{connecting ? 'Encrypting…' : 'Connect token'}
-				</button>
-			</div>
-			<p class="text-muted-foreground text-[12px]">
-				Tip: create a scoped, expiring token with <code>fly tokens create org</code>.
+			<p
+				class="border-border text-muted-foreground rounded-[var(--radius-lg)] border border-dashed px-4 py-6 text-center text-[13px]"
+			>
+				No Fly token yet. Add one in your account → <span class="text-foreground">Vault keys</span>.
 			</p>
 		{:else}
-			<div class="flex items-center justify-between gap-2">
-				<span class="text-muted-foreground text-[12px]">
-					Token connected · {orgs.length} org{orgs.length === 1 ? '' : 's'}
-				</span>
-				<button
-					type="button"
-					class="text-muted-foreground hover:text-foreground text-[12px]"
-					onclick={() => {
-						token = null
-					}}
-				>
-					Replace token
-				</button>
-			</div>
-
 			<div class="flex flex-col gap-1">
 				{#each orgs as org (org.id)}
 					<div class="border-border rounded-[var(--radius-lg)] border">

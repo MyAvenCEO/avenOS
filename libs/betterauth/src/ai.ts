@@ -3,7 +3,7 @@ import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
-import { creditStatus } from './credits'
+import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
 import { executeDataTool, schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
@@ -365,9 +365,13 @@ export async function aiSetTier(c: Context): Promise<Response> {
 		userId?: string
 		tier?: string
 	} | null
-	const valid = body?.tier === 'free' || (body?.tier !== undefined && body.tier in TIERS)
+	// Valid tiers: free, the comp tiers (early-bird), or a wired Polar tier. board 0055.
+	const valid =
+		body?.tier === 'free' ||
+		(body?.tier !== undefined && (body.tier in TIERS || body.tier in FIXED_ALLOWANCE_USD))
 	if (!body?.userId || !valid) {
-		return c.json({ error: `userId and tier (free|${Object.keys(TIERS).join('|')}) required` }, 400)
+		const allowed = ['free', ...Object.keys(FIXED_ALLOWANCE_USD), ...Object.keys(TIERS)].join('|')
+		return c.json({ error: `userId and tier (${allowed}) required` }, 400)
 	}
 	await db().updateTable('user').set({ tier: body.tier }).where('id', '=', body.userId).execute()
 	return c.json({ ok: true, userId: body.userId, tier: body.tier })

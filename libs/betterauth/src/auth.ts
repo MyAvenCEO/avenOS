@@ -129,8 +129,9 @@ export const auth = betterAuth({
 			clientSecret: requireEnv('GOOGLE_CLIENT_SECRET')
 		}
 	},
-	// Product tier on the user (free | avenCITY). Assigned by an admin; gates the weekly
-	// AI credit allowance. `input: false` so it can't be set by the client at sign-up. board 0052.
+	// Product tier on the user (free | early-bird comp grant | avenME/avenFOUNDER/avenCEO).
+	// Assigned by an admin or a Polar checkout; gates the weekly AI credit allowance.
+	// `input: false` so it can't be set by the client at sign-up. board 0052/0055.
 	user: {
 		additionalFields: {
 			tier: { type: 'string', required: false, defaultValue: 'free', input: false },
