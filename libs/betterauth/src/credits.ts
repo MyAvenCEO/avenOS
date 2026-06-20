@@ -1,10 +1,20 @@
 import { sql } from 'kysely'
 import { db } from './db'
+import { getTierPriceEur } from './tier-price-cache'
 
-// Weekly price of each tier, in EUR. avenCITY = the first paid tier. board 0052.
+// Fallback weekly price of each tier, in EUR — used only until billing.ts has read the LIVE price
+// from Polar (the SSOT) into the shared cache. Drives the MINDS allowance (price × ALLOWANCE_FRACTION).
+// board 0052.
 export const TIER_PRICE_EUR: Record<string, number> = {
 	free: 0,
-	avenCITY: 7
+	avenME: 7,
+	avenFOUNDER: 34,
+	avenCEO: 377
+}
+
+/** A tier's weekly price in EUR: the live Polar price when cached, else the hardcoded fallback. */
+function tierPriceEur(tier: string): number {
+	return getTierPriceEur(tier) ?? TIER_PRICE_EUR[tier] ?? 0
 }
 
 // We grant HALF the tier's weekly price as the AI credit allowance. This €-price → $-allowance
@@ -14,7 +24,7 @@ export const TIER_PRICE_EUR: Record<string, number> = {
 export const ALLOWANCE_FRACTION = 0.5
 
 export function weeklyAllowanceUsd(tier: string): number {
-	return (TIER_PRICE_EUR[tier] ?? 0) * ALLOWANCE_FRACTION
+	return tierPriceEur(tier) * ALLOWANCE_FRACTION
 }
 
 export type CreditStatus = {

@@ -1,6 +1,5 @@
 <script lang="ts">
 import { authClient } from '$lib/auth/auth-client'
-import DebugCopy from '$lib/debug/DebugCopy.svelte'
 import { t } from '$lib/i18n'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { clearNetwork } from '$lib/settings/network-store'
@@ -109,9 +108,6 @@ async function continueWithGoogle(): Promise<void> {
 			{#if error}
 				<p class="text-destructive mt-3 text-xs">{error}</p>
 			{/if}
-			<div class="mt-4">
-				<DebugCopy />
-			</div>
 			<button
 				type="button"
 				class="text-muted-foreground hover:text-foreground mt-4 text-[11px] font-semibold underline-offset-2 hover:underline"

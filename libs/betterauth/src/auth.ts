@@ -41,9 +41,10 @@ const polarToken = optionalEnv('POLAR_API_KEY') ?? optionalEnv('POLAR_ACCESS_TOK
 if (!polarToken) {
 	console.warn('[betterauth] POLAR_API_KEY not set — Polar account link disabled')
 }
-// Shared Polar client, reused by both the plugin (checkout/portal later) and our own
-// best-effort customer link below. null when Polar isn't configured.
-const polarClient = polarToken
+// Shared Polar client, reused by the plugin, the checkout/webhook billing routes
+// (src/billing.ts), and our own best-effort customer link below. null when Polar isn't
+// configured.
+export const polarClient = polarToken
 	? new Polar({
 			accessToken: polarToken,
 			// Default to production (polar.sh) — tokens minted there 401 against sandbox.
@@ -75,7 +76,7 @@ const polarPlugins = polarClient
  * customer already exists for the email, it's "linked" only if its external_id already
  * matches this user (external_id is immutable). board 0052.
  */
-async function linkPolarCustomer(user: {
+export async function linkPolarCustomer(user: {
 	id: string
 	email: string
 	name?: string

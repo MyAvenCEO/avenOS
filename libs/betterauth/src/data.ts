@@ -4,6 +4,7 @@ import type { Context } from 'hono'
 import { sql } from 'kysely'
 import { auth } from './auth'
 import { db } from './db'
+import { publish } from './events'
 
 // Generic, schema-driven user data store. `data_schema` rows are JSON Schema definitions;
 // `data_value` rows reference a schema and hold a JSONB value validated against it on write.
@@ -84,6 +85,7 @@ export async function createSchema(c: Context): Promise<Response> {
 			})
 			.execute()
 	}
+	publish(uid, { entity: 'data' })
 	return c.json({ id, name: body.name, jsonSchema: body.jsonSchema })
 }
 
@@ -136,6 +138,7 @@ export async function createValue(c: Context): Promise<Response> {
 			updated_at: new Date()
 		})
 		.execute()
+	publish(uid, { entity: 'data' })
 	return c.json({ id, schemaId, data: body?.data })
 }
 
@@ -178,6 +181,7 @@ export async function updateValue(c: Context): Promise<Response> {
 		.set({ data: jsonb(body?.data), updated_at: new Date() })
 		.where('id', '=', id)
 		.execute()
+	publish(uid, { entity: 'data' })
 	return c.json({ id, data: body?.data })
 }
 
@@ -188,6 +192,7 @@ export async function deleteValue(c: Context): Promise<Response> {
 	const id = c.req.param('id')
 	if (!id) return c.json({ error: 'id required' }, 400)
 	await db().deleteFrom('data_value').where('id', '=', id).where('user_id', '=', uid).execute()
+	publish(uid, { entity: 'data' })
 	return c.json({ ok: true, id })
 }
 
@@ -265,6 +270,7 @@ export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<
 				.execute()
 			created.push(id)
 		}
+		if (created.length > 0) publish(uid, { entity: 'data' })
 		return { ok: errors.length === 0, action: 'create', created, errors }
 	}
 
@@ -299,6 +305,7 @@ export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<
 				.execute()
 			updated.push(id)
 		}
+		if (updated.length > 0) publish(uid, { entity: 'data' })
 		return { ok: errors.length === 0, action: 'update', updated, errors }
 	}
 
@@ -309,6 +316,7 @@ export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<
 			.where('id', '=', args.id)
 			.where('user_id', '=', uid)
 			.execute()
+		publish(uid, { entity: 'data' })
 		return { ok: true, action: 'delete', deleted: [args.id] }
 	}
 
