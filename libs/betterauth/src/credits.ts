@@ -1,10 +1,13 @@
 import { sql } from 'kysely'
 import { db } from './db'
 
-// Weekly price of each tier, in EUR. avenCITY = the first paid tier. board 0052.
+// Weekly price of each tier, in EUR. Drives the MINDS allowance (price × ALLOWANCE_FRACTION).
+// Keep tiers in sync with billing.ts TIERS (product mapping). board 0052.
 export const TIER_PRICE_EUR: Record<string, number> = {
 	free: 0,
-	avenCITY: 7
+	avenME: 7,
+	avenFOUNDER: 34,
+	avenCEO: 377
 }
 
 // We grant HALF the tier's weekly price as the AI credit allowance. This €-price → $-allowance

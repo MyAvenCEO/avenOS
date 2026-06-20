@@ -1,7 +1,6 @@
 <script lang="ts">
 import { tick } from 'svelte'
 import { getBearerToken } from '$lib/auth/auth-client'
-import { refreshUsage } from '$lib/data/usage-store'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
@@ -114,7 +113,6 @@ $effect(() => {
 		await refreshSessions()
 		if (sessions.length > 0) await loadSessionMessages(sessions[0].id)
 	})()
-	void refreshUsage()
 })
 
 function toOpenAi(history: ChatMessage[]): { role: string; content: string }[] {
@@ -153,7 +151,6 @@ async function streamTinfoil(
 	const sid = res.headers.get('X-Session-Id')
 	if (sid) currentSessionId = sid
 	if (res.status === 402) {
-		void refreshUsage()
 		throw new Error(t('mainnet.chat.outOfCredits'))
 	}
 	if (!res.ok || !res.body) {
@@ -243,7 +240,6 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 	} finally {
 		busy = false
 		scrollToBottom()
-		void refreshUsage()
 		void refreshSessions()
 	}
 }

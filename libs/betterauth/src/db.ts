@@ -98,6 +98,16 @@ export interface DataValueHistoryTable {
 	updated_at: Date
 }
 
+// Append-only audit log of verified Polar webhook events (board 0052). The UI reads billing
+// state live from Polar; this is purely for audit / idempotency / replay.
+export interface PolarEventTable {
+	event_id: string
+	type: string
+	external_id: string | null
+	payload: unknown
+	received_at: Generated<Date>
+}
+
 export interface Database {
 	ai_usage: AiUsageTable
 	model_pricing: ModelPricingTable
@@ -108,6 +118,7 @@ export interface Database {
 	data_value: DataValueTable
 	data_schema_history: DataSchemaHistoryTable
 	data_value_history: DataValueHistoryTable
+	polar_event: PolarEventTable
 }
 
 let cached: Kysely<Database> | null = null

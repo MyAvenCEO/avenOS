@@ -2,6 +2,16 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { aiChat, aiSessionMessages, aiSessions, aiSetTier, aiUsage } from './ai'
 import { auth, TRUSTED_ORIGINS } from './auth'
+import {
+	billingCancel,
+	billingCheckout,
+	billingOrderInvoice,
+	billingState,
+	billingSwitch,
+	billingSync,
+	billingUncancel,
+	billingWebhook
+} from './billing'
 import { bootstrapSchema } from './bootstrap'
 import {
 	createSchema,
@@ -11,6 +21,7 @@ import {
 	listValues,
 	updateValue
 } from './data'
+import { eventsStream } from './events'
 import { syncPricing } from './usage'
 
 const app = new Hono()
@@ -32,6 +43,11 @@ app.use('/api/auth/*', cors(corsOptions))
 app.use('/api/ai/*', cors(corsOptions))
 app.use('/api/admin/*', cors(corsOptions))
 app.use('/api/data/*', cors(corsOptions))
+// `/api/billing/checkout` is browser-called (needs CORS); `/api/billing/webhook` is a
+// server-to-server POST from Polar (no Origin, so CORS is inert there) verified by signature.
+app.use('/api/billing/*', cors(corsOptions))
+// Realtime: a per-user SSE stream the app fetches to invalidate TanStack Query caches. board 0055.
+app.use('/api/events', cors(corsOptions))
 
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
@@ -50,7 +66,34 @@ app.get('/api/data/schemas/:schemaId/values', listValues)
 app.patch('/api/data/values/:id', updateValue)
 app.delete('/api/data/values/:id', deleteValue)
 
+// Billing: create a Polar checkout (session-gated) + receive Polar webhooks → sync tier +
+// on-demand reconcile (pull customer state from Polar → tier) for the post-checkout return. board 0052.
+app.post('/api/billing/checkout', billingCheckout)
+app.post('/api/billing/webhook', billingWebhook)
+app.post('/api/billing/sync', billingSync)
+// Self-service plan management, all in our own UI: read subscriptions+orders, cancel/downgrade
+// (period-end or immediate), and resume a scheduled cancellation. board 0052.
+app.get('/api/events', eventsStream)
+app.get('/api/billing/state', billingState)
+app.post('/api/billing/cancel', billingCancel)
+app.post('/api/billing/uncancel', billingUncancel)
+app.post('/api/billing/switch', billingSwitch)
+app.get('/api/billing/orders/:id/invoice', billingOrderInvoice)
+
 app.get('/', (c) => c.text('avenOS betterauth server'))
+
+// Polar checkout success landing. The tier is applied by the webhook, so this is just a
+// confirmation the user lands on after paying (Polar's success_url target). board 0052.
+app.get('/billing/success', (c) =>
+	c.html(
+		'<!doctype html><meta charset="utf-8"><title>Payment complete</title>' +
+			'<body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#0b1220;color:#f5f1e6">' +
+			'<div style="text-align:center;max-width:28rem;padding:2rem">' +
+			'<h1 style="font-weight:500">Welcome to avenCITY 🎉</h1>' +
+			'<p style="opacity:.7;line-height:1.6">Your subscription is active. You can close this tab and return to avenOS — your plan and weekly MINDS are already syncing.</p>' +
+			'</div></body>'
+	)
+)
 
 // Self-bootstrap the schema before serving any request, so a fresh Neon DB works with
 // no manual migrate step. Awaited at module load — Bun finishes evaluating this module
