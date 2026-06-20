@@ -3,7 +3,6 @@ import { createQuery, useQueryClient } from '@tanstack/svelte-query'
 import { authClient, setBearerToken } from '$lib/auth/auth-client'
 import { syncBilling } from '$lib/billing/checkout'
 import { fmtMinds } from '$lib/billing/minds'
-import DebugCopy from '$lib/debug/DebugCopy.svelte'
 import { t } from '$lib/i18n'
 import { qk } from '$lib/query/client'
 import { fetchUsage } from '$lib/query/usage'
@@ -119,7 +118,6 @@ async function logout(): Promise<void> {
 			>
 				{t('mainnet.chat.logout')}
 			</button>
-			<span class="normal-case opacity-50"><DebugCopy compact /></span>
 		</div>
 	</nav>
 

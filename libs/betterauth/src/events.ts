@@ -70,7 +70,9 @@ export async function eventsStream(c: Context): Promise<Response> {
 			}
 			enqueue(': connected\n\n')
 			unsubscribe = subscribe(userId, (ev) => enqueue(`data: ${JSON.stringify(ev)}\n\n`))
-			keepAlive = setInterval(() => enqueue(': ping\n\n'), 25_000)
+			// Keep-alive must stay well under the server idleTimeout (120s) so Bun doesn't drop the
+			// idle stream — a too-long interval was the "Load failed" reconnect-churn bug. board 0055.
+			keepAlive = setInterval(() => enqueue(': ping\n\n'), 15_000)
 		},
 		cancel() {
 			unsubscribe?.()

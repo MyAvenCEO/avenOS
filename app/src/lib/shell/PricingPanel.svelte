@@ -62,6 +62,14 @@ function actionFor(tierId: string): 'current' | 'book' | 'upgrade' | 'downgrade'
 	return (RANK[tierId] ?? 0) > (RANK[currentTier] ?? 0) ? 'upgrade' : 'downgrade'
 }
 
+// Weekly price label, live from Polar (billing.prices) — falls back to the static TIER_LIST value
+// only until the state loads, so a Polar repricing shows up here with no code change. board 0052.
+function priceLabel(tierId: string, fallback: string): string {
+	const eur = billing?.prices?.[tierId]
+	if (eur == null) return fallback
+	return `€${Number.isInteger(eur) ? eur : eur.toFixed(2)}`
+}
+
 // Writes go through TanStack mutations that invalidate billing + usage on success (the SSE
 // stream covers it too, but the explicit invalidate makes the UI snap immediately). board 0055.
 function invalidateBilling(): void {
@@ -212,7 +220,9 @@ function closeInvoice(): void {
 						{t(`mainnet.pricing.tiers.${tier.id}.tagline`)}
 					</p>
 					<div class="mt-3 flex items-baseline gap-1">
-						<span class="text-foreground text-2xl font-semibold tracking-tight">{tier.price}</span>
+						<span class="text-foreground text-2xl font-semibold tracking-tight"
+							>{priceLabel(tier.id, tier.price)}</span
+						>
 						<span class="text-muted-foreground text-sm">{t('mainnet.pricing.perWeek')}</span>
 					</div>
 					<p class="text-muted-foreground mt-0.5 text-[11px]">{t('mainnet.pricing.exclVat')}</p>

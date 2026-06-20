@@ -4,6 +4,7 @@ import { sql } from 'kysely'
 import { auth, linkPolarCustomer, polarClient } from './auth'
 import { db } from './db'
 import { publish } from './events'
+import { allTierPricesEur, setTierPriceEur } from './tier-price-cache'
 
 /**
  * Polar checkout + webhook for product tiers. board 0052 slice 2 (Polar billing).
@@ -25,8 +26,9 @@ const AVENCEO_PRODUCT_ID =
 
 /**
  * Tier → Polar product + rank. THE single source of truth for paid tiers — add a row to wire a
- * new one. `rank` orders tiers so the UI/switch can tell an upgrade from a downgrade. Keep the
- * weekly price in sync in credits.ts (TIER_PRICE_EUR), which derives the MINDS allowance.
+ * new one. `rank` orders tiers so the UI/switch can tell an upgrade from a downgrade. Prices are
+ * read LIVE from Polar (refreshTierPrices → tier-price-cache); credits.ts TIER_PRICE_EUR is only
+ * the boot-time fallback.
  */
 export const TIERS: Record<string, { productId: string; rank: number }> = {
 	avenME: { productId: AVENME_PRODUCT_ID, rank: 1 },
@@ -74,6 +76,40 @@ function tierFromActiveSubscriptions(subs: { productId: string }[] | undefined):
 async function applyTier(userId: string | null | undefined, tier: string): Promise<void> {
 	if (!userId) return
 	await db().updateTable('user').set({ tier }).where('id', '=', userId).execute()
+}
+
+// ── Live tier prices (Polar is the SSOT; we cache so the credit hot-path + state read don't
+// hit the API every time). The UI shows these and credits.ts derives the MINDS allowance from
+// them — nothing about price is hardcoded in the app any more. board 0052.
+let priceCacheAt = 0
+const PRICE_TTL_MS = 5 * 60_000
+
+/** Fetch each tier's current weekly price from Polar into the shared cache. Best-effort. */
+export async function refreshTierPrices(): Promise<void> {
+	const client = polarClient
+	if (!client) return
+	await Promise.all(
+		Object.entries(TIERS).map(async ([tier, cfg]) => {
+			try {
+				const product = await client.products.get({ id: cfg.productId })
+				const fixed = (product.prices ?? []).find(
+					(p) => typeof (p as { priceAmount?: number }).priceAmount === 'number'
+				) as { priceAmount?: number } | undefined
+				if (fixed?.priceAmount != null) setTierPriceEur(tier, fixed.priceAmount / 100)
+			} catch (e) {
+				console.error(
+					`[billing] price fetch failed for ${tier}:`,
+					e instanceof Error ? e.message : e
+				)
+			}
+		})
+	)
+	priceCacheAt = Date.now()
+}
+
+/** Refresh prices when the cache is older than the TTL (no-op otherwise). */
+async function ensureTierPrices(): Promise<void> {
+	if (Date.now() - priceCacheAt > PRICE_TTL_MS) await refreshTierPrices()
 }
 
 /**
@@ -305,7 +341,8 @@ export async function billingState(c: Context): Promise<Response> {
 		const [subsPager, ordersPager, skills] = await Promise.all([
 			polarClient.subscriptions.list({ externalCustomerId: user.id, limit: 50 }),
 			polarClient.orders.list({ externalCustomerId: user.id, limit: 50 }),
-			grantedSkills(user.id)
+			grantedSkills(user.id),
+			ensureTierPrices() // refresh live prices (cached; the UI reads them below)
 		])
 		const subs = await firstPageItems(subsPager)
 		const orders = await firstPageItems(ordersPager)
@@ -320,6 +357,8 @@ export async function billingState(c: Context): Promise<Response> {
 
 		return c.json({
 			tier,
+			// Live weekly price (EUR) per tier, straight from Polar — the UI renders these, never hardcoded.
+			prices: allTierPricesEur(),
 			// Skills the user is actually entitled to, from Polar feature-flag benefits (not inferred).
 			skills,
 			subscriptions: subs.map((s) => ({

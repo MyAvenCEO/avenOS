@@ -10,7 +10,8 @@ import {
 	billingSwitch,
 	billingSync,
 	billingUncancel,
-	billingWebhook
+	billingWebhook,
+	refreshTierPrices
 } from './billing'
 import { bootstrapSchema } from './bootstrap'
 import {
@@ -104,6 +105,14 @@ await bootstrapSchema()
 // lazily syncs if a model is unseen). Never blocks startup.
 void syncPricing().catch((e) => console.error('[betterauth] pricing sync failed:', e))
 
+// Best-effort: warm the live tier-price cache from Polar on boot, so the first credit check /
+// billing state read already has real prices (billingState also refreshes lazily). board 0052.
+void refreshTierPrices().catch((e) => console.error('[betterauth] tier price warm failed:', e))
+
 const port = Number(new URL(process.env.BETTER_AUTH_URL ?? 'http://localhost:8787').port || 8787)
 
-export default { port, fetch: app.fetch }
+// idleTimeout: Bun closes any connection idle for this many seconds. The default (10s) kills the
+// long-lived SSE stream (GET /api/events) and any AI response that pauses >10s, which churned the
+// WKWebView connection pool and surfaced as "Load failed" across the app. 120s comfortably covers
+// the 15s SSE keep-alive and model think-pauses. board 0055.
+export default { port, idleTimeout: 120, fetch: app.fetch }
