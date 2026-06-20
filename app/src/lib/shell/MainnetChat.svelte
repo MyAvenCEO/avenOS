@@ -1,4 +1,5 @@
 <script lang="ts">
+import { useQueryClient } from '@tanstack/svelte-query'
 import { tick } from 'svelte'
 import { getBearerToken } from '$lib/auth/auth-client'
 import { t } from '$lib/i18n'
@@ -23,6 +24,11 @@ let currentSessionId = $state<string | null>(null)
 let nextId = 0
 let scrollEl = $state<HTMLDivElement | null>(null)
 let initialized = false
+
+// After an AI turn the server has recorded usage + (often) written data via the tool-loop, so
+// invalidate those queries to snap the MINDS counter + any todos vibe up to date at once (polling
+// is only the fallback). board 0055.
+const queryClient = useQueryClient()
 
 const AI_BASE = import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined
 const SYSTEM_PROMPT =
@@ -241,6 +247,8 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 		busy = false
 		scrollToBottom()
 		void refreshSessions()
+		void queryClient.invalidateQueries({ queryKey: ['usage'] })
+		void queryClient.invalidateQueries({ queryKey: ['data'] })
 	}
 }
 

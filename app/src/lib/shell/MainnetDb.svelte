@@ -2,6 +2,7 @@
 import { createQuery } from '@tanstack/svelte-query'
 import { type DataValue, listSchemas, listValues } from '$lib/data/client'
 import { t } from '$lib/i18n'
+import { POLL_MS } from '$lib/query/client'
 
 // Mainnet "DB" tab: a left "select schema" rail + the selected schema shown two ways via a
 // Schema/Data toggle — its JSON Schema definition, or the table of its value instances (columns
@@ -39,6 +40,7 @@ function cell(value: unknown): string {
 // 'data' event invalidates it). No manual reload. board 0055.
 const tablesQuery = createQuery(() => ({
 	queryKey: ['data', 'tables'],
+	refetchInterval: POLL_MS.data,
 	queryFn: async (): Promise<Table[]> => {
 		const schemas = await listSchemas()
 		return Promise.all(
