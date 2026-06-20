@@ -1001,7 +1001,100 @@
 			"vibes": "Vibes",
 			"schemas": "Schemas",
 			"db": "DB",
+			"plan": "Plan",
+			"passkey": "Passkey",
 			"admin": "Admin"
+		},
+		"pricing": {
+			"title": "Plans",
+			"subtitle": "Run private AI on MINDS. Book avenCITY to unlock your weekly allowance and secure your own aven name.",
+			"perWeek": "/ week",
+			"exclVat": "excl. VAT",
+			"book": "Book avenCITY",
+			"bookTier": "Book {tier}",
+			"upgradeTo": "Upgrade to {tier}",
+			"downgradeTo": "Downgrade to {tier}",
+			"opening": "Opening checkout…",
+			"currentPlan": "Current plan",
+			"comingSoon": "Coming soon",
+			"error": "Checkout failed: {message}",
+			"upgradedTitle": "Welcome to avenCITY 🎉",
+			"upgradedBody": "Your subscription is active — your weekly MINDS are ready.",
+			"footnote": "Billed weekly via Polar. Card entry happens on Polar's secure page; you can cancel anytime.",
+			"manageTitle": "Manage plan",
+			"subscriptions": "Subscriptions",
+			"orders": "Orders",
+			"skills": "Your skills",
+			"skill": {
+				"website": "Website",
+				"bookkeeping": "Bookkeeping",
+				"vibecreator": "Vibecreator"
+			},
+			"invoice": "Invoice",
+			"invoiceTitle": "Invoice",
+			"download": "Download",
+			"close": "Close",
+			"cancel": "Cancel subscription",
+			"resume": "Resume subscription",
+			"cancelYes": "Yes, cancel",
+			"keep": "Keep plan",
+			"working": "Working…",
+			"cancelConfirm": "Cancel your plan? You'll keep it until {date}, then drop to free.",
+			"cancelsOn": "Cancels on {date}",
+			"renewsOn": "Renews {date}",
+			"status": {
+				"active": "Active",
+				"trialing": "Trial",
+				"canceled": "Canceled",
+				"past_due": "Past due",
+				"unpaid": "Unpaid",
+				"incomplete": "Incomplete",
+				"paid": "Paid",
+				"pending": "Pending",
+				"refunded": "Refunded",
+				"partially_refunded": "Partially refunded",
+				"void": "Void",
+				"draft": "Draft"
+			},
+			"interval": {
+				"day": "day",
+				"week": "week",
+				"month": "month",
+				"year": "year"
+			},
+			"reason": {
+				"purchase": "Purchase",
+				"subscription_create": "New subscription",
+				"subscription_cycle": "Renewal",
+				"subscription_update": "Plan change"
+			},
+			"tiers": {
+				"avenME": {
+					"name": "avenME",
+					"tagline": "Your first self.",
+					"f1": "35 MINDS / week of private AI",
+					"f2": "Secure your own aven name",
+					"f3": "Full chat, vibes, schemas & DB",
+					"f4": "avenME game pass"
+				},
+				"avenFOUNDER": {
+					"name": "avenFOUNDER",
+					"tagline": "Found a city.",
+					"f1": "Everything in avenME, plus:",
+					"f2": "170 MINDS / week of private AI",
+					"f3": "avenFOUNDER game pass",
+					"f4": "Website skill",
+					"f5": "Bookkeeping skill"
+				},
+				"avenCEO": {
+					"name": "avenCEO",
+					"tagline": "Run a company of selves.",
+					"f1": "Everything in avenFOUNDER, plus:",
+					"f2": "1,885 MINDS / week of private AI",
+					"f3": "avenCEO game pass",
+					"f4": "Vibecreator skill"
+				}
+			}
 		},
 		"vibes": {
 			"select": "Select vibe"
@@ -1014,7 +1107,9 @@
 		"db": {
 			"empty": "No data yet.",
 			"emptyTable": "No entries for this schema yet.",
-			"rows": "rows"
+			"rows": "rows",
+			"tabSchema": "Schema",
+			"tabData": "Data"
 		},
 		"auth": {
 			"tag": "mainnet / alberobello",

@@ -1,24 +1,23 @@
 <script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
 import { type DataValue, listSchemas, listValues } from '$lib/data/client'
 import { t } from '$lib/i18n'
 
-// Mainnet "DB" tab: a left "select schema" rail (same shape as Vibes/Schemas) + a table of
-// the selected schema's values on the right (columns derived from the schema's properties +
-// any extra keys present in the data). Read-only view over the generic /api/data store. board 0053.
+// Mainnet "DB" tab: a left "select schema" rail + the selected schema shown two ways via a
+// Schema/Data toggle — its JSON Schema definition, or the table of its value instances (columns
+// derived from the schema properties + any extra keys present). Folds the old "Schemas" tab in.
+// Read-only view over the generic /api/data store. board 0053/0055.
 type Table = {
 	id: string
 	name: string
+	jsonSchema: unknown
 	columns: string[]
 	rows: DataValue<Record<string, unknown>>[]
 }
 
-let tables = $state<Table[]>([])
 let selectedId = $state<string | null>(null)
-let err = $state<string | null>(null)
-let loading = $state(true)
-let started = false
-
-const selected = $derived(tables.find((tbl) => tbl.id === selectedId) ?? null)
+// Which face of the selected schema to show: its definition or its data instances.
+let view = $state<'data' | 'schema'>('data')
 
 function columnsFor(jsonSchema: unknown, rows: DataValue<Record<string, unknown>>[]): string[] {
 	const fromSchema = Object.keys(
@@ -36,27 +35,34 @@ function cell(value: unknown): string {
 	return String(value)
 }
 
-async function load(): Promise<void> {
-	try {
+// Tables — schemas + their values, live via TanStack Query (key under ['data'] so the SSE
+// 'data' event invalidates it). No manual reload. board 0055.
+const tablesQuery = createQuery(() => ({
+	queryKey: ['data', 'tables'],
+	queryFn: async (): Promise<Table[]> => {
 		const schemas = await listSchemas()
-		tables = await Promise.all(
+		return Promise.all(
 			schemas.map(async (s) => {
 				const rows = await listValues<Record<string, unknown>>(s.id)
-				return { id: s.id, name: s.name, columns: columnsFor(s.jsonSchema, rows), rows }
+				return {
+					id: s.id,
+					name: s.name,
+					jsonSchema: s.jsonSchema,
+					columns: columnsFor(s.jsonSchema, rows),
+					rows
+				}
 			})
 		)
-		if (tables.length > 0 && !selectedId) selectedId = tables[0].id
-	} catch (e) {
-		err = e instanceof Error ? e.message : String(e)
-	} finally {
-		loading = false
 	}
-}
+}))
+const tables = $derived<Table[]>(tablesQuery.data ?? [])
+const loading = $derived(tablesQuery.isPending)
+const err = $derived(tablesQuery.error ? (tablesQuery.error as Error).message : null)
+const selected = $derived(tables.find((tbl) => tbl.id === selectedId) ?? null)
 
+// Auto-select the first table once they load.
 $effect(() => {
-	if (started) return
-	started = true
-	void load()
+	if (!selectedId && tables.length > 0) selectedId = tables[0].id
 })
 </script>
 
@@ -95,15 +101,38 @@ $effect(() => {
 		{/if}
 		{#if selected}
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
-				<div class="mb-2 flex items-baseline justify-between gap-2">
+				<div class="mb-3 flex items-center justify-between gap-2">
 					<h2 class="text-foreground text-base font-semibold">{selected.name}</h2>
-					<span class="text-muted-foreground text-[11px] tabular-nums">
-						{selected.rows.length}
-						{t('mainnet.db.rows')}
-					</span>
+					<div
+						class="border-border inline-flex shrink-0 overflow-hidden rounded-[var(--radius)] border text-[12px]"
+					>
+						<button
+							type="button"
+							class="px-3 py-1 transition-colors {view === 'schema'
+								? 'bg-primary/10 text-foreground font-medium'
+								: 'text-muted-foreground hover:bg-card'}"
+							onclick={() => (view = 'schema')}
+						>
+							{t('mainnet.db.tabSchema')}
+						</button>
+						<button
+							type="button"
+							class="border-border border-l px-3 py-1 transition-colors {view === 'data'
+								? 'bg-primary/10 text-foreground font-medium'
+								: 'text-muted-foreground hover:bg-card'}"
+							onclick={() => (view = 'data')}
+						>
+							{t('mainnet.db.tabData')}
+							<span class="ml-1 tabular-nums opacity-60">{selected.rows.length}</span>
+						</button>
+					</div>
 				</div>
 
-				{#if selected.rows.length === 0}
+				{#if view === 'schema'}
+					<pre
+						class="border-border bg-card text-foreground min-h-0 overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
+					><code>{JSON.stringify(selected.jsonSchema, null, 2)}</code></pre>
+				{:else if selected.rows.length === 0}
 					<p
 						class="border-border text-muted-foreground rounded-[var(--radius-lg)] border border-dashed px-4 py-6 text-center text-[13px]"
 					>

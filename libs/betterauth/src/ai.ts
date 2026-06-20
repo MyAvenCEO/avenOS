@@ -1,10 +1,12 @@
 import { DATA_TOOLS } from '@avenos/aven-vibes/tools'
 import type { Context } from 'hono'
 import { auth } from './auth'
+import { TIERS } from './billing'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
 import { creditStatus } from './credits'
 import { executeDataTool, schemasPromptHint } from './data'
 import { db } from './db'
+import { publish } from './events'
 import { getUsageStats, recordUsage, type TokenUsage } from './usage'
 
 /**
@@ -106,6 +108,7 @@ export async function aiChat(c: Context): Promise<Response> {
 			console.error('[ai] recordUsage failed:', e)
 		)
 	}
+	publish(userId, { entity: 'usage' })
 	return c.json({ content, usage: data.usage ?? null, sessionId: chatSessionId })
 }
 
@@ -264,6 +267,7 @@ function streamWithTools(opts: {
 					prompt_tokens: promptTokens,
 					completion_tokens: completionTokens
 				}).catch((err) => console.error('[ai] recordUsage (stream) failed:', err))
+				publish(userId, { entity: 'usage' })
 			}
 		}
 	})
@@ -306,7 +310,7 @@ export async function aiSessionMessages(c: Context): Promise<Response> {
 	return c.json({ messages })
 }
 
-/** Admin-gated: set a user's product tier (free | avenCITY). board 0052. */
+/** Admin-gated: set a user's product tier (free | any wired tier). board 0052. */
 export async function aiSetTier(c: Context): Promise<Response> {
 	const session = await auth.api.getSession({ headers: c.req.raw.headers })
 	if (!session) return c.json({ error: 'unauthorized' }, 401)
@@ -317,8 +321,9 @@ export async function aiSetTier(c: Context): Promise<Response> {
 		userId?: string
 		tier?: string
 	} | null
-	if (!body?.userId || (body.tier !== 'free' && body.tier !== 'avenCITY')) {
-		return c.json({ error: 'userId and tier (free|avenCITY) required' }, 400)
+	const valid = body?.tier === 'free' || (body?.tier !== undefined && body.tier in TIERS)
+	if (!body?.userId || !valid) {
+		return c.json({ error: `userId and tier (free|${Object.keys(TIERS).join('|')}) required` }, 400)
 	}
 	await db().updateTable('user').set({ tier: body.tier }).where('id', '=', body.userId).execute()
 	return c.json({ ok: true, userId: body.userId, tier: body.tier })

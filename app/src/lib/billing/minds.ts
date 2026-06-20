@@ -10,6 +10,14 @@ export function usdToMinds(usd: number): number {
 	return usd * MINDS_PER_USD
 }
 
+// The weekly MINDS a tier's price buys, for the pricing cards. The PRICE is live from Polar; this
+// only applies the fixed €→allowance fraction (mirrors the server's credits.ts ALLOWANCE_FRACTION),
+// so a Polar repricing flows straight through to the MINDS shown. board 0052.
+const WEEKLY_ALLOWANCE_FRACTION = 0.5
+export function weeklyMindsLabel(priceEur: number): string {
+	return fmtMinds(priceEur * WEEKLY_ALLOWANCE_FRACTION)
+}
+
 /**
  * Format a USD amount as MINDS for display: 3.5 → "35 MINDS", 0.12 → "0.12 MINDS".
  * A tiny non-zero amount shows "<0.01 MINDS" rather than rounding to 0.
