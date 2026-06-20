@@ -1,4 +1,5 @@
 mod asr;
+mod device_key;
 mod embed_model;
 mod fly;
 mod llm;
@@ -256,6 +257,8 @@ pub fn run() {
 			network::aven_ceo_addressbook_id,
 			network::google_oauth_config,
 			fly::fly_fetch,
+			device_key::device_seed_load,
+			device_key::device_seed_save,
 			avendb::avendb_runtime,
 		avendb::brain_runtime,
 			avendb::self_storage_paths,

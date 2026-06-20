@@ -48,9 +48,10 @@ if (!polarToken) {
 export const polarClient = polarToken
 	? new Polar({
 			accessToken: polarToken,
-			// Default to production (polar.sh) — tokens minted there 401 against sandbox.
-			// Set POLAR_SERVER=sandbox explicitly for sandbox.polar.sh tokens.
-			server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'production'
+			// Default to SANDBOX (sandbox.polar.sh) — dev/next tokens are sandbox-minted. Production
+			// is OPT-IN: set POLAR_SERVER=production explicitly (with a production token) for the
+			// main/production deploy. A token only works against the env it was minted in. board 0050.
+			server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'sandbox'
 		})
 	: null
 const polarPlugins = polarClient

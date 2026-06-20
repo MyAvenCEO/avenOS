@@ -15,20 +15,16 @@ import {
 	unwrapMasterKey,
 	wrapMasterKey
 } from './crypto'
-import { deriveVaultKey } from './unlock'
+import { DEVICE_CRED, deriveVaultKey } from './unlock'
 
 const RP_ID = 'api.next.aven.ceo' // the passkey rp.id (live AASA host)
 const FLY_KIND = 'fly_token'
-const DEV_CRED = 'dev' // marker stored when the vault was created via the DEV-fallback key
 
-/** Re-derive the vault's master DEK from its pinned salt (passkey PRF, or DEV fallback). */
+/** Re-derive the vault's master DEK from its pinned salt (passkey PRF, or device key). */
 async function openVaultDek(vault: VaultRow): Promise<CryptoKey> {
 	const salt = unb64(vault.prf_salt)
-	const { prf } = await deriveVaultKey({
-		rpId: RP_ID,
-		salt,
-		credentialId: vault.credential_id === DEV_CRED ? undefined : vault.credential_id
-	})
+	// credential_id tells deriveVaultKey which provider made this vault ('device' vs a passkey).
+	const { prf } = await deriveVaultKey({ rpId: RP_ID, salt, credentialId: vault.credential_id })
 	const kek = await deriveKek(prf, salt)
 	return unwrapMasterKey(
 		{ wrappedMasterKey: vault.wrapped_master_key, wrapNonce: vault.wrap_nonce, alg: 'AES-256-GCM' },
@@ -46,7 +42,7 @@ export async function connectFlyToken(token: string): Promise<void> {
 		const dek = await generateMasterKey()
 		const wrapped = await wrapMasterKey(dek, kek)
 		await putVault({
-			credentialId: provider === 'passkey' ? '(passkey)' : DEV_CRED,
+			credentialId: provider === 'passkey' ? '(passkey)' : DEVICE_CRED,
 			prfSalt: b64(salt),
 			wrappedMasterKey: wrapped.wrappedMasterKey,
 			wrapNonce: wrapped.wrapNonce,
