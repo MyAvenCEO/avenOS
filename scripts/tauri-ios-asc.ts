@@ -276,6 +276,18 @@ function writeAvenIosCompileEnv() {
 			sherpaLibDir
 		)
 	}
+	// Native Google sign-in (board 0050): the Desktop client id/secret are option_env!-baked
+	// into network.rs (google_oauth_config). macOS gets them from the direct cargo build env,
+	// but the iOS compile only sees THIS file — so forward them when present (CI sets them from
+	// the `next` GitHub Environment). Without this the shipped iOS app reports "GOOGLE_CLIENT_ID
+	// not set" at sign-in.
+	const googleId = process.env.GOOGLE_CLIENT_ID?.trim()
+	const googleSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()
+	if (googleId) lines.push(`export GOOGLE_CLIENT_ID=${shellEscapeSingleQuoted(googleId)}`)
+	if (googleSecret) {
+		lines.push(`export GOOGLE_CLIENT_SECRET=${shellEscapeSingleQuoted(googleSecret)}`)
+	}
+
 	lines.push('')
 	writeFileSync(AVEN_IOS_COMPILE_ENV, lines.join('\n'), 'utf8')
 	console.log(
