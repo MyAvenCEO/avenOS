@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.8...v) (2026-06-20)
+
+
+### Bug Fixes
+
+* **ios:** bake the Google Desktop client into the iOS binary ([d58c230](https://github.com/MyAvenCEO/avenOS/commit/d58c230ff45cbeb894a641b5764183668104cc5b))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.7...v) (2026-06-19)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.6...v) (2026-06-19)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.5...v) (2026-06-19)
