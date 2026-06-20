@@ -11,6 +11,7 @@ import {
 	switchSubscription,
 	uncancelSubscription
 } from '$lib/billing/checkout'
+import { weeklyMindsLabel } from '$lib/billing/minds'
 import { getLocale, t } from '$lib/i18n'
 import { POLL_MS, qk } from '$lib/query/client'
 
@@ -18,13 +19,13 @@ import { POLL_MS, qk } from '$lib/query/client'
 // are data-driven (TIER_LIST); each card computes book / upgrade / downgrade / current from the
 // user's tier + rank. Subscriptions + orders and all manage actions go through /api/billing/*
 // which proxies the Polar SDK server-side. board 0052.
-type TierCfg = { id: string; price: string; rank: number; features: string[] }
-// Keep in sync with the server's billing.ts TIERS (ranks) + credits.ts (prices). `features`
-// lists the i18n leaf keys to show — avenFOUNDER leads with "Everything in avenCITY".
+// Tiers are data-driven by RANK only. Price + feature bullets both come LIVE from Polar
+// (billing.prices / billing.benefits); `eur` is just a load-time price fallback. board 0052/0055.
+type TierCfg = { id: string; eur: number; rank: number }
 const TIER_LIST: TierCfg[] = [
-	{ id: 'avenME', price: '€7', rank: 1, features: ['f1', 'f2', 'f3', 'f4'] },
-	{ id: 'avenFOUNDER', price: '€34', rank: 2, features: ['f1', 'f2', 'f3', 'f4', 'f5'] },
-	{ id: 'avenCEO', price: '€377', rank: 3, features: ['f1', 'f2', 'f3', 'f4'] }
+	{ id: 'avenME', eur: 7, rank: 1 },
+	{ id: 'avenFOUNDER', eur: 34, rank: 2 },
+	{ id: 'avenCEO', eur: 377, rank: 3 }
 ]
 const RANK: Record<string, number> = Object.fromEntries(TIER_LIST.map((x) => [x.id, x.rank]))
 
@@ -68,10 +69,17 @@ function actionFor(tierId: string): 'current' | 'book' | 'upgrade' | 'downgrade'
 
 // Weekly price label, live from Polar (billing.prices) — falls back to the static TIER_LIST value
 // only until the state loads, so a Polar repricing shows up here with no code change. board 0052.
-function priceLabel(tierId: string, fallback: string): string {
-	const eur = billing?.prices?.[tierId]
-	if (eur == null) return fallback
+function priceLabel(tierId: string, fallbackEur: number): string {
+	const eur = billing?.prices?.[tierId] ?? fallbackEur
 	return `€${Number.isInteger(eur) ? eur : eur.toFixed(2)}`
+}
+
+// Card bullets = a derived MINDS line (from the live price) + the tier's Polar benefit
+// descriptions, in Polar's order. Polar is the SSOT for features; only MINDS is computed. board 0052/0055.
+function featuresFor(tierId: string, fallbackEur: number): string[] {
+	const eur = billing?.prices?.[tierId] ?? fallbackEur
+	const minds = `${weeklyMindsLabel(eur)} / week of private AI`
+	return [minds, ...(billing?.benefits?.[tierId] ?? [])]
 }
 
 // Writes go through TanStack mutations that invalidate billing + usage on success (the SSE
@@ -225,16 +233,16 @@ function closeInvoice(): void {
 					</p>
 					<div class="mt-3 flex items-baseline gap-1">
 						<span class="text-foreground text-2xl font-semibold tracking-tight"
-							>{priceLabel(tier.id, tier.price)}</span
+							>{priceLabel(tier.id, tier.eur)}</span
 						>
 						<span class="text-muted-foreground text-sm">{t('mainnet.pricing.perWeek')}</span>
 					</div>
 					<p class="text-muted-foreground mt-0.5 text-[11px]">{t('mainnet.pricing.exclVat')}</p>
 					<ul class="text-foreground/90 mt-4 flex flex-col gap-2 text-sm">
-						{#each tier.features as f (f)}
+						{#each featuresFor(tier.id, tier.eur) as f (f)}
 							<li class="flex gap-2">
 								<span class="text-primary" aria-hidden="true">✓</span>
-								{t(`mainnet.pricing.tiers.${tier.id}.${f}`)}
+								{f}
 							</li>
 						{/each}
 					</ul>

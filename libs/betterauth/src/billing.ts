@@ -4,7 +4,12 @@ import { sql } from 'kysely'
 import { auth, linkPolarCustomer, polarClient } from './auth'
 import { db } from './db'
 import { publish } from './events'
-import { allTierPricesEur, setTierPriceEur } from './tier-price-cache'
+import {
+	allTierBenefits,
+	allTierPricesEur,
+	setTierBenefits,
+	setTierPriceEur
+} from './tier-price-cache'
 
 /**
  * Polar checkout + webhook for product tiers. board 0052 slice 2 (Polar billing).
@@ -96,6 +101,13 @@ export async function refreshTierPrices(): Promise<void> {
 					(p) => typeof (p as { priceAmount?: number }).priceAmount === 'number'
 				) as { priceAmount?: number } | undefined
 				if (fixed?.priceAmount != null) setTierPriceEur(tier, fixed.priceAmount / 100)
+				// Card feature list = the product's Polar benefit descriptions (Polar is the SSOT).
+				setTierBenefits(
+					tier,
+					(product.benefits ?? [])
+						.map((b) => (b as { description?: string }).description ?? '')
+						.filter(Boolean)
+				)
 			} catch (e) {
 				console.error(
 					`[billing] price fetch failed for ${tier}:`,
@@ -359,6 +371,8 @@ export async function billingState(c: Context): Promise<Response> {
 			tier,
 			// Live weekly price (EUR) per tier, straight from Polar — the UI renders these, never hardcoded.
 			prices: allTierPricesEur(),
+			// Card feature bullets per tier — the Polar product benefit descriptions (Polar = SSOT).
+			benefits: allTierBenefits(),
 			// Skills the user is actually entitled to, from Polar feature-flag benefits (not inferred).
 			skills,
 			subscriptions: subs.map((s) => ({
