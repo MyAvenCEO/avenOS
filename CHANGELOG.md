@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.2...v) (2026-06-20)
+
+
+### Bug Fixes
+
+* **ios:** use dedicated iOS Google OAuth client (+ server multi-audience) ([347f4a5](https://github.com/MyAvenCEO/avenOS/commit/347f4a55334e8f8ce1f218682f74900299bac6d6))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.1...v) (2026-06-20)
 
 
