@@ -31,6 +31,10 @@ let initialized = false
 const queryClient = useQueryClient()
 
 const AI_BASE = import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined
+// Client backstop: abort a chat stream that goes silent this long so the composer can't stay
+// stuck busy if the server hangs. Longer than the server's STREAM_IDLE_MS so its graceful
+// [DONE] normally lands first. board 0055.
+const CLIENT_IDLE_MS = 90_000
 const SYSTEM_PROMPT =
 	'You are a helpful assistant inside the avenOS Alberobello chat. Be concise and friendly.'
 // Sentinel content the server persists for a vibe-card marker message (must match
@@ -141,9 +145,12 @@ async function streamTinfoil(
 ): Promise<void> {
 	if (!AI_BASE) throw new Error('auth server URL not configured')
 	const token = getBearerToken()
+	const ac = new AbortController()
+	let idle = setTimeout(() => ac.abort(), CLIENT_IDLE_MS)
 	const res = await fetch(`${AI_BASE}/api/ai/chat`, {
 		method: 'POST',
 		credentials: 'include',
+		signal: ac.signal,
 		headers: {
 			'Content-Type': 'application/json',
 			...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -157,9 +164,11 @@ async function streamTinfoil(
 	const sid = res.headers.get('X-Session-Id')
 	if (sid) currentSessionId = sid
 	if (res.status === 402) {
+		clearTimeout(idle)
 		throw new Error(t('mainnet.chat.outOfCredits'))
 	}
 	if (!res.ok || !res.body) {
+		clearTimeout(idle)
 		const err = (await res.json().catch(() => null)) as { error?: string; detail?: string } | null
 		throw new Error(
 			err?.error ? `${err.error}${err.detail ? `: ${err.detail}` : ''}` : `HTTP ${res.status}`
@@ -168,29 +177,35 @@ async function streamTinfoil(
 	const reader = res.body.getReader()
 	const decoder = new TextDecoder()
 	let buf = ''
-	while (true) {
-		const { done, value } = await reader.read()
-		if (done) break
-		buf += decoder.decode(value, { stream: true })
-		const events = buf.split('\n\n')
-		buf = events.pop() ?? ''
-		for (const event of events) {
-			const dataLine = event.split('\n').find((l) => l.startsWith('data:'))
-			if (!dataLine) continue
-			const payload = dataLine.slice(5).trim()
-			if (payload === '[DONE]') return
-			try {
-				const json = JSON.parse(payload) as {
-					choices?: { delta?: { content?: string } }[]
-					aven_vibe?: { schema?: string }
+	try {
+		while (true) {
+			const { done, value } = await reader.read()
+			if (done) break
+			clearTimeout(idle)
+			idle = setTimeout(() => ac.abort(), CLIENT_IDLE_MS)
+			buf += decoder.decode(value, { stream: true })
+			const events = buf.split('\n\n')
+			buf = events.pop() ?? ''
+			for (const event of events) {
+				const dataLine = event.split('\n').find((l) => l.startsWith('data:'))
+				if (!dataLine) continue
+				const payload = dataLine.slice(5).trim()
+				if (payload === '[DONE]') return
+				try {
+					const json = JSON.parse(payload) as {
+						choices?: { delta?: { content?: string } }[]
+						aven_vibe?: { schema?: string }
+					}
+					if (json.aven_vibe?.schema) onVibe(json.aven_vibe.schema)
+					const delta = json.choices?.[0]?.delta?.content
+					if (delta) onDelta(delta)
+				} catch {
+					/* skip keep-alives / partial frames */
 				}
-				if (json.aven_vibe?.schema) onVibe(json.aven_vibe.schema)
-				const delta = json.choices?.[0]?.delta?.content
-				if (delta) onDelta(delta)
-			} catch {
-				/* skip keep-alives / partial frames */
 			}
 		}
+	} finally {
+		clearTimeout(idle)
 	}
 }
 
