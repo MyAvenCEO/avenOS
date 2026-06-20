@@ -20,6 +20,9 @@ import { getUsageStats, recordUsage, type TokenUsage } from './usage'
  */
 const TINFOIL_BASE_URL = process.env.TINFOIL_BASE_URL ?? 'https://inference.tinfoil.sh/v1'
 const TINFOIL_MODEL = process.env.TINFOIL_MODEL ?? 'gemma4-31b'
+// Max time a streaming round may go without receiving any bytes before we abort it (a stalled
+// upstream must not wedge the stream open forever). Resets on every chunk. board 0055.
+const STREAM_IDLE_MS = 60_000
 
 /**
  * Sentinel content for a persisted vibe-card marker message: `<ZWSP>aven-vibe:<schema>`.
@@ -143,16 +146,45 @@ function streamWithTools(opts: {
 			let completionTokens = 0
 			const emittedVibes = new Set<string>()
 			try {
-				// Tell the model the exact schema field names so data_crud writes validate.
+				// Tell the model the exact schema field names so data_crud writes validate. MERGE the
+				// hint into the existing leading system message — a SECOND system message makes Tinfoil
+				// 400 (only the first turn worked, before any schema existed → no hint). board 0055.
 				const hint = await schemasPromptHint(userId).catch(() => '')
-				if (hint) msgs.unshift({ role: 'system', content: hint })
+				if (hint) {
+					const first = msgs[0] as { role?: string; content?: string } | undefined
+					if (first?.role === 'system') {
+						first.content = `${first.content ?? ''}\n\n${hint}`.trim()
+					} else {
+						msgs.unshift({ role: 'system', content: hint })
+					}
+				}
 				for (let round = 0; round < 5; round++) {
-					const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
-						method: 'POST',
-						headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-						body: JSON.stringify({ model, messages: msgs, tools: DATA_TOOLS, stream: true })
-					})
+					// Abort a round that stalls (no bytes for STREAM_IDLE_MS) so a hung Tinfoil upstream
+					// can't wedge the whole stream open forever — that left the client stuck on
+					// "Thinking…" with no [DONE], which also bricked every follow-up request. board 0055.
+					const ac = new AbortController()
+					let idle = setTimeout(() => ac.abort(), STREAM_IDLE_MS)
+					const bumpIdle = (): void => {
+						clearTimeout(idle)
+						idle = setTimeout(() => ac.abort(), STREAM_IDLE_MS)
+					}
+					let res: Response
+					try {
+						res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
+							method: 'POST',
+							headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+							body: JSON.stringify({ model, messages: msgs, tools: DATA_TOOLS, stream: true }),
+							signal: ac.signal
+						})
+					} catch {
+						clearTimeout(idle)
+						emit({ choices: [{ delta: { content: '\n[ai timed out — please retry]' } }] })
+						break
+					}
 					if (!res.ok || !res.body) {
+						clearTimeout(idle)
+						const detail = await res.text().catch(() => '')
+						console.error(`[ai] tinfoil ${res.status} (round ${round}):`, detail.slice(0, 400))
 						emit({ choices: [{ delta: { content: `\n[ai error ${res.status}]` } }] })
 						break
 					}
@@ -163,46 +195,58 @@ function streamWithTools(opts: {
 					let roundContent = ''
 					let roundPrompt = 0
 					let roundCompletion = 0
-					while (true) {
-						const { done, value } = await reader.read()
-						if (done) break
-						buf += decoder.decode(value, { stream: true })
-						const events = buf.split('\n\n')
-						buf = events.pop() ?? ''
-						for (const ev of events) {
-							const line = ev.split('\n').find((l) => l.startsWith('data:'))
-							if (!line) continue
-							const payload = line.slice(5).trim()
-							if (payload === '[DONE]') continue
-							let json: { usage?: TokenUsage; choices?: { delta?: StreamDelta }[] }
-							try {
-								json = JSON.parse(payload)
-							} catch {
-								continue
-							}
-							if (json.usage) {
-								roundPrompt = json.usage.prompt_tokens ?? roundPrompt
-								roundCompletion = json.usage.completion_tokens ?? roundCompletion
-							}
-							const delta = json.choices?.[0]?.delta
-							if (!delta) continue
-							if (typeof delta.content === 'string' && delta.content) {
-								roundContent += delta.content
-								assistant += delta.content
-								emit({ choices: [{ delta: { content: delta.content } }] })
-							}
-							for (const tc of delta.tool_calls ?? []) {
-								const i = tc.index ?? 0
-								let acc = calls[i]
-								if (!acc) {
-									acc = { id: '', name: '', args: '' }
-									calls[i] = acc
+					let interrupted = false
+					try {
+						while (true) {
+							const { done, value } = await reader.read()
+							if (done) break
+							bumpIdle()
+							buf += decoder.decode(value, { stream: true })
+							const events = buf.split('\n\n')
+							buf = events.pop() ?? ''
+							for (const ev of events) {
+								const line = ev.split('\n').find((l) => l.startsWith('data:'))
+								if (!line) continue
+								const payload = line.slice(5).trim()
+								if (payload === '[DONE]') continue
+								let json: { usage?: TokenUsage; choices?: { delta?: StreamDelta }[] }
+								try {
+									json = JSON.parse(payload)
+								} catch {
+									continue
 								}
-								if (tc.id) acc.id = tc.id
-								if (tc.function?.name) acc.name = tc.function.name
-								if (tc.function?.arguments) acc.args += tc.function.arguments
+								if (json.usage) {
+									roundPrompt = json.usage.prompt_tokens ?? roundPrompt
+									roundCompletion = json.usage.completion_tokens ?? roundCompletion
+								}
+								const delta = json.choices?.[0]?.delta
+								if (!delta) continue
+								if (typeof delta.content === 'string' && delta.content) {
+									roundContent += delta.content
+									assistant += delta.content
+									emit({ choices: [{ delta: { content: delta.content } }] })
+								}
+								for (const tc of delta.tool_calls ?? []) {
+									const i = tc.index ?? 0
+									let acc = calls[i]
+									if (!acc) {
+										acc = { id: '', name: '', args: '' }
+										calls[i] = acc
+									}
+									if (tc.id) acc.id = tc.id
+									if (tc.function?.name) acc.name = tc.function.name
+									if (tc.function?.arguments) acc.args += tc.function.arguments
+								}
 							}
 						}
+					} catch {
+						interrupted = true
+					} finally {
+						clearTimeout(idle)
+					}
+					if (interrupted) {
+						emit({ choices: [{ delta: { content: '\n[ai stream interrupted — please retry]' } }] })
+						break
 					}
 					promptTokens += roundPrompt
 					completionTokens += roundCompletion

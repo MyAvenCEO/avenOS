@@ -85,19 +85,19 @@ app.post('/api/billing/uncancel', billingUncancel)
 app.post('/api/billing/switch', billingSwitch)
 app.get('/api/billing/orders/:id/invoice', billingOrderInvoice)
 
-// E2EE secrets vault (board 0055): session + tier (>= avenFOUNDER) gated; server-blind. The
-// passkey-PRF-derived key never reaches the server — it only stores ciphertext + wrapped key.
+// E2EE secrets vault (board 0055): session + tier (>= avenFOUNDER, admin-bypass) gated;
+// server-blind. The passkey-PRF-derived key never reaches the server.
 app.get('/api/vault', getVault)
 app.post('/api/vault', putVault)
 app.get('/api/vault/secrets', listSecrets)
 app.post('/api/vault/secrets', putSecret)
 app.delete('/api/vault/secrets/:id', deleteSecret)
 
-// Apple App Site Association (AASA) — lets the NATIVE macOS/iOS app use passkeys (WebAuthn PRF)
-// with rp.id = this host (api.next.aven.ceo). Apple fetches it server-side over HTTPS at the
-// exact well-known path with NO `.json` suffix and application/json; the app entitlement must
-// list `webcredentials:<this host>`. This is the rp.id anchor for the secrets-vault unlock. board 0055.
-const APPLE_APP_ID = '2P6VCHVJWB.ceo.aven.os' // <Team ID>.<bundle id>, from Entitlements-appstore.plist
+// Apple App Site Association (AASA) — lets the native macOS/iOS app use passkeys (WebAuthn PRF)
+// with rp.id = this host (api.next.aven.ceo). Served at the well-known path over HTTPS, no
+// `.json` suffix, application/json. The app entitlement must list `webcredentials:<this host>`.
+// board 0055.
+const APPLE_APP_ID = '2P6VCHVJWB.ceo.aven.os' // <Team ID>.<bundle id>
 app.get('/.well-known/apple-app-site-association', (c) =>
 	c.json({ webcredentials: { apps: [APPLE_APP_ID] } })
 )

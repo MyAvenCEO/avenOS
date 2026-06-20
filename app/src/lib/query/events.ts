@@ -1,4 +1,5 @@
 import { getBearerToken } from '$lib/auth/auth-client'
+import { consumeSse } from '$lib/net/sse'
 import { queryClient } from './client'
 
 // Fetch-based SSE consumer for the betterauth realtime stream (GET /api/events). EventSource
@@ -55,25 +56,14 @@ export function startRealtime(): () => void {
 					await sleep(2000)
 					continue
 				}
-				const reader = res.body.getReader()
-				const decoder = new TextDecoder()
-				let buf = ''
-				while (!aborted) {
-					const { done, value } = await reader.read()
-					if (done) break
-					buf += decoder.decode(value, { stream: true })
-					const frames = buf.split('\n\n')
-					buf = frames.pop() ?? ''
-					for (const frame of frames) {
-						const line = frame.split('\n').find((l) => l.startsWith('data:'))
-						if (!line) continue
-						try {
-							invalidate(JSON.parse(line.slice(5).trim()) as ChangeEvent)
-						} catch {
-							/* keep-alive comment or partial frame */
-						}
+				// Same SSE reader the chat uses (DRY). Each frame is a change event → invalidate.
+				await consumeSse(res, (data) => {
+					try {
+						invalidate(JSON.parse(data) as ChangeEvent)
+					} catch {
+						/* keep-alive comment or partial frame */
 					}
-				}
+				})
 			} catch {
 				/* network/abort error → reconnect after a backoff */
 			}

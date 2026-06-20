@@ -103,6 +103,8 @@ export type BillingState = {
 	tier: string
 	/** Live weekly price (EUR) per tier, straight from Polar — the UI renders these, never hardcoded. */
 	prices: Record<string, number>
+	/** Card feature bullets per tier — the Polar product benefit descriptions (Polar = SSOT). */
+	benefits: Record<string, string[]>
 	/** Skill names granted to the user, from Polar feature-flag benefits (the entitlement source). */
 	skills: string[]
 	subscriptions: BillingSubscription[]

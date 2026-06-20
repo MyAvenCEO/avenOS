@@ -4,8 +4,12 @@ import { sql } from 'kysely'
 import { auth, linkPolarCustomer, polarClient } from './auth'
 import { db } from './db'
 import { publish } from './events'
-import { TIER_RANK } from './tier'
-import { allTierPricesEur, setTierPriceEur } from './tier-price-cache'
+import {
+	allTierBenefits,
+	allTierPricesEur,
+	setTierBenefits,
+	setTierPriceEur
+} from './tier-price-cache'
 
 /**
  * Polar checkout + webhook for product tiers. board 0052 slice 2 (Polar billing).
@@ -32,9 +36,9 @@ const AVENCEO_PRODUCT_ID =
  * the boot-time fallback.
  */
 export const TIERS: Record<string, { productId: string; rank: number }> = {
-	avenME: { productId: AVENME_PRODUCT_ID, rank: TIER_RANK.avenME },
-	avenFOUNDER: { productId: AVENFOUNDER_PRODUCT_ID, rank: TIER_RANK.avenFOUNDER },
-	avenCEO: { productId: AVENCEO_PRODUCT_ID, rank: TIER_RANK.avenCEO }
+	avenME: { productId: AVENME_PRODUCT_ID, rank: 1 },
+	avenFOUNDER: { productId: AVENFOUNDER_PRODUCT_ID, rank: 2 },
+	avenCEO: { productId: AVENCEO_PRODUCT_ID, rank: 3 }
 }
 
 // Reverse map (product id → tier), derived from TIERS so it can never drift.
@@ -97,6 +101,13 @@ export async function refreshTierPrices(): Promise<void> {
 					(p) => typeof (p as { priceAmount?: number }).priceAmount === 'number'
 				) as { priceAmount?: number } | undefined
 				if (fixed?.priceAmount != null) setTierPriceEur(tier, fixed.priceAmount / 100)
+				// Card feature list = the product's Polar benefit descriptions (Polar is the SSOT).
+				setTierBenefits(
+					tier,
+					(product.benefits ?? [])
+						.map((b) => (b as { description?: string }).description ?? '')
+						.filter(Boolean)
+				)
 			} catch (e) {
 				console.error(
 					`[billing] price fetch failed for ${tier}:`,
@@ -360,6 +371,8 @@ export async function billingState(c: Context): Promise<Response> {
 			tier,
 			// Live weekly price (EUR) per tier, straight from Polar — the UI renders these, never hardcoded.
 			prices: allTierPricesEur(),
+			// Card feature bullets per tier — the Polar product benefit descriptions (Polar = SSOT).
+			benefits: allTierBenefits(),
 			// Skills the user is actually entitled to, from Polar feature-flag benefits (not inferred).
 			skills,
 			subscriptions: subs.map((s) => ({

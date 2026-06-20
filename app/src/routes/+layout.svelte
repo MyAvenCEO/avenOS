@@ -96,8 +96,9 @@ $effect(() => {
 	initLocale('en')
 })
 
-// Open the realtime SSE stream → TanStack Query invalidation. Idempotent + waits for the
-// bearer token internally, so starting it once here is safe pre-sign-in. board 0055.
+// Realtime: one SSE stream → TanStack Query invalidation (the "subscription" transport for all
+// betterauth reads). Idempotent + waits for the bearer token internally, so starting it once here
+// is safe pre-sign-in. Polling would be far more expensive. board 0055.
 $effect(() => {
 	if (!browser) return
 	startRealtime()
