@@ -105,6 +105,12 @@ async function linkPolarCustomer(user: {
  * cookies must be SameSite=None; Secure to be sent on cross-site requests. Browsers
  * accept Secure cookies over http://localhost, so this works in dev too.
  */
+// Public iOS OAuth client id (avenCEO-ios). Native iOS Google Sign-In must use an iOS-type
+// client (no secret), so its idTokens carry a different `aud` than the desktop client. List
+// BOTH as valid audiences so macOS (desktop client) and iOS both verify. board 0050.
+const GOOGLE_IOS_CLIENT_ID =
+	'623539759782-dh478o33v7hu3d658albbsrsq31s2ng7.apps.googleusercontent.com'
+
 export const auth = betterAuth({
 	baseURL: requireEnv('BETTER_AUTH_URL'),
 	secret: requireEnv('BETTER_AUTH_SECRET'),
@@ -114,7 +120,9 @@ export const auth = betterAuth({
 	},
 	socialProviders: {
 		google: {
-			clientId: requireEnv('GOOGLE_CLIENT_ID'),
+			// Array = multiple accepted idToken audiences (desktop client for macOS, iOS client
+			// for iOS). The secret belongs to the desktop client; iOS verifies by audience only.
+			clientId: [requireEnv('GOOGLE_CLIENT_ID'), GOOGLE_IOS_CLIENT_ID],
 			clientSecret: requireEnv('GOOGLE_CLIENT_SECRET')
 		}
 	},
