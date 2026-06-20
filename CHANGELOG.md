@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.3...v) (2026-06-20)
+
+
+### Features
+
+* **mainnet:** passkey PRF probe + AASA domain anchor + polar billing merge ([49264af](https://github.com/MyAvenCEO/avenOS/commit/49264af428184e8aa78db427fe6f51797349a78b))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.2...v) (2026-06-20)
 
 
