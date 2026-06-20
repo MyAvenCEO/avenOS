@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.1...v) (2026-06-20)
+
+
+### Bug Fixes
+
+* **ios:** register Google reversed-client-ID URL scheme in Info.plist ([586956f](https://github.com/MyAvenCEO/avenOS/commit/586956f20b07f8887ab0ab31efb29ec95235a896))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.8...v) (2026-06-20)
 
 
