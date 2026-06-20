@@ -10,6 +10,7 @@ import { clearNetwork } from '$lib/settings/network-store'
 import AdminPanel from '$lib/shell/AdminPanel.svelte'
 import MainnetChat from '$lib/shell/MainnetChat.svelte'
 import MainnetDb from '$lib/shell/MainnetDb.svelte'
+import MainnetFly from '$lib/shell/MainnetFly.svelte'
 import MainnetPasskeyProbe from '$lib/shell/MainnetPasskeyProbe.svelte'
 import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
 import PricingPanel from '$lib/shell/PricingPanel.svelte'
@@ -17,7 +18,7 @@ import PricingPanel from '$lib/shell/PricingPanel.svelte'
 // Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | Schemas | DB (+ Admin for
 // admins) on the left, weekly credits + signed-in identity + Log out on the right — over the
 // active view. Every section (incl. Admin) is a normal in-place view, not a modal. board 0053/0054.
-type Tab = 'chat' | 'vibes' | 'db' | 'plan' | 'passkey' | 'admin'
+type Tab = 'chat' | 'vibes' | 'db' | 'plan' | 'passkey' | 'fly' | 'admin'
 let tab = $state<Tab>('chat')
 let checkoutHandled = false
 // Shown briefly after returning from a successful Polar checkout (?checkout=success).
@@ -67,6 +68,7 @@ const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'db', label: t('mainnet.nav.db') },
 	{ id: 'plan', label: t('mainnet.nav.plan') },
 	{ id: 'passkey', label: t('mainnet.nav.passkey') },
+	{ id: 'fly', label: t('mainnet.nav.fly') },
 	...(isAdmin ? [{ id: 'admin' as Tab, label: t('mainnet.nav.admin') }] : [])
 ])
 
@@ -149,6 +151,8 @@ async function logout(): Promise<void> {
 		<PricingPanel />
 	{:else if tab === 'passkey'}
 		<MainnetPasskeyProbe />
+	{:else if tab === 'fly'}
+		<MainnetFly />
 	{:else if tab === 'admin' && isAdmin}
 		<AdminPanel />
 	{:else}

@@ -1003,6 +1003,7 @@
 			"db": "DB",
 			"plan": "Plan",
 			"passkey": "Passkey",
+			"fly": "Fly",
 			"admin": "Admin"
 		},
 		"pricing": {

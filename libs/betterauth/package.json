@@ -19,6 +19,7 @@
 	},
 	"dependencies": {
 		"@avenos/aven-vibes": "workspace:*",
+		"@better-auth/passkey": "^1.6.20",
 		"@neondatabase/serverless": "^0.10.4",
 		"@polar-sh/better-auth": "^1.8.4",
 		"@polar-sh/sdk": "^0.48.1",

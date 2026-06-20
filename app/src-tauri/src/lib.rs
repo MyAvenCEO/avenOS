@@ -1,5 +1,6 @@
 mod asr;
 mod embed_model;
+mod fly;
 mod llm;
 mod tts;
 mod biscuit_resolver;
@@ -254,6 +255,7 @@ pub fn run() {
 			network::aven_ceo_identity,
 			network::aven_ceo_addressbook_id,
 			network::google_oauth_config,
+			fly::fly_fetch,
 			avendb::avendb_runtime,
 		avendb::brain_runtime,
 			avendb::self_storage_paths,

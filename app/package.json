@@ -38,6 +38,7 @@
 		"@avenos/aven-skills": "workspace:*",
 		"@avenos/aven-ui": "workspace:*",
 		"@avenos/docs": "workspace:*",
+		"@better-auth/passkey": "^1.6.20",
 		"@choochmeque/tauri-plugin-google-auth-api": "^0.5.1",
 		"@tanstack/svelte-query": "^6.1.34",
 		"@tauri-apps/api": "^2",

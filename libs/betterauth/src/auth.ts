@@ -1,3 +1,4 @@
+import { passkey } from '@better-auth/passkey'
 import { polar } from '@polar-sh/better-auth'
 import { Polar } from '@polar-sh/sdk'
 import { betterAuth } from 'better-auth'
@@ -181,7 +182,19 @@ export const auth = betterAuth({
 	// `admin` adds a `role` field (user|admin) + admin-gated user management
 	// (list/setRole/ban/impersonate). The first user to sign up is auto-promoted to admin
 	// via the databaseHooks below; every later signup is a normal user. board 0052.
-	plugins: [bearer(), admin(), ...polarPlugins],
+	// `passkey` (board 0055): a passkey linked next to Google = the avenFOUNDER→avenCEO 2nd
+	// factor, AND the source of the vault-unlock PRF. rp.id = the AASA host; origin = the app's
+	// WebAuthn ceremony origins (tauri://localhost etc.). Runs inside the native Tauri webview.
+	plugins: [
+		bearer(),
+		admin(),
+		passkey({
+			rpID: optionalEnv('PASSKEY_RP_ID') ?? 'api.next.aven.ceo',
+			rpName: 'avenOS',
+			origin: TRUSTED_ORIGINS
+		}),
+		...polarPlugins
+	],
 	advanced: {
 		defaultCookieAttributes: {
 			sameSite: 'none',

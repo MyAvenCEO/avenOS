@@ -24,6 +24,7 @@ import {
 } from './data'
 import { eventsStream } from './events'
 import { syncPricing } from './usage'
+import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
 
 const app = new Hono()
 
@@ -49,6 +50,9 @@ app.use('/api/data/*', cors(corsOptions))
 app.use('/api/billing/*', cors(corsOptions))
 // Realtime: a per-user SSE stream the app fetches to invalidate TanStack Query caches. board 0055.
 app.use('/api/events', cors(corsOptions))
+// E2EE secrets vault (board 0055). Both the bare path and sub-paths need CORS.
+app.use('/api/vault', cors(corsOptions))
+app.use('/api/vault/*', cors(corsOptions))
 
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
@@ -80,6 +84,14 @@ app.post('/api/billing/cancel', billingCancel)
 app.post('/api/billing/uncancel', billingUncancel)
 app.post('/api/billing/switch', billingSwitch)
 app.get('/api/billing/orders/:id/invoice', billingOrderInvoice)
+
+// E2EE secrets vault (board 0055): session + tier (>= avenFOUNDER) gated; server-blind. The
+// passkey-PRF-derived key never reaches the server — it only stores ciphertext + wrapped key.
+app.get('/api/vault', getVault)
+app.post('/api/vault', putVault)
+app.get('/api/vault/secrets', listSecrets)
+app.post('/api/vault/secrets', putSecret)
+app.delete('/api/vault/secrets/:id', deleteSecret)
 
 // Apple App Site Association (AASA) — lets the NATIVE macOS/iOS app use passkeys (WebAuthn PRF)
 // with rp.id = this host (api.next.aven.ceo). Apple fetches it server-side over HTTPS at the

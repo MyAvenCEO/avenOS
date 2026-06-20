@@ -4,6 +4,7 @@ import { sql } from 'kysely'
 import { auth, linkPolarCustomer, polarClient } from './auth'
 import { db } from './db'
 import { publish } from './events'
+import { TIER_RANK } from './tier'
 import { allTierPricesEur, setTierPriceEur } from './tier-price-cache'
 
 /**
@@ -31,9 +32,9 @@ const AVENCEO_PRODUCT_ID =
  * the boot-time fallback.
  */
 export const TIERS: Record<string, { productId: string; rank: number }> = {
-	avenME: { productId: AVENME_PRODUCT_ID, rank: 1 },
-	avenFOUNDER: { productId: AVENFOUNDER_PRODUCT_ID, rank: 2 },
-	avenCEO: { productId: AVENCEO_PRODUCT_ID, rank: 3 }
+	avenME: { productId: AVENME_PRODUCT_ID, rank: TIER_RANK.avenME },
+	avenFOUNDER: { productId: AVENFOUNDER_PRODUCT_ID, rank: TIER_RANK.avenFOUNDER },
+	avenCEO: { productId: AVENCEO_PRODUCT_ID, rank: TIER_RANK.avenCEO }
 }
 
 // Reverse map (product id → tier), derived from TIERS so it can never drift.

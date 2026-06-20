@@ -108,6 +108,34 @@ export interface PolarEventTable {
 	received_at: Generated<Date>
 }
 
+// E2EE secrets vault (board 0055). One vault per user; the master DEK is AES-GCM-wrapped
+// under the passkey-PRF-derived KEK (HKDF) with a PINNED salt. The server is BLIND: it only
+// ever stores ciphertext + wrapped key + salt + nonces — never the token, DEK, KEK, or PRF.
+export interface VaultTable {
+	id: string
+	user_id: string
+	credential_id: string // the Better Auth passkey credentialID that unlocks this vault
+	prf_salt: string // base64; the pinned salt fed to PRF → HKDF (re-derive)
+	wrapped_master_key: string // base64; master DEK AES-GCM-wrapped under the KEK
+	wrap_nonce: string
+	alg: string
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
+export interface SecretTable {
+	id: string
+	vault_id: string
+	user_id: string
+	kind: string // e.g. 'fly_token'
+	label: string | null
+	ciphertext: string // base64; secret AES-GCM-encrypted under the master DEK
+	nonce: string
+	alg: string
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
 export interface Database {
 	ai_usage: AiUsageTable
 	model_pricing: ModelPricingTable
@@ -119,6 +147,8 @@ export interface Database {
 	data_schema_history: DataSchemaHistoryTable
 	data_value_history: DataValueHistoryTable
 	polar_event: PolarEventTable
+	vault: VaultTable
+	secret: SecretTable
 }
 
 let cached: Kysely<Database> | null = null
