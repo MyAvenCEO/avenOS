@@ -16,7 +16,7 @@ import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
 // MINDS + the signed-in account NAME on the right. Clicking the name opens the Account Settings
 // view (profile, plans & billing, vault keys, Admin for admins, log out). board 0053/0054/0055.
 type Tab = 'chat' | 'vibes' | 'db' | 'fly'
-type SettingsCategory = 'profile' | 'plans' | 'vault' | 'admin'
+type SettingsCategory = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'admin'
 let tab = $state<Tab>('chat')
 let settings = $state(false)
 let settingsCategory = $state<SettingsCategory>('profile')

@@ -28,3 +28,17 @@ export function fmtMinds(usd: number): string {
 	const n = minds >= 100 ? Math.round(minds) : Number(minds.toFixed(2))
 	return `${n.toLocaleString()} MINDS`
 }
+
+/**
+ * Format a USD amount as the EXACT MINDS consumed, never collapsing tiny values to "<0.01".
+ * Per-request costs are minuscule (e.g. 0.00003 MINDS), so small amounts show 3 significant
+ * digits (0.0000345 → "0.0000345"); amounts ≥ 1 show up to 2 decimals (12.5 → "12.5"). For the
+ * Usage view, where the real cost per roundtrip matters. board 0055.
+ */
+export function fmtMindsExact(usd: number, locale?: string): string {
+	const minds = usd * MINDS_PER_USD
+	if (minds === 0) return `0 MINDS`
+	const opts: Intl.NumberFormatOptions =
+		minds >= 1 ? { maximumFractionDigits: 2 } : { maximumSignificantDigits: 3 }
+	return `${minds.toLocaleString(locale, opts)} MINDS`
+}

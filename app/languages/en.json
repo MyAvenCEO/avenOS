@@ -1005,6 +1005,18 @@
 			"fly": "Fly",
 			"admin": "Admin"
 		},
+		"usage": {
+			"title": "Usage",
+			"subtitle": "Your token usage and what each request roundtrip costs in MINDS.",
+			"week": "This week",
+			"allTime": "All time",
+			"tokens": "tokens",
+			"requests": "Recent requests",
+			"loading": "Loading…",
+			"empty": "No requests yet. Your AI usage will show up here.",
+			"in": "in",
+			"out": "out"
+		},
 		"pricing": {
 			"title": "Plans",
 			"subtitle": "Run private AI on MINDS. Book avenCITY to unlock your weekly allowance and secure your own aven name.",
@@ -1021,7 +1033,9 @@
 			"upgradedTitle": "Welcome to avenCITY 🎉",
 			"upgradedBody": "Your subscription is active — your weekly MINDS are ready.",
 			"footnote": "Billed weekly via Polar. Card entry happens on Polar's secure page; you can cancel anytime.",
-			"manageTitle": "Manage plan",
+			"manageTitle": "Billing",
+			"manageSubtitle": "Your subscriptions, renewals, and payment history.",
+			"manageEmpty": "No billing yet. Choose a plan under Plans to get started.",
 			"subscriptions": "Subscriptions",
 			"orders": "Orders",
 			"skills": "Your skills",

@@ -22,6 +22,7 @@ export const queryClient = new QueryClient({
 // `['billing']`), so every key below MUST start with its entity name. board 0055.
 export const qk = {
 	usage: ['usage'] as const,
+	usageRecent: ['usage', 'recent'] as const,
 	billing: ['billing', 'state'] as const,
 	schemas: ['data', 'schemas'] as const,
 	values: (schemaId: string) => ['data', 'values', schemaId] as const

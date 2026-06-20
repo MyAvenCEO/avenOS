@@ -3,12 +3,13 @@ import { authClient, setBearerToken } from '$lib/auth/auth-client'
 import { clearNetwork } from '$lib/settings/network-store'
 import AdminPanel from '$lib/shell/AdminPanel.svelte'
 import PricingPanel from '$lib/shell/PricingPanel.svelte'
+import UsageStats from '$lib/shell/UsageStats.svelte'
 import VaultKeys from '$lib/shell/VaultKeys.svelte'
 
 // Account settings (board 0055): opened from the account name in the top nav. Left aside selects
-// a category (Profile | Plans & billing | Vault keys | Admin for admins); main center renders it.
-// Log out is pinned to the bottom of the aside.
-type Category = 'profile' | 'plans' | 'vault' | 'admin'
+// a category (Profile | Plans | Billing | Usage | Vault keys | Admin for admins); main center
+// renders it. Log out is pinned to the bottom of the aside.
+type Category = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'admin'
 let { category = 'profile' }: { category?: Category } = $props()
 // `category` is read once as the initial tab; the parent remounts this on open, so a fresh value
 // always arrives. Local navigation owns `active` after that.
@@ -24,7 +25,9 @@ const isAdmin = $derived(user?.role === 'admin')
 // Admin only shows for admins (the AdminPanel endpoints are server-gated to admins too).
 const cats = $derived<{ id: Category; label: string }[]>([
 	{ id: 'profile', label: 'Profile' },
-	{ id: 'plans', label: 'Plans & billing' },
+	{ id: 'plans', label: 'Plans' },
+	{ id: 'billing', label: 'Billing' },
+	{ id: 'usage', label: 'Usage' },
 	{ id: 'vault', label: 'Vault keys' },
 	...(isAdmin ? [{ id: 'admin' as Category, label: 'Admin' }] : [])
 ])
@@ -98,7 +101,11 @@ async function logout(): Promise<void> {
 				</div>
 			</div>
 		{:else if active === 'plans'}
-			<PricingPanel />
+			<PricingPanel section="plans" />
+		{:else if active === 'billing'}
+			<PricingPanel section="billing" />
+		{:else if active === 'usage'}
+			<UsageStats />
 		{:else if active === 'admin' && isAdmin}
 			<AdminPanel />
 		{:else}

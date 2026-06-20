@@ -982,6 +982,18 @@
 			"fly": "Fly",
 			"admin": "Admin"
 		},
+		"usage": {
+			"title": "Nutzung",
+			"subtitle": "Dein Token-Verbrauch und was jede Anfrage in MINDS kostet.",
+			"week": "Diese Woche",
+			"allTime": "Gesamt",
+			"tokens": "Tokens",
+			"requests": "Letzte Anfragen",
+			"loading": "Lädt…",
+			"empty": "Noch keine Anfragen. Deine KI-Nutzung erscheint hier.",
+			"in": "rein",
+			"out": "raus"
+		},
 		"pricing": {
 			"title": "Pläne",
 			"subtitle": "Private KI läuft mit MINDS. Buche avenCITY, um dein wöchentliches Guthaben freizuschalten und deinen eigenen aven-Namen zu sichern.",
@@ -998,7 +1010,9 @@
 			"upgradedTitle": "Willkommen bei avenCITY 🎉",
 			"upgradedBody": "Dein Abo ist aktiv — deine wöchentlichen MINDS stehen bereit.",
 			"footnote": "Wöchentliche Abrechnung über Polar. Die Kartendaten werden auf der sicheren Polar-Seite eingegeben; jederzeit kündbar.",
-			"manageTitle": "Plan verwalten",
+			"manageTitle": "Abrechnung",
+			"manageSubtitle": "Deine Abos, Verlängerungen und Zahlungsverlauf.",
+			"manageEmpty": "Noch keine Abrechnung. Wähle unter Pläne einen Plan, um zu starten.",
 			"subscriptions": "Abos",
 			"orders": "Bestellungen",
 			"skills": "Deine Skills",

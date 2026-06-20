@@ -7,7 +7,7 @@ import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
 import { executeDataTool, schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
-import { getUsageStats, recordUsage, type TokenUsage } from './usage'
+import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './usage'
 
 /**
  * Authenticated proxy for Tinfoil private AI inference. Only a request carrying a valid
@@ -334,6 +334,13 @@ export async function aiUsage(c: Context): Promise<Response> {
 		creditStatus(session.user.id)
 	])
 	return c.json({ ...stats, credit })
+}
+
+/** Session-gated: the caller's most recent completions (per-request tokens + USD cost). */
+export async function aiUsageRecent(c: Context): Promise<Response> {
+	const session = await auth.api.getSession({ headers: c.req.raw.headers })
+	if (!session) return c.json({ error: 'unauthorized' }, 401)
+	return c.json({ recent: await getRecentUsage(session.user.id) })
 }
 
 /** Session-gated: the caller's own chat sessions (most recent first). */
