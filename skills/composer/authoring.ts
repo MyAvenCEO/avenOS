@@ -1,22 +1,30 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: the guide text instructs GLM to write the literal ${BASE_URL} placeholder
-// The compact authoring contract injected into the website model's (GLM) system prompt. It tells
-// GLM the SOURCE layout it edits and the hard boundary: it authors content files only — the
-// deterministic generator (site-generator.ts) wires ALL routing. The full architecture lives in
-// README.md; this is its "smaller compat form". board 0056.
+// The compact authoring contract injected into the website model's (GLM) system prompt. It tells GLM
+// the SOURCE (`src/`) layout it edits and the hard boundary: it authors markdown + components + i18n
+// only — the deterministic generator (site-generator.ts) ASSEMBLES `public/` (pages, routing, the
+// language switcher, the blog index). The full architecture lives in README.md. board 0056/0057.
 
 export const COMPOSER_AUTHORING_GUIDE =
-	'You edit the SOURCE files of a locale-routed static website (hosted on Tigris, like ' +
-	'next.aven.ceo). You author ONLY human-written source content; a deterministic generator wires ' +
-	'ALL routing for you — you NEVER produce slash-keys, no-slash stubs, index.html redirects, ' +
-	'404.html, robots.txt, sitemap.xml, or hreflang/canonical alternate tags.\n' +
-	'Source layout (everything under public/):\n' +
-	'- public/en/index.html — the English home, served at /en/.\n' +
-	'- A route → its OWN folder index: public/en/<route>/index.html, served at /en/<route>/ ' +
-	'(e.g. a "blog" route → public/en/blog/index.html → /en/blog/).\n' +
-	'- public/styles.css — ONE shared stylesheet. Link it from every page head with ' +
-	'<link rel="stylesheet" href="/styles.css"> and put ALL styling there; no inline <style> blocks.\n' +
-	'Linking:\n' +
-	'- Internal links are root-absolute and slash-terminated: <a href="/en/blog/">. Keep a shared ' +
-	'top nav across pages.\n' +
-	'- For any ABSOLUTE url (canonical, og:image, sharing) use the ${BASE_URL} placeholder — e.g. ' +
-	'<link rel="canonical" href="${BASE_URL}/en/blog/">. The generator substitutes the real host.'
+	'You edit the SOURCE of a locale-routed static website (a real generator assembles + hosts it on ' +
+	'Tigris, like next.aven.ceo). You author ONLY files under src/; a deterministic generator builds ' +
+	'public/ from them. You NEVER write whole HTML pages, routing, slash-keys, 404/robots/sitemap, the ' +
+	'language switcher, or the blog index — the generator owns ALL of that.\n' +
+	'src/ layout:\n' +
+	'- src/pages/<locale>/<name>.md — a page in MARKDOWN with frontmatter (title, layout). ' +
+	'`home.md` is the locale home (served at /<locale>/); `about.md` → /<locale>/about/.\n' +
+	'- src/blog/<locale>/<slug>.md — an article in MARKDOWN with frontmatter (title, date, summary, ' +
+	'layout: article). The generator builds the blog index automatically from these.\n' +
+	'- src/i18n/<locale>.json — UI strings, e.g. {"title":"…","nav":{"home":"…","blog":"…"}}.\n' +
+	'- src/components/<name>.html — reusable plain-HTML partials with {{token}} slots (nav, footer, ' +
+	'article-card). Reference a partial from a layout with {{> name}}.\n' +
+	'- src/layouts/<name>.html — page skeletons: include {{> nav}}/{{> footer}}, place {{content}}, and ' +
+	'use {{title}}, {{lang}}, {{t.nav.home}} (i18n), {{lang_switcher}}.\n' +
+	'- src/styles.css — ALL styling (light, clean). No inline <style>.\n' +
+	'How to make changes:\n' +
+	'- ADD a page/article: create a new .md under src/pages/<locale>/ or src/blog/<locale>/ for EACH ' +
+	'locale. Keep locales in sync.\n' +
+	'- Reword content: edit the .md body or src/i18n/<locale>.json.\n' +
+	'- Change the look / nav / footer: edit the component or layout HTML, or styles.css.\n' +
+	'- Templates use ONLY {{token}} slots and {{> include}} — never loops/conditionals (the generator ' +
+	'does the logic). For an absolute URL use the ${BASE_URL} placeholder (e.g. ' +
+	'<link rel="canonical" href="${BASE_URL}{{path}}">).'

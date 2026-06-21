@@ -9,24 +9,26 @@
 // /→/en/ redirects, bad paths 404). A tab switcher flips between Preview and Code. board 0055/0056.
 // Import the PURE generator subpath only — the composer barrel also re-exports the server-only
 // GLM editor (edit.ts uses process.env/fetch), which would crash in the browser. board 0056.
-import { buildSite, resolveRoute } from '@avenos/skills/composer/site-generator'
+import { buildSite, localesOf, resolveRoute } from '@avenos/skills/composer/site-generator'
 import type { StorageItemMeta } from '@storagesdk/core'
 import { Storage } from '@storagesdk/core'
 import { untrack } from 'svelte'
 import { get } from 'svelte/store'
-import { activeSpark, composerReload, PUBLIC_INDEX } from '$lib/composer/active-spark'
+import { activeSpark, composerReload, ensureSeeded } from '$lib/composer/active-spark'
 import { sparksList } from '$lib/composer/spark-ipc'
 import { tauriFs } from '$lib/composer/tauri-fs-adapter'
 
 type Tab = 'preview' | 'code'
 let tab = $state<Tab>('preview')
 
+const SRC_HOME = 'src/pages/en/home.md' // the file opened by default in the Code view
+
 let sparks = $state<string[]>([])
 let sparkId = $state('')
 let files = $state<StorageItemMeta[]>([])
-let openPath = $state(PUBLIC_INDEX)
+let openPath = $state(SRC_HOME)
 let content = $state('')
-// All public/ source files (path→content); the generator builds the routed site from this.
+// The spark's src/ tree (path→content); the generator ASSEMBLES the routed site from this. board 0057.
 let source = $state<Record<string, string>>({})
 // The preview's current URL — resolved through resolveRoute exactly like the live edge+Tigris.
 let currentPath = $state('/en/')
@@ -37,7 +39,13 @@ const dec = new TextDecoder()
 const TEXT_FILE_RE = /\.(html|css|js|mjs|json|svg|xml|txt|md)$/i
 
 // Preview baseUrl is '' → ${BASE_URL}/en/ resolves to /en/ (root-relative); the nav shim below
-// intercepts those clicks and routes them through resolveRoute. board 0056.
+// intercepts those clicks and routes them through resolveRoute. Locales are inferred from src so the
+// switcher + redirects match the deployed site. board 0056/0057.
+const siteLocales = $derived(localesOf(source))
+const routeOpts = $derived({
+	locales: siteLocales.length ? siteLocales : ['en'],
+	defaultLocale: siteLocales.includes('en') ? 'en' : (siteLocales[0] ?? 'en')
+})
 const siteObjects = $derived(buildSite(source, { baseUrl: '' }))
 const siteKeys = $derived(new Set(siteObjects.map((o) => o.key)))
 const bodyOf = (key: string): string => siteObjects.find((o) => o.key === key)?.body ?? ''
@@ -73,7 +81,7 @@ function decorate(html: string): string {
 function renderPath(path: string): string {
 	let p = path
 	for (let i = 0; i < 6; i++) {
-		const r = resolveRoute(p, siteKeys)
+		const r = resolveRoute(p, siteKeys, routeOpts)
 		if (r.status === 200) return decorate(bodyOf(r.key))
 		if (r.status === 404) return decorate(bodyOf('404.html'))
 		p = r.location
@@ -86,7 +94,7 @@ const previewHtml = $derived(renderPath(currentPath))
 function navigate(path: string): void {
 	let p = path
 	for (let i = 0; i < 6; i++) {
-		const r = resolveRoute(p, siteKeys)
+		const r = resolveRoute(p, siteKeys, routeOpts)
 		if (r.status === 200 || r.status === 404) {
 			currentPath = p
 			return
@@ -116,7 +124,7 @@ $effect(() => {
 
 async function loadFiles() {
 	if (!storage) return
-	files = (await storage.list()).items
+	files = (await storage.list()).items.filter((f) => f.path.startsWith('src/'))
 }
 async function readFile(path: string): Promise<string> {
 	if (!storage) return ''
@@ -126,12 +134,12 @@ async function readFile(path: string): Promise<string> {
 		return '' // file doesn't exist yet
 	}
 }
-// Load every public/ text file into `source` so the generator can build the full routed site.
+// Load every src/ text file into `source` so the generator can assemble the full routed site.
 async function loadSource() {
 	if (!storage) return
 	const next: Record<string, string> = {}
 	for (const it of (await storage.list()).items) {
-		if (!it.path.startsWith('public/') || !TEXT_FILE_RE.test(it.path)) continue
+		if (!it.path.startsWith('src/') || !TEXT_FILE_RE.test(it.path)) continue
 		next[it.path] = await readFile(it.path)
 	}
 	source = next
@@ -201,14 +209,15 @@ $effect(() => {
 	if (sparkId && sparkId !== lastSpark) {
 		lastSpark = sparkId
 		void (async () => {
+			await ensureSeeded(sparkId)
 			await loadFiles()
 			await loadSource()
 			currentPath = '/en/'
 			try {
-				await openFile(PUBLIC_INDEX)
+				await openFile(SRC_HOME)
 			} catch {
 				content = ''
-				openPath = PUBLIC_INDEX
+				openPath = SRC_HOME
 			}
 		})()
 	}

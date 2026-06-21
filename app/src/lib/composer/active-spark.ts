@@ -1,3 +1,4 @@
+import { SEED_SRC } from '@avenos/skills/composer/seed'
 import { get, writable } from 'svelte/store'
 import {
 	sparkListFiles,
@@ -28,22 +29,6 @@ export async function resolveActiveSpark(): Promise<string> {
 	return first
 }
 
-// Locale-routed static site (Tigris model, like next.aven.ceo): the English home is public/en/
-// index.html (served at /en/), styling is a shared public/styles.css, and `private/` holds dropped
-// reference images that are never published. board 0055.
-export const PUBLIC_INDEX = 'public/en/index.html'
-export const PUBLIC_STYLES = 'public/styles.css'
-
-/** Read a spark's current public/index.html (empty string if missing). */
-export async function readIndexHtml(sparkId: string): Promise<string> {
-	if (!sparkId) return ''
-	try {
-		return await sparkReadFile(sparkId, PUBLIC_INDEX)
-	} catch {
-		return ''
-	}
-}
-
 export type DroppedImage = { name: string; path: string }
 // Reference images the user dropped this session — stored in the spark's private/ folder (never
 // published). The chat surfaces them as design inspiration for the next edit. board 0055.
@@ -70,13 +55,36 @@ export async function storeDroppedFiles(files: File[]): Promise<DroppedImage[]> 
 
 const TEXT_FILE_RE = /\.(html|css|js|mjs|json|svg|xml|txt|md)$/i
 
-/** Read all text files under public/ as a path→content map (the AI multi-file edit context). */
-export async function readPublicFiles(sparkId: string): Promise<Record<string, string>> {
+// The composer site is a `src/` tree (components/layouts + i18n JSON + markdown pages/blog) that the
+// deterministic generator (@avenos/skills/composer) assembles into the deployable site. GLM + the
+// editor maintain `src/`; `public/` is generated, `private/` holds dropped images. board 0057.
+
+/** Seed a fresh spark's src/ from the starter bilingual example if it has none yet. board 0057. */
+export async function ensureSeeded(sparkId: string): Promise<void> {
+	if (!sparkId) return
+	try {
+		const files = await sparkListFiles(sparkId)
+		if (files.some((f) => f.path.startsWith('src/'))) return // already has a source tree
+	} catch {
+		/* list failed — fall through and seed */
+	}
+	for (const [path, content] of Object.entries(SEED_SRC)) {
+		try {
+			await sparkWriteFile(sparkId, path, content)
+		} catch (e) {
+			console.error('[composer] seed write failed:', path, e)
+		}
+	}
+}
+
+/** Read all text files under src/ as a path→content map (the SSG input + AI edit context). */
+export async function readSrcFiles(sparkId: string): Promise<Record<string, string>> {
 	if (!sparkId) return {}
+	await ensureSeeded(sparkId)
 	const out: Record<string, string> = {}
 	try {
 		for (const f of await sparkListFiles(sparkId)) {
-			if (!f.path.startsWith('public/') || !TEXT_FILE_RE.test(f.path)) continue
+			if (!f.path.startsWith('src/') || !TEXT_FILE_RE.test(f.path)) continue
 			try {
 				out[f.path] = await sparkReadFile(sparkId, f.path)
 			} catch {
@@ -86,22 +94,13 @@ export async function readPublicFiles(sparkId: string): Promise<Record<string, s
 	} catch {
 		/* none yet */
 	}
-	if (!out[PUBLIC_INDEX]) out[PUBLIC_INDEX] = await readIndexHtml(sparkId)
 	return out
 }
 
-/** Write changed public/ files back to disk (AI multi-file edit result). */
-export async function writePublicFiles(
-	sparkId: string,
-	files: Record<string, string>
-): Promise<void> {
+/** Write changed src/ files back to disk (AI edit result / editor save). */
+export async function writeSrcFiles(sparkId: string, files: Record<string, string>): Promise<void> {
 	for (const [path, content] of Object.entries(files)) {
-		if (!path.startsWith('public/')) continue // safety: never write outside the public bucket
+		if (!path.startsWith('src/')) continue // safety: only the source tree
 		await sparkWriteFile(sparkId, path, content)
 	}
-}
-
-/** Overwrite a spark's public/index.html. */
-export async function writeIndexHtml(sparkId: string, html: string): Promise<void> {
-	await sparkWriteFile(sparkId, PUBLIC_INDEX, html)
 }

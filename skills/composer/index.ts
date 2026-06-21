@@ -11,8 +11,10 @@ export {
 	type TokenUsage,
 	WEBSITE_MODEL
 } from './edit'
+export { SEED_SRC } from './seed'
 export {
 	buildSite,
+	localesOf,
 	type Resolution,
 	resolveRoute,
 	type SiteObject,

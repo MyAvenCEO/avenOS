@@ -1,52 +1,30 @@
-// Deterministic static-site generator — the routing SSOT for the composer skill. ONE function
-// produces the EXACT Tigris key→object map that BOTH the local preview and the remote deploy use,
-// so the preview routes identically to the deployed site (next.aven.ceo model: locale prefix,
-// slash-keys + index.html fallbacks, /→/<locale>/ redirect, 404). Pure: no DOM/Storage.
-//
-// GLM authors only the SOURCE files (under public/) — content + a ${BASE_URL} placeholder — and
-// this generator wires ALL routing. See README.md §2 "What the SSG must produce". board 0056.
+// Deterministic static-site generator — the SSOT for the composer skill (board 0056 routing + 0057
+// assembly). `buildSite` takes the GLM-maintained `src/` (plain-HTML components/layouts, i18n JSON,
+// markdown pages/articles) and produces the EXACT Tigris key→object map used by BOTH the local
+// preview and the remote deploy: per-locale pages assembled from layouts + markdown + i18n, a
+// language switcher, a blog index, and the routing tail (slash-keys, /→/<locale>/, 404, sitemap,
+// robots). `resolveRoute` mimics the edge+Tigris routing on the OUTPUT keys. Pure: no DOM/Storage.
+import { marked } from 'marked'
+import { assemble, i18nGet, type Strings } from './assemble'
+import { parseFrontmatter } from './frontmatter'
 
 export type SiteObject = { key: string; body: string; contentType: string }
 export type SiteOptions = {
-	/** Locales the site is published under (default ['en']). */
+	/** Locales the site is published under. Default: inferred from src/i18n/<loc>.json (else ['en']). */
 	locales?: string[]
-	/** Locale the bare root redirects to (default 'en'). */
+	/** Locale the bare root redirects to (default: the first locale). */
 	defaultLocale?: string
-	/** Substituted for every `${BASE_URL}` token in text bodies. Preview: the iframe origin; deploy:
-	 *  the content host (https://www.next.aven.ceo). Default '' → root-relative. */
+	/** Substituted for every `${BASE_URL}` token. Preview: '' (root-relative); deploy: the content host. */
 	baseUrl?: string
 }
 
 const HTML = 'text/html; charset=utf-8'
-const MIME: Record<string, string> = {
-	html: HTML,
-	css: 'text/css; charset=utf-8',
-	js: 'text/javascript; charset=utf-8',
-	mjs: 'text/javascript; charset=utf-8',
-	json: 'application/json',
-	svg: 'image/svg+xml',
-	xml: 'application/xml',
-	txt: 'text/plain; charset=utf-8',
-	md: 'text/plain; charset=utf-8',
-	png: 'image/png',
-	jpg: 'image/jpeg',
-	jpeg: 'image/jpeg',
-	gif: 'image/gif',
-	webp: 'image/webp',
-	ico: 'image/x-icon',
-	woff: 'font/woff',
-	woff2: 'font/woff2'
-}
-const TEXT_EXT = /\.(html|css|js|mjs|json|svg|xml|txt|md)$/i
+const CSS = 'text/css; charset=utf-8'
 
-function mimeFor(key: string): string {
-	const ext = key.includes('.') ? key.slice(key.lastIndexOf('.') + 1).toLowerCase() : ''
-	return MIME[ext] ?? 'application/octet-stream'
-}
-
-/** Replace every `${BASE_URL}` token (no template-literal eval — plain string swap). */
-// biome-ignore lint/suspicious/noTemplateCurlyInString: ${BASE_URL} is the literal placeholder GLM writes, not interpolation
-const subst = (body: string, baseUrl: string): string => body.split('${BASE_URL}').join(baseUrl)
+/** Replace every `${BASE_URL}` token (plain string swap — no template-literal eval). */
+const subst = (body: string, baseUrl: string): string =>
+	// biome-ignore lint/suspicious/noTemplateCurlyInString: ${BASE_URL} is the literal placeholder token
+	body.split('${BASE_URL}').join(baseUrl)
 
 function redirectHtml(to: string): string {
 	return (
@@ -56,7 +34,6 @@ function redirectHtml(to: string): string {
 		`<a href="${to}">→ ${to}</a>`
 	)
 }
-
 function notFoundHtml(defaultLocale: string): string {
 	return (
 		'<!doctype html><meta charset="utf-8"><title>404</title>' +
@@ -65,34 +42,167 @@ function notFoundHtml(defaultLocale: string): string {
 	)
 }
 
+/** src/<dir>/<name>.<ext> → { name → content } for direct children only (components, layouts). */
+function collect(src: Record<string, string>, prefix: string): Record<string, string> {
+	const out: Record<string, string> = {}
+	for (const [path, body] of Object.entries(src)) {
+		if (!path.startsWith(prefix)) continue
+		const rest = path.slice(prefix.length)
+		if (rest.includes('/')) continue
+		out[rest.replace(/\.[^.]+$/, '')] = body
+	}
+	return out
+}
+
+/** Locales present in a src tree (from src/i18n/<loc>.json), sorted. */
+export function localesOf(src: Record<string, string>): string[] {
+	const set = new Set<string>()
+	for (const path of Object.keys(src)) {
+		const m = path.match(/^src\/i18n\/([a-z]{2})\.json$/)
+		if (m?.[1]) set.add(m[1])
+	}
+	return [...set].sort()
+}
+
+const renderMarkdown = (body: string): string => marked.parse(body, { async: false }) as string
+
 /**
- * Build the deploy/preview key→object map from the composer's source files (a `public/…`→content
- * map). For each file: strip `public/` → its rel key. For any `…/index.html`, ALSO emit the
- * slash-key alias (the dir path) so `/<loc>/<dir>/` serves directly (Tigris-direct). Append
- * `404.html` and a root `index.html` redirect to `/<defaultLocale>/`. Text bodies get `${BASE_URL}`
- * substituted. Deterministic: output is sorted by key.
+ * Assemble the deploy/preview key→object map from the `src/` tree. For each locale: render every
+ * markdown page/article through its layout (resolving `{{> component}}` includes + `{{t.*}}` i18n +
+ * `{{content}}`/`{{title}}`/… tokens), emit per-locale pages + slash-key aliases, generate the blog
+ * index from the articles, and add the language switcher per page. Then the routing tail (404,
+ * sitemap, robots, `/`→`/<default>/`). Deterministic: output is sorted by key.
  */
-export function buildSite(source: Record<string, string>, opts: SiteOptions = {}): SiteObject[] {
-	const defaultLocale = opts.defaultLocale ?? 'en'
+export function buildSite(src: Record<string, string>, opts: SiteOptions = {}): SiteObject[] {
+	const detected = localesOf(src)
+	const locales = opts.locales ?? (detected.length ? detected : ['en'])
+	const defaultLocale = opts.defaultLocale ?? (locales.includes('en') ? 'en' : (locales[0] ?? 'en'))
 	const baseUrl = opts.baseUrl ?? ''
+	const partials = collect(src, 'src/components/')
+	const layouts = collect(src, 'src/layouts/')
+	const i18n: Record<string, Strings> = {}
+	for (const loc of locales) {
+		try {
+			i18n[loc] = JSON.parse(src[`src/i18n/${loc}.json`] ?? '{}') as Strings
+		} catch {
+			i18n[loc] = {}
+		}
+	}
+
 	const out = new Map<string, SiteObject>()
-	for (const [path, raw] of Object.entries(source)) {
-		if (!path.startsWith('public/')) continue
-		const rel = path.slice('public/'.length)
-		if (!rel) continue
-		const body = TEXT_EXT.test(rel) ? subst(raw, baseUrl) : raw
-		out.set(rel, { key: rel, body, contentType: mimeFor(rel) })
-		// Slash-key alias for any directory index → `/<loc>/<dir>/` serves directly.
+	const setKey = (rel: string, body: string): void => {
+		out.set(rel, { key: rel, body, contentType: HTML })
 		if (rel.endsWith('/index.html')) {
-			const slash = rel.slice(0, -'index.html'.length) // 'en/', 'en/blog/'
+			const slash = rel.slice(0, -'index.html'.length) // slash-key alias (Tigris-direct)
 			out.set(slash, { key: slash, body, contentType: HTML })
 		}
 	}
+
+	// Language switcher for a logical path (e.g. /en/blog/foo/) — the same path in each locale.
+	const switcher = (curLoc: string, path: string): string =>
+		locales
+			.map((loc) => {
+				const lp = path.replace(new RegExp(`^/${curLoc}(/|$)`), `/${loc}$1`)
+				const on = loc === curLoc ? ' class="on"' : ''
+				return `<a href="${lp}"${on}>${loc.toUpperCase()}</a>`
+			})
+			.join(' ')
+
+	const render = (mdSrc: string, loc: string, path: string): string => {
+		const { data, body } = parseFrontmatter(mdSrc)
+		const layout = layouts[data.layout ?? 'page'] ?? layouts.page ?? '{{content}}'
+		const tokens = {
+			lang: loc,
+			path,
+			title: data.title ?? '',
+			date: data.date ?? '',
+			summary: data.summary ?? '',
+			content: renderMarkdown(body),
+			lang_switcher: switcher(loc, path)
+		}
+		return subst(assemble(layout, { partials, i18n: i18n[loc], tokens }), baseUrl)
+	}
+
+	for (const loc of locales) {
+		// pages: src/pages/<loc>/<name>.md → <loc>/index.html (home) | <loc>/<name>/index.html
+		for (const [path, content] of Object.entries(src)) {
+			const m = path.match(new RegExp(`^src/pages/${loc}/(.+)\\.md$`))
+			if (!m?.[1]) continue
+			const name = m[1]
+			const rel = name === 'home' ? `${loc}/index.html` : `${loc}/${name}/index.html`
+			const url = name === 'home' ? `/${loc}/` : `/${loc}/${name}/`
+			setKey(rel, render(content, loc, url))
+		}
+		// blog articles: src/blog/<loc>/<slug>.md → <loc>/blog/<slug>/index.html
+		const articles: { slug: string; title: string; summary: string; date: string }[] = []
+		for (const [path, content] of Object.entries(src)) {
+			const m = path.match(new RegExp(`^src/blog/${loc}/(.+)\\.md$`))
+			if (!m?.[1]) continue
+			const slug = m[1]
+			const { data } = parseFrontmatter(content)
+			articles.push({
+				slug,
+				title: data.title ?? slug,
+				summary: data.summary ?? '',
+				date: data.date ?? ''
+			})
+			setKey(`${loc}/blog/${slug}/index.html`, render(content, loc, `/${loc}/blog/${slug}/`))
+		}
+		// blog index (generated): heading + article cards (newest first), in the page layout
+		const cards = articles
+			.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+			.map((a) =>
+				assemble(partials['article-card'] ?? '', {
+					tokens: {
+						url: `/${loc}/blog/${a.slug}/`,
+						title: a.title,
+						summary: a.summary,
+						date: a.date
+					}
+				})
+			)
+			.join('\n')
+		const blogTitle = i18nGet(i18n[loc] ?? {}, 'nav.blog') || 'Blog'
+		const blogHtml = subst(
+			assemble(layouts.page ?? '{{content}}', {
+				partials,
+				i18n: i18n[loc],
+				tokens: {
+					lang: loc,
+					path: `/${loc}/blog/`,
+					title: blogTitle,
+					content: `<h1 class="section-title">${blogTitle}</h1><div class="blog-list">${cards}</div>`,
+					lang_switcher: switcher(loc, `/${loc}/blog/`)
+				}
+			}),
+			baseUrl
+		)
+		setKey(`${loc}/blog/index.html`, blogHtml)
+	}
+
+	// shared stylesheet + routing tail
+	const styles = src['src/styles.css']
+	if (styles) out.set('styles.css', { key: 'styles.css', body: styles, contentType: CSS })
 	out.set('404.html', { key: '404.html', body: notFoundHtml(defaultLocale), contentType: HTML })
 	out.set('index.html', {
 		key: 'index.html',
 		body: redirectHtml(`/${defaultLocale}/`),
 		contentType: HTML
+	})
+	const urls = [...out.keys()].filter((k) => k.endsWith('/')).sort()
+	out.set('sitemap.xml', {
+		key: 'sitemap.xml',
+		body:
+			'<?xml version="1.0" encoding="UTF-8"?>' +
+			'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +
+			urls.map((u) => `<url><loc>${baseUrl}/${u}</loc></url>`).join('') +
+			'</urlset>',
+		contentType: 'application/xml; charset=utf-8'
+	})
+	out.set('robots.txt', {
+		key: 'robots.txt',
+		body: 'User-agent: *\nAllow: /\n',
+		contentType: 'text/plain; charset=utf-8'
 	})
 	return [...out.values()].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
 }
@@ -106,17 +216,11 @@ export type Resolution =
 /**
  * Mimic the edge + Tigris: resolve a request path to a 200 key, a redirect, or 404, using the key
  * set from `buildSite`. The preview's local router and the live edge agree because they read the
- * same keys. Rules (README §1/§2/§4):
- *   `/`              → 302 `/<default>/`            (language-negotiated bare apex)
- *   `/<loc>`         → 301 `/<loc>/`                (add the load-bearing trailing slash)
- *   exact key        → 200                          (slash-key `en/`, file `styles.css`, …)
- *   `/<dir>` w/ key  → 301 `/<dir>/`                (no-slash → slash)
- *   `/<dir>/`        → 200 `<dir>/index.html`       (index fallback)
- *   else             → 404 `404.html`
+ * same keys. board 0056.
  */
 export function resolveRoute(path: string, keys: Set<string>, opts: SiteOptions = {}): Resolution {
 	const locales = opts.locales ?? ['en']
-	const defaultLocale = opts.defaultLocale ?? 'en'
+	const defaultLocale = opts.defaultLocale ?? (locales.includes('en') ? 'en' : (locales[0] ?? 'en'))
 	let p = (path.split('?')[0] ?? '').split('#')[0] ?? ''
 	if (!p.startsWith('/')) p = `/${p}`
 	if (p === '/') return { status: 302, location: `/${defaultLocale}/` }

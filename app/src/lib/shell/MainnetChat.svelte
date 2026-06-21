@@ -4,9 +4,9 @@ import { tick } from 'svelte'
 import { getBearerToken } from '$lib/auth/auth-client'
 import {
 	bumpComposerReload,
-	readPublicFiles,
+	readSrcFiles,
 	resolveActiveSpark,
-	writePublicFiles
+	writeSrcFiles
 } from '$lib/composer/active-spark'
 import Composer from '$lib/composer/Composer.svelte'
 import { t } from '$lib/i18n'
@@ -36,8 +36,8 @@ let initialized = false
 // Session switcher is collapsed by default so the conversation is centered + full-width; a tiny
 // toggle button opens the chats viewer. board 0055.
 let showSessions = $state(false)
-// The active spark's current public/ files (path→content), loaded into the AI context before each
-// send so the edit_website tool can diff/create across files. board 0055.
+// The active spark's current src/ files (path→content), loaded into the AI context before each send
+// so the edit_website tool can diff/create across them (sent as the body's `publicFiles`). board 0057.
 let publicFiles: Record<string, string> = {}
 
 // Live tool-loop activity for the current turn (which tools run / are still running / done),
@@ -349,14 +349,14 @@ async function streamTinfoil(
 	}
 }
 
-// Apply an AI website edit: write the changed public/ files to the active spark (same Storage
-// primitive as the Tigris deploy) and refresh any mounted Composer vibe. board 0055.
+// Apply an AI website edit: write the changed src/ files to the active spark (the generator
+// re-assembles the preview) and refresh any mounted Composer vibe. board 0055/0057.
 async function applyEdit(files: Record<string, string>): Promise<void> {
 	if (!files || Object.keys(files).length === 0) return
 	const spark = await resolveActiveSpark()
 	if (!spark) return
 	try {
-		await writePublicFiles(spark, files)
+		await writeSrcFiles(spark, files)
 		bumpComposerReload()
 	} catch (e) {
 		console.error('[chat] apply website edit failed:', e)
@@ -370,8 +370,8 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 	const fileNote = files.length > 0 ? ` (${files.length} attachment(s))` : ''
 	if (trimmed === '' && files.length === 0) return
 
-	// Load the current public/ files into the AI context so edit_website can diff/create across them.
-	publicFiles = await readPublicFiles(await resolveActiveSpark())
+	// Load the spark's src/ files into the AI context so edit_website can diff/create across them.
+	publicFiles = await readSrcFiles(await resolveActiveSpark())
 	toolActivity = [] // fresh tool-activity strip for this turn
 	editStream = '' // fresh GLM edit stream for this turn
 

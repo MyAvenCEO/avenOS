@@ -12,13 +12,6 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-// Locale-routed home seeded at public/en/index.html (served at /en/, like next.aven.ceo). It links
-// the shared /styles.css rather than inlining styles. board 0055.
-const STARTER: &str = "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>aven.ceo</title>\n<link rel=\"stylesheet\" href=\"/styles.css\"></head>\n<body><h1>aven.ceo — edit me</h1></body></html>\n";
-
-// Shared stylesheet seeded at public/styles.css — every page links it via <link href=\"/styles.css\">.
-const STARTER_CSS: &str = "body{font-family:ui-sans-serif,system-ui,sans-serif;background:#0B1F3A;color:#F4EFE6;display:grid;place-items:center;height:100vh;margin:0}\nh1{font-size:3rem;background:linear-gradient(180deg,#fff,#7aa2ff);-webkit-background-clip:text;background-clip:text;color:transparent}\n";
-
 /// `<mainnet_base>/sparks` (i.e. `.avenOS/ceo.aven/mainnet/alberobello/sparks`) — created if
 /// missing. Mainnet data root, not the testnet avenDB identity root.
 fn sparks_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -63,37 +56,19 @@ pub struct SparkFile {
 	pub size: u64,
 }
 
-/// The single MVP spark. Each spark holds `public/` (the deploy bucket — a locale-routed static
-/// site: `en/index.html` served at /en/, shared `styles.css`) and `private/` (dropped reference
-/// images, never published). Mirrors the next.aven.ceo Tigris layout. board 0055.
+/// The single MVP spark. Each spark holds `src/` (the GLM-maintained source tree — components/
+/// layouts, i18n JSON, markdown pages/blog — which the app seeds from the starter example and the
+/// generator assembles), `public/` (the generated deploy bucket), and `private/` (dropped reference
+/// images, never published). The `src/` CONTENT is seeded app-side (active-spark.ensureSeeded) from
+/// the skill's SEED_SRC so it has ONE source of truth. board 0057.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn sparks_list(app: tauri::AppHandle) -> Result<Vec<String>, String> {
 	let root = sparks_root(&app)?;
 	// MVP: a single spark. Drop any legacy spark2.
 	let _ = fs::remove_dir_all(root.join("spark2"));
 	let dir = root.join("spark1");
-	let public = dir.join("public");
-	let en = public.join("en");
-	fs::create_dir_all(&en).map_err(|e| format!("seed spark1/public/en: {e}"))?;
-	fs::create_dir_all(dir.join("private")).map_err(|e| format!("seed spark1/private: {e}"))?;
-	let idx = en.join("index.html"); // public/en/index.html — the /en/ home
-	let styles = public.join("styles.css");
-	// Migrate older layouts into public/en/index.html (content preserved):
-	//   spark1/public/index.html (pre-locale)  or  spark1/index.html (flat) → public/en/index.html.
-	if !idx.exists() {
-		let legacy_public = public.join("index.html");
-		let legacy_flat = dir.join("index.html");
-		if legacy_public.exists() {
-			let _ = fs::rename(&legacy_public, &idx);
-		} else if legacy_flat.exists() {
-			let _ = fs::rename(&legacy_flat, &idx);
-		}
-	}
-	if !idx.exists() {
-		fs::write(&idx, STARTER).map_err(|e| format!("seed spark1/public/en/index.html: {e}"))?;
-	}
-	if !styles.exists() {
-		fs::write(&styles, STARTER_CSS).map_err(|e| format!("seed spark1/public/styles.css: {e}"))?;
+	for sub in ["src", "public", "private"] {
+		fs::create_dir_all(dir.join(sub)).map_err(|e| format!("seed spark1/{sub}: {e}"))?;
 	}
 	Ok(vec!["spark1".to_string()])
 }

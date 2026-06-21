@@ -16,6 +16,9 @@
 		"index.ts",
 		"composer/index.ts",
 		"composer/site-generator.ts",
+		"composer/frontmatter.ts",
+		"composer/assemble.ts",
+		"composer/seed.ts",
 		"composer/edit.ts",
 		"composer/authoring.ts",
 		"composer/tools.ts"

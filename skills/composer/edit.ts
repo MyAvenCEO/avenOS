@@ -26,10 +26,10 @@ const TINFOIL_BASE_URL = process.env.TINFOIL_BASE_URL ?? 'https://inference.tinf
 export const WEBSITE_MODEL = process.env.TINFOIL_WEBSITE_MODEL ?? 'glm-5-2'
 
 // The home source file (served at /en/) — the default/fallback target when a block names no file.
-const HOME = 'public/en/index.html'
+const HOME = 'src/pages/en/home.md'
 
 // Parse the model's file-scoped SEARCH/REPLACE blocks:
-//   FILE: public/<path>\n<<<<<<< SEARCH\n<verbatim>\n=======\n<replacement>\n>>>>>>> REPLACE
+//   FILE: src/<path>\n<<<<<<< SEARCH\n<verbatim>\n=======\n<replacement>\n>>>>>>> REPLACE
 export function parseEditBlocks(raw: string): { file: string; search: string; replace: string }[] {
 	const blocks: { file: string; search: string; replace: string }[] = []
 	const re =
@@ -56,7 +56,7 @@ export async function editWebsiteDiff(
 		`${COMPOSER_AUTHORING_GUIDE}\n\n` +
 		'Make the SMALLEST change that satisfies the instruction. Output ONLY edit blocks; precede ' +
 		'EACH with its target file, EXACTLY:\n' +
-		'FILE: public/<path>\n<<<<<<< SEARCH\n<verbatim text from that file>\n=======\n<replacement>\n' +
+		'FILE: src/<path>\n<<<<<<< SEARCH\n<verbatim text from that file>\n=======\n<replacement>\n' +
 		'>>>>>>> REPLACE\n' +
 		'SEARCH must be an exact, unique substring of THAT file (copy whitespace verbatim). To CREATE ' +
 		'a new file or fully rewrite one, use an EMPTY SEARCH and the entire document as REPLACE. Use ' +
@@ -124,9 +124,9 @@ export async function editWebsiteDiff(
 						const marks = raw.match(/FILE:[ \t]*([^\n]+)/g)
 						const last = marks?.[marks.length - 1]?.replace(/FILE:[ \t]*/, '').trim()
 						if (last) {
-							const file = last.startsWith('public/') ? last : `public/${last.replace(/^\/+/, '')}`
+							const file = last.startsWith('src/') ? last : `src/${last.replace(/^\/+/, '')}`
 							onProgress(
-								`${file in files ? 'editing' : 'creating'} ${file.replace(/^public\//, '')} · ${lines}`
+								`${file in files ? 'editing' : 'creating'} ${file.replace(/^src\//, '')} · ${lines}`
 							)
 						} else {
 							onProgress(`glm-5-2 generating… · ${lines}`)
@@ -162,7 +162,7 @@ export async function editWebsiteDiff(
 	// Work on a copy so multiple blocks targeting the same file compound.
 	const working: Record<string, string> = { ...files }
 	for (const b of blocks) {
-		const path = b.file.startsWith('public/') ? b.file : `public/${b.file.replace(/^\/+/, '')}`
+		const path = b.file.startsWith('src/') ? b.file : `src/${b.file.replace(/^\/+/, '')}`
 		const cur = working[path] ?? ''
 		if (b.search.trim() === '') {
 			working[path] = b.replace // empty SEARCH = create / full replace
