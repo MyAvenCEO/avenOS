@@ -1,10 +1,12 @@
-//! Scoped filesystem IPC for the website composer.
+//! Scoped filesystem IPC for the website composer (a mainnet/alberobello feature).
 //!
-//! Every spark is a website project living at `<app_base>/sparks/<sparkId>/`
-//! (i.e. `~/Documents/.avenOS/<network>/sparks/<sparkId>/`). All access is
-//! constrained to that subtree: spark ids and relative keys are validated to
-//! reject `..`, absolute paths, and separators, so the webview can never read
-//! or write outside the sparks folder.
+//! Every spark is a website project living at
+//! `~/Documents/.avenOS/ceo.aven/mainnet/alberobello/sparks/<sparkId>/`. The composer belongs to
+//! the mainnet app, which has NO avenDB vault/crypto — so this stores under the mainnet data root
+//! (`paths::mainnet_app_base`), NOT the testnet avenDB identity root (`aven_os_app_base`, keyed to
+//! `NETWORK_SEED`). All access is constrained to that subtree: spark ids and relative keys are
+//! validated to reject `..`, absolute paths, and separators, so the webview can never read or
+//! write outside the sparks folder.
 
 use serde::Serialize;
 use std::fs;
@@ -12,9 +14,10 @@ use std::path::{Path, PathBuf};
 
 const STARTER: &str = "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>aven.ceo</title>\n<style>body{font-family:ui-sans-serif,system-ui,sans-serif;background:#0B1F3A;color:#F4EFE6;display:grid;place-items:center;height:100vh;margin:0}h1{font-size:3rem;background:linear-gradient(180deg,#fff,#7aa2ff);-webkit-background-clip:text;background-clip:text;color:transparent}</style></head>\n<body><h1>aven.ceo — edit me</h1></body></html>\n";
 
-/// `<app_base>/sparks` — created if missing.
+/// `<mainnet_base>/sparks` (i.e. `.avenOS/ceo.aven/mainnet/alberobello/sparks`) — created if
+/// missing. Mainnet data root, not the testnet avenDB identity root.
 fn sparks_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-	let base = tauri_plugin_self::paths::aven_os_app_base(app)?.join("sparks");
+	let base = tauri_plugin_self::paths::mainnet_app_base(app)?.join("sparks");
 	fs::create_dir_all(&base).map_err(|e| format!("create_dir_all {}: {e}", base.display()))?;
 	Ok(base)
 }
