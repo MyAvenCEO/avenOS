@@ -53,5 +53,29 @@ export const EDIT_WEBSITE_TOOL = {
 	}
 } as const
 
-/** Every Composer-vibe tool the chat advertises: read-only viewer + multi-file editor. */
-export const COMPOSER_TOOLS = [SHOW_WEBSITE_TOOL, EDIT_WEBSITE_TOOL]
+/**
+ * Publish the website to the LIVE web (www.next.aven.ceo). Calling this does NOT deploy immediately —
+ * the server routes it through a HITL confirm card ("Publish to www?"), and only an admin can deploy.
+ * The model just calls the tool; the server assembles the site and uploads it to Tigris on confirm.
+ * board 0058.
+ */
+export const DEPLOY_WEBSITE_TOOL = {
+	type: 'function',
+	function: {
+		name: 'deploy_website',
+		description:
+			"Publish the user's website to the LIVE web (www.next.aven.ceo). Call this when the user " +
+			'asks to publish, deploy, go live, ship, or push their site online. The user must CONFIRM a ' +
+			'publish prompt before anything goes live, and only an admin can deploy — you do NOT upload ' +
+			'anything yourself, just call this tool.',
+		parameters: {
+			type: 'object',
+			properties: {
+				response: { type: 'string', description: 'A short human-facing reply to show the user.' }
+			}
+		}
+	}
+} as const
+
+/** Every Composer-vibe tool the chat advertises: read-only viewer + multi-file editor + publish. */
+export const COMPOSER_TOOLS = [SHOW_WEBSITE_TOOL, EDIT_WEBSITE_TOOL, DEPLOY_WEBSITE_TOOL]

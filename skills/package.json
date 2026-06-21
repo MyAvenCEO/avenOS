@@ -8,7 +8,8 @@
 		".": "./index.ts",
 		"./composer": "./composer/index.ts",
 		"./composer/site-generator": "./composer/site-generator.ts",
-		"./composer/seed": "./composer/seed.ts"
+		"./composer/seed": "./composer/seed.ts",
+		"./composer/publish": "./composer/publish.ts"
 	},
 	"scripts": {
 		"check": "tsc -p tsconfig.json --noEmit",

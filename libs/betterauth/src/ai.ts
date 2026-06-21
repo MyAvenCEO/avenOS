@@ -1,5 +1,6 @@
 import { CHAT_TOOLS } from '@avenos/aven-vibes/tools'
 import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
+import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
@@ -368,7 +369,7 @@ function streamWithTools(opts: {
 								clearInterval(ping)
 							}
 							const ok = applied > 0
-							const names = Object.keys(changedFiles).map((p) => p.replace(/^public\//, ''))
+							const names = Object.keys(changedFiles).map((p) => p.replace(/^src\//, ''))
 							emitTool(
 								tc.id,
 								'edit_website',
@@ -388,6 +389,30 @@ function streamWithTools(opts: {
 									(e) => console.error('[ai] persist composer vibe marker failed:', e)
 								)
 							}
+							continue
+						}
+						// Publish to the live web: NEVER deploy without explicit confirmation — show a confirm
+						// card carrying the spark's src + host; the upload runs in aiConfirmAction (admin-gated)
+						// on confirm. Like the delete HITL, but for the website. board 0058.
+						if (tc.name === 'deploy_website') {
+							const host = deployHost()
+							emit({
+								aven_hitl: {
+									id: tc.id,
+									tool: 'deploy_website',
+									label: `Publish your site to ${host.replace(/^https?:\/\//, '')}?`,
+									action: { tool: 'deploy_website', src: turnFiles, host }
+								}
+							})
+							msgs.push({
+								role: 'tool',
+								tool_call_id: tc.id,
+								content: JSON.stringify({
+									ok: false,
+									status: 'awaiting_user_confirmation',
+									note: 'A publish confirm card was shown. Do NOT deploy or retry — just tell the user you asked them to confirm publishing.'
+								})
+							})
 							continue
 						}
 						const dataDetail =
@@ -515,6 +540,24 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 	const body = (await c.req.json().catch(() => null)) as { action?: Record<string, unknown> } | null
 	if (!body?.action || typeof body.action !== 'object') {
 		return c.json({ error: 'action required' }, 400)
+	}
+	// Publish to the live web — ADMIN-ONLY (same gate as set-tier), reusing the spark's src carried in
+	// the confirm action. The Tigris creds live in the server env; never reach the client. board 0058.
+	if (body.action.tool === 'deploy_website') {
+		if ((session.user as { role?: string }).role !== 'admin') {
+			return c.json({ ok: false, error: 'admin_only' }, 403)
+		}
+		const src = body.action.src
+		if (!src || typeof src !== 'object') return c.json({ ok: false, error: 'no_site' }, 400)
+		const storage = tigrisStorageFromEnv()
+		if (!storage) return c.json({ ok: false, error: 'deploy_not_configured' }, 503)
+		const host = typeof body.action.host === 'string' ? body.action.host : undefined
+		try {
+			const r = await deploySite(src as Record<string, string>, storage, { host })
+			return c.json({ ok: true, result: { deployed: r.count, url: r.url } })
+		} catch (e) {
+			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 502)
+		}
 	}
 	try {
 		const result = await executeDataTool(session.user.id, body.action)

@@ -98,12 +98,26 @@ function addHitl(req: {
 }) {
 	hitlRequests = [...hitlRequests.filter((r) => r.id !== req.id), { ...req, status: 'pending' }]
 }
-function setHitlStatus(id: string, status: HitlRequest['status']): void {
-	hitlRequests = hitlRequests.map((r) => (r.id === id ? { ...r, status } : r))
+/** Dismiss a HITL card (the user clicked, so it always disappears from view). board 0058. */
+function removeHitl(id: string): void {
+	hitlRequests = hitlRequests.filter((r) => r.id !== id)
+}
+/** Action-specific confirm/decline button labels (delete vs publish vs …) + the confirm intent. */
+function hitlVerb(tool: string): { confirm: string; decline: string; danger: boolean } {
+	if (tool === 'deploy_website') return { confirm: 'Publish', decline: 'Cancel', danger: false }
+	return { confirm: 'Delete', decline: 'Keep', danger: true }
+}
+/** Append a short assistant note (e.g. the publish result) into the conversation. */
+function appendNote(text: string): void {
+	messages = [...messages, { id: nextId++, role: 'assistant', text }]
+	scrollToBottom()
+}
+function declineHitl(req: HitlRequest): void {
+	removeHitl(req.id) // dismiss — nothing runs
 }
 async function confirmHitl(req: HitlRequest): Promise<void> {
 	if (req.status !== 'pending' || !AI_BASE) return
-	setHitlStatus(req.id, 'confirmed')
+	removeHitl(req.id) // hide the card immediately on click
 	try {
 		const token = getBearerToken()
 		const res = await fetch(`${AI_BASE}/api/ai/confirm`, {
@@ -115,10 +129,20 @@ async function confirmHitl(req: HitlRequest): Promise<void> {
 			},
 			body: JSON.stringify({ action: req.action })
 		})
-		if (!res.ok) throw new Error(`HTTP ${res.status}`)
-		void queryClient.invalidateQueries({ queryKey: ['data'] })
+		const data = (await res.json().catch(() => null)) as {
+			ok?: boolean
+			result?: { url?: string; deployed?: number }
+			error?: string
+		} | null
+		if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`)
+		if (req.tool === 'deploy_website') {
+			appendNote(`✅ Published — live at ${data.result?.url ?? 'www.next.aven.ceo'}`)
+		} else {
+			void queryClient.invalidateQueries({ queryKey: ['data'] })
+		}
 	} catch (e) {
-		setHitlStatus(req.id, 'error')
+		const msg = e instanceof Error ? e.message : String(e)
+		if (req.tool === 'deploy_website') appendNote(`⚠️ Publish failed: ${msg}`)
 		console.error('[chat] HITL confirm failed:', e)
 	}
 }
@@ -137,7 +161,9 @@ const SYSTEM_PROMPT =
 	'You are a helpful assistant inside the avenOS Alberobello chat. Be concise and friendly. ' +
 	'To show the user their website (read-only), call show_website. To change their website, call ' +
 	'edit_website with a clear instruction — a specialist model does the rewrite, so you never ' +
-	'write HTML yourself.'
+	'write HTML yourself. To PUBLISH their website to the live web (www.next.aven.ceo), call ' +
+	'deploy_website — the user must confirm a publish prompt and only an admin can deploy; you never ' +
+	'upload anything yourself.'
 // Sentinel content the server persists for a vibe-card marker message (must match
 // VIBE_MARKER in libs/betterauth/src/ai.ts). Re-hydrated into a vibe card on load.
 const VIBE_MARKER = '\u200baven-vibe:'
@@ -565,32 +591,31 @@ function handleTranscribeError(message: string): void {
 		<div class="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
 			<div class="mx-auto w-full max-w-[52rem]">
 				{#each hitlRequests as req (req.id)}
+					{@const v = hitlVerb(req.tool)}
+					<!-- a small confirm card: question on top, buttons at the bottom; dismissed on click -->
 					<div
-						class="border-border bg-card mb-2 flex flex-wrap items-center justify-center gap-2 rounded-[var(--radius-lg)] border px-3 py-2 text-[13px]"
+						class="border-border bg-card mx-auto mb-2 max-w-xs rounded-[var(--radius-lg)] border px-4 py-3 text-center text-[13px] shadow-sm"
 					>
-						<span class="text-foreground font-medium">{req.label}</span>
-						{#if req.status === 'pending'}
+						<p class="text-foreground mb-3 font-medium">{req.label}</p>
+						<div class="flex justify-center gap-2">
+							<!-- decline always LEFT, confirm always RIGHT -->
 							<button
 								type="button"
-								class="border-destructive/50 text-destructive hover:bg-destructive/10 rounded-full border px-3 py-1 text-xs font-semibold transition-colors"
+								class="border-border hover:bg-muted rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors"
+								onclick={() => declineHitl(req)}
+							>
+								{v.decline}
+							</button>
+							<button
+								type="button"
+								class="rounded-full px-4 py-1.5 text-xs font-semibold transition-colors {v.danger
+									? 'border-destructive/50 text-destructive hover:bg-destructive/10 border'
+									: 'bg-primary text-primary-foreground hover:opacity-90'}"
 								onclick={() => void confirmHitl(req)}
 							>
-								Delete
+								{v.confirm}
 							</button>
-							<button
-								type="button"
-								class="border-border hover:bg-muted rounded-full border px-3 py-1 text-xs font-semibold transition-colors"
-								onclick={() => setHitlStatus(req.id, 'declined')}
-							>
-								Keep
-							</button>
-						{:else if req.status === 'confirmed'}
-							<span class="text-muted-foreground text-xs">✓ deleted</span>
-						{:else if req.status === 'declined'}
-							<span class="text-muted-foreground text-xs">kept</span>
-						{:else}
-							<span class="text-destructive text-xs">failed — try again</span>
-						{/if}
+						</div>
 					</div>
 				{/each}
 				{#if editStream}

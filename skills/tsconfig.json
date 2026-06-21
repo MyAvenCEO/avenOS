@@ -19,6 +19,7 @@
 		"composer/frontmatter.ts",
 		"composer/assemble.ts",
 		"composer/seed.ts",
+		"composer/publish.ts",
 		"composer/edit.ts",
 		"composer/authoring.ts",
 		"composer/tools.ts"
