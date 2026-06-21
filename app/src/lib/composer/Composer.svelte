@@ -1,14 +1,17 @@
 <script lang="ts">
 import type { StorageItemMeta } from '@storagesdk/core'
-// Website composer: edit a spark's files locally and preview securely.
+// Website composer vibe: edit a spark's files locally and preview securely.
 //
-// Storage goes through the SAME universal `Storage` API as the Tigris deploy —
-// here backed by the `tauriFs` adapter (scoped Tauri fs IPC). Preview renders in
-// a sandboxed, opaque-origin iframe (no allow-same-origin) so the site's JS can
-// never reach the app or Tauri IPC.
+// Storage goes through the SAME universal `Storage` API as the Tigris deploy — here backed by the
+// `tauriFs` adapter (scoped Tauri fs IPC). Preview renders in a sandboxed, opaque-origin iframe
+// (no allow-same-origin) so the site's JS can never reach the app or Tauri IPC. A tab switcher
+// flips between the live Preview and the Code view (file list + editor). board 0055.
 import { Storage } from '@storagesdk/core'
 import { sparksList } from '$lib/composer/spark-ipc'
 import { tauriFs } from '$lib/composer/tauri-fs-adapter'
+
+type Tab = 'preview' | 'code'
+let tab = $state<Tab>('preview')
 
 let sparks = $state<string[]>([])
 let sparkId = $state('')
@@ -86,64 +89,90 @@ $effect(() => {
 })
 </script>
 
-<div class="flex h-full min-h-0 flex-col bg-[#060f1f] text-[#F4EFE6]">
-	<header class="flex items-center gap-3 border-b border-white/10 px-4 py-2 text-sm">
-		<span class="font-semibold">Composer</span>
+<div class="bg-background text-foreground flex h-full min-h-0 flex-col">
+	<header class="border-border flex shrink-0 items-center gap-3 border-b px-4 py-2 text-sm">
 		<select
 			bind:value={sparkId}
-			class="rounded border border-white/15 bg-[#0b1426] px-2 py-1 text-xs"
+			class="border-border bg-card text-foreground rounded-[var(--radius)] border px-2 py-1 text-xs"
 		>
 			{#each sparks as s (s)}
 				<option value={s}>{s}</option>
 			{/each}
 		</select>
-		<span class="text-white/40">editing <b class="text-[#cfe0ff]">{openPath}</b></span>
-		<button
-			onclick={save}
-			class="rounded border border-[#7aa2ff]/40 bg-[#7aa2ff]/10 px-3 py-1 text-xs text-[#cfe0ff] hover:bg-[#7aa2ff]/20"
+
+		<!-- Preview | Code tab switcher -->
+		<div
+			class="border-border bg-card flex gap-0.5 rounded-[var(--radius)] border p-0.5 text-xs font-medium"
 		>
-			Save
-		</button>
-		<span class="text-xs text-emerald-400">{status}</span>
+			{#each [{ id: 'preview', label: 'Preview' }, { id: 'code', label: 'Code' }] as t (t.id)}
+				<button
+					type="button"
+					class="rounded-[calc(var(--radius)-2px)] px-3 py-1 transition-colors {tab === t.id
+						? 'bg-primary text-primary-foreground'
+						: 'text-muted-foreground hover:text-foreground'}"
+					onclick={() => (tab = t.id as Tab)}
+				>
+					{t.label}
+				</button>
+			{/each}
+		</div>
+
+		{#if tab === 'code'}
+			<span class="text-muted-foreground">editing <b class="text-foreground">{openPath}</b></span>
+			<button
+				type="button"
+				onclick={save}
+				class="bg-primary text-primary-foreground rounded-[var(--radius)] px-3 py-1 text-xs font-medium transition-opacity hover:opacity-90"
+			>
+				Save
+			</button>
+			<span class="text-primary text-xs">{status}</span>
+		{/if}
+
 		<span
-			class="ml-auto rounded-full border border-[#7aa2ff]/40 bg-[#7aa2ff]/10 px-2 py-0.5 text-[11px] text-[#cfe0ff]"
-			>local fs · sandboxed preview</span
+			class="border-border text-muted-foreground ml-auto rounded-full border px-2 py-0.5 text-[11px]"
 		>
+			local fs · sandboxed preview
+		</span>
 	</header>
 
-	<div
-		class="grid min-h-0 flex-1"
-		style="grid-template-columns: 200px 1fr 1fr; grid-template-rows: minmax(0, 1fr);"
-	>
-		<!-- file list -->
-		<ul class="min-h-0 overflow-auto border-r border-white/10 p-2 text-[13px]">
-			{#each files as f (f.path)}
-				<li>
-					<button
-						onclick={() => openFile(f.path)}
-						class="w-full truncate rounded px-2 py-1 text-left hover:bg-white/5 {f.path === openPath
-							? 'bg-white/10 text-[#cfe0ff]'
-							: 'text-white/70'}"
-					>
-						{f.path}
-					</button>
-				</li>
-			{/each}
-		</ul>
-
-		<!-- editor -->
-		<textarea
-			bind:value={content}
-			spellcheck="false"
-			class="min-h-0 resize-none border-r border-white/10 bg-[#0b1426] p-4 font-mono text-[13px] leading-relaxed text-[#d7e0f0] outline-none"
-		></textarea>
-
+	{#if tab === 'preview'}
 		<!-- sandboxed preview (opaque origin: no app/IPC access); srcdoc re-renders on every edit/save -->
 		<iframe
 			title="preview"
 			srcdoc={previewHtml}
 			sandbox="allow-scripts"
-			class="h-full w-full border-0 bg-white"
+			class="min-h-0 flex-1 border-0 bg-white"
 		></iframe>
-	</div>
+	{:else}
+		<div
+			class="grid min-h-0 flex-1"
+			style="grid-template-columns: 220px 1fr; grid-template-rows: minmax(0, 1fr);"
+		>
+			<!-- file list -->
+			<ul class="border-border min-h-0 overflow-auto border-r p-2 text-[13px]">
+				{#each files as f (f.path)}
+					<li>
+						<button
+							type="button"
+							onclick={() => openFile(f.path)}
+							class="w-full truncate rounded-[var(--radius)] px-2 py-1 text-left transition-colors {f.path ===
+							openPath
+								? 'bg-primary/10 text-foreground font-medium'
+								: 'text-muted-foreground hover:bg-card'}"
+						>
+							{f.path}
+						</button>
+					</li>
+				{/each}
+			</ul>
+
+			<!-- editor -->
+			<textarea
+				bind:value={content}
+				spellcheck="false"
+				class="bg-card text-foreground min-h-0 resize-none p-4 font-mono text-[13px] leading-relaxed outline-none"
+			></textarea>
+		</div>
+	{/if}
 </div>

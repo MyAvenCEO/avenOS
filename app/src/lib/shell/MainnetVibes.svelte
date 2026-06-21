@@ -1,10 +1,14 @@
 <script lang="ts">
+import Composer from '$lib/composer/Composer.svelte'
 import { t } from '$lib/i18n'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
-// Mainnet "Vibes" tab: a left "select vibe" rail + the selected vibe. The vibes are the
-// dynamic aven-vibes views (the same TodosVibe used in the chat stream). board 0054.
-const VIBES: { id: string; label: string }[] = [{ id: 'todos', label: t('mainnet.todos.title') }]
+// Mainnet "Vibes" tab: a left "select vibe" rail + the selected vibe. Vibes are the dynamic
+// aven-vibes views (TodosVibe) plus the website Composer (Preview/Code). board 0054/0055.
+const VIBES: { id: string; label: string }[] = [
+	{ id: 'todos', label: t('mainnet.todos.title') },
+	{ id: 'composer', label: t('mainnet.nav.composer') }
+]
 let selectedVibe = $state('todos')
 </script>
 
@@ -30,10 +34,14 @@ let selectedVibe = $state('todos')
 		</div>
 	</aside>
 
-	<!-- Right: the selected vibe -->
-	<div class="flex min-h-0 flex-1 flex-col p-4">
+	<!-- Right: the selected vibe (Composer renders full-bleed — it has its own chrome) -->
+	<div class="flex min-h-0 flex-1 flex-col">
 		{#if selectedVibe === 'todos'}
-			<TodosVibe containerName="aven-vibes-tab-todos" />
+			<div class="flex min-h-0 flex-1 flex-col p-4">
+				<TodosVibe containerName="aven-vibes-tab-todos" />
+			</div>
+		{:else if selectedVibe === 'composer'}
+			<Composer />
 		{/if}
 	</div>
 </div>
