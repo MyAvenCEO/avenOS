@@ -111,7 +111,10 @@ $effect(() => {
 		>
 	</header>
 
-	<div class="grid min-h-0 flex-1" style="grid-template-columns: 200px 1fr 1fr;">
+	<div
+		class="grid min-h-0 flex-1"
+		style="grid-template-columns: 200px 1fr 1fr; grid-template-rows: minmax(0, 1fr);"
+	>
 		<!-- file list -->
 		<ul class="min-h-0 overflow-auto border-r border-white/10 p-2 text-[13px]">
 			{#each files as f (f.path)}
@@ -140,7 +143,7 @@ $effect(() => {
 			title="preview"
 			srcdoc={previewHtml}
 			sandbox="allow-scripts"
-			class="min-h-0 bg-white"
+			class="h-full w-full border-0 bg-white"
 		></iframe>
 	</div>
 </div>
