@@ -5,6 +5,7 @@ import { refreshUsage, usage } from '$lib/data/usage-store'
 import DebugCopy from '$lib/debug/DebugCopy.svelte'
 import { t } from '$lib/i18n'
 import { clearNetwork } from '$lib/settings/network-store'
+import Composer from '$lib/composer/Composer.svelte'
 import AdminPanel from '$lib/shell/AdminPanel.svelte'
 import MainnetChat from '$lib/shell/MainnetChat.svelte'
 import MainnetDb from '$lib/shell/MainnetDb.svelte'
@@ -14,7 +15,7 @@ import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
 // Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | Schemas | DB (+ Admin for
 // admins) on the left, weekly credits + signed-in identity + Log out on the right — over the
 // active view. Every section (incl. Admin) is a normal in-place view, not a modal. board 0053/0054.
-type Tab = 'chat' | 'vibes' | 'schemas' | 'db' | 'admin'
+type Tab = 'chat' | 'vibes' | 'schemas' | 'db' | 'composer' | 'admin'
 let tab = $state<Tab>('chat')
 let usageStarted = false
 
@@ -37,6 +38,7 @@ const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'vibes', label: t('mainnet.nav.vibes') },
 	{ id: 'schemas', label: t('mainnet.nav.schemas') },
 	{ id: 'db', label: t('mainnet.nav.db') },
+	{ id: 'composer', label: t('mainnet.nav.composer') },
 	...(isAdmin ? [{ id: 'admin' as Tab, label: t('mainnet.nav.admin') }] : [])
 ])
 
@@ -100,6 +102,8 @@ async function logout(): Promise<void> {
 		<MainnetVibes />
 	{:else if tab === 'schemas'}
 		<MainnetSchemas />
+	{:else if tab === 'composer'}
+		<Composer />
 	{:else if tab === 'admin' && isAdmin}
 		<AdminPanel />
 	{:else}

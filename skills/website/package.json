@@ -1,0 +1,10 @@
+{
+  "name": "@aven/website-deploy",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@storagesdk/adapters": "^0.7.1",
+    "@storagesdk/core": "^0.4.2",
+    "@tigrisdata/storage": "^3.14.0"
+  }
+}

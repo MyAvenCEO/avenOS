@@ -14,6 +14,7 @@ mod schema_manifest;
 mod schema_migrations;
 mod identity_acc;
 mod identity_sync;
+mod sparks;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Listener, Manager, RunEvent};
@@ -285,6 +286,11 @@ pub fn run() {
 			tts::tts_cancel_download,
 			tts::tts_start_download,
 			tts::tts_delete_model,
+			sparks::sparks_list,
+			sparks::spark_list_files,
+			sparks::spark_read_file,
+			sparks::spark_write_file,
+			sparks::spark_delete_file,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application")
