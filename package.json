@@ -6,7 +6,8 @@
 		"ARCHIVE/*",
 		"libs/*",
 		"docs",
-		"app"
+		"app",
+		"skills"
 	],
 	"scripts": {
 		"dev": "bun --env-file=.env run dev:aven-website",

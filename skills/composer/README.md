@@ -9,7 +9,7 @@ Reference deployment (the `next` test channel):
 - **`next.aven.ceo`** → Fly door app `next-aven-ceo` (redirects only)
 - **`www.next.aven.ceo`** → Tigris bucket `dark-wind-6797` (serves all content, free egress)
 
-## Files (everything lives in `skills/website/`)
+## Files (everything lives in `skills/composer/`)
 
 | File | Purpose |
 |---|---|
@@ -77,7 +77,7 @@ verbatim. So the build output must be shaped for that:
 8. **Locale layout:** everything lives under a locale prefix — `en/…`, `de/…`. The locale
    home is `en/` (served at `/en/`).
 
-Deploy = `bun skills/website/deploy.ts` — it builds these keys and uploads them via the
+Deploy = `bun skills/composer/deploy.ts` — it builds these keys and uploads them via the
 universal **storagesdk.dev** API (`storage.upload(key, body, { contentType, cacheControl })`),
 backend-agnostic. Updating a page = overwrite its stable key (URL stays stable). For
 atomic/rollback-able deploys, use the SDK's **snapshots/forks** (Tigris-native): snapshot the
@@ -102,7 +102,7 @@ live state, deploy into a **fork**, verify, then promote — an "IPNS-at-deploy-
 
 ## 4. Fly door requirements
 
-The door (`skills/website/edge/`) is a ~40-line Bun app. Rules:
+The door (`skills/composer/edge/`) is a ~40-line Bun app. Rules:
 
 ```
 /                      → 302 → CONTENT/<locale>/   (locale from Accept-Language; varies ⇒ 302)
@@ -123,7 +123,7 @@ The door (`skills/website/edge/`) is a ~40-line Bun app. Rules:
 Deploy:
 ```bash
 export FLY_API_TOKEN=$(grep -E '^access_token:' ~/.fly/config.yml | sed -E 's/access_token: *//' | tr -d '"'"'"' \r')
-fly deploy skills/website/edge --remote-only --ha=false
+fly deploy skills/composer/edge --remote-only --ha=false
 ```
 
 ---
@@ -191,7 +191,7 @@ Rules:
    TIGRIS_BUCKET=dark-wind-6797 \
    TIGRIS_ACCESS_KEY_ID=… TIGRIS_SECRET_ACCESS_KEY=… \
    TIGRIS_ENDPOINT=https://fly.storage.tigris.dev \
-   bun skills/website/deploy.ts
+   bun skills/composer/deploy.ts
    ```
    Switch backends with `STORAGE_ADAPTER=r2` (or `s3`, `gcs`, …) + that provider's env vars
    (`getAdapterEnvVars(name)` lists them) — **no code change**. `FORK=<name>` deploys into a
@@ -199,7 +199,7 @@ Rules:
 2. `fly storage update <bucket> --public --custom-domain www.<host>`.
 3. Hetzner: `www.<host>` CNAME → `<bucket>.fly.storage.tigris.dev.` (TTL 300, DNS-only).
 4. Wait for Tigris cert (`fly certs check` / curl `https://www.<host>/<locale>/` → 200).
-5. `fly deploy skills/website/edge --ha=false` (door) and point the apex/door host at the Fly app
+5. `fly deploy skills/composer/edge --ha=false` (door) and point the apex/door host at the Fly app
    (subdomain → CNAME `next-aven-ceo.fly.dev.`; real apex → A/AAAA).
 6. `fly certs add <door-host>` and confirm.
 7. Verify: door `/` → 302 → `www/<locale>/`; `www/<locale>/…` → 200 from Tigris;

@@ -6,6 +6,7 @@ import { page } from '$app/state'
 import { startAsrReadiness } from '$lib/asr/model-download-store'
 import { avenCeoMembership } from '$lib/avendb/api'
 import { avenDbStore } from '$lib/avendb/store.svelte'
+import { storeDroppedFiles } from '$lib/composer/active-spark'
 import { installConsoleCapture } from '$lib/debug/console-capture'
 import { startEmbedReadiness } from '$lib/embed/model-download-store'
 import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
@@ -252,6 +253,21 @@ const selfNavLabel = $derived.by(() => {
 /** Global file-drag overlay (all routes when unlocked; not active on lock screen). */
 let dragDepth = $state(0)
 const dragActive = $derived(dragDepth > 0)
+// The drop overlay's wording depends on the world: testnet ingests into Intents; mainnet stores
+// the files as private website reference images for the Composer. board 0055.
+const dropText = $derived(
+	$selectedNetwork === 'mainnet'
+		? {
+				title: 'Drop images',
+				subtitle: 'Saved privately to your site as design inspiration — never published.',
+				hint: ''
+			}
+		: {
+				title: t('intents.fileDrop.title'),
+				subtitle: t('intents.fileDrop.subtitle'),
+				hint: t('intents.fileDrop.hint')
+			}
+)
 
 function isFilesDrag(dt: DataTransfer | null): boolean {
 	if (!dt) return false
@@ -259,7 +275,9 @@ function isFilesDrag(dt: DataTransfer | null): boolean {
 }
 
 $effect(() => {
-	if (!browser || shellLocked) return
+	// Mainnet (betterauth, no vault) keeps `shellLocked` true, so don't gate the file-drop overlay
+	// on it there — only block it on the testnet lock screen. board 0055.
+	if (!browser || (shellLocked && $selectedNetwork !== 'mainnet')) return
 	const onDragEnter = (e: DragEvent) => {
 		// Always preventDefault so the webview never falls back to its default
 		// "open the dropped file" navigation. On WebKitGTK (Linux) dataTransfer.types
@@ -289,6 +307,12 @@ $effect(() => {
 		const list = e.dataTransfer?.files
 		if (!list?.length) return
 		const files = Array.from(list)
+		// Mainnet: dropped files are website reference images → store them in the spark's private/
+		// folder (never published). The chat surfaces them for the next edit. board 0055.
+		if ($selectedNetwork === 'mainnet') {
+			void storeDroppedFiles(files)
+			return
+		}
 		pendingIntentFileDrop.set(files)
 		// E3: dropping on an identity screen stays in place — the identity's composer
 		// consumes the pending drop and the files ingest into THAT identity's db/brain.
@@ -331,6 +355,33 @@ $effect(() => {
 			<AuthGate>
 				<MainnetShell />
 			</AuthGate>
+			{#if dragActive}
+				<div
+					class="pointer-events-auto fixed inset-0 z-[100] flex touch-none items-center justify-center bg-background/95 backdrop-blur-md"
+					role="region"
+					aria-label={dropText.title}
+				>
+					<div class="mx-6 w-full max-w-md">
+						<div
+							class="rounded-[var(--radius-lg)] border-[3px] border-dashed border-primary/50 bg-card/96 p-[10px] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_14%,transparent)] ring-2 ring-primary/20 ring-offset-[8px] ring-offset-background backdrop-blur-sm"
+						>
+							<div
+								class="rounded-[calc(var(--radius-lg)-8px)] border border-dotted border-primary/40 bg-muted/40 px-7 py-9 text-center"
+							>
+								<p class="text-xl font-semibold tracking-tight text-primary md:text-[1.3rem]">
+									{dropText.title}
+								</p>
+								<p class="mt-2.5 px-1 text-[12px] leading-relaxed opacity-85">
+									{dropText.subtitle}
+								</p>
+								{#if dropText.hint}
+									<p class="mt-1.5 px-1 text-[11px] leading-relaxed opacity-55">{dropText.hint}</p>
+								{/if}
+							</div>
+						</div>
+					</div>
+				</div>
+			{/if}
 		{:else}
 			<LockGate />
 			{#if !shellLocked}

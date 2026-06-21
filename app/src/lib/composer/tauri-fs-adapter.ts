@@ -2,7 +2,7 @@
 //
 // This is the whole point: the composer reads/writes local spark files through
 // the SAME universal `Storage` API (`upload`/`download`/`list`/`delete`) that
-// `skills/website/deploy.ts` uses to push to Tigris. Swap `tauriFs(...)` for the
+// `skills/composer/deploy.ts` uses to push to Tigris. Swap `tauriFs(...)` for the
 // `tigris(...)` adapter and the exact same call sites publish to the cloud.
 //
 // First slice = text files (HTML/CSS/JS/JSON) — content round-trips as UTF-8 via

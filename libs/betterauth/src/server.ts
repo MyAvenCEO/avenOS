@@ -1,6 +1,14 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { aiChat, aiSessionMessages, aiSessions, aiSetTier, aiUsage, aiUsageRecent } from './ai'
+import {
+	aiChat,
+	aiConfirmAction,
+	aiSessionMessages,
+	aiSessions,
+	aiSetTier,
+	aiUsage,
+	aiUsageRecent
+} from './ai'
 import { auth, TRUSTED_ORIGINS } from './auth'
 import {
 	billingCancel,
@@ -60,6 +68,7 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 app.post('/api/ai/chat', aiChat)
 app.get('/api/ai/usage', aiUsage)
 app.get('/api/ai/usage/recent', aiUsageRecent)
+app.post('/api/ai/confirm', aiConfirmAction)
 app.get('/api/ai/sessions', aiSessions)
 app.get('/api/ai/sessions/:id/messages', aiSessionMessages)
 app.post('/api/admin/set-tier', aiSetTier)

@@ -295,6 +295,7 @@ pub fn run() {
 			sparks::spark_list_files,
 			sparks::spark_read_file,
 			sparks::spark_write_file,
+			sparks::spark_write_bytes,
 			sparks::spark_delete_file,
 		])
 		.build(tauri::generate_context!())

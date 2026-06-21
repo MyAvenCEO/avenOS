@@ -12,7 +12,12 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const STARTER: &str = "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>aven.ceo</title>\n<style>body{font-family:ui-sans-serif,system-ui,sans-serif;background:#0B1F3A;color:#F4EFE6;display:grid;place-items:center;height:100vh;margin:0}h1{font-size:3rem;background:linear-gradient(180deg,#fff,#7aa2ff);-webkit-background-clip:text;background-clip:text;color:transparent}</style></head>\n<body><h1>aven.ceo — edit me</h1></body></html>\n";
+// Locale-routed home seeded at public/en/index.html (served at /en/, like next.aven.ceo). It links
+// the shared /styles.css rather than inlining styles. board 0055.
+const STARTER: &str = "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>aven.ceo</title>\n<link rel=\"stylesheet\" href=\"/styles.css\"></head>\n<body><h1>aven.ceo — edit me</h1></body></html>\n";
+
+// Shared stylesheet seeded at public/styles.css — every page links it via <link href=\"/styles.css\">.
+const STARTER_CSS: &str = "body{font-family:ui-sans-serif,system-ui,sans-serif;background:#0B1F3A;color:#F4EFE6;display:grid;place-items:center;height:100vh;margin:0}\nh1{font-size:3rem;background:linear-gradient(180deg,#fff,#7aa2ff);-webkit-background-clip:text;background-clip:text;color:transparent}\n";
 
 /// `<mainnet_base>/sparks` (i.e. `.avenOS/ceo.aven/mainnet/alberobello/sparks`) — created if
 /// missing. Mainnet data root, not the testnet avenDB identity root.
@@ -58,35 +63,39 @@ pub struct SparkFile {
 	pub size: u64,
 }
 
-/// List spark project folders; seed `spark1`/`spark2` on first use.
+/// The single MVP spark. Each spark holds `public/` (the deploy bucket — a locale-routed static
+/// site: `en/index.html` served at /en/, shared `styles.css`) and `private/` (dropped reference
+/// images, never published). Mirrors the next.aven.ceo Tigris layout. board 0055.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn sparks_list(app: tauri::AppHandle) -> Result<Vec<String>, String> {
 	let root = sparks_root(&app)?;
-	let mut names: Vec<String> = Vec::new();
-	if let Ok(entries) = fs::read_dir(&root) {
-		for e in entries.flatten() {
-			if e.path().is_dir() {
-				if let Some(n) = e.file_name().to_str() {
-					if valid_segment(n) {
-						names.push(n.to_string());
-					}
-				}
-			}
+	// MVP: a single spark. Drop any legacy spark2.
+	let _ = fs::remove_dir_all(root.join("spark2"));
+	let dir = root.join("spark1");
+	let public = dir.join("public");
+	let en = public.join("en");
+	fs::create_dir_all(&en).map_err(|e| format!("seed spark1/public/en: {e}"))?;
+	fs::create_dir_all(dir.join("private")).map_err(|e| format!("seed spark1/private: {e}"))?;
+	let idx = en.join("index.html"); // public/en/index.html — the /en/ home
+	let styles = public.join("styles.css");
+	// Migrate older layouts into public/en/index.html (content preserved):
+	//   spark1/public/index.html (pre-locale)  or  spark1/index.html (flat) → public/en/index.html.
+	if !idx.exists() {
+		let legacy_public = public.join("index.html");
+		let legacy_flat = dir.join("index.html");
+		if legacy_public.exists() {
+			let _ = fs::rename(&legacy_public, &idx);
+		} else if legacy_flat.exists() {
+			let _ = fs::rename(&legacy_flat, &idx);
 		}
 	}
-	if names.is_empty() {
-		for s in ["spark1", "spark2"] {
-			let d = root.join(s);
-			fs::create_dir_all(&d).map_err(|e| format!("seed {s}: {e}"))?;
-			let idx = d.join("index.html");
-			if !idx.exists() {
-				fs::write(&idx, STARTER).map_err(|e| format!("seed {s}/index.html: {e}"))?;
-			}
-			names.push(s.to_string());
-		}
+	if !idx.exists() {
+		fs::write(&idx, STARTER).map_err(|e| format!("seed spark1/public/en/index.html: {e}"))?;
 	}
-	names.sort();
-	Ok(names)
+	if !styles.exists() {
+		fs::write(&styles, STARTER_CSS).map_err(|e| format!("seed spark1/public/styles.css: {e}"))?;
+	}
+	Ok(vec!["spark1".to_string()])
 }
 
 /// Recursively list files in a spark (relative, forward-slash paths).
@@ -135,6 +144,21 @@ pub async fn spark_write_file(
 	spark_id: String,
 	path: String,
 	content: String,
+) -> Result<(), String> {
+	let p = spark_file(&app, &spark_id, &path)?;
+	if let Some(parent) = p.parent() {
+		fs::create_dir_all(parent).map_err(|e| format!("mkdir: {e}"))?;
+	}
+	fs::write(&p, content).map_err(|e| format!("write {path}: {e}"))
+}
+
+/// Write raw bytes to a spark file (e.g. a dropped image into `private/`). board 0055.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn spark_write_bytes(
+	app: tauri::AppHandle,
+	spark_id: String,
+	path: String,
+	content: Vec<u8>,
 ) -> Result<(), String> {
 	let p = spark_file(&app, &spark_id, &path)?;
 	if let Some(parent) = p.parent() {

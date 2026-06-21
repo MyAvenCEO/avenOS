@@ -1,4 +1,5 @@
-import { DATA_TOOLS } from '@avenos/aven-vibes/tools'
+import { CHAT_TOOLS } from '@avenos/aven-vibes/tools'
+import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
@@ -44,6 +45,8 @@ export async function aiChat(c: Context): Promise<Response> {
 		model?: string
 		stream?: boolean
 		sessionId?: string
+		/** Current public/ files of the active spark, for the edit_website tool (GLM). board 0055. */
+		publicFiles?: Record<string, string>
 	} | null
 	const messages = body?.messages
 	if (!Array.isArray(messages) || messages.length === 0) {
@@ -52,6 +55,10 @@ export async function aiChat(c: Context): Promise<Response> {
 	const wantStream = body?.stream === true
 	const userId = session.user.id
 	const model = body?.model ?? TINFOIL_MODEL
+	const publicFiles =
+		body?.publicFiles && typeof body.publicFiles === 'object'
+			? (body.publicFiles as Record<string, string>)
+			: {}
 
 	// Hard credit cap: block inference once the tier's weekly allowance is spent. board 0052.
 	const credit = await creditStatus(userId)
@@ -81,7 +88,7 @@ export async function aiChat(c: Context): Promise<Response> {
 	// assistant's content to the client; tool calls (schema-validated CRUD on /api/data)
 	// run server-side between rounds, transparent to the client. board 0054.
 	if (wantStream) {
-		return streamWithTools({ key, model, messages, userId, chatSessionId })
+		return streamWithTools({ key, model, messages, userId, chatSessionId, publicFiles })
 	}
 
 	// Non-streaming fallback: a single completion, no tools.
@@ -133,18 +140,42 @@ function streamWithTools(opts: {
 	messages: unknown[]
 	userId: string
 	chatSessionId: string
+	publicFiles: Record<string, string>
 }): Response {
-	const { key, model, messages, userId, chatSessionId } = opts
+	const { key, model, messages, userId, chatSessionId, publicFiles } = opts
 	const encoder = new TextEncoder()
+	// When the client disconnects (its idle-abort, or navigating away) the stream is cancelled and any
+	// further controller.enqueue throws "Controller is already closed". That throw, from a non-awaited
+	// callback (e.g. a long GLM edit's keep-alive ping), is uncaught and CRASHES the bun server — which
+	// made every later chat request fail with "Load failed". Guard every emit so a late write is a
+	// no-op, and flip `cancelled` in the stream's cancel() hook. board 0056.
+	let cancelled = false
 	const stream = new ReadableStream<Uint8Array>({
 		async start(controller) {
-			const emit = (obj: unknown) =>
-				controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
+			const emit = (obj: unknown) => {
+				if (cancelled) return
+				try {
+					controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
+				} catch {
+					cancelled = true // controller closed (client gone) — stop emitting
+				}
+			}
+			// Bubble tool-loop activity to the client so the chat shows which tools run + finish — and,
+			// for long tools (GLM edits), the periodic 'running' re-emit keeps the stream alive. 0055.
+			const emitTool = (
+				id: string,
+				name: string,
+				detail: string,
+				status: 'running' | 'done' | 'error'
+			) => emit({ aven_tool: { id, name, detail, status } })
 			const msgs: unknown[] = [...messages]
 			let assistant = ''
 			let promptTokens = 0
 			let completionTokens = 0
 			const emittedVibes = new Set<string>()
+			// Running copy of the website files for this turn — each edit_website merges its changed
+			// files into THIS, so edits compound across files + calls. Seeded from the client. board 0055.
+			const turnFiles: Record<string, string> = { ...publicFiles }
 			try {
 				// Tell the model the exact schema field names so data_crud writes validate. MERGE the
 				// hint into the existing leading system message — a SECOND system message makes Tinfoil
@@ -173,7 +204,7 @@ function streamWithTools(opts: {
 						res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 							method: 'POST',
 							headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-							body: JSON.stringify({ model, messages: msgs, tools: DATA_TOOLS, stream: true }),
+							body: JSON.stringify({ model, messages: msgs, tools: CHAT_TOOLS, stream: true }),
 							signal: ac.signal
 						})
 					} catch {
@@ -269,6 +300,124 @@ function streamWithTools(opts: {
 						} catch {
 							/* leave empty; executeDataTool will report the error */
 						}
+						// Read-only website viewer: flow the Composer vibe into the chat — no data op, so
+						// the data_crud (todos etc.) path is untouched. board 0055.
+						if (tc.name === 'show_website') {
+							emitTool(tc.id, 'show_website', 'opening website viewer', 'running')
+							msgs.push({
+								role: 'tool',
+								tool_call_id: tc.id,
+								content: JSON.stringify({ ok: true, shown: 'website composer (read-only)' })
+							})
+							if (!emittedVibes.has('composer')) {
+								emittedVibes.add('composer')
+								emit({ aven_vibe: { schema: 'composer' } })
+								await persistMessage(chatSessionId, 'assistant', `${VIBE_MARKER}composer`).catch(
+									(e) => console.error('[ai] persist composer vibe marker failed:', e)
+								)
+							}
+							emitTool(tc.id, 'show_website', 'website viewer ready', 'done')
+							continue
+						}
+						// Website edit: the chat model passed an instruction — GLM returns SEARCH/REPLACE diff
+						// blocks, applied here to the turn's running html (compounds across edits). Relayed to
+						// the client (it writes via tauriFs + re-renders the Composer vibe). board 0055.
+						if (tc.name === 'edit_website') {
+							const instruction = typeof parsed.instruction === 'string' ? parsed.instruction : ''
+							// Show which files GLM is reading up front; onProgress then streams the per-file detail.
+							const reading = Object.keys(turnFiles)
+								.map((p) => p.replace(/^public\//, ''))
+								.join(', ')
+							let editDetail = reading
+								? `read ${reading} · glm-5-2 thinking…`
+								: 'glm-5-2 starting a new site…'
+							emitTool(tc.id, 'edit_website', editDetail, 'running')
+							// Keep the chat stream alive during GLM prefill (no tokens yet) with a status ping.
+							const ping = setInterval(
+								() => emitTool(tc.id, 'edit_website', editDetail, 'running'),
+								5_000
+							)
+							let applied = 0
+							let failed = 0
+							let changedFiles: Record<string, string> = {}
+							try {
+								const edit = await editWebsiteDiff(
+									key,
+									turnFiles,
+									instruction,
+									(detail) => {
+										editDetail = detail
+										emitTool(tc.id, 'edit_website', detail, 'running')
+									},
+									// Live feed of GLM's reasoning + diff text → a streaming activity panel. board 0056.
+									(text) => emit({ aven_edit_chunk: { text } })
+								)
+								applied = edit.applied
+								failed = edit.failed
+								changedFiles = edit.files
+								Object.assign(turnFiles, edit.files)
+								if (edit.usage) {
+									// Bill the GLM edit at GLM's price, separate from the chat model's turn.
+									await recordUsage(userId, WEBSITE_MODEL, edit.usage).catch((e) =>
+										console.error('[ai] recordUsage (website) failed:', e)
+									)
+								}
+							} catch (e) {
+								console.error('[ai] website edit (glm) failed:', e)
+							} finally {
+								clearInterval(ping)
+							}
+							const ok = applied > 0
+							const names = Object.keys(changedFiles).map((p) => p.replace(/^public\//, ''))
+							emitTool(
+								tc.id,
+								'edit_website',
+								ok ? `updated ${names.join(', ')}` : 'edit failed',
+								ok ? 'done' : 'error'
+							)
+							if (ok) emit({ aven_edit: { files: changedFiles } })
+							msgs.push({
+								role: 'tool',
+								tool_call_id: tc.id,
+								content: JSON.stringify({ ok, applied, failed, files: Object.keys(changedFiles) })
+							})
+							if (ok && !emittedVibes.has('composer')) {
+								emittedVibes.add('composer')
+								emit({ aven_vibe: { schema: 'composer' } })
+								await persistMessage(chatSessionId, 'assistant', `${VIBE_MARKER}composer`).catch(
+									(e) => console.error('[ai] persist composer vibe marker failed:', e)
+								)
+							}
+							continue
+						}
+						const dataDetail =
+							`${typeof parsed.action === 'string' ? parsed.action : ''} ${typeof parsed.schema === 'string' ? parsed.schema : ''}`.trim() ||
+							'data'
+						// HITL: never DELETE without explicit confirmation — show a confirm/decline card and
+						// DON'T execute. The user approves via /api/ai/confirm, which runs it. board 0055.
+						if (parsed.action === 'delete') {
+							const schema = typeof parsed.schema === 'string' ? parsed.schema : 'data'
+							const id = typeof parsed.id === 'string' ? parsed.id : ''
+							emit({
+								aven_hitl: {
+									id: tc.id,
+									tool: 'data_crud',
+									label: `Delete from "${schema}"${id ? ` (#${id.slice(0, 8)})` : ''}?`,
+									action: parsed
+								}
+							})
+							msgs.push({
+								role: 'tool',
+								tool_call_id: tc.id,
+								content: JSON.stringify({
+									ok: false,
+									status: 'awaiting_user_confirmation',
+									note: 'A confirm/decline card was shown to the user. Do NOT delete or retry — just tell them you asked them to confirm.'
+								})
+							})
+							continue
+						}
+						emitTool(tc.id, tc.name || 'data_crud', dataDetail, 'running')
 						let result: unknown
 						try {
 							result = await executeDataTool(userId, parsed)
@@ -276,6 +425,7 @@ function streamWithTools(opts: {
 							result = { ok: false, error: e instanceof Error ? e.message : String(e) }
 						}
 						msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) })
+						emitTool(tc.id, tc.name || 'data_crud', dataDetail, 'done')
 						// Signal the client to flow a live vibe card for the touched schema into the
 						// message stream (the same data this CRUD just changed), and persist a marker
 						// message so the card reappears when the session is reloaded. One per schema
@@ -300,8 +450,14 @@ function streamWithTools(opts: {
 					choices: [{ delta: { content: `\n[ai error: ${e instanceof Error ? e.message : e}]` } }]
 				})
 			} finally {
-				controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-				controller.close()
+				if (!cancelled) {
+					try {
+						controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+						controller.close()
+					} catch {
+						/* client already disconnected */
+					}
+				}
 				if (assistant) {
 					await persistMessage(chatSessionId, 'assistant', assistant).catch((err) =>
 						console.error('[ai] persist assistant (stream) failed:', err)
@@ -313,6 +469,11 @@ function streamWithTools(opts: {
 				}).catch((err) => console.error('[ai] recordUsage (stream) failed:', err))
 				publish(userId, { entity: 'usage' })
 			}
+		},
+		cancel() {
+			// Client disconnected (idle-abort / navigation). Stop all further emits so no late write
+			// throws on the closed controller and crashes the process. board 0056.
+			cancelled = true
 		}
 	})
 	return new Response(stream, {
@@ -341,6 +502,26 @@ export async function aiUsageRecent(c: Context): Promise<Response> {
 	const session = await auth.api.getSession({ headers: c.req.raw.headers })
 	if (!session) return c.json({ error: 'unauthorized' }, 401)
 	return c.json({ recent: await getRecentUsage(session.user.id) })
+}
+
+/**
+ * HITL: run a data action the user explicitly confirmed (e.g. a delete the model proposed and
+ * which the tool loop deliberately did NOT execute). Session-gated; executeDataTool publishes a
+ * `data` event so the live vibe refreshes. board 0055.
+ */
+export async function aiConfirmAction(c: Context): Promise<Response> {
+	const session = await auth.api.getSession({ headers: c.req.raw.headers })
+	if (!session) return c.json({ error: 'unauthorized' }, 401)
+	const body = (await c.req.json().catch(() => null)) as { action?: Record<string, unknown> } | null
+	if (!body?.action || typeof body.action !== 'object') {
+		return c.json({ error: 'action required' }, 400)
+	}
+	try {
+		const result = await executeDataTool(session.user.id, body.action)
+		return c.json({ ok: true, result })
+	} catch (e) {
+		return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500)
+	}
 }
 
 /** Session-gated: the caller's own chat sessions (most recent first). */
