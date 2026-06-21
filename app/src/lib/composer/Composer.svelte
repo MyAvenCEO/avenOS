@@ -1,4 +1,5 @@
 <script lang="ts">
+import type { StorageItemMeta } from '@storagesdk/core'
 // Website composer: edit a spark's files locally and preview securely.
 //
 // Storage goes through the SAME universal `Storage` API as the Tigris deploy —
@@ -6,16 +7,15 @@
 // a sandboxed, opaque-origin iframe (no allow-same-origin) so the site's JS can
 // never reach the app or Tauri IPC.
 import { Storage } from '@storagesdk/core'
-import type { StorageItemMeta } from '@storagesdk/core'
-import { tauriFs } from '$lib/composer/tauri-fs-adapter'
 import { sparksList } from '$lib/composer/spark-ipc'
+import { tauriFs } from '$lib/composer/tauri-fs-adapter'
 
 let sparks = $state<string[]>([])
 let sparkId = $state('')
 let files = $state<StorageItemMeta[]>([])
 let openPath = $state('index.html')
 let content = $state('')
-let previewUrl = $state('')
+let previewHtml = $state('')
 let status = $state('')
 
 const storage = $derived(sparkId ? new Storage({ adapter: tauriFs({ sparkId }) }) : null)
@@ -29,16 +29,17 @@ async function openFile(path: string) {
 	if (!storage) return
 	openPath = path
 	content = dec.decode((await storage.download(path)).body)
+	// index.html mirrors the live buffer (see the $effect below); for any other file, show the
+	// current index.html from storage so the preview still reflects the site.
+	if (path !== 'index.html') await loadIndexPreview()
 }
-async function refreshPreview() {
+// Pull index.html from storage into the preview — used when editing a non-index file.
+async function loadIndexPreview() {
 	if (!storage) return
 	try {
-		const html = dec.decode((await storage.download('index.html')).body)
-		const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
-		if (previewUrl) URL.revokeObjectURL(previewUrl)
-		previewUrl = url
+		previewHtml = dec.decode((await storage.download('index.html')).body)
 	} catch {
-		/* spark has no index.html yet */
+		previewHtml = '' // spark has no index.html yet
 	}
 }
 async function save() {
@@ -47,9 +48,16 @@ async function save() {
 	await storage.upload(openPath, content, { contentType: 'text/html; charset=utf-8' })
 	status = 'saved ✓'
 	await loadFiles()
-	await refreshPreview()
+	if (openPath !== 'index.html') await loadIndexPreview()
 	setTimeout(() => (status = ''), 1500)
 }
+
+// Live preview: while editing index.html, mirror the buffer into the iframe on every edit (and
+// therefore on save too). `srcdoc` re-renders whenever this string changes — no blob URL, so the
+// sandboxed opaque-origin iframe loads it reliably.
+$effect(() => {
+	if (openPath === 'index.html') previewHtml = content
+})
 
 // load spark list once
 $effect(() => {
@@ -73,7 +81,6 @@ $effect(() => {
 				content = ''
 				openPath = 'index.html'
 			}
-			await refreshPreview()
 		})()
 	}
 })
@@ -86,14 +93,17 @@ $effect(() => {
 			bind:value={sparkId}
 			class="rounded border border-white/15 bg-[#0b1426] px-2 py-1 text-xs"
 		>
-			{#each sparks as s (s)}<option value={s}>{s}</option>{/each}
+			{#each sparks as s (s)}
+				<option value={s}>{s}</option>
+			{/each}
 		</select>
 		<span class="text-white/40">editing <b class="text-[#cfe0ff]">{openPath}</b></span>
 		<button
 			onclick={save}
 			class="rounded border border-[#7aa2ff]/40 bg-[#7aa2ff]/10 px-3 py-1 text-xs text-[#cfe0ff] hover:bg-[#7aa2ff]/20"
-			>Save</button
 		>
+			Save
+		</button>
 		<span class="text-xs text-emerald-400">{status}</span>
 		<span
 			class="ml-auto rounded-full border border-[#7aa2ff]/40 bg-[#7aa2ff]/10 px-2 py-0.5 text-[11px] text-[#cfe0ff]"
@@ -110,8 +120,10 @@ $effect(() => {
 						onclick={() => openFile(f.path)}
 						class="w-full truncate rounded px-2 py-1 text-left hover:bg-white/5 {f.path === openPath
 							? 'bg-white/10 text-[#cfe0ff]'
-							: 'text-white/70'}">{f.path}</button
+							: 'text-white/70'}"
 					>
+						{f.path}
+					</button>
 				</li>
 			{/each}
 		</ul>
@@ -123,8 +135,12 @@ $effect(() => {
 			class="min-h-0 resize-none border-r border-white/10 bg-[#0b1426] p-4 font-mono text-[13px] leading-relaxed text-[#d7e0f0] outline-none"
 		></textarea>
 
-		<!-- sandboxed preview (opaque origin: no app/IPC access) -->
-		<iframe title="preview" src={previewUrl} sandbox="allow-scripts" class="min-h-0 bg-white"
+		<!-- sandboxed preview (opaque origin: no app/IPC access); srcdoc re-renders on every edit/save -->
+		<iframe
+			title="preview"
+			srcdoc={previewHtml}
+			sandbox="allow-scripts"
+			class="min-h-0 bg-white"
 		></iframe>
 	</div>
 </div>
