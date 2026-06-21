@@ -1001,8 +1001,8 @@
 			"vibes": "Vibes",
 			"schemas": "Schemas",
 			"db": "DB",
-			"plan": "Plan",
 			"fly": "Fly",
+			"composer": "Composer",
 			"admin": "Admin"
 		},
 		"usage": {

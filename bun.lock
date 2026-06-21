@@ -35,6 +35,7 @@
         "@avenos/docs": "workspace:*",
         "@better-auth/passkey": "^1.6.20",
         "@choochmeque/tauri-plugin-google-auth-api": "^0.5.1",
+        "@storagesdk/core": "^0.4.2",
         "@tanstack/svelte-query": "^6.1.34",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
@@ -574,6 +575,8 @@
     "@stablelib/base64": ["@stablelib/base64@1.0.1", "", {}, "sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
+
+    "@storagesdk/core": ["@storagesdk/core@0.4.2", "", {}, "sha512-TASJvFpf4tHM52Sgg3AWMF1VsW6tiZAf6cG1PWktyqKWm+P4Iaz8cILEpD1VncvC4DzFYKeXRkq/xgaY3phKtg=="],
 
     "@stripe/react-stripe-js": ["@stripe/react-stripe-js@4.0.2", "", { "dependencies": { "prop-types": "^15.7.2" }, "peerDependencies": { "@stripe/stripe-js": ">=1.44.1 <8.0.0", "react": ">=16.8.0 <20.0.0", "react-dom": ">=16.8.0 <20.0.0" } }, "sha512-l2wau+8/LOlHl+Sz8wQ1oDuLJvyw51nQCsu6/ljT6smqzTszcMHifjAJoXlnMfcou3+jK/kQyVe04u/ufyTXgg=="],
 

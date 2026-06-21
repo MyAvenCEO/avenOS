@@ -3,6 +3,7 @@ import { createQuery, useQueryClient } from '@tanstack/svelte-query'
 import { authClient } from '$lib/auth/auth-client'
 import { syncBilling } from '$lib/billing/checkout'
 import { fmtMinds } from '$lib/billing/minds'
+import Composer from '$lib/composer/Composer.svelte'
 import { t } from '$lib/i18n'
 import { qk } from '$lib/query/client'
 import { fetchUsage } from '$lib/query/usage'
@@ -12,10 +13,10 @@ import MainnetDb from '$lib/shell/MainnetDb.svelte'
 import MainnetFly from '$lib/shell/MainnetFly.svelte'
 import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
 
-// Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | DB | Fly on the left; weekly
-// MINDS + the signed-in account NAME on the right. Clicking the name opens the Account Settings
-// view (profile, plans & billing, vault keys, Admin for admins, log out). board 0053/0054/0055.
-type Tab = 'chat' | 'vibes' | 'db' | 'fly'
+// Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | DB | Fly | Composer on the left;
+// weekly MINDS + the signed-in account NAME on the right. Clicking the name opens the Account
+// Settings view (profile, plans, billing, usage, vault keys, Admin for admins, log out). board 0053/0054/0055.
+type Tab = 'chat' | 'vibes' | 'db' | 'fly' | 'composer'
 type SettingsCategory = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'admin'
 let tab = $state<Tab>('chat')
 let settings = $state(false)
@@ -65,7 +66,8 @@ const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'chat', label: t('mainnet.nav.chat') },
 	{ id: 'vibes', label: t('mainnet.nav.vibes') },
 	{ id: 'db', label: t('mainnet.nav.db') },
-	{ id: 'fly', label: t('mainnet.nav.fly') }
+	{ id: 'fly', label: t('mainnet.nav.fly') },
+	{ id: 'composer', label: t('mainnet.nav.composer') }
 ])
 
 function openTab(id: Tab): void {
@@ -143,6 +145,8 @@ function openTab(id: Tab): void {
 		<MainnetVibes />
 	{:else if tab === 'fly'}
 		<MainnetFly />
+	{:else if tab === 'composer'}
+		<Composer />
 	{:else}
 		<MainnetDb />
 	{/if}
