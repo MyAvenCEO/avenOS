@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.3...v) (2026-06-22)
+
+
+### Features
+
+* **app:** profile app-version row + system-browser desktop checkout (0061) ([#20](https://github.com/MyAvenCEO/avenOS/issues/20)) ([6e2d5ad](https://github.com/MyAvenCEO/avenOS/commit/6e2d5ad326d354c76d9f99df71a90d30d0edfd56))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.2...v) (2026-06-22)
 
 
