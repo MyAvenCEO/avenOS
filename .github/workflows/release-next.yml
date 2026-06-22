@@ -192,6 +192,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Capture the full release version (incl. -next.N) for the in-app version row
+        # Read it BEFORE the next step strips -next.N out of package.json for the App Store; the
+        # tauri/vite build bakes PUBLIC_APP_VERSION into the Profile "App version" row. board 0061.
+        run: echo "PUBLIC_APP_VERSION=$(node -p 'require("./app/package.json").version')" >> "$GITHUB_ENV"
+
       - name: Set marketing version to the stable CalVer (strip -next.N for App Store)
         # Apple rejects non-numeric CFBundleShortVersionString, so the app ships the stable
         # CalVer (e.g. 26.6.1) as its marketing version; github.run_number is the unique
@@ -285,6 +290,11 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Capture the full release version (incl. -next.N) for the in-app version row
+        # Read it BEFORE the next step strips -next.N out of package.json for the App Store; the
+        # tauri/vite build bakes PUBLIC_APP_VERSION into the Profile "App version" row. board 0061.
+        run: echo "PUBLIC_APP_VERSION=$(node -p 'require("./app/package.json").version')" >> "$GITHUB_ENV"
 
       - name: Set marketing version to the stable CalVer (strip -next.N for App Store)
         run: bun run set-version "$(bun run --silent next-version)"
