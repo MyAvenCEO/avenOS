@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.1...v) (2026-06-22)
+
+
+### Bug Fixes
+
+* **betterauth:** include skills workspace in the docker prune so @avenos/skills resolves ([#18](https://github.com/MyAvenCEO/avenOS/issues/18)) ([3a49187](https://github.com/MyAvenCEO/avenOS/commit/3a491879b7a25894562cd216b8910d09f2bedcc1))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.4...v) (2026-06-22)
 
 
