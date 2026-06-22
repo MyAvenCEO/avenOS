@@ -36,6 +36,7 @@ pub struct GoogleOAuthConfig {
 /// Resolve a build-time-or-runtime value: prefer the value baked at COMPILE time (so a
 /// shipped/packaged app has it with no process env), and fall back to the runtime env for
 /// `bun run dev` (the launcher injects GOOGLE_CLIENT_ID/SECRET). board 0050.
+#[cfg_attr(target_os = "ios", allow(dead_code))] // iOS uses IOS_GOOGLE_CLIENT_ID instead.
 fn baked_or_env(compile_time: Option<&str>, key: &str) -> Result<String, String> {
 	compile_time
 		.map(str::to_string)
@@ -44,8 +45,26 @@ fn baked_or_env(compile_time: Option<&str>, key: &str) -> Result<String, String>
 		.ok_or_else(|| format!("{key} not set"))
 }
 
+/// Public iOS OAuth client id (no secret — native iOS Google Sign-In uses the bundle id +
+/// reversed-client-id URL scheme + PKCE, and REQUIRES an iOS-type client, not the desktop one).
+/// Its reversed form is registered as a URL scheme in Info.ios.plist, and the Better Auth
+/// server lists it as a valid idToken audience alongside the desktop client. Public, so it's
+/// embedded directly. board 0050.
+#[cfg(target_os = "ios")]
+const IOS_GOOGLE_CLIENT_ID: &str =
+	"623539759782-dh478o33v7hu3d658albbsrsq31s2ng7.apps.googleusercontent.com";
+
 #[tauri::command]
 pub async fn google_oauth_config() -> Result<GoogleOAuthConfig, String> {
+	// iOS: the dedicated iOS client (public, no secret).
+	#[cfg(target_os = "ios")]
+	return Ok(GoogleOAuthConfig {
+		client_id: IOS_GOOGLE_CLIENT_ID.to_string(),
+		client_secret: String::new(),
+	});
+
+	// macOS/desktop: the Desktop client baked at compile time (secret via env).
+	#[cfg(not(target_os = "ios"))]
 	Ok(GoogleOAuthConfig {
 		client_id: baked_or_env(option_env!("GOOGLE_CLIENT_ID"), "GOOGLE_CLIENT_ID")?,
 		client_secret: baked_or_env(option_env!("GOOGLE_CLIENT_SECRET"), "GOOGLE_CLIENT_SECRET")?,

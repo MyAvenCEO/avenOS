@@ -4,8 +4,10 @@ Self-hosted [Better Auth](https://better-auth.com) server for avenOS — a stand
 **bun + [Hono](https://hono.dev)** service on **Neon Postgres** (via the
 [`kysely-neon`](https://github.com/kysely-org/kysely-neon) dialect). It provides
 Google sign-in for the `mainnet/alberobello` app and links each user to a
-[Polar](https://polar.sh) customer (account connection only — products/checkout come
-later). board 0050.
+[Polar](https://polar.sh) customer (`external_id = user.id`). The Plan tab books the
+**avenCITY** product via a server-side Polar checkout (`POST /api/billing/checkout`), and a
+Polar webhook (`POST /api/billing/webhook`) syncs the active subscription → the user's
+`tier`. board 0050/0052.
 
 Everything the server needs lives in this folder; it runs on its own.
 
@@ -38,8 +40,11 @@ Set these in the repo-root `.env` (see `.env.example`):
 | `BETTER_AUTH_SECRET` | Better Auth signing secret (`openssl rand -base64 32`) |
 | `BETTER_AUTH_URL` | This server's origin, e.g. `http://localhost:8787` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth web client; register `{BETTER_AUTH_URL}/api/auth/callback/google` |
-| `POLAR_API_KEY` | Polar org access token (optional — plugin disabled if unset) |
+| `POLAR_API_KEY` | Polar org access token (optional — billing disabled if unset) |
 | `POLAR_SERVER` | `sandbox` or `production`; must match the token's environment |
+| `POLAR_WEBHOOK_SECRET` | Webhook signing secret; point the Polar endpoint (format **RAW**) at `{BETTER_AUTH_URL}/api/billing/webhook`. Required for tier sync |
+| `POLAR_AVENCITY_PRODUCT_ID` | avenCITY product id (defaults to the sandbox product) |
+| `POLAR_CHECKOUT_SUCCESS_URL` | optional; checkout redirect target (defaults to `{BETTER_AUTH_URL}/billing/success`) |
 
 The app side reads `PUBLIC_BETTER_AUTH_URL` (same value as `BETTER_AUTH_URL`).
 

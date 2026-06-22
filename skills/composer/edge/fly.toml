@@ -1,0 +1,22 @@
+app = "next-aven-ceo"
+primary_region = "fra"
+
+[build]
+
+[env]
+  CONTENT_HOST = "https://www.next.aven.ceo"
+  LOCALES = "en,de"
+  DEFAULT_LOCALE = "en"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0          # scale to zero when idle
+  processes = ["app"]
+  # single machine only — deploy with `--ha=false` so Fly doesn't re-spawn an HA 2nd machine
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

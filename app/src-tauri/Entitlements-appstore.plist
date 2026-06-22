@@ -22,5 +22,14 @@
 	     even expose navigator.mediaDevices. NSMicrophoneUsageDescription is in Info.plist. -->
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
+	<!-- Associated Domains: required for NATIVE passkeys (ASAuthorization / WebAuthn PRF) on macOS.
+	     rp.id must be one of these hosts, each serving /.well-known/apple-app-site-association over
+	     HTTPS. App ID ceo.aven.os has the Associated Domains capability enabled. board 0055. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:aven.ceo</string>
+		<string>webcredentials:aven.ceo</string>
+		<string>webcredentials:api.next.aven.ceo</string>
+	</array>
 </dict>
 </plist>

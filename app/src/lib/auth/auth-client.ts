@@ -1,3 +1,4 @@
+import { passkeyClient } from '@better-auth/passkey/client'
 import { adminClient } from 'better-auth/client/plugins'
 import { createAuthClient } from 'better-auth/svelte'
 
@@ -50,5 +51,7 @@ export const authClient = createAuthClient({
 		}
 	},
 	// Admin user-management (list users, set role, ban, …) — server-gated to admins. board 0052.
-	plugins: [adminClient()]
+	// adminClient: admin user-management. passkeyClient: register/link a passkey (the
+	// avenFOUNDER→avenCEO 2nd factor) whose PRF also unlocks the secrets vault. board 0055.
+	plugins: [adminClient(), passkeyClient()]
 })

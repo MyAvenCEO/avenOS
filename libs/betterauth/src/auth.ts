@@ -1,3 +1,4 @@
+import { passkey } from '@better-auth/passkey'
 import { polar } from '@polar-sh/better-auth'
 import { Polar } from '@polar-sh/sdk'
 import { betterAuth } from 'better-auth'
@@ -41,14 +42,16 @@ const polarToken = optionalEnv('POLAR_API_KEY') ?? optionalEnv('POLAR_ACCESS_TOK
 if (!polarToken) {
 	console.warn('[betterauth] POLAR_API_KEY not set — Polar account link disabled')
 }
-// Shared Polar client, reused by both the plugin (checkout/portal later) and our own
-// best-effort customer link below. null when Polar isn't configured.
-const polarClient = polarToken
+// Shared Polar client, reused by the plugin, the checkout/webhook billing routes
+// (src/billing.ts), and our own best-effort customer link below. null when Polar isn't
+// configured.
+export const polarClient = polarToken
 	? new Polar({
 			accessToken: polarToken,
-			// Default to production (polar.sh) — tokens minted there 401 against sandbox.
-			// Set POLAR_SERVER=sandbox explicitly for sandbox.polar.sh tokens.
-			server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'production'
+			// Default to SANDBOX (sandbox.polar.sh) — dev/next tokens are sandbox-minted. Production
+			// is OPT-IN: set POLAR_SERVER=production explicitly (with a production token) for the
+			// main/production deploy. A token only works against the env it was minted in. board 0050.
+			server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'sandbox'
 		})
 	: null
 const polarPlugins = polarClient
@@ -75,7 +78,7 @@ const polarPlugins = polarClient
  * customer already exists for the email, it's "linked" only if its external_id already
  * matches this user (external_id is immutable). board 0052.
  */
-async function linkPolarCustomer(user: {
+export async function linkPolarCustomer(user: {
 	id: string
 	email: string
 	name?: string
@@ -105,6 +108,12 @@ async function linkPolarCustomer(user: {
  * cookies must be SameSite=None; Secure to be sent on cross-site requests. Browsers
  * accept Secure cookies over http://localhost, so this works in dev too.
  */
+// Public iOS OAuth client id (avenCEO-ios). Native iOS Google Sign-In must use an iOS-type
+// client (no secret), so its idTokens carry a different `aud` than the desktop client. List
+// BOTH as valid audiences so macOS (desktop client) and iOS both verify. board 0050.
+const GOOGLE_IOS_CLIENT_ID =
+	'623539759782-dh478o33v7hu3d658albbsrsq31s2ng7.apps.googleusercontent.com'
+
 export const auth = betterAuth({
 	baseURL: requireEnv('BETTER_AUTH_URL'),
 	secret: requireEnv('BETTER_AUTH_SECRET'),
@@ -114,12 +123,15 @@ export const auth = betterAuth({
 	},
 	socialProviders: {
 		google: {
-			clientId: requireEnv('GOOGLE_CLIENT_ID'),
+			// Array = multiple accepted idToken audiences (desktop client for macOS, iOS client
+			// for iOS). The secret belongs to the desktop client; iOS verifies by audience only.
+			clientId: [requireEnv('GOOGLE_CLIENT_ID'), GOOGLE_IOS_CLIENT_ID],
 			clientSecret: requireEnv('GOOGLE_CLIENT_SECRET')
 		}
 	},
-	// Product tier on the user (free | avenCITY). Assigned by an admin; gates the weekly
-	// AI credit allowance. `input: false` so it can't be set by the client at sign-up. board 0052.
+	// Product tier on the user (free | early-bird comp grant | avenME/avenFOUNDER/avenCEO).
+	// Assigned by an admin or a Polar checkout; gates the weekly AI credit allowance.
+	// `input: false` so it can't be set by the client at sign-up. board 0052/0055.
 	user: {
 		additionalFields: {
 			tier: { type: 'string', required: false, defaultValue: 'free', input: false },
@@ -172,7 +184,19 @@ export const auth = betterAuth({
 	// `admin` adds a `role` field (user|admin) + admin-gated user management
 	// (list/setRole/ban/impersonate). The first user to sign up is auto-promoted to admin
 	// via the databaseHooks below; every later signup is a normal user. board 0052.
-	plugins: [bearer(), admin(), ...polarPlugins],
+	// `passkey` (board 0055): a passkey linked next to Google = the avenFOUNDER→avenCEO 2nd
+	// factor, AND the source of the vault-unlock PRF. rp.id = the AASA host; origin = the app's
+	// WebAuthn ceremony origins (tauri://localhost etc.). Runs inside the native Tauri webview.
+	plugins: [
+		bearer(),
+		admin(),
+		passkey({
+			rpID: optionalEnv('PASSKEY_RP_ID') ?? 'api.next.aven.ceo',
+			rpName: 'avenOS',
+			origin: TRUSTED_ORIGINS
+		}),
+		...polarPlugins
+	],
 	advanced: {
 		defaultCookieAttributes: {
 			sameSite: 'none',

@@ -978,7 +978,114 @@
 			"vibes": "Vibes",
 			"schemas": "Schemas",
 			"db": "DB",
+			"fly": "Fly",
+			"composer": "Composer",
 			"admin": "Admin"
+		},
+		"usage": {
+			"title": "Nutzung",
+			"subtitle": "Dein Token-Verbrauch und was jede Anfrage in MINDS kostet.",
+			"week": "Diese Woche",
+			"allTime": "Gesamt",
+			"tokens": "Tokens",
+			"requests": "Letzte Anfragen",
+			"loading": "Lädt…",
+			"empty": "Noch keine Anfragen. Deine KI-Nutzung erscheint hier.",
+			"in": "rein",
+			"out": "raus"
+		},
+		"pricing": {
+			"title": "Pläne",
+			"subtitle": "Private KI läuft mit MINDS. Buche avenCITY, um dein wöchentliches Guthaben freizuschalten und deinen eigenen aven-Namen zu sichern.",
+			"perWeek": "/ Woche",
+			"exclVat": "zzgl. MwSt.",
+			"book": "avenCITY buchen",
+			"bookTier": "{tier} buchen",
+			"upgradeTo": "Upgrade auf {tier}",
+			"downgradeTo": "Wechsel zu {tier}",
+			"opening": "Checkout wird geöffnet…",
+			"currentPlan": "Aktueller Plan",
+			"comingSoon": "Demnächst",
+			"error": "Checkout fehlgeschlagen: {message}",
+			"upgradedTitle": "Willkommen bei avenCITY 🎉",
+			"upgradedBody": "Dein Abo ist aktiv — deine wöchentlichen MINDS stehen bereit.",
+			"footnote": "Wöchentliche Abrechnung über Polar. Die Kartendaten werden auf der sicheren Polar-Seite eingegeben; jederzeit kündbar.",
+			"manageTitle": "Abrechnung",
+			"manageSubtitle": "Deine Abos, Verlängerungen und Zahlungsverlauf.",
+			"manageEmpty": "Noch keine Abrechnung. Wähle unter Pläne einen Plan, um zu starten.",
+			"subscriptions": "Abos",
+			"orders": "Bestellungen",
+			"skills": "Deine Skills",
+			"skill": {
+				"website": "Website",
+				"bookkeeping": "Buchhaltung",
+				"vibecreator": "Vibecreator"
+			},
+			"invoice": "Rechnung",
+			"invoiceTitle": "Rechnung",
+			"download": "Herunterladen",
+			"close": "Schließen",
+			"cancel": "Abo kündigen",
+			"resume": "Abo fortsetzen",
+			"cancelYes": "Ja, kündigen",
+			"keep": "Plan behalten",
+			"working": "Wird ausgeführt…",
+			"cancelConfirm": "Plan kündigen? Bleibt bis {date} aktiv, danach kostenlos.",
+			"cancelsOn": "Endet am {date}",
+			"renewsOn": "Verlängert am {date}",
+			"status": {
+				"active": "Aktiv",
+				"trialing": "Test",
+				"canceled": "Gekündigt",
+				"past_due": "Überfällig",
+				"unpaid": "Unbezahlt",
+				"incomplete": "Unvollständig",
+				"paid": "Bezahlt",
+				"pending": "Ausstehend",
+				"refunded": "Erstattet",
+				"partially_refunded": "Teilw. erstattet",
+				"void": "Storniert",
+				"draft": "Entwurf"
+			},
+			"interval": {
+				"day": "Tag",
+				"week": "Woche",
+				"month": "Monat",
+				"year": "Jahr"
+			},
+			"reason": {
+				"purchase": "Kauf",
+				"subscription_create": "Neues Abo",
+				"subscription_cycle": "Verlängerung",
+				"subscription_update": "Plan-Änderung"
+			},
+			"tiers": {
+				"avenME": {
+					"name": "avenME",
+					"tagline": "Dein erstes Selbst.",
+					"f1": "35 MINDS / Woche private KI",
+					"f2": "Sichere deinen eigenen aven-Namen",
+					"f3": "Voller Zugang: Chat, Vibes, Schemas & DB",
+					"f4": "avenME Game Pass"
+				},
+				"avenFOUNDER": {
+					"name": "avenFOUNDER",
+					"tagline": "Gründe eine Stadt.",
+					"f1": "Alles aus avenME, plus:",
+					"f2": "170 MINDS / Woche private KI",
+					"f3": "avenFOUNDER Game Pass",
+					"f4": "Website-Skill",
+					"f5": "Buchhaltungs-Skill"
+				},
+				"avenCEO": {
+					"name": "avenCEO",
+					"tagline": "Führe ein Unternehmen aus Selbsten.",
+					"f1": "Alles aus avenFOUNDER, plus:",
+					"f2": "1.885 MINDS / Woche private KI",
+					"f3": "avenCEO Game Pass",
+					"f4": "Vibecreator-Skill"
+				}
+			}
 		},
 		"vibes": {
 			"select": "Vibe wählen"
@@ -991,7 +1098,9 @@
 		"db": {
 			"empty": "Noch keine Daten.",
 			"emptyTable": "Noch keine Einträge für dieses Schema.",
-			"rows": "Einträge"
+			"rows": "Einträge",
+			"tabSchema": "Schema",
+			"tabData": "Daten"
 		},
 		"auth": {
 			"tag": "mainnet / alberobello",

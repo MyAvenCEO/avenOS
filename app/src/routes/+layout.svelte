@@ -1,15 +1,19 @@
 <script lang="ts">
+import { QueryClientProvider } from '@tanstack/svelte-query'
 import { browser } from '$app/environment'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import { startAsrReadiness } from '$lib/asr/model-download-store'
 import { avenCeoMembership } from '$lib/avendb/api'
 import { avenDbStore } from '$lib/avendb/store.svelte'
+import { storeDroppedFiles } from '$lib/composer/active-spark'
 import { installConsoleCapture } from '$lib/debug/console-capture'
 import { startEmbedReadiness } from '$lib/embed/model-download-store'
 import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
+import { queryClient } from '$lib/query/client'
+import { startRealtime } from '$lib/query/events'
 import { attachAvenosRuntimeBridge, avendbSessionReady } from '$lib/runtime/avendb-runtime'
 import { copyToClipboard } from '$lib/runtime/clipboard'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -91,6 +95,14 @@ const sessionKind = $derived($deviceSession.kind)
 $effect(() => {
 	if (!browser || !isTauriRuntime()) return
 	initLocale('en')
+})
+
+// Realtime: one SSE stream → TanStack Query invalidation (the "subscription" transport for all
+// betterauth reads). Idempotent + waits for the bearer token internally, so starting it once here
+// is safe pre-sign-in. Polling would be far more expensive. board 0055.
+$effect(() => {
+	if (!browser) return
+	startRealtime()
 })
 
 let vaults = $state<VaultListEntry[]>([])
@@ -241,6 +253,21 @@ const selfNavLabel = $derived.by(() => {
 /** Global file-drag overlay (all routes when unlocked; not active on lock screen). */
 let dragDepth = $state(0)
 const dragActive = $derived(dragDepth > 0)
+// The drop overlay's wording depends on the world: testnet ingests into Intents; mainnet stores
+// the files as private website reference images for the Composer. board 0055.
+const dropText = $derived(
+	$selectedNetwork === 'mainnet'
+		? {
+				title: 'Drop images',
+				subtitle: 'Saved privately to your site as design inspiration — never published.',
+				hint: ''
+			}
+		: {
+				title: t('intents.fileDrop.title'),
+				subtitle: t('intents.fileDrop.subtitle'),
+				hint: t('intents.fileDrop.hint')
+			}
+)
 
 function isFilesDrag(dt: DataTransfer | null): boolean {
 	if (!dt) return false
@@ -248,7 +275,9 @@ function isFilesDrag(dt: DataTransfer | null): boolean {
 }
 
 $effect(() => {
-	if (!browser || shellLocked) return
+	// Mainnet (betterauth, no vault) keeps `shellLocked` true, so don't gate the file-drop overlay
+	// on it there — only block it on the testnet lock screen. board 0055.
+	if (!browser || (shellLocked && $selectedNetwork !== 'mainnet')) return
 	const onDragEnter = (e: DragEvent) => {
 		// Always preventDefault so the webview never falls back to its default
 		// "open the dropped file" navigation. On WebKitGTK (Linux) dataTransfer.types
@@ -278,6 +307,12 @@ $effect(() => {
 		const list = e.dataTransfer?.files
 		if (!list?.length) return
 		const files = Array.from(list)
+		// Mainnet: dropped files are website reference images → store them in the spark's private/
+		// folder (never published). The chat surfaces them for the next edit. board 0055.
+		if ($selectedNetwork === 'mainnet') {
+			void storeDroppedFiles(files)
+			return
+		}
 		pendingIntentFileDrop.set(files)
 		// E3: dropping on an identity screen stays in place — the identity's composer
 		// consumes the pending drop and the files ingest into THAT identity's db/brain.
@@ -309,158 +344,187 @@ $effect(() => {
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="128x128">
 </svelte:head>
 
-<div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
-	{#if $selectedNetwork === null}
-		<!-- Step 0: Select Network. All current features (vault, signup, accounts, sync) live on
+<QueryClientProvider client={queryClient}>
+	<div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
+		{#if $selectedNetwork === null}
+			<!-- Step 0: Select Network. All current features (vault, signup, accounts, sync) live on
 		     testnet/abagana. mainnet/alberobello is a separate world (mocked chat UI for now). -->
-		<NetworkSelect />
-	{:else if $selectedNetwork === 'mainnet'}
-		<!-- Protected screen: Google sign-in gates the mainnet shell (Chat | Vibes). board 0050/0054. -->
-		<AuthGate>
-			<MainnetShell />
-		</AuthGate>
-	{:else}
-		<LockGate />
-		{#if !shellLocked}
-			{#if appAccessState === 'checking'}
-				<div class="flex min-h-0 flex-1 items-center justify-center p-6">
-					<p class="text-muted-foreground text-sm">{t('networkGate.checking')}</p>
-				</div>
-			{:else if appAccessState === 'human'}
-				<HumanSafeGate />
-			{:else}
-				{#if showNetworkBanner}
-					<!-- Non-blocking: the app is NOT invite-gated (local-first). This only flags that the
-				     SYNC/server layer isn't joined yet, and offers the did:safe to be vouched in. -->
-					<div
-						class="border-primary/30 bg-primary/5 text-foreground flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-1.5 text-xs sm:px-6"
-					>
-						<span class="font-medium">{t('networkGate.bannerTitle')}</span>
-						<span class="text-muted-foreground min-w-0">{t('networkGate.bannerBody')}</span>
-						{#if ownDid}
-							<button
-								type="button"
-								class="border-border/60 hover:bg-card ml-auto rounded-md border px-2 py-0.5 font-mono text-[10px]"
-								onclick={() => void copyOwnDid()}
-							>
-								{ownDidCopied ? t('networkGate.copied') : t('networkGate.copyDid')}
-							</button>
-						{/if}
-						<button
-							type="button"
-							class="text-muted-foreground hover:text-foreground shrink-0 px-1 font-semibold"
-							aria-label={t('common.dismiss')}
-							onclick={() => (networkBannerDismissed = true)}
-						>
-							×
-						</button>
-					</div>
-				{/if}
-				<header
-					class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2"
+			<NetworkSelect />
+		{:else if $selectedNetwork === 'mainnet'}
+			<!-- Protected screen: Google sign-in gates the mainnet shell (Chat | Vibes). board 0050/0054. -->
+			<AuthGate>
+				<MainnetShell />
+			</AuthGate>
+			{#if dragActive}
+				<div
+					class="pointer-events-auto fixed inset-0 z-[100] flex touch-none items-center justify-center bg-background/95 backdrop-blur-md"
+					role="region"
+					aria-label={dropText.title}
 				>
-					<div
-						class="mx-auto grid w-full max-w-[min(100%,88rem)] grid-cols-1 items-center gap-x-2 gap-y-2 sm:grid-cols-3"
-					>
+					<div class="mx-6 w-full max-w-md">
 						<div
-							class="flex min-w-0 items-center justify-start justify-self-start sm:justify-self-start"
-						></div>
-
-						<nav
-							class="hidden flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase sm:flex"
-							aria-label={t('nav.appSections')}
+							class="rounded-[var(--radius-lg)] border-[3px] border-dashed border-primary/50 bg-card/96 p-[10px] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_14%,transparent)] ring-2 ring-primary/20 ring-offset-[8px] ring-offset-background backdrop-blur-sm"
 						>
-							<a
-								href="/"
-								data-sveltekit-preload-data="hover"
-								class="transition-opacity hover:opacity-80 {intentsActive ? 'opacity-95' : 'opacity-40'}"
-								aria-current={intentsActive ? 'page' : undefined}
-								onclick={(e) => navigateApp('/', e)}
-								>{t('nav.intents')}</a
-							>
-							<span class="select-none opacity-25" aria-hidden="true">|</span>
-							<a
-								href="/sandbox"
-								data-sveltekit-preload-data="hover"
-								class="transition-opacity hover:opacity-80 {sandboxActive ? 'opacity-95' : 'opacity-40'}"
-								aria-current={sandboxActive ? 'page' : undefined}
-								onclick={(e) => navigateApp('/sandbox', e)}
-								>{t('nav.sandbox')}</a
-							>
-							<span class="select-none opacity-25" aria-hidden="true">|</span>
-							<a
-								href="/identities"
-								data-sveltekit-preload-data="hover"
-								class="transition-opacity hover:opacity-80 {sparksNavActive ? 'opacity-95' : 'opacity-40'}"
-								aria-current={sparksNavActive ? 'page' : undefined}
-								onclick={(e) => navigateApp('/identities', e)}
-								>{t('nav.identities')}</a
-							>
-							<span class="select-none opacity-25" aria-hidden="true">|</span>
-							<a
-								href="/avens"
-								data-sveltekit-preload-data="hover"
-								class="transition-opacity hover:opacity-80 {avensActive ? 'opacity-95' : 'opacity-40'}"
-								aria-current={avensActive ? 'page' : undefined}
-								onclick={(e) => navigateApp('/avens', e)}
-								>{t('nav.avens')}</a
-							>
-						</nav>
-
-						<nav
-							class="hidden min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 justify-self-end text-[10px] font-bold tracking-wider uppercase sm:flex"
-							aria-label={t('nav.deviceIdentity')}
-						>
-							<a
-								href="/settings/identity"
-								data-sveltekit-preload-data="hover"
-								class="normal-case max-w-[8rem] truncate text-[11px] font-semibold tracking-normal transition-opacity hover:opacity-80 sm:max-w-[10rem] {selfActive ? 'opacity-95' : 'opacity-40'}"
-								aria-current={selfActive ? 'page' : undefined}
-								title={selfNavLabel}
-								onclick={(e) => navigateApp('/settings/identity', e)}
-								>{selfNavLabel}</a
-							>
-						</nav>
-					</div>
-				</header>
-				{#if dragActive}
-					<div
-						class="pointer-events-auto fixed inset-0 z-[100] flex touch-none items-center justify-center bg-background/95 backdrop-blur-md"
-						role="region"
-						aria-label={t('intents.fileDrop.region')}
-					>
-						<div class="mx-6 w-full max-w-md">
 							<div
-								class="rounded-[var(--radius-lg)] border-[3px] border-dashed border-primary/50 bg-card/96 p-[10px] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_14%,transparent)] ring-2 ring-primary/20 ring-offset-[8px] ring-offset-background backdrop-blur-sm"
+								class="rounded-[calc(var(--radius-lg)-8px)] border border-dotted border-primary/40 bg-muted/40 px-7 py-9 text-center"
 							>
-								<div
-									class="rounded-[calc(var(--radius-lg)-8px)] border border-dotted border-primary/40 bg-muted/40 px-7 py-9 text-center"
-								>
-									<p class="text-xl font-semibold tracking-tight text-primary md:text-[1.3rem]">
-										{t('intents.fileDrop.title')}
-									</p>
-									<p class="mt-2.5 px-1 text-[12px] leading-relaxed opacity-85">
-										{t('intents.fileDrop.subtitle')}
-									</p>
-									<p class="mt-1.5 px-1 text-[11px] leading-relaxed opacity-55">
-										{t('intents.fileDrop.hint')}
-									</p>
-								</div>
+								<p class="text-xl font-semibold tracking-tight text-primary md:text-[1.3rem]">
+									{dropText.title}
+								</p>
+								<p class="mt-2.5 px-1 text-[12px] leading-relaxed opacity-85">
+									{dropText.subtitle}
+								</p>
+								{#if dropText.hint}
+									<p class="mt-1.5 px-1 text-[11px] leading-relaxed opacity-55">{dropText.hint}</p>
+								{/if}
 							</div>
 						</div>
 					</div>
-				{/if}
-				<div
-					class={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden${dragActive ? ' pointer-events-none select-none saturate-75 contrast-[0.85] brightness-90 blur-[3px]' : ''}`}
-					aria-hidden={dragActive ? true : undefined}
-				>
-					{#key routeKey}
-						{@render pageContent()}
-					{/key}
 				</div>
+			{/if}
+		{:else}
+			<LockGate />
+			{#if !shellLocked}
+				{#if appAccessState === 'checking'}
+					<div class="flex min-h-0 flex-1 items-center justify-center p-6">
+						<p class="text-muted-foreground text-sm">{t('networkGate.checking')}</p>
+					</div>
+				{:else if appAccessState === 'human'}
+					<HumanSafeGate />
+				{:else}
+					{#if showNetworkBanner}
+						<!-- Non-blocking: the app is NOT invite-gated (local-first). This only flags that the
+				     SYNC/server layer isn't joined yet, and offers the did:safe to be vouched in. -->
+						<div
+							class="border-primary/30 bg-primary/5 text-foreground flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-1.5 text-xs sm:px-6"
+						>
+							<span class="font-medium">{t('networkGate.bannerTitle')}</span>
+							<span class="text-muted-foreground min-w-0">{t('networkGate.bannerBody')}</span>
+							{#if ownDid}
+								<button
+									type="button"
+									class="border-border/60 hover:bg-card ml-auto rounded-md border px-2 py-0.5 font-mono text-[10px]"
+									onclick={() => void copyOwnDid()}
+								>
+									{ownDidCopied ? t('networkGate.copied') : t('networkGate.copyDid')}
+								</button>
+							{/if}
+							<button
+								type="button"
+								class="text-muted-foreground hover:text-foreground shrink-0 px-1 font-semibold"
+								aria-label={t('common.dismiss')}
+								onclick={() => (networkBannerDismissed = true)}
+							>
+								×
+							</button>
+						</div>
+					{/if}
+					<header
+						class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2"
+					>
+						<div
+							class="mx-auto grid w-full max-w-[min(100%,88rem)] grid-cols-1 items-center gap-x-2 gap-y-2 sm:grid-cols-3"
+						>
+							<div
+								class="flex min-w-0 items-center justify-start justify-self-start sm:justify-self-start"
+							></div>
 
-				<MobileShellNav {selfNavLabel} {selfActive} />
+							<nav
+								class="hidden flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase sm:flex"
+								aria-label={t('nav.appSections')}
+							>
+								<a
+									href="/"
+									data-sveltekit-preload-data="hover"
+									class="transition-opacity hover:opacity-80 {intentsActive ? 'opacity-95' : 'opacity-40'}"
+									aria-current={intentsActive ? 'page' : undefined}
+									onclick={(e) => navigateApp('/', e)}
+									>{t('nav.intents')}</a
+								>
+								<span class="select-none opacity-25" aria-hidden="true">|</span>
+								<a
+									href="/sandbox"
+									data-sveltekit-preload-data="hover"
+									class="transition-opacity hover:opacity-80 {sandboxActive ? 'opacity-95' : 'opacity-40'}"
+									aria-current={sandboxActive ? 'page' : undefined}
+									onclick={(e) => navigateApp('/sandbox', e)}
+									>{t('nav.sandbox')}</a
+								>
+								<span class="select-none opacity-25" aria-hidden="true">|</span>
+								<a
+									href="/identities"
+									data-sveltekit-preload-data="hover"
+									class="transition-opacity hover:opacity-80 {sparksNavActive ? 'opacity-95' : 'opacity-40'}"
+									aria-current={sparksNavActive ? 'page' : undefined}
+									onclick={(e) => navigateApp('/identities', e)}
+									>{t('nav.identities')}</a
+								>
+								<span class="select-none opacity-25" aria-hidden="true">|</span>
+								<a
+									href="/avens"
+									data-sveltekit-preload-data="hover"
+									class="transition-opacity hover:opacity-80 {avensActive ? 'opacity-95' : 'opacity-40'}"
+									aria-current={avensActive ? 'page' : undefined}
+									onclick={(e) => navigateApp('/avens', e)}
+									>{t('nav.avens')}</a
+								>
+							</nav>
+
+							<nav
+								class="hidden min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 justify-self-end text-[10px] font-bold tracking-wider uppercase sm:flex"
+								aria-label={t('nav.deviceIdentity')}
+							>
+								<a
+									href="/settings/identity"
+									data-sveltekit-preload-data="hover"
+									class="normal-case max-w-[8rem] truncate text-[11px] font-semibold tracking-normal transition-opacity hover:opacity-80 sm:max-w-[10rem] {selfActive ? 'opacity-95' : 'opacity-40'}"
+									aria-current={selfActive ? 'page' : undefined}
+									title={selfNavLabel}
+									onclick={(e) => navigateApp('/settings/identity', e)}
+									>{selfNavLabel}</a
+								>
+							</nav>
+						</div>
+					</header>
+					{#if dragActive}
+						<div
+							class="pointer-events-auto fixed inset-0 z-[100] flex touch-none items-center justify-center bg-background/95 backdrop-blur-md"
+							role="region"
+							aria-label={t('intents.fileDrop.region')}
+						>
+							<div class="mx-6 w-full max-w-md">
+								<div
+									class="rounded-[var(--radius-lg)] border-[3px] border-dashed border-primary/50 bg-card/96 p-[10px] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_14%,transparent)] ring-2 ring-primary/20 ring-offset-[8px] ring-offset-background backdrop-blur-sm"
+								>
+									<div
+										class="rounded-[calc(var(--radius-lg)-8px)] border border-dotted border-primary/40 bg-muted/40 px-7 py-9 text-center"
+									>
+										<p class="text-xl font-semibold tracking-tight text-primary md:text-[1.3rem]">
+											{t('intents.fileDrop.title')}
+										</p>
+										<p class="mt-2.5 px-1 text-[12px] leading-relaxed opacity-85">
+											{t('intents.fileDrop.subtitle')}
+										</p>
+										<p class="mt-1.5 px-1 text-[11px] leading-relaxed opacity-55">
+											{t('intents.fileDrop.hint')}
+										</p>
+									</div>
+								</div>
+							</div>
+						</div>
+					{/if}
+					<div
+						class={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden${dragActive ? ' pointer-events-none select-none saturate-75 contrast-[0.85] brightness-90 blur-[3px]' : ''}`}
+						aria-hidden={dragActive ? true : undefined}
+					>
+						{#key routeKey}
+							{@render pageContent()}
+						{/key}
+					</div>
+
+					<MobileShellNav {selfNavLabel} {selfActive} />
+				{/if}
 			{/if}
 		{/if}
-	{/if}
-</div>
+	</div>
+</QueryClientProvider>

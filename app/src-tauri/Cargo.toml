@@ -18,7 +18,7 @@ incremental = false
 
 [package]
 name = "aven-os-app"
-version = "26.6.19-next.7"
+version = "26.6.20-next.4"
 description = "Aven OS desktop shell"
 authors = ["Aven"]
 edition = "2021"
@@ -80,13 +80,16 @@ async-trait = "0.1"
 # the future Gemma/LLM path. The heavy native deps live here, gated by its
 # `stt` / `gemma` features. Only compiled with `local-voice` / `gemma`.
 aven-ai = { path = "../../libs/aven-ai", optional = true, default-features = false }
-aven-db = { version = "26.6.19-next.7", default-features = false, features = ["client-p2p"] }
+aven-db = { version = "26.6.20-next.4", default-features = false, features = ["client-p2p"] }
 aven-brain = { path = "../../libs/aven-brain" }
 aven-caps = { path = "../../libs/aven-caps" }
 aven-p2p = { path = "../../libs/aven-p2p" }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Device-side authenticated fetch to the Fly.io API (board 0055) — the webview can't reach
+# api.fly.io (CSP + CORS), so the `fly_fetch` command proxies it natively.
+reqwest = "0.12"
 sha2 = "0.10"
 tauri-plugin-self = { path = "../../libs/tauri-plugin-self" }
 tauri-plugin-vault = { path = "../../libs/tauri-plugin-vault" }

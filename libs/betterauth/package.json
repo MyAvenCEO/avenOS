@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/betterauth",
 	"private": true,
-	"version": "26.6.19-next.7",
+	"version": "26.6.20-next.4",
 	"type": "module",
 	"description": "Self-hosted Better Auth server (bun + Hono) on Neon Postgres via the kysely-neon dialect. Google sign-in + Polar account link for the mainnet/alberobello app. Runnable standalone from this folder.",
 	"main": "./src/index.ts",
@@ -19,6 +19,8 @@
 	},
 	"dependencies": {
 		"@avenos/aven-vibes": "workspace:*",
+		"@avenos/skills": "workspace:*",
+		"@better-auth/passkey": "^1.6.20",
 		"@neondatabase/serverless": "^0.10.4",
 		"@polar-sh/better-auth": "^1.8.4",
 		"@polar-sh/sdk": "^0.48.1",

@@ -98,6 +98,44 @@ export interface DataValueHistoryTable {
 	updated_at: Date
 }
 
+// Append-only audit log of verified Polar webhook events (board 0052). The UI reads billing
+// state live from Polar; this is purely for audit / idempotency / replay.
+export interface PolarEventTable {
+	event_id: string
+	type: string
+	external_id: string | null
+	payload: unknown
+	received_at: Generated<Date>
+}
+
+// E2EE secrets vault (board 0055). One vault per user; the master DEK is AES-GCM-wrapped under
+// the passkey-PRF-derived KEK (HKDF) with a PINNED salt. The server is BLIND: it only ever
+// stores ciphertext + wrapped key + salt + nonces — never the token, DEK, KEK, or PRF.
+export interface VaultTable {
+	id: string
+	user_id: string
+	credential_id: string
+	prf_salt: string
+	wrapped_master_key: string
+	wrap_nonce: string
+	alg: string
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
+export interface SecretTable {
+	id: string
+	vault_id: string
+	user_id: string
+	kind: string
+	label: string | null
+	ciphertext: string
+	nonce: string
+	alg: string
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
 export interface Database {
 	ai_usage: AiUsageTable
 	model_pricing: ModelPricingTable
@@ -108,6 +146,9 @@ export interface Database {
 	data_value: DataValueTable
 	data_schema_history: DataSchemaHistoryTable
 	data_value_history: DataValueHistoryTable
+	polar_event: PolarEventTable
+	vault: VaultTable
+	secret: SecretTable
 }
 
 let cached: Kysely<Database> | null = null

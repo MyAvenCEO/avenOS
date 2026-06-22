@@ -109,3 +109,41 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
 		week: { tokens: Number(week?.tokens ?? 0), costUsd: Number(week?.cost ?? 0) }
 	}
 }
+
+export type RecentUsageItem = {
+	id: string
+	model: string
+	promptTokens: number
+	completionTokens: number
+	totalTokens: number
+	costUsd: number
+	createdAt: string
+}
+
+/** A user's most recent completions — one row per request roundtrip, newest first. */
+export async function getRecentUsage(userId: string, limit = 25): Promise<RecentUsageItem[]> {
+	const rows = await db()
+		.selectFrom('ai_usage')
+		.select([
+			'id',
+			'model',
+			'prompt_tokens',
+			'completion_tokens',
+			'total_tokens',
+			'cost_usd',
+			'created_at'
+		])
+		.where('user_id', '=', userId)
+		.orderBy('created_at', 'desc')
+		.limit(limit)
+		.execute()
+	return rows.map((r) => ({
+		id: r.id,
+		model: r.model,
+		promptTokens: Number(r.prompt_tokens),
+		completionTokens: Number(r.completion_tokens),
+		totalTokens: Number(r.total_tokens),
+		costUsd: Number(r.cost_usd),
+		createdAt: new Date(r.created_at).toISOString()
+	}))
+}

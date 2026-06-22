@@ -1,3 +1,28 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.3...v) (2026-06-20)
+
+
+### Features
+
+* **mainnet:** passkey PRF probe + AASA domain anchor + polar billing merge ([49264af](https://github.com/MyAvenCEO/avenOS/commit/49264af428184e8aa78db427fe6f51797349a78b))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.2...v) (2026-06-20)
+
+
+### Bug Fixes
+
+* **ios:** use dedicated iOS Google OAuth client (+ server multi-audience) ([347f4a5](https://github.com/MyAvenCEO/avenOS/commit/347f4a55334e8f8ce1f218682f74900299bac6d6))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.1...v) (2026-06-20)
+
+
+### Bug Fixes
+
+* **ios:** register Google reversed-client-ID URL scheme in Info.plist ([586956f](https://github.com/MyAvenCEO/avenOS/commit/586956f20b07f8887ab0ab31efb29ec95235a896))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.8...v) (2026-06-20)
+
+
+### Bug Fixes
+
+* **ios:** bake the Google Desktop client into the iOS binary ([d58c230](https://github.com/MyAvenCEO/avenOS/commit/d58c230ff45cbeb894a641b5764183668104cc5b))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.7...v) (2026-06-19)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.6...v) (2026-06-19)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.5...v) (2026-06-19)
 

@@ -1,5 +1,7 @@
 mod asr;
+mod device_key;
 mod embed_model;
+mod fly;
 mod llm;
 mod tts;
 mod biscuit_resolver;
@@ -14,6 +16,7 @@ mod schema_manifest;
 mod schema_migrations;
 mod identity_acc;
 mod identity_sync;
+mod sparks;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Listener, Manager, RunEvent};
@@ -254,6 +257,9 @@ pub fn run() {
 			network::aven_ceo_identity,
 			network::aven_ceo_addressbook_id,
 			network::google_oauth_config,
+			fly::fly_fetch,
+			device_key::device_seed_load,
+			device_key::device_seed_save,
 			avendb::avendb_runtime,
 		avendb::brain_runtime,
 			avendb::self_storage_paths,
@@ -288,6 +294,12 @@ pub fn run() {
 			tts::tts_cancel_download,
 			tts::tts_start_download,
 			tts::tts_delete_model,
+			sparks::sparks_list,
+			sparks::spark_list_files,
+			sparks::spark_read_file,
+			sparks::spark_write_file,
+			sparks::spark_write_bytes,
+			sparks::spark_delete_file,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application")
