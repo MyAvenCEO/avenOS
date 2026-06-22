@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.5...v) (2026-06-22)
+
+
+### Features
+
+* **billing:** metadata.tier product discovery + full app version in Profile ([#22](https://github.com/MyAvenCEO/avenOS/issues/22)) ([864bc6d](https://github.com/MyAvenCEO/avenOS/commit/864bc6df3ef8069a1c3bd6b6ed0dd73968e0e026))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.4...v) (2026-06-22)
 
 
