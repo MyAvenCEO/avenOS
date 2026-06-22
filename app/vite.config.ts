@@ -15,6 +15,11 @@ const repoRoot = path.resolve(__dirname, '..')
 const require = createRequire(import.meta.url)
 const workspaceRoot = path.resolve(require.resolve('vite/package.json'), '../../..')
 
+// App release/build version (e.g. "26.6.22-next.4") baked into the bundle so the Profile UI can show
+// the FULL version + build suffix — Tauri's getVersion() drops the `-next.N` because Apple's
+// CFBundleShortVersionString must be a plain X.Y.Z. board 0061.
+const appVersion = (require('./package.json') as { version: string }).version
+
 export default defineConfig(({ mode }) => {
 	const loaded = loadEnv(mode, repoRoot, '')
 	for (const key of Object.keys(loaded)) {
@@ -33,6 +38,8 @@ export default defineConfig(({ mode }) => {
 	}
 
 	return {
+		// Bake the package.json version (incl. the -next.N build suffix) for the Profile "App version" row.
+		define: { __APP_VERSION__: JSON.stringify(appVersion) },
 		// App-local env only — repo-root `.env` is Tauri/P2P; loadEnv below still merges it at startup.
 		envDir: __dirname,
 		envPrefix: ['VITE_', 'PUBLIC_', 'TAURI_ENV_'],
