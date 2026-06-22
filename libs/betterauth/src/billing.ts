@@ -148,14 +148,21 @@ export async function billingCheckout(c: Context): Promise<Response> {
 	// Best-effort: make sure the Polar customer exists with external_id = user.id before checkout.
 	await linkPolarCustomer(user)
 
+	// The app passes its own origin as returnUrl so the user lands back IN the app. But the PACKAGED
+	// desktop webview's origin is a non-http scheme (tauri://localhost), and Polar REJECTS a non
+	// http(s) successUrl — which 502s the whole checkout ("checkout_failed"). Only honor an http(s)
+	// returnUrl; otherwise fall back to our own https success page. (Local dev works because there the
+	// origin is http://localhost:<port>.) board 0061.
+	const requestedReturn = body?.returnUrl
+	const checkoutSuccessUrl =
+		requestedReturn && /^https?:\/\//i.test(requestedReturn) ? requestedReturn : successUrl()
+
 	try {
 		const checkout = await polarClient.checkouts.create({
 			products: [productId],
 			externalCustomerId: user.id,
 			customerEmail: user.email,
-			// Prefer the app's own return URL (so the user lands back IN the app, on a real
-			// routeable screen) over the standalone fallback page. The app passes its origin.
-			successUrl: body?.returnUrl || successUrl()
+			successUrl: checkoutSuccessUrl
 		})
 		return c.json({ url: checkout.url })
 	} catch (e) {
