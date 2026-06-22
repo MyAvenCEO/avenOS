@@ -7,6 +7,7 @@ import { t } from '$lib/i18n'
 import { qk } from '$lib/query/client'
 import { fetchUsage } from '$lib/query/usage'
 import AccountSettings from '$lib/shell/AccountSettings.svelte'
+import MailInbox from '$lib/shell/MailInbox.svelte'
 import MainnetChat from '$lib/shell/MainnetChat.svelte'
 import MainnetDb from '$lib/shell/MainnetDb.svelte'
 import MainnetFly from '$lib/shell/MainnetFly.svelte'
@@ -16,7 +17,7 @@ import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
 // MINDS + the signed-in account NAME on the right. Clicking the name opens the Account Settings
 // view (profile, plans, billing, usage, vault keys, Admin for admins, log out). The website
 // Composer lives under Vibes now. board 0053/0054/0055.
-type Tab = 'chat' | 'vibes' | 'db' | 'fly'
+type Tab = 'chat' | 'vibes' | 'db' | 'fly' | 'mail'
 type SettingsCategory = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'admin'
 let tab = $state<Tab>('chat')
 let settings = $state(false)
@@ -61,12 +62,15 @@ const user = $derived(
 	$sessionStore.data?.user as { name?: string; email?: string; role?: string } | undefined
 )
 const displayName = $derived(user?.name || user?.email || '')
+const isAdmin = $derived(user?.role === 'admin')
 
+// Mail is an ADMIN-ONLY tab (the /api/inbox/* endpoints are server-gated to admins too). board 0060.
 const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'chat', label: t('mainnet.nav.chat') },
 	{ id: 'vibes', label: t('mainnet.nav.vibes') },
 	{ id: 'db', label: t('mainnet.nav.db') },
-	{ id: 'fly', label: t('mainnet.nav.fly') }
+	{ id: 'fly', label: t('mainnet.nav.fly') },
+	...(isAdmin ? [{ id: 'mail' as Tab, label: 'Mail' }] : [])
 ])
 
 function openTab(id: Tab): void {
@@ -144,6 +148,8 @@ function openTab(id: Tab): void {
 		<MainnetVibes />
 	{:else if tab === 'fly'}
 		<MainnetFly />
+	{:else if tab === 'mail'}
+		<MailInbox />
 	{:else}
 		<MainnetDb />
 	{/if}

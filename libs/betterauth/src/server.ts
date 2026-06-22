@@ -31,6 +31,7 @@ import {
 	updateValue
 } from './data'
 import { eventsStream } from './events'
+import { inboxGet, inboxList, mailInbox } from './inbox'
 import { syncPricing } from './usage'
 import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
 
@@ -61,6 +62,9 @@ app.use('/api/events', cors(corsOptions))
 // E2EE secrets vault (board 0055). Both the bare path and sub-paths need CORS.
 app.use('/api/vault', cors(corsOptions))
 app.use('/api/vault/*', cors(corsOptions))
+// Admin-only inbound-mail viewer (board 0060). The /webhooks/inbox/mail receiver is server-to-server
+// (no CORS); these /api/inbox/* read endpoints are browser-called by the app, so they need CORS.
+app.use('/api/inbox/*', cors(corsOptions))
 
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
@@ -102,6 +106,15 @@ app.post('/api/vault', putVault)
 app.get('/api/vault/secrets', listSecrets)
 app.post('/api/vault/secrets', putSecret)
 app.delete('/api/vault/secrets/:id', deleteSecret)
+
+// Incoming webhooks (server-to-server, NO CORS). Postmark INBOUND email → parsed + stored in
+// `inbound_email`. Authenticated by a shared secret (Basic auth / ?token= / X-Inbox-Token) since
+// Postmark inbound has no signature; fail-closed without POSTMARK_INBOUND_SECRET. board 0060.
+app.post('/webhooks/inbox/mail', mailInbox)
+
+// Admin-only inbound-mail viewer: list (headline fields) + one message's full detail. board 0060.
+app.get('/api/inbox/messages', inboxList)
+app.get('/api/inbox/messages/:id', inboxGet)
 
 // Apple App Site Association (AASA) — lets the native macOS/iOS app use passkeys (WebAuthn PRF)
 // with rp.id = this host (api.next.aven.ceo). Served at the well-known path over HTTPS, no
