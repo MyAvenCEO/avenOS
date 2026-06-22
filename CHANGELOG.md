@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.4...v) (2026-06-22)
+
+
+### Features
+
+* composer site generator + tigris publish, voice transcription, inbound mail (0056-0060) ([467198d](https://github.com/MyAvenCEO/avenOS/commit/467198d555a27dd255362df2a13985a1faf00d43))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.3...v) (2026-06-20)
 
 
