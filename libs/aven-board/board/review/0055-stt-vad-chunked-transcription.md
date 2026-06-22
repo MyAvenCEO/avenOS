@@ -170,9 +170,12 @@ check.
 - [x] `cargo test --lib --features stt` (in `libs/aven-ai`) green incl.
   `split_into_windows` + `merge_segment_texts` — **verified: 5 passed**.
 - [x] `cargo clippy --lib --features stt -- -D warnings` exit 0 — **verified**.
-- [ ] From `app/src-tauri`: `cargo check --features local-voice` exit 0 — _in
-  progress (heavy first Tauri build; needs GTK/webkit2gtk dev libs + the sherpa
-  archive in this sandbox)._
+- [x] From `app/src-tauri`: `cargo check --features local-voice` exit 0 —
+  **verified** (`aven-os-app` compiles, 1 pre-existing unrelated `push_line`
+  warning); `cargo clippy --features local-voice` clean for the changed code.
+  Needed GTK/webkit2gtk dev libs + `SHERPA_ONNX_ARCHIVE_DIR` (build-script
+  download blocked here) + a dummy `onnxruntime/libonnxruntime.dylib` resource
+  (gitignored; a pre-existing bundle-resource gap in this Linux checkout).
 - [x] From `app/`: `bun --bun x svelte-kit sync && bun --bun x svelte-check
   --tsconfig ./tsconfig.json` exit 0 — **verified: 0 errors** (1 pre-existing
   unrelated warning in `aven-city`).
@@ -184,8 +187,9 @@ check.
   VAD + streaming path wired.
 - [x] `rg -n "asr:transcribe-progress|asr_stream_" app/src-tauri/src app/src`
   shows the event + commands emitted/registered/consumed.
-- [ ] `git status --porcelain` lists only the files in "Files to touch" (plus the
-  board card move + lockfile).
+- [x] `git status --porcelain` lists only the files in "Files to touch" (plus the
+  board card move, lockfiles, and the regenerated `gen/schemas/linux-schema.json`)
+  — **verified clean** after the build.
 
 ## Verification
 
@@ -228,6 +232,13 @@ posts on stop without hanging.
 
 Newest entry first.
 
+- `2026-06-22` — **Built & all gates green; moved build → review.** Final
+  verification: aven-ai `cargo test --lib --features stt` 5 pass + clippy clean;
+  src-tauri `cargo check --features local-voice` **exit 0** (+ clippy clean for
+  the changed code) — required GTK/webkit2gtk dev libs, `SHERPA_ONNX_ARCHIVE_DIR`,
+  and a gitignored dummy onnxruntime resource; `svelte-check` 0 errors; `bun test
+  tests` 31 pass; biome clean; all wiring greps pass; tree clean. Live mic
+  transcript remains a manual post-build check.
 - `2026-06-22` — **Re-specced to LIVE streaming + built.** Per the user: keep
   Parakeet, transcribe **live while the mic is open** (the VAD makes the chunking
   decision — decode each closed segment once, no re-decoding), 30s safety cap with
