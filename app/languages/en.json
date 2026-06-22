@@ -1027,6 +1027,7 @@
 			"upgradeTo": "Upgrade to {tier}",
 			"downgradeTo": "Downgrade to {tier}",
 			"opening": "Opening checkout…",
+			"openedInBrowser": "Checkout opened in your browser — finish there and your plan updates here automatically.",
 			"currentPlan": "Current plan",
 			"comingSoon": "Coming soon",
 			"error": "Checkout failed: {message}",

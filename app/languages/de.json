@@ -1004,6 +1004,7 @@
 			"upgradeTo": "Upgrade auf {tier}",
 			"downgradeTo": "Wechsel zu {tier}",
 			"opening": "Checkout wird geöffnet…",
+			"openedInBrowser": "Checkout im Browser geöffnet — schließe ihn dort ab, dein Plan aktualisiert sich hier automatisch.",
 			"currentPlan": "Aktueller Plan",
 			"comingSoon": "Demnächst",
 			"error": "Checkout fehlgeschlagen: {message}",
