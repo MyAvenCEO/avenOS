@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.2...v) (2026-06-22)
+
+
+### Bug Fixes
+
+* **billing:** ignore non-http(s) returnUrl so the desktop checkout works ([#19](https://github.com/MyAvenCEO/avenOS/issues/19)) ([4ae53a6](https://github.com/MyAvenCEO/avenOS/commit/4ae53a6317df3c30b026e77dbe1e1188f998b784))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.1...v) (2026-06-22)
 
 
