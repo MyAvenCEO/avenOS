@@ -1,6 +1,14 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { aiChat, aiSessionMessages, aiSessions, aiSetTier, aiUsage } from './ai'
+import {
+	aiChat,
+	aiConfirmAction,
+	aiSessionMessages,
+	aiSessions,
+	aiSetTier,
+	aiUsage,
+	aiUsageRecent
+} from './ai'
 import { auth, TRUSTED_ORIGINS } from './auth'
 import {
 	billingCancel,
@@ -23,7 +31,9 @@ import {
 	updateValue
 } from './data'
 import { eventsStream } from './events'
+import { inboxGet, inboxList, mailInbox } from './inbox'
 import { syncPricing } from './usage'
+import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
 
 const app = new Hono()
 
@@ -49,12 +59,20 @@ app.use('/api/data/*', cors(corsOptions))
 app.use('/api/billing/*', cors(corsOptions))
 // Realtime: a per-user SSE stream the app fetches to invalidate TanStack Query caches. board 0055.
 app.use('/api/events', cors(corsOptions))
+// E2EE secrets vault (board 0055). Both the bare path and sub-paths need CORS.
+app.use('/api/vault', cors(corsOptions))
+app.use('/api/vault/*', cors(corsOptions))
+// Admin-only inbound-mail viewer (board 0060). The /webhooks/inbox/mail receiver is server-to-server
+// (no CORS); these /api/inbox/* read endpoints are browser-called by the app, so they need CORS.
+app.use('/api/inbox/*', cors(corsOptions))
 
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
 // Authenticated Tinfoil proxy — only signed-in users can run inference. board 0051.
 app.post('/api/ai/chat', aiChat)
 app.get('/api/ai/usage', aiUsage)
+app.get('/api/ai/usage/recent', aiUsageRecent)
+app.post('/api/ai/confirm', aiConfirmAction)
 app.get('/api/ai/sessions', aiSessions)
 app.get('/api/ai/sessions/:id/messages', aiSessionMessages)
 app.post('/api/admin/set-tier', aiSetTier)
@@ -81,11 +99,28 @@ app.post('/api/billing/uncancel', billingUncancel)
 app.post('/api/billing/switch', billingSwitch)
 app.get('/api/billing/orders/:id/invoice', billingOrderInvoice)
 
-// Apple App Site Association (AASA) — lets the NATIVE macOS/iOS app use passkeys (WebAuthn PRF)
-// with rp.id = this host (api.next.aven.ceo). Apple fetches it server-side over HTTPS at the
-// exact well-known path with NO `.json` suffix and application/json; the app entitlement must
-// list `webcredentials:<this host>`. This is the rp.id anchor for the secrets-vault unlock. board 0055.
-const APPLE_APP_ID = '2P6VCHVJWB.ceo.aven.os' // <Team ID>.<bundle id>, from Entitlements-appstore.plist
+// E2EE secrets vault (board 0055): session + tier (>= avenFOUNDER, admin-bypass) gated;
+// server-blind. The passkey-PRF-derived key never reaches the server.
+app.get('/api/vault', getVault)
+app.post('/api/vault', putVault)
+app.get('/api/vault/secrets', listSecrets)
+app.post('/api/vault/secrets', putSecret)
+app.delete('/api/vault/secrets/:id', deleteSecret)
+
+// Incoming webhooks (server-to-server, NO CORS). Postmark INBOUND email → parsed + stored in
+// `inbound_email`. Authenticated by a shared secret (Basic auth / ?token= / X-Inbox-Token) since
+// Postmark inbound has no signature; fail-closed without POSTMARK_INBOUND_SECRET. board 0060.
+app.post('/webhooks/inbox/mail', mailInbox)
+
+// Admin-only inbound-mail viewer: list (headline fields) + one message's full detail. board 0060.
+app.get('/api/inbox/messages', inboxList)
+app.get('/api/inbox/messages/:id', inboxGet)
+
+// Apple App Site Association (AASA) — lets the native macOS/iOS app use passkeys (WebAuthn PRF)
+// with rp.id = this host (api.next.aven.ceo). Served at the well-known path over HTTPS, no
+// `.json` suffix, application/json. The app entitlement must list `webcredentials:<this host>`.
+// board 0055.
+const APPLE_APP_ID = '2P6VCHVJWB.ceo.aven.os' // <Team ID>.<bundle id>
 app.get('/.well-known/apple-app-site-association', (c) =>
 	c.json({ webcredentials: { apps: [APPLE_APP_ID] } })
 )

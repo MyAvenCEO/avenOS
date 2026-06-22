@@ -38,6 +38,13 @@ export default defineConfig(({ mode }) => {
 		envPrefix: ['VITE_', 'PUBLIC_', 'TAURI_ENV_'],
 		cacheDir,
 		clearScreen: false,
+		// Pre-bundle @storagesdk/core (+ its /adapter subpath), used by the in-app composer. Without
+		// this, Vite discovers it at runtime (the composer view is behind auth/routing, not in the
+		// startup crawl), then re-optimizes + reloads — a reload the Tauri WKWebView fails to ride on
+		// a cold cache ("Importing a module script failed"). Eager pre-bundling avoids that churn.
+		optimizeDeps: {
+			include: ['@storagesdk/core', '@storagesdk/core/adapter']
+		},
 		plugins: [tailwindcss(), sveltekit()],
 		preview: {
 			headers: crossOriginIsolationHeaders

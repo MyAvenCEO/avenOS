@@ -1,8 +1,0 @@
-"$schema" = "schemas/schema.json"
-
-[default]
-description = "Default permissions for tauri-plugin-passkey"
-permissions = [
-  "allow-register-passkey",
-  "allow-login-passkey"
-]

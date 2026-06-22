@@ -3,6 +3,8 @@
 // pulling in the renderer. The server executes it against the betterauth /api/data store
 // (schema-validated), scoped to the signed-in user. Same data the vibes + cards read.
 
+import { COMPOSER_TOOLS } from '@avenos/skills/composer'
+
 export type DataCrudAction = 'list' | 'create' | 'update' | 'delete'
 
 export type DataCrudArgs = {
@@ -45,3 +47,6 @@ export const DATA_CRUD_TOOL = {
 } as const
 
 export const DATA_TOOLS = [DATA_CRUD_TOOL]
+
+/** Every tool the chat advertises: data CRUD (todos etc.) + the Composer-vibe tools. Both work. */
+export const CHAT_TOOLS = [...DATA_TOOLS, ...COMPOSER_TOOLS]

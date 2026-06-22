@@ -1,0 +1,27 @@
+{
+	"name": "@avenos/skills",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "AvenOS code-skills. Each sub-skill is its own subpath export (e.g. @avenos/skills/composer). board 0056.",
+	"exports": {
+		".": "./index.ts",
+		"./composer": "./composer/index.ts",
+		"./composer/site-generator": "./composer/site-generator.ts",
+		"./composer/seed": "./composer/seed.ts",
+		"./composer/publish": "./composer/publish.ts"
+	},
+	"scripts": {
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@storagesdk/adapters": "^0.7.1",
+		"@storagesdk/core": "^0.4.2",
+		"@tigrisdata/storage": "^3.14.0",
+		"marked": "^15.0.12"
+	},
+	"devDependencies": {
+		"typescript": "^5.7.2"
+	}
+}

@@ -25,6 +25,24 @@ use tauri::AppHandle;
 #[cfg_attr(not(feature = "local-voice"), allow(dead_code))]
 pub const DOWNLOAD_EVENT: &str = "asr:model-download";
 
+/// Tauri event carrying live partial transcripts as each segment decodes, so the
+/// composer can stream text while a long recording is being transcribed. Only
+/// emitted by the `local-voice` build.
+#[cfg_attr(not(feature = "local-voice"), allow(dead_code))]
+pub const PROGRESS_EVENT: &str = "asr:transcribe-progress";
+
+/// Payload of `asr:transcribe-progress`: the cumulative transcript so far plus the
+/// 1-based segment `done` of `total`. The composer shows `text` as a live preview;
+/// it is NOT posted to the chat until the human submits.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(not(feature = "local-voice"), allow(dead_code))]
+pub struct TranscribeProgress {
+	pub text: String,
+	pub done: u64,
+	pub total: u64,
+}
+
 /// Presentation metadata for the active model. Kept feature-independent so the
 /// status command + Models page work in any build. The download URL + file names
 /// live in the `local-voice` `imp` module (they need the engine to be useful).
@@ -108,6 +126,38 @@ pub async fn transcribe_audio(
 		return Err("on-device voice transcription runs on the primary instance only".into());
 	}
 	imp::transcribe(&app, pcm, sample_rate).await
+}
+
+/// Begin a **live** transcription session for a new recording: loads the model +
+/// VAD if needed and starts the segment-decoding worker. The webview then streams
+/// mic PCM via `asr_stream_feed` and ends with `asr_stream_finish`.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn asr_stream_start(app: AppHandle) -> Result<(), String> {
+	if !instance_enabled() {
+		return Err("on-device voice transcription runs on the primary instance only".into());
+	}
+	imp::stream_start(&app).await
+}
+
+/// Feed one chunk of mic PCM (mono f32 @ 16 kHz) into the live session. Cheap and
+/// fire-and-forget: a Parakeet decode only runs when the VAD closes a segment, and
+/// `asr:transcribe-progress` carries the cumulative partial as it does.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn asr_stream_feed(app: AppHandle, pcm: Vec<f32>, sample_rate: u32) -> Result<(), String> {
+	if !instance_enabled() {
+		return Ok(());
+	}
+	imp::stream_feed(&app, pcm, sample_rate).await
+}
+
+/// End the live session: flush the VAD's trailing speech, decode it, and return the
+/// final `{ transcript, title, summary }`. The caller submits this to the chat.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn asr_stream_finish(app: AppHandle) -> Result<VoiceNote, String> {
+	if !instance_enabled() {
+		return Err("on-device voice transcription runs on the primary instance only".into());
+	}
+	imp::stream_finish(&app).await
 }
 
 /// Kick the first-run model download in the background (no-op without
@@ -238,6 +288,18 @@ mod imp {
 		Err("on-device transcription is not available in this build (enable the `local-voice` feature)".into())
 	}
 
+	pub async fn stream_start(_app: &AppHandle) -> Result<(), String> {
+		Err("on-device transcription is not available in this build (enable the `local-voice` feature)".into())
+	}
+
+	pub async fn stream_feed(_app: &AppHandle, _pcm: Vec<f32>, _sr: u32) -> Result<(), String> {
+		Ok(())
+	}
+
+	pub async fn stream_finish(_app: &AppHandle) -> Result<VoiceNote, String> {
+		Err("on-device transcription is not available in this build (enable the `local-voice` feature)".into())
+	}
+
 	pub fn spawn_download(_app: &AppHandle) {}
 
 	pub fn cancel(_app: &AppHandle) {}
@@ -251,10 +313,15 @@ mod imp {
 	use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 	use std::sync::{Arc, Mutex, OnceLock};
 
-	use aven_ai::stt::{self, DownloadError, ModelSpec, Transcriber};
+	use std::time::{Duration, Instant};
+
+	use aven_ai::stt::{self, DownloadError, ModelSpec, StreamTranscriber, Transcriber, Vad, VadSpec};
 	use tauri::{AppHandle, Emitter};
 
-	use super::{AsrStatus, VoiceNote, DOWNLOAD_EVENT, MODEL_DIR, MODEL_LABEL, MODEL_QUANT};
+	use super::{
+		AsrStatus, TranscribeProgress, VoiceNote, DOWNLOAD_EVENT, MODEL_DIR, MODEL_LABEL,
+		MODEL_QUANT, PROGRESS_EVENT,
+	};
 
 	// Where the model comes from (the URL + file names the engine needs).
 	const MODEL_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2";
@@ -262,6 +329,25 @@ mod imp {
 	const DECODER: &str = "decoder.int8.onnx";
 	const JOINER: &str = "joiner.int8.onnx";
 	const TOKENS: &str = "tokens.txt";
+
+	// Silero VAD v5 — the latest Silero the pinned sherpa-onnx (1.13) can load (v6
+	// changed the model IO and isn't supported here). A ~2 MB bare `.onnx` cached
+	// next to the Parakeet model; used to split long recordings into bounded,
+	// silence-trimmed speech segments so no single decode runs unbounded.
+	const VAD_URL: &str =
+		"https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx";
+	const VAD_FILE: &str = "silero_vad.onnx";
+	/// Hard cap on a single decode window, and the VAD's `max_speech_duration`.
+	const MAX_WINDOW_SECS: f32 = 30.0;
+	/// Overlap between fallback windows / re-split of long speech runs, so a word on
+	/// a cut still lands whole in one window.
+	const OVERLAP_SECS: f32 = 0.5;
+	/// The webview encodes mic audio to 16 kHz mono; the VAD is built to match.
+	const VAD_SAMPLE_RATE: u32 = 16_000;
+
+	fn vad_spec() -> VadSpec {
+		VadSpec { file: VAD_FILE, url: VAD_URL }
+	}
 
 	fn spec() -> ModelSpec {
 		ModelSpec {
@@ -287,6 +373,9 @@ mod imp {
 		download_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 		/// Set when the user cancels, so the blocking download loop bails out.
 		cancelled: AtomicBool,
+		/// Set to abort an in-flight segmented transcription (e.g. the model is
+		/// deleted mid-decode); reset to false at the start of each transcribe.
+		transcribe_cancelled: AtomicBool,
 		/// Bumped on every cancel/delete. A build captures the epoch at its start
 		/// and refuses to publish (status `ready` / cache the model) if it changed
 		/// underneath it — so a cancel/delete during the slow `loading` phase can't
@@ -316,6 +405,51 @@ mod imp {
 	fn build_lock() -> &'static tokio::sync::Mutex<()> {
 		static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
 		LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+	}
+
+	/// The loaded Silero VAD, resettable alongside the recognizer.
+	fn vad_slot() -> &'static tokio::sync::Mutex<Option<Arc<Vad>>> {
+		static VAD: OnceLock<tokio::sync::Mutex<Option<Arc<Vad>>>> = OnceLock::new();
+		VAD.get_or_init(|| tokio::sync::Mutex::new(None))
+	}
+
+	/// Ensure the Silero VAD is downloaded + loaded; cache it in `vad_slot()`.
+	/// Best-effort: any failure returns `None` so transcription falls back to
+	/// fixed-window segmentation (still bounded — never the old unbounded decode).
+	async fn ensure_vad(app: &AppHandle) -> Option<Arc<Vad>> {
+		if let Some(v) = vad_slot().lock().await.clone() {
+			return Some(v);
+		}
+		let root = tauri_plugin_self::paths::models_dir(app).ok()?;
+		if !vad_spec().present(&root) {
+			let root2 = root.clone();
+			let res = tokio::task::spawn_blocking(move || {
+				stt::download_file(vad_spec().url, &vad_spec().path(&root2), || false, |_, _| {})
+			})
+			.await
+			.ok()?;
+			if let Err(e) = res {
+				log::warn!(target: "avenos::asr", "Silero VAD download failed: {e}");
+				return None;
+			}
+		}
+		let root3 = root.clone();
+		let loaded = tokio::task::spawn_blocking(move || {
+			Vad::load(&vad_spec(), &root3, VAD_SAMPLE_RATE, MAX_WINDOW_SECS)
+		})
+		.await
+		.ok()?;
+		match loaded {
+			Ok(v) => {
+				let arc = Arc::new(v);
+				*vad_slot().lock().await = Some(arc.clone());
+				Some(arc)
+			}
+			Err(e) => {
+				log::warn!(target: "avenos::asr", "Silero VAD load failed: {e}");
+				None
+			}
+		}
 	}
 
 	fn snapshot() -> AsrStatus {
@@ -419,6 +553,132 @@ mod imp {
 		}
 	}
 
+	/// A message to the live-transcription worker thread.
+	enum StreamMsg {
+		Pcm(Vec<f32>),
+		Finish,
+	}
+
+	/// A running live-transcription session: an ordered channel to the worker plus
+	/// the worker's final-transcript receiver. One channel keeps feeds in order
+	/// (decoding off the IPC threads, never reordered).
+	struct StreamSession {
+		tx: std::sync::mpsc::Sender<StreamMsg>,
+		result_rx: std::sync::Mutex<std::sync::mpsc::Receiver<String>>,
+	}
+
+	fn stream_slot() -> &'static std::sync::Mutex<Option<StreamSession>> {
+		static SLOT: OnceLock<std::sync::Mutex<Option<StreamSession>>> = OnceLock::new();
+		SLOT.get_or_init(|| std::sync::Mutex::new(None))
+	}
+
+	/// Start a live session: ensure the model + VAD, spawn a worker that owns the
+	/// `StreamTranscriber`, and stash its channels. Any prior session is dropped.
+	pub async fn stream_start(app: &AppHandle) -> Result<(), String> {
+		let model = ensure_model(app).await?;
+		// A streaming session needs its OWN detector — VAD state is per-stream and
+		// can't be shared with the cached offline `ensure_vad` instance. Best-effort:
+		// without it the worker buffers and decodes (bounded) on finish.
+		let vad = load_fresh_vad(app).await;
+
+		state().transcribe_cancelled.store(false, Ordering::Relaxed);
+
+		let (tx, rx) = std::sync::mpsc::channel::<StreamMsg>();
+		let (res_tx, res_rx) = std::sync::mpsc::channel::<String>();
+		let app2 = app.clone();
+		std::thread::spawn(move || {
+			let mut st = StreamTranscriber::new(
+				model,
+				vad,
+				VAD_SAMPLE_RATE,
+				MAX_WINDOW_SECS,
+				OVERLAP_SECS,
+			);
+			while let Ok(msg) = rx.recv() {
+				if state().transcribe_cancelled.load(Ordering::Relaxed) {
+					break;
+				}
+				match msg {
+					StreamMsg::Pcm(pcm) => {
+						if let Some(text) = st.accept(&pcm) {
+							let _ = app2.emit(
+								PROGRESS_EVENT,
+								TranscribeProgress {
+									text,
+									done: st.segment_count() as u64,
+									total: 0,
+								},
+							);
+						}
+					}
+					StreamMsg::Finish => break,
+				}
+			}
+			let _ = res_tx.send(st.finish());
+		});
+
+		*stream_slot().lock().unwrap() =
+			Some(StreamSession { tx, result_rx: std::sync::Mutex::new(res_rx) });
+		Ok(())
+	}
+
+	/// Load a fresh (un-cached) Silero VAD for a streaming session, downloading it
+	/// first if needed. `None` on any failure → the worker falls back to
+	/// buffer-then-decode (still bounded; never the old unbounded decode).
+	async fn load_fresh_vad(app: &AppHandle) -> Option<Vad> {
+		let root = tauri_plugin_self::paths::models_dir(app).ok()?;
+		if !vad_spec().present(&root) {
+			let root2 = root.clone();
+			let res = tokio::task::spawn_blocking(move || {
+				stt::download_file(vad_spec().url, &vad_spec().path(&root2), || false, |_, _| {})
+			})
+			.await
+			.ok()?;
+			if res.is_err() {
+				return None;
+			}
+		}
+		let root3 = root.clone();
+		tokio::task::spawn_blocking(move || {
+			Vad::load(&vad_spec(), &root3, VAD_SAMPLE_RATE, MAX_WINDOW_SECS).ok()
+		})
+		.await
+		.ok()
+		.flatten()
+	}
+
+	/// Feed a chunk into the live worker (ordered, non-blocking). The webview sends
+	/// 16 kHz mono PCM; the worker is built for that rate.
+	pub async fn stream_feed(_app: &AppHandle, pcm: Vec<f32>, _sample_rate: u32) -> Result<(), String> {
+		if let Some(s) = stream_slot().lock().unwrap().as_ref() {
+			let _ = s.tx.send(StreamMsg::Pcm(pcm));
+		}
+		Ok(())
+	}
+
+	/// Signal end-of-stream and wait for the worker's final transcript.
+	pub async fn stream_finish(_app: &AppHandle) -> Result<VoiceNote, String> {
+		let session = stream_slot().lock().unwrap().take();
+		let Some(session) = session else {
+			return Err("no active transcription session".into());
+		};
+		let _ = session.tx.send(StreamMsg::Finish);
+		let text = tokio::task::spawn_blocking(move || {
+			session
+				.result_rx
+				.lock()
+				.unwrap()
+				.recv()
+				.map_err(|e| format!("stream result: {e}"))
+		})
+		.await
+		.map_err(|e| format!("stream finish task: {e}"))??;
+
+		let transcript = text.trim().to_string();
+		let title = make_title(&transcript);
+		Ok(VoiceNote { transcript, title, summary: String::new() })
+	}
+
 	pub fn spawn_download(app: &AppHandle) {
 		{
 			let st = state().status.lock().unwrap();
@@ -442,11 +702,20 @@ mod imp {
 		let s = state();
 		s.epoch.fetch_add(1, Ordering::SeqCst);
 		s.cancelled.store(true, Ordering::Relaxed);
+		// Abort any in-flight segmented transcription too (e.g. model being deleted).
+		s.transcribe_cancelled.store(true, Ordering::Relaxed);
 		if let Some(h) = s.download_task.lock().unwrap().take() {
 			h.abort();
 		}
 		if drop_loaded {
 			if let Ok(mut slot) = model_slot().try_lock() {
+				*slot = None;
+			}
+			if let Ok(mut slot) = vad_slot().try_lock() {
+				*slot = None;
+			}
+			// Drop any live session; its worker sees `transcribe_cancelled` and exits.
+			if let Ok(mut slot) = stream_slot().try_lock() {
 				*slot = None;
 			}
 		}
@@ -479,9 +748,40 @@ mod imp {
 		sample_rate: u32,
 	) -> Result<VoiceNote, String> {
 		let model = ensure_model(app).await?;
-		let text = tokio::task::spawn_blocking(move || model.transcribe(&pcm, sample_rate))
-			.await
-			.map_err(|e| format!("transcribe task: {e}"))?;
+		// Best-effort VAD: on failure we fall back to bounded fixed windows.
+		let vad = ensure_vad(app).await;
+
+		// Arm cancellation for this run (a later cancel/delete flips it true).
+		state().transcribe_cancelled.store(false, Ordering::Relaxed);
+
+		let app2 = app.clone();
+		let text = tokio::task::spawn_blocking(move || {
+			let mut last = Instant::now();
+			model.transcribe_segmented(
+				&pcm,
+				sample_rate,
+				vad.as_deref(),
+				MAX_WINDOW_SECS,
+				OVERLAP_SECS,
+				&|| state().transcribe_cancelled.load(Ordering::Relaxed),
+				&mut |p| {
+					// Throttle to ~7/s, but always emit the final segment.
+					if p.index == p.total || last.elapsed() >= Duration::from_millis(140) {
+						last = Instant::now();
+						let _ = app2.emit(
+							PROGRESS_EVENT,
+							TranscribeProgress {
+								text: p.text,
+								done: p.index as u64,
+								total: p.total as u64,
+							},
+						);
+					}
+				},
+			)
+		})
+		.await
+		.map_err(|e| format!("transcribe task: {e}"))?;
 
 		let transcript = text.trim().to_string();
 		let title = make_title(&transcript);

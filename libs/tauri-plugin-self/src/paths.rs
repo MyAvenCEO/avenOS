@@ -56,6 +56,21 @@ pub fn aven_os_app_base<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf
 	Ok(base)
 }
 
+/// `<Documents>/.avenOS/ceo.aven/mainnet/alberobello` — the mainnet (alberobello) data root.
+/// A separate world from the testnet avenDB identity root: the mainnet app is betterauth-based
+/// with NO vault/crypto, so this never touches `NETWORK_SEED`. Used by the website composer's
+/// spark storage. Ignores `AVENOS_DATA_DIR_OVERRIDE` (that targets the avenDB identity root).
+/// board 0055.
+pub fn mainnet_app_base<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+	let docs = user_documents_dir(app)?;
+	let mut base = docs.join(".avenOS");
+	for seg in crate::network::MAINNET_PATH_SEGMENTS {
+		base = base.join(seg);
+	}
+	fs::create_dir_all(&base).map_err(|e| format!("create_dir_all {}: {e}", base.display()))?;
+	Ok(base)
+}
+
 /// `<Documents>/.avenOS/<network>/vaults/` — the container of one `<slug>/` dir per
 /// peer (every client device AND server node is a peer). On-disk name is `vaults`.
 pub fn vaults_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {

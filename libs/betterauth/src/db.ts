@@ -108,8 +108,55 @@ export interface PolarEventTable {
 	received_at: Generated<Date>
 }
 
+// E2EE secrets vault (board 0055). One vault per user; the master DEK is AES-GCM-wrapped under
+// the passkey-PRF-derived KEK (HKDF) with a PINNED salt. The server is BLIND: it only ever
+// stores ciphertext + wrapped key + salt + nonces — never the token, DEK, KEK, or PRF.
+export interface VaultTable {
+	id: string
+	user_id: string
+	credential_id: string
+	prf_salt: string
+	wrapped_master_key: string
+	wrap_nonce: string
+	alg: string
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
+export interface SecretTable {
+	id: string
+	vault_id: string
+	user_id: string
+	kind: string
+	label: string | null
+	ciphertext: string
+	nonce: string
+	alg: string
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
+// Inbound email received via the Postmark inbound webhook (POST /webhooks/inbox/mail). We store the
+// parsed headline fields for querying PLUS the full raw MIME (`raw_email`) and the entire Postmark
+// JSON (`payload`) so nothing is lost. Deduped on Postmark's `message_id`. board 0060.
+export interface InboundEmailTable {
+	id: string
+	message_id: string | null
+	from_email: string | null
+	from_name: string | null
+	to_email: string | null
+	subject: string | null
+	text_body: string | null
+	html_body: string | null
+	mailbox_hash: string | null
+	raw_email: string | null
+	payload: unknown
+	received_at: Generated<Date>
+}
+
 export interface Database {
 	ai_usage: AiUsageTable
+	inbound_email: InboundEmailTable
 	model_pricing: ModelPricingTable
 	ai_chat_session: AiChatSessionTable
 	ai_message: AiMessageTable
@@ -119,6 +166,8 @@ export interface Database {
 	data_schema_history: DataSchemaHistoryTable
 	data_value_history: DataValueHistoryTable
 	polar_event: PolarEventTable
+	vault: VaultTable
+	secret: SecretTable
 }
 
 let cached: Kysely<Database> | null = null

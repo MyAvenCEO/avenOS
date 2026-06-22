@@ -1,3 +1,4 @@
+import { passkey } from '@better-auth/passkey'
 import { polar } from '@polar-sh/better-auth'
 import { Polar } from '@polar-sh/sdk'
 import { betterAuth } from 'better-auth'
@@ -47,9 +48,10 @@ if (!polarToken) {
 export const polarClient = polarToken
 	? new Polar({
 			accessToken: polarToken,
-			// Default to production (polar.sh) — tokens minted there 401 against sandbox.
-			// Set POLAR_SERVER=sandbox explicitly for sandbox.polar.sh tokens.
-			server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'production'
+			// Default to SANDBOX (sandbox.polar.sh) — dev/next tokens are sandbox-minted. Production
+			// is OPT-IN: set POLAR_SERVER=production explicitly (with a production token) for the
+			// main/production deploy. A token only works against the env it was minted in. board 0050.
+			server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'sandbox'
 		})
 	: null
 const polarPlugins = polarClient
@@ -127,8 +129,9 @@ export const auth = betterAuth({
 			clientSecret: requireEnv('GOOGLE_CLIENT_SECRET')
 		}
 	},
-	// Product tier on the user (free | avenCITY). Assigned by an admin; gates the weekly
-	// AI credit allowance. `input: false` so it can't be set by the client at sign-up. board 0052.
+	// Product tier on the user (free | early-bird comp grant | avenME/avenFOUNDER/avenCEO).
+	// Assigned by an admin or a Polar checkout; gates the weekly AI credit allowance.
+	// `input: false` so it can't be set by the client at sign-up. board 0052/0055.
 	user: {
 		additionalFields: {
 			tier: { type: 'string', required: false, defaultValue: 'free', input: false },
@@ -181,7 +184,19 @@ export const auth = betterAuth({
 	// `admin` adds a `role` field (user|admin) + admin-gated user management
 	// (list/setRole/ban/impersonate). The first user to sign up is auto-promoted to admin
 	// via the databaseHooks below; every later signup is a normal user. board 0052.
-	plugins: [bearer(), admin(), ...polarPlugins],
+	// `passkey` (board 0055): a passkey linked next to Google = the avenFOUNDER→avenCEO 2nd
+	// factor, AND the source of the vault-unlock PRF. rp.id = the AASA host; origin = the app's
+	// WebAuthn ceremony origins (tauri://localhost etc.). Runs inside the native Tauri webview.
+	plugins: [
+		bearer(),
+		admin(),
+		passkey({
+			rpID: optionalEnv('PASSKEY_RP_ID') ?? 'api.next.aven.ceo',
+			rpName: 'avenOS',
+			origin: TRUSTED_ORIGINS
+		}),
+		...polarPlugins
+	],
 	advanced: {
 		defaultCookieAttributes: {
 			sameSite: 'none',

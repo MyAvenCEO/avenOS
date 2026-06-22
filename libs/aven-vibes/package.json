@@ -17,6 +17,7 @@
 		"test": "bun test tests"
 	},
 	"dependencies": {
+		"@avenos/skills": "workspace:*",
 		"dompurify": "^3.3.3",
 		"marked": "^15.0.12"
 	},

@@ -38,6 +38,39 @@ export type AsrEvent = {
 export const ASR_MODEL_LABEL = 'Parakeet TDT 0.6b v3'
 export const ASR_EVENT = 'asr:model-download'
 export const ASR_STATUS_COMMAND = 'asr_status'
+/** Live partial-transcript event emitted per decoded segment during transcription. */
+export const ASR_PROGRESS_EVENT = 'asr:transcribe-progress'
+
+/** Payload of the `asr:transcribe-progress` Tauri event. */
+export type TranscribeProgressEvent = {
+	/** Cumulative transcript decoded so far. */
+	text?: string
+	/** 1-based index of the segment just decoded. */
+	done?: number
+	/** Total segments to decode. */
+	total?: number
+}
+
+/** A live transcription preview: the cumulative text plus a [0,1] fraction. */
+export type TranscribeProgress = {
+	text: string
+	/** Decode fraction in [0, 1], or `null` when the segment count is unknown. */
+	fraction: number | null
+}
+
+/**
+ * Pure: fold a backend `asr:transcribe-progress` event into preview state. The
+ * `text` is shown as a non-interactive preview while transcribing; it is NOT
+ * posted to the chat until decode completes and the composer submits.
+ */
+export function reduceTranscribeProgress(ev: TranscribeProgressEvent): TranscribeProgress {
+	const total = ev.total ?? 0
+	const done = ev.done ?? 0
+	return {
+		text: (ev.text ?? '').trim(),
+		fraction: total > 0 ? Math.max(0, Math.min(1, done / total)) : null
+	}
+}
 
 export const initialAsrState: AsrState = {
 	status: 'idle',

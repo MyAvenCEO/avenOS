@@ -10,8 +10,13 @@ use sha2::Sha256;
 /// User-facing network id (also HKDF root `info` + salt for device root).
 pub const NETWORK_SEED: &str = "ceo.aven/testnet/abagana";
 
-/// Path segments under `<Documents>/.avenOS/`.
+/// Path segments under `<Documents>/.avenOS/` for the testnet (abagana) avenDB identity root.
 pub const NETWORK_PATH_SEGMENTS: &[&str] = &["ceo.aven", "testnet", "abagana"];
+
+/// Mainnet (alberobello) data-root segments — the betterauth app world (Chat/Vibes/DB/Fly/
+/// Composer + accounts), which has NO avenDB vault/crypto. Mirrors
+/// `app/src/lib/settings/network.ts` NETWORKS.mainnet.pathSegments. board 0055.
+pub const MAINNET_PATH_SEGMENTS: &[&str] = &["ceo.aven", "mainnet", "alberobello"];
 
 /// Default hosted relay for this network.
 pub const RELAY_URL: &str = "relay.aven.ceo";
