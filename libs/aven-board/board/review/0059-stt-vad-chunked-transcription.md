@@ -225,13 +225,19 @@ posts on stop without hanging.
 ## Hand-off
 
 ```
-/aven-review 0055
+/aven-review 0059
 ```
 
 ## Progress log
 
 Newest entry first.
 
+- `2026-06-22` — **Merged `dev` (365 commits) into the feature branch** to update
+  it and re-verify against current `dev`. Only `Cargo.lock` + `bun.lock`
+  conflicted (took dev's; no new deps added) — all source auto-merged.
+  Re-verified on the merged tree: `svelte-check` 0 errors, `bun test tests` 35
+  pass, src-tauri `cargo check --features local-voice` (see below).
+  **Renumbered 0055 → 0059** — `dev` already used 0055 (×2) and up to 0058.
 - `2026-06-22` — **Built & all gates green; moved build → review.** Final
   verification: aven-ai `cargo test --lib --features stt` 5 pass + clippy clean;
   src-tauri `cargo check --features local-voice` **exit 0** (+ clippy clean for
