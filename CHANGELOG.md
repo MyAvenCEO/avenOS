@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.6...v) (2026-06-22)
+
+
+### Bug Fixes
+
+* **ci:** bake the full -next.N version into mac/ios builds for the Profile ([#24](https://github.com/MyAvenCEO/avenOS/issues/24)) ([b8ea59c](https://github.com/MyAvenCEO/avenOS/commit/b8ea59c5c88b24bb8a8c9ef29a4d0bc11010624e))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.5...v) (2026-06-22)
 
 
