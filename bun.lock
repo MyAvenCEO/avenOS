@@ -19,7 +19,7 @@
     },
     "app": {
       "name": "@AvenOS/app",
-      "version": "26.6.1-next.19",
+      "version": "26.6.19-next.7",
       "dependencies": {
         "@avenos/aven-board": "workspace:*",
         "@avenos/aven-city": "workspace:*",
@@ -54,11 +54,11 @@
     },
     "docs": {
       "name": "@avenos/docs",
-      "version": "26.6.1-next.19",
+      "version": "26.6.19-next.7",
     },
     "libs/aven-board": {
       "name": "@avenos/aven-board",
-      "version": "26.6.1-next.19",
+      "version": "26.6.19-next.7",
       "dependencies": {
         "dompurify": "^3",
         "github-slugger": "^2",
@@ -71,7 +71,7 @@
     },
     "libs/aven-city": {
       "name": "@avenos/aven-city",
-      "version": "26.6.1-next.19",
+      "version": "26.6.19-next.7",
       "dependencies": {
         "@threlte/core": "^8.0.0",
         "@threlte/extras": "^9.0.0",
@@ -84,11 +84,11 @@
     },
     "libs/aven-skills": {
       "name": "@avenos/aven-skills",
-      "version": "26.6.1-next.19",
+      "version": "26.6.19-next.7",
     },
     "libs/aven-ui": {
       "name": "@avenos/aven-ui",
-      "version": "26.6.1-next.19",
+      "version": "26.6.19-next.7",
       "dependencies": {
         "dompurify": "^3.3.3",
         "marked": "^15.0.12",
@@ -96,7 +96,7 @@
     },
     "libs/aven-vibes": {
       "name": "@avenos/aven-vibes",
-      "version": "26.6.1-next.17",
+      "version": "26.6.19-next.7",
       "dependencies": {
         "dompurify": "^3.3.3",
         "marked": "^15.0.12",
@@ -107,7 +107,7 @@
     },
     "libs/aven-website": {
       "name": "@avenos/aven-website",
-      "version": "26.6.1-next.19",
+      "version": "26.6.19-next.7",
       "devDependencies": {
         "@biomejs/biome": "^2.4.14",
         "@sveltejs/adapter-auto": "^7.0.1",
@@ -124,7 +124,7 @@
     },
     "libs/betterauth": {
       "name": "@avenos/betterauth",
-      "version": "26.6.1-next.19",
+      "version": "26.6.19-next.7",
       "dependencies": {
         "@avenos/aven-vibes": "workspace:*",
         "@neondatabase/serverless": "^0.10.4",

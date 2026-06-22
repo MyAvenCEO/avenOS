@@ -128,6 +128,38 @@ pub async fn transcribe_audio(
 	imp::transcribe(&app, pcm, sample_rate).await
 }
 
+/// Begin a **live** transcription session for a new recording: loads the model +
+/// VAD if needed and starts the segment-decoding worker. The webview then streams
+/// mic PCM via `asr_stream_feed` and ends with `asr_stream_finish`.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn asr_stream_start(app: AppHandle) -> Result<(), String> {
+	if !instance_enabled() {
+		return Err("on-device voice transcription runs on the primary instance only".into());
+	}
+	imp::stream_start(&app).await
+}
+
+/// Feed one chunk of mic PCM (mono f32 @ 16 kHz) into the live session. Cheap and
+/// fire-and-forget: a Parakeet decode only runs when the VAD closes a segment, and
+/// `asr:transcribe-progress` carries the cumulative partial as it does.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn asr_stream_feed(app: AppHandle, pcm: Vec<f32>, sample_rate: u32) -> Result<(), String> {
+	if !instance_enabled() {
+		return Ok(());
+	}
+	imp::stream_feed(&app, pcm, sample_rate).await
+}
+
+/// End the live session: flush the VAD's trailing speech, decode it, and return the
+/// final `{ transcript, title, summary }`. The caller submits this to the chat.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn asr_stream_finish(app: AppHandle) -> Result<VoiceNote, String> {
+	if !instance_enabled() {
+		return Err("on-device voice transcription runs on the primary instance only".into());
+	}
+	imp::stream_finish(&app).await
+}
+
 /// Kick the first-run model download in the background (no-op without
 /// `local-voice`, or on a secondary dev instance).
 pub fn spawn_model_download(app: &AppHandle) {
@@ -256,6 +288,18 @@ mod imp {
 		Err("on-device transcription is not available in this build (enable the `local-voice` feature)".into())
 	}
 
+	pub async fn stream_start(_app: &AppHandle) -> Result<(), String> {
+		Err("on-device transcription is not available in this build (enable the `local-voice` feature)".into())
+	}
+
+	pub async fn stream_feed(_app: &AppHandle, _pcm: Vec<f32>, _sr: u32) -> Result<(), String> {
+		Ok(())
+	}
+
+	pub async fn stream_finish(_app: &AppHandle) -> Result<VoiceNote, String> {
+		Err("on-device transcription is not available in this build (enable the `local-voice` feature)".into())
+	}
+
 	pub fn spawn_download(_app: &AppHandle) {}
 
 	pub fn cancel(_app: &AppHandle) {}
@@ -271,7 +315,7 @@ mod imp {
 
 	use std::time::{Duration, Instant};
 
-	use aven_ai::stt::{self, DownloadError, ModelSpec, Transcriber, Vad, VadSpec};
+	use aven_ai::stt::{self, DownloadError, ModelSpec, StreamTranscriber, Transcriber, Vad, VadSpec};
 	use tauri::{AppHandle, Emitter};
 
 	use super::{
@@ -509,6 +553,132 @@ mod imp {
 		}
 	}
 
+	/// A message to the live-transcription worker thread.
+	enum StreamMsg {
+		Pcm(Vec<f32>),
+		Finish,
+	}
+
+	/// A running live-transcription session: an ordered channel to the worker plus
+	/// the worker's final-transcript receiver. One channel keeps feeds in order
+	/// (decoding off the IPC threads, never reordered).
+	struct StreamSession {
+		tx: std::sync::mpsc::Sender<StreamMsg>,
+		result_rx: std::sync::Mutex<std::sync::mpsc::Receiver<String>>,
+	}
+
+	fn stream_slot() -> &'static std::sync::Mutex<Option<StreamSession>> {
+		static SLOT: OnceLock<std::sync::Mutex<Option<StreamSession>>> = OnceLock::new();
+		SLOT.get_or_init(|| std::sync::Mutex::new(None))
+	}
+
+	/// Start a live session: ensure the model + VAD, spawn a worker that owns the
+	/// `StreamTranscriber`, and stash its channels. Any prior session is dropped.
+	pub async fn stream_start(app: &AppHandle) -> Result<(), String> {
+		let model = ensure_model(app).await?;
+		// A streaming session needs its OWN detector — VAD state is per-stream and
+		// can't be shared with the cached offline `ensure_vad` instance. Best-effort:
+		// without it the worker buffers and decodes (bounded) on finish.
+		let vad = load_fresh_vad(app).await;
+
+		state().transcribe_cancelled.store(false, Ordering::Relaxed);
+
+		let (tx, rx) = std::sync::mpsc::channel::<StreamMsg>();
+		let (res_tx, res_rx) = std::sync::mpsc::channel::<String>();
+		let app2 = app.clone();
+		std::thread::spawn(move || {
+			let mut st = StreamTranscriber::new(
+				model,
+				vad,
+				VAD_SAMPLE_RATE,
+				MAX_WINDOW_SECS,
+				OVERLAP_SECS,
+			);
+			while let Ok(msg) = rx.recv() {
+				if state().transcribe_cancelled.load(Ordering::Relaxed) {
+					break;
+				}
+				match msg {
+					StreamMsg::Pcm(pcm) => {
+						if let Some(text) = st.accept(&pcm) {
+							let _ = app2.emit(
+								PROGRESS_EVENT,
+								TranscribeProgress {
+									text,
+									done: st.segment_count() as u64,
+									total: 0,
+								},
+							);
+						}
+					}
+					StreamMsg::Finish => break,
+				}
+			}
+			let _ = res_tx.send(st.finish());
+		});
+
+		*stream_slot().lock().unwrap() =
+			Some(StreamSession { tx, result_rx: std::sync::Mutex::new(res_rx) });
+		Ok(())
+	}
+
+	/// Load a fresh (un-cached) Silero VAD for a streaming session, downloading it
+	/// first if needed. `None` on any failure → the worker falls back to
+	/// buffer-then-decode (still bounded; never the old unbounded decode).
+	async fn load_fresh_vad(app: &AppHandle) -> Option<Vad> {
+		let root = tauri_plugin_self::paths::models_dir(app).ok()?;
+		if !vad_spec().present(&root) {
+			let root2 = root.clone();
+			let res = tokio::task::spawn_blocking(move || {
+				stt::download_file(vad_spec().url, &vad_spec().path(&root2), || false, |_, _| {})
+			})
+			.await
+			.ok()?;
+			if res.is_err() {
+				return None;
+			}
+		}
+		let root3 = root.clone();
+		tokio::task::spawn_blocking(move || {
+			Vad::load(&vad_spec(), &root3, VAD_SAMPLE_RATE, MAX_WINDOW_SECS).ok()
+		})
+		.await
+		.ok()
+		.flatten()
+	}
+
+	/// Feed a chunk into the live worker (ordered, non-blocking). The webview sends
+	/// 16 kHz mono PCM; the worker is built for that rate.
+	pub async fn stream_feed(_app: &AppHandle, pcm: Vec<f32>, _sample_rate: u32) -> Result<(), String> {
+		if let Some(s) = stream_slot().lock().unwrap().as_ref() {
+			let _ = s.tx.send(StreamMsg::Pcm(pcm));
+		}
+		Ok(())
+	}
+
+	/// Signal end-of-stream and wait for the worker's final transcript.
+	pub async fn stream_finish(_app: &AppHandle) -> Result<VoiceNote, String> {
+		let session = stream_slot().lock().unwrap().take();
+		let Some(session) = session else {
+			return Err("no active transcription session".into());
+		};
+		let _ = session.tx.send(StreamMsg::Finish);
+		let text = tokio::task::spawn_blocking(move || {
+			session
+				.result_rx
+				.lock()
+				.unwrap()
+				.recv()
+				.map_err(|e| format!("stream result: {e}"))
+		})
+		.await
+		.map_err(|e| format!("stream finish task: {e}"))??;
+
+		let transcript = text.trim().to_string();
+		let title = make_title(&transcript);
+		Ok(VoiceNote { transcript, title, summary: String::new() })
+	}
+
 	pub fn spawn_download(app: &AppHandle) {
 		{
 			let st = state().status.lock().unwrap();
@@ -542,6 +712,10 @@ mod imp {
 				*slot = None;
 			}
 			if let Ok(mut slot) = vad_slot().try_lock() {
+				*slot = None;
+			}
+			// Drop any live session; its worker sees `transcribe_cancelled` and exits.
+			if let Ok(mut slot) = stream_slot().try_lock() {
 				*slot = None;
 			}
 		}

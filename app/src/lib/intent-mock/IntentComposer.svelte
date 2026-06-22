@@ -9,9 +9,15 @@ import {
 	voicePrep as voicePrepOf,
 	voiceUnavailableReason as voiceUnavailableReasonOf
 } from '$lib/asr/model-download-store'
-import { encodeForModel } from '$lib/intent-mock/audio-encode'
+import { downsample, encodeForModel, TARGET_SAMPLE_RATE } from '$lib/intent-mock/audio-encode'
 import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
-import { transcribeAudio } from '$lib/intent-mock/transcribe'
+import {
+	feedLiveTranscription,
+	finishLiveTranscription,
+	startLiveTranscription,
+	subscribeTranscribeProgress,
+	transcribeAudio
+} from '$lib/intent-mock/transcribe'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
@@ -518,6 +524,18 @@ let processorNode: ScriptProcessorNode | null = null
 let muteNode: GainNode | null = null
 let pcmChunks: Float32Array[] = []
 let recordedSampleRate = 0
+/** Live partial transcript, streamed while recording; shown as a preview, NOT posted. */
+let voicePartial = $state('')
+/** True between `startLiveTranscription` and `finishLiveTranscription`. */
+let liveStreaming = false
+/** Unsubscribe from the live `asr:transcribe-progress` stream. */
+let stopProgress: (() => void) | null = null
+
+// The default on-device route (Tauri runtime, no caller-injected transcriber) uses
+// the live VAD-streaming path: PCM is fed to the backend during capture and the
+// transcript streams back as a preview. A caller-supplied `onTranscribeAudio` keeps
+// the single-shot offline path.
+const useLiveStream = $derived(tauriRuntime && !onTranscribeAudio)
 
 /**
  * Create + resume the AudioContext INSIDE the user-gesture call stack (the mic tap). A context
@@ -532,7 +550,14 @@ function armAudioContext() {
 		const Ctx: typeof AudioContext =
 			window.AudioContext ??
 			(window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-		audioCtx = new Ctx()
+		// Prefer a 16 kHz context so captured PCM matches the model/VAD rate with no
+		// resampling; fall back to the default rate (we downsample per chunk) if the
+		// platform rejects the request.
+		try {
+			audioCtx = new Ctx({ sampleRate: TARGET_SAMPLE_RATE })
+		} catch {
+			audioCtx = new Ctx()
+		}
 		if (audioCtx.state === 'suspended') void audioCtx.resume()
 	} catch {
 		audioCtx = null
@@ -561,10 +586,31 @@ async function beginCapture() {
 		// Resume in case it came up (or was left) suspended — mirrors the TTS playback path.
 		if (audioCtx.state === 'suspended') await audioCtx.resume()
 		recordedSampleRate = audioCtx.sampleRate
+		// Live path: open the streaming session + subscribe to partials BEFORE wiring
+		// the processor, so the first fed chunks have somewhere to land.
+		if (useLiveStream) {
+			voicePartial = ''
+			try {
+				await startLiveTranscription()
+				stopProgress = await subscribeTranscribeProgress((p) => {
+					voicePartial = p.text
+				})
+				liveStreaming = true
+			} catch {
+				stopProgress?.()
+				stopProgress = null
+				liveStreaming = false
+			}
+		}
 		sourceNode = audioCtx.createMediaStreamSource(stream)
 		processorNode = audioCtx.createScriptProcessor(4096, 1, 1)
 		processorNode.onaudioprocess = (e) => {
-			pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)))
+			const input = new Float32Array(e.inputBuffer.getChannelData(0))
+			pcmChunks.push(input)
+			// Stream each chunk live at 16 kHz; the VAD closes segments on pauses.
+			if (liveStreaming) {
+				void feedLiveTranscription(downsample(input, recordedSampleRate, TARGET_SAMPLE_RATE))
+			}
 		}
 		// Sink through a muted gain node so ScriptProcessor fires without feedback.
 		muteNode = audioCtx.createGain()
@@ -606,6 +652,12 @@ function teardownRecording() {
 	audioCtx = null
 	pcmChunks = []
 	recordedSampleRate = 0
+	// Stop the live preview subscription (the Rust session is ended/aborted by the
+	// caller — commit finishes it, cancel drains it).
+	stopProgress?.()
+	stopProgress = null
+	voicePartial = ''
+	liveStreaming = false
 }
 
 function openListening() {
@@ -651,6 +703,9 @@ function dismissPreparing() {
 }
 
 async function stopListening() {
+	// Cancelled (not submitted): drain the live session so its worker exits and the
+	// transcript is discarded — nothing is posted to the chat.
+	if (liveStreaming) void finishLiveTranscription().catch(() => {})
 	teardownRecording()
 	autoRecordWhenReady = false
 	suppressTextEffect = true
@@ -688,8 +743,11 @@ async function finalizeSubmitCollapseAfterParent() {
 async function commitVoiceNote() {
 	if (disabled || submitBusy || transcribing) return
 
-	// Capture the audio before tearing down the listening UI (real path only).
-	const captured = effectiveTranscribe ? collectRecording() : null
+	// Live path: the audio was already streamed during capture — just stop the mic.
+	// Offline path: encode the captured buffer before tearing down the listening UI.
+	const wasLive = useLiveStream && liveStreaming
+	const captured = effectiveTranscribe && !wasLive ? collectRecording() : null
+	if (wasLive) teardownRecording()
 
 	suppressTextEffect = true
 	text = ''
@@ -700,8 +758,24 @@ async function commitVoiceNote() {
 	mode = 'collapsed'
 	openMicCooldownUntilMs = performance.now() + 280
 
-	if (effectiveTranscribe) {
-		// On-device transcription — never mock. Nothing captured → post nothing.
+	if (wasLive) {
+		// Finish the live session: flush the trailing speech, get the full transcript,
+		// and only NOW submit to the chat (partials were preview-only).
+		transcribing = true
+		try {
+			const note = await finishLiveTranscription()
+			if (note?.transcript) onSubmitMessage?.(note.transcript, [])
+		} catch (e) {
+			onTranscribeError?.(e instanceof Error ? e.message : String(e))
+		} finally {
+			transcribing = false
+			liveStreaming = false
+			voicePartial = ''
+			stopProgress?.()
+			stopProgress = null
+		}
+	} else if (effectiveTranscribe) {
+		// Single-shot offline transcription — never mock. Nothing captured → post nothing.
 		if (captured) {
 			transcribing = true
 			try {
@@ -935,6 +1009,16 @@ const pillClass = $derived.by(() => {
 			</button>
 		</div>
 	{:else if mode === 'listening'}
+		{#if voicePartial}
+			<!-- Live transcript preview: streams as the VAD closes each segment on a
+			     pause. Preview only — it is posted to the chat solely on submit. -->
+			<div
+				class="mx-auto mb-1.5 max-h-20 max-w-[min(36rem,80vw)] overflow-y-auto rounded-2xl bg-muted/40 px-3 py-2 text-left text-sm leading-snug text-foreground/80 max-sm:max-w-none"
+				aria-live="polite"
+			>
+				{voicePartial}
+			</div>
+		{/if}
 		<div class={pillClass} role="group">
 			<div
 				class={`flex shrink-0 items-center justify-start ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}

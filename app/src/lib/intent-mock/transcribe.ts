@@ -25,17 +25,55 @@ type Invoker = (cmd: string, args: Record<string, unknown>) => Promise<unknown>
 export type ProgressSink = (p: TranscribeProgress) => void
 
 /**
- * Subscribe to `asr:transcribe-progress` for the duration of one transcription,
- * forwarding each event to `onProgress`. No-op (returns a no-op unsubscriber)
- * outside the Tauri runtime so this stays unit-testable.
+ * Subscribe to `asr:transcribe-progress`, forwarding each event to `onProgress`.
+ * Returns an unsubscriber. No-op outside the Tauri runtime so this stays
+ * unit-testable. Used both for the offline path and live streaming.
  */
-async function listenForProgress(onProgress: ProgressSink): Promise<() => void> {
+export async function subscribeTranscribeProgress(onProgress: ProgressSink): Promise<() => void> {
 	if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return () => {}
 	const { listen } = await import('@tauri-apps/api/event')
 	const unlisten = await listen<TranscribeProgressEvent>(ASR_PROGRESS_EVENT, (e) => {
 		if (e.payload) onProgress(reduceTranscribeProgress(e.payload))
 	})
 	return () => unlisten()
+}
+
+/** True when running inside the Tauri webview (so the stream commands exist). */
+function inTauri(): boolean {
+	return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+}
+
+/**
+ * Begin a live transcription session. The webview then streams mic PCM with
+ * {@link feedLiveTranscription} as it captures and ends with
+ * {@link finishLiveTranscription}; partials arrive via
+ * {@link subscribeTranscribeProgress}. No-op outside Tauri.
+ */
+export async function startLiveTranscription(invoker: Invoker = invoke): Promise<void> {
+	if (!inTauri()) return
+	await invoker('asr_stream_start', {})
+}
+
+/** Feed one chunk of 16 kHz mono PCM into the live session (fire-and-forget). */
+export async function feedLiveTranscription(
+	pcm: Float32Array,
+	invoker: Invoker = invoke
+): Promise<void> {
+	if (!inTauri() || pcm.length === 0) return
+	await invoker('asr_stream_feed', {
+		pcm: Array.from(pcm),
+		sampleRate: 16_000
+	})
+}
+
+/** End the live session and return the final `{ transcript, title, summary }`. */
+export async function finishLiveTranscription(invoker: Invoker = invoke): Promise<VoiceNote> {
+	const result = (await invoker('asr_stream_finish', {})) as Partial<VoiceNote> | null
+	return {
+		transcript: (result?.transcript ?? '').trim(),
+		title: (result?.title ?? '').trim(),
+		summary: (result?.summary ?? '').trim()
+	}
 }
 
 /**
@@ -51,7 +89,7 @@ export async function transcribeAudio(
 	invoker: Invoker = invoke,
 	onProgress?: ProgressSink
 ): Promise<VoiceNote> {
-	const unlisten = onProgress ? await listenForProgress(onProgress) : () => {}
+	const unlisten = onProgress ? await subscribeTranscribeProgress(onProgress) : () => {}
 	try {
 		const result = (await invoker('transcribe_audio', {
 			// Tauri serializes `Vec<f32>` from a plain number array.

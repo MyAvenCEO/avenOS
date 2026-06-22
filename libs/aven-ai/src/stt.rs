@@ -8,6 +8,7 @@
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use sherpa_onnx::{
 	OfflineRecognizer, OfflineRecognizerConfig, OfflineTransducerModelConfig, SileroVadModelConfig,
@@ -299,6 +300,35 @@ impl Vad {
 		self.sample_rate
 	}
 
+	/// Detector window size in samples (the unit `accept_window` expects).
+	fn window(&self) -> usize {
+		self.window.max(1)
+	}
+
+	/// Feed exactly one window of samples to the streaming detector.
+	fn accept_window(&self, samples: &[f32]) {
+		self.det.accept_waveform(samples);
+	}
+
+	/// Pop the front closed speech segment as owned samples, if one is ready.
+	fn take_front(&self) -> Option<Vec<f32>> {
+		let seg = self.det.front()?;
+		let out = seg.samples().to_vec();
+		drop(seg);
+		self.det.pop();
+		Some(out)
+	}
+
+	/// Flush trailing buffered speech into the output queue (end of stream).
+	fn flush(&self) {
+		self.det.flush();
+	}
+
+	/// Clear all detector state for a fresh stream.
+	fn reset(&self) {
+		self.det.reset();
+	}
+
 	/// Split `pcm` into bounded speech-only chunks (silence dropped). Each chunk is
 	/// at most `max_window` samples — any longer speech run is re-split by the pure
 	/// planner, so the caller's per-chunk decode is always bounded.
@@ -335,6 +365,128 @@ impl Vad {
 			self.det.pop();
 		}
 		out
+	}
+}
+
+/// Stateful **live** transcription, the streaming counterpart to
+/// `Transcriber::transcribe_segmented`. Feed mic PCM as it arrives with
+/// [`accept`](Self::accept); the Silero VAD closes a speech segment on each
+/// natural pause (or at the `max_window` safety cap) and that segment is decoded
+/// **exactly once** with Parakeet — no re-decoding. The total recording length is
+/// unbounded; only each segment is bounded. Without a VAD it degrades to
+/// buffer-then-decode on [`finish`](Self::finish) (still bounded by the planner).
+///
+/// `Send` so it can run on a dedicated worker thread driven by the app's IPC.
+pub struct StreamTranscriber {
+	rec: Arc<Transcriber>,
+	vad: Option<Vad>,
+	sample_rate: u32,
+	max_window: usize,
+	overlap: usize,
+	/// Samples not yet aligned to a VAD window (VAD path), or the whole recording
+	/// so far (no-VAD fallback — decoded on `finish`).
+	pending: Vec<f32>,
+	/// Decoded segment transcripts, in order.
+	parts: Vec<String>,
+}
+
+impl StreamTranscriber {
+	/// Build a session. `max_window_secs` caps a single segment/decode (the safety
+	/// valve) and `overlap_secs` is the re-split overlap for an over-cap run.
+	pub fn new(
+		rec: Arc<Transcriber>,
+		vad: Option<Vad>,
+		sample_rate: u32,
+		max_window_secs: f32,
+		overlap_secs: f32,
+	) -> Self {
+		let max_window = ((max_window_secs * sample_rate as f32) as usize).max(1);
+		let overlap = ((overlap_secs * sample_rate as f32) as usize).min(max_window - 1);
+		if let Some(v) = vad.as_ref() {
+			v.reset();
+		}
+		Self { rec, vad, sample_rate, max_window, overlap, pending: Vec::new(), parts: Vec::new() }
+	}
+
+	/// Number of segments decoded so far.
+	pub fn segment_count(&self) -> usize {
+		self.parts.len()
+	}
+
+	/// Feed live PCM (mono, at `sample_rate`). Returns `Some(cumulative_transcript)`
+	/// when one or more segments closed (so the caller emits a live partial), else
+	/// `None`. Cheap on most calls — a Parakeet decode only runs when the VAD
+	/// actually closes a segment (a pause, or the safety cap).
+	pub fn accept(&mut self, pcm: &[f32]) -> Option<String> {
+		if self.vad.is_none() {
+			// No VAD: accumulate; the whole buffer is decoded (bounded) on finish.
+			self.pending.extend_from_slice(pcm);
+			return None;
+		}
+		self.pending.extend_from_slice(pcm);
+
+		// Drain whole VAD windows, collecting any closed segments as owned samples
+		// (so we don't hold a borrow of `self.vad` across the decode below).
+		let win = self.vad.as_ref().unwrap().window();
+		let mut closed: Vec<Vec<f32>> = Vec::new();
+		{
+			let vad = self.vad.as_ref().unwrap();
+			while self.pending.len() >= win {
+				let chunk: Vec<f32> = self.pending.drain(..win).collect();
+				vad.accept_window(&chunk);
+				while let Some(seg) = vad.take_front() {
+					closed.push(seg);
+				}
+			}
+		}
+		if closed.is_empty() {
+			return None;
+		}
+		for seg in closed {
+			self.decode_capped(&seg);
+		}
+		Some(merge_segment_texts(&self.parts))
+	}
+
+	/// End of stream: flush the VAD's trailing speech (or decode the whole buffer
+	/// in the no-VAD fallback) and return the full transcript.
+	pub fn finish(&mut self) -> String {
+		match self.vad.take() {
+			Some(vad) => {
+				if !self.pending.is_empty() {
+					let rest = std::mem::take(&mut self.pending);
+					vad.accept_window(&rest);
+				}
+				vad.flush();
+				while let Some(seg) = vad.take_front() {
+					self.decode_capped(&seg);
+				}
+			}
+			None => {
+				let buf = std::mem::take(&mut self.pending);
+				for (s, e) in split_into_windows(buf.len(), self.max_window, self.overlap) {
+					let text = self.rec.decode_one(&buf[s..e], self.sample_rate);
+					self.parts.push(text);
+				}
+			}
+		}
+		merge_segment_texts(&self.parts)
+	}
+
+	/// Decode one closed segment, re-splitting (with overlap) anything over the cap.
+	fn decode_capped(&mut self, samples: &[f32]) {
+		if samples.is_empty() {
+			return;
+		}
+		if samples.len() <= self.max_window {
+			let text = self.rec.decode_one(samples, self.sample_rate);
+			self.parts.push(text);
+		} else {
+			for (s, e) in split_into_windows(samples.len(), self.max_window, self.overlap) {
+				let text = self.rec.decode_one(&samples[s..e], self.sample_rate);
+				self.parts.push(text);
+			}
+		}
 	}
 }
 
@@ -395,6 +547,7 @@ impl Transcriber {
 	/// `max_window_secs`. `cancelled()` is polled before each segment (bail out
 	/// early); `on_progress` is called after each with the cumulative transcript so
 	/// the caller can stream partials. Returns the full transcript. Blocking.
+	#[allow(clippy::too_many_arguments)]
 	pub fn transcribe_segmented(
 		&self,
 		pcm: &[f32],
@@ -469,7 +622,7 @@ impl Transcriber {
 			// leading space depending on the model — a token starting with either
 			// begins a new word; punctuation tokens (".", ",") attach to the current.
 			let starts_word = tok.starts_with('\u{2581}') || tok.starts_with(' ');
-			let clean = tok.trim_start_matches(|c| c == '\u{2581}' || c == ' ');
+			let clean = tok.trim_start_matches(['\u{2581}', ' ']);
 			if starts_word && !cur.is_empty() {
 				// close the previous word — its end is this word's onset
 				words.push(Word { text: cur.clone(), start: cur_start, end: t });
