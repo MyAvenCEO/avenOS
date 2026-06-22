@@ -21,34 +21,60 @@ import {
  * keeping our DB / bot systems in sync with Polar as the billing source of truth.
  */
 
-// Polar product ids per tier (sandbox defaults; overridable per-env for production). board 0052.
-const AVENME_PRODUCT_ID =
-	process.env.POLAR_AVENME_PRODUCT_ID ?? '949bd015-4909-4512-a3ac-dc0043cbdae6'
-const AVENFOUNDER_PRODUCT_ID =
-	process.env.POLAR_AVENFOUNDER_PRODUCT_ID ?? '8440114c-f672-4b6e-a8dc-21c592e97d2e'
-const AVENCEO_PRODUCT_ID =
-	process.env.POLAR_AVENCEO_PRODUCT_ID ?? '8f304678-f1b1-4d47-bd0f-320c1d35fe0b'
-
-/**
- * Tier → Polar product + rank. THE single source of truth for paid tiers — add a row to wire a
- * new one. `rank` orders tiers so the UI/switch can tell an upgrade from a downgrade. Prices are
- * read LIVE from Polar (refreshTierPrices → tier-price-cache); credits.ts TIER_PRICE_EUR is only
- * the boot-time fallback.
- */
-export const TIERS: Record<string, { productId: string; rank: number }> = {
-	avenME: { productId: AVENME_PRODUCT_ID, rank: 1 },
-	avenFOUNDER: { productId: AVENFOUNDER_PRODUCT_ID, rank: 2 },
-	avenCEO: { productId: AVENCEO_PRODUCT_ID, rank: 3 }
+// Per-tier product config — the SSOT the seeder (seed-products.ts) creates from, and what the
+// pricing cards represent. `priceCents` is the WEEKLY price in EUR minor units (excl. VAT — Polar
+// adds tax at checkout). Add a row here to wire a new tier. board 0062.
+export const TIER_PRODUCTS: Record<string, { name: string; priceCents: number; rank: number }> = {
+	avenME: { name: 'avenME', priceCents: 700, rank: 1 },
+	avenFOUNDER: { name: 'avenFOUNDER', priceCents: 3400, rank: 2 },
+	avenCEO: { name: 'avenCEO', priceCents: 37700, rank: 3 }
 }
 
-// Reverse map (product id → tier), derived from TIERS so it can never drift.
-const PRODUCT_TIER: Record<string, string> = Object.fromEntries(
-	Object.entries(TIERS).map(([tier, cfg]) => [cfg.productId, tier])
-)
+// Resolved Polar product id per tier. Seeded from env / legacy-sandbox defaults, then OVERRIDDEN at
+// boot by refreshTierProducts(), which discovers products by `metadata.tier` — so a freshly seeded
+// org "just works" with no per-org ids to copy. A tier with no metadata.tier match (e.g. the legacy
+// sandbox products that predate metadata) keeps its default. board 0052/0062.
+const tierProductId: Record<string, string> = {
+	avenME: process.env.POLAR_AVENME_PRODUCT_ID ?? '949bd015-4909-4512-a3ac-dc0043cbdae6',
+	avenFOUNDER: process.env.POLAR_AVENFOUNDER_PRODUCT_ID ?? '8440114c-f672-4b6e-a8dc-21c592e97d2e',
+	avenCEO: process.env.POLAR_AVENCEO_PRODUCT_ID ?? '8f304678-f1b1-4d47-bd0f-320c1d35fe0b'
+}
+
+/** Override a tier's resolved product id (used by the seeder + boot discovery). board 0062. */
+export function setTierProductId(tier: string, productId: string): void {
+	if (tier in tierProductId) tierProductId[tier] = productId
+}
+
+/**
+ * Tier → Polar product + rank. THE single source of truth for paid tiers. `productId` is a getter so
+ * it always reflects the latest discovery (refreshTierProducts). `rank` orders tiers so the UI/switch
+ * can tell an upgrade from a downgrade. Prices are read LIVE from Polar (refreshTierPrices →
+ * tier-price-cache); credits.ts TIER_PRICE_EUR is only the boot-time fallback.
+ */
+export const TIERS: Record<string, { readonly productId: string; rank: number }> = {
+	avenME: {
+		get productId() {
+			return tierProductId.avenME
+		},
+		rank: TIER_PRODUCTS.avenME.rank
+	},
+	avenFOUNDER: {
+		get productId() {
+			return tierProductId.avenFOUNDER
+		},
+		rank: TIER_PRODUCTS.avenFOUNDER.rank
+	},
+	avenCEO: {
+		get productId() {
+			return tierProductId.avenCEO
+		},
+		rank: TIER_PRODUCTS.avenCEO.rank
+	}
+}
 
 /** Resolve a tier name OR explicit product id to a tier-granting Polar product id. */
 function resolveProductId(input: { tier?: string; productId?: string }): string | undefined {
-	if (input.productId && PRODUCT_TIER[input.productId]) return input.productId
+	if (input.productId && tierForProduct(input.productId)) return input.productId
 	if (input.tier && TIERS[input.tier]) return TIERS[input.tier].productId
 	return undefined
 }
@@ -65,7 +91,30 @@ function successUrl(): string {
 
 /** Map a Polar product id to our tier, or undefined if it isn't a tier-granting product. */
 function tierForProduct(productId: string | null | undefined): string | undefined {
-	return productId ? PRODUCT_TIER[productId] : undefined
+	if (!productId) return undefined
+	return Object.keys(tierProductId).find((tier) => tierProductId[tier] === productId)
+}
+
+/**
+ * Discover each tier's Polar product id by `metadata.tier` and cache it, so a seeded org needs no
+ * per-org product-id env vars. Read-only + best-effort; a tier with no metadata.tier match keeps its
+ * env/default id (e.g. the legacy sandbox products that predate metadata). board 0062.
+ */
+export async function refreshTierProducts(): Promise<void> {
+	const client = polarClient
+	if (!client) return
+	try {
+		const pager = await client.products.list({ limit: 100 })
+		for await (const page of pager) {
+			for (const p of page.result.items) {
+				if (p.isArchived) continue
+				const tier = (p.metadata as Record<string, unknown> | undefined)?.tier
+				if (typeof tier === 'string') setTierProductId(tier, p.id)
+			}
+		}
+	} catch (e) {
+		console.error('[billing] product discovery failed:', e instanceof Error ? e.message : e)
+	}
 }
 
 /**
@@ -141,7 +190,7 @@ export async function billingCheckout(c: Context): Promise<Response> {
 		tier?: string
 		returnUrl?: string
 	} | null
-	const productId = resolveProductId(body ?? {}) ?? AVENME_PRODUCT_ID
+	const productId = resolveProductId(body ?? {}) ?? TIERS.avenME.productId
 	if (!tierForProduct(productId)) return c.json({ error: 'unknown_product' }, 400)
 
 	const user = session.user as { id: string; email: string; name?: string }
