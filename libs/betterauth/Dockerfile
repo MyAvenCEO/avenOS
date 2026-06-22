@@ -13,11 +13,12 @@ WORKDIR /repo
 # target — so the heavy app toolchain and Rust build dirs never enter the context.
 COPY . .
 
-# Trim the monorepo to just the auth server + its one workspace dep (@avenos/aven-vibes),
+# Trim the monorepo to just the auth server + its workspace deps (@avenos/aven-vibes and
+# @avenos/skills — the composer SDK the chat loop + deploy use; aven-vibes also depends on it),
 # so `bun install` neither requires the excluded workspace members (app/docs/ARCHIVE — bun
 # errors on a missing literal workspace) nor pulls the app's heavy deps. Also drop the root
-# lifecycle scripts (the `prepare` hook needs a .env we don't ship).
-RUN bun --eval "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['libs/betterauth','libs/aven-vibes'];delete p.scripts;fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
+# lifecycle scripts (the `prepare` hook needs a .env we don't ship). board 0056.
+RUN bun --eval "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['libs/betterauth','libs/aven-vibes','skills'];delete p.scripts;fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
  && bun install --ignore-scripts
 
 ENV NODE_ENV=production
