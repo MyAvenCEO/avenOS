@@ -19,7 +19,8 @@ import {
 	billingSync,
 	billingUncancel,
 	billingWebhook,
-	refreshTierPrices
+	refreshTierPrices,
+	refreshTierProducts
 } from './billing'
 import { bootstrapSchema } from './bootstrap'
 import {
@@ -149,9 +150,13 @@ await bootstrapSchema()
 // lazily syncs if a model is unseen). Never blocks startup.
 void syncPricing().catch((e) => console.error('[betterauth] pricing sync failed:', e))
 
-// Best-effort: warm the live tier-price cache from Polar on boot, so the first credit check /
-// billing state read already has real prices (billingState also refreshes lazily). board 0052.
-void refreshTierPrices().catch((e) => console.error('[betterauth] tier price warm failed:', e))
+// Best-effort on boot: first DISCOVER each tier's product id by metadata.tier (so a config-seeded
+// org needs no per-org product-id env vars — board 0062), THEN warm the live price cache from those
+// products, so the first credit check / billing state read already has real ids + prices
+// (billingState also refreshes lazily). board 0052.
+void refreshTierProducts()
+	.then(() => refreshTierPrices())
+	.catch((e) => console.error('[betterauth] tier product/price warm failed:', e))
 
 const port = Number(new URL(process.env.BETTER_AUTH_URL ?? 'http://localhost:8787').port || 8787)
 

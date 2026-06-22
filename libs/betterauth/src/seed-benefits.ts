@@ -1,5 +1,6 @@
 import { polarClient } from './auth'
 import { TIERS } from './billing'
+import { seedProducts } from './seed-products'
 
 // Idempotent Polar benefit seeding — the pricing cards render 100% from these (Polar = SSOT).
 // Matched by a STABLE key (metadata.skill for skills, metadata.key for display benefits) so
@@ -55,6 +56,10 @@ async function main(): Promise<void> {
 		process.exit(1)
 	}
 	const client = polarClient
+
+	// Ensure the tier PRODUCTS exist first (creates them in a fresh org + updates the in-process
+	// tier→id map) so benefits attach to the right product ids. See seed-products.ts. board 0062.
+	await seedProducts()
 
 	// Collect ALL existing benefits (so we update in place rather than duplicate).
 	const existing: BenefitRow[] = []
