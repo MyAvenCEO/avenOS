@@ -1,5 +1,8 @@
 <script lang="ts">
+import { getVersion } from '@tauri-apps/api/app'
+import { browser } from '$app/environment'
 import { authClient, setBearerToken } from '$lib/auth/auth-client'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { clearNetwork } from '$lib/settings/network-store'
 import AdminPanel from '$lib/shell/AdminPanel.svelte'
 import PricingPanel from '$lib/shell/PricingPanel.svelte'
@@ -21,6 +24,21 @@ const user = $derived(
 	$sessionStore.data?.user as { name?: string; email?: string; role?: string } | undefined
 )
 const isAdmin = $derived(user?.role === 'admin')
+
+// The installed app's release/tag version — read from tauri.conf.json (baked at build, so it equals
+// the CalVer release the bundle was cut from, e.g. 26.6.22-next.2). Tauri-only; blank in a browser.
+// board 0061.
+let appVersion = $state('')
+$effect(() => {
+	if (!browser || !isTauriRuntime()) return
+	void (async () => {
+		try {
+			appVersion = await getVersion()
+		} catch {
+			appVersion = ''
+		}
+	})()
+})
 
 // Admin only shows for admins (the AdminPanel endpoints are server-gated to admins too).
 const cats = $derived<{ id: Category; label: string }[]>([
@@ -97,6 +115,14 @@ async function logout(): Promise<void> {
 							Role
 						</span>
 						<span class="text-foreground text-[14px]">{user?.role ?? 'user'}</span>
+					</div>
+					<div class="flex flex-col gap-0.5">
+						<span class="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+							App version
+						</span>
+						<span class="text-foreground text-[14px] tabular-nums">
+							{appVersion ? `v${appVersion}` : '—'}
+						</span>
 					</div>
 				</div>
 			</div>

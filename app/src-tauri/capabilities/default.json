@@ -13,6 +13,7 @@
 		"vault:default",
 		"sandbox-quickjs:default",
 		"clipboard-manager:allow-write-text",
+		"opener:default",
 		"google-auth:default"
 	]
 }

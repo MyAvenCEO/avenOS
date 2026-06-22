@@ -48,6 +48,9 @@ const currentTier = $derived(
 
 let error = $state<string | null>(null)
 let bookBusy = $state(false)
+// Desktop only: set once the hosted checkout opens in the system browser, so we can show a
+// "finish in your browser" hint while the app window stays put. board 0061.
+let openedInBrowser = $state(false)
 let confirmCancel = $state(false)
 // Invoice preview: a `blob:` URL (PDF) shown in a modal; null when closed.
 let invoiceUrl = $state<string | null>(null)
@@ -117,8 +120,16 @@ async function book(tierId: string): Promise<void> {
 	if (manageBusy) return
 	bookBusy = true
 	error = null
+	openedInBrowser = false
 	try {
-		await startCheckout(tierId) // redirects away on success
+		const mode = await startCheckout(tierId)
+		// Desktop: checkout opened in the system browser; the app stays open and the plan
+		// reconciles via the Polar webhook → SSE, so release the button + show a hint. On web,
+		// 'redirect' means the page is navigating to Polar — leave the busy state set.
+		if (mode === 'external') {
+			openedInBrowser = true
+			bookBusy = false
+		}
 	} catch (e) {
 		setErr(e)
 		bookBusy = false
@@ -198,6 +209,11 @@ function closeInvoice(): void {
 		{#if error}
 			<p class="text-destructive mb-3 text-center text-sm">
 				{t('mainnet.pricing.error', { message: error })}
+			</p>
+		{/if}
+		{#if openedInBrowser}
+			<p class="text-muted-foreground mb-3 text-center text-sm">
+				{t('mainnet.pricing.openedInBrowser')}
 			</p>
 		{/if}
 

@@ -1,4 +1,6 @@
+import { browser } from '$app/environment'
 import { getBearerToken } from '$lib/auth/auth-client'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 // Auth/billing server origin (same server as the AI proxy + Better Auth). board 0052.
 const BASE = import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined
@@ -11,9 +13,13 @@ const BASE = import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined
  * tied back to this user and the webhook can sync the tier. Throws on any non-OK response
  * so the caller can surface the error.
  *
+ * Returns `'external'` when the checkout was opened in the system browser (desktop) — the app
+ * stays open and the caller should release its busy state — or `'redirect'` when the current
+ * page is navigating to Polar (web).
+ *
  * @param tier optional tier name (e.g. 'avenFOUNDER'); defaults server-side to avenCITY.
  */
-export async function startCheckout(tier?: string): Promise<void> {
+export async function startCheckout(tier?: string): Promise<'external' | 'redirect'> {
 	if (!BASE) throw new Error('billing server URL not configured')
 	const token = getBearerToken()
 	// Return the customer to OUR app after paying, on a real routeable screen. The `?checkout=
@@ -42,9 +48,18 @@ export async function startCheckout(tier?: string): Promise<void> {
 	// Polar follows the webview's prefers-color-scheme — dark on a dark-mode Mac — which
 	// clashes with our light app. (theme is the only color lever on the hosted page.)
 	const themed = `${url}${url.includes('?') ? '&' : '?'}theme=light`
-	// Full-page redirect to Polar's hosted checkout; on success Polar redirects back to
-	// `returnUrl` (our app), where the shell reconciles the new entitlement.
+	// Desktop (Tauri): open the hosted checkout in the SYSTEM BROWSER so the app window stays open.
+	// The plan + weekly MINDS reconcile back in-app on their own via the Polar webhook → SSE
+	// 'billing' event — there's no in-app return route to land on (the packaged webview's tauri://
+	// origin can't be a Polar successUrl, which is why the server falls back to its own success
+	// page). In a plain browser, keep the classic full-page redirect. board 0061.
+	if (browser && isTauriRuntime()) {
+		const { openUrl } = await import('@tauri-apps/plugin-opener')
+		await openUrl(themed)
+		return 'external'
+	}
 	window.location.href = themed
+	return 'redirect'
 }
 
 /**
