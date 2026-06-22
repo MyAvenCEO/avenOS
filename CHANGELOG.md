@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.4...v) (2026-06-22)
+
+
+### Bug Fixes
+
+* **billing:** next checkout via metadata.tier product discovery + full version in UI ([#21](https://github.com/MyAvenCEO/avenOS/issues/21)) ([6192310](https://github.com/MyAvenCEO/avenOS/commit/6192310fd9f96dfc4dfcc978d58c6abb353f4388))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.3...v) (2026-06-22)
 
 
