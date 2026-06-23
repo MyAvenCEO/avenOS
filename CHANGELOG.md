@@ -1,3 +1,45 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.6...v) (2026-06-22)
+
+
+### Bug Fixes
+
+* **ci:** bake the full -next.N version into mac/ios builds for the Profile ([#24](https://github.com/MyAvenCEO/avenOS/issues/24)) ([b8ea59c](https://github.com/MyAvenCEO/avenOS/commit/b8ea59c5c88b24bb8a8c9ef29a4d0bc11010624e))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.5...v) (2026-06-22)
+
+
+### Features
+
+* **billing:** metadata.tier product discovery + full app version in Profile ([#22](https://github.com/MyAvenCEO/avenOS/issues/22)) ([864bc6d](https://github.com/MyAvenCEO/avenOS/commit/864bc6df3ef8069a1c3bd6b6ed0dd73968e0e026))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.4...v) (2026-06-22)
+
+
+### Bug Fixes
+
+* **billing:** next checkout via metadata.tier product discovery + full version in UI ([#21](https://github.com/MyAvenCEO/avenOS/issues/21)) ([6192310](https://github.com/MyAvenCEO/avenOS/commit/6192310fd9f96dfc4dfcc978d58c6abb353f4388))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.3...v) (2026-06-22)
+
+
+### Features
+
+* **app:** profile app-version row + system-browser desktop checkout (0061) ([#20](https://github.com/MyAvenCEO/avenOS/issues/20)) ([6e2d5ad](https://github.com/MyAvenCEO/avenOS/commit/6e2d5ad326d354c76d9f99df71a90d30d0edfd56))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.2...v) (2026-06-22)
+
+
+### Bug Fixes
+
+* **billing:** ignore non-http(s) returnUrl so the desktop checkout works ([#19](https://github.com/MyAvenCEO/avenOS/issues/19)) ([4ae53a6](https://github.com/MyAvenCEO/avenOS/commit/4ae53a6317df3c30b026e77dbe1e1188f998b784))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.1...v) (2026-06-22)
+
+
+### Bug Fixes
+
+* **betterauth:** include skills workspace in the docker prune so @avenos/skills resolves ([#18](https://github.com/MyAvenCEO/avenOS/issues/18)) ([3a49187](https://github.com/MyAvenCEO/avenOS/commit/3a491879b7a25894562cd216b8910d09f2bedcc1))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.4...v) (2026-06-22)
+
+
+### Features
+
+* composer site generator + tigris publish, voice transcription, inbound mail (0056-0060) ([467198d](https://github.com/MyAvenCEO/avenOS/commit/467198d555a27dd255362df2a13985a1faf00d43))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.20-next.3...v) (2026-06-20)
 
 
