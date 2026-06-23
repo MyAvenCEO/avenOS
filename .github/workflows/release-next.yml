@@ -154,6 +154,7 @@ jobs:
             "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}" \
             "TINFOIL_API_KEY=${TINFOIL_API_KEY:-}" \
             "POLAR_API_KEY=${POLAR_API_KEY:-}" \
+            "POLAR_WEBHOOK_SECRET=${POLAR_WEBHOOK_SECRET:-}" \
             "POSTMARK_INBOUND_SECRET=${POSTMARK_INBOUND_SECRET:-}" \
             "POSTMARK_INBOUND_USER=${POSTMARK_INBOUND_USER:-}"; do
             [ -n "${kv#*=}" ] && args+=("$kv")
@@ -168,6 +169,7 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           TINFOIL_API_KEY: ${{ secrets.TINFOIL_API_KEY }}
           POLAR_API_KEY: ${{ secrets.POLAR_API_KEY }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
           POSTMARK_INBOUND_SECRET: ${{ secrets.POSTMARK_INBOUND_SECRET }}
           POSTMARK_INBOUND_USER: ${{ secrets.POSTMARK_INBOUND_USER }}
 
