@@ -2,6 +2,7 @@
 import { useQueryClient } from '@tanstack/svelte-query'
 import { tick } from 'svelte'
 import { getBearerToken } from '$lib/auth/auth-client'
+import { filesToVisionImages } from '$lib/avendb/intent-files'
 import {
 	bumpComposerReload,
 	readSrcFiles,
@@ -11,8 +12,16 @@ import {
 import Composer from '$lib/composer/Composer.svelte'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
+import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
+import BookingsVibe from '$lib/shell/BookingsVibe.svelte'
+import BookkeepingVibe from '$lib/shell/BookkeepingVibe.svelte'
+import DocCompareVibe from '$lib/shell/DocCompareVibe.svelte'
+import FinanceVibe from '$lib/shell/FinanceVibe.svelte'
+import InvoiceBookingVibe from '$lib/shell/InvoiceBookingVibe.svelte'
+import InvoiceMatchVibe from '$lib/shell/InvoiceMatchVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
+import TransactionsVibe from '$lib/shell/TransactionsVibe.svelte'
 
 type ChatMessage = {
 	id: number
@@ -21,6 +30,8 @@ type ChatMessage = {
 	pending?: boolean
 	/** When set, this message renders a live vibe card for the named schema instead of text. */
 	vibe?: string
+	/** Classification/metadata payload for ephemeral vibes (bookkeeping). */
+	vibeData?: Record<string, unknown>
 }
 
 type SessionRow = { id: string; title: string }
@@ -33,6 +44,25 @@ let nextId = 0
 let scrollEl = $state<HTMLDivElement | null>(null)
 let contentEl = $state<HTMLDivElement | null>(null)
 let initialized = false
+// The chat's IntentComposer instance — so a global file drop can push files into it (preview
+// thumbnails above the input). Bound below; consumed by the pendingMainnetFileDrop effect. 0063.
+let composerRef = $state<{ openWithFiles(files: File[] | FileList): void } | null>(null)
+let pendingDrop = $state<File[] | null>(null)
+$effect(() => {
+	const unsub = pendingMainnetFileDrop.subscribe((v) => {
+		pendingDrop = v
+	})
+	return unsub
+})
+$effect(() => {
+	const files = pendingDrop
+	if (!files?.length || !composerRef) return
+	const ref = composerRef
+	// tick() so the composer is fully mounted/bound before we hand it the files (matches the
+	// testnet drop path) — otherwise the attachments + preview can be dropped.
+	void tick().then(() => ref.openWithFiles(files))
+	pendingMainnetFileDrop.set(null)
+})
 // Session switcher is collapsed by default so the conversation is centered + full-width; a tiny
 // toggle button opens the chats viewer. board 0055.
 let showSessions = $state(false)
@@ -216,14 +246,23 @@ async function loadSessionMessages(id: string): Promise<void> {
 		}
 		currentSessionId = id
 		messages = rows.map((r) => {
-			// Re-hydrate a persisted vibe marker back into a live vibe card.
+			// Re-hydrate a persisted vibe marker back into a live vibe card. The marker is
+			// `<ZWSP>aven-vibe:<schema>` optionally followed by `\n<json data>` (board 0067) so the
+			// card renders its stored content after reload, not an empty shell. Data-backed vibes
+			// (todos) carry no payload — they re-fetch live from /api/data.
 			if (r.role === 'assistant' && r.content.startsWith(VIBE_MARKER)) {
-				return {
-					id: nextId++,
-					role: 'assistant' as const,
-					text: '',
-					vibe: r.content.slice(VIBE_MARKER.length)
+				const rest = r.content.slice(VIBE_MARKER.length)
+				const nl = rest.indexOf('\n')
+				const schema = (nl >= 0 ? rest.slice(0, nl) : rest).trim()
+				let vibeData: Record<string, unknown> | undefined
+				if (nl >= 0) {
+					try {
+						vibeData = JSON.parse(rest.slice(nl + 1)) as Record<string, unknown>
+					} catch {
+						/* malformed payload — render the empty card */
+					}
 				}
+				return { id: nextId++, role: 'assistant' as const, text: '', vibe: schema, vibeData }
 			}
 			return {
 				id: nextId++,
@@ -288,7 +327,7 @@ function toOpenAi(history: ChatMessage[]): { role: string; content: string }[] {
 async function streamTinfoil(
 	history: ChatMessage[],
 	onDelta: (chunk: string) => void,
-	onVibe: (schema: string) => void,
+	onVibe: (schema: string, data?: Record<string, unknown>) => void,
 	onEdit: (files: Record<string, string>) => void,
 	onTool: (tl: ToolStatus) => void,
 	onHitl: (req: {
@@ -297,7 +336,8 @@ async function streamTinfoil(
 		label: string
 		action: Record<string, unknown>
 	}) => void,
-	onEditChunk: (text: string) => void
+	onEditChunk: (text: string) => void,
+	attachments: { mimeType: string; b64: string }[]
 ): Promise<void> {
 	if (!AI_BASE) throw new Error('auth server URL not configured')
 	const token = getBearerToken()
@@ -316,7 +356,9 @@ async function streamTinfoil(
 			stream: true,
 			sessionId: currentSessionId ?? undefined,
 			// Current public/ files → the server's edit_website tool (GLM) diffs/creates across them.
-			publicFiles
+			publicFiles,
+			// Image attachments for the classify_document vision tool. board 0063.
+			...(attachments.length > 0 ? { attachments } : {})
 		})
 	})
 	const sid = res.headers.get('X-Session-Id')
@@ -346,7 +388,7 @@ async function streamTinfoil(
 				try {
 					const json = JSON.parse(payload) as {
 						choices?: { delta?: { content?: string } }[]
-						aven_vibe?: { schema?: string }
+						aven_vibe?: { schema?: string; data?: Record<string, unknown> }
 						aven_edit?: { files?: Record<string, string> }
 						aven_tool?: ToolStatus
 						aven_hitl?: {
@@ -359,7 +401,7 @@ async function streamTinfoil(
 					}
 					if (json.aven_tool) onTool(json.aven_tool)
 					if (json.aven_hitl) onHitl(json.aven_hitl)
-					if (json.aven_vibe?.schema) onVibe(json.aven_vibe.schema)
+					if (json.aven_vibe?.schema) onVibe(json.aven_vibe.schema, json.aven_vibe.data)
 					if (json.aven_edit?.files) onEdit(json.aven_edit.files)
 					if (json.aven_edit_chunk?.text) onEditChunk(json.aven_edit_chunk.text)
 					const delta = json.choices?.[0]?.delta?.content
@@ -401,6 +443,16 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 	toolActivity = [] // fresh tool-activity strip for this turn
 	editStream = '' // fresh GLM edit stream for this turn
 
+	// Build vision attachments for server-side multimodal classification: images pass through,
+	// PDFs are rasterized to page images (gemma4-31b can't read raw PDFs). The first page also
+	// becomes the inline bookkeeping preview. board 0063.
+	const visionImages = await filesToVisionImages(files)
+	const attachments: { mimeType: string; b64: string }[] = visionImages.map((img) => ({
+		mimeType: img.mimeType,
+		b64: img.dataUrl.split(',')[1] ?? ''
+	}))
+	const previewImage = visionImages[0] ?? null
+
 	const pendingId = nextId + 1
 	messages = [
 		...messages,
@@ -412,11 +464,22 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 	busy = true
 	let acc = ''
 	// One live vibe card per touched schema per turn, inserted just above the streaming reply.
+	// vibeData carries ephemeral classification payload for the bookkeeping vibe. board 0063.
 	const turnVibes = new Set<string>()
-	const insertVibe = (schema: string): void => {
+	const insertVibe = (schema: string, data?: Record<string, unknown>): void => {
 		if (turnVibes.has(schema)) return
 		turnVibes.add(schema)
-		const card: ChatMessage = { id: nextId++, role: 'assistant', text: '', vibe: schema }
+		const wantsPreview = schema === 'bookkeeping' || schema === 'doc-compare'
+		const vibeData: Record<string, unknown> =
+			wantsPreview && data
+				? {
+						...data,
+						...(previewImage
+							? { fileUrl: previewImage.dataUrl, mimeType: previewImage.mimeType }
+							: {})
+					}
+				: (data ?? {})
+		const card: ChatMessage = { id: nextId++, role: 'assistant', text: '', vibe: schema, vibeData }
 		const idx = messages.findIndex((m) => m.id === pendingId)
 		messages =
 			idx < 0 ? [...messages, card] : [...messages.slice(0, idx), card, ...messages.slice(idx)]
@@ -437,7 +500,8 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 			(text) => {
 				editStream += text
 				scrollToBottom()
-			}
+			},
+			attachments
 		)
 		const finalText = acc.trim() || t('mainnet.chat.noReply')
 		messages = messages.map((m) =>
@@ -569,6 +633,58 @@ function handleTranscribeError(message: string): void {
 							>
 								<Composer />
 							</div>
+						{:else if message.vibe === 'bookkeeping'}
+							<!-- Compact standalone classification card (component self-sizes). board 0070. -->
+							<div class="max-h-[80vh] w-full overflow-y-auto">
+								<BookkeepingVibe
+									containerName={`aven-vibes-chat-${message.id}`}
+									data={message.vibeData}
+								/>
+							</div>
+						{:else if message.vibe === 'doc-compare'}
+							<!-- Compare needs room: break out of the 52rem chat column and center a wider
+							     card on the viewport so the doc + extracted fields sit 50/50. board 0064. -->
+							<div
+								class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
+							>
+								<DocCompareVibe
+									containerName={`aven-vibes-chat-${message.id}`}
+									data={message.vibeData}
+								/>
+							</div>
+						{:else if message.vibe === 'invoice-match'}
+							<!-- Compact reconciliation summary (invoice excerpt ↔ matched tx). board 0070. -->
+							<div class="max-h-[80vh] w-full overflow-y-auto">
+								<InvoiceMatchVibe
+									containerName={`aven-vibes-chat-${message.id}`}
+									data={message.vibeData}
+								/>
+							</div>
+						{:else if message.vibe === 'invoice-booking'}
+							<!-- Compact booking summary (invoice excerpt → SKR04 Buchungssatz). board 0070. -->
+							<div class="max-h-[80vh] w-full overflow-y-auto">
+								<InvoiceBookingVibe
+									containerName={`aven-vibes-chat-${message.id}`}
+									data={message.vibeData}
+								/>
+							</div>
+						{:else if message.vibe === 'tx'}
+							<!-- Live transactions list — same max width as todos (component self-constrains). 0068. -->
+							<div class="max-h-[80vh] w-full overflow-y-auto">
+								<TransactionsVibe containerName={`aven-vibes-chat-${message.id}`} />
+							</div>
+						{:else if message.vibe === 'booking'}
+							<!-- Bookings: list self-centers at max-w-2xl; the 50/50 prüf detail breaks out wide. 0071/0077. -->
+							<div
+								class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
+							>
+								<BookingsVibe containerName={`aven-vibes-chat-${message.id}`} />
+							</div>
+						{:else if message.vibe === 'bwa'}
+							<!-- BWA / finance snapshot (computed from bookings + tx). board 0072. -->
+							<div class="max-h-[80vh] w-full overflow-y-auto">
+								<FinanceVibe containerName={`aven-vibes-chat-${message.id}`} />
+							</div>
 						{/if}
 					{:else}
 						<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
@@ -658,6 +774,7 @@ function handleTranscribeError(message: string): void {
 					</div>
 				{/if}
 				<IntentComposer
+					bind:this={composerRef}
 					placeholder={t('mainnet.chat.placeholder')}
 					enableAttachments={true}
 					submitBusy={busy}

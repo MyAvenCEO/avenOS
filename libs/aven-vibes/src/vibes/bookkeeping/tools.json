@@ -1,0 +1,64 @@
+[
+	{
+		"type": "function",
+		"function": {
+			"name": "classify_document",
+			"description": "Call this when the user attaches or uploads a document (image, PDF, or any file). Examine the file, determine its document type from the VISUAL CONTENT (not the filename), extract metadata AND identify the parties involved. Always pick the most specific docType — use 'other' ONLY when the document clearly matches none of the specific types. After calling this tool the server renders a classification card — respond ONLY with the short sentence in `response`, nothing else.",
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"docType": {
+						"type": "string",
+						"enum": ["invoice", "bank_statement", "contract", "other"],
+						"description": "The document category, judged from the layout/content:\n• invoice — a bill/Rechnung requesting payment for goods/services: an invoice number (Rechnungsnummer), line items, net/VAT/gross totals, an amount due (Gesamtbetrag / Total due), a vendor billing a buyer.\n• bank_statement — an account or card statement / KONTOAUSZUG: shows a bank ACCOUNT (IBAN/BIC, account holder), a statement PERIOD (Von–Bis), an opening AND closing balance (Eröffnungssaldo / Abschlusssaldo), and a LIST OF DATED TRANSACTIONS (Umsätze, Einnahmen/Ausgaben, bookings). A title like 'Kontoauszug', 'Account statement', 'Statement' is a strong signal — classify as bank_statement even if it also shows fees.\n• contract — an agreement/Vertrag: named parties, numbered clauses (§), terms, signatures.\n• other — none of the above (letters, IDs, certificates, …). Do NOT use 'other' for a clear invoice/statement/contract."
+					},
+					"title": {
+						"type": "string",
+						"description": "Concise descriptive title for the document (max 60 chars)."
+					},
+					"description": {
+						"type": "string",
+						"description": "One- or two-sentence summary of the document content."
+					},
+					"booking_summary": {
+						"type": "string",
+						"description": "A compact, BOOKKEEPER-oriented PRE-ANALYSIS of the Vorgänge on this document. Start with a one-line nature (e.g. 'Software-Abo / SaaS'). THEN, if the document mixes several DISTINCT Vorgänge that would book to DIFFERENT SKR04 accounts — different cost types, different VAT rates (7%/19%), private vs business shares, or Skonto — list each on its OWN line as '- <Vorgang> (<Betrag/USt-Hinweis>)' so a later Splitbuchung can use it. If it is a single uniform Vorgang, just the one line. Keep each line short."
+					},
+					"tags": {
+						"type": "array",
+						"items": { "type": "string" },
+						"description": "3–5 relevant keyword tags."
+					},
+					"issuer": {
+						"type": "string",
+						"description": "The party that issued/sent the document (the identity of the counterparty), e.g. the vendor on an invoice, the bank on a statement, the offering party on a contract. Empty string if not determinable."
+					},
+					"recipient": {
+						"type": "string",
+						"description": "The party the document is addressed to (the customer/account holder/signing party). Empty string if not determinable."
+					},
+					"parties": {
+						"type": "array",
+						"items": { "type": "string" },
+						"description": "Any OTHER parties named in the document beyond issuer and recipient (e.g. intermediaries, guarantors, referenced companies). Empty array if none."
+					},
+					"response": {
+						"type": "string",
+						"description": "A single-sentence human-facing reply, e.g. 'Ich habe das Dokument klassifiziert.'"
+					}
+				},
+				"required": [
+					"docType",
+					"title",
+					"description",
+					"booking_summary",
+					"tags",
+					"issuer",
+					"recipient",
+					"parties",
+					"response"
+				]
+			}
+		}
+	}
+]

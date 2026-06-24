@@ -6,11 +6,10 @@ import { page } from '$app/state'
 import { startAsrReadiness } from '$lib/asr/model-download-store'
 import { avenCeoMembership } from '$lib/avendb/api'
 import { avenDbStore } from '$lib/avendb/store.svelte'
-import { storeDroppedFiles } from '$lib/composer/active-spark'
 import { installConsoleCapture } from '$lib/debug/console-capture'
 import { startEmbedReadiness } from '$lib/embed/model-download-store'
 import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
-import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
+import { pendingIntentFileDrop, pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
 import { queryClient } from '$lib/query/client'
 import { startRealtime } from '$lib/query/events'
@@ -258,8 +257,8 @@ const dragActive = $derived(dragDepth > 0)
 const dropText = $derived(
 	$selectedNetwork === 'mainnet'
 		? {
-				title: 'Drop images',
-				subtitle: 'Saved privately to your site as design inspiration — never published.',
+				title: 'Drop a file',
+				subtitle: 'Attaches to your chat — images & PDFs are sent to the AI on submit.',
 				hint: ''
 			}
 		: {
@@ -307,10 +306,10 @@ $effect(() => {
 		const list = e.dataTransfer?.files
 		if (!list?.length) return
 		const files = Array.from(list)
-		// Mainnet: dropped files are website reference images → store them in the spark's private/
-		// folder (never published). The chat surfaces them for the next edit. board 0055.
+		// Mainnet: hand dropped files to the chat composer (preview thumbnails above the input);
+		// on submit they ride along to the LLM as attachments (e.g. the bookkeeping classifier). 0063.
 		if ($selectedNetwork === 'mainnet') {
-			void storeDroppedFiles(files)
+			pendingMainnetFileDrop.set(files)
 			return
 		}
 		pendingIntentFileDrop.set(files)

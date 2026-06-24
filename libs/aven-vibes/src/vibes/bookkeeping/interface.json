@@ -1,0 +1,17 @@
+{
+	"properties": {
+		"SET_CLASSIFICATION": {
+			"properties": {
+				"docType": {},
+				"title": {},
+				"description": {},
+				"tags": {},
+				"fileUrl": {},
+				"mimeType": {}
+			}
+		},
+		"RESET": {
+			"properties": {}
+		}
+	}
+}

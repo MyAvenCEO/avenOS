@@ -77,6 +77,43 @@ async function fileToBase64(file: File): Promise<string> {
 	})
 }
 
+/** An image attachment ready to ride along in an OpenAI-style multimodal user message. */
+export type ImageAttachment = { mimeType: string; dataUrl: string }
+
+/** Cap PDF→image rasterization so a long document can't blow up the request payload. */
+const PDF_MAX_PAGES_FOR_LLM = 5
+
+/**
+ * Build vision `image_url` payloads from uploaded files so they reach a vision LLM
+ * (gemma4-31b). Images become `data:` URLs directly; PDFs are rasterized page-by-page to
+ * JPEGs (the model can't read PDFs natively) up to {@link PDF_MAX_PAGES_FOR_LLM} pages.
+ * Other types (CSV/TXT/RTF/MD) are skipped here — they're still saved to the spark's files
+ * table, just not sent as vision input. Best-effort: a file that fails to read/convert is
+ * dropped rather than throwing.
+ */
+export async function filesToVisionImages(files: File[]): Promise<ImageAttachment[]> {
+	const out: ImageAttachment[] = []
+	for (const file of files) {
+		const classified = classifyIntentUploadFile(file)
+		if (!classified.ok) continue
+		try {
+			if (classified.mime.startsWith('image/')) {
+				const b64 = await fileToBase64(file)
+				out.push({ mimeType: classified.mime, dataUrl: `data:${classified.mime};base64,${b64}` })
+			} else if (classified.mime === 'application/pdf') {
+				// Rasterize the PDF to page images so the vision model can actually read it.
+				const { renderPdfPagesToDataUrls } = await import('$lib/gallery/pdf-thumbnail')
+				const b64 = await fileToBase64(file)
+				const pages = await renderPdfPagesToDataUrls(b64, { maxPages: PDF_MAX_PAGES_FOR_LLM })
+				for (const dataUrl of pages) out.push({ mimeType: 'image/jpeg', dataUrl })
+			}
+		} catch {
+			// skip unreadable / unconvertible file
+		}
+	}
+	return out
+}
+
 /**
  * Persist attachments to avenDB `files` table (Tauri + unlocked only).
  * `parentId` is stored in `intent_id` (intent row id from composer, or message id from talk).

@@ -1,0 +1,13 @@
+{
+	"title": "Rechnung",
+	"subtitle": "Rechnung",
+	"sections": [
+		{
+			"title": "Beleg",
+			"cards": [],
+			"rows": [{ "k": "Status", "v": "Datei anhängen und extrahieren lassen." }],
+			"columns": [],
+			"tableRows": []
+		}
+	]
+}

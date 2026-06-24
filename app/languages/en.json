@@ -1168,6 +1168,54 @@
 			"empty": "No todos yet.",
 			"placeholder": "New todo…",
 			"add": "Add"
+		},
+		"bookkeeping": {
+			"title": "Bookkeeping"
+		},
+		"docCompare": {
+			"title": "Documents"
+		},
+		"invoiceMatch": {
+			"title": "Reconcile"
+		},
+		"invoiceBooking": {
+			"title": "Booking"
+		},
+		"transactions": {
+			"title": "Transactions",
+			"count": "entries",
+			"empty": "No transactions yet — upload a bank statement.",
+			"date": "Date",
+			"counterparty": "Counterparty",
+			"purpose": "Purpose",
+			"amount": "Amount",
+			"balance": "Balance",
+			"status": "Status",
+			"belegt": "Doc linked",
+			"verbucht": "Booked",
+			"offen": "Open"
+		},
+		"bookings": {
+			"title": "Bookings",
+			"count": "entries",
+			"empty": "No bookings yet — classify an invoice.",
+			"vendor": "Vendor",
+			"soll": "Debit",
+			"haben": "Credit",
+			"tax": "Tax",
+			"gross": "Gross",
+			"back": "All bookings",
+			"noInvoice": "No linked invoice found.",
+			"prüfHint": "Click a booking to verify it against its invoice."
+		},
+		"finance": {
+			"title": "Finances (BWA)",
+			"revenue": "Revenue",
+			"expenses": "Expenses",
+			"result": "Result",
+			"cash": "Cash flow",
+			"byAccount": "Expenses by account",
+			"empty": "No bookings yet — classify an invoice."
 		}
 	}
 }

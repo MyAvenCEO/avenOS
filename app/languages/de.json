@@ -1145,6 +1145,54 @@
 			"empty": "Noch keine Aufgaben.",
 			"placeholder": "Neue Aufgabe…",
 			"add": "Hinzufügen"
+		},
+		"bookkeeping": {
+			"title": "Buchhaltung"
+		},
+		"docCompare": {
+			"title": "Belege"
+		},
+		"invoiceMatch": {
+			"title": "Abgleich"
+		},
+		"invoiceBooking": {
+			"title": "Buchung"
+		},
+		"transactions": {
+			"title": "Transaktionen",
+			"count": "Buchungen",
+			"empty": "Noch keine Transaktionen — lade einen Kontoauszug hoch.",
+			"date": "Datum",
+			"counterparty": "Gegenpartei",
+			"purpose": "Verwendungszweck",
+			"amount": "Betrag",
+			"balance": "Saldo",
+			"status": "Status",
+			"belegt": "Belegt",
+			"verbucht": "Verbucht",
+			"offen": "Offen"
+		},
+		"bookings": {
+			"title": "Buchungen",
+			"count": "Buchungen",
+			"empty": "Noch keine Buchungen — klassifiziere eine Rechnung.",
+			"vendor": "Lieferant",
+			"soll": "Soll",
+			"haben": "Haben",
+			"tax": "Steuer",
+			"gross": "Brutto",
+			"back": "Alle Buchungen",
+			"noInvoice": "Keine verknüpfte Rechnung gefunden.",
+			"prüfHint": "Buchung anklicken, um sie gegen die Rechnung zu prüfen."
+		},
+		"finance": {
+			"title": "Finanzen (BWA)",
+			"revenue": "Erlöse",
+			"expenses": "Aufwendungen",
+			"result": "Ergebnis",
+			"cash": "Cashflow",
+			"byAccount": "Aufwand nach Konto",
+			"empty": "Noch keine Buchungen — klassifiziere eine Rechnung."
 		}
 	}
 }

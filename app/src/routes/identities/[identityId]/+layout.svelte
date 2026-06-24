@@ -1,4 +1,5 @@
 <script lang="ts">
+import { tick } from 'svelte'
 import { browser } from '$app/environment'
 import { page } from '$app/state'
 import { avenDbStore } from '$lib/avendb/store.svelte'
@@ -79,11 +80,20 @@ let composerMode = $state<ComposerMode>('collapsed')
 // mode + shows the previews above the input), then clear the store so it fires once.
 let composerRef = $state<{ openWithFiles(files: File[] | FileList): void } | null>(null)
 let pendingDrop = $state<File[] | null>(null)
-$effect(() => pendingIntentFileDrop.subscribe((v) => (pendingDrop = v)))
+$effect(() => {
+	const unsub = pendingIntentFileDrop.subscribe((v) => {
+		pendingDrop = v
+	})
+	return unsub
+})
 $effect(() => {
 	const files = pendingDrop
 	if (!files?.length || !composerRef) return
-	composerRef.openWithFiles(files)
+	const ref = composerRef
+	// Defer to the next microtask (matching the intents page): calling openWithFiles synchronously
+	// from inside the effect can land before the composer has fully mounted/bound, dropping the
+	// attachments + preview. tick() guarantees the composer is ready before we hand it the files.
+	void tick().then(() => ref.openWithFiles(files))
 	pendingIntentFileDrop.set(null)
 })
 
@@ -139,9 +149,7 @@ const navSections = $derived(
 // The 420px right column (Brain roundtrip aside) only exists on the Brain view; everywhere else
 // is a clean 2-column layout (no brain panel).
 const identityGridClass = $derived(
-	isBrainView
-		? 'md:grid-cols-[8.5rem_minmax(0,1fr)_420px]'
-		: 'md:grid-cols-[8.5rem_minmax(0,1fr)]'
+	isBrainView ? 'md:grid-cols-[8.5rem_minmax(0,1fr)_420px]' : 'md:grid-cols-[8.5rem_minmax(0,1fr)]'
 )
 
 const mainClass = $derived(

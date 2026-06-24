@@ -9,6 +9,11 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./tools": "./src/tools.ts",
+		"./doctypes": "./src/doctypes.ts",
+		"./tx": "./src/vibes/bank-statement/tx.ts",
+		"./match": "./src/vibes/invoice/match.ts",
+		"./booking": "./src/vibes/invoice/booking.ts",
+		"./skr": "./src/skr.ts",
 		"./AvenVibeView.svelte": "./src/AvenVibeView.svelte"
 	},
 	"scripts": {

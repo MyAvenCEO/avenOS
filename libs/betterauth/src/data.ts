@@ -89,6 +89,49 @@ export async function createSchema(c: Context): Promise<Response> {
 	return c.json({ id, name: body.name, jsonSchema: body.jsonSchema })
 }
 
+/** Server-side: register/upsert a named JSON Schema for a user (idempotent). Returns the schema id.
+ *  Used by the document-extract loop to ensure the doctype schema exists before storing a value
+ *  (the same data_schema table the todos/data_crud path uses). board 0064. */
+export async function ensureDocSchema(
+	uid: string,
+	name: string,
+	jsonSchema: unknown
+): Promise<string> {
+	try {
+		ajv.compile(jsonSchema as object) // reject a malformed schema up front
+	} catch (e) {
+		throw new Error(`invalid schema "${name}": ${e instanceof Error ? e.message : String(e)}`)
+	}
+	const existing = await db()
+		.selectFrom('data_schema')
+		.select('id')
+		.where('user_id', '=', uid)
+		.where('name', '=', name)
+		.executeTakeFirst()
+	if (existing) {
+		await db()
+			.updateTable('data_schema')
+			.set({ json_schema: jsonb(jsonSchema), updated_at: new Date() })
+			.where('id', '=', existing.id)
+			.execute()
+		return existing.id
+	}
+	const id = randomUUID()
+	await db()
+		.insertInto('data_schema')
+		.values({
+			id,
+			user_id: uid,
+			name,
+			json_schema: jsonb(jsonSchema),
+			created_at: new Date(),
+			updated_at: new Date()
+		})
+		.execute()
+	publish(uid, { entity: 'data' })
+	return id
+}
+
 /** GET /api/data/schemas — the user's schemas. */
 export async function listSchemas(c: Context): Promise<Response> {
 	const uid = await userId(c)
