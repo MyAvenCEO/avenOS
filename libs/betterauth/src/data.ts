@@ -321,19 +321,14 @@ export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<
 		const updated: string[] = []
 		const errors: string[] = []
 		for (const item of args.items ?? []) {
-			const { id, ...data } = item as { id?: string } & Record<string, unknown>
+			const { id, ...patch } = item as { id?: string } & Record<string, unknown>
 			if (!id) {
 				errors.push('update item missing id')
 				continue
 			}
-			const e = validate(jsonSchema, data)
-			if (e) {
-				errors.push(...e)
-				continue
-			}
 			const owns = await db()
 				.selectFrom('data_value')
-				.select('id')
+				.select(['id', 'data'])
 				.where('id', '=', id)
 				.where('user_id', '=', uid)
 				.executeTakeFirst()
@@ -341,9 +336,18 @@ export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<
 				errors.push(`no value ${id}`)
 				continue
 			}
+			// MERGE the patch onto the existing value (PATCH semantics): a partial update keeps the other
+			// fields, and validation runs on the MERGED object so required fields stay satisfied. Without
+			// this a partial update (e.g. set one field) failed validation + wiped the rest. board 0082.
+			const merged = { ...(asJson(owns.data) as Record<string, unknown>), ...patch }
+			const e = validate(jsonSchema, merged)
+			if (e) {
+				errors.push(...e)
+				continue
+			}
 			await db()
 				.updateTable('data_value')
-				.set({ data: jsonb(data), updated_at: new Date() })
+				.set({ data: jsonb(merged), updated_at: new Date() })
 				.where('id', '=', id)
 				.execute()
 			updated.push(id)

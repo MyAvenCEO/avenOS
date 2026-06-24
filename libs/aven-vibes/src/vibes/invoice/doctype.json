@@ -954,6 +954,10 @@
 						}
 					}
 				}
+			},
+			"file_hash": {
+				"type": ["string", "null"],
+				"description": "Content hash of the source file in the PRIVATE store (board 0082)."
 			}
 		}
 	}

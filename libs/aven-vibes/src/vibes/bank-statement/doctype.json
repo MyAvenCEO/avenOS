@@ -266,6 +266,10 @@
 			"notes": {
 				"type": ["string", "null"],
 				"description": "Footnotes, interest summary, or other narrative not mapped to a transaction line."
+			},
+			"file_hash": {
+				"type": ["string", "null"],
+				"description": "Content hash of the source file in the PRIVATE store (board 0082)."
 			}
 		}
 	}

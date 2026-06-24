@@ -1,12 +1,12 @@
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import {
-	BOOLEAN_ATTRS,
 	ALLOWED_EVENTS,
-	SAFE_TAGS,
 	assertSafeClassValue,
+	BOOLEAN_ATTRS,
 	isAllowedAttribute,
 	isSafeUrl,
+	SAFE_TAGS,
 	sanitizeAttributeWhitelist,
 	sanitizePayloadForValidation,
 	URL_ATTRS
@@ -241,7 +241,8 @@ export class ViewEngine {
 		data: RenderData
 	): void {
 		for (const [eventName, eventDef] of Object.entries(events)) {
-			if (!ALLOWED_EVENTS.has(eventName)) throw new Error(`[aven-ui] Forbidden event "${eventName}"`)
+			if (!ALLOWED_EVENTS.has(eventName))
+				throw new Error(`[aven-ui] Forbidden event "${eventName}"`)
 			element.addEventListener(eventName, (domEvent) => {
 				if (eventName === 'submit') {
 					domEvent.preventDefault()

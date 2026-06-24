@@ -4,7 +4,23 @@ import {
 	type BookingRecord,
 	buildBookingRecord
 } from '@avenos/aven-vibes/booking'
+import { CONTACT_SCHEMA, contactDisplayName, mintContactId } from '@avenos/aven-vibes/contact'
+import {
+	enrichFields,
+	matchContact,
+	type PartyInput,
+	partiesFromDoc,
+	partyToContactFields
+} from '@avenos/aven-vibes/contact-match'
 import { getDoctype } from '@avenos/aven-vibes/doctypes'
+import {
+	computeInvoiceTotals,
+	INVOICE_DOC_SCHEMA,
+	type InvoiceDoc,
+	type InvoiceLine,
+	requiredFieldsMissing
+} from '@avenos/aven-vibes/invoice-doc'
+import { assignInvoiceNumber, type InvoiceState } from '@avenos/aven-vibes/invoice-number'
 import {
 	bestInvoiceMatch,
 	buildMatchRecord,
@@ -108,17 +124,31 @@ async function extractDocFields(
 			tool_choice: { type: 'function', function: { name: 'emit_fields' } },
 			stream: false
 		})
-	}).catch(() => null)
-	if (!res?.ok) return null
+	}).catch((e) => {
+		console.error('[ai] extract vision fetch threw:', e)
+		return null
+	})
+	if (!res?.ok) {
+		const detail = res ? await res.text().catch(() => '') : 'no response'
+		console.error(`[ai] extract vision HTTP ${res?.status ?? '???'}:`, detail.slice(0, 600))
+		return null
+	}
 	const data = (await res.json().catch(() => null)) as {
 		choices?: { message?: { tool_calls?: { function?: { arguments?: string } }[] } }[]
 	} | null
 	const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments
-	if (!args) return null
+	if (!args) {
+		console.error(
+			'[ai] extract vision: no tool_call args returned:',
+			JSON.stringify(data).slice(0, 400)
+		)
+		return null
+	}
 	try {
 		const parsed = JSON.parse(args)
 		return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
-	} catch {
+	} catch (e) {
+		console.error('[ai] extract vision: tool args not JSON:', e, args.slice(0, 300))
 		return null
 	}
 }
@@ -508,6 +538,8 @@ export async function aiChat(c: Context): Promise<Response> {
 		publicFiles?: Record<string, string>
 		/** File attachments from the client: base64 data + MIME type for multimodal classification. */
 		attachments?: { mimeType: string; b64: string }[]
+		/** Content hashes of the source files persisted to the PRIVATE store (mainnet). board 0082. */
+		fileHashes?: string[]
 	} | null
 	const messages = body?.messages
 	if (!Array.isArray(messages) || messages.length === 0) {
@@ -524,6 +556,9 @@ export async function aiChat(c: Context): Promise<Response> {
 		? (body.attachments as { mimeType: string; b64: string }[]).filter(
 				(a) => typeof a.mimeType === 'string' && typeof a.b64 === 'string'
 			)
+		: []
+	const fileHashes = Array.isArray(body?.fileHashes)
+		? (body.fileHashes as string[]).filter((h) => typeof h === 'string')
 		: []
 
 	// Hard credit cap: block inference once the tier's weekly allowance is spent. board 0052.
@@ -561,7 +596,8 @@ export async function aiChat(c: Context): Promise<Response> {
 			userId,
 			chatSessionId,
 			publicFiles,
-			attachments
+			attachments,
+			fileHashes
 		})
 	}
 
@@ -608,6 +644,121 @@ type StreamDelta = {
  * OpenAI-style SSE, tool calls are assembled and executed against the data store (scoped to
  * the user), their results fed back, until the model returns a final answer. board 0054.
  */
+// board 0082 — outgoing invoicing helpers (pure shaping; the tool branches do the persist/emit).
+const CONTACT_FIELD_KEYS = [
+	'type',
+	'name',
+	'legal_form',
+	'street',
+	'zip',
+	'city',
+	'country',
+	'vat_id',
+	'tax_number',
+	'email',
+	'phone',
+	'iban',
+	'bic',
+	'bank_name',
+	'contact_person',
+	'register_court',
+	'register_number',
+	'managing_director',
+	'notes'
+] as const
+
+function contactFieldsFromPick(p: Record<string, unknown>): Record<string, unknown> {
+	const out: Record<string, unknown> = {}
+	for (const k of CONTACT_FIELD_KEYS) if (p[k] != null) out[k] = p[k]
+	return out
+}
+
+function partyFromContact(c: Record<string, unknown> | null): Record<string, unknown> | null {
+	if (!c) return null
+	const pick = (k: string) => (typeof c[k] === 'string' && c[k] ? (c[k] as string) : null)
+	return {
+		name: pick('name'),
+		legal_form: pick('legal_form'),
+		street: pick('street'),
+		zip: pick('zip'),
+		city: pick('city'),
+		country: pick('country'),
+		vat_id: pick('vat_id'),
+		tax_number: pick('tax_number'),
+		iban: pick('iban'),
+		bic: pick('bic'),
+		bank_name: pick('bank_name'),
+		register_court: pick('register_court'),
+		register_number: pick('register_number'),
+		managing_director: pick('managing_director')
+	}
+}
+
+/**
+ * board 0082 — after a doc extract, harvest its parties (vendor + buyer / account holder), match them
+ * against the addressbook (USt-IdNr → IBAN → name), and create/enrich contacts. The buyer/account
+ * holder is the user's SELF-company candidate: when none is marked yet, return a hint so the chat asks
+ * "is this your company?" (answerable in free text → set_my_company). Returns the hint + touched count.
+ */
+async function enrichAddressbookFromDoc(
+	userId: string,
+	docType: string,
+	extracted: Record<string, unknown>
+): Promise<{ hint: string | null; touched: number }> {
+	const { vendor, self } = partiesFromDoc(docType, extracted)
+	if (!vendor?.name && !self?.name) return { hint: null, touched: 0 }
+	await ensureDocSchema(userId, 'contact', CONTACT_SCHEMA)
+	const contacts = ((
+		(await executeDataTool(userId, { schema: 'contact', action: 'list' })) as {
+			items?: Record<string, unknown>[]
+		}
+	).items ?? []) as (Record<string, unknown> & { id?: string })[]
+	const hasSelf = contacts.some((c) => c.is_self)
+	const ids = contacts.map((c) => String(c.short_id ?? '')).filter(Boolean)
+	let touched = 0
+
+	const upsert = async (
+		party: PartyInput | undefined
+	): Promise<{ id: string; name: string } | null> => {
+		if (!party?.name) return null
+		const match = matchContact(party, contacts)
+		if (match?.id) {
+			const patch = enrichFields(match, party)
+			if (Object.keys(patch).length > 0) {
+				await executeDataTool(userId, {
+					schema: 'contact',
+					action: 'update',
+					items: [{ id: match.id, ...patch }]
+				})
+				touched++
+			}
+			return { id: match.id, name: String(match.name ?? party.name) }
+		}
+		const fields = partyToContactFields(party)
+		const shortId = mintContactId(Math.random, ids)
+		ids.push(shortId)
+		const res = (await executeDataTool(userId, {
+			schema: 'contact',
+			action: 'create',
+			items: [{ short_id: shortId, is_self: false, ...fields }]
+		})) as { created?: string[] }
+		const id = res.created?.[0] ?? ''
+		if (id) {
+			contacts.push({ id, short_id: shortId, ...(fields as Record<string, unknown>) })
+			touched++
+		}
+		return id ? { id, name: String(fields.name ?? party.name) } : null
+	}
+
+	await upsert(vendor)
+	const selfContact = await upsert(self)
+	const hint =
+		!hasSelf && selfContact
+			? `Es ist noch keine eigene Firma (Stammdaten) gesetzt. Frage den Nutzer kurz, ob „${selfContact.name}" seine eigene Firma ist; wenn ja, rufe set_my_company(contact_value_id="${selfContact.id}") auf.`
+			: null
+	return { hint, touched }
+}
+
 function streamWithTools(opts: {
 	key: string
 	model: string
@@ -616,8 +767,10 @@ function streamWithTools(opts: {
 	chatSessionId: string
 	publicFiles: Record<string, string>
 	attachments: { mimeType: string; b64: string }[]
+	fileHashes?: string[]
 }): Response {
 	const { key, model, messages, userId, chatSessionId, publicFiles, attachments } = opts
+	const fileHashes = opts.fileHashes ?? []
 	const encoder = new TextEncoder()
 	// When the client disconnects (its idle-abort, or navigating away) the stream is cancelled and any
 	// further controller.enqueue throws "Controller is already closed". That throw, from a non-awaited
@@ -694,6 +847,7 @@ function streamWithTools(opts: {
 				stored: boolean
 				txAdded: number
 				match?: { status: string; confidence?: string }
+				addressbookHint?: string | null
 			}> => {
 				const doctype = getDoctype(docTypeName)
 				emitTool(tcId, 'extract_document', docTypeName || 'document', 'running')
@@ -703,6 +857,7 @@ function streamWithTools(opts: {
 				let createdId: string | null = null
 				let invoiceMatch: InvoiceMatch | null = null
 				let invoiceBooking: BookingRecord | null = null
+				let addressbookHint: string | null = null
 				if (doctype && attachments.length > 0) {
 					// The 2nd vision pass can take 10–30s with no bytes; re-emit 'running' every 5s so the
 					// client's idle watchdog doesn't abort the stream ("Fetch is aborted"). board 0064.
@@ -716,6 +871,9 @@ function streamWithTools(opts: {
 						clearInterval(ping)
 					}
 					if (extracted) {
+						// Stamp the source file's content hash (it was persisted to the PRIVATE store on the
+						// client) into the extracted doc so the JSON references the original. board 0082.
+						if (fileHashes[0]) extracted.file_hash = fileHashes[0]
 						try {
 							await ensureDocSchema(userId, docTypeName, doctype.schema)
 							const result = (await executeDataTool(userId, {
@@ -738,6 +896,14 @@ function streamWithTools(opts: {
 									invoiceMatch,
 									createdId
 								)
+							}
+							// board 0082 — harvest + match-make the doc's parties into the addressbook (the buyer /
+							// account holder is the self-company candidate, surfaced via the returned hint).
+							try {
+								addressbookHint = (await enrichAddressbookFromDoc(userId, docTypeName, extracted))
+									.hint
+							} catch (e2) {
+								console.error('[ai] addressbook enrich failed:', e2)
 							}
 						} catch (e) {
 							console.error('[ai] extract persist failed:', e)
@@ -797,7 +963,8 @@ function streamWithTools(opts: {
 						? { status: 'matched', confidence: invoiceMatch.confidence }
 						: docTypeName === 'invoice'
 							? { status: 'unmatched' }
-							: undefined
+							: undefined,
+					addressbookHint
 				}
 			}
 			// Running copy of the website files for this turn — each edit_website merges its changed
@@ -973,6 +1140,234 @@ function streamWithTools(opts: {
 							emitTool(tc.id, 'show_finances', 'finance snapshot ready', 'done')
 							continue
 						}
+						// board 0082 — outgoing invoicing + addressbook tools. Contacts/invoices are JSON in /api/data;
+						// the server mints contact ids, assigns fortlaufende numbers, computes VAT. PDF render is client-side.
+						if (
+							tc.name === 'upsert_contact' ||
+							tc.name === 'set_my_company' ||
+							tc.name === 'query_contacts' ||
+							tc.name === 'create_invoice' ||
+							tc.name === 'update_invoice' ||
+							tc.name === 'set_invoice_state' ||
+							tc.name === 'save_invoice_pdf'
+						) {
+							const reply = typeof parsed.response === 'string' ? parsed.response : ''
+							emitTool(tc.id, tc.name, tc.name, 'running')
+							let toolResult: Record<string, unknown> = { ok: true }
+							const emitVibe = (schema: string, data?: unknown) => {
+								emit({ aven_vibe: data === undefined ? { schema } : { schema, data } })
+								const marker =
+									data === undefined
+										? `${VIBE_MARKER}${schema}`
+										: `${VIBE_MARKER}${schema}\n${JSON.stringify(data)}`
+								void persistMessage(chatSessionId, 'assistant', marker).catch(() => {})
+							}
+							try {
+								await ensureDocSchema(userId, 'contact', CONTACT_SCHEMA)
+								const listContacts = async (): Promise<Record<string, unknown>[]> =>
+									(
+										(await executeDataTool(userId, { schema: 'contact', action: 'list' })) as {
+											items?: Record<string, unknown>[]
+										}
+									).items ?? []
+								if (tc.name === 'query_contacts') {
+									const items = await listContacts()
+									emitVibe('addressbook')
+									toolResult = { ok: true, count: items.length, note: CARD_REPLY_NOTE }
+								} else if (tc.name === 'upsert_contact') {
+									const fields = contactFieldsFromPick(parsed)
+									const contacts = await listContacts()
+									// Resolve the target: an explicit id, else DEDUPE against an existing contact
+									// (USt-IdNr → IBAN → name) so we never create a duplicate. board 0082.
+									let targetId =
+										typeof parsed.contact_value_id === 'string' && parsed.contact_value_id
+											? parsed.contact_value_id
+											: (matchContact(fields as PartyInput, contacts)?.id ?? null)
+									if (targetId) {
+										await executeDataTool(userId, {
+											schema: 'contact',
+											action: 'update',
+											items: [{ id: targetId, ...fields }]
+										})
+										toolResult = { ok: true, contact_value_id: targetId, updated: true }
+									} else {
+										const shortId = mintContactId(
+											Math.random,
+											contacts.map((c) => String(c.short_id ?? '')).filter(Boolean)
+										)
+										const res = (await executeDataTool(userId, {
+											schema: 'contact',
+											action: 'create',
+											items: [{ short_id: shortId, is_self: false, ...fields }]
+										})) as { created?: string[] }
+										targetId = res.created?.[0] ?? null
+										toolResult = { ok: true, contact_value_id: targetId, short_id: shortId }
+									}
+									emitVibe('addressbook')
+								} else if (tc.name === 'set_my_company') {
+									await executeDataTool(userId, {
+										schema: 'contact',
+										action: 'update',
+										items: [{ id: parsed.contact_value_id, is_self: true }]
+									})
+									emitVibe('addressbook')
+									toolResult = { ok: true, set: 'is_self' }
+								} else {
+									// invoice tools — need invoice_doc schema, the seller (my company), and existing numbers.
+									await ensureDocSchema(userId, 'invoice_doc', INVOICE_DOC_SCHEMA)
+									const contacts = await listContacts()
+									const myCompany = contacts.find((c) => c.is_self) ?? null
+									const invoices =
+										(
+											(await executeDataTool(userId, {
+												schema: 'invoice_doc',
+												action: 'list'
+											})) as { items?: Record<string, unknown>[] }
+										).items ?? []
+									const numbers = invoices.map((i) => String(i.number ?? '')).filter(Boolean)
+									const persistDoc = async (doc: InvoiceDoc) => {
+										await executeDataTool(userId, {
+											schema: 'invoice_doc',
+											action: 'create',
+											items: [doc as unknown as Record<string, unknown>]
+										})
+										emitVibe('invoice-create', doc)
+									}
+									if (tc.name === 'create_invoice') {
+										// resolve the customer: existing contact, or create one from `customer`.
+										let customer =
+											typeof parsed.contact_value_id === 'string'
+												? (contacts.find((c) => c.id === parsed.contact_value_id) ?? null)
+												: null
+										if (!customer && parsed.customer && typeof parsed.customer === 'object') {
+											const cf = contactFieldsFromPick(parsed.customer as Record<string, unknown>)
+											const shortId = mintContactId(
+												Math.random,
+												contacts.map((c) => String(c.short_id ?? '')).filter(Boolean)
+											)
+											const res = (await executeDataTool(userId, {
+												schema: 'contact',
+												action: 'create',
+												items: [{ short_id: shortId, is_self: false, type: 'company', ...cf }]
+											})) as { created?: string[] }
+											customer = { id: res.created?.[0] ?? null, short_id: shortId, ...cf }
+											emitVibe('addressbook')
+										}
+										const shortId = String(customer?.short_id ?? 'XXXXXXXX')
+										const lines = (Array.isArray(parsed.lines) ? parsed.lines : []) as InvoiceLine[]
+										const number = assignInvoiceNumber(numbers, 'entwurf', shortId)
+										const doc: InvoiceDoc = {
+											number,
+											state: 'entwurf',
+											version: 1,
+											contact_short_id: shortId,
+											contact_value_id: (customer?.id as string) ?? null,
+											issue_date: typeof parsed.issue_date === 'string' ? parsed.issue_date : null,
+											service_date: null,
+											service_period:
+												typeof parsed.service_period === 'string' ? parsed.service_period : null,
+											seller: partyFromContact(myCompany) as InvoiceDoc['seller'],
+											buyer: partyFromContact(customer) as InvoiceDoc['buyer'],
+											lines,
+											totals: computeInvoiceTotals(lines),
+											currency: 'EUR',
+											note: typeof parsed.note === 'string' ? parsed.note : null,
+											pdf_file_hash: null,
+											supersedes: null
+										}
+										await persistDoc(doc)
+										const missing = requiredFieldsMissing(doc)
+										toolResult = {
+											ok: true,
+											number,
+											totals: doc.totals,
+											my_company_set: !!myCompany,
+											missing_required_fields: missing,
+											note:
+												missing.length || !myCompany
+													? 'Ask the user (free text/voice) for the missing fields, then update_invoice / upsert the seller.'
+													: CARD_REPLY_NOTE
+										}
+									} else if (tc.name === 'update_invoice') {
+										const prior =
+											invoices
+												.filter((i) => i.number === parsed.number)
+												.sort((a, b) => Number(b.version ?? 0) - Number(a.version ?? 0))[0] ?? null
+										const base = (prior ?? {}) as unknown as InvoiceDoc
+										const lines = (
+											Array.isArray(parsed.lines) ? parsed.lines : (base.lines ?? [])
+										) as InvoiceLine[]
+										const doc: InvoiceDoc = {
+											...base,
+											version: Number(base.version ?? 0) + 1,
+											issue_date:
+												typeof parsed.issue_date === 'string'
+													? parsed.issue_date
+													: (base.issue_date ?? null),
+											service_period:
+												typeof parsed.service_period === 'string'
+													? parsed.service_period
+													: (base.service_period ?? null),
+											note: typeof parsed.note === 'string' ? parsed.note : (base.note ?? null),
+											lines,
+											totals: computeInvoiceTotals(lines),
+											pdf_file_hash: null,
+											supersedes: String(parsed.number)
+										}
+										await persistDoc(doc)
+										toolResult = {
+											ok: true,
+											number: doc.number,
+											version: doc.version,
+											totals: doc.totals,
+											note: CARD_REPLY_NOTE
+										}
+									} else if (tc.name === 'set_invoice_state') {
+										const prior =
+											invoices
+												.filter((i) => i.number === parsed.number)
+												.sort((a, b) => Number(b.version ?? 0) - Number(a.version ?? 0))[0] ?? null
+										const base = (prior ?? {}) as unknown as InvoiceDoc
+										const state = parsed.state as InvoiceState
+										const shortId = String(base.contact_short_id ?? 'XXXXXXXX')
+										const number = assignInvoiceNumber(numbers, state, shortId)
+										const doc: InvoiceDoc = {
+											...base,
+											number,
+											state,
+											version: 1,
+											pdf_file_hash: null,
+											supersedes: String(parsed.number)
+										}
+										await persistDoc(doc)
+										toolResult = { ok: true, number, state, note: CARD_REPLY_NOTE }
+									} else if (tc.name === 'save_invoice_pdf') {
+										// The PDF is rendered client-side (HTML template → print). Flow the invoice card so the client
+										// can render + store it in the PRIVATE file store and stamp the hash. board 0082 Phase E.
+										const doc =
+											invoices
+												.filter((i) => i.number === parsed.number)
+												.sort((a, b) => Number(b.version ?? 0) - Number(a.version ?? 0))[0] ?? null
+										if (doc) emitVibe('invoice-create', doc)
+										emit({ aven_invoice_pdf: { number: parsed.number } })
+										toolResult = {
+											ok: true,
+											number: parsed.number,
+											note: 'The client renders + stores the PDF.'
+										}
+									}
+								}
+							} catch (e) {
+								toolResult = { ok: false, error: e instanceof Error ? e.message : String(e) }
+							}
+							msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(toolResult) })
+							if (reply) {
+								emit({ choices: [{ delta: { content: reply } }] })
+								assistant += reply
+							}
+							emitTool(tc.id, tc.name, tc.name, 'done')
+							continue
+						}
 						// Website edit: the chat model passed an instruction — GLM returns SEARCH/REPLACE diff
 						// blocks, applied here to the turn's running html (compounds across edits). Relayed to
 						// the client (it writes via tauriFs + re-renders the Composer vibe). board 0055.
@@ -1138,7 +1533,11 @@ function streamWithTools(opts: {
 										? {
 												extracted: autoExtract.extracted,
 												stored: autoExtract.stored,
-												note: 'Extraction already ran automatically — do NOT call extract_document. Reply with one short sentence.'
+												// Addressbook auto-enriched from the parties; the hint (if any) asks the user to
+												// confirm their own company. Else: extraction already ran, reply briefly. board 0082.
+												note:
+													autoExtract.addressbookHint ??
+													'Extraction already ran automatically — do NOT call extract_document. Reply with one short sentence.'
 											}
 										: {})
 								})
@@ -1155,7 +1554,13 @@ function streamWithTools(opts: {
 								typeof parsed.response === 'string' ? parsed.response : 'Dokument extrahiert.'
 							const summary =
 								extractedType === docTypeName
-									? { extracted: true, stored: true, txAdded: 0, match: undefined }
+									? {
+											extracted: true,
+											stored: true,
+											txAdded: 0,
+											match: undefined,
+											addressbookHint: null as string | null
+										}
 									: await performExtraction(docTypeName, tc.id)
 							msgs.push({
 								role: 'tool',
@@ -1166,7 +1571,10 @@ function streamWithTools(opts: {
 									stored: summary.stored,
 									validated: summary.stored,
 									transactions_added: summary.txAdded,
-									match: summary.match
+									match: summary.match,
+									// board 0082 — addressbook auto-enriched from the parties; when the user's own
+									// company isn't set yet, this asks them to confirm it (free text).
+									...(summary.addressbookHint ? { note: summary.addressbookHint } : {})
 								})
 							})
 							emit({ choices: [{ delta: { content: reply } }] })

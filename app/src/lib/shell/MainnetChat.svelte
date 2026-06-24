@@ -2,7 +2,7 @@
 import { useQueryClient } from '@tanstack/svelte-query'
 import { tick } from 'svelte'
 import { getBearerToken } from '$lib/auth/auth-client'
-import { filesToVisionImages } from '$lib/avendb/intent-files'
+import { filesToVisionImages, persistMainnetFiles } from '$lib/avendb/intent-files'
 import {
 	bumpComposerReload,
 	readSrcFiles,
@@ -14,11 +14,13 @@ import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
+import AddressbookVibe from '$lib/shell/AddressbookVibe.svelte'
 import BookingsVibe from '$lib/shell/BookingsVibe.svelte'
 import BookkeepingVibe from '$lib/shell/BookkeepingVibe.svelte'
 import DocCompareVibe from '$lib/shell/DocCompareVibe.svelte'
 import FinanceVibe from '$lib/shell/FinanceVibe.svelte'
 import InvoiceBookingVibe from '$lib/shell/InvoiceBookingVibe.svelte'
+import InvoiceCreateVibe from '$lib/shell/InvoiceCreateVibe.svelte'
 import InvoiceMatchVibe from '$lib/shell/InvoiceMatchVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 import TransactionsVibe from '$lib/shell/TransactionsVibe.svelte'
@@ -337,7 +339,8 @@ async function streamTinfoil(
 		action: Record<string, unknown>
 	}) => void,
 	onEditChunk: (text: string) => void,
-	attachments: { mimeType: string; b64: string }[]
+	attachments: { mimeType: string; b64: string }[],
+	fileHashes: string[]
 ): Promise<void> {
 	if (!AI_BASE) throw new Error('auth server URL not configured')
 	const token = getBearerToken()
@@ -358,7 +361,10 @@ async function streamTinfoil(
 			// Current public/ files → the server's edit_website tool (GLM) diffs/creates across them.
 			publicFiles,
 			// Image attachments for the classify_document vision tool. board 0063.
-			...(attachments.length > 0 ? { attachments } : {})
+			...(attachments.length > 0 ? { attachments } : {}),
+			// Content hashes of the source files persisted to the PRIVATE store; the server stamps the
+			// first into the extracted doc JSON (file_hash). board 0082.
+			...(fileHashes.length > 0 ? { fileHashes } : {})
 		})
 	})
 	const sid = res.headers.get('X-Session-Id')
@@ -452,6 +458,9 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 		b64: img.dataUrl.split(',')[1] ?? ''
 	}))
 	const previewImage = visionImages[0] ?? null
+	// Persist the ORIGINAL source files to the mainnet PRIVATE content-addressed store, and pass their
+	// hashes so the server can stamp file_hash into the extracted JSON. Mainnet-only. board 0082.
+	const fileHashes = (await persistMainnetFiles(files)).map((r) => r.hash)
 
 	const pendingId = nextId + 1
 	messages = [
@@ -501,7 +510,8 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 				editStream += text
 				scrollToBottom()
 			},
-			attachments
+			attachments,
+			fileHashes
 		)
 		const finalText = acc.trim() || t('mainnet.chat.noReply')
 		messages = messages.map((m) =>
@@ -684,6 +694,21 @@ function handleTranscribeError(message: string): void {
 							<!-- BWA / finance snapshot (computed from bookings + tx). board 0072. -->
 							<div class="max-h-[80vh] w-full overflow-y-auto">
 								<FinanceVibe containerName={`aven-vibes-chat-${message.id}`} />
+							</div>
+						{:else if message.vibe === 'addressbook'}
+							<!-- Addressbook: contacts list + detail (Stammdaten / Belege). board 0082. -->
+							<div
+								class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
+							>
+								<AddressbookVibe containerName={`aven-vibes-chat-${message.id}`} />
+							</div>
+						{:else if message.vibe === 'invoice-create'}
+							<!-- Outgoing invoice authoring view (doc emitted by the invoicing tools). board 0082. -->
+							<div class="max-h-[80vh] w-full overflow-y-auto">
+								<InvoiceCreateVibe
+									containerName={`aven-vibes-chat-${message.id}`}
+									data={message.vibeData}
+								/>
 							</div>
 						{/if}
 					{:else}

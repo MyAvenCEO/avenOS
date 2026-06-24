@@ -86,6 +86,8 @@ export type BookingRecord = {
 	confidence: BookingConfidence
 	reason: string | null
 	status: 'booked' | 'unbooked'
+	/** incoming = supplier invoice (Aufwand+Vorsteuer); outgoing = our Rechnung (Erlös). board 0082. */
+	direction?: 'incoming' | 'outgoing'
 }
 
 const LINE_SCHEMA = {
@@ -134,7 +136,8 @@ export const BOOKING_SCHEMA = {
 		buchungstext: { type: ['string', 'null'] },
 		confidence: { type: 'string', enum: ['high', 'medium', 'low', 'none'] },
 		reason: { type: ['string', 'null'] },
-		status: { type: 'string', enum: ['booked', 'unbooked'] }
+		status: { type: 'string', enum: ['booked', 'unbooked'] },
+		direction: { type: 'string', enum: ['incoming', 'outgoing'] }
 	}
 } as const
 
@@ -164,6 +167,61 @@ const VORSTEUER_KONTO: Record<string, string> = { '19': '1406', '7': '1401' }
 // SKR04 Bewirtung accounts for the §4 Abs.5 EStG 70/30 split. board 0079.
 const BEWIRTUNG_ABZIEHBAR = '6640' // Bewirtungskosten (70% abziehbar)
 const BEWIRTUNG_NICHT_ABZIEHBAR = '6644' // Nicht abzugsfähige Bewirtungskosten (30%)
+
+// SKR04 OUTGOING (Ausgangsrechnung) accounts: revenue per VAT rate + Forderungen. board 0082.
+const ERLOES_KONTO: Record<string, string> = { '19': '4400', '7': '4300', '0': '4200' }
+const FORDERUNGEN_KONTO = '1200' // Forderungen aus Lieferungen und Leistungen (Debitor)
+
+/**
+ * Book an OUTGOING invoice (our Rechnung) into SKR04 on the REVENUE side: Soll Forderungen (gross) →
+ * Haben Erlöse (net per rate) + Umsatzsteuer (vat). The `lines` carry the Erlös konten (4400/4300) so
+ * the BWA picks them up as Erlöse. Deterministic — we choose the konten. board 0082.
+ */
+export function buildOutgoingBooking(args: {
+	invoiceValueId: string | null
+	number: string
+	buyer: string | null
+	currency: string | null
+	byRate: { rate: number; net: number; vat: number }[]
+}): BookingRecord {
+	const lines: BookingLine[] = args.byRate.map((r) => {
+		const konto = ERLOES_KONTO[String(r.rate)] ?? ERLOES_KONTO['0']
+		const valid = isValidKonto(konto)
+		return {
+			soll_konto: valid ? konto : null,
+			soll_bezeichnung: valid ? bezeichnungFor(konto) : null,
+			net_amount: round2(r.net),
+			tax_amount: round2(r.vat),
+			gross_amount: round2(r.net), // the Erlös position posts its NET
+			tax_key: `${r.rate}% Umsatzsteuer`,
+			note: 'Erlös'
+		}
+	})
+	const net = round2(lines.reduce((s, l) => s + (l.net_amount ?? 0), 0))
+	const vat = round2(lines.reduce((s, l) => s + (l.tax_amount ?? 0), 0))
+	const first = lines[0]
+	return {
+		invoice_value_id: args.invoiceValueId,
+		invoice_number: args.number,
+		vendor: args.buyer,
+		currency: args.currency,
+		lines,
+		is_split: lines.length > 1,
+		direction: 'outgoing',
+		haben_konto: FORDERUNGEN_KONTO,
+		haben_bezeichnung: bezeichnungFor(FORDERUNGEN_KONTO),
+		net_amount: net,
+		tax_amount: vat,
+		gross_amount: round2(net + vat),
+		soll_konto: first?.soll_konto ?? null,
+		soll_bezeichnung: first?.soll_bezeichnung ?? null,
+		tax_key: first?.tax_key ?? null,
+		buchungstext: `Ausgangsrechnung ${args.number}${args.buyer ? ` · ${args.buyer}` : ''}`,
+		confidence: 'high',
+		reason: 'Ausgangsrechnung (Erlös)',
+		status: lines.every((l) => l.soll_konto != null) ? 'booked' : 'unbooked'
+	}
+}
 
 function treatmentLabel(
 	t: TaxTreatment | null | undefined,
@@ -323,6 +381,7 @@ export function buildBookingRecord(
 		soll_bezeichnung: first?.soll_bezeichnung ?? null,
 		tax_key: first?.tax_key ?? null,
 		buchungstext: str(pick?.buchungstext) || null,
+		direction: 'incoming',
 		confidence,
 		reason,
 		status: booked ? 'booked' : 'unbooked'
@@ -348,21 +407,38 @@ export function mapBookingToView(booking: BookingRecord | null): DocView {
 		}
 	}
 	const cur = booking.currency
+	// Outgoing (Ausgangsrechnung): the lines are Erlös (Haben) and the contra is the Forderung (Soll).
+	const out = booking.direction === 'outgoing'
+	const linesLabel = out
+		? 'Erlöskonten (Haben)'
+		: booking.is_split
+			? 'Soll-Positionen'
+			: 'Buchungssatz'
+	const contraLabel = out ? 'Forderung (Soll)' : 'Haben'
 	const sollRows = booking.lines.map((l) => {
 		const label = `${l.soll_konto} · ${l.soll_bezeichnung ?? ''}`.trim()
 		const detail = [money(l.gross_amount, cur), l.tax_key].filter(Boolean).join(' · ')
 		return [label, detail] as [string, string | null]
 	})
 	return {
-		title: booking.is_split
-			? `Splitbuchung · ${booking.lines.length} Positionen`
-			: `${booking.soll_konto} ${booking.soll_bezeichnung ?? ''}`.trim(),
-		subtitle: booking.is_split ? 'Splitbuchung (SKR04)' : 'Buchungssatz (SKR04)',
+		title: out
+			? `Ausgangsrechnung · ${booking.invoice_number ?? ''}`.trim()
+			: booking.is_split
+				? `Splitbuchung · ${booking.lines.length} Positionen`
+				: `${booking.soll_konto} ${booking.soll_bezeichnung ?? ''}`.trim(),
+		subtitle: out
+			? 'Erlösbuchung (SKR04)'
+			: booking.is_split
+				? 'Splitbuchung (SKR04)'
+				: 'Buchungssatz (SKR04)',
 		sections: [
-			section(booking.is_split ? 'Soll-Positionen' : 'Buchungssatz', {
+			section(linesLabel, {
 				rows: kvList([
 					...sollRows,
-					['Haben', `${booking.haben_konto ?? '—'} · ${booking.haben_bezeichnung ?? ''}`.trim()],
+					[
+						contraLabel,
+						`${booking.haben_konto ?? '—'} · ${booking.haben_bezeichnung ?? ''}`.trim()
+					],
 					...(booking.is_split
 						? []
 						: ([['Steuerschlüssel', booking.tax_key]] as [string, string | null][])),

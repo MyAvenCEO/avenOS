@@ -116,11 +116,197 @@ export const SHOW_FINANCES_TOOL = {
 
 export const FINANCE_TOOLS = [SHOW_FINANCES_TOOL]
 
-/** Every tool the chat advertises: data CRUD + Composer + bookkeeping classify + doc extract + BWA. */
+// board 0082 — outgoing invoicing + addressbook. Contacts/invoices are JSON in /api/data; the source
+// docs + rendered PDFs live in the mainnet PRIVATE file store. The model fills everything from the
+// prompt; the SERVER mints contact ids, assigns fortlaufende numbers, and computes VAT.
+const ADDRESS_FIELDS = {
+	type: { type: 'string', enum: ['person', 'company'] },
+	name: { type: 'string', description: 'Display / company name (without legal form).' },
+	legal_form: { type: ['string', 'null'], description: 'GmbH / KG / UG / e.V. …' },
+	street: { type: ['string', 'null'] },
+	zip: { type: ['string', 'null'] },
+	city: { type: ['string', 'null'] },
+	country: { type: ['string', 'null'] },
+	vat_id: { type: ['string', 'null'], description: 'USt-IdNr.' },
+	tax_number: { type: ['string', 'null'] },
+	email: { type: ['string', 'null'] },
+	phone: { type: ['string', 'null'] },
+	iban: { type: ['string', 'null'] },
+	bic: { type: ['string', 'null'] },
+	bank_name: { type: ['string', 'null'] },
+	contact_person: { type: ['string', 'null'] },
+	register_court: {
+		type: ['string', 'null'],
+		description: 'Registergericht, z. B. "Amtsgericht München".'
+	},
+	register_number: {
+		type: ['string', 'null'],
+		description: 'Handelsregisternummer, z. B. "HRB 292608".'
+	},
+	managing_director: { type: ['string', 'null'], description: 'Geschäftsführer.' }
+} as const
+
+const INVOICE_LINE = {
+	type: 'object',
+	properties: {
+		description: { type: 'string' },
+		quantity: { type: 'number' },
+		unit_price: { type: 'number', description: 'NET unit price (ohne USt).' },
+		vat_rate: { type: 'number', enum: [19, 7, 0] }
+	},
+	required: ['description', 'quantity', 'unit_price', 'vat_rate']
+} as const
+
+export const INVOICING_TOOLS = [
+	{
+		type: 'function',
+		function: {
+			name: 'upsert_contact',
+			description:
+				'Create or update an addressbook contact (person or company). Omit contact_value_id to ' +
+				'create (the server mints a stable short id); pass it to update. Fill every field you know.',
+			parameters: {
+				type: 'object',
+				properties: {
+					contact_value_id: {
+						type: ['string', 'null'],
+						description: 'Existing contact id to update.'
+					},
+					...ADDRESS_FIELDS
+				},
+				required: ['type', 'name']
+			}
+		}
+	},
+	{
+		type: 'function',
+		function: {
+			name: 'set_my_company',
+			description:
+				"Mark a contact as the user's OWN company (Stammdaten / invoice seller). Used after the " +
+				'first ingest HITL ("is this your company?") and for the user confirming their own details.',
+			parameters: {
+				type: 'object',
+				properties: { contact_value_id: { type: 'string' } },
+				required: ['contact_value_id']
+			}
+		}
+	},
+	{
+		type: 'function',
+		function: {
+			name: 'query_contacts',
+			description:
+				'Show the addressbook / contacts. Call when the user asks to see contacts / addressbook / ' +
+				'an Adressbuch. Respond ONLY with the short sentence in `response`.',
+			parameters: {
+				type: 'object',
+				properties: {
+					filter: { type: ['string', 'null'], enum: ['person', 'company', 'all', null] },
+					response: { type: 'string', description: 'One short human sentence.' }
+				},
+				required: ['response']
+			}
+		}
+	},
+	{
+		type: 'function',
+		function: {
+			name: 'create_invoice',
+			description:
+				'Create an OUTGOING invoice draft (Entwurf) from the prompt. Resolve the customer (by ' +
+				'contact_value_id, or by name to create one), list the positions (NET unit prices + vat_rate). ' +
+				'The server assigns the fortlaufende number (E-<contactId>-<seq>) and computes the VAT.',
+			parameters: {
+				type: 'object',
+				properties: {
+					contact_value_id: {
+						type: ['string', 'null'],
+						description: 'Existing customer contact id.'
+					},
+					customer: {
+						type: ['object', 'null'],
+						description: 'New customer to create if no contact_value_id.',
+						properties: ADDRESS_FIELDS
+					},
+					issue_date: { type: ['string', 'null'], description: 'YYYY-MM-DD.' },
+					service_period: {
+						type: ['string', 'null'],
+						description:
+							'Liefer-/Leistungszeitraum (Pflichtangabe §14 UStG) — a date or range, e.g. "12.–14.05.2025" or "Mai 2025". Leave null only if it equals the invoice date.'
+					},
+					note: { type: ['string', 'null'] },
+					lines: { type: 'array', items: INVOICE_LINE, minItems: 1 },
+					response: { type: 'string', description: 'One short human sentence.' }
+				},
+				required: ['lines', 'response']
+			}
+		}
+	},
+	{
+		type: 'function',
+		function: {
+			name: 'update_invoice',
+			description:
+				'Edit an existing invoice (by number) — patches lines/fields and saves the NEXT version. The ' +
+				'server recomputes the VAT and bumps the version.',
+			parameters: {
+				type: 'object',
+				properties: {
+					number: { type: 'string', description: 'The invoice number to edit.' },
+					issue_date: { type: ['string', 'null'] },
+					service_period: { type: ['string', 'null'], description: 'Liefer-/Leistungszeitraum.' },
+					note: { type: ['string', 'null'] },
+					lines: { type: ['array', 'null'], items: INVOICE_LINE },
+					response: { type: 'string' }
+				},
+				required: ['number', 'response']
+			}
+		}
+	},
+	{
+		type: 'function',
+		function: {
+			name: 'set_invoice_state',
+			description:
+				'Promote/demote an invoice between states: entwurf → angebot → rechnung (or back). The server ' +
+				're-prefixes + assigns the next number for the new state (E-/A-/R-).',
+			parameters: {
+				type: 'object',
+				properties: {
+					number: { type: 'string' },
+					state: { type: 'string', enum: ['entwurf', 'angebot', 'rechnung'] },
+					response: { type: 'string' }
+				},
+				required: ['number', 'state', 'response']
+			}
+		}
+	},
+	{
+		type: 'function',
+		function: {
+			name: 'save_invoice_pdf',
+			description:
+				'Render the current invoice to PDF and store it in the private file store. The client renders ' +
+				'the HTML template → PDF; the hash is recorded on the invoice.',
+			parameters: {
+				type: 'object',
+				properties: {
+					number: { type: 'string' },
+					response: { type: 'string' }
+				},
+				required: ['number', 'response']
+			}
+		}
+	}
+] as const
+
+/** Every tool the chat advertises: data CRUD + Composer + bookkeeping + doc extract + BWA + invoicing. */
 export const CHAT_TOOLS = [
 	...DATA_TOOLS,
 	...COMPOSER_TOOLS,
 	...BOOKKEEPING_TOOLS,
 	...EXTRACT_TOOLS,
-	...FINANCE_TOOLS
+	...FINANCE_TOOLS,
+	...INVOICING_TOOLS
 ]

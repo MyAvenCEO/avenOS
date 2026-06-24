@@ -1216,6 +1216,28 @@
 			"cash": "Cash flow",
 			"byAccount": "Expenses by account",
 			"empty": "No bookings yet — classify an invoice."
+		},
+		"addressbook": {
+			"title": "Addressbook",
+			"all": "All",
+			"person": "People",
+			"company": "Companies",
+			"empty": "No contacts yet.",
+			"pick": "Pick a contact to see details.",
+			"stammdaten": "Details",
+			"belege": "Documents",
+			"outgoing": "Outgoing",
+			"incoming": "Incoming"
+		},
+		"invoiceCreate": {
+			"title": "Invoices",
+			"empty": "No invoice yet — say e.g. \"create an invoice for …\".",
+			"number": "Number",
+			"state": "State",
+			"gross": "Gross",
+			"pdfHint": "Say \"save as PDF\" to store the invoice as a PDF.",
+			"pdfSaved": "PDF saved.",
+			"savePdf": "Save as PDF"
 		}
 	}
 }

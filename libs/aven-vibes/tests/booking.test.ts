@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import Ajv from 'ajv'
 import { getAccount, isValidKonto, SKR04_ACCOUNTS, skrForPrompt } from '../src/skr.js'
-import { BOOKING_SCHEMA, buildBookingRecord } from '../src/vibes/invoice/booking.js'
+import {
+	BOOKING_SCHEMA,
+	buildBookingRecord,
+	buildOutgoingBooking
+} from '../src/vibes/invoice/booking.js'
 
 // board 0069 — the SKR04 chart loads, account lookup works, and a booking validates against schema.
 
@@ -141,6 +145,41 @@ describe('SKR04 chart + booking', () => {
 		expect(rec.lines.find((l) => l.soll_konto === '6640')?.gross_amount).toBe(68)
 		expect(rec.lines.find((l) => l.soll_konto === '6644')?.gross_amount).toBe(29.14)
 		expect(rec.gross_amount).toBe(115.6) // balances to the invoice total
+		expect(validateBooking(rec)).toBe(true)
+	})
+
+	test('buildOutgoingBooking: a Rechnung books on the revenue side (Erlös 4400 / Forderung 1200)', () => {
+		const rec = buildOutgoingBooking({
+			invoiceValueId: 'inv-out',
+			number: 'R-WAIZMAN1-1',
+			buyer: 'WaizmannTabelle GmbH',
+			currency: 'EUR',
+			byRate: [{ rate: 19, net: 3000, vat: 570 }]
+		})
+		expect(rec.status).toBe('booked')
+		expect(rec.direction).toBe('outgoing')
+		expect(rec.lines[0].soll_konto).toBe('4400') // Erlöse 19% USt
+		expect(rec.haben_konto).toBe('1200') // Forderungen aLuL
+		expect(rec.net_amount).toBe(3000)
+		expect(rec.tax_amount).toBe(570)
+		expect(rec.gross_amount).toBe(3570)
+		expect(validateBooking(rec)).toBe(true)
+	})
+
+	test('buildOutgoingBooking: mixed 19% + 7% → 4400 + 4300 Erlös lines', () => {
+		const rec = buildOutgoingBooking({
+			invoiceValueId: null,
+			number: 'R-X-1',
+			buyer: 'X',
+			currency: 'EUR',
+			byRate: [
+				{ rate: 19, net: 100, vat: 19 },
+				{ rate: 7, net: 50, vat: 3.5 }
+			]
+		})
+		expect(rec.is_split).toBe(true)
+		expect(rec.lines.map((l) => l.soll_konto)).toEqual(['4400', '4300'])
+		expect(rec.gross_amount).toBe(172.5)
 		expect(validateBooking(rec)).toBe(true)
 	})
 

@@ -13,7 +13,10 @@
 				"type": ["string", "null"],
 				"description": "Reference / Aktenzeichen if printed."
 			},
-			"title": { "type": ["string", "null"], "description": "The contract's printed title." },
+			"title": {
+				"type": ["string", "null"],
+				"description": "The contract's printed title."
+			},
 			"contract_type": {
 				"type": ["string", "null"],
 				"description": "Kind of agreement (Dienstleistungsvertrag, Mietvertrag, NDA, …)."
@@ -26,8 +29,14 @@
 				"type": ["string", "null"],
 				"description": "Vertragsbeginn / Wirksamkeitsdatum (YYYY-MM-DD)."
 			},
-			"language": { "type": ["string", "null"], "description": "ISO language code (de, en, …)." },
-			"preamble": { "type": ["string", "null"], "description": "Präambel verbatim if present." },
+			"language": {
+				"type": ["string", "null"],
+				"description": "ISO language code (de, en, …)."
+			},
+			"preamble": {
+				"type": ["string", "null"],
+				"description": "Präambel verbatim if present."
+			},
 			"parties": {
 				"type": "array",
 				"description": "Contracting parties + any guarantor/witness.",
@@ -40,8 +49,14 @@
 							"type": ["string", "null"],
 							"description": "Party role (Auftragnehmerin, Auftraggeber, Garantin, …)."
 						},
-						"name": { "type": ["string", "null"], "description": "Legal entity / person name." },
-						"legal_form": { "type": ["string", "null"], "description": "GmbH, AG, e.K., …" },
+						"name": {
+							"type": ["string", "null"],
+							"description": "Legal entity / person name."
+						},
+						"legal_form": {
+							"type": ["string", "null"],
+							"description": "GmbH, AG, e.K., …"
+						},
 						"registration": {
 							"type": ["string", "null"],
 							"description": "HRB number + register court."
@@ -54,7 +69,9 @@
 							"type": ["string", "null"],
 							"description": "Signing natural person + function."
 						},
-						"email": { "type": ["string", "null"] }
+						"email": {
+							"type": ["string", "null"]
+						}
 					}
 				}
 			},
@@ -70,7 +87,10 @@
 							"type": ["string", "null"],
 							"description": "The defined term (keep quotation marks as printed)."
 						},
-						"definition": { "type": ["string", "null"], "description": "Its meaning." }
+						"definition": {
+							"type": ["string", "null"],
+							"description": "Its meaning."
+						}
 					}
 				}
 			},
@@ -87,7 +107,10 @@
 							"type": ["string", "null"],
 							"description": "Clause number (§ 1, Art. 2, …)."
 						},
-						"title": { "type": ["string", "null"], "description": "Clause heading." },
+						"title": {
+							"type": ["string", "null"],
+							"description": "Clause heading."
+						},
 						"body": {
 							"type": ["string", "null"],
 							"description": "Full clause text; join wrapped lines with \\n."
@@ -100,13 +123,22 @@
 								"additionalProperties": false,
 								"required": ["text"],
 								"properties": {
-									"label": { "type": ["string", "null"], "description": "(1), a), …" },
-									"text": { "type": ["string", "null"] }
+									"label": {
+										"type": ["string", "null"],
+										"description": "(1), a), …"
+									},
+									"text": {
+										"type": ["string", "null"]
+									}
 								}
 							}
 						}
 					}
 				}
+			},
+			"file_hash": {
+				"type": ["string", "null"],
+				"description": "Content hash of the source file in the PRIVATE store (board 0082)."
 			}
 		}
 	}

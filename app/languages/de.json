@@ -1193,6 +1193,28 @@
 			"cash": "Cashflow",
 			"byAccount": "Aufwand nach Konto",
 			"empty": "Noch keine Buchungen — klassifiziere eine Rechnung."
+		},
+		"addressbook": {
+			"title": "Adressbuch",
+			"all": "Alle",
+			"person": "Personen",
+			"company": "Firmen",
+			"empty": "Noch keine Kontakte.",
+			"pick": "Kontakt auswählen, um Details zu sehen.",
+			"stammdaten": "Stammdaten",
+			"belege": "Belege",
+			"outgoing": "Ausgehend",
+			"incoming": "Eingehend"
+		},
+		"invoiceCreate": {
+			"title": "Rechnungen",
+			"empty": "Noch keine Rechnung — sag z. B. „erstelle eine Rechnung für …“.",
+			"number": "Nummer",
+			"state": "Status",
+			"gross": "Brutto",
+			"pdfHint": "Sag „als PDF speichern“, um die Rechnung als PDF abzulegen.",
+			"pdfSaved": "PDF gespeichert.",
+			"savePdf": "Als PDF speichern"
 		}
 	}
 }

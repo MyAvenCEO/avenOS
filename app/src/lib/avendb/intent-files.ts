@@ -1,6 +1,8 @@
+import { fileRef } from '@avenos/aven-vibes/file-ref'
 import { get } from 'svelte/store'
 import { browser } from '$app/environment'
 import { avenDbTable } from '$lib/avendb/api'
+import { sparkWriteBytes } from '$lib/composer/spark-ipc'
 import { waitForAvenDbSessionReady } from '$lib/runtime/avendb-runtime'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { deviceSession } from '$lib/settings/device-session-store'
@@ -119,6 +121,36 @@ export async function filesToVisionImages(files: File[]): Promise<ImageAttachmen
  * `parentId` is stored in `intent_id` (intent row id from composer, or message id from talk).
  * Pass `identityId` when the file belongs to a non-default identity (e.g. talk threads).
  */
+/** board 0082 — the mainnet PRIVATE file store (the spark id reserved for content-addressed files). */
+export const PRIVATE_SPARK = 'PRIVATE'
+
+/**
+ * board 0082 — persist mainnet upload/ingest files to the CONTENT-ADDRESSED PRIVATE store on disk:
+ * `<spark root>/sparks/PRIVATE/<sha256>[.ext]`, dedup by hash. Returns the file refs (hash + filename
+ * + mime) to stamp into the JSON. This is MAINNET only — it does NOT touch the testnet
+ * `persistSparkFiles` (avenDB `files` table) path. No-op outside Tauri.
+ */
+export async function persistMainnetFiles(
+	files: File[]
+): Promise<{ hash: string; filename: string; mime: string }[]> {
+	if (!browser || !isTauriRuntime()) return []
+	const out: { hash: string; filename: string; mime: string }[] = []
+	for (const file of files) {
+		try {
+			const bytes = new Uint8Array(await file.arrayBuffer())
+			const mime = file.type || inferMimeFromFilename(file.name) || 'application/octet-stream'
+			const ref = await fileRef(bytes, file.name, mime)
+			// ref.path = `sparks/PRIVATE/<hash>.<ext>`; the scoped IPC writes under `sparks/<sparkId>/…`.
+			const rel = ref.path.replace(/^sparks\/PRIVATE\//, '')
+			await sparkWriteBytes(PRIVATE_SPARK, rel, bytes)
+			out.push({ hash: ref.hash, filename: file.name, mime })
+		} catch (e) {
+			console.error('[mainnet-files] persist failed:', file.name, e)
+		}
+	}
+	return out
+}
+
 export async function persistSparkFiles(
 	parentId: string,
 	files: File[],

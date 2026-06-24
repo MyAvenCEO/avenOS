@@ -132,10 +132,19 @@ function hasOnlySelectorChars(selector: string): boolean {
 }
 
 function assertSafeSelector(selector: string, path: string): void {
-	if (selector.length > 220 || /[{};<`]/.test(selector) || selector.includes('\\') || !hasOnlySelectorChars(selector)) {
+	if (
+		selector.length > 220 ||
+		/[{};<`]/.test(selector) ||
+		selector.includes('\\') ||
+		!hasOnlySelectorChars(selector)
+	) {
 		throw new Error(`[aven-ui] Forbidden CSS selector in ${path}: ${selector}`)
 	}
-	if (selector.includes(':global') || selector.includes(':host-context') || /(^|\s)(html|body)(\s|$|[.:[#>+~])/i.test(selector)) {
+	if (
+		selector.includes(':global') ||
+		selector.includes(':host-context') ||
+		/(^|\s)(html|body)(\s|$|[.:[#>+~])/i.test(selector)
+	) {
 		throw new Error(`[aven-ui] Forbidden CSS selector in ${path}: ${selector}`)
 	}
 	for (const raw of selector.split(',')) {
@@ -151,7 +160,8 @@ function assertSafeSelector(selector: string, path: string): void {
 		const withoutAttrs = part.replace(/\[[^\]]+\]/g, '')
 		for (const match of withoutAttrs.matchAll(/(^|[\s>+~(])([a-z][a-z0-9-]*)(?=$|[\s.:[#)>+~])/g)) {
 			const tag = match[2]
-			if (!SAFE_TAGS.has(tag)) throw new Error(`[aven-ui] Forbidden selector tag "${tag}" in ${path}`)
+			if (!SAFE_TAGS.has(tag))
+				throw new Error(`[aven-ui] Forbidden selector tag "${tag}" in ${path}`)
 		}
 	}
 }
@@ -169,7 +179,13 @@ function validateDeclarations(styles: Record<string, unknown>, path: string): vo
 function validateComponentStyles(styles: Record<string, unknown>, path: string): void {
 	for (const [prop, value] of Object.entries(styles)) {
 		if (value && typeof value === 'object' && !Array.isArray(value)) {
-			if (!(prop.startsWith(':') || prop.startsWith('[') || /^[A-Za-z][A-Za-z0-9_-]*(?:\s+[A-Za-z][A-Za-z0-9_-]*)*$/.test(prop))) {
+			if (
+				!(
+					prop.startsWith(':') ||
+					prop.startsWith('[') ||
+					/^[A-Za-z][A-Za-z0-9_-]*(?:\s+[A-Za-z][A-Za-z0-9_-]*)*$/.test(prop)
+				)
+			) {
 				throw new Error(`[aven-ui] Forbidden component modifier "${prop}" in ${path}`)
 			}
 			validateDeclarations(value as Record<string, unknown>, `${path}.${prop}`)
@@ -187,9 +203,15 @@ function validateSelectors(selectors: Record<string, Record<string, unknown>>, p
 			throw new Error(`[aven-ui] Expected selector object at ${path}.${selector}`)
 		}
 		if (selector.startsWith('@keyframes')) {
-			if (!KEYFRAMES_RULE.test(selector)) throw new Error(`[aven-ui] Forbidden at-rule in ${path}: ${selector}`)
+			if (!KEYFRAMES_RULE.test(selector))
+				throw new Error(`[aven-ui] Forbidden at-rule in ${path}: ${selector}`)
 			for (const [step, declarations] of Object.entries(styles)) {
-				if (!KEYFRAME_STEP.test(step) || !declarations || typeof declarations !== 'object' || Array.isArray(declarations)) {
+				if (
+					!KEYFRAME_STEP.test(step) ||
+					!declarations ||
+					typeof declarations !== 'object' ||
+					Array.isArray(declarations)
+				) {
 					throw new Error(`[aven-ui] Forbidden keyframe step in ${path}.${selector}: ${step}`)
 				}
 				validateDeclarations(declarations as Record<string, unknown>, `${path}.${selector}.${step}`)
@@ -197,11 +219,13 @@ function validateSelectors(selectors: Record<string, Record<string, unknown>>, p
 			continue
 		}
 		if (selector.startsWith('@media')) {
-			if (!MEDIA_RULE.test(selector)) throw new Error(`[aven-ui] Forbidden at-rule in ${path}: ${selector}`)
+			if (!MEDIA_RULE.test(selector))
+				throw new Error(`[aven-ui] Forbidden at-rule in ${path}: ${selector}`)
 			validateSelectors(styles as Record<string, Record<string, unknown>>, `${path}.${selector}`)
 			continue
 		}
-		if (selector.startsWith('@')) throw new Error(`[aven-ui] Forbidden at-rule in ${path}: ${selector}`)
+		if (selector.startsWith('@'))
+			throw new Error(`[aven-ui] Forbidden at-rule in ${path}: ${selector}`)
 		assertSafeSelector(selector, path)
 		validateDeclarations(styles, `${path}.${selector}`)
 	}
@@ -213,7 +237,9 @@ export function validateStyleDef(style: StyleDef, path = 'style'): void {
 	}
 	for (const key of Object.keys(style as Record<string, unknown>)) {
 		if (!TOP_LEVEL_STYLE_KEYS.has(key)) {
-			throw new Error(`[aven-ui] Forbidden style field "${key}" at ${path}. Use tokens/components/selectors only.`)
+			throw new Error(
+				`[aven-ui] Forbidden style field "${key}" at ${path}. Use tokens/components/selectors only.`
+			)
 		}
 		if (FORBIDDEN_STYLE_KEYS.has(key)) {
 			throw new Error(
@@ -224,7 +250,8 @@ export function validateStyleDef(style: StyleDef, path = 'style'): void {
 	validateTokenTree(style.tokens, `${path}.tokens`)
 	if (style.components) {
 		for (const [className, styles] of Object.entries(style.components)) {
-			if (!SAFE_CLASS.test(className)) throw new Error(`[aven-ui] Forbidden component class "${className}"`)
+			if (!SAFE_CLASS.test(className))
+				throw new Error(`[aven-ui] Forbidden component class "${className}"`)
 			validateComponentStyles(styles, `${path}.components.${className}`)
 		}
 	}

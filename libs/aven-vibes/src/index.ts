@@ -1,7 +1,33 @@
 // @avenos/aven-vibes — standalone vibes engine + todos vibe (copied from @avenos/aven-ui),
 // wired to the betterauth /api/data store with generic CRUD tools for the LLM. board 0054.
 
+// board 0082 — outgoing invoicing + addressbook.
+export {
+	CONTACT_SCHEMA,
+	type Contact,
+	type ContactType,
+	contactDisplayName,
+	mapContactToView,
+	mintContactId
+} from './contact.js'
+export {
+	enrichFields,
+	matchContact,
+	normalizeName,
+	type PartyInput,
+	partiesFromDoc,
+	partyToContactFields
+} from './contact-match.js'
 export * from './engine/index.js'
+export { contentHash, type FileRef, filePath, fileRef } from './file-ref.js'
+export {
+	assignInvoiceNumber,
+	type InvoiceState,
+	invoiceNumber,
+	nextSeq,
+	parseInvoiceNumber,
+	STATE_PREFIX
+} from './invoice-number.js'
 export * from './sandbox.js'
 // Document extract + side-by-side compare vibe (invoice / bank-statement / contract). board 0064.
 export type { DocView } from './vibes/_doc/types.js'
@@ -30,6 +56,15 @@ export {
 	mapBookingToView
 } from './vibes/invoice/booking.js'
 export { createInvoiceShell, mapInvoiceToView } from './vibes/invoice/index.js'
+export {
+	computeInvoiceTotals,
+	INVOICE_DOC_SCHEMA,
+	type InvoiceDoc,
+	type InvoiceLine,
+	invoiceDocToDoctype,
+	mapInvoiceDocToView,
+	requiredFieldsMissing
+} from './vibes/invoice/invoice-doc.js'
 export {
 	bestInvoiceMatch,
 	type InvoiceMatch,
