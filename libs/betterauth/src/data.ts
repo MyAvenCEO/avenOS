@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { create, query, remove, update } from '@avenos/aven-ontology'
+import type { Cell, PredicationStore, TypeSpec } from '@avenos/aven-ontology'
 import { todoPredicateSchemas } from '@avenos/aven-vibes/predicate'
 import Ajv from 'ajv'
 import type { Context } from 'hono'
@@ -261,7 +263,7 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 		.execute()
 	// The atomic x1–x5 data types (task/valid/due/prioritized) are NOT exposed to the model — todos
 	// are managed ONLY through the consolidated `todos` type, which writes that bundle underneath
-	// (executeTodos). Identify those data types by their `predicate` discriminator (no name prefix —
+	// (the generic ontology engine). Identify those data types by their `predicate` discriminator (no prefix —
 	// the bare name is the universal data type). Never let the model query them directly. board 0087.
 	const lines = rows
 		.filter((r) => {
@@ -277,8 +279,9 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 	return `Current date & time: ${now.toISOString()} — resolve any relative dates the user mentions ("today", "tomorrow", "in 3 days", "next Monday") against THIS instant; emit absolute ISO dates.\n\nThe data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}\n\nIMPORTANT: whenever the user asks to see / show / list / check their todos OR tasks (any wording, any language), you MUST call data_crud with action="list", schema="todos" — this renders their live todo card. Never answer about todos/tasks from memory or with a plain-text list; always call the tool so the card appears.`
 }
 
-/** Ensure the per-user gismu todo data-type schemas (task/valid/due/prioritized) exist. */
-async function ensureTodoSchemas(uid: string): Promise<Record<string, string>> {
+/** Ensure the per-user gismu DATA-TYPE schemas (task/valid/due/prioritized) exist + are in sync.
+ *  Returns predicate-name → schema_id — the map the engine's store resolves predicates through. */
+async function ensurePredicateSchemas(uid: string): Promise<Record<string, string>> {
 	const ids: Record<string, string> = {}
 	for (const { name, jsonSchema } of todoPredicateSchemas()) {
 		const existing = await db()
@@ -314,174 +317,119 @@ async function ensureTodoSchemas(uid: string): Promise<Record<string, string>> {
 	return ids
 }
 
-// The `todos` tool stores each todo as a BUNDLE of gismu predications with CANONICAL place
-// structures (board 0087): task≡zukte (x1 agent, x2 action), valid≡ranji (x1 task, x2 from, x3 to;
-// x3 null = open → "done" sets x3), due≡detri (x1 = the DATE, x2 = task), prioritized≡vajni
-// (x1 task, x2 user, x3 level). The {title,done,due,priority} tool interface is unchanged — the
-// predications live underneath, projected via `v_task`. See [[two-layer-schema-split]].
-async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
-	const ids = await ensureTodoSchemas(uid)
-	const taskSchema = ids['task']
-	const validSchema = ids['valid']
-	const dueSchema = ids['due']
-	const prioSchema = ids['prioritized']
+// ── The generic predication engine (board 0088) ─────────────────────────────────
+// A composite TYPE (e.g. `todos`) is a declarative bundle spec in the `predicate_type` registry;
+// the pure aven-ontology engine runs CRUD + projection against the x1–x5 predications with ZERO
+// per-type code. `pgStore` adapts the engine's PredicationStore onto data_value (user-scoped).
 
-	// due ≡ detri: x1 = the date, x2 = the task (canonical). Passing null clears it.
-	async function setDue(taskId: string, date: string | null): Promise<void> {
-		await sql`DELETE FROM data_value WHERE user_id = ${uid} AND schema_id = ${dueSchema} AND data->>'x2' = ${taskId}`.execute(
-			db()
-		)
-		if (date)
+/** Adapt the engine's PredicationStore onto data_value, resolving each predicate to its schema_id. */
+function pgStore(uid: string, schemaIdByPred: Record<string, string>): PredicationStore {
+	const schemaOf = (pred: string): string => {
+		const id = schemaIdByPred[pred]
+		if (!id) throw new Error(`[ontology] no data_schema for predicate "${pred}"`)
+		return id
+	}
+	return {
+		async rows(pred) {
+			const r = await sql<{ id: string; data: Record<string, Cell> }>`
+				SELECT id, data FROM data_value
+				WHERE user_id = ${uid} AND schema_id = ${schemaOf(pred)} ORDER BY id
+			`.execute(db())
+			return r.rows.map((row) => {
+				const d = asJson(row.data) as Record<string, Cell>
+				return { id: row.id, x1: d.x1 ?? null, x2: d.x2 ?? null, x3: d.x3 ?? null }
+			})
+		},
+		async insert(pred, cells) {
+			const id = randomUUID()
 			await db()
 				.insertInto('data_value')
 				.values({
-					id: randomUUID(),
+					id,
 					user_id: uid,
-					schema_id: dueSchema,
-					data: jsonb({ predicate: 'due', x1: date, x2: taskId }),
+					schema_id: schemaOf(pred),
+					data: jsonb({ predicate: pred, ...cells }),
 					created_at: new Date(),
 					updated_at: new Date()
 				})
 				.execute()
-	}
-	// prioritized ≡ vajni: x1 = task, x2 = user (to-whom), x3 = level (canonical). null clears it.
-	async function setPriority(taskId: string, level: string | null): Promise<void> {
-		await sql`DELETE FROM data_value WHERE user_id = ${uid} AND schema_id = ${prioSchema} AND data->>'x1' = ${taskId}`.execute(
-			db()
-		)
-		if (level)
-			await db()
-				.insertInto('data_value')
-				.values({
-					id: randomUUID(),
-					user_id: uid,
-					schema_id: prioSchema,
-					data: jsonb({ predicate: 'prioritized', x1: taskId, x2: uid, x3: level }),
-					created_at: new Date(),
-					updated_at: new Date()
-				})
-				.execute()
-	}
-
-	if (!args.action || args.action === 'list') {
-		const rows = await sql<{
-			id: string
-			what: string | null
-			open: boolean
-			due_date: string | null
-			priority: string | null
-		}>`SELECT id, what, open, due_date, priority FROM v_task WHERE user_id = ${uid} ORDER BY id`.execute(
-			db()
-		)
-		return {
-			ok: true,
-			action: 'list',
-			items: rows.rows.map((r) => ({
-				id: r.id,
-				title: r.what,
-				done: !r.open,
-				due: r.due_date,
-				priority: r.priority
-			}))
+			return id
+		},
+		async patch(id, cells) {
+			await sql`UPDATE data_value SET data = data || ${JSON.stringify(cells)}::jsonb, updated_at = now()
+				WHERE id = ${id} AND user_id = ${uid}`.execute(db())
+		},
+		async patchWhere(pred, place, equals, cells) {
+			await sql`UPDATE data_value SET data = data || ${JSON.stringify(cells)}::jsonb, updated_at = now()
+				WHERE user_id = ${uid} AND schema_id = ${schemaOf(pred)} AND data->>${place} = ${equals}`.execute(
+				db()
+			)
+		},
+		async deleteWhere(pred, place, equals) {
+			await sql`DELETE FROM data_value
+				WHERE user_id = ${uid} AND schema_id = ${schemaOf(pred)} AND data->>${place} = ${equals}`.execute(
+				db()
+			)
+		},
+		async remove(id) {
+			await db().deleteFrom('data_value').where('id', '=', id).where('user_id', '=', uid).execute()
 		}
 	}
+}
 
+/** Load a registered composite type's bundle spec from the admin-owned registry. */
+async function loadTypeSpec(name: string): Promise<TypeSpec | null> {
+	const row = await db()
+		.selectFrom('predicate_type')
+		.select('spec')
+		.where('type', '=', name)
+		.executeTakeFirst()
+	return row ? (asJson(row.spec) as TypeSpec) : null
+}
+
+/** Run a list/create/update/delete action for a registered type through the generic engine. */
+async function runType(uid: string, spec: TypeSpec, args: DataCrudArgs): Promise<unknown> {
+	const ids = await ensurePredicateSchemas(uid)
+	const store = pgStore(uid, ids)
+	const ctx = { user: uid, now: () => new Date().toISOString() }
+
+	if (!args.action || args.action === 'list') {
+		return { ok: true, action: 'list', items: await query(spec, store) }
+	}
 	if (args.action === 'create') {
 		const created: string[] = []
 		for (const item of args.items ?? []) {
-			const it = item as { title?: string; done?: boolean; due?: string; priority?: string }
-			if (!it.title) continue
-			const taskId = randomUUID()
-			const now = new Date().toISOString()
-			await db()
-				.insertInto('data_value')
-				.values({
-					id: taskId,
-					user_id: uid,
-					schema_id: taskSchema,
-					data: jsonb({ predicate: 'task', x1: uid, x2: it.title }),
-					created_at: new Date(),
-					updated_at: new Date()
-				})
-				.execute()
-			await db()
-				.insertInto('data_value')
-				.values({
-					id: randomUUID(),
-					user_id: uid,
-					schema_id: validSchema,
-					data: jsonb({ predicate: 'valid', x1: taskId, x2: now, x3: it.done ? now : null }),
-					created_at: new Date(),
-					updated_at: new Date()
-				})
-				.execute()
-			if (it.due) await setDue(taskId, it.due)
-			if (it.priority) await setPriority(taskId, it.priority)
-			created.push(taskId)
+			const id = await create(spec, store, item as Record<string, unknown>, ctx)
+			if (id) created.push(id)
 		}
 		if (created.length > 0) publish(uid, { entity: 'data' })
 		return { ok: true, action: 'create', created, errors: [] }
 	}
-
 	if (args.action === 'update') {
 		const updated: string[] = []
 		for (const item of args.items ?? []) {
-			const it = item as {
-				id?: string
-				title?: string
-				done?: boolean
-				due?: string | null
-				priority?: string | null
-			}
-			if (!it.id) continue
-			if (it.title !== undefined) {
-				await db()
-					.updateTable('data_value')
-					.set({
-						data: jsonb({ predicate: 'task', x1: uid, x2: it.title }),
-						updated_at: new Date()
-					})
-					.where('id', '=', it.id)
-					.where('user_id', '=', uid)
-					.where('schema_id', '=', taskSchema)
-					.execute()
-			}
-			if (it.done !== undefined) {
-				const now = new Date().toISOString()
-				// "done" closes (or reopens) the task's valid interval by setting x3.
-				await sql`
-					UPDATE data_value
-					SET data = jsonb_set(data, '{x3}', ${JSON.stringify(it.done ? now : null)}::jsonb),
-					    updated_at = now()
-					WHERE user_id = ${uid} AND schema_id = ${validSchema} AND data->>'x1' = ${it.id}
-				`.execute(db())
-			}
-			if (it.due !== undefined) await setDue(it.id, it.due)
-			if (it.priority !== undefined) await setPriority(it.id, it.priority)
-			updated.push(it.id)
+			const id = await update(spec, store, item as Record<string, unknown>, ctx)
+			if (id) updated.push(id)
 		}
 		if (updated.length > 0) publish(uid, { entity: 'data' })
 		return { ok: true, action: 'update', updated, errors: [] }
 	}
-
 	if (args.action === 'delete') {
 		const id = args.id ?? (args.items?.[0] as { id?: string } | undefined)?.id
 		if (!id) return { ok: false, error: 'delete requires id' }
-		// Remove the task + every predication that refs it (valid/due/prioritized).
-		await db().deleteFrom('data_value').where('id', '=', id).where('user_id', '=', uid).execute()
-		await sql`DELETE FROM data_value WHERE user_id = ${uid} AND (data->>'x1' = ${id} OR data->>'x2' = ${id})`.execute(db())
+		await remove(spec, store, id)
 		publish(uid, { entity: 'data' })
 		return { ok: true, action: 'delete', deleted: [id] }
 	}
-
 	return { ok: false, error: `unknown action: ${args.action}` }
 }
 
 // ── Todos REST (board 0087) ─────────────────────────────────────────────────────
-// The Todos vibe UI reads/writes through these, which delegate to the SAME predication
-// path (executeTodos) the LLM's data_crud tool uses — one source of truth, projected via v_task.
+// The Todos vibe UI reads/writes through these, which delegate to the SAME generic engine path
+// (the `todos` registered type) the LLM's data_crud tool uses — one source of truth, projected
+// by the aven-ontology matcher. board 0088.
 
-/** GET /api/data/todos — the user's todos (from the v_task projection). */
+/** GET /api/data/todos — the user's todos (projected by the generic engine). */
 export async function listTodos(c: Context): Promise<Response> {
 	const uid = await userId(c)
 	if (!uid) return c.json({ error: 'unauthorized' }, 401)
@@ -535,8 +483,10 @@ export async function deleteTodo(c: Context): Promise<Response> {
 export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const name = args?.schema
 	if (!name) return { ok: false, error: 'schema name required' }
-	// Todos are stored as gismu predications underneath the {title,done} tool interface. board 0087.
-	if (name === 'todos') return executeTodos(uid, args)
+	// A registered composite TYPE (board 0088) routes through the generic predication engine —
+	// no per-type code. Falls through to raw single-schema CRUD when the name isn't a registered type.
+	const typeSpec = await loadTypeSpec(name)
+	if (typeSpec) return runType(uid, typeSpec, args)
 	const schema = await db()
 		.selectFrom('data_schema')
 		.select(['id', 'json_schema'])

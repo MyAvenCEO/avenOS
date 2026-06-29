@@ -18,6 +18,7 @@
 		"check": "tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {
+		"@avenos/aven-ontology": "workspace:*",
 		"@avenos/aven-vibes": "workspace:*",
 		"@avenos/skills": "workspace:*",
 		"@better-auth/passkey": "^1.6.20",

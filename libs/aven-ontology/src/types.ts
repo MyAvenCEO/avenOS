@@ -1,0 +1,82 @@
+// The declarative engine's type model (board 0088). A composite "type" (e.g. todos) is a BUNDLE of
+// x1–x5 predications + how to project them — there is NO domain code per type, only this spec.
+
+/** A predication place value. Predications store only strings or null in x1…x5. */
+export type Cell = string | null
+export type Place = 'x1' | 'x2' | 'x3' | 'x4' | 'x5'
+
+/** One predication row, flattened: the row id plus its x1…x5 cells (the predicate is the store key). */
+export type Row = { id: string } & Partial<Record<Place, Cell>>
+
+/**
+ * A binding resolved against the mutation context. Forms:
+ *   `$user`    → the acting user id
+ *   `$primary` → the primary (entity) row id
+ *   `$now`     → ISO timestamp
+ *   `$value`   → the current input field's value
+ *   `$value?$now:null` → conditional (truthy raw value → THEN, else ELSE); operands are bindings
+ *   anything else → a literal
+ */
+export type Bind = string
+
+export type PartKind = 'primary' | 'singleton' | 'replace'
+
+/**
+ * One predication that participates in a composite type:
+ *  - `primary`:   its rows ARE the entities (the task). `field` drives create; `set` patches it.
+ *  - `singleton`: exactly one linked row, created WITH the entity (`create`) and patched in place (`set`).
+ *  - `replace`:   an optional linked attribute — setting it deletes the linked row(s) then re-inserts
+ *                 (`set`) when the field has a value (cleared when empty).
+ */
+export type PartSpec = {
+	pred: string
+	/** the place on THIS predication that holds the primary id (omit for the primary itself) */
+	link?: Place
+	kind: PartKind
+	/** the input field that drives this part (e.g. title/done/due/priority) */
+	field?: string
+	/** places written when the entity is created */
+	create?: Partial<Record<Place, Bind>>
+	/** places written when `field` is set (singleton patches; replace/primary (re)write) */
+	set?: Partial<Record<Place, Bind>>
+}
+
+/** How one output field is projected back from the predications. */
+export type ProjectSpec = {
+	pred: string
+	/** read this place's value */
+	place?: Place
+	/** boolean: true when this place is present + non-null (e.g. done = valid.x3 is set) */
+	notNull?: Place
+}
+
+/** A composite type: a bundle of predications + how to project them back into a flat record. */
+export type TypeSpec = {
+	type: string
+	parts: PartSpec[]
+	project: Record<string, ProjectSpec>
+}
+
+/** Context for resolving bindings during a mutation. `now` is a thunk so each call stamps fresh. */
+export type MutateCtx = {
+	user: string
+	now: () => string
+}
+
+/**
+ * The minimal predication store the engine drives. A pure in-memory impl ([[memStore]]) powers the
+ * tests; the betterauth adapter implements the same interface over `data_value`, scoped to a user.
+ */
+export interface PredicationStore {
+	rows(predicate: string): Promise<Row[]>
+	insert(predicate: string, cells: Partial<Record<Place, Cell>>): Promise<string>
+	patch(id: string, cells: Partial<Record<Place, Cell>>): Promise<void>
+	patchWhere(
+		predicate: string,
+		place: Place,
+		equals: string,
+		cells: Partial<Record<Place, Cell>>
+	): Promise<void>
+	deleteWhere(predicate: string, place: Place, equals: string): Promise<void>
+	remove(id: string): Promise<void>
+}

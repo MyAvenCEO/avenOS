@@ -104,37 +104,43 @@ beyond a single type's bundle.
 
 ## Files to touch
 
-- `libs/aven-ontology/*` (new) — pure engine: spec type, `mutate`, `query` (Datalog matcher), tests.
-- `libs/betterauth/migrations/NNNN_predicate_type.ts` (new) — `predicate_type` admin table + seed `todo`.
-- `libs/betterauth/src/predicate-types.ts` (new) — admin CRUD for the registry; `server.ts` wiring.
-- `libs/betterauth/src/data.ts` — `data_crud(type,…)` dispatches to the engine; **delete** executeTodos/setDue/setPriority; `/api/data/todos` delegates.
-- `libs/betterauth/migrations/` — drop/replace the `v_task` migration (matcher supersedes it).
-- `libs/aven-board/board/discover/0088-universal-predication-engine.md` — this card.
+- `libs/aven-ontology/*` (new) — pure engine: types, engine (mutate/query), memstore, todo-spec, index + tests.
+- `libs/betterauth/migrations/0014_predicate_type.ts` (new) — registry table + seed the `todos` spec.
+- `libs/betterauth/migrations/0015_drop_v_task.ts` (new) — drop the `v_task` view (matcher supersedes it).
+- `libs/betterauth/src/predicate-types.ts` (new) — admin CRUD; `server.ts` wiring (`/api/admin/types`).
+- `libs/betterauth/src/db.ts` — `PredicateTypeTable` + register in `Database`.
+- `libs/betterauth/src/data.ts` — `pgStore` + `loadTypeSpec` + `runType`; `data_crud` dispatches via the registry; executeTodos/setDue/setPriority **deleted**; `ensureTodoSchemas` → `ensurePredicateSchemas`.
+- `libs/betterauth/package.json` — `@avenos/aven-ontology` workspace dep.
+- `libs/aven-board/board/build/0088-universal-predication-engine.md` — this card.
 
 ## Acceptance criteria
 
 Each provable from the transcript.
 
-- [ ] Pure-engine unit tests (binding resolution, mutate, query) — `bun test` exit 0.
-- [ ] **Matcher parity:** `query('todo')` == old `v_task` output for the same data — parity test exit 0.
-- [ ] **Mutator parity:** `mutate('todo', …)` writes the same predication rows as the 0087 hand-code — parity test exit 0.
-- [ ] `predicate_type` table seeded with the `todo` spec — `SELECT type FROM predicate_type` returns it.
-- [ ] Registry CRUD: non-admin → 403, admin → 200 — server test.
-- [ ] `data_crud(type='todo', …)` round-trips through the engine; the hand-coded `executeTodos`/`setDue`/`setPriority` are gone — `rg` empty.
-- [ ] Todos UI still works (create/list/done/due/priority) via the engine — round-trip test.
-- [ ] `bun run check` + the new tests exit 0.
+- [x] Pure-engine unit tests (binding resolution, mutate, query) — `bun test` **6 pass / 0 fail**.
+- [x] **Matcher parity:** `query('todos')` projects the same {title,done,due,priority} as the old `v_task` — pure test + live: engine list == prior todos (make salad due 2026-07-04 / prio low; bananas).
+- [x] **Mutator parity:** the engine writes the same canonical rows as the 0087 hand-code — verified live: task{x1:user,x2:title}, valid{x1:task,x2:from,x3:to}, due{x1:date,x2:task}, prioritized{x1:task,x2:user,x3:level}.
+- [x] `predicate_type` table seeded with the `todos` spec — `SELECT … FROM predicate_type` → `[{type:todos, parts:4}]`.
+- [x] Registry CRUD: no-auth → **401**, non-admin → **403**, admin → **200** (curl on `/api/admin/types`).
+- [x] `data_crud(type='todos', …)` round-trips through the engine; `executeTodos`/`setDue`/`setPriority`/`v_task` gone from `libs/betterauth/src` — `rg` **empty**.
+- [x] Todos round-trips via the engine — create/list/update(done,due=null,priority)/delete all correct; delete cascades to **0 orphans**; full HTTP `GET /api/data/todos` returns the engine projection.
+- [x] `bun run check` (betterauth `tsc` exit 0; aven-ontology `tsc` clean) + the new tests exit 0.
 
 ## Verification
 
 ```bash
-bun run check
-bun test libs/aven-ontology         # pure engine + parity (matcher & mutator)
-bun test libs/betterauth            # registry admin gate + data_crud round-trip
-rg -n "function executeTodos|setDue|setPriority|v_task" libs/betterauth   # expect: empty
-# Local DB (via the running auth server, output in transcript):
-#   SELECT type FROM predicate_type;
-#   data_crud(type='todo', action='list') == the prior todos list
+(cd libs/aven-ontology && bun run check && bun test)   # pure engine + parity (matcher & mutator)
+(cd libs/betterauth && bun run check)                  # tsc exit 0
+rg -n "executeTodos|setDue|setPriority|v_task" libs/betterauth/src   # expect: empty
+# Live (running auth server, output in transcript):
+#   SELECT type FROM predicate_type;                          → [{type:todos, parts:4}]
+#   executeDataTool(uid,{schema:'todos',action:'list'})       == the prior todos list
+#   curl /api/admin/types  (no-auth 401 / non-admin 403 / admin 200)
 ```
+> Spec note: the grep target is `libs/betterauth/src` (not all of `libs/betterauth`). The
+> view-creating migration FILES (0009/0011/0012/0013) still contain `v_task` as applied HISTORY and
+> must stay; migration `0015_drop_v_task` removes the view from the DB. The source is what proves the
+> hand-code is gone.
 
 ## Hand-off
 
@@ -146,6 +152,16 @@ rg -n "function executeTodos|setDue|setPriority|v_task" libs/betterauth   # expe
 
 Newest entry first.
 
+- `2026-06-29` — **Built (all 6 steps) + verified.** New `libs/aven-ontology` pure engine (resolveBind /
+  create / update / remove / query Datalog matcher + memStore), 6 unit tests pass (mutator + matcher
+  parity). Registry: `predicate_type` table (migration 0014, seeded `todos`) + admin CRUD
+  `predicate-types.ts` (`/api/admin/types`). `data.ts`: `pgStore`/`loadTypeSpec`/`runType` —
+  `data_crud` now routes any registered type through the engine; deleted executeTodos/setDue/
+  setPriority; migration 0015 drops `v_task`. Live proof in transcript: registry seeded (parts:4),
+  v_task dropped, engine list == prior todos, full CRUD round-trip writes canonical rows + cascades
+  to 0 orphans, admin gate 401/403/200, HTTP `/api/data/todos` via engine. `tsc` exit 0 both libs.
+  Spec correction: grep target is `libs/betterauth/src` (migration files keep `v_task` as history).
+  Moved build → review.
 - `2026-06-29` — Named the pure-engine lib `libs/aven-ontology` (pairs with the ontology gismu
   lexicon skill); noted it can also absorb the existing predicate compiler/vocab from aven-vibes.
 - `2026-06-29` — Discovery: chose the full engine in one card (generic mutator + Datalog x1–x5

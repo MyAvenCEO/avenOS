@@ -95,6 +95,10 @@
         "typescript": "^6.0.2",
       },
     },
+    "libs/aven-ontology": {
+      "name": "@avenos/aven-ontology",
+      "version": "26.6.22-next.7",
+    },
     "libs/aven-skills": {
       "name": "@avenos/aven-skills",
       "version": "26.6.22-next.7",
@@ -140,6 +144,7 @@
       "name": "@avenos/betterauth",
       "version": "26.6.22-next.7",
       "dependencies": {
+        "@avenos/aven-ontology": "workspace:*",
         "@avenos/aven-vibes": "workspace:*",
         "@avenos/skills": "workspace:*",
         "@better-auth/passkey": "^1.6.20",
@@ -179,6 +184,8 @@
     "@avenos/aven-city": ["@avenos/aven-city@workspace:libs/aven-city"],
 
     "@avenos/aven-mail": ["@avenos/aven-mail@workspace:ARCHIVE/aven-mail"],
+
+    "@avenos/aven-ontology": ["@avenos/aven-ontology@workspace:libs/aven-ontology"],
 
     "@avenos/aven-skills": ["@avenos/aven-skills@workspace:libs/aven-skills"],
 

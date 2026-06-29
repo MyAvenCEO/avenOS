@@ -88,6 +88,17 @@ export interface FlowTable {
 	updated_at: Generated<Date>
 }
 
+// Composite TYPE registry (board 0088, Layer A) — admin-owned. Each row is a declarative bundle
+// spec (an aven-ontology TypeSpec) describing how a type's fields map to x1–x5 predications; the
+// generic engine loads it at runtime, so there is NO per-type code. Like `flow`, this is platform
+// structure, not user data. See [[two-layer-schema-split]].
+export interface PredicateTypeTable {
+	type: string
+	spec: unknown
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
 export type DataHistoryOperation = 'UPDATE' | 'DELETE'
 
 export interface DataSchemaHistoryTable {
@@ -180,6 +191,7 @@ export interface Database {
 	data_schema: DataSchemaTable
 	data_value: DataValueTable
 	flow: FlowTable
+	predicate_type: PredicateTypeTable
 	data_schema_history: DataSchemaHistoryTable
 	data_value_history: DataValueHistoryTable
 	polar_event: PolarEventTable

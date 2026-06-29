@@ -38,6 +38,7 @@ import {
 import { eventsStream } from './events'
 import { deleteFlow, getFlow, listFlows, upsertFlow } from './flows'
 import { inboxGet, inboxList, mailInbox } from './inbox'
+import { deleteType, getType, listTypes, upsertType } from './predicate-types'
 import { syncPricing } from './usage'
 import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
 
@@ -90,6 +91,13 @@ app.get('/api/admin/flows/:id', getFlow)
 app.post('/api/admin/flows', upsertFlow)
 app.delete('/api/admin/flows/:id', deleteFlow)
 
+// Composite TYPE registry (board 0088, Layer A) — admin-only CRUD over the declarative bundle specs
+// the generic predication engine runs. Distinct from the user-scoped /api/data/*.
+app.get('/api/admin/types', listTypes)
+app.get('/api/admin/types/:type', getType)
+app.post('/api/admin/types', upsertType)
+app.delete('/api/admin/types/:type', deleteType)
+
 // Generic schema-driven user data (board 0053): schemas + schema-validated values.
 app.post('/api/data/schemas', createSchema)
 app.get('/api/data/schemas', listSchemas)
@@ -98,8 +106,8 @@ app.get('/api/data/schemas/:schemaId/values', listValues)
 app.patch('/api/data/values/:id', updateValue)
 app.delete('/api/data/values/:id', deleteValue)
 
-// Todos (board 0087): stored as gismu predications (task+valid), surfaced via these routes
-// which delegate to executeTodos — the same path the LLM data_crud tool uses.
+// Todos (board 0087/0088): stored as x1–x5 predications, surfaced via these routes which delegate
+// to the generic ontology engine (the `todos` registered type) — the same path the LLM tool uses.
 app.get('/api/data/todos', listTodos)
 app.post('/api/data/todos', createTodos)
 app.patch('/api/data/todos', updateTodos)
