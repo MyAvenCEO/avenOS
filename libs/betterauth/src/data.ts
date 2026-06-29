@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { create, query, remove, update } from '@avenos/aven-ontology'
 import type { Cell, PredicationStore, TypeSpec } from '@avenos/aven-ontology'
-import { documentPredicateSchemas, todoPredicateSchemas } from '@avenos/aven-vibes/predicate'
+import {
+	documentPredicateSchemas,
+	invoicePredicateSchemas,
+	todoPredicateSchemas
+} from '@avenos/aven-vibes/predicate'
 import Ajv from 'ajv'
 import type { Context } from 'hono'
 import { sql } from 'kysely'
@@ -283,8 +287,12 @@ export async function schemasPromptHint(uid: string): Promise<string> {
  *  Returns predicate-name → schema_id — the map the engine's store resolves predicates through. */
 async function ensurePredicateSchemas(uid: string): Promise<Record<string, string>> {
 	const ids: Record<string, string> = {}
-	// Seed every registered type's atomic data-type schemas (todo + document). board 0087/0089.
-	for (const { name, jsonSchema } of [...todoPredicateSchemas(), ...documentPredicateSchemas()]) {
+	// Seed every registered type's atomic data-type schemas (todo + document + invoice). board 0087/0089/0090.
+	for (const { name, jsonSchema } of [
+		...todoPredicateSchemas(),
+		...documentPredicateSchemas(),
+		...invoicePredicateSchemas()
+	]) {
 		const existing = await db()
 			.selectFrom('data_schema')
 			.select('id')
