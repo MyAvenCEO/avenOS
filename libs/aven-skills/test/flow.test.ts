@@ -136,14 +136,14 @@ describe('flow / recipe schema', () => {
 		const flat = flattenFlow(close, EXAMPLE_FLOWS)
 		// every node in the flattened graph is a leaf (actual executor)
 		expect(flat.nodes.every(isLeaf)).toBe(true)
-		// bank-statement(2) + doc-ingest(9: ingest-sub 3 + bank-sub 2 + extract-invoice/contract/enrich/book-open) + report(1) = 12
-		expect(flat.nodes.length).toBe(12)
-		// nested namespacing: month-close → doc-ingest → Dokument-Ingest skill (classify+extract) + bank sub-skill
-		expect(flat.nodes.some((n) => n.id === 'ingest/ingest/classify')).toBe(true)
-		expect(flat.nodes.some((n) => n.id === 'ingest/ingest/import')).toBe(true)
-		expect(flat.nodes.some((n) => n.id === 'bank/extract-stmt')).toBe(true)
-		// the daisy-chain edge bank → ingest joins the sub-flows' terminal → entry
-		expect(flat.edges.some((e) => e.from.startsWith('bank/') && e.to.startsWith('ingest/'))).toBe(
+		// docs→doc-ingest(9) + bank→tx-import(4) + settle→open-item-match(3) + report(1) = 17
+		expect(flat.nodes.length).toBe(17)
+		// deep nesting: month-close → docs → doc-ingest → Dokument-Ingest skill → classify + the Kontoauszug sub-skill
+		expect(flat.nodes.some((n) => n.id === 'docs/ingest/classify')).toBe(true)
+		expect(flat.nodes.some((n) => n.id === 'docs/ingest/bank/extract-stmt')).toBe(true)
+		expect(flat.nodes.some((n) => n.id === 'bank/parse-csv')).toBe(true)
+		// the daisy-chain edge bank → settle joins the sub-flows' terminal → entry
+		expect(flat.edges.some((e) => e.from.startsWith('bank/') && e.to.startsWith('settle/'))).toBe(
 			true
 		)
 	})

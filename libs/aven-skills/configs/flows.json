@@ -70,7 +70,7 @@
 				"name": "Kontoauszug",
 				"flowRef": "bank-statement",
 				"inputs": ["document"],
-				"outputs": ["transaction", "contact"],
+				"outputs": ["transaction"],
 				"note": "Composite → Sub-Skill »Kontoauszug« (extrahieren + Transaktionen anlegen)",
 				"supervision": {
 					"strategy": "restart",
@@ -227,7 +227,7 @@
 				"name": "Beleg verstehen",
 				"flowRef": "ingest",
 				"inputs": ["file", "image"],
-				"outputs": ["invoice", "transaction", "contact", "contract"],
+				"outputs": ["invoice", "transaction", "contract"],
 				"note": "Composite → Skill »Dokument-Ingest« (Import→Ablage→Klassifizieren→Extrahieren)",
 				"supervision": {
 					"strategy": "restart",
@@ -355,11 +355,11 @@
 			},
 			{
 				"id": "book-out",
-				"name": "Erlös buchen",
-				"actor": "buildOutgoingBooking",
+				"name": "Als offene Forderung buchen",
+				"actor": "bookInvoiceOpen",
 				"inputs": ["invoice"],
-				"outputs": ["booking"],
-				"note": "Erlös 4400/4300 → Forderung 1200",
+				"outputs": ["open_item"],
+				"note": "Forderung als OFFEN (Erlös 4400/4300 → Forderung 1200); Zahlungseingang via »Offene Posten ausgleichen«.",
 				"supervision": {
 					"strategy": "resume"
 				}
@@ -611,15 +611,15 @@
 	{
 		"id": "month-close",
 		"name": "Monatsabschluss",
-		"description": "Komposition wiederverwendbarer Skills (Composite/Leaf): der Kontoauszug-Skill liefert Transaktionen → der Beleg-Ingest-Skill verbucht damit → ein Leaf-Aktor erstellt die BWA. Sub-Skills sind anklickbar.",
+		"description": "Monatsabschluss: Belege als offene Posten erfassen (doc-ingest) + Kontobewegungen importieren (tx-import) → offene Posten ausgleichen (open-item-match) → BWA aggregieren.",
 		"nodes": [
 			{
-				"id": "bank",
-				"name": "Kontoauszüge",
-				"flowRef": "bank-statement",
-				"inputs": ["bank_statement"],
-				"outputs": ["transaction"],
-				"note": "Composite → Sub-Skill »Kontoauszug«",
+				"id": "docs",
+				"name": "Belege erfassen",
+				"flowRef": "doc-ingest",
+				"inputs": ["file", "image"],
+				"outputs": ["open_item"],
+				"note": "Composite → offene Posten aus Belegen",
 				"supervision": {
 					"strategy": "restart",
 					"retry": {
@@ -629,12 +629,27 @@
 				}
 			},
 			{
-				"id": "ingest",
-				"name": "Belege verbuchen",
-				"flowRef": "doc-ingest",
-				"inputs": ["document", "image", "transaction"],
+				"id": "bank",
+				"name": "Kontobewegungen",
+				"flowRef": "tx-import",
+				"inputs": ["file"],
+				"outputs": ["transaction"],
+				"note": "Composite → Transaktionen aus CSV",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "settle",
+				"name": "Offene Posten ausgleichen",
+				"flowRef": "open-item-match",
+				"inputs": ["transaction"],
 				"outputs": ["booking"],
-				"note": "Composite → Sub-Skill »Beleg-Ingest«",
+				"note": "Composite → Zahlungen verbuchen",
 				"supervision": {
 					"strategy": "restart",
 					"retry": {
@@ -647,9 +662,9 @@
 				"id": "report",
 				"name": "BWA erstellen",
 				"actor": "buildBWA",
-				"inputs": ["booking"],
+				"inputs": ["open_item", "booking"],
 				"outputs": ["report"],
-				"note": "Leaf (echte Ausführung)",
+				"note": "Leaf: offene Posten + Buchungen → BWA",
 				"tools": ["data_crud"],
 				"supervision": {
 					"strategy": "resume"
@@ -659,17 +674,24 @@
 		"edges": [
 			{
 				"from": "bank",
-				"to": "ingest",
+				"to": "settle",
 				"resource": "transaction",
 				"kind": "data",
 				"message": "transaction"
 			},
 			{
-				"from": "ingest",
+				"from": "settle",
 				"to": "report",
 				"resource": "booking",
 				"kind": "data",
 				"message": "booking"
+			},
+			{
+				"from": "docs",
+				"to": "report",
+				"resource": "open_item",
+				"kind": "data",
+				"message": "open_item"
 			}
 		],
 		"triggers": [
