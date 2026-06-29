@@ -64,6 +64,7 @@ const ALLOWED_CSS_PROPERTIES = new Set([
 	'placeContent',
 	'textAlign',
 	'textDecoration',
+	'textOverflow',
 	'textTransform',
 	'transform',
 	'transition',
