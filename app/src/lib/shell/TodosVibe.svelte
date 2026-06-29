@@ -27,7 +27,15 @@ const rows = $derived<Todo[]>(valuesQuery.data ?? [])
 
 const source = $derived({
 	title: t('mainnet.todos.title'),
-	items: rows.map((r) => ({ id: r.id, text: r.title, done: r.done === true })),
+	items: rows.map((r) => ({
+		id: r.id,
+		text: r.title,
+		done: r.done === true,
+		// due + priority predications, surfaced as a small meta line (board 0087)
+		meta: [r.due ? `📅 ${r.due}` : '', r.priority ? `⚡ ${r.priority}` : '']
+			.filter(Boolean)
+			.join('   ·   ')
+	})),
 	labels: {
 		listEyebrow: t('identities.todos.listEyebrow'),
 		openLabel: t('identities.todos.openLabel'),

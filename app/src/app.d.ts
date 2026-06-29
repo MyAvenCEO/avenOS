@@ -1,7 +1,7 @@
-// Baked at build by vite.config.ts `define` — the full app version incl. the -next.N build suffix.
-declare const __APP_VERSION__: string
-
 declare global {
+	// Baked at build by vite.config.ts `define` — the full app version incl. the -next.N build suffix.
+	const __APP_VERSION__: string
+
 	namespace App {
 		// interface Error {}
 		// interface Locals {}

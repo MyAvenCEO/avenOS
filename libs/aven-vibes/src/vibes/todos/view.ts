@@ -59,7 +59,13 @@ export const todoView: ViewDef = {
 													change: { send: 'TOGGLE_ITEM', payload: { id: '$$id' } }
 												}
 											},
-											{ class: 'td-row-text', text: '$$text' },
+											{
+												class: 'td-row-main',
+												children: [
+													{ class: 'td-row-text', text: '$$text' },
+													{ class: 'td-row-meta', text: '$$meta' }
+												]
+											},
 											{
 												tag: 'button',
 												class: 'td-btn td-btn--icon delete',

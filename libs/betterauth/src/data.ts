@@ -303,22 +303,60 @@ async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const ids = await ensureTodoSchemas(uid)
 	const taskSchema = ids['pred:task']
 	const validSchema = ids['pred:valid']
+	const dueSchema = ids['pred:due']
+	const prioSchema = ids['pred:prioritized']
+
+	// Insert/replace a single predication that refs a task (due/prioritized). null clears it.
+	async function setRefPredicate(
+		schemaId: string,
+		predicate: string,
+		taskId: string,
+		value: string | null
+	): Promise<void> {
+		await sql`DELETE FROM data_value WHERE user_id = ${uid} AND schema_id = ${schemaId} AND data->>'x1' = ${taskId}`.execute(
+			db()
+		)
+		if (value)
+			await db()
+				.insertInto('data_value')
+				.values({
+					id: randomUUID(),
+					user_id: uid,
+					schema_id: schemaId,
+					data: jsonb({ predicate, x1: taskId, x2: value }),
+					created_at: new Date(),
+					updated_at: new Date()
+				})
+				.execute()
+	}
 
 	if (!args.action || args.action === 'list') {
-		const rows = await sql<{ id: string; what: string | null; open: boolean }>`
-			SELECT id, what, open FROM v_task WHERE user_id = ${uid} ORDER BY id
-		`.execute(db())
+		const rows = await sql<{
+			id: string
+			what: string | null
+			open: boolean
+			due_date: string | null
+			priority: string | null
+		}>`SELECT id, what, open, due_date, priority FROM v_task WHERE user_id = ${uid} ORDER BY id`.execute(
+			db()
+		)
 		return {
 			ok: true,
 			action: 'list',
-			items: rows.rows.map((r) => ({ id: r.id, title: r.what, done: !r.open }))
+			items: rows.rows.map((r) => ({
+				id: r.id,
+				title: r.what,
+				done: !r.open,
+				due: r.due_date,
+				priority: r.priority
+			}))
 		}
 	}
 
 	if (args.action === 'create') {
 		const created: string[] = []
 		for (const item of args.items ?? []) {
-			const it = item as { title?: string; done?: boolean }
+			const it = item as { title?: string; done?: boolean; due?: string; priority?: string }
 			if (!it.title) continue
 			const taskId = randomUUID()
 			const now = new Date().toISOString()
@@ -344,6 +382,8 @@ async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 					updated_at: new Date()
 				})
 				.execute()
+			if (it.due) await setRefPredicate(dueSchema, 'due', taskId, it.due)
+			if (it.priority) await setRefPredicate(prioSchema, 'prioritized', taskId, it.priority)
 			created.push(taskId)
 		}
 		if (created.length > 0) publish(uid, { entity: 'data' })
@@ -353,7 +393,13 @@ async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 	if (args.action === 'update') {
 		const updated: string[] = []
 		for (const item of args.items ?? []) {
-			const it = item as { id?: string; title?: string; done?: boolean }
+			const it = item as {
+				id?: string
+				title?: string
+				done?: boolean
+				due?: string | null
+				priority?: string | null
+			}
 			if (!it.id) continue
 			if (it.title !== undefined) {
 				await db()
@@ -377,6 +423,9 @@ async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 					WHERE user_id = ${uid} AND schema_id = ${validSchema} AND data->>'x1' = ${it.id}
 				`.execute(db())
 			}
+			if (it.due !== undefined) await setRefPredicate(dueSchema, 'due', it.id, it.due)
+			if (it.priority !== undefined)
+				await setRefPredicate(prioSchema, 'prioritized', it.id, it.priority)
 			updated.push(it.id)
 		}
 		if (updated.length > 0) publish(uid, { entity: 'data' })
