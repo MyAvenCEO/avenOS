@@ -1,27 +1,27 @@
 [
 	{
 		"id": "doc-ingest",
-		"name": "Dokument-Ingest",
-		"description": "Beleg aufnehmen: Datei inhaltsadressiert ablegen → per LLM klassifizieren. Liefert ein klassifiziertes Dokument; nachgelagerte Skills (Extrahieren/Anreichern, Buchen) bauen darauf auf.",
+		"name": "Document Ingest",
+		"description": "Take a document in: store the file content-addressed → classify it via LLM. Yields a classified document; downstream skills (extract/enrich, book) build on it.",
 		"nodes": [
 			{
 				"id": "ingest",
-				"name": "Aufnehmen",
+				"name": "Ingest",
 				"actor": "storeDocument",
 				"inputs": ["file", "image"],
 				"outputs": ["document"],
-				"note": "Datei / Foto inhaltsadressiert in fs ablegen (sparks/PRIVATE/<sha256>)",
+				"note": "Store the file / photo content-addressed in fs (sparks/PRIVATE/<sha256>)",
 				"tools": ["sparkWriteBytes"],
 				"supervision": { "strategy": "resume" }
 			},
 			{
 				"id": "classify",
-				"name": "Klassifizieren",
+				"name": "Classify",
 				"actor": "classify_document",
 				"inputs": ["document"],
 				"outputs": ["document"],
-				"note": "Belegart per LLM erkennen (Rechnung / Kontoauszug / Vertrag / …)",
-				"system_prompt": "Du bist Buchhalter. Bestimme die Belegart: invoice (Rechnung), bank_statement (Kontoauszug), contract (Vertrag) oder other. Gib Titel, Tags und eine kurze Zusammenfassung zurück.",
+				"note": "Detect the document type via LLM (invoice / bank statement / contract / …)",
+				"system_prompt": "You are a bookkeeper. Determine the document type: invoice, bank_statement, contract or other. Return a title, tags and a short summary.",
 				"llm": { "model": "gemma4-31b", "vision": true, "mode": "vision" },
 				"tools": ["classify_document"],
 				"supervision": { "strategy": "restart", "retry": { "max": 2, "backoff": "exponential" } }

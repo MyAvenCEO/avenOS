@@ -14,20 +14,20 @@ export type ResourceKind = string
 
 export const RESOURCE_LABEL: Record<ResourceKind, string> = {
 	prompt: 'Prompt',
-	audio: 'Sprachnotiz',
-	file: 'Datei',
-	image: 'Bild',
-	document: 'Dokument',
-	invoice: 'Rechnung',
-	contract: 'Vertrag',
-	bank_statement: 'Kontoauszug',
-	transaction: 'Transaktion',
+	audio: 'Voice note',
+	file: 'File',
+	image: 'Image',
+	document: 'Document',
+	invoice: 'Invoice',
+	contract: 'Contract',
+	bank_statement: 'Bank statement',
+	transaction: 'Transaction',
 	match: 'Match',
-	booking: 'Buchung',
-	contact: 'Kontakt',
+	booking: 'Booking',
+	contact: 'Contact',
 	pdf: 'PDF',
-	report: 'Bericht',
-	open_item: 'Offener Posten'
+	report: 'Report',
+	open_item: 'Open item'
 }
 
 /** The open-item lifecycle (data-layer convenience for the vibes — NOT a schema enum). board 0084. */

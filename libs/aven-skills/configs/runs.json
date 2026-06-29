@@ -2,31 +2,31 @@
 	{
 		"id": "run-ingest-1",
 		"flowId": "doc-ingest",
-		"label": "Müller GmbH — Beleg aufnehmen",
-		"startedAt": "heute 09:02",
+		"label": "Acme Ltd — ingest document",
+		"startedAt": "today 09:02",
 		"status": "done",
 		"trace": [
 			{
 				"nodeId": "ingest",
 				"state": "done",
 				"at": "+0s",
-				"inputs": ["1× Datei"],
+				"inputs": ["1× file"],
 				"outputs": ["sparks/PRIVATE/<sha256>"],
-				"message": "inhaltsadressiert abgelegt"
+				"message": "stored content-addressed"
 			},
 			{
 				"nodeId": "classify",
 				"state": "done",
 				"at": "+2s",
-				"inputs": ["1× Dokument"],
-				"outputs": ["als Rechnung erkannt"],
+				"inputs": ["1× document"],
+				"outputs": ["recognized as invoice"],
 				"vibe": "bookkeeping",
 				"vibeData": {
 					"docType": "invoice",
-					"title": "Rechnung 2026-0815 — Müller GmbH",
-					"description": "Eingangsrechnung über Bürobedarf (Druckerpapier).",
-					"booking_summary": "Aufwand Bürobedarf 100,00 € netto + 19 % Vorsteuer.",
-					"tags": ["Rechnung", "Eingang", "19% USt"]
+					"title": "Invoice 2026-0815 — Acme Ltd",
+					"description": "Incoming invoice for office supplies (printer paper).",
+					"booking_summary": "Office-supplies expense 100.00 € net + 19% input VAT.",
+					"tags": ["Invoice", "Incoming", "19% VAT"]
 				}
 			}
 		]
