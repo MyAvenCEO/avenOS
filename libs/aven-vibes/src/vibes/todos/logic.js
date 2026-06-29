@@ -29,6 +29,7 @@ function mapItems(items) {
 		id: String(it.id || uid()),
 		text: it.text || '',
 		done: !!it.done,
+		meta: it.meta || '', // due/priority badge line (board 0087) — must survive the transform
 		rowClass: it.done ? 'td-row done' : 'td-row'
 	}))
 }
@@ -79,7 +80,7 @@ function handleEvent(type, payload, state) {
 	if (type === 'ADD_ITEM') {
 		var text = (payload.text != null ? String(payload.text) : draft).trim()
 		if (!text) return state
-		items.push({ id: uid(), text: text, done: false, rowClass: 'td-row' })
+		items.push({ id: uid(), text: text, done: false, meta: '', rowClass: 'td-row' })
 		draft = ''
 	}
 
@@ -91,6 +92,7 @@ function handleEvent(type, payload, state) {
 					id: items[i].id,
 					text: items[i].text,
 					done: !items[i].done,
+					meta: items[i].meta,
 					rowClass: !items[i].done ? 'td-row done' : 'td-row'
 				}
 				break
