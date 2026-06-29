@@ -90,24 +90,13 @@
 				"tools": ["matchContact", "data_crud"]
 			},
 			{
-				"id": "reconcile",
-				"name": "Abgleichen",
-				"actor": "matchInvoiceAgainstTx",
-				"inputs": ["invoice", "transaction"],
-				"outputs": ["match"],
-				"note": "Fan-in: Rechnung + Transaktion → Match",
-				"system_prompt": "Wähle die Transaktion, die diese Rechnung bezahlt hat (Betrag, Cross-Currency via original_amount/FX, Gegenpartei, Datum) — oder keine.",
-				"llm": { "model": "gemma4-31b", "mode": "tool" },
-				"tools": ["pick_match"]
-			},
-			{
-				"id": "book",
-				"name": "Buchen (SKR04)",
-				"actor": "bookInvoice",
-				"inputs": ["invoice", "match"],
-				"outputs": ["booking"],
-				"note": "Fan-in: Soll/Haben + Vorsteuer",
-				"system_prompt": "Buche die Eingangsrechnung in SKR04: pro Position das beste Aufwandskonto (NETTO) + tax_treatment; das System bucht die Abziehbare Vorsteuer. Splitbuchung bei gemischten Sätzen/Bewirtung.",
+				"id": "book-open",
+				"name": "Als offen buchen (SKR04)",
+				"actor": "bookInvoiceOpen",
+				"inputs": ["invoice"],
+				"outputs": ["open_item"],
+				"note": "Sollstellung: Aufwand/Erlös + Vorsteuer/USt → Forderung/Verbindlichkeit als OFFEN. Zahlung folgt via »Offene Posten ausgleichen«.",
+				"system_prompt": "Buche die Rechnung in SKR04 als offenen Posten (Sollstellung): pro Position das beste Konto (NETTO) + tax_treatment; das System bucht Vorsteuer/USt. Status = offen, wartet auf die Zahlung.",
 				"llm": { "model": "gemma4-31b", "mode": "tool" },
 				"tools": ["book_invoice"]
 			}
@@ -117,8 +106,93 @@
 			{ "from": "ingest", "to": "bank", "resource": "document", "when": "Kontoauszug" },
 			{ "from": "ingest", "to": "extract-contract", "resource": "document", "when": "Vertrag" },
 			{ "from": "extract-invoice", "to": "enrich", "resource": "invoice" },
-			{ "from": "extract-invoice", "to": "reconcile", "resource": "invoice" },
-			{ "from": "reconcile", "to": "book", "resource": "match" }
+			{ "from": "extract-invoice", "to": "book-open", "resource": "invoice" }
+		]
+	},
+	{
+		"id": "tx-import",
+		"name": "Kontobewegungen importieren",
+		"description": "Bankauszug / CSV → die aven-skills Ingestor-Pipeline (ingest → parse → transform → dedup → assemble): Transaktionen mit Provenance, idempotent. Eigenständiger Eingang, unabhängig von einem Beleg.",
+		"nodes": [
+			{
+				"id": "ingest-csv",
+				"name": "Datei aufnehmen",
+				"actor": "ingest",
+				"inputs": ["file"],
+				"outputs": ["bank_statement"],
+				"note": "Inhalt hashen + ablegen (UploaderPort); Doppel-Import = No-op",
+				"tools": ["data_crud"]
+			},
+			{
+				"id": "parse-csv",
+				"name": "CSV parsen",
+				"actor": "parse",
+				"inputs": ["bank_statement"],
+				"outputs": ["transaction"],
+				"note": "Spalten + Zeilen dekodieren (rowRef Provenance)"
+			},
+			{
+				"id": "transform",
+				"name": "Auf Schema mappen",
+				"actor": "transform",
+				"inputs": ["transaction"],
+				"outputs": ["transaction"],
+				"note": "Feld-Mapping per IngestConfig (bank-statement-tx.json) → transactions"
+			},
+			{
+				"id": "dedup",
+				"name": "Dedupe + Ablage",
+				"actor": "dedup",
+				"inputs": ["transaction"],
+				"outputs": ["transaction"],
+				"note": "Idempotent per key; _source Provenance je Zeile",
+				"tools": ["data_crud"]
+			}
+		],
+		"edges": [
+			{ "from": "ingest-csv", "to": "parse-csv", "resource": "bank_statement" },
+			{ "from": "parse-csv", "to": "transform", "resource": "transaction" },
+			{ "from": "transform", "to": "dedup", "resource": "transaction" }
+		]
+	},
+	{
+		"id": "open-item-match",
+		"name": "Offene Posten ausgleichen",
+		"description": "Event-getriggert bei Zahlungseingang: eine Transaktion sucht ihren offenen Posten → ausgleichen (bezahlt) oder, ohne Beleg, parken (wartet auf Beleg). Deckt beide Zeitrichtungen ab (Beleg-zuerst und Transaktion-zuerst).",
+		"nodes": [
+			{
+				"id": "find-open",
+				"name": "Offenen Posten suchen",
+				"actor": "findOpenItem",
+				"inputs": ["transaction"],
+				"outputs": ["open_item"],
+				"note": "Match per Betrag / Gegenpartei / IBAN / Datum",
+				"system_prompt": "Finde den offenen Posten, den diese Transaktion ausgleicht (Betrag, Cross-Currency, Gegenpartei, Datum) — oder keinen.",
+				"llm": { "model": "gemma4-31b", "mode": "tool" },
+				"tools": ["pick_match"]
+			},
+			{
+				"id": "settle",
+				"name": "Ausgleichen (Zahlung)",
+				"actor": "settleOpenItem",
+				"inputs": ["open_item", "transaction"],
+				"outputs": ["booking"],
+				"note": "Fan-in: offener Posten + Zahlung → Zahlungsbuchung, Status → bezahlt",
+				"tools": ["book_invoice", "data_crud"]
+			},
+			{
+				"id": "park",
+				"name": "Parken (kein Beleg)",
+				"actor": "parkTransaction",
+				"inputs": ["transaction"],
+				"outputs": ["transaction"],
+				"note": "Dead-letter: Transaktion ohne Beleg → wartet auf Beleg",
+				"tools": ["data_crud"]
+			}
+		],
+		"edges": [
+			{ "from": "find-open", "to": "settle", "resource": "open_item", "when": "Treffer" },
+			{ "from": "find-open", "to": "park", "resource": "transaction", "when": "kein Beleg" }
 		]
 	},
 	{

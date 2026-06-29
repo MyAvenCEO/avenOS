@@ -1,0 +1,54 @@
+{
+	"id": "bank-statement-tx",
+	"version": 1,
+	"skipDuplicateFiles": true,
+	"source": {
+		"format": "csv",
+		"delimiter": "auto",
+		"headerRow": true,
+		"nullValues": ["", "-", "—"],
+		"rowRef": ["Buchungstag", "Betrag", "Verwendungszweck"]
+	},
+	"targets": [
+		{
+			"name": "transactions",
+			"key": ["Buchungstag", "Betrag", "Verwendungszweck"],
+			"fields": {
+				"booking_date": {
+					"from": "Buchungstag",
+					"type": "datetime",
+					"format": "DD.MM.YYYY",
+					"nullable": true
+				},
+				"value_date": {
+					"from": "Wertstellung",
+					"type": "datetime",
+					"format": "DD.MM.YYYY",
+					"nullable": true
+				},
+				"amount": {
+					"from": "Betrag",
+					"type": "number",
+					"decimal": ",",
+					"thousands": ".",
+					"default": 0
+				},
+				"currency": { "from": "Waehrung", "type": "text", "default": "EUR" },
+				"counterparty_name": {
+					"from": "Beguenstigter/Zahlungspflichtiger",
+					"type": "text",
+					"nullable": true
+				},
+				"counterparty_iban": { "from": "IBAN", "type": "text", "nullable": true },
+				"description": { "from": "Verwendungszweck", "type": "text", "nullable": true },
+				"balance_after": {
+					"from": "Saldo",
+					"type": "number",
+					"decimal": ",",
+					"thousands": ".",
+					"nullable": true
+				}
+			}
+		}
+	]
+}

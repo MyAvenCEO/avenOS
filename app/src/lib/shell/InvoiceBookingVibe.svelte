@@ -39,7 +39,17 @@ const total = $derived(
 const match = $derived((data?.match ?? null) as InvoiceMatch | null)
 const tx = $derived(match?.tx ?? null)
 const booking = $derived((data?.booking ?? null) as BookingRecord | null)
-const booked = $derived(booking?.status === 'booked')
+// Lifecycle status: booked | offen | teilbezahlt | bezahlt (open-item lifecycle, board 0084).
+const status = $derived(String(booking?.status ?? 'unbooked'))
+const posted = $derived(!!booking && status !== 'unbooked')
+const statusBadge = $derived(
+	{
+		booked: { label: 'Gebucht', cls: 'bg-green-600/15 text-green-700' },
+		offen: { label: 'Offen · wartet auf Zahlung', cls: 'bg-amber-500/15 text-amber-700' },
+		teilbezahlt: { label: 'Teilbezahlt', cls: 'bg-blue-500/15 text-blue-700' },
+		bezahlt: { label: 'Bezahlt', cls: 'bg-green-600/15 text-green-700' }
+	}[status] ?? null
+)
 const bcur = $derived(booking?.currency ?? currency)
 // Confidence in the picked account: high / medium / low. board 0080.
 const conf = $derived(
@@ -115,7 +125,13 @@ const lines = $derived(
 		>
 			<span>{booking?.is_split ? `Splitbuchung · ${lines.length} Pos.` : 'Buchung'}</span>
 			<span class="flex items-center gap-1">
-				{#if booked && conf}
+				{#if statusBadge}
+					<span
+						class="rounded-full px-1.5 py-0.5 text-[9px] font-semibold normal-case {statusBadge.cls}"
+						>{statusBadge.label}</span
+					>
+				{/if}
+				{#if posted && conf}
 					<span class="rounded-full px-1.5 py-0.5 text-[9px] font-semibold normal-case {conf.cls}"
 						>{conf.label}</span
 					>
@@ -123,7 +139,7 @@ const lines = $derived(
 				<span>SKR04</span>
 			</span>
 		</div>
-		{#if booked && booking}
+		{#if posted && booking}
 			<div class="flex flex-col gap-1 text-xs">
 				{#each lines as l, i (i)}
 					<div class="flex justify-between gap-2">

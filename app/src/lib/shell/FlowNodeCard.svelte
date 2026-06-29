@@ -25,14 +25,16 @@ const STATE_BORDER: Record<NodeState, string> = {
 	waiting: 'border-amber-500/60',
 	running: 'border-blue-500/70',
 	done: 'border-green-600/60',
-	error: 'border-red-600/60'
+	error: 'border-red-600/60',
+	parked: 'border-purple-500/60'
 }
 const STATE_DOT: Record<NodeState, string> = {
 	idle: '',
 	waiting: 'bg-amber-500',
 	running: 'bg-blue-500',
 	done: 'bg-green-600',
-	error: 'bg-red-600'
+	error: 'bg-red-600',
+	parked: 'bg-purple-500'
 }
 </script>
 

@@ -4,6 +4,7 @@ import BookkeepingVibe from '$lib/shell/BookkeepingVibe.svelte'
 import DocCompareVibe from '$lib/shell/DocCompareVibe.svelte'
 import InvoiceBookingVibe from '$lib/shell/InvoiceBookingVibe.svelte'
 import InvoiceMatchVibe from '$lib/shell/InvoiceMatchVibe.svelte'
+import OpenItemsVibe from '$lib/shell/OpenItemsVibe.svelte'
 
 // board 0083 — the optional "vibe view" of a single flow step: a more visually appealing, user-facing
 // rendering of what an actor is doing right now. A step may name a `vibe` (reusing a chat-timeline card
@@ -31,14 +32,16 @@ const STATE_LABEL: Record<NodeState, string> = {
 	waiting: 'Wartet',
 	running: 'Läuft',
 	done: 'Fertig',
-	error: 'Fehler'
+	error: 'Fehler',
+	parked: 'Geparkt'
 }
 const STATE_CHIP: Record<NodeState, string> = {
 	idle: 'bg-muted text-muted-foreground',
 	waiting: 'bg-amber-500/15 text-amber-700',
 	running: 'bg-blue-500/15 text-blue-700',
 	done: 'bg-green-600/15 text-green-700',
-	error: 'bg-red-600/15 text-red-700'
+	error: 'bg-red-600/15 text-red-700',
+	parked: 'bg-purple-500/15 text-purple-700'
 }
 </script>
 
@@ -61,6 +64,10 @@ const STATE_CHIP: Record<NodeState, string> = {
 {:else if vibe === 'invoice-booking'}
 	<div class="w-full">
 		<InvoiceBookingVibe data={vibeData} />
+	</div>
+{:else if vibe === 'open-items'}
+	<div class="w-full">
+		<OpenItemsVibe data={vibeData} />
 	</div>
 {:else if vibe === 'contact'}
 	<!-- Adressbuch-Anreicherung: which party was matched/created + what was added -->

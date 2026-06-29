@@ -48,7 +48,8 @@ const STATE_DOT: Record<NodeState, string> = {
 	waiting: 'bg-amber-500',
 	running: 'bg-blue-500',
 	done: 'bg-green-600',
-	error: 'bg-red-600'
+	error: 'bg-red-600',
+	parked: 'bg-purple-500'
 }
 
 function flowName(id: string): string {

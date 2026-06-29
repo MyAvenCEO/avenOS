@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import Ajv from 'ajv'
+import bankTxConfig from '../configs/bank-statement-tx.json'
 import {
 	currentStepIndex,
 	EXAMPLE_FLOWS,
@@ -12,11 +13,14 @@ import {
 	isFanIn,
 	isFanOut,
 	isLeaf,
+	OPEN_ITEM_STATUS,
+	RESOURCE_LABEL,
 	resourceSchema,
 	runStateOf,
 	runsForFlow,
 	validateFlow
 } from '../src/flow.js'
+import { createIngestor, textSource } from '../src/index.js'
 
 // board 0083 — the universal flow/recipe schema + our skills as data validate, with fan-out + fan-in.
 
@@ -64,7 +68,7 @@ describe('flow / recipe schema', () => {
 		// the per-type extract branches all sit one column after the entry
 		expect(depth['extract-invoice']).toBe(1)
 		expect(depth.bank).toBe(1)
-		expect(depth.book).toBeGreaterThan(depth.reconcile) // downstream is deeper
+		expect(depth['book-open']).toBeGreaterThan(depth['extract-invoice']) // downstream is deeper
 	})
 
 	test('actor nodes carry config (system_prompt / llm / tools)', () => {
@@ -125,8 +129,8 @@ describe('flow / recipe schema', () => {
 		const flat = flattenFlow(close, EXAMPLE_FLOWS)
 		// every node in the flattened graph is a leaf (actual executor)
 		expect(flat.nodes.every(isLeaf)).toBe(true)
-		// bank-statement(2) + doc-ingest(10: ingest-sub 3 + bank-sub 2 + 5 leaves) + report(1) = 13
-		expect(flat.nodes.length).toBe(13)
+		// bank-statement(2) + doc-ingest(9: ingest-sub 3 + bank-sub 2 + extract-invoice/contract/enrich/book-open) + report(1) = 12
+		expect(flat.nodes.length).toBe(12)
 		// nested namespacing: doc-ingest's ingest composite expands the ingest sub-skill's classify
 		expect(flat.nodes.some((n) => n.id === 'ingest/ingest/classify')).toBe(true)
 		expect(flat.nodes.some((n) => n.id === 'bank/extract-stmt')).toBe(true)
@@ -158,29 +162,87 @@ describe('flow / recipe schema', () => {
 		const glass = EXAMPLE_RUNS.find((r) => r.flowId === 'minecraft-glass')!
 		// craft-pane is 'running' at index 2
 		expect(currentStepIndex(glass)).toBe(2)
-		const done = EXAMPLE_RUNS.find((r) => r.id === 'run-ingest-2')!
+		const done = EXAMPLE_RUNS.find((r) => r.id === 'run-tx-import')!
 		expect(currentStepIndex(done)).toBe(done.trace.length - 1) // all done → last
 		expect(currentStepIndex(null)).toBe(-1)
 	})
 
-	test('the full invoice run carries a vibe view for every step (extract → booked)', () => {
-		const run = EXAMPLE_RUNS.find((r) => r.id === 'run-invoice-full')
+	test('the invoice run walks ingest → extract → enrich → book-open, each with a vibe', () => {
+		const run = EXAMPLE_RUNS.find((r) => r.id === 'run-invoice-open')
 		expect(run).toBeTruthy()
 		if (!run) return
-		const ingest = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')!
-		const ids = new Set(ingest.nodes.map((n) => n.id))
-		// covers the invoice path classify → extract → enrich → reconcile → book, each with a vibe + data
+		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')!
+		const ids = new Set(doc.nodes.map((n) => n.id))
 		expect(run.trace.map((s) => s.nodeId)).toEqual([
 			'ingest',
 			'extract-invoice',
 			'enrich',
-			'reconcile',
-			'book'
+			'book-open'
 		])
 		expect(run.trace.every((s) => ids.has(s.nodeId))).toBe(true)
 		expect(run.trace.every((s) => typeof s.vibe === 'string' && s.vibe.length > 0)).toBe(true)
 		expect(run.trace.every((s) => s.vibeData != null)).toBe(true)
-		expect(run.trace.map((s) => s.vibe)).toContain('invoice-booking')
+		// it ends OFFEN (Sollstellung), awaiting the payment
+		const book = run.trace.find((s) => s.nodeId === 'book-open')!
+		expect((book.vibeData as { booking?: { status?: string } }).booking?.status).toBe('offen')
+	})
+
+	test('open-item lifecycle: tx-import + open-item-match flows; offen → bezahlt; park = dead-letter', () => {
+		const txImport = EXAMPLE_FLOWS.find((f) => f.id === 'tx-import')
+		const oim = EXAMPLE_FLOWS.find((f) => f.id === 'open-item-match')
+		expect(txImport).toBeTruthy()
+		expect(oim).toBeTruthy()
+		if (!txImport || !oim) return
+		expect(validateSchema(txImport)).toBe(true)
+		expect(validateFlow(txImport)).toEqual([])
+		expect(validateSchema(oim)).toBe(true)
+		expect(validateFlow(oim)).toEqual([])
+		// doc-ingest now ends at book-open (offen), not an inline reconcile→book
+		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')!
+		expect(doc.nodes.some((n) => n.id === 'book-open')).toBe(true)
+		expect(doc.nodes.some((n) => n.id === 'reconcile')).toBe(false)
+		// settle fans in (open_item + transaction → booking)
+		const settle = oim.nodes.find((n) => n.id === 'settle')!
+		expect(isFanIn(settle)).toBe(true)
+		expect(settle.inputs).toContain('open_item')
+		// offen (run-invoice-open) → bezahlt (run-settle)
+		const open = EXAMPLE_RUNS.find((r) => r.id === 'run-invoice-open')!
+		const settled = EXAMPLE_RUNS.find((r) => r.id === 'run-settle')!
+		const openBooking = open.trace.find((s) => s.nodeId === 'book-open')!.vibeData as {
+			booking?: { status?: string }
+		}
+		const paidBooking = settled.trace.find((s) => s.nodeId === 'settle')!.vibeData as {
+			booking?: { status?: string }
+		}
+		expect(openBooking.booking?.status).toBe('offen')
+		expect(paidBooking.booking?.status).toBe('bezahlt')
+		// the inverse: a tx with no Beleg is parked (dead-letter)
+		const parked = EXAMPLE_RUNS.find((r) => r.id === 'run-tx-unmatched')!
+		expect(parked.trace.some((s) => s.state === 'parked')).toBe(true)
+		// OPEN_ITEM_STATUS + open_item kind
+		expect([...OPEN_ITEM_STATUS]).toEqual(['offen', 'teilbezahlt', 'bezahlt'])
+		expect(RESOURCE_LABEL.open_item).toBeTruthy()
+	})
+
+	test('tx-import is realized by the aven-skills ingestor (CSV → transactions + provenance + dedup)', async () => {
+		const csv = [
+			'Buchungstag;Wertstellung;Betrag;Waehrung;Beguenstigter/Zahlungspflichtiger;IBAN;Verwendungszweck;Saldo',
+			'12.06.2026;12.06.2026;-119,00;EUR;Müller GmbH;DE89370400440532013000;Rechnung 2026-0815;4.881,00',
+			'09.06.2026;09.06.2026;-49,00;EUR;Telekom Deutschland;DE12500105170648489890;Mobilfunk Juni;5.000,00'
+		].join('\n')
+		const ing = createIngestor(bankTxConfig as unknown as Parameters<typeof createIngestor>[0])
+		const r1 = await ing.ingest(textSource('juni.csv', csv))
+		expect(r1.duplicateFile).toBe(false)
+		const txs = (r1.output as { transactions?: Record<string, unknown>[] }).transactions ?? []
+		expect(txs.length).toBe(2)
+		// German decimal coercion
+		const müller = txs.find((t) => t.description === 'Rechnung 2026-0815')
+		expect(müller?.amount).toBe(-119)
+		// provenance back to the source doc
+		expect((müller?._source as { contentSha256?: string })?.contentSha256).toBeTruthy()
+		// idempotent: re-ingesting the same content is a no-op
+		const r2 = await ing.ingest(textSource('juni.csv', csv))
+		expect(r2.duplicateFile).toBe(true)
 	})
 
 	test('persisted resource kinds map to a DB schema name; ephemeral ones do not', () => {

@@ -1,16 +1,16 @@
 [
 	{
-		"id": "run-invoice-full",
+		"id": "run-invoice-open",
 		"flowId": "doc-ingest",
-		"label": "Müller GmbH — Rechnung 2026-0815",
+		"label": "Müller GmbH — Rechnung 2026-0815 (offen)",
 		"startedAt": "heute 09:02",
-		"status": "done",
+		"status": "running",
 		"trace": [
 			{
 				"nodeId": "ingest",
 				"state": "done",
 				"at": "+0s",
-				"inputs": ["1× Dokument"],
+				"inputs": ["1× Datei"],
 				"outputs": ["als Rechnung erkannt"],
 				"vibe": "bookkeeping",
 				"vibeData": {
@@ -82,52 +82,12 @@
 				}
 			},
 			{
-				"nodeId": "reconcile",
-				"state": "done",
-				"at": "+7s",
-				"inputs": ["invoice JSON", "Transaktionen"],
-				"outputs": ["Match: −119,00 €"],
-				"vibe": "invoice-match",
-				"vibeData": {
-					"currency": "EUR",
-					"invoice": {
-						"header": {
-							"invoice_number": "2026-0815",
-							"issue_date": "2026-06-01",
-							"currency": "EUR"
-						},
-						"vendor": { "name": "Müller GmbH" },
-						"totals": { "invoice_total": 119 }
-					},
-					"match": {
-						"tx": {
-							"dedup_key": "tx-0815",
-							"booking_date": "2026-06-03",
-							"value_date": "2026-06-03",
-							"amount": -119,
-							"currency": "EUR",
-							"description": "Rechnung 2026-0815 Müller GmbH",
-							"counterparty_name": "Müller GmbH",
-							"counterparty_iban": "DE89370400440532013000",
-							"balance_after": 4881,
-							"account_iban": "DE03100180000494779244"
-						},
-						"confidence": "high",
-						"reasons": [
-							"Betrag exakt −119,00 €",
-							"Gegenpartei: Müller GmbH",
-							"Datum nahe Fälligkeit"
-						],
-						"target": 119
-					}
-				}
-			},
-			{
-				"nodeId": "book",
-				"state": "done",
-				"at": "+9s",
-				"inputs": ["invoice JSON", "Match"],
-				"outputs": ["Buchung 6815 + VSt 1406 → 3300"],
+				"nodeId": "book-open",
+				"state": "running",
+				"at": "+8s",
+				"inputs": ["invoice JSON"],
+				"outputs": ["Offener Posten 119,00 €"],
+				"message": "Sollstellung gebucht · wartet auf Zahlung",
 				"vibe": "invoice-booking",
 				"vibeData": {
 					"currency": "EUR",
@@ -140,20 +100,7 @@
 						"vendor": { "name": "Müller GmbH" },
 						"totals": { "invoice_total": 119 }
 					},
-					"match": {
-						"tx": {
-							"dedup_key": "tx-0815",
-							"booking_date": "2026-06-03",
-							"amount": -119,
-							"currency": "EUR",
-							"counterparty_name": "Müller GmbH"
-						},
-						"confidence": "high",
-						"reasons": ["Betrag exakt −119,00 €"],
-						"target": 119
-					},
 					"booking": {
-						"invoice_value_id": null,
 						"invoice_number": "2026-0815",
 						"vendor": "Müller GmbH",
 						"currency": "EUR",
@@ -179,11 +126,181 @@
 						"tax_key": "VST19",
 						"buchungstext": "Bürobedarf Müller GmbH, Rg. 2026-0815",
 						"confidence": "high",
-						"reason": "Lieferant + Bürobedarf eindeutig; Vorsteuer 1406 (19 %).",
-						"status": "booked",
+						"reason": "Sollstellung; wartet auf den Zahlungseingang.",
+						"status": "offen",
 						"direction": "incoming"
 					}
 				}
+			}
+		]
+	},
+	{
+		"id": "run-tx-import",
+		"flowId": "tx-import",
+		"label": "Kontoauszug Juni (CSV, 42 Buchungen)",
+		"startedAt": "heute 09:10",
+		"status": "done",
+		"trace": [
+			{
+				"nodeId": "ingest-csv",
+				"state": "done",
+				"at": "+0s",
+				"inputs": ["1× Datei (CSV)"],
+				"outputs": ["SourceDoc (sha256)"],
+				"message": "Inhalt gehasht + abgelegt"
+			},
+			{
+				"nodeId": "parse-csv",
+				"state": "done",
+				"at": "+1s",
+				"outputs": ["42 Zeilen"],
+				"message": "Spalten erkannt"
+			},
+			{
+				"nodeId": "transform",
+				"state": "done",
+				"at": "+1s",
+				"outputs": ["42× transaction"],
+				"message": "auf das transactions-Schema gemappt"
+			},
+			{
+				"nodeId": "dedup",
+				"state": "done",
+				"at": "+2s",
+				"outputs": ["38 neu, 4 Duplikate"],
+				"message": "idempotent (key) · _source Provenance je Zeile"
+			}
+		]
+	},
+	{
+		"id": "run-settle",
+		"flowId": "open-item-match",
+		"label": "Zahlung Müller GmbH → Rg. 2026-0815 (bezahlt)",
+		"startedAt": "heute 09:12",
+		"status": "done",
+		"trace": [
+			{
+				"nodeId": "find-open",
+				"state": "done",
+				"at": "+0s",
+				"inputs": ["1× Transaktion −119,00 €"],
+				"outputs": ["Treffer: Rg. 2026-0815"],
+				"vibe": "open-items",
+				"vibeData": {
+					"match": {
+						"invoice": {
+							"number": "2026-0815",
+							"vendor": "Müller GmbH",
+							"amount": 119,
+							"currency": "EUR",
+							"status": "offen"
+						},
+						"tx": {
+							"date": "2026-06-12",
+							"amount": -119,
+							"currency": "EUR",
+							"counterparty": "Müller GmbH"
+						},
+						"confidence": "high",
+						"reasons": ["Betrag exakt −119,00 €", "Gegenpartei: Müller GmbH"]
+					}
+				}
+			},
+			{
+				"nodeId": "settle",
+				"state": "done",
+				"at": "+1s",
+				"inputs": ["Offener Posten", "Transaktion"],
+				"outputs": ["Zahlung gebucht · bezahlt"],
+				"vibe": "invoice-booking",
+				"vibeData": {
+					"currency": "EUR",
+					"invoice": {
+						"header": {
+							"invoice_number": "2026-0815",
+							"issue_date": "2026-06-01",
+							"currency": "EUR"
+						},
+						"vendor": { "name": "Müller GmbH" },
+						"totals": { "invoice_total": 119 }
+					},
+					"match": {
+						"tx": {
+							"dedup_key": "tx-0815",
+							"booking_date": "2026-06-12",
+							"amount": -119,
+							"currency": "EUR",
+							"counterparty_name": "Müller GmbH"
+						},
+						"confidence": "high",
+						"reasons": ["Betrag exakt"],
+						"target": 119
+					},
+					"booking": {
+						"invoice_number": "2026-0815",
+						"vendor": "Müller GmbH",
+						"currency": "EUR",
+						"lines": [
+							{
+								"soll_konto": "3300",
+								"soll_bezeichnung": "Verbindlichkeiten aus L+L",
+								"net_amount": 119,
+								"tax_amount": 0,
+								"gross_amount": 119,
+								"tax_key": null,
+								"note": "Zahlungsausgleich"
+							}
+						],
+						"is_split": false,
+						"haben_konto": "1800",
+						"haben_bezeichnung": "Bank",
+						"net_amount": 119,
+						"tax_amount": 0,
+						"gross_amount": 119,
+						"soll_konto": "3300",
+						"soll_bezeichnung": "Verbindlichkeiten aus L+L",
+						"tax_key": null,
+						"buchungstext": "Zahlung Müller GmbH, Rg. 2026-0815",
+						"confidence": "high",
+						"reason": "Offener Posten durch Banktransaktion ausgeglichen.",
+						"status": "bezahlt",
+						"direction": "incoming"
+					}
+				}
+			}
+		]
+	},
+	{
+		"id": "run-tx-unmatched",
+		"flowId": "open-item-match",
+		"label": "Lastschrift Telekom — kein Beleg (geparkt)",
+		"startedAt": "heute 09:14",
+		"status": "done",
+		"trace": [
+			{
+				"nodeId": "find-open",
+				"state": "done",
+				"at": "+0s",
+				"inputs": ["1× Transaktion −49,00 €"],
+				"outputs": ["kein offener Posten"],
+				"vibe": "open-items",
+				"vibeData": {
+					"unmatchedTx": {
+						"date": "2026-06-09",
+						"amount": -49,
+						"currency": "EUR",
+						"counterparty": "Telekom Deutschland",
+						"description": "Mobilfunk Juni"
+					}
+				}
+			},
+			{
+				"nodeId": "park",
+				"state": "parked",
+				"at": "+1s",
+				"inputs": ["1× Transaktion"],
+				"outputs": ["geparkt · wartet auf Beleg"],
+				"message": "Dead-letter: keine Rechnung gefunden — Beleg nachreichen"
 			}
 		]
 	},
@@ -222,7 +339,7 @@
 				"nodeId": "ingest",
 				"state": "done",
 				"at": "+0s",
-				"inputs": ["1× Dokument"],
+				"inputs": ["1× Datei"],
 				"outputs": ["als Rechnung erkannt"]
 			},
 			{
@@ -231,25 +348,6 @@
 				"at": "+3s",
 				"inputs": ["1× Dokument"],
 				"message": "Vision-Extraktion läuft…"
-			}
-		]
-	},
-	{
-		"id": "run-ingest-2",
-		"flowId": "doc-ingest",
-		"label": "Pogner's Bewirtung",
-		"startedAt": "gestern 18:22",
-		"status": "done",
-		"trace": [
-			{ "nodeId": "ingest", "state": "done", "at": "+0s", "outputs": ["Rechnung"] },
-			{ "nodeId": "extract-invoice", "state": "done", "at": "+4s", "outputs": ["invoice JSON"] },
-			{ "nodeId": "enrich", "state": "done", "at": "+5s", "outputs": ["Kontakt Pogner's"] },
-			{ "nodeId": "reconcile", "state": "done", "at": "+6s", "outputs": ["kein Match"] },
-			{
-				"nodeId": "book",
-				"state": "done",
-				"at": "+8s",
-				"outputs": ["Splitbuchung 6640/6644 + 1406"]
 			}
 		]
 	}

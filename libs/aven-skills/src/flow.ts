@@ -25,8 +25,13 @@ export const RESOURCE_LABEL: Record<ResourceKind, string> = {
 	booking: 'Buchung',
 	contact: 'Kontakt',
 	pdf: 'PDF',
-	report: 'Bericht'
+	report: 'Bericht',
+	open_item: 'Offener Posten'
 }
+
+/** The open-item lifecycle (data-layer convenience for the vibes — NOT a schema enum). board 0084. */
+export const OPEN_ITEM_STATUS = ['offen', 'teilbezahlt', 'bezahlt'] as const
+export type OpenItemStatus = (typeof OPEN_ITEM_STATUS)[number]
 
 /** Resource kinds backed by a persisted JSON Schema in the data store (the DB view), keyed by the
  *  schema NAME used there. Lets the flow UI type input/output badges to the real schema + deep-link
@@ -44,8 +49,9 @@ export function resourceSchema(kind: string): string | undefined {
 	return RESOURCE_SCHEMA[kind]
 }
 
-/** State of a node within a running flow instance. */
-export type NodeState = 'idle' | 'waiting' | 'running' | 'done' | 'error'
+/** State of a node within a running flow instance. `waiting` = stashed (blocked on a dependency,
+ *  e.g. a Beleg awaiting its payment); `parked` = dead-lettered (e.g. a tx with no matching Beleg). */
+export type NodeState = 'idle' | 'waiting' | 'running' | 'done' | 'error' | 'parked'
 
 // LLM config + tool-call specs live in the capability layer; re-exported for flow consumers.
 export type { JsonSchema, LlmConfig, ToolSpec } from './capability.js'
