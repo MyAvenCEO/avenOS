@@ -387,7 +387,7 @@ function pgStore(uid: string, schemaIdByPred: Record<string, string>): Predicati
 }
 
 /** Load a registered composite type's bundle spec from the admin-owned registry. */
-async function loadTypeSpec(name: string): Promise<TypeSpec | null> {
+export async function loadTypeSpec(name: string): Promise<TypeSpec | null> {
 	const row = await db()
 		.selectFrom('predicate_type')
 		.select('spec')

@@ -10,7 +10,7 @@ import type { Context } from 'hono'
 import { pgArtifactStore } from './artifact-store'
 import { auth } from './auth'
 import { db } from './db'
-import { executeDataTool } from './data'
+import { executeDataTool, loadTypeSpec } from './data'
 
 // Skill execution (board 0089). Loads a skill's Flow config from the admin `flow` table, runs it
 // through the GENERIC runner with doc-ingest's actors injected, stores the raw bytes in the
@@ -49,8 +49,9 @@ const CLASSIFY_SCHEMA = {
 
 /** A real gemma4-31b vision pass: force the model to fill CLASSIFY_SCHEMA as a single tool over the
  *  page image. Returns the parsed fields, or null on any failure (the actor falls back to "other"). */
-async function visionClassify(
+async function visionExtract(
 	systemPrompt: string,
+	schema: Record<string, unknown>,
 	image: { mime: string; b64: string }
 ): Promise<Record<string, unknown> | null> {
 	const key = process.env.TINFOIL_API_KEY
@@ -75,8 +76,8 @@ async function visionClassify(
 					type: 'function',
 					function: {
 						name: 'emit',
-						description: 'Return the document classification.',
-						parameters: CLASSIFY_SCHEMA
+						description: 'Return the extracted fields matching the schema.',
+						parameters: schema
 					}
 				}
 			],
@@ -97,9 +98,21 @@ async function visionClassify(
 	}
 }
 
-/** Doc-ingest's actors, closing over the user + ArtifactStore. The `document` resource carries the
- *  bytes between ingest→classify (for vision); only the sha256 is persisted to predications. */
-function docIngestActors(store: ArtifactStore): ActorRegistry {
+const INVOICE_EXTRACT_SCHEMA = {
+	type: 'object',
+	properties: {
+		number: { type: 'string', description: 'The invoice number / identifier.' },
+		amount: { type: 'string', description: 'The total amount as a decimal string, e.g. "1200.00".' },
+		vendor: { type: 'string', description: 'The vendor / biller name.' },
+		due: { type: 'string', description: 'The due date as ISO yyyy-mm-dd, or empty if none.' }
+	},
+	required: ['number', 'amount', 'vendor']
+}
+
+/** The skills' actors, closing over the ArtifactStore. The `document` resource carries the bytes
+ *  between ingest→classify/extract (for vision); only the sha256 is persisted to predications. The
+ *  runner is GENERIC — adding a skill = adding an actor here (+ its config + ontology type). board 0089/0090. */
+function skillActors(store: ArtifactStore): ActorRegistry {
 	return {
 		storeDocument: async ({ inputs }) => {
 			const file = (inputs.file ?? inputs.image) as SkillInput | undefined
@@ -113,7 +126,7 @@ function docIngestActors(store: ArtifactStore): ActorRegistry {
 			const sys =
 				node.system_prompt ??
 				'Determine the document type: invoice, bank_statement, contract or other. Return a title, kind and a short summary.'
-			const fields = (await visionClassify(sys, { mime: doc.mime, b64 })) ?? {
+			const fields = (await visionExtract(sys, CLASSIFY_SCHEMA, { mime: doc.mime, b64 })) ?? {
 				title: 'Untitled document',
 				kind: 'other',
 				summary: ''
@@ -124,6 +137,23 @@ function docIngestActors(store: ArtifactStore): ActorRegistry {
 					title: fields.title,
 					kind: fields.kind,
 					summary: fields.summary
+				}
+			}
+		},
+		extract_invoice: async ({ node, inputs }) => {
+			const doc = inputs.document as { artifact: string; mime: string; bytes: Uint8Array }
+			const b64 = Buffer.from(doc.bytes).toString('base64')
+			const sys =
+				node.system_prompt ??
+				'You are a bookkeeper. Extract the invoice fields: number, total amount as a decimal, vendor name, and due date (ISO yyyy-mm-dd).'
+			const f = (await visionExtract(sys, INVOICE_EXTRACT_SCHEMA, { mime: doc.mime, b64 })) ?? {}
+			return {
+				invoice: {
+					artifact: doc.artifact,
+					number: f.number ?? 'unknown',
+					amount: f.amount ?? '0',
+					vendor: f.vendor ?? '',
+					due: f.due ?? ''
 				}
 			}
 		}
@@ -182,34 +212,52 @@ export async function runSkillForUser(
 	if (!flow) throw new Error(`no skill "${skillId}"`)
 	const runId = `run_${randomUUID().slice(0, 12)}`
 	const { run, outputs } = await runFlow(flow, {
-		actors: docIngestActors(pgArtifactStore()),
+		actors: skillActors(pgArtifactStore()),
 		runId,
 		now: () => new Date().toISOString(),
 		input: { file: input, image: input }
 	})
 
+	// GENERIC persistence: any output resource whose kind is a REGISTERED type (document/invoice/…) is
+	// written via the 0088 engine, with the run id added so the krasi/finti provenance closes. board 0090.
 	let documentId: string | null = null
-	const doc = outputs.document as
-		| { artifact: string; title?: unknown; kind?: unknown; summary?: unknown }
-		| undefined
-	if (run.status === 'done' && doc?.artifact) {
-		const res = (await executeDataTool(uid, {
-			schema: 'document',
-			action: 'create',
-			items: [
-				{
-					title: String(doc.title ?? 'Untitled document'),
-					kind: String(doc.kind ?? 'other'),
-					summary: String(doc.summary ?? ''),
-					artifact: doc.artifact,
-					run: runId
-				}
-			]
-		})) as { created?: string[] }
-		documentId = res.created?.[0] ?? null
+	if (run.status === 'done') {
+		for (const [kind, value] of Object.entries(outputs)) {
+			if (!value || typeof value !== 'object') continue
+			const spec = await loadTypeSpec(kind)
+			if (!spec) continue
+			const res = (await executeDataTool(uid, {
+				schema: kind,
+				action: 'create',
+				items: [{ ...(value as Record<string, unknown>), run: runId }]
+			})) as { created?: string[] }
+			documentId = res.created?.[0] ?? documentId
+		}
 	}
 	await persistFlowRun(uid, run)
 	return { runId, status: run.status, documentId }
+}
+
+/** GET /api/skills/runs — the signed-in user's REAL persisted run traces (newest first). board 0090. */
+export async function listRuns(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const rows = await db()
+		.selectFrom('flow_run')
+		.select(['id', 'flow_id', 'label', 'status', 'trace', 'started_at'])
+		.where('user_id', '=', uid)
+		.orderBy('created_at', 'desc')
+		.execute()
+	return c.json({
+		runs: rows.map((r) => ({
+			id: r.id,
+			flowId: r.flow_id,
+			label: r.label,
+			status: r.status,
+			startedAt: r.started_at ? new Date(r.started_at).toISOString() : undefined,
+			trace: asJson(r.trace)
+		}))
+	})
 }
 
 /** POST /api/skills/:id/run — body { mime, b64 }. Runs the skill for the signed-in user. */

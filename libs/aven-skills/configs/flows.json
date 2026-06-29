@@ -438,5 +438,38 @@
 		"triggers": [
 			{ "kind": "resource", "on": "goal" }
 		]
+	},
+	{
+		"id": "invoice-ingest",
+		"name": "Invoice Ingest",
+		"description": "Ingest an invoice: store the file content-addressed → extract its fields via vision. Yields an ontology invoice with provenance.",
+		"nodes": [
+			{
+				"id": "ingest",
+				"name": "Ingest",
+				"actor": "storeDocument",
+				"inputs": ["file", "image"],
+				"outputs": ["document"],
+				"supervision": { "strategy": "resume" }
+			},
+			{
+				"id": "extract",
+				"name": "Extract Invoice",
+				"actor": "extract_invoice",
+				"inputs": ["document"],
+				"outputs": ["invoice"],
+				"system_prompt": "You are a bookkeeper. Extract the invoice fields: number, total amount as a decimal, vendor name, and due date (ISO yyyy-mm-dd).",
+				"llm": { "model": "gemma4-31b", "vision": true, "mode": "vision" },
+				"tools": ["emit_invoice"],
+				"supervision": { "strategy": "restart", "retry": { "max": 2, "backoff": "exponential" } }
+			}
+		],
+		"edges": [
+			{ "from": "ingest", "to": "extract", "resource": "document", "kind": "data", "message": "document" }
+		],
+		"triggers": [
+			{ "kind": "resource", "on": "file" },
+			{ "kind": "resource", "on": "image" }
+		]
 	}
 ]
