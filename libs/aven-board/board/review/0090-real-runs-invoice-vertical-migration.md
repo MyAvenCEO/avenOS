@@ -82,12 +82,12 @@ ontology type (so `vendor` can become a ref); RunsView live-streaming a running 
 
 Each provable from the transcript.
 
-- [ ] `rg "EXAMPLE_RUNS|configs/runs.json" libs app` empty; `runs.json` deleted.
-- [ ] `GET /api/skills/runs` returns the user's real `flow_run` rows; RunsView renders them (a real run from 0089 appears, no "Acme Ltd — Invoice 2026-…" fixtures).
-- [ ] `invoice` registered in `predicate_type`; `data_crud(invoice, create→list)` returns number/amount/vendor/due.
-- [ ] A live invoice run on the generic runner persists a `flow_run` + an `invoice` with `krasi` provenance to the source artifact + `finti` to the run (SQL/engine query).
-- [ ] OLD `invoice` data_schema DROPPED — `SELECT … FROM data_schema WHERE name='invoice'` empty; pre-existing invoice data present as predications.
-- [ ] `bun run check` + the new tests exit 0; aven-db untouched (no spark/CRDT writes).
+- [x] `rg "EXAMPLE_RUNS|configs/runs.json" libs/aven-skills/src app/src` **empty**; `runs.json` deleted; aven-skills 32 tests pass.
+- [x] `GET /api/skills/runs` returns the user's real `flow_run` rows — `[invoice-ingest/run_3602d30c (done), doc-ingest/run_33de1def (done)]`, no "Acme Ltd …" fixtures; RunsView reads it.
+- [x] `invoice` registered in `predicate_type` (registry = document, invoice, todos); `data_crud(invoice,create→list)` returns number/amount/vendor/due.
+- [x] A live invoice run on the GENERIC runner (`POST /api/skills/invoice-ingest/run`) persists a `flow_run` + an `invoice` with `source`(krasi)→artifact + `produced`(finti)→run provenance (verified by SQL).
+- [x] OLD blob `invoice` data_schema **DROPPED** (0 blob-shaped invoice schemas remain); the pre-existing Gandi invoice survives as predications (number 2026051100627, €9.99, vendor, artifact preserved from `file_hash`). NB: the name `invoice` is now the janta ontology predicate, not the old blob.
+- [x] `bun run check` (aven-skills/aven-ontology/betterauth tsc) + tests exit 0; svelte-check 0 errors; aven-db untouched (mainnet Postgres only).
 
 ## Verification
 
@@ -112,6 +112,22 @@ rg -n "EXAMPLE_RUNS|configs/runs.json" libs app           # expect: empty
 
 Newest entry first.
 
+- `2026-06-29` — **Steps 2–5 DONE + verified — card complete.** Step 2: `invoice` composite type
+  (janta/jdima/vendor + REUSED due/krasi/finti) registered (migration 0020); old blob parked →
+  `invoice_blob_legacy` (0021). Step 3: generalized the vision pass (`visionExtract`); `extract_invoice`
+  actor + `invoice-ingest` flow (flows.json + seed migration 0022); `runSkillForUser` persists ANY
+  registered output type generically. Live: `POST /api/skills/invoice-ingest/run` → done; invoice +
+  krasi/finti provenance; `GET /api/skills/runs` shows BOTH real runs (invoice-ingest + doc-ingest),
+  no fixtures. Step 4: migrated the 1 legacy Gandi blob → predications (artifact preserved from
+  `file_hash`) + DROPPED the blob `invoice` schema. Step 5: all gates green (rg empty, 0 fail, tsc +
+  svelte-check clean). Moved build → review. NB: the legacy migrate+drop ran as a one-time live data
+  migration on the samuel DB (the parked-schema rename is durable via migration 0021).
+- `2026-06-29` — **Build step 1 DONE + verified.** Real runs only: `GET /api/skills/runs` (listRuns) +
+  RunsView reads real `flow_run` via createQuery (auto-selects newest, keyed under ['data'] for SSE
+  refetch); removed `EXAMPLE_RUNS`/`runsForFlow` from flow.ts + deleted `configs/runs.json`; dropped
+  the fixture-dependent flow.test tests (kept the pure exampleInstance helper). Verified: grep
+  `EXAMPLE_RUNS|runs.json` empty in src/app; aven-skills 32 tests pass; RunsView svelte-check clean;
+  `GET /api/skills/runs` returns the real run (run_33de1def-290 doc-ingest done, 2 steps) — no fixtures.
 - `2026-06-29` — Discovery. Follow-on to 0089. User locked: first slice = real runs + the invoice
   vertical; old `invoice` schema = MIGRATE + DROP in this slice (data survives as predications);
   real gemma vision extract. Grounded gismu: invoice≡janta, amount≡jdima, reuse due/krasi/finti.
