@@ -32,7 +32,9 @@ export type PredicateDef = {
 	places: PlaceDef[]
 }
 
-const UUID_PATTERN = '^[0-9a-f-]{36}$'
+// A ref is the id of another row (a data_value UUID) or a principal (a Better-Auth user id,
+// ~32 alphanumerics) — so accept any word/hyphen id of reasonable length, not strictly a UUID.
+const ID_PATTERN = '^[\\w-]{6,}$'
 // Accepts a date (2026-06-29) or an ISO-8601 date-time (no ajv-formats available).
 const DATETIME_PATTERN =
 	'^\\d{4}-\\d{2}-\\d{2}([T ]\\d{2}:\\d{2}(:\\d{2})?(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?)?$'
@@ -51,7 +53,7 @@ function placeSchema(p: PlaceDef): Record<string, unknown> {
 
 	if (p.kind === 'ref') {
 		base.type = p.nullable ? ['string', 'null'] : 'string'
-		base.pattern = UUID_PATTERN
+		base.pattern = ID_PATTERN
 		base['x-ref'] = p.references ?? '*'
 		return base
 	}

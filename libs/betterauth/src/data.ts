@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { todoPredicateSchemas } from '@avenos/aven-vibes/predicate'
 import Ajv from 'ajv'
 import type { Context } from 'hono'
 import { sql } from 'kysely'
@@ -263,9 +264,143 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 	return `The data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}`
 }
 
+/** Ensure the per-user gismu todo predicate schemas (pred:task/valid/due/prioritized) exist. */
+async function ensureTodoSchemas(uid: string): Promise<Record<string, string>> {
+	const ids: Record<string, string> = {}
+	for (const { name, jsonSchema } of todoPredicateSchemas()) {
+		const existing = await db()
+			.selectFrom('data_schema')
+			.select('id')
+			.where('user_id', '=', uid)
+			.where('name', '=', name)
+			.executeTakeFirst()
+		if (existing) {
+			ids[name] = existing.id
+			continue
+		}
+		const id = randomUUID()
+		await db()
+			.insertInto('data_schema')
+			.values({
+				id,
+				user_id: uid,
+				name,
+				json_schema: jsonb(jsonSchema),
+				created_at: new Date(),
+				updated_at: new Date()
+			})
+			.execute()
+		ids[name] = id
+	}
+	return ids
+}
+
+// The `todos` tool stores each todo as a BUNDLE of gismu predications (board 0087): a `task`
+// (x1 agent, x2 what) + a reusable `valid` (x1 task, x2 from, x3 to; x3 null = open). "done" =
+// set valid.x3. The tool's {title, done} interface is unchanged — predications live underneath,
+// projected back through the `v_task` view. See [[two-layer-schema-split]].
+async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
+	const ids = await ensureTodoSchemas(uid)
+	const taskSchema = ids['pred:task']
+	const validSchema = ids['pred:valid']
+
+	if (!args.action || args.action === 'list') {
+		const rows = await sql<{ id: string; what: string | null; open: boolean }>`
+			SELECT id, what, open FROM v_task WHERE user_id = ${uid} ORDER BY id
+		`.execute(db())
+		return {
+			ok: true,
+			action: 'list',
+			items: rows.rows.map((r) => ({ id: r.id, title: r.what, done: !r.open }))
+		}
+	}
+
+	if (args.action === 'create') {
+		const created: string[] = []
+		for (const item of args.items ?? []) {
+			const it = item as { title?: string; done?: boolean }
+			if (!it.title) continue
+			const taskId = randomUUID()
+			const now = new Date().toISOString()
+			await db()
+				.insertInto('data_value')
+				.values({
+					id: taskId,
+					user_id: uid,
+					schema_id: taskSchema,
+					data: jsonb({ predicate: 'task', x1: uid, x2: it.title }),
+					created_at: new Date(),
+					updated_at: new Date()
+				})
+				.execute()
+			await db()
+				.insertInto('data_value')
+				.values({
+					id: randomUUID(),
+					user_id: uid,
+					schema_id: validSchema,
+					data: jsonb({ predicate: 'valid', x1: taskId, x2: now, x3: it.done ? now : null }),
+					created_at: new Date(),
+					updated_at: new Date()
+				})
+				.execute()
+			created.push(taskId)
+		}
+		if (created.length > 0) publish(uid, { entity: 'data' })
+		return { ok: true, action: 'create', created, errors: [] }
+	}
+
+	if (args.action === 'update') {
+		const updated: string[] = []
+		for (const item of args.items ?? []) {
+			const it = item as { id?: string; title?: string; done?: boolean }
+			if (!it.id) continue
+			if (it.title !== undefined) {
+				await db()
+					.updateTable('data_value')
+					.set({
+						data: jsonb({ predicate: 'task', x1: uid, x2: it.title }),
+						updated_at: new Date()
+					})
+					.where('id', '=', it.id)
+					.where('user_id', '=', uid)
+					.where('schema_id', '=', taskSchema)
+					.execute()
+			}
+			if (it.done !== undefined) {
+				const now = new Date().toISOString()
+				// "done" closes (or reopens) the task's valid interval by setting x3.
+				await sql`
+					UPDATE data_value
+					SET data = jsonb_set(data, '{x3}', ${JSON.stringify(it.done ? now : null)}::jsonb),
+					    updated_at = now()
+					WHERE user_id = ${uid} AND schema_id = ${validSchema} AND data->>'x1' = ${it.id}
+				`.execute(db())
+			}
+			updated.push(it.id)
+		}
+		if (updated.length > 0) publish(uid, { entity: 'data' })
+		return { ok: true, action: 'update', updated, errors: [] }
+	}
+
+	if (args.action === 'delete') {
+		const id = args.id ?? (args.items?.[0] as { id?: string } | undefined)?.id
+		if (!id) return { ok: false, error: 'delete requires id' }
+		// Remove the task + every predication that refs it (valid/due/prioritized).
+		await db().deleteFrom('data_value').where('id', '=', id).where('user_id', '=', uid).execute()
+		await sql`DELETE FROM data_value WHERE user_id = ${uid} AND data->>'x1' = ${id}`.execute(db())
+		publish(uid, { entity: 'data' })
+		return { ok: true, action: 'delete', deleted: [id] }
+	}
+
+	return { ok: false, error: `unknown action: ${args.action}` }
+}
+
 export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const name = args?.schema
 	if (!name) return { ok: false, error: 'schema name required' }
+	// Todos are stored as gismu predications underneath the {title,done} tool interface. board 0087.
+	if (name === 'todos') return executeTodos(uid, args)
 	const schema = await db()
 		.selectFrom('data_schema')
 		.select(['id', 'json_schema'])
