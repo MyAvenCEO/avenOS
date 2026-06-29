@@ -56,6 +56,43 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
 		description: 'Emit the extracted fields object (the tool the model is forced to call).',
 		input: { type: 'object', additionalProperties: true }
 	},
+	// Per-doc-type extract tool schemas — the specialized tool-call contract each extract node forces.
+	emit_invoice: {
+		name: 'emit_invoice',
+		description: 'Emit the extracted invoice (header, vendor, buyer, line items, totals).',
+		input: {
+			type: 'object',
+			properties: {
+				header: { type: 'object' },
+				vendor: { type: 'object' },
+				buyer: { type: 'object' },
+				line_items: { type: 'array' },
+				totals: { type: 'object' }
+			}
+		}
+	},
+	emit_bank_statement: {
+		name: 'emit_bank_statement',
+		description: 'Emit the account holder + every transaction from a bank statement (fan-out).',
+		input: {
+			type: 'object',
+			properties: {
+				account: { type: 'object' },
+				transactions: {
+					type: 'array',
+					items: {
+						type: 'object',
+						properties: {
+							date: { type: 'string' },
+							amount: { type: 'number' },
+							counterparty: { type: 'string' },
+							purpose: { type: 'string' }
+						}
+					}
+				}
+			}
+		}
+	},
 	pick_match: {
 		name: 'pick_match',
 		description: 'Pick the transaction that settles a document, or none.',

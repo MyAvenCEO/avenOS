@@ -43,7 +43,9 @@
 							"address": "1 Example St, 80333 Munich",
 							"ust_id": "DE123456789"
 						},
-						"buyer": { "name": "avenCEO GmbH" },
+						"buyer": {
+							"name": "avenCEO GmbH"
+						},
 						"statements": [
 							{
 								"section_title": "Line items",
@@ -60,7 +62,11 @@
 								]
 							}
 						],
-						"totals": { "subtotal": 100, "tax_total": 19, "invoice_total": 119 },
+						"totals": {
+							"subtotal": 100,
+							"tax_total": 19,
+							"invoice_total": 119
+						},
 						"total_outstanding": 119
 					}
 				}
@@ -80,8 +86,12 @@
 							"issue_date": "2026-06-01",
 							"currency": "EUR"
 						},
-						"vendor": { "name": "Acme Ltd" },
-						"totals": { "invoice_total": 119 }
+						"vendor": {
+							"name": "Acme Ltd"
+						},
+						"totals": {
+							"invoice_total": 119
+						}
 					},
 					"match": {
 						"tx": {
@@ -134,6 +144,46 @@
 				"inputs": ["booking"],
 				"outputs": [],
 				"message": "HITL — awaiting human approval of the end-to-end invoice"
+			}
+		]
+	},
+	{
+		"id": "run-bank-e2e",
+		"flowId": "kontoauszug",
+		"label": "Acme Bank — statement June (review)",
+		"startedAt": "today 09:20",
+		"status": "running",
+		"trace": [
+			{
+				"nodeId": "ingest-doc",
+				"state": "done",
+				"at": "+0s",
+				"inputs": ["1× file"],
+				"outputs": ["classified as bank statement"],
+				"vibe": "bookkeeping",
+				"vibeData": {
+					"docType": "bank_statement",
+					"title": "Statement June 2026 — Acme Bank",
+					"description": "Monthly bank statement, 12 transactions.",
+					"booking_summary": "12 transactions imported; account DE03…2444.",
+					"tags": ["Bank statement", "June", "12 tx"]
+				}
+			},
+			{
+				"nodeId": "map-brain",
+				"state": "done",
+				"at": "+6s",
+				"inputs": ["document"],
+				"outputs": ["12 transactions + account holder"],
+				"message": "extracted + persisted (idempotent dedup)"
+			},
+			{
+				"nodeId": "review",
+				"state": "waiting",
+				"at": "+7s",
+				"inputs": ["transaction"],
+				"outputs": [],
+				"message": "HITL — accept the imported transactions"
 			}
 		]
 	},

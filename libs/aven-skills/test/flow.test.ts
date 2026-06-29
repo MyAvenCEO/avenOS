@@ -211,7 +211,45 @@ describe('invoice processing (end-to-end composition)', () => {
 	})
 })
 
+describe('reuse across doc types (invoice vs bank statement)', () => {
+	const F = (id: string) => EXAMPLE_FLOWS.find((f) => f.id === id) as Flow
+
+	test('both doc types reuse Document Ingest + the human Review actor', () => {
+		for (const top of ['invoice', 'kontoauszug']) {
+			const f = F(top)
+			expect(f.nodes.find((n) => n.id === 'ingest-doc')!.flowRef).toBe('doc-ingest')
+			expect(f.nodes.find((n) => n.id === 'review')!.actor).toBe('humanReview')
+			expect(f.nodes.find((n) => n.id === 'review')!.hitl).toBe(true)
+		}
+	})
+
+	test('enrich is the shared actor; extract is per-type (same actor, different prompt + emit tool)', () => {
+		const inv = F('capture')
+		const bank = F('capture-bank')
+		const e1 = inv.nodes.find((n) => n.id === 'enrich')!
+		const e2 = bank.nodes.find((n) => n.id === 'enrich')!
+		expect(e1.actor).toBe(e2.actor) // enrich reused across types
+		const x1 = inv.nodes.find((n) => n.id === 'extract')!
+		const x2 = bank.nodes.find((n) => n.id === 'extract')!
+		expect(x1.actor).toBe(x2.actor) // same extract MECHANISM
+		expect(x1.system_prompt).not.toBe(x2.system_prompt) // specialized prompt
+		expect(x1.tools).toContain('emit_invoice') // specialized tool-call schema
+		expect(x2.tools).toContain('emit_bank_statement')
+	})
+
+	test('per-type extract tool schemas live in the capability registry', () => {
+		expect(TOOL_SPECS.emit_invoice?.input).toBeTruthy()
+		expect(TOOL_SPECS.emit_bank_statement?.input).toBeTruthy()
+	})
+})
+
 describe('runs', () => {
+	test('the e2e bank-statement run reuses ingest, maps the brain, and waits at review (HITL)', () => {
+		const run = EXAMPLE_RUNS.find((r) => r.id === 'run-bank-e2e')!
+		expect(run.trace.map((s) => s.nodeId)).toEqual(['ingest-doc', 'map-brain', 'review'])
+		expect(run.trace.find((s) => s.nodeId === 'review')!.state).toBe('waiting')
+	})
+
 	test('the e2e invoice run walks the 4 composites and waits at review (HITL)', () => {
 		const run = EXAMPLE_RUNS.find((r) => r.id === 'run-invoice-e2e')!
 		expect(run.trace.map((s) => s.nodeId)).toEqual(['ingest-doc', 'capture', 'book', 'review'])
