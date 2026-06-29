@@ -283,6 +283,12 @@ async function ensureTodoSchemas(uid: string): Promise<Record<string, string>> {
 			.where('name', '=', name)
 			.executeTakeFirst()
 		if (existing) {
+			// keep the stored schema in sync with the current vocab (gismu/place-structure edits)
+			await db()
+				.updateTable('data_schema')
+				.set({ json_schema: jsonb(jsonSchema), updated_at: new Date() })
+				.where('id', '=', existing.id)
+				.execute()
 			ids[name] = existing.id
 			continue
 		}
@@ -303,10 +309,11 @@ async function ensureTodoSchemas(uid: string): Promise<Record<string, string>> {
 	return ids
 }
 
-// The `todos` tool stores each todo as a BUNDLE of gismu predications (board 0087): a `task`
-// (x1 agent, x2 what) + a reusable `valid` (x1 task, x2 from, x3 to; x3 null = open). "done" =
-// set valid.x3. The tool's {title, done} interface is unchanged — predications live underneath,
-// projected back through the `v_task` view. See [[two-layer-schema-split]].
+// The `todos` tool stores each todo as a BUNDLE of gismu predications with CANONICAL place
+// structures (board 0087): task≡zukte (x1 agent, x2 action), valid≡ranji (x1 task, x2 from, x3 to;
+// x3 null = open → "done" sets x3), due≡detri (x1 = the DATE, x2 = task), prioritized≡vajni
+// (x1 task, x2 user, x3 level). The {title,done,due,priority} tool interface is unchanged — the
+// predications live underneath, projected via `v_task`. See [[two-layer-schema-split]].
 async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const ids = await ensureTodoSchemas(uid)
 	const taskSchema = ids['pred:task']
@@ -314,24 +321,37 @@ async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const dueSchema = ids['pred:due']
 	const prioSchema = ids['pred:prioritized']
 
-	// Insert/replace a single predication that refs a task (due/prioritized). null clears it.
-	async function setRefPredicate(
-		schemaId: string,
-		predicate: string,
-		taskId: string,
-		value: string | null
-	): Promise<void> {
-		await sql`DELETE FROM data_value WHERE user_id = ${uid} AND schema_id = ${schemaId} AND data->>'x1' = ${taskId}`.execute(
+	// due ≡ detri: x1 = the date, x2 = the task (canonical). Passing null clears it.
+	async function setDue(taskId: string, date: string | null): Promise<void> {
+		await sql`DELETE FROM data_value WHERE user_id = ${uid} AND schema_id = ${dueSchema} AND data->>'x2' = ${taskId}`.execute(
 			db()
 		)
-		if (value)
+		if (date)
 			await db()
 				.insertInto('data_value')
 				.values({
 					id: randomUUID(),
 					user_id: uid,
-					schema_id: schemaId,
-					data: jsonb({ predicate, x1: taskId, x2: value }),
+					schema_id: dueSchema,
+					data: jsonb({ predicate: 'due', x1: date, x2: taskId }),
+					created_at: new Date(),
+					updated_at: new Date()
+				})
+				.execute()
+	}
+	// prioritized ≡ vajni: x1 = task, x2 = user (to-whom), x3 = level (canonical). null clears it.
+	async function setPriority(taskId: string, level: string | null): Promise<void> {
+		await sql`DELETE FROM data_value WHERE user_id = ${uid} AND schema_id = ${prioSchema} AND data->>'x1' = ${taskId}`.execute(
+			db()
+		)
+		if (level)
+			await db()
+				.insertInto('data_value')
+				.values({
+					id: randomUUID(),
+					user_id: uid,
+					schema_id: prioSchema,
+					data: jsonb({ predicate: 'prioritized', x1: taskId, x2: uid, x3: level }),
 					created_at: new Date(),
 					updated_at: new Date()
 				})
@@ -390,8 +410,8 @@ async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 					updated_at: new Date()
 				})
 				.execute()
-			if (it.due) await setRefPredicate(dueSchema, 'due', taskId, it.due)
-			if (it.priority) await setRefPredicate(prioSchema, 'prioritized', taskId, it.priority)
+			if (it.due) await setDue(taskId, it.due)
+			if (it.priority) await setPriority(taskId, it.priority)
 			created.push(taskId)
 		}
 		if (created.length > 0) publish(uid, { entity: 'data' })
@@ -431,9 +451,8 @@ async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 					WHERE user_id = ${uid} AND schema_id = ${validSchema} AND data->>'x1' = ${it.id}
 				`.execute(db())
 			}
-			if (it.due !== undefined) await setRefPredicate(dueSchema, 'due', it.id, it.due)
-			if (it.priority !== undefined)
-				await setRefPredicate(prioSchema, 'prioritized', it.id, it.priority)
+			if (it.due !== undefined) await setDue(it.id, it.due)
+			if (it.priority !== undefined) await setPriority(it.id, it.priority)
 			updated.push(it.id)
 		}
 		if (updated.length > 0) publish(uid, { entity: 'data' })
@@ -445,7 +464,7 @@ async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 		if (!id) return { ok: false, error: 'delete requires id' }
 		// Remove the task + every predication that refs it (valid/due/prioritized).
 		await db().deleteFrom('data_value').where('id', '=', id).where('user_id', '=', uid).execute()
-		await sql`DELETE FROM data_value WHERE user_id = ${uid} AND data->>'x1' = ${id}`.execute(db())
+		await sql`DELETE FROM data_value WHERE user_id = ${uid} AND (data->>'x1' = ${id} OR data->>'x2' = ${id})`.execute(db())
 		publish(uid, { entity: 'data' })
 		return { ok: true, action: 'delete', deleted: [id] }
 	}
