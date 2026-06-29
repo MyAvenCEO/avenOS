@@ -27,7 +27,8 @@ export const RESOURCE_LABEL: Record<ResourceKind, string> = {
 	contact: 'Contact',
 	pdf: 'PDF',
 	report: 'Report',
-	open_item: 'Open item'
+	open_item: 'Open item',
+	approval: 'Approval'
 }
 
 /** The open-item lifecycle (data-layer convenience for the vibes — NOT a schema enum). board 0084. */
@@ -113,6 +114,8 @@ export type RecipeNode = {
 	supervision?: Supervision
 	/** Generic actor config for non-LLM actors (a parser, an HTTP call, a furnace…). */
 	config?: Record<string, unknown>
+	/** Human-in-the-loop: this step waits for a person to review/accept before continuing. */
+	hitl?: boolean
 }
 
 /** A directed connection (a message channel). `when` = a branch guard; `kind` = data (a resource
@@ -375,7 +378,8 @@ const NODE_SCHEMA = {
 		tools: { type: ['array', 'null'], items: { type: 'string' } },
 		ports: { type: ['object', 'null'], additionalProperties: true },
 		supervision: { type: ['object', 'null'], additionalProperties: true },
-		config: { type: ['object', 'null'], additionalProperties: true }
+		config: { type: ['object', 'null'], additionalProperties: true },
+		hitl: { type: ['boolean', 'null'] }
 	}
 } as const
 

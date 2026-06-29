@@ -2,7 +2,7 @@
 	{
 		"id": "doc-ingest",
 		"name": "Document Ingest",
-		"description": "Take a document in: store the file content-addressed → classify it via LLM. Yields a classified document; downstream skills (extract/enrich, book) build on it.",
+		"description": "Take a document in: store the file content-addressed → classify it via LLM. Yields a classified document.",
 		"nodes": [
 			{
 				"id": "ingest",
@@ -34,6 +34,149 @@
 				"resource": "document",
 				"kind": "data",
 				"message": "document"
+			}
+		],
+		"triggers": [{ "kind": "resource", "on": "file" }, { "kind": "resource", "on": "image" }]
+	},
+	{
+		"id": "capture",
+		"name": "Capture",
+		"description": "Turn a classified document into structured, persisted data: extract the invoice via LLM → enrich (create/update the contact + persist the invoice).",
+		"nodes": [
+			{
+				"id": "extract",
+				"name": "Extract",
+				"actor": "extract_document",
+				"inputs": ["document"],
+				"outputs": ["invoice"],
+				"note": "LLM: extract all invoice fields as strict JSON",
+				"system_prompt": "Extract every field of the invoice (header, vendor, buyer, line items, totals) as strict JSON per the invoice schema.",
+				"llm": { "model": "gemma4-31b", "vision": true, "mode": "tool" },
+				"tools": ["extract_document", "emit_fields"],
+				"supervision": { "strategy": "restart", "retry": { "max": 2, "backoff": "exponential" } }
+			},
+			{
+				"id": "enrich",
+				"name": "Enrich",
+				"actor": "enrichAddressbook",
+				"inputs": ["invoice"],
+				"outputs": ["invoice", "contact"],
+				"note": "Create/update the contact (match by VAT-ID / IBAN / name) + persist the invoice",
+				"tools": ["matchContact", "data_crud"],
+				"supervision": { "strategy": "resume" }
+			}
+		],
+		"edges": [
+			{
+				"from": "extract",
+				"to": "enrich",
+				"resource": "invoice",
+				"kind": "data",
+				"message": "invoice"
+			}
+		],
+		"triggers": [{ "kind": "resource", "on": "document" }]
+	},
+	{
+		"id": "book",
+		"name": "Bookkeeping",
+		"description": "Match the invoice to a bank transaction, then post the SKR04 booking.",
+		"nodes": [
+			{
+				"id": "match",
+				"name": "Match",
+				"actor": "matchInvoiceAgainstTx",
+				"inputs": ["invoice"],
+				"outputs": ["match"],
+				"note": "Find the transaction that pays this invoice (amount, counterparty, date) — or none",
+				"system_prompt": "Pick the transaction that settles this invoice (amount, FX, counterparty, date) — or none.",
+				"llm": { "model": "gemma4-31b", "mode": "tool" },
+				"tools": ["pick_match"],
+				"supervision": { "strategy": "restart", "retry": { "max": 2, "backoff": "exponential" } }
+			},
+			{
+				"id": "post",
+				"name": "Book (SKR04)",
+				"actor": "bookInvoice",
+				"inputs": ["match"],
+				"outputs": ["booking"],
+				"note": "Post the SKR04 booking (expense + input VAT; split on mixed rates)",
+				"system_prompt": "Post the incoming invoice in SKR04: per line the best expense account (NET) + tax_treatment; the system posts input VAT. Split booking on mixed rates.",
+				"llm": { "model": "gemma4-31b", "mode": "tool" },
+				"tools": ["book_invoice"],
+				"supervision": { "strategy": "restart", "retry": { "max": 2, "backoff": "exponential" } }
+			}
+		],
+		"edges": [
+			{ "from": "match", "to": "post", "resource": "match", "kind": "data", "message": "match" }
+		],
+		"triggers": [{ "kind": "resource", "on": "invoice" }]
+	},
+	{
+		"id": "invoice",
+		"name": "Invoice Processing",
+		"description": "End-to-end incoming invoice: ingest → capture (extract+enrich) → bookkeeping (match+book) → human review. Composes the three sub-skills.",
+		"nodes": [
+			{
+				"id": "ingest-doc",
+				"name": "Document Ingest",
+				"flowRef": "doc-ingest",
+				"inputs": ["file", "image"],
+				"outputs": ["document"],
+				"note": "Composite → Document Ingest (ingest + classify)",
+				"supervision": { "strategy": "restart", "retry": { "max": 2, "backoff": "exponential" } }
+			},
+			{
+				"id": "capture",
+				"name": "Capture",
+				"flowRef": "capture",
+				"inputs": ["document"],
+				"outputs": ["invoice"],
+				"note": "Composite → Capture (extract + enrich)",
+				"supervision": { "strategy": "restart", "retry": { "max": 2, "backoff": "exponential" } }
+			},
+			{
+				"id": "book",
+				"name": "Bookkeeping",
+				"flowRef": "book",
+				"inputs": ["invoice"],
+				"outputs": ["booking"],
+				"note": "Composite → Bookkeeping (match + book)",
+				"supervision": { "strategy": "restart", "retry": { "max": 2, "backoff": "exponential" } }
+			},
+			{
+				"id": "review",
+				"name": "Review",
+				"actor": "humanReview",
+				"inputs": ["booking"],
+				"outputs": ["approval"],
+				"note": "HITL: accept the end-to-end invoice (ingest → extract → enrich → match → book)",
+				"hitl": true,
+				"tools": ["approve"],
+				"supervision": { "strategy": "escalate" }
+			}
+		],
+		"edges": [
+			{
+				"from": "ingest-doc",
+				"to": "capture",
+				"resource": "document",
+				"kind": "data",
+				"message": "document"
+			},
+			{
+				"from": "capture",
+				"to": "book",
+				"resource": "invoice",
+				"kind": "data",
+				"message": "invoice"
+			},
+			{
+				"from": "book",
+				"to": "review",
+				"resource": "booking",
+				"kind": "data",
+				"message": "booking"
 			}
 		],
 		"triggers": [{ "kind": "resource", "on": "file" }, { "kind": "resource", "on": "image" }]

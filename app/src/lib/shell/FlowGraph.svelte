@@ -78,6 +78,7 @@ function buildGraph(
 					fanTag: fanTag(n),
 					inputs: n.inputs.map((r) => ({ label: resLabel(f, r), schema: resourceSchema(r) })),
 					outputs: n.outputs.map((r) => ({ label: resLabel(f, r), schema: resourceSchema(r) })),
+					hitl: n.hitl,
 					state: states[n.id],
 					selected: sel === n.id
 				}

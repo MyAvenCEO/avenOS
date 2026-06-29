@@ -14,6 +14,7 @@ type CardData = {
 	fanTag: string | null
 	inputs: Port[]
 	outputs: Port[]
+	hitl?: boolean
 	state?: NodeState
 	selected?: boolean
 }
@@ -69,6 +70,11 @@ const STATE_DOT: Record<NodeState, string> = {
 			{/if}
 		</div>
 		<span class="flex shrink-0 items-center gap-1">
+			{#if d.hitl}
+				<span class="rounded bg-amber-500/20 px-1 py-0.5 text-[8px] font-semibold text-amber-700"
+					>HITL</span
+				>
+			{/if}
 			{#if d.composite}
 				<span
 					class="border-primary/60 text-primary rounded border border-dashed px-1 py-0.5 text-[8px] font-semibold"

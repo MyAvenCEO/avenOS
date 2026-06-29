@@ -172,7 +172,55 @@ describe('doc-ingest skill', () => {
 	})
 })
 
+describe('invoice processing (end-to-end composition)', () => {
+	const inv = EXAMPLE_FLOWS.find((f) => f.id === 'invoice') as Flow
+
+	test('composes ingest → capture → book → review (HITL)', () => {
+		expect(inv.nodes.map((n) => n.id)).toEqual(['ingest-doc', 'capture', 'book', 'review'])
+		// the first three nodes are composites pointing at the sub-skills, in order
+		expect(inv.nodes.filter(isComposite).map((n) => n.flowRef)).toEqual([
+			'doc-ingest',
+			'capture',
+			'book'
+		])
+		const review = inv.nodes.find((n) => n.id === 'review')!
+		expect(isLeaf(review)).toBe(true)
+		expect(review.hitl).toBe(true)
+	})
+
+	test('the sub-skills are extract→enrich and match→post', () => {
+		expect((EXAMPLE_FLOWS.find((f) => f.id === 'capture') as Flow).nodes.map((n) => n.id)).toEqual([
+			'extract',
+			'enrich'
+		])
+		expect((EXAMPLE_FLOWS.find((f) => f.id === 'book') as Flow).nodes.map((n) => n.id)).toEqual([
+			'match',
+			'post'
+		])
+	})
+
+	test('flattens to the full leaf pipeline (ingest+classify+extract+enrich+match+post+review)', () => {
+		const flat = flattenFlow(inv, EXAMPLE_FLOWS)
+		expect(flat.nodes.every(isLeaf)).toBe(true)
+		// doc-ingest(2) + capture(2) + book(2) + review(1) = 7
+		expect(flat.nodes.length).toBe(7)
+		expect(flat.nodes.some((n) => n.id === 'ingest-doc/classify')).toBe(true)
+		expect(flat.nodes.some((n) => n.id === 'capture/extract')).toBe(true)
+		expect(flat.nodes.some((n) => n.id === 'book/post')).toBe(true)
+		expect(flat.nodes.some((n) => n.id === 'review')).toBe(true)
+	})
+})
+
 describe('runs', () => {
+	test('the e2e invoice run walks the 4 composites and waits at review (HITL)', () => {
+		const run = EXAMPLE_RUNS.find((r) => r.id === 'run-invoice-e2e')!
+		expect(run.trace.map((s) => s.nodeId)).toEqual(['ingest-doc', 'capture', 'book', 'review'])
+		expect(run.trace.find((s) => s.nodeId === 'review')!.state).toBe('waiting')
+		// the three composite steps each carry a vibe; review is the HITL gate
+		const composites = run.trace.filter((s) => s.nodeId !== 'review')
+		expect(composites.every((s) => typeof s.vibe === 'string' && s.vibe.length > 0)).toBe(true)
+	})
+
 	test('the doc-ingest run traces ingest → classify with a vibe', () => {
 		const run = EXAMPLE_RUNS.find((r) => r.flowId === 'doc-ingest')!
 		expect(run.trace.map((s) => s.nodeId)).toEqual(['ingest', 'classify'])
