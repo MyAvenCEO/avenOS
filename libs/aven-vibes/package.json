@@ -19,6 +19,7 @@
 		"./invoice-doc": "./src/vibes/invoice/invoice-doc.ts",
 		"./file-ref": "./src/file-ref.ts",
 		"./skr": "./src/skr.ts",
+		"./predicate": "./src/predicate/index.ts",
 		"./AvenVibeView.svelte": "./src/AvenVibeView.svelte"
 	},
 	"scripts": {
