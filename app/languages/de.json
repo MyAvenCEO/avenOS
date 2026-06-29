@@ -1101,7 +1101,16 @@
 			"emptyTable": "Noch keine Einträge für dieses Schema.",
 			"rows": "Einträge",
 			"tabSchema": "Schema",
-			"tabData": "Daten"
+			"tabData": "Daten",
+			"gismuTitle": "Kanonisches Lojban-Gismu, von dem die Stellenstruktur abgeleitet ist",
+			"rawSchema": "JSON-Schema (roh)",
+			"place": {
+				"place": "Stelle",
+				"role": "Rolle",
+				"meaning": "Bedeutung",
+				"kind": "Art",
+				"example": "Beispiel"
+			}
 		},
 		"auth": {
 			"tag": "mainnet / alberobello",

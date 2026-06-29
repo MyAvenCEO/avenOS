@@ -36,6 +36,63 @@ function cell(value: unknown): string {
 	return String(value)
 }
 
+// One positional place (x1…x5) of a predication data type, surfaced from the compiled schema.
+type Place = {
+	pos: string
+	role: string
+	means: string
+	kind: string
+	example: string
+	required: boolean
+	nullable: boolean
+}
+type SchemaMeta = {
+	isPredication: boolean
+	gismu: string | null
+	gloss: string
+	title: string
+	places: Place[]
+}
+
+function kindLabel(p: Record<string, unknown>): string {
+	if (typeof p['x-ref'] === 'string') {
+		const ref = p['x-ref'] as string
+		return ref === '*' ? 'ref → any' : `ref → ${ref}`
+	}
+	const type = Array.isArray(p.type) ? (p.type as string[]).find((x) => x !== 'null') : p.type
+	// date/date-time value places carry a YYYY-MM-DD pattern (no ajv-formats, see compile.ts)
+	if (type === 'string' && typeof p.pattern === 'string' && p.pattern.includes('\\d{4}')) return 'date'
+	return (type as string) ?? 'value'
+}
+
+// x1–x5 predications ARE the universal data-type model — a "data type" reads as its gismu + the
+// per-place role/meaning/example baked into the compiled schema (compile.ts). Pure read, no todos
+// special-casing: any schema with a `predicate` discriminator or `x-gismu` renders this way.
+function schemaMeta(jsonSchema: unknown): SchemaMeta {
+	const s = (jsonSchema ?? {}) as Record<string, unknown>
+	const props = (s.properties ?? {}) as Record<string, Record<string, unknown>>
+	const required = Array.isArray(s.required) ? (s.required as string[]) : []
+	const gismu = typeof s['x-gismu'] === 'string' ? (s['x-gismu'] as string) : null
+	const places: Place[] = Object.entries(props)
+		.filter(([k]) => k !== 'predicate')
+		.map(([pos, p]) => ({
+			pos,
+			role: typeof p.title === 'string' ? p.title : pos,
+			means: typeof p.description === 'string' ? p.description : '',
+			kind: kindLabel(p),
+			example: Array.isArray(p.examples) && p.examples.length ? String(p.examples[0]) : '',
+			required: required.includes(pos),
+			nullable: Array.isArray(p.type) && (p.type as string[]).includes('null')
+		}))
+	return {
+		isPredication: !!props.predicate || gismu !== null,
+		gismu,
+		gloss: typeof s.description === 'string' ? s.description : '',
+		title: typeof s.title === 'string' ? s.title : '',
+		places
+	}
+}
+
 // Tables — schemas + their values, live via TanStack Query (key under ['data'] so the SSE
 // 'data' event invalidates it). No manual reload. board 0055.
 const tablesQuery = createQuery(() => ({
@@ -141,9 +198,81 @@ $effect(() => {
 				</div>
 
 				{#if view === 'schema'}
-					<pre
-						class="border-border bg-card text-foreground min-h-0 overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
-					><code>{JSON.stringify(selected.jsonSchema, null, 2)}</code></pre>
+					{@const m = schemaMeta(selected.jsonSchema)}
+					{#if m.isPredication}
+						<div class="flex min-h-0 flex-col gap-3">
+							<!-- the data type as a Lojban predicate: name ≡ gismu, then its whole-predicate gloss -->
+							<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4">
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="text-foreground font-mono text-sm font-semibold"
+										>{m.title || selected.name}</span
+									>
+									{#if m.gismu}
+										<span
+											class="bg-primary/10 text-foreground rounded-full px-2 py-0.5 font-mono text-[11px]"
+											title={t('mainnet.db.gismuTitle')}>≡ {m.gismu}</span
+										>
+									{/if}
+									<span class="text-muted-foreground text-[11px] tracking-wider uppercase opacity-70"
+										>{m.places.length}-place predicate</span
+									>
+								</div>
+								{#if m.gloss}
+									<p class="text-muted-foreground mt-1.5 text-[13px] leading-relaxed">{m.gloss}</p>
+								{/if}
+							</div>
+							<!-- the positional places x1…x5: role · meaning · kind · example -->
+							<div class="border-border overflow-x-auto rounded-[var(--radius-lg)] border">
+								<table class="w-full border-collapse text-left text-[13px]">
+									<thead>
+										<tr class="border-border bg-card border-b">
+											{#each ['place', 'role', 'meaning', 'kind', 'example'] as h (h)}
+												<th
+													class="text-muted-foreground px-3 py-2 font-bold tracking-wider whitespace-nowrap uppercase"
+													>{t(`mainnet.db.place.${h}`)}</th
+												>
+											{/each}
+										</tr>
+									</thead>
+									<tbody>
+										{#each m.places as pl (pl.pos)}
+											<tr class="border-border/60 border-b last:border-0">
+												<td class="text-foreground px-3 py-2 align-top font-mono whitespace-nowrap">
+													{pl.pos}
+													{#if !pl.required || pl.nullable}
+														<span class="text-muted-foreground ml-1 text-[10px] opacity-70"
+															>{[!pl.required ? 'opt' : '', pl.nullable ? 'null' : '']
+																.filter(Boolean)
+																.join('·')}</span
+														>
+													{/if}
+												</td>
+												<td class="text-foreground px-3 py-2 align-top font-medium">{pl.role}</td>
+												<td class="text-muted-foreground px-3 py-2 align-top">{pl.means || '—'}</td>
+												<td class="text-foreground px-3 py-2 align-top font-mono text-[12px]">{pl.kind}</td>
+												<td class="text-muted-foreground px-3 py-2 align-top font-mono text-[12px]"
+													>{pl.example || '—'}</td
+												>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+							<details class="text-[12px]">
+								<summary class="text-muted-foreground hover:text-foreground cursor-pointer select-none"
+									>{t('mainnet.db.rawSchema')}</summary
+								>
+								<pre
+									class="border-border bg-card text-foreground mt-2 overflow-auto rounded-[var(--radius-lg)] border p-4 leading-relaxed"><code
+										>{JSON.stringify(selected.jsonSchema, null, 2)}</code
+									></pre>
+							</details>
+						</div>
+					{:else}
+						<pre
+							class="border-border bg-card text-foreground min-h-0 overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
+						><code>{JSON.stringify(selected.jsonSchema, null, 2)}</code></pre>
+					{/if}
 				{:else if selected.rows.length === 0}
 					<p
 						class="border-border text-muted-foreground rounded-[var(--radius-lg)] border border-dashed px-4 py-6 text-center text-[13px]"

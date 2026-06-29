@@ -1124,7 +1124,16 @@
 			"emptyTable": "No entries for this schema yet.",
 			"rows": "rows",
 			"tabSchema": "Schema",
-			"tabData": "Data"
+			"tabData": "Data",
+			"gismuTitle": "Canonical Lojban gismu the place structure derives from",
+			"rawSchema": "Raw JSON Schema",
+			"place": {
+				"place": "Place",
+				"role": "Role",
+				"meaning": "Meaning",
+				"kind": "Kind",
+				"example": "Example"
+			}
 		},
 		"auth": {
 			"tag": "mainnet / alberobello",
