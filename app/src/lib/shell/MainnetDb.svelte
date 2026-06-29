@@ -2,6 +2,7 @@
 import { createQuery } from '@tanstack/svelte-query'
 import { type DataValue, listSchemas, listValues } from '$lib/data/client'
 import { t } from '$lib/i18n'
+import { nav } from '$lib/shell/nav.svelte'
 
 // Mainnet "DB" tab: a left "select schema" rail + the selected schema shown two ways via a
 // Schema/Data toggle — its JSON Schema definition, or the table of its value instances (columns
@@ -63,6 +64,17 @@ const selected = $derived(tables.find((tbl) => tbl.id === selectedId) ?? null)
 // Auto-select the first table once they load.
 $effect(() => {
 	if (!selectedId && tables.length > 0) selectedId = tables[0].id
+})
+
+// Deep link from a flow schema badge: select the requested schema by name + show its definition.
+$effect(() => {
+	if (!nav.dbSchema || tables.length === 0) return
+	const match = tables.find((tbl) => tbl.name === nav.dbSchema)
+	if (match) {
+		selectedId = match.id
+		view = 'schema'
+	}
+	nav.dbSchema = null
 })
 </script>
 

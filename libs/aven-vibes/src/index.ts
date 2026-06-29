@@ -20,6 +20,8 @@ export {
 } from './contact-match.js'
 export * from './engine/index.js'
 export { contentHash, type FileRef, filePath, fileRef } from './file-ref.js'
+// board 0084 — the flow/recipe model moved to @avenos/aven-skills (the actor engine). Import flow
+// symbols from there; aven-vibes is vibe rendering only.
 export {
 	assignInvoiceNumber,
 	type InvoiceState,

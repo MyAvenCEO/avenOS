@@ -22,6 +22,8 @@ import FinanceVibe from '$lib/shell/FinanceVibe.svelte'
 import InvoiceBookingVibe from '$lib/shell/InvoiceBookingVibe.svelte'
 import InvoiceCreateVibe from '$lib/shell/InvoiceCreateVibe.svelte'
 import InvoiceMatchVibe from '$lib/shell/InvoiceMatchVibe.svelte'
+import RunsView from '$lib/shell/RunsView.svelte'
+import SkillsView from '$lib/shell/SkillsView.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 import TransactionsVibe from '$lib/shell/TransactionsVibe.svelte'
 
@@ -68,6 +70,8 @@ $effect(() => {
 // Session switcher is collapsed by default so the conversation is centered + full-width; a tiny
 // toggle button opens the chats viewer. board 0055.
 let showSessions = $state(false)
+// Main-area sub-tabs: the conversation vs the Skills (flow/recipe) view. board 0083.
+let mainTab = $state<'chat' | 'skills' | 'runs'>('chat')
 // The active spark's current src/ files (path→content), loaded into the AI context before each send
 // so the edit_website tool can diff/create across them (sent as the body's `publicFiles`). board 0057.
 let publicFiles: Record<string, string> = {}
@@ -595,218 +599,259 @@ function handleTranscribeError(message: string): void {
 	{/if}
 
 	<!-- Right: the conversation (truly centered when the switcher is collapsed) -->
-	<div class="flex min-h-0 flex-1 flex-col pt-2">
-		{#if !showSessions}
-			<div class="shrink-0 px-4 pb-1">
-				<button
-					type="button"
-					class="text-muted-foreground hover:text-foreground hover:bg-card inline-flex items-center gap-1.5 rounded-[var(--radius)] px-2 py-1 text-xs transition-colors"
-					onclick={() => (showSessions = true)}
-					title="Open chats"
-				>
-					<svg
-						width="15"
-						height="15"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<rect x="3" y="4" width="18" height="16" rx="2" />
-						<line x1="9" y1="4" x2="9" y2="20" />
-					</svg>
-					Chats
-				</button>
+	<div class="flex min-h-0 min-w-0 flex-1 flex-col pt-2">
+		<!-- Chat | Skills sub-tabs for the main view area. board 0083. -->
+		<div class="border-border flex shrink-0 gap-1 border-b px-4 pb-1">
+			<button
+				type="button"
+				class="rounded-[var(--radius)] px-2.5 py-1 text-[13px] transition-colors {mainTab === 'chat'
+					? 'bg-primary/10 text-foreground font-medium'
+					: 'text-muted-foreground hover:bg-card'}"
+				onclick={() => (mainTab = 'chat')}
+			>
+				{t('mainnet.nav.chat')}
+			</button>
+			<button
+				type="button"
+				class="rounded-[var(--radius)] px-2.5 py-1 text-[13px] transition-colors {mainTab === 'skills'
+					? 'bg-primary/10 text-foreground font-medium'
+					: 'text-muted-foreground hover:bg-card'}"
+				onclick={() => (mainTab = 'skills')}
+			>
+				{t('mainnet.skills.tab')}
+			</button>
+			<button
+				type="button"
+				class="rounded-[var(--radius)] px-2.5 py-1 text-[13px] transition-colors {mainTab === 'runs'
+					? 'bg-primary/10 text-foreground font-medium'
+					: 'text-muted-foreground hover:bg-card'}"
+				onclick={() => (mainTab = 'runs')}
+			>
+				{t('mainnet.runs.tab')}
+			</button>
+		</div>
+		{#if mainTab === 'skills'}
+			<!-- No scroll here: SkillsView fills the area and each of its columns scrolls on its own. -->
+			<div class="flex min-h-0 min-w-0 flex-1 p-4">
+				<SkillsView containerName="aven-vibes-skills-tab" />
 			</div>
-		{/if}
-		<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
-			<div bind:this={contentEl} class="mx-auto flex w-full max-w-[52rem] flex-col gap-3 py-4">
-				{#if messages.length === 0}
-					<div class="text-muted-foreground py-16 text-center text-sm leading-relaxed">
-						{t('mainnet.chat.empty')}
-					</div>
-				{/if}
-				{#each messages as message (message.id)}
-					{#if message.vibe}
-						<!-- Vibes flow into the stream. Data vibes size to content (capped + scroll); the
+		{:else if mainTab === 'runs'}
+			<div class="flex min-h-0 min-w-0 flex-1 p-4">
+				<RunsView containerName="aven-vibes-runs-tab" />
+			</div>
+		{:else}
+			{#if !showSessions}
+				<div class="shrink-0 px-4 pb-1">
+					<button
+						type="button"
+						class="text-muted-foreground hover:text-foreground hover:bg-card inline-flex items-center gap-1.5 rounded-[var(--radius)] px-2 py-1 text-xs transition-colors"
+						onclick={() => (showSessions = true)}
+						title="Open chats"
+					>
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<rect x="3" y="4" width="18" height="16" rx="2" />
+							<line x1="9" y1="4" x2="9" y2="20" />
+						</svg>
+						Chats
+					</button>
+				</div>
+			{/if}
+			<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
+				<div bind:this={contentEl} class="mx-auto flex w-full max-w-[52rem] flex-col gap-3 py-4">
+					{#if messages.length === 0}
+						<div class="text-muted-foreground py-16 text-center text-sm leading-relaxed">
+							{t('mainnet.chat.empty')}
+						</div>
+					{/if}
+					{#each messages as message (message.id)}
+						{#if message.vibe}
+							<!-- Vibes flow into the stream. Data vibes size to content (capped + scroll); the
 						     Composer needs a definite height, so it renders in a fixed-height card. -->
-						{#if message.vibe === 'todos'}
-							<div class="max-h-[80vh] w-full overflow-y-auto">
-								<TodosVibe containerName={`aven-vibes-chat-${message.id}`} />
-							</div>
-						{:else if message.vibe === 'composer'}
-							<div
-								class="border-border h-[70vh] w-full overflow-hidden rounded-[var(--radius-lg)] border"
-							>
-								<Composer />
-							</div>
-						{:else if message.vibe === 'bookkeeping'}
-							<!-- Compact standalone classification card (component self-sizes). board 0070. -->
-							<div class="max-h-[80vh] w-full overflow-y-auto">
-								<BookkeepingVibe
-									containerName={`aven-vibes-chat-${message.id}`}
-									data={message.vibeData}
-								/>
-							</div>
-						{:else if message.vibe === 'doc-compare'}
-							<!-- Compare needs room: break out of the 52rem chat column and center a wider
+							{#if message.vibe === 'todos'}
+								<div class="max-h-[80vh] w-full overflow-y-auto">
+									<TodosVibe containerName={`aven-vibes-chat-${message.id}`} />
+								</div>
+							{:else if message.vibe === 'composer'}
+								<div
+									class="border-border h-[70vh] w-full overflow-hidden rounded-[var(--radius-lg)] border"
+								>
+									<Composer />
+								</div>
+							{:else if message.vibe === 'bookkeeping'}
+								<!-- Compact standalone classification card (component self-sizes). board 0070. -->
+								<div class="max-h-[80vh] w-full overflow-y-auto">
+									<BookkeepingVibe
+										containerName={`aven-vibes-chat-${message.id}`}
+										data={message.vibeData}
+									/>
+								</div>
+							{:else if message.vibe === 'doc-compare'}
+								<!-- Compare needs room: break out of the 52rem chat column and center a wider
 							     card on the viewport so the doc + extracted fields sit 50/50. board 0064. -->
-							<div
-								class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
-							>
-								<DocCompareVibe
-									containerName={`aven-vibes-chat-${message.id}`}
-									data={message.vibeData}
-								/>
-							</div>
-						{:else if message.vibe === 'invoice-match'}
-							<!-- Compact reconciliation summary (invoice excerpt ↔ matched tx). board 0070. -->
-							<div class="max-h-[80vh] w-full overflow-y-auto">
-								<InvoiceMatchVibe
-									containerName={`aven-vibes-chat-${message.id}`}
-									data={message.vibeData}
-								/>
-							</div>
-						{:else if message.vibe === 'invoice-booking'}
-							<!-- Compact booking summary (invoice excerpt → SKR04 Buchungssatz). board 0070. -->
-							<div class="max-h-[80vh] w-full overflow-y-auto">
-								<InvoiceBookingVibe
-									containerName={`aven-vibes-chat-${message.id}`}
-									data={message.vibeData}
-								/>
-							</div>
-						{:else if message.vibe === 'tx'}
-							<!-- Live transactions list — same max width as todos (component self-constrains). 0068. -->
-							<div class="max-h-[80vh] w-full overflow-y-auto">
-								<TransactionsVibe containerName={`aven-vibes-chat-${message.id}`} />
-							</div>
-						{:else if message.vibe === 'booking'}
-							<!-- Bookings: list self-centers at max-w-2xl; the 50/50 prüf detail breaks out wide. 0071/0077. -->
-							<div
-								class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
-							>
-								<BookingsVibe containerName={`aven-vibes-chat-${message.id}`} />
-							</div>
-						{:else if message.vibe === 'bwa'}
-							<!-- BWA / finance snapshot (computed from bookings + tx). board 0072. -->
-							<div class="max-h-[80vh] w-full overflow-y-auto">
-								<FinanceVibe containerName={`aven-vibes-chat-${message.id}`} />
-							</div>
-						{:else if message.vibe === 'addressbook'}
-							<!-- Addressbook: contacts list + detail (Stammdaten / Belege). board 0082. -->
-							<div
-								class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
-							>
-								<AddressbookVibe containerName={`aven-vibes-chat-${message.id}`} />
-							</div>
-						{:else if message.vibe === 'invoice-create'}
-							<!-- Outgoing invoice authoring view (doc emitted by the invoicing tools). board 0082. -->
-							<div class="max-h-[80vh] w-full overflow-y-auto">
-								<InvoiceCreateVibe
-									containerName={`aven-vibes-chat-${message.id}`}
-									data={message.vibeData}
-								/>
-							</div>
-						{/if}
-					{:else}
-						<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
-							<div
-								class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-sm leading-relaxed {message.role ===
+								<div
+									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
+								>
+									<DocCompareVibe
+										containerName={`aven-vibes-chat-${message.id}`}
+										data={message.vibeData}
+									/>
+								</div>
+							{:else if message.vibe === 'invoice-match'}
+								<!-- Compact reconciliation summary (invoice excerpt ↔ matched tx). board 0070. -->
+								<div class="max-h-[80vh] w-full overflow-y-auto">
+									<InvoiceMatchVibe
+										containerName={`aven-vibes-chat-${message.id}`}
+										data={message.vibeData}
+									/>
+								</div>
+							{:else if message.vibe === 'invoice-booking'}
+								<!-- Compact booking summary (invoice excerpt → SKR04 Buchungssatz). board 0070. -->
+								<div class="max-h-[80vh] w-full overflow-y-auto">
+									<InvoiceBookingVibe
+										containerName={`aven-vibes-chat-${message.id}`}
+										data={message.vibeData}
+									/>
+								</div>
+							{:else if message.vibe === 'tx'}
+								<!-- Live transactions list — same max width as todos (component self-constrains). 0068. -->
+								<div class="max-h-[80vh] w-full overflow-y-auto">
+									<TransactionsVibe containerName={`aven-vibes-chat-${message.id}`} />
+								</div>
+							{:else if message.vibe === 'booking'}
+								<!-- Bookings: list self-centers at max-w-2xl; the 50/50 prüf detail breaks out wide. 0071/0077. -->
+								<div
+									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
+								>
+									<BookingsVibe containerName={`aven-vibes-chat-${message.id}`} />
+								</div>
+							{:else if message.vibe === 'bwa'}
+								<!-- BWA / finance snapshot (computed from bookings + tx). board 0072. -->
+								<div class="max-h-[80vh] w-full overflow-y-auto">
+									<FinanceVibe containerName={`aven-vibes-chat-${message.id}`} />
+								</div>
+							{:else if message.vibe === 'addressbook'}
+								<!-- Addressbook: contacts list + detail (Stammdaten / Belege). board 0082. -->
+								<div
+									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
+								>
+									<AddressbookVibe containerName={`aven-vibes-chat-${message.id}`} />
+								</div>
+							{:else if message.vibe === 'invoice-create'}
+								<!-- Outgoing invoice authoring view (doc emitted by the invoicing tools). board 0082. -->
+								<div class="max-h-[80vh] w-full overflow-y-auto">
+									<InvoiceCreateVibe
+										containerName={`aven-vibes-chat-${message.id}`}
+										data={message.vibeData}
+									/>
+								</div>
+							{/if}
+						{:else}
+							<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
+								<div
+									class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-sm leading-relaxed {message.role ===
 							'user'
 								? 'bg-primary text-primary-foreground'
 								: 'border-border bg-card text-foreground border'}{message.pending
 								? ' animate-pulse italic opacity-60'
 								: ''}"
-							>
-								{message.text}
+								>
+									{message.text}
+								</div>
 							</div>
-						</div>
-					{/if}
-				{/each}
+						{/if}
+					{/each}
+				</div>
 			</div>
-		</div>
 
-		<div class="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-			<div class="mx-auto w-full max-w-[52rem]">
-				{#each hitlRequests as req (req.id)}
-					{@const v = hitlVerb(req.tool)}
-					<!-- a small confirm card: question on top, buttons at the bottom; dismissed on click -->
-					<div
-						class="border-border bg-card mx-auto mb-2 max-w-xs rounded-[var(--radius-lg)] border px-4 py-3 text-center text-[13px] shadow-sm"
-					>
-						<p class="text-foreground mb-3 font-medium">{req.label}</p>
-						<div class="flex justify-center gap-2">
-							<!-- decline always LEFT, confirm always RIGHT -->
-							<button
-								type="button"
-								class="border-border hover:bg-muted rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors"
-								onclick={() => declineHitl(req)}
-							>
-								{v.decline}
-							</button>
-							<button
-								type="button"
-								class="rounded-full px-4 py-1.5 text-xs font-semibold transition-colors {v.danger
+			<div class="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+				<div class="mx-auto w-full max-w-[52rem]">
+					{#each hitlRequests as req (req.id)}
+						{@const v = hitlVerb(req.tool)}
+						<!-- a small confirm card: question on top, buttons at the bottom; dismissed on click -->
+						<div
+							class="border-border bg-card mx-auto mb-2 max-w-xs rounded-[var(--radius-lg)] border px-4 py-3 text-center text-[13px] shadow-sm"
+						>
+							<p class="text-foreground mb-3 font-medium">{req.label}</p>
+							<div class="flex justify-center gap-2">
+								<!-- decline always LEFT, confirm always RIGHT -->
+								<button
+									type="button"
+									class="border-border hover:bg-muted rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors"
+									onclick={() => declineHitl(req)}
+								>
+									{v.decline}
+								</button>
+								<button
+									type="button"
+									class="rounded-full px-4 py-1.5 text-xs font-semibold transition-colors {v.danger
 									? 'border-destructive/50 text-destructive hover:bg-destructive/10 border'
 									: 'bg-primary text-primary-foreground hover:opacity-90'}"
-								onclick={() => void confirmHitl(req)}
-							>
-								{v.confirm}
-							</button>
+									onclick={() => void confirmHitl(req)}
+								>
+									{v.confirm}
+								</button>
+							</div>
 						</div>
-					</div>
-				{/each}
-				{#if editStream}
-					<!-- live GLM edit stream: reasoning + diff text as the website model writes it -->
-					<div
-						bind:this={streamEl}
-						class="border-border bg-card text-muted-foreground mb-2 max-h-36 overflow-y-auto rounded-[var(--radius-lg)] border px-3 py-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap"
-					>
-						{editStreamTail}
-					</div>
-				{/if}
-				{#if toolActivity.length > 0}
-					<div class="flex flex-wrap justify-center gap-1.5 pb-2">
-						{#each toolActivity as tool (tool.id)}
-							<span
-								class="border-border bg-card inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] {tool.status ===
+					{/each}
+					{#if editStream}
+						<!-- live GLM edit stream: reasoning + diff text as the website model writes it -->
+						<div
+							bind:this={streamEl}
+							class="border-border bg-card text-muted-foreground mb-2 max-h-36 overflow-y-auto rounded-[var(--radius-lg)] border px-3 py-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap"
+						>
+							{editStreamTail}
+						</div>
+					{/if}
+					{#if toolActivity.length > 0}
+						<div class="flex flex-wrap justify-center gap-1.5 pb-2">
+							{#each toolActivity as tool (tool.id)}
+								<span
+									class="border-border bg-card inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] {tool.status ===
 								'error'
 									? 'text-destructive'
 									: 'text-muted-foreground'}"
-								title={tool.detail}
-							>
-								{#if tool.status === 'running'}
-									<span
-										class="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full"
-									></span>
-								{:else if tool.status === 'done'}
-									<span class="text-primary">✓</span>
-								{:else}
-									<span class="text-destructive">✕</span>
-								{/if}
-								<b class="text-foreground font-semibold">{tool.name}</b>
-								<span class="opacity-80">{tool.detail}</span>
-								{#if tool.status === 'running' && tool.startedAt}
-									<span class="text-foreground/60 tabular-nums">
-										· {Math.max(0, Math.round((nowTick - tool.startedAt) / 1000))}s
-									</span>
-								{/if}
-							</span>
-						{/each}
-					</div>
-				{/if}
-				<IntentComposer
-					bind:this={composerRef}
-					placeholder={t('mainnet.chat.placeholder')}
-					enableAttachments={true}
-					submitBusy={busy}
-					onSubmitMessage={handleSubmit}
-					onTranscribeError={handleTranscribeError}
-				/>
+									title={tool.detail}
+								>
+									{#if tool.status === 'running'}
+										<span
+											class="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full"
+										></span>
+									{:else if tool.status === 'done'}
+										<span class="text-primary">✓</span>
+									{:else}
+										<span class="text-destructive">✕</span>
+									{/if}
+									<b class="text-foreground font-semibold">{tool.name}</b>
+									<span class="opacity-80">{tool.detail}</span>
+									{#if tool.status === 'running' && tool.startedAt}
+										<span class="text-foreground/60 tabular-nums">
+											· {Math.max(0, Math.round((nowTick - tool.startedAt) / 1000))}s
+										</span>
+									{/if}
+								</span>
+							{/each}
+						</div>
+					{/if}
+					<IntentComposer
+						bind:this={composerRef}
+						placeholder={t('mainnet.chat.placeholder')}
+						enableAttachments={true}
+						submitBusy={busy}
+						onSubmitMessage={handleSubmit}
+						onTranscribeError={handleTranscribeError}
+					/>
+				</div>
 			</div>
-		</div>
+		{/if}
 	</div>
 </div>
