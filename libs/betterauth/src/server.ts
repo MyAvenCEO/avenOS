@@ -39,6 +39,7 @@ import { eventsStream } from './events'
 import { deleteFlow, getFlow, listFlows, upsertFlow } from './flows'
 import { inboxGet, inboxList, mailInbox } from './inbox'
 import { deleteType, getType, listTypes, upsertType } from './predicate-types'
+import { runSkill } from './skills-run'
 import { syncPricing } from './usage'
 import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
 
@@ -61,6 +62,8 @@ app.use('/api/auth/*', cors(corsOptions))
 app.use('/api/ai/*', cors(corsOptions))
 app.use('/api/admin/*', cors(corsOptions))
 app.use('/api/data/*', cors(corsOptions))
+// Skill execution (board 0089) — run a skill's flow for the signed-in user (doc-ingest wired first).
+app.use('/api/skills/*', cors(corsOptions))
 // `/api/billing/checkout` is browser-called (needs CORS); `/api/billing/webhook` is a
 // server-to-server POST from Polar (no Origin, so CORS is inert there) verified by signature.
 app.use('/api/billing/*', cors(corsOptions))
@@ -108,6 +111,10 @@ app.delete('/api/data/values/:id', deleteValue)
 
 // Todos (board 0087/0088): stored as x1–x5 predications, surfaced via these routes which delegate
 // to the generic ontology engine (the `todos` registered type) — the same path the LLM tool uses.
+// Skill runner (board 0089): POST a file → run the skill's flow → artifact + document predications
+// + provenance + a persisted run trace. The generic runner the LLM `run_skill` tool also calls.
+app.post('/api/skills/:id/run', runSkill)
+
 app.get('/api/data/todos', listTodos)
 app.post('/api/data/todos', createTodos)
 app.patch('/api/data/todos', updateTodos)

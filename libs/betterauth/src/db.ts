@@ -109,6 +109,18 @@ export interface ArtifactTable {
 	created_at: Generated<Date>
 }
 
+// Persisted skill RUN traces (board 0089) — the FlowRun event-log from the generic runner, per user.
+export interface FlowRunTable {
+	id: string
+	user_id: string
+	flow_id: string
+	label: string
+	status: string
+	trace: unknown
+	started_at: Date | null
+	created_at: Generated<Date>
+}
+
 export type DataHistoryOperation = 'UPDATE' | 'DELETE'
 
 export interface DataSchemaHistoryTable {
@@ -203,6 +215,7 @@ export interface Database {
 	flow: FlowTable
 	predicate_type: PredicateTypeTable
 	artifact: ArtifactTable
+	flow_run: FlowRunTable
 	data_schema_history: DataSchemaHistoryTable
 	data_value_history: DataValueHistoryTable
 	polar_event: PolarEventTable
