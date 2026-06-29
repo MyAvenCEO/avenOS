@@ -40,7 +40,7 @@
 	},
 	{
 		"id": "capture",
-		"name": "Capture",
+		"name": "Map Brain",
 		"description": "Turn a classified document into structured, persisted data: extract the invoice via LLM → enrich (create/update the contact + persist the invoice).",
 		"nodes": [
 			{
@@ -128,11 +128,11 @@
 			},
 			{
 				"id": "capture",
-				"name": "Capture",
+				"name": "Map Brain",
 				"flowRef": "capture",
 				"inputs": ["document"],
 				"outputs": ["invoice"],
-				"note": "Composite → Capture (extract + enrich)",
+				"note": "Composite → Map Brain (extract + enrich)",
 				"supervision": { "strategy": "restart", "retry": { "max": 2, "backoff": "exponential" } }
 			},
 			{
