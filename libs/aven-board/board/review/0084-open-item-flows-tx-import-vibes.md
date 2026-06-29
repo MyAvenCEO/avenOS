@@ -146,18 +146,18 @@ runtime's data model 1:1 (and now literally share aven-skills' types).
 - [x] Moved flow tests pass under `cd libs/aven-skills && bun test`; `aven-skills` + `aven-vibes` tsc both 0; app svelte-check only `__APP_VERSION__`.
 
 **Phase A — bookkeeping**
-- [ ] `tx-import` realized as an aven-skills IngestConfig run (CSV → transactions + provenance + dedup) — test.
-- [ ] doc-ingest ends at `book-open` (offen); `open-item-match` settles/parks; `OPEN_ITEM_STATUS` exported; offen→bezahlt proven across `run-invoice-open`→`run-settle` — tests.
-- [ ] Four mock runs with expected terminal states; `open_item` kind — tests.
-- [ ] `OpenItemsVibe` exists; `StepVibe` maps `open-items`/`book-open`; `InvoiceBookingVibe` renders `offen` — grep + svelte-check.
+- [x] `tx-import` realized as an aven-skills IngestConfig run (CSV → transactions + provenance + dedup) — test.
+- [x] doc-ingest ends at `book-open` (offen); `open-item-match` settles/parks; `OPEN_ITEM_STATUS` exported; offen→bezahlt proven across `run-invoice-open`→`run-settle` — tests.
+- [x] Four mock runs with expected terminal states; `open_item` kind — tests.
+- [x] `OpenItemsVibe` exists; `StepVibe` maps `open-items`/`book-open`; `InvoiceBookingVibe` renders `offen` — grep + svelte-check.
 
 **Phase B — engine v2**
-- [ ] Every flow carries explicit `edge.kind` + node `supervision` + `flow.triggers` (incl. minecraft) — test over all flows.
-- [ ] Event-sourced trace (nested + per-item fan-out + lineage), `waiting`/`parked`, stronger `validateFlow` (cycle/unreachable/type-incompat), `ACTOR_MAPPING` test.
+- [x] Every flow carries explicit `edge.kind` + node `supervision` + `flow.triggers` (incl. minecraft) — test over all flows.
+- [x] Event-sourced trace (nested + per-item fan-out + lineage), `waiting`/`parked`, stronger `validateFlow` (cycle/unreachable/type-incompat), `ACTOR_MAPPING` test.
 
 **Cross-cutting**
-- [ ] Universal-first: no domain vocabulary as enum/required in the schema; a generic non-bookkeeping flow validates — `universality` test + grep guard.
-- [ ] `bunx biome check` clean; `git diff --name-only` touches no `betterauth/src/**` or testnet files.
+- [x] Universal-first: no domain vocabulary as enum/required in the schema; a generic non-bookkeeping flow validates — `universality` test + grep guard.
+- [x] `bunx biome check` clean; `git diff --name-only` touches no `betterauth/src/**` or testnet files.
 
 ## Verification
 
@@ -179,6 +179,8 @@ To build:
 ```
 
 ## Progress log
+
+- `2026-06-29` — **BUILT (all phases)**: Phase A (open-item lifecycle: doc-ingest→book-open offen, open-item-match settle/park, tx-import via a real `bank-statement-tx` IngestConfig, runs, OpenItemsVibe + offen booking vibe) + Phase B (additive actor types: Port/Supervision/Trigger/ResourceLifecycle, edge kind/message/ports, span trace fields incl. nested + per-item fan-out + lineage + events; ALL 8 flows hand-migrated to explicit edge.kind+supervision+triggers; stronger validateFlow = cycle/unreachable/type-incompat; ACTOR_MAPPING + OPEN_ITEM_LIFECYCLE). Capability layer (ToolSpec+LlmConfig+TOOL_SPECS) in aven-skills. Green: 31 aven-skills tests, aven-skills+aven-vibes tsc 0, app svelte-check only __APP_VERSION__, biome clean, schema domain-generic, configs collocated in aven-skills, no betterauth/testnet diff. Moved build→review.
 
 - `2026-06-29` — **Phase 0 DONE** (checkpoint): moved `flow.ts`→`libs/aven-skills/src/`, `flows.json`/`runs.json`→`libs/aven-skills/configs/`, flow tests→`libs/aven-skills/test/`. New `capability.ts` (ToolSpec + JsonSchema + extended LlmConfig + TOOL_SPECS registry); flow.ts re-exports them. aven-skills index `export *`s the flow model; trace reuses the existing pipeline `StageEvent`/`Logger`. aven-vibes index drops the flow re-export + `./flow` export; app shell flow-imports repointed to `@avenos/aven-skills`. Green: aven-skills tsc + 24 tests, aven-vibes tsc, app svelte-check (only __APP_VERSION__), biome clean on touched files.
 

@@ -43,7 +43,9 @@
 							"address": "Musterstraße 1, 80333 München",
 							"ust_id": "DE123456789"
 						},
-						"buyer": { "name": "avenCEO GmbH" },
+						"buyer": {
+							"name": "avenCEO GmbH"
+						},
 						"statements": [
 							{
 								"section_title": "Positionen",
@@ -60,7 +62,11 @@
 								]
 							}
 						],
-						"totals": { "subtotal": 100, "tax_total": 19, "invoice_total": 119 },
+						"totals": {
+							"subtotal": 100,
+							"tax_total": 19,
+							"invoice_total": 119
+						},
 						"total_outstanding": 119
 					}
 				}
@@ -97,8 +103,12 @@
 							"issue_date": "2026-06-01",
 							"currency": "EUR"
 						},
-						"vendor": { "name": "Müller GmbH" },
-						"totals": { "invoice_total": 119 }
+						"vendor": {
+							"name": "Müller GmbH"
+						},
+						"totals": {
+							"invoice_total": 119
+						}
 					},
 					"booking": {
 						"invoice_number": "2026-0815",
@@ -147,28 +157,75 @@
 				"at": "+0s",
 				"inputs": ["1× Datei (CSV)"],
 				"outputs": ["SourceDoc (sha256)"],
-				"message": "Inhalt gehasht + abgelegt"
+				"message": "Inhalt gehasht + abgelegt",
+				"spanId": "s-ingest",
+				"endedAt": "+0s",
+				"emitted": ["doc:juni-csv#sha256"],
+				"events": [
+					{
+						"level": "info",
+						"at": "+0s",
+						"message": "42 Zeilen, sha256 ok"
+					}
+				]
 			},
 			{
 				"nodeId": "parse-csv",
 				"state": "done",
 				"at": "+1s",
 				"outputs": ["42 Zeilen"],
-				"message": "Spalten erkannt"
+				"message": "Spalten erkannt",
+				"spanId": "s-parse",
+				"parentSpanId": "s-ingest",
+				"emitted": ["rows:42"]
 			},
 			{
 				"nodeId": "transform",
 				"state": "done",
 				"at": "+1s",
 				"outputs": ["42× transaction"],
-				"message": "auf das transactions-Schema gemappt"
+				"message": "auf das transactions-Schema gemappt",
+				"spanId": "s-transform",
+				"parentSpanId": "s-parse",
+				"cost": {
+					"ms": 7
+				}
+			},
+			{
+				"nodeId": "transform",
+				"state": "done",
+				"at": "+1s",
+				"parentSpanId": "s-transform",
+				"spanId": "s-tx-1",
+				"outputs": ["tx#1 −119,00 €"],
+				"emitted": ["tx:2026-06-12|-119|Rg2026-0815"],
+				"message": "Müller GmbH"
+			},
+			{
+				"nodeId": "transform",
+				"state": "done",
+				"at": "+1s",
+				"parentSpanId": "s-transform",
+				"spanId": "s-tx-2",
+				"outputs": ["tx#2 −49,00 €"],
+				"emitted": ["tx:2026-06-09|-49|Mobilfunk"],
+				"message": "Telekom Deutschland"
 			},
 			{
 				"nodeId": "dedup",
 				"state": "done",
 				"at": "+2s",
 				"outputs": ["38 neu, 4 Duplikate"],
-				"message": "idempotent (key) · _source Provenance je Zeile"
+				"message": "idempotent (key) · _source Provenance je Zeile",
+				"spanId": "s-dedup",
+				"parentSpanId": "s-transform",
+				"events": [
+					{
+						"level": "info",
+						"at": "+2s",
+						"message": "38 added, 4 skipped (dedup key)"
+					}
+				]
 			}
 		]
 	},
@@ -221,8 +278,12 @@
 							"issue_date": "2026-06-01",
 							"currency": "EUR"
 						},
-						"vendor": { "name": "Müller GmbH" },
-						"totals": { "invoice_total": 119 }
+						"vendor": {
+							"name": "Müller GmbH"
+						},
+						"totals": {
+							"invoice_total": 119
+						}
 					},
 					"match": {
 						"tx": {
@@ -311,7 +372,12 @@
 		"startedAt": "vor 2 Min",
 		"status": "running",
 		"trace": [
-			{ "nodeId": "mine", "state": "done", "at": "+0s", "outputs": ["8× Sand"] },
+			{
+				"nodeId": "mine",
+				"state": "done",
+				"at": "+0s",
+				"outputs": ["8× Sand"]
+			},
 			{
 				"nodeId": "smelt",
 				"state": "done",

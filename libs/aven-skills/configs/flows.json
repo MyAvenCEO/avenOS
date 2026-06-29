@@ -11,7 +11,10 @@
 				"inputs": ["file", "image"],
 				"outputs": ["document"],
 				"note": "Datei / Foto / Scan übernehmen",
-				"tools": ["upload"]
+				"tools": ["upload"],
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "store",
@@ -20,7 +23,10 @@
 				"inputs": ["document"],
 				"outputs": ["document"],
 				"note": "Inhaltsadressiert in sparks/PRIVATE/<sha256>",
-				"tools": ["sparkWriteBytes"]
+				"tools": ["sparkWriteBytes"],
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "classify",
@@ -30,13 +36,42 @@
 				"outputs": ["document"],
 				"note": "Belegart erkennen (Rechnung / Kontoauszug / Vertrag / …)",
 				"system_prompt": "Du bist Buchhalter. Bestimme die Belegart: invoice (Rechnung), bank_statement (Kontoauszug), contract (Vertrag) oder other. Gib Titel, Tags und eine kurze Buchungs-Zusammenfassung zurück.",
-				"llm": { "model": "gemma4-31b", "vision": true, "mode": "vision" },
-				"tools": ["classify_document"]
+				"llm": {
+					"model": "gemma4-31b",
+					"vision": true,
+					"mode": "vision"
+				},
+				"tools": ["classify_document"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			}
 		],
 		"edges": [
-			{ "from": "import", "to": "store", "resource": "document" },
-			{ "from": "store", "to": "classify", "resource": "document" }
+			{
+				"from": "import",
+				"to": "store",
+				"resource": "document",
+				"kind": "data",
+				"message": "document"
+			},
+			{
+				"from": "store",
+				"to": "classify",
+				"resource": "document",
+				"kind": "data",
+				"message": "document"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "file"
+			}
 		]
 	},
 	{
@@ -50,7 +85,14 @@
 				"flowRef": "ingest",
 				"inputs": ["file", "image"],
 				"outputs": ["document"],
-				"note": "Composite → Sub-Skill »Dokument-Ingest« (Import → Ablage → Klassifizieren)"
+				"note": "Composite → Sub-Skill »Dokument-Ingest« (Import → Ablage → Klassifizieren)",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			},
 			{
 				"id": "extract-invoice",
@@ -59,8 +101,19 @@
 				"inputs": ["document"],
 				"outputs": ["invoice"],
 				"system_prompt": "Extrahiere alle Felder der Rechnung (Kopf, Lieferant, Käufer, Positionen, Summen) als striktes JSON nach dem invoice-Schema.",
-				"llm": { "model": "gemma4-31b", "vision": true, "mode": "tool" },
-				"tools": ["extract_document", "emit_fields"]
+				"llm": {
+					"model": "gemma4-31b",
+					"vision": true,
+					"mode": "tool"
+				},
+				"tools": ["extract_document", "emit_fields"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			},
 			{
 				"id": "bank",
@@ -68,7 +121,14 @@
 				"flowRef": "bank-statement",
 				"inputs": ["document"],
 				"outputs": ["transaction", "contact"],
-				"note": "Composite → Sub-Skill »Kontoauszug« (extrahieren + Transaktionen anlegen)"
+				"note": "Composite → Sub-Skill »Kontoauszug« (extrahieren + Transaktionen anlegen)",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			},
 			{
 				"id": "extract-contract",
@@ -77,8 +137,19 @@
 				"inputs": ["document"],
 				"outputs": ["contract"],
 				"system_prompt": "Extrahiere Vertragsparteien, Laufzeit, Kündigungsfrist und Konditionen als JSON nach dem contract-Schema.",
-				"llm": { "model": "gemma4-31b", "vision": true, "mode": "tool" },
-				"tools": ["extract_document", "emit_fields"]
+				"llm": {
+					"model": "gemma4-31b",
+					"vision": true,
+					"mode": "tool"
+				},
+				"tools": ["extract_document", "emit_fields"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			},
 			{
 				"id": "enrich",
@@ -87,7 +158,10 @@
 				"inputs": ["invoice"],
 				"outputs": ["contact"],
 				"note": "Parteien matchen (USt-IdNr/IBAN/Name) → anlegen/ergänzen",
-				"tools": ["matchContact", "data_crud"]
+				"tools": ["matchContact", "data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "book-open",
@@ -97,16 +171,69 @@
 				"outputs": ["open_item"],
 				"note": "Sollstellung: Aufwand/Erlös + Vorsteuer/USt → Forderung/Verbindlichkeit als OFFEN. Zahlung folgt via »Offene Posten ausgleichen«.",
 				"system_prompt": "Buche die Rechnung in SKR04 als offenen Posten (Sollstellung): pro Position das beste Konto (NETTO) + tax_treatment; das System bucht Vorsteuer/USt. Status = offen, wartet auf die Zahlung.",
-				"llm": { "model": "gemma4-31b", "mode": "tool" },
-				"tools": ["book_invoice"]
+				"llm": {
+					"model": "gemma4-31b",
+					"mode": "tool"
+				},
+				"tools": ["book_invoice"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			}
 		],
 		"edges": [
-			{ "from": "ingest", "to": "extract-invoice", "resource": "document", "when": "Rechnung" },
-			{ "from": "ingest", "to": "bank", "resource": "document", "when": "Kontoauszug" },
-			{ "from": "ingest", "to": "extract-contract", "resource": "document", "when": "Vertrag" },
-			{ "from": "extract-invoice", "to": "enrich", "resource": "invoice" },
-			{ "from": "extract-invoice", "to": "book-open", "resource": "invoice" }
+			{
+				"from": "ingest",
+				"to": "extract-invoice",
+				"resource": "document",
+				"when": "Rechnung",
+				"kind": "data",
+				"message": "document"
+			},
+			{
+				"from": "ingest",
+				"to": "bank",
+				"resource": "document",
+				"when": "Kontoauszug",
+				"kind": "data",
+				"message": "document"
+			},
+			{
+				"from": "ingest",
+				"to": "extract-contract",
+				"resource": "document",
+				"when": "Vertrag",
+				"kind": "data",
+				"message": "document"
+			},
+			{
+				"from": "extract-invoice",
+				"to": "enrich",
+				"resource": "invoice",
+				"kind": "data",
+				"message": "invoice"
+			},
+			{
+				"from": "extract-invoice",
+				"to": "book-open",
+				"resource": "invoice",
+				"kind": "data",
+				"message": "invoice"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "document"
+			},
+			{
+				"kind": "resource",
+				"on": "image"
+			}
 		]
 	},
 	{
@@ -121,7 +248,10 @@
 				"inputs": ["file"],
 				"outputs": ["bank_statement"],
 				"note": "Inhalt hashen + ablegen (UploaderPort); Doppel-Import = No-op",
-				"tools": ["data_crud"]
+				"tools": ["data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "parse-csv",
@@ -129,7 +259,10 @@
 				"actor": "parse",
 				"inputs": ["bank_statement"],
 				"outputs": ["transaction"],
-				"note": "Spalten + Zeilen dekodieren (rowRef Provenance)"
+				"note": "Spalten + Zeilen dekodieren (rowRef Provenance)",
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "transform",
@@ -137,7 +270,10 @@
 				"actor": "transform",
 				"inputs": ["transaction"],
 				"outputs": ["transaction"],
-				"note": "Feld-Mapping per IngestConfig (bank-statement-tx.json) → transactions"
+				"note": "Feld-Mapping per IngestConfig (bank-statement-tx.json) → transactions",
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "dedup",
@@ -146,13 +282,40 @@
 				"inputs": ["transaction"],
 				"outputs": ["transaction"],
 				"note": "Idempotent per key; _source Provenance je Zeile",
-				"tools": ["data_crud"]
+				"tools": ["data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
 			}
 		],
 		"edges": [
-			{ "from": "ingest-csv", "to": "parse-csv", "resource": "bank_statement" },
-			{ "from": "parse-csv", "to": "transform", "resource": "transaction" },
-			{ "from": "transform", "to": "dedup", "resource": "transaction" }
+			{
+				"from": "ingest-csv",
+				"to": "parse-csv",
+				"resource": "bank_statement",
+				"kind": "data",
+				"message": "bank_statement"
+			},
+			{
+				"from": "parse-csv",
+				"to": "transform",
+				"resource": "transaction",
+				"kind": "data",
+				"message": "transaction"
+			},
+			{
+				"from": "transform",
+				"to": "dedup",
+				"resource": "transaction",
+				"kind": "data",
+				"message": "transaction"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "file"
+			}
 		]
 	},
 	{
@@ -165,11 +328,21 @@
 				"name": "Offenen Posten suchen",
 				"actor": "findOpenItem",
 				"inputs": ["transaction"],
-				"outputs": ["open_item"],
+				"outputs": ["open_item", "transaction"],
 				"note": "Match per Betrag / Gegenpartei / IBAN / Datum",
 				"system_prompt": "Finde den offenen Posten, den diese Transaktion ausgleicht (Betrag, Cross-Currency, Gegenpartei, Datum) — oder keinen.",
-				"llm": { "model": "gemma4-31b", "mode": "tool" },
-				"tools": ["pick_match"]
+				"llm": {
+					"model": "gemma4-31b",
+					"mode": "tool"
+				},
+				"tools": ["pick_match"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			},
 			{
 				"id": "settle",
@@ -178,7 +351,10 @@
 				"inputs": ["open_item", "transaction"],
 				"outputs": ["booking"],
 				"note": "Fan-in: offener Posten + Zahlung → Zahlungsbuchung, Status → bezahlt",
-				"tools": ["book_invoice", "data_crud"]
+				"tools": ["book_invoice", "data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "park",
@@ -187,12 +363,35 @@
 				"inputs": ["transaction"],
 				"outputs": ["transaction"],
 				"note": "Dead-letter: Transaktion ohne Beleg → wartet auf Beleg",
-				"tools": ["data_crud"]
+				"tools": ["data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
 			}
 		],
 		"edges": [
-			{ "from": "find-open", "to": "settle", "resource": "open_item", "when": "Treffer" },
-			{ "from": "find-open", "to": "park", "resource": "transaction", "when": "kein Beleg" }
+			{
+				"from": "find-open",
+				"to": "settle",
+				"resource": "open_item",
+				"when": "Treffer",
+				"kind": "data",
+				"message": "open_item"
+			},
+			{
+				"from": "find-open",
+				"to": "park",
+				"resource": "transaction",
+				"when": "kein Beleg",
+				"kind": "data",
+				"message": "transaction"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "event",
+				"on": "transaction"
+			}
 		]
 	},
 	{
@@ -208,8 +407,18 @@
 				"outputs": ["invoice"],
 				"note": "Kunde + Positionen aus dem Prompt",
 				"system_prompt": "Erstelle eine Ausgangsrechnung: Kunde auflösen/anlegen, Positionen (NETTO + tax_treatment). Der Server vergibt die fortlaufende Nummer und rechnet die USt.",
-				"llm": { "model": "gemma4-31b", "mode": "tool" },
-				"tools": ["create_invoice"]
+				"llm": {
+					"model": "gemma4-31b",
+					"mode": "tool"
+				},
+				"tools": ["create_invoice"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			},
 			{
 				"id": "number",
@@ -217,7 +426,10 @@
 				"actor": "assignInvoiceNumber",
 				"inputs": ["invoice"],
 				"outputs": ["invoice"],
-				"note": "R-ID-0001, VAT auto"
+				"note": "R-ID-0001, VAT auto",
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "pdf",
@@ -225,7 +437,10 @@
 				"actor": "saveInvoicePdf",
 				"inputs": ["invoice"],
 				"outputs": ["pdf"],
-				"note": "§14-konform, in PRIVATE store"
+				"note": "§14-konform, in PRIVATE store",
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "book-out",
@@ -233,13 +448,39 @@
 				"actor": "buildOutgoingBooking",
 				"inputs": ["invoice"],
 				"outputs": ["booking"],
-				"note": "Erlös 4400/4300 → Forderung 1200"
+				"note": "Erlös 4400/4300 → Forderung 1200",
+				"supervision": {
+					"strategy": "resume"
+				}
 			}
 		],
 		"edges": [
-			{ "from": "create", "to": "number", "resource": "invoice" },
-			{ "from": "number", "to": "pdf", "resource": "invoice" },
-			{ "from": "number", "to": "book-out", "resource": "invoice" }
+			{
+				"from": "create",
+				"to": "number",
+				"resource": "invoice",
+				"kind": "data",
+				"message": "invoice"
+			},
+			{
+				"from": "number",
+				"to": "pdf",
+				"resource": "invoice",
+				"kind": "data",
+				"message": "invoice"
+			},
+			{
+				"from": "number",
+				"to": "book-out",
+				"resource": "invoice",
+				"kind": "data",
+				"message": "invoice"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "manual"
+			}
 		]
 	},
 	{
@@ -255,8 +496,19 @@
 				"outputs": ["transaction", "contact"],
 				"note": "Fan-out 1→N",
 				"system_prompt": "Extrahiere Kontoinhaber, Saldo und jede Transaktion als JSON nach dem bank_statement-Schema.",
-				"llm": { "model": "gemma4-31b", "vision": true, "mode": "tool" },
-				"tools": ["extract_document", "emit_fields"]
+				"llm": {
+					"model": "gemma4-31b",
+					"vision": true,
+					"mode": "tool"
+				},
+				"tools": ["extract_document", "emit_fields"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			},
 			{
 				"id": "fanout",
@@ -265,10 +517,27 @@
 				"inputs": ["transaction"],
 				"outputs": ["transaction"],
 				"note": "idempotent (dedup_key)",
-				"tools": ["data_crud"]
+				"tools": ["data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
 			}
 		],
-		"edges": [{ "from": "extract-stmt", "to": "fanout", "resource": "transaction" }]
+		"edges": [
+			{
+				"from": "extract-stmt",
+				"to": "fanout",
+				"resource": "transaction",
+				"kind": "data",
+				"message": "transaction"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "bank_statement"
+			}
+		]
 	},
 	{
 		"id": "month-close",
@@ -281,7 +550,14 @@
 				"flowRef": "bank-statement",
 				"inputs": ["bank_statement"],
 				"outputs": ["transaction"],
-				"note": "Composite → Sub-Skill »Kontoauszug«"
+				"note": "Composite → Sub-Skill »Kontoauszug«",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			},
 			{
 				"id": "ingest",
@@ -289,7 +565,14 @@
 				"flowRef": "doc-ingest",
 				"inputs": ["document", "image", "transaction"],
 				"outputs": ["booking"],
-				"note": "Composite → Sub-Skill »Beleg-Ingest«"
+				"note": "Composite → Sub-Skill »Beleg-Ingest«",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			},
 			{
 				"id": "report",
@@ -298,12 +581,32 @@
 				"inputs": ["booking"],
 				"outputs": ["report"],
 				"note": "Leaf (echte Ausführung)",
-				"tools": ["data_crud"]
+				"tools": ["data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
 			}
 		],
 		"edges": [
-			{ "from": "bank", "to": "ingest", "resource": "transaction" },
-			{ "from": "ingest", "to": "report", "resource": "booking" }
+			{
+				"from": "bank",
+				"to": "ingest",
+				"resource": "transaction",
+				"kind": "data",
+				"message": "transaction"
+			},
+			{
+				"from": "ingest",
+				"to": "report",
+				"resource": "booking",
+				"kind": "data",
+				"message": "booking"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "schedule"
+			}
 		]
 	},
 	{
@@ -324,7 +627,10 @@
 				"actor": "gather",
 				"inputs": ["world"],
 				"outputs": ["sand"],
-				"note": "Quelle: Sandblock (Schaufel)"
+				"note": "Quelle: Sandblock (Schaufel)",
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "smelt",
@@ -332,7 +638,10 @@
 				"actor": "furnace",
 				"inputs": ["sand", "fuel"],
 				"outputs": ["glass"],
-				"note": "Rezept: 1 Sand + Brennstoff → 1 Glas (Fan-in: Zutaten → Produkt)"
+				"note": "Rezept: 1 Sand + Brennstoff → 1 Glas (Fan-in: Zutaten → Produkt)",
+				"supervision": {
+					"strategy": "resume"
+				}
 			},
 			{
 				"id": "craft-pane",
@@ -340,12 +649,32 @@
 				"actor": "crafting_table",
 				"inputs": ["glass"],
 				"outputs": ["glass_pane"],
-				"note": "Rezept: 6 Glas → 16 Glasscheiben"
+				"note": "Rezept: 6 Glas → 16 Glasscheiben",
+				"supervision": {
+					"strategy": "resume"
+				}
 			}
 		],
 		"edges": [
-			{ "from": "mine", "to": "smelt", "resource": "sand" },
-			{ "from": "smelt", "to": "craft-pane", "resource": "glass" }
+			{
+				"from": "mine",
+				"to": "smelt",
+				"resource": "sand",
+				"kind": "data",
+				"message": "sand"
+			},
+			{
+				"from": "smelt",
+				"to": "craft-pane",
+				"resource": "glass",
+				"kind": "data",
+				"message": "glass"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "manual"
+			}
 		]
 	}
 ]

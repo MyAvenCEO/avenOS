@@ -7,6 +7,7 @@
 import flowsJson from '../configs/flows.json'
 import runsJson from '../configs/runs.json'
 import type { LlmConfig } from './capability.js'
+import type { LogLevel } from './pipeline/types.js'
 
 /** The typed items that flow between recipes. */
 export type ResourceKind = string
@@ -57,6 +58,34 @@ export type NodeState = 'idle' | 'waiting' | 'running' | 'done' | 'error' | 'par
 export type { JsonSchema, LlmConfig, ToolSpec } from './capability.js'
 export { TOOL_SPECS, toolSpec } from './capability.js'
 
+// ── Actor-model extras (board 0084, all OPTIONAL/additive — map the model onto an Akka-style runtime).
+
+/** A named, typed port (mailbox slot) — for disambiguating multiple inputs/outputs of the same kind. */
+export type Port = {
+	id: string
+	kind: ResourceKind
+	label?: string
+	required?: boolean
+	many?: boolean
+}
+
+/** Supervision strategy for an actor (how the parent handles a failure) + retry/timeout. */
+export type Supervision = {
+	strategy: 'resume' | 'restart' | 'stop' | 'escalate'
+	retry?: { max: number; backoff?: 'none' | 'linear' | 'exponential' }
+	timeout?: number
+}
+
+/** What starts a flow (an actor system): manual, an inbound event/resource, or a schedule. */
+export type Trigger = { kind: 'manual' | 'event' | 'schedule' | 'resource'; on?: ResourceKind }
+
+/** A resource lifecycle = a tiny state machine (generic; e.g. open_item: offen→bezahlt). */
+export type ResourceLifecycle = {
+	kind: ResourceKind
+	states: string[]
+	transitions: { from: string; to: string; on?: string }[]
+}
+
 /** An actor blackbox: a recipe that turns its inbox (inputs) into its output.
  *  Composite/Leaf: a LEAF carries an `actor` (the real execution); a COMPOSITE carries a `flowRef`
  *  (the id of another Flow) and expands into that reusable sub-skill — so flows compose / daisy-chain. */
@@ -76,15 +105,30 @@ export type RecipeNode = {
 	system_prompt?: string
 	/** The LLM config the actor runs with (for LLM steps). */
 	llm?: LlmConfig
-	/** The tools/functions the actor invokes. */
+	/** The tools/functions the actor invokes (ids into the capability `TOOL_SPECS`). */
 	tools?: string[]
+	/** Named typed ports (optional refinement of inputs/outputs). */
+	ports?: { in?: Port[]; out?: Port[] }
+	/** Supervision strategy for this actor. */
+	supervision?: Supervision
+	/** Generic actor config for non-LLM actors (a parser, an HTTP call, a furnace…). */
+	config?: Record<string, unknown>
 }
 
-/** A directed connection: one node's output feeds another node's inbox. `when` = a branch guard
- *  (e.g. the classified doc type) — that's how a shared entry point fans into conditional flows. */
-export type Edge = { from: string; to: string; resource?: ResourceKind; when?: string }
+/** A directed connection (a message channel). `when` = a branch guard; `kind` = data (a resource
+ *  message), control (ordering/trigger), or error (failure route). `message` = the resource sent. */
+export type Edge = {
+	from: string
+	to: string
+	resource?: ResourceKind
+	when?: string
+	kind?: 'data' | 'control' | 'error'
+	message?: ResourceKind
+	sourcePort?: string
+	targetPort?: string
+}
 
-/** A skill, modeled as a graph of recipe nodes. */
+/** A skill (an actor system), modeled as a graph of recipe nodes. */
 export type Flow = {
 	id: string
 	name: string
@@ -93,16 +137,20 @@ export type Flow = {
 	edges: Edge[]
 	/** Optional domain label map for resource kinds (e.g. Minecraft items). */
 	resourceLabels?: Record<string, string>
+	/** What starts this flow (event sources / schedule / manual). board 0084. */
+	triggers?: Trigger[]
 }
 
 /** A run of a flow: the current state of each node. */
 export type FlowInstance = { flowId: string; nodeStates: Record<string, NodeState> }
 
-/** One step of an instance run's trace — what an actor did, when, with which resources. */
+/** One step of an instance run's trace = a SPAN (event-sourced): an actor received a message + emitted
+ *  messages. Aligns with the aven-skills pipeline `StageEvent`/`Logger` model; nests via `parentSpanId`
+ *  (composite sub-flows), repeats per item for fan-out, and carries lineage via produced/consumed ids. */
 export type TraceStep = {
 	nodeId: string
 	state: NodeState
-	/** human/relative timestamp, e.g. '+12s' or 'heute 10:14'. */
+	/** human/relative timestamp (span start), e.g. '+12s' or 'heute 10:14'. */
 	at?: string
 	inputs?: string[]
 	outputs?: string[]
@@ -111,6 +159,19 @@ export type TraceStep = {
 	vibe?: string
 	/** The payload handed to that vibe view (shape depends on `vibe`). */
 	vibeData?: unknown
+	// ── span fields (board 0084, optional/additive) ──
+	/** This span's id; `parentSpanId` nests a composite's sub-flow spans. */
+	spanId?: string
+	parentSpanId?: string
+	/** span end + attempt# (supervision retries). */
+	endedAt?: string
+	attempt?: number
+	/** emitted output messages (lineage: produced resource ids). */
+	emitted?: string[]
+	/** structured log events within the span (aligned with the pipeline Logger). */
+	events?: { level: LogLevel; at?: string; message: string }[]
+	/** cost/metrics for this span (LLM tokens, duration). */
+	cost?: { tokens?: number; ms?: number }
 }
 
 /** An INSTANCE of a Flow (the template/class): one execution with its trace. board 0083. */
@@ -212,9 +273,11 @@ export function flowDepths(flow: Flow): Record<string, number> {
 	return depth
 }
 
-/** Structural problems with a flow (edges referencing missing nodes, empty in/out). Empty = valid. */
+/** Structural problems with a flow. Empty = valid. board 0084 adds (additive, satisfied by all real
+ *  flows): edge resource type-compatibility, flow-level cycle detection, and unreachable-node detection. */
 export function validateFlow(flow: Flow): string[] {
-	const ids = new Set(flow.nodes.map((n) => n.id))
+	const byId = new Map(flow.nodes.map((n) => [n.id, n]))
+	const ids = new Set(byId.keys())
 	const problems: string[] = []
 	for (const n of flow.nodes) {
 		if (!n.actor && !n.flowRef)
@@ -225,8 +288,74 @@ export function validateFlow(flow: Flow): string[] {
 	for (const e of flow.edges) {
 		if (!ids.has(e.from)) problems.push(`${flow.id}: edge.from "${e.from}" missing`)
 		if (!ids.has(e.to)) problems.push(`${flow.id}: edge.to "${e.to}" missing`)
+		// type-compat: the message must be produced by the source and accepted by the target.
+		const msg = e.message ?? e.resource
+		const from = byId.get(e.from)
+		const to = byId.get(e.to)
+		if (msg && from && to) {
+			if (!from.outputs.includes(msg))
+				problems.push(`${flow.id}: edge ${e.from}→${e.to} sends "${msg}" not in ${e.from}.outputs`)
+			if (!to.inputs.includes(msg))
+				problems.push(`${flow.id}: edge ${e.from}→${e.to} sends "${msg}" not in ${e.to}.inputs`)
+		}
+	}
+	// flow-level cycle detection (DFS over the edge graph).
+	const adj = new Map<string, string[]>()
+	for (const e of flow.edges) adj.set(e.from, [...(adj.get(e.from) ?? []), e.to])
+	const WHITE = 0
+	const GREY = 1
+	const BLACK = 2
+	const color = new Map<string, number>()
+	const visit = (id: string): boolean => {
+		color.set(id, GREY)
+		for (const nxt of adj.get(id) ?? []) {
+			const c = color.get(nxt) ?? WHITE
+			if (c === GREY) return true
+			if (c === WHITE && visit(nxt)) return true
+		}
+		color.set(id, BLACK)
+		return false
+	}
+	for (const n of flow.nodes)
+		if ((color.get(n.id) ?? WHITE) === WHITE && visit(n.id))
+			problems.push(`${flow.id}: cycle detected (not a DAG)`)
+	// unreachable / orphan nodes: in a multi-node flow, a node that appears in no edge is disconnected.
+	if (flow.nodes.length > 1) {
+		const wired = new Set<string>()
+		for (const e of flow.edges) {
+			wired.add(e.from)
+			wired.add(e.to)
+		}
+		for (const n of flow.nodes)
+			if (!wired.has(n.id)) problems.push(`${flow.id}/${n.id}: unreachable (no edges)`)
 	}
 	return problems
+}
+
+/** The node↔actor / edge↔message / composite↔supervision-subtree / trace↔event-log mapping — the
+ *  contract that keeps the descriptive model aligned with a future actor (Akka-style) runtime. 0084. */
+export const ACTOR_MAPPING: { flow: string; actor: string }[] = [
+	{ flow: 'RecipeNode', actor: 'Actor (id=address, inputs=mailbox, state=behavior)' },
+	{ flow: 'ResourceKind on an edge', actor: 'typed Message' },
+	{ flow: 'Edge', actor: 'message channel (tell); kind data/control/error' },
+	{ flow: 'Composite (flowRef)', actor: 'child actor system / supervision subtree' },
+	{ flow: 'Flow', actor: 'ActorSystem' },
+	{ flow: 'FlowRun / TraceStep', actor: 'event-sourced span log (StageEvent/Logger)' },
+	{ flow: 'waiting', actor: 'stash' },
+	{ flow: 'parked', actor: 'dead-letters' },
+	{ flow: 'supervision', actor: 'supervision strategy (resume/restart/stop/escalate)' },
+	{ flow: 'triggers', actor: 'event sources' }
+]
+
+/** A generic resource lifecycle (state machine). Example: the open-item offen→bezahlt lifecycle. */
+export const OPEN_ITEM_LIFECYCLE: ResourceLifecycle = {
+	kind: 'open_item',
+	states: [...OPEN_ITEM_STATUS],
+	transitions: [
+		{ from: 'offen', to: 'teilbezahlt', on: 'Teilzahlung' },
+		{ from: 'offen', to: 'bezahlt', on: 'Zahlung' },
+		{ from: 'teilbezahlt', to: 'bezahlt', on: 'Restzahlung' }
+	]
 }
 
 const NODE_SCHEMA = {
@@ -243,7 +372,10 @@ const NODE_SCHEMA = {
 		note: { type: ['string', 'null'] },
 		system_prompt: { type: ['string', 'null'] },
 		llm: { type: ['object', 'null'], additionalProperties: true },
-		tools: { type: ['array', 'null'], items: { type: 'string' } }
+		tools: { type: ['array', 'null'], items: { type: 'string' } },
+		ports: { type: ['object', 'null'], additionalProperties: true },
+		supervision: { type: ['object', 'null'], additionalProperties: true },
+		config: { type: ['object', 'null'], additionalProperties: true }
 	}
 } as const
 
@@ -258,6 +390,7 @@ export const FLOW_SCHEMA = {
 		description: { type: 'string' },
 		nodes: { type: 'array', minItems: 1, items: NODE_SCHEMA },
 		resourceLabels: { type: ['object', 'null'], additionalProperties: { type: 'string' } },
+		triggers: { type: ['array', 'null'], items: { type: 'object', additionalProperties: true } },
 		edges: {
 			type: 'array',
 			items: {
@@ -268,7 +401,11 @@ export const FLOW_SCHEMA = {
 					from: { type: 'string' },
 					to: { type: 'string' },
 					resource: { type: ['string', 'null'] },
-					when: { type: ['string', 'null'] }
+					when: { type: ['string', 'null'] },
+					kind: { type: ['string', 'null'] },
+					message: { type: ['string', 'null'] },
+					sourcePort: { type: ['string', 'null'] },
+					targetPort: { type: ['string', 'null'] }
 				}
 			}
 		}

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import Ajv from 'ajv'
 import bankTxConfig from '../configs/bank-statement-tx.json'
 import {
+	ACTOR_MAPPING,
 	currentStepIndex,
 	EXAMPLE_FLOWS,
 	EXAMPLE_RUNS,
@@ -13,6 +14,7 @@ import {
 	isFanIn,
 	isFanOut,
 	isLeaf,
+	OPEN_ITEM_LIFECYCLE,
 	OPEN_ITEM_STATUS,
 	RESOURCE_LABEL,
 	resourceSchema,
@@ -262,5 +264,101 @@ describe('flow / recipe schema', () => {
 		const inst = exampleInstance(f)
 		expect(Object.keys(inst.nodeStates).sort()).toEqual(f.nodes.map((n) => n.id).sort())
 		expect(inst.nodeStates[f.nodes[0].id]).toBe('done')
+	})
+
+	// ── Phase B: actor-aligned engine v2 ──────────────────────────────────────────────────────────
+
+	test('universal-first: a generic non-bookkeeping flow validates + flattens', () => {
+		const generic = {
+			id: 'a-to-b',
+			name: 'Generic A→B',
+			description: 'Arbitrary domain: an actor turns an a into a b.',
+			nodes: [
+				{ id: 'mk', name: 'Make', actor: 'make', inputs: ['a'], outputs: ['b'] },
+				{ id: 'use', name: 'Use', actor: 'use', inputs: ['b'], outputs: ['c'] }
+			],
+			edges: [{ from: 'mk', to: 'use', resource: 'b' }]
+		}
+		expect(validateSchema(generic)).toBe(true)
+		expect(validateFlow(generic as Parameters<typeof validateFlow>[0])).toEqual([])
+		const depth = flowDepths(generic as Parameters<typeof flowDepths>[0])
+		expect(depth.use).toBeGreaterThan(depth.mk)
+	})
+
+	test('every flow carries the explicit actor fields (edge.kind, node.supervision, flow.triggers)', () => {
+		for (const f of EXAMPLE_FLOWS) {
+			expect(Array.isArray(f.triggers) && f.triggers.length > 0).toBe(true)
+			expect(f.nodes.every((n) => !!n.supervision)).toBe(true)
+			expect(f.edges.every((e) => !!e.kind)).toBe(true)
+		}
+		// incl. the domain-agnostic Minecraft flow
+		const glass = EXAMPLE_FLOWS.find((f) => f.id === 'minecraft-glass')!
+		expect(glass.nodes.every((n) => !!n.supervision)).toBe(true)
+	})
+
+	test('validateFlow flags a cycle, an unreachable node, and a type-incompatible edge', () => {
+		const cyclic = {
+			id: 'cyc',
+			name: 'Cyclic',
+			description: '',
+			nodes: [
+				{ id: 'x', name: 'X', actor: 'x', inputs: ['a'], outputs: ['a'] },
+				{ id: 'y', name: 'Y', actor: 'y', inputs: ['a'], outputs: ['a'] }
+			],
+			edges: [
+				{ from: 'x', to: 'y', resource: 'a' },
+				{ from: 'y', to: 'x', resource: 'a' }
+			]
+		} as Parameters<typeof validateFlow>[0]
+		expect(validateFlow(cyclic).some((p) => /cycle/.test(p))).toBe(true)
+
+		const orphan = {
+			id: 'orp',
+			name: 'Orphan',
+			description: '',
+			nodes: [
+				{ id: 'a', name: 'A', actor: 'a', inputs: ['x'], outputs: ['y'] },
+				{ id: 'b', name: 'B', actor: 'b', inputs: ['x'], outputs: ['y'] },
+				{ id: 'lonely', name: 'L', actor: 'l', inputs: ['z'], outputs: ['w'] }
+			],
+			edges: [{ from: 'a', to: 'b', resource: 'y' }]
+		} as Parameters<typeof validateFlow>[0]
+		expect(validateFlow(orphan).some((p) => /unreachable/.test(p))).toBe(true)
+
+		const mistyped = {
+			id: 'mis',
+			name: 'Mistyped',
+			description: '',
+			nodes: [
+				{ id: 'a', name: 'A', actor: 'a', inputs: ['x'], outputs: ['y'] },
+				{ id: 'b', name: 'B', actor: 'b', inputs: ['z'], outputs: ['w'] }
+			],
+			edges: [{ from: 'a', to: 'b', resource: 'y' }]
+		} as Parameters<typeof validateFlow>[0]
+		// 'y' is produced by a but NOT accepted by b (b.inputs = [z])
+		expect(validateFlow(mistyped).some((p) => /not in b\.inputs/.test(p))).toBe(true)
+	})
+
+	test('ACTOR_MAPPING encodes the node↔actor / trace↔event-log contract', () => {
+		const froms = ACTOR_MAPPING.map((m) => m.flow)
+		expect(froms).toContain('RecipeNode')
+		expect(froms).toContain('Composite (flowRef)')
+		expect(ACTOR_MAPPING.find((m) => m.flow === 'waiting')?.actor).toMatch(/stash/)
+		expect(ACTOR_MAPPING.find((m) => m.flow === 'parked')?.actor).toMatch(/dead-letter/)
+		// the generic resource lifecycle is wired for open_item
+		expect(OPEN_ITEM_LIFECYCLE.states).toEqual([...OPEN_ITEM_STATUS])
+	})
+
+	test('event-sourced trace: nested spans + per-item fan-out + lineage', () => {
+		const run = EXAMPLE_RUNS.find((r) => r.id === 'run-tx-import')!
+		// spans + nesting
+		expect(run.trace.some((s) => s.spanId && s.parentSpanId)).toBe(true)
+		// per-item fan-out: ≥2 spans for the same node (transform)
+		const transforms = run.trace.filter((s) => s.nodeId === 'transform')
+		expect(transforms.length).toBeGreaterThanOrEqual(2)
+		// lineage: ≥2 per-item child spans each emit a produced-resource id
+		expect(transforms.filter((s) => (s.emitted?.length ?? 0) >= 1).length).toBeGreaterThanOrEqual(2)
+		// structured log events aligned with the pipeline Logger
+		expect(run.trace.some((s) => (s.events?.length ?? 0) >= 1)).toBe(true)
 	})
 })
