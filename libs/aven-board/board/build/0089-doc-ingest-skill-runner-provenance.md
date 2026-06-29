@@ -136,6 +136,14 @@ rg -n "sparkWriteBytes" libs/betterauth/src/skills-run.ts   # expect: empty (mai
 
 Newest entry first.
 
+- `2026-06-29` — **Build step 2 DONE.** Generic flow runner (`aven-skills/src/runner/runner.ts`):
+  `runFlow` executes ANY Flow by resolving each node's actor from an injected registry (NO
+  skill-specific code), longest-path order, threads typed resources along a bus, returns a FlowRun
+  trace + final outputs. 3 runner tests + the artifact test pass (4/4), tsc clean. Unblocked the
+  server by copying `0016_chain.ts` into the worktree UNTRACKED (won't be committed) — server boots,
+  `0017_artifact` applied. **Remaining:** step 3 (document type + `krasi` provenance via the 0088
+  engine), step 4 (storeDocument + real gemma4-31b classify actors), step 5 (run endpoint + flow_run),
+  step 6 (`run_skill` chat tool), step 7 (live e2e verify).
 - `2026-06-29` — **Build step 1 DONE + verified.** `ArtifactStore` port in aven-skills (content-addressed;
   `memoryArtifactStore` + a Postgres-`bytea` `pgArtifactStore`) + the `artifact` table migration
   (renumbered **0017** to avoid colliding with the main checkout's uncommitted `0016_chain` WIP).
