@@ -5,7 +5,7 @@ owner: claude
 created: 2026-06-29
 updated: 2026-06-29
 tags: [postgres, skills, runner, provenance, predication, artifact]
-goal: Running the `doc-ingest` skill (config loaded from the `flow` table) through a NEW generic flow runner ingests one real document end-to-end on mainnet Postgres — proven by a live run plus tests: (1) the raw bytes are stored content-addressed in a new `artifact` table (Postgres bytea) behind an abstracted ArtifactStore interface and are retrievable by sha256 (put→get round-trip test exit 0; SELECT shows the row + matching octet_length); (2) the classified document (real gemma4-31b vision) is stored as a `document` composite type via the 0088 engine — data_crud(document,list) returns its title/kind/summary; (3) GENERIC source provenance: `krasi` predications link the document → its artifact (sha256) → the run, queryable via the engine; (4) the runner is generic — a unit test runs a stub 2-node flow through it (exit 0), and it is NOT doc-ingest-specific; and `bun run check` (aven-skills + betterauth) + the new tests exit 0. aven-db CRDT untouched; only doc-ingest's actors are implemented (other skills are follow-on).
+goal: Running the `doc-ingest` skill (config loaded from the `flow` table) through a NEW generic flow runner ingests one real document end-to-end on mainnet Postgres — proven by a live run plus tests: (1) the raw bytes are stored content-addressed in a new `artifact` table (Postgres bytea) behind an abstracted ArtifactStore interface and are retrievable by sha256 (put→get round-trip test exit 0; SELECT shows the row + matching octet_length); (2) the classified document (real gemma4-31b vision) is stored as a `document` composite type via the 0088 engine — data_crud(document,list) returns its title/kind/summary; (3) GENERIC source provenance: `krasi` predications link the document → its artifact (sha256) → the run, queryable via the engine; (4) the runner is generic — a unit test runs a stub 2-node flow through it (exit 0), and it is NOT doc-ingest-specific; (5) the skill is triggerable from the NORMAL CHAT — a `run_skill` LLM tool invokes the runner for the signed-in user, proven by a live chat-driven run; and `bun run check` (aven-skills + betterauth) + the new tests exit 0. aven-db CRDT untouched; only doc-ingest's actors are implemented (other skills are follow-on).
 ---
 
 # Doc-ingest on the generic runner + generic provenance/artifact layers
@@ -43,6 +43,10 @@ See [[universal-predication-schema-0084]] (0088 engine), [[two-layer-schema-spli
 - **Artifact backend:** Postgres `bytea` (all-in-Neon), behind an abstracted `ArtifactStore` interface.
 - **Classify step:** the **real** gemma4-31b vision call (no stub for the skill itself).
 - **Provenance:** generic, as predications — `krasi` (source) linking document → artifact (+ run).
+- **Trigger surface:** the skill runs from the **normal chat** — a `run_skill` LLM tool (alongside
+  `data_crud` in the AI tool-loop) invokes the generic runner server-side for the signed-in user;
+  attaching a document and asking to "ingest" it triggers doc-ingest. `POST /api/skills/:id/run` is
+  the underlying mechanism the tool calls.
 
 ## Approach
 
@@ -79,7 +83,9 @@ backend; mailboxes/supervision/parallelism/HITL in the runner (synchronous topol
    `classify_document` (→ real gemma4-31b vision); persistence writes document + `krasi`. **Checkpoint.**
 5. **Run endpoint + flow_run** — generic `POST /api/skills/:id/run` loads the flow, runs it via the
    runner, persists a `flow_run` trace; wire doc-ingest end-to-end. **Checkpoint.**
-6. **Verify** — live real-document ingest + unit tests + repo gates.
+6. **Chat trigger** — a `run_skill` tool in the AI tool-loop invokes the runner; a chat turn
+   ("ingest this document" + an attachment) runs doc-ingest from the normal chat. **Checkpoint.**
+7. **Verify** — live real-document ingest (via chat + endpoint) + unit tests + repo gates.
 
 ## Files to touch
 
@@ -102,6 +108,7 @@ Each provable from the transcript.
 - [ ] `document` type registered in `predicate_type`; `data_crud(document, list)` returns the classified doc's title/kind/summary.
 - [ ] **Generic provenance:** `krasi` predications link the document → its artifact (sha256) → the run — shown by a SELECT / `data_crud` query.
 - [ ] Live end-to-end: `POST /api/skills/doc-ingest/run` with a real file → artifact stored, document predications created, provenance linked, a `flow_run` trace persisted (real gemma4-31b classify).
+- [ ] The skill runs from the **normal chat** — a `run_skill` tool call (a live chat turn) triggers doc-ingest end-to-end.
 - [ ] aven-db CRDT untouched (no aven-db/spark writes on this path) — `rg` for `sparkWriteBytes` on the new path empty.
 - [ ] `bun run check` (aven-skills + betterauth) + the new tests exit 0.
 
@@ -129,6 +136,16 @@ rg -n "sparkWriteBytes" libs/betterauth/src/skills-run.ts   # expect: empty (mai
 
 Newest entry first.
 
+- `2026-06-29` — **Build step 1 DONE + verified.** `ArtifactStore` port in aven-skills (content-addressed;
+  `memoryArtifactStore` + a Postgres-`bytea` `pgArtifactStore`) + the `artifact` table migration
+  (renumbered **0017** to avoid colliding with the main checkout's uncommitted `0016_chain` WIP).
+  Verified: interface test passes; live `pgArtifactStore` round-trip on the samuel Neon DB
+  (put→sha256→get identical, idempotent, bytea via base64 decode/encode). tsc clean (both libs).
+  **BLOCKER (server-dependent steps 4–6):** the shared `samuel` Neon dev DB already has `0016_chain`
+  applied (main-checkout WIP) but this worktree lacks the file → Kysely refuses to boot the auth
+  server ("corrupted migrations: 0016_chain missing"). Steps 2–3 (pure runner + document type) are
+  verifiable without the server via direct DB scripts; 4–6 (real LLM classify, run endpoint, chat
+  tool) need the server, so the `0016_chain` divergence must be resolved first.
 - `2026-06-29` — Discovery. Mapped current state: doc-ingest config already in the `flow` table, but
   NOTHING executes (descriptive only); raw file currently goes to the spark fs (aven-db). User locked:
   minimal-but-GENERIC runner (works for all basic skills; doc-ingest first), Postgres-bytea artifact

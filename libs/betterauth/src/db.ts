@@ -99,6 +99,16 @@ export interface PredicateTypeTable {
 	updated_at: Generated<Date>
 }
 
+// Content-addressed raw-artifact store (board 0089) — original source bytes for any ingesting skill,
+// keyed by sha256 (bytea). Behind the abstracted ArtifactStore; only the hash enters the predications.
+export interface ArtifactTable {
+	sha256: string
+	bytes: unknown
+	mime: string
+	size: number
+	created_at: Generated<Date>
+}
+
 export type DataHistoryOperation = 'UPDATE' | 'DELETE'
 
 export interface DataSchemaHistoryTable {
@@ -192,6 +202,7 @@ export interface Database {
 	data_value: DataValueTable
 	flow: FlowTable
 	predicate_type: PredicateTypeTable
+	artifact: ArtifactTable
 	data_schema_history: DataSchemaHistoryTable
 	data_value_history: DataValueHistoryTable
 	polar_event: PolarEventTable

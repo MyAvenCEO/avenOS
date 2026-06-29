@@ -57,6 +57,8 @@ export {
 	silentLogger,
 	stage
 } from './pipeline/types'
+// board 0089 — the generic flow runner's ports (the swappable raw-artifact store).
+export { type ArtifactStore, memoryArtifactStore, type StoredArtifact } from './runner/ports'
 
 import type { RawSource } from './ingestor/stages/ingest'
 
