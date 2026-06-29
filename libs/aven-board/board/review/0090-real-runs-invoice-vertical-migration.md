@@ -112,6 +112,14 @@ rg -n "EXAMPLE_RUNS|configs/runs.json" libs app           # expect: empty
 
 Newest entry first.
 
+- `2026-06-29` — **Review feedback addressed (3 fixes).** (1) **Composite reuse:** invoice-ingest now
+  `flowRef`s doc-ingest (store + classify) then extracts — the runner flattens composites (flattenFlow)
+  before running; classify preserves bytes so the downstream extract can still vision. Trace verified:
+  `ingest-doc/ingest → ingest-doc/classify → extract` (migration 0023 re-seeds the composite).
+  (2) **Original invoice extraction:** extract_invoice now uses the REAL doctype via `getDoctype('invoice')`
+  — its proven system prompt + rich tool-call schema (header/vendor/totals/payments/statements) — mapped
+  to the ontology invoice headline fields. (3) **DB detail aside:** every relationship reference is now a
+  CLICKABLE link to its DB instance (jumps + re-focuses the detail). tsc + svelte-check clean.
 - `2026-06-29` — **Steps 2–5 DONE + verified — card complete.** Step 2: `invoice` composite type
   (janta/jdima/vendor + REUSED due/krasi/finti) registered (migration 0020); old blob parked →
   `invoice_blob_legacy` (0021). Step 3: generalized the vision pass (`visionExtract`); `extract_invoice`

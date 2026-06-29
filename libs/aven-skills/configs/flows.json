@@ -442,12 +442,12 @@
 	{
 		"id": "invoice-ingest",
 		"name": "Invoice Ingest",
-		"description": "Ingest an invoice: store the file content-addressed → extract its fields via vision. Yields an ontology invoice with provenance.",
+		"description": "REUSE Document Ingest (store + classify), then the brain extracts the invoice fields in invoice-mode. Yields an ontology invoice with provenance back to the source document.",
 		"nodes": [
 			{
-				"id": "ingest",
-				"name": "Ingest",
-				"actor": "storeDocument",
+				"id": "ingest-doc",
+				"name": "Document Ingest",
+				"flowRef": "doc-ingest",
 				"inputs": ["file", "image"],
 				"outputs": ["document"],
 				"supervision": { "strategy": "resume" }
@@ -465,7 +465,7 @@
 			}
 		],
 		"edges": [
-			{ "from": "ingest", "to": "extract", "resource": "document", "kind": "data", "message": "document" }
+			{ "from": "ingest-doc", "to": "extract", "resource": "document", "kind": "data", "message": "document" }
 		],
 		"triggers": [
 			{ "kind": "resource", "on": "file" },

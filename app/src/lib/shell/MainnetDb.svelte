@@ -173,7 +173,7 @@ $effect(() => {
 
 // Every predication that mentions `focusId` in ANY place (incl. its own primary row), as short
 // "predicate sentences": the predicate (+ gismu) and its places as resolved role/value pairs.
-type SentencePart = { role: string; value: string; isRef: boolean }
+type SentencePart = { role: string; value: string; ref: Resolved | null }
 type Sentence = { id: string; predicate: string; gismu: string | null; parts: SentencePart[] }
 function relatedPredications(focusId: string): Sentence[] {
 	const out: Sentence[] = []
@@ -184,10 +184,11 @@ function relatedPredications(focusId: string): Sentence[] {
 			const mentions =
 				row.id === focusId || meta.places.some((p) => String(data[p.pos] ?? '') === focusId)
 			if (!mentions) continue
-			const parts = meta.places.map((p) =>
+			// ref places carry their resolved target (clickable → jump to that DB instance); value places plain.
+			const parts: SentencePart[] = meta.places.map((p) =>
 				p.ref
-					? { role: p.role, value: resolveRef(data[p.pos]).label, isRef: true }
-					: { role: p.role, value: data[p.pos] == null ? '—' : String(data[p.pos]), isRef: false }
+					? { role: p.role, value: '', ref: resolveRef(data[p.pos]) }
+					: { role: p.role, value: data[p.pos] == null ? '—' : String(data[p.pos]), ref: null }
 			)
 			out.push({ id: row.id, predicate: meta.title || tbl.name, gismu: meta.gismu, parts })
 		}
@@ -484,9 +485,25 @@ $effect(() => {
 							</div>
 							<div class="flex flex-wrap gap-x-2.5 gap-y-1 text-[12px]">
 								{#each s.parts as part (part.role)}
-									<span>
+									<span class="inline-flex items-center gap-1">
 										<span class="text-muted-foreground uppercase opacity-60">{part.role}</span>
-										<span class="text-foreground {part.isRef ? 'italic' : ''}">{part.value}</span>
+										{#if part.ref}
+											{#if part.ref.kind === 'row'}
+												{@const target = part.ref.target}
+												<button
+													type="button"
+													class="text-foreground hover:text-primary cursor-pointer underline decoration-dotted underline-offset-2"
+													title={`Go to ${part.ref.label}`}
+													onclick={() => gotoRef(target)}>{part.ref.label}</button
+												>
+											{:else if part.ref.kind === 'you'}
+												<span class="text-foreground italic">{part.ref.label}</span>
+											{:else}
+												<span class="text-muted-foreground font-mono">{part.ref.label}</span>
+											{/if}
+										{:else}
+											<span class="text-foreground">{part.value}</span>
+										{/if}
 									</span>
 								{/each}
 							</div>

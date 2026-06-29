@@ -3,9 +3,11 @@ import {
 	type ActorRegistry,
 	type ArtifactStore,
 	type Flow,
+	flattenFlow,
 	type FlowRun,
 	runFlow
 } from '@avenos/aven-skills'
+import { getDoctype } from '@avenos/aven-vibes/doctypes'
 import type { Context } from 'hono'
 import { pgArtifactStore } from './artifact-store'
 import { auth } from './auth'
@@ -98,17 +100,6 @@ async function visionExtract(
 	}
 }
 
-const INVOICE_EXTRACT_SCHEMA = {
-	type: 'object',
-	properties: {
-		number: { type: 'string', description: 'The invoice number / identifier.' },
-		amount: { type: 'string', description: 'The total amount as a decimal string, e.g. "1200.00".' },
-		vendor: { type: 'string', description: 'The vendor / biller name.' },
-		due: { type: 'string', description: 'The due date as ISO yyyy-mm-dd, or empty if none.' }
-	},
-	required: ['number', 'amount', 'vendor']
-}
-
 /** The skills' actors, closing over the ArtifactStore. The `document` resource carries the bytes
  *  between ingest→classify/extract (for vision); only the sha256 is persisted to predications. The
  *  runner is GENERIC — adding a skill = adding an actor here (+ its config + ontology type). board 0089/0090. */
@@ -132,28 +123,38 @@ function skillActors(store: ArtifactStore): ActorRegistry {
 				summary: ''
 			}
 			return {
+				// preserve bytes+mime so a downstream step (composite flows, e.g. invoice extract after
+				// classify) can still run vision; the persistence ignores them — only the sha256 lands.
 				document: {
 					artifact: doc.artifact,
+					mime: doc.mime,
+					bytes: doc.bytes,
 					title: fields.title,
 					kind: fields.kind,
 					summary: fields.summary
 				}
 			}
 		},
-		extract_invoice: async ({ node, inputs }) => {
+		extract_invoice: async ({ inputs }) => {
 			const doc = inputs.document as { artifact: string; mime: string; bytes: Uint8Array }
 			const b64 = Buffer.from(doc.bytes).toString('base64')
-			const sys =
-				node.system_prompt ??
-				'You are a bookkeeper. Extract the invoice fields: number, total amount as a decimal, vendor name, and due date (ISO yyyy-mm-dd).'
-			const f = (await visionExtract(sys, INVOICE_EXTRACT_SCHEMA, { mime: doc.mime, b64 })) ?? {}
+			// Use the ORIGINAL working invoice doctype — its proven system prompt + rich tool-call schema
+			// (header/vendor/totals/payments/statements). board 0064/0090.
+			const doctype = getDoctype('invoice')
+			const rich =
+				(doctype ? await visionExtract(doctype.system_prompt, doctype.schema, { mime: doc.mime, b64 }) : null) ??
+				{}
+			const header = (rich.header ?? {}) as Record<string, unknown>
+			const totals = (rich.totals ?? {}) as Record<string, unknown>
+			const vendor = (rich.vendor ?? {}) as Record<string, unknown>
+			// Map the rich extraction → the ontology invoice headline fields (richer lines = follow-on).
 			return {
 				invoice: {
 					artifact: doc.artifact,
-					number: f.number ?? 'unknown',
-					amount: f.amount ?? '0',
-					vendor: f.vendor ?? '',
-					due: f.due ?? ''
+					number: String(header.invoice_number ?? 'N/A'),
+					amount: totals.invoice_total != null ? String(totals.invoice_total) : '0',
+					vendor: String(vendor.name ?? ''),
+					due: String(header.due_date ?? header.issue_date ?? '')
 				}
 			}
 		}
@@ -177,6 +178,23 @@ async function loadFlow(id: string): Promise<Flow | null> {
 		triggers: (asJson(row.triggers) as Flow['triggers']) ?? undefined,
 		resourceLabels: (asJson(row.resource_labels) as Flow['resourceLabels']) ?? undefined
 	}
+}
+
+/** All skill Flow configs (for composite flowRef resolution via flattenFlow). */
+async function loadAllFlows(): Promise<Flow[]> {
+	const rows = await db()
+		.selectFrom('flow')
+		.select(['id', 'name', 'description', 'nodes', 'edges', 'triggers', 'resource_labels'])
+		.execute()
+	return rows.map((row) => ({
+		id: row.id,
+		name: row.name,
+		description: row.description,
+		nodes: asJson(row.nodes) as Flow['nodes'],
+		edges: asJson(row.edges) as Flow['edges'],
+		triggers: (asJson(row.triggers) as Flow['triggers']) ?? undefined,
+		resourceLabels: (asJson(row.resource_labels) as Flow['resourceLabels']) ?? undefined
+	}))
 }
 
 async function persistFlowRun(uid: string, run: FlowRun): Promise<void> {
@@ -210,8 +228,11 @@ export async function runSkillForUser(
 ): Promise<RunSkillResult> {
 	const flow = await loadFlow(skillId)
 	if (!flow) throw new Error(`no skill "${skillId}"`)
+	// Flatten composite (flowRef) steps so a skill can REUSE another skill — invoice-ingest reuses
+	// doc-ingest (store + classify) then extracts. flattenFlow is a no-op for already-flat flows.
+	const flat = flattenFlow(flow, await loadAllFlows())
 	const runId = `run_${randomUUID().slice(0, 12)}`
-	const { run, outputs } = await runFlow(flow, {
+	const { run, outputs } = await runFlow(flat, {
 		actors: skillActors(pgArtifactStore()),
 		runId,
 		now: () => new Date().toISOString(),
