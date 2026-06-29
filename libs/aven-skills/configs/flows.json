@@ -1,8 +1,8 @@
 [
 	{
-		"id": "intake",
-		"name": "Dokument-Intake",
-		"description": "Wiederverwendbarer Sub-Skill: Beleg importieren → inhaltsadressiert ablegen. Klassifizieren passt der aufrufende Flow nach Bedarf an.",
+		"id": "ingest",
+		"name": "Dokument-Ingest",
+		"description": "Wiederverwendbarer Skill: rohe Datei → importieren → ablegen → klassifizieren → je nach Belegart extrahieren. Liefert ein strukturiertes Dokument (Rechnung | Transaktionen | Vertrag).",
 		"nodes": [
 			{
 				"id": "import",
@@ -26,43 +26,6 @@
 				"tools": ["sparkWriteBytes"],
 				"supervision": {
 					"strategy": "resume"
-				}
-			}
-		],
-		"edges": [
-			{
-				"from": "import",
-				"to": "store",
-				"resource": "document",
-				"kind": "data",
-				"message": "document"
-			}
-		],
-		"triggers": [
-			{
-				"kind": "resource",
-				"on": "file"
-			}
-		]
-	},
-	{
-		"id": "doc-ingest",
-		"name": "Beleg-Ingest",
-		"description": "Beleg aufnehmen (Sub-Skill »Dokument-Ingest«: Import → Ablage → Klassifizieren) → je nach Belegart verzweigen (Rechnung, Kontoauszug-Sub-Skill, Vertrag) → anreichern, abgleichen, buchen. Komponiert wiederverwendbare Sub-Skills.",
-		"nodes": [
-			{
-				"id": "intake",
-				"name": "Beleg aufnehmen",
-				"flowRef": "intake",
-				"inputs": ["file", "image"],
-				"outputs": ["document"],
-				"note": "Composite → Sub-Skill »Dokument-Intake« (Import → Ablage)",
-				"supervision": {
-					"strategy": "restart",
-					"retry": {
-						"max": 2,
-						"backoff": "exponential"
-					}
 				}
 			},
 			{
@@ -143,6 +106,78 @@
 						"backoff": "exponential"
 					}
 				}
+			}
+		],
+		"edges": [
+			{
+				"from": "import",
+				"to": "store",
+				"resource": "document",
+				"kind": "data",
+				"message": "document"
+			},
+			{
+				"from": "store",
+				"to": "classify",
+				"resource": "document",
+				"kind": "data",
+				"message": "document"
+			},
+			{
+				"from": "classify",
+				"to": "extract-invoice",
+				"resource": "document",
+				"kind": "data",
+				"message": "document",
+				"when": "Rechnung"
+			},
+			{
+				"from": "classify",
+				"to": "bank",
+				"resource": "document",
+				"kind": "data",
+				"message": "document",
+				"when": "Kontoauszug"
+			},
+			{
+				"from": "classify",
+				"to": "extract-contract",
+				"resource": "document",
+				"kind": "data",
+				"message": "document",
+				"when": "Vertrag"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "file"
+			},
+			{
+				"kind": "resource",
+				"on": "image"
+			}
+		]
+	},
+	{
+		"id": "doc-ingest",
+		"name": "Beleg-Ingest",
+		"description": "Buchhaltungs-Flow: nutzt den Dokument-Ingest-Skill → Adressbuch anreichern → als offenen Posten buchen. Zahlung folgt via »Offene Posten ausgleichen«.",
+		"nodes": [
+			{
+				"id": "ingest",
+				"name": "Beleg verstehen",
+				"flowRef": "ingest",
+				"inputs": ["file", "image"],
+				"outputs": ["invoice", "transaction", "contact", "contract"],
+				"note": "Composite → Skill »Dokument-Ingest« (Import→Ablage→Klassifizieren→Extrahieren)",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
 			},
 			{
 				"id": "enrich",
@@ -180,56 +215,25 @@
 		],
 		"edges": [
 			{
-				"from": "intake",
-				"to": "classify",
-				"resource": "document",
-				"kind": "data",
-				"message": "document"
-			},
-			{
-				"from": "classify",
-				"to": "extract-invoice",
-				"resource": "document",
-				"kind": "data",
-				"message": "document",
-				"when": "Rechnung"
-			},
-			{
-				"from": "classify",
-				"to": "bank",
-				"resource": "document",
-				"kind": "data",
-				"message": "document",
-				"when": "Kontoauszug"
-			},
-			{
-				"from": "classify",
-				"to": "extract-contract",
-				"resource": "document",
-				"kind": "data",
-				"message": "document",
-				"when": "Vertrag"
-			},
-			{
-				"from": "extract-invoice",
+				"from": "ingest",
 				"to": "enrich",
 				"resource": "invoice",
 				"kind": "data",
 				"message": "invoice"
 			},
 			{
-				"from": "extract-invoice",
-				"to": "book-open",
-				"resource": "invoice",
-				"kind": "data",
-				"message": "invoice"
-			},
-			{
-				"from": "extract-contract",
+				"from": "ingest",
 				"to": "enrich",
 				"resource": "contract",
 				"kind": "data",
 				"message": "contract"
+			},
+			{
+				"from": "ingest",
+				"to": "book-open",
+				"resource": "invoice",
+				"kind": "data",
+				"message": "invoice"
 			}
 		],
 		"triggers": [
@@ -240,164 +244,6 @@
 			{
 				"kind": "resource",
 				"on": "image"
-			}
-		]
-	},
-	{
-		"id": "tx-import",
-		"name": "Kontobewegungen importieren",
-		"description": "Bankauszug / CSV → die aven-skills Ingestor-Pipeline (ingest → parse → transform → dedup → assemble): Transaktionen mit Provenance, idempotent. Eigenständiger Eingang, unabhängig von einem Beleg.",
-		"nodes": [
-			{
-				"id": "ingest-csv",
-				"name": "Datei aufnehmen",
-				"actor": "ingest",
-				"inputs": ["file"],
-				"outputs": ["bank_statement"],
-				"note": "Inhalt hashen + ablegen (UploaderPort); Doppel-Import = No-op",
-				"tools": ["data_crud"],
-				"supervision": {
-					"strategy": "resume"
-				}
-			},
-			{
-				"id": "parse-csv",
-				"name": "CSV parsen",
-				"actor": "parse",
-				"inputs": ["bank_statement"],
-				"outputs": ["transaction"],
-				"note": "Spalten + Zeilen dekodieren (rowRef Provenance)",
-				"supervision": {
-					"strategy": "resume"
-				}
-			},
-			{
-				"id": "transform",
-				"name": "Auf Schema mappen",
-				"actor": "transform",
-				"inputs": ["transaction"],
-				"outputs": ["transaction"],
-				"note": "Feld-Mapping per IngestConfig (bank-statement-tx.json) → transactions",
-				"supervision": {
-					"strategy": "resume"
-				}
-			},
-			{
-				"id": "dedup",
-				"name": "Dedupe + Ablage",
-				"actor": "dedup",
-				"inputs": ["transaction"],
-				"outputs": ["transaction"],
-				"note": "Idempotent per key; _source Provenance je Zeile",
-				"tools": ["data_crud"],
-				"supervision": {
-					"strategy": "resume"
-				}
-			}
-		],
-		"edges": [
-			{
-				"from": "ingest-csv",
-				"to": "parse-csv",
-				"resource": "bank_statement",
-				"kind": "data",
-				"message": "bank_statement"
-			},
-			{
-				"from": "parse-csv",
-				"to": "transform",
-				"resource": "transaction",
-				"kind": "data",
-				"message": "transaction"
-			},
-			{
-				"from": "transform",
-				"to": "dedup",
-				"resource": "transaction",
-				"kind": "data",
-				"message": "transaction"
-			}
-		],
-		"triggers": [
-			{
-				"kind": "resource",
-				"on": "file"
-			}
-		]
-	},
-	{
-		"id": "open-item-match",
-		"name": "Offene Posten ausgleichen",
-		"description": "Event-getriggert bei Zahlungseingang: eine Transaktion sucht ihren offenen Posten → ausgleichen (bezahlt) oder, ohne Beleg, parken (wartet auf Beleg). Deckt beide Zeitrichtungen ab (Beleg-zuerst und Transaktion-zuerst).",
-		"nodes": [
-			{
-				"id": "find-open",
-				"name": "Offenen Posten suchen",
-				"actor": "findOpenItem",
-				"inputs": ["transaction"],
-				"outputs": ["open_item", "transaction"],
-				"note": "Match per Betrag / Gegenpartei / IBAN / Datum",
-				"system_prompt": "Finde den offenen Posten, den diese Transaktion ausgleicht (Betrag, Cross-Currency, Gegenpartei, Datum) — oder keinen.",
-				"llm": {
-					"model": "gemma4-31b",
-					"mode": "tool"
-				},
-				"tools": ["pick_match"],
-				"supervision": {
-					"strategy": "restart",
-					"retry": {
-						"max": 2,
-						"backoff": "exponential"
-					}
-				}
-			},
-			{
-				"id": "settle",
-				"name": "Ausgleichen (Zahlung)",
-				"actor": "settleOpenItem",
-				"inputs": ["open_item", "transaction"],
-				"outputs": ["booking"],
-				"note": "Fan-in: offener Posten + Zahlung → Zahlungsbuchung, Status → bezahlt",
-				"tools": ["book_invoice", "data_crud"],
-				"supervision": {
-					"strategy": "resume"
-				}
-			},
-			{
-				"id": "park",
-				"name": "Parken (kein Beleg)",
-				"actor": "parkTransaction",
-				"inputs": ["transaction"],
-				"outputs": ["transaction"],
-				"note": "Dead-letter: Transaktion ohne Beleg → wartet auf Beleg",
-				"tools": ["data_crud"],
-				"supervision": {
-					"strategy": "resume"
-				}
-			}
-		],
-		"edges": [
-			{
-				"from": "find-open",
-				"to": "settle",
-				"resource": "open_item",
-				"when": "Treffer",
-				"kind": "data",
-				"message": "open_item"
-			},
-			{
-				"from": "find-open",
-				"to": "park",
-				"resource": "transaction",
-				"when": "kein Beleg",
-				"kind": "data",
-				"message": "transaction"
-			}
-		],
-		"triggers": [
-			{
-				"kind": "event",
-				"on": "transaction"
 			}
 		]
 	},
@@ -543,6 +389,164 @@
 			{
 				"kind": "resource",
 				"on": "bank_statement"
+			}
+		]
+	},
+	{
+		"id": "open-item-match",
+		"name": "Offene Posten ausgleichen",
+		"description": "Event-getriggert bei Zahlungseingang: eine Transaktion sucht ihren offenen Posten → ausgleichen (bezahlt) oder, ohne Beleg, parken (wartet auf Beleg). Deckt beide Zeitrichtungen ab (Beleg-zuerst und Transaktion-zuerst).",
+		"nodes": [
+			{
+				"id": "find-open",
+				"name": "Offenen Posten suchen",
+				"actor": "findOpenItem",
+				"inputs": ["transaction"],
+				"outputs": ["open_item", "transaction"],
+				"note": "Match per Betrag / Gegenpartei / IBAN / Datum",
+				"system_prompt": "Finde den offenen Posten, den diese Transaktion ausgleicht (Betrag, Cross-Currency, Gegenpartei, Datum) — oder keinen.",
+				"llm": {
+					"model": "gemma4-31b",
+					"mode": "tool"
+				},
+				"tools": ["pick_match"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "settle",
+				"name": "Ausgleichen (Zahlung)",
+				"actor": "settleOpenItem",
+				"inputs": ["open_item", "transaction"],
+				"outputs": ["booking"],
+				"note": "Fan-in: offener Posten + Zahlung → Zahlungsbuchung, Status → bezahlt",
+				"tools": ["book_invoice", "data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
+			},
+			{
+				"id": "park",
+				"name": "Parken (kein Beleg)",
+				"actor": "parkTransaction",
+				"inputs": ["transaction"],
+				"outputs": ["transaction"],
+				"note": "Dead-letter: Transaktion ohne Beleg → wartet auf Beleg",
+				"tools": ["data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
+			}
+		],
+		"edges": [
+			{
+				"from": "find-open",
+				"to": "settle",
+				"resource": "open_item",
+				"when": "Treffer",
+				"kind": "data",
+				"message": "open_item"
+			},
+			{
+				"from": "find-open",
+				"to": "park",
+				"resource": "transaction",
+				"when": "kein Beleg",
+				"kind": "data",
+				"message": "transaction"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "event",
+				"on": "transaction"
+			}
+		]
+	},
+	{
+		"id": "tx-import",
+		"name": "Kontobewegungen importieren",
+		"description": "Bankauszug / CSV → die aven-skills Ingestor-Pipeline (ingest → parse → transform → dedup → assemble): Transaktionen mit Provenance, idempotent. Eigenständiger Eingang, unabhängig von einem Beleg.",
+		"nodes": [
+			{
+				"id": "ingest-csv",
+				"name": "Datei aufnehmen",
+				"actor": "ingest",
+				"inputs": ["file"],
+				"outputs": ["bank_statement"],
+				"note": "Inhalt hashen + ablegen (UploaderPort); Doppel-Import = No-op",
+				"tools": ["data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
+			},
+			{
+				"id": "parse-csv",
+				"name": "CSV parsen",
+				"actor": "parse",
+				"inputs": ["bank_statement"],
+				"outputs": ["transaction"],
+				"note": "Spalten + Zeilen dekodieren (rowRef Provenance)",
+				"supervision": {
+					"strategy": "resume"
+				}
+			},
+			{
+				"id": "transform",
+				"name": "Auf Schema mappen",
+				"actor": "transform",
+				"inputs": ["transaction"],
+				"outputs": ["transaction"],
+				"note": "Feld-Mapping per IngestConfig (bank-statement-tx.json) → transactions",
+				"supervision": {
+					"strategy": "resume"
+				}
+			},
+			{
+				"id": "dedup",
+				"name": "Dedupe + Ablage",
+				"actor": "dedup",
+				"inputs": ["transaction"],
+				"outputs": ["transaction"],
+				"note": "Idempotent per key; _source Provenance je Zeile",
+				"tools": ["data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
+			}
+		],
+		"edges": [
+			{
+				"from": "ingest-csv",
+				"to": "parse-csv",
+				"resource": "bank_statement",
+				"kind": "data",
+				"message": "bank_statement"
+			},
+			{
+				"from": "parse-csv",
+				"to": "transform",
+				"resource": "transaction",
+				"kind": "data",
+				"message": "transaction"
+			},
+			{
+				"from": "transform",
+				"to": "dedup",
+				"resource": "transaction",
+				"kind": "data",
+				"message": "transaction"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "file"
 			}
 		]
 	},

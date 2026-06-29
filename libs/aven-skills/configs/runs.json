@@ -7,34 +7,11 @@
 		"status": "running",
 		"trace": [
 			{
-				"nodeId": "intake",
+				"nodeId": "ingest",
 				"state": "done",
 				"at": "+0s",
 				"inputs": ["1× Datei"],
-				"outputs": ["Dokument abgelegt"],
-				"message": "inhaltsadressiert in sparks/PRIVATE"
-			},
-			{
-				"nodeId": "classify",
-				"state": "done",
-				"at": "+1s",
-				"inputs": ["1× Dokument"],
-				"outputs": ["als Rechnung erkannt"],
-				"vibe": "bookkeeping",
-				"vibeData": {
-					"docType": "invoice",
-					"title": "Rechnung 2026-0815 — Müller GmbH",
-					"description": "Eingangsrechnung über Bürobedarf (Druckerpapier).",
-					"booking_summary": "Aufwand Bürobedarf 100,00 € netto + 19 % Vorsteuer.",
-					"tags": ["Rechnung", "Eingang", "19% USt", "Bürobedarf"]
-				}
-			},
-			{
-				"nodeId": "extract-invoice",
-				"state": "done",
-				"at": "+4s",
-				"inputs": ["1× Dokument"],
-				"outputs": ["invoice JSON"],
+				"outputs": ["Rechnung (extrahiert)"],
 				"vibe": "doc-compare",
 				"vibeData": {
 					"type": "invoice",
@@ -77,7 +54,8 @@
 						},
 						"total_outstanding": 119
 					}
-				}
+				},
+				"message": "Dokument-Ingest abgeschlossen"
 			},
 			{
 				"nodeId": "enrich",
@@ -147,6 +125,95 @@
 						"reason": "Sollstellung; wartet auf den Zahlungseingang.",
 						"status": "offen",
 						"direction": "incoming"
+					}
+				}
+			}
+		]
+	},
+	{
+		"id": "run-doc-understand",
+		"flowId": "ingest",
+		"label": "Müller GmbH — Beleg verstehen",
+		"startedAt": "heute 09:01",
+		"status": "done",
+		"trace": [
+			{
+				"nodeId": "import",
+				"state": "done",
+				"at": "+0s",
+				"inputs": ["1× Datei"],
+				"outputs": ["bytes"],
+				"message": "Foto übernommen"
+			},
+			{
+				"nodeId": "store",
+				"state": "done",
+				"at": "+0s",
+				"outputs": ["sparks/PRIVATE/<sha256>"],
+				"message": "inhaltsadressiert abgelegt"
+			},
+			{
+				"nodeId": "classify",
+				"state": "done",
+				"at": "+1s",
+				"inputs": ["1× Dokument"],
+				"outputs": ["als Rechnung erkannt"],
+				"vibe": "bookkeeping",
+				"vibeData": {
+					"docType": "invoice",
+					"title": "Rechnung 2026-0815 — Müller GmbH",
+					"description": "Eingangsrechnung über Bürobedarf (Druckerpapier).",
+					"booking_summary": "Aufwand Bürobedarf 100,00 € netto + 19 % Vorsteuer.",
+					"tags": ["Rechnung", "Eingang", "19% USt", "Bürobedarf"]
+				}
+			},
+			{
+				"nodeId": "extract-invoice",
+				"state": "done",
+				"at": "+4s",
+				"inputs": ["1× Dokument"],
+				"outputs": ["invoice JSON"],
+				"vibe": "doc-compare",
+				"vibeData": {
+					"type": "invoice",
+					"extracted": {
+						"header": {
+							"document_kind": "Rechnung",
+							"invoice_number": "2026-0815",
+							"issue_date": "2026-06-01",
+							"due_date": "2026-06-15",
+							"currency": "EUR"
+						},
+						"vendor": {
+							"name": "Müller GmbH",
+							"address": "Musterstraße 1, 80333 München",
+							"ust_id": "DE123456789"
+						},
+						"buyer": {
+							"name": "avenCEO GmbH"
+						},
+						"statements": [
+							{
+								"section_title": "Positionen",
+								"line_items": [
+									{
+										"position": "1",
+										"description": "Druckerpapier A4 (Karton)",
+										"quantity": 5,
+										"unit": "Stk",
+										"unit_price": 20,
+										"tax_rate": 19,
+										"amount": 100
+									}
+								]
+							}
+						],
+						"totals": {
+							"subtotal": 100,
+							"tax_total": 19,
+							"invoice_total": 119
+						},
+						"total_outstanding": 119
 					}
 				}
 			}
@@ -404,7 +471,7 @@
 	},
 	{
 		"id": "run-ingest-1",
-		"flowId": "doc-ingest",
+		"flowId": "ingest",
 		"label": "Cursor Rechnung 6199869E-0049",
 		"startedAt": "heute 10:14",
 		"status": "running",
@@ -413,7 +480,7 @@
 				"nodeId": "classify",
 				"state": "done",
 				"at": "+0s",
-				"inputs": ["1× Datei"],
+				"inputs": ["1× Dokument"],
 				"outputs": ["als Rechnung erkannt"]
 			},
 			{

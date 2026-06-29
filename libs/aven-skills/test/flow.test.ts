@@ -54,25 +54,24 @@ describe('flow / recipe schema', () => {
 	})
 
 	test('a shared entry point branches via guarded (when) edges', () => {
-		// the `ingest` composite is the shared entry: one node, ≥2 outgoing edges, each guarded by type.
-		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')
-		expect(doc).toBeTruthy()
-		if (!doc) return
-		// classify is the visible branch decision node
-		const branchEdges = doc.edges.filter((e) => e.from === 'classify' && e.when)
+		// classify (inside the Dokument-Ingest skill) branches to the per-type extractors.
+		const ingest = EXAMPLE_FLOWS.find((f) => f.id === 'ingest')
+		expect(ingest).toBeTruthy()
+		if (!ingest) return
+		const branchEdges = ingest.edges.filter((e) => e.from === 'classify' && e.when)
 		expect(branchEdges.length).toBeGreaterThanOrEqual(2)
-		expect(branchEdges.every((e) => doc.nodes.some((n) => n.id === e.to))).toBe(true)
+		expect(branchEdges.every((e) => ingest.nodes.some((n) => n.id === e.to))).toBe(true)
 	})
 
-	test('flowDepths lays nodes into columns (branches share the entry column)', () => {
-		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')!
-		const depth = flowDepths(doc)
-		expect(depth.intake).toBe(0) // reusable intake (import→store) is the entry
-		expect(depth.classify).toBe(1) // visible branch decision node
-		// the per-type extract branches sit one column after classify
-		expect(depth['extract-invoice']).toBe(2)
-		expect(depth.bank).toBe(2)
-		expect(depth['book-open']).toBeGreaterThan(depth['extract-invoice']) // downstream is deeper
+	test('flowDepths lays the Dokument-Ingest skill into columns (import→store→classify→extract)', () => {
+		const ingest = EXAMPLE_FLOWS.find((f) => f.id === 'ingest')!
+		const depth = flowDepths(ingest)
+		expect(depth.import).toBe(0)
+		expect(depth.store).toBe(1)
+		expect(depth.classify).toBe(2) // branch decision node
+		// the per-type extractors sit one column after classify
+		expect(depth['extract-invoice']).toBe(3)
+		expect(depth.bank).toBe(3)
 	})
 
 	test('actor nodes carry config (system_prompt / llm / tools)', () => {
@@ -135,9 +134,9 @@ describe('flow / recipe schema', () => {
 		expect(flat.nodes.every(isLeaf)).toBe(true)
 		// bank-statement(2) + doc-ingest(9: ingest-sub 3 + bank-sub 2 + extract-invoice/contract/enrich/book-open) + report(1) = 12
 		expect(flat.nodes.length).toBe(12)
-		// nested namespacing: month-close's ingest composite → doc-ingest → its classify + intake sub-skill
-		expect(flat.nodes.some((n) => n.id === 'ingest/classify')).toBe(true)
-		expect(flat.nodes.some((n) => n.id === 'ingest/intake/import')).toBe(true)
+		// nested namespacing: month-close → doc-ingest → Dokument-Ingest skill (classify+extract) + bank sub-skill
+		expect(flat.nodes.some((n) => n.id === 'ingest/ingest/classify')).toBe(true)
+		expect(flat.nodes.some((n) => n.id === 'ingest/ingest/import')).toBe(true)
 		expect(flat.nodes.some((n) => n.id === 'bank/extract-stmt')).toBe(true)
 		// the daisy-chain edge bank → ingest joins the sub-flows' terminal → entry
 		expect(flat.edges.some((e) => e.from.startsWith('bank/') && e.to.startsWith('ingest/'))).toBe(
@@ -178,18 +177,11 @@ describe('flow / recipe schema', () => {
 		if (!run) return
 		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')!
 		const ids = new Set(doc.nodes.map((n) => n.id))
-		expect(run.trace.map((s) => s.nodeId)).toEqual([
-			'intake',
-			'classify',
-			'extract-invoice',
-			'enrich',
-			'book-open'
-		])
+		expect(run.trace.map((s) => s.nodeId)).toEqual(['ingest', 'enrich', 'book-open'])
 		expect(run.trace.every((s) => ids.has(s.nodeId))).toBe(true)
-		// every meaningful step (intake is plumbing) carries a vibe + data
-		const vibed = run.trace.filter((s) => s.nodeId !== 'intake')
-		expect(vibed.every((s) => typeof s.vibe === 'string' && s.vibe.length > 0)).toBe(true)
-		expect(vibed.every((s) => s.vibeData != null)).toBe(true)
+		// every step carries a vibe + data (ingest=doc-compare, enrich=contact, book-open=invoice-booking)
+		expect(run.trace.every((s) => typeof s.vibe === 'string' && s.vibe.length > 0)).toBe(true)
+		expect(run.trace.every((s) => s.vibeData != null)).toBe(true)
 		// it ends OFFEN (Sollstellung), awaiting the payment
 		const book = run.trace.find((s) => s.nodeId === 'book-open')!
 		expect((book.vibeData as { booking?: { status?: string } }).booking?.status).toBe('offen')
