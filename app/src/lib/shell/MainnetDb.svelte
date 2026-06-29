@@ -131,16 +131,33 @@ const me = $derived(
 // another row (e.g. valid.x1 → a task) resolves to THAT row's first value place (the task's title).
 // Built across ALL tables so any ref can be resolved. board 0088.
 const refMap = $derived.by(() => {
-	const m = new Map<string, string>()
+	const m = new Map<string, { label: string; schemaId: string; rowId: string }>()
 	for (const tbl of tables) {
 		const labelPos = schemaMeta(tbl.jsonSchema).places.find((p) => !p.ref)?.pos
 		if (!labelPos) continue
 		for (const row of tbl.rows) {
 			const v = (row.data as Record<string, unknown> | undefined)?.[labelPos]
-			if (typeof v === 'string') m.set(row.id, v)
+			if (typeof v === 'string') m.set(row.id, { label: v, schemaId: tbl.id, rowId: row.id })
 		}
 	}
 	return m
+})
+
+// Clicking a resolved row-ref jumps to that row (select its table + flash a highlight that clears).
+let highlightId = $state<string | null>(null)
+function gotoRef(target: { schemaId: string; rowId: string }): void {
+	selectedId = target.schemaId
+	view = 'data'
+	highlightId = target.rowId
+}
+$effect(() => {
+	const id = highlightId
+	if (!id) return
+	document.querySelector(`[data-row-id="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+	const timer = setTimeout(() => {
+		if (highlightId === id) highlightId = null
+	}, 2200)
+	return () => clearTimeout(timer)
 })
 
 type DataCol = { key: string; label: string; ref: string | null }
@@ -155,14 +172,17 @@ function dataColumns(table: Table): DataCol[] {
 		})
 }
 
-type Resolved = { label: string; kind: 'you' | 'row' | 'id' }
-/** A ref cell → the signed-in user ("you"), the referenced row's label, or a shortened id fallback. */
+type RefTarget = { schemaId: string; rowId: string }
+type Resolved =
+	| { label: string; kind: 'you' | 'id' }
+	| { label: string; kind: 'row'; target: RefTarget }
+/** A ref cell → the signed-in user ("you"), the referenced row (clickable), or a shortened id. */
 function resolveRef(id: unknown): Resolved {
 	const s = id == null ? '' : String(id)
 	if (!s) return { label: '—', kind: 'id' }
 	if (me?.id && s === me.id) return { label: me.name || me.email || 'you', kind: 'you' }
-	const r = refMap.get(s)
-	if (r) return { label: r, kind: 'row' }
+	const hit = refMap.get(s)
+	if (hit) return { label: hit.label, kind: 'row', target: { schemaId: hit.schemaId, rowId: hit.rowId } }
 	return { label: s.length > 14 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s, kind: 'id' }
 }
 
@@ -345,7 +365,13 @@ $effect(() => {
 							</thead>
 							<tbody>
 								{#each selected.rows as row (row.id)}
-									<tr class="border-border/60 border-b last:border-0">
+									<tr
+										data-row-id={row.id}
+										class="border-border/60 border-b transition-colors last:border-0 {highlightId ===
+										row.id
+											? 'bg-primary/10'
+											: ''}"
+									>
 										{#each cols as c (c.key)}
 											<td class="text-foreground px-3 py-2 align-top">
 												{#if c.ref}
@@ -356,9 +382,11 @@ $effect(() => {
 															>◆ {r.label}</span
 														>
 													{:else if r.kind === 'row'}
-														<span
-															class="border-border text-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px]"
-															title={String(row.data?.[c.key] ?? '')}>↪ {r.label}</span
+														<button
+															type="button"
+															class="border-border text-foreground hover:bg-primary/10 hover:border-primary/40 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] transition-colors"
+															title={`Go to ${r.label}`}
+															onclick={() => gotoRef(r.target)}>↪ {r.label}</button
 														>
 													{:else}
 														<span
