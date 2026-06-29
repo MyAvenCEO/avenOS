@@ -8,7 +8,7 @@ import {
 	RESOURCE_LABEL,
 	type RecipeNode,
 	resourceSchema
-} from '@avenos/aven-vibes'
+} from '@avenos/aven-skills'
 import { Background, Controls, type Edge, MarkerType, type Node, SvelteFlow } from '@xyflow/svelte'
 import '@xyflow/svelte/dist/style.css'
 import FlowNodeCard from '$lib/shell/FlowNodeCard.svelte'

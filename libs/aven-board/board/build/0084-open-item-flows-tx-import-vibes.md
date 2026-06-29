@@ -14,7 +14,7 @@ goal: "From the worktree, `cd libs/aven-skills && ulimit -n 60000 && bun test` e
 
 Board [[0083]] built a descriptive flow/recipe model **in aven-vibes** (`flow.ts`,
 `flows.json`, `runs.json`) + a Skills/Runs explorer. Discovery for the next step
-revealed that **`aven-skills` (`@avenos/skills`) already is the actor-inspired
+revealed that **`aven-skills` (`@avenos/aven-skills`) already is the actor-inspired
 engine** this should live in — so the 0083 model is partly a parallel reinvention.
 The decision (user, 2026-06-29): **unify everything into one actor-inspired
 architecture in aven-skills**, collocate configs there, keep aven-vibes for
@@ -41,7 +41,7 @@ rendering, and abstract the per-actor tool-call + LLM config so they wire later.
 **Decisions locked (user, 2026-06-29):**
 1. **Move into aven-skills** — `flow.ts`, `flows.json`, `runs.json` move from
    aven-vibes → aven-skills; aven-vibes keeps ONLY vibe components and imports
-   `@avenos/skills`.
+   `@avenos/aven-skills`.
 2. **Unify** the descriptive model with aven-skills' actor pipeline + tracing
    (nodes↔Stages/actors, trace↔`StageEvent`/`Logger`, tx-import↔the ingestor) —
    one architecture, not two.
@@ -96,8 +96,8 @@ reality (any-order documents/tx, offen→bezahlt) is modelled with strong vibes.
   `LlmConfig`. Keep additive/back-compat.
 - **aven-vibes** keeps only vibe components (StepVibe, FlowGraph, FlowNodeCard,
   Invoice*/Bookkeeping*/DocCompare/OpenItems…) — re-point their imports to
-  `@avenos/skills`. Remove `flow.ts`/`flows.json`/`runs.json` from aven-vibes.
-- **app**: update imports `@avenos/aven-vibes` flow.* → `@avenos/skills`.
+  `@avenos/aven-skills`. Remove `flow.ts`/`flows.json`/`runs.json` from aven-vibes.
+- **app**: update imports `@avenos/aven-vibes flow.* → @avenos/aven-skills.
 - Move the flow tests to `libs/aven-skills/test/`. Everything green.
 - **HARD CHECKPOINT — stop & review after Phase 0** (the refactor must land clean
   before any feature work; could be split to a follow-on card here if preferred).
@@ -133,17 +133,17 @@ runtime's data model 1:1 (and now literally share aven-skills' types).
 - `libs/aven-skills/configs/**` — flows + runs configs; `bank-statement-tx.json` ingest config.
 - `libs/aven-skills/src/index.ts`, `package.json` (exports) — surface the new API.
 - `libs/aven-skills/test/flow.test.ts` — moved + new tests.
-- `libs/aven-vibes/**` — remove flow.ts/flows.json/runs.json; vibe components import `@avenos/skills`; update index/exports.
-- `app/src/lib/shell/{SkillsView,RunsView,StepVibe,FlowGraph,FlowNodeCard,OpenItemsVibe,InvoiceMatchVibe,InvoiceBookingVibe}.svelte` — import `@avenos/skills`; Phase A/B UI.
+- `libs/aven-vibes/**` — remove flow.ts/flows.json/runs.json; vibe components import `@avenos/aven-skills`; update index/exports.
+- `app/src/lib/shell/{SkillsView,RunsView,StepVibe,FlowGraph,FlowNodeCard,OpenItemsVibe,InvoiceMatchVibe,InvoiceBookingVibe}.svelte` — import `@avenos/aven-skills`; Phase A/B UI.
 - `app/languages/{de,en}.json` — labels.
 
 ## Acceptance criteria
 
 **Phase 0 — unify & collocate**
-- [ ] Flow model + flow/run configs live under `libs/aven-skills`; **none** remain in aven-vibes — proven by `ls libs/aven-skills/configs` + `! test -e libs/aven-vibes/src/flows.json` + grep that aven-vibes vibe components import `@avenos/skills`.
-- [ ] `ToolSpec` + `LlmConfig` exported from `@avenos/skills`; `RecipeNode` references them — test.
-- [ ] Trace is unified with `StageEvent`/`Logger` (no parallel span type that duplicates them) — test/grep.
-- [ ] Moved flow tests pass under `cd libs/aven-skills && bun test`; `aven-skills` + `aven-vibes` tsc both 0; app svelte-check only `__APP_VERSION__`.
+- [x] Flow model + flow/run configs live under `libs/aven-skills`; **none** remain in aven-vibes — proven by `ls libs/aven-skills/configs` + `! test -e libs/aven-vibes/src/flows.json` + grep that aven-vibes vibe components import `@avenos/aven-skills`.
+- [x] `ToolSpec` + `LlmConfig` exported from `@avenos/aven-skills`; `RecipeNode` references them — test.
+- [x] Trace is unified with `StageEvent`/`Logger` (no parallel span type that duplicates them) — test/grep.
+- [x] Moved flow tests pass under `cd libs/aven-skills && bun test`; `aven-skills` + `aven-vibes` tsc both 0; app svelte-check only `__APP_VERSION__`.
 
 **Phase A — bookkeeping**
 - [ ] `tx-import` realized as an aven-skills IngestConfig run (CSV → transactions + provenance + dedup) — test.
@@ -179,6 +179,8 @@ To build:
 ```
 
 ## Progress log
+
+- `2026-06-29` — **Phase 0 DONE** (checkpoint): moved `flow.ts`→`libs/aven-skills/src/`, `flows.json`/`runs.json`→`libs/aven-skills/configs/`, flow tests→`libs/aven-skills/test/`. New `capability.ts` (ToolSpec + JsonSchema + extended LlmConfig + TOOL_SPECS registry); flow.ts re-exports them. aven-skills index `export *`s the flow model; trace reuses the existing pipeline `StageEvent`/`Logger`. aven-vibes index drops the flow re-export + `./flow` export; app shell flow-imports repointed to `@avenos/aven-skills`. Green: aven-skills tsc + 24 tests, aven-vibes tsc, app svelte-check (only __APP_VERSION__), biome clean on touched files.
 
 - `2026-06-29` — Re-architected the plan (user): discovered `aven-skills` already IS the actor-inspired pipeline + config ingestor + tracing (`Stage`/`PipelineContext`/`StageEvent`/`Logger`/ports). Decisions: **move** the flow model + configs into aven-skills; **unify** with its pipeline/ingestor/trace (one architecture); add a typed **ToolSpec + LlmConfig** capability layer there; aven-vibes = vibe rendering only. Restructured into Phase 0 (unify/collocate foundation, hard checkpoint) → Phase A (bookkeeping) → Phase B (engine v2). Goal now proves collocation + capability layer + unified trace + no live/testnet changes.
 - `2026-06-29` — (prior) hand-migrate every flow; actor-model north star; universal-first; offen+settle lifecycle; mock-only. Folded engine v2 + bookkeeping cases into one card.

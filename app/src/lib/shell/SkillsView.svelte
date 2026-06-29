@@ -6,7 +6,7 @@ import {
 	RESOURCE_LABEL,
 	type RecipeNode,
 	resourceSchema
-} from '@avenos/aven-vibes'
+} from '@avenos/aven-skills'
 import { t } from '$lib/i18n'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import { openDbSchema } from '$lib/shell/nav.svelte'

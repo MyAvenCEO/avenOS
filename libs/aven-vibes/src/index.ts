@@ -20,34 +20,8 @@ export {
 } from './contact-match.js'
 export * from './engine/index.js'
 export { contentHash, type FileRef, filePath, fileRef } from './file-ref.js'
-export {
-	currentStepIndex,
-	type Edge,
-	EXAMPLE_FLOWS,
-	EXAMPLE_RUNS,
-	exampleInstance,
-	FLOW_SCHEMA,
-	type Flow,
-	type FlowInstance,
-	type FlowRun,
-	flattenFlow,
-	flowDepths,
-	isComposite,
-	isFanIn,
-	isFanOut,
-	isLeaf,
-	type LlmConfig,
-	type NodeState,
-	RESOURCE_LABEL,
-	RESOURCE_SCHEMA,
-	type RecipeNode,
-	type ResourceKind,
-	resourceSchema,
-	runStateOf,
-	runsForFlow,
-	type TraceStep,
-	validateFlow
-} from './flow.js'
+// board 0084 — the flow/recipe model moved to @avenos/aven-skills (the actor engine). Import flow
+// symbols from there; aven-vibes is vibe rendering only.
 export {
 	assignInvoiceNumber,
 	type InvoiceState,

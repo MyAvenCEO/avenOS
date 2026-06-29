@@ -7,7 +7,7 @@ import {
 	type FlowRun,
 	type NodeState,
 	type RecipeNode
-} from '@avenos/aven-vibes'
+} from '@avenos/aven-skills'
 import { t } from '$lib/i18n'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import StepVibe from '$lib/shell/StepVibe.svelte'

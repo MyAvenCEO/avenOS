@@ -8,6 +8,8 @@
 	"types": "./src/index.ts",
 	"exports": {
 		".": "./src/index.ts",
+		"./flow": "./src/flow.ts",
+		"./capability": "./src/capability.ts",
 		"./configs/*": "./configs/*"
 	},
 	"scripts": {

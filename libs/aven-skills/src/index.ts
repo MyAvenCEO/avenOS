@@ -8,6 +8,9 @@
  */
 
 export { coerceValue } from './coerce'
+// board 0083/0084 — the descriptive flow/recipe model (Skills/Runs) + the actor capability layer,
+// unified into this package alongside the runtime pipeline + ingestor.
+export * from './flow.js'
 export {
 	ConfigError,
 	childTargets,

@@ -18,7 +18,6 @@
 		"./invoice-number": "./src/invoice-number.ts",
 		"./invoice-doc": "./src/vibes/invoice/invoice-doc.ts",
 		"./file-ref": "./src/file-ref.ts",
-		"./flow": "./src/flow.ts",
 		"./skr": "./src/skr.ts",
 		"./AvenVibeView.svelte": "./src/AvenVibeView.svelte"
 	},

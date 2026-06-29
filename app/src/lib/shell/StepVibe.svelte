@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Flow, NodeState, RecipeNode, TraceStep } from '@avenos/aven-vibes'
+import type { Flow, NodeState, RecipeNode, TraceStep } from '@avenos/aven-skills'
 import BookkeepingVibe from '$lib/shell/BookkeepingVibe.svelte'
 import DocCompareVibe from '$lib/shell/DocCompareVibe.svelte'
 import InvoiceBookingVibe from '$lib/shell/InvoiceBookingVibe.svelte'

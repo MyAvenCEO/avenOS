@@ -4,8 +4,9 @@
 // a `FlowInstance` is a run with per-node state. Descriptive (powers the Skills view); shaped so it
 // could drive execution later. Pure (no DOM): just the schema + our existing skills as data.
 
-import flowsJson from './flows.json'
-import runsJson from './runs.json'
+import flowsJson from '../configs/flows.json'
+import runsJson from '../configs/runs.json'
+import type { LlmConfig } from './capability.js'
 
 /** The typed items that flow between recipes. */
 export type ResourceKind = string
@@ -46,14 +47,9 @@ export function resourceSchema(kind: string): string | undefined {
 /** State of a node within a running flow instance. */
 export type NodeState = 'idle' | 'waiting' | 'running' | 'done' | 'error'
 
-/** LLM config an actor runs with (when it's an LLM step). */
-export type LlmConfig = {
-	model: string
-	temperature?: number
-	vision?: boolean
-	/** how the model is driven: a forced tool call, free chat, or a vision pass. */
-	mode?: 'tool' | 'chat' | 'vision'
-}
+// LLM config + tool-call specs live in the capability layer; re-exported for flow consumers.
+export type { JsonSchema, LlmConfig, ToolSpec } from './capability.js'
+export { TOOL_SPECS, toolSpec } from './capability.js'
 
 /** An actor blackbox: a recipe that turns its inbox (inputs) into its output.
  *  Composite/Leaf: a LEAF carries an `actor` (the real execution); a COMPOSITE carries a `flowRef`

@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { NodeState } from '@avenos/aven-vibes'
+import type { NodeState } from '@avenos/aven-skills'
 import { Handle, type NodeProps, Position } from '@xyflow/svelte'
 
 // board 0083 — a Svelte Flow custom node = our actor-blackbox card (inbox → actor/sub-skill → output),
