@@ -88,6 +88,34 @@ export const EXTRACT_DOCUMENT_TOOL = {
 export const EXTRACT_TOOLS = [EXTRACT_DOCUMENT_TOOL]
 
 /**
+ * Run a SKILL on the attached document (board 0089). When the user attaches a file/photo and asks to
+ * ingest / process / file it, the server runs the skill's flow: stores the raw artifact
+ * content-addressed, classifies it via vision, and saves a `document` with provenance (krasi) back to
+ * the source. Default skill is `doc-ingest`.
+ */
+export const RUN_SKILL_TOOL = {
+	type: 'function',
+	function: {
+		name: 'run_skill',
+		description:
+			'Run a skill on the attached document. Use when the user attaches a file/photo and asks to ' +
+			'ingest / process / file / read it. The server stores the raw artifact, classifies it via ' +
+			'vision, and saves a document with provenance back to the source. Default skill "doc-ingest". ' +
+			'Respond ONLY with the short sentence in `response`.',
+		parameters: {
+			type: 'object',
+			properties: {
+				skill: { type: 'string', description: 'The skill id to run. Default "doc-ingest".' },
+				response: { type: 'string', description: 'A single-sentence human-facing reply.' }
+			},
+			required: ['response']
+		}
+	}
+} as const
+
+export const SKILL_TOOLS = [RUN_SKILL_TOOL]
+
+/**
  * Open the BWA / finance snapshot vibe — a realtime overview of revenue, expenses, result and cash
  * flow computed from the user's stored bookings + transactions. No args; the view is computed
  * client-side from /api/data. board 0072.
@@ -307,6 +335,7 @@ export const CHAT_TOOLS = [
 	...COMPOSER_TOOLS,
 	...BOOKKEEPING_TOOLS,
 	...EXTRACT_TOOLS,
+	...SKILL_TOOLS,
 	...FINANCE_TOOLS,
 	...INVOICING_TOOLS
 ]

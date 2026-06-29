@@ -45,6 +45,7 @@ import { TIERS } from './billing'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
 import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
 import { ensureDocSchema, executeDataTool, schemasPromptHint } from './data'
+import { runSkillForUser } from './skills-run'
 import { db } from './db'
 import { publish } from './events'
 import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './usage'
@@ -151,6 +152,31 @@ async function extractDocFields(
 		console.error('[ai] extract vision: tool args not JSON:', e, args.slice(0, 300))
 		return null
 	}
+}
+
+/**
+ * Recover tool calls the model emitted as TEXT instead of a structured `tool_calls` field — gemma
+ * does this in VISION mode (e.g. `_call:run_skill{skill: "doc-ingest"}`, optionally wrapped in
+ * `<|tool_call>…<tool_call|>`). Without this, an image-turn tool call (like run_skill) would be lost.
+ * Gated: only consulted when no structured call arrived but a clear `call:NAME{…}` marker is present. board 0089.
+ */
+function parseTextToolCalls(content: string): { id: string; name: string; args: string }[] {
+	const out: { id: string; name: string; args: string }[] = []
+	const re = /call:\s*(\w+)\s*(\{[\s\S]*?\})/g
+	let m: RegExpExecArray | null
+	let n = 0
+	while ((m = re.exec(content)) !== null) {
+		let args: Record<string, unknown> = {}
+		try {
+			// lenient: quote unquoted keys + normalize single quotes → JSON
+			const jsonish = m[2].replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"')
+			args = JSON.parse(jsonish) as Record<string, unknown>
+		} catch {
+			args = {}
+		}
+		out.push({ id: `txt_${n++}`, name: m[1], args: JSON.stringify(args) })
+	}
+	return out
 }
 
 /**
@@ -1075,7 +1101,11 @@ function streamWithTools(opts: {
 					}
 					promptTokens += roundPrompt
 					completionTokens += roundCompletion
-					const callList = Object.values(calls)
+					let callList = Object.values(calls)
+					// gemma vision mode sometimes emits tool calls as TEXT — recover them so they dispatch.
+					if (callList.length === 0 && /call:\s*\w+\s*\{/.test(roundContent)) {
+						callList = parseTextToolCalls(roundContent)
+					}
 					if (callList.length === 0) break // model gave its final answer (already streamed)
 					// Tool round: record the assistant tool-call turn, run each tool, feed results back.
 					msgs.push({
@@ -1093,6 +1123,36 @@ function streamWithTools(opts: {
 							parsed = JSON.parse(tc.args || '{}')
 						} catch {
 							/* leave empty; executeDataTool will report the error */
+						}
+						// Run a skill on the attached document (board 0089): store the raw artifact, classify
+						// via REAL vision, save a `document` with provenance — the generic runner, from chat.
+						if (tc.name === 'run_skill') {
+							const skill =
+								typeof parsed.skill === 'string' && parsed.skill ? parsed.skill : 'doc-ingest'
+							emitTool(tc.id, 'run_skill', `running ${skill}`, 'running')
+							let toolResult: Record<string, unknown>
+							try {
+								const img = attachments.find((a) => a.mimeType.startsWith('image/'))
+								if (!img) {
+									toolResult = { ok: false, error: 'attach a document image to ingest' }
+								} else {
+									const out = await runSkillForUser(userId, skill, {
+										bytes: new Uint8Array(Buffer.from(img.b64, 'base64')),
+										mime: img.mimeType
+									})
+									toolResult = { ok: out.status === 'done', ...out, note: CARD_REPLY_NOTE }
+								}
+							} catch (e) {
+								toolResult = { ok: false, error: e instanceof Error ? e.message : String(e) }
+							}
+							msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(toolResult) })
+							emitTool(
+								tc.id,
+								'run_skill',
+								toolResult.ok ? 'document filed' : 'skill failed',
+								toolResult.ok ? 'done' : 'error'
+							)
+							continue
 						}
 						// Read-only website viewer: flow the Composer vibe into the chat — no data op, so
 						// the data_crud (todos etc.) path is untouched. board 0055.

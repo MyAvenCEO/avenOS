@@ -136,6 +136,18 @@ rg -n "sparkWriteBytes" libs/betterauth/src/skills-run.ts   # expect: empty (mai
 
 Newest entry first.
 
+- `2026-06-29` — **Steps 3–6 DONE + verified; step 7 endpoint-proven, chat wired.** Step 3: `document`
+  composite type (vreji/klesi/skicu/krasi/finti) on the 0088 engine (migration 0018) — provenance
+  proven. Steps 4+5: `skills-run.ts` doc-ingest actors (storeDocument→ArtifactStore; classify_document→
+  REAL gemma4-31b vision) + `runSkillForUser` + `POST /api/skills/:id/run` + `flow_run` (0019).
+  **Endpoint e2e PROVEN:** POST a PNG → status done; REAL LLM classified it; artifact stored,
+  document predications projected, PROVENANCE loop closed (doc.artifact==artifact.sha256,
+  produced.run==flow_run.id), run trace persisted. Step 6: `run_skill` chat tool added to CHAT_TOOLS
+  + dispatch in ai.ts → runSkillForUser with the attached image; added a gated text-form tool-call
+  recovery (gemma emits tool calls as TEXT in vision mode). Live chat: the model DID emit a run_skill
+  call (`run_skill{skill:"doc-ingest", image:…}`), but a CLEAN live run is flaky because the test
+  fixture is a 1×1 BLANK png — the model sometimes asks for a real image instead of running. **Step 7
+  remaining:** final chat-trigger verification with a REAL document image (best done in the Mac app).
 - `2026-06-29` — **Build step 2 DONE.** Generic flow runner (`aven-skills/src/runner/runner.ts`):
   `runFlow` executes ANY Flow by resolving each node's actor from an injected registry (NO
   skill-specific code), longest-path order, threads typed resources along a bus, returns a FlowRun
