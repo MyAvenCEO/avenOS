@@ -1,13 +1,14 @@
 <script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
 import {
 	currentStepIndex,
-	EXAMPLE_FLOWS,
 	EXAMPLE_RUNS,
 	type Flow,
 	type FlowRun,
 	type NodeState,
 	type RecipeNode
 } from '@avenos/aven-skills'
+import { listFlows } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import StepVibe from '$lib/shell/StepVibe.svelte'
@@ -16,6 +17,10 @@ import StepVibe from '$lib/shell/StepVibe.svelte'
 // runs, center = the flow graph on top (click a node to step) + the step's vibe below, right = the
 // detail logs of the run.
 let { containerName = 'aven-vibes-runs' }: { containerName?: string } = $props()
+
+// Flow CONFIGS load from the admin API (board 0087); runs stay example fixtures for now.
+const flowsQuery = createQuery(() => ({ queryKey: ['flows'], queryFn: listFlows }))
+const flows = $derived<Flow[]>(flowsQuery.data ?? [])
 
 let selectedRunId = $state<string>(EXAMPLE_RUNS[0]?.id ?? '')
 let selectedNodeId = $state<string | null>(
@@ -26,7 +31,7 @@ const selectedRun = $derived<FlowRun | null>(
 	EXAMPLE_RUNS.find((r) => r.id === selectedRunId) ?? null
 )
 const flow = $derived<Flow | null>(
-	selectedRun ? (EXAMPLE_FLOWS.find((f) => f.id === selectedRun.flowId) ?? null) : null
+	selectedRun ? (flows.find((f) => f.id === selectedRun.flowId) ?? null) : null
 )
 const nodeById = $derived(new Map((flow?.nodes ?? []).map((n) => [n.id, n])))
 // One state per node, from the run's trace (last write wins) → colours the graph.
@@ -53,7 +58,7 @@ const STATE_DOT: Record<NodeState, string> = {
 }
 
 function flowName(id: string): string {
-	return EXAMPLE_FLOWS.find((f) => f.id === id)?.name ?? id
+	return flows.find((f) => f.id === id)?.name ?? id
 }
 function selectRun(r: FlowRun): void {
 	selectedRunId = r.id

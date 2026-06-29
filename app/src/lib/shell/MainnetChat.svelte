@@ -70,8 +70,14 @@ $effect(() => {
 // Session switcher is collapsed by default so the conversation is centered + full-width; a tiny
 // toggle button opens the chats viewer. board 0055.
 let showSessions = $state(false)
+// Skills/Runs (flow/recipe) views are admin-only (board 0087); passed from the shell.
+let { isAdmin = false }: { isAdmin?: boolean } = $props()
 // Main-area sub-tabs: the conversation vs the Skills (flow/recipe) view. board 0083.
 let mainTab = $state<'chat' | 'skills' | 'runs'>('chat')
+// Non-admins never see Skills/Runs — fall back to chat if somehow selected.
+$effect(() => {
+	if (!isAdmin && mainTab !== 'chat') mainTab = 'chat'
+})
 // The active spark's current src/ files (path→content), loaded into the AI context before each send
 // so the edit_website tool can diff/create across them (sent as the body's `publicFiles`). board 0057.
 let publicFiles: Record<string, string> = {}
@@ -611,24 +617,26 @@ function handleTranscribeError(message: string): void {
 			>
 				{t('mainnet.nav.chat')}
 			</button>
-			<button
-				type="button"
-				class="rounded-[var(--radius)] px-2.5 py-1 text-[13px] transition-colors {mainTab === 'skills'
-					? 'bg-primary/10 text-foreground font-medium'
-					: 'text-muted-foreground hover:bg-card'}"
-				onclick={() => (mainTab = 'skills')}
-			>
-				{t('mainnet.skills.tab')}
-			</button>
-			<button
-				type="button"
-				class="rounded-[var(--radius)] px-2.5 py-1 text-[13px] transition-colors {mainTab === 'runs'
-					? 'bg-primary/10 text-foreground font-medium'
-					: 'text-muted-foreground hover:bg-card'}"
-				onclick={() => (mainTab = 'runs')}
-			>
-				{t('mainnet.runs.tab')}
-			</button>
+			{#if isAdmin}
+				<button
+					type="button"
+					class="rounded-[var(--radius)] px-2.5 py-1 text-[13px] transition-colors {mainTab === 'skills'
+						? 'bg-primary/10 text-foreground font-medium'
+						: 'text-muted-foreground hover:bg-card'}"
+					onclick={() => (mainTab = 'skills')}
+				>
+					{t('mainnet.skills.tab')}
+				</button>
+				<button
+					type="button"
+					class="rounded-[var(--radius)] px-2.5 py-1 text-[13px] transition-colors {mainTab === 'runs'
+						? 'bg-primary/10 text-foreground font-medium'
+						: 'text-muted-foreground hover:bg-card'}"
+					onclick={() => (mainTab = 'runs')}
+				>
+					{t('mainnet.runs.tab')}
+				</button>
+			{/if}
 		</div>
 		{#if mainTab === 'skills'}
 			<!-- No scroll here: SkillsView fills the area and each of its columns scrolls on its own. -->

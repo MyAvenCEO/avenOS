@@ -1,3 +1,4 @@
+import type { Flow } from '@avenos/aven-skills'
 import { getBearerToken } from '$lib/auth/auth-client'
 
 /**
@@ -67,4 +68,11 @@ export async function updateValue<T>(id: string, data: T): Promise<void> {
 
 export async function deleteValue(id: string): Promise<void> {
 	await api(`/api/data/values/${id}`, { method: 'DELETE' })
+}
+
+// Flow/skill CONFIG templates (board 0087, Layer A) — admin-only; the server returns 403 for
+// non-admins. Distinct from the user-scoped data store above. Skills/Runs views read from here.
+export async function listFlows(): Promise<Flow[]> {
+	const { flows } = await api<{ flows: Flow[] }>('/api/admin/flows')
+	return flows
 }

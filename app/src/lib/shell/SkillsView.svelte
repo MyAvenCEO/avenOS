@@ -1,12 +1,13 @@
 <script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
 import {
-	EXAMPLE_FLOWS,
 	type Flow,
 	isComposite,
 	RESOURCE_LABEL,
 	type RecipeNode,
 	resourceSchema
 } from '@avenos/aven-skills'
+import { listFlows } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import { openDbSchema } from '$lib/shell/nav.svelte'
@@ -16,10 +17,18 @@ import { openDbSchema } from '$lib/shell/nav.svelte'
 // the selected actor's config. Instance runs + traces live in RunsView.
 let { containerName = 'aven-vibes-skills' }: { containerName?: string } = $props()
 
-let selectedId = $state<string>(EXAMPLE_FLOWS[0]?.id ?? '')
-let selectedNodeId = $state<string | null>(null)
+// Skills load from the admin flow-config API (board 0087) — no static import.
+const flowsQuery = createQuery(() => ({ queryKey: ['flows'], queryFn: listFlows }))
+const flows = $derived<Flow[]>(flowsQuery.data ?? [])
 
-const selected = $derived<Flow | null>(EXAMPLE_FLOWS.find((f) => f.id === selectedId) ?? null)
+let selectedId = $state<string>('')
+let selectedNodeId = $state<string | null>(null)
+// Default-select the first skill once flows load.
+$effect(() => {
+	if (!selectedId && flows.length > 0) selectedId = flows[0].id
+})
+
+const selected = $derived<Flow | null>(flows.find((f) => f.id === selectedId) ?? null)
 const nodeById = $derived(new Map((selected?.nodes ?? []).map((n) => [n.id, n])))
 const selectedNode = $derived<RecipeNode | null>(
 	selectedNodeId ? (nodeById.get(selectedNodeId) ?? null) : null
@@ -49,7 +58,7 @@ function onSelect(id: string): void {
 	<aside class="border-border flex w-48 shrink-0 flex-col rounded-[var(--radius-lg)] border">
 		<p class="border-border border-b p-3 text-sm font-semibold">{t('mainnet.skills.title')}</p>
 		<div class="min-h-0 flex-1 overflow-y-auto p-1.5">
-			{#each EXAMPLE_FLOWS as f (f.id)}
+			{#each flows as f (f.id)}
 				<button
 					type="button"
 					class="mb-1 block w-full rounded-[var(--radius)] px-2.5 py-2 text-left transition-colors {f.id ===

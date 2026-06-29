@@ -153,7 +153,7 @@ function openTab(id: Tab): void {
 	{#if settings}
 		<AccountSettings category={settingsCategory} />
 	{:else if tab === 'chat'}
-		<MainnetChat />
+		<MainnetChat {isAdmin} />
 	{:else if tab === 'vibes'}
 		<MainnetVibes />
 	{:else if tab === 'fly'}
