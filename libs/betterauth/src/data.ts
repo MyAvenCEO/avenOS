@@ -259,8 +259,16 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 		.select(['name', 'json_schema'])
 		.where('user_id', '=', uid)
 		.execute()
-	if (rows.length === 0) return ''
-	const lines = rows.map((r) => `- ${r.name}: ${JSON.stringify(asJson(r.json_schema))}`)
+	// Internal predication schemas (pred:*) are NOT exposed to the model — todos are managed ONLY
+	// through the consolidated `todos` schema, which writes the task/valid/due/prioritized bundle
+	// underneath (executeTodos). Never let the model query `task`/`pred:*` directly. board 0087.
+	const lines = rows
+		.filter((r) => !r.name.startsWith('pred:'))
+		.map((r) => `- ${r.name}: ${JSON.stringify(asJson(r.json_schema))}`)
+	// `todos` is virtual (backed by predications); describe its fields incl. due + priority.
+	lines.unshift(
+		'- todos: { "title": string, "done"?: boolean, "due"?: ISO-8601 date string, "priority"?: "high" | "medium" | "low" } — the ONE way to manage tasks; never query "task" or any "pred:*" schema.'
+	)
 	return `The data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}`
 }
 
