@@ -143,22 +143,58 @@ const refMap = $derived.by(() => {
 	return m
 })
 
-// Clicking a resolved row-ref jumps to that row (select its table + flash a highlight that clears).
-let highlightId = $state<string | null>(null)
+// The entity shown in the detail aside (also highlights its row). Clicking a row, or a resolved
+// row-ref, sets it; the aside lists every predication that mentions that entity. board 0088.
+let focusRow = $state<string | null>(null)
+/** Focus the entity a row belongs to: prefer the row's ref to a known entity (a `due` row → its
+ *  task), else the row itself (a `task` row → the task). So clicking any predication opens the todo. */
+function openDetail(row: DataValue<Record<string, unknown>>): void {
+	const data = (row.data ?? {}) as Record<string, unknown>
+	const link = selected
+		? schemaMeta(selected.jsonSchema).places.find(
+				(p) => p.ref && refMap.has(String(data[p.pos] ?? ''))
+			)
+		: undefined
+	focusRow = link ? String(data[link.pos]) : row.id
+}
 function gotoRef(target: { schemaId: string; rowId: string }): void {
 	selectedId = target.schemaId
 	view = 'data'
-	highlightId = target.rowId
+	focusRow = target.rowId
 }
+// Scroll the focused row into view when it changes (e.g. after a ref jump).
 $effect(() => {
-	const id = highlightId
+	const id = focusRow
 	if (!id) return
-	document.querySelector(`[data-row-id="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-	const timer = setTimeout(() => {
-		if (highlightId === id) highlightId = null
-	}, 2200)
-	return () => clearTimeout(timer)
+	document
+		.querySelector(`[data-row-id="${id}"]`)
+		?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 })
+
+// Every predication that mentions `focusId` in ANY place (incl. its own primary row), as short
+// "predicate sentences": the predicate (+ gismu) and its places as resolved role/value pairs.
+type SentencePart = { role: string; value: string; isRef: boolean }
+type Sentence = { id: string; predicate: string; gismu: string | null; parts: SentencePart[] }
+function relatedPredications(focusId: string): Sentence[] {
+	const out: Sentence[] = []
+	for (const tbl of tables) {
+		const meta = schemaMeta(tbl.jsonSchema)
+		for (const row of tbl.rows) {
+			const data = (row.data ?? {}) as Record<string, unknown>
+			const mentions =
+				row.id === focusId || meta.places.some((p) => String(data[p.pos] ?? '') === focusId)
+			if (!mentions) continue
+			const parts = meta.places.map((p) =>
+				p.ref
+					? { role: p.role, value: resolveRef(data[p.pos]).label, isRef: true }
+					: { role: p.role, value: data[p.pos] == null ? '—' : String(data[p.pos]), isRef: false }
+			)
+			out.push({ id: row.id, predicate: meta.title || tbl.name, gismu: meta.gismu, parts })
+		}
+	}
+	return out
+}
+const focusLabel = $derived(focusRow ? (refMap.get(focusRow)?.label ?? focusRow) : null)
 
 type DataCol = { key: string; label: string; ref: string | null }
 /** Columns for the Data table: place roles as headers (refs flagged), the redundant `predicate` dropped. */
@@ -365,9 +401,11 @@ $effect(() => {
 							</thead>
 							<tbody>
 								{#each selected.rows as row (row.id)}
+									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 									<tr
 										data-row-id={row.id}
-										class="border-border/60 border-b transition-colors last:border-0 {highlightId ===
+										onclick={() => openDetail(row)}
+										class="border-border/60 hover:bg-card/60 cursor-pointer border-b transition-colors last:border-0 {focusRow ===
 										row.id
 											? 'bg-primary/10'
 											: ''}"
@@ -386,7 +424,10 @@ $effect(() => {
 															type="button"
 															class="border-border text-foreground hover:bg-primary/10 hover:border-primary/40 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] transition-colors"
 															title={`Go to ${r.label}`}
-															onclick={() => gotoRef(r.target)}>↪ {r.label}</button
+															onclick={(e) => {
+																e.stopPropagation()
+																gotoRef(r.target)
+															}}>↪ {r.label}</button
 														>
 													{:else}
 														<span
@@ -408,4 +449,51 @@ $effect(() => {
 			</div>
 		{/if}
 	</div>
+
+	<!-- Right: detail aside — every predication attached to the clicked entity, as short sentences -->
+	{#if focusRow}
+		{@const sentences = relatedPredications(focusRow)}
+		<aside class="border-border hidden w-80 shrink-0 flex-col border-l md:flex">
+			<div class="border-border flex items-start justify-between gap-2 border-b px-3 py-2.5">
+				<div class="min-w-0">
+					<p class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
+						{t('mainnet.db.detail')}
+					</p>
+					<p class="text-foreground truncate text-[14px] font-semibold">{focusLabel}</p>
+				</div>
+				<button
+					type="button"
+					class="text-muted-foreground hover:text-foreground shrink-0 text-lg leading-none"
+					aria-label={t('mainnet.db.close')}
+					onclick={() => (focusRow = null)}>×</button
+				>
+			</div>
+			<div class="min-h-0 flex-1 overflow-y-auto p-3">
+				<p class="text-muted-foreground mb-2 text-[11px]">
+					{sentences.length}
+					{t('mainnet.db.attached')}
+				</p>
+				<ul class="flex flex-col gap-2">
+					{#each sentences as s (s.id)}
+						<li class="border-border bg-card rounded-[var(--radius)] border px-3 py-2">
+							<div class="mb-1 flex items-center gap-1.5">
+								<span class="text-foreground font-mono text-[13px] font-semibold">{s.predicate}</span>
+								{#if s.gismu}
+									<span class="text-muted-foreground font-mono text-[10px]">≡ {s.gismu}</span>
+								{/if}
+							</div>
+							<div class="flex flex-wrap gap-x-2.5 gap-y-1 text-[12px]">
+								{#each s.parts as part (part.role)}
+									<span>
+										<span class="text-muted-foreground uppercase opacity-60">{part.role}</span>
+										<span class="text-foreground {part.isRef ? 'italic' : ''}">{part.value}</span>
+									</span>
+								{/each}
+							</div>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		</aside>
+	{/if}
 </div>

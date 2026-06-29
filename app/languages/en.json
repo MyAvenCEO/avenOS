@@ -1125,6 +1125,9 @@
 			"rows": "rows",
 			"tabSchema": "Schema",
 			"tabData": "Data",
+			"detail": "Detail",
+			"attached": "predications attached",
+			"close": "Close",
 			"gismuTitle": "Canonical Lojban gismu the place structure derives from",
 			"rawSchema": "Raw JSON Schema",
 			"place": {

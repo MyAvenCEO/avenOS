@@ -1102,6 +1102,9 @@
 			"rows": "Einträge",
 			"tabSchema": "Schema",
 			"tabData": "Daten",
+			"detail": "Detail",
+			"attached": "Prädikationen verknüpft",
+			"close": "Schließen",
 			"gismuTitle": "Kanonisches Lojban-Gismu, von dem die Stellenstruktur abgeleitet ist",
 			"rawSchema": "JSON-Schema (roh)",
 			"place": {
