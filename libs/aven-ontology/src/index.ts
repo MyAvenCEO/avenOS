@@ -15,3 +15,4 @@ export type {
 export { create, query, remove, resolveBind, update } from './engine.js'
 export { memStore } from './memstore.js'
 export { TODO_SPEC } from './todo-spec.js'
+export { DOCUMENT_SPEC } from './document-spec.js'
