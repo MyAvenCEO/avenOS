@@ -100,7 +100,13 @@ export async function createTodos(
 }
 
 export async function updateTodos(
-	items: { id: string; title?: string; done?: boolean; due?: string | null; priority?: string | null }[]
+	items: {
+		id: string
+		title?: string
+		done?: boolean
+		due?: string | null
+		priority?: string | null
+	}[]
 ): Promise<void> {
 	await api('/api/data/todos', { method: 'PATCH', body: JSON.stringify({ items }) })
 }

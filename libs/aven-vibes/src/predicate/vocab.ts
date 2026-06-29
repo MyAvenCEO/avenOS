@@ -38,9 +38,30 @@ export const VALID: PredicateDef = {
 	gismu: 'temci',
 	gloss: 'x1 (fact) holds from x2 until x3 (x3 null = still open; set x3 to mark done/closed)',
 	places: [
-		{ pos: 'x1', role: 'fact', gloss: 'the fact this validity applies to', kind: 'ref', references: '*' },
-		{ pos: 'x2', role: 'from', gloss: 'start of the interval (inclusive)', kind: 'value', type: 'date-time', example: '2026-06-29T08:00:00Z' },
-		{ pos: 'x3', role: 'to', gloss: 'end of the interval, or null while open', kind: 'value', type: 'date-time', required: false, nullable: true }
+		{
+			pos: 'x1',
+			role: 'fact',
+			gloss: 'the fact this validity applies to',
+			kind: 'ref',
+			references: '*'
+		},
+		{
+			pos: 'x2',
+			role: 'from',
+			gloss: 'start of the interval (inclusive)',
+			kind: 'value',
+			type: 'date-time',
+			example: '2026-06-29T08:00:00Z'
+		},
+		{
+			pos: 'x3',
+			role: 'to',
+			gloss: 'end of the interval, or null while open',
+			kind: 'value',
+			type: 'date-time',
+			required: false,
+			nullable: true
+		}
 	]
 }
 
@@ -50,7 +71,14 @@ export const DUE: PredicateDef = {
 	gloss: 'x1 (task) is due by x2',
 	places: [
 		{ pos: 'x1', role: 'task', gloss: 'the task that is due', kind: 'ref', references: '*' },
-		{ pos: 'x2', role: 'date', gloss: 'the due date', kind: 'value', type: 'date-time', example: '2026-07-01' }
+		{
+			pos: 'x2',
+			role: 'date',
+			gloss: 'the due date',
+			kind: 'value',
+			type: 'date-time',
+			example: '2026-07-01'
+		}
 	]
 }
 
@@ -60,7 +88,14 @@ export const PRIORITIZED: PredicateDef = {
 	gloss: 'x1 (task) is prioritized at level x2',
 	places: [
 		{ pos: 'x1', role: 'task', gloss: 'the task being prioritized', kind: 'ref', references: '*' },
-		{ pos: 'x2', role: 'level', gloss: 'priority level', kind: 'value', type: 'string', example: 'high' }
+		{
+			pos: 'x2',
+			role: 'level',
+			gloss: 'priority level',
+			kind: 'value',
+			type: 'string',
+			example: 'high'
+		}
 	]
 }
 
@@ -69,8 +104,11 @@ export const TODO_PREDICATES: PredicateDef[] = [TASK, VALID, DUE, PRIORITIZED]
 
 /** Compiled `{ name, jsonSchema }` rows ready to seed as data_schema entries. */
 export function todoPredicateSchemas(): { name: string; jsonSchema: Record<string, unknown> }[] {
-	return TODO_PREDICATES.map((def) => ({ name: predSchemaName(def), jsonSchema: compilePredicate(def) }))
+	return TODO_PREDICATES.map((def) => ({
+		name: predSchemaName(def),
+		jsonSchema: compilePredicate(def)
+	}))
 }
 
-export { compilePredicate, predSchemaName }
 export type { PredicateDef } from './compile.js'
+export { compilePredicate, predSchemaName }

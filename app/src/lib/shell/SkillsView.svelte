@@ -1,5 +1,4 @@
 <script lang="ts">
-import { createQuery } from '@tanstack/svelte-query'
 import {
 	type Flow,
 	isComposite,
@@ -7,6 +6,7 @@ import {
 	type RecipeNode,
 	resourceSchema
 } from '@avenos/aven-skills'
+import { createQuery } from '@tanstack/svelte-query'
 import { listFlows } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
