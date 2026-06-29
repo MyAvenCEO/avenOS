@@ -61,6 +61,10 @@ describe('flow / recipe schema', () => {
 		const branchEdges = ingest.edges.filter((e) => e.from === 'classify' && e.when)
 		expect(branchEdges.length).toBeGreaterThanOrEqual(2)
 		expect(branchEdges.every((e) => ingest.nodes.some((n) => n.id === e.to))).toBe(true)
+		// consistency: EVERY per-type extractor is a reusable sub-skill (composite), not a bare leaf
+		expect(
+			branchEdges.every((e) => isComposite(ingest.nodes.find((n) => n.id === e.to)!))
+		).toBe(true)
 	})
 
 	test('flowDepths lays the Dokument-Ingest skill into columns (import→store→classify→extract)', () => {

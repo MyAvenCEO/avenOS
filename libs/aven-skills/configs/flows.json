@@ -53,16 +53,10 @@
 			{
 				"id": "extract-invoice",
 				"name": "Rechnung extrahieren",
-				"actor": "extract_document",
+				"flowRef": "rechnung",
 				"inputs": ["document"],
 				"outputs": ["invoice"],
-				"system_prompt": "Extrahiere alle Felder der Rechnung (Kopf, Lieferant, Käufer, Positionen, Summen) als striktes JSON nach dem invoice-Schema.",
-				"llm": {
-					"model": "gemma4-31b",
-					"vision": true,
-					"mode": "tool"
-				},
-				"tools": ["extract_document", "emit_fields"],
+				"note": "Composite → Sub-Skill »Rechnung extrahieren«",
 				"supervision": {
 					"strategy": "restart",
 					"retry": {
@@ -89,16 +83,10 @@
 			{
 				"id": "extract-contract",
 				"name": "Vertrag extrahieren",
-				"actor": "extract_document",
+				"flowRef": "vertrag",
 				"inputs": ["document"],
 				"outputs": ["contract"],
-				"system_prompt": "Extrahiere Vertragsparteien, Laufzeit, Kündigungsfrist und Konditionen als JSON nach dem contract-Schema.",
-				"llm": {
-					"model": "gemma4-31b",
-					"vision": true,
-					"mode": "tool"
-				},
-				"tools": ["extract_document", "emit_fields"],
+				"note": "Composite → Sub-Skill »Vertrag extrahieren«",
 				"supervision": {
 					"strategy": "restart",
 					"retry": {
@@ -156,6 +144,76 @@
 			{
 				"kind": "resource",
 				"on": "image"
+			}
+		]
+	},
+	{
+		"id": "rechnung",
+		"name": "Rechnung extrahieren",
+		"description": "Wiederverwendbarer Extraktions-Skill: Dokument → invoice-JSON (striktes Schema).",
+		"nodes": [
+			{
+				"id": "extract",
+				"name": "Rechnung extrahieren",
+				"actor": "extract_document",
+				"inputs": ["document"],
+				"outputs": ["invoice"],
+				"system_prompt": "Extrahiere alle Felder der Rechnung (Kopf, Lieferant, Käufer, Positionen, Summen) als striktes JSON nach dem invoice-Schema.",
+				"llm": {
+					"model": "gemma4-31b",
+					"vision": true,
+					"mode": "tool"
+				},
+				"tools": ["extract_document", "emit_fields"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			}
+		],
+		"edges": [],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "document"
+			}
+		]
+	},
+	{
+		"id": "vertrag",
+		"name": "Vertrag extrahieren",
+		"description": "Wiederverwendbarer Extraktions-Skill: Dokument → contract-JSON (striktes Schema).",
+		"nodes": [
+			{
+				"id": "extract",
+				"name": "Vertrag extrahieren",
+				"actor": "extract_document",
+				"inputs": ["document"],
+				"outputs": ["contract"],
+				"system_prompt": "Extrahiere Vertragsparteien, Laufzeit, Kündigungsfrist und Konditionen als JSON nach dem contract-Schema.",
+				"llm": {
+					"model": "gemma4-31b",
+					"vision": true,
+					"mode": "tool"
+				},
+				"tools": ["extract_document", "emit_fields"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			}
+		],
+		"edges": [],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "document"
 			}
 		]
 	},

@@ -180,6 +180,8 @@ To build:
 
 ## Progress log
 
+- `2026-06-29` — Consistency (review feedback): in Dokument-Ingest every per-type extractor is now a **reusable sub-skill (composite)** — added `rechnung` (Rechnung extrahieren) + `vertrag` (Vertrag extrahieren) skills alongside the existing `bank-statement` (Kontoauszug); classify branches to all three composites uniformly. Test asserts every branch target isComposite. 31 aven-skills tests green; tscs 0; app svelte-check clean.
+
 - `2026-06-29` — Boundary fix (review feedback): **classify AND extract now live inside the `Dokument-Ingest` skill** (import→store→classify→branch→extract-invoice/bank/extract-contract → emits invoice|transaction|contract). The `doc-ingest` (Beleg-Ingest) flow is now a thin bookkeeping consumer: Dokument-Ingest [composite] → enrich → book-open. Dropped the separate `intake` flow. Runs: `run-doc-understand` (the ingest skill: import→store→classify→extract, with classify+extract vibes) + `run-invoice-open` (bookkeeping: ingest→enrich→book-open). 31 aven-skills tests green, tscs 0, app svelte-check clean.
 
 - `2026-06-29` — Fixed doc-ingest config (review feedback): **classify is now a VISIBLE branch node** (was hidden in the composite). `ingest`→`intake` reusable sub-skill (import→store only); doc-ingest = intake(composite) → classify → branch(Rechnung/Kontoauszug/Vertrag) → extract-invoice→enrich→book-open / bank / extract-contract→enrich. No more dead-end branches; classify→extract contiguous. enrich accepts invoice+contract. Runs/tests updated; 31 aven-skills tests green, tscs 0, app svelte-check clean.
