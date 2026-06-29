@@ -1,8 +1,8 @@
 [
 	{
-		"id": "ingest",
-		"name": "Dokument-Ingest",
-		"description": "Wiederverwendbarer Sub-Skill: Beleg importieren → inhaltsadressiert ablegen → klassifizieren. Der gemeinsame Eingang für ALLE Belegarten.",
+		"id": "intake",
+		"name": "Dokument-Intake",
+		"description": "Wiederverwendbarer Sub-Skill: Beleg importieren → inhaltsadressiert ablegen. Klassifizieren passt der aufrufende Flow nach Bedarf an.",
 		"nodes": [
 			{
 				"id": "import",
@@ -27,41 +27,12 @@
 				"supervision": {
 					"strategy": "resume"
 				}
-			},
-			{
-				"id": "classify",
-				"name": "Klassifizieren",
-				"actor": "classify_document",
-				"inputs": ["document"],
-				"outputs": ["document"],
-				"note": "Belegart erkennen (Rechnung / Kontoauszug / Vertrag / …)",
-				"system_prompt": "Du bist Buchhalter. Bestimme die Belegart: invoice (Rechnung), bank_statement (Kontoauszug), contract (Vertrag) oder other. Gib Titel, Tags und eine kurze Buchungs-Zusammenfassung zurück.",
-				"llm": {
-					"model": "gemma4-31b",
-					"vision": true,
-					"mode": "vision"
-				},
-				"tools": ["classify_document"],
-				"supervision": {
-					"strategy": "restart",
-					"retry": {
-						"max": 2,
-						"backoff": "exponential"
-					}
-				}
 			}
 		],
 		"edges": [
 			{
 				"from": "import",
 				"to": "store",
-				"resource": "document",
-				"kind": "data",
-				"message": "document"
-			},
-			{
-				"from": "store",
-				"to": "classify",
 				"resource": "document",
 				"kind": "data",
 				"message": "document"
@@ -80,12 +51,34 @@
 		"description": "Beleg aufnehmen (Sub-Skill »Dokument-Ingest«: Import → Ablage → Klassifizieren) → je nach Belegart verzweigen (Rechnung, Kontoauszug-Sub-Skill, Vertrag) → anreichern, abgleichen, buchen. Komponiert wiederverwendbare Sub-Skills.",
 		"nodes": [
 			{
-				"id": "ingest",
+				"id": "intake",
 				"name": "Beleg aufnehmen",
-				"flowRef": "ingest",
+				"flowRef": "intake",
 				"inputs": ["file", "image"],
 				"outputs": ["document"],
-				"note": "Composite → Sub-Skill »Dokument-Ingest« (Import → Ablage → Klassifizieren)",
+				"note": "Composite → Sub-Skill »Dokument-Intake« (Import → Ablage)",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "classify",
+				"name": "Klassifizieren",
+				"actor": "classify_document",
+				"inputs": ["document"],
+				"outputs": ["document"],
+				"note": "Belegart erkennen → entscheidet die Verzweigung",
+				"system_prompt": "Du bist Buchhalter. Bestimme die Belegart: invoice (Rechnung), bank_statement (Kontoauszug), contract (Vertrag) oder other. Gib Titel, Tags und eine kurze Buchungs-Zusammenfassung zurück.",
+				"llm": {
+					"model": "gemma4-31b",
+					"vision": true,
+					"mode": "vision"
+				},
+				"tools": ["classify_document"],
 				"supervision": {
 					"strategy": "restart",
 					"retry": {
@@ -155,7 +148,7 @@
 				"id": "enrich",
 				"name": "Adressbuch anreichern",
 				"actor": "enrichAddressbookFromDoc",
-				"inputs": ["invoice"],
+				"inputs": ["invoice", "contract"],
 				"outputs": ["contact"],
 				"note": "Parteien matchen (USt-IdNr/IBAN/Name) → anlegen/ergänzen",
 				"tools": ["matchContact", "data_crud"],
@@ -187,28 +180,35 @@
 		],
 		"edges": [
 			{
-				"from": "ingest",
+				"from": "intake",
+				"to": "classify",
+				"resource": "document",
+				"kind": "data",
+				"message": "document"
+			},
+			{
+				"from": "classify",
 				"to": "extract-invoice",
 				"resource": "document",
-				"when": "Rechnung",
 				"kind": "data",
-				"message": "document"
+				"message": "document",
+				"when": "Rechnung"
 			},
 			{
-				"from": "ingest",
+				"from": "classify",
 				"to": "bank",
 				"resource": "document",
-				"when": "Kontoauszug",
 				"kind": "data",
-				"message": "document"
+				"message": "document",
+				"when": "Kontoauszug"
 			},
 			{
-				"from": "ingest",
+				"from": "classify",
 				"to": "extract-contract",
 				"resource": "document",
-				"when": "Vertrag",
 				"kind": "data",
-				"message": "document"
+				"message": "document",
+				"when": "Vertrag"
 			},
 			{
 				"from": "extract-invoice",
@@ -223,6 +223,13 @@
 				"resource": "invoice",
 				"kind": "data",
 				"message": "invoice"
+			},
+			{
+				"from": "extract-contract",
+				"to": "enrich",
+				"resource": "contract",
+				"kind": "data",
+				"message": "contract"
 			}
 		],
 		"triggers": [

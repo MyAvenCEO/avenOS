@@ -58,7 +58,8 @@ describe('flow / recipe schema', () => {
 		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')
 		expect(doc).toBeTruthy()
 		if (!doc) return
-		const branchEdges = doc.edges.filter((e) => e.from === 'ingest' && e.when)
+		// classify is the visible branch decision node
+		const branchEdges = doc.edges.filter((e) => e.from === 'classify' && e.when)
 		expect(branchEdges.length).toBeGreaterThanOrEqual(2)
 		expect(branchEdges.every((e) => doc.nodes.some((n) => n.id === e.to))).toBe(true)
 	})
@@ -66,10 +67,11 @@ describe('flow / recipe schema', () => {
 	test('flowDepths lays nodes into columns (branches share the entry column)', () => {
 		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')!
 		const depth = flowDepths(doc)
-		expect(depth.ingest).toBe(0) // shared entry (the Dokument-Ingest composite)
-		// the per-type extract branches all sit one column after the entry
-		expect(depth['extract-invoice']).toBe(1)
-		expect(depth.bank).toBe(1)
+		expect(depth.intake).toBe(0) // reusable intake (import→store) is the entry
+		expect(depth.classify).toBe(1) // visible branch decision node
+		// the per-type extract branches sit one column after classify
+		expect(depth['extract-invoice']).toBe(2)
+		expect(depth.bank).toBe(2)
 		expect(depth['book-open']).toBeGreaterThan(depth['extract-invoice']) // downstream is deeper
 	})
 
@@ -133,8 +135,9 @@ describe('flow / recipe schema', () => {
 		expect(flat.nodes.every(isLeaf)).toBe(true)
 		// bank-statement(2) + doc-ingest(9: ingest-sub 3 + bank-sub 2 + extract-invoice/contract/enrich/book-open) + report(1) = 12
 		expect(flat.nodes.length).toBe(12)
-		// nested namespacing: doc-ingest's ingest composite expands the ingest sub-skill's classify
-		expect(flat.nodes.some((n) => n.id === 'ingest/ingest/classify')).toBe(true)
+		// nested namespacing: month-close's ingest composite → doc-ingest → its classify + intake sub-skill
+		expect(flat.nodes.some((n) => n.id === 'ingest/classify')).toBe(true)
+		expect(flat.nodes.some((n) => n.id === 'ingest/intake/import')).toBe(true)
 		expect(flat.nodes.some((n) => n.id === 'bank/extract-stmt')).toBe(true)
 		// the daisy-chain edge bank → ingest joins the sub-flows' terminal → entry
 		expect(flat.edges.some((e) => e.from.startsWith('bank/') && e.to.startsWith('ingest/'))).toBe(
@@ -176,14 +179,17 @@ describe('flow / recipe schema', () => {
 		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')!
 		const ids = new Set(doc.nodes.map((n) => n.id))
 		expect(run.trace.map((s) => s.nodeId)).toEqual([
-			'ingest',
+			'intake',
+			'classify',
 			'extract-invoice',
 			'enrich',
 			'book-open'
 		])
 		expect(run.trace.every((s) => ids.has(s.nodeId))).toBe(true)
-		expect(run.trace.every((s) => typeof s.vibe === 'string' && s.vibe.length > 0)).toBe(true)
-		expect(run.trace.every((s) => s.vibeData != null)).toBe(true)
+		// every meaningful step (intake is plumbing) carries a vibe + data
+		const vibed = run.trace.filter((s) => s.nodeId !== 'intake')
+		expect(vibed.every((s) => typeof s.vibe === 'string' && s.vibe.length > 0)).toBe(true)
+		expect(vibed.every((s) => s.vibeData != null)).toBe(true)
 		// it ends OFFEN (Sollstellung), awaiting the payment
 		const book = run.trace.find((s) => s.nodeId === 'book-open')!
 		expect((book.vibeData as { booking?: { status?: string } }).booking?.status).toBe('offen')

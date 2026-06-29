@@ -7,10 +7,18 @@
 		"status": "running",
 		"trace": [
 			{
-				"nodeId": "ingest",
+				"nodeId": "intake",
 				"state": "done",
 				"at": "+0s",
 				"inputs": ["1× Datei"],
+				"outputs": ["Dokument abgelegt"],
+				"message": "inhaltsadressiert in sparks/PRIVATE"
+			},
+			{
+				"nodeId": "classify",
+				"state": "done",
+				"at": "+1s",
+				"inputs": ["1× Dokument"],
 				"outputs": ["als Rechnung erkannt"],
 				"vibe": "bookkeeping",
 				"vibeData": {
@@ -402,7 +410,7 @@
 		"status": "running",
 		"trace": [
 			{
-				"nodeId": "ingest",
+				"nodeId": "classify",
 				"state": "done",
 				"at": "+0s",
 				"inputs": ["1× Datei"],
