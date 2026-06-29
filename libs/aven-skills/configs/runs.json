@@ -7,137 +7,6 @@
 		"status": "running",
 		"trace": [
 			{
-				"nodeId": "ingest",
-				"state": "done",
-				"at": "+0s",
-				"inputs": ["1× Datei"],
-				"outputs": ["Rechnung (extrahiert)"],
-				"vibe": "doc-compare",
-				"vibeData": {
-					"type": "invoice",
-					"extracted": {
-						"header": {
-							"document_kind": "Rechnung",
-							"invoice_number": "2026-0815",
-							"issue_date": "2026-06-01",
-							"due_date": "2026-06-15",
-							"currency": "EUR"
-						},
-						"vendor": {
-							"name": "Müller GmbH",
-							"address": "Musterstraße 1, 80333 München",
-							"ust_id": "DE123456789"
-						},
-						"buyer": {
-							"name": "avenCEO GmbH"
-						},
-						"statements": [
-							{
-								"section_title": "Positionen",
-								"line_items": [
-									{
-										"position": "1",
-										"description": "Druckerpapier A4 (Karton)",
-										"quantity": 5,
-										"unit": "Stk",
-										"unit_price": 20,
-										"tax_rate": 19,
-										"amount": 100
-									}
-								]
-							}
-						],
-						"totals": {
-							"subtotal": 100,
-							"tax_total": 19,
-							"invoice_total": 119
-						},
-						"total_outstanding": 119
-					}
-				},
-				"message": "Dokument-Ingest abgeschlossen"
-			},
-			{
-				"nodeId": "enrich",
-				"state": "done",
-				"at": "+5s",
-				"inputs": ["invoice JSON"],
-				"outputs": ["Kontakt Müller GmbH"],
-				"vibe": "contact",
-				"vibeData": {
-					"name": "Müller GmbH",
-					"matchedBy": "USt-IdNr",
-					"isNew": false,
-					"ust_id": "DE123456789",
-					"address": "Musterstraße 1, 80333 München",
-					"added": ["USt-IdNr", "Adresse", "1 Beleg verknüpft"]
-				}
-			},
-			{
-				"nodeId": "book-open",
-				"state": "running",
-				"at": "+8s",
-				"inputs": ["invoice JSON"],
-				"outputs": ["Offener Posten 119,00 €"],
-				"message": "Sollstellung gebucht · wartet auf Zahlung",
-				"vibe": "invoice-booking",
-				"vibeData": {
-					"currency": "EUR",
-					"invoice": {
-						"header": {
-							"invoice_number": "2026-0815",
-							"issue_date": "2026-06-01",
-							"currency": "EUR"
-						},
-						"vendor": {
-							"name": "Müller GmbH"
-						},
-						"totals": {
-							"invoice_total": 119
-						}
-					},
-					"booking": {
-						"invoice_number": "2026-0815",
-						"vendor": "Müller GmbH",
-						"currency": "EUR",
-						"lines": [
-							{
-								"soll_konto": "6815",
-								"soll_bezeichnung": "Bürobedarf",
-								"net_amount": 100,
-								"tax_amount": 19,
-								"gross_amount": 119,
-								"tax_key": "VST19",
-								"note": null
-							}
-						],
-						"is_split": false,
-						"haben_konto": "3300",
-						"haben_bezeichnung": "Verbindlichkeiten aus L+L",
-						"net_amount": 100,
-						"tax_amount": 19,
-						"gross_amount": 119,
-						"soll_konto": "6815",
-						"soll_bezeichnung": "Bürobedarf",
-						"tax_key": "VST19",
-						"buchungstext": "Bürobedarf Müller GmbH, Rg. 2026-0815",
-						"confidence": "high",
-						"reason": "Sollstellung; wartet auf den Zahlungseingang.",
-						"status": "offen",
-						"direction": "incoming"
-					}
-				}
-			}
-		]
-	},
-	{
-		"id": "run-doc-understand",
-		"flowId": "ingest",
-		"label": "Müller GmbH — Beleg verstehen",
-		"startedAt": "heute 09:01",
-		"status": "done",
-		"trace": [
-			{
 				"nodeId": "import",
 				"state": "done",
 				"at": "+0s",
@@ -214,6 +83,77 @@
 							"invoice_total": 119
 						},
 						"total_outstanding": 119
+					}
+				}
+			},
+			{
+				"nodeId": "enrich",
+				"state": "done",
+				"at": "+5s",
+				"inputs": ["invoice JSON"],
+				"outputs": ["Kontakt Müller GmbH"],
+				"vibe": "contact",
+				"vibeData": {
+					"name": "Müller GmbH",
+					"matchedBy": "USt-IdNr",
+					"isNew": false,
+					"ust_id": "DE123456789",
+					"address": "Musterstraße 1, 80333 München",
+					"added": ["USt-IdNr", "Adresse", "1 Beleg verknüpft"]
+				}
+			},
+			{
+				"nodeId": "book-open",
+				"state": "running",
+				"at": "+8s",
+				"inputs": ["invoice JSON"],
+				"outputs": ["Offener Posten 119,00 €"],
+				"message": "Sollstellung gebucht · wartet auf Zahlung",
+				"vibe": "invoice-booking",
+				"vibeData": {
+					"currency": "EUR",
+					"invoice": {
+						"header": {
+							"invoice_number": "2026-0815",
+							"issue_date": "2026-06-01",
+							"currency": "EUR"
+						},
+						"vendor": {
+							"name": "Müller GmbH"
+						},
+						"totals": {
+							"invoice_total": 119
+						}
+					},
+					"booking": {
+						"invoice_number": "2026-0815",
+						"vendor": "Müller GmbH",
+						"currency": "EUR",
+						"lines": [
+							{
+								"soll_konto": "6815",
+								"soll_bezeichnung": "Bürobedarf",
+								"net_amount": 100,
+								"tax_amount": 19,
+								"gross_amount": 119,
+								"tax_key": "VST19",
+								"note": null
+							}
+						],
+						"is_split": false,
+						"haben_konto": "3300",
+						"haben_bezeichnung": "Verbindlichkeiten aus L+L",
+						"net_amount": 100,
+						"tax_amount": 19,
+						"gross_amount": 119,
+						"soll_konto": "6815",
+						"soll_bezeichnung": "Bürobedarf",
+						"tax_key": "VST19",
+						"buchungstext": "Bürobedarf Müller GmbH, Rg. 2026-0815",
+						"confidence": "high",
+						"reason": "Sollstellung; wartet auf den Zahlungseingang.",
+						"status": "offen",
+						"direction": "incoming"
 					}
 				}
 			}
@@ -466,29 +406,6 @@
 				"at": "+20s",
 				"inputs": ["6× Glas"],
 				"message": "craftet 16 Scheiben…"
-			}
-		]
-	},
-	{
-		"id": "run-ingest-1",
-		"flowId": "ingest",
-		"label": "Cursor Rechnung 6199869E-0049",
-		"startedAt": "heute 10:14",
-		"status": "running",
-		"trace": [
-			{
-				"nodeId": "classify",
-				"state": "done",
-				"at": "+0s",
-				"inputs": ["1× Dokument"],
-				"outputs": ["als Rechnung erkannt"]
-			},
-			{
-				"nodeId": "extract-invoice",
-				"state": "running",
-				"at": "+3s",
-				"inputs": ["1× Dokument"],
-				"message": "Vision-Extraktion läuft…"
 			}
 		]
 	}

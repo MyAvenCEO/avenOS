@@ -54,28 +54,25 @@ describe('flow / recipe schema', () => {
 	})
 
 	test('a shared entry point branches via guarded (when) edges', () => {
-		// classify (inside the Dokument-Ingest skill) branches to the per-type extractors.
-		const ingest = EXAMPLE_FLOWS.find((f) => f.id === 'ingest')
-		expect(ingest).toBeTruthy()
-		if (!ingest) return
-		const branchEdges = ingest.edges.filter((e) => e.from === 'classify' && e.when)
+		// classify branches to the per-type extractor sub-skills.
+		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')
+		expect(doc).toBeTruthy()
+		if (!doc) return
+		const branchEdges = doc.edges.filter((e) => e.from === 'classify' && e.when)
 		expect(branchEdges.length).toBeGreaterThanOrEqual(2)
-		expect(branchEdges.every((e) => ingest.nodes.some((n) => n.id === e.to))).toBe(true)
+		expect(branchEdges.every((e) => doc.nodes.some((n) => n.id === e.to))).toBe(true)
 		// consistency: EVERY per-type extractor is a reusable sub-skill (composite), not a bare leaf
-		expect(
-			branchEdges.every((e) => isComposite(ingest.nodes.find((n) => n.id === e.to)!))
-		).toBe(true)
+		expect(branchEdges.every((e) => isComposite(doc.nodes.find((n) => n.id === e.to)!))).toBe(true)
 	})
 
-	test('flowDepths lays the Dokument-Ingest skill into columns (import→store→classify→extract)', () => {
-		const ingest = EXAMPLE_FLOWS.find((f) => f.id === 'ingest')!
-		const depth = flowDepths(ingest)
+	test('flowDepths lays the Beleg-Ingest flow into columns (import→store→classify→extract→enrich/book)', () => {
+		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')!
+		const depth = flowDepths(doc)
 		expect(depth.import).toBe(0)
 		expect(depth.store).toBe(1)
 		expect(depth.classify).toBe(2) // branch decision node
-		// the per-type extractors sit one column after classify
-		expect(depth['extract-invoice']).toBe(3)
-		expect(depth.bank).toBe(3)
+		expect(depth['extract-invoice']).toBe(3) // per-type extractor sub-skill
+		expect(depth['book-open']).toBeGreaterThan(depth['extract-invoice']) // shared booking after
 	})
 
 	test('actor nodes carry config (system_prompt / llm / tools)', () => {
@@ -138,9 +135,9 @@ describe('flow / recipe schema', () => {
 		expect(flat.nodes.every(isLeaf)).toBe(true)
 		// docs→doc-ingest(9) + bank→tx-import(4) + settle→open-item-match(3) + report(1) = 17
 		expect(flat.nodes.length).toBe(17)
-		// deep nesting: month-close → docs → doc-ingest → Dokument-Ingest skill → classify + the Kontoauszug sub-skill
-		expect(flat.nodes.some((n) => n.id === 'docs/ingest/classify')).toBe(true)
-		expect(flat.nodes.some((n) => n.id === 'docs/ingest/bank/extract-stmt')).toBe(true)
+		// deep nesting: month-close → docs → doc-ingest (classify) + the Kontoauszug sub-skill
+		expect(flat.nodes.some((n) => n.id === 'docs/classify')).toBe(true)
+		expect(flat.nodes.some((n) => n.id === 'docs/bank/extract-stmt')).toBe(true)
 		expect(flat.nodes.some((n) => n.id === 'bank/parse-csv')).toBe(true)
 		// the daisy-chain edge bank → settle joins the sub-flows' terminal → entry
 		expect(flat.edges.some((e) => e.from.startsWith('bank/') && e.to.startsWith('settle/'))).toBe(
@@ -181,11 +178,19 @@ describe('flow / recipe schema', () => {
 		if (!run) return
 		const doc = EXAMPLE_FLOWS.find((f) => f.id === 'doc-ingest')!
 		const ids = new Set(doc.nodes.map((n) => n.id))
-		expect(run.trace.map((s) => s.nodeId)).toEqual(['ingest', 'enrich', 'book-open'])
+		expect(run.trace.map((s) => s.nodeId)).toEqual([
+			'import',
+			'store',
+			'classify',
+			'extract-invoice',
+			'enrich',
+			'book-open'
+		])
 		expect(run.trace.every((s) => ids.has(s.nodeId))).toBe(true)
-		// every step carries a vibe + data (ingest=doc-compare, enrich=contact, book-open=invoice-booking)
-		expect(run.trace.every((s) => typeof s.vibe === 'string' && s.vibe.length > 0)).toBe(true)
-		expect(run.trace.every((s) => s.vibeData != null)).toBe(true)
+		// the meaningful steps (import/store are plumbing) each carry a vibe + data
+		const vibed = run.trace.filter((s) => !['import', 'store'].includes(s.nodeId))
+		expect(vibed.every((s) => typeof s.vibe === 'string' && s.vibe.length > 0)).toBe(true)
+		expect(vibed.every((s) => s.vibeData != null)).toBe(true)
 		// it ends OFFEN (Sollstellung), awaiting the payment
 		const book = run.trace.find((s) => s.nodeId === 'book-open')!
 		expect((book.vibeData as { booking?: { status?: string } }).booking?.status).toBe('offen')
