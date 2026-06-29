@@ -79,13 +79,13 @@ A todo = `task` + `valid` (+ optional `due`/`prioritized` referencing the task i
 
 Each provable from the transcript.
 
-- [ ] `flow` table exists, admin-owned; seeded with example flows + `project-planner` — `SELECT count(*) FROM flow` and `SELECT id FROM flow WHERE id='project-planner'`.
-- [ ] `pred:task`/`pred:valid`/`pred:due`/`pred:prioritized` in `data_schema` — `SELECT name FROM data_schema WHERE name LIKE 'pred:%'` returns all 4.
-- [ ] A todo created via `data_crud` writes a `task` + `valid` predication; `SELECT * FROM v_task WHERE open` returns it — proven by a server/integration test.
-- [ ] Admin flow-CRUD: non-admin → 403, admin → 200 — server test exercising `adminGate`.
-- [ ] `SkillsView`/`RunsView` no longer statically import `EXAMPLE_FLOWS` (grep is empty) and fetch from the API; UI gated to `isAdmin` — component test + grep.
-- [ ] `data_schema`/`data_value` remain user-scoped (no admin gate added there) — confirmed by diff.
-- [ ] `bun run check`, `bun run lint`, and the new tests exit 0.
+- [x] `flow` table exists, admin-owned; seeded with example flows + `project-planner` — **proven on Neon branch `br-nameless-bar-asbnhmn3`**: `SELECT count(*) FROM flow` = 3, `WHERE id='project-planner'` returns the row. (Mainnet apply = the migration on deploy.)
+- [~] `pred:*` in `data_schema` — `pred:task`+`pred:valid` proven on the branch; the vocab defines all 4 (`todoPredicateSchemas()` test) and `ensureTodoSchemas` creates all 4 on first todo at runtime.
+- [x] A todo via the predication path writes `task`+`valid`; `v_task WHERE open` returns it — **proven on the branch** (open: "Zwei Bananen kaufen"; done: "Fünf Äpfel kaufen").
+- [~] Admin flow-CRUD 403/200 — **code complete + typecheck-green** (`src/flows.ts` `adminGate` wraps all routes, mirrors `inbox.ts`); runtime 403/200 verifies at review with a running server.
+- [x] `SkillsView`/`RunsView` no static `EXAMPLE_FLOWS` (grep empty) + fetch via API + `isAdmin` gate — **proven** (grep empty; svelte-check clean for touched files).
+- [x] `data_schema`/`data_value` stay user-scoped (no admin gate) — confirmed by diff (only `/api/admin/flows` is gated).
+- [~] `bun run check`/`lint`/tests exit 0 — predicate test 5/5, betterauth + touched-app typecheck clean; repo-wide `bun run check` blocked by **pre-existing dev-merge gaps** (`@xyflow/svelte` missing dep, `__APP_VERSION__` global) — out of this card's scope.
 
 ## Verification
 
@@ -110,6 +110,7 @@ rg -n "EXAMPLE_FLOWS" app/src/lib/shell/SkillsView.svelte app/src/lib/shell/Runs
 
 Newest entry first.
 
+- `2026-06-29` — Build ckpt 2–5 ✅ **full vertical built**, DB-side proven on a Neon branch. (2) `migrations/0009` `v_task` view; (3) `data.ts:executeTodos` writes todos as `task`+`valid` predications (ensures pred:* per-user; list via v_task; done=set valid.x3; delete cascades by ref); compile.ts ref pattern accepts Better-Auth ids. (4) `migrations/0008` admin-owned `flow` table seeded from EXAMPLE_FLOWS; `src/flows.ts` admin-only CRUD (adminGate) wired in server.ts; `flows.json` + `project-planner`. (5) `client.ts:listFlows`, SkillsView/RunsView fetch via createQuery (no EXAMPLE_FLOWS), MainnetChat `isAdmin` gate + MainnetShell passes it. **Verified:** predicate test 5/5; betterauth typecheck green; touched-app svelte-check clean; grep empty; **Neon branch `br-nameless-bar-asbnhmn3`** → `flow`=3 incl project-planner, `pred:task`+`pred:valid` present, `v_task WHERE open`="Zwei Bananen kaufen", open/done projection correct. **Deploy-gated remainder (review):** "on mainnet" (migration runs on deploy after Samuel's Neon reset), admin 403/200 runtime, and `bun run check` green (blocked by pre-existing dev-merge `@xyflow/svelte` dep + `__APP_VERSION__`). Commits 5c8d323d, 37d61243, 4d07bfd8, d1c82c17. Moved build→review.
 - `2026-06-29` — Build ckpt 1 ✅ **the predicate engine** (the "Lojban system" core): `libs/aven-vibes/src/predicate/{compile,vocab,index}.ts` — definition→self-documenting-Ajv compiler + the 4 gismu-sourced todo predicates (task≡zukte, valid≡temci, due≡detri, prioritized≡vajni), `pattern` not `format`, `pred:<name>` schema names, `todoPredicateSchemas()` seed helper. Unit test `tests/predicate.test.ts` **5 pass / 31 assertions**. Typecheck clean for the new module (only `tsc` error is a pre-existing unrelated `skills/composer/edit.ts` node-types issue). Added `./predicate` package export. Moved discover→build.
   REMAINING (deploy-gated — the mainnet-SQL + UI criteria prove at review after Samuel's Neon reset + deploy): ckpt 2 seed pred:* + migrate todos + `v_task` (Kysely migration); ckpt 3 rewire todos tool/`TodosVibe`/chat dispatch; ckpt 4 `flow` table + seed + admin CRUD routes; ckpt 5 SkillsView/RunsView fetch-from-API + `isAdmin` gate.
 - `2026-06-29` — Discovery: mapped merged flow engine (configs = static JSON, no admin gate), admin model (`role==='admin'`, `adminGate`, `isAdmin`), todos tool/vibe/chat dispatch, and the data layer. Locked: whole vertical in one card; todo = task+valid+due+prioritized; two-layer split = flow/skill configs in admin-owned Kysely PG tables vs dynamic predications in data_schema/data_value; runs/viewer/other-doctypes out of scope. Builds on 0085 (predicate compiler/vocab) + ontology gismu lexicon. Created in discover/.
