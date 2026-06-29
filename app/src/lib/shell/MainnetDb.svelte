@@ -1,5 +1,6 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
+import { authClient } from '$lib/auth/auth-client'
 import { type DataValue, listSchemas, listValues } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import { nav } from '$lib/shell/nav.svelte'
@@ -45,6 +46,7 @@ type Place = {
 	example: string
 	required: boolean
 	nullable: boolean
+	ref: string | null // the x-ref target ('user' / '*' / a type) when this place holds a reference
 }
 type SchemaMeta = {
 	isPredication: boolean
@@ -82,7 +84,8 @@ function schemaMeta(jsonSchema: unknown): SchemaMeta {
 			kind: kindLabel(p),
 			example: Array.isArray(p.examples) && p.examples.length ? String(p.examples[0]) : '',
 			required: required.includes(pos),
-			nullable: Array.isArray(p.type) && (p.type as string[]).includes('null')
+			nullable: Array.isArray(p.type) && (p.type as string[]).includes('null'),
+			ref: typeof p['x-ref'] === 'string' ? (p['x-ref'] as string) : null
 		}))
 	return {
 		isPredication: !!props.predicate || gismu !== null,
@@ -117,6 +120,51 @@ const tables = $derived<Table[]>(tablesQuery.data ?? [])
 const loading = $derived(tablesQuery.isPending)
 const err = $derived(tablesQuery.error ? (tablesQuery.error as Error).message : null)
 const selected = $derived(tables.find((tbl) => tbl.id === selectedId) ?? null)
+
+// Who is signed in — so a `user` reference resolves to "you", not a raw id.
+const sessionStore = authClient.useSession()
+const me = $derived(
+	$sessionStore.data?.user as { id?: string; name?: string; email?: string } | undefined
+)
+
+// Resolve a reference id → a human label. A predication's id IS its data_value row id, so a ref to
+// another row (e.g. valid.x1 → a task) resolves to THAT row's first value place (the task's title).
+// Built across ALL tables so any ref can be resolved. board 0088.
+const refMap = $derived.by(() => {
+	const m = new Map<string, string>()
+	for (const tbl of tables) {
+		const labelPos = schemaMeta(tbl.jsonSchema).places.find((p) => !p.ref)?.pos
+		if (!labelPos) continue
+		for (const row of tbl.rows) {
+			const v = (row.data as Record<string, unknown> | undefined)?.[labelPos]
+			if (typeof v === 'string') m.set(row.id, v)
+		}
+	}
+	return m
+})
+
+type DataCol = { key: string; label: string; ref: string | null }
+/** Columns for the Data table: place roles as headers (refs flagged), the redundant `predicate` dropped. */
+function dataColumns(table: Table): DataCol[] {
+	const byPos = new Map(schemaMeta(table.jsonSchema).places.map((p) => [p.pos, p]))
+	return table.columns
+		.filter((key) => key !== 'predicate')
+		.map((key) => {
+			const p = byPos.get(key)
+			return { key, label: p ? p.role : key, ref: p?.ref ?? null }
+		})
+}
+
+type Resolved = { label: string; kind: 'you' | 'row' | 'id' }
+/** A ref cell → the signed-in user ("you"), the referenced row's label, or a shortened id fallback. */
+function resolveRef(id: unknown): Resolved {
+	const s = id == null ? '' : String(id)
+	if (!s) return { label: '—', kind: 'id' }
+	if (me?.id && s === me.id) return { label: me.name || me.email || 'you', kind: 'you' }
+	const r = refMap.get(s)
+	if (r) return { label: r, kind: 'row' }
+	return { label: s.length > 14 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s, kind: 'id' }
+}
 
 // Auto-select the first table once they load.
 $effect(() => {
@@ -280,15 +328,17 @@ $effect(() => {
 						{t('mainnet.db.emptyTable')}
 					</p>
 				{:else}
+					{@const cols = dataColumns(selected)}
 					<div class="border-border overflow-x-auto rounded-[var(--radius-lg)] border">
 						<table class="w-full border-collapse text-left text-[13px]">
 							<thead>
 								<tr class="border-border bg-card border-b">
-									{#each selected.columns as col (col)}
+									{#each cols as c (c.key)}
 										<th
 											class="text-muted-foreground px-3 py-2 font-bold tracking-wider whitespace-nowrap uppercase"
 										>
-											{col}
+											{c.label}
+											{#if c.ref}<span class="ml-0.5 normal-case opacity-50">↪</span>{/if}
 										</th>
 									{/each}
 								</tr>
@@ -296,8 +346,30 @@ $effect(() => {
 							<tbody>
 								{#each selected.rows as row (row.id)}
 									<tr class="border-border/60 border-b last:border-0">
-										{#each selected.columns as col (col)}
-											<td class="text-foreground px-3 py-2 align-top">{cell(row.data?.[col])}</td>
+										{#each cols as c (c.key)}
+											<td class="text-foreground px-3 py-2 align-top">
+												{#if c.ref}
+													{@const r = resolveRef(row.data?.[c.key])}
+													{#if r.kind === 'you'}
+														<span
+															class="bg-primary/10 text-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium"
+															>◆ {r.label}</span
+														>
+													{:else if r.kind === 'row'}
+														<span
+															class="border-border text-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px]"
+															title={String(row.data?.[c.key] ?? '')}>↪ {r.label}</span
+														>
+													{:else}
+														<span
+															class="text-muted-foreground font-mono text-[12px]"
+															title={String(row.data?.[c.key] ?? '')}>{r.label}</span
+														>
+													{/if}
+												{:else}
+													{cell(row.data?.[c.key])}
+												{/if}
+											</td>
 										{/each}
 									</tr>
 								{/each}
