@@ -1,0 +1,287 @@
+{
+  "zabna": {
+    "name": "favorable",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "favorable thing", "definition": "the thing that is great/admirable/desirable", "example": "the new design", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property in which it is favorable", "example": "ease of use", "kind": "value", "type": "string" },
+      "x3": { "role": "standard", "definition": "standard by which it is judged favorable", "example": "industry best practice", "kind": "value", "type": "string" }
+    }
+  },
+  "zajba": {
+    "name": "gymnast",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "gymnast", "definition": "the one performing gymnastics", "example": "the Olympic athlete", "kind": "ref", "references": "*" },
+      "x2": { "role": "feat", "definition": "the gymnastics feat performed", "example": "a back handspring", "kind": "value", "type": "string" }
+    }
+  },
+  "zalvi": {
+    "name": "grinds",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "grinder", "definition": "the hard surface(s) that grind/pulverize", "example": "the millstone", "kind": "ref", "references": "*" },
+      "x2": { "role": "ground material", "definition": "the material being crushed", "example": "the wheat grain", "kind": "ref", "references": "*" },
+      "x3": { "role": "powder", "definition": "the resulting powder", "example": "fine flour", "kind": "ref", "references": "*" }
+    }
+  },
+  "zanru": {
+    "name": "approves",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "approver", "definition": "the one who approves/gives favor", "example": "the manager", "kind": "ref", "references": "*" },
+      "x2": { "role": "plan", "definition": "the plan/action approved", "example": "the marketing proposal", "kind": "value", "type": "string" }
+    }
+  },
+  "zarci": {
+    "name": "market",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "market", "definition": "the market/store/shop", "example": "the farmers' market", "kind": "ref", "references": "*" },
+      "x2": { "role": "goods", "definition": "goods sold/traded", "example": "fresh produce", "kind": "value", "type": "string" },
+      "x3": { "role": "participants", "definition": "operators/participants of the market", "example": "local vendors", "kind": "ref", "references": "*" }
+    }
+  },
+  "zargu": {
+    "name": "buttock",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "buttock", "definition": "the buttock/rear body-part", "example": "the seat of the dancer", "kind": "ref", "references": "*" },
+      "x2": { "role": "body owner", "definition": "the body the buttock belongs to", "example": "the gymnast", "kind": "ref", "references": "*" }
+    }
+  },
+  "zasni": {
+    "name": "temporary",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "temporary thing", "definition": "the thing that is temporary/changing", "example": "the scaffolding", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property that is temporary", "example": "its placement", "kind": "value", "type": "string" },
+      "x3": { "role": "standard", "definition": "standard/expectation of impermanence", "example": "construction timeline", "kind": "value", "type": "string" }
+    }
+  },
+  "zasti": {
+    "name": "exists",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "existing thing", "definition": "the thing that exists/is real", "example": "the black hole", "kind": "ref", "references": "*" },
+      "x2": { "role": "observer", "definition": "the one for whom it is real", "example": "the physicist", "kind": "ref", "references": "*" },
+      "x3": { "role": "metaphysics", "definition": "metaphysics under which it exists", "example": "materialist framework", "kind": "value", "type": "string" }
+    }
+  },
+  "zbabu": {
+    "name": "soap",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "soap", "definition": "the quantity of soap", "example": "a bar of lavender soap", "kind": "ref", "references": "*" },
+      "x2": { "role": "source", "definition": "source the soap is made from", "example": "olive oil and lye", "kind": "value", "type": "string" },
+      "x3": { "role": "composition", "definition": "composition/ingredients of the soap", "example": "glycerin and fragrance", "kind": "value", "type": "string" }
+    }
+  },
+  "zbani": {
+    "name": "bay",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "bay", "definition": "the bay/inlet of water", "example": "San Francisco Bay", "kind": "ref", "references": "*" },
+      "x2": { "role": "coast", "definition": "coast/shoreline the bay is part of", "example": "the Pacific coastline", "kind": "ref", "references": "*" }
+    }
+  },
+  "zbasu": {
+    "name": "makes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "maker", "definition": "the one who makes/builds/manufactures", "example": "the carpenter", "kind": "ref", "references": "*" },
+      "x2": { "role": "product", "definition": "the thing made/assembled", "example": "a wooden table", "kind": "ref", "references": "*" },
+      "x3": { "role": "materials", "definition": "materials/parts it is made from", "example": "oak planks and screws", "kind": "value", "type": "string" }
+    }
+  },
+  "zbepi": {
+    "name": "pedestal",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pedestal", "definition": "the pedestal/base/stand", "example": "the marble plinth", "kind": "ref", "references": "*" },
+      "x2": { "role": "supported", "definition": "the object supported by it", "example": "the statue", "kind": "ref", "references": "*" },
+      "x3": { "role": "material", "definition": "material/properties of the pedestal", "example": "polished granite", "kind": "value", "type": "string" }
+    }
+  },
+  "zdani": {
+    "name": "nest",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "nest", "definition": "the nest/house/den/home", "example": "the eagle's nest", "kind": "ref", "references": "*" },
+      "x2": { "role": "dweller", "definition": "the one the nest is for", "example": "the nesting pair", "kind": "ref", "references": "*" }
+    }
+  },
+  "zdile": {
+    "name": "amusing",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "amusing thing", "definition": "the abstraction that amuses", "example": "the comedy show", "kind": "value", "type": "string" },
+      "x2": { "role": "amused one", "definition": "the one who is amused", "example": "the audience", "kind": "ref", "references": "*" },
+      "x3": { "role": "aspect", "definition": "aspect that amuses", "example": "the witty punchlines", "kind": "value", "type": "string" }
+    }
+  },
+  "zekri": {
+    "name": "crime",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "crime", "definition": "the punishable crime/event", "example": "the burglary", "kind": "value", "type": "string" },
+      "x2": { "role": "judges", "definition": "people/culture/jury judging it a crime", "example": "the local jury", "kind": "ref", "references": "*" }
+    }
+  },
+  "zenba": {
+    "name": "increases",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "increasing thing", "definition": "the thing that increases", "example": "the bank balance", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property/quantity increasing", "example": "total savings", "kind": "value", "type": "string" },
+      "x3": { "role": "amount", "definition": "amount of increase", "example": "500 dollars", "kind": "value", "type": "quantity" }
+    }
+  },
+  "zepti": {
+    "name": "zepto",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "zepto quantity", "definition": "the quantity that is 10^-21 of x2", "example": "1 zeptosecond", "kind": "value", "type": "quantity" },
+      "x2": { "role": "base unit", "definition": "the thing it is 10^-21 of", "example": "one second", "kind": "value", "type": "quantity" },
+      "x3": { "role": "dimension", "definition": "dimension/aspect measured", "example": "time", "kind": "value", "type": "string" }
+    }
+  },
+  "zetro": {
+    "name": "zetta",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "zetta quantity", "definition": "the quantity that is 10^21 of x2", "example": "1 zettabyte", "kind": "value", "type": "quantity" },
+      "x2": { "role": "base unit", "definition": "the thing it is 10^21 of", "example": "one byte", "kind": "value", "type": "quantity" },
+      "x3": { "role": "dimension", "definition": "dimension/aspect measured", "example": "data size", "kind": "value", "type": "string" }
+    }
+  },
+  "zgana": {
+    "name": "observes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "observer", "definition": "the one who observes/watches", "example": "the astronomer", "kind": "ref", "references": "*" },
+      "x2": { "role": "observed", "definition": "the thing observed", "example": "the comet", "kind": "ref", "references": "*" },
+      "x3": { "role": "means", "definition": "senses/means used to observe", "example": "a telescope", "kind": "value", "type": "string" },
+      "x4": { "role": "conditions", "definition": "conditions of observation", "example": "a clear night sky", "kind": "value", "type": "string" }
+    }
+  },
+  "zgike": {
+    "name": "music",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "music", "definition": "the music produced", "example": "a jazz piece", "kind": "value", "type": "string" },
+      "x2": { "role": "performer", "definition": "the one who performs/produces it", "example": "the quartet", "kind": "ref", "references": "*" }
+    }
+  },
+  "zifre": {
+    "name": "free",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "free one", "definition": "the one who is free/at liberty", "example": "the released prisoner", "kind": "ref", "references": "*" },
+      "x2": { "role": "action", "definition": "the action/state free to do/be", "example": "to travel abroad", "kind": "value", "type": "string" },
+      "x3": { "role": "conditions", "definition": "conditions of the freedom", "example": "after parole approval", "kind": "value", "type": "string" }
+    }
+  },
+  "zinki": {
+    "name": "zinc",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "zinc", "definition": "the quantity of zinc metal", "example": "a zinc ingot", "kind": "ref", "references": "*" }
+    }
+  },
+  "zirpu": {
+    "name": "purple",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "purple thing", "definition": "the thing that is purple/violet", "example": "the lavender flower", "kind": "ref", "references": "*" }
+    }
+  },
+  "zivle": {
+    "name": "invests",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "investor", "definition": "the agent who invests", "example": "the venture fund", "kind": "ref", "references": "*" },
+      "x2": { "role": "resources", "definition": "resources invested", "example": "two million dollars", "kind": "value", "type": "quantity" },
+      "x3": { "role": "investment", "definition": "the investment target", "example": "the startup", "kind": "ref", "references": "*" },
+      "x4": { "role": "return", "definition": "expected return/profit", "example": "a 10x exit", "kind": "value", "type": "string" }
+    }
+  },
+  "zmadu": {
+    "name": "exceeds",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "greater", "definition": "the thing that exceeds/is more", "example": "the new revenue", "kind": "ref", "references": "*" },
+      "x2": { "role": "lesser", "definition": "the thing exceeded", "example": "last year's revenue", "kind": "ref", "references": "*" },
+      "x3": { "role": "property", "definition": "property/quantity compared", "example": "annual earnings", "kind": "value", "type": "string" },
+      "x4": { "role": "excess", "definition": "amount of excess", "example": "20 percent", "kind": "value", "type": "quantity" }
+    }
+  },
+  "zmiku": {
+    "name": "automatic",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "automatic thing", "definition": "the thing that is automatic", "example": "the assembly robot", "kind": "ref", "references": "*" },
+      "x2": { "role": "function", "definition": "function it performs automatically", "example": "welding parts", "kind": "value", "type": "string" },
+      "x3": { "role": "conditions", "definition": "conditions under which it is automatic", "example": "during normal operation", "kind": "value", "type": "string" }
+    }
+  },
+  "zukte": {
+    "name": "acts",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "actor", "definition": "the volitional entity taking action", "example": "the activist", "kind": "ref", "references": "*" },
+      "x2": { "role": "action", "definition": "the means/action taken", "example": "organizing a rally", "kind": "value", "type": "string" },
+      "x3": { "role": "goal", "definition": "the purpose/goal of the action", "example": "raising awareness", "kind": "value", "type": "string" }
+    }
+  },
+  "zumri": {
+    "name": "maize",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "maize", "definition": "the quantity of maize/corn", "example": "a bushel of corn", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain of the maize", "example": "Zea mays sweetcorn", "kind": "value", "type": "string" }
+    }
+  },
+  "zungi": {
+    "name": "guilt",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "guilty one", "definition": "the one feeling guilt/remorse", "example": "the apologizing friend", "kind": "ref", "references": "*" },
+      "x2": { "role": "cause", "definition": "abstraction the guilt is about", "example": "breaking the promise", "kind": "value", "type": "string" }
+    }
+  },
+  "zunle": {
+    "name": "left",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "left thing", "definition": "the thing to the left", "example": "the left turn lane", "kind": "ref", "references": "*" },
+      "x2": { "role": "reference", "definition": "the thing it is to the left of", "example": "the central divider", "kind": "ref", "references": "*" },
+      "x3": { "role": "frame", "definition": "frame of reference facing", "example": "facing north", "kind": "value", "type": "string" }
+    }
+  },
+  "zunti": {
+    "name": "interferes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "interferer", "definition": "the event/state that interferes", "example": "the power outage", "kind": "value", "type": "string" },
+      "x2": { "role": "hindered", "definition": "the event/process hindered", "example": "the data backup", "kind": "value", "type": "string" },
+      "x3": { "role": "quality", "definition": "quality causing the interference", "example": "loss of electricity", "kind": "value", "type": "string" }
+    }
+  },
+  "zutse": {
+    "name": "sits",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "sitter", "definition": "the one who sits", "example": "the tired traveler", "kind": "ref", "references": "*" },
+      "x2": { "role": "surface", "definition": "surface sat upon", "example": "the park bench", "kind": "ref", "references": "*" }
+    }
+  },
+  "zvati": {
+    "name": "at",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "present thing", "definition": "the object/event present/attending", "example": "the keynote speaker", "kind": "ref", "references": "*" },
+      "x2": { "role": "location", "definition": "the event/location attended", "example": "the conference hall", "kind": "ref", "references": "*" }
+    }
+  }
+}

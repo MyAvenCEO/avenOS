@@ -1,0 +1,771 @@
+{
+  "mabla": {
+    "name": "wretched",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "wretched thing", "definition": "the execrable/deplorable thing", "example": "the rotten deal", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property in which it is awful", "example": "build quality", "kind": "value", "type": "string" },
+      "x3": { "role": "standard", "definition": "standard judged by", "example": "consumer reviews", "kind": "value", "type": "string" }
+    }
+  },
+  "mabru": {
+    "name": "mammal",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mammal", "definition": "the mammal/beast", "example": "a red fox", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species of the mammal", "example": "Vulpes vulpes", "kind": "value", "type": "string" }
+    }
+  },
+  "macnu": {
+    "name": "manual",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "manual process", "definition": "the manual (non-automatic) event/action", "example": "hand-stitching a seam", "kind": "ref", "references": "*" },
+      "x2": { "role": "function", "definition": "function it is manual in", "example": "stitching", "kind": "value", "type": "string" },
+      "x3": { "role": "conditions", "definition": "conditions under which it is manual", "example": "no sewing machine available", "kind": "value", "type": "string" }
+    }
+  },
+  "makcu": {
+    "name": "mature",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mature one", "definition": "the mature/ripe/fully-grown entity", "example": "a ripe tomato", "kind": "ref", "references": "*" },
+      "x2": { "role": "quality", "definition": "development-quality of maturity", "example": "edibility", "kind": "value", "type": "string" }
+    }
+  },
+  "makfa": {
+    "name": "magic",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "magic", "definition": "the magic/supernatural act", "example": "a disappearing trick", "kind": "ref", "references": "*" },
+      "x2": { "role": "audience", "definition": "the one to whom it is magic", "example": "the spectators", "kind": "ref", "references": "*" },
+      "x3": { "role": "performer", "definition": "person/force/deity performing it", "example": "the sorcerer", "kind": "ref", "references": "*" }
+    }
+  },
+  "maksi": {
+    "name": "magnetic",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "magnet", "definition": "the magnetic object", "example": "a bar magnet", "kind": "ref", "references": "*" },
+      "x2": { "role": "field", "definition": "magnetic field produced", "example": "a 1 tesla field", "kind": "value", "type": "quantity" }
+    }
+  },
+  "malsi": {
+    "name": "temple",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "temple", "definition": "the temple/church/shrine", "example": "Notre-Dame cathedral", "kind": "ref", "references": "*" },
+      "x2": { "role": "religion", "definition": "religion it serves", "example": "Catholicism", "kind": "value", "type": "string" },
+      "x3": { "role": "location", "definition": "location/area served", "example": "central Paris", "kind": "ref", "references": "*" }
+    }
+  },
+  "mamta": {
+    "name": "mother",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mother", "definition": "the one who mothers", "example": "Maria", "kind": "ref", "references": "*" },
+      "x2": { "role": "child", "definition": "the one mothered", "example": "her daughter", "kind": "ref", "references": "*" }
+    }
+  },
+  "manci": {
+    "name": "wonders",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "wonderer", "definition": "the one feeling awe", "example": "the stargazer", "kind": "ref", "references": "*" },
+      "x2": { "role": "marvel", "definition": "what is wondered at", "example": "the aurora", "kind": "value", "type": "string" }
+    }
+  },
+  "manfo": {
+    "name": "uniform",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "uniform thing", "definition": "the homogeneous object/event", "example": "a sheet of glass", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property in which it is uniform", "example": "thickness", "kind": "value", "type": "string" }
+    }
+  },
+  "manku": {
+    "name": "dark",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "dark thing", "definition": "the thing lacking illumination", "example": "the cellar", "kind": "ref", "references": "*" }
+    }
+  },
+  "manri": {
+    "name": "reference frame",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "reference frame", "definition": "the frame of reference/standard", "example": "sea level", "kind": "value", "type": "string" },
+      "x2": { "role": "observed", "definition": "what is observed/measured against it", "example": "the mountain's height", "kind": "value", "type": "string" },
+      "x3": { "role": "rules", "definition": "rules used by the frame", "example": "metric system", "kind": "value", "type": "string" }
+    }
+  },
+  "mansa": {
+    "name": "satisfies",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "satisfier", "definition": "the thing that satisfies", "example": "the new design", "kind": "ref", "references": "*" },
+      "x2": { "role": "evaluator", "definition": "the one satisfied", "example": "the client", "kind": "ref", "references": "*" },
+      "x3": { "role": "property", "definition": "property/state of satisfaction", "example": "responsiveness", "kind": "value", "type": "string" }
+    }
+  },
+  "manti": {
+    "name": "ant",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "ant", "definition": "the ant", "example": "a carpenter ant", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed of the ant", "example": "Camponotus", "kind": "value", "type": "string" }
+    }
+  },
+  "mapku": {
+    "name": "hat",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hat", "definition": "the cap/hat/helmet/headgear", "example": "a baseball cap", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "material of the headgear", "example": "felt", "kind": "value", "type": "string" }
+    }
+  },
+  "mapni": {
+    "name": "cotton",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "cotton", "definition": "the quantity of cotton", "example": "a bale of cotton", "kind": "ref", "references": "*" }
+    }
+  },
+  "mapti": {
+    "name": "matches",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "fitting thing", "definition": "the thing that fits/suits", "example": "the lid", "kind": "ref", "references": "*" },
+      "x2": { "role": "counterpart", "definition": "what it matches with", "example": "the jar", "kind": "ref", "references": "*" },
+      "x3": { "role": "aspect", "definition": "aspect in which they match", "example": "diameter", "kind": "value", "type": "string" }
+    }
+  },
+  "marbi": {
+    "name": "shelter",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "shelter", "definition": "the shelter/haven/refuge", "example": "a storm cellar", "kind": "ref", "references": "*" },
+      "x2": { "role": "protected", "definition": "who/what is sheltered", "example": "the family", "kind": "ref", "references": "*" },
+      "x3": { "role": "threat", "definition": "danger sheltered from", "example": "the tornado", "kind": "value", "type": "string" }
+    }
+  },
+  "marce": {
+    "name": "vehicle",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "vehicle", "definition": "the vehicle/mode of transport", "example": "a ferry", "kind": "ref", "references": "*" },
+      "x2": { "role": "cargo", "definition": "what it carries", "example": "commuters", "kind": "ref", "references": "*" },
+      "x3": { "role": "medium", "definition": "surface/medium traveled", "example": "the river", "kind": "ref", "references": "*" },
+      "x4": { "role": "propulsion", "definition": "means of propulsion", "example": "a diesel engine", "kind": "value", "type": "string" }
+    }
+  },
+  "marde": {
+    "name": "morals",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "morals", "definition": "the ethics/moral standards", "example": "the Hippocratic oath", "kind": "value", "type": "string" },
+      "x2": { "role": "holder", "definition": "whose morals these are", "example": "the medical profession", "kind": "ref", "references": "*" },
+      "x3": { "role": "situation", "definition": "situation the morals concern", "example": "end-of-life care", "kind": "value", "type": "string" }
+    }
+  },
+  "margu": {
+    "name": "mercury",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mercury", "definition": "the quantity of mercury/quicksilver", "example": "the mercury in a thermometer", "kind": "ref", "references": "*" }
+    }
+  },
+  "marji": {
+    "name": "material",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "material", "definition": "the material/matter/stuff", "example": "reinforced concrete", "kind": "ref", "references": "*" },
+      "x2": { "role": "composition", "definition": "composition/ingredients", "example": "cement and steel rebar", "kind": "value", "type": "string" },
+      "x3": { "role": "form", "definition": "shape/form of the material", "example": "a poured slab", "kind": "value", "type": "string" }
+    }
+  },
+  "marna": {
+    "name": "hemp",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hemp", "definition": "the quantity of hemp/marijuana/jute", "example": "a hemp fiber rope", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain", "example": "Cannabis sativa", "kind": "value", "type": "string" }
+    }
+  },
+  "marxa": {
+    "name": "crushes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "crusher", "definition": "the force that mashes/crushes", "example": "the hydraulic press", "kind": "ref", "references": "*" },
+      "x2": { "role": "crushed", "definition": "what is crushed", "example": "the grapes", "kind": "ref", "references": "*" },
+      "x3": { "role": "pulp", "definition": "resulting mash/deformed mass", "example": "grape must", "kind": "ref", "references": "*" }
+    }
+  },
+  "masno": {
+    "name": "slow",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "slow one", "definition": "the slow/sluggish entity", "example": "the old server", "kind": "ref", "references": "*" },
+      "x2": { "role": "activity", "definition": "activity it is slow at", "example": "loading pages", "kind": "value", "type": "string" }
+    }
+  },
+  "masti": {
+    "name": "month",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "duration", "definition": "the event/period in months", "example": "the lease term", "kind": "ref", "references": "*" },
+      "x2": { "role": "months", "definition": "number of months", "example": "6", "kind": "value", "type": "number" },
+      "x3": { "role": "standard", "definition": "month standard used", "example": "Gregorian calendar", "kind": "value", "type": "string" }
+    }
+  },
+  "matci": {
+    "name": "mat",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mat", "definition": "the mat/pad/mattress", "example": "a yoga mat", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "material of the mat", "example": "foam rubber", "kind": "value", "type": "string" }
+    }
+  },
+  "matli": {
+    "name": "linen",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "linen", "definition": "the quantity of linen/flax", "example": "a linen tablecloth", "kind": "ref", "references": "*" }
+    }
+  },
+  "matne": {
+    "name": "butter",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "butter", "definition": "the quantity of butter/margarine", "example": "a stick of butter", "kind": "ref", "references": "*" },
+      "x2": { "role": "source", "definition": "source of the butter", "example": "cow's milk", "kind": "ref", "references": "*" }
+    }
+  },
+  "matra": {
+    "name": "engine",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "engine", "definition": "the motor/engine", "example": "a V8 engine", "kind": "ref", "references": "*" },
+      "x2": { "role": "driven", "definition": "what it powers/propels", "example": "the car's wheels", "kind": "ref", "references": "*" }
+    }
+  },
+  "mavji": {
+    "name": "oats",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "oats", "definition": "the quantity of oats", "example": "a bowl of oats", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain", "example": "Avena sativa", "kind": "value", "type": "string" }
+    }
+  },
+  "maxri": {
+    "name": "wheat",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "wheat", "definition": "the quantity of wheat", "example": "a field of wheat", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain", "example": "Triticum durum", "kind": "value", "type": "string" }
+    }
+  },
+  "mebri": {
+    "name": "forehead",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "forehead", "definition": "the brow/forehead body part", "example": "a furrowed brow", "kind": "ref", "references": "*" },
+      "x2": { "role": "owner", "definition": "whose forehead", "example": "the actor", "kind": "ref", "references": "*" }
+    }
+  },
+  "megdo": {
+    "name": "million",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "million", "definition": "the quantity of one million", "example": "1,000,000 bytes", "kind": "value", "type": "quantity" },
+      "x2": { "role": "unit", "definition": "what is counted", "example": "bytes", "kind": "value", "type": "string" },
+      "x3": { "role": "dimension", "definition": "dimension/aspect measured", "example": "data size", "kind": "value", "type": "string" }
+    }
+  },
+  "mekso": {
+    "name": "math expression",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "expression", "definition": "the mathematical expression", "example": "2 + 2 = 4", "kind": "value", "type": "string" },
+      "x2": { "role": "convention", "definition": "rules/convention it is read under", "example": "standard arithmetic", "kind": "value", "type": "string" }
+    }
+  },
+  "melbi": {
+    "name": "beautiful",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "beautiful thing", "definition": "the beautiful/pleasant entity", "example": "the sunset", "kind": "ref", "references": "*" },
+      "x2": { "role": "beholder", "definition": "the one to whom it is beautiful", "example": "the painter", "kind": "ref", "references": "*" },
+      "x3": { "role": "aspect", "definition": "aspect of beauty", "example": "color palette", "kind": "value", "type": "string" },
+      "x4": { "role": "standard", "definition": "aesthetic standard", "example": "classical proportion", "kind": "value", "type": "string" }
+    }
+  },
+  "meljo": {
+    "name": "malaysian",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "malaysian thing", "definition": "what reflects Malaysian culture", "example": "nasi lemak", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of Malaysian culture", "example": "cuisine", "kind": "value", "type": "string" }
+    }
+  },
+  "menli": {
+    "name": "mind",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mind", "definition": "the mind/intellect/psyche", "example": "a brilliant intellect", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "body the mind belongs to", "example": "the scientist", "kind": "ref", "references": "*" }
+    }
+  },
+  "mensi": {
+    "name": "sister",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "sister", "definition": "the sister", "example": "Anna", "kind": "ref", "references": "*" },
+      "x2": { "role": "sibling", "definition": "the one she is sister to", "example": "her brother", "kind": "ref", "references": "*" },
+      "x3": { "role": "bond", "definition": "bond/tie/parentage standard", "example": "shared parents", "kind": "value", "type": "string" }
+    }
+  },
+  "mentu": {
+    "name": "minute",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "duration", "definition": "the event/period in minutes", "example": "the phone call", "kind": "ref", "references": "*" },
+      "x2": { "role": "minutes", "definition": "number of minutes", "example": "15", "kind": "value", "type": "number" },
+      "x3": { "role": "standard", "definition": "minute standard used", "example": "SI seconds", "kind": "value", "type": "string" }
+    }
+  },
+  "merko": {
+    "name": "american",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "american thing", "definition": "what reflects USA culture", "example": "a Texas barbecue", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of American culture", "example": "cuisine", "kind": "value", "type": "string" }
+    }
+  },
+  "merli": {
+    "name": "measures",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "measurer", "definition": "the agent who measures", "example": "the surveyor", "kind": "ref", "references": "*" },
+      "x2": { "role": "quantity", "definition": "what is measured", "example": "the plot of land", "kind": "ref", "references": "*" },
+      "x3": { "role": "result", "definition": "measured value in units", "example": "500 square meters", "kind": "value", "type": "quantity" },
+      "x4": { "role": "scale", "definition": "scale measured on", "example": "metric area", "kind": "value", "type": "string" },
+      "x5": { "role": "accuracy", "definition": "accuracy of measurement", "example": "plus or minus 1 m2", "kind": "value", "type": "string" }
+    }
+  },
+  "mexno": {
+    "name": "mexican",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mexican thing", "definition": "what reflects Mexican culture", "example": "a mariachi band", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of Mexican culture", "example": "music", "kind": "value", "type": "string" }
+    }
+  },
+  "midju": {
+    "name": "center",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "center", "definition": "the middle/center/midpoint", "example": "the bullseye", "kind": "ref", "references": "*" },
+      "x2": { "role": "whole", "definition": "what it is the center of", "example": "the dartboard", "kind": "ref", "references": "*" }
+    }
+  },
+  "mifra": {
+    "name": "ciphertext",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "ciphertext", "definition": "the encoded/cipher text", "example": "Xbcd9f2a==", "kind": "value", "type": "string" },
+      "x2": { "role": "plaintext", "definition": "the plain text encoded", "example": "attack at dawn", "kind": "value", "type": "string" },
+      "x3": { "role": "code", "definition": "coding system used", "example": "AES-256", "kind": "value", "type": "string" }
+    }
+  },
+  "mikce": {
+    "name": "doctor",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "doctor", "definition": "the physician/nurse who treats", "example": "Dr. Patel", "kind": "ref", "references": "*" },
+      "x2": { "role": "patient", "definition": "the one treated", "example": "the patient", "kind": "ref", "references": "*" },
+      "x3": { "role": "ailment", "definition": "ailment treated", "example": "pneumonia", "kind": "value", "type": "string" },
+      "x4": { "role": "treatment", "definition": "treatment/cure applied", "example": "a course of antibiotics", "kind": "value", "type": "string" }
+    }
+  },
+  "mikri": {
+    "name": "millionth",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "millionth", "definition": "the quantity of one millionth", "example": "one micrometer", "kind": "value", "type": "quantity" },
+      "x2": { "role": "unit", "definition": "what is divided", "example": "a meter", "kind": "value", "type": "string" },
+      "x3": { "role": "dimension", "definition": "dimension/aspect measured", "example": "length", "kind": "value", "type": "string" }
+    }
+  },
+  "milti": {
+    "name": "thousandth",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thousandth", "definition": "the quantity of one thousandth", "example": "one milliliter", "kind": "value", "type": "quantity" },
+      "x2": { "role": "unit", "definition": "what is divided", "example": "a liter", "kind": "value", "type": "string" },
+      "x3": { "role": "dimension", "definition": "dimension/aspect measured", "example": "volume", "kind": "value", "type": "string" }
+    }
+  },
+  "milxe": {
+    "name": "mild",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mild thing", "definition": "the mild/gentle/middling entity", "example": "a mild salsa", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property in which it is mild", "example": "spiciness", "kind": "value", "type": "string" }
+    }
+  },
+  "minde": {
+    "name": "commands",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "commander", "definition": "the one who issues commands", "example": "the general", "kind": "ref", "references": "*" },
+      "x2": { "role": "commanded", "definition": "the one ordered", "example": "the troops", "kind": "ref", "references": "*" },
+      "x3": { "role": "result", "definition": "result commanded to occur", "example": "advancing at dawn", "kind": "value", "type": "string" }
+    }
+  },
+  "minji": {
+    "name": "machine",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "machine", "definition": "the machine/apparatus", "example": "a washing machine", "kind": "ref", "references": "*" },
+      "x2": { "role": "function", "definition": "function the machine serves", "example": "laundering clothes", "kind": "value", "type": "string" }
+    }
+  },
+  "minli": {
+    "name": "mile",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "distance", "definition": "the distance in local units", "example": "the marathon route", "kind": "ref", "references": "*" },
+      "x2": { "role": "count", "definition": "number of distance units", "example": "26.2", "kind": "value", "type": "number" },
+      "x3": { "role": "subunits", "definition": "subunit breakdown", "example": "yards and feet", "kind": "value", "type": "string" },
+      "x4": { "role": "standard", "definition": "measurement standard", "example": "the statute mile", "kind": "value", "type": "string" }
+    }
+  },
+  "minra": {
+    "name": "reflects",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "reflector", "definition": "the mirroring surface", "example": "the still lake", "kind": "ref", "references": "*" },
+      "x2": { "role": "reflected", "definition": "object/radiation reflected", "example": "the moonlight", "kind": "ref", "references": "*" },
+      "x3": { "role": "observer", "definition": "observer/point reflected to", "example": "the photographer", "kind": "ref", "references": "*" },
+      "x4": { "role": "image", "definition": "resulting reflection/image", "example": "a shimmering moon", "kind": "value", "type": "string" }
+    }
+  },
+  "mintu": {
+    "name": "same",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "the first identical thing", "example": "the morning star", "kind": "ref", "references": "*" },
+      "x2": { "role": "counterpart", "definition": "the second identical thing", "example": "the evening star", "kind": "ref", "references": "*" },
+      "x3": { "role": "standard", "definition": "standard of identity", "example": "astronomical identity", "kind": "value", "type": "string" }
+    }
+  },
+  "mipri": {
+    "name": "conceals",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "concealer", "definition": "the one who keeps the secret", "example": "the spy", "kind": "ref", "references": "*" },
+      "x2": { "role": "secret", "definition": "what is kept secret", "example": "the password", "kind": "value", "type": "string" },
+      "x3": { "role": "excluded", "definition": "who is kept from knowing", "example": "the enemy", "kind": "ref", "references": "*" },
+      "x4": { "role": "method", "definition": "method of concealment", "example": "encryption", "kind": "value", "type": "string" }
+    }
+  },
+  "mirli": {
+    "name": "deer",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "deer", "definition": "the deer/elk/moose", "example": "a white-tailed deer", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed", "example": "Odocoileus virginianus", "kind": "value", "type": "string" }
+    }
+  },
+  "misno": {
+    "name": "famous",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "celebrity", "definition": "the famous person/thing/event", "example": "the rock star", "kind": "ref", "references": "*" },
+      "x2": { "role": "community", "definition": "community among whom famous", "example": "music fans worldwide", "kind": "ref", "references": "*" }
+    }
+  },
+  "misro": {
+    "name": "egyptian",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "egyptian thing", "definition": "what reflects Egyptian culture", "example": "the pyramids of Giza", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of Egyptian culture", "example": "architecture", "kind": "value", "type": "string" }
+    }
+  },
+  "mitre": {
+    "name": "meter",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "length", "definition": "the length in meters", "example": "the rope", "kind": "ref", "references": "*" },
+      "x2": { "role": "meters", "definition": "number of meters", "example": "3", "kind": "value", "type": "number" },
+      "x3": { "role": "direction", "definition": "direction measured in", "example": "horizontally", "kind": "value", "type": "string" },
+      "x4": { "role": "standard", "definition": "measurement standard", "example": "the SI meter", "kind": "value", "type": "string" }
+    }
+  },
+  "mixre": {
+    "name": "mixture",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mixture", "definition": "the mixture/blend/colloid", "example": "a vinaigrette", "kind": "ref", "references": "*" },
+      "x2": { "role": "ingredient", "definition": "an ingredient mixed in", "example": "olive oil", "kind": "ref", "references": "*" }
+    }
+  },
+  "mlana": {
+    "name": "beside",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "side thing", "definition": "what is to the side", "example": "the passenger", "kind": "ref", "references": "*" },
+      "x2": { "role": "reference", "definition": "what it is lateral to", "example": "the driver", "kind": "ref", "references": "*" },
+      "x3": { "role": "facing", "definition": "what it faces", "example": "the windshield", "kind": "ref", "references": "*" },
+      "x4": { "role": "frame", "definition": "frame of reference", "example": "the car interior", "kind": "value", "type": "string" }
+    }
+  },
+  "mlatu": {
+    "name": "cat",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "cat", "definition": "the cat/feline", "example": "a tabby cat", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed", "example": "Maine Coon", "kind": "value", "type": "string" }
+    }
+  },
+  "mleca": {
+    "name": "less than",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "lesser", "definition": "the smaller thing", "example": "the runner-up's time", "kind": "ref", "references": "*" },
+      "x2": { "role": "greater", "definition": "what it is less than", "example": "the winner's time", "kind": "ref", "references": "*" },
+      "x3": { "role": "property", "definition": "property compared", "example": "speed", "kind": "value", "type": "string" },
+      "x4": { "role": "amount", "definition": "amount of difference", "example": "2 seconds", "kind": "value", "type": "quantity" }
+    }
+  },
+  "mledi": {
+    "name": "mold",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mold", "definition": "the mold/fungus/mushroom", "example": "a patch of black mold", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain", "example": "Stachybotrys", "kind": "value", "type": "string" },
+      "x3": { "role": "host", "definition": "what it grows on", "example": "the damp drywall", "kind": "ref", "references": "*" }
+    }
+  },
+  "mluni": {
+    "name": "satellite",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "satellite", "definition": "the satellite/moon", "example": "the Moon", "kind": "ref", "references": "*" },
+      "x2": { "role": "primary", "definition": "body it orbits", "example": "the Earth", "kind": "ref", "references": "*" },
+      "x3": { "role": "characteristics", "definition": "characteristics of the satellite", "example": "rocky and cratered", "kind": "value", "type": "string" },
+      "x4": { "role": "orbit", "definition": "orbital parameters", "example": "a 27-day period", "kind": "value", "type": "string" }
+    }
+  },
+  "mokca": {
+    "name": "point",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "point", "definition": "the point/instant/moment", "example": "the vertex", "kind": "ref", "references": "*" },
+      "x2": { "role": "location", "definition": "time/place it is at", "example": "the triangle's corner", "kind": "value", "type": "string" }
+    }
+  },
+  "moklu": {
+    "name": "mouth",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mouth", "definition": "the mouth/oral cavity", "example": "a wide-open mouth", "kind": "ref", "references": "*" },
+      "x2": { "role": "owner", "definition": "whose mouth", "example": "the singer", "kind": "ref", "references": "*" }
+    }
+  },
+  "molki": {
+    "name": "mill",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mill", "definition": "the mill/foundry/plant", "example": "a steel foundry", "kind": "ref", "references": "*" },
+      "x2": { "role": "process", "definition": "process it performs", "example": "smelting iron ore", "kind": "value", "type": "string" }
+    }
+  },
+  "molro": {
+    "name": "mole",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "amount", "definition": "the substance amount in moles", "example": "the dissolved salt", "kind": "ref", "references": "*" },
+      "x2": { "role": "moles", "definition": "number of moles", "example": "2", "kind": "value", "type": "number" },
+      "x3": { "role": "standard", "definition": "measurement standard", "example": "the SI mole", "kind": "value", "type": "string" }
+    }
+  },
+  "morji": {
+    "name": "remembers",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rememberer", "definition": "the one who recalls", "example": "the witness", "kind": "ref", "references": "*" },
+      "x2": { "role": "memory", "definition": "fact/memory recalled", "example": "the license plate number", "kind": "value", "type": "string" },
+      "x3": { "role": "subject", "definition": "subject of the memory", "example": "the getaway car", "kind": "value", "type": "string" }
+    }
+  },
+  "morko": {
+    "name": "moroccan",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "moroccan thing", "definition": "what reflects Moroccan culture", "example": "a tagine dish", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of Moroccan culture", "example": "cuisine", "kind": "value", "type": "string" }
+    }
+  },
+  "morna": {
+    "name": "pattern",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pattern", "definition": "the pattern of forms/events", "example": "a houndstooth pattern", "kind": "ref", "references": "*" },
+      "x2": { "role": "elements", "definition": "forms/events arranged", "example": "alternating shapes", "kind": "value", "type": "string" },
+      "x3": { "role": "structure", "definition": "structure of the arrangement", "example": "a repeating grid", "kind": "value", "type": "string" }
+    }
+  },
+  "morsi": {
+    "name": "dead",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "dead one", "definition": "the thing that has died", "example": "the fallen tree", "kind": "ref", "references": "*" }
+    }
+  },
+  "mosra": {
+    "name": "friction",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "friction", "definition": "the friction force", "example": "the drag on the brakes", "kind": "value", "type": "quantity" },
+      "x2": { "role": "surface a", "definition": "one rubbing surface", "example": "the brake pad", "kind": "ref", "references": "*" },
+      "x3": { "role": "surface b", "definition": "the other rubbing surface", "example": "the rotor", "kind": "ref", "references": "*" }
+    }
+  },
+  "mraji": {
+    "name": "rye",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rye", "definition": "the quantity of rye", "example": "a loaf of rye", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain", "example": "Secale cereale", "kind": "value", "type": "string" }
+    }
+  },
+  "mrilu": {
+    "name": "mails",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "sender", "definition": "the one who mails", "example": "the clerk", "kind": "ref", "references": "*" },
+      "x2": { "role": "item", "definition": "what is mailed", "example": "a parcel", "kind": "ref", "references": "*" },
+      "x3": { "role": "recipient", "definition": "recipient address", "example": "123 Main St", "kind": "value", "type": "string" },
+      "x4": { "role": "origin", "definition": "sender/mailbox address", "example": "the downtown post office", "kind": "value", "type": "string" },
+      "x5": { "role": "carrier", "definition": "carrier/network/system", "example": "the postal service", "kind": "ref", "references": "*" }
+    }
+  },
+  "mruli": {
+    "name": "hammer",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hammer", "definition": "the hammer tool", "example": "a claw hammer", "kind": "ref", "references": "*" },
+      "x2": { "role": "target", "definition": "what is hammered", "example": "a nail", "kind": "ref", "references": "*" },
+      "x3": { "role": "head", "definition": "weight/head of hammer", "example": "a steel head", "kind": "value", "type": "string" },
+      "x4": { "role": "propulsion", "definition": "what propels the head", "example": "a swinging arm", "kind": "value", "type": "string" }
+    }
+  },
+  "mucti": {
+    "name": "immaterial",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "immaterial thing", "definition": "the non-physical entity", "example": "an abstract idea", "kind": "ref", "references": "*" }
+    }
+  },
+  "mudri": {
+    "name": "wood",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "wood", "definition": "the quantity of wood/lumber", "example": "a plank of oak", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "tree type/species", "example": "white oak", "kind": "value", "type": "string" }
+    }
+  },
+  "mukti": {
+    "name": "motive",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "motive", "definition": "the motivating action/event/state", "example": "a desire for justice", "kind": "value", "type": "string" },
+      "x2": { "role": "motivated", "definition": "action/event motivated", "example": "filing the lawsuit", "kind": "value", "type": "string" },
+      "x3": { "role": "agent", "definition": "whose volition drives it", "example": "the plaintiff", "kind": "ref", "references": "*" }
+    }
+  },
+  "mulno": {
+    "name": "complete",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "complete thing", "definition": "the finished event/object", "example": "the assembled engine", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property made whole", "example": "functionality", "kind": "value", "type": "string" },
+      "x3": { "role": "standard", "definition": "standard of completeness", "example": "factory spec", "kind": "value", "type": "string" }
+    }
+  },
+  "munje": {
+    "name": "universe",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "universe", "definition": "the universe/cosmos", "example": "the observable universe", "kind": "ref", "references": "*" },
+      "x2": { "role": "domain", "definition": "domain/sphere it spans", "example": "all space and time", "kind": "value", "type": "string" },
+      "x3": { "role": "rules", "definition": "rules defining it", "example": "the laws of physics", "kind": "value", "type": "string" }
+    }
+  },
+  "mupli": {
+    "name": "example",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "example", "definition": "the example/sample/instance", "example": "this blood sample", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "common property illustrated", "example": "type O blood", "kind": "value", "type": "string" },
+      "x3": { "role": "set", "definition": "set it is drawn from", "example": "the donor batch", "kind": "ref", "references": "*" }
+    }
+  },
+  "murse": {
+    "name": "twilight",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "twilight", "definition": "the dawn/dusk/half-light", "example": "the rosy dawn", "kind": "value", "type": "string" },
+      "x2": { "role": "day", "definition": "day it belongs to", "example": "Monday", "kind": "value", "type": "date-time" },
+      "x3": { "role": "location", "definition": "location it occurs at", "example": "the coastline", "kind": "ref", "references": "*" }
+    }
+  },
+  "murta": {
+    "name": "curtain",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "curtain", "definition": "the curtain/blinds/drapes", "example": "blackout drapes", "kind": "ref", "references": "*" },
+      "x2": { "role": "aperture", "definition": "opening it covers", "example": "the bedroom window", "kind": "ref", "references": "*" },
+      "x3": { "role": "material", "definition": "material of the curtain", "example": "heavy velvet", "kind": "value", "type": "string" }
+    }
+  },
+  "muslo": {
+    "name": "islamic",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "islamic thing", "definition": "what reflects Islamic culture/religion", "example": "the call to prayer", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of Islamic culture", "example": "worship", "kind": "value", "type": "string" }
+    }
+  },
+  "mutce": {
+    "name": "extreme",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "extreme thing", "definition": "the thing extreme in a property", "example": "the heatwave", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property of extremity", "example": "temperature", "kind": "value", "type": "string" },
+      "x3": { "role": "direction", "definition": "extreme/direction toward", "example": "very hot", "kind": "value", "type": "string" }
+    }
+  },
+  "muvdu": {
+    "name": "moves",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mover", "definition": "the object that moves", "example": "the package", "kind": "ref", "references": "*" },
+      "x2": { "role": "destination", "definition": "destination/receiver", "example": "the warehouse", "kind": "ref", "references": "*" },
+      "x3": { "role": "origin", "definition": "origin moved from", "example": "the factory", "kind": "ref", "references": "*" },
+      "x4": { "role": "path", "definition": "path/route taken", "example": "the highway", "kind": "value", "type": "string" }
+    }
+  },
+  "muzga": {
+    "name": "museum",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "museum", "definition": "the museum", "example": "the Louvre", "kind": "ref", "references": "*" },
+      "x2": { "role": "collection", "definition": "what it preserves/exhibits", "example": "Renaissance paintings", "kind": "ref", "references": "*" },
+      "x3": { "role": "location", "definition": "location of the museum", "example": "Paris", "kind": "ref", "references": "*" }
+    }
+  }
+}

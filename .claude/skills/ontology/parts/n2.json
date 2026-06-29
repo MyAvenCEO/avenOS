@@ -1,0 +1,20 @@
+{
+  "nabmi": {
+    "name": "problem",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "problem", "definition": "the problematic event/state/situation", "example": "<unpaid-invoice event>", "kind": "ref", "references": "*" },
+      "x2": { "role": "afflicted", "definition": "who encounters/is troubled by the problem", "example": "<user id>", "kind": "ref", "references": "*" },
+      "x3": { "role": "context", "definition": "the situation/task/inquiry in which it is a problem", "example": "<reconciliation task>", "kind": "ref", "references": "*" }
+    }
+  },
+  "nakni": {
+    "name": "male",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "male", "definition": "the male/buck entity", "example": "<organism id>", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species of the male", "example": "Bos taurus", "kind": "value", "type": "string" },
+      "x3": { "role": "traits", "definition": "masculine trait(s) evidenced", "example": "mane, deeper voice", "kind": "value", "type": "string" }
+    }
+  }
+}
