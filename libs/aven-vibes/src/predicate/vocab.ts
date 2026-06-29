@@ -1,9 +1,10 @@
-// Todo predicate vocabulary — board 0087. A todo decomposes into a BUNDLE of gismu-sourced
-// predications (English names, x1…x5 place structures reused from the Lojban gismu lexicon):
-//   task         (≡ zukte)  — x1 agent intends task x2
-//   valid        (≡ temci)  — x1 (fact) holds from x2 to x3   (x3 null = open; "done" = set x3)
-//   due          (≡ detri)  — x1 (task) is due by x2
-//   prioritized  (≡ vajni)  — x1 (task) is prioritized at level x2
+// Todo predicate vocabulary — board 0087. A todo decomposes into a BUNDLE of predications, each
+// carrying a canonical Lojban gismu from .claude/skills/ontology (the place order is adapted to the
+// "task as x1" reification pattern where noted):
+//   task        ≡ zukte  — x1 (agent) employs means/takes action x2            [faithful]
+//   valid       ≡ ranji  — x1 (event/state) persists over the interval x2→x3   [x1 = the fact]
+//   due         ≡ detri  — the date x2 of the task x1 (x1 is due by x2)         [adapted: task in x1]
+//   prioritized ≡ vajni  — x1 (task) is important in aspect/degree x2 (level)   [x2 = priority level]
 // Each compiles to a self-documenting Ajv data_schema named `pred:<predicate>` and is seeded
 // into the DYNAMIC data_schema store (Layer B). See [[two-layer-schema-split]].
 import { compilePredicate, type PredicateDef, predSchemaName } from './compile.js'
@@ -11,7 +12,7 @@ import { compilePredicate, type PredicateDef, predSchemaName } from './compile.j
 export const TASK: PredicateDef = {
 	predicate: 'task',
 	gismu: 'zukte',
-	gloss: 'x1 (agent) intends/takes on task x2',
+	gloss: 'x1 (agent) employs means / takes on action-task x2 (zukte)',
 	places: [
 		{
 			pos: 'x1',
@@ -35,8 +36,8 @@ export const TASK: PredicateDef = {
 
 export const VALID: PredicateDef = {
 	predicate: 'valid',
-	gismu: 'temci',
-	gloss: 'x1 (fact) holds from x2 until x3 (x3 null = still open; set x3 to mark done/closed)',
+	gismu: 'ranji',
+	gloss: 'x1 (the fact) persists/is valid over the interval x2→x3 (ranji: x1 continues over an interval); x3 null = still open, set x3 to close/done',
 	places: [
 		{
 			pos: 'x1',
@@ -68,7 +69,7 @@ export const VALID: PredicateDef = {
 export const DUE: PredicateDef = {
 	predicate: 'due',
 	gismu: 'detri',
-	gloss: 'x1 (task) is due by x2',
+	gloss: 'x2 is the date (detri) by which the task x1 is due',
 	places: [
 		{ pos: 'x1', role: 'task', gloss: 'the task that is due', kind: 'ref', references: '*' },
 		{
@@ -85,7 +86,7 @@ export const DUE: PredicateDef = {
 export const PRIORITIZED: PredicateDef = {
 	predicate: 'prioritized',
 	gismu: 'vajni',
-	gloss: 'x1 (task) is prioritized at level x2',
+	gloss: 'x1 (task) is important (vajni) in aspect/degree x2 — the priority level',
 	places: [
 		{ pos: 'x1', role: 'task', gloss: 'the task being prioritized', kind: 'ref', references: '*' },
 		{
