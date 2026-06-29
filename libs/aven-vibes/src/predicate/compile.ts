@@ -91,6 +91,8 @@ export function compilePredicate(def: PredicateDef): Record<string, unknown> {
 		type: 'object',
 		title: def.predicate,
 		description: def.gloss,
+		// canonical Lojban gismu provenance — seeded into the data_schema row so the DB/UI shows it
+		...(def.gismu ? { 'x-gismu': def.gismu } : {}),
 		required,
 		additionalProperties: false,
 		properties

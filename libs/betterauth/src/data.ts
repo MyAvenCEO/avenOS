@@ -269,7 +269,8 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 	lines.unshift(
 		'- todos: { "title": string, "done"?: boolean, "due"?: ISO-8601 date string, "priority"?: "high" | "medium" | "low" } — the ONE way to manage tasks; never query "task" or any "pred:*" schema.'
 	)
-	return `The data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}\n\nIMPORTANT: whenever the user asks to see / show / list / check their todos OR tasks (any wording, any language), you MUST call data_crud with action="list", schema="todos" — this renders their live todo card. Never answer about todos/tasks from memory or with a plain-text list; always call the tool so the card appears.`
+	const now = new Date()
+	return `Current date & time: ${now.toISOString()} — resolve any relative dates the user mentions ("today", "tomorrow", "in 3 days", "next Monday") against THIS instant; emit absolute ISO dates.\n\nThe data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}\n\nIMPORTANT: whenever the user asks to see / show / list / check their todos OR tasks (any wording, any language), you MUST call data_crud with action="list", schema="todos" — this renders their live todo card. Never answer about todos/tasks from memory or with a plain-text list; always call the tool so the card appears.`
 }
 
 /** Ensure the per-user gismu todo predicate schemas (pred:task/valid/due/prioritized) exist. */
