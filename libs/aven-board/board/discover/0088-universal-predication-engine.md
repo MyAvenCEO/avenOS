@@ -69,7 +69,7 @@ Register a type → full CRUD + projection, no bespoke code. Todos runs entirely
 
 ## Approach
 
-A new `libs/aven-predicate` (or `libs/aven-vibes/src/engine-predication`) holds the **pure** engine:
+A new `libs/aven-ontology` holds the **pure** engine:
 the spec type, `mutate()`, `query()` (Datalog matcher), and `$user/$value/$primary/$now` binding
 resolution — unit-tested without a DB by injecting a row store. The betterauth layer wires it to
 `data_value` + the `predicate_type` registry table (admin CRUD), and `data_crud` dispatches
@@ -77,6 +77,11 @@ resolution — unit-tested without a DB by injecting a row store. The betterauth
 
 The matcher is the de-risking core: prove it reproduces v_task's {what,open,due,priority} from the
 spec before deleting v_task. Keep gismu provenance (x-gismu) on the seeded pred schemas.
+
+`aven-ontology` is also the natural home for the EXISTING predicate compiler + vocab
+(`libs/aven-vibes/src/predicate/{compile,vocab}.ts` from 0085/0087) — consider relocating them here
+so all the gismu/predication machinery lives in one lib (pairs with the `.claude/skills/ontology`
+lexicon). Optional in this card; can be a follow-on if it bloats the diff.
 
 **Out of scope (follow-on):** migrating booking/invoice/contact onto the engine (this card proves
 it on todos + the engine being type-agnostic); a visual type-spec editor; cross-type joins/queries
@@ -99,7 +104,7 @@ beyond a single type's bundle.
 
 ## Files to touch
 
-- `libs/aven-predicate/*` (new) — pure engine: spec type, `mutate`, `query` (Datalog matcher), tests.
+- `libs/aven-ontology/*` (new) — pure engine: spec type, `mutate`, `query` (Datalog matcher), tests.
 - `libs/betterauth/migrations/NNNN_predicate_type.ts` (new) — `predicate_type` admin table + seed `todo`.
 - `libs/betterauth/src/predicate-types.ts` (new) — admin CRUD for the registry; `server.ts` wiring.
 - `libs/betterauth/src/data.ts` — `data_crud(type,…)` dispatches to the engine; **delete** executeTodos/setDue/setPriority; `/api/data/todos` delegates.
@@ -123,7 +128,7 @@ Each provable from the transcript.
 
 ```bash
 bun run check
-bun test libs/aven-predicate        # pure engine + parity (matcher & mutator)
+bun test libs/aven-ontology         # pure engine + parity (matcher & mutator)
 bun test libs/betterauth            # registry admin gate + data_crud round-trip
 rg -n "function executeTodos|setDue|setPriority|v_task" libs/betterauth   # expect: empty
 # Local DB (via the running auth server, output in transcript):
@@ -141,6 +146,8 @@ rg -n "function executeTodos|setDue|setPriority|v_task" libs/betterauth   # expe
 
 Newest entry first.
 
+- `2026-06-29` — Named the pure-engine lib `libs/aven-ontology` (pairs with the ontology gismu
+  lexicon skill); noted it can also absorb the existing predicate compiler/vocab from aven-vibes.
 - `2026-06-29` — Discovery: chose the full engine in one card (generic mutator + Datalog x1–x5
   matcher + admin-owned registry table + universal data_crud), projection via a Datalog matcher
   (replaces per-type v_task), registry in an admin PG table. Carved into 6 checkpointed steps with
