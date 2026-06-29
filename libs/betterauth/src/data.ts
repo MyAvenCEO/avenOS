@@ -396,6 +396,61 @@ async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 	return { ok: false, error: `unknown action: ${args.action}` }
 }
 
+// ── Todos REST (board 0087) ─────────────────────────────────────────────────────
+// The Todos vibe UI reads/writes through these, which delegate to the SAME predication
+// path (executeTodos) the LLM's data_crud tool uses — one source of truth, projected via v_task.
+
+/** GET /api/data/todos — the user's todos (from the v_task projection). */
+export async function listTodos(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const res = (await executeDataTool(uid, { schema: 'todos', action: 'list' })) as {
+		items?: unknown[]
+	}
+	return c.json({ todos: res.items ?? [] })
+}
+
+/** POST /api/data/todos — create todos (each {title, done?}). */
+export async function createTodos(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const body = (await c.req.json().catch(() => null)) as {
+		items?: Record<string, unknown>[]
+	} | null
+	return c.json(
+		(await executeDataTool(uid, {
+			schema: 'todos',
+			action: 'create',
+			items: body?.items ?? []
+		})) as object
+	)
+}
+
+/** PATCH /api/data/todos — update todos by id (title and/or done). */
+export async function updateTodos(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const body = (await c.req.json().catch(() => null)) as {
+		items?: Record<string, unknown>[]
+	} | null
+	return c.json(
+		(await executeDataTool(uid, {
+			schema: 'todos',
+			action: 'update',
+			items: body?.items ?? []
+		})) as object
+	)
+}
+
+/** DELETE /api/data/todos/:id — delete a todo (and the predications that ref it). */
+export async function deleteTodo(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const id = c.req.param('id')
+	if (!id) return c.json({ error: 'id required' }, 400)
+	return c.json((await executeDataTool(uid, { schema: 'todos', action: 'delete', id })) as object)
+}
+
 export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const name = args?.schema
 	if (!name) return { ok: false, error: 'schema name required' }

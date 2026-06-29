@@ -25,10 +25,14 @@ import {
 import { bootstrapSchema } from './bootstrap'
 import {
 	createSchema,
+	createTodos,
 	createValue,
+	deleteTodo,
 	deleteValue,
 	listSchemas,
+	listTodos,
 	listValues,
+	updateTodos,
 	updateValue
 } from './data'
 import { eventsStream } from './events'
@@ -93,6 +97,13 @@ app.post('/api/data/schemas/:schemaId/values', createValue)
 app.get('/api/data/schemas/:schemaId/values', listValues)
 app.patch('/api/data/values/:id', updateValue)
 app.delete('/api/data/values/:id', deleteValue)
+
+// Todos (board 0087): stored as gismu predications (task+valid), surfaced via these routes
+// which delegate to executeTodos — the same path the LLM data_crud tool uses.
+app.get('/api/data/todos', listTodos)
+app.post('/api/data/todos', createTodos)
+app.patch('/api/data/todos', updateTodos)
+app.delete('/api/data/todos/:id', deleteTodo)
 
 // Billing: create a Polar checkout (session-gated) + receive Polar webhooks → sync tier +
 // on-demand reconcile (pull customer state from Polar → tier) for the post-checkout return. board 0052.

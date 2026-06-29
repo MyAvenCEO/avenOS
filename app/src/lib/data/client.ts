@@ -76,3 +76,27 @@ export async function listFlows(): Promise<Flow[]> {
 	const { flows } = await api<{ flows: Flow[] }>('/api/admin/flows')
 	return flows
 }
+
+// Todos (board 0087) — stored as gismu predications (task+valid), surfaced via /api/data/todos
+// which delegates to the same executeTodos path the LLM tool uses. The UI never touches a
+// `todos` schema directly anymore.
+export type Todo = { id: string; title: string; done: boolean }
+
+export async function listTodos(): Promise<Todo[]> {
+	const { todos } = await api<{ todos: Todo[] }>('/api/data/todos')
+	return todos
+}
+
+export async function createTodos(items: { title: string; done?: boolean }[]): Promise<void> {
+	await api('/api/data/todos', { method: 'POST', body: JSON.stringify({ items }) })
+}
+
+export async function updateTodos(
+	items: { id: string; title?: string; done?: boolean }[]
+): Promise<void> {
+	await api('/api/data/todos', { method: 'PATCH', body: JSON.stringify({ items }) })
+}
+
+export async function deleteTodo(id: string): Promise<void> {
+	await api(`/api/data/todos/${id}`, { method: 'DELETE' })
+}
