@@ -72,6 +72,22 @@ export interface DataValueTable {
 	updated_at: Generated<Date>
 }
 
+// Flow/skill CONFIG templates (board 0087, Layer A). System structure — admin-owned CRUD,
+// seeded from @avenos/aven-skills EXAMPLE_FLOWS by a migration. NOT user data: distinct from
+// the dynamic data_schema/data_value store. Columns mirror the `Flow` type; node/edge graphs
+// are JSONB. See [[two-layer-schema-split]].
+export interface FlowTable {
+	id: string
+	name: string
+	description: string
+	nodes: unknown
+	edges: unknown
+	triggers: unknown
+	resource_labels: unknown
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
 export type DataHistoryOperation = 'UPDATE' | 'DELETE'
 
 export interface DataSchemaHistoryTable {
@@ -163,6 +179,7 @@ export interface Database {
 	user: UserTable
 	data_schema: DataSchemaTable
 	data_value: DataValueTable
+	flow: FlowTable
 	data_schema_history: DataSchemaHistoryTable
 	data_value_history: DataValueHistoryTable
 	polar_event: PolarEventTable

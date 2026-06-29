@@ -32,6 +32,7 @@ import {
 	updateValue
 } from './data'
 import { eventsStream } from './events'
+import { deleteFlow, getFlow, listFlows, upsertFlow } from './flows'
 import { inboxGet, inboxList, mailInbox } from './inbox'
 import { syncPricing } from './usage'
 import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
@@ -77,6 +78,13 @@ app.post('/api/ai/confirm', aiConfirmAction)
 app.get('/api/ai/sessions', aiSessions)
 app.get('/api/ai/sessions/:id/messages', aiSessionMessages)
 app.post('/api/admin/set-tier', aiSetTier)
+
+// Flow/skill CONFIG templates (board 0087, Layer A) — admin-only CRUD; the Skills/Runs UI reads
+// flows from here instead of a static JSON import. Distinct from the user-scoped /api/data/*.
+app.get('/api/admin/flows', listFlows)
+app.get('/api/admin/flows/:id', getFlow)
+app.post('/api/admin/flows', upsertFlow)
+app.delete('/api/admin/flows/:id', deleteFlow)
 
 // Generic schema-driven user data (board 0053): schemas + schema-validated values.
 app.post('/api/data/schemas', createSchema)
