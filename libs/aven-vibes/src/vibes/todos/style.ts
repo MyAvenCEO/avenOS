@@ -223,12 +223,48 @@ const selectors: StyleDef['selectors'] = {
 	'.td-row input[type="checkbox"]:checked::after': { opacity: '1' },
 	'.td-row-text': {
 		flex: '1',
+		minWidth: '0',
 		outline: 'none',
 		padding: '0.05rem 0.2rem',
 		borderRadius: '0.35rem',
 		fontSize: 'var(--fs-body)',
-		whiteSpace: 'pre-wrap',
-		wordBreak: 'break-word'
+		whiteSpace: 'nowrap',
+		overflow: 'hidden',
+		textOverflow: 'ellipsis'
+	},
+	'.td-status': {
+		width: '0.9rem',
+		height: '0.9rem',
+		flexShrink: '0',
+		borderRadius: '50%',
+		border: '1.5px solid var(--border)',
+		background: 'var(--tech-fill-inner)'
+	},
+	'.td-row.done .td-status': {
+		background: 'var(--brand-accent)',
+		borderColor: 'color-mix(in srgb, var(--text) 14%, transparent)'
+	},
+	'.td-chip': {
+		display: 'inline-flex',
+		alignItems: 'center',
+		flexShrink: '0',
+		fontSize: 'var(--fs-micro)',
+		fontWeight: '600',
+		lineHeight: '1.4',
+		padding: '0.12rem 0.5rem',
+		borderRadius: '999px',
+		background: 'var(--tech-fill-inner)',
+		color: 'var(--muted)',
+		border: '1px solid var(--border-soft)',
+		whiteSpace: 'nowrap'
+	},
+	'.td-chip:empty': { display: 'none' },
+	'.td-chip--due': { fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' },
+	'.td-chip--prio': {
+		textTransform: 'capitalize',
+		color: 'var(--text)',
+		background: 'color-mix(in srgb, var(--brand-accent) 9%, transparent)',
+		borderColor: 'color-mix(in srgb, var(--brand-accent) 20%, transparent)'
 	},
 	'.td-row.done .td-row-text': {
 		textDecoration: 'line-through',

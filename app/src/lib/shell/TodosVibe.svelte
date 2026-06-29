@@ -25,16 +25,33 @@ const valuesQuery = createQuery(() => ({
 }))
 const rows = $derived<Todo[]>(valuesQuery.data ?? [])
 
+// Human relative due: "in 3 days" / "in 5 hours" / "in 20 min" / "2 days overdue".
+function relDue(iso: string | null | undefined): string {
+	if (!iso) return ''
+	const d = new Date(iso)
+	if (Number.isNaN(d.getTime())) return ''
+	const ms = d.getTime() - Date.now()
+	const past = ms < 0
+	const abs = Math.abs(ms)
+	const day = Math.floor(abs / 86_400_000)
+	const hr = Math.floor(abs / 3_600_000)
+	const min = Math.floor(abs / 60_000)
+	let unit: string
+	if (day >= 1) unit = `${day} day${day === 1 ? '' : 's'}`
+	else if (hr >= 1) unit = `${hr} hour${hr === 1 ? '' : 's'}`
+	else unit = `${Math.max(1, min)} min`
+	return past ? `${unit} overdue` : `in ${unit}`
+}
+
 const source = $derived({
 	title: t('mainnet.todos.title'),
 	items: rows.map((r) => ({
 		id: r.id,
 		text: r.title,
 		done: r.done === true,
-		// due + priority predications, surfaced as a small meta line (board 0087)
-		meta: [r.due ? `📅 ${r.due}` : '', r.priority ? `⚡ ${r.priority}` : '']
-			.filter(Boolean)
-			.join('   ·   ')
+		// due/priority predications → inline brand chips (board 0087); due as a relative label
+		due: relDue(r.due),
+		priority: r.priority ?? ''
 	})),
 	labels: {
 		listEyebrow: t('identities.todos.listEyebrow'),

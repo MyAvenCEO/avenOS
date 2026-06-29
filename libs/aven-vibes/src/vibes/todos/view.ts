@@ -48,33 +48,12 @@ export const todoView: ViewDef = {
 										class: '$$rowClass',
 										attrs: { 'data-id': '$$id' },
 										children: [
-											{
-												tag: 'input',
-												attrs: {
-													type: 'checkbox',
-													'aria-label': '$labels.toggleAria',
-													checked: '$$done'
-												},
-												$on: {
-													change: { send: 'TOGGLE_ITEM', payload: { id: '$$id' } }
-												}
-											},
-											{
-												class: 'td-row-main',
-												children: [
-													{ class: 'td-row-text', text: '$$text' },
-													{ class: 'td-row-meta', text: '$$meta' }
-												]
-											},
-											{
-												tag: 'button',
-												class: 'td-btn td-btn--icon delete',
-												attrs: { type: 'button', 'aria-label': '$labels.deleteAria' },
-												text: '×',
-												$on: {
-													click: { send: 'DELETE_ITEM', payload: { id: '$$id' } }
-												}
-											}
+											// read-only status dot (done/open) — todos are managed via prompts only
+											{ class: 'td-status' },
+											{ class: 'td-row-text', text: '$$text' },
+											// inline brand chips; empty ones hide via CSS :empty
+											{ class: 'td-chip td-chip--due', text: '$$due' },
+											{ class: 'td-chip td-chip--prio', text: '$$priority' }
 										]
 									}
 								}
