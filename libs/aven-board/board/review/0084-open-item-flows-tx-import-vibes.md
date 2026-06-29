@@ -180,6 +180,8 @@ To build:
 
 ## Progress log
 
+- `2026-06-29` — Naming consolidation (review feedback): removed the double-»Ingest« confusion. `doc-ingest` flow renamed **»Beleg verbuchen«** (it's the bookkeeping consumer, not another ingest); its composite node relabelled **»Dokument-Ingest«** to match the skill it references. Split kept (Dokument-Ingest = understanding skill; Beleg verbuchen = bookkeeping). IDs unchanged → no ref/test breakage. 31 tests green; app svelte-check clean.
+
 - `2026-06-29` — E2E consolidation pass (audit script over all flows): fixed type/consistency drift from the incremental refactors. (1) `month-close` was stale (its doc-ingest composite still declared `booking`, but doc-ingest now yields `open_item`) → realigned to docs(doc-ingest→open_item) + bank(tx-import→transaction) + settle(open-item-match→booking) → BWA report. (2) `outgoing-invoice` now books a **Forderung as offen** (open_item) on the unified open-item lifecycle, symmetric with incoming. (3) dropped the unused `contact` the `bank` composite declared but `bank-statement` never surfaced. Audit now reports 0 inconsistencies (all flowRefs resolve, all edges type-compatible, all composite outputs ⊆ referenced terminals). 31 aven-skills tests green; tscs 0; app svelte-check clean.
 
 - `2026-06-29` — Consistency (review feedback): in Dokument-Ingest every per-type extractor is now a **reusable sub-skill (composite)** — added `rechnung` (Rechnung extrahieren) + `vertrag` (Vertrag extrahieren) skills alongside the existing `bank-statement` (Kontoauszug); classify branches to all three composites uniformly. Test asserts every branch target isComposite. 31 aven-skills tests green; tscs 0; app svelte-check clean.

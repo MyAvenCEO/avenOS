@@ -219,12 +219,12 @@
 	},
 	{
 		"id": "doc-ingest",
-		"name": "Beleg-Ingest",
-		"description": "Buchhaltungs-Flow: nutzt den Dokument-Ingest-Skill → Adressbuch anreichern → als offenen Posten buchen. Zahlung folgt via »Offene Posten ausgleichen«.",
+		"name": "Beleg verbuchen",
+		"description": "Buchhaltungs-Flow: nutzt den Dokument-Ingest-Skill (Beleg verstehen) → Adressbuch anreichern → als offenen Posten buchen. Zahlung folgt via »Offene Posten ausgleichen«.",
 		"nodes": [
 			{
 				"id": "ingest",
-				"name": "Beleg verstehen",
+				"name": "Dokument-Ingest",
 				"flowRef": "ingest",
 				"inputs": ["file", "image"],
 				"outputs": ["invoice", "transaction", "contract"],
