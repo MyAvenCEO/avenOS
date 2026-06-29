@@ -12,6 +12,7 @@ import MainnetChat from '$lib/shell/MainnetChat.svelte'
 import MainnetDb from '$lib/shell/MainnetDb.svelte'
 import MainnetFly from '$lib/shell/MainnetFly.svelte'
 import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
+import { nav } from '$lib/shell/nav.svelte'
 
 // Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | DB | Fly on the left; weekly
 // MINDS + the signed-in account NAME on the right. Clicking the name opens the Account Settings
@@ -22,6 +23,15 @@ type SettingsCategory = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'a
 let tab = $state<Tab>('chat')
 let settings = $state(false)
 let settingsCategory = $state<SettingsCategory>('profile')
+
+// Honor cross-view deep links (e.g. a flow schema badge → DB tab). board 0083.
+$effect(() => {
+	if (nav.requestTab) {
+		tab = nav.requestTab as Tab
+		settings = false
+		nav.requestTab = null
+	}
+})
 let checkoutHandled = false
 // Shown briefly after returning from a successful Polar checkout (?checkout=success).
 let justUpgraded = $state(false)

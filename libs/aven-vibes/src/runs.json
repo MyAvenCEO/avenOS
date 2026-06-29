@@ -1,0 +1,256 @@
+[
+	{
+		"id": "run-invoice-full",
+		"flowId": "doc-ingest",
+		"label": "Müller GmbH — Rechnung 2026-0815",
+		"startedAt": "heute 09:02",
+		"status": "done",
+		"trace": [
+			{
+				"nodeId": "ingest",
+				"state": "done",
+				"at": "+0s",
+				"inputs": ["1× Dokument"],
+				"outputs": ["als Rechnung erkannt"],
+				"vibe": "bookkeeping",
+				"vibeData": {
+					"docType": "invoice",
+					"title": "Rechnung 2026-0815 — Müller GmbH",
+					"description": "Eingangsrechnung über Bürobedarf (Druckerpapier).",
+					"booking_summary": "Aufwand Bürobedarf 100,00 € netto + 19 % Vorsteuer.",
+					"tags": ["Rechnung", "Eingang", "19% USt", "Bürobedarf"]
+				}
+			},
+			{
+				"nodeId": "extract-invoice",
+				"state": "done",
+				"at": "+4s",
+				"inputs": ["1× Dokument"],
+				"outputs": ["invoice JSON"],
+				"vibe": "doc-compare",
+				"vibeData": {
+					"type": "invoice",
+					"extracted": {
+						"header": {
+							"document_kind": "Rechnung",
+							"invoice_number": "2026-0815",
+							"issue_date": "2026-06-01",
+							"due_date": "2026-06-15",
+							"currency": "EUR"
+						},
+						"vendor": {
+							"name": "Müller GmbH",
+							"address": "Musterstraße 1, 80333 München",
+							"ust_id": "DE123456789"
+						},
+						"buyer": { "name": "avenCEO GmbH" },
+						"statements": [
+							{
+								"section_title": "Positionen",
+								"line_items": [
+									{
+										"position": "1",
+										"description": "Druckerpapier A4 (Karton)",
+										"quantity": 5,
+										"unit": "Stk",
+										"unit_price": 20,
+										"tax_rate": 19,
+										"amount": 100
+									}
+								]
+							}
+						],
+						"totals": { "subtotal": 100, "tax_total": 19, "invoice_total": 119 },
+						"total_outstanding": 119
+					}
+				}
+			},
+			{
+				"nodeId": "enrich",
+				"state": "done",
+				"at": "+5s",
+				"inputs": ["invoice JSON"],
+				"outputs": ["Kontakt Müller GmbH"],
+				"vibe": "contact",
+				"vibeData": {
+					"name": "Müller GmbH",
+					"matchedBy": "USt-IdNr",
+					"isNew": false,
+					"ust_id": "DE123456789",
+					"address": "Musterstraße 1, 80333 München",
+					"added": ["USt-IdNr", "Adresse", "1 Beleg verknüpft"]
+				}
+			},
+			{
+				"nodeId": "reconcile",
+				"state": "done",
+				"at": "+7s",
+				"inputs": ["invoice JSON", "Transaktionen"],
+				"outputs": ["Match: −119,00 €"],
+				"vibe": "invoice-match",
+				"vibeData": {
+					"currency": "EUR",
+					"invoice": {
+						"header": {
+							"invoice_number": "2026-0815",
+							"issue_date": "2026-06-01",
+							"currency": "EUR"
+						},
+						"vendor": { "name": "Müller GmbH" },
+						"totals": { "invoice_total": 119 }
+					},
+					"match": {
+						"tx": {
+							"dedup_key": "tx-0815",
+							"booking_date": "2026-06-03",
+							"value_date": "2026-06-03",
+							"amount": -119,
+							"currency": "EUR",
+							"description": "Rechnung 2026-0815 Müller GmbH",
+							"counterparty_name": "Müller GmbH",
+							"counterparty_iban": "DE89370400440532013000",
+							"balance_after": 4881,
+							"account_iban": "DE03100180000494779244"
+						},
+						"confidence": "high",
+						"reasons": [
+							"Betrag exakt −119,00 €",
+							"Gegenpartei: Müller GmbH",
+							"Datum nahe Fälligkeit"
+						],
+						"target": 119
+					}
+				}
+			},
+			{
+				"nodeId": "book",
+				"state": "done",
+				"at": "+9s",
+				"inputs": ["invoice JSON", "Match"],
+				"outputs": ["Buchung 6815 + VSt 1406 → 3300"],
+				"vibe": "invoice-booking",
+				"vibeData": {
+					"currency": "EUR",
+					"invoice": {
+						"header": {
+							"invoice_number": "2026-0815",
+							"issue_date": "2026-06-01",
+							"currency": "EUR"
+						},
+						"vendor": { "name": "Müller GmbH" },
+						"totals": { "invoice_total": 119 }
+					},
+					"match": {
+						"tx": {
+							"dedup_key": "tx-0815",
+							"booking_date": "2026-06-03",
+							"amount": -119,
+							"currency": "EUR",
+							"counterparty_name": "Müller GmbH"
+						},
+						"confidence": "high",
+						"reasons": ["Betrag exakt −119,00 €"],
+						"target": 119
+					},
+					"booking": {
+						"invoice_value_id": null,
+						"invoice_number": "2026-0815",
+						"vendor": "Müller GmbH",
+						"currency": "EUR",
+						"lines": [
+							{
+								"soll_konto": "6815",
+								"soll_bezeichnung": "Bürobedarf",
+								"net_amount": 100,
+								"tax_amount": 19,
+								"gross_amount": 119,
+								"tax_key": "VST19",
+								"note": null
+							}
+						],
+						"is_split": false,
+						"haben_konto": "3300",
+						"haben_bezeichnung": "Verbindlichkeiten aus L+L",
+						"net_amount": 100,
+						"tax_amount": 19,
+						"gross_amount": 119,
+						"soll_konto": "6815",
+						"soll_bezeichnung": "Bürobedarf",
+						"tax_key": "VST19",
+						"buchungstext": "Bürobedarf Müller GmbH, Rg. 2026-0815",
+						"confidence": "high",
+						"reason": "Lieferant + Bürobedarf eindeutig; Vorsteuer 1406 (19 %).",
+						"status": "booked",
+						"direction": "incoming"
+					}
+				}
+			}
+		]
+	},
+	{
+		"id": "run-glass-1",
+		"flowId": "minecraft-glass",
+		"label": "Glas-Lauf #1",
+		"startedAt": "vor 2 Min",
+		"status": "running",
+		"trace": [
+			{ "nodeId": "mine", "state": "done", "at": "+0s", "outputs": ["8× Sand"] },
+			{
+				"nodeId": "smelt",
+				"state": "done",
+				"at": "+12s",
+				"inputs": ["8× Sand", "1× Brennstoff"],
+				"outputs": ["8× Glas"]
+			},
+			{
+				"nodeId": "craft-pane",
+				"state": "running",
+				"at": "+20s",
+				"inputs": ["6× Glas"],
+				"message": "craftet 16 Scheiben…"
+			}
+		]
+	},
+	{
+		"id": "run-ingest-1",
+		"flowId": "doc-ingest",
+		"label": "Cursor Rechnung 6199869E-0049",
+		"startedAt": "heute 10:14",
+		"status": "running",
+		"trace": [
+			{
+				"nodeId": "ingest",
+				"state": "done",
+				"at": "+0s",
+				"inputs": ["1× Dokument"],
+				"outputs": ["als Rechnung erkannt"]
+			},
+			{
+				"nodeId": "extract-invoice",
+				"state": "running",
+				"at": "+3s",
+				"inputs": ["1× Dokument"],
+				"message": "Vision-Extraktion läuft…"
+			}
+		]
+	},
+	{
+		"id": "run-ingest-2",
+		"flowId": "doc-ingest",
+		"label": "Pogner's Bewirtung",
+		"startedAt": "gestern 18:22",
+		"status": "done",
+		"trace": [
+			{ "nodeId": "ingest", "state": "done", "at": "+0s", "outputs": ["Rechnung"] },
+			{ "nodeId": "extract-invoice", "state": "done", "at": "+4s", "outputs": ["invoice JSON"] },
+			{ "nodeId": "enrich", "state": "done", "at": "+5s", "outputs": ["Kontakt Pogner's"] },
+			{ "nodeId": "reconcile", "state": "done", "at": "+6s", "outputs": ["kein Match"] },
+			{
+				"nodeId": "book",
+				"state": "done",
+				"at": "+8s",
+				"outputs": ["Splitbuchung 6640/6644 + 1406"]
+			}
+		]
+	}
+]

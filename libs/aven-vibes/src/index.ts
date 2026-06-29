@@ -21,6 +21,34 @@ export {
 export * from './engine/index.js'
 export { contentHash, type FileRef, filePath, fileRef } from './file-ref.js'
 export {
+	currentStepIndex,
+	type Edge,
+	EXAMPLE_FLOWS,
+	EXAMPLE_RUNS,
+	exampleInstance,
+	FLOW_SCHEMA,
+	type Flow,
+	type FlowInstance,
+	type FlowRun,
+	flattenFlow,
+	flowDepths,
+	isComposite,
+	isFanIn,
+	isFanOut,
+	isLeaf,
+	type LlmConfig,
+	type NodeState,
+	RESOURCE_LABEL,
+	RESOURCE_SCHEMA,
+	type RecipeNode,
+	type ResourceKind,
+	resourceSchema,
+	runStateOf,
+	runsForFlow,
+	type TraceStep,
+	validateFlow
+} from './flow.js'
+export {
 	assignInvoiceNumber,
 	type InvoiceState,
 	invoiceNumber,

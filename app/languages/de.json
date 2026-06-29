@@ -1215,6 +1215,19 @@
 			"pdfHint": "Sag „als PDF speichern“, um die Rechnung als PDF abzulegen.",
 			"pdfSaved": "PDF gespeichert.",
 			"savePdf": "Als PDF speichern"
+		},
+		"skills": {
+			"tab": "Skills",
+			"title": "Skills",
+			"pick": "Skill auswählen, um den Flow zu sehen."
+		},
+		"runs": {
+			"tab": "Läufe",
+			"title": "Läufe",
+			"pick": "Lauf auswählen, um die Vibe-Ansicht zu sehen.",
+			"vibe": "Vibe-Ansicht",
+			"trace": "Verlauf",
+			"current": "Aktueller Schritt"
 		}
 	}
 }

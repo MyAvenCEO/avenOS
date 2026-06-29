@@ -1,0 +1,277 @@
+[
+	{
+		"id": "ingest",
+		"name": "Dokument-Ingest",
+		"description": "Wiederverwendbarer Sub-Skill: Beleg importieren → inhaltsadressiert ablegen → klassifizieren. Der gemeinsame Eingang für ALLE Belegarten.",
+		"nodes": [
+			{
+				"id": "import",
+				"name": "Importieren",
+				"actor": "importDocument",
+				"inputs": ["file", "image"],
+				"outputs": ["document"],
+				"note": "Datei / Foto / Scan übernehmen",
+				"tools": ["upload"]
+			},
+			{
+				"id": "store",
+				"name": "Ablegen",
+				"actor": "sparkWriteBytes",
+				"inputs": ["document"],
+				"outputs": ["document"],
+				"note": "Inhaltsadressiert in sparks/PRIVATE/<sha256>",
+				"tools": ["sparkWriteBytes"]
+			},
+			{
+				"id": "classify",
+				"name": "Klassifizieren",
+				"actor": "classify_document",
+				"inputs": ["document"],
+				"outputs": ["document"],
+				"note": "Belegart erkennen (Rechnung / Kontoauszug / Vertrag / …)",
+				"system_prompt": "Du bist Buchhalter. Bestimme die Belegart: invoice (Rechnung), bank_statement (Kontoauszug), contract (Vertrag) oder other. Gib Titel, Tags und eine kurze Buchungs-Zusammenfassung zurück.",
+				"llm": { "model": "gemma4-31b", "vision": true, "mode": "vision" },
+				"tools": ["classify_document"]
+			}
+		],
+		"edges": [
+			{ "from": "import", "to": "store", "resource": "document" },
+			{ "from": "store", "to": "classify", "resource": "document" }
+		]
+	},
+	{
+		"id": "doc-ingest",
+		"name": "Beleg-Ingest",
+		"description": "Beleg aufnehmen (Sub-Skill »Dokument-Ingest«: Import → Ablage → Klassifizieren) → je nach Belegart verzweigen (Rechnung, Kontoauszug-Sub-Skill, Vertrag) → anreichern, abgleichen, buchen. Komponiert wiederverwendbare Sub-Skills.",
+		"nodes": [
+			{
+				"id": "ingest",
+				"name": "Beleg aufnehmen",
+				"flowRef": "ingest",
+				"inputs": ["file", "image"],
+				"outputs": ["document"],
+				"note": "Composite → Sub-Skill »Dokument-Ingest« (Import → Ablage → Klassifizieren)"
+			},
+			{
+				"id": "extract-invoice",
+				"name": "Rechnung extrahieren",
+				"actor": "extract_document",
+				"inputs": ["document"],
+				"outputs": ["invoice"],
+				"system_prompt": "Extrahiere alle Felder der Rechnung (Kopf, Lieferant, Käufer, Positionen, Summen) als striktes JSON nach dem invoice-Schema.",
+				"llm": { "model": "gemma4-31b", "vision": true, "mode": "tool" },
+				"tools": ["extract_document", "emit_fields"]
+			},
+			{
+				"id": "bank",
+				"name": "Kontoauszug",
+				"flowRef": "bank-statement",
+				"inputs": ["document"],
+				"outputs": ["transaction", "contact"],
+				"note": "Composite → Sub-Skill »Kontoauszug« (extrahieren + Transaktionen anlegen)"
+			},
+			{
+				"id": "extract-contract",
+				"name": "Vertrag extrahieren",
+				"actor": "extract_document",
+				"inputs": ["document"],
+				"outputs": ["contract"],
+				"system_prompt": "Extrahiere Vertragsparteien, Laufzeit, Kündigungsfrist und Konditionen als JSON nach dem contract-Schema.",
+				"llm": { "model": "gemma4-31b", "vision": true, "mode": "tool" },
+				"tools": ["extract_document", "emit_fields"]
+			},
+			{
+				"id": "enrich",
+				"name": "Adressbuch anreichern",
+				"actor": "enrichAddressbookFromDoc",
+				"inputs": ["invoice"],
+				"outputs": ["contact"],
+				"note": "Parteien matchen (USt-IdNr/IBAN/Name) → anlegen/ergänzen",
+				"tools": ["matchContact", "data_crud"]
+			},
+			{
+				"id": "reconcile",
+				"name": "Abgleichen",
+				"actor": "matchInvoiceAgainstTx",
+				"inputs": ["invoice", "transaction"],
+				"outputs": ["match"],
+				"note": "Fan-in: Rechnung + Transaktion → Match",
+				"system_prompt": "Wähle die Transaktion, die diese Rechnung bezahlt hat (Betrag, Cross-Currency via original_amount/FX, Gegenpartei, Datum) — oder keine.",
+				"llm": { "model": "gemma4-31b", "mode": "tool" },
+				"tools": ["pick_match"]
+			},
+			{
+				"id": "book",
+				"name": "Buchen (SKR04)",
+				"actor": "bookInvoice",
+				"inputs": ["invoice", "match"],
+				"outputs": ["booking"],
+				"note": "Fan-in: Soll/Haben + Vorsteuer",
+				"system_prompt": "Buche die Eingangsrechnung in SKR04: pro Position das beste Aufwandskonto (NETTO) + tax_treatment; das System bucht die Abziehbare Vorsteuer. Splitbuchung bei gemischten Sätzen/Bewirtung.",
+				"llm": { "model": "gemma4-31b", "mode": "tool" },
+				"tools": ["book_invoice"]
+			}
+		],
+		"edges": [
+			{ "from": "ingest", "to": "extract-invoice", "resource": "document", "when": "Rechnung" },
+			{ "from": "ingest", "to": "bank", "resource": "document", "when": "Kontoauszug" },
+			{ "from": "ingest", "to": "extract-contract", "resource": "document", "when": "Vertrag" },
+			{ "from": "extract-invoice", "to": "enrich", "resource": "invoice" },
+			{ "from": "extract-invoice", "to": "reconcile", "resource": "invoice" },
+			{ "from": "reconcile", "to": "book", "resource": "match" }
+		]
+	},
+	{
+		"id": "outgoing-invoice",
+		"name": "Ausgangsrechnung",
+		"description": "Per Prompt erstellen → Nummer + USt → PDF → als Erlös buchen.",
+		"nodes": [
+			{
+				"id": "create",
+				"name": "Rechnung erstellen",
+				"actor": "create_invoice",
+				"inputs": ["prompt"],
+				"outputs": ["invoice"],
+				"note": "Kunde + Positionen aus dem Prompt",
+				"system_prompt": "Erstelle eine Ausgangsrechnung: Kunde auflösen/anlegen, Positionen (NETTO + tax_treatment). Der Server vergibt die fortlaufende Nummer und rechnet die USt.",
+				"llm": { "model": "gemma4-31b", "mode": "tool" },
+				"tools": ["create_invoice"]
+			},
+			{
+				"id": "number",
+				"name": "Nummer + USt",
+				"actor": "assignInvoiceNumber",
+				"inputs": ["invoice"],
+				"outputs": ["invoice"],
+				"note": "R-ID-0001, VAT auto"
+			},
+			{
+				"id": "pdf",
+				"name": "PDF speichern",
+				"actor": "saveInvoicePdf",
+				"inputs": ["invoice"],
+				"outputs": ["pdf"],
+				"note": "§14-konform, in PRIVATE store"
+			},
+			{
+				"id": "book-out",
+				"name": "Erlös buchen",
+				"actor": "buildOutgoingBooking",
+				"inputs": ["invoice"],
+				"outputs": ["booking"],
+				"note": "Erlös 4400/4300 → Forderung 1200"
+			}
+		],
+		"edges": [
+			{ "from": "create", "to": "number", "resource": "invoice" },
+			{ "from": "number", "to": "pdf", "resource": "invoice" },
+			{ "from": "number", "to": "book-out", "resource": "invoice" }
+		]
+	},
+	{
+		"id": "bank-statement",
+		"name": "Kontoauszug",
+		"description": "Kontoauszug extrahieren → Transaktionen + Kontoinhaber herausfächern und idempotent anlegen.",
+		"nodes": [
+			{
+				"id": "extract-stmt",
+				"name": "Auszug extrahieren",
+				"actor": "extractDocFields",
+				"inputs": ["bank_statement"],
+				"outputs": ["transaction", "contact"],
+				"note": "Fan-out 1→N",
+				"system_prompt": "Extrahiere Kontoinhaber, Saldo und jede Transaktion als JSON nach dem bank_statement-Schema.",
+				"llm": { "model": "gemma4-31b", "vision": true, "mode": "tool" },
+				"tools": ["extract_document", "emit_fields"]
+			},
+			{
+				"id": "fanout",
+				"name": "Transaktionen anlegen",
+				"actor": "fanOutTransactions",
+				"inputs": ["transaction"],
+				"outputs": ["transaction"],
+				"note": "idempotent (dedup_key)",
+				"tools": ["data_crud"]
+			}
+		],
+		"edges": [{ "from": "extract-stmt", "to": "fanout", "resource": "transaction" }]
+	},
+	{
+		"id": "month-close",
+		"name": "Monatsabschluss",
+		"description": "Komposition wiederverwendbarer Skills (Composite/Leaf): der Kontoauszug-Skill liefert Transaktionen → der Beleg-Ingest-Skill verbucht damit → ein Leaf-Aktor erstellt die BWA. Sub-Skills sind anklickbar.",
+		"nodes": [
+			{
+				"id": "bank",
+				"name": "Kontoauszüge",
+				"flowRef": "bank-statement",
+				"inputs": ["bank_statement"],
+				"outputs": ["transaction"],
+				"note": "Composite → Sub-Skill »Kontoauszug«"
+			},
+			{
+				"id": "ingest",
+				"name": "Belege verbuchen",
+				"flowRef": "doc-ingest",
+				"inputs": ["document", "image", "transaction"],
+				"outputs": ["booking"],
+				"note": "Composite → Sub-Skill »Beleg-Ingest«"
+			},
+			{
+				"id": "report",
+				"name": "BWA erstellen",
+				"actor": "buildBWA",
+				"inputs": ["booking"],
+				"outputs": ["report"],
+				"note": "Leaf (echte Ausführung)",
+				"tools": ["data_crud"]
+			}
+		],
+		"edges": [
+			{ "from": "bank", "to": "ingest", "resource": "transaction" },
+			{ "from": "ingest", "to": "report", "resource": "booking" }
+		]
+	},
+	{
+		"id": "minecraft-glass",
+		"name": "Minecraft: Glas herstellen",
+		"description": "Dieselbe generische Recipe-Architektur, domänenfremd: Sand abbauen → im Ofen zu Glas schmelzen → am Craftingtisch zu Glasscheiben verarbeiten. Universelle Resource-Transformation.",
+		"resourceLabels": {
+			"world": "Welt",
+			"sand": "Sand",
+			"fuel": "Brennstoff",
+			"glass": "Glasblock",
+			"glass_pane": "Glasscheibe"
+		},
+		"nodes": [
+			{
+				"id": "mine",
+				"name": "Sand abbauen",
+				"actor": "gather",
+				"inputs": ["world"],
+				"outputs": ["sand"],
+				"note": "Quelle: Sandblock (Schaufel)"
+			},
+			{
+				"id": "smelt",
+				"name": "Schmelzen (Ofen)",
+				"actor": "furnace",
+				"inputs": ["sand", "fuel"],
+				"outputs": ["glass"],
+				"note": "Rezept: 1 Sand + Brennstoff → 1 Glas (Fan-in: Zutaten → Produkt)"
+			},
+			{
+				"id": "craft-pane",
+				"name": "Glasscheiben craften",
+				"actor": "crafting_table",
+				"inputs": ["glass"],
+				"outputs": ["glass_pane"],
+				"note": "Rezept: 6 Glas → 16 Glasscheiben"
+			}
+		],
+		"edges": [
+			{ "from": "mine", "to": "smelt", "resource": "sand" },
+			{ "from": "smelt", "to": "craft-pane", "resource": "glass" }
+		]
+	}
+]

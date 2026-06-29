@@ -1238,6 +1238,19 @@
 			"pdfHint": "Say \"save as PDF\" to store the invoice as a PDF.",
 			"pdfSaved": "PDF saved.",
 			"savePdf": "Save as PDF"
+		},
+		"skills": {
+			"tab": "Skills",
+			"title": "Skills",
+			"pick": "Pick a skill to see its flow."
+		},
+		"runs": {
+			"tab": "Runs",
+			"title": "Runs",
+			"pick": "Pick a run to see its vibe view.",
+			"vibe": "Vibe view",
+			"trace": "Trace",
+			"current": "Current step"
 		}
 	}
 }
