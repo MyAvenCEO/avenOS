@@ -5,8 +5,9 @@
 //   valid       ≡ ranji  — x1 (event/state) persists over interval x2→x3        [x1 = the task/fact]
 //   due         ≡ detri  — x1 (the date) is the date of event x2                [faithful: date=x1, task=x2]
 //   prioritized ≡ vajni  — x1 (task) important to x2 (user) in aspect/degree x3 [faithful: level=x3]
-// Each compiles to a self-documenting Ajv data_schema named `pred:<predicate>` and is seeded
-// into the DYNAMIC data_schema store (Layer B). See [[two-layer-schema-split]].
+// Each compiles to a self-documenting Ajv data_schema named `<predicate>` (the bare data-type name —
+// x1–x5 predications ARE the universal data-type model, no namespace prefix leaks to the DB/UI) and
+// is seeded into the DYNAMIC data_schema store (Layer B). See [[two-layer-schema-split]].
 import { compilePredicate, type PredicateDef, predSchemaName } from './compile.js'
 
 export const TASK: PredicateDef = {

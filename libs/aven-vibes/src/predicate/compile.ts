@@ -39,9 +39,10 @@ const ID_PATTERN = '^[\\w-]{6,}$'
 const DATETIME_PATTERN =
 	'^\\d{4}-\\d{2}-\\d{2}([T ]\\d{2}:\\d{2}(:\\d{2})?(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?)?$'
 
-/** The data_schema row name for a predicate, e.g. 'task' → 'pred:task'. */
+/** The data_schema row name for a data type. x1–x5 predications ARE the universal data-type model,
+ * so the schema name is just the bare data-type name — no namespace prefix leaks to the DB/UI. */
 export function predSchemaName(def: PredicateDef): string {
-	return `pred:${def.predicate}`
+	return def.predicate
 }
 
 function placeSchema(p: PlaceDef): Record<string, unknown> {

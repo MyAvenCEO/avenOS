@@ -68,12 +68,13 @@ describe('predicate compiler (board 0087)', () => {
 		expect(validate({ predicate: 'valid', x1: fact, x2: 'not-a-date' })).toBe(false)
 	})
 
-	test('the todo bundle seeds 4 pred:* schemas, each gismu-sourced', () => {
+	test('the todo bundle seeds 4 bare data-type schemas, each gismu-sourced', () => {
 		expect(TODO_PREDICATES.map((p) => p.predicate)).toEqual(['task', 'valid', 'due', 'prioritized'])
 		expect(TODO_PREDICATES.every((p) => typeof p.gismu === 'string' && p.gismu.length === 5)).toBe(true)
 		const rows = todoPredicateSchemas()
-		expect(rows.map((r) => r.name)).toEqual(['pred:task', 'pred:valid', 'pred:due', 'pred:prioritized'])
-		expect(predSchemaName(TASK)).toBe('pred:task')
+		// x1–x5 predications ARE the universal data types — schema names carry no namespace prefix
+		expect(rows.map((r) => r.name)).toEqual(['task', 'valid', 'due', 'prioritized'])
+		expect(predSchemaName(TASK)).toBe('task')
 		// every compiled schema is itself a valid Ajv schema
 		for (const r of rows) expect(() => ajv.compile(r.jsonSchema)).not.toThrow()
 	})

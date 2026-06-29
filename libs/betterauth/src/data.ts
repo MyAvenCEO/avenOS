@@ -259,21 +259,25 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 		.select(['name', 'json_schema'])
 		.where('user_id', '=', uid)
 		.execute()
-	// Internal predication schemas (pred:*) are NOT exposed to the model — todos are managed ONLY
-	// through the consolidated `todos` schema, which writes the task/valid/due/prioritized bundle
-	// underneath (executeTodos). Never let the model query `task`/`pred:*` directly. board 0087.
+	// The atomic x1–x5 data types (task/valid/due/prioritized) are NOT exposed to the model — todos
+	// are managed ONLY through the consolidated `todos` type, which writes that bundle underneath
+	// (executeTodos). Identify those data types by their `predicate` discriminator (no name prefix —
+	// the bare name is the universal data type). Never let the model query them directly. board 0087.
 	const lines = rows
-		.filter((r) => !r.name.startsWith('pred:'))
+		.filter((r) => {
+			const s = asJson(r.json_schema) as { properties?: Record<string, unknown> } | null
+			return !s?.properties?.predicate
+		})
 		.map((r) => `- ${r.name}: ${JSON.stringify(asJson(r.json_schema))}`)
 	// `todos` is virtual (backed by predications); describe its fields incl. due + priority.
 	lines.unshift(
-		'- todos: { "title": string, "done"?: boolean, "due"?: ISO-8601 date string, "priority"?: "high" | "medium" | "low" } — the ONE way to manage tasks; never query "task" or any "pred:*" schema.'
+		'- todos: { "title": string, "done"?: boolean, "due"?: ISO-8601 date string, "priority"?: "high" | "medium" | "low" } — the ONE way to manage tasks; never query the underlying data types (task/valid/due/prioritized) directly.'
 	)
 	const now = new Date()
 	return `Current date & time: ${now.toISOString()} — resolve any relative dates the user mentions ("today", "tomorrow", "in 3 days", "next Monday") against THIS instant; emit absolute ISO dates.\n\nThe data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}\n\nIMPORTANT: whenever the user asks to see / show / list / check their todos OR tasks (any wording, any language), you MUST call data_crud with action="list", schema="todos" — this renders their live todo card. Never answer about todos/tasks from memory or with a plain-text list; always call the tool so the card appears.`
 }
 
-/** Ensure the per-user gismu todo predicate schemas (pred:task/valid/due/prioritized) exist. */
+/** Ensure the per-user gismu todo data-type schemas (task/valid/due/prioritized) exist. */
 async function ensureTodoSchemas(uid: string): Promise<Record<string, string>> {
 	const ids: Record<string, string> = {}
 	for (const { name, jsonSchema } of todoPredicateSchemas()) {
@@ -317,10 +321,10 @@ async function ensureTodoSchemas(uid: string): Promise<Record<string, string>> {
 // predications live underneath, projected via `v_task`. See [[two-layer-schema-split]].
 async function executeTodos(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const ids = await ensureTodoSchemas(uid)
-	const taskSchema = ids['pred:task']
-	const validSchema = ids['pred:valid']
-	const dueSchema = ids['pred:due']
-	const prioSchema = ids['pred:prioritized']
+	const taskSchema = ids['task']
+	const validSchema = ids['valid']
+	const dueSchema = ids['due']
+	const prioSchema = ids['prioritized']
 
 	// due ≡ detri: x1 = the date, x2 = the task (canonical). Passing null clears it.
 	async function setDue(taskId: string, date: string | null): Promise<void> {
