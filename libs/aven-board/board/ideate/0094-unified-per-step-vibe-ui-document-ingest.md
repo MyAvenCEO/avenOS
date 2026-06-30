@@ -112,6 +112,12 @@ rg -n "SAMPLE_VIBE_DATA" app/src/lib/shell
 
 Newest entry first.
 
+- `2026-06-30` — **SUPERSEDED by board 0095 (vibe definitions as DB config); folded back to ideate/.**
+  The build started (one `StepVibe` edit) then paused + reverted. Rationale: unifying THREE hardcoded
+  Svelte dispatch paths is the weaker fix — once vibe view/style/logic live in the DB and render through
+  the ONE engine (0095), "same vibe in Chat/Runs/Skills" is structural, not hand-maintained. Carried
+  forward as follow-ons: authoring the `ingest`/`classify` cards as engine-vibes (DB vibe bundles under
+  0095), and the classify-RESULT fix (invoice→'Sonstiges' — a separate small vision/prompt card).
 - `2026-06-30` — Discovery. Found the root cause live: THREE drifting vibe-render paths (Chat inline
   `{#if message.vibe}`, Runs `StepVibe`, Skills config-only) + neither has an `invoice` case, plus a
   classify mis-type (invoice → 'Sonstiges'). User decisions: ONE card (Document Ingest end-to-end —
