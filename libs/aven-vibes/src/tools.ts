@@ -100,8 +100,8 @@ export const RUN_SKILL_TOOL = {
 		description:
 			'Run a skill on the attached document — the ONLY way to ingest/process a file or photo in chat. ' +
 			'Use when the user attaches a file/photo and asks to ingest / process / file / read / book it. ' +
-			'Pick `skill`: "invoice-ingest" for an invoice/bill/receipt (stores the file, classifies, then ' +
-			'extracts the invoice fields), else "doc-ingest" for a general document (store + classify). The ' +
+			'Pick `skill`: "invoice" for an invoice/bill/receipt (stores the file, classifies, extracts the ' +
+			'invoice fields + line items, and enriches the vendor company), else "doc-ingest" for a general document (store + classify). The ' +
 			'server saves the result as ontology data with provenance back to the source. ' +
 			'Respond ONLY with the short sentence in `response`.',
 		parameters: {
@@ -109,7 +109,7 @@ export const RUN_SKILL_TOOL = {
 			properties: {
 				skill: {
 					type: 'string',
-					description: 'The skill id: "invoice-ingest" for invoices/bills/receipts, else "doc-ingest".'
+					description: 'The skill id: "invoice" for invoices/bills/receipts, else "doc-ingest".'
 				},
 				response: { type: 'string', description: 'A single-sentence human-facing reply.' }
 			},

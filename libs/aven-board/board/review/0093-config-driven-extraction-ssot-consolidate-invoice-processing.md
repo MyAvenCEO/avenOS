@@ -127,6 +127,16 @@ rg -n "invoice-ingest" libs/betterauth libs/aven-skills/configs   # → no flow/
 
 Newest entry first.
 
+- `2026-06-30` — **Regression fix (chat run_skill broke).** Deleting `invoice-ingest` left the chat
+  pointing at a missing flow, and `Invoice Processing` couldn't run (its `book`/`humanReview` steps have
+  no actors → runner "no actor registered"). Fixes: migration `0032` scopes the `invoice` flow to
+  CAPTURE-ONLY (ingest → capture; book/review deferred to the follow-on), so it flattens to four
+  IMPLEMENTED actors (storeDocument→classify_document→extract_document→enrichAddressbook); the
+  `run_skill` tool now picks `"invoice"` (not the deleted `invoice-ingest`); migration `0033` tags the
+  capture extract node `vibe:'invoice'` so the invoice card streams into chat + the Runs trace (only
+  classify carried a vibe before). Verified headlessly: `run_skill('invoice')` → status `done`, trace
+  `ingest→classify(vibe=bookkeeping)→extract(vibe=invoice)→enrich`. Requires the stale dev auth server
+  to be RESTARTED to pick up the new actors/tool (DB flow changes are already live).
 - `2026-06-30` — **BUILT + verified. All five proofs pass.** (1) `extract_document` is now generic +
   config-driven — it reads the node's `system_prompt` + `schema` (the SSOT), so one actor extracts any
   doctype; migration `0030` embedded the invoice (3514-char prompt) + bank-statement doctype configs into
