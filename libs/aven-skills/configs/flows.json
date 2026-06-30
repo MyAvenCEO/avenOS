@@ -20,6 +20,7 @@
 				"id": "classify",
 				"name": "Classify",
 				"actor": "classify_document",
+				"vibe": "bookkeeping",
 				"inputs": ["document"],
 				"outputs": ["document"],
 				"note": "Detect the document type via LLM (invoice / bank statement / contract / …)",

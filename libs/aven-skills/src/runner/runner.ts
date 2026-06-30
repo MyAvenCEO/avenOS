@@ -28,6 +28,8 @@ export type RunFlowOpts = {
 	label?: string
 	/** initial trigger resources seeded onto the bus (e.g. `{ file: bytes }`) */
 	input?: Record<string, unknown>
+	/** Called after each node completes — lets the host stream the step's vibe card live. board 0091. */
+	onStep?: (step: TraceStep) => void
 }
 
 export type RunResult = {
@@ -77,13 +79,21 @@ export async function runFlow(flow: Flow, opts: RunFlowOpts): Promise<RunResult>
 		try {
 			const out = await actor({ node, inputs })
 			for (const [kind, val] of Object.entries(out)) bus[kind] = val
-			trace.push({
+			// the step's vibe card (config-driven): node.vibe + the node's primary output as data — so
+			// chat + the Runs explorer render the SAME card from one source (the trace). board 0091.
+			const primaryOut = node.outputs[0]
+			const step: TraceStep = {
 				nodeId: node.id,
 				state: 'done',
 				at: now(),
 				inputs: Object.keys(inputs),
-				outputs: Object.keys(out)
-			})
+				outputs: Object.keys(out),
+				...(node.vibe
+					? { vibe: node.vibe, vibeData: primaryOut !== undefined ? out[primaryOut] : undefined }
+					: {})
+			}
+			trace.push(step)
+			opts.onStep?.(step)
 		} catch (e) {
 			trace.push({
 				nodeId: node.id,

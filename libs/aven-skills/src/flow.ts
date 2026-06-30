@@ -5,7 +5,6 @@
 // could drive execution later. Pure (no DOM): just the schema + our existing skills as data.
 
 import flowsJson from '../configs/flows.json'
-import runsJson from '../configs/runs.json'
 import type { LlmConfig } from './capability.js'
 import type { LogLevel } from './pipeline/types.js'
 
@@ -116,6 +115,9 @@ export type RecipeNode = {
 	config?: Record<string, unknown>
 	/** Human-in-the-loop: this step waits for a person to review/accept before continuing. */
 	hitl?: boolean
+	/** The user-facing vibe card this step renders (e.g. "bookkeeping", "doc-compare", "invoice-booking").
+	 *  The runner copies it onto the TraceStep so chat + the Runs explorer show the SAME card. board 0091. */
+	vibe?: string
 }
 
 /** A directed connection (a message channel). `when` = a branch guard; `kind` = data (a resource
@@ -419,13 +421,8 @@ export const FLOW_SCHEMA = {
 /** Our real skills + a Minecraft demo — loaded from pure JSON config (flows.json). board 0083. */
 export const EXAMPLE_FLOWS: Flow[] = flowsJson as unknown as Flow[]
 
-/** Example instance RUNS (with traces) — separate from the Flow templates. From runs.json. */
-export const EXAMPLE_RUNS: FlowRun[] = runsJson as unknown as FlowRun[]
-
-/** The runs (instances) of a given flow template. */
-export function runsForFlow(flowId: string): FlowRun[] {
-	return EXAMPLE_RUNS.filter((r) => r.flowId === flowId)
-}
+// Runs are no longer seeded fixtures — they are the REAL persisted flow_run rows produced by the
+// generic runner (board 0089/0090); the app reads them from GET /api/skills/runs, not from here.
 
 /** The index of a run's CURRENT step = the first 'running' step, else the last traced step (else -1). */
 export function currentStepIndex(run: FlowRun | null): number {

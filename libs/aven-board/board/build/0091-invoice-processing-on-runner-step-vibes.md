@@ -97,6 +97,7 @@ Each provable from the transcript.
 - [ ] `contact`/`transaction`/`booking`/`match` registered in `predicate_type`; `data_crud(<type>,create→list)` round-trips with provenance.
 - [ ] A live `run_skill` on "Invoice Processing" runs ALL steps (trace has store→classify→extract→enrich→match→book→review) and persists `invoice`+`contact`+`booking`+`match` predications with krasi/finti.
 - [ ] The chat turn STREAMS a vibe card per step (classification, doc-compare, invoice-booking) — `aven_vibe` events in the SSE.
+- [ ] The **Runs explorer** renders the SAME per-step vibe — StepVibe shows each step's `vibe`/`vibeData` from the real persisted `flow_run` trace (one source of truth: the trace's vibe drives BOTH chat + Runs view).
 - [ ] `invoice-ingest` removed (`rg` empty); `run_skill` drives `invoice`.
 - [ ] Old `tx`/`contact`/`booking` blob schemas DROPPED (SQL); data present as predications.
 - [ ] `bun run check` + new tests exit 0; aven-db untouched.
@@ -124,6 +125,16 @@ rg -n "invoice-ingest" libs                            # expect: empty (consolid
 
 Newest entry first.
 
+- `2026-06-29` — **Build step 1 DONE + verified — the per-step vibe mechanism (the "wire the runner vibe
+  view" ask).** Runner: `RecipeNode.vibe` config + `RunFlowOpts.onStep`; on each node the runner sets
+  `TraceStep.vibe`/`vibeData` (node.vibe + primary output) and calls `onStep`. `runSkillForUser` passes
+  `onStep` through; the chat `run_skill` dispatch emits `aven_vibe` per step (+ persists the VIBE_MARKER).
+  doc-ingest's `classify` node tagged `vibe:"bookkeeping"` (migration 0024 re-seeds). One source of truth:
+  the trace's vibe drives BOTH chat AND the Runs explorer's StepVibe. Verified: runner test passes; live
+  `runSkillForUser(...,onStep)` → classify step streams `vibe:"bookkeeping"`; tsc clean. **Remaining:**
+  2 (contact/tx/booking/match ontology types), 3 (ontology actors extract/enrich/match/book/review +
+  vibes), 4 (full Invoice Processing on the runner + delete invoice-ingest), 5 (migrate+drop tx/contact/
+  booking blobs), 6 (verify).
 - `2026-06-29` — Discovery. Follow-on to 0090 after review feedback (use the existing Invoice Processing,
   not a new flow; stream per-step vibe cards in chat). User locked: FULL flow on the runner, actors
   REIMPLEMENTED on the ontology, review auto-posts (HITL follow-on). Grounded the flatten chain

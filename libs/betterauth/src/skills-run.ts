@@ -5,7 +5,8 @@ import {
 	type Flow,
 	flattenFlow,
 	type FlowRun,
-	runFlow
+	runFlow,
+	type TraceStep
 } from '@avenos/aven-skills'
 import { getDoctype } from '@avenos/aven-vibes/doctypes'
 import type { Context } from 'hono'
@@ -224,7 +225,8 @@ export type RunSkillResult = {
 export async function runSkillForUser(
 	uid: string,
 	skillId: string,
-	input: SkillInput
+	input: SkillInput,
+	onStep?: (step: TraceStep) => void
 ): Promise<RunSkillResult> {
 	const flow = await loadFlow(skillId)
 	if (!flow) throw new Error(`no skill "${skillId}"`)
@@ -236,7 +238,8 @@ export async function runSkillForUser(
 		actors: skillActors(pgArtifactStore()),
 		runId,
 		now: () => new Date().toISOString(),
-		input: { file: input, image: input }
+		input: { file: input, image: input },
+		onStep // board 0091 — stream each step's vibe card to the caller (chat)
 	})
 
 	// GENERIC persistence: any output resource whose kind is a REGISTERED type (document/invoice/…) is

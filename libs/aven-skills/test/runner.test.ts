@@ -55,4 +55,42 @@ describe('generic flow runner (board 0089)', () => {
 		expect(run.status).toBe('error')
 		expect(run.trace[0]?.message).toBe('disk full')
 	})
+
+	test('a node `vibe` → step.vibe/vibeData + onStep fires per step (board 0091)', async () => {
+		const vibeFlow: Flow = {
+			id: 'vf',
+			name: 'VF',
+			description: '',
+			nodes: [
+				{ id: 'a', name: 'Store', actor: 'store', inputs: ['file'], outputs: ['document'] },
+				{
+					id: 'b',
+					name: 'Classify',
+					actor: 'classify',
+					inputs: ['document'],
+					outputs: ['document'],
+					vibe: 'bookkeeping'
+				}
+			],
+			edges: [{ from: 'a', to: 'b', resource: 'document', message: 'document' }]
+		}
+		const seen: { id: string; vibe?: string }[] = []
+		const { run } = await runFlow(vibeFlow, {
+			actors: {
+				store: async ({ inputs }) => ({ document: { sha: `h(${inputs.file})` } }),
+				classify: async ({ inputs }) => ({ document: { ...(inputs.document as object), kind: 'invoice' } })
+			},
+			runId: 'r4',
+			now: () => 'T',
+			input: { file: 'b' },
+			onStep: (s) => seen.push({ id: s.nodeId, vibe: s.vibe })
+		})
+		expect(seen).toEqual([
+			{ id: 'a', vibe: undefined },
+			{ id: 'b', vibe: 'bookkeeping' }
+		])
+		const bStep = run.trace.find((s) => s.nodeId === 'b')
+		expect(bStep?.vibe).toBe('bookkeeping')
+		expect(bStep?.vibeData).toEqual({ sha: 'h(b)', kind: 'invoice' })
+	})
 })

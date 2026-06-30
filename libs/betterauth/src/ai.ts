@@ -1136,10 +1136,26 @@ function streamWithTools(opts: {
 								if (!img) {
 									toolResult = { ok: false, error: 'attach a document image to ingest' }
 								} else {
-									const out = await runSkillForUser(userId, skill, {
-										bytes: new Uint8Array(Buffer.from(img.b64, 'base64')),
-										mime: img.mimeType
-									})
+									const out = await runSkillForUser(
+										userId,
+										skill,
+										{
+											bytes: new Uint8Array(Buffer.from(img.b64, 'base64')),
+											mime: img.mimeType
+										},
+										// board 0091 — stream each step's vibe card into the chat (classification,
+										// doc-compare, invoice-booking) as the flow runs.
+										(step) => {
+											if (!step.vibe || emittedVibes.has(step.vibe)) return
+											emittedVibes.add(step.vibe)
+											emit({ aven_vibe: { schema: step.vibe, data: step.vibeData } })
+											void persistMessage(
+												chatSessionId,
+												'assistant',
+												`${VIBE_MARKER}${step.vibe}\n${JSON.stringify(step.vibeData ?? {})}`
+											).catch(() => {})
+										}
+									)
 									toolResult = { ok: out.status === 'done', ...out, note: CARD_REPLY_NOTE }
 								}
 							} catch (e) {
