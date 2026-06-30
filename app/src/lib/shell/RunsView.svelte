@@ -1,14 +1,14 @@
 <script lang="ts">
 import {
 	currentStepIndex,
-	EXAMPLE_RUNS,
 	type Flow,
+	flattenFlow,
 	type FlowRun,
 	type NodeState,
 	type RecipeNode
 } from '@avenos/aven-skills'
 import { createQuery } from '@tanstack/svelte-query'
-import { listFlows } from '$lib/data/client'
+import { listFlows, listRuns } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import StepVibe from '$lib/shell/StepVibe.svelte'
@@ -18,21 +18,31 @@ import StepVibe from '$lib/shell/StepVibe.svelte'
 // detail logs of the run.
 let { containerName = 'aven-vibes-runs' }: { containerName?: string } = $props()
 
-// Flow CONFIGS load from the admin API (board 0087); runs stay example fixtures for now.
+// Flow CONFIGS load from the admin API (board 0087); RUNS are the user's REAL persisted runs
+// (board 0090) — no fixtures. Keyed under ['data'] so the SSE 'data' event refetches after a run.
 const flowsQuery = createQuery(() => ({ queryKey: ['flows'], queryFn: listFlows }))
 const flows = $derived<Flow[]>(flowsQuery.data ?? [])
+const runsQuery = createQuery(() => ({ queryKey: ['data', 'runs'], queryFn: listRuns }))
+const runs = $derived<FlowRun[]>(runsQuery.data ?? [])
 
-let selectedRunId = $state<string>(EXAMPLE_RUNS[0]?.id ?? '')
-let selectedNodeId = $state<string | null>(
-	EXAMPLE_RUNS[0]?.trace[currentStepIndex(EXAMPLE_RUNS[0] ?? null)]?.nodeId ?? null
-)
+let selectedRunId = $state<string>('')
+let selectedNodeId = $state<string | null>(null)
+// Auto-select the newest run once they load (or when the selection falls out of the list).
+$effect(() => {
+	if (runs.length > 0 && !runs.some((r) => r.id === selectedRunId)) {
+		selectedRunId = runs[0].id
+		selectedNodeId = runs[0].trace[currentStepIndex(runs[0])]?.nodeId ?? null
+	}
+})
 
-const selectedRun = $derived<FlowRun | null>(
-	EXAMPLE_RUNS.find((r) => r.id === selectedRunId) ?? null
-)
-const flow = $derived<Flow | null>(
+const selectedRun = $derived<FlowRun | null>(runs.find((r) => r.id === selectedRunId) ?? null)
+// FLATTEN the flow (board 0093/0094): the trace records flattened step ids (e.g. `capture/extract`),
+// so the graph + nodeById must be the flattened flow too — otherwise a clicked step can't resolve its
+// node (→ no vibe) and sub-skills render collapsed. Flattening shows the sub-flow steps in full detail.
+const rawFlow = $derived<Flow | null>(
 	selectedRun ? (flows.find((f) => f.id === selectedRun.flowId) ?? null) : null
 )
+const flow = $derived<Flow | null>(rawFlow ? flattenFlow(rawFlow, flows) : null)
 const nodeById = $derived(new Map((flow?.nodes ?? []).map((n) => [n.id, n])))
 // One state per node, from the run's trace (last write wins) → colours the graph.
 const nodeStates = $derived.by<Record<string, NodeState>>(() => {
@@ -78,7 +88,7 @@ function onSelect(id: string): void {
 	<aside class="border-border flex w-56 shrink-0 flex-col rounded-[var(--radius-lg)] border">
 		<p class="border-border border-b p-3 text-sm font-semibold">{t('mainnet.runs.title')}</p>
 		<div class="min-h-0 flex-1 overflow-y-auto p-1.5">
-			{#each EXAMPLE_RUNS as r (r.id)}
+			{#each runs as r (r.id)}
 				<button
 					type="button"
 					class="mb-1 block w-full rounded-[var(--radius)] px-2.5 py-2 text-left transition-colors {r.id ===
