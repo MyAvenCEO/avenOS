@@ -102,17 +102,19 @@ export async function update(
 	const now = ctx.now()
 	for (const [field, raw] of Object.entries(item)) {
 		if (field === 'id') continue
-		const part = spec.parts.find((p) => p.field === field)
-		if (!part) continue
 		const env: Env = { user: ctx.user, primary: id, now, value: raw }
-		if (part.kind === 'primary') {
-			await store.patch(id, cellsFrom(part.set, env))
-		} else if (part.kind === 'singleton' && part.link) {
-			await store.patchWhere(part.pred, part.link, id, cellsFrom(part.set, env))
-		} else if (part.kind === 'replace' && part.link) {
-			await store.deleteWhere(part.pred, part.link, id)
-			// presence semantics (board 0092): re-insert only when truthy — done:false leaves it deleted.
-			if (raw) await store.insert(part.pred, cellsFrom(part.set, env))
+		// a single input field may drive MULTIPLE parts (e.g. invoice `number` gates the primary AND is
+		// stored as its own cmene predication) — apply them all, not just the first match. board 0092.
+		for (const part of spec.parts.filter((p) => p.field === field)) {
+			if (part.kind === 'primary') {
+				await store.patch(id, cellsFrom(part.set, env))
+			} else if (part.kind === 'singleton' && part.link) {
+				await store.patchWhere(part.pred, part.link, id, cellsFrom(part.set, env))
+			} else if (part.kind === 'replace' && part.link) {
+				await store.deleteWhere(part.pred, part.link, id)
+				// presence semantics (board 0092): re-insert only when truthy — done:false leaves it deleted.
+				if (raw) await store.insert(part.pred, cellsFrom(part.set, env))
+			}
 		}
 	}
 	return id

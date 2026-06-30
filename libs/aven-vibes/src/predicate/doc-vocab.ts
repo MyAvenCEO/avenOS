@@ -6,7 +6,7 @@
 //   classified  ≡ klesi  — document x1 falls in category x2 (invoice / …)
 //   summary     ≡ skicu  — document x1 is described/summarized by text x2
 //   source      ≡ krasi  — x1 (the raw artifact, sha256) is the ORIGIN of document x2   [PROVENANCE]
-//   produced    ≡ finti  — x1 (the skill run) produced document x2                       [LINEAGE]
+//   produced    ≡ cupra  — x1 (the skill run, producer) produces document x2             [LINEAGE]
 import { compilePredicate, type PredicateDef, predSchemaName } from './compile.js'
 
 export const DOCUMENT: PredicateDef = {
@@ -79,21 +79,23 @@ export const SOURCE: PredicateDef = {
 	]
 }
 
-// LINEAGE — which skill run produced this (generic).
+// LINEAGE — which skill run produced this (generic). cupra: x1 (producer) produces x2 (product) — the
+// run is the producer (a ref to the flow_run), the entity is the product. board 0092: finti → cupra,
+// and x1 becomes a ref (the run id) to match cupra's canonical producer place.
 export const PRODUCED: PredicateDef = {
 	predicate: 'produced',
-	gismu: 'finti',
-	gloss: 'finti (create): x1 (the skill run) produced/created x2 (the document)',
+	gismu: 'cupra',
+	gloss: 'cupra (produce): x1 (the skill run) produces x2 (the document/invoice) — the run is the producer',
 	places: [
 		{
 			pos: 'x1',
-			role: 'run',
-			gloss: 'the flow-run id that produced this',
-			kind: 'value',
-			type: 'string',
+			role: 'producer',
+			gloss: 'the flow-run that produced this — cupra x1 (the producer)',
+			kind: 'ref',
+			references: '*',
 			example: 'run_5f3a'
 		},
-		{ pos: 'x2', role: 'document', gloss: 'the produced thing', kind: 'ref', references: '*' }
+		{ pos: 'x2', role: 'product', gloss: 'the produced thing — cupra x2 (the product)', kind: 'ref', references: '*' }
 	]
 }
 

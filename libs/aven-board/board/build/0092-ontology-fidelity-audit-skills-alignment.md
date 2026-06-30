@@ -204,6 +204,21 @@ contact. No metadata is lost vs. the doctype's `org_public_record.identifiers[]`
 
 Newest entry first.
 
+- `2026-06-30` — **Step 2a DONE + verified live (invoice headline canonical).** Corrected the audit's
+  flagged invoice errors: ownership → universal `owned_by`≡ponse (drop owner-in-x1); `number`≡cmene
+  (x1 number, x2 invoice — off janta.x2); `total`≡jdima **un-reversed** (x1 = the price); the invoice
+  primary IS the janta row with x3 = billed-party; `produced` finti→**cupra** (x1 now a ref, matching
+  cupra's producer place). Engine: a single input field may drive MULTIPLE parts (invoice `number` gates
+  the primary AND writes its cmene). The **places==seed gate** now covers todo + invoice and *earned its
+  keep* — it caught `classified`≡klesi (value in a ref place) and the transitional `vendor`≡vecnu, both
+  scoped out to their steps (document-correction; step 3 biller-as-contact). Migration `0026`: re-seed
+  invoice spec + schemas, re-sync data (amount→total un-reversed, owner→owned_by, janta.x2→cmene,
+  primary owner→x3). Live `data_crud(invoice)` round-trip: create→list projects `{number:"2026-014",
+  total:"1200.00", vendor, buyer, owner, due}`; delete cascades; the 2 pre-existing invoices intact,
+  owned_by now on todos + invoices. check 0 (ontology/vibes/betterauth), 54/54 vibes tests.
+  Remaining for step 2: **2b** = nested children-array engine (line items≡pagbu w/ description/qty/
+  unit-price/amount, taxes≡cteki+parbi, payments≡pleji) — the recursive sub-entity primitive. Plus the
+  document-vocab correction (classified→cmima needs class entities; owner→owned_by) as its own step.
 - `2026-06-30` — **Step 1 DONE + verified live (owned_by + done=mulno — the core fidelity correction).**
   Vocab: dropped `valid`≡ranji; added universal `owned_by`≡ponse (x1 owner, x2 entity) + `done`≡mulno
   (x1 task, presence = done). Engine: replace parts now use presence semantics (falsy = absent) so a
