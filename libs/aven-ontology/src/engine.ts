@@ -70,7 +70,13 @@ export async function create(
 	if (titleVal == null || titleVal === '') return null
 
 	const base: Env = { user: ctx.user, primary: null, parent: parentId, now, value: titleVal }
-	const primaryId = await store.insert(primary.pred, cellsFrom(primary.create, base))
+	const primaryCells = cellsFrom(primary.create, base)
+	// extra primary fields → their own places (e.g. pleji payer/payee/goods on a transaction). board 0092.
+	for (const [place, field] of Object.entries(primary.fields ?? {})) {
+		const v = item[field]
+		if (v != null && v !== '') primaryCells[place as Place] = String(v)
+	}
+	const primaryId = await store.insert(primary.pred, primaryCells)
 	const env = { ...base, primary: primaryId }
 
 	for (const part of spec.parts) {
@@ -124,8 +130,15 @@ export async function update(
 	const id = typeof item.id === 'string' ? item.id : null
 	if (!id) return null
 	const now = ctx.now()
+	// extra primary places (a primary part's `fields`) patch directly by field name.
+	const primaryFieldPlace: Record<string, Place> = {}
+	for (const [place, f] of Object.entries(primaryPart(spec).fields ?? {})) primaryFieldPlace[f as string] = place as Place
 	for (const [field, raw] of Object.entries(item)) {
 		if (field === 'id') continue
+		if (primaryFieldPlace[field]) {
+			await store.patch(id, { [primaryFieldPlace[field]]: raw == null || raw === '' ? null : String(raw) })
+			continue
+		}
 		const env: Env = { user: ctx.user, primary: id, parent: null, now, value: raw }
 		// a single input field may drive MULTIPLE parts (e.g. invoice `number` gates the primary AND is
 		// stored as its own cmene predication) — apply them all, not just the first match. board 0092.

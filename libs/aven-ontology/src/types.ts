@@ -45,6 +45,9 @@ export type PartSpec = {
 	set?: Partial<Record<Place, Bind>>
 	/** for kind:'children' — the sub-type each array element is created/projected as */
 	childSpec?: TypeSpec
+	/** for the PRIMARY — extra input fields written to its OWN places (place → field), e.g. a
+	 *  transaction≡pleji carrying payer/payee/goods alongside the driving amount. board 0092. */
+	fields?: Partial<Record<Place, string>>
 }
 
 /** How one output field is projected back from the predications. */

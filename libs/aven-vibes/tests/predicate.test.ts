@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 import Ajv from 'ajv'
 import {
+	COMPANY_PREDICATES,
 	compilePredicate,
 	DOCUMENT_PREDICATES,
 	DONE,
@@ -10,10 +11,12 @@ import {
 	LINE_PREDICATES,
 	OWNED_BY,
 	PAYMENT_PREDICATES,
+	PERSON_PREDICATES,
 	predSchemaName,
 	TASK,
 	TODO_PREDICATES,
-	todoPredicateSchemas
+	todoPredicateSchemas,
+	TRANSACTION_PREDICATES
 } from '../src/predicate/index.js'
 
 // board 0087 — the predicate compiler turns a gismu-sourced definition into a self-documenting
@@ -108,7 +111,10 @@ describe('predicate compiler (board 0087)', () => {
 			...DOCUMENT_PREDICATES.filter((p) => p.predicate !== 'classified'),
 			...INVOICE_PREDICATES.filter((p) => p.predicate !== 'vendor'),
 			...LINE_PREDICATES,
-			...PAYMENT_PREDICATES
+			...PAYMENT_PREDICATES,
+			...PERSON_PREDICATES,
+			...COMPANY_PREDICATES,
+			...TRANSACTION_PREDICATES
 		]
 		for (const def of gated) {
 			const seed = def.gismu ? GISMU[def.gismu] : undefined

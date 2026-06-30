@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { create, query, remove, update } from '@avenos/aven-ontology'
 import type { Cell, PredicationStore, TypeSpec } from '@avenos/aven-ontology'
 import {
+	contactPredicateSchemas,
 	documentPredicateSchemas,
 	invoicePredicateSchemas,
 	todoPredicateSchemas
@@ -295,7 +296,8 @@ async function ensurePredicateSchemas(uid: string): Promise<Record<string, strin
 	for (const { name, jsonSchema } of [
 		...todoPredicateSchemas(),
 		...documentPredicateSchemas(),
-		...invoicePredicateSchemas()
+		...invoicePredicateSchemas(),
+		...contactPredicateSchemas()
 	]) {
 		const existing = await db()
 			.selectFrom('data_schema')

@@ -204,6 +204,18 @@ contact. No metadata is lost vs. the doctype's `org_public_record.identifiers[]`
 
 Newest entry first.
 
+- `2026-06-30` — **Step 3 DONE + verified live (contact graph + transaction settlement + SKR04 booking).**
+  New composite types — `person`≡prenu, `company`≡kagni, `transaction`≡pleji — all gismu-faithful and
+  gate-covered. KEY MODELLING WIN: the channel/identifier TYPE is encoded in the PREDICATE NAME
+  (email/phone/iban/postal≡judri; vat_id/tax_number≡cmene; name≡cmene), so every place stays canonical
+  (no short categorical label stuffed into a ref slot — the trap that sank classified). Ansprechpartner =
+  a `person` that `represents`≡krati a `company`. Reconciliation: a `transaction` settles its invoice via
+  `pleji.x4` (the goods paid for) and is `booked`≡cmima to an SKR04 account. Small general engine add: a
+  primary part's `fields` map writes extra input fields to its own places (pleji's payee/invoice). Live:
+  company {name, email, iban, vat_id, tax_number, owner} + Ansprechpartner {name, email, represents→company}
+  + transaction {amount, payee→company, settles→invoice, date, account: skr04-6810} all round-trip;
+  migration 0029 registers the types. check 0; ontology 7/7, vibes 54/54 (gate covers contacts).
+  Remaining: app-layer — actors + Invoice Processing flow, vibe views, chat trigger (need the Tauri app).
 - `2026-06-30` — **Document correction DONE + verified live (universal ownership now on ALL verticals).**
   Extended owned_by≡ponse to the document (drop owner-in-x1); summary≡skicu un-reversed (x2 document,
   x4 text); source≡krasi x1 is now the artifact ref (the sha256 content-address IS the origin ref);
