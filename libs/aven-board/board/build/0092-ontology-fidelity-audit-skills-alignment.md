@@ -204,6 +204,18 @@ contact. No metadata is lost vs. the doctype's `org_public_record.identifiers[]`
 
 Newest entry first.
 
+- `2026-06-30` — **Step 1 DONE + verified live (owned_by + done=mulno — the core fidelity correction).**
+  Vocab: dropped `valid`≡ranji; added universal `owned_by`≡ponse (x1 owner, x2 entity) + `done`≡mulno
+  (x1 task, presence = done). Engine: replace parts now use presence semantics (falsy = absent) so a
+  boolean state stores a row iff true. `TODO_SPEC`: owned_by singleton (link x2) + done replace (link x1)
+  + `owner`/`done` projections. Tests green: aven-vibes predicate **6/6** incl. a new **places==seed gate**
+  (every place is a real gismu position with matching ref/value kind); aven-ontology engine **6/6**
+  rewritten for the new spec. Migration `0025_todos_canonical`: re-seeds the predicate_type spec + seeds
+  done/owned_by data_schema + RE-SYNCS data (backfilled owned_by for both tasks, dropped valid). Live
+  `data_crud` round-trip on the samuel branch: create→list projects `{owner, done:true, priority, due}`;
+  update done=false flips the mulno presence off; delete cascades — original 2 todos intact. check clean
+  (ontology/vibes/betterauth). Remaining: steps 2–8 (rich invoice → contact/tx/booking → nested
+  projection → actors+flow → vibes → chat+re-sync → verify).
 - `2026-06-29` — **Consolidated into the SSOT execution plan.** Folded ALL remaining open work into 0092:
   0091 (Invoice Processing flow + actors + per-step vibe streaming) entirely → 0091 retired; 0089's open
   chat-trigger (step 7) → step 7 here; 0090's `invoice-ingest` is deleted by step 5. Added a "Completed

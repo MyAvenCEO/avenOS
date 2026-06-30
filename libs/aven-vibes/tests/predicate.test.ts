@@ -1,18 +1,28 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 import Ajv from 'ajv'
 import {
 	compilePredicate,
+	DONE,
+	OWNED_BY,
 	predSchemaName,
 	TASK,
 	TODO_PREDICATES,
-	todoPredicateSchemas,
-	VALID
+	todoPredicateSchemas
 } from '../src/predicate/index.js'
 
 // board 0087 — the predicate compiler turns a gismu-sourced definition into a self-documenting
 // Ajv schema that validates predications through the same Ajv the /api/data store uses.
 
 const ajv = new Ajv({ allErrors: true, strict: false })
+
+// The canonical Lojban gismu lexicon — the SSOT for place structures (board 0092 fidelity audit).
+const GISMU = (
+	JSON.parse(readFileSync(join(import.meta.dir, '../../../.claude/skills/ontology/gismu.json'), 'utf8')) as {
+		gismu: Record<string, { arity: number; places: Record<string, { role: string; kind: string }> }>
+	}
+).gismu
 
 describe('predicate compiler (board 0087)', () => {
 	test('compiles a self-documenting schema (title/description/places)', () => {
@@ -59,23 +69,40 @@ describe('predicate compiler (board 0087)', () => {
 		).toBe(false) // additionalProperties
 	})
 
-	test('valid: open interval (x3 null) and closed interval both validate', () => {
-		const validate = ajv.compile(compilePredicate(VALID))
-		const fact = '01b97648-db14-4e48-b519-3b0e938de50b'
-		expect(validate({ predicate: 'valid', x1: fact, x2: '2026-06-29T08:00:00Z', x3: null })).toBe(true)
-		expect(validate({ predicate: 'valid', x1: fact, x2: '2026-06-29' })).toBe(true) // x3 optional
-		expect(validate({ predicate: 'valid', x1: fact, x2: '2026-06-21T09:00:00Z' })).toBe(true)
-		expect(validate({ predicate: 'valid', x1: fact, x2: 'not-a-date' })).toBe(false)
+	test('done≡mulno is a presence predication (just x1=task); owned_by≡ponse binds account→entity', () => {
+		const task = '01b97648-db14-4e48-b519-3b0e938de50b'
+		const doneV = ajv.compile(compilePredicate(DONE))
+		expect(doneV({ predicate: 'done', x1: task })).toBe(true) // present = done
+		expect(doneV({ predicate: 'done', x1: 'u' })).toBe(false) // bad ref
+		const ownV = ajv.compile(compilePredicate(OWNED_BY))
+		expect(ownV({ predicate: 'owned_by', x1: 'JhB95T3lSOe0ZYTKLzuKNXHzGeju9LIb', x2: task })).toBe(true)
+		expect(ownV({ predicate: 'owned_by', x1: 'JhB95T3lSOe0ZYTKLzuKNXHzGeju9LIb' })).toBe(false) // missing x2
 	})
 
-	test('the todo bundle seeds 4 bare data-type schemas, each gismu-sourced', () => {
-		expect(TODO_PREDICATES.map((p) => p.predicate)).toEqual(['task', 'valid', 'due', 'prioritized'])
+	test('the todo bundle seeds 5 bare data-type schemas (incl. universal owned_by), each gismu-sourced', () => {
+		expect(TODO_PREDICATES.map((p) => p.predicate)).toEqual(['task', 'owned_by', 'done', 'due', 'prioritized'])
 		expect(TODO_PREDICATES.every((p) => typeof p.gismu === 'string' && p.gismu.length === 5)).toBe(true)
 		const rows = todoPredicateSchemas()
 		// x1–x5 predications ARE the universal data types — schema names carry no namespace prefix
-		expect(rows.map((r) => r.name)).toEqual(['task', 'valid', 'due', 'prioritized'])
+		expect(rows.map((r) => r.name)).toEqual(['task', 'owned_by', 'done', 'due', 'prioritized'])
 		expect(predSchemaName(TASK)).toBe('task')
 		// every compiled schema is itself a valid Ajv schema
 		for (const r of rows) expect(() => ajv.compile(r.jsonSchema)).not.toThrow()
+	})
+
+	// board 0092 — the fidelity gate: every place a predicate declares must be a REAL place of its
+	// canonical gismu, at the same position, with the same KIND (ref vs value). This catches a
+	// convenient relabel (e.g. putting a value in a position the seed says is a ref, or inventing a
+	// place the gismu doesn't have). Role names stay pragmatic English; structure must match the seed.
+	test('every predicate place == a canonical gismu position + matching kind (places == seed)', () => {
+		for (const def of TODO_PREDICATES) {
+			const seed = def.gismu ? GISMU[def.gismu] : undefined
+			expect(seed, `gismu "${def.gismu}" exists in the lexicon`).toBeDefined()
+			for (const place of def.places) {
+				const sp = seed?.places[place.pos]
+				expect(sp, `${def.predicate}.${place.pos} is a real ${def.gismu} place`).toBeDefined()
+				expect(sp?.kind, `${def.predicate}.${place.pos} kind matches ${def.gismu}.${place.pos}`).toBe(place.kind)
+			}
+		}
 	})
 })

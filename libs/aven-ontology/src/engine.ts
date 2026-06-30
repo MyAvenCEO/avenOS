@@ -81,7 +81,9 @@ export async function create(
 	for (const part of spec.parts) {
 		if (part.kind === 'replace' && part.field) {
 			const value = item[part.field]
-			if (value == null || value === '') continue
+			// presence semantics: a falsy value (false / '' / null / 0) means the predication is ABSENT —
+			// so a boolean-state part like done≡mulno stores a row iff true, nothing if false. board 0092.
+			if (!value) continue
 			await store.insert(part.pred, cellsFrom(part.set, { ...env, value }))
 		}
 	}
@@ -109,7 +111,8 @@ export async function update(
 			await store.patchWhere(part.pred, part.link, id, cellsFrom(part.set, env))
 		} else if (part.kind === 'replace' && part.link) {
 			await store.deleteWhere(part.pred, part.link, id)
-			if (raw != null && raw !== '') await store.insert(part.pred, cellsFrom(part.set, env))
+			// presence semantics (board 0092): re-insert only when truthy — done:false leaves it deleted.
+			if (raw) await store.insert(part.pred, cellsFrom(part.set, env))
 		}
 	}
 	return id

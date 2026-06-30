@@ -19,7 +19,7 @@ describe('aven-ontology engine (board 0088)', () => {
 		expect(resolveBind('$value?$now:null', { ...env, value: false })).toBe(null)
 	})
 
-	test('create writes the canonical task/valid/due/prioritized rows (mutator parity w/ 0087)', async () => {
+	test('create writes the canonical task/owned_by/due/prioritized rows (board 0092 fidelity)', async () => {
 		const store = memStore()
 		const id = await create(
 			TODO_SPEC,
@@ -30,32 +30,34 @@ describe('aven-ontology engine (board 0088)', () => {
 		const by = (p: string) => store.dump().find((r) => r.predicate === p)?.cells
 		// task ≡ zukte: x1 agent, x2 action
 		expect(by('task')).toEqual({ x1: 'USER1', x2: 'make salad' })
-		// valid ≡ ranji: x1 task, x2 from, x3 to (null = open)
-		expect(by('valid')).toEqual({ x2: '2026-06-29T12:00:00Z', x3: null, x1: id })
+		// owned_by ≡ ponse: x1 account, x2 entity — universal ownership, one per entity
+		expect(by('owned_by')).toEqual({ x1: 'USER1', x2: id })
+		// done ≡ mulno presence: done:false → NO row (still open)
+		expect(by('done')).toBeUndefined()
 		// due ≡ detri: x1 DATE, x2 task
 		expect(by('due')).toEqual({ x1: '2026-07-04', x2: id })
 		// prioritized ≡ vajni: x1 task, x2 user, x3 level
 		expect(by('prioritized')).toEqual({ x1: id, x2: 'USER1', x3: 'high' })
 	})
 
-	test('create with no due/priority writes only task + valid', async () => {
+	test('create with no due/priority/done writes only task + owned_by', async () => {
 		const store = memStore()
 		await create(TODO_SPEC, store, { title: 'plain', done: false }, ctx)
-		expect(store.dump().map((r) => r.predicate).sort()).toEqual(['task', 'valid'])
+		expect(store.dump().map((r) => r.predicate).sort()).toEqual(['owned_by', 'task'])
 	})
 
-	test('query projects {title,done,due,priority} (matcher parity w/ v_task)', async () => {
+	test('query projects {title,done,due,priority,owner} (matcher parity w/ v_task)', async () => {
 		const store = memStore()
 		await create(TODO_SPEC, store, { title: 'a', done: true, due: '2026-07-04', priority: 'low' }, ctx)
 		await create(TODO_SPEC, store, { title: 'b' }, ctx)
 		const list = await query(TODO_SPEC, store)
 		expect(list).toEqual([
-			{ id: expect.any(String), title: 'a', done: true, due: '2026-07-04', priority: 'low' },
-			{ id: expect.any(String), title: 'b', done: false, due: null, priority: null }
+			{ id: expect.any(String), title: 'a', done: true, due: '2026-07-04', priority: 'low', owner: 'USER1' },
+			{ id: expect.any(String), title: 'b', done: false, due: null, priority: null, owner: 'USER1' }
 		])
 	})
 
-	test('update: done closes the interval, due/priority replace, then clear', async () => {
+	test('update: done≡mulno presence toggles, due/priority replace, then clear (board 0092)', async () => {
 		const store = memStore()
 		const id = (await create(TODO_SPEC, store, { title: 'x' }, ctx)) as string
 		await update(TODO_SPEC, store, { id, done: true, due: '2026-08-01', priority: 'high' }, ctx)
@@ -71,8 +73,8 @@ describe('aven-ontology engine (board 0088)', () => {
 			due: null,
 			priority: null
 		})
-		// no orphan due/prioritized rows linger after clearing
-		expect(store.dump().map((r) => r.predicate).sort()).toEqual(['task', 'valid'])
+		// no orphan done/due/prioritized rows linger — only task + owned_by remain
+		expect(store.dump().map((r) => r.predicate).sort()).toEqual(['owned_by', 'task'])
 	})
 
 	test('delete cascades — primary + every linked predication, no orphans', async () => {
