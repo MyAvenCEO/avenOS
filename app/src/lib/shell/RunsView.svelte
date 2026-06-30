@@ -43,6 +43,11 @@ const rawFlow = $derived<Flow | null>(
 	selectedRun ? (flows.find((f) => f.id === selectedRun.flowId) ?? null) : null
 )
 const flow = $derived<Flow | null>(rawFlow ? flattenFlow(rawFlow, flows) : null)
+// the dotted sub-flow groups: each top-level composite node's id prefix → its pretty name, so the
+// flattened graph shows which step belongs to which parent sub-flow. board 0094.
+const groups = $derived<Record<string, string>>(
+	rawFlow ? Object.fromEntries(rawFlow.nodes.filter((n) => n.flowRef).map((n) => [n.id, n.name])) : {}
+)
 const nodeById = $derived(new Map((flow?.nodes ?? []).map((n) => [n.id, n])))
 // One state per node, from the run's trace (last write wins) → colours the graph.
 const nodeStates = $derived.by<Record<string, NodeState>>(() => {
@@ -135,7 +140,7 @@ function onSelect(id: string): void {
 			</div>
 			<!-- Top: the actual node flow — click a node to step through. -->
 			<div class="border-border h-64 shrink-0 border-b">
-				<FlowGraph {flow} {nodeStates} {selectedNodeId} {onSelect} draggable={false} />
+				<FlowGraph {flow} {nodeStates} {selectedNodeId} {onSelect} draggable={false} {groups} />
 			</div>
 			<!-- Below: the vibe view of the selected step. -->
 			<div class="min-h-0 flex-1 overflow-auto p-4">
