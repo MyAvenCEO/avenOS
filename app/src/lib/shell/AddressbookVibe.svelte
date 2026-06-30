@@ -6,9 +6,8 @@ import {
 	mapContactToView
 } from '@avenos/aven-vibes'
 import AvenVibeView from '@avenos/aven-vibes/AvenVibeView.svelte'
-import { CONTACT_SCHEMA } from '@avenos/aven-vibes/contact'
 import { createQuery } from '@tanstack/svelte-query'
-import { type DataValue, ensureSchema, listSchemas, listValues } from '$lib/data/client'
+import { listContacts, listSchemas, listValues } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import { qk } from '$lib/query/client'
 
@@ -17,7 +16,6 @@ import { qk } from '$lib/query/client'
 // in chat via the query_contacts tool ("show me contacts"); data-backed, re-fetches live.
 let { containerName = 'aven-vibes-addressbook' }: { containerName?: string } = $props()
 
-let contactSchemaId = $state<string | null>(null)
 let invoiceSchemaId = $state<string | null>(null)
 let invoiceDocSchemaId = $state<string | null>(null)
 let selectedId = $state<string | null>(null)
@@ -31,10 +29,6 @@ $effect(() => {
 	started = true
 	void (async () => {
 		try {
-			contactSchemaId = await ensureSchema(
-				'contact',
-				CONTACT_SCHEMA as unknown as Record<string, unknown>
-			)
 			const schemas = await listSchemas()
 			invoiceSchemaId = schemas.find((s) => s.name === 'invoice')?.id ?? null
 			invoiceDocSchemaId = schemas.find((s) => s.name === 'invoice_doc')?.id ?? null
@@ -44,10 +38,11 @@ $effect(() => {
 	})()
 })
 
+// board 0096: the addressbook reads the ONTOLOGY (company + person), not the legacy `contact` schema —
+// so the vendor company + Ansprechpartner enriched by the invoice flow appear here.
 const contactsQuery = createQuery(() => ({
-	queryKey: contactSchemaId ? qk.values(contactSchemaId) : ['data', 'values', 'contact-pending'],
-	queryFn: () => listValues<Contact>(contactSchemaId as string),
-	enabled: !!contactSchemaId
+	queryKey: ['data', 'contacts'],
+	queryFn: listContacts
 }))
 const invoicesQuery = createQuery(() => ({
 	queryKey: invoiceSchemaId ? qk.values(invoiceSchemaId) : ['data', 'values', 'inv-in-pending'],
@@ -62,7 +57,7 @@ const invoiceDocsQuery = createQuery(() => ({
 	enabled: !!invoiceDocSchemaId
 }))
 
-const rows = $derived<DataValue<Contact>[]>(contactsQuery.data ?? [])
+const rows = $derived<{ id: string; data: Contact }[]>(contactsQuery.data ?? [])
 const filtered = $derived(
 	rows
 		.filter((r) => filter === 'all' || r.data.type === filter)

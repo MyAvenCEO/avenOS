@@ -30,6 +30,7 @@ import {
 	deleteTodo,
 	deleteValue,
 	listSchemas,
+	listDataType,
 	listTodos,
 	listValues,
 	updateTodos,
@@ -123,6 +124,7 @@ app.get('/api/skills/runs', listRuns)
 app.post('/api/skills/:id/run', runSkill)
 
 app.get('/api/data/todos', listTodos)
+app.get('/api/data/type/:type', listDataType)
 app.post('/api/data/todos', createTodos)
 app.patch('/api/data/todos', updateTodos)
 app.delete('/api/data/todos/:id', deleteTodo)

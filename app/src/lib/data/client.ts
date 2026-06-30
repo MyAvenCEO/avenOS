@@ -1,4 +1,5 @@
 import type { Flow, FlowRun } from '@avenos/aven-skills'
+import type { Contact, ContactType } from '@avenos/aven-vibes/contact'
 import { getBearerToken } from '$lib/auth/auth-client'
 
 /**
@@ -37,6 +38,63 @@ export async function loadVibeBundle(
 	name: string
 ): Promise<{ view: unknown; style: unknown; logic: string }> {
 	return api(`/api/vibe/${name}`)
+}
+
+/** List ANY registered composite type's rows for the signed-in user (board 0096). */
+export async function listType<T = Record<string, unknown>>(type: string): Promise<T[]> {
+	const { items } = await api<{ items: T[] }>(`/api/data/type/${type}`)
+	return items
+}
+
+/** The addressbook from the ONTOLOGY (board 0096): the `company` + `person` composite types mapped into
+ *  the Contact shape the AddressbookVibe renders — replacing the legacy `contact` data_schema, so the
+ *  vendor company + Ansprechpartner enriched by the invoice flow actually appear. */
+export async function listContacts(): Promise<{ id: string; data: Contact }[]> {
+	const [companies, persons] = await Promise.all([
+		listType<Record<string, unknown>>('company'),
+		listType<Record<string, unknown>>('person')
+	])
+	const s = (v: unknown): string | null => (v == null || v === '' ? null : String(v))
+	const base = (id: string, type: ContactType, name: string): Contact => ({
+		short_id: id.slice(0, 8),
+		type,
+		name,
+		legal_form: null,
+		is_self: false,
+		street: null,
+		zip: null,
+		city: null,
+		country: null,
+		vat_id: null,
+		tax_number: null,
+		email: null,
+		phone: null,
+		iban: null,
+		bic: null,
+		bank_name: null,
+		contact_person: null,
+		register_court: null,
+		register_number: null,
+		managing_director: null,
+		notes: null
+	})
+	const companyRows = companies.map((c) => ({
+		id: String(c.id),
+		data: {
+			...base(String(c.id), 'company', s(c.name) ?? ''),
+			vat_id: s(c.vat_id),
+			tax_number: s(c.tax_number),
+			email: s(c.email),
+			phone: s(c.phone),
+			iban: s(c.iban),
+			street: s(c.postal)
+		}
+	}))
+	const personRows = persons.map((p) => ({
+		id: String(p.id),
+		data: { ...base(String(p.id), 'person', s(p.name) ?? ''), email: s(p.email) }
+	}))
+	return [...companyRows, ...personRows]
 }
 
 /** Create or update (by name) a schema; returns its id. */

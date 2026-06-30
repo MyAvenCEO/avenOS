@@ -455,6 +455,17 @@ export async function listTodos(c: Context): Promise<Response> {
 	return c.json({ todos: res.items ?? [] })
 }
 
+/** GET /api/data/type/:type — list ANY registered composite type's rows for the signed-in user (board
+ *  0096). Lets the addressbook read `company`/`person` from the ontology, not the legacy contact store. */
+export async function listDataType(c: Context): Promise<Response> {
+	const uid = await userId(c)
+	if (!uid) return c.json({ error: 'unauthorized' }, 401)
+	const type = c.req.param('type')
+	if (!type) return c.json({ error: 'type required' }, 400)
+	const res = (await executeDataTool(uid, { schema: type, action: 'list' })) as { items?: unknown[] }
+	return c.json({ items: res.items ?? [] })
+}
+
 /** POST /api/data/todos — create todos (each {title, done?}). */
 export async function createTodos(c: Context): Promise<Response> {
 	const uid = await userId(c)
