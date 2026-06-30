@@ -204,6 +204,19 @@ contact. No metadata is lost vs. the doctype's `org_public_record.identifiers[]`
 
 Newest entry first.
 
+- `2026-06-30` — **App-layer (step 5–7) wired + the app runs the corrected stack.** Launched the full
+  Tauri Mac app on the samuel branch — Better Auth (:8787), relay (:8080), Vite (:1420), native window
+  all up, no errors (user confirmed it works). Step 5: `extract_invoice` actor now maps the rich
+  extraction → the ontology invoice GRAPH — header→number, totals→total, vendor, due, PLUS the nested
+  `lines[]` (statements[].line_items → description/quantity/unit_price/amount) and `payments[]`; the raw
+  doctype is spread into the resource so the invoice vibe card still renders rich. Verified headlessly:
+  the actor's exact output shape persists as a nested invoice (2 line items + payment) via the generic
+  runner→engine path. Step 6: the invoice vibe view reads the doctype from the resource (mapper.ts), so
+  it renders the rich nested shape with no change. Step 7: chat `run_skill` already streams per-step
+  vibe cards (0089/0091) and now drives the corrected actor. Gates: ontology 7/7, vibes 54/54, skills
+  33/33; check 0 across 4 packages. Residuals (follow-on): vendor→company/Ansprechpartner AUTO-extraction
+  from the invoice (the contact types exist + are verified, but the flow doesn't yet create+link them in
+  one run — needs multi-entity persistence); and a live in-app visual pass of a real invoice run.
 - `2026-06-30` — **Step 3 DONE + verified live (contact graph + transaction settlement + SKR04 booking).**
   New composite types — `person`≡prenu, `company`≡kagni, `transaction`≡pleji — all gismu-faithful and
   gate-covered. KEY MODELLING WIN: the channel/identifier TYPE is encoded in the PREDICATE NAME

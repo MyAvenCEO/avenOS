@@ -148,14 +148,34 @@ function skillActors(store: ArtifactStore): ActorRegistry {
 			const header = (rich.header ?? {}) as Record<string, unknown>
 			const totals = (rich.totals ?? {}) as Record<string, unknown>
 			const vendor = (rich.vendor ?? {}) as Record<string, unknown>
-			// Map the rich extraction → the ontology invoice headline fields (richer lines = follow-on).
+			// Map the rich extraction → the ontology invoice graph (board 0092): the headline PLUS the
+			// nested line items (statements[].line_items[]) and payments[], so the 0088 engine persists
+			// the full lines[]/payments[] sub-entities. The raw doctype is spread in too, so the invoice
+			// vibe card (mapper.ts reads header/vendor/statements/totals) still renders the rich view.
+			const str = (v: unknown): string => (v == null ? '' : String(v))
+			const statements = (Array.isArray(rich.statements) ? rich.statements : []) as Record<string, unknown>[]
+			const lines = statements
+				.flatMap((s) => (Array.isArray(s.line_items) ? (s.line_items as Record<string, unknown>[]) : []))
+				.map((li) => ({
+					description: str(li.description ?? li.title),
+					quantity: str(li.quantity),
+					unit_price: str(li.unit_price),
+					amount: str(li.amount)
+				}))
+				.filter((l) => l.description || l.amount)
+			const payments = ((Array.isArray(rich.payments) ? rich.payments : []) as Record<string, unknown>[])
+				.map((p) => ({ amount: str(p.amount), date: str(p.date) }))
+				.filter((p) => p.amount)
 			return {
 				invoice: {
+					...rich, // keep the rich doctype for the vibe view
 					artifact: doc.artifact,
 					number: String(header.invoice_number ?? 'N/A'),
-					amount: totals.invoice_total != null ? String(totals.invoice_total) : '0',
+					total: totals.invoice_total != null ? String(totals.invoice_total) : '0',
 					vendor: String(vendor.name ?? ''),
-					due: String(header.due_date ?? header.issue_date ?? '')
+					due: String(header.due_date ?? header.issue_date ?? ''),
+					lines,
+					payments
 				}
 			}
 		}
