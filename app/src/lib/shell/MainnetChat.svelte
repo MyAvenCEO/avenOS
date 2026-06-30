@@ -16,14 +16,11 @@ import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
 import AddressbookVibe from '$lib/shell/AddressbookVibe.svelte'
 import BookingsVibe from '$lib/shell/BookingsVibe.svelte'
-import BookkeepingVibe from '$lib/shell/BookkeepingVibe.svelte'
-import DocCompareVibe from '$lib/shell/DocCompareVibe.svelte'
 import FinanceVibe from '$lib/shell/FinanceVibe.svelte'
-import InvoiceBookingVibe from '$lib/shell/InvoiceBookingVibe.svelte'
 import InvoiceCreateVibe from '$lib/shell/InvoiceCreateVibe.svelte'
-import InvoiceMatchVibe from '$lib/shell/InvoiceMatchVibe.svelte'
 import RunsView from '$lib/shell/RunsView.svelte'
 import SkillsView from '$lib/shell/SkillsView.svelte'
+import StepVibe from '$lib/shell/StepVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 import TransactionsVibe from '$lib/shell/TransactionsVibe.svelte'
 
@@ -695,41 +692,6 @@ function handleTranscribeError(message: string): void {
 								>
 									<Composer />
 								</div>
-							{:else if message.vibe === 'bookkeeping'}
-								<!-- Compact standalone classification card (component self-sizes). board 0070. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<BookkeepingVibe
-										containerName={`aven-vibes-chat-${message.id}`}
-										data={message.vibeData}
-									/>
-								</div>
-							{:else if message.vibe === 'doc-compare'}
-								<!-- Compare needs room: break out of the 52rem chat column and center a wider
-							     card on the viewport so the doc + extracted fields sit 50/50. board 0064. -->
-								<div
-									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
-								>
-									<DocCompareVibe
-										containerName={`aven-vibes-chat-${message.id}`}
-										data={message.vibeData}
-									/>
-								</div>
-							{:else if message.vibe === 'invoice-match'}
-								<!-- Compact reconciliation summary (invoice excerpt ↔ matched tx). board 0070. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<InvoiceMatchVibe
-										containerName={`aven-vibes-chat-${message.id}`}
-										data={message.vibeData}
-									/>
-								</div>
-							{:else if message.vibe === 'invoice-booking'}
-								<!-- Compact booking summary (invoice excerpt → SKR04 Buchungssatz). board 0070. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<InvoiceBookingVibe
-										containerName={`aven-vibes-chat-${message.id}`}
-										data={message.vibeData}
-									/>
-								</div>
 							{:else if message.vibe === 'tx'}
 								<!-- Live transactions list — same max width as todos (component self-constrains). 0068. -->
 								<div class="max-h-[80vh] w-full overflow-y-auto">
@@ -761,6 +723,14 @@ function handleTranscribeError(message: string): void {
 										containerName={`aven-vibes-chat-${message.id}`}
 										data={message.vibeData}
 									/>
+								</div>
+							{:else}
+								<!-- ALL per-step cards (ingest/classify/extract/enrich/doc-compare/match/booking) via
+								     the ONE shared StepVibe — same component the Runs view uses. board 0096. -->
+								<div
+									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
+								>
+									<StepVibe vibe={message.vibe} data={message.vibeData} />
 								</div>
 							{/if}
 						{:else}

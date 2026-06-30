@@ -16,11 +16,22 @@ const TYPE_LABELS: Record<string, string> = {
 	other: 'Sonstiges'
 }
 
-const docType = $derived(typeof data?.docType === 'string' ? (data?.docType as string) : 'other')
+// board 0096: classify_document provides `kind` + `summary`; keep `docType`/`description` back-compat.
+const docType = $derived(
+	typeof data?.kind === 'string'
+		? (data?.kind as string)
+		: typeof data?.docType === 'string'
+			? (data?.docType as string)
+			: 'other'
+)
 const typeLabel = $derived(TYPE_LABELS[docType] ?? TYPE_LABELS.other)
 const title = $derived(typeof data?.title === 'string' ? (data?.title as string) : '')
 const description = $derived(
-	typeof data?.description === 'string' ? (data?.description as string) : ''
+	typeof data?.summary === 'string'
+		? (data?.summary as string)
+		: typeof data?.description === 'string'
+			? (data?.description as string)
+			: ''
 )
 const bookingSummary = $derived(
 	typeof data?.booking_summary === 'string' ? (data?.booking_summary as string) : ''

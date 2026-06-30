@@ -10,12 +10,27 @@ import OpenItemsVibe from '$lib/shell/OpenItemsVibe.svelte'
 // rendering of what an actor is doing right now. A step may name a `vibe` (reusing a chat-timeline card
 // like classify/extract/match/book) with `vibeData`; otherwise we key on `${flowId}:${nodeId}` for the
 // Minecraft sand→glass samples, and fall back to a clean generic step card.
-let { flow, node, step }: { flow: Flow; node: RecipeNode | null; step: TraceStep | null } = $props()
+// THE single per-step vibe component (board 0096): used by Runs (pass a `step` → derives vibe+data) AND
+// the chat (pass `vibe` + `data` directly, no flow/node/step). One renderer — a card added once shows
+// in both places, no drift.
+let {
+	flow = null,
+	node = null,
+	step = null,
+	vibe: vibeProp = undefined,
+	data: dataProp = undefined
+}: {
+	flow?: Flow | null
+	node?: RecipeNode | null
+	step?: TraceStep | null
+	vibe?: string
+	data?: Record<string, unknown>
+} = $props()
 
-const key = $derived(node ? `${flow.id}:${node.id}` : '')
+const key = $derived(node && flow ? `${flow.id}:${node.id}` : '')
 const running = $derived(step?.state === 'running')
-const vibe = $derived(step?.vibe ?? '')
-const vibeData = $derived((step?.vibeData ?? {}) as Record<string, unknown>)
+const vibe = $derived(vibeProp ?? step?.vibe ?? '')
+const vibeData = $derived((dataProp ?? step?.vibeData ?? {}) as Record<string, unknown>)
 const contact = $derived(
 	vibeData as {
 		name?: string
@@ -30,26 +45,6 @@ const contact = $derived(
 )
 // ingest (storeDocument): the content-addressed artifact stored in Postgres bytea. board 0094.
 const ingest = $derived(vibeData as { artifact?: string; mime?: string })
-// extract (extract_document): the raw invoice extraction — show the headline + line items. board 0094.
-const inv = $derived.by(() => {
-	const d = vibeData as Record<string, unknown>
-	const header = (d.header ?? {}) as Record<string, unknown>
-	const totals = (d.totals ?? {}) as Record<string, unknown>
-	const vendor = (d.vendor ?? {}) as Record<string, unknown>
-	const lines = (Array.isArray(d.statements) ? (d.statements as Record<string, unknown>[]) : []).flatMap((s) =>
-		Array.isArray(s.line_items) ? (s.line_items as Record<string, unknown>[]) : []
-	)
-	const s = (v: unknown): string => (v == null ? '' : String(v))
-	return {
-		number: s(header.invoice_number ?? d.number),
-		total: s(totals.invoice_total ?? d.total),
-		currency: s(header.currency),
-		vendor: s(vendor.name ?? d.vendor),
-		due: s(header.due_date ?? header.issue_date ?? d.due),
-		lineCount: lines.length,
-		lines: lines.slice(0, 6).map((li) => ({ desc: s(li.description ?? li.title), amount: s(li.amount) }))
-	}
-})
 
 const STATE_LABEL: Record<NodeState, string> = {
 	idle: 'Bereit',
@@ -69,7 +64,7 @@ const STATE_CHIP: Record<NodeState, string> = {
 }
 </script>
 
-{#if !node || !step}
+{#if !vibe && (!node || !step)}
 	<div class="text-muted-foreground flex h-full items-center justify-center text-sm">
 		Kein Schritt ausgewählt.
 	</div>
@@ -130,48 +125,10 @@ const STATE_CHIP: Record<NodeState, string> = {
 		{/if}
 	</div>
 {:else if vibe === 'invoice'}
-	<!-- Extracted invoice: the headline + line items the brain pulled from the document (board 0094) -->
-	<div
-		class="border-border bg-card mx-auto flex w-full max-w-lg flex-col gap-4 rounded-[var(--radius-lg)] border p-6"
-	>
-		<div class="flex items-start justify-between gap-3">
-			<div class="min-w-0">
-				<p class="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
-					Rechnung extrahiert
-				</p>
-				<h3 class="text-foreground truncate text-lg font-semibold">{inv.vendor || 'Rechnung'}</h3>
-				{#if inv.number}
-					<p class="text-muted-foreground font-mono text-xs">Nr. {inv.number}</p>
-				{/if}
-			</div>
-			{#if inv.total}
-				<div class="shrink-0 text-right">
-					<p class="text-foreground text-xl font-bold">{inv.total} {inv.currency}</p>
-					{#if inv.due}
-						<p class="text-muted-foreground text-xs">fällig {inv.due}</p>
-					{/if}
-				</div>
-			{/if}
-		</div>
-		{#if inv.lines.length}
-			<div class="border-border overflow-hidden rounded-[var(--radius)] border">
-				{#each inv.lines as l, i (i)}
-					<div
-						class="border-border flex justify-between gap-3 px-3 py-1.5 text-sm {i > 0
-							? 'border-t'
-							: ''}"
-					>
-						<span class="text-foreground min-w-0 truncate">{l.desc}</span>
-						<span class="text-muted-foreground shrink-0 font-mono">{l.amount}</span>
-					</div>
-				{/each}
-				{#if inv.lineCount > inv.lines.length}
-					<div class="text-muted-foreground border-border border-t px-3 py-1 text-xs">
-						+ {inv.lineCount - inv.lines.length} weitere Positionen
-					</div>
-				{/if}
-			</div>
-		{/if}
+	<!-- Extracted invoice: the FULL invoice doc view (board 0064/0096) — preview + all extracted fields.
+	     The extract step's vibeData IS the raw doctype, so wrap it as DocCompare's `extracted`. -->
+	<div class="w-full">
+		<DocCompareVibe data={{ type: 'invoice', extracted: vibeData }} />
 	</div>
 {:else if vibe === 'contact'}
 	<!-- Adressbuch-Anreicherung: which party was matched/created + what was added -->
@@ -236,7 +193,7 @@ const STATE_CHIP: Record<NodeState, string> = {
 			</div>
 		{/if}
 	</div>
-{:else if key === 'minecraft-glass:mine'}
+{:else if step && key === 'minecraft-glass:mine'}
 	<!-- ⛏️ Sand abbauen -->
 	<div
 		class="flex h-full flex-col items-center justify-center gap-4 rounded-[var(--radius-lg)] p-8"
@@ -255,7 +212,7 @@ const STATE_CHIP: Record<NodeState, string> = {
 			>
 		{/each}
 	</div>
-{:else if key === 'minecraft-glass:smelt'}
+{:else if step && key === 'minecraft-glass:smelt'}
 	<!-- 🔥 Ofen -->
 	<div
 		class="flex h-full flex-col items-center justify-center gap-4 rounded-[var(--radius-lg)] p-8 text-[#ffe]"
@@ -290,7 +247,7 @@ const STATE_CHIP: Record<NodeState, string> = {
 			<p class="text-sm text-orange-200">{step.message}</p>
 		{/if}
 	</div>
-{:else if key === 'minecraft-glass:craft-pane'}
+{:else if step && key === 'minecraft-glass:craft-pane'}
 	<!-- 🪟 Glasscheiben craften -->
 	<div
 		class="flex h-full flex-col items-center justify-center gap-4 rounded-[var(--radius-lg)] p-8"
@@ -315,7 +272,7 @@ const STATE_CHIP: Record<NodeState, string> = {
 			<p class="text-sm text-[#1f4a5c]">{step.message}</p>
 		{/if}
 	</div>
-{:else}
+{:else if node && step}
 	<!-- Generic fallback: a clean step card (vibe optional) -->
 	<div
 		class="border-border bg-card flex h-full flex-col gap-4 rounded-[var(--radius-lg)] border p-6"
@@ -362,5 +319,15 @@ const STATE_CHIP: Record<NodeState, string> = {
 				{step.message}
 			</p>
 		{/if}
+	</div>
+{:else}
+	<!-- a vibe with no dedicated card AND no step (e.g. an unknown vibe streamed into chat): show the raw
+	     data so nothing is silently dropped. board 0096. -->
+	<div
+		class="border-border bg-card mx-auto w-full max-w-md rounded-[var(--radius-lg)] border p-4 text-sm"
+	>
+		<p class="text-muted-foreground mb-2 text-[10px] font-semibold tracking-wide uppercase">{vibe}</p>
+		<pre
+			class="text-foreground overflow-auto text-xs whitespace-pre-wrap">{JSON.stringify(vibeData, null, 2)}</pre>
 	</div>
 {/if}
