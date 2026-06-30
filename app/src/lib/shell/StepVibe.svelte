@@ -3,6 +3,7 @@ import type { Flow, NodeState, RecipeNode, TraceStep } from '@avenos/aven-skills
 import BookkeepingVibe from '$lib/shell/BookkeepingVibe.svelte'
 import DocCompareVibe from '$lib/shell/DocCompareVibe.svelte'
 import InvoiceBookingVibe from '$lib/shell/InvoiceBookingVibe.svelte'
+import InvoiceDocVibe from '$lib/shell/InvoiceDocVibe.svelte'
 import InvoiceMatchVibe from '$lib/shell/InvoiceMatchVibe.svelte'
 import OpenItemsVibe from '$lib/shell/OpenItemsVibe.svelte'
 
@@ -126,10 +127,10 @@ const STATE_CHIP: Record<NodeState, string> = {
 		{/if}
 	</div>
 {:else if vibe === 'invoice'}
-	<!-- Extracted invoice: the FULL invoice doc view (board 0064/0096) — preview + all extracted fields.
-	     The extract step's vibeData IS the raw doctype, so wrap it as DocCompare's `extracted`. -->
+	<!-- Extracted invoice ALONE (board 0096): the full extracted-fields doc view, NO doc-vs-fields
+	     compare (the extract step keeps no preview). The vibeData IS the raw doctype → wrap as `extracted`. -->
 	<div class="w-full">
-		<DocCompareVibe data={{ type: 'invoice', extracted: vibeData }} />
+		<InvoiceDocVibe data={{ type: 'invoice', extracted: vibeData }} />
 	</div>
 {:else if vibe === 'contact'}
 	<!-- Adressbuch-Anreicherung: which party was matched/created + what was added -->
