@@ -350,7 +350,8 @@ function pgStore(uid: string, schemaIdByPred: Record<string, string>): Predicati
 			`.execute(db())
 			return r.rows.map((row) => {
 				const d = asJson(row.data) as Record<string, Cell>
-				return { id: row.id, x1: d.x1 ?? null, x2: d.x2 ?? null, x3: d.x3 ?? null }
+				// all five places — x4/x5 carry e.g. skicu's description + janta's biller. board 0092.
+				return { id: row.id, x1: d.x1 ?? null, x2: d.x2 ?? null, x3: d.x3 ?? null, x4: d.x4 ?? null, x5: d.x5 ?? null }
 			})
 		},
 		async insert(pred, cells) {

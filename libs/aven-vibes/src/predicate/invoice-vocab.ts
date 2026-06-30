@@ -82,12 +82,101 @@ export const VENDOR: PredicateDef = {
 	]
 }
 
-/** The invoice-specific predicate bundle (owned_by/due/source/produced are reused from todo+document). */
-export const INVOICE_PREDICATES: PredicateDef[] = [INVOICE, NUMBER, TOTAL, VENDOR]
+// ── Line items (board 0092 step 2b): each line is its OWN sub-entity, a child of the invoice ──────────
+// line ≡ pagbu (x1 the line/part, x2 the invoice/whole); its attributes hang off the line:
+//   description ≡ skicu (x2 line, x4 text) · quantity ≡ klani (x1 line, x2 qty) ·
+//   unit_price ≡ jdima (x1 price, x2 line) · line_amount ≡ jdima (x1 amount, x2 line)
 
-/** Compiled `{ name, jsonSchema }` rows ready to seed as data_schema entries. */
+export const LINE: PredicateDef = {
+	predicate: 'line',
+	gismu: 'pagbu',
+	gloss: 'pagbu: x1 (the line) is a part/component of x2 (the invoice) — a single invoice line item',
+	places: [
+		{ pos: 'x2', role: 'whole', gloss: 'the invoice this line belongs to — pagbu x2 (the whole)', kind: 'ref', references: '*' }
+	]
+}
+
+export const DESCRIPTION: PredicateDef = {
+	predicate: 'description',
+	gismu: 'skicu',
+	gloss: 'skicu: x2 (the line/subject) is described by text x4 — the line description',
+	places: [
+		{ pos: 'x2', role: 'subject', gloss: 'the described thing — skicu x2', kind: 'ref', references: '*' },
+		{
+			pos: 'x4',
+			role: 'description',
+			gloss: 'the description text — skicu x4',
+			kind: 'value',
+			type: 'string',
+			minLength: 1,
+			example: 'Beratung (Stunden)'
+		}
+	]
+}
+
+export const QUANTITY: PredicateDef = {
+	predicate: 'quantity',
+	gismu: 'klani',
+	gloss: 'klani: x1 (the line) is a quantity measured by amount x2 — the line quantity',
+	places: [
+		{ pos: 'x1', role: 'quantity', gloss: 'the measured thing (the line) — klani x1', kind: 'ref', references: '*' },
+		{ pos: 'x2', role: 'amount', gloss: 'the quantity value — klani x2', kind: 'value', type: 'string', example: '3' }
+	]
+}
+
+export const UNIT_PRICE: PredicateDef = {
+	predicate: 'unit_price',
+	gismu: 'jdima',
+	gloss: 'jdima: x1 (the unit price) is the price of x2 (the line) — per-unit price',
+	places: [
+		{ pos: 'x1', role: 'price', gloss: 'the unit price — jdima x1', kind: 'value', type: 'string', example: '100.00' },
+		{ pos: 'x2', role: 'item', gloss: 'the line — jdima x2', kind: 'ref', references: '*' }
+	]
+}
+
+export const LINE_AMOUNT: PredicateDef = {
+	predicate: 'line_amount',
+	gismu: 'jdima',
+	gloss: 'jdima: x1 (the line total) is the price of x2 (the line) — qty × unit price',
+	places: [
+		{ pos: 'x1', role: 'price', gloss: 'the line total — jdima x1', kind: 'value', type: 'string', example: '300.00' },
+		{ pos: 'x2', role: 'item', gloss: 'the line — jdima x2', kind: 'ref', references: '*' }
+	]
+}
+
+// ── Payments (board 0092 step 2b): each payment is a child sub-entity of the invoice ─────────────────
+// payment ≡ pleji (x2 the amount, x4 the invoice/goods paid for); paid_on ≡ detri (x1 date, x2 payment)
+
+export const PAYMENT: PredicateDef = {
+	predicate: 'payment',
+	gismu: 'pleji',
+	gloss: 'pleji: x2 (the amount) is paid for x4 (the invoice) — a payment toward the invoice',
+	places: [
+		{ pos: 'x2', role: 'payment', gloss: 'the amount paid — pleji x2', kind: 'value', type: 'string', example: '300.00' },
+		{ pos: 'x4', role: 'goods', gloss: 'the invoice paid for — pleji x4 (goods)', kind: 'value', type: 'string', example: '7e776030' }
+	]
+}
+
+export const PAID_ON: PredicateDef = {
+	predicate: 'paid_on',
+	gismu: 'detri',
+	gloss: 'detri: x1 (the date) is the date of payment x2 — when the payment was made',
+	places: [
+		{ pos: 'x1', role: 'date', gloss: 'the payment date — detri x1', kind: 'value', type: 'date-time', example: '2026-07-09' },
+		{ pos: 'x2', role: 'event', gloss: 'the payment — detri x2', kind: 'ref', references: '*' }
+	]
+}
+
+/** The invoice headline predicate bundle (owned_by/due/source/produced reused from todo+document). */
+export const INVOICE_PREDICATES: PredicateDef[] = [INVOICE, NUMBER, TOTAL, VENDOR]
+/** The line-item sub-entity bundle (board 0092 step 2b). */
+export const LINE_PREDICATES: PredicateDef[] = [LINE, DESCRIPTION, QUANTITY, UNIT_PRICE, LINE_AMOUNT]
+/** The payment sub-entity bundle (board 0092 step 2b). */
+export const PAYMENT_PREDICATES: PredicateDef[] = [PAYMENT, PAID_ON]
+
+/** Compiled `{ name, jsonSchema }` rows ready to seed as data_schema entries (headline + lines + payments). */
 export function invoicePredicateSchemas(): { name: string; jsonSchema: Record<string, unknown> }[] {
-	return INVOICE_PREDICATES.map((def) => ({
+	return [...INVOICE_PREDICATES, ...LINE_PREDICATES, ...PAYMENT_PREDICATES].map((def) => ({
 		name: predSchemaName(def),
 		jsonSchema: compilePredicate(def)
 	}))

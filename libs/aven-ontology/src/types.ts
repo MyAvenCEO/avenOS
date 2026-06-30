@@ -12,6 +12,7 @@ export type Row = { id: string } & Partial<Record<Place, Cell>>
  * A binding resolved against the mutation context. Forms:
  *   `$user`    → the acting user id
  *   `$primary` → the primary (entity) row id
+ *   `$parent`  → the PARENT entity id (set while creating a child sub-entity; null otherwise)
  *   `$now`     → ISO timestamp
  *   `$value`   → the current input field's value
  *   `$value?$now:null` → conditional (truthy raw value → THEN, else ELSE); operands are bindings
@@ -19,7 +20,7 @@ export type Row = { id: string } & Partial<Record<Place, Cell>>
  */
 export type Bind = string
 
-export type PartKind = 'primary' | 'singleton' | 'replace'
+export type PartKind = 'primary' | 'singleton' | 'replace' | 'children'
 
 /**
  * One predication that participates in a composite type:
@@ -27,18 +28,23 @@ export type PartKind = 'primary' | 'singleton' | 'replace'
  *  - `singleton`: exactly one linked row, created WITH the entity (`create`) and patched in place (`set`).
  *  - `replace`:   an optional linked attribute — setting it deletes the linked row(s) then re-inserts
  *                 (`set`) when the field has a value (cleared when empty).
+ *  - `children`:  a 0..N array field where each element is its OWN sub-entity (`childSpec`), created
+ *                 recursively and linked to the parent via `link` (the place on the child PRIMARY that
+ *                 holds the parent id — bound to `$parent` in the child spec). Replaced wholesale on update.
  */
 export type PartSpec = {
 	pred: string
-	/** the place on THIS predication that holds the primary id (omit for the primary itself) */
+	/** the place on THIS predication that holds the primary id (children: the place on the CHILD primary) */
 	link?: Place
 	kind: PartKind
-	/** the input field that drives this part (e.g. title/done/due/priority) */
+	/** the input field that drives this part (e.g. title/done/due/priority; children: the array field) */
 	field?: string
 	/** places written when the entity is created */
 	create?: Partial<Record<Place, Bind>>
 	/** places written when `field` is set (singleton patches; replace/primary (re)write) */
 	set?: Partial<Record<Place, Bind>>
+	/** for kind:'children' — the sub-type each array element is created/projected as */
+	childSpec?: TypeSpec
 }
 
 /** How one output field is projected back from the predications. */
@@ -48,6 +54,8 @@ export type ProjectSpec = {
 	place?: Place
 	/** boolean: true when this place is present + non-null (e.g. done = valid.x3 is set) */
 	notNull?: Place
+	/** project the `children` part named by `pred` as an ARRAY of projected sub-entities */
+	children?: boolean
 }
 
 /** A composite type: a bundle of predications + how to project them back into a flat record. */

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { create, query, remove, resolveBind, update } from '../src/engine.js'
 import { memStore } from '../src/memstore.js'
 import { TODO_SPEC } from '../src/todo-spec.js'
+import type { TypeSpec } from '../src/types.js'
 
 const ctx = { user: 'USER1', now: () => '2026-06-29T12:00:00Z' }
 
@@ -75,6 +76,49 @@ describe('aven-ontology engine (board 0088)', () => {
 		})
 		// no orphan done/due/prioritized rows linger — only task + owned_by remain
 		expect(store.dump().map((r) => r.predicate).sort()).toEqual(['owned_by', 'task'])
+	})
+
+	test('children: a parent with N child sub-entities round-trips as a nested array (board 0092)', async () => {
+		const store = memStore()
+		// a line is its OWN sub-entity (its own primary + attribute); the order projects them as an array
+		const lineSpec: TypeSpec = {
+			type: 'line',
+			parts: [
+				{ pred: 'line', kind: 'primary', field: 'desc', create: { x1: '$value', x2: '$parent' } },
+				{ pred: 'lineamt', kind: 'replace', link: 'x2', field: 'amount', set: { x1: '$value', x2: '$primary' } }
+			],
+			project: { desc: { pred: 'line', place: 'x1' }, amount: { pred: 'lineamt', place: 'x1' } }
+		}
+		const orderSpec: TypeSpec = {
+			type: 'order',
+			parts: [
+				{ pred: 'order', kind: 'primary', field: 'ref', create: { x2: '$value' } },
+				{ pred: 'line', kind: 'children', field: 'lines', link: 'x2', childSpec: lineSpec }
+			],
+			project: { ref: { pred: 'order', place: 'x2' }, lines: { pred: 'line', children: true } }
+		}
+		const id = (await create(
+			orderSpec,
+			store,
+			{ ref: 'PO-1', lines: [{ desc: 'Widget', amount: '10.00' }, { desc: 'Gadget', amount: '5.50' }] },
+			ctx
+		)) as string
+		const list = await query(orderSpec, store)
+		expect(list).toHaveLength(1)
+		expect(list[0]).toMatchObject({ ref: 'PO-1' })
+		expect(list[0].lines).toEqual([
+			{ id: expect.any(String), desc: 'Widget', amount: '10.00' },
+			{ id: expect.any(String), desc: 'Gadget', amount: '5.50' }
+		])
+		// update replaces the children wholesale, no orphans
+		await update(orderSpec, store, { id, lines: [{ desc: 'Only', amount: '1.00' }] }, ctx)
+		expect((await query(orderSpec, store))[0].lines).toEqual([
+			{ id: expect.any(String), desc: 'Only', amount: '1.00' }
+		])
+		expect(store.dump().map((r) => r.predicate).sort()).toEqual(['line', 'lineamt', 'order'])
+		// delete cascades every child + its sub-predications
+		await remove(orderSpec, store, id)
+		expect(store.dump()).toEqual([])
 	})
 
 	test('delete cascades — primary + every linked predication, no orphans', async () => {

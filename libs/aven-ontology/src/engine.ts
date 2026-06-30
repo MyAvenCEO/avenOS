@@ -13,7 +13,7 @@ import type {
 	TypeSpec
 } from './types.js'
 
-type Env = { user: string; primary: string | null; now: string; value: unknown }
+type Env = { user: string; primary: string | null; parent: string | null; now: string; value: unknown }
 
 /** Resolve one binding (see [[Bind]]). Conditional truthiness tests the RAW value, not its string. */
 export function resolveBind(bind: Bind, env: Env): Cell {
@@ -27,6 +27,8 @@ export function resolveBind(bind: Bind, env: Env): Cell {
 			return env.user
 		case '$primary':
 			return env.primary
+		case '$parent':
+			return env.parent
 		case '$now':
 			return env.now
 		case '$value':
@@ -59,14 +61,15 @@ export async function create(
 	spec: TypeSpec,
 	store: PredicationStore,
 	item: Record<string, unknown>,
-	ctx: MutateCtx
+	ctx: MutateCtx,
+	parentId: string | null = null
 ): Promise<string | null> {
 	const now = ctx.now()
 	const primary = primaryPart(spec)
 	const titleVal = item[primary.field as string]
 	if (titleVal == null || titleVal === '') return null
 
-	const base: Env = { user: ctx.user, primary: null, now, value: titleVal }
+	const base: Env = { user: ctx.user, primary: null, parent: parentId, now, value: titleVal }
 	const primaryId = await store.insert(primary.pred, cellsFrom(primary.create, base))
 	const env = { ...base, primary: primaryId }
 
@@ -87,7 +90,28 @@ export async function create(
 			await store.insert(part.pred, cellsFrom(part.set, { ...env, value }))
 		}
 	}
+	// children: each element of the array field is its OWN sub-entity, created recursively with this
+	// row as $parent (the child's primary links back via the part's `link` place). board 0092.
+	for (const part of spec.parts) {
+		if (part.kind === 'children' && part.childSpec && part.field) {
+			const arr = item[part.field]
+			if (Array.isArray(arr)) {
+				for (const el of arr) await create(part.childSpec, store, el as Record<string, unknown>, ctx, primaryId)
+			}
+		}
+	}
 	return primaryId
+}
+
+/** The child sub-entities of `parent` linked through a children part's `link` place. */
+async function childrenOf(
+	store: PredicationStore,
+	part: { childSpec?: TypeSpec; link?: Place },
+	parentId: string
+): Promise<Row[]> {
+	if (!part.childSpec || !part.link) return []
+	const childPrimary = primaryPart(part.childSpec)
+	return (await store.rows(childPrimary.pred)).filter((r) => r[part.link as Place] === parentId)
 }
 
 /** Update one entity by id: each present input field patches/replaces its part. Returns the id. */
@@ -102,7 +126,7 @@ export async function update(
 	const now = ctx.now()
 	for (const [field, raw] of Object.entries(item)) {
 		if (field === 'id') continue
-		const env: Env = { user: ctx.user, primary: id, now, value: raw }
+		const env: Env = { user: ctx.user, primary: id, parent: null, now, value: raw }
 		// a single input field may drive MULTIPLE parts (e.g. invoice `number` gates the primary AND is
 		// stored as its own cmene predication) — apply them all, not just the first match. board 0092.
 		for (const part of spec.parts.filter((p) => p.field === field)) {
@@ -114,17 +138,28 @@ export async function update(
 				await store.deleteWhere(part.pred, part.link, id)
 				// presence semantics (board 0092): re-insert only when truthy — done:false leaves it deleted.
 				if (raw) await store.insert(part.pred, cellsFrom(part.set, env))
+			} else if (part.kind === 'children' && part.childSpec && part.link) {
+				// replace wholesale: cascade-remove the existing children, then re-create from the array.
+				for (const kid of await childrenOf(store, part, id)) await remove(part.childSpec, store, kid.id)
+				if (Array.isArray(raw)) {
+					for (const el of raw) await create(part.childSpec, store, el as Record<string, unknown>, ctx, id)
+				}
 			}
 		}
 	}
 	return id
 }
 
-/** Delete one entity: the primary row + every predication that refs it via a part's link place. */
+/** Delete one entity: cascade its child sub-entities, the primary row, + every linked predication. */
 export async function remove(spec: TypeSpec, store: PredicationStore, id: string): Promise<void> {
+	for (const part of spec.parts) {
+		if (part.kind === 'children' && part.childSpec) {
+			for (const kid of await childrenOf(store, part, id)) await remove(part.childSpec, store, kid.id)
+		}
+	}
 	await store.remove(id)
 	for (const part of spec.parts) {
-		if (part.link) await store.deleteWhere(part.pred, part.link, id)
+		if (part.kind !== 'children' && part.link) await store.deleteWhere(part.pred, part.link, id)
 	}
 }
 
@@ -145,22 +180,35 @@ function project(
 }
 
 /** Project every entity of `spec` into a flat record (the v_task equivalent), by pattern-matching
- *  each primary row against its linked predications at the declared gismu positions. */
+ *  each primary row against its linked predications at the declared gismu positions. When `parent` is
+ *  given (a recursive children query), only primaries linking back to that parent are projected. */
 export async function query(
 	spec: TypeSpec,
-	store: PredicationStore
+	store: PredicationStore,
+	parent?: { link: Place; id: string }
 ): Promise<Record<string, unknown>[]> {
 	const primary = primaryPart(spec)
-	const primaries = await store.rows(primary.pred)
+	let primaries = await store.rows(primary.pred)
+	if (parent) primaries = primaries.filter((r) => r[parent.link] === parent.id)
 	const linked: Record<string, Row[]> = {}
 	for (const part of spec.parts) {
-		if (part.link && !linked[part.pred]) linked[part.pred] = await store.rows(part.pred)
+		if (part.kind !== 'children' && part.link && !linked[part.pred]) linked[part.pred] = await store.rows(part.pred)
 	}
-	return primaries.map((prow) => {
-		const out: Record<string, unknown> = { id: prow.id }
+	const out: Record<string, unknown>[] = []
+	for (const prow of primaries) {
+		const rec: Record<string, unknown> = { id: prow.id }
 		for (const [field, proj] of Object.entries(spec.project)) {
-			out[field] = project(spec, prow, proj, linked, primary.pred)
+			if (proj.children) {
+				const part = spec.parts.find((p) => p.kind === 'children' && p.pred === proj.pred)
+				rec[field] =
+					part?.childSpec && part.link
+						? await query(part.childSpec, store, { link: part.link, id: prow.id })
+						: []
+			} else {
+				rec[field] = project(spec, prow, proj, linked, primary.pred)
+			}
 		}
-		return out
-	})
+		out.push(rec)
+	}
+	return out
 }

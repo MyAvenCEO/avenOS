@@ -7,7 +7,9 @@ import {
 	DOCUMENT_PREDICATES,
 	DONE,
 	INVOICE_PREDICATES,
+	LINE_PREDICATES,
 	OWNED_BY,
+	PAYMENT_PREDICATES,
 	predSchemaName,
 	TASK,
 	TODO_PREDICATES,
@@ -102,7 +104,12 @@ describe('predicate compiler (board 0087)', () => {
 		//   - DOCUMENT (classified≡klesi puts a value where klesi.x2 is a ref; owner-in-x1) → document step
 		//   - invoice `vendor` (a transitional name; becomes the biller as a janta.x4 contact ref) → step 3
 		void DOCUMENT_PREDICATES
-		const gated = [...TODO_PREDICATES, ...INVOICE_PREDICATES.filter((p) => p.predicate !== 'vendor')]
+		const gated = [
+			...TODO_PREDICATES,
+			...INVOICE_PREDICATES.filter((p) => p.predicate !== 'vendor'),
+			...LINE_PREDICATES,
+			...PAYMENT_PREDICATES
+		]
 		for (const def of gated) {
 			const seed = def.gismu ? GISMU[def.gismu] : undefined
 			expect(seed, `gismu "${def.gismu}" exists in the lexicon`).toBeDefined()

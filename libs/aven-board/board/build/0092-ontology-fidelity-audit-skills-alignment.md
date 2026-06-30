@@ -204,6 +204,21 @@ contact. No metadata is lost vs. the doctype's `org_public_record.identifiers[]`
 
 Newest entry first.
 
+- `2026-06-30` — **Step 2b DONE + verified live (nested children engine + rich invoice lines/payments).**
+  Built the recursive sub-entity primitive in the 0088 engine: a new `children` part kind + `$parent`
+  binding + `ProjectSpec.children` — each array element is its OWN sub-entity, created recursively,
+  linked back via the child-primary place, projected back as a nested array, replaced wholesale on
+  update, cascade-removed on delete (engine test green). Applied it to the invoice: **line items** are
+  faithful sub-entities — line≡pagbu (x2 invoice) with description≡skicu(x4), quantity≡klani(x2),
+  unit_price≡jdima, line_amount≡jdima; **payments** — payment≡pleji(x2 amount, x4 invoice) +
+  paid_on≡detri. The places==seed gate now covers todo + invoice headline + lines + payments (all 5
+  kinds match the seed). Fixed `pgStore.rows` to map x4/x5 (it dropped them — skicu's description +
+  pleji's invoice live in x4). Migration `0027` re-seeds the invoice spec with children (schemas seed
+  lazily). Live `data_crud(invoice)` round-trip: create with 2 line items (Beratung 3×100=300, Spesen
+  1×57=57) + a 100.00 payment → list projects them as nested `lines[]`/`payments[]` arrays; delete
+  cascades all sub-entities. check 0 (ontology/vibes/betterauth); ontology 7/7, vibes 54/54.
+  Note: taxes (cteki+parbi) deferred — parbi has no ref place to anchor a rate to its tax line; needs a
+  modelling decision. Remaining: document-vocab correction; contact/tx/booking; actors+flow; vibes; chat.
 - `2026-06-30` — **Step 2a DONE + verified live (invoice headline canonical).** Corrected the audit's
   flagged invoice errors: ownership → universal `owned_by`≡ponse (drop owner-in-x1); `number`≡cmene
   (x1 number, x2 invoice — off janta.x2); `total`≡jdima **un-reversed** (x1 = the price); the invoice
