@@ -163,7 +163,8 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 			const vendor = (raw.vendor ?? {}) as Record<string, unknown>
 			const banking = (Array.isArray(vendor.banking_accounts) ? vendor.banking_accounts : []) as Record<string, unknown>[]
 			const iban = str(banking[0]?.iban)
-			const vatId = str(vendor.tax_id)
+			const vatId = str(vendor.tax_id) // USt-IdNr / VAT-ID (cmene)
+			const taxNumber = str(vendor.tax_number) // Steuernummer (cmene) — distinct from the VAT-ID
 			const name = str(vendor.name)
 			const email = str(vendor.email)
 			const postal = [str(vendor.street), [str(vendor.postal_code), str(vendor.city)].filter(Boolean).join(' '), str(vendor.country)]
@@ -190,7 +191,7 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 				const c = (await executeDataTool(uid, {
 					schema: 'company',
 					action: 'create',
-					items: [{ name, email, phone: str(vendor.phone), iban, vat_id: vatId, postal }]
+					items: [{ name, email, phone: str(vendor.phone), iban, vat_id: vatId, tax_number: taxNumber, postal }]
 				})) as { created?: string[] }
 				companyId = c.created?.[0]
 				for (const [label, value] of [
@@ -199,6 +200,7 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 					['Telefon', str(vendor.phone)],
 					['IBAN', iban],
 					['USt-IdNr', vatId],
+					['Steuernummer', taxNumber],
 					['Adresse', postal]
 				] as const)
 					if (value) added.push(label)
@@ -238,6 +240,7 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 					isNew,
 					matchedBy,
 					ust_id: vatId || undefined,
+					tax_number: taxNumber || undefined,
 					iban: iban || undefined,
 					address: postal || undefined,
 					ansprechpartner: contactName || undefined,

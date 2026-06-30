@@ -37,6 +37,7 @@ const contact = $derived(
 		matchedBy?: string
 		isNew?: boolean
 		ust_id?: string
+		tax_number?: string
 		iban?: string
 		address?: string
 		ansprechpartner?: string
@@ -160,6 +161,12 @@ const STATE_CHIP: Record<NodeState, string> = {
 			<div class="flex justify-between text-sm">
 				<span class="text-muted-foreground">USt-IdNr</span
 				><span class="text-foreground font-mono">{contact.ust_id}</span>
+			</div>
+		{/if}
+		{#if contact.tax_number}
+			<div class="flex justify-between text-sm">
+				<span class="text-muted-foreground">Steuernummer</span
+				><span class="text-foreground font-mono">{contact.tax_number}</span>
 			</div>
 		{/if}
 		{#if contact.iban}
