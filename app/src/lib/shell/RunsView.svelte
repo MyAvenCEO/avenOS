@@ -55,21 +55,35 @@ const nodeStates = $derived.by<Record<string, NodeState>>(() => {
 	for (const s of selectedRun?.trace ?? []) m[s.nodeId] = s.state
 	return m
 })
-const step = $derived(selectedRun?.trace.find((s) => s.nodeId === selectedNodeId) ?? null)
+const trace = $derived(selectedRun?.trace ?? [])
+const step = $derived(trace.find((s) => s.nodeId === selectedNodeId) ?? null)
 const node = $derived<RecipeNode | null>(step ? (nodeById.get(step.nodeId) ?? null) : null)
+// position in the run so we can toggle through it step by step (prev/next).
+const stepIdx = $derived(trace.findIndex((s) => s.nodeId === selectedNodeId))
+const stepDataJson = $derived(
+	step?.vibeData !== undefined ? JSON.stringify(step.vibeData, null, 2) : ''
+)
 
 const RUN_DOT: Record<FlowRun['status'], string> = {
 	running: 'bg-blue-500',
 	done: 'bg-green-600',
 	error: 'bg-red-600'
 }
-const STATE_DOT: Record<NodeState, string> = {
-	idle: 'bg-muted-foreground/40',
-	waiting: 'bg-amber-500',
-	running: 'bg-blue-500',
-	done: 'bg-green-600',
-	error: 'bg-red-600',
-	parked: 'bg-purple-500'
+const STATE_LABEL: Record<NodeState, string> = {
+	idle: 'Bereit',
+	waiting: 'Wartet',
+	running: 'Läuft',
+	done: 'Fertig',
+	error: 'Fehler',
+	parked: 'Geparkt'
+}
+const STATE_CHIP: Record<NodeState, string> = {
+	idle: 'bg-muted text-muted-foreground',
+	waiting: 'bg-amber-500/15 text-amber-700',
+	running: 'bg-blue-500/15 text-blue-700',
+	done: 'bg-green-600/15 text-green-700',
+	error: 'bg-red-600/15 text-red-700',
+	parked: 'bg-purple-500/15 text-purple-700'
 }
 
 function flowName(id: string): string {
@@ -79,9 +93,15 @@ function selectRun(r: FlowRun): void {
 	selectedRunId = r.id
 	selectedNodeId = r.trace[currentStepIndex(r)]?.nodeId ?? null
 }
-// Clicking a node in the graph (or a log line) steps the explorer to that node.
+// Clicking a node in the graph steps the explorer to that node.
 function onSelect(id: string): void {
 	selectedNodeId = id
+}
+// Toggle through the run step by step (the graph stays the visual navigator).
+function stepBy(delta: number): void {
+	const i = stepIdx
+	const j = i < 0 ? 0 : i + delta
+	if (j >= 0 && j < trace.length) selectedNodeId = trace[j].nodeId
 }
 </script>
 
@@ -149,42 +169,118 @@ function onSelect(id: string): void {
 		{/if}
 	</div>
 
-	<!-- Right: the run's detail logs -->
+	<!-- Right: the SELECTED step's technical detail (the internal run) — toggle via the graph or ↑/↓ -->
 	{#if selectedRun}
 		<aside class="border-border flex w-80 shrink-0 flex-col rounded-[var(--radius-lg)] border">
-			<p class="border-border border-b p-3 text-sm font-semibold">{t('mainnet.runs.trace')}</p>
-			<div
-				class="min-h-0 flex-1 space-y-2 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed"
-			>
-				{#each selectedRun.trace as s, i (i)}
+			<div class="border-border flex items-center justify-between gap-2 border-b p-3">
+				<div class="min-w-0">
+					<p class="text-foreground truncate text-sm font-semibold">
+						{node?.name ?? t('mainnet.runs.trace')}
+					</p>
+					{#if node?.actor}
+						<p class="text-muted-foreground truncate font-mono text-[10px]">{node.actor}</p>
+					{/if}
+				</div>
+				<div class="flex shrink-0 items-center gap-1">
+					<span class="text-muted-foreground mr-1 text-[10px] tabular-nums"
+						>{stepIdx + 1}/{trace.length}</span
+					>
 					<button
 						type="button"
-						class="block w-full rounded-[var(--radius)] p-2 text-left transition-colors {s.nodeId ===
-						selectedNodeId
-							? 'bg-primary/10'
-							: 'hover:bg-card'}"
-						onclick={() => (selectedNodeId = s.nodeId)}
+						class="border-border hover:bg-card rounded border px-2 py-1 text-xs disabled:opacity-40"
+						onclick={() => stepBy(-1)}
+						disabled={stepIdx <= 0}>↑</button
 					>
-						<span class="text-foreground flex items-center gap-2">
-							<span class="text-muted-foreground w-9 shrink-0">{s.at ?? ''}</span>
-							<span class="size-2 shrink-0 rounded-full {STATE_DOT[s.state]}"></span>
-							<span class="truncate font-semibold">{nodeById.get(s.nodeId)?.name ?? s.nodeId}</span>
-							<span class="text-muted-foreground ml-auto shrink-0">{s.state}</span>
-						</span>
-						{#if s.inputs?.length}
-							<span class="text-muted-foreground mt-0.5 block pl-11">⬇ {s.inputs.join(', ')}</span>
-						{/if}
-						{#if s.outputs?.length}
-							<span class="text-muted-foreground block pl-11">⬆ {s.outputs.join(', ')}</span>
-						{/if}
-						{#if s.message}
-							<span class="text-muted-foreground block pl-11 italic">{s.message}</span>
-						{/if}
-						{#if s.vibe}
-							<span class="text-muted-foreground/70 block pl-11">vibe: {s.vibe}</span>
-						{/if}
-					</button>
-				{/each}
+					<button
+						type="button"
+						class="border-border hover:bg-card rounded border px-2 py-1 text-xs disabled:opacity-40"
+						onclick={() => stepBy(1)}
+						disabled={stepIdx < 0 || stepIdx >= trace.length - 1}>↓</button
+					>
+				</div>
+			</div>
+			<div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 text-[11px] leading-relaxed">
+				{#if step}
+					<div class="flex items-center justify-between gap-2">
+						<span class="rounded-full px-2 py-0.5 text-[10px] font-semibold {STATE_CHIP[step.state]}"
+							>{STATE_LABEL[step.state]}</span
+						>
+						<span class="text-muted-foreground font-mono">{step.at ?? ''}</span>
+					</div>
+					<div class="flex items-stretch gap-2">
+						<div class="min-w-0 flex-1">
+							<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
+								Inbox
+							</p>
+							{#each step.inputs ?? [] as i (i)}
+								<span class="bg-muted text-foreground mb-1 block truncate rounded px-2 py-1">{i}</span>
+							{/each}
+						</div>
+						<span class="text-muted-foreground self-center">→</span>
+						<div class="min-w-0 flex-1">
+							<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
+								Output
+							</p>
+							{#each step.outputs ?? [] as o (o)}
+								<span class="bg-primary/10 text-foreground mb-1 block truncate rounded px-2 py-1 font-medium"
+									>{o}</span
+								>
+							{/each}
+						</div>
+					</div>
+					{#if step.message}
+						<div class="border-border text-muted-foreground rounded border border-dashed p-2 italic">
+							{step.message}
+						</div>
+					{/if}
+					{#if node?.llm}
+						<div class="flex flex-wrap items-center gap-1">
+							<span class="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase"
+								>LLM</span
+							>
+							<span class="bg-muted text-foreground rounded px-1.5 py-0.5 font-mono">{node.llm.model}</span>
+							{#if node.llm.vision}
+								<span class="bg-muted text-foreground rounded px-1.5 py-0.5">vision</span>
+							{/if}
+						</div>
+					{/if}
+					{#if node?.tools?.length}
+						<div>
+							<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
+								Tools
+							</p>
+							<div class="flex flex-wrap gap-1">
+								{#each node.tools as tl (tl)}
+									<span class="bg-muted text-foreground rounded px-1.5 py-0.5 font-mono">{tl}</span>
+								{/each}
+							</div>
+						</div>
+					{/if}
+					{#if node?.system_prompt}
+						<details>
+							<summary
+								class="text-muted-foreground cursor-pointer text-[10px] font-semibold tracking-wide uppercase"
+								>System-Prompt</summary
+							>
+							<pre
+								class="text-foreground bg-muted/40 mt-1 max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">{node.system_prompt}</pre>
+						</details>
+					{/if}
+					{#if step.vibe}
+						<p class="text-muted-foreground/70">vibe: {step.vibe}</p>
+					{/if}
+					{#if stepDataJson}
+						<div>
+							<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
+								Daten
+							</p>
+							<pre
+								class="text-foreground bg-muted/40 max-h-72 overflow-auto rounded p-2 font-mono whitespace-pre-wrap">{stepDataJson}</pre>
+						</div>
+					{/if}
+				{:else}
+					<p class="text-muted-foreground">Schritt im Graphen wählen.</p>
+				{/if}
 			</div>
 		</aside>
 	{/if}
