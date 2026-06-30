@@ -99,13 +99,13 @@ describe('predicate compiler (board 0087)', () => {
 	// convenient relabel (e.g. putting a value in a position the seed says is a ref, or inventing a
 	// place the gismu doesn't have). Role names stay pragmatic English; structure must match the seed.
 	test('every predicate place == a canonical gismu position + matching kind (places == seed)', () => {
-		// the corrected vocab — todo (step 1) + the faithful invoice headline (step 2a). Two known
-		// follow-ons (the gate PROVED both, then they're scoped out until their step):
-		//   - DOCUMENT (classified≡klesi puts a value where klesi.x2 is a ref; owner-in-x1) → document step
-		//   - invoice `vendor` (a transitional name; becomes the biller as a janta.x4 contact ref) → step 3
-		void DOCUMENT_PREDICATES
+		// the corrected vocab — todo + document + invoice headline + line items + payments. Two
+		// transitional predicates are scoped out (each a noted follow-on the gate already PROVED):
+		//   - document `classified`≡klesi (kind as a value; → cmima + first-class class entities)
+		//   - invoice `vendor` (a transitional name; → the biller as a janta.x4 contact ref, step 3)
 		const gated = [
 			...TODO_PREDICATES,
+			...DOCUMENT_PREDICATES.filter((p) => p.predicate !== 'classified'),
 			...INVOICE_PREDICATES.filter((p) => p.predicate !== 'vendor'),
 			...LINE_PREDICATES,
 			...PAYMENT_PREDICATES

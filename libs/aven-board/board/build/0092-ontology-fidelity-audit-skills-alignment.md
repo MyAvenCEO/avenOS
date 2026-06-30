@@ -204,6 +204,16 @@ contact. No metadata is lost vs. the doctype's `org_public_record.identifiers[]`
 
 Newest entry first.
 
+- `2026-06-30` — **Document correction DONE + verified live (universal ownership now on ALL verticals).**
+  Extended owned_by≡ponse to the document (drop owner-in-x1); summary≡skicu un-reversed (x2 document,
+  x4 text); source≡krasi x1 is now the artifact ref (the sha256 content-address IS the origin ref);
+  produced≡cupra (relabelled in 0026). The places==seed gate now covers todo + document + invoice +
+  lines + payments — only two transitional predicates remain scoped out (the gate proved both):
+  document `classified`≡klesi (kind as a value; needs cmima + first-class class entities) and invoice
+  `vendor` (→ biller-as-contact in step 3). Migration `0028` re-syncs documents (owned_by backfill,
+  primary owner→drop, summary x2-text→x4). Live: existing Hetzner doc re-projects {title, owner,
+  summary, kind}; a fresh doc round-trips {title, owner, kind, summary, artifact, run}. 54/54 vibes,
+  check 0. Remaining: contact/tx/booking (step 3) + actors/flow/vibes/chat (app-layer, steps 5–7).
 - `2026-06-30` — **Step 2b DONE + verified live (nested children engine + rich invoice lines/payments).**
   Built the recursive sub-entity primitive in the 0088 engine: a new `children` part kind + `$parent`
   binding + `ProjectSpec.children` — each array element is its OWN sub-entity, created recursively,
