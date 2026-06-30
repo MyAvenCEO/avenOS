@@ -1,4 +1,4 @@
-import type { Flow } from '@avenos/aven-skills'
+import type { Flow, FlowRun } from '@avenos/aven-skills'
 import { getBearerToken } from '$lib/auth/auth-client'
 
 /**
@@ -29,6 +29,14 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 		throw new Error(err?.details?.join('; ') || err?.error || `HTTP ${res.status}`)
 	}
 	return res.json() as Promise<T>
+}
+
+/** The vibe bundle (view/style/logic) from the `vibe.*` registry (config-as-data, board 0095) — the app
+ *  loads a vibe's definition from the DB and renders it through the engine instead of importing TS files. */
+export async function loadVibeBundle(
+	name: string
+): Promise<{ view: unknown; style: unknown; logic: string }> {
+	return api(`/api/vibe/${name}`)
 }
 
 /** Create or update (by name) a schema; returns its id. */
@@ -75,6 +83,12 @@ export async function deleteValue(id: string): Promise<void> {
 export async function listFlows(): Promise<Flow[]> {
 	const { flows } = await api<{ flows: Flow[] }>('/api/admin/flows')
 	return flows
+}
+
+/** The signed-in user's REAL skill runs (persisted flow_run traces, newest first). board 0090. */
+export async function listRuns(): Promise<FlowRun[]> {
+	const { runs } = await api<{ runs: FlowRun[] }>('/api/skills/runs')
+	return runs
 }
 
 // Todos (board 0087) — stored as gismu predications (task+valid), surfaced via /api/data/todos

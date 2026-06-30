@@ -112,6 +112,18 @@ rg -n "todoView|todoStyle" app/src   # → not imported on the render path (load
 
 Newest entry first.
 
+- `2026-06-30` — **BUILT + verified. All proofs pass.** Migration `0034` creates the `vibe.*` registry —
+  three admin-config tables `vibe_view` / `vibe_style` (jsonb) + `vibe_logic` (text) — and seeds the
+  `todos` pilot from its files (`todoView` + `todoStyle` rows, `todoLogic` 5643 chars). `loadVibe` +
+  `GET /api/vibe/:name` (betterauth) serve the bundle (404 on unknown). The app's `loadVibeBundle` client
+  + `TodosVibe` now LOAD view/style/logic from the DB and override the file shell (interface/source stay
+  as instant defaults) — `rg` shows no `todoView`/`todoStyle` import on the render path, just the loader.
+  Headless test `vibe-registry.test.ts` proves the DB bundle == the file definition (canonical
+  key-order-independent deep-equal; 1 pass / 3 asserts) — so the engine renders the same tree. svelte-check
+  **0 errors**, betterauth check 0. Only `todos` migrated; other vibes + their files untouched; aven-db +
+  data_schema/data_value unchanged. The config-as-data stack is now complete: flow.* + predicate_type.* +
+  data_* + **vibe.***. Follow-ons (noted): the other vibes' migration (incl. authoring ingest/classify as
+  engine-vibes — folded 0094), a vibe editor, the classify-result vision fix.
 - `2026-06-30` — Discovery. The config-as-data stack has flow + predicate_type + data_* in the DB, but
   vibe definitions (view/style/logic) are still TS files — though a vibe is already a pure UiFixtureShell
   fed to the engine + sandbox-quickjs. User decisions: SEPARATE vibe_view/vibe_style/vibe_logic configs

@@ -3,15 +3,39 @@ import type { UiEvent } from '@avenos/aven-vibes'
 import { createTodosShell } from '@avenos/aven-vibes'
 import AvenVibeView from '@avenos/aven-vibes/AvenVibeView.svelte'
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query'
-import { createTodos, deleteTodo, listTodos, type Todo, updateTodos } from '$lib/data/client'
+import {
+	createTodos,
+	deleteTodo,
+	listTodos,
+	loadVibeBundle,
+	type Todo,
+	updateTodos
+} from '$lib/data/client'
 import { t } from '$lib/i18n'
 
 // The unified todos vibe: the aven-vibes todos vibe (JSON view/style + QuickJS) with its
 // CRUD wired to the betterauth /api/data store. Single source of truth for the todos UI —
 // reused in both the Vibes tab and the chat stream. board 0054.
+// board 0095: the view/style/logic now LOAD from the DB `vibe.*` registry (config-as-data) and override
+// the file defaults — the app renders the vibe from the DB through the engine. The file shell supplies
+// the interface/source defaults + renders instantly while the DB bundle resolves (it is identical).
 let { containerName = 'aven-vibes-todos' }: { containerName?: string } = $props()
 
-const shell = createTodosShell()
+const base = createTodosShell()
+const vibeQuery = createQuery(() => ({
+	queryKey: ['vibe', 'todos'],
+	queryFn: () => loadVibeBundle('todos')
+}))
+const shell = $derived(
+	vibeQuery.data
+		? {
+				...base,
+				view: vibeQuery.data.view as typeof base.view,
+				style: vibeQuery.data.style as typeof base.style,
+				logic: vibeQuery.data.logic
+			}
+		: base
+)
 const queryClient = useQueryClient()
 
 let err = $state<string | null>(null)

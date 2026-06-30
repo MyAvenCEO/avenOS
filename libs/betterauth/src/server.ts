@@ -39,7 +39,8 @@ import { eventsStream } from './events'
 import { deleteFlow, getFlow, listFlows, upsertFlow } from './flows'
 import { inboxGet, inboxList, mailInbox } from './inbox'
 import { deleteType, getType, listTypes, upsertType } from './predicate-types'
-import { runSkill } from './skills-run'
+import { listRuns, runSkill } from './skills-run'
+import { getVibe } from './vibe-registry'
 import { syncPricing } from './usage'
 import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
 
@@ -64,6 +65,7 @@ app.use('/api/admin/*', cors(corsOptions))
 app.use('/api/data/*', cors(corsOptions))
 // Skill execution (board 0089) — run a skill's flow for the signed-in user (doc-ingest wired first).
 app.use('/api/skills/*', cors(corsOptions))
+app.use('/api/vibe/*', cors(corsOptions))
 // `/api/billing/checkout` is browser-called (needs CORS); `/api/billing/webhook` is a
 // server-to-server POST from Polar (no Origin, so CORS is inert there) verified by signature.
 app.use('/api/billing/*', cors(corsOptions))
@@ -94,6 +96,10 @@ app.get('/api/admin/flows/:id', getFlow)
 app.post('/api/admin/flows', upsertFlow)
 app.delete('/api/admin/flows/:id', deleteFlow)
 
+// Vibe registry (board 0095, Layer A) — vibe definitions (view/style/logic) as config-as-data; the app
+// LOADS a bundle from here + renders it through the engine instead of importing the TS files.
+app.get('/api/vibe/:name', getVibe)
+
 // Composite TYPE registry (board 0088, Layer A) — admin-only CRUD over the declarative bundle specs
 // the generic predication engine runs. Distinct from the user-scoped /api/data/*.
 app.get('/api/admin/types', listTypes)
@@ -113,6 +119,7 @@ app.delete('/api/data/values/:id', deleteValue)
 // to the generic ontology engine (the `todos` registered type) — the same path the LLM tool uses.
 // Skill runner (board 0089): POST a file → run the skill's flow → artifact + document predications
 // + provenance + a persisted run trace. The generic runner the LLM `run_skill` tool also calls.
+app.get('/api/skills/runs', listRuns)
 app.post('/api/skills/:id/run', runSkill)
 
 app.get('/api/data/todos', listTodos)

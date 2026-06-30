@@ -15,7 +15,8 @@
 		"db:generate": "bash -c 'set -a; . ../../.env; set +a; bunx @better-auth/cli@latest generate --config src/auth.ts -y'",
 		"db:migrate": "bash -c 'set -a; . ../../.env; set +a; bunx @better-auth/cli@latest migrate --config src/auth.ts -y'",
 		"db:migrate:usage": "bun --env-file=../../.env src/migrate.ts",
-		"check": "tsc -p tsconfig.json --noEmit"
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "bun test tests"
 	},
 	"dependencies": {
 		"@avenos/aven-ontology": "workspace:*",
