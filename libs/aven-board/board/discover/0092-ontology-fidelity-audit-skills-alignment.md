@@ -5,7 +5,7 @@ owner: claude
 created: 2026-06-29
 updated: 2026-06-29
 tags: [ontology, gismu, predication, invoice, bookkeeping, contact, skills, audit, migration]
-goal: The ontology is rebuilt to canonical, domain-correct gismu places (verified against .claude/skills/ontology/gismu.json) and aligned through the stack — proven by tests + a live run: (1) a test asserts every predicate's `x-gismu` + per-place roles == the seed's canonical roles, with NO owner-in-a-place (ownership is the universal `owned_by`≡ponse predication on every entity) and NO reversed attribute predicates; (2) the `invoice` composite captures the FULL extract-doctype granularity as predications — number(cmene), total(jdima), due(detri), per-rate tax(cteki+parbi), payments(pleji), and N line items(pagbu) each with description(skicu)/quantity(klani)/unit-price(jdima)/amount(jdima)/tax — round-tripping via data_crud; (3) a `contact` is a person(prenu) OR company(kagni) with name(cmene)+address(judri)+metadata; (4) reconciliation links a transaction to its invoice via the PAYMENT (pleji.x4=invoice), and an invoice books to SKR04 accounts(cmima); (5) the 0088 TypeSpecs + skills-run actors + data_crud field interface align, existing predications are re-synced (SQL shows the new shapes), and `bun run check` + tests exit 0. aven-db CRDT untouched.
+goal: The ontology is rebuilt to canonical, domain-correct gismu places (verified against .claude/skills/ontology/gismu.json) and aligned through the stack — proven by tests + a live run: (1) a test asserts every predicate's `x-gismu` + per-place roles == the seed's canonical roles, with NO owner-in-a-place (ownership is the universal `owned_by`≡ponse predication on every entity) and NO reversed attribute predicates; (2) the `invoice` composite captures the FULL extract-doctype granularity as predications — number(cmene), total(jdima), due(detri), per-rate tax(cteki+parbi), payments(pleji), and N line items(pagbu) each with description(skicu)/quantity(klani)/unit-price(jdima)/amount(jdima)/tax — round-tripping via data_crud; (3) a `contact` is a person(prenu) OR company(kagni) with name(cmene)+address(judri)+metadata; (4) reconciliation links a transaction to its invoice via the PAYMENT (pleji.x4=invoice), and an invoice books to SKR04 accounts(cmima); (5) typed metadata maps to the right party — channels(judri: email/phone/IBAN) + identifiers(cmene: VAT-ID/tax-number/Rechnungsnummer) + the Ansprechpartner as a person(prenu) linked via represents(krati); (6) the engine projects child arrays (lines/taxes/payments/identifiers) and the invoice/doc-compare/addressbook vibe views render that nested shape; (7) the 0088 TypeSpecs + actors + data_crud field interface align, existing predications are re-synced (SQL shows the new shapes), and `bun run check` + tests exit 0. aven-db CRDT untouched.
 ---
 
 # Ontology fidelity audit + rich domain modelling
@@ -68,15 +68,22 @@ not a place on the primary:
 | vendor | — | (folded) | = janta.x4 biller → a `contact` ref (kagni/prenu) |
 | source | krasi | x1 artifact · x2 invoice | file_hash (provenance) |
 
-**Contact — person OR company + addresses + metadata**
+**Contact — person OR company + addresses + identifiers + Ansprechpartner**
 | pred | gismu | places | note |
 |---|---|---|---|
-| person | **prenu** | x1 person | a human contact |
-| organization | **kagni** | x1 company · x2 authority · x3 purpose | a company contact |
-| named | cmene | x1 name · x2 contact · x3 user | the contact's name |
-| address | **judri** | x1 address · x2 contact · x3 system | postal address (one per location) |
-| located | **stuzi** | x1 location · x2 contact | physical site (optional) |
-| (email/phone/tax_id) | cmene/judri | — | identifiers as named/address rows (no forced gismu where none fits) |
+| person | **prenu** | x1 person | a HUMAN contact |
+| organization | **kagni** | x1 company · x2 authority · x3 purpose | a COMPANY contact |
+| named | cmene | x1 name · x2 contact · x3 user | the contact's display name |
+| address | **judri** | x1 address-value · x2 contact · x3 system | ONE predicate for postal/email/phone/IBAN — `x3=system` ∈ {postal, email, phone, sepa-iban} (+ a `label`) |
+| identifier | **cmene** | x1 id-value · x2 contact · x3 issuer | VAT-ID/USt-IdNr, tax-number, HRB-register, etc. — + a `kind` ∈ {vat_id, tax_number, commercial_register, …}. (Rechnungsnummer on an invoice = same shape.) |
+| represents | **krati** | x1 representative · x2 represented · x3 matter | **Ansprechpartner**: a `person`(prenu) represents the `company`(kagni); the person has its own name/identifiers/channels |
+
+**Identifiers & channels (the rule):** every typed reference is one of two shapes — a **channel** ≡
+`judri` (something you reach the entity AT: postal/email/phone/IBAN, distinguished by `x3 system`) or an
+**identifier** ≡ `cmene` (something that NAMES/tags the entity: VAT-ID, tax-number, register-no,
+invoice-no, distinguished by `kind` + `x3 issuer`). The extract actor emits these onto the right party
+(vendor company, its Ansprechpartner person, or the invoice), and enrich dedupes/links them to a stored
+contact. No metadata is lost vs. the doctype's `org_public_record.identifiers[]` / `reference_entries[]`.
 
 **Transaction & reconciliation — the payment IS the link**
 | pred | gismu | places | note |
@@ -111,6 +118,12 @@ not a place on the primary:
   (this is where the granularity lands); `enrich` → contact(prenu/kagni)+address; `match`→pleji.x4;
   `book`→SKR04 cmima; all set `owned_by`.
 - **data_crud / schemasPromptHint** — the LLM-facing field names stay pragmatic English; only places move.
+- **nested projection (engine)** — the 0088 `query` matcher gains CHILD/array projection: a parent type
+  projects its child predications as a sub-array (invoice `lines[]`/`taxes[]`/`payments[]`; a party's
+  `identifiers[]`/`channels[]`/`represents`). Needed so the rich graph reads back as a nested shape.
+- **vibe views** — the invoice / doc-compare / addressbook / bwa vibes read the engine's PROJECTED nested
+  shape (kept ≈ their current props), so they need minor adaptation, not a rewrite; verify each renders
+  the new shape (line items, taxes, vendor + its Ansprechpartner + identifiers).
 - **data re-sync** — migration park→convert→swap existing task/document/invoice predications to the new shapes.
 
 **Out of scope (follow-on):** building 0091's flow/runner wiring (this card fixes the ontology base it
@@ -124,9 +137,13 @@ needs); a visual ontology browser; bank-statement (kontoauszug) vertical.
    data_crud(invoice) round-trips with line items + taxes + payments. **Checkpoint.**
 3. **Contact (person/company) + transaction + booking** — prenu/kagni/judri; pleji transaction with
    x4-settlement; SKR04 booked(cmima). **Checkpoint.**
-4. **Skills/tools alignment** — actors emit the rich predications + owned_by; data_crud interface stable. **Checkpoint.**
-5. **Data re-sync** — migrate existing predications to the corrected shapes; SQL proves shapes; counts preserved. **Checkpoint.**
-6. **Verify** — places==seed assertion, rich invoice round-trip, repo gates.
+4. **Skills/tools alignment + nested projection** — actors emit the rich predications + identifiers
+   (judri channels / cmene IDs) + Ansprechpartner(krati) + owned_by; the engine projects child arrays
+   (lines/taxes/payments/identifiers); data_crud interface stable. **Checkpoint.**
+5. **Vibe views** — adapt invoice / doc-compare / addressbook / bwa to render the projected nested shape
+   (line items, taxes, vendor + Ansprechpartner + VAT-ID/etc.); a live run shows the cards. **Checkpoint.**
+6. **Data re-sync** — migrate existing predications to the corrected shapes; SQL proves shapes; counts preserved. **Checkpoint.**
+7. **Verify** — places==seed assertion, rich invoice round-trip (incl. identifiers + Ansprechpartner), vibes render, repo gates.
 
 ## Acceptance criteria
 
@@ -134,6 +151,8 @@ needs); a visual ontology browser; bank-statement (kontoauszug) vertical.
 - [ ] No owner stored in a place; every entity has an `owned_by`≡ponse predication (SQL).
 - [ ] Meaning-correct gismu applied: done=mulno, classified=cmima, produced=cupra, summary/amount un-reversed, named=cmene, address=judri, tax=cteki, rate=parbi, line=pagbu, quantity=klani, transaction=pleji, person=prenu, organization=kagni.
 - [ ] `invoice` round-trips the FULL doctype granularity (≥1 line item with desc/qty/price/amount, ≥1 tax rate, payments) via data_crud + SQL.
+- [ ] Identifiers + Ansprechpartner: the vendor company carries `identifier`(cmene, e.g. kind=vat_id) + `channel`(judri, e.g. system=email) + Rechnungsnummer(cmene on the invoice), and its Ansprechpartner is a `person`(prenu) linked via `represents`(krati) — SQL shows them mapped to the right party.
+- [ ] The engine projects child arrays (lines/taxes/payments/identifiers); the vibe views (invoice / doc-compare / addressbook) RENDER that nested shape — verified live.
 - [ ] A transaction settles an invoice via `pleji.x4=invoice` (no `match` type); an invoice books to an SKR04 account via `booked`(cmima).
 - [ ] 0088 engine round-trips on all corrected specs; existing predications re-synced (counts preserved).
 - [ ] `data_crud`/`schemasPromptHint` field interface unchanged (chat unaffected); `bun run check` + tests exit 0; aven-db untouched.
@@ -161,6 +180,12 @@ needs); a visual ontology browser; bank-statement (kontoauszug) vertical.
 
 Newest entry first.
 
+- `2026-06-29` — Added metadata + vibe scope. Typed references unified: **channel ≡ judri** (postal/
+  email/phone/IBAN, by `x3 system`) + **identifier ≡ cmene** (VAT-ID/USt-IdNr/tax-number/HRB/
+  Rechnungsnummer, by `kind`+issuer), extracted + enriched onto the right party. **Ansprechpartner ≡
+  krati** (a person/prenu represents a company/kagni). And the engine gains **child/array projection**
+  so the rich graph (lines/taxes/payments/identifiers) reads back nested — the invoice/doc-compare/
+  addressbook **vibe views** then render that shape (minor adaptation). +1 step (vibes) → 7 steps.
 - `2026-06-29` — Discovery, upgraded after deeper review. Beyond fixing places, the user pushed for
   DOMAIN-correct modelling: ownership as a universal `owned_by`≡ponse predication (drop owner-from-x1 /
   user_id-as-owner); contacts as person(prenu) vs company(kagni) + address(judri) + metadata; the FULL
