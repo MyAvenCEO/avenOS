@@ -31,6 +31,8 @@ export type Contact = {
 	register_number: string | null
 	managing_director: string | null
 	notes: string | null
+	/** for a `person` contact (board 0097): the `company` id it `represents` — the Ansprechpartner link. */
+	represents?: string | null
 }
 
 /** The JSON Schema registered as the user's `contact` schema (Ajv-validated on write). */

@@ -92,7 +92,7 @@ export async function listContacts(): Promise<{ id: string; data: Contact }[]> {
 	}))
 	const personRows = persons.map((p) => ({
 		id: String(p.id),
-		data: { ...base(String(p.id), 'person', s(p.name) ?? ''), email: s(p.email) }
+		data: { ...base(String(p.id), 'person', s(p.name) ?? ''), email: s(p.email), represents: s(p.represents) }
 	}))
 	return [...companyRows, ...personRows]
 }

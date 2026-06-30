@@ -1,6 +1,10 @@
 import { INVOICE_SPEC } from '@avenos/aven-ontology'
-import { compilePredicate, INVOICE, NUMBER, PRODUCED, TOTAL } from '@avenos/aven-vibes/predicate'
+import { compilePredicate, INVOICE, PRODUCED, TOTAL } from '@avenos/aven-vibes/predicate'
 import { type Kysely, sql } from 'kysely'
+
+// NOTE (board 0097): the invoice `number`≡cmene predicate this migration originally seeded was folded
+// into the universal `identifier`≡tcita — so the `number` schema seeding + its backfill were removed
+// here (the deleted symbol no longer imports); migration 0037 seeds the consolidated end-state.
 
 // board 0092 step 2a — canonical-fidelity correction of the `invoice` headline:
 //   - re-seed the predicate_type spec (owned_by≡ponse; number≡cmene; total≡jdima un-reversed; the row
@@ -16,7 +20,6 @@ import { type Kysely, sql } from 'kysely'
 
 export async function up(db: Kysely<unknown>): Promise<void> {
 	const invoiceSchema = JSON.stringify(compilePredicate(INVOICE))
-	const numberSchema = JSON.stringify(compilePredicate(NUMBER))
 	const totalSchema = JSON.stringify(compilePredicate(TOTAL))
 	const producedSchema = JSON.stringify(compilePredicate(PRODUCED))
 
@@ -31,10 +34,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 	//    for every user that already has an `invoice` schema.
 	await sql`UPDATE data_schema SET json_schema = ${invoiceSchema}::jsonb, updated_at = now() WHERE name = 'invoice'`.execute(db)
 	await sql`UPDATE data_schema SET json_schema = ${producedSchema}::jsonb, updated_at = now() WHERE name = 'produced'`.execute(db)
-	for (const [name, js] of [
-		['number', numberSchema],
-		['total', totalSchema]
-	] as const) {
+	for (const [name, js] of [['total', totalSchema]] as const) {
 		await sql`
 			INSERT INTO data_schema (id, user_id, name, json_schema)
 			SELECT ${'seed_' + name + '_'} || u.user_id, u.user_id, ${name}, ${js}::jsonb
@@ -56,20 +56,6 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 		  AND NOT EXISTS (
 			SELECT 1 FROM data_value ov JOIN data_schema ox ON ox.id = ov.schema_id AND ox.name = 'owned_by'
 			WHERE ov.data->>'x2' = iv.id)
-	`.execute(db)
-
-	// 3b. number→cmene — x1 = the invoice's OLD number (data->>'x2'), x2 = the invoice id
-	await sql`
-		INSERT INTO data_value (id, user_id, schema_id, data)
-		SELECT ${'num_'} || iv.id, iv.user_id, ns.id,
-		       jsonb_build_object('predicate','number','x1', iv.data->>'x2','x2', iv.id)
-		FROM data_value iv
-		JOIN data_schema isch ON isch.id = iv.schema_id AND isch.name = 'invoice'
-		JOIN data_schema ns ON ns.user_id = iv.user_id AND ns.name = 'number'
-		WHERE iv.data->>'x2' IS NOT NULL
-		  AND NOT EXISTS (
-			SELECT 1 FROM data_value nx JOIN data_schema nxs ON nxs.id = nx.schema_id AND nxs.name = 'number'
-			WHERE nx.data->>'x2' = iv.id)
 	`.execute(db)
 
 	// 3c. amount→total, UN-REVERSED — total.x1 = amount.x2 (the value), total.x2 = amount.x1 (the invoice)

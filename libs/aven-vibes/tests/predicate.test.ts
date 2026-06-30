@@ -97,33 +97,55 @@ describe('predicate compiler (board 0087)', () => {
 		for (const r of rows) expect(() => ajv.compile(r.jsonSchema)).not.toThrow()
 	})
 
-	// board 0092 — the fidelity gate: every place a predicate declares must be a REAL place of its
-	// canonical gismu, at the same position, with the same KIND (ref vs value). This catches a
-	// convenient relabel (e.g. putting a value in a position the seed says is a ref, or inventing a
-	// place the gismu doesn't have). Role names stay pragmatic English; structure must match the seed.
-	test('every predicate place == a canonical gismu position + matching kind (places == seed)', () => {
-		// the corrected vocab — todo + document + invoice headline + line items + payments. Two
-		// transitional predicates are scoped out (each a noted follow-on the gate already PROVED):
-		//   - document `classified`≡klesi (kind as a value; → cmima + first-class class entities)
-		//   - invoice `vendor` (a transitional name; → the biller as a janta.x4 contact ref, step 3)
-		const gated = [
-			...TODO_PREDICATES,
-			...DOCUMENT_PREDICATES.filter((p) => p.predicate !== 'classified'),
-			...INVOICE_PREDICATES.filter((p) => p.predicate !== 'vendor'),
-			...LINE_PREDICATES,
-			...PAYMENT_PREDICATES,
-			...PERSON_PREDICATES,
-			...COMPANY_PREDICATES,
-			...TRANSACTION_PREDICATES
-		]
-		for (const def of gated) {
+	// board 0092/0097 — the fidelity gate. EVERY wired predicate (no exclusions) must be both
+	// CORRECT and COMPLETE against its canonical gismu (.claude/skills/ontology/gismu.json):
+	//   (a) CORRECTNESS — every place it declares is a REAL place of that gismu, at the same position,
+	//       with the same KIND (ref vs value). Catches a value smuggled into a ref slot, or an invented
+	//       place. (b) COMPLETENESS (board 0097) — every place the gismu DEFINES is declared, even the
+	//       ones our domain leaves empty (those are `required: false`). A predicate that drops any of
+	//       its gismu's places FAILS. Role names stay pragmatic English; the place STRUCTURE is the seed.
+	const ALL_WIRED = [
+		...TODO_PREDICATES,
+		...DOCUMENT_PREDICATES,
+		...INVOICE_PREDICATES,
+		...LINE_PREDICATES,
+		...PAYMENT_PREDICATES,
+		...PERSON_PREDICATES,
+		...COMPANY_PREDICATES,
+		...TRANSACTION_PREDICATES
+	]
+
+	test('every predicate is CORRECT + COMPLETE against its gismu (places == seed, all of them)', () => {
+		for (const def of ALL_WIRED) {
 			const seed = def.gismu ? GISMU[def.gismu] : undefined
 			expect(seed, `gismu "${def.gismu}" exists in the lexicon`).toBeDefined()
+			// (a) correctness: each declared place is a real gismu place at the same position + kind.
 			for (const place of def.places) {
 				const sp = seed?.places[place.pos]
 				expect(sp, `${def.predicate}.${place.pos} is a real ${def.gismu} place`).toBeDefined()
 				expect(sp?.kind, `${def.predicate}.${place.pos} kind matches ${def.gismu}.${place.pos}`).toBe(place.kind)
 			}
+			// (b) completeness: every place the gismu defines is declared (same positions, no drops).
+			const declared = new Set(def.places.map((p) => p.pos))
+			for (const pos of Object.keys(seed?.places ?? {})) {
+				expect(declared.has(pos), `${def.predicate} declares ${def.gismu}.${pos} (completeness)`).toBe(true)
+			}
 		}
+	})
+
+	test('the consolidation holds: address≡judri + identifier≡tcita + kind≡tcita; no per-channel/klesi predicates', () => {
+		const byName = new Map(ALL_WIRED.map((p) => [p.predicate, p]))
+		// the dropped per-channel / per-identifier / klesi predicates no longer exist
+		for (const gone of ['email', 'phone', 'iban', 'postal', 'vat_id', 'tax_number', 'classified', 'number', 'vendor']) {
+			expect(byName.has(gone), `dropped predicate "${gone}" is gone`).toBe(false)
+		}
+		// one address≡judri (x3=system ref), one identifier≡tcita (x1=kind ref, x3=value), one kind≡tcita
+		expect(byName.get('address')?.gismu).toBe('judri')
+		expect(byName.get('address')?.places.find((p) => p.pos === 'x3')?.kind).toBe('ref')
+		expect(byName.get('identifier')?.gismu).toBe('tcita')
+		expect(byName.get('identifier')?.places.find((p) => p.pos === 'x1')?.kind).toBe('ref')
+		expect(byName.get('identifier')?.places.find((p) => p.pos === 'x3')?.kind).toBe('value')
+		expect(byName.get('kind')?.gismu).toBe('tcita')
+		expect(byName.get('name')?.gismu).toBe('cmene')
 	})
 })

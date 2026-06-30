@@ -49,6 +49,13 @@ function cellsFrom(spec: Partial<Record<Place, Bind>> | undefined, env: Env): Pa
 	return out
 }
 
+/** Does a row carry every discriminator cell? (no discriminator ⇒ always matches). board 0097. */
+function matchesCells(row: Row, match: Partial<Record<Place, Cell>> | undefined): boolean {
+	if (!match) return true
+	for (const [place, want] of Object.entries(match)) if (row[place as Place] !== want) return false
+	return true
+}
+
 function primaryPart(spec: TypeSpec) {
 	const p = spec.parts.find((part) => part.kind === 'primary')
 	if (!p || !p.field) throw new Error(`aven-ontology: type "${spec.type}" has no primary part with a field`)
@@ -93,7 +100,8 @@ export async function create(
 			// presence semantics: a falsy value (false / '' / null / 0) means the predication is ABSENT —
 			// so a boolean-state part like done≡mulno stores a row iff true, nothing if false. board 0092.
 			if (!value) continue
-			await store.insert(part.pred, cellsFrom(part.set, { ...env, value }))
+			// the discriminator (board 0097) is written alongside the set cells (e.g. x3=`addrsys-email`).
+			await store.insert(part.pred, { ...cellsFrom(part.set, { ...env, value }), ...part.match })
 		}
 	}
 	// children: each element of the array field is its OWN sub-entity, created recursively with this
@@ -148,9 +156,17 @@ export async function update(
 			} else if (part.kind === 'singleton' && part.link) {
 				await store.patchWhere(part.pred, part.link, id, cellsFrom(part.set, env))
 			} else if (part.kind === 'replace' && part.link) {
-				await store.deleteWhere(part.pred, part.link, id)
+				// a discriminated part (board 0097) replaces only the rows carrying its discriminator
+				// (e.g. just the x3=`addrsys-email` address), not every linked row sharing the predicate.
+				if (part.match) {
+					for (const r of await store.rows(part.pred)) {
+						if (r[part.link] === id && matchesCells(r, part.match)) await store.remove(r.id)
+					}
+				} else {
+					await store.deleteWhere(part.pred, part.link, id)
+				}
 				// presence semantics (board 0092): re-insert only when truthy — done:false leaves it deleted.
-				if (raw) await store.insert(part.pred, cellsFrom(part.set, env))
+				if (raw) await store.insert(part.pred, { ...cellsFrom(part.set, env), ...part.match })
 			} else if (part.kind === 'children' && part.childSpec && part.link) {
 				// replace wholesale: cascade-remove the existing children, then re-create from the array.
 				for (const kid of await childrenOf(store, part, id)) await remove(part.childSpec, store, kid.id)
@@ -186,8 +202,12 @@ function project(
 	if (proj.pred === primaryPred) {
 		return proj.notNull ? prow[proj.notNull] != null : (prow[proj.place as Place] ?? null)
 	}
+	// when several parts share a predicate (board 0097) they carry the same link place; the
+	// discriminator on the projection (e.g. x3=`addrsys-email`) selects the right linked row.
 	const part = spec.parts.find((p) => p.pred === proj.pred)
-	const row = part?.link ? (linked[proj.pred] ?? []).find((r) => r[part.link as Place] === prow.id) : undefined
+	const row = part?.link
+		? (linked[proj.pred] ?? []).find((r) => r[part.link as Place] === prow.id && matchesCells(r, proj.match))
+		: undefined
 	if (proj.notNull) return !!(row && row[proj.notNull] != null)
 	return row ? (row[proj.place as Place] ?? null) : null
 }

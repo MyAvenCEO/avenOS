@@ -2,16 +2,18 @@ import type { TypeSpec } from './types.js'
 
 // The `invoice` composite type — the invoice vertical (board 0090), corrected to canonical gismu
 // places (board 0092 step 2a). The headline as x1–x5 predications:
-//   invoice (janta)  x3 = billed-party (us); the row IS the invoice (x1)   — the entity
+//   invoice (janta)  x3 = billed-party (us), x4 = biller (vendor company); the row IS the invoice (x1)
 //   owned_by (ponse) x1 account, x2 invoice                                — UNIVERSAL ownership
-//   number (cmene)   x1 number, x2 invoice                                 — Rechnungsnummer (was janta.x2)
+//   identifier(tcita) x1 idkind-invoice_number, x2 invoice, x3 the number  — Rechnungsnummer (board 0097:
+//                                                                            was number≡cmene; now the
+//                                                                            universal identifier)
 //   total (jdima)    x1 total, x2 invoice                                  — un-reversed (x1 = the price)
-//   vendor (vecnu)   x1 invoice, x2 name                                   — biller name (→ contact ref, step 3)
 //   due (detri)      x1 date, x2 invoice                                   — REUSED deadline predicate
 //   source (krasi)   x1 artifact, x2 invoice                              — REUSED provenance
 //   produced (cupra) x1 run, x2 invoice                                    — REUSED lineage (finti → cupra)
-// Ownership is owned_by, not an owner place; `number` is its own cmene (the `number` field drives BOTH
-// the primary gate AND the cmene predication — the engine applies every part matching a field).
+// Ownership is owned_by, not an owner place; the `number` field drives BOTH the primary gate AND the
+// identifier predication (the engine applies every part matching a field). The transitional `vendor`≡
+// vecnu is gone (board 0097): the biller is janta.x4 (the vendor company ref, set by enrich).
 
 // A LINE ITEM is its own sub-entity (board 0092 step 2b): line≡pagbu (x2 = the invoice) with
 // description≡skicu (x4), quantity≡klani (x2), unit_price≡jdima (x1), line_amount≡jdima (x1).
@@ -52,9 +54,9 @@ export const INVOICE_SPEC: TypeSpec = {
 		// janta.x3 = billed-party (us); janta.x4 = biller (the vendor company ref, set by enrich). board 0093.
 		{ pred: 'invoice', kind: 'primary', field: 'number', create: { x3: '$user' }, set: {}, fields: { x4: 'billed_by' } },
 		{ pred: 'owned_by', kind: 'singleton', link: 'x2', create: { x1: '$user' } },
-		{ pred: 'number', kind: 'replace', link: 'x2', field: 'number', set: { x1: '$value', x2: '$primary' } },
+		// the invoice number is the universal identifier≡tcita, keyed by x1 = idkind-invoice_number, value in x3
+		{ pred: 'identifier', kind: 'replace', link: 'x2', field: 'number', match: { x1: 'idkind-invoice_number' }, set: { x2: '$primary', x3: '$value' } },
 		{ pred: 'total', kind: 'replace', link: 'x2', field: 'total', set: { x1: '$value', x2: '$primary' } },
-		{ pred: 'vendor', kind: 'replace', link: 'x1', field: 'vendor', set: { x1: '$primary', x2: '$value' } },
 		{ pred: 'due', kind: 'replace', link: 'x2', field: 'due', set: { x1: '$value', x2: '$primary' } },
 		{ pred: 'source', kind: 'replace', link: 'x2', field: 'artifact', set: { x1: '$value', x2: '$primary' } },
 		{ pred: 'produced', kind: 'replace', link: 'x2', field: 'run', set: { x1: '$value', x2: '$primary' } },
@@ -62,9 +64,8 @@ export const INVOICE_SPEC: TypeSpec = {
 		{ pred: 'payment', kind: 'children', field: 'payments', link: 'x4', childSpec: PAYMENT_SPEC }
 	],
 	project: {
-		number: { pred: 'number', place: 'x1' },
+		number: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-invoice_number' } },
 		total: { pred: 'total', place: 'x1' },
-		vendor: { pred: 'vendor', place: 'x2' },
 		buyer: { pred: 'invoice', place: 'x3' },
 		billed_by: { pred: 'invoice', place: 'x4' },
 		owner: { pred: 'owned_by', place: 'x1' },

@@ -1,93 +1,126 @@
-// Contact + transaction predicate vocabulary — board 0092 step 3. The relational enrichment layer:
-// a person (prenu) OR a company (kagni), each named (cmene) with channels (judri) + identifiers (cmene);
-// an Ansprechpartner is a person who REPRESENTS (krati) a company; a transaction (pleji) settles an
-// invoice via its goods place (x4) and is booked (cmima) to an SKR04 account.
+// Contact + transaction predicate vocabulary — board 0092, consolidated + completed (board 0097).
+// Every predicate carries EVERY place its canonical gismu defines (unused ones `required: false`).
 //
-// KEY IDEA: the channel/identifier TYPE is encoded in the PREDICATE NAME (email/phone/iban ≡ judri;
-// vat_id/tax_number ≡ cmene), so each predicate's places stay 100% gismu-faithful (no short categorical
-// label stuffed into a ref slot). All are generic + reusable across any entity.
-import { compilePredicate, type PredicateDef, predSchemaName } from './compile.js'
+// THE CONSOLIDATION: the per-channel/per-identifier predicates are gone. Instead of four `judri`
+// channels (email/phone/iban/postal) and two `cmene` identifiers (vat_id/tax_number), the TYPE moves
+// into its proper x-position — as a referenced entity, the faithful Lojban move (no short label in a
+// ref slot):
+//   address    ≡ judri — x1 the address value · x2 the entity · x3 the SYSTEM (a ref to a stable
+//                        `addrsys-{email,phone,iban,postal}` entity)
+//   identifier ≡ tcita — x1 the KIND (a ref to a stable `idkind-{vat_id,tax_number,invoice_number}`
+//                        entity) · x2 the tagged entity · x3 the id value
+//   name       ≡ cmene — x1 the name value · x2 the named entity · x3 the namer
+// An Ansprechpartner is a `person` that `represents` (krati) a `company`. A `transaction` (pleji)
+// settles an invoice via x4, is dated (detri) and booked (cmima) to an SKR04 account. All generic +
+// reusable across any entity. Ownership is the universal owned_by. See [[ontology-gismu-skill]].
+import { compilePredicate, type PredicateDef, predSchemaName, ref, val } from './compile.js'
 
-const entityRef = (role: string, gismu: string) => ({
-	pos: 'x2',
-	role,
-	gloss: `the ${role} this belongs to — ${gismu} x2`,
-	kind: 'ref' as const,
-	references: '*'
-})
-
-// ── Entities (the row IS the person/company; no stored places — name/channels hang off it) ──────────
+// ── Entities (the row IS the person/company; name/channels/ids hang off it as linked predications) ──
+// prenu: x1 the person (the row; implicit). kagni: x1 company, x2 chartering authority, x3 purpose.
 export const PERSON: PredicateDef = {
 	predicate: 'person',
 	gismu: 'prenu',
 	gloss: 'prenu: x1 is a person — a human contact (the row is the person)',
-	places: []
+	places: [ref('x1', 'person', 'the person — prenu x1 (the row; implicit, the entity)', { required: false })]
 }
 export const COMPANY: PredicateDef = {
 	predicate: 'company',
 	gismu: 'kagni',
-	gloss: 'kagni: x1 is a company/firm/legal entity — an organisation contact (the row is the company)',
-	places: []
+	gloss: 'kagni: x1 is a company/firm chartered by authority x2 for purpose x3 — an organisation contact',
+	places: [
+		ref('x1', 'company', 'the company — kagni x1 (the row; implicit, the entity)', { required: false }),
+		ref('x2', 'authority', 'the chartering authority — kagni x2 (open)', { required: false }),
+		val('x3', 'purpose', 'the company purpose/mission — kagni x3 (open)', 'string', { required: false })
+	]
 }
 
-// ── Name + identifiers (cmene: x1 the name/id value, x2 the named entity) ────────────────────────────
-const cmeneId = (predicate: string, label: string, example: string): PredicateDef => ({
-	predicate,
+// cmene: x1 the name value, x2 the named entity, x3 the namer.
+export const NAME: PredicateDef = {
+	predicate: 'name',
 	gismu: 'cmene',
-	gloss: `cmene: x1 (the ${label}) is a name/tag of x2 (the contact)`,
+	gloss: 'cmene: x1 (the name) is a/the name/tag of x2 (the entity) used by namer x3',
 	places: [
-		{ pos: 'x1', role: label, gloss: `the ${label} — cmene x1 (the quoted name/tag)`, kind: 'value', type: 'string', minLength: 1, example },
-		entityRef('named thing', 'cmene')
+		val('x1', 'name', 'the name/title — cmene x1 (the quoted name)', 'string', {
+			minLength: 1,
+			example: 'ACME GmbH'
+		}),
+		ref('x2', 'named thing', 'the entity named — cmene x2'),
+		ref('x3', 'namer', 'who uses/gave the name — cmene x3 (open)', { required: false })
 	]
-})
-export const NAME: PredicateDef = cmeneId('name', 'name', 'ACME GmbH')
-export const VAT_ID: PredicateDef = cmeneId('vat_id', 'VAT-ID', 'DE123456789')
-export const TAX_NUMBER: PredicateDef = cmeneId('tax_number', 'tax number', '151/815/08156')
+}
 
-// ── Channels (judri: x1 the address value, x2 the located entity) — type = the predicate name ────────
-const channel = (predicate: string, label: string, example: string): PredicateDef => ({
-	predicate,
+// judri: x1 the address value, x2 the located entity, x3 the system (a ref to an addrsys-* entity).
+// ONE predicate for every channel — the channel TYPE is x3, not the predicate name.
+export const ADDRESS: PredicateDef = {
+	predicate: 'address',
 	gismu: 'judri',
-	gloss: `judri: x1 (the ${label}) is an address of x2 (the contact)`,
+	gloss: 'judri: x1 (the address) locates x2 (the entity) in addressing system x3 (email/phone/iban/postal)',
 	places: [
-		{ pos: 'x1', role: 'address', gloss: `the ${label} — judri x1 (the address)`, kind: 'value', type: 'string', minLength: 1, example },
-		entityRef('located', 'judri')
+		val('x1', 'address', 'the address/coordinate value — judri x1 (e.g. an email, phone, IBAN, street)', 'string', {
+			minLength: 1,
+			example: 'billing@acme.example'
+		}),
+		ref('x2', 'located', 'the entity this addresses — judri x2 (the located thing)'),
+		ref('x3', 'system', 'the addressing system — judri x3 (a ref to addrsys-email/phone/iban/postal)', {
+			example: 'addrsys-email'
+		})
 	]
-})
-export const EMAIL: PredicateDef = channel('email', 'email address', 'billing@acme.example')
-export const PHONE: PredicateDef = channel('phone', 'phone number', '+49 30 1234567')
-export const IBAN: PredicateDef = channel('iban', 'IBAN', 'DE89370400440532013000')
-export const POSTAL: PredicateDef = channel('postal', 'postal address', 'Hauptstr. 1, 10115 Berlin')
+}
 
-// ── Ansprechpartner (krati: x1 representative, x2 represented) ───────────────────────────────────────
+// tcita: x1 the label/kind (a ref to an idkind-* entity), x2 the tagged entity, x3 the information (the
+// id value). ONE predicate for every identifier — the KIND is x1, the value is x3.
+export const IDENTIFIER: PredicateDef = {
+	predicate: 'identifier',
+	gismu: 'tcita',
+	gloss: 'tcita: x1 (the id kind) tags x2 (the entity) showing information x3 (the id value) — VAT-ID / Steuernr / …',
+	places: [
+		ref('x1', 'label', 'the identifier KIND — tcita x1 (a ref to idkind-vat_id/tax_number/invoice_number)', {
+			example: 'idkind-vat_id'
+		}),
+		ref('x2', 'labeled', 'the entity this identifies — tcita x2 (the tagged thing)'),
+		val('x3', 'information', 'the identifier value — tcita x3 (e.g. DE123456789)', 'string', {
+			minLength: 1,
+			example: 'DE123456789'
+		})
+	]
+}
+
+// krati: x1 representative (the person), x2 represented (the company), x3 the matter — the Ansprechpartner.
 export const REPRESENTS: PredicateDef = {
 	predicate: 'represents',
 	gismu: 'krati',
-	gloss: 'krati: x1 (the person) represents/is the agent for x2 (the company) — the Ansprechpartner link',
+	gloss: 'krati: x1 (the person) represents/is the agent for x2 (the company) in matter x3 — the Ansprechpartner link',
 	places: [
-		{ pos: 'x1', role: 'representative', gloss: 'the representing person — krati x1', kind: 'ref', references: '*' },
-		{ pos: 'x2', role: 'represented', gloss: 'the company represented — krati x2', kind: 'ref', references: '*' }
+		ref('x1', 'representative', 'the representing person — krati x1'),
+		ref('x2', 'represented', 'the company represented — krati x2'),
+		val('x3', 'matter', 'the matter represented in — krati x3 (open)', 'string', { required: false })
 	]
 }
 
-// ── Transaction (pleji: x2 amount, x3 payee, x4 the invoice paid for) + date (detri) + booked (cmima) ─
+// ── Transaction (pleji: x1 payer, x2 amount, x3 payee, x4 the invoice paid for) + dated + booked ─────
 export const TRANSACTION: PredicateDef = {
 	predicate: 'transaction',
 	gismu: 'pleji',
-	gloss: 'pleji: x2 (the amount) is paid to payee x3 for goods x4 (the settled invoice) — a bank transaction',
+	gloss: 'pleji: x1 (the payer) pays amount x2 to payee x3 for goods x4 (the settled invoice) — a bank transaction',
 	places: [
-		{ pos: 'x2', role: 'payment', gloss: 'the amount paid — pleji x2', kind: 'value', type: 'string', example: '26.65' },
-		{ pos: 'x3', role: 'payee', gloss: 'the payee (a contact) — pleji x3', kind: 'ref', references: '*', required: false },
-		{ pos: 'x4', role: 'goods', gloss: 'the invoice this settles — pleji x4 (the goods paid for)', kind: 'value', type: 'string', required: false, example: '7e776030' }
+		ref('x1', 'payer', 'who paid — pleji x1 (open)', { required: false }),
+		val('x2', 'payment', 'the amount paid — pleji x2 (the payment)', 'string', { example: '26.65' }),
+		ref('x3', 'payee', 'the payee (a contact) — pleji x3', { required: false }),
+		val('x4', 'goods', 'the invoice this settles — pleji x4 (the goods paid for)', 'string', {
+			required: false,
+			example: '7e776030'
+		})
 	]
 }
 export const DATED: PredicateDef = {
 	predicate: 'dated',
 	gismu: 'detri',
-	gloss: 'detri: x1 (the date) is the date of event x2 (the transaction) — the value date',
+	gloss: 'detri: x1 (the date) is the date of event x2 at location x3 by calendar x4 — the value date',
 	places: [
-		{ pos: 'x1', role: 'date', gloss: 'the value date — detri x1', kind: 'value', type: 'date-time', example: '2026-03-31' },
-		{ pos: 'x2', role: 'event', gloss: 'the transaction — detri x2', kind: 'ref', references: '*' }
+		val('x1', 'date', 'the value date — detri x1', 'date-time', { example: '2026-03-31' }),
+		ref('x2', 'event', 'the transaction — detri x2 (the event)'),
+		ref('x3', 'location', 'where reckoned — detri x3 (open)', { required: false }),
+		val('x4', 'calendar', 'the calendar — detri x4 (open)', 'string', { required: false })
 	]
 }
 export const BOOKED: PredicateDef = {
@@ -95,15 +128,15 @@ export const BOOKED: PredicateDef = {
 	gismu: 'cmima',
 	gloss: 'cmima: x1 (the transaction) is a member of set x2 (the SKR04 account it is booked to)',
 	places: [
-		{ pos: 'x1', role: 'member', gloss: 'the booked transaction — cmima x1', kind: 'ref', references: '*' },
-		{ pos: 'x2', role: 'set', gloss: 'the SKR04 account (e.g. skr04-4400) — cmima x2', kind: 'ref', references: '*' }
+		ref('x1', 'member', 'the booked transaction — cmima x1'),
+		ref('x2', 'set', 'the SKR04 account (e.g. skr04-4400) — cmima x2')
 	]
 }
 
 /** Person contact bundle. */
-export const PERSON_PREDICATES: PredicateDef[] = [PERSON, NAME, EMAIL, REPRESENTS]
+export const PERSON_PREDICATES: PredicateDef[] = [PERSON, NAME, ADDRESS, IDENTIFIER, REPRESENTS]
 /** Company contact bundle. */
-export const COMPANY_PREDICATES: PredicateDef[] = [COMPANY, NAME, EMAIL, PHONE, IBAN, POSTAL, VAT_ID, TAX_NUMBER]
+export const COMPANY_PREDICATES: PredicateDef[] = [COMPANY, NAME, ADDRESS, IDENTIFIER]
 /** Transaction (reconciliation) bundle. */
 export const TRANSACTION_PREDICATES: PredicateDef[] = [TRANSACTION, DATED, BOOKED]
 

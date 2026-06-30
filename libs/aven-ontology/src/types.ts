@@ -48,6 +48,12 @@ export type PartSpec = {
 	/** for the PRIMARY — extra input fields written to its OWN places (place → field), e.g. a
 	 *  transaction≡pleji carrying payer/payee/goods alongside the driving amount. board 0092. */
 	fields?: Partial<Record<Place, string>>
+	/** A DISCRIMINATOR: fixed cells that (a) are written on every insert of this part and (b) scope its
+	 *  replace delete + its projection lookup. Lets MULTIPLE parts share one predicate, distinguished by
+	 *  a stable place value — e.g. every contact channel is one `address`≡judri keyed by x3=system
+	 *  (`addrsys-email`/…), every identifier one `identifier`≡tcita keyed by x1=kind (`idkind-vat_id`/…).
+	 *  board 0097. */
+	match?: Partial<Record<Place, Cell>>
 }
 
 /** How one output field is projected back from the predications. */
@@ -59,6 +65,9 @@ export type ProjectSpec = {
 	notNull?: Place
 	/** project the `children` part named by `pred` as an ARRAY of projected sub-entities */
 	children?: boolean
+	/** the same DISCRIMINATOR as the matching part (see [[PartSpec.match]]) — picks ONE linked row when
+	 *  several parts share `pred` (e.g. the `email` channel = the `address` row whose x3=`addrsys-email`). */
+	match?: Partial<Record<Place, Cell>>
 }
 
 /** A composite type: a bundle of predications + how to project them back into a flat record. */

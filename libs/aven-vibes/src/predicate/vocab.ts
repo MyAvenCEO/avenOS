@@ -1,106 +1,81 @@
-// Todo predicate vocabulary — board 0087. A todo decomposes into a BUNDLE of predications, each
-// carrying a canonical Lojban gismu from .claude/skills/ontology (the place order is adapted to the
-// "task as x1" reification pattern where noted):
-//   owned_by    ≡ ponse  — x1 (account) owns/possesses x2 (the entity)          [universal ownership]
-//   task        ≡ zukte  — x1 (agent) employs means/takes action x2             [faithful]
-//   done        ≡ mulno  — x1 (the task) is complete; predication exists iff done [presence = done]
-//   due         ≡ detri  — x1 (the date) is the date of event x2                [faithful: date=x1, task=x2]
-//   prioritized ≡ vajni  — x1 (task) important to x2 (user) in aspect/degree x3 [faithful: level=x3]
+// Todo predicate vocabulary — board 0087, completed to FULL gismu place structures (board 0097). Each
+// predicate now carries EVERY place its canonical gismu defines (x1–x5 from .claude/skills/ontology);
+// the places our domain doesn't fill are `required: false` (present + documented, never dropped):
+//   owned_by    ≡ ponse  — x1 owner · x2 possession · x3 standard                 [universal ownership]
+//   task        ≡ zukte  — x1 actor · x2 action · x3 goal
+//   done        ≡ mulno  — x1 complete-thing · x2 property · x3 standard           [presence = done]
+//   due         ≡ detri  — x1 date · x2 event · x3 location · x4 calendar
+//   prioritized ≡ vajni  — x1 significant-thing · x2 audience · x3 aspect
 // owned_by≡ponse is UNIVERSAL (board 0092): every entity binds to its account here, replacing a
-// user_id column — ownership IS a predication. done≡mulno replaces the old valid≡ranji interval:
-// completion is a STATE (the mulno predication present), not a closed time interval.
+// user_id column — ownership IS a predication. done≡mulno is a STATE (the predication present = done).
 // Each compiles to a self-documenting Ajv data_schema named `<predicate>` (the bare data-type name —
-// x1–x5 predications ARE the universal data-type model, no namespace prefix leaks to the DB/UI) and
-// is seeded into the DYNAMIC data_schema store (Layer B). See [[two-layer-schema-split]].
-import { compilePredicate, type PredicateDef, predSchemaName } from './compile.js'
+// x1–x5 predications ARE the universal data-type model) seeded into the DYNAMIC data_schema store
+// (Layer B). See [[two-layer-schema-split]].
+import { compilePredicate, type PredicateDef, predSchemaName, ref, val } from './compile.js'
 
+// zukte: x1 actor (a volitional entity), x2 the action/means, x3 the goal/purpose.
 export const TASK: PredicateDef = {
 	predicate: 'task',
 	gismu: 'zukte',
-	gloss: 'x1 (agent) employs means / takes on action-task x2 (zukte)',
+	gloss: 'zukte: x1 (the actor) employs means / takes on action-task x2 toward goal x3',
 	places: [
-		{
-			pos: 'x1',
-			role: 'agent',
-			gloss: 'who holds this intention (a user)',
-			kind: 'ref',
+		ref('x1', 'agent', 'who holds this intention (a user) — zukte x1 (the actor)', {
 			references: 'user',
 			example: 'JhB95T3lSOe0ZYTKLzuKNXHzGeju9LIb'
-		},
-		{
-			pos: 'x2',
-			role: 'what',
-			gloss: 'the task — a short imperative phrase',
-			kind: 'value',
-			type: 'string',
+		}),
+		val('x2', 'what', 'the task — a short imperative phrase (zukte x2, the action/means)', 'string', {
 			minLength: 1,
 			example: 'Zwei Bananen kaufen'
-		}
+		}),
+		val('x3', 'goal', 'the goal/purpose the action serves — zukte x3 (often left open)', 'string', {
+			required: false,
+			example: 'Vorrat auffüllen'
+		})
 	]
 }
 
-// ponse: x1 owns x2. UNIVERSAL ownership (board 0092) — every entity carries ONE owned_by binding it
-// to its account (x1=account, x2=the entity). Replaces a user_id column: ownership IS a predication.
+// ponse: x1 owns x2 under standard x3. UNIVERSAL ownership (board 0092) — every entity carries ONE
+// owned_by binding it to its account (x1=account, x2=the entity); x3 = the law/custom (open).
 export const OWNED_BY: PredicateDef = {
 	predicate: 'owned_by',
 	gismu: 'ponse',
-	gloss: 'ponse: x1 (the account) owns/possesses x2 (the entity) — universal ownership of any data item',
+	gloss: 'ponse: x1 (the account) owns/possesses x2 (the entity) under standard x3 — universal ownership',
 	places: [
-		{
-			pos: 'x1',
-			role: 'owner',
-			gloss: 'the owning account — ponse x1 (owner/proprietor)',
-			kind: 'ref',
-			references: 'user'
-		},
-		{
-			pos: 'x2',
-			role: 'possession',
-			gloss: 'the entity owned — ponse x2 (what is owned)',
-			kind: 'ref',
-			references: '*'
-		}
+		ref('x1', 'owner', 'the owning account — ponse x1 (owner/proprietor)', { references: 'user' }),
+		ref('x2', 'possession', 'the entity owned — ponse x2 (what is owned)'),
+		val('x3', 'standard', 'the law/custom the ownership holds under — ponse x3 (open)', 'string', {
+			required: false
+		})
 	]
 }
 
-// mulno: x1 (event) is complete/done. PRESENCE of this predication = the task is done; its absence =
-// still open. A state, not a closed interval (replaces the old valid≡ranji). Only x1 is modelled.
+// mulno: x1 (event) is complete/done; x2 the property in which complete; x3 the standard. PRESENCE of
+// this predication = the task is done; its absence = still open. A state, not a closed interval.
 export const DONE: PredicateDef = {
 	predicate: 'done',
 	gismu: 'mulno',
-	gloss: 'mulno: x1 (the task) is complete/finished — the predication exists iff the task is done',
+	gloss: 'mulno: x1 (the task) is complete/finished in property x2 by standard x3 — the predication exists iff done',
 	places: [
-		{
-			pos: 'x1',
-			role: 'complete thing',
-			gloss: 'the task that is finished — mulno x1 (the completed event/object)',
-			kind: 'ref',
-			references: '*'
-		}
+		ref('x1', 'complete thing', 'the task that is finished — mulno x1 (the completed event/object)'),
+		val('x2', 'property', 'the property in which it is complete — mulno x2 (open)', 'string', {
+			required: false
+		}),
+		val('x3', 'standard', 'the completeness standard — mulno x3 (open)', 'string', { required: false })
 	]
 }
 
-// detri: x1 IS THE DATE of event x2 — so the date is x1 and the task is x2 (canonical, not reversed).
+// detri: x1 IS THE DATE of event x2 at location x3 by calendar x4 — date=x1, task=x2 (canonical).
 export const DUE: PredicateDef = {
 	predicate: 'due',
 	gismu: 'detri',
-	gloss: 'detri: x1 (the date) is the date of event x2 — i.e. task x2 is due by date x1',
+	gloss: 'detri: x1 (the date) is the date of event x2 at location x3 by calendar x4 — task x2 due by date x1',
 	places: [
-		{
-			pos: 'x1',
-			role: 'date',
-			gloss: 'the due date — detri x1 (the date itself)',
-			kind: 'value',
-			type: 'date-time',
-			example: '2026-07-01'
-		},
-		{
-			pos: 'x2',
-			role: 'task',
-			gloss: 'the task this is the deadline of — detri x2 (the event)',
-			kind: 'ref',
-			references: '*'
-		}
+		val('x1', 'date', 'the due date — detri x1 (the date itself)', 'date-time', { example: '2026-07-01' }),
+		ref('x2', 'task', 'the task this is the deadline of — detri x2 (the event)'),
+		ref('x3', 'location', 'the place the dating is reckoned at — detri x3 (open)', { required: false }),
+		val('x4', 'calendar', 'the calendar/standard — detri x4 (open, e.g. Gregorian)', 'string', {
+			required: false
+		})
 	]
 }
 
@@ -110,28 +85,13 @@ export const PRIORITIZED: PredicateDef = {
 	gismu: 'vajni',
 	gloss: 'vajni: x1 (the task) is important to x2 (the user) in aspect/degree x3 — the priority level',
 	places: [
-		{
-			pos: 'x1',
-			role: 'task',
-			gloss: 'the important thing — the task (vajni x1)',
-			kind: 'ref',
-			references: '*'
-		},
-		{
-			pos: 'x2',
-			role: 'beneficiary',
-			gloss: 'to whom it is important — the user (vajni x2)',
-			kind: 'ref',
+		ref('x1', 'task', 'the important thing — the task (vajni x1, the significant thing)'),
+		ref('x2', 'beneficiary', 'to whom it is important — the user (vajni x2, the audience)', {
 			references: 'user'
-		},
-		{
-			pos: 'x3',
-			role: 'level',
-			gloss: 'the priority level / degree of importance — vajni x3 (aspect)',
-			kind: 'value',
-			type: 'string',
+		}),
+		val('x3', 'level', 'the priority level / degree of importance — vajni x3 (aspect)', 'string', {
 			example: 'high'
-		}
+		})
 	]
 }
 

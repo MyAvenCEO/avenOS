@@ -24,13 +24,26 @@ goal: >
   (4) NAME + DOC-KIND: `name`≡cmene carries x1 value + x2 ref + x3 namer (nullable ref); the document
   type is `kind`≡tcita (x1=doctype ref, x2=document ref, x3=info value) and `classified`≡klesi no
   longer exists (`rg "klesi" libs/aven-vibes/src` is empty).
-  (5) DATA RE-SYNC: a migration rewrites existing data_value rows for the dropped predicates into the
-  consolidated shapes; SQL on the samuel branch shows `address` rows (with an x3 system ref) and
-  `identifier` rows (with an x1 kind ref) and ZERO rows whose predicate is a dropped name
-  (`email`/`phone`/`iban`/`postal`/`vat_id`/`tax_number`/`classified`).
-  (6) GREEN: `bun run check` (betterauth) + `bun --bun x svelte-check` (app) + the aven-vibes /
+  (5) DATA RE-SYNC: the Neon samuel branch is being reset FRESH (no legacy data to rewrite), so the
+  migration just (a) upserts the consolidated specs into `predicate_type` and (b) drops any orphaned
+  data_schema/data_value rows under a retired predicate name — `ensurePredicateSchemas` then seeds the
+  new `address`/`identifier`/`kind` schemas lazily. SQL on the fresh branch after one invoice run shows
+  `address` rows (x3 = `addrsys-*`) + `identifier` rows (x1 = `idkind-*`) and ZERO rows under any dropped
+  name (`email`/`phone`/`iban`/`postal`/`vat_id`/`tax_number`/`classified`/`number`/`vendor`). The
+  `addrsys-*`/`idkind-*`/`doctype-*` ids are canonical reference constants (the vibe maps them to labels).
+  (6) ADDRESSBOOK REDESIGN — the addressbook detail viewer is a purpose-built `company`/`person` layout
+  (identity · channels · identifiers · Ansprechpartner · Belege), not the generic DocCompare projection;
+  it reads the pure-Lojban `company`/`person` predications (board 0096). The classify badge strips the
+  `doctype-` prefix; the addressbook's incoming-invoice match uses the `billed_by` company ref, not a
+  vendor-name string.
+  (7) GREEN: `bun run check` (betterauth) + `bun --bun x svelte-check` (app) + the aven-vibes /
   aven-ontology test suites exit 0; extract + enrich + addressbook still render a live invoice run.
   aven-db CRDT + the data_schema/data_value plumbing are untouched.
+  NORTH STAR (recorded; follow-on card 0098, immediate): kill flat `contact` + flat `invoice_doc`
+  TOGETHER (they're one vertical — `set_my_company`/`create_invoice` use the contact as the invoice
+  seller) — rewire the chat tools onto `company`/`person` + an outgoing-invoice predication spec,
+  my-company via `represents` (no is_self). Then `tx`/`match`/`booking` likewise. See
+  [[all-dynamic-data-is-predications]].
 ---
 
 ## Context
@@ -160,4 +173,38 @@ making the category a first-class referenced entity**, which is the faithful Loj
 
 - The SkillsView vibe-preview pane (top flow / bottom sample-data vibe, like RunsView) — a separate
   small card.
-- Any new domain verticals; this is purely making the EXISTING wired predicates canonically faithful.
+- Killing the flat `contact` + `invoice_doc` chat verticals → **card 0098** (they're coupled via the
+  invoice seller). The addressbook *display* is already on `company`/`person`; only the chat write tools
+  remain on flat `contact`. See [[all-dynamic-data-is-predications]].
+
+## Progress log
+
+- 2026-06-30 — **BUILT (review).** Implemented the full canonical re-audit:
+  - **Engine** (`aven-ontology`): added a discriminated `replace` (a `match` cell on a part) so several
+    parts can share one predicate — `types.ts` (`PartSpec.match`/`ProjectSpec.match`) + `engine.ts`
+    create/update(scoped delete)/project. New round-trip test proves a company stores email/phone/iban
+    through one `address` + vat_id/tax_number through one `identifier`, projecting back flat.
+  - **Vocab** (`aven-vibes/src/predicate/*`): every predicate carries ALL its gismu's x1–x5 (unused
+    `required:false`), via terse `ref()`/`val()` factories. Consolidated `address`≡judri (x3=system),
+    `identifier`≡tcita (x1=kind, x3=value), `kind`≡tcita (replaces `classified`≡klesi); dropped
+    email/phone/iban/postal/vat_id/tax_number; folded invoice `number`→identifier; retired `vendor`.
+    **Audit: 28 predicates, 0 missing / 0 extra / 0 kind-mismatch.**
+  - **Gate** (`predicate.test.ts`): no exclusions; asserts correctness (place==seed position+kind) AND
+    completeness (every seed place declared) for every predicate + the consolidation invariants. 7 tests,
+    379 assertions, green.
+  - **Specs**: company/person via discriminated `address`/`identifier`; document `kind`≡tcita
+    (x1=`doctype-*` ref); invoice `number`→identifier, `vendor` retired, janta completed.
+  - **Actors** (`betterauth`): classify emits `kind: doctype-<k>`; enrich unchanged (flat item shape
+    survives the discriminated specs); seeding is automatic (ensurePredicateSchemas maps the bundles).
+  - **Migration 0037** upserts the consolidated specs + drops any retired-predicate data. Also fixed
+    `0026` (dropped the deleted `NUMBER` import). **All 37 migrations applied to the fresh `local.samuel`
+    Neon branch.** Live SQL confirms: company parts = company/owned_by/name/address×4
+    (addrsys-email/phone/iban/postal)/identifier×2; document.kind→x1; invoice.number→identifier
+    (idkind-invoice_number, x3); **0 dropped-name schemas**.
+  - **Vibes** (`app`): BookkeepingVibe strips the `doctype-` prefix; AddressbookVibe detail viewer
+    REDESIGNED (purpose-built identity/Kontakt/Bank/Steuer/Anschrift/Register + Ansprechpartner layout,
+    no DocCompare projection); incoming-invoice match now uses the `billed_by` company ref; `client.ts`
+    maps `person.represents`.
+  - **Green**: aven-ontology 8/8 · aven-vibes 55/55 · betterauth `check` PASS · app `svelte-check` 0
+    errors. App relaunched against the fresh DB. Remaining manual check: a live invoice upload rendering
+    extract+enrich+addressbook (needs vision + a user upload).

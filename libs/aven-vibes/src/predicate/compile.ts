@@ -45,6 +45,22 @@ export function predSchemaName(def: PredicateDef): string {
 	return def.predicate
 }
 
+// Place factories — keep the gismu-faithful vocab terse + consistent. board 0097 demands every
+// predicate carry ALL of its gismu's places (x1–x5); the ones our domain doesn't fill are declared
+// `required: false` so they're documented + present without breaking stored rows that omit them.
+export function ref(pos: string, role: string, gloss: string, opts: Partial<PlaceDef> = {}): PlaceDef {
+	return { pos, role, gloss, kind: 'ref', references: '*', ...opts }
+}
+export function val(
+	pos: string,
+	role: string,
+	gloss: string,
+	type: PlaceType,
+	opts: Partial<PlaceDef> = {}
+): PlaceDef {
+	return { pos, role, gloss, kind: 'value', type, ...opts }
+}
+
 function placeSchema(p: PlaceDef): Record<string, unknown> {
 	const base: Record<string, unknown> = {
 		title: p.role,

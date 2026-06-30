@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { COMPANY_SPEC } from '../src/contact-spec.js'
 import { create, query, remove, resolveBind, update } from '../src/engine.js'
 import { memStore } from '../src/memstore.js'
 import { TODO_SPEC } from '../src/todo-spec.js'
@@ -118,6 +119,40 @@ describe('aven-ontology engine (board 0088)', () => {
 		expect(store.dump().map((r) => r.predicate).sort()).toEqual(['line', 'lineamt', 'order'])
 		// delete cascades every child + its sub-predications
 		await remove(orderSpec, store, id)
+		expect(store.dump()).toEqual([])
+	})
+
+	// board 0097 — the discriminated `replace`: several channels share ONE `address`≡judri (keyed by
+	// x3 = the addressing system) and several identifiers share ONE `identifier`≡tcita (keyed by x1 =
+	// the id kind), yet each replaces + projects independently and the projected record stays flat.
+	test('consolidation: one address/identifier predicate, discriminated by x3/x1', async () => {
+		const store = memStore()
+		const id = (await create(
+			COMPANY_SPEC,
+			store,
+			{ name: 'Fly.io', email: 'billing@fly.io', phone: '+1 555', iban: 'DE89', vat_id: 'DE12345', tax_number: '151/815' },
+			ctx
+		)) as string
+		const addrs = store.dump().filter((r) => r.predicate === 'address')
+		const ids = store.dump().filter((r) => r.predicate === 'identifier')
+		// three given channels → three `address` rows, each carrying its system in x3 (the channel TYPE)
+		expect(addrs.length).toBe(3)
+		expect(new Set(addrs.map((r) => r.cells.x3))).toEqual(new Set(['addrsys-email', 'addrsys-phone', 'addrsys-iban']))
+		expect(addrs.find((r) => r.cells.x3 === 'addrsys-email')?.cells).toEqual({ x1: 'billing@fly.io', x2: id, x3: 'addrsys-email' })
+		// two identifiers → two `identifier` rows, each carrying its kind in x1 (the id KIND), value x3
+		expect(ids.length).toBe(2)
+		expect(ids.find((r) => r.cells.x1 === 'idkind-vat_id')?.cells).toEqual({ x1: 'idkind-vat_id', x2: id, x3: 'DE12345' })
+		// the projection stays flat — every channel/identifier reads back at its own field
+		const [co] = await query(COMPANY_SPEC, store)
+		expect(co).toMatchObject({ name: 'Fly.io', email: 'billing@fly.io', phone: '+1 555', iban: 'DE89', vat_id: 'DE12345', tax_number: '151/815' })
+		// update ONE channel — only its discriminated row is replaced, the others untouched
+		await update(COMPANY_SPEC, store, { id, email: 'new@fly.io' }, ctx)
+		const after = store.dump().filter((r) => r.predicate === 'address')
+		expect(after.length).toBe(3)
+		expect(after.find((r) => r.cells.x3 === 'addrsys-email')?.cells.x1).toBe('new@fly.io')
+		expect(after.find((r) => r.cells.x3 === 'addrsys-phone')?.cells.x1).toBe('+1 555')
+		// delete cascades every linked address/identifier — no orphans
+		await remove(COMPANY_SPEC, store, id)
 		expect(store.dump()).toEqual([])
 	})
 

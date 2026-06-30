@@ -1,10 +1,17 @@
 import type { TypeSpec } from './types.js'
 
-// Contact + transaction composite types — board 0092 step 3. A person (prenu) or company (kagni) is a
-// bare entity row; its name (cmene), channels (judri: email/phone/iban/postal) and identifiers (cmene:
-// vat_id/tax_number) hang off it as linked predications. An Ansprechpartner is a `person` that
-// `represents` (krati) a `company`. A `transaction` (pleji) settles an invoice via x4 (the goods paid
-// for), is dated (detri) and booked (cmima) to an SKR04 account. Ownership is the universal owned_by.
+// Contact + transaction composite types — board 0092, consolidated (board 0097). A person (prenu) or
+// company (kagni) is a bare entity row; its name (cmene) and — NOW CONSOLIDATED — its channels and
+// identifiers hang off it as discriminated predications:
+//   • every channel is ONE `address`≡judri, the channel keyed by x3 = a stable addressing-system ref
+//     (`addrsys-email`/`addrsys-phone`/`addrsys-iban`/`addrsys-postal`);
+//   • every identifier is ONE `identifier`≡tcita, the kind keyed by x1 = a stable id-kind ref
+//     (`idkind-vat_id`/`idkind-tax_number`), the value in x3.
+// The `match` discriminator (board 0097) lets several parts share one predicate yet replace/project
+// independently — so the projected record stays flat (email/phone/iban/postal/vat_id/tax_number).
+// An Ansprechpartner is a `person` that `represents` (krati) a `company`. A `transaction` (pleji)
+// settles an invoice via x4, is dated (detri) and booked (cmima) to an SKR04 account. Ownership is
+// the universal owned_by.
 
 export const PERSON_SPEC: TypeSpec = {
 	type: 'person',
@@ -12,13 +19,13 @@ export const PERSON_SPEC: TypeSpec = {
 		{ pred: 'person', kind: 'primary', field: 'name', create: {}, set: {} },
 		{ pred: 'owned_by', kind: 'singleton', link: 'x2', create: { x1: '$user' } },
 		{ pred: 'name', kind: 'replace', link: 'x2', field: 'name', set: { x1: '$value', x2: '$primary' } },
-		{ pred: 'email', kind: 'replace', link: 'x2', field: 'email', set: { x1: '$value', x2: '$primary' } },
+		{ pred: 'address', kind: 'replace', link: 'x2', field: 'email', match: { x3: 'addrsys-email' }, set: { x1: '$value', x2: '$primary' } },
 		// krati: x1 the person (representative), x2 the company represented — the Ansprechpartner link
 		{ pred: 'represents', kind: 'replace', link: 'x1', field: 'company', set: { x1: '$primary', x2: '$value' } }
 	],
 	project: {
 		name: { pred: 'name', place: 'x1' },
-		email: { pred: 'email', place: 'x1' },
+		email: { pred: 'address', place: 'x1', match: { x3: 'addrsys-email' } },
 		represents: { pred: 'represents', place: 'x2' },
 		owner: { pred: 'owned_by', place: 'x1' }
 	}
@@ -30,21 +37,23 @@ export const COMPANY_SPEC: TypeSpec = {
 		{ pred: 'company', kind: 'primary', field: 'name', create: {}, set: {} },
 		{ pred: 'owned_by', kind: 'singleton', link: 'x2', create: { x1: '$user' } },
 		{ pred: 'name', kind: 'replace', link: 'x2', field: 'name', set: { x1: '$value', x2: '$primary' } },
-		{ pred: 'email', kind: 'replace', link: 'x2', field: 'email', set: { x1: '$value', x2: '$primary' } },
-		{ pred: 'phone', kind: 'replace', link: 'x2', field: 'phone', set: { x1: '$value', x2: '$primary' } },
-		{ pred: 'iban', kind: 'replace', link: 'x2', field: 'iban', set: { x1: '$value', x2: '$primary' } },
-		{ pred: 'postal', kind: 'replace', link: 'x2', field: 'postal', set: { x1: '$value', x2: '$primary' } },
-		{ pred: 'vat_id', kind: 'replace', link: 'x2', field: 'vat_id', set: { x1: '$value', x2: '$primary' } },
-		{ pred: 'tax_number', kind: 'replace', link: 'x2', field: 'tax_number', set: { x1: '$value', x2: '$primary' } }
+		// channels — one `address`≡judri each, distinguished by x3 = the addressing-system ref
+		{ pred: 'address', kind: 'replace', link: 'x2', field: 'email', match: { x3: 'addrsys-email' }, set: { x1: '$value', x2: '$primary' } },
+		{ pred: 'address', kind: 'replace', link: 'x2', field: 'phone', match: { x3: 'addrsys-phone' }, set: { x1: '$value', x2: '$primary' } },
+		{ pred: 'address', kind: 'replace', link: 'x2', field: 'iban', match: { x3: 'addrsys-iban' }, set: { x1: '$value', x2: '$primary' } },
+		{ pred: 'address', kind: 'replace', link: 'x2', field: 'postal', match: { x3: 'addrsys-postal' }, set: { x1: '$value', x2: '$primary' } },
+		// identifiers — one `identifier`≡tcita each, distinguished by x1 = the id-kind ref, value in x3
+		{ pred: 'identifier', kind: 'replace', link: 'x2', field: 'vat_id', match: { x1: 'idkind-vat_id' }, set: { x2: '$primary', x3: '$value' } },
+		{ pred: 'identifier', kind: 'replace', link: 'x2', field: 'tax_number', match: { x1: 'idkind-tax_number' }, set: { x2: '$primary', x3: '$value' } }
 	],
 	project: {
 		name: { pred: 'name', place: 'x1' },
-		email: { pred: 'email', place: 'x1' },
-		phone: { pred: 'phone', place: 'x1' },
-		iban: { pred: 'iban', place: 'x1' },
-		postal: { pred: 'postal', place: 'x1' },
-		vat_id: { pred: 'vat_id', place: 'x1' },
-		tax_number: { pred: 'tax_number', place: 'x1' },
+		email: { pred: 'address', place: 'x1', match: { x3: 'addrsys-email' } },
+		phone: { pred: 'address', place: 'x1', match: { x3: 'addrsys-phone' } },
+		iban: { pred: 'address', place: 'x1', match: { x3: 'addrsys-iban' } },
+		postal: { pred: 'address', place: 'x1', match: { x3: 'addrsys-postal' } },
+		vat_id: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-vat_id' } },
+		tax_number: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-tax_number' } },
 		owner: { pred: 'owned_by', place: 'x1' }
 	}
 }

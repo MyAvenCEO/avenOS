@@ -131,7 +131,9 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 					mime: doc.mime,
 					bytes: doc.bytes,
 					title: fields.title,
-					kind: fields.kind,
+					// board 0097: the doc type is kind≡tcita whose x1 (label) is a stable doctype REF, so we
+					// emit `doctype-<kind>` (the vibe strips the prefix for display).
+					kind: `doctype-${fields.kind || 'other'}`,
 					summary: fields.summary
 				}
 			}
