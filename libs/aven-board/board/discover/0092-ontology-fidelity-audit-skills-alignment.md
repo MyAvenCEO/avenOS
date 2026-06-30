@@ -1,6 +1,6 @@
 ---
-title: Ontology fidelity audit + rich domain modelling — canonical gismu, owned_by, full invoice graph
-summary: Re-read the gismu seed end-to-end and rebuild the ontology to MEAN what the domain means, not convenient labels. Universal ownership as owned_by≡ponse (this item belongs to account X) — drop owner-from-x1 and the user_id-as-owner idea. Person vs company contacts (prenu/kagni) with addresses (judri) + metadata. The FULL invoice granularity of the extract doctype (line items≡pagbu, tax≡cteki, rate≡parbi, payments≡pleji, totals≡jdima/vamji, vendor≡biller) as a predication graph. Transaction↔invoice is the PAYMENT itself (pleji.x4→invoice), not an abstract "match". German SKR04 booking as account postings (cmima/janta). Then align the 0088 TypeSpecs, skills/tools/actors, data_crud interface + re-sync data. mainnet Postgres only; aven-db CRDT untouched.
+title: Bookkeeping vertical on the correct ontology (SSOT) — gismu fidelity + Invoice Processing on the runner + per-step vibes
+summary: SINGLE execution plan consolidating all open work. Rebuild the ontology to canonical gismu places (owned_by≡ponse, done=mulno, classified=cmima, produced=cupra; un-reverse attribute predicates) with FULL invoice granularity (line=pagbu, tax=cteki, rate=parbi, payment=pleji, identifiers=judri/cmene, Ansprechpartner=krati). Run the EXISTING "Invoice Processing" composite flow end-to-end on the generic runner with actors reimplemented on the ontology; stream a per-step vibe card into chat + the Runs explorer; consolidate (delete invoice-ingest, run_skill drives Invoice Processing, finish 0089's chat-trigger); migrate the old blob schemas; adapt the vibe views to the projected nested shape. The 0089/0090 runner + 0088 engine + ArtifactStore + type-registry + vibe-mechanism are the COMMITTED foundation this builds on. mainnet Postgres only; aven-db CRDT untouched.
 owner: claude
 created: 2026-06-29
 updated: 2026-06-29
@@ -18,6 +18,21 @@ The ontology was built fast with convenient 1:1 labels. Reading the seed end-to-
 doctype actually captures; "match" is an abstract stand-in for what is really a *payment*). This card
 fixes BOTH — the canonical places and the domain depth — and aligns the dependent skills/tools.
 See [[ontology-gismu-skill]], [[universal-predication-schema-0084]], [[two-layer-schema-split]], [[bookkeeping]].
+
+## Completed foundation (committed — 0089 / 0090 / 0091-step1)
+
+This is the SSOT for the bookkeeping vertical. The execution engine it builds on is DONE + committed;
+this card does NOT re-open it — it folds in the remaining OPEN work and supersedes the redundant slices:
+- **Generic flow runner** (`aven-skills/src/runner`) — runFlow over any flow + actor registry, composite
+  flatten, `onStep` per-step hook + `vibe`/`vibeData` on the trace — 0089 `dafe518a`, 0091 step 1.
+- **Content-addressed ArtifactStore** (Postgres bytea, abstracted) — 0089 `2584826c`.
+- **0088 generic predication engine** (mutate/query matcher, `predicate_type` registry, `data_crud`).
+- **Type registry + flow table + `GET /api/skills/runs`** (real runs, no fixtures) — 0090 `ab0b0224`.
+- **`run_skill` chat tool + text-form tool-call recovery; legacy doc tools deprecated** — `24af443c`.
+
+**Folds in / supersedes:** the remaining open work of **0089** (live chat-trigger, step 7) and **0091**
+(Invoice Processing flow + actors + per-step vibe streaming) → retire 0091; **0090**'s `invoice-ingest` is
+deleted here. 0089/0090 stay as the committed foundation record.
 
 ## Universal: ownership = `owned_by` ≡ ponse
 
@@ -126,24 +141,31 @@ contact. No metadata is lost vs. the doctype's `org_public_record.identifiers[]`
   the new shape (line items, taxes, vendor + its Ansprechpartner + identifiers).
 - **data re-sync** — migration park→convert→swap existing task/document/invoice predications to the new shapes.
 
-**Out of scope (follow-on):** building 0091's flow/runner wiring (this card fixes the ontology base it
-needs); a visual ontology browser; bank-statement (kontoauszug) vertical.
+**Out of scope (follow-on):** the HITL review pause/resume (review auto-posts); the bank-statement
+(kontoauszug) vertical; a visual ontology browser.
 
 ## Steps (small, checkpointed)
 
 1. **owned_by + corrected core vocab** — ponse owned_by (universal); todo (done=mulno) + document
    (vreji/cmima/skicu/cupra/named) rewritten; predicate test asserts places == seed. **Checkpoint.**
-2. **Rich invoice vocab + spec** — janta/cmene/detri/jdima/cteki/parbi/pleji/pagbu(+line sub-type);
-   data_crud(invoice) round-trips with line items + taxes + payments. **Checkpoint.**
-3. **Contact (person/company) + transaction + booking** — prenu/kagni/judri; pleji transaction with
-   x4-settlement; SKR04 booked(cmima). **Checkpoint.**
-4. **Skills/tools alignment + nested projection** — actors emit the rich predications + identifiers
-   (judri channels / cmene IDs) + Ansprechpartner(krati) + owned_by; the engine projects child arrays
-   (lines/taxes/payments/identifiers); data_crud interface stable. **Checkpoint.**
-5. **Vibe views** — adapt invoice / doc-compare / addressbook / bwa to render the projected nested shape
-   (line items, taxes, vendor + Ansprechpartner + VAT-ID/etc.); a live run shows the cards. **Checkpoint.**
-6. **Data re-sync** — migrate existing predications to the corrected shapes; SQL proves shapes; counts preserved. **Checkpoint.**
-7. **Verify** — places==seed assertion, rich invoice round-trip (incl. identifiers + Ansprechpartner), vibes render, repo gates.
+2. **Rich invoice vocab + spec** — janta/cmene/detri/jdima/cteki/parbi/pleji/pagbu(+line sub-type) +
+   identifiers (judri channels / cmene IDs) + Ansprechpartner(krati); data_crud(invoice) round-trips
+   lines + taxes + payments. **Checkpoint.**
+3. **Contact / transaction / booking ontology** — person(prenu)/company(kagni)/address(judri); pleji
+   transaction with x4-settlement; SKR04 booked(cmima). **Checkpoint.**
+4. **Engine nested/array projection** — parent types project child predications as sub-arrays
+   (invoice lines/taxes/payments; party identifiers/channels/represents). **Checkpoint.**
+5. **Ontology actors + Invoice Processing on the runner** — extract/enrich/match/book/review
+   reimplemented on the ontology (emit the rich predications + owned_by); the EXISTING `invoice` flow
+   flattens + runs all steps; `run_skill` drives it; **delete `invoice-ingest`**. **Checkpoint.**
+6. **Per-step vibe streaming + view adaptation** — `run_skill` emits `aven_vibe` per step (chat) + the
+   Runs StepVibe renders the SAME card; adapt invoice/doc-compare/addressbook/bwa to the projected
+   nested shape. **Checkpoint.**
+7. **Chat trigger (finish 0089 step 7) + data re-sync** — a real-document chat turn drives Invoice
+   Processing end-to-end; migrate existing predications + the old tx/contact/booking blob schemas to
+   the new shapes. **Checkpoint.**
+8. **Verify** — places==seed, rich invoice round-trip (incl. identifiers + Ansprechpartner), a live chat
+   run with a per-step vibe card, repo gates.
 
 ## Acceptance criteria
 
@@ -154,6 +176,8 @@ needs); a visual ontology browser; bank-statement (kontoauszug) vertical.
 - [ ] Identifiers + Ansprechpartner: the vendor company carries `identifier`(cmene, e.g. kind=vat_id) + `channel`(judri, e.g. system=email) + Rechnungsnummer(cmene on the invoice), and its Ansprechpartner is a `person`(prenu) linked via `represents`(krati) — SQL shows them mapped to the right party.
 - [ ] The engine projects child arrays (lines/taxes/payments/identifiers); the vibe views (invoice / doc-compare / addressbook) RENDER that nested shape — verified live.
 - [ ] A transaction settles an invoice via `pleji.x4=invoice` (no `match` type); an invoice books to an SKR04 account via `booked`(cmima).
+- [ ] The EXISTING `invoice` (Invoice Processing) flow runs end-to-end on the generic runner (trace store→classify→extract→enrich→match→book→review); `run_skill` drives it; `invoice-ingest` is deleted (`rg -n "invoice-ingest" libs` empty).
+- [ ] A live CHAT turn (attach an invoice, "book this") drives Invoice Processing end-to-end, streaming an `aven_vibe` card per step; the Runs explorer renders the same per-step cards.
 - [ ] 0088 engine round-trips on all corrected specs; existing predications re-synced (counts preserved).
 - [ ] `data_crud`/`schemasPromptHint` field interface unchanged (chat unaffected); `bun run check` + tests exit 0; aven-db untouched.
 
@@ -180,6 +204,12 @@ needs); a visual ontology browser; bank-statement (kontoauszug) vertical.
 
 Newest entry first.
 
+- `2026-06-29` — **Consolidated into the SSOT execution plan.** Folded ALL remaining open work into 0092:
+  0091 (Invoice Processing flow + actors + per-step vibe streaming) entirely → 0091 retired; 0089's open
+  chat-trigger (step 7) → step 7 here; 0090's `invoice-ingest` is deleted by step 5. Added a "Completed
+  foundation" section (runner/engine/ArtifactStore/registry/vibe-mechanism, with commit refs) as the
+  committed base. Steps 5–7 now carry the flow/runner/chat work; 8 checkpointed steps total. One card to
+  execute against.
 - `2026-06-29` — Added metadata + vibe scope. Typed references unified: **channel ≡ judri** (postal/
   email/phone/IBAN, by `x3 system`) + **identifier ≡ cmene** (VAT-ID/USt-IdNr/tax-number/HRB/
   Rechnungsnummer, by `kind`+issuer), extracted + enriched onto the right party. **Ansprechpartner ≡
