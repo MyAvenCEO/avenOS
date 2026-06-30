@@ -79,18 +79,23 @@ export async function runFlow(flow: Flow, opts: RunFlowOpts): Promise<RunResult>
 		try {
 			const out = await actor({ node, inputs })
 			for (const [kind, val] of Object.entries(out)) bus[kind] = val
-			// the step's vibe card (config-driven): node.vibe + the node's primary output as data — so
-			// chat + the Runs explorer render the SAME card from one source (the trace). board 0091.
-			const primaryOut = node.outputs[0]
+			// the step's vibe card (config-driven): node.vibe + ONE output as data — so chat + the Runs
+			// explorer render the SAME card from one source (the trace). board 0091. `vibeOutput` picks
+			// which output feeds the card (e.g. enrich shows `contact`, not its primary `invoice`); the
+			// transient `bytes` field is stripped (never a vibe concern + avoids bloating the trace). 0094.
+			const vibeKey = node.vibeOutput ?? node.outputs[0]
+			const rawVibe = vibeKey !== undefined ? out[vibeKey] : undefined
+			const vibeData =
+				rawVibe && typeof rawVibe === 'object' && 'bytes' in (rawVibe as object)
+					? Object.fromEntries(Object.entries(rawVibe as object).filter(([k]) => k !== 'bytes'))
+					: rawVibe
 			const step: TraceStep = {
 				nodeId: node.id,
 				state: 'done',
 				at: now(),
 				inputs: Object.keys(inputs),
 				outputs: Object.keys(out),
-				...(node.vibe
-					? { vibe: node.vibe, vibeData: primaryOut !== undefined ? out[primaryOut] : undefined }
-					: {})
+				...(node.vibe ? { vibe: node.vibe, vibeData } : {})
 			}
 			trace.push(step)
 			opts.onStep?.(step)

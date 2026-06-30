@@ -169,11 +169,23 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 			const postal = [str(vendor.street), [str(vendor.postal_code), str(vendor.city)].filter(Boolean).join(' '), str(vendor.country)]
 				.filter(Boolean)
 				.join(', ')
-			// 1. match-or-create the vendor company (by VAT-ID / IBAN / name)
+			// 1. match-or-create the vendor company (by VAT-ID / IBAN / name) — track HOW it matched and
+			// WHAT was added, so the enrich vibe can highlight the addressbook change.
 			const companies = ((await executeDataTool(uid, { schema: 'company', action: 'list' })) as { items: Record<string, unknown>[] }).items
-			let companyId = companies.find(
+			const matched = companies.find(
 				(c) => (vatId && c.vat_id === vatId) || (iban && c.iban === iban) || (name && c.name === name)
-			)?.id as string | undefined
+			)
+			const matchedBy =
+				matched && vatId && matched.vat_id === vatId
+					? 'VAT-ID'
+					: matched && iban && matched.iban === iban
+						? 'IBAN'
+						: matched
+							? 'Name'
+							: undefined
+			let companyId = matched?.id as string | undefined
+			const isNew = !companyId
+			const added: string[] = []
 			if (!companyId && name) {
 				const c = (await executeDataTool(uid, {
 					schema: 'company',
@@ -181,6 +193,15 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 					items: [{ name, email, phone: str(vendor.phone), iban, vat_id: vatId, postal }]
 				})) as { created?: string[] }
 				companyId = c.created?.[0]
+				for (const [label, value] of [
+					['Name', name],
+					['E-Mail', email],
+					['Telefon', str(vendor.phone)],
+					['IBAN', iban],
+					['USt-IdNr', vatId],
+					['Adresse', postal]
+				] as const)
+					if (value) added.push(label)
 			}
 			// 2. Ansprechpartner: a person who REPRESENTS the company
 			const contactName = str(vendor.contact_name)
@@ -211,7 +232,17 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 					lines,
 					payments
 				},
-				contact: { id: companyId, name, vat_id: vatId, iban, ansprechpartner: contactName || undefined }
+				contact: {
+					id: companyId,
+					name,
+					isNew,
+					matchedBy,
+					ust_id: vatId || undefined,
+					iban: iban || undefined,
+					address: postal || undefined,
+					ansprechpartner: contactName || undefined,
+					added
+				}
 			}
 		}
 	}

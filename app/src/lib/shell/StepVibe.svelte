@@ -22,10 +22,34 @@ const contact = $derived(
 		matchedBy?: string
 		isNew?: boolean
 		ust_id?: string
+		iban?: string
 		address?: string
+		ansprechpartner?: string
 		added?: string[]
 	}
 )
+// ingest (storeDocument): the content-addressed artifact stored in Postgres bytea. board 0094.
+const ingest = $derived(vibeData as { artifact?: string; mime?: string })
+// extract (extract_document): the raw invoice extraction — show the headline + line items. board 0094.
+const inv = $derived.by(() => {
+	const d = vibeData as Record<string, unknown>
+	const header = (d.header ?? {}) as Record<string, unknown>
+	const totals = (d.totals ?? {}) as Record<string, unknown>
+	const vendor = (d.vendor ?? {}) as Record<string, unknown>
+	const lines = (Array.isArray(d.statements) ? (d.statements as Record<string, unknown>[]) : []).flatMap((s) =>
+		Array.isArray(s.line_items) ? (s.line_items as Record<string, unknown>[]) : []
+	)
+	const s = (v: unknown): string => (v == null ? '' : String(v))
+	return {
+		number: s(header.invoice_number ?? d.number),
+		total: s(totals.invoice_total ?? d.total),
+		currency: s(header.currency),
+		vendor: s(vendor.name ?? d.vendor),
+		due: s(header.due_date ?? header.issue_date ?? d.due),
+		lineCount: lines.length,
+		lines: lines.slice(0, 6).map((li) => ({ desc: s(li.description ?? li.title), amount: s(li.amount) }))
+	}
+})
 
 const STATE_LABEL: Record<NodeState, string> = {
 	idle: 'Bereit',
@@ -69,6 +93,86 @@ const STATE_CHIP: Record<NodeState, string> = {
 	<div class="w-full">
 		<OpenItemsVibe data={vibeData} />
 	</div>
+{:else if vibe === 'ingest'}
+	<!-- Upload / store: the file landed content-addressed in Postgres bytea (board 0089/0094) -->
+	<div
+		class="border-border bg-card mx-auto flex w-full max-w-md flex-col gap-4 rounded-[var(--radius-lg)] border p-6"
+	>
+		<div class="flex items-center justify-between gap-2">
+			<div class="flex items-center gap-3">
+				<div
+					class="bg-primary/15 text-primary flex size-11 items-center justify-center rounded-xl text-lg font-bold"
+				>
+					⬆
+				</div>
+				<div class="min-w-0">
+					<h3 class="text-foreground text-lg font-semibold">Dokument gespeichert</h3>
+					<p class="text-muted-foreground text-xs">Inhaltsadressiert in Postgres (bytea)</p>
+				</div>
+			</div>
+			<span class="rounded-full bg-green-600/15 px-2.5 py-1 text-xs font-semibold text-green-700"
+				>Gespeichert ✓</span
+			>
+		</div>
+		{#if ingest.mime}
+			<div class="flex justify-between text-sm">
+				<span class="text-muted-foreground">Typ</span><span class="text-foreground font-mono"
+					>{ingest.mime}</span
+				>
+			</div>
+		{/if}
+		{#if ingest.artifact}
+			<div class="flex justify-between gap-3 text-sm">
+				<span class="text-muted-foreground shrink-0">sha256</span><span
+					class="text-foreground truncate text-right font-mono text-xs">{ingest.artifact}</span
+				>
+			</div>
+		{/if}
+	</div>
+{:else if vibe === 'invoice'}
+	<!-- Extracted invoice: the headline + line items the brain pulled from the document (board 0094) -->
+	<div
+		class="border-border bg-card mx-auto flex w-full max-w-lg flex-col gap-4 rounded-[var(--radius-lg)] border p-6"
+	>
+		<div class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<p class="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+					Rechnung extrahiert
+				</p>
+				<h3 class="text-foreground truncate text-lg font-semibold">{inv.vendor || 'Rechnung'}</h3>
+				{#if inv.number}
+					<p class="text-muted-foreground font-mono text-xs">Nr. {inv.number}</p>
+				{/if}
+			</div>
+			{#if inv.total}
+				<div class="shrink-0 text-right">
+					<p class="text-foreground text-xl font-bold">{inv.total} {inv.currency}</p>
+					{#if inv.due}
+						<p class="text-muted-foreground text-xs">fällig {inv.due}</p>
+					{/if}
+				</div>
+			{/if}
+		</div>
+		{#if inv.lines.length}
+			<div class="border-border overflow-hidden rounded-[var(--radius)] border">
+				{#each inv.lines as l, i (i)}
+					<div
+						class="border-border flex justify-between gap-3 px-3 py-1.5 text-sm {i > 0
+							? 'border-t'
+							: ''}"
+					>
+						<span class="text-foreground min-w-0 truncate">{l.desc}</span>
+						<span class="text-muted-foreground shrink-0 font-mono">{l.amount}</span>
+					</div>
+				{/each}
+				{#if inv.lineCount > inv.lines.length}
+					<div class="text-muted-foreground border-border border-t px-3 py-1 text-xs">
+						+ {inv.lineCount - inv.lines.length} weitere Positionen
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
 {:else if vibe === 'contact'}
 	<!-- Adressbuch-Anreicherung: which party was matched/created + what was added -->
 	<div
@@ -101,10 +205,22 @@ const STATE_CHIP: Record<NodeState, string> = {
 				><span class="text-foreground font-mono">{contact.ust_id}</span>
 			</div>
 		{/if}
+		{#if contact.iban}
+			<div class="flex justify-between gap-3 text-sm">
+				<span class="text-muted-foreground shrink-0">IBAN</span
+				><span class="text-foreground truncate text-right font-mono text-xs">{contact.iban}</span>
+			</div>
+		{/if}
 		{#if contact.address}
 			<div class="flex justify-between gap-3 text-sm">
 				<span class="text-muted-foreground shrink-0">Adresse</span
 				><span class="text-foreground text-right">{contact.address}</span>
+			</div>
+		{/if}
+		{#if contact.ansprechpartner}
+			<div class="flex justify-between gap-3 text-sm">
+				<span class="text-muted-foreground shrink-0">Ansprechpartner</span
+				><span class="text-foreground text-right">{contact.ansprechpartner}</span>
 			</div>
 		{/if}
 		{#if contact.added?.length}

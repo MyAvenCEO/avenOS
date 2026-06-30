@@ -121,6 +121,9 @@ export type RecipeNode = {
 	/** The user-facing vibe card this step renders (e.g. "bookkeeping", "doc-compare", "invoice-booking").
 	 *  The runner copies it onto the TraceStep so chat + the Runs explorer show the SAME card. board 0091. */
 	vibe?: string
+	/** Which output kind feeds the vibe card's data (default: the first output). E.g. `enrich` shows
+	 *  its `contact` output, not its primary `invoice`. board 0094. */
+	vibeOutput?: string
 }
 
 /** A directed connection (a message channel). `when` = a branch guard; `kind` = data (a resource
