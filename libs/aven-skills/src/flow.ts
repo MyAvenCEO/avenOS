@@ -101,8 +101,11 @@ export type RecipeNode = {
 	/** Products — what the actor emits (≥1). >1 = fan-out by kind. */
 	outputs: ResourceKind[]
 	note?: string
-	/** The actor's system prompt (for LLM steps). */
+	/** The actor's system prompt (for LLM steps). board 0093: the SSOT for an extractor's instructions. */
 	system_prompt?: string
+	/** The tool-call / output JSON Schema the LLM step extracts to. board 0093: embedded here (the DRY
+	 *  SSOT) so a generic extractor is driven entirely by node config — no per-doctype actor code. */
+	schema?: Record<string, unknown>
 	/** The LLM config the actor runs with (for LLM steps). */
 	llm?: LlmConfig
 	/** The tools/functions the actor invokes (ids into the capability `TOOL_SPECS`). */

@@ -12,7 +12,7 @@ import {
 	partiesFromDoc,
 	partyToContactFields
 } from '@avenos/aven-vibes/contact-match'
-import { getDoctype } from '@avenos/aven-vibes/doctypes'
+import { loadExtractConfig } from './skills-run'
 import {
 	computeInvoiceTotals,
 	INVOICE_DOC_SCHEMA,
@@ -875,7 +875,7 @@ function streamWithTools(opts: {
 				match?: { status: string; confidence?: string }
 				addressbookHint?: string | null
 			}> => {
-				const doctype = getDoctype(docTypeName)
+				const doctype = await loadExtractConfig(docTypeName) // board 0093: the flow-config SSOT
 				emitTool(tcId, 'extract_document', docTypeName || 'document', 'running')
 				let extracted: Record<string, unknown> | null = null
 				let stored = false

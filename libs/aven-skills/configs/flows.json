@@ -439,38 +439,5 @@
 		"triggers": [
 			{ "kind": "resource", "on": "goal" }
 		]
-	},
-	{
-		"id": "invoice-ingest",
-		"name": "Invoice Ingest",
-		"description": "REUSE Document Ingest (store + classify), then the brain extracts the invoice fields in invoice-mode. Yields an ontology invoice with provenance back to the source document.",
-		"nodes": [
-			{
-				"id": "ingest-doc",
-				"name": "Document Ingest",
-				"flowRef": "doc-ingest",
-				"inputs": ["file", "image"],
-				"outputs": ["document"],
-				"supervision": { "strategy": "resume" }
-			},
-			{
-				"id": "extract",
-				"name": "Extract Invoice",
-				"actor": "extract_invoice",
-				"inputs": ["document"],
-				"outputs": ["invoice"],
-				"system_prompt": "You are a bookkeeper. Extract the invoice fields: number, total amount as a decimal, vendor name, and due date (ISO yyyy-mm-dd).",
-				"llm": { "model": "gemma4-31b", "vision": true, "mode": "vision" },
-				"tools": ["emit_invoice"],
-				"supervision": { "strategy": "restart", "retry": { "max": 2, "backoff": "exponential" } }
-			}
-		],
-		"edges": [
-			{ "from": "ingest-doc", "to": "extract", "resource": "document", "kind": "data", "message": "document" }
-		],
-		"triggers": [
-			{ "kind": "resource", "on": "file" },
-			{ "kind": "resource", "on": "image" }
-		]
 	}
 ]

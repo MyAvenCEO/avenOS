@@ -8,7 +8,6 @@ import {
 	runFlow,
 	type TraceStep
 } from '@avenos/aven-skills'
-import { getDoctype } from '@avenos/aven-vibes/doctypes'
 import type { Context } from 'hono'
 import { pgArtifactStore } from './artifact-store'
 import { auth } from './auth'
@@ -101,10 +100,11 @@ async function visionExtract(
 	}
 }
 
-/** The skills' actors, closing over the ArtifactStore. The `document` resource carries the bytes
- *  between ingest→classify/extract (for vision); only the sha256 is persisted to predications. The
- *  runner is GENERIC — adding a skill = adding an actor here (+ its config + ontology type). board 0089/0090. */
-function skillActors(store: ArtifactStore): ActorRegistry {
+/** The skills' actors, closing over the ArtifactStore + the acting user. The `document` resource carries
+ *  the bytes between ingest→classify/extract (for vision); only the sha256 is persisted. board 0089/0090.
+ *  board 0093: extraction is CONFIG-DRIVEN — `extract_document` reads the node's system_prompt + schema
+ *  (the SSOT), so one actor extracts any doctype; `enrichAddressbook` links the contact graph. */
+function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 	return {
 		storeDocument: async ({ inputs }) => {
 			const file = (inputs.file ?? inputs.image) as SkillInput | undefined
@@ -136,47 +136,82 @@ function skillActors(store: ArtifactStore): ActorRegistry {
 				}
 			}
 		},
-		extract_invoice: async ({ inputs }) => {
-			const doc = inputs.document as { artifact: string; mime: string; bytes: Uint8Array }
+		// GENERIC extractor (board 0093): the system prompt + tool-call schema come from the NODE config
+		// (the SSOT), so this one actor extracts ANY doctype — invoice, bank_statement, … — no per-type
+		// code. Emits the raw extraction under the node's output kind; `enrichAddressbook` maps + persists.
+		extract_document: async ({ node, inputs }) => {
+			const doc = inputs.document as { artifact: string; mime: string; bytes: Uint8Array } | undefined
+			if (!doc?.bytes) throw new Error('extract_document: no document input')
+			const sys = node.system_prompt
+			const schema = node.schema as Record<string, unknown> | undefined
+			if (!sys || !schema) throw new Error('extract_document: node is missing system_prompt/schema (the SSOT)')
 			const b64 = Buffer.from(doc.bytes).toString('base64')
-			// Use the ORIGINAL working invoice doctype — its proven system prompt + rich tool-call schema
-			// (header/vendor/totals/payments/statements). board 0064/0090.
-			const doctype = getDoctype('invoice')
-			const rich =
-				(doctype ? await visionExtract(doctype.system_prompt, doctype.schema, { mime: doc.mime, b64 }) : null) ??
-				{}
-			const header = (rich.header ?? {}) as Record<string, unknown>
-			const totals = (rich.totals ?? {}) as Record<string, unknown>
-			const vendor = (rich.vendor ?? {}) as Record<string, unknown>
-			// Map the rich extraction → the ontology invoice graph (board 0092): the headline PLUS the
-			// nested line items (statements[].line_items[]) and payments[], so the 0088 engine persists
-			// the full lines[]/payments[] sub-entities. The raw doctype is spread in too, so the invoice
-			// vibe card (mapper.ts reads header/vendor/statements/totals) still renders the rich view.
+			const raw = (await visionExtract(sys, schema, { mime: doc.mime, b64 })) ?? {}
+			const kind = node.outputs[0] ?? 'document'
+			return { [kind]: { ...raw, artifact: doc.artifact } }
+		},
+		// ENRICH (board 0093): from the raw invoice extraction — match/create the vendor `company` (by
+		// VAT-ID / IBAN / name) + its Ansprechpartner as a `person` that `represents` it, then emit the
+		// ontology invoice (lines/payments) linked to the company via `billed_by` (janta.x4). The generic
+		// persist loop writes the invoice (+ provenance); the `contact` output is vibe-only (not a type).
+		enrichAddressbook: async ({ inputs }) => {
+			const raw = inputs.invoice as Record<string, unknown> | undefined
+			if (!raw) return {} // non-invoice path (e.g. bank statement) — follow-on
 			const str = (v: unknown): string => (v == null ? '' : String(v))
-			const statements = (Array.isArray(rich.statements) ? rich.statements : []) as Record<string, unknown>[]
+			const header = (raw.header ?? {}) as Record<string, unknown>
+			const totals = (raw.totals ?? {}) as Record<string, unknown>
+			const vendor = (raw.vendor ?? {}) as Record<string, unknown>
+			const banking = (Array.isArray(vendor.banking_accounts) ? vendor.banking_accounts : []) as Record<string, unknown>[]
+			const iban = str(banking[0]?.iban)
+			const vatId = str(vendor.tax_id)
+			const name = str(vendor.name)
+			const email = str(vendor.email)
+			const postal = [str(vendor.street), [str(vendor.postal_code), str(vendor.city)].filter(Boolean).join(' '), str(vendor.country)]
+				.filter(Boolean)
+				.join(', ')
+			// 1. match-or-create the vendor company (by VAT-ID / IBAN / name)
+			const companies = ((await executeDataTool(uid, { schema: 'company', action: 'list' })) as { items: Record<string, unknown>[] }).items
+			let companyId = companies.find(
+				(c) => (vatId && c.vat_id === vatId) || (iban && c.iban === iban) || (name && c.name === name)
+			)?.id as string | undefined
+			if (!companyId && name) {
+				const c = (await executeDataTool(uid, {
+					schema: 'company',
+					action: 'create',
+					items: [{ name, email, phone: str(vendor.phone), iban, vat_id: vatId, postal }]
+				})) as { created?: string[] }
+				companyId = c.created?.[0]
+			}
+			// 2. Ansprechpartner: a person who REPRESENTS the company
+			const contactName = str(vendor.contact_name)
+			if (contactName && companyId) {
+				const persons = ((await executeDataTool(uid, { schema: 'person', action: 'list' })) as { items: Record<string, unknown>[] }).items
+				if (!persons.find((p) => p.name === contactName && p.represents === companyId)) {
+					await executeDataTool(uid, { schema: 'person', action: 'create', items: [{ name: contactName, email, company: companyId }] })
+				}
+			}
+			// 3. map the rich extraction → the ontology invoice (lines/payments), linked via billed_by
+			const statements = (Array.isArray(raw.statements) ? raw.statements : []) as Record<string, unknown>[]
 			const lines = statements
 				.flatMap((s) => (Array.isArray(s.line_items) ? (s.line_items as Record<string, unknown>[]) : []))
-				.map((li) => ({
-					description: str(li.description ?? li.title),
-					quantity: str(li.quantity),
-					unit_price: str(li.unit_price),
-					amount: str(li.amount)
-				}))
+				.map((li) => ({ description: str(li.description ?? li.title), quantity: str(li.quantity), unit_price: str(li.unit_price), amount: str(li.amount) }))
 				.filter((l) => l.description || l.amount)
-			const payments = ((Array.isArray(rich.payments) ? rich.payments : []) as Record<string, unknown>[])
+			const payments = ((Array.isArray(raw.payments) ? raw.payments : []) as Record<string, unknown>[])
 				.map((p) => ({ amount: str(p.amount), date: str(p.date) }))
 				.filter((p) => p.amount)
 			return {
 				invoice: {
-					...rich, // keep the rich doctype for the vibe view
-					artifact: doc.artifact,
+					...raw, // keep the rich doctype for the vibe card
+					artifact: str(raw.artifact),
 					number: String(header.invoice_number ?? 'N/A'),
 					total: totals.invoice_total != null ? String(totals.invoice_total) : '0',
-					vendor: String(vendor.name ?? ''),
-					due: String(header.due_date ?? header.issue_date ?? ''),
+					vendor: name,
+					billed_by: companyId ?? '',
+					due: str(header.due_date ?? header.issue_date),
 					lines,
 					payments
-				}
+				},
+				contact: { id: companyId, name, vat_id: vatId, iban, ansprechpartner: contactName || undefined }
 			}
 		}
 	}
@@ -199,6 +234,23 @@ async function loadFlow(id: string): Promise<Flow | null> {
 		triggers: (asJson(row.triggers) as Flow['triggers']) ?? undefined,
 		resourceLabels: (asJson(row.resource_labels) as Flow['resourceLabels']) ?? undefined
 	}
+}
+
+/** Which flow's `extract_document` node holds the SSOT extraction config for a doctype. board 0093. */
+const DOCTYPE_FLOW: Record<string, string> = { invoice: 'capture', bank_statement: 'capture-bank' }
+
+/** The extraction config (system_prompt + tool-call schema) for a doctype, read from the flow node that
+ *  extracts it — the board 0093 SSOT, replacing the old per-doctype registry lookup. Returns a Doctype-shaped
+ *  object so existing extractors (e.g. the chat path's extractDocFields) consume it unchanged. */
+export async function loadExtractConfig(
+	doctype: string
+): Promise<{ id: string; name: string; system_prompt: string; schema: Record<string, unknown> } | undefined> {
+	const flowId = DOCTYPE_FLOW[doctype]
+	if (!flowId) return undefined
+	const flow = await loadFlow(flowId)
+	const node = flow?.nodes.find((n) => n.actor === 'extract_document')
+	if (!node?.system_prompt || !node.schema) return undefined
+	return { id: doctype, name: doctype, system_prompt: node.system_prompt, schema: node.schema as Record<string, unknown> }
 }
 
 /** All skill Flow configs (for composite flowRef resolution via flattenFlow). */
@@ -250,12 +302,12 @@ export async function runSkillForUser(
 ): Promise<RunSkillResult> {
 	const flow = await loadFlow(skillId)
 	if (!flow) throw new Error(`no skill "${skillId}"`)
-	// Flatten composite (flowRef) steps so a skill can REUSE another skill — invoice-ingest reuses
-	// doc-ingest (store + classify) then extracts. flattenFlow is a no-op for already-flat flows.
+	// Flatten composite (flowRef) steps so a skill can REUSE another skill — Invoice Processing reuses
+	// doc-ingest (store + classify) then captures (extract + enrich). flattenFlow is a no-op when flat.
 	const flat = flattenFlow(flow, await loadAllFlows())
 	const runId = `run_${randomUUID().slice(0, 12)}`
 	const { run, outputs } = await runFlow(flat, {
-		actors: skillActors(pgArtifactStore()),
+		actors: skillActors(pgArtifactStore(), uid),
 		runId,
 		now: () => new Date().toISOString(),
 		input: { file: input, image: input },

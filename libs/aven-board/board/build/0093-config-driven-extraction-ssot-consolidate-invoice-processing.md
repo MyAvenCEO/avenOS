@@ -127,6 +127,20 @@ rg -n "invoice-ingest" libs/betterauth libs/aven-skills/configs   # → no flow/
 
 Newest entry first.
 
+- `2026-06-30` — **BUILT + verified. All five proofs pass.** (1) `extract_document` is now generic +
+  config-driven — it reads the node's `system_prompt` + `schema` (the SSOT), so one actor extracts any
+  doctype; migration `0030` embedded the invoice (3514-char prompt) + bank-statement doctype configs into
+  the `capture`/`capture-bank` extract nodes and deleted the `invoice-ingest` flow row. (2) New
+  `enrichAddressbook` actor: match/create the vendor `company` (by VAT-ID/IBAN/name) + the Ansprechpartner
+  as a `person` that `represents` it, then emit the ontology invoice linked via `billed_by`≡janta.x4
+  (added to the invoice spec + re-seeded by `0031`); the generic persist loop writes it (contact output is
+  vibe-only). (3) Migrated the chat path off `getDoctype` → `loadExtractConfig` reads the same flow-config
+  SSOT (`rg getDoctype libs/betterauth/src` empty). (4) Deleted `extract_invoice` (actor + flows.json seed).
+  Verified live: capture node prompt len 3514 + schema present, `invoice-ingest` rows 0; a headless
+  enrich-graph round-trip projects invoice{billed_by→company, 2 lines, 1 payment} + company{vat_id,iban,
+  postal} + Ansprechpartner{represents→company}; `bun run check` 0 + ontology 7/7, vibes 54/54, skills
+  33/33. Out of scope (follow-on): `book` (match+SKR04) runner actors; the bank-statement enrich path; a
+  live in-app vision run (review/verify territory).
 - `2026-06-30` — Discovery. Triggered from the running Skills explorer: 3 overlapping invoice/doc skills
   + a hardcoded `extract_invoice` + extraction config (prompt/schema) split between the doctype and a
   short flow summary. User decisions: **embed** the detailed prompt + tool-schema into the flow node as

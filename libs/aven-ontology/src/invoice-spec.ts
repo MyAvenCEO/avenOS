@@ -49,7 +49,8 @@ const PAYMENT_SPEC: TypeSpec = {
 export const INVOICE_SPEC: TypeSpec = {
 	type: 'invoice',
 	parts: [
-		{ pred: 'invoice', kind: 'primary', field: 'number', create: { x3: '$user' }, set: {} },
+		// janta.x3 = billed-party (us); janta.x4 = biller (the vendor company ref, set by enrich). board 0093.
+		{ pred: 'invoice', kind: 'primary', field: 'number', create: { x3: '$user' }, set: {}, fields: { x4: 'billed_by' } },
 		{ pred: 'owned_by', kind: 'singleton', link: 'x2', create: { x1: '$user' } },
 		{ pred: 'number', kind: 'replace', link: 'x2', field: 'number', set: { x1: '$value', x2: '$primary' } },
 		{ pred: 'total', kind: 'replace', link: 'x2', field: 'total', set: { x1: '$value', x2: '$primary' } },
@@ -65,6 +66,7 @@ export const INVOICE_SPEC: TypeSpec = {
 		total: { pred: 'total', place: 'x1' },
 		vendor: { pred: 'vendor', place: 'x2' },
 		buyer: { pred: 'invoice', place: 'x3' },
+		billed_by: { pred: 'invoice', place: 'x4' },
 		owner: { pred: 'owned_by', place: 'x1' },
 		due: { pred: 'due', place: 'x1' },
 		artifact: { pred: 'source', place: 'x1' },
