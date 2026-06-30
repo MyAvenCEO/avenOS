@@ -1,122 +1,154 @@
 ---
-title: Ontology fidelity audit — canonical gismu places + skills/tools alignment
-summary: Audit EVERY predicate against the Lojban gismu seed and correct the x1–x5 places to the canonical roles (stop forcing owner-into-x1 — user_id already scopes; stop reversing attribute predicates; pick the right gismu, leave it unforced where none fits). Then propagate the corrected places through the 0088 TypeSpecs, the skills/tools/actors that map fields→places, the data_crud field interface the LLM sees, and the flow/vibe configs — and re-sync existing predications. mainnet Postgres only; aven-db CRDT untouched.
+title: Ontology fidelity audit + rich domain modelling — canonical gismu, owned_by, full invoice graph
+summary: Re-read the gismu seed end-to-end and rebuild the ontology to MEAN what the domain means, not convenient labels. Universal ownership as owned_by≡ponse (this item belongs to account X) — drop owner-from-x1 and the user_id-as-owner idea. Person vs company contacts (prenu/kagni) with addresses (judri) + metadata. The FULL invoice granularity of the extract doctype (line items≡pagbu, tax≡cteki, rate≡parbi, payments≡pleji, totals≡jdima/vamji, vendor≡biller) as a predication graph. Transaction↔invoice is the PAYMENT itself (pleji.x4→invoice), not an abstract "match". German SKR04 booking as account postings (cmima/janta). Then align the 0088 TypeSpecs, skills/tools/actors, data_crud interface + re-sync data. mainnet Postgres only; aven-db CRDT untouched.
 owner: claude
 created: 2026-06-29
 updated: 2026-06-29
-tags: [ontology, gismu, predication, skills, tools, audit, migration]
-goal: Every predicate's stored data_schema matches its CANONICAL gismu place structure (verified against .claude/skills/ontology/gismu.json) — proven by a test/assertion that each `pred:*` schema's `x-gismu` + per-place roles equal the seed's canonical roles (no owner-in-x1 unless the gismu's x1 IS the agent; no reversed attribute predicates); the corrected places propagate to the 0088 TypeSpecs, the skills-run actors, the data_crud/schemasPromptHint field interface, and the flow/vibe configs (all tsc-clean + consistent); existing predications are re-synced to the corrected places (SQL shows the new shapes); and `bun run check` + the new tests exit 0. aven-db CRDT untouched.
+tags: [ontology, gismu, predication, invoice, bookkeeping, contact, skills, audit, migration]
+goal: The ontology is rebuilt to canonical, domain-correct gismu places (verified against .claude/skills/ontology/gismu.json) and aligned through the stack — proven by tests + a live run: (1) a test asserts every predicate's `x-gismu` + per-place roles == the seed's canonical roles, with NO owner-in-a-place (ownership is the universal `owned_by`≡ponse predication on every entity) and NO reversed attribute predicates; (2) the `invoice` composite captures the FULL extract-doctype granularity as predications — number(cmene), total(jdima), due(detri), per-rate tax(cteki+parbi), payments(pleji), and N line items(pagbu) each with description(skicu)/quantity(klani)/unit-price(jdima)/amount(jdima)/tax — round-tripping via data_crud; (3) a `contact` is a person(prenu) OR company(kagni) with name(cmene)+address(judri)+metadata; (4) reconciliation links a transaction to its invoice via the PAYMENT (pleji.x4=invoice), and an invoice books to SKR04 accounts(cmima); (5) the 0088 TypeSpecs + skills-run actors + data_crud field interface align, existing predications are re-synced (SQL shows the new shapes), and `bun run check` + tests exit 0. aven-db CRDT untouched.
 ---
 
-# Ontology fidelity audit + skills/tools alignment
+# Ontology fidelity audit + rich domain modelling
 
 ## Context
 
-The ontology was built fast, forcing convenient mappings. A read of the gismu seed exposes SYSTEMATIC
-deviations: (a) the **owner jammed into x1** even when the gismu's x1 isn't the agent — yet the
-`data_value` row already has a `user_id` column, so ownership never needs a place; (b) **attribute
-predicates reversed** (the canonical gismu often puts the VALUE in x1, the entity in x2 — I did the
-opposite); (c) **wrong gismu** for some concepts; (d) **redundant predicates** that are really another
-place of the primary gismu. Correctness here is load-bearing: the places drive the 0088 TypeSpecs, the
-actors, the `data_crud` field interface, and the vibe/flow configs. See [[ontology-gismu-skill]],
-[[universal-predication-schema-0084]], [[two-layer-schema-split]].
+The ontology was built fast with convenient 1:1 labels. Reading the seed end-to-end exposes both
+**place errors** (owner-in-x1; reversed attribute predicates; wrong gismu) AND **shallow modelling**
+(invoice = {number,amount,vendor,due} loses the line items, taxes, payments, addresses the extract
+doctype actually captures; "match" is an abstract stand-in for what is really a *payment*). This card
+fixes BOTH — the canonical places and the domain depth — and aligns the dependent skills/tools.
+See [[ontology-gismu-skill]], [[universal-predication-schema-0084]], [[two-layer-schema-split]], [[bookkeeping]].
 
-## The audit (current → CANONICAL)
+## Universal: ownership = `owned_by` ≡ ponse
 
-Legend: ✓ keep · ✏️ fix places · ↔ reverse · ⊘ replace gismu · ✂️ fold into another predicate's place.
+Every entity belongs to an account. Model it as a UNIVERSAL predication, not a column-as-semantics and
+not a place on the primary:
+- **owned_by ≡ ponse** — `ponse(x1 owner-account, x2 possession)` → `owned_by(x1=account, x2=entity)`.
+- Added as a part on EVERY composite type. The `data_value.user_id` column stays for fast scoping but
+  is now a *mirror* of `owned_by.x1`, not the source of ownership meaning. "This item belongs to
+  account X" is a first-class, queryable fact.
+- Consequence: primary predicates use their canonical places freely — the owner never occupies x1
+  (unless the gismu's x1 genuinely IS the agent, e.g. zukte/task).
+
+## The corrected ontology (current → CANONICAL, with depth)
 
 **Todos**
-| pred | gismu | canonical places (seed) | current | verdict |
-|---|---|---|---|---|
-| task | zukte | x1 actor · x2 action · x3 goal | x1=user, x2=title | ✓ (actor IS the user; canonical) |
-| due | detri | x1 date · x2 event | x1=date, x2=task | ✓ |
-| prioritized | vajni | x1 significant-thing · x2 audience · x3 aspect | x1=task, x2=user, x3=level | ✓ (x3 level ≈ aspect) |
-| ~~valid~~ → **done** | mulno | x1 complete-thing | x1=task, x2=from, x3=to | ⊘ ranji's x2 is ONE interval (no from/to split). "done" = **mulno**(x1=task); open = absent. Drop the interval hack. |
+| pred | gismu | canonical places | fix |
+|---|---|---|---|
+| task | zukte | x1 actor · x2 action · x3 goal | x1=user(actor) ✓, x2=title(action); + owned_by |
+| due | detri | x1 date · x2 event | ✓ x1=date, x2=task |
+| prioritized | vajni | x1 significant · x2 audience · x3 aspect | ✓ x1=task, x2=user, x3=level |
+| done | **mulno** | x1 complete-thing | ⊘ replaces valid(ranji from/to): `done(x1=task)`; open = absent |
 
 **Document**
-| pred | gismu | canonical places | current | verdict |
-|---|---|---|---|---|
-| document | vreji | x1 record · x2 data · x3 subject · x4 medium | x1=owner, x2=title | ✏️ row IS the record; x2=summary/data, x3=subject, x4=medium(artifact sha); **owner→user_id**; title→`named`(cmene) |
-| classified | ~~klesi~~ **cmima** | x1 member · x2 set | x1=document, x2=kind | ⊘ membership = **cmima**: x1=document, x2=kind-set |
-| summary | skicu | x1 describer · x2 subject · x3 audience · x4 description | x1=document, x2=text | ↔ x2=document(subject), x4=text(description) |
-| source | krasi | x1 source · x2 originated | x1=artifact, x2=document | ✓ |
-| produced | finti | x1 inventor · x2 invention | x1=run, x2=document | ✓ |
-| (title) | cmene | x1 name · x2 named-thing · x3 namer | — | ➕ x1=title, x2=document, x3=user |
-
-**Invoice**
-| pred | gismu | canonical places | current | verdict |
-|---|---|---|---|---|
-| invoice | janta | x1 account · x2 goods · x3 billed-party · x4 biller | x1=owner, x2=number | ✏️ row IS the bill; x2=goods/desc, x3=billed-party(user), x4=biller(vendor); **owner→user_id**; number→`named`(cmene) |
-| amount | jdima | x1 price · x2 item · x3 purchaser · x4 vendor | x1=invoice, x2=total | ↔ x1=amount(price), x2=invoice(item) |
-| ~~vendor~~ | vecnu | — | x1=invoice, x2=name | ✂️ vendor IS `janta`.x4 (biller) → fold into invoice; drop the separate predicate |
-
-**0091 new (corrected before building)**
-| pred | gismu | canonical places | mapping |
+| pred | gismu | canonical places | fix |
 |---|---|---|---|
-| transaction | pleji | x1 payer · x2 payment · x3 payee · x4 goods | x1=payer, x2=amount, x3=payee, x4=reference |
-| match | mapti | x1 fitting · x2 counterpart · x3 aspect | x1=invoice, x2=tx, x3=aspect(amount+date) |
-| contact | ⊘ none | — | NO person-or-org gismu — model a named party: `named`(cmene) x1=name,x2=contact,x3=user + kind via cmima(x1=contact,x2=person|organization). Don't force prenu/kagni. |
-| booking | ⊘ weak | — | no "ledger posting" gismu; pragmatic: x1=invoice(ref), account(SKR04 value), amount; reuse source/produced provenance |
+| document | vreji | x1 record · x2 data · x3 subject · x4 medium | row IS the record; x2=summary, x3=subject, x4=medium(artifact); owner→owned_by |
+| named | **cmene** | x1 name · x2 named-thing · x3 namer | ➕ title/number → x1=name, x2=entity, x3=user |
+| classified | **cmima** | x1 member · x2 set | ⊘ x1=document, x2=kind-set (membership, not klesi) |
+| summary | skicu | x1 describer · x2 subject · x4 description | ↔ x2=document(subject), x4=text |
+| source | krasi | x1 source · x2 originated | ✓ x1=artifact, x2=entity |
+| produced | **cupra** | x1 producer · x2 product · x3 process | ⊘ replaces finti(invent): `cupra(x1=run, x2=entity, x3=skill)` |
 
-## Principles (the rules going forward)
+**Invoice — FULL granularity (the extract doctype, as predications)**
+| pred | gismu | places | maps doctype field |
+|---|---|---|---|
+| invoice | **janta** | x1 account/bill · x2 goods · x3 billed-party · x4 biller | the bill; x3=us(owned_by acct), x4=vendor ref |
+| named | cmene | x1 number · x2 invoice · x3 user | header.invoice_number |
+| due | detri | x1 date · x2 invoice | header.due_date / issue_date |
+| total | **jdima** | x1 price · x2 invoice · x3 purchaser · x4 vendor | totals.invoice_total (↔ amount was reversed) |
+| tax | **cteki** | x1 tax · x2 taxed-thing · x3 taxpayer · x4 authority | totals.tax_breakdown[] (one per rate) |
+| rate | **parbi** | x1 ratio · x2 numerator · x3 denominator | tax_rate_percent (e.g. 19/100) |
+| payment | **pleji** | x1 payer · x2 amount · x3 payee · x4 for-what(invoice) | payments[] |
+| line | **pagbu** | x1 part(line) · x2 whole(invoice) | statements[].line_items[] |
+| ↳ line desc | skicu | x2 line(subject) · x4 text | line_items[].description |
+| ↳ line qty | **klani** | x1 quantity · x2 amount · x3 scale(unit) | quantity + quantity_unit |
+| ↳ line price | jdima | x1 unit-price · x2 line | unit_price |
+| ↳ line amount | jdima | x1 amount · x2 line | line amount |
+| vendor | — | (folded) | = janta.x4 biller → a `contact` ref (kagni/prenu) |
+| source | krasi | x1 artifact · x2 invoice | file_hash (provenance) |
 
-1. **Owner = `user_id`, never a place** — unless the gismu's x1 genuinely IS the agent (zukte/vajni).
-2. **Use the gismu's exact x1–x5 roles** — attribute predicates put the VALUE where the gismu does
-   (jdima x1=price, detri x1=date, krasi x1=source), entity in the later place.
-3. **Pick the right gismu** — membership=cmima, completion=mulno, naming=cmene, fit=mapti, pay=pleji.
-4. **Fold, don't duplicate** — if an attribute is already another place of the primary gismu
-   (vendor = janta biller x4), use that place; don't mint a parallel predicate.
-5. **No forced gismu** — where none fits (contact, booking), use a pragmatic predicate with `gismu: null`.
+**Contact — person OR company + addresses + metadata**
+| pred | gismu | places | note |
+|---|---|---|---|
+| person | **prenu** | x1 person | a human contact |
+| organization | **kagni** | x1 company · x2 authority · x3 purpose | a company contact |
+| named | cmene | x1 name · x2 contact · x3 user | the contact's name |
+| address | **judri** | x1 address · x2 contact · x3 system | postal address (one per location) |
+| located | **stuzi** | x1 location · x2 contact | physical site (optional) |
+| (email/phone/tax_id) | cmene/judri | — | identifiers as named/address rows (no forced gismu where none fits) |
+
+**Transaction & reconciliation — the payment IS the link**
+| pred | gismu | places | note |
+|---|---|---|---|
+| transaction | **pleji** | x1 payer · x2 amount · x3 payee · x4 for-what | a bank movement = a payment |
+| (settles) | — | pleji.x4 = invoice | reconciliation = set the payment's x4 to the invoice. NO "match"/mapti type. |
+| (owed) | **dejni** | x1 debtor · x2 amount · x3 creditor · x4 consideration | optional: an unpaid invoice as a debt |
+
+**Booking — German SKR04 posting**
+| pred | gismu | places | note |
+|---|---|---|---|
+| booked | **cmima** | x1 member · x2 set(SKR04 Konto) | the invoice/expense is a member of an SKR04 account (e.g. "6010") |
+| (Soll/Haben) | cmima ×2 | debit-account + credit-account | double-entry: two `booked` rows (debit, credit) + amount(jdima) |
+| amount | jdima | x1 amount · x2 booking | the posted amount |
+
+## Principles
+
+1. **Ownership = `owned_by`≡ponse** (universal predication), never a place — unless the gismu's x1 IS the agent.
+2. **Use the gismu's exact x1–x5 roles** (value-first where the gismu is: jdima x1=price, detri x1=date, cteki x1=tax).
+3. **Pick the meaning-correct gismu** (cmima membership, mulno done, cupra produce, cmene name, judri address, pleji pay, pagbu part, cteki tax, parbi rate, klani quantity).
+4. **Model the relationship, not a label** — tx↔invoice is `pleji.x4`; don't invent a "match".
+5. **Fold, don't duplicate** (vendor = janta biller); **no forced gismu** where none fits (email/booking-entry).
+6. **Capture full domain granularity** — line items, per-rate tax, payments, addresses become predications, matching the extract doctype 1:1.
 
 ## Approach / skills + tools alignment (the cascade)
 
-The corrected places propagate, in lockstep:
-- **vocab** (`aven-vibes/src/predicate/*-vocab.ts`) — rewrite each PredicateDef's places (+ x-gismu).
-- **TypeSpecs** (`aven-ontology/*-spec.ts`) — re-map each field → its corrected place + projection.
-- **actors** (`betterauth/src/skills-run.ts`) — the field→item mappings the actors emit.
-- **data_crud field interface** — `schemasPromptHint` (the LLM-facing field names) stays the SAME
-  pragmatic English ({title, kind, due, …}); only the underlying places move, so the chat tool is
-  unaffected — VERIFY this holds (the engine maps fields→places).
-- **flow/vibe configs** — unaffected by places, but re-confirm.
-- **data re-sync** — a migration re-maps existing predications to the corrected places (park→convert,
-  like 0090) so live data isn't orphaned.
+- **vocab** (`aven-vibes/src/predicate/*`) — rewrite every PredicateDef to canonical places + new ones
+  (owned_by, named, done, total, tax, rate, payment, line, person, organization, address, transaction, booked).
+- **TypeSpecs** (`aven-ontology/*`) — todo/document/invoice rebuilt; new contact/transaction/booking; the
+  invoice spec gains the rich parts (+ a line-item sub-shape — likely a `line` child type referencing the invoice).
+- **actors** (`betterauth/skills-run.ts`) — `extract` maps the doctype JSON → the rich predication set
+  (this is where the granularity lands); `enrich` → contact(prenu/kagni)+address; `match`→pleji.x4;
+  `book`→SKR04 cmima; all set `owned_by`.
+- **data_crud / schemasPromptHint** — the LLM-facing field names stay pragmatic English; only places move.
+- **data re-sync** — migration park→convert→swap existing task/document/invoice predications to the new shapes.
 
-**Out of scope (follow-on):** building 0091's flow/actors (this card only fixes the ontology + alignment
-so 0091 builds on a correct base); a visual ontology browser.
+**Out of scope (follow-on):** building 0091's flow/runner wiring (this card fixes the ontology base it
+needs); a visual ontology browser; bank-statement (kontoauszug) vertical.
 
 ## Steps (small, checkpointed)
 
-1. **Corrected vocab** — rewrite todo/document/invoice PredicateDefs to canonical places (done=mulno,
-   classified=cmima, summary↔, amount↔, vendor folded, owner-out-of-x1, named=cmene); predicate tests
-   assert each schema's places == the seed's canonical roles. **Checkpoint.**
-2. **Corrected TypeSpecs** — re-map TODO/DOCUMENT/INVOICE_SPEC fields → corrected places; engine unit
-   tests (mutate/query) still green on the new shapes. **Checkpoint.**
-3. **Data re-sync** — migration re-maps existing task/document/invoice predications to the corrected
-   places (park→convert→swap); SQL shows the new shapes; nothing orphaned. **Checkpoint.**
-4. **0091 new types on the corrected base** — register transaction(pleji)/match(mapti)/contact/booking
-   with the canonical structures. **Checkpoint.**
-5. **Verify** — places==seed assertion, engine round-trips, data_crud unchanged field interface, repo gates.
+1. **owned_by + corrected core vocab** — ponse owned_by (universal); todo (done=mulno) + document
+   (vreji/cmima/skicu/cupra/named) rewritten; predicate test asserts places == seed. **Checkpoint.**
+2. **Rich invoice vocab + spec** — janta/cmene/detri/jdima/cteki/parbi/pleji/pagbu(+line sub-type);
+   data_crud(invoice) round-trips with line items + taxes + payments. **Checkpoint.**
+3. **Contact (person/company) + transaction + booking** — prenu/kagni/judri; pleji transaction with
+   x4-settlement; SKR04 booked(cmima). **Checkpoint.**
+4. **Skills/tools alignment** — actors emit the rich predications + owned_by; data_crud interface stable. **Checkpoint.**
+5. **Data re-sync** — migrate existing predications to the corrected shapes; SQL proves shapes; counts preserved. **Checkpoint.**
+6. **Verify** — places==seed assertion, rich invoice round-trip, repo gates.
 
 ## Acceptance criteria
 
-- [ ] An assertion/test proves each `pred:*` schema's `x-gismu` + per-place roles == the gismu seed's canonical roles (todo/document/invoice + new).
-- [ ] No predicate stores the owner in a place unless the gismu's x1 is the agent (grep/inspect).
-- [ ] Corrected gismu applied: `done`=mulno, `classified`=cmima, `summary`/`amount` un-reversed, `vendor` folded into `invoice`(janta x4), `named`=cmene; `transaction`=pleji, `match`=mapti; contact/booking `gismu:null`.
-- [ ] 0088 engine round-trips (create→list) on the corrected TypeSpecs — tests exit 0.
-- [ ] Existing task/document/invoice predications re-synced to the corrected places — SQL shows the new shapes; counts preserved.
-- [ ] `data_crud`/`schemasPromptHint` field interface unchanged (chat unaffected) — verified.
-- [ ] `bun run check` + tests exit 0; aven-db untouched.
+- [ ] Test: every predicate's `x-gismu` + per-place roles == the gismu seed (todo/document/invoice/contact/tx/booking).
+- [ ] No owner stored in a place; every entity has an `owned_by`≡ponse predication (SQL).
+- [ ] Meaning-correct gismu applied: done=mulno, classified=cmima, produced=cupra, summary/amount un-reversed, named=cmene, address=judri, tax=cteki, rate=parbi, line=pagbu, quantity=klani, transaction=pleji, person=prenu, organization=kagni.
+- [ ] `invoice` round-trips the FULL doctype granularity (≥1 line item with desc/qty/price/amount, ≥1 tax rate, payments) via data_crud + SQL.
+- [ ] A transaction settles an invoice via `pleji.x4=invoice` (no `match` type); an invoice books to an SKR04 account via `booked`(cmima).
+- [ ] 0088 engine round-trips on all corrected specs; existing predications re-synced (counts preserved).
+- [ ] `data_crud`/`schemasPromptHint` field interface unchanged (chat unaffected); `bun run check` + tests exit 0; aven-db untouched.
 
 ## Verification
 
 ```bash
 (cd libs/aven-vibes && bun run check && bun test tests/predicate.test.ts)   # places == seed
-(cd libs/aven-ontology && bun run check && bun test)                        # engine on corrected specs
+(cd libs/aven-ontology && bun run check && bun test)
 (cd libs/betterauth && bun run check)
 # Live (running auth server):
-#   data_crud(todos|document|invoice, list) round-trips unchanged (field interface stable)
-#   SELECT data FROM data_value … WHERE name='invoice'  → janta places (x2 goods, x3 billed, x4 biller)
-#   SELECT data FROM data_value … WHERE name='amount'   → x1 = the amount (price), x2 = invoice
+#   data_crud(invoice, create {full doctype}) → list → number/total/due + tax[] + payments[] + lines[]
+#   SELECT data FROM data_value … name='line'      → pagbu (x1=line, x2=invoice)
+#   SELECT data FROM data_value … name='transaction' → pleji; reconciled row has x4 = an invoice id
+#   SELECT data FROM data_value … name='owned_by'  → ponse (x1=account, x2=entity)
 ```
 
 ## Hand-off
@@ -129,10 +161,13 @@ so 0091 builds on a correct base); a visual ontology browser.
 
 Newest entry first.
 
-- `2026-06-29` — Discovery. Triggered by review: `prenu` is person-only (wrong for company contacts),
-  and I'd been forcing owner-into-x1 + reversing attribute predicates. User chose a FULL ontology audit
-  first (pause 0091's build), and to also upgrade the skills/tools to match. Read the seed for every
-  used + candidate gismu; built the current→canonical table; derived 5 principles. Corrected: done=mulno,
-  classified=cmima, summary/amount un-reversed, vendor folded into janta.x4, owner→user_id, named=cmene;
-  transaction=pleji, match=mapti; contact/booking gismu:null (no fit). 5 checkpointed steps incl. a data
-  re-sync. Out of scope: 0091's flow/actors (builds on this corrected base). Created in discover/.
+- `2026-06-29` — Discovery, upgraded after deeper review. Beyond fixing places, the user pushed for
+  DOMAIN-correct modelling: ownership as a universal `owned_by`≡ponse predication (drop owner-from-x1 /
+  user_id-as-owner); contacts as person(prenu) vs company(kagni) + address(judri) + metadata; the FULL
+  invoice granularity of the extract doctype as predications (line=pagbu, tax=cteki, rate=parbi,
+  payment=pleji, total=jdima, qty=klani); tx↔invoice as the PAYMENT (pleji.x4), not an abstract match;
+  SKR04 booking as account membership (cmima). Re-read the seed e2e for ponse/cupra/prenu/kagni/judri/
+  cteki/parbi/pagbu/klani/pleji/cmene/mulno/cmima. produced=finti corrected → cupra. 6 checkpointed
+  steps incl. data re-sync. Out of scope: 0091 build, bank-statement vertical, ontology browser.
+- `2026-06-29` — Discovery (initial). Audit found owner-in-x1 + reversed attribute predicates + wrong
+  gismu (klesi→cmima, ranji-split→mulno). Created in discover/.
