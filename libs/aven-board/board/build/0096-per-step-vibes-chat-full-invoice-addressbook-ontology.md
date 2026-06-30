@@ -112,6 +112,18 @@ rg -n "company|person" libs/betterauth/src/ai.ts app/src/lib/shell/AddressbookVi
 
 Newest entry first.
 
+- `2026-06-30` — **BUILT + verified. All four fixes + all five proofs.** (1) `StepVibe` now takes direct
+  `vibe`+`data` props → the ONE renderer for chat AND Runs; `MainnetChat` delegates every per-step card
+  to `<StepVibe>` (the inline bookkeeping/doc-compare/invoice-match/invoice-booking branches are GONE),
+  so a chat invoice run shows all four cards — dashboard vibes (todos/tx/addressbook/…) stay inline.
+  (2) `BookkeepingVibe` reads `kind`+`summary` (not stale `docType`/`description`) → kind:invoice shows
+  'Rechnung'. (3) StepVibe's `invoice` branch renders the FULL `DocCompareVibe` (board 0064). (4) The
+  addressbook reads the ONTOLOGY: new `GET /api/data/type/:type` + client `listType`/`listContacts`
+  (merge company+person → the Contact shape); `AddressbookVibe` uses it — verified the ontology has 2
+  enriched companies (Fly.io, ActiveCampaign) it now shows (0 persons — those invoices had no
+  Ansprechpartner). svelte-check 0 errors, betterauth check 0. aven-db + data_schema/data_value
+  untouched. Auth server restarted so the running app picks it up. Out of scope (noted): the Belege
+  invoice list; DB-vibe authoring of these cards (board 0095 follow-on).
 - `2026-06-30` — Discovery. Four issues found live running invoice processing: chat renders only the
   classify card (its inline dispatch lacks ingest/invoice/contact branches); the classify card shows
   'Sonstiges' despite kind:'invoice' (BookkeepingVibe reads stale `docType`, not `kind`); the extract
