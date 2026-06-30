@@ -98,14 +98,19 @@ export const RUN_SKILL_TOOL = {
 	function: {
 		name: 'run_skill',
 		description:
-			'Run a skill on the attached document. Use when the user attaches a file/photo and asks to ' +
-			'ingest / process / file / read it. The server stores the raw artifact, classifies it via ' +
-			'vision, and saves a document with provenance back to the source. Default skill "doc-ingest". ' +
+			'Run a skill on the attached document — the ONLY way to ingest/process a file or photo in chat. ' +
+			'Use when the user attaches a file/photo and asks to ingest / process / file / read / book it. ' +
+			'Pick `skill`: "invoice-ingest" for an invoice/bill/receipt (stores the file, classifies, then ' +
+			'extracts the invoice fields), else "doc-ingest" for a general document (store + classify). The ' +
+			'server saves the result as ontology data with provenance back to the source. ' +
 			'Respond ONLY with the short sentence in `response`.',
 		parameters: {
 			type: 'object',
 			properties: {
-				skill: { type: 'string', description: 'The skill id to run. Default "doc-ingest".' },
+				skill: {
+					type: 'string',
+					description: 'The skill id: "invoice-ingest" for invoices/bills/receipts, else "doc-ingest".'
+				},
 				response: { type: 'string', description: 'A single-sentence human-facing reply.' }
 			},
 			required: ['response']
@@ -330,6 +335,10 @@ export const INVOICING_TOOLS = [
 ] as const
 
 /** Every tool the chat advertises: data CRUD + Composer + bookkeeping + doc extract + BWA + invoicing. */
+// board 0089/0090 — the legacy in-chat document path (`classify_document` + `extract_document`,
+// boards 0064/0065) is DEPRECATED in favour of `run_skill` → the generic flow runner. Filter them
+// out so the model can ONLY drive document/invoice ingestion through the new flows.
+const DEPRECATED_TOOLS = new Set(['classify_document', 'extract_document'])
 export const CHAT_TOOLS = [
 	...DATA_TOOLS,
 	...COMPOSER_TOOLS,
@@ -338,4 +347,4 @@ export const CHAT_TOOLS = [
 	...SKILL_TOOLS,
 	...FINANCE_TOOLS,
 	...INVOICING_TOOLS
-]
+].filter((t) => !DEPRECATED_TOOLS.has(t.function.name))

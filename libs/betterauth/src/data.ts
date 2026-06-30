@@ -277,7 +277,11 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 		.map((r) => `- ${r.name}: ${JSON.stringify(asJson(r.json_schema))}`)
 	// `todos` is virtual (backed by predications); describe its fields incl. due + priority.
 	lines.unshift(
-		'- todos: { "title": string, "done"?: boolean, "due"?: ISO-8601 date string, "priority"?: "high" | "medium" | "low" } — the ONE way to manage tasks; never query the underlying data types (task/valid/due/prioritized) directly.'
+		'- todos: { "title": string, "done"?: boolean, "due"?: "YYYY-MM-DD", "priority"?: "high" | "medium" | "low" } — the ONE way to manage tasks. ' +
+			'These are the ONLY fields — there is NO "valid", "from/until", or interval field; do not invent one. ' +
+			'`due` is the DEADLINE: for "due/by/until/till <date>", "tomorrow", "next week", etc., set `due` to the resolved ABSOLUTE date as "YYYY-MM-DD" (use the current date above). ' +
+			'`done` (boolean) = completed. `priority` is "high" | "medium" | "low". ' +
+			'Never query the underlying data types (task/valid/due/prioritized) directly.'
 	)
 	const now = new Date()
 	return `Current date & time: ${now.toISOString()} — resolve any relative dates the user mentions ("today", "tomorrow", "in 3 days", "next Monday") against THIS instant; emit absolute ISO dates.\n\nThe data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}\n\nIMPORTANT: whenever the user asks to see / show / list / check their todos OR tasks (any wording, any language), you MUST call data_crud with action="list", schema="todos" — this renders their live todo card. Never answer about todos/tasks from memory or with a plain-text list; always call the tool so the card appears.`
