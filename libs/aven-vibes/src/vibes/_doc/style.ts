@@ -57,9 +57,12 @@ const selectors: StyleDef['selectors'] = {
 		gridTemplateColumns: '1fr 1fr',
 		gap: '0.8rem'
 	},
-	// board 0097 — party cards + rows scaled up a notch to mimic the legacy OCR invoice layout.
+	// board 0097 — party cards + rows scaled up a notch to mimic the legacy OCR invoice layout; the
+	// card fill is TRANSPARENT so the host card's own background (bg-card) shows through — only the
+	// border delineates each card. Empty card grids collapse.
+	'.doc-cards:empty': { display: 'none' },
 	'.doc-card': {
-		background: 'var(--surface)',
+		background: 'transparent',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-card)',
 		padding: '0.9rem 1.05rem',
@@ -67,6 +70,20 @@ const selectors: StyleDef['selectors'] = {
 		flexDirection: 'column',
 		gap: '0.2rem'
 	},
+	// PANEL — wraps a section's key/value list + table as ONE card (Positionen, Summen). Transparent
+	// fill (bg looks through); empty panels (e.g. the Parteien section, cards only) are hidden.
+	'.doc-panel': {
+		background: 'transparent',
+		border: '1px solid var(--border)',
+		borderRadius: 'var(--radius-card)',
+		padding: '0.85rem 1.05rem',
+		display: 'flex',
+		flexDirection: 'column',
+		gap: '0.5rem'
+	},
+	'.doc-panel:not(:has(.doc-kv-row)):not(:has(td))': { display: 'none' },
+	'.doc-kv:empty': { display: 'none' },
+	'.doc-table:not(:has(td)):not(:has(th))': { display: 'none' },
 	'.doc-card-title': {
 		fontSize: 'var(--fs-micro)',
 		fontWeight: '600',
@@ -100,6 +117,7 @@ const selectors: StyleDef['selectors'] = {
 		borderBottom: '1px solid var(--border)',
 		padding: '0.35rem 0'
 	},
+	'.doc-kv-row:last-child': { borderBottom: 'none' },
 	'.doc-kv-k': {
 		color: 'var(--muted)',
 		flexShrink: '0'
