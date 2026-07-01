@@ -148,6 +148,10 @@ function hitlVerb(tool: string): { confirm: string; decline: string; danger: boo
 /** Append a short assistant note (e.g. the publish result) into the conversation. */
 function appendNote(text: string): void {
 	messages = [...messages, { id: nextId++, role: 'assistant', text }]
+}
+/** board 0099 — the delete actor: flow a todos-deleted summary card showing what was removed. */
+function appendVibe(vibe: string, vibeData?: Record<string, unknown>): void {
+	messages = [...messages, { id: nextId++, role: 'assistant', text: '', vibe, vibeData }]
 	scrollToBottom()
 }
 function declineHitl(req: HitlRequest): void {
@@ -176,6 +180,13 @@ async function confirmHitl(req: HitlRequest): Promise<void> {
 		if (req.tool === 'deploy_website') {
 			appendNote(`✅ Published — live at ${data.result?.url ?? 'www.next.aven.ceo'}`)
 		} else {
+			// board 0099 — a confirmed todos delete streams a todos-deleted card (which task was removed),
+			// then refreshes the live list. Every other delete just refreshes.
+			if (req.action.schema === 'todos') {
+				appendVibe('todos-deleted', {
+					items: [{ id: String(req.action.id ?? ''), title: String(req.action._title ?? '') }]
+				})
+			}
 			void queryClient.invalidateQueries({ queryKey: ['data'] })
 		}
 	} catch (e) {

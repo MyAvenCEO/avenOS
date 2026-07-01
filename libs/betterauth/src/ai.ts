@@ -1237,12 +1237,26 @@ function streamWithTools(opts: {
 						if (parsed.action === 'delete') {
 							const schema = typeof parsed.schema === 'string' ? parsed.schema : 'data'
 							const id = typeof parsed.id === 'string' ? parsed.id : ''
+							// board 0099 — the delete actor shows WHICH todo was removed, so snapshot its title now and
+							// carry it in the HITL action; the client renders a todos-deleted card on confirm. Also gives
+							// the confirm card a human label instead of a bare id.
+							let delTitle = ''
+							if (schema === 'todos' && id) {
+								const cur = (await executeDataTool(userId, {
+									schema: 'todos',
+									action: 'list'
+								})) as { items?: Record<string, unknown>[] }
+								delTitle = String((cur.items ?? []).find((r) => String(r.id) === id)?.title ?? '')
+							}
 							emit({
 								aven_hitl: {
 									id: tc.id,
 									tool: 'data_crud',
-									label: `Delete from "${schema}"${id ? ` (#${id.slice(0, 8)})` : ''}?`,
-									action: parsed
+									label:
+										schema === 'todos' && delTitle
+											? `Delete todo "${delTitle}"?`
+											: `Delete from "${schema}"${id ? ` (#${id.slice(0, 8)})` : ''}?`,
+									action: { ...parsed, ...(delTitle ? { _title: delTitle } : {}) }
 								}
 							})
 							msgs.push({
