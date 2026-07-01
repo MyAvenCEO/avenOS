@@ -131,6 +131,19 @@ bun run lint                              # biome
 
 Newest entry first.
 
+- `2026-07-02` — BUILD (measurable goal MET + proven green). The deterministic engine is done:
+  `libs/betterauth/src/queries.ts` — query + mutation SPEC languages as fixed AJV meta-schemas;
+  `compileQuery` turns a validated filter+join+count spec + params → ONE parameterized SQL over
+  `data_value(predicate,x1..x5)` (values bound, columns allow-listed places, ops allow-listed — a
+  malicious value can never become SQL); `runMutation` runs a validated insert/delete op list as ONE
+  transaction (all-or-nothing), destructive flagged for HITL. `libs/betterauth/tests/queries.test.ts`
+  (5 tests, live DB) proves it: filter+join+count returns the right rows incl. a HAVING threshold; a
+  malformed spec is AJV-rejected; a transfer mutation applies transactionally and a bad op ROLLS BACK
+  with no partial write; the injection value stays a bound param. **Verified:** betterauth 9 tests / 0
+  fail, app svelte-check 0, skills tsc 0. **REMAINING (human-acceptance, non-deterministic — the card's
+  out-of-metric slice):** the `data_queries`/`data_mutations` persistence tables + the GLM
+  `create_query`/`create_mutation`/`run_query`/`run_mutation` actors on the brain skill, their context
+  providers + result/diff vibes + runs. Follow-on build; the engine they sit on is proven.
 - `2026-07-02` — Discovery. Uncovered the goal: the next self-extending-data layer after 0100's dynamic
   schema — dynamic QUERIES + MUTATIONS as validated JSON specs over the x1–x5 store, GLM-authored, run by a
   generic engine. Confirmed load-bearing decisions: (1) both queries AND mutations this card; (2) two tables
