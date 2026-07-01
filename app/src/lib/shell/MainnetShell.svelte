@@ -12,13 +12,15 @@ import MainnetChat from '$lib/shell/MainnetChat.svelte'
 import MainnetDb from '$lib/shell/MainnetDb.svelte'
 import MainnetFly from '$lib/shell/MainnetFly.svelte'
 import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
+import RunsView from '$lib/shell/RunsView.svelte'
+import SkillsView from '$lib/shell/SkillsView.svelte'
 import { nav } from '$lib/shell/nav.svelte'
 
 // Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | DB | Fly on the left; weekly
 // MINDS + the signed-in account NAME on the right. Clicking the name opens the Account Settings
 // view (profile, plans, billing, usage, vault keys, Admin for admins, log out). The website
 // Composer lives under Vibes now. board 0053/0054/0055.
-type Tab = 'chat' | 'vibes' | 'db' | 'fly' | 'mail'
+type Tab = 'chat' | 'vibes' | 'db' | 'fly' | 'skills' | 'runs' | 'mail'
 type SettingsCategory = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'admin'
 let tab = $state<Tab>('chat')
 let settings = $state(false)
@@ -80,7 +82,15 @@ const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'vibes', label: t('mainnet.nav.vibes') },
 	{ id: 'db', label: t('mainnet.nav.db') },
 	{ id: 'fly', label: t('mainnet.nav.fly') },
-	...(isAdmin ? [{ id: 'mail' as Tab, label: 'Mail' }] : [])
+	// board 0099 — Skills + Runs (actor-model explorer) are admin-only top-nav tabs now (moved up
+	// from the Chat sub-tabs), alongside admin-only Mail.
+	...(isAdmin
+		? [
+			{ id: 'skills' as Tab, label: t('mainnet.skills.tab') },
+			{ id: 'runs' as Tab, label: t('mainnet.runs.tab') },
+			{ id: 'mail' as Tab, label: 'Mail' }
+		]
+		: [])
 ])
 
 function openTab(id: Tab): void {
@@ -153,11 +163,19 @@ function openTab(id: Tab): void {
 	{#if settings}
 		<AccountSettings category={settingsCategory} />
 	{:else if tab === 'chat'}
-		<MainnetChat {isAdmin} />
+		<MainnetChat />
 	{:else if tab === 'vibes'}
 		<MainnetVibes />
 	{:else if tab === 'fly'}
 		<MainnetFly />
+	{:else if tab === 'skills'}
+		<div class="flex min-h-0 min-w-0 flex-1 p-4">
+			<SkillsView containerName="aven-vibes-skills-tab" />
+		</div>
+	{:else if tab === 'runs'}
+		<div class="flex min-h-0 min-w-0 flex-1 p-4">
+			<RunsView containerName="aven-vibes-runs-tab" />
+		</div>
 	{:else if tab === 'mail'}
 		<MailInbox />
 	{:else}
