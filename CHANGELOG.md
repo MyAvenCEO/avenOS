@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.1-next.1...v) (2026-07-01)
+
+
+### Features
+
+* **app:** Apple Pencil scratchpad — a /draw main (in-memory web canvas) ([#28](https://github.com/MyAvenCEO/avenOS/issues/28)) ([3d7ec1a](https://github.com/MyAvenCEO/avenOS/commit/3d7ec1a0a40d4ec2f47fa8e5a9958cfe5a6916ee))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.23-next.1...v) (2026-07-01)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.7...v) (2026-06-23)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.6...v) (2026-06-22)
