@@ -37,6 +37,8 @@ const contact = $derived(
 		name?: string
 		matchedBy?: string
 		isNew?: boolean
+		email?: string
+		phone?: string
 		ust_id?: string
 		tax_number?: string
 		iban?: string
@@ -158,6 +160,18 @@ const STATE_CHIP: Record<NodeState, string> = {
 				>Adressbuch ✓</span
 			>
 		</div>
+		{#if contact.email}
+			<div class="flex justify-between gap-3 text-sm">
+				<span class="text-muted-foreground shrink-0">E-Mail</span
+				><span class="text-foreground truncate text-right">{contact.email}</span>
+			</div>
+		{/if}
+		{#if contact.phone}
+			<div class="flex justify-between gap-3 text-sm">
+				<span class="text-muted-foreground shrink-0">Telefon</span
+				><span class="text-foreground text-right">{contact.phone}</span>
+			</div>
+		{/if}
 		{#if contact.ust_id}
 			<div class="flex justify-between text-sm">
 				<span class="text-muted-foreground">USt-IdNr</span

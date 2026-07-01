@@ -163,12 +163,22 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 			const header = (raw.header ?? {}) as Record<string, unknown>
 			const totals = (raw.totals ?? {}) as Record<string, unknown>
 			const vendor = (raw.vendor ?? {}) as Record<string, unknown>
+			// The vision model scatters the same fact across paths — it fills EITHER the single `bank`
+			// block OR `banking_accounts[]`, and often drops email/phone/tax into the `org_public_record`
+			// imprint instead of the root. Harvest from EVERY path so nothing extracted is lost. board 0097.
+			const bank = (vendor.bank ?? {}) as Record<string, unknown>
 			const banking = (Array.isArray(vendor.banking_accounts) ? vendor.banking_accounts : []) as Record<string, unknown>[]
-			const iban = str(banking[0]?.iban)
-			const vatId = str(vendor.tax_id) // USt-IdNr / VAT-ID (cmene)
-			const taxNumber = str(vendor.tax_number) // Steuernummer (cmene) — distinct from the VAT-ID
+			const opr = (vendor.org_public_record ?? {}) as Record<string, unknown>
+			const channels = (Array.isArray(opr.contact_channels) ? opr.contact_channels : []) as Record<string, unknown>[]
+			const oprIds = (Array.isArray(opr.identifiers) ? opr.identifiers : []) as Record<string, unknown>[]
+			const chan = (k: string): string => str(channels.find((c) => str(c.channel) === k)?.value)
+			const oprId = (cat: string): string => str(oprIds.find((i) => str(i.category) === cat)?.value)
+			const iban = str(banking[0]?.iban) || str(bank.iban)
+			const vatId = str(vendor.tax_id) || oprId('vat_id') // USt-IdNr / VAT-ID
+			const taxNumber = str(vendor.tax_number) || oprId('national_tax_number') // Steuernummer
 			const name = str(vendor.name)
-			const email = str(vendor.email)
+			const email = str(vendor.email) || chan('email')
+			const phone = str(vendor.phone) || chan('phone')
 			const postal = [str(vendor.street), [str(vendor.postal_code), str(vendor.city)].filter(Boolean).join(' '), str(vendor.country)]
 				.filter(Boolean)
 				.join(', ')
@@ -193,19 +203,40 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 				const c = (await executeDataTool(uid, {
 					schema: 'company',
 					action: 'create',
-					items: [{ name, email, phone: str(vendor.phone), iban, vat_id: vatId, tax_number: taxNumber, postal }]
+					items: [{ name, email, phone, iban, vat_id: vatId, tax_number: taxNumber, postal }]
 				})) as { created?: string[] }
 				companyId = c.created?.[0]
 				for (const [label, value] of [
 					['Name', name],
 					['E-Mail', email],
-					['Telefon', str(vendor.phone)],
+					['Telefon', phone],
 					['IBAN', iban],
 					['USt-IdNr', vatId],
 					['Steuernummer', taxNumber],
 					['Adresse', postal]
 				] as const)
 					if (value) added.push(label)
+			} else if (companyId && matched) {
+				// BACKFILL (board 0097): the company already exists but a later invoice extracted fields it was
+				// missing (e.g. the first run had no IBAN, this one does). Patch only the EMPTY fields so a re-run
+				// enriches rather than no-ops — the discriminated spec updates just that channel/id, never
+				// clobbering a value already on file.
+				const patch: Record<string, string> = {}
+				for (const [field, label, value] of [
+					['email', 'E-Mail', email],
+					['phone', 'Telefon', phone],
+					['iban', 'IBAN', iban],
+					['vat_id', 'USt-IdNr', vatId],
+					['tax_number', 'Steuernummer', taxNumber],
+					['postal', 'Adresse', postal]
+				] as const) {
+					if (value && !str(matched[field])) {
+						patch[field] = value
+						added.push(label)
+					}
+				}
+				if (Object.keys(patch).length > 0)
+					await executeDataTool(uid, { schema: 'company', action: 'update', items: [{ id: companyId, ...patch }] })
 			}
 			// 2. Ansprechpartner: a person who REPRESENTS the company
 			const contactName = str(vendor.contact_name)
@@ -241,6 +272,8 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 					name,
 					isNew,
 					matchedBy,
+					email: email || undefined,
+					phone: phone || undefined,
 					ust_id: vatId || undefined,
 					tax_number: taxNumber || undefined,
 					iban: iban || undefined,
