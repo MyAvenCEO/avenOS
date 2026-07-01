@@ -712,7 +712,7 @@ function handleTranscribeError(message: string): void {
 							{:else if message.vibe === 'addressbook'}
 								<!-- Addressbook: contacts list + detail (Stammdaten / Belege). board 0082. -->
 								<div
-									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
+									class="relative left-1/2 max-h-[85vh] w-[min(64rem,92vw)] max-w-none -translate-x-1/2 overflow-y-auto"
 								>
 									<AddressbookVibe containerName={`aven-vibes-chat-${message.id}`} />
 								</div>
@@ -728,7 +728,7 @@ function handleTranscribeError(message: string): void {
 								<!-- ALL per-step cards (ingest/classify/extract/enrich/doc-compare/match/booking) via
 								     the ONE shared StepVibe — same component the Runs view uses. board 0096. -->
 								<div
-									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
+									class="relative left-1/2 max-h-[85vh] w-[min(56rem,92vw)] max-w-none -translate-x-1/2 overflow-y-auto"
 								>
 									<StepVibe vibe={message.vibe} data={message.vibeData} />
 								</div>
