@@ -160,13 +160,30 @@ cd app && bun --bun x svelte-check --tsconfig ./tsconfig.json
     rail + `MainnetChat` dispatch = todos modes + composer only; `StepVibe` reduced to a generic actor-step
     card (+ minecraft demo) for the Runs explorer; `client.ts` dropped `listContacts`/`listType` + contact
     import. (commit: strip frontend.)
-  - **REMAINING (backend teardown — its own clean pass):** gut `ai.ts` of the doc/finance path
-    (`extractDocFields`/`enrichAddressbookFromDoc`/`performExtraction`/`ensureDocSchema` + emitVibe
-    addressbook/invoice/bwa/bookkeeping/tx + the `run_skill` doc branch + imports of aven-vibes
-    contact/contact-match/invoice-doc/invoice-number); reduce `skills-run.ts` `skillActors` to generic
-    (drop `visionExtract`/`loadExtractConfig`/`DOCTYPE_FLOW`/file-based `runSkillForUser`); clean
-    `app/src/lib/aven-ui/vibe-views.ts` + `app/src/lib/avendb/invoice-pdf.ts`; delete the aven-vibes
-    `_doc/bank-statement/bookkeeping/contract/doc-compare/invoice/contact*` modules + their package.json
-    exports + tests; then a forward-only migration DROPping the non-todos flows (book/capture/capture-bank/
-    kontoauszug/invoice/doc-ingest/project-planner) + predicate_types (company/person/invoice/document/
-    transaction) + their data. Deferred here to avoid a rushed red-tree surgery on the 1500-line `ai.ts`.
+  - **Tool-actor architecture (config+behavior co-located).** New `@avenos/skills/tools` subpath: a
+    `ToolActor = { definition, handle(ctx, args) }` with server caps injected via `ctx` (pure/portable,
+    same DI shape as the flow actors). `data_crud` is the reference actor — the whole Todos hub lives in
+    its handler. `ai.ts`'s `streamWithTools` is now a thin loop: `tools = chatToolDefinitions()`, dispatch
+    each tool_call via the registry, plumb the returned `{content, reply, vibe, hitl}`. (commits: tool-actor
+    scaffold; ai.ts → registry dispatch.)
+  - **Backend teardown DONE + green.** Deleted from `ai.ts`: run_skill, show_finances, the contact/invoicing
+    block, classify/extract_document, the inline data_crud block + the orphaned extractDocFields/
+    performExtraction/enrichAddressbookFromDoc/contact helpers + every doc/finance import. `skills-run.ts`
+    reduced to the generic runner (empty `skillActors`; dropped visionExtract/loadExtractConfig/DOCTYPE_FLOW).
+    `aven-vibes` is todos-only: deleted the 6 doc vibe modules + contact/contact-match/invoice-number/
+    doctypes/tools + 8 tests + their exports; **SKR04 preserved** (moved to `src/skr04.json`). Deleted the
+    orphaned `invoice-pdf.ts`; migration 0030 no longer imports the deleted doctypes.
+  - **DB strip (migration 0046) — verified on a throwaway Neon branch forked from dev.** Drops the 7
+    doc/finance flows + their dead flow_run traces, un-registers the 5 composite predicate_types, hard-deletes
+    the 28 exclusive-vertical data_schemas + their 332 values, orphan-cleans the SHARED owned_by/due rows (49,
+    todos rows would survive). End state proven: `flow(none-then-todos)`, `predicate_type(todos)`,
+    `data_schema(done,due,owned_by,prioritized,task)`, 0 orphans.
+  - **Skills/Runs UI → actor hub (migration 0047).** Seeded the `todos` flow as a HUB: 4 nodes
+    (read/create/edit/delete), **`edges:[]`**, each tagged with its `data_crud` tool + vibe state; delete is
+    `hitl`. FlowGraph lays all four in column 0 → SkillsView renders 4 disconnected actor cards (a hub, not a
+    pipeline). RunsView stays the flow-run explorer; the hub runs through chat, so its "runs" are the chat
+    vibe cards (no flow_run rows) — the stale doc-flow runs were cleared in 0046.
+  - **Green everywhere:** skills/aven-vibes/betterauth tsc 0, app svelte-check 0 errors, skills 18 + aven-vibes
+    16 tests pass. Three layers now cleanly separated: **tool** (config+handler → `@avenos/skills/tools`),
+    **vibe** (view+style+own sandboxed `logic.js` → `@avenos/aven-vibes/vibes/*`), **orchestration** (`ai.ts`
+    = loop + registry, owns neither).
