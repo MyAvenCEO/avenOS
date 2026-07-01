@@ -1,12 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { create, query, remove, update } from '@avenos/aven-ontology'
 import type { Cell, PredicationStore, TypeSpec } from '@avenos/aven-ontology'
-import {
-	contactPredicateSchemas,
-	documentPredicateSchemas,
-	invoicePredicateSchemas,
-	todoPredicateSchemas
-} from '@avenos/aven-vibes/predicate'
+import { todoPredicateSchemas } from '@avenos/aven-vibes/predicate'
 import Ajv from 'ajv'
 import type { Context } from 'hono'
 import { sql } from 'kysely'
@@ -304,17 +299,13 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 	return `Current date & time: ${now.toISOString()} — resolve any relative dates the user mentions ("today", "tomorrow", "in 3 days", "next Monday") against THIS instant; emit absolute ISO dates.\n\nThe data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}${todosSnapshot}\n\nIMPORTANT: the current todos are listed above — for update/delete, reference their ids DIRECTLY (one tool call, no preceding list). Only call data_crud action="list" schema="todos" when the user explicitly asks to SEE / show / list / check their todos (any wording, any language) — that re-renders their live card. Never answer about todos from memory with a plain-text list.`
 }
 
-/** Ensure the per-user gismu DATA-TYPE schemas (task/valid/due/prioritized) exist + are in sync.
- *  Returns predicate-name → schema_id — the map the engine's store resolves predicates through. */
+/** Ensure the per-user gismu DATA-TYPE schemas (task/owned_by/done/due/prioritized) exist + are in sync.
+ *  Returns predicate-name → schema_id — the map the engine's store resolves predicates through.
+ *  board 0099 — todos ONLY: the document/invoice/contact verticals were stripped, so seeding their
+ *  predicate schemas here is what kept re-creating the legacy empty schemas after every migration. */
 async function ensurePredicateSchemas(uid: string): Promise<Record<string, string>> {
 	const ids: Record<string, string> = {}
-	// Seed every registered type's atomic data-type schemas (todo + document + invoice). board 0087/0089/0090.
-	for (const { name, jsonSchema } of [
-		...todoPredicateSchemas(),
-		...documentPredicateSchemas(),
-		...invoicePredicateSchemas(),
-		...contactPredicateSchemas()
-	]) {
+	for (const { name, jsonSchema } of todoPredicateSchemas()) {
 		const existing = await db()
 			.selectFrom('data_schema')
 			.select('id')

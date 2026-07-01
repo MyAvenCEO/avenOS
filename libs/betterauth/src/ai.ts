@@ -70,6 +70,29 @@ function parseTextToolCalls(content: string): { id: string; name: string; args: 
 	return out
 }
 
+/**
+ * Guarantee a tool-call's `arguments` are valid JSON before we echo the assistant turn back to Tinfoil.
+ * gemma sometimes streams a TRUNCATED tool call (e.g. an unterminated string when it hits a token cap or
+ * multi-item op); forwarding that raw makes the NEXT round 400 ("Unterminated string…") and kills the
+ * whole stream. Re-serialize a lenient parse; if it's unsalvageable, fall back to `{}` so the tool just
+ * reports an error and the model can retry — never a hard 400. board 0099.
+ */
+function sanitizeToolArgs(raw: string): string {
+	const s = raw || '{}'
+	try {
+		JSON.parse(s)
+		return s
+	} catch {
+		try {
+			const repaired = s.replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"')
+			JSON.parse(repaired)
+			return repaired
+		} catch {
+			return '{}'
+		}
+	}
+}
+
 export async function aiChat(c: Context): Promise<Response> {
 	const session = await auth.api.getSession({ headers: c.req.raw.headers })
 	if (!session) return c.json({ error: 'unauthorized' }, 401)
@@ -378,6 +401,9 @@ function streamWithTools(opts: {
 						callList = parseTextToolCalls(roundContent)
 					}
 					if (callList.length === 0) break // model gave its final answer (already streamed)
+					// Repair any truncated/malformed tool-call JSON BEFORE echoing the turn back — a raw
+					// unterminated string 400s the next Tinfoil round + kills the stream. board 0099.
+					for (const tc of callList) tc.args = sanitizeToolArgs(tc.args)
 					// Tool round: record the assistant tool-call turn, run each tool, feed results back.
 					msgs.push({
 						role: 'assistant',
