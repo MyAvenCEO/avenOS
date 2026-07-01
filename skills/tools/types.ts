@@ -26,11 +26,44 @@ export type DataCrudArgs = {
 	response?: string
 }
 
+/** One positional place of a minted predicate (board 0100) — the JSON shape GLM returns + we compile/AJV. */
+export type PlaceDefJSON = {
+	pos: string
+	role: string
+	gloss: string
+	kind: 'ref' | 'value'
+	type?: string
+	references?: string
+	required?: boolean
+}
+/** A minted x1–x5 predicate definition (the gismu's FULL place structure). */
+export type PredicateDefJSON = {
+	predicate: string
+	gismu?: string | null
+	gloss?: string
+	places: PlaceDefJSON[]
+}
+
 /** Runtime capabilities injected by the server; a tool-actor closes over these instead of importing them. */
 export type ToolCtx = {
 	userId: string
 	/** Execute a schema-validated CRUD op against the signed-in user's store (betterauth executeDataTool). */
 	data(args: DataCrudArgs): Promise<unknown>
+	/** board 0100 — the ontology actor's server caps (GLM-5.2 mint + data_schema registry). Injected only
+	 *  when the ontology tool is dispatched; other actors ignore it. */
+	ontology?: {
+		/** The predicates already in the data_schema registry (name + gloss). */
+		list(): Promise<{ name: string; gloss?: string }[]>
+		/** Ask GLM-5.2 (with the full gismu dictionary) to REUSE an existing predicate or mint a new
+		 *  x1–x5 PredicateDef with its gismu's FULL place structure. */
+		mint(request: string, existing: { name: string; gloss?: string }[]): Promise<{
+			reuse?: string
+			def?: PredicateDefJSON
+			error?: string
+		}>
+		/** compilePredicate → AJV self-validate → persist to data_schema. Returns the stored name + place count. */
+		save(def: PredicateDefJSON): Promise<{ name: string; places: number }>
+	}
 }
 
 /** What a tool-actor hands back to the chat loop. The loop does the plumbing (SSE emit, persistence). */

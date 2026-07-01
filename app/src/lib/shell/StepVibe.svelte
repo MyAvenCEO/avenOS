@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { Flow, NodeState, RecipeNode, TraceStep } from '@avenos/aven-skills'
+import OntologyVibe from '$lib/shell/OntologyVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
 // board 0083/0099 — the optional "vibe view" of a single flow step: a user-facing rendering of what an
@@ -55,6 +56,9 @@ const STATE_CHIP: Record<NodeState, string> = {
 			| 'deleted'}
 		data={vibeData as { items?: { id?: string; title?: string }[]; diffs?: [] }}
 	/>
+{:else if vibe.startsWith('ontology')}
+	<!-- board 0100 — the ontology actor vibes render through OntologyVibe (chat, Runs, Skills). -->
+	<OntologyVibe mode={vibe === 'ontology' ? 'read' : 'created'} data={vibeData as never} />
 {:else if !vibe && (!node || !step)}
 	<div class="text-muted-foreground flex h-full items-center justify-center text-sm">
 		Kein Schritt ausgewählt.

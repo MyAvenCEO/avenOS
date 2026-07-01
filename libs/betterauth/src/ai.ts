@@ -1,5 +1,6 @@
 import { chatToolDefinitions, TOOL_ACTORS } from '@avenos/skills/tools'
 import { recordActorRun } from './skills-run'
+import { ontologyCaps } from './ontology'
 import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
 import type { Context } from 'hono'
@@ -426,7 +427,14 @@ function streamWithTools(opts: {
 						// new tool = one module + one registry line, no loop edit. Server caps are injected via ctx.
 						const actor = TOOL_ACTORS[tc.name]
 						if (actor) {
-							const out = await actor.handle({ userId, data: (a) => executeDataTool(userId, a) }, parsed)
+							const out = await actor.handle(
+								{
+									userId,
+									data: (a) => executeDataTool(userId, a),
+									ontology: ontologyCaps(userId) // board 0100 — GLM mint + data_schema registry caps
+								},
+								parsed
+							)
 							if (out.hitl) {
 								// HITL: show a confirm/decline card and DON'T execute (the delete actor). aiConfirmAction runs it.
 								emit({ aven_hitl: { id: tc.id, tool: tc.name, label: out.hitl.label, action: out.hitl.action } })
@@ -460,6 +468,16 @@ function streamWithTools(opts: {
 										vibe: schema,
 										vibeData: data,
 										outputs: ['todos']
+									})
+								} else if (schema.startsWith('ontology')) {
+									// board 0100 — each ontology actor firing = a run of the `ontology` skill (read/create).
+									void recordActorRun(userId, {
+										flowId: 'ontology',
+										nodeId: schema === 'ontology' ? 'read' : 'create',
+										label: out.detail ?? 'ontology',
+										vibe: schema,
+										vibeData: data,
+										outputs: ['predicate']
 									})
 								}
 							}

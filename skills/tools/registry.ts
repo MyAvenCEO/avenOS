@@ -6,11 +6,13 @@
 
 import { COMPOSER_TOOLS } from '../composer/tools'
 import { dataCrud } from './data-crud'
+import { ontology } from './ontology'
 import type { ToolActor, ToolDefinition } from './types'
 
-/** name → tool-actor. The Todos actor hub is the whole `data_crud` behavior. */
+/** name → tool-actor. Todos hub = `data_crud`; the dynamic ontology skill = `ontology` (board 0100). */
 export const TOOL_ACTORS: Record<string, ToolActor> = {
-	data_crud: dataCrud
+	data_crud: dataCrud,
+	ontology
 }
 
 /** Every tool the chat advertises: the registered actors + the Composer configs (handled inline server-side). */

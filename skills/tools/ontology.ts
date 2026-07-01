@@ -3,7 +3,89 @@
 // pre-instructions that force the mint to carry the chosen gismu's FULL x1–x5 place structure. The GLM
 // wiring + persistence live in the server adapter; keeping this pure makes it unit-testable.
 
+import type { ToolActor, ToolDefinition, ToolResult } from './types'
+
 export type ExistingPredicate = { name: string; gloss?: string; keywords?: string[] }
+
+/** The chat tool that drives the ontology actor: read the predicate registry, or create (mint/reuse) a
+ *  new x1–x5 relationship from natural language. The actual minting runs on GLM-5.2 server-side. board 0100. */
+export const ONTOLOGY_TOOL: ToolDefinition = {
+	type: 'function',
+	function: {
+		name: 'ontology',
+		description:
+			'Read the ontology (the x1–x5 Lojban predicate/relationship types the user already has) or CREATE ' +
+			'a new relationship type from a plain-language description. Use `create` when the user wants a NEW ' +
+			'kind of relationship/connection between things (e.g. "people can own companies", "a project has ' +
+			'members") — a specialist model mints the gismu-based x1–x5 predicate, reusing an existing one if it ' +
+			'already fits. Use `read` to show the existing relationship types. This is about SCHEMA (relationship ' +
+			'kinds), not individual data rows — for todos and data use data_crud.',
+		parameters: {
+			type: 'object',
+			properties: {
+				action: { type: 'string', enum: ['read', 'create'] },
+				request: {
+					type: 'string',
+					description:
+						'For create: the relationship to define, in plain language (e.g. "people can own companies").'
+				},
+				response: { type: 'string', description: 'A short human-facing reply to show the user.' }
+			},
+			required: ['action']
+		}
+	}
+}
+
+export const ontology: ToolActor = {
+	definition: ONTOLOGY_TOOL,
+	async handle(ctx, raw): Promise<ToolResult> {
+		const args = raw as { action?: string; request?: string }
+		if (!ctx.ontology) {
+			return { content: { ok: false, error: 'ontology capabilities not available on this server' } }
+		}
+		// READ — the predicate registry.
+		if (args.action === 'read') {
+			const predicates = await ctx.ontology.list()
+			return {
+				detail: 'read ontology',
+				content: { ok: true, count: predicates.length, predicates },
+				vibe: { schema: 'ontology', data: { predicates } }
+			}
+		}
+		// CREATE — dedup (deterministic gate) → GLM mint (reuse-or-new) → compile+AJV+persist.
+		const request = String(args.request ?? '').trim()
+		if (!request) return { content: { ok: false, error: 'create needs a `request`' } }
+		const existing = await ctx.ontology.list()
+		const preDup = findExistingPredicate(
+			{ name: request, keywords: request.toLowerCase().split(/\s+/) },
+			existing
+		)
+		if (preDup) {
+			return {
+				detail: 'reuse predicate',
+				content: { ok: true, reused: preDup.name, note: 'An existing predicate already fits — reused it.' },
+				vibe: { schema: 'ontology-created', data: { reused: preDup.name, predicates: existing } }
+			}
+		}
+		const minted = await ctx.ontology.mint(request, existing)
+		if (minted.reuse) {
+			return {
+				detail: 'reuse predicate',
+				content: { ok: true, reused: minted.reuse },
+				vibe: { schema: 'ontology-created', data: { reused: minted.reuse, predicates: existing } }
+			}
+		}
+		if (!minted.def) {
+			return { content: { ok: false, error: minted.error ?? 'could not mint a predicate' } }
+		}
+		const saved = await ctx.ontology.save(minted.def)
+		return {
+			detail: 'create predicate',
+			content: { ok: true, created: saved.name, places: saved.places },
+			vibe: { schema: 'ontology-created', data: { created: minted.def } }
+		}
+	}
+}
 
 const norm = (s: string): string => s.toLowerCase().trim()
 
