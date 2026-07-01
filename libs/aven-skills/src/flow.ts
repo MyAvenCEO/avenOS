@@ -137,6 +137,8 @@ export type NodeContext = {
 	label: string
 	/** the registered provider key the `/api/context/:provider` endpoint resolves (e.g. "gismu"). */
 	provider: string
+	/** optional argument the provider needs (e.g. provider "type" + arg "todos" → that type's recipe). */
+	arg?: string
 	/** optional one-line note (size / source / what it's for). */
 	note?: string
 }

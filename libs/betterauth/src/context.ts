@@ -15,7 +15,9 @@ export type ContextPayload = {
 	/** free-form metadata shown as chips (source, size, count…). */
 	meta?: Record<string, unknown>
 }
-export type ContextProvider = (uid: string) => Promise<ContextPayload>
+/** A provider resolves a context key to its content. `arg` lets one provider serve many resources of a
+ *  kind (e.g. the "type" provider with arg="todos" → the todos projection recipe + schemas). */
+export type ContextProvider = (uid: string, arg?: string) => Promise<ContextPayload>
 
 const providers = new Map<string, ContextProvider>()
 
@@ -24,7 +26,7 @@ export function registerContextProvider(key: string, fn: ContextProvider): void 
 	providers.set(key, fn)
 }
 
-/** GET /api/context/:provider — session-gated; resolves the registered provider to its actual content. */
+/** GET /api/context/:provider?arg=… — session-gated; resolves the registered provider to its content. */
 export async function contextRoute(c: Context): Promise<Response> {
 	const session = await auth.api.getSession({ headers: c.req.raw.headers })
 	if (!session) return c.json({ error: 'unauthorized' }, 401)
@@ -32,7 +34,7 @@ export async function contextRoute(c: Context): Promise<Response> {
 	const fn = key ? providers.get(key) : undefined
 	if (!fn) return c.json({ error: `no context provider "${key ?? ''}"` }, 404)
 	try {
-		return c.json({ provider: key, ...(await fn(session.user.id)) })
+		return c.json({ provider: key, ...(await fn(session.user.id, c.req.query('arg'))) })
 	} catch (e) {
 		return c.json({ error: e instanceof Error ? e.message : String(e) }, 500)
 	}

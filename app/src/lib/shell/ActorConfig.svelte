@@ -25,13 +25,15 @@ const tools = $derived(
 
 // Lazily fetch a declared context resource's ACTUAL content when its <details> is opened. board 0100.
 let ctxCache = $state<Record<string, NodeContextPayload | 'loading' | 'error'>>({})
-async function fetchCtx(provider: string): Promise<void> {
-	if (ctxCache[provider]) return
-	ctxCache[provider] = 'loading'
+const ctxKey = (provider: string, arg?: string) => (arg ? `${provider}:${arg}` : provider)
+async function fetchCtx(provider: string, arg?: string): Promise<void> {
+	const key = ctxKey(provider, arg)
+	if (ctxCache[key]) return
+	ctxCache[key] = 'loading'
 	try {
-		ctxCache[provider] = await loadContext(provider)
+		ctxCache[key] = await loadContext(provider, arg)
 	} catch {
-		ctxCache[provider] = 'error'
+		ctxCache[key] = 'error'
 	}
 }
 </script>
@@ -81,8 +83,8 @@ async function fetchCtx(provider: string): Promise<void> {
 	</div>
 {/each}
 
-{#each node.context ?? [] as ctx (ctx.provider)}
-	{@const loaded = ctxCache[ctx.provider]}
+{#each node.context ?? [] as ctx (ctxKey(ctx.provider, ctx.arg))}
+	{@const loaded = ctxCache[ctxKey(ctx.provider, ctx.arg)]}
 	<div>
 		<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
 			Kontext · <span class="text-foreground">{ctx.label}</span>
@@ -90,7 +92,7 @@ async function fetchCtx(provider: string): Promise<void> {
 		{#if ctx.note}
 			<p class="text-muted-foreground mb-1.5 text-[11px] leading-relaxed">{ctx.note}</p>
 		{/if}
-		<details ontoggle={(e) => e.currentTarget.open && fetchCtx(ctx.provider)}>
+		<details ontoggle={(e) => e.currentTarget.open && fetchCtx(ctx.provider, ctx.arg)}>
 			<summary
 				class="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] select-none"
 			>

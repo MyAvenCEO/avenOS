@@ -6,6 +6,7 @@ import Ajv from 'ajv'
 import type { Context } from 'hono'
 import { sql } from 'kysely'
 import { auth } from './auth'
+import { registerContextProvider } from './context'
 import { db } from './db'
 import { publish } from './events'
 
@@ -460,6 +461,42 @@ export async function loadTypeSpec(name: string): Promise<TypeSpec | null> {
 		.executeTakeFirst()
 	return row ? (asJson(row.spec) as TypeSpec) : null
 }
+
+// board 0100 — a UNIVERSAL "type" context provider: given a type name (arg), expose HOW `data_crud`
+// actually queries + mutates it under the hood — the composite `TypeSpec` (the x1–x5 projection recipe:
+// which predicate each field maps to, the part kinds + links) PLUS each involved atomic predicate's
+// JSON-Schema (the AJV validation). Wired onto the data_crud actor nodes, so the Skills/Runs config aside
+// transparently shows the multi-predicate machinery + schemas behind a simple `data_crud` call.
+registerContextProvider('type', async (uid, arg) => {
+	const name = arg ?? ''
+	const spec = await loadTypeSpec(name)
+	if (!spec) return { kind: 'text', label: `${name} type`, text: `(no registered type "${name}")` }
+	const preds = new Set<string>()
+	const collect = async (s: TypeSpec): Promise<void> => {
+		for (const p of s.parts) {
+			preds.add(p.pred)
+			const sub = (p as { sub?: string }).sub
+			if (sub) {
+				const child = await loadTypeSpec(sub)
+				if (child) await collect(child)
+			}
+		}
+	}
+	await collect(spec)
+	const rows = await db()
+		.selectFrom('data_schema')
+		.select(['name', 'json_schema'])
+		.where('user_id', '=', uid)
+		.execute()
+	const predicate_schemas: Record<string, unknown> = {}
+	for (const r of rows) if (preds.has(r.name)) predicate_schemas[r.name] = asJson(r.json_schema)
+	return {
+		kind: 'text',
+		label: `${name} — projection recipe + predicate schemas`,
+		text: JSON.stringify({ type: spec.type, projection: spec, predicate_schemas }, null, 2),
+		meta: { predicates: preds.size, source: 'predicate_type + data_schema' }
+	}
+})
 
 /** Run a list/create/update/delete action for a registered type through the generic engine. */
 async function runType(uid: string, spec: TypeSpec, args: DataCrudArgs): Promise<unknown> {

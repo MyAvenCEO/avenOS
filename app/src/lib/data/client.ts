@@ -101,8 +101,9 @@ export type NodeContextPayload = {
 	items?: { name: string; gloss?: string }[]
 	meta?: Record<string, unknown>
 }
-export async function loadContext(provider: string): Promise<NodeContextPayload> {
-	return api<NodeContextPayload>(`/api/context/${encodeURIComponent(provider)}`)
+export async function loadContext(provider: string, arg?: string): Promise<NodeContextPayload> {
+	const qs = arg ? `?arg=${encodeURIComponent(arg)}` : ''
+	return api<NodeContextPayload>(`/api/context/${encodeURIComponent(provider)}${qs}`)
 }
 
 // Todos (board 0087) — stored as gismu predications (task+valid), surfaced via /api/data/todos
