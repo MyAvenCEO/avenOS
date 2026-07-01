@@ -83,6 +83,15 @@ columns + AJV self-validation + dedup, with no regression.
     `gismu.json` + the existing predicates to mint an x1–x5 `PredicateDef` (pick/adapt a
     gismu, fill place roles/kinds); (3) `compilePredicate` → AJV self-validate the produced
     schema; (4) persist to `data_schema`; (5) stream a create-vibe + record a run.
+  - **CREATE PROMPT — canonical FULL place structure (pre-instruction):** the mint prompt
+    hard-instructs GLM to define **ALL x1–x5 places the chosen gismu declares in `gismu.json`**
+    (its complete, canonical place structure), each with its correct per-place AJV validation
+    config (role/gloss + `kind` `ref`/`value` + type/`references`) — **even when the immediate
+    request only fills a subset of them**. The stored predicate schema is the gismu's WHOLE place
+    structure, never a request-trimmed one: a request that uses fewer places still persists the
+    full x1–x5 schema (unused places declared, nullable). This keeps every minted predicate a
+    faithful, reusable gismu — mirrors the existing `ref()`/`val()` "carry ALL of its gismu's
+    places" rule in `libs/aven-vibes/src/predicate/compile.ts`.
   - Registered in the `@avenos/skills/tools` registry; dispatched by the chat loop exactly
     like `data_crud`; server caps (GLM key, data access) injected via `ctx`.
 - **Vibes + runs**: `ontology` (read) + `ontology-created` vibe views (single + batch),
@@ -124,6 +133,10 @@ dedup (start with name/gloss + place-structure match).
 - [ ] A novel predicate schema seeded into `data_schema` validates a `data_value` written to its
       x1–x5 columns via AJV — asserted in `ontology.test.ts`.
 - [ ] A near-duplicate create resolves to the EXISTING predicate (no new row) — asserted in the test.
+- [ ] A minted predicate carries the gismu's FULL place structure: every place the gismu declares in
+      `gismu.json` is present in the stored schema with a valid per-place config, even when the request
+      filled only a subset (e.g. a 4-place gismu → x1–x4 all present) — asserted with a fixed mint in the
+      test + human-checked live.
 - [ ] Todos vertical still works: existing todos tests + a manual add/edit/delete round-trip.
 - [ ] `bun run check` and `bun run lint` exit 0.
 - [ ] (Human/review) A live chat "people can own companies" → GLM reuses or mints a sensible
@@ -148,6 +161,10 @@ bun run lint                              # biome
 
 Newest entry first.
 
+- `2026-07-02` — Spec update (user): the CREATE mint prompt must always define the chosen gismu's FULL
+  x1–x5 place structure (all places the dictionary declares) with correct per-place AJV configs, even
+  when the request only fills a subset — the stored schema is the canonical gismu, never request-trimmed.
+  Added to Approach (create) + a new acceptance criterion.
 - `2026-07-02` — Discovery. Uncovered the goal (fully-dynamic self-validating ontology skill,
   GLM-5.2, full gismu prompt, create-with-dedup + read, vibes + runs like todos). Confirmed the
   two load-bearing storage decisions: (1) consolidate the vocab into the single `data_schema`
