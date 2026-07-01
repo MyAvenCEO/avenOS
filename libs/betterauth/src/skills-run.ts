@@ -54,7 +54,8 @@ const CLASSIFY_SCHEMA = {
 async function visionExtract(
 	systemPrompt: string,
 	schema: Record<string, unknown>,
-	image: { mime: string; b64: string }
+	image: { mime: string; b64: string },
+	userText = 'Classify this document.'
 ): Promise<Record<string, unknown> | null> {
 	const key = process.env.TINFOIL_API_KEY
 	if (!key) return null
@@ -68,7 +69,7 @@ async function visionExtract(
 				{
 					role: 'user',
 					content: [
-						{ type: 'text', text: 'Classify this document.' },
+						{ type: 'text', text: userText },
 						{ type: 'image_url', image_url: { url: `data:${image.mime};base64,${image.b64}` } }
 					]
 				}
@@ -148,7 +149,17 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 			const schema = node.schema as Record<string, unknown> | undefined
 			if (!sys || !schema) throw new Error('extract_document: node is missing system_prompt/schema (the SSOT)')
 			const b64 = Buffer.from(doc.bytes).toString('base64')
-			const raw = (await visionExtract(sys, schema, { mime: doc.mime, b64 })) ?? {}
+			// board 0098 — a task-appropriate user turn (NOT "Classify this document."): transcribe EXACTLY,
+			// no rounding/guessing, and the German number format ('1.186,56' = 1186.56) so dense figures +
+			// the final total come through correctly.
+			const extractText =
+				'Read this document image with extreme care and return EVERY field via the `emit` tool. ' +
+				'Transcribe all numbers, amounts, dates, names and addresses EXACTLY as printed — copy digit ' +
+				"for digit, do NOT round, scale, guess or invent. German number format: '.' is the thousands " +
+				"separator and ',' is the decimal point, so '1.186,56' means 1186.56 and '100,11' means 100.11. " +
+				'The invoice/total amount is the FINAL sum due (Summe / Fälliger Betrag / Gesamtbetrag / ' +
+				'Rechnungsbetrag), not a single line item. Extract every line item and every party field the page shows.'
+			const raw = (await visionExtract(sys, schema, { mime: doc.mime, b64 }, extractText)) ?? {}
 			const kind = node.outputs[0] ?? 'document'
 			return { [kind]: { ...raw, artifact: doc.artifact } }
 		},
