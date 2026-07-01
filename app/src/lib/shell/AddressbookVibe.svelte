@@ -110,7 +110,10 @@ function selectContact(id: string): void {
 }
 </script>
 
-<div class="flex min-h-[320px] w-full gap-3" data-container={containerName}>
+<div
+	class="bg-card flex min-h-[320px] w-full gap-3 rounded-[var(--radius-lg)] p-3"
+	data-container={containerName}
+>
 	<!-- Left: contact list -->
 	<aside class="border-border flex w-56 shrink-0 flex-col rounded-[var(--radius-lg)] border">
 		<div class="border-border flex items-center justify-between gap-1 border-b p-2">

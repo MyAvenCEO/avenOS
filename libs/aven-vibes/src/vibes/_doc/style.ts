@@ -23,6 +23,10 @@ const selectors: StyleDef['selectors'] = {
 		letterSpacing: '-0.02em',
 		color: 'var(--text)'
 	},
+	// board 0097 — when a host (e.g. InvoiceDocVibe with its own hero) blanks the title/subtitle, collapse
+	// the empty flex children so they leave no gap.
+	'.doc-title:empty': { display: 'none' },
+	'.doc-subtitle:empty': { display: 'none' },
 	'.doc-subtitle': {
 		fontSize: 'var(--fs-micro)',
 		fontWeight: '600',
@@ -51,16 +55,17 @@ const selectors: StyleDef['selectors'] = {
 	'.doc-cards': {
 		display: 'grid',
 		gridTemplateColumns: '1fr 1fr',
-		gap: '0.6rem'
+		gap: '0.8rem'
 	},
+	// board 0097 — party cards + rows scaled up a notch to mimic the legacy OCR invoice layout.
 	'.doc-card': {
 		background: 'var(--surface)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-card)',
-		padding: '0.7rem 0.8rem',
+		padding: '0.9rem 1.05rem',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '0.15rem'
+		gap: '0.2rem'
 	},
 	'.doc-card-title': {
 		fontSize: 'var(--fs-micro)',
@@ -70,16 +75,16 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--muted)'
 	},
 	'.doc-card-name': {
-		fontSize: 'var(--fs-body)',
-		fontWeight: '600',
+		fontSize: '1rem',
+		fontWeight: '700',
 		color: 'var(--text)',
 		lineHeight: '1.3',
-		marginBottom: '0.2rem'
+		marginBottom: '0.25rem'
 	},
 	'.doc-card-line': {
-		fontSize: 'var(--fs-micro)',
+		fontSize: '0.8125rem',
 		color: 'var(--muted)',
-		lineHeight: '1.45'
+		lineHeight: '1.5'
 	},
 	'.doc-kv': {
 		display: 'flex',
@@ -90,10 +95,10 @@ const selectors: StyleDef['selectors'] = {
 		display: 'flex',
 		justifyContent: 'space-between',
 		gap: '1rem',
-		fontSize: 'var(--fs-body)',
-		lineHeight: '1.5',
+		fontSize: '0.9375rem',
+		lineHeight: '1.55',
 		borderBottom: '1px solid var(--border)',
-		padding: '0.2rem 0'
+		padding: '0.35rem 0'
 	},
 	'.doc-kv-k': {
 		color: 'var(--muted)',
@@ -106,7 +111,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.doc-table': {
 		width: '100%',
-		fontSize: 'var(--fs-micro)',
+		fontSize: '0.8125rem',
 		color: 'var(--text)'
 	},
 	'.doc-th': {
@@ -115,12 +120,12 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.04em',
-		padding: '0.3rem 0.4rem',
+		padding: '0.4rem 0.5rem',
 		borderBottom: '1px solid var(--border)'
 	},
 	'.doc-td': {
 		textAlign: 'left',
-		padding: '0.3rem 0.4rem',
+		padding: '0.45rem 0.5rem',
 		borderBottom: '1px solid var(--border)',
 		color: 'var(--text)'
 	},

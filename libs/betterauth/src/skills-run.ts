@@ -162,91 +162,94 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 			const str = (v: unknown): string => (v == null ? '' : String(v))
 			const header = (raw.header ?? {}) as Record<string, unknown>
 			const totals = (raw.totals ?? {}) as Record<string, unknown>
-			const vendor = (raw.vendor ?? {}) as Record<string, unknown>
-			// The vision model scatters the same fact across paths — it fills EITHER the single `bank`
-			// block OR `banking_accounts[]`, and often drops email/phone/tax into the `org_public_record`
-			// imprint instead of the root. Harvest from EVERY path so nothing extracted is lost. board 0097.
-			const bank = (vendor.bank ?? {}) as Record<string, unknown>
-			const banking = (Array.isArray(vendor.banking_accounts) ? vendor.banking_accounts : []) as Record<string, unknown>[]
-			const opr = (vendor.org_public_record ?? {}) as Record<string, unknown>
-			const channels = (Array.isArray(opr.contact_channels) ? opr.contact_channels : []) as Record<string, unknown>[]
-			const oprIds = (Array.isArray(opr.identifiers) ? opr.identifiers : []) as Record<string, unknown>[]
-			const chan = (k: string): string => str(channels.find((c) => str(c.channel) === k)?.value)
-			const oprId = (cat: string): string => str(oprIds.find((i) => str(i.category) === cat)?.value)
-			const iban = str(banking[0]?.iban) || str(bank.iban)
-			const vatId = str(vendor.tax_id) || oprId('vat_id') // USt-IdNr / VAT-ID
-			const taxNumber = str(vendor.tax_number) || oprId('national_tax_number') // Steuernummer
-			const name = str(vendor.name)
-			const email = str(vendor.email) || chan('email')
-			const phone = str(vendor.phone) || chan('phone')
-			const postal = [str(vendor.street), [str(vendor.postal_code), str(vendor.city)].filter(Boolean).join(' '), str(vendor.country)]
-				.filter(Boolean)
-				.join(', ')
-			// 1. match-or-create the vendor company (by VAT-ID / IBAN / name) — track HOW it matched and
-			// WHAT was added, so the enrich vibe can highlight the addressbook change.
+
+			// Harvest a party (vendor OR buyer) from EVERY extraction path — the model scatters the same
+			// fact across the root, the single `bank` block, `banking_accounts[]`, and the imprint. board 0097.
+			type Party = { name: string; email: string; phone: string; iban: string; vat_id: string; tax_number: string; postal: string; contact_name: string }
+			const harvest = (partyRaw: unknown): Party => {
+				const p = (partyRaw ?? {}) as Record<string, unknown>
+				const bank = (p.bank ?? {}) as Record<string, unknown>
+				const banking = (Array.isArray(p.banking_accounts) ? p.banking_accounts : []) as Record<string, unknown>[]
+				const opr = (p.org_public_record ?? {}) as Record<string, unknown>
+				const channels = (Array.isArray(opr.contact_channels) ? opr.contact_channels : []) as Record<string, unknown>[]
+				const oprIds = (Array.isArray(opr.identifiers) ? opr.identifiers : []) as Record<string, unknown>[]
+				const chan = (k: string): string => str(channels.find((c) => str(c.channel) === k)?.value)
+				const oprId = (cat: string): string => str(oprIds.find((i) => str(i.category) === cat)?.value)
+				return {
+					name: str(p.name),
+					email: str(p.email) || chan('email'),
+					phone: str(p.phone) || chan('phone'),
+					iban: str(banking[0]?.iban) || str(bank.iban),
+					vat_id: str(p.tax_id) || oprId('vat_id'),
+					tax_number: str(p.tax_number) || oprId('national_tax_number'),
+					postal: [str(p.street), [str(p.postal_code), str(p.city)].filter(Boolean).join(' '), str(p.country)].filter(Boolean).join(', '),
+					contact_name: str(p.contact_name)
+				}
+			}
+
+			// Match-or-create-or-enrich a company from a harvested party. Compares against EXISTING entries
+			// (VAT-ID → IBAN → name) so re-runs de-dupe; backfills empty fields AND upgrades a poorer address
+			// to a richer one. Runs for BOTH parties so neither vendor nor buyer is dropped. board 0097.
 			const companies = ((await executeDataTool(uid, { schema: 'company', action: 'list' })) as { items: Record<string, unknown>[] }).items
-			const matched = companies.find(
-				(c) => (vatId && c.vat_id === vatId) || (iban && c.iban === iban) || (name && c.name === name)
-			)
-			const matchedBy =
-				matched && vatId && matched.vat_id === vatId
-					? 'VAT-ID'
-					: matched && iban && matched.iban === iban
-						? 'IBAN'
-						: matched
-							? 'Name'
-							: undefined
-			let companyId = matched?.id as string | undefined
-			const isNew = !companyId
-			const added: string[] = []
-			if (!companyId && name) {
-				const c = (await executeDataTool(uid, {
-					schema: 'company',
-					action: 'create',
-					items: [{ name, email, phone, iban, vat_id: vatId, tax_number: taxNumber, postal }]
-				})) as { created?: string[] }
-				companyId = c.created?.[0]
-				for (const [label, value] of [
-					['Name', name],
-					['E-Mail', email],
-					['Telefon', phone],
-					['IBAN', iban],
-					['USt-IdNr', vatId],
-					['Steuernummer', taxNumber],
-					['Adresse', postal]
-				] as const)
-					if (value) added.push(label)
-			} else if (companyId && matched) {
-				// BACKFILL (board 0097): the company already exists but a later invoice extracted fields it was
-				// missing (e.g. the first run had no IBAN, this one does). Patch only the EMPTY fields so a re-run
-				// enriches rather than no-ops — the discriminated spec updates just that channel/id, never
-				// clobbering a value already on file.
+			const upsertCompany = async (f: Party): Promise<{ id?: string; isNew: boolean; matchedBy?: string; added: string[] }> => {
+				const added: string[] = []
+				if (!f.name) return { id: undefined, isNew: false, matchedBy: undefined, added }
+				const matched = companies.find(
+					(c) => (f.vat_id && c.vat_id === f.vat_id) || (f.iban && c.iban === f.iban) || (f.name && c.name === f.name)
+				)
+				const matchedBy = matched
+					? f.vat_id && matched.vat_id === f.vat_id
+						? 'VAT-ID'
+						: f.iban && matched.iban === f.iban
+							? 'IBAN'
+							: 'Name'
+					: undefined
+				if (!matched) {
+					const c = (await executeDataTool(uid, {
+						schema: 'company',
+						action: 'create',
+						items: [{ name: f.name, email: f.email, phone: f.phone, iban: f.iban, vat_id: f.vat_id, tax_number: f.tax_number, postal: f.postal }]
+					})) as { created?: string[] }
+					const id = c.created?.[0]
+					for (const [label, value] of [['Name', f.name], ['E-Mail', f.email], ['Telefon', f.phone], ['IBAN', f.iban], ['USt-IdNr', f.vat_id], ['Steuernummer', f.tax_number], ['Adresse', f.postal]] as const)
+						if (value) added.push(label)
+					// register in the local list so the OTHER party of the same invoice de-dupes against it
+					if (id) companies.push({ id, name: f.name, vat_id: f.vat_id, iban: f.iban, email: f.email, phone: f.phone, tax_number: f.tax_number, postal: f.postal })
+					return { id, isNew: true, matchedBy, added }
+				}
+				// backfill: fill EMPTY fields, and upgrade the address when the new one is richer (longer).
 				const patch: Record<string, string> = {}
-				for (const [field, label, value] of [
-					['email', 'E-Mail', email],
-					['phone', 'Telefon', phone],
-					['iban', 'IBAN', iban],
-					['vat_id', 'USt-IdNr', vatId],
-					['tax_number', 'Steuernummer', taxNumber],
-					['postal', 'Adresse', postal]
-				] as const) {
+				for (const [field, label, value] of [['email', 'E-Mail', f.email], ['phone', 'Telefon', f.phone], ['iban', 'IBAN', f.iban], ['vat_id', 'USt-IdNr', f.vat_id], ['tax_number', 'Steuernummer', f.tax_number]] as const) {
 					if (value && !str(matched[field])) {
 						patch[field] = value
 						added.push(label)
 					}
 				}
-				if (Object.keys(patch).length > 0)
-					await executeDataTool(uid, { schema: 'company', action: 'update', items: [{ id: companyId, ...patch }] })
+				if (f.postal && f.postal.length > str(matched.postal).length) {
+					patch.postal = f.postal
+					added.push('Adresse')
+				}
+				if (Object.keys(patch).length > 0) {
+					await executeDataTool(uid, { schema: 'company', action: 'update', items: [{ id: matched.id, ...patch }] })
+					Object.assign(matched, patch)
+				}
+				return { id: matched.id as string, isNew: false, matchedBy, added }
 			}
-			// 2. Ansprechpartner: a person who REPRESENTS the company
-			const contactName = str(vendor.contact_name)
-			if (contactName && companyId) {
+
+			const v = harvest(raw.vendor)
+			const b = harvest(raw.buyer)
+			const vendorRes = await upsertCompany(v)
+			const buyerRes = await upsertCompany(b)
+
+			// Ansprechpartner: a person who REPRESENTS the vendor company (the counterparty).
+			if (v.contact_name && vendorRes.id) {
 				const persons = ((await executeDataTool(uid, { schema: 'person', action: 'list' })) as { items: Record<string, unknown>[] }).items
-				if (!persons.find((p) => p.name === contactName && p.represents === companyId)) {
-					await executeDataTool(uid, { schema: 'person', action: 'create', items: [{ name: contactName, email, company: companyId }] })
+				if (!persons.find((p) => p.name === v.contact_name && p.represents === vendorRes.id)) {
+					await executeDataTool(uid, { schema: 'person', action: 'create', items: [{ name: v.contact_name, email: v.email, company: vendorRes.id }] })
 				}
 			}
-			// 3. map the rich extraction → the ontology invoice (lines/payments), linked via billed_by
+
+			// map the rich extraction → the ontology invoice (lines/payments); billed_by = vendor, billed_to = buyer.
 			const statements = (Array.isArray(raw.statements) ? raw.statements : []) as Record<string, unknown>[]
 			const lines = statements
 				.flatMap((s) => (Array.isArray(s.line_items) ? (s.line_items as Record<string, unknown>[]) : []))
@@ -257,29 +260,31 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 				.filter((p) => p.amount)
 			return {
 				invoice: {
-					...raw, // keep the rich doctype for the vibe card
+					...raw,
 					artifact: str(raw.artifact),
 					number: String(header.invoice_number ?? 'N/A'),
 					total: totals.invoice_total != null ? String(totals.invoice_total) : '0',
-					vendor: name,
-					billed_by: companyId ?? '',
+					vendor: v.name,
+					billed_by: vendorRes.id ?? '',
+					billed_to: buyerRes.id ?? '',
 					due: str(header.due_date ?? header.issue_date),
 					lines,
 					payments
 				},
 				contact: {
-					id: companyId,
-					name,
-					isNew,
-					matchedBy,
-					email: email || undefined,
-					phone: phone || undefined,
-					ust_id: vatId || undefined,
-					tax_number: taxNumber || undefined,
-					iban: iban || undefined,
-					address: postal || undefined,
-					ansprechpartner: contactName || undefined,
-					added
+					id: vendorRes.id,
+					name: v.name,
+					isNew: vendorRes.isNew,
+					matchedBy: vendorRes.matchedBy,
+					email: v.email || undefined,
+					phone: v.phone || undefined,
+					ust_id: v.vat_id || undefined,
+					tax_number: v.tax_number || undefined,
+					iban: v.iban || undefined,
+					address: v.postal || undefined,
+					ansprechpartner: v.contact_name || undefined,
+					added: vendorRes.added,
+					buyer: b.name ? { name: b.name, isNew: buyerRes.isNew, matchedBy: buyerRes.matchedBy, added: buyerRes.added } : undefined
 				}
 			}
 		}

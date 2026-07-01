@@ -712,7 +712,7 @@ function handleTranscribeError(message: string): void {
 							{:else if message.vibe === 'addressbook'}
 								<!-- Addressbook: contacts list + detail (Stammdaten / Belege). board 0082. -->
 								<div
-									class="relative left-1/2 max-h-[85vh] w-[min(64rem,92vw)] max-w-none -translate-x-1/2 overflow-y-auto"
+									class="relative left-1/2 max-h-[85vh] w-[min(56rem,92vw)] max-w-none -translate-x-1/2 overflow-y-auto"
 								>
 									<AddressbookVibe containerName={`aven-vibes-chat-${message.id}`} />
 								</div>

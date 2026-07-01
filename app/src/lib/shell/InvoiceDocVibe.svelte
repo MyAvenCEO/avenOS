@@ -49,17 +49,18 @@ const metaFields = $derived(
 	).filter(([, v]) => v)
 )
 
-// The doc-view body WITHOUT the "Beleg" section — the hero now carries that metadata (no duplication).
+// The doc-view body WITHOUT the "Beleg" section AND without the title/subtitle — the hero now carries
+// the invoice-nr + metadata, so the body would otherwise repeat them right below the hero (no duplication).
 const view = $derived.by(() => {
 	const full = mapDocView(type, extracted) as unknown as { sections?: { title?: string }[] } & Record<string, unknown>
-	return { ...full, sections: (full.sections ?? []).filter((s) => s.title !== 'Beleg') } as unknown as Record<
+	return { ...full, title: '', subtitle: '', sections: (full.sections ?? []).filter((s) => s.title !== 'Beleg') } as unknown as Record<
 		string,
 		unknown
 	>
 })
 </script>
 
-<div class="border-border mx-auto max-h-[80vh] w-full overflow-y-auto rounded-[var(--radius-lg)] border p-3">
+<div class="border-border bg-card mx-auto max-h-[80vh] w-full overflow-y-auto rounded-[var(--radius-lg)] border p-3">
 	<!-- HERO: invoice nr (left) · total (right, accent) · metadata row -->
 	<div
 		class="border-border from-primary/[0.04] mb-3 rounded-[var(--radius-lg)] border bg-gradient-to-br to-transparent p-4"
