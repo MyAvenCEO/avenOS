@@ -6,6 +6,7 @@ import { compilePredicate, type PredicateDef } from '@avenos/aven-vibes/predicat
 import { CREATE_INSTRUCTIONS, type PredicateDefJSON } from '@avenos/skills/tools'
 import Ajv from 'ajv'
 import { sql } from 'kysely'
+import { registerContextProvider } from './context'
 import { db } from './db'
 import { publish } from './events'
 
@@ -167,6 +168,24 @@ async function save(uid: string, def: PredicateDefJSON): Promise<{ name: string;
 	publish(uid, { entity: 'data' })
 	return { name, places: def.places.length }
 }
+
+// board 0100 — register the ontology skill's context providers with the UNIVERSAL registry, so the config
+// UI transparently shows the ACTUAL context the create actor mints over: the raw gismu dictionary (TSV) +
+// the live existing-predicate registry. No special-casing in the config UI — it's just two providers.
+registerContextProvider('gismu', async () => {
+	const gismu = await gismuText()
+	return {
+		kind: 'text',
+		label: 'Gismu dictionary',
+		text: gismu,
+		meta: { source: GISMU_SOURCE, roots: gismu.split('\n').filter((l) => l.trim().length > 0).length }
+	}
+})
+registerContextProvider('predicates', async (uid) => ({
+	kind: 'list',
+	label: 'Existing predicates',
+	items: await listPredicates(uid)
+}))
 
 /** The `ctx.ontology` capability bundle the chat loop injects when dispatching the `ontology` tool. */
 export function ontologyCaps(uid: string) {

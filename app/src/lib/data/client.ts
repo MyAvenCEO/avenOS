@@ -91,6 +91,20 @@ export async function listRuns(): Promise<FlowRun[]> {
 	return runs
 }
 
+/** board 0100 — the ACTUAL content of an actor node's declared attached context (a reference text or a
+ *  live registry list), resolved by the universal `/api/context/:provider` endpoint. */
+export type NodeContextPayload = {
+	provider: string
+	kind: 'text' | 'list'
+	label?: string
+	text?: string
+	items?: { name: string; gloss?: string }[]
+	meta?: Record<string, unknown>
+}
+export async function loadContext(provider: string): Promise<NodeContextPayload> {
+	return api<NodeContextPayload>(`/api/context/${encodeURIComponent(provider)}`)
+}
+
 // Todos (board 0087) — stored as gismu predications (task+valid), surfaced via /api/data/todos
 // which delegates to the same executeTodos path the LLM tool uses. The UI never touches a
 // `todos` schema directly anymore.

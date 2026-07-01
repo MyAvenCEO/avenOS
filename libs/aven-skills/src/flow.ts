@@ -124,6 +124,21 @@ export type RecipeNode = {
 	/** Which output kind feeds the vibe card's data (default: the first output). E.g. `enrich` shows
 	 *  its `contact` output, not its primary `invoice`. board 0094. */
 	vibeOutput?: string
+	/** board 0100 — GENERIC attached context: reference material appended to this actor's prompt/behavior
+	 *  at runtime (e.g. a reference dictionary, a live registry). The config UI resolves each `provider`
+	 *  through the universal `/api/context/:provider` endpoint and shows it, so it's transparent WHAT is in
+	 *  the actor's context window — for ANY actor, not a per-skill special case. */
+	context?: NodeContext[]
+}
+
+/** A generic attached-context resource declared on a node — resolved by the universal context endpoint. */
+export type NodeContext = {
+	/** human label shown in the config UI, e.g. "Gismu dictionary (TSV)" */
+	label: string
+	/** the registered provider key the `/api/context/:provider` endpoint resolves (e.g. "gismu"). */
+	provider: string
+	/** optional one-line note (size / source / what it's for). */
+	note?: string
 }
 
 /** A directed connection (a message channel). `when` = a branch guard; `kind` = data (a resource

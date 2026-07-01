@@ -37,7 +37,9 @@ import {
 	updateValue
 } from './data'
 import { eventsStream } from './events'
+import { contextRoute } from './context'
 import { deleteFlow, getFlow, listFlows, upsertFlow } from './flows'
+import './ontology' // board 0100 — registers the ontology context providers (gismu/predicates) at load
 import { inboxGet, inboxList, mailInbox } from './inbox'
 import { deleteType, getType, listTypes, upsertType } from './predicate-types'
 import { listRuns, runSkill } from './skills-run'
@@ -100,6 +102,9 @@ app.delete('/api/admin/flows/:id', deleteFlow)
 // Vibe registry (board 0095, Layer A) — vibe definitions (view/style/logic) as config-as-data; the app
 // LOADS a bundle from here + renders it through the engine instead of importing the TS files.
 app.get('/api/vibe/:name', getVibe)
+// board 0100 — UNIVERSAL attached-context resolver: any actor node's declared `context: [{provider}]`
+// is fetched here, so the config UI transparently shows what's in an actor's context window.
+app.get('/api/context/:provider', contextRoute)
 
 // Composite TYPE registry (board 0088, Layer A) — admin-only CRUD over the declarative bundle specs
 // the generic predication engine runs. Distinct from the user-scoped /api/data/*.
