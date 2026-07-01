@@ -1,4 +1,5 @@
 import { chatToolDefinitions, TOOL_ACTORS } from '@avenos/skills/tools'
+import { recordActorRun } from './skills-run'
 import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
 import type { Context } from 'hono'
@@ -422,6 +423,19 @@ function streamWithTools(opts: {
 									'assistant',
 									data === undefined ? `${VIBE_MARKER}${schema}` : `${VIBE_MARKER}${schema}\n${JSON.stringify(data)}`
 								).catch((e) => console.error('[ai] persist vibe marker failed:', e))
+								// board 0099 — record each Todos actor firing as a single-step run of the `todos`
+								// hub, so the Runs explorer shows chat todos interactions (read/create/edit).
+								if (schema.startsWith('todos')) {
+									const nodeId = schema === 'todos' ? 'read' : schema.slice('todos-'.length)
+									void recordActorRun(userId, {
+										flowId: 'todos',
+										nodeId,
+										label: out.detail ?? nodeId,
+										vibe: schema,
+										vibeData: data,
+										outputs: ['todos']
+									})
+								}
 							}
 							emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
 							continue
@@ -637,6 +651,20 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 	}
 	try {
 		const result = await executeDataTool(session.user.id, body.action)
+		// board 0099 — a confirmed todos delete is the delete actor firing; record it as a run of the
+		// `todos` hub so the Runs explorer shows deletes too (create/edit/read record inline in the loop).
+		if (body.action.schema === 'todos' && body.action.action === 'delete') {
+			const title = typeof body.action._title === 'string' ? body.action._title : ''
+			const id = typeof body.action.id === 'string' ? body.action.id : ''
+			void recordActorRun(session.user.id, {
+				flowId: 'todos',
+				nodeId: 'delete',
+				label: 'delete todos',
+				vibe: 'todos-deleted',
+				vibeData: { items: [{ id, title }] },
+				outputs: ['todos']
+			})
+		}
 		return c.json({ ok: true, result })
 	} catch (e) {
 		return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500)

@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { Flow, NodeState, RecipeNode, TraceStep } from '@avenos/aven-skills'
+import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
 // board 0083/0099 — the optional "vibe view" of a single flow step: a user-facing rendering of what an
 // actor is doing. A step may name a `vibe` with `vibeData`; otherwise we key on `${flowId}:${nodeId}`
@@ -44,7 +45,17 @@ const STATE_CHIP: Record<NodeState, string> = {
 }
 </script>
 
-{#if !vibe && (!node || !step)}
+{#if vibe.startsWith('todos')}
+	<!-- board 0099 — the Todos actor vibes render through TodosVibe everywhere (chat, Runs, Skills). -->
+	<TodosVibe
+		mode={(vibe === 'todos' ? 'all' : vibe.slice('todos-'.length)) as
+			| 'all'
+			| 'created'
+			| 'edited'
+			| 'deleted'}
+		data={vibeData as { items?: { id?: string; title?: string }[]; diffs?: [] }}
+	/>
+{:else if !vibe && (!node || !step)}
 	<div class="text-muted-foreground flex h-full items-center justify-center text-sm">
 		Kein Schritt ausgewählt.
 	</div>

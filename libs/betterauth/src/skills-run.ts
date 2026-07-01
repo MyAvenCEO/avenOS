@@ -90,6 +90,43 @@ async function persistFlowRun(uid: string, run: FlowRun): Promise<void> {
 		.execute()
 }
 
+/** board 0099 — record a ONE-actor run. The Todos hub executes via the chat `data_crud` tool (not the
+ *  flow runner), so each todos action is persisted as a single-step `flow_run` of the `todos` hub — that
+ *  is how the Runs explorer shows todos interactions as runs (one span per actor firing). */
+export async function recordActorRun(
+	uid: string,
+	opts: {
+		flowId: string
+		nodeId: string
+		label: string
+		vibe?: string
+		vibeData?: unknown
+		inputs?: string[]
+		outputs?: string[]
+	}
+): Promise<void> {
+	const now = new Date().toISOString()
+	const run: FlowRun = {
+		id: `run_${randomUUID().slice(0, 12)}`,
+		flowId: opts.flowId,
+		label: opts.label,
+		status: 'done',
+		startedAt: now,
+		trace: [
+			{
+				nodeId: opts.nodeId,
+				state: 'done',
+				at: now,
+				inputs: opts.inputs ?? [],
+				outputs: opts.outputs ?? [],
+				vibe: opts.vibe,
+				vibeData: opts.vibeData
+			}
+		]
+	}
+	await persistFlowRun(uid, run).catch((e) => console.error('[skills] recordActorRun failed:', e))
+}
+
 export type RunSkillResult = {
 	runId: string
 	status: FlowRun['status']
