@@ -305,11 +305,13 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 		const res = (await executeDataTool(uid, { schema: 'todos', action: 'list' })) as {
 			items?: { id: string; title?: string; done?: boolean }[]
 		}
+		// SHORT ids (8 chars) — gemma can't copy 36-char UUIDs verbatim (it hallucinates them, so the
+		// update/delete misses); 8 hex chars are reliable and the server resolves them back. board 0099.
 		const list = (res.items ?? [])
-			.map((task) => `${task.id} · "${task.title ?? ''}"${task.done ? ' ✓done' : ''}`)
+			.map((task) => `${String(task.id).slice(0, 8)} · "${task.title ?? ''}"${task.done ? ' ✓done' : ''}`)
 			.join('\n')
 		if (list)
-			todosSnapshot = `\n\nCURRENT TODOS (id · title · done) — for update/delete use these ids DIRECTLY, do NOT call list first:\n${list}`
+			todosSnapshot = `\n\nCURRENT TODOS (id · title · done) — for update/delete pass the exact 8-char id shown here as \`id\` (or in \`ids\` for a batch delete); do NOT call list first, and NEVER invent an id:\n${list}`
 	} catch {
 		/* best-effort snapshot; the model can still list */
 	}

@@ -83,6 +83,22 @@ function todosVibe(
 	return { schema: 'todos' }
 }
 
+/**
+ * Resolve a model-supplied id against the LIVE rows. gemma can't reliably copy a 36-char UUID — it
+ * hallucinates plausible ones, so the update/delete silently misses AND the diff loses its "before".
+ * We show the model SHORT ids and match here by exact → prefix → shared-8-char-prefix. board 0099.
+ */
+function resolveId(given: string, rows: Rec[]): string {
+	const g = String(given ?? '')
+	const ids = rows.map((r) => String(r.id))
+	return (
+		ids.find((rid) => rid === g) ??
+		(g.length >= 4 ? ids.find((rid) => rid.startsWith(g) || g.startsWith(rid)) : undefined) ??
+		(g.length >= 6 ? ids.find((rid) => rid.slice(0, 8) === g.slice(0, 8)) : undefined) ??
+		g
+	)
+}
+
 export const dataCrud: ToolActor = {
 	definition: DATA_CRUD_TOOL,
 	async handle(ctx, raw): Promise<ToolResult> {
@@ -90,22 +106,31 @@ export const dataCrud: ToolActor = {
 		const schema = typeof args.schema === 'string' ? args.schema : 'data'
 		const detail = `${typeof args.action === 'string' ? args.action : ''} ${schema}`.trim() || 'data'
 
+		// For a todos update/delete, read the LIVE rows ONCE and RESOLVE the model's id(s) against them
+		// (gemma hallucinates UUIDs). This both makes the write hit the real row AND gives the diff/label
+		// its real "before". Reused for the delete titles + the edit before-snapshot. board 0099.
+		let todosNow: Rec[] | undefined
+		if (schema === 'todos' && (args.action === 'update' || args.action === 'delete')) {
+			const cur = (await ctx.data({ schema: 'todos', action: 'list' })) as { items?: Rec[] }
+			todosNow = cur.items ?? []
+			if (args.action === 'update' && args.items) {
+				args.items = args.items.map((i) => ({ ...i, id: resolveId(String((i as Rec).id ?? ''), todosNow!) }))
+			}
+			if (args.action === 'delete') {
+				const raw2 = (args.ids?.length ? args.ids : args.id ? [args.id] : []).map((x) => String(x))
+				args.ids = raw2.map((x) => resolveId(x, todosNow!))
+				args.id = undefined
+			}
+		}
+
 		// DELETE actor — HITL: never delete without explicit confirmation. Supports a BATCH (args.ids) so
 		// "delete all done" is ONE confirm for many. Snapshot each todo's title so the confirm card + the
 		// todos-deleted summary can name what went. The loop shows the card; nothing runs until confirmed.
 		if (args.action === 'delete') {
-			const ids = (
-				args.ids?.length ? args.ids : args.id ? [args.id] : []
-			).filter((x): x is string => typeof x === 'string' && !!x)
-			let deleted: { id: string; title: string }[] = ids.map((id) => ({ id, title: '' }))
-			if (schema === 'todos' && ids.length) {
-				const cur = (await ctx.data({ schema: 'todos', action: 'list' })) as { items?: Rec[] }
-				const byId = new Map((cur.items ?? []).map((r) => [String(r.id), String(r.title ?? '')]))
-				deleted = ids.map((id) => ({ id, title: byId.get(id) ?? '' }))
-			}
-			const names = deleted
-				.map((d) => d.title)
-				.filter(Boolean)
+			const ids = (args.ids ?? []).filter((x): x is string => typeof x === 'string' && !!x)
+			const byId = new Map((todosNow ?? []).map((r) => [String(r.id), String(r.title ?? '')]))
+			const deleted = ids.map((id) => ({ id, title: byId.get(id) ?? '' }))
+			const names = deleted.map((d) => d.title).filter(Boolean)
 			const label =
 				schema === 'todos' && names.length
 					? names.length === 1
@@ -127,12 +152,11 @@ export const dataCrud: ToolActor = {
 			}
 		}
 
-		// EDIT actor — snapshot the rows BEFORE the write so we can show a real before→after diff.
-		let before: Record<string, Rec> | undefined
-		if (schema === 'todos' && args.action === 'update') {
-			const cur = (await ctx.data({ schema: 'todos', action: 'list' })) as { items?: Rec[] }
-			before = Object.fromEntries((cur.items ?? []).map((r) => [String(r.id), r]))
-		}
+		// EDIT actor — the before→after diff reads the live rows we already fetched (ids now resolved).
+		const before: Record<string, Rec> | undefined =
+			schema === 'todos' && args.action === 'update'
+				? Object.fromEntries((todosNow ?? []).map((r) => [String(r.id), r]))
+				: undefined
 
 		let result: unknown
 		try {
