@@ -160,26 +160,24 @@ function handleEvent(event: UiEvent): void {
 // before→after diff, deleted marks the row done + a "gelöscht" chip. board 0099.
 const summarySource = $derived.by(() => {
 	if (mode === 'all') return source
-	const items = summaryItems.map((it) => {
-		if (mode === 'edited') {
-			const d = summaryDiffs.find((x) => x.id === it.id)
-			const chg = d
-				? d.changes.map((c) => `${c.field}: ${c.from || '—'} → ${c.to || '—'}`).join(' · ')
-				: ''
-			return { id: it.id ?? it.title ?? '', text: it.title ?? '—', done: false, due: '', priority: chg }
-		}
-		if (mode === 'deleted') {
-			return { id: it.id ?? it.title ?? '', text: it.title ?? '—', done: true, due: '', priority: 'gelöscht' }
-		}
-		// created
-		return {
-			id: it.id ?? it.title ?? '',
-			text: it.title ?? '—',
-			done: it.done === true,
-			due: relDue(it.due),
-			priority: it.priority ?? ''
-		}
-	})
+	// EDITED: build rows from the diffs — an update only sends the changed fields (no title), but the
+	// diff carries the before→after snapshot INCLUDING the task's title. So show the title + the change.
+	const items =
+		mode === 'edited'
+			? summaryDiffs.map((d) => ({
+					id: d.id,
+					text: d.title || '—',
+					done: false,
+					due: '',
+					priority: d.changes.map((c) => `${c.field}: ${c.from || '—'} → ${c.to || '—'}`).join(' · ')
+				}))
+			: summaryItems.map((it) => ({
+					id: it.id ?? it.title ?? '',
+					text: it.title ?? '—',
+					done: mode === 'deleted' ? true : it.done === true,
+					due: mode === 'deleted' ? '' : relDue(it.due),
+					priority: mode === 'deleted' ? 'gelöscht' : (it.priority ?? '')
+				}))
 	const m = mode as Exclude<TodoMode, 'all'>
 	return {
 		title: MODE_TITLE[m],

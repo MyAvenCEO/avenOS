@@ -12,9 +12,10 @@ export const DATA_CRUD_TOOL: ToolDefinition = {
 	function: {
 		name: 'data_crud',
 		description:
-			'Read or modify the signed-in user\'s data for a named schema (e.g. "todos"). ' +
-			'Always `list` first to get item ids before `update` or `delete`. Each value is ' +
-			'validated server-side against its schema.',
+			'Read or modify the signed-in user\'s data for a named schema (e.g. "todos"). The current ' +
+			'todos (with ids) are provided in the system context — use those ids DIRECTLY for `update` / ' +
+			'`delete` (no preceding `list`). Only `list` when the user asks to see the data. Each value ' +
+			'is validated server-side against its schema.',
 		parameters: {
 			type: 'object',
 			properties: {

@@ -285,7 +285,23 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 			'Never query the underlying data types (task/valid/due/prioritized) directly.'
 	)
 	const now = new Date()
-	return `Current date & time: ${now.toISOString()} — resolve any relative dates the user mentions ("today", "tomorrow", "in 3 days", "next Monday") against THIS instant; emit absolute ISO dates.\n\nThe data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}\n\nIMPORTANT: whenever the user asks to see / show / list / check their todos OR tasks (any wording, any language), you MUST call data_crud with action="list", schema="todos" — this renders their live todo card. Never answer about todos/tasks from memory or with a plain-text list; always call the tool so the card appears.`
+	// Inject a compact snapshot of the CURRENT todos (id · title · done) so the model can `update` /
+	// `delete` a task by id in ONE round — WITHOUT a preceding `list` call. Cutting that extra gemma
+	// round is the single biggest latency win for "mark X done" / "delete Y". board 0099.
+	let todosSnapshot = '\n\nCURRENT TODOS: (none yet).'
+	try {
+		const res = (await executeDataTool(uid, { schema: 'todos', action: 'list' })) as {
+			items?: { id: string; title?: string; done?: boolean }[]
+		}
+		const list = (res.items ?? [])
+			.map((task) => `${task.id} · "${task.title ?? ''}"${task.done ? ' ✓done' : ''}`)
+			.join('\n')
+		if (list)
+			todosSnapshot = `\n\nCURRENT TODOS (id · title · done) — for update/delete use these ids DIRECTLY, do NOT call list first:\n${list}`
+	} catch {
+		/* best-effort snapshot; the model can still list */
+	}
+	return `Current date & time: ${now.toISOString()} — resolve any relative dates the user mentions ("today", "tomorrow", "in 3 days", "next Monday") against THIS instant; emit absolute ISO dates.\n\nThe data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}${todosSnapshot}\n\nIMPORTANT: the current todos are listed above — for update/delete, reference their ids DIRECTLY (one tool call, no preceding list). Only call data_crud action="list" schema="todos" when the user explicitly asks to SEE / show / list / check their todos (any wording, any language) — that re-renders their live card. Never answer about todos from memory with a plain-text list.`
 }
 
 /** Ensure the per-user gismu DATA-TYPE schemas (task/valid/due/prioritized) exist + are in sync.
