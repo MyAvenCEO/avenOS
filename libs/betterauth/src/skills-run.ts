@@ -160,6 +160,20 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 				'The invoice/total amount is the FINAL sum due (Summe / Fälliger Betrag / Gesamtbetrag / ' +
 				'Rechnungsbetrag), not a single line item. Extract every line item and every party field the page shows.'
 			const raw = (await visionExtract(sys, schema, { mime: doc.mime, b64 }, extractText)) ?? {}
+			// MULTI-AGENT (board 0098) — mirror the legacy OCR pipeline: when the node ALSO configures a
+			// focused PARTIES pass (`parties_prompt` + `parties_schema`), run it as its own vision call so
+			// the model fills a SMALL party-only schema (full address, email, tax ids) instead of losing the
+			// parties in one overloaded blob, then merge the parties into the body extraction.
+			const pnode = node as unknown as { parties_prompt?: string; parties_schema?: Record<string, unknown> }
+			if (pnode.parties_prompt && pnode.parties_schema) {
+				const partiesText =
+					'Read this document image and return the PARTIES via the `emit` tool. For every party fill the ' +
+					'COMPLETE printed block — legal name, full postal address (street, PLZ/ZIP, city, country as ' +
+					'separate fields), email, phone, and the bare VAT-ID / tax-number digits (strip labels like ' +
+					'"USt-IdNr." / "DE VAT"). Read the whole letterhead + footer + imprint. Copy every value EXACTLY.'
+				const parties = (await visionExtract(pnode.parties_prompt, pnode.parties_schema, { mime: doc.mime, b64 }, partiesText)) ?? {}
+				for (const [k, v] of Object.entries(parties)) if (v != null) (raw as Record<string, unknown>)[k] = v
+			}
 			const kind = node.outputs[0] ?? 'document'
 			return { [kind]: { ...raw, artifact: doc.artifact } }
 		},
