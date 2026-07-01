@@ -42,6 +42,7 @@ const sandboxActive = $derived(path.startsWith('/sandbox'))
 const selfActive = $derived(path.startsWith('/settings'))
 const sparksNavActive = $derived(path.startsWith('/identities'))
 const avensActive = $derived(path.startsWith('/avens'))
+const drawActive = $derived(path.startsWith('/draw'))
 
 const shellLocked = $derived(browser && isTauriRuntime() && $deviceSession.kind === 'locked')
 
@@ -467,6 +468,15 @@ $effect(() => {
 									aria-current={avensActive ? 'page' : undefined}
 									onclick={(e) => navigateApp('/avens', e)}
 									>{t('nav.avens')}</a
+								>
+								<span class="select-none opacity-25" aria-hidden="true">|</span>
+								<a
+									href="/draw"
+									data-sveltekit-preload-data="hover"
+									class="transition-opacity hover:opacity-80 {drawActive ? 'opacity-95' : 'opacity-40'}"
+									aria-current={drawActive ? 'page' : undefined}
+									onclick={(e) => navigateApp('/draw', e)}
+									>{t('nav.draw')}</a
 								>
 							</nav>
 
