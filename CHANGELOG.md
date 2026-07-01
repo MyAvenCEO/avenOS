@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.1-next.2...v) (2026-07-01)
+
+
+### Bug Fixes
+
+* **app:** move the /draw scratchpad into the mainnet (Alberobello) shell ([#29](https://github.com/MyAvenCEO/avenOS/issues/29)) ([632dd30](https://github.com/MyAvenCEO/avenOS/commit/632dd3040375954a087bf4d955b6b31ffbd5eba1))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.1-next.1...v) (2026-07-01)
 
 
