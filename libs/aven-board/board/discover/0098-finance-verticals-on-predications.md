@@ -177,6 +177,16 @@ cd app && bun --bun x svelte-check --tsconfig ./tsconfig.json
 
 ## Progress log
 
+- 2026-07-01 — **Build checkpoint 2 (reference extraction ported).** Migration 0041 replaces BOTH the
+  invoice (`capture`) + bank (`capture-bank`) extract-node `system_prompt` + tool `schema` with the
+  legacy OCR reference (`ocr/config/prompts/extract_{invoice,bank_statement}.system` + the rich
+  `doctypes/*.schema` — invoice now carries `totals.tax_breakdown`, `total_outstanding`,
+  `payment_instructions`, `reference_entries`, `line_groups`, `service_period_normalized`). Used the
+  UNIFIED invoice prompt (extracts parties + header + body) since avenOS's enrich harvests the parties
+  from one pass; the reference's separate parties/header agents remain a possible follow-on decomposition.
+  Combined with the strong user-turn (German number format `1.186,56`=1186.56, "total = the final Summe",
+  transcribe-exactly). Applied to the samuel branch; loadFlow reads it per run. **Remaining:** the finance
+  predications (fidelity/reconcile/book) + retire flat — checkpoints 3+.
 - 2026-07-01 — **Re-discovered (extraction quality + reference).** A live Cursor invoice extracted badly
   wrong (total 1.88 vs 100.11; wrong number/dates/line amounts; incomplete parties). Found two pipeline
   bugs (extract turn said "Classify this document."; no German-number/total rules) and patched them
