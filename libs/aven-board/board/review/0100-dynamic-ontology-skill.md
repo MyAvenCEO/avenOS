@@ -161,6 +161,17 @@ bun run lint                              # biome
 
 Newest entry first.
 
+- `2026-07-02` — FULL build done (steps 4-5, the human-acceptance layer) + LIVE-verified. New `ontology`
+  ToolActor: `read` (list the data_schema predicate registry) + `create` (deterministic dedup gate →
+  GLM-5.2 mint → compilePredicate → AJV self-validate → persist to data_schema). Server adapter
+  `libs/betterauth/src/ontology.ts` loads the full `gismu.json` into the mint prompt + enforces the FULL
+  place structure; `ToolCtx` gains injected `ontology` caps; `ai.ts` injects them + records `ontology`
+  runs. `OntologyVibe` renders read/created everywhere (chat + Runs + Skills preview via StepVibe
+  delegation). Migration 0050 seeds the `ontology` actor hub. LIVE PROOF (human-acceptance criterion):
+  "a person can be a member of a project" → GLM-5.2 chose gismu `cmima` → minted `member_of` (x1 member ·
+  x2 set, full place structure) → AJV-validated → persisted. Green: skills/betterauth tsc, app svelte-check,
+  betterauth 4 tests. NOTE: mint is ~50s (the ~900k-char gismu prompt) — a compact gismu projection /
+  streaming is the obvious latency follow-on. Also follow-on: edit/delete of predicates.
 - `2026-07-02` — BUILD (measurable goal MET + proven green). Foundation done: (1) `data_value` has real
   `(predicate, x1..x5)` columns + indexes; `pgStore` + the history trigger read/write them (migration 0049);
   todos create/update/delete round-trips on the columns. (2) `ensurePredicateSchemas` is generic — `data_schema`
