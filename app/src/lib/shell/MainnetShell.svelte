@@ -3,6 +3,7 @@ import { createQuery, useQueryClient } from '@tanstack/svelte-query'
 import { authClient } from '$lib/auth/auth-client'
 import { syncBilling } from '$lib/billing/checkout'
 import { fmtMinds } from '$lib/billing/minds'
+import DrawCanvas from '$lib/draw/DrawCanvas.svelte'
 import { t } from '$lib/i18n'
 import { qk } from '$lib/query/client'
 import { fetchUsage } from '$lib/query/usage'
@@ -17,7 +18,7 @@ import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
 // MINDS + the signed-in account NAME on the right. Clicking the name opens the Account Settings
 // view (profile, plans, billing, usage, vault keys, Admin for admins, log out). The website
 // Composer lives under Vibes now. board 0053/0054/0055.
-type Tab = 'chat' | 'vibes' | 'db' | 'fly' | 'mail'
+type Tab = 'chat' | 'vibes' | 'draw' | 'db' | 'fly' | 'mail'
 type SettingsCategory = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'admin'
 let tab = $state<Tab>('chat')
 let settings = $state(false)
@@ -68,6 +69,7 @@ const isAdmin = $derived(user?.role === 'admin')
 const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'chat', label: t('mainnet.nav.chat') },
 	{ id: 'vibes', label: t('mainnet.nav.vibes') },
+	{ id: 'draw', label: t('mainnet.nav.draw') },
 	{ id: 'db', label: t('mainnet.nav.db') },
 	{ id: 'fly', label: t('mainnet.nav.fly') },
 	...(isAdmin ? [{ id: 'mail' as Tab, label: 'Mail' }] : [])
@@ -146,6 +148,8 @@ function openTab(id: Tab): void {
 		<MainnetChat />
 	{:else if tab === 'vibes'}
 		<MainnetVibes />
+	{:else if tab === 'draw'}
+		<DrawCanvas />
 	{:else if tab === 'fly'}
 		<MainnetFly />
 	{:else if tab === 'mail'}

@@ -30,14 +30,12 @@ const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const sparksNavActive = $derived(path.startsWith('/identities'))
 const avensActive = $derived(path.startsWith('/avens'))
-const drawActive = $derived(path.startsWith('/draw'))
 
 const navItems = $derived<NavItem[]>([
 	{ href: '/', label: t('nav.intents'), active: intentsActive },
 	{ href: '/sandbox', label: t('nav.sandbox'), active: sandboxActive },
 	{ href: '/identities', label: t('nav.identities'), active: sparksNavActive },
-	{ href: '/avens', label: t('nav.avens'), active: avensActive },
-	{ href: '/draw', label: t('nav.draw'), active: drawActive }
+	{ href: '/avens', label: t('nav.avens'), active: avensActive }
 ])
 
 const showNavFab = $derived(!chrome.hideProfile)

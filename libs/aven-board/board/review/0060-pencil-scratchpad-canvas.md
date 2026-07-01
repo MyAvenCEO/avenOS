@@ -85,10 +85,14 @@ Split the feature into **pure logic** (testable, no DOM) and a **thin renderer**
    select`), and re-renders `SketchState` each frame via `requestAnimationFrame`. A small
    floating toolbar toggles the three tools. All mutations go through `sketch-model.ts`.
 
-3. `app/src/routes/draw/+page.svelte` — the main; mounts `DrawCanvas`, sets the title.
+3. **Surface it in the mainnet (Alberobello) shell** — `DrawCanvas` mounts as a **Draw tab**
+   in `app/src/lib/shell/MainnetShell.svelte` (the mainnet view's own tab bar: Chat | Vibes |
+   Draw | DB | Fly), with a `mainnet.nav.draw` label in `app/languages/{en,de}.json`. The
+   mainnet view is a component shell (tab-switched), not route-based — so no `/draw` route.
 
-4. Nav wiring — add `drawActive` + a desktop nav link in `+layout.svelte`, a mobile nav
-   item in `MobileShellNav.svelte`, and a `nav.draw` label to `app/languages/{en,de}.json`.
+   *(Correction during build: an earlier pass wired `/draw` into the LOCAL-app primary nav
+   [`+layout.svelte` / `MobileShellNav.svelte`] + a route. Wrong surface — the scratchpad
+   belongs in the mainnet shell. That wiring + the route were removed.)*
 
 **Tool semantics (kept deliberately basic):**
 - **Pen** — freehand stroke; width scales with `pressure` (falls back to a constant when
@@ -106,19 +110,18 @@ palettes beyond a default. Each is a candidate follow-on card back in `ideate/`.
 1. Write `sketch-model.ts` (pure) + `app/tests/sketch-model.test.ts`; get `bun test tests`
    green. *(checkpoint — the metric's core is provable before any UI.)*
 2. Build `DrawCanvas.svelte` (canvas render loop + pointer/pen handling + 3-tool toolbar).
-3. Add `app/src/routes/draw/+page.svelte`; wire nav in the two nav files + `nav.draw` i18n.
-4. `cd app && bun run check`; `bun run lint` (root); fix types/lint. *(checkpoint.)*
+3. Mount `DrawCanvas` as a **Draw tab** in `MainnetShell.svelte` + `mainnet.nav.draw` i18n.
+4. `cd app && bun run check`; scoped `biome check`; fix types/lint. *(checkpoint.)*
 5. Manual pencil pass in `bun run tauri:dev` (and on-device iPad) — HITL, for review.
 
 ## Files to touch
 
 - `app/src/lib/draw/sketch-model.ts` — NEW, pure state + geometry (all tested logic).
 - `app/src/lib/draw/DrawCanvas.svelte` — NEW, canvas renderer + pointer/pen + toolbar.
-- `app/src/routes/draw/+page.svelte` — NEW, the `/draw` main.
-- `app/src/routes/+layout.svelte` — EDIT, `drawActive` derived + desktop nav link.
-- `app/src/lib/shell/MobileShellNav.svelte` — EDIT, mobile nav item.
-- `app/languages/en.json`, `app/languages/de.json` — EDIT, add `nav.draw` + a `draw.*`
-  toolbar block (`pen`/`eraser`/`select`/`clear`/`tools`).
+- `app/src/lib/shell/MainnetShell.svelte` — EDIT, add the **Draw tab** (Alberobello shell)
+  rendering `DrawCanvas`.
+- `app/languages/en.json`, `app/languages/de.json` — EDIT, add `mainnet.nav.draw` + a
+  `draw.*` toolbar block (`pen`/`eraser`/`select`/`clear`/`tools`).
 - `app/tests/sketch-model.test.ts` — NEW, unit tests (the metric).
 - `app/src/app.d.ts` — EDIT (out-of-card but necessary), move `declare const
   __APP_VERSION__` inside `declare global` so `bun run check` can pass at all. See the note
@@ -128,8 +131,8 @@ palettes beyond a default. Each is a candidate follow-on card back in `ideate/`.
 
 Each checkable from the transcript.
 
-- [x] `cd app && bun run check` exits 0 — svelte-check compiles the new route,
-      `DrawCanvas.svelte`, the nav edits, and `sketch-model.ts`. *(0 errors after the
+- [x] `cd app && bun run check` exits 0 — svelte-check compiles `MainnetShell.svelte`
+      (Draw tab), `DrawCanvas.svelte`, and `sketch-model.ts`. *(0 errors after the
       `app.d.ts` global fix; 1 pre-existing unrelated warning in `aven-city`.)*
 - [x] Scoped lint clean — `biome check` over the 9 touched files exits 0, **0 errors /
       0 warnings**. *(Repo-wide `bun run lint` stays pre-existing-red — see the note; not
@@ -140,8 +143,9 @@ Each checkable from the transcript.
   - [x] `eraseAt` removes only the stroke within `radius` of the point; others remain
   - [x] `selectInRect` selects strokes inside the rect and excludes ones outside
   - [x] `moveSelection(dx,dy)` translates only selected strokes' points; others unchanged
-- [x] Registration present — `git grep -n "/draw"` shows entries in both
-      `app/src/routes/+layout.svelte` and `app/src/lib/shell/MobileShellNav.svelte`.
+- [x] Registration present — `git grep -n "'draw'" app/src/lib/shell/MainnetShell.svelte`
+      shows the Draw tab (id + label + render branch) in the Alberobello shell. No `/draw`
+      route or local-app primary-nav entry (that mis-wiring was removed).
 - [x] In-memory constraint held — `git diff --name-only` touches **no** file under
       `libs/aven-schema/` or `app/src-tauri/`.
 - [ ] HITL (review, not machine): on iPad in `bun run tauri:dev` the Pencil draws smoothly,
@@ -159,12 +163,11 @@ bun test tests         # incl. app/tests/sketch-model.test.ts (the metric's core
 cd ..
 bunx biome check \
   app/src/lib/draw/sketch-model.ts app/src/lib/draw/DrawCanvas.svelte \
-  app/src/routes/draw/+page.svelte app/src/routes/+layout.svelte \
-  app/src/lib/shell/MobileShellNav.svelte app/src/app.d.ts \
+  app/src/lib/shell/MainnetShell.svelte app/src/app.d.ts \
   app/tests/sketch-model.test.ts app/languages/en.json app/languages/de.json
 
-# registration + in-memory constraint
-git grep -n "/draw" app/src/routes/+layout.svelte app/src/lib/shell/MobileShellNav.svelte
+# registration (Draw tab in the Alberobello shell) + in-memory constraint
+git grep -n "'draw'" app/src/lib/shell/MainnetShell.svelte
 git diff --name-only | grep -E '^(libs/aven-schema/|app/src-tauri/)' && echo "VIOLATION: touched persistence" || echo "ok: no schema/backend changes"
 
 # manual (HITL, review): pencil feel on device
@@ -189,6 +192,12 @@ Pick this up with the board command (resolves the item, loads it, drives it):
 
 Newest entry first.
 
+- `2026-07-01` — Rewired to the correct surface: `DrawCanvas` now mounts as a **Draw tab in
+  the mainnet (Alberobello) shell** (`MainnetShell.svelte`, Chat | Vibes | Draw | DB | Fly)
+  with a `mainnet.nav.draw` label. Removed the earlier mis-wiring — the `/draw` route
+  (`app/src/routes/draw/`), the local-app primary-nav entries in `+layout.svelte` /
+  `MobileShellNav.svelte`, and the `nav.draw` label. `bun run check` exit 0, tests 11/11,
+  scoped lint clean.
 - `2026-07-01` — Built. `sketch-model.ts` (pure) + 11 passing unit tests; `DrawCanvas.svelte`
   (canvas + pointer/pen + pen/eraser/select toolbar); `/draw` route + nav wiring (desktop +
   mobile) + i18n (`nav.draw`, `draw.*`). `bun run check` exits 0, `bun test tests` 11/11,

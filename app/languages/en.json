@@ -74,7 +74,6 @@
 		"self": "Self",
 		"intents": "Intents",
 		"sandbox": "Sandbox",
-		"draw": "Draw",
 		"uiLab": "UI Lab",
 		"identities": "Identities",
 		"db": "DB",
@@ -1007,6 +1006,7 @@
 		"nav": {
 			"chat": "Chat",
 			"vibes": "Vibes",
+			"draw": "Draw",
 			"schemas": "Schemas",
 			"db": "DB",
 			"fly": "Fly",
