@@ -677,17 +677,18 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 	}
 	try {
 		const result = await executeDataTool(session.user.id, body.action)
-		// board 0099 — a confirmed todos delete is the delete actor firing; record it as a run of the
-		// `todos` hub so the Runs explorer shows deletes too (create/edit/read record inline in the loop).
+		// board 0099 — a confirmed todos delete is the delete actor firing (a BATCH of ids); record it as a
+		// run of the `todos` hub so the Runs explorer shows deletes too (create/edit/read record inline).
 		if (body.action.schema === 'todos' && body.action.action === 'delete') {
-			const title = typeof body.action._title === 'string' ? body.action._title : ''
-			const id = typeof body.action.id === 'string' ? body.action.id : ''
+			const items = Array.isArray(body.action._deleted)
+				? (body.action._deleted as { id: string; title: string }[])
+				: []
 			void recordActorRun(session.user.id, {
 				flowId: 'todos',
 				nodeId: 'delete',
-				label: 'delete todos',
+				label: items.length > 1 ? `delete ${items.length} todos` : 'delete todos',
 				vibe: 'todos-deleted',
-				vibeData: { items: [{ id, title }] },
+				vibeData: { items },
 				outputs: ['todos']
 			})
 		}

@@ -17,8 +17,12 @@ export type ToolDefinition = {
 export type DataCrudArgs = {
 	schema: string
 	action: 'list' | 'create' | 'update' | 'delete'
+	/** create: the value objects; update: objects that include their `id` (a BATCH edits many at once). */
 	items?: Record<string, unknown>[]
+	/** delete: a single value id. */
 	id?: string
+	/** delete: a BATCH of value ids — one call removes many (board 0099). */
+	ids?: string[]
 	response?: string
 }
 

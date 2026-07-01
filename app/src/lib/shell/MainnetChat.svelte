@@ -165,12 +165,13 @@ async function confirmHitl(req: HitlRequest): Promise<void> {
 		if (req.tool === 'deploy_website') {
 			appendNote(`✅ Published — live at ${data.result?.url ?? 'www.next.aven.ceo'}`)
 		} else {
-			// board 0099 — a confirmed todos delete streams a todos-deleted card (which task was removed),
-			// then refreshes the live list. Every other delete just refreshes.
+			// board 0099 — a confirmed todos delete streams a todos-deleted card listing EVERY removed task
+			// (a batch delete removes many), then refreshes the live list. Other deletes just refresh.
 			if (req.action.schema === 'todos') {
-				appendVibe('todos-deleted', {
-					items: [{ id: String(req.action.id ?? ''), title: String(req.action._title ?? '') }]
-				})
+				const items = Array.isArray(req.action._deleted)
+					? (req.action._deleted as { id: string; title: string }[])
+					: []
+				appendVibe('todos-deleted', { items })
 			}
 			void queryClient.invalidateQueries({ queryKey: ['data'] })
 		}

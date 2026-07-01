@@ -14,8 +14,10 @@ export const DATA_CRUD_TOOL: ToolDefinition = {
 		description:
 			'Read or modify the signed-in user\'s data for a named schema (e.g. "todos"). The current ' +
 			'todos (with ids) are provided in the system context — use those ids DIRECTLY for `update` / ' +
-			'`delete` (no preceding `list`). Only `list` when the user asks to see the data. Each value ' +
-			'is validated server-side against its schema.',
+			'`delete` (no preceding `list`). BATCH is supported and PREFERRED: create/update many in one ' +
+			'call via `items`; delete many in one call via `ids`. So "delete all done", "mark A and B done", ' +
+			'"add three tasks" are each a SINGLE call. Mixed intents (delete X + edit Y + add Z) = one call ' +
+			'per action. Only `list` when the user asks to see the data. Values are validated server-side.',
 		parameters: {
 			type: 'object',
 			properties: {
@@ -24,10 +26,15 @@ export const DATA_CRUD_TOOL: ToolDefinition = {
 				items: {
 					type: 'array',
 					description:
-						'For create: value objects (e.g. {"title":"Buy milk","done":false}). For update: objects including their "id".',
+						'create: value objects (e.g. {"title":"Buy milk"}). update: objects including their "id" — pass MANY to edit several at once.',
 					items: { type: 'object', additionalProperties: true }
 				},
-				id: { type: 'string', description: 'For delete: the value id to remove.' },
+				id: { type: 'string', description: 'delete: a single value id to remove.' },
+				ids: {
+					type: 'array',
+					description: 'delete: MANY value ids to remove in one call (e.g. every done todo).',
+					items: { type: 'string' }
+				},
 				response: { type: 'string', description: 'A short human-facing reply to show the user.' }
 			},
 			required: ['schema', 'action']
@@ -81,15 +88,28 @@ export const dataCrud: ToolActor = {
 		const schema = typeof args.schema === 'string' ? args.schema : 'data'
 		const detail = `${typeof args.action === 'string' ? args.action : ''} ${schema}`.trim() || 'data'
 
-		// DELETE actor — HITL: never delete without explicit confirmation. Snapshot the todo title so the
-		// confirm card + the todos-deleted summary can name what went. The loop shows the card; nothing runs.
+		// DELETE actor — HITL: never delete without explicit confirmation. Supports a BATCH (args.ids) so
+		// "delete all done" is ONE confirm for many. Snapshot each todo's title so the confirm card + the
+		// todos-deleted summary can name what went. The loop shows the card; nothing runs until confirmed.
 		if (args.action === 'delete') {
-			const id = typeof args.id === 'string' ? args.id : ''
-			let title = ''
-			if (schema === 'todos' && id) {
+			const ids = (
+				args.ids?.length ? args.ids : args.id ? [args.id] : []
+			).filter((x): x is string => typeof x === 'string' && !!x)
+			let deleted: { id: string; title: string }[] = ids.map((id) => ({ id, title: '' }))
+			if (schema === 'todos' && ids.length) {
 				const cur = (await ctx.data({ schema: 'todos', action: 'list' })) as { items?: Rec[] }
-				title = String((cur.items ?? []).find((r) => String(r.id) === id)?.title ?? '')
+				const byId = new Map((cur.items ?? []).map((r) => [String(r.id), String(r.title ?? '')]))
+				deleted = ids.map((id) => ({ id, title: byId.get(id) ?? '' }))
 			}
+			const names = deleted
+				.map((d) => d.title)
+				.filter(Boolean)
+			const label =
+				schema === 'todos' && names.length
+					? names.length === 1
+						? `Delete todo "${names[0]}"?`
+						: `Delete ${names.length} todos: ${names.join(', ')}?`
+					: `Delete ${ids.length || 1} from "${schema}"?`
 			return {
 				detail,
 				content: {
@@ -98,11 +118,9 @@ export const dataCrud: ToolActor = {
 					note: 'A confirm/decline card was shown to the user. Do NOT delete or retry — just tell them you asked them to confirm.'
 				},
 				hitl: {
-					label:
-						schema === 'todos' && title
-							? `Delete todo "${title}"?`
-							: `Delete from "${schema}"${id ? ` (#${id.slice(0, 8)})` : ''}?`,
-					action: { ...args, ...(title ? { _title: title } : {}) }
+					// carry the resolved ids + their titles so the confirm path deletes the batch + renders the card.
+					label,
+					action: { schema, action: 'delete', ids, _deleted: deleted }
 				}
 			}
 		}

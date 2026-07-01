@@ -250,7 +250,19 @@ type DataCrudArgs = {
 	schema?: string
 	action?: 'list' | 'create' | 'update' | 'delete'
 	items?: Record<string, unknown>[]
+	/** delete: a single value id. */
 	id?: string
+	/** delete: a BATCH of value ids — one call removes many (board 0099). */
+	ids?: string[]
+}
+
+/** Resolve the id(s) a delete targets: explicit `ids`, a single `id`, or the ids inside `items`. */
+function deleteIds(args: DataCrudArgs): string[] {
+	if (args.ids?.length) return args.ids.filter((x) => typeof x === 'string' && x)
+	if (args.id) return [args.id]
+	return (args.items ?? [])
+		.map((i) => (i as { id?: string }).id)
+		.filter((x): x is string => typeof x === 'string' && !!x)
 }
 
 /** A system-prompt hint listing the user's schemas + their JSON Schema, so the LLM uses
@@ -438,11 +450,11 @@ async function runType(uid: string, spec: TypeSpec, args: DataCrudArgs): Promise
 		return { ok: true, action: 'update', updated, errors: [] }
 	}
 	if (args.action === 'delete') {
-		const id = args.id ?? (args.items?.[0] as { id?: string } | undefined)?.id
-		if (!id) return { ok: false, error: 'delete requires id' }
-		await remove(spec, store, id)
+		const ids = deleteIds(args)
+		if (ids.length === 0) return { ok: false, error: 'delete requires id(s)' }
+		for (const id of ids) await remove(spec, store, id)
 		publish(uid, { entity: 'data' })
-		return { ok: true, action: 'delete', deleted: [id] }
+		return { ok: true, action: 'delete', deleted: ids }
 	}
 	return { ok: false, error: `unknown action: ${args.action}` }
 }
@@ -612,14 +624,15 @@ export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<
 	}
 
 	if (args.action === 'delete') {
-		if (!args.id) return { ok: false, error: 'delete requires id' }
+		const ids = deleteIds(args)
+		if (ids.length === 0) return { ok: false, error: 'delete requires id(s)' }
 		await db()
 			.deleteFrom('data_value')
-			.where('id', '=', args.id)
+			.where('id', 'in', ids)
 			.where('user_id', '=', uid)
 			.execute()
 		publish(uid, { entity: 'data' })
-		return { ok: true, action: 'delete', deleted: [args.id] }
+		return { ok: true, action: 'delete', deleted: ids }
 	}
 
 	return { ok: false, error: `unknown action: ${args.action}` }
