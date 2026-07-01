@@ -72,7 +72,9 @@ function todosVibe(
 				const changes = Object.keys(patch)
 					.filter((k) => k !== 'id' && String(patch[k] ?? '') !== String(b[k] ?? ''))
 					.map((k) => ({ field: k, from: String(b[k] ?? ''), to: String(patch[k] ?? '') }))
-				return { id: String(patch.id), title: String(b.title ?? patch.title ?? ''), changes }
+				// the card's prominent title = the NEW state (the task IS now the updated title); a title
+					// rename still shows old→new in the change rows below. board 0099.
+					return { id: String(patch.id), title: String(patch.title ?? b.title ?? ''), changes }
 			})
 			.filter((d) => d.changes.length > 0)
 		return { schema: 'todos-edited', data: { items: items.map(todoItem), diffs } }
