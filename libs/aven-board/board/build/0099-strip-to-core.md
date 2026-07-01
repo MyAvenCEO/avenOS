@@ -148,3 +148,25 @@ cd app && bun --bun x svelte-check --tsconfig ./tsconfig.json
   Todos skill built as an ACTOR CLUSTER — 4 non-linear actors (read/create/edit/delete), each a tool + a
   vibe state (all/created/edited/deleted), dispatched by intent, sequential or parallel. Runner + Runs/Skills
   UI + vibe config evolve from linear pipeline → actor hub. Supersedes the finance parts of 0097 + all 0098.
+- 2026-07-01 — BUILD (build-working-first, then strip; green at every commit):
+  - **4-actor Todos hub DONE + green.** `TodosVibe` now renders 4 modes — `all` (live read list),
+    `created` (new tasks), `edited` (updated + before→after diff), `deleted` (which task went). The
+    `data_crud` todos path in `ai.ts` emits the mode-specific vibe per action (create→todos-created,
+    update→todos-edited with a real before-snapshot diff, list→full read card); delete is HITL-gated so its
+    title is snapshotted at confirm-time and the client flows a `todos-deleted` card. Because the chat LLM can
+    call multiple `data_crud` tools in one turn, "add 2 tasks and delete groceries" runs CREATE ‖ DELETE, each
+    streaming its own vibe = the actor hub in parallel. (commits: Todos actor hub, delete actor.)
+  - **Frontend stripped to Todos + Composer + green.** Deleted 10 non-todos vibe components; `MainnetVibes`
+    rail + `MainnetChat` dispatch = todos modes + composer only; `StepVibe` reduced to a generic actor-step
+    card (+ minecraft demo) for the Runs explorer; `client.ts` dropped `listContacts`/`listType` + contact
+    import. (commit: strip frontend.)
+  - **REMAINING (backend teardown — its own clean pass):** gut `ai.ts` of the doc/finance path
+    (`extractDocFields`/`enrichAddressbookFromDoc`/`performExtraction`/`ensureDocSchema` + emitVibe
+    addressbook/invoice/bwa/bookkeeping/tx + the `run_skill` doc branch + imports of aven-vibes
+    contact/contact-match/invoice-doc/invoice-number); reduce `skills-run.ts` `skillActors` to generic
+    (drop `visionExtract`/`loadExtractConfig`/`DOCTYPE_FLOW`/file-based `runSkillForUser`); clean
+    `app/src/lib/aven-ui/vibe-views.ts` + `app/src/lib/avendb/invoice-pdf.ts`; delete the aven-vibes
+    `_doc/bank-statement/bookkeeping/contract/doc-compare/invoice/contact*` modules + their package.json
+    exports + tests; then a forward-only migration DROPping the non-todos flows (book/capture/capture-bank/
+    kontoauszug/invoice/doc-ingest/project-planner) + predicate_types (company/person/invoice/document/
+    transaction) + their data. Deferred here to avoid a rushed red-tree surgery on the 1500-line `ai.ts`.
