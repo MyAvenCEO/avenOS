@@ -5,7 +5,7 @@ owner: aven (Claude Code)
 created: 2026-07-02
 updated: 2026-07-02
 tags: [ontology, predication, queries, mutations, ai]
-goal: "A validated query spec (filter + join + count) and a validated mutation spec run correctly over the x1–x5 store with ZERO per-query/mutation code — proven green: `cd libs/betterauth && bun test tests` (new queries.test.ts: over seeded predications, a filter+join+count query spec returns the correct rows incl. a HAVING threshold; a malformed spec is AJV-rejected; a transfer mutation spec applies the correct predication writes transactionally and a bad op rolls back) AND `bun run check` exits 0, with todos + the ontology skill still working."
+goal: "A validated query spec (filter + join + count) and a validated mutation spec run correctly over the x1–x5 store with ZERO per-query/mutation code — proven green: `cd libs/betterauth && bun test tests` (new queries.test.ts: over seeded predications, a filter+join+count query spec returns the correct rows incl. a HAVING threshold; a malformed spec is AJV-rejected; a transfer mutation spec applies the correct predication writes transactionally and a bad op rolls back) AND `bun run check` exits 0, with todos + the brain skill still working."
 ---
 
 # Dynamic GLM-authored queries + mutations as validated specs over the x1–x5 store
@@ -34,7 +34,7 @@ safe parameterized SQL; a mutation is a validated, transactional list of predica
    parameterized SQL (queries) or a transactional predication-write sequence (mutations). Destructive
    mutations (any `delete` op) are HITL-gated like `data_crud` delete.
 
-New actors extend the ontology skill (the self-extending data hub): `create_query` / `run_query` /
+New actors extend the brain skill (the self-extending data hub): `create_query` / `run_query` /
 `create_mutation` / `run_mutation`. Each stored spec is inspectable through the universal context panel
 (board 0100) so you can see the compiled SQL / op list.
 
@@ -50,7 +50,7 @@ as validated specs, with no code change — safely (validated specs → paramete
 > (new `queries.test.ts`: over seeded predications, a filter+join+count query spec returns the correct
 > rows incl. a HAVING threshold; a malformed spec is AJV-rejected; a transfer mutation spec applies the
 > correct predication writes transactionally and a bad op rolls back) AND `bun run check` exits 0, with
-> todos + the ontology skill still working.
+> todos + the brain skill still working.
 
 The **GLM authoring quality** (it writes a sensible spec from NL) is non-deterministic → NOT in the goal;
 it's a human-checked acceptance criterion. The goal proves the deterministic engine: spec language + AJV
