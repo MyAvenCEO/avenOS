@@ -427,21 +427,31 @@ function streamWithTools(opts: {
 						// new tool = one module + one registry line, no loop edit. Server caps are injected via ctx.
 						const actor = TOOL_ACTORS[tc.name]
 						if (actor) {
-							const out = await actor.handle(
-								{
-									userId,
-									data: (a) => executeDataTool(userId, a),
-									ontology: ontologyCaps(userId) // board 0100 — GLM mint + data_schema registry caps
-								},
-								parsed
-							)
+							// Show the tool chip + start its timer BEFORE running the actor — a mint can take ~50s —
+							// and keep the stream + timer alive with a 5s ping (else the client's 90s idle watchdog
+							// aborts a long tool). One chip per tool_call id; re-emitting 'running' updates it. board 0100.
+							const runDetail =
+								[parsed.action, parsed.schema].filter((x) => typeof x === 'string' && x).join(' ') ||
+								tc.name
+							emitTool(tc.id, tc.name, runDetail, 'running')
+							const ping = setInterval(() => emitTool(tc.id, tc.name, runDetail, 'running'), 5_000)
+							const out = await actor
+								.handle(
+									{
+										userId,
+										data: (a) => executeDataTool(userId, a),
+										ontology: ontologyCaps(userId) // board 0100 — GLM mint + data_schema registry caps
+									},
+									parsed
+								)
+								.finally(() => clearInterval(ping))
 							if (out.hitl) {
 								// HITL: show a confirm/decline card and DON'T execute (the delete actor). aiConfirmAction runs it.
 								emit({ aven_hitl: { id: tc.id, tool: tc.name, label: out.hitl.label, action: out.hitl.action } })
 								msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out.content) })
+								emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
 								continue
 							}
-							emitTool(tc.id, tc.name, out.detail ?? tc.name, 'running')
 							msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out.content) })
 							if (out.reply) {
 								emit({ choices: [{ delta: { content: out.reply } }] })
