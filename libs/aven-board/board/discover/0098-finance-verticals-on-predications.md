@@ -38,11 +38,12 @@ goal: >
   (5) RETIRE FLAT: `rg "TX_SCHEMA|MATCH_SCHEMA|BOOKING_SCHEMA|schema: '(tx|match|booking)'" libs app` is
   empty; a migration drops the flat `tx`/`match`/`booking` data_schema rows; the Transactions, BWA, and
   reconciliation vibes read the predication types.
-  (6) EXTRACTION FIDELITY: parties are extracted COMPLETELY — the invoice + bank extract prompts force
-  the full party block (name, street, postal_code, city, country, email, phone, tax_id/tax_number,
-  banking) whenever the document shows it, not just name+street+tax_id (the schema already has every
-  field; the prompt/tool-call must insist on filling it). A live run's extracted JSON shows a party with
-  its complete printed address, and the enrich persists those places.
+  (6) EXTRACTION FIDELITY (ported from the reference): the invoice + bank extract nodes use the legacy
+  OCR reference prompts + doctype schemas + the two-stage (header → doctype) pass, so extraction is
+  correct AND complete. REGRESSION — the Cursor invoice (`ocr/…/04_Cursor_Invoice-6199869E-0059.pdf`)
+  extracts total **100.11**, number **6199869E 0059**, dates **2026-02-03**, all 6 line items with their
+  exact amounts (1186.56 / 654.87 / 24.19 / 600.66 / 6.50 / 0.45), both parties complete (Anysphere Inc.
+  + München, emails, EIN/VAT), and the reverse-charge note — no hallucinated/rounded numbers.
   (7) ONE FLOW-SKILL ARCHITECTURE: the bank statement is a first-class, triggerable flow SKILL —
   "Bank Statement Processing" (ingest → extract → enrich → …) exactly like "Invoice Processing" — not
   dead `kontoauszug` config; both share the same skill/flow shape + the shared extract/enrich actors.
@@ -78,12 +79,39 @@ amount/payee/description/date — it drops currency, running balance, the value-
 the whole FX cluster (original amount/currency, exchange rate, surcharge, fee %) the extract schema
 captures. Per the invoice_doc directive, a migration must preserve **100 %** of the flat field fidelity.
 
+**Extraction quality is broken, and the fix is a KNOWN-GOOD reference.** A live Cursor invoice extracted
+catastrophically wrong: total **1,88 USD** where the PDF says **100,11 $**; number `6199869E*0061` where
+it is `6199869E 0059`; dates off by 2 days; the mid-month line **1.28667** where it is **1.186,56 $**;
+line-item call counts + amounts wrong; both parties missing city/country/email/phone + the vendor's legal
+entity (`Anysphere, Inc.`, US EIN) + the reverse-charge note — all dropped. Two pipeline bugs already
+found + patched interim: the extract turn literally said *"Classify this document."* (wrong task), and the
+prompt lacked German number-format + "total = final Summe" rules. But the real cure is the **legacy OCR
+project** at `/Users/samuelandert/Documents/Development/ocr/` (`config/{prompts,doctypes,actors}`), where
+invoice + Kontoauszug extraction "worked perfectly" on the SAME `gemma4-31b` model — because of the
+PIPELINE + PROMPT + SCHEMA, not the model: a **two-stage** pass (a `DOCUMENT_HEADER` routing/header
+extraction, then a **doctype-specific** `extract_invoice` / `extract_bank_statement` pass), and much
+richer, battle-tested prompts (semantic label→field mapping, completeness, VAT tax_breakdown, DRY
+titles, banking/SEPA blocks, org imprint, FX-column disambiguation for card statements). avenOS today has
+ONE thin single-pass generic `extract_document` — that is why dense figures + full parties are lost.
+
 **Why (the goal behind the task).** Finish the "zero flat schemas" north star for finance so the entire
 document→extract→enrich→reconcile→book chain — and the features on top (Transactions list, BWA/P&L,
 Offene-Posten reconciliation) — run off ONE predication source of truth, not a flat store that drifts
-from the ontology. This unlocks a coherent, queryable finance layer and removes the last board-0064 debt.
+from the ontology; AND extraction is trustworthy (correct totals/numbers/parties), by porting the proven
+reference pipeline. This unlocks a coherent, queryable, correct finance layer and removes the last board-0064 debt.
 
 ## Load-bearing decisions (confirmed / to confirm at build)
+
+- **Extraction = port the legacy OCR reference (user's directive).** The reference at
+  `/Users/samuelandert/Documents/Development/ocr/config/` is the SSOT for the extract PROMPTS +
+  doctype SCHEMAS + the pipeline SHAPE. Adopt: (a) the **two-stage** extraction — a header/routing pass
+  (`extract_doc_header`) then a **doctype-specific** extract pass, not one generic single pass; (b) the
+  reference `prompts/extract_invoice.json` + `prompts/extract_bank_statement.json` (+ `extract_doc_header`)
+  verbatim-in-spirit as the avenOS extract-node system_prompts; (c) the reference `doctypes/invoice.json`
+  + `doctypes/bank_statement.json` as the schemas. Regression: the Cursor invoice extracts correctly.
+- **Bank flow MIRRORS the invoice flow EXACTLY (user's directive).** "Bank Statement Processing" is
+  structurally identical to "Invoice Processing" — same ingest→extract→enrich shape, a doctype-specific
+  bank extract actor/prompt/schema paralleling the invoice one, feeding the same enrich→predication path.
 
 - **Scope: ONE card, everything** (user chose this over slicing) — trigger + bank fidelity + reconcile +
   book + retire flat, built in checkpointed steps (it is large; stop-and-look after each numbered step).
@@ -99,9 +127,17 @@ from the ontology. This unlocks a coherent, queryable finance layer and removes 
 
 ## Approach (for the build — not exhaustive)
 
-1. **Trigger the bank flow.** Make a classified bank statement run the bank extract+enrich (unified
-   doc-processing flow branching on `kind`, or router + kind check). Checkpoint: a Run shows the
-   `capture-bank` extract executing after classify.
+0. **Port the reference extraction (prompts + schemas + two-stage pipeline).** From
+   `/Users/samuelandert/Documents/Development/ocr/config/`: seed the avenOS invoice (`capture`) + bank
+   (`capture-bank`) extract nodes with the reference `prompts/extract_invoice.json` +
+   `prompts/extract_bank_statement.json` system prompts and the reference `doctypes/invoice.json` +
+   `doctypes/bank_statement.json` schemas; add the header/routing pre-pass (`extract_doc_header`) so
+   extraction is two-stage per doctype. Regression proof: the Cursor invoice extracts total **100,11**,
+   number **6199869E 0059**, dates **2026-02-03**, all 6 line items with exact amounts, both parties
+   complete (Anysphere/München + emails), reverse-charge flagged. (Checkpoint 1 already landed the
+   trigger + the interim prompt/user-turn fixes; this step replaces those with the reference SSOT.)
+1. **Trigger the bank flow.** ✅ (checkpoint 1) — `run_skill` offers `kontoauszug`; `humanReview` no-op
+   lets the flow complete; a Run shows `capture-bank` extract+enrich after classify.
 2. **Bank-statement predicate fidelity.** Extend the transaction bundle (aven-vibes predicate vocab +
    the TRANSACTION_SPEC) with faithful predicates/places for currency, running balance, value/booking
    dates, and the FX cluster; strengthen the audit to prove 0 unmapped flat-`tx` fields; keep the 0097 gate green.
@@ -114,6 +150,8 @@ from the ontology. This unlocks a coherent, queryable finance layer and removes 
 
 ## Acceptance criteria
 
+- [ ] Extract nodes seeded from the reference (`ocr/config/prompts` + `doctypes`), two-stage per doctype;
+      the Cursor invoice extracts correctly (total 100.11, number 0059, all lines + full parties + reverse-charge).
 - [ ] A bank-statement upload's live run trace shows extract + enrich after classify (no longer stops at Classify).
 - [ ] Audit script: 0 flat-`tx` fields unmapped to a transaction predicate/place; the 0097 gate passes for the new predicates.
 - [ ] A match predication links an invoice↔transaction and drives belegt; a booking predication shows in the BWA.
@@ -139,6 +177,13 @@ cd app && bun --bun x svelte-check --tsconfig ./tsconfig.json
 
 ## Progress log
 
+- 2026-07-01 — **Re-discovered (extraction quality + reference).** A live Cursor invoice extracted badly
+  wrong (total 1.88 vs 100.11; wrong number/dates/line amounts; incomplete parties). Found two pipeline
+  bugs (extract turn said "Classify this document."; no German-number/total rules) and patched them
+  interim. User directed: port the legacy OCR reference (`/Users/samuelandert/Documents/Development/ocr/
+  config/{prompts,doctypes,actors}`) — its two-stage (header → doctype) pipeline + battle-tested
+  invoice/bank prompts + schemas — as the extraction SSOT, and mirror the bank flow EXACTLY on the
+  invoice flow. Added the Cursor invoice as the extraction regression. Moved build → discover to re-spec.
 - 2026-07-01 — **Build checkpoint 1 (trigger + extraction).** The bank statement is now a triggerable
   flow skill: the `run_skill` router (`libs/aven-vibes/src/tools.ts`) offers `"kontoauszug"` for
   bank/account/credit-card statements (the model picks it by vision), and a no-op `humanReview` actor
