@@ -22,7 +22,9 @@ const DOOMED_PREDS = [
 ]
 
 export async function up(db: Kysely<unknown>): Promise<void> {
-	// 1. flows
+	// 1. flows + their run traces (the doc/finance runs are dead — the Todos hub runs through chat, not
+	//    the flow runner, so it produces no flow_run rows). Delete runs for any flow being removed.
+	await sql`DELETE FROM flow_run WHERE flow_id IN ('book','capture','capture-bank','doc-ingest','invoice','kontoauszug','project-planner','invoice-ingest','invoice-processing')`.execute(db)
 	await sql`DELETE FROM flow WHERE id IN ('book','capture','capture-bank','doc-ingest','invoice','kontoauszug','project-planner','invoice-ingest','invoice-processing')`.execute(db)
 
 	// 2. composite type registry
