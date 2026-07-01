@@ -40,15 +40,19 @@ let {
 
 const summaryItems = $derived(data?.items ?? [])
 const summaryDiffs = $derived(data?.diffs ?? [])
-const MODE_LABEL: Record<Exclude<TodoMode, 'all'>, string> = {
+// Each non-read actor is ALSO a real vibe: it renders through the SAME engine (AvenVibeView + the
+// todos QuickJS logic), just with a mode-specific SOURCE — the eyebrow names the actor, and the change
+// is carried in the row chips (created → due/priority, edited → the before→after diff, deleted → a
+// "gelöscht" chip). So all four states are engine-rendered vibes, not bare markup. board 0099.
+const MODE_EYEBROW: Record<Exclude<TodoMode, 'all'>, string> = {
+	created: 'Neu erstellt',
+	edited: 'Aktualisiert',
+	deleted: 'Gelöscht'
+}
+const MODE_TITLE: Record<Exclude<TodoMode, 'all'>, string> = {
 	created: 'Neue Aufgaben',
 	edited: 'Aktualisierte Aufgaben',
 	deleted: 'Gelöschte Aufgaben'
-}
-const MODE_ACCENT: Record<Exclude<TodoMode, 'all'>, string> = {
-	created: 'text-green-700',
-	edited: 'text-primary',
-	deleted: 'text-destructive'
 }
 
 const base = createTodosShell()
@@ -150,59 +154,54 @@ function handleEvent(event: UiEvent): void {
 	err = null
 	mutation.mutate(event)
 }
+
+// The create/edit/delete actors render through the SAME engine as read — a mode-specific source over
+// the todos vibe. The row chips carry the change: created keeps due/priority, edited shows the
+// before→after diff, deleted marks the row done + a "gelöscht" chip. board 0099.
+const summarySource = $derived.by(() => {
+	if (mode === 'all') return source
+	const items = summaryItems.map((it) => {
+		if (mode === 'edited') {
+			const d = summaryDiffs.find((x) => x.id === it.id)
+			const chg = d
+				? d.changes.map((c) => `${c.field}: ${c.from || '—'} → ${c.to || '—'}`).join(' · ')
+				: ''
+			return { id: it.id ?? it.title ?? '', text: it.title ?? '—', done: false, due: '', priority: chg }
+		}
+		if (mode === 'deleted') {
+			return { id: it.id ?? it.title ?? '', text: it.title ?? '—', done: true, due: '', priority: 'gelöscht' }
+		}
+		// created
+		return {
+			id: it.id ?? it.title ?? '',
+			text: it.title ?? '—',
+			done: it.done === true,
+			due: relDue(it.due),
+			priority: it.priority ?? ''
+		}
+	})
+	const m = mode as Exclude<TodoMode, 'all'>
+	return {
+		title: MODE_TITLE[m],
+		items,
+		labels: { ...source.labels, listEyebrow: MODE_EYEBROW[m], emptyList: '—' }
+	}
+})
+// Summary actors are read-only — swallow any UI event (no add/toggle/delete from a "what changed" card).
+function noEvent(): void {}
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-2">
 	{#if err}
 		<p class="text-destructive shrink-0 text-sm" role="alert">{err}</p>
 	{/if}
-	{#if mode === 'all'}
-		<div class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
-			<AvenVibeView
-				{shell}
-				{source}
-				onEvent={handleEvent}
-				{containerName}
-				desktopHint={t('mainnet.auth.loading')}
-			/>
-		</div>
-	{:else}
-		<!-- create / edit / delete actor summary — read-only card showing only what changed -->
-		<div
-			class="border-border bg-card mx-auto w-full max-w-2xl rounded-[var(--radius-lg)] border p-4"
-			data-container={containerName}
-		>
-			<p class="text-[10px] font-semibold tracking-wide uppercase {MODE_ACCENT[mode]}">
-				{MODE_LABEL[mode]} · {summaryItems.length}
-			</p>
-			<ul class="border-border/60 divide-border/60 mt-2 divide-y">
-				{#each summaryItems as it (it.id ?? it.title)}
-					<li class="flex items-baseline justify-between gap-3 py-1.5">
-						<span
-							class="text-foreground text-[13px] {mode === 'deleted' ? 'text-muted-foreground line-through' : ''}"
-							>{it.title ?? '—'}</span
-						>
-						{#if mode === 'edited'}
-							{@const d = summaryDiffs.find((x) => x.id === it.id)}
-							{#if d}
-								<span class="text-muted-foreground text-right text-[11px]">
-									{#each d.changes as c (c.field)}
-										<span class="whitespace-nowrap"
-											>{c.field}: <s>{c.from || '—'}</s> → <b class="text-foreground">{c.to || '—'}</b></span
-										>{' '}
-									{/each}
-								</span>
-							{/if}
-						{:else if it.due || it.priority}
-							<span class="text-muted-foreground text-[11px]">{[it.priority, it.due].filter(Boolean).join(' · ')}</span
-							>
-						{/if}
-					</li>
-				{/each}
-			</ul>
-			{#if summaryItems.length === 0}
-				<p class="text-muted-foreground py-2 text-xs">—</p>
-			{/if}
-		</div>
-	{/if}
+	<div class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
+		<AvenVibeView
+			{shell}
+			source={mode === 'all' ? source : summarySource}
+			onEvent={mode === 'all' ? handleEvent : noEvent}
+			{containerName}
+			desktopHint={t('mainnet.auth.loading')}
+		/>
+	</div>
 </div>
