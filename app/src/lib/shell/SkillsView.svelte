@@ -12,6 +12,7 @@ import { t } from '$lib/i18n'
 import ActorConfig from '$lib/shell/ActorConfig.svelte'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import { openDbSchema } from '$lib/shell/nav.svelte'
+import OntologyVibe from '$lib/shell/OntologyVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
 // board 0083 — Skills view = TEMPLATES only, rendered via the shared FlowGraph (real edges + labels,
@@ -62,6 +63,27 @@ const PREVIEW_DATA: Record<
 	'todos-deleted': { items: [{ id: 'sample', title: 'Beispielaufgabe' }] }
 }
 const previewData = $derived(PREVIEW_DATA[previewVibe])
+// board 0100 — illustrative ontology preview data for the Skills template view.
+const ONTOLOGY_PREVIEW: Record<string, Record<string, unknown>> = {
+	ontology: {
+		predicates: [
+			{ name: 'owned_by', gloss: 'x1 is owned by x2' },
+			{ name: 'task', gloss: 'x1 does deed x2' }
+		]
+	},
+	'ontology-created': {
+		created: {
+			predicate: 'ponse',
+			gismu: 'ponse',
+			gloss: 'x1 possesses/owns x2 under right x3',
+			places: [
+				{ pos: 'x1', role: 'owner', gloss: 'the possessor', kind: 'ref' },
+				{ pos: 'x2', role: 'possession', gloss: 'the thing owned', kind: 'ref' },
+				{ pos: 'x3', role: 'right', gloss: 'the legal basis', kind: 'value', type: 'string', required: false }
+			]
+		}
+	}
+}
 
 function resLabel(flow: Flow | null, k: string): string {
 	return flow?.resourceLabels?.[k] ?? RESOURCE_LABEL[k] ?? k
@@ -129,6 +151,14 @@ function onSelect(id: string): void {
 							containerName={`skills-preview-${selectedNodeId}`}
 							mode={previewMode}
 							data={previewData}
+						/>
+					{:else if selectedNode && previewVibe.startsWith('ontology')}
+						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
+							Vibe · {previewVibe}
+						</p>
+						<OntologyVibe
+							mode={previewVibe === 'ontology' ? 'read' : 'created'}
+							data={ONTOLOGY_PREVIEW[previewVibe]}
 						/>
 					{:else if selectedNode}
 						<p class="text-muted-foreground text-center text-sm">
