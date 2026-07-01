@@ -4,6 +4,10 @@ import type { StyleDef } from '../../engine/types.js'
 // Shared styling for the generic structured-document view. Brand layer + a clean sections/cards/
 // table layout (the legacy invoice/bank/contract layouts, unified under one cleaner design). 0064.
 const selectors: StyleDef['selectors'] = {
+	// board 0097 — the brand base fills the shadow-DOM :host with var(--bg-a); for the doc view that
+	// solid host background overwrites the host card's own bg (e.g. InvoiceDocVibe's bg-card). Make the
+	// host transparent so the surrounding card background shows through the sections.
+	':host': { background: 'transparent' },
 	'.doc-view': {
 		minHeight: '100%',
 		width: '100%',
