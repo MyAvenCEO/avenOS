@@ -289,6 +289,11 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 			'These are the ONLY fields — there is NO "valid", "from/until", or interval field; do not invent one. ' +
 			'`due` is the DEADLINE: for "due/by/until/till <date>", "tomorrow", "next week", etc., set `due` to the resolved ABSOLUTE date as "YYYY-MM-DD" (use the current date above). ' +
 			'`done` (boolean) = completed. `priority` is "high" | "medium" | "low". ' +
+			'CLEAN THE TITLE — write each `title` as a tidy, correctly-spelled item: silently fix obvious ' +
+			'misspellings and speech-to-text garbles (e.g. "anandas" → "Ananas", "mandarina" → "Mandarine"), ' +
+			'and strip filler / nonsense / duplicate tokens, keeping ONLY the real item (e.g. "akdjfasg ' +
+			'pineapple" → "Pineapple", "buy buy milk" → "Buy milk"). Keep the user\'s language and any real ' +
+			'quantity ("3 apples" stays "3 apples"); never invent details the user did not say. ' +
 			'Never query the underlying data types (task/valid/due/prioritized) directly.'
 	)
 	const now = new Date()
