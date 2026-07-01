@@ -318,12 +318,14 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 	return `Current date & time: ${now.toISOString()} — resolve any relative dates the user mentions ("today", "tomorrow", "in 3 days", "next Monday") against THIS instant; emit absolute ISO dates.\n\nThe data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}${todosSnapshot}\n\nIMPORTANT: the current todos are listed above — for update/delete, reference their ids DIRECTLY (one tool call, no preceding list). Only call data_crud action="list" schema="todos" when the user explicitly asks to SEE / show / list / check their todos (any wording, any language) — that re-renders their live card. Never answer about todos from memory with a plain-text list.`
 }
 
-/** Ensure the per-user gismu DATA-TYPE schemas (task/owned_by/done/due/prioritized) exist + are in sync.
- *  Returns predicate-name → schema_id — the map the engine's store resolves predicates through.
- *  board 0099 — todos ONLY: the document/invoice/contact verticals were stripped, so seeding their
- *  predicate schemas here is what kept re-creating the legacy empty schemas after every migration. */
+/** predicate-name → schema_id — the map the engine's store resolves predicates through. board 0100:
+ *  GENERIC + DB-driven. `data_schema` is the single vocab registry: a predicate schema is any row whose
+ *  JSON-Schema carries a `predicate` discriminator (what `compilePredicate` emits). So EVERY predicate —
+ *  the seeded todo vocab AND any dynamically-minted x1–x5 predicate — resolves here with ZERO code change;
+ *  adding a relation is just inserting a `data_schema` row. The todo vocab is still bootstrapped (idempotent)
+ *  so a fresh user has working todos, but resolution reads the DB, not a hardcoded list. */
 async function ensurePredicateSchemas(uid: string): Promise<Record<string, string>> {
-	const ids: Record<string, string> = {}
+	// Bootstrap: the ONLY code-seeded vocab — ensure the 5 todo predicate schemas exist for this user.
 	for (const { name, jsonSchema } of todoPredicateSchemas()) {
 		const existing = await db()
 			.selectFrom('data_schema')
@@ -332,28 +334,35 @@ async function ensurePredicateSchemas(uid: string): Promise<Record<string, strin
 			.where('name', '=', name)
 			.executeTakeFirst()
 		if (existing) {
-			// keep the stored schema in sync with the current vocab (gismu/place-structure edits)
 			await db()
 				.updateTable('data_schema')
 				.set({ json_schema: jsonb(jsonSchema), updated_at: new Date() })
 				.where('id', '=', existing.id)
 				.execute()
-			ids[name] = existing.id
-			continue
+		} else {
+			await db()
+				.insertInto('data_schema')
+				.values({
+					id: randomUUID(),
+					user_id: uid,
+					name,
+					json_schema: jsonb(jsonSchema),
+					created_at: new Date(),
+					updated_at: new Date()
+				})
+				.execute()
 		}
-		const id = randomUUID()
-		await db()
-			.insertInto('data_schema')
-			.values({
-				id,
-				user_id: uid,
-				name,
-				json_schema: jsonb(jsonSchema),
-				created_at: new Date(),
-				updated_at: new Date()
-			})
-			.execute()
-		ids[name] = id
+	}
+	// Resolve EVERY predicate schema from the DB (todo vocab + minted predicates) → name → schema_id.
+	const rows = await db()
+		.selectFrom('data_schema')
+		.select(['id', 'name', 'json_schema'])
+		.where('user_id', '=', uid)
+		.execute()
+	const ids: Record<string, string> = {}
+	for (const r of rows) {
+		const s = asJson(r.json_schema) as { properties?: Record<string, unknown> } | null
+		if (s?.properties?.predicate) ids[r.name] = r.id
 	}
 	return ids
 }
