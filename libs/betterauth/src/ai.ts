@@ -1,21 +1,4 @@
-import { CONTACT_SCHEMA, contactDisplayName, mintContactId } from '@avenos/aven-vibes/contact'
-import {
-	enrichFields,
-	matchContact,
-	type PartyInput,
-	partiesFromDoc,
-	partyToContactFields
-} from '@avenos/aven-vibes/contact-match'
-import { loadExtractConfig } from './skills-run'
-import {
-	computeInvoiceTotals,
-	INVOICE_DOC_SCHEMA,
-	type InvoiceDoc,
-	type InvoiceLine,
-	requiredFieldsMissing
-} from '@avenos/aven-vibes/invoice-doc'
-import { assignInvoiceNumber, type InvoiceState } from '@avenos/aven-vibes/invoice-number'
-import { CHAT_TOOLS } from '@avenos/aven-vibes/tools'
+import { chatToolDefinitions, TOOL_ACTORS } from '@avenos/skills/tools'
 import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
 import type { Context } from 'hono'
@@ -23,8 +6,7 @@ import { auth } from './auth'
 import { TIERS } from './billing'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
 import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
-import { ensureDocSchema, executeDataTool, schemasPromptHint } from './data'
-import { runSkillForUser } from './skills-run'
+import { executeDataTool, schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
 import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './usage'
@@ -61,77 +43,6 @@ export const VIBE_MARKER = '\u200baven-vibe:'
 const CARD_REPLY_NOTE =
 	'Reply with ONE short sentence confirming this \u2014 the card already shows the data. Do NOT re-list ' +
 	'it as prose, bullet points, or a Markdown table unless the user explicitly asks.'
-
-/**
- * Full type-specific extraction (board 0064): a focused, non-streaming vision pass that forces the
- * model to fill the doctype's JSON Schema as a single tool, driven by the doctype's system prompt,
- * over the same rasterized page images the classify step saw. Returns the parsed fields or null.
- */
-async function extractDocFields(
-	key: string,
-	model: string,
-	doctype: { system_prompt: string; schema: Record<string, unknown> },
-	attachments: { mimeType: string; b64: string }[]
-): Promise<Record<string, unknown> | null> {
-	const imageBlocks = attachments
-		.filter((a) => a.mimeType.startsWith('image/'))
-		.map((a) => ({ type: 'image_url', image_url: { url: `data:${a.mimeType};base64,${a.b64}` } }))
-	if (imageBlocks.length === 0) return null
-	const tool = {
-		type: 'function',
-		function: {
-			name: 'emit_fields',
-			description: 'Return the extracted document fields matching the schema.',
-			parameters: doctype.schema
-		}
-	}
-	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
-		method: 'POST',
-		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			model,
-			messages: [
-				{ role: 'system', content: doctype.system_prompt },
-				{
-					role: 'user',
-					content: [
-						{ type: 'text', text: 'Extract every field from this document.' },
-						...imageBlocks
-					]
-				}
-			],
-			tools: [tool],
-			tool_choice: { type: 'function', function: { name: 'emit_fields' } },
-			stream: false
-		})
-	}).catch((e) => {
-		console.error('[ai] extract vision fetch threw:', e)
-		return null
-	})
-	if (!res?.ok) {
-		const detail = res ? await res.text().catch(() => '') : 'no response'
-		console.error(`[ai] extract vision HTTP ${res?.status ?? '???'}:`, detail.slice(0, 600))
-		return null
-	}
-	const data = (await res.json().catch(() => null)) as {
-		choices?: { message?: { tool_calls?: { function?: { arguments?: string } }[] } }[]
-	} | null
-	const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments
-	if (!args) {
-		console.error(
-			'[ai] extract vision: no tool_call args returned:',
-			JSON.stringify(data).slice(0, 400)
-		)
-		return null
-	}
-	try {
-		const parsed = JSON.parse(args)
-		return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
-	} catch (e) {
-		console.error('[ai] extract vision: tool args not JSON:', e, args.slice(0, 300))
-		return null
-	}
-}
 
 /**
  * Recover tool calls the model emitted as TEXT instead of a structured `tool_calls` field — gemma
@@ -280,121 +191,6 @@ type StreamDelta = {
  * OpenAI-style SSE, tool calls are assembled and executed against the data store (scoped to
  * the user), their results fed back, until the model returns a final answer. board 0054.
  */
-// board 0082 — outgoing invoicing helpers (pure shaping; the tool branches do the persist/emit).
-const CONTACT_FIELD_KEYS = [
-	'type',
-	'name',
-	'legal_form',
-	'street',
-	'zip',
-	'city',
-	'country',
-	'vat_id',
-	'tax_number',
-	'email',
-	'phone',
-	'iban',
-	'bic',
-	'bank_name',
-	'contact_person',
-	'register_court',
-	'register_number',
-	'managing_director',
-	'notes'
-] as const
-
-function contactFieldsFromPick(p: Record<string, unknown>): Record<string, unknown> {
-	const out: Record<string, unknown> = {}
-	for (const k of CONTACT_FIELD_KEYS) if (p[k] != null) out[k] = p[k]
-	return out
-}
-
-function partyFromContact(c: Record<string, unknown> | null): Record<string, unknown> | null {
-	if (!c) return null
-	const pick = (k: string) => (typeof c[k] === 'string' && c[k] ? (c[k] as string) : null)
-	return {
-		name: pick('name'),
-		legal_form: pick('legal_form'),
-		street: pick('street'),
-		zip: pick('zip'),
-		city: pick('city'),
-		country: pick('country'),
-		vat_id: pick('vat_id'),
-		tax_number: pick('tax_number'),
-		iban: pick('iban'),
-		bic: pick('bic'),
-		bank_name: pick('bank_name'),
-		register_court: pick('register_court'),
-		register_number: pick('register_number'),
-		managing_director: pick('managing_director')
-	}
-}
-
-/**
- * board 0082 — after a doc extract, harvest its parties (vendor + buyer / account holder), match them
- * against the addressbook (USt-IdNr → IBAN → name), and create/enrich contacts. The buyer/account
- * holder is the user's SELF-company candidate: when none is marked yet, return a hint so the chat asks
- * "is this your company?" (answerable in free text → set_my_company). Returns the hint + touched count.
- */
-async function enrichAddressbookFromDoc(
-	userId: string,
-	docType: string,
-	extracted: Record<string, unknown>
-): Promise<{ hint: string | null; touched: number }> {
-	const { vendor, self } = partiesFromDoc(docType, extracted)
-	if (!vendor?.name && !self?.name) return { hint: null, touched: 0 }
-	await ensureDocSchema(userId, 'contact', CONTACT_SCHEMA)
-	const contacts = ((
-		(await executeDataTool(userId, { schema: 'contact', action: 'list' })) as {
-			items?: Record<string, unknown>[]
-		}
-	).items ?? []) as (Record<string, unknown> & { id?: string })[]
-	const hasSelf = contacts.some((c) => c.is_self)
-	const ids = contacts.map((c) => String(c.short_id ?? '')).filter(Boolean)
-	let touched = 0
-
-	const upsert = async (
-		party: PartyInput | undefined
-	): Promise<{ id: string; name: string } | null> => {
-		if (!party?.name) return null
-		const match = matchContact(party, contacts)
-		if (match?.id) {
-			const patch = enrichFields(match, party)
-			if (Object.keys(patch).length > 0) {
-				await executeDataTool(userId, {
-					schema: 'contact',
-					action: 'update',
-					items: [{ id: match.id, ...patch }]
-				})
-				touched++
-			}
-			return { id: match.id, name: String(match.name ?? party.name) }
-		}
-		const fields = partyToContactFields(party)
-		const shortId = mintContactId(Math.random, ids)
-		ids.push(shortId)
-		const res = (await executeDataTool(userId, {
-			schema: 'contact',
-			action: 'create',
-			items: [{ short_id: shortId, is_self: false, ...fields }]
-		})) as { created?: string[] }
-		const id = res.created?.[0] ?? ''
-		if (id) {
-			contacts.push({ id, short_id: shortId, ...(fields as Record<string, unknown>) })
-			touched++
-		}
-		return id ? { id, name: String(fields.name ?? party.name) } : null
-	}
-
-	await upsert(vendor)
-	const selfContact = await upsert(self)
-	const hint =
-		!hasSelf && selfContact
-			? `Es ist noch keine eigene Firma (Stammdaten) gesetzt. Frage den Nutzer kurz, ob „${selfContact.name}" seine eigene Firma ist; wenn ja, rufe set_my_company(contact_value_id="${selfContact.id}") auf.`
-			: null
-	return { hint, touched }
-}
-
 function streamWithTools(opts: {
 	key: string
 	model: string
@@ -467,104 +263,6 @@ function streamWithTools(opts: {
 			let promptTokens = 0
 			let completionTokens = 0
 			const emittedVibes = new Set<string>()
-			// The doc type already extracted this turn (auto-chained after classify, or via the
-			// extract_document tool) — guards against a double extraction if the model also calls the
-			// tool after we auto-ran it. board 0076.
-			let extractedType: string | null = null
-			// Run the full type-specific extraction for a classified doc (board 0064/0076): vision pass →
-			// validate+persist → tx fan-out / invoice reconcile+book → emit doc-compare + booking cards.
-			// Factored out so it runs BOTH when the model calls extract_document AND auto-chained right
-			// after classify — so the extract step never silently fails to trigger.
-			const performExtraction = async (
-				docTypeName: string,
-				tcId: string
-			): Promise<{
-				extracted: boolean
-				stored: boolean
-				txAdded: number
-				match?: { status: string; confidence?: string }
-				addressbookHint?: string | null
-			}> => {
-				const doctype = await loadExtractConfig(docTypeName) // board 0093: the flow-config SSOT
-				emitTool(tcId, 'extract_document', docTypeName || 'document', 'running')
-				let extracted: Record<string, unknown> | null = null
-				let stored = false
-				let txAdded = 0
-				let createdId: string | null = null
-					let addressbookHint: string | null = null
-				if (doctype && attachments.length > 0) {
-					// The 2nd vision pass can take 10–30s with no bytes; re-emit 'running' every 5s so the
-					// client's idle watchdog doesn't abort the stream ("Fetch is aborted"). board 0064.
-					const ping = setInterval(
-						() => emitTool(tcId, 'extract_document', `${docTypeName} · extracting…`, 'running'),
-						5_000
-					)
-					try {
-						extracted = await extractDocFields(key, model, doctype, attachments)
-					} finally {
-						clearInterval(ping)
-					}
-					if (extracted) {
-						// Stamp the source file's content hash (it was persisted to the PRIVATE store on the
-						// client) into the extracted doc so the JSON references the original. board 0082.
-						if (fileHashes[0]) extracted.file_hash = fileHashes[0]
-						try {
-							await ensureDocSchema(userId, docTypeName, doctype.schema)
-							const result = (await executeDataTool(userId, {
-								schema: docTypeName,
-								action: 'create',
-								items: [extracted]
-							})) as { ok?: boolean; created?: string[] }
-							stored = result?.ok === true
-							createdId = result?.created?.[0] ?? null
-							// board 0082 — harvest + match-make the doc's parties into the addressbook (the buyer /
-							// account holder is the self-company candidate, surfaced via the returned hint).
-							try {
-								addressbookHint = (await enrichAddressbookFromDoc(userId, docTypeName, extracted))
-									.hint
-							} catch (e2) {
-								console.error('[ai] addressbook enrich failed:', e2)
-							}
-						} catch (e) {
-							console.error('[ai] extract persist failed:', e)
-						}
-					}
-				}
-				if (extracted) extractedType = docTypeName
-				emitTool(
-					tcId,
-					'extract_document',
-					stored
-						? `${docTypeName} · stored${txAdded > 0 ? ` · +${txAdded} tx` : ''}`
-						: docTypeName || 'document',
-					extracted ? 'done' : 'error'
-				)
-				if (extracted && !emittedVibes.has('doc-compare')) {
-					emittedVibes.add('doc-compare')
-					const previewAtt = attachments.find((a) => a.mimeType.startsWith('image/'))
-					const dcData = {
-						type: docTypeName,
-						extracted,
-						fileUrl: previewAtt ? `data:${previewAtt.mimeType};base64,${previewAtt.b64}` : null,
-						mimeType: previewAtt?.mimeType ?? null
-					}
-					emit({ aven_vibe: { schema: 'doc-compare', data: dcData } })
-					await persistMessage(
-						chatSessionId,
-						'assistant',
-						`${VIBE_MARKER}doc-compare\n${JSON.stringify(dcData)}`
-					).catch((e) => console.error('[ai] persist doc-compare vibe marker failed:', e))
-				}
-				return {
-					extracted: !!extracted,
-					stored,
-					txAdded,
-					// board 0098 — reconciliation moved to the flow (matched≡mapti auto-match); the inline path
-					// no longer reconciles against flat `tx`, so an extracted invoice is reported unmatched here.
-					match: docTypeName === 'invoice' ? ({ status: 'unmatched' } as const) : undefined,
-					addressbookHint
-				}
-			}
 			// Running copy of the website files for this turn — each edit_website merges its changed
 			// files into THIS, so edits compound across files + calls. Seeded from the client. board 0055.
 			const turnFiles: Record<string, string> = { ...publicFiles }
@@ -596,7 +294,7 @@ function streamWithTools(opts: {
 						res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 							method: 'POST',
 							headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-							body: JSON.stringify({ model, messages: msgs, tools: CHAT_TOOLS, stream: true }),
+							body: JSON.stringify({ model, messages: msgs, tools: chatToolDefinitions(), stream: true }),
 							signal: ac.signal
 						})
 					} catch {
@@ -696,50 +394,36 @@ function streamWithTools(opts: {
 						} catch {
 							/* leave empty; executeDataTool will report the error */
 						}
-						// Run a skill on the attached document (board 0089): store the raw artifact, classify
-						// via REAL vision, save a `document` with provenance — the generic runner, from chat.
-						if (tc.name === 'run_skill') {
-							const skill =
-								typeof parsed.skill === 'string' && parsed.skill ? parsed.skill : 'doc-ingest'
-							emitTool(tc.id, 'run_skill', `running ${skill}`, 'running')
-							let toolResult: Record<string, unknown>
-							try {
-								const img = attachments.find((a) => a.mimeType.startsWith('image/'))
-								if (!img) {
-									toolResult = { ok: false, error: 'attach a document image to ingest' }
-								} else {
-									const out = await runSkillForUser(
-										userId,
-										skill,
-										{
-											bytes: new Uint8Array(Buffer.from(img.b64, 'base64')),
-											mime: img.mimeType
-										},
-										// board 0091 — stream each step's vibe card into the chat (classification,
-										// doc-compare, invoice-booking) as the flow runs.
-										(step) => {
-											if (!step.vibe || emittedVibes.has(step.vibe)) return
-											emittedVibes.add(step.vibe)
-											emit({ aven_vibe: { schema: step.vibe, data: step.vibeData } })
-											void persistMessage(
-												chatSessionId,
-												'assistant',
-												`${VIBE_MARKER}${step.vibe}\n${JSON.stringify(step.vibeData ?? {})}`
-											).catch(() => {})
-										}
-									)
-									toolResult = { ok: out.status === 'done', ...out, note: CARD_REPLY_NOTE }
-								}
-							} catch (e) {
-								toolResult = { ok: false, error: e instanceof Error ? e.message : String(e) }
+						// board 0099 — REGISTRY DISPATCH: a chat tool is an actor (config+behavior) in
+						// @avenos/skills/tools. data_crud (the whole Todos hub) routes here; the loop stays generic —
+						// new tool = one module + one registry line, no loop edit. Server caps are injected via ctx.
+						const actor = TOOL_ACTORS[tc.name]
+						if (actor) {
+							const out = await actor.handle({ userId, data: (a) => executeDataTool(userId, a) }, parsed)
+							if (out.hitl) {
+								// HITL: show a confirm/decline card and DON'T execute (the delete actor). aiConfirmAction runs it.
+								emit({ aven_hitl: { id: tc.id, tool: tc.name, label: out.hitl.label, action: out.hitl.action } })
+								msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out.content) })
+								continue
 							}
-							msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(toolResult) })
-							emitTool(
-								tc.id,
-								'run_skill',
-								toolResult.ok ? 'document filed' : 'skill failed',
-								toolResult.ok ? 'done' : 'error'
-							)
+							emitTool(tc.id, tc.name, out.detail ?? tc.name, 'running')
+							msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out.content) })
+							if (out.reply) {
+								emit({ choices: [{ delta: { content: out.reply } }] })
+								assistant += out.reply
+							}
+							// The actor decides WHICH vibe (todos → its mode card); the loop does the plumbing + dedup.
+							if (out.vibe && !emittedVibes.has(out.vibe.schema)) {
+								emittedVibes.add(out.vibe.schema)
+								const { schema, data } = out.vibe
+								emit({ aven_vibe: data === undefined ? { schema } : { schema, data } })
+								await persistMessage(
+									chatSessionId,
+									'assistant',
+									data === undefined ? `${VIBE_MARKER}${schema}` : `${VIBE_MARKER}${schema}\n${JSON.stringify(data)}`
+								).catch((e) => console.error('[ai] persist vibe marker failed:', e))
+							}
+							emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
 							continue
 						}
 						// Read-only website viewer: flow the Composer vibe into the chat — no data op, so
@@ -763,257 +447,6 @@ function streamWithTools(opts: {
 								)
 							}
 							emitTool(tc.id, 'show_website', 'website viewer ready', 'done')
-							continue
-						}
-						// BWA / finance snapshot: flow the computed finance vibe into the chat. No data op —
-						// the view is computed client-side from the user's bookings + tx. board 0072.
-						if (tc.name === 'show_finances') {
-							emitTool(tc.id, 'show_finances', 'opening finance snapshot', 'running')
-							msgs.push({
-								role: 'tool',
-								tool_call_id: tc.id,
-								content: JSON.stringify({
-									ok: true,
-									shown: 'finance snapshot (BWA)',
-									note: CARD_REPLY_NOTE
-								})
-							})
-							if (!emittedVibes.has('bwa')) {
-								emittedVibes.add('bwa')
-								emit({ aven_vibe: { schema: 'bwa' } })
-								await persistMessage(chatSessionId, 'assistant', `${VIBE_MARKER}bwa`).catch((e) =>
-									console.error('[ai] persist bwa vibe marker failed:', e)
-								)
-							}
-							emitTool(tc.id, 'show_finances', 'finance snapshot ready', 'done')
-							continue
-						}
-						// board 0082 — outgoing invoicing + addressbook tools. Contacts/invoices are JSON in /api/data;
-						// the server mints contact ids, assigns fortlaufende numbers, computes VAT. PDF render is client-side.
-						if (
-							tc.name === 'upsert_contact' ||
-							tc.name === 'set_my_company' ||
-							tc.name === 'query_contacts' ||
-							tc.name === 'create_invoice' ||
-							tc.name === 'update_invoice' ||
-							tc.name === 'set_invoice_state' ||
-							tc.name === 'save_invoice_pdf'
-						) {
-							const reply = typeof parsed.response === 'string' ? parsed.response : ''
-							emitTool(tc.id, tc.name, tc.name, 'running')
-							let toolResult: Record<string, unknown> = { ok: true }
-							const emitVibe = (schema: string, data?: unknown) => {
-								emit({ aven_vibe: data === undefined ? { schema } : { schema, data } })
-								const marker =
-									data === undefined
-										? `${VIBE_MARKER}${schema}`
-										: `${VIBE_MARKER}${schema}\n${JSON.stringify(data)}`
-								void persistMessage(chatSessionId, 'assistant', marker).catch(() => {})
-							}
-							try {
-								await ensureDocSchema(userId, 'contact', CONTACT_SCHEMA)
-								const listContacts = async (): Promise<Record<string, unknown>[]> =>
-									(
-										(await executeDataTool(userId, { schema: 'contact', action: 'list' })) as {
-											items?: Record<string, unknown>[]
-										}
-									).items ?? []
-								if (tc.name === 'query_contacts') {
-									const items = await listContacts()
-									emitVibe('addressbook')
-									toolResult = { ok: true, count: items.length, note: CARD_REPLY_NOTE }
-								} else if (tc.name === 'upsert_contact') {
-									const fields = contactFieldsFromPick(parsed)
-									const contacts = await listContacts()
-									// Resolve the target: an explicit id, else DEDUPE against an existing contact
-									// (USt-IdNr → IBAN → name) so we never create a duplicate. board 0082.
-									let targetId =
-										typeof parsed.contact_value_id === 'string' && parsed.contact_value_id
-											? parsed.contact_value_id
-											: (matchContact(fields as PartyInput, contacts)?.id ?? null)
-									if (targetId) {
-										await executeDataTool(userId, {
-											schema: 'contact',
-											action: 'update',
-											items: [{ id: targetId, ...fields }]
-										})
-										toolResult = { ok: true, contact_value_id: targetId, updated: true }
-									} else {
-										const shortId = mintContactId(
-											Math.random,
-											contacts.map((c) => String(c.short_id ?? '')).filter(Boolean)
-										)
-										const res = (await executeDataTool(userId, {
-											schema: 'contact',
-											action: 'create',
-											items: [{ short_id: shortId, is_self: false, ...fields }]
-										})) as { created?: string[] }
-										targetId = res.created?.[0] ?? null
-										toolResult = { ok: true, contact_value_id: targetId, short_id: shortId }
-									}
-									emitVibe('addressbook')
-								} else if (tc.name === 'set_my_company') {
-									await executeDataTool(userId, {
-										schema: 'contact',
-										action: 'update',
-										items: [{ id: parsed.contact_value_id, is_self: true }]
-									})
-									emitVibe('addressbook')
-									toolResult = { ok: true, set: 'is_self' }
-								} else {
-									// invoice tools — need invoice_doc schema, the seller (my company), and existing numbers.
-									await ensureDocSchema(userId, 'invoice_doc', INVOICE_DOC_SCHEMA)
-									const contacts = await listContacts()
-									const myCompany = contacts.find((c) => c.is_self) ?? null
-									const invoices =
-										(
-											(await executeDataTool(userId, {
-												schema: 'invoice_doc',
-												action: 'list'
-											})) as { items?: Record<string, unknown>[] }
-										).items ?? []
-									const numbers = invoices.map((i) => String(i.number ?? '')).filter(Boolean)
-									const persistDoc = async (doc: InvoiceDoc) => {
-										await executeDataTool(userId, {
-											schema: 'invoice_doc',
-											action: 'create',
-											items: [doc as unknown as Record<string, unknown>]
-										})
-										emitVibe('invoice-create', doc)
-									}
-									if (tc.name === 'create_invoice') {
-										// resolve the customer: existing contact, or create one from `customer`.
-										let customer =
-											typeof parsed.contact_value_id === 'string'
-												? (contacts.find((c) => c.id === parsed.contact_value_id) ?? null)
-												: null
-										if (!customer && parsed.customer && typeof parsed.customer === 'object') {
-											const cf = contactFieldsFromPick(parsed.customer as Record<string, unknown>)
-											const shortId = mintContactId(
-												Math.random,
-												contacts.map((c) => String(c.short_id ?? '')).filter(Boolean)
-											)
-											const res = (await executeDataTool(userId, {
-												schema: 'contact',
-												action: 'create',
-												items: [{ short_id: shortId, is_self: false, type: 'company', ...cf }]
-											})) as { created?: string[] }
-											customer = { id: res.created?.[0] ?? null, short_id: shortId, ...cf }
-											emitVibe('addressbook')
-										}
-										const shortId = String(customer?.short_id ?? 'XXXXXXXX')
-										const lines = (Array.isArray(parsed.lines) ? parsed.lines : []) as InvoiceLine[]
-										const number = assignInvoiceNumber(numbers, 'entwurf', shortId)
-										const doc: InvoiceDoc = {
-											number,
-											state: 'entwurf',
-											version: 1,
-											contact_short_id: shortId,
-											contact_value_id: (customer?.id as string) ?? null,
-											issue_date: typeof parsed.issue_date === 'string' ? parsed.issue_date : null,
-											service_date: null,
-											service_period:
-												typeof parsed.service_period === 'string' ? parsed.service_period : null,
-											seller: partyFromContact(myCompany) as InvoiceDoc['seller'],
-											buyer: partyFromContact(customer) as InvoiceDoc['buyer'],
-											lines,
-											totals: computeInvoiceTotals(lines),
-											currency: 'EUR',
-											note: typeof parsed.note === 'string' ? parsed.note : null,
-											pdf_file_hash: null,
-											supersedes: null
-										}
-										await persistDoc(doc)
-										const missing = requiredFieldsMissing(doc)
-										toolResult = {
-											ok: true,
-											number,
-											totals: doc.totals,
-											my_company_set: !!myCompany,
-											missing_required_fields: missing,
-											note:
-												missing.length || !myCompany
-													? 'Ask the user (free text/voice) for the missing fields, then update_invoice / upsert the seller.'
-													: CARD_REPLY_NOTE
-										}
-									} else if (tc.name === 'update_invoice') {
-										const prior =
-											invoices
-												.filter((i) => i.number === parsed.number)
-												.sort((a, b) => Number(b.version ?? 0) - Number(a.version ?? 0))[0] ?? null
-										const base = (prior ?? {}) as unknown as InvoiceDoc
-										const lines = (
-											Array.isArray(parsed.lines) ? parsed.lines : (base.lines ?? [])
-										) as InvoiceLine[]
-										const doc: InvoiceDoc = {
-											...base,
-											version: Number(base.version ?? 0) + 1,
-											issue_date:
-												typeof parsed.issue_date === 'string'
-													? parsed.issue_date
-													: (base.issue_date ?? null),
-											service_period:
-												typeof parsed.service_period === 'string'
-													? parsed.service_period
-													: (base.service_period ?? null),
-											note: typeof parsed.note === 'string' ? parsed.note : (base.note ?? null),
-											lines,
-											totals: computeInvoiceTotals(lines),
-											pdf_file_hash: null,
-											supersedes: String(parsed.number)
-										}
-										await persistDoc(doc)
-										toolResult = {
-											ok: true,
-											number: doc.number,
-											version: doc.version,
-											totals: doc.totals,
-											note: CARD_REPLY_NOTE
-										}
-									} else if (tc.name === 'set_invoice_state') {
-										const prior =
-											invoices
-												.filter((i) => i.number === parsed.number)
-												.sort((a, b) => Number(b.version ?? 0) - Number(a.version ?? 0))[0] ?? null
-										const base = (prior ?? {}) as unknown as InvoiceDoc
-										const state = parsed.state as InvoiceState
-										const shortId = String(base.contact_short_id ?? 'XXXXXXXX')
-										const number = assignInvoiceNumber(numbers, state, shortId)
-										const doc: InvoiceDoc = {
-											...base,
-											number,
-											state,
-											version: 1,
-											pdf_file_hash: null,
-											supersedes: String(parsed.number)
-										}
-										await persistDoc(doc)
-										toolResult = { ok: true, number, state, note: CARD_REPLY_NOTE }
-									} else if (tc.name === 'save_invoice_pdf') {
-										// The PDF is rendered client-side (HTML template → print). Flow the invoice card so the client
-										// can render + store it in the PRIVATE file store and stamp the hash. board 0082 Phase E.
-										const doc =
-											invoices
-												.filter((i) => i.number === parsed.number)
-												.sort((a, b) => Number(b.version ?? 0) - Number(a.version ?? 0))[0] ?? null
-										if (doc) emitVibe('invoice-create', doc)
-										emit({ aven_invoice_pdf: { number: parsed.number } })
-										toolResult = {
-											ok: true,
-											number: parsed.number,
-											note: 'The client renders + stores the PDF.'
-										}
-									}
-								}
-							} catch (e) {
-								toolResult = { ok: false, error: e instanceof Error ? e.message : String(e) }
-							}
-							msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(toolResult) })
-							if (reply) {
-								emit({ choices: [{ delta: { content: reply } }] })
-								assistant += reply
-							}
-							emitTool(tc.id, tc.name, tc.name, 'done')
 							continue
 						}
 						// Website edit: the chat model passed an instruction — GLM returns SEARCH/REPLACE diff
@@ -1110,240 +543,6 @@ function streamWithTools(opts: {
 								})
 							})
 							continue
-						}
-						// Bookkeeping: classify_document — the model already determined the type and
-						// metadata from the multimodal content. Emit the vibe card with that data. 0063.
-						if (tc.name === 'classify_document') {
-							const docType = typeof parsed.docType === 'string' ? parsed.docType : 'other'
-							const title = typeof parsed.title === 'string' ? parsed.title : ''
-							const description = typeof parsed.description === 'string' ? parsed.description : ''
-							const booking_summary =
-								typeof parsed.booking_summary === 'string' ? parsed.booking_summary : ''
-							const tags = Array.isArray(parsed.tags) ? (parsed.tags as unknown[]).map(String) : []
-							const issuer = typeof parsed.issuer === 'string' ? parsed.issuer : ''
-							const recipient = typeof parsed.recipient === 'string' ? parsed.recipient : ''
-							const parties = Array.isArray(parsed.parties)
-								? (parsed.parties as unknown[]).map(String)
-								: []
-							const reply =
-								typeof parsed.response === 'string' ? parsed.response : 'Dokument klassifiziert.'
-							emitTool(tc.id, 'classify_document', `${docType}: ${title}`, 'running')
-							if (!emittedVibes.has('bookkeeping')) {
-								emittedVibes.add('bookkeeping')
-								const previewAtt = attachments.find((a) => a.mimeType.startsWith('image/'))
-								const bkData = {
-									docType,
-									title,
-									description,
-									booking_summary,
-									tags,
-									issuer,
-									recipient,
-									parties,
-									fileUrl: previewAtt
-										? `data:${previewAtt.mimeType};base64,${previewAtt.b64}`
-										: null,
-									mimeType: previewAtt?.mimeType ?? null
-								}
-								emit({ aven_vibe: { schema: 'bookkeeping', data: bkData } })
-								// Persist the marker WITH its data + preview image so the card (and its thumbnail)
-								// re-hydrate after reload. board 0067/0074.
-								await persistMessage(
-									chatSessionId,
-									'assistant',
-									`${VIBE_MARKER}bookkeeping\n${JSON.stringify(bkData)}`
-								).catch((e) => console.error('[ai] persist bookkeeping vibe marker failed:', e))
-							}
-							emitTool(tc.id, 'classify_document', `${docType}: ${title}`, 'done')
-							// Auto-chain the extract step (board 0076): the model sometimes classifies and then stops
-							// without calling extract_document. For an extractable type with images, run extraction
-							// here directly so it never silently fails to trigger.
-							const extractable =
-								(docType === 'invoice' || docType === 'bank_statement' || docType === 'contract') &&
-								attachments.length > 0
-							let autoExtract: Awaited<ReturnType<typeof performExtraction>> | null = null
-							if (extractable && !extractedType) {
-								autoExtract = await performExtraction(docType, `${tc.id}:extract`)
-							}
-							msgs.push({
-								role: 'tool',
-								tool_call_id: tc.id,
-								content: JSON.stringify({
-									ok: true,
-									docType,
-									title,
-									description,
-									tags,
-									issuer,
-									recipient,
-									parties,
-									...(autoExtract
-										? {
-												extracted: autoExtract.extracted,
-												stored: autoExtract.stored,
-												// Addressbook auto-enriched from the parties; the hint (if any) asks the user to
-												// confirm their own company. Else: extraction already ran, reply briefly. board 0082.
-												note:
-													autoExtract.addressbookHint ??
-													'Extraction already ran automatically — do NOT call extract_document. Reply with one short sentence.'
-											}
-										: {})
-								})
-							})
-							emit({ choices: [{ delta: { content: reply } }] })
-							assistant += reply
-							continue
-						}
-						// Bookkeeping: extract_document — full type-specific extraction (factored into performExtraction,
-						// also auto-chained after classify). Skip if classify already ran it for this type. board 0064/0076.
-						if (tc.name === 'extract_document') {
-							const docTypeName = typeof parsed.type === 'string' ? parsed.type : ''
-							const reply =
-								typeof parsed.response === 'string' ? parsed.response : 'Dokument extrahiert.'
-							const summary =
-								extractedType === docTypeName
-									? {
-											extracted: true,
-											stored: true,
-											txAdded: 0,
-											match: undefined,
-											addressbookHint: null as string | null
-										}
-									: await performExtraction(docTypeName, tc.id)
-							msgs.push({
-								role: 'tool',
-								tool_call_id: tc.id,
-								content: JSON.stringify({
-									ok: !!summary.extracted,
-									type: docTypeName,
-									stored: summary.stored,
-									validated: summary.stored,
-									transactions_added: summary.txAdded,
-									match: summary.match,
-									// board 0082 — addressbook auto-enriched from the parties; when the user's own
-									// company isn't set yet, this asks them to confirm it (free text).
-									...(summary.addressbookHint ? { note: summary.addressbookHint } : {})
-								})
-							})
-							emit({ choices: [{ delta: { content: reply } }] })
-							assistant += reply
-							continue
-						}
-						const dataDetail =
-							`${typeof parsed.action === 'string' ? parsed.action : ''} ${typeof parsed.schema === 'string' ? parsed.schema : ''}`.trim() ||
-							'data'
-						// HITL: never DELETE without explicit confirmation — show a confirm/decline card and
-						// DON'T execute. The user approves via /api/ai/confirm, which runs it. board 0055.
-						if (parsed.action === 'delete') {
-							const schema = typeof parsed.schema === 'string' ? parsed.schema : 'data'
-							const id = typeof parsed.id === 'string' ? parsed.id : ''
-							// board 0099 — the delete actor shows WHICH todo was removed, so snapshot its title now and
-							// carry it in the HITL action; the client renders a todos-deleted card on confirm. Also gives
-							// the confirm card a human label instead of a bare id.
-							let delTitle = ''
-							if (schema === 'todos' && id) {
-								const cur = (await executeDataTool(userId, {
-									schema: 'todos',
-									action: 'list'
-								})) as { items?: Record<string, unknown>[] }
-								delTitle = String((cur.items ?? []).find((r) => String(r.id) === id)?.title ?? '')
-							}
-							emit({
-								aven_hitl: {
-									id: tc.id,
-									tool: 'data_crud',
-									label:
-										schema === 'todos' && delTitle
-											? `Delete todo "${delTitle}"?`
-											: `Delete from "${schema}"${id ? ` (#${id.slice(0, 8)})` : ''}?`,
-									action: { ...parsed, ...(delTitle ? { _title: delTitle } : {}) }
-								}
-							})
-							msgs.push({
-								role: 'tool',
-								tool_call_id: tc.id,
-								content: JSON.stringify({
-									ok: false,
-									status: 'awaiting_user_confirmation',
-									note: 'A confirm/decline card was shown to the user. Do NOT delete or retry — just tell them you asked them to confirm.'
-								})
-							})
-							continue
-						}
-						// board 0099 — the Todos skill is an actor hub. The edit actor shows a before→after
-						// diff, so snapshot the affected rows BEFORE the write while we still can.
-						let todosBefore: Record<string, Record<string, unknown>> | undefined
-						if (parsed.schema === 'todos' && parsed.action === 'update') {
-							const cur = (await executeDataTool(userId, {
-								schema: 'todos',
-								action: 'list'
-							})) as { items?: Record<string, unknown>[] }
-							todosBefore = Object.fromEntries((cur.items ?? []).map((r) => [String(r.id), r]))
-						}
-						emitTool(tc.id, tc.name || 'data_crud', dataDetail, 'running')
-						let result: unknown
-						try {
-							result = await executeDataTool(userId, parsed)
-						} catch (e) {
-							result = { ok: false, error: e instanceof Error ? e.message : String(e) }
-						}
-						// A `list` renders a vibe card, so tell the model to answer tersely (don't re-dump the
-						// rows as a Markdown table). Scoped to THIS tool result, not a global prompt. board 0075.
-						const resultPayload =
-							parsed.action === 'list' &&
-							result &&
-							typeof result === 'object' &&
-							!Array.isArray(result)
-								? { ...(result as Record<string, unknown>), note: CARD_REPLY_NOTE }
-								: result
-						msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(resultPayload) })
-						emitTool(tc.id, tc.name || 'data_crud', dataDetail, 'done')
-						// Signal the client to flow a live vibe card for the touched schema into the
-						// message stream (the same data this CRUD just changed), and persist a marker
-						// message so the card reappears when the session is reloaded. One per schema
-						// per turn. board 0054.
-						// board 0099 — the Todos skill is an ACTOR HUB: the create/edit actors stream their own
-						// mode vibe showing ONLY what changed (created → new tasks, edited → updated + before→after
-						// diff). Every other schema (incl. a plain todos `list` = the read actor) flows the full
-						// live card. One vibe per schema/mode per turn; a marker is persisted so it survives reload.
-						const todoItem = (o: Record<string, unknown>) => ({
-							id: o.id as string | undefined,
-							title: (o.title ?? o.task) as string | undefined,
-							done: o.done as boolean | undefined,
-							due: o.due as string | undefined,
-							priority: o.priority as string | undefined
-						})
-						let vibeSchema = typeof parsed.schema === 'string' ? parsed.schema : ''
-						let vibePayload: unknown
-						if (parsed.schema === 'todos' && parsed.action === 'create') {
-							vibeSchema = 'todos-created'
-							const pItems = (parsed.items ?? []) as Record<string, unknown>[]
-							vibePayload = { items: pItems.map((i) => todoItem(i)) }
-						} else if (parsed.schema === 'todos' && parsed.action === 'update') {
-							vibeSchema = 'todos-edited'
-							const pItems = (parsed.items ?? []) as Record<string, unknown>[]
-							const items = pItems.map((i) => todoItem(i))
-							const diffs = pItems
-								.map((patch) => {
-									const before = (todosBefore ?? {})[String(patch.id)] ?? {}
-									const changes = Object.keys(patch)
-										.filter((k) => k !== 'id' && String(patch[k] ?? '') !== String(before[k] ?? ''))
-										.map((k) => ({ field: k, from: String(before[k] ?? ''), to: String(patch[k] ?? '') }))
-									return { id: String(patch.id), title: String(before.title ?? patch.title ?? ''), changes }
-								})
-								.filter((d) => d.changes.length > 0)
-							vibePayload = { items, diffs }
-						}
-						if (vibeSchema && !emittedVibes.has(vibeSchema)) {
-							emittedVibes.add(vibeSchema)
-							emit({ aven_vibe: vibePayload === undefined ? { schema: vibeSchema } : { schema: vibeSchema, data: vibePayload } })
-							await persistMessage(
-								chatSessionId,
-								'assistant',
-								vibePayload === undefined
-									? `${VIBE_MARKER}${vibeSchema}`
-									: `${VIBE_MARKER}${vibeSchema}\n${JSON.stringify(vibePayload)}`
-							).catch((e) => console.error('[ai] persist vibe marker failed:', e))
 						}
 					}
 				}
