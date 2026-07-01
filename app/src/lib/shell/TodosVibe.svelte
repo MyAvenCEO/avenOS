@@ -49,11 +49,6 @@ const MODE_EYEBROW: Record<Exclude<TodoMode, 'all'>, string> = {
 	edited: 'Aktualisiert',
 	deleted: 'Gelöscht'
 }
-const MODE_TITLE: Record<Exclude<TodoMode, 'all'>, string> = {
-	created: 'Neue Aufgaben',
-	edited: 'Aktualisierte Aufgaben',
-	deleted: 'Gelöschte Aufgaben'
-}
 
 const base = createTodosShell()
 const vibeQuery = createQuery(() => ({
@@ -155,51 +150,115 @@ function handleEvent(event: UiEvent): void {
 	mutation.mutate(event)
 }
 
-// The create/edit/delete actors render through the SAME engine as read — a mode-specific source over
-// the todos vibe. The row chips carry the change: created keeps due/priority, edited shows the
-// before→after diff, deleted marks the row done + a "gelöscht" chip. board 0099.
-const summarySource = $derived.by(() => {
-	if (mode === 'all') return source
-	// EDITED: build rows from the diffs — an update only sends the changed fields (no title), but the
-	// diff carries the before→after snapshot INCLUDING the task's title. So show the title + the change.
-	const items =
-		mode === 'edited'
-			? summaryDiffs.map((d) => ({
-					id: d.id,
-					text: d.title || '—',
-					done: false,
-					due: '',
-					priority: d.changes.map((c) => `${c.field}: ${c.from || '—'} → ${c.to || '—'}`).join(' · ')
-				}))
-			: summaryItems.map((it) => ({
-					id: it.id ?? it.title ?? '',
-					text: it.title ?? '—',
-					done: mode === 'deleted' ? true : it.done === true,
-					due: mode === 'deleted' ? '' : relDue(it.due),
-					priority: mode === 'deleted' ? 'gelöscht' : (it.priority ?? '')
-				}))
-	const m = mode as Exclude<TodoMode, 'all'>
-	return {
-		title: MODE_TITLE[m],
-		items,
-		labels: { ...source.labels, listEyebrow: MODE_EYEBROW[m], emptyList: '—' }
-	}
-})
-// Summary actors are read-only — swallow any UI event (no add/toggle/delete from a "what changed" card).
-function noEvent(): void {}
+// read (all) is the full interactive engine vibe. create/edit/delete are the "what changed" actors —
+// a diff doesn't fit an interactive list row, so each gets a purpose-built layout: created = new tasks
+// + chips, edited = title + aligned field old→new rows, deleted = struck-through titles. board 0099.
+const MODE_DOT: Record<Exclude<TodoMode, 'all'>, string> = {
+	created: 'bg-green-600',
+	edited: 'bg-primary',
+	deleted: 'bg-destructive'
+}
+const MODE_ACCENT: Record<Exclude<TodoMode, 'all'>, string> = {
+	created: 'text-green-700',
+	edited: 'text-primary',
+	deleted: 'text-destructive'
+}
+const summaryMode = $derived(mode as Exclude<TodoMode, 'all'>)
+const summaryCount = $derived(mode === 'edited' ? summaryDiffs.length : summaryItems.length)
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-2">
 	{#if err}
 		<p class="text-destructive shrink-0 text-sm" role="alert">{err}</p>
 	{/if}
-	<div class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
-		<AvenVibeView
-			{shell}
-			source={mode === 'all' ? source : summarySource}
-			onEvent={mode === 'all' ? handleEvent : noEvent}
-			{containerName}
-			desktopHint={t('mainnet.auth.loading')}
-		/>
-	</div>
+	{#if mode === 'all'}
+		<div class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
+			<AvenVibeView
+				{shell}
+				{source}
+				onEvent={handleEvent}
+				{containerName}
+				desktopHint={t('mainnet.auth.loading')}
+			/>
+		</div>
+	{:else}
+		<!-- create / edit / delete actor — a clean, purpose-built "what changed" card. board 0099. -->
+		<section class="mx-auto w-full max-w-2xl" data-container={containerName}>
+			<header class="mb-3 flex items-center gap-2">
+				<span class="size-2 rounded-full {MODE_DOT[summaryMode]}"></span>
+				<span class="text-[11px] font-bold tracking-[0.14em] uppercase {MODE_ACCENT[summaryMode]}"
+					>{MODE_EYEBROW[summaryMode]}</span
+				>
+				<span class="text-muted-foreground text-[11px]"
+					>· {summaryCount} {summaryCount === 1 ? 'Aufgabe' : 'Aufgaben'}</span
+				>
+			</header>
+
+			{#if summaryCount === 0}
+				<p
+					class="text-muted-foreground border-border rounded-[var(--radius-lg)] border border-dashed px-4 py-6 text-center text-sm"
+				>
+					Keine Änderungen.
+				</p>
+			{:else if mode === 'edited'}
+				<ul class="flex flex-col gap-2">
+					{#each summaryDiffs as d (d.id)}
+						<li class="border-border bg-card rounded-[var(--radius-lg)] border px-4 py-3">
+							<p class="text-foreground text-sm font-semibold">{d.title || '—'}</p>
+							<ul class="mt-2 flex flex-col gap-1.5">
+								{#each d.changes as c (c.field)}
+									<li class="flex items-baseline gap-2 text-[12px]">
+										<span class="text-muted-foreground w-20 shrink-0 capitalize">{c.field}</span>
+										<span class="text-muted-foreground line-through decoration-1">{c.from || '—'}</span>
+										<span class="text-muted-foreground/60">→</span>
+										<span class="text-foreground font-medium">{c.to || '—'}</span>
+									</li>
+								{/each}
+							</ul>
+						</li>
+					{/each}
+				</ul>
+			{:else if mode === 'deleted'}
+				<ul class="flex flex-col gap-2">
+					{#each summaryItems as it (it.id ?? it.title)}
+						<li
+							class="border-border bg-card flex items-center gap-2.5 rounded-[var(--radius-lg)] border px-4 py-3"
+						>
+							<span class="text-destructive text-sm">✕</span>
+							<span class="text-muted-foreground text-sm line-through">{it.title ?? '—'}</span>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<!-- created -->
+				<ul class="flex flex-col gap-2">
+					{#each summaryItems as it (it.id ?? it.title)}
+						<li
+							class="border-border bg-card flex items-center justify-between gap-3 rounded-[var(--radius-lg)] border px-4 py-3"
+						>
+							<span class="flex min-w-0 items-center gap-2.5">
+								<span class="border-primary/40 size-4 shrink-0 rounded-full border-2"></span>
+								<span class="text-foreground truncate text-sm font-medium">{it.title ?? '—'}</span>
+							</span>
+							{#if relDue(it.due) || it.priority}
+								<span class="flex shrink-0 gap-1.5">
+									{#if relDue(it.due)}
+										<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px]"
+											>{relDue(it.due)}</span
+										>
+									{/if}
+									{#if it.priority}
+										<span
+											class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px] capitalize"
+											>{it.priority}</span
+										>
+									{/if}
+								</span>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+	{/if}
 </div>

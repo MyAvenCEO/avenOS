@@ -11,6 +11,7 @@ import { listFlows } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import { openDbSchema } from '$lib/shell/nav.svelte'
+import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
 // board 0083 — Skills view = TEMPLATES only, rendered via the shared FlowGraph (real edges + labels,
 // pan/zoom). Left = skill list, center = the flow DAG (composites navigate into sub-skills), right =
@@ -33,6 +34,33 @@ const nodeById = $derived(new Map((selected?.nodes ?? []).map((n) => [n.id, n]))
 const selectedNode = $derived<RecipeNode | null>(
 	selectedNodeId ? (nodeById.get(selectedNodeId) ?? null) : null
 )
+
+// board 0099 — preview the SELECTED actor's vibe below the flow graph. Each todos actor names its
+// vibe (todos / todos-created / todos-edited / todos-deleted); render it with illustrative sample data
+// so the template view shows what that actor produces, without needing a live run.
+type PreviewMode = 'all' | 'created' | 'edited' | 'deleted'
+const previewVibe = $derived<string>(selectedNode?.vibe ?? '')
+const previewMode = $derived<PreviewMode>(
+	previewVibe === 'todos-created'
+		? 'created'
+		: previewVibe === 'todos-edited'
+			? 'edited'
+			: previewVibe === 'todos-deleted'
+				? 'deleted'
+				: 'all'
+)
+const PREVIEW_DATA: Record<
+	string,
+	{ items?: { id?: string; title?: string; priority?: string }[]; diffs?: { id: string; title: string; changes: { field: string; from: string; to: string }[] }[] }
+> = {
+	'todos-created': { items: [{ id: 'sample', title: 'Beispielaufgabe', priority: 'medium' }] },
+	'todos-edited': {
+		items: [],
+		diffs: [{ id: 'sample', title: 'Beispielaufgabe', changes: [{ field: 'done', from: 'False', to: 'True' }] }]
+	},
+	'todos-deleted': { items: [{ id: 'sample', title: 'Beispielaufgabe' }] }
+}
+const previewData = $derived(PREVIEW_DATA[previewVibe])
 
 function resLabel(flow: Flow | null, k: string): string {
 	return flow?.resourceLabels?.[k] ?? RESOURCE_LABEL[k] ?? k
@@ -86,8 +114,30 @@ function onSelect(id: string): void {
 					<h2 class="text-foreground text-base font-semibold">{selected.name}</h2>
 					<p class="text-muted-foreground text-xs">{selected.description}</p>
 				</div>
-				<div class="min-h-0 flex-1">
+				<!-- Top: the actor flow — click a node to preview its vibe. -->
+				<div class="border-border h-64 shrink-0 border-b">
 					<FlowGraph flow={selected} {selectedNodeId} {onSelect} />
+				</div>
+				<!-- Bottom: the selected actor's vibe view (with sample data for the template). board 0099. -->
+				<div class="min-h-0 flex-1 overflow-auto p-4">
+					{#if selectedNode && previewVibe.startsWith('todos')}
+						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
+							Vibe · {previewVibe}
+						</p>
+						<TodosVibe
+							containerName={`skills-preview-${selectedNodeId}`}
+							mode={previewMode}
+							data={previewData}
+						/>
+					{:else if selectedNode}
+						<p class="text-muted-foreground text-center text-sm">
+							Keine Vibe-Vorschau für diesen Aktor.
+						</p>
+					{:else}
+						<p class="text-muted-foreground text-center text-sm">
+							Aktor im Graphen wählen, um seine Vibe zu sehen.
+						</p>
+					{/if}
 				</div>
 			</div>
 		{/if}
