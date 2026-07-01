@@ -1,122 +1,150 @@
 ---
-title: Strip avenOS back to a resilient core — delete finance / bank / booking / enrich / addressbook / planner
+title: One e2e Todos skill on the actor model — 4 non-linear vibe states (read · create · edit · delete); strip everything else
 summary: >
-  The finance program (board 0098) + the addressbook/enrich/booking machinery (0064–0066, 0082, 0097's
-  finance half) became a complexity sink and hit a dead end ("Sackgasse") — bank-statement extract + brain
-  + processing flows, the bookkeeping (SKR04 double-entry) skill, the BWA/reconcile/transaction/booking
-  verticals, the enrich actor + contact card, the addressbook vibe, the project-planner skill. First
-  principles (`.cursor/rules/first-principles.mdc` + `compact-simplify-consolidate.mdc`): don't optimize
-  what shouldn't exist — DELETE it. Strip the app to its irreducible resilient core and re-introduce
-  verticals later, deliberately. KEEP: chat, todos, and invoice extraction as SHOW-ONLY (ingest → classify
-  → extract → render the extracted invoice, NO persistence/enrich); the Lojban ontology types
-  todos+company+person+invoice+document (defined, just not auto-written); the SKR04 reference JSON (skr.ts)
-  for later. 100% migration, no shims, no dead code left behind. aven-db CRDT untouched.
+  The finance/bank/booking/enrich/addressbook/invoice program hit a dead end. First-principles reset: KEEP
+  the skills actor/flow machinery + the vibe engine + the predication data engine, but DELETE every
+  document/invoice/finance vertical and reduce the whole app to ONE end-to-end **Todos skill** built as an
+  ACTOR CLUSTER (not a linear pipeline). The Todos skill has 4 independent actors, each with its own tool
+  + its own vibe state: (1) READ — list/display all todos (the current todos vibe); (2) CREATE — show the
+  new tasks just created; (3) EDIT — read all todos to resolve ids, then show only the updated todos + what
+  changed; (4) DELETE — read all todos to resolve ids, then show which todos were deleted. These are NOT
+  linear flow steps — one skill, multiple actors + tools, dispatched by intent, able to run sequentially OR
+  in parallel (e.g. "add two tasks and delete the groceries one" → CREATE ‖ DELETE in one turn, each
+  streaming its own vibe). This is the reference implementation of the actor model on the simplest vertical,
+  and it forces the runner + Runs/Skills UI + vibe config to evolve from left→right pipeline to actor hub.
+  KEEP the flow/actor/vibe/predication machinery + the SKR04 reference JSON (skr.ts) for later. aven-db untouched.
 owner: claude
 created: 2026-07-01
 updated: 2026-07-01
 goal: >
-  avenOS is stripped to chat + todos + invoice-extract-show-only, with the finance/bank/booking/enrich/
-  addressbook/planner surface fully deleted (no back-compat shims, all call sites migrated). Proven by —
-  (1) FLOWS: a migration drops `book`, `capture-bank`, `kontoauszug`, `project-planner` from the `flow`
-  table, and rewrites `capture` to end at `extract` (the `enrich` node removed); `SELECT id FROM flow`
-  returns only `doc-ingest`, `capture`, `invoice` (+ any kept). Their seed migrations no longer run stale
-  config.
-  (2) PREDICATE TYPES: `transaction` is dropped from `predicate_type`; the transaction vocab
-  (transaction/dated/value_dated/balance/booked/matched) + `TRANSACTION_SPEC` are deleted from the code;
-  the board-0097 completeness+correctness gate still exits 0 for the remaining predicates.
-  (3) VIBES: `AddressbookVibe`, `FinanceVibe`, `TransactionsVibe`, `InvoiceBookingVibe`, `InvoiceMatchVibe`,
-  `OpenItemsVibe`, `InvoiceCreateVibe` are deleted; `StepVibe`'s enrich/contact + finance branches are gone;
-  no `MainnetChat`/`MainnetVibes` dispatch references them. The invoice flow renders the extracted invoice
-  via `InvoiceDocVibe` only.
-  (4) ACTORS/SKILLS/TOOLS: `enrichAddressbook` + `humanReview` deleted from `skills-run`; the addressbook +
-  outgoing-invoice chat tools (`query_contacts`/`upsert_contact`/`set_my_company`/`create_invoice`) removed
-  from `ai.ts`; `rg "enrichAddressbook|AddressbookVibe|FinanceVibe|TransactionsVibe|BWA|matchInvoice|bookInvoice"
+  The app is one end-to-end Todos skill on the actor model, with every other vertical deleted. Proven by —
+  (1) ONE SKILL: the only registered skill/flow is `todos`; `book`/`capture`/`capture-bank`/`kontoauszug`/
+  `invoice`/`doc-ingest`/`project-planner` are dropped from the `flow` table (migration) + their configs/
+  actors/vibes deleted from code.
+  (2) FOUR ACTORS, NON-LINEAR: the `todos` skill declares 4 actors — `read_todos`, `create_todos`,
+  `edit_todos`, `delete_todos` — each with its own TOOL + VIBE, and NO edges between them (an actor
+  cluster, not a chain). `edit_todos`/`delete_todos` first read all todos to resolve ids.
+  (3) FOUR VIBE STATES: one `TodosVibe` renders 4 modes — `all` (read), `created` (the new tasks), `edited`
+  (only the updated tasks + a before→after diff), `deleted` (the removed tasks); each actor emits its mode.
+  (4) DISPATCH + PARALLEL: a single chat turn expressing multiple intents runs the matching actors
+  (sequentially or in parallel), and each streams its own vibe card; the run trace (`flow_run`) records
+  every invoked actor + its vibe.
+  (5) RUNS/SKILLS UI: RunsView + SkillsView render the todos skill as an ACTOR HUB (the 4 actors as
+  independent mailboxes, no left→right edge chain); a run highlights the actor(s) that received a message
+  and shows their vibe(s); parallel invocations render side-by-side.
+  (6) STRIP: `predicate_type` = only `todos`; the `company`/`person`/`invoice`/`document`/`transaction`
+  types + their specs/vocab/vibes are deleted; `rg "AddressbookVibe|FinanceVibe|TransactionsVibe|
+  enrichAddressbook|InvoiceDocVibe|BookkeepingVibe|capture-bank|kontoauszug|bank-statement|bookkeeping"
   libs app` is empty (except board docs).
-  (5) KEEP: `skr.ts` (SKR04 reference) still present; `company`/`person`/`invoice`/`document` predicate
-  types still registered (ontology preserved).
-  (6) GREEN + RESILIENT: `bun run check` (betterauth) + `bun --bun x svelte-check` (app) + the aven-vibes /
-  aven-ontology / aven-skills suites exit 0; a live invoice upload shows the extracted invoice, todos +
-  chat work. Net LOC across the deleted surface drops by thousands (report the diffstat). aven-db untouched.
+  (7) GREEN: `bun run check` (betterauth) + `bun --bun x svelte-check` (app) + the aven-vibes / aven-ontology
+  / aven-skills suites exit 0; live: "show my todos", "add 2 tasks", "mark X done", "delete Y" each render
+  the right vibe (all/created/edited/deleted). KEEP: the flow/actor/vibe/predication machinery + `skr.ts`.
+  aven-db CRDT + the data_schema/data_value engine untouched.
 ---
 
 ## Context
 
-**Where we are.** A long build push (board 0098 + the finance half of 0097 + the legacy 0064–0066/0082
-verticals) accreted a huge, fragile machinery: the bank-statement pipeline (extract + "map brain" +
-processing flows `capture-bank`/`kontoauszug`), the bookkeeping SKR04 double-entry `book` flow, the
-BWA/reconcile/transaction/booking predications + vibes, the `enrichAddressbook` actor + its contact card,
-the `AddressbookVibe`, and the `project-planner` skill. Each fix made the next thing worse — a dead end.
+**Where we are.** The finance/bank/booking/enrich/addressbook/invoice build (0098 + the finance half of
+0097 + legacy 0064–0082) became a complexity sink and a dead end. Reset per the repo's own rules
+(`first-principles.mdc`, `compact-simplify-consolidate.mdc`): don't optimize what shouldn't exist — delete
+it — and re-introduce verticals later, deliberately.
 
-**First principles (the repo's own rules).** `first-principles.mdc`: *"strip out as much indirection as
-you can… lean into massive simplification while keeping functionality intact."* `compact-simplify-
-consolidate.mdc`: *"Don't optimize what shouldn't exist… Should this exist? → NO: DELETE IT… 100% migrate,
-no backwards-compatibility layers, no deprecation shims."* Applied here: the finance/bank/booking/enrich/
-addressbook/planner surface **shouldn't exist right now** — it outran its value. Delete it cleanly, keep
-an irreducible resilient core, and re-introduce verticals later, deliberately, one measurable card each.
+**The keep decision (confirmed with the user).** KEEP the **skills actor / flow machinery** (aven-skills
+runner, `skills-run` actors, RunsView, SkillsView, StepVibe, `run_skill`) + the vibe engine (AvenVibeView)
++ the predication data engine (aven-ontology + data_value/data_schema) + `skr.ts` (SKR04 reference, for
+later). DELETE every document/invoice/finance/bank/booking vertical. APPLY the kept machinery to exactly
+ONE end-to-end vertical: **Todos**.
 
-**The irreducible core (confirmed with the user).** Chat + Todos + **invoice extraction SHOW-ONLY**:
-upload → `doc-ingest` (store + classify) → `capture` (extract) → render the extracted invoice
-(`InvoiceDocVibe`). No enrich, no persistence, no addressbook, no finance. The Lojban ontology types
-`todos + company + person + invoice + document` stay **defined** (0097's ontology is preserved for
-deliberate reuse), just not auto-written. The **SKR04 reference JSON** (`skr.ts`) is kept for later
-reintroduction of bookkeeping.
+**The actor-model insight (the real design).** The Todos skill is NOT a linear pipeline. It is one skill =
+4 independent ACTORS, each addressable by a tool, each rendering its own vibe:
 
-**Why (the goal behind the task).** Restore resilience + a clean base. A small core that always works
-beats a broad one that drifts. This unblocks future verticals by giving them a stable, comprehensible
-foundation instead of a tangled one.
+| Actor | Tool (message) | Reads state? | Vibe state |
+| --- | --- | --- | --- |
+| `read_todos` | "show/list my todos" | — | `all` — the full todos list (today's TodosVibe) |
+| `create_todos` | "add task(s)" `{items}` | — | `created` — only the new tasks just created |
+| `edit_todos` | "edit/mark/rename" `{patches}` | reads all (resolve ids) | `edited` — only the updated tasks + before→after diff |
+| `delete_todos` | "delete task(s)" `{ids}` | reads all (resolve ids) | `deleted` — the removed tasks |
+
+They dispatch by intent and can run **one after another OR in parallel** — e.g. "add two tasks and delete
+the groceries one" fires `create_todos` ‖ `delete_todos` in one turn, each streaming its own vibe. This is
+the Akka-inspired actor architecture (board 0083): an actor = **address (its tool) · mailbox (the tool
+args) · behavior (data_crud) · vibe (its card)**. No edges — the wiring is the LLM's dispatch, not a
+topological chain.
+
+**Why this vertical.** Todos is the simplest possible vertical, so it is the cleanest place to make the
+runner + Runs/Skills UI + vibe config express the actor model instead of a linear pipeline — the
+foundation every future vertical (invoices, bank, bookkeeping) is re-introduced on.
+
+## Design — how the machinery evolves (linear pipeline → actor hub)
+
+- **Skill config:** the `todos` flow's `nodes` are the 4 actors, `edges: []` (unconnected). Each node
+  carries its `actor`, `tools` (the tool it answers), `vibe` + `vibeOutput` (the mode-specific card).
+- **Runner:** today's runner is topological (run every node left→right). Evolve it (or dispatch at the
+  chat layer) so a **message** (a tool call: `create_todos`/`edit_todos`/`delete_todos`/`read_todos`) is
+  routed to the ONE addressed actor, which runs its behavior + emits its vibe — not "run all nodes". Multiple
+  messages in a turn → multiple actors (parallel/sequential). The run trace records each invoked actor+vibe.
+- **Runs/Skills UI:** render the skill as an **actor hub** — the 4 actors as independent mailbox tiles (no
+  left→right edge chain). A run highlights the actor(s) that got a message + shows their vibe(s);
+  concurrent messages render side-by-side; the step panel shows the messaged actor's tool + args + vibe.
+- **Vibe config:** ONE `TodosVibe`, a `mode` prop (`all`/`created`/`edited`/`deleted`) + the affected ids /
+  diff; each actor's `vibe` selects the mode. `edited` shows a compact before→after per changed field.
 
 ## Delete list (100% migration, no shims)
 
-- **Flows:** `book`, `capture-bank`, `kontoauszug`, `project-planner`; rewrite `capture` → extract-only
-  (drop the `enrich` node). Remove/neutralize their seed migrations.
-- **Predicate type + vocab:** `transaction` (predicate_type) + `TRANSACTION_SPEC` + the vocab
-  `transaction/dated/value_dated/balance/booked/matched` + the `idkind-currency`/FX discriminators.
-- **Actors:** `enrichAddressbook`, `humanReview` (skills-run).
-- **Vibes (app):** `AddressbookVibe`, `FinanceVibe`, `TransactionsVibe`, `InvoiceBookingVibe`,
-  `InvoiceMatchVibe`, `OpenItemsVibe`, `InvoiceCreateVibe`; `StepVibe` enrich/contact + finance branches.
-- **aven-vibes modules:** `bank-statement/`, `bookkeeping/` (+ `contract/` if unused); the flat
-  `tx`/`match`/`booking`/`invoice-doc` schemas + `booking`/`match`/`tx` helpers; their tests.
-- **ai.ts chat tools:** `query_contacts`, `upsert_contact`, `set_my_company`, `create_invoice` (+ the
-  now-dead flat `contact`/`invoice_doc` machinery: `enrichAddressbookFromDoc`, `partiesFromDoc`, etc.).
-- **A migration** drops the retired `flow` + `predicate_type` + `data_schema`/`data_value` rows.
+- **Flows:** `book`, `capture`, `capture-bank`, `kontoauszug`, `invoice`, `doc-ingest`, `project-planner`
+  (all non-todos flows) + their seed migrations; add the `todos` skill/flow (4 actors).
+- **Predicate types + vocab/specs:** `company`, `person`, `invoice`, `document`, `transaction` +
+  contact/invoice/document/transaction vocab + their `*_SPEC`s. Keep the todo vocab + `TODO_SPEC`.
+- **Actors (skills-run):** `storeDocument`, `classify_document`, `extract_document`, `enrichAddressbook`,
+  `humanReview`; add the 4 todos actors.
+- **Vibes (app):** every `*Vibe.svelte` except `TodosVibe` (Addressbook, Finance, Transactions,
+  InvoiceBooking, InvoiceMatch, OpenItems, InvoiceCreate, InvoiceDoc, DocCompare, Bookkeeping) +
+  StepVibe's doc/finance branches (keep StepVibe for the todos vibes).
+- **aven-vibes modules:** `_doc/`, `bank-statement/`, `bookkeeping/`, `contract/`, `doc-compare/`,
+  `invoice/`; the flat `tx`/`match`/`booking`/`invoice-doc`/`contact` schemas + helpers + their tests.
+- **ai.ts:** all doc/invoice/finance tools + the flat-doc extraction path (`performExtraction`,
+  `extractDocFields`, `enrichAddressbookFromDoc`, parties/contact machinery); the `run_skill` tool now
+  targets the `todos` skill's actor tools.
+- **Migration** drops the retired `flow` + `predicate_type` + `data_schema`/`data_value` rows.
 
 ## KEEP
 
-- Chat, Todos (`TodosVibe`, the todos flow/predications), `doc-ingest` + `invoice` (capture) flows.
-- `InvoiceDocVibe` + `DocCompareVibe` + `BookkeepingVibe` (classify card) + `StepVibe` (ingest/classify/extract).
-- Ontology types `todos/company/person/invoice/document` + their vocab/specs (defined, not auto-written).
+- The skills actor/flow machinery (aven-skills, skills-run, RunsView, SkillsView, StepVibe, run_skill) —
+  evolved to the actor-hub model.
+- The vibe engine (AvenVibeView + sandbox) + the predication data engine (aven-ontology + data.ts).
+- The todos vertical: `TODO_SPEC` + todo vocab + `TodosVibe` (extended to 4 modes) + chat.
 - `skr.ts` (SKR04 reference JSON) — untouched, for later.
-- aven-db CRDT + the data_schema/data_value engine.
+- aven-db CRDT.
 
 ## Acceptance criteria
 
-- [ ] `SELECT id FROM flow` = only the kept flows; `capture` has no `enrich` node.
-- [ ] `transaction` gone from `predicate_type`; TRANSACTION_SPEC + finance vocab deleted; 0097 gate green.
-- [ ] The listed vibes/actors/tools are deleted; `rg` for their names in `libs`/`app` is empty (except board docs).
-- [ ] A live invoice upload renders `InvoiceDocVibe` (show-only); todos + chat work.
-- [ ] `bun run check` + `bun --bun x svelte-check` + aven-vibes/aven-ontology/aven-skills suites exit 0.
-- [ ] Diffstat shows a large net deletion; `skr.ts` + kept ontology types remain.
+- [ ] Only `todos` in the skill/flow registry; all non-todos flows dropped (DB + code).
+- [ ] The `todos` skill has 4 actors (read/create/edit/delete), each with a tool + vibe, `edges: []`.
+- [ ] `TodosVibe` renders 4 modes; each actor emits its mode; `edited` shows a before→after diff.
+- [ ] A multi-intent chat turn invokes ≥2 actors (parallel/sequential), each streaming its vibe; the trace records both.
+- [ ] RunsView/SkillsView render the todos skill as an actor hub (no linear chain).
+- [ ] `predicate_type` = only `todos`; the dropped vibes/actors/types are gone; `rg` for their names empty.
+- [ ] `bun run check` + `bun --bun x svelte-check` + aven-vibes/aven-ontology/aven-skills suites exit 0; live 4 vibes work.
 
 ## Verification
 
 ```sh
-rg "AddressbookVibe|FinanceVibe|TransactionsVibe|enrichAddressbook|TRANSACTION_SPEC|matchInvoice|bookInvoice|kontoauszug|project-planner" libs app | rg -v 'board/'   # empty
-bun test libs/aven-vibes/tests/predicate.test.ts     # gate green
+rg "AddressbookVibe|FinanceVibe|TransactionsVibe|enrichAddressbook|InvoiceDocVibe|capture-bank|kontoauszug|bank-statement|project-planner" libs app | rg -v 'board/'   # empty
+bun test libs/aven-vibes/tests/predicate.test.ts     # todo predicates gate green
 cd libs/betterauth && bun run check
 cd app && bun --bun x svelte-check --tsconfig ./tsconfig.json
-# DB: SELECT id FROM flow;  SELECT type FROM predicate_type;
+# DB: SELECT id FROM flow;  SELECT type FROM predicate_type;   -> only todos
 ```
 
 ## Out of scope / follow-on
 
-- Re-introducing bank statements / bookkeeping / reconciliation later — deliberate, one measurable card
-  each, on the preserved SKR04 reference + ontology. Not now.
-- Killing the flat `contact`/`invoice_doc` schemas is subsumed here (deleted with their tools).
+- Re-introducing documents / invoices / bank / bookkeeping — later, one measurable card each, each modeled
+  as its own actor cluster on this same evolved machinery + the preserved SKR04 reference + ontology.
 
 ## Progress log
 
-- 2026-07-01 — Discovered. User hit a dead end on the finance/bank/booking build; directed a radical strip
-  per the repo's first-principles + compact-simplify rules. Confirmed core = chat + todos + invoice
-  show-only; ontology keeps todos+company+person+invoice+document; SKR04 reference kept. Measurable goal =
-  flows/types/vibes/actors/tools deleted (rg empty, DB rows dropped), core works, suites green, large net
-  LOC deletion. Supersedes the finance parts of 0097 + all of 0098.
+- 2026-07-01 — Discovered + refined. Dead end on finance; radical reset. Confirmed: KEEP the actor/flow/
+  vibe/predication machinery + SKR04 reference; DELETE every non-todos vertical; APPLY the machinery to ONE
+  Todos skill built as an ACTOR CLUSTER — 4 non-linear actors (read/create/edit/delete), each a tool + a
+  vibe state (all/created/edited/deleted), dispatched by intent, sequential or parallel. Runner + Runs/Skills
+  UI + vibe config evolve from linear pipeline → actor hub. Supersedes the finance parts of 0097 + all 0098.
