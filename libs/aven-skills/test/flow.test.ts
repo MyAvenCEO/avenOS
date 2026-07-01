@@ -2,9 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import Ajv from 'ajv'
 import {
 	ACTOR_MAPPING,
-	currentStepIndex,
 	EXAMPLE_FLOWS,
-	EXAMPLE_RUNS,
 	exampleInstance,
 	FLOW_SCHEMA,
 	type Flow,
@@ -15,8 +13,6 @@ import {
 	isFanOut,
 	isLeaf,
 	resourceSchema,
-	runStateOf,
-	runsForFlow,
 	TOOL_SPECS,
 	validateFlow
 } from '../src/flow.js'
@@ -244,30 +240,8 @@ describe('reuse across doc types (invoice vs bank statement)', () => {
 })
 
 describe('runs', () => {
-	test('the e2e bank-statement run reuses ingest, maps the brain, and waits at review (HITL)', () => {
-		const run = EXAMPLE_RUNS.find((r) => r.id === 'run-bank-e2e')!
-		expect(run.trace.map((s) => s.nodeId)).toEqual(['ingest-doc', 'map-brain', 'review'])
-		expect(run.trace.find((s) => s.nodeId === 'review')!.state).toBe('waiting')
-	})
-
-	test('the e2e invoice run walks the 4 composites and waits at review (HITL)', () => {
-		const run = EXAMPLE_RUNS.find((r) => r.id === 'run-invoice-e2e')!
-		expect(run.trace.map((s) => s.nodeId)).toEqual(['ingest-doc', 'capture', 'book', 'review'])
-		expect(run.trace.find((s) => s.nodeId === 'review')!.state).toBe('waiting')
-		// the three composite steps each carry a vibe; review is the HITL gate
-		const composites = run.trace.filter((s) => s.nodeId !== 'review')
-		expect(composites.every((s) => typeof s.vibe === 'string' && s.vibe.length > 0)).toBe(true)
-	})
-
-	test('the doc-ingest run traces ingest → classify with a vibe', () => {
-		const run = EXAMPLE_RUNS.find((r) => r.flowId === 'doc-ingest')!
-		expect(run.trace.map((s) => s.nodeId)).toEqual(['ingest', 'classify'])
-		expect(run.trace.find((s) => s.nodeId === 'classify')!.vibe).toBe('bookkeeping')
-		expect(currentStepIndex(run)).toBe(run.trace.length - 1)
-		expect(runStateOf(run, 'classify')).toBe('done')
-		expect(runsForFlow('doc-ingest').length).toBeGreaterThanOrEqual(1)
-	})
-
+	// Seeded EXAMPLE_RUNS were removed (board 0090) — runs are now the REAL persisted flow_run rows.
+	// `exampleInstance` stays as a pure helper (a state per node from a flow, no fixture data).
 	test('exampleInstance assigns a state to every node', () => {
 		const f = EXAMPLE_FLOWS[0]
 		const inst = exampleInstance(f)

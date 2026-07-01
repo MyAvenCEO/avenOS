@@ -19,7 +19,37 @@ import { t } from '$lib/i18n'
 // board 0095: the view/style/logic now LOAD from the DB `vibe.*` registry (config-as-data) and override
 // the file defaults — the app renders the vibe from the DB through the engine. The file shell supplies
 // the interface/source defaults + renders instantly while the DB bundle resolves (it is identical).
-let { containerName = 'aven-vibes-todos' }: { containerName?: string } = $props()
+// board 0099 — the Todos skill is an ACTOR HUB: this one vibe renders 4 modes, one per actor —
+// `all` (read: the full interactive list) · `created` (the new tasks) · `edited` (only the updated tasks
+// + a before→after diff) · `deleted` (the removed tasks). The create/edit/delete modes are read-only
+// summary cards fed by the actor's `data`; `all` is the live interactive list.
+type TodoMode = 'all' | 'created' | 'edited' | 'deleted'
+type TodoDiff = { id: string; title: string; changes: { field: string; from: string; to: string }[] }
+let {
+	containerName = 'aven-vibes-todos',
+	mode = 'all',
+	data
+}: {
+	containerName?: string
+	mode?: TodoMode
+	data?: {
+		items?: { id?: string; title?: string; done?: boolean; due?: string; priority?: string }[]
+		diffs?: TodoDiff[]
+	}
+} = $props()
+
+const summaryItems = $derived(data?.items ?? [])
+const summaryDiffs = $derived(data?.diffs ?? [])
+const MODE_LABEL: Record<Exclude<TodoMode, 'all'>, string> = {
+	created: 'Neue Aufgaben',
+	edited: 'Aktualisierte Aufgaben',
+	deleted: 'Gelöschte Aufgaben'
+}
+const MODE_ACCENT: Record<Exclude<TodoMode, 'all'>, string> = {
+	created: 'text-green-700',
+	edited: 'text-primary',
+	deleted: 'text-destructive'
+}
 
 const base = createTodosShell()
 const vibeQuery = createQuery(() => ({
@@ -126,13 +156,53 @@ function handleEvent(event: UiEvent): void {
 	{#if err}
 		<p class="text-destructive shrink-0 text-sm" role="alert">{err}</p>
 	{/if}
-	<div class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
-		<AvenVibeView
-			{shell}
-			{source}
-			onEvent={handleEvent}
-			{containerName}
-			desktopHint={t('mainnet.auth.loading')}
-		/>
-	</div>
+	{#if mode === 'all'}
+		<div class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
+			<AvenVibeView
+				{shell}
+				{source}
+				onEvent={handleEvent}
+				{containerName}
+				desktopHint={t('mainnet.auth.loading')}
+			/>
+		</div>
+	{:else}
+		<!-- create / edit / delete actor summary — read-only card showing only what changed -->
+		<div
+			class="border-border bg-card mx-auto w-full max-w-2xl rounded-[var(--radius-lg)] border p-4"
+			data-container={containerName}
+		>
+			<p class="text-[10px] font-semibold tracking-wide uppercase {MODE_ACCENT[mode]}">
+				{MODE_LABEL[mode]} · {summaryItems.length}
+			</p>
+			<ul class="border-border/60 divide-border/60 mt-2 divide-y">
+				{#each summaryItems as it (it.id ?? it.title)}
+					<li class="flex items-baseline justify-between gap-3 py-1.5">
+						<span
+							class="text-foreground text-[13px] {mode === 'deleted' ? 'text-muted-foreground line-through' : ''}"
+							>{it.title ?? '—'}</span
+						>
+						{#if mode === 'edited'}
+							{@const d = summaryDiffs.find((x) => x.id === it.id)}
+							{#if d}
+								<span class="text-muted-foreground text-right text-[11px]">
+									{#each d.changes as c (c.field)}
+										<span class="whitespace-nowrap"
+											>{c.field}: <s>{c.from || '—'}</s> → <b class="text-foreground">{c.to || '—'}</b></span
+										>{' '}
+									{/each}
+								</span>
+							{/if}
+						{:else if it.due || it.priority}
+							<span class="text-muted-foreground text-[11px]">{[it.priority, it.due].filter(Boolean).join(' · ')}</span
+							>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+			{#if summaryItems.length === 0}
+				<p class="text-muted-foreground py-2 text-xs">—</p>
+			{/if}
+		</div>
+	{/if}
 </div>

@@ -136,6 +136,11 @@ rg -n "sparkWriteBytes" libs/betterauth/src/skills-run.ts   # expect: empty (mai
 
 Newest entry first.
 
+- `2026-06-29` — **Foundation done; remaining open work consolidated into 0092 (SSOT).** The runner +
+  ArtifactStore + document type + actors + endpoint + run_skill chat tool are built + committed (the
+  base everything else uses). The one OPEN item — the live chat-trigger (step 7) — plus the document
+  type's gismu re-alignment are now tracked in **board 0092** (the single execution plan). Moved → review/
+  as the committed foundation record.
 - `2026-06-29` — **Steps 3–6 DONE + verified; step 7 endpoint-proven, chat wired.** Step 3: `document`
   composite type (vreji/klesi/skicu/krasi/finti) on the 0088 engine (migration 0018) — provenance
   proven. Steps 4+5: `skills-run.ts` doc-ingest actors (storeDocument→ArtifactStore; classify_document→

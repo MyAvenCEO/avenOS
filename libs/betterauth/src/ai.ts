@@ -1256,6 +1256,16 @@ function streamWithTools(opts: {
 							})
 							continue
 						}
+						// board 0099 — the Todos skill is an actor hub. The edit actor shows a before→after
+						// diff, so snapshot the affected rows BEFORE the write while we still can.
+						let todosBefore: Record<string, Record<string, unknown>> | undefined
+						if (parsed.schema === 'todos' && parsed.action === 'update') {
+							const cur = (await executeDataTool(userId, {
+								schema: 'todos',
+								action: 'list'
+							})) as { items?: Record<string, unknown>[] }
+							todosBefore = Object.fromEntries((cur.items ?? []).map((r) => [String(r.id), r]))
+						}
 						emitTool(tc.id, tc.name || 'data_crud', dataDetail, 'running')
 						let result: unknown
 						try {
@@ -1278,17 +1288,47 @@ function streamWithTools(opts: {
 						// message stream (the same data this CRUD just changed), and persist a marker
 						// message so the card reappears when the session is reloaded. One per schema
 						// per turn. board 0054.
-						if (
-							typeof parsed.schema === 'string' &&
-							parsed.schema &&
-							!emittedVibes.has(parsed.schema)
-						) {
-							emittedVibes.add(parsed.schema)
-							emit({ aven_vibe: { schema: parsed.schema } })
+						// board 0099 — the Todos skill is an ACTOR HUB: the create/edit actors stream their own
+						// mode vibe showing ONLY what changed (created → new tasks, edited → updated + before→after
+						// diff). Every other schema (incl. a plain todos `list` = the read actor) flows the full
+						// live card. One vibe per schema/mode per turn; a marker is persisted so it survives reload.
+						const todoItem = (o: Record<string, unknown>) => ({
+							id: o.id as string | undefined,
+							title: (o.title ?? o.task) as string | undefined,
+							done: o.done as boolean | undefined,
+							due: o.due as string | undefined,
+							priority: o.priority as string | undefined
+						})
+						let vibeSchema = typeof parsed.schema === 'string' ? parsed.schema : ''
+						let vibePayload: unknown
+						if (parsed.schema === 'todos' && parsed.action === 'create') {
+							vibeSchema = 'todos-created'
+							const pItems = (parsed.items ?? []) as Record<string, unknown>[]
+							vibePayload = { items: pItems.map((i) => todoItem(i)) }
+						} else if (parsed.schema === 'todos' && parsed.action === 'update') {
+							vibeSchema = 'todos-edited'
+							const pItems = (parsed.items ?? []) as Record<string, unknown>[]
+							const items = pItems.map((i) => todoItem(i))
+							const diffs = pItems
+								.map((patch) => {
+									const before = (todosBefore ?? {})[String(patch.id)] ?? {}
+									const changes = Object.keys(patch)
+										.filter((k) => k !== 'id' && String(patch[k] ?? '') !== String(before[k] ?? ''))
+										.map((k) => ({ field: k, from: String(before[k] ?? ''), to: String(patch[k] ?? '') }))
+									return { id: String(patch.id), title: String(before.title ?? patch.title ?? ''), changes }
+								})
+								.filter((d) => d.changes.length > 0)
+							vibePayload = { items, diffs }
+						}
+						if (vibeSchema && !emittedVibes.has(vibeSchema)) {
+							emittedVibes.add(vibeSchema)
+							emit({ aven_vibe: vibePayload === undefined ? { schema: vibeSchema } : { schema: vibeSchema, data: vibePayload } })
 							await persistMessage(
 								chatSessionId,
 								'assistant',
-								`${VIBE_MARKER}${parsed.schema}`
+								vibePayload === undefined
+									? `${VIBE_MARKER}${vibeSchema}`
+									: `${VIBE_MARKER}${vibeSchema}\n${JSON.stringify(vibePayload)}`
 							).catch((e) => console.error('[ai] persist vibe marker failed:', e))
 						}
 					}

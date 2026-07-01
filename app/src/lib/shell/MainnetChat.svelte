@@ -685,6 +685,16 @@ function handleTranscribeError(message: string): void {
 								<div class="max-h-[80vh] w-full overflow-y-auto">
 									<TodosVibe containerName={`aven-vibes-chat-${message.id}`} />
 								</div>
+							{:else if message.vibe === 'todos-created' || message.vibe === 'todos-edited' || message.vibe === 'todos-deleted'}
+								<!-- board 0099 — the create/edit/delete actors each stream their own read-only
+								     summary card (only what changed), fed by the actor's vibeData {items, diffs}. -->
+								<div class="max-h-[80vh] w-full overflow-y-auto">
+									<TodosVibe
+										containerName={`aven-vibes-chat-${message.id}`}
+										mode={message.vibe.slice('todos-'.length) as 'created' | 'edited' | 'deleted'}
+										data={message.vibeData}
+									/>
+								</div>
 							{:else if message.vibe === 'composer'}
 								<div
 									class="border-border h-[70vh] w-full overflow-hidden rounded-[var(--radius-lg)] border"
