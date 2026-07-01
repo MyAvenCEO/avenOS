@@ -68,7 +68,8 @@ const fieldGroups = $derived.by((): { title: string; rows: Field[] }[] => {
 	const groups: { title: string; rows: Field[] }[] = [
 		{ title: 'Kontakt', rows: [['E-Mail', c.email], ['Telefon', c.phone]] },
 		{ title: 'Bank', rows: [['IBAN', c.iban], ['BIC', c.bic], ['Bank', c.bank_name]] },
-		{ title: 'Steuer', rows: [['USt-IdNr', c.vat_id], ['Steuernummer', c.tax_number]] },
+		// USt-IdNr is the hero headline, so this card carries only the Steuernummer.
+		{ title: 'Steuer', rows: [['Steuernummer', c.tax_number]] },
 		{ title: 'Anschrift', rows: [['Adresse', c.street]] },
 		{
 			title: 'Register',
@@ -185,82 +186,89 @@ function selectContact(id: string): void {
 			</div>
 			<div class="max-h-[70vh] overflow-y-auto p-3">
 				{#if tab === 'stammdaten'}
-					<div class="flex flex-col gap-4">
-						<header class="flex items-start justify-between gap-3">
-							<div class="min-w-0">
-								<h3 class="text-foreground truncate text-lg font-semibold">
-									{selected.data.name || '—'}
-								</h3>
-								<div class="mt-1 flex flex-wrap items-center gap-1.5">
-									<span
-										class="bg-primary/10 text-foreground rounded-full px-2 py-0.5 text-[11px] font-medium"
-									>
-										{selected.data.type === 'company'
-											? t('mainnet.addressbook.company')
-											: t('mainnet.addressbook.person')}
-									</span>
-									{#if selected.data.legal_form}
-										<span class="text-muted-foreground text-[11px]">{selected.data.legal_form}</span>
+						<div class="flex flex-col gap-4">
+							<!-- HERO — name (left) · USt-IdNr (right, accent) · meta row (mirrors the invoice hero) -->
+							<div
+								class="border-border from-primary/[0.04] rounded-[var(--radius-lg)] border bg-gradient-to-br to-transparent p-4"
+							>
+								<div class="flex flex-wrap items-end justify-between gap-3">
+									<div class="min-w-0">
+										<p class="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+											{selected.data.type === 'company'
+												? t('mainnet.addressbook.company')
+												: t('mainnet.addressbook.person')}{selected.data.legal_form
+												? ` · ${selected.data.legal_form}`
+												: ''}
+										</p>
+										<p class="text-foreground truncate text-2xl font-extrabold tracking-tight">
+											{selected.data.name || '—'}
+										</p>
+									</div>
+									{#if selected.data.vat_id}
+										<div class="text-right">
+											<p class="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+												USt-IdNr
+											</p>
+											<p class="text-primary font-mono text-lg font-extrabold tabular-nums">
+												{selected.data.vat_id}
+											</p>
+										</div>
 									{/if}
+								</div>
+								<div
+									class="border-border/60 mt-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t pt-3 text-[11px]"
+								>
+									<span class="text-muted-foreground font-mono">{selected.data.short_id}</span>
 									{#if selected.data.is_self}
-										<span class="text-[11px] font-medium text-green-600">★ Eigenes Unternehmen</span>
+										<span class="font-medium text-green-600">★ Eigenes Unternehmen</span>
 									{/if}
+									<span class="text-muted-foreground">Belege: {outgoing.length + incoming.length}</span>
 								</div>
 							</div>
-							<span class="text-muted-foreground shrink-0 font-mono text-[10px]"
-								>{selected.data.short_id}</span
-							>
-						</header>
 
-						{#if fieldGroups.length === 0}
-							<p class="text-muted-foreground text-xs">Keine weiteren Stammdaten erfasst.</p>
-						{:else}
-							{#each fieldGroups as g (g.title)}
-								<section>
-									<p
-										class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase"
-									>
-										{g.title}
-									</p>
-									<dl
-										class="border-border/60 divide-border/60 divide-y rounded-[var(--radius-md)] border"
-									>
-										{#each g.rows as [label, value] (label)}
-											<div class="flex items-baseline justify-between gap-3 px-3 py-1.5">
-												<dt class="text-muted-foreground shrink-0 text-xs">{label}</dt>
-												<dd class="text-foreground text-right text-[13px] font-medium break-all">
-													{value}
-												</dd>
-											</div>
-										{/each}
-									</dl>
-								</section>
-							{/each}
-						{/if}
-
-						{#if ansprechpartner.length > 0}
-							<section>
-								<p
-									class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase"
-								>
-									Ansprechpartner
-								</p>
-								<div
-									class="border-border/60 divide-border/60 divide-y rounded-[var(--radius-md)] border"
-								>
-									{#each ansprechpartner as p (p.id)}
-										<div class="flex items-center justify-between gap-3 px-3 py-1.5">
-											<span class="text-foreground text-[13px] font-medium">{p.data.name}</span>
-											{#if p.data.email}
-												<span class="text-muted-foreground text-xs break-all">{p.data.email}</span>
-											{/if}
-										</div>
+							<!-- SECTION CARDS — a responsive grid, one card per data group (like the invoice parties) -->
+							{#if fieldGroups.length === 0 && ansprechpartner.length === 0}
+								<p class="text-muted-foreground text-xs">Keine weiteren Stammdaten erfasst.</p>
+							{:else}
+								<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+									{#each fieldGroups as g (g.title)}
+										<section class="border-border rounded-[var(--radius-md)] border p-3.5">
+											<p class="text-muted-foreground mb-2 text-[10px] font-semibold tracking-wide uppercase">
+												{g.title}
+											</p>
+											<dl class="flex flex-col gap-2">
+												{#each g.rows as [label, value] (label)}
+													<div class="flex items-baseline justify-between gap-3">
+														<dt class="text-muted-foreground shrink-0 text-xs">{label}</dt>
+														<dd class="text-foreground text-right text-[13px] font-medium break-all">
+															{value}
+														</dd>
+													</div>
+												{/each}
+											</dl>
+										</section>
 									{/each}
+									{#if ansprechpartner.length > 0}
+										<section class="border-border rounded-[var(--radius-md)] border p-3.5">
+											<p class="text-muted-foreground mb-2 text-[10px] font-semibold tracking-wide uppercase">
+												Ansprechpartner
+											</p>
+											<div class="flex flex-col gap-2">
+												{#each ansprechpartner as p (p.id)}
+													<div class="flex items-baseline justify-between gap-3">
+														<span class="text-foreground text-[13px] font-medium">{p.data.name}</span>
+														{#if p.data.email}
+															<span class="text-muted-foreground text-right text-xs break-all">{p.data.email}</span>
+														{/if}
+													</div>
+												{/each}
+											</div>
+										</section>
+									{/if}
 								</div>
-							</section>
-						{/if}
-					</div>
-				{:else if tab === 'belege'}
+							{/if}
+						</div>
+					{:else if tab === 'belege'}
 					<div class="flex flex-col gap-3 text-xs">
 						<div>
 							<p
