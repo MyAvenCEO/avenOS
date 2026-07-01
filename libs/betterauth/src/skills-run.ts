@@ -188,13 +188,16 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 				const oprIds = (Array.isArray(opr.identifiers) ? opr.identifiers : []) as Record<string, unknown>[]
 				const chan = (k: string): string => str(channels.find((c) => str(c.channel) === k)?.value)
 				const oprId = (cat: string): string => str(oprIds.find((i) => str(i.category) === cat)?.value)
+				// strip a label the model may leak into an id (e.g. "DE VAT DE368356417" → "DE368356417"). board 0098.
+				const cleanId = (v: string): string =>
+					v.replace(/^\s*(?:USt-?IdNr\.?|VAT(?:-ID)?|St(?:euer)?\.?-?Nr\.?|Tax\s*(?:ID|Number)|DE\s+VAT)\s*[:.]?\s*/i, '').trim()
 				return {
 					name: str(p.name),
 					email: str(p.email) || chan('email'),
 					phone: str(p.phone) || chan('phone'),
 					iban: str(banking[0]?.iban) || str(bank.iban),
-					vat_id: str(p.tax_id) || oprId('vat_id'),
-					tax_number: str(p.tax_number) || oprId('national_tax_number'),
+					vat_id: cleanId(str(p.tax_id) || oprId('vat_id')),
+					tax_number: cleanId(str(p.tax_number) || oprId('national_tax_number')),
 					postal: [str(p.street), [str(p.postal_code), str(p.city)].filter(Boolean).join(' '), str(p.country)].filter(Boolean).join(', '),
 					contact_name: str(p.contact_name)
 				}
