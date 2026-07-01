@@ -24,13 +24,16 @@ function jsonb(value: unknown) {
 	return sql`${JSON.stringify(value)}::jsonb`
 }
 
-// The full gismu dictionary (~1 MB, 1300+ roots) — read once, cached. Repo path from this file:
-// libs/betterauth/src/ontology.ts → ../../../.claude/skills/ontology/gismu.json.
+// The ORIGINAL compact Lojban dictionary — `gismu.tsv` (~130 KB, all 1341 roots as
+// `word\tdefinition(with the x1…xN place structure in prose)\tkeyword`). 8× smaller than the enriched
+// gismu.json, so the mint prompt is far cheaper/faster while still grounding GLM in every root + its
+// place structure. Read once, cached. board 0100.
+export const GISMU_SOURCE = '.claude/skills/ontology/gismu.tsv'
 let gismuCache: string | null = null
 async function gismuText(): Promise<string> {
 	if (gismuCache !== null) return gismuCache
 	const here = path.dirname(fileURLToPath(import.meta.url))
-	const p = path.resolve(here, '../../../.claude/skills/ontology/gismu.json')
+	const p = path.resolve(here, '../../..', GISMU_SOURCE)
 	gismuCache = await fs.readFile(p, 'utf8').catch(() => '')
 	return gismuCache
 }
@@ -95,8 +98,8 @@ async function mint(
 		'   "places":[{"pos":"x1","role":"…","gloss":"…","kind":"ref"|"value","type":"string|number|integer|boolean|date-time","references":"*","required":true|false}, …]}',
 		'Include EVERY place the chosen gismu defines. `kind:"ref"` for entity/id places (omit `type`), `kind:"value"` for literals (set `type`).',
 		'',
-		'THE GISMU DICTIONARY (place structures to reuse):',
-		gismu.slice(0, 900_000)
+		'THE GISMU DICTIONARY — every Lojban root as `word <tab> definition (with its x1…xN place structure) <tab> keyword`. Reuse the place structure of the matching root:',
+		gismu
 	].join('\n')
 
 	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
