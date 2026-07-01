@@ -54,11 +54,11 @@ export type ToolCtx = {
 	ontology?: {
 		/** The predicates already in the data_schema registry (name + gloss). */
 		list(): Promise<{ name: string; gloss?: string }[]>
-		/** Ask GLM-5.2 (with the full gismu dictionary) to REUSE an existing predicate or mint a new
-		 *  x1–x5 PredicateDef with its gismu's FULL place structure. */
+		/** Ask GLM-5.2 (with the full gismu dictionary) to define the relationship(s) in the request — a
+		 *  BATCH: one entry PER relationship ("eating and drinking" → two), each either reusing an existing
+		 *  predicate or minting a new x1–x5 PredicateDef with its gismu's FULL place structure. */
 		mint(request: string, existing: { name: string; gloss?: string }[]): Promise<{
-			reuse?: string
-			def?: PredicateDefJSON
+			results?: { reuse?: string; def?: PredicateDefJSON }[]
 			error?: string
 		}>
 		/** compilePredicate → AJV self-validate → persist to data_schema. Returns the stored name + place count. */

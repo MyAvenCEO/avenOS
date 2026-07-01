@@ -50,24 +50,35 @@ async function listPredicates(uid: string): Promise<{ name: string; gloss?: stri
 	return out.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** Strip markdown fences + grab the first {...} JSON object from an LLM reply. */
-function parseJsonObject(text: string): Record<string, unknown> | null {
+/** Strip markdown fences + grab the first [...] JSON array from an LLM reply (tolerating a lone object). */
+function parseJsonArray(text: string): unknown[] | null {
 	const cleaned = text.replace(/```(?:json)?/gi, '').trim()
-	const start = cleaned.indexOf('{')
-	const end = cleaned.lastIndexOf('}')
-	if (start < 0 || end <= start) return null
-	try {
-		return JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>
-	} catch {
-		return null
+	const s = cleaned.indexOf('[')
+	const e = cleaned.lastIndexOf(']')
+	if (s >= 0 && e > s) {
+		try {
+			return JSON.parse(cleaned.slice(s, e + 1)) as unknown[]
+		} catch {
+			/* fall through to single-object */
+		}
 	}
+	const os = cleaned.indexOf('{')
+	const oe = cleaned.lastIndexOf('}')
+	if (os >= 0 && oe > os) {
+		try {
+			return [JSON.parse(cleaned.slice(os, oe + 1))]
+		} catch {
+			return null
+		}
+	}
+	return null
 }
 
-/** GLM-5.2 mints (or reuses) a predicate for the requested relationship, grounded in the full gismu dict. */
+/** GLM-5.2 defines the relationship(s) — a BATCH, one entry per relation, each reuse-or-mint. */
 async function mint(
 	request: string,
 	existing: { name: string; gloss?: string }[]
-): Promise<{ reuse?: string; def?: PredicateDefJSON; error?: string }> {
+): Promise<{ results?: { reuse?: string; def?: PredicateDefJSON }[]; error?: string }> {
 	const key = process.env.TINFOIL_API_KEY
 	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
 	const gismu = await gismuText()
@@ -77,9 +88,9 @@ async function mint(
 		'EXISTING PREDICATES (reuse one of these names if it already fits):',
 		existing.map((e) => `- ${e.name}${e.gloss ? ` — ${e.gloss}` : ''}`).join('\n') || '(none yet)',
 		'',
-		'OUTPUT — return ONLY a single JSON object, no prose, either:',
+		'OUTPUT — return ONLY a JSON ARRAY, no prose. ONE entry PER relationship the user described',
+		'(e.g. "eating and drinking" → TWO entries). Each entry is either a reuse or a new predicate:',
 		'  {"reuse":"<existing predicate name>"}',
-		'or a new predicate:',
 		'  {"predicate":"<english_snake_case>","gismu":"<lojban root>","gloss":"x1 … x2 …",',
 		'   "places":[{"pos":"x1","role":"…","gloss":"…","kind":"ref"|"value","type":"string|number|integer|boolean|date-time","references":"*","required":true|false}, …]}',
 		'Include EVERY place the chosen gismu defines. `kind:"ref"` for entity/id places (omit `type`), `kind:"value"` for literals (set `type`).',
@@ -95,7 +106,7 @@ async function mint(
 			model: GLM_MODEL,
 			messages: [
 				{ role: 'system', content: system },
-				{ role: 'user', content: `Define the relationship: ${request}` }
+				{ role: 'user', content: `Define the relationship(s): ${request}` }
 			],
 			stream: false
 		})
@@ -107,14 +118,16 @@ async function mint(
 	const data = (await res.json().catch(() => null)) as {
 		choices?: { message?: { content?: string } }[]
 	} | null
-	const content = data?.choices?.[0]?.message?.content ?? ''
-	const parsed = parseJsonObject(content)
-	if (!parsed) return { error: 'GLM did not return a parseable predicate' }
-	if (typeof parsed.reuse === 'string' && parsed.reuse) return { reuse: parsed.reuse }
-	if (typeof parsed.predicate === 'string' && Array.isArray(parsed.places)) {
-		return { def: parsed as unknown as PredicateDefJSON }
+	const arr = parseJsonArray(data?.choices?.[0]?.message?.content ?? '')
+	if (!arr) return { error: 'GLM did not return a parseable predicate list' }
+	const results: { reuse?: string; def?: PredicateDefJSON }[] = []
+	for (const raw of arr) {
+		const o = raw as Record<string, unknown>
+		if (typeof o?.reuse === 'string' && o.reuse) results.push({ reuse: o.reuse })
+		else if (typeof o?.predicate === 'string' && Array.isArray(o.places))
+			results.push({ def: o as unknown as PredicateDefJSON })
 	}
-	return { error: 'GLM output was neither a reuse nor a valid predicate' }
+	return results.length ? { results } : { error: 'GLM output had no usable predicates' }
 }
 
 /** compilePredicate → AJV self-validate the produced schema → persist to data_schema (idempotent by name). */

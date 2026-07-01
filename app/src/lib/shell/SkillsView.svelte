@@ -72,16 +72,27 @@ const ONTOLOGY_PREVIEW: Record<string, Record<string, unknown>> = {
 		]
 	},
 	'ontology-created': {
-		created: {
-			predicate: 'ponse',
-			gismu: 'ponse',
-			gloss: 'x1 possesses/owns x2 under right x3',
-			places: [
-				{ pos: 'x1', role: 'owner', gloss: 'the possessor', kind: 'ref' },
-				{ pos: 'x2', role: 'possession', gloss: 'the thing owned', kind: 'ref' },
-				{ pos: 'x3', role: 'right', gloss: 'the legal basis', kind: 'value', type: 'string', required: false }
-			]
-		}
+		created: [
+			{
+				predicate: 'eats',
+				gismu: 'citka',
+				gloss: 'x1 eats/ingests/consumes x2',
+				places: [
+					{ pos: 'x1', role: 'eater', gloss: 'the one who eats', kind: 'ref' },
+					{ pos: 'x2', role: 'food', gloss: 'what is eaten', kind: 'ref' }
+				]
+			},
+			{
+				predicate: 'drinks',
+				gismu: 'pinxe',
+				gloss: 'x1 drinks beverage x2 from container x3',
+				places: [
+					{ pos: 'x1', role: 'drinker', gloss: 'the agent who drinks', kind: 'ref' },
+					{ pos: 'x2', role: 'beverage', gloss: 'the liquid drunk', kind: 'ref' },
+					{ pos: 'x3', role: 'container', gloss: 'the source drunk from', kind: 'ref', required: false }
+				]
+			}
+		]
 	}
 }
 

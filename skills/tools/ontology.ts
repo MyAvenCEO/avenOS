@@ -3,7 +3,7 @@
 // pre-instructions that force the mint to carry the chosen gismu's FULL x1–x5 place structure. The GLM
 // wiring + persistence live in the server adapter; keeping this pure makes it unit-testable.
 
-import type { ToolActor, ToolDefinition, ToolResult } from './types'
+import type { PredicateDefJSON, ToolActor, ToolDefinition, ToolResult } from './types'
 
 export type ExistingPredicate = { name: string; gloss?: string; keywords?: string[] }
 
@@ -52,37 +52,40 @@ export const ontology: ToolActor = {
 				vibe: { schema: 'ontology', data: { predicates } }
 			}
 		}
-		// CREATE — dedup (deterministic gate) → GLM mint (reuse-or-new) → compile+AJV+persist.
+		// CREATE — a BATCH: GLM returns one entry PER relationship in the request ("eating and drinking" →
+		// two). For each: reuse if it already exists (GLM's `reuse` OR a name-dedup against the registry),
+		// else compile+AJV+persist. board 0100.
 		const request = String(args.request ?? '').trim()
 		if (!request) return { content: { ok: false, error: 'create needs a `request`' } }
 		const existing = await ctx.ontology.list()
-		const preDup = findExistingPredicate(
-			{ name: request, keywords: request.toLowerCase().split(/\s+/) },
-			existing
-		)
-		if (preDup) {
-			return {
-				detail: 'reuse predicate',
-				content: { ok: true, reused: preDup.name, note: 'An existing predicate already fits — reused it.' },
-				vibe: { schema: 'ontology-created', data: { reused: preDup.name, predicates: existing } }
-			}
-		}
 		const minted = await ctx.ontology.mint(request, existing)
-		if (minted.reuse) {
-			return {
-				detail: 'reuse predicate',
-				content: { ok: true, reused: minted.reuse },
-				vibe: { schema: 'ontology-created', data: { reused: minted.reuse, predicates: existing } }
+		if (minted.error || !minted.results?.length) {
+			return { content: { ok: false, error: minted.error ?? 'could not mint any predicate' } }
+		}
+		const known = new Set(existing.map((e) => e.name))
+		const created: PredicateDefJSON[] = []
+		const reused: string[] = []
+		for (const r of minted.results) {
+			if (r.reuse && known.has(r.reuse)) {
+				reused.push(r.reuse)
+				continue
 			}
+			if (!r.def) continue
+			// dedup: a predicate with this name already exists (or was just minted in THIS batch) → reuse.
+			if (known.has(r.def.predicate)) {
+				reused.push(r.def.predicate)
+				continue
+			}
+			await ctx.ontology.save(r.def)
+			created.push(r.def)
+			known.add(r.def.predicate) // so a later batch entry dedups against it
 		}
-		if (!minted.def) {
-			return { content: { ok: false, error: minted.error ?? 'could not mint a predicate' } }
-		}
-		const saved = await ctx.ontology.save(minted.def)
 		return {
-			detail: 'create predicate',
-			content: { ok: true, created: saved.name, places: saved.places },
-			vibe: { schema: 'ontology-created', data: { created: minted.def } }
+			detail: created.length
+				? `create ${created.length} predicate${created.length === 1 ? '' : 's'}`
+				: 'reuse predicate',
+			content: { ok: true, created: created.map((d) => d.predicate), reused },
+			vibe: { schema: 'ontology-created', data: { created, reused } }
 		}
 	}
 }
@@ -118,11 +121,15 @@ export function findExistingPredicate(
  * predicates first and REUSE a match instead of minting a near-duplicate.
  */
 export const CREATE_INSTRUCTIONS = [
-	'You mint a NEW x1–x5 Lojban predicate for a relationship the user describes, grounded in the gismu',
-	'dictionary provided below.',
+	'You mint NEW x1–x5 Lojban predicates for the relationship(s) the user describes, grounded in the',
+	'gismu dictionary provided below.',
 	'',
-	'RULE 1 — REUSE FIRST: search the EXISTING predicates listed below. If one already means the same',
-	'relation, REUSE it (return its name) instead of minting a near-duplicate.',
+	'RULE 0 — ONE PER RELATIONSHIP: if the user describes SEVERAL relationships in one request (e.g.',
+	'"eating and drinking", "owning and renting"), define EACH one separately — one output entry per',
+	'relationship (eating → citka, drinking → pinxe). Never collapse distinct relations into one predicate.',
+	'',
+	'RULE 1 — REUSE FIRST: for each relation, search the EXISTING predicates listed below. If one already',
+	'means the same relation, REUSE it (return its name) instead of minting a near-duplicate.',
 	'',
 	'RULE 2 — FULL PLACE STRUCTURE: when you do mint, define EVERY place the chosen gismu declares in the',
 	'dictionary — its complete canonical place structure x1…xN — never a request-trimmed subset. For EACH',
