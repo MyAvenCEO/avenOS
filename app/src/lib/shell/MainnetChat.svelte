@@ -14,14 +14,9 @@ import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
-import AddressbookVibe from '$lib/shell/AddressbookVibe.svelte'
-import FinanceVibe from '$lib/shell/FinanceVibe.svelte'
-import InvoiceCreateVibe from '$lib/shell/InvoiceCreateVibe.svelte'
 import RunsView from '$lib/shell/RunsView.svelte'
 import SkillsView from '$lib/shell/SkillsView.svelte'
-import StepVibe from '$lib/shell/StepVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
-import TransactionsVibe from '$lib/shell/TransactionsVibe.svelte'
 
 type ChatMessage = {
 	id: number
@@ -711,39 +706,6 @@ function handleTranscribeError(message: string): void {
 									class="border-border h-[70vh] w-full overflow-hidden rounded-[var(--radius-lg)] border"
 								>
 									<Composer />
-								</div>
-							{:else if message.vibe === 'tx'}
-								<!-- Live transactions list — same max width as todos (component self-constrains). 0068. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<TransactionsVibe containerName={`aven-vibes-chat-${message.id}`} />
-								</div>
-							{:else if message.vibe === 'bwa'}
-								<!-- BWA / finance snapshot (computed from bookings + tx). board 0072. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<FinanceVibe containerName={`aven-vibes-chat-${message.id}`} />
-								</div>
-							{:else if message.vibe === 'addressbook'}
-								<!-- Addressbook: contacts list + detail (Stammdaten / Belege). board 0082. -->
-								<div
-									class="relative left-1/2 max-h-[85vh] w-[min(56rem,92vw)] max-w-none -translate-x-1/2 overflow-y-auto"
-								>
-									<AddressbookVibe containerName={`aven-vibes-chat-${message.id}`} />
-								</div>
-							{:else if message.vibe === 'invoice-create'}
-								<!-- Outgoing invoice authoring view (doc emitted by the invoicing tools). board 0082. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<InvoiceCreateVibe
-										containerName={`aven-vibes-chat-${message.id}`}
-										data={message.vibeData}
-									/>
-								</div>
-							{:else}
-								<!-- ALL per-step cards (ingest/classify/extract/enrich/doc-compare/match/booking) via
-								     the ONE shared StepVibe — same component the Runs view uses. board 0096. -->
-								<div
-									class="relative left-1/2 max-h-[85vh] w-[min(56rem,92vw)] max-w-none -translate-x-1/2 overflow-y-auto"
-								>
-									<StepVibe vibe={message.vibe} data={message.vibeData} />
 								</div>
 							{/if}
 						{:else}

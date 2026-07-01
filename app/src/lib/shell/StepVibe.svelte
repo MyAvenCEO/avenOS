@@ -1,19 +1,12 @@
 <script lang="ts">
 import type { Flow, NodeState, RecipeNode, TraceStep } from '@avenos/aven-skills'
-import BookkeepingVibe from '$lib/shell/BookkeepingVibe.svelte'
-import DocCompareVibe from '$lib/shell/DocCompareVibe.svelte'
-import InvoiceBookingVibe from '$lib/shell/InvoiceBookingVibe.svelte'
-import InvoiceDocVibe from '$lib/shell/InvoiceDocVibe.svelte'
-import InvoiceMatchVibe from '$lib/shell/InvoiceMatchVibe.svelte'
-import OpenItemsVibe from '$lib/shell/OpenItemsVibe.svelte'
 
-// board 0083 — the optional "vibe view" of a single flow step: a more visually appealing, user-facing
-// rendering of what an actor is doing right now. A step may name a `vibe` (reusing a chat-timeline card
-// like classify/extract/match/book) with `vibeData`; otherwise we key on `${flowId}:${nodeId}` for the
-// Minecraft sand→glass samples, and fall back to a clean generic step card.
-// THE single per-step vibe component (board 0096): used by Runs (pass a `step` → derives vibe+data) AND
-// the chat (pass `vibe` + `data` directly, no flow/node/step). One renderer — a card added once shows
-// in both places, no drift.
+// board 0083/0099 — the optional "vibe view" of a single flow step: a user-facing rendering of what an
+// actor is doing. A step may name a `vibe` with `vibeData`; otherwise we key on `${flowId}:${nodeId}`
+// for the Minecraft sand→glass demo, and fall back to a clean generic actor-step card. THE single
+// per-step vibe component: used by Runs (pass a `step`) AND the chat (pass `vibe` + `data`). One
+// renderer, no drift. board 0099 stripped the document/finance step cards — the actor hub renders
+// generically; the one data skill (Todos) streams its own dedicated modes via TodosVibe.
 let {
 	flow = null,
 	node = null,
@@ -32,23 +25,6 @@ const key = $derived(node && flow ? `${flow.id}:${node.id}` : '')
 const running = $derived(step?.state === 'running')
 const vibe = $derived(vibeProp ?? step?.vibe ?? '')
 const vibeData = $derived((dataProp ?? step?.vibeData ?? {}) as Record<string, unknown>)
-const contact = $derived(
-	vibeData as {
-		name?: string
-		matchedBy?: string
-		isNew?: boolean
-		email?: string
-		phone?: string
-		ust_id?: string
-		tax_number?: string
-		iban?: string
-		address?: string
-		ansprechpartner?: string
-		added?: string[]
-	}
-)
-// ingest (storeDocument): the content-addressed artifact stored in Postgres bytea. board 0094.
-const ingest = $derived(vibeData as { artifact?: string; mime?: string })
 
 const STATE_LABEL: Record<NodeState, string> = {
 	idle: 'Bereit',
@@ -71,149 +47,6 @@ const STATE_CHIP: Record<NodeState, string> = {
 {#if !vibe && (!node || !step)}
 	<div class="text-muted-foreground flex h-full items-center justify-center text-sm">
 		Kein Schritt ausgewählt.
-	</div>
-{:else if vibe === 'bookkeeping'}
-	<div class="w-full">
-		<BookkeepingVibe data={vibeData} />
-	</div>
-{:else if vibe === 'doc-compare'}
-	<div class="w-full">
-		<DocCompareVibe data={vibeData} />
-	</div>
-{:else if vibe === 'invoice-match'}
-	<div class="w-full">
-		<InvoiceMatchVibe data={vibeData} />
-	</div>
-{:else if vibe === 'invoice-booking'}
-	<div class="w-full">
-		<InvoiceBookingVibe data={vibeData} />
-	</div>
-{:else if vibe === 'open-items'}
-	<div class="w-full">
-		<OpenItemsVibe data={vibeData} />
-	</div>
-{:else if vibe === 'ingest'}
-	<!-- Upload / store: the file landed content-addressed in Postgres bytea (board 0089/0094) -->
-	<div
-		class="border-border bg-card mx-auto flex w-full max-w-md flex-col gap-4 rounded-[var(--radius-lg)] border p-6"
-	>
-		<div class="flex items-center justify-between gap-2">
-			<div class="flex items-center gap-3">
-				<div
-					class="bg-primary/15 text-primary flex size-11 items-center justify-center rounded-xl text-lg font-bold"
-				>
-					⬆
-				</div>
-				<div class="min-w-0">
-					<h3 class="text-foreground text-lg font-semibold">Dokument gespeichert</h3>
-					<p class="text-muted-foreground text-xs">Inhaltsadressiert in Postgres (bytea)</p>
-				</div>
-			</div>
-			<span class="rounded-full bg-green-600/15 px-2.5 py-1 text-xs font-semibold text-green-700"
-				>Gespeichert ✓</span
-			>
-		</div>
-		{#if ingest.mime}
-			<div class="flex justify-between text-sm">
-				<span class="text-muted-foreground">Typ</span><span class="text-foreground font-mono"
-					>{ingest.mime}</span
-				>
-			</div>
-		{/if}
-		{#if ingest.artifact}
-			<div class="flex justify-between gap-3 text-sm">
-				<span class="text-muted-foreground shrink-0">sha256</span><span
-					class="text-foreground truncate text-right font-mono text-xs">{ingest.artifact}</span
-				>
-			</div>
-		{/if}
-	</div>
-{:else if vibe === 'invoice'}
-	<!-- Extracted invoice ALONE (board 0096): the full extracted-fields doc view, NO doc-vs-fields
-	     compare (the extract step keeps no preview). The vibeData IS the raw doctype → wrap as `extracted`. -->
-	<div class="w-full">
-		<InvoiceDocVibe data={{ type: 'invoice', extracted: vibeData }} />
-	</div>
-{:else if vibe === 'contact'}
-	<!-- Adressbuch-Anreicherung: which party was matched/created + what was added -->
-	<div
-		class="border-border bg-card mx-auto flex w-full max-w-md flex-col gap-4 rounded-[var(--radius-lg)] border p-6"
-	>
-		<div class="flex items-center justify-between gap-2">
-			<div class="flex items-center gap-3">
-				<div
-					class="bg-primary/15 text-primary flex size-11 items-center justify-center rounded-full text-lg font-bold"
-				>
-					{(contact.name ?? '?').slice(0, 2).toUpperCase()}
-				</div>
-				<div class="min-w-0">
-					<h3 class="text-foreground truncate text-lg font-semibold">
-						{contact.name ?? 'Kontakt'}
-					</h3>
-					<p class="text-muted-foreground text-xs">
-						{contact.isNew ? 'Neu angelegt' : 'Aktualisiert'}
-						· Match über {contact.matchedBy ?? '—'}
-					</p>
-				</div>
-			</div>
-			<span class="rounded-full bg-green-600/15 px-2.5 py-1 text-xs font-semibold text-green-700"
-				>Adressbuch ✓</span
-			>
-		</div>
-		{#if contact.email}
-			<div class="flex justify-between gap-3 text-sm">
-				<span class="text-muted-foreground shrink-0">E-Mail</span
-				><span class="text-foreground truncate text-right">{contact.email}</span>
-			</div>
-		{/if}
-		{#if contact.phone}
-			<div class="flex justify-between gap-3 text-sm">
-				<span class="text-muted-foreground shrink-0">Telefon</span
-				><span class="text-foreground text-right">{contact.phone}</span>
-			</div>
-		{/if}
-		{#if contact.ust_id}
-			<div class="flex justify-between text-sm">
-				<span class="text-muted-foreground">USt-IdNr</span
-				><span class="text-foreground font-mono">{contact.ust_id}</span>
-			</div>
-		{/if}
-		{#if contact.tax_number}
-			<div class="flex justify-between text-sm">
-				<span class="text-muted-foreground">Steuernummer</span
-				><span class="text-foreground font-mono">{contact.tax_number}</span>
-			</div>
-		{/if}
-		{#if contact.iban}
-			<div class="flex justify-between gap-3 text-sm">
-				<span class="text-muted-foreground shrink-0">IBAN</span
-				><span class="text-foreground truncate text-right font-mono text-xs">{contact.iban}</span>
-			</div>
-		{/if}
-		{#if contact.address}
-			<div class="flex justify-between gap-3 text-sm">
-				<span class="text-muted-foreground shrink-0">Adresse</span
-				><span class="text-foreground text-right">{contact.address}</span>
-			</div>
-		{/if}
-		{#if contact.ansprechpartner}
-			<div class="flex justify-between gap-3 text-sm">
-				<span class="text-muted-foreground shrink-0">Ansprechpartner</span
-				><span class="text-foreground text-right">{contact.ansprechpartner}</span>
-			</div>
-		{/if}
-		{#if contact.added?.length}
-			<div>
-				<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
-					Ergänzt
-				</p>
-				<div class="flex flex-wrap gap-1">
-					{#each contact.added as a (a)}
-						<span class="bg-primary/10 text-foreground rounded px-2 py-0.5 text-xs">+ {a}</span>
-					{/each}
-				</div>
-			</div>
-		{/if}
 	</div>
 {:else if step && key === 'minecraft-glass:mine'}
 	<!-- ⛏️ Sand abbauen -->
@@ -286,8 +119,7 @@ const STATE_CHIP: Record<NodeState, string> = {
 		</div>
 		<span class="text-2xl text-[#1f4a5c]">↓</span>
 		{#each step.outputs ?? [] as o (o)}
-			<span class="rounded-full bg-[#1f4a5c] px-4 py-1 text-sm font-semibold text-white"
-				>🪟 {o}</span
+			<span class="rounded-full bg-[#1f4a5c] px-4 py-1 text-sm font-semibold text-white">🪟 {o}</span
 			>
 		{/each}
 		{#if step.message}
@@ -295,10 +127,8 @@ const STATE_CHIP: Record<NodeState, string> = {
 		{/if}
 	</div>
 {:else if node && step}
-	<!-- Generic fallback: a clean step card (vibe optional) -->
-	<div
-		class="border-border bg-card flex h-full flex-col gap-4 rounded-[var(--radius-lg)] border p-6"
-	>
+	<!-- Generic actor-step card: name · actor · mailbox → output · state. board 0099 actor hub. -->
+	<div class="border-border bg-card flex h-full flex-col gap-4 rounded-[var(--radius-lg)] border p-6">
 		<div class="flex items-center justify-between gap-2">
 			<div class="min-w-0">
 				<h3 class="text-foreground truncate text-lg font-semibold">{node.name}</h3>
@@ -328,23 +158,19 @@ const STATE_CHIP: Record<NodeState, string> = {
 					>Output</span
 				>
 				{#each step.outputs ?? [] as o (o)}
-					<span class="bg-primary/10 text-foreground rounded px-2 py-1 text-xs font-medium"
-						>{o}</span
+					<span class="bg-primary/10 text-foreground rounded px-2 py-1 text-xs font-medium">{o}</span
 					>
 				{/each}
 			</div>
 		</div>
 		{#if step.message}
-			<p
-				class="text-muted-foreground border-border mt-auto rounded border border-dashed p-2 text-sm"
-			>
+			<p class="text-muted-foreground border-border mt-auto rounded border border-dashed p-2 text-sm">
 				{step.message}
 			</p>
 		{/if}
 	</div>
 {:else}
-	<!-- a vibe with no dedicated card AND no step (e.g. an unknown vibe streamed into chat): show the raw
-	     data so nothing is silently dropped. board 0096. -->
+	<!-- a vibe with no dedicated card AND no step: show the raw data so nothing is silently dropped. -->
 	<div
 		class="border-border bg-card mx-auto w-full max-w-md rounded-[var(--radius-lg)] border p-4 text-sm"
 	>
