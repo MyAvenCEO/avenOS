@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { create, query, remove, update } from '@avenos/aven-ontology'
-import type { Cell, PredicationStore, TypeSpec } from '@avenos/aven-ontology'
+import type { Cell, Place, PredicationStore, TypeSpec } from '@avenos/aven-ontology'
 import { todoPredicateSchemas } from '@avenos/aven-vibes/predicate'
 import Ajv from 'ajv'
 import type { Context } from 'hono'
@@ -370,17 +370,30 @@ function pgStore(uid: string, schemaIdByPred: Record<string, string>): Predicati
 		if (!id) throw new Error(`[ontology] no data_schema for predicate "${pred}"`)
 		return id
 	}
+	// board 0100 — the predication IS (predicate, x1…x5) columns; only those 5 places, DB-enforced.
+	const PLACES = ['x1', 'x2', 'x3', 'x4', 'x5'] as const
+	const cellSet = (cells: Partial<Record<Place, Cell>>): Record<string, Cell> => {
+		const set: Record<string, Cell> = {}
+		for (const p of PLACES) if (p in cells) set[p] = cells[p] ?? null
+		return set
+	}
 	return {
 		async rows(pred) {
-			const r = await sql<{ id: string; data: Record<string, Cell> }>`
-				SELECT id, data FROM data_value
-				WHERE user_id = ${uid} AND schema_id = ${schemaOf(pred)} ORDER BY id
-			`.execute(db())
-			return r.rows.map((row) => {
-				const d = asJson(row.data) as Record<string, Cell>
-				// all five places — x4/x5 carry e.g. skicu's description + janta's biller. board 0092.
-				return { id: row.id, x1: d.x1 ?? null, x2: d.x2 ?? null, x3: d.x3 ?? null, x4: d.x4 ?? null, x5: d.x5 ?? null }
-			})
+			const r = await db()
+				.selectFrom('data_value')
+				.select(['id', 'x1', 'x2', 'x3', 'x4', 'x5'])
+				.where('user_id', '=', uid)
+				.where('schema_id', '=', schemaOf(pred))
+				.orderBy('id')
+				.execute()
+			return r.map((row) => ({
+				id: row.id,
+				x1: row.x1 ?? null,
+				x2: row.x2 ?? null,
+				x3: row.x3 ?? null,
+				x4: row.x4 ?? null,
+				x5: row.x5 ?? null
+			}))
 		},
 		async insert(pred, cells) {
 			const id = randomUUID()
@@ -390,7 +403,8 @@ function pgStore(uid: string, schemaIdByPred: Record<string, string>): Predicati
 					id,
 					user_id: uid,
 					schema_id: schemaOf(pred),
-					data: jsonb({ predicate: pred, ...cells }),
+					predicate: pred,
+					...cellSet(cells),
 					created_at: new Date(),
 					updated_at: new Date()
 				})
@@ -398,20 +412,29 @@ function pgStore(uid: string, schemaIdByPred: Record<string, string>): Predicati
 			return id
 		},
 		async patch(id, cells) {
-			await sql`UPDATE data_value SET data = data || ${JSON.stringify(cells)}::jsonb, updated_at = now()
-				WHERE id = ${id} AND user_id = ${uid}`.execute(db())
+			await db()
+				.updateTable('data_value')
+				.set({ ...cellSet(cells), updated_at: new Date() })
+				.where('id', '=', id)
+				.where('user_id', '=', uid)
+				.execute()
 		},
 		async patchWhere(pred, place, equals, cells) {
-			await sql`UPDATE data_value SET data = data || ${JSON.stringify(cells)}::jsonb, updated_at = now()
-				WHERE user_id = ${uid} AND schema_id = ${schemaOf(pred)} AND data->>${place} = ${equals}`.execute(
-				db()
-			)
+			await db()
+				.updateTable('data_value')
+				.set({ ...cellSet(cells), updated_at: new Date() })
+				.where('user_id', '=', uid)
+				.where('schema_id', '=', schemaOf(pred))
+				.where(place, '=', equals)
+				.execute()
 		},
 		async deleteWhere(pred, place, equals) {
-			await sql`DELETE FROM data_value
-				WHERE user_id = ${uid} AND schema_id = ${schemaOf(pred)} AND data->>${place} = ${equals}`.execute(
-				db()
-			)
+			await db()
+				.deleteFrom('data_value')
+				.where('user_id', '=', uid)
+				.where('schema_id', '=', schemaOf(pred))
+				.where(place, '=', equals)
+				.execute()
 		},
 		async remove(id) {
 			await db().deleteFrom('data_value').where('id', '=', id).where('user_id', '=', uid).execute()

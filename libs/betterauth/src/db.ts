@@ -67,6 +67,15 @@ export interface DataValueTable {
 	id: string
 	user_id: string
 	schema_id: string
+	// board 0100 — a predication IS its predicate + x1–x5 cells, so those are real columns now
+	// (only Lojban x1–x5 predications are legal; the shape is enforced by the DB, not a jsonb blob).
+	// `data` is kept transitionally (nullable) but no longer written; the columns are the SSOT.
+	predicate: string | null
+	x1: string | null
+	x2: string | null
+	x3: string | null
+	x4: string | null
+	x5: string | null
 	data: unknown
 	created_at: Generated<Date>
 	updated_at: Generated<Date>
