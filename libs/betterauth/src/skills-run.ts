@@ -329,7 +329,10 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 					buyer: b.name ? { name: b.name, isNew: buyerRes.isNew, matchedBy: buyerRes.matchedBy, added: buyerRes.added } : undefined
 				}
 			}
-		}
+		},
+		// board 0098 — the Kontoauszug flow ends in a HITL `review` node; the sync runner has no HITL yet,
+		// so a no-op auto-approval lets the bank flow complete cleanly after the enrich has persisted.
+		humanReview: async () => ({ approval: 'auto' })
 	}
 }
 

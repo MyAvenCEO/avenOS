@@ -139,6 +139,16 @@ cd app && bun --bun x svelte-check --tsconfig ./tsconfig.json
 
 ## Progress log
 
+- 2026-07-01 — **Build checkpoint 1 (trigger + extraction).** The bank statement is now a triggerable
+  flow skill: the `run_skill` router (`libs/aven-vibes/src/tools.ts`) offers `"kontoauszug"` for
+  bank/account/credit-card statements (the model picks it by vision), and a no-op `humanReview` actor
+  (`skills-run.ts`) lets the `kontoauszug` flow (ingest → extract → enrich → review) complete cleanly
+  since the sync runner has no HITL yet. Migration 0040 prepends a strong PARTY COMPLETENESS directive
+  to BOTH the invoice (`capture`) + bank (`capture-bank`) extract prompts so every printed party field
+  (full address, email, phone, tax ids, IBAN, imprint) is filled — the schema already had the fields.
+  Applied to the samuel branch; betterauth `check` green. **Remaining:** full transaction fidelity
+  (currency/balance/FX predicates), reconciliation (mapti), SKR04 booking (cmima), retire flat
+  tx/match/booking — checkpoints 2–4.
 - 2026-07-01 — Discovered. Confirmed via the Runs view that a bank upload stops after doc-ingest+classify
   (the `kontoauszug` flow never fires — the `run_skill` router only offers invoice/doc-ingest and there is
   no kind→flow routing). Scope = one card / full fidelity (user). Measurable goal = trigger + fidelity +
