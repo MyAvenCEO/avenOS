@@ -73,6 +73,7 @@
 		"self": "Self",
 		"intents": "Intents",
 		"sandbox": "Sandbox",
+		"draw": "Zeichnen",
 		"uiLab": "UI-Lab",
 		"identities": "Identities",
 		"db": "DB",
@@ -309,6 +310,13 @@
 		"httpsProbeFailed": "TCP/443 FEHLGESCHLAGEN · {error}",
 		"selectPairedPeer": "Gepairten Peer auswählen…",
 		"noLabel": "(kein Label)"
+	},
+	"draw": {
+		"tools": "Zeichenwerkzeuge",
+		"pen": "Stift",
+		"eraser": "Radierer",
+		"select": "Auswählen",
+		"clear": "Löschen"
 	},
 	"intents": {
 		"title": "Intents",
