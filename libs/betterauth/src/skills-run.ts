@@ -157,13 +157,15 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 		// ontology invoice (lines/payments) linked to the company via `billed_by` (janta.x4). The generic
 		// persist loop writes the invoice (+ provenance); the `contact` output is vibe-only (not a type).
 		enrichAddressbook: async ({ inputs }) => {
-			const raw = inputs.invoice as Record<string, unknown> | undefined
-			if (!raw) return {} // non-invoice path (e.g. bank statement) — follow-on
+			// board 0097 — the enrich actor serves BOTH verticals: an invoice (inputs.invoice) or a bank
+			// statement (inputs.transaction). Both reuse the same company harvest/upsert helpers.
 			const str = (v: unknown): string => (v == null ? '' : String(v))
-			const header = (raw.header ?? {}) as Record<string, unknown>
-			const totals = (raw.totals ?? {}) as Record<string, unknown>
+			const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})
+			const invoiceRaw = inputs.invoice as Record<string, unknown> | undefined
+			const bankRaw = inputs.transaction as Record<string, unknown> | undefined
+			if (!invoiceRaw && !bankRaw) return {}
 
-			// Harvest a party (vendor OR buyer) from EVERY extraction path — the model scatters the same
+			// Harvest a party (vendor OR buyer OR account-holder) from EVERY extraction path — the model scatters the same
 			// fact across the root, the single `bank` block, `banking_accounts[]`, and the imprint. board 0097.
 			type Party = { name: string; email: string; phone: string; iban: string; vat_id: string; tax_number: string; postal: string; contact_name: string }
 			const harvest = (partyRaw: unknown): Party => {
@@ -236,6 +238,46 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 				return { id: matched.id as string, isNew: false, matchedBy, added }
 			}
 
+			// ── BANK STATEMENT PATH (board 0097) — the Kontoauszug flow: upsert the account-holder company,
+			// then persist EACH posted line as a transaction≡pleji predication (amount x2, payee x3 = the
+			// counterparty company, x4 = the Verwendungszweck; dated≡detri the value/booking date). Idempotent
+			// by amount|date|description so re-imports de-dupe. Counterparties become addressbook contacts too.
+			if (bankRaw && !invoiceRaw) {
+				const holder = harvest(bankRaw.account_holder)
+				const holderRes = await upsertCompany(holder)
+				const txLines = (Array.isArray(bankRaw.transactions) ? bankRaw.transactions : []) as Record<string, unknown>[]
+				const existing = ((await executeDataTool(uid, { schema: 'transaction', action: 'list' })) as { items: Record<string, unknown>[] }).items
+				const seen = new Set(existing.map((t) => `${str(t.amount)}|${str(t.date)}|${str(t.invoice)}`))
+				let imported = 0
+				for (const rawLine of txLines) {
+					const line = rec(rawLine)
+					const amount = str(line.amount)
+					if (!amount) continue
+					const date = str(line.booking_date) || str(line.value_date)
+					const desc = str(line.description) || str(line.title)
+					const key = `${amount}|${date}|${desc}`
+					if (seen.has(key)) continue
+					seen.add(key)
+					let payeeId: string | undefined
+					const cpName = str(line.counterparty_name)
+					if (cpName) {
+						const r = await upsertCompany({ name: cpName, email: '', phone: '', iban: str(line.counterparty_iban), vat_id: '', tax_number: '', postal: '', contact_name: '' })
+						payeeId = r.id
+					}
+					await executeDataTool(uid, { schema: 'transaction', action: 'create', items: [{ amount, date, payee: payeeId, invoice: desc }] })
+					imported++
+				}
+				const inst = rec(bankRaw.institution)
+				return {
+					contact: { id: holderRes.id, name: holder.name, isNew: holderRes.isNew, matchedBy: holderRes.matchedBy, address: holder.postal || undefined, added: holderRes.added },
+					bank_statement: { institution: str(inst.name), account_holder: holder.name, period_start: str(bankRaw.period_start), period_end: str(bankRaw.period_end), currency: str(bankRaw.currency), total: txLines.length, imported }
+				}
+			}
+
+			// ── INVOICE PATH ──
+			const raw = invoiceRaw as Record<string, unknown>
+			const header = (raw.header ?? {}) as Record<string, unknown>
+			const totals = (raw.totals ?? {}) as Record<string, unknown>
 			const v = harvest(raw.vendor)
 			const b = harvest(raw.buyer)
 			const vendorRes = await upsertCompany(v)
