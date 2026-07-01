@@ -10,7 +10,7 @@ import { registerContextProvider } from './context'
 import { db } from './db'
 import { publish } from './events'
 
-// board 0100 — the ONTOLOGY actor's server capabilities: read the data_schema predicate registry, MINT a
+// board 0100 — the BRAIN actor's server capabilities: read the data_schema predicate registry, MINT a
 // new x1–x5 predicate via GLM-5.2 (grounded in the full gismu dictionary), and persist it (compile → AJV
 // self-validate → data_schema). The deterministic core (dedup, full-place rule) lives in @avenos/skills/tools;
 // this is the server adapter that injects `ctx.ontology`.
@@ -188,7 +188,7 @@ registerContextProvider('predicates', async (uid) => ({
 }))
 
 /** The `ctx.ontology` capability bundle the chat loop injects when dispatching the `ontology` tool. */
-export function ontologyCaps(uid: string) {
+export function brainCaps(uid: string) {
 	return {
 		list: () => listPredicates(uid),
 		mint,

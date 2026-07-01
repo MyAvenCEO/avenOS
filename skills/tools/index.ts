@@ -10,4 +10,4 @@ export type {
 } from './types'
 export { DATA_CRUD_TOOL, dataCrud } from './data-crud'
 export { chatToolDefinitions, TOOL_ACTORS } from './registry'
-export { CREATE_INSTRUCTIONS, type ExistingPredicate, findExistingPredicate } from './ontology'
+export { CREATE_INSTRUCTIONS, type ExistingPredicate, findExistingPredicate } from './brain'

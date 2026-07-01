@@ -1,6 +1,6 @@
 import { chatToolDefinitions, TOOL_ACTORS } from '@avenos/skills/tools'
 import { recordActorRun } from './skills-run'
-import { ontologyCaps } from './ontology'
+import { brainCaps } from './brain'
 import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
 import type { Context } from 'hono'
@@ -440,7 +440,7 @@ function streamWithTools(opts: {
 									{
 										userId,
 										data: (a) => executeDataTool(userId, a),
-										ontology: ontologyCaps(userId) // board 0100 — GLM mint + data_schema registry caps
+										brain: brainCaps(userId) // board 0100 — GLM mint + data_schema registry caps
 									},
 									parsed
 								)
@@ -479,12 +479,12 @@ function streamWithTools(opts: {
 										vibeData: data,
 										outputs: ['todos']
 									})
-								} else if (schema.startsWith('ontology')) {
-									// board 0100 — each ontology actor firing = a run of the `ontology` skill (read/create).
+								} else if (schema.startsWith('brain')) {
+									// board 0100 — each brain actor firing = a run of the `brain` skill (read/create).
 									void recordActorRun(userId, {
-										flowId: 'ontology',
-										nodeId: schema === 'ontology' ? 'read' : 'create',
-										label: out.detail ?? 'ontology',
+										flowId: 'brain',
+										nodeId: schema === 'brain' ? 'read' : 'create',
+										label: out.detail ?? 'brain',
 										vibe: schema,
 										vibeData: data,
 										outputs: ['predicate']

@@ -39,7 +39,7 @@ import {
 import { eventsStream } from './events'
 import { contextRoute } from './context'
 import { deleteFlow, getFlow, listFlows, upsertFlow } from './flows'
-import './ontology' // board 0100 — registers the ontology context providers (gismu/predicates) at load
+import './brain' // board 0100 — registers the brain skill's context providers (gismu/predicates) at load
 import { inboxGet, inboxList, mailInbox } from './inbox'
 import { deleteType, getType, listTypes, upsertType } from './predicate-types'
 import { listRuns, runSkill } from './skills-run'

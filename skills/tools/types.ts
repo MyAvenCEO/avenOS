@@ -49,9 +49,9 @@ export type ToolCtx = {
 	userId: string
 	/** Execute a schema-validated CRUD op against the signed-in user's store (betterauth executeDataTool). */
 	data(args: DataCrudArgs): Promise<unknown>
-	/** board 0100 — the ontology actor's server caps (GLM-5.2 mint + data_schema registry). Injected only
-	 *  when the ontology tool is dispatched; other actors ignore it. */
-	ontology?: {
+	/** board 0100 — the brain actor's server caps (GLM-5.2 mint + data_schema registry). Injected only
+	 *  when the brain tool is dispatched; other actors ignore it. */
+	brain?: {
 		/** The predicates already in the data_schema registry (name + gloss). */
 		list(): Promise<{ name: string; gloss?: string }[]>
 		/** Ask GLM-5.2 (with the full gismu dictionary) to define the relationship(s) in the request — a
