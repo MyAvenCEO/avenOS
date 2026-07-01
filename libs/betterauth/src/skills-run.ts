@@ -259,7 +259,12 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 				const txLines = (Array.isArray(bankRaw.transactions) ? bankRaw.transactions : []) as Record<string, unknown>[]
 				const existing = ((await executeDataTool(uid, { schema: 'transaction', action: 'list' })) as { items: Record<string, unknown>[] }).items
 				const seen = new Set(existing.map((t) => `${str(t.amount)}|${str(t.date)}|${str(t.invoice)}`))
+				// board 0098 — RECONCILE: auto-match each transaction to the invoice it settles (matched≡mapti)
+				// when |amount| equals an invoice total (+ same biller company when known). Drives "belegt".
+				const invoices = ((await executeDataTool(uid, { schema: 'invoice', action: 'list' })) as { items: Record<string, unknown>[] }).items
+				const money2 = (v: unknown): string => (Number.isFinite(Number(v)) ? Math.abs(Number(v)).toFixed(2) : '')
 				let imported = 0
+				let matched = 0
 				for (const rawLine of txLines) {
 					const line = rec(rawLine)
 					const amount = str(line.amount)
@@ -275,13 +280,40 @@ function skillActors(store: ArtifactStore, uid: string): ActorRegistry {
 						const r = await upsertCompany({ name: cpName, email: '', phone: '', iban: str(line.counterparty_iban), vat_id: '', tax_number: '', postal: '', contact_name: '' })
 						payeeId = r.id
 					}
-					await executeDataTool(uid, { schema: 'transaction', action: 'create', items: [{ amount, date, payee: payeeId, invoice: desc }] })
+					// reconcile: an invoice whose total matches this line's |amount| (+ same biller when known).
+					const amt2 = money2(amount)
+					const matchedInv = amt2
+						? invoices.find((inv) => money2(inv.total) === amt2 && (!payeeId || !inv.billed_by || inv.billed_by === payeeId))
+						: undefined
+					if (matchedInv) matched++
+					// board 0098 — FULL fidelity: value date, running balance, currency + the FX cluster + reconcile.
+					await executeDataTool(uid, {
+						schema: 'transaction',
+						action: 'create',
+						items: [
+							{
+								amount,
+								date,
+								value_date: str(line.value_date) || undefined,
+								balance: str(line.balance_after) || undefined,
+								currency: str(bankRaw.currency) || undefined,
+								exchange_rate: str(line.exchange_rate) || undefined,
+								fx_fee_percent: str(line.foreign_exchange_fee_percent) || undefined,
+								original_currency: str(line.original_currency) || undefined,
+								original_amount: str(line.original_amount) || undefined,
+								fx_surcharge: str(line.fx_surcharge_eur) || undefined,
+								payee: payeeId,
+								invoice: desc,
+								matched_invoice: matchedInv?.id as string | undefined
+							}
+						]
+					})
 					imported++
 				}
 				const inst = rec(bankRaw.institution)
 				return {
 					contact: { id: holderRes.id, name: holder.name, isNew: holderRes.isNew, matchedBy: holderRes.matchedBy, address: holder.postal || undefined, added: holderRes.added },
-					bank_statement: { institution: str(inst.name), account_holder: holder.name, period_start: str(bankRaw.period_start), period_end: str(bankRaw.period_end), currency: str(bankRaw.currency), total: txLines.length, imported }
+					bank_statement: { institution: str(inst.name), account_holder: holder.name, period_start: str(bankRaw.period_start), period_end: str(bankRaw.period_end), currency: str(bankRaw.currency), total: txLines.length, imported, matched }
 				}
 			}
 

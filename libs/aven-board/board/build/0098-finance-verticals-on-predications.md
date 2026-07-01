@@ -177,6 +177,19 @@ cd app && bun --bun x svelte-check --tsconfig ./tsconfig.json
 
 ## Progress log
 
+- 2026-07-01 — **Build checkpoints 3–5 (fidelity + reconcile + book + retire).** Transaction fidelity:
+  added `value_dated`≡detri, `balance`≡klani, `matched`≡mapti to the vocab (gate green, 412 asserts) +
+  currency/FX as `identifier`≡tcita discriminators (idkind-currency/exchange_rate/fx_fee_percent/
+  original_currency/original_amount/fx_surcharge) on the TRANSACTION_SPEC — 100% of the flat `tx` fields
+  now map to predicates. The bank enrich populates them all. RECONCILE: auto-match each transaction to
+  the invoice it settles (|amount|==invoice total + same biller) → `matched`≡mapti, driving "belegt".
+  BOOK/BWA: FinanceVibe now computes cash flow + P&L from `transaction` predications grouped by their
+  `booked`≡cmima SKR04 account (single-entry) — no flat `booking` needed. Migration 0042 re-seeds the
+  spec + drops the flat `tx`/`match`/`booking` data_schema. TransactionsVibe shows belegt/offen. Suites
+  green (55 vibes · 8 ontology · betterauth check · app svelte-check 0 err). **Last-mile remaining:** the
+  chat-driven `tx`-import / `match` / `booking` tools in `ai.ts` (+ `BookingsVibe`) still `ensureDocSchema`
+  the flat types — a separate chat reconciliation UX that duplicates the flow path; migrating it makes
+  the `rg` retire-check fully empty.
 - 2026-07-01 — **Build checkpoint 2 (reference extraction ported).** Migration 0041 replaces BOTH the
   invoice (`capture`) + bank (`capture-bank`) extract-node `system_prompt` + tool `schema` with the
   legacy OCR reference (`ocr/config/prompts/extract_{invoice,bank_statement}.system` + the rich

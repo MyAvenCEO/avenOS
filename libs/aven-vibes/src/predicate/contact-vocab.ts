@@ -133,12 +133,55 @@ export const BOOKED: PredicateDef = {
 	]
 }
 
+// ── Bank-statement fidelity (board 0098) — a transaction carries two dates + a running balance ────────
+// value_dated≡detri (the value/Wertstellung date, distinct from the booking date), balance≡klani (the
+// running account balance after the line). currency + the FX cluster reuse the universal identifier≡tcita
+// (idkind-currency / idkind-exchange_rate / …) so no per-scalar predicate is minted. board 0098.
+export const VALUE_DATED: PredicateDef = {
+	predicate: 'value_dated',
+	gismu: 'detri',
+	gloss: 'detri: x1 (the value date) is the date of event x2 (the transaction) at location x3 by calendar x4',
+	places: [
+		val('x1', 'date', 'the value/Wertstellung date — detri x1', 'date-time', { example: '2026-03-31' }),
+		ref('x2', 'event', 'the transaction — detri x2 (the event)'),
+		ref('x3', 'location', 'where reckoned — detri x3 (open)', { required: false }),
+		val('x4', 'calendar', 'the calendar — detri x4 (open)', 'string', { required: false })
+	]
+}
+export const BALANCE: PredicateDef = {
+	predicate: 'balance',
+	gismu: 'klani',
+	gloss: 'klani: x1 (the transaction) is a quantity measured by amount x2 (the running balance) on scale x3 (the currency)',
+	places: [
+		ref('x1', 'quantity', 'the transaction whose running balance this is — klani x1'),
+		val('x2', 'amount', 'the running account balance after the line — klani x2', 'string', { example: '1234.56' }),
+		val('x3', 'scale', 'the currency the balance is in — klani x3 (open)', 'string', { required: false, example: 'EUR' })
+	]
+}
+
+// ── Reconciliation (board 0098) — a transaction is MATCHED to the invoice it settles ─────────────────
+// mapti: x1 fits/corresponds to x2 in aspect x3. matched: x1 the transaction, x2 the invoice, x3 the
+// confidence/aspect of the match — the Beleg↔Buchung link that drives the "belegt" status.
+export const MATCHED: PredicateDef = {
+	predicate: 'matched',
+	gismu: 'mapti',
+	gloss: 'mapti: x1 (the transaction) fits/corresponds to x2 (the invoice it settles) in aspect x3 (confidence)',
+	places: [
+		ref('x1', 'fitting thing', 'the transaction — mapti x1'),
+		ref('x2', 'counterpart', 'the invoice it settles — mapti x2'),
+		val('x3', 'aspect', 'the match confidence/aspect — mapti x3 (open, e.g. high/iban/amount+date)', 'string', {
+			required: false,
+			example: 'high'
+		})
+	]
+}
+
 /** Person contact bundle. */
 export const PERSON_PREDICATES: PredicateDef[] = [PERSON, NAME, ADDRESS, IDENTIFIER, REPRESENTS]
 /** Company contact bundle. */
 export const COMPANY_PREDICATES: PredicateDef[] = [COMPANY, NAME, ADDRESS, IDENTIFIER]
-/** Transaction (reconciliation) bundle. */
-export const TRANSACTION_PREDICATES: PredicateDef[] = [TRANSACTION, DATED, BOOKED]
+/** Transaction (bank-statement + reconciliation) bundle. board 0098 adds value_dated/balance/matched. */
+export const TRANSACTION_PREDICATES: PredicateDef[] = [TRANSACTION, DATED, VALUE_DATED, BALANCE, BOOKED, MATCHED]
 
 /** Compiled `{ name, jsonSchema }` rows ready to seed as data_schema entries (contacts + transactions). */
 export function contactPredicateSchemas(): { name: string; jsonSchema: Record<string, unknown> }[] {

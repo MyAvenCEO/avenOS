@@ -16,6 +16,7 @@ type Tx = {
 	payee?: string | null
 	invoice?: string | null
 	account?: string | null
+	matched_invoice?: string | null
 }
 
 const txQuery = createQuery(() => ({
@@ -64,6 +65,7 @@ function money(n: number | null | undefined): string {
 					<tr class="text-muted-foreground border-border border-b text-left">
 						<th class="px-3 py-2 font-semibold">{t('mainnet.transactions.date')}</th>
 						<th class="px-3 py-2 font-semibold">{t('mainnet.transactions.counterparty')}</th>
+						<th class="px-3 py-2 font-semibold">{t('mainnet.transactions.status')}</th>
 						<th class="px-3 py-2 font-semibold">{t('mainnet.transactions.purpose')}</th>
 						<th class="px-3 py-2 text-right font-semibold">{t('mainnet.transactions.amount')}</th>
 					</tr>
@@ -75,6 +77,17 @@ function money(n: number | null | undefined): string {
 								{r.date ?? '—'}
 							</td>
 							<td class="text-foreground px-3 py-2">{counterparty(r)}</td>
+							<td class="px-3 py-2">
+								{#if r.matched_invoice}
+									<span class="rounded-full bg-blue-900/90 px-1.5 py-0.5 text-[9px] font-semibold text-blue-50"
+										>{t('mainnet.transactions.belegt')}</span
+									>
+								{:else}
+									<span class="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
+										>{t('mainnet.transactions.offen')}</span
+									>
+								{/if}
+							</td>
 							<td class="text-muted-foreground max-w-[24rem] truncate px-3 py-2">
 								{r.invoice ?? '—'}
 							</td>

@@ -65,15 +65,36 @@ export const TRANSACTION_SPEC: TypeSpec = {
 		{ pred: 'transaction', kind: 'primary', field: 'amount', create: { x2: '$value' }, set: { x2: '$value' }, fields: { x3: 'payee', x4: 'invoice' } },
 		{ pred: 'owned_by', kind: 'singleton', link: 'x2', create: { x1: '$user' } },
 		{ pred: 'dated', kind: 'replace', link: 'x2', field: 'date', set: { x1: '$value', x2: '$primary' } },
+		// board 0098 — bank-statement fidelity: value date, running balance, currency + the FX cluster.
+		{ pred: 'value_dated', kind: 'replace', link: 'x2', field: 'value_date', set: { x1: '$value', x2: '$primary' } },
+		{ pred: 'balance', kind: 'replace', link: 'x1', field: 'balance', set: { x1: '$primary', x2: '$value' } },
+		// currency + FX scalars — one universal identifier≡tcita each, keyed by x1 = the id-kind ref, value in x3
+		{ pred: 'identifier', kind: 'replace', link: 'x2', field: 'currency', match: { x1: 'idkind-currency' }, set: { x2: '$primary', x3: '$value' } },
+		{ pred: 'identifier', kind: 'replace', link: 'x2', field: 'exchange_rate', match: { x1: 'idkind-exchange_rate' }, set: { x2: '$primary', x3: '$value' } },
+		{ pred: 'identifier', kind: 'replace', link: 'x2', field: 'fx_fee_percent', match: { x1: 'idkind-fx_fee_percent' }, set: { x2: '$primary', x3: '$value' } },
+		{ pred: 'identifier', kind: 'replace', link: 'x2', field: 'original_currency', match: { x1: 'idkind-original_currency' }, set: { x2: '$primary', x3: '$value' } },
+		{ pred: 'identifier', kind: 'replace', link: 'x2', field: 'original_amount', match: { x1: 'idkind-original_amount' }, set: { x2: '$primary', x3: '$value' } },
+		{ pred: 'identifier', kind: 'replace', link: 'x2', field: 'fx_surcharge', match: { x1: 'idkind-fx_surcharge' }, set: { x2: '$primary', x3: '$value' } },
 		// cmima: x1 the transaction (member), x2 the SKR04 account it is booked to
-		{ pred: 'booked', kind: 'replace', link: 'x1', field: 'account', set: { x1: '$primary', x2: '$value' } }
+		{ pred: 'booked', kind: 'replace', link: 'x1', field: 'account', set: { x1: '$primary', x2: '$value' } },
+		// mapti: x1 the transaction, x2 the invoice it settles — the reconciliation link (belegt)
+		{ pred: 'matched', kind: 'replace', link: 'x1', field: 'matched_invoice', set: { x1: '$primary', x2: '$value' } }
 	],
 	project: {
 		amount: { pred: 'transaction', place: 'x2' },
 		payee: { pred: 'transaction', place: 'x3' },
 		invoice: { pred: 'transaction', place: 'x4' },
 		date: { pred: 'dated', place: 'x1' },
+		value_date: { pred: 'value_dated', place: 'x1' },
+		balance: { pred: 'balance', place: 'x2' },
+		currency: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-currency' } },
+		exchange_rate: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-exchange_rate' } },
+		fx_fee_percent: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-fx_fee_percent' } },
+		original_currency: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-original_currency' } },
+		original_amount: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-original_amount' } },
+		fx_surcharge: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-fx_surcharge' } },
 		account: { pred: 'booked', place: 'x2' },
+		matched_invoice: { pred: 'matched', place: 'x2' },
 		owner: { pred: 'owned_by', place: 'x1' }
 	}
 }
