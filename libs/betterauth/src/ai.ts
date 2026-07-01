@@ -1,9 +1,3 @@
-import {
-	BOOKING_SCHEMA,
-	type BookingPick,
-	type BookingRecord,
-	buildBookingRecord
-} from '@avenos/aven-vibes/booking'
 import { CONTACT_SCHEMA, contactDisplayName, mintContactId } from '@avenos/aven-vibes/contact'
 import {
 	enrichFields,
@@ -21,22 +15,7 @@ import {
 	requiredFieldsMissing
 } from '@avenos/aven-vibes/invoice-doc'
 import { assignInvoiceNumber, type InvoiceState } from '@avenos/aven-vibes/invoice-number'
-import {
-	bestInvoiceMatch,
-	buildMatchRecord,
-	type InvoiceMatch,
-	invoiceTotal,
-	invoiceVendor,
-	MATCH_SCHEMA
-} from '@avenos/aven-vibes/match'
-import { skrForPrompt } from '@avenos/aven-vibes/skr'
 import { CHAT_TOOLS } from '@avenos/aven-vibes/tools'
-import {
-	bankStatementToTransactions,
-	newTransactions,
-	TX_SCHEMA,
-	type TxRecord
-} from '@avenos/aven-vibes/tx'
 import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
 import type { Context } from 'hono'
@@ -177,375 +156,6 @@ function parseTextToolCalls(content: string): { id: string; name: string; args: 
 		out.push({ id: `txt_${n++}`, name: m[1], args: JSON.stringify(args) })
 	}
 	return out
-}
-
-/**
- * board 0065 — fan a bank statement's transactions out into the user's `tx` schema/table,
- * idempotently: skip any dedup_key we already stored (so re-extracting the same statement adds
- * nothing). Returns the count of NEW transactions stored.
- */
-async function fanOutTransactions(
-	userId: string,
-	extracted: Record<string, unknown>,
-	sourceValueId: string | null
-): Promise<number> {
-	const txs = bankStatementToTransactions(extracted, sourceValueId)
-	if (txs.length === 0) return 0
-	await ensureDocSchema(userId, 'tx', TX_SCHEMA)
-	const existing = (await executeDataTool(userId, { schema: 'tx', action: 'list' })) as {
-		items?: { dedup_key?: string }[]
-	}
-	const seen = new Set(
-		(existing.items ?? []).map((i) => i.dedup_key).filter((k): k is string => typeof k === 'string')
-	)
-	const fresh = newTransactions(txs, seen)
-	if (fresh.length === 0) return 0
-	const res = (await executeDataTool(userId, {
-		schema: 'tx',
-		action: 'create',
-		items: fresh as unknown as Record<string, unknown>[]
-	})) as { created?: string[] }
-	return res.created?.length ?? 0
-}
-
-/**
- * board 0066 — reconcile an extracted invoice against the user's stored `tx` records: query the tx
- * table, find the best paying transaction (amount-required), and persist a `match` row. Returns the
- * match (for the invoice-match vibe) or null when nothing reconciles.
- */
-async function matchInvoiceAgainstTx(
-	key: string,
-	model: string,
-	userId: string,
-	extracted: Record<string, unknown>,
-	invoiceValueId: string | null
-): Promise<InvoiceMatch | null> {
-	const listed = (await executeDataTool(userId, { schema: 'tx', action: 'list' })) as {
-		items?: Record<string, unknown>[]
-	}
-	const txs = (listed.items ?? []) as unknown as TxRecord[]
-	// DYNAMIC matching: let the model reconcile (handles cross-currency USD/EUR via original_amount,
-	// fuzzy amounts/fees, vendor naming, date proximity). Fall back to the deterministic matcher.
-	let match = await matchInvoiceLLM(key, model, extracted, txs)
-	if (!match) match = bestInvoiceMatch(extracted, txs)
-	try {
-		await ensureDocSchema(userId, 'match', MATCH_SCHEMA)
-		const record = buildMatchRecord(invoiceValueId, extracted, match)
-		await executeDataTool(userId, {
-			schema: 'match',
-			action: 'create',
-			items: [record as unknown as Record<string, unknown>]
-		})
-	} catch (e) {
-		console.error('[ai] match persist failed:', e)
-	}
-	return match
-}
-
-/**
- * Dynamic invoice↔tx reconciliation: a focused tool call where the model picks the paying
- * transaction from the candidate list. It reasons about CROSS-CURRENCY payments (a USD invoice paid
- * as a EUR debit — match the tx `original_amount`/`original_currency`), small FX fees, vendor naming
- * in the Verwendungszweck, and date proximity. Returns an InvoiceMatch or null. board 0066/0069.
- */
-async function matchInvoiceLLM(
-	key: string,
-	model: string,
-	invoice: Record<string, unknown>,
-	txs: TxRecord[]
-): Promise<InvoiceMatch | null> {
-	if (txs.length === 0) return null
-	const target = invoiceTotal(invoice)
-	const hdr =
-		invoice.header && typeof invoice.header === 'object'
-			? (invoice.header as Record<string, unknown>)
-			: {}
-	// Line-item / title text helps bridge vendor↔product naming (e.g. invoice vendor
-	// "ActiveCampaign, LLC" → tx "POSTMARKAPP.COM"; "Cursor" → "CURSOR, AI POWERED IDE").
-	const stmts = Array.isArray(invoice.statements) ? invoice.statements : []
-	const lineText = stmts
-		.flatMap((s) => {
-			const li = s && typeof s === 'object' ? (s as Record<string, unknown>).line_items : null
-			return Array.isArray(li) ? li : []
-		})
-		.map((li) => {
-			const r = li && typeof li === 'object' ? (li as Record<string, unknown>) : {}
-			return [r.title, r.description].filter((x) => typeof x === 'string').join(' ')
-		})
-		.filter(Boolean)
-		.join(' · ')
-		.slice(0, 400)
-	const invSummary = {
-		vendor: invoiceVendor(invoice),
-		total: target,
-		currency: typeof hdr.currency === 'string' ? hdr.currency : null,
-		invoice_number: typeof hdr.invoice_number === 'string' ? hdr.invoice_number : null,
-		order_number: typeof hdr.order_number === 'string' ? hdr.order_number : null,
-		date: typeof hdr.issue_date === 'string' ? hdr.issue_date : null,
-		line_items: lineText
-	}
-	const candidates = txs.slice(0, 400).map((t) => ({
-		dedup_key: t.dedup_key,
-		date: t.booking_date ?? t.value_date,
-		amount: t.amount,
-		currency: t.currency,
-		original_amount: t.original_amount,
-		original_currency: t.original_currency,
-		counterparty: t.counterparty_name ?? t.counterparty_iban,
-		// the description usually carries the merchant name AND an FX rate like "1 EUR = 1,1783 USD"
-		description: t.description
-	}))
-	const tool = {
-		type: 'function',
-		function: {
-			name: 'pick_match',
-			description: 'Record which transaction paid the invoice (or none).',
-			parameters: {
-				type: 'object',
-				properties: {
-					tx_dedup_key: {
-						type: ['string', 'null'],
-						description: 'dedup_key of the paying transaction, or null if none plausibly matches.'
-					},
-					confidence: { type: 'string', enum: ['high', 'medium', 'low', 'none'] },
-					reason: {
-						type: 'string',
-						description: 'One short sentence (German) explaining the choice.'
-					}
-				},
-				required: ['tx_dedup_key', 'confidence', 'reason']
-			}
-		}
-	}
-	const system =
-		'You are a German bookkeeping assistant. Pick the SINGLE bank transaction that PAID this ' +
-		'invoice, or NONE.\n' +
-		'- AMOUNT first: the tx (an outgoing debit, usually negative) should equal the invoice total. ' +
-		'CROSS-CURRENCY: a USD invoice paid as a EUR debit — compare the tx original_amount/' +
-		'original_currency, or apply the FX rate often printed in the description (e.g. "1 EUR = ' +
-		'1,1783 USD"). Allow small FX fees / rounding (about ±3%).\n' +
-		'- VENDOR: the invoice vendor or its product/brand should appear in the tx counterparty or ' +
-		'description (e.g. "ActiveCampaign"<->"POSTMARKAPP", "Cursor"<->"CURSOR"); use line_items.\n' +
-		'- DATE: the payment is usually on/after the invoice date, within a few weeks.\n' +
-		'Call pick_match with the tx dedup_key, or null if nothing plausibly matches.'
-	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
-		method: 'POST',
-		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			model,
-			messages: [
-				{ role: 'system', content: system },
-				{
-					role: 'user',
-					content: `Invoice:\n${JSON.stringify(invSummary)}\n\nTransactions:\n${JSON.stringify(candidates)}`
-				}
-			],
-			tools: [tool],
-			tool_choice: { type: 'function', function: { name: 'pick_match' } },
-			stream: false
-		})
-	}).catch(() => null)
-	if (!res?.ok) return null
-	const data = (await res.json().catch(() => null)) as {
-		choices?: { message?: { tool_calls?: { function?: { arguments?: string } }[] } }[]
-	} | null
-	const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments
-	if (!args) return null
-	let pick: { tx_dedup_key?: string | null; confidence?: string; reason?: string } | null = null
-	try {
-		pick = JSON.parse(args)
-	} catch {
-		return null
-	}
-	const matchedKey = typeof pick?.tx_dedup_key === 'string' ? pick.tx_dedup_key : null
-	if (!matchedKey) return null
-	const tx = txs.find((x) => x.dedup_key === matchedKey)
-	if (!tx) return null
-	const confidence: InvoiceMatch['confidence'] =
-		pick?.confidence === 'high' ? 'high' : pick?.confidence === 'none' ? 'none' : 'medium'
-	if (confidence === 'none') return null
-	return { tx, confidence, reasons: pick?.reason ? [pick.reason] : [], target: target ?? 0 }
-}
-
-async function bookInvoice(
-	key: string,
-	model: string,
-	userId: string,
-	invoice: Record<string, unknown>,
-	match: InvoiceMatch | null,
-	invoiceValueId: string | null
-): Promise<BookingRecord | null> {
-	const hdr =
-		invoice.header && typeof invoice.header === 'object'
-			? (invoice.header as Record<string, unknown>)
-			: {}
-	const invSummary = {
-		vendor: invoiceVendor(invoice),
-		total: invoiceTotal(invoice),
-		currency: typeof hdr.currency === 'string' ? hdr.currency : null,
-		invoice_number: typeof hdr.invoice_number === 'string' ? hdr.invoice_number : null,
-		date: typeof hdr.issue_date === 'string' ? hdr.issue_date : null,
-		booking_summary: typeof invoice.booking_summary === 'string' ? invoice.booking_summary : null,
-		totals: invoice.totals ?? null,
-		statements: invoice.statements ?? null
-	}
-	const paidVia = match
-		? {
-				konto_hint: '1800',
-				amount: match.tx.amount,
-				date: match.tx.booking_date ?? match.tx.value_date,
-				text: match.tx.description
-			}
-		: null
-	const tool = {
-		type: 'function',
-		function: {
-			name: 'book_invoice',
-			description:
-				'Record the SKR04 Buchungssatz for this invoice. Use a Splitbuchung (multiple `lines`) ' +
-				'when the invoice mixes VAT rates, cost types, private/business shares, or Skonto.',
-			parameters: {
-				type: 'object',
-				properties: {
-					lines: {
-						type: 'array',
-						minItems: 1,
-						description:
-							'The EXPENSE (Soll) positions — NET only. ONE line for a simple invoice; MULTIPLE ' +
-							'lines (a Splitbuchung) when positions need different EXPENSE accounts or VAT rates. ' +
-							'Do NOT add a Vorsteuer/VAT line and do NOT pick a VAT account — the system posts the ' +
-							'Abziehbare Vorsteuer automatically from each position net + tax_treatment.',
-						items: {
-							type: 'object',
-							properties: {
-								soll_konto: {
-									type: 'string',
-									description:
-										'SKR04 EXPENSE/asset konto for THIS position (4 digits, EXACTLY as in the chart). NOT a VAT account.'
-								},
-								net_amount: {
-									type: ['number', 'null'],
-									description:
-										'NET amount of this position (ohne USt). If only gross is known, set gross_amount instead.'
-								},
-								gross_amount: {
-									type: ['number', 'null'],
-									description:
-										'Gross of this position — only if net is not separately known; the system derives net + VAT.'
-								},
-								tax_treatment: {
-									type: 'string',
-									enum: ['vat_19', 'vat_7', 'reverse_charge', 'intra_eu', 'none'],
-									description:
-										'VAT treatment of THIS position: vat_19 / vat_7 = domestic German input VAT (system posts Abziehbare Vorsteuer 1406/1401); reverse_charge = §13b foreign supplier; intra_eu = innergemeinschaftlicher Erwerb; none = steuerfrei / no deductible VAT.'
-								},
-								cost_treatment: {
-									type: ['string', 'null'],
-									enum: ['standard', 'bewirtung', null],
-									description:
-										'Set "bewirtung" for a RESTAURANT / entertainment receipt (Bewirtungsbeleg, "Bewirtete Personen"): the system books the §4 Abs.5 EStG 70/30 split (6640 abziehbar + 6644 nicht abziehbar) with full Vorsteuer — pass the FULL net + vat_19. Otherwise "standard" or omit.'
-								},
-								note: {
-									type: ['string', 'null'],
-									description: 'Short German label of what this position is (e.g. "Druckerpapier").'
-								}
-							},
-							required: ['soll_konto', 'tax_treatment']
-						}
-					},
-					haben_konto: {
-						type: 'string',
-						description:
-							'Credit/contra account: the bank/payment konto it was paid from (e.g. 1800 Bank), 4 digits from the chart.'
-					},
-					buchungstext: {
-						type: ['string', 'null'],
-						description: 'Short German Buchungstext (vendor + what it is).'
-					},
-					confidence: {
-						type: 'string',
-						enum: ['high', 'medium', 'low'],
-						description:
-							'Your confidence in the chosen ACCOUNT(s): high = the standard/obvious konto for this Vorgang; medium = plausible but some judgement; low = unsure or a fallback account. Rate it honestly.'
-					},
-					reason: {
-						type: 'string',
-						description: 'One short German sentence justifying the account choice(s).'
-					}
-				},
-				required: ['lines', 'haben_konto', 'confidence', 'reason']
-			}
-		}
-	}
-	const system =
-		'You are a German bookkeeper booking ONE incoming supplier invoice into the SKR04 chart. ' +
-		'For EACH EXPENSE position choose the best Soll expense/asset account — rely especially on ' +
-		'`booking_summary` (a bookkeeper-oriented description of the Leistung/Vorgang), plus the vendor + ' +
-		'line items; e.g. software/SaaS subscriptions → an IT/software-costs account, hosting → ' +
-		'IT/communication costs. The CREDIT (Haben) is the account it was paid from — use 1800 (Bank) ' +
-		'unless context says otherwise. Pick every konto STRICTLY from the provided SKR04 chart (exact ' +
-		'4-digit konto).\n\n' +
-		'AMOUNTS + VAT: give each position as NET (net_amount, ohne USt) plus a `tax_treatment`. Do NOT ' +
-		'add a Vorsteuer line and do NOT pick a VAT/Umsatzsteuer account — the system posts the ' +
-		'Abziehbare Vorsteuer (SKR04 1406 for 19%, 1401 for 7%) AUTOMATICALLY from net + tax_treatment, ' +
-		'so the Buchungssatz balances. tax_treatment: vat_19 / vat_7 = normal domestic German input VAT; ' +
-		'reverse_charge = §13b foreign supplier (no deductible input VAT in the payment); intra_eu = ' +
-		'innergemeinschaftlicher Erwerb; none = steuerfrei or a non-EU supplier billing without VAT.\n\n' +
-		'SPLITBUCHUNG: emit MULTIPLE expense `lines` when ONE invoice mixes different VAT rates (7% vs ' +
-		'19%), different cost types (Bürobedarf + Reinigung + Bewirtung → separate konten), or private ' +
-		'vs business shares. For a simple single-rate invoice, emit exactly ONE expense line.\n\n' +
-		'BEWIRTUNG: a RESTAURANT bill / entertainment receipt (Restaurantrechnung, Bewirtungsbeleg, a ' +
-		'"Bewirtete Personen" field, food & drinks) → ONE line with cost_treatment "bewirtung", the FULL ' +
-		'net, tax_treatment vat_19, soll_konto 6640. The system applies the §4 Abs.5 EStG 70/30 split ' +
-		'(6640 + 6644) and the full Vorsteuer itself — do not split it yourself.\n\n' +
-		'ALWAYS pick the single best-fitting SKR04 expense account for a clear business expense and call ' +
-		'book_invoice — never return without an account. If genuinely unsure, use the closest sonstige ' +
-		'betrieblicher Aufwand konto rather than nothing, and set `confidence` to "low".\n\n' +
-		'CONFIDENCE: rate `confidence` honestly for how sure you are about the ACCOUNT choice — "high" ' +
-		'for an obvious/standard konto, "medium" when it needed judgement, "low" for a guess/fallback.'
-	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
-		method: 'POST',
-		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			model,
-			messages: [
-				{ role: 'system', content: system },
-				{
-					role: 'user',
-					content: `SKR04 chart (konto<TAB>bezeichnung):\n${skrForPrompt()}\n\nInvoice summary (lean on booking_summary to pick the account):\n${JSON.stringify(invSummary)}\n\nFull invoice JSON:\n${JSON.stringify(invoice)}\n\nPaid via:\n${JSON.stringify(paidVia)}`
-				}
-			],
-			tools: [tool],
-			tool_choice: { type: 'function', function: { name: 'book_invoice' } },
-			stream: false
-		})
-	}).catch(() => null)
-	let pick: BookingPick | null = null
-	if (res?.ok) {
-		const data = (await res.json().catch(() => null)) as {
-			choices?: { message?: { tool_calls?: { function?: { arguments?: string } }[] } }[]
-		} | null
-		const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments
-		if (args) {
-			try {
-				pick = JSON.parse(args) as BookingPick
-			} catch {
-				pick = null
-			}
-		}
-	}
-	const record = buildBookingRecord(invoiceValueId, invoice, pick)
-	try {
-		await ensureDocSchema(userId, 'booking', BOOKING_SCHEMA)
-		await executeDataTool(userId, {
-			schema: 'booking',
-			action: 'create',
-			items: [record as unknown as Record<string, unknown>]
-		})
-	} catch (e) {
-		console.error('[ai] booking persist failed:', e)
-	}
-	return record
 }
 
 export async function aiChat(c: Context): Promise<Response> {
@@ -881,9 +491,7 @@ function streamWithTools(opts: {
 				let stored = false
 				let txAdded = 0
 				let createdId: string | null = null
-				let invoiceMatch: InvoiceMatch | null = null
-				let invoiceBooking: BookingRecord | null = null
-				let addressbookHint: string | null = null
+					let addressbookHint: string | null = null
 				if (doctype && attachments.length > 0) {
 					// The 2nd vision pass can take 10–30s with no bytes; re-emit 'running' every 5s so the
 					// client's idle watchdog doesn't abort the stream ("Fetch is aborted"). board 0064.
@@ -909,20 +517,6 @@ function streamWithTools(opts: {
 							})) as { ok?: boolean; created?: string[] }
 							stored = result?.ok === true
 							createdId = result?.created?.[0] ?? null
-							if (docTypeName === 'bank_statement') {
-								txAdded = await fanOutTransactions(userId, extracted, createdId)
-							}
-							if (docTypeName === 'invoice') {
-								invoiceMatch = await matchInvoiceAgainstTx(key, model, userId, extracted, createdId)
-								invoiceBooking = await bookInvoice(
-									key,
-									model,
-									userId,
-									extracted,
-									invoiceMatch,
-									createdId
-								)
-							}
 							// board 0082 — harvest + match-make the doc's parties into the addressbook (the buyer /
 							// account holder is the self-company candidate, surfaced via the returned hint).
 							try {
@@ -961,35 +555,13 @@ function streamWithTools(opts: {
 						`${VIBE_MARKER}doc-compare\n${JSON.stringify(dcData)}`
 					).catch((e) => console.error('[ai] persist doc-compare vibe marker failed:', e))
 				}
-				if (extracted && docTypeName === 'invoice' && !emittedVibes.has('invoice-booking')) {
-					emittedVibes.add('invoice-booking')
-					const hdr =
-						extracted.header && typeof extracted.header === 'object'
-							? (extracted.header as Record<string, unknown>)
-							: {}
-					const currency = typeof hdr.currency === 'string' ? hdr.currency : ''
-					const ibData = {
-						invoice: extracted,
-						match: invoiceMatch,
-						booking: invoiceBooking,
-						currency
-					}
-					emit({ aven_vibe: { schema: 'invoice-booking', data: ibData } })
-					await persistMessage(
-						chatSessionId,
-						'assistant',
-						`${VIBE_MARKER}invoice-booking\n${JSON.stringify(ibData)}`
-					).catch((e) => console.error('[ai] persist invoice-booking vibe marker failed:', e))
-				}
 				return {
 					extracted: !!extracted,
 					stored,
 					txAdded,
-					match: invoiceMatch
-						? { status: 'matched', confidence: invoiceMatch.confidence }
-						: docTypeName === 'invoice'
-							? { status: 'unmatched' }
-							: undefined,
+					// board 0098 — reconciliation moved to the flow (matched≡mapti auto-match); the inline path
+					// no longer reconciles against flat `tx`, so an extracted invoice is reported unmatched here.
+					match: docTypeName === 'invoice' ? ({ status: 'unmatched' } as const) : undefined,
 					addressbookHint
 				}
 			}

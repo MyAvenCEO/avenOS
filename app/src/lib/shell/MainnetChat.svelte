@@ -15,7 +15,6 @@ import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
 import AddressbookVibe from '$lib/shell/AddressbookVibe.svelte'
-import BookingsVibe from '$lib/shell/BookingsVibe.svelte'
 import FinanceVibe from '$lib/shell/FinanceVibe.svelte'
 import InvoiceCreateVibe from '$lib/shell/InvoiceCreateVibe.svelte'
 import RunsView from '$lib/shell/RunsView.svelte'
@@ -696,13 +695,6 @@ function handleTranscribeError(message: string): void {
 								<!-- Live transactions list — same max width as todos (component self-constrains). 0068. -->
 								<div class="max-h-[80vh] w-full overflow-y-auto">
 									<TransactionsVibe containerName={`aven-vibes-chat-${message.id}`} />
-								</div>
-							{:else if message.vibe === 'booking'}
-								<!-- Bookings: list self-centers at max-w-2xl; the 50/50 prüf detail breaks out wide. 0071/0077. -->
-								<div
-									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
-								>
-									<BookingsVibe containerName={`aven-vibes-chat-${message.id}`} />
 								</div>
 							{:else if message.vibe === 'bwa'}
 								<!-- BWA / finance snapshot (computed from bookings + tx). board 0072. -->

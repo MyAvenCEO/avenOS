@@ -2,7 +2,6 @@
 import Composer from '$lib/composer/Composer.svelte'
 import { t } from '$lib/i18n'
 import AddressbookVibe from '$lib/shell/AddressbookVibe.svelte'
-import BookingsVibe from '$lib/shell/BookingsVibe.svelte'
 import BookkeepingVibe from '$lib/shell/BookkeepingVibe.svelte'
 import DocCompareVibe from '$lib/shell/DocCompareVibe.svelte'
 import FinanceVibe from '$lib/shell/FinanceVibe.svelte'
@@ -23,7 +22,6 @@ const VIBES: { id: string; label: string }[] = [
 	{ id: 'invoice-match', label: t('mainnet.invoiceMatch.title') },
 	{ id: 'invoice-booking', label: t('mainnet.invoiceBooking.title') },
 	{ id: 'tx', label: t('mainnet.transactions.title') },
-	{ id: 'booking', label: t('mainnet.bookings.title') },
 	{ id: 'bwa', label: t('mainnet.finance.title') },
 	{ id: 'addressbook', label: t('mainnet.addressbook.title') },
 	{ id: 'invoice-create', label: t('mainnet.invoiceCreate.title') }
@@ -80,10 +78,6 @@ let selectedVibe = $state('todos')
 		{:else if selectedVibe === 'tx'}
 			<div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
 				<TransactionsVibe containerName="aven-vibes-tab-tx" />
-			</div>
-		{:else if selectedVibe === 'booking'}
-			<div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
-				<BookingsVibe containerName="aven-vibes-tab-booking" />
 			</div>
 		{:else if selectedVibe === 'bwa'}
 			<div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
