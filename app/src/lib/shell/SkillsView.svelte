@@ -9,6 +9,7 @@ import {
 import { createQuery } from '@tanstack/svelte-query'
 import { listFlows } from '$lib/data/client'
 import { t } from '$lib/i18n'
+import ActorConfig from '$lib/shell/ActorConfig.svelte'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import { openDbSchema } from '$lib/shell/nav.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
@@ -234,32 +235,9 @@ function onSelect(id: string): void {
 						</div>
 					</div>
 				{/if}
-				{#if selectedNode.tools?.length}
-					<div>
-						<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
-							Tools
-						</p>
-						<div class="flex flex-wrap gap-1">
-							{#each selectedNode.tools as tool (tool)}
-								<span class="bg-muted text-foreground rounded px-1.5 py-0.5 font-mono text-[10px]"
-									>{tool}</span
-								>
-							{/each}
-						</div>
-					</div>
-				{/if}
-				{#if selectedNode.system_prompt}
-					<div>
-						<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
-							System-Prompt
-						</p>
-						<p
-							class="text-foreground border-border bg-muted/20 rounded border p-2 text-[11px] leading-relaxed whitespace-pre-wrap"
-						>
-							{selectedNode.system_prompt}
-						</p>
-					</div>
-				{/if}
+				<!-- board 0099 — the actor's inspectable config: system prompt + tool-call definitions
+				     (name · description · parameter JSON-Schema), shared with the Runs detail aside. -->
+				<ActorConfig node={selectedNode} promptOpen />
 			</div>
 		</aside>
 	{/if}

@@ -10,6 +10,7 @@ import {
 import { createQuery } from '@tanstack/svelte-query'
 import { listFlows, listRuns } from '$lib/data/client'
 import { t } from '$lib/i18n'
+import ActorConfig from '$lib/shell/ActorConfig.svelte'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import StepVibe from '$lib/shell/StepVibe.svelte'
 
@@ -244,27 +245,9 @@ function stepBy(delta: number): void {
 							{/if}
 						</div>
 					{/if}
-					{#if node?.tools?.length}
-						<div>
-							<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
-								Tools
-							</p>
-							<div class="flex flex-wrap gap-1">
-								{#each node.tools as tl (tl)}
-									<span class="bg-muted text-foreground rounded px-1.5 py-0.5 font-mono">{tl}</span>
-								{/each}
-							</div>
-						</div>
-					{/if}
-					{#if node?.system_prompt}
-						<details>
-							<summary
-								class="text-muted-foreground cursor-pointer text-[10px] font-semibold tracking-wide uppercase"
-								>System-Prompt</summary
-							>
-							<pre
-								class="text-foreground bg-muted/40 mt-1 max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">{node.system_prompt}</pre>
-						</details>
+					{#if node}
+						<!-- board 0099 — the actor's inspectable config: system prompt + tool-call definitions. -->
+						<ActorConfig {node} />
 					{/if}
 					{#if step.vibe}
 						<p class="text-muted-foreground/70">vibe: {step.vibe}</p>
