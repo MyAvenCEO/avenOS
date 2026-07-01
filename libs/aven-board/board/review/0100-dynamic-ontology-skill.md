@@ -161,6 +161,18 @@ bun run lint                              # biome
 
 Newest entry first.
 
+- `2026-07-02` — BUILD (measurable goal MET + proven green). Foundation done: (1) `data_value` has real
+  `(predicate, x1..x5)` columns + indexes; `pgStore` + the history trigger read/write them (migration 0049);
+  todos create/update/delete round-trips on the columns. (2) `ensurePredicateSchemas` is generic — `data_schema`
+  is the single vocab registry, resolving EVERY predicate (todo + minted) from the DB by the `predicate`
+  discriminator, so a new relation = insert a `data_schema` row, ZERO TS. (3) `skills/tools/ontology.ts` pure
+  core (`findExistingPredicate` dedup + `CREATE_INSTRUCTIONS` full-place rule) + `ontology.test.ts` proving a
+  novel predicate is AJV self-validating with its gismu's FULL place structure + dedup reuses an existing one.
+  **Verified:** `cd libs/betterauth && bun test tests` = 4 pass / 0 fail; betterauth tsc, app svelte-check,
+  aven-vibes 16 tests all green. **REMAINING (human-acceptance, non-deterministic — the card's own out-of-metric
+  slice):** the GLM-5.2 create/read ToolActor (load full `gismu.json` → dedup → mint → AJV-gate → persist to
+  `data_schema`), its `ontology`/`ontology-created` vibe views, and runs wiring. Follow-on build; the
+  deterministic pipeline it sits on is proven.
 - `2026-07-02` — Spec update (user): the CREATE mint prompt must always define the chosen gismu's FULL
   x1–x5 place structure (all places the dictionary declares) with correct per-place AJV configs, even
   when the request only fills a subset — the stored schema is the canonical gismu, never request-trimmed.
