@@ -5,17 +5,24 @@
 // (their config already lives in this package via COMPOSER_TOOLS) — next to migrate to a tool-actor.
 
 import { COMPOSER_TOOLS } from '../composer/tools'
-import { dataCrud } from './data-crud'
 import { brain } from './brain'
+import { dataCrud } from './data-crud'
+import { mutate, query } from './queries'
 import type { ToolActor, ToolDefinition } from './types'
 
-/** name → tool-actor. Todos hub = `data_crud`; the dynamic Brain skill = `brain` (board 0100). */
+/** name → tool-actor. Todos hub = `data_crud`; the dynamic Brain skill = `brain` (mint predicates, board
+ *  0100) + `query`/`mutate` (GLM-authored validated specs over the x1–x5 store, board 0101). */
 export const TOOL_ACTORS: Record<string, ToolActor> = {
 	data_crud: dataCrud,
-	brain
+	brain,
+	query,
+	mutate
 }
 
 /** Every tool the chat advertises: the registered actors + the Composer configs (handled inline server-side). */
 export function chatToolDefinitions(): ToolDefinition[] {
-	return [...Object.values(TOOL_ACTORS).map((a) => a.definition), ...(COMPOSER_TOOLS as ToolDefinition[])]
+	return [
+		...Object.values(TOOL_ACTORS).map((a) => a.definition),
+		...(COMPOSER_TOOLS as ToolDefinition[])
+	]
 }

@@ -15,6 +15,7 @@ import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
 import BrainVibe from '$lib/shell/BrainVibe.svelte'
+import QueryVibe from '$lib/shell/QueryVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
 type ChatMessage = {
@@ -129,6 +130,7 @@ function removeHitl(id: string): void {
 /** Action-specific confirm/decline button labels (delete vs publish vs …) + the confirm intent. */
 function hitlVerb(tool: string): { confirm: string; decline: string; danger: boolean } {
 	if (tool === 'deploy_website') return { confirm: 'Publish', decline: 'Cancel', danger: false }
+	if (tool === 'mutate') return { confirm: 'Apply', decline: 'Cancel', danger: true } // board 0101
 	return { confirm: 'Delete', decline: 'Keep', danger: true }
 }
 /** Append a short assistant note (e.g. the publish result) into the conversation. */
@@ -159,12 +161,16 @@ async function confirmHitl(req: HitlRequest): Promise<void> {
 		})
 		const data = (await res.json().catch(() => null)) as {
 			ok?: boolean
-			result?: { url?: string; deployed?: number }
+			result?: { url?: string; deployed?: number; vibe?: string; data?: Record<string, unknown> }
 			error?: string
 		} | null
 		if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`)
 		if (req.tool === 'deploy_website') {
 			appendNote(`✅ Published — live at ${data.result?.url ?? 'www.next.aven.ceo'}`)
+		} else if (req.tool === 'mutate') {
+			// board 0101 — a confirmed structural mutation: flow the diff card, then refresh the live data.
+			if (data.result?.vibe === 'mutation-result') appendVibe('mutation-result', data.result.data)
+			void queryClient.invalidateQueries({ queryKey: ['data'] })
 		} else {
 			// board 0099 — a confirmed todos delete streams a todos-deleted card listing EVERY removed task
 			// (a batch delete removes many), then refreshes the live list. Other deletes just refresh.
@@ -656,6 +662,14 @@ function handleTranscribeError(message: string): void {
 								<div class="max-h-[80vh] w-full overflow-y-auto">
 									<BrainVibe
 										mode={message.vibe === 'brain' ? 'read' : 'created'}
+										data={message.vibeData}
+									/>
+								</div>
+							{:else if message.vibe === 'query-result' || message.vibe === 'mutation-result'}
+								<!-- board 0101 — the dynamic query/mutate actors: the answered rows / applied change. -->
+								<div class="max-h-[80vh] w-full overflow-y-auto">
+									<QueryVibe
+										mode={message.vibe === 'query-result' ? 'query' : 'mutation'}
 										data={message.vibeData}
 									/>
 								</div>

@@ -1,16 +1,17 @@
-import { chatToolDefinitions, TOOL_ACTORS } from '@avenos/skills/tools'
-import { recordActorRun } from './skills-run'
-import { brainCaps } from './brain'
 import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
+import { chatToolDefinitions, TOOL_ACTORS } from '@avenos/skills/tools'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
+import { brainCaps } from './brain'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
 import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
 import { executeDataTool, schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
+import { mutationCaps, queryCaps } from './query-caps'
+import { recordActorRun } from './skills-run'
 import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './usage'
 
 /**
@@ -319,7 +320,12 @@ function streamWithTools(opts: {
 						res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 							method: 'POST',
 							headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-							body: JSON.stringify({ model, messages: msgs, tools: chatToolDefinitions(), stream: true }),
+							body: JSON.stringify({
+								model,
+								messages: msgs,
+								tools: chatToolDefinitions(),
+								stream: true
+							}),
 							signal: ac.signal
 						})
 					} catch {
@@ -431,8 +437,9 @@ function streamWithTools(opts: {
 							// and keep the stream + timer alive with a 5s ping (else the client's 90s idle watchdog
 							// aborts a long tool). One chip per tool_call id; re-emitting 'running' updates it. board 0100.
 							const runDetail =
-								[parsed.action, parsed.schema].filter((x) => typeof x === 'string' && x).join(' ') ||
-								tc.name
+								[parsed.action, parsed.schema]
+									.filter((x) => typeof x === 'string' && x)
+									.join(' ') || tc.name
 							emitTool(tc.id, tc.name, runDetail, 'running')
 							const ping = setInterval(() => emitTool(tc.id, tc.name, runDetail, 'running'), 5_000)
 							const out = await actor
@@ -440,15 +447,28 @@ function streamWithTools(opts: {
 									{
 										userId,
 										data: (a) => executeDataTool(userId, a),
-										brain: brainCaps(userId) // board 0100 — GLM mint + data_schema registry caps
+										brain: brainCaps(userId), // board 0100 — GLM mint + data_schema registry caps
+										query: queryCaps(userId), // board 0101 — GLM-authored validated query specs
+										mutate: mutationCaps(userId) // board 0101 — GLM-authored validated mutation specs
 									},
 									parsed
 								)
 								.finally(() => clearInterval(ping))
 							if (out.hitl) {
 								// HITL: show a confirm/decline card and DON'T execute (the delete actor). aiConfirmAction runs it.
-								emit({ aven_hitl: { id: tc.id, tool: tc.name, label: out.hitl.label, action: out.hitl.action } })
-								msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out.content) })
+								emit({
+									aven_hitl: {
+										id: tc.id,
+										tool: tc.name,
+										label: out.hitl.label,
+										action: out.hitl.action
+									}
+								})
+								msgs.push({
+									role: 'tool',
+									tool_call_id: tc.id,
+									content: JSON.stringify(out.content)
+								})
 								emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
 								continue
 							}
@@ -465,7 +485,9 @@ function streamWithTools(opts: {
 								await persistMessage(
 									chatSessionId,
 									'assistant',
-									data === undefined ? `${VIBE_MARKER}${schema}` : `${VIBE_MARKER}${schema}\n${JSON.stringify(data)}`
+									data === undefined
+										? `${VIBE_MARKER}${schema}`
+										: `${VIBE_MARKER}${schema}\n${JSON.stringify(data)}`
 								).catch((e) => console.error('[ai] persist vibe marker failed:', e))
 								// board 0099 — record each Todos actor firing as a single-step run of the `todos`
 								// hub, so the Runs explorer shows chat todos interactions (read/create/edit).
@@ -488,6 +510,17 @@ function streamWithTools(opts: {
 										vibe: schema,
 										vibeData: data,
 										outputs: ['predicate']
+									})
+								} else if (schema === 'query-result' || schema === 'mutation-result') {
+									// board 0101 — the dynamic query/mutate actors on the Brain skill (a destructive
+									// mutation records instead on confirm, in aiConfirmAction below).
+									void recordActorRun(userId, {
+										flowId: 'brain',
+										nodeId: schema === 'query-result' ? 'query' : 'mutate',
+										label: out.detail ?? schema,
+										vibe: schema,
+										vibeData: data,
+										outputs: [schema === 'query-result' ? 'rows' : 'ops']
 									})
 								}
 							}
@@ -610,7 +643,6 @@ function streamWithTools(opts: {
 									note: 'A publish confirm card was shown. Do NOT deploy or retry — just tell the user you asked them to confirm publishing.'
 								})
 							})
-							continue
 						}
 					}
 				}
@@ -701,6 +733,30 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 			return c.json({ ok: true, result: { deployed: r.count, url: r.url } })
 		} catch (e) {
 			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 502)
+		}
+	}
+	// board 0101 — a confirmed destructive MUTATION: apply the (already validated + stored) mutation spec as
+	// one transaction and record the run. The tool loop deliberately did NOT run it.
+	if (body.action.tool === 'mutate') {
+		const spec = body.action.spec
+		const request = typeof body.action.request === 'string' ? body.action.request : 'mutation'
+		if (!spec || typeof spec !== 'object') return c.json({ ok: false, error: 'no_spec' }, 400)
+		try {
+			const result = await mutationCaps(session.user.id).apply(spec as never)
+			void recordActorRun(session.user.id, {
+				flowId: 'brain',
+				nodeId: 'mutate',
+				label: `mutate — ${request}`,
+				vibe: 'mutation-result',
+				vibeData: { request, spec, ops: result.ops },
+				outputs: ['ops']
+			})
+			return c.json({
+				ok: true,
+				result: { vibe: 'mutation-result', data: { request, spec, ops: result.ops } }
+			})
+		} catch (e) {
+			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500)
 		}
 	}
 	try {

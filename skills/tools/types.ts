@@ -57,12 +57,39 @@ export type ToolCtx = {
 		/** Ask GLM-5.2 (with the full gismu dictionary) to define the relationship(s) in the request — a
 		 *  BATCH: one entry PER relationship ("eating and drinking" → two), each either reusing an existing
 		 *  predicate or minting a new x1–x5 PredicateDef with its gismu's FULL place structure. */
-		mint(request: string, existing: { name: string; gloss?: string }[]): Promise<{
+		mint(
+			request: string,
+			existing: { name: string; gloss?: string }[]
+		): Promise<{
 			results?: { reuse?: string; def?: PredicateDefJSON }[]
 			error?: string
 		}>
 		/** compilePredicate → AJV self-validate → persist to data_schema. Returns the stored name + place count. */
 		save(def: PredicateDefJSON): Promise<{ name: string; places: number }>
+	}
+	/** board 0101 — the query actor's caps: GLM-5.2 authors a VALIDATED query spec (grounded in the user's
+	 *  predicate place-structures + the spec meta-language), the engine persists + RUNS it (read-only, safe). */
+	query?: {
+		/** Author a query spec from plain language, validate, persist to data_queries, and run it. */
+		author(request: string): Promise<{
+			spec?: unknown
+			rows?: Record<string, unknown>[]
+			name?: string
+			error?: string
+		}>
+	}
+	/** board 0101 — the mutation actor's caps: GLM authors a VALIDATED mutation spec; `plan` persists it
+	 *  WITHOUT running (destructive ops are HITL-gated at the loop), `apply` runs a validated spec. */
+	mutate?: {
+		/** Author a mutation spec from plain language, validate, persist to data_mutations — but do NOT run. */
+		plan(request: string): Promise<{
+			spec?: unknown
+			destructive?: boolean
+			name?: string
+			error?: string
+		}>
+		/** Run a validated mutation spec as ONE transaction (after HITL confirm for destructive specs). */
+		apply(spec: unknown, params?: Record<string, unknown>): Promise<{ ops: unknown[] }>
 	}
 }
 
