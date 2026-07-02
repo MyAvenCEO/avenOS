@@ -1131,11 +1131,22 @@
 			"gismuTitle": "Canonical Lojban gismu the place structure derives from",
 			"rawSchema": "Raw JSON Schema",
 			"dynamic": "Dynamic",
-			"queries": "Queries",
-			"mutations": "Mutations",
-			"queriesHint": "GLM-authored, validated query specs — reusable configs the query actor persists to answer questions over your data.",
-			"mutationsHint": "GLM-authored, validated mutation specs — reusable configs the mutate actor persists to apply structural changes.",
+			"vibes": "Vibes",
 			"emptySpecs": "None yet — ask a question or request a change in chat to author one.",
+			"reg": {
+				"data_queries": "Queries",
+				"data_mutations": "Mutations",
+				"vibe_view": "Views",
+				"vibe_style": "Styles",
+				"vibe_logic": "Logic"
+			},
+			"regHint": {
+				"data_queries": "GLM-authored, validated query specs — reusable configs the query actor persists to answer questions over your data.",
+				"data_mutations": "GLM-authored, validated mutation specs — reusable configs the mutate actor persists to apply structural changes.",
+				"vibe_view": "vibe_view — the ViewDef trees (the layout/structure of each card), rendered by the engine with no per-view Svelte.",
+				"vibe_style": "vibe_style — the StyleDef tokens (the visual styling of each card), config-as-data.",
+				"vibe_logic": "vibe_logic — the sandbox-quickjs JS that maps data into each view (the template's query/mapping logic)."
+			},
 			"place": {
 				"place": "Place",
 				"role": "Role",

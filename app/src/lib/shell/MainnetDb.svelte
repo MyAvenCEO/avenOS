@@ -21,11 +21,11 @@ let selectedId = $state<string | null>(null)
 // Which face of the selected schema to show: its definition or its data instances.
 let view = $state<'data' | 'schema'>('data')
 
-// board 0101 — the dynamic spec registries (data_queries / data_mutations): GLM-authored, AJV-validated
-// query/mutation SPECS stored in Postgres. Selecting one shows its stored specs (the reusable configs the
-// query/mutate actors persist), fetched through the same universal /api/context/:provider endpoint the
-// Skills config panel uses. `null` = a normal schema is selected instead. board 0101.
-type SpecKind = 'data_queries' | 'data_mutations'
+// The config REGISTRIES, surfaced through the same universal /api/context/:provider endpoint the Skills
+// panel uses: the GLM-authored data_queries / data_mutations specs (board 0101), and the vibe.* rendering
+// templates — vibe_view (ViewDef), vibe_style (StyleDef), vibe_logic (sandbox JS) (board 0095). Selecting
+// one shows its stored rows; `null` = a normal predicate schema is selected instead.
+type SpecKind = 'data_queries' | 'data_mutations' | 'vibe_view' | 'vibe_style' | 'vibe_logic'
 let specKind = $state<SpecKind | null>(null)
 const specsQuery = createQuery(() => ({
 	queryKey: ['data', 'specs', specKind],
@@ -44,12 +44,16 @@ const specItems = $derived<StoredSpec[]>(
 		return { name: it.name, spec }
 	})
 )
-/** Select a stored-spec registry (Queries / Mutations) instead of a predicate schema. */
+/** Select a config registry (a data_ spec set or a vibe_ template table) instead of a predicate schema. */
 function selectSpecKind(kind: SpecKind): void {
 	specKind = kind
 	selectedId = null
 	focusRow = null
 }
+const DYNAMIC_REGISTRIES: SpecKind[] = ['data_queries', 'data_mutations']
+const VIBE_REGISTRIES: SpecKind[] = ['vibe_view', 'vibe_style', 'vibe_logic']
+const specLabel = (k: SpecKind): string => t(`mainnet.db.reg.${k}`)
+const specHint = (k: SpecKind): string => t(`mainnet.db.regHint.${k}`)
 
 function columnsFor(jsonSchema: unknown, rows: DataValue<Record<string, unknown>>[]): string[] {
 	const fromSchema = Object.keys(
@@ -93,7 +97,8 @@ function kindLabel(p: Record<string, unknown>): string {
 	}
 	const type = Array.isArray(p.type) ? (p.type as string[]).find((x) => x !== 'null') : p.type
 	// date/date-time value places carry a YYYY-MM-DD pattern (no ajv-formats, see compile.ts)
-	if (type === 'string' && typeof p.pattern === 'string' && p.pattern.includes('\\d{4}')) return 'date'
+	if (type === 'string' && typeof p.pattern === 'string' && p.pattern.includes('\\d{4}'))
+		return 'date'
 	return (type as string) ?? 'value'
 }
 
@@ -249,7 +254,8 @@ function resolveRef(id: unknown): Resolved {
 	if (!s) return { label: '—', kind: 'id' }
 	if (me?.id && s === me.id) return { label: me.name || me.email || 'you', kind: 'you' }
 	const hit = refMap.get(s)
-	if (hit) return { label: hit.label, kind: 'row', target: { schemaId: hit.schemaId, rowId: hit.rowId } }
+	if (hit)
+		return { label: hit.label, kind: 'row', target: { schemaId: hit.schemaId, rowId: hit.rowId } }
 	return { label: s.length > 14 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s, kind: 'id' }
 }
 
@@ -305,17 +311,37 @@ $effect(() => {
 			>
 				{t('mainnet.db.dynamic')}
 			</p>
-			{#each [{ kind: 'data_queries', label: t('mainnet.db.queries') }, { kind: 'data_mutations', label: t('mainnet.db.mutations') }] as reg (reg.kind)}
+			{#each DYNAMIC_REGISTRIES as kind (kind)}
 				<button
 					type="button"
 					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {specKind ===
-					reg.kind
+					kind
 						? 'bg-primary/10 text-foreground font-medium'
 						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => selectSpecKind(reg.kind as SpecKind)}
+					onclick={() => selectSpecKind(kind)}
 				>
 					<span class="opacity-60">⚙</span>
-					<span class="truncate">{reg.label}</span>
+					<span class="truncate">{specLabel(kind)}</span>
+				</button>
+			{/each}
+
+			<!-- board 0095 — the vibe.* registry: the rendering templates (view / style / logic) as config-as-data. -->
+			<p
+				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase opacity-70"
+			>
+				{t('mainnet.db.vibes')}
+			</p>
+			{#each VIBE_REGISTRIES as kind (kind)}
+				<button
+					type="button"
+					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {specKind ===
+					kind
+						? 'bg-primary/10 text-foreground font-medium'
+						: 'text-muted-foreground hover:bg-card'}"
+					onclick={() => selectSpecKind(kind)}
+				>
+					<span class="opacity-60">🎨</span>
+					<span class="truncate">{specLabel(kind)}</span>
 				</button>
 			{/each}
 		</div>
@@ -327,17 +353,16 @@ $effect(() => {
 			<p class="text-destructive shrink-0 text-sm" role="alert">{err}</p>
 		{/if}
 		{#if specKind}
-			<!-- board 0101 — the stored query/mutation specs: each a reusable GLM-authored config. -->
+			<!-- board 0101/0095 — a config registry: GLM-authored query/mutation specs, or vibe rendering
+			     templates (view/style/logic). Each row is a reusable, inspectable config. -->
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
 				<div class="mb-3 flex items-center gap-2">
-					<h2 class="text-foreground text-base font-semibold">
-						{specKind === 'data_queries' ? t('mainnet.db.queries') : t('mainnet.db.mutations')}
-					</h2>
-					<span class="text-muted-foreground text-[11px] tabular-nums opacity-60">{specItems.length}</span>
+					<h2 class="text-foreground text-base font-semibold">{specLabel(specKind)}</h2>
+					<span class="text-muted-foreground text-[11px] tabular-nums opacity-60"
+						>{specItems.length}</span
+					>
 				</div>
-				<p class="text-muted-foreground mb-3 text-[12px] leading-relaxed">
-					{specKind === 'data_queries' ? t('mainnet.db.queriesHint') : t('mainnet.db.mutationsHint')}
-				</p>
+				<p class="text-muted-foreground mb-3 text-[12px] leading-relaxed">{specHint(specKind)}</p>
 				{#if specsQuery.isPending}
 					<p class="text-muted-foreground text-[13px]">…</p>
 				{:else if specItems.length === 0}
@@ -352,8 +377,9 @@ $effect(() => {
 							<li class="border-border bg-card rounded-[var(--radius-lg)] border p-4">
 								<p class="text-foreground mb-2 font-mono text-[13px] font-semibold">{it.name}</p>
 								<pre
-									class="border-border/60 text-muted-foreground overflow-x-auto rounded-[var(--radius)] border px-3 py-2 text-[12px] leading-relaxed"><code
-										>{JSON.stringify(it.spec, null, 2)}</code
+									class="border-border/60 text-muted-foreground overflow-x-auto rounded-[var(--radius)] border px-3 py-2 text-[12px] leading-relaxed"
+								><code
+										>{typeof it.spec === 'string' ? it.spec : JSON.stringify(it.spec, null, 2)}</code
 									></pre>
 							</li>
 						{/each}
@@ -402,10 +428,12 @@ $effect(() => {
 									{#if m.gismu}
 										<span
 											class="bg-primary/10 text-foreground rounded-full px-2 py-0.5 font-mono text-[11px]"
-											title={t('mainnet.db.gismuTitle')}>≡ {m.gismu}</span
+											title={t('mainnet.db.gismuTitle')}
+											>≡ {m.gismu}</span
 										>
 									{/if}
-									<span class="text-muted-foreground text-[11px] tracking-wider uppercase opacity-70"
+									<span
+										class="text-muted-foreground text-[11px] tracking-wider uppercase opacity-70"
 										>{m.places.length}-place predicate</span
 									>
 								</div>
@@ -421,8 +449,9 @@ $effect(() => {
 											{#each ['place', 'role', 'meaning', 'kind', 'example'] as h (h)}
 												<th
 													class="text-muted-foreground px-3 py-2 font-bold tracking-wider whitespace-nowrap uppercase"
-													>{t(`mainnet.db.place.${h}`)}</th
 												>
+													{t(`mainnet.db.place.${h}`)}
+												</th>
 											{/each}
 										</tr>
 									</thead>
@@ -441,21 +470,26 @@ $effect(() => {
 												</td>
 												<td class="text-foreground px-3 py-2 align-top font-medium">{pl.role}</td>
 												<td class="text-muted-foreground px-3 py-2 align-top">{pl.means || '—'}</td>
-												<td class="text-foreground px-3 py-2 align-top font-mono text-[12px]">{pl.kind}</td>
-												<td class="text-muted-foreground px-3 py-2 align-top font-mono text-[12px]"
-													>{pl.example || '—'}</td
-												>
+												<td class="text-foreground px-3 py-2 align-top font-mono text-[12px]">
+													{pl.kind}
+												</td>
+												<td class="text-muted-foreground px-3 py-2 align-top font-mono text-[12px]">
+													{pl.example || '—'}
+												</td>
 											</tr>
 										{/each}
 									</tbody>
 								</table>
 							</div>
 							<details class="text-[12px]">
-								<summary class="text-muted-foreground hover:text-foreground cursor-pointer select-none"
-									>{t('mainnet.db.rawSchema')}</summary
+								<summary
+									class="text-muted-foreground hover:text-foreground cursor-pointer select-none"
 								>
+									{t('mainnet.db.rawSchema')}
+								</summary>
 								<pre
-									class="border-border bg-card text-foreground mt-2 overflow-auto rounded-[var(--radius-lg)] border p-4 leading-relaxed"><code
+									class="border-border bg-card text-foreground mt-2 overflow-auto rounded-[var(--radius-lg)] border p-4 leading-relaxed"
+								><code
 										>{JSON.stringify(selected.jsonSchema, null, 2)}</code
 									></pre>
 							</details>
@@ -482,7 +516,9 @@ $effect(() => {
 											class="text-muted-foreground px-3 py-2 font-bold tracking-wider whitespace-nowrap uppercase"
 										>
 											{c.label}
-											{#if c.ref}<span class="ml-0.5 normal-case opacity-50">↪</span>{/if}
+											{#if c.ref}
+												<span class="ml-0.5 normal-case opacity-50">↪</span>
+											{/if}
 										</th>
 									{/each}
 								</tr>
@@ -515,12 +551,15 @@ $effect(() => {
 															onclick={(e) => {
 																e.stopPropagation()
 																gotoRef(r.target)
-															}}>↪ {r.label}</button
+															}}
 														>
+															↪ {r.label}
+														</button>
 													{:else}
 														<span
 															class="text-muted-foreground font-mono text-[12px]"
-															title={String(row.data?.[c.key] ?? '')}>{r.label}</span
+															title={String(row.data?.[c.key] ?? '')}
+															>{r.label}</span
 														>
 													{/if}
 												{:else}
@@ -553,8 +592,10 @@ $effect(() => {
 					type="button"
 					class="text-muted-foreground hover:text-foreground shrink-0 text-lg leading-none"
 					aria-label={t('mainnet.db.close')}
-					onclick={() => (focusRow = null)}>×</button
+					onclick={() => (focusRow = null)}
 				>
+					×
+				</button>
 			</div>
 			<div class="min-h-0 flex-1 overflow-y-auto p-3">
 				<p class="text-muted-foreground mb-2 text-[11px]">
@@ -565,7 +606,9 @@ $effect(() => {
 					{#each sentences as s (s.id)}
 						<li class="border-border bg-card rounded-[var(--radius)] border px-3 py-2">
 							<div class="mb-1 flex items-center gap-1.5">
-								<span class="text-foreground font-mono text-[13px] font-semibold">{s.predicate}</span>
+								<span class="text-foreground font-mono text-[13px] font-semibold"
+									>{s.predicate}</span
+								>
 								{#if s.gismu}
 									<span class="text-muted-foreground font-mono text-[10px]">≡ {s.gismu}</span>
 								{/if}
@@ -581,8 +624,10 @@ $effect(() => {
 													type="button"
 													class="text-foreground hover:text-primary cursor-pointer underline decoration-dotted underline-offset-2"
 													title={`Go to ${part.ref.label}`}
-													onclick={() => gotoRef(target)}>{part.ref.label}</button
+													onclick={() => gotoRef(target)}
 												>
+													{part.ref.label}
+												</button>
 											{:else if part.ref.kind === 'you'}
 												<span class="text-foreground italic">{part.ref.label}</span>
 											{:else}

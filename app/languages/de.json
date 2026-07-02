@@ -1108,11 +1108,22 @@
 			"gismuTitle": "Kanonisches Lojban-Gismu, von dem die Stellenstruktur abgeleitet ist",
 			"rawSchema": "JSON-Schema (roh)",
 			"dynamic": "Dynamisch",
-			"queries": "Abfragen",
-			"mutations": "Mutationen",
-			"queriesHint": "GLM-verfasste, validierte Abfrage-Specs — wiederverwendbare Konfigurationen, die der Query-Actor speichert, um Fragen über deine Daten zu beantworten.",
-			"mutationsHint": "GLM-verfasste, validierte Mutations-Specs — wiederverwendbare Konfigurationen, die der Mutate-Actor speichert, um strukturelle Änderungen anzuwenden.",
+			"vibes": "Vibes",
 			"emptySpecs": "Noch keine — stelle im Chat eine Frage oder wünsche eine Änderung, um eine anzulegen.",
+			"reg": {
+				"data_queries": "Abfragen",
+				"data_mutations": "Mutationen",
+				"vibe_view": "Views",
+				"vibe_style": "Styles",
+				"vibe_logic": "Logic"
+			},
+			"regHint": {
+				"data_queries": "GLM-verfasste, validierte Abfrage-Specs — wiederverwendbare Konfigurationen, die der Query-Actor speichert, um Fragen über deine Daten zu beantworten.",
+				"data_mutations": "GLM-verfasste, validierte Mutations-Specs — wiederverwendbare Konfigurationen, die der Mutate-Actor speichert, um strukturelle Änderungen anzuwenden.",
+				"vibe_view": "vibe_view — die ViewDef-Bäume (Layout/Struktur jeder Karte), vom Engine gerendert, ohne per-View-Svelte.",
+				"vibe_style": "vibe_style — die StyleDef-Tokens (visuelles Styling jeder Karte), Config-as-Data.",
+				"vibe_logic": "vibe_logic — das sandbox-quickjs-JS, das Daten in jede View abbildet (die Query-/Mapping-Logik des Templates)."
+			},
 			"place": {
 				"place": "Stelle",
 				"role": "Rolle",

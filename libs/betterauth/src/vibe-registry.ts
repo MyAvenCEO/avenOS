@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
 import { sql } from 'kysely'
+import { registerContextProvider } from './context'
 import { db } from './db'
 
 // The `vibe.*` registry (board 0095): vibe definitions as admin-owned config-as-data (Layer A). A vibe
@@ -11,15 +12,51 @@ function asJson(v: unknown): unknown {
 	return typeof v === 'string' ? JSON.parse(v) : v
 }
 
+// board 0102 — surface the vibe registry in the DB viewer via the universal context system, alongside the
+// data_ registries. Each vibe table (view/style/logic) is one provider listing its rows (name + body).
+async function listVibeRows(
+	table: 'vibe_view' | 'vibe_style' | 'vibe_logic'
+): Promise<{ name: string; gloss: string }[]> {
+	const r = await sql<{
+		name: string
+		body: unknown
+	}>`SELECT name, body FROM ${sql.raw(table)} ORDER BY name`.execute(db())
+	return r.rows.map((row) => ({
+		name: row.name,
+		gloss: typeof row.body === 'string' ? row.body : JSON.stringify(asJson(row.body))
+	}))
+}
+registerContextProvider('vibe_view', async () => ({
+	kind: 'list',
+	label: 'Vibe views',
+	items: await listVibeRows('vibe_view')
+}))
+registerContextProvider('vibe_style', async () => ({
+	kind: 'list',
+	label: 'Vibe styles',
+	items: await listVibeRows('vibe_style')
+}))
+registerContextProvider('vibe_logic', async () => ({
+	kind: 'list',
+	label: 'Vibe logic',
+	items: await listVibeRows('vibe_logic')
+}))
+
 export type VibeBundle = { view: unknown; style: unknown; logic: string }
 
 /** The view/style/logic bundle for `name` from the registry, or null if no part exists. */
 export async function loadVibe(name: string): Promise<VibeBundle | null> {
 	const one = async (table: string): Promise<unknown> => {
-		const r = await sql<{ body: unknown }>`SELECT body FROM ${sql.raw(table)} WHERE name = ${name}`.execute(db())
+		const r = await sql<{
+			body: unknown
+		}>`SELECT body FROM ${sql.raw(table)} WHERE name = ${name}`.execute(db())
 		return r.rows[0]?.body
 	}
-	const [view, style, logic] = await Promise.all([one('vibe_view'), one('vibe_style'), one('vibe_logic')])
+	const [view, style, logic] = await Promise.all([
+		one('vibe_view'),
+		one('vibe_style'),
+		one('vibe_logic')
+	])
 	if (view == null && style == null && logic == null) return null
 	return {
 		view: view == null ? null : asJson(view),
