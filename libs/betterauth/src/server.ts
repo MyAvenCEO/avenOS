@@ -23,29 +23,29 @@ import {
 	refreshTierProducts
 } from './billing'
 import { bootstrapSchema } from './bootstrap'
+import { contextRoute } from './context'
 import {
 	createSchema,
 	createTodos,
 	createValue,
 	deleteTodo,
 	deleteValue,
-	listSchemas,
 	listDataType,
+	listSchemas,
 	listTodos,
 	listValues,
 	updateTodos,
 	updateValue
 } from './data'
 import { eventsStream } from './events'
-import { contextRoute } from './context'
 import { deleteFlow, getFlow, listFlows, upsertFlow } from './flows'
-import './brain' // board 0100 — registers the brain skill's context providers (gismu/predicates) at load
+import './ontology' // board 0100 — registers the ontology skill's context providers (gismu/predicates) at load
 import { inboxGet, inboxList, mailInbox } from './inbox'
 import { deleteType, getType, listTypes, upsertType } from './predicate-types'
 import { listRuns, runSkill } from './skills-run'
-import { getVibe } from './vibe-registry'
 import { syncPricing } from './usage'
 import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
+import { getVibe } from './vibe-registry'
 
 const app = new Hono()
 

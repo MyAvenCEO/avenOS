@@ -10,7 +10,7 @@ import { registerContextProvider } from './context'
 import { db } from './db'
 import { publish } from './events'
 
-// board 0100 — the BRAIN actor's server capabilities: read the data_schema predicate registry, MINT a
+// board 0100 — the ONTOLOGY actor's server capabilities: read the data_schema predicate registry, MINT a
 // new x1–x5 predicate via GLM-5.2 (grounded in the full gismu dictionary), and persist it (compile → AJV
 // self-validate → data_schema). The deterministic core (dedup, full-place rule) lives in @avenos/skills/tools;
 // this is the server adapter that injects `ctx.ontology`.
@@ -48,7 +48,10 @@ async function listPredicates(uid: string): Promise<{ name: string; gloss?: stri
 		.execute()
 	const out: { name: string; gloss?: string }[] = []
 	for (const r of rows) {
-		const s = asJson(r.json_schema) as { properties?: Record<string, unknown>; description?: string } | null
+		const s = asJson(r.json_schema) as {
+			properties?: Record<string, unknown>
+			description?: string
+		} | null
 		if (s?.properties?.predicate) out.push({ name: r.name, gloss: s.description })
 	}
 	return out.sort((a, b) => a.name.localeCompare(b.name))
@@ -178,7 +181,10 @@ registerContextProvider('gismu', async () => {
 		kind: 'text',
 		label: 'Gismu dictionary',
 		text: gismu,
-		meta: { source: GISMU_SOURCE, roots: gismu.split('\n').filter((l) => l.trim().length > 0).length }
+		meta: {
+			source: GISMU_SOURCE,
+			roots: gismu.split('\n').filter((l) => l.trim().length > 0).length
+		}
 	}
 })
 registerContextProvider('predicates', async (uid) => ({
@@ -188,7 +194,7 @@ registerContextProvider('predicates', async (uid) => ({
 }))
 
 /** The `ctx.ontology` capability bundle the chat loop injects when dispatching the `ontology` tool. */
-export function brainCaps(uid: string) {
+export function ontologyCaps(uid: string) {
 	return {
 		list: () => listPredicates(uid),
 		mint,

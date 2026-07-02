@@ -9,10 +9,10 @@ export type ExistingPredicate = { name: string; gloss?: string; keywords?: strin
 
 /** The chat tool that drives the ontology actor: read the predicate registry, or create (mint/reuse) a
  *  new x1–x5 relationship from natural language. The actual minting runs on GLM-5.2 server-side. board 0100. */
-export const BRAIN_TOOL: ToolDefinition = {
+export const ONTOLOGY_TOOL: ToolDefinition = {
 	type: 'function',
 	function: {
-		name: 'brain',
+		name: 'ontology',
 		description:
 			'Read the ontology (the x1–x5 Lojban predicate/relationship types the user already has) or CREATE ' +
 			'a new relationship type from a plain-language description. Use `create` when the user wants a NEW ' +
@@ -36,20 +36,20 @@ export const BRAIN_TOOL: ToolDefinition = {
 	}
 }
 
-export const brain: ToolActor = {
-	definition: BRAIN_TOOL,
+export const ontology: ToolActor = {
+	definition: ONTOLOGY_TOOL,
 	async handle(ctx, raw): Promise<ToolResult> {
 		const args = raw as { action?: string; request?: string }
-		if (!ctx.brain) {
+		if (!ctx.ontology) {
 			return { content: { ok: false, error: 'ontology capabilities not available on this server' } }
 		}
 		// READ — the predicate registry.
 		if (args.action === 'read') {
-			const predicates = await ctx.brain.list()
+			const predicates = await ctx.ontology.list()
 			return {
 				detail: 'read ontology',
 				content: { ok: true, count: predicates.length, predicates },
-				vibe: { schema: 'brain', data: { predicates } }
+				vibe: { schema: 'ontology', data: { predicates } }
 			}
 		}
 		// CREATE — a BATCH: GLM returns one entry PER relationship in the request ("eating and drinking" →
@@ -57,8 +57,8 @@ export const brain: ToolActor = {
 		// else compile+AJV+persist. board 0100.
 		const request = String(args.request ?? '').trim()
 		if (!request) return { content: { ok: false, error: 'create needs a `request`' } }
-		const existing = await ctx.brain.list()
-		const minted = await ctx.brain.mint(request, existing)
+		const existing = await ctx.ontology.list()
+		const minted = await ctx.ontology.mint(request, existing)
 		if (minted.error || !minted.results?.length) {
 			return { content: { ok: false, error: minted.error ?? 'could not mint any predicate' } }
 		}
@@ -76,7 +76,7 @@ export const brain: ToolActor = {
 				reused.push(r.def.predicate)
 				continue
 			}
-			await ctx.brain.save(r.def)
+			await ctx.ontology.save(r.def)
 			created.push(r.def)
 			known.add(r.def.predicate) // so a later batch entry dedups against it
 		}
@@ -85,7 +85,7 @@ export const brain: ToolActor = {
 				? `create ${created.length} predicate${created.length === 1 ? '' : 's'}`
 				: 'reuse predicate',
 			content: { ok: true, created: created.map((d) => d.predicate), reused },
-			vibe: { schema: 'brain-created', data: { created, reused } }
+			vibe: { schema: 'ontology-created', data: { created, reused } }
 		}
 	}
 }

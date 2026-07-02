@@ -5,18 +5,18 @@
 // (their config already lives in this package via COMPOSER_TOOLS) — next to migrate to a tool-actor.
 
 import { COMPOSER_TOOLS } from '../composer/tools'
-import { brain } from './brain'
 import { bundle } from './bundle'
 import { dataCrud } from './data-crud'
+import { ontology } from './ontology'
 import { mutate, query } from './queries'
 import type { ToolActor, ToolDefinition } from './types'
 
-/** name → tool-actor. Todos hub = `data_crud`; the dynamic Brain skill = `brain` (mint predicates, board
+/** name → tool-actor. Todos hub = `data_crud`; the dynamic Ontology skill = `ontology` (mint predicates, board
  *  0100) + `query`/`mutate` (GLM-authored specs over the x1–x5 store, board 0101) + `bundle` (GLM-authored
  *  composite types / kinds, board 0102). */
 export const TOOL_ACTORS: Record<string, ToolActor> = {
 	data_crud: dataCrud,
-	brain,
+	ontology,
 	query,
 	mutate,
 	bundle

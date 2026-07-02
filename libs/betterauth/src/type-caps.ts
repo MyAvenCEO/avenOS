@@ -199,7 +199,7 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 
 /** GLM-5.2 authors a bundle spec from plain language, grounded in the live predicates + existing bundles +
  *  the bundle meta-language; AJV-validates it. Returns the spec + the predicates it references (so the actor
- *  can mint any that don't exist yet through the 0100 brain path). board 0102. */
+ *  can mint any that don't exist yet through the 0100 ontology path). board 0102. */
 async function mintBundle(
 	uid: string,
 	request: string

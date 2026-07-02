@@ -1,4 +1,4 @@
-// board 0101 — the two dynamic-data actors on the Brain skill: `query` answers a question that fixed
+// board 0101 — the two dynamic-data actors on the Ontology skill: `query` answers a question that fixed
 // list/create/update/delete can't (filter + join + count over the x1–x5 store), and `mutate` applies a
 // structural change (transfer, batch move). Both let GLM-5.2 author a VALIDATED spec (never raw SQL) grounded
 // in the user's live predicates; the server caps (query-caps.ts) do the authoring/validation/run. These

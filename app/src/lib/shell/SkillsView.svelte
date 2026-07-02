@@ -12,7 +12,7 @@ import { t } from '$lib/i18n'
 import ActorConfig from '$lib/shell/ActorConfig.svelte'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import { openDbSchema } from '$lib/shell/nav.svelte'
-import BrainVibe from '$lib/shell/BrainVibe.svelte'
+import OntologyVibe from '$lib/shell/OntologyVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
 // board 0083 — Skills view = TEMPLATES only, rendered via the shared FlowGraph (real edges + labels,
@@ -63,15 +63,15 @@ const PREVIEW_DATA: Record<
 	'todos-deleted': { items: [{ id: 'sample', title: 'Beispielaufgabe' }] }
 }
 const previewData = $derived(PREVIEW_DATA[previewVibe])
-// board 0100 — illustrative brain preview data for the Skills template view.
-const BRAIN_PREVIEW: Record<string, Record<string, unknown>> = {
-	brain: {
+// board 0100 — illustrative ontology preview data for the Skills template view.
+const ONTOLOGY_PREVIEW: Record<string, Record<string, unknown>> = {
+	ontology: {
 		predicates: [
 			{ name: 'owned_by', gloss: 'x1 is owned by x2' },
 			{ name: 'task', gloss: 'x1 does deed x2' }
 		]
 	},
-	'brain-created': {
+	'ontology-created': {
 		created: [
 			{
 				predicate: 'eats',
@@ -163,13 +163,13 @@ function onSelect(id: string): void {
 							mode={previewMode}
 							data={previewData}
 						/>
-					{:else if selectedNode && previewVibe.startsWith('brain')}
+					{:else if selectedNode && previewVibe.startsWith('ontology')}
 						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
 							Vibe · {previewVibe}
 						</p>
-						<BrainVibe
-							mode={previewVibe === 'brain' ? 'read' : 'created'}
-							data={BRAIN_PREVIEW[previewVibe]}
+						<OntologyVibe
+							mode={previewVibe === 'ontology' ? 'read' : 'created'}
+							data={ONTOLOGY_PREVIEW[previewVibe]}
 						/>
 					{:else if selectedNode}
 						<p class="text-muted-foreground text-center text-sm">

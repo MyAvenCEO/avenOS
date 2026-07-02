@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Flow, NodeState, RecipeNode, TraceStep } from '@avenos/aven-skills'
-import BrainVibe from '$lib/shell/BrainVibe.svelte'
+import OntologyVibe from '$lib/shell/OntologyVibe.svelte'
 import BundleVibe from '$lib/shell/BundleVibe.svelte'
 import QueryVibe from '$lib/shell/QueryVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
@@ -58,9 +58,9 @@ const STATE_CHIP: Record<NodeState, string> = {
 			| 'deleted'}
 		data={vibeData as { items?: { id?: string; title?: string }[]; diffs?: [] }}
 	/>
-{:else if vibe.startsWith('brain')}
-	<!-- board 0100 — the brain actor vibes render through BrainVibe (chat, Runs, Skills). -->
-	<BrainVibe mode={vibe === 'brain' ? 'read' : 'created'} data={vibeData as never} />
+{:else if vibe.startsWith('ontology')}
+	<!-- board 0100 — the ontology actor vibes render through OntologyVibe (chat, Runs, Skills). -->
+	<OntologyVibe mode={vibe === 'ontology' ? 'read' : 'created'} data={vibeData as never} />
 {:else if vibe === 'query-result' || vibe === 'mutation-result'}
 	<!-- board 0101 — the dynamic query/mutate actors render through QueryVibe (chat, Runs, Skills). -->
 	<QueryVibe mode={vibe === 'query-result' ? 'query' : 'mutation'} data={vibeData as never} />

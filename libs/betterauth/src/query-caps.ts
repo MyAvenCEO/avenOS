@@ -64,7 +64,7 @@ async function listPredicatesDetailed(uid: string): Promise<PredInfo[]> {
 
 function predicatesBlock(preds: PredInfo[]): string {
 	if (!preds.length)
-		return '(the user has no predicates yet — they must mint one with the brain tool first)'
+		return '(the user has no predicates yet — they must mint one with the ontology tool first)'
 	return preds
 		.map((p) => {
 			const places = p.places.map((pl) => `${pl.pos}=${pl.role ?? '?'}(${pl.kind})`).join(' ')

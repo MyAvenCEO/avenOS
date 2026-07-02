@@ -14,7 +14,7 @@ import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
-import BrainVibe from '$lib/shell/BrainVibe.svelte'
+import OntologyVibe from '$lib/shell/OntologyVibe.svelte'
 import BundleVibe from '$lib/shell/BundleVibe.svelte'
 import QueryVibe from '$lib/shell/QueryVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
@@ -658,11 +658,11 @@ function handleTranscribeError(message: string): void {
 										data={message.vibeData}
 									/>
 								</div>
-							{:else if message.vibe === 'brain' || message.vibe === 'brain-created'}
-								<!-- board 0100 — the brain actor: read the predicate registry / show a minted predicate. -->
+							{:else if message.vibe === 'ontology' || message.vibe === 'ontology-created'}
+								<!-- board 0100 — the ontology actor: read the predicate registry / show a minted predicate. -->
 								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<BrainVibe
-										mode={message.vibe === 'brain' ? 'read' : 'created'}
+									<OntologyVibe
+										mode={message.vibe === 'ontology' ? 'read' : 'created'}
 										data={message.vibeData}
 									/>
 								</div>

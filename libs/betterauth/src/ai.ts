@@ -4,12 +4,12 @@ import { chatToolDefinitions, TOOL_ACTORS } from '@avenos/skills/tools'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
-import { brainCaps } from './brain'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
 import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
 import { executeDataTool, schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
+import { ontologyCaps } from './ontology'
 import { mutationCaps, queryCaps } from './query-caps'
 import { recordActorRun } from './skills-run'
 import { typeCaps } from './type-caps'
@@ -448,7 +448,7 @@ function streamWithTools(opts: {
 									{
 										userId,
 										data: (a) => executeDataTool(userId, a),
-										brain: brainCaps(userId), // board 0100 — GLM mint + data_schema registry caps
+										ontology: ontologyCaps(userId), // board 0100 — GLM mint + data_schema registry caps
 										query: queryCaps(userId), // board 0101 — GLM-authored validated query specs
 										mutate: mutationCaps(userId), // board 0101 — GLM-authored validated mutation specs
 										bundle: typeCaps(userId) // board 0102 — GLM-authored composite types (data_bundles)
@@ -503,12 +503,12 @@ function streamWithTools(opts: {
 										vibeData: data,
 										outputs: ['todos']
 									})
-								} else if (schema.startsWith('brain')) {
-									// board 0100 — each brain actor firing = a run of the `brain` skill (read/create).
+								} else if (schema.startsWith('ontology')) {
+									// board 0100 — each ontology actor firing = a run of the `ontology` skill (read/create).
 									void recordActorRun(userId, {
-										flowId: 'brain',
-										nodeId: schema === 'brain' ? 'read' : 'create',
-										label: out.detail ?? 'brain',
+										flowId: 'ontology',
+										nodeId: schema === 'ontology' ? 'read' : 'create',
+										label: out.detail ?? 'ontology',
 										vibe: schema,
 										vibeData: data,
 										outputs: ['predicate']
@@ -516,7 +516,7 @@ function streamWithTools(opts: {
 								} else if (schema === 'bundle-created') {
 									// board 0102 — the bundle actor authored a new composite type (a kind).
 									void recordActorRun(userId, {
-										flowId: 'brain',
+										flowId: 'ontology',
 										nodeId: 'bundle',
 										label: out.detail ?? 'bundle',
 										vibe: schema,
@@ -524,10 +524,10 @@ function streamWithTools(opts: {
 										outputs: ['bundle']
 									})
 								} else if (schema === 'query-result' || schema === 'mutation-result') {
-									// board 0101 — the dynamic query/mutate actors on the Brain skill (a destructive
+									// board 0101 — the dynamic query/mutate actors on the Ontology skill (a destructive
 									// mutation records instead on confirm, in aiConfirmAction below).
 									void recordActorRun(userId, {
-										flowId: 'brain',
+										flowId: 'ontology',
 										nodeId: schema === 'query-result' ? 'query' : 'mutate',
 										label: out.detail ?? schema,
 										vibe: schema,
@@ -756,7 +756,7 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 		try {
 			const result = await mutationCaps(session.user.id).apply(spec as never)
 			void recordActorRun(session.user.id, {
-				flowId: 'brain',
+				flowId: 'ontology',
 				nodeId: 'mutate',
 				label: `mutate — ${request}`,
 				vibe: 'mutation-result',
