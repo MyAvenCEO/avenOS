@@ -1,4 +1,4 @@
-import { TODO_SPEC } from '@avenos/aven-ontology'
+import { TODO_SPEC } from '../src/legacy-bundle-fixtures'
 import { compilePredicate, DONE, OWNED_BY } from '@avenos/aven-vibes/predicate'
 import { type Kysely, sql } from 'kysely'
 

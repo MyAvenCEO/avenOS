@@ -1,4 +1,4 @@
-import { TODO_SPEC } from '@avenos/aven-ontology'
+import { TODO_SPEC } from '../src/legacy-bundle-fixtures'
 import { type Kysely, sql } from 'kysely'
 
 // Composite TYPE registry (board 0088, Layer A) — admin-owned. Each row is a declarative bundle

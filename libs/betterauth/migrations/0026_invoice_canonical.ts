@@ -1,4 +1,4 @@
-import { INVOICE_SPEC } from '@avenos/aven-ontology'
+import { INVOICE_SPEC } from '../src/legacy-bundle-fixtures'
 import { compilePredicate, INVOICE, PRODUCED, TOTAL } from '@avenos/aven-vibes/predicate'
 import { type Kysely, sql } from 'kysely'
 

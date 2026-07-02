@@ -1,4 +1,4 @@
-import { COMPANY_SPEC, DOCUMENT_SPEC, INVOICE_SPEC, PERSON_SPEC, TRANSACTION_SPEC } from '@avenos/aven-ontology'
+import { COMPANY_SPEC, DOCUMENT_SPEC, INVOICE_SPEC, PERSON_SPEC, TRANSACTION_SPEC } from '../src/legacy-bundle-fixtures'
 import { type Kysely, sql } from 'kysely'
 
 // board 0097 — the canonical ontology re-audit. The composite specs are re-seeded with their

@@ -1,4 +1,4 @@
-import { DOCUMENT_SPEC } from '@avenos/aven-ontology'
+import { DOCUMENT_SPEC } from '../src/legacy-bundle-fixtures'
 import { type Kysely, sql } from 'kysely'
 
 // board 0092 — canonical-fidelity correction of the `document` type (extends universal ownership to the

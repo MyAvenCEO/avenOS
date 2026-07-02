@@ -1,4 +1,4 @@
-import { COMPANY_SPEC, PERSON_SPEC, TRANSACTION_SPEC } from '@avenos/aven-ontology'
+import { COMPANY_SPEC, PERSON_SPEC, TRANSACTION_SPEC } from '../src/legacy-bundle-fixtures'
 import { type Kysely, sql } from 'kysely'
 
 // board 0092 step 3 — register the contact + reconciliation composite types in the predicate_type

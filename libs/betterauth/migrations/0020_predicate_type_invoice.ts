@@ -1,4 +1,4 @@
-import { INVOICE_SPEC } from '@avenos/aven-ontology'
+import { INVOICE_SPEC } from '../src/legacy-bundle-fixtures'
 import { type Kysely, sql } from 'kysely'
 
 // Register the `invoice` composite type (board 0090) in the predicate_type registry — the invoice

@@ -114,7 +114,7 @@ top.
 - [x] Meta-schema validates/rejects TypeSpecs incl. recursive childSpec — proven by `bun --env-file=../../.env.samuel test tests/dynamic-type.test.ts`.
 - [x] A validated spec persisted via `saveType` is immediately CRUD-able through `executeDataTool` (create "Dune" → list projects `{title, owner}`) — same test.
 - [x] Table renamed `predicate_type` → `data_bundles`; migrate exits "up to date" (0058), all 12 betterauth tests pass, tsc exit 0.
-- [ ] Hardcoded specs retired: `grep -rn "TODO_SPEC\|INVOICE_SPEC\|DOCUMENT_SPEC\|COMPANY_SPEC\|PERSON_SPEC\|TRANSACTION_SPEC" libs/aven-ontology/src` returns nothing; historical migrations carry inline JSON snapshots; `bun test libs/aven-ontology` passes (coverage ported, not dropped).
+- [x] Hardcoded specs retired: the 4 domain specs deleted from `libs/aven-ontology/src` (only engine/index/memstore/types remain); 11 historical migrations repointed to a frozen `libs/betterauth/src/legacy-bundle-fixtures.ts` (byte-identical, never imported at runtime); `engine.test.ts` ported to inline fixtures — 8/8 aven-ontology tests pass, betterauth tsc 0, migrate up-to-date, 12/12 betterauth tests pass.
 - [ ] `create_bundle` registered + dispatched; betterauth/skills tsc exit 0.
 - [ ] Bundle vibe renders in chat + Runs — `cd app && bun run check` 0 errors.
 - [ ] Live human check: a chat request mints a usable bundle (review gate).
@@ -135,6 +135,13 @@ cd ../../app && bun run check
 
 ## Progress log
 
+- `2026-07-02` — Step 3 done (retire hardcoded specs): verified the todos bundle
+  is ALREADY runtime-dynamic (one `data_bundles` row, runtime reads DB only,
+  TODO_SPEC runtime-dead). Deleted todo/document/invoice/contact specs from
+  aven-ontology; froze their exact JSON as `betterauth/src/legacy-bundle-fixtures.ts`
+  and repointed all 11 seed migrations to it (byte-identical replay, decoupled
+  from live code); ported engine.test.ts to inline fixtures. Green: aven-ontology
+  tsc + 8 tests, betterauth tsc + 12 tests, skills tsc, migrate up-to-date.
 - `2026-07-02` — Step 2 done: migration 0058 renames `predicate_type` →
   `data_bundles` (table-only, `type` column kept); updated db.ts
   (PredicateTypeTable → DataBundlesTable), data.ts loadTypeSpec, predicate-types.ts

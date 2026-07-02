@@ -1,4 +1,4 @@
-import { INVOICE_SPEC } from '@avenos/aven-ontology'
+import { INVOICE_SPEC } from '../src/legacy-bundle-fixtures'
 import { type Kysely, sql } from 'kysely'
 
 // board 0092 step 2b — the invoice composite now carries nested CHILDREN: line items (line≡pagbu with

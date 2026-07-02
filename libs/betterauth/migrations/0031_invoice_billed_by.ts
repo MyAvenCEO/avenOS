@@ -1,4 +1,4 @@
-import { INVOICE_SPEC } from '@avenos/aven-ontology'
+import { INVOICE_SPEC } from '../src/legacy-bundle-fixtures'
 import { type Kysely, sql } from 'kysely'
 
 // board 0093 — re-seed the invoice composite spec so it carries `billed_by` ≡ janta.x4 (the vendor

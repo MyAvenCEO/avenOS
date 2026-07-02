@@ -1,11 +1,95 @@
 import { describe, expect, test } from 'bun:test'
-import { COMPANY_SPEC } from '../src/contact-spec.js'
 import { create, query, remove, resolveBind, update } from '../src/engine.js'
 import { memStore } from '../src/memstore.js'
-import { TODO_SPEC } from '../src/todo-spec.js'
 import type { TypeSpec } from '../src/types.js'
 
 const ctx = { user: 'USER1', now: () => '2026-06-29T12:00:00Z' }
+
+// board 0102 — the engine is domain-free; aven-ontology no longer ships bundle specs. These two are INLINE
+// TEST FIXTURES exercising the full engine: create/project, presence-toggle + replace + clear (TODO_SPEC,
+// which also mirrors the live `todos` bundle for the projection-parity check), and the discriminated
+// `replace`/`match` where several channels share ONE `address`/`identifier` predicate (COMPANY_SPEC).
+const TODO_SPEC: TypeSpec = {
+	type: 'todos',
+	parts: [
+		{
+			pred: 'task',
+			kind: 'primary',
+			field: 'title',
+			create: { x1: '$user', x2: '$value' },
+			set: { x2: '$value' }
+		},
+		{ pred: 'owned_by', kind: 'singleton', link: 'x2', create: { x1: '$user' } },
+		{ pred: 'done', kind: 'replace', link: 'x1', field: 'done', set: { x1: '$primary' } },
+		{
+			pred: 'due',
+			kind: 'replace',
+			link: 'x2',
+			field: 'due',
+			set: { x1: '$value', x2: '$primary' }
+		},
+		{
+			pred: 'prioritized',
+			kind: 'replace',
+			link: 'x1',
+			field: 'priority',
+			set: { x1: '$primary', x2: '$user', x3: '$value' }
+		}
+	],
+	project: {
+		title: { pred: 'task', place: 'x2' },
+		done: { pred: 'done', notNull: 'x1' },
+		due: { pred: 'due', place: 'x1' },
+		priority: { pred: 'prioritized', place: 'x3' },
+		owner: { pred: 'owned_by', place: 'x1' }
+	}
+}
+const channel = (field: string, sys: string): TypeSpec['parts'][number] => ({
+	pred: 'address',
+	kind: 'replace',
+	link: 'x2',
+	field,
+	match: { x3: sys },
+	set: { x1: '$value', x2: '$primary' }
+})
+const idpart = (field: string, kind: string): TypeSpec['parts'][number] => ({
+	pred: 'identifier',
+	kind: 'replace',
+	link: 'x2',
+	field,
+	match: { x1: kind },
+	set: { x2: '$primary', x3: '$value' }
+})
+const COMPANY_SPEC: TypeSpec = {
+	type: 'company',
+	parts: [
+		{ pred: 'company', kind: 'primary', field: 'name', create: {}, set: {} },
+		{ pred: 'owned_by', kind: 'singleton', link: 'x2', create: { x1: '$user' } },
+		{
+			pred: 'name',
+			kind: 'replace',
+			link: 'x2',
+			field: 'name',
+			set: { x1: '$value', x2: '$primary' }
+		},
+		channel('email', 'addrsys-email'),
+		channel('phone', 'addrsys-phone'),
+		channel('iban', 'addrsys-iban'),
+		channel('postal', 'addrsys-postal'),
+		idpart('vat_id', 'idkind-vat_id'),
+		idpart('tax_number', 'idkind-tax_number')
+	],
+	project: {
+		name: { pred: 'name', place: 'x1' },
+		email: { pred: 'address', place: 'x1', match: { x3: 'addrsys-email' } },
+		phone: { pred: 'address', place: 'x1', match: { x3: 'addrsys-phone' } },
+		iban: { pred: 'address', place: 'x1', match: { x3: 'addrsys-iban' } },
+		postal: { pred: 'address', place: 'x1', match: { x3: 'addrsys-postal' } },
+		vat_id: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-vat_id' } },
+		tax_number: { pred: 'identifier', place: 'x3', match: { x1: 'idkind-tax_number' } },
+		owner: { pred: 'owned_by', place: 'x1' }
+	}
+}
 
 describe('aven-ontology engine (board 0088)', () => {
 	test('resolveBind: tokens + conditional truthiness on the raw value', () => {
@@ -45,16 +129,33 @@ describe('aven-ontology engine (board 0088)', () => {
 	test('create with no due/priority/done writes only task + owned_by', async () => {
 		const store = memStore()
 		await create(TODO_SPEC, store, { title: 'plain', done: false }, ctx)
-		expect(store.dump().map((r) => r.predicate).sort()).toEqual(['owned_by', 'task'])
+		expect(
+			store
+				.dump()
+				.map((r) => r.predicate)
+				.sort()
+		).toEqual(['owned_by', 'task'])
 	})
 
 	test('query projects {title,done,due,priority,owner} (matcher parity w/ v_task)', async () => {
 		const store = memStore()
-		await create(TODO_SPEC, store, { title: 'a', done: true, due: '2026-07-04', priority: 'low' }, ctx)
+		await create(
+			TODO_SPEC,
+			store,
+			{ title: 'a', done: true, due: '2026-07-04', priority: 'low' },
+			ctx
+		)
 		await create(TODO_SPEC, store, { title: 'b' }, ctx)
 		const list = await query(TODO_SPEC, store)
 		expect(list).toEqual([
-			{ id: expect.any(String), title: 'a', done: true, due: '2026-07-04', priority: 'low', owner: 'USER1' },
+			{
+				id: expect.any(String),
+				title: 'a',
+				done: true,
+				due: '2026-07-04',
+				priority: 'low',
+				owner: 'USER1'
+			},
 			{ id: expect.any(String), title: 'b', done: false, due: null, priority: null, owner: 'USER1' }
 		])
 	})
@@ -76,7 +177,12 @@ describe('aven-ontology engine (board 0088)', () => {
 			priority: null
 		})
 		// no orphan done/due/prioritized rows linger — only task + owned_by remain
-		expect(store.dump().map((r) => r.predicate).sort()).toEqual(['owned_by', 'task'])
+		expect(
+			store
+				.dump()
+				.map((r) => r.predicate)
+				.sort()
+		).toEqual(['owned_by', 'task'])
 	})
 
 	test('children: a parent with N child sub-entities round-trips as a nested array (board 0092)', async () => {
@@ -86,7 +192,13 @@ describe('aven-ontology engine (board 0088)', () => {
 			type: 'line',
 			parts: [
 				{ pred: 'line', kind: 'primary', field: 'desc', create: { x1: '$value', x2: '$parent' } },
-				{ pred: 'lineamt', kind: 'replace', link: 'x2', field: 'amount', set: { x1: '$value', x2: '$primary' } }
+				{
+					pred: 'lineamt',
+					kind: 'replace',
+					link: 'x2',
+					field: 'amount',
+					set: { x1: '$value', x2: '$primary' }
+				}
 			],
 			project: { desc: { pred: 'line', place: 'x1' }, amount: { pred: 'lineamt', place: 'x1' } }
 		}
@@ -101,7 +213,13 @@ describe('aven-ontology engine (board 0088)', () => {
 		const id = (await create(
 			orderSpec,
 			store,
-			{ ref: 'PO-1', lines: [{ desc: 'Widget', amount: '10.00' }, { desc: 'Gadget', amount: '5.50' }] },
+			{
+				ref: 'PO-1',
+				lines: [
+					{ desc: 'Widget', amount: '10.00' },
+					{ desc: 'Gadget', amount: '5.50' }
+				]
+			},
 			ctx
 		)) as string
 		const list = await query(orderSpec, store)
@@ -116,7 +234,12 @@ describe('aven-ontology engine (board 0088)', () => {
 		expect((await query(orderSpec, store))[0].lines).toEqual([
 			{ id: expect.any(String), desc: 'Only', amount: '1.00' }
 		])
-		expect(store.dump().map((r) => r.predicate).sort()).toEqual(['line', 'lineamt', 'order'])
+		expect(
+			store
+				.dump()
+				.map((r) => r.predicate)
+				.sort()
+		).toEqual(['line', 'lineamt', 'order'])
 		// delete cascades every child + its sub-predications
 		await remove(orderSpec, store, id)
 		expect(store.dump()).toEqual([])
@@ -130,21 +253,45 @@ describe('aven-ontology engine (board 0088)', () => {
 		const id = (await create(
 			COMPANY_SPEC,
 			store,
-			{ name: 'Fly.io', email: 'billing@fly.io', phone: '+1 555', iban: 'DE89', vat_id: 'DE12345', tax_number: '151/815' },
+			{
+				name: 'Fly.io',
+				email: 'billing@fly.io',
+				phone: '+1 555',
+				iban: 'DE89',
+				vat_id: 'DE12345',
+				tax_number: '151/815'
+			},
 			ctx
 		)) as string
 		const addrs = store.dump().filter((r) => r.predicate === 'address')
 		const ids = store.dump().filter((r) => r.predicate === 'identifier')
 		// three given channels → three `address` rows, each carrying its system in x3 (the channel TYPE)
 		expect(addrs.length).toBe(3)
-		expect(new Set(addrs.map((r) => r.cells.x3))).toEqual(new Set(['addrsys-email', 'addrsys-phone', 'addrsys-iban']))
-		expect(addrs.find((r) => r.cells.x3 === 'addrsys-email')?.cells).toEqual({ x1: 'billing@fly.io', x2: id, x3: 'addrsys-email' })
+		expect(new Set(addrs.map((r) => r.cells.x3))).toEqual(
+			new Set(['addrsys-email', 'addrsys-phone', 'addrsys-iban'])
+		)
+		expect(addrs.find((r) => r.cells.x3 === 'addrsys-email')?.cells).toEqual({
+			x1: 'billing@fly.io',
+			x2: id,
+			x3: 'addrsys-email'
+		})
 		// two identifiers → two `identifier` rows, each carrying its kind in x1 (the id KIND), value x3
 		expect(ids.length).toBe(2)
-		expect(ids.find((r) => r.cells.x1 === 'idkind-vat_id')?.cells).toEqual({ x1: 'idkind-vat_id', x2: id, x3: 'DE12345' })
+		expect(ids.find((r) => r.cells.x1 === 'idkind-vat_id')?.cells).toEqual({
+			x1: 'idkind-vat_id',
+			x2: id,
+			x3: 'DE12345'
+		})
 		// the projection stays flat — every channel/identifier reads back at its own field
 		const [co] = await query(COMPANY_SPEC, store)
-		expect(co).toMatchObject({ name: 'Fly.io', email: 'billing@fly.io', phone: '+1 555', iban: 'DE89', vat_id: 'DE12345', tax_number: '151/815' })
+		expect(co).toMatchObject({
+			name: 'Fly.io',
+			email: 'billing@fly.io',
+			phone: '+1 555',
+			iban: 'DE89',
+			vat_id: 'DE12345',
+			tax_number: '151/815'
+		})
 		// update ONE channel — only its discriminated row is replaced, the others untouched
 		await update(COMPANY_SPEC, store, { id, email: 'new@fly.io' }, ctx)
 		const after = store.dump().filter((r) => r.predicate === 'address')

@@ -1,4 +1,4 @@
-import { TRANSACTION_SPEC } from '@avenos/aven-ontology'
+import { TRANSACTION_SPEC } from '../src/legacy-bundle-fixtures'
 import { type Kysely, sql } from 'kysely'
 
 // board 0098 — the finance verticals are now on Lojban predications: a bank transaction is

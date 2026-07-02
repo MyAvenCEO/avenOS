@@ -1,4 +1,4 @@
-import { DOCUMENT_SPEC } from '@avenos/aven-ontology'
+import { DOCUMENT_SPEC } from '../src/legacy-bundle-fixtures'
 import { type Kysely, sql } from 'kysely'
 
 // Register the `document` composite type (board 0089) in the predicate_type registry — the doc-ingest
