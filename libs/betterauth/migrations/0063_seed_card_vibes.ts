@@ -50,9 +50,10 @@ const STYLE = {
 		'.vc-eyebrow--amber': { color: 'var(--amber)' },
 		'.vc-title': { fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: '600' },
 		'.vc-meta': { fontSize: '11px', color: 'var(--muted)' },
+		// board 0105 — the engine's CSS allow-list (style-validator) forbids fontStyle; the request reads fine
+		// as muted text without italics (security: use only allow-listed properties, never widen the list).
 		'.vc-request': {
 			fontSize: '13px',
-			fontStyle: 'italic',
 			color: 'var(--muted)',
 			margin: '0.25rem 0 0.5rem'
 		},
