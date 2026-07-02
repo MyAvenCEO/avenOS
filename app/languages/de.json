@@ -1110,6 +1110,13 @@
 			"dynamic": "Dynamisch",
 			"vibes": "Vibes",
 			"emptySpecs": "Noch keine — stelle im Chat eine Frage oder wünsche eine Änderung, um eine anzulegen.",
+			"sec": {
+				"schemas": "Schemas",
+				"values": "Werte",
+				"bundles": "Bundles",
+				"operations": "Operationen",
+				"vibes": "Vibes"
+			},
 			"vibe": {
 				"summary": "Zusammenfassung",
 				"summaryHint": "Diese Karte rendert über den Engine aus ihren vibe.*-Zeilen (view + style + logic) — derselbe Pfad wie Chat/Runs. Kein per-View-Svelte. Die Tabs zeigen die rohe Konfiguration."

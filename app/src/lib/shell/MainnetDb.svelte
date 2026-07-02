@@ -28,38 +28,54 @@ let selectedId = $state<string | null>(null)
 // Which face of the selected schema to show: its definition or its data instances.
 let view = $state<'data' | 'schema'>('data')
 
-// The DYNAMIC config registries, via the universal /api/context/:provider endpoint: the composite-type
-// bundles (`types`) + the merged operation registry `data_operations` (query|mutation, board 0104).
-type SpecKind = 'types' | 'data_operations'
-let specKind = $state<SpecKind | null>(null)
-const specsQuery = createQuery(() => ({
-	queryKey: ['data', 'specs', specKind],
-	enabled: specKind !== null,
-	queryFn: async () => (specKind ? loadContext(specKind) : null)
+// board 0105 — the DB viewer has FIVE sections, each with its own list in the left rail: schemas (predicate
+// DEFINITIONS) · values (predication INSTANCES) · bundles (composite types) · operations (the merged
+// query|mutation registry) · vibes (the rendering templates, tabbed). Exactly one item is selected at a time.
+let selectedBundle = $state<string | null>(null)
+let selectedOp = $state<string | null>(null)
+// The bundle list (name + summary) and the operation list (name + kind + full spec), via /api/context.
+const bundlesQuery = createQuery(() => ({
+	queryKey: ['db', 'bundles'],
+	queryFn: () => loadContext('types')
 }))
-type StoredSpec = { name: string; spec: unknown; tag?: string }
-const specItems = $derived<StoredSpec[]>(
-	(specsQuery.data?.items ?? []).map((it) => {
-		let spec: unknown = it.gloss
+const bundleNames = $derived<string[]>((bundlesQuery.data?.items ?? []).map((i) => i.name))
+type OpItem = { name: string; kind: string; spec: unknown }
+const opsQuery = createQuery(() => ({
+	queryKey: ['db', 'ops'],
+	queryFn: () => loadContext('data_operations')
+}))
+const opItems = $derived<OpItem[]>(
+	(opsQuery.data?.items ?? []).map((it) => {
+		let spec: unknown = null
 		try {
 			spec = it.gloss ? JSON.parse(it.gloss) : null
 		} catch {
-			/* leave the raw string */
+			/* leave null */
 		}
-		return { name: it.name, spec, tag: it.tag }
+		return { name: it.name, kind: it.tag ?? 'query', spec }
 	})
 )
-// board 0104 — a fetch failure must NOT read as "empty" (the old silent-empty bug); surface it.
-const specError = $derived(specsQuery.error ? (specsQuery.error as Error).message : null)
-function selectSpecKind(kind: SpecKind): void {
-	specKind = kind
-	selectedId = null
-	selectedVibe = null
-	focusRow = null
+const selectedOpItem = $derived<OpItem | null>(opItems.find((o) => o.name === selectedOp) ?? null)
+// A selected bundle's full TypeSpec (traits + view) — the `type` context provider returns the projection.
+const bundleDetailQuery = createQuery(() => ({
+	queryKey: ['db', 'bundle', selectedBundle],
+	enabled: selectedBundle !== null,
+	queryFn: () => (selectedBundle ? loadContext('type', selectedBundle) : null)
+}))
+type BundleSpec = {
+	type?: string
+	parts?: { pred?: string; kind?: string; field?: string }[]
+	project?: Record<string, { pred?: string; place?: string; notNull?: string; children?: boolean }>
 }
-const DYNAMIC_REGISTRIES: SpecKind[] = ['types', 'data_operations']
-const specLabel = (k: SpecKind): string => t(`mainnet.db.reg.${k}`)
-const specHint = (k: SpecKind): string => t(`mainnet.db.regHint.${k}`)
+const bundleSpec = $derived.by<BundleSpec | null>(() => {
+	const txt = bundleDetailQuery.data?.text
+	if (!txt) return null
+	try {
+		return (JSON.parse(txt).projection ?? null) as BundleSpec | null
+	} catch {
+		return null
+	}
+})
 
 // board 0105 — the VIBES section folds the old Vibes tab into the DB viewer: each vibe.* row is ONE entry
 // (its view+style+logic together), shown in a tabbed detail — the live UI (rendered through the engine via
@@ -149,12 +165,31 @@ const VIBE_SAMPLE: Record<string, Record<string, unknown>> = {
 const vibeSample = $derived<Record<string, unknown>>(
 	selectedVibe ? (VIBE_SAMPLE[selectedVibe] ?? {}) : {}
 )
+// Exactly-one-selected: each picker clears the others. board 0105.
+function clearSel(): void {
+	selectedId = null
+	selectedBundle = null
+	selectedOp = null
+	selectedVibe = null
+	focusRow = null
+}
+function pickSchema(id: string, face: 'schema' | 'data'): void {
+	clearSel()
+	selectedId = id
+	view = face
+}
+function pickBundle(name: string): void {
+	clearSel()
+	selectedBundle = name
+}
+function pickOp(name: string): void {
+	clearSel()
+	selectedOp = name
+}
 function selectVibe(name: string): void {
+	clearSel()
 	selectedVibe = name
 	vibeTab = 'ui'
-	specKind = null
-	selectedId = null
-	focusRow = null
 }
 const pretty = (v: unknown): string => {
 	try {
@@ -162,6 +197,17 @@ const pretty = (v: unknown): string => {
 	} catch {
 		return String(v)
 	}
+}
+/** A human-readable one-line read of a bundle's view field (place / presence / children). */
+function readLabel(r: {
+	pred?: string
+	place?: string
+	notNull?: string
+	children?: boolean
+}): string {
+	if (r.notNull) return `${r.pred}.${r.notNull} present?`
+	if (r.children) return `${r.pred}[]`
+	return `${r.pred}.${r.place ?? '?'}`
 }
 
 function columnsFor(jsonSchema: unknown, rows: DataValue<Record<string, unknown>>[]): string[] {
@@ -302,6 +348,9 @@ function openDetail(row: DataValue<Record<string, unknown>>): void {
 	focusRow = link ? String(data[link.pos]) : row.id
 }
 function gotoRef(target: { schemaId: string; rowId: string }): void {
+	selectedBundle = null
+	selectedOp = null
+	selectedVibe = null
 	selectedId = target.schemaId
 	view = 'data'
 	focusRow = target.rowId
@@ -368,30 +417,29 @@ function resolveRef(id: unknown): Resolved {
 	return { label: s.length > 14 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s, kind: 'id' }
 }
 
-// Auto-select the first table once they load (unless a spec registry is being viewed).
+// Auto-select the first table once they load (unless another section is active).
 $effect(() => {
-	if (!selectedId && !specKind && !selectedVibe && tables.length > 0) selectedId = tables[0].id
+	if (!selectedId && !selectedBundle && !selectedOp && !selectedVibe && tables.length > 0)
+		selectedId = tables[0].id
 })
 
 // Deep link from a flow schema badge: select the requested schema by name + show its definition.
 $effect(() => {
 	if (!nav.dbSchema || tables.length === 0) return
 	const match = tables.find((tbl) => tbl.name === nav.dbSchema)
-	if (match) {
-		selectedId = match.id
-		view = 'schema'
-	}
+	if (match) pickSchema(match.id, 'schema')
 	nav.dbSchema = null
 })
 </script>
 
 <div class="flex min-h-0 flex-1">
-	<!-- Left: select schema -->
-	<aside class="border-border hidden w-48 shrink-0 flex-col border-r pt-3 sm:flex">
-		<p class="text-muted-foreground px-3 pb-2 text-[10px] font-bold tracking-[0.14em] uppercase">
-			{t('mainnet.schemas.select')}
-		</p>
+	<!-- Left: five sections, each with its own list. board 0105. -->
+	<aside class="border-border hidden w-52 shrink-0 flex-col border-r pt-3 sm:flex">
 		<div class="min-h-0 flex-1 overflow-y-auto px-2">
+			<!-- 1 · SCHEMAS (predicate definitions) -->
+			<p class="text-muted-foreground px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase">
+				{t('mainnet.db.sec.schemas')}
+			</p>
 			{#if !loading && tables.length === 0}
 				<p class="text-muted-foreground px-2 py-2 text-[11px] leading-relaxed">
 					{t('mainnet.db.empty')}
@@ -400,47 +448,86 @@ $effect(() => {
 			{#each tables as tbl (tbl.id)}
 				<button
 					type="button"
-					class="mb-0.5 flex w-full items-center justify-between gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {tbl.id ===
-					selectedId
+					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {selectedId ===
+						tbl.id && view === 'schema'
 						? 'bg-primary/10 text-foreground font-medium'
 						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => {
-						selectedId = tbl.id
-						specKind = null
-						selectedVibe = null
-					}}
+					onclick={() => pickSchema(tbl.id, 'schema')}
 				>
-					<span class="truncate">{tbl.name}</span>
+					<span class="truncate font-mono text-[12px]">{tbl.name}</span>
+				</button>
+			{/each}
+
+			<!-- 2 · VALUES (predication instances) -->
+			<p
+				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase"
+			>
+				{t('mainnet.db.sec.values')}
+			</p>
+			{#each tables as tbl (tbl.id)}
+				<button
+					type="button"
+					class="mb-0.5 flex w-full items-center justify-between gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {selectedId ===
+						tbl.id && view === 'data'
+						? 'bg-primary/10 text-foreground font-medium'
+						: 'text-muted-foreground hover:bg-card'}"
+					onclick={() => pickSchema(tbl.id, 'data')}
+				>
+					<span class="truncate font-mono text-[12px]">{tbl.name}</span>
 					<span class="shrink-0 text-[11px] tabular-nums opacity-60">{tbl.rows.length}</span>
 				</button>
 			{/each}
 
-			<!-- board 0101 — the dynamic spec registries: GLM-authored query/mutation configs (reusable). -->
+			<!-- 3 · BUNDLES -->
 			<p
-				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase opacity-70"
+				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase"
 			>
-				{t('mainnet.db.dynamic')}
+				{t('mainnet.db.sec.bundles')}
 			</p>
-			{#each DYNAMIC_REGISTRIES as kind (kind)}
+			{#each bundleNames as name (name)}
 				<button
 					type="button"
-					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {specKind ===
-					kind
+					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {selectedBundle ===
+					name
 						? 'bg-primary/10 text-foreground font-medium'
 						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => selectSpecKind(kind)}
+					onclick={() => pickBundle(name)}
 				>
-					<span class="opacity-60">⚙</span>
-					<span class="truncate">{specLabel(kind)}</span>
+					<span class="opacity-60">⬡</span>
+					<span class="truncate font-mono text-[12px]">{name}</span>
 				</button>
 			{/each}
 
-			<!-- board 0105 — the VIBES section: each vibe.* row (view+style+logic) as ONE entry, shown in a
-			     tabbed detail (live UI + raw View/Function/Style/State). Folds in the old Vibes tab. -->
+			<!-- 4 · OPERATIONS -->
 			<p
-				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase opacity-70"
+				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase"
 			>
-				{t('mainnet.db.vibes')}
+				{t('mainnet.db.sec.operations')}
+			</p>
+			{#each opItems as op (op.name)}
+				<button
+					type="button"
+					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {selectedOp ===
+					op.name
+						? 'bg-primary/10 text-foreground font-medium'
+						: 'text-muted-foreground hover:bg-card'}"
+					onclick={() => pickOp(op.name)}
+				>
+					<span
+						class="shrink-0 rounded-full px-1 py-0.5 text-[8px] font-semibold {op.kind === 'mutation'
+							? 'bg-amber-100 text-amber-700'
+							: 'bg-sky-100 text-sky-700'}"
+						>{op.kind === 'mutation' ? 'M' : 'Q'}</span
+					>
+					<span class="truncate font-mono text-[12px]">{op.name}</span>
+				</button>
+			{/each}
+
+			<!-- 5 · VIBES (tabbed detail) -->
+			<p
+				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase"
+			>
+				{t('mainnet.db.sec.vibes')}
 			</p>
 			{#each vibeNames as name (name)}
 				<button
@@ -557,82 +644,164 @@ $effect(() => {
 					{/if}
 				{/if}
 			</div>
-		{:else if specKind}
-			<!-- board 0101/0104 — a config registry: bundles or the merged operations. Each row is a
-			     reusable, inspectable config. -->
+		{:else if selectedBundle}
+			<!-- board 0105 — a bundle read as a KIND: its traits (which predicate each plays) + its view
+			     (how they read back flat), not raw JSON. Raw TypeSpec stays available on demand. -->
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
 				<div class="mb-3 flex items-center gap-2">
-					<h2 class="text-foreground text-base font-semibold">{specLabel(specKind)}</h2>
-					<span class="text-muted-foreground text-[11px] tabular-nums opacity-60"
-						>{specItems.length}</span
-					>
+					<span class="opacity-60">⬡</span>
+					<h2 class="text-foreground font-mono text-base font-semibold">{selectedBundle}</h2>
 				</div>
-				<p class="text-muted-foreground mb-3 text-[12px] leading-relaxed">{specHint(specKind)}</p>
-				{#if specsQuery.isPending}
+				{#if bundleDetailQuery.isPending}
 					<p class="text-muted-foreground text-[13px]">…</p>
-				{:else if specError}
-					<p
-						class="border-destructive/40 text-destructive rounded-[var(--radius-lg)] border px-4 py-3 text-[13px]"
-						role="alert"
-					>
-						{specError}
-					</p>
-				{:else if specItems.length === 0}
-					<p
-						class="border-border text-muted-foreground rounded-[var(--radius-lg)] border border-dashed px-4 py-6 text-center text-[13px]"
-					>
-						{t('mainnet.db.emptySpecs')}
-					</p>
-				{:else}
-					<ul class="flex flex-col gap-2">
-						{#each specItems as it (it.name)}
-							<li class="border-border bg-card rounded-[var(--radius-lg)] border p-4">
-								<p class="mb-2 flex items-center gap-2">
-									{#if it.tag}
-										<span
-											class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold {it.tag === 'mutation' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}"
-											>{it.tag}</span
-										>
+				{:else if bundleSpec}
+					<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4">
+						<p
+							class="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase"
+						>
+							Traits
+						</p>
+						<ul class="divide-border/60 divide-y">
+							{#each bundleSpec.parts ?? [] as p (p.pred)}
+								<li class="flex items-baseline gap-2.5 py-1.5 text-[12px]">
+									<span class="text-foreground font-mono font-medium">{p.pred}</span>
+									<span
+										class="bg-muted text-muted-foreground shrink-0 rounded-full px-1.5 py-0.5 text-[10px]"
+										>{p.kind}</span
+									>
+									{#if p.field}
+										<span class="text-muted-foreground truncate">← {p.field}</span>
 									{/if}
-									<span class="text-foreground font-mono text-[13px] font-semibold">{it.name}</span>
-								</p>
-								<pre
-									class="border-border/60 text-muted-foreground overflow-x-auto rounded-[var(--radius)] border px-3 py-2 text-[12px] leading-relaxed"
-								><code
-										>{typeof it.spec === 'string' ? it.spec : JSON.stringify(it.spec, null, 2)}</code
-									></pre>
-							</li>
-						{/each}
-					</ul>
+								</li>
+							{/each}
+						</ul>
+						<p
+							class="text-muted-foreground mt-3 mb-1.5 text-[10px] font-semibold tracking-wide uppercase"
+						>
+							View
+						</p>
+						<div class="flex flex-wrap gap-1.5">
+							{#each Object.entries(bundleSpec.project ?? {}) as [ field, r ] (field)}
+								<span class="border-border rounded-full border px-2 py-0.5 text-[11px]">
+									<span class="text-foreground font-medium">{field}</span>
+									<span class="text-muted-foreground font-mono"> = {readLabel(r)}</span>
+								</span>
+							{/each}
+						</div>
+					</div>
+					<details class="mt-3 text-[12px]">
+						<summary class="text-muted-foreground hover:text-foreground cursor-pointer select-none">
+							Raw TypeSpec
+						</summary>
+						<pre
+							class="border-border bg-card text-foreground mt-2 overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
+						><code
+								>{pretty(bundleSpec)}</code
+							></pre>
+					</details>
+				{:else}
+					<p class="text-muted-foreground text-[13px]">{t('mainnet.db.emptySpecs')}</p>
 				{/if}
+			</div>
+		{:else if selectedOp}
+			<!-- board 0105 — an operation read structurally: kind + a readable breakdown of its spec (query
+			     filter/join/project, or the mutation's insert/delete/update ops). Raw spec on demand. -->
+			{@const s = (selectedOpItem?.spec ?? {}) as Record<string, unknown>}
+			<div class="mx-auto flex w-full max-w-4xl flex-col">
+				<div class="mb-3 flex items-center gap-2">
+					<span
+						class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold {selectedOpItem?.kind ===
+						'mutation'
+							? 'bg-amber-100 text-amber-700'
+							: 'bg-sky-100 text-sky-700'}"
+						>{selectedOpItem?.kind}</span
+					>
+					<h2 class="text-foreground font-mono text-base font-semibold">{selectedOp}</h2>
+				</div>
+				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[13px]">
+					{#if selectedOpItem?.kind === 'query'}
+						<dl class="flex flex-col gap-2">
+							<div class="flex gap-3">
+								<dt class="text-muted-foreground w-20 shrink-0">from</dt>
+								<dd class="text-foreground font-mono">{s.from}</dd>
+							</div>
+							{#if Array.isArray(s.where) && s.where.length}
+								<div class="flex gap-3">
+									<dt class="text-muted-foreground w-20 shrink-0">where</dt>
+									<dd class="text-foreground font-mono">
+										{(s.where as { place: string; op: string; value?: unknown; param?: string }[])
+											.map((f) => `${f.place} ${f.op} ${f.param ? `:${f.param}` : JSON.stringify(f.value)}`)
+											.join('  ·  ')}
+									</dd>
+								</div>
+							{/if}
+							{#if Array.isArray(s.join) && s.join.length}
+								<div class="flex gap-3">
+									<dt class="text-muted-foreground w-20 shrink-0">join</dt>
+									<dd class="text-foreground font-mono">
+										{(s.join as { predicate: string; kind?: string; on: { place: string; base: string } }[])
+											.map((j) => `${j.kind === 'left' ? 'left ' : ''}${j.predicate} (${j.on.place}=${j.on.base})`)
+											.join('  ·  ')}
+									</dd>
+								</div>
+							{/if}
+							{#if s.group_by}
+								<div class="flex gap-3">
+									<dt class="text-muted-foreground w-20 shrink-0">group</dt>
+									<dd class="text-foreground font-mono">{s.group_by}{s.count ? ' · count' : ''}</dd>
+								</div>
+							{/if}
+							{#if Array.isArray(s.project) && s.project.length}
+								<div class="flex gap-3">
+									<dt class="text-muted-foreground w-20 shrink-0">project</dt>
+									<dd class="text-foreground font-mono">
+										{(s.project as unknown[]).map((p) => (typeof p === 'string' ? p : JSON.stringify(p))).join(', ')}
+									</dd>
+								</div>
+							{/if}
+						</dl>
+					{:else}
+						{@const ops = (s.ops ?? []) as { op: string; predicate: string }[]}
+						<ul class="flex flex-col gap-1.5">
+							{#each ops as o, i (i)}
+								<li class="flex items-center gap-2.5">
+									<span
+										class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold {o.op === 'delete'
+											? 'bg-red-100 text-red-700'
+											: o.op === 'update'
+												? 'bg-amber-100 text-amber-700'
+												: 'bg-green-100 text-green-700'}"
+										>{o.op}</span
+									>
+									<span class="text-foreground font-mono">{o.predicate}</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+				<details class="mt-3 text-[12px]">
+					<summary class="text-muted-foreground hover:text-foreground cursor-pointer select-none">
+						Raw spec
+					</summary>
+					<pre
+						class="border-border bg-card text-foreground mt-2 overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
+					><code
+							>{pretty(s)}</code
+						></pre>
+				</details>
 			</div>
 		{:else if selected}
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
-				<div class="mb-3 flex items-center justify-between gap-2">
-					<h2 class="text-foreground text-base font-semibold">{selected.name}</h2>
-					<div
-						class="border-border inline-flex shrink-0 overflow-hidden rounded-[var(--radius)] border text-[12px]"
+				<div class="mb-3 flex items-center gap-2">
+					<span class="text-muted-foreground text-[11px] tracking-wide uppercase"
+						>{view === 'schema' ? t('mainnet.db.tabSchema') : t('mainnet.db.tabData')}</span
 					>
-						<button
-							type="button"
-							class="px-3 py-1 transition-colors {view === 'schema'
-								? 'bg-primary/10 text-foreground font-medium'
-								: 'text-muted-foreground hover:bg-card'}"
-							onclick={() => (view = 'schema')}
+					<h2 class="text-foreground font-mono text-base font-semibold">{selected.name}</h2>
+					{#if view === 'data'}
+						<span class="text-muted-foreground text-[11px] tabular-nums opacity-60"
+							>{selected.rows.length}</span
 						>
-							{t('mainnet.db.tabSchema')}
-						</button>
-						<button
-							type="button"
-							class="border-border border-l px-3 py-1 transition-colors {view === 'data'
-								? 'bg-primary/10 text-foreground font-medium'
-								: 'text-muted-foreground hover:bg-card'}"
-							onclick={() => (view = 'data')}
-						>
-							{t('mainnet.db.tabData')}
-							<span class="ml-1 tabular-nums opacity-60">{selected.rows.length}</span>
-						</button>
-					</div>
+					{/if}
 				</div>
 
 				{#if view === 'schema'}

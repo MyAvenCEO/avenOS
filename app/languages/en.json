@@ -1133,6 +1133,13 @@
 			"dynamic": "Dynamic",
 			"vibes": "Vibes",
 			"emptySpecs": "None yet — ask a question or request a change in chat to author one.",
+			"sec": {
+				"schemas": "Schemas",
+				"values": "Values",
+				"bundles": "Bundles",
+				"operations": "Operations",
+				"vibes": "Vibes"
+			},
 			"vibe": {
 				"summary": "Summary",
 				"summaryHint": "This card renders through the engine from its vibe.* rows (view + style + logic) — the same path chat/Runs use. No per-view Svelte. The tabs show the raw config."
