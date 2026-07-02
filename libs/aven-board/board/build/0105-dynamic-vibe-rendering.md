@@ -132,6 +132,23 @@ cd app && bun run check   # 0 errors
 
 ## Progress log
 
+- `2026-07-02` — Generic host built + green; verification wall reached (card STAYS
+  in build/). Done: `app/src/lib/shell/VibeCard.svelte` — the reusable host
+  (loadVibeBundle(schema) → a UiFixtureShell {view,style,logic,source:{},
+  interface:{}} → AvenVibeView, the card's data fed as `source`), svelte-check 0
+  errors. Confirmed the vibe format from the live todos rows: **view** = ViewDef
+  nodes (class/tag/text/attrs/children/`$each`, `$state` bindings, `$$item` inside
+  `$each`); **style** = `{tokens, selectors:{".class":{camelCaseCss}}}`; **logic**
+  = QuickJS `initState(source)` → state. No per-card shell factory needed. NOT yet
+  done: authoring the 8 cards' view/style/logic, the seed migration, rewiring
+  StepVibe/MainnetChat, deleting the Svelte. **Wall:** a card's success is
+  fundamentally VISUAL — the QuickJS ViewDef renders ONLY in the Tauri sandbox
+  (Rust `plugin:sandbox-quickjs`), so svelte-check green does NOT prove a card
+  renders. Authoring 8 unverifiable cards + deleting their working Svelte in one
+  autonomous pass risks silent blank/broken cards. Correct pattern (the speced
+  pilot-first): author ONE card → verify live → fan out. Host committed + safe
+  (nothing rewired, working cards untouched).
+
 - `2026-07-02` — Discovery: grounded in the live vibe engine (AvenVibeView shell
   = view/style/logic + data-as-source; the todos `all` card proves it). Settled
   hand-authored rows (GLM-authored → 0106) + all-cards-in-one-pass (de-risked by
