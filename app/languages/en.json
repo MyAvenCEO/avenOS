@@ -328,7 +328,13 @@
 		"pen": "Pen",
 		"eraser": "Eraser",
 		"select": "Select",
-		"clear": "Clear"
+		"clear": "Clear",
+		"colors": "Colours",
+		"addImage": "Image",
+		"zoom": "Zoom",
+		"zoomIn": "Zoom in",
+		"zoomOut": "Zoom out",
+		"resetView": "Reset view"
 	},
 	"intents": {
 		"title": "Intents",

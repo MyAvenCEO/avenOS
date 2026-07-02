@@ -315,7 +315,13 @@
 		"pen": "Stift",
 		"eraser": "Radierer",
 		"select": "Auswählen",
-		"clear": "Löschen"
+		"clear": "Löschen",
+		"colors": "Farben",
+		"addImage": "Bild",
+		"zoom": "Zoom",
+		"zoomIn": "Vergrößern",
+		"zoomOut": "Verkleinern",
+		"resetView": "Ansicht zurücksetzen"
 	},
 	"intents": {
 		"title": "Intents",
