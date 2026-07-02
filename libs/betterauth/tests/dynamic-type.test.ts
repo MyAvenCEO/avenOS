@@ -108,6 +108,7 @@ describe('dynamic composite types — author a TypeSpec, CRUD works with no new 
 			await sql`DELETE FROM data_value WHERE user_id = ${UID}`.execute(db())
 			await sql`DELETE FROM data_schema WHERE user_id = ${UID}`.execute(db())
 			await sql`DELETE FROM data_bundles WHERE type = 'library'`.execute(db())
+			await sql`DELETE FROM data_operations WHERE derived_from = 'library'`.execute(db()) // board 0104 — saveType regenerates derived ops; clean them too
 		}
 		await clean()
 		// 1. the `book` predicate must exist as a data_schema (x1=owner ref, x2=title value) — a compiled

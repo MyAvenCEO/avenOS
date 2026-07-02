@@ -69,6 +69,9 @@ app.use('/api/data/*', cors(corsOptions))
 // Skill execution (board 0089) — run a skill's flow for the signed-in user (doc-ingest wired first).
 app.use('/api/skills/*', cors(corsOptions))
 app.use('/api/vibe/*', cors(corsOptions))
+// board 0100/0104 — the universal attached-context registry (gismu/predicates/types/data_operations/vibe_*),
+// browser-called cross-origin by the Skills config panel + the DB viewer. Needs CORS like every other /api.
+app.use('/api/context/*', cors(corsOptions))
 // `/api/billing/checkout` is browser-called (needs CORS); `/api/billing/webhook` is a
 // server-to-server POST from Polar (no Origin, so CORS is inert there) verified by signature.
 app.use('/api/billing/*', cors(corsOptions))
