@@ -30,7 +30,7 @@ export async function listTypes(c: Context): Promise<Response> {
 	const gate = await adminGate(c)
 	if (gate) return gate
 	const rows = await db()
-		.selectFrom('predicate_type')
+		.selectFrom('data_bundles')
 		.select(['type', 'spec'])
 		.orderBy('type', 'asc')
 		.execute()
@@ -44,7 +44,7 @@ export async function getType(c: Context): Promise<Response> {
 	const type = c.req.param('type')
 	if (!type) return c.json({ error: 'type required' }, 400)
 	const row = await db()
-		.selectFrom('predicate_type')
+		.selectFrom('data_bundles')
 		.select(['type', 'spec'])
 		.where('type', '=', type)
 		.executeTakeFirst()
@@ -62,9 +62,11 @@ export async function upsertType(c: Context): Promise<Response> {
 		return c.json({ error: 'type + spec{parts[],project} required' }, 400)
 	}
 	await db()
-		.insertInto('predicate_type')
+		.insertInto('data_bundles')
 		.values({ type: body.type, spec: jsonb(spec), created_at: new Date(), updated_at: new Date() })
-		.onConflict((oc) => oc.column('type').doUpdateSet({ spec: jsonb(spec), updated_at: new Date() }))
+		.onConflict((oc) =>
+			oc.column('type').doUpdateSet({ spec: jsonb(spec), updated_at: new Date() })
+		)
 		.execute()
 	return c.json({ type: body.type })
 }
@@ -75,6 +77,6 @@ export async function deleteType(c: Context): Promise<Response> {
 	if (gate) return gate
 	const type = c.req.param('type')
 	if (!type) return c.json({ error: 'type required' }, 400)
-	await db().deleteFrom('predicate_type').where('type', '=', type).execute()
+	await db().deleteFrom('data_bundles').where('type', '=', type).execute()
 	return c.json({ ok: true, type })
 }

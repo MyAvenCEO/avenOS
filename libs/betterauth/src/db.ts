@@ -97,11 +97,12 @@ export interface FlowTable {
 	updated_at: Generated<Date>
 }
 
-// Composite TYPE registry (board 0088, Layer A) — admin-owned. Each row is a declarative bundle
-// spec (an aven-ontology TypeSpec) describing how a type's fields map to x1–x5 predications; the
-// generic engine loads it at runtime, so there is NO per-type code. Like `flow`, this is platform
-// structure, not user data. See [[two-layer-schema-split]].
-export interface PredicateTypeTable {
+// BUNDLE registry (board 0088/0102) — `data_bundles`, in the dynamic-data namespace. Each row is a
+// declarative bundle spec (an aven-ontology Bundle/TypeSpec): which predicates cluster into a kind + how
+// they read back flat. The generic engine loads it at runtime, so there is NO per-type code. A bundle is
+// AI-mintable at runtime like a predicate is, so it belongs beside data_schema/data_value, not with the
+// admin `flow` config. See [[two-layer-schema-split]].
+export interface DataBundlesTable {
 	type: string
 	spec: unknown
 	created_at: Generated<Date>
@@ -222,7 +223,7 @@ export interface Database {
 	data_schema: DataSchemaTable
 	data_value: DataValueTable
 	flow: FlowTable
-	predicate_type: PredicateTypeTable
+	data_bundles: DataBundlesTable
 	artifact: ArtifactTable
 	flow_run: FlowRunTable
 	data_schema_history: DataSchemaHistoryTable

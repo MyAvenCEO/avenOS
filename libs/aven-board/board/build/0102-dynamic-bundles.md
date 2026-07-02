@@ -113,7 +113,7 @@ top.
 
 - [x] Meta-schema validates/rejects TypeSpecs incl. recursive childSpec — proven by `bun --env-file=../../.env.samuel test tests/dynamic-type.test.ts`.
 - [x] A validated spec persisted via `saveType` is immediately CRUD-able through `executeDataTool` (create "Dune" → list projects `{title, owner}`) — same test.
-- [ ] Table renamed `predicate_type` → `data_bundles`; migrate exits "up to date", all betterauth tests still pass.
+- [x] Table renamed `predicate_type` → `data_bundles`; migrate exits "up to date" (0058), all 12 betterauth tests pass, tsc exit 0.
 - [ ] Hardcoded specs retired: `grep -rn "TODO_SPEC\|INVOICE_SPEC\|DOCUMENT_SPEC\|COMPANY_SPEC\|PERSON_SPEC\|TRANSACTION_SPEC" libs/aven-ontology/src` returns nothing; historical migrations carry inline JSON snapshots; `bun test libs/aven-ontology` passes (coverage ported, not dropped).
 - [ ] `create_bundle` registered + dispatched; betterauth/skills tsc exit 0.
 - [ ] Bundle vibe renders in chat + Runs — `cd app && bun run check` 0 errors.
@@ -135,6 +135,11 @@ cd ../../app && bun run check
 
 ## Progress log
 
+- `2026-07-02` — Step 2 done: migration 0058 renames `predicate_type` →
+  `data_bundles` (table-only, `type` column kept); updated db.ts
+  (PredicateTypeTable → DataBundlesTable), data.ts loadTypeSpec, predicate-types.ts
+  routes, type-caps.ts + dynamic-type.test.ts. Green: tsc 0, migrate up-to-date,
+  12/12 betterauth tests pass.
 - `2026-07-02` — Filed retroactively into build/: the deterministic engine slice
   was built + committed (`0f393338`) before the card existed. Taxonomy settled
   (bundle/trait/view/entity; table renames out of scope). GLM authoring slice

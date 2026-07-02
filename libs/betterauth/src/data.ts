@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { create, query, remove, update } from '@avenos/aven-ontology'
 import type { Cell, Place, PredicationStore, TypeSpec } from '@avenos/aven-ontology'
+import { create, query, remove, update } from '@avenos/aven-ontology'
 import { todoPredicateSchemas } from '@avenos/aven-vibes/predicate'
 import Ajv from 'ajv'
 import type { Context } from 'hono'
@@ -309,7 +309,10 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 		// SHORT ids (8 chars) — gemma can't copy 36-char UUIDs verbatim (it hallucinates them, so the
 		// update/delete misses); 8 hex chars are reliable and the server resolves them back. board 0099.
 		const list = (res.items ?? [])
-			.map((task) => `${String(task.id).slice(0, 8)} · "${task.title ?? ''}"${task.done ? ' ✓done' : ''}`)
+			.map(
+				(task) =>
+					`${String(task.id).slice(0, 8)} · "${task.title ?? ''}"${task.done ? ' ✓done' : ''}`
+			)
 			.join('\n')
 		if (list)
 			todosSnapshot = `\n\nCURRENT TODOS (id · title · done) — for update/delete pass the exact 8-char id shown here as \`id\` (or in \`ids\` for a batch delete); do NOT call list first, and NEVER invent an id:\n${list}`
@@ -369,7 +372,7 @@ async function ensurePredicateSchemas(uid: string): Promise<Record<string, strin
 }
 
 // ── The generic predication engine (board 0088) ─────────────────────────────────
-// A composite TYPE (e.g. `todos`) is a declarative bundle spec in the `predicate_type` registry;
+// A composite TYPE (e.g. `todos`) is a declarative bundle spec in the `data_bundles` registry;
 // the pure aven-ontology engine runs CRUD + projection against the x1–x5 predications with ZERO
 // per-type code. `pgStore` adapts the engine's PredicationStore onto data_value (user-scoped).
 
@@ -452,10 +455,10 @@ function pgStore(uid: string, schemaIdByPred: Record<string, string>): Predicati
 	}
 }
 
-/** Load a registered composite type's bundle spec from the admin-owned registry. */
+/** Load a registered bundle spec from the `data_bundles` registry (board 0102). */
 export async function loadTypeSpec(name: string): Promise<TypeSpec | null> {
 	const row = await db()
-		.selectFrom('predicate_type')
+		.selectFrom('data_bundles')
 		.select('spec')
 		.where('type', '=', name)
 		.executeTakeFirst()
@@ -494,7 +497,7 @@ registerContextProvider('type', async (uid, arg) => {
 		kind: 'text',
 		label: `${name} — projection recipe + predicate schemas`,
 		text: JSON.stringify({ type: spec.type, projection: spec, predicate_schemas }, null, 2),
-		meta: { predicates: preds.size, source: 'predicate_type + data_schema' }
+		meta: { predicates: preds.size, source: 'data_bundles + data_schema' }
 	}
 })
 
@@ -557,7 +560,9 @@ export async function listDataType(c: Context): Promise<Response> {
 	if (!uid) return c.json({ error: 'unauthorized' }, 401)
 	const type = c.req.param('type')
 	if (!type) return c.json({ error: 'type required' }, 400)
-	const res = (await executeDataTool(uid, { schema: type, action: 'list' })) as { items?: unknown[] }
+	const res = (await executeDataTool(uid, { schema: type, action: 'list' })) as {
+		items?: unknown[]
+	}
 	return c.json({ items: res.items ?? [] })
 }
 
@@ -702,11 +707,7 @@ export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<
 	if (args.action === 'delete') {
 		const ids = deleteIds(args)
 		if (ids.length === 0) return { ok: false, error: 'delete requires id(s)' }
-		await db()
-			.deleteFrom('data_value')
-			.where('id', 'in', ids)
-			.where('user_id', '=', uid)
-			.execute()
+		await db().deleteFrom('data_value').where('id', 'in', ids).where('user_id', '=', uid).execute()
 		publish(uid, { entity: 'data' })
 		return { ok: true, action: 'delete', deleted: ids }
 	}

@@ -8,7 +8,7 @@ import { publish } from './events'
 // board 0102 — DYNAMIC COMPOSITE TYPES. GLM already mints new x1–x5 PREDICATES on the fly (board 0100);
 // this lets it mint new composite TYPES too — a `TypeSpec` (the declarative bundle that projects several
 // predications into one flat record, e.g. a todo = task+done+due+prioritized+owned_by). A validated
-// TypeSpec persisted to `predicate_type` is IMMEDIATELY CRUD-able through the existing generic engine
+// TypeSpec persisted to `data_bundles` is IMMEDIATELY CRUD-able through the existing generic engine
 // (executeDataTool → loadTypeSpec → runType), zero new code. So "a book with an author and a rating"
 // becomes AI-authored config, not seeded code — the last seeded layer of the data brain goes dynamic.
 
@@ -93,14 +93,14 @@ export function typePredicates(spec: TypeSpec): string[] {
 	return [...out]
 }
 
-/** Persist a validated TypeSpec to the `predicate_type` registry (idempotent by type name). Throws on an
+/** Persist a validated TypeSpec to the `data_bundles` registry (idempotent by type name). Throws on an
  *  invalid spec — it never reaches the engine. board 0102. */
 export async function saveType(spec: TypeSpec): Promise<{ type: string; predicates: string[] }> {
 	if (!validateTypeSpec(spec)) {
 		throw new Error(`[type-caps] invalid TypeSpec: ${ajv.errorsText(validateTypeSpec.errors)}`)
 	}
 	await sql`
-		INSERT INTO predicate_type (type, spec, created_at, updated_at)
+		INSERT INTO data_bundles (type, spec, created_at, updated_at)
 		VALUES (${spec.type}, ${jsonb(spec)}, now(), now())
 		ON CONFLICT (type) DO UPDATE SET spec = ${jsonb(spec)}, updated_at = now()
 	`.execute(db())
@@ -112,7 +112,7 @@ async function listTypeSpecs(): Promise<{ name: string; gloss: string }[]> {
 	const rows = await sql<{
 		type: string
 		spec: unknown
-	}>`SELECT type, spec FROM predicate_type ORDER BY type`.execute(db())
+	}>`SELECT type, spec FROM data_bundles ORDER BY type`.execute(db())
 	return rows.rows.map((r) => {
 		const spec = asJson(r.spec) as TypeSpec
 		return {

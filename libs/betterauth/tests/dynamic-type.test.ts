@@ -8,7 +8,7 @@ import { db } from '../src/db'
 import { saveType, TYPE_META_SCHEMA, typePredicates, validateTypeSpec } from '../src/type-caps'
 
 // board 0102 — the DETERMINISTIC proof for dynamic composite types: a validated TypeSpec persisted to
-// predicate_type is IMMEDIATELY CRUD-able through the existing generic engine (executeDataTool → runType),
+// data_bundles is IMMEDIATELY CRUD-able through the existing generic engine (executeDataTool → runType),
 // with ZERO new code. GLM authoring quality is a separate human-checked criterion.
 
 const UID = `test-types-${randomUUID().slice(0, 8)}`
@@ -107,7 +107,7 @@ describe('dynamic composite types — author a TypeSpec, CRUD works with no new 
 		const clean = async () => {
 			await sql`DELETE FROM data_value WHERE user_id = ${UID}`.execute(db())
 			await sql`DELETE FROM data_schema WHERE user_id = ${UID}`.execute(db())
-			await sql`DELETE FROM predicate_type WHERE type = 'library'`.execute(db())
+			await sql`DELETE FROM data_bundles WHERE type = 'library'`.execute(db())
 		}
 		await clean()
 		// 1. the `book` predicate must exist as a data_schema (x1=owner ref, x2=title value) — a compiled
