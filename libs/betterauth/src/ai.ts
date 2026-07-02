@@ -255,7 +255,16 @@ function streamWithTools(opts: {
 				detail: string,
 				status: 'running' | 'done' | 'error'
 			) => emit({ aven_tool: { id, name, detail, status } })
-			const msgs: unknown[] = [...messages]
+			// PERF (board 0105): the client sends the FULL session history, and Tinfoil re-prefills every
+			// message each round — an ever-growing prompt is the dominant chat cost. Cap the context to the
+			// last SESSION_CONTEXT_LIMIT conversational messages (the leading system message, if any, is
+			// always kept — it carries the instructions + the schema hint merge below). Server-side tool
+			// rounds aren't in this client history (they're persisted separately), so slicing is safe.
+			const SESSION_CONTEXT_LIMIT = 5
+			const hist = messages as { role?: string }[]
+			const lead = hist[0]?.role === 'system' ? [hist[0]] : []
+			const convo = lead.length ? hist.slice(1) : hist
+			const msgs: unknown[] = [...lead, ...convo.slice(-SESSION_CONTEXT_LIMIT)]
 			// Inject image attachments as multimodal content into the last user message so the
 			// vision model (Gemma 4 31B) can see them — needed for classify_document. board 0063.
 			if (attachments.length > 0) {
