@@ -1,9 +1,20 @@
 <script lang="ts">
 import type { Flow, NodeState, RecipeNode, TraceStep } from '@avenos/aven-skills'
-import OntologyVibe from '$lib/shell/OntologyVibe.svelte'
-import BundleVibe from '$lib/shell/BundleVibe.svelte'
-import QueryVibe from '$lib/shell/QueryVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
+import VibeCard from '$lib/shell/VibeCard.svelte'
+
+// board 0105 — every read-only actor card renders from its vibe.* registry rows through the ONE generic
+// VibeCard host; only the interactive todos `all` list keeps a dedicated component (it wires CRUD events).
+const VIBE_CARDS = new Set([
+	'todos-created',
+	'todos-edited',
+	'todos-deleted',
+	'ontology',
+	'ontology-created',
+	'query-result',
+	'mutation-result',
+	'bundle-created'
+])
 
 // board 0083/0099 — the optional "vibe view" of a single flow step: a user-facing rendering of what an
 // actor is doing. A step may name a `vibe` with `vibeData`; otherwise we key on `${flowId}:${nodeId}`
@@ -48,25 +59,15 @@ const STATE_CHIP: Record<NodeState, string> = {
 }
 </script>
 
-{#if vibe.startsWith('todos')}
-	<!-- board 0099 — the Todos actor vibes render through TodosVibe everywhere (chat, Runs, Skills). -->
+{#if vibe === 'todos'}
+	<!-- the interactive todos list (CRUD events) keeps its dedicated engine component. board 0099. -->
 	<TodosVibe
-		mode={(vibe === 'todos' ? 'all' : vibe.slice('todos-'.length)) as
-			| 'all'
-			| 'created'
-			| 'edited'
-			| 'deleted'}
+		mode="all"
 		data={vibeData as { items?: { id?: string; title?: string }[]; diffs?: [] }}
 	/>
-{:else if vibe.startsWith('ontology')}
-	<!-- board 0100 — the ontology actor vibes render through OntologyVibe (chat, Runs, Skills). -->
-	<OntologyVibe mode={vibe === 'ontology' ? 'read' : 'created'} data={vibeData as never} />
-{:else if vibe === 'query-result' || vibe === 'mutation-result'}
-	<!-- board 0101 — the dynamic query/mutate actors render through QueryVibe (chat, Runs, Skills). -->
-	<QueryVibe mode={vibe === 'query-result' ? 'query' : 'mutation'} data={vibeData as never} />
-{:else if vibe === 'bundle-created'}
-	<!-- board 0102 — the bundle actor (a new composite type) renders through BundleVibe. -->
-	<BundleVibe data={vibeData as never} />
+{:else if VIBE_CARDS.has(vibe)}
+	<!-- board 0105 — every other actor card renders from its vibe.* rows through the generic host. -->
+	<VibeCard schema={vibe} data={vibeData} />
 {:else if !vibe && (!node || !step)}
 	<div class="text-muted-foreground flex h-full items-center justify-center text-sm">
 		Kein Schritt ausgewählt.
@@ -142,7 +143,8 @@ const STATE_CHIP: Record<NodeState, string> = {
 		</div>
 		<span class="text-2xl text-[#1f4a5c]">↓</span>
 		{#each step.outputs ?? [] as o (o)}
-			<span class="rounded-full bg-[#1f4a5c] px-4 py-1 text-sm font-semibold text-white">🪟 {o}</span
+			<span class="rounded-full bg-[#1f4a5c] px-4 py-1 text-sm font-semibold text-white"
+				>🪟 {o}</span
 			>
 		{/each}
 		{#if step.message}
@@ -151,7 +153,9 @@ const STATE_CHIP: Record<NodeState, string> = {
 	</div>
 {:else if node && step}
 	<!-- Generic actor-step card: name · actor · mailbox → output · state. board 0099 actor hub. -->
-	<div class="border-border bg-card flex h-full flex-col gap-4 rounded-[var(--radius-lg)] border p-6">
+	<div
+		class="border-border bg-card flex h-full flex-col gap-4 rounded-[var(--radius-lg)] border p-6"
+	>
 		<div class="flex items-center justify-between gap-2">
 			<div class="min-w-0">
 				<h3 class="text-foreground truncate text-lg font-semibold">{node.name}</h3>
@@ -181,13 +185,16 @@ const STATE_CHIP: Record<NodeState, string> = {
 					>Output</span
 				>
 				{#each step.outputs ?? [] as o (o)}
-					<span class="bg-primary/10 text-foreground rounded px-2 py-1 text-xs font-medium">{o}</span
+					<span class="bg-primary/10 text-foreground rounded px-2 py-1 text-xs font-medium"
+						>{o}</span
 					>
 				{/each}
 			</div>
 		</div>
 		{#if step.message}
-			<p class="text-muted-foreground border-border mt-auto rounded border border-dashed p-2 text-sm">
+			<p
+				class="text-muted-foreground border-border mt-auto rounded border border-dashed p-2 text-sm"
+			>
 				{step.message}
 			</p>
 		{/if}
@@ -197,8 +204,11 @@ const STATE_CHIP: Record<NodeState, string> = {
 	<div
 		class="border-border bg-card mx-auto w-full max-w-md rounded-[var(--radius-lg)] border p-4 text-sm"
 	>
-		<p class="text-muted-foreground mb-2 text-[10px] font-semibold tracking-wide uppercase">{vibe}</p>
+		<p class="text-muted-foreground mb-2 text-[10px] font-semibold tracking-wide uppercase">
+			{vibe}
+		</p>
 		<pre
-			class="text-foreground overflow-auto text-xs whitespace-pre-wrap">{JSON.stringify(vibeData, null, 2)}</pre>
+			class="text-foreground overflow-auto text-xs whitespace-pre-wrap"
+		>{JSON.stringify(vibeData, null, 2)}</pre>
 	</div>
 {/if}

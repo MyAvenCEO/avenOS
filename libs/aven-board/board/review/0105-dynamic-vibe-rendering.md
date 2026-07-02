@@ -108,12 +108,13 @@ non-mainnet vibes.
 
 ## Acceptance criteria
 
-- [ ] `OntologyVibe.svelte`, `QueryVibe.svelte`, `BundleVibe.svelte` deleted; `grep -rn 'OntologyVibe\|QueryVibe\|BundleVibe' app/src` empty.
-- [ ] A migration seeds vibe_view/style/logic for all 8 card kinds — proven by a DB count.
-- [ ] StepVibe + MainnetChat render every migrated card through the ONE `VibeCard`/AvenVibeView host — no per-card component tags (grep).
-- [ ] `cd app && bun run check` reports 0 errors.
-- [ ] Any ViewDef primitive added lives in `libs/aven-vibes` (surfaced), never faked in Svelte.
-- [ ] Live gate: all 8 cards render correctly in chat AND Runs.
+- [x] `OntologyVibe.svelte`, `QueryVibe.svelte`, `BundleVibe.svelte` deleted (git rm); `grep -rn 'OntologyVibe\|QueryVibe\|BundleVibe' app/src` empty.
+- [x] Migration 0063 seeds vibe_view/style/logic for all 8 card kinds — DB count = 8 (+ todos = 9 views).
+- [x] StepVibe + MainnetChat + SkillsView render every migrated card through the ONE `VibeCard`/AvenVibeView host (a shared `VIBE_CARDS` set); todos `all` interactive list keeps TodosVibe.
+- [x] `cd app && bun run check` reports 0 errors.
+- [x] No ViewDef primitive needed — all 8 views use only single-level `$each` + `$state`/`$$item` (nesting flattened in `initState`); nothing faked in Svelte.
+- [x] Pre-flight: all 8 `initState(sample)` execute cleanly (8 ok / 0 fail) — rules out logic crashes.
+- [→] Live gate: all 8 cards render correctly in chat AND Runs — **the review's HITL sign-off** (only the QuickJS view-binding rendering, unverifiable by command).
 
 ## Verification
 

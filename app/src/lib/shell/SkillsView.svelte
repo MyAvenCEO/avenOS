@@ -12,8 +12,20 @@ import { t } from '$lib/i18n'
 import ActorConfig from '$lib/shell/ActorConfig.svelte'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import { openDbSchema } from '$lib/shell/nav.svelte'
-import OntologyVibe from '$lib/shell/OntologyVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
+import VibeCard from '$lib/shell/VibeCard.svelte'
+
+// board 0105 — the Skills preview renders read-only cards through the same generic host as chat/Runs.
+const VIBE_CARDS = new Set([
+	'todos-created',
+	'todos-edited',
+	'todos-deleted',
+	'ontology',
+	'ontology-created',
+	'query-result',
+	'mutation-result',
+	'bundle-created'
+])
 
 // board 0083 — Skills view = TEMPLATES only, rendered via the shared FlowGraph (real edges + labels,
 // pan/zoom). Left = skill list, center = the flow DAG (composites navigate into sub-skills), right =
@@ -53,12 +65,21 @@ const previewMode = $derived<PreviewMode>(
 )
 const PREVIEW_DATA: Record<
 	string,
-	{ items?: { id?: string; title?: string; priority?: string }[]; diffs?: { id: string; title: string; changes: { field: string; from: string; to: string }[] }[] }
+	{
+		items?: { id?: string; title?: string; priority?: string }[]
+		diffs?: { id: string; title: string; changes: { field: string; from: string; to: string }[] }[]
+	}
 > = {
 	'todos-created': { items: [{ id: 'sample', title: 'Beispielaufgabe', priority: 'medium' }] },
 	'todos-edited': {
 		items: [],
-		diffs: [{ id: 'sample', title: 'Beispielaufgabe', changes: [{ field: 'done', from: 'False', to: 'True' }] }]
+		diffs: [
+			{
+				id: 'sample',
+				title: 'Beispielaufgabe',
+				changes: [{ field: 'done', from: 'False', to: 'True' }]
+			}
+		]
 	},
 	'todos-deleted': { items: [{ id: 'sample', title: 'Beispielaufgabe' }] }
 }
@@ -89,7 +110,13 @@ const ONTOLOGY_PREVIEW: Record<string, Record<string, unknown>> = {
 				places: [
 					{ pos: 'x1', role: 'drinker', gloss: 'the agent who drinks', kind: 'ref' },
 					{ pos: 'x2', role: 'beverage', gloss: 'the liquid drunk', kind: 'ref' },
-					{ pos: 'x3', role: 'container', gloss: 'the source drunk from', kind: 'ref', required: false }
+					{
+						pos: 'x3',
+						role: 'container',
+						gloss: 'the source drunk from',
+						kind: 'ref',
+						required: false
+					}
 				]
 			}
 		]
@@ -154,7 +181,7 @@ function onSelect(id: string): void {
 				</div>
 				<!-- Bottom: the selected actor's vibe view (with sample data for the template). board 0099. -->
 				<div class="min-h-0 flex-1 overflow-auto p-4">
-					{#if selectedNode && previewVibe.startsWith('todos')}
+					{#if selectedNode && previewVibe === 'todos'}
 						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
 							Vibe · {previewVibe}
 						</p>
@@ -163,13 +190,14 @@ function onSelect(id: string): void {
 							mode={previewMode}
 							data={previewData}
 						/>
-					{:else if selectedNode && previewVibe.startsWith('ontology')}
+					{:else if selectedNode && VIBE_CARDS.has(previewVibe)}
 						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
 							Vibe · {previewVibe}
 						</p>
-						<OntologyVibe
-							mode={previewVibe === 'ontology' ? 'read' : 'created'}
-							data={ONTOLOGY_PREVIEW[previewVibe]}
+						<VibeCard
+							schema={previewVibe}
+							data={previewData ?? ONTOLOGY_PREVIEW[previewVibe] ?? {}}
+							containerName={`skills-preview-${selectedNodeId}`}
 						/>
 					{:else if selectedNode}
 						<p class="text-muted-foreground text-center text-sm">
