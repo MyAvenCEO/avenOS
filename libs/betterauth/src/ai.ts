@@ -1,6 +1,14 @@
 import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
-import { chatToolDefinitions, TOOL_ACTORS } from '@avenos/skills/tools'
+import {
+	assembleSystemContext,
+	chatToolDefinitionsFor,
+	type RouterRequest,
+	routeSkill,
+	type SkillId,
+	skillWantsTodosHint,
+	TOOL_ACTORS
+} from '@avenos/skills/tools'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
@@ -303,14 +311,48 @@ function streamWithTools(opts: {
 			// files into THIS, so edits compound across files + calls. Seeded from the client. board 0055.
 			const turnFiles: Record<string, string> = { ...publicFiles }
 			try {
-				// Tell the model the exact schema field names so data_crud writes validate. MERGE the
-				// hint into the existing leading system message — a SECOND system message makes Tinfoil
-				// 400 (only the first turn worked, before any schema existed → no hint). board 0055.
-				const hint = await schemasPromptHint(userId).catch(() => '')
+				// board 0106 — DISPATCH (Tier 1): a tiny SCHEMA-FREE gemma call routes this turn to ONE skill,
+				// so only that skill's tools enter context below (Tier 2) and its heavy context loads lazily
+				// (Tier 3). Any error falls back to the default skill inside routeSkill, so routing never
+				// blocks a turn. The router carries no tool schemas / no hint — it stays cheap on purpose.
+				const routerCall = async (req: RouterRequest): Promise<string> => {
+					const r = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
+						method: 'POST',
+						headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+						body: JSON.stringify(req)
+					})
+					if (!r.ok) throw new Error(`router ${r.status}`)
+					const j = (await r.json()) as { choices?: { message?: { content?: string } }[] }
+					return j.choices?.[0]?.message?.content ?? ''
+				}
+				const lastUser = [...msgs]
+					.reverse()
+					.find((m) => (m as { role?: string }).role === 'user') as
+					| { content?: string | { type: string; text?: string }[] }
+					| undefined
+				const routeText =
+					typeof lastUser?.content === 'string'
+						? lastUser.content
+						: (lastUser?.content ?? [])
+								.filter(
+									(b): b is { type: string; text?: string } =>
+										typeof b === 'object' && b.type === 'text'
+								)
+								.map((b) => b.text ?? '')
+								.join(' ')
+				const skillId: SkillId = await routeSkill(routerCall, routeText, model)
+				console.log(`[ai] dispatch → ${skillId}`)
+
+				// Tier 3 — the todos snapshot (with ids) is merged into the system prompt ONLY on the todos
+				// route; every other skill skips the DB read entirely. MERGE into the leading system message —
+				// a SECOND system message makes Tinfoil 400. board 0055 / 0106.
+				const hint = skillWantsTodosHint(skillId)
+					? await schemasPromptHint(userId).catch(() => '')
+					: ''
 				if (hint) {
 					const first = msgs[0] as { role?: string; content?: string } | undefined
 					if (first?.role === 'system') {
-						first.content = `${first.content ?? ''}\n\n${hint}`.trim()
+						first.content = assembleSystemContext(skillId, first.content ?? '', hint)
 					} else {
 						msgs.unshift({ role: 'system', content: hint })
 					}
@@ -333,7 +375,7 @@ function streamWithTools(opts: {
 							body: JSON.stringify({
 								model,
 								messages: msgs,
-								tools: chatToolDefinitions(),
+								tools: chatToolDefinitionsFor(skillId),
 								stream: true
 							}),
 							signal: ac.signal

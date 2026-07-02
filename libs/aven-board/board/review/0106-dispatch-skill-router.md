@@ -5,7 +5,7 @@ owner: Claude Code (build agent)
 created: 2026-07-02
 updated: 2026-07-02
 tags: [chat, dispatch, perf]
-goal: "`bun test libs/betterauth/test/dispatch.test.ts` exits 0 and `bunx tsc --noEmit -p libs/betterauth/tsconfig.json` exits 0, proving: (1) advertisedTools('todos')==['data_crud'], advertisedTools('ontology')==['ontology','query','mutate','bundle'], advertisedTools('website')==['show_website','edit_website','deploy_website']; (2) the router request payload carries NO tools array and NO todos snapshot / gismu lexicon (Tier-1 is schema-free); (3) an assembled todos-route context CONTAINS the todos snapshot hint while an ontology-route context does NOT (Tier-3 gating); (4) a printed measurement shows a todos turn advertises ≤ 1600 tool-schema chars (baseline 6055). Existing betterauth tests stay green; no files outside skills/tools + libs/betterauth/src/ai.ts + the new test change."
+goal: "`bun test libs/betterauth/tests/dispatch.test.ts` exits 0 and `bunx tsc --noEmit -p libs/betterauth/tsconfig.json` exits 0, proving: (1) advertisedTools('todos')==['data_crud'], advertisedTools('ontology')==['ontology','query','mutate','bundle'], advertisedTools('website')==['show_website','edit_website','deploy_website']; (2) the router request payload carries NO tools array and NO todos snapshot / gismu lexicon (Tier-1 is schema-free); (3) an assembled todos-route context CONTAINS the todos snapshot hint while an ontology-route context does NOT (Tier-3 gating); (4) a printed measurement shows a todos turn advertises ≤ 1600 tool-schema chars (baseline 6055). Existing betterauth tests stay green; no files outside skills/tools + libs/betterauth/src/ai.ts + the new test change."
 ---
 
 # Dispatch skill — gemma router + 3-tier progressive tool/context loading
@@ -72,7 +72,7 @@ prompt size sharply and giving a structure that scales as skills are added.
 
 **Completion condition** (identical to frontmatter `goal`):
 
-> `bun test libs/betterauth/test/dispatch.test.ts` exits 0 and `bunx tsc --noEmit -p libs/betterauth/tsconfig.json` exits 0, proving: (1) advertisedTools('todos')==['data_crud'], advertisedTools('ontology')==['ontology','query','mutate','bundle'], advertisedTools('website')==['show_website','edit_website','deploy_website']; (2) the router request payload carries NO tools array and NO todos snapshot / gismu lexicon (Tier-1 is schema-free); (3) an assembled todos-route context CONTAINS the todos snapshot hint while an ontology-route context does NOT (Tier-3 gating); (4) a printed measurement shows a todos turn advertises ≤ 1600 tool-schema chars (baseline 6055). Existing betterauth tests stay green; no files outside skills/tools + libs/betterauth/src/ai.ts + the new test change.
+> `bun test libs/betterauth/tests/dispatch.test.ts` exits 0 and `bunx tsc --noEmit -p libs/betterauth/tsconfig.json` exits 0, proving: (1) advertisedTools('todos')==['data_crud'], advertisedTools('ontology')==['ontology','query','mutate','bundle'], advertisedTools('website')==['show_website','edit_website','deploy_website']; (2) the router request payload carries NO tools array and NO todos snapshot / gismu lexicon (Tier-1 is schema-free); (3) an assembled todos-route context CONTAINS the todos snapshot hint while an ontology-route context does NOT (Tier-3 gating); (4) a printed measurement shows a todos turn advertises ≤ 1600 tool-schema chars (baseline 6055). Existing betterauth tests stay green; no files outside skills/tools + libs/betterauth/src/ai.ts + the new test change.
 
 ## Approach
 
@@ -87,7 +87,7 @@ classification quality is a HITL/review check, not a unit assertion.
 - **`skills/tools/registry.ts`** — add `SKILL_REGISTRY: Record<SkillId, { label, description, tools: string[] }>` with the three buckets; add `advertisedTools(skillId): string[]` (pure) and `chatToolDefinitionsFor(skillId): ToolDefinition[]` (filters the actor defs + Composer defs by the skill's tool ids). Keep `chatToolDefinitions()` as the "all" fallback.
 - **`skills/tools/dispatch.ts`** (new) — `buildRouterRequest(userText)` returns a tiny OpenAI-style body: a terse system menu ("Route to exactly one skill id: todos | ontology | website. Reply with only the id.") + the user message, **no `tools`, no hint** (this is what the test asserts is schema-free). `routeSkill(callLLM, userText): Promise<SkillId>` calls it, parses the one-word reply, validates against `SKILL_REGISTRY`, and falls back to `'todos'` on anything unknown.
 - **`libs/betterauth/src/ai.ts`** — before the round loop, `const skillId = await routeSkill(gemmaCall, lastUserText)`; use `chatToolDefinitionsFor(skillId)` in the round `fetch` body instead of `chatToolDefinitions()`; gate the hint so `schemasPromptHint` is merged **only when `skillId === 'todos'`**. The router call is `stream:false`, tiny `max_tokens`, so it's sub-second.
-- **`libs/betterauth/test/dispatch.test.ts`** (new) — the measurable proof (see Acceptance).
+- **`libs/betterauth/tests/dispatch.test.ts`** (new) — the measurable proof (see Acceptance).
 
 Trade-off: +1 gemma call per turn. Mitigated by the router being schema-free + a few
 output tokens; net prompt bytes drop because the main loop no longer carries 8 tools
@@ -106,25 +106,25 @@ output tokens; net prompt bytes drop because the main loop no longer carries 8 t
 - `skills/tools/registry.ts` — `SKILL_REGISTRY`, `advertisedTools`, `chatToolDefinitionsFor`.
 - `skills/tools/dispatch.ts` (new) — `buildRouterRequest`, `routeSkill`, `SkillId`.
 - `libs/betterauth/src/ai.ts` — per-turn route; Tier-2 advertise; Tier-3 hint gating.
-- `libs/betterauth/test/dispatch.test.ts` (new) — the proof.
+- `libs/betterauth/tests/dispatch.test.ts` (new) — the proof.
 
 ## Acceptance criteria
 
 Each box checkable from the transcript (a command + its output proves it).
 
-- [ ] Tier-2 exact sets — `dispatch.test.ts` asserts `advertisedTools('todos')`, `('ontology')`, `('website')` equal the three exact arrays. Proven by `bun test libs/betterauth/test/dispatch.test.ts` exit 0.
-- [ ] Tier-1 schema-free — the test asserts `buildRouterRequest(text)` has no `tools` key and its serialized body contains neither the todos snapshot nor the gismu lexicon.
-- [ ] Tier-3 hint gating — the test asserts an assembled todos-route context includes the todos snapshot hint and an ontology-route context does not.
-- [ ] Token win — the test prints the advertised tool-schema chars for a todos turn and asserts ≤ 1600 (baseline 6055).
-- [ ] `routeSkill` validates + falls back — mocked `callLLM` returning `"ontology"` → `'ontology'`; returning garbage → `'todos'`.
-- [ ] `bunx tsc --noEmit -p libs/betterauth/tsconfig.json` exits 0 and the existing betterauth test suite stays green.
-- [ ] **(HITL / review)** Live: a todos message routes to `todos` (server log shows the route + only `data_crud` advertised); an ontology message ("people can own companies") routes to `ontology`; a simple create completes in router + one skill round.
+- [x] Tier-2 exact sets — `dispatch.test.ts` asserts `advertisedTools('todos')`, `('ontology')`, `('website')` equal the three exact arrays. Proven by `bun test libs/betterauth/tests/dispatch.test.ts` exit 0 (8 pass).
+- [x] Tier-1 schema-free — the test asserts `buildRouterRequest(text)` has no `tools` key and its serialized body contains neither the todos snapshot nor the gismu lexicon.
+- [x] Tier-3 hint gating — the test asserts an assembled todos-route context includes the todos snapshot hint and an ontology-route context does not.
+- [x] Token win — the test printed `todos-turn advertised tool-schema chars: 1379 (flat-8 baseline: 6055)`; assert ≤ 1600 passed.
+- [x] `routeSkill` validates + falls back — mocked `callLLM` returning `"ontology"` → `'ontology'`; garbage / thrown error / empty input → `'todos'`.
+- [x] `bunx tsc --noEmit -p libs/betterauth/tsconfig.json` exits 0 (skills tsc too) and the existing betterauth suite stays green (30 pass / 0 fail across 6 files).
+- [ ] **(HITL / review)** Live: a todos message routes to `todos` (server logs `[ai] dispatch → todos`, only `data_crud` advertised); an ontology message ("people can own companies") routes to `ontology`; a simple create completes in router + one skill round. — server hot-reloaded green (HTTP 401 auth gate); live route verification is the reviewer's step.
 
 ## Verification
 
 ```bash
 bunx tsc --noEmit -p libs/betterauth/tsconfig.json   # types green
-bun test libs/betterauth/test/dispatch.test.ts        # the measurable proof (exit 0 + printed ≤1600)
+bun test libs/betterauth/tests/dispatch.test.ts        # the measurable proof (exit 0 + printed ≤1600)
 bun test libs/betterauth                               # existing suite stays green
 git status --short                                     # only the 4 files above changed
 ```
@@ -145,4 +145,5 @@ git status --short                                     # only the 4 files above 
 
 Newest entry first.
 
+- `2026-07-02` — Build: implemented the dispatch skill. `SKILL_REGISTRY` + `advertisedTools` + `chatToolDefinitionsFor` (Tier 2) in `registry.ts`; new `dispatch.ts` with `buildRouterRequest`/`parseSkillId`/`routeSkill` (Tier 1, schema-free, DEFAULT_SKILL fallback) + `skillWantsTodosHint`/`assembleSystemContext` (Tier 3 gating); wired `ai.ts` to route each turn (gemma, cheap `stream:false` call, logs `[ai] dispatch → <skill>`), advertise `chatToolDefinitionsFor(skillId)`, and merge the todos snapshot ONLY on the todos route (other routes skip the DB read). New `tests/dispatch.test.ts`: **8 pass**, todos turn = **1379 tool-schema chars** vs 6055 baseline. Full betterauth suite 30 pass / 0 fail; skills+betterauth tsc green; server hot-reloaded clean. All measurable Acceptance boxes checked; only the live-routing HITL row remains for review. `git mv` build → review.
 - `2026-07-02` — Discovery: interviewed; locked first-slice = core dispatch + 3 tiers on existing skills, gemma-routes-every-turn, gemma router model. Grounded in the current registry (`chatToolDefinitions` = flat 8; gismu already lazy; hint injected every turn). Made "done" a `bun test` proving the Tier-2 exact sets + Tier-1 schema-free + Tier-3 hint gating + a ≤1600-char todos measurement. Filed website-actor migration / DB skill registry / viewer wiring as follow-on cards 0107–0109. Written into `discover/`.
