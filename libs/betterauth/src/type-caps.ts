@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto'
 import type { TypeSpec } from '@avenos/aven-ontology'
 import Ajv from 'ajv'
 import { sql } from 'kysely'
 import { registerContextProvider } from './context'
 import { db } from './db'
+import { deriveOps } from './derive-ops'
 import { publish } from './events'
 
 // board 0102 — DYNAMIC COMPOSITE TYPES. GLM already mints new x1–x5 PREDICATES on the fly (board 0100);
@@ -93,8 +95,27 @@ export function typePredicates(spec: TypeSpec): string[] {
 	return [...out]
 }
 
-/** Persist a validated TypeSpec to the `data_bundles` registry (idempotent by type name). Throws on an
- *  invalid spec — it never reaches the engine. board 0102. */
+/** Regenerate a bundle's DERIVED operations in data_operations (global rows). Minting/updating a bundle =
+ *  minting its ops; a non-derivable bundle (children/match) simply produces none (the interpreter runs it).
+ *  board 0104. */
+export async function regenerateDerivedOps(spec: TypeSpec): Promise<void> {
+	let ops: ReturnType<typeof deriveOps>
+	try {
+		ops = deriveOps(spec)
+	} catch {
+		return // non-derivable → no derived ops; executeDataTool falls back to the interpreter
+	}
+	await sql`DELETE FROM data_operations WHERE derived_from = ${spec.type}`.execute(db())
+	for (const o of ops) {
+		await sql`
+			INSERT INTO data_operations (id, user_id, name, kind, spec, derived_from, created_at, updated_at)
+			VALUES (${randomUUID()}, NULL, ${o.name}, ${o.kind}, ${jsonb(o.spec)}, ${spec.type}, now(), now())
+		`.execute(db())
+	}
+}
+
+/** Persist a validated TypeSpec to the `data_bundles` registry (idempotent by type name) AND regenerate its
+ *  derived operations. Throws on an invalid spec — it never reaches the engine. board 0102/0104. */
 export async function saveType(spec: TypeSpec): Promise<{ type: string; predicates: string[] }> {
 	if (!validateTypeSpec(spec)) {
 		throw new Error(`[type-caps] invalid TypeSpec: ${ajv.errorsText(validateTypeSpec.errors)}`)
@@ -104,6 +125,7 @@ export async function saveType(spec: TypeSpec): Promise<{ type: string; predicat
 		VALUES (${spec.type}, ${jsonb(spec)}, now(), now())
 		ON CONFLICT (type) DO UPDATE SET spec = ${jsonb(spec)}, updated_at = now()
 	`.execute(db())
+	await regenerateDerivedOps(spec).catch((e) => console.error('[type-caps] derive ops failed:', e))
 	return { type: spec.type, predicates: typePredicates(spec) }
 }
 

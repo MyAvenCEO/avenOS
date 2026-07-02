@@ -23,7 +23,7 @@ const OPS: Record<Op, string> = {
 	in: 'in'
 }
 
-export type Filter = { place: Place; op: Op; value?: unknown; param?: string }
+export type Filter = { place: Place | 'id'; op: Op; value?: unknown; param?: string }
 // board 0104 — a join may match on the base ROW ID (`base:'id'`) so a satellite predicate correlates on the
 // entity id (e.g. done.x1 = <task row id>), and may be a LEFT join so a missing satellite projects as null.
 type JoinBase = Place | 'id'
@@ -54,8 +54,10 @@ export type MutationOp = {
 	predicate: string
 	where?: Filter[]
 	cells?: Record<string, unknown>
-	/** board 0104 — skip this op entirely when the named param is null/absent (optional-attribute writes). */
-	when?: { param: string }
+	/** board 0104 — skip this op when a condition on params holds. `param` = skip when FALSY (truthy-gate,
+	 *  for an optional insert); `present` = skip when the KEY is absent (presence-gate, for a delete-clear
+	 *  that must only fire when the caller actually supplied the field). Exactly one is set. */
+	when?: { param?: string; present?: string }
 }
 export type MutationSpec = { name?: string; params?: string[]; ops: MutationOp[] }
 
@@ -65,7 +67,7 @@ const OP_ENUM = { type: 'string', enum: Object.keys(OPS) } as const
 const PLACE_OR_ID = { type: 'string', enum: [...PLACES, 'id'] } as const
 const FILTER_SCHEMA = {
 	type: 'object',
-	properties: { place: PLACE_ENUM, op: OP_ENUM, value: {}, param: { type: 'string' } },
+	properties: { place: PLACE_OR_ID, op: OP_ENUM, value: {}, param: { type: 'string' } },
 	required: ['place', 'op'],
 	additionalProperties: false
 } as const
@@ -156,8 +158,11 @@ export const MUTATION_META_SCHEMA = {
 					cells: { type: 'object', additionalProperties: true },
 					when: {
 						type: 'object',
-						properties: { param: { type: 'string', minLength: 1 } },
-						required: ['param'],
+						properties: {
+							param: { type: 'string', minLength: 1 },
+							present: { type: 'string', minLength: 1 }
+						},
+						minProperties: 1,
 						additionalProperties: false
 					}
 				},
@@ -179,6 +184,11 @@ function assertPlace(p: string): Place {
 	if (!(PLACES as string[]).includes(p)) throw new Error(`[queries] illegal place "${p}"`)
 	return p as Place
 }
+/** A bare (un-aliased) column for a DELETE/UPDATE statement — allow-listed to `id` or x1…x5. board 0104. */
+function bareCol(place: string): RawBuilder<unknown> {
+	if (place === 'id') return sql.ref('id')
+	return sql.ref(assertPlace(place))
+}
 /** a column reference — the place is validated against the allow-list, never raw user input. */
 function col(alias: string, place: string): RawBuilder<unknown> {
 	return sql.ref(`${alias}.${assertPlace(place)}`)
@@ -189,11 +199,12 @@ function refCol(alias: string, place: string): RawBuilder<unknown> {
 	if (place === 'id') return sql.ref(`${alias}.id`)
 	return col(alias, place)
 }
-/** Resolve a reserved bind object (`{bind:'$user'}` → the caller's uid). Any other value passes through. */
+/** Resolve a reserved bind object (`{bind:'$user'}` → uid, `{bind:'$now'}` → an ISO timestamp). board 0104. */
 function resolveBind(v: unknown, uid: string): unknown {
 	if (v && typeof v === 'object' && 'bind' in (v as object)) {
 		const b = (v as { bind: string }).bind
 		if (b === '$user') return uid
+		if (b === '$now') return new Date().toISOString()
 		throw new Error(`[queries] unknown bind ${JSON.stringify(b)}`)
 	}
 	return v
@@ -243,7 +254,7 @@ function filterFrag(
 	params: Record<string, unknown>,
 	uid: string
 ): RawBuilder<unknown> {
-	const c = col(alias, f.place)
+	const c = refCol(alias, f.place)
 	const v = resolveVal(f, params, uid)
 	if (f.op === 'in') {
 		const arr = Array.isArray(v) ? v : [v]
@@ -332,7 +343,7 @@ export async function runMutation(
 	uid: string,
 	spec: MutationSpec,
 	params: Record<string, unknown> = {}
-): Promise<{ ops: { op: string; predicate: string; affected: number }[] }> {
+): Promise<{ ops: { op: string; predicate: string; affected: number }[]; ids: (string | null)[] }> {
 	if (!validateMutationSpec(spec)) {
 		throw new Error(
 			`[queries] invalid mutation spec: ${ajv.errorsText(validateMutationSpec.errors)}`
@@ -353,16 +364,21 @@ export async function runMutation(
 					const v = resolveVal(f, params, uid)
 					if (f.op === 'in') {
 						const arr = Array.isArray(v) ? v : [v]
-						return sql`${sql.ref(assertPlace(f.place))} in (${sql.join(arr.map((x) => sql`${x}`))})`
+						return sql`${bareCol(f.place)} in (${sql.join(arr.map((x) => sql`${x}`))})`
 					}
-					return sql`${sql.ref(assertPlace(f.place))} ${sql.raw(OPS[f.op])} ${v}`
+					return sql`${bareCol(f.place)} ${sql.raw(OPS[f.op])} ${v}`
 				})
 			]
+			// board 0104 — a when-guard skips an op: `param` = skip when FALSY (optional insert), `present` =
+			// skip when the KEY is absent (a delete-clear that must only fire when the field was supplied).
+			const skipOp = (o: MutationOp): boolean =>
+				!!o.when &&
+				(o.when.present !== undefined
+					? !(o.when.present in params)
+					: !params[o.when.param as string])
 			for (let i = 0; i < spec.ops.length; i++) {
 				const o = spec.ops[i]
-				// board 0104 — when-guard: skip an optional-attribute op when its param is null/absent (so a
-				// derived `create`/`update` can carry due/priority ops that no-op when the field is unset).
-				if (o.when && params[o.when.param] == null) {
+				if (skipOp(o)) {
 					generated[i] = null
 					ops.push({ op: o.op, predicate: o.predicate, affected: 0 })
 					continue
@@ -409,7 +425,7 @@ export async function runMutation(
 					ops.push({ op: 'delete', predicate: o.predicate, affected: Number(r.rows[0]?.n ?? 0) })
 				}
 			}
-			return { ops }
+			return { ops, ids: generated }
 		})
 	publish(uid, { entity: 'data' })
 	return result
@@ -418,4 +434,19 @@ export async function runMutation(
 /** Does a mutation spec contain a destructive (delete) op? Drives HITL at the actor layer. */
 export function mutationIsDestructive(spec: MutationSpec): boolean {
 	return (spec.ops ?? []).some((o) => o.op === 'delete')
+}
+
+// board 0104 — run ANY operation (a query or a mutation spec, e.g. a bundle-derived op) through the engine.
+export type OperationRow = { kind: 'query' | 'mutation'; spec: QuerySpec | MutationSpec }
+export async function runOperation(
+	uid: string,
+	op: OperationRow,
+	params: Record<string, unknown> = {}
+): Promise<{
+	rows?: Record<string, unknown>[]
+	ops?: { op: string; predicate: string; affected: number }[]
+	ids?: (string | null)[]
+}> {
+	if (op.kind === 'query') return { rows: await runQuery(uid, op.spec as QuerySpec, params) }
+	return await runMutation(uid, op.spec as MutationSpec, params)
 }

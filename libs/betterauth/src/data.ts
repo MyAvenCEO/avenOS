@@ -8,7 +8,9 @@ import { sql } from 'kysely'
 import { auth } from './auth'
 import { registerContextProvider } from './context'
 import { db } from './db'
+import { deriveOps } from './derive-ops'
 import { publish } from './events'
+import { runOperation } from './queries'
 
 // Generic, schema-driven user data store. `data_schema` rows are JSON Schema definitions;
 // `data_value` rows reference a schema and hold a JSONB value validated against it on write.
@@ -501,8 +503,65 @@ registerContextProvider('type', async (uid, arg) => {
 	}
 })
 
-/** Run a list/create/update/delete action for a registered type through the generic engine. */
+/** board 0104 — run a bundle's CRUD through its DERIVED OPERATIONS (the unified engine). The bundle
+ *  compiles to <type>.list/create/update/delete; this maps a data_crud call to the matching op. Result
+ *  carries `via:'operations'` so callers/tests can see the CRUD ran through the ops engine, not the
+ *  interpreter. */
+export async function runViaOps(uid: string, spec: TypeSpec, args: DataCrudArgs): Promise<unknown> {
+	const byName = new Map(deriveOps(spec).map((o) => [o.name, o]))
+	const op = (verb: string) => byName.get(`${spec.type}.${verb}`)
+	if (!args.action || args.action === 'list') {
+		const { rows } = await runOperation(uid, op('list')!)
+		return { ok: true, action: 'list', items: rows ?? [], via: 'operations' }
+	}
+	if (args.action === 'create') {
+		const created: string[] = []
+		for (const item of args.items ?? []) {
+			const { ids } = await runOperation(uid, op('create')!, item as Record<string, unknown>)
+			const id = ids?.[0]
+			if (id) created.push(id)
+		}
+		return { ok: true, action: 'create', created, errors: [], via: 'operations' }
+	}
+	if (args.action === 'update') {
+		const updated: string[] = []
+		for (const item of args.items ?? []) {
+			const id = (item as { id?: string }).id
+			if (!id) continue
+			await runOperation(uid, op('update')!, item as Record<string, unknown>)
+			updated.push(id)
+		}
+		return { ok: true, action: 'update', updated, errors: [], via: 'operations' }
+	}
+	if (args.action === 'delete') {
+		const ids = deleteIds(args)
+		if (ids.length === 0) return { ok: false, error: 'delete requires id(s)' }
+		for (const id of ids) await runOperation(uid, op('delete')!, { id })
+		return { ok: true, action: 'delete', deleted: ids, via: 'operations' }
+	}
+	return { ok: false, error: `unknown action: ${args.action}` }
+}
+
+/** Run a bundle's CRUD. board 0104 — prefer the DERIVED-OPS path; fall back to the aven-ontology interpreter
+ *  ONLY for a bundle whose traits aren't derivable yet (children/match), and LOUDLY (never a silent split). */
 async function runType(uid: string, spec: TypeSpec, args: DataCrudArgs): Promise<unknown> {
+	try {
+		deriveOps(spec) // derivation check (throws on a non-derivable trait) — cheap, pure
+	} catch (e) {
+		console.warn(
+			`[data] bundle "${spec.type}" not yet derivable, using the interpreter — ${e instanceof Error ? e.message : String(e)}`
+		)
+		return runTypeInterpreted(uid, spec, args)
+	}
+	return runViaOps(uid, spec, args)
+}
+
+/** The legacy aven-ontology interpreter path (board 0088) — kept as the loud fallback for non-derivable bundles. */
+export async function runTypeInterpreted(
+	uid: string,
+	spec: TypeSpec,
+	args: DataCrudArgs
+): Promise<unknown> {
 	const ids = await ensurePredicateSchemas(uid)
 	const store = pgStore(uid, ids)
 	const ctx = { user: uid, now: () => new Date().toISOString() }
