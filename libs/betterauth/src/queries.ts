@@ -24,31 +24,76 @@ const OPS: Record<Op, string> = {
 }
 
 export type Filter = { place: Place; op: Op; value?: unknown; param?: string }
+// board 0104 — a join may match on the base ROW ID (`base:'id'`) so a satellite predicate correlates on the
+// entity id (e.g. done.x1 = <task row id>), and may be a LEFT join so a missing satellite projects as null.
+type JoinBase = Place | 'id'
+export type JoinSpec = {
+	predicate: string
+	on: { place: Place; base: JoinBase }
+	kind?: 'inner' | 'left'
+}
+// board 0104 — a projection entry: a bare base place (`"x2"`), the base row id (`"id"`), a place from the
+// base or a join (`{place, as?, join?}`), or a presence boolean over a LEFT join (`{join, exists, as}` →
+// true iff the joined row exists, e.g. `done`).
+type ProjPlace = Place | 'id'
+export type ProjectEntry =
+	| ProjPlace
+	| { place: ProjPlace; as?: string; join?: number }
+	| { join: number; exists: true; as: string }
 export type QuerySpec = {
 	name?: string
 	from: string
 	where?: Filter[]
-	join?: { predicate: string; on: { place: Place; base: Place } }[]
+	join?: JoinSpec[]
 	group_by?: Place
 	count?: { having?: { op: Op; value: number } }
-	project?: Place[]
+	project?: ProjectEntry[]
 }
 export type MutationOp = {
-	op: 'insert' | 'delete'
+	op: 'insert' | 'delete' | 'update'
 	predicate: string
 	where?: Filter[]
 	cells?: Record<string, unknown>
+	/** board 0104 — skip this op entirely when the named param is null/absent (optional-attribute writes). */
+	when?: { param: string }
 }
 export type MutationSpec = { name?: string; params?: string[]; ops: MutationOp[] }
 
 // ── AJV meta-schemas (the spec LANGUAGE) ────────────────────────────────────────
 const PLACE_ENUM = { type: 'string', enum: PLACES } as const
 const OP_ENUM = { type: 'string', enum: Object.keys(OPS) } as const
+const PLACE_OR_ID = { type: 'string', enum: [...PLACES, 'id'] } as const
 const FILTER_SCHEMA = {
 	type: 'object',
 	properties: { place: PLACE_ENUM, op: OP_ENUM, value: {}, param: { type: 'string' } },
 	required: ['place', 'op'],
 	additionalProperties: false
+} as const
+// board 0104 — a projection entry: a bare place/id string, a place read (base or a join), or an exists boolean.
+const PROJECT_ENTRY_SCHEMA = {
+	oneOf: [
+		PLACE_OR_ID,
+		{
+			type: 'object',
+			properties: {
+				place: PLACE_OR_ID,
+				as: { type: 'string' },
+				join: { type: 'integer', minimum: 0 }
+			},
+			required: ['place'],
+			additionalProperties: false
+		},
+		{
+			type: 'object',
+			properties: {
+				join: { type: 'integer', minimum: 0 },
+				exists: { const: true },
+				as: { type: 'string', minLength: 1 }
+			},
+			required: ['join', 'exists', 'as'],
+			additionalProperties: false
+		}
+	]
 } as const
 
 export const QUERY_META_SCHEMA = {
@@ -63,9 +108,10 @@ export const QUERY_META_SCHEMA = {
 				type: 'object',
 				properties: {
 					predicate: { type: 'string', minLength: 1 },
+					kind: { type: 'string', enum: ['inner', 'left'] },
 					on: {
 						type: 'object',
-						properties: { place: PLACE_ENUM, base: PLACE_ENUM },
+						properties: { place: PLACE_ENUM, base: PLACE_OR_ID },
 						required: ['place', 'base'],
 						additionalProperties: false
 					}
@@ -87,7 +133,7 @@ export const QUERY_META_SCHEMA = {
 			},
 			additionalProperties: false
 		},
-		project: { type: 'array', items: PLACE_ENUM }
+		project: { type: 'array', items: PROJECT_ENTRY_SCHEMA }
 	},
 	required: ['from'],
 	additionalProperties: false
@@ -104,10 +150,16 @@ export const MUTATION_META_SCHEMA = {
 			items: {
 				type: 'object',
 				properties: {
-					op: { type: 'string', enum: ['insert', 'delete'] },
+					op: { type: 'string', enum: ['insert', 'delete', 'update'] },
 					predicate: { type: 'string', minLength: 1 },
 					where: { type: 'array', items: FILTER_SCHEMA },
-					cells: { type: 'object', additionalProperties: true }
+					cells: { type: 'object', additionalProperties: true },
+					when: {
+						type: 'object',
+						properties: { param: { type: 'string', minLength: 1 } },
+						required: ['param'],
+						additionalProperties: false
+					}
 				},
 				required: ['op', 'predicate'],
 				additionalProperties: false
@@ -131,8 +183,23 @@ function assertPlace(p: string): Place {
 function col(alias: string, place: string): RawBuilder<unknown> {
 	return sql.ref(`${alias}.${assertPlace(place)}`)
 }
-function resolveVal(f: Filter, params: Record<string, unknown>): unknown {
-	return f.param !== undefined ? params[f.param] : f.value
+/** like col, but also allows the row-id column (`id`) — for joins/projections that correlate on the entity
+ *  id rather than an x-place (e.g. done.x1 = task.id). Still allow-listed: only `id` or x1…x5. board 0104. */
+function refCol(alias: string, place: string): RawBuilder<unknown> {
+	if (place === 'id') return sql.ref(`${alias}.id`)
+	return col(alias, place)
+}
+/** Resolve a reserved bind object (`{bind:'$user'}` → the caller's uid). Any other value passes through. */
+function resolveBind(v: unknown, uid: string): unknown {
+	if (v && typeof v === 'object' && 'bind' in (v as object)) {
+		const b = (v as { bind: string }).bind
+		if (b === '$user') return uid
+		throw new Error(`[queries] unknown bind ${JSON.stringify(b)}`)
+	}
+	return v
+}
+function resolveVal(f: Filter, params: Record<string, unknown>, uid: string): unknown {
+	return resolveBind(f.param !== undefined ? params[f.param] : f.value, uid)
 }
 /**
  * Resolve one INSERT cell value (board 0103 — reified nesting). A cell is a literal, a `{param}` (a caller
@@ -145,9 +212,11 @@ function resolveCell(
 	raw: unknown,
 	params: Record<string, unknown>,
 	generated: (string | null)[],
-	opIndex: number
+	opIndex: number,
+	uid: string
 ): unknown {
 	if (raw && typeof raw === 'object') {
+		if ('bind' in (raw as object)) return resolveBind(raw, uid)
 		if ('param' in (raw as object)) return params[(raw as { param: string }).param]
 		if ('ref' in (raw as object)) {
 			const n = (raw as { ref: unknown }).ref
@@ -171,10 +240,11 @@ function resolveCell(
 function filterFrag(
 	alias: string,
 	f: Filter,
-	params: Record<string, unknown>
+	params: Record<string, unknown>,
+	uid: string
 ): RawBuilder<unknown> {
 	const c = col(alias, f.place)
-	const v = resolveVal(f, params)
+	const v = resolveVal(f, params, uid)
 	if (f.op === 'in') {
 		const arr = Array.isArray(v) ? v : [v]
 		return sql`${c} in (${sql.join(arr.map((x) => sql`${x}`))})`
@@ -190,21 +260,37 @@ export function compileQuery(
 	params: Record<string, unknown> = {}
 ): RawBuilder<Record<string, unknown>> {
 	const b = 'b'
+	const jspec = spec.join ?? []
 	const wheres: RawBuilder<unknown>[] = [
 		sql`${sql.ref(`${b}.user_id`)} = ${uid}`,
 		sql`${sql.ref(`${b}.predicate`)} = ${spec.from}`,
-		...(spec.where ?? []).map((f) => filterFrag(b, f, params))
+		...(spec.where ?? []).map((f) => filterFrag(b, f, params, uid))
 	]
-	const joins = (spec.join ?? []).map((j, i) => {
+	const joins = jspec.map((j, i) => {
 		const a = `j${i}`
-		return sql`JOIN data_value ${sql.ref(a)} ON ${sql.ref(`${a}.user_id`)} = ${sql.ref(`${b}.user_id`)} AND ${sql.ref(`${a}.predicate`)} = ${j.predicate} AND ${col(a, j.on.place)} = ${col(b, j.on.base)}`
+		const kw = sql.raw(j.kind === 'left' ? 'LEFT JOIN' : 'JOIN')
+		return sql`${kw} data_value ${sql.ref(a)} ON ${sql.ref(`${a}.user_id`)} = ${sql.ref(`${b}.user_id`)} AND ${sql.ref(`${a}.predicate`)} = ${j.predicate} AND ${refCol(a, j.on.place)} = ${refCol(b, j.on.base)}`
 	})
+	// board 0104 — a projection entry is a bare place/id, a place read from base or a join, or an exists
+	// boolean over a LEFT join (true iff the joined satellite row is present, e.g. `done`).
+	const projectEntry = (e: ProjectEntry): RawBuilder<unknown> => {
+		if (typeof e === 'string') return sql`${refCol(b, e)} as ${sql.ref(e)}`
+		if ('exists' in e) {
+			const j = jspec[e.join]
+			if (!j) throw new Error(`[queries] project exists references missing join ${e.join}`)
+			return sql`(${refCol(`j${e.join}`, j.on.place)} is not null) as ${sql.ref(e.as)}`
+		}
+		const alias = e.join !== undefined ? `j${e.join}` : b
+		if (e.join !== undefined && !jspec[e.join])
+			throw new Error(`[queries] project references missing join ${e.join}`)
+		return sql`${refCol(alias, e.place)} as ${sql.ref(e.as ?? e.place)}`
+	}
 	const selects: RawBuilder<unknown>[] = spec.count
 		? [
 				...(spec.group_by ? [sql`${col(b, spec.group_by)} as ${sql.ref('key')}`] : []),
 				sql`count(*)::int as ${sql.ref('n')}`
 			]
-		: (spec.project?.length ? spec.project : PLACES).map((p) => sql`${col(b, p)} as ${sql.ref(p)}`)
+		: (spec.project?.length ? spec.project : (PLACES as ProjectEntry[])).map(projectEntry)
 
 	let q = sql`SELECT ${sql.join(selects, sql`, `)} FROM data_value ${sql.ref(b)}`
 	if (joins.length) q = sql`${q} ${sql.join(joins, sql` `)}`
@@ -256,11 +342,31 @@ export async function runMutation(
 		.transaction()
 		.execute(async (trx) => {
 			const ops: { op: string; predicate: string; affected: number }[] = []
-			// board 0103 — each op's generated row id (inserts only; delete → null), so a later insert cell
-			// `{ref:n}` can point at op n's new referent. Indexed by op position.
+			// board 0103 — each op's generated row id (inserts only; delete/update → null), so a later insert
+			// cell `{ref:n}` can point at op n's new referent. Indexed by op position.
 			const generated: (string | null)[] = []
+			// board 0104 — the scoped WHERE for a delete/update op (user + predicate + the op's filters).
+			const whereFrags = (o: MutationOp): RawBuilder<unknown>[] => [
+				sql`user_id = ${uid}`,
+				sql`predicate = ${o.predicate}`,
+				...(o.where ?? []).map((f) => {
+					const v = resolveVal(f, params, uid)
+					if (f.op === 'in') {
+						const arr = Array.isArray(v) ? v : [v]
+						return sql`${sql.ref(assertPlace(f.place))} in (${sql.join(arr.map((x) => sql`${x}`))})`
+					}
+					return sql`${sql.ref(assertPlace(f.place))} ${sql.raw(OPS[f.op])} ${v}`
+				})
+			]
 			for (let i = 0; i < spec.ops.length; i++) {
 				const o = spec.ops[i]
+				// board 0104 — when-guard: skip an optional-attribute op when its param is null/absent (so a
+				// derived `create`/`update` can carry due/priority ops that no-op when the field is unset).
+				if (o.when && params[o.when.param] == null) {
+					generated[i] = null
+					ops.push({ op: o.op, predicate: o.predicate, affected: 0 })
+					continue
+				}
 				if (o.op === 'insert') {
 					const schemaId = await schemaIdFor(trx, uid, o.predicate)
 					const cells = o.cells ?? {}
@@ -268,7 +374,7 @@ export async function runMutation(
 					if (colNames.length === 0) throw new Error('[queries] insert op needs cells')
 					const rowId = randomUUID()
 					const vals = colNames.map((p) => {
-						const v = resolveCell(cells[p], params, generated, i)
+						const v = resolveCell(cells[p], params, generated, i, uid)
 						return sql`${v ?? null}`
 					})
 					const cols = colNames.map((p) => sql.ref(p))
@@ -278,21 +384,25 @@ export async function runMutation(
 					`.execute(trx)
 					generated[i] = rowId
 					ops.push({ op: 'insert', predicate: o.predicate, affected: 1 })
-				} else {
-					const wheres: RawBuilder<unknown>[] = [
-						sql`user_id = ${uid}`,
-						sql`predicate = ${o.predicate}`,
-						...(o.where ?? []).map((f) => {
-							const v = resolveVal(f, params)
-							if (f.op === 'in') {
-								const arr = Array.isArray(v) ? v : [v]
-								return sql`${sql.ref(assertPlace(f.place))} in (${sql.join(arr.map((x) => sql`${x}`))})`
-							}
-							return sql`${sql.ref(assertPlace(f.place))} ${sql.raw(OPS[f.op])} ${v}`
-						})
-					]
+				} else if (o.op === 'update') {
+					// board 0104 — patch places IN PLACE (keeps the row id → any referents pointing at it survive;
+					// a delete+insert would mint a NEW id). Scoped by user + predicate + the op's where.
+					const cells = o.cells ?? {}
+					const colNames = Object.keys(cells).map(assertPlace)
+					if (colNames.length === 0) throw new Error('[queries] update op needs cells')
+					const sets = colNames.map((p) => {
+						const v = resolveCell(cells[p], params, generated, i, uid)
+						return sql`${sql.ref(p)} = ${v ?? null}`
+					})
 					const r = await sql<{ n: string }>`
-						WITH del AS (DELETE FROM data_value WHERE ${sql.join(wheres, sql` AND `)} RETURNING 1)
+						WITH upd AS (UPDATE data_value SET ${sql.join(sets, sql`, `)}, updated_at = now() WHERE ${sql.join(whereFrags(o), sql` AND `)} RETURNING 1)
+						SELECT count(*)::text as n FROM upd
+					`.execute(trx)
+					generated[i] = null
+					ops.push({ op: 'update', predicate: o.predicate, affected: Number(r.rows[0]?.n ?? 0) })
+				} else {
+					const r = await sql<{ n: string }>`
+						WITH del AS (DELETE FROM data_value WHERE ${sql.join(whereFrags(o), sql` AND `)} RETURNING 1)
 						SELECT count(*)::text as n FROM del
 					`.execute(trx)
 					generated[i] = null // a delete produces no referent

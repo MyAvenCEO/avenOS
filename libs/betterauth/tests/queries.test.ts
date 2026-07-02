@@ -253,3 +253,151 @@ describe('queries — validated specs over the x1–x5 store (board 0101)', () =
 		await clean()
 	})
 })
+
+describe('queries — DSL growth: left join, object projection, exists, when, update, $user (board 0104)', () => {
+	const UID2 = `test-dsl-${randomUUID().slice(0, 8)}`
+
+	test('compile: left join + id-base + object projection + exists emit the expected SQL', () => {
+		const spec: QuerySpec = {
+			from: 'task',
+			join: [
+				{ predicate: 'owned_by', kind: 'left', on: { place: 'x2', base: 'id' } },
+				{ predicate: 'done', kind: 'left', on: { place: 'x1', base: 'id' } }
+			],
+			project: [
+				'id',
+				{ place: 'x2', as: 'title' },
+				{ join: 0, place: 'x1', as: 'owner' },
+				{ join: 1, exists: true, as: 'done' }
+			]
+		}
+		expect(validateQuerySpec(spec)).toBe(true)
+		const { sql: text } = compileQuery('u1', spec).compile(db())
+		const low = text.toLowerCase()
+		expect(low).toContain('left join')
+		expect(low).toContain('"b"."id"') // id-base correlation + projection
+		expect(low).toContain('is not null') // the `done` exists boolean
+		expect(text).toContain('as "title"')
+		expect(text).toContain('as "owner"')
+	})
+
+	test('AJV rejects a malformed projection entry', () => {
+		// biome-ignore lint/suspicious/noExplicitAny: intentionally malformed
+		expect(validateQuerySpec({ from: 'task', project: [{ exists: true }] } as any)).toBe(false) // exists needs join+as
+		// biome-ignore lint/suspicious/noExplicitAny: intentionally malformed
+		expect(validateQuerySpec({ from: 'task', project: [{ place: 'x9' }] } as any)).toBe(false)
+	})
+
+	test('AJV accepts when-guard + update op + $user bind', () => {
+		expect(
+			validateMutationSpec({
+				ops: [
+					{ op: 'insert', predicate: 'task', cells: { x1: { bind: '$user' }, x2: 'hi' } },
+					{
+						op: 'update',
+						predicate: 'task',
+						where: [{ place: 'x1', op: 'eq', value: 'a' }],
+						cells: { x2: 'ho' }
+					},
+					{
+						op: 'insert',
+						predicate: 'due',
+						when: { param: 'due' },
+						cells: { x1: { param: 'due' }, x2: 'a' }
+					}
+				]
+			})
+		).toBe(true)
+	})
+
+	test('EXECUTION: a todos-shaped left-join projection assembles the flat entity (deriveOps precursor)', async () => {
+		if (!(await hasDb())) {
+			console.log('[queries] skipped DB execution test — no connection')
+			return
+		}
+		const clean = async () => {
+			await sql`DELETE FROM data_value WHERE user_id = ${UID2}`.execute(db())
+			await sql`DELETE FROM data_schema WHERE user_id = ${UID2}`.execute(db())
+		}
+		await clean()
+		for (const p of ['task', 'owned_by', 'done', 'due']) {
+			await sql`INSERT INTO data_schema (id, user_id, name, json_schema, created_at, updated_at)
+				VALUES (${randomUUID()}, ${UID2}, ${p}, '{"properties":{"predicate":{}}}'::jsonb, now(), now())`.execute(
+				db()
+			)
+		}
+		// task T1 (done + due) via mutations that use the $user bind + reified id refs, then a plain T2.
+		await runMutation(
+			UID2,
+			{
+				ops: [
+					{ op: 'insert', predicate: 'task', cells: { x1: { bind: '$user' }, x2: 'buy milk' } }, // op 0 → T1
+					{ op: 'insert', predicate: 'owned_by', cells: { x1: { bind: '$user' }, x2: { ref: 0 } } },
+					{ op: 'insert', predicate: 'done', cells: { x1: { ref: 0 } } },
+					{
+						op: 'insert',
+						predicate: 'due',
+						when: { param: 'due' },
+						cells: { x1: { param: 'due' }, x2: { ref: 0 } }
+					}
+				]
+			},
+			{ due: '2026-08-01' }
+		)
+		await runMutation(UID2, {
+			ops: [
+				{ op: 'insert', predicate: 'task', cells: { x1: { bind: '$user' }, x2: 'call bob' } },
+				{ op: 'insert', predicate: 'owned_by', cells: { x1: { bind: '$user' }, x2: { ref: 0 } } },
+				{
+					op: 'insert',
+					predicate: 'due',
+					when: { param: 'due' },
+					cells: { x1: { param: 'due' }, x2: { ref: 0 } }
+				} // skipped: no due
+			]
+		})
+
+		const rows = await runQuery(UID2, {
+			from: 'task',
+			join: [
+				{ predicate: 'owned_by', kind: 'left', on: { place: 'x2', base: 'id' } },
+				{ predicate: 'done', kind: 'left', on: { place: 'x1', base: 'id' } },
+				{ predicate: 'due', kind: 'left', on: { place: 'x2', base: 'id' } }
+			],
+			project: [
+				'id',
+				{ place: 'x2', as: 'title' },
+				{ join: 0, place: 'x1', as: 'owner' },
+				{ join: 1, exists: true, as: 'done' },
+				{ join: 2, place: 'x1', as: 'due' }
+			]
+		})
+		const milk = rows.find((r) => r.title === 'buy milk')
+		const bob = rows.find((r) => r.title === 'call bob')
+		expect(milk).toMatchObject({ owner: UID2, done: true, due: '2026-08-01' })
+		expect(milk?.id).toBeTruthy()
+		expect(bob).toMatchObject({ owner: UID2, done: false, due: null }) // when-guard skipped its due; no done row
+
+		// update op patches IN PLACE — same row id, new title (a delete+insert would change the id).
+		const beforeId = milk?.id as string
+		await runMutation(UID2, {
+			ops: [
+				{
+					op: 'update',
+					predicate: 'task',
+					where: [{ place: 'x2', op: 'eq', value: 'buy milk' }],
+					cells: { x2: 'buy oat milk' }
+				}
+			]
+		})
+		const after = await runQuery(UID2, {
+			from: 'task',
+			where: [{ place: 'x2', op: 'eq', value: 'buy oat milk' }],
+			project: ['id', 'x2']
+		})
+		expect(after.length).toBe(1)
+		expect(after[0].id).toBe(beforeId) // id preserved
+
+		await clean()
+	})
+})
