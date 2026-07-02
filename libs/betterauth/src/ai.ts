@@ -340,7 +340,12 @@ function streamWithTools(opts: {
 								)
 								.map((b) => b.text ?? '')
 								.join(' ')
+				// board 0106 — surface the router as its own state chip (like a tool call) so the roundtrip
+				// stays transparent: the user sees `dispatch → todos` flip running→done, not a silent gap
+				// before the first tool badge. One stable chip id per turn (toolActivity resets each turn).
+				emitTool('dispatch', 'dispatch', 'routing…', 'running')
 				const skillId: SkillId = await routeSkill(routerCall, routeText, model)
+				emitTool('dispatch', 'dispatch', `→ ${skillId}`, 'done')
 				console.log(`[ai] dispatch → ${skillId}`)
 
 				// Tier 3 — the todos snapshot (with ids) is merged into the system prompt ONLY on the todos
