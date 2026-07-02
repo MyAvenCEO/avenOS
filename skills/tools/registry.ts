@@ -6,17 +6,20 @@
 
 import { COMPOSER_TOOLS } from '../composer/tools'
 import { brain } from './brain'
+import { bundle } from './bundle'
 import { dataCrud } from './data-crud'
 import { mutate, query } from './queries'
 import type { ToolActor, ToolDefinition } from './types'
 
 /** name → tool-actor. Todos hub = `data_crud`; the dynamic Brain skill = `brain` (mint predicates, board
- *  0100) + `query`/`mutate` (GLM-authored validated specs over the x1–x5 store, board 0101). */
+ *  0100) + `query`/`mutate` (GLM-authored specs over the x1–x5 store, board 0101) + `bundle` (GLM-authored
+ *  composite types / kinds, board 0102). */
 export const TOOL_ACTORS: Record<string, ToolActor> = {
 	data_crud: dataCrud,
 	brain,
 	query,
-	mutate
+	mutate,
+	bundle
 }
 
 /** Every tool the chat advertises: the registered actors + the Composer configs (handled inline server-side). */

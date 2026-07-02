@@ -12,6 +12,7 @@ import { db } from './db'
 import { publish } from './events'
 import { mutationCaps, queryCaps } from './query-caps'
 import { recordActorRun } from './skills-run'
+import { typeCaps } from './type-caps'
 import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './usage'
 
 /**
@@ -449,7 +450,8 @@ function streamWithTools(opts: {
 										data: (a) => executeDataTool(userId, a),
 										brain: brainCaps(userId), // board 0100 — GLM mint + data_schema registry caps
 										query: queryCaps(userId), // board 0101 — GLM-authored validated query specs
-										mutate: mutationCaps(userId) // board 0101 — GLM-authored validated mutation specs
+										mutate: mutationCaps(userId), // board 0101 — GLM-authored validated mutation specs
+										bundle: typeCaps(userId) // board 0102 — GLM-authored composite types (data_bundles)
 									},
 									parsed
 								)
@@ -510,6 +512,16 @@ function streamWithTools(opts: {
 										vibe: schema,
 										vibeData: data,
 										outputs: ['predicate']
+									})
+								} else if (schema === 'bundle-created') {
+									// board 0102 — the bundle actor authored a new composite type (a kind).
+									void recordActorRun(userId, {
+										flowId: 'brain',
+										nodeId: 'bundle',
+										label: out.detail ?? 'bundle',
+										vibe: schema,
+										vibeData: data,
+										outputs: ['bundle']
 									})
 								} else if (schema === 'query-result' || schema === 'mutation-result') {
 									// board 0101 — the dynamic query/mutate actors on the Brain skill (a destructive

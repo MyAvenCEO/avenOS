@@ -91,6 +91,17 @@ export type ToolCtx = {
 		/** Run a validated mutation spec as ONE transaction (after HITL confirm for destructive specs). */
 		apply(spec: unknown, params?: Record<string, unknown>): Promise<{ ops: unknown[] }>
 	}
+	/** board 0102 — the bundle actor's caps: GLM authors a VALIDATED bundle (composite-type) spec — a named
+	 *  set of traits over predicates + a flat view. Persisting it makes a NEW data kind CRUD-able through the
+	 *  same engine todos uses, zero new code. Missing predicates are minted via `brain` first. */
+	bundle?: {
+		/** Author a bundle spec from plain language (grounded in live predicates + existing bundles), AJV-validate. */
+		mint(request: string): Promise<{ spec?: unknown; predicates?: string[]; error?: string }>
+		/** The predicate names the user already has — the actor diffs a bundle's needs against these. */
+		existingPredicates(): Promise<string[]>
+		/** Persist a validated bundle spec to data_bundles (idempotent by type name). */
+		save(spec: unknown): Promise<{ type: string; predicates: string[] }>
+	}
 }
 
 /** What a tool-actor hands back to the chat loop. The loop does the plumbing (SSE emit, persistence). */

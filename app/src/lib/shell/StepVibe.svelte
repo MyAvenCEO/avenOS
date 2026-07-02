@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { Flow, NodeState, RecipeNode, TraceStep } from '@avenos/aven-skills'
 import BrainVibe from '$lib/shell/BrainVibe.svelte'
+import BundleVibe from '$lib/shell/BundleVibe.svelte'
 import QueryVibe from '$lib/shell/QueryVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
@@ -63,6 +64,9 @@ const STATE_CHIP: Record<NodeState, string> = {
 {:else if vibe === 'query-result' || vibe === 'mutation-result'}
 	<!-- board 0101 — the dynamic query/mutate actors render through QueryVibe (chat, Runs, Skills). -->
 	<QueryVibe mode={vibe === 'query-result' ? 'query' : 'mutation'} data={vibeData as never} />
+{:else if vibe === 'bundle-created'}
+	<!-- board 0102 — the bundle actor (a new composite type) renders through BundleVibe. -->
+	<BundleVibe data={vibeData as never} />
 {:else if !vibe && (!node || !step)}
 	<div class="text-muted-foreground flex h-full items-center justify-center text-sm">
 		Kein Schritt ausgewählt.

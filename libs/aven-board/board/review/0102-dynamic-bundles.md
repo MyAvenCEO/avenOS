@@ -4,7 +4,7 @@ summary: The last seeded layer goes dynamic — GLM mints validated bundle recip
 owner: claude
 created: 2026-07-02
 updated: 2026-07-02
-tags: [data-brain, ontology, ai-authoring]
+tags: [data-brain, ontology, ai-authoring, bundles]
 goal: "`cd libs/betterauth && bunx tsc --noEmit` exits 0, `bun --env-file=../../.env.samuel test tests/dynamic-type.test.ts` exits 0 (all tests pass incl. the round-trip: author a `library` TypeSpec → create → list projects {title, owner} through executeDataTool), `cd app && bun run check` reports 0 errors, and the GLM authoring layer (a `create_bundle` brain action registered + dispatched, with a bundle vibe) compiles green — live GLM mint quality is the human check in review."
 ---
 
@@ -115,9 +115,9 @@ top.
 - [x] A validated spec persisted via `saveType` is immediately CRUD-able through `executeDataTool` (create "Dune" → list projects `{title, owner}`) — same test.
 - [x] Table renamed `predicate_type` → `data_bundles`; migrate exits "up to date" (0058), all 12 betterauth tests pass, tsc exit 0.
 - [x] Hardcoded specs retired: the 4 domain specs deleted from `libs/aven-ontology/src` (only engine/index/memstore/types remain); 11 historical migrations repointed to a frozen `libs/betterauth/src/legacy-bundle-fixtures.ts` (byte-identical, never imported at runtime); `engine.test.ts` ported to inline fixtures — 8/8 aven-ontology tests pass, betterauth tsc 0, migrate up-to-date, 12/12 betterauth tests pass.
-- [ ] `create_bundle` registered + dispatched; betterauth/skills tsc exit 0.
-- [ ] Bundle vibe renders in chat + Runs — `cd app && bun run check` 0 errors.
-- [ ] Live human check: a chat request mints a usable bundle (review gate).
+- [x] `bundle` actor (the create-a-kind action) registered + dispatched via the existing registry loop; caps injected in ai.ts; betterauth + skills tsc exit 0.
+- [x] Bundle vibe (`BundleVibe.svelte`) renders in chat + Runs (StepVibe) — `cd app && bun run check` 0 errors; server restarted clean.
+- [ ] Live human check: a chat request ("track books I read with a rating") mints a usable bundle (review gate).
 
 ## Verification
 
@@ -135,6 +135,17 @@ cd ../../app && bun run check
 
 ## Progress log
 
+- `2026-07-02` — Steps 4–6 done (GLM authoring): `type-caps.ts` gains
+  `mintBundle` (GLM-5.2 authors a TypeSpec grounded in live predicates + the
+  bundle meta-language + existing bundles, AJV-validated) + `typeCaps(uid)`
+  (list/mint/save). New `skills/tools/bundle.ts` actor: author → mint any missing
+  predicates via the `brain` (0100) → `saveType` → `bundle-created` vibe;
+  registered + dispatched. `ai.ts` injects the cap + records the run.
+  `BundleVibe.svelte` (traits + view + minted predicates) wired into chat +
+  StepVibe. Migration 0059 adds the `bundle` node to the Brain hub with
+  predicates+types context. Green: betterauth/skills tsc, app svelte-check 0
+  errors, 12/12 tests, migrate up-to-date, server restarted clean. Remaining:
+  live human mint check (review gate).
 - `2026-07-02` — Step 3 done (retire hardcoded specs): verified the todos bundle
   is ALREADY runtime-dynamic (one `data_bundles` row, runtime reads DB only,
   TODO_SPEC runtime-dead). Deleted todo/document/invoice/contact specs from

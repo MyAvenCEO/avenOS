@@ -15,6 +15,7 @@ import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
 import BrainVibe from '$lib/shell/BrainVibe.svelte'
+import BundleVibe from '$lib/shell/BundleVibe.svelte'
 import QueryVibe from '$lib/shell/QueryVibe.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
@@ -664,6 +665,11 @@ function handleTranscribeError(message: string): void {
 										mode={message.vibe === 'brain' ? 'read' : 'created'}
 										data={message.vibeData}
 									/>
+								</div>
+							{:else if message.vibe === 'bundle-created'}
+								<!-- board 0102 — the bundle actor: a freshly-authored composite type (a kind). -->
+								<div class="max-h-[80vh] w-full overflow-y-auto">
+									<BundleVibe data={message.vibeData} />
 								</div>
 							{:else if message.vibe === 'query-result' || message.vibe === 'mutation-result'}
 								<!-- board 0101 — the dynamic query/mutate actors: the answered rows / applied change. -->
