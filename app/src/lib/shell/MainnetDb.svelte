@@ -22,17 +22,17 @@ let selectedId = $state<string | null>(null)
 let view = $state<'data' | 'schema'>('data')
 
 // The config REGISTRIES, surfaced through the same universal /api/context/:provider endpoint the Skills
-// panel uses: the GLM-authored data_queries / data_mutations specs (board 0101), and the vibe.* rendering
-// templates — vibe_view (ViewDef), vibe_style (StyleDef), vibe_logic (sandbox JS) (board 0095). Selecting
-// one shows its stored rows; `null` = a normal predicate schema is selected instead.
-type SpecKind = 'data_queries' | 'data_mutations' | 'vibe_view' | 'vibe_style' | 'vibe_logic'
+// panel uses: the composite-type bundles (`types`), the merged operation registry `data_operations`
+// (query|mutation, board 0104), and the vibe.* rendering templates — vibe_view / vibe_style / vibe_logic
+// (board 0095). Selecting one shows its stored rows; `null` = a normal predicate schema is selected instead.
+type SpecKind = 'types' | 'data_operations' | 'vibe_view' | 'vibe_style' | 'vibe_logic'
 let specKind = $state<SpecKind | null>(null)
 const specsQuery = createQuery(() => ({
 	queryKey: ['data', 'specs', specKind],
 	enabled: specKind !== null,
 	queryFn: async () => (specKind ? loadContext(specKind) : null)
 }))
-type StoredSpec = { name: string; spec: unknown }
+type StoredSpec = { name: string; spec: unknown; tag?: string }
 const specItems = $derived<StoredSpec[]>(
 	(specsQuery.data?.items ?? []).map((it) => {
 		let spec: unknown = it.gloss
@@ -41,16 +41,18 @@ const specItems = $derived<StoredSpec[]>(
 		} catch {
 			/* leave the raw string */
 		}
-		return { name: it.name, spec }
+		return { name: it.name, spec, tag: it.tag }
 	})
 )
+// board 0104 — a fetch failure must NOT read as "empty" (the old silent-empty bug); surface it.
+const specError = $derived(specsQuery.error ? (specsQuery.error as Error).message : null)
 /** Select a config registry (a data_ spec set or a vibe_ template table) instead of a predicate schema. */
 function selectSpecKind(kind: SpecKind): void {
 	specKind = kind
 	selectedId = null
 	focusRow = null
 }
-const DYNAMIC_REGISTRIES: SpecKind[] = ['data_queries', 'data_mutations']
+const DYNAMIC_REGISTRIES: SpecKind[] = ['types', 'data_operations']
 const VIBE_REGISTRIES: SpecKind[] = ['vibe_view', 'vibe_style', 'vibe_logic']
 const specLabel = (k: SpecKind): string => t(`mainnet.db.reg.${k}`)
 const specHint = (k: SpecKind): string => t(`mainnet.db.regHint.${k}`)
@@ -365,6 +367,13 @@ $effect(() => {
 				<p class="text-muted-foreground mb-3 text-[12px] leading-relaxed">{specHint(specKind)}</p>
 				{#if specsQuery.isPending}
 					<p class="text-muted-foreground text-[13px]">…</p>
+				{:else if specError}
+					<p
+						class="border-destructive/40 text-destructive rounded-[var(--radius-lg)] border px-4 py-3 text-[13px]"
+						role="alert"
+					>
+						{specError}
+					</p>
 				{:else if specItems.length === 0}
 					<p
 						class="border-border text-muted-foreground rounded-[var(--radius-lg)] border border-dashed px-4 py-6 text-center text-[13px]"
@@ -375,7 +384,15 @@ $effect(() => {
 					<ul class="flex flex-col gap-2">
 						{#each specItems as it (it.name)}
 							<li class="border-border bg-card rounded-[var(--radius-lg)] border p-4">
-								<p class="text-foreground mb-2 font-mono text-[13px] font-semibold">{it.name}</p>
+								<p class="mb-2 flex items-center gap-2">
+									{#if it.tag}
+										<span
+											class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold {it.tag === 'mutation' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}"
+											>{it.tag}</span
+										>
+									{/if}
+									<span class="text-foreground font-mono text-[13px] font-semibold">{it.name}</span>
+								</p>
 								<pre
 									class="border-border/60 text-muted-foreground overflow-x-auto rounded-[var(--radius)] border px-3 py-2 text-[12px] leading-relaxed"
 								><code

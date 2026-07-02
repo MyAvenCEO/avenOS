@@ -164,37 +164,33 @@ async function authorSpec(
 	return { spec }
 }
 
-/** Persist a named spec into data_queries / data_mutations (idempotent by name for the user). */
-async function saveSpec(
-	uid: string,
-	table: 'data_queries' | 'data_mutations',
-	name: string,
-	spec: unknown
-): Promise<void> {
+// board 0104 — one operation registry, `data_operations`, discriminated by `kind` (query | mutation).
+type OpKind = 'query' | 'mutation'
+
+/** Persist a named operation into data_operations (idempotent by name for the user). board 0104. */
+async function saveSpec(uid: string, kind: OpKind, name: string, spec: unknown): Promise<void> {
 	const existing = await sql<{
 		id: string
-	}>`SELECT id FROM ${sql.ref(table)} WHERE user_id = ${uid} AND name = ${name} LIMIT 1`.execute(
-		db()
-	)
+	}>`SELECT id FROM data_operations WHERE user_id = ${uid} AND name = ${name} LIMIT 1`.execute(db())
 	if (existing.rows[0]) {
-		await sql`UPDATE ${sql.ref(table)} SET spec = ${jsonb(spec)}, updated_at = now() WHERE id = ${existing.rows[0].id}`.execute(
+		await sql`UPDATE data_operations SET spec = ${jsonb(spec)}, kind = ${kind}, updated_at = now() WHERE id = ${existing.rows[0].id}`.execute(
 			db()
 		)
 	} else {
-		await sql`INSERT INTO ${sql.ref(table)} (id, user_id, name, spec, created_at, updated_at)
-			VALUES (${randomUUID()}, ${uid}, ${name}, ${jsonb(spec)}, now(), now())`.execute(db())
+		await sql`INSERT INTO data_operations (id, user_id, name, kind, spec, created_at, updated_at)
+			VALUES (${randomUUID()}, ${uid}, ${name}, ${kind}, ${jsonb(spec)}, now(), now())`.execute(
+			db()
+		)
 	}
 }
 
-async function listSpecs(
-	uid: string,
-	table: 'data_queries' | 'data_mutations'
-): Promise<{ name: string; spec: unknown }[]> {
-	const rows = await sql<{
-		name: string
-		spec: unknown
-	}>`SELECT name, spec FROM ${sql.ref(table)} WHERE user_id = ${uid} ORDER BY name`.execute(db())
-	return rows.rows.map((r) => ({ name: r.name, spec: asJson(r.spec) }))
+/** Every operation visible to a user: their own authored ops + the global (user_id NULL) bundle-derived
+ *  ones. Newest-authored-shape first would need a sort col; name order is stable + enough. board 0104. */
+async function listOps(uid: string): Promise<{ name: string; kind: string; spec: unknown }[]> {
+	const rows = await sql<{ name: string; kind: string; spec: unknown }>`
+		SELECT name, kind, spec FROM data_operations WHERE user_id = ${uid} OR user_id IS NULL ORDER BY kind, name
+	`.execute(db())
+	return rows.rows.map((r) => ({ name: r.name, kind: r.kind, spec: asJson(r.spec) }))
 }
 
 /** A short deterministic name for a stored spec (predicate + kind); no Date/random in this file's hot path. */
@@ -207,21 +203,15 @@ function specName(base: string, request: string): string {
 	return slug ? `${base}-${slug}` : base
 }
 
-// ── the transparency context providers (the config UI shows the actual stored specs) ──────────────
-registerContextProvider('data_queries', async (uid) => ({
+// ── the transparency context provider (the config UI shows the actual stored operations) ───────────
+// board 0104 — ONE provider for the merged registry; the `kind` rides as a tag chip in the UI.
+registerContextProvider('data_operations', async (uid) => ({
 	kind: 'list',
-	label: 'Stored queries',
-	items: (await listSpecs(uid, 'data_queries')).map((q) => ({
-		name: q.name,
-		gloss: JSON.stringify(q.spec)
-	}))
-}))
-registerContextProvider('data_mutations', async (uid) => ({
-	kind: 'list',
-	label: 'Stored mutations',
-	items: (await listSpecs(uid, 'data_mutations')).map((m) => ({
-		name: m.name,
-		gloss: JSON.stringify(m.spec)
+	label: 'Operations',
+	items: (await listOps(uid)).map((o) => ({
+		name: o.name,
+		tag: o.kind,
+		gloss: JSON.stringify(o.spec)
 	}))
 }))
 
@@ -241,7 +231,7 @@ export function queryCaps(uid: string) {
 				return { spec: spec as QuerySpec, error: 'GLM produced an invalid query spec' }
 			const rows = await runQuery(uid, spec)
 			const name = specName('q', (spec as QuerySpec).name ?? request)
-			await saveSpec(uid, 'data_queries', name, spec).catch((e) =>
+			await saveSpec(uid, 'query', name, spec).catch((e) =>
 				console.error('[query-caps] save query failed:', e)
 			)
 			return { spec, rows, name }
@@ -261,7 +251,7 @@ export function mutationCaps(uid: string) {
 			if (!validateMutationSpec(spec))
 				return { spec: spec as MutationSpec, error: 'GLM produced an invalid mutation spec' }
 			const name = specName('m', (spec as MutationSpec).name ?? request)
-			await saveSpec(uid, 'data_mutations', name, spec).catch((e) =>
+			await saveSpec(uid, 'mutation', name, spec).catch((e) =>
 				console.error('[query-caps] save mutation failed:', e)
 			)
 			return { spec, destructive: mutationIsDestructive(spec), name }

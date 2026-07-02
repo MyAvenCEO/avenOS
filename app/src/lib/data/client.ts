@@ -98,7 +98,7 @@ export type NodeContextPayload = {
 	kind: 'text' | 'list'
 	label?: string
 	text?: string
-	items?: { name: string; gloss?: string }[]
+	items?: { name: string; gloss?: string; tag?: string }[]
 	meta?: Record<string, unknown>
 }
 export async function loadContext(provider: string, arg?: string): Promise<NodeContextPayload> {

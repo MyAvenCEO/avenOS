@@ -1134,15 +1134,15 @@
 			"vibes": "Vibes",
 			"emptySpecs": "None yet — ask a question or request a change in chat to author one.",
 			"reg": {
-				"data_queries": "Queries",
-				"data_mutations": "Mutations",
+				"types": "Bundles",
+				"data_operations": "Operations",
 				"vibe_view": "Views",
 				"vibe_style": "Styles",
 				"vibe_logic": "Logic"
 			},
 			"regHint": {
-				"data_queries": "GLM-authored, validated query specs — reusable configs the query actor persists to answer questions over your data.",
-				"data_mutations": "GLM-authored, validated mutation specs — reusable configs the mutate actor persists to apply structural changes.",
+				"types": "Composite types — a bundle is a named set of traits (which predicates cluster into a kind) + a view (how they read back flat). Bundles COMPILE to the operations below.",
+				"data_operations": "The unified operation registry — queries (ask) and mutations (change) as one validated-spec table. GLM-authored ops are yours; bundle-derived ops are global.",
 				"vibe_view": "vibe_view — the ViewDef trees (the layout/structure of each card), rendered by the engine with no per-view Svelte.",
 				"vibe_style": "vibe_style — the StyleDef tokens (the visual styling of each card), config-as-data.",
 				"vibe_logic": "vibe_logic — the sandbox-quickjs JS that maps data into each view (the template's query/mapping logic)."

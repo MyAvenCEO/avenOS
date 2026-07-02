@@ -11,7 +11,7 @@ export type ContextPayload = {
 	kind: 'text' | 'list'
 	label?: string
 	text?: string
-	items?: { name: string; gloss?: string }[]
+	items?: { name: string; gloss?: string; tag?: string }[]
 	/** free-form metadata shown as chips (source, size, count…). */
 	meta?: Record<string, unknown>
 }
