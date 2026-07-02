@@ -12,12 +12,10 @@ export const BUNDLE_TOOL: ToolDefinition = {
 	function: {
 		name: 'bundle',
 		description:
-			'Create a NEW KIND of thing the user can then track — a composite data type ("a book with an author ' +
-			'and a rating", "a habit with a streak", "a contact with email + phone"). A specialist model authors ' +
-			'the recipe (which relationship types cluster into this kind + how they read back as fields) and mints ' +
-			'any missing relationship types automatically; afterwards the user can list/add/update/delete that kind ' +
-			'via data_crud immediately. Use this to define a new TYPE/kind; use ontology for a single relationship, ' +
-			'data_crud for individual rows, and query/mutate for questions/changes over existing data.',
+			'Define a NEW KIND of thing to track — a composite type ("a book with an author and a rating", "a habit ' +
+			'with a streak"). A specialist authors the recipe + mints any missing relationship types; then it is ' +
+			'usable via data_crud. Defining a TYPE only — single relationship → ontology, rows → data_crud, ' +
+			'questions/changes → query/mutate.',
 		parameters: {
 			type: 'object',
 			properties: {

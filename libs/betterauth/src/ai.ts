@@ -412,6 +412,11 @@ function streamWithTools(opts: {
 					// Repair any truncated/malformed tool-call JSON BEFORE echoing the turn back — a raw
 					// unterminated string 400s the next Tinfoil round + kills the stream. board 0099.
 					for (const tc of callList) tc.args = sanitizeToolArgs(tc.args)
+					// PERF (board 0105): count tool calls whose actor already produced the human reply (its
+					// `response`). If EVERY call this round self-replied, we skip the next round — a whole
+					// stateless re-prefill of the system prompt + tools + growing convo just to regenerate a
+					// sentence the model already wrote. Halves latency on the common write/list turn.
+					let selfReplied = 0
 					// Tool round: record the assistant tool-call turn, run each tool, feed results back.
 					msgs.push({
 						role: 'assistant',
@@ -478,6 +483,7 @@ function streamWithTools(opts: {
 							if (out.reply) {
 								emit({ choices: [{ delta: { content: out.reply } }] })
 								assistant += out.reply
+								selfReplied++
 							}
 							// The actor decides WHICH vibe (todos → its mode card); the loop does the plumbing + dedup.
 							if (out.vibe && !emittedVibes.has(out.vibe.schema)) {
@@ -657,6 +663,11 @@ function streamWithTools(opts: {
 							})
 						}
 					}
+					// PERF (board 0105): every tool call this round already emitted its own reply → the
+					// answer is fully streamed and the card shows the result. Skip the extra round (a full
+					// stateless re-prefill of prompt+tools+convo just to restate what the model already said).
+					// query / HITL / website narration don't self-reply, so they still get a follow-up round.
+					if (selfReplied > 0 && selfReplied === callList.length) break
 				}
 			} catch (e) {
 				emit({

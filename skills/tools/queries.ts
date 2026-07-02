@@ -12,11 +12,10 @@ export const QUERY_TOOL: ToolDefinition = {
 	function: {
 		name: 'query',
 		description:
-			"Answer a QUESTION about the user's data that plain list/create/update/delete cannot — anything " +
-			'needing a filter, a join across two relationship types, or a count/aggregate (e.g. "who owns more ' +
-			'than 3 companies?", "which projects have no members?", "how many todos are done?"). A specialist ' +
-			'model authors a validated query over the x1–x5 predicate store and runs it; you get back the rows. ' +
-			'Use this for READ questions; use data_crud for simple single-type lists and mutate for changes.',
+			"Answer a READ question about the user's data that list/create/update/delete can't — needs a filter, " +
+			'a join across two relationship types, or a count/aggregate (e.g. "who owns >3 companies?", "how many ' +
+			'todos are done?"). A specialist authors + runs a validated query; you get the rows. Simple single-type ' +
+			'lists → data_crud; changes → mutate.',
 		parameters: {
 			type: 'object',
 			properties: {
@@ -56,11 +55,9 @@ export const MUTATE_TOOL: ToolDefinition = {
 	function: {
 		name: 'mutate',
 		description:
-			'Apply a STRUCTURAL change to the data that plain create/update/delete cannot express in one step — ' +
-			'e.g. "transfer ownership of Acme from Alice to Bob", "move every task from project A to project B". A ' +
-			'specialist model authors a validated mutation (a small transaction of predication insert/delete ops) ' +
-			'over the x1–x5 store. Non-destructive changes apply immediately; any change that DELETES data is ' +
-			'shown to the user for confirmation first. Use data_crud for simple single-row create/update/delete.',
+			'Apply a STRUCTURAL change one create/update/delete cannot express — e.g. "transfer ownership of Acme ' +
+			'from Alice to Bob", "move every task from project A to B". A specialist authors a validated transaction ' +
+			'over the x1–x5 store; deletes are confirmed first. Simple single-row changes → data_crud.',
 		parameters: {
 			type: 'object',
 			properties: {

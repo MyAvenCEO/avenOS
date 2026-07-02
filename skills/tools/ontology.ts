@@ -14,12 +14,9 @@ export const ONTOLOGY_TOOL: ToolDefinition = {
 	function: {
 		name: 'ontology',
 		description:
-			'Read the ontology (the x1–x5 Lojban predicate/relationship types the user already has) or CREATE ' +
-			'a new relationship type from a plain-language description. Use `create` when the user wants a NEW ' +
-			'kind of relationship/connection between things (e.g. "people can own companies", "a project has ' +
-			'members") — a specialist model mints the gismu-based x1–x5 predicate, reusing an existing one if it ' +
-			'already fits. Use `read` to show the existing relationship types. This is about SCHEMA (relationship ' +
-			'kinds), not individual data rows — for todos and data use data_crud.',
+			'Read the user\'s x1–x5 relationship types, or CREATE a new one from plain language (e.g. "people can ' +
+			'own companies", "a project has members"). `create` mints a gismu-based predicate (reusing an existing ' +
+			'fit); `read` lists them. SCHEMA (relationship kinds) only — todos/data rows → data_crud.',
 		parameters: {
 			type: 'object',
 			properties: {

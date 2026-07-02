@@ -193,6 +193,15 @@ export const dataCrud: ToolActor = {
 				? { ...rec(result), note: CARD_REPLY_NOTE }
 				: result
 
-		return { detail, content, vibe: todosVibe(args, before) }
+		// PERF (board 0105): the model already wrote the human reply into `response`, and the card shows the
+		// result — so emit that reply DIRECTLY and let the loop skip the extra "confirmation" round (a full
+		// stateless re-prefill of the whole prompt). Only when the write actually succeeded; a failure still
+		// falls through to a follow-up round so the model can explain what went wrong. Missing `response` also
+		// falls through (unchanged behavior). Never short-circuits the delete HITL (it returns earlier).
+		const ok = !(result && typeof result === 'object' && (result as Rec).ok === false)
+		const said = typeof args.response === 'string' ? args.response.trim() : ''
+		const reply = ok && said ? said : undefined
+
+		return { detail, content, reply, vibe: todosVibe(args, before) }
 	}
 }
