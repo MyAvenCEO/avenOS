@@ -73,11 +73,30 @@ top.
 2. Rename migration: `predicate_type` → `data_bundles` (+ db.ts type, data.ts
    loadTypeSpec, predicate-types.ts routes, type-caps.ts) — green before the
    authoring work stacks on it.
-3. GLM cap: `mintBundle(request)` — author → AJV-validate → check referenced
+3. **Todos bundle → fully dynamic (retire the hardcoded specs).** VERIFIED
+   (2026-07-02): the live table holds exactly one row (`todos`) and the runtime
+   reads ONLY the DB — `TODO_SPEC` in code is dead at runtime, referenced only
+   by historical migrations (0014/0025; legacy 0018/0020/0027/0029/0031 import
+   DOCUMENT/INVOICE/COMPANY/PERSON/TRANSACTION specs) and by engine tests. So:
+   freeze byte-identical JSON snapshots of each spec INLINE into those
+   historical migrations (kysely tracks migrations by filename, so editing the
+   import → inline JSON is replay-safe and decouples history from live code);
+   delete `todo-spec.ts`, `document-spec.ts`, `invoice-spec.ts`,
+   `contact-spec.ts` + their index exports from `libs/aven-ontology`; port
+   `engine.test.ts` to inline synthetic specs (keep the discriminated-replace +
+   todos coverage, no test loss). The `todos` bundle then exists ONLY as
+   dynamic `data_bundles` config — same status a GLM-minted bundle has.
+4. GLM cap: `mintBundle(request)` — author → AJV-validate → check referenced
    predicates exist (mint missing ones) → `saveType`.
-4. Actor: `create_bundle` action, HITL not required (additive config), vibe.
-5. Migration: Brain hub node + context; register vibe rendering (StepVibe/chat).
-6. Green pass + live human mint check ("track books I read with a rating").
+5. Actor: `create_bundle` action, HITL not required (additive config), vibe.
+6. Migration: Brain hub node + context; register vibe rendering (StepVibe/chat).
+7. Green pass + live human mint check ("track books I read with a rating").
+
+> Residual seed (explicitly OUT of scope, note for a follow-on): the per-user
+> ATOMIC-predicate bootstrap (`ensurePredicateSchemas` seeding task/done/due/
+> prioritized/owned_by from `aven-vibes` vocab.ts) is the last code-side seed —
+> the predicate layer's equivalent of this step. Candidate: a "default bundle
+> pack" seeded as data. See memory [[schema-actor-dynamic-predicates]].
 
 ## Files to touch
 
@@ -95,6 +114,7 @@ top.
 - [x] Meta-schema validates/rejects TypeSpecs incl. recursive childSpec — proven by `bun --env-file=../../.env.samuel test tests/dynamic-type.test.ts`.
 - [x] A validated spec persisted via `saveType` is immediately CRUD-able through `executeDataTool` (create "Dune" → list projects `{title, owner}`) — same test.
 - [ ] Table renamed `predicate_type` → `data_bundles`; migrate exits "up to date", all betterauth tests still pass.
+- [ ] Hardcoded specs retired: `grep -rn "TODO_SPEC\|INVOICE_SPEC\|DOCUMENT_SPEC\|COMPANY_SPEC\|PERSON_SPEC\|TRANSACTION_SPEC" libs/aven-ontology/src` returns nothing; historical migrations carry inline JSON snapshots; `bun test libs/aven-ontology` passes (coverage ported, not dropped).
 - [ ] `create_bundle` registered + dispatched; betterauth/skills tsc exit 0.
 - [ ] Bundle vibe renders in chat + Runs — `cd app && bun run check` 0 errors.
 - [ ] Live human check: a chat request mints a usable bundle (review gate).
