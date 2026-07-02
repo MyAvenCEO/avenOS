@@ -5,7 +5,7 @@ owner: claude
 created: 2026-07-02
 updated: 2026-07-02
 tags: [data-brain, ontology, query-engine]
-goal: "`bun --env-file=../../.env.samuel test tests/queries.test.ts` exits 0 with a new test proving: (1) a mutation spec whose insert cell `{\"ref\": 0}` binds op 0's generated row id executes transactionally (\"I ate 2 bananas\" → 3 predications sharing referent B: banana(x1=B), quantity(x1=B,x2=\"2\"), eat(x1=me,x2=B)); (2) a join query over the referent counts the bananas (SUM/count via the 0101 engine returns 2); and `cd libs/betterauth && bunx tsc --noEmit` exits 0 with no regression in the other queries tests."
+goal: "`bun --env-file=../../.env.samuel test tests/queries.test.ts` exits 0 with new tests proving: (1) a mutation spec whose insert cell `{\"ref\": 0}` binds op 0's generated row id executes transactionally (\"I ate 2 bananas\" → 3 predications sharing referent B: banana(row=B), quantity(x1=B,x2=\"2\"), eat(x1=me,x2=B)); (2) a join query over the referent reads the quantity through it (`Number(row.x2) === 2`) and the join correlates on the real referent id; (3) a forward/self ref AND a ref to a delete op each roll the transaction back; and `cd libs/betterauth && bunx tsc --noEmit` exits 0 with no regression in the other queries tests."
 ---
 
 # Reified nested facts — cross-op referents + reify-first authoring
@@ -95,10 +95,11 @@ Small, additive change to `libs/betterauth/src/queries.ts`:
 
 ## Acceptance criteria
 
-- [ ] `{"ref": n}` validates in the meta-schema; forward refs rejected — proven by queries tests.
-- [ ] The banana mutation inserts 3 predications sharing B in ONE transaction — proven by the new test.
-- [ ] A referent join query returns count/sum 2 — same test.
-- [ ] No regression: all prior queries tests still pass; betterauth tsc exits 0.
+- [x] `{"ref": n}` validates in the meta-schema (cells accept literal | {param} | {ref}) — proven by the new AJV test.
+- [x] The banana mutation inserts 3 predications sharing referent B in ONE transaction; quantity.x1 and eat.x2 resolve to banana's row id — proven by the execution test.
+- [x] A referent join reads the quantity through B (`Number(row.x2) === 2`) and correlates on the real referent id — same test. (Corrected from the original "count returns 2": the engine projects place VALUES, so the faithful "how many" is the quantity read through the join, not a row count.)
+- [x] Fail-closed: a forward/self `{ref}` AND a `{ref}` to a delete op each roll the whole transaction back — same test (2 `.rejects.toThrow()`).
+- [x] No regression: all prior queries tests still pass (7/7, up from 5); full betterauth suite 14/14; betterauth tsc exit 0.
 
 ## Verification
 
@@ -115,6 +116,15 @@ bun --env-file=../../.env.samuel test tests/queries.test.ts
 
 ## Progress log
 
+- `2026-07-02` — Built + green. `queries.ts`: `resolveCell` (literal | {param} |
+  {ref:n}) + `runMutation` tracks each op's generated id and resolves `{ref}`
+  fail-closed (must index a strictly-earlier INSERT). `queries.test.ts`: +2 tests
+  (AJV accepts the three cell forms; the reified "I ate 2 bananas" execution +
+  referent join reading quantity=2 + two rollback cases) — 7/7 pass, 14/14 full
+  suite, tsc 0. `query-caps.ts` MUTATION_INSTRUCTIONS gains the REIFY-DON'T-PACK
+  rule + the {ref} banana example. Goal corrected: engine reads the quantity
+  VALUE through the join (not a row count). data-crud/brain instruction touch-ups
+  deemed unnecessary (the mutate actor is where packing happened). Card → review.
 - `2026-07-02` — Discovery: settled the leaf/composite question (keep flat x1–x5
   + reification; no new storage model), named the concrete engine gap (cross-op
   referent binding) and made it the measurable goal. Filed straight into
