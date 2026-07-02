@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.1-next.3...v) (2026-07-02)
+
+
+### Features
+
+* **app:** Draw canvas — bounded zoom, reference images, pen colours ([#30](https://github.com/MyAvenCEO/avenOS/issues/30)) ([15f7c3c](https://github.com/MyAvenCEO/avenOS/commit/15f7c3c74cfddcd310d7a3f571ca48f6ba71eef7))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.1-next.2...v) (2026-07-01)
 
 
