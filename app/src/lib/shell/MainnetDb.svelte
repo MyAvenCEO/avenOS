@@ -1,9 +1,16 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import { authClient } from '$lib/auth/auth-client'
-import { type DataValue, listSchemas, listValues, loadContext } from '$lib/data/client'
+import {
+	type DataValue,
+	listSchemas,
+	listValues,
+	loadContext,
+	loadVibeBundle
+} from '$lib/data/client'
 import { t } from '$lib/i18n'
 import { nav } from '$lib/shell/nav.svelte'
+import VibeCard from '$lib/shell/VibeCard.svelte'
 
 // Mainnet "DB" tab: a left "select schema" rail + the selected schema shown two ways via a
 // Schema/Data toggle — its JSON Schema definition, or the table of its value instances (columns
@@ -21,11 +28,9 @@ let selectedId = $state<string | null>(null)
 // Which face of the selected schema to show: its definition or its data instances.
 let view = $state<'data' | 'schema'>('data')
 
-// The config REGISTRIES, surfaced through the same universal /api/context/:provider endpoint the Skills
-// panel uses: the composite-type bundles (`types`), the merged operation registry `data_operations`
-// (query|mutation, board 0104), and the vibe.* rendering templates — vibe_view / vibe_style / vibe_logic
-// (board 0095). Selecting one shows its stored rows; `null` = a normal predicate schema is selected instead.
-type SpecKind = 'types' | 'data_operations' | 'vibe_view' | 'vibe_style' | 'vibe_logic'
+// The DYNAMIC config registries, via the universal /api/context/:provider endpoint: the composite-type
+// bundles (`types`) + the merged operation registry `data_operations` (query|mutation, board 0104).
+type SpecKind = 'types' | 'data_operations'
 let specKind = $state<SpecKind | null>(null)
 const specsQuery = createQuery(() => ({
 	queryKey: ['data', 'specs', specKind],
@@ -46,16 +51,118 @@ const specItems = $derived<StoredSpec[]>(
 )
 // board 0104 — a fetch failure must NOT read as "empty" (the old silent-empty bug); surface it.
 const specError = $derived(specsQuery.error ? (specsQuery.error as Error).message : null)
-/** Select a config registry (a data_ spec set or a vibe_ template table) instead of a predicate schema. */
 function selectSpecKind(kind: SpecKind): void {
 	specKind = kind
 	selectedId = null
+	selectedVibe = null
 	focusRow = null
 }
 const DYNAMIC_REGISTRIES: SpecKind[] = ['types', 'data_operations']
-const VIBE_REGISTRIES: SpecKind[] = ['vibe_view', 'vibe_style', 'vibe_logic']
 const specLabel = (k: SpecKind): string => t(`mainnet.db.reg.${k}`)
 const specHint = (k: SpecKind): string => t(`mainnet.db.regHint.${k}`)
+
+// board 0105 — the VIBES section folds the old Vibes tab into the DB viewer: each vibe.* row is ONE entry
+// (its view+style+logic together), shown in a tabbed detail — the live UI (rendered through the engine via
+// VibeCard, with a readable summary aside), plus the raw View / Function / Style / State JSON. The whole
+// viewer-as-a-vibe is the follow-on (0106).
+let selectedVibe = $state<string | null>(null)
+type VibeTab = 'ui' | 'view' | 'function' | 'style' | 'state'
+let vibeTab = $state<VibeTab>('ui')
+const VIBE_TABS: { id: VibeTab; label: string }[] = [
+	{ id: 'ui', label: 'UI' },
+	{ id: 'view', label: 'View' },
+	{ id: 'function', label: 'Function' },
+	{ id: 'style', label: 'Style' },
+	{ id: 'state', label: 'State' }
+]
+// The list of vibe names = the vibe_view registry rows (each is one vibe).
+const vibeListQuery = createQuery(() => ({
+	queryKey: ['vibe-list'],
+	queryFn: () => loadContext('vibe_view')
+}))
+const vibeNames = $derived<string[]>((vibeListQuery.data?.items ?? []).map((i) => i.name))
+// The selected vibe's bundle (view/style/logic) for the raw tabs.
+const vibeBundleQuery = createQuery(() => ({
+	queryKey: ['vibe', selectedVibe],
+	enabled: selectedVibe !== null,
+	queryFn: () => (selectedVibe ? loadVibeBundle(selectedVibe) : null)
+}))
+// Representative sample `source` per vibe — drives the live UI render + the State tab (never a live run).
+const VIBE_SAMPLE: Record<string, Record<string, unknown>> = {
+	todos: {
+		title: 'Todos',
+		items: [
+			{ id: '1', text: 'Buy milk', done: false, due: 'in 3 days', priority: 'high' },
+			{ id: '2', text: 'Old task', done: true }
+		]
+	},
+	'bundle-created': {
+		request: 'track books I read with a rating',
+		spec: {
+			type: 'book',
+			parts: [
+				{ pred: 'book', kind: 'primary', field: 'title' },
+				{ pred: 'rated', kind: 'replace', field: 'rating' }
+			],
+			project: { title: { pred: 'book', place: 'x2' }, rating: { pred: 'rated', place: 'x3' } }
+		},
+		mintedPredicates: ['rated']
+	},
+	ontology: {
+		predicates: [
+			{ name: 'owned_by', gloss: 'x1 is owned by x2' },
+			{ name: 'task', gloss: 'x1 does deed x2' }
+		]
+	},
+	'ontology-created': {
+		created: [
+			{
+				predicate: 'eats',
+				gismu: 'citka',
+				gloss: 'x1 eats/ingests x2',
+				places: [
+					{ pos: 'x1', role: 'eater', kind: 'ref' },
+					{ pos: 'x2', role: 'food', kind: 'value' }
+				]
+			}
+		],
+		reused: ['owned_by']
+	},
+	'query-result': {
+		request: 'who owns more than 3 companies?',
+		rows: [{ key: 'alice', n: 4 }],
+		spec: {}
+	},
+	'mutation-result': {
+		request: 'transfer Acme from Alice to Bob',
+		ops: [
+			{ op: 'delete', predicate: 'owned_by', affected: 1 },
+			{ op: 'insert', predicate: 'owned_by', affected: 1 }
+		]
+	},
+	'todos-created': { items: [{ title: 'Buy milk', due: 'in 3 days', priority: 'high' }] },
+	'todos-edited': {
+		diffs: [{ title: 'Buy milk', changes: [{ field: 'done', from: 'false', to: 'true' }] }]
+	},
+	'todos-deleted': { items: [{ title: 'Old task' }] }
+}
+const vibeSample = $derived<Record<string, unknown>>(
+	selectedVibe ? (VIBE_SAMPLE[selectedVibe] ?? {}) : {}
+)
+function selectVibe(name: string): void {
+	selectedVibe = name
+	vibeTab = 'ui'
+	specKind = null
+	selectedId = null
+	focusRow = null
+}
+const pretty = (v: unknown): string => {
+	try {
+		return JSON.stringify(v, null, 2)
+	} catch {
+		return String(v)
+	}
+}
 
 function columnsFor(jsonSchema: unknown, rows: DataValue<Record<string, unknown>>[]): string[] {
 	const fromSchema = Object.keys(
@@ -263,7 +370,7 @@ function resolveRef(id: unknown): Resolved {
 
 // Auto-select the first table once they load (unless a spec registry is being viewed).
 $effect(() => {
-	if (!selectedId && !specKind && tables.length > 0) selectedId = tables[0].id
+	if (!selectedId && !specKind && !selectedVibe && tables.length > 0) selectedId = tables[0].id
 })
 
 // Deep link from a flow schema badge: select the requested schema by name + show its definition.
@@ -300,6 +407,7 @@ $effect(() => {
 					onclick={() => {
 						selectedId = tbl.id
 						specKind = null
+						selectedVibe = null
 					}}
 				>
 					<span class="truncate">{tbl.name}</span>
@@ -327,23 +435,24 @@ $effect(() => {
 				</button>
 			{/each}
 
-			<!-- board 0095 — the vibe.* registry: the rendering templates (view / style / logic) as config-as-data. -->
+			<!-- board 0105 — the VIBES section: each vibe.* row (view+style+logic) as ONE entry, shown in a
+			     tabbed detail (live UI + raw View/Function/Style/State). Folds in the old Vibes tab. -->
 			<p
 				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase opacity-70"
 			>
 				{t('mainnet.db.vibes')}
 			</p>
-			{#each VIBE_REGISTRIES as kind (kind)}
+			{#each vibeNames as name (name)}
 				<button
 					type="button"
-					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {specKind ===
-					kind
+					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {selectedVibe ===
+					name
 						? 'bg-primary/10 text-foreground font-medium'
 						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => selectSpecKind(kind)}
+					onclick={() => selectVibe(name)}
 				>
 					<span class="opacity-60">🎨</span>
-					<span class="truncate">{specLabel(kind)}</span>
+					<span class="truncate font-mono text-[12px]">{name}</span>
 				</button>
 			{/each}
 		</div>
@@ -354,9 +463,103 @@ $effect(() => {
 		{#if err}
 			<p class="text-destructive shrink-0 text-sm" role="alert">{err}</p>
 		{/if}
-		{#if specKind}
-			<!-- board 0101/0095 — a config registry: GLM-authored query/mutation specs, or vibe rendering
-			     templates (view/style/logic). Each row is a reusable, inspectable config. -->
+		{#if selectedVibe}
+			<!-- board 0105 — a vibe as ONE entity: a tabbed detail. UI = the live card through the engine
+			     (VibeCard) + a readable summary aside; the other tabs are the raw View/Function/Style/State. -->
+			<div class="mx-auto flex w-full max-w-4xl flex-col">
+				<div class="mb-3 flex items-center gap-2">
+					<span class="opacity-60">🎨</span>
+					<h2 class="text-foreground font-mono text-base font-semibold">{selectedVibe}</h2>
+				</div>
+				<!-- tabs -->
+				<div
+					class="border-border mb-4 inline-flex shrink-0 self-start overflow-hidden rounded-[var(--radius)] border text-[12px]"
+				>
+					{#each VIBE_TABS as tabDef (tabDef.id)}
+						<button
+							type="button"
+							class="border-border px-3 py-1 transition-colors not-first:border-l {vibeTab === tabDef.id
+								? 'bg-primary/10 text-foreground font-medium'
+								: 'text-muted-foreground hover:bg-card'}"
+							onclick={() => (vibeTab = tabDef.id)}
+						>
+							{tabDef.label}
+						</button>
+					{/each}
+				</div>
+
+				{#if vibeTab === 'ui'}
+					<!-- live render + readable summary aside -->
+					<div class="flex flex-col gap-4 md:flex-row">
+						<div class="border-border bg-card min-w-0 flex-1 rounded-[var(--radius-lg)] border p-4">
+							<VibeCard
+								schema={selectedVibe}
+								data={vibeSample}
+								containerName={`db-vibe-${selectedVibe}`}
+							/>
+						</div>
+						<aside
+							class="border-border bg-card w-full shrink-0 rounded-[var(--radius-lg)] border p-4 text-[12px] md:w-72"
+						>
+							<p
+								class="text-muted-foreground mb-2 text-[10px] font-semibold tracking-wide uppercase"
+							>
+								{t('mainnet.db.vibe.summary')}
+							</p>
+							<p class="text-muted-foreground leading-relaxed">
+								{t('mainnet.db.vibe.summaryHint')}
+							</p>
+							<dl class="mt-3 flex flex-col gap-1.5">
+								<div class="flex justify-between gap-2">
+									<dt class="text-muted-foreground">view</dt>
+									<dd class="text-foreground font-mono">ViewDef</dd>
+								</div>
+								<div class="flex justify-between gap-2">
+									<dt class="text-muted-foreground">function</dt>
+									<dd class="text-foreground font-mono">
+										{(vibeBundleQuery.data?.logic ?? '').length}
+										B
+									</dd>
+								</div>
+								<div class="flex justify-between gap-2">
+									<dt class="text-muted-foreground">style</dt>
+									<dd class="text-foreground font-mono">
+										{Object.keys((vibeBundleQuery.data?.style as { selectors?: object })?.selectors ?? {}).length}
+										rules
+									</dd>
+								</div>
+								<div class="flex justify-between gap-2">
+									<dt class="text-muted-foreground">source keys</dt>
+									<dd class="text-foreground font-mono">
+										{Object.keys(vibeSample).join(', ') || '—'}
+									</dd>
+								</div>
+							</dl>
+						</aside>
+					</div>
+				{:else}
+					{@const raw =
+						vibeTab === 'view'
+							? pretty(vibeBundleQuery.data?.view)
+							: vibeTab === 'style'
+								? pretty(vibeBundleQuery.data?.style)
+								: vibeTab === 'function'
+									? (vibeBundleQuery.data?.logic ?? '')
+									: pretty(vibeSample)}
+					{#if vibeBundleQuery.isPending}
+						<p class="text-muted-foreground text-[13px]">…</p>
+					{:else}
+						<pre
+							class="border-border bg-card text-foreground overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
+						><code
+								>{raw}</code
+							></pre>
+					{/if}
+				{/if}
+			</div>
+		{:else if specKind}
+			<!-- board 0101/0104 — a config registry: bundles or the merged operations. Each row is a
+			     reusable, inspectable config. -->
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
 				<div class="mb-3 flex items-center gap-2">
 					<h2 class="text-foreground text-base font-semibold">{specLabel(specKind)}</h2>
