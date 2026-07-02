@@ -1130,6 +1130,12 @@
 			"close": "Close",
 			"gismuTitle": "Canonical Lojban gismu the place structure derives from",
 			"rawSchema": "Raw JSON Schema",
+			"dynamic": "Dynamic",
+			"queries": "Queries",
+			"mutations": "Mutations",
+			"queriesHint": "GLM-authored, validated query specs — reusable configs the query actor persists to answer questions over your data.",
+			"mutationsHint": "GLM-authored, validated mutation specs — reusable configs the mutate actor persists to apply structural changes.",
+			"emptySpecs": "None yet — ask a question or request a change in chat to author one.",
 			"place": {
 				"place": "Place",
 				"role": "Role",

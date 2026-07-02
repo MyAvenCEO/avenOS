@@ -1107,6 +1107,12 @@
 			"close": "Schließen",
 			"gismuTitle": "Kanonisches Lojban-Gismu, von dem die Stellenstruktur abgeleitet ist",
 			"rawSchema": "JSON-Schema (roh)",
+			"dynamic": "Dynamisch",
+			"queries": "Abfragen",
+			"mutations": "Mutationen",
+			"queriesHint": "GLM-verfasste, validierte Abfrage-Specs — wiederverwendbare Konfigurationen, die der Query-Actor speichert, um Fragen über deine Daten zu beantworten.",
+			"mutationsHint": "GLM-verfasste, validierte Mutations-Specs — wiederverwendbare Konfigurationen, die der Mutate-Actor speichert, um strukturelle Änderungen anzuwenden.",
+			"emptySpecs": "Noch keine — stelle im Chat eine Frage oder wünsche eine Änderung, um eine anzulegen.",
 			"place": {
 				"place": "Stelle",
 				"role": "Rolle",

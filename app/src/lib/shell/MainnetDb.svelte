@@ -1,7 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import { authClient } from '$lib/auth/auth-client'
-import { type DataValue, listSchemas, listValues } from '$lib/data/client'
+import { type DataValue, listSchemas, listValues, loadContext } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import { nav } from '$lib/shell/nav.svelte'
 
@@ -20,6 +20,36 @@ type Table = {
 let selectedId = $state<string | null>(null)
 // Which face of the selected schema to show: its definition or its data instances.
 let view = $state<'data' | 'schema'>('data')
+
+// board 0101 — the dynamic spec registries (data_queries / data_mutations): GLM-authored, AJV-validated
+// query/mutation SPECS stored in Postgres. Selecting one shows its stored specs (the reusable configs the
+// query/mutate actors persist), fetched through the same universal /api/context/:provider endpoint the
+// Skills config panel uses. `null` = a normal schema is selected instead. board 0101.
+type SpecKind = 'data_queries' | 'data_mutations'
+let specKind = $state<SpecKind | null>(null)
+const specsQuery = createQuery(() => ({
+	queryKey: ['data', 'specs', specKind],
+	enabled: specKind !== null,
+	queryFn: async () => (specKind ? loadContext(specKind) : null)
+}))
+type StoredSpec = { name: string; spec: unknown }
+const specItems = $derived<StoredSpec[]>(
+	(specsQuery.data?.items ?? []).map((it) => {
+		let spec: unknown = it.gloss
+		try {
+			spec = it.gloss ? JSON.parse(it.gloss) : null
+		} catch {
+			/* leave the raw string */
+		}
+		return { name: it.name, spec }
+	})
+)
+/** Select a stored-spec registry (Queries / Mutations) instead of a predicate schema. */
+function selectSpecKind(kind: SpecKind): void {
+	specKind = kind
+	selectedId = null
+	focusRow = null
+}
 
 function columnsFor(jsonSchema: unknown, rows: DataValue<Record<string, unknown>>[]): string[] {
 	const fromSchema = Object.keys(
@@ -223,9 +253,9 @@ function resolveRef(id: unknown): Resolved {
 	return { label: s.length > 14 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s, kind: 'id' }
 }
 
-// Auto-select the first table once they load.
+// Auto-select the first table once they load (unless a spec registry is being viewed).
 $effect(() => {
-	if (!selectedId && tables.length > 0) selectedId = tables[0].id
+	if (!selectedId && !specKind && tables.length > 0) selectedId = tables[0].id
 })
 
 // Deep link from a flow schema badge: select the requested schema by name + show its definition.
@@ -259,10 +289,33 @@ $effect(() => {
 					selectedId
 						? 'bg-primary/10 text-foreground font-medium'
 						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => (selectedId = tbl.id)}
+					onclick={() => {
+						selectedId = tbl.id
+						specKind = null
+					}}
 				>
 					<span class="truncate">{tbl.name}</span>
 					<span class="shrink-0 text-[11px] tabular-nums opacity-60">{tbl.rows.length}</span>
+				</button>
+			{/each}
+
+			<!-- board 0101 — the dynamic spec registries: GLM-authored query/mutation configs (reusable). -->
+			<p
+				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase opacity-70"
+			>
+				{t('mainnet.db.dynamic')}
+			</p>
+			{#each [{ kind: 'data_queries', label: t('mainnet.db.queries') }, { kind: 'data_mutations', label: t('mainnet.db.mutations') }] as reg (reg.kind)}
+				<button
+					type="button"
+					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {specKind ===
+					reg.kind
+						? 'bg-primary/10 text-foreground font-medium'
+						: 'text-muted-foreground hover:bg-card'}"
+					onclick={() => selectSpecKind(reg.kind as SpecKind)}
+				>
+					<span class="opacity-60">⚙</span>
+					<span class="truncate">{reg.label}</span>
 				</button>
 			{/each}
 		</div>
@@ -273,7 +326,41 @@ $effect(() => {
 		{#if err}
 			<p class="text-destructive shrink-0 text-sm" role="alert">{err}</p>
 		{/if}
-		{#if selected}
+		{#if specKind}
+			<!-- board 0101 — the stored query/mutation specs: each a reusable GLM-authored config. -->
+			<div class="mx-auto flex w-full max-w-4xl flex-col">
+				<div class="mb-3 flex items-center gap-2">
+					<h2 class="text-foreground text-base font-semibold">
+						{specKind === 'data_queries' ? t('mainnet.db.queries') : t('mainnet.db.mutations')}
+					</h2>
+					<span class="text-muted-foreground text-[11px] tabular-nums opacity-60">{specItems.length}</span>
+				</div>
+				<p class="text-muted-foreground mb-3 text-[12px] leading-relaxed">
+					{specKind === 'data_queries' ? t('mainnet.db.queriesHint') : t('mainnet.db.mutationsHint')}
+				</p>
+				{#if specsQuery.isPending}
+					<p class="text-muted-foreground text-[13px]">…</p>
+				{:else if specItems.length === 0}
+					<p
+						class="border-border text-muted-foreground rounded-[var(--radius-lg)] border border-dashed px-4 py-6 text-center text-[13px]"
+					>
+						{t('mainnet.db.emptySpecs')}
+					</p>
+				{:else}
+					<ul class="flex flex-col gap-2">
+						{#each specItems as it (it.name)}
+							<li class="border-border bg-card rounded-[var(--radius-lg)] border p-4">
+								<p class="text-foreground mb-2 font-mono text-[13px] font-semibold">{it.name}</p>
+								<pre
+									class="border-border/60 text-muted-foreground overflow-x-auto rounded-[var(--radius)] border px-3 py-2 text-[12px] leading-relaxed"><code
+										>{JSON.stringify(it.spec, null, 2)}</code
+									></pre>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
+		{:else if selected}
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
 				<div class="mb-3 flex items-center justify-between gap-2">
 					<h2 class="text-foreground text-base font-semibold">{selected.name}</h2>
