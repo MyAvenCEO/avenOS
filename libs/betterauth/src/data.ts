@@ -199,12 +199,24 @@ export async function listValues(c: Context): Promise<Response> {
 	if (!schemaId) return c.json({ error: 'schemaId required' }, 400)
 	const rows = await db()
 		.selectFrom('data_value')
-		.select(['id', 'data', 'created_at'])
+		.select(['id', 'data', 'x1', 'x2', 'x3', 'x4', 'x5', 'created_at'])
 		.where('user_id', '=', uid)
 		.where('schema_id', '=', schemaId)
 		.orderBy('created_at', 'asc')
 		.execute()
-	return c.json({ values: rows.map((r) => ({ id: r.id, data: asJson(r.data) })) })
+	// board 0104+ writes populate the x1–x5 predication columns and leave the legacy `data` jsonb NULL on
+	// those rows. Read the x-columns as the source of truth (same {x1..x5} shape the viewer projects),
+	// falling back to the legacy jsonb only for pre-migration rows — otherwise every new predication renders
+	// as an empty "ghost" row in the DB viewer (and its label is missing from ref resolution). board 0106.
+	return c.json({
+		values: rows.map((r) => {
+			const fromX: Record<string, unknown> = {}
+			for (const k of ['x1', 'x2', 'x3', 'x4', 'x5'] as const) {
+				if (r[k] !== null && r[k] !== undefined) fromX[k] = r[k]
+			}
+			return { id: r.id, data: Object.keys(fromX).length > 0 ? fromX : asJson(r.data) }
+		})
+	})
 }
 
 /** PATCH /api/data/values/:id — replace a value's data (re-validated against its schema). */

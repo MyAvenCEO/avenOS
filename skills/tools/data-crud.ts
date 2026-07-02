@@ -49,6 +49,29 @@ const CARD_REPLY_NOTE =
 
 type Rec = Record<string, unknown>
 const rec = (v: unknown): Rec => (v && typeof v === 'object' ? (v as Rec) : {})
+
+// A terse, deterministic reply for a successful action when the model didn't write its own `response`.
+// The vibe card already shows the data, so this exists only to let the loop finish in ONE round (no
+// second gemma pass just to narrate what the card already displays). board 0106.
+function defaultReply(
+	action: string,
+	schema: string,
+	items: unknown,
+	result: unknown
+): string {
+	const listN = (result as { items?: unknown[] })?.items
+	const inN = items as unknown[] | undefined
+	switch (action) {
+		case 'list':
+			return Array.isArray(listN) ? `Showing your ${schema} (${listN.length}).` : `Showing your ${schema}.`
+		case 'create':
+			return Array.isArray(inN) && inN.length ? `Added ${inN.length} to ${schema}.` : `Added to ${schema}.`
+		case 'update':
+			return Array.isArray(inN) && inN.length > 1 ? `Updated ${inN.length} ${schema}.` : `Updated ${schema}.`
+		default:
+			return 'Done.'
+	}
+}
 // A friendly relative due for the summary cards. A DATE-ONLY due is a whole-DAY deadline → compare by
 // calendar day (so "today" reads "today", never "13 hours overdue"). A due WITH a time keeps day precision
 // too here (the summary card is a moment-in-time snapshot). board 0105.
@@ -193,14 +216,17 @@ export const dataCrud: ToolActor = {
 				? { ...rec(result), note: CARD_REPLY_NOTE }
 				: result
 
-		// PERF (board 0105): the model already wrote the human reply into `response`, and the card shows the
-		// result — so emit that reply DIRECTLY and let the loop skip the extra "confirmation" round (a full
-		// stateless re-prefill of the whole prompt). Only when the write actually succeeded; a failure still
-		// falls through to a follow-up round so the model can explain what went wrong. Missing `response` also
-		// falls through (unchanged behavior). Never short-circuits the delete HITL (it returns earlier).
+		// PERF (board 0105/0106): the card already shows the result, so emit the human reply DIRECTLY and let
+		// the loop skip the extra "confirmation" round (a full stateless re-prefill of the whole prompt). Use
+		// the model's own `response` when it wrote one; otherwise supply a terse default so EVERY successful
+		// action self-replies in ONE round. This is what made a read ("show me todos") feel slower than a
+		// write: on a write the model fills `response` up front, but on a `list` it tends to withhold it,
+		// waiting to narrate the rows — which forced a slow second round even though the card is the answer.
+		// A failure still falls through to a follow-up round so the model can explain it; delete is HITL and
+		// returned earlier.
 		const ok = !(result && typeof result === 'object' && (result as Rec).ok === false)
 		const said = typeof args.response === 'string' ? args.response.trim() : ''
-		const reply = ok && said ? said : undefined
+		const reply = ok ? said || defaultReply(args.action, schema, args.items, result) : undefined
 
 		return { detail, content, reply, vibe: todosVibe(args, before) }
 	}
