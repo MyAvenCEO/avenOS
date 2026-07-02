@@ -49,11 +49,29 @@ const CARD_REPLY_NOTE =
 
 type Rec = Record<string, unknown>
 const rec = (v: unknown): Rec => (v && typeof v === 'object' ? (v as Rec) : {})
+// A friendly relative due for the summary cards. A DATE-ONLY due is a whole-DAY deadline → compare by
+// calendar day (so "today" reads "today", never "13 hours overdue"). A due WITH a time keeps day precision
+// too here (the summary card is a moment-in-time snapshot). board 0105.
+function relDue(iso: unknown): string | undefined {
+	if (typeof iso !== 'string' || !iso.trim()) return undefined
+	const s = iso.trim()
+	const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+	if (!m) return s
+	const dueDay = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+	if (Number.isNaN(dueDay.getTime())) return s
+	const today = new Date()
+	today.setHours(0, 0, 0, 0)
+	const days = Math.round((dueDay.getTime() - today.getTime()) / 86_400_000)
+	if (days === 0) return 'today'
+	if (days === 1) return 'tomorrow'
+	if (days === -1) return 'yesterday'
+	return days < 0 ? `${-days} days overdue` : `in ${days} days`
+}
 const todoItem = (o: Rec) => ({
 	id: o.id as string | undefined,
 	title: (o.title ?? o.task) as string | undefined,
 	done: o.done as boolean | undefined,
-	due: o.due as string | undefined,
+	due: relDue(o.due),
 	priority: o.priority as string | undefined
 })
 
@@ -64,7 +82,8 @@ function todosVibe(
 ): { schema: string; data?: unknown } | undefined {
 	if (args.schema !== 'todos') return undefined
 	const items = (args.items ?? []) as Rec[]
-	if (args.action === 'create') return { schema: 'todos-created', data: { items: items.map(todoItem) } }
+	if (args.action === 'create')
+		return { schema: 'todos-created', data: { items: items.map(todoItem) } }
 	if (args.action === 'update') {
 		const diffs = items
 			.map((patch) => {
@@ -73,8 +92,8 @@ function todosVibe(
 					.filter((k) => k !== 'id' && String(patch[k] ?? '') !== String(b[k] ?? ''))
 					.map((k) => ({ field: k, from: String(b[k] ?? ''), to: String(patch[k] ?? '') }))
 				// the card's prominent title = the NEW state (the task IS now the updated title); a title
-					// rename still shows old→new in the change rows below. board 0099.
-					return { id: String(patch.id), title: String(patch.title ?? b.title ?? ''), changes }
+				// rename still shows old→new in the change rows below. board 0099.
+				return { id: String(patch.id), title: String(patch.title ?? b.title ?? ''), changes }
 			})
 			.filter((d) => d.changes.length > 0)
 		return { schema: 'todos-edited', data: { items: items.map(todoItem), diffs } }
@@ -104,7 +123,8 @@ export const dataCrud: ToolActor = {
 	async handle(ctx, raw): Promise<ToolResult> {
 		const args = raw as DataCrudArgs
 		const schema = typeof args.schema === 'string' ? args.schema : 'data'
-		const detail = `${typeof args.action === 'string' ? args.action : ''} ${schema}`.trim() || 'data'
+		const detail =
+			`${typeof args.action === 'string' ? args.action : ''} ${schema}`.trim() || 'data'
 
 		// For a todos update/delete, read the LIVE rows ONCE and RESOLVE the model's id(s) against them
 		// (gemma hallucinates UUIDs). This both makes the write hit the real row AND gives the diff/label
@@ -114,7 +134,10 @@ export const dataCrud: ToolActor = {
 			const cur = (await ctx.data({ schema: 'todos', action: 'list' })) as { items?: Rec[] }
 			todosNow = cur.items ?? []
 			if (args.action === 'update' && args.items) {
-				args.items = args.items.map((i) => ({ ...i, id: resolveId(String((i as Rec).id ?? ''), todosNow!) }))
+				args.items = args.items.map((i) => ({
+					...i,
+					id: resolveId(String((i as Rec).id ?? ''), todosNow!)
+				}))
 			}
 			if (args.action === 'delete') {
 				const raw2 = (args.ids?.length ? args.ids : args.id ? [args.id] : []).map((x) => String(x))

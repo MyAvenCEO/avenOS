@@ -24,7 +24,11 @@ import { t } from '$lib/i18n'
 // + a before→after diff) · `deleted` (the removed tasks). The create/edit/delete modes are read-only
 // summary cards fed by the actor's `data`; `all` is the live interactive list.
 type TodoMode = 'all' | 'created' | 'edited' | 'deleted'
-type TodoDiff = { id: string; title: string; changes: { field: string; from: string; to: string }[] }
+type TodoDiff = {
+	id: string
+	title: string
+	changes: { field: string; from: string; to: string }[]
+}
 let {
 	containerName = 'aven-vibes-todos',
 	mode = 'all',
@@ -78,10 +82,25 @@ const valuesQuery = createQuery(() => ({
 }))
 const rows = $derived<Todo[]>(valuesQuery.data ?? [])
 
-// Human relative due: "in 3 days" / "in 5 hours" / "in 20 min" / "2 days overdue".
+// Human relative due. A DATE-ONLY due ("YYYY-MM-DD") is a whole-DAY deadline — compare by calendar day so
+// "today" reads "today" (NOT "13 hours overdue" — the old bug of parsing a bare date as UTC midnight). A
+// due WITH a time keeps hour/minute precision. board 0105.
 function relDue(iso: string | null | undefined): string {
 	if (!iso) return ''
-	const d = new Date(iso)
+	const s = iso.trim()
+	if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+		// day-granular: compare local calendar days.
+		const [y, m, d] = s.split('-').map(Number)
+		const dueDay = new Date(y, m - 1, d)
+		const today = new Date()
+		today.setHours(0, 0, 0, 0)
+		const days = Math.round((dueDay.getTime() - today.getTime()) / 86_400_000)
+		if (days === 0) return 'today'
+		if (days === 1) return 'tomorrow'
+		if (days === -1) return 'yesterday'
+		return days < 0 ? `${-days} days overdue` : `in ${days} days`
+	}
+	const d = new Date(s)
 	if (Number.isNaN(d.getTime())) return ''
 	const ms = d.getTime() - Date.now()
 	const past = ms < 0
@@ -209,7 +228,9 @@ const summaryCount = $derived(mode === 'edited' ? summaryDiffs.length : summaryI
 								{#each d.changes as c (c.field)}
 									<li class="flex items-baseline gap-2 text-[12px]">
 										<span class="text-muted-foreground w-20 shrink-0 capitalize">{c.field}</span>
-										<span class="text-muted-foreground line-through decoration-1">{c.from || '—'}</span>
+										<span class="text-muted-foreground line-through decoration-1"
+											>{c.from || '—'}</span
+										>
 										<span class="text-muted-foreground/60">→</span>
 										<span class="text-foreground font-medium">{c.to || '—'}</span>
 									</li>
@@ -243,7 +264,8 @@ const summaryCount = $derived(mode === 'edited' ? summaryDiffs.length : summaryI
 							{#if relDue(it.due) || it.priority}
 								<span class="flex shrink-0 gap-1.5">
 									{#if relDue(it.due)}
-										<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px]"
+										<span
+											class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px]"
 											>{relDue(it.due)}</span
 										>
 									{/if}
