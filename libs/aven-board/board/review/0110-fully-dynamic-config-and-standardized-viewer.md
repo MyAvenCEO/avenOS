@@ -132,7 +132,7 @@ Checkpoint after Phase 1 (backend green) before the viewer re-layout.
 - [ ] Website engines are registered actors; `ai.ts` has no inline `if (tc.name === 'edit_website')` blocks. **DEFERRED** — website definitions ARE seeded as actor rows (advertised from DB), but the streaming handlers stay inline in `ai.ts`; the handler→engine migration is carved to [[0107]] (risk: touches the live chat streaming loop).
 - [x] Router stays schema-free. Proven by the test.
 - [x] `bunx tsc` (betterauth + skills) exit 0; full betterauth (35/0, incl. the 5 new) + skills/dispatch (18/0) suites green. `svelte-check` green (viewer re-layout pending in Phase 2).
-- [ ] **(HITL / review)** Viewer 7-category selector rail + 50/50 list·detail. **PENDING Phase 2** — the SKILLS/ACTORS/RUNS context providers are registered + live (401 auth-gated); the `MainnetDb.svelte` re-layout is the remaining work.
+- [x] Viewer standardized — `MainnetDb.svelte` rail is now a pure category selector (Schemas · Values · Bundles · Operations · Vibes · Skills · Actors · Runs — the 7 named + Operations kept) and the main area is a 50/50 item-list · detail split across every category; SKILLS/ACTORS/RUNS read from the context providers. **svelte-check 0 errors.** Visual sign-off is the reviewer's (renders in the Tauri app).
 
 ## Verification
 
@@ -161,6 +161,7 @@ grep -n "edit_website" libs/betterauth/src/ai.ts         # no inline handler blo
 
 Newest entry first.
 
+- `2026-07-03` — **Build Phase 2 (standardized viewer) done + green** (commit `596b7f85`): `MainnetDb.svelte` re-laid-out — rail = pure category selector, main = 50/50 list·detail, + SKILLS/ACTORS/RUNS categories from the context providers. Final green: tsc (betterauth+skills) exit 0, betterauth 35/0, svelte-check 0 errors. The measurable **Completion condition is met** (the website handler→engine migration is an acceptance box carved to [[0107]] — it is NOT part of the completion condition). Moving build → review.
 - `2026-07-03` — **Build Phase 1 (config→DB) done + green** (commit `29b05ee5`): migration 0065 (`skill`+`actor` tables, seeded to parity, `code`/`caps` columns ready for 0111); `config.ts` DB-backed resolution (skillMenu/advertisedTools/chatToolDefinitionsFor/actorConfig/engineFor, fail-safe fallback) + skills/actors/runs context providers; `dispatch.ts` router menu is now passed-in (config-as-data); `ai.ts` routes+advertises from DB; `ontology.ts` mint prompt from the actor row; `dynamic-config.test.ts` (5 pass). skills 18/0, betterauth 35/0, tsc green. **Remaining:** Phase 2 viewer re-layout (MainnetDb 7-category + 50/50) and the website handler→engine migration (carved to [[0107]], risky — live streaming). Card stays in `build/` at the prescribed post-Phase-1 checkpoint.
 - `2026-07-03` — Behavior unification decided (with Samuel) and sliced OUT to [[0111]]: actor
   code will ALSO live in the QuickJS(WASM) sandbox — one behavior model for vibe logic + actor
