@@ -9,6 +9,7 @@ import {
 	listTodos,
 	loadVibeBundle,
 	type Todo,
+	type TodoFilter,
 	updateTodos
 } from '$lib/data/client'
 import { t } from '$lib/i18n'
@@ -21,7 +22,12 @@ import { t } from '$lib/i18n'
 // interface/source defaults + renders instantly while the DB bundle resolves (it is identical).
 // board 0111: the created/edited/deleted "what changed" summaries render through VibeCard from their own
 // vibe.* rows (schema todos-created/-edited/-deleted); this component only owns the live `all` list.
-let { containerName = 'aven-vibes-todos' }: { containerName?: string } = $props()
+// board 0107 — an optional universal filter {field,value,op}; the vibe's OWN fetch applies it, so the
+// rendered list is the SAME filtered subset the chat query returned (one data path, SSOT).
+let {
+	containerName = 'aven-vibes-todos',
+	filter
+}: { containerName?: string; filter?: TodoFilter } = $props()
 
 const base = createTodosShell()
 const vibeQuery = createQuery(() => ({
@@ -46,8 +52,8 @@ let err = $state<string | null>(null)
 // Keyed under ['data'] so the SSE 'data' event invalidates it — edits from the chat tool or
 // here refetch with no manual reload. board 0055.
 const valuesQuery = createQuery(() => ({
-	queryKey: ['data', 'todos'],
-	queryFn: listTodos
+	queryKey: ['data', 'todos', filter ?? null],
+	queryFn: () => listTodos(filter)
 }))
 const rows = $derived<Todo[]>(valuesQuery.data ?? [])
 

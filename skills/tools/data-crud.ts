@@ -133,8 +133,9 @@ function todosVibe(
 			.filter((d) => d.changes.length > 0)
 		return { schema: 'todos-edited', data: { items: items.map(todoItem), diffs } }
 	}
-	// list (the read actor) → the full live card
-	return { schema: 'todos' }
+	// list (the read actor) → the live card; carry the filter so the card fetches the SAME subset (SSOT —
+	// one data path: vibe → /api/data/todos → crud, the filter flows through). board 0107.
+	return { schema: 'todos', data: args.filter ? { filter: args.filter } : undefined }
 }
 
 /**

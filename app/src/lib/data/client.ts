@@ -117,8 +117,12 @@ export type Todo = {
 	priority?: string | null
 }
 
-export async function listTodos(): Promise<Todo[]> {
-	const { todos } = await api<{ todos: Todo[] }>('/api/data/todos')
+// A universal list filter over any projected field: { field, value, op? }. board 0107.
+export type TodoFilter = { field: string; value?: unknown; op?: string }
+
+export async function listTodos(filter?: TodoFilter): Promise<Todo[]> {
+	const q = filter ? `?filter=${encodeURIComponent(JSON.stringify(filter))}` : ''
+	const { todos } = await api<{ todos: Todo[] }>(`/api/data/todos${q}`)
 	return todos
 }
 

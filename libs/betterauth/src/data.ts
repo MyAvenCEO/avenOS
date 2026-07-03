@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { Cell, Place, PredicationStore, TypeSpec } from '@avenos/aven-ontology'
+import type { DataCrudArgs } from '@avenos/skills/tools'
 import { create, query, remove, update } from '@avenos/aven-ontology'
 import { todoPredicateSchemas } from '@avenos/aven-vibes/predicate'
 import Ajv from 'ajv'
@@ -261,16 +262,6 @@ export async function deleteValue(c: Context): Promise<Response> {
 // ── LLM tool executor ──────────────────────────────────────────────────────────
 // Runs the generic `data_crud` tool (schema @avenos/aven-vibes/tools) against the store,
 // scoped to a user. Validates writes against the schema; never throws (returns {ok,...}).
-
-type DataCrudArgs = {
-	schema?: string
-	action?: 'list' | 'create' | 'update' | 'delete'
-	items?: Record<string, unknown>[]
-	/** delete: a single value id. */
-	id?: string
-	/** delete: a BATCH of value ids — one call removes many (board 0099). */
-	ids?: string[]
-}
 
 /** Resolve the id(s) a delete targets: explicit `ids`, a single `id`, or the ids inside `items`. */
 function deleteIds(args: DataCrudArgs): string[] {
@@ -619,7 +610,18 @@ export async function runTypeInterpreted(
 export async function listTodos(c: Context): Promise<Response> {
 	const uid = await userId(c)
 	if (!uid) return c.json({ error: 'unauthorized' }, 401)
-	const res = (await crud(uid, { schema: 'todos', action: 'list' })) as {
+	// board 0107 — the universal {field,value,op} filter rides as a JSON query param so the vibe's OWN fetch
+	// returns the filtered subset (one data path: vibe → here → crud → engine).
+	const raw = c.req.query('filter')
+	let filter: DataCrudArgs['filter']
+	if (raw) {
+		try {
+			filter = JSON.parse(raw)
+		} catch {
+			/* ignore a malformed filter → full list */
+		}
+	}
+	const res = (await crud(uid, { schema: 'todos', action: 'list', filter })) as {
 		items?: unknown[]
 	}
 	return c.json({ todos: res.items ?? [] })

@@ -561,7 +561,12 @@ function handleTranscribeError(message: string): void {
 						     Composer needs a definite height, so it renders in a fixed-height card. -->
 						{#if message.vibe === 'todos'}
 							<div class="max-h-[80vh] w-full overflow-y-auto">
-								<TodosVibe containerName={`aven-vibes-chat-${message.id}`} />
+								<TodosVibe
+									containerName={`aven-vibes-chat-${message.id}`}
+									filter={message.vibeData?.filter as
+										| { field: string; value?: unknown; op?: string }
+										| undefined}
+								/>
 							</div>
 						{:else if VIBE_CARDS.has(message.vibe ?? '')}
 							<!-- board 0105 — every read-only actor card renders from its vibe.* rows through the
