@@ -38,4 +38,15 @@ d('board 0107 — universal crud() filters', () => {
 		expect(medium.every((t) => t.priority === 'medium')).toBe(true)
 		expect(medium.length).toBe(all.filter((t) => t.priority === 'medium').length)
 	})
+
+	// board 0112 — string eq is CASE-INSENSITIVE: goal/tag/location values are free-text labels a model
+	// capitalizes however it read them. This is the one reason "show me my Healthy Eating todos" returned 0
+	// (the stored goal is "Healthy eating"). Exact-case and off-case filters must return the SAME rows.
+	test('string filter is case-insensitive (the "Healthy Eating" vs "Healthy eating" bug)', async () => {
+		const exact = rows(await list({ field: 'priority', value: 'medium' }))
+		const upper = rows(await list({ field: 'priority', value: 'MEDIUM' }))
+		const mixed = rows(await list({ field: 'priority', value: 'Medium' }))
+		expect(upper.length).toBe(exact.length)
+		expect(mixed.length).toBe(exact.length)
+	})
 })

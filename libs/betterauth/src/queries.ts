@@ -27,6 +27,17 @@ const OPS: Record<BinOp, string> = {
 	in: 'in'
 }
 
+// board 0112 — user-facing filter/match values are free-text LABELS a model capitalizes however it read
+// them ("Healthy eating" the stored goal vs "Healthy Eating" from the user's phrasing). So string eq/neq
+// compare CASE-INSENSITIVELY — the single reason "show me my Healthy Eating todos" returned 0. Numbers
+// and ids are unaffected (lower() of a digit/uuid string is identity); ordering ops keep exact semantics.
+// Used by BOTH the query filter and the mutation matcher, so rename/merge/delete-by-name are fuzzy too.
+function compare(col: RawBuilder<unknown>, op: BinOp, v: unknown): RawBuilder<unknown> {
+	if ((op === 'eq' || op === 'neq') && typeof v === 'string')
+		return sql`lower(${col}) ${sql.raw(OPS[op])} lower(${v})`
+	return sql`${col} ${sql.raw(OPS[op])} ${v}`
+}
+
 // board 0107 — a filter targets the base predicate by default, or a JOIN (`join` = its index) so a query can
 // filter on a satellite place (e.g. due date on the `due` join) or a satellite's existence (a `notnull`/
 // `isnull` on the join's id → the `done` predicate present/absent). Every value stays a bound param.
@@ -293,7 +304,7 @@ function filterFrag(
 		const arr = Array.isArray(v) ? v : [v]
 		return sql`${c} in (${sql.join(arr.map((x) => sql`${x}`))})`
 	}
-	return sql`${c} ${sql.raw(OPS[f.op])} ${v}`
+	return compare(c, f.op, v)
 }
 
 // ── query executor ──────────────────────────────────────────────────────────────
@@ -422,7 +433,7 @@ export async function runMutation(
 						const arr = Array.isArray(v) ? v : [v]
 						return sql`${bareCol(f.place)} in (${sql.join(arr.map((x) => sql`${x}`))})`
 					}
-					return sql`${bareCol(f.place)} ${sql.raw(OPS[f.op])} ${v}`
+					return compare(bareCol(f.place), f.op, v)
 				})
 			]
 			// board 0104 — a when-guard skips an op: `param` = skip when FALSY (optional insert), `present` =
