@@ -26,9 +26,26 @@ export const goals: ToolActor = {
 	definition: GOALS_TOOL,
 	async handle(ctx, raw): Promise<ToolResult> {
 		if (!ctx.ops) return { content: { ok: false, error: 'ops capability not available' } }
-		const res = (await ctx.ops('todos.goals', {})) as { rows?: { key?: string; n?: number }[] }
-		const rows = (res.rows ?? []).filter((r) => r.key)
-		const said = typeof (raw as { response?: string }).response === 'string' ? String((raw as { response?: string }).response).trim() : ''
+		// two configured universal aggregates: total memberships per goal + DONE memberships per goal
+		// (the done op inner-joins the done satellite) — merged into {key, total, done} for the grid's
+		// progress bar. board 0112.
+		type Agg = { rows?: { key?: string; n?: number }[] }
+		const [total, done] = await Promise.all([
+			ctx.ops('todos.goals', {}) as Promise<Agg>,
+			ctx.ops('todos.goals-done', {}).catch(() => ({ rows: [] })) as Promise<Agg>
+		])
+		const doneBy = new Map((done.rows ?? []).map((r) => [String(r.key), Number(r.n ?? 0)]))
+		const rows = (total.rows ?? [])
+			.filter((r) => r.key)
+			.map((r) => ({
+				key: String(r.key),
+				total: Number(r.n ?? 0),
+				done: doneBy.get(String(r.key)) ?? 0
+			}))
+		const said =
+			typeof (raw as { response?: string }).response === 'string'
+				? String((raw as { response?: string }).response).trim()
+				: ''
 		return {
 			detail: 'goals',
 			content: { ok: true, count: rows.length, goals: rows },

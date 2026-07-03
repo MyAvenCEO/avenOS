@@ -172,6 +172,36 @@ const selectors: StyleDef['selectors'] = {
 		borderColor: 'color-mix(in srgb, var(--prio-low) 28%, transparent)'
 	},
 	'.vc-prio[data-prio="low"]::before': { background: 'var(--prio-low)' },
+	// board 0112 — the GOAL chip (brand-navy ✳, same look as the list's td-chip--goal) and the ↳ sub-task
+	// marker, so a created/edited card shows the FULL badges of the row it touched.
+	'.vc-goal': {
+		display: 'inline-flex',
+		alignItems: 'center',
+		gap: '0.3rem',
+		fontSize: 'var(--fs-micro)',
+		fontWeight: '600',
+		color: 'var(--brand-accent)',
+		background: 'color-mix(in srgb, var(--brand-accent) 7%, transparent)',
+		border: '1px solid color-mix(in srgb, var(--brand-accent) 22%, transparent)',
+		borderRadius: 'var(--radius-pill)',
+		padding: '0.12rem 0.55rem',
+		whiteSpace: 'nowrap'
+	},
+	'.vc-goal:empty': { display: 'none' },
+	'.vc-goal::before': { content: '"✳"', fontSize: '0.9em', lineHeight: '1', opacity: '0.8' },
+	'.vc-sub': {
+		display: 'inline-flex',
+		alignItems: 'center',
+		gap: '0.25rem',
+		fontSize: 'var(--fs-micro)',
+		color: 'var(--muted)',
+		border: '1px solid var(--border-soft)',
+		borderRadius: 'var(--radius-pill)',
+		padding: '0.12rem 0.5rem',
+		whiteSpace: 'nowrap'
+	},
+	'.vc-sub:empty': { display: 'none' },
+	'.vc-sub::before': { content: '"↳"', opacity: '0.7', lineHeight: '1' },
 	// standalone inner card (bundle-created / ontology-created items) — a brand surface box.
 	'.vc-card': {
 		border: '1px solid var(--border)',

@@ -111,7 +111,10 @@ const todoItem = (o: Rec) => ({
 	title: (o.title ?? o.task) as string | undefined,
 	done: o.done as boolean | undefined,
 	due: relDue(o.due),
-	priority: o.priority as string | undefined
+	priority: o.priority as string | undefined,
+	// board 0112 — the created/edited cards show the FULL badges: the goal label + a sub-task marker.
+	goal: (o.goal ?? '') as string,
+	sub: o.parent ? 'Sub-Task' : ''
 })
 
 /** The mode-specific vibe for a touched schema: todos → its actor card; anything else → no vibe. */

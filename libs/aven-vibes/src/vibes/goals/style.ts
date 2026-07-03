@@ -42,6 +42,32 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--muted)',
 		fontVariantNumeric: 'tabular-nums'
 	},
+	// board 0112 — the done/total PROGRESS BAR. The sandbox forbids inline styles, so the fill width is a
+	// DISCRETE class (p0…p100, rounded to 10s by the logic) — pure config, validator-safe.
+	'.gl-bar': {
+		height: '0.375rem',
+		borderRadius: 'var(--radius-pill)',
+		background: 'color-mix(in srgb, var(--brand-accent) 10%, transparent)',
+		overflow: 'hidden',
+		marginTop: '0.35rem'
+	},
+	'.gl-bar-fill': {
+		height: '100%',
+		borderRadius: 'var(--radius-pill)',
+		background: 'var(--brand-accent)',
+		transition: 'width 0.25s ease'
+	},
+	'.gl-bar-fill.p0': { width: '0%' },
+	'.gl-bar-fill.p10': { width: '10%' },
+	'.gl-bar-fill.p20': { width: '20%' },
+	'.gl-bar-fill.p30': { width: '30%' },
+	'.gl-bar-fill.p40': { width: '40%' },
+	'.gl-bar-fill.p50': { width: '50%' },
+	'.gl-bar-fill.p60': { width: '60%' },
+	'.gl-bar-fill.p70': { width: '70%' },
+	'.gl-bar-fill.p80': { width: '80%' },
+	'.gl-bar-fill.p90': { width: '90%' },
+	'.gl-bar-fill.p100': { width: '100%' },
 	'.gl-empty': {
 		border: '1px dashed var(--border)',
 		borderRadius: 'var(--radius-card)',
