@@ -75,7 +75,9 @@ then flip the runtime to read the DB — same pattern as `data_bundles`/`data_op
 ### Phase 1 — config → DB (skills + actors)
 - **Migration** `00NN_skill_actor_registry.ts`: create
   `skill (id, label, description, workflow jsonb, position, timestamps)` and
-  `actor (id, skill_id, name, engine, mailbox jsonb, llm jsonb, prompt text, context jsonb, vibe, hitl, position, timestamps)`.
+  `actor (id, skill_id, name, engine, code text NULL, caps jsonb NULL, mailbox jsonb, llm jsonb, prompt text, context jsonb, vibe, hitl, position, timestamps)`.
+  Behavior binding: `engine` (by-name, this card) XOR `code` (sandboxed QuickJS, lands in
+  [[0111]] — the columns exist NOW so 0111 needs no schema change).
   Seed `skill` from `SKILL_REGISTRY` (todos/ontology/website) and `actor` from every
   `ToolActor.definition` + the 3 Composer definitions; seed `prompt` from the existing TS
   constants (`CREATE_INSTRUCTIONS`, the authoring prompts) and `llm` from today's model
@@ -159,5 +161,10 @@ grep -n "edit_website" libs/betterauth/src/ai.ts         # no inline handler blo
 
 Newest entry first.
 
+- `2026-07-03` — Behavior unification decided (with Samuel) and sliced OUT to [[0111]]: actor
+  code will ALSO live in the QuickJS(WASM) sandbox — one behavior model for vibe logic + actor
+  code, vibes reference 1+ actors as their interactivity, `vibe_logic` retires. THIS card only
+  makes the actor table schema-ready (`code`/`caps` columns, nullable) and binds behavior by
+  `engine` name; 0111 ports the todos vertical to `code` rows.
 - `2026-07-03` — Taxonomy clarified with Samuel: **node = actor** (config-complete row: engine-by-name + mailbox + llm + prompt + context deps + vibe/hitl); **skill** = actor collection + workflow (sub-skill orchestration, as mocked by the legacy invoice composite 0022/0023); **dispatch** = pure delegator. TOOLS viewer category → ACTORS. Spec rewritten to match; actor rows now carry prompt/llm/context with a prompt-from-row acceptance test. Chat-side multi-step orchestration explicitly out of scope (flow-runner owns it).
 - `2026-07-03` — Discovery: interviewed; decided ALL-IN-ONE (config→DB + viewer standardization) with config-in-DB / handler-by-name. Absorbs 0107 (website→actors) + 0108 (skill registry→DB). Made "done" a `bun test` proving DB-backed resolution + parity + DB-only-row dynamism + schema-free router, plus tsc/svelte-check for the 7-category 50/50 viewer. Written into `discover/`.
