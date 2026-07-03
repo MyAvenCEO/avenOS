@@ -553,7 +553,7 @@ $effect(() => {
 	<!-- board 0110 — main = 50/50 (item list | selected-item detail) -->
 	<div class="flex min-h-0 flex-1">
 		<!-- left 50%: the current category's item list -->
-		<div class="border-border w-1/2 min-w-0 shrink-0 overflow-y-auto border-r px-2 py-3">
+		<div class="border-border w-1/4 min-w-0 shrink-0 overflow-y-auto border-r px-2 py-3">
 			{#if category === 'schemas' || category === 'values'}
 				{#if !loading && tables.length === 0}
 					<p class="text-muted-foreground px-2 py-2 text-[11px]">{t('mainnet.db.empty')}</p>
@@ -570,7 +570,7 @@ $effect(() => {
 			{:else if category === 'bundles'}
 				{#each bundleNames as name (name)}
 					<button type="button" class={listBtn(selectedBundle === name)} onclick={() => pickBundle(name)}>
-						<span class="opacity-60">⬡</span><span class="truncate font-mono text-[12px]">{name}</span>
+						<span class="truncate font-mono text-[12px]">{name}</span>
 					</button>
 				{/each}
 			{:else if category === 'operations'}
@@ -585,13 +585,13 @@ $effect(() => {
 			{:else if category === 'vibes'}
 				{#each vibeNames as name (name)}
 					<button type="button" class={listBtn(selectedVibe === name)} onclick={() => selectVibe(name)}>
-						<span class="opacity-60">🎨</span><span class="truncate font-mono text-[12px]">{name}</span>
+						<span class="truncate font-mono text-[12px]">{name}</span>
 					</button>
 				{/each}
 			{:else if category === 'skills'}
 				{#each skillItems as it (it.name)}
 					<button type="button" class={listBtn(selectedSkill === it.name)} onclick={() => pickSkill(it.name)}>
-						<span class="opacity-60">🧩</span><span class="truncate font-mono text-[12px]">{it.name}</span>
+						<span class="truncate font-mono text-[12px]">{it.name}</span>
 					</button>
 				{/each}
 			{:else if category === 'actors'}
@@ -613,7 +613,7 @@ $effect(() => {
 		</div>
 
 		<!-- right 50%: the selected item detail -->
-		<div class="w-1/2 min-w-0 min-h-0 overflow-y-auto p-4">
+		<div class="w-3/4 min-w-0 min-h-0 overflow-y-auto p-4">
 		{#if err}
 			<p class="text-destructive shrink-0 text-sm" role="alert">{err}</p>
 		{/if}
@@ -622,7 +622,6 @@ $effect(() => {
 			     (VibeCard) + a readable summary aside; the other tabs are the raw View/Function/Style/State. -->
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
 				<div class="mb-3 flex items-center gap-2">
-					<span class="opacity-60">🎨</span>
 					<h2 class="text-foreground font-mono text-base font-semibold">{selectedVibe}</h2>
 				</div>
 				<!-- tabs -->
@@ -716,7 +715,6 @@ $effect(() => {
 			     (how they read back flat), not raw JSON. Raw TypeSpec stays available on demand. -->
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
 				<div class="mb-3 flex items-center gap-2">
-					<span class="opacity-60">⬡</span>
 					<h2 class="text-foreground font-mono text-base font-semibold">{selectedBundle}</h2>
 				</div>
 				{#if bundleDetailQuery.isPending}
@@ -890,7 +888,6 @@ $effect(() => {
 		{:else if selectedSkill}
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
 				<div class="mb-3 flex items-center gap-2">
-					<span class="opacity-60">🧩</span>
 					<h2 class="text-foreground font-mono text-base font-semibold">{selectedSkill}</h2>
 				</div>
 				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[13px]">
@@ -1028,9 +1025,6 @@ $effect(() => {
 											class="text-muted-foreground px-3 py-2 font-bold tracking-wider whitespace-nowrap uppercase"
 										>
 											{c.label}
-											{#if c.ref}
-												<span class="ml-0.5 normal-case opacity-50">↪</span>
-											{/if}
 										</th>
 									{/each}
 								</tr>
@@ -1053,7 +1047,7 @@ $effect(() => {
 													{#if r.kind === 'you'}
 														<span
 															class="bg-primary/10 text-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium"
-															>◆ {r.label}</span
+															>{r.label}</span
 														>
 													{:else if r.kind === 'row'}
 														<button
@@ -1065,7 +1059,7 @@ $effect(() => {
 																gotoRef(r.target)
 															}}
 														>
-															↪ {r.label}
+															{r.label}
 														</button>
 													{:else}
 														<span
