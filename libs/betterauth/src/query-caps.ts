@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { sql } from 'kysely'
+import { actorConfig } from './config'
 import { registerContextProvider } from './context'
 import { db } from './db'
 import {
@@ -74,14 +75,14 @@ function predicatesBlock(preds: PredInfo[]): string {
 }
 
 // ── the spec meta-languages, described for GLM (it emits JSON matching the AJV meta-schema) ────────
-const QUERY_INSTRUCTIONS = [
+export const QUERY_INSTRUCTIONS = [
 	'You author a QUERY SPEC — a small JSON object the engine compiles to ONE safe, parameterized SQL over the',
 	'x1–x5 predication store. You NEVER write SQL. Output ONLY the JSON object, no prose, no code fence.',
 	'',
 	'A query spec:',
 	'  { "from": "<predicate>",              // the base predicate to scan (required)',
 	'    "where": [ {"place":"x1|..|x5|id","op":"eq|neq|gt|gte|lt|lte|in|isnull|notnull","value":<literal>,"join":N} ],',
-	'    "join":  [ {"predicate":"<other>","kind":"inner|left","on":{"place":"x1..x5","base":"x1..x5|id"}} ],',
+	'    "join":  [ {"predicate":"<other>","kind":"inner|left","on":{"place":"x1..x5","base":"x1..x5|id"|{"join":N,"place":"x1..x5|id"}}} ],',
 	'    "group_by": "x1..x5",               // with count, to aggregate per key',
 	'    "count":  {"having":{"op":"gt|gte|..","value":<number>}},  // filter groups by their count',
 	'    "project": ["x1", {"place":"x2","as":"title"}, {"join":N,"exists":true,"as":"done"}] }',
@@ -94,6 +95,10 @@ const QUERY_INSTRUCTIONS = [
 	'"kind":"left" so base rows survive when the satellite is absent — REQUIRED for isnull, and to keep',
 	'not-yet-satisfied rows (open todos) visible. An inner join drops base rows lacking the satellite.',
 	'',
+	'CHAINS (graph depth). "base" may instead reference an EARLIER join: {"join":N,"place":"id|x1..x5"} —',
+	'so a query walks referent chains to any depth (item → quantity(x1=item id) → unit(x1=QUANTITY row id):',
+	'join 1 uses "base":{"join":0,"place":"id"}). N must be a STRICTLY EARLIER join index — never forward/self.',
+	'',
 	"Pick places from each predicate's declared place structure below. Examples over task(x2=title) with",
 	'satellites done(x1=task id) and due(x1=date, x2=task id):',
 	'  done todos  → {"from":"task","join":[{"predicate":"done","kind":"left","on":{"place":"x1","base":"id"}}],"where":[{"join":0,"place":"id","op":"notnull"}],"project":["id",{"place":"x2","as":"title"}]}',
@@ -102,7 +107,7 @@ const QUERY_INSTRUCTIONS = [
 	'  owners with >3 companies over owned_by(x1=owner,x2=company): {"from":"owned_by","group_by":"x1","count":{"having":{"op":"gt","value":3}},"project":["x1"]}'
 ].join('\n')
 
-const MUTATION_INSTRUCTIONS = [
+export const MUTATION_INSTRUCTIONS = [
 	'You author a MUTATION SPEC — a small JSON object the engine runs as ONE all-or-nothing transaction of',
 	'predication writes. You NEVER write SQL. Output ONLY the JSON object, no prose, no code fence.',
 	'',
@@ -123,6 +128,22 @@ const MUTATION_INSTRUCTIONS = [
 	'{"x1":{"ref":0},"x2":"2"} → 2 insert eat {"x1":"<me>","x2":{"ref":0}}. {"ref":N} must point at an earlier',
 	'INSERT (never forward, never a delete). Mint any missing predicate name (e.g. quantity≡klani) by just using it.'
 ].join('\n')
+
+/**
+ * board 0112 — the authoring instructions are DB CONFIG: the `query`/`mutate` ACTOR row's `prompt` column
+ * is the SSOT (seeded by migration 0071 from the TS constants); the constant remains only as the fail-safe
+ * fallback when the row is missing/empty (the config.ts seed-fallback pattern). Editing how GLM authors
+ * specs = editing a DB row — the pattern a GLM-minted skill's own authoring prompts will follow.
+ */
+export async function authoringInstructions(kind: 'query' | 'mutation'): Promise<string> {
+	const fallback = kind === 'query' ? QUERY_INSTRUCTIONS : MUTATION_INSTRUCTIONS
+	try {
+		const actor = await actorConfig(kind === 'query' ? 'query' : 'mutate')
+		return actor?.prompt?.trim() ? actor.prompt : fallback
+	} catch {
+		return fallback
+	}
+}
 
 /** Strip a fence + grab the first {...} JSON object from an LLM reply. */
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -146,7 +167,7 @@ async function authorSpec(
 	const key = process.env.TINFOIL_API_KEY
 	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
 	const system = [
-		kind === 'query' ? QUERY_INSTRUCTIONS : MUTATION_INSTRUCTIONS,
+		await authoringInstructions(kind),
 		'',
 		`Today is ${new Date().toISOString().slice(0, 10)} — resolve relative dates ("today", "this week", "tomorrow") to ISO YYYY-MM-DD literals.`,
 		'',
