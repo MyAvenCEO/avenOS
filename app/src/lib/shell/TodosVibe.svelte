@@ -13,46 +13,15 @@ import {
 } from '$lib/data/client'
 import { t } from '$lib/i18n'
 
-// The unified todos vibe: the aven-vibes todos vibe (JSON view/style + QuickJS) with its
-// CRUD wired to the betterauth /api/data store. Single source of truth for the todos UI —
-// reused in both the Vibes tab and the chat stream. board 0054.
-// board 0095: the view/style/logic now LOAD from the DB `vibe.*` registry (config-as-data) and override
-// the file defaults — the app renders the vibe from the DB through the engine. The file shell supplies
-// the interface/source defaults + renders instantly while the DB bundle resolves (it is identical).
-// board 0099 — the Todos skill is an ACTOR HUB: this one vibe renders 4 modes, one per actor —
-// `all` (read: the full interactive list) · `created` (the new tasks) · `edited` (only the updated tasks
-// + a before→after diff) · `deleted` (the removed tasks). The create/edit/delete modes are read-only
-// summary cards fed by the actor's `data`; `all` is the live interactive list.
-type TodoMode = 'all' | 'created' | 'edited' | 'deleted'
-type TodoDiff = {
-	id: string
-	title: string
-	changes: { field: string; from: string; to: string }[]
-}
-let {
-	containerName = 'aven-vibes-todos',
-	mode = 'all',
-	data
-}: {
-	containerName?: string
-	mode?: TodoMode
-	data?: {
-		items?: { id?: string; title?: string; done?: boolean; due?: string; priority?: string }[]
-		diffs?: TodoDiff[]
-	}
-} = $props()
-
-const summaryItems = $derived(data?.items ?? [])
-const summaryDiffs = $derived(data?.diffs ?? [])
-// Each non-read actor is ALSO a real vibe: it renders through the SAME engine (AvenVibeView + the
-// todos QuickJS logic), just with a mode-specific SOURCE — the eyebrow names the actor, and the change
-// is carried in the row chips (created → due/priority, edited → the before→after diff, deleted → a
-// "gelöscht" chip). So all four states are engine-rendered vibes, not bare markup. board 0099.
-const MODE_EYEBROW: Record<Exclude<TodoMode, 'all'>, string> = {
-	created: 'Neu erstellt',
-	edited: 'Aktualisiert',
-	deleted: 'Gelöscht'
-}
+// The interactive todos list vibe: the aven-vibes todos vibe (JSON view/style + QuickJS) with its CRUD
+// wired to the betterauth /api/data store. Single source of truth for the live list UI — reused in the
+// chat stream, the Skills preview, and the flow-step view. board 0054.
+// board 0095: the view/style/logic LOAD from the DB `vibe.*` registry (config-as-data) and override the
+// file defaults — the app renders the vibe from the DB through the engine. The file shell supplies the
+// interface/source defaults + renders instantly while the DB bundle resolves (it is identical).
+// board 0111: the created/edited/deleted "what changed" summaries render through VibeCard from their own
+// vibe.* rows (schema todos-created/-edited/-deleted); this component only owns the live `all` list.
+let { containerName = 'aven-vibes-todos' }: { containerName?: string } = $props()
 
 const base = createTodosShell()
 const vibeQuery = createQuery(() => ({
@@ -168,124 +137,19 @@ function handleEvent(event: UiEvent): void {
 	err = null
 	mutation.mutate(event)
 }
-
-// read (all) is the full interactive engine vibe. create/edit/delete are the "what changed" actors —
-// a diff doesn't fit an interactive list row, so each gets a purpose-built layout: created = new tasks
-// + chips, edited = title + aligned field old→new rows, deleted = struck-through titles. board 0099.
-// Brand palette — one stringent style with the interactive vibe: sage (created) /
-// navy accent (edited) / terracotta (deleted). Match the vibe's priority pills.
-const MODE_ACCENT: Record<Exclude<TodoMode, 'all'>, string> = {
-	created: 'text-[#5f8a63]',
-	edited: 'text-[#1e293b]',
-	deleted: 'text-[#c1502e]'
-}
-// Static priority-pill classes (Tailwind JIT needs whole strings) — same tones as the
-// interactive vibe's .td-chip--prio (high=terracotta / medium=ochre / low=sage).
-const PRIO_PILL: Record<string, string> = {
-	high: 'text-[#c1502e] bg-[#c1502e]/10 border-[#c1502e]/25',
-	medium: 'text-[#b0803a] bg-[#b0803a]/10 border-[#b0803a]/25',
-	low: 'text-[#5f8a63] bg-[#5f8a63]/10 border-[#5f8a63]/25'
-}
-const prioPill = (p: unknown): string =>
-	PRIO_PILL[String(p ?? '').toLowerCase()] ?? 'text-muted-foreground bg-muted border-border/60'
-const summaryMode = $derived(mode as Exclude<TodoMode, 'all'>)
-const summaryCount = $derived(mode === 'edited' ? summaryDiffs.length : summaryItems.length)
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-2">
 	{#if err}
 		<p class="text-destructive shrink-0 text-sm" role="alert">{err}</p>
 	{/if}
-	{#if mode === 'all'}
-		<div class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
-			<AvenVibeView
-				{shell}
-				{source}
-				onEvent={handleEvent}
-				{containerName}
-				desktopHint={t('mainnet.auth.loading')}
-			/>
-		</div>
-	{:else}
-		<!-- create / edit / delete actor — a clean, purpose-built "what changed" card. board 0099. -->
-		<section class="mx-auto w-full max-w-2xl" data-container={containerName}>
-			<header
-				class="mb-3 inline-flex items-center gap-2 text-[11px] font-semibold tracking-[0.08em] uppercase"
-			>
-				<span class="text-[#1e293b]/80" style="font-family:var(--font-display)">✳</span>
-				<span class={MODE_ACCENT[summaryMode]}>{MODE_EYEBROW[summaryMode]}</span>
-				<span class="text-muted-foreground/70"
-					>· {summaryCount} {summaryCount === 1 ? 'Aufgabe' : 'Aufgaben'}</span
-				>
-			</header>
-
-			{#if summaryCount === 0}
-				<p
-					class="text-muted-foreground border-border rounded-[var(--radius-card)] border border-dashed px-4 py-6 text-center text-sm"
-				>
-					Keine Änderungen.
-				</p>
-			{:else if mode === 'edited'}
-				<ul class="border-border bg-card overflow-hidden rounded-[var(--radius-card)] border">
-					{#each summaryDiffs as d (d.id)}
-						<li class="border-border/60 border-b px-4 py-3 last:border-b-0">
-							<p class="text-foreground text-sm font-semibold">{d.title || '—'}</p>
-							<ul class="mt-2 flex flex-col gap-1.5">
-								{#each d.changes as c (c.field)}
-									<li class="flex items-baseline gap-2 text-[12px]">
-										<span class="text-muted-foreground w-20 shrink-0 capitalize">{c.field}</span>
-										<span class="text-muted-foreground line-through decoration-1"
-											>{c.from || '—'}</span
-										>
-										<span class="text-muted-foreground/50">→</span>
-										<span class="text-foreground font-medium">{c.to || '—'}</span>
-									</li>
-								{/each}
-							</ul>
-						</li>
-					{/each}
-				</ul>
-			{:else if mode === 'deleted'}
-				<ul class="border-border bg-card overflow-hidden rounded-[var(--radius-card)] border">
-					{#each summaryItems as it (it.id ?? it.title)}
-						<li class="border-border/60 flex items-center gap-2.5 border-b px-4 py-3 last:border-b-0">
-							<span class="text-[#c1502e] text-sm">✕</span>
-							<span class="text-muted-foreground text-sm line-through">{it.title ?? '—'}</span>
-						</li>
-					{/each}
-				</ul>
-			{:else}
-				<!-- created -->
-				<ul class="border-border bg-card overflow-hidden rounded-[var(--radius-card)] border">
-					{#each summaryItems as it (it.id ?? it.title)}
-						<li
-							class="border-border/60 flex items-center justify-between gap-3 border-b px-4 py-3 last:border-b-0"
-						>
-							<span class="flex min-w-0 items-center gap-2.5">
-								<span class="size-1.5 shrink-0 rounded-full bg-[#5f8a63]"></span>
-								<span class="text-foreground truncate text-sm font-medium">{it.title ?? '—'}</span>
-							</span>
-							{#if relDue(it.due) || it.priority}
-								<span class="flex shrink-0 items-center gap-1.5">
-									{#if relDue(it.due)}
-										<span
-											class="text-muted-foreground border-border/60 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] tabular-nums"
-											>◷ {relDue(it.due)}</span
-										>
-									{/if}
-									{#if it.priority}
-										<span
-											class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold capitalize {prioPill(
-												it.priority
-											)}">{it.priority}</span
-										>
-									{/if}
-								</span>
-							{/if}
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		</section>
-	{/if}
+	<div class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
+		<AvenVibeView
+			{shell}
+			{source}
+			onEvent={handleEvent}
+			{containerName}
+			desktopHint={t('mainnet.auth.loading')}
+		/>
+	</div>
 </div>

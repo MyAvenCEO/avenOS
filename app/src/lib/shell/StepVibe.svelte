@@ -61,10 +61,7 @@ const STATE_CHIP: Record<NodeState, string> = {
 
 {#if vibe === 'todos'}
 	<!-- the interactive todos list (CRUD events) keeps its dedicated engine component. board 0099. -->
-	<TodosVibe
-		mode="all"
-		data={vibeData as { items?: { id?: string; title?: string }[]; diffs?: [] }}
-	/>
+	<TodosVibe />
 {:else if VIBE_CARDS.has(vibe)}
 	<!-- board 0105 — every other actor card renders from its vibe.* rows through the generic host. -->
 	<VibeCard schema={vibe} data={vibeData} />

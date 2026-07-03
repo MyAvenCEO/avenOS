@@ -52,17 +52,7 @@ const selectedNode = $derived<RecipeNode | null>(
 // board 0099 — preview the SELECTED actor's vibe below the flow graph. Each todos actor names its
 // vibe (todos / todos-created / todos-edited / todos-deleted); render it with illustrative sample data
 // so the template view shows what that actor produces, without needing a live run.
-type PreviewMode = 'all' | 'created' | 'edited' | 'deleted'
 const previewVibe = $derived<string>(selectedNode?.vibe ?? '')
-const previewMode = $derived<PreviewMode>(
-	previewVibe === 'todos-created'
-		? 'created'
-		: previewVibe === 'todos-edited'
-			? 'edited'
-			: previewVibe === 'todos-deleted'
-				? 'deleted'
-				: 'all'
-)
 const PREVIEW_DATA: Record<
 	string,
 	{
@@ -185,11 +175,7 @@ function onSelect(id: string): void {
 						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
 							Vibe · {previewVibe}
 						</p>
-						<TodosVibe
-							containerName={`skills-preview-${selectedNodeId}`}
-							mode={previewMode}
-							data={previewData}
-						/>
+						<TodosVibe containerName={`skills-preview-${selectedNodeId}`} />
 					{:else if selectedNode && VIBE_CARDS.has(previewVibe)}
 						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
 							Vibe · {previewVibe}
