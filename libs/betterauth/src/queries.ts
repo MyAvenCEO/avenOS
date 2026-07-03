@@ -12,8 +12,12 @@ import { publish } from './events'
 
 type Place = 'x1' | 'x2' | 'x3' | 'x4' | 'x5'
 const PLACES: Place[] = ['x1', 'x2', 'x3', 'x4', 'x5']
-type Op = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in'
-const OPS: Record<Op, string> = {
+// Binary ops take a value/param; the two NULL ops take none (existence over a LEFT join — e.g. a `done`
+// satellite present or absent, which is how "done" vs "open" todos filter). board 0107.
+type BinOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in'
+type NullOp = 'isnull' | 'notnull'
+type Op = BinOp | NullOp
+const OPS: Record<BinOp, string> = {
 	eq: '=',
 	neq: '<>',
 	gt: '>',
@@ -23,7 +27,10 @@ const OPS: Record<Op, string> = {
 	in: 'in'
 }
 
-export type Filter = { place: Place | 'id'; op: Op; value?: unknown; param?: string }
+// board 0107 — a filter targets the base predicate by default, or a JOIN (`join` = its index) so a query can
+// filter on a satellite place (e.g. due date on the `due` join) or a satellite's existence (a `notnull`/
+// `isnull` on the join's id → the `done` predicate present/absent). Every value stays a bound param.
+export type Filter = { place: Place | 'id'; op: Op; value?: unknown; param?: string; join?: number }
 // board 0104 — a join may match on the base ROW ID (`base:'id'`) so a satellite predicate correlates on the
 // entity id (e.g. done.x1 = <task row id>), and may be a LEFT join so a missing satellite projects as null.
 type JoinBase = Place | 'id'
@@ -63,11 +70,17 @@ export type MutationSpec = { name?: string; params?: string[]; ops: MutationOp[]
 
 // ── AJV meta-schemas (the spec LANGUAGE) ────────────────────────────────────────
 const PLACE_ENUM = { type: 'string', enum: PLACES } as const
-const OP_ENUM = { type: 'string', enum: Object.keys(OPS) } as const
+const OP_ENUM = { type: 'string', enum: [...Object.keys(OPS), 'isnull', 'notnull'] } as const
 const PLACE_OR_ID = { type: 'string', enum: [...PLACES, 'id'] } as const
 const FILTER_SCHEMA = {
 	type: 'object',
-	properties: { place: PLACE_OR_ID, op: OP_ENUM, value: {}, param: { type: 'string' } },
+	properties: {
+		place: PLACE_OR_ID,
+		op: OP_ENUM,
+		value: {},
+		param: { type: 'string' },
+		join: { type: 'integer', minimum: 0 }
+	},
 	required: ['place', 'op'],
 	additionalProperties: false
 } as const
@@ -255,6 +268,9 @@ function filterFrag(
 	uid: string
 ): RawBuilder<unknown> {
 	const c = refCol(alias, f.place)
+	// NULL ops take no value — pure existence checks (a `notnull` on a LEFT-join id = the satellite is present).
+	if (f.op === 'isnull') return sql`${c} is null`
+	if (f.op === 'notnull') return sql`${c} is not null`
 	const v = resolveVal(f, params, uid)
 	if (f.op === 'in') {
 		const arr = Array.isArray(v) ? v : [v]
@@ -275,7 +291,12 @@ export function compileQuery(
 	const wheres: RawBuilder<unknown>[] = [
 		sql`${sql.ref(`${b}.user_id`)} = ${uid}`,
 		sql`${sql.ref(`${b}.predicate`)} = ${spec.from}`,
-		...(spec.where ?? []).map((f) => filterFrag(b, f, params, uid))
+		...(spec.where ?? []).map((f) => {
+			// board 0107 — a filter may target a JOIN alias (`f.join`) instead of the base predicate.
+			if (f.join !== undefined && !jspec[f.join])
+				throw new Error(`[queries] where references missing join ${f.join}`)
+			return filterFrag(f.join !== undefined ? `j${f.join}` : b, f, params, uid)
+		})
 	]
 	const joins = jspec.map((j, i) => {
 		const a = `j${i}`
@@ -309,7 +330,10 @@ export function compileQuery(
 	if (spec.group_by) q = sql`${q} GROUP BY ${col(b, spec.group_by)}`
 	if (spec.count?.having) {
 		const h = spec.count.having
-		q = sql`${q} HAVING count(*) ${sql.raw(OPS[h.op])} ${h.value}`
+		// HAVING compares a numeric count — only the binary ops make sense; a null op here is a spec error.
+		const hop = OPS[h.op as BinOp]
+		if (!hop) throw new Error(`[queries] HAVING needs a binary op, got "${h.op}"`)
+		q = sql`${q} HAVING count(*) ${sql.raw(hop)} ${h.value}`
 	}
 	return q as RawBuilder<Record<string, unknown>>
 }
@@ -361,6 +385,9 @@ export async function runMutation(
 				sql`user_id = ${uid}`,
 				sql`predicate = ${o.predicate}`,
 				...(o.where ?? []).map((f) => {
+					// mutations act on ONE predicate (no joins); null ops still apply on its own places.
+					if (f.op === 'isnull') return sql`${bareCol(f.place)} is null`
+					if (f.op === 'notnull') return sql`${bareCol(f.place)} is not null`
 					const v = resolveVal(f, params, uid)
 					if (f.op === 'in') {
 						const arr = Array.isArray(v) ? v : [v]
