@@ -19,6 +19,7 @@ export {
 	parseSkillId,
 	type RouterRequest,
 	routeSkill,
+	type SkillMenuItem,
 	skillWantsTodosHint
 } from './dispatch'
 export type {

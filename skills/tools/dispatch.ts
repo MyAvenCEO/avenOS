@@ -15,11 +15,24 @@ export type RouterRequest = {
 	stream: false
 }
 
+/** One entry of the router menu: the skill id + how to recognize when it's the right skill. board 0110 —
+ *  the menu is passed in (from the DB `skill` table) so the router is fully config-as-data; it defaults to
+ *  the TS SKILL_REGISTRY so the skills-package unit tests + any DB-less path still work. */
+export type SkillMenuItem = { id: string; description: string }
+
+const tsMenu = (): SkillMenuItem[] =>
+	(Object.keys(SKILL_REGISTRY) as SkillId[]).map((id) => ({
+		id,
+		description: SKILL_REGISTRY[id].description
+	}))
+
 /** Build the SCHEMA-FREE Tier-1 router request. No `tools`, no hint, no lexicon — by construction. */
-export function buildRouterRequest(userText: string, model: string): RouterRequest {
-	const menu = (Object.keys(SKILL_REGISTRY) as SkillId[])
-		.map((id) => `- ${id}: ${SKILL_REGISTRY[id].description}`)
-		.join('\n')
+export function buildRouterRequest(
+	userText: string,
+	model: string,
+	skills?: SkillMenuItem[]
+): RouterRequest {
+	const menu = (skills ?? tsMenu()).map((s) => `- ${s.id}: ${s.description}`).join('\n')
 	const system =
 		'You are a router. Read the user message and reply with EXACTLY ONE skill id from this list — ' +
 		'just the id, lowercase, no punctuation, no explanation:\n' +
@@ -36,27 +49,33 @@ export function buildRouterRequest(userText: string, model: string): RouterReque
 	}
 }
 
-/** Parse a router reply to a known SkillId — first skill id that appears as a whole word wins; anything
- *  unknown falls back to DEFAULT_SKILL (so a mis-route degrades to the common case, never to nothing). */
-export function parseSkillId(raw: string): SkillId {
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** Parse a router reply to a known skill id — first id that appears as a whole word wins; anything unknown
+ *  falls back to DEFAULT_SKILL (so a mis-route degrades to the common case, never to nothing). */
+export function parseSkillId(raw: string, ids?: string[]): string {
 	const t = (raw ?? '').toLowerCase()
-	for (const id of Object.keys(SKILL_REGISTRY) as SkillId[]) {
-		if (new RegExp(`\\b${id}\\b`).test(t)) return id
+	for (const id of ids ?? (Object.keys(SKILL_REGISTRY) as string[])) {
+		if (new RegExp(`\\b${escapeRe(id.toLowerCase())}\\b`).test(t)) return id
 	}
 	return DEFAULT_SKILL
 }
 
 /** Tier 1 — route a turn to its skill. `callLLM` runs the schema-free request and returns the raw reply
- *  text; it is injected so the routing logic is unit-testable without a live model. Empty input or any
- *  error falls back to DEFAULT_SKILL. */
+ *  text; it is injected so the routing logic is unit-testable without a live model. `skills` (from the DB)
+ *  makes routing dynamic; omitted → the TS seed. Empty input or any error falls back to DEFAULT_SKILL. */
 export async function routeSkill(
 	callLLM: (req: RouterRequest) => Promise<string>,
 	userText: string,
-	model: string
-): Promise<SkillId> {
+	model: string,
+	skills?: SkillMenuItem[]
+): Promise<string> {
 	if (!userText.trim()) return DEFAULT_SKILL
 	try {
-		return parseSkillId(await callLLM(buildRouterRequest(userText, model)))
+		return parseSkillId(
+			await callLLM(buildRouterRequest(userText, model, skills)),
+			skills?.map((s) => s.id)
+		)
 	} catch {
 		return DEFAULT_SKILL
 	}
@@ -64,11 +83,11 @@ export async function routeSkill(
 
 /** Tier 3 gating — only the todos skill needs the live task-list snapshot (with ids) merged into its
  *  system prompt; every other route stays lean (and skips the DB read entirely). */
-export function skillWantsTodosHint(skillId: SkillId): boolean {
+export function skillWantsTodosHint(skillId: string): boolean {
 	return skillId === 'todos'
 }
 
 /** Tier 3 — assemble a skill's system context: merge the todos snapshot hint ONLY on the todos route. */
-export function assembleSystemContext(skillId: SkillId, baseSystem: string, hint: string): string {
+export function assembleSystemContext(skillId: string, baseSystem: string, hint: string): string {
 	return skillWantsTodosHint(skillId) && hint ? `${baseSystem}\n\n${hint}`.trim() : baseSystem
 }

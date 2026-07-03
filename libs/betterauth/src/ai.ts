@@ -2,13 +2,12 @@ import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
 import {
 	assembleSystemContext,
-	chatToolDefinitionsFor,
 	type RouterRequest,
 	routeSkill,
-	type SkillId,
 	skillWantsTodosHint,
 	TOOL_ACTORS
 } from '@avenos/skills/tools'
+import { chatToolDefinitionsFor, skillMenu } from './config'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
@@ -344,9 +343,14 @@ function streamWithTools(opts: {
 				// stays transparent: the user sees `dispatch → todos` flip running→done, not a silent gap
 				// before the first tool badge. One stable chip id per turn (toolActivity resets each turn).
 				emitTool('dispatch', 'dispatch', 'routing…', 'running')
-				const skillId: SkillId = await routeSkill(routerCall, routeText, model)
+				// board 0110 — the router menu + advertised tools now come from the DB skill/actor registries
+				// (config-as-data), not hardcoded TS; both fall back to the TS seed if the tables are empty.
+				const menu = await skillMenu()
+				const skillId = await routeSkill(routerCall, routeText, model, menu)
 				emitTool('dispatch', 'dispatch', `→ ${skillId}`, 'done')
 				console.log(`[ai] dispatch → ${skillId}`)
+				// Tier 2 — resolve the routed skill's actors' mailboxes ONCE (same every round). board 0110.
+				const toolDefs = await chatToolDefinitionsFor(skillId)
 
 				// Tier 3 — the todos snapshot (with ids) is merged into the system prompt ONLY on the todos
 				// route; every other skill skips the DB read entirely. MERGE into the leading system message —
@@ -380,7 +384,7 @@ function streamWithTools(opts: {
 							body: JSON.stringify({
 								model,
 								messages: msgs,
-								tools: chatToolDefinitionsFor(skillId),
+								tools: toolDefs,
 								stream: true
 							}),
 							signal: ac.signal

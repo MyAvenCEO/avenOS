@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { compilePredicate, type PredicateDef } from '@avenos/aven-vibes/predicate'
 import { CREATE_INSTRUCTIONS, type PredicateDefJSON } from '@avenos/skills/tools'
+import { actorConfig } from './config'
 import Ajv from 'ajv'
 import { sql } from 'kysely'
 import { registerContextProvider } from './context'
@@ -89,8 +90,11 @@ async function mint(
 	const key = process.env.TINFOIL_API_KEY
 	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
 	const gismu = await gismuText()
+	// board 0110 — the mint prompt is config-as-data: served from the `ontology` actor row (edit the row →
+	// change how minting reasons, no deploy). Falls back to the TS constant if the row has no prompt.
+	const promptRow = await actorConfig('ontology').catch(() => null)
 	const system = [
-		CREATE_INSTRUCTIONS,
+		promptRow?.prompt ?? CREATE_INSTRUCTIONS,
 		'',
 		'EXISTING PREDICATES (reuse one of these names if it already fits):',
 		existing.map((e) => `- ${e.name}${e.gloss ? ` — ${e.gloss}` : ''}`).join('\n') || '(none yet)',
