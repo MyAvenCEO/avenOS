@@ -13,7 +13,8 @@ export const GOALS_TOOL: ToolDefinition = {
 			"Show the user's GOALS — the named groups their todos cluster under — as a grid of goal cards " +
 			'with done/total progress. Use when they ask to see their goals/projects/groups. Pass ' +
 			'rename:{from,to} to RENAME a goal or MERGE it into an existing one (all its tasks move to `to`). ' +
-			'For the tasks INSIDE one goal use data_crud list with {"field":"goal","value":<name>}.',
+			'Pass remove:{name} to DELETE a goal — its tasks stay, they just leave the group. For the tasks ' +
+			'INSIDE one goal use data_crud list with {"field":"goal","value":<name>}.',
 		parameters: {
 			type: 'object',
 			properties: {
@@ -23,6 +24,12 @@ export const GOALS_TOOL: ToolDefinition = {
 						'rename/merge: every task in goal `from` moves to goal `to` (merging when `to` already exists).',
 					properties: { from: { type: 'string' }, to: { type: 'string' } },
 					required: ['from', 'to']
+				},
+				remove: {
+					type: 'object',
+					description: 'delete a goal by name — dissolves the grouping; the tasks themselves stay.',
+					properties: { name: { type: 'string' } },
+					required: ['name']
 				},
 				response: { type: 'string', description: 'A short human-facing reply to show the user.' }
 			}
@@ -43,6 +50,15 @@ export const goals: ToolActor = {
 				ops?: { affected?: number }[]
 			}
 			renamed = { from: rn.from, to: rn.to, moved: res.ops?.[0]?.affected ?? 0 }
+		}
+		// DELETE a goal (board 0112): dissolve the grouping — its member_of rows go, the tasks stay.
+		const rm = (raw as { remove?: { name?: string } }).remove
+		let removed: { name: string; ungrouped: number } | undefined
+		if (rm?.name) {
+			const res = (await ctx.ops('todos.goal-delete', { name: rm.name })) as {
+				ops?: { affected?: number }[]
+			}
+			removed = { name: rm.name, ungrouped: res.ops?.[0]?.affected ?? 0 }
 		}
 		// two configured universal aggregates: total memberships per goal + DONE memberships per goal
 		// (the done op inner-joins the done satellite) — merged into {key, total, done} for the grid's
@@ -65,13 +81,25 @@ export const goals: ToolActor = {
 				? String((raw as { response?: string }).response).trim()
 				: ''
 		return {
-			detail: renamed ? `merge goals ${renamed.from} → ${renamed.to}` : 'goals',
-			content: { ok: true, count: rows.length, goals: rows, ...(renamed ? { renamed } : {}) },
+			detail: renamed
+				? `merge goals ${renamed.from} → ${renamed.to}`
+				: removed
+					? `delete goal ${removed.name}`
+					: 'goals',
+			content: {
+				ok: true,
+				count: rows.length,
+				goals: rows,
+				...(renamed ? { renamed } : {}),
+				...(removed ? { removed } : {})
+			},
 			reply:
 				said ||
 				(renamed
 					? `Moved ${renamed.moved} task(s) from "${renamed.from}" to "${renamed.to}".`
-					: `Showing your goals (${rows.length}).`),
+					: removed
+						? `Removed the goal "${removed.name}" — its ${removed.ungrouped} task(s) stay, just ungrouped.`
+						: `Showing your goals (${rows.length}).`),
 			vibe: { schema: 'goals', data: { goals: rows } }
 		}
 	}

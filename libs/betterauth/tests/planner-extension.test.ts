@@ -160,6 +160,20 @@ d('board 0112 — Planner battle test (goals · sub-tasks · tags), config-only'
 		expect(m.Fitness).toBe(2) // meal prep + file taxes
 	})
 
+	test('GOAL DELETE: todos.goal-delete dissolves the grouping — the tasks SURVIVE, ungrouped', async () => {
+		const res = (await tagOp('todos.goal-delete', { name: 'Fitness' })) as {
+			ops?: { affected?: number }[]
+		}
+		expect(res.ops?.[0]?.affected).toBe(2) // meal prep + file taxes leave the group
+		const all = items(await crud(UID, { schema: 'todos', action: 'list' }))
+		expect(byTitle(all, 'meal prep')).toBeDefined() // the tasks still exist…
+		expect(byTitle(all, 'file taxes')).toBeDefined()
+		expect(byTitle(all, 'meal prep')?.goal).toBeNull() // …just without the goal
+		expect(byTitle(all, 'file taxes')?.goal).toBeNull()
+		const perGoal = await runQuery(UID, { from: 'member_of', group_by: 'x2', count: {} })
+		expect(perGoal.find((r) => r.key === 'Fitness')).toBeUndefined()
+	})
+
 	test('DELETE cascades the new satellites too (goal/parent/tags of the deleted task)', async () => {
 		await crud(UID, { schema: 'todos', action: 'delete', id: stepsId })
 		const orphans = await sql<{ n: string }>`
