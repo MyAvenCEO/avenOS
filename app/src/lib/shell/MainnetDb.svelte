@@ -87,6 +87,31 @@ let vibeTab = $state<VibeTab>('ui')
 // board 0106 — bundle + operation detail read either as the structured summary or the raw JSON, as two tabs.
 type DetailTab = 'readable' | 'raw'
 let detailTab = $state<DetailTab>('readable')
+// board 0110 — the viewer is STANDARDIZED: the left rail is a pure CATEGORY selector; the main area is a
+// 50/50 split (item list | selected-item detail), the same shape across every category.
+type Category =
+	| 'schemas'
+	| 'values'
+	| 'bundles'
+	| 'operations'
+	| 'vibes'
+	| 'skills'
+	| 'actors'
+	| 'runs'
+const CATEGORIES: { id: Category; label: string }[] = [
+	{ id: 'schemas', label: 'Schemas' },
+	{ id: 'values', label: 'Values' },
+	{ id: 'bundles', label: 'Bundles' },
+	{ id: 'operations', label: 'Operations' },
+	{ id: 'vibes', label: 'Vibes' },
+	{ id: 'skills', label: 'Skills' },
+	{ id: 'actors', label: 'Actors' },
+	{ id: 'runs', label: 'Runs' }
+]
+let category = $state<Category>('values')
+let selectedSkill = $state<string | null>(null)
+let selectedActor = $state<string | null>(null)
+let selectedRun = $state<string | null>(null)
 const VIBE_TABS: { id: VibeTab; label: string }[] = [
 	{ id: 'ui', label: 'UI' },
 	{ id: 'view', label: 'View' },
@@ -106,6 +131,21 @@ const vibeBundleQuery = createQuery(() => ({
 	enabled: selectedVibe !== null,
 	queryFn: () => (selectedVibe ? loadVibeBundle(selectedVibe) : null)
 }))
+// board 0110 — SKILLS / ACTORS / RUNS via the ONE generic context endpoint (config-as-data).
+type CtxItem = { name: string; gloss?: string; tag?: string }
+const skillsQuery = createQuery(() => ({ queryKey: ['db', 'skills'], queryFn: () => loadContext('skills') }))
+const actorsQuery = createQuery(() => ({ queryKey: ['db', 'actors'], queryFn: () => loadContext('actors') }))
+const runsQuery = createQuery(() => ({ queryKey: ['db', 'runs'], queryFn: () => loadContext('runs') }))
+const skillItems = $derived<CtxItem[]>((skillsQuery.data?.items ?? []) as CtxItem[])
+const actorItems = $derived<CtxItem[]>((actorsQuery.data?.items ?? []) as CtxItem[])
+const runItems = $derived<CtxItem[]>((runsQuery.data?.items ?? []) as CtxItem[])
+const selectedSkillItem = $derived<CtxItem | null>(
+	skillItems.find((x) => x.name === selectedSkill) ?? null
+)
+const selectedActorItem = $derived<CtxItem | null>(
+	actorItems.find((x) => x.name === selectedActor) ?? null
+)
+const selectedRunItem = $derived<CtxItem | null>(runItems.find((x) => x.name === selectedRun) ?? null)
 // Representative sample `source` per vibe — drives the live UI render + the State tab (never a live run).
 const VIBE_SAMPLE: Record<string, Record<string, unknown>> = {
 	todos: {
@@ -174,28 +214,76 @@ function clearSel(): void {
 	selectedBundle = null
 	selectedOp = null
 	selectedVibe = null
+	selectedSkill = null
+	selectedActor = null
+	selectedRun = null
 	focusRow = null
 }
 function pickSchema(id: string, face: 'schema' | 'data'): void {
 	clearSel()
 	selectedId = id
 	view = face
+	category = face === 'schema' ? 'schemas' : 'values'
 }
 function pickBundle(name: string): void {
 	clearSel()
 	selectedBundle = name
 	detailTab = 'readable'
+	category = 'bundles'
 }
 function pickOp(name: string): void {
 	clearSel()
 	selectedOp = name
 	detailTab = 'readable'
+	category = 'operations'
 }
 function selectVibe(name: string): void {
 	clearSel()
 	selectedVibe = name
 	vibeTab = 'ui'
+	category = 'vibes'
 }
+function pickSkill(name: string): void {
+	clearSel()
+	selectedSkill = name
+	category = 'skills'
+}
+function pickActor(name: string): void {
+	clearSel()
+	selectedActor = name
+	category = 'actors'
+}
+function pickRun(name: string): void {
+	clearSel()
+	selectedRun = name
+	category = 'runs'
+}
+// board 0110 — the rail selects a CATEGORY; auto-pick its first item so the detail pane always shows something.
+function setCategory(cat: Category): void {
+	clearSel()
+	category = cat
+	if (cat === 'schemas') {
+		if (tables.length) pickSchema(tables[0].id, 'schema')
+	} else if (cat === 'values') {
+		if (tables.length) pickSchema(tables[0].id, 'data')
+	} else if (cat === 'bundles') {
+		if (bundleNames.length) pickBundle(bundleNames[0])
+	} else if (cat === 'operations') {
+		if (opItems.length) pickOp(opItems[0].name)
+	} else if (cat === 'vibes') {
+		if (vibeNames.length) selectVibe(vibeNames[0])
+	} else if (cat === 'skills') {
+		if (skillItems.length) pickSkill(skillItems[0].name)
+	} else if (cat === 'actors') {
+		if (actorItems.length) pickActor(actorItems[0].name)
+	} else if (cat === 'runs') {
+		if (runItems.length) pickRun(runItems[0].name)
+	}
+	category = cat
+}
+// board 0110 — one shared class for every item-list button (used across all categories).
+const listBtn = (active: boolean): string =>
+	`mb-0.5 flex w-full items-center justify-between gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left transition-colors ${active ? 'bg-primary/10 text-foreground font-medium' : 'text-muted-foreground hover:bg-card'}`
 const pretty = (v: unknown): string => {
 	try {
 		return JSON.stringify(v, null, 2)
@@ -422,10 +510,17 @@ function resolveRef(id: unknown): Resolved {
 	return { label: s.length > 14 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s, kind: 'id' }
 }
 
-// Auto-select the first table once they load (unless another section is active).
+// Auto-select the first item once data loads (unless something is already selected). Default = VALUES.
 $effect(() => {
-	if (!selectedId && !selectedBundle && !selectedOp && !selectedVibe && tables.length > 0)
-		selectedId = tables[0].id
+	const nothing =
+		!selectedId &&
+		!selectedBundle &&
+		!selectedOp &&
+		!selectedVibe &&
+		!selectedSkill &&
+		!selectedActor &&
+		!selectedRun
+	if (nothing && tables.length > 0) pickSchema(tables[0].id, 'data')
 })
 
 // Deep link from a flow schema badge: select the requested schema by name + show its definition.
@@ -439,119 +534,86 @@ $effect(() => {
 
 <div class="flex min-h-0 flex-1">
 	<!-- Left: five sections, each with its own list. board 0105. -->
-	<aside class="border-border hidden w-52 shrink-0 flex-col border-r pt-3 sm:flex">
-		<div class="min-h-0 flex-1 overflow-y-auto px-2">
-			<!-- 1 · SCHEMAS (predicate definitions) -->
-			<p class="text-muted-foreground px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase">
-				{t('mainnet.db.sec.schemas')}
-			</p>
-			{#if !loading && tables.length === 0}
-				<p class="text-muted-foreground px-2 py-2 text-[11px] leading-relaxed">
-					{t('mainnet.db.empty')}
-				</p>
-			{/if}
-			{#each tables as tbl (tbl.id)}
+	<!-- board 0110 — left rail = pure CATEGORY selector -->
+	<aside class="border-border hidden w-36 shrink-0 flex-col border-r pt-3 sm:flex">
+		<div class="flex flex-col gap-0.5 px-2">
+			{#each CATEGORIES as cat (cat.id)}
 				<button
 					type="button"
-					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {selectedId ===
-						tbl.id && view === 'schema'
-						? 'bg-primary/10 text-foreground font-medium'
+					class="rounded-[var(--radius)] px-3 py-1.5 text-left text-[11px] font-bold tracking-[0.1em] uppercase transition-colors {category ===
+					cat.id
+						? 'bg-primary/10 text-foreground'
 						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => pickSchema(tbl.id, 'schema')}
+					onclick={() => setCategory(cat.id)}>{cat.label}</button
 				>
-					<span class="truncate font-mono text-[12px]">{tbl.name}</span>
-				</button>
-			{/each}
-
-			<!-- 2 · VALUES (predication instances) -->
-			<p
-				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase"
-			>
-				{t('mainnet.db.sec.values')}
-			</p>
-			{#each tables as tbl (tbl.id)}
-				<button
-					type="button"
-					class="mb-0.5 flex w-full items-center justify-between gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {selectedId ===
-						tbl.id && view === 'data'
-						? 'bg-primary/10 text-foreground font-medium'
-						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => pickSchema(tbl.id, 'data')}
-				>
-					<span class="truncate font-mono text-[12px]">{tbl.name}</span>
-					<span class="shrink-0 text-[11px] tabular-nums opacity-60">{tbl.rows.length}</span>
-				</button>
-			{/each}
-
-			<!-- 3 · BUNDLES -->
-			<p
-				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase"
-			>
-				{t('mainnet.db.sec.bundles')}
-			</p>
-			{#each bundleNames as name (name)}
-				<button
-					type="button"
-					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {selectedBundle ===
-					name
-						? 'bg-primary/10 text-foreground font-medium'
-						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => pickBundle(name)}
-				>
-					<span class="opacity-60">⬡</span>
-					<span class="truncate font-mono text-[12px]">{name}</span>
-				</button>
-			{/each}
-
-			<!-- 4 · OPERATIONS -->
-			<p
-				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase"
-			>
-				{t('mainnet.db.sec.operations')}
-			</p>
-			{#each opItems as op (op.name)}
-				<button
-					type="button"
-					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {selectedOp ===
-					op.name
-						? 'bg-primary/10 text-foreground font-medium'
-						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => pickOp(op.name)}
-				>
-					<span
-						class="shrink-0 rounded-full px-1 py-0.5 text-[8px] font-semibold {op.kind === 'mutation'
-							? 'bg-amber-100 text-amber-700'
-							: 'bg-sky-100 text-sky-700'}"
-						>{op.kind === 'mutation' ? 'M' : 'Q'}</span
-					>
-					<span class="truncate font-mono text-[12px]">{op.name}</span>
-				</button>
-			{/each}
-
-			<!-- 5 · VIBES (tabbed detail) -->
-			<p
-				class="text-muted-foreground mt-3 px-3 pb-1 text-[10px] font-bold tracking-[0.14em] uppercase"
-			>
-				{t('mainnet.db.sec.vibes')}
-			</p>
-			{#each vibeNames as name (name)}
-				<button
-					type="button"
-					class="mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {selectedVibe ===
-					name
-						? 'bg-primary/10 text-foreground font-medium'
-						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => selectVibe(name)}
-				>
-					<span class="opacity-60">🎨</span>
-					<span class="truncate font-mono text-[12px]">{name}</span>
-				</button>
 			{/each}
 		</div>
 	</aside>
 
-	<!-- Right: the selected schema's table -->
-	<div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+	<!-- board 0110 — main = 50/50 (item list | selected-item detail) -->
+	<div class="flex min-h-0 flex-1">
+		<!-- left 50%: the current category's item list -->
+		<div class="border-border w-1/2 min-w-0 shrink-0 overflow-y-auto border-r px-2 py-3">
+			{#if category === 'schemas' || category === 'values'}
+				{#if !loading && tables.length === 0}
+					<p class="text-muted-foreground px-2 py-2 text-[11px]">{t('mainnet.db.empty')}</p>
+				{/if}
+				{#each tables as tbl (tbl.id)}
+					<button
+						type="button"
+						class={listBtn(selectedId === tbl.id)}
+						onclick={() => pickSchema(tbl.id, category === 'schemas' ? 'schema' : 'data')}>
+						<span class="truncate font-mono text-[12px]">{tbl.name}</span>
+						{#if category === 'values'}<span class="shrink-0 text-[11px] tabular-nums opacity-60">{tbl.rows.length}</span>{/if}
+					</button>
+				{/each}
+			{:else if category === 'bundles'}
+				{#each bundleNames as name (name)}
+					<button type="button" class={listBtn(selectedBundle === name)} onclick={() => pickBundle(name)}>
+						<span class="opacity-60">⬡</span><span class="truncate font-mono text-[12px]">{name}</span>
+					</button>
+				{/each}
+			{:else if category === 'operations'}
+				{#each opItems as op (op.name)}
+					<button type="button" class={listBtn(selectedOp === op.name)} onclick={() => pickOp(op.name)}>
+						<span class="flex min-w-0 items-center gap-2">
+							<span class="shrink-0 rounded-full px-1 py-0.5 text-[8px] font-semibold {op.kind === 'mutation' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}">{op.kind === 'mutation' ? 'M' : 'Q'}</span>
+							<span class="truncate font-mono text-[12px]">{op.name}</span>
+						</span>
+					</button>
+				{/each}
+			{:else if category === 'vibes'}
+				{#each vibeNames as name (name)}
+					<button type="button" class={listBtn(selectedVibe === name)} onclick={() => selectVibe(name)}>
+						<span class="opacity-60">🎨</span><span class="truncate font-mono text-[12px]">{name}</span>
+					</button>
+				{/each}
+			{:else if category === 'skills'}
+				{#each skillItems as it (it.name)}
+					<button type="button" class={listBtn(selectedSkill === it.name)} onclick={() => pickSkill(it.name)}>
+						<span class="opacity-60">🧩</span><span class="truncate font-mono text-[12px]">{it.name}</span>
+					</button>
+				{/each}
+			{:else if category === 'actors'}
+				{#each actorItems as it (it.name)}
+					<button type="button" class={listBtn(selectedActor === it.name)} onclick={() => pickActor(it.name)}>
+						<span class="truncate font-mono text-[12px]">{it.name}</span>
+						{#if it.tag}<span class="shrink-0 text-[10px] opacity-50">{it.tag}</span>{/if}
+					</button>
+				{/each}
+			{:else if category === 'runs'}
+				{#if runItems.length === 0}<p class="text-muted-foreground px-2 py-2 text-[11px]">—</p>{/if}
+				{#each runItems as it, i (i)}
+					<button type="button" class={listBtn(selectedRun === it.name)} onclick={() => pickRun(it.name)}>
+						<span class="truncate text-[12px]">{it.name}</span>
+						{#if it.tag}<span class="shrink-0 font-mono text-[10px] opacity-50">{it.tag}</span>{/if}
+					</button>
+				{/each}
+			{/if}
+		</div>
+
+		<!-- right 50%: the selected item detail -->
+		<div class="w-1/2 min-w-0 min-h-0 overflow-y-auto p-4">
 		{#if err}
 			<p class="text-destructive shrink-0 text-sm" role="alert">{err}</p>
 		{/if}
@@ -813,6 +875,44 @@ $effect(() => {
 					><code>{pretty(s)}</code></pre>
 					{/if}
 			</div>
+		{:else if selectedActor}
+			<div class="mx-auto flex w-full max-w-4xl flex-col">
+				<div class="mb-3 flex items-center gap-2">
+					<h2 class="text-foreground font-mono text-base font-semibold">{selectedActor}</h2>
+					{#if selectedActorItem?.tag}<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px]">{selectedActorItem.tag}</span>{/if}
+				</div>
+				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[13px]">
+					<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">Actor</p>
+					<p class="text-foreground">{selectedActorItem?.gloss || '—'}</p>
+					<p class="text-muted-foreground mt-3 text-[12px] leading-relaxed">Behavior is resolved by engine name; the config — mailbox · llm · prompt · context — is data (board 0110).</p>
+				</div>
+			</div>
+		{:else if selectedSkill}
+			<div class="mx-auto flex w-full max-w-4xl flex-col">
+				<div class="mb-3 flex items-center gap-2">
+					<span class="opacity-60">🧩</span>
+					<h2 class="text-foreground font-mono text-base font-semibold">{selectedSkill}</h2>
+				</div>
+				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[13px]">
+					<p class="text-foreground">{selectedSkillItem?.gloss || '—'}</p>
+					<p class="text-muted-foreground mt-3 mb-1.5 text-[10px] font-semibold tracking-wide uppercase">Actors</p>
+					<div class="flex flex-wrap gap-1.5">
+						{#each actorItems.filter((a) => a.tag === selectedSkill) as a (a.name)}
+							<button type="button" class="border-border hover:bg-primary/10 rounded-full border px-2 py-0.5 font-mono text-[11px]" onclick={() => pickActor(a.name)}>{a.name}</button>
+						{/each}
+					</div>
+				</div>
+			</div>
+		{:else if selectedRun}
+			<div class="mx-auto flex w-full max-w-4xl flex-col">
+				<div class="mb-3 flex items-center gap-2">
+					<h2 class="text-foreground font-mono text-base font-semibold">{selectedRun}</h2>
+					{#if selectedRunItem?.tag}<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[11px]">{selectedRunItem.tag}</span>{/if}
+				</div>
+				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[13px]">
+					<p class="text-foreground">status: {selectedRunItem?.gloss || '—'}</p>
+				</div>
+			</div>
 		{:else if selected}
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
 				<div class="mb-3 flex items-center gap-2">
@@ -987,6 +1087,7 @@ $effect(() => {
 				{/if}
 			</div>
 		{/if}
+	</div>
 	</div>
 
 	<!-- Right: detail aside — every predication attached to the clicked entity, as short sentences -->
