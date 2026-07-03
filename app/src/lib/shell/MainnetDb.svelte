@@ -113,9 +113,7 @@ const CATEGORIES: { id: Category; label: string }[] = [
 	{ id: 'runs', label: 'Runs' }
 ]
 let category = $state<Category>('values')
-let selectedSkill = $state<string | null>(null)
 let selectedActor = $state<string | null>(null)
-let selectedRun = $state<string | null>(null)
 const VIBE_TABS: { id: VibeTab; label: string }[] = [
 	{ id: 'ui', label: 'UI' },
 	{ id: 'view', label: 'View' },
@@ -135,21 +133,14 @@ const vibeBundleQuery = createQuery(() => ({
 	enabled: selectedVibe !== null,
 	queryFn: () => (selectedVibe ? loadVibeBundle(selectedVibe) : null)
 }))
-// board 0110 — SKILLS / ACTORS / RUNS via the ONE generic context endpoint (config-as-data).
+// board 0110 — ACTORS via the ONE generic context endpoint (config-as-data). Skills + Runs now render the
+// full SkillsView / RunsView (board 0107), so they no longer need a list here.
 type CtxItem = { name: string; gloss?: string; tag?: string }
-const skillsQuery = createQuery(() => ({ queryKey: ['db', 'skills'], queryFn: () => loadContext('skills') }))
 const actorsQuery = createQuery(() => ({ queryKey: ['db', 'actors'], queryFn: () => loadContext('actors') }))
-const runsQuery = createQuery(() => ({ queryKey: ['db', 'runs'], queryFn: () => loadContext('runs') }))
-const skillItems = $derived<CtxItem[]>((skillsQuery.data?.items ?? []) as CtxItem[])
 const actorItems = $derived<CtxItem[]>((actorsQuery.data?.items ?? []) as CtxItem[])
-const runItems = $derived<CtxItem[]>((runsQuery.data?.items ?? []) as CtxItem[])
-const selectedSkillItem = $derived<CtxItem | null>(
-	skillItems.find((x) => x.name === selectedSkill) ?? null
-)
 const selectedActorItem = $derived<CtxItem | null>(
 	actorItems.find((x) => x.name === selectedActor) ?? null
 )
-const selectedRunItem = $derived<CtxItem | null>(runItems.find((x) => x.name === selectedRun) ?? null)
 // Representative sample `source` per vibe — drives the live UI render + the State tab (never a live run).
 const VIBE_SAMPLE: Record<string, Record<string, unknown>> = {
 	todos: {
@@ -218,9 +209,7 @@ function clearSel(): void {
 	selectedBundle = null
 	selectedOp = null
 	selectedVibe = null
-	selectedSkill = null
 	selectedActor = null
-	selectedRun = null
 	focusRow = null
 }
 function pickSchema(id: string, face: 'schema' | 'data'): void {
@@ -247,20 +236,10 @@ function selectVibe(name: string): void {
 	vibeTab = 'ui'
 	category = 'vibes'
 }
-function pickSkill(name: string): void {
-	clearSel()
-	selectedSkill = name
-	category = 'skills'
-}
 function pickActor(name: string): void {
 	clearSel()
 	selectedActor = name
 	category = 'actors'
-}
-function pickRun(name: string): void {
-	clearSel()
-	selectedRun = name
-	category = 'runs'
 }
 // board 0110 — the rail selects a CATEGORY; auto-pick its first item so the detail pane always shows something.
 function setCategory(cat: Category): void {
@@ -276,12 +255,8 @@ function setCategory(cat: Category): void {
 		if (opItems.length) pickOp(opItems[0].name)
 	} else if (cat === 'vibes') {
 		if (vibeNames.length) selectVibe(vibeNames[0])
-	} else if (cat === 'skills') {
-		if (skillItems.length) pickSkill(skillItems[0].name)
 	} else if (cat === 'actors') {
 		if (actorItems.length) pickActor(actorItems[0].name)
-	} else if (cat === 'runs') {
-		if (runItems.length) pickRun(runItems[0].name)
 	}
 	category = cat
 }
@@ -521,9 +496,7 @@ $effect(() => {
 		!selectedBundle &&
 		!selectedOp &&
 		!selectedVibe &&
-		!selectedSkill &&
-		!selectedActor &&
-		!selectedRun
+		!selectedActor
 	if (nothing && tables.length > 0) pickSchema(tables[0].id, 'data')
 })
 
@@ -850,31 +823,6 @@ $effect(() => {
 					<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">Actor</p>
 					<p class="text-foreground">{selectedActorItem?.gloss || '—'}</p>
 					<p class="text-muted-foreground mt-3 text-[12px] leading-relaxed">Behavior is resolved by engine name; the config — mailbox · llm · prompt · context — is data (board 0110).</p>
-				</div>
-			</div>
-		{:else if selectedSkill}
-			<div class="mx-auto flex w-full max-w-4xl flex-col">
-				<div class="mb-3 flex items-center gap-2">
-					<h2 class="text-foreground font-mono text-base font-semibold">{selectedSkill}</h2>
-				</div>
-				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[13px]">
-					<p class="text-foreground">{selectedSkillItem?.gloss || '—'}</p>
-					<p class="text-muted-foreground mt-3 mb-1.5 text-[10px] font-semibold tracking-wide uppercase">Actors</p>
-					<div class="flex flex-wrap gap-1.5">
-						{#each actorItems.filter((a) => a.tag === selectedSkill) as a (a.name)}
-							<button type="button" class="border-border hover:bg-primary/10 rounded-full border px-2 py-0.5 font-mono text-[11px]" onclick={() => pickActor(a.name)}>{a.name}</button>
-						{/each}
-					</div>
-				</div>
-			</div>
-		{:else if selectedRun}
-			<div class="mx-auto flex w-full max-w-4xl flex-col">
-				<div class="mb-3 flex items-center gap-2">
-					<h2 class="text-foreground font-mono text-base font-semibold">{selectedRun}</h2>
-					{#if selectedRunItem?.tag}<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 font-mono text-[11px]">{selectedRunItem.tag}</span>{/if}
-				</div>
-				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[13px]">
-					<p class="text-foreground">status: {selectedRunItem?.gloss || '—'}</p>
 				</div>
 			</div>
 		{:else if selected}
