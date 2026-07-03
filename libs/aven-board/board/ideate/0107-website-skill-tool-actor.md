@@ -37,3 +37,5 @@ completion condition (tests + a green website round-trip) at `discover`.
 ## Progress log
 
 - `2026-07-02` — Created in idea as the website slice of the dispatch architecture (0106).
+
+- `2026-07-03` — **Superseded by [[0110]]** (fully-dynamic-config-and-standardized-viewer), which absorbs this scope into the all-in-one config→DB + viewer card.
