@@ -115,6 +115,10 @@ export type Todo = {
 	done: boolean
 	due?: string | null
 	priority?: string | null
+	/** board 0112 — Planner: the goal/group label this task belongs to (member_of.x2). */
+	goal?: string | null
+	/** board 0112 — Planner: the parent task's row id for a sub-task (part_of.x2). */
+	parent?: string | null
 }
 
 // A universal list filter over any projected field: { field, value, op? }. board 0107.

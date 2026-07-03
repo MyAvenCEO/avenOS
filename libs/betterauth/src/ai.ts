@@ -12,7 +12,7 @@ import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
-import { crud } from './actor-run'
+import { crud, runNamedOp } from './actor-run'
 import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
 import { schemasPromptHint } from './data'
 import { db } from './db'
@@ -514,6 +514,7 @@ function streamWithTools(opts: {
 									{
 										userId,
 										data: (a) => crud(userId, a),
+										ops: (n, p) => runNamedOp(userId, n, p ?? {}), // board 0112 — named-op cap (e.g. the goals aggregate)
 										ontology: ontologyCaps(userId), // board 0100 — GLM mint + data_schema registry caps
 										query: queryCaps(userId), // board 0101 — GLM-authored validated query specs
 										mutate: mutationCaps(userId), // board 0101 — GLM-authored validated mutation specs

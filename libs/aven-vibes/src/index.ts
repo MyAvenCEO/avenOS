@@ -8,6 +8,8 @@ export { contentHash, type FileRef, filePath, fileRef } from './file-ref.js'
 export * from './sandbox.js'
 // Shared read-only card style (todos created/edited/deleted, ontology, query/mutation, bundle). board 0111.
 export { cardStyle } from './vibes/cards/style.js'
+// The Planner's goals grid card. board 0112.
+export { goalsStyle } from './vibes/goals/style.js'
 export {
 	createTodosShell,
 	todoLogic,

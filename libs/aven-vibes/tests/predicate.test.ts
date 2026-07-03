@@ -86,12 +86,31 @@ describe('predicate compiler (board 0087)', () => {
 		expect(ownV({ predicate: 'owned_by', x1: 'JhB95T3lSOe0ZYTKLzuKNXHzGeju9LIb' })).toBe(false) // missing x2
 	})
 
-	test('the todo bundle seeds 5 bare data-type schemas (incl. universal owned_by), each gismu-sourced', () => {
-		expect(TODO_PREDICATES.map((p) => p.predicate)).toEqual(['task', 'owned_by', 'done', 'due', 'prioritized'])
+	test('the todo bundle seeds 8 bare data-type schemas (incl. universal owned_by), each gismu-sourced', () => {
+		// board 0112 — the Planner battle test added member_of (goals), part_of (sub-tasks), tagged (tags).
+		expect(TODO_PREDICATES.map((p) => p.predicate)).toEqual([
+			'task',
+			'owned_by',
+			'done',
+			'due',
+			'prioritized',
+			'member_of',
+			'part_of',
+			'tagged'
+		])
 		expect(TODO_PREDICATES.every((p) => typeof p.gismu === 'string' && p.gismu.length === 5)).toBe(true)
 		const rows = todoPredicateSchemas()
 		// x1–x5 predications ARE the universal data types — schema names carry no namespace prefix
-		expect(rows.map((r) => r.name)).toEqual(['task', 'owned_by', 'done', 'due', 'prioritized'])
+		expect(rows.map((r) => r.name)).toEqual([
+			'task',
+			'owned_by',
+			'done',
+			'due',
+			'prioritized',
+			'member_of',
+			'part_of',
+			'tagged'
+		])
 		expect(predSchemaName(TASK)).toBe('task')
 		// every compiled schema is itself a valid Ajv schema
 		for (const r of rows) expect(() => ajv.compile(r.jsonSchema)).not.toThrow()

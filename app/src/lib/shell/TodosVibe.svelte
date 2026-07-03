@@ -98,7 +98,10 @@ const source = $derived({
 		done: r.done === true,
 		// due/priority predications → inline brand chips (board 0087); due as a relative label
 		due: relDue(r.due),
-		priority: r.priority ?? ''
+		priority: r.priority ?? '',
+		// board 0112 — Planner: goal chip + sub-task nesting flow into the vibe source.
+		goal: r.goal ?? '',
+		parent: r.parent ?? ''
 	})),
 	labels: {
 		listEyebrow: t('identities.todos.listEyebrow'),

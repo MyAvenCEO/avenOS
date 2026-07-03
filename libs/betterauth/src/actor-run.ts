@@ -31,7 +31,7 @@ export async function fetchOp(uid: string, name: string): Promise<OperationRow> 
 }
 
 /** Run a named `data_operations` row (query or mutation) with params — the `ops` capability. */
-async function runNamedOp(
+export async function runNamedOp(
 	uid: string,
 	name: string,
 	params: Record<string, unknown>

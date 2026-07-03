@@ -17,7 +17,7 @@ import {
 
 describe('Tier 2 — a routed skill advertises exactly its own tools', () => {
 	test('exact tool sets per skill', () => {
-		expect(advertisedTools('todos')).toEqual(['data_crud'])
+		expect(advertisedTools('todos')).toEqual(['data_crud', 'goals'])
 		expect(advertisedTools('ontology')).toEqual(['ontology', 'query', 'mutate', 'bundle'])
 		expect(advertisedTools('website')).toEqual([
 			'show_website',
@@ -27,7 +27,7 @@ describe('Tier 2 — a routed skill advertises exactly its own tools', () => {
 	})
 
 	test('chatToolDefinitionsFor returns only those tool definitions', () => {
-		expect(chatToolDefinitionsFor('todos').map((d) => d.function.name)).toEqual(['data_crud'])
+		expect(chatToolDefinitionsFor('todos').map((d) => d.function.name)).toEqual(['data_crud', 'goals'])
 		expect(chatToolDefinitionsFor('ontology').map((d) => d.function.name)).toEqual([
 			'ontology',
 			'query',
@@ -45,8 +45,8 @@ describe('Tier 2 — a routed skill advertises exactly its own tools', () => {
 		const todos = JSON.stringify(chatToolDefinitionsFor('todos')).length
 		const all = JSON.stringify(chatToolDefinitions()).length
 		console.log(`todos-turn advertised tool-schema chars: ${todos} (flat-8 baseline: ${all})`)
-		// board 0107 — data_crud's universal {field,value,op} list filter adds real capability; still ~1/3 the flat set.
-		expect(todos).toBeLessThanOrEqual(1900)
+		// board 0107/0112 — the universal filter + the goals grid actor add real capability; still ~1/3 the flat set.
+		expect(todos).toBeLessThanOrEqual(2600)
 		expect(todos).toBeLessThan(all) // strictly leaner than advertising everything
 	})
 })

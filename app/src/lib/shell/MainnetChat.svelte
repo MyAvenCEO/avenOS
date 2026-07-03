@@ -19,6 +19,7 @@ import VibeCard from '$lib/shell/VibeCard.svelte'
 
 // board 0105 — read-only actor cards render from their vibe.* rows through the generic VibeCard host.
 const VIBE_CARDS = new Set([
+	'goals',
 	'todos-created',
 	'todos-edited',
 	'todos-deleted',

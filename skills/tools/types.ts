@@ -52,6 +52,9 @@ export type ToolCtx = {
 	userId: string
 	/** Execute a schema-validated CRUD op against the signed-in user's store (betterauth crud — the ONE ops engine). */
 	data(args: DataCrudArgs): Promise<unknown>
+	/** board 0112 — run a NAMED data_operations row (query or mutation spec) with params: the same generic
+	 *  `ops` capability sandboxed code actors get, exposed to tool-actors (e.g. the goals aggregate). */
+	ops?(name: string, params?: Record<string, unknown>): Promise<unknown>
 	/** board 0100 — the ontology actor's server caps (GLM-5.2 mint + data_schema registry). Injected only
 	 *  when the ontology tool is dispatched; other actors ignore it. */
 	ontology?: {

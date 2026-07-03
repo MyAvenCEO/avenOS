@@ -31,7 +31,8 @@ const TACTOR = 'zzz-dyn-test-actor'
 
 d('board 0110 — config-as-data: skills + actors load from the DB', () => {
 	test('Tier-2 parity: advertised lists come from the DB seed', async () => {
-		expect(await advertisedTools('todos')).toEqual(['data_crud'])
+		// board 0112 — the Planner carries data_crud + the goals grid actor.
+		expect(await advertisedTools('todos')).toEqual(['data_crud', 'goals'])
 		expect(await advertisedTools('ontology')).toEqual(['ontology', 'query', 'mutate', 'bundle'])
 		expect(await advertisedTools('website')).toEqual([
 			'show_website',
@@ -42,7 +43,7 @@ d('board 0110 — config-as-data: skills + actors load from the DB', () => {
 
 	test('chatToolDefinitionsFor builds mailboxes from the DB', async () => {
 		const defs = await chatToolDefinitionsFor('todos')
-		expect(defs.map((x) => x.function.name)).toEqual(['data_crud'])
+		expect(defs.map((x) => x.function.name)).toEqual(['data_crud', 'goals'])
 		expect(defs[0]?.function.parameters).toBeTruthy() // the mailbox (params schema) came from the row
 	})
 

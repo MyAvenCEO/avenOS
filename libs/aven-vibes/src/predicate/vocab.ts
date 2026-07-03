@@ -104,8 +104,9 @@ export const MEMBER_OF: PredicateDef = {
 	gloss: 'cmima: x1 (the task/entity) is a member of set/group x2 — clusters tasks under a named goal',
 	places: [
 		ref('x1', 'member', 'the entity that belongs — the task (cmima x1, the member)'),
-		val('x2', 'set', 'the goal/group it belongs to — cmima x2 (the set), a name label', 'string', {
-			minLength: 1,
+		// the set is a REF identified SYMBOLICALLY by the goal name (the booked≡cmima / idkind-* pattern:
+		// a symbolic id until goals are reified into entities of their own — the 0103 rule).
+		ref('x2', 'set', 'the goal/group it belongs to — cmima x2 (the set), symbolic id = its name', {
 			example: 'Fitness'
 		})
 	]
@@ -128,13 +129,14 @@ export const PART_OF: PredicateDef = {
 export const TAGGED: PredicateDef = {
 	predicate: 'tagged',
 	gismu: 'tcita',
-	gloss: 'tcita: x1 (the tag/label text) labels entity x2 — attach any number of tags to a task',
+	gloss: 'tcita: x1 (the tag label) labels entity x2 showing information x3 — attach any number of tags',
 	places: [
-		val('x1', 'tag', 'the tag text — tcita x1 (the label)', 'string', {
-			minLength: 1,
+		// the label is a REF identified symbolically by the tag text (the identifier≡tcita idkind-* pattern).
+		ref('x1', 'label', 'the tag — tcita x1 (a symbolic label id = the tag text)', {
 			example: 'shopping'
 		}),
-		ref('x2', 'labelled', 'the entity carrying the tag — tcita x2 (the labelled thing)')
+		ref('x2', 'labeled', 'the entity carrying the tag — tcita x2 (the labeled thing)'),
+		val('x3', 'information', 'what the tag conveys — tcita x3 (open)', 'string', { required: false })
 	]
 }
 

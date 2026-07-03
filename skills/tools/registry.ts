@@ -7,6 +7,7 @@
 import { COMPOSER_TOOLS } from '../composer/tools'
 import { bundle } from './bundle'
 import { dataCrud } from './data-crud'
+import { goals } from './goals'
 import { ontology } from './ontology'
 import { mutate, query } from './queries'
 import type { ToolActor, ToolDefinition } from './types'
@@ -16,6 +17,7 @@ import type { ToolActor, ToolDefinition } from './types'
  *  composite types / kinds, board 0102). */
 export const TOOL_ACTORS: Record<string, ToolActor> = {
 	data_crud: dataCrud,
+	goals,
 	ontology,
 	query,
 	mutate,
@@ -45,7 +47,7 @@ export const SKILL_REGISTRY: Record<SkillId, { label: string; description: strin
 		description:
 			"the user's planner — todos/tasks with goals, tags, sub-tasks, priorities and due dates: " +
 			'list, add, complete, edit, delete, or group them',
-		tools: ['data_crud']
+		tools: ['data_crud', 'goals']
 	},
 	ontology: {
 		label: 'Ontology',

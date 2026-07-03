@@ -272,6 +272,14 @@ const selectors: StyleDef['selectors'] = {
 		whiteSpace: 'nowrap'
 	},
 	'.td-chip:empty': { display: 'none' },
+	// board 0112 — the GOAL chip: brand-navy tint with the ✳ marker, distinct from the priority tones.
+	'.td-chip--goal': {
+		gap: '0.3rem',
+		color: 'var(--brand-accent)',
+		background: 'color-mix(in srgb, var(--brand-accent) 7%, transparent)',
+		borderColor: 'color-mix(in srgb, var(--brand-accent) 22%, transparent)'
+	},
+	'.td-chip--goal::before': { content: '"✳"', fontSize: '0.9em', lineHeight: '1', opacity: '0.8' },
 	'.td-chip--due': {
 		fontVariantNumeric: 'tabular-nums',
 		letterSpacing: '-0.01em',
@@ -320,6 +328,14 @@ const selectors: StyleDef['selectors'] = {
 	'.td-row.done .td-row-text': {
 		textDecoration: 'line-through',
 		color: 'var(--muted)'
+	},
+	// board 0112 — SUB-TASKS: children render indented under their parent with a ↳ marker (the logic
+	// orders them depth-first). The status dot keeps the hierarchy scannable.
+	'.td-row.sub': { paddingLeft: '1.75rem' },
+	'.td-row.sub .td-row-text::before': {
+		content: '"↳ "',
+		color: 'var(--muted)',
+		opacity: '0.7'
 	},
 	'.td-list-footer': {
 		display: 'flex',

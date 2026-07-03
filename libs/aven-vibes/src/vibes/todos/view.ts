@@ -51,7 +51,8 @@ export const todoView: ViewDef = {
 											// read-only status dot (done/open) — todos are managed via prompts only
 											{ class: 'td-status' },
 											{ class: 'td-row-text', text: '$$text' },
-											// inline brand chips; empty ones hide via CSS :empty
+											// inline brand chips; empty ones hide via CSS :empty. board 0112 — + the goal chip.
+											{ class: 'td-chip td-chip--goal', text: '$$goal' },
 											{ class: 'td-chip td-chip--due', text: '$$due' },
 											{ class: 'td-chip td-chip--prio', text: '$$priority' }
 										]
