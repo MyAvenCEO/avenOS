@@ -84,6 +84,9 @@ const bundleSpec = $derived.by<BundleSpec | null>(() => {
 let selectedVibe = $state<string | null>(null)
 type VibeTab = 'ui' | 'view' | 'function' | 'style' | 'state'
 let vibeTab = $state<VibeTab>('ui')
+// board 0106 — bundle + operation detail read either as the structured summary or the raw JSON, as two tabs.
+type DetailTab = 'readable' | 'raw'
+let detailTab = $state<DetailTab>('readable')
 const VIBE_TABS: { id: VibeTab; label: string }[] = [
 	{ id: 'ui', label: 'UI' },
 	{ id: 'view', label: 'View' },
@@ -181,10 +184,12 @@ function pickSchema(id: string, face: 'schema' | 'data'): void {
 function pickBundle(name: string): void {
 	clearSel()
 	selectedBundle = name
+	detailTab = 'readable'
 }
 function pickOp(name: string): void {
 	clearSel()
 	selectedOp = name
+	detailTab = 'readable'
 }
 function selectVibe(name: string): void {
 	clearSel()
@@ -655,6 +660,20 @@ $effect(() => {
 				{#if bundleDetailQuery.isPending}
 					<p class="text-muted-foreground text-[13px]">…</p>
 				{:else if bundleSpec}
+					<div
+						class="border-border mb-4 inline-flex shrink-0 self-start overflow-hidden rounded-[var(--radius)] border text-[12px]"
+					>
+						{#each [['readable', 'Readable'], ['raw', 'Raw JSON']] as [id, label] (id)}
+							<button
+								type="button"
+								class="border-border px-3 py-1 transition-colors not-first:border-l {detailTab === id
+									? 'bg-primary/10 text-foreground font-medium'
+									: 'text-muted-foreground hover:bg-card'}"
+								onclick={() => (detailTab = id as DetailTab)}>{label}</button
+							>
+						{/each}
+					</div>
+					{#if detailTab === 'readable'}
 					<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4">
 						<p
 							class="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase"
@@ -689,16 +708,11 @@ $effect(() => {
 							{/each}
 						</div>
 					</div>
-					<details class="mt-3 text-[12px]">
-						<summary class="text-muted-foreground hover:text-foreground cursor-pointer select-none">
-							Raw TypeSpec
-						</summary>
-						<pre
-							class="border-border bg-card text-foreground mt-2 overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
-						><code
-								>{pretty(bundleSpec)}</code
-							></pre>
-					</details>
+					{:else}
+					<pre
+						class="border-border bg-card text-foreground overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
+					><code>{pretty(bundleSpec)}</code></pre>
+					{/if}
 				{:else}
 					<p class="text-muted-foreground text-[13px]">{t('mainnet.db.emptySpecs')}</p>
 				{/if}
@@ -718,6 +732,20 @@ $effect(() => {
 					>
 					<h2 class="text-foreground font-mono text-base font-semibold">{selectedOp}</h2>
 				</div>
+					<div
+						class="border-border mb-4 inline-flex shrink-0 self-start overflow-hidden rounded-[var(--radius)] border text-[12px]"
+					>
+						{#each [['readable', 'Readable'], ['raw', 'Raw JSON']] as [id, label] (id)}
+							<button
+								type="button"
+								class="border-border px-3 py-1 transition-colors not-first:border-l {detailTab === id
+									? 'bg-primary/10 text-foreground font-medium'
+									: 'text-muted-foreground hover:bg-card'}"
+								onclick={() => (detailTab = id as DetailTab)}>{label}</button
+							>
+						{/each}
+					</div>
+					{#if detailTab === 'readable'}
 				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[13px]">
 					{#if selectedOpItem?.kind === 'query'}
 						<dl class="flex flex-col gap-2">
@@ -779,16 +807,11 @@ $effect(() => {
 						</ul>
 					{/if}
 				</div>
-				<details class="mt-3 text-[12px]">
-					<summary class="text-muted-foreground hover:text-foreground cursor-pointer select-none">
-						Raw spec
-					</summary>
+					{:else}
 					<pre
-						class="border-border bg-card text-foreground mt-2 overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
-					><code
-							>{pretty(s)}</code
-						></pre>
-				</details>
+						class="border-border bg-card text-foreground overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
+					><code>{pretty(s)}</code></pre>
+					{/if}
 			</div>
 		{:else if selected}
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
