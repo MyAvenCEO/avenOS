@@ -490,6 +490,8 @@ function resolveRef(id: unknown): Resolved {
 }
 
 // Auto-select the first item once data loads (unless something is already selected). Default = VALUES.
+// SKILLS/RUNS render full views with NO item selection — the auto-pick must not yank the category
+// back to 'values' while they're active (the "can't select Skills/Runs" bug). board 0112.
 $effect(() => {
 	const nothing =
 		!selectedId &&
@@ -497,7 +499,8 @@ $effect(() => {
 		!selectedOp &&
 		!selectedVibe &&
 		!selectedActor
-	if (nothing && tables.length > 0) pickSchema(tables[0].id, 'data')
+	if (nothing && category !== 'skills' && category !== 'runs' && tables.length > 0)
+		pickSchema(tables[0].id, 'data')
 })
 
 // Deep link from a flow schema badge: select the requested schema by name + show its definition.

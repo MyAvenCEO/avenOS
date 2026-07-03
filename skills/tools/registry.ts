@@ -39,8 +39,12 @@ export type SkillId = 'todos' | 'ontology' | 'website'
 
 export const SKILL_REGISTRY: Record<SkillId, { label: string; description: string; tools: string[] }> = {
 	todos: {
-		label: 'Todos',
-		description: "the user's task list — list, add, complete, edit, or delete todos and tasks",
+		// board 0112 — renamed to the general "Planner" (goals, tags, sub-tasks — not just a flat list).
+		// The skill ID stays `todos` (wire-stable, the 0040 lesson); only the label/description changed.
+		label: 'Planner',
+		description:
+			"the user's planner — todos/tasks with goals, tags, sub-tasks, priorities and due dates: " +
+			'list, add, complete, edit, delete, or group them',
 		tools: ['data_crud']
 	},
 	ontology: {
