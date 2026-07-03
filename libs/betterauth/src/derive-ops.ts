@@ -9,6 +9,8 @@ import type { MutationSpec, QuerySpec } from './queries'
 //   <type>.delete  (mutation) — cascade-delete the primary + every linked satellite.
 // SQL analogy: the bundle is CREATE TABLE, these ops are the SELECT/INSERT/UPDATE/DELETE. Scope guard: a
 // `children` trait or a `match` (discriminated) trait is NOT derivable yet — deriveOps throws LOUDLY so the
+// caller sees it. A `many` trait (board 0112) derives ONLY its delete-cascade: no list join (row multiplication),
+// no create/update (hand-authored ops own its writes).
 // caller keeps the runType interpretation as an explicit fallback (never a silent partial derivation).
 
 export type DerivedOp = { name: string; kind: 'query' | 'mutation'; spec: QuerySpec | MutationSpec }
@@ -64,6 +66,9 @@ export function deriveOps(bundle: TypeSpec): DerivedOp[] {
 	const joins: NonNullable<QuerySpec['join']> = []
 	const joinIndex = new Map<string, number>()
 	for (const p of satellites) {
+		// board 0112 — a `many` satellite (0..N rows, e.g. tags) is NOT joined into the list (it would
+		// multiply base rows); it exists on the bundle so DELETE cascades it. Reads go through its own ops.
+		if (p.kind === 'many') continue
 		joinIndex.set(p.pred, joins.length)
 		joins.push({ predicate: p.pred, kind: 'left', on: { place: linkOf(p) as never, base: 'id' } })
 	}

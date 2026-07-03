@@ -20,7 +20,10 @@ export type Row = { id: string } & Partial<Record<Place, Cell>>
  */
 export type Bind = string
 
-export type PartKind = 'primary' | 'singleton' | 'replace' | 'children'
+// board 0112 — `many`: a 0..N satellite (e.g. tags) DECLARED on the bundle so entity deletion cascades its
+// rows, but EXCLUDED from the derived list joins (it would multiply base rows) and from create/update (its
+// writes are hand-authored operations, e.g. todos.tag / todos.untag). Declaration = ownership, not CRUD.
+export type PartKind = 'primary' | 'singleton' | 'replace' | 'children' | 'many'
 
 /**
  * One predication that participates in a composite type:

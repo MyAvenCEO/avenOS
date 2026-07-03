@@ -95,9 +95,62 @@ export const PRIORITIZED: PredicateDef = {
 	]
 }
 
+// cmima: x1 is a member/element of set x2. GOAL CLUSTERING (board 0112 battle test): a task belongs to a
+// named goal/group — member_of(x1=the task, x2=the goal name). The goal stays an atomic label (the 0103
+// rule: reify only when it gains structure of its own).
+export const MEMBER_OF: PredicateDef = {
+	predicate: 'member_of',
+	gismu: 'cmima',
+	gloss: 'cmima: x1 (the task/entity) is a member of set/group x2 — clusters tasks under a named goal',
+	places: [
+		ref('x1', 'member', 'the entity that belongs — the task (cmima x1, the member)'),
+		val('x2', 'set', 'the goal/group it belongs to — cmima x2 (the set), a name label', 'string', {
+			minLength: 1,
+			example: 'Fitness'
+		})
+	]
+}
+
+// pagbu: x1 is a part/component of x2. SUB-TASKS: part_of(x1=the sub-task, x2=the parent task) — both
+// real task rows, so hierarchy queries are joins/chains over the same predicate.
+export const PART_OF: PredicateDef = {
+	predicate: 'part_of',
+	gismu: 'pagbu',
+	gloss: 'pagbu: x1 (the sub-task) is a part/component of whole x2 (the parent task)',
+	places: [
+		ref('x1', 'part', 'the sub-task — pagbu x1 (the piece)'),
+		ref('x2', 'whole', 'the parent task it belongs to — pagbu x2 (the whole)')
+	]
+}
+
+// tcita: x1 is a label/tag of x2. TAGS (many-to-many — several tag rows per task): tagged(x1=the tag
+// text, x2=the entity). Same inverted shape as `due` (value first, entity second) — Lojban-faithful.
+export const TAGGED: PredicateDef = {
+	predicate: 'tagged',
+	gismu: 'tcita',
+	gloss: 'tcita: x1 (the tag/label text) labels entity x2 — attach any number of tags to a task',
+	places: [
+		val('x1', 'tag', 'the tag text — tcita x1 (the label)', 'string', {
+			minLength: 1,
+			example: 'shopping'
+		}),
+		ref('x2', 'labelled', 'the entity carrying the tag — tcita x2 (the labelled thing)')
+	]
+}
+
 /** The full todo predicate bundle (Layer B vocab to seed into data_schema). owned_by is universal but
- *  seeded with the first vertical; document/invoice reuse the same OWNED_BY def. board 0092. */
-export const TODO_PREDICATES: PredicateDef[] = [TASK, OWNED_BY, DONE, DUE, PRIORITIZED]
+ *  seeded with the first vertical; document/invoice reuse the same OWNED_BY def. board 0092.
+ *  board 0112 — the Planner battle test adds member_of (goals), part_of (sub-tasks), tagged (tags). */
+export const TODO_PREDICATES: PredicateDef[] = [
+	TASK,
+	OWNED_BY,
+	DONE,
+	DUE,
+	PRIORITIZED,
+	MEMBER_OF,
+	PART_OF,
+	TAGGED
+]
 
 /** Compiled `{ name, jsonSchema }` rows ready to seed as data_schema entries. */
 export function todoPredicateSchemas(): { name: string; jsonSchema: Record<string, unknown> }[] {

@@ -34,7 +34,7 @@ const PART_SCHEMA = {
 	properties: {
 		pred: { type: 'string', minLength: 1 },
 		link: PLACE_ENUM,
-		kind: { type: 'string', enum: ['primary', 'singleton', 'replace', 'children'] },
+		kind: { type: 'string', enum: ['primary', 'singleton', 'replace', 'children', 'many'] },
 		field: { type: 'string' },
 		create: placeRecord(BIND),
 		set: placeRecord(BIND),
@@ -187,7 +187,7 @@ const BUNDLE_INSTRUCTIONS = [
 	'a VIEW that reads it back flat. You NEVER write SQL. Output ONLY the JSON object, no prose, no code fence.',
 	'',
 	'A bundle: { "type":"<snake_case name>", "parts":[<trait>…], "project":{ "<field>": <read> … } }',
-	'A trait (part): { "pred":"<predicate>", "kind":"primary|singleton|replace|children", "field":"<input field>",',
+	'A trait (part): { "pred":"<predicate>", "kind":"primary|singleton|replace|children|many", "field":"<input field>",',
 	'  "link":"x1..x5", "create":{"x1..x5":"<bind>"}, "set":{"x1..x5":"<bind>"}, "match":{"x1..x5":"<literal>"} }',
 	'  · primary   — its rows ARE the entities (exactly one primary). `field` drives create; `set` patches it.',
 	'  · singleton — one linked row created WITH the entity (e.g. owned_by; `link` = the place holding the id).',
