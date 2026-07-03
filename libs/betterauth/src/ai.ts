@@ -12,7 +12,7 @@ import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
-import { runData } from './actor-run'
+import { crud } from './actor-run'
 import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
 import { schemasPromptHint } from './data'
 import { db } from './db'
@@ -513,7 +513,7 @@ function streamWithTools(opts: {
 								.handle(
 									{
 										userId,
-										data: (a) => runData(userId, a),
+										data: (a) => crud(userId, a),
 										ontology: ontologyCaps(userId), // board 0100 — GLM mint + data_schema registry caps
 										query: queryCaps(userId), // board 0101 — GLM-authored validated query specs
 										mutate: mutationCaps(userId), // board 0101 — GLM-authored validated mutation specs
@@ -844,7 +844,7 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 		}
 	}
 	try {
-		const result = await runData(session.user.id, body.action as Parameters<typeof runData>[1])
+		const result = await crud(session.user.id, body.action as Parameters<typeof crud>[1])
 		// board 0099 — a confirmed todos delete is the delete actor firing (a BATCH of ids); record it as a
 		// run of the `todos` hub so the Runs explorer shows deletes too (create/edit/read record inline).
 		if (body.action.schema === 'todos' && body.action.action === 'delete') {

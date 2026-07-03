@@ -1,8 +1,7 @@
 import { sql } from 'kysely'
 import { type Caps, runActorCode } from './actor-sandbox'
 import type { DataCrudArgs } from '@avenos/skills/tools'
-import { actorConfig, type ActorRow, engineFor } from './config'
-import { executeDataTool } from './data'
+import { type ActorRow, engineFor } from './config'
 import { db } from './db'
 import { type OperationRow, runOperation } from './queries'
 
@@ -66,20 +65,49 @@ export function actorBinding(actor: Pick<ActorRow, 'code' | 'engine'>): 'code' |
 }
 
 /**
- * board 0111 — the LIVE flip: run a data CRUD call through the sandboxed `data_crud` code actor when one is
- * seeded (SSOT — the same code the vibe UI drives), else the engine. FAIL-SAFE: any error (sandbox throws, a
- * schema with no derived ops, a shape it can't handle) falls back to `executeDataTool`, so the chat behaves
- * exactly as before. The chat tool loop + the delete-confirm path both call this instead of executeDataTool.
+ * board 0107 — the ONE data-CRUD executor. CRUD is not special: list/create/update/delete + a configured
+ * `filter` are just NAMED operations (`<schema>.<verb>` rows in data_operations, query or mutation specs)
+ * run through the universal engine. Every caller — the chat tool loop, the delete-confirm path, and the
+ * /api/data REST handlers — dispatches here; there is no separate sandbox-code / typeSpec / raw-jsonb path.
+ * Config-as-data SSOT: the available verbs (and list filters like `todos.done`) ARE the seeded ops.
  */
-export async function runData(uid: string, args: DataCrudArgs): Promise<unknown> {
-	try {
-		const actor = await actorConfig('data_crud')
-		if (actor?.code) {
-			const out = await runCodeActor(actor, args, uid)
-			if (out.ran) return out.result
-		}
-	} catch (e) {
-		console.error('[actor] data_crud code path failed → engine fallback:', e)
+export async function crud(uid: string, args: DataCrudArgs): Promise<unknown> {
+	const schema = args.schema
+	if (!schema) return { ok: false, error: 'schema name required' }
+	const op = (verb: string) => `${schema}.${verb}`
+	const action = args.action ?? 'list'
+
+	if (action === 'list') {
+		const view = args.filter && args.filter !== 'all' ? op(args.filter) : op('list')
+		const res = (await runNamedOp(uid, view, {})) as { rows?: unknown[] }
+		return { ok: true, action: 'list', items: res.rows ?? [] }
 	}
-	return executeDataTool(uid, args)
+	if (action === 'create') {
+		const created: string[] = []
+		for (const item of args.items ?? []) {
+			const res = (await runNamedOp(uid, op('create'), item as Record<string, unknown>)) as {
+				ids?: (string | null)[]
+			}
+			const id = res.ids?.[0]
+			if (id) created.push(id)
+		}
+		return { ok: true, action: 'create', created, errors: [] }
+	}
+	if (action === 'update') {
+		const updated: string[] = []
+		for (const item of args.items ?? []) {
+			const id = (item as { id?: string }).id
+			if (!id) continue
+			await runNamedOp(uid, op('update'), item as Record<string, unknown>)
+			updated.push(id)
+		}
+		return { ok: true, action: 'update', updated, errors: [] }
+	}
+	if (action === 'delete') {
+		const ids = args.ids ?? (args.id ? [args.id] : [])
+		if (ids.length === 0) return { ok: false, error: 'delete requires id(s)' }
+		for (const id of ids) await runNamedOp(uid, op('delete'), { id })
+		return { ok: true, action: 'delete', deleted: ids }
+	}
+	return { ok: false, error: `unknown action: ${String(args.action)}` }
 }

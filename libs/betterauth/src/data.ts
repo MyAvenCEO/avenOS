@@ -7,6 +7,7 @@ import type { Context } from 'hono'
 import { sql } from 'kysely'
 import { auth } from './auth'
 import { registerContextProvider } from './context'
+import { crud } from './actor-run'
 import { db } from './db'
 import { deriveOps } from './derive-ops'
 import { publish } from './events'
@@ -618,7 +619,7 @@ export async function runTypeInterpreted(
 export async function listTodos(c: Context): Promise<Response> {
 	const uid = await userId(c)
 	if (!uid) return c.json({ error: 'unauthorized' }, 401)
-	const res = (await executeDataTool(uid, { schema: 'todos', action: 'list' })) as {
+	const res = (await crud(uid, { schema: 'todos', action: 'list' })) as {
 		items?: unknown[]
 	}
 	return c.json({ todos: res.items ?? [] })
@@ -645,7 +646,7 @@ export async function createTodos(c: Context): Promise<Response> {
 		items?: Record<string, unknown>[]
 	} | null
 	return c.json(
-		(await executeDataTool(uid, {
+		(await crud(uid, {
 			schema: 'todos',
 			action: 'create',
 			items: body?.items ?? []
@@ -661,7 +662,7 @@ export async function updateTodos(c: Context): Promise<Response> {
 		items?: Record<string, unknown>[]
 	} | null
 	return c.json(
-		(await executeDataTool(uid, {
+		(await crud(uid, {
 			schema: 'todos',
 			action: 'update',
 			items: body?.items ?? []
@@ -675,7 +676,7 @@ export async function deleteTodo(c: Context): Promise<Response> {
 	if (!uid) return c.json({ error: 'unauthorized' }, 401)
 	const id = c.req.param('id')
 	if (!id) return c.json({ error: 'id required' }, 400)
-	return c.json((await executeDataTool(uid, { schema: 'todos', action: 'delete', id })) as object)
+	return c.json((await crud(uid, { schema: 'todos', action: 'delete', id })) as object)
 }
 
 export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<unknown> {
