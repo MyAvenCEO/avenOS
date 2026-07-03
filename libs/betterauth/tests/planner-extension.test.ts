@@ -146,6 +146,20 @@ d('board 0112 — Planner battle test (goals · sub-tasks · tags), config-only'
 		expect(Number(urgent.rows[0].n)).toBe(1)
 	})
 
+	test('GOAL MERGE: todos.goal-rename moves every membership from → to (one configured mutation)', async () => {
+		// merge "Admin" into "Fitness": file taxes moves over; the Admin goal disappears from the aggregate.
+		const res = (await tagOp('todos.goal-rename', { from: 'Admin', to: 'Fitness' })) as {
+			ops?: { affected?: number }[]
+		}
+		expect(res.ops?.[0]?.affected).toBe(1)
+		const all = items(await crud(UID, { schema: 'todos', action: 'list' }))
+		expect(byTitle(all, 'file taxes')?.goal).toBe('Fitness')
+		const perGoal = await runQuery(UID, { from: 'member_of', group_by: 'x2', count: {} })
+		const m = Object.fromEntries(perGoal.map((r) => [r.key, r.n]))
+		expect(m.Admin).toBeUndefined()
+		expect(m.Fitness).toBe(2) // meal prep + file taxes
+	})
+
 	test('DELETE cascades the new satellites too (goal/parent/tags of the deleted task)', async () => {
 		await crud(UID, { schema: 'todos', action: 'delete', id: stepsId })
 		const orphans = await sql<{ n: string }>`

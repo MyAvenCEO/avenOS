@@ -11,11 +11,19 @@ export const GOALS_TOOL: ToolDefinition = {
 		name: 'goals',
 		description:
 			"Show the user's GOALS — the named groups their todos cluster under — as a grid of goal cards " +
-			'with task counts. Use when they ask to see their goals/projects/groups (any wording). For the ' +
-			'tasks INSIDE one goal use data_crud list with {"field":"goal","value":<name>}.',
+			'with done/total progress. Use when they ask to see their goals/projects/groups. Pass ' +
+			'rename:{from,to} to RENAME a goal or MERGE it into an existing one (all its tasks move to `to`). ' +
+			'For the tasks INSIDE one goal use data_crud list with {"field":"goal","value":<name>}.',
 		parameters: {
 			type: 'object',
 			properties: {
+				rename: {
+					type: 'object',
+					description:
+						'rename/merge: every task in goal `from` moves to goal `to` (merging when `to` already exists).',
+					properties: { from: { type: 'string' }, to: { type: 'string' } },
+					required: ['from', 'to']
+				},
 				response: { type: 'string', description: 'A short human-facing reply to show the user.' }
 			}
 		}
@@ -26,6 +34,16 @@ export const goals: ToolActor = {
 	definition: GOALS_TOOL,
 	async handle(ctx, raw): Promise<ToolResult> {
 		if (!ctx.ops) return { content: { ok: false, error: 'ops capability not available' } }
+		// rename/MERGE first (board 0112): one configured mutation moves every membership from→to; the
+		// fresh grid below then reflects it (a merge = renaming onto an existing goal name).
+		const rn = (raw as { rename?: { from?: string; to?: string } }).rename
+		let renamed: { from: string; to: string; moved: number } | undefined
+		if (rn?.from && rn?.to) {
+			const res = (await ctx.ops('todos.goal-rename', { from: rn.from, to: rn.to })) as {
+				ops?: { affected?: number }[]
+			}
+			renamed = { from: rn.from, to: rn.to, moved: res.ops?.[0]?.affected ?? 0 }
+		}
 		// two configured universal aggregates: total memberships per goal + DONE memberships per goal
 		// (the done op inner-joins the done satellite) — merged into {key, total, done} for the grid's
 		// progress bar. board 0112.
@@ -47,9 +65,13 @@ export const goals: ToolActor = {
 				? String((raw as { response?: string }).response).trim()
 				: ''
 		return {
-			detail: 'goals',
-			content: { ok: true, count: rows.length, goals: rows },
-			reply: said || `Showing your goals (${rows.length}).`,
+			detail: renamed ? `merge goals ${renamed.from} → ${renamed.to}` : 'goals',
+			content: { ok: true, count: rows.length, goals: rows, ...(renamed ? { renamed } : {}) },
+			reply:
+				said ||
+				(renamed
+					? `Moved ${renamed.moved} task(s) from "${renamed.from}" to "${renamed.to}".`
+					: `Showing your goals (${rows.length}).`),
 			vibe: { schema: 'goals', data: { goals: rows } }
 		}
 	}

@@ -45,8 +45,9 @@ describe('Tier 2 — a routed skill advertises exactly its own tools', () => {
 		const todos = JSON.stringify(chatToolDefinitionsFor('todos')).length
 		const all = JSON.stringify(chatToolDefinitions()).length
 		console.log(`todos-turn advertised tool-schema chars: ${todos} (flat-8 baseline: ${all})`)
-		// board 0107/0112 — the universal filter + the goals grid actor add real capability; still ~1/3 the flat set.
-		expect(todos).toBeLessThanOrEqual(2600)
+		// board 0107/0112 — the universal filter + the goals actor (grid, progress, rename/merge) add real
+		// capability; still well under half the flat set.
+		expect(todos).toBeLessThanOrEqual(3200)
 		expect(todos).toBeLessThan(all) // strictly leaner than advertising everything
 	})
 })
