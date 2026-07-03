@@ -26,19 +26,23 @@ export const DATA_CRUD_TOOL: ToolDefinition = {
 				filter: {
 					type: 'object',
 					description:
-						'list only: narrow by ONE projected field — {"field":<priority|due|done|title>,"value":…,"op"?:eq|neq|gt|' +
-						'gte|lt|lte}. medium: {"field":"priority","value":"medium"}; open: {"field":"done","value":false}; ' +
-						'due≤date: {"field":"due","op":"lte","value":"2026-07-13"}.',
+						'list only: narrow by ONE projected field — {"field":<priority|due|done|title|goal|parent>,"value":…,' +
+						'"op"?:eq|neq|gt|gte|lt|lte|isnull|notnull}. medium: {"field":"priority","value":"medium"}; open: ' +
+						'{"field":"done","value":false}; goal: {"field":"goal","value":"Fitness"}; top-level: ' +
+						'{"field":"parent","op":"isnull"}.',
 					properties: {
 						field: { type: 'string' },
 						value: {},
-						op: { type: 'string', enum: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'] }
+						op: { type: 'string', enum: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'isnull', 'notnull'] }
 					}
 				},
 				items: {
 					type: 'array',
 					description:
-						'create: value objects (e.g. {"title":"Buy milk"}). update: objects including their "id" — pass MANY to edit several at once.',
+						'create: value objects — todos fields: title, done, due (ISO date), priority, goal (a GROUP NAME ' +
+						'label, e.g. "Fitness"), parent (a SUB-TASK: the id of the parent task from CURRENT TODOS — an id, ' +
+						'NEVER a title; use goal for named groups instead). update: same fields plus the item\'s "id" — ' +
+						'pass MANY to edit several at once.',
 					items: { type: 'object', additionalProperties: true }
 				},
 				id: { type: 'string', description: 'delete: a single value id to remove.' },
@@ -162,11 +166,15 @@ export const dataCrud: ToolActor = {
 		const detail =
 			`${typeof args.action === 'string' ? args.action : ''} ${schema}`.trim() || 'data'
 
-		// For a todos update/delete, read the LIVE rows ONCE and RESOLVE the model's id(s) against them
-		// (gemma hallucinates UUIDs). This both makes the write hit the real row AND gives the diff/label
-		// its real "before". Reused for the delete titles + the edit before-snapshot. board 0099.
+		// For a todos update/delete — or a create that nests via `parent` — read the LIVE rows ONCE and
+		// RESOLVE the model's id(s) against them (gemma hallucinates UUIDs / copies 8-char short ids).
+		// This both makes the write hit the real row AND gives the diff/label its real "before". board 0099.
 		let todosNow: Rec[] | undefined
-		if (schema === 'todos' && (args.action === 'update' || args.action === 'delete')) {
+		const wantsParent = (args.items ?? []).some((i) => (i as Rec).parent)
+		if (
+			schema === 'todos' &&
+			(args.action === 'update' || args.action === 'delete' || (args.action === 'create' && wantsParent))
+		) {
 			const cur = (await ctx.data({ schema: 'todos', action: 'list' })) as { items?: Rec[] }
 			todosNow = cur.items ?? []
 			if (args.action === 'update' && args.items) {
@@ -179,6 +187,22 @@ export const dataCrud: ToolActor = {
 				const raw2 = (args.ids?.length ? args.ids : args.id ? [args.id] : []).map((x) => String(x))
 				args.ids = raw2.map((x) => resolveId(x, todosNow!))
 				args.id = undefined
+			}
+			// board 0112 — SUB-TASKS: `parent` must be a REAL task row id (part_of.x2). Resolve short/fuzzy
+			// ids; a value that resolves to nothing and matches NO row id prefix is most likely a TITLE the
+			// model smuggled in — resolve it by title too, so "parent":"file taxes" still nests correctly.
+			if (args.items) {
+				args.items = args.items.map((i) => {
+					const p = (i as Rec).parent
+					if (!p || typeof p !== 'string') return i
+					const byId = resolveId(p, todosNow!)
+					const hit = todosNow!.some((r) => String(r.id) === byId)
+						? byId
+						: String(
+								todosNow!.find((r) => String(r.title ?? '').toLowerCase() === p.toLowerCase())?.id ?? p
+							)
+					return { ...i, parent: hit }
+				})
 			}
 		}
 
