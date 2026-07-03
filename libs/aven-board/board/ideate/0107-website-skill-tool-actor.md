@@ -39,3 +39,5 @@ completion condition (tests + a green website round-trip) at `discover`.
 - `2026-07-02` — Created in idea as the website slice of the dispatch architecture (0106).
 
 - `2026-07-03` — **Superseded by [[0110]]** (fully-dynamic-config-and-standardized-viewer), which absorbs this scope into the all-in-one config→DB + viewer card.
+
+- `2026-07-03` — **Reactivated**: 0110 built the config→DB core but DEFERRED the website handler→engine migration (it touches the live chat streaming loop). This card carries that remaining slice: move show/edit/deploy_website handlers out of ai.ts into ToolActor engines so `engineFor(name)` resolves them (their actor DEFINITIONS are already seeded + advertised from the DB by 0110).

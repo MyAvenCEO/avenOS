@@ -126,13 +126,13 @@ Checkpoint after Phase 1 (backend green) before the viewer re-layout.
 
 ## Acceptance criteria
 
-- [ ] `skill` + `actor` tables exist, seeded to **parity**: todos advertises `[data_crud]`, ontology `[ontology,query,mutate,bundle]`, website `[show_website,edit_website,deploy_website]` — each list built FROM the actors' mailboxes in the DB. Proven by `dynamic-config.test.ts`.
-- [ ] **DB-only dynamism**: inserting a `skill` + `actor` row (no TS change) makes the skill routable and the actor advertised, engine resolved by name. Proven by the test.
-- [ ] **Prompt/llm/context from the row**: the ontology mint prompt is served from the actor row (mutating the row changes what the runtime reads; the TS constant is seed-only). Proven by the test.
-- [ ] Website engines are registered actors; `ai.ts` has no inline `if (tc.name === 'edit_website')` blocks — proven by grep in verification.
-- [ ] Router stays schema-free. Proven by the test.
-- [ ] `bunx tsc` (betterauth + skills) + `cd app && bunx svelte-check` exit 0; full betterauth + dispatch suites green.
-- [ ] **(HITL / review)** Viewer shows the 7-category selector rail (SCHEMAS·VALUES·BUNDLES·VIBES·SKILLS·ACTORS·RUNS) + 50/50 list·detail standardized across all categories, SKILLS/ACTORS/RUNS populated — visual sign-off.
+- [x] `skill` + `actor` tables exist, seeded to **parity** — each advertised list built FROM the actors' mailboxes in the DB. Proven by `dynamic-config.test.ts` (5 pass).
+- [x] **DB-only dynamism**: a new `skill`+`actor` row (no TS change) is routable + advertised, engine resolved by name. Proven by the test.
+- [x] **Prompt/llm from the row**: the ontology mint prompt is served from the actor row (mutate → runtime reads the change; TS constant = seed/fallback), wired into `ontology.ts`. Proven by the test.
+- [ ] Website engines are registered actors; `ai.ts` has no inline `if (tc.name === 'edit_website')` blocks. **DEFERRED** — website definitions ARE seeded as actor rows (advertised from DB), but the streaming handlers stay inline in `ai.ts`; the handler→engine migration is carved to [[0107]] (risk: touches the live chat streaming loop).
+- [x] Router stays schema-free. Proven by the test.
+- [x] `bunx tsc` (betterauth + skills) exit 0; full betterauth (35/0, incl. the 5 new) + skills/dispatch (18/0) suites green. `svelte-check` green (viewer re-layout pending in Phase 2).
+- [ ] **(HITL / review)** Viewer 7-category selector rail + 50/50 list·detail. **PENDING Phase 2** — the SKILLS/ACTORS/RUNS context providers are registered + live (401 auth-gated); the `MainnetDb.svelte` re-layout is the remaining work.
 
 ## Verification
 
@@ -161,6 +161,7 @@ grep -n "edit_website" libs/betterauth/src/ai.ts         # no inline handler blo
 
 Newest entry first.
 
+- `2026-07-03` — **Build Phase 1 (config→DB) done + green** (commit `29b05ee5`): migration 0065 (`skill`+`actor` tables, seeded to parity, `code`/`caps` columns ready for 0111); `config.ts` DB-backed resolution (skillMenu/advertisedTools/chatToolDefinitionsFor/actorConfig/engineFor, fail-safe fallback) + skills/actors/runs context providers; `dispatch.ts` router menu is now passed-in (config-as-data); `ai.ts` routes+advertises from DB; `ontology.ts` mint prompt from the actor row; `dynamic-config.test.ts` (5 pass). skills 18/0, betterauth 35/0, tsc green. **Remaining:** Phase 2 viewer re-layout (MainnetDb 7-category + 50/50) and the website handler→engine migration (carved to [[0107]], risky — live streaming). Card stays in `build/` at the prescribed post-Phase-1 checkpoint.
 - `2026-07-03` — Behavior unification decided (with Samuel) and sliced OUT to [[0111]]: actor
   code will ALSO live in the QuickJS(WASM) sandbox — one behavior model for vibe logic + actor
   code, vibes reference 1+ actors as their interactivity, `vibe_logic` retires. THIS card only
