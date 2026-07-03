@@ -44,7 +44,6 @@ type SessionRow = { id: string; title: string }
 
 let messages = $state<ChatMessage[]>([])
 let busy = $state(false)
-let sessions = $state<SessionRow[]>([])
 let currentSessionId = $state<string | null>(null)
 let nextId = 0
 let scrollEl = $state<HTMLDivElement | null>(null)
@@ -69,9 +68,6 @@ $effect(() => {
 	void tick().then(() => ref.openWithFiles(files))
 	pendingMainnetFileDrop.set(null)
 })
-// Session switcher is collapsed by default so the conversation is centered + full-width; a tiny
-// toggle button opens the chats viewer. board 0055.
-let showSessions = $state(false)
 // The active spark's current src/ files (path→content), loaded into the AI context before each send
 // so the edit_website tool can diff/create across them (sent as the body's `publicFiles`). board 0057.
 let publicFiles: Record<string, string> = {}
@@ -234,8 +230,9 @@ function scrollToBottom(): void {
 	})
 }
 
-// Refresh the user's session list (most-recent first) for the left switcher.
-async function refreshSessions(): Promise<void> {
+// Load the single rolling conversation (the most-recent server session) into the view. There is no
+// session switcher — one continuous context, hydrated on mount so it survives restarts. board 0111.
+async function loadRollingSession(): Promise<void> {
 	if (!AI_BASE) return
 	const token = getBearerToken()
 	if (!token) return
@@ -244,12 +241,11 @@ async function refreshSessions(): Promise<void> {
 			credentials: 'include',
 			headers: { Authorization: `Bearer ${token}` }
 		})
-		if (res.ok) {
-			const { sessions: rows } = (await res.json()) as { sessions: SessionRow[] }
-			sessions = rows ?? []
-		}
+		if (!res.ok) return
+		const { sessions: rows } = (await res.json()) as { sessions: SessionRow[] }
+		if (rows?.length) await loadSessionMessages(rows[0].id)
 	} catch {
-		/* keep the current list on failure */
+		/* start fresh on failure */
 	}
 }
 
@@ -299,26 +295,10 @@ async function loadSessionMessages(id: string): Promise<void> {
 	}
 }
 
-/** Switch to a session from the left list. */
-function selectSession(id: string): void {
-	if (busy || id === currentSessionId) return
-	void loadSessionMessages(id)
-}
-
-/** Start a new conversation: next message creates a fresh server-side session. */
-function newChat(): void {
-	if (busy) return
-	messages = []
-	currentSessionId = null
-}
-
 $effect(() => {
 	if (initialized) return
 	initialized = true
-	void (async () => {
-		await refreshSessions()
-		if (sessions.length > 0) await loadSessionMessages(sessions[0].id)
-	})()
+	void loadRollingSession()
 })
 
 // Stick to the bottom while the conversation grows. A ResizeObserver on the message column fires
@@ -548,7 +528,6 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 	} finally {
 		busy = false
 		scrollToBottom()
-		void refreshSessions()
 		void queryClient.invalidateQueries({ queryKey: ['usage'] })
 		void queryClient.invalidateQueries({ queryKey: ['data'] })
 	}
@@ -567,82 +546,8 @@ function handleTranscribeError(message: string): void {
 </script>
 
 <div class="flex min-h-0 flex-1 bg-background">
-	<!-- Left: session switcher — collapsed by default, opened by the tiny "Chats" toggle -->
-	{#if showSessions}
-		<aside
-			class="border-border flex w-56 shrink-0 flex-col border-r pt-[max(0.75rem,env(safe-area-inset-top))]"
-		>
-			<div class="flex items-center gap-1.5 px-3 pb-2">
-				<button
-					type="button"
-					class="border-border hover:bg-card flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius)] border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40"
-					onclick={newChat}
-					disabled={busy || (messages.length === 0 && currentSessionId === null)}
-				>
-					+ {t('mainnet.chat.newChat')}
-				</button>
-				<button
-					type="button"
-					class="text-muted-foreground hover:text-foreground hover:bg-card rounded-[var(--radius)] px-2 py-1.5 text-xs transition-colors"
-					onclick={() => (showSessions = false)}
-					aria-label="Close chats"
-					title="Close"
-				>
-					✕
-				</button>
-			</div>
-			<div class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-				{#if sessions.length === 0}
-					<p class="text-muted-foreground px-2 py-2 text-[11px] leading-relaxed">
-						{t('mainnet.chat.noSessions')}
-					</p>
-				{/if}
-				{#each sessions as s (s.id)}
-					<button
-						type="button"
-						class="mb-0.5 block w-full truncate rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {s.id ===
-					currentSessionId
-						? 'bg-primary/10 text-foreground font-medium'
-						: 'text-muted-foreground hover:bg-card'}"
-						title={s.title}
-						onclick={() => selectSession(s.id)}
-						disabled={busy}
-					>
-						{s.title || t('mainnet.chat.untitled')}
-					</button>
-				{/each}
-			</div>
-		</aside>
-	{/if}
-
-	<!-- Right: the conversation (truly centered when the switcher is collapsed) -->
+	<!-- One continuous conversation — no session switcher (single rolling context). board 0111. -->
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col pt-2">
-		{#if !showSessions}
-			<div class="shrink-0 px-4 pb-1">
-				<button
-					type="button"
-					class="text-muted-foreground hover:text-foreground hover:bg-card inline-flex items-center gap-1.5 rounded-[var(--radius)] px-2 py-1 text-xs transition-colors"
-					onclick={() => (showSessions = true)}
-					title="Open chats"
-				>
-					<svg
-						width="15"
-						height="15"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<rect x="3" y="4" width="18" height="16" rx="2" />
-						<line x1="9" y1="4" x2="9" y2="20" />
-					</svg>
-					Chats
-				</button>
-			</div>
-		{/if}
 		<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
 			<div bind:this={contentEl} class="mx-auto flex w-full max-w-[52rem] flex-col gap-3 py-4">
 				{#if messages.length === 0}
