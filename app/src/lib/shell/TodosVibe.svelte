@@ -172,16 +172,22 @@ function handleEvent(event: UiEvent): void {
 // read (all) is the full interactive engine vibe. create/edit/delete are the "what changed" actors —
 // a diff doesn't fit an interactive list row, so each gets a purpose-built layout: created = new tasks
 // + chips, edited = title + aligned field old→new rows, deleted = struck-through titles. board 0099.
-const MODE_DOT: Record<Exclude<TodoMode, 'all'>, string> = {
-	created: 'bg-green-600',
-	edited: 'bg-primary',
-	deleted: 'bg-destructive'
-}
+// Brand palette — one stringent style with the interactive vibe: sage (created) /
+// navy accent (edited) / terracotta (deleted). Match the vibe's priority pills.
 const MODE_ACCENT: Record<Exclude<TodoMode, 'all'>, string> = {
-	created: 'text-green-700',
-	edited: 'text-primary',
-	deleted: 'text-destructive'
+	created: 'text-[#5f8a63]',
+	edited: 'text-[#1e293b]',
+	deleted: 'text-[#c1502e]'
 }
+// Static priority-pill classes (Tailwind JIT needs whole strings) — same tones as the
+// interactive vibe's .td-chip--prio (high=terracotta / medium=ochre / low=sage).
+const PRIO_PILL: Record<string, string> = {
+	high: 'text-[#c1502e] bg-[#c1502e]/10 border-[#c1502e]/25',
+	medium: 'text-[#b0803a] bg-[#b0803a]/10 border-[#b0803a]/25',
+	low: 'text-[#5f8a63] bg-[#5f8a63]/10 border-[#5f8a63]/25'
+}
+const prioPill = (p: unknown): string =>
+	PRIO_PILL[String(p ?? '').toLowerCase()] ?? 'text-muted-foreground bg-muted border-border/60'
 const summaryMode = $derived(mode as Exclude<TodoMode, 'all'>)
 const summaryCount = $derived(mode === 'edited' ? summaryDiffs.length : summaryItems.length)
 </script>
@@ -203,26 +209,26 @@ const summaryCount = $derived(mode === 'edited' ? summaryDiffs.length : summaryI
 	{:else}
 		<!-- create / edit / delete actor — a clean, purpose-built "what changed" card. board 0099. -->
 		<section class="mx-auto w-full max-w-2xl" data-container={containerName}>
-			<header class="mb-3 flex items-center gap-2">
-				<span class="size-2 rounded-full {MODE_DOT[summaryMode]}"></span>
-				<span class="text-[11px] font-bold tracking-[0.14em] uppercase {MODE_ACCENT[summaryMode]}"
-					>{MODE_EYEBROW[summaryMode]}</span
-				>
-				<span class="text-muted-foreground text-[11px]"
+			<header
+				class="mb-3 inline-flex items-center gap-2 text-[11px] font-semibold tracking-[0.08em] uppercase"
+			>
+				<span class="text-[#1e293b]/80" style="font-family:var(--font-display)">✳</span>
+				<span class={MODE_ACCENT[summaryMode]}>{MODE_EYEBROW[summaryMode]}</span>
+				<span class="text-muted-foreground/70"
 					>· {summaryCount} {summaryCount === 1 ? 'Aufgabe' : 'Aufgaben'}</span
 				>
 			</header>
 
 			{#if summaryCount === 0}
 				<p
-					class="text-muted-foreground border-border rounded-[var(--radius-lg)] border border-dashed px-4 py-6 text-center text-sm"
+					class="text-muted-foreground border-border rounded-[var(--radius-card)] border border-dashed px-4 py-6 text-center text-sm"
 				>
 					Keine Änderungen.
 				</p>
 			{:else if mode === 'edited'}
-				<ul class="flex flex-col gap-2">
+				<ul class="border-border bg-card overflow-hidden rounded-[var(--radius-card)] border">
 					{#each summaryDiffs as d (d.id)}
-						<li class="border-border bg-card rounded-[var(--radius-lg)] border px-4 py-3">
+						<li class="border-border/60 border-b px-4 py-3 last:border-b-0">
 							<p class="text-foreground text-sm font-semibold">{d.title || '—'}</p>
 							<ul class="mt-2 flex flex-col gap-1.5">
 								{#each d.changes as c (c.field)}
@@ -231,7 +237,7 @@ const summaryCount = $derived(mode === 'edited' ? summaryDiffs.length : summaryI
 										<span class="text-muted-foreground line-through decoration-1"
 											>{c.from || '—'}</span
 										>
-										<span class="text-muted-foreground/60">→</span>
+										<span class="text-muted-foreground/50">→</span>
 										<span class="text-foreground font-medium">{c.to || '—'}</span>
 									</li>
 								{/each}
@@ -240,39 +246,38 @@ const summaryCount = $derived(mode === 'edited' ? summaryDiffs.length : summaryI
 					{/each}
 				</ul>
 			{:else if mode === 'deleted'}
-				<ul class="flex flex-col gap-2">
+				<ul class="border-border bg-card overflow-hidden rounded-[var(--radius-card)] border">
 					{#each summaryItems as it (it.id ?? it.title)}
-						<li
-							class="border-border bg-card flex items-center gap-2.5 rounded-[var(--radius-lg)] border px-4 py-3"
-						>
-							<span class="text-destructive text-sm">✕</span>
+						<li class="border-border/60 flex items-center gap-2.5 border-b px-4 py-3 last:border-b-0">
+							<span class="text-[#c1502e] text-sm">✕</span>
 							<span class="text-muted-foreground text-sm line-through">{it.title ?? '—'}</span>
 						</li>
 					{/each}
 				</ul>
 			{:else}
 				<!-- created -->
-				<ul class="flex flex-col gap-2">
+				<ul class="border-border bg-card overflow-hidden rounded-[var(--radius-card)] border">
 					{#each summaryItems as it (it.id ?? it.title)}
 						<li
-							class="border-border bg-card flex items-center justify-between gap-3 rounded-[var(--radius-lg)] border px-4 py-3"
+							class="border-border/60 flex items-center justify-between gap-3 border-b px-4 py-3 last:border-b-0"
 						>
 							<span class="flex min-w-0 items-center gap-2.5">
-								<span class="border-primary/40 size-4 shrink-0 rounded-full border-2"></span>
+								<span class="size-1.5 shrink-0 rounded-full bg-[#5f8a63]"></span>
 								<span class="text-foreground truncate text-sm font-medium">{it.title ?? '—'}</span>
 							</span>
 							{#if relDue(it.due) || it.priority}
-								<span class="flex shrink-0 gap-1.5">
+								<span class="flex shrink-0 items-center gap-1.5">
 									{#if relDue(it.due)}
 										<span
-											class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px]"
-											>{relDue(it.due)}</span
+											class="text-muted-foreground border-border/60 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] tabular-nums"
+											>◷ {relDue(it.due)}</span
 										>
 									{/if}
 									{#if it.priority}
 										<span
-											class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px] capitalize"
-											>{it.priority}</span
+											class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold capitalize {prioPill(
+												it.priority
+											)}">{it.priority}</span
 										>
 									{/if}
 								</span>
