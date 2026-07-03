@@ -40,6 +40,7 @@ import {
 import { eventsStream } from './events'
 import { deleteFlow, getFlow, listFlows, upsertFlow } from './flows'
 import './ontology' // board 0100 — registers the ontology skill's context providers (gismu/predicates) at load
+import './config' // board 0110 — registers the skills/actors/runs context providers at load
 import { inboxGet, inboxList, mailInbox } from './inbox'
 import { deleteType, getType, listTypes, upsertType } from './predicate-types'
 import { listRuns, runSkill } from './skills-run'
