@@ -17,18 +17,9 @@ import { consumeSse } from '$lib/net/sse'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 import VibeCard from '$lib/shell/VibeCard.svelte'
 
-// board 0105 — read-only actor cards render from their vibe.* rows through the generic VibeCard host.
-const VIBE_CARDS = new Set([
-	'goals',
-	'todos-created',
-	'todos-edited',
-	'todos-deleted',
-	'ontology',
-	'ontology-created',
-	'query-result',
-	'mutation-result',
-	'bundle-created'
-])
+// board 0113 — ANY vibe schema renders from its DB vibe.* rows through the generic VibeCard host (no
+// client allow-list: a config-minted skill's card works with zero client change; a schema without rows
+// gets VibeCard's soft error). Only `todos` (live interactive list) and `composer` stay special-cased.
 
 type ChatMessage = {
 	id: number
@@ -569,21 +560,20 @@ function handleTranscribeError(message: string): void {
 										| undefined}
 								/>
 							</div>
-						{:else if VIBE_CARDS.has(message.vibe ?? '')}
-							<!-- board 0105 — every read-only actor card renders from its vibe.* rows through the
-								     ONE generic host (ontology, query/mutation results, bundle, todos changed-summaries). -->
+						{:else if message.vibe === 'composer'}
+							<div
+								class="border-border h-[70vh] w-full overflow-hidden rounded-[var(--radius-xl)] border bg-[var(--color-surface-soft)]"
+							>
+								<Composer />
+							</div>
+						{:else}
+							<!-- board 0113 — GENERIC: any other schema renders its own DB vibe rows via VibeCard. -->
 							<div class="max-h-[80vh] w-full overflow-y-auto">
 								<VibeCard
 									schema={message.vibe ?? ''}
 									data={message.vibeData ?? {}}
 									containerName={`aven-vibes-chat-${message.id}`}
 								/>
-							</div>
-						{:else if message.vibe === 'composer'}
-							<div
-								class="border-border h-[70vh] w-full overflow-hidden rounded-[var(--radius-xl)] border bg-[var(--color-surface-soft)]"
-							>
-								<Composer />
 							</div>
 						{/if}
 					{:else}

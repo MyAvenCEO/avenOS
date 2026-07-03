@@ -15,17 +15,7 @@ import { openDbSchema } from '$lib/shell/nav.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 import VibeCard from '$lib/shell/VibeCard.svelte'
 
-// board 0105 — the Skills preview renders read-only cards through the same generic host as chat/Runs.
-const VIBE_CARDS = new Set([
-	'todos-created',
-	'todos-edited',
-	'todos-deleted',
-	'ontology',
-	'ontology-created',
-	'query-result',
-	'mutation-result',
-	'bundle-created'
-])
+// board 0113 — the Skills preview renders ANY vibe schema through the same generic host (no allow-list).
 
 // board 0083 — Skills view = TEMPLATES only, rendered via the shared FlowGraph (real edges + labels,
 // pan/zoom). Left = skill list, center = the flow DAG (composites navigate into sub-skills), right =
@@ -176,7 +166,7 @@ function onSelect(id: string): void {
 							Vibe · {previewVibe}
 						</p>
 						<TodosVibe containerName={`skills-preview-${selectedNodeId}`} />
-					{:else if selectedNode && VIBE_CARDS.has(previewVibe)}
+					{:else if selectedNode && previewVibe}
 						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
 							Vibe · {previewVibe}
 						</p>

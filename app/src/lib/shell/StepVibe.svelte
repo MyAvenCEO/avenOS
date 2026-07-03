@@ -3,18 +3,8 @@ import type { Flow, NodeState, RecipeNode, TraceStep } from '@avenos/aven-skills
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 import VibeCard from '$lib/shell/VibeCard.svelte'
 
-// board 0105 — every read-only actor card renders from its vibe.* registry rows through the ONE generic
-// VibeCard host; only the interactive todos `all` list keeps a dedicated component (it wires CRUD events).
-const VIBE_CARDS = new Set([
-	'todos-created',
-	'todos-edited',
-	'todos-deleted',
-	'ontology',
-	'ontology-created',
-	'query-result',
-	'mutation-result',
-	'bundle-created'
-])
+// board 0113 — ANY vibe schema renders from its DB vibe.* rows through the ONE generic VibeCard host
+// (no allow-list); only the interactive todos `all` list keeps a dedicated component (CRUD events).
 
 // board 0083/0099 — the optional "vibe view" of a single flow step: a user-facing rendering of what an
 // actor is doing. A step may name a `vibe` with `vibeData`; otherwise we key on `${flowId}:${nodeId}`
@@ -62,8 +52,8 @@ const STATE_CHIP: Record<NodeState, string> = {
 {#if vibe === 'todos'}
 	<!-- the interactive todos list (CRUD events) keeps its dedicated engine component. board 0099. -->
 	<TodosVibe />
-{:else if VIBE_CARDS.has(vibe)}
-	<!-- board 0105 — every other actor card renders from its vibe.* rows through the generic host. -->
+{:else if vibe}
+	<!-- board 0113 — every other schema renders its DB vibe rows through the generic host. -->
 	<VibeCard schema={vibe} data={vibeData} />
 {:else if !vibe && (!node || !step)}
 	<div class="text-muted-foreground flex h-full items-center justify-center text-sm">

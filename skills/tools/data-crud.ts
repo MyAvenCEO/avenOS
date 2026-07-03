@@ -117,12 +117,22 @@ const todoItem = (o: Rec) => ({
 	sub: o.parent ? 'Sub-Task' : ''
 })
 
-/** The mode-specific vibe for a touched schema: todos → its actor card; anything else → no vibe. */
-function todosVibe(
+/**
+ * The result vibe for a touched schema. todos keeps its purpose-built actor cards (live list /
+ * created / edited). Every OTHER schema is GENERIC (board 0113): a `list` renders the schema's own
+ * vibe rows through the VibeCard host with the result items as its source — so a config-minted skill
+ * (e.g. inventory) gets a live card with ZERO code here. No rows seeded → VibeCard shows a soft error.
+ */
+function resultVibe(
 	args: DataCrudArgs,
-	before: Record<string, Rec> | undefined
+	before: Record<string, Rec> | undefined,
+	result: unknown
 ): { schema: string; data?: unknown } | undefined {
-	if (args.schema !== 'todos') return undefined
+	if (args.schema !== 'todos') {
+		if (args.action !== 'list') return undefined
+		const items = (result as { items?: unknown[] } | null)?.items ?? []
+		return { schema: args.schema, data: { items } }
+	}
 	const items = (args.items ?? []) as Rec[]
 	if (args.action === 'create')
 		return { schema: 'todos-created', data: { items: items.map(todoItem) } }
@@ -268,6 +278,6 @@ export const dataCrud: ToolActor = {
 		const said = typeof args.response === 'string' ? args.response.trim() : ''
 		const reply = ok ? said || defaultReply(args.action, schema, args.items, result) : undefined
 
-		return { detail, content, reply, vibe: todosVibe(args, before) }
+		return { detail, content, reply, vibe: resultVibe(args, before, result) }
 	}
 }
