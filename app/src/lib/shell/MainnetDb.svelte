@@ -623,8 +623,11 @@ $effect(() => {
 			<p class="text-destructive shrink-0 text-sm" role="alert">{err}</p>
 		{/if}
 		{#if selectedVibe === 'website'}
-			<!-- board 0110 — the website Composer, moved into the DB viewer (was the separate Vibes tab) -->
-			<div class="min-h-0 flex-1">
+			<!-- board 0110 — the website Composer, moved into the DB viewer (was the separate Vibes tab).
+			     Full-height rounded container; the vibe fills it. -->
+			<div
+				class="border-border bg-card h-[calc(100dvh-9.5rem)] overflow-hidden rounded-[var(--radius-lg)] border"
+			>
 				<Composer />
 			</div>
 		{:else if selectedVibe}
@@ -665,7 +668,9 @@ $effect(() => {
 								<div class="flex gap-2"><dt class="text-muted-foreground">source keys</dt><dd class="text-foreground font-mono">{Object.keys(vibeSample).join(', ') || '—'}</dd></div>
 							</dl>
 						</div>
-						<div class="border-border bg-card min-w-0 rounded-[var(--radius-lg)] border p-4">
+						<div
+							class="border-border bg-card min-h-[70vh] min-w-0 rounded-[var(--radius-lg)] border p-4"
+						>
 							<VibeCard schema={selectedVibe} data={vibeSample} containerName={`db-vibe-${selectedVibe}`} />
 						</div>
 					</div>
