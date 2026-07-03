@@ -46,7 +46,7 @@ export const todoView: ViewDef = {
 									template: {
 										tag: 'li',
 										class: '$$rowClass',
-										attrs: { 'data-id': '$$id' },
+										attrs: { 'data-id': '$$id', 'data-prio': '$$priority' },
 										children: [
 											// read-only status dot (done/open) — todos are managed via prompts only
 											{ class: 'td-status' },

@@ -7,7 +7,11 @@ import type { StyleDef } from '../../engine/types.js'
 const tokens: StyleDef['tokens'] = {
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
 	'brand-accent': '#1e293b',
-	'brand-accent-fg': '#f8fafc'
+	'brand-accent-fg': '#f8fafc',
+	// Priority palette — warm brand tones (terracotta / ochre / sage), muted for pills.
+	'prio-high': '#c1502e',
+	'prio-medium': '#b0803a',
+	'prio-low': '#5f8a63'
 }
 
 const selectors: StyleDef['selectors'] = {
@@ -21,7 +25,7 @@ const selectors: StyleDef['selectors'] = {
 		border: 'none',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '0.5rem',
+		gap: '0.85rem',
 		boxSizing: 'border-box',
 		fontFamily: 'var(--font-sans)',
 		color: 'var(--text)',
@@ -31,7 +35,7 @@ const selectors: StyleDef['selectors'] = {
 		background: 'var(--surface)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-card)',
-		padding: '0.7rem 0.8rem',
+		padding: '1rem 1.15rem',
 		marginBottom: '0'
 	},
 	'.td-card:last-child': { marginBottom: '0' },
@@ -51,14 +55,23 @@ const selectors: StyleDef['selectors'] = {
 		alignItems: 'end'
 	},
 	'.td-eyebrow': {
-		display: 'block',
+		display: 'inline-flex',
+		alignItems: 'center',
+		gap: '0.4rem',
 		fontSize: 'var(--fs-micro)',
 		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.08em',
-		opacity: '0.55',
-		marginBottom: '3px'
+		opacity: '0.6',
+		marginBottom: '5px'
+	},
+	'.td-eyebrow::before': {
+		content: '"✳"',
+		fontSize: '0.9em',
+		lineHeight: '1',
+		color: 'var(--brand-accent)',
+		opacity: '0.85'
 	},
 	'.td-banner-title': {
 		margin: '0',
@@ -94,9 +107,8 @@ const selectors: StyleDef['selectors'] = {
 		display: 'flex',
 		flexDirection: 'column',
 		marginBottom: '0',
-		border: 'none',
-		background: 'transparent',
-		padding: '0'
+		padding: '0.3rem 1.15rem',
+		overflow: 'hidden'
 	},
 	'.td-add-form': {
 		display: 'flex',
@@ -159,39 +171,36 @@ const selectors: StyleDef['selectors'] = {
 		minHeight: '48px',
 		overflowY: 'auto',
 		display: 'flex',
-		flexDirection: 'column',
-		gap: '6px'
+		flexDirection: 'column'
 	},
-	// The view engine wraps `$each` rows in a single <div>, so a gap on `.td-list` only
-	// spaces that wrapper — never the rows. Put the row gap on the wrapper itself. board 0054.
+	// The view engine wraps `$each` rows in a single <div>; rows are separated by their own
+	// bottom-divider (mockup table look), so the wrapper carries no gap. board 0111.
 	'.td-list > div': {
 		display: 'flex',
-		flexDirection: 'column',
-		gap: '6px'
+		flexDirection: 'column'
 	},
 	'.td-list li.empty': {
 		textAlign: 'center',
 		color: 'var(--muted)',
-		padding: '0.85rem',
-		fontSize: 'var(--fs-body)',
-		border: '1px solid var(--border)',
-		borderRadius: 'var(--radius-md)',
-		marginTop: '2px'
+		padding: '1.1rem 0.85rem',
+		fontSize: 'var(--fs-body)'
 	},
 	'.td-list:has(.td-row) li[data-empty="true"]': { display: 'none' },
 	'.td-row': {
 		display: 'flex',
 		alignItems: 'center',
-		gap: '0.6rem',
-		padding: '7px 10px',
-		border: '1px solid var(--border)',
-		borderRadius: 'var(--radius-md)',
-		background: 'var(--tech-fill)',
-		// Never let flexbox compress a row when the list is height-constrained — that's the
-		// "task list squeezes itself" look; rows keep their natural height + the list gap.
+		gap: '0.7rem',
+		padding: '0.72rem 0.15rem',
+		borderBottom: '1px solid var(--row-divider)',
+		background: 'transparent',
+		// Never let flexbox compress a row when the list is height-constrained — the
+		// "task list squeezes itself" look; rows keep their natural height.
 		flexShrink: '0',
-		animation: 'td-slide-in 0.18s ease-out'
+		animation: 'td-slide-in 0.18s ease-out',
+		transition: 'background 0.12s ease'
 	},
+	'.td-list > div .td-row:last-child': { borderBottom: 'none' },
+	'.td-row:hover': { background: 'color-mix(in srgb, var(--text) 3.5%, transparent)' },
 	'.td-row input[type="checkbox"]': {
 		appearance: 'none',
 		WebkitAppearance: 'none',
@@ -260,13 +269,51 @@ const selectors: StyleDef['selectors'] = {
 		whiteSpace: 'nowrap'
 	},
 	'.td-chip:empty': { display: 'none' },
-	'.td-chip--due': { fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' },
+	'.td-chip--due': {
+		fontVariantNumeric: 'tabular-nums',
+		letterSpacing: '-0.01em',
+		gap: '0.3rem'
+	},
+	'.td-chip--due::before': {
+		content: '"◷"',
+		fontSize: '0.95em',
+		opacity: '0.7',
+		lineHeight: '1'
+	},
+	// Priority pill: leading dot + tinted fill, colour-coded by the row's data-prio.
 	'.td-chip--prio': {
 		textTransform: 'capitalize',
-		color: 'var(--text)',
-		background: 'color-mix(in srgb, var(--brand-accent) 9%, transparent)',
-		borderColor: 'color-mix(in srgb, var(--brand-accent) 20%, transparent)'
+		gap: '0.34rem',
+		color: 'var(--muted-strong)',
+		background: 'transparent',
+		borderColor: 'var(--border-soft)'
 	},
+	'.td-chip--prio::before': {
+		content: '""',
+		width: '0.42rem',
+		height: '0.42rem',
+		borderRadius: '50%',
+		background: 'var(--muted)',
+		flexShrink: '0'
+	},
+	'.td-row[data-prio="high"] .td-chip--prio': {
+		color: 'var(--prio-high)',
+		background: 'color-mix(in srgb, var(--prio-high) 9%, transparent)',
+		borderColor: 'color-mix(in srgb, var(--prio-high) 26%, transparent)'
+	},
+	'.td-row[data-prio="high"] .td-chip--prio::before': { background: 'var(--prio-high)' },
+	'.td-row[data-prio="medium"] .td-chip--prio': {
+		color: 'var(--prio-medium)',
+		background: 'color-mix(in srgb, var(--prio-medium) 10%, transparent)',
+		borderColor: 'color-mix(in srgb, var(--prio-medium) 28%, transparent)'
+	},
+	'.td-row[data-prio="medium"] .td-chip--prio::before': { background: 'var(--prio-medium)' },
+	'.td-row[data-prio="low"] .td-chip--prio': {
+		color: 'var(--prio-low)',
+		background: 'color-mix(in srgb, var(--prio-low) 11%, transparent)',
+		borderColor: 'color-mix(in srgb, var(--prio-low) 28%, transparent)'
+	},
+	'.td-row[data-prio="low"] .td-chip--prio::before': { background: 'var(--prio-low)' },
 	'.td-row.done .td-row-text': {
 		textDecoration: 'line-through',
 		color: 'var(--muted)'
