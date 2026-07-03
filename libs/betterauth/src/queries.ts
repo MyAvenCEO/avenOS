@@ -33,7 +33,10 @@ const OPS: Record<BinOp, string> = {
 export type Filter = { place: Place | 'id'; op: Op; value?: unknown; param?: string; join?: number }
 // board 0104 — a join may match on the base ROW ID (`base:'id'`) so a satellite predicate correlates on the
 // entity id (e.g. done.x1 = <task row id>), and may be a LEFT join so a missing satellite projects as null.
-type JoinBase = Place | 'id'
+// board 0112 — CHAINED joins: `base` may instead reference an EARLIER join ({join:N, place}) so a query
+// walks a predication graph to any explicit depth (task → referent → referent …). Fail-closed like the
+// mutation {ref:N} rule: N must index a STRICTLY EARLIER join — never forward, never self.
+type JoinBase = Place | 'id' | { join: number; place: Place | 'id' }
 export type JoinSpec = {
 	predicate: string
 	on: { place: Place; base: JoinBase }
@@ -126,7 +129,21 @@ export const QUERY_META_SCHEMA = {
 					kind: { type: 'string', enum: ['inner', 'left'] },
 					on: {
 						type: 'object',
-						properties: { place: PLACE_ENUM, base: PLACE_OR_ID },
+						properties: {
+							place: PLACE_ENUM,
+							// board 0112 — base is a place/id of the BASE row, or a CHAIN ref to an earlier join.
+							base: {
+								oneOf: [
+									PLACE_OR_ID,
+									{
+										type: 'object',
+										properties: { join: { type: 'integer', minimum: 0 }, place: PLACE_OR_ID },
+										required: ['join', 'place'],
+										additionalProperties: false
+									}
+								]
+							}
+						},
 						required: ['place', 'base'],
 						additionalProperties: false
 					}
@@ -301,7 +318,19 @@ export function compileQuery(
 	const joins = jspec.map((j, i) => {
 		const a = `j${i}`
 		const kw = sql.raw(j.kind === 'left' ? 'LEFT JOIN' : 'JOIN')
-		return sql`${kw} data_value ${sql.ref(a)} ON ${sql.ref(`${a}.user_id`)} = ${sql.ref(`${b}.user_id`)} AND ${sql.ref(`${a}.predicate`)} = ${j.predicate} AND ${refCol(a, j.on.place)} = ${refCol(b, j.on.base)}`
+		// board 0112 — the base side of the ON: the base row, or (chained) a STRICTLY EARLIER join's alias.
+		// Fail-closed like the mutation {ref:N} rule: a forward/self chain ref never reaches SQL.
+		let baseSide: RawBuilder<unknown>
+		if (typeof j.on.base === 'object') {
+			const n = j.on.base.join
+			if (!Number.isInteger(n) || n < 0 || n >= i) {
+				throw new Error(`[queries] join ${i} chain base {"join":${JSON.stringify(n)}} must reference an earlier join`)
+			}
+			baseSide = refCol(`j${n}`, j.on.base.place)
+		} else {
+			baseSide = refCol(b, j.on.base)
+		}
+		return sql`${kw} data_value ${sql.ref(a)} ON ${sql.ref(`${a}.user_id`)} = ${sql.ref(`${b}.user_id`)} AND ${sql.ref(`${a}.predicate`)} = ${j.predicate} AND ${refCol(a, j.on.place)} = ${baseSide}`
 	})
 	// board 0104 — a projection entry is a bare place/id, a place read from base or a join, or an exists
 	// boolean over a LEFT join (true iff the joined satellite row is present, e.g. `done`).
