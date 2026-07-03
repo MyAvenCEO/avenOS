@@ -11,6 +11,7 @@ import {
 	runOperation,
 	runQuery
 } from './queries'
+import { ensureVocab } from './vocab'
 
 // board 0111 — the actor RUNNER. An actor's behavior is bound either as sandboxed `code` (QuickJS-in-WASM,
 // this card) or a by-name `engine` (the code registry, board 0110). A `code` actor runs in the sandbox with
@@ -18,7 +19,7 @@ import {
 // seam: the chat tool loop AND the vibe UI post to the SAME actor row's mailbox.
 
 /** Fetch a named `data_operations` row — the user's own, else the global (user_id NULL) one. */
-async function fetchOp(uid: string, name: string): Promise<OperationRow> {
+export async function fetchOp(uid: string, name: string): Promise<OperationRow> {
 	const r = await sql`
 		SELECT id, name, kind, spec FROM data_operations
 		WHERE name = ${name} AND (user_id = ${uid} OR user_id IS NULL)
@@ -109,6 +110,9 @@ export function actorBinding(actor: Pick<ActorRow, 'code' | 'engine'>): 'code' |
 export async function crud(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const schema = args.schema
 	if (!schema) return { ok: false, error: 'schema name required' }
+	// fresh-user vocab bootstrap (once per process per user) — the seeded todo predicates must exist
+	// before any mutation resolves its schema_id. board 0112 (moved from the retired interpreter path).
+	await ensureVocab(uid)
 	const op = (verb: string) => `${schema}.${verb}`
 	const action = args.action ?? 'list'
 

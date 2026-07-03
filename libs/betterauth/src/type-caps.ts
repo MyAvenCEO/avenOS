@@ -11,7 +11,7 @@ import { publish } from './events'
 // this lets it mint new composite TYPES too — a `TypeSpec` (the declarative bundle that projects several
 // predications into one flat record, e.g. a todo = task+done+due+prioritized+owned_by). A validated
 // TypeSpec persisted to `data_bundles` is IMMEDIATELY CRUD-able through the existing generic engine
-// (executeDataTool → loadTypeSpec → runType), zero new code. So "a book with an author and a rating"
+// (crud() → the type's SEEDED data_operations, board 0112), zero new code. So "a book with an author and a rating"
 // becomes AI-authored config, not seeded code — the last seeded layer of the data brain goes dynamic.
 
 // ── the TypeSpec meta-language, as an AJV meta-schema (GLM emits JSON matching this) ───────────────
@@ -103,7 +103,7 @@ export async function regenerateDerivedOps(spec: TypeSpec): Promise<void> {
 	try {
 		ops = deriveOps(spec)
 	} catch {
-		return // non-derivable → no derived ops; executeDataTool falls back to the interpreter
+		return // non-derivable → no derived ops seeded; such a bundle is not CRUD-able until derivable (0112 — no interpreter)
 	}
 	await sql`DELETE FROM data_operations WHERE derived_from = ${spec.type}`.execute(db())
 	for (const o of ops) {

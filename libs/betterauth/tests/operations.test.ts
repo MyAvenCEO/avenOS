@@ -1,14 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'kysely'
-import { executeDataTool, runTypeInterpreted, runViaOps } from '../src/data'
+import { crud } from '../src/actor-run'
 import { db } from '../src/db'
 import { deriveOps } from '../src/derive-ops'
 import { TODO_SPEC } from '../src/legacy-bundle-fixtures'
 
-// board 0104 — a BUNDLE compiles to OPERATIONS, and the derived ops must run CRUD identically to the old
-// aven-ontology interpreter (the PARITY gate) before the interpreter is retired. Also: the merged
-// data_operations registry holds the pre-existing GLM specs.
+// board 0104 — a BUNDLE compiles to OPERATIONS. board 0112 — the aven-ontology interpreter is RETIRED:
+// the parity gate this file used to run (derived ops == interpreter) served its purpose; the same CRUD
+// behavior is now asserted through the ONE universal path — crud() → the SEEDED data_operations
+// (<schema>.<verb>) → runOperation. deriveOps survives only as the mint-time seeder.
 
 async function hasDb(): Promise<boolean> {
 	try {
@@ -26,7 +27,7 @@ type Todo = {
 	priority: string | null
 	owner: string
 }
-type ListResult = { items: Todo[]; via?: string }
+type ListResult = { items: Todo[] }
 const norm = (items: Todo[]) =>
 	items
 		.map((x) => ({
@@ -38,7 +39,7 @@ const norm = (items: Todo[]) =>
 		}))
 		.sort((a, b) => a.title.localeCompare(b.title))
 
-describe('operations — bundles compile to ops; parity with the interpreter (board 0104)', () => {
+describe('operations — bundles compile to ops; CRUD through the ONE engine (0104/0112)', () => {
 	test('deriveOps(todo bundle) emits list/create/update/delete with the right kinds', () => {
 		const ops = deriveOps(TODO_SPEC)
 		expect(ops.map((o) => o.name)).toEqual([
@@ -50,7 +51,7 @@ describe('operations — bundles compile to ops; parity with the interpreter (bo
 		expect(ops.map((o) => o.kind)).toEqual(['query', 'mutation', 'mutation', 'mutation'])
 	})
 
-	test('a non-derivable bundle (a children trait) throws LOUDLY (interpreter fallback, never silent)', () => {
+	test('a non-derivable bundle (a children trait) throws LOUDLY at mint time (never silent)', () => {
 		expect(() =>
 			deriveOps({
 				type: 'shelf',
@@ -71,13 +72,7 @@ describe('operations — bundles compile to ops; parity with the interpreter (bo
 		if (r.rows[0]) expect(r.rows[0].kind).toBe('mutation') // present iff the session authored it — assert kind when so
 	})
 
-	test('EXECUTION PARITY: derived ops CRUD == the aven-ontology interpreter, for todos', async () => {
-		await parityBody()
-	}, 30_000)
-})
-
-async function parityBody(): Promise<void> {
-	{
+	test('EXECUTION: full todos CRUD through crud() → seeded ops (fresh user, vocab auto-bootstraps)', async () => {
 		if (!(await hasDb())) {
 			console.log('[operations] skipped DB execution test — no connection')
 			return
@@ -88,74 +83,48 @@ async function parityBody(): Promise<void> {
 			await sql`DELETE FROM data_schema WHERE user_id = ${UID}`.execute(db())
 		}
 		await clean()
-		// bootstrap the user's todo predicate schemas (the interpreter path ensures them).
-		await runTypeInterpreted(UID, TODO_SPEC, { schema: 'todos', action: 'list' })
 
-		// CREATE two todos through the DERIVED ops.
-		const created = (await runViaOps(UID, TODO_SPEC, {
+		// CREATE two todos — crud() bootstraps the fresh user's predicate vocab itself (board 0112).
+		const created = (await crud(UID, {
 			schema: 'todos',
 			action: 'create',
 			items: [
 				{ title: 'buy milk', done: true, due: '2026-08-01', priority: 'high' },
 				{ title: 'call bob' }
 			]
-		})) as { via?: string; created?: string[] }
-		expect(created.via).toBe('operations')
+		})) as { created?: string[] }
 		expect(created.created?.length).toBe(2)
 
-		// the DERIVED list and the INTERPRETER list project the SAME flat todos.
-		const viaOps = (await runViaOps(UID, TODO_SPEC, {
-			schema: 'todos',
-			action: 'list'
-		})) as ListResult
-		const viaInterp = (await runTypeInterpreted(UID, TODO_SPEC, {
-			schema: 'todos',
-			action: 'list'
-		})) as ListResult
-		expect(viaOps.via).toBe('operations')
-		expect(norm(viaOps.items)).toEqual(norm(viaInterp.items))
-		expect(norm(viaOps.items)).toEqual([
+		// LIST projects the flat todos.
+		const listed = (await crud(UID, { schema: 'todos', action: 'list' })) as ListResult
+		expect(norm(listed.items)).toEqual([
 			{ title: 'buy milk', done: true, due: '2026-08-01', priority: 'high', owner: UID },
 			{ title: 'call bob', done: false, due: null, priority: null, owner: UID }
 		])
 
-		// UPDATE through ops (re-open + retitle 'buy milk'), verify through the interpreter.
-		const milkId = viaInterp.items.find((x) => x.title === 'buy milk')?.id as string
-		await runViaOps(UID, TODO_SPEC, {
+		// UPDATE patches IN PLACE (same row id; untouched fields preserved).
+		const milkId = listed.items.find((x) => x.title === 'buy milk')?.id as string
+		await crud(UID, {
 			schema: 'todos',
 			action: 'update',
 			items: [{ id: milkId, title: 'buy oat milk', done: false }]
 		})
-		const afterUpdate = (await runTypeInterpreted(UID, TODO_SPEC, {
-			schema: 'todos',
-			action: 'list'
-		})) as ListResult
+		const afterUpdate = (await crud(UID, { schema: 'todos', action: 'list' })) as ListResult
 		const oat = afterUpdate.items.find((x) => x.id === milkId)
-		expect(oat).toMatchObject({ title: 'buy oat milk', done: false }) // patched in place; same row id
-		expect(oat?.due).toBe('2026-08-01') // untouched fields preserved
+		expect(oat).toMatchObject({ title: 'buy oat milk', done: false })
+		expect(oat?.due).toBe('2026-08-01')
 
-		// DELETE through ops, verify through the interpreter — the entity + its satellites are gone.
-		await runViaOps(UID, TODO_SPEC, { schema: 'todos', action: 'delete', id: milkId })
-		const afterDelete = (await runTypeInterpreted(UID, TODO_SPEC, {
-			schema: 'todos',
-			action: 'list'
-		})) as ListResult
+		// DELETE cascades the entity + its satellites.
+		await crud(UID, { schema: 'todos', action: 'delete', id: milkId })
+		const afterDelete = (await crud(UID, { schema: 'todos', action: 'list' })) as ListResult
 		expect(afterDelete.items.find((x) => x.id === milkId)).toBeUndefined()
 		expect(afterDelete.items.length).toBe(1) // only 'call bob' remains
-		const bobId = afterDelete.items[0].id
 		const orphans = await sql<{ n: string }>`
 			SELECT count(*)::text as n FROM data_value WHERE user_id = ${UID}
 			AND (predicate = 'due' AND x2 = ${milkId} OR predicate = 'done' AND x1 = ${milkId} OR predicate = 'owned_by' AND x2 = ${milkId})
 		`.execute(db())
-		expect(Number(orphans.rows[0].n)).toBe(0) // cascade delete left no orphaned satellites
-
-		// executeDataTool routes todos through the ops engine.
-		const viaTool = (await executeDataTool(UID, { schema: 'todos', action: 'list' })) as {
-			via?: string
-		}
-		expect(viaTool.via).toBe('operations')
-		expect(bobId).toBeTruthy()
+		expect(Number(orphans.rows[0].n)).toBe(0)
 
 		await clean()
-	}
-}
+	}, 30_000)
+})

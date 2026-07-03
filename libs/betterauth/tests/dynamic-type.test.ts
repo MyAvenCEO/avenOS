@@ -3,13 +3,13 @@ import { randomUUID } from 'node:crypto'
 import type { TypeSpec } from '@avenos/aven-ontology'
 import { compilePredicate } from '@avenos/aven-vibes/predicate'
 import { sql } from 'kysely'
-import { executeDataTool } from '../src/data'
+import { crud } from '../src/actor-run'
 import { db } from '../src/db'
 import { saveType, TYPE_META_SCHEMA, typePredicates, validateTypeSpec } from '../src/type-caps'
 
-// board 0102 — the DETERMINISTIC proof for dynamic composite types: a validated TypeSpec persisted to
-// data_bundles is IMMEDIATELY CRUD-able through the existing generic engine (executeDataTool → runType),
-// with ZERO new code. GLM authoring quality is a separate human-checked criterion.
+// board 0102/0112 — the DETERMINISTIC proof for dynamic composite types: a validated TypeSpec persisted
+// to data_bundles is IMMEDIATELY CRUD-able through the ONE universal engine (saveType seeds the derived
+// ops → crud() runs them), with ZERO new code. GLM authoring quality is a separate human-checked criterion.
 
 const UID = `test-types-${randomUUID().slice(0, 8)}`
 async function hasDb(): Promise<boolean> {
@@ -143,8 +143,8 @@ describe('dynamic composite types — author a TypeSpec, CRUD works with no new 
 		const saved = await saveType(library)
 		expect(saved.type).toBe('library')
 
-		// 3. the SAME data_crud engine todos uses now does CRUD on `library` with zero new code.
-		const created = (await executeDataTool(UID, {
+		// 3. the SAME crud() → seeded-ops path todos uses now does CRUD on `library` with zero new code.
+		const created = (await crud(UID, {
 			schema: 'library',
 			action: 'create',
 			items: [{ title: 'Dune' }]
@@ -155,7 +155,7 @@ describe('dynamic composite types — author a TypeSpec, CRUD works with no new 
 		expect(created.ok).toBe(true)
 		expect(created.created?.length).toBe(1)
 
-		const listed = (await executeDataTool(UID, { schema: 'library', action: 'list' })) as {
+		const listed = (await crud(UID, { schema: 'library', action: 'list' })) as {
 			items?: { title?: string; owner?: string }[]
 		}
 		expect(listed.items?.length).toBe(1)

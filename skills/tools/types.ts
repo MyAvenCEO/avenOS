@@ -50,7 +50,7 @@ export type PredicateDefJSON = {
 /** Runtime capabilities injected by the server; a tool-actor closes over these instead of importing them. */
 export type ToolCtx = {
 	userId: string
-	/** Execute a schema-validated CRUD op against the signed-in user's store (betterauth executeDataTool). */
+	/** Execute a schema-validated CRUD op against the signed-in user's store (betterauth crud — the ONE ops engine). */
 	data(args: DataCrudArgs): Promise<unknown>
 	/** board 0100 — the ontology actor's server caps (GLM-5.2 mint + data_schema registry). Injected only
 	 *  when the ontology tool is dispatched; other actors ignore it. */

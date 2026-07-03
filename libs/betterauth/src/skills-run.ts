@@ -12,7 +12,7 @@ import type { Context } from 'hono'
 import { pgArtifactStore } from './artifact-store'
 import { auth } from './auth'
 import { db } from './db'
-import { executeDataTool, loadTypeSpec } from './data'
+import { crud, fetchOp } from './actor-run'
 
 // Skill execution (board 0089). Loads a skill's Flow config from the admin `flow` table and runs it
 // through the GENERIC runner, persisting any output whose kind is a registered type via the 0088
@@ -155,15 +155,18 @@ export async function runSkillForUser(
 		onStep // board 0091 — stream each step's vibe card to the caller (chat)
 	})
 
-	// GENERIC persistence: any output resource whose kind is a REGISTERED type (document/invoice/…) is
-	// written via the 0088 engine, with the run id added so the krasi/finti provenance closes. board 0090.
+	// GENERIC persistence via the ONE operations engine (board 0112): a kind is persistable iff its
+	// `<kind>.create` op is seeded in data_operations (mint-time seeding); the write is a plain crud().
 	let documentId: string | null = null
 	if (run.status === 'done') {
 		for (const [kind, value] of Object.entries(outputs)) {
 			if (!value || typeof value !== 'object') continue
-			const spec = await loadTypeSpec(kind)
-			if (!spec) continue
-			const res = (await executeDataTool(uid, {
+			const persistable = await fetchOp(uid, `${kind}.create`).then(
+				() => true,
+				() => false
+			)
+			if (!persistable) continue
+			const res = (await crud(uid, {
 				schema: kind,
 				action: 'create',
 				items: [{ ...(value as Record<string, unknown>), run: runId }]

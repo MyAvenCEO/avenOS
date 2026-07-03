@@ -493,7 +493,7 @@ function streamWithTools(opts: {
 						try {
 							parsed = JSON.parse(tc.args || '{}')
 						} catch {
-							/* leave empty; executeDataTool will report the error */
+							/* leave empty; crud() will report the error */
 						}
 						// board 0099 — REGISTRY DISPATCH: a chat tool is an actor (config+behavior) in
 						// @avenos/skills/tools. data_crud (the whole Todos hub) routes here; the loop stays generic —
@@ -791,7 +791,7 @@ export async function aiUsageRecent(c: Context): Promise<Response> {
 
 /**
  * HITL: run a data action the user explicitly confirmed (e.g. a delete the model proposed and
- * which the tool loop deliberately did NOT execute). Session-gated; executeDataTool publishes a
+ * which the tool loop deliberately did NOT execute). Session-gated; crud() publishes a
  * `data` event so the live vibe refreshes. board 0055.
  */
 export async function aiConfirmAction(c: Context): Promise<Response> {

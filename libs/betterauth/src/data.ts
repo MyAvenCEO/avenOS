@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import type { Cell, Place, PredicationStore, TypeSpec } from '@avenos/aven-ontology'
+import type { TypeSpec } from '@avenos/aven-ontology'
 import type { DataCrudArgs } from '@avenos/skills/tools'
-import { create, query, remove, update } from '@avenos/aven-ontology'
-import { todoPredicateSchemas } from '@avenos/aven-vibes/predicate'
 import Ajv from 'ajv'
 import type { Context } from 'hono'
 import { sql } from 'kysely'
@@ -10,9 +8,7 @@ import { auth } from './auth'
 import { registerContextProvider } from './context'
 import { crud } from './actor-run'
 import { db } from './db'
-import { deriveOps } from './derive-ops'
 import { publish } from './events'
-import { runOperation } from './queries'
 
 // Generic, schema-driven user data store. `data_schema` rows are JSON Schema definitions;
 // `data_value` rows reference a schema and hold a JSONB value validated against it on write.
@@ -309,7 +305,7 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 	// round is the single biggest latency win for "mark X done" / "delete Y". board 0099.
 	let todosSnapshot = '\n\nCURRENT TODOS: (none yet).'
 	try {
-		const res = (await executeDataTool(uid, { schema: 'todos', action: 'list' })) as {
+		const res = (await crud(uid, { schema: 'todos', action: 'list' })) as {
 			items?: { id: string; title?: string; done?: boolean }[]
 		}
 		// SHORT ids (8 chars) — gemma can't copy 36-char UUIDs verbatim (it hallucinates them, so the
@@ -328,141 +324,10 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 	return `Current date & time: ${now.toISOString()} — resolve any relative dates the user mentions ("today", "tomorrow", "in 3 days", "next Monday") against THIS instant; emit absolute ISO dates.\n\nThe data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}${todosSnapshot}\n\nIMPORTANT: the current todos are listed above — for update/delete, reference their ids DIRECTLY (one tool call, no preceding list). Only call data_crud action="list" schema="todos" when the user explicitly asks to SEE / show / list / check their todos (any wording, any language) — that re-renders their live card. Never answer about todos from memory with a plain-text list.`
 }
 
-/** predicate-name → schema_id — the map the engine's store resolves predicates through. board 0100:
- *  GENERIC + DB-driven. `data_schema` is the single vocab registry: a predicate schema is any row whose
- *  JSON-Schema carries a `predicate` discriminator (what `compilePredicate` emits). So EVERY predicate —
- *  the seeded todo vocab AND any dynamically-minted x1–x5 predicate — resolves here with ZERO code change;
- *  adding a relation is just inserting a `data_schema` row. The todo vocab is still bootstrapped (idempotent)
- *  so a fresh user has working todos, but resolution reads the DB, not a hardcoded list. */
-async function ensurePredicateSchemas(uid: string): Promise<Record<string, string>> {
-	// Bootstrap: the ONLY code-seeded vocab — ensure the 5 todo predicate schemas exist for this user.
-	for (const { name, jsonSchema } of todoPredicateSchemas()) {
-		const existing = await db()
-			.selectFrom('data_schema')
-			.select('id')
-			.where('user_id', '=', uid)
-			.where('name', '=', name)
-			.executeTakeFirst()
-		if (existing) {
-			await db()
-				.updateTable('data_schema')
-				.set({ json_schema: jsonb(jsonSchema), updated_at: new Date() })
-				.where('id', '=', existing.id)
-				.execute()
-		} else {
-			await db()
-				.insertInto('data_schema')
-				.values({
-					id: randomUUID(),
-					user_id: uid,
-					name,
-					json_schema: jsonb(jsonSchema),
-					created_at: new Date(),
-					updated_at: new Date()
-				})
-				.execute()
-		}
-	}
-	// Resolve EVERY predicate schema from the DB (todo vocab + minted predicates) → name → schema_id.
-	const rows = await db()
-		.selectFrom('data_schema')
-		.select(['id', 'name', 'json_schema'])
-		.where('user_id', '=', uid)
-		.execute()
-	const ids: Record<string, string> = {}
-	for (const r of rows) {
-		const s = asJson(r.json_schema) as { properties?: Record<string, unknown> } | null
-		if (s?.properties?.predicate) ids[r.name] = r.id
-	}
-	return ids
-}
 
-// ── The generic predication engine (board 0088) ─────────────────────────────────
-// A composite TYPE (e.g. `todos`) is a declarative bundle spec in the `data_bundles` registry;
-// the pure aven-ontology engine runs CRUD + projection against the x1–x5 predications with ZERO
-// per-type code. `pgStore` adapts the engine's PredicationStore onto data_value (user-scoped).
 
-/** Adapt the engine's PredicationStore onto data_value, resolving each predicate to its schema_id. */
-function pgStore(uid: string, schemaIdByPred: Record<string, string>): PredicationStore {
-	const schemaOf = (pred: string): string => {
-		const id = schemaIdByPred[pred]
-		if (!id) throw new Error(`[ontology] no data_schema for predicate "${pred}"`)
-		return id
-	}
-	// board 0100 — the predication IS (predicate, x1…x5) columns; only those 5 places, DB-enforced.
-	const PLACES = ['x1', 'x2', 'x3', 'x4', 'x5'] as const
-	const cellSet = (cells: Partial<Record<Place, Cell>>): Record<string, Cell> => {
-		const set: Record<string, Cell> = {}
-		for (const p of PLACES) if (p in cells) set[p] = cells[p] ?? null
-		return set
-	}
-	return {
-		async rows(pred) {
-			const r = await db()
-				.selectFrom('data_value')
-				.select(['id', 'x1', 'x2', 'x3', 'x4', 'x5'])
-				.where('user_id', '=', uid)
-				.where('schema_id', '=', schemaOf(pred))
-				.orderBy('id')
-				.execute()
-			return r.map((row) => ({
-				id: row.id,
-				x1: row.x1 ?? null,
-				x2: row.x2 ?? null,
-				x3: row.x3 ?? null,
-				x4: row.x4 ?? null,
-				x5: row.x5 ?? null
-			}))
-		},
-		async insert(pred, cells) {
-			const id = randomUUID()
-			await db()
-				.insertInto('data_value')
-				.values({
-					id,
-					user_id: uid,
-					schema_id: schemaOf(pred),
-					predicate: pred,
-					...cellSet(cells),
-					created_at: new Date(),
-					updated_at: new Date()
-				})
-				.execute()
-			return id
-		},
-		async patch(id, cells) {
-			await db()
-				.updateTable('data_value')
-				.set({ ...cellSet(cells), updated_at: new Date() })
-				.where('id', '=', id)
-				.where('user_id', '=', uid)
-				.execute()
-		},
-		async patchWhere(pred, place, equals, cells) {
-			await db()
-				.updateTable('data_value')
-				.set({ ...cellSet(cells), updated_at: new Date() })
-				.where('user_id', '=', uid)
-				.where('schema_id', '=', schemaOf(pred))
-				.where(place, '=', equals)
-				.execute()
-		},
-		async deleteWhere(pred, place, equals) {
-			await db()
-				.deleteFrom('data_value')
-				.where('user_id', '=', uid)
-				.where('schema_id', '=', schemaOf(pred))
-				.where(place, '=', equals)
-				.execute()
-		},
-		async remove(id) {
-			await db().deleteFrom('data_value').where('id', '=', id).where('user_id', '=', uid).execute()
-		}
-	}
-}
-
-/** Load a registered bundle spec from the `data_bundles` registry (board 0102). */
-export async function loadTypeSpec(name: string): Promise<TypeSpec | null> {
+/** A registered bundle's spec from the `data_bundles` registry — the transparency provider's read. */
+async function bundleSpec(name: string): Promise<TypeSpec | null> {
 	const row = await db()
 		.selectFrom('data_bundles')
 		.select('spec')
@@ -478,7 +343,7 @@ export async function loadTypeSpec(name: string): Promise<TypeSpec | null> {
 // transparently shows the multi-predicate machinery + schemas behind a simple `data_crud` call.
 registerContextProvider('type', async (uid, arg) => {
 	const name = arg ?? ''
-	const spec = await loadTypeSpec(name)
+	const spec = await bundleSpec(name)
 	if (!spec) return { kind: 'text', label: `${name} type`, text: `(no registered type "${name}")` }
 	const preds = new Set<string>()
 	const collect = async (s: TypeSpec): Promise<void> => {
@@ -486,7 +351,7 @@ registerContextProvider('type', async (uid, arg) => {
 			preds.add(p.pred)
 			const sub = (p as { sub?: string }).sub
 			if (sub) {
-				const child = await loadTypeSpec(sub)
+				const child = await bundleSpec(sub)
 				if (child) await collect(child)
 			}
 		}
@@ -507,99 +372,6 @@ registerContextProvider('type', async (uid, arg) => {
 	}
 })
 
-/** board 0104 — run a bundle's CRUD through its DERIVED OPERATIONS (the unified engine). The bundle
- *  compiles to <type>.list/create/update/delete; this maps a data_crud call to the matching op. Result
- *  carries `via:'operations'` so callers/tests can see the CRUD ran through the ops engine, not the
- *  interpreter. */
-export async function runViaOps(uid: string, spec: TypeSpec, args: DataCrudArgs): Promise<unknown> {
-	const byName = new Map(deriveOps(spec).map((o) => [o.name, o]))
-	const op = (verb: string) => byName.get(`${spec.type}.${verb}`)
-	if (!args.action || args.action === 'list') {
-		const { rows } = await runOperation(uid, op('list')!)
-		return { ok: true, action: 'list', items: rows ?? [], via: 'operations' }
-	}
-	if (args.action === 'create') {
-		const created: string[] = []
-		for (const item of args.items ?? []) {
-			const { ids } = await runOperation(uid, op('create')!, item as Record<string, unknown>)
-			const id = ids?.[0]
-			if (id) created.push(id)
-		}
-		return { ok: true, action: 'create', created, errors: [], via: 'operations' }
-	}
-	if (args.action === 'update') {
-		const updated: string[] = []
-		for (const item of args.items ?? []) {
-			const id = (item as { id?: string }).id
-			if (!id) continue
-			await runOperation(uid, op('update')!, item as Record<string, unknown>)
-			updated.push(id)
-		}
-		return { ok: true, action: 'update', updated, errors: [], via: 'operations' }
-	}
-	if (args.action === 'delete') {
-		const ids = deleteIds(args)
-		if (ids.length === 0) return { ok: false, error: 'delete requires id(s)' }
-		for (const id of ids) await runOperation(uid, op('delete')!, { id })
-		return { ok: true, action: 'delete', deleted: ids, via: 'operations' }
-	}
-	return { ok: false, error: `unknown action: ${args.action}` }
-}
-
-/** Run a bundle's CRUD. board 0104 — prefer the DERIVED-OPS path; fall back to the aven-ontology interpreter
- *  ONLY for a bundle whose traits aren't derivable yet (children/match), and LOUDLY (never a silent split). */
-async function runType(uid: string, spec: TypeSpec, args: DataCrudArgs): Promise<unknown> {
-	try {
-		deriveOps(spec) // derivation check (throws on a non-derivable trait) — cheap, pure
-	} catch (e) {
-		console.warn(
-			`[data] bundle "${spec.type}" not yet derivable, using the interpreter — ${e instanceof Error ? e.message : String(e)}`
-		)
-		return runTypeInterpreted(uid, spec, args)
-	}
-	return runViaOps(uid, spec, args)
-}
-
-/** The legacy aven-ontology interpreter path (board 0088) — kept as the loud fallback for non-derivable bundles. */
-export async function runTypeInterpreted(
-	uid: string,
-	spec: TypeSpec,
-	args: DataCrudArgs
-): Promise<unknown> {
-	const ids = await ensurePredicateSchemas(uid)
-	const store = pgStore(uid, ids)
-	const ctx = { user: uid, now: () => new Date().toISOString() }
-
-	if (!args.action || args.action === 'list') {
-		return { ok: true, action: 'list', items: await query(spec, store) }
-	}
-	if (args.action === 'create') {
-		const created: string[] = []
-		for (const item of args.items ?? []) {
-			const id = await create(spec, store, item as Record<string, unknown>, ctx)
-			if (id) created.push(id)
-		}
-		if (created.length > 0) publish(uid, { entity: 'data' })
-		return { ok: true, action: 'create', created, errors: [] }
-	}
-	if (args.action === 'update') {
-		const updated: string[] = []
-		for (const item of args.items ?? []) {
-			const id = await update(spec, store, item as Record<string, unknown>, ctx)
-			if (id) updated.push(id)
-		}
-		if (updated.length > 0) publish(uid, { entity: 'data' })
-		return { ok: true, action: 'update', updated, errors: [] }
-	}
-	if (args.action === 'delete') {
-		const ids = deleteIds(args)
-		if (ids.length === 0) return { ok: false, error: 'delete requires id(s)' }
-		for (const id of ids) await remove(spec, store, id)
-		publish(uid, { entity: 'data' })
-		return { ok: true, action: 'delete', deleted: ids }
-	}
-	return { ok: false, error: `unknown action: ${args.action}` }
-}
 
 // ── Todos REST (board 0087) ─────────────────────────────────────────────────────
 // The Todos vibe UI reads/writes through these, which delegate to the SAME generic engine path
@@ -634,9 +406,8 @@ export async function listDataType(c: Context): Promise<Response> {
 	if (!uid) return c.json({ error: 'unauthorized' }, 401)
 	const type = c.req.param('type')
 	if (!type) return c.json({ error: 'type required' }, 400)
-	const res = (await executeDataTool(uid, { schema: type, action: 'list' })) as {
-		items?: unknown[]
-	}
+	// board 0112 — through the ONE engine: a registered bundle's list op is seeded at mint time.
+	const res = (await crud(uid, { schema: type, action: 'list' })) as { items?: unknown[] }
 	return c.json({ items: res.items ?? [] })
 }
 
@@ -681,110 +452,3 @@ export async function deleteTodo(c: Context): Promise<Response> {
 	return c.json((await crud(uid, { schema: 'todos', action: 'delete', id })) as object)
 }
 
-export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<unknown> {
-	const name = args?.schema
-	if (!name) return { ok: false, error: 'schema name required' }
-	// A registered composite TYPE (board 0088) routes through the generic predication engine —
-	// no per-type code. Falls through to raw single-schema CRUD when the name isn't a registered type.
-	const typeSpec = await loadTypeSpec(name)
-	if (typeSpec) return runType(uid, typeSpec, args)
-	const schema = await db()
-		.selectFrom('data_schema')
-		.select(['id', 'json_schema'])
-		.where('user_id', '=', uid)
-		.where('name', '=', name)
-		.executeTakeFirst()
-	if (!schema) return { ok: false, error: `no schema named "${name}"` }
-	const jsonSchema = asJson(schema.json_schema)
-
-	if (args.action === 'list') {
-		const rows = await db()
-			.selectFrom('data_value')
-			.select(['id', 'data'])
-			.where('user_id', '=', uid)
-			.where('schema_id', '=', schema.id)
-			.orderBy('created_at', 'asc')
-			.execute()
-		return {
-			ok: true,
-			action: 'list',
-			items: rows.map((r) => ({ id: r.id, ...(asJson(r.data) as object) }))
-		}
-	}
-
-	if (args.action === 'create') {
-		const created: string[] = []
-		const errors: string[] = []
-		for (const item of args.items ?? []) {
-			const e = validate(jsonSchema, item)
-			if (e) {
-				errors.push(...e)
-				continue
-			}
-			const id = randomUUID()
-			await db()
-				.insertInto('data_value')
-				.values({
-					id,
-					user_id: uid,
-					schema_id: schema.id,
-					data: jsonb(item),
-					created_at: new Date(),
-					updated_at: new Date()
-				})
-				.execute()
-			created.push(id)
-		}
-		if (created.length > 0) publish(uid, { entity: 'data' })
-		return { ok: errors.length === 0, action: 'create', created, errors }
-	}
-
-	if (args.action === 'update') {
-		const updated: string[] = []
-		const errors: string[] = []
-		for (const item of args.items ?? []) {
-			const { id, ...patch } = item as { id?: string } & Record<string, unknown>
-			if (!id) {
-				errors.push('update item missing id')
-				continue
-			}
-			const owns = await db()
-				.selectFrom('data_value')
-				.select(['id', 'data'])
-				.where('id', '=', id)
-				.where('user_id', '=', uid)
-				.executeTakeFirst()
-			if (!owns) {
-				errors.push(`no value ${id}`)
-				continue
-			}
-			// MERGE the patch onto the existing value (PATCH semantics): a partial update keeps the other
-			// fields, and validation runs on the MERGED object so required fields stay satisfied. Without
-			// this a partial update (e.g. set one field) failed validation + wiped the rest. board 0082.
-			const merged = { ...(asJson(owns.data) as Record<string, unknown>), ...patch }
-			const e = validate(jsonSchema, merged)
-			if (e) {
-				errors.push(...e)
-				continue
-			}
-			await db()
-				.updateTable('data_value')
-				.set({ data: jsonb(merged), updated_at: new Date() })
-				.where('id', '=', id)
-				.execute()
-			updated.push(id)
-		}
-		if (updated.length > 0) publish(uid, { entity: 'data' })
-		return { ok: errors.length === 0, action: 'update', updated, errors }
-	}
-
-	if (args.action === 'delete') {
-		const ids = deleteIds(args)
-		if (ids.length === 0) return { ok: false, error: 'delete requires id(s)' }
-		await db().deleteFrom('data_value').where('id', 'in', ids).where('user_id', '=', uid).execute()
-		publish(uid, { entity: 'data' })
-		return { ok: true, action: 'delete', deleted: ids }
-	}
-
-	return { ok: false, error: `unknown action: ${args.action}` }
-}
