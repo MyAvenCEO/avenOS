@@ -80,15 +80,26 @@ const QUERY_INSTRUCTIONS = [
 	'',
 	'A query spec:',
 	'  { "from": "<predicate>",              // the base predicate to scan (required)',
-	'    "where": [ {"place":"x1|..|x5","op":"eq|neq|gt|gte|lt|lte|in","value":<literal>} ],',
-	'    "join":  [ {"predicate":"<other>","on":{"place":"x1..x5","base":"x1..x5"}} ],  // correlate two predicates',
+	'    "where": [ {"place":"x1|..|x5|id","op":"eq|neq|gt|gte|lt|lte|in|isnull|notnull","value":<literal>,"join":N} ],',
+	'    "join":  [ {"predicate":"<other>","kind":"inner|left","on":{"place":"x1..x5","base":"x1..x5|id"}} ],',
 	'    "group_by": "x1..x5",               // with count, to aggregate per key',
 	'    "count":  {"having":{"op":"gt|gte|..","value":<number>}},  // filter groups by their count',
-	'    "project": ["x1","x2"] }            // which places to return (default: all)',
+	'    "project": ["x1", {"place":"x2","as":"title"}, {"join":N,"exists":true,"as":"done"}] }',
 	'',
-	"Pick places by the predicate's declared place structure below (x1=owner, x2=company, …). Example —",
-	'"owners with more than 3 companies" over owned_by(x1=owner, x2=company):',
-	'  {"from":"owned_by","group_by":"x1","count":{"having":{"op":"gt","value":3}},"project":["x1"]}'
+	'FILTERS. A `where` entry filters the base predicate, OR — with "join":N — the N-th join (0-based). The two',
+	'EXISTENCE ops take NO value: "notnull" = the (LEFT-joined) satellite row is PRESENT, "isnull" = ABSENT. A',
+	'boolean satellite predicate (a row exists ⇔ true, e.g. `done`) is filtered as notnull/isnull on its join.',
+	'',
+	'JOINS. Correlate a satellite on the base ROW ID with "base":"id" (e.g. done.x1 = the task row id). Use',
+	'"kind":"left" so base rows survive when the satellite is absent — REQUIRED for isnull, and to keep',
+	'not-yet-satisfied rows (open todos) visible. An inner join drops base rows lacking the satellite.',
+	'',
+	"Pick places from each predicate's declared place structure below. Examples over task(x2=title) with",
+	'satellites done(x1=task id) and due(x1=date, x2=task id):',
+	'  done todos  → {"from":"task","join":[{"predicate":"done","kind":"left","on":{"place":"x1","base":"id"}}],"where":[{"join":0,"place":"id","op":"notnull"}],"project":["id",{"place":"x2","as":"title"}]}',
+	'  open todos  → identical but "op":"isnull"',
+	'  due ≤ date  → {"from":"task","join":[{"predicate":"due","kind":"left","on":{"place":"x2","base":"id"}}],"where":[{"join":0,"place":"x1","op":"lte","value":"<YYYY-MM-DD>"}],"project":["id",{"place":"x2","as":"title"}]}',
+	'  owners with >3 companies over owned_by(x1=owner,x2=company): {"from":"owned_by","group_by":"x1","count":{"having":{"op":"gt","value":3}},"project":["x1"]}'
 ].join('\n')
 
 const MUTATION_INSTRUCTIONS = [
@@ -136,6 +147,8 @@ async function authorSpec(
 	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
 	const system = [
 		kind === 'query' ? QUERY_INSTRUCTIONS : MUTATION_INSTRUCTIONS,
+		'',
+		`Today is ${new Date().toISOString().slice(0, 10)} — resolve relative dates ("today", "this week", "tomorrow") to ISO YYYY-MM-DD literals.`,
 		'',
 		"THE USER'S PREDICATES (choose `from`/`predicate` + places from these):",
 		predicatesBlock(preds)
