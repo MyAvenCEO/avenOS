@@ -76,11 +76,11 @@ const selectors: StyleDef['selectors'] = {
 	'.td-banner-title': {
 		margin: '0',
 		fontFamily: 'var(--font-display)',
-		fontSize: 'var(--fs-title)',
+		fontSize: 'var(--fs-lead)',
 		fontWeight: '500',
-		letterSpacing: '-0.02em',
+		letterSpacing: '-0.01em',
 		color: 'var(--text)',
-		lineHeight: '1.2'
+		lineHeight: '1.15'
 	},
 	'.td-field-label': {
 		display: 'block',

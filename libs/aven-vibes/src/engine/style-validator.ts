@@ -49,6 +49,8 @@ const ALLOWED_CSS_PROPERTIES = new Set([
 	'listStyle',
 	'margin',
 	'marginBottom',
+	'marginLeft',
+	'marginRight',
 	'marginTop',
 	'maxHeight',
 	'maxWidth',

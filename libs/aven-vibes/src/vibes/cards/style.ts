@@ -89,8 +89,14 @@ const selectors: StyleDef['selectors'] = {
 	'.vc-list > div > .vc-row:last-child, .vc-list > .vc-row:last-child': { borderBottom: 'none' },
 	// stacked variant — edited diffs (title over the change line).
 	'.vc-row--stack': { flexDirection: 'column', alignItems: 'stretch', gap: '0.2rem' },
-	// trailing group pushed to the right edge of a row (due + priority chips).
-	'.vc-trail': { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', flexShrink: '0' },
+	// trailing group (due + priority chips) pushed to the row's right edge.
+	'.vc-trail': {
+		marginLeft: 'auto',
+		display: 'inline-flex',
+		alignItems: 'center',
+		gap: '0.4rem',
+		flexShrink: '0'
+	},
 	'.vc-pred': {
 		fontFamily: 'var(--font-sans)',
 		fontSize: 'var(--fs-body)',

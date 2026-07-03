@@ -575,7 +575,7 @@ function handleTranscribeError(message: string): void {
 							</div>
 						{:else if message.vibe === 'composer'}
 							<div
-								class="border-border h-[70vh] w-full overflow-hidden rounded-[var(--radius-lg)] border"
+								class="border-border h-[70vh] w-full overflow-hidden rounded-[var(--radius-xl)] border bg-[var(--color-surface-soft)]"
 							>
 								<Composer />
 							</div>
