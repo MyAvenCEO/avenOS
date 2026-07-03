@@ -6,6 +6,8 @@
 export * from './engine/index.js'
 export { contentHash, type FileRef, filePath, fileRef } from './file-ref.js'
 export * from './sandbox.js'
+// Shared read-only card style (todos created/edited/deleted, ontology, query/mutation, bundle). board 0111.
+export { cardStyle } from './vibes/cards/style.js'
 export {
 	createTodosShell,
 	todoLogic,
