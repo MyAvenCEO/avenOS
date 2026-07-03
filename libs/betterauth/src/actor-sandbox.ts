@@ -1,4 +1,4 @@
-import { getQuickJS, type QuickJSContext } from 'quickjs-emscripten'
+import { newAsyncContext, type QuickJSAsyncContext } from 'quickjs-emscripten'
 
 // board 0111 — the ONE behavior model: an actor's `code` is a QuickJS module `handle(msg, caps, ctx)`
 // executed in a QuickJS-in-WASM sandbox with NO ambient authority. The VM has no fetch, no filesystem, no
@@ -7,11 +7,11 @@ import { getQuickJS, type QuickJSContext } from 'quickjs-emscripten'
 // interrupt deadline; memory is capped. Fail-closed: the sandbox can only message the caps it was handed.
 // Everything crosses the boundary as JSON, so no host object reference ever leaks into (or out of) the VM.
 //
-// Slice 1 (this card) proves the security boundary with SYNCHRONOUS caps. Async caps (a DB `ops` call that
-// suspends the VM) need the asyncify variant and are the todos-port slice — see the card.
+// Caps may be ASYNC (a DB `ops` call): the async context + asyncified host functions suspend the VM while
+// the host promise settles, so `await caps.ops(...)` inside the actor works transparently.
 
-/** A capability = a host function the sandbox may call by name. Args + return marshal as JSON. */
-export type Caps = Record<string, (...args: unknown[]) => unknown>
+/** A capability = a (possibly async) host function the sandbox may call by name. Args + return are JSON. */
+export type Caps = Record<string, (...args: unknown[]) => unknown | Promise<unknown>>
 
 export type SandboxOptions = {
 	/** wall-clock budget; a longer-running script is interrupted (fuel). */
@@ -20,7 +20,7 @@ export type SandboxOptions = {
 	memoryBytes?: number
 }
 
-const DEFAULT_DEADLINE_MS = 3000
+const DEFAULT_DEADLINE_MS = 5000
 const DEFAULT_MEMORY = 32 * 1024 * 1024
 
 const errText = (e: unknown): string =>
@@ -40,19 +40,19 @@ export async function runActorCode(
 	ctxData: Record<string, unknown> = {},
 	opts: SandboxOptions = {}
 ): Promise<unknown> {
-	const QuickJS = await getQuickJS()
-	const vm: QuickJSContext = QuickJS.newContext()
+	const vm: QuickJSAsyncContext = await newAsyncContext()
 	const deadline = Date.now() + (opts.deadlineMs ?? DEFAULT_DEADLINE_MS)
 	vm.runtime.setInterruptHandler(() => Date.now() > deadline)
 	vm.runtime.setMemoryLimit(opts.memoryBytes ?? DEFAULT_MEMORY)
 	try {
-		// Inject the caps as an object of host functions: each takes ONE JSON-string arg (the args array) and
-		// returns a JSON-string result. Only these names exist on `__caps`; anything else is `undefined`.
+		// Inject the caps as an object of ASYNCIFIED host functions: each takes ONE JSON-string arg (the args
+		// array) and returns a JSON-string result. asyncify suspends the VM while an async host fn (a DB call)
+		// settles. Only these names exist on `__caps`; anything else is `undefined`.
 		const capsObj = vm.newObject()
 		for (const [name, fn] of Object.entries(caps)) {
-			const f = vm.newFunction(name, (argHandle) => {
+			const f = vm.newAsyncifiedFunction(name, async (argHandle) => {
 				const args = JSON.parse(vm.getString(argHandle)) as unknown[]
-				return vm.newString(JSON.stringify(fn(...args) ?? null))
+				return vm.newString(JSON.stringify((await fn(...args)) ?? null))
 			})
 			vm.setProp(capsObj, name, f)
 			f.dispose()
@@ -78,17 +78,16 @@ export async function runActorCode(
 			${code}
 			;(async () => JSON.stringify((await handle(JSON.parse(__msgJson), caps, JSON.parse(__ctxJson))) ?? null))()
 		`
-		const res = vm.evalCode(wrapper)
+		const res = await vm.evalCodeAsync(wrapper)
 		if (res.error) {
 			const e = vm.dump(res.error)
 			res.error.dispose()
 			throw new Error(`[sandbox] ${errText(e)}`)
 		}
-		// `handle` may be async → the wrapper returns a Promise; drain the job queue and read its state.
-		const promiseHandle = res.value
+		// `handle` is async → the wrapper returns a Promise; drain the job queue and read its settled state.
 		vm.runtime.executePendingJobs()
-		const state = vm.getPromiseState(promiseHandle)
-		promiseHandle.dispose()
+		const state = vm.getPromiseState(res.value)
+		res.value.dispose()
 		if (state.type === 'fulfilled') {
 			const s = vm.getString(state.value)
 			state.value.dispose()
@@ -99,8 +98,7 @@ export async function runActorCode(
 			state.error.dispose()
 			throw new Error(`[sandbox] ${errText(e)}`)
 		}
-		// still pending after draining jobs → an unresolved await (a real async cap; slice 2 / asyncify).
-		throw new Error('[sandbox] actor did not settle — an unresolved async await (async caps land in the todos-port slice)')
+		throw new Error('[sandbox] actor did not settle (still pending after draining jobs)')
 	} finally {
 		vm.dispose()
 	}

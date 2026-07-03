@@ -15,7 +15,7 @@ describe('board 0111 — actor sandbox', () => {
 		expect(out).toEqual({ doubled: 42, who: 'sam' })
 	})
 
-	test('a granted capability is callable; args + result marshal as JSON', async () => {
+	test('a granted ASYNC capability is callable; args + result marshal as JSON', async () => {
 		const calls: unknown[][] = []
 		const out = await runActorCode(
 			`async function handle(msg, caps) {
@@ -24,7 +24,8 @@ describe('board 0111 — actor sandbox', () => {
 			}`,
 			{ title: 'buy milk' },
 			{
-				ops: (name: string, payload: unknown) => {
+				ops: async (name: string, payload: unknown) => {
+					await new Promise((r) => setTimeout(r, 1)) // a real async DB-style call — the VM suspends
 					calls.push([name, payload])
 					return { id: 'row-1', ...(payload as object) }
 				}
