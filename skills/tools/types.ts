@@ -17,8 +17,9 @@ export type ToolDefinition = {
 export type DataCrudArgs = {
 	schema: string
 	action: 'list' | 'create' | 'update' | 'delete'
-	/** list: a configured view name — runs `<schema>.<filter>` (e.g. todos.done); omit/'all' = the full list. */
-	filter?: string
+	/** list: a UNIVERSAL filter over any projected field of the list — { field, value, op? }. e.g.
+	 *  { field: 'priority', value: 'medium' } or { field: 'due', op: 'lte', value: '2026-07-13' }. Omit for all. */
+	filter?: { field: string; value?: unknown; op?: string }
 	/** create: the value objects; update: objects that include their `id` (a BATCH edits many at once). */
 	items?: Record<string, unknown>[]
 	/** delete: a single value id. */

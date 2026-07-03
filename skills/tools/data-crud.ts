@@ -24,10 +24,16 @@ export const DATA_CRUD_TOOL: ToolDefinition = {
 				schema: { type: 'string', description: 'Schema name, e.g. "todos".' },
 				action: { type: 'string', enum: ['list', 'create', 'update', 'delete'] },
 				filter: {
-					type: 'string',
+					type: 'object',
 					description:
-						'list only: a configured view to narrow the list. "done" = completed, "open" = not done; ' +
-						'omit (or "all") for everything. e.g. "show me done todos" → filter:"done".'
+						'list only: narrow by ONE projected field — {"field":<priority|due|done|title>,"value":…,"op"?:eq|neq|gt|' +
+						'gte|lt|lte}. medium: {"field":"priority","value":"medium"}; open: {"field":"done","value":false}; ' +
+						'due≤date: {"field":"due","op":"lte","value":"2026-07-13"}.',
+					properties: {
+						field: { type: 'string' },
+						value: {},
+						op: { type: 'string', enum: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'] }
+					}
 				},
 				items: {
 					type: 'array',

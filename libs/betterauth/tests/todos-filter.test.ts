@@ -3,11 +3,10 @@ import { sql } from 'kysely'
 import { crud } from '../src/actor-run'
 import { db } from '../src/db'
 
-// board 0107 — proves the Todos skill's CONFIGURED query filters flow through the ONE universal CRUD executor
-// `crud()`: `list` with filter:'done'/'open' selects the configured todos.done / todos.open ops (a
-// join-targeted null-op filter over the x1–x5 store) via `<schema>.<filter>`, while no filter runs todos.list.
-// The filter is DATA (data_operations), selected generically — no hardcoded filter vocabulary. The ops are
-// complementary (done ⊎ open = the whole list), which is the invariant asserted here over live data.
+// board 0107 — UNIVERSAL list filtering via crud(): a {field, value, op} filter builds a validated QuerySpec
+// over ANY projected field of todos.list (priority / due / done / title) — no configured per-filter op, no
+// hardcoded vocabulary. Asserted over live data: `done` (a boolean satellite) partitions the list, and a
+// `priority` (place) filter returns exactly the rows of that priority.
 
 async function hasDb(): Promise<boolean> {
 	try {
@@ -20,21 +19,23 @@ async function hasDb(): Promise<boolean> {
 const DB = await hasDb()
 const d = DB ? describe : describe.skip
 const UID = 'CkoZlEwLP8nOeBV5UYTmmfdrzyBd4zpt'
-const items = (out: unknown): { title?: string }[] =>
-	((out as { items?: { title?: string }[] })?.items ?? []) as { title?: string }[]
+type Row = { priority?: string; title?: string }
+const rows = (out: unknown): Row[] => ((out as { items?: Row[] })?.items ?? []) as Row[]
+const list = (filter?: { field: string; value?: unknown; op?: string }) =>
+	crud(UID, { schema: 'todos', action: 'list', ...(filter ? { filter } : {}) })
 
-d('board 0107 — configured todos filters via crud()', () => {
-	test('filter:done / filter:open select complementary configured ops; none = the full list', async () => {
-		const all = items(await crud(UID, { schema: 'todos', action: 'list' }))
-		const done = items(await crud(UID, { schema: 'todos', action: 'list', filter: 'done' }))
-		const open = items(await crud(UID, { schema: 'todos', action: 'list', filter: 'open' }))
-
-		// done ⊎ open partitions the whole list — proving crud() ran todos.done and todos.open (not
-		// todos.list) and that the null-op join filter splits the set exactly on the `done` satellite.
+d('board 0107 — universal crud() filters', () => {
+	test('boolean `done` field: done ⊎ open = the full list', async () => {
+		const all = rows(await list())
+		const done = rows(await list({ field: 'done', value: true }))
+		const open = rows(await list({ field: 'done', value: false }))
 		expect(done.length + open.length).toBe(all.length)
-		// 'all' as a filter value is treated as no filter → the full list.
-		expect(items(await crud(UID, { schema: 'todos', action: 'list', filter: 'all' })).length).toBe(
-			all.length
-		)
+	})
+
+	test('place `priority` field: returns exactly the rows of that priority', async () => {
+		const all = rows(await list())
+		const medium = rows(await list({ field: 'priority', value: 'medium' }))
+		expect(medium.every((t) => t.priority === 'medium')).toBe(true)
+		expect(medium.length).toBe(all.filter((t) => t.priority === 'medium').length)
 	})
 })

@@ -45,7 +45,8 @@ describe('Tier 2 — a routed skill advertises exactly its own tools', () => {
 		const todos = JSON.stringify(chatToolDefinitionsFor('todos')).length
 		const all = JSON.stringify(chatToolDefinitions()).length
 		console.log(`todos-turn advertised tool-schema chars: ${todos} (flat-8 baseline: ${all})`)
-		expect(todos).toBeLessThanOrEqual(1600)
+		// board 0107 — data_crud's universal {field,value,op} list filter adds real capability; still ~1/3 the flat set.
+		expect(todos).toBeLessThanOrEqual(1900)
 		expect(todos).toBeLessThan(all) // strictly leaner than advertising everything
 	})
 })

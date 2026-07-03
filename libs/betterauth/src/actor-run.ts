@@ -3,19 +3,22 @@ import { type Caps, runActorCode } from './actor-sandbox'
 import type { DataCrudArgs } from '@avenos/skills/tools'
 import { type ActorRow, engineFor } from './config'
 import { db } from './db'
-import { type OperationRow, runOperation } from './queries'
+import {
+	type Filter,
+	type OperationRow,
+	type ProjectEntry,
+	type QuerySpec,
+	runOperation,
+	runQuery
+} from './queries'
 
 // board 0111 — the actor RUNNER. An actor's behavior is bound either as sandboxed `code` (QuickJS-in-WASM,
 // this card) or a by-name `engine` (the code registry, board 0110). A `code` actor runs in the sandbox with
 // ONLY the capabilities its `caps` list grants, each wired here to a real host function. This is the SSOT
 // seam: the chat tool loop AND the vibe UI post to the SAME actor row's mailbox.
 
-/** Run a named `data_operations` row (query or mutation) with params — the `ops` capability. */
-async function runNamedOp(
-	uid: string,
-	name: string,
-	params: Record<string, unknown>
-): Promise<unknown> {
+/** Fetch a named `data_operations` row — the user's own, else the global (user_id NULL) one. */
+async function fetchOp(uid: string, name: string): Promise<OperationRow> {
 	const r = await sql`
 		SELECT id, name, kind, spec FROM data_operations
 		WHERE name = ${name} AND (user_id = ${uid} OR user_id IS NULL)
@@ -23,7 +26,39 @@ async function runNamedOp(
 	`.execute(db())
 	const row = r.rows[0] as OperationRow | undefined
 	if (!row) throw new Error(`ops: no operation "${name}"`)
-	return runOperation(uid, row, params)
+	return row
+}
+
+/** Run a named `data_operations` row (query or mutation) with params — the `ops` capability. */
+async function runNamedOp(
+	uid: string,
+	name: string,
+	params: Record<string, unknown>
+): Promise<unknown> {
+	return runOperation(uid, await fetchOp(uid, name), params)
+}
+
+/**
+ * board 0107 — UNIVERSAL list filtering. Turn a `{field, value, op}` filter into ONE validated where-clause
+ * over the list query's OWN projection — ANY projected field is filterable, with zero hardcoded vocabulary.
+ * A boolean satellite (an `exists` projection, e.g. `done`) filters by presence (notnull/isnull); a place
+ * field (priority, due, title, …) filters by value with the given op (default `eq`). The engine validates +
+ * binds every value, so a filter value can never become SQL.
+ */
+type CrudFilter = { field?: string; value?: unknown; op?: string }
+function deriveFilter(spec: QuerySpec, f: CrudFilter): Filter {
+	const field = f.field ?? ''
+	const entry = (spec.project ?? []).find((e: ProjectEntry) =>
+		typeof e === 'string' ? e === field : e.as === field
+	)
+	if (!entry) throw new Error(`filter: "${field}" is not a field of this list`)
+	if (typeof entry === 'object' && 'exists' in entry) {
+		const present = f.value === true || f.value === 'true' || f.value === 1
+		return { join: entry.join, place: 'id', op: present ? 'notnull' : 'isnull' }
+	}
+	const op = (f.op as Filter['op']) ?? 'eq'
+	if (typeof entry === 'string') return { place: entry, op, value: f.value }
+	return { join: entry.join, place: entry.place, op, value: f.value }
 }
 
 /** Build the capability object an actor is allowed, from its declared `caps` list. Only granted names get a
@@ -78,8 +113,17 @@ export async function crud(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const action = args.action ?? 'list'
 
 	if (action === 'list') {
-		const view = args.filter && args.filter !== 'all' ? op(args.filter) : op('list')
-		const res = (await runNamedOp(uid, view, {})) as { rows?: unknown[] }
+		if (args.filter?.field) {
+			// UNIVERSAL filter: build a validated QuerySpec = the list op's spec + one derived where-clause
+			// over any of its projected fields (priority, due, done, …). No configured per-filter op needed.
+			const listSpec = (await fetchOp(uid, op('list'))).spec as QuerySpec
+			const spec: QuerySpec = {
+				...listSpec,
+				where: [...(listSpec.where ?? []), deriveFilter(listSpec, args.filter)]
+			}
+			return { ok: true, action: 'list', items: await runQuery(uid, spec) }
+		}
+		const res = (await runNamedOp(uid, op('list'), {})) as { rows?: unknown[] }
 		return { ok: true, action: 'list', items: res.rows ?? [] }
 	}
 	if (action === 'create') {
