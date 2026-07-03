@@ -238,6 +238,9 @@ const selectors: StyleDef['selectors'] = {
 		padding: '0.05rem 0.2rem',
 		borderRadius: '0.35rem',
 		fontSize: 'var(--fs-body)',
+		// match the card titles (.vc-pred) so the list and the created/edited/deleted cards read at ONE
+		// weight — a step up from the ExtraLight body, not thin. board 0111.
+		fontWeight: '500',
 		whiteSpace: 'nowrap',
 		overflow: 'hidden',
 		textOverflow: 'ellipsis'

@@ -96,7 +96,16 @@ const TODOS_EDITED_VIEW = {
 								class: 'vc-row vc-row--stack',
 								children: [
 									{ text: '$$title', class: 'vc-pred' },
-									{ text: '$$changesText', class: 'vc-places-text' }
+									{
+										class: 'vc-diff',
+										children: [
+											{ text: '$$field', class: 'vc-diff-field' },
+											{ text: '$$from', class: 'vc-diff-from' },
+											{ text: '→', class: 'vc-diff-arrow' },
+											{ text: '$$to', class: 'vc-diff-to' },
+											{ text: '$$more', class: 'vc-diff-more' }
+										]
+									}
 								]
 							}
 						}
@@ -106,6 +115,10 @@ const TODOS_EDITED_VIEW = {
 		]
 	}
 }
+
+// edited logic: emit the primary change as FIELD / FROM / TO (+ "N more" when a diff has several), so the
+// view can render a structured before→after instead of a flat joined string. board 0111.
+const TODOS_EDITED_LOGIC = `function initState(source){source=source||{};var df=source.diffs||[];var out=[];for(var i=0;i<df.length;i++){var d=df[i]||{};var ch=d.changes||[];var f=ch[0]||{};out.push({title:d.title||'\\u2014',field:f.field||'',from:(f.from==null||f.from==='')?'\\u2014':String(f.from),to:(f.to==null||f.to==='')?'\\u2014':String(f.to),more:ch.length>1?('+'+(ch.length-1)+' more'):''});}return{count:out.length+' Aufgabe(n)',diffs:out,emptyMsg:out.length?'':'Keine \\u00c4nderungen.'};}${NOOP}`
 
 // deleted: a terracotta ✕ marker + struck title.
 const TODOS_DELETED_VIEW = {
@@ -132,7 +145,7 @@ const TODOS_DELETED_VIEW = {
 								tag: 'li',
 								class: 'vc-row',
 								children: [
-									{ text: '\\u2715', class: 'vc-x' },
+									{ text: '✕', class: 'vc-x' },
 									{ text: '$$title', class: 'vc-strike' }
 								]
 							}
@@ -176,6 +189,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 	await upsertJson(db, 'vibe_view', 'todos-created', TODOS_CREATED_VIEW)
 	await upsertLogic(db, 'todos-created', TODOS_CREATED_LOGIC)
 	await upsertJson(db, 'vibe_view', 'todos-edited', TODOS_EDITED_VIEW)
+	await upsertLogic(db, 'todos-edited', TODOS_EDITED_LOGIC)
 	await upsertJson(db, 'vibe_view', 'todos-deleted', TODOS_DELETED_VIEW)
 }
 

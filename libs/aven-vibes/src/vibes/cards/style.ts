@@ -195,6 +195,32 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--muted)',
 		marginTop: '0.1rem'
 	},
+	// before→after diff row (edited card): a FIELD label, the old value struck, an arrow, the new value
+	// emphasised — reads "DUE  tomorrow → friday" instead of a flat mono string. board 0111.
+	'.vc-diff': {
+		display: 'flex',
+		alignItems: 'baseline',
+		flexWrap: 'wrap',
+		gap: '0.4rem',
+		fontSize: 'var(--fs-micro)',
+		marginTop: '0.15rem'
+	},
+	'.vc-diff-field': {
+		textTransform: 'uppercase',
+		letterSpacing: '0.06em',
+		fontWeight: '600',
+		color: 'var(--muted)'
+	},
+	'.vc-diff-from': {
+		fontFamily: 'var(--font-mono)',
+		color: 'var(--muted)',
+		textDecoration: 'line-through'
+	},
+	'.vc-diff-from:empty': { display: 'none' },
+	'.vc-diff-arrow': { color: 'var(--muted)', opacity: '0.6' },
+	'.vc-diff-to': { fontFamily: 'var(--font-mono)', fontWeight: '600', color: 'var(--text)' },
+	'.vc-diff-more': { color: 'var(--muted)', opacity: '0.7' },
+	'.vc-diff-more:empty': { display: 'none' },
 	'.vc-chips': { display: 'flex', flexWrap: 'wrap', gap: '0.375rem' },
 	'.vc-chip': {
 		display: 'inline-flex',
