@@ -12,6 +12,9 @@ import { t } from '$lib/i18n'
 import { nav } from '$lib/shell/nav.svelte'
 import Composer from '$lib/composer/Composer.svelte'
 import VibeCard from '$lib/shell/VibeCard.svelte'
+// board 0107 — Skills (flow template + node/config aside) and Runs (step trace) fold into the DB viewer.
+import SkillsView from '$lib/shell/SkillsView.svelte'
+import RunsView from '$lib/shell/RunsView.svelte'
 
 // Mainnet "DB" tab: a left "select schema" rail + the selected schema shown two ways via a
 // Schema/Data toggle — its JSON Schema definition, or the table of its value instances (columns
@@ -551,6 +554,13 @@ $effect(() => {
 		</div>
 	</aside>
 
+	{#if category === 'skills'}
+		<!-- board 0107 — the full Skills template explorer (flow graph + node viewer + config aside). -->
+		<div class="min-h-0 min-w-0 flex-1 overflow-hidden p-3"><SkillsView containerName="db-skills" /></div>
+	{:else if category === 'runs'}
+		<!-- board 0107 — the Runs step-trace explorer (NO flow graph; that stays in Skills templates). -->
+		<div class="min-h-0 min-w-0 flex-1 overflow-hidden p-3"><RunsView containerName="db-runs" /></div>
+	{:else}
 	<!-- board 0110 — main = 50/50 (item list | selected-item detail) -->
 	<div class="flex min-h-0 flex-1">
 		<!-- left 50%: the current category's item list -->
@@ -593,25 +603,11 @@ $effect(() => {
 						<span class="truncate font-mono text-[12px]">{name}</span>
 					</button>
 				{/each}
-			{:else if category === 'skills'}
-				{#each skillItems as it (it.name)}
-					<button type="button" class={listBtn(selectedSkill === it.name)} onclick={() => pickSkill(it.name)}>
-						<span class="truncate font-mono text-[12px]">{it.name}</span>
-					</button>
-				{/each}
 			{:else if category === 'actors'}
 				{#each actorItems as it (it.name)}
 					<button type="button" class={listBtn(selectedActor === it.name)} onclick={() => pickActor(it.name)}>
 						<span class="truncate font-mono text-[12px]">{it.name}</span>
 						{#if it.tag}<span class="shrink-0 text-[10px] opacity-50">{it.tag}</span>{/if}
-					</button>
-				{/each}
-			{:else if category === 'runs'}
-				{#if runItems.length === 0}<p class="text-muted-foreground px-2 py-2 text-[11px]">—</p>{/if}
-				{#each runItems as it, i (i)}
-					<button type="button" class={listBtn(selectedRun === it.name)} onclick={() => pickRun(it.name)}>
-						<span class="truncate text-[12px]">{it.name}</span>
-						{#if it.tag}<span class="shrink-0 font-mono text-[10px] opacity-50">{it.tag}</span>{/if}
 					</button>
 				{/each}
 			{/if}
@@ -1122,5 +1118,6 @@ $effect(() => {
 				</ul>
 			</div>
 		</aside>
+	{/if}
 	{/if}
 </div>

@@ -11,7 +11,6 @@ import { createQuery } from '@tanstack/svelte-query'
 import { listFlows, listRuns } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import ActorConfig from '$lib/shell/ActorConfig.svelte'
-import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import StepVibe from '$lib/shell/StepVibe.svelte'
 
 // board 0083 — Runs view (3rd tab): the INSTANCE side, as a step-through explorer. Left = instance
@@ -44,18 +43,7 @@ const rawFlow = $derived<Flow | null>(
 	selectedRun ? (flows.find((f) => f.id === selectedRun.flowId) ?? null) : null
 )
 const flow = $derived<Flow | null>(rawFlow ? flattenFlow(rawFlow, flows) : null)
-// the dotted sub-flow groups: each top-level composite node's id prefix → its pretty name, so the
-// flattened graph shows which step belongs to which parent sub-flow. board 0094.
-const groups = $derived<Record<string, string>>(
-	rawFlow ? Object.fromEntries(rawFlow.nodes.filter((n) => n.flowRef).map((n) => [n.id, n.name])) : {}
-)
 const nodeById = $derived(new Map((flow?.nodes ?? []).map((n) => [n.id, n])))
-// One state per node, from the run's trace (last write wins) → colours the graph.
-const nodeStates = $derived.by<Record<string, NodeState>>(() => {
-	const m: Record<string, NodeState> = {}
-	for (const s of selectedRun?.trace ?? []) m[s.nodeId] = s.state
-	return m
-})
 const trace = $derived(selectedRun?.trace ?? [])
 const step = $derived(trace.find((s) => s.nodeId === selectedNodeId) ?? null)
 const node = $derived<RecipeNode | null>(step ? (nodeById.get(step.nodeId) ?? null) : null)
@@ -94,11 +82,7 @@ function selectRun(r: FlowRun): void {
 	selectedRunId = r.id
 	selectedNodeId = r.trace[currentStepIndex(r)]?.nodeId ?? null
 }
-// Clicking a node in the graph steps the explorer to that node.
-function onSelect(id: string): void {
-	selectedNodeId = id
-}
-// Toggle through the run step by step (the graph stays the visual navigator).
+// Toggle through the run step by step (prev/next via the right aside).
 function stepBy(delta: number): void {
 	const i = stepIdx
 	const j = i < 0 ? 0 : i + delta
@@ -159,11 +143,8 @@ function stepBy(delta: number): void {
 					>{t('mainnet.runs.current')}</span
 				>
 			</div>
-			<!-- Top: the actual node flow — click a node to step through. -->
-			<div class="border-border h-64 shrink-0 border-b">
-				<FlowGraph {flow} {nodeStates} {selectedNodeId} {onSelect} draggable={false} {groups} />
-			</div>
-			<!-- Below: the vibe view of the selected step. -->
+			<!-- board 0107 — no flow graph in Runs (that lives in Skills templates); step via the ↑/↓ in the
+			     right aside. The center is the selected step's vibe view. -->
 			<div class="min-h-0 flex-1 overflow-auto p-4">
 				<StepVibe {flow} {node} {step} />
 			</div>
