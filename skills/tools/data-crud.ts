@@ -23,6 +23,12 @@ export const DATA_CRUD_TOOL: ToolDefinition = {
 			properties: {
 				schema: { type: 'string', description: 'Schema name, e.g. "todos".' },
 				action: { type: 'string', enum: ['list', 'create', 'update', 'delete'] },
+				filter: {
+					type: 'string',
+					description:
+						'list only: a configured view to narrow the list. "done" = completed, "open" = not done; ' +
+						'omit (or "all") for everything. e.g. "show me done todos" → filter:"done".'
+				},
 				items: {
 					type: 'array',
 					description:

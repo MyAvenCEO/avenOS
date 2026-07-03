@@ -11,8 +11,13 @@ async function handle(msg, caps) {
 	const schema = msg.schema;
 	const action = msg.action;
 	if (action === 'list') {
-		// return { items } to match the engine shape the chat host reads (id-resolution + before-diff).
-		const res = await caps.ops(schema + '.list', {});
+		// a configured filter selects a named universal query op — schema + '.' + filter (e.g. todos.done);
+		// no filter (or 'all') runs the full schema.list. The available filters are DATA (data_operations
+		// rows authored with the universal query grammar), never hardcoded here. return { items } to match
+		// the engine shape the chat host reads (id-resolution + before-diff).
+		const f = msg.filter;
+		const op = (f && f !== 'all') ? (schema + '.' + f) : (schema + '.list');
+		const res = await caps.ops(op, {});
 		return { items: (res && res.rows) || [] };
 	}
 	if (action === 'create') {
