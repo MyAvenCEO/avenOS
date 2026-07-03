@@ -1,6 +1,8 @@
 import { sql } from 'kysely'
 import { type Caps, runActorCode } from './actor-sandbox'
-import { type ActorRow, engineFor } from './config'
+import type { DataCrudArgs } from '@avenos/skills/tools'
+import { actorConfig, type ActorRow, engineFor } from './config'
+import { executeDataTool } from './data'
 import { db } from './db'
 import { type OperationRow, runOperation } from './queries'
 
@@ -61,4 +63,23 @@ export function actorBinding(actor: Pick<ActorRow, 'code' | 'engine'>): 'code' |
 	if (actor.code) return 'code'
 	if (actor.engine && engineFor(actor.engine)) return 'engine'
 	return 'none'
+}
+
+/**
+ * board 0111 — the LIVE flip: run a data CRUD call through the sandboxed `data_crud` code actor when one is
+ * seeded (SSOT — the same code the vibe UI drives), else the engine. FAIL-SAFE: any error (sandbox throws, a
+ * schema with no derived ops, a shape it can't handle) falls back to `executeDataTool`, so the chat behaves
+ * exactly as before. The chat tool loop + the delete-confirm path both call this instead of executeDataTool.
+ */
+export async function runData(uid: string, args: DataCrudArgs): Promise<unknown> {
+	try {
+		const actor = await actorConfig('data_crud')
+		if (actor?.code) {
+			const out = await runCodeActor(actor, args, uid)
+			if (out.ran) return out.result
+		}
+	} catch (e) {
+		console.error('[actor] data_crud code path failed → engine fallback:', e)
+	}
+	return executeDataTool(uid, args)
 }

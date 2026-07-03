@@ -79,6 +79,7 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		color: 'var(--muted-strong)'
 	},
 	'.grid-card-title': {
+		fontFamily: 'var(--font-display)',
 		fontSize: 'var(--fs-title)',
 		fontWeight: '500',
 		color: 'var(--text)'

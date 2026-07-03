@@ -264,8 +264,8 @@
 
 	body {
 		@apply bg-background text-foreground font-sans tracking-tight;
-		/* board 0110 — Azeret Mono Thin is the default body/text weight. */
-		font-weight: 100;
+		/* board 0110 — Azeret Mono ExtraLight is the default body/text weight (one up from Thin). */
+		font-weight: 200;
 	}
 
 	/* Design-system titles. Components don't need to opt in — bare h1–h6 inherit

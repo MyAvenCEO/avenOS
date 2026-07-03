@@ -62,8 +62,9 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.td-banner-title': {
 		margin: '0',
+		fontFamily: 'var(--font-display)',
 		fontSize: 'var(--fs-title)',
-		fontWeight: '600',
+		fontWeight: '500',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
 		lineHeight: '1.2'

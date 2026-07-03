@@ -11,7 +11,9 @@ async function handle(msg, caps) {
 	const schema = msg.schema;
 	const action = msg.action;
 	if (action === 'list') {
-		return await caps.ops(schema + '.list', {});
+		// return { items } to match the engine shape the chat host reads (id-resolution + before-diff).
+		const res = await caps.ops(schema + '.list', {});
+		return { items: (res && res.rows) || [] };
 	}
 	if (action === 'create') {
 		const created = [];

@@ -631,48 +631,37 @@ $effect(() => {
 				<Composer />
 			</div>
 		{:else if selectedVibe}
-			<!-- board 0105 — a vibe as ONE entity: a tabbed detail. UI = the live card through the engine
-			     (VibeCard) + a readable summary aside; the other tabs are the raw View/Function/Style/State. -->
+			<!-- board 0110 — a vibe as ONE card: summary + fields + the tabs at its bottom; the tab content
+			     (the live UI preview, or the raw View/Function/Style/State) renders below it. -->
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
 				<div class="mb-3 flex items-center gap-2">
 					<h2 class="text-foreground font-mono text-base font-semibold">{selectedVibe}</h2>
 				</div>
-				<!-- tabs -->
-				<div
-					class="border-border mb-4 inline-flex shrink-0 self-start overflow-hidden rounded-[var(--radius)] border text-[12px]"
-				>
-					{#each VIBE_TABS as tabDef (tabDef.id)}
-						<button
-							type="button"
-							class="border-border px-3 py-1 transition-colors not-first:border-l {vibeTab === tabDef.id
-								? 'bg-primary/10 text-foreground font-medium'
-								: 'text-muted-foreground hover:bg-card'}"
-							onclick={() => (vibeTab = tabDef.id)}
-						>
-							{tabDef.label}
-						</button>
-					{/each}
+				<!-- summary + tabs, one card (tabs integrated at the bottom) -->
+				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[12px]">
+					<p class="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">{t('mainnet.db.vibe.summary')}</p>
+					<p class="text-muted-foreground leading-relaxed">{t('mainnet.db.vibe.summaryHint')}</p>
+					<dl class="mt-3 flex flex-wrap gap-x-8 gap-y-2">
+						<div class="flex gap-2"><dt class="text-muted-foreground">view</dt><dd class="text-foreground font-mono">ViewDef</dd></div>
+						<div class="flex gap-2"><dt class="text-muted-foreground">function</dt><dd class="text-foreground font-mono">{(vibeBundleQuery.data?.logic ?? '').length} B</dd></div>
+						<div class="flex gap-2"><dt class="text-muted-foreground">style</dt><dd class="text-foreground font-mono">{Object.keys((vibeBundleQuery.data?.style as { selectors?: object })?.selectors ?? {}).length} rules</dd></div>
+						<div class="flex gap-2"><dt class="text-muted-foreground">source keys</dt><dd class="text-foreground font-mono">{Object.keys(vibeSample).join(', ') || '—'}</dd></div>
+					</dl>
+					<div class="border-border mt-4 flex overflow-hidden rounded-[var(--radius)] border">
+						{#each VIBE_TABS as tabDef (tabDef.id)}
+							<button
+								type="button"
+								class="border-border flex-1 px-3 py-1.5 transition-colors not-first:border-l {vibeTab === tabDef.id
+									? 'bg-primary/10 text-foreground font-medium'
+									: 'text-muted-foreground hover:bg-card'}"
+								onclick={() => (vibeTab = tabDef.id)}>{tabDef.label}</button
+							>
+						{/each}
+					</div>
 				</div>
-
 				{#if vibeTab === 'ui'}
-					<!-- live render + readable summary aside -->
-					<!-- board 0110 — summary as a WIDE card on top, so the live preview below runs full-width + larger -->
-					<div class="flex flex-col gap-4">
-						<div class="border-border bg-card w-full rounded-[var(--radius-lg)] border p-4 text-[12px]">
-							<p class="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">{t('mainnet.db.vibe.summary')}</p>
-							<p class="text-muted-foreground leading-relaxed">{t('mainnet.db.vibe.summaryHint')}</p>
-							<dl class="mt-3 flex flex-wrap gap-x-8 gap-y-2">
-								<div class="flex gap-2"><dt class="text-muted-foreground">view</dt><dd class="text-foreground font-mono">ViewDef</dd></div>
-								<div class="flex gap-2"><dt class="text-muted-foreground">function</dt><dd class="text-foreground font-mono">{(vibeBundleQuery.data?.logic ?? '').length} B</dd></div>
-								<div class="flex gap-2"><dt class="text-muted-foreground">style</dt><dd class="text-foreground font-mono">{Object.keys((vibeBundleQuery.data?.style as { selectors?: object })?.selectors ?? {}).length} rules</dd></div>
-								<div class="flex gap-2"><dt class="text-muted-foreground">source keys</dt><dd class="text-foreground font-mono">{Object.keys(vibeSample).join(', ') || '—'}</dd></div>
-							</dl>
-						</div>
-						<div
-							class="border-border bg-card min-h-[70vh] min-w-0 rounded-[var(--radius-lg)] border p-4"
-						>
-							<VibeCard schema={selectedVibe} data={vibeSample} containerName={`db-vibe-${selectedVibe}`} />
-						</div>
+					<div class="border-border bg-card mt-4 min-h-[70vh] min-w-0 rounded-[var(--radius-lg)] border p-4">
+						<VibeCard schema={selectedVibe} data={vibeSample} containerName={`db-vibe-${selectedVibe}`} />
 					</div>
 				{:else}
 					{@const raw =
@@ -684,13 +673,11 @@ $effect(() => {
 									? (vibeBundleQuery.data?.logic ?? '')
 									: pretty(vibeSample)}
 					{#if vibeBundleQuery.isPending}
-						<p class="text-muted-foreground text-[13px]">…</p>
+						<p class="text-muted-foreground mt-4 text-[13px]">…</p>
 					{:else}
 						<pre
-							class="border-border bg-card text-foreground overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
-						><code
-								>{raw}</code
-							></pre>
+							class="border-border bg-card text-foreground mt-4 overflow-auto rounded-[var(--radius-lg)] border p-4 text-[12px] leading-relaxed"
+						><code>{raw}</code></pre>
 					{/if}
 				{/if}
 			</div>

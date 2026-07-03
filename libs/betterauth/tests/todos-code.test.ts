@@ -38,8 +38,8 @@ d('board 0111 — todos CRUD as sandboxed code', () => {
 
 	test('LIST → returns the created task', async () => {
 		// a query op returns { rows } (the projected view: title/done/due/owner/priority).
-		const out = (await run({ schema: 'todos', action: 'list' })) as { rows?: { title?: string }[] }
-		expect(out.rows?.some((t) => t.title === TITLE)).toBe(true)
+		const out = (await run({ schema: 'todos', action: 'list' })) as { items?: { title?: string }[] }
+		expect(out.items?.some((t) => t.title === TITLE)).toBe(true)
 	})
 
 	test('UPDATE → marking done is reflected', async () => {
