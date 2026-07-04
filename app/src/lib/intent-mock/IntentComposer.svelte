@@ -972,7 +972,7 @@ const pillClass = $derived.by(() => {
 		<div class={pillClass} role="group">
 			<button
 				type="button"
-				class="group relative flex size-[4.375rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+				class="group relative flex size-[4.375rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl outline-none transition-[transform,filter] duration-200 ease-out [filter:drop-shadow(0_3px_7px_color-mix(in_srgb,var(--color-primary)_18%,transparent))] hover:-translate-y-0.5 hover:[filter:drop-shadow(0_7px_16px_color-mix(in_srgb,var(--color-primary)_30%,transparent))] focus-visible:ring-2 focus-visible:ring-primary/35 active:translate-y-0 active:[filter:drop-shadow(0_2px_5px_color-mix(in_srgb,var(--color-primary)_22%,transparent))] disabled:cursor-not-allowed disabled:opacity-40"
 				{disabled}
 				onpointerdown={(e) => {
 					void focusShellWebview()

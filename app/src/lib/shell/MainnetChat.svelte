@@ -40,6 +40,10 @@ let currentSessionId = $state<string | null>(null)
 let nextId = 0
 let scrollEl = $state<HTMLDivElement | null>(null)
 let contentEl = $state<HTMLDivElement | null>(null)
+// board 0112 — the composer + AI button FLOAT over the scroll area (content scrolls behind them). We
+// measure the floating bar's height and mirror it as a bottom SPACER inside the scroll content, so the
+// last message can always scroll clear ABOVE the button (and scrollToBottom lands it just above the bar).
+let barHeight = $state(0)
 let initialized = false
 // The chat's IntentComposer instance — so a global file drop can push files into it (preview
 // thumbnails above the input). Bound below; consumed by the pendingMainnetFileDrop effect. 0063.
@@ -539,7 +543,7 @@ function handleTranscribeError(message: string): void {
 
 <div class="flex min-h-0 flex-1 bg-background">
 	<!-- One continuous conversation — no session switcher (single rolling context). board 0111. -->
-	<div class="flex min-h-0 min-w-0 flex-1 flex-col pt-2">
+	<div class="relative flex min-h-0 min-w-0 flex-1 flex-col pt-2">
 		<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
 			<div bind:this={contentEl} class="mx-auto flex w-full max-w-[52rem] flex-col gap-3 py-4">
 				{#if messages.length === 0}
@@ -591,11 +595,19 @@ function handleTranscribeError(message: string): void {
 						</div>
 					{/if}
 				{/each}
+				<!-- board 0112 — bottom SPACER matching the floating bar's height, so the last message can
+				     always scroll clear above the composer + AI button (never trapped behind it). -->
+				<div aria-hidden="true" class="shrink-0" style="height: {barHeight}px"></div>
 			</div>
 		</div>
 
-		<div class="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-			<div class="mx-auto w-full max-w-[52rem]">
+		<!-- board 0112 — the composer + AI button FLOAT over the scroll area: content scrolls BEHIND them.
+		     pointer-events pass through the empty margins to the content; only the bar itself is interactive. -->
+		<div
+			bind:clientHeight={barHeight}
+			class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+		>
+			<div class="pointer-events-auto mx-auto w-full max-w-[52rem]">
 				{#each hitlRequests as req (req.id)}
 					{@const v = hitlVerb(req.tool)}
 					<!-- a small confirm card: question on top, buttons at the bottom; dismissed on click -->
