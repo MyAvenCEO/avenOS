@@ -573,9 +573,11 @@ function handleTranscribeError(message: string): void {
 						{:else}
 							<!-- board 0113 — GENERIC: any other schema renders its own DB vibe rows via VibeCard. -->
 							<div class="max-h-[80vh] w-full overflow-y-auto">
+								<!-- board 0115 — vibeData passes through UNCOERCED: a data-less vibe (a mockup
+								     show) renders its EXAMPLE source via VibeCard's bundle fallback. -->
 								<VibeCard
 									schema={message.vibe ?? ''}
-									data={message.vibeData ?? {}}
+									data={message.vibeData}
 									containerName={`aven-vibes-chat-${message.id}`}
 								/>
 							</div>

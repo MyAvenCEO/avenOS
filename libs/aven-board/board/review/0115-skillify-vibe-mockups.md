@@ -93,12 +93,12 @@ mockups (one vibe per mockup for now).
 
 ## Acceptance criteria
 
-- [ ] `skillify` skill + `mockup`/`mockups` actors: router menu, advertisedTools, composeFlows (2 derived nodes) — tests.
-- [ ] saveMockup forces `mock-` (input `todos` → `mock-todos`, system rows untouched — asserted), rejects bad style/view/empty source, valid payload → 3 rows + loadVibe returns source — tests.
-- [ ] mockups actor lists + shows without LLM — stubbed-ctx test.
-- [ ] The GLM prompt is DB config (actor.prompt) with a TS fallback — test.
-- [ ] vibe-source completeness gate green (mockups included by construction).
-- [ ] svelte-check 0 errors; both suites 0 fail.
+- [x] `skillify` skill + `mockup`/`mockups` actors: router menu, advertisedTools, composeFlows (2 derived nodes) — skillify-mockups.test (a).
+- [x] saveMockup forces `mock-` (input `todos` → `mock-todos`, system vibe_view byte-identical before/after — asserted), rejects position:fixed style / script tag / empty source, valid payload → 4 rows (incl. the identity mapper) + loadVibe serves source + brand-composed style — tests (b).
+- [x] mockups actor lists + shows (fuzzy name) without LLM; show emits a DATA-LESS vibe (example-source render) — test (c).
+- [x] The GLM prompt is DB config (actor.prompt, >200 chars, carries the VIEW grammar) with the TS fallback — test (d).
+- [x] vibe-source completeness gate green (saveMockup writes source by construction; the `mockups` list vibe seeded with sample).
+- [x] svelte-check 0 errors; betterauth 98/0 · aven-vibes 19/0.
 - [ ] LIVE (Samuel): mint "banking accounts" → card renders with example data; one refinement re-renders; "show me my mockups" lists instantly.
 
 ## Verification
@@ -112,6 +112,16 @@ bun test libs/aven-vibes/tests/
 Plus Samuel's live mint → refine → show loop in the Tauri app.
 
 ## Progress log
+
+- `2026-07-04` — BUILT green. mockup-caps.ts (saveMockup: mock- wall + validateViewDef +
+  withBrand∘validateStyleDef + non-empty source + the IDENTITY mapper — state = source;
+  mintMockup: GLM-5.2 with prompt-from-actor-row, refine feeds existing rows back);
+  actors mockup (GLM design/refine → data-less vibe render) + mockups (no-LLM fuzzy
+  show / list grid); migration 0089 (skill + actors + the `mockups` list vibe with
+  sample); ai.ts ctx.mockup cap; MainnetChat passes vibeData UNCOERCED so data-less
+  vibes render their example source; withBrand exported at the package root + a ?raw
+  module declaration for betterauth tsc. skillify-mockups.test 6/6; suites 98/0 + 19/0;
+  svelte-check clean. Remaining: Samuel's live mint → refine → show banking loop.
 
 - `2026-07-04` — Discovered with Samuel (by-example interview: the banking-screen
   walkthrough): host = NEW `skillify` skill; shape = 2 actors + the mock- namespace

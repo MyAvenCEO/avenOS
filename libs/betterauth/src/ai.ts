@@ -17,6 +17,7 @@ import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
 import { schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
+import { mockupCaps } from './mockup-caps'
 import { ontologyCaps } from './ontology'
 import { mutationCaps, queryCaps } from './query-caps'
 import { recordActorRun } from './skills-run'
@@ -526,7 +527,8 @@ function streamWithTools(opts: {
 										ontology: ontologyCaps(userId), // board 0100 — GLM mint + data_schema registry caps
 										query: queryCaps(userId), // board 0101 — GLM-authored validated query specs
 										mutate: mutationCaps(userId), // board 0101 — GLM-authored validated mutation specs
-										bundle: typeCaps(userId) // board 0102 — GLM-authored composite types (data_bundles)
+										bundle: typeCaps(userId), // board 0102 — GLM-authored composite types (data_bundles)
+										mockup: mockupCaps() // board 0115 — skillify part 1: GLM vibe mockups (mock- walled)
 									},
 									parsed
 								)

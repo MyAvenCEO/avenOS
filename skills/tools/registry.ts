@@ -9,6 +9,8 @@ import { bundle } from './bundle'
 import { dataCrud } from './data-crud'
 import { goals } from './goals'
 import { locations } from './locations'
+import { mockup } from './mockup'
+import { mockups } from './mockups'
 import { ontology } from './ontology'
 import { mutate, query } from './queries'
 import type { ToolActor, ToolDefinition } from './types'
@@ -20,6 +22,8 @@ export const TOOL_ACTORS: Record<string, ToolActor> = {
 	data_crud: dataCrud,
 	goals,
 	locations,
+	mockup,
+	mockups,
 	ontology,
 	query,
 	mutate,
@@ -39,7 +43,7 @@ export function chatToolDefinitions(): ToolDefinition[] {
 // (Tier 2, `chatToolDefinitionsFor`). Heavy per-actor context (the gismu lexicon; the todos snapshot
 // hint) loads only when relevant (Tier 3, gated in the server). This map is hardcoded TS for now — a
 // clean seam to the DB `skill` table in board 0108 (config-as-data), mirroring TOOL_ACTORS above.
-export type SkillId = 'todos' | 'ontology' | 'website' | 'inventory'
+export type SkillId = 'todos' | 'ontology' | 'website' | 'inventory' | 'skillify'
 
 export const SKILL_REGISTRY: Record<SkillId, { label: string; description: string; tools: string[] }> = {
 	todos: {
@@ -71,6 +75,14 @@ export const SKILL_REGISTRY: Record<SkillId, { label: string; description: strin
 			"the user's inventory/stock — items with a location and an amount: list what's stored where, " +
 			'add, move, restock/consume, or remove items',
 		tools: ['data_crud', 'locations']
+	},
+	// board 0115 — skillify part 1: design/refine/show SCREEN MOCKUPS for new skill features.
+	skillify: {
+		label: 'Skillify',
+		description:
+			'design, refine, or show SCREEN MOCKUPS for new skill features ("design me a banking screen", ' +
+			'"make the total bigger", "show me my mockups") — look only, no real data yet',
+		tools: ['mockup', 'mockups']
 	}
 }
 

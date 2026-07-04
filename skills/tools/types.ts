@@ -55,6 +55,13 @@ export type ToolCtx = {
 	/** board 0112 — run a NAMED data_operations row (query or mutation spec) with params: the same generic
 	 *  `ops` capability sandboxed code actors get, exposed to tool-actors (e.g. the goals aggregate). */
 	ops?(name: string, params?: Record<string, unknown>): Promise<unknown>
+	/** board 0115 — the skillify part-1 caps: GLM designs/refines a vibe MOCKUP (view+style+example source,
+	 *  walled into the mock- namespace + validator-gated server-side); list/load for the no-LLM viewer. */
+	mockup?: {
+		mint(request: string, name?: string): Promise<{ name?: string; error?: string }>
+		list(): Promise<{ name: string; label: string }[]>
+		load(name: string): Promise<unknown>
+	}
 	/** board 0100 — the ontology actor's server caps (GLM-5.2 mint + data_schema registry). Injected only
 	 *  when the ontology tool is dispatched; other actors ignore it. */
 	ontology?: {
