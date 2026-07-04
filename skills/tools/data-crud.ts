@@ -129,9 +129,15 @@ function resultVibe(
 	result: unknown
 ): { schema: string; data?: unknown } | undefined {
 	if (args.schema !== 'todos') {
+		// per-verb cards for config-minted skills (Planner pattern, board 0116): `<type>-created` /
+		// `<type>-edited` are deterministic vibe rows minted at wire/sync time; the chat loop's
+		// vibeExists guard silently skips them for skills that predate the cards.
+		const items = (args.items ?? []) as unknown[]
+		if (args.action === 'create') return { schema: `${args.schema}-created`, data: { items } }
+		if (args.action === 'update') return { schema: `${args.schema}-edited`, data: { items } }
 		if (args.action !== 'list') return undefined
-		const items = (result as { items?: unknown[] } | null)?.items ?? []
-		return { schema: args.schema, data: { items } }
+		const listItems = (result as { items?: unknown[] } | null)?.items ?? []
+		return { schema: args.schema, data: { items: listItems } }
 	}
 	const items = (args.items ?? []) as Rec[]
 	if (args.action === 'create')

@@ -97,6 +97,9 @@ export type ToolCtx = {
 		available(): Promise<string[]>
 		/** Bake a user rule into a LIVE skill's data_crud instructions (GLM rewrite, wording-only graft). */
 		improve(name: string, instruction: string): Promise<{ app?: string; description?: string; error?: string }>
+		/** ADD-ONLY upgrade: bring a live skill to the Planner-grade granularity (per-step flow nodes +
+		 *  per-verb cards). Missing pieces are added; nothing is rewritten. */
+		syncActors(name: string): Promise<{ app?: string; addedNodes?: string[]; addedVibes?: string[]; error?: string }>
 		/** TRUE promotion progress, derived from DB facts (list op ⇒ Daten · skill row ⇒ Aktoren ·
 		 *  real rows ⇒ Seed · un-walled vibe ⇒ Live) — the pipeline's memory across turns. */
 		progress(skeleton: unknown): Promise<{

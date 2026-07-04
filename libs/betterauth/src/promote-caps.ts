@@ -347,7 +347,184 @@ export async function wireSkill(
 		VALUES (gen_random_uuid(), ${skillId}, 'improve_skill', 'improve_skill', ${JSON.stringify(improveMailboxFor(skillId, label))}::jsonb, false, 3, now(), now())
 		ON CONFLICT DO NOTHING
 	`.execute(D)
+	// the Planner-grade PRESENCE (Samuel 2026-07-04): granular per-step flow nodes + per-verb cards,
+	// so the Skills explorer shows Read/Create/Edit/Delete with their own vibes from birth.
+	await mintVerbVibes(skeleton)
+	await writeSkillFlow(skeleton)
 	return { skillId, code: authored }
+}
+
+// ── skill PRESENCE: granular per-step flow nodes + per-verb cards (the Planner pattern) ────────────
+// Samuel (2026-07-04): a promoted skill must have the SAME workflow granularity as todos — one flow
+// node per step (read/create/edit/delete/overview), each with its OWN vibe card. Like todos, the
+// granularity lives in the FLOW row (nodes referencing the one data_crud actor + per-step vibes),
+// not in duplicate actor rows. All of it deterministic config — no GLM.
+
+const labelFieldOf = (e: AppSkeleton['entities'][0]): string =>
+	e.fields.find((f) => ['name', 'title', 'label'].includes(f)) ?? e.fields[0]
+
+/** Deterministic per-verb card (view/style/logic/source) for an entity: `<type>-created|edited`. */
+function verbCardParts(
+	entity: AppSkeleton['entities'][0],
+	verb: 'created' | 'edited'
+): { view: unknown; style: unknown; logic: string; source: unknown } {
+	const label = labelFieldOf(entity)
+	const meta = entity.fields.filter((f) => f !== label)
+	const view = {
+		content: {
+			class: 'uc-root',
+			children: [
+				{
+					class: 'uc-header',
+					children: [
+						{ text: verb === 'created' ? 'Neu angelegt' : 'Aktualisiert', class: `uc-eyebrow uc-eyebrow--${verb}` },
+						{ text: '$count', class: 'uc-meta' }
+					]
+				},
+				{
+					tag: 'ul',
+					class: 'uc-list',
+					children: [
+						{
+							$each: {
+								items: '$items',
+								template: {
+									tag: 'li',
+									class: 'uc-row',
+									children: [
+										{ text: '$$title', class: 'uc-title' },
+										{ text: '$$meta', class: 'uc-badge' }
+									]
+								}
+							}
+						}
+					]
+				}
+			]
+		}
+	}
+	const logic = `function initState(source){source=source||{};var it=source.items||[];var out=[];for(var i=0;i<it.length;i++){var r=it[i]||{};out.push({title:String(r[${JSON.stringify(label)}]||'—'),meta:[${meta.map((f) => `r[${JSON.stringify(f)}]`).join(',')}].filter(Boolean).join('  ·  ')});}return{count:out.length+' Eintrag/Einträge',items:out};}
+function handleEvent(t,p,s){return s}`
+	const style = {
+		extends: 'brand',
+		tokens: { green: '#5f8a63', amber: '#b0803a' },
+		selectors: {
+			'.uc-root': { display: 'flex', flexDirection: 'column', gap: '0.4rem', width: '100%', fontFamily: 'var(--font-sans)', color: 'var(--text)' },
+			'.uc-header': { display: 'flex', alignItems: 'center', gap: '0.5rem' },
+			'.uc-eyebrow': { fontSize: 'var(--fs-micro)', fontWeight: '600', letterSpacing: '0.09em', textTransform: 'uppercase' },
+			'.uc-eyebrow--created': { color: 'var(--green)' },
+			'.uc-eyebrow--edited': { color: 'var(--amber)' },
+			'.uc-meta': { fontSize: 'var(--fs-micro)', color: 'var(--muted)' },
+			'.uc-list': { listStyle: 'none', margin: '0', padding: '0' },
+			'.uc-row': { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.7rem', padding: '0.6rem 0.1rem', borderBottom: '1px solid var(--border-soft)', fontSize: 'var(--fs-body)' },
+			'.uc-title': { fontWeight: '600' },
+			'.uc-badge': { color: 'var(--muted)', fontSize: 'var(--fs-micro)', border: '1px solid var(--border-soft)', borderRadius: 'var(--radius-pill)', padding: '0.12rem 0.5rem', whiteSpace: 'nowrap' }
+		}
+	}
+	const source = {
+		items: [
+			Object.fromEntries(entity.fields.map((f, i) => [f, f === label ? 'Beispiel-Eintrag' : `Wert ${i}`])),
+			Object.fromEntries(entity.fields.map((f, i) => [f, f === label ? 'Zweiter Eintrag' : `Wert ${i}`]))
+		]
+	}
+	return { view, style, logic, source }
+}
+
+/** Add-only mint of the per-verb cards for every entity; returns the vibe names actually added. */
+export async function mintVerbVibes(skeleton: AppSkeleton): Promise<string[]> {
+	const D = db()
+	const added: string[] = []
+	for (const entity of skeleton.entities) {
+		for (const verb of ['created', 'edited'] as const) {
+			const name = `${entity.type}-${verb}`
+			const exists = (await sql`SELECT 1 FROM vibe_view WHERE name = ${name} LIMIT 1`.execute(D)).rows.length > 0
+			if (exists) continue
+			const parts = verbCardParts(entity, verb)
+			await sql`INSERT INTO vibe_view (name, body) VALUES (${name}, ${JSON.stringify(parts.view)}::jsonb) ON CONFLICT (name) DO NOTHING`.execute(D)
+			await sql`INSERT INTO vibe_style (name, body) VALUES (${name}, ${JSON.stringify(parts.style)}::jsonb) ON CONFLICT (name) DO NOTHING`.execute(D)
+			await sql`INSERT INTO vibe_logic (name, body) VALUES (${name}, ${parts.logic}) ON CONFLICT (name) DO NOTHING`.execute(D)
+			await sql`INSERT INTO vibe_source (name, body) VALUES (${name}, ${JSON.stringify(parts.source)}::jsonb) ON CONFLICT (name) DO NOTHING`.execute(D)
+			added.push(name)
+		}
+	}
+	return added
+}
+
+type FlowNode = Record<string, unknown> & { id: string }
+type FlowEdge = { from: string; to: string; kind: string }
+
+/** The granular flow presence of a promoted skill — the todos/Planner node set, deterministic. */
+export function skillPresence(skeleton: AppSkeleton): { nodes: FlowNode[]; edges: FlowEdge[] } {
+	const app = skeleton.app
+	const entity = skeleton.entities[0]
+	const type = entity?.type ?? 'entry'
+	const nodes: FlowNode[] = [
+		{ id: 'dispatch', name: 'Dispatch', actor: 'dispatch', inputs: ['intent'], outputs: ['intent'] },
+		{ id: 'overview', name: 'Overview', actor: `${app}_overview`, vibe: app, inputs: ['intent'], outputs: [app], note: 'Sandbox code actor: computed aggregates + latest entries.' },
+		{ id: 'read', name: `Read ${type}`, actor: 'data_crud', vibe: app, inputs: ['intent'], outputs: [type], note: 'list — the overview card renders the rows.' },
+		{ id: 'create', name: `Create ${type}`, actor: 'data_crud', vibe: `${type}-created`, inputs: ['intent'], outputs: [type], note: 'create — show only the new entries.' },
+		{ id: 'edit', name: `Edit ${type}`, actor: 'data_crud', vibe: `${type}-edited`, inputs: ['intent', type], outputs: [type], note: 'update — show the changed entries.' },
+		{ id: 'delete', name: `Delete ${type}`, actor: 'data_crud', vibe: app, hitl: true, inputs: ['intent', type], outputs: [type], note: 'delete — confirm before removing.' },
+		{ id: 'improve', name: 'Improve', actor: 'improve_skill', inputs: ['intent'], outputs: [app], note: 'Bake user rules into how entries are interpreted.' }
+	]
+	const edges: FlowEdge[] = nodes
+		.filter((n) => n.id !== 'dispatch')
+		.map((n) => ({ from: 'dispatch', to: n.id, kind: 'control' }))
+	return { nodes, edges }
+}
+
+/** Upsert the skill's flow row ADD-ONLY: missing nodes (by id) and missing edges (by from→to) are
+ *  appended; existing ones are never rewritten. Returns the node ids actually added. */
+export async function writeSkillFlow(skeleton: AppSkeleton): Promise<string[]> {
+	const D = db()
+	const want = skillPresence(skeleton)
+	const existing = await sql<{ nodes: unknown; edges: unknown }>`
+		SELECT nodes, edges FROM flow WHERE id = ${skeleton.app}
+	`.execute(D)
+	const parse = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : (v ?? [])) as Record<string, unknown>[]
+	const nodes = existing.rows.length ? parse(existing.rows[0].nodes) : []
+	const edges = (existing.rows.length ? parse(existing.rows[0].edges) : []) as unknown as FlowEdge[]
+	const addedIds: string[] = []
+	for (const n of want.nodes) {
+		if (nodes.some((x) => x.id === n.id)) continue
+		nodes.push(n)
+		addedIds.push(n.id)
+	}
+	for (const e of want.edges) {
+		if (edges.some((x) => x.from === e.from && x.to === e.to)) continue
+		edges.push(e)
+	}
+	const label = skeleton.app.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+	await sql`
+		INSERT INTO flow (id, name, description, nodes, edges, created_at, updated_at)
+		VALUES (${skeleton.app}, ${label},
+			${`the ${label} app — one node per workflow step (overview/read/create/edit/delete), each with its own card. Promoted from mock-${skeleton.app}.`},
+			${JSON.stringify(nodes)}::jsonb, ${JSON.stringify(edges)}::jsonb, now(), now())
+		ON CONFLICT (id) DO UPDATE SET nodes = EXCLUDED.nodes, edges = EXCLUDED.edges, updated_at = now()
+	`.execute(D)
+	return addedIds
+}
+
+/** The add-only UPGRADE seam (board 0116 S1 slice): bring an already-promoted skill up to the
+ *  current granularity — missing flow nodes + missing per-verb cards are added; nothing rewritten. */
+export async function syncActors(
+	rawName: string
+): Promise<{ app?: string; addedNodes?: string[]; addedVibes?: string[]; error?: string }> {
+	let app: string
+	try {
+		app = mockName(rawName).slice(MOCK_PREFIX.length)
+	} catch {
+		return { error: 'a skill name is required' }
+	}
+	const D = db()
+	const wired = (await sql`SELECT 1 FROM skill WHERE id = ${app} LIMIT 1`.execute(D)).rows.length > 0
+	if (!wired) return { error: `skill "${app}" is not promoted yet` }
+	const parts = await loadRawParts(`${MOCK_PREFIX}${app}`)
+	if (!parts) return { error: `the mockup mock-${app} (the skill's design source) no longer exists` }
+	const skeleton = deriveAppSkeleton(app, parts.source as Record<string, unknown>)
+	const addedVibes = await mintVerbVibes(skeleton)
+	const addedNodes = await writeSkillFlow(skeleton)
+	return { app, addedNodes, addedVibes }
 }
 
 /** The per-promoted-skill improve_skill mailbox (name pinned to THIS skill, like crud pins schema). */
@@ -575,6 +752,7 @@ export function promoteCaps(uid: string) {
 		wire: (sk: AppSkeleton, src: Record<string, unknown>) => wireSkill(uid, sk, src),
 		seed: (sk: AppSkeleton, src: Record<string, unknown>) => seedData(uid, sk, src),
 		improve: (name: string, instruction: string) => improveSkill(name, instruction),
+		syncActors,
 		promoteVibe,
 		loadVibe
 	}

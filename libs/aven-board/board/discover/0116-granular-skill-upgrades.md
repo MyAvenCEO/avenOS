@@ -123,3 +123,18 @@ grep -rn "includes(" skills/tools/promote.ts | grep -v fields  # no fuzzy resolu
   explicit look-sync step (mock stays the sandbox), ALL FOUR layers in this one
   card. Filed straight into discover/ with measurable goal + acceptance
   criteria seeded.
+
+- `2026-07-04` — SLICE PULLED FORWARD live (Samuel: banking lacks the Planner
+  granularity — separate add/edit steps + one vibe per step): promoted skills now
+  get Planner-grade PRESENCE from birth — wireSkill mints a per-skill FLOW row
+  (dispatch/overview/read/create/edit/delete/improve nodes, per-step vibes — the
+  todos pattern: granularity lives in flow nodes over ONE data_crud actor) plus
+  deterministic per-verb cards `<type>-created/-edited` (no GLM); generic crud
+  results now emit those cards (vibeExists guards legacy skills). NEW `sync_actors`
+  upgrade seam (ADD-ONLY diff: missing nodes/cards appended, nothing rewritten,
+  idempotent → honest empty diff) on skillify + every promoted skill (migration
+  0100). Tests: presence-from-birth + add-only/idempotent/honest-miss.
+  111/0 ×2 · tsc · svelte-check clean. Remaining for this card: sync_vibe
+  (look diff-copy) · improve_code (minimal GLM edit + smoke) · sync_data
+  (additive shape diff). Live demo pending: Samuel runs "sync banking actors"
+  in chat → transaction-created/-edited cards + granular graph.

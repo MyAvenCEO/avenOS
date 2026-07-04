@@ -255,6 +255,42 @@ export const improveSkillActor: ToolActor = {
 	}
 }
 
+export const syncActorsActor: ToolActor = {
+	definition: def(
+		'sync_actors',
+		'UPGRADE a promoted (live) skill to full workflow granularity: add the missing per-step flow ' +
+			'nodes (read/create/edit/delete/overview) and their per-step cards (created/edited). ' +
+			'ADD-ONLY — never rewrites existing pieces. Use when the user wants separate steps/cards ' +
+			'for a live skill ("add a create-transaction step/view").'
+	),
+	async handle(ctx, raw): Promise<ToolResult> {
+		if (!ctx.promote) return noCap
+		const r = raw as Raw
+		const res = await ctx.promote.syncActors(String(r.name ?? ''))
+		if (res.error || !res.app) return stepFailed('sync_actors', res.error ?? 'sync failed')
+		const nodes = res.addedNodes ?? []
+		const vibes = res.addedVibes ?? []
+		const nothing = !nodes.length && !vibes.length
+		return {
+			detail: `sync ${res.app}`,
+			content: {
+				ok: true,
+				app: res.app,
+				addedNodes: nodes,
+				addedVibes: vibes,
+				note: nothing
+					? 'Everything already at full granularity — nothing added. ONE short sentence.'
+					: 'Granular steps/cards added (add-only). ONE short sentence listing what is new.'
+			},
+			reply:
+				said(r) ||
+				(nothing
+					? `„${res.app}" ist schon auf voller Granularität — nichts zu tun.`
+					: `„${res.app}" erweitert: ${[...nodes.map((n) => `Schritt ${n}`), ...vibes.map((v) => `Karte ${v}`)].join(', ')}.`)
+		}
+	}
+}
+
 export const promoteApp: ToolActor = {
 	definition: def(
 		'promote',

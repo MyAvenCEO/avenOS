@@ -4,7 +4,7 @@ import { crud, runCodeActor, runNamedOp } from '../src/actor-run'
 import { db } from '../src/db'
 import { composeFlows } from '../src/flows'
 import { saveMockup } from '../src/mockup-caps'
-import { improveSkill, promotionProgress,
+import { improveSkill, promotionProgress, syncActors,
 	deriveAppSkeleton,
 	mintDataLayer,
 	promoteVibe,
@@ -144,6 +144,14 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		`.execute(db())
 		// self-improvable by construction: the promoted skill advertises its own improve_skill.
 		expect(actors.rows.map((a) => a.name)).toEqual(['data_crud', `${APP}_overview`, 'improve_skill'])
+		// Planner-grade PRESENCE from birth: granular flow nodes + per-verb cards (board 0116 slice).
+		const fl = await sql<{ nodes: unknown }>`SELECT nodes FROM flow WHERE id = ${APP}`.execute(db())
+		const nodeIds = ((typeof fl.rows[0].nodes === 'string' ? JSON.parse(fl.rows[0].nodes as string) : fl.rows[0].nodes) as { id: string }[]).map((n) => n.id)
+		for (const id of ['dispatch', 'overview', 'read', 'create', 'edit', 'delete', 'improve']) expect(nodeIds).toContain(id)
+		for (const v of ['record-created', 'record-edited']) {
+			const vr = await sql`SELECT 1 FROM vibe_view WHERE name = ${v}`.execute(db())
+			expect(vr.rows.length).toBe(1)
+		}
 		expect((actors.rows[1].code ?? '').length).toBeGreaterThan(50) // the sandbox seat, occupied
 		expect(JSON.stringify(actors.rows[1].caps)).toContain('ops') // fail-closed caps
 
@@ -216,9 +224,31 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		expect(junk.error).toContain('out of bounds')
 	}, 20000)
 
+	test('(f) sync_actors is ADD-ONLY + idempotent: re-adds only what is missing', async () => {
+		// full presence exists → empty diff, honestly.
+		const noop = await syncActors(APP)
+		expect(noop.error).toBeUndefined()
+		expect(noop.addedNodes).toEqual([])
+		expect(noop.addedVibes).toEqual([])
+		// simulate a pre-granularity skill: drop one card + one flow node, sync restores JUST those.
+		for (const t of ['vibe_view', 'vibe_style', 'vibe_logic', 'vibe_source'])
+			await sql`DELETE FROM ${sql.raw(t)} WHERE name = 'record-created'`.execute(db())
+		const fl = await sql<{ nodes: unknown; edges: unknown }>`SELECT nodes, edges FROM flow WHERE id = ${APP}`.execute(db())
+		const nodes = (typeof fl.rows[0].nodes === 'string' ? JSON.parse(fl.rows[0].nodes as string) : fl.rows[0].nodes) as { id: string }[]
+		await sql`UPDATE flow SET nodes = ${JSON.stringify(nodes.filter((n) => n.id !== 'create'))}::jsonb WHERE id = ${APP}`.execute(db())
+		const res = await syncActors(APP)
+		expect(res.addedVibes).toEqual(['record-created'])
+		expect(res.addedNodes).toEqual(['create'])
+		// unknown skill fails honestly.
+		expect((await syncActors('never-promoted-app')).error).toContain('not promoted')
+	}, 20000)
+
 	afterAll(async () => {
 		if (!DB) return
 		const D = db()
+		await sql`DELETE FROM flow WHERE id = ${APP}`.execute(D)
+		for (const t of ['vibe_view', 'vibe_style', 'vibe_logic', 'vibe_source'])
+			await sql`DELETE FROM ${sql.raw(t)} WHERE name IN ('record-created', 'record-edited')`.execute(D)
 		// tear the promoted app back down (skill, actors, flow-free), the data layer, and the vibes.
 		await sql`DELETE FROM actor WHERE skill_id = ${APP}`.execute(D)
 		await sql`DELETE FROM skill WHERE id = ${APP}`.execute(D)
