@@ -39,7 +39,7 @@ export function chatToolDefinitions(): ToolDefinition[] {
 // (Tier 2, `chatToolDefinitionsFor`). Heavy per-actor context (the gismu lexicon; the todos snapshot
 // hint) loads only when relevant (Tier 3, gated in the server). This map is hardcoded TS for now — a
 // clean seam to the DB `skill` table in board 0108 (config-as-data), mirroring TOOL_ACTORS above.
-export type SkillId = 'todos' | 'ontology' | 'website'
+export type SkillId = 'todos' | 'ontology' | 'website' | 'inventory'
 
 export const SKILL_REGISTRY: Record<SkillId, { label: string; description: string; tools: string[] }> = {
 	todos: {
@@ -63,6 +63,14 @@ export const SKILL_REGISTRY: Record<SkillId, { label: string; description: strin
 		label: 'Website',
 		description: 'view, edit, or publish the personal website / composer',
 		tools: ['show_website', 'edit_website', 'deploy_website']
+	},
+	// board 0114 — the DB rows are the SSOT; this fail-safe must still know every skill (audit drift fix).
+	inventory: {
+		label: 'Inventory',
+		description:
+			"the user's inventory/stock — items with a location and an amount: list what's stored where, " +
+			'add, move, restock/consume, or remove items',
+		tools: ['data_crud', 'locations']
 	}
 }
 

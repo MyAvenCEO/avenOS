@@ -26,7 +26,6 @@ let {
 	data?: Record<string, unknown>
 } = $props()
 
-const key = $derived(node && flow ? `${flow.id}:${node.id}` : '')
 const running = $derived(step?.state === 'running')
 const vibe = $derived(vibeProp ?? step?.vibe ?? '')
 const vibeData = $derived((dataProp ?? step?.vibeData ?? {}) as Record<string, unknown>)
@@ -58,85 +57,6 @@ const STATE_CHIP: Record<NodeState, string> = {
 {:else if !vibe && (!node || !step)}
 	<div class="text-muted-foreground flex h-full items-center justify-center text-sm">
 		Kein Schritt ausgewählt.
-	</div>
-{:else if step && key === 'minecraft-glass:mine'}
-	<!-- ⛏️ Sand abbauen -->
-	<div
-		class="flex h-full flex-col items-center justify-center gap-4 rounded-[var(--radius-lg)] p-8"
-		style="background: linear-gradient(160deg,#e7d9b0,#cbb481)"
-	>
-		<div class="text-6xl">⛏️</div>
-		<h3 class="text-2xl font-bold text-[#5a4a2a]">Sand abgebaut</h3>
-		<div class="grid grid-cols-4 gap-1.5">
-			{#each Array(8) as _, i (i)}
-				<div class="size-9 rounded-sm border border-[#a8915f]" style="background:#ddc88f"></div>
-			{/each}
-		</div>
-		{#each step.outputs ?? [] as o (o)}
-			<span class="rounded-full bg-[#5a4a2a] px-4 py-1 text-sm font-semibold text-[#f3e9cf]"
-				>⛏ {o}</span
-			>
-		{/each}
-	</div>
-{:else if step && key === 'minecraft-glass:smelt'}
-	<!-- 🔥 Ofen -->
-	<div
-		class="flex h-full flex-col items-center justify-center gap-4 rounded-[var(--radius-lg)] p-8 text-[#ffe]"
-		style="background: linear-gradient(160deg,#2b2b33,#16161b)"
-	>
-		<div class="text-6xl {running ? 'animate-pulse' : ''}">🔥</div>
-		<h3 class="text-2xl font-bold">Schmelzen im Ofen</h3>
-		<div class="flex items-center gap-3">
-			<div class="flex flex-col items-center gap-1">
-				{#each step.inputs ?? [] as i (i)}
-					<span class="rounded bg-white/10 px-3 py-1 text-sm">{i}</span>
-				{/each}
-			</div>
-			<span class="text-3xl text-orange-400">→</span>
-			<div class="flex flex-col items-center gap-1">
-				{#each step.outputs ?? [] as o (o)}
-					<span class="rounded bg-sky-400/20 px-3 py-1 text-sm font-semibold text-sky-200"
-						>🪟 {o}</span
-					>
-				{/each}
-			</div>
-		</div>
-		<div class="h-2 w-56 overflow-hidden rounded-full bg-white/10">
-			<div
-				class="h-full rounded-full bg-gradient-to-r from-orange-500 to-yellow-300 {running
-					? 'animate-pulse'
-					: ''}"
-				style="width: {running ? '70%' : '100%'}"
-			></div>
-		</div>
-		{#if step.message}
-			<p class="text-sm text-orange-200">{step.message}</p>
-		{/if}
-	</div>
-{:else if step && key === 'minecraft-glass:craft-pane'}
-	<!-- 🪟 Glasscheiben craften -->
-	<div
-		class="flex h-full flex-col items-center justify-center gap-4 rounded-[var(--radius-lg)] p-8"
-		style="background: linear-gradient(160deg,#cfe6ef,#a9cfe0)"
-	>
-		<h3 class="text-2xl font-bold text-[#1f4a5c]">Glasscheiben craften</h3>
-		<div class="grid grid-cols-3 gap-1 rounded-md bg-[#6b4a2a] p-2">
-			{#each Array(9) as _, i (i)}
-				<div
-					class="size-10 rounded-sm border"
-					style="background:{i < 6 ? 'rgba(180,220,235,.85)' : 'rgba(255,255,255,.25)'};border-color:#4a341f"
-				></div>
-			{/each}
-		</div>
-		<span class="text-2xl text-[#1f4a5c]">↓</span>
-		{#each step.outputs ?? [] as o (o)}
-			<span class="rounded-full bg-[#1f4a5c] px-4 py-1 text-sm font-semibold text-white"
-				>🪟 {o}</span
-			>
-		{/each}
-		{#if step.message}
-			<p class="text-sm text-[#1f4a5c]">{step.message}</p>
-		{/if}
 	</div>
 {:else if node && step}
 	<!-- Generic actor-step card: name · actor · mailbox → output · state. board 0099 actor hub. -->

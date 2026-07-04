@@ -31,15 +31,32 @@ d('board 0114 — the Skills read-model + generic tracing', () => {
 		expect((inv?.nodes as { id: string }[]).map((n) => n.id)).toEqual(['data_crud', 'locations'])
 	})
 
-	test('the label comes from skill.label — Planner, not the stale "Todos" flow seed', async () => {
+	test('the Planner is the LIVING explicit-flow override: mode nodes + dispatch edges + vibes', async () => {
+		// board 0114/0088 — an edge-carrying flow row overrides the derived hub: the Planner keeps its four
+		// data_crud MODE nodes (each previewing its own vibe — richness one actor row cannot express),
+		// plus dispatch fan-out edges. Name comes from the flow row and MUST say Planner (the stale
+		// "Todos" seed name was the original drift).
 		const flows = await composeFlows()
 		const planner = flows.find((f) => f.id === 'todos')
 		expect(planner?.name).toBe('Planner')
-		// derived nodes = the actor rows (data_crud, goals) — not the 4-node hand-seeded hub.
-		expect((planner?.nodes as { id: string }[]).map((n) => n.id).sort()).toEqual([
-			'data_crud',
-			'goals'
+		const nodes = planner?.nodes as { id: string; vibe?: string }[]
+		expect(nodes.map((n) => n.id).sort()).toEqual([
+			'create',
+			'delete',
+			'dispatch',
+			'edit',
+			'goals',
+			'read'
 		])
+		expect(Object.fromEntries(nodes.filter((n) => n.vibe).map((n) => [n.id, n.vibe]))).toEqual({
+			read: 'todos',
+			create: 'todos-created',
+			edit: 'todos-edited',
+			delete: 'todos-deleted',
+			goals: 'goals'
+		})
+		expect((planner?.edges as { from: string }[]).every((e) => e.from === 'dispatch')).toBe(true)
+		expect((planner?.edges as unknown[]).length).toBe(5)
 	})
 
 	test('an EDGE-carrying flow row overrides the derived graph', async () => {
