@@ -35,3 +35,5 @@ row) at `discover`.
 ## Progress log
 
 - `2026-07-02` — Created in idea as the observability slice of the dispatch architecture (0106).
+
+- `2026-07-04` — **Absorbed by [[0114]]** (one-skill-config-flows-tracing): generic (skill, actor) tracing at the dispatch seam records the route decision too — this card's scope ships there.
