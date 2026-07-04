@@ -87,6 +87,15 @@ app.use('/api/inbox/*', cors(corsOptions))
 
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
+// TEMPORARY (board 0114 S0 diagnosis) — the WKWebView can't be inspected from the agent, so the vibe
+// host beacons its COMPUTED layout here; readings land in the dev log. Dev-only; removed after diagnosis.
+app.use('/api/dev/*', cors(corsOptions))
+app.post('/api/dev/layout-probe', async (c) => {
+	const body = await c.req.json().catch(() => null)
+	console.log('[layout-probe]', JSON.stringify(body))
+	return c.json({ ok: true })
+})
+
 // Authenticated Tinfoil proxy — only signed-in users can run inference. board 0051.
 app.post('/api/ai/chat', aiChat)
 app.get('/api/ai/usage', aiUsage)

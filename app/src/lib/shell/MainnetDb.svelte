@@ -135,7 +135,20 @@ const vibeBundleQuery = createQuery(() => ({
 }))
 // board 0110 — ACTORS via the ONE generic context endpoint (config-as-data). Skills + Runs now render the
 // full SkillsView / RunsView (board 0107), so they no longer need a list here.
-type CtxItem = { name: string; gloss?: string; tag?: string }
+type ActorCfg = {
+	binding?: 'code' | 'engine'
+	engine?: string | null
+	code?: string | null
+	caps?: string[] | null
+	mailbox?: { description?: string; parameters?: unknown } | null
+	llm?: unknown
+	prompt?: string | null
+	context?: string[] | null
+	vibe?: string | null
+	hitl?: boolean
+	position?: number
+}
+type CtxItem = { name: string; gloss?: string; tag?: string; config?: ActorCfg }
 const actorsQuery = createQuery(() => ({ queryKey: ['db', 'actors'], queryFn: () => loadContext('actors') }))
 const actorItems = $derived<CtxItem[]>((actorsQuery.data?.items ?? []) as CtxItem[])
 // board 0114 — actor names repeat across skills (data_crud on Planner AND Inventory), so the selection
@@ -821,15 +834,73 @@ $effect(() => {
 					{/if}
 			</div>
 		{:else if selectedActor}
-			<div class="mx-auto flex w-full max-w-4xl flex-col">
-				<div class="mb-3 flex items-center gap-2">
+			{@const cfg = selectedActorItem?.config}
+			<!-- board 0114 — the FULL actor config: binding, mailbox tool-schema, llm, prompt, context,
+			     caps, vibe, hitl. Config IS data — the viewer shows the whole row, not a one-line gloss. -->
+			<div class="mx-auto flex w-full max-w-4xl flex-col gap-3">
+				<div class="flex flex-wrap items-center gap-2">
 					<h2 class="text-foreground font-mono text-base font-semibold">{selectedActorItem?.name ?? selectedActor}</h2>
 					{#if selectedActorItem?.tag}<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px]">{selectedActorItem.tag}</span>{/if}
+					{#if cfg}
+						<span class="border-border text-muted-foreground rounded-full border px-2 py-0.5 font-mono text-[10px]">
+							{cfg.binding === 'code' ? 'QuickJS code' : `engine · ${cfg.engine ?? selectedActorItem?.name}`}
+						</span>
+						{#if cfg.hitl}<span class="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700">HITL</span>{/if}
+						{#if cfg.vibe}
+							<button
+								type="button"
+								class="bg-primary/10 text-foreground hover:bg-primary/20 rounded-full px-2 py-0.5 font-mono text-[10px]"
+								title="Open the vibe in the Vibes category"
+								onclick={() => selectVibe(cfg.vibe ?? '')}
+							>
+								vibe · {cfg.vibe}
+							</button>
+						{/if}
+					{/if}
 				</div>
 				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[13px]">
-					<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">Actor</p>
-					<p class="text-foreground">{selectedActorItem?.gloss || '—'}</p>
-					<p class="text-muted-foreground mt-3 text-[12px] leading-relaxed">Behavior is resolved by engine name; the config — mailbox · llm · prompt · context — is data (board 0110).</p>
+					<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">Mailbox</p>
+					<p class="text-foreground leading-relaxed">{cfg?.mailbox?.description ?? selectedActorItem?.gloss ?? '—'}</p>
+					{#if cfg?.mailbox?.parameters}
+						<p class="text-muted-foreground mt-3 mb-1 text-[10px] font-semibold tracking-wide uppercase">Tool schema (parameters)</p>
+						<pre class="border-border bg-background text-foreground max-h-72 overflow-auto rounded-[var(--radius)] border p-3 font-mono text-[11px] leading-relaxed"><code>{pretty(cfg.mailbox.parameters)}</code></pre>
+					{/if}
+				</div>
+				{#if cfg?.prompt}
+					<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4">
+						<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">System prompt</p>
+						<pre class="text-foreground max-h-72 overflow-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap">{cfg.prompt}</pre>
+					</div>
+				{/if}
+				{#if cfg?.code}
+					<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4">
+						<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">QuickJS sandbox code</p>
+						<pre class="border-border bg-background text-foreground max-h-96 overflow-auto rounded-[var(--radius)] border p-3 font-mono text-[11px] leading-relaxed"><code>{cfg.code}</code></pre>
+					</div>
+				{/if}
+				<div class="flex flex-wrap gap-3">
+					{#if cfg?.caps?.length}
+						<div class="border-border bg-card min-w-40 rounded-[var(--radius-lg)] border p-4">
+							<p class="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">Caps</p>
+							<div class="flex flex-wrap gap-1">
+								{#each cfg.caps as cap (cap)}<span class="bg-muted text-foreground rounded px-1.5 py-0.5 font-mono text-[10px]">{cap}</span>{/each}
+							</div>
+						</div>
+					{/if}
+					{#if cfg?.context?.length}
+						<div class="border-border bg-card min-w-40 rounded-[var(--radius-lg)] border p-4">
+							<p class="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">Context providers</p>
+							<div class="flex flex-wrap gap-1">
+								{#each cfg.context as ctx (ctx)}<span class="bg-muted text-foreground rounded px-1.5 py-0.5 font-mono text-[10px]">{ctx}</span>{/each}
+							</div>
+						</div>
+					{/if}
+					{#if cfg?.llm}
+						<div class="border-border bg-card min-w-40 rounded-[var(--radius-lg)] border p-4">
+							<p class="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">LLM</p>
+							<pre class="text-foreground font-mono text-[11px] leading-relaxed"><code>{pretty(cfg.llm)}</code></pre>
+						</div>
+					{/if}
 				</div>
 			</div>
 		{:else if selected}

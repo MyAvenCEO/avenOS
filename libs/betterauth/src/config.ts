@@ -155,10 +155,26 @@ registerContextProvider('actors', async () => {
 	return {
 		kind: 'list',
 		label: 'Actors',
+		// board 0114 — the FULL per-actor config rides along so the DB viewer's Actors pane shows the
+		// whole row (binding, mailbox schema, llm, prompt, context, caps, vibe, hitl) — config IS data,
+		// so the viewer surfaces all of it, not a one-line gloss.
 		items: rows.map((a) => ({
 			name: a.name,
 			gloss: a.mailbox?.description ?? '',
-			tag: a.skill_id
+			tag: a.skill_id,
+			config: {
+				binding: a.code ? 'code' : 'engine',
+				engine: a.engine,
+				code: a.code,
+				caps: a.caps,
+				mailbox: a.mailbox,
+				llm: a.llm,
+				prompt: a.prompt,
+				context: a.context,
+				vibe: a.vibe,
+				hitl: a.hitl,
+				position: a.position
+			}
 		}))
 	}
 })
