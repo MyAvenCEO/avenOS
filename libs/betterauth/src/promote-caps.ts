@@ -340,7 +340,33 @@ export async function wireSkill(
 		VALUES (gen_random_uuid(), ${skillId}, ${`${skillId}_overview`}, NULL, ${authored}, ${JSON.stringify(['ops'])}::jsonb, ${JSON.stringify(overviewMailbox)}::jsonb, ${skillId}, false, 2, now(), now())
 		ON CONFLICT DO NOTHING
 	`.execute(D)
+	// every promoted skill is SELF-IMPROVABLE: it advertises its own improve_skill, so "improve the
+	// banking skill: …" works even when the router (correctly) lands on the skill itself.
+	await sql`
+		INSERT INTO actor (id, skill_id, name, engine, mailbox, hitl, position, created_at, updated_at)
+		VALUES (gen_random_uuid(), ${skillId}, 'improve_skill', 'improve_skill', ${JSON.stringify(improveMailboxFor(skillId, label))}::jsonb, false, 3, now(), now())
+		ON CONFLICT DO NOTHING
+	`.execute(D)
 	return { skillId, code: authored }
+}
+
+/** The per-promoted-skill improve_skill mailbox (name pinned to THIS skill, like crud pins schema). */
+export function improveMailboxFor(skillId: string, label: string): Record<string, unknown> {
+	return {
+		description:
+			`IMPROVE the ${label} skill itself: bake a user rule into how entries are interpreted — number ` +
+			'formats ("German 25,33 €"), sign conventions ("bought/purchase = negative"), defaults, wording. ' +
+			'Use when the user asks to improve/change/teach THIS skill (not for adding data).',
+		parameters: {
+			type: 'object',
+			properties: {
+				name: { type: 'string', description: `Always "${skillId}" on this skill.` },
+				instruction: { type: 'string', description: "The rule to bake in, in the user's words." },
+				response: { type: 'string', description: 'A short human-facing reply to show the user.' }
+			},
+			required: ['name', 'instruction']
+		}
+	}
 }
 
 // ── S4: seed + promote ──────────────────────────────────────────────────────────────────────────────

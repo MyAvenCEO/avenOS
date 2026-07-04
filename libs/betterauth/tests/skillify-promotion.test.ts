@@ -142,7 +142,8 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		const actors = await sql<{ name: string; code: string | null; caps: unknown }>`
 			SELECT name, code, caps FROM actor WHERE skill_id = ${APP} ORDER BY position
 		`.execute(db())
-		expect(actors.rows.map((a) => a.name)).toEqual(['data_crud', `${APP}_overview`])
+		// self-improvable by construction: the promoted skill advertises its own improve_skill.
+		expect(actors.rows.map((a) => a.name)).toEqual(['data_crud', `${APP}_overview`, 'improve_skill'])
 		expect((actors.rows[1].code ?? '').length).toBeGreaterThan(50) // the sandbox seat, occupied
 		expect(JSON.stringify(actors.rows[1].caps)).toContain('ops') // fail-closed caps
 

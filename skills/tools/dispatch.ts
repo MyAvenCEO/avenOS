@@ -42,7 +42,9 @@ export function buildRouterRequest(
 		'punctuation, no explanation:\n' +
 		menu +
 		'\nIf the user message continues an ongoing task visible in the recent conversation (e.g. ' +
-		'"weiter", "nochmal", "continue", "next step", a bare confirmation), pick the skill of THAT task.'
+		'"weiter", "nochmal", "continue", "next step", a bare confirmation), pick the skill of THAT task.' +
+		'\nRequests about a skill/app ITSELF — creating, improving, redesigning it, changing its rules or ' +
+		'behavior — belong to skillify. Requests about the DATA INSIDE a skill belong to that skill.'
 	const user = context
 		? `RECENT CONVERSATION:\n${context}\n\nUSER MESSAGE: ${userText}`
 		: userText
