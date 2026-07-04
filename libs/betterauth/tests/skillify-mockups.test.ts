@@ -4,7 +4,7 @@ import { sql } from 'kysely'
 import { advertisedTools, chatToolDefinitionsFor, skillMenu } from '../src/config'
 import { db } from '../src/db'
 import { composeFlows } from '../src/flows'
-import { listMockups, MOCK_PREFIX, mockName, saveMockup } from '../src/mockup-caps'
+import { listMockups, MOCK_PREFIX, mockName, resolveMockup, saveMockup } from '../src/mockup-caps'
 import { loadVibe } from '../src/vibe-registry'
 
 // board 0115 — SKILLIFY part 1: designing a skill screen in chat is pure config behind hard gates. These
@@ -138,13 +138,22 @@ d('board 0115 — skillify mockups: wiring, gates, the mock- wall, the viewer', 
 		expect(JSON.stringify(bundle?.style)).toContain('grid-card')
 	})
 
-	test('(c) the mockups VIEWER (no LLM): lists minted mockups; shows one by fuzzy name', async () => {
+	test('(c) the canonicalizing resolver: walled name · app name · label · casing all hit; junk misses', async () => {
+		// ONE deterministic rule (the save-time mockName slug) — no heuristics: extra words stay a miss.
+		for (const form of ['mock-banking-accounts', 'banking-accounts', 'banking accounts', 'Banking Accounts', 'banking_accounts'])
+			expect(await resolveMockup(form)).toBe('mock-banking-accounts')
+		expect(await resolveMockup('the banking accounts screen')).toBeNull()
+		expect(await resolveMockup('')).toBeNull()
+	})
+
+	test('(c) the mockups VIEWER (no LLM): lists minted mockups; shows one by canonicalized name', async () => {
 		const ctx = {
 			userId: 'u1',
 			data: async () => ({}),
 			mockup: {
 				mint: async () => ({ error: 'not used' }),
 				list: listMockups,
+				resolve: resolveMockup,
 				load: (n: string) => loadVibe(mockName(n))
 			}
 		}

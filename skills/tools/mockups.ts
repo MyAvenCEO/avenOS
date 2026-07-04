@@ -30,19 +30,18 @@ export const mockups: ToolActor = {
 		const said = typeof args.response === 'string' ? args.response.trim() : ''
 		const all = await ctx.mockup.list()
 		if (args.name) {
-			// EXACT name or exact label (the route context carries the exact names); miss → available list.
-			const want = args.name.trim().toLowerCase()
-			const hit = all.find((m) => m.name === want) ?? all.find((m) => m.label === want)
+			// Deterministic canonicalizing resolution (save-time mockName rule); miss → available list.
+			const hit = await ctx.mockup.resolve(args.name)
 			if (!hit)
 				return {
 					detail: 'mockup not found',
 					content: { ok: false, error: `no mockup matching "${args.name}"`, available: all.map((m) => m.label) }
 				}
 			return {
-				detail: `show ${hit.name}`,
-				content: { ok: true, name: hit.name, note: 'The mockup card is shown. ONE short sentence.' },
-				reply: said || `Showing the "${hit.label}" mockup.`,
-				vibe: { schema: hit.name } // no data → the card renders its example source
+				detail: `show ${hit}`,
+				content: { ok: true, name: hit, note: 'The mockup card is shown. ONE short sentence.' },
+				reply: said || `Showing the "${hit.replace(/^mock-/, '').replace(/-/g, ' ')}" mockup.`,
+				vibe: { schema: hit } // no data → the card renders its example source
 			}
 		}
 		return {

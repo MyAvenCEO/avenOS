@@ -63,6 +63,9 @@ export type ToolCtx = {
 			opts?: { name?: string; promptActor?: string }
 		): Promise<{ name?: string; error?: string }>
 		list(): Promise<{ name: string; label: string }[]>
+		/** deterministic canonicalizing resolver (the save-time mockName rule) — walled name, app name,
+		 *  or label all resolve to the stored row; null on a genuine miss. */
+		resolve(name: string): Promise<string | null>
 		load(name: string): Promise<unknown>
 	}
 	/** board 0113 — the stepwise mockup→skill PROMOTION caps (plan/mint/wire/seed/promote — each step

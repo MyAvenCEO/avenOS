@@ -83,21 +83,20 @@ export const editMockup: ToolActor = {
 		const args = raw as { name?: string; description?: string; response?: string }
 		const request = String(args.description ?? '').trim()
 		if (!request) return { content: { ok: false, error: 'describe the change to apply' } }
-		// EXACT resolution (LLM-smart: the skillify route injects the exact names as context; a miss
-		// fails honestly with the available list so the model self-corrects — no string heuristics).
-		const all = await ctx.mockup.list()
-		const want = String(args.name ?? '').trim().toLowerCase()
-		const hit = all.find((m) => m.name === want) ?? all.find((m) => m.label === want)
+		// Deterministic canonicalizing resolution (the save-time mockName rule — walled name, app name,
+		// or label all hit); a genuine miss fails honestly with the available names so the model
+		// self-corrects — no string heuristics.
+		const hit = await ctx.mockup.resolve(String(args.name ?? ''))
 		if (!hit)
 			return {
 				detail: 'mockup not found',
 				content: {
 					ok: false,
 					error: `no mockup matching "${args.name}". Retry with one of the available names.`,
-					available: all.map((m) => m.label)
+					available: (await ctx.mockup.list()).map((m) => m.label)
 				}
 			}
-		const res = await ctx.mockup.mint(request, { name: hit.name, promptActor: 'edit_mockup' })
+		const res = await ctx.mockup.mint(request, { name: hit, promptActor: 'edit_mockup' })
 		if (res.error || !res.name)
 			return { detail: 'refine failed', content: { ok: false, error: res.error ?? 'refine failed' } }
 		const said = typeof args.response === 'string' ? args.response.trim() : ''

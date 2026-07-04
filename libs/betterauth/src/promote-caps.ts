@@ -4,7 +4,7 @@ import { sql } from 'kysely'
 import { runNamedOp } from './actor-run'
 import { runActorCode } from './actor-sandbox'
 import { db } from './db'
-import { listMockups, loadRawParts, MOCK_PREFIX } from './mockup-caps'
+import { listMockups, loadRawParts, MOCK_PREFIX, resolveMockup } from './mockup-caps'
 import { ontologyCaps } from './ontology'
 import { saveType } from './type-caps'
 import { loadVibe } from './vibe-registry'
@@ -377,17 +377,10 @@ export async function promoteVibe(app: string): Promise<{ name: string }> {
 /** `ctx.promote` — the stepwise promotion caps (each step stateless, keyed by the mockup name). */
 export function promoteCaps(uid: string) {
 	// board 0113 — resolution is LLM-SMART, not string-fuzzy (Samuel): the skillify route injects the
-	// EXACT mockup names as Tier-3 context, and a miss returns the available names so the model
-	// self-corrects. The server matches the exact walled name or the exact label — nothing heuristic.
-	const resolveMock = async (rawName: string): Promise<string | null> => {
-		const raw = String(rawName ?? '').trim().toLowerCase()
-		if (!raw) return null
-		const all = await listMockups()
-		const hit = all.find((m) => m.name === raw) ?? all.find((m) => m.label === raw)
-		return hit?.name ?? null
-	}
+	// EXACT mockup names as Tier-3 context; the server canonicalizes through the shared resolveMockup
+	// (the save-time mockName rule) and a miss returns the available names so the model self-corrects.
 	const skeletonOf = async (rawName: string) => {
-		const name = await resolveMock(rawName)
+		const name = await resolveMockup(rawName)
 		if (!name) return null
 		const parts = await loadRawParts(name)
 		if (!parts) return null

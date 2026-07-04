@@ -325,13 +325,29 @@ export async function mintMockup(
 	}
 }
 
-/** `ctx.mockup` — the skillify part-1 caps: GLM design/refine · list · load. board 0115. */
+/** The ONE mockup resolver (deterministic, not fuzzy): canonicalize the input through the SAME
+ *  mockName() rule applied at save time, then exact-match. Cards show the app name WITHOUT the
+ *  mock- wall and labels use spaces, so "banking-overview" / "Banking Overview" / the walled name
+ *  all canonicalize to the same stored row. A miss stays a miss — semantics belong to the model. */
+export async function resolveMockup(rawName: string): Promise<string | null> {
+	let canonical: string
+	try {
+		canonical = mockName(String(rawName ?? ''))
+	} catch {
+		return null
+	}
+	const all = await listMockups()
+	return all.find((m) => m.name === canonical)?.name ?? null
+}
+
+/** `ctx.mockup` — the skillify part-1 caps: GLM design/refine · list · resolve · load. board 0115. */
 export function mockupCaps(onToken?: (text: string) => void) {
 	return {
 		mint: (request: string, o: { name?: string; promptActor?: string } = {}) =>
 			mintMockup(request, { ...o, onToken }),
 		save: saveMockup,
 		list: listMockups,
+		resolve: resolveMockup,
 		load: (name: string) => loadVibe(mockName(name)),
 		json: asJson
 	}
