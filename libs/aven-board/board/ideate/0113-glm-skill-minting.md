@@ -54,3 +54,11 @@ artifact?); how the authoring prompts teach the ViewDef/StyleDef/logic +
 caps-code grammars safely; one `skillify` orchestrator actor vs a multi-actor
 workflow; naming collisions + versioning of minted skills; how the dispatch
 router's skill menu scales as skills multiply.
+
+- `2026-07-04` — DESIGN NOTE (Samuel's question, twice): should a vibe's mapper ("function") reference
+  the ACTOR (actor.code) instead of being its own vibe_logic row? Settled for now: NO — the mapper is
+  the RENDER contract (actor-output → view state), reused across emitters (tool loop + confirm path emit
+  the same cards), so it stays part of the vibe bundle; actors reference vibes (actor.vibe), and the DB
+  viewer now shows the backlink ("emitted by" chips) + labels the tab "Mapper" honestly. FOR SKILLIFY:
+  decide whether GLM authors the mapper as part of the vibe mint (recommended) or actor mint, and
+  whether actor.code (behavior sandbox, still 0 users) becomes the default binding for minted actors.

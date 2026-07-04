@@ -117,7 +117,7 @@ let selectedActor = $state<string | null>(null)
 const VIBE_TABS: { id: VibeTab; label: string }[] = [
 	{ id: 'ui', label: 'UI' },
 	{ id: 'view', label: 'View' },
-	{ id: 'function', label: 'Function' },
+	{ id: 'function', label: 'Mapper' },
 	{ id: 'style', label: 'Style' },
 	{ id: 'state', label: 'State' }
 ]
@@ -162,6 +162,12 @@ const selectedActorItem = $derived<CtxItem | null>(
 // hardcoded map: every vibe previews with representative data, and new vibes bring their own sample.
 const vibeSample = $derived<Record<string, unknown>>(
 	(vibeBundleQuery.data?.source as Record<string, unknown> | null) ?? {}
+)
+// board 0114 — the vibe↔actor BACKLINK: actors reference their vibe (actor.vibe); the vibe pane shows
+// which actors emit this card (clickable, mirroring the actor pane's vibe chip). The mapper stays part
+// of the VIBE bundle (it is the render contract, reused across emitters) — actors are the referencers.
+const vibeEmitters = $derived<CtxItem[]>(
+	selectedVibe ? actorItems.filter((a) => a.config?.vibe === selectedVibe) : []
 )
 // Exactly-one-selected: each picker clears the others. board 0105.
 function clearSel(): void {
@@ -575,9 +581,16 @@ $effect(() => {
 					<p class="text-muted-foreground leading-relaxed">{t('mainnet.db.vibe.summaryHint')}</p>
 					<dl class="mt-3 flex flex-wrap gap-x-8 gap-y-2">
 						<div class="flex gap-2"><dt class="text-muted-foreground">view</dt><dd class="text-foreground font-mono">ViewDef</dd></div>
-						<div class="flex gap-2"><dt class="text-muted-foreground">function</dt><dd class="text-foreground font-mono">{(vibeBundleQuery.data?.logic ?? '').length} B</dd></div>
+						<div class="flex gap-2"><dt class="text-muted-foreground">mapper</dt><dd class="text-foreground font-mono">{(vibeBundleQuery.data?.logic ?? '').length} B</dd></div>
 						<div class="flex gap-2"><dt class="text-muted-foreground">style</dt><dd class="text-foreground font-mono">{Object.keys((vibeBundleQuery.data?.style as { selectors?: object })?.selectors ?? {}).length} rules</dd></div>
 						<div class="flex gap-2"><dt class="text-muted-foreground">source keys</dt><dd class="text-foreground font-mono">{Object.keys(vibeSample).join(', ') || '—'}</dd></div>
+						<div class="flex items-center gap-2"><dt class="text-muted-foreground">emitted by</dt><dd class="flex flex-wrap gap-1">
+							{#each vibeEmitters as a (actorKey(a))}
+								<button type="button" class="bg-primary/10 text-foreground hover:bg-primary/20 rounded-full px-2 py-0.5 font-mono text-[10px]" onclick={() => pickActor(actorKey(a))}>{a.tag}/{a.name}</button>
+							{:else}
+								<span class="text-muted-foreground font-mono">—</span>
+							{/each}
+						</dd></div>
 					</dl>
 					<div class="border-border mt-4 flex overflow-hidden rounded-[var(--radius)] border">
 						{#each VIBE_TABS as tabDef (tabDef.id)}
