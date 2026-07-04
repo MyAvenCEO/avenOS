@@ -150,3 +150,15 @@ transaction → show the overview.
   skillify-promotion.test 4/4 INCLUDING the interactive proof: a crud-added record
   appears in the sandbox actor's next run (28,00 € computed in-sandbox). Suites 108/0
   ×2 · aven-vibes 27/0 · svelte-check clean. Remaining: Samuel's live banking loop.
+
+- `2026-07-04` — LLM-SMART hardening after the first live run (mint_data failed →
+  gemma wandered → "nochmal" routed to todos → a hallucinated edit_website EXECUTED).
+  Samuel's rule: no hardcoded fuzzy routing — LLM-based smartness instead. (1) the
+  router now SEES the conversation tail + a continuation rule ("nochmal"/"weiter" stay
+  on the ongoing skill); (2) the skillify route injects the EXACT mockup names as a
+  Tier-3 hint (todos-snapshot pattern) — all fuzzy resolvers DELETED, server matches
+  exact name/label and a miss returns the available names so the model self-corrects;
+  (3) SECURITY: the tool loop hard-enforces the advertised tool set — un-advertised
+  (hallucinated) calls never execute, honest role:tool error instead; (4) failed steps
+  reply LOUDLY with the error + „nochmal" retry hint; raw GLM output logged on
+  unparseable vocab plans. dispatch tests updated to the new contracts. 108/0 ×2.

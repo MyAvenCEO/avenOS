@@ -1,8 +1,8 @@
 // board 0115 — SKILLIFY's GLM DESIGN actors, split by intent (create vs edit — one tool that did both
 // silently minted a NEW mockup when the model forgot `name` on a refinement):
 //   · create_mockup — "design me a banking screen…" → a NEW mockup, rendered the same turn.
-//   · edit_mockup   — "make the total bigger" → REFINES an existing mockup (name REQUIRED, fuzzy-resolved;
-//     honest not-found error carries the available names so the model self-corrects).
+//   · edit_mockup   — "make the total bigger" → REFINES an existing mockup (name REQUIRED, EXACT match —
+//     the route injects the exact names; a miss fails honestly with the available list, no heuristics).
 // Both stream GLM's raw authoring tokens live into the chat panel (no dead "Thinking…").
 
 import type { ToolActor, ToolDefinition, ToolResult } from './types'
