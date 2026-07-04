@@ -194,6 +194,21 @@ export class ViewEngine {
 		} else if (node.children && !node.$each) {
 			for (let i = 0; i < node.children.length; i++) {
 				const child = node.children[i]
+				// board 0114 — a PURE $each child (no tag/class/text/attrs/events of its own) renders
+				// TRANSPARENTLY: its items append directly to THIS element instead of an anonymous
+				// wrapper <div>. The wrapper was invisible in block lists but silently broke every
+				// GRID parent (all items landed inside ONE track — the single-column mystery).
+				if (
+					child.$each &&
+					!child.tag &&
+					!child.class &&
+					child.text === undefined &&
+					!child.attrs &&
+					!child.$on
+				) {
+					element.appendChild(await this.renderEach(child.$each, data, `${path}.${i}`))
+					continue
+				}
 				const childEl = await this.renderNode(child, data, `${path}.${i}`)
 				if (childEl) element.appendChild(childEl)
 			}

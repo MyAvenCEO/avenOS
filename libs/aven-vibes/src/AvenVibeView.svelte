@@ -153,6 +153,8 @@ async function mount(): Promise<void> {
 							gridW: grid ? (grid as HTMLElement).getBoundingClientRect().width : null,
 							gridDisplay: gc?.display ?? null,
 							gridCols: gc?.gridTemplateColumns ?? null,
+							gridKids: grid?.childElementCount ?? null,
+							gridKid0: grid?.firstElementChild?.className ?? null,
 							sheets: root?.adoptedStyleSheets?.length ?? -1
 						})
 					}).catch(() => {})
