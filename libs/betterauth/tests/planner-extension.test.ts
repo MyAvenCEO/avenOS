@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
+import { TOOL_ACTORS } from '@avenos/skills/tools'
 import { sql } from 'kysely'
-import { crud, fetchOp } from '../src/actor-run'
+import { crud, fetchOp, runNamedOp } from '../src/actor-run'
 import { db } from '../src/db'
 import { type QuerySpec, runOperation, runQuery } from '../src/queries'
 
@@ -28,6 +29,21 @@ const items = (out: unknown): Row[] => ((out as { items?: Row[] })?.items ?? [])
 const byTitle = (rows: Row[], t: string): Row | undefined => rows.find((r) => r.title === t)
 const tagOp = async (name: string, params: Record<string, unknown>) =>
 	runOperation(UID, await fetchOp(UID, name), params)
+// board 0112 REIFICATION — goals are entities now; the goals ACTOR owns the grid + rename/merge/delete
+// (resolving the user's NAMES to entity ids). Test the real user path with a live ctx.
+const goalsCtx = {
+	userId: UID,
+	data: (a: Parameters<typeof crud>[1]) => crud(UID, a),
+	ops: (n: string, p?: Record<string, unknown>) => runNamedOp(UID, n, p ?? {})
+}
+const runGoals = (raw: Record<string, unknown>) =>
+	TOOL_ACTORS.goals.handle(goalsCtx as never, raw) as Promise<{
+		content: { goals?: { key: string; total: number; done: number }[] }
+	}>
+const goalNames = async (): Promise<string[]> =>
+	(((await runNamedOp(UID, 'goal.list', {})) as { rows?: { name?: string }[] }).rows ?? []).map((g) =>
+		String(g.name)
+	)
 
 d('board 0112 — Planner battle test (goals · sub-tasks · tags), config-only', () => {
 	let gymId = ''
@@ -66,12 +82,13 @@ d('board 0112 — Planner battle test (goals · sub-tasks · tags), config-only'
 		expect(byTitle(after, 'go to the gym')?.goal).toBeNull()
 	})
 
-	test('GOALS: group_by + count — open todos per goal (the aggregate grammar live)', async () => {
-		const perGoal: QuerySpec = { from: 'member_of', group_by: 'x2', count: {} }
-		const rows = await runQuery(UID, perGoal)
-		const m = Object.fromEntries(rows.map((r) => [r.key, r.n]))
+	test('GOALS: the goals actor grids goal ENTITIES with per-goal counts (reified)', async () => {
+		// the aggregate keys by goal ID now; the actor maps id→name off goal.list and includes EMPTY goals.
+		const grid = (await runGoals({})).content.goals ?? []
+		const m = Object.fromEntries(grid.map((g) => [g.key, g.total]))
 		expect(m.Fitness).toBe(1) // meal prep (gym moved out then cleared)
 		expect(m.Admin).toBe(1)
+		expect(m.Health).toBe(0) // the emptied goal still EXISTS as an entity — impossible pre-reification
 	})
 
 	test('SUB-TASKS: parent projected; top-level filter (isnull); grandparent via a CHAIN query', async () => {
@@ -146,32 +163,34 @@ d('board 0112 — Planner battle test (goals · sub-tasks · tags), config-only'
 		expect(Number(urgent.rows[0].n)).toBe(1)
 	})
 
-	test('GOAL MERGE: todos.goal-rename moves every membership from → to (one configured mutation)', async () => {
-		// merge "Admin" into "Fitness": file taxes moves over; the Admin goal disappears from the aggregate.
-		const res = (await tagOp('todos.goal-rename', { from: 'Admin', to: 'Fitness' })) as {
-			ops?: { affected?: number }[]
-		}
-		expect(res.ops?.[0]?.affected).toBe(1)
+	test('GOAL MERGE (reified): merging Admin into Fitness repoints memberships + drops the Admin entity', async () => {
+		await runGoals({ rename: { from: 'Admin', to: 'Fitness' } })
 		const all = items(await crud(UID, { schema: 'todos', action: 'list' }))
-		expect(byTitle(all, 'file taxes')?.goal).toBe('Fitness')
-		const perGoal = await runQuery(UID, { from: 'member_of', group_by: 'x2', count: {} })
-		const m = Object.fromEntries(perGoal.map((r) => [r.key, r.n]))
-		expect(m.Admin).toBeUndefined()
-		expect(m.Fitness).toBe(2) // meal prep + file taxes
+		expect(byTitle(all, 'file taxes')?.goal).toBe('Fitness') // moved to the surviving goal by ID
+		expect(await goalNames()).not.toContain('Admin') // the merged-away ENTITY is gone
+		const grid = (await runGoals({})).content.goals ?? []
+		expect(grid.find((g) => g.key === 'Fitness')?.total).toBe(2) // meal prep + file taxes
 	})
 
-	test('GOAL DELETE: todos.goal-delete dissolves the grouping — the tasks SURVIVE, ungrouped', async () => {
-		const res = (await tagOp('todos.goal-delete', { name: 'Fitness' })) as {
-			ops?: { affected?: number }[]
-		}
-		expect(res.ops?.[0]?.affected).toBe(2) // meal prep + file taxes leave the group
+	test('GOAL RENAME (reified): renaming onto a NEW name relabels the SAME entity (one edit)', async () => {
+		const before = ((await runNamedOp(UID, 'goal.list', {})) as { rows?: { id?: string; name?: string }[] })
+			.rows?.find((g) => g.name === 'Fitness')?.id
+		await runGoals({ rename: { from: 'Fitness', to: 'Wellness' } })
+		const after = ((await runNamedOp(UID, 'goal.list', {})) as { rows?: { id?: string; name?: string }[] })
+			.rows?.find((g) => g.name === 'Wellness')?.id
+		expect(after).toBe(before) // SAME entity id — a relabel, not a new goal
+		const all = items(await crud(UID, { schema: 'todos', action: 'list' }))
+		expect(byTitle(all, 'meal prep')?.goal).toBe('Wellness') // its members follow the rename for free
+	})
+
+	test('GOAL DELETE (reified): removing a goal dissolves memberships (tasks survive) + drops the entity', async () => {
+		await runGoals({ remove: { name: 'Wellness' } })
 		const all = items(await crud(UID, { schema: 'todos', action: 'list' }))
 		expect(byTitle(all, 'meal prep')).toBeDefined() // the tasks still exist…
 		expect(byTitle(all, 'file taxes')).toBeDefined()
 		expect(byTitle(all, 'meal prep')?.goal).toBeNull() // …just without the goal
 		expect(byTitle(all, 'file taxes')?.goal).toBeNull()
-		const perGoal = await runQuery(UID, { from: 'member_of', group_by: 'x2', count: {} })
-		expect(perGoal.find((r) => r.key === 'Fitness')).toBeUndefined()
+		expect(await goalNames()).not.toContain('Wellness') // the entity itself is gone
 	})
 
 	test('DELETE cascades the new satellites too (goal/parent/tags of the deleted task)', async () => {

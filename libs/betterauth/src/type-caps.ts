@@ -40,6 +40,7 @@ const PART_SCHEMA = {
 		set: placeRecord(BIND),
 		fields: placeRecord({ type: 'string' }),
 		match: placeRecord(CELL),
+		refType: { type: 'string', minLength: 1 }, // board 0112 — this field's value is another entity's NAME
 		childSpec: { $ref: 'typespec' } // recursive: a `children` part nests a whole sub-type
 	},
 	required: ['pred', 'kind'],
@@ -53,7 +54,8 @@ const PROJECT_SCHEMA = {
 		place: PLACE_ENUM,
 		notNull: PLACE_ENUM,
 		children: { type: 'boolean' },
-		match: placeRecord(CELL)
+		match: placeRecord(CELL),
+		refName: { type: 'boolean' } // board 0112 — project the referenced entity's NAME (via `named` chain)
 	},
 	required: ['pred'],
 	additionalProperties: false

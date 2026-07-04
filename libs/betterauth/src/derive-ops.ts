@@ -82,7 +82,18 @@ export function deriveOps(bundle: TypeSpec): DerivedOp[] {
 			const ji = joinIndex.get(proj.pred)
 			if (ji === undefined)
 				throw new Error(`[derive] ${bundle.type}.${field}: projects unknown predicate ${proj.pred}`)
-			if (proj.notNull) project.push({ join: ji, exists: true, as: field })
+			if (proj.refName) {
+				// board 0112 REIFICATION: proj.place holds another entity's id — chain a `named` LEFT-join
+				// (named.x2 = that id) and project the entity's NAME. This is the 0112 chained join: the new
+				// join correlates to the (strictly earlier) satellite join. So member_of.x2 → the goal's name.
+				const nj = joins.length
+				joins.push({
+					predicate: 'named',
+					kind: 'left',
+					on: { place: 'x2', base: { join: ji, place: proj.place as never } }
+				})
+				project.push({ join: nj, place: 'x1', as: field })
+			} else if (proj.notNull) project.push({ join: ji, exists: true, as: field })
 			else project.push({ join: ji, place: proj.place as never, as: field })
 		}
 	}

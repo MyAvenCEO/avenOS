@@ -73,10 +73,16 @@ d('board 0113 — the Inventory skill, pure config, end to end from the DB', () 
 		const after = items(await crud(UID, { schema: 'inventory', action: 'list' }))
 		expect(byName(after, N('Hammer'))).toMatchObject({ amount: '5', location: 'Garage' })
 
+		// board 0112 REIFICATION — located.x2 is a location ENTITY id now; the aggregate keys by that id, so
+		// resolve the names off location.list first (the location grid actor does the same id→name mapping).
 		const agg = (await runNamedOp(UID, 'inventory.locations', {})) as { rows?: Row[] }
-		const m = Object.fromEntries((agg.rows ?? []).map((r) => [r.key, r.n]))
-		expect(Number(m.Garage)).toBeGreaterThanOrEqual(2)
-		expect(Number(m.Keller)).toBeGreaterThanOrEqual(1)
+		const locs =
+			((await runNamedOp(UID, 'location.list', {})) as { rows?: { id?: string; name?: string }[] }).rows ??
+			[]
+		const idOf = (name: string) => String(locs.find((l) => l.name === name)?.id)
+		const countBy = Object.fromEntries((agg.rows ?? []).map((r) => [String(r.key), Number(r.n)]))
+		expect(countBy[idOf('Garage')]).toBeGreaterThanOrEqual(2)
+		expect(countBy[idOf('Keller')]).toBeGreaterThanOrEqual(1)
 	})
 
 	test('DELETE cascades the satellites (located/quantity/owned_by rows go with the item)', async () => {

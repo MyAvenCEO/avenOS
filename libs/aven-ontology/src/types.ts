@@ -57,6 +57,11 @@ export type PartSpec = {
 	 *  (`addrsys-email`/…), every identifier one `identifier`≡tcita keyed by x1=kind (`idkind-vat_id`/…).
 	 *  board 0097. */
 	match?: Partial<Record<Place, Cell>>
+	/** board 0112 — REIFICATION: this trait's `field` is not a raw value but the NAME of another ENTITY.
+	 *  The value stored in its place is that entity's id; the write layer (crud) resolves the input name →
+	 *  the id, find-or-creating a `refType` bundle entity (e.g. member_of.x2 → a `goal`; located.x2 → a
+	 *  `location`). Pairs with a `refName` projection that reads the entity's name back. */
+	refType?: string
 }
 
 /** How one output field is projected back from the predications. */
@@ -71,6 +76,10 @@ export type ProjectSpec = {
 	/** the same DISCRIMINATOR as the matching part (see [[PartSpec.match]]) — picks ONE linked row when
 	 *  several parts share `pred` (e.g. the `email` channel = the `address` row whose x3=`addrsys-email`). */
 	match?: Partial<Record<Place, Cell>>
+	/** board 0112 — REIFICATION read side: `place` holds another entity's id; project that entity's NAME
+	 *  instead, by chaining a `named` join on named.x2 = this place (the display value for member_of.x2 →
+	 *  a goal, located.x2 → a location). Pairs with the trait's `refType` on the write side. */
+	refName?: boolean
 }
 
 /** A composite type: a bundle of predications + how to project them back into a flat record. */

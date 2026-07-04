@@ -1,4 +1,5 @@
 import { sql } from 'kysely'
+import type { TypeSpec } from '@avenos/aven-ontology'
 import { type Caps, runActorCode } from './actor-sandbox'
 import type { DataCrudArgs } from '@avenos/skills/tools'
 import { type ActorRow, engineFor } from './config'
@@ -107,6 +108,58 @@ export function actorBinding(actor: Pick<ActorRow, 'code' | 'engine'>): 'code' |
  * /api/data REST handlers — dispatches here; there is no separate sandbox-code / typeSpec / raw-jsonb path.
  * Config-as-data SSOT: the available verbs (and list filters like `todos.done`) ARE the seeded ops.
  */
+/** Parse a jsonb column that may arrive as a string or an already-decoded object. */
+function asJson(v: unknown): unknown {
+	return typeof v === 'string' ? JSON.parse(v) : v
+}
+
+/** Load a bundle spec from the registry — read for entity-ref (`refType`) resolution. board 0112. */
+async function loadBundle(type: string): Promise<TypeSpec | null> {
+	const row = await db()
+		.selectFrom('data_bundles')
+		.select('spec')
+		.where('type', '=', type)
+		.executeTakeFirst()
+	return row ? (asJson(row.spec) as TypeSpec) : null
+}
+
+/**
+ * board 0112 REIFICATION — resolve every entity-ref field of an item (a NAME the user typed) to the
+ * referenced entity's id, FIND-OR-CREATING it. Fully generic: driven by the bundle's `refType` traits, so
+ * goal (member_of.x2 → a `goal`), location (located.x2 → a `location`) and any future ref work the same.
+ * Match is case-insensitive (a value already equal to an existing id is left as-is). Returns a copy.
+ */
+async function resolveRefs(
+	uid: string,
+	bundle: TypeSpec,
+	item: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+	const refParts = bundle.parts.filter((p) => p.refType && p.field)
+	if (!refParts.length) return item
+	const out = { ...item }
+	for (const p of refParts) {
+		const field = p.field as string
+		const raw = out[field]
+		if (raw == null || raw === '') continue
+		const name = String(raw)
+		const listed = (await runNamedOp(uid, `${p.refType as string}.list`, {})) as {
+			rows?: { id?: string; name?: string }[]
+		}
+		const rows = listed.rows ?? []
+		if (rows.some((r) => r.id === name)) continue // already the entity id
+		const hit = rows.find((r) => String(r.name ?? '').toLowerCase() === name.toLowerCase())
+		if (hit?.id) {
+			out[field] = hit.id
+			continue
+		}
+		const created = (await runNamedOp(uid, `${p.refType as string}.create`, { name })) as {
+			ids?: (string | null)[]
+		}
+		if (created.ids?.[0]) out[field] = created.ids[0]
+	}
+	return out
+}
+
 export async function crud(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const schema = args.schema
 	if (!schema) return { ok: false, error: 'schema name required' }
@@ -131,9 +184,12 @@ export async function crud(uid: string, args: DataCrudArgs): Promise<unknown> {
 		return { ok: true, action: 'list', items: res.rows ?? [] }
 	}
 	if (action === 'create') {
+		// board 0112 — resolve any entity-ref fields (goal/location NAME → its entity id) before the write.
+		const bundle = await loadBundle(schema)
 		const created: string[] = []
 		for (const item of args.items ?? []) {
-			const res = (await runNamedOp(uid, op('create'), item as Record<string, unknown>)) as {
+			const row = bundle ? await resolveRefs(uid, bundle, item as Record<string, unknown>) : item
+			const res = (await runNamedOp(uid, op('create'), row as Record<string, unknown>)) as {
 				ids?: (string | null)[]
 			}
 			const id = res.ids?.[0]
@@ -142,11 +198,13 @@ export async function crud(uid: string, args: DataCrudArgs): Promise<unknown> {
 		return { ok: true, action: 'create', created, errors: [] }
 	}
 	if (action === 'update') {
+		const bundle = await loadBundle(schema)
 		const updated: string[] = []
 		for (const item of args.items ?? []) {
 			const id = (item as { id?: string }).id
 			if (!id) continue
-			await runNamedOp(uid, op('update'), item as Record<string, unknown>)
+			const row = bundle ? await resolveRefs(uid, bundle, item as Record<string, unknown>) : item
+			await runNamedOp(uid, op('update'), row as Record<string, unknown>)
 			updated.push(id)
 		}
 		return { ok: true, action: 'update', updated, errors: [] }

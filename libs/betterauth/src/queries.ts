@@ -454,17 +454,25 @@ export async function runMutation(
 					const schemaId = await schemaIdFor(trx, uid, o.predicate)
 					const cells = o.cells ?? {}
 					const colNames = Object.keys(cells).map(assertPlace)
-					if (colNames.length === 0) throw new Error('[queries] insert op needs cells')
 					const rowId = randomUUID()
-					const vals = colNames.map((p) => {
-						const v = resolveCell(cells[p], params, generated, i, uid)
-						return sql`${v ?? null}`
-					})
-					const cols = colNames.map((p) => sql.ref(p))
-					await sql`
-						INSERT INTO data_value (id, user_id, schema_id, predicate, ${sql.join(cols)}, created_at, updated_at)
-						VALUES (${rowId}, ${uid}, ${schemaId}, ${o.predicate}, ${sql.join(vals)}, now(), now())
-					`.execute(trx)
+					if (colNames.length === 0) {
+						// board 0112 — an IDENTITY-ONLY entity (e.g. a reified goal `girzu` / location `stuzi`):
+						// no x-places, its existence IS the predication; its name/owner live on satellites.
+						await sql`
+							INSERT INTO data_value (id, user_id, schema_id, predicate, created_at, updated_at)
+							VALUES (${rowId}, ${uid}, ${schemaId}, ${o.predicate}, now(), now())
+						`.execute(trx)
+					} else {
+						const vals = colNames.map((p) => {
+							const v = resolveCell(cells[p], params, generated, i, uid)
+							return sql`${v ?? null}`
+						})
+						const cols = colNames.map((p) => sql.ref(p))
+						await sql`
+							INSERT INTO data_value (id, user_id, schema_id, predicate, ${sql.join(cols)}, created_at, updated_at)
+							VALUES (${rowId}, ${uid}, ${schemaId}, ${o.predicate}, ${sql.join(vals)}, now(), now())
+						`.execute(trx)
+					}
 					generated[i] = rowId
 					ops.push({ op: 'insert', predicate: o.predicate, affected: 1 })
 				} else if (o.op === 'update') {

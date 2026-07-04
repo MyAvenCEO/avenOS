@@ -41,40 +41,64 @@ export const goals: ToolActor = {
 	definition: GOALS_TOOL,
 	async handle(ctx, raw): Promise<ToolResult> {
 		if (!ctx.ops) return { content: { ok: false, error: 'ops capability not available' } }
-		// rename/MERGE first (board 0112): one configured mutation moves every membership from→to; the
-		// fresh grid below then reflects it (a merge = renaming onto an existing goal name).
+		const ops = ctx.ops
+		// board 0112 REIFICATION — goals are ENTITIES now (girzu), not name strings. The grid is driven by
+		// goal.list (so EMPTY goals appear), with per-goal counts from the id-keyed aggregates; rename/merge/
+		// delete resolve the user's NAMES to entity ids and manage the entity lifecycle.
+		type Goal = { id?: string; name?: string }
+		const listGoals = async (): Promise<Goal[]> =>
+			((await ops('goal.list', {})) as { rows?: Goal[] }).rows ?? []
+		const byName = (gs: Goal[], n: string): Goal | undefined =>
+			gs.find((g) => String(g.name ?? '').toLowerCase() === n.toLowerCase())
+
+		// RENAME / MERGE: renaming onto a NEW name relabels the entity (one edit, keeps its id + members);
+		// onto an EXISTING goal it MERGES — repoint memberships from→to (todos.goal-rename by id) then drop
+		// the emptied `from` entity.
 		const rn = (raw as { rename?: { from?: string; to?: string } }).rename
-		let renamed: { from: string; to: string; moved: number } | undefined
+		let renamed: { from: string; to: string; moved: number; mode: 'rename' | 'merge' } | undefined
 		if (rn?.from && rn?.to) {
-			const res = (await ctx.ops('todos.goal-rename', { from: rn.from, to: rn.to })) as {
-				ops?: { affected?: number }[]
+			const gs = await listGoals()
+			const from = byName(gs, rn.from)
+			const to = byName(gs, rn.to)
+			if (from?.id && !to) {
+				await ctx.data({ schema: 'goal', action: 'update', items: [{ id: from.id, name: rn.to }] })
+				renamed = { from: rn.from, to: rn.to, moved: 0, mode: 'rename' }
+			} else if (from?.id && to?.id) {
+				const res = (await ops('todos.goal-rename', { from: from.id, to: to.id })) as {
+					ops?: { affected?: number }[]
+				}
+				await ctx.data({ schema: 'goal', action: 'delete', id: from.id })
+				renamed = { from: rn.from, to: rn.to, moved: res.ops?.[0]?.affected ?? 0, mode: 'merge' }
 			}
-			renamed = { from: rn.from, to: rn.to, moved: res.ops?.[0]?.affected ?? 0 }
 		}
-		// DELETE a goal (board 0112): dissolve the grouping — its member_of rows go, the tasks stay.
+		// DELETE a goal: dissolve its memberships (tasks stay) then remove the entity itself.
 		const rm = (raw as { remove?: { name?: string } }).remove
 		let removed: { name: string; ungrouped: number } | undefined
 		if (rm?.name) {
-			const res = (await ctx.ops('todos.goal-delete', { name: rm.name })) as {
-				ops?: { affected?: number }[]
+			const g = byName(await listGoals(), rm.name)
+			if (g?.id) {
+				const res = (await ops('todos.goal-delete', { goal: g.id })) as {
+					ops?: { affected?: number }[]
+				}
+				await ctx.data({ schema: 'goal', action: 'delete', id: g.id })
+				removed = { name: rm.name, ungrouped: res.ops?.[0]?.affected ?? 0 }
 			}
-			removed = { name: rm.name, ungrouped: res.ops?.[0]?.affected ?? 0 }
 		}
-		// two configured universal aggregates: total memberships per goal + DONE memberships per goal
-		// (the done op inner-joins the done satellite) — merged into {key, total, done} for the grid's
-		// progress bar. board 0112.
+		// GRID: every goal ENTITY (incl. empty ones) + its total/done counts from the id-keyed aggregates.
 		type Agg = { rows?: { key?: string; n?: number }[] }
-		const [total, done] = await Promise.all([
-			ctx.ops('todos.goals', {}) as Promise<Agg>,
-			ctx.ops('todos.goals-done', {}).catch(() => ({ rows: [] })) as Promise<Agg>
+		const [entities, total, done] = await Promise.all([
+			listGoals(),
+			ops('todos.goals', {}) as Promise<Agg>,
+			ops('todos.goals-done', {}).catch(() => ({ rows: [] })) as Promise<Agg>
 		])
+		const totalBy = new Map((total.rows ?? []).map((r) => [String(r.key), Number(r.n ?? 0)]))
 		const doneBy = new Map((done.rows ?? []).map((r) => [String(r.key), Number(r.n ?? 0)]))
-		const rows = (total.rows ?? [])
-			.filter((r) => r.key)
-			.map((r) => ({
-				key: String(r.key),
-				total: Number(r.n ?? 0),
-				done: doneBy.get(String(r.key)) ?? 0
+		const rows = entities
+			.filter((g) => g.name)
+			.map((g) => ({
+				key: String(g.name),
+				total: totalBy.get(String(g.id)) ?? 0,
+				done: doneBy.get(String(g.id)) ?? 0
 			}))
 		const said =
 			typeof (raw as { response?: string }).response === 'string'
@@ -96,7 +120,9 @@ export const goals: ToolActor = {
 			reply:
 				said ||
 				(renamed
-					? `Moved ${renamed.moved} task(s) from "${renamed.from}" to "${renamed.to}".`
+					? renamed.mode === 'rename'
+						? `Renamed the goal "${renamed.from}" to "${renamed.to}".`
+						: `Merged "${renamed.from}" into "${renamed.to}" — moved ${renamed.moved} task(s).`
 					: removed
 						? `Removed the goal "${removed.name}" — its ${removed.ungrouped} task(s) stay, just ungrouped.`
 						: `Showing your goals (${rows.length}).`),
