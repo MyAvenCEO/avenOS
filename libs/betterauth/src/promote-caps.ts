@@ -4,7 +4,7 @@ import { sql } from 'kysely'
 import { runNamedOp } from './actor-run'
 import { runActorCode } from './actor-sandbox'
 import { db } from './db'
-import { listMockups, loadRawParts, MOCK_PREFIX, resolveMockup } from './mockup-caps'
+import { listMockups, loadRawParts, MOCK_PREFIX, mockName, resolveMockup } from './mockup-caps'
 import { ontologyCaps } from './ontology'
 import { saveType } from './type-caps'
 import { loadVibe } from './vibe-registry'
@@ -374,6 +374,96 @@ export async function promoteVibe(app: string): Promise<{ name: string }> {
 	return { name: app }
 }
 
+// ── IMPROVE a promoted skill — the post-live loop ──────────────────────────────────────────────────
+/** GLM rewrites the data_crud mailbox WORDING to bake a user rule into the skill's behavior (e.g.
+ *  "German number format, purchases are negative"). Fail-closed graft: only the description texts
+ *  move — the parameter schema shape (keys, enums, required) is NEVER GLM-writable. */
+type MailboxDef = {
+	description?: string
+	parameters?: { properties?: Record<string, { description?: string }> }
+}
+type ImproveOut = { description: string; properties?: Record<string, string> }
+
+async function glmImproveMailbox(
+	mailbox: MailboxDef,
+	instruction: string
+): Promise<ImproveOut | { error: string }> {
+	const key = process.env.TINFOIL_API_KEY
+	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
+	const system = [
+		'You maintain the TOOL INSTRUCTIONS of a data-entry assistant. Given the current tool config and a',
+		'USER RULE, rewrite the wording so the assistant follows the rule from now on. Keep everything that',
+		'still applies; fold the rule in explicitly (formats, sign conventions, defaults). Output ONLY JSON:',
+		'  { "description": "<the improved tool description>",',
+		'    "properties": { "<param>": "<improved param description>" } }   // only params that changed',
+		'You may ONLY change wording — never invent parameters, types, or enums.'
+	].join('\n')
+	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
+		method: 'POST',
+		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			model: GLM_MODEL,
+			messages: [
+				{ role: 'system', content: system },
+				{
+					role: 'user',
+					content: `CURRENT CONFIG: ${JSON.stringify(mailbox)}\n\nUSER RULE: ${instruction}`
+				}
+			],
+			stream: false
+		})
+	}).catch(() => null)
+	if (!res?.ok) return { error: `GLM error ${res?.status ?? '???'}` }
+	const data = (await res.json().catch(() => null)) as { choices?: { message?: { content?: string } }[] } | null
+	const raw = (data?.choices?.[0]?.message?.content ?? '').replace(/```(?:json)?/gi, '').trim()
+	try {
+		const out = JSON.parse(raw) as ImproveOut
+		if (typeof out.description !== 'string') return { error: 'GLM output misses description' }
+		return out
+	} catch {
+		console.error('[improve] unparseable GLM output:', raw.slice(0, 400))
+		return { error: 'GLM returned no parseable config' }
+	}
+}
+
+/** Bake a user rule into a PROMOTED skill's data_crud instructions (config-as-data: the actor row's
+ *  mailbox). The seam param lets tests fix the GLM output. */
+export async function improveSkill(
+	rawName: string,
+	instruction: string,
+	seam?: (mailbox: MailboxDef, instruction: string) => Promise<ImproveOut | { error: string }>
+): Promise<{ app?: string; description?: string; error?: string }> {
+	let app: string
+	try {
+		app = mockName(rawName).slice(MOCK_PREFIX.length) // same canonicalizer as everywhere
+	} catch {
+		return { error: 'a skill name is required' }
+	}
+	const D = db()
+	const row = await sql<{ id: string; mailbox: unknown }>`
+		SELECT id, mailbox FROM actor WHERE skill_id = ${app} AND name = 'data_crud' LIMIT 1
+	`.execute(D)
+	if (!row.rows.length) return { error: `skill "${app}" is not promoted yet (no data_crud actor)` }
+	const mailbox = (
+		typeof row.rows[0].mailbox === 'string' ? JSON.parse(row.rows[0].mailbox as string) : row.rows[0].mailbox
+	) as MailboxDef & { parameters?: { properties?: Record<string, Record<string, unknown>> } }
+	const out = await (seam ?? glmImproveMailbox)(mailbox, instruction)
+	if ('error' in out) return { error: out.error }
+	// fail-closed graft: wording only, bounded; schema shape untouched.
+	const desc = String(out.description ?? '').trim()
+	if (desc.length < 20 || desc.length > 2000) return { error: 'improved description out of bounds' }
+	mailbox.description = desc
+	const props = mailbox.parameters?.properties ?? {}
+	for (const [k, v] of Object.entries(out.properties ?? {})) {
+		if (props[k] && typeof v === 'string' && v.trim() && v.length <= 500) props[k].description = v.trim()
+	}
+	await sql`
+		UPDATE actor SET mailbox = ${JSON.stringify(mailbox)}::jsonb, updated_at = now()
+		WHERE id = ${row.rows[0].id}
+	`.execute(D)
+	return { app, description: desc }
+}
+
 // ── promotion PROGRESS — derived from the DB, never stored ─────────────────────────────────────────
 /** Where a promotion actually stands, read off the FACTS each stage leaves behind (no state table,
  *  nothing to drift): the derived list op ⇒ Daten · the skill row ⇒ Aktoren · real rows ⇒ Seed ·
@@ -458,6 +548,7 @@ export function promoteCaps(uid: string) {
 		mintData: (sk: AppSkeleton, src: Record<string, unknown>) => mintDataLayer(uid, sk, src),
 		wire: (sk: AppSkeleton, src: Record<string, unknown>) => wireSkill(uid, sk, src),
 		seed: (sk: AppSkeleton, src: Record<string, unknown>) => seedData(uid, sk, src),
+		improve: (name: string, instruction: string) => improveSkill(name, instruction),
 		promoteVibe,
 		loadVibe
 	}

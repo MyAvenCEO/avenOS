@@ -75,6 +75,13 @@ async function composeStyle(style: StyleRow, seen: Set<string> = new Set()): Pro
 }
 
 /** The view/style/logic(+example source) bundle for `name`, or null if no part exists. */
+/** Cheap existence probe — does a view row exist for this vibe name? (One indexed lookup; used by
+ *  the chat loop to SKIP emitting a card for schemas that have no vibe instead of erroring client-side.) */
+export async function vibeExists(name: string): Promise<boolean> {
+	const r = await sql`SELECT 1 FROM vibe_view WHERE name = ${name} LIMIT 1`.execute(db())
+	return r.rows.length > 0
+}
+
 export async function loadVibe(name: string): Promise<VibeBundle | null> {
 	const one = async (table: string): Promise<unknown> => {
 		const r = await sql<{

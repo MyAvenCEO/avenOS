@@ -95,6 +95,8 @@ export type ToolCtx = {
 		seed(skeleton: unknown, source: Record<string, unknown>): Promise<{ seeded: Record<string, number> }>
 		promoteVibe(app: string): Promise<{ name: string }>
 		available(): Promise<string[]>
+		/** Bake a user rule into a LIVE skill's data_crud instructions (GLM rewrite, wording-only graft). */
+		improve(name: string, instruction: string): Promise<{ app?: string; description?: string; error?: string }>
 		/** TRUE promotion progress, derived from DB facts (list op ⇒ Daten · skill row ⇒ Aktoren ·
 		 *  real rows ⇒ Seed · un-walled vibe ⇒ Live) — the pipeline's memory across turns. */
 		progress(skeleton: unknown): Promise<{

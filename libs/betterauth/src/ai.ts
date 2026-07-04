@@ -22,6 +22,7 @@ import { promoteCaps, promotionStatusLines } from './promote-caps'
 import { ontologyCaps } from './ontology'
 import { mutationCaps, queryCaps } from './query-caps'
 import { recordActorRun } from './skills-run'
+import { vibeExists } from './vibe-registry'
 import { typeCaps } from './type-caps'
 import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './usage'
 
@@ -608,6 +609,9 @@ function streamWithTools(opts: {
 								const key = `${v.schema}\n${v.data === undefined ? '' : JSON.stringify(v.data)}`
 								if (emittedVibes.has(key)) continue
 								emittedVibes.add(key)
+								// a schema without vibe rows (e.g. a promoted skill's raw entity type) gets NO
+								// card — the text reply stands; never a client-side "konnte nicht geladen" error.
+								if (!(await vibeExists(v.schema).catch(() => true))) continue
 								const { schema, data } = v
 								emit({ aven_vibe: data === undefined ? { schema } : { schema, data } })
 								await persistMessage(

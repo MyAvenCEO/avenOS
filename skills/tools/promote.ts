@@ -227,6 +227,34 @@ export const seedDataActor: ToolActor = {
 	}
 }
 
+export const improveSkillActor: ToolActor = {
+	definition: def(
+		'improve_skill',
+		'IMPROVE a promoted (live) skill: bake a user rule into its data behavior — number formats ' +
+			'("German 25,33 €"), sign conventions ("bought/purchase = negative"), defaults, wording. ' +
+			'Pass the skill name + the rule. Only for LIVE skills — mockup looks change via edit_mockup.',
+		{ instruction: { type: 'string', description: "The rule to bake in, in the user's words." } }
+	),
+	async handle(ctx, raw): Promise<ToolResult> {
+		if (!ctx.promote) return noCap
+		const r = raw as Raw & { instruction?: string }
+		const instruction = String(r.instruction ?? '').trim()
+		if (!instruction) return { content: { ok: false, error: 'describe the rule to bake in' } }
+		const res = await ctx.promote.improve(String(r.name ?? ''), instruction)
+		if (res.error || !res.app) return stepFailed('improve_skill', res.error ?? 'improve failed')
+		return {
+			detail: `improve ${res.app}`,
+			content: {
+				ok: true,
+				app: res.app,
+				description: res.description,
+				note: 'The rule is baked into the skill config. ONE short sentence; future entries follow it.'
+			},
+			reply: said(r) || `Skill „${res.app}" verbessert — die Regel gilt ab der nächsten Eingabe.`
+		}
+	}
+}
+
 export const promoteApp: ToolActor = {
 	definition: def(
 		'promote',

@@ -4,7 +4,7 @@ import { crud, runCodeActor, runNamedOp } from '../src/actor-run'
 import { db } from '../src/db'
 import { composeFlows } from '../src/flows'
 import { saveMockup } from '../src/mockup-caps'
-import { promotionProgress,
+import { improveSkill, promotionProgress,
 	deriveAppSkeleton,
 	mintDataLayer,
 	promoteVibe,
@@ -187,6 +187,33 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		expect(state.records.length).toBe(3) // 2 seeded + 1 added in chat-style
 		expect(state.totalBalance).toBe('28,00 €') // 10,50 + 5,00 + 12,50
 	}, 30000)
+
+	test('(e) improve_skill: a user rule lands in the data_crud mailbox — wording only, fail-closed', async () => {
+		// the GLM seam is fixed; the graft path (bounds + schema-shape protection) runs for real.
+		const RULE = 'amounts use German format (25,33 €); bought/purchase means NEGATIVE.'
+		const res = await improveSkill(APP, RULE, async (mb) => ({
+			description: `${String(mb.description ?? '')} RULES: ${RULE}`,
+			properties: { items: 'Rows to write. Amounts German-formatted; purchases negative.', bogus: 'never lands' }
+		}))
+		expect(res.error).toBeUndefined()
+		expect(res.app).toBe(APP)
+		const row = await sql<{ mailbox: unknown }>`
+			SELECT mailbox FROM actor WHERE skill_id = ${APP} AND name = 'data_crud'
+		`.execute(db())
+		const mb = (typeof row.rows[0].mailbox === 'string' ? JSON.parse(row.rows[0].mailbox as string) : row.rows[0].mailbox) as {
+			description: string
+			parameters: { properties: Record<string, { description?: string }>; required: string[] }
+		}
+		expect(mb.description).toContain('NEGATIVE')
+		expect(mb.parameters.properties.items.description).toContain('German')
+		expect('bogus' in mb.parameters.properties).toBe(false) // shape is never GLM-writable
+		expect(mb.parameters.required).toEqual(['schema', 'action']) // untouched
+		// honest failures: unknown skill · out-of-bounds description.
+		const miss = await improveSkill('no-such-app', RULE, async () => ({ description: 'x'.repeat(50) }))
+		expect(miss.error).toContain('not promoted')
+		const junk = await improveSkill(APP, RULE, async () => ({ description: 'tiny' }))
+		expect(junk.error).toContain('out of bounds')
+	}, 20000)
 
 	afterAll(async () => {
 		if (!DB) return

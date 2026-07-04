@@ -12,7 +12,7 @@ import { locations } from './locations'
 import { createMockup, editMockup } from './mockup'
 import { mockups } from './mockups'
 import { ontology } from './ontology'
-import { mintData, planApp, promoteApp, seedDataActor, wireActors } from './promote'
+import { improveSkillActor, mintData, planApp, promoteApp, seedDataActor, wireActors } from './promote'
 import { mutate, query } from './queries'
 import type { ToolActor, ToolDefinition } from './types'
 
@@ -31,6 +31,7 @@ export const TOOL_ACTORS: Record<string, ToolActor> = {
 	wire_actors: wireActors,
 	seed_data: seedDataActor,
 	promote: promoteApp,
+	improve_skill: improveSkillActor,
 	ontology,
 	query,
 	mutate,
@@ -89,7 +90,7 @@ export const SKILL_REGISTRY: Record<SkillId, { label: string; description: strin
 		description:
 			'design, refine, or show SCREEN MOCKUPS for new skill features ("design me a banking screen", ' +
 			'"make the total bigger", "show me my mockups") — look only, no real data yet',
-		tools: ['create_mockup', 'edit_mockup', 'mockups', 'plan_app', 'mint_data', 'wire_actors', 'seed_data', 'promote']
+		tools: ['create_mockup', 'edit_mockup', 'mockups', 'plan_app', 'mint_data', 'wire_actors', 'seed_data', 'promote', 'improve_skill']
 	}
 }
 
