@@ -26,6 +26,26 @@ type Raw = { name?: string; response?: string; skip?: boolean }
 const said = (raw: Raw): string => (typeof raw.response === 'string' ? raw.response.trim() : '')
 /** board 0113 — a FAILED step is spoken out loud and the model is told to stay on this step: silent
  *  errors made gemma wander off to other tools ("mint failed" → listed mockups) instead of retrying. */
+/** The pipeline STEPPER card, shown on EVERY promotion step (Samuel: the progress bar must ride
+ *  along) — same skill-plan vibe, only `step` advances; the card's DB logic maps it to done/current. */
+type Skeleton = {
+	app: string
+	entities: { key: string; type: string; fields: string[] }[]
+	aggregates: string[]
+}
+const stepper = (sk: Skeleton, source: Record<string, unknown>, step: string) => ({
+	schema: 'skill-plan',
+	data: {
+		app: sk.app,
+		step,
+		entities: sk.entities.map((e) => ({
+			type: e.type,
+			fields: e.fields,
+			seedRows: Array.isArray(source[e.key]) ? (source[e.key] as unknown[]).length : 0
+		})),
+		aggregates: sk.aggregates
+	}
+})
 const stepFailed = (step: string, error: string): ToolResult => ({
 	detail: `${step} failed`,
 	content: {
@@ -53,24 +73,31 @@ export const planApp: ToolActor = {
 				`no mockup named "${r.name}". Existing mockups: ${(await ctx.promote.available()).join(', ') || '(none)'} — retry with the exact name.`
 			)
 		const { skeleton, source } = got
-		const plan = {
-			app: skeleton.app,
-			entities: skeleton.entities.map((e) => ({
-				type: e.type,
-				fields: e.fields,
-				seedRows: Array.isArray(source[e.key]) ? (source[e.key] as unknown[]).length : 0
-			})),
-			aggregates: skeleton.aggregates
-		}
+		// the pipeline's MEMORY: the card + the model both get the TRUE progress derived from the DB,
+		// so re-planning after a derail resumes where the promotion actually stands.
+		const p = await ctx.promote.progress(skeleton)
+		const card = stepper(skeleton, source, p.step)
+		const plan = { app: card.data.app, entities: card.data.entities, aggregates: card.data.aggregates }
+		const resumed = p.step !== 'plan'
 		return {
 			detail: `plan ${skeleton.app}`,
 			content: {
 				ok: true,
 				plan,
-				note: 'The plan card is shown. Summarize in ONE sentence and ask whether to continue with mint_data.'
+				progress: p,
+				next_step: p.next,
+				note: resumed
+					? `This promotion is ALREADY at "${p.step}" — do NOT restart. The next step is ${p.next ?? 'nothing (live)'}.`
+					: 'The plan card is shown. Summarize in ONE sentence and ask whether to continue with mint_data.'
 			},
-			reply: said(r) || `Here is the plan for "${skeleton.app}" — continue with the data layer?`,
-			vibe: { schema: 'skill-plan', data: { ...plan, step: 'plan' } }
+			reply:
+				said(r) ||
+				(p.next === null
+					? `"${skeleton.app}" ist bereits live — fertig promotet. 🎉`
+					: resumed
+						? `„${skeleton.app}" steht schon bei „${p.step}" — nächster Schritt: ${p.next}. Weiter?`
+						: `Here is the plan for "${skeleton.app}" — continue with the data layer?`),
+			vibe: card
 		}
 	}
 }
@@ -101,15 +128,16 @@ export const mintData: ToolActor = {
 				types: res.types,
 				minted: res.minted?.map((d) => d.predicate),
 				reused: res.reused,
+				next_step: 'wire_actors',
 				note: 'The vocabulary card (x1–x5 places) is shown. ONE sentence; next step is wire_actors.'
 			},
 			reply:
 				said(r) ||
 				`Data layer ready: type ${res.types?.map((t) => t.type).join(', ')} — ${res.minted?.length ?? 0} predicates minted, ${res.reused?.length ?? 0} reused. Wire the actors next?`,
-			vibe: {
-				schema: 'ontology-created',
-				data: { created: res.minted ?? [], reused: res.reused ?? [] }
-			}
+			vibe: [
+				stepper(got.skeleton, got.source, 'data'),
+				{ schema: 'ontology-created', data: { created: res.minted ?? [], reused: res.reused ?? [] } }
+			]
 		}
 	}
 }
@@ -129,6 +157,9 @@ export const wireActors: ToolActor = {
 				'wire_actors',
 				`no mockup named "${r.name}". Existing mockups: ${(await ctx.promote.available()).join(', ') || '(none)'} — retry with the exact name.`
 			)
+		const pre = await ctx.promote.progress(got.skeleton)
+		if (!pre.data)
+			return stepFailed('wire_actors', `die Datenschicht fehlt noch — nächster Schritt: ${pre.next}.`)
 		const res = await ctx.promote.wire(got.skeleton, got.source)
 		if (res.error) return stepFailed('wire_actors', res.error)
 		return {
@@ -137,20 +168,13 @@ export const wireActors: ToolActor = {
 				ok: true,
 				skillId: res.skillId,
 				sandboxBytes: res.code?.length ?? 0,
+				next_step: 'seed_data',
 				note: 'The wiring card is shown. ONE sentence; next step is seed_data (skippable) then promote.'
 			},
 			reply:
 				said(r) ||
 				`Skill "${res.skillId}" wired (sandbox actor smoke-tested). Seed the example rows, or skip to promote?`,
-			vibe: {
-				schema: 'skill-plan',
-				data: {
-					app: got.skeleton.app,
-					step: 'wired',
-					entities: got.skeleton.entities.map((e) => ({ type: e.type, fields: e.fields, seedRows: 0 })),
-					aggregates: got.skeleton.aggregates
-				}
-			}
+			vibe: stepper(got.skeleton, got.source, 'wired')
 		}
 	}
 }
@@ -177,22 +201,28 @@ export const seedDataActor: ToolActor = {
 				'seed_data',
 				`no mockup named "${r.name}". Existing mockups: ${(await ctx.promote.available()).join(', ') || '(none)'} — retry with the exact name.`
 			)
+		const pre = await ctx.promote.progress(got.skeleton)
+		if (!pre.wired)
+			return stepFailed('seed_data', `der Skill ist noch nicht verdrahtet — nächster Schritt: ${pre.next}.`)
 		const res = await ctx.promote.seed(got.skeleton, got.source)
 		const total = Object.values(res.seeded).reduce((a, b) => a + b, 0)
 		return {
 			detail: `seed ${got.skeleton.app}`,
-			content: { ok: true, seeded: res.seeded, note: 'Seeded. ONE sentence; final step is promote.' },
+			content: { ok: true, seeded: res.seeded, next_step: 'promote', note: 'Seeded. ONE sentence; final step is promote.' },
 			reply: said(r) || `Seeded ${total} example row(s). Promote the app now?`,
-			vibe: {
-				schema: 'todos-created',
-				data: {
-					items: got.skeleton.entities.flatMap((e) =>
-						(got.source[e.key] as Record<string, unknown>[]).map((row) => ({
-							title: String(row[e.fields.find((f) => ['name', 'title', 'label'].includes(f)) ?? e.fields[0]] ?? '—')
-						}))
-					)
+			vibe: [
+				stepper(got.skeleton, got.source, 'seeded'),
+				{
+					schema: 'todos-created',
+					data: {
+						items: got.skeleton.entities.flatMap((e) =>
+							(got.source[e.key] as Record<string, unknown>[]).map((row) => ({
+								title: String(row[e.fields.find((f) => ['name', 'title', 'label'].includes(f)) ?? e.fields[0]] ?? '—')
+							}))
+						)
+					}
 				}
-			}
+			]
 		}
 	}
 }
@@ -212,6 +242,9 @@ export const promoteApp: ToolActor = {
 				'promote',
 				`no mockup named "${r.name}". Existing mockups: ${(await ctx.promote.available()).join(', ') || '(none)'} — retry with the exact name.`
 			)
+		const pre = await ctx.promote.progress(got.skeleton)
+		if (!pre.wired)
+			return stepFailed('promote', `der Skill ist noch nicht verdrahtet — nächster Schritt: ${pre.next}.`)
 		await ctx.promote.promoteVibe(got.skeleton.app)
 		return {
 			detail: `promote ${got.skeleton.app}`,
@@ -223,7 +256,7 @@ export const promoteApp: ToolActor = {
 			reply: said(r) || `"${got.skeleton.app}" is live — a real skill over real data. 🎉`,
 			// the overview code actor renders it with REAL data from here on; this final card shows the
 			// promoted vibe with its (now seeded) example-shaped state via the actor on the NEW skill.
-			vibe: { schema: got.skeleton.app }
+			vibe: [stepper(got.skeleton, got.source, 'live'), { schema: got.skeleton.app }]
 		}
 	}
 }

@@ -374,6 +374,67 @@ export async function promoteVibe(app: string): Promise<{ name: string }> {
 	return { name: app }
 }
 
+// ── promotion PROGRESS — derived from the DB, never stored ─────────────────────────────────────────
+/** Where a promotion actually stands, read off the FACTS each stage leaves behind (no state table,
+ *  nothing to drift): the derived list op ⇒ Daten · the skill row ⇒ Aktoren · real rows ⇒ Seed ·
+ *  the un-walled vibe row ⇒ Live. This is the pipeline's memory across turns and derails. */
+export type PromotionProgress = {
+	step: 'plan' | 'data' | 'wired' | 'seeded' | 'live'
+	data: boolean
+	wired: boolean
+	seeded: boolean
+	live: boolean
+	/** The step tool the model should call next (null when live). Seed stays skippable. */
+	next: 'mint_data' | 'wire_actors' | 'seed_data' | 'promote' | null
+}
+
+export async function promotionProgress(uid: string, skeleton: AppSkeleton): Promise<PromotionProgress> {
+	const D = db()
+	const type = skeleton.entities[0]?.type
+	const data = type
+		? (await sql`SELECT 1 FROM data_operations WHERE name = ${`${type}.list`} LIMIT 1`.execute(D)).rows.length > 0
+		: false
+	const wired =
+		(await sql`SELECT 1 FROM skill WHERE id = ${skeleton.app} LIMIT 1`.execute(D)).rows.length > 0
+	let seeded = false
+	if (data && type) {
+		try {
+			const res = (await runNamedOp(uid, `${type}.list`, {})) as { rows?: unknown[] } | unknown[]
+			const rows = Array.isArray(res) ? res : (res?.rows ?? [])
+			seeded = Array.isArray(rows) && rows.length > 0
+		} catch {
+			seeded = false
+		}
+	}
+	const live =
+		(await sql`SELECT 1 FROM vibe_view WHERE name = ${skeleton.app} LIMIT 1`.execute(D)).rows.length > 0
+	const step = live ? 'live' : seeded && wired ? 'seeded' : wired ? 'wired' : data ? 'data' : 'plan'
+	const next = live ? null : wired ? (seeded ? 'promote' : 'seed_data') : data ? 'wire_actors' : 'mint_data'
+	return { step, data, wired, seeded, live, next }
+}
+
+const PROGRESS_LABEL: Record<string, string> = {
+	plan: 'noch nichts gebaut — nächster Schritt: plan_app dann mint_data',
+	data: 'Daten ✓ — nächster Schritt: wire_actors',
+	wired: 'Daten ✓ · Aktoren ✓ — nächster Schritt: seed_data (überspringbar) oder promote',
+	seeded: 'Daten ✓ · Aktoren ✓ · Seed ✓ — nächster Schritt: promote (go live)',
+	live: 'LIVE ✓ — fertig promotet'
+}
+
+/** One line per mockup for the skillify Tier-3 hint: exact name + true promotion status, so the
+ *  model always knows where each promotion stands ("go live" after a derail resumes correctly). */
+export async function promotionStatusLines(uid: string): Promise<string[]> {
+	const lines: string[] = []
+	for (const m of await listMockups()) {
+		const parts = await loadRawParts(m.name)
+		if (!parts) continue
+		const skeleton = deriveAppSkeleton(m.name.slice(MOCK_PREFIX.length), parts.source as Record<string, unknown>)
+		const p = await promotionProgress(uid, skeleton)
+		lines.push(`${m.name} ("${m.label}") — ${PROGRESS_LABEL[p.step]}`)
+	}
+	return lines
+}
+
 /** `ctx.promote` — the stepwise promotion caps (each step stateless, keyed by the mockup name). */
 export function promoteCaps(uid: string) {
 	// board 0113 — resolution is LLM-SMART, not string-fuzzy (Samuel): the skillify route injects the
@@ -393,6 +454,7 @@ export function promoteCaps(uid: string) {
 	return {
 		skeletonOf,
 		available: async () => (await listMockups()).map((m) => m.name),
+		progress: (sk: AppSkeleton) => promotionProgress(uid, sk),
 		mintData: (sk: AppSkeleton, src: Record<string, unknown>) => mintDataLayer(uid, sk, src),
 		wire: (sk: AppSkeleton, src: Record<string, unknown>) => wireSkill(uid, sk, src),
 		seed: (sk: AppSkeleton, src: Record<string, unknown>) => seedData(uid, sk, src),

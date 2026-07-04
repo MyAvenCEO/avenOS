@@ -95,6 +95,16 @@ export type ToolCtx = {
 		seed(skeleton: unknown, source: Record<string, unknown>): Promise<{ seeded: Record<string, number> }>
 		promoteVibe(app: string): Promise<{ name: string }>
 		available(): Promise<string[]>
+		/** TRUE promotion progress, derived from DB facts (list op ⇒ Daten · skill row ⇒ Aktoren ·
+		 *  real rows ⇒ Seed · un-walled vibe ⇒ Live) — the pipeline's memory across turns. */
+		progress(skeleton: unknown): Promise<{
+			step: 'plan' | 'data' | 'wired' | 'seeded' | 'live'
+			data: boolean
+			wired: boolean
+			seeded: boolean
+			live: boolean
+			next: 'mint_data' | 'wire_actors' | 'seed_data' | 'promote' | null
+		}>
 	}
 	/** board 0100 — the ontology actor's server caps (GLM-5.2 mint + data_schema registry). Injected only
 	 *  when the ontology tool is dispatched; other actors ignore it. */
@@ -157,8 +167,9 @@ export type ToolResult = {
 	content: unknown
 	/** A short human-facing reply to stream (optional; most card tools stay terse). */
 	reply?: string
-	/** A live vibe card to flow into the stream (schema = the vibe id, e.g. 'todos' | 'todos-created'). */
-	vibe?: { schema: string; data?: unknown }
+	/** Live vibe card(s) to flow into the stream (schema = the vibe id, e.g. 'todos' | 'todos-created').
+	 *  An ARRAY renders multiple cards in order — e.g. the skillify stepper + the step's content card. */
+	vibe?: { schema: string; data?: unknown } | { schema: string; data?: unknown }[]
 	/** A human-in-the-loop confirm request: the loop shows a confirm/decline card and does NOT execute. */
 	hitl?: { label: string; action: unknown }
 	/** A short label for the tool-activity chip (e.g. 'create todos'). */

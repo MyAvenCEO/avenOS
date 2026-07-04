@@ -18,7 +18,7 @@ import { schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
 import { listMockups, mockupCaps } from './mockup-caps'
-import { promoteCaps } from './promote-caps'
+import { promoteCaps, promotionStatusLines } from './promote-caps'
 import { ontologyCaps } from './ontology'
 import { mutationCaps, queryCaps } from './query-caps'
 import { recordActorRun } from './skills-run'
@@ -352,7 +352,12 @@ function streamWithTools(opts: {
 			// board 0113 — the router sees the conversation TAIL (last few user/assistant turns) so
 				// continuations route by understanding, not keywords.
 				const tail = (messages as { role?: string; content?: unknown }[])
-					.filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+					.filter(
+						(m) =>
+							(m.role === 'user' || m.role === 'assistant') &&
+							typeof m.content === 'string' &&
+							!m.content.startsWith(VIBE_MARKER) // persisted card markers are payload, not talk
+					)
 					.slice(-5, -1)
 					.map((m) => `${m.role}: ${String(m.content).slice(0, 200)}`)
 					.join('\n')
@@ -381,10 +386,10 @@ function streamWithTools(opts: {
 				const hint = skillWantsTodosHint(skillId)
 					? await schemasPromptHint(userId).catch(() => '')
 					: skillId === 'skillify'
-						? await listMockups()
-								.then((ms) =>
-									ms.length
-										? `EXISTING MOCKUPS (use these EXACT names for mockup/promotion tools): ${ms.map((m) => `${m.name} ("${m.label}")`).join(', ')}`
+						? await promotionStatusLines(userId)
+								.then((lines) =>
+									lines.length
+										? `EXISTING MOCKUPS + PROMOTION STATUS (use the EXACT names; when the user continues a promotion, call the named next step — do NOT restart at plan_app):\n${lines.join('\n')}`
 										: ''
 								)
 								.catch(() => '')
@@ -594,10 +599,16 @@ function streamWithTools(opts: {
 								assistant += out.reply
 								selfReplied++
 							}
-							// The actor decides WHICH vibe (todos → its mode card); the loop does the plumbing + dedup.
-							if (out.vibe && !emittedVibes.has(out.vibe.schema)) {
-								emittedVibes.add(out.vibe.schema)
-								const { schema, data } = out.vibe
+							// The actor decides WHICH vibe(s) (todos → its mode card; skillify steps → the
+							// stepper + the step's content card). The loop does the plumbing + dedup — keyed
+							// by schema+data so an IDENTICAL re-emit is dropped but a newer state (the same
+							// stepper at a later step) still renders.
+							const vibes = out.vibe ? (Array.isArray(out.vibe) ? out.vibe : [out.vibe]) : []
+							for (const v of vibes) {
+								const key = `${v.schema}\n${v.data === undefined ? '' : JSON.stringify(v.data)}`
+								if (emittedVibes.has(key)) continue
+								emittedVibes.add(key)
+								const { schema, data } = v
 								emit({ aven_vibe: data === undefined ? { schema } : { schema, data } })
 								await persistMessage(
 									chatSessionId,
@@ -610,13 +621,14 @@ function streamWithTools(opts: {
 							// board 0114 — GENERIC tracing at the ONE dispatch seam: every executed tool call
 							// records a run keyed by the ROUTED skill + the actor (tool) name — no per-skill
 							// schema-prefix sniffing, so a config-minted skill is traced from birth.
+							const traceVibe = vibes[vibes.length - 1]
 							void recordActorRun(userId, {
 								flowId: skillId,
 								nodeId: tc.name,
 								label: out.detail ?? tc.name,
-								vibe: out.vibe?.schema,
-								vibeData: out.vibe?.data,
-								outputs: [out.vibe?.schema ?? skillId]
+								vibe: traceVibe?.schema,
+								vibeData: traceVibe?.data,
+								outputs: [traceVibe?.schema ?? skillId]
 							})
 							emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
 							continue

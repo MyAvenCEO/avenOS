@@ -4,7 +4,7 @@ import { crud, runCodeActor, runNamedOp } from '../src/actor-run'
 import { db } from '../src/db'
 import { composeFlows } from '../src/flows'
 import { saveMockup } from '../src/mockup-caps'
-import {
+import { promotionProgress,
 	deriveAppSkeleton,
 	mintDataLayer,
 	promoteVibe,
@@ -109,6 +109,11 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		await saveMockup(APP, { view: VIEW, style: STYLE, source: SOURCE })
 		const sk = deriveAppSkeleton(APP, SOURCE)
 
+		// PROGRESS (the pipeline's derived memory): nothing built yet → plan / mint_data next.
+		const p0 = await promotionProgress(UID, sk)
+		expect(p0.step).toBe('plan')
+		expect(p0.next).toBe('mint_data')
+
 		// S2 — mint the data layer through the Ontology save cap (vocab seam fixed).
 		const minted = await mintDataLayer(UID, sk, SOURCE, async () => VOCAB)
 		expect(minted.error).toBeUndefined()
@@ -122,6 +127,10 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 			'record.list',
 			'record.update'
 		])
+
+		const p1 = await promotionProgress(UID, sk)
+		expect(p1.step).toBe('data')
+		expect(p1.next).toBe('wire_actors')
 
 		// S3 — the smoke gate + the wired skill (code seam fixed).
 		const smoke = await smokeRunOverview(CODE, sk, SOURCE)
@@ -137,6 +146,10 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		expect((actors.rows[1].code ?? '').length).toBeGreaterThan(50) // the sandbox seat, occupied
 		expect(JSON.stringify(actors.rows[1].caps)).toContain('ops') // fail-closed caps
 
+		const p2 = await promotionProgress(UID, sk)
+		expect(p2.step).toBe('wired')
+		expect(p2.next).toBe('seed_data')
+
 		// S4 — seed + promote (the identity mapper survives: rows copied, mock stays).
 		const seeded = await seedData(UID, sk, SOURCE)
 		expect(seeded.seeded.records).toBe(2)
@@ -146,6 +159,9 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		expect(real?.logic).toContain('initState') // the identity mapper, unchanged
 		const mock = await loadVibe(`mock-${APP}`)
 		expect(mock?.view).toBeTruthy() // the mock remains
+		const p3 = await promotionProgress(UID, sk)
+		expect(p3.step).toBe('live')
+		expect(p3.next).toBeNull()
 	}, 30000)
 
 	test('(d) FULLY INTERACTIVE: a crud-added record shows up in the sandbox actor\'s next run', async () => {
