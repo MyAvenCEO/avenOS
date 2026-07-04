@@ -100,6 +100,25 @@ d('board 0115 — skillify mockups: wiring, gates, the mock- wall, the viewer', 
 		).rejects.toThrow()
 	})
 
+	test('(b) the COVERAGE gate: a view key the source misses is rejected BY NAME', async () => {
+		// the live finding: an empty GESAMTSALDO card — the view read $balance, the source lacked it.
+		await expect(
+			saveMockup('bad-coverage', {
+				view: {
+					content: {
+						class: 'r',
+						children: [
+							{ text: '$balance', class: 'b' },
+							{ class: 'g', children: [{ $each: { items: '$rows', template: { text: '$$label', class: 'l' } } }] }
+						]
+					}
+				},
+				style: VALID_STYLE,
+				source: { rows: [{ notLabel: 'x' }] } // balance missing entirely; rows items miss `label`
+			})
+		).rejects.toThrow(/\$balance.*\$\$label|\$\$label.*\$balance/s)
+	})
+
 	test('(b) a valid mockup lands as 4 rows and the bundle serves its example source', async () => {
 		const name = await saveMockup('banking-accounts', {
 			view: VALID_VIEW,

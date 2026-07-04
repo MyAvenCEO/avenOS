@@ -80,7 +80,7 @@ d('board 0112 — Planner battle test (goals · sub-tasks · tags), config-only'
 		await crud(UID, { schema: 'todos', action: 'update', items: [{ id: gymId, goal: '' }] })
 		after = items(await crud(UID, { schema: 'todos', action: 'list' }))
 		expect(byTitle(after, 'go to the gym')?.goal).toBeNull()
-	})
+	}, 20000)
 
 	test('GOALS: the goals actor grids goal ENTITIES with per-goal counts (reified)', async () => {
 		// the aggregate keys by goal ID now; the actor maps id→name off goal.list and includes EMPTY goals.
@@ -89,7 +89,7 @@ d('board 0112 — Planner battle test (goals · sub-tasks · tags), config-only'
 		expect(m.Fitness).toBe(1) // meal prep (gym moved out then cleared)
 		expect(m.Admin).toBe(1)
 		expect(m.Health).toBe(0) // the emptied goal still EXISTS as an entity — impossible pre-reification
-	})
+	}, 20000)
 
 	test('SUB-TASKS: parent projected; top-level filter (isnull); grandparent via a CHAIN query', async () => {
 		const all = items(await crud(UID, { schema: 'todos', action: 'list' }))

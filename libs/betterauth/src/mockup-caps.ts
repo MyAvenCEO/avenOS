@@ -36,6 +36,53 @@ export function mockName(raw: string): string {
 
 export type MockupParts = { view: unknown; style: unknown; source: unknown }
 
+// board 0115 — the COVERAGE gate: the card renders `source` directly (identity mapper), so EVERY $key
+// the view reads must exist in the source, and every $$field used inside an $each template must exist
+// on that array's items. A miss renders blank (the live "empty GESAMTSALDO" finding) — so it FAILS
+// here instead, naming the missing keys, and GLM retries with a complete example state.
+type ViewNodeish = {
+	text?: unknown
+	children?: ViewNodeish[]
+	$each?: { items?: unknown; template?: ViewNodeish }
+	[k: string]: unknown
+}
+export function assertSourceCoverage(view: unknown, source: Record<string, unknown>): void {
+	const missing = new Set<string>()
+	const topKey = (v: unknown): string | null => {
+		if (typeof v !== 'string') return null
+		const m = /^\$([A-Za-z_]\w*)$/.exec(v)
+		return m ? m[1] : null
+	}
+	const itemField = (v: unknown): string | null => {
+		if (typeof v !== 'string') return null
+		const m = /^\$\$([A-Za-z_]\w*)$/.exec(v)
+		return m ? m[1] : null
+	}
+	const isEmpty = (v: unknown): boolean =>
+		v == null || v === '' || (Array.isArray(v) && v.length === 0)
+	const walk = (node: ViewNodeish | undefined, items: Record<string, unknown>[] | null): void => {
+		if (!node || typeof node !== 'object') return
+		const tk = topKey(node.text)
+		if (tk && isEmpty(source[tk])) missing.add(`$${tk}`)
+		const fk = itemField(node.text)
+		if (fk && items && items.length > 0 && items.every((it) => isEmpty(it?.[fk])))
+			missing.add(`$$${fk}`)
+		if (node.$each) {
+			const ik = topKey(node.$each.items)
+			const arr = ik && Array.isArray(source[ik]) ? (source[ik] as Record<string, unknown>[]) : null
+			if (ik && (!arr || arr.length === 0)) missing.add(`$${ik} (non-empty array)`)
+			walk(node.$each.template, arr)
+		}
+		for (const c of node.children ?? []) walk(c, items)
+	}
+	const root = (view as { content?: ViewNodeish })?.content ?? (view as ViewNodeish)
+	walk(root, null)
+	if (missing.size)
+		throw new Error(
+			`[mockup] the example source misses keys the view renders: ${[...missing].join(', ')} — add realistic values for each`
+		)
+}
+
 /** Validate + persist one mockup (view/style/source + the identity mapper). Returns the walled name. */
 export async function saveMockup(rawName: string, parts: MockupParts): Promise<string> {
 	const name = mockName(rawName)
@@ -55,6 +102,8 @@ export async function saveMockup(rawName: string, parts: MockupParts): Promise<s
 	const source = parts.source
 	if (!source || typeof source !== 'object' || Object.keys(source as object).length === 0)
 		throw new Error('[mockup] example source must be a non-empty object')
+	// gate 4: COVERAGE — every $key/$$field the view renders must carry example data (no blank cards).
+	assertSourceCoverage(parts.view, source as Record<string, unknown>)
 
 	const D = db()
 	const upsertJson = (table: 'vibe_view' | 'vibe_style' | 'vibe_source', body: unknown) => sql`
@@ -106,8 +155,10 @@ export const MOCKUP_INSTRUCTIONS = [
 	'  House style: a small uppercase eyebrow with a colored marker, Clash display titles, bordered cream',
 	'  surfaces (var(--surface) + var(--border)), pill chips, grids via repeat(auto-fill, minmax(11rem, 1fr)).',
 	'',
-	'SOURCE — realistic, GERMAN-flavoured example data matching every $key/$$field the view reads.',
-	'  3–5 list items, plausible values (names, amounts with units, dates). Non-empty, always.',
+	'SOURCE — the card renders it DIRECTLY: EVERY "$key" in the view MUST be a key of source with a real',
+	'  value, and EVERY "$$field" in an $each template MUST exist on that array\'s items — a missing key',
+	'  renders a BLANK card and is REJECTED. Realistic, GERMAN-flavoured: 3–5 list items, plausible names,',
+	'  amounts with units, dates. Never empty strings.',
 	'',
 	'When EXISTING ROWS are provided you are REFINING: keep the name, apply the requested change, return the',
 	'full updated object. Keep views compact (one screen, one idea).'
