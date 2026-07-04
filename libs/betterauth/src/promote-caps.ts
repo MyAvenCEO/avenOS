@@ -108,8 +108,12 @@ async function glmVocabPlan(
 	const data = (await res.json().catch(() => null)) as {
 		choices?: { message?: { content?: string } }[]
 	} | null
-	const obj = parseJsonObject(data?.choices?.[0]?.message?.content ?? '')
-	if (!obj || !obj.fields) return { error: 'GLM did not return a parseable vocabulary plan' }
+	const rawText = data?.choices?.[0]?.message?.content ?? ''
+	const obj = parseJsonObject(rawText)
+	if (!obj || !obj.fields) {
+		console.error('[promote] vocab plan unparseable — raw GLM output:', rawText.slice(0, 800))
+		return { error: 'GLM did not return a parseable vocabulary plan' }
+	}
 	return obj as unknown as VocabPlan
 }
 
@@ -145,19 +149,34 @@ export async function mintDataLayer(
 	skeleton: AppSkeleton,
 	source: Record<string, unknown>,
 	vocabSeam?: (entity: AppSkeleton['entities'][0]) => Promise<VocabPlan>
-): Promise<{ types?: { type: string; predicates: string[] }[]; error?: string }> {
+): Promise<{
+	types?: { type: string; predicates: string[] }[]
+	/** the x1–x5 vocabulary detail for the mint card: full defs for MINTED predicates + reused names. */
+	minted?: PredicateDefJSON[]
+	reused?: string[]
+	error?: string
+}> {
 	const onto = ontologyCaps(uid)
 	const out: { type: string; predicates: string[] }[] = []
+	const mintedDefs: PredicateDefJSON[] = []
+	const reusedNames: string[] = []
 	for (const entity of skeleton.entities) {
 		const sample = (source[entity.key] as Record<string, unknown>[])[0] ?? {}
 		const plan = vocabSeam ? await vocabSeam(entity) : await glmVocabPlan(uid, entity, sample)
-		if ('error' in plan && plan.error) return { error: plan.error }
+		if ('error' in plan && plan.error) {
+			console.error('[promote] mintDataLayer failed:', plan.error)
+			return { error: plan.error }
+		}
 		const vp = plan as VocabPlan
 		// persist: mint every def through the ontology cap (compile + self-validate + data_schema).
 		const resolve = async (m: { reuse?: string; def?: PredicateDefJSON }): Promise<string> => {
-			if (m.reuse) return m.reuse
+			if (m.reuse) {
+				if (!reusedNames.includes(m.reuse)) reusedNames.push(m.reuse)
+				return m.reuse
+			}
 			if (!m.def) throw new Error('[promote] vocabulary entry needs reuse or def')
 			const saved = await onto.save(m.def)
+			mintedDefs.push(m.def)
 			return saved.name
 		}
 		const entityPred = await resolve(vp.entity)
@@ -203,7 +222,7 @@ export async function mintDataLayer(
 		const saved = await saveType(spec)
 		out.push({ type: saved.type, predicates: saved.predicates })
 	}
-	return { types: out }
+	return { types: out, minted: mintedDefs, reused: reusedNames }
 }
 
 // ── S3: the sandbox overview actor (GLM seam + the SMOKE-RUN gate) ─────────────────────────────────

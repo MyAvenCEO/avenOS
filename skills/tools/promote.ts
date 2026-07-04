@@ -24,6 +24,17 @@ function def(name: string, description: string, extra: Record<string, unknown> =
 const noCap: ToolResult = { content: { ok: false, error: 'promote capability not available' } }
 type Raw = { name?: string; response?: string; skip?: boolean }
 const said = (raw: Raw): string => (typeof raw.response === 'string' ? raw.response.trim() : '')
+/** board 0113 — a FAILED step is spoken out loud and the model is told to stay on this step: silent
+ *  errors made gemma wander off to other tools ("mint failed" → listed mockups) instead of retrying. */
+const stepFailed = (step: string, error: string): ToolResult => ({
+	detail: `${step} failed`,
+	content: {
+		ok: false,
+		error,
+		note: `Step "${step}" FAILED. Do NOT call any other tool. Tell the user the error verbatim and that saying "nochmal" retries this step.`
+	},
+	reply: `⚠️ Schritt „${step}" fehlgeschlagen: ${error} — sag „nochmal", um es erneut zu versuchen.`
+})
 
 export const planApp: ToolActor = {
 	definition: def(
@@ -36,8 +47,7 @@ export const planApp: ToolActor = {
 		if (!ctx.promote) return noCap
 		const r = raw as Raw
 		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
-		if (!got)
-			return { detail: 'plan failed', content: { ok: false, error: `no mockup matching "${r.name}"` } }
+		if (!got) return stepFailed('plan_app', `no mockup matching "${r.name}"`)
 		const { skeleton, source } = got
 		const plan = {
 			app: skeleton.app,
@@ -71,25 +81,26 @@ export const mintData: ToolActor = {
 		if (!ctx.promote) return noCap
 		const r = raw as Raw
 		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
-		if (!got)
-			return { detail: 'mint failed', content: { ok: false, error: `no mockup matching "${r.name}"` } }
+		if (!got) return stepFailed('mint_data', `no mockup matching "${r.name}"`)
 		const res = await ctx.promote.mintData(got.skeleton, got.source)
-		if (res.error) return { detail: 'mint failed', content: { ok: false, error: res.error } }
+		if (res.error) return stepFailed('mint_data', res.error)
+		// the x1–x5 VOCABULARY card (board 0113): full place structures for every MINTED predicate +
+		// the reused ones — the ontology-created card renders exactly this detail.
 		return {
 			detail: `mint ${got.skeleton.app} data`,
 			content: {
 				ok: true,
 				types: res.types,
-				note: 'The bundle card is shown. ONE sentence; next step is wire_actors.'
+				minted: res.minted?.map((d) => d.predicate),
+				reused: res.reused,
+				note: 'The vocabulary card (x1–x5 places) is shown. ONE sentence; next step is wire_actors.'
 			},
-			reply: said(r) || `Data layer ready: ${res.types?.map((t) => t.type).join(', ')} — wire the actors next?`,
+			reply:
+				said(r) ||
+				`Data layer ready: type ${res.types?.map((t) => t.type).join(', ')} — ${res.minted?.length ?? 0} predicates minted, ${res.reused?.length ?? 0} reused. Wire the actors next?`,
 			vibe: {
-				schema: 'bundle-created',
-				data: {
-					request: `promote ${got.skeleton.app}`,
-					spec: { type: res.types?.[0]?.type, parts: [], project: {} },
-					mintedPredicates: res.types?.flatMap((t) => t.predicates) ?? []
-				}
+				schema: 'ontology-created',
+				data: { created: res.minted ?? [], reused: res.reused ?? [] }
 			}
 		}
 	}
@@ -105,10 +116,9 @@ export const wireActors: ToolActor = {
 		if (!ctx.promote) return noCap
 		const r = raw as Raw
 		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
-		if (!got)
-			return { detail: 'wire failed', content: { ok: false, error: `no mockup matching "${r.name}"` } }
+		if (!got) return stepFailed('wire_actors', `no mockup matching "${r.name}"`)
 		const res = await ctx.promote.wire(got.skeleton, got.source)
-		if (res.error) return { detail: 'wire failed', content: { ok: false, error: res.error } }
+		if (res.error) return stepFailed('wire_actors', res.error)
 		return {
 			detail: `wire ${res.skillId}`,
 			content: {
@@ -150,8 +160,7 @@ export const seedDataActor: ToolActor = {
 				reply: said(r) || 'Skipped seeding — promoting next.'
 			}
 		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
-		if (!got)
-			return { detail: 'seed failed', content: { ok: false, error: `no mockup matching "${r.name}"` } }
+		if (!got) return stepFailed('seed_data', `no mockup matching "${r.name}"`)
 		const res = await ctx.promote.seed(got.skeleton, got.source)
 		const total = Object.values(res.seeded).reduce((a, b) => a + b, 0)
 		return {
@@ -182,8 +191,7 @@ export const promoteApp: ToolActor = {
 		if (!ctx.promote) return noCap
 		const r = raw as Raw
 		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
-		if (!got)
-			return { detail: 'promote failed', content: { ok: false, error: `no mockup matching "${r.name}"` } }
+		if (!got) return stepFailed('promote', `no mockup matching "${r.name}"`)
 		await ctx.promote.promoteVibe(got.skeleton.app)
 		return {
 			detail: `promote ${got.skeleton.app}`,

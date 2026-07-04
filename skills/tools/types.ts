@@ -79,7 +79,12 @@ export type ToolCtx = {
 		mintData(
 			skeleton: unknown,
 			source: Record<string, unknown>
-		): Promise<{ types?: { type: string; predicates: string[] }[]; error?: string }>
+		): Promise<{
+			types?: { type: string; predicates: string[] }[]
+			minted?: PredicateDefJSON[]
+			reused?: string[]
+			error?: string
+		}>
 		wire(
 			skeleton: unknown,
 			source: Record<string, unknown>
