@@ -2,6 +2,7 @@ import type { PredicateDefJSON } from '@avenos/skills/tools'
 import type { TypeSpec } from '@avenos/aven-ontology'
 import { sql } from 'kysely'
 import { runNamedOp } from './actor-run'
+import { actorConfig } from './config'
 import { runActorCode } from './actor-sandbox'
 import { db } from './db'
 import { listMockups, loadRawParts, MOCK_PREFIX, mockName, resolveMockup } from './mockup-caps'
@@ -595,20 +596,36 @@ type MailboxDef = {
 }
 type ImproveOut = { description: string; properties?: Record<string, string> }
 
+/** The improver's instructions — runtime SSOT is the improve_skill actor row's `prompt` column
+ *  (0115 pattern); this constant is the fallback. The ENGINE FACTS section is the key: GLM can only
+ *  weave real capabilities into a skill's wording if it KNOWS them (the live "fix editing" rewrite
+ *  couldn't teach title-as-id because GLM had no way to know the server resolves titles). */
+export const IMPROVE_INSTRUCTIONS = [
+	'You maintain the TOOL INSTRUCTIONS of a data-entry assistant. Given the current tool config and a',
+	'USER RULE, rewrite the wording so the assistant follows the rule from now on. Keep everything that',
+	'still applies; fold the rule in explicitly (formats, sign conventions, defaults). Output ONLY JSON:',
+	'  { "description": "<the improved tool description>",',
+	'    "properties": { "<param>": "<improved param description>" } }   // only params that changed',
+	'You may ONLY change wording — never invent parameters, types, or enums.',
+	'',
+	'ENGINE FACTS (real server capabilities — weave the relevant ones into the wording so the assistant',
+	'actually uses them; never contradict them):',
+	'- actions: list · create · update · delete (batch writes via items[]; delete via ids[]).',
+	'- update/delete resolve the entry TITLE/NAME as the id server-side — a correction to an existing',
+	'  entry must be an UPDATE (id = the title works); creating a duplicate is always wrong.',
+	'- delete is HITL-confirmed by the app; pass ids directly, never filter-hunt with list first.',
+	'- list supports ONE {field, value, op} filter over the projected fields.'
+].join('\n')
+
 async function glmImproveMailbox(
 	mailbox: MailboxDef,
 	instruction: string
 ): Promise<ImproveOut | { error: string }> {
 	const key = process.env.TINFOIL_API_KEY
 	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
-	const system = [
-		'You maintain the TOOL INSTRUCTIONS of a data-entry assistant. Given the current tool config and a',
-		'USER RULE, rewrite the wording so the assistant follows the rule from now on. Keep everything that',
-		'still applies; fold the rule in explicitly (formats, sign conventions, defaults). Output ONLY JSON:',
-		'  { "description": "<the improved tool description>",',
-		'    "properties": { "<param>": "<improved param description>" } }   // only params that changed',
-		'You may ONLY change wording — never invent parameters, types, or enums.'
-	].join('\n')
+	// instructions are CONFIG (the improve_skill actor row's prompt column); the constant is the fallback.
+	const cfg = await actorConfig('improve_skill').catch(() => null)
+	const system = cfg?.prompt?.trim() || IMPROVE_INSTRUCTIONS
 	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 		method: 'POST',
 		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },

@@ -195,6 +195,16 @@ d('board 0115 — skillify mockups: wiring, gates, the mock- wall, the viewer', 
 		expect(edit).toContain('PATCH') // minimal-patch editing, never a full rewrite
 	})
 
+	test("(d2) the improve_skill instructions are DB config and carry the ENGINE FACTS", async () => {
+		const r = await sql<{ prompt: string | null }>`
+			SELECT prompt FROM actor WHERE skill_id = 'skillify' AND name = 'improve_skill'
+		`.execute(db())
+		const prompt = r.rows[0]?.prompt ?? ''
+		expect(prompt).toContain('ENGINE FACTS')
+		expect(prompt).toContain('TITLE/NAME as the id') // GLM can only teach what it knows
+		expect(prompt).toContain('never invent parameters')
+	})
+
 	test('(e) PATCH merge: only changed sections move; untouched parts preserved by construction', async () => {
 		const { mergeMockupPatch } = await import('../src/mockup-caps')
 		const base = {
