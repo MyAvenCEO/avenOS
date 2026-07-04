@@ -104,6 +104,35 @@ d('board 0113 — the Inventory skill, pure config, end to end from the DB', () 
 		expect(byName(moved, N('Hammer'))?.location).toBe('Keller')
 	})
 
+	test('HONEST FAILURE: a garbled name that matches nothing returns an error, never fake-success', async () => {
+		// the live bug: "move mozzaralal into garage" → "Updated inventory." while nothing moved.
+		const ctx = {
+			userId: UID,
+			data: (a: Parameters<typeof crud>[1]) => crud(UID, a),
+			ops: (n: string, p?: Record<string, unknown>) => runNamedOp(UID, n, p ?? {})
+		}
+		const r = (await TOOL_ACTORS.data_crud.handle(ctx as never, {
+			schema: 'inventory',
+			action: 'update',
+			items: [{ id: 'zzz-inv-Hammr-garble', location: 'Garage' }]
+		})) as { content: { ok?: boolean; error?: string; available?: string[] } }
+		expect(r.content.ok).toBe(false)
+		expect(String(r.content.error)).toContain('zzz-inv-Hammr-garble')
+		expect(Array.isArray(r.content.available)).toBe(true) // the real names, so the model self-corrects
+	})
+
+	test('LOCATION RENAME (reified): relabels the SAME entity; every item follows by id', async () => {
+		const ctx = {
+			userId: UID,
+			data: (a: Parameters<typeof crud>[1]) => crud(UID, a),
+			ops: (n: string, p?: Record<string, unknown>) => runNamedOp(UID, n, p ?? {})
+		}
+		await TOOL_ACTORS.locations.handle(ctx as never, { rename: { from: 'Keller', to: 'zzz-Vorratsraum' } })
+		const inv = items(await crud(UID, { schema: 'inventory', action: 'list' }))
+		expect(byName(inv, N('Hammer'))?.location).toBe('zzz-Vorratsraum') // moved there in the MOVE test
+		await TOOL_ACTORS.locations.handle(ctx as never, { rename: { from: 'zzz-Vorratsraum', to: 'Keller' } })
+	})
+
 	test('DELETE cascades the satellites (located/quantity/owned_by rows go with the item)', async () => {
 		const all = items(await crud(UID, { schema: 'inventory', action: 'list' }))
 		const mehl = byName(all, N('Mehl'))

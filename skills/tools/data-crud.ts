@@ -224,6 +224,36 @@ export const dataCrud: ToolActor = {
 					return { ...i, parent: hit }
 				})
 			}
+
+			// board 0112 — HONEST FAILURE: an id/name that resolves to NO live row must never fake-success
+			// ("move mozzaralal into garage" → "Updated inventory." while nothing moved). Drop the unmatched
+			// entries and REPORT them; with nothing left to write, return an error listing the real names so
+			// the model corrects itself in the follow-up round (it knows the right spelling from the card).
+			const liveIds = new Set(liveRows.map((r) => String(r.id)))
+			const label = (r: Rec) => String(r.title ?? r.name ?? r.id)
+			const notFound: string[] = []
+			if (args.action === 'update' && args.items) {
+				for (const i of args.items) if (!liveIds.has(String((i as Rec).id))) notFound.push(String((i as Rec).id))
+				args.items = args.items.filter((i) => liveIds.has(String((i as Rec).id)))
+			}
+			if (args.action === 'delete' && args.ids) {
+				for (const id of args.ids) if (!liveIds.has(id)) notFound.push(id)
+				args.ids = args.ids.filter((id) => liveIds.has(id))
+			}
+			if (notFound.length && !(args.items?.length || args.ids?.length)) {
+				return {
+					detail,
+					content: {
+						ok: false,
+						error: `no ${schema} row matches: ${notFound.join(', ')}. Retry with an exact name/id from the list.`,
+						available: liveRows.slice(0, 40).map(label)
+					}
+				}
+			}
+			if (notFound.length) {
+				// partial: proceed with the matched rows, but the reply must SAY what was skipped.
+				args.response = `${typeof args.response === 'string' ? `${args.response.trim()} ` : ''}(Not found: ${notFound.join(', ')}.)`
+			}
 		}
 
 		// DELETE actor — HITL: never delete without explicit confirmation. Supports a BATCH (args.ids) so

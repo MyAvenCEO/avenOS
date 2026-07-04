@@ -118,13 +118,15 @@ export class StyleEngine {
 		return result
 	}
 
-	private compileTokensToCSS(tokens: Record<string, unknown>, containerName: string): string {
+	private compileTokensToCSS(tokens: Record<string, unknown>, _containerName: string): string {
 		const flatTokens = this.flattenTokens(tokens)
 		const cssVars = Object.entries(flatTokens)
 			.map(([name, value]) => `  ${name}: ${value};`)
 			.join('\n')
-		const sanitizedName = containerName.replace(/[^a-zA-Z0-9-_]/g, '-').replace(/-+/g, '-')
-		return `:host {\n  container-type: inline-size;\n  container-name: ${sanitizedName};\n${cssVars}\n}\n`
+		// board 0112 — NO container-type on :host. Nothing in the system uses @container queries, and
+		// inline-size containment made WebKit (Tauri/WKWebView) SHRINK the host to its content width —
+		// which collapsed every `repeat(auto-fill, …)` grid to a single column. Dead weight, deleted.
+		return `:host {\n${cssVars}\n}\n`
 	}
 
 	private compileModifierStyles(
