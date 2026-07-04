@@ -350,6 +350,14 @@ function streamWithTools(opts: {
 				const skillId = await routeSkill(routerCall, routeText, model, menu)
 				emitTool('dispatch', 'dispatch', `→ ${skillId}`, 'done')
 				console.log(`[ai] dispatch → ${skillId}`)
+				// board 0114 — the route decision itself is observable: one trace per turn naming the
+				// chosen skill (absorbs board 0109).
+				void recordActorRun(userId, {
+					flowId: 'dispatch',
+					nodeId: 'route',
+					label: `→ ${skillId}`,
+					outputs: [skillId]
+				})
 				// Tier 2 — resolve the routed skill's actors' mailboxes ONCE (same every round). board 0110.
 				const toolDefs = await chatToolDefinitionsFor(skillId)
 
@@ -559,51 +567,18 @@ function streamWithTools(opts: {
 										? `${VIBE_MARKER}${schema}`
 										: `${VIBE_MARKER}${schema}\n${JSON.stringify(data)}`
 								).catch((e) => console.error('[ai] persist vibe marker failed:', e))
-								// board 0099 — record each Todos actor firing as a single-step run of the `todos`
-								// hub, so the Runs explorer shows chat todos interactions (read/create/edit).
-								if (schema.startsWith('todos')) {
-									const nodeId = schema === 'todos' ? 'read' : schema.slice('todos-'.length)
-									void recordActorRun(userId, {
-										flowId: 'todos',
-										nodeId,
-										label: out.detail ?? nodeId,
-										vibe: schema,
-										vibeData: data,
-										outputs: ['todos']
-									})
-								} else if (schema.startsWith('ontology')) {
-									// board 0100 — each ontology actor firing = a run of the `ontology` skill (read/create).
-									void recordActorRun(userId, {
-										flowId: 'ontology',
-										nodeId: schema === 'ontology' ? 'read' : 'create',
-										label: out.detail ?? 'ontology',
-										vibe: schema,
-										vibeData: data,
-										outputs: ['predicate']
-									})
-								} else if (schema === 'bundle-created') {
-									// board 0102 — the bundle actor authored a new composite type (a kind).
-									void recordActorRun(userId, {
-										flowId: 'ontology',
-										nodeId: 'bundle',
-										label: out.detail ?? 'bundle',
-										vibe: schema,
-										vibeData: data,
-										outputs: ['bundle']
-									})
-								} else if (schema === 'query-result' || schema === 'mutation-result') {
-									// board 0101 — the dynamic query/mutate actors on the Ontology skill (a destructive
-									// mutation records instead on confirm, in aiConfirmAction below).
-									void recordActorRun(userId, {
-										flowId: 'ontology',
-										nodeId: schema === 'query-result' ? 'query' : 'mutate',
-										label: out.detail ?? schema,
-										vibe: schema,
-										vibeData: data,
-										outputs: [schema === 'query-result' ? 'rows' : 'ops']
-									})
-								}
 							}
+							// board 0114 — GENERIC tracing at the ONE dispatch seam: every executed tool call
+							// records a run keyed by the ROUTED skill + the actor (tool) name — no per-skill
+							// schema-prefix sniffing, so a config-minted skill is traced from birth.
+							void recordActorRun(userId, {
+								flowId: skillId,
+								nodeId: tc.name,
+								label: out.detail ?? tc.name,
+								vibe: out.vibe?.schema,
+								vibeData: out.vibe?.data,
+								outputs: [out.vibe?.schema ?? skillId]
+							})
 							emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
 							continue
 						}
@@ -846,19 +821,19 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 	}
 	try {
 		const result = await crud(session.user.id, body.action as Parameters<typeof crud>[1])
-		// board 0099 — a confirmed todos delete is the delete actor firing (a BATCH of ids); record it as a
-		// run of the `todos` hub so the Runs explorer shows deletes too (create/edit/read record inline).
-		if (body.action.schema === 'todos' && body.action.action === 'delete') {
+		// board 0114 — a confirmed delete records GENERICALLY for any schema (the schema name doubles as
+		// the owning skill id for data hubs); todos keeps its deleted-summary card vibe.
+		if (body.action.action === 'delete') {
+			const schema = String(body.action.schema ?? 'data')
 			const items = Array.isArray(body.action._deleted)
 				? (body.action._deleted as { id: string; title: string }[])
 				: []
 			void recordActorRun(session.user.id, {
-				flowId: 'todos',
-				nodeId: 'delete',
-				label: items.length > 1 ? `delete ${items.length} todos` : 'delete todos',
-				vibe: 'todos-deleted',
-				vibeData: { items },
-				outputs: ['todos']
+				flowId: schema,
+				nodeId: 'data_crud',
+				label: items.length > 1 ? `delete ${items.length} ${schema}` : `delete ${schema}`,
+				...(schema === 'todos' ? { vibe: 'todos-deleted', vibeData: { items } } : {}),
+				outputs: [schema]
 			})
 		}
 		return c.json({ ok: true, result })

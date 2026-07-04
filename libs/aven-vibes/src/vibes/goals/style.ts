@@ -78,7 +78,13 @@ const selectors: StyleDef['selectors'] = {
 		fontSize: 'var(--fs-body)',
 		color: 'var(--muted)'
 	},
-	'.gl-empty:empty': { display: 'none' }
+	'.gl-empty:empty': { display: 'none' },
+	// board 0114 — the LIVING @container example (the default vibe capability: the engine puts
+	// inline-size containment on the view root): in a narrow container the grid tightens its tracks so
+	// two tiles still fit side by side instead of stacking.
+	'@container (max-width: 420px)': {
+		'.gl-grid': { gridTemplateColumns: 'repeat(auto-fill, minmax(8.5rem, 1fr))', gap: '0.5rem' }
+	}
 }
 
 export const goalsStyle: StyleDef = withBrand({ tokens: {}, selectors })

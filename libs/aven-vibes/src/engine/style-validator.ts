@@ -6,6 +6,10 @@ const TOP_LEVEL_STYLE_KEYS = new Set(['tokens', 'components', 'selectors'])
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/
 const SAFE_CLASS = /^[A-Za-z][A-Za-z0-9_-]*$/
 const MEDIA_RULE = /^@media\s*\(\s*(?:max|min)-width\s*:\s*\d+(?:px|rem|em)\s*\)$/
+// board 0114 — @container queries are a default vibe capability (the engine puts inline-size containment
+// on the view root). Allowed with the SAME strict shape as @media: a single max/min-width size query —
+// no style() queries, no container names, nothing else.
+const CONTAINER_RULE = /^@container\s*\(\s*(?:max|min)-width\s*:\s*\d+(?:px|rem|em)\s*\)$/
 const KEYFRAMES_RULE = /^@keyframes\s+[A-Za-z][A-Za-z0-9_-]*$/
 const KEYFRAME_STEP = /^(from|to|(?:100|[1-9]?\d)%)$/
 const SELECTOR_SYMBOLS = new Set(' .,;:*#>+~=[]"\'()_-'.replace(';', '').split(''))
@@ -226,6 +230,12 @@ function validateSelectors(selectors: Record<string, Record<string, unknown>>, p
 		}
 		if (selector.startsWith('@media')) {
 			if (!MEDIA_RULE.test(selector))
+				throw new Error(`[aven-ui] Forbidden at-rule in ${path}: ${selector}`)
+			validateSelectors(styles as Record<string, Record<string, unknown>>, `${path}.${selector}`)
+			continue
+		}
+		if (selector.startsWith('@container')) {
+			if (!CONTAINER_RULE.test(selector))
 				throw new Error(`[aven-ui] Forbidden at-rule in ${path}: ${selector}`)
 			validateSelectors(styles as Record<string, Record<string, unknown>>, `${path}.${selector}`)
 			continue

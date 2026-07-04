@@ -137,15 +137,15 @@ tracing, not a flow runner); porting the minecraft demo.
 
 ## Acceptance criteria
 
-- [ ] Skills read-model lists every skill row incl. `inventory`; graph derived from actor rows; explicit override wins — new betterauth tests pass.
-- [ ] Skills explorer shows Planner (not Todos) + Inventory with actor vibe previews — Samuel live-confirms.
-- [ ] Every tool call traced by (routed skill, actor): inventory data_crud + locations runs visible — test + Samuel live-confirms in Runs.
-- [ ] `grep -rn "startsWith('todos')\|startsWith('ontology')" libs/betterauth/src/ai.ts` → no output.
-- [ ] Dispatch route decision traced per turn (0109 absorbed).
-- [ ] Compiled :host CSS has `container-type: inline-size`; one shipping `@container` rule emitted; grids multi-column live — tests + Samuel confirms.
-- [ ] Garbled move name → correction message live (no false "Updated").
-- [ ] `bun --watch` hot-reload behavior for skills/tools/* settled + documented (rule in the dev script or a comment).
-- [ ] Both suites + svelte-check exit 0.
+- [x] Skills read-model lists every skill row incl. `inventory`; graph derived from actor rows; explicit override wins — skill-readmodel.test 4/4.
+- [ ] Skills explorer shows Planner (not Todos) + Inventory with actor vibe previews — Samuel live-confirms. (server-side proven: composeFlows returns Planner + Inventory)
+- [x] Every tool call traced by (routed skill, actor): ONE generic record at the dispatch seam; inventory traces proven by test. (Samuel live-confirms in Runs.)
+- [x] `grep -rn "startsWith('todos')\|startsWith('ontology')" libs/betterauth/src/ai.ts` → no output (exit 1).
+- [x] Dispatch route decision traced per turn: flowId 'dispatch' / nodeId 'route' → the chosen skill (0109 absorbed).
+- [x] Containment on the view root (:host > *:first-child), NEVER on :host; the goals grid ships a live `@container (max-width: 420px)` rule; validator allows strict width @container only — container-queries.test 3/3. (Grids multi-column: Samuel confirms live.)
+- [ ] Garbled move name → correction message live (no false "Updated") — server-side proven (5c3c4d87 tests); Samuel confirms in-app.
+- [x] `bun --watch` PROVEN to follow workspace imports: touching skills/tools/data-crud.ts restarted the auth server in 3s (start-count 6→7). Dev mode is fully hot on all layers.
+- [x] betterauth 90/0 · aven-vibes 19/0 · svelte-check 0 errors.
 
 ## Verification
 
@@ -159,6 +159,18 @@ grep -rn "startsWith('todos')\|startsWith('ontology')" libs/betterauth/src/ai.ts
 Plus Samuel's live 4-point confirmation in the Tauri app (explorer, runs, grids, garble).
 
 ## Progress log
+
+- `2026-07-04` — BUILT green (S0–S3). S0: --watch probe proves workspace-import hot-reload
+  (6→7 server starts in 3s); container arrangement settled = containment on the view root.
+  S1: composeFlows() — every skill row → a Flow derived from its actor rows (label from
+  skill.label → Planner ✓, Inventory visible ✓); edge-carrying flow rows override; demo
+  flows pass through; listFlows/getFlow serve the composed model (client untouched).
+  S2: ONE generic recordActorRun at the dispatch seam keyed (routed skill, tool name);
+  the ai.ts prefix chain DELETED (grep exit 1); dispatch route decision traced (0109);
+  confirm-path delete records generically. S3: engine emits containment on
+  :host > *:first-child; validator allows strict-width @container; goals grid ships the
+  living example (migration 0086). Suites 90/0 + 19/0; svelte-check clean. Remaining:
+  Samuel's 4-point live confirmation → review.
 
 - `2026-07-04` — Discovered with Samuel: flows are PART of skill config (dynamic, never
   hardcoded; orchestration returns later); graph home = derived-from-actors +

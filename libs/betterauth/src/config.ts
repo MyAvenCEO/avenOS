@@ -45,14 +45,14 @@ function j<T>(v: unknown): T | null {
 	return v as T
 }
 
-async function readSkills(): Promise<SkillRow[]> {
+export async function readSkills(): Promise<SkillRow[]> {
 	const r = await sql<SkillRow>`
 		SELECT id, label, description, workflow, position FROM skill ORDER BY position, id
 	`.execute(db())
 	return r.rows
 }
 
-async function readActors(skillId?: string): Promise<ActorRow[]> {
+export async function readActors(skillId?: string): Promise<ActorRow[]> {
 	const rows = skillId
 		? (
 				await sql`
