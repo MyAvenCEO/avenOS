@@ -624,26 +624,88 @@ async function glmConnectorCode(
 	const instructions = cfg?.prompt?.trim() || CONNECT_INSTRUCTIONS
 	const contractText = (label: string, cs: OpsContract[]) =>
 		`${label}:\n${cs.map((c) => `  schema "${c.type}" — ops: ${c.ops.join(', ')}\n  sample rows: ${JSON.stringify(c.sample).slice(0, 600)}`).join('\n')}`
+	// STREAMING transport (the 0115 lesson twice over): a whole-connector authoring round exceeds any
+	// sane flat timeout (the flat 120s cap KILLED the first live connect) — so stream with an idle
+	// abort (45s without bytes) + a generous total cap instead.
+	const text = await glmStreamText(
+		key,
+		[
+			{
+				role: 'system',
+				content: `${instructions}\n\n${contractText('SOURCE', sourceContracts)}\n${contractText('TARGET', targetContracts)}`
+			},
+			{ role: 'user', content: `USER RULE: ${rule}` }
+		],
+		{ idleMs: 45_000, totalMs: 300_000 }
+	)
+	if (typeof text !== 'string') return text
+	const code = text.replace(/```(?:js|javascript)?/gi, '').trim()
+	return code || { error: 'GLM returned no connector code' }
+}
+
+/** Streamed GLM completion with idle + total aborts — accumulate the full text; a stall is an honest
+ *  error, never a wedged call. */
+async function glmStreamText(
+	key: string,
+	messages: { role: string; content: string }[],
+	o: { idleMs: number; totalMs: number }
+): Promise<string | { error: string }> {
+	const ctrl = new AbortController()
+	let idleTimer = setTimeout(() => ctrl.abort(), o.idleMs)
+	const totalTimer = setTimeout(() => ctrl.abort(), o.totalMs)
+	const bump = () => {
+		clearTimeout(idleTimer)
+		idleTimer = setTimeout(() => ctrl.abort(), o.idleMs)
+	}
+	const clearTimers = () => {
+		clearTimeout(idleTimer)
+		clearTimeout(totalTimer)
+	}
 	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 		method: 'POST',
 		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-		signal: AbortSignal.timeout(120_000),
-		body: JSON.stringify({
-			model: GLM_MODEL,
-			messages: [
-				{
-					role: 'system',
-					content: `${instructions}\n\n${contractText('SOURCE', sourceContracts)}\n${contractText('TARGET', targetContracts)}`
-				},
-				{ role: 'user', content: `USER RULE: ${rule}` }
-			],
-			stream: false
-		})
-	}).catch(() => null)
-	if (!res?.ok) return { error: `GLM error ${res?.status ?? '???'}` }
-	const data = (await res.json().catch(() => null)) as { choices?: { message?: { content?: string } }[] } | null
-	const code = (data?.choices?.[0]?.message?.content ?? '').replace(/```(?:js|javascript)?/gi, '').trim()
-	return code || { error: 'GLM returned no connector code' }
+		signal: ctrl.signal,
+		body: JSON.stringify({ model: GLM_MODEL, messages, stream: true })
+	}).catch((e) => {
+		console.error('[connect] GLM fetch failed:', e)
+		return null
+	})
+	if (!res?.ok || !res.body) {
+		clearTimers()
+		return { error: `GLM error ${res?.status ?? '(no response)'}` }
+	}
+	let full = ''
+	const reader = res.body.getReader()
+	const dec = new TextDecoder()
+	let buf = ''
+	for (;;) {
+		let step: { done: boolean; value?: Uint8Array }
+		try {
+			step = await reader.read()
+		} catch {
+			clearTimers()
+			return { error: `GLM stream stalled (no data for ${o.idleMs / 1000}s) — try again` }
+		}
+		bump()
+		if (step.done) break
+		buf += dec.decode(step.value, { stream: true })
+		const lines = buf.split('\n')
+		buf = lines.pop() ?? ''
+		for (const line of lines) {
+			const t = line.trim()
+			if (!t.startsWith('data:')) continue
+			const payload = t.slice(5).trim()
+			if (payload === '[DONE]') continue
+			try {
+				const j = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] }
+				full += j.choices?.[0]?.delta?.content ?? ''
+			} catch {
+				/* partial frame */
+			}
+		}
+	}
+	clearTimers()
+	return full
 }
 
 /** Connector SMOKE gate: run against stub ops for BOTH schemas; must return { summary: string }. */
