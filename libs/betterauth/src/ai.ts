@@ -17,7 +17,7 @@ import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
 import { schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
-import { mockupCaps } from './mockup-caps'
+import { listMockups, mockupCaps } from './mockup-caps'
 import { promoteCaps } from './promote-caps'
 import { ontologyCaps } from './ontology'
 import { mutationCaps, queryCaps } from './query-caps'
@@ -349,7 +349,14 @@ function streamWithTools(opts: {
 				// board 0110 — the router menu + advertised tools now come from the DB skill/actor registries
 				// (config-as-data), not hardcoded TS; both fall back to the TS seed if the tables are empty.
 				const menu = await skillMenu()
-				const skillId = await routeSkill(routerCall, routeText, model, menu)
+			// board 0113 — the router sees the conversation TAIL (last few user/assistant turns) so
+				// continuations route by understanding, not keywords.
+				const tail = (messages as { role?: string; content?: unknown }[])
+					.filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+					.slice(-5, -1)
+					.map((m) => `${m.role}: ${String(m.content).slice(0, 200)}`)
+					.join('\n')
+				const skillId = await routeSkill(routerCall, routeText, model, menu, tail || undefined)
 				emitTool('dispatch', 'dispatch', `→ ${skillId}`, 'done')
 				console.log(`[ai] dispatch → ${skillId}`)
 				// board 0114 — the route decision itself is observable: one trace per turn naming the
@@ -362,13 +369,26 @@ function streamWithTools(opts: {
 				})
 				// Tier 2 — resolve the routed skill's actors' mailboxes ONCE (same every round). board 0110.
 				const toolDefs = await chatToolDefinitionsFor(skillId)
+				// board 0113 — HARD tool-set enforcement: only the routed skill's advertised tools may run
+				// this turn. Without it a hallucinated call executed ANY inline handler ("nochmal" routed to
+				// todos, gemma invented edit_website, and GLM started rewriting the WEBSITE mid-promotion).
+				const advertisedSet = new Set(toolDefs.map((d) => d.function.name))
 
-				// Tier 3 — the todos snapshot (with ids) is merged into the system prompt ONLY on the todos
-				// route; every other skill skips the DB read entirely. MERGE into the leading system message —
-				// a SECOND system message makes Tinfoil 400. board 0055 / 0106.
+				// Tier 3 — per-skill context hints, fetched ONLY on their route: todos gets the live task
+				// snapshot (with ids); skillify gets the EXACT mockup names (so the model passes exact names —
+				// LLM-smart resolution, zero server-side fuzz). MERGE into the leading system message —
+				// a SECOND system message makes Tinfoil 400. board 0055 / 0106 / 0113.
 				const hint = skillWantsTodosHint(skillId)
 					? await schemasPromptHint(userId).catch(() => '')
-					: ''
+					: skillId === 'skillify'
+						? await listMockups()
+								.then((ms) =>
+									ms.length
+										? `EXISTING MOCKUPS (use these EXACT names for mockup/promotion tools): ${ms.map((m) => `${m.name} ("${m.label}")`).join(', ')}`
+										: ''
+								)
+								.catch(() => '')
+						: ''
 				if (hint) {
 					const first = msgs[0] as { role?: string; content?: string } | undefined
 					if (first?.role === 'system') {
@@ -504,6 +524,19 @@ function streamWithTools(opts: {
 							parsed = JSON.parse(tc.args || '{}')
 						} catch {
 							/* leave empty; crud() will report the error */
+						}
+						// board 0113 — the enforcement gate: an un-advertised tool call NEVER executes.
+						if (!advertisedSet.has(tc.name)) {
+							msgs.push({
+								role: 'tool',
+								tool_call_id: tc.id,
+								content: JSON.stringify({
+									ok: false,
+									error: `tool "${tc.name}" is not available on the current skill (${skillId}). Use only the advertised tools.`
+								})
+							})
+							emitTool(tc.id, tc.name, 'not on this skill', 'error')
+							continue
 						}
 						// board 0099 — REGISTRY DISPATCH: a chat tool is an actor (config+behavior) in
 						// @avenos/skills/tools. data_crud (the whole Todos hub) routes here; the loop stays generic —

@@ -30,12 +30,9 @@ export const mockups: ToolActor = {
 		const said = typeof args.response === 'string' ? args.response.trim() : ''
 		const all = await ctx.mockup.list()
 		if (args.name) {
-			// fuzzy: exact walled name, else label match — the model often passes plain words.
-			const want = args.name.toLowerCase().replace(/^mock[-_\s]*/, '').replace(/[^a-z0-9]+/g, '-')
-			const hit =
-				all.find((m) => m.name === `mock-${want}`) ??
-				all.find((m) => m.label === args.name!.toLowerCase().trim()) ??
-				all.find((m) => m.name.includes(want))
+			// EXACT name or exact label (the route context carries the exact names); miss → available list.
+			const want = args.name.trim().toLowerCase()
+			const hit = all.find((m) => m.name === want) ?? all.find((m) => m.label === want)
 			if (!hit)
 				return {
 					detail: 'mockup not found',

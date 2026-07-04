@@ -47,7 +47,11 @@ export const planApp: ToolActor = {
 		if (!ctx.promote) return noCap
 		const r = raw as Raw
 		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
-		if (!got) return stepFailed('plan_app', `no mockup matching "${r.name}"`)
+		if (!got)
+			return stepFailed(
+				'plan_app',
+				`no mockup named "${r.name}". Existing mockups: ${(await ctx.promote.available()).join(', ') || '(none)'} — retry with the exact name.`
+			)
 		const { skeleton, source } = got
 		const plan = {
 			app: skeleton.app,
@@ -81,7 +85,11 @@ export const mintData: ToolActor = {
 		if (!ctx.promote) return noCap
 		const r = raw as Raw
 		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
-		if (!got) return stepFailed('mint_data', `no mockup matching "${r.name}"`)
+		if (!got)
+			return stepFailed(
+				'mint_data',
+				`no mockup named "${r.name}". Existing mockups: ${(await ctx.promote.available()).join(', ') || '(none)'} — retry with the exact name.`
+			)
 		const res = await ctx.promote.mintData(got.skeleton, got.source)
 		if (res.error) return stepFailed('mint_data', res.error)
 		// the x1–x5 VOCABULARY card (board 0113): full place structures for every MINTED predicate +
@@ -116,7 +124,11 @@ export const wireActors: ToolActor = {
 		if (!ctx.promote) return noCap
 		const r = raw as Raw
 		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
-		if (!got) return stepFailed('wire_actors', `no mockup matching "${r.name}"`)
+		if (!got)
+			return stepFailed(
+				'wire_actors',
+				`no mockup named "${r.name}". Existing mockups: ${(await ctx.promote.available()).join(', ') || '(none)'} — retry with the exact name.`
+			)
 		const res = await ctx.promote.wire(got.skeleton, got.source)
 		if (res.error) return stepFailed('wire_actors', res.error)
 		return {
@@ -160,7 +172,11 @@ export const seedDataActor: ToolActor = {
 				reply: said(r) || 'Skipped seeding — promoting next.'
 			}
 		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
-		if (!got) return stepFailed('seed_data', `no mockup matching "${r.name}"`)
+		if (!got)
+			return stepFailed(
+				'seed_data',
+				`no mockup named "${r.name}". Existing mockups: ${(await ctx.promote.available()).join(', ') || '(none)'} — retry with the exact name.`
+			)
 		const res = await ctx.promote.seed(got.skeleton, got.source)
 		const total = Object.values(res.seeded).reduce((a, b) => a + b, 0)
 		return {
@@ -191,7 +207,11 @@ export const promoteApp: ToolActor = {
 		if (!ctx.promote) return noCap
 		const r = raw as Raw
 		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
-		if (!got) return stepFailed('promote', `no mockup matching "${r.name}"`)
+		if (!got)
+			return stepFailed(
+				'promote',
+				`no mockup named "${r.name}". Existing mockups: ${(await ctx.promote.available()).join(', ') || '(none)'} — retry with the exact name.`
+			)
 		await ctx.promote.promoteVibe(got.skeleton.app)
 		return {
 			detail: `promote ${got.skeleton.app}`,

@@ -83,16 +83,11 @@ export const editMockup: ToolActor = {
 		const args = raw as { name?: string; description?: string; response?: string }
 		const request = String(args.description ?? '').trim()
 		if (!request) return { content: { ok: false, error: 'describe the change to apply' } }
-		// fuzzy-resolve the target — an unknown name FAILS HONESTLY with the available list.
+		// EXACT resolution (LLM-smart: the skillify route injects the exact names as context; a miss
+		// fails honestly with the available list so the model self-corrects — no string heuristics).
 		const all = await ctx.mockup.list()
-		const want = String(args.name ?? '')
-			.toLowerCase()
-			.replace(/^mock[-_\s]*/, '')
-			.replace(/[^a-z0-9]+/g, '-')
-		const hit =
-			all.find((m) => m.name === `mock-${want}`) ??
-			all.find((m) => m.label === String(args.name ?? '').toLowerCase().trim()) ??
-			all.find((m) => m.name.includes(want))
+		const want = String(args.name ?? '').trim().toLowerCase()
+		const hit = all.find((m) => m.name === want) ?? all.find((m) => m.label === want)
 		if (!hit)
 			return {
 				detail: 'mockup not found',

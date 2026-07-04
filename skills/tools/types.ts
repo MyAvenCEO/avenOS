@@ -91,6 +91,7 @@ export type ToolCtx = {
 		): Promise<{ skillId?: string; error?: string; code?: string }>
 		seed(skeleton: unknown, source: Record<string, unknown>): Promise<{ seeded: Record<string, number> }>
 		promoteVibe(app: string): Promise<{ name: string }>
+		available(): Promise<string[]>
 	}
 	/** board 0100 — the ontology actor's server caps (GLM-5.2 mint + data_schema registry). Injected only
 	 *  when the ontology tool is dispatched; other actors ignore it. */

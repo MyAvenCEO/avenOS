@@ -30,18 +30,27 @@ const tsMenu = (): SkillMenuItem[] =>
 export function buildRouterRequest(
 	userText: string,
 	model: string,
-	skills?: SkillMenuItem[]
+	skills?: SkillMenuItem[],
+	context?: string
 ): RouterRequest {
 	const menu = (skills ?? tsMenu()).map((s) => `- ${s.id}: ${s.description}`).join('\n')
+	// board 0113 — the router reasons over the RECENT CONVERSATION, not just the last message: a
+	// continuation ("weiter", "nochmal", "continue", "next step") belongs to the skill of the ongoing
+	// task. LLM-smart routing — no keyword heuristics anywhere.
 	const system =
-		'You are a router. Read the user message and reply with EXACTLY ONE skill id from this list — ' +
-		'just the id, lowercase, no punctuation, no explanation:\n' +
-		menu
+		'You are a router. Reply with EXACTLY ONE skill id from this list — just the id, lowercase, no ' +
+		'punctuation, no explanation:\n' +
+		menu +
+		'\nIf the user message continues an ongoing task visible in the recent conversation (e.g. ' +
+		'"weiter", "nochmal", "continue", "next step", a bare confirmation), pick the skill of THAT task.'
+	const user = context
+		? `RECENT CONVERSATION:\n${context}\n\nUSER MESSAGE: ${userText}`
+		: userText
 	return {
 		model,
 		messages: [
 			{ role: 'system', content: system },
-			{ role: 'user', content: userText }
+			{ role: 'user', content: user }
 		],
 		max_tokens: 8,
 		temperature: 0,
@@ -68,12 +77,13 @@ export async function routeSkill(
 	callLLM: (req: RouterRequest) => Promise<string>,
 	userText: string,
 	model: string,
-	skills?: SkillMenuItem[]
+	skills?: SkillMenuItem[],
+	context?: string
 ): Promise<string> {
 	if (!userText.trim()) return DEFAULT_SKILL
 	try {
 		return parseSkillId(
-			await callLLM(buildRouterRequest(userText, model, skills)),
+			await callLLM(buildRouterRequest(userText, model, skills, context)),
 			skills?.map((s) => s.id)
 		)
 	} catch {
@@ -88,6 +98,7 @@ export function skillWantsTodosHint(skillId: string): boolean {
 }
 
 /** Tier 3 — assemble a skill's system context: merge the todos snapshot hint ONLY on the todos route. */
-export function assembleSystemContext(skillId: string, baseSystem: string, hint: string): string {
-	return skillWantsTodosHint(skillId) && hint ? `${baseSystem}\n\n${hint}`.trim() : baseSystem
+export function assembleSystemContext(_skillId: string, baseSystem: string, hint: string): string {
+	// gating happens at FETCH time (each skill decides its own hint); a provided hint always merges.
+	return hint ? `${baseSystem}\n\n${hint}`.trim() : baseSystem
 }

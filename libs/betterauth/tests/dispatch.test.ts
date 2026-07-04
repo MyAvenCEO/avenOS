@@ -63,7 +63,11 @@ describe('Tier 1 — the router request is schema-free', () => {
 		expect(body).not.toContain('data_crud') // no tool schema leaked in
 		expect(body).not.toContain('gismu')
 		expect(body).not.toContain('parameters') // no JSON-schema of any tool
-		expect(body.length).toBeLessThan(1200) // stays tiny
+		expect(body.length).toBeLessThan(1700) // stays tiny (grew: 2 more skills + the continuation rule)
+		// board 0113 — context mode: the recent-conversation tail rides in the USER message, still schema-free.
+		const withCtx = buildRouterRequest('nochmal', 'gemma4-31b', undefined, 'assistant: Schritt plan_app…')
+		expect(withCtx.messages[1].content).toContain('RECENT CONVERSATION')
+		expect(withCtx.messages[1].content).toContain('nochmal')
 	})
 })
 
@@ -102,10 +106,12 @@ describe('Tier 3 — the todos snapshot hint is gated to the todos route', () =>
 		expect(skillWantsTodosHint('website')).toBe(false)
 	})
 
-	test('assembled context includes the hint on the todos route, not elsewhere', () => {
+	test('assembled context merges any PROVIDED hint — gating happens at fetch time, per skill', () => {
+		// board 0113 — hints are per-skill now (todos snapshot · skillify mockup names); the FETCH is
+		// gated per route, so assemble simply merges whatever the route decided to provide.
 		const HINT = 'CURRENT TODOS: [id=abc] buy milk'
 		expect(assembleSystemContext('todos', 'SYSTEM', HINT)).toContain(HINT)
-		expect(assembleSystemContext('ontology', 'SYSTEM', HINT)).not.toContain(HINT)
-		expect(assembleSystemContext('website', 'SYSTEM', HINT)).not.toContain(HINT)
+		expect(assembleSystemContext('skillify', 'SYSTEM', 'EXISTING MOCKUPS: mock-x')).toContain('mock-x')
+		expect(assembleSystemContext('ontology', 'SYSTEM', '')).toBe('SYSTEM')
 	})
 })
