@@ -140,9 +140,62 @@ export const TAGGED: PredicateDef = {
 	]
 }
 
+// cmene: x1 (a word) is the NAME/label of x2, used by namer x3. THE UNIVERSAL LABEL (board 0112
+// reification): every reified entity carries its human name here — named(x1=the text, x2=the entity ref,
+// x3=the user). Reused by goals (girzu), locations (stuzi) and every future entity, so a rename is ONE
+// row edit and the same projection/join reads any entity's display name.
+export const NAMED: PredicateDef = {
+	predicate: 'named',
+	gismu: 'cmene',
+	gloss: 'cmene: x1 (the text) is the name/label of entity x2, given by namer x3 — the universal label',
+	places: [
+		val('x1', 'name', 'the label text — cmene x1 (the name/word)', 'string', {
+			minLength: 1,
+			example: 'Healthy eating'
+		}),
+		ref('x2', 'named thing', 'the entity being named — cmene x2 (the bearer)'),
+		ref('x3', 'namer', 'who assigned the name — cmene x3 (the name-user)', {
+			references: 'user',
+			required: false
+		})
+	]
+}
+
+// girzu: x1 is a group/cluster showing common property x2, from members x3, with relations x4. GOAL
+// REIFICATION (board 0112): a goal IS a girzu ENTITY of its own — the literal dual of cmima (member_of).
+// Its identity is the row id (x1 self-ref); its display name lives on a `named` label; its members are the
+// member_of edges pointing at it. x2/x3/x4 stay open (the property/members/relations are edges, not cells).
+export const GIRZU: PredicateDef = {
+	predicate: 'girzu',
+	gismu: 'girzu',
+	gloss: 'girzu: x1 is a group/cluster with common property x2 from members x3 — a goal as its own entity',
+	places: [
+		ref('x1', 'group', 'the goal/group entity — girzu x1 (the cluster itself)'),
+		val('x2', 'common property', 'the defining property — girzu x2 (open; the name lives on `named`)', 'string', {
+			required: false
+		}),
+		ref('x3', 'members', 'the members — girzu x3 (open; tracked via member_of edges)', { required: false }),
+		val('x4', 'relations', 'interrelations among members — girzu x4 (open)', 'string', { required: false })
+	]
+}
+
+// stuzi: x1 is the inherent site/location of x2. LOCATION REIFICATION (board 0112): a place IS a stuzi
+// ENTITY — its identity is the row id, its name lives on a `named` label, and stock sits at it via the
+// `located` edge (located.x2 → this stuzi id). x2 (occupant) stays open (occupancy is the located edges).
+export const STUZI: PredicateDef = {
+	predicate: 'stuzi',
+	gismu: 'stuzi',
+	gloss: 'stuzi: x1 is the inherent site/location of occupant x2 — a storage place as its own entity',
+	places: [
+		ref('x1', 'location', 'the place entity — stuzi x1 (the site itself)'),
+		ref('x2', 'occupant', 'what sits there — stuzi x2 (open; tracked via located edges)', { required: false })
+	]
+}
+
 /** The full todo predicate bundle (Layer B vocab to seed into data_schema). owned_by is universal but
  *  seeded with the first vertical; document/invoice reuse the same OWNED_BY def. board 0092.
- *  board 0112 — the Planner battle test adds member_of (goals), part_of (sub-tasks), tagged (tags). */
+ *  board 0112 — the Planner battle test adds member_of (goals), part_of (sub-tasks), tagged (tags); goal
+ *  REIFICATION adds girzu (the goal entity) + named (the universal label). */
 export const TODO_PREDICATES: PredicateDef[] = [
 	TASK,
 	OWNED_BY,
@@ -151,7 +204,9 @@ export const TODO_PREDICATES: PredicateDef[] = [
 	PRIORITIZED,
 	MEMBER_OF,
 	PART_OF,
-	TAGGED
+	TAGGED,
+	GIRZU,
+	NAMED
 ]
 
 /** Compiled `{ name, jsonSchema }` rows ready to seed as data_schema entries. */

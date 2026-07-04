@@ -13,6 +13,7 @@ import {
 	PAYMENT_PREDICATES,
 	PERSON_PREDICATES,
 	predSchemaName,
+	STUZI,
 	TASK,
 	TODO_PREDICATES,
 	todoPredicateSchemas,
@@ -86,8 +87,9 @@ describe('predicate compiler (board 0087)', () => {
 		expect(ownV({ predicate: 'owned_by', x1: 'JhB95T3lSOe0ZYTKLzuKNXHzGeju9LIb' })).toBe(false) // missing x2
 	})
 
-	test('the todo bundle seeds 8 bare data-type schemas (incl. universal owned_by), each gismu-sourced', () => {
-		// board 0112 — the Planner battle test added member_of (goals), part_of (sub-tasks), tagged (tags).
+	test('the todo bundle seeds 10 bare data-type schemas (incl. universal owned_by), each gismu-sourced', () => {
+		// board 0112 — the Planner battle test added member_of (goals), part_of (sub-tasks), tagged (tags);
+		// goal REIFICATION added girzu (the goal entity) + named (the universal label).
 		expect(TODO_PREDICATES.map((p) => p.predicate)).toEqual([
 			'task',
 			'owned_by',
@@ -96,7 +98,9 @@ describe('predicate compiler (board 0087)', () => {
 			'prioritized',
 			'member_of',
 			'part_of',
-			'tagged'
+			'tagged',
+			'girzu',
+			'named'
 		])
 		expect(TODO_PREDICATES.every((p) => typeof p.gismu === 'string' && p.gismu.length === 5)).toBe(true)
 		const rows = todoPredicateSchemas()
@@ -109,7 +113,9 @@ describe('predicate compiler (board 0087)', () => {
 			'prioritized',
 			'member_of',
 			'part_of',
-			'tagged'
+			'tagged',
+			'girzu',
+			'named'
 		])
 		expect(predSchemaName(TASK)).toBe('task')
 		// every compiled schema is itself a valid Ajv schema
@@ -125,6 +131,7 @@ describe('predicate compiler (board 0087)', () => {
 	//       its gismu's places FAILS. Role names stay pragmatic English; the place STRUCTURE is the seed.
 	const ALL_WIRED = [
 		...TODO_PREDICATES,
+		STUZI, // inventory location entity (seeded via migration, not in TODO_PREDICATES) — gate it too
 		...DOCUMENT_PREDICATES,
 		...INVOICE_PREDICATES,
 		...LINE_PREDICATES,
