@@ -476,7 +476,10 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 		if (turnVibes.has(schema)) return
 		turnVibes.add(schema)
 		const wantsPreview = schema === 'bookkeeping' || schema === 'doc-compare'
-		const vibeData: Record<string, unknown> =
+		// board 0115 — data stays UNCOERCED (no `?? {}`): a data-less vibe (a mockup show/mint) must reach
+		// VibeCard as undefined so it renders the vibe's EXAMPLE source — `{}` fed the identity mapper an
+		// empty state and rendered a BLANK card on the live turn (while the reloaded history was fine).
+		const vibeData: Record<string, unknown> | undefined =
 			wantsPreview && data
 				? {
 						...data,
@@ -484,7 +487,7 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 							? { fileUrl: previewImage.dataUrl, mimeType: previewImage.mimeType }
 							: {})
 					}
-				: (data ?? {})
+				: data
 		const card: ChatMessage = { id: nextId++, role: 'assistant', text: '', vibe: schema, vibeData }
 		const idx = messages.findIndex((m) => m.id === pendingId)
 		messages =
