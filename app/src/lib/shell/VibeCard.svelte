@@ -9,7 +9,7 @@ import { loadVibeBundle } from '$lib/data/client'
 // look is config-as-data, changeable without a rebuild. Read-only summary cards need no event wiring.
 let {
 	schema,
-	data = {},
+	data = undefined,
 	containerName = 'aven-vibe-card'
 }: { schema: string; data?: Record<string, unknown>; containerName?: string } = $props()
 
@@ -36,7 +36,13 @@ const shell = $derived(
 
 {#if shell}
 	<div class="mx-auto w-full max-w-2xl">
-		<AvenVibeView {shell} source={data} {containerName} />
+		<!-- board 0114 — no explicit data (a PREVIEW) falls back to the vibe's EXAMPLE source
+		     (the vibe_source registry row riding on the bundle), so previews never show the empty state. -->
+		<AvenVibeView
+			{shell}
+			source={data ?? (bundle.data?.source as Record<string, unknown> | undefined) ?? {}}
+			{containerName}
+		/>
 	</div>
 {:else if bundle.isError}
 	<p class="text-destructive text-sm" role="alert">Vibe „{schema}“ konnte nicht geladen werden.</p>

@@ -42,9 +42,9 @@ registerContextProvider('vibe_logic', async () => ({
 	items: await listVibeRows('vibe_logic')
 }))
 
-export type VibeBundle = { view: unknown; style: unknown; logic: string }
+export type VibeBundle = { view: unknown; style: unknown; logic: string; source: unknown }
 
-/** The view/style/logic bundle for `name` from the registry, or null if no part exists. */
+/** The view/style/logic(+example source) bundle for `name`, or null if no part exists. */
 export async function loadVibe(name: string): Promise<VibeBundle | null> {
 	const one = async (table: string): Promise<unknown> => {
 		const r = await sql<{
@@ -52,16 +52,19 @@ export async function loadVibe(name: string): Promise<VibeBundle | null> {
 		}>`SELECT body FROM ${sql.raw(table)} WHERE name = ${name}`.execute(db())
 		return r.rows[0]?.body
 	}
-	const [view, style, logic] = await Promise.all([
+	const [view, style, logic, source] = await Promise.all([
 		one('vibe_view'),
 		one('vibe_style'),
-		one('vibe_logic')
+		one('vibe_logic'),
+		// board 0114 — the vibe's EXAMPLE source (vibe_source registry) rides along for previews.
+		one('vibe_source').catch(() => null)
 	])
 	if (view == null && style == null && logic == null) return null
 	return {
 		view: view == null ? null : asJson(view),
 		style: style == null ? null : asJson(style),
-		logic: typeof logic === 'string' ? logic : ''
+		logic: typeof logic === 'string' ? logic : '',
+		source: source == null ? null : asJson(source)
 	}
 }
 

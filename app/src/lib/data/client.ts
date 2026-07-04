@@ -35,7 +35,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
  *  loads a vibe's definition from the DB and renders it through the engine instead of importing TS files. */
 export async function loadVibeBundle(
 	name: string
-): Promise<{ view: unknown; style: unknown; logic: string }> {
+): Promise<{ view: unknown; style: unknown; logic: string; source: unknown }> {
 	return api(`/api/vibe/${name}`)
 }
 

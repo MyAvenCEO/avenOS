@@ -158,67 +158,10 @@ const actorKey = (x: CtxItem): string => `${x.tag ?? ''}:${x.name}`
 const selectedActorItem = $derived<CtxItem | null>(
 	actorItems.find((x) => actorKey(x) === selectedActor) ?? null
 )
-// Representative sample `source` per vibe — drives the live UI render + the State tab (never a live run).
-const VIBE_SAMPLE: Record<string, Record<string, unknown>> = {
-	todos: {
-		title: 'Todos',
-		items: [
-			{ id: '1', text: 'Buy milk', done: false, due: 'in 3 days', priority: 'high' },
-			{ id: '2', text: 'Old task', done: true }
-		]
-	},
-	'bundle-created': {
-		request: 'track books I read with a rating',
-		spec: {
-			type: 'book',
-			parts: [
-				{ pred: 'book', kind: 'primary', field: 'title' },
-				{ pred: 'rated', kind: 'replace', field: 'rating' }
-			],
-			project: { title: { pred: 'book', place: 'x2' }, rating: { pred: 'rated', place: 'x3' } }
-		},
-		mintedPredicates: ['rated']
-	},
-	ontology: {
-		predicates: [
-			{ name: 'owned_by', gloss: 'x1 is owned by x2' },
-			{ name: 'task', gloss: 'x1 does deed x2' }
-		]
-	},
-	'ontology-created': {
-		created: [
-			{
-				predicate: 'eats',
-				gismu: 'citka',
-				gloss: 'x1 eats/ingests x2',
-				places: [
-					{ pos: 'x1', role: 'eater', kind: 'ref' },
-					{ pos: 'x2', role: 'food', kind: 'value' }
-				]
-			}
-		],
-		reused: ['owned_by']
-	},
-	'query-result': {
-		request: 'who owns more than 3 companies?',
-		rows: [{ key: 'alice', n: 4 }],
-		spec: {}
-	},
-	'mutation-result': {
-		request: 'transfer Acme from Alice to Bob',
-		ops: [
-			{ op: 'delete', predicate: 'owned_by', affected: 1 },
-			{ op: 'insert', predicate: 'owned_by', affected: 1 }
-		]
-	},
-	'todos-created': { items: [{ title: 'Buy milk', due: 'in 3 days', priority: 'high' }] },
-	'todos-edited': {
-		diffs: [{ title: 'Buy milk', changes: [{ field: 'done', from: 'false', to: 'true' }] }]
-	},
-	'todos-deleted': { items: [{ title: 'Old task' }] }
-}
+// board 0114 — the sample `source` comes from the vibe_source REGISTRY (riding on the bundle), not a
+// hardcoded map: every vibe previews with representative data, and new vibes bring their own sample.
 const vibeSample = $derived<Record<string, unknown>>(
-	selectedVibe ? (VIBE_SAMPLE[selectedVibe] ?? {}) : {}
+	(vibeBundleQuery.data?.source as Record<string, unknown> | null) ?? {}
 )
 // Exactly-one-selected: each picker clears the others. board 0105.
 function clearSel(): void {
@@ -650,7 +593,7 @@ $effect(() => {
 				</div>
 				{#if vibeTab === 'ui'}
 					<div class="border-border bg-card mt-4 min-h-[70vh] min-w-0 rounded-[var(--radius-lg)] border p-4">
-						<VibeCard schema={selectedVibe} data={vibeSample} containerName={`db-vibe-${selectedVibe}`} />
+						<VibeCard schema={selectedVibe} containerName={`db-vibe-${selectedVibe}`} />
 					</div>
 				{:else}
 					{@const raw =

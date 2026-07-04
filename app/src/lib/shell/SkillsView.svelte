@@ -43,66 +43,8 @@ const selectedNode = $derived<RecipeNode | null>(
 // vibe (todos / todos-created / todos-edited / todos-deleted); render it with illustrative sample data
 // so the template view shows what that actor produces, without needing a live run.
 const previewVibe = $derived<string>(selectedNode?.vibe ?? '')
-const PREVIEW_DATA: Record<
-	string,
-	{
-		items?: { id?: string; title?: string; priority?: string }[]
-		diffs?: { id: string; title: string; changes: { field: string; from: string; to: string }[] }[]
-	}
-> = {
-	'todos-created': { items: [{ id: 'sample', title: 'Beispielaufgabe', priority: 'medium' }] },
-	'todos-edited': {
-		items: [],
-		diffs: [
-			{
-				id: 'sample',
-				title: 'Beispielaufgabe',
-				changes: [{ field: 'done', from: 'False', to: 'True' }]
-			}
-		]
-	},
-	'todos-deleted': { items: [{ id: 'sample', title: 'Beispielaufgabe' }] }
-}
-const previewData = $derived(PREVIEW_DATA[previewVibe])
-// board 0100 — illustrative ontology preview data for the Skills template view.
-const ONTOLOGY_PREVIEW: Record<string, Record<string, unknown>> = {
-	ontology: {
-		predicates: [
-			{ name: 'owned_by', gloss: 'x1 is owned by x2' },
-			{ name: 'task', gloss: 'x1 does deed x2' }
-		]
-	},
-	'ontology-created': {
-		created: [
-			{
-				predicate: 'eats',
-				gismu: 'citka',
-				gloss: 'x1 eats/ingests/consumes x2',
-				places: [
-					{ pos: 'x1', role: 'eater', gloss: 'the one who eats', kind: 'ref' },
-					{ pos: 'x2', role: 'food', gloss: 'what is eaten', kind: 'ref' }
-				]
-			},
-			{
-				predicate: 'drinks',
-				gismu: 'pinxe',
-				gloss: 'x1 drinks beverage x2 from container x3',
-				places: [
-					{ pos: 'x1', role: 'drinker', gloss: 'the agent who drinks', kind: 'ref' },
-					{ pos: 'x2', role: 'beverage', gloss: 'the liquid drunk', kind: 'ref' },
-					{
-						pos: 'x3',
-						role: 'container',
-						gloss: 'the source drunk from',
-						kind: 'ref',
-						required: false
-					}
-				]
-			}
-		]
-	}
-}
-
+// board 0114 — preview data comes from the vibe_source registry (VibeCard falls back to the bundle's
+// example source when no data is passed) — the hardcoded per-vibe sample maps are gone.
 function resLabel(flow: Flow | null, k: string): string {
 	return flow?.resourceLabels?.[k] ?? RESOURCE_LABEL[k] ?? k
 }
@@ -170,11 +112,7 @@ function onSelect(id: string): void {
 						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
 							Vibe · {previewVibe}
 						</p>
-						<VibeCard
-							schema={previewVibe}
-							data={previewData ?? ONTOLOGY_PREVIEW[previewVibe] ?? {}}
-							containerName={`skills-preview-${selectedNodeId}`}
-						/>
+						<VibeCard schema={previewVibe} containerName={`skills-preview-${selectedNodeId}`} />
 					{:else if selectedNode}
 						<p class="text-muted-foreground text-center text-sm">
 							Keine Vibe-Vorschau für diesen Aktor.
