@@ -1,4 +1,4 @@
-import { validateStyleDef, validateViewDef } from '@avenos/aven-vibes'
+import { mergeDeep, validateStyleDef, validateViewDef } from '@avenos/aven-vibes'
 import { sql } from 'kysely'
 import { actorConfig } from './config'
 import { db } from './db'
@@ -131,6 +131,50 @@ export async function listMockups(): Promise<{ name: string; label: string }[]> 
 	}))
 }
 
+/** The three RAW rows of a mockup (style UNcomposed — extends ref intact): the refine base. */
+export async function loadRawParts(name: string): Promise<MockupParts | null> {
+	const one = async (table: string): Promise<unknown> => {
+		const r = await sql<{ body: unknown }>`SELECT body FROM ${sql.raw(table)} WHERE name = ${name}`.execute(db())
+		return r.rows[0]?.body
+	}
+	const [view, style, source] = await Promise.all([
+		one('vibe_view'),
+		one('vibe_style'),
+		one('vibe_source')
+	])
+	if (view == null) return null
+	return { view: asJson(view), style: asJson(style) ?? {}, source: asJson(source) ?? {} }
+}
+
+/** board 0115 — PATCH editing (instead of full rewrites): GLM emits only the changed sections; the
+ *  server merges them onto the RAW base — view replaces when present (a tree), style tokens/selectors
+ *  and source DEEP-MERGE — so untouched parts are preserved BY CONSTRUCTION, never re-generated. */
+export function mergeMockupPatch(
+	base: MockupParts,
+	patch: { view?: unknown; style?: unknown; source?: unknown }
+): MockupParts {
+	const baseStyle = (base.style ?? {}) as { tokens?: unknown; selectors?: unknown }
+	const patchStyle = (patch.style ?? {}) as { tokens?: unknown; selectors?: unknown }
+	return {
+		view: patch.view ?? base.view,
+		style: patch.style
+			? {
+					tokens: mergeDeep(
+						(baseStyle.tokens ?? {}) as Record<string, unknown>,
+						(patchStyle.tokens ?? {}) as Record<string, unknown>
+					),
+					selectors: mergeDeep(
+						(baseStyle.selectors ?? {}) as Record<string, unknown>,
+						(patchStyle.selectors ?? {}) as Record<string, unknown>
+					)
+				}
+			: base.style,
+		source: patch.source
+			? mergeDeep(base.source as Record<string, unknown>, patch.source as Record<string, unknown>)
+			: base.source
+	}
+}
+
 // ── GLM authoring (the non-deterministic layer over the deterministic gates) ──────────────────────
 // The TS FALLBACK for the authoring prompt; the SSOT at runtime is the mockup actor row's prompt
 // column (config-as-data, the 0112 pattern) — seeded from this constant by migration 0089.
@@ -160,8 +204,27 @@ export const MOCKUP_INSTRUCTIONS = [
 	'  renders a BLANK card and is REJECTED. Realistic, GERMAN-flavoured: 3–5 list items, plausible names,',
 	'  amounts with units, dates. Never empty strings.',
 	'',
-	'When EXISTING ROWS are provided you are REFINING: keep the name, apply the requested change, return the',
-	'full updated object. Keep views compact (one screen, one idea).'
+	'ICONS — an inline-SVG SUBSET is allowed (shape tags only: svg, g, path, circle, rect, line, polyline,',
+	'  polygon, ellipse; geometry+paint attrs only — no href, no image, no script). Example:',
+	'  {"tag":"svg","attrs":{"viewBox":"0 0 24 24","width":"18","height":"18","fill":"none",',
+	'   "stroke":"currentColor","stroke-width":"2"},"children":[{"tag":"path","attrs":{"d":"M3 12h18M3 6h18M3 18h18"}}]}',
+	'  Icons inherit text color via stroke/fill "currentColor".',
+	'',
+	'Keep views compact (one screen, one idea).'
+].join('\n')
+
+// The EDIT prompt (config on the edit_mockup actor row; this is the fallback): a MINIMAL PATCH, not a
+// rewrite — smaller outputs, and untouched parts can never be mangled or dropped.
+export const EDIT_INSTRUCTIONS = [
+	'You REFINE an existing screen mockup. You receive its CURRENT CONFIG (view, style, source) and a',
+	'requested change. Output ONLY one JSON PATCH object — include ONLY what changes:',
+	'  { "name":"<unchanged>", "view":{...}?, "style":{...}?, "source":{...}? }',
+	'  · style — PARTIAL: only the tokens/selectors you change/add (deep-merged onto the current style).',
+	'  · source — PARTIAL: only the keys you change/add (deep-merged). New view refs need new source keys.',
+	'  · view — include ONLY when the STRUCTURE changes (it replaces the whole tree); pure styling changes',
+	'    must NOT include view.',
+	'The same grammar and limits as creation apply (node tree · camelCase style props from the allow-list ·',
+	'brand variables · the inline-SVG icon subset). Never re-emit unchanged sections.'
 ].join('\n')
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -187,18 +250,21 @@ export async function mintMockup(
 	const key = process.env.TINFOIL_API_KEY
 	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
 	// the authoring prompt is CONFIG (the actor row's prompt column); this constant is the fallback.
-	const cfg = await actorConfig(opts.promptActor ?? 'create_mockup').catch(() => null)
-	const instructions = cfg?.prompt?.trim() || MOCKUP_INSTRUCTIONS
-	// refining? feed the existing rows back as context.
+	const promptActor = opts.promptActor ?? (rawName ? 'edit_mockup' : 'create_mockup')
+	const cfg = await actorConfig(promptActor).catch(() => null)
+	const fallback = rawName ? EDIT_INSTRUCTIONS : MOCKUP_INSTRUCTIONS
+	const instructions = cfg?.prompt?.trim() || fallback
+	// refining? feed the RAW rows (uncomposed style — no brand bloat) as the CURRENT CONFIG.
 	let existing = ''
+	let base: MockupParts | null = null
 	if (rawName) {
 		const name = mockName(rawName)
-		const bundle = await loadVibe(name).catch(() => null)
-		if (bundle?.view) {
+		base = await loadRawParts(name).catch(() => null)
+		if (base) {
 			existing = [
 				'',
-				`EXISTING ROWS for "${name}" (you are REFINING — apply the change, return the full object):`,
-				JSON.stringify({ name, view: bundle.view, style: bundle.style, source: bundle.source })
+				`CURRENT CONFIG for "${name}" (you are REFINING — output a MINIMAL PATCH):`,
+				JSON.stringify({ name, view: base.view, style: base.style, source: base.source })
 			].join('\n')
 		}
 	}
@@ -249,11 +315,10 @@ export async function mintMockup(
 	const obj = parseJsonObject(full)
 	if (!obj) return { error: 'GLM did not return a parseable mockup object' }
 	try {
-		const name = await saveMockup(String(obj.name ?? rawName ?? request.slice(0, 40)), {
-			view: obj.view,
-			style: obj.style,
-			source: obj.source
-		})
+		const parts: MockupParts = base
+			? mergeMockupPatch(base, { view: obj.view, style: obj.style, source: obj.source })
+			: { view: obj.view, style: obj.style, source: obj.source }
+		const name = await saveMockup(String(obj.name ?? rawName ?? request.slice(0, 40)), parts)
 		return { name }
 	} catch (e) {
 		return { error: e instanceof Error ? e.message : String(e) }

@@ -163,14 +163,43 @@ d('board 0115 — skillify mockups: wiring, gates, the mock- wall, the viewer', 
 		expect(show.vibe && 'data' in show.vibe ? show.vibe.data : undefined).toBeUndefined()
 	})
 
-	test('(d) the GLM authoring prompt is DB config on the mockup actor row', async () => {
-		for (const actor of ['create_mockup', 'edit_mockup']) {
-			const r = await sql<{ prompt: string | null }>`
-				SELECT prompt FROM actor WHERE skill_id = 'skillify' AND name = ${actor}
-			`.execute(db())
-			expect((r.rows[0]?.prompt ?? '').length).toBeGreaterThan(200)
-			expect(r.rows[0]?.prompt).toContain('VIEW grammar')
+	test('(d) the GLM authoring prompts are DB config — create (full grammar) vs edit (PATCH)', async () => {
+		const read = async (actor: string) =>
+			(
+				await sql<{ prompt: string | null }>`
+					SELECT prompt FROM actor WHERE skill_id = 'skillify' AND name = ${actor}
+				`.execute(db())
+			).rows[0]?.prompt ?? ''
+		const create = await read('create_mockup')
+		expect(create.length).toBeGreaterThan(200)
+		expect(create).toContain('VIEW grammar')
+		expect(create).toContain('ICONS') // the inline-SVG subset guidance
+		const edit = await read('edit_mockup')
+		expect(edit.length).toBeGreaterThan(200)
+		expect(edit).toContain('PATCH') // minimal-patch editing, never a full rewrite
+	})
+
+	test('(e) PATCH merge: only changed sections move; untouched parts preserved by construction', async () => {
+		const { mergeMockupPatch } = await import('../src/mockup-caps')
+		const base = {
+			view: { content: { class: 'r', children: [{ text: '$title', class: 't' }] } },
+			style: { extends: 'brand', tokens: { a: '1' }, selectors: { '.t': { color: 'red' }, '.r': { gap: '1rem' } } },
+			source: { title: 'Konten', rows: [{ n: 1 }] }
 		}
+		// a style-only patch: view + source BYTE-identical (same reference), style deep-merged.
+		const styled = mergeMockupPatch(base as never, {
+			style: { selectors: { '.t': { fontWeight: '700' } } }
+		})
+		expect(styled.view).toBe(base.view)
+		expect(styled.source).toBe(base.source)
+		const sel = (styled.style as { selectors: Record<string, Record<string, string>> }).selectors
+		expect(sel['.t']).toEqual({ color: 'red', fontWeight: '700' }) // merged, not replaced
+		expect(sel['.r']).toEqual({ gap: '1rem' }) // untouched selector survives
+		// a source-only patch deep-merges keys.
+		const sourced = mergeMockupPatch(base as never, { source: { subtitle: 'Neu' } })
+		expect((sourced.source as { title?: string; subtitle?: string }).title).toBe('Konten')
+		expect((sourced.source as { subtitle?: string }).subtitle).toBe('Neu')
+		expect(sourced.view).toBe(base.view)
 	})
 
 	afterAll(async () => {

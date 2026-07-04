@@ -7,6 +7,7 @@ import {
 	isAllowedAttribute,
 	isSafeUrl,
 	SAFE_TAGS,
+	SVG_TAGS,
 	sanitizeAttributeWhitelist,
 	sanitizePayloadForValidation,
 	URL_ATTRS
@@ -149,13 +150,16 @@ export class ViewEngine {
 		const rawTag = (node.tag || 'div').toLowerCase()
 		if (!SAFE_TAGS.has(rawTag)) throw new Error(`[aven-ui] Forbidden tag "${rawTag}"`)
 		const tag = rawTag
-		const element = document.createElement(tag)
+		// board 0115 — the inline-SVG icon subset renders in the SVG namespace; everything else is HTML.
+		const element = SVG_TAGS.has(tag)
+			? (document.createElementNS('http://www.w3.org/2000/svg', tag) as unknown as HTMLElement)
+			: document.createElement(tag)
 		element.setAttribute('data-aven-path', path)
 
 		if (node.class) {
 			const classValue = await this.evaluator.evaluate(node.class, data)
 			assertSafeClassValue(classValue, 'runtime class')
-			if (classValue) element.className = sanitizeAttributeWhitelist(classValue)
+			if (classValue) element.setAttribute('class', sanitizeAttributeWhitelist(classValue))
 		}
 
 		if (node.attrs) {
