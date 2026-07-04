@@ -58,7 +58,10 @@ export type ToolCtx = {
 	/** board 0115 — the skillify part-1 caps: GLM designs/refines a vibe MOCKUP (view+style+example source,
 	 *  walled into the mock- namespace + validator-gated server-side); list/load for the no-LLM viewer. */
 	mockup?: {
-		mint(request: string, name?: string): Promise<{ name?: string; error?: string }>
+		mint(
+			request: string,
+			opts?: { name?: string; promptActor?: string }
+		): Promise<{ name?: string; error?: string }>
 		list(): Promise<{ name: string; label: string }[]>
 		load(name: string): Promise<unknown>
 	}

@@ -528,7 +528,9 @@ function streamWithTools(opts: {
 										query: queryCaps(userId), // board 0101 — GLM-authored validated query specs
 										mutate: mutationCaps(userId), // board 0101 — GLM-authored validated mutation specs
 										bundle: typeCaps(userId), // board 0102 — GLM-authored composite types (data_bundles)
-										mockup: mockupCaps() // board 0115 — skillify part 1: GLM vibe mockups (mock- walled)
+										// board 0115 — GLM mockup authoring streams its raw tokens into the SAME live
+										// panel the website skill uses (no dead "Thinking…" during a mint/refine).
+										mockup: mockupCaps((text) => emit({ aven_edit_chunk: { text } }))
 									},
 									parsed
 								)

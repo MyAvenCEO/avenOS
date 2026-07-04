@@ -57,13 +57,18 @@ d('board 0115 — skillify mockups: wiring, gates, the mock- wall, the viewer', 
 	test('(a) the skillify skill is wired from the DB: menu · tools · read-model', async () => {
 		const menu = await skillMenu()
 		expect(menu.some((s) => s.id === 'skillify')).toBe(true)
-		expect(await advertisedTools('skillify')).toEqual(['mockup', 'mockups'])
+		expect(await advertisedTools('skillify')).toEqual(['create_mockup', 'edit_mockup', 'mockups'])
 		expect((await chatToolDefinitionsFor('skillify')).map((x) => x.function.name)).toEqual([
-			'mockup',
+			'create_mockup',
+			'edit_mockup',
 			'mockups'
 		])
 		const flow = (await composeFlows()).find((f) => f.id === 'skillify')
-		expect((flow?.nodes as { id: string }[]).map((n) => n.id)).toEqual(['mockup', 'mockups'])
+		expect((flow?.nodes as { id: string }[]).map((n) => n.id)).toEqual([
+			'create_mockup',
+			'edit_mockup',
+			'mockups'
+		])
 	})
 
 	test('(b) the mock- WALL: input name "todos" saves as mock-todos; the system rows are untouched', async () => {
@@ -119,6 +124,13 @@ d('board 0115 — skillify mockups: wiring, gates, the mock- wall, the viewer', 
 				load: (n: string) => loadVibe(mockName(n))
 			}
 		}
+		// edit_mockup fails HONESTLY on an unknown name, carrying the available labels.
+		const miss = (await TOOL_ACTORS.edit_mockup.handle(ctx as never, {
+			name: 'does-not-exist',
+			description: 'bigger'
+		})) as { content: { ok?: boolean; available?: string[] } }
+		expect(miss.content.ok).toBe(false)
+		expect(Array.isArray(miss.content.available)).toBe(true)
 		const list = (await TOOL_ACTORS.mockups.handle(ctx as never, {})) as {
 			content: { mockups?: { name: string }[] }
 			vibe?: { schema: string }
@@ -133,11 +145,13 @@ d('board 0115 — skillify mockups: wiring, gates, the mock- wall, the viewer', 
 	})
 
 	test('(d) the GLM authoring prompt is DB config on the mockup actor row', async () => {
-		const r = await sql<{ prompt: string | null }>`
-			SELECT prompt FROM actor WHERE skill_id = 'skillify' AND name = 'mockup'
-		`.execute(db())
-		expect((r.rows[0]?.prompt ?? '').length).toBeGreaterThan(200)
-		expect(r.rows[0]?.prompt).toContain('VIEW grammar')
+		for (const actor of ['create_mockup', 'edit_mockup']) {
+			const r = await sql<{ prompt: string | null }>`
+				SELECT prompt FROM actor WHERE skill_id = 'skillify' AND name = ${actor}
+			`.execute(db())
+			expect((r.rows[0]?.prompt ?? '').length).toBeGreaterThan(200)
+			expect(r.rows[0]?.prompt).toContain('VIEW grammar')
+		}
 	})
 
 	afterAll(async () => {

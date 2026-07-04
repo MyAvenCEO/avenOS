@@ -125,15 +125,18 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 	}
 }
 
-/** GLM-5.2 designs (or refines) a mockup from plain language; the deterministic gates persist it. */
+/** GLM-5.2 designs (or refines) a mockup from plain language; the deterministic gates persist it.
+ *  Streams raw tokens through `onToken` (board 0115: the chat shows the live authoring stream instead
+ *  of a dead "Thinking…" — same panel the website skill uses). */
 export async function mintMockup(
 	request: string,
-	rawName?: string
+	opts: { name?: string; onToken?: (text: string) => void; promptActor?: string } = {}
 ): Promise<{ name?: string; error?: string }> {
+	const rawName = opts.name
 	const key = process.env.TINFOIL_API_KEY
 	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
 	// the authoring prompt is CONFIG (the actor row's prompt column); this constant is the fallback.
-	const cfg = await actorConfig('mockup').catch(() => null)
+	const cfg = await actorConfig(opts.promptActor ?? 'create_mockup').catch(() => null)
 	const instructions = cfg?.prompt?.trim() || MOCKUP_INSTRUCTIONS
 	// refining? feed the existing rows back as context.
 	let existing = ''
@@ -157,17 +160,42 @@ export async function mintMockup(
 				{ role: 'system', content: instructions + existing },
 				{ role: 'user', content: `Design the screen for: ${request}` }
 			],
-			stream: false
+			stream: true
 		})
 	}).catch((e) => {
 		console.error('[mockup] GLM fetch failed:', e)
 		return null
 	})
-	if (!res?.ok) return { error: `GLM error ${res?.status ?? '???'}` }
-	const data = (await res.json().catch(() => null)) as {
-		choices?: { message?: { content?: string } }[]
-	} | null
-	const obj = parseJsonObject(data?.choices?.[0]?.message?.content ?? '')
+	if (!res?.ok || !res.body) return { error: `GLM error ${res?.status ?? '???'}` }
+	// stream: accumulate the full text while forwarding each delta to the live panel.
+	let full = ''
+	const reader = res.body.getReader()
+	const dec = new TextDecoder()
+	let buf = ''
+	for (;;) {
+		const { done, value } = await reader.read()
+		if (done) break
+		buf += dec.decode(value, { stream: true })
+		const lines = buf.split('\n')
+		buf = lines.pop() ?? ''
+		for (const line of lines) {
+			const t = line.trim()
+			if (!t.startsWith('data:')) continue
+			const payload = t.slice(5).trim()
+			if (payload === '[DONE]') continue
+			try {
+				const j = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] }
+				const piece = j.choices?.[0]?.delta?.content ?? ''
+				if (piece) {
+					full += piece
+					opts.onToken?.(piece)
+				}
+			} catch {
+				/* partial frame */
+			}
+		}
+	}
+	const obj = parseJsonObject(full)
 	if (!obj) return { error: 'GLM did not return a parseable mockup object' }
 	try {
 		const name = await saveMockup(String(obj.name ?? rawName ?? request.slice(0, 40)), {
@@ -182,9 +210,10 @@ export async function mintMockup(
 }
 
 /** `ctx.mockup` — the skillify part-1 caps: GLM design/refine · list · load. board 0115. */
-export function mockupCaps() {
+export function mockupCaps(onToken?: (text: string) => void) {
 	return {
-		mint: mintMockup,
+		mint: (request: string, o: { name?: string; promptActor?: string } = {}) =>
+			mintMockup(request, { ...o, onToken }),
 		save: saveMockup,
 		list: listMockups,
 		load: (name: string) => loadVibe(mockName(name)),

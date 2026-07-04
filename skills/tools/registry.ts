@@ -9,7 +9,7 @@ import { bundle } from './bundle'
 import { dataCrud } from './data-crud'
 import { goals } from './goals'
 import { locations } from './locations'
-import { mockup } from './mockup'
+import { createMockup, editMockup } from './mockup'
 import { mockups } from './mockups'
 import { ontology } from './ontology'
 import { mutate, query } from './queries'
@@ -22,7 +22,8 @@ export const TOOL_ACTORS: Record<string, ToolActor> = {
 	data_crud: dataCrud,
 	goals,
 	locations,
-	mockup,
+	create_mockup: createMockup,
+	edit_mockup: editMockup,
 	mockups,
 	ontology,
 	query,
@@ -82,7 +83,7 @@ export const SKILL_REGISTRY: Record<SkillId, { label: string; description: strin
 		description:
 			'design, refine, or show SCREEN MOCKUPS for new skill features ("design me a banking screen", ' +
 			'"make the total bigger", "show me my mockups") — look only, no real data yet',
-		tools: ['mockup', 'mockups']
+		tools: ['create_mockup', 'edit_mockup', 'mockups']
 	}
 }
 
