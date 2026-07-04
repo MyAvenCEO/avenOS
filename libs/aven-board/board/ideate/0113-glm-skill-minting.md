@@ -62,3 +62,9 @@ router's skill menu scales as skills multiply.
   viewer now shows the backlink ("emitted by" chips) + labels the tab "Mapper" honestly. FOR SKILLIFY:
   decide whether GLM authors the mapper as part of the vibe mint (recommended) or actor mint, and
   whether actor.code (behavior sandbox, still 0 users) becomes the default binding for minted actors.
+
+- `2026-07-04` — **Part 1 split out → [[0115]]** (skillify-vibe-mockups, in discover/): the LOOK-only
+  slice — a new `skillify` skill with `mockup` (GLM mints/refines vibe view+style+example source behind
+  the mock- namespace wall) + `mockups` (no-LLM show/list). This card keeps PART 2: wiring the real data
+  layer (reuse/create operations + bundles + vocab) by DELEGATING data authoring to the Ontology skill
+  as a sub-skill flow, plus mockup→real-skill promotion.
