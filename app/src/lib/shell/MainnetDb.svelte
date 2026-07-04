@@ -575,8 +575,10 @@ $effect(() => {
 				<div class="mb-3 flex items-center gap-2">
 					<h2 class="text-foreground font-mono text-base font-semibold">{selectedVibe}</h2>
 				</div>
-				<!-- summary + tabs, one card (tabs integrated at the bottom) -->
-				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[12px]">
+				<!-- summary + tabs, one card (tabs integrated at the bottom) — brand cream, matching the
+				     vibe :host background (#f8f6ef = --color-surface-cream) so the pane reads as ONE brand
+				     surface like every outer vibe design. board 0114. -->
+				<div class="border-border rounded-[var(--radius-lg)] border bg-[var(--color-surface-cream)] p-4 text-[12px]">
 					<p class="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">{t('mainnet.db.vibe.summary')}</p>
 					<p class="text-muted-foreground leading-relaxed">{t('mainnet.db.vibe.summaryHint')}</p>
 					<dl class="mt-3 flex flex-wrap gap-x-8 gap-y-2">
@@ -605,7 +607,7 @@ $effect(() => {
 					</div>
 				</div>
 				{#if vibeTab === 'ui'}
-					<div class="border-border bg-card mt-4 min-h-[70vh] min-w-0 rounded-[var(--radius-lg)] border p-4">
+					<div class="border-border mt-4 min-h-[70vh] min-w-0 rounded-[var(--radius-lg)] border bg-[var(--color-surface-cream)] p-4">
 						<VibeCard schema={selectedVibe} containerName={`db-vibe-${selectedVibe}`} />
 					</div>
 				{:else}
