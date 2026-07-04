@@ -10,6 +10,13 @@ export * from './sandbox.js'
 export { cardStyle } from './vibes/cards/style.js'
 // The Planner's goals grid card. board 0112.
 export { goalsStyle } from './vibes/goals/style.js'
+// The Inventory vibes — a bespoke "stock ledger" list + a "storage bins" locations grid. board 0112.
+export { inventoryStyle } from './vibes/inventory/style.js'
+export { inventoryView } from './vibes/inventory/view.js'
+export { inventoryLogic } from './vibes/inventory/logic.js'
+export { locationsStyle } from './vibes/inventory-locations/style.js'
+export { locationsView } from './vibes/inventory-locations/view.js'
+export { locationsLogic } from './vibes/inventory-locations/logic.js'
 export {
 	createTodosShell,
 	todoLogic,

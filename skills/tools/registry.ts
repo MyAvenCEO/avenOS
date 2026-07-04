@@ -8,6 +8,7 @@ import { COMPOSER_TOOLS } from '../composer/tools'
 import { bundle } from './bundle'
 import { dataCrud } from './data-crud'
 import { goals } from './goals'
+import { locations } from './locations'
 import { ontology } from './ontology'
 import { mutate, query } from './queries'
 import type { ToolActor, ToolDefinition } from './types'
@@ -18,6 +19,7 @@ import type { ToolActor, ToolDefinition } from './types'
 export const TOOL_ACTORS: Record<string, ToolActor> = {
 	data_crud: dataCrud,
 	goals,
+	locations,
 	ontology,
 	query,
 	mutate,
