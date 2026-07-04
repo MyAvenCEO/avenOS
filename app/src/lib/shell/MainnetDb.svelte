@@ -138,8 +138,12 @@ const vibeBundleQuery = createQuery(() => ({
 type CtxItem = { name: string; gloss?: string; tag?: string }
 const actorsQuery = createQuery(() => ({ queryKey: ['db', 'actors'], queryFn: () => loadContext('actors') }))
 const actorItems = $derived<CtxItem[]>((actorsQuery.data?.items ?? []) as CtxItem[])
+// board 0114 — actor names repeat across skills (data_crud on Planner AND Inventory), so the selection
+// key is the COMPOSITE `${skill}:${name}` — a bare-name key made the {#each} throw on duplicates, which
+// blanked the whole Actors category.
+const actorKey = (x: CtxItem): string => `${x.tag ?? ''}:${x.name}`
 const selectedActorItem = $derived<CtxItem | null>(
-	actorItems.find((x) => x.name === selectedActor) ?? null
+	actorItems.find((x) => actorKey(x) === selectedActor) ?? null
 )
 // Representative sample `source` per vibe — drives the live UI render + the State tab (never a live run).
 const VIBE_SAMPLE: Record<string, Record<string, unknown>> = {
@@ -236,9 +240,9 @@ function selectVibe(name: string): void {
 	vibeTab = 'ui'
 	category = 'vibes'
 }
-function pickActor(name: string): void {
+function pickActor(key: string): void {
 	clearSel()
-	selectedActor = name
+	selectedActor = key // the composite `${skill}:${name}` (see actorKey)
 	category = 'actors'
 }
 // board 0110 — the rail selects a CATEGORY; auto-pick its first item so the detail pane always shows something.
@@ -256,7 +260,7 @@ function setCategory(cat: Category): void {
 	} else if (cat === 'vibes') {
 		if (vibeNames.length) selectVibe(vibeNames[0])
 	} else if (cat === 'actors') {
-		if (actorItems.length) pickActor(actorItems[0].name)
+		if (actorItems.length) pickActor(actorKey(actorItems[0]))
 	}
 	category = cat
 }
@@ -580,8 +584,8 @@ $effect(() => {
 					</button>
 				{/each}
 			{:else if category === 'actors'}
-				{#each actorItems as it (it.name)}
-					<button type="button" class={listBtn(selectedActor === it.name)} onclick={() => pickActor(it.name)}>
+				{#each actorItems as it (actorKey(it))}
+					<button type="button" class={listBtn(selectedActor === actorKey(it))} onclick={() => pickActor(actorKey(it))}>
 						<span class="truncate font-mono text-[12px]">{it.name}</span>
 						{#if it.tag}<span class="shrink-0 text-[10px] opacity-50">{it.tag}</span>{/if}
 					</button>
@@ -819,7 +823,7 @@ $effect(() => {
 		{:else if selectedActor}
 			<div class="mx-auto flex w-full max-w-4xl flex-col">
 				<div class="mb-3 flex items-center gap-2">
-					<h2 class="text-foreground font-mono text-base font-semibold">{selectedActor}</h2>
+					<h2 class="text-foreground font-mono text-base font-semibold">{selectedActorItem?.name ?? selectedActor}</h2>
 					{#if selectedActorItem?.tag}<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px]">{selectedActorItem.tag}</span>{/if}
 				</div>
 				<div class="border-border bg-card rounded-[var(--radius-lg)] border p-4 text-[13px]">
