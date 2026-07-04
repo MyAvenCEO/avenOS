@@ -259,17 +259,25 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		expect(await typesOfSkill(APP)).toEqual(['record'])
 		expect(await typesOfSkill('todos')).toEqual(['todos'])
 		// the smoke gate REFUSES code that misses the contract or escapes its scopes.
-		const bad = await smokeRunConnector('async function handle(m,c){ return { nope: 1 } }', [])
+		const bad = await smokeRunConnector('function handle(m,c){ return { nope: 1 } }', [])
 		expect(bad.ok).toBe(false)
+		// the STATIC sync-style gate (the sandbox supports caps calls only during the main eval).
+		const asyncStyle = await smokeRunConnector(
+			"async function handle(m,c){ var r = await c.ops('record.list',{}); return { summary: 'x' } }",
+			[{ type: 'record', ops: [], sample: [] }]
+		)
+		expect(asyncStyle.ok).toBe(false)
+		expect(asyncStyle.error).toContain('SYNCHRONOUS')
 		const escape = await smokeRunConnector(
-			"async function handle(m,c){ await c.ops('goal.list',{}); return { summary: 'x' } }",
+			"function handle(m,c){ c.ops('goal.list',{}); return { summary: 'x' } }",
 			[{ type: 'record', ops: [], sample: [] }]
 		)
 		expect(escape.ok).toBe(false)
 		expect(escape.error).toContain('not granted')
 		// the seam-fixed connector wires end-to-end: actor row (scoped caps) + composite node.
+		// PLAIN SYNC style — several blocking caps calls in one run (the fixed sandbox contract).
 		const CODE =
-			"async function handle(msg, caps){ var r = await caps.ops('record.list', {}); var n = (r && r.rows ? r.rows.length : 0); return { summary: n + ' Einträge geprüft.' } }"
+			"function handle(msg, caps){ var r = caps.ops('record.list', {}); var n = (r && r.rows ? r.rows.length : 0); var r2 = caps.ops('record.list', {}); return { summary: n + ' Einträge geprüft.' } }"
 		const res = await connectSkills(UID, APP, 'todos', 'Ausgaben werden als Aufgaben nachgehalten', CODE)
 		expect(res.error).toBeUndefined()
 		expect(res.tool).toBe('sync_todos')

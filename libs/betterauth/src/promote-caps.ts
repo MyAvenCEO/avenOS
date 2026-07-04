@@ -241,6 +241,8 @@ async function glmOverviewCode(skeleton: AppSkeleton, source: Record<string, unk
 		JSON.stringify(Object.fromEntries([...skeleton.aggregates.map((a) => [a, '<computed>']), ...skeleton.entities.map((e) => [e.key, ['<rows shaped like the sample>']])])),
 		`Sample state (match value FORMATTING, e.g. currency strings): ${JSON.stringify(source).slice(0, 800)}`,
 		'Aggregates are COMPUTED from the rows (e.g. a total = sum of parsed amounts, formatted like the sample).',
+		'PLAIN SYNCHRONOUS style: `function handle(msg, caps) { var r = caps.ops("<type>.list", {}); ... }` —',
+		'caps.ops() blocks and returns directly; do NOT use async/await/Promise.',
 		'No imports, no fetch, no timers, no globals — plain ES5-ish JS + JSON/Math. Output ONLY the code.'
 	].join('\n')
 	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
@@ -610,9 +612,9 @@ export const CONNECT_INSTRUCTIONS = [
 	'RETURN a state object with at least { "summary": "<one German sentence: what was synced/changed>" }.',
 	'Idempotence matters: running the connector twice must not double-apply (match by name/label before',
 	'creating; prefer update over create when a matching target row exists).',
-	'SEQUENTIAL awaits ONLY: plain for-loops with await, one caps.ops call at a time. NEVER Promise.all,',
-	'never parallel awaits, no async callbacks inside map/forEach — the sandbox suspends ONE host call',
-	'at a time and parallel pending promises never settle.',
+	'PLAIN SYNCHRONOUS style ONLY: `function handle(msg, caps) { var r = caps.ops("x.list", {}); ... }` —',
+	'caps.ops() BLOCKS and returns the result directly. NEVER use async, await, Promise, .then, or',
+	'callbacks — any of those and the sandbox rejects the code.',
 	'No imports, no fetch, no timers, no globals — plain ES5-ish JS + JSON/Math. Output ONLY the code.'
 ].join('\n')
 
@@ -644,7 +646,7 @@ async function glmConnectorCode(
 						{ role: 'assistant', content: repair.code },
 						{
 							role: 'user',
-							content: `The sandbox smoke run REJECTED that code: ${repair.error}. Fix it MINIMALLY (remember: sequential awaits only, return { summary }). Output ONLY the corrected code.`
+							content: `The sandbox smoke run REJECTED that code: ${repair.error}. Fix it MINIMALLY (remember: PLAIN SYNCHRONOUS style — caps.ops() returns directly, no async/await/Promise; return { summary }). Output ONLY the corrected code.`
 						}
 					]
 				: [])
@@ -726,6 +728,14 @@ export async function smokeRunConnector(
 	code: string,
 	contracts: OpsContract[]
 ): Promise<{ ok: boolean; error?: string }> {
+	// STATIC gate first (deterministic): the sandbox supports host calls ONLY during the main eval,
+	// so connector code must be plain synchronous — async/await/Promise are rejected by name.
+	if (/\basync\b|\bawait\b|\bPromise\b|\.then\s*\(/.test(code))
+		return {
+			ok: false,
+			error:
+				'use PLAIN SYNCHRONOUS style — caps.ops() returns the result directly; async/await/Promise/.then are not supported in the sandbox'
+		}
 	const byType = new Map(contracts.map((c) => [c.type, c]))
 	const stubOps = async (name: unknown) => {
 		const n = String(name)

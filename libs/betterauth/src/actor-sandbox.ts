@@ -41,7 +41,10 @@ export async function runActorCode(
 	opts: SandboxOptions = {}
 ): Promise<unknown> {
 	const vm: QuickJSAsyncContext = await newAsyncContext()
-	const deadline = Date.now() + (opts.deadlineMs ?? DEFAULT_DEADLINE_MS)
+	const fuelMs = opts.deadlineMs ?? DEFAULT_DEADLINE_MS
+	// fuel is PER VM SLICE: each await of a host cap refuels, so an actor doing several sequential DB
+	// calls isn't killed by wall-clock spent WAITING on the host — only runaway VM execution is.
+	let deadline = Date.now() + fuelMs
 	vm.runtime.setInterruptHandler(() => Date.now() > deadline)
 	vm.runtime.setMemoryLimit(opts.memoryBytes ?? DEFAULT_MEMORY)
 	try {
@@ -52,7 +55,9 @@ export async function runActorCode(
 		for (const [name, fn] of Object.entries(caps)) {
 			const f = vm.newAsyncifiedFunction(name, async (argHandle) => {
 				const args = JSON.parse(vm.getString(argHandle)) as unknown[]
-				return vm.newString(JSON.stringify((await fn(...args)) ?? null))
+				const out = JSON.stringify((await fn(...args)) ?? null)
+				deadline = Date.now() + fuelMs // refuel: the wait was host time, not VM time
+				return vm.newString(out)
 			})
 			vm.setProp(capsObj, name, f)
 			f.dispose()
@@ -84,7 +89,12 @@ export async function runActorCode(
 			res.error.dispose()
 			throw new Error(`[sandbox] ${errText(e)}`)
 		}
-		// `handle` is async → the wrapper returns a Promise; drain the job queue and read its settled state.
+		// ASYNCIFY CONTRACT (board 0117, learned the hard way): a host cap can only suspend the VM
+		// during the MAIN eval. A cap call inside a promise CONTINUATION (i.e. after an `await`) is
+		// unsupported — pumping executePendingJobs across a suspension corrupts the WASM ("Out of
+		// bounds memory access"). Therefore actor code calls caps SYNCHRONOUSLY (they block via
+		// asyncify — any number of calls) and the single drain below only unwraps the final value;
+		// legacy `async handle` with ONE trailing await still settles on this drain.
 		vm.runtime.executePendingJobs()
 		const state = vm.getPromiseState(res.value)
 		res.value.dispose()
@@ -98,7 +108,9 @@ export async function runActorCode(
 			state.error.dispose()
 			throw new Error(`[sandbox] ${errText(e)}`)
 		}
-		throw new Error('[sandbox] actor did not settle (still pending after draining jobs)')
+		throw new Error(
+			'[sandbox] actor did not settle — a caps call happened AFTER an await; write handle as a PLAIN SYNCHRONOUS function (caps.ops() returns directly)'
+		)
 	} finally {
 		vm.dispose()
 	}
