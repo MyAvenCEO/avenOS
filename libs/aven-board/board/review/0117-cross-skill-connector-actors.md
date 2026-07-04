@@ -92,3 +92,16 @@ smoke gate mandatory; no fuzzy resolution; everything config-as-data.
   tsc · svelte-check clean · migration applied to dev. Remaining: Samuel's live
   banking→inventory loop ("connect banking to inventory: Käufe erhöhen den
   Bestand, Verkäufe mindern ihn") + v2 reactive data-event edges (follow-on).
+
+- `2026-07-04` — LIVE LOOP LANDED (three rounds of engine hardening, connector
+  100% GLM-authored throughout): round 1 died on a flat 120s timeout (→ streamed
+  authoring, idle+total aborts); round 2 exposed the REAL sandbox contract — an
+  asyncified cap can only suspend during the MAIN eval, so any cap call after an
+  await never settles and pumping jobs across a suspension corrupts the WASM (→
+  actors are PLAIN SYNCHRONOUS, caps.ops() blocks; static async/await/Promise
+  gate; per-slice interrupt refuel; matrix-proven incl. legacy single-await);
+  round 3 WIRED: sync_inventory on banking-overview, caps
+  [ops:transaction, ops:inventory], sync-style GLM reconciler (by-name index,
+  update-over-create), flow = …improve, sync_inventory, sub-inventory→[inventory]
+  (the composite flowRef seat, live). Samuel's first "sync inventory" chat run =
+  the remaining HITL confirmation.
