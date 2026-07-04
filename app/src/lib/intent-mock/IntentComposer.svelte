@@ -972,7 +972,7 @@ const pillClass = $derived.by(() => {
 		<div class={pillClass} role="group">
 			<button
 				type="button"
-				class="group relative flex size-[4.375rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl outline-none transition-[transform,filter] duration-200 ease-out [filter:drop-shadow(0_3px_7px_color-mix(in_srgb,var(--color-primary)_18%,transparent))] hover:-translate-y-0.5 hover:[filter:drop-shadow(0_7px_16px_color-mix(in_srgb,var(--color-primary)_30%,transparent))] focus-visible:ring-2 focus-visible:ring-primary/35 active:translate-y-0 active:[filter:drop-shadow(0_2px_5px_color-mix(in_srgb,var(--color-primary)_22%,transparent))] disabled:cursor-not-allowed disabled:opacity-40"
+				class="group relative flex size-[4.375rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl outline-none transition-transform duration-200 ease-out hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-primary/35 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40"
 				{disabled}
 				onpointerdown={(e) => {
 					void focusShellWebview()
@@ -996,6 +996,13 @@ const pillClass = $derived.by(() => {
 					? 'Tap to type, double-tap for voice stream, hold to record (mock)'
 					: 'Start voice note (mock)'}
 			>
+				<!-- board 0112 — a soft CIRCULAR glow behind the mark lifts it off the cream background (a
+				     radial gradient, not a shape-tracing drop-shadow → no squared petal silhouette). Subtle
+				     at rest, brighter + wider on hover. -->
+				<span
+					aria-hidden="true"
+					class="pointer-events-none absolute inset-[12%] rounded-full opacity-55 blur-[12px] transition-all duration-200 group-hover:inset-[6%] group-hover:opacity-90 [background:radial-gradient(circle,color-mix(in_srgb,var(--color-primary)_30%,transparent),transparent_70%)]"
+				></span>
 				<!-- board 0110 — disabled mark at rest, full-colour clean mark on hover / active / focus -->
 				<img
 					src={logoDisabled}
