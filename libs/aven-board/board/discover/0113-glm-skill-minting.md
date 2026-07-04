@@ -5,6 +5,7 @@ owner: claude
 created: 2026-07-03
 updated: 2026-07-03
 tags: [betterauth, skills, glm, north-star]
+goal: "`bun --env-file=.env.samuel test libs/betterauth/tests/` and `bun test libs/aven-vibes/tests/` exit 0 — including NEW tests proving (a) deriveAppSkeleton() maps the banking mockup source deterministically (top-level arrays → entities with item fields; scalars → computed aggregates); (b) the skillify skill carries the FIVE promotion step actors (plan_app, mint_data, wire_actors, seed_data, promote) each with a vibe, plus an EXPLICIT flow row with plan→…→promote edges served by composeFlows; (c) the pipeline executed against the banking mockup with the GLM-vocabulary seam stubbed lands: bundle + derived ops exist, the promoted skill row + a data_crud actor + an actor.code SANDBOX actor (caps ['ops']) exist, runCodeActor() returns {totalBalance, transactions[]} shaped like the example source (the identity mapper survives promotion), the vibe rows are COPIED mock-banking-overview → banking-overview, and the seeded example rows exist as predications; (d) after crud() adds one more transaction the code actor's next run includes it — plus svelte-check exits 0 and Samuel live-confirms: 'skillify the banking mockup' walks the step cards, then 'add a transaction 12.50 at Rewe' and 'show my banking overview' work against real data."
 ---
 
 # Skillify — the skill that mints complete skills, end to end
@@ -68,3 +69,69 @@ router's skill menu scales as skills multiply.
   the mock- namespace wall) + `mockups` (no-LLM show/list). This card keeps PART 2: wiring the real data
   layer (reuse/create operations + bundles + vocab) by DELEGATING data authoring to the Ontology skill
   as a sub-skill flow, plus mockup→real-skill promotion.
+
+
+## Goal (discovered 2026-07-04)
+
+Say **"skillify the banking mockup"** and walk a STEPWISE actor flow — each step ONE
+actor with ITS OWN vibe card you can react to (the Planner-mode pattern) — until the
+mockup is a real, routable, interactive skill over live predication data.
+
+**Completion condition:** the frontmatter `goal` (command-provable + Samuel's live loop).
+
+## Interviewed decisions (2026-07-04)
+
+1. **Stepwise, actor-per-step** (Samuel): `plan_app → mint_data → wire_actors →
+   seed_data → promote`, each an actor row on skillify with its own vibe card (plan
+   card · the existing ontology/bundle-created cards · a wiring card · a seeded-rows
+   card · the finished app). The skillify skill gets an EXPLICIT flow row with those
+   edges — the second orchestration-as-config example after the Planner (0088); the
+   graph in the Skills explorer IS the pipeline. Steps are STATELESS across turns —
+   keyed by the mockup name, idempotent, re-runnable.
+2. **Deterministic skeleton + GLM vocabulary**: `deriveAppSkeleton(source)` maps the
+   example-source shape mechanically (top-level arrays → entities + item fields;
+   top-level scalars → COMPUTED aggregates — no SUM in the query grammar, so
+   aggregation is exactly the sandbox actor's job). GLM's ONLY authoring: field →
+   Lojban predicate mapping via the Ontology skill's proven caps (reuse owned_by/
+   named/due…, mint missing from the gismu lexicon) — the sub-skill delegation.
+3. **Seeding: yes, visible + skippable**: seed_data writes the example rows as real
+   predications through the derived create op, shown as a created-rows card.
+
+## Key design consequence
+
+**The identity mapper SURVIVES promotion.** The sandbox code actor (actor.code — the
+0111 seat's FIRST real user, caps = ['ops'] only) fetches via the derived + aggregate
+ops and shapes its output to EXACTLY the example-source shape — so the mockup's
+view/style/mapper promote UNCHANGED (rows copied mock-name → real name). The example
+source is the CONTRACT between data and view. Sandbox code is gated by a SMOKE RUN
+(runCodeActor with stubbed ops must return the contract shape) before the actor row
+is saved — author → validate → seed → render, never raw-trusted.
+
+## Slices
+
+- **S1** deriveAppSkeleton (pure, tested) + the plan_app actor + the `skill-plan` card.
+- **S2** mint_data: Ontology delegation (GLM vocabulary seam injectable for tests) →
+  predicates + bundle + derived ops, traced as sub-skill runs.
+- **S3** wire_actors: the new skill row + a data_crud actor row + the GLM-authored
+  sandbox actor.code (smoke-run gate) + the TS registry fail-safe entry.
+- **S4** seed_data (skippable) + promote (copy vibe rows, point actor.vibe, done card)
+  + the banking e2e (crud add → the code actor reflects it).
+
+**Out of scope:** card-button interactivity on promoted apps ($on → sandbox dispatch),
+cross-entity refs between promoted entities (refType reification, e.g. tx→account),
+deleting/archiving promoted skills, multi-mockup apps.
+
+## Verification
+
+```bash
+bun --env-file=.env.samuel test libs/betterauth/tests/   # incl. the skillify-promotion tests
+bun test libs/aven-vibes/tests/
+(cd app && bunx svelte-check --tsconfig ./tsconfig.json)
+```
+Plus Samuel's live loop: skillify the banking mockup → the step cards → add a
+transaction → show the overview.
+
+- `2026-07-04` — DISCOVERED (part 2): stepwise actor-per-step with own vibes (Samuel's
+  Planner-mode analogy), explicit skillify flow edges, deterministic skeleton +
+  GLM-vocabulary-only, visible skippable seeding, the identity-mapper-survives
+  contract, the sandbox smoke-run gate. Card promoted ideate → discover.
