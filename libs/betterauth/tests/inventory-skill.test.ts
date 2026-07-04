@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test'
+import { TOOL_ACTORS } from '@avenos/skills/tools'
 import { sql } from 'kysely'
 import { crud, runNamedOp } from '../src/actor-run'
 import { db } from '../src/db'
@@ -84,6 +85,23 @@ d('board 0113 — the Inventory skill, pure config, end to end from the DB', () 
 		const countBy = Object.fromEntries((agg.rows ?? []).map((r) => [String(r.key), Number(r.n)]))
 		expect(countBy[idOf('Garage')]).toBeGreaterThanOrEqual(2)
 		expect(countBy[idOf('Keller')]).toBeGreaterThanOrEqual(1)
+	})
+
+	test('MOVE by NAME: the data_crud actor resolves a name→id so an update hits the right row', async () => {
+		// the reported bug: the card shows no ids, so the model passes the item NAME as `id` on an update
+		// ("move the Hammer to Keller") — the actor must resolve it to the real row and apply the move.
+		const ctx = {
+			userId: UID,
+			data: (a: Parameters<typeof crud>[1]) => crud(UID, a),
+			ops: (n: string, p?: Record<string, unknown>) => runNamedOp(UID, n, p ?? {})
+		}
+		await TOOL_ACTORS.data_crud.handle(ctx as never, {
+			schema: 'inventory',
+			action: 'update',
+			items: [{ id: N('Hammer'), location: 'Keller' }] // id = the NAME, not a uuid
+		})
+		const moved = items(await crud(UID, { schema: 'inventory', action: 'list' }))
+		expect(byName(moved, N('Hammer'))?.location).toBe('Keller')
 	})
 
 	test('DELETE cascades the satellites (located/quantity/owned_by rows go with the item)', async () => {

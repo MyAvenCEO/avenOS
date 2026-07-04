@@ -163,12 +163,16 @@ function resultVibe(
 function resolveId(given: string, rows: Rec[]): string {
 	const g = String(given ?? '')
 	const ids = rows.map((r) => String(r.id))
-	return (
+	const byId =
 		ids.find((rid) => rid === g) ??
 		(g.length >= 4 ? ids.find((rid) => rid.startsWith(g) || g.startsWith(rid)) : undefined) ??
-		(g.length >= 6 ? ids.find((rid) => rid.slice(0, 8) === g.slice(0, 8)) : undefined) ??
-		g
-	)
+		(g.length >= 6 ? ids.find((rid) => rid.slice(0, 8) === g.slice(0, 8)) : undefined)
+	if (byId) return byId
+	// the model often can't see ids (the card shows names) and passes the NAME/TITLE instead ("the toaster")
+	// — match the primary label so an update/delete still hits the right row. board 0112.
+	const gl = g.toLowerCase()
+	const byLabel = rows.find((r) => String(r.title ?? r.name ?? '').toLowerCase() === gl)
+	return byLabel ? String(byLabel.id) : g
 }
 
 export const dataCrud: ToolActor = {
@@ -179,40 +183,43 @@ export const dataCrud: ToolActor = {
 		const detail =
 			`${typeof args.action === 'string' ? args.action : ''} ${schema}`.trim() || 'data'
 
-		// For a todos update/delete — or a create that nests via `parent` — read the LIVE rows ONCE and
-		// RESOLVE the model's id(s) against them (gemma hallucinates UUIDs / copies 8-char short ids).
-		// This both makes the write hit the real row AND gives the diff/label its real "before". board 0099.
-		let todosNow: Rec[] | undefined
+		// For ANY schema's update/delete — or a todos create that nests via `parent` — read the LIVE rows
+		// ONCE and RESOLVE the model's id(s) against them (gemma can't see ids on the card, so it copies
+		// short/hallucinated UUIDs or passes the NAME). This makes the write hit the real row (e.g. "move
+		// the toaster to the cellar" reliably updates the right item) AND gives the diff/label its "before".
+		// board 0099/0112 — generalized from todos-only so inventory (and every skill) moves/edits reliably.
+		let liveRows: Rec[] | undefined
 		const wantsParent = (args.items ?? []).some((i) => (i as Rec).parent)
 		if (
-			schema === 'todos' &&
-			(args.action === 'update' || args.action === 'delete' || (args.action === 'create' && wantsParent))
+			args.action === 'update' ||
+			args.action === 'delete' ||
+			(schema === 'todos' && args.action === 'create' && wantsParent)
 		) {
-			const cur = (await ctx.data({ schema: 'todos', action: 'list' })) as { items?: Rec[] }
-			todosNow = cur.items ?? []
+			const cur = (await ctx.data({ schema, action: 'list' })) as { items?: Rec[] }
+			liveRows = cur.items ?? []
 			if (args.action === 'update' && args.items) {
 				args.items = args.items.map((i) => ({
 					...i,
-					id: resolveId(String((i as Rec).id ?? ''), todosNow!)
+					id: resolveId(String((i as Rec).id ?? ''), liveRows!)
 				}))
 			}
 			if (args.action === 'delete') {
 				const raw2 = (args.ids?.length ? args.ids : args.id ? [args.id] : []).map((x) => String(x))
-				args.ids = raw2.map((x) => resolveId(x, todosNow!))
+				args.ids = raw2.map((x) => resolveId(x, liveRows!))
 				args.id = undefined
 			}
-			// board 0112 — SUB-TASKS: `parent` must be a REAL task row id (part_of.x2). Resolve short/fuzzy
-			// ids; a value that resolves to nothing and matches NO row id prefix is most likely a TITLE the
-			// model smuggled in — resolve it by title too, so "parent":"file taxes" still nests correctly.
-			if (args.items) {
+			// board 0112 — SUB-TASKS (todos only): `parent` must be a REAL task row id (part_of.x2). Resolve
+			// short/fuzzy ids; a value that matches NO row id is most likely a TITLE the model smuggled in —
+			// resolve it by title too, so "parent":"file taxes" still nests correctly.
+			if (schema === 'todos' && args.items) {
 				args.items = args.items.map((i) => {
 					const p = (i as Rec).parent
 					if (!p || typeof p !== 'string') return i
-					const byId = resolveId(p, todosNow!)
-					const hit = todosNow!.some((r) => String(r.id) === byId)
+					const byId = resolveId(p, liveRows!)
+					const hit = liveRows!.some((r) => String(r.id) === byId)
 						? byId
 						: String(
-								todosNow!.find((r) => String(r.title ?? '').toLowerCase() === p.toLowerCase())?.id ?? p
+								liveRows!.find((r) => String(r.title ?? '').toLowerCase() === p.toLowerCase())?.id ?? p
 							)
 					return { ...i, parent: hit }
 				})
@@ -224,15 +231,16 @@ export const dataCrud: ToolActor = {
 		// todos-deleted summary can name what went. The loop shows the card; nothing runs until confirmed.
 		if (args.action === 'delete') {
 			const ids = (args.ids ?? []).filter((x): x is string => typeof x === 'string' && !!x)
-			const byId = new Map((todosNow ?? []).map((r) => [String(r.id), String(r.title ?? '')]))
+			// name each row generically (title for todos, name for inventory/…) so the confirm card says WHAT.
+			const byId = new Map((liveRows ?? []).map((r) => [String(r.id), String(r.title ?? r.name ?? '')]))
 			const deleted = ids.map((id) => ({ id, title: byId.get(id) ?? '' }))
 			const names = deleted.map((d) => d.title).filter(Boolean)
-			const label =
-				schema === 'todos' && names.length
-					? names.length === 1
-						? `Delete todo "${names[0]}"?`
-						: `Delete ${names.length} todos: ${names.join(', ')}?`
-					: `Delete ${ids.length || 1} from "${schema}"?`
+			const noun = schema === 'todos' ? 'todo' : schema
+			const label = names.length
+				? names.length === 1
+					? `Delete ${noun} "${names[0]}"?`
+					: `Delete ${names.length} ${noun}s: ${names.join(', ')}?`
+				: `Delete ${ids.length || 1} from "${schema}"?`
 			return {
 				detail,
 				content: {
@@ -251,7 +259,7 @@ export const dataCrud: ToolActor = {
 		// EDIT actor — the before→after diff reads the live rows we already fetched (ids now resolved).
 		const before: Record<string, Rec> | undefined =
 			schema === 'todos' && args.action === 'update'
-				? Object.fromEntries((todosNow ?? []).map((r) => [String(r.id), r]))
+				? Object.fromEntries((liveRows ?? []).map((r) => [String(r.id), r]))
 				: undefined
 
 		let result: unknown

@@ -15,6 +15,7 @@ const selectors: StyleDef['selectors'] = {
 		display: 'flex',
 		flexDirection: 'column',
 		gap: '0.55rem',
+		width: '100%',
 		fontFamily: 'var(--font-sans)',
 		color: 'var(--text)',
 		letterSpacing: '-0.02em'
@@ -44,6 +45,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	// the ledger: one bordered surface, hairline divider rows.
 	'.inv-list': {
+		width: '100%',
 		background: 'var(--surface)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-card)',

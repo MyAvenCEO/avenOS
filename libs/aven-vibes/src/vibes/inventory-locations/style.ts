@@ -13,6 +13,7 @@ const selectors: StyleDef['selectors'] = {
 		display: 'flex',
 		flexDirection: 'column',
 		gap: '0.55rem',
+		width: '100%',
 		fontFamily: 'var(--font-sans)',
 		color: 'var(--text)',
 		letterSpacing: '-0.02em'
@@ -31,6 +32,7 @@ const selectors: StyleDef['selectors'] = {
 	'.loc-meta': { fontSize: 'var(--fs-micro)', color: 'var(--muted)', opacity: '0.7' },
 	'.loc-grid': {
 		display: 'grid',
+		width: '100%',
 		gridTemplateColumns: 'repeat(auto-fill, minmax(10.5rem, 1fr))',
 		gap: '0.75rem'
 	},
