@@ -200,14 +200,21 @@ export async function crud(uid: string, args: DataCrudArgs): Promise<unknown> {
 	if (action === 'update') {
 		const bundle = await loadBundle(schema)
 		const updated: string[] = []
+		const errors: string[] = []
 		for (const item of args.items ?? []) {
 			const id = (item as { id?: string }).id
-			if (!id) continue
+			if (!id) {
+				// HONEST failure — a silent skip here fakes success and teaches the model to duplicate
+				// entries via create instead (the live banking "edit doubles the tx" derail).
+				errors.push('update item missing "id" (the entry\u2019s title/name also works as id)')
+				continue
+			}
 			const row = bundle ? await resolveRefs(uid, bundle, item as Record<string, unknown>) : item
 			await runNamedOp(uid, op('update'), row as Record<string, unknown>)
 			updated.push(id)
 		}
-		return { ok: true, action: 'update', updated, errors: [] }
+		if (errors.length && updated.length === 0) return { ok: false, action: 'update', updated, errors }
+		return { ok: true, action: 'update', updated, errors }
 	}
 	if (action === 'delete') {
 		const ids = args.ids ?? (args.id ? [args.id] : [])

@@ -308,7 +308,7 @@ export async function wireSkill(
 		ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, description = EXCLUDED.description, updated_at = now()
 	`.execute(D)
 	const crudMailbox = {
-		description: `Read or modify the user's ${label} data (schema "${entity?.type}"): items with ${entity?.fields.join(', ')}. BATCH create/update via items; delete via ids; list with the universal {field,value,op} filter.`,
+		description: `Read or modify the user's ${label} data (schema "${entity?.type}"): items with ${entity?.fields.join(', ')}. BATCH create/update via items; delete via ids; list with the universal {field,value,op} filter. ${CRUD_STEERING}`,
 		parameters: {
 			type: 'object',
 			properties: {
@@ -353,6 +353,14 @@ export async function wireSkill(
 	await writeSkillFlow(skeleton)
 	return { skillId, code: authored }
 }
+
+/** Universal update/delete steering for the generic crud mailbox (no domain vocabulary): the server
+ *  resolves titles/names to row ids, so the model must never duplicate-on-correct or filter-hunt. */
+export const CRUD_STEERING =
+	'When the user refers to an EXISTING entry (correcting its amount/date/sign, renaming, marking), use ' +
+	'action "update" — the item\u2019s id may be its title/name, the server resolves it. NEVER create a ' +
+	'duplicate for a correction. To delete, pass ids directly (titles work) \u2014 do not search with list ' +
+	'filters first.'
 
 // ── skill PRESENCE: granular per-step flow nodes + per-verb cards (the Planner pattern) ────────────
 // Samuel (2026-07-04): a promoted skill must have the SAME workflow granularity as todos — one flow

@@ -279,7 +279,9 @@ export const syncActorsActor: ToolActor = {
 				addedNodes: nodes,
 				addedVibes: vibes,
 				note: nothing
-					? 'Everything already at full granularity — nothing added. ONE short sentence.'
+					? 'Already at full granularity: read/create/edit/delete/overview ALL exist and work ' +
+						'(update/delete accept the entry title as id). Answer the user\u2019s actual question ' +
+						'about what the skill supports — do not just say "nothing to do".'
 					: 'Granular steps/cards added (add-only). ONE short sentence listing what is new.'
 			},
 			reply:
