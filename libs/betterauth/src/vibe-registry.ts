@@ -44,6 +44,36 @@ registerContextProvider('vibe_logic', async () => ({
 
 export type VibeBundle = { view: unknown; style: unknown; logic: string; source: unknown }
 
+// board 0115 — a style row may REFERENCE another row as its base (`extends: 'brand'`): shared styling
+// lives in ONE row and is composed base-under-own AT SERVE TIME (same merge semantics as withBrand).
+// Change the `brand` row → every extending vibe re-styles on its next load. Depth-limited + cycle-safe.
+function mergeDeep(base: Record<string, unknown>, over: Record<string, unknown>): Record<string, unknown> {
+	const out: Record<string, unknown> = { ...base }
+	for (const key of Object.keys(over)) {
+		const ov = over[key]
+		const bv = out[key]
+		if (ov && typeof ov === 'object' && !Array.isArray(ov) && bv && typeof bv === 'object' && !Array.isArray(bv))
+			out[key] = mergeDeep(bv as Record<string, unknown>, ov as Record<string, unknown>)
+		else out[key] = ov
+	}
+	return out
+}
+type StyleRow = { extends?: string; tokens?: unknown; components?: unknown; selectors?: unknown }
+async function composeStyle(style: StyleRow, seen: Set<string> = new Set()): Promise<StyleRow> {
+	const ref = typeof style.extends === 'string' ? style.extends : null
+	if (!ref || seen.has(ref) || seen.size >= 3) return style
+	seen.add(ref)
+	const r = await sql<{ body: unknown }>`SELECT body FROM vibe_style WHERE name = ${ref}`.execute(db())
+	const baseRaw = r.rows[0]?.body
+	if (baseRaw == null) return style // missing base: serve the own layer (never throw a render)
+	const base = await composeStyle(asJson(baseRaw) as StyleRow, seen)
+	return {
+		tokens: mergeDeep((base.tokens ?? {}) as never, (style.tokens ?? {}) as never),
+		components: (style.components ?? base.components) as never,
+		selectors: mergeDeep((base.selectors ?? {}) as never, (style.selectors ?? {}) as never)
+	}
+}
+
 /** The view/style/logic(+example source) bundle for `name`, or null if no part exists. */
 export async function loadVibe(name: string): Promise<VibeBundle | null> {
 	const one = async (table: string): Promise<unknown> => {
@@ -62,7 +92,7 @@ export async function loadVibe(name: string): Promise<VibeBundle | null> {
 	if (view == null && style == null && logic == null) return null
 	return {
 		view: view == null ? null : asJson(view),
-		style: style == null ? null : asJson(style),
+		style: style == null ? null : await composeStyle(asJson(style) as StyleRow),
 		logic: typeof logic === 'string' ? logic : '',
 		source: source == null ? null : asJson(source)
 	}

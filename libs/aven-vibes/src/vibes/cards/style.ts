@@ -1,4 +1,3 @@
-import { withBrand } from '../../brand-style.js'
 import type { StyleDef } from '../../engine/types.js'
 
 // board 0111 — the ONE shared style for every read-only chat/Runs card (todos created/edited/deleted,
@@ -295,4 +294,4 @@ const selectors: StyleDef['selectors'] = {
 	'.vc-line': { fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-body)', color: 'var(--text)' }
 }
 
-export const cardStyle: StyleDef = withBrand({ tokens, selectors })
+export const cardStyle: StyleDef = { extends: 'brand', tokens, selectors }

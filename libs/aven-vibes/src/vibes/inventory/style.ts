@@ -1,4 +1,3 @@
-import { withBrand } from '../../brand-style.js'
 import type { StyleDef } from '../../engine/types.js'
 
 // board 0112 — the INVENTORY list vibe: a bespoke "stock ledger" in its OWN inv-* namespace (not the
@@ -109,4 +108,4 @@ const selectors: StyleDef['selectors'] = {
 	'.inv-empty:empty': { display: 'none' }
 }
 
-export const inventoryStyle: StyleDef = withBrand({ tokens, selectors })
+export const inventoryStyle: StyleDef = { extends: 'brand', tokens, selectors }

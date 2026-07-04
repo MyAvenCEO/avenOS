@@ -2,7 +2,7 @@ import { CSS_INJECTION_PATTERNS, FORBIDDEN_PATH_KEYS, SAFE_TAGS } from './securi
 import type { StyleDef } from './types.js'
 
 const FORBIDDEN_STYLE_KEYS = new Set(['rawCss', 'rawCSS', 'raw_css'])
-const TOP_LEVEL_STYLE_KEYS = new Set(['tokens', 'components', 'selectors'])
+const TOP_LEVEL_STYLE_KEYS = new Set(['tokens', 'components', 'selectors', 'extends'])
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/
 const SAFE_CLASS = /^[A-Za-z][A-Za-z0-9_-]*$/
 const MEDIA_RULE = /^@media\s*\(\s*(?:max|min)-width\s*:\s*\d+(?:px|rem|em)\s*\)$/
@@ -262,6 +262,12 @@ export function validateStyleDef(style: StyleDef, path = 'style'): void {
 				`[aven-ui] Forbidden style field "${key}" at ${path}. Raw CSS is not allowed.`
 			)
 		}
+	}
+	// board 0115 — `extends` REFERENCES another vibe_style row as the base layer (composed server-side).
+	// A safe row name only — never CSS, never a path.
+	if ('extends' in style && style.extends !== undefined) {
+		if (typeof style.extends !== 'string' || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(style.extends))
+			throw new Error(`[aven-ui] Invalid extends ref at ${path}: must be a kebab-case style name`)
 	}
 	validateTokenTree(style.tokens, `${path}.tokens`)
 	if (style.components) {

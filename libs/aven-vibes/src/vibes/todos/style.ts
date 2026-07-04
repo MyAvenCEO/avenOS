@@ -1,4 +1,3 @@
-import { withBrand } from '../../brand-style.js'
 import type { StyleDef } from '../../engine/types.js'
 
 // Shared brand layer provides colours/radii/fonts/ink. Todos keeps its navy action accent
@@ -355,4 +354,4 @@ const selectors: StyleDef['selectors'] = {
 	}
 }
 
-export const todoStyle: StyleDef = withBrand({ tokens, selectors })
+export const todoStyle: StyleDef = { extends: 'brand', tokens, selectors }

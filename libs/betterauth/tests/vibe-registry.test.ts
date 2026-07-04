@@ -1,4 +1,4 @@
-import { todoLogic, todoStyle, todoView } from '@avenos/aven-vibes'
+import { todoLogic, todoStyle, todoView, withBrand } from '@avenos/aven-vibes'
 import { describe, expect, test } from 'bun:test'
 import { loadVibe } from '../src/vibe-registry'
 
@@ -31,7 +31,9 @@ describe('vibe.* registry (board 0095)', () => {
 			return
 		}
 		expect(canon(bundle.view)).toEqual(canon(todoView))
-		expect(canon(bundle.style)).toEqual(canon(todoStyle))
+		// board 0115 — the STORED row is the raw file definition (extends:'brand'); the SERVED style is
+		// composed base-under-own at serve time. Parity = served ≡ withBrand(file definition).
+		expect(canon(bundle.style)).toEqual(canon(withBrand(todoStyle)))
 		expect(bundle.logic).toBe(todoLogic)
 	})
 })

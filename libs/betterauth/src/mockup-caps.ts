@@ -1,4 +1,4 @@
-import { validateStyleDef, validateViewDef, withBrand } from '@avenos/aven-vibes'
+import { validateStyleDef, validateViewDef } from '@avenos/aven-vibes'
 import { sql } from 'kysely'
 import { actorConfig } from './config'
 import { db } from './db'
@@ -41,9 +41,15 @@ export async function saveMockup(rawName: string, parts: MockupParts): Promise<s
 	const name = mockName(rawName)
 	// gate 1: the view — SAFE_TAGS / event / path rules.
 	validateViewDef((parts.view ?? {}) as never)
-	// gate 2: the style — brand-composed first (GLM authors only its own selectors/tokens; the brand layer
-	// comes free and keeps every mockup on-system), then the allow-list validator.
-	const styled = withBrand((parts.style ?? { tokens: {}, selectors: {} }) as never)
+	// gate 2: the style — stored RAW with `extends: 'brand'` (board 0115): the brand layer is a REFERENCED
+	// vibe_style row composed at serve time, never baked in — so a brand change re-styles every mockup.
+	// The validator gates the mockup's OWN layer (the brand row is system-owned + already validated).
+	const raw = (parts.style ?? {}) as { tokens?: unknown; selectors?: unknown }
+	const styled = {
+		extends: 'brand',
+		tokens: (raw.tokens ?? {}) as Record<string, unknown>,
+		selectors: (raw.selectors ?? {}) as Record<string, Record<string, unknown>>
+	}
 	validateStyleDef(styled)
 	// gate 3: the example source must be a non-empty object (the vibe-source completeness rule).
 	const source = parts.source

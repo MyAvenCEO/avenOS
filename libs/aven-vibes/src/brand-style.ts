@@ -135,7 +135,7 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 	}
 }
 
-function mergeDeep(
+export function mergeDeep(
 	base: Record<string, unknown>,
 	over: Record<string, unknown>
 ): Record<string, unknown> {

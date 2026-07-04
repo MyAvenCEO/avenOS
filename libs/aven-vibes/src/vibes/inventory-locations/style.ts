@@ -1,4 +1,3 @@
-import { withBrand } from '../../brand-style.js'
 import type { StyleDef } from '../../engine/types.js'
 
 // board 0112 — the inventory LOCATIONS grid: storage "bins" as brand tiles, each with an OCHRE spine (a
@@ -74,4 +73,4 @@ const selectors: StyleDef['selectors'] = {
 	'.loc-empty:empty': { display: 'none' }
 }
 
-export const locationsStyle: StyleDef = withBrand({ tokens, selectors })
+export const locationsStyle: StyleDef = { extends: 'brand', tokens, selectors }

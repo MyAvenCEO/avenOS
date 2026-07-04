@@ -1,4 +1,3 @@
-import { withBrand } from '../../brand-style.js'
 import type { StyleDef } from '../../engine/types.js'
 
 // board 0112 — the GOALS grid card: every goal the user's todos cluster under, as a responsive grid of
@@ -87,4 +86,4 @@ const selectors: StyleDef['selectors'] = {
 	}
 }
 
-export const goalsStyle: StyleDef = withBrand({ tokens: {}, selectors })
+export const goalsStyle: StyleDef = { extends: 'brand', tokens: {}, selectors }

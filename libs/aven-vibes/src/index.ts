@@ -4,7 +4,7 @@
 // helpers) are gone. Predication vocab is a subpath: '@avenos/aven-vibes/predicate'; SKR04 is './skr'.
 
 export * from './engine/index.js'
-export { brandBaseSelectors, brandTokens, withBrand } from './brand-style.js'
+export { brandBaseSelectors, brandTokens, mergeDeep, withBrand } from './brand-style.js'
 export { contentHash, type FileRef, filePath, fileRef } from './file-ref.js'
 export * from './sandbox.js'
 // Shared read-only card style (todos created/edited/deleted, ontology, query/mutation, bundle). board 0111.
