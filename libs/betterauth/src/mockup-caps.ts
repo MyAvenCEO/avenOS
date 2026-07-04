@@ -268,9 +268,25 @@ export async function mintMockup(
 			].join('\n')
 		}
 	}
+	// a stalled GLM stream must NEVER wedge the tool call open (the live 187s+ hang): abort when no
+	// bytes arrive for IDLE_MS, and hard-cap the whole authoring round at TOTAL_MS.
+	const IDLE_MS = 45_000
+	const TOTAL_MS = 240_000
+	const ctrl = new AbortController()
+	let idleTimer = setTimeout(() => ctrl.abort(), IDLE_MS)
+	const totalTimer = setTimeout(() => ctrl.abort(), TOTAL_MS)
+	const bump = () => {
+		clearTimeout(idleTimer)
+		idleTimer = setTimeout(() => ctrl.abort(), IDLE_MS)
+	}
+	const clearTimers = () => {
+		clearTimeout(idleTimer)
+		clearTimeout(totalTimer)
+	}
 	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 		method: 'POST',
 		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+		signal: ctrl.signal,
 		body: JSON.stringify({
 			model: GLM_MODEL,
 			messages: [
@@ -283,14 +299,25 @@ export async function mintMockup(
 		console.error('[mockup] GLM fetch failed:', e)
 		return null
 	})
-	if (!res?.ok || !res.body) return { error: `GLM error ${res?.status ?? '???'}` }
+	if (!res?.ok || !res.body) {
+		clearTimers()
+		return { error: `GLM error ${res?.status ?? '???'}` }
+	}
 	// stream: accumulate the full text while forwarding each delta to the live panel.
 	let full = ''
 	const reader = res.body.getReader()
 	const dec = new TextDecoder()
 	let buf = ''
 	for (;;) {
-		const { done, value } = await reader.read()
+		let step: { done: boolean; value?: Uint8Array }
+		try {
+			step = await reader.read()
+		} catch {
+			clearTimers()
+			return { error: `GLM stream stalled (no data for ${IDLE_MS / 1000}s) — try again` }
+		}
+		bump()
+		const { done, value } = step
 		if (done) break
 		buf += dec.decode(value, { stream: true })
 		const lines = buf.split('\n')
@@ -312,6 +339,7 @@ export async function mintMockup(
 			}
 		}
 	}
+	clearTimers()
 	const obj = parseJsonObject(full)
 	if (!obj) return { error: 'GLM did not return a parseable mockup object' }
 	try {

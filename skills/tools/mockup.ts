@@ -60,7 +60,15 @@ export const createMockup: ToolActor = {
 		if (!request) return { content: { ok: false, error: 'a description of the screen is required' } }
 		const res = await ctx.mockup.mint(request, { promptActor: 'create_mockup' })
 		if (res.error || !res.name)
-			return { detail: 'mockup failed', content: { ok: false, error: res.error ?? 'mint failed' } }
+			return {
+				detail: 'mockup failed',
+				content: {
+					ok: false,
+					error: res.error ?? 'mint failed',
+					note: 'Do NOT retry on your own — tell the user the error and that "nochmal" retries.'
+				},
+				reply: `⚠️ Mockup fehlgeschlagen: ${res.error ?? 'mint failed'} — sag „nochmal", um es erneut zu versuchen.`
+			}
 		const said = typeof args.response === 'string' ? args.response.trim() : ''
 		return {
 			detail: `create ${res.name}`,
@@ -98,7 +106,15 @@ export const editMockup: ToolActor = {
 			}
 		const res = await ctx.mockup.mint(request, { name: hit, promptActor: 'edit_mockup' })
 		if (res.error || !res.name)
-			return { detail: 'refine failed', content: { ok: false, error: res.error ?? 'refine failed' } }
+			return {
+				detail: 'refine failed',
+				content: {
+					ok: false,
+					error: res.error ?? 'refine failed',
+					note: 'Do NOT retry on your own — tell the user the error and that "nochmal" retries.'
+				},
+				reply: `⚠️ Mockup-Änderung fehlgeschlagen: ${res.error ?? 'refine failed'} — sag „nochmal", um es erneut zu versuchen.`
+			}
 		const said = typeof args.response === 'string' ? args.response.trim() : ''
 		return {
 			detail: `edit ${res.name}`,

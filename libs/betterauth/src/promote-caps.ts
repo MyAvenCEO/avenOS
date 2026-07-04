@@ -93,6 +93,7 @@ async function glmVocabPlan(
 	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 		method: 'POST',
 		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+		signal: AbortSignal.timeout(120_000),
 		body: JSON.stringify({
 			model: GLM_MODEL,
 			messages: [
@@ -245,6 +246,7 @@ async function glmOverviewCode(skeleton: AppSkeleton, source: Record<string, unk
 	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 		method: 'POST',
 		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+		signal: AbortSignal.timeout(120_000),
 		body: JSON.stringify({
 			model: GLM_MODEL,
 			messages: [
@@ -629,6 +631,7 @@ async function glmImproveMailbox(
 	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 		method: 'POST',
 		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+		signal: AbortSignal.timeout(120_000),
 		body: JSON.stringify({
 			model: GLM_MODEL,
 			messages: [
