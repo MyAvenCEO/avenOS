@@ -7,17 +7,18 @@ import {
 	skillWantsTodosHint,
 	TOOL_ACTORS
 } from '@avenos/skills/tools'
-import { chatToolDefinitionsFor, skillMenu } from './config'
+import { actorConfig, chatToolDefinitionsFor, skillMenu } from './config'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
-import { crud, runNamedOp } from './actor-run'
+import { crud, runCodeActor, runNamedOp } from './actor-run'
 import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
 import { schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
 import { mockupCaps } from './mockup-caps'
+import { promoteCaps } from './promote-caps'
 import { ontologyCaps } from './ontology'
 import { mutationCaps, queryCaps } from './query-caps'
 import { recordActorRun } from './skills-run'
@@ -530,7 +531,8 @@ function streamWithTools(opts: {
 										bundle: typeCaps(userId), // board 0102 — GLM-authored composite types (data_bundles)
 										// board 0115 — GLM mockup authoring streams its raw tokens into the SAME live
 										// panel the website skill uses (no dead "Thinking…" during a mint/refine).
-										mockup: mockupCaps((text) => emit({ aven_edit_chunk: { text } }))
+										mockup: mockupCaps((text) => emit({ aven_edit_chunk: { text } })),
+										promote: promoteCaps(userId) // board 0113 — the stepwise mockup→skill promotion
 									},
 									parsed
 								)
@@ -584,6 +586,63 @@ function streamWithTools(opts: {
 								outputs: [out.vibe?.schema ?? skillId]
 							})
 							emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
+							continue
+						}
+						// board 0113 — a DB-ONLY actor with sandboxed `code` is a FIRST-CLASS chat tool: no TS
+						// handler exists (the skill was minted as pure config), so resolve the actor row by name
+						// and run its QuickJS code with ONLY its granted caps. The state it returns feeds its
+						// vibe card directly (the example-source contract). The 0111 seat, finally occupied.
+						const dbActor = TOOL_ACTORS[tc.name] ? null : await actorConfig(tc.name)
+						if (dbActor?.code) {
+							emitTool(tc.id, tc.name, 'sandbox', 'running')
+							const ping2 = setInterval(() => emitTool(tc.id, tc.name, 'sandbox', 'running'), 5_000)
+							try {
+								const run = await runCodeActor(dbActor, parsed, userId)
+								const state = run.ran ? (run.result as Record<string, unknown>) : null
+								msgs.push({
+									role: 'tool',
+									tool_call_id: tc.id,
+									content: JSON.stringify({ ok: !!state, note: CARD_REPLY_NOTE })
+								})
+								const schema = dbActor.vibe
+								if (state && schema && !emittedVibes.has(schema)) {
+									emittedVibes.add(schema)
+									emit({ aven_vibe: { schema, data: state } })
+									await persistMessage(
+										chatSessionId,
+										'assistant',
+										`${VIBE_MARKER}${schema}\n${JSON.stringify(state)}`
+									).catch((e) => console.error('[ai] persist sandbox vibe failed:', e))
+								}
+								const saidReply =
+									typeof parsed.response === 'string' && parsed.response.trim()
+										? parsed.response.trim()
+										: `Here is your ${String(schema ?? tc.name).replace(/-/g, ' ')}.`
+								emit({ choices: [{ delta: { content: saidReply } }] })
+								assistant += saidReply
+								selfReplied++
+								void recordActorRun(userId, {
+									flowId: skillId,
+									nodeId: tc.name,
+									label: `sandbox ${tc.name}`,
+									vibe: schema ?? undefined,
+									vibeData: state ?? undefined,
+									outputs: [schema ?? skillId]
+								})
+								emitTool(tc.id, tc.name, 'done', 'done')
+							} catch (e) {
+								msgs.push({
+									role: 'tool',
+									tool_call_id: tc.id,
+									content: JSON.stringify({
+										ok: false,
+										error: e instanceof Error ? e.message : String(e)
+									})
+								})
+								emitTool(tc.id, tc.name, 'sandbox error', 'error')
+							} finally {
+								clearInterval(ping2)
+							}
 							continue
 						}
 						// Read-only website viewer: flow the Composer vibe into the chat — no data op, so

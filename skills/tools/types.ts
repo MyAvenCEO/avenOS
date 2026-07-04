@@ -65,6 +65,28 @@ export type ToolCtx = {
 		list(): Promise<{ name: string; label: string }[]>
 		load(name: string): Promise<unknown>
 	}
+	/** board 0113 — the stepwise mockup→skill PROMOTION caps (plan/mint/wire/seed/promote — each step
+	 *  stateless, keyed by the mockup name; GLM seams live server-side behind validation gates). */
+	promote?: {
+		skeletonOf(name: string): Promise<{
+			skeleton: {
+				app: string
+				entities: { key: string; type: string; fields: string[] }[]
+				aggregates: string[]
+			}
+			source: Record<string, unknown>
+		} | null>
+		mintData(
+			skeleton: unknown,
+			source: Record<string, unknown>
+		): Promise<{ types?: { type: string; predicates: string[] }[]; error?: string }>
+		wire(
+			skeleton: unknown,
+			source: Record<string, unknown>
+		): Promise<{ skillId?: string; error?: string; code?: string }>
+		seed(skeleton: unknown, source: Record<string, unknown>): Promise<{ seeded: Record<string, number> }>
+		promoteVibe(app: string): Promise<{ name: string }>
+	}
 	/** board 0100 — the ontology actor's server caps (GLM-5.2 mint + data_schema registry). Injected only
 	 *  when the ontology tool is dispatched; other actors ignore it. */
 	ontology?: {

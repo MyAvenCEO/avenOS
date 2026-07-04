@@ -57,18 +57,23 @@ d('board 0115 — skillify mockups: wiring, gates, the mock- wall, the viewer', 
 	test('(a) the skillify skill is wired from the DB: menu · tools · read-model', async () => {
 		const menu = await skillMenu()
 		expect(menu.some((s) => s.id === 'skillify')).toBe(true)
-		expect(await advertisedTools('skillify')).toEqual(['create_mockup', 'edit_mockup', 'mockups'])
-		expect((await chatToolDefinitionsFor('skillify')).map((x) => x.function.name)).toEqual([
+		const ALL = [
 			'create_mockup',
 			'edit_mockup',
-			'mockups'
-		])
+			'mockups',
+			'plan_app',
+			'mint_data',
+			'wire_actors',
+			'seed_data',
+			'promote'
+		]
+		expect(await advertisedTools('skillify')).toEqual(ALL)
+		expect((await chatToolDefinitionsFor('skillify')).map((x) => x.function.name)).toEqual(ALL)
+		// board 0113 — skillify carries an EXPLICIT flow (the promotion pipeline edges) that overrides
+		// the derived hub; its nodes include the design fan AND the five promotion steps.
 		const flow = (await composeFlows()).find((f) => f.id === 'skillify')
-		expect((flow?.nodes as { id: string }[]).map((n) => n.id)).toEqual([
-			'create_mockup',
-			'edit_mockup',
-			'mockups'
-		])
+		const ids = (flow?.nodes as { id: string }[]).map((n) => n.id)
+		for (const t of ALL) expect(ids).toContain(t)
 	})
 
 	test('(b) the mock- WALL: input name "todos" saves as mock-todos; the system rows are untouched', async () => {

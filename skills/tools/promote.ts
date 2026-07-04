@@ -1,0 +1,201 @@
+// board 0113 — the PROMOTION step actors: skillify's stepwise flow (one actor per step, each with its
+// own reactable card — the Planner-mode pattern): plan_app → mint_data → wire_actors → seed_data →
+// promote. Steps are STATELESS across turns (keyed by the mockup name) and idempotent — the human reacts
+// to each card in chat ("go on" / "change X" / "skip seeding") and the model calls the next step.
+
+import type { ToolActor, ToolDefinition, ToolResult } from './types'
+
+const nameParam = {
+	name: { type: 'string', description: 'The mockup being promoted (kebab-case or plain words).' },
+	response: { type: 'string', description: 'A short human-facing reply to show the user.' }
+}
+
+function def(name: string, description: string, extra: Record<string, unknown> = {}): ToolDefinition {
+	return {
+		type: 'function',
+		function: {
+			name,
+			description,
+			parameters: { type: 'object', properties: { ...nameParam, ...extra }, required: ['name'] }
+		}
+	}
+}
+
+const noCap: ToolResult = { content: { ok: false, error: 'promote capability not available' } }
+type Raw = { name?: string; response?: string; skip?: boolean }
+const said = (raw: Raw): string => (typeof raw.response === 'string' ? raw.response.trim() : '')
+
+export const planApp: ToolActor = {
+	definition: def(
+		'plan_app',
+		'STEP 1 of promoting a mockup to a real skill: derive + show the APP PLAN (entities from the ' +
+			'example data, their fields, computed aggregates, seed counts). Use when the user says ' +
+			'"skillify/promote the X mockup". The next step after the user agrees is mint_data.'
+	),
+	async handle(ctx, raw): Promise<ToolResult> {
+		if (!ctx.promote) return noCap
+		const r = raw as Raw
+		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
+		if (!got)
+			return { detail: 'plan failed', content: { ok: false, error: `no mockup matching "${r.name}"` } }
+		const { skeleton, source } = got
+		const plan = {
+			app: skeleton.app,
+			entities: skeleton.entities.map((e) => ({
+				type: e.type,
+				fields: e.fields,
+				seedRows: Array.isArray(source[e.key]) ? (source[e.key] as unknown[]).length : 0
+			})),
+			aggregates: skeleton.aggregates
+		}
+		return {
+			detail: `plan ${skeleton.app}`,
+			content: {
+				ok: true,
+				plan,
+				note: 'The plan card is shown. Summarize in ONE sentence and ask whether to continue with mint_data.'
+			},
+			reply: said(r) || `Here is the plan for "${skeleton.app}" — continue with the data layer?`,
+			vibe: { schema: 'skill-plan', data: { ...plan, step: 'plan' } }
+		}
+	}
+}
+
+export const mintData: ToolActor = {
+	definition: def(
+		'mint_data',
+		'STEP 2: mint the DATA layer for the app being promoted — Lojban predicates (reuse or mint via ' +
+			'the Ontology engine) + the bundle + the derived CRUD ops. Run only after plan_app was agreed.'
+	),
+	async handle(ctx, raw): Promise<ToolResult> {
+		if (!ctx.promote) return noCap
+		const r = raw as Raw
+		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
+		if (!got)
+			return { detail: 'mint failed', content: { ok: false, error: `no mockup matching "${r.name}"` } }
+		const res = await ctx.promote.mintData(got.skeleton, got.source)
+		if (res.error) return { detail: 'mint failed', content: { ok: false, error: res.error } }
+		return {
+			detail: `mint ${got.skeleton.app} data`,
+			content: {
+				ok: true,
+				types: res.types,
+				note: 'The bundle card is shown. ONE sentence; next step is wire_actors.'
+			},
+			reply: said(r) || `Data layer ready: ${res.types?.map((t) => t.type).join(', ')} — wire the actors next?`,
+			vibe: {
+				schema: 'bundle-created',
+				data: {
+					request: `promote ${got.skeleton.app}`,
+					spec: { type: res.types?.[0]?.type, parts: [], project: {} },
+					mintedPredicates: res.types?.flatMap((t) => t.predicates) ?? []
+				}
+			}
+		}
+	}
+}
+
+export const wireActors: ToolActor = {
+	definition: def(
+		'wire_actors',
+		'STEP 3: create the new SKILL row + its actors — the generic data_crud and the SANDBOXED overview ' +
+			'actor (GLM-authored code, smoke-run gated). Run only after mint_data succeeded.'
+	),
+	async handle(ctx, raw): Promise<ToolResult> {
+		if (!ctx.promote) return noCap
+		const r = raw as Raw
+		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
+		if (!got)
+			return { detail: 'wire failed', content: { ok: false, error: `no mockup matching "${r.name}"` } }
+		const res = await ctx.promote.wire(got.skeleton, got.source)
+		if (res.error) return { detail: 'wire failed', content: { ok: false, error: res.error } }
+		return {
+			detail: `wire ${res.skillId}`,
+			content: {
+				ok: true,
+				skillId: res.skillId,
+				sandboxBytes: res.code?.length ?? 0,
+				note: 'The wiring card is shown. ONE sentence; next step is seed_data (skippable) then promote.'
+			},
+			reply:
+				said(r) ||
+				`Skill "${res.skillId}" wired (sandbox actor smoke-tested). Seed the example rows, or skip to promote?`,
+			vibe: {
+				schema: 'skill-plan',
+				data: {
+					app: got.skeleton.app,
+					step: 'wired',
+					entities: got.skeleton.entities.map((e) => ({ type: e.type, fields: e.fields, seedRows: 0 })),
+					aggregates: got.skeleton.aggregates
+				}
+			}
+		}
+	}
+}
+
+export const seedDataActor: ToolActor = {
+	definition: def(
+		'seed_data',
+		'STEP 4 (skippable): write the mockup\'s example rows as REAL data through the derived create op. ' +
+			'Pass skip:true to skip when the user declines seeding.',
+		{ skip: { type: 'boolean', description: 'Skip seeding (the user declined).' } }
+	),
+	async handle(ctx, raw): Promise<ToolResult> {
+		if (!ctx.promote) return noCap
+		const r = raw as Raw
+		if (r.skip)
+			return {
+				detail: 'seed skipped',
+				content: { ok: true, skipped: true, note: 'Seeding skipped. Next step is promote.' },
+				reply: said(r) || 'Skipped seeding — promoting next.'
+			}
+		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
+		if (!got)
+			return { detail: 'seed failed', content: { ok: false, error: `no mockup matching "${r.name}"` } }
+		const res = await ctx.promote.seed(got.skeleton, got.source)
+		const total = Object.values(res.seeded).reduce((a, b) => a + b, 0)
+		return {
+			detail: `seed ${got.skeleton.app}`,
+			content: { ok: true, seeded: res.seeded, note: 'Seeded. ONE sentence; final step is promote.' },
+			reply: said(r) || `Seeded ${total} example row(s). Promote the app now?`,
+			vibe: {
+				schema: 'todos-created',
+				data: {
+					items: got.skeleton.entities.flatMap((e) =>
+						(got.source[e.key] as Record<string, unknown>[]).map((row) => ({
+							title: String(row[e.fields.find((f) => ['name', 'title', 'label'].includes(f)) ?? e.fields[0]] ?? '—')
+						}))
+					)
+				}
+			}
+		}
+	}
+}
+
+export const promoteApp: ToolActor = {
+	definition: def(
+		'promote',
+		'FINAL STEP: promote the vibe (mock-<name> → <name>) and show the finished app rendered with REAL ' +
+			'data via its sandbox actor. Run only after wire_actors (and optionally seed_data).'
+	),
+	async handle(ctx, raw): Promise<ToolResult> {
+		if (!ctx.promote) return noCap
+		const r = raw as Raw
+		const got = await ctx.promote.skeletonOf(String(r.name ?? ''))
+		if (!got)
+			return { detail: 'promote failed', content: { ok: false, error: `no mockup matching "${r.name}"` } }
+		await ctx.promote.promoteVibe(got.skeleton.app)
+		return {
+			detail: `promote ${got.skeleton.app}`,
+			content: {
+				ok: true,
+				app: got.skeleton.app,
+				note: `Promoted. Tell the user the app is live — they can say "show my ${got.skeleton.app.replace(/-/g, ' ')}" or add entries in chat.`
+			},
+			reply: said(r) || `"${got.skeleton.app}" is live — a real skill over real data. 🎉`,
+			// the overview code actor renders it with REAL data from here on; this final card shows the
+			// promoted vibe with its (now seeded) example-shaped state via the actor on the NEW skill.
+			vibe: { schema: got.skeleton.app }
+		}
+	}
+}

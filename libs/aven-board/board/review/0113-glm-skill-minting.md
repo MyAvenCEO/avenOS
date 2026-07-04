@@ -135,3 +135,18 @@ transaction → show the overview.
   Planner-mode analogy), explicit skillify flow edges, deterministic skeleton +
   GLM-vocabulary-only, visible skippable seeding, the identity-mapper-survives
   contract, the sandbox smoke-run gate. Card promoted ideate → discover.
+
+- `2026-07-04` — BUILT green (S1–S4 in one pass). promote-caps.ts: deriveAppSkeleton
+  (deterministic: arrays→entities, scalars→computed aggregates) · mintDataLayer
+  (GLM-vocabulary seam → ontologyCaps.save → deterministic INVENTORY-pattern bundle →
+  saveType-derived CRUD ops) · wireSkill (skill row + data_crud + the GLM-code seam →
+  SMOKE-RUN gate in the real QuickJS sandbox → actor.code row, caps ['ops'] — the 0111
+  seat's FIRST occupant) · seedData · promoteVibe (rows copied mock→real; identity
+  mapper survives). ai.ts: DB-only code actors are FIRST-CLASS chat tools (actorConfig
+  fallback → runCodeActor → state feeds the actor's vibe card + generic trace). Five
+  step tool actors + the skillify EXPLICIT flow (design fan + the promotion pipeline
+  edges) + the skill-plan card (migrations 0094/0095 — 0095 repairs an actor-ID
+  collision 0094 caused with inventory: pseudo-UUIDs must be globally unique).
+  skillify-promotion.test 4/4 INCLUDING the interactive proof: a crud-added record
+  appears in the sandbox actor's next run (28,00 € computed in-sandbox). Suites 108/0
+  ×2 · aven-vibes 27/0 · svelte-check clean. Remaining: Samuel's live banking loop.
