@@ -301,6 +301,12 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		expect(nodes.some((n) => n.id === 'sync_todos' && n.actor === 'sync_todos')).toBe(true)
 		const sub = nodes.find((n) => n.id === 'sub-todos')
 		expect(sub?.flowRef).toBe('todos') // the composite/leaf recursion seat, occupied
+		// advertised on BOTH endpoints: the router may land on either skill ("sync inventory" names
+		// the TARGET) — the mirror row carries the same code + scoped caps.
+		const mirror = await sql<{ caps: unknown }>`
+			SELECT caps FROM actor WHERE skill_id = 'todos' AND name = 'sync_todos'
+		`.execute(db())
+		expect(mirror.rows.length).toBe(1)
 		// honest failures: unknown target · same skill twice.
 		expect((await connectSkills(UID, APP, 'no-such-skill', 'x', CODE)).error).toContain('no skill')
 		expect((await connectSkills(UID, APP, APP, 'x', CODE)).error).toContain('different')
@@ -310,6 +316,7 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		if (!DB) return
 		const D = db()
 		await sql`DELETE FROM flow WHERE id = ${APP}`.execute(D)
+		await sql`DELETE FROM actor WHERE skill_id = 'todos' AND name = 'sync_todos'`.execute(D)
 		for (const t of ['vibe_view', 'vibe_style', 'vibe_logic', 'vibe_source'])
 			await sql`DELETE FROM ${sql.raw(t)} WHERE name IN ('record-created', 'record-edited')`.execute(D)
 		// tear the promoted app back down (skill, actors, flow-free), the data layer, and the vibes.

@@ -819,20 +819,34 @@ export async function connectSkills(
 			properties: { response: { type: 'string', description: 'A short human-facing reply to show the user.' } }
 		}
 	}
-	const existing = await sql<{ id: string }>`
-		SELECT id FROM actor WHERE skill_id = ${source} AND name = ${toolName} LIMIT 1
-	`.execute(D)
-	if (existing.rows.length) {
-		await sql`
-			UPDATE actor SET code = ${authored}, caps = ${JSON.stringify(caps)}::jsonb,
-				mailbox = ${JSON.stringify(mailbox)}::jsonb, updated_at = now()
-			WHERE id = ${existing.rows[0].id}
+	// the connector is advertised on BOTH endpoints (Samuel's live "sync inventory" routed to the
+	// TARGET skill — humans name the target): same tool, same code, same scoped caps on each side,
+	// only the description flips perspective. Whichever way the router lands, the tool is there.
+	const mirrorMailbox = {
+		...mailbox,
+		description:
+			`SYNC/reconcile this skill's data FROM the ${byId.get(source)} entries (rule: ${rule.slice(0, 160)}). ` +
+			'Run when the user asks to sync/abgleichen.'
+	}
+	for (const [skillId, mb] of [
+		[source, mailbox],
+		[target, mirrorMailbox]
+	] as const) {
+		const existing = await sql<{ id: string }>`
+			SELECT id FROM actor WHERE skill_id = ${skillId} AND name = ${toolName} LIMIT 1
 		`.execute(D)
-	} else {
-		await sql`
-			INSERT INTO actor (id, skill_id, name, engine, code, caps, mailbox, hitl, position, created_at, updated_at)
-			VALUES (gen_random_uuid(), ${source}, ${toolName}, NULL, ${authored}, ${JSON.stringify(caps)}::jsonb, ${JSON.stringify(mailbox)}::jsonb, false, 5, now(), now())
-		`.execute(D)
+		if (existing.rows.length) {
+			await sql`
+				UPDATE actor SET code = ${authored}, caps = ${JSON.stringify(caps)}::jsonb,
+					mailbox = ${JSON.stringify(mb)}::jsonb, updated_at = now()
+				WHERE id = ${existing.rows[0].id}
+			`.execute(D)
+		} else {
+			await sql`
+				INSERT INTO actor (id, skill_id, name, engine, code, caps, mailbox, hitl, position, created_at, updated_at)
+				VALUES (gen_random_uuid(), ${skillId}, ${toolName}, NULL, ${authored}, ${JSON.stringify(caps)}::jsonb, ${JSON.stringify(mb)}::jsonb, false, 5, now(), now())
+			`.execute(D)
+		}
 	}
 	// the COMPOSITE sub-skill node: source flow → connector leaf → flowRef(target). Add-only.
 	await mergeFlowPieces(
