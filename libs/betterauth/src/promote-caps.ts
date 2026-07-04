@@ -610,13 +610,17 @@ export const CONNECT_INSTRUCTIONS = [
 	'RETURN a state object with at least { "summary": "<one German sentence: what was synced/changed>" }.',
 	'Idempotence matters: running the connector twice must not double-apply (match by name/label before',
 	'creating; prefer update over create when a matching target row exists).',
+	'SEQUENTIAL awaits ONLY: plain for-loops with await, one caps.ops call at a time. NEVER Promise.all,',
+	'never parallel awaits, no async callbacks inside map/forEach — the sandbox suspends ONE host call',
+	'at a time and parallel pending promises never settle.',
 	'No imports, no fetch, no timers, no globals — plain ES5-ish JS + JSON/Math. Output ONLY the code.'
 ].join('\n')
 
 async function glmConnectorCode(
 	sourceContracts: OpsContract[],
 	targetContracts: OpsContract[],
-	rule: string
+	rule: string,
+	repair?: { code: string; error: string }
 ): Promise<string | { error: string }> {
 	const key = process.env.TINFOIL_API_KEY
 	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
@@ -634,7 +638,16 @@ async function glmConnectorCode(
 				role: 'system',
 				content: `${instructions}\n\n${contractText('SOURCE', sourceContracts)}\n${contractText('TARGET', targetContracts)}`
 			},
-			{ role: 'user', content: `USER RULE: ${rule}` }
+			{ role: 'user', content: `USER RULE: ${rule}` },
+			...(repair
+				? [
+						{ role: 'assistant', content: repair.code },
+						{
+							role: 'user',
+							content: `The sandbox smoke run REJECTED that code: ${repair.error}. Fix it MINIMALLY (remember: sequential awaits only, return { summary }). Output ONLY the corrected code.`
+						}
+					]
+				: [])
 		],
 		{ idleMs: 45_000, totalMs: 300_000 }
 	)
@@ -767,9 +780,22 @@ export async function connectSkills(
 	if (!tgtTypes.length) return { error: `skill "${target}" exposes no data schemas (no data_crud config)` }
 	const srcContracts = await Promise.all(srcTypes.map((t) => opsContract(uid, t)))
 	const tgtContracts = await Promise.all(tgtTypes.map((t) => opsContract(uid, t)))
-	const authored = codeSeam ?? (await glmConnectorCode(srcContracts, tgtContracts, rule))
+	let authored = codeSeam ?? (await glmConnectorCode(srcContracts, tgtContracts, rule))
 	if (typeof authored !== 'string') return { error: authored.error }
-	const smoke = await smokeRunConnector(authored, [...srcContracts, ...tgtContracts])
+	let smoke = await smokeRunConnector(authored, [...srcContracts, ...tgtContracts])
+	if (!smoke.ok && !codeSeam) {
+		// ONE automatic repair round: an authoring round is expensive (~2–3 min) and smoke failures are
+		// usually mechanical (parallel awaits, missing summary) — feed the error back before giving up.
+		console.error('[connect] smoke failed, repairing:', smoke.error)
+		const repaired = await glmConnectorCode(srcContracts, tgtContracts, rule, {
+			code: authored,
+			error: smoke.error ?? 'unknown'
+		})
+		if (typeof repaired === 'string') {
+			authored = repaired
+			smoke = await smokeRunConnector(authored, [...srcContracts, ...tgtContracts])
+		}
+	}
 	if (!smoke.ok) return { error: `smoke run failed: ${smoke.error}` }
 
 	const toolName = `sync_${target.replace(/-/g, '_')}`
