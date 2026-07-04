@@ -880,7 +880,9 @@ const pillClass = $derived.by(() => {
 		'flex max-w-full overflow-hidden transition-[width,max-width,background-color,border-color,border-radius,box-shadow,padding] duration-[360ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]'
 	if (mode === 'collapsed') {
 		// board 0110 — the idle AI icon is the bare avenOS logo (no circle chrome); 25% larger than the old 56px.
-		return `${base} size-[4.375rem] shrink-0 items-center justify-center p-0`
+		// board 0112 — !overflow-visible so the soft glow behind the mark isn't CLIPPED to the square wrapper
+		// (base sets overflow-hidden for the pill animations) — the clip was the "squared outline".
+		return `${base} size-[4.375rem] shrink-0 items-center justify-center p-0 !overflow-visible`
 	}
 	if (mode === 'listening') {
 		if (isMobile) {
@@ -972,7 +974,7 @@ const pillClass = $derived.by(() => {
 		<div class={pillClass} role="group">
 			<button
 				type="button"
-				class="group relative flex size-[4.375rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl outline-none transition-transform duration-200 ease-out hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-primary/35 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40"
+				class="group relative flex size-[4.375rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
 				{disabled}
 				onpointerdown={(e) => {
 					void focusShellWebview()
