@@ -67,10 +67,21 @@ function deriveFilter(spec: QuerySpec, f: CrudFilter): Filter {
  *  host function; everything else is absent (so the sandbox fails closed). board 0111. */
 export function buildCaps(uid: string, capList: string[] | null): Caps {
 	const want = new Set(capList ?? [])
+	// board 0117 — SCOPED ops caps: 'ops:<type>' grants ONLY that schema's named ops
+	// (`<type>.list/create/…`). Bare 'ops' stays the legacy full grant. Fail-closed: an
+	// ungranted op is a plain error naming the scopes, never a silent pass-through.
+	const scopes = [...want].filter((c) => c.startsWith('ops:')).map((c) => c.slice(4))
 	const caps: Caps = {}
-	if (want.has('ops')) {
-		caps.ops = (name: unknown, params: unknown) =>
-			runNamedOp(uid, String(name), (params as Record<string, unknown>) ?? {})
+	if (want.has('ops') || scopes.length) {
+		caps.ops = (name: unknown, params: unknown) => {
+			const n = String(name)
+			if (!want.has('ops')) {
+				const ok = scopes.some((sc) => n === sc || n.startsWith(`${sc}.`))
+				if (!ok)
+					throw new Error(`op "${n}" not granted — this actor's scopes: ${scopes.map((sc) => `ops:${sc}`).join(', ')}`)
+			}
+			return runNamedOp(uid, n, (params as Record<string, unknown>) ?? {})
+		}
 	}
 	return caps
 }

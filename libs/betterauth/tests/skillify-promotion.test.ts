@@ -1,10 +1,10 @@
 import { afterAll, describe, expect, test } from 'bun:test'
 import { sql } from 'kysely'
-import { crud, runCodeActor, runNamedOp } from '../src/actor-run'
+import { buildCaps, crud, runCodeActor, runNamedOp } from '../src/actor-run'
 import { db } from '../src/db'
 import { composeFlows } from '../src/flows'
 import { saveMockup } from '../src/mockup-caps'
-import { improveSkill, promotionProgress, syncActors,
+import { connectSkills, improveSkill, promotionProgress, smokeRunConnector, syncActors, typesOfSkill,
 	deriveAppSkeleton,
 	mintDataLayer,
 	promoteVibe,
@@ -242,6 +242,61 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		// unknown skill fails honestly.
 		expect((await syncActors('never-promoted-app')).error).toContain('not promoted')
 	}, 20000)
+
+	test('(g) board 0117 — scoped ops caps: granted schema passes, anything else throws', async () => {
+		const caps = buildCaps(UID, ['ops:record'])
+		const res = (await caps.ops?.('record.list', {})) as { rows?: unknown[] }
+		expect(Array.isArray(res?.rows)).toBe(true)
+		expect(() => caps.ops?.('todos.list', {})).toThrow('not granted')
+		// bare 'ops' stays the legacy full grant.
+		const full = buildCaps(UID, ['ops'])
+		const ok = (await full.ops?.('todos.list', {})) as { rows?: unknown[] }
+		expect(Array.isArray(ok?.rows)).toBe(true)
+	}, 20000)
+
+	test('(h) board 0117 — connectSkills: scoped connector actor + the composite flowRef node', async () => {
+		// deterministic schema derivation from the skills' own config.
+		expect(await typesOfSkill(APP)).toEqual(['record'])
+		expect(await typesOfSkill('todos')).toEqual(['todos'])
+		// the smoke gate REFUSES code that misses the contract or escapes its scopes.
+		const bad = await smokeRunConnector('async function handle(m,c){ return { nope: 1 } }', [])
+		expect(bad.ok).toBe(false)
+		const escape = await smokeRunConnector(
+			"async function handle(m,c){ await c.ops('goal.list',{}); return { summary: 'x' } }",
+			[{ type: 'record', ops: [], sample: [] }]
+		)
+		expect(escape.ok).toBe(false)
+		expect(escape.error).toContain('not granted')
+		// the seam-fixed connector wires end-to-end: actor row (scoped caps) + composite node.
+		const CODE =
+			"async function handle(msg, caps){ var r = await caps.ops('record.list', {}); var n = (r && r.rows ? r.rows.length : 0); return { summary: n + ' Einträge geprüft.' } }"
+		const res = await connectSkills(UID, APP, 'todos', 'Ausgaben werden als Aufgaben nachgehalten', CODE)
+		expect(res.error).toBeUndefined()
+		expect(res.tool).toBe('sync_todos')
+		const row = await sql<{ code: string | null; caps: unknown }>`
+			SELECT code, caps FROM actor WHERE skill_id = ${APP} AND name = 'sync_todos'
+		`.execute(db())
+		expect(row.rows.length).toBe(1)
+		const caps = (typeof row.rows[0].caps === 'string' ? JSON.parse(row.rows[0].caps as string) : row.rows[0].caps) as string[]
+		expect(caps.sort()).toEqual(['ops:record', 'ops:todos'])
+		// the LIVE run path (runCodeActor with the row's scoped caps) works read-only.
+		const run = await runCodeActor(
+			{ name: 'sync_todos', code: row.rows[0].code, caps, prompt: null, engine: null },
+			{},
+			UID
+		)
+		expect(run.ran).toBe(true)
+		expect(String((run as { result: { summary: string } }).result.summary)).toContain('geprüft')
+		// the source flow carries the connector leaf + the SUB-SKILL composite (flowRef → todos).
+		const fl = await sql<{ nodes: unknown }>`SELECT nodes FROM flow WHERE id = ${APP}`.execute(db())
+		const nodes = (typeof fl.rows[0].nodes === 'string' ? JSON.parse(fl.rows[0].nodes as string) : fl.rows[0].nodes) as Record<string, unknown>[]
+		expect(nodes.some((n) => n.id === 'sync_todos' && n.actor === 'sync_todos')).toBe(true)
+		const sub = nodes.find((n) => n.id === 'sub-todos')
+		expect(sub?.flowRef).toBe('todos') // the composite/leaf recursion seat, occupied
+		// honest failures: unknown target · same skill twice.
+		expect((await connectSkills(UID, APP, 'no-such-skill', 'x', CODE)).error).toContain('no skill')
+		expect((await connectSkills(UID, APP, APP, 'x', CODE)).error).toContain('different')
+	}, 30000)
 
 	afterAll(async () => {
 		if (!DB) return

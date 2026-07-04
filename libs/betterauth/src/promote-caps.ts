@@ -340,7 +340,7 @@ export async function wireSkill(
 	`.execute(D)
 	await sql`
 		INSERT INTO actor (id, skill_id, name, engine, code, caps, mailbox, vibe, hitl, position, created_at, updated_at)
-		VALUES (gen_random_uuid(), ${skillId}, ${`${skillId}_overview`}, NULL, ${authored}, ${JSON.stringify(['ops'])}::jsonb, ${JSON.stringify(overviewMailbox)}::jsonb, ${skillId}, false, 2, now(), now())
+		VALUES (gen_random_uuid(), ${skillId}, ${`${skillId}_overview`}, NULL, ${authored}, ${JSON.stringify(skeleton.entities.length ? skeleton.entities.map((e) => `ops:${e.type}`) : ['ops'])}::jsonb, ${JSON.stringify(overviewMailbox)}::jsonb, ${skillId}, false, 2, now(), now())
 		ON CONFLICT DO NOTHING
 	`.execute(D)
 	// every promoted skill is SELF-IMPROVABLE: it advertises its own improve_skill, so "improve the
@@ -484,36 +484,52 @@ export function skillPresence(skeleton: AppSkeleton): { nodes: FlowNode[]; edges
 	return { nodes, edges }
 }
 
-/** Upsert the skill's flow row ADD-ONLY: missing nodes (by id) and missing edges (by from→to) are
- *  appended; existing ones are never rewritten. Returns the node ids actually added. */
-export async function writeSkillFlow(skeleton: AppSkeleton): Promise<string[]> {
+/** ADD-ONLY flow merge (the one write path for flow presence): missing nodes (by id) and missing
+ *  edges (by from→to) are appended; existing ones are never rewritten. Returns added node ids. */
+export async function mergeFlowPieces(
+	flowId: string,
+	meta: { name: string; description: string },
+	wantNodes: FlowNode[],
+	wantEdges: FlowEdge[]
+): Promise<string[]> {
 	const D = db()
-	const want = skillPresence(skeleton)
 	const existing = await sql<{ nodes: unknown; edges: unknown }>`
-		SELECT nodes, edges FROM flow WHERE id = ${skeleton.app}
+		SELECT nodes, edges FROM flow WHERE id = ${flowId}
 	`.execute(D)
 	const parse = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : (v ?? [])) as Record<string, unknown>[]
 	const nodes = existing.rows.length ? parse(existing.rows[0].nodes) : []
 	const edges = (existing.rows.length ? parse(existing.rows[0].edges) : []) as unknown as FlowEdge[]
 	const addedIds: string[] = []
-	for (const n of want.nodes) {
+	for (const n of wantNodes) {
 		if (nodes.some((x) => x.id === n.id)) continue
 		nodes.push(n)
 		addedIds.push(n.id)
 	}
-	for (const e of want.edges) {
+	for (const e of wantEdges) {
 		if (edges.some((x) => x.from === e.from && x.to === e.to)) continue
 		edges.push(e)
 	}
-	const label = skeleton.app.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 	await sql`
 		INSERT INTO flow (id, name, description, nodes, edges, created_at, updated_at)
-		VALUES (${skeleton.app}, ${label},
-			${`the ${label} app — one node per workflow step (overview/read/create/edit/delete), each with its own card. Promoted from mock-${skeleton.app}.`},
+		VALUES (${flowId}, ${meta.name}, ${meta.description},
 			${JSON.stringify(nodes)}::jsonb, ${JSON.stringify(edges)}::jsonb, now(), now())
 		ON CONFLICT (id) DO UPDATE SET nodes = EXCLUDED.nodes, edges = EXCLUDED.edges, updated_at = now()
 	`.execute(D)
 	return addedIds
+}
+
+export async function writeSkillFlow(skeleton: AppSkeleton): Promise<string[]> {
+	const want = skillPresence(skeleton)
+	const label = skeleton.app.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+	return mergeFlowPieces(
+		skeleton.app,
+		{
+			name: label,
+			description: `the ${label} app — one node per workflow step (overview/read/create/edit/delete), each with its own card. Promoted from mock-${skeleton.app}.`
+		},
+		want.nodes,
+		want.edges
+	)
 }
 
 /** The add-only UPGRADE seam (board 0116 S1 slice): bring an already-promoted skill up to the
@@ -536,6 +552,208 @@ export async function syncActors(
 	const addedVibes = await mintVerbVibes(skeleton)
 	const addedNodes = await writeSkillFlow(skeleton)
 	return { app, addedNodes, addedVibes }
+}
+
+// ── board 0117: CROSS-SKILL CONNECTORS — the composite/leaf sub-skill pattern ─────────────────────
+// A skill stacks into another skill: the SOURCE skill owns a GLM-authored connector actor (sandbox
+// code, caps SCOPED to exactly the two schemas) and its flow gains a COMPOSITE node (flowRef → the
+// target skill's flow — the board-0083 recursion seat, unbounded stacking by construction). The
+// target is only ever touched through its PUBLIC surface: its named ops — the same delegation shape
+// as mint_data → Ontology.
+
+/** The schemas a skill operates on — DETERMINISTIC: quoted names in its own data_crud mailbox
+ *  config, validated against the ops registry (a name only counts if `<type>.list` exists). */
+export async function typesOfSkill(skillId: string): Promise<string[]> {
+	const D = db()
+	const r = await sql<{ mailbox: unknown }>`
+		SELECT mailbox FROM actor WHERE skill_id = ${skillId} AND name = 'data_crud' LIMIT 1
+	`.execute(D)
+	if (!r.rows.length) return []
+	const mb = (typeof r.rows[0].mailbox === 'string' ? JSON.parse(r.rows[0].mailbox as string) : r.rows[0].mailbox) as {
+		parameters?: { properties?: { schema?: { enum?: string[]; description?: string } } }
+	}
+	const prop = mb?.parameters?.properties?.schema
+	const candidates = new Set<string>(prop?.enum ?? [])
+	for (const m of String(prop?.description ?? '').matchAll(/"([a-z0-9_-]+)"/g)) candidates.add(m[1])
+	const confirmed: string[] = []
+	for (const c of candidates) {
+		const op = await sql`SELECT 1 FROM data_operations WHERE name = ${`${c}.list`} LIMIT 1`.execute(D)
+		if (op.rows.length) confirmed.push(c)
+	}
+	return confirmed
+}
+
+type OpsContract = { type: string; ops: string[]; sample: unknown[] }
+
+async function opsContract(uid: string, type: string): Promise<OpsContract> {
+	const D = db()
+	const r = await sql<{ name: string }>`
+		SELECT name FROM data_operations WHERE name LIKE ${`${type}.%`} ORDER BY name
+	`.execute(D)
+	let sample: unknown[] = []
+	try {
+		const res = (await runNamedOp(uid, `${type}.list`, {})) as { rows?: unknown[] }
+		sample = (res?.rows ?? []).slice(0, 2)
+	} catch {
+		sample = []
+	}
+	return { type, ops: r.rows.map((x) => x.name), sample }
+}
+
+/** Connector-author instructions — runtime SSOT = the connect_skills actor row's prompt (0115
+ *  pattern); this is the fallback. */
+export const CONNECT_INSTRUCTIONS = [
+	'You write a CONNECTOR between two apps as a SINGLE JavaScript module for a locked-down sandbox:',
+	'  async function handle(msg, caps) { ... return state }',
+	'caps.ops(name, params) is the ONLY capability — and it is SCOPED to exactly the two schemas below;',
+	'calling any other op throws. Read from the SOURCE, reconcile the TARGET per the USER RULE.',
+	'RETURN a state object with at least { "summary": "<one German sentence: what was synced/changed>" }.',
+	'Idempotence matters: running the connector twice must not double-apply (match by name/label before',
+	'creating; prefer update over create when a matching target row exists).',
+	'No imports, no fetch, no timers, no globals — plain ES5-ish JS + JSON/Math. Output ONLY the code.'
+].join('\n')
+
+async function glmConnectorCode(
+	sourceContracts: OpsContract[],
+	targetContracts: OpsContract[],
+	rule: string
+): Promise<string | { error: string }> {
+	const key = process.env.TINFOIL_API_KEY
+	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
+	const cfg = await actorConfig('connect_skills').catch(() => null)
+	const instructions = cfg?.prompt?.trim() || CONNECT_INSTRUCTIONS
+	const contractText = (label: string, cs: OpsContract[]) =>
+		`${label}:\n${cs.map((c) => `  schema "${c.type}" — ops: ${c.ops.join(', ')}\n  sample rows: ${JSON.stringify(c.sample).slice(0, 600)}`).join('\n')}`
+	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
+		method: 'POST',
+		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+		signal: AbortSignal.timeout(120_000),
+		body: JSON.stringify({
+			model: GLM_MODEL,
+			messages: [
+				{
+					role: 'system',
+					content: `${instructions}\n\n${contractText('SOURCE', sourceContracts)}\n${contractText('TARGET', targetContracts)}`
+				},
+				{ role: 'user', content: `USER RULE: ${rule}` }
+			],
+			stream: false
+		})
+	}).catch(() => null)
+	if (!res?.ok) return { error: `GLM error ${res?.status ?? '???'}` }
+	const data = (await res.json().catch(() => null)) as { choices?: { message?: { content?: string } }[] } | null
+	const code = (data?.choices?.[0]?.message?.content ?? '').replace(/```(?:js|javascript)?/gi, '').trim()
+	return code || { error: 'GLM returned no connector code' }
+}
+
+/** Connector SMOKE gate: run against stub ops for BOTH schemas; must return { summary: string }. */
+export async function smokeRunConnector(
+	code: string,
+	contracts: OpsContract[]
+): Promise<{ ok: boolean; error?: string }> {
+	const byType = new Map(contracts.map((c) => [c.type, c]))
+	const stubOps = async (name: unknown) => {
+		const n = String(name)
+		const type = n.split('.')[0]
+		if (!byType.has(type)) throw new Error(`op "${n}" not granted — this actor's scopes: ${[...byType.keys()].map((t) => `ops:${t}`).join(', ')}`)
+		if (n.endsWith('.list')) {
+			const c = byType.get(type)
+			return { rows: (c?.sample ?? []).map((r, i) => ({ id: `s${i}`, ...(r as object) })) }
+		}
+		return { ok: true, ids: ['stub'] }
+	}
+	try {
+		const state = (await runActorCode(code, {}, { ops: stubOps }, {})) as Record<string, unknown>
+		if (!state || typeof state !== 'object') return { ok: false, error: 'connector did not return a state object' }
+		if (typeof state.summary !== 'string' || !state.summary.trim())
+			return { ok: false, error: 'connector state misses the "summary" string' }
+		return { ok: true }
+	} catch (e) {
+		return { ok: false, error: e instanceof Error ? e.message : String(e) }
+	}
+}
+
+/** Wire a connector: source skill OWNS the actor (scoped caps) + its flow gains the sub-skill
+ *  COMPOSITE node (flowRef → target). Re-connecting refreshes the code (smoke-gated upsert). */
+export async function connectSkills(
+	uid: string,
+	sourceRaw: string,
+	targetRaw: string,
+	rule: string,
+	codeSeam?: string
+): Promise<{ tool?: string; source?: string; target?: string; error?: string }> {
+	const slug = (raw: string): string | null => {
+		try {
+			return mockName(raw).slice(MOCK_PREFIX.length)
+		} catch {
+			return null
+		}
+	}
+	const source = slug(sourceRaw)
+	const target = slug(targetRaw)
+	if (!source || !target) return { error: 'source and target skill names are required' }
+	if (source === target) return { error: 'source and target must be different skills' }
+	const D = db()
+	const skills = await sql<{ id: string; label: string | null }>`SELECT id, label FROM skill`.execute(D)
+	const byId = new Map(skills.rows.map((r) => [r.id, r.label ?? r.id]))
+	for (const id of [source, target])
+		if (!byId.has(id))
+			return { error: `no skill "${id}". Existing skills: ${[...byId.keys()].join(', ')}` }
+	const srcTypes = await typesOfSkill(source)
+	const tgtTypes = await typesOfSkill(target)
+	if (!srcTypes.length) return { error: `skill "${source}" exposes no data schemas (no data_crud config)` }
+	if (!tgtTypes.length) return { error: `skill "${target}" exposes no data schemas (no data_crud config)` }
+	const srcContracts = await Promise.all(srcTypes.map((t) => opsContract(uid, t)))
+	const tgtContracts = await Promise.all(tgtTypes.map((t) => opsContract(uid, t)))
+	const authored = codeSeam ?? (await glmConnectorCode(srcContracts, tgtContracts, rule))
+	if (typeof authored !== 'string') return { error: authored.error }
+	const smoke = await smokeRunConnector(authored, [...srcContracts, ...tgtContracts])
+	if (!smoke.ok) return { error: `smoke run failed: ${smoke.error}` }
+
+	const toolName = `sync_${target.replace(/-/g, '_')}`
+	const caps = [...srcTypes, ...tgtTypes].map((t) => `ops:${t}`)
+	const mailbox = {
+		description:
+			`SYNC/reconcile the ${byId.get(target)} from this skill's data (rule: ${rule.slice(0, 160)}). ` +
+			'Run when the user asks to sync, or offer it after recording relevant entries.',
+		parameters: {
+			type: 'object',
+			properties: { response: { type: 'string', description: 'A short human-facing reply to show the user.' } }
+		}
+	}
+	const existing = await sql<{ id: string }>`
+		SELECT id FROM actor WHERE skill_id = ${source} AND name = ${toolName} LIMIT 1
+	`.execute(D)
+	if (existing.rows.length) {
+		await sql`
+			UPDATE actor SET code = ${authored}, caps = ${JSON.stringify(caps)}::jsonb,
+				mailbox = ${JSON.stringify(mailbox)}::jsonb, updated_at = now()
+			WHERE id = ${existing.rows[0].id}
+		`.execute(D)
+	} else {
+		await sql`
+			INSERT INTO actor (id, skill_id, name, engine, code, caps, mailbox, hitl, position, created_at, updated_at)
+			VALUES (gen_random_uuid(), ${source}, ${toolName}, NULL, ${authored}, ${JSON.stringify(caps)}::jsonb, ${JSON.stringify(mailbox)}::jsonb, false, 5, now(), now())
+		`.execute(D)
+	}
+	// the COMPOSITE sub-skill node: source flow → connector leaf → flowRef(target). Add-only.
+	await mergeFlowPieces(
+		source,
+		{
+			name: String(byId.get(source)),
+			description: `the ${byId.get(source)} app — granular steps + cross-skill connectors.`
+		},
+		[
+			{ id: toolName, name: `Sync ${byId.get(target)}`, actor: toolName, inputs: srcTypes, outputs: tgtTypes, note: `Connector (scoped caps: ${caps.join(', ')}): ${rule.slice(0, 120)}` },
+			{ id: `sub-${target}`, name: String(byId.get(target)), flowRef: target, inputs: tgtTypes, outputs: tgtTypes, note: 'Sub-skill (composite): delegated through its public ops.' }
+		],
+		[
+			{ from: 'dispatch', to: toolName, kind: 'control' },
+			{ from: 'create', to: toolName, kind: 'data' },
+			{ from: toolName, to: `sub-${target}`, kind: 'data' }
+		]
+	)
+	return { tool: toolName, source, target }
 }
 
 /** The per-promoted-skill improve_skill mailbox (name pinned to THIS skill, like crud pins schema). */
@@ -781,6 +999,7 @@ export function promoteCaps(uid: string) {
 		seed: (sk: AppSkeleton, src: Record<string, unknown>) => seedData(uid, sk, src),
 		improve: (name: string, instruction: string) => improveSkill(name, instruction),
 		syncActors,
+		connect: (source: string, target: string, rule: string) => connectSkills(uid, source, target, rule),
 		promoteVibe,
 		loadVibe
 	}

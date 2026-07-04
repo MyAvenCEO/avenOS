@@ -100,6 +100,9 @@ export type ToolCtx = {
 		/** ADD-ONLY upgrade: bring a live skill to the Planner-grade granularity (per-step flow nodes +
 		 *  per-verb cards). Missing pieces are added; nothing is rewritten. */
 		syncActors(name: string): Promise<{ app?: string; addedNodes?: string[]; addedVibes?: string[]; error?: string }>
+		/** board 0117 — cross-skill CONNECTOR (composite sub-skill pattern): the source skill gains a
+		 *  GLM-authored, smoke-gated sandbox actor with caps scoped to BOTH schemas + a flowRef node. */
+		connect(source: string, target: string, rule: string): Promise<{ tool?: string; source?: string; target?: string; error?: string }>
 		/** TRUE promotion progress, derived from DB facts (list op ⇒ Daten · skill row ⇒ Aktoren ·
 		 *  real rows ⇒ Seed · un-walled vibe ⇒ Live) — the pipeline's memory across turns. */
 		progress(skeleton: unknown): Promise<{

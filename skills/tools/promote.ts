@@ -293,6 +293,40 @@ export const syncActorsActor: ToolActor = {
 	}
 }
 
+export const connectSkillsActor: ToolActor = {
+	definition: def(
+		'connect_skills',
+		'CONNECT two live skills (the sub-skill/composite pattern): e.g. "every banking purchase updates ' +
+			'the inventory". Authors a sandboxed connector on the SOURCE skill (caps scoped to both ' +
+			'schemas, smoke-gated) + a sub-skill flow node. Pass name (source), target, instruction (the rule).',
+		{
+			target: { type: 'string', description: 'The TARGET skill to keep in sync (kebab-case or plain words).' },
+			instruction: { type: 'string', description: "The sync rule, in the user's words." }
+		}
+	),
+	async handle(ctx, raw): Promise<ToolResult> {
+		if (!ctx.promote) return noCap
+		const r = raw as Raw & { target?: string; instruction?: string }
+		const rule = String(r.instruction ?? '').trim()
+		if (!rule) return { content: { ok: false, error: 'describe the sync rule' } }
+		const res = await ctx.promote.connect(String(r.name ?? ''), String(r.target ?? ''), rule)
+		if (res.error || !res.tool) return stepFailed('connect_skills', res.error ?? 'connect failed')
+		return {
+			detail: `connect ${res.source} → ${res.target}`,
+			content: {
+				ok: true,
+				tool: res.tool,
+				source: res.source,
+				target: res.target,
+				note: `The connector is live as the "${res.tool}" tool on the ${res.source} skill. ONE short sentence; tell the user they can run it any time ("sync ${res.target}").`
+			},
+			reply:
+				said(r) ||
+				`Verbunden: „${res.source}" → „${res.target}" — sag z. B. „sync ${res.target}", um abzugleichen.`
+		}
+	}
+}
+
 export const promoteApp: ToolActor = {
 	definition: def(
 		'promote',
