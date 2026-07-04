@@ -142,7 +142,7 @@ tracing, not a flow runner); porting the minecraft demo.
 - [x] Every tool call traced by (routed skill, actor): ONE generic record at the dispatch seam; inventory traces proven by test. (Samuel live-confirms in Runs.)
 - [x] `grep -rn "startsWith('todos')\|startsWith('ontology')" libs/betterauth/src/ai.ts` → no output (exit 1).
 - [x] Dispatch route decision traced per turn: flowId 'dispatch' / nodeId 'route' → the chosen skill (0109 absorbed).
-- [x] Containment on the view root (:host > *:first-child), NEVER on :host; the goals grid ships a live `@container (max-width: 420px)` rule; validator allows strict width @container only — container-queries.test 3/3. (Grids multi-column: Samuel confirms live.)
+- [x] Containment on the view root (:host > *:first-child), NEVER on :host; the goals grid ships a live `@container (max-width: 420px)` rule; validator allows strict width @container only — container-queries.test 3/3. Grids multi-column LIVE-CONFIRMED (probe: gridCols 216px×3, gridKids 3 loc-card; Samuel: "finally there we are"). Root cause was a THIRD layer: the view-engine's anonymous $each wrapper (f0aca5a1) — pure $each children now render transparently.
 - [ ] Garbled move name → correction message live (no false "Updated") — server-side proven (5c3c4d87 tests); Samuel confirms in-app.
 - [x] `bun --watch` PROVEN to follow workspace imports: touching skills/tools/data-crud.ts restarted the auth server in 3s (start-count 6→7). Dev mode is fully hot on all layers.
 - [x] betterauth 90/0 · aven-vibes 19/0 · svelte-check 0 errors.
@@ -159,6 +159,14 @@ grep -rn "startsWith('todos')\|startsWith('ontology')" libs/betterauth/src/ai.ts
 Plus Samuel's live 4-point confirmation in the Tauri app (explorer, runs, grids, garble).
 
 ## Progress log
+
+- `2026-07-04` — GRID LIVE-CONFIRMED. The layout-probe beacon (temporary WKWebView →
+  dev-log instrumentation, since removed) delivered the real root cause: a pure `{$each}`
+  child node rendered as an anonymous <div> wrapper — the grid always computed 3 tracks
+  but had ONE child. view-engine now renders pure $each children transparently
+  (f0aca5a1). Probe after fix: gridKids 3 · gridKid0 loc-card · 216px×3. Samuel confirms
+  visually. Diagnostics stripped. Remaining live points for review: Skills explorer
+  (Planner + Inventory) + the garble-move correction message.
 
 - `2026-07-04` — BUILT green (S0–S3). S0: --watch probe proves workspace-import hot-reload
   (6→7 server starts in 3s); container arrangement settled = containment on the view root.

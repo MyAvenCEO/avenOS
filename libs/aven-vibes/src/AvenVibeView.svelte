@@ -129,40 +129,6 @@ async function mount(): Promise<void> {
 		}
 		onState?.(mounted.state)
 
-		// TEMPORARY (board 0114 S0 diagnosis) — beacon the COMPUTED layout out of the WKWebView so the
-		// agent can read it in the dev log. Dev-only; removed after diagnosis.
-		if (import.meta.env.DEV) {
-			requestAnimationFrame(() => {
-				try {
-					const root = host.shadowRoot
-					const grid = root?.querySelector('.gl-grid, .loc-grid, .inv-list')
-					const first = root?.firstElementChild as HTMLElement | null
-					const gc = grid ? getComputedStyle(grid as HTMLElement) : null
-					void fetch('http://localhost:8787/api/dev/layout-probe', {
-						method: 'POST',
-						headers: { 'content-type': 'application/json' },
-						body: JSON.stringify({
-							containerName,
-							hostW: host.getBoundingClientRect().width,
-							hostDisplay: getComputedStyle(host).display,
-							parentW: host.parentElement?.getBoundingClientRect().width,
-							rootTag: first?.className ?? null,
-							rootW: first?.getBoundingClientRect().width,
-							rootContainerType: first ? getComputedStyle(first).containerType : null,
-							gridSel: grid?.className ?? null,
-							gridW: grid ? (grid as HTMLElement).getBoundingClientRect().width : null,
-							gridDisplay: gc?.display ?? null,
-							gridCols: gc?.gridTemplateColumns ?? null,
-							gridKids: grid?.childElementCount ?? null,
-							gridKid0: grid?.firstElementChild?.className ?? null,
-							sheets: root?.adoptedStyleSheets?.length ?? -1
-						})
-					}).catch(() => {})
-				} catch {
-					/* diagnostics only */
-				}
-			})
-		}
 
 		unlistenState = await listenSandboxQjsState((event) => {
 			if (event.sessionId !== sessionId || token !== mountToken) return
