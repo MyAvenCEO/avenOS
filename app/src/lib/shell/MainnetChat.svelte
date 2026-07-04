@@ -588,7 +588,7 @@ function handleTranscribeError(message: string): void {
 					{:else}
 						<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
 							<div
-								class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-sm leading-relaxed {message.role ===
+								class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-xs leading-relaxed {message.role ===
 							'user'
 								? 'bg-primary text-primary-foreground'
 								: 'border-border bg-card text-foreground border'}{message.pending

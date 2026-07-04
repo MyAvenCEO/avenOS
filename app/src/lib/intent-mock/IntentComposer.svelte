@@ -1247,7 +1247,7 @@ const pillClass = $derived.by(() => {
 							oninput={resizeComposer}
 							onkeydown={onTextareaKeydown}
 							onblur={collapseIfEmpty}
-							class="min-h-9 max-sm:min-h-[2.7rem] max-h-[min(24rem,calc(100vh-12rem))] w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2 max-sm:py-[0.6rem] px-0 text-sm max-sm:text-[1.05rem] leading-snug font-medium tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:min-h-10 sm:py-2.5 sm:text-xl sm:leading-tight"
+							class="min-h-9 max-sm:min-h-[2.7rem] max-h-[min(24rem,calc(100vh-12rem))] w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2 max-sm:py-[0.6rem] px-0 text-sm max-sm:text-[1.05rem] leading-snug font-normal tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:min-h-10 sm:py-2.5 sm:text-base sm:leading-tight"
 						></textarea>
 					</form>
 					<button
