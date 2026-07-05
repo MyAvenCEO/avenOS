@@ -102,6 +102,24 @@ const routedSkill = $derived(
 		?.detail?.replace('→', '')
 		.trim() ?? null
 )
+// board 0118e — EDIT MODE: while a skill-editing action runs (mockup design, promotion steps,
+// improve/sync/connect, website edit), the whole screen wears a 4px brand-gold outline.
+const EDIT_TOOLS = new Set([
+	'create_mockup',
+	'edit_mockup',
+	'plan_app',
+	'mint_data',
+	'wire_actors',
+	'seed_data',
+	'promote',
+	'improve_skill',
+	'sync_actors',
+	'connect_skills',
+	'edit_website'
+])
+const editingSkill = $derived(
+	toolActivity.some((tl) => tl.status === 'running' && EDIT_TOOLS.has(tl.name))
+)
 // Live GLM edit stream (reasoning + diff text) for the current turn, shown in a scrolling panel so
 // the user sees what the website model is actually writing — not just "thinking". board 0056.
 let editStream = $state('')
@@ -577,7 +595,14 @@ function handleTranscribeError(message: string): void {
 	<!-- board 0118 — THE STAGE: one current vibe, full width/height; each new vibe replaces it. -->
 	<div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
 		{#if routedSkill}
-			<FlowStatusStrip skillId={routedSkill} {toolActivity} />
+			<FlowStatusStrip skillId={routedSkill} {toolActivity} nowMs={nowTick} />
+		{/if}
+		{#if editingSkill}
+			<!-- brand-gold (logo star #DEA657) 4px full-screen outline: skill editing in progress -->
+			<div
+				class="pointer-events-none fixed inset-0 z-[70]"
+				style="box-shadow: inset 0 0 0 4px #DEA657"
+			></div>
 		{/if}
 		<div class="min-h-0 flex-1 overflow-y-auto px-6 pt-4" style="padding-bottom: 11rem">
 			{#if currentVibe}
