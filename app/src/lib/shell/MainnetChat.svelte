@@ -46,6 +46,8 @@ let vibeHistory = $state<VibeEntry[]>([])
 let currentVibeId = $state<number | null>(null)
 const currentVibe = $derived(vibeHistory.find((v) => v.id === currentVibeId) ?? null)
 const vibeLabel = (schema: string): string => schema.replace(/^mock-/, '').replace(/-/g, ' ')
+// board 0118b — the overlay shows ONLY the latest exchange bubble (badges are stage/rail concerns).
+const lastMessage = $derived([...messages].reverse().find((m) => !m.vibe) ?? null)
 let busy = $state(false)
 let currentSessionId = $state<string | null>(null)
 let nextId = 0
@@ -566,7 +568,7 @@ function handleTranscribeError(message: string): void {
 <div class="flex min-h-0 flex-1 bg-background">
 	<!-- board 0118 — THE STAGE: one current vibe, full width/height; each new vibe replaces it. -->
 	<div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
-		<div class="min-h-0 flex-1 overflow-y-auto px-6 pt-4" style="padding-bottom: calc(25vh + 3rem)">
+		<div class="min-h-0 flex-1 overflow-y-auto px-6 pt-4" style="padding-bottom: 11rem">
 			{#if currentVibe}
 				{#key currentVibe.id}
 					{#if currentVibe.schema === 'todos'}
@@ -601,121 +603,90 @@ function handleTranscribeError(message: string): void {
 			{/if}
 		</div>
 
-		<!-- board 0118 — CHAT OVERLAY: a bottom card (~25% height); history shows text + vibe BADGES. -->
+		<!-- board 0118b — CHAT OVERLAY, minimal: NO history, NO container card — just the latest
+		     exchange bubble centered directly above the AI button, plus live tool/actor chips. -->
 		<div
 			class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
 		>
-			<div
-				class="border-border bg-card/95 pointer-events-auto mx-auto flex h-[25vh] min-h-[13rem] w-full max-w-[52rem] flex-col overflow-hidden rounded-[var(--radius-xl)] border shadow-lg backdrop-blur"
-			>
-				<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-3 pt-2">
-					<div bind:this={contentEl} class="flex flex-col gap-1.5 pb-2">
-						{#if messages.length === 0}
-							<div class="text-muted-foreground py-6 text-center text-xs leading-relaxed">
-								{t('mainnet.chat.empty')}
-							</div>
-						{/if}
-						{#each messages as message (message.id)}
-							{#if message.vibe}
-								<!-- minimal badge: which vibe/action loaded — click puts it back on the stage -->
-								<div class="flex justify-start">
-									<button
-										type="button"
-										class="border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground inline-flex max-w-[80%] items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors {message.vibeRef ===
-										currentVibeId
-											? 'border-primary/60 text-foreground'
-											: ''}"
-										onclick={() => {
-											if (message.vibeRef != null) currentVibeId = message.vibeRef
-										}}
-									>
-										<span class="text-primary">◆</span>
-										<span class="truncate">{vibeLabel(message.vibe)}</span>
-									</button>
-								</div>
-							{:else}
-								<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
-									<div
-										class="max-w-[85%] rounded-[var(--radius-lg)] px-3 py-1.5 text-xs leading-relaxed {message.role ===
-										'user'
-											? 'bg-primary text-primary-foreground'
-											: 'border-border bg-background text-foreground border'}{message.pending
-											? ' animate-pulse italic opacity-60'
-											: ''}"
-									>
-										{message.text}
-									</div>
-								</div>
-							{/if}
+			<div class="pointer-events-auto mx-auto flex w-full max-w-[44rem] flex-col items-center gap-2">
+				{#each hitlRequests as req (req.id)}
+					{@const v = hitlVerb(req.tool)}
+					<div
+						class="border-border bg-card max-w-xs rounded-[var(--radius-lg)] border px-4 py-2.5 text-center text-[13px] shadow-sm"
+					>
+						<p class="text-foreground mb-2 font-medium">{req.label}</p>
+						<div class="flex justify-center gap-2">
+							<button
+								type="button"
+								class="border-border hover:bg-muted rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors"
+								onclick={() => declineHitl(req)}
+							>
+								{v.decline}
+							</button>
+							<button
+								type="button"
+								class="rounded-full px-4 py-1.5 text-xs font-semibold transition-colors {v.danger
+									? 'border-destructive/50 text-destructive hover:bg-destructive/10 border'
+									: 'bg-primary text-primary-foreground hover:opacity-90'}"
+								onclick={() => void confirmHitl(req)}
+							>
+								{v.confirm}
+							</button>
+						</div>
+					</div>
+				{/each}
+				{#if editStream}
+					<div
+						bind:this={streamEl}
+						class="border-border bg-card/90 text-muted-foreground max-h-20 w-full overflow-y-auto rounded-[var(--radius-lg)] border px-3 py-1.5 font-mono text-[10px] leading-relaxed break-words whitespace-pre-wrap shadow-sm backdrop-blur"
+					>
+						{editStreamTail}
+					</div>
+				{/if}
+				{#if toolActivity.length > 0}
+					<!-- which actors/tools run right now — the user always knows where we are. -->
+					<div class="flex flex-wrap justify-center gap-1.5">
+						{#each toolActivity as tool (tool.id)}
+							<span
+								class="border-border bg-card/90 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] shadow-sm backdrop-blur {tool.status ===
+								'error'
+									? 'text-destructive'
+									: 'text-muted-foreground'}"
+								title={tool.detail}
+							>
+								{#if tool.status === 'running'}
+									<span class="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full"
+									></span>
+								{:else if tool.status === 'done'}
+									<span class="text-primary">✓</span>
+								{:else}
+									<span class="text-destructive">✕</span>
+								{/if}
+								<b class="text-foreground font-semibold">{tool.name}</b>
+								<span class="opacity-80">{tool.detail}</span>
+								{#if tool.status === 'running' && tool.startedAt}
+									<span class="text-foreground/60 tabular-nums">
+										· {Math.max(0, Math.round((nowTick - tool.startedAt) / 1000))}s
+									</span>
+								{/if}
+							</span>
 						{/each}
 					</div>
-				</div>
-
-				<div class="shrink-0 px-2 pb-2">
-					{#each hitlRequests as req (req.id)}
-						{@const v = hitlVerb(req.tool)}
-						<div
-							class="border-border bg-card mx-auto mb-2 max-w-xs rounded-[var(--radius-lg)] border px-4 py-2.5 text-center text-[13px] shadow-sm"
-						>
-							<p class="text-foreground mb-2 font-medium">{req.label}</p>
-							<div class="flex justify-center gap-2">
-								<button
-									type="button"
-									class="border-border hover:bg-muted rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors"
-									onclick={() => declineHitl(req)}
-								>
-									{v.decline}
-								</button>
-								<button
-									type="button"
-									class="rounded-full px-4 py-1.5 text-xs font-semibold transition-colors {v.danger
-										? 'border-destructive/50 text-destructive hover:bg-destructive/10 border'
-										: 'bg-primary text-primary-foreground hover:opacity-90'}"
-									onclick={() => void confirmHitl(req)}
-								>
-									{v.confirm}
-								</button>
-							</div>
-						</div>
-					{/each}
-					{#if editStream}
-						<div
-							bind:this={streamEl}
-							class="border-border bg-background text-muted-foreground mb-2 max-h-20 overflow-y-auto rounded-[var(--radius-lg)] border px-3 py-1.5 font-mono text-[10px] leading-relaxed break-words whitespace-pre-wrap"
-						>
-							{editStreamTail}
-						</div>
-					{/if}
-					{#if toolActivity.length > 0}
-						<div class="flex flex-wrap justify-center gap-1.5 pb-1.5">
-							{#each toolActivity as tool (tool.id)}
-								<span
-									class="border-border bg-background inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] {tool.status ===
-									'error'
-										? 'text-destructive'
-										: 'text-muted-foreground'}"
-									title={tool.detail}
-								>
-									{#if tool.status === 'running'}
-										<span
-											class="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full"
-										></span>
-									{:else if tool.status === 'done'}
-										<span class="text-primary">✓</span>
-									{:else}
-										<span class="text-destructive">✕</span>
-									{/if}
-									<b class="text-foreground font-semibold">{tool.name}</b>
-									<span class="opacity-80">{tool.detail}</span>
-									{#if tool.status === 'running' && tool.startedAt}
-										<span class="text-foreground/60 tabular-nums">
-											· {Math.max(0, Math.round((nowTick - tool.startedAt) / 1000))}s
-										</span>
-									{/if}
-								</span>
-							{/each}
-						</div>
-					{/if}
+				{/if}
+				{#if lastMessage}
+					<!-- the ONE bubble: the latest human message or assistant reply, centered. -->
+					<div
+						class="max-w-[85%] rounded-[var(--radius-lg)] px-3.5 py-2 text-center text-xs leading-relaxed shadow-sm {lastMessage.role ===
+						'user'
+							? 'bg-primary text-primary-foreground'
+							: 'border-border bg-card/95 text-foreground border backdrop-blur'}{lastMessage.pending
+							? ' animate-pulse italic opacity-60'
+							: ''}"
+					>
+						{lastMessage.text}
+					</div>
+				{/if}
+				<div class="w-full">
 					<IntentComposer
 						bind:this={composerRef}
 						placeholder={t('mainnet.chat.placeholder')}

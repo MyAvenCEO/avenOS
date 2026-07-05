@@ -34,3 +34,11 @@ Implementation (MainnetChat.svelte, client-only — no server/protocol change):
 
 - `2026-07-05` — Built; svelte-check 0 errors. Remaining: Samuel's live look
   (HMR applies immediately) + mobile pass if the rail/overlay need tuning.
+
+- `2026-07-05` — 0118b, Samuel's first live look: NO history and NO container
+  card in the overlay — just the LATEST exchange bubble (human message or
+  assistant reply, whichever is newest; badges skipped) centered directly above
+  the AI button, with the live tool/actor chips kept above it ("the user always
+  knows where we are") + the GLM edit stream + HITL confirms floating free on
+  the stage. Older messages remain in context/persistence; the rail is the
+  visual history.
