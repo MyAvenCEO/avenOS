@@ -86,7 +86,6 @@ function secondsOf(tl: ToolStatus | null): number {
 					title={(n.name ?? n.id) + (n.flowRef ? ' ▸' : '')}
 					description={tl?.detail ?? n.note ?? n.actor ?? ''}
 					selected={tl?.status === 'running'}
-					archived={!tl}
 					showTimer={tl?.status === 'running'}
 					mirror={true}
 					skillRow={true}

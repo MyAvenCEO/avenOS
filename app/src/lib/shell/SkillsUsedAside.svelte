@@ -66,7 +66,6 @@ const statusOf = (u: SkillUse | null): CardStatus =>
 					title={r.name}
 					description={r.use ? (r.use.detail ?? timeOf(r.use.at)) : ''}
 					selected={selectedSkill === r.skill}
-					archived={!r.use && selectedSkill !== r.skill}
 					showTimer={r.use?.status === 'running'}
 					onclick={() => onSelect(r.skill)}
 					skillRow={true}
