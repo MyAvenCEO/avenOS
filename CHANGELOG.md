@@ -1,3 +1,10 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.8...v) (2026-07-05)
+
+
+### Features
+
+* **0119:** wire the Flows tab — the routed skill's node tree full-screen (DB Skills read-model) ([#41](https://github.com/MyAvenCEO/avenOS/issues/41)) ([97b2bc0](https://github.com/MyAvenCEO/avenOS/commit/97b2bc0caa9dedd5814f07580a177c2eeb51340a))
+* remove the Fly tab (read-only orgs viewer — not needed) ([#40](https://github.com/MyAvenCEO/avenOS/issues/40)) ([872441f](https://github.com/MyAvenCEO/avenOS/commit/872441f0aefec9706e1b1e53eee5cb27f11d8626))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.7...v) (2026-07-05)
 
 
