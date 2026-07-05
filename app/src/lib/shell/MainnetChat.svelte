@@ -706,36 +706,6 @@ function handleTranscribeError(message: string): void {
 						{editStreamTail}
 					</div>
 				{/if}
-				{#if toolActivity.length > 0}
-					<!-- which actors/tools run right now — the user always knows where we are. -->
-					<div class="flex flex-wrap justify-center gap-1.5">
-						{#each toolActivity as tool (tool.id)}
-							<span
-								class="border-border bg-card/90 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] shadow-sm backdrop-blur {tool.status ===
-								'error'
-									? 'text-destructive'
-									: 'text-muted-foreground'}"
-								title={tool.detail}
-							>
-								{#if tool.status === 'running'}
-									<span class="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full"
-									></span>
-								{:else if tool.status === 'done'}
-									<span class="text-primary">✓</span>
-								{:else}
-									<span class="text-destructive">✕</span>
-								{/if}
-								<b class="text-foreground font-semibold">{tool.name}</b>
-								<span class="opacity-80">{tool.detail}</span>
-								{#if tool.status === 'running' && tool.startedAt}
-									<span class="text-foreground/60 tabular-nums">
-										· {Math.max(0, Math.round((nowTick - tool.startedAt) / 1000))}s
-									</span>
-								{/if}
-							</span>
-						{/each}
-					</div>
-				{/if}
 				{#if lastMessage}
 					<!-- the ONE bubble: the latest human message or assistant reply, centered. -->
 					<div
