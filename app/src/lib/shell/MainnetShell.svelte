@@ -11,14 +11,13 @@ import AccountSettings from '$lib/shell/AccountSettings.svelte'
 import MailInbox from '$lib/shell/MailInbox.svelte'
 import MainnetChat from '$lib/shell/MainnetChat.svelte'
 import MainnetDb from '$lib/shell/MainnetDb.svelte'
-import MainnetFly from '$lib/shell/MainnetFly.svelte'
 import { nav } from '$lib/shell/nav.svelte'
 
 // Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | DB | Fly on the left; weekly
 // MINDS + the signed-in account NAME on the right. Clicking the name opens the Account Settings
 // view (profile, plans, billing, usage, vault keys, Admin for admins, log out). The website
 // Composer lives under Vibes; Skills/Runs live inside the DB viewer. board 0053/0054/0055/0110.
-type Tab = 'chat' | 'draw' | 'db' | 'fly' | 'mail'
+type Tab = 'chat' | 'draw' | 'db' | 'mail'
 type SettingsCategory = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'admin'
 let tab = $state<Tab>('chat')
 let settings = $state(false)
@@ -79,7 +78,6 @@ const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'chat', label: t('mainnet.nav.chat') },
 	{ id: 'db', label: t('mainnet.nav.db') },
 	{ id: 'draw', label: t('mainnet.nav.draw') },
-	{ id: 'fly', label: t('mainnet.nav.fly') },
 	// board 0107 — Skills + Runs (the actor-model explorer) now live INSIDE the DB viewer as their own
 	// categories (SKILLS = the flow template viewer + node/config aside; RUNS = the step trace, no graph),
 	// so the top nav stays lean. Mail is the only remaining admin-only tab.
@@ -118,8 +116,6 @@ function openTab(id: Tab): void {
 		<MainnetChat />
 	{:else if tab === 'draw'}
 		<DrawCanvas />
-	{:else if tab === 'fly'}
-		<MainnetFly />
 	{:else if tab === 'mail'}
 		<MailInbox />
 	{:else}
