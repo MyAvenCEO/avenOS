@@ -224,7 +224,7 @@ $effect(() => {
 })
 </script>
 
-<div class="bg-background text-foreground flex h-full min-h-0 flex-col">
+<div class="text-foreground flex h-full min-h-0 flex-col bg-[var(--color-surface-soft)]">
 	<header class="border-border flex shrink-0 items-center gap-3 border-b px-4 py-2 text-sm">
 		<select
 			bind:value={sparkId}

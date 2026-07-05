@@ -1,11 +1,11 @@
 import {
 	ALLOWED_EVENTS,
-	FORBIDDEN_PATH_KEYS,
-	SAFE_TAGS,
-	SLOT_REF_PATTERN,
 	assertSafeAttributeValue,
 	assertSafeClassValue,
-	isAllowedAttribute
+	FORBIDDEN_PATH_KEYS,
+	isAllowedAttribute,
+	SAFE_TAGS,
+	SLOT_REF_PATTERN
 } from './security.js'
 
 const VIEW_NODE_KEYS = new Set([
@@ -75,10 +75,14 @@ function validateEvents(events: unknown, path: string): void {
 			throw new Error(`[aven-ui] Forbidden event "${eventName}" at ${path}`)
 		}
 		assertPlainRecord(eventDef, `${path}.${eventName}`)
-		if (typeof eventDef.send !== 'string' || !/^[A-Za-z][A-Za-z0-9_:-]{0,80}$/.test(eventDef.send)) {
+		if (
+			typeof eventDef.send !== 'string' ||
+			!/^[A-Za-z][A-Za-z0-9_:-]{0,80}$/.test(eventDef.send)
+		) {
 			throw new Error(`[aven-ui] Invalid event send at ${path}.${eventName}`)
 		}
-		if (eventDef.payload !== undefined) assertPlainRecord(eventDef.payload, `${path}.${eventName}.payload`)
+		if (eventDef.payload !== undefined)
+			assertPlainRecord(eventDef.payload, `${path}.${eventName}.payload`)
 	}
 }
 
@@ -92,7 +96,8 @@ function validateViewNode(node: unknown, path = 'view'): void {
 	}
 	const n = node as Record<string, unknown>
 	for (const key of Object.keys(n)) {
-		if (!VIEW_NODE_KEYS.has(key)) throw new Error(`[aven-ui] Forbidden view field "${key}" at ${path}`)
+		if (!VIEW_NODE_KEYS.has(key))
+			throw new Error(`[aven-ui] Forbidden view field "${key}" at ${path}`)
 	}
 	const rawTag = typeof n.tag === 'string' ? n.tag.toLowerCase() : 'div'
 	if (n.tag !== undefined && (typeof n.tag !== 'string' || !SAFE_TAGS.has(rawTag))) {
@@ -110,7 +115,9 @@ function validateViewNode(node: unknown, path = 'view'): void {
 	if (n.attrs && typeof n.attrs === 'object') {
 		for (const [attrName, attrValue] of Object.entries(n.attrs as Record<string, unknown>)) {
 			if (!isAllowedAttribute(rawTag, attrName)) {
-				throw new Error(`[aven-ui] Forbidden attribute "${attrName}" on <${rawTag}> at ${path}.attrs`)
+				throw new Error(
+					`[aven-ui] Forbidden attribute "${attrName}" on <${rawTag}> at ${path}.attrs`
+				)
 			}
 			rejectValue(attrValue, `${path}.attrs.${attrName}`, attrName)
 			assertSafeAttributeValue(rawTag, attrName, attrValue, `${path}.attrs`)

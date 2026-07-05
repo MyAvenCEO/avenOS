@@ -11,7 +11,12 @@
  */
 
 import { getContext, setContext } from 'svelte'
-import { persistSparkFiles } from '$lib/avendb/intent-files'
+import { get } from 'svelte/store'
+import {
+	filesToVisionImages,
+	type ImageAttachment,
+	persistSparkFiles
+} from '$lib/avendb/intent-files'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import {
 	brainAppendActivity,
@@ -26,7 +31,6 @@ import {
 	embedState,
 	startEmbedDownload
 } from '$lib/embed/model-download-store'
-import { get } from 'svelte/store'
 import { t } from '$lib/i18n'
 import {
 	activityBegin,
@@ -104,7 +108,13 @@ async function runDreamLogged(identity: string): Promise<void> {
 			// extract_ready: the actor hands off to a non-actor IPC so the Tinfoil HTTP
 			// call never blocks the actor mailbox (DB viewer, next message, etc.)
 			if (step.phase === 'extract_ready') {
-				dreamLogStep({ phase: 'extract_ready', label: 'Extracting facts (off-actor)…', count: 0, tokens: 0, ms: Date.now() - t0 })
+				dreamLogStep({
+					phase: 'extract_ready',
+					label: 'Extracting facts (off-actor)…',
+					count: 0,
+					tokens: 0,
+					ms: Date.now() - t0
+				})
 				cursor = step.nextCursor
 				// Fire extraction in background — don't await (actor is free for other msgs).
 				brainDoExtract(identity)
@@ -118,7 +128,9 @@ async function runDreamLogged(identity: string): Promise<void> {
 							entities: es.entities
 						})
 					)
-					.catch((e) => dreamLogStep({ phase: 'error', label: String(e), count: 0, tokens: 0, ms: 0 }))
+					.catch((e) =>
+						dreamLogStep({ phase: 'error', label: String(e), count: 0, tokens: 0, ms: 0 })
+					)
 				continue
 			}
 			dreamLogStep({
@@ -371,7 +383,8 @@ export function createIdentityAgent(deps: {
 		replyId: string,
 		ctx: ToolContext,
 		context?: string,
-		history?: ChatTurn[]
+		history?: ChatTurn[],
+		images?: ImageAttachment[]
 	): Promise<ToolCallRecord> {
 		const messages: unknown[] = [{ role: 'system', content: CLOUD_SYSTEM_PROMPT }]
 		if (history && history.length > 0) {
@@ -387,7 +400,19 @@ export function createIdentityAgent(deps: {
 				content: `What you remember (auto-assembled from memory — use it to ground your reply):\n\n${context}`
 			})
 		}
-		messages.push({ role: 'user', content: prompt })
+		// With image attachments, the user turn becomes OpenAI multimodal content (text + image_url
+		// blocks) so the vision model (gemma4-31b) can see the dropped files. Plain text otherwise.
+		if (images && images.length > 0) {
+			messages.push({
+				role: 'user',
+				content: [
+					{ type: 'text', text: prompt },
+					...images.map((img) => ({ type: 'image_url', image_url: { url: img.dataUrl } }))
+				]
+			})
+		} else {
+			messages.push({ role: 'user', content: prompt })
+		}
 		const tools = toOpenAiTools(CLOUD_TOOLS)
 		let last: { name: string; args: Record<string, unknown>; exec: ToolDispatchResult } | undefined
 
@@ -401,7 +426,8 @@ export function createIdentityAgent(deps: {
 			const nCalls = turn.toolCalls?.length ?? 0
 			activityFinish(llmId, {
 				label: `Model round ${round + 1}`,
-				detail: nCalls > 0 ? `requested ${nCalls} tool call${nCalls === 1 ? '' : 's'}` : 'final reply'
+				detail:
+					nCalls > 0 ? `requested ${nCalls} tool call${nCalls === 1 ? '' : 's'}` : 'final reply'
 			})
 			if (!turn.toolCalls || turn.toolCalls.length === 0) {
 				const reply = turn.content ?? ''
@@ -504,7 +530,8 @@ export function createIdentityAgent(deps: {
 	async function replyWithAgent(
 		prompt: string,
 		_userRowId?: string,
-		context?: string
+		context?: string,
+		images?: ImageAttachment[]
 	): Promise<void> {
 		const env = deps.env()
 		if (!env.canonicalSparkId) return
@@ -537,10 +564,8 @@ export function createIdentityAgent(deps: {
 			// PLAIN mode: build the traditional session history (prior turns, excluding this turn's
 			// user row + the empty reply). BRAIN mode: no history — continuity rides in `context`.
 			const history =
-				env.mode === 'plain'
-					? sessionHistory(env, [reply.id, _userRowId ?? ''])
-					: undefined
-			const record = await runCloudLoop(prompt, reply.id, ctx, context, history)
+				env.mode === 'plain' ? sessionHistory(env, [reply.id, _userRowId ?? '']) : undefined
+			const record = await runCloudLoop(prompt, reply.id, ctx, context, history, images)
 			await persistRecord(env, reply.id, record)
 
 			/* ───────────────── DISABLED: on-device LFM + brain-recall fallback ─────────────────
@@ -722,7 +747,12 @@ export function createIdentityAgent(deps: {
 					}
 				}
 			}
+			// Build image attachments for the LLM (vision) BEFORE persisting so the model sees the
+			// dropped files even if the avenDB write has a non-fatal error. Images ride along as
+			// multimodal content; all files are also stored in the spark's private `files` table.
+			let images: ImageAttachment[] = []
 			if (files.length > 0) {
+				images = await filesToVisionImages(files)
 				const { stored, errors } = await persistSparkFiles(row.id, files, {
 					identityId: env.canonicalSparkId
 				})
@@ -736,7 +766,9 @@ export function createIdentityAgent(deps: {
 			// Fire the agent reply. BRAIN mode grounds it in the auto-assembled context (unless the
 			// embedder wasn't ready — board 0032 — in which case we never answer on a stub). PLAIN mode
 			// passes no brain context; replyWithAgent builds traditional session history instead.
-			if (body && !embedBlocked) await replyWithAgent(body, row.id, assembledContext)
+			// Image attachments (if any) ride along as multimodal content for the vision model.
+			if ((body || images.length > 0) && !embedBlocked)
+				await replyWithAgent(body, row.id, assembledContext, images)
 			// Dreaming (brain mode only): heal claims, merge entities, decay bonds, consolidate + build
 			// the entity graph for new memories. STEPPED + fire-and-forget; streams into the Dreaming tab.
 			if (env.mode === 'brain' && body && !embedBlocked) void runDreamLogged(env.canonicalSparkId)
@@ -750,7 +782,12 @@ export function createIdentityAgent(deps: {
 			// Persist this turn's activity timeline (store · recall · model · tools, with timings) to
 			// the sealed dreamlog stream so the perf history survives reload and rides along in the
 			// debug export (board 0029 M2). Best-effort, fire-and-forget.
-			if (env.mode === 'brain' && env.tauri && env.canonicalSparkId && brainActivity.steps.length > 0) {
+			if (
+				env.mode === 'brain' &&
+				env.tauri &&
+				env.canonicalSparkId &&
+				brainActivity.steps.length > 0
+			) {
 				void brainAppendActivity(
 					env.canonicalSparkId,
 					brainActivity.steps.map((s) => ({

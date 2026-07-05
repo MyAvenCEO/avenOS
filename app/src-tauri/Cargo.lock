@@ -435,7 +435,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "aven-ai"
-version = "26.6.20-next.4"
+version = "26.7.2-next.1"
 dependencies = [
  "bzip2",
  "half",
@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "aven-brain"
-version = "26.6.20-next.4"
+version = "26.7.2-next.1"
 dependencies = [
  "aven-ai",
  "aven-caps",
@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "aven-caps"
-version = "26.6.20-next.4"
+version = "26.7.2-next.1"
 dependencies = [
  "aven-db",
  "base64 0.22.1",
@@ -494,7 +494,7 @@ dependencies = [
 
 [[package]]
 name = "aven-db"
-version = "26.6.20-next.4"
+version = "26.7.2-next.1"
 dependencies = [
  "ahash",
  "async-trait",
@@ -528,7 +528,7 @@ dependencies = [
 
 [[package]]
 name = "aven-os-app"
-version = "26.6.20-next.4"
+version = "26.7.2-next.1"
 dependencies = [
  "ar",
  "async-trait",
@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "aven-p2p"
-version = "26.6.20-next.4"
+version = "26.7.2-next.1"
 dependencies = [
  "async-trait",
  "aven-db",
@@ -7005,7 +7005,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-sandbox-quickjs"
-version = "26.6.20-next.4"
+version = "26.7.2-next.1"
 dependencies = [
  "rquickjs",
  "serde",
@@ -7017,7 +7017,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-self"
-version = "26.6.20-next.4"
+version = "26.7.2-next.1"
 dependencies = [
  "base64 0.22.1",
  "dirs 6.0.0",
@@ -7043,7 +7043,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-vault"
-version = "26.6.20-next.4"
+version = "26.7.2-next.1"
 dependencies = [
  "serde",
  "tauri",

@@ -44,7 +44,9 @@ let {
 	 * left-aligned intent rows. The mobile horizontal skills scroller
 	 * keeps the default (left-strip) layout.
 	 */
-	mirror = false
+	mirror = false,
+	/** Hide the timer cell entirely (flow/skill asides show it only while running). board 0118. */
+	showTimer = true
 }: {
 	status: CardStatus
 	totalSeconds: number
@@ -58,6 +60,7 @@ let {
 	extraClass?: string
 	skillRow?: boolean
 	mirror?: boolean
+	showTimer?: boolean
 } = $props()
 
 const dur = $derived(formatDurationStrip(totalSeconds))
@@ -90,8 +93,10 @@ const frameSidesClass = $derived(mirror ? 'border-y-0 border-l-0' : 'border-y-0 
 					: `${STATUS_TIMER_BG_REST[status]} ${STATUS_TIMER_BG_HOVER[status]} ${STATUS_STRIP_TEXT[status]} ${STATUS_STRIP_TEXT_HOVER[status]}`}"
 			aria-hidden="true"
 		>
-			<span class="text-[12px] tabular-nums">{dur.main}</span>
-			<span class="text-[7px] font-medium uppercase">{dur.unit}</span>
+			{#if showTimer}
+				<span class="text-[12px] tabular-nums">{dur.main}</span>
+				<span class="text-[7px] font-medium uppercase">{dur.unit}</span>
+			{/if}
 		</div>
 		<div
 			class="min-w-0 flex-1 space-y-0 py-1.5 pr-2 pl-2 {mirror ? 'text-right' : ''} {archived

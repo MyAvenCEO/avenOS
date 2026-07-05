@@ -23,18 +23,31 @@ import {
 	refreshTierProducts
 } from './billing'
 import { bootstrapSchema } from './bootstrap'
+import { contextRoute } from './context'
 import {
 	createSchema,
+	createTodos,
 	createValue,
+	deleteTodo,
 	deleteValue,
+	listDataType,
 	listSchemas,
+	listTodos,
 	listValues,
+	updateTodos,
 	updateValue
 } from './data'
 import { eventsStream } from './events'
+import { deleteFlow, getFlow, listFlows, upsertFlow } from './flows'
+import { skillEnter } from './skill-enter'
+import './ontology' // board 0100 — registers the ontology skill's context providers (gismu/predicates) at load
+import './config' // board 0110 — registers the skills/actors/runs context providers at load
 import { inboxGet, inboxList, mailInbox } from './inbox'
+import { deleteType, getType, listTypes, upsertType } from './predicate-types'
+import { listRuns, runSkill } from './skills-run'
 import { syncPricing } from './usage'
 import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
+import { getVibe } from './vibe-registry'
 
 const app = new Hono()
 
@@ -55,6 +68,12 @@ app.use('/api/auth/*', cors(corsOptions))
 app.use('/api/ai/*', cors(corsOptions))
 app.use('/api/admin/*', cors(corsOptions))
 app.use('/api/data/*', cors(corsOptions))
+// Skill execution (board 0089) — run a skill's flow for the signed-in user (doc-ingest wired first).
+app.use('/api/skills/*', cors(corsOptions))
+app.use('/api/vibe/*', cors(corsOptions))
+// board 0100/0104 — the universal attached-context registry (gismu/predicates/types/data_operations/vibe_*),
+// browser-called cross-origin by the Skills config panel + the DB viewer. Needs CORS like every other /api.
+app.use('/api/context/*', cors(corsOptions))
 // `/api/billing/checkout` is browser-called (needs CORS); `/api/billing/webhook` is a
 // server-to-server POST from Polar (no Origin, so CORS is inert there) verified by signature.
 app.use('/api/billing/*', cors(corsOptions))
@@ -78,6 +97,28 @@ app.get('/api/ai/sessions', aiSessions)
 app.get('/api/ai/sessions/:id/messages', aiSessionMessages)
 app.post('/api/admin/set-tier', aiSetTier)
 
+// Flow/skill CONFIG templates (board 0087, Layer A) — admin-only CRUD; the Skills/Runs UI reads
+// flows from here instead of a static JSON import. Distinct from the user-scoped /api/data/*.
+app.get('/api/admin/flows', listFlows)
+app.get('/api/skills/:id/enter', skillEnter)
+app.get('/api/admin/flows/:id', getFlow)
+app.post('/api/admin/flows', upsertFlow)
+app.delete('/api/admin/flows/:id', deleteFlow)
+
+// Vibe registry (board 0095, Layer A) — vibe definitions (view/style/logic) as config-as-data; the app
+// LOADS a bundle from here + renders it through the engine instead of importing the TS files.
+app.get('/api/vibe/:name', getVibe)
+// board 0100 — UNIVERSAL attached-context resolver: any actor node's declared `context: [{provider}]`
+// is fetched here, so the config UI transparently shows what's in an actor's context window.
+app.get('/api/context/:provider', contextRoute)
+
+// Composite TYPE registry (board 0088, Layer A) — admin-only CRUD over the declarative bundle specs
+// the generic predication engine runs. Distinct from the user-scoped /api/data/*.
+app.get('/api/admin/types', listTypes)
+app.get('/api/admin/types/:type', getType)
+app.post('/api/admin/types', upsertType)
+app.delete('/api/admin/types/:type', deleteType)
+
 // Generic schema-driven user data (board 0053): schemas + schema-validated values.
 app.post('/api/data/schemas', createSchema)
 app.get('/api/data/schemas', listSchemas)
@@ -85,6 +126,19 @@ app.post('/api/data/schemas/:schemaId/values', createValue)
 app.get('/api/data/schemas/:schemaId/values', listValues)
 app.patch('/api/data/values/:id', updateValue)
 app.delete('/api/data/values/:id', deleteValue)
+
+// Todos (board 0087/0088): stored as x1–x5 predications, surfaced via these routes which delegate
+// to the generic ontology engine (the `todos` registered type) — the same path the LLM tool uses.
+// Skill runner (board 0089): POST a file → run the skill's flow → artifact + document predications
+// + provenance + a persisted run trace. The generic runner the LLM `run_skill` tool also calls.
+app.get('/api/skills/runs', listRuns)
+app.post('/api/skills/:id/run', runSkill)
+
+app.get('/api/data/todos', listTodos)
+app.get('/api/data/type/:type', listDataType)
+app.post('/api/data/todos', createTodos)
+app.patch('/api/data/todos', updateTodos)
+app.delete('/api/data/todos/:id', deleteTodo)
 
 // Billing: create a Polar checkout (session-gated) + receive Polar webhooks → sync tier +
 // on-demand reconcile (pull customer state from Polar → tier) for the post-checkout return. board 0052.

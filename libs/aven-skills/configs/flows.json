@@ -1,0 +1,443 @@
+[
+	{
+		"id": "doc-ingest",
+		"name": "Document Ingest",
+		"description": "Take a document in: store the file content-addressed → classify it via LLM. Yields a classified document.",
+		"nodes": [
+			{
+				"id": "ingest",
+				"name": "Ingest",
+				"actor": "storeDocument",
+				"inputs": ["file", "image"],
+				"outputs": ["document"],
+				"note": "Store the file / photo content-addressed in fs (sparks/PRIVATE/<sha256>)",
+				"tools": ["sparkWriteBytes"],
+				"supervision": {
+					"strategy": "resume"
+				}
+			},
+			{
+				"id": "classify",
+				"name": "Classify",
+				"actor": "classify_document",
+				"vibe": "bookkeeping",
+				"inputs": ["document"],
+				"outputs": ["document"],
+				"note": "Detect the document type via LLM (invoice / bank statement / contract / …)",
+				"system_prompt": "You are a bookkeeper. Determine the document type: invoice, bank_statement, contract or other. Return a title, tags and a short summary.",
+				"llm": {
+					"model": "gemma4-31b",
+					"vision": true,
+					"mode": "vision"
+				},
+				"tools": ["classify_document"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			}
+		],
+		"edges": [
+			{
+				"from": "ingest",
+				"to": "classify",
+				"resource": "document",
+				"kind": "data",
+				"message": "document"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "file"
+			},
+			{
+				"kind": "resource",
+				"on": "image"
+			}
+		]
+	},
+	{
+		"id": "capture",
+		"name": "Map Brain (Invoice)",
+		"description": "Turn a classified document into structured, persisted data: extract the invoice via LLM → enrich (create/update the contact + persist the invoice).",
+		"nodes": [
+			{
+				"id": "extract",
+				"name": "Extract",
+				"actor": "extract_document",
+				"inputs": ["document"],
+				"outputs": ["invoice"],
+				"note": "LLM: extract all invoice fields as strict JSON",
+				"system_prompt": "Extract every field of the invoice (header, vendor, buyer, line items, totals) as strict JSON per the invoice schema.",
+				"llm": {
+					"model": "gemma4-31b",
+					"vision": true,
+					"mode": "tool"
+				},
+				"tools": ["extract_document", "emit_invoice"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "enrich",
+				"name": "Enrich",
+				"actor": "enrichAddressbook",
+				"inputs": ["invoice"],
+				"outputs": ["invoice", "contact"],
+				"note": "Create/update the contact (match by VAT-ID / IBAN / name) + persist the invoice",
+				"tools": ["matchContact", "data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
+			}
+		],
+		"edges": [
+			{
+				"from": "extract",
+				"to": "enrich",
+				"resource": "invoice",
+				"kind": "data",
+				"message": "invoice"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "document"
+			}
+		]
+	},
+	{
+		"id": "capture-bank",
+		"name": "Map Brain (Kontoauszug)",
+		"description": "Turn a classified bank statement into structured, persisted data: extract account holder + transactions via LLM → enrich (create/update the account contact + persist the transactions).",
+		"nodes": [
+			{
+				"id": "extract",
+				"name": "Extract",
+				"actor": "extract_document",
+				"inputs": ["document"],
+				"outputs": ["transaction", "contact"],
+				"note": "LLM: extract account holder + every transaction (fan-out 1→N)",
+				"system_prompt": "Extract the account holder, balance and every transaction (date, amount, counterparty, IBAN, purpose) as strict JSON per the bank_statement schema.",
+				"llm": {
+					"model": "gemma4-31b",
+					"vision": true,
+					"mode": "tool"
+				},
+				"tools": ["extract_document", "emit_bank_statement"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "enrich",
+				"name": "Enrich",
+				"actor": "enrichAddressbook",
+				"inputs": ["transaction", "contact"],
+				"outputs": ["transaction", "contact"],
+				"note": "Create/update the account-holder contact + persist the transactions (idempotent dedup)",
+				"tools": ["matchContact", "data_crud"],
+				"supervision": {
+					"strategy": "resume"
+				}
+			}
+		],
+		"edges": [
+			{
+				"from": "extract",
+				"to": "enrich",
+				"resource": "transaction",
+				"kind": "data",
+				"message": "transaction"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "document"
+			}
+		]
+	},
+	{
+		"id": "book",
+		"name": "Bookkeeping",
+		"description": "Match the invoice to a bank transaction, then post the SKR04 booking.",
+		"nodes": [
+			{
+				"id": "match",
+				"name": "Match",
+				"actor": "matchInvoiceAgainstTx",
+				"inputs": ["invoice"],
+				"outputs": ["match"],
+				"note": "Find the transaction that pays this invoice (amount, counterparty, date) — or none",
+				"system_prompt": "Pick the transaction that settles this invoice (amount, FX, counterparty, date) — or none.",
+				"llm": {
+					"model": "gemma4-31b",
+					"mode": "tool"
+				},
+				"tools": ["pick_match"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "post",
+				"name": "Book (SKR04)",
+				"actor": "bookInvoice",
+				"inputs": ["match"],
+				"outputs": ["booking"],
+				"note": "Post the SKR04 booking (expense + input VAT; split on mixed rates)",
+				"system_prompt": "Post the incoming invoice in SKR04: per line the best expense account (NET) + tax_treatment; the system posts input VAT. Split booking on mixed rates.",
+				"llm": {
+					"model": "gemma4-31b",
+					"mode": "tool"
+				},
+				"tools": ["book_invoice"],
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			}
+		],
+		"edges": [
+			{
+				"from": "match",
+				"to": "post",
+				"resource": "match",
+				"kind": "data",
+				"message": "match"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "invoice"
+			}
+		]
+	},
+	{
+		"id": "invoice",
+		"name": "Invoice Processing",
+		"description": "End-to-end incoming invoice: ingest → capture (extract+enrich) → bookkeeping (match+book) → human review. Composes the three sub-skills.",
+		"nodes": [
+			{
+				"id": "ingest-doc",
+				"name": "Document Ingest",
+				"flowRef": "doc-ingest",
+				"inputs": ["file", "image"],
+				"outputs": ["document"],
+				"note": "Composite → Document Ingest (ingest + classify)",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "capture",
+				"name": "Map Brain (Invoice)",
+				"flowRef": "capture",
+				"inputs": ["document"],
+				"outputs": ["invoice"],
+				"note": "Composite → Map Brain (extract + enrich)",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "book",
+				"name": "Bookkeeping",
+				"flowRef": "book",
+				"inputs": ["invoice"],
+				"outputs": ["booking"],
+				"note": "Composite → Bookkeeping (match + book)",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "review",
+				"name": "Review",
+				"actor": "humanReview",
+				"inputs": ["booking"],
+				"outputs": ["approval"],
+				"note": "HITL: accept the end-to-end invoice (ingest → extract → enrich → match → book)",
+				"hitl": true,
+				"tools": ["approve"],
+				"supervision": {
+					"strategy": "escalate"
+				}
+			}
+		],
+		"edges": [
+			{
+				"from": "ingest-doc",
+				"to": "capture",
+				"resource": "document",
+				"kind": "data",
+				"message": "document"
+			},
+			{
+				"from": "capture",
+				"to": "book",
+				"resource": "invoice",
+				"kind": "data",
+				"message": "invoice"
+			},
+			{
+				"from": "book",
+				"to": "review",
+				"resource": "booking",
+				"kind": "data",
+				"message": "booking"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "file"
+			},
+			{
+				"kind": "resource",
+				"on": "image"
+			}
+		]
+	},
+	{
+		"id": "kontoauszug",
+		"name": "Bank Statement Processing",
+		"description": "End-to-end bank statement: ingest → map brain (extract + enrich → transactions + account holder) → human review. Reuses Document Ingest + Review; only the extract is bank-specific.",
+		"nodes": [
+			{
+				"id": "ingest-doc",
+				"name": "Document Ingest",
+				"flowRef": "doc-ingest",
+				"inputs": ["file", "image"],
+				"outputs": ["document"],
+				"note": "Composite → Document Ingest (ingest + classify)",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "map-brain",
+				"name": "Map Brain (Kontoauszug)",
+				"flowRef": "capture-bank",
+				"inputs": ["document"],
+				"outputs": ["transaction", "contact"],
+				"note": "Composite → Map Brain (extract + enrich)",
+				"supervision": {
+					"strategy": "restart",
+					"retry": {
+						"max": 2,
+						"backoff": "exponential"
+					}
+				}
+			},
+			{
+				"id": "review",
+				"name": "Review",
+				"actor": "humanReview",
+				"inputs": ["transaction"],
+				"outputs": ["approval"],
+				"note": "HITL: accept the imported transactions",
+				"hitl": true,
+				"tools": ["approve"],
+				"supervision": {
+					"strategy": "escalate"
+				}
+			}
+		],
+		"edges": [
+			{
+				"from": "ingest-doc",
+				"to": "map-brain",
+				"resource": "document",
+				"kind": "data",
+				"message": "document"
+			},
+			{
+				"from": "map-brain",
+				"to": "review",
+				"resource": "transaction",
+				"kind": "data",
+				"message": "transaction"
+			}
+		],
+		"triggers": [
+			{
+				"kind": "resource",
+				"on": "file"
+			},
+			{
+				"kind": "resource",
+				"on": "image"
+			}
+		]
+	},
+	{
+		"id": "project-planner",
+		"name": "Project Planner",
+		"description": "Break a goal into todos and manage them as task/valid/due/prioritized gismu predications. board 0087.",
+		"nodes": [
+			{
+				"id": "plan",
+				"name": "Plan",
+				"actor": "llm",
+				"inputs": ["goal"],
+				"outputs": ["task"],
+				"system_prompt": "You are a project planner. Break the user's goal into concrete, atomic tasks and create them via the todos tool.",
+				"llm": { "model": "claude-sonnet-4-6", "mode": "tool" },
+				"tools": ["todos"]
+			},
+			{
+				"id": "todos",
+				"name": "Todos",
+				"actor": "renderTodos",
+				"inputs": ["task"],
+				"outputs": ["task"]
+			}
+		],
+		"edges": [
+			{ "from": "plan", "to": "todos", "resource": "task" }
+		],
+		"triggers": [
+			{ "kind": "resource", "on": "goal" }
+		]
+	}
+]

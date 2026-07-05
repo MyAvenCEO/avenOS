@@ -1,6 +1,10 @@
 <script lang="ts">
 import { onDestroy, tick } from 'svelte'
 import { browser } from '$app/environment'
+// board 0110 — the idle AI button IS the avenOS logo: the freigestellt (cut-out) mark, disabled by default,
+// the full-colour clean mark on hover/active. No circle chrome.
+import logoClean from '$lib/assets/logo/logo_clean.svg'
+import logoDisabled from '$lib/assets/logo/logo_clean_disabled.svg'
 import {
 	asrState,
 	startDownload as startAsrDownload,
@@ -875,7 +879,10 @@ const pillClass = $derived.by(() => {
 	const base =
 		'flex max-w-full overflow-hidden transition-[width,max-width,background-color,border-color,border-radius,box-shadow,padding] duration-[360ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]'
 	if (mode === 'collapsed') {
-		return `${base} h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary p-0 text-primary-foreground shadow-[0_8px_24px_-8px_color-mix(in_srgb,var(--color-primary)_50%,transparent)]`
+		// board 0110 — the idle AI icon is the bare avenOS logo (no circle chrome); 25% larger than the old 56px.
+		// board 0112 — !overflow-visible so the soft glow behind the mark isn't CLIPPED to the square wrapper
+		// (base sets overflow-hidden for the pill animations) — the clip was the "squared outline".
+		return `${base} size-[4.375rem] shrink-0 items-center justify-center p-0 !overflow-visible`
 	}
 	if (mode === 'listening') {
 		if (isMobile) {
@@ -967,7 +974,7 @@ const pillClass = $derived.by(() => {
 		<div class={pillClass} role="group">
 			<button
 				type="button"
-				class="flex h-14 w-14 shrink-0 touch-manipulation select-none items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+				class="group relative flex size-[4.375rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
 				{disabled}
 				onpointerdown={(e) => {
 					void focusShellWebview()
@@ -991,21 +998,25 @@ const pillClass = $derived.by(() => {
 					? 'Tap to type, double-tap for voice stream, hold to record (mock)'
 					: 'Start voice note (mock)'}
 			>
-				<svg
-					class="size-6"
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
+				<!-- board 0112 — a soft CIRCULAR glow behind the mark lifts it off the cream background (a
+				     radial gradient, not a shape-tracing drop-shadow → no squared petal silhouette). Subtle
+				     at rest, brighter + wider on hover. -->
+				<span
 					aria-hidden="true"
-				>
-					<path d="M0 0h24v24H0z" fill="none" />
-					<path
-						fill="none"
-						stroke="currentColor"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M15 19c1.2-3.678 2.526-5.005 6-6c-3.474-.995-4.8-2.322-6-6c-1.2 3.678-2.526 5.005-6 6c3.474.995 4.8 2.322 6 6Zm-8-9c.6-1.84 1.263-2.503 3-3c-1.737-.497-2.4-1.16-3-3c-.6 1.84-1.263 2.503-3 3c1.737.497 2.4 1.16 3 3Zm1.5 10c.3-.92.631-1.251 1.5-1.5c-.869-.249-1.2-.58-1.5-1.5c-.3.92-.631 1.251-1.5 1.5c.869.249 1.2.58 1.5 1.5Z"
-					/>
-				</svg>
+					class="pointer-events-none absolute inset-[12%] rounded-full opacity-55 blur-[12px] transition-all duration-200 group-hover:inset-[6%] group-hover:opacity-90 [background:radial-gradient(circle,color-mix(in_srgb,var(--color-primary)_30%,transparent),transparent_70%)]"
+				></span>
+				<!-- board 0110 — disabled mark at rest, full-colour clean mark on hover / active / focus -->
+				<img
+					src={logoDisabled}
+					alt="avenOS"
+					class="pointer-events-none absolute inset-0 size-full object-contain p-1 transition-opacity duration-150 group-hover:opacity-0 group-active:opacity-0 group-focus-visible:opacity-0"
+				/>
+				<img
+					src={logoClean}
+					alt=""
+					aria-hidden="true"
+					class="pointer-events-none absolute inset-0 size-full object-contain p-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-active:opacity-100 group-focus-visible:opacity-100"
+				/>
 			</button>
 		</div>
 	{:else if mode === 'listening'}
@@ -1236,7 +1247,7 @@ const pillClass = $derived.by(() => {
 							oninput={resizeComposer}
 							onkeydown={onTextareaKeydown}
 							onblur={collapseIfEmpty}
-							class="min-h-9 max-sm:min-h-[2.7rem] max-h-[min(24rem,calc(100vh-12rem))] w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2 max-sm:py-[0.6rem] px-0 text-sm max-sm:text-[1.05rem] leading-snug font-medium tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:min-h-10 sm:py-2.5 sm:text-xl sm:leading-tight"
+							class="min-h-9 max-sm:min-h-[2.7rem] max-h-[min(24rem,calc(100vh-12rem))] w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2 max-sm:py-[0.6rem] px-0 text-sm max-sm:text-[1.05rem] leading-snug font-normal tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:min-h-10 sm:py-2.5 sm:text-base sm:leading-tight"
 						></textarea>
 					</form>
 					<button

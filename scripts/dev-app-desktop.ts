@@ -65,8 +65,10 @@ async function startAuthService(env: Record<string, string>) {
 	const port = authPort(env)
 	freeDevServerPort(port)
 	console.log(`[auth] Starting Better Auth on ${env.PUBLIC_BETTER_AUTH_URL}`)
+	// `--watch` so edits to the auth server (routes, context providers, etc.) hot-reload in dev instead of
+	// serving stale boot-time code until a full app restart. board 0110.
 	const auth = Bun.spawn(
-		[bun, `--env-file=${selectedEnvFileRelativeTo(authDir, env)}`, 'src/server.ts'],
+		[bun, `--env-file=${selectedEnvFileRelativeTo(authDir, env)}`, '--watch', 'src/server.ts'],
 		{
 			cwd: authDir,
 			stdout: 'inherit',

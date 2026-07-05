@@ -1,12 +1,13 @@
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import {
-	BOOLEAN_ATTRS,
 	ALLOWED_EVENTS,
-	SAFE_TAGS,
 	assertSafeClassValue,
+	BOOLEAN_ATTRS,
 	isAllowedAttribute,
 	isSafeUrl,
+	SAFE_TAGS,
+	SVG_TAGS,
 	sanitizeAttributeWhitelist,
 	sanitizePayloadForValidation,
 	URL_ATTRS
@@ -149,13 +150,16 @@ export class ViewEngine {
 		const rawTag = (node.tag || 'div').toLowerCase()
 		if (!SAFE_TAGS.has(rawTag)) throw new Error(`[aven-ui] Forbidden tag "${rawTag}"`)
 		const tag = rawTag
-		const element = document.createElement(tag)
+		// board 0115 — the inline-SVG icon subset renders in the SVG namespace; everything else is HTML.
+		const element = SVG_TAGS.has(tag)
+			? (document.createElementNS('http://www.w3.org/2000/svg', tag) as unknown as HTMLElement)
+			: document.createElement(tag)
 		element.setAttribute('data-aven-path', path)
 
 		if (node.class) {
 			const classValue = await this.evaluator.evaluate(node.class, data)
 			assertSafeClassValue(classValue, 'runtime class')
-			if (classValue) element.className = sanitizeAttributeWhitelist(classValue)
+			if (classValue) element.setAttribute('class', sanitizeAttributeWhitelist(classValue))
 		}
 
 		if (node.attrs) {
@@ -194,6 +198,21 @@ export class ViewEngine {
 		} else if (node.children && !node.$each) {
 			for (let i = 0; i < node.children.length; i++) {
 				const child = node.children[i]
+				// board 0114 — a PURE $each child (no tag/class/text/attrs/events of its own) renders
+				// TRANSPARENTLY: its items append directly to THIS element instead of an anonymous
+				// wrapper <div>. The wrapper was invisible in block lists but silently broke every
+				// GRID parent (all items landed inside ONE track — the single-column mystery).
+				if (
+					child.$each &&
+					!child.tag &&
+					!child.class &&
+					child.text === undefined &&
+					!child.attrs &&
+					!child.$on
+				) {
+					element.appendChild(await this.renderEach(child.$each, data, `${path}.${i}`))
+					continue
+				}
 				const childEl = await this.renderNode(child, data, `${path}.${i}`)
 				if (childEl) element.appendChild(childEl)
 			}
@@ -241,7 +260,8 @@ export class ViewEngine {
 		data: RenderData
 	): void {
 		for (const [eventName, eventDef] of Object.entries(events)) {
-			if (!ALLOWED_EVENTS.has(eventName)) throw new Error(`[aven-ui] Forbidden event "${eventName}"`)
+			if (!ALLOWED_EVENTS.has(eventName))
+				throw new Error(`[aven-ui] Forbidden event "${eventName}"`)
 			element.addEventListener(eventName, (domEvent) => {
 				if (eventName === 'submit') {
 					domEvent.preventDefault()

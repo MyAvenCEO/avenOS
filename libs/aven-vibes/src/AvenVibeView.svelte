@@ -129,6 +129,7 @@ async function mount(): Promise<void> {
 		}
 		onState?.(mounted.state)
 
+
 		unlistenState = await listenSandboxQjsState((event) => {
 			if (event.sessionId !== sessionId || token !== mountToken) return
 			void engine?.replaceState(event.state)
