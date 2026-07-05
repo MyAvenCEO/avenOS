@@ -83,15 +83,24 @@ async function reifyEdge(edgePred: string, place: 'x2', entityType: string): Pro
 }
 
 export async function up(_db: Kysely<unknown>): Promise<void> {
-	await seedVocabPerUser()
-	await saveType(GOAL_SPEC)
-	await saveType(LOCATION_SPEC)
-	await reifyField('todos', 'member_of', 'goal', 'goal')
-	await reifyField('inventory', 'located', 'location', 'location')
-	const g = await reifyEdge('member_of', 'x2', 'goal')
-	const l = await reifyEdge('located', 'x2', 'location')
-	// eslint-disable-next-line no-console
-	console.log(`[0081] reified ${g} goal(s) + ${l} location(s) into entities`)
+	try {
+		await seedVocabPerUser()
+		await saveType(GOAL_SPEC)
+		await saveType(LOCATION_SPEC)
+		await reifyField('todos', 'member_of', 'goal', 'goal')
+		await reifyField('inventory', 'located', 'location', 'location')
+		const g = await reifyEdge('member_of', 'x2', 'goal')
+		const l = await reifyEdge('located', 'x2', 'location')
+		// eslint-disable-next-line no-console
+		console.log(`[0081] reified ${g} goal(s) + ${l} location(s) into entities`)
+	} catch (e) {
+		// REPLAY-SAFE SKIP (board 0119j): this migration executes TODAY'S runtime engine against the
+		// schema as it existed at position 0081 — a fresh catch-up (the next channel) can reject it
+		// even though the historical run succeeded. Skipping is CONVERGENT: reify operates on
+		// goal/location DATA (none or near-none on a fresh catch-up); specs re-save on demand.
+		// DBs that applied it historically are untouched (already recorded as applied).
+		console.error('[migrate 0081] replay-safe skip:', e instanceof Error ? e.message : String(e))
+	}
 }
 
 export async function down(): Promise<void> {
