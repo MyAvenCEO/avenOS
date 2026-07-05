@@ -91,8 +91,40 @@ function openTab(id: Tab): void {
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background">
+
+	{#if justUpgraded}
+		<div
+			class="border-primary/30 bg-primary/10 text-foreground flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 text-sm"
+			role="status"
+		>
+			<span class="font-semibold">{t('mainnet.pricing.upgradedTitle')}</span>
+			<span class="text-muted-foreground min-w-0">{t('mainnet.pricing.upgradedBody')}</span>
+			<button
+				type="button"
+				class="text-muted-foreground hover:text-foreground ml-auto shrink-0 text-xs font-semibold"
+				onclick={() => (justUpgraded = false)}
+				aria-label="Dismiss"
+			>
+				✕
+			</button>
+		</div>
+	{/if}
+
+	{#if settings}
+		<AccountSettings category={settingsCategory} />
+	{:else if tab === 'chat'}
+		<MainnetChat />
+	{:else if tab === 'fly'}
+		<MainnetFly />
+	{:else if tab === 'mail'}
+		<MailInbox />
+	{:else}
+		<MainnetDb />
+	{/if}
+
+	<!-- board 0119e — the section nav lives at the BOTTOM now (Samuel): content owns the top edge. -->
 	<nav
-		class="flex shrink-0 items-center gap-2 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-1.5 text-[10px] font-bold tracking-wider uppercase"
+		class="border-border/50 flex shrink-0 items-center gap-2 border-t px-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[10px] font-bold tracking-wider uppercase"
 		aria-label="Mainnet sections"
 	>
 		{#each tabs as item, i (item.id)}
@@ -132,34 +164,4 @@ function openTab(id: Tab): void {
 			{/if}
 		</div>
 	</nav>
-
-	{#if justUpgraded}
-		<div
-			class="border-primary/30 bg-primary/10 text-foreground flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 text-sm"
-			role="status"
-		>
-			<span class="font-semibold">{t('mainnet.pricing.upgradedTitle')}</span>
-			<span class="text-muted-foreground min-w-0">{t('mainnet.pricing.upgradedBody')}</span>
-			<button
-				type="button"
-				class="text-muted-foreground hover:text-foreground ml-auto shrink-0 text-xs font-semibold"
-				onclick={() => (justUpgraded = false)}
-				aria-label="Dismiss"
-			>
-				✕
-			</button>
-		</div>
-	{/if}
-
-	{#if settings}
-		<AccountSettings category={settingsCategory} />
-	{:else if tab === 'chat'}
-		<MainnetChat />
-	{:else if tab === 'fly'}
-		<MainnetFly />
-	{:else if tab === 'mail'}
-		<MailInbox />
-	{:else}
-		<MainnetDb />
-	{/if}
 </div>
