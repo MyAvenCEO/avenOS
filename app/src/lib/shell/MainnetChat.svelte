@@ -658,14 +658,14 @@ function handleTranscribeError(message: string): void {
 		{/if}
 		<div class="pointer-events-none absolute inset-x-0 top-1 z-20 flex justify-center">
 			<div
-				class="border-border bg-card/95 pointer-events-auto flex items-center gap-0.5 rounded-full border p-0.5 shadow-sm backdrop-blur"
+				class="border-border bg-surface-card pointer-events-auto flex items-center gap-0.5 rounded-full border p-0.5 shadow-sm"
 			>
 				<button
 					type="button"
 					class="rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase transition-colors {mainTab ===
 					'display'
-						? 'bg-primary text-primary-foreground'
-						: 'text-muted-foreground hover:text-foreground'}"
+						? 'bg-surface-card-selected text-foreground'
+						: 'text-muted-foreground hover:bg-surface-card-hover hover:text-foreground'}"
 					onclick={() => (mainTab = 'display')}
 				>
 					Display
@@ -674,8 +674,8 @@ function handleTranscribeError(message: string): void {
 					type="button"
 					class="rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase transition-colors {mainTab ===
 					'flows'
-						? 'bg-primary text-primary-foreground'
-						: 'text-muted-foreground hover:text-foreground'}"
+						? 'bg-surface-card-selected text-foreground'
+						: 'text-muted-foreground hover:bg-surface-card-hover hover:text-foreground'}"
 					onclick={() => (mainTab = 'flows')}
 				>
 					Flows

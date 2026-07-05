@@ -124,7 +124,7 @@ function openTab(id: Tab): void {
 
 	<!-- board 0119e — the section nav lives at the BOTTOM now (Samuel): content owns the top edge. -->
 	<nav
-		class="border-border/50 flex shrink-0 items-center gap-2 border-t px-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[10px] font-bold tracking-wider uppercase"
+		class="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 px-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[10px] font-bold tracking-wider uppercase"
 		aria-label="Mainnet sections"
 	>
 		{#each tabs as item, i (item.id)}
@@ -133,7 +133,7 @@ function openTab(id: Tab): void {
 			{/if}
 			<button
 				type="button"
-				class="transition-opacity hover:opacity-80 {tab === item.id && !settings
+				class="pointer-events-auto transition-opacity hover:opacity-80 {tab === item.id && !settings
 					? 'opacity-95'
 					: 'opacity-40'}"
 				aria-current={tab === item.id && !settings ? 'page' : undefined}
@@ -152,7 +152,7 @@ function openTab(id: Tab): void {
 			{#if displayName}
 				<button
 					type="button"
-					class="max-w-[14rem] truncate normal-case transition-opacity hover:opacity-80 {settings
+					class="pointer-events-auto max-w-[14rem] truncate normal-case transition-opacity hover:opacity-80 {settings
 						? 'text-foreground opacity-95'
 						: 'opacity-60'}"
 					title={user?.email}
