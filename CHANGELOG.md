@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.10...v) (2026-07-05)
+
+
+### Features
+
+* **0119:** voice + logo button polish; Flows tab reuses the left-aside skill ([#43](https://github.com/MyAvenCEO/avenOS/issues/43)) ([b9d10a9](https://github.com/MyAvenCEO/avenOS/commit/b9d10a9252ddaad7c23723f86ac74fa8fb1cf5ca))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.9...v) (2026-07-05)
 
 
