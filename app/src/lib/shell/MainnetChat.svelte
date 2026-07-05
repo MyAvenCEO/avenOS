@@ -107,23 +107,12 @@ const routedSkill = $derived(
 let skillUses = $state<SkillUse[]>([])
 let pinnedSkill = $state<string | null>(null)
 const asideSkill = $derived(pinnedSkill ?? routedSkill)
-// board 0118e — EDIT MODE: while a skill-editing action runs (mockup design, promotion steps,
-// improve/sync/connect, website edit), the whole screen wears a 4px brand-gold outline.
-const EDIT_TOOLS = new Set([
-	'create_mockup',
-	'edit_mockup',
-	'plan_app',
-	'mint_data',
-	'wire_actors',
-	'seed_data',
-	'promote',
-	'improve_skill',
-	'sync_actors',
-	'connect_skills',
-	'edit_website'
-])
+// board 0118e — EDIT MODE (Samuel: ONLY while the skillify skill is active): the 4px brand-gold
+// full-screen outline shows while a skillify-routed action is running — never on ordinary skill
+// turns, even when they use shared upgrade tools like improve_skill.
 const editingSkill = $derived(
-	toolActivity.some((tl) => tl.status === 'running' && EDIT_TOOLS.has(tl.name))
+	routedSkill === 'skillify' &&
+		toolActivity.some((tl) => tl.status === 'running' && tl.id !== 'dispatch')
 )
 // Live GLM edit stream (reasoning + diff text) for the current turn, shown in a scrolling panel so
 // the user sees what the website model is actually writing — not just "thinking". board 0056.
