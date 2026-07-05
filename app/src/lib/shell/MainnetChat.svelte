@@ -682,7 +682,13 @@ function handleTranscribeError(message: string): void {
 				</button>
 			</div>
 		</div>
-		<div class="min-h-0 flex-1 overflow-y-auto px-6 pt-14" style="padding-bottom: 11rem">
+		<!-- board 0119d — the stage content is SCOPED to the inner column between the two asides
+		     (md+): wide vibes (the website composer) lay out inside it instead of underneath the
+		     overlay cards. Mobile keeps the plain padding (asides hidden there). -->
+		<div
+			class="min-h-0 flex-1 overflow-y-auto px-6 pt-14 md:px-[15.5rem]"
+			style="padding-bottom: 11rem"
+		>
 			{#if mainTab === 'flows'}
 				<div
 					class="text-muted-foreground flex h-full items-center justify-center text-sm leading-relaxed"
