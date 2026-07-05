@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.4...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **deploy:** resilient boot — bootstrap retries forever with per-attempt timeout + logged cause ([#35](https://github.com/MyAvenCEO/avenOS/issues/35)) ([1f73222](https://github.com/MyAvenCEO/avenOS/commit/1f73222d081c31ddc135574dfc8b338ec76b147d))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.3...v) (2026-07-05)
 
 

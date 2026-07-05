@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/aven-ontology",
 	"private": true,
-	"version": "26.7.5-next.4",
+	"version": "26.7.5-next.5",
 	"type": "module",
 	"description": "Pure, declarative CRUD/query engine over x1–x5 predications — register a type (bundle spec) → generic mutate + Datalog-style projection. No domain code per type. board 0088.",
 	"main": "./src/index.ts",
