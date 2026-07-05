@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.1...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **deploy:** betterauth Fly image needs aven-skills + aven-ontology workspaces ([#32](https://github.com/MyAvenCEO/avenOS/issues/32)) ([e912bd6](https://github.com/MyAvenCEO/avenOS/commit/e912bd60a9b3890830e71f6fc00e158be3430970))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.2-next.1...v) (2026-07-05)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.1-next.3...v) (2026-07-02)
 
