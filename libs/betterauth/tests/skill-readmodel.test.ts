@@ -35,23 +35,17 @@ d('board 0114 — the Skills read-model + generic tracing', () => {
 		).toEqual(['data_crud', 'locations'])
 	})
 
-	test('the Planner is the LIVING explicit-flow override: mode nodes + dispatch edges + vibes', async () => {
-		// board 0114/0088 — an edge-carrying flow row overrides the derived hub: the Planner keeps its four
-		// data_crud MODE nodes (each previewing its own vibe — richness one actor row cannot express),
-		// plus dispatch fan-out edges. Name comes from the flow row and MUST say Planner (the stale
-		// "Todos" seed name was the original drift).
+	test('the Planner is the LIVING explicit-flow override: mode nodes + step vibes, no dispatch', async () => {
+		// board 0114/0088/0119r — a flow row with STEP-LEVEL config (per-node vibes — richness one
+		// actor row cannot express) overrides the derived hub. The dispatcher routes; it is NOT a
+		// step inside skill flows (it has its own system skill), so no dispatch node/edges here.
+		// Name comes from the flow row and MUST say Planner (the stale "Todos" seed name was the
+		// original drift).
 		const flows = await composeFlows()
 		const planner = flows.find((f) => f.id === 'todos')
 		expect(planner?.name).toBe('Planner')
 		const nodes = planner?.nodes as { id: string; vibe?: string }[]
-		expect(nodes.map((n) => n.id).sort()).toEqual([
-			'create',
-			'delete',
-			'dispatch',
-			'edit',
-			'goals',
-			'read'
-		])
+		expect(nodes.map((n) => n.id).sort()).toEqual(['create', 'delete', 'edit', 'goals', 'read'])
 		expect(Object.fromEntries(nodes.filter((n) => n.vibe).map((n) => [n.id, n.vibe]))).toEqual({
 			read: 'todos',
 			create: 'todos-created',
@@ -59,8 +53,7 @@ d('board 0114 — the Skills read-model + generic tracing', () => {
 			delete: 'todos-deleted',
 			goals: 'goals'
 		})
-		expect((planner?.edges as { from: string }[]).every((e) => e.from === 'dispatch')).toBe(true)
-		expect((planner?.edges as unknown[]).length).toBe(5)
+		expect(nodes.some((n) => n.id === 'dispatch')).toBe(false)
 	})
 
 	test('an EDGE-carrying flow row overrides the derived graph', async () => {

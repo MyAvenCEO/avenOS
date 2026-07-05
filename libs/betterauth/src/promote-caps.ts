@@ -467,13 +467,15 @@ export async function mintVerbVibes(skeleton: AppSkeleton): Promise<string[]> {
 type FlowNode = Record<string, unknown> & { id: string }
 type FlowEdge = { from: string; to: string; kind: string }
 
-/** The granular flow presence of a promoted skill — the todos/Planner node set, deterministic. */
+/** The granular flow presence of a promoted skill — the todos/Planner node set, deterministic.
+ *  board 0119r — the dispatcher ROUTES to the skill (it lives in its own system skill flow); it is
+ *  not a step inside skill flows, so no dispatch node / star-edges here. The mode nodes are parallel
+ *  entry points; edges appear only for real orchestration (e.g. connector data edges). */
 export function skillPresence(skeleton: AppSkeleton): { nodes: FlowNode[]; edges: FlowEdge[] } {
 	const app = skeleton.app
 	const entity = skeleton.entities[0]
 	const type = entity?.type ?? 'entry'
 	const nodes: FlowNode[] = [
-		{ id: 'dispatch', name: 'Dispatch', actor: 'dispatch', inputs: ['intent'], outputs: ['intent'] },
 		{ id: 'overview', name: 'Overview', actor: `${app}_overview`, vibe: app, inputs: ['intent'], outputs: [app], note: 'Sandbox code actor: computed aggregates + latest entries.' },
 		{ id: 'read', name: `Read ${type}`, actor: 'data_crud', vibe: app, inputs: ['intent'], outputs: [type], note: 'list — the overview card renders the rows.' },
 		{ id: 'create', name: `Create ${type}`, actor: 'data_crud', vibe: `${type}-created`, inputs: ['intent'], outputs: [type], note: 'create — show only the new entries.' },
@@ -481,10 +483,7 @@ export function skillPresence(skeleton: AppSkeleton): { nodes: FlowNode[]; edges
 		{ id: 'delete', name: `Delete ${type}`, actor: 'data_crud', vibe: app, hitl: true, inputs: ['intent', type], outputs: [type], note: 'delete — confirm before removing.' },
 		{ id: 'improve', name: 'Improve', actor: 'improve_skill', inputs: ['intent'], outputs: [app], note: 'Bake user rules into how entries are interpreted.' }
 	]
-	const edges: FlowEdge[] = nodes
-		.filter((n) => n.id !== 'dispatch')
-		.map((n) => ({ from: 'dispatch', to: n.id, kind: 'control' }))
-	return { nodes, edges }
+	return { nodes, edges: [] }
 }
 
 /** ADD-ONLY flow merge (the one write path for flow presence): missing nodes (by id) and missing
@@ -959,7 +958,6 @@ export async function connectSkills(
 			{ id: `sub-${target}`, name: String(byId.get(target)), flowRef: target, inputs: tgtTypes, outputs: tgtTypes, note: 'Sub-skill (composite): delegated through its public ops.' }
 		],
 		[
-			{ from: 'dispatch', to: toolName, kind: 'control' },
 			{ from: 'create', to: toolName, kind: 'data' },
 			{ from: toolName, to: `sub-${target}`, kind: 'data' }
 		]

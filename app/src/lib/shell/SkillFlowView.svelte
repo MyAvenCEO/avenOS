@@ -9,7 +9,15 @@ import FlowGraph from '$lib/shell/FlowGraph.svelte'
 // switcher — one selection source). Same read-model + FlowGraph as the DB Skills explorer; a
 // composite node dives into its sub-skill (transient — reset when the aside selection changes).
 
-let { skillId = null }: { skillId?: string | null } = $props()
+let {
+	skillId = null,
+	onNodeSelect
+}: {
+	skillId?: string | null
+	/** emits the selected LEAF node's actor id + the skill it lives in + the NODE itself (it carries
+	 * step-level overrides like vibe/hitl that overlay the shared actor config). */
+	onNodeSelect?: (actorName: string | null, inSkill: string | null, node?: RecipeNode | null) => void
+} = $props()
 
 const flowsQuery = createQuery(() => ({ queryKey: ['flows'], queryFn: listFlows }))
 const flows = $derived<Flow[]>((flowsQuery.data ?? []) as Flow[])
@@ -30,14 +38,25 @@ function onSelect(id: string): void {
 	if (n && isComposite(n) && n.flowRef) {
 		dived = n.flowRef // dive into the sub-skill
 		selectedNodeId = null
+		onNodeSelect?.(null, null, null)
 	} else {
 		selectedNodeId = id
+		// the node id is the WORKFLOW STEP (read/create/edit/delete); the implementing ACTOR is
+		// n.actor (e.g. data_crud) — that's what carries the config. The node rides along for its
+		// step-level overrides (vibe/hitl).
+		onNodeSelect?.(n?.actor ?? id, activeId, n ?? null)
 	}
 }
+// clear the detail selection whenever the shown skill changes.
+$effect(() => {
+	void activeId
+	selectedNodeId = null
+	onNodeSelect?.(null, null, null)
+})
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
-	<div class="border-border bg-surface-card min-h-0 flex-1 overflow-hidden rounded-[var(--radius-xl)] border">
+	<div class="border-border bg-surface-cream min-h-0 flex-1 overflow-hidden rounded-[var(--radius-xl)] border">
 		{#if flow}
 			{#key flow.id}
 				<FlowGraph {flow} {selectedNodeId} {onSelect} />

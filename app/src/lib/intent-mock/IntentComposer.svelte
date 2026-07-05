@@ -998,17 +998,19 @@ const pillClass = $derived.by(() => {
 					: 'Start voice note (mock)'}
 			>
 				<!-- board 0112 — a soft CIRCULAR glow behind the mark lifts it off the cream background (a
-				     radial gradient, not a shape-tracing drop-shadow → no squared petal silhouette). Subtle
-				     at rest, brighter + wider on hover. -->
+				     radial gradient, not a shape-tracing drop-shadow → no squared petal silhouette). Constant
+				     at rest AND on hover — the hover highlight is the scale only (board 0119m). -->
 				<span
 					aria-hidden="true"
-					class="pointer-events-none absolute inset-[12%] rounded-full opacity-55 blur-[12px] transition-all duration-200 group-hover:inset-[6%] group-hover:opacity-90 [background:radial-gradient(circle,color-mix(in_srgb,var(--color-primary)_30%,transparent),transparent_70%)]"
+					class="pointer-events-none absolute inset-[12%] rounded-full opacity-55 blur-[12px] [background:radial-gradient(circle,color-mix(in_srgb,var(--color-primary)_30%,transparent),transparent_70%)]"
 				></span>
-				<!-- board 0119m — the full-colour clean mark is the DEFAULT (no disabled/inactive swap). -->
+				<!-- board 0119m — the full-colour clean mark is the DEFAULT (no disabled/inactive swap).
+				     Hover highlight = a MINIMAL transform (scale-up, no reflow → never displaces the
+				     button) + a hair more contrast; a tiny press-in on active. -->
 				<img
 					src={logoClean}
 					alt="avenOS"
-					class="pointer-events-none absolute inset-0 size-full object-contain p-1"
+					class="pointer-events-none absolute inset-0 size-full object-contain p-1 transition-transform duration-200 ease-out group-hover:scale-[1.08] group-active:scale-95"
 				/>
 			</button>
 		</div>

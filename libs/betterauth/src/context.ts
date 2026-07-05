@@ -26,6 +26,17 @@ export function registerContextProvider(key: string, fn: ContextProvider): void 
 	providers.set(key, fn)
 }
 
+/** Resolve a provider in-process (the runtime path for manifest-declared hints — the SAME registry
+ *  the UI endpoint reads, so what the LLM gets IS what the config panel shows). Unknown key → null. */
+export async function resolveContext(
+	key: string,
+	uid: string,
+	arg?: string
+): Promise<ContextPayload | null> {
+	const fn = providers.get(key)
+	return fn ? await fn(uid, arg) : null
+}
+
 /** GET /api/context/:provider?arg=… — session-gated; resolves the registered provider to its content. */
 export async function contextRoute(c: Context): Promise<Response> {
 	const session = await auth.api.getSession({ headers: c.req.raw.headers })
