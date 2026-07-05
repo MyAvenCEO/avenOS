@@ -13,6 +13,7 @@ import Composer from '$lib/composer/Composer.svelte'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
+import { enterSkill } from '$lib/data/client'
 import { consumeSse } from '$lib/net/sse'
 import FlowStatusStrip from '$lib/shell/FlowStatusStrip.svelte'
 import SkillsUsedAside, { type SkillUse } from '$lib/shell/SkillsUsedAside.svelte'
@@ -103,6 +104,8 @@ const routedSkill = $derived(
 		?.detail?.replace('→', '')
 		.trim() ?? null
 )
+// board 0119b — main-area tabs: DISPLAY (the vibe stage) | FLOWS (placeholder, not wired yet).
+let mainTab = $state<'display' | 'flows'>('display')
 // board 0118f — recent skills (left aside) + a pinned flow selection (right aside override).
 let skillUses = $state<SkillUse[]>([])
 let pinnedSkill = $state<string | null>(null)
@@ -156,6 +159,15 @@ function upsertTool(tl: ToolStatus): void {
 				{ skill, at: Date.now(), status: 'running' as const },
 				...skillUses.filter((u) => u.skill !== skill)
 			].slice(0, 8)
+			// board 0119 — SKILL MANIFEST: ground the stage in the skill's DEFAULT view first (its
+			// context), then the actual actor's card replaces it. If a tool vibe already landed for
+			// this turn (fast tools), the default must NOT overwrite it.
+			const before = vibeHistory.length
+			void enterSkill(skill)
+				.then((view) => {
+					if (view && vibeHistory.length === before) pushVibe(view.vibe, view.data)
+				})
+				.catch(() => {})
 		}
 	}
 }
@@ -192,7 +204,7 @@ function removeHitl(id: string): void {
 /** Action-specific confirm/decline button labels (delete vs publish vs …) + the confirm intent. */
 function hitlVerb(tool: string): { confirm: string; decline: string; danger: boolean } {
 	if (tool === 'deploy_website') return { confirm: 'Publish', decline: 'Cancel', danger: false }
-	if (tool === 'promote_skill') return { confirm: 'Live schalten', decline: 'Abbrechen', danger: false }
+	if (tool === 'promote') return { confirm: 'Live schalten', decline: 'Abbrechen', danger: false }
 	if (tool === 'mutate') return { confirm: 'Apply', decline: 'Cancel', danger: true } // board 0101
 	return { confirm: 'Delete', decline: 'Keep', danger: true }
 }
@@ -231,7 +243,7 @@ async function confirmHitl(req: HitlRequest): Promise<void> {
 		if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`)
 		if (req.tool === 'deploy_website') {
 			appendNote(`✅ Published — live at ${data.result?.url ?? 'www.next.aven.ceo'}`)
-		} else if (req.tool === 'promote_skill') {
+		} else if (req.tool === 'promote') {
 			appendNote(`✅ „${String((req.action as { app?: string }).app ?? 'Skill')}" ist live.`)
 			void queryClient.invalidateQueries({ queryKey: ['flows'] })
 		} else if (req.tool === 'mutate') {
@@ -623,7 +635,15 @@ function handleTranscribeError(message: string): void {
 		<SkillsUsedAside
 			uses={skillUses}
 			selectedSkill={asideSkill}
-			onSelect={(skill) => (pinnedSkill = skill)}
+			onSelect={(skill) => {
+				pinnedSkill = skill
+				// board 0119 — selecting a skill ENTERS it: the stage shows its default view.
+				void enterSkill(skill)
+					.then((view) => {
+						if (view) pushVibe(view.vibe, view.data)
+					})
+					.catch(() => {})
+			}}
 		/>
 		{#if asideSkill}
 			<FlowStatusStrip skillId={asideSkill} {toolActivity} nowMs={nowTick} />
@@ -633,11 +653,43 @@ function handleTranscribeError(message: string): void {
 			     skillify is editing a skill right now. -->
 			<div
 				class="pointer-events-none absolute inset-y-2 right-2 left-2 z-[70] rounded-[var(--radius-xl)] md:right-[15.5rem] md:left-[15.5rem]"
-				style="box-shadow: inset 0 0 0 4px #DEA657"
+				style="box-shadow: inset 0 0 0 3px #DEA657"
 			></div>
 		{/if}
-		<div class="min-h-0 flex-1 overflow-y-auto px-6 pt-4" style="padding-bottom: 11rem">
-			{#if currentVibe}
+		<div class="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center">
+			<div
+				class="border-border bg-card/95 pointer-events-auto flex items-center gap-1 rounded-full border p-0.5 shadow-sm backdrop-blur"
+			>
+				<button
+					type="button"
+					class="rounded-full px-3.5 py-1 text-[11px] font-semibold tracking-wide uppercase transition-colors {mainTab ===
+					'display'
+						? 'bg-primary text-primary-foreground'
+						: 'text-muted-foreground hover:text-foreground'}"
+					onclick={() => (mainTab = 'display')}
+				>
+					Display
+				</button>
+				<button
+					type="button"
+					class="rounded-full px-3.5 py-1 text-[11px] font-semibold tracking-wide uppercase transition-colors {mainTab ===
+					'flows'
+						? 'bg-primary text-primary-foreground'
+						: 'text-muted-foreground hover:text-foreground'}"
+					onclick={() => (mainTab = 'flows')}
+				>
+					Flows
+				</button>
+			</div>
+		</div>
+		<div class="min-h-0 flex-1 overflow-y-auto px-6 pt-14" style="padding-bottom: 11rem">
+			{#if mainTab === 'flows'}
+				<div
+					class="text-muted-foreground flex h-full items-center justify-center text-sm leading-relaxed"
+				>
+					Flows — bald verfügbar.
+				</div>
+			{:else if currentVibe}
 				{#key currentVibe.id}
 					{#if currentVibe.schema === 'todos'}
 						<div class="mx-auto w-full max-w-[64rem]">

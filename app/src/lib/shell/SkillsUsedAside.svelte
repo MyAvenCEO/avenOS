@@ -48,6 +48,7 @@ const statusOf = (u: SkillUse): CardStatus =>
 					description={u.detail ? u.detail : timeOf(u.at)}
 					selected={selectedSkill === u.skill}
 					archived={u.status !== 'running' && selectedSkill !== u.skill}
+					showTimer={u.status === 'running'}
 					onclick={() => onSelect(u.skill)}
 					skillRow={true}
 					extraClass="w-full"

@@ -85,6 +85,16 @@ export async function listFlows(): Promise<Flow[]> {
 	return flows
 }
 
+/** board 0119 — a skill's DEFAULT entry view per its manifest (real data via actor/list). */
+export async function enterSkill(
+	id: string
+): Promise<{ vibe: string; data?: Record<string, unknown> } | null> {
+	const { view } = await api<{ view: { vibe: string; data?: Record<string, unknown> } | null }>(
+		`/api/skills/${encodeURIComponent(id)}/enter`
+	)
+	return view
+}
+
 /** The signed-in user's REAL skill runs (persisted flow_run traces, newest first). board 0090. */
 export async function listRuns(): Promise<FlowRun[]> {
 	const { runs } = await api<{ runs: FlowRun[] }>('/api/skills/runs')

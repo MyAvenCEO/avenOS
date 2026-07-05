@@ -39,6 +39,7 @@ import {
 } from './data'
 import { eventsStream } from './events'
 import { deleteFlow, getFlow, listFlows, upsertFlow } from './flows'
+import { skillEnter } from './skill-enter'
 import './ontology' // board 0100 — registers the ontology skill's context providers (gismu/predicates) at load
 import './config' // board 0110 — registers the skills/actors/runs context providers at load
 import { inboxGet, inboxList, mailInbox } from './inbox'
@@ -99,6 +100,7 @@ app.post('/api/admin/set-tier', aiSetTier)
 // Flow/skill CONFIG templates (board 0087, Layer A) — admin-only CRUD; the Skills/Runs UI reads
 // flows from here instead of a static JSON import. Distinct from the user-scoped /api/data/*.
 app.get('/api/admin/flows', listFlows)
+app.get('/api/skills/:id/enter', skillEnter)
 app.get('/api/admin/flows/:id', getFlow)
 app.post('/api/admin/flows', upsertFlow)
 app.delete('/api/admin/flows/:id', deleteFlow)

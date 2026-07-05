@@ -30,7 +30,7 @@ export type ActorRow = {
 	hitl: boolean
 	position: number
 }
-export type SkillRow = { id: string; label: string; description: string; workflow: unknown; position: number }
+export type SkillRow = { id: string; label: string; description: string; manifest: unknown; position: number }
 
 /** jsonb may arrive parsed (neon) or as a string — normalize either way. */
 function j<T>(v: unknown): T | null {
@@ -47,7 +47,7 @@ function j<T>(v: unknown): T | null {
 
 export async function readSkills(): Promise<SkillRow[]> {
 	const r = await sql<SkillRow>`
-		SELECT id, label, description, workflow, position FROM skill ORDER BY position, id
+		SELECT id, label, description, manifest, position FROM skill ORDER BY position, id
 	`.execute(db())
 	return r.rows
 }

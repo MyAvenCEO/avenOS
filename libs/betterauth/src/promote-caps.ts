@@ -306,11 +306,12 @@ export async function wireSkill(
 	const D = db()
 	const entity = skeleton.entities[0]
 	await sql`
-		INSERT INTO skill (id, label, description, position, created_at, updated_at)
+		INSERT INTO skill (id, label, description, manifest, position, created_at, updated_at)
 		VALUES (${skillId}, ${label},
 			${`the user's ${label} app — ${entity ? `${entity.key} (${entity.fields.join(', ')})` : 'data'}: show the overview, list/add/edit/delete entries`},
+			${JSON.stringify({ actor: `${skillId}_overview` })}::jsonb,
 			9, now(), now())
-		ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, description = EXCLUDED.description, updated_at = now()
+		ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, description = EXCLUDED.description, manifest = EXCLUDED.manifest, updated_at = now()
 	`.execute(D)
 	const crudMailbox = {
 		description: `Read or modify the user's ${label} data (schema "${entity?.type}"): items with ${entity?.fields.join(', ')}. BATCH create/update via items; delete via ids; list with the universal {field,value,op} filter. ${CRUD_STEERING}`,

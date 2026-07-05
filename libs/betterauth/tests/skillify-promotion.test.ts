@@ -12,6 +12,7 @@ import { connectSkills, editSkillMeta, improveSkill, promotionProgress, smokeRun
 	smokeRunOverview,
 	wireSkill
 } from '../src/promote-caps'
+import { enterSkillView } from '../src/skill-enter'
 import { loadVibe } from '../src/vibe-registry'
 
 // board 0113 — PROMOTION: a mockup becomes a full interactive skill. The GLM seams (vocabulary + sandbox
@@ -144,6 +145,14 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		`.execute(db())
 		// self-improvable by construction: the promoted skill advertises its own improve_skill.
 		expect(actors.rows.map((a) => a.name)).toEqual(['data_crud', `${APP}_overview`, 'improve_skill'])
+		// board 0119 — the MANIFEST from birth: entering the skill runs its default overview actor
+		// against real data (the context-grounding view).
+		const man = await sql<{ manifest: unknown }>`SELECT manifest FROM skill WHERE id = ${APP}`.execute(db())
+		const manifest = (typeof man.rows[0].manifest === 'string' ? JSON.parse(man.rows[0].manifest as string) : man.rows[0].manifest) as { actor?: string }
+		expect(manifest?.actor).toBe(`${APP}_overview`)
+		const entry = await enterSkillView(UID, APP)
+		expect(entry?.vibe).toBe(APP)
+		expect(entry?.data && 'totalBalance' in entry.data).toBe(true)
 		// Planner-grade PRESENCE from birth: granular flow nodes + per-verb cards (board 0116 slice).
 		const fl = await sql<{ nodes: unknown }>`SELECT nodes FROM flow WHERE id = ${APP}`.execute(db())
 		const nodeIds = ((typeof fl.rows[0].nodes === 'string' ? JSON.parse(fl.rows[0].nodes as string) : fl.rows[0].nodes) as { id: string }[]).map((n) => n.id)
