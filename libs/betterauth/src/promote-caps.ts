@@ -622,7 +622,8 @@ async function glmConnectorCode(
 	sourceContracts: OpsContract[],
 	targetContracts: OpsContract[],
 	rule: string,
-	repair?: { code: string; error: string }
+	repair?: { code: string; error: string },
+	onToken?: (text: string) => void
 ): Promise<string | { error: string }> {
 	const key = process.env.TINFOIL_API_KEY
 	if (!key) return { error: 'TINFOIL_API_KEY not configured' }
@@ -651,7 +652,7 @@ async function glmConnectorCode(
 					]
 				: [])
 		],
-		{ idleMs: 45_000, totalMs: 300_000 }
+		{ idleMs: 45_000, totalMs: 300_000, onToken }
 	)
 	if (typeof text !== 'string') return text
 	const code = text.replace(/```(?:js|javascript)?/gi, '').trim()
@@ -663,7 +664,7 @@ async function glmConnectorCode(
 async function glmStreamText(
 	key: string,
 	messages: { role: string; content: string }[],
-	o: { idleMs: number; totalMs: number }
+	o: { idleMs: number; totalMs: number; onToken?: (text: string) => void }
 ): Promise<string | { error: string }> {
 	const ctrl = new AbortController()
 	let idleTimer = setTimeout(() => ctrl.abort(), o.idleMs)
@@ -713,7 +714,11 @@ async function glmStreamText(
 			if (payload === '[DONE]') continue
 			try {
 				const j = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] }
-				full += j.choices?.[0]?.delta?.content ?? ''
+				const piece = j.choices?.[0]?.delta?.content ?? ''
+				if (piece) {
+					full += piece
+					o.onToken?.(piece)
+				}
 			} catch {
 				/* partial frame */
 			}
@@ -765,7 +770,8 @@ export async function connectSkills(
 	sourceRaw: string,
 	targetRaw: string,
 	rule: string,
-	codeSeam?: string
+	codeSeam?: string,
+	onToken?: (text: string) => void
 ): Promise<{ tool?: string; source?: string; target?: string; error?: string }> {
 	const slug = (raw: string): string | null => {
 		try {
@@ -790,17 +796,21 @@ export async function connectSkills(
 	if (!tgtTypes.length) return { error: `skill "${target}" exposes no data schemas (no data_crud config)` }
 	const srcContracts = await Promise.all(srcTypes.map((t) => opsContract(uid, t)))
 	const tgtContracts = await Promise.all(tgtTypes.map((t) => opsContract(uid, t)))
-	let authored = codeSeam ?? (await glmConnectorCode(srcContracts, tgtContracts, rule))
+	let authored = codeSeam ?? (await glmConnectorCode(srcContracts, tgtContracts, rule, undefined, onToken))
 	if (typeof authored !== 'string') return { error: authored.error }
 	let smoke = await smokeRunConnector(authored, [...srcContracts, ...tgtContracts])
 	if (!smoke.ok && !codeSeam) {
 		// ONE automatic repair round: an authoring round is expensive (~2–3 min) and smoke failures are
 		// usually mechanical (parallel awaits, missing summary) — feed the error back before giving up.
 		console.error('[connect] smoke failed, repairing:', smoke.error)
-		const repaired = await glmConnectorCode(srcContracts, tgtContracts, rule, {
-			code: authored,
-			error: smoke.error ?? 'unknown'
-		})
+		onToken?.('\n\n— Korrekturrunde (Smoke-Test abgelehnt) —\n')
+		const repaired = await glmConnectorCode(
+			srcContracts,
+			tgtContracts,
+			rule,
+			{ code: authored, error: smoke.error ?? 'unknown' },
+			onToken
+		)
 		if (typeof repaired === 'string') {
 			authored = repaired
 			smoke = await smokeRunConnector(authored, [...srcContracts, ...tgtContracts])
@@ -1087,7 +1097,7 @@ export async function promotionStatusLines(uid: string): Promise<string[]> {
 }
 
 /** `ctx.promote` — the stepwise promotion caps (each step stateless, keyed by the mockup name). */
-export function promoteCaps(uid: string) {
+export function promoteCaps(uid: string, onToken?: (text: string) => void) {
 	// board 0113 — resolution is LLM-SMART, not string-fuzzy (Samuel): the skillify route injects the
 	// EXACT mockup names as Tier-3 context; the server canonicalizes through the shared resolveMockup
 	// (the save-time mockName rule) and a miss returns the available names so the model self-corrects.
@@ -1111,7 +1121,8 @@ export function promoteCaps(uid: string) {
 		seed: (sk: AppSkeleton, src: Record<string, unknown>) => seedData(uid, sk, src),
 		improve: (name: string, instruction: string) => improveSkill(name, instruction),
 		syncActors,
-		connect: (source: string, target: string, rule: string) => connectSkills(uid, source, target, rule),
+		connect: (source: string, target: string, rule: string) =>
+			connectSkills(uid, source, target, rule, undefined, onToken),
 		promoteVibe,
 		loadVibe
 	}

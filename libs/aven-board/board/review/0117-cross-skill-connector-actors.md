@@ -105,3 +105,16 @@ smoke gate mandatory; no fuzzy resolution; everything config-as-data.
   update-over-create), flow = …improve, sync_inventory, sub-inventory→[inventory]
   (the composite flowRef seat, live). Samuel's first "sync inventory" chat run =
   the remaining HITL confirmation.
+
+- `2026-07-05` — v2 REACTIVE + live feedback (Samuel: "directly connected to the
+  incoming and outgoing tx" + the dead-Thinking connect): (1) TRIGGERS AT THE
+  CRUD SEAM — connector actor rows ARE the registrations: any sync_* sandbox
+  actor whose scoped caps include ops:<schema> FIRES after every crud WRITE to
+  that schema; summaries ride the result + the chat reply ("Added 1 … 3
+  Positionen aktualisiert."); no recursion (connectors write via runNamedOp,
+  not crud); failures reported never swallowed; REST path triggers too.
+  (2) connect_skills authoring now STREAMS its GLM tokens into the live panel
+  (mockup/website pattern) incl. a "— Korrekturrunde —" marker; promoteCaps
+  carries onToken from the chat emitter. Tests: reactive fire asserted at the
+  seam (crud create → sync_todos summary in triggered[]). 114/0 ×2 · tsc ·
+  svelte-check clean.

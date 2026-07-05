@@ -571,7 +571,9 @@ function streamWithTools(opts: {
 										// board 0115 — GLM mockup authoring streams its raw tokens into the SAME live
 										// panel the website skill uses (no dead "Thinking…" during a mint/refine).
 										mockup: mockupCaps((text) => emit({ aven_edit_chunk: { text } })),
-										promote: promoteCaps(userId) // board 0113 — the stepwise mockup→skill promotion
+										// board 0113/0117 — stepwise promotion + connectors; authoring tokens stream
+									// into the SAME live panel the mockup/website edits use (no dead "Thinking…").
+									promote: promoteCaps(userId, (text) => emit({ aven_edit_chunk: { text } }))
 									},
 									parsed
 								)

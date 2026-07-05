@@ -171,6 +171,41 @@ async function resolveRefs(
 	return out
 }
 
+/** board 0117 v2 — REACTIVE wiring at the ONE crud seam: connector actor rows ARE the trigger
+ *  registrations. A connector (name sync_*, sandbox code) whose scoped caps include `ops:<schema>`
+ *  fires after every WRITE to that schema — "a new tx updates the inventory" with zero extra
+ *  machinery. No recursion: connectors write through runNamedOp (not crud), so their own writes
+ *  never re-trigger. Failures are reported, never swallowed. */
+async function runDataTriggers(
+	uid: string,
+	schema: string
+): Promise<{ tool: string; summary: string }[]> {
+	const rows = await sql<{ name: string; code: string | null; caps: unknown; prompt: string | null; engine: string | null }>`
+		SELECT DISTINCT ON (name) name, code, caps, prompt, engine
+		FROM actor
+		WHERE code IS NOT NULL AND name LIKE 'sync_%' AND caps @> ${JSON.stringify([`ops:${schema}`])}::jsonb
+		ORDER BY name
+	`.execute(db())
+	const out: { tool: string; summary: string }[] = []
+	for (const r of rows.rows) {
+		const caps = (typeof r.caps === 'string' ? JSON.parse(r.caps as string) : r.caps) as string[]
+		try {
+			const run = await runCodeActor(
+				{ name: r.name, code: r.code, caps, prompt: r.prompt, engine: r.engine },
+				{ trigger: { schema } },
+				uid
+			)
+			const summary = run.ran
+				? String((run.result as { summary?: unknown })?.summary ?? 'ok')
+				: 'no code'
+			out.push({ tool: r.name, summary })
+		} catch (e) {
+			out.push({ tool: r.name, summary: `⚠️ ${e instanceof Error ? e.message : String(e)}` })
+		}
+	}
+	return out
+}
+
 export async function crud(uid: string, args: DataCrudArgs): Promise<unknown> {
 	const schema = args.schema
 	if (!schema) return { ok: false, error: 'schema name required' }
@@ -206,7 +241,7 @@ export async function crud(uid: string, args: DataCrudArgs): Promise<unknown> {
 			const id = res.ids?.[0]
 			if (id) created.push(id)
 		}
-		return { ok: true, action: 'create', created, errors: [] }
+		return { ok: true, action: 'create', created, errors: [], triggered: await runDataTriggers(uid, schema) }
 	}
 	if (action === 'update') {
 		const bundle = await loadBundle(schema)
@@ -225,13 +260,13 @@ export async function crud(uid: string, args: DataCrudArgs): Promise<unknown> {
 			updated.push(id)
 		}
 		if (errors.length && updated.length === 0) return { ok: false, action: 'update', updated, errors }
-		return { ok: true, action: 'update', updated, errors }
+		return { ok: true, action: 'update', updated, errors, triggered: await runDataTriggers(uid, schema) }
 	}
 	if (action === 'delete') {
 		const ids = args.ids ?? (args.id ? [args.id] : [])
 		if (ids.length === 0) return { ok: false, error: 'delete requires id(s)' }
 		for (const id of ids) await runNamedOp(uid, op('delete'), { id })
-		return { ok: true, action: 'delete', deleted: ids }
+		return { ok: true, action: 'delete', deleted: ids, triggered: await runDataTriggers(uid, schema) }
 	}
 	return { ok: false, error: `unknown action: ${String(args.action)}` }
 }

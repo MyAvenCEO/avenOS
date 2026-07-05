@@ -307,6 +307,14 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 			SELECT caps FROM actor WHERE skill_id = 'todos' AND name = 'sync_todos'
 		`.execute(db())
 		expect(mirror.rows.length).toBe(1)
+		// board 0117 v2 — REACTIVE: a WRITE to the source schema FIRES the connector at the crud seam
+		// (the actor row + its scoped caps ARE the trigger registration); its summary rides the result.
+		const written = (await crud(UID, {
+			schema: 'record',
+			action: 'create',
+			items: [{ name: 'Trigger-Test', amount: '1,00 €', category: 'Test', date: 'Heute' }]
+		})) as { triggered?: { tool: string; summary: string }[] }
+		expect(written.triggered?.some((t) => t.tool === 'sync_todos' && t.summary.includes('geprüft'))).toBe(true)
 		// honest failures: unknown target · same skill twice.
 		expect((await connectSkills(UID, APP, 'no-such-skill', 'x', CODE)).error).toContain('no skill')
 		expect((await connectSkills(UID, APP, APP, 'x', CODE)).error).toContain('different')

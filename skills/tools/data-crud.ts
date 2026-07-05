@@ -320,7 +320,10 @@ export const dataCrud: ToolActor = {
 		// returned earlier.
 		const ok = !(result && typeof result === 'object' && (result as Rec).ok === false)
 		const said = typeof args.response === 'string' ? args.response.trim() : ''
-		const reply = ok ? said || defaultReply(args.action, schema, args.items, result) : undefined
+		let reply = ok ? said || defaultReply(args.action, schema, args.items, result) : undefined
+		// board 0117 — a write that fired connector TRIGGERS reports their summaries in the same turn.
+		const triggered = (result as { triggered?: { tool: string; summary: string }[] } | null)?.triggered
+		if (reply && triggered?.length) reply = `${reply} ${triggered.map((t) => t.summary).join(' ')}`
 
 		return { detail, content, reply, vibe: resultVibe(args, before, result) }
 	}
