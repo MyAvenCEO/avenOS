@@ -15,6 +15,7 @@ import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
 import FlowStatusStrip from '$lib/shell/FlowStatusStrip.svelte'
+import SkillsUsedAside, { type SkillUse } from '$lib/shell/SkillsUsedAside.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 import VibeCard from '$lib/shell/VibeCard.svelte'
 
@@ -102,6 +103,10 @@ const routedSkill = $derived(
 		?.detail?.replace('→', '')
 		.trim() ?? null
 )
+// board 0118f — recent skills (left aside) + a pinned flow selection (right aside override).
+let skillUses = $state<SkillUse[]>([])
+let pinnedSkill = $state<string | null>(null)
+const asideSkill = $derived(pinnedSkill ?? routedSkill)
 // board 0118e — EDIT MODE: while a skill-editing action runs (mockup design, promotion steps,
 // improve/sync/connect, website edit), the whole screen wears a 4px brand-gold outline.
 const EDIT_TOOLS = new Set([
@@ -140,6 +145,17 @@ function upsertTool(tl: ToolStatus): void {
 	} else {
 		const startedAt = toolActivity[i].startedAt
 		toolActivity = toolActivity.map((x, j) => (j === i ? { ...tl, startedAt } : x))
+	}
+	// board 0118f — the LEFT aside's "latest skills utilized": one row per skill, newest first.
+	if (tl.id === 'dispatch' && tl.detail.startsWith('→')) {
+		const skill = tl.detail.replace('→', '').trim()
+		if (skill) {
+			pinnedSkill = null // a new turn unpins any manual flow selection
+			skillUses = [
+				{ skill, at: Date.now(), status: 'running' as const },
+				...skillUses.filter((u) => u.skill !== skill)
+			].slice(0, 8)
+		}
 	}
 }
 // Ticks every second while a tool is running, to drive the live elapsed-time counter.
@@ -573,6 +589,11 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 		)
 	} finally {
 		busy = false
+		// settle the newest skill-use row: error if any tool errored this turn, else success.
+		const turnErrored = toolActivity.some((tl) => tl.status === 'error')
+		skillUses = skillUses.map((u, i) =>
+			i === 0 && u.status === 'running' ? { ...u, status: turnErrored ? 'error' : 'success' } : u
+		)
 		scrollToBottom()
 		void queryClient.invalidateQueries({ queryKey: ['usage'] })
 		void queryClient.invalidateQueries({ queryKey: ['data'] })
@@ -594,8 +615,13 @@ function handleTranscribeError(message: string): void {
 <div class="flex min-h-0 flex-1 bg-background">
 	<!-- board 0118 — THE STAGE: one current vibe, full width/height; each new vibe replaces it. -->
 	<div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
-		{#if routedSkill}
-			<FlowStatusStrip skillId={routedSkill} {toolActivity} nowMs={nowTick} />
+		<SkillsUsedAside
+			uses={skillUses}
+			selectedSkill={asideSkill}
+			onSelect={(skill) => (pinnedSkill = skill)}
+		/>
+		{#if asideSkill}
+			<FlowStatusStrip skillId={asideSkill} {toolActivity} nowMs={nowTick} />
 		{/if}
 		{#if editingSkill}
 			<!-- brand-gold (logo star #DEA657) 4px full-screen outline: skill editing in progress -->
