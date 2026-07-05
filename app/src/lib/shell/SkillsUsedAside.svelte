@@ -1,10 +1,14 @@
 <script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+import type { Flow } from '@avenos/aven-skills'
+import { listFlows } from '$lib/data/client'
 import StatusCard from '$lib/intents/StatusCard.svelte'
 import type { CardStatus } from '$lib/intents/types'
 
-// board 0118f — the LEFT ASIDE: the latest skills utilized (one row per skill, newest first) in the
-// intents design language (left-strip StatusCards). Clicking a row pins that skill's flow into the
-// right aside. Overlay — the main stage stays centered.
+// board 0118f/0119c — the LEFT ASIDE: ALL available skills, always (the flows read-model IS the
+// skill list), in the intents design language. Recently used skills float to the top carrying
+// their live status (running/success/error + time); the rest sit quiet below. Clicking a row pins
+// that skill's flow into the right aside AND enters its default view (the manifest).
 
 export type SkillUse = {
 	skill: string
@@ -23,14 +27,29 @@ let {
 	onSelect: (skill: string) => void
 } = $props()
 
-const label = (s: string): string => s.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+const flowsQuery = createQuery(() => ({ queryKey: ['flows'], queryFn: listFlows }))
+const allSkills = $derived<Flow[]>((flowsQuery.data ?? []) as Flow[])
+
+type Row = { skill: string; name: string; use: SkillUse | null }
+const rows = $derived.by((): Row[] => {
+	const byId = new Map(allSkills.map((f) => [f.id, f]))
+	const used: Row[] = uses
+		.filter((u) => byId.has(u.skill))
+		.map((u) => ({ skill: u.skill, name: String(byId.get(u.skill)?.name ?? u.skill), use: u }))
+	const usedIds = new Set(used.map((r) => r.skill))
+	const rest: Row[] = allSkills
+		.filter((f) => !usedIds.has(f.id))
+		.map((f) => ({ skill: f.id, name: String(f.name ?? f.id), use: null }))
+	return [...used, ...rest]
+})
+
 const timeOf = (at: number): string =>
 	new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-const statusOf = (u: SkillUse): CardStatus =>
-	u.status === 'running' ? 'running' : u.status === 'error' ? 'error' : 'success'
+const statusOf = (u: SkillUse | null): CardStatus =>
+	!u ? 'archived' : u.status === 'running' ? 'running' : u.status === 'error' ? 'error' : 'success'
 </script>
 
-{#if uses.length > 0}
+{#if rows.length > 0}
 	<aside
 		class="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-60 flex-col pt-3 pb-40 pl-2 md:flex"
 	>
@@ -40,16 +59,16 @@ const statusOf = (u: SkillUse): CardStatus =>
 			</span>
 		</div>
 		<div class="pointer-events-auto flex min-h-0 flex-col gap-1.5 overflow-y-auto">
-			{#each uses as u (u.skill)}
+			{#each rows as r (r.skill)}
 				<StatusCard
-					status={statusOf(u)}
+					status={statusOf(r.use)}
 					totalSeconds={0}
-					title={label(u.skill)}
-					description={u.detail ? u.detail : timeOf(u.at)}
-					selected={selectedSkill === u.skill}
-					archived={u.status !== 'running' && selectedSkill !== u.skill}
-					showTimer={u.status === 'running'}
-					onclick={() => onSelect(u.skill)}
+					title={r.name}
+					description={r.use ? (r.use.detail ?? timeOf(r.use.at)) : ''}
+					selected={selectedSkill === r.skill}
+					archived={!r.use && selectedSkill !== r.skill}
+					showTimer={r.use?.status === 'running'}
+					onclick={() => onSelect(r.skill)}
 					skillRow={true}
 					extraClass="w-full"
 				/>
