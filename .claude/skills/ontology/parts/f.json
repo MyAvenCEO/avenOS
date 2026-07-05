@@ -1,0 +1,519 @@
+{
+  "facki": {
+    "name": "discovers",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "discoverer", "definition": "the one who finds out", "example": "Marie Curie", "kind": "ref", "references": "*" },
+      "x2": { "role": "discovery", "definition": "the fact found out", "example": "that radium is radioactive", "kind": "value", "type": "string" },
+      "x3": { "role": "subject", "definition": "object or topic discovered about", "example": "uranium ore", "kind": "ref", "references": "*" }
+    }
+  },
+  "fadni": {
+    "name": "ordinary",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "member", "definition": "the typical/common one", "example": "this house", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "the property in which it is typical", "example": "size", "kind": "value", "type": "string" },
+      "x3": { "role": "reference set", "definition": "the set among whose members it is typical", "example": "suburban homes", "kind": "ref", "references": "*" }
+    }
+  },
+  "fagri": {
+    "name": "fire",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "fire", "definition": "the fire/flame", "example": "the campfire", "kind": "ref", "references": "*" },
+      "x2": { "role": "fuel", "definition": "the material being burned", "example": "firewood", "kind": "ref", "references": "*" },
+      "x3": { "role": "oxidizer", "definition": "the substance reacting with the fuel", "example": "oxygen", "kind": "ref", "references": "*" }
+    }
+  },
+  "falnu": {
+    "name": "sail",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "sail", "definition": "the sail", "example": "the mainsail", "kind": "ref", "references": "*" },
+      "x2": { "role": "propelling medium", "definition": "material the sail gathers for propulsion", "example": "wind", "kind": "ref", "references": "*" },
+      "x3": { "role": "vehicle", "definition": "the vehicle or motor it propels", "example": "the sailboat", "kind": "ref", "references": "*" }
+    }
+  },
+  "famti": {
+    "name": "aunt or uncle",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "aunt or uncle", "definition": "the parent's-generation relative", "example": "Uncle Bob", "kind": "ref", "references": "*" },
+      "x2": { "role": "nibling", "definition": "the niece/nephew", "example": "Lisa", "kind": "ref", "references": "*" },
+      "x3": { "role": "bond", "definition": "the tie or relationship standard", "example": "by marriage", "kind": "value", "type": "string" }
+    }
+  },
+  "fancu": {
+    "name": "function",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "function", "definition": "the single-valued mapping", "example": "f(x) = x squared", "kind": "ref", "references": "*" },
+      "x2": { "role": "domain", "definition": "the input set", "example": "real numbers", "kind": "ref", "references": "*" },
+      "x3": { "role": "range", "definition": "the output set", "example": "non-negative reals", "kind": "ref", "references": "*" },
+      "x4": { "role": "rule", "definition": "the defining expression or rule", "example": "square the input", "kind": "value", "type": "string" }
+    }
+  },
+  "fange": {
+    "name": "foreign",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "foreign thing", "definition": "the alien/unfamiliar one", "example": "the visitor", "kind": "ref", "references": "*" },
+      "x2": { "role": "observer", "definition": "the one to whom it is foreign", "example": "the locals", "kind": "ref", "references": "*" },
+      "x3": { "role": "property", "definition": "the aspect in which it is foreign", "example": "customs", "kind": "value", "type": "string" }
+    }
+  },
+  "fanmo": {
+    "name": "end",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "end", "definition": "the termination/finish", "example": "the final chapter", "kind": "ref", "references": "*" },
+      "x2": { "role": "whole", "definition": "the thing or process being ended", "example": "the novel", "kind": "ref", "references": "*" }
+    }
+  },
+  "fanri": {
+    "name": "factory",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "factory", "definition": "the industrial plant", "example": "the Toyota plant", "kind": "ref", "references": "*" },
+      "x2": { "role": "product", "definition": "what it produces", "example": "cars", "kind": "ref", "references": "*" },
+      "x3": { "role": "materials", "definition": "the inputs it uses", "example": "steel and rubber", "kind": "ref", "references": "*" }
+    }
+  },
+  "fanta": {
+    "name": "prevents",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "preventer", "definition": "the one that stops it", "example": "the seatbelt", "kind": "ref", "references": "*" },
+      "x2": { "role": "prevented event", "definition": "the event kept from occurring", "example": "ejection from the car", "kind": "value", "type": "string" }
+    }
+  },
+  "fanva": {
+    "name": "translates",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "translator", "definition": "the one translating", "example": "the interpreter", "kind": "ref", "references": "*" },
+      "x2": { "role": "source text", "definition": "the text or utterance translated", "example": "the speech", "kind": "value", "type": "string" },
+      "x3": { "role": "target language", "definition": "the language translated into", "example": "English", "kind": "value", "type": "string" },
+      "x4": { "role": "source language", "definition": "the language translated from", "example": "French", "kind": "value", "type": "string" },
+      "x5": { "role": "result", "definition": "the resulting translation", "example": "the English transcript", "kind": "value", "type": "string" }
+    }
+  },
+  "fanza": {
+    "name": "annoys",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "annoyance", "definition": "the annoying event", "example": "the loud music", "kind": "value", "type": "string" },
+      "x2": { "role": "annoyed", "definition": "the one bothered", "example": "the neighbor", "kind": "ref", "references": "*" }
+    }
+  },
+  "fapro": {
+    "name": "opposes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "opposer", "definition": "the one contending", "example": "the protesters", "kind": "ref", "references": "*" },
+      "x2": { "role": "opponent", "definition": "the person or force opposed", "example": "the new policy", "kind": "ref", "references": "*" },
+      "x3": { "role": "issue", "definition": "the matter contended about", "example": "the rezoning plan", "kind": "value", "type": "string" }
+    }
+  },
+  "farlu": {
+    "name": "falls",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "faller", "definition": "the thing that falls", "example": "the apple", "kind": "ref", "references": "*" },
+      "x2": { "role": "destination", "definition": "where it falls to", "example": "the ground", "kind": "ref", "references": "*" },
+      "x3": { "role": "origin", "definition": "where it falls from", "example": "the tree", "kind": "ref", "references": "*" },
+      "x4": { "role": "frame", "definition": "the gravity well or frame of reference", "example": "Earth's gravity", "kind": "value", "type": "string" }
+    }
+  },
+  "farna": {
+    "name": "direction",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "direction", "definition": "the direction", "example": "northeast", "kind": "value", "type": "string" },
+      "x2": { "role": "target", "definition": "the object or event located", "example": "the harbor", "kind": "ref", "references": "*" },
+      "x3": { "role": "origin", "definition": "the origin or frame of reference", "example": "the lighthouse", "kind": "ref", "references": "*" }
+    }
+  },
+  "farvi": {
+    "name": "develops",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "developer", "definition": "the thing that develops", "example": "the tadpole", "kind": "ref", "references": "*" },
+      "x2": { "role": "outcome", "definition": "what it develops into", "example": "a frog", "kind": "ref", "references": "*" },
+      "x3": { "role": "starting state", "definition": "what it develops from", "example": "an egg", "kind": "ref", "references": "*" },
+      "x4": { "role": "stages", "definition": "the stages passed through", "example": "metamorphosis", "kind": "value", "type": "string" }
+    }
+  },
+  "fasnu": {
+    "name": "event",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "event", "definition": "the happening/occurrence", "example": "the eclipse", "kind": "value", "type": "string" }
+    }
+  },
+  "fatci": {
+    "name": "fact",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "fact", "definition": "the truth/reality", "example": "that water boils at 100C", "kind": "value", "type": "string" }
+    }
+  },
+  "fatne": {
+    "name": "reverse",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "reversed", "definition": "the inverted sequence or object", "example": "the palindrome backwards", "kind": "ref", "references": "*" },
+      "x2": { "role": "reference", "definition": "the sequence or object it is reversed from", "example": "the original order", "kind": "ref", "references": "*" }
+    }
+  },
+  "fatri": {
+    "name": "distributes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "distributed thing", "definition": "what is allotted", "example": "the inheritance", "kind": "ref", "references": "*" },
+      "x2": { "role": "recipients", "definition": "those among whom it is shared", "example": "the heirs", "kind": "ref", "references": "*" },
+      "x3": { "role": "shares", "definition": "the portions allocated", "example": "equal thirds", "kind": "value", "type": "quantity" }
+    }
+  },
+  "febvi": {
+    "name": "boils",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "boiler", "definition": "the substance that boils/evaporates", "example": "the water", "kind": "ref", "references": "*" },
+      "x2": { "role": "temperature", "definition": "the boiling temperature", "example": "100 degrees Celsius", "kind": "value", "type": "quantity" },
+      "x3": { "role": "pressure", "definition": "the pressure condition", "example": "1 atmosphere", "kind": "value", "type": "quantity" }
+    }
+  },
+  "femti": {
+    "name": "femto",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "quantity", "definition": "the value that is 1E-15 of the reference", "example": "0.000000000000001 second", "kind": "value", "type": "quantity" },
+      "x2": { "role": "reference", "definition": "the thing it is a fraction of", "example": "a second", "kind": "ref", "references": "*" },
+      "x3": { "role": "dimension", "definition": "the dimension or aspect measured", "example": "duration", "kind": "value", "type": "string" }
+    }
+  },
+  "fendi": {
+    "name": "divides",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "divider", "definition": "the agent partitioning", "example": "the chef", "kind": "ref", "references": "*" },
+      "x2": { "role": "whole", "definition": "the thing divided", "example": "the cake", "kind": "ref", "references": "*" },
+      "x3": { "role": "parts", "definition": "the resulting sections", "example": "eight slices", "kind": "ref", "references": "*" },
+      "x4": { "role": "method", "definition": "the method or partition used", "example": "cutting along the diameter", "kind": "value", "type": "string" }
+    }
+  },
+  "fengu": {
+    "name": "angry",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "angry one", "definition": "the one who is angry", "example": "the customer", "kind": "ref", "references": "*" },
+      "x2": { "role": "target", "definition": "the one angry at", "example": "the waiter", "kind": "ref", "references": "*" },
+      "x3": { "role": "cause", "definition": "the action or state causing anger", "example": "the cold meal", "kind": "value", "type": "string" }
+    }
+  },
+  "fenki": {
+    "name": "crazy",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "crazy action", "definition": "the insane action or event", "example": "jumping off the roof", "kind": "value", "type": "string" },
+      "x2": { "role": "standard", "definition": "the standard of craziness", "example": "common sense", "kind": "value", "type": "string" }
+    }
+  },
+  "fenra": {
+    "name": "crack",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "crack", "definition": "the fissure or cleft", "example": "the canyon", "kind": "ref", "references": "*" },
+      "x2": { "role": "cracked thing", "definition": "the thing it is in", "example": "the windshield", "kind": "ref", "references": "*" }
+    }
+  },
+  "fenso": {
+    "name": "sews",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "sewer", "definition": "the one sewing", "example": "the tailor", "kind": "ref", "references": "*" },
+      "x2": { "role": "materials", "definition": "the pieces sewn together", "example": "two panels of fabric", "kind": "ref", "references": "*" },
+      "x3": { "role": "tool", "definition": "the sewing tool", "example": "a needle", "kind": "ref", "references": "*" },
+      "x4": { "role": "filament", "definition": "the thread used", "example": "cotton thread", "kind": "ref", "references": "*" }
+    }
+  },
+  "fepni": {
+    "name": "cent",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "amount", "definition": "the value measured in cents/kopecks", "example": "the price", "kind": "ref", "references": "*" },
+      "x2": { "role": "quantity", "definition": "the number of subunits", "example": "50 cents", "kind": "value", "type": "quantity" },
+      "x3": { "role": "monetary system", "definition": "the currency system", "example": "US dollar", "kind": "value", "type": "string" }
+    }
+  },
+  "fepri": {
+    "name": "lung",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "lung", "definition": "the lung body-part", "example": "the left lung", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "the body it belongs to", "example": "the patient", "kind": "ref", "references": "*" }
+    }
+  },
+  "ferti": {
+    "name": "fertile",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "fertile thing", "definition": "the thing supporting growth", "example": "the soil", "kind": "ref", "references": "*" },
+      "x2": { "role": "growth", "definition": "what it supports the growth of", "example": "crops", "kind": "ref", "references": "*" }
+    }
+  },
+  "festi": {
+    "name": "waste",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "waste", "definition": "the waste product", "example": "factory sludge", "kind": "ref", "references": "*" },
+      "x2": { "role": "source activity", "definition": "the event or activity producing it", "example": "manufacturing", "kind": "value", "type": "string" }
+    }
+  },
+  "fetsi": {
+    "name": "female",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "female", "definition": "the female individual", "example": "the cow", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "the species", "example": "cattle", "kind": "value", "type": "string" },
+      "x3": { "role": "feminine traits", "definition": "the feminine traits evidenced", "example": "the ability to bear young", "kind": "value", "type": "string" }
+    }
+  },
+  "figre": {
+    "name": "fig",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "fig", "definition": "the fig fruit or tree", "example": "this fig", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "the species or strain", "example": "Ficus carica", "kind": "value", "type": "string" }
+    }
+  },
+  "filso": {
+    "name": "palestinian",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "palestinian thing", "definition": "the thing reflecting Palestinian culture", "example": "the embroidery", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "the cultural aspect reflected", "example": "cuisine", "kind": "value", "type": "string" }
+    }
+  },
+  "finpe": {
+    "name": "fish",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "fish", "definition": "the fish", "example": "the salmon", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "the species", "example": "Atlantic salmon", "kind": "value", "type": "string" }
+    }
+  },
+  "finti": {
+    "name": "invents",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "inventor", "definition": "the creator/author", "example": "Thomas Edison", "kind": "ref", "references": "*" },
+      "x2": { "role": "invention", "definition": "what is invented or composed", "example": "the light bulb", "kind": "ref", "references": "*" },
+      "x3": { "role": "purpose", "definition": "the function or purpose", "example": "indoor lighting", "kind": "value", "type": "string" },
+      "x4": { "role": "elements", "definition": "the existing ideas or elements used", "example": "carbon filament and vacuum", "kind": "ref", "references": "*" }
+    }
+  },
+  "flalu": {
+    "name": "law",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "law", "definition": "the law", "example": "the speed limit statute", "kind": "value", "type": "string" },
+      "x2": { "role": "provision", "definition": "the state or event it specifies", "example": "driving under 50 mph", "kind": "value", "type": "string" },
+      "x3": { "role": "community", "definition": "the community it applies to", "example": "the state of California", "kind": "ref", "references": "*" },
+      "x4": { "role": "conditions", "definition": "the conditions under which it holds", "example": "on highways", "kind": "value", "type": "string" },
+      "x5": { "role": "lawgiver", "definition": "the lawgiver(s)", "example": "the legislature", "kind": "ref", "references": "*" }
+    }
+  },
+  "flani": {
+    "name": "flute",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "flute", "definition": "the flute or pipe instrument", "example": "the silver flute", "kind": "ref", "references": "*" }
+    }
+  },
+  "flecu": {
+    "name": "flow",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "flow", "definition": "the current/river/flow", "example": "the Mississippi", "kind": "ref", "references": "*" },
+      "x2": { "role": "fluid", "definition": "the material flowing", "example": "water", "kind": "ref", "references": "*" },
+      "x3": { "role": "destination", "definition": "where it flows toward", "example": "the Gulf of Mexico", "kind": "ref", "references": "*" },
+      "x4": { "role": "source", "definition": "where it flows from", "example": "Lake Itasca", "kind": "ref", "references": "*" }
+    }
+  },
+  "fliba": {
+    "name": "fails",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "failer", "definition": "the one who fails", "example": "the candidate", "kind": "ref", "references": "*" },
+      "x2": { "role": "endeavor", "definition": "the state or event failed at", "example": "passing the exam", "kind": "value", "type": "string" }
+    }
+  },
+  "flira": {
+    "name": "face",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "face", "definition": "the face body-part", "example": "her face", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "the body it belongs to", "example": "the actor", "kind": "ref", "references": "*" }
+    }
+  },
+  "foldi": {
+    "name": "field",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "field", "definition": "the broad expanse", "example": "the wheat field", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "the material it consists of", "example": "wheat", "kind": "ref", "references": "*" }
+    }
+  },
+  "fonmo": {
+    "name": "foam",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "foam", "definition": "the foam or froth", "example": "the sea foam", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "the material it is made of", "example": "soapy water", "kind": "ref", "references": "*" },
+      "x3": { "role": "bubble content", "definition": "the material in the bubbles", "example": "air", "kind": "ref", "references": "*" }
+    }
+  },
+  "fonxa": {
+    "name": "telephone",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "telephone", "definition": "the telephone or modem", "example": "the office phone", "kind": "ref", "references": "*" },
+      "x2": { "role": "network", "definition": "the system or network it attaches to", "example": "the landline network", "kind": "ref", "references": "*" }
+    }
+  },
+  "forca": {
+    "name": "fork",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "fork", "definition": "the fork utensil", "example": "the dinner fork", "kind": "ref", "references": "*" },
+      "x2": { "role": "purpose", "definition": "the purpose it serves", "example": "eating salad", "kind": "value", "type": "string" },
+      "x3": { "role": "tines", "definition": "the prongs or tines", "example": "four steel tines", "kind": "ref", "references": "*" },
+      "x4": { "role": "base", "definition": "the base or support", "example": "the handle", "kind": "ref", "references": "*" }
+    }
+  },
+  "fraso": {
+    "name": "french",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "french thing", "definition": "the thing reflecting French culture", "example": "the baguette", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "the cultural aspect reflected", "example": "cuisine", "kind": "value", "type": "string" }
+    }
+  },
+  "frati": {
+    "name": "reacts",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "reactor", "definition": "the one responding", "example": "the immune system", "kind": "ref", "references": "*" },
+      "x2": { "role": "response", "definition": "the action taken in response", "example": "producing antibodies", "kind": "value", "type": "string" },
+      "x3": { "role": "stimulus", "definition": "the triggering stimulus", "example": "the virus", "kind": "ref", "references": "*" },
+      "x4": { "role": "conditions", "definition": "the conditions of the reaction", "example": "during infection", "kind": "value", "type": "string" }
+    }
+  },
+  "fraxu": {
+    "name": "forgives",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "forgiver", "definition": "the one who forgives", "example": "the friend", "kind": "ref", "references": "*" },
+      "x2": { "role": "forgiven", "definition": "the one forgiven", "example": "the offender", "kind": "ref", "references": "*" },
+      "x3": { "role": "offense", "definition": "the event or activity forgiven", "example": "the broken promise", "kind": "value", "type": "string" }
+    }
+  },
+  "frica": {
+    "name": "differs",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "differer", "definition": "the first thing", "example": "the original", "kind": "ref", "references": "*" },
+      "x2": { "role": "counterpart", "definition": "the thing differed from", "example": "the copy", "kind": "ref", "references": "*" },
+      "x3": { "role": "property", "definition": "the property in which they differ", "example": "color", "kind": "value", "type": "string" }
+    }
+  },
+  "friko": {
+    "name": "african",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "african thing", "definition": "the thing reflecting African culture", "example": "the kente cloth", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "the cultural aspect reflected", "example": "textile art", "kind": "value", "type": "string" }
+    }
+  },
+  "frili": {
+    "name": "easy",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "easy action", "definition": "the action that is easy", "example": "riding a bike", "kind": "value", "type": "string" },
+      "x2": { "role": "agent", "definition": "the one for whom it is easy", "example": "the experienced cyclist", "kind": "ref", "references": "*" },
+      "x3": { "role": "conditions", "definition": "the conditions making it easy", "example": "on flat ground", "kind": "value", "type": "string" }
+    }
+  },
+  "frinu": {
+    "name": "fraction",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "fraction", "definition": "the fraction", "example": "three quarters", "kind": "value", "type": "quantity" },
+      "x2": { "role": "numerator", "definition": "the numerator", "example": "3", "kind": "value", "type": "quantity" },
+      "x3": { "role": "denominator", "definition": "the denominator", "example": "4", "kind": "value", "type": "quantity" }
+    }
+  },
+  "friti": {
+    "name": "offers",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "offerer", "definition": "the one offering", "example": "the host", "kind": "ref", "references": "*" },
+      "x2": { "role": "offering", "definition": "what is offered", "example": "a cup of tea", "kind": "ref", "references": "*" },
+      "x3": { "role": "recipient", "definition": "the one offered to", "example": "the guest", "kind": "ref", "references": "*" },
+      "x4": { "role": "conditions", "definition": "the conditions of the offer", "example": "free of charge", "kind": "value", "type": "string" }
+    }
+  },
+  "frumu": {
+    "name": "frowns",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "frowner", "definition": "the one who frowns", "example": "the disappointed teacher", "kind": "ref", "references": "*" }
+    }
+  },
+  "fukpi": {
+    "name": "copy",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "copy", "definition": "the replica or duplicate", "example": "the photocopy", "kind": "ref", "references": "*" },
+      "x2": { "role": "original", "definition": "what it is a copy of", "example": "the original document", "kind": "ref", "references": "*" },
+      "x3": { "role": "medium", "definition": "the form or medium of the copy", "example": "paper", "kind": "value", "type": "string" },
+      "x4": { "role": "method", "definition": "the method of copying", "example": "scanning and printing", "kind": "value", "type": "string" }
+    }
+  },
+  "fulta": {
+    "name": "floats",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "floater", "definition": "the buoyant thing", "example": "the cork", "kind": "ref", "references": "*" },
+      "x2": { "role": "fluid", "definition": "the fluid it floats on or in", "example": "water", "kind": "ref", "references": "*" }
+    }
+  },
+  "funca": {
+    "name": "luck",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "outcome", "definition": "the luck-determined event or property", "example": "winning the lottery", "kind": "value", "type": "string" },
+      "x2": { "role": "lucky one", "definition": "the one whose luck determines it", "example": "the ticket holder", "kind": "ref", "references": "*" }
+    }
+  },
+  "fusra": {
+    "name": "rots",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rotter", "definition": "the thing that rots/ferments", "example": "the fallen apple", "kind": "ref", "references": "*" },
+      "x2": { "role": "agent", "definition": "the decay or fermentation agent", "example": "mold", "kind": "ref", "references": "*" }
+    }
+  },
+  "fuzme": {
+    "name": "responsible",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "responsible party", "definition": "the one accountable", "example": "the project manager", "kind": "ref", "references": "*" },
+      "x2": { "role": "obligation", "definition": "the action or state accountable for", "example": "the deadline", "kind": "value", "type": "string" },
+      "x3": { "role": "authority", "definition": "the judge or authority", "example": "the board of directors", "kind": "ref", "references": "*" }
+    }
+  }
+}

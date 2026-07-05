@@ -25,12 +25,41 @@ function uid() {
 }
 
 function mapItems(items) {
-	return (items || []).map((it) => ({
+	var mapped = (items || []).map((it) => ({
 		id: String(it.id || uid()),
 		text: it.text || '',
 		done: !!it.done,
-		rowClass: it.done ? 'td-row done' : 'td-row'
+		due: it.due || '', // relative due label + priority (board 0087) — must survive the transform
+		priority: it.priority || '',
+		// board 0112 — Planner: goal chip + sub-task nesting (parent = the parent task's row id).
+		goal: it.goal || '',
+		parent: it.parent || '',
+		rowClass: 'td-row' + (it.done ? ' done' : '') + (it.parent ? ' sub' : '')
 	}))
+	return orderByParent(mapped)
+}
+
+// board 0112 — children render directly UNDER their parent (depth-first), keeping list order otherwise.
+// An item whose parent isn't in the list renders as a root (never hidden).
+function orderByParent(list) {
+	var present = {}
+	var i
+	for (i = 0; i < list.length; i++) present[list[i].id] = true
+	var roots = []
+	var kids = {}
+	for (i = 0; i < list.length; i++) {
+		var it = list[i]
+		if (it.parent && present[it.parent]) (kids[it.parent] = kids[it.parent] || []).push(it)
+		else roots.push(it)
+	}
+	var out = []
+	function walk(n) {
+		out.push(n)
+		var c = kids[n.id] || []
+		for (var k = 0; k < c.length; k++) walk(c[k])
+	}
+	for (i = 0; i < roots.length; i++) walk(roots[i])
+	return out
 }
 
 function computeOpenCount(items) {
@@ -79,7 +108,16 @@ function handleEvent(type, payload, state) {
 	if (type === 'ADD_ITEM') {
 		var text = (payload.text != null ? String(payload.text) : draft).trim()
 		if (!text) return state
-		items.push({ id: uid(), text: text, done: false, rowClass: 'td-row' })
+		items.push({
+			id: uid(),
+			text: text,
+			done: false,
+			due: '',
+			priority: '',
+			goal: '',
+			parent: '',
+			rowClass: 'td-row'
+		})
 		draft = ''
 	}
 
@@ -91,7 +129,12 @@ function handleEvent(type, payload, state) {
 					id: items[i].id,
 					text: items[i].text,
 					done: !items[i].done,
-					rowClass: !items[i].done ? 'td-row done' : 'td-row'
+					due: items[i].due,
+					priority: items[i].priority,
+					goal: items[i].goal,
+					parent: items[i].parent,
+					rowClass:
+						'td-row' + (!items[i].done ? ' done' : '') + (items[i].parent ? ' sub' : '')
 				}
 				break
 			}

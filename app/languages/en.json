@@ -1010,7 +1010,7 @@
 	},
 	"mainnet": {
 		"nav": {
-			"chat": "Chat",
+			"chat": "Intents",
 			"vibes": "Vibes",
 			"draw": "Draw",
 			"schemas": "Schemas",
@@ -1138,7 +1138,47 @@
 			"emptyTable": "No entries for this schema yet.",
 			"rows": "rows",
 			"tabSchema": "Schema",
-			"tabData": "Data"
+			"tabData": "Data",
+			"detail": "Detail",
+			"attached": "predications attached",
+			"close": "Close",
+			"gismuTitle": "Canonical Lojban gismu the place structure derives from",
+			"rawSchema": "Raw JSON Schema",
+			"dynamic": "Dynamic",
+			"vibes": "Vibes",
+			"emptySpecs": "None yet — ask a question or request a change in chat to author one.",
+			"sec": {
+				"schemas": "Schemas",
+				"values": "Values",
+				"bundles": "Bundles",
+				"operations": "Operations",
+				"vibes": "Vibes"
+			},
+			"vibe": {
+				"summary": "Summary",
+				"summaryHint": "This card renders through the engine from its vibe.* rows (view + style + logic) — the same path chat/Runs use. No per-view Svelte. The tabs show the raw config."
+			},
+			"reg": {
+				"types": "Bundles",
+				"data_operations": "Operations",
+				"vibe_view": "Views",
+				"vibe_style": "Styles",
+				"vibe_logic": "Logic"
+			},
+			"regHint": {
+				"types": "Composite types — a bundle is a named set of traits (which predicates cluster into a kind) + a view (how they read back flat). Bundles COMPILE to the operations below.",
+				"data_operations": "The unified operation registry — queries (ask) and mutations (change) as one validated-spec table. GLM-authored ops are yours; bundle-derived ops are global.",
+				"vibe_view": "vibe_view — the ViewDef trees (the layout/structure of each card), rendered by the engine with no per-view Svelte.",
+				"vibe_style": "vibe_style — the StyleDef tokens (the visual styling of each card), config-as-data.",
+				"vibe_logic": "vibe_logic — the sandbox-quickjs JS that maps data into each view (the template's query/mapping logic)."
+			},
+			"place": {
+				"place": "Place",
+				"role": "Role",
+				"meaning": "Meaning",
+				"kind": "Kind",
+				"example": "Example"
+			}
 		},
 		"auth": {
 			"tag": "mainnet / alberobello",
@@ -1182,6 +1222,89 @@
 			"empty": "No todos yet.",
 			"placeholder": "New todo…",
 			"add": "Add"
+		},
+		"bookkeeping": {
+			"title": "Bookkeeping"
+		},
+		"docCompare": {
+			"title": "Documents"
+		},
+		"invoiceMatch": {
+			"title": "Reconcile"
+		},
+		"invoiceBooking": {
+			"title": "Booking"
+		},
+		"transactions": {
+			"title": "Transactions",
+			"count": "entries",
+			"empty": "No transactions yet — upload a bank statement.",
+			"date": "Date",
+			"counterparty": "Counterparty",
+			"purpose": "Purpose",
+			"amount": "Amount",
+			"balance": "Balance",
+			"status": "Status",
+			"belegt": "Doc linked",
+			"verbucht": "Booked",
+			"offen": "Open"
+		},
+		"bookings": {
+			"title": "Bookings",
+			"count": "entries",
+			"empty": "No bookings yet — classify an invoice.",
+			"vendor": "Vendor",
+			"soll": "Debit",
+			"haben": "Credit",
+			"tax": "Tax",
+			"gross": "Gross",
+			"back": "All bookings",
+			"noInvoice": "No linked invoice found.",
+			"prüfHint": "Click a booking to verify it against its invoice."
+		},
+		"finance": {
+			"title": "Finances (BWA)",
+			"revenue": "Revenue",
+			"expenses": "Expenses",
+			"result": "Result",
+			"cash": "Cash flow",
+			"byAccount": "Expenses by account",
+			"empty": "No bookings yet — classify an invoice."
+		},
+		"addressbook": {
+			"title": "Addressbook",
+			"all": "All",
+			"person": "People",
+			"company": "Companies",
+			"empty": "No contacts yet.",
+			"pick": "Pick a contact to see details.",
+			"stammdaten": "Details",
+			"belege": "Documents",
+			"outgoing": "Outgoing",
+			"incoming": "Incoming"
+		},
+		"invoiceCreate": {
+			"title": "Invoices",
+			"empty": "No invoice yet — say e.g. \"create an invoice for …\".",
+			"number": "Number",
+			"state": "State",
+			"gross": "Gross",
+			"pdfHint": "Say \"save as PDF\" to store the invoice as a PDF.",
+			"pdfSaved": "PDF saved.",
+			"savePdf": "Save as PDF"
+		},
+		"skills": {
+			"tab": "Skills",
+			"title": "Skills",
+			"pick": "Pick a skill to see its flow."
+		},
+		"runs": {
+			"tab": "Runs",
+			"title": "Runs",
+			"pick": "Pick a run to see its vibe view.",
+			"vibe": "Vibe view",
+			"trace": "Trace",
+			"current": "Current step"
 		}
 	}
 }

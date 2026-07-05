@@ -27,6 +27,14 @@
 							"done": {
 								"type": "boolean",
 								"description": "Whether the task is completed."
+							},
+							"due": {
+								"type": "string",
+								"description": "Optional due date (ISO 8601, e.g. 2026-07-01). On update, pass null to clear."
+							},
+							"priority": {
+								"type": "string",
+								"description": "Optional priority level, e.g. 'high', 'medium', 'low'. On update, pass null to clear."
 							}
 						}
 					}

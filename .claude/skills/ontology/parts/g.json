@@ -1,0 +1,477 @@
+{
+  "gacri": {
+    "name": "cover",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "cover", "definition": "the covering/lid/top object", "example": "a saucepan lid", "kind": "ref", "references": "*" },
+      "x2": { "role": "covered thing", "definition": "what is covered/concealed/sheltered", "example": "the pot", "kind": "ref", "references": "*" }
+    }
+  },
+  "gadri": {
+    "name": "article",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "article", "definition": "the article/descriptor word", "example": "the word \"the\"", "kind": "value", "type": "string" },
+      "x2": { "role": "description", "definition": "the description text it labels", "example": "\"red house\"", "kind": "value", "type": "string" },
+      "x3": { "role": "language", "definition": "the language used", "example": "English", "kind": "value", "type": "string" },
+      "x4": { "role": "semantics", "definition": "the semantics conveyed", "example": "definite reference", "kind": "value", "type": "string" }
+    }
+  },
+  "galfi": {
+    "name": "modify",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "modifier event", "definition": "the event that modifies/alters", "example": "the renovation", "kind": "ref", "references": "*" },
+      "x2": { "role": "original", "definition": "what is changed from", "example": "the old kitchen", "kind": "ref", "references": "*" },
+      "x3": { "role": "result", "definition": "what it is changed into", "example": "a modern kitchen", "kind": "ref", "references": "*" }
+    }
+  },
+  "galtu": {
+    "name": "high",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "high thing", "definition": "what is high/up/upward", "example": "the kite", "kind": "ref", "references": "*" },
+      "x2": { "role": "frame", "definition": "frame of reference", "example": "the ground", "kind": "value", "type": "string" },
+      "x3": { "role": "baseline height", "definition": "standard/baseline height compared against", "example": "sea level", "kind": "value", "type": "quantity" }
+    }
+  },
+  "galxe": {
+    "name": "throat",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "throat", "definition": "the throat/gullet body-part", "example": "the singer's throat", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "whose throat it is", "example": "the singer", "kind": "ref", "references": "*" }
+    }
+  },
+  "ganlo": {
+    "name": "closed",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "portal", "definition": "the closed portal/passage", "example": "the front door", "kind": "ref", "references": "*" },
+      "x2": { "role": "blocked space", "definition": "what access is prevented to", "example": "the house interior", "kind": "ref", "references": "*" },
+      "x3": { "role": "blocked thing", "definition": "what is blocked from passing", "example": "a visitor", "kind": "ref", "references": "*" }
+    }
+  },
+  "ganra": {
+    "name": "wide",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "wide thing", "definition": "what is broad/wide", "example": "the river", "kind": "ref", "references": "*" },
+      "x2": { "role": "dimension", "definition": "dimension of width", "example": "side-to-side span", "kind": "value", "type": "string" },
+      "x3": { "role": "standard", "definition": "standard of comparison", "example": "a typical creek", "kind": "value", "type": "string" }
+    }
+  },
+  "ganse": {
+    "name": "sense",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "observer", "definition": "the one who senses/detects", "example": "the dog", "kind": "ref", "references": "*" },
+      "x2": { "role": "stimulus", "definition": "what is sensed", "example": "an approaching scent", "kind": "ref", "references": "*" },
+      "x3": { "role": "means", "definition": "the means of sensing", "example": "smell", "kind": "value", "type": "string" },
+      "x4": { "role": "conditions", "definition": "conditions of sensing", "example": "in the dark", "kind": "value", "type": "string" }
+    }
+  },
+  "ganti": {
+    "name": "gonad",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "gonad", "definition": "the gonad/testes/ovary body-part", "example": "the ovary", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "whose gonad it is", "example": "the patient", "kind": "ref", "references": "*" },
+      "x3": { "role": "gender", "definition": "the gender/sex", "example": "female", "kind": "value", "type": "string" }
+    }
+  },
+  "ganxo": {
+    "name": "anus",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "anus", "definition": "the anus/anal orifice body-part", "example": "the anus", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "whose anus it is", "example": "the patient", "kind": "ref", "references": "*" }
+    }
+  },
+  "ganzu": {
+    "name": "organize",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "organizer", "definition": "the one who organizes", "example": "the manager", "kind": "ref", "references": "*" },
+      "x2": { "role": "raw material", "definition": "the chaos/material being organized", "example": "scattered files", "kind": "ref", "references": "*" },
+      "x3": { "role": "organized result", "definition": "the ordered result", "example": "a sorted archive", "kind": "ref", "references": "*" },
+      "x4": { "role": "principle", "definition": "the system/principle of organizing", "example": "alphabetical order", "kind": "value", "type": "string" }
+    }
+  },
+  "gapci": {
+    "name": "gas",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "gas", "definition": "the gas/vapor/fumes", "example": "steam", "kind": "ref", "references": "*" },
+      "x2": { "role": "composition", "definition": "material composition of the gas", "example": "water vapor", "kind": "value", "type": "string" },
+      "x3": { "role": "conditions", "definition": "conditions under which it is gaseous", "example": "above 100C", "kind": "value", "type": "string" }
+    }
+  },
+  "gapru": {
+    "name": "above",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "upper thing", "definition": "what is directly above", "example": "the ceiling lamp", "kind": "ref", "references": "*" },
+      "x2": { "role": "lower thing", "definition": "what it is above", "example": "the table", "kind": "ref", "references": "*" },
+      "x3": { "role": "frame", "definition": "gravity/frame of reference", "example": "earth gravity", "kind": "value", "type": "string" }
+    }
+  },
+  "garna": {
+    "name": "rail",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rail", "definition": "the rail/railing/bar", "example": "the stair railing", "kind": "ref", "references": "*" },
+      "x2": { "role": "supported thing", "definition": "what it supports/restrains", "example": "a person climbing", "kind": "ref", "references": "*" },
+      "x3": { "role": "material", "definition": "material of the rail", "example": "oak wood", "kind": "value", "type": "string" }
+    }
+  },
+  "gasnu": {
+    "name": "does",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "agent", "definition": "the agent that brings about", "example": "the engineer", "kind": "ref", "references": "*" },
+      "x2": { "role": "event", "definition": "the event brought about", "example": "the deployment", "kind": "ref", "references": "*" }
+    }
+  },
+  "gasta": {
+    "name": "steel",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "steel", "definition": "the steel quantity", "example": "a steel beam", "kind": "ref", "references": "*" },
+      "x2": { "role": "composition", "definition": "composition of the steel", "example": "iron and carbon", "kind": "value", "type": "string" }
+    }
+  },
+  "genja": {
+    "name": "root",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "root", "definition": "the root body-part of a plant", "example": "an oak root", "kind": "ref", "references": "*" },
+      "x2": { "role": "plant", "definition": "the plant/species it belongs to", "example": "the oak tree", "kind": "ref", "references": "*" }
+    }
+  },
+  "gento": {
+    "name": "argentinian",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "argentinian thing", "definition": "what reflects Argentinian culture", "example": "a tango", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "the cultural aspect reflected", "example": "music", "kind": "value", "type": "string" }
+    }
+  },
+  "genxu": {
+    "name": "hook",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hook", "definition": "the hook/crook shape", "example": "a coat hook", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "material of the hook", "example": "brass", "kind": "value", "type": "string" }
+    }
+  },
+  "gerku": {
+    "name": "dog",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "dog", "definition": "the dog/canine", "example": "Rex", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed of the dog", "example": "Labrador retriever", "kind": "value", "type": "string" }
+    }
+  },
+  "gerna": {
+    "name": "grammar",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "grammar", "definition": "the grammar/rules of a language", "example": "Lojban grammar", "kind": "value", "type": "string" },
+      "x2": { "role": "language", "definition": "the language it defines", "example": "Lojban", "kind": "value", "type": "string" },
+      "x3": { "role": "structure", "definition": "the structure/text governed", "example": "a sentence", "kind": "value", "type": "string" }
+    }
+  },
+  "gidva": {
+    "name": "guide",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "guide", "definition": "the one who guides/leads", "example": "the tour leader", "kind": "ref", "references": "*" },
+      "x2": { "role": "guided", "definition": "the participants being guided", "example": "the tourists", "kind": "ref", "references": "*" },
+      "x3": { "role": "activity", "definition": "the event/activity guided in", "example": "the museum tour", "kind": "ref", "references": "*" }
+    }
+  },
+  "gigdo": {
+    "name": "billion",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "billion amount", "definition": "the quantity that is a billion of x2", "example": "a billion grains", "kind": "value", "type": "quantity" },
+      "x2": { "role": "unit", "definition": "the thing counted", "example": "grains of sand", "kind": "ref", "references": "*" },
+      "x3": { "role": "dimension", "definition": "the dimension/aspect counted", "example": "count of units", "kind": "value", "type": "string" }
+    }
+  },
+  "ginka": {
+    "name": "camp",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "camp", "definition": "the camp/encampment", "example": "the base camp", "kind": "ref", "references": "*" },
+      "x2": { "role": "occupants", "definition": "who resides at the camp", "example": "the climbers", "kind": "ref", "references": "*" },
+      "x3": { "role": "location", "definition": "the location of the camp", "example": "the mountain slope", "kind": "ref", "references": "*" }
+    }
+  },
+  "girzu": {
+    "name": "group",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "group", "definition": "the group/cluster/team", "example": "the research team", "kind": "ref", "references": "*" },
+      "x2": { "role": "common property", "definition": "the shared property defining the group", "example": "studying physics", "kind": "value", "type": "string" },
+      "x3": { "role": "members", "definition": "the set of members", "example": "the scientists", "kind": "ref", "references": "*" },
+      "x4": { "role": "relations", "definition": "relations linking the members", "example": "co-authorship", "kind": "value", "type": "string" }
+    }
+  },
+  "gismu": {
+    "name": "root word",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "root word", "definition": "the Lojban root word", "example": "the word \"gunka\"", "kind": "value", "type": "string" },
+      "x2": { "role": "relation", "definition": "the relation it expresses", "example": "working", "kind": "value", "type": "string" },
+      "x3": { "role": "argument roles", "definition": "the argument roles it takes", "example": "worker, task, goal", "kind": "value", "type": "string" },
+      "x4": { "role": "affixes", "definition": "the combining affixes", "example": "\"gun\"", "kind": "value", "type": "string" }
+    }
+  },
+  "glare": {
+    "name": "hot",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hot thing", "definition": "what is hot/warm", "example": "the oven", "kind": "ref", "references": "*" },
+      "x2": { "role": "standard", "definition": "standard of hotness", "example": "room temperature", "kind": "value", "type": "string" }
+    }
+  },
+  "gleki": {
+    "name": "happy",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "happy one", "definition": "who is happy/glad", "example": "the child", "kind": "ref", "references": "*" },
+      "x2": { "role": "cause", "definition": "what they are happy about", "example": "the birthday gift", "kind": "ref", "references": "*" }
+    }
+  },
+  "gletu": {
+    "name": "copulate",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mate", "definition": "one who copulates", "example": "the stallion", "kind": "ref", "references": "*" },
+      "x2": { "role": "partner", "definition": "the mating partner", "example": "the mare", "kind": "ref", "references": "*" }
+    }
+  },
+  "glico": {
+    "name": "english",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "english thing", "definition": "what is English/English-speaking", "example": "afternoon tea", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "the cultural aspect reflected", "example": "custom", "kind": "value", "type": "string" }
+    }
+  },
+  "gluta": {
+    "name": "glove",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "glove", "definition": "the glove/mitten", "example": "a winter mitten", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "material of the glove", "example": "wool", "kind": "value", "type": "string" }
+    }
+  },
+  "gocti": {
+    "name": "yocto",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "yocto amount", "definition": "the quantity that is 10^-24 of x2", "example": "a yoctogram", "kind": "value", "type": "quantity" },
+      "x2": { "role": "unit", "definition": "the thing measured", "example": "grams", "kind": "ref", "references": "*" },
+      "x3": { "role": "dimension", "definition": "the dimension/aspect measured", "example": "mass", "kind": "value", "type": "string" }
+    }
+  },
+  "gotro": {
+    "name": "yotta",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "yotta amount", "definition": "the quantity that is 10^24 of x2", "example": "a yottabyte", "kind": "value", "type": "quantity" },
+      "x2": { "role": "unit", "definition": "the thing measured", "example": "bytes", "kind": "ref", "references": "*" },
+      "x3": { "role": "dimension", "definition": "the dimension/aspect measured", "example": "data size", "kind": "value", "type": "string" }
+    }
+  },
+  "gradu": {
+    "name": "unit",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "unit", "definition": "the unit/degree of magnitude", "example": "a degree Celsius", "kind": "value", "type": "string" },
+      "x2": { "role": "scale", "definition": "the reference scale/standard", "example": "the Celsius scale", "kind": "value", "type": "string" },
+      "x3": { "role": "property", "definition": "the property measured", "example": "temperature", "kind": "value", "type": "string" }
+    }
+  },
+  "grake": {
+    "name": "gram",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "massive thing", "definition": "what has the given mass", "example": "the apple", "kind": "ref", "references": "*" },
+      "x2": { "role": "grams", "definition": "the mass in grams", "example": "150 grams", "kind": "value", "type": "quantity" },
+      "x3": { "role": "standard", "definition": "measurement standard", "example": "metric standard", "kind": "value", "type": "string" }
+    }
+  },
+  "grana": {
+    "name": "rod",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rod", "definition": "the rod/pole/stick", "example": "a walking cane", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "material of the rod", "example": "bamboo", "kind": "value", "type": "string" }
+    }
+  },
+  "grasu": {
+    "name": "grease",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "grease", "definition": "the grease/fat/oil", "example": "bacon fat", "kind": "ref", "references": "*" },
+      "x2": { "role": "source", "definition": "source of the grease", "example": "pork", "kind": "ref", "references": "*" }
+    }
+  },
+  "greku": {
+    "name": "frame",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "frame", "definition": "the frame/skeleton/structure", "example": "the building's steel frame", "kind": "ref", "references": "*" },
+      "x2": { "role": "supported form", "definition": "what it supports or shapes", "example": "the skyscraper", "kind": "ref", "references": "*" }
+    }
+  },
+  "grusi": {
+    "name": "gray",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "gray thing", "definition": "what is gray colored", "example": "the storm cloud", "kind": "ref", "references": "*" }
+    }
+  },
+  "grute": {
+    "name": "fruit",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "fruit", "definition": "the fruit body-part", "example": "an apple", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species of the plant", "example": "apple tree", "kind": "value", "type": "string" }
+    }
+  },
+  "gubni": {
+    "name": "public",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "public thing", "definition": "what is public/openly available", "example": "the town square", "kind": "ref", "references": "*" },
+      "x2": { "role": "community", "definition": "the community it is open to", "example": "the townspeople", "kind": "ref", "references": "*" }
+    }
+  },
+  "gugde": {
+    "name": "country",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "country", "definition": "the country", "example": "Germany", "kind": "ref", "references": "*" },
+      "x2": { "role": "people", "definition": "the peoples of the country", "example": "Germans", "kind": "ref", "references": "*" },
+      "x3": { "role": "territory", "definition": "the land/territory", "example": "Central European land", "kind": "ref", "references": "*" }
+    }
+  },
+  "gundi": {
+    "name": "industry",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "industry", "definition": "the industrial manufacturing activity", "example": "the automotive industry", "kind": "ref", "references": "*" },
+      "x2": { "role": "product", "definition": "what is produced", "example": "cars", "kind": "ref", "references": "*" },
+      "x3": { "role": "process", "definition": "the process/means of production", "example": "assembly line", "kind": "value", "type": "string" }
+    }
+  },
+  "gunka": {
+    "name": "work",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "worker", "definition": "the person who labors", "example": "the carpenter", "kind": "ref", "references": "*" },
+      "x2": { "role": "task", "definition": "the activity worked on", "example": "building a deck", "kind": "ref", "references": "*" },
+      "x3": { "role": "goal", "definition": "the goal/objective", "example": "a finished patio", "kind": "ref", "references": "*" }
+    }
+  },
+  "gunma": {
+    "name": "mass",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "mass", "definition": "the aggregate/whole considered jointly", "example": "the choir", "kind": "ref", "references": "*" },
+      "x2": { "role": "components", "definition": "the components composing it", "example": "the singers", "kind": "ref", "references": "*" }
+    }
+  },
+  "gunro": {
+    "name": "roll",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "roller", "definition": "what rolls/trundles", "example": "the barrel", "kind": "ref", "references": "*" },
+      "x2": { "role": "surface", "definition": "the surface rolled on", "example": "the floor", "kind": "ref", "references": "*" },
+      "x3": { "role": "axis", "definition": "the axis/axle rotated on", "example": "its central axis", "kind": "ref", "references": "*" }
+    }
+  },
+  "gunse": {
+    "name": "goose",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "goose", "definition": "the goose", "example": "the gander", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed of the goose", "example": "Canada goose", "kind": "value", "type": "string" }
+    }
+  },
+  "gunta": {
+    "name": "attack",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "attacker", "definition": "who attacks/invades", "example": "the raiding party", "kind": "ref", "references": "*" },
+      "x2": { "role": "victim", "definition": "who is attacked", "example": "the village", "kind": "ref", "references": "*" },
+      "x3": { "role": "goal", "definition": "the goal/objective of the attack", "example": "seizing the harbor", "kind": "ref", "references": "*" }
+    }
+  },
+  "gurni": {
+    "name": "grain",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "grain", "definition": "the grain/cereal", "example": "wheat", "kind": "ref", "references": "*" },
+      "x2": { "role": "plant", "definition": "the plant/species it comes from", "example": "the wheat plant", "kind": "ref", "references": "*" }
+    }
+  },
+  "guska": {
+    "name": "scrape",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "scraper", "definition": "the blade/scraper that abrades", "example": "the ice scraper", "kind": "ref", "references": "*" },
+      "x2": { "role": "scraped material", "definition": "what is scraped/eroded off", "example": "the frost", "kind": "ref", "references": "*" },
+      "x3": { "role": "source", "definition": "what it is scraped from", "example": "the windshield", "kind": "ref", "references": "*" }
+    }
+  },
+  "gusni": {
+    "name": "light",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "light", "definition": "the light/illumination energy", "example": "the lamplight", "kind": "ref", "references": "*" },
+      "x2": { "role": "illuminated thing", "definition": "what is illuminated", "example": "the desk", "kind": "ref", "references": "*" },
+      "x3": { "role": "light source", "definition": "the source of the light", "example": "the desk lamp", "kind": "ref", "references": "*" }
+    }
+  },
+  "gusta": {
+    "name": "restaurant",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "restaurant", "definition": "the restaurant/cafe/diner", "example": "the corner bistro", "kind": "ref", "references": "*" },
+      "x2": { "role": "food", "definition": "the type of food served", "example": "Italian cuisine", "kind": "value", "type": "string" },
+      "x3": { "role": "patrons", "definition": "the audience/patrons served", "example": "the dinner guests", "kind": "ref", "references": "*" }
+    }
+  },
+  "gutci": {
+    "name": "cubit",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "measured thing", "definition": "what is the given local distance", "example": "the rope", "kind": "ref", "references": "*" },
+      "x2": { "role": "distance units", "definition": "the count of local distance units", "example": "3 cubits", "kind": "value", "type": "quantity" },
+      "x3": { "role": "standard", "definition": "measurement standard", "example": "the royal cubit", "kind": "value", "type": "string" },
+      "x4": { "role": "subunits", "definition": "the subunits of measure", "example": "palms", "kind": "value", "type": "string" }
+    }
+  },
+  "gutra": {
+    "name": "womb",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "womb", "definition": "the womb/uterus body-part", "example": "the uterus", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "whose womb it is", "example": "the mother", "kind": "ref", "references": "*" }
+    }
+  },
+  "guzme": {
+    "name": "melon",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "melon", "definition": "the melon/squash fruit", "example": "a watermelon", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain of the plant", "example": "watermelon vine", "kind": "value", "type": "string" }
+    }
+  }
+}

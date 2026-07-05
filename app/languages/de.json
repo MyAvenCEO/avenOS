@@ -987,7 +987,7 @@
 	},
 	"mainnet": {
 		"nav": {
-			"chat": "Chat",
+			"chat": "Intents",
 			"vibes": "Vibes",
 			"draw": "Zeichnen",
 			"schemas": "Schemas",
@@ -1115,7 +1115,47 @@
 			"emptyTable": "Noch keine Einträge für dieses Schema.",
 			"rows": "Einträge",
 			"tabSchema": "Schema",
-			"tabData": "Daten"
+			"tabData": "Daten",
+			"detail": "Detail",
+			"attached": "Prädikationen verknüpft",
+			"close": "Schließen",
+			"gismuTitle": "Kanonisches Lojban-Gismu, von dem die Stellenstruktur abgeleitet ist",
+			"rawSchema": "JSON-Schema (roh)",
+			"dynamic": "Dynamisch",
+			"vibes": "Vibes",
+			"emptySpecs": "Noch keine — stelle im Chat eine Frage oder wünsche eine Änderung, um eine anzulegen.",
+			"sec": {
+				"schemas": "Schemas",
+				"values": "Werte",
+				"bundles": "Bundles",
+				"operations": "Operationen",
+				"vibes": "Vibes"
+			},
+			"vibe": {
+				"summary": "Zusammenfassung",
+				"summaryHint": "Diese Karte rendert über den Engine aus ihren vibe.*-Zeilen (view + style + logic) — derselbe Pfad wie Chat/Runs. Kein per-View-Svelte. Die Tabs zeigen die rohe Konfiguration."
+			},
+			"reg": {
+				"types": "Bundles",
+				"data_operations": "Operationen",
+				"vibe_view": "Views",
+				"vibe_style": "Styles",
+				"vibe_logic": "Logic"
+			},
+			"regHint": {
+				"types": "Composite Types — ein Bundle ist ein benannter Satz Traits (welche Prädikate eine Art bilden) + eine View (wie sie flach zurückgelesen werden). Bundles KOMPILIEREN zu den Operationen unten.",
+				"data_operations": "Die vereinheitlichte Operations-Registry — Abfragen (lesen) und Mutationen (ändern) als eine validierte-Spec-Tabelle. GLM-verfasste Ops gehören dir; Bundle-abgeleitete Ops sind global.",
+				"vibe_view": "vibe_view — die ViewDef-Bäume (Layout/Struktur jeder Karte), vom Engine gerendert, ohne per-View-Svelte.",
+				"vibe_style": "vibe_style — die StyleDef-Tokens (visuelles Styling jeder Karte), Config-as-Data.",
+				"vibe_logic": "vibe_logic — das sandbox-quickjs-JS, das Daten in jede View abbildet (die Query-/Mapping-Logik des Templates)."
+			},
+			"place": {
+				"place": "Stelle",
+				"role": "Rolle",
+				"meaning": "Bedeutung",
+				"kind": "Art",
+				"example": "Beispiel"
+			}
 		},
 		"auth": {
 			"tag": "mainnet / alberobello",
@@ -1159,6 +1199,89 @@
 			"empty": "Noch keine Aufgaben.",
 			"placeholder": "Neue Aufgabe…",
 			"add": "Hinzufügen"
+		},
+		"bookkeeping": {
+			"title": "Buchhaltung"
+		},
+		"docCompare": {
+			"title": "Belege"
+		},
+		"invoiceMatch": {
+			"title": "Abgleich"
+		},
+		"invoiceBooking": {
+			"title": "Buchung"
+		},
+		"transactions": {
+			"title": "Transaktionen",
+			"count": "Buchungen",
+			"empty": "Noch keine Transaktionen — lade einen Kontoauszug hoch.",
+			"date": "Datum",
+			"counterparty": "Gegenpartei",
+			"purpose": "Verwendungszweck",
+			"amount": "Betrag",
+			"balance": "Saldo",
+			"status": "Status",
+			"belegt": "Belegt",
+			"verbucht": "Verbucht",
+			"offen": "Offen"
+		},
+		"bookings": {
+			"title": "Buchungen",
+			"count": "Buchungen",
+			"empty": "Noch keine Buchungen — klassifiziere eine Rechnung.",
+			"vendor": "Lieferant",
+			"soll": "Soll",
+			"haben": "Haben",
+			"tax": "Steuer",
+			"gross": "Brutto",
+			"back": "Alle Buchungen",
+			"noInvoice": "Keine verknüpfte Rechnung gefunden.",
+			"prüfHint": "Buchung anklicken, um sie gegen die Rechnung zu prüfen."
+		},
+		"finance": {
+			"title": "Finanzen (BWA)",
+			"revenue": "Erlöse",
+			"expenses": "Aufwendungen",
+			"result": "Ergebnis",
+			"cash": "Cashflow",
+			"byAccount": "Aufwand nach Konto",
+			"empty": "Noch keine Buchungen — klassifiziere eine Rechnung."
+		},
+		"addressbook": {
+			"title": "Adressbuch",
+			"all": "Alle",
+			"person": "Personen",
+			"company": "Firmen",
+			"empty": "Noch keine Kontakte.",
+			"pick": "Kontakt auswählen, um Details zu sehen.",
+			"stammdaten": "Stammdaten",
+			"belege": "Belege",
+			"outgoing": "Ausgehend",
+			"incoming": "Eingehend"
+		},
+		"invoiceCreate": {
+			"title": "Rechnungen",
+			"empty": "Noch keine Rechnung — sag z. B. „erstelle eine Rechnung für …“.",
+			"number": "Nummer",
+			"state": "Status",
+			"gross": "Brutto",
+			"pdfHint": "Sag „als PDF speichern“, um die Rechnung als PDF abzulegen.",
+			"pdfSaved": "PDF gespeichert.",
+			"savePdf": "Als PDF speichern"
+		},
+		"skills": {
+			"tab": "Skills",
+			"title": "Skills",
+			"pick": "Skill auswählen, um den Flow zu sehen."
+		},
+		"runs": {
+			"tab": "Läufe",
+			"title": "Läufe",
+			"pick": "Lauf auswählen, um die Vibe-Ansicht zu sehen.",
+			"vibe": "Vibe-Ansicht",
+			"trace": "Verlauf",
+			"current": "Aktueller Schritt"
 		}
 	}
 }

@@ -13,6 +13,16 @@ export const CSS_INJECTION_PATTERNS = [
 ]
 
 export const SAFE_TAGS = new Set([
+	// the inline-SVG icon subset (board 0115) — mirrored in SVG_TAGS below for NS creation.
+	'svg',
+	'g',
+	'path',
+	'circle',
+	'rect',
+	'line',
+	'polyline',
+	'polygon',
+	'ellipse',
 	'div',
 	'span',
 	'p',
@@ -88,6 +98,49 @@ export const ALLOWED_EVENTS = new Set(['click', 'change', 'input', 'submit'])
 
 const GLOBAL_ATTRS = new Set(['id', 'title', 'role', 'tabindex', 'hidden'])
 
+// board 0115 — a STRICT inline-SVG subset for icons. Shape/geometry tags ONLY — no script, no
+// foreignObject (HTML embedding), no use/image/a (external refs), no animate/set/filter/style. The
+// attribute list is geometry + paint only: no href/xlink, no on*, no style. Values are further gated
+// (path-data charset, no url()) in the view validator. Fail-closed by construction.
+export const SVG_TAGS = new Set([
+	'svg',
+	'g',
+	'path',
+	'circle',
+	'rect',
+	'line',
+	'polyline',
+	'polygon',
+	'ellipse'
+])
+const SVG_ATTRS = new Set([
+	'viewbox',
+	'd',
+	'cx',
+	'cy',
+	'r',
+	'rx',
+	'ry',
+	'x',
+	'y',
+	'x1',
+	'y1',
+	'x2',
+	'y2',
+	'width',
+	'height',
+	'points',
+	'fill',
+	'stroke',
+	'stroke-width',
+	'stroke-linecap',
+	'stroke-linejoin',
+	'fill-rule',
+	'clip-rule',
+	'opacity',
+	'transform'
+])
+
 const TAG_ATTRS: Record<string, Set<string>> = {
 	a: new Set(['href', 'target', 'rel']),
 	button: new Set(['type', 'disabled', 'name', 'value']),
@@ -115,7 +168,16 @@ const TAG_ATTRS: Record<string, Set<string>> = {
 	progress: new Set(['value', 'max']),
 	select: new Set(['name', 'disabled', 'required', 'multiple']),
 	source: new Set(['src', 'type']),
-	textarea: new Set(['name', 'placeholder', 'rows', 'cols', 'maxlength', 'readonly', 'disabled', 'required']),
+	textarea: new Set([
+		'name',
+		'placeholder',
+		'rows',
+		'cols',
+		'maxlength',
+		'readonly',
+		'disabled',
+		'required'
+	]),
 	time: new Set(['datetime'])
 }
 
@@ -138,7 +200,9 @@ export function isAllowedAttribute(tag: string, name: string): boolean {
 	const attr = name.toLowerCase()
 	if (!/^[a-z][a-z0-9_.:-]*$/.test(attr)) return false
 	if (attr.startsWith('on')) return false
-	if (attr === 'style' || attr === 'srcdoc' || attr === 'innerhtml' || attr === 'outerhtml') return false
+	if (attr === 'style' || attr === 'srcdoc' || attr === 'innerhtml' || attr === 'outerhtml')
+		return false
+	if (SVG_TAGS.has(tag)) return SVG_ATTRS.has(attr)
 	if (attr.startsWith('aria-') || attr.startsWith('data-')) return true
 	return GLOBAL_ATTRS.has(attr) || Boolean(TAG_ATTRS[tag]?.has(attr))
 }
@@ -146,6 +210,12 @@ export function isAllowedAttribute(tag: string, name: string): boolean {
 export function isSafeUrl(value: string): boolean {
 	const url = value.trim()
 	if (!url) return true
+	// Inline RASTER image data URLs are allowed (the bookkeeping preview + rasterized PDF pages).
+	// Raster formats are pure pixel data and can NEVER execute script — even if the URL is navigated
+	// to (e.g. via <a href>). `data:image/svg+xml` is deliberately EXCLUDED: an SVG document can carry
+	// inline <script> that runs on navigation, so it stays blocked. All other `data:` schemes (html,
+	// text, application, …) remain blocked too. board 0063.
+	if (/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp)[;,]/i.test(url)) return true
 	return /^(https?:\/\/|mailto:|tel:|\/|\.\/|\.\.\/|#)/i.test(url) || !url.includes(':')
 }
 
@@ -156,16 +226,35 @@ export function assertSafeClassValue(value: unknown, path = 'class'): void {
 	}
 }
 
-export function assertSafeAttributeValue(tag: string, name: string, value: unknown, path: string): void {
+export function assertSafeAttributeValue(
+	tag: string,
+	name: string,
+	value: unknown,
+	path: string
+): void {
 	if (value == null || typeof value !== 'string' || value.startsWith('$')) return
 	const attr = name.toLowerCase()
 	if (URL_ATTRS.has(attr) && !isSafeUrl(value)) {
 		throw new Error(`[aven-ui] Forbidden URL attribute value in ${path}.${name}`)
 	}
+	// board 0115 — SVG value gates: no url() references (filters/exfil), no protocols; path data and
+	// point lists are restricted to the geometry charset.
+	if (SVG_TAGS.has(tag)) {
+		if (/url\s*\(/i.test(value) || /[a-z][a-z0-9+.-]*:/i.test(value)) {
+			throw new Error(`[aven-ui] Forbidden SVG attribute value in ${path}.${name}`)
+		}
+		if ((attr === 'd' || attr === 'points') && !/^[MmLlHhVvCcSsQqTtAaZz0-9\s.,+\-eE]*$/.test(value)) {
+			throw new Error(`[aven-ui] Forbidden path data in ${path}.${name}`)
+		}
+	}
 	if (tag === 'button' && attr === 'type' && !['button', 'submit', 'reset'].includes(value)) {
 		throw new Error(`[aven-ui] Forbidden button type in ${path}.${name}`)
 	}
-	if (tag === 'input' && attr === 'type' && !['checkbox', 'email', 'number', 'password', 'search', 'tel', 'text', 'url'].includes(value)) {
+	if (
+		tag === 'input' &&
+		attr === 'type' &&
+		!['checkbox', 'email', 'number', 'password', 'search', 'tel', 'text', 'url'].includes(value)
+	) {
 		throw new Error(`[aven-ui] Forbidden input type in ${path}.${name}`)
 	}
 }

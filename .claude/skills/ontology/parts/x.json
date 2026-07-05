@@ -1,0 +1,458 @@
+{
+  "xabju": {
+    "name": "dwells",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "resident", "definition": "the one who dwells/resides", "example": "Maria", "kind": "ref", "references": "*" },
+      "x2": { "role": "habitat", "definition": "location/home inhabited", "example": "a cottage in Lisbon", "kind": "ref", "references": "*" }
+    }
+  },
+  "xadba": {
+    "name": "half",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "half", "definition": "the portion that is half of the whole", "example": "half the cake", "kind": "ref", "references": "*" },
+      "x2": { "role": "whole", "definition": "the whole being halved", "example": "the cake", "kind": "ref", "references": "*" },
+      "x3": { "role": "standard", "definition": "standard of halving", "example": "by volume", "kind": "value", "type": "string" }
+    }
+  },
+  "xadni": {
+    "name": "body",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "body", "definition": "the physical body/corpus", "example": "her body", "kind": "ref", "references": "*" },
+      "x2": { "role": "owner", "definition": "the being whose body it is", "example": "Maria", "kind": "ref", "references": "*" }
+    }
+  },
+  "xagji": {
+    "name": "hungers",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hungerer", "definition": "the one who hungers", "example": "the child", "kind": "ref", "references": "*" },
+      "x2": { "role": "food", "definition": "food/fuel craved", "example": "bread", "kind": "ref", "references": "*" }
+    }
+  },
+  "xagri": {
+    "name": "reed instrument",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "instrument", "definition": "the reed wind instrument", "example": "a clarinet", "kind": "ref", "references": "*" },
+      "x2": { "role": "reed", "definition": "the reed component", "example": "a cane reed", "kind": "ref", "references": "*" }
+    }
+  },
+  "xajmi": {
+    "name": "funny",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "funny thing", "definition": "the thing that is funny", "example": "the joke", "kind": "ref", "references": "*" },
+      "x2": { "role": "amused one", "definition": "the one amused", "example": "the audience", "kind": "ref", "references": "*" },
+      "x3": { "role": "aspect", "definition": "what is funny about it", "example": "its absurdity", "kind": "value", "type": "string" }
+    }
+  },
+  "xaksu": {
+    "name": "consumes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "consumption", "definition": "the event that depletes", "example": "the road trip", "kind": "ref", "references": "*" },
+      "x2": { "role": "resource", "definition": "the resource used up", "example": "the fuel tank", "kind": "ref", "references": "*" }
+    }
+  },
+  "xalbo": {
+    "name": "levity",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "joker", "definition": "the one being frivolous", "example": "the comedian", "kind": "ref", "references": "*" },
+      "x2": { "role": "topic", "definition": "the matter treated lightly", "example": "the exam results", "kind": "value", "type": "string" }
+    }
+  },
+  "xalka": {
+    "name": "alcohol",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "alcohol", "definition": "the alcohol quantity", "example": "the whiskey", "kind": "ref", "references": "*" },
+      "x2": { "role": "type", "definition": "type of alcohol", "example": "ethanol", "kind": "value", "type": "string" },
+      "x3": { "role": "source", "definition": "source/process of origin", "example": "fermented grain", "kind": "value", "type": "string" }
+    }
+  },
+  "xalni": {
+    "name": "panicked",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "panicker", "definition": "the one in panic", "example": "the crowd", "kind": "ref", "references": "*" },
+      "x2": { "role": "crisis", "definition": "the crisis causing panic", "example": "the fire alarm", "kind": "ref", "references": "*" }
+    }
+  },
+  "xamgu": {
+    "name": "good",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "good thing", "definition": "what is good/beneficial", "example": "the new policy", "kind": "ref", "references": "*" },
+      "x2": { "role": "beneficiary", "definition": "the one it is good for", "example": "the employees", "kind": "ref", "references": "*" },
+      "x3": { "role": "standard", "definition": "standard of goodness", "example": "by health metrics", "kind": "value", "type": "string" }
+    }
+  },
+  "xampo": {
+    "name": "ampere",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "current", "definition": "the measured current", "example": "the circuit current", "kind": "ref", "references": "*" },
+      "x2": { "role": "amount", "definition": "number of amperes", "example": "5", "kind": "value", "type": "quantity" },
+      "x3": { "role": "standard", "definition": "measurement standard", "example": "SI", "kind": "value", "type": "string" }
+    }
+  },
+  "xamsi": {
+    "name": "sea",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "sea", "definition": "the sea/ocean", "example": "the Atlantic", "kind": "ref", "references": "*" },
+      "x2": { "role": "planet", "definition": "planet the sea is on", "example": "Earth", "kind": "ref", "references": "*" },
+      "x3": { "role": "fluid", "definition": "fluid it consists of", "example": "saltwater", "kind": "value", "type": "string" }
+    }
+  },
+  "xance": {
+    "name": "hand",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hand", "definition": "the hand", "example": "her left hand", "kind": "ref", "references": "*" },
+      "x2": { "role": "owner", "definition": "the being whose hand it is", "example": "Maria", "kind": "ref", "references": "*" }
+    }
+  },
+  "xanka": {
+    "name": "nervous",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "anxious one", "definition": "the nervous one", "example": "the student", "kind": "ref", "references": "*" },
+      "x2": { "role": "concern", "definition": "what they are anxious about", "example": "the interview", "kind": "value", "type": "string" },
+      "x3": { "role": "conditions", "definition": "conditions of anxiety", "example": "under deadline", "kind": "value", "type": "string" }
+    }
+  },
+  "xanri": {
+    "name": "imaginary",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "concept", "definition": "the imagined concept", "example": "a unicorn", "kind": "value", "type": "string" },
+      "x2": { "role": "imaginer", "definition": "the one imagining it", "example": "the child", "kind": "ref", "references": "*" }
+    }
+  },
+  "xanto": {
+    "name": "elephant",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "elephant", "definition": "the elephant", "example": "Dumbo", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed", "example": "African elephant", "kind": "value", "type": "string" }
+    }
+  },
+  "xarci": {
+    "name": "weapon",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "weapon", "definition": "the weapon", "example": "a sword", "kind": "ref", "references": "*" },
+      "x2": { "role": "target", "definition": "what it is used against", "example": "the invaders", "kind": "ref", "references": "*" },
+      "x3": { "role": "wielder", "definition": "the one using it", "example": "the soldier", "kind": "ref", "references": "*" }
+    }
+  },
+  "xarju": {
+    "name": "pig",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pig", "definition": "the pig/swine", "example": "Babe", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed", "example": "domestic pig", "kind": "value", "type": "string" }
+    }
+  },
+  "xarnu": {
+    "name": "stubborn",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "stubborn one", "definition": "the one resisting", "example": "the toddler", "kind": "ref", "references": "*" },
+      "x2": { "role": "opposed", "definition": "what is opposed/resisted", "example": "his parents", "kind": "ref", "references": "*" },
+      "x3": { "role": "matter", "definition": "matter of resistance", "example": "going to bed", "kind": "value", "type": "string" }
+    }
+  },
+  "xasli": {
+    "name": "donkey",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "donkey", "definition": "the donkey/jackass", "example": "Eeyore", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed", "example": "domestic donkey", "kind": "value", "type": "string" }
+    }
+  },
+  "xasne": {
+    "name": "sweat",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "sweat", "definition": "the perspiration", "example": "the sweat on his brow", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "body it comes from", "example": "the runner", "kind": "ref", "references": "*" },
+      "x3": { "role": "gland", "definition": "gland/organ excreting it", "example": "sweat glands", "kind": "ref", "references": "*" }
+    }
+  },
+  "xatra": {
+    "name": "letter",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "letter", "definition": "the letter/missive", "example": "her resignation letter", "kind": "ref", "references": "*" },
+      "x2": { "role": "audience", "definition": "intended recipient", "example": "her manager", "kind": "ref", "references": "*" },
+      "x3": { "role": "author", "definition": "the originator", "example": "Maria", "kind": "ref", "references": "*" },
+      "x4": { "role": "content", "definition": "content of the letter", "example": "her two-week notice", "kind": "value", "type": "string" }
+    }
+  },
+  "xatsi": {
+    "name": "atto",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "quantity", "definition": "the 10^-18 amount", "example": "an attosecond", "kind": "ref", "references": "*" },
+      "x2": { "role": "base", "definition": "what it is a fraction of", "example": "a second", "kind": "ref", "references": "*" },
+      "x3": { "role": "dimension", "definition": "dimension/aspect measured", "example": "duration", "kind": "value", "type": "string" }
+    }
+  },
+  "xazdo": {
+    "name": "asian",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "asian thing", "definition": "what reflects Asiatic culture", "example": "the cuisine", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of culture reflected", "example": "its flavors", "kind": "value", "type": "string" }
+    }
+  },
+  "xebni": {
+    "name": "hates",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hater", "definition": "the one who hates", "example": "the rival", "kind": "ref", "references": "*" },
+      "x2": { "role": "hated", "definition": "what is hated", "example": "the noise", "kind": "ref", "references": "*" }
+    }
+  },
+  "xebro": {
+    "name": "hebrew",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hebrew thing", "definition": "what reflects Hebrew culture", "example": "the holiday", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of culture reflected", "example": "its traditions", "kind": "value", "type": "string" }
+    }
+  },
+  "xecto": {
+    "name": "hundred",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hundred", "definition": "a hundred of something", "example": "a hundred coins", "kind": "ref", "references": "*" },
+      "x2": { "role": "unit", "definition": "what is counted", "example": "coins", "kind": "ref", "references": "*" },
+      "x3": { "role": "dimension", "definition": "dimension/aspect counted", "example": "by count", "kind": "value", "type": "string" }
+    }
+  },
+  "xedja": {
+    "name": "jaw",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "jaw", "definition": "the jaw", "example": "his lower jaw", "kind": "ref", "references": "*" },
+      "x2": { "role": "owner", "definition": "the being whose jaw it is", "example": "Maria", "kind": "ref", "references": "*" }
+    }
+  },
+  "xekri": {
+    "name": "black",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "black thing", "definition": "the black-colored thing", "example": "the night sky", "kind": "ref", "references": "*" }
+    }
+  },
+  "xelso": {
+    "name": "greek",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "greek thing", "definition": "what reflects Greek culture", "example": "the philosophy", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of culture reflected", "example": "its logic", "kind": "value", "type": "string" }
+    }
+  },
+  "xendo": {
+    "name": "kind",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "kind one", "definition": "the person being kind", "example": "the nurse", "kind": "ref", "references": "*" },
+      "x2": { "role": "recipient", "definition": "the one treated kindly", "example": "the patient", "kind": "ref", "references": "*" },
+      "x3": { "role": "behavior", "definition": "the kind actions", "example": "gentle care", "kind": "value", "type": "string" }
+    }
+  },
+  "xenru": {
+    "name": "regrets",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "regretter", "definition": "the one who regrets", "example": "Maria", "kind": "ref", "references": "*" },
+      "x2": { "role": "regretted", "definition": "what is regretted", "example": "the missed flight", "kind": "value", "type": "string" }
+    }
+  },
+  "xexso": {
+    "name": "exa",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "quantity", "definition": "the 10^18 amount", "example": "an exabyte", "kind": "ref", "references": "*" },
+      "x2": { "role": "base", "definition": "what it is a multiple of", "example": "a byte", "kind": "ref", "references": "*" },
+      "x3": { "role": "dimension", "definition": "dimension/aspect measured", "example": "data size", "kind": "value", "type": "string" }
+    }
+  },
+  "xindo": {
+    "name": "hindi",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hindi thing", "definition": "what reflects Hindi culture", "example": "the film", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of culture reflected", "example": "its music", "kind": "value", "type": "string" }
+    }
+  },
+  "xinmo": {
+    "name": "ink",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "ink", "definition": "the ink quantity", "example": "the black ink", "kind": "ref", "references": "*" },
+      "x2": { "role": "color", "definition": "color/pigment of ink", "example": "carbon black", "kind": "value", "type": "string" },
+      "x3": { "role": "writing device", "definition": "device using the ink", "example": "a fountain pen", "kind": "ref", "references": "*" }
+    }
+  },
+  "xirma": {
+    "name": "horse",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "horse", "definition": "the horse/equine", "example": "Seabiscuit", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed", "example": "thoroughbred", "kind": "value", "type": "string" }
+    }
+  },
+  "xislu": {
+    "name": "wheel",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "wheel", "definition": "the wheel", "example": "the front wheel", "kind": "ref", "references": "*" },
+      "x2": { "role": "vehicle", "definition": "device/vehicle it belongs to", "example": "the bicycle", "kind": "ref", "references": "*" },
+      "x3": { "role": "material", "definition": "material/properties", "example": "rubber and steel", "kind": "value", "type": "string" }
+    }
+  },
+  "xispo": {
+    "name": "hispanic",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hispanic thing", "definition": "what reflects Hispano-American culture", "example": "the festival", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of culture reflected", "example": "its dance", "kind": "value", "type": "string" }
+    }
+  },
+  "xlali": {
+    "name": "bad",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "bad thing", "definition": "what is bad/poor", "example": "the spoiled milk", "kind": "ref", "references": "*" },
+      "x2": { "role": "affected", "definition": "the one it is bad for", "example": "the consumer", "kind": "ref", "references": "*" },
+      "x3": { "role": "standard", "definition": "standard of badness", "example": "by freshness", "kind": "value", "type": "string" }
+    }
+  },
+  "xlura": {
+    "name": "influences",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "influencer", "definition": "the one who influences/lures", "example": "the advertiser", "kind": "ref", "references": "*" },
+      "x2": { "role": "influenced", "definition": "the one influenced", "example": "the shopper", "kind": "ref", "references": "*" },
+      "x3": { "role": "action", "definition": "action/state lured into", "example": "buying the product", "kind": "value", "type": "string" },
+      "x4": { "role": "lure", "definition": "the influence/threat/lure", "example": "a discount", "kind": "value", "type": "string" }
+    }
+  },
+  "xotli": {
+    "name": "hotel",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hotel", "definition": "the hotel/inn", "example": "the Ritz", "kind": "ref", "references": "*" },
+      "x2": { "role": "location", "definition": "location of the hotel", "example": "downtown Paris", "kind": "ref", "references": "*" },
+      "x3": { "role": "operator", "definition": "the one operating it", "example": "the chain", "kind": "ref", "references": "*" }
+    }
+  },
+  "xrabo": {
+    "name": "arabic",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "arabic thing", "definition": "what reflects Arabic culture", "example": "the calligraphy", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of culture reflected", "example": "its script", "kind": "value", "type": "string" }
+    }
+  },
+  "xrani": {
+    "name": "injures",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "injury event", "definition": "the event that injures", "example": "the crash", "kind": "ref", "references": "*" },
+      "x2": { "role": "victim", "definition": "the one injured", "example": "the driver", "kind": "ref", "references": "*" },
+      "x3": { "role": "property", "definition": "property injured in", "example": "his leg", "kind": "value", "type": "string" },
+      "x4": { "role": "injury", "definition": "resulting injury state", "example": "a fracture", "kind": "value", "type": "string" }
+    }
+  },
+  "xriso": {
+    "name": "christian",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "christian thing", "definition": "what pertains to Christianity", "example": "the cathedral", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of religion reflected", "example": "its liturgy", "kind": "value", "type": "string" }
+    }
+  },
+  "xruba": {
+    "name": "buckwheat",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "buckwheat", "definition": "the buckwheat/rhubarb quantity", "example": "the buckwheat flour", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain", "example": "common buckwheat", "kind": "value", "type": "string" }
+    }
+  },
+  "xruki": {
+    "name": "turkey",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "turkey", "definition": "the turkey bird", "example": "the roast turkey", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed", "example": "wild turkey", "kind": "value", "type": "string" }
+    }
+  },
+  "xrula": {
+    "name": "flower",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "flower", "definition": "the flower/blossom", "example": "the rose", "kind": "ref", "references": "*" },
+      "x2": { "role": "plant", "definition": "plant/species it grows on", "example": "the rosebush", "kind": "ref", "references": "*" }
+    }
+  },
+  "xruti": {
+    "name": "returns",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "returner", "definition": "the agent returning it", "example": "Maria", "kind": "ref", "references": "*" },
+      "x2": { "role": "returned", "definition": "what is returned", "example": "the borrowed book", "kind": "ref", "references": "*" },
+      "x3": { "role": "destination", "definition": "origin/earlier state returned to", "example": "the library", "kind": "ref", "references": "*" },
+      "x4": { "role": "origin", "definition": "where it is moved back from", "example": "her desk", "kind": "ref", "references": "*" }
+    }
+  },
+  "xukmi": {
+    "name": "chemical",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "instance", "definition": "the instance of substance", "example": "the vial of solution", "kind": "ref", "references": "*" },
+      "x2": { "role": "substance", "definition": "the chemical/drug", "example": "caffeine", "kind": "value", "type": "string" },
+      "x3": { "role": "purity", "definition": "purity of the substance", "example": "99% pure", "kind": "value", "type": "quantity" }
+    }
+  },
+  "xunre": {
+    "name": "red",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "red thing", "definition": "the red-colored thing", "example": "the apple", "kind": "ref", "references": "*" }
+    }
+  },
+  "xurdo": {
+    "name": "urdu",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "urdu thing", "definition": "what reflects Urdu culture", "example": "the poetry", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of culture reflected", "example": "its verse", "kind": "value", "type": "string" }
+    }
+  },
+  "xusra": {
+    "name": "asserts",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "asserter", "definition": "the agent who asserts", "example": "the scientist", "kind": "ref", "references": "*" },
+      "x2": { "role": "claim", "definition": "what is claimed true", "example": "the earth is round", "kind": "value", "type": "string" }
+    }
+  },
+  "xutla": {
+    "name": "smooth",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "smooth thing", "definition": "the smooth/even thing", "example": "the polished marble", "kind": "ref", "references": "*" }
+    }
+  }
+}

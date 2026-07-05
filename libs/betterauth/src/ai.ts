@@ -1,14 +1,29 @@
-import { CHAT_TOOLS } from '@avenos/aven-vibes/tools'
 import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
+import {
+	assembleSystemContext,
+	type RouterRequest,
+	routeSkill,
+	skillWantsTodosHint,
+	TOOL_ACTORS
+} from '@avenos/skills/tools'
+import { actorConfig, chatToolDefinitionsFor, skillMenu } from './config'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
+import { crud, runCodeActor, runNamedOp } from './actor-run'
 import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
-import { executeDataTool, schemasPromptHint } from './data'
+import { schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
+import { listMockups, mockupCaps } from './mockup-caps'
+import { promoteCaps, promoteVibe, promotionStatusLines } from './promote-caps'
+import { ontologyCaps } from './ontology'
+import { mutationCaps, queryCaps } from './query-caps'
+import { recordActorRun } from './skills-run'
+import { vibeExists } from './vibe-registry'
+import { typeCaps } from './type-caps'
 import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './usage'
 
 /**
@@ -34,6 +49,64 @@ const STREAM_IDLE_MS = 60_000
  */
 export const VIBE_MARKER = '\u200baven-vibe:'
 
+/**
+ * Per-tool reply-style note (board 0075): attached to the RESULT of any tool that renders a card/view
+ * (data_crud list, show_finances, show_website). The card already shows the data, so the model should
+ * reply with one short sentence \u2014 NOT re-dump the data as prose/Markdown. Scoped to those tool calls,
+ * not injected globally, so plain conversational turns keep their normal style.
+ */
+const CARD_REPLY_NOTE =
+	'Reply with ONE short sentence confirming this \u2014 the card already shows the data. Do NOT re-list ' +
+	'it as prose, bullet points, or a Markdown table unless the user explicitly asks.'
+
+/**
+ * Recover tool calls the model emitted as TEXT instead of a structured `tool_calls` field — gemma
+ * does this in VISION mode (e.g. `_call:run_skill{skill: "doc-ingest"}`, optionally wrapped in
+ * `<|tool_call>…<tool_call|>`). Without this, an image-turn tool call (like run_skill) would be lost.
+ * Gated: only consulted when no structured call arrived but a clear `call:NAME{…}` marker is present. board 0089.
+ */
+function parseTextToolCalls(content: string): { id: string; name: string; args: string }[] {
+	const out: { id: string; name: string; args: string }[] = []
+	const re = /call:\s*(\w+)\s*(\{[\s\S]*?\})/g
+	let m: RegExpExecArray | null
+	let n = 0
+	while ((m = re.exec(content)) !== null) {
+		let args: Record<string, unknown> = {}
+		try {
+			// lenient: quote unquoted keys + normalize single quotes → JSON
+			const jsonish = m[2].replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"')
+			args = JSON.parse(jsonish) as Record<string, unknown>
+		} catch {
+			args = {}
+		}
+		out.push({ id: `txt_${n++}`, name: m[1], args: JSON.stringify(args) })
+	}
+	return out
+}
+
+/**
+ * Guarantee a tool-call's `arguments` are valid JSON before we echo the assistant turn back to Tinfoil.
+ * gemma sometimes streams a TRUNCATED tool call (e.g. an unterminated string when it hits a token cap or
+ * multi-item op); forwarding that raw makes the NEXT round 400 ("Unterminated string…") and kills the
+ * whole stream. Re-serialize a lenient parse; if it's unsalvageable, fall back to `{}` so the tool just
+ * reports an error and the model can retry — never a hard 400. board 0099.
+ */
+function sanitizeToolArgs(raw: string): string {
+	const s = raw || '{}'
+	try {
+		JSON.parse(s)
+		return s
+	} catch {
+		try {
+			const repaired = s.replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"')
+			JSON.parse(repaired)
+			return repaired
+		} catch {
+			return '{}'
+		}
+	}
+}
+
 export async function aiChat(c: Context): Promise<Response> {
 	const session = await auth.api.getSession({ headers: c.req.raw.headers })
 	if (!session) return c.json({ error: 'unauthorized' }, 401)
@@ -48,6 +121,10 @@ export async function aiChat(c: Context): Promise<Response> {
 		sessionId?: string
 		/** Current public/ files of the active spark, for the edit_website tool (GLM). board 0055. */
 		publicFiles?: Record<string, string>
+		/** File attachments from the client: base64 data + MIME type for multimodal classification. */
+		attachments?: { mimeType: string; b64: string }[]
+		/** Content hashes of the source files persisted to the PRIVATE store (mainnet). board 0082. */
+		fileHashes?: string[]
 	} | null
 	const messages = body?.messages
 	if (!Array.isArray(messages) || messages.length === 0) {
@@ -60,6 +137,14 @@ export async function aiChat(c: Context): Promise<Response> {
 		body?.publicFiles && typeof body.publicFiles === 'object'
 			? (body.publicFiles as Record<string, string>)
 			: {}
+	const attachments = Array.isArray(body?.attachments)
+		? (body.attachments as { mimeType: string; b64: string }[]).filter(
+				(a) => typeof a.mimeType === 'string' && typeof a.b64 === 'string'
+			)
+		: []
+	const fileHashes = Array.isArray(body?.fileHashes)
+		? (body.fileHashes as string[]).filter((h) => typeof h === 'string')
+		: []
 
 	// Hard credit cap: block inference once the tier's weekly allowance is spent. board 0052.
 	const credit = await creditStatus(userId)
@@ -89,7 +174,16 @@ export async function aiChat(c: Context): Promise<Response> {
 	// assistant's content to the client; tool calls (schema-validated CRUD on /api/data)
 	// run server-side between rounds, transparent to the client. board 0054.
 	if (wantStream) {
-		return streamWithTools({ key, model, messages, userId, chatSessionId, publicFiles })
+		return streamWithTools({
+			key,
+			model,
+			messages,
+			userId,
+			chatSessionId,
+			publicFiles,
+			attachments,
+			fileHashes
+		})
 	}
 
 	// Non-streaming fallback: a single completion, no tools.
@@ -142,8 +236,11 @@ function streamWithTools(opts: {
 	userId: string
 	chatSessionId: string
 	publicFiles: Record<string, string>
+	attachments: { mimeType: string; b64: string }[]
+	fileHashes?: string[]
 }): Response {
-	const { key, model, messages, userId, chatSessionId, publicFiles } = opts
+	const { key, model, messages, userId, chatSessionId, publicFiles, attachments } = opts
+	const fileHashes = opts.fileHashes ?? []
 	const encoder = new TextEncoder()
 	// When the client disconnects (its idle-abort, or navigating away) the stream is cancelled and any
 	// further controller.enqueue throws "Controller is already closed". That throw, from a non-awaited
@@ -169,7 +266,46 @@ function streamWithTools(opts: {
 				detail: string,
 				status: 'running' | 'done' | 'error'
 			) => emit({ aven_tool: { id, name, detail, status } })
-			const msgs: unknown[] = [...messages]
+			// PERF (board 0105): the client sends the FULL session history, and Tinfoil re-prefills every
+			// message each round — an ever-growing prompt is the dominant chat cost. Cap the context to the
+			// last SESSION_CONTEXT_LIMIT conversational messages (the leading system message, if any, is
+			// always kept — it carries the instructions + the schema hint merge below). Server-side tool
+			// rounds aren't in this client history (they're persisted separately), so slicing is safe.
+			const SESSION_CONTEXT_LIMIT = 5
+			const hist = messages as { role?: string }[]
+			const lead = hist[0]?.role === 'system' ? [hist[0]] : []
+			const convo = lead.length ? hist.slice(1) : hist
+			const msgs: unknown[] = [...lead, ...convo.slice(-SESSION_CONTEXT_LIMIT)]
+			// Inject image attachments as multimodal content into the last user message so the
+			// vision model (Gemma 4 31B) can see them — needed for classify_document. board 0063.
+			if (attachments.length > 0) {
+				const lastUserIdx = [...msgs]
+					.reverse()
+					.findIndex((m) => (m as { role?: string }).role === 'user')
+				if (lastUserIdx >= 0) {
+					const realIdx = msgs.length - 1 - lastUserIdx
+					const lastUser = msgs[realIdx] as { role: string; content: string | unknown[] }
+					const imageBlocks = attachments
+						.filter((a) => a.mimeType.startsWith('image/'))
+						.map((a) => ({
+							type: 'image_url',
+							image_url: { url: `data:${a.mimeType};base64,${a.b64}` }
+						}))
+					if (imageBlocks.length > 0) {
+						const textContent =
+							typeof lastUser.content === 'string'
+								? lastUser.content
+								: (lastUser.content as { type: string; text?: string }[])
+										.filter((b) => b.type === 'text')
+										.map((b) => b.text ?? '')
+										.join('\n')
+						msgs[realIdx] = {
+							role: 'user',
+							content: [{ type: 'text', text: textContent }, ...imageBlocks]
+						}
+					}
+				}
+			}
 			let assistant = ''
 			let promptTokens = 0
 			let completionTokens = 0
@@ -178,14 +314,98 @@ function streamWithTools(opts: {
 			// files into THIS, so edits compound across files + calls. Seeded from the client. board 0055.
 			const turnFiles: Record<string, string> = { ...publicFiles }
 			try {
-				// Tell the model the exact schema field names so data_crud writes validate. MERGE the
-				// hint into the existing leading system message — a SECOND system message makes Tinfoil
-				// 400 (only the first turn worked, before any schema existed → no hint). board 0055.
-				const hint = await schemasPromptHint(userId).catch(() => '')
+				// board 0106 — DISPATCH (Tier 1): a tiny SCHEMA-FREE gemma call routes this turn to ONE skill,
+				// so only that skill's tools enter context below (Tier 2) and its heavy context loads lazily
+				// (Tier 3). Any error falls back to the default skill inside routeSkill, so routing never
+				// blocks a turn. The router carries no tool schemas / no hint — it stays cheap on purpose.
+				const routerCall = async (req: RouterRequest): Promise<string> => {
+					const r = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
+						method: 'POST',
+						headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+						body: JSON.stringify(req)
+					})
+					if (!r.ok) throw new Error(`router ${r.status}`)
+					const j = (await r.json()) as { choices?: { message?: { content?: string } }[] }
+					return j.choices?.[0]?.message?.content ?? ''
+				}
+				const lastUser = [...msgs]
+					.reverse()
+					.find((m) => (m as { role?: string }).role === 'user') as
+					| { content?: string | { type: string; text?: string }[] }
+					| undefined
+				const routeText =
+					typeof lastUser?.content === 'string'
+						? lastUser.content
+						: (lastUser?.content ?? [])
+								.filter(
+									(b): b is { type: string; text?: string } =>
+										typeof b === 'object' && b.type === 'text'
+								)
+								.map((b) => b.text ?? '')
+								.join(' ')
+				// board 0106 — surface the router as its own state chip (like a tool call) so the roundtrip
+				// stays transparent: the user sees `dispatch → todos` flip running→done, not a silent gap
+				// before the first tool badge. One stable chip id per turn (toolActivity resets each turn).
+				emitTool('dispatch', 'dispatch', 'routing…', 'running')
+				// board 0110 — the router menu + advertised tools now come from the DB skill/actor registries
+				// (config-as-data), not hardcoded TS; both fall back to the TS seed if the tables are empty.
+				const menu = await skillMenu()
+			// board 0113 — the router sees the conversation TAIL (last few user/assistant turns) so
+				// continuations route by understanding, not keywords.
+				const tail = (messages as { role?: string; content?: unknown }[])
+					.filter(
+						(m) =>
+							(m.role === 'user' || m.role === 'assistant') &&
+							typeof m.content === 'string' &&
+							!m.content.startsWith(VIBE_MARKER) // persisted card markers are payload, not talk
+					)
+					.slice(-5, -1)
+					.map((m) => `${m.role}: ${String(m.content).slice(0, 200)}`)
+					.join('\n')
+				const skillId = await routeSkill(routerCall, routeText, model, menu, tail || undefined)
+				emitTool('dispatch', 'dispatch', `→ ${skillId}`, 'done')
+				console.log(`[ai] dispatch → ${skillId}`)
+				// board 0114 — the route decision itself is observable: one trace per turn naming the
+				// chosen skill (absorbs board 0109).
+				void recordActorRun(userId, {
+					flowId: 'dispatch',
+					nodeId: 'route',
+					label: `→ ${skillId}`,
+					outputs: [skillId]
+				})
+				// Tier 2 — resolve the routed skill's actors' mailboxes ONCE (same every round). board 0110.
+				const toolDefs = await chatToolDefinitionsFor(skillId)
+				// board 0113 — HARD tool-set enforcement: only the routed skill's advertised tools may run
+				// this turn. Without it a hallucinated call executed ANY inline handler ("nochmal" routed to
+				// todos, gemma invented edit_website, and GLM started rewriting the WEBSITE mid-promotion).
+				const advertisedSet = new Set(toolDefs.map((d) => d.function.name))
+
+				// Tier 3 — per-skill context hints, fetched ONLY on their route: todos gets the live task
+				// snapshot (with ids); skillify gets the EXACT mockup names (so the model passes exact names —
+				// LLM-smart resolution, zero server-side fuzz). MERGE into the leading system message —
+				// a SECOND system message makes Tinfoil 400. board 0055 / 0106 / 0113.
+				const hint = skillWantsTodosHint(skillId)
+					? await schemasPromptHint(userId).catch(() => '')
+					: skillId === 'skillify'
+						? await promotionStatusLines(userId)
+								.then((lines) => {
+									const seams = [
+										'UPDATE SEAMS — pick by WHAT the user wants to change:',
+										'· behavior/rules/formats → improve_skill. Batch ops are BUILT-IN (create/update items[], delete ids[]) — answer capability questions directly, do not call a tool.',
+										'· missing workflow steps/cards (UI granularity) → sync_actors (add-only).',
+										'· look/design → edit_mockup on the mock, then promote to push live.',
+										'· keep two skills in sync → connect_skills.'
+									].join('\n')
+									return lines.length
+										? `EXISTING MOCKUPS + PROMOTION STATUS (use the EXACT names; when the user continues a promotion, call the named next step — do NOT restart at plan_app):\n${lines.join('\n')}\n${seams}`
+										: seams
+								})
+								.catch(() => '')
+						: ''
 				if (hint) {
 					const first = msgs[0] as { role?: string; content?: string } | undefined
 					if (first?.role === 'system') {
-						first.content = `${first.content ?? ''}\n\n${hint}`.trim()
+						first.content = assembleSystemContext(skillId, first.content ?? '', hint)
 					} else {
 						msgs.unshift({ role: 'system', content: hint })
 					}
@@ -205,7 +425,12 @@ function streamWithTools(opts: {
 						res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 							method: 'POST',
 							headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-							body: JSON.stringify({ model, messages: msgs, tools: CHAT_TOOLS, stream: true }),
+							body: JSON.stringify({
+								model,
+								messages: msgs,
+								tools: toolDefs,
+								stream: true
+							}),
 							signal: ac.signal
 						})
 					} catch {
@@ -282,8 +507,20 @@ function streamWithTools(opts: {
 					}
 					promptTokens += roundPrompt
 					completionTokens += roundCompletion
-					const callList = Object.values(calls)
+					let callList = Object.values(calls)
+					// gemma vision mode sometimes emits tool calls as TEXT — recover them so they dispatch.
+					if (callList.length === 0 && /call:\s*\w+\s*\{/.test(roundContent)) {
+						callList = parseTextToolCalls(roundContent)
+					}
 					if (callList.length === 0) break // model gave its final answer (already streamed)
+					// Repair any truncated/malformed tool-call JSON BEFORE echoing the turn back — a raw
+					// unterminated string 400s the next Tinfoil round + kills the stream. board 0099.
+					for (const tc of callList) tc.args = sanitizeToolArgs(tc.args)
+					// PERF (board 0105): count tool calls whose actor already produced the human reply (its
+					// `response`). If EVERY call this round self-replied, we skip the next round — a whole
+					// stateless re-prefill of the system prompt + tools + growing convo just to regenerate a
+					// sentence the model already wrote. Halves latency on the common write/list turn.
+					let selfReplied = 0
 					// Tool round: record the assistant tool-call turn, run each tool, feed results back.
 					msgs.push({
 						role: 'assistant',
@@ -299,7 +536,172 @@ function streamWithTools(opts: {
 						try {
 							parsed = JSON.parse(tc.args || '{}')
 						} catch {
-							/* leave empty; executeDataTool will report the error */
+							/* leave empty; crud() will report the error */
+						}
+						// board 0113 — the enforcement gate: an un-advertised tool call NEVER executes.
+						if (!advertisedSet.has(tc.name)) {
+							msgs.push({
+								role: 'tool',
+								tool_call_id: tc.id,
+								content: JSON.stringify({
+									ok: false,
+									error: `tool "${tc.name}" is not available on the current skill (${skillId}). Use only the advertised tools.`
+								})
+							})
+							emitTool(tc.id, tc.name, 'not on this skill', 'error')
+							continue
+						}
+						// board 0099 — REGISTRY DISPATCH: a chat tool is an actor (config+behavior) in
+						// @avenos/skills/tools. data_crud (the whole Todos hub) routes here; the loop stays generic —
+						// new tool = one module + one registry line, no loop edit. Server caps are injected via ctx.
+						const actor = TOOL_ACTORS[tc.name]
+						if (actor) {
+							// Show the tool chip + start its timer BEFORE running the actor — a mint can take ~50s —
+							// and keep the stream + timer alive with a 5s ping (else the client's 90s idle watchdog
+							// aborts a long tool). One chip per tool_call id; re-emitting 'running' updates it. board 0100.
+							const runDetail =
+								[parsed.action, parsed.schema]
+									.filter((x) => typeof x === 'string' && x)
+									.join(' ') || tc.name
+							emitTool(tc.id, tc.name, runDetail, 'running')
+							const ping = setInterval(() => emitTool(tc.id, tc.name, runDetail, 'running'), 5_000)
+							const out = await actor
+								.handle(
+									{
+										userId,
+										data: (a) => crud(userId, a),
+										ops: (n, p) => runNamedOp(userId, n, p ?? {}), // board 0112 — named-op cap (e.g. the goals aggregate)
+										ontology: ontologyCaps(userId), // board 0100 — GLM mint + data_schema registry caps
+										query: queryCaps(userId), // board 0101 — GLM-authored validated query specs
+										mutate: mutationCaps(userId), // board 0101 — GLM-authored validated mutation specs
+										bundle: typeCaps(userId), // board 0102 — GLM-authored composite types (data_bundles)
+										// board 0115 — GLM mockup authoring streams its raw tokens into the SAME live
+										// panel the website skill uses (no dead "Thinking…" during a mint/refine).
+										mockup: mockupCaps((text) => emit({ aven_edit_chunk: { text } })),
+										// board 0113/0117 — stepwise promotion + connectors; authoring tokens stream
+									// into the SAME live panel the mockup/website edits use (no dead "Thinking…").
+									promote: promoteCaps(userId, (text) => emit({ aven_edit_chunk: { text } }))
+									},
+									parsed
+								)
+								.finally(() => clearInterval(ping))
+							if (out.hitl) {
+								// HITL: show a confirm/decline card and DON'T execute (the delete actor). aiConfirmAction runs it.
+								emit({
+									aven_hitl: {
+										id: tc.id,
+										tool: tc.name,
+										label: out.hitl.label,
+										action: out.hitl.action
+									}
+								})
+								msgs.push({
+									role: 'tool',
+									tool_call_id: tc.id,
+									content: JSON.stringify(out.content)
+								})
+								emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
+								continue
+							}
+							msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out.content) })
+							if (out.reply) {
+								emit({ choices: [{ delta: { content: out.reply } }] })
+								assistant += out.reply
+								selfReplied++
+							}
+							// The actor decides WHICH vibe(s) (todos → its mode card; skillify steps → the
+							// stepper + the step's content card). The loop does the plumbing + dedup — keyed
+							// by schema+data so an IDENTICAL re-emit is dropped but a newer state (the same
+							// stepper at a later step) still renders.
+							const vibes = out.vibe ? (Array.isArray(out.vibe) ? out.vibe : [out.vibe]) : []
+							for (const v of vibes) {
+								const key = `${v.schema}\n${v.data === undefined ? '' : JSON.stringify(v.data)}`
+								if (emittedVibes.has(key)) continue
+								emittedVibes.add(key)
+								// a schema without vibe rows (e.g. a promoted skill's raw entity type) gets NO
+								// card — the text reply stands; never a client-side "konnte nicht geladen" error.
+								if (!(await vibeExists(v.schema).catch(() => true))) continue
+								const { schema, data } = v
+								emit({ aven_vibe: data === undefined ? { schema } : { schema, data } })
+								await persistMessage(
+									chatSessionId,
+									'assistant',
+									data === undefined
+										? `${VIBE_MARKER}${schema}`
+										: `${VIBE_MARKER}${schema}\n${JSON.stringify(data)}`
+								).catch((e) => console.error('[ai] persist vibe marker failed:', e))
+							}
+							// board 0114 — GENERIC tracing at the ONE dispatch seam: every executed tool call
+							// records a run keyed by the ROUTED skill + the actor (tool) name — no per-skill
+							// schema-prefix sniffing, so a config-minted skill is traced from birth.
+							const traceVibe = vibes[vibes.length - 1]
+							void recordActorRun(userId, {
+								flowId: skillId,
+								nodeId: tc.name,
+								label: out.detail ?? tc.name,
+								vibe: traceVibe?.schema,
+								vibeData: traceVibe?.data,
+								outputs: [traceVibe?.schema ?? skillId]
+							})
+							emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
+							continue
+						}
+						// board 0113 — a DB-ONLY actor with sandboxed `code` is a FIRST-CLASS chat tool: no TS
+						// handler exists (the skill was minted as pure config), so resolve the actor row by name
+						// and run its QuickJS code with ONLY its granted caps. The state it returns feeds its
+						// vibe card directly (the example-source contract). The 0111 seat, finally occupied.
+						const dbActor = TOOL_ACTORS[tc.name] ? null : await actorConfig(tc.name)
+						if (dbActor?.code) {
+							emitTool(tc.id, tc.name, 'sandbox', 'running')
+							const ping2 = setInterval(() => emitTool(tc.id, tc.name, 'sandbox', 'running'), 5_000)
+							try {
+								const run = await runCodeActor(dbActor, parsed, userId)
+								const state = run.ran ? (run.result as Record<string, unknown>) : null
+								msgs.push({
+									role: 'tool',
+									tool_call_id: tc.id,
+									content: JSON.stringify({ ok: !!state, note: CARD_REPLY_NOTE })
+								})
+								const schema = dbActor.vibe
+								if (state && schema && !emittedVibes.has(schema)) {
+									emittedVibes.add(schema)
+									emit({ aven_vibe: { schema, data: state } })
+									await persistMessage(
+										chatSessionId,
+										'assistant',
+										`${VIBE_MARKER}${schema}\n${JSON.stringify(state)}`
+									).catch((e) => console.error('[ai] persist sandbox vibe failed:', e))
+								}
+								const saidReply =
+									typeof parsed.response === 'string' && parsed.response.trim()
+										? parsed.response.trim()
+										: `Here is your ${String(schema ?? tc.name).replace(/-/g, ' ')}.`
+								emit({ choices: [{ delta: { content: saidReply } }] })
+								assistant += saidReply
+								selfReplied++
+								void recordActorRun(userId, {
+									flowId: skillId,
+									nodeId: tc.name,
+									label: `sandbox ${tc.name}`,
+									vibe: schema ?? undefined,
+									vibeData: state ?? undefined,
+									outputs: [schema ?? skillId]
+								})
+								emitTool(tc.id, tc.name, 'done', 'done')
+							} catch (e) {
+								msgs.push({
+									role: 'tool',
+									tool_call_id: tc.id,
+									content: JSON.stringify({
+										ok: false,
+										error: e instanceof Error ? e.message : String(e)
+									})
+								})
+								emitTool(tc.id, tc.name, 'sandbox error', 'error')
+							} finally {
+								clearInterval(ping2)
+							}
+							continue
 						}
 						// Read-only website viewer: flow the Composer vibe into the chat — no data op, so
 						// the data_crud (todos etc.) path is untouched. board 0055.
@@ -308,7 +710,11 @@ function streamWithTools(opts: {
 							msgs.push({
 								role: 'tool',
 								tool_call_id: tc.id,
-								content: JSON.stringify({ ok: true, shown: 'website composer (read-only)' })
+								content: JSON.stringify({
+									ok: true,
+									shown: 'website composer (read-only)',
+									note: CARD_REPLY_NOTE
+								})
 							})
 							if (!emittedVibes.has('composer')) {
 								emittedVibes.add('composer')
@@ -413,62 +819,13 @@ function streamWithTools(opts: {
 									note: 'A publish confirm card was shown. Do NOT deploy or retry — just tell the user you asked them to confirm publishing.'
 								})
 							})
-							continue
-						}
-						const dataDetail =
-							`${typeof parsed.action === 'string' ? parsed.action : ''} ${typeof parsed.schema === 'string' ? parsed.schema : ''}`.trim() ||
-							'data'
-						// HITL: never DELETE without explicit confirmation — show a confirm/decline card and
-						// DON'T execute. The user approves via /api/ai/confirm, which runs it. board 0055.
-						if (parsed.action === 'delete') {
-							const schema = typeof parsed.schema === 'string' ? parsed.schema : 'data'
-							const id = typeof parsed.id === 'string' ? parsed.id : ''
-							emit({
-								aven_hitl: {
-									id: tc.id,
-									tool: 'data_crud',
-									label: `Delete from "${schema}"${id ? ` (#${id.slice(0, 8)})` : ''}?`,
-									action: parsed
-								}
-							})
-							msgs.push({
-								role: 'tool',
-								tool_call_id: tc.id,
-								content: JSON.stringify({
-									ok: false,
-									status: 'awaiting_user_confirmation',
-									note: 'A confirm/decline card was shown to the user. Do NOT delete or retry — just tell them you asked them to confirm.'
-								})
-							})
-							continue
-						}
-						emitTool(tc.id, tc.name || 'data_crud', dataDetail, 'running')
-						let result: unknown
-						try {
-							result = await executeDataTool(userId, parsed)
-						} catch (e) {
-							result = { ok: false, error: e instanceof Error ? e.message : String(e) }
-						}
-						msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) })
-						emitTool(tc.id, tc.name || 'data_crud', dataDetail, 'done')
-						// Signal the client to flow a live vibe card for the touched schema into the
-						// message stream (the same data this CRUD just changed), and persist a marker
-						// message so the card reappears when the session is reloaded. One per schema
-						// per turn. board 0054.
-						if (
-							typeof parsed.schema === 'string' &&
-							parsed.schema &&
-							!emittedVibes.has(parsed.schema)
-						) {
-							emittedVibes.add(parsed.schema)
-							emit({ aven_vibe: { schema: parsed.schema } })
-							await persistMessage(
-								chatSessionId,
-								'assistant',
-								`${VIBE_MARKER}${parsed.schema}`
-							).catch((e) => console.error('[ai] persist vibe marker failed:', e))
 						}
 					}
+					// PERF (board 0105): every tool call this round already emitted its own reply → the
+					// answer is fully streamed and the card shows the result. Skip the extra round (a full
+					// stateless re-prefill of prompt+tools+convo just to restate what the model already said).
+					// query / HITL / website narration don't self-reply, so they still get a follow-up round.
+					if (selfReplied > 0 && selfReplied === callList.length) break
 				}
 			} catch (e) {
 				emit({
@@ -531,7 +888,7 @@ export async function aiUsageRecent(c: Context): Promise<Response> {
 
 /**
  * HITL: run a data action the user explicitly confirmed (e.g. a delete the model proposed and
- * which the tool loop deliberately did NOT execute). Session-gated; executeDataTool publishes a
+ * which the tool loop deliberately did NOT execute). Session-gated; crud() publishes a
  * `data` event so the live vibe refreshes. board 0055.
  */
 export async function aiConfirmAction(c: Context): Promise<Response> {
@@ -559,8 +916,64 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 502)
 		}
 	}
+	// board 0113/0117 — a CONFIRMED promote: copy the mock vibes live (first promote or a redesign).
+	if (body.action.tool === 'promote_skill') {
+		const app = String(body.action.app ?? '').trim()
+		if (!app) return c.json({ ok: false, error: 'no_app' }, 400)
+		try {
+			await promoteVibe(app)
+			void recordActorRun(session.user.id, {
+				flowId: 'skillify',
+				nodeId: 'promote',
+				label: `promote ${app}`,
+				outputs: [app]
+			})
+			return c.json({ ok: true, result: { app } })
+		} catch (e) {
+			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500)
+		}
+	}
+	// board 0101 — a confirmed destructive MUTATION: apply the (already validated + stored) mutation spec as
+	// one transaction and record the run. The tool loop deliberately did NOT run it.
+	if (body.action.tool === 'mutate') {
+		const spec = body.action.spec
+		const request = typeof body.action.request === 'string' ? body.action.request : 'mutation'
+		if (!spec || typeof spec !== 'object') return c.json({ ok: false, error: 'no_spec' }, 400)
+		try {
+			const result = await mutationCaps(session.user.id).apply(spec as never)
+			void recordActorRun(session.user.id, {
+				flowId: 'ontology',
+				nodeId: 'mutate',
+				label: `mutate — ${request}`,
+				vibe: 'mutation-result',
+				vibeData: { request, spec, ops: result.ops },
+				outputs: ['ops']
+			})
+			return c.json({
+				ok: true,
+				result: { vibe: 'mutation-result', data: { request, spec, ops: result.ops } }
+			})
+		} catch (e) {
+			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500)
+		}
+	}
 	try {
-		const result = await executeDataTool(session.user.id, body.action)
+		const result = await crud(session.user.id, body.action as Parameters<typeof crud>[1])
+		// board 0114 — a confirmed delete records GENERICALLY for any schema (the schema name doubles as
+		// the owning skill id for data hubs); todos keeps its deleted-summary card vibe.
+		if (body.action.action === 'delete') {
+			const schema = String(body.action.schema ?? 'data')
+			const items = Array.isArray(body.action._deleted)
+				? (body.action._deleted as { id: string; title: string }[])
+				: []
+			void recordActorRun(session.user.id, {
+				flowId: schema,
+				nodeId: 'data_crud',
+				label: items.length > 1 ? `delete ${items.length} ${schema}` : `delete ${schema}`,
+				...(schema === 'todos' ? { vibe: 'todos-deleted', vibeData: { items } } : {}),
+				outputs: [schema]
+			})
+		}
 		return c.json({ ok: true, result })
 	} catch (e) {
 		return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500)

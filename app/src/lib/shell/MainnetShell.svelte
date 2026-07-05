@@ -13,16 +13,26 @@ import MainnetChat from '$lib/shell/MainnetChat.svelte'
 import MainnetDb from '$lib/shell/MainnetDb.svelte'
 import MainnetFly from '$lib/shell/MainnetFly.svelte'
 import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
+import { nav } from '$lib/shell/nav.svelte'
 
 // Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | DB | Fly on the left; weekly
 // MINDS + the signed-in account NAME on the right. Clicking the name opens the Account Settings
 // view (profile, plans, billing, usage, vault keys, Admin for admins, log out). The website
-// Composer lives under Vibes now. board 0053/0054/0055.
+// Composer lives under Vibes; Skills/Runs live inside the DB viewer. board 0053/0054/0055/0110.
 type Tab = 'chat' | 'vibes' | 'draw' | 'db' | 'fly' | 'mail'
 type SettingsCategory = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'admin'
 let tab = $state<Tab>('chat')
 let settings = $state(false)
 let settingsCategory = $state<SettingsCategory>('profile')
+
+// Honor cross-view deep links (e.g. a flow schema badge → DB tab). board 0083.
+$effect(() => {
+	if (nav.requestTab) {
+		tab = nav.requestTab as Tab
+		settings = false
+		nav.requestTab = null
+	}
+})
 let checkoutHandled = false
 // Shown briefly after returning from a successful Polar checkout (?checkout=success).
 let justUpgraded = $state(false)
@@ -72,6 +82,9 @@ const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'draw', label: t('mainnet.nav.draw') },
 	{ id: 'db', label: t('mainnet.nav.db') },
 	{ id: 'fly', label: t('mainnet.nav.fly') },
+	// board 0107 — Skills + Runs (the actor-model explorer) now live INSIDE the DB viewer as their own
+	// categories (SKILLS = the flow template viewer + node/config aside; RUNS = the step trace, no graph),
+	// so the top nav stays lean. Mail is the only remaining admin-only tab.
 	...(isAdmin ? [{ id: 'mail' as Tab, label: 'Mail' }] : [])
 ])
 
@@ -82,47 +95,6 @@ function openTab(id: Tab): void {
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background">
-	<nav
-		class="flex shrink-0 items-center gap-2 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-1.5 text-[10px] font-bold tracking-wider uppercase"
-		aria-label="Mainnet sections"
-	>
-		{#each tabs as item, i (item.id)}
-			{#if i > 0}
-				<span class="select-none opacity-25" aria-hidden="true">|</span>
-			{/if}
-			<button
-				type="button"
-				class="transition-opacity hover:opacity-80 {tab === item.id && !settings
-					? 'opacity-95'
-					: 'opacity-40'}"
-				aria-current={tab === item.id && !settings ? 'page' : undefined}
-				onclick={() => openTab(item.id)}
-			>
-				{item.label}
-			</button>
-		{/each}
-
-		<div class="ml-auto flex items-center gap-3">
-			{#if usageQuery.data?.credit}
-				<span class="tabular-nums opacity-60" title={t('mainnet.chat.credits')}>
-					{fmtMinds(usageQuery.data.credit.remainingUsd)} {t('mainnet.chat.creditsLeft')}
-				</span>
-			{/if}
-			{#if displayName}
-				<button
-					type="button"
-					class="max-w-[14rem] truncate normal-case transition-opacity hover:opacity-80 {settings
-						? 'text-foreground opacity-95'
-						: 'opacity-60'}"
-					title={user?.email}
-					aria-current={settings ? 'page' : undefined}
-					onclick={() => (settings = !settings)}
-				>
-					{displayName}
-				</button>
-			{/if}
-		</div>
-	</nav>
 
 	{#if justUpgraded}
 		<div
@@ -157,4 +129,47 @@ function openTab(id: Tab): void {
 	{:else}
 		<MainnetDb />
 	{/if}
+
+	<!-- board 0119e — the section nav lives at the BOTTOM now (Samuel): content owns the top edge. -->
+	<nav
+		class="font-display pointer-events-none fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 px-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[10px] font-bold tracking-wider uppercase"
+		aria-label="Mainnet sections"
+	>
+		{#each tabs as item, i (item.id)}
+			{#if i > 0}
+				<span class="select-none opacity-25" aria-hidden="true">|</span>
+			{/if}
+			<button
+				type="button"
+				class="pointer-events-auto transition-opacity hover:opacity-80 {tab === item.id && !settings
+					? 'opacity-95'
+					: 'opacity-40'}"
+				aria-current={tab === item.id && !settings ? 'page' : undefined}
+				onclick={() => openTab(item.id)}
+			>
+				{item.label}
+			</button>
+		{/each}
+
+		<div class="ml-auto flex items-center gap-3">
+			{#if usageQuery.data?.credit}
+				<span class="tabular-nums opacity-60" title={t('mainnet.chat.credits')}>
+					{fmtMinds(usageQuery.data.credit.remainingUsd)} {t('mainnet.chat.creditsLeft')}
+				</span>
+			{/if}
+			{#if displayName}
+				<button
+					type="button"
+					class="pointer-events-auto max-w-[14rem] truncate normal-case transition-opacity hover:opacity-80 {settings
+						? 'text-foreground opacity-95'
+						: 'opacity-60'}"
+					title={user?.email}
+					aria-current={settings ? 'page' : undefined}
+					onclick={() => (settings = !settings)}
+				>
+					{displayName}
+				</button>
+			{/if}
+		</div>
+	</nav>
 </div>
