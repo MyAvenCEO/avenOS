@@ -118,3 +118,13 @@ smoke gate mandatory; no fuzzy resolution; everything config-as-data.
   carries onToken from the chat emitter. Tests: reactive fire asserted at the
   seam (crud create → sync_todos summary in triggered[]). 114/0 ×2 · tsc ·
   svelte-check clean.
+
+- `2026-07-05` — BI-DIRECTIONAL + the detailed author prompt (Samuel): the
+  trigger seam was already two-way by construction (caps subscribe BOTH
+  schemas) — now the AUTHOR knows it: the connect prompt (config, migration
+  0105) teaches the full trigger contract (msg.trigger.schema branching:
+  forward reconcile · reverse reconcile or honest no-op · manual full sync),
+  the contracts fed to GLM carry each skill's own data rules (crud
+  descriptions incl. improve_skill-earned wording — the German-numbers rule
+  reaches the connector author), and the smoke gate runs ALL THREE call paths.
+  114/0 (×3 consecutive; one Neon flake) · tsc clean.

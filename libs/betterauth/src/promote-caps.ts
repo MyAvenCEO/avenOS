@@ -585,7 +585,20 @@ export async function typesOfSkill(skillId: string): Promise<string[]> {
 	return confirmed
 }
 
-type OpsContract = { type: string; ops: string[]; sample: unknown[] }
+type OpsContract = { type: string; ops: string[]; sample: unknown[]; notes?: string }
+
+/** The skill's own data notes — its crud mailbox description (which carries improve_skill-earned
+ *  rules like number formats/sign conventions): exactly what the connector author must respect. */
+async function skillNotes(skillId: string): Promise<string> {
+	const r = await sql<{ mailbox: unknown }>`
+		SELECT mailbox FROM actor WHERE skill_id = ${skillId} AND name = 'data_crud' LIMIT 1
+	`.execute(db())
+	if (!r.rows.length) return ''
+	const mb = (typeof r.rows[0].mailbox === 'string' ? JSON.parse(r.rows[0].mailbox as string) : r.rows[0].mailbox) as {
+		description?: string
+	}
+	return String(mb?.description ?? '')
+}
 
 async function opsContract(uid: string, type: string): Promise<OpsContract> {
 	const D = db()
@@ -608,7 +621,15 @@ export const CONNECT_INSTRUCTIONS = [
 	'You write a CONNECTOR between two apps as a SINGLE JavaScript module for a locked-down sandbox:',
 	'  async function handle(msg, caps) { ... return state }',
 	'caps.ops(name, params) is the ONLY capability — and it is SCOPED to exactly the two schemas below;',
-	'calling any other op throws. Read from the SOURCE, reconcile the TARGET per the USER RULE.',
+	'calling any other op throws.',
+	'',
+	'HOW YOU ARE CALLED (the trigger contract — handle ALL three):',
+	'- msg = { trigger: { schema: "<sourceSchema>" } } — a row of that schema was just written: reconcile',
+	'  the OTHER side per the USER RULE (e.g. a new purchase transaction ⇒ raise the matching stock).',
+	'- msg = { trigger: { schema: "<targetSchema>" } } — the other direction changed: reconcile BACK if',
+	'  the rule is meaningful in reverse (e.g. manually raised stock ⇒ record a purchase transaction);',
+	'  if the reverse direction makes no sense, do nothing and say so in the summary.',
+	'- msg = {} (no trigger) — a MANUAL full sync: reconcile everything, both directions where sensible.',
 	'RETURN a state object with at least { "summary": "<one German sentence: what was synced/changed>" }.',
 	'Idempotence matters: running the connector twice must not double-apply (match by name/label before',
 	'creating; prefer update over create when a matching target row exists).',
@@ -630,7 +651,7 @@ async function glmConnectorCode(
 	const cfg = await actorConfig('connect_skills').catch(() => null)
 	const instructions = cfg?.prompt?.trim() || CONNECT_INSTRUCTIONS
 	const contractText = (label: string, cs: OpsContract[]) =>
-		`${label}:\n${cs.map((c) => `  schema "${c.type}" — ops: ${c.ops.join(', ')}\n  sample rows: ${JSON.stringify(c.sample).slice(0, 600)}`).join('\n')}`
+		`${label}:\n${cs.map((c) => `  schema "${c.type}" — ops: ${c.ops.join(', ')}\n  sample rows: ${JSON.stringify(c.sample).slice(0, 600)}${c.notes ? `\n  data rules: ${c.notes.slice(0, 400)}` : ''}`).join('\n')}`
 	// STREAMING transport (the 0115 lesson twice over): a whole-connector authoring round exceeds any
 	// sane flat timeout (the flat 120s cap KILLED the first live connect) — so stream with an idle
 	// abort (45s without bytes) + a generous total cap instead.
@@ -752,15 +773,21 @@ export async function smokeRunConnector(
 		}
 		return { ok: true, ids: ['stub'] }
 	}
-	try {
-		const state = (await runActorCode(code, {}, { ops: stubOps }, {})) as Record<string, unknown>
-		if (!state || typeof state !== 'object') return { ok: false, error: 'connector did not return a state object' }
-		if (typeof state.summary !== 'string' || !state.summary.trim())
-			return { ok: false, error: 'connector state misses the "summary" string' }
-		return { ok: true }
-	} catch (e) {
-		return { ok: false, error: e instanceof Error ? e.message : String(e) }
+	// all THREE call paths must settle and return a summary: manual sync + a trigger from EITHER side
+	// (the trigger seam is bi-directional by construction — caps subscribe both schemas).
+	const msgs: unknown[] = [{}, ...contracts.map((c) => ({ trigger: { schema: c.type } }))]
+	for (const msg of msgs) {
+		try {
+			const state = (await runActorCode(code, msg, { ops: stubOps }, {})) as Record<string, unknown>
+			if (!state || typeof state !== 'object')
+				return { ok: false, error: `did not return a state object for msg ${JSON.stringify(msg)}` }
+			if (typeof state.summary !== 'string' || !state.summary.trim())
+				return { ok: false, error: `state misses the "summary" string for msg ${JSON.stringify(msg)}` }
+		} catch (e) {
+			return { ok: false, error: e instanceof Error ? e.message : String(e) }
+		}
 	}
+	return { ok: true }
 }
 
 /** Wire a connector: source skill OWNS the actor (scoped caps) + its flow gains the sub-skill
@@ -794,8 +821,14 @@ export async function connectSkills(
 	const tgtTypes = await typesOfSkill(target)
 	if (!srcTypes.length) return { error: `skill "${source}" exposes no data schemas (no data_crud config)` }
 	if (!tgtTypes.length) return { error: `skill "${target}" exposes no data schemas (no data_crud config)` }
-	const srcContracts = await Promise.all(srcTypes.map((t) => opsContract(uid, t)))
-	const tgtContracts = await Promise.all(tgtTypes.map((t) => opsContract(uid, t)))
+	const srcNotes = await skillNotes(source)
+	const tgtNotes = await skillNotes(target)
+	const srcContracts = await Promise.all(
+		srcTypes.map(async (t) => ({ ...(await opsContract(uid, t)), notes: srcNotes }))
+	)
+	const tgtContracts = await Promise.all(
+		tgtTypes.map(async (t) => ({ ...(await opsContract(uid, t)), notes: tgtNotes }))
+	)
 	let authored = codeSeam ?? (await glmConnectorCode(srcContracts, tgtContracts, rule, undefined, onToken))
 	if (typeof authored !== 'string') return { error: authored.error }
 	let smoke = await smokeRunConnector(authored, [...srcContracts, ...tgtContracts])
