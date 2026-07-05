@@ -26,7 +26,7 @@
     },
     "app": {
       "name": "@AvenOS/app",
-      "version": "26.6.22-next.7",
+      "version": "26.7.5-next.1",
       "dependencies": {
         "@avenos/aven-board": "workspace:*",
         "@avenos/aven-city": "workspace:*",
@@ -67,11 +67,11 @@
     },
     "docs": {
       "name": "@avenos/docs",
-      "version": "26.6.22-next.7",
+      "version": "26.7.5-next.1",
     },
     "libs/aven-board": {
       "name": "@avenos/aven-board",
-      "version": "26.6.22-next.7",
+      "version": "26.7.5-next.1",
       "dependencies": {
         "dompurify": "^3",
         "github-slugger": "^2",
@@ -84,7 +84,7 @@
     },
     "libs/aven-city": {
       "name": "@avenos/aven-city",
-      "version": "26.6.22-next.7",
+      "version": "26.7.5-next.1",
       "dependencies": {
         "@threlte/core": "^8.0.0",
         "@threlte/extras": "^9.0.0",
@@ -97,15 +97,15 @@
     },
     "libs/aven-ontology": {
       "name": "@avenos/aven-ontology",
-      "version": "26.6.22-next.7",
+      "version": "26.7.5-next.1",
     },
     "libs/aven-skills": {
       "name": "@avenos/aven-skills",
-      "version": "26.6.22-next.7",
+      "version": "26.7.5-next.1",
     },
     "libs/aven-ui": {
       "name": "@avenos/aven-ui",
-      "version": "26.6.22-next.7",
+      "version": "26.7.5-next.1",
       "dependencies": {
         "dompurify": "^3.3.3",
         "marked": "^15.0.12",
@@ -113,7 +113,7 @@
     },
     "libs/aven-vibes": {
       "name": "@avenos/aven-vibes",
-      "version": "26.6.22-next.7",
+      "version": "26.7.5-next.1",
       "dependencies": {
         "@avenos/skills": "workspace:*",
         "dompurify": "^3.3.3",
@@ -125,7 +125,7 @@
     },
     "libs/aven-website": {
       "name": "@avenos/aven-website",
-      "version": "26.6.22-next.7",
+      "version": "26.7.5-next.1",
       "devDependencies": {
         "@biomejs/biome": "^2.4.14",
         "@sveltejs/adapter-auto": "^7.0.1",
@@ -142,9 +142,10 @@
     },
     "libs/betterauth": {
       "name": "@avenos/betterauth",
-      "version": "26.6.22-next.7",
+      "version": "26.7.5-next.1",
       "dependencies": {
         "@avenos/aven-ontology": "workspace:*",
+        "@avenos/aven-skills": "workspace:*",
         "@avenos/aven-vibes": "workspace:*",
         "@avenos/skills": "workspace:*",
         "@better-auth/passkey": "^1.6.20",

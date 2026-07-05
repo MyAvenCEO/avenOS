@@ -20,6 +20,7 @@
 	},
 	"dependencies": {
 		"@avenos/aven-ontology": "workspace:*",
+		"@avenos/aven-skills": "workspace:*",
 		"@avenos/aven-vibes": "workspace:*",
 		"@avenos/skills": "workspace:*",
 		"@better-auth/passkey": "^1.6.20",
