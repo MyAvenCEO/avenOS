@@ -73,7 +73,7 @@ function secondsOf(tl: ToolStatus | null): number {
 		class="pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-60 flex-col pt-3 pr-2 pb-40 md:flex"
 	>
 		<div class="flex items-center justify-end gap-1.5 px-1 pb-1.5">
-			<span class="text-foreground/40 text-[8px] font-bold tracking-[0.18em] uppercase">
+			<span class="font-display text-foreground/40 text-[10px] font-bold tracking-wider uppercase">
 				{flow.name ?? skillId}
 			</span>
 		</div>

@@ -652,30 +652,29 @@ function handleTranscribeError(message: string): void {
 			<!-- brand-gold (logo star #DEA657) 4px ROUNDED outline around the main content area only:
 			     skillify is editing a skill right now. -->
 			<div
-				class="pointer-events-none absolute inset-y-2 right-2 left-2 z-[70] rounded-[var(--radius-xl)] md:right-[15.5rem] md:left-[15.5rem]"
+				class="pointer-events-none absolute top-8 right-2 bottom-2 left-2 z-[70] rounded-[var(--radius-xl)] md:right-[15.5rem] md:left-[15.5rem]"
 				style="box-shadow: inset 0 0 0 3px #DEA657"
 			></div>
 		{/if}
-		<div class="pointer-events-none absolute inset-x-0 top-1 z-20 flex justify-center">
+		<div class="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center">
 			<div
-				class="border-border bg-surface-card pointer-events-auto flex items-center gap-0.5 rounded-full border p-0.5 shadow-sm"
+				class="font-display pointer-events-auto flex items-center gap-2 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-1.5 text-[10px] font-bold tracking-wider uppercase"
 			>
 				<button
 					type="button"
-					class="rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase transition-colors {mainTab ===
-					'display'
-						? 'bg-surface-card-selected text-foreground'
-						: 'text-muted-foreground hover:bg-surface-card-hover hover:text-foreground'}"
+					class="transition-opacity hover:opacity-80 {mainTab === 'display'
+						? 'opacity-95'
+						: 'opacity-40'}"
 					onclick={() => (mainTab = 'display')}
 				>
 					Display
 				</button>
+				<span class="select-none opacity-25" aria-hidden="true">|</span>
 				<button
 					type="button"
-					class="rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase transition-colors {mainTab ===
-					'flows'
-						? 'bg-surface-card-selected text-foreground'
-						: 'text-muted-foreground hover:bg-surface-card-hover hover:text-foreground'}"
+					class="transition-opacity hover:opacity-80 {mainTab === 'flows'
+						? 'opacity-95'
+						: 'opacity-40'}"
 					onclick={() => (mainTab = 'flows')}
 				>
 					Flows

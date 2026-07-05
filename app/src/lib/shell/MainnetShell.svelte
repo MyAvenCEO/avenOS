@@ -124,7 +124,7 @@ function openTab(id: Tab): void {
 
 	<!-- board 0119e — the section nav lives at the BOTTOM now (Samuel): content owns the top edge. -->
 	<nav
-		class="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 px-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[10px] font-bold tracking-wider uppercase"
+		class="font-display pointer-events-none fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 px-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[10px] font-bold tracking-wider uppercase"
 		aria-label="Mainnet sections"
 	>
 		{#each tabs as item, i (item.id)}
