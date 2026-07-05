@@ -30,20 +30,34 @@ type ChatMessage = {
 	vibe?: string
 	/** Classification/metadata payload for ephemeral vibes (bookkeeping). */
 	vibeData?: Record<string, unknown>
+	/** The stage-history entry this badge selects (board 0118). */
+	vibeRef?: number
 }
+
+// board 0118 — the STAGE model (Samuel): no continuous card stream. ONE current vibe fills the
+// stage (each new vibe REPLACES it); the right rail scrolls the history; chat is a bottom overlay
+// card whose history shows minimal badges instead of inline vibe cards.
+type VibeEntry = { id: number; schema: string; data?: Record<string, unknown> }
 
 type SessionRow = { id: string; title: string }
 
 let messages = $state<ChatMessage[]>([])
+let vibeHistory = $state<VibeEntry[]>([])
+let currentVibeId = $state<number | null>(null)
+const currentVibe = $derived(vibeHistory.find((v) => v.id === currentVibeId) ?? null)
+const vibeLabel = (schema: string): string => schema.replace(/^mock-/, '').replace(/-/g, ' ')
 let busy = $state(false)
 let currentSessionId = $state<string | null>(null)
 let nextId = 0
+/** Push a vibe onto the stage (+ history) and return its id for the chat badge. board 0118. */
+function pushVibe(schema: string, data?: Record<string, unknown>): number {
+	const id = nextId++
+	vibeHistory = [...vibeHistory, { id, schema, data }]
+	currentVibeId = id
+	return id
+}
 let scrollEl = $state<HTMLDivElement | null>(null)
 let contentEl = $state<HTMLDivElement | null>(null)
-// board 0112 — the composer + AI button FLOAT over the scroll area (content scrolls behind them). We
-// measure the floating bar's height and mirror it as a bottom SPACER inside the scroll content, so the
-// last message can always scroll clear ABOVE the button (and scrollToBottom lands it just above the bar).
-let barHeight = $state(0)
 let initialized = false
 // The chat's IntentComposer instance — so a global file drop can push files into it (preview
 // thumbnails above the input). Bound below; consumed by the pendingMainnetFileDrop effect. 0063.
@@ -142,7 +156,8 @@ function appendNote(text: string): void {
 }
 /** board 0099 — the delete actor: flow a todos-deleted summary card showing what was removed. */
 function appendVibe(vibe: string, vibeData?: Record<string, unknown>): void {
-	messages = [...messages, { id: nextId++, role: 'assistant', text: '', vibe, vibeData }]
+	const ref = pushVibe(vibe, vibeData)
+	messages = [...messages, { id: nextId++, role: 'assistant', text: '', vibe, vibeData, vibeRef: ref }]
 	scrollToBottom()
 }
 function declineHitl(req: HitlRequest): void {
@@ -277,7 +292,8 @@ async function loadSessionMessages(id: string): Promise<void> {
 						/* malformed payload — render the empty card */
 					}
 				}
-				return { id: nextId++, role: 'assistant' as const, text: '', vibe: schema, vibeData }
+				const ref = pushVibe(schema, vibeData)
+				return { id: nextId++, role: 'assistant' as const, text: '', vibe: schema, vibeData, vibeRef: ref }
 			}
 			return {
 				id: nextId++,
@@ -473,8 +489,9 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 	// vibeData carries ephemeral classification payload for the bookkeeping vibe. board 0063.
 	const turnVibes = new Set<string>()
 	const insertVibe = (schema: string, data?: Record<string, unknown>): void => {
-		if (turnVibes.has(schema)) return
-		turnVibes.add(schema)
+		const dk = `${schema}\n${data === undefined ? '' : JSON.stringify(data)}`
+		if (turnVibes.has(dk)) return
+		turnVibes.add(dk)
 		const wantsPreview = schema === 'bookkeeping' || schema === 'doc-compare'
 		// board 0115 — data stays UNCOERCED (no `?? {}`): a data-less vibe (a mockup show/mint) must reach
 		// VibeCard as undefined so it renders the vibe's EXAMPLE source — `{}` fed the identity mapper an
@@ -488,7 +505,9 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 							: {})
 					}
 				: data
-		const card: ChatMessage = { id: nextId++, role: 'assistant', text: '', vibe: schema, vibeData }
+		// board 0118 — the vibe goes to the STAGE; the chat stream gets only the badge.
+		const ref = pushVibe(schema, vibeData)
+		const card: ChatMessage = { id: nextId++, role: 'assistant', text: '', vibe: schema, vibeData, vibeRef: ref }
 		const idx = messages.findIndex((m) => m.id === pendingId)
 		messages =
 			idx < 0 ? [...messages, card] : [...messages.slice(0, idx), card, ...messages.slice(idx)]
@@ -545,150 +564,188 @@ function handleTranscribeError(message: string): void {
 </script>
 
 <div class="flex min-h-0 flex-1 bg-background">
-	<!-- One continuous conversation — no session switcher (single rolling context). board 0111. -->
-	<div class="relative flex min-h-0 min-w-0 flex-1 flex-col pt-2">
-		<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
-			<div bind:this={contentEl} class="mx-auto flex w-full max-w-[52rem] flex-col gap-3 py-4">
-				{#if messages.length === 0}
-					<div class="text-muted-foreground py-16 text-center text-sm leading-relaxed">
-						{t('mainnet.chat.empty')}
-					</div>
-				{/if}
-				{#each messages as message (message.id)}
-					{#if message.vibe}
-						<!-- Vibes flow into the stream. Data vibes size to content (capped + scroll); the
-						     Composer needs a definite height, so it renders in a fixed-height card. -->
-						{#if message.vibe === 'todos'}
-							<div class="max-h-[80vh] w-full overflow-y-auto">
-								<TodosVibe
-									containerName={`aven-vibes-chat-${message.id}`}
-									filter={message.vibeData?.filter as
-										| { field: string; value?: unknown; op?: string }
-										| undefined}
-								/>
-							</div>
-						{:else if message.vibe === 'composer'}
-							<div
-								class="border-border h-[70vh] w-full overflow-hidden rounded-[var(--radius-xl)] border bg-[var(--color-surface-soft)]"
-							>
-								<Composer />
-							</div>
-						{:else}
-							<!-- board 0113 — GENERIC: any other schema renders its own DB vibe rows via VibeCard. -->
-							<div class="max-h-[80vh] w-full overflow-y-auto">
-								<!-- board 0115 — vibeData passes through UNCOERCED: a data-less vibe (a mockup
-								     show) renders its EXAMPLE source via VibeCard's bundle fallback. -->
-								<VibeCard
-									schema={message.vibe ?? ''}
-									data={message.vibeData}
-									containerName={`aven-vibes-chat-${message.id}`}
-								/>
-							</div>
-						{/if}
+	<!-- board 0118 — THE STAGE: one current vibe, full width/height; each new vibe replaces it. -->
+	<div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+		<div class="min-h-0 flex-1 overflow-y-auto px-6 pt-4" style="padding-bottom: calc(25vh + 3rem)">
+			{#if currentVibe}
+				{#key currentVibe.id}
+					{#if currentVibe.schema === 'todos'}
+						<div class="mx-auto w-full max-w-[64rem]">
+							<TodosVibe
+								containerName={`aven-vibes-stage-${currentVibe.id}`}
+								filter={currentVibe.data?.filter as
+									| { field: string; value?: unknown; op?: string }
+									| undefined}
+							/>
+						</div>
+					{:else if currentVibe.schema === 'composer'}
+						<div
+							class="border-border h-full min-h-[24rem] w-full overflow-hidden rounded-[var(--radius-xl)] border bg-[var(--color-surface-soft)]"
+						>
+							<Composer />
+						</div>
 					{:else}
-						<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
-							<div
-								class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-xs leading-relaxed {message.role ===
-							'user'
-								? 'bg-primary text-primary-foreground'
-								: 'border-border bg-card text-foreground border'}{message.pending
-								? ' animate-pulse italic opacity-60'
-								: ''}"
-							>
-								{message.text}
-							</div>
+						<div class="mx-auto w-full max-w-[64rem]">
+							<VibeCard
+								schema={currentVibe.schema}
+								data={currentVibe.data}
+								containerName={`aven-vibes-stage-${currentVibe.id}`}
+							/>
 						</div>
 					{/if}
-				{/each}
-				<!-- board 0112 — bottom SPACER matching the floating bar's height, so the last message can
-				     always scroll clear above the composer + AI button (never trapped behind it). -->
-				<div aria-hidden="true" class="shrink-0" style="height: {barHeight}px"></div>
-			</div>
+				{/key}
+			{:else}
+				<div class="text-muted-foreground flex h-full items-center justify-center text-sm leading-relaxed">
+					{t('mainnet.chat.empty')}
+				</div>
+			{/if}
 		</div>
 
-		<!-- board 0112 — the composer + AI button FLOAT over the scroll area: content scrolls BEHIND them.
-		     pointer-events pass through the empty margins to the content; only the bar itself is interactive. -->
+		<!-- board 0118 — CHAT OVERLAY: a bottom card (~25% height); history shows text + vibe BADGES. -->
 		<div
-			bind:clientHeight={barHeight}
 			class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
 		>
-			<div class="pointer-events-auto mx-auto w-full max-w-[52rem]">
-				{#each hitlRequests as req (req.id)}
-					{@const v = hitlVerb(req.tool)}
-					<!-- a small confirm card: question on top, buttons at the bottom; dismissed on click -->
-					<div
-						class="border-border bg-card mx-auto mb-2 max-w-xs rounded-[var(--radius-lg)] border px-4 py-3 text-center text-[13px] shadow-sm"
-					>
-						<p class="text-foreground mb-3 font-medium">{req.label}</p>
-						<div class="flex justify-center gap-2">
-							<!-- decline always LEFT, confirm always RIGHT -->
-							<button
-								type="button"
-								class="border-border hover:bg-muted rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors"
-								onclick={() => declineHitl(req)}
-							>
-								{v.decline}
-							</button>
-							<button
-								type="button"
-								class="rounded-full px-4 py-1.5 text-xs font-semibold transition-colors {v.danger
-									? 'border-destructive/50 text-destructive hover:bg-destructive/10 border'
-									: 'bg-primary text-primary-foreground hover:opacity-90'}"
-								onclick={() => void confirmHitl(req)}
-							>
-								{v.confirm}
-							</button>
-						</div>
-					</div>
-				{/each}
-				{#if editStream}
-					<!-- live GLM edit stream: reasoning + diff text as the website model writes it -->
-					<div
-						bind:this={streamEl}
-						class="border-border bg-card text-muted-foreground mb-2 max-h-36 overflow-y-auto rounded-[var(--radius-lg)] border px-3 py-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap"
-					>
-						{editStreamTail}
-					</div>
-				{/if}
-				{#if toolActivity.length > 0}
-					<div class="flex flex-wrap justify-center gap-1.5 pb-2">
-						{#each toolActivity as tool (tool.id)}
-							<span
-								class="border-border bg-card inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] {tool.status ===
-								'error'
-									? 'text-destructive'
-									: 'text-muted-foreground'}"
-								title={tool.detail}
-							>
-								{#if tool.status === 'running'}
-									<span
-										class="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full"
-									></span>
-								{:else if tool.status === 'done'}
-									<span class="text-primary">✓</span>
-								{:else}
-									<span class="text-destructive">✕</span>
-								{/if}
-								<b class="text-foreground font-semibold">{tool.name}</b>
-								<span class="opacity-80">{tool.detail}</span>
-								{#if tool.status === 'running' && tool.startedAt}
-									<span class="text-foreground/60 tabular-nums">
-										· {Math.max(0, Math.round((nowTick - tool.startedAt) / 1000))}s
-									</span>
-								{/if}
-							</span>
+			<div
+				class="border-border bg-card/95 pointer-events-auto mx-auto flex h-[25vh] min-h-[13rem] w-full max-w-[52rem] flex-col overflow-hidden rounded-[var(--radius-xl)] border shadow-lg backdrop-blur"
+			>
+				<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-3 pt-2">
+					<div bind:this={contentEl} class="flex flex-col gap-1.5 pb-2">
+						{#if messages.length === 0}
+							<div class="text-muted-foreground py-6 text-center text-xs leading-relaxed">
+								{t('mainnet.chat.empty')}
+							</div>
+						{/if}
+						{#each messages as message (message.id)}
+							{#if message.vibe}
+								<!-- minimal badge: which vibe/action loaded — click puts it back on the stage -->
+								<div class="flex justify-start">
+									<button
+										type="button"
+										class="border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground inline-flex max-w-[80%] items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors {message.vibeRef ===
+										currentVibeId
+											? 'border-primary/60 text-foreground'
+											: ''}"
+										onclick={() => {
+											if (message.vibeRef != null) currentVibeId = message.vibeRef
+										}}
+									>
+										<span class="text-primary">◆</span>
+										<span class="truncate">{vibeLabel(message.vibe)}</span>
+									</button>
+								</div>
+							{:else}
+								<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
+									<div
+										class="max-w-[85%] rounded-[var(--radius-lg)] px-3 py-1.5 text-xs leading-relaxed {message.role ===
+										'user'
+											? 'bg-primary text-primary-foreground'
+											: 'border-border bg-background text-foreground border'}{message.pending
+											? ' animate-pulse italic opacity-60'
+											: ''}"
+									>
+										{message.text}
+									</div>
+								</div>
+							{/if}
 						{/each}
 					</div>
-				{/if}
-				<IntentComposer
-					bind:this={composerRef}
-					placeholder={t('mainnet.chat.placeholder')}
-					enableAttachments={true}
-					submitBusy={busy}
-					onSubmitMessage={handleSubmit}
-					onTranscribeError={handleTranscribeError}
-				/>
+				</div>
+
+				<div class="shrink-0 px-2 pb-2">
+					{#each hitlRequests as req (req.id)}
+						{@const v = hitlVerb(req.tool)}
+						<div
+							class="border-border bg-card mx-auto mb-2 max-w-xs rounded-[var(--radius-lg)] border px-4 py-2.5 text-center text-[13px] shadow-sm"
+						>
+							<p class="text-foreground mb-2 font-medium">{req.label}</p>
+							<div class="flex justify-center gap-2">
+								<button
+									type="button"
+									class="border-border hover:bg-muted rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors"
+									onclick={() => declineHitl(req)}
+								>
+									{v.decline}
+								</button>
+								<button
+									type="button"
+									class="rounded-full px-4 py-1.5 text-xs font-semibold transition-colors {v.danger
+										? 'border-destructive/50 text-destructive hover:bg-destructive/10 border'
+										: 'bg-primary text-primary-foreground hover:opacity-90'}"
+									onclick={() => void confirmHitl(req)}
+								>
+									{v.confirm}
+								</button>
+							</div>
+						</div>
+					{/each}
+					{#if editStream}
+						<div
+							bind:this={streamEl}
+							class="border-border bg-background text-muted-foreground mb-2 max-h-20 overflow-y-auto rounded-[var(--radius-lg)] border px-3 py-1.5 font-mono text-[10px] leading-relaxed break-words whitespace-pre-wrap"
+						>
+							{editStreamTail}
+						</div>
+					{/if}
+					{#if toolActivity.length > 0}
+						<div class="flex flex-wrap justify-center gap-1.5 pb-1.5">
+							{#each toolActivity as tool (tool.id)}
+								<span
+									class="border-border bg-background inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] {tool.status ===
+									'error'
+										? 'text-destructive'
+										: 'text-muted-foreground'}"
+									title={tool.detail}
+								>
+									{#if tool.status === 'running'}
+										<span
+											class="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full"
+										></span>
+									{:else if tool.status === 'done'}
+										<span class="text-primary">✓</span>
+									{:else}
+										<span class="text-destructive">✕</span>
+									{/if}
+									<b class="text-foreground font-semibold">{tool.name}</b>
+									<span class="opacity-80">{tool.detail}</span>
+									{#if tool.status === 'running' && tool.startedAt}
+										<span class="text-foreground/60 tabular-nums">
+											· {Math.max(0, Math.round((nowTick - tool.startedAt) / 1000))}s
+										</span>
+									{/if}
+								</span>
+							{/each}
+						</div>
+					{/if}
+					<IntentComposer
+						bind:this={composerRef}
+						placeholder={t('mainnet.chat.placeholder')}
+						enableAttachments={true}
+						submitBusy={busy}
+						onSubmitMessage={handleSubmit}
+						onTranscribeError={handleTranscribeError}
+					/>
+				</div>
 			</div>
 		</div>
 	</div>
+
+	<!-- board 0118 — THE RAIL: minimal vibe history (newest first); click restores it to the stage. -->
+	{#if vibeHistory.length > 0}
+		<aside class="border-border hidden w-44 shrink-0 overflow-y-auto border-l md:block">
+			<div class="flex flex-col gap-1 p-2">
+				{#each [...vibeHistory].reverse() as v (v.id)}
+					<button
+						type="button"
+						class="rounded-[var(--radius-lg)] border px-2.5 py-1.5 text-left text-[11px] transition-colors {v.id ===
+						currentVibeId
+							? 'border-primary/60 bg-card text-foreground'
+							: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
+						onclick={() => (currentVibeId = v.id)}
+					>
+						<span class="block truncate">{vibeLabel(v.schema)}</span>
+					</button>
+				{/each}
+			</div>
+		</aside>
+	{/if}
 </div>
