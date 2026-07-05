@@ -33,9 +33,9 @@ const flowsQuery = createQuery(() => ({ queryKey: ['flows'], queryFn: listFlows 
 const flow = $derived<Flow | null>(
 	((flowsQuery.data ?? []) as Flow[]).find((f) => f.id === skillId) ?? null
 )
-const nodes = $derived(
-	(((flow?.nodes ?? []) as FlowNode[]) || []).filter((n) => n.id !== 'dispatch')
-)
+// board 0119r — skill flows carry only their own steps now (dispatch lives in its own system
+// skill), so no filtering needed.
+const nodes = $derived(((flow?.nodes ?? []) as FlowNode[]) || [])
 
 /** Map a tool event onto a flow node: by actor name, node id, or (for the shared data_crud actor)
  *  the action verb leading the chip detail ("create transaction" → node `create`). */

@@ -4,10 +4,10 @@ import {
 	assembleSystemContext,
 	type RouterRequest,
 	routeSkill,
-	skillWantsTodosHint,
 	TOOL_ACTORS
 } from '@avenos/skills/tools'
-import { actorConfig, chatToolDefinitionsFor, skillMenu } from './config'
+import { actorConfig, chatToolDefinitionsFor, skillManifest, skillMenu } from './config'
+import { registerContextProvider, resolveContext } from './context'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
@@ -37,6 +37,28 @@ import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './u
  */
 const TINFOIL_BASE_URL = process.env.TINFOIL_BASE_URL ?? 'https://inference.tinfoil.sh/v1'
 const TINFOIL_MODEL = process.env.TINFOIL_MODEL ?? 'gemma4-31b'
+
+// board 0119q — Tier-3 skill hints are MANIFEST CONFIG, not code branches: a skill declares
+// `hint_providers` (resolved live per turn through the SAME context registry the UI reads) and/or
+// `hint_static` (a fixed block) in skill.manifest. These two providers wrap the live-data
+// assemblers the old hardcoded todos/skillify branches called.
+registerContextProvider('todos_snapshot', async (uid) => ({
+	kind: 'text',
+	label: 'Live todos snapshot',
+	text: await schemasPromptHint(uid).catch(() => ''),
+	meta: { source: 'live data assembler — data.ts · schemasPromptHint()' }
+}))
+registerContextProvider('promotion_status', async (uid) => {
+	const lines = await promotionStatusLines(uid).catch(() => [] as string[])
+	return {
+		kind: 'text',
+		label: 'Mockups + promotion status',
+		text: lines.length
+			? `EXISTING MOCKUPS + PROMOTION STATUS (use the EXACT names; when the user continues a promotion, call the named next step — do NOT restart at plan_app):\n${lines.join('\n')}`
+			: '',
+		meta: { source: 'live data assembler — promote-caps.ts · promotionStatusLines()' }
+	}
+})
 // Max time a streaming round may go without receiving any bytes before we abort it (a stalled
 // upstream must not wedge the stream open forever). Resets on every chunk. board 0055.
 const STREAM_IDLE_MS = 60_000
@@ -349,7 +371,11 @@ function streamWithTools(opts: {
 				emitTool('dispatch', 'dispatch', 'routing…', 'running')
 				// board 0110 — the router menu + advertised tools now come from the DB skill/actor registries
 				// (config-as-data), not hardcoded TS; both fall back to the TS seed if the tables are empty.
-				const menu = await skillMenu()
+				// board 0119q — the router SCAFFOLD PROMPT too: DB actor `dispatch` (skill dispatch).
+				const [menu, dispatchCfg] = await Promise.all([
+					skillMenu(),
+					actorConfig('dispatch').catch(() => null)
+				])
 			// board 0113 — the router sees the conversation TAIL (last few user/assistant turns) so
 				// continuations route by understanding, not keywords.
 				const tail = (messages as { role?: string; content?: unknown }[])
@@ -362,7 +388,14 @@ function streamWithTools(opts: {
 					.slice(-5, -1)
 					.map((m) => `${m.role}: ${String(m.content).slice(0, 200)}`)
 					.join('\n')
-				const skillId = await routeSkill(routerCall, routeText, model, menu, tail || undefined)
+				const skillId = await routeSkill(
+					routerCall,
+					routeText,
+					model,
+					menu,
+					tail || undefined,
+					dispatchCfg?.prompt ?? undefined
+				)
 				emitTool('dispatch', 'dispatch', `→ ${skillId}`, 'done')
 				console.log(`[ai] dispatch → ${skillId}`)
 				// board 0114 — the route decision itself is observable: one trace per turn naming the
@@ -380,28 +413,28 @@ function streamWithTools(opts: {
 				// todos, gemma invented edit_website, and GLM started rewriting the WEBSITE mid-promotion).
 				const advertisedSet = new Set(toolDefs.map((d) => d.function.name))
 
-				// Tier 3 — per-skill context hints, fetched ONLY on their route: todos gets the live task
-				// snapshot (with ids); skillify gets the EXACT mockup names (so the model passes exact names —
-				// LLM-smart resolution, zero server-side fuzz). MERGE into the leading system message —
-				// a SECOND system message makes Tinfoil 400. board 0055 / 0106 / 0113.
-				const hint = skillWantsTodosHint(skillId)
-					? await schemasPromptHint(userId).catch(() => '')
-					: skillId === 'skillify'
-						? await promotionStatusLines(userId)
-								.then((lines) => {
-									const seams = [
-										'UPDATE SEAMS — pick by WHAT the user wants to change:',
-										'· behavior/rules/formats → improve_skill. Batch ops are BUILT-IN (create/update items[], delete ids[]) — answer capability questions directly, do not call a tool.',
-										'· missing workflow steps/cards (UI granularity) → sync_actors (add-only).',
-										'· look/design → edit_mockup on the mock, then promote to push live.',
-										'· keep two skills in sync → connect_skills.'
-									].join('\n')
-									return lines.length
-										? `EXISTING MOCKUPS + PROMOTION STATUS (use the EXACT names; when the user continues a promotion, call the named next step — do NOT restart at plan_app):\n${lines.join('\n')}\n${seams}`
-										: seams
-								})
-								.catch(() => '')
-						: ''
+				// board 0119q — the BASE system prompt is DB config too (actor `chat` on the dispatch
+				// skill); the client's SYSTEM_PROMPT constant is only the seed/fallback when the row is
+				// absent. Server-enforced so the prompt is editable + transparent like any actor's.
+				const baseCfg = await actorConfig('chat').catch(() => null)
+				if (baseCfg?.prompt) {
+					const base = msgs[0] as { role?: string; content?: string } | undefined
+					if (base?.role === 'system') base.content = baseCfg.prompt
+					else msgs.unshift({ role: 'system', content: baseCfg.prompt })
+				}
+				// Tier 3 — per-skill context hints are MANIFEST CONFIG (board 0119q), not code branches:
+				// the routed skill's manifest declares `hint_providers` (resolved live through the SAME
+				// context registry the config UI reads — what the LLM gets IS what the panel shows) and/or
+				// `hint_static`. MERGE into the leading system message — a SECOND system message makes
+				// Tinfoil 400. board 0055 / 0106 / 0113.
+				const manifest = await skillManifest(skillId).catch(() => null)
+				const hintParts: string[] = []
+				for (const providerKey of manifest?.hint_providers ?? []) {
+					const p = await resolveContext(providerKey, userId).catch(() => null)
+					if (p?.text) hintParts.push(p.text)
+				}
+				if (manifest?.hint_static) hintParts.push(manifest.hint_static)
+				const hint = hintParts.join('\n')
 				if (hint) {
 					const first = msgs[0] as { role?: string; content?: string } | undefined
 					if (first?.role === 'system') {

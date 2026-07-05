@@ -26,25 +26,31 @@ const tsMenu = (): SkillMenuItem[] =>
 		description: SKILL_REGISTRY[id].description
 	}))
 
-/** Build the SCHEMA-FREE Tier-1 router request. No `tools`, no hint, no lexicon — by construction. */
+/** The router system-prompt SCAFFOLD — `{menu}` is replaced with the live skill menu at call time.
+ *  board 0119q — this TS string is the SEED (migration 0114 copies it into the `dispatch` actor row)
+ *  and the FAIL-SAFE fallback; the DB prompt is the live source of truth, editable like any actor. */
+export const ROUTER_SCAFFOLD =
+	'You are a router. Reply with EXACTLY ONE skill id from this list — just the id, lowercase, no ' +
+	'punctuation, no explanation:\n{menu}' +
+	'\nIf the user message continues an ongoing task visible in the recent conversation (e.g. ' +
+	'"weiter", "nochmal", "continue", "next step", a bare confirmation), pick the skill of THAT task.' +
+	'\nRequests about a skill/app ITSELF — creating, improving, redesigning it, changing its rules or ' +
+	'behavior — belong to skillify. Requests about the DATA INSIDE a skill belong to that skill.'
+
+/** Build the SCHEMA-FREE Tier-1 router request. No `tools`, no hint, no lexicon — by construction.
+ *  `scaffold` (the DB-config prompt) overrides the TS seed; both use the `{menu}` placeholder. */
 export function buildRouterRequest(
 	userText: string,
 	model: string,
 	skills?: SkillMenuItem[],
-	context?: string
+	context?: string,
+	scaffold?: string
 ): RouterRequest {
 	const menu = (skills ?? tsMenu()).map((s) => `- ${s.id}: ${s.description}`).join('\n')
 	// board 0113 — the router reasons over the RECENT CONVERSATION, not just the last message: a
 	// continuation ("weiter", "nochmal", "continue", "next step") belongs to the skill of the ongoing
 	// task. LLM-smart routing — no keyword heuristics anywhere.
-	const system =
-		'You are a router. Reply with EXACTLY ONE skill id from this list — just the id, lowercase, no ' +
-		'punctuation, no explanation:\n' +
-		menu +
-		'\nIf the user message continues an ongoing task visible in the recent conversation (e.g. ' +
-		'"weiter", "nochmal", "continue", "next step", a bare confirmation), pick the skill of THAT task.' +
-		'\nRequests about a skill/app ITSELF — creating, improving, redesigning it, changing its rules or ' +
-		'behavior — belong to skillify. Requests about the DATA INSIDE a skill belong to that skill.'
+	const system = (scaffold?.includes('{menu}') ? scaffold : ROUTER_SCAFFOLD).replace('{menu}', menu)
 	const user = context
 		? `RECENT CONVERSATION:\n${context}\n\nUSER MESSAGE: ${userText}`
 		: userText
@@ -80,12 +86,13 @@ export async function routeSkill(
 	userText: string,
 	model: string,
 	skills?: SkillMenuItem[],
-	context?: string
+	context?: string,
+	scaffold?: string
 ): Promise<string> {
 	if (!userText.trim()) return DEFAULT_SKILL
 	try {
 		return parseSkillId(
-			await callLLM(buildRouterRequest(userText, model, skills, context)),
+			await callLLM(buildRouterRequest(userText, model, skills, context, scaffold)),
 			skills?.map((s) => s.id)
 		)
 	} catch {

@@ -1,4 +1,5 @@
 import {
+	buildRouterRequest,
 	chatToolDefinitions as tsToolDefs,
 	SKILL_REGISTRY as TS_SKILLS,
 	type ToolDefinition,
@@ -83,11 +84,24 @@ export async function readActors(skillId?: string): Promise<ActorRow[]> {
 	}))
 }
 
-/** The dispatch router menu: skill id + description, from the DB (fallback: the TS seed). board 0110. */
+/** A skill's manifest config (entry views, hint providers, system flag) — jsonb-parsed. board 0119q. */
+export type SkillManifest = {
+	system?: boolean
+	hint_providers?: string[]
+	hint_static?: string
+} & Record<string, unknown>
+export async function skillManifest(id: string): Promise<SkillManifest | null> {
+	const rows = await readSkills().catch(() => [] as SkillRow[])
+	return j<SkillManifest>(rows.find((s) => s.id === id)?.manifest ?? null)
+}
+
+/** The dispatch router menu: skill id + description, from the DB (fallback: the TS seed). board 0110.
+ *  board 0119q — manifest {"system": true} skills (the dispatcher itself) are never routing targets. */
 export async function skillMenu(): Promise<{ id: string; description: string }[]> {
 	try {
 		const rows = await readSkills()
-		if (rows.length) return rows.map((s) => ({ id: s.id, description: s.description }))
+		const routable = rows.filter((s) => j<SkillManifest>(s.manifest)?.system !== true)
+		if (routable.length) return routable.map((s) => ({ id: s.id, description: s.description }))
 	} catch {
 		/* fall through to the TS seed */
 	}
@@ -170,12 +184,35 @@ registerContextProvider('actors', async () => {
 				mailbox: a.mailbox,
 				llm: a.llm,
 				prompt: a.prompt,
+				// where the prompt comes from: a DB config row (editable via improve_skill) — engine
+				// actors without one run no roundtrip of their own.
+				promptSource: a.prompt ? 'db' : null,
 				context: a.context,
 				vibe: a.vibe,
 				hitl: a.hitl,
 				position: a.position
 			}
 		}))
+	}
+})
+// board 0119q — PROMPT TRANSPARENCY: assemble the router system prompt exactly like the live turn
+// does — the DB `dispatch` actor prompt (migration 0114) rendered with the live skill menu; the TS
+// scaffold only ever fires as the fail-safe (and is flagged as such).
+registerContextProvider('dispatch_prompt', async () => {
+	const [menu, dispatchActor] = await Promise.all([
+		skillMenu(),
+		actorConfig('dispatch').catch(() => null)
+	])
+	const scaffold = dispatchActor?.prompt ?? undefined
+	const req = buildRouterRequest('<user message>', '<model>', menu, undefined, scaffold)
+	return {
+		kind: 'text',
+		label: 'Dispatch router system prompt',
+		text: req.messages[0]?.content ?? '',
+		meta: {
+			source: scaffold ? 'db config — actor "dispatch" (skill dispatch)' : 'hardcoded TS fallback',
+			note: 'skill menu resolved LIVE from the DB skill table at every turn'
+		}
 	}
 })
 registerContextProvider('runs', async (uid) => {

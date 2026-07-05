@@ -156,7 +156,9 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		// Planner-grade PRESENCE from birth: granular flow nodes + per-verb cards (board 0116 slice).
 		const fl = await sql<{ nodes: unknown }>`SELECT nodes FROM flow WHERE id = ${APP}`.execute(db())
 		const nodeIds = ((typeof fl.rows[0].nodes === 'string' ? JSON.parse(fl.rows[0].nodes as string) : fl.rows[0].nodes) as { id: string }[]).map((n) => n.id)
-		for (const id of ['dispatch', 'overview', 'read', 'create', 'edit', 'delete', 'improve']) expect(nodeIds).toContain(id)
+		// board 0119r — no dispatch node: the dispatcher routes from its own system skill.
+		for (const id of ['overview', 'read', 'create', 'edit', 'delete', 'improve']) expect(nodeIds).toContain(id)
+		expect(nodeIds).not.toContain('dispatch')
 		for (const v of ['record-created', 'record-edited']) {
 			const vr = await sql`SELECT 1 FROM vibe_view WHERE name = ${v}`.execute(db())
 			expect(vr.rows.length).toBe(1)

@@ -53,9 +53,12 @@ function toFlow(r: FlowRow) {
 // board 0114 — the ONE Skills read-model: every `skill` row becomes a Flow DERIVED from its actor rows
 // (hub layout — actors as nodes, nothing to hand-seed, so a config-minted skill is INSTANTLY visible and
 // the label always matches skill.label — Planner, not the stale "Todos" seed). A `flow` row overrides the
-// derived graph ONLY when it carries EDGES (real orchestration — flows are part of skill config, and
-// orchestration returns later); edge-less hub seeds are thereby retired without a migration. Flow rows
-// whose id matches no skill (demos) pass through unchanged.
+// derived graph ONLY when it expresses something the hub cannot: EDGES (real orchestration) or
+// STEP-LEVEL node config (per-step vibe/hitl/flowRef — e.g. crud mode nodes sharing one data_crud
+// actor, each with its own vibe). Plain edge-less hub seeds are thereby retired without a migration.
+// board 0119r — the dispatcher routes; it is NOT a step inside skill flows (it has its own system
+// skill), so skill flow rows no longer carry dispatch nodes/star-edges. Flow rows whose id matches
+// no skill (demos) pass through unchanged.
 type WireFlow = ReturnType<typeof toFlow>
 
 /** Derive a skill's hub Flow from its actor rows. */
@@ -97,7 +100,12 @@ export async function composeFlows(): Promise<WireFlow[]> {
 	const out: WireFlow[] = skills.map((s) => {
 		const override = byId.get(s.id)
 		const edges = override ? ((asJson(override.edges) as unknown[] | null) ?? []) : []
-		return override && edges.length > 0
+		const nodes = override
+			? ((asJson(override.nodes) as { vibe?: unknown; hitl?: unknown; flowRef?: unknown }[] | null) ?? [])
+			: []
+		const explicit =
+			edges.length > 0 || nodes.some((n) => n.vibe != null || n.hitl != null || n.flowRef != null)
+		return override && explicit
 			? toFlow(override)
 			: deriveFlow(
 					s,

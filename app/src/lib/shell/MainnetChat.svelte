@@ -16,6 +16,7 @@ import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { enterSkill } from '$lib/data/client'
 import { consumeSse } from '$lib/net/sse'
 import FlowStatusStrip from '$lib/shell/FlowStatusStrip.svelte'
+import ActorDetailAside from '$lib/shell/ActorDetailAside.svelte'
 import SkillFlowView from '$lib/shell/SkillFlowView.svelte'
 import SkillsUsedAside, { type SkillUse } from '$lib/shell/SkillsUsedAside.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
@@ -124,6 +125,11 @@ let mainTab = $state<'display' | 'flows'>('display')
 let skillUses = $state<SkillUse[]>([])
 let pinnedSkill = $state<string | null>(null)
 const asideSkill = $derived(pinnedSkill ?? routedSkill)
+// board 0119n — the flow node selected in the FLOWS tab drives the right detail aside.
+let flowActor = $state<string | null>(null)
+let flowActorSkill = $state<string | null>(null)
+// the selected flow NODE — carries step-level overrides (vibe/hitl) over the shared actor config.
+let flowNode = $state<{ id?: string; vibe?: string; hitl?: boolean } | null>(null)
 // board 0118e — EDIT MODE = a SKILLIFY-FAMILY tool is running, wherever the router landed
 // (Samuel: improve_skill on banking IS skillify work — the tool rides on the target skill only for
 // routing resilience). Design tools + promotion steps + the upgrade seams; viewing (mockups) and
@@ -659,7 +665,7 @@ function handleTranscribeError(message: string): void {
 					.catch(() => {})
 			}}
 		/>
-		{#if asideSkill}
+		{#if asideSkill && mainTab !== 'flows'}
 			<FlowStatusStrip skillId={asideSkill} {toolActivity} nowMs={nowTick} />
 		{/if}
 		{#if editingSkill}
@@ -699,12 +705,26 @@ function handleTranscribeError(message: string): void {
 		     (md+): wide vibes (the website composer) lay out inside it instead of underneath the
 		     overlay cards. Mobile keeps the plain padding (asides hidden there). -->
 		<div
-			class="min-h-0 flex-1 overflow-y-auto px-6 pt-9 md:px-[15.5rem]"
-			style="padding-bottom: 11rem"
+			class="min-h-0 flex-1 overflow-y-auto px-6 pt-9 md:pl-[15.5rem] {mainTab === 'flows'
+				? 'pb-11 md:pr-3'
+				: 'md:pr-[15.5rem]'}"
+			style={mainTab === 'flows' ? '' : 'padding-bottom: 11rem'}
 		>
 			{#if mainTab === 'flows'}
-				<div class="mx-auto h-full w-full max-w-[64rem]">
-					<SkillFlowView skillId={asideSkill} />
+				<div class="flex h-full min-h-0 gap-3">
+					<div class="min-w-0 flex-1 basis-1/2">
+						<SkillFlowView
+							skillId={asideSkill}
+							onNodeSelect={(actor, inSkill, node) => {
+								flowActor = actor
+								flowActorSkill = inSkill
+								flowNode = node ?? null
+							}}
+						/>
+					</div>
+					<div class="hidden min-w-0 flex-1 basis-1/2 md:block">
+						<ActorDetailAside skillId={flowActorSkill ?? asideSkill} actorName={flowActor} node={flowNode} />
+					</div>
 				</div>
 			{:else if currentVibe}
 				{#key currentVibe.id}
