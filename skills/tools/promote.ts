@@ -232,7 +232,8 @@ export const improveSkillActor: ToolActor = {
 		'improve_skill',
 		'IMPROVE a promoted (live) skill: bake a user rule into its data behavior — number formats ' +
 			'("German 25,33 €"), sign conventions ("bought/purchase = negative"), defaults, wording. ' +
-			'Pass the skill name + the rule. Only for LIVE skills — mockup looks change via edit_mockup.',
+			'THE seam for behavior/rule changes. Pass the skill name + the rule. Looks change via ' +
+			'edit_mockup; missing workflow steps/cards via sync_actors; cross-skill sync via connect_skills.',
 		{ instruction: { type: 'string', description: "The rule to bake in, in the user's words." } }
 	),
 	async handle(ctx, raw): Promise<ToolResult> {
@@ -258,10 +259,10 @@ export const improveSkillActor: ToolActor = {
 export const syncActorsActor: ToolActor = {
 	definition: def(
 		'sync_actors',
-		'UPGRADE a promoted (live) skill to full workflow granularity: add the missing per-step flow ' +
-			'nodes (read/create/edit/delete/overview) and their per-step cards (created/edited). ' +
-			'ADD-ONLY — never rewrites existing pieces. Use when the user wants separate steps/cards ' +
-			'for a live skill ("add a create-transaction step/view").'
+		'ADD missing per-step flow nodes/cards to a live skill (UI granularity: read/create/edit/delete ' +
+			'steps + created/edited cards). ADD-ONLY, never rewrites. ONLY for missing steps/cards — NOT ' +
+			'for behavior, rules, or capabilities (that is improve_skill). NOTE: batch operations are ' +
+			'BUILT-IN already (create/update via items[], delete via ids[]) — answer such asks directly.'
 	),
 	async handle(ctx, raw): Promise<ToolResult> {
 		if (!ctx.promote) return noCap

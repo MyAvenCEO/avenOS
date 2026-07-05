@@ -388,11 +388,18 @@ function streamWithTools(opts: {
 					? await schemasPromptHint(userId).catch(() => '')
 					: skillId === 'skillify'
 						? await promotionStatusLines(userId)
-								.then((lines) =>
-									lines.length
-										? `EXISTING MOCKUPS + PROMOTION STATUS (use the EXACT names; when the user continues a promotion, call the named next step — do NOT restart at plan_app):\n${lines.join('\n')}`
-										: ''
-								)
+								.then((lines) => {
+									const seams = [
+										'UPDATE SEAMS — pick by WHAT the user wants to change:',
+										'· behavior/rules/formats → improve_skill. Batch ops are BUILT-IN (create/update items[], delete ids[]) — answer capability questions directly, do not call a tool.',
+										'· missing workflow steps/cards (UI granularity) → sync_actors (add-only).',
+										'· look/design → edit_mockup on the mock, then promote to push live.',
+										'· keep two skills in sync → connect_skills.'
+									].join('\n')
+									return lines.length
+										? `EXISTING MOCKUPS + PROMOTION STATUS (use the EXACT names; when the user continues a promotion, call the named next step — do NOT restart at plan_app):\n${lines.join('\n')}\n${seams}`
+										: seams
+								})
 								.catch(() => '')
 						: ''
 				if (hint) {

@@ -14,6 +14,7 @@ import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
+import FlowStatusStrip from '$lib/shell/FlowStatusStrip.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 import VibeCard from '$lib/shell/VibeCard.svelte'
 
@@ -93,6 +94,14 @@ type ToolStatus = {
 	startedAt?: number
 }
 let toolActivity = $state<ToolStatus[]>([])
+// board 0118d — the routed skill of the current turn (from the dispatch chip) drives the top
+// flow-status strip: the skill's flow with live per-step states, so the user knows where we are.
+const routedSkill = $derived(
+	toolActivity
+		.find((tl) => tl.id === 'dispatch')
+		?.detail?.replace('→', '')
+		.trim() ?? null
+)
 // Live GLM edit stream (reasoning + diff text) for the current turn, shown in a scrolling panel so
 // the user sees what the website model is actually writing — not just "thinking". board 0056.
 let editStream = $state('')
@@ -567,6 +576,9 @@ function handleTranscribeError(message: string): void {
 <div class="flex min-h-0 flex-1 bg-background">
 	<!-- board 0118 — THE STAGE: one current vibe, full width/height; each new vibe replaces it. -->
 	<div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+		{#if routedSkill}
+			<FlowStatusStrip skillId={routedSkill} {toolActivity} />
+		{/if}
 		<div class="min-h-0 flex-1 overflow-y-auto px-6 pt-4" style="padding-bottom: 11rem">
 			{#if currentVibe}
 				{#key currentVibe.id}
