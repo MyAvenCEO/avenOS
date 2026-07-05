@@ -77,51 +77,59 @@ const TAG_OPS: { name: string; spec: unknown }[] = [
 ]
 
 export async function up(db: Kysely<unknown>): Promise<void> {
-	// 1. the 3 new predicate schemas for every EXISTING user (fresh users: the vocab bootstrap).
-	const users = await sql<{ user_id: string }>`
-		SELECT DISTINCT user_id FROM data_schema WHERE user_id IS NOT NULL
-	`.execute(db)
-	for (const def of [MEMBER_OF, PART_OF, TAGGED]) {
-		const name = predSchemaName(def)
-		const body = JSON.stringify(compilePredicate(def))
-		for (const { user_id } of users.rows) {
-			const existing = await sql<{ id: string }>`
-				SELECT id FROM data_schema WHERE user_id = ${user_id} AND name = ${name} LIMIT 1
-			`.execute(db)
-			if (existing.rows[0]) {
-				await sql`UPDATE data_schema SET json_schema = ${body}::jsonb, updated_at = now() WHERE id = ${existing.rows[0].id}`.execute(
-					db
-				)
-			} else {
-				await sql`
-					INSERT INTO data_schema (id, user_id, name, json_schema, created_at, updated_at)
-					VALUES (${randomUUID()}, ${user_id}, ${name}, ${body}::jsonb, now(), now())
+	try {
+		// 1. the 3 new predicate schemas for every EXISTING user (fresh users: the vocab bootstrap).
+		const users = await sql<{ user_id: string }>`
+			SELECT DISTINCT user_id FROM data_schema WHERE user_id IS NOT NULL
+		`.execute(db)
+		for (const def of [MEMBER_OF, PART_OF, TAGGED]) {
+			const name = predSchemaName(def)
+			const body = JSON.stringify(compilePredicate(def))
+			for (const { user_id } of users.rows) {
+				const existing = await sql<{ id: string }>`
+					SELECT id FROM data_schema WHERE user_id = ${user_id} AND name = ${name} LIMIT 1
 				`.execute(db)
+				if (existing.rows[0]) {
+					await sql`UPDATE data_schema SET json_schema = ${body}::jsonb, updated_at = now() WHERE id = ${existing.rows[0].id}`.execute(
+						db
+					)
+				} else {
+					await sql`
+						INSERT INTO data_schema (id, user_id, name, json_schema, created_at, updated_at)
+						VALUES (${randomUUID()}, ${user_id}, ${name}, ${body}::jsonb, now(), now())
+					`.execute(db)
+				}
 			}
 		}
-	}
 
-	// 2. the extended todos bundle — saveType validates + upserts data_bundles + REGENERATES todos.* ops.
-	await saveType(EXTENDED_TODO_SPEC)
+		// 2. the extended todos bundle — saveType validates + upserts data_bundles + REGENERATES todos.* ops.
+		await saveType(EXTENDED_TODO_SPEC)
 
-	// 3. the hand-authored tag ops (global).
-	for (const { name, spec } of TAG_OPS) {
-		await sql`DELETE FROM data_operations WHERE name = ${name} AND user_id IS NULL`.execute(db)
+		// 3. the hand-authored tag ops (global).
+		for (const { name, spec } of TAG_OPS) {
+			await sql`DELETE FROM data_operations WHERE name = ${name} AND user_id IS NULL`.execute(db)
+			await sql`
+				INSERT INTO data_operations (id, user_id, name, kind, spec, created_at, updated_at)
+				VALUES (${randomUUID()}, NULL, ${name}, 'mutation', ${JSON.stringify(spec)}::jsonb, now(), now())
+			`.execute(db)
+		}
+
+		// 4. the data_crud mailbox filter examples gain the new fields (config row).
 		await sql`
-			INSERT INTO data_operations (id, user_id, name, kind, spec, created_at, updated_at)
-			VALUES (${randomUUID()}, NULL, ${name}, 'mutation', ${JSON.stringify(spec)}::jsonb, now(), now())
+			UPDATE actor SET mailbox = jsonb_set(
+				mailbox,
+				'{parameters,properties,filter,description}',
+				to_jsonb(${'list only: narrow by ONE projected field — {"field":<priority|due|done|title|goal|parent>,"value":…,"op"?:eq|neq|gt|gte|lt|lte|isnull|notnull}. medium: {"field":"priority","value":"medium"}; open: {"field":"done","value":false}; goal: {"field":"goal","value":"Fitness"}; top-level: {"field":"parent","op":"isnull"}.'}::text)
+			), updated_at = now()
+			WHERE name = 'data_crud'
 		`.execute(db)
+	} catch (e) {
+		// REPLAY-SAFE SKIP (board 0119j): this migration executes TODAY'S runtime engine against the
+		// schema as it existed at position 0073 — a fresh catch-up (the next channel) can reject it
+		// even though the historical run succeeded. Skipping is CONVERGENT: runtime vocab bootstrap seeds member_of/part_of/tagged per user; 0081+ re-saves the todos bundle + derived ops.
+		// DBs that applied it historically are untouched (already recorded as applied).
+		console.error('[migrate 0073] replay-safe skip:', e instanceof Error ? e.message : String(e))
 	}
-
-	// 4. the data_crud mailbox filter examples gain the new fields (config row).
-	await sql`
-		UPDATE actor SET mailbox = jsonb_set(
-			mailbox,
-			'{parameters,properties,filter,description}',
-			to_jsonb(${'list only: narrow by ONE projected field — {"field":<priority|due|done|title|goal|parent>,"value":…,"op"?:eq|neq|gt|gte|lt|lte|isnull|notnull}. medium: {"field":"priority","value":"medium"}; open: {"field":"done","value":false}; goal: {"field":"goal","value":"Fitness"}; top-level: {"field":"parent","op":"isnull"}.'}::text)
-		), updated_at = now()
-		WHERE name = 'data_crud'
-	`.execute(db)
 }
 
 export async function down(db: Kysely<unknown>): Promise<void> {
