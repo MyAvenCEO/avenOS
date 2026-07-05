@@ -667,7 +667,7 @@ function handleTranscribeError(message: string): void {
 						: 'opacity-40'}"
 					onclick={() => (mainTab = 'display')}
 				>
-					Display
+					DISPLAY
 				</button>
 				<span class="select-none opacity-25" aria-hidden="true">|</span>
 				<button
@@ -677,7 +677,7 @@ function handleTranscribeError(message: string): void {
 						: 'opacity-40'}"
 					onclick={() => (mainTab = 'flows')}
 				>
-					Flows
+					FLOWS
 				</button>
 			</div>
 		</div>

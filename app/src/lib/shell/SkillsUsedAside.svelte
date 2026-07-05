@@ -57,9 +57,9 @@ const timeOf = (at: number): string =>
 
 {#if rows.length > 0}
 	<aside
-		class="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-60 flex-col pt-3 pb-40 pl-2 md:flex"
+		class="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-60 flex-col pt-[max(0.5rem,env(safe-area-inset-top))] pb-40 pl-2 md:flex"
 	>
-		<div class="flex items-center gap-1.5 px-1 pb-1.5">
+		<div class="flex items-center gap-1.5 px-2 pb-1.5">
 			<span class="font-display text-foreground/40 text-[10px] font-bold tracking-wider uppercase">
 				Skills
 			</span>
