@@ -682,7 +682,7 @@ async function glmConnectorCode(
 					]
 				: [])
 		],
-		{ idleMs: 45_000, totalMs: 300_000, onToken }
+		{ idleMs: 60_000, totalMs: 600_000, onToken }
 	)
 	if (typeof text !== 'string') return text
 	const code = text.replace(/```(?:js|javascript)?/gi, '').trim()
@@ -697,11 +697,21 @@ async function glmStreamText(
 	o: { idleMs: number; totalMs: number; onToken?: (text: string) => void }
 ): Promise<string | { error: string }> {
 	const ctrl = new AbortController()
-	let idleTimer = setTimeout(() => ctrl.abort(), o.idleMs)
-	const totalTimer = setTimeout(() => ctrl.abort(), o.totalMs)
+	let why: 'idle' | 'total' | null = null
+	let idleTimer = setTimeout(() => {
+		why = 'idle'
+		ctrl.abort()
+	}, o.idleMs)
+	const totalTimer = setTimeout(() => {
+		why = 'total'
+		ctrl.abort()
+	}, o.totalMs)
 	const bump = () => {
 		clearTimeout(idleTimer)
-		idleTimer = setTimeout(() => ctrl.abort(), o.idleMs)
+		idleTimer = setTimeout(() => {
+			why = 'idle'
+			ctrl.abort()
+		}, o.idleMs)
 	}
 	const clearTimers = () => {
 		clearTimeout(idleTimer)
@@ -730,7 +740,12 @@ async function glmStreamText(
 			step = await reader.read()
 		} catch {
 			clearTimers()
-			return { error: `GLM stream stalled (no data for ${o.idleMs / 1000}s) — try again` }
+			return {
+				error:
+					why === 'total'
+						? `GLM authoring exceeded the ${o.totalMs / 1000}s budget — try again`
+						: `GLM stream stalled (no data for ${o.idleMs / 1000}s) — try again`
+			}
 		}
 		bump()
 		if (step.done) break
