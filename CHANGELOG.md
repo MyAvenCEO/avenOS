@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.5...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **ci:** move the boot-forensics logs step into the deploy-auth job (it had landed in release-macos) ([#36](https://github.com/MyAvenCEO/avenOS/issues/36)) ([cdb8794](https://github.com/MyAvenCEO/avenOS/commit/cdb879424af47846229abec1989cb77631e0ee26))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.4...v) (2026-07-05)
 
 
