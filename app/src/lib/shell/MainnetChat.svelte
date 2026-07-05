@@ -192,6 +192,7 @@ function removeHitl(id: string): void {
 /** Action-specific confirm/decline button labels (delete vs publish vs …) + the confirm intent. */
 function hitlVerb(tool: string): { confirm: string; decline: string; danger: boolean } {
 	if (tool === 'deploy_website') return { confirm: 'Publish', decline: 'Cancel', danger: false }
+	if (tool === 'promote_skill') return { confirm: 'Live schalten', decline: 'Abbrechen', danger: false }
 	if (tool === 'mutate') return { confirm: 'Apply', decline: 'Cancel', danger: true } // board 0101
 	return { confirm: 'Delete', decline: 'Keep', danger: true }
 }
@@ -230,6 +231,9 @@ async function confirmHitl(req: HitlRequest): Promise<void> {
 		if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`)
 		if (req.tool === 'deploy_website') {
 			appendNote(`✅ Published — live at ${data.result?.url ?? 'www.next.aven.ceo'}`)
+		} else if (req.tool === 'promote_skill') {
+			appendNote(`✅ „${String((req.action as { app?: string }).app ?? 'Skill')}" ist live.`)
+			void queryClient.invalidateQueries({ queryKey: ['flows'] })
 		} else if (req.tool === 'mutate') {
 			// board 0101 — a confirmed structural mutation: flow the diff card, then refresh the live data.
 			if (data.result?.vibe === 'mutation-result') appendVibe('mutation-result', data.result.data)

@@ -1123,6 +1123,60 @@ export async function improveSkill(
 	return { app, description: desc }
 }
 
+// ── DESIGN DRIFT + skill metadata ──────────────────────────────────────────────────────────────────
+/** Which vibe tables differ between the mock (design source) and the LIVE rows — the fact that says
+ *  "the design changed since the last promote", making re-promote a REAL next step. */
+export async function vibeDrift(app: string): Promise<string[]> {
+	const D = db()
+	const drift: string[] = []
+	for (const t of ['vibe_view', 'vibe_style', 'vibe_logic', 'vibe_source']) {
+		const r = await sql<{ name: string; body: unknown }>`
+			SELECT name, body FROM ${sql.raw(t)} WHERE name IN (${`${MOCK_PREFIX}${app}`}, ${app})
+		`.execute(D)
+		const norm = (v: unknown): string => {
+			try {
+				return JSON.stringify(typeof v === 'string' && t !== 'vibe_logic' ? JSON.parse(v) : v)
+			} catch {
+				return String(v)
+			}
+		}
+		const mock = r.rows.find((x) => x.name === `${MOCK_PREFIX}${app}`)
+		const live = r.rows.find((x) => x.name === app)
+		if (mock && live && norm(mock.body) !== norm(live.body)) drift.push(t.replace('vibe_', ''))
+	}
+	return drift
+}
+
+/** Edit a skill's METADATA (display label · description). The id is WIRE-STABLE and never renamed —
+ *  "rename the skill" means relabeling; every reference keeps working. Deterministic, no GLM. */
+export async function editSkillMeta(
+	rawName: string,
+	patch: { label?: string; description?: string }
+): Promise<{ app?: string; label?: string; error?: string }> {
+	let app: string
+	try {
+		app = mockName(rawName).slice(MOCK_PREFIX.length)
+	} catch {
+		return { error: 'a skill name is required' }
+	}
+	const D = db()
+	const row = await sql<{ id: string; label: string | null }>`
+		SELECT id, label FROM skill WHERE id = ${app} LIMIT 1
+	`.execute(D)
+	if (!row.rows.length) {
+		const all = await sql<{ id: string }>`SELECT id FROM skill`.execute(D)
+		return { error: `no skill "${app}". Existing skills: ${all.rows.map((r) => r.id).join(', ')}` }
+	}
+	const label = String(patch.label ?? '').trim()
+	const description = String(patch.description ?? '').trim()
+	if (!label && !description) return { error: 'nothing to change — pass label and/or description' }
+	if (label)
+		await sql`UPDATE skill SET label = ${label.slice(0, 80)}, updated_at = now() WHERE id = ${app}`.execute(D)
+	if (description)
+		await sql`UPDATE skill SET description = ${description.slice(0, 500)}, updated_at = now() WHERE id = ${app}`.execute(D)
+	return { app, label: label || (row.rows[0].label ?? app) }
+}
+
 // ── promotion PROGRESS — derived from the DB, never stored ─────────────────────────────────────────
 /** Where a promotion actually stands, read off the FACTS each stage leaves behind (no state table,
  *  nothing to drift): the derived list op ⇒ Daten · the skill row ⇒ Aktoren · real rows ⇒ Seed ·
@@ -1133,8 +1187,10 @@ export type PromotionProgress = {
 	wired: boolean
 	seeded: boolean
 	live: boolean
-	/** The step tool the model should call next (null when live). Seed stays skippable. */
+	/** The step tool the model should call next (null when live AND design unchanged). */
 	next: 'mint_data' | 'wire_actors' | 'seed_data' | 'promote' | null
+	/** LIVE only: vibe tables where the mock differs from the live rows (edited design). */
+	drift?: string[]
 }
 
 export async function promotionProgress(uid: string, skeleton: AppSkeleton): Promise<PromotionProgress> {
@@ -1157,9 +1213,22 @@ export async function promotionProgress(uid: string, skeleton: AppSkeleton): Pro
 	}
 	const live =
 		(await sql`SELECT 1 FROM vibe_view WHERE name = ${skeleton.app} LIMIT 1`.execute(D)).rows.length > 0
+	// LIVE is not the end of the road: an edited mockup (design drift) makes promote a REAL next
+	// step again — the reliability gap Samuel hit ("I edit a skill but can't promote it").
+	const drift = live ? await vibeDrift(skeleton.app) : []
 	const step = live ? 'live' : seeded && wired ? 'seeded' : wired ? 'wired' : data ? 'data' : 'plan'
-	const next = live ? null : wired ? (seeded ? 'promote' : 'seed_data') : data ? 'wire_actors' : 'mint_data'
-	return { step, data, wired, seeded, live, next }
+	const next = live
+		? drift.length
+			? 'promote'
+			: null
+		: wired
+			? seeded
+				? 'promote'
+				: 'seed_data'
+			: data
+				? 'wire_actors'
+				: 'mint_data'
+	return { step, data, wired, seeded, live, next, drift }
 }
 
 const PROGRESS_LABEL: Record<string, string> = {
@@ -1179,7 +1248,11 @@ export async function promotionStatusLines(uid: string): Promise<string[]> {
 		if (!parts) continue
 		const skeleton = deriveAppSkeleton(m.name.slice(MOCK_PREFIX.length), parts.source as Record<string, unknown>)
 		const p = await promotionProgress(uid, skeleton)
-		lines.push(`${m.name} ("${m.label}") — ${PROGRESS_LABEL[p.step]}`)
+		const label =
+			p.step === 'live' && p.drift?.length
+				? `LIVE ✓ — Design geändert (${p.drift.join(', ')}) → nächster Schritt: promote (überträgt das neue Design)`
+				: PROGRESS_LABEL[p.step]
+		lines.push(`${m.name} ("${m.label}") — ${label}`)
 	}
 	return lines
 }
@@ -1208,6 +1281,7 @@ export function promoteCaps(uid: string, onToken?: (text: string) => void) {
 		wire: (sk: AppSkeleton, src: Record<string, unknown>) => wireSkill(uid, sk, src),
 		seed: (sk: AppSkeleton, src: Record<string, unknown>) => seedData(uid, sk, src),
 		improve: (name: string, instruction: string) => improveSkill(name, instruction),
+		editMeta: editSkillMeta,
 		syncActors,
 		connect: (source: string, target: string, rule: string) =>
 			connectSkills(uid, source, target, rule, undefined, onToken),

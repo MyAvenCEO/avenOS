@@ -92,11 +92,13 @@ export const planApp: ToolActor = {
 			},
 			reply:
 				said(r) ||
-				(p.next === null
-					? `"${skeleton.app}" ist bereits live — fertig promotet. 🎉`
-					: resumed
-						? `„${skeleton.app}" steht schon bei „${p.step}" — nächster Schritt: ${p.next}. Weiter?`
-						: `Here is the plan for "${skeleton.app}" — continue with the data layer?`),
+				(p.step === 'live' && p.drift?.length
+					? `„${skeleton.app}" ist live, aber das Design wurde geändert (${p.drift.join(', ')}) — „promote" überträgt es. Weiter?`
+					: p.next === null
+						? `"${skeleton.app}" ist bereits live — fertig promotet. 🎉`
+						: resumed
+							? `„${skeleton.app}" steht schon bei „${p.step}" — nächster Schritt: ${p.next}. Weiter?`
+							: `Here is the plan for "${skeleton.app}" — continue with the data layer?`),
 			vibe: card
 		}
 	}
@@ -328,6 +330,38 @@ export const connectSkillsActor: ToolActor = {
 	}
 }
 
+export const editSkillActor: ToolActor = {
+	definition: def(
+		'edit_skill',
+		'EDIT a skill\u2019s METADATA: the display label ("rename" — the internal id stays stable so ' +
+			'nothing breaks) and/or the description (what the router reads). Deterministic, instant. ' +
+			'For behavior rules use improve_skill; for the look use edit_mockup.',
+		{
+			label: { type: 'string', description: 'The new display name (id stays unchanged).' },
+			description: { type: 'string', description: 'The new skill description (router-facing).' }
+		}
+	),
+	async handle(ctx, raw): Promise<ToolResult> {
+		if (!ctx.promote) return noCap
+		const r = raw as Raw & { label?: string; description?: string }
+		const res = await ctx.promote.editMeta(String(r.name ?? ''), {
+			label: r.label,
+			description: r.description
+		})
+		if (res.error || !res.app) return stepFailed('edit_skill', res.error ?? 'edit failed')
+		return {
+			detail: `edit ${res.app}`,
+			content: {
+				ok: true,
+				app: res.app,
+				label: res.label,
+				note: 'Metadata updated (id unchanged — everything keeps working). ONE short sentence.'
+			},
+			reply: said(r) || `Skill heißt jetzt „${res.label}" (interne ID bleibt stabil).`
+		}
+	}
+}
+
 export const promoteApp: ToolActor = {
 	definition: def(
 		'promote',
@@ -346,18 +380,24 @@ export const promoteApp: ToolActor = {
 		const pre = await ctx.promote.progress(got.skeleton)
 		if (!pre.wired)
 			return stepFailed('promote', `der Skill ist noch nicht verdrahtet — nächster Schritt: ${pre.next}.`)
-		await ctx.promote.promoteVibe(got.skeleton.app)
+		// GOING LIVE IS ALWAYS HITL (Samuel): the tool never executes — a confirm card is shown and
+		// aiConfirmAction runs the actual vibe copy after the human clicks. Same gate as deletes/publish.
+		const app = got.skeleton.app
+		const redesign = pre.step === 'live'
 		return {
-			detail: `promote ${got.skeleton.app}`,
+			detail: `promote ${app}`,
 			content: {
-				ok: true,
-				app: got.skeleton.app,
-				note: `Promoted. Tell the user the app is live — they can say "show my ${got.skeleton.app.replace(/-/g, ' ')}" or add entries in chat.`
+				ok: false,
+				status: 'awaiting_user_confirmation',
+				note: 'A confirm card was shown. Do NOT retry — tell the user to confirm the promote prompt.'
 			},
-			reply: said(r) || `"${got.skeleton.app}" is live — a real skill over real data. 🎉`,
-			// the overview code actor renders it with REAL data from here on; this final card shows the
-			// promoted vibe with its (now seeded) example-shaped state via the actor on the NEW skill.
-			vibe: [stepper(got.skeleton, got.source, 'live'), { schema: got.skeleton.app }]
+			hitl: {
+				label: redesign
+					? `„${app}" — geändertes Design live schalten?`
+					: `„${app}" live schalten?`,
+				action: { tool: 'promote_skill', app }
+			},
+			vibe: stepper(got.skeleton, got.source, redesign ? 'live' : 'seeded')
 		}
 	}
 }

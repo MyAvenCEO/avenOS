@@ -12,7 +12,7 @@ import { locations } from './locations'
 import { createMockup, editMockup } from './mockup'
 import { mockups } from './mockups'
 import { ontology } from './ontology'
-import { connectSkillsActor, improveSkillActor, mintData, planApp, promoteApp, seedDataActor, syncActorsActor, wireActors } from './promote'
+import { connectSkillsActor, editSkillActor, improveSkillActor, mintData, planApp, promoteApp, seedDataActor, syncActorsActor, wireActors } from './promote'
 import { mutate, query } from './queries'
 import type { ToolActor, ToolDefinition } from './types'
 
@@ -34,6 +34,7 @@ export const TOOL_ACTORS: Record<string, ToolActor> = {
 	improve_skill: improveSkillActor,
 	sync_actors: syncActorsActor,
 	connect_skills: connectSkillsActor,
+	edit_skill: editSkillActor,
 	ontology,
 	query,
 	mutate,
@@ -92,7 +93,7 @@ export const SKILL_REGISTRY: Record<SkillId, { label: string; description: strin
 		description:
 			'design, refine, or show SCREEN MOCKUPS for new skill features ("design me a banking screen", ' +
 			'"make the total bigger", "show me my mockups") — look only, no real data yet',
-		tools: ['create_mockup', 'edit_mockup', 'mockups', 'plan_app', 'mint_data', 'wire_actors', 'seed_data', 'promote', 'improve_skill', 'sync_actors', 'connect_skills']
+		tools: ['create_mockup', 'edit_mockup', 'mockups', 'plan_app', 'mint_data', 'wire_actors', 'seed_data', 'promote', 'improve_skill', 'sync_actors', 'connect_skills', 'edit_skill']
 	}
 }
 

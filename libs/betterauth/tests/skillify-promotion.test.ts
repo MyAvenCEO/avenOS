@@ -4,7 +4,7 @@ import { buildCaps, crud, runCodeActor, runNamedOp } from '../src/actor-run'
 import { db } from '../src/db'
 import { composeFlows } from '../src/flows'
 import { saveMockup } from '../src/mockup-caps'
-import { connectSkills, improveSkill, promotionProgress, smokeRunConnector, syncActors, typesOfSkill,
+import { connectSkills, editSkillMeta, improveSkill, promotionProgress, smokeRunConnector, syncActors, typesOfSkill,
 	deriveAppSkeleton,
 	mintDataLayer,
 	promoteVibe,
@@ -171,6 +171,25 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		const p3 = await promotionProgress(UID, sk)
 		expect(p3.step).toBe('live')
 		expect(p3.next).toBeNull()
+		// DESIGN DRIFT re-opens promote (Samuel: "edit then promote to production must work"):
+		// touch the mock's style → progress says promote again; re-promote → drift cleared.
+		await sql`UPDATE vibe_style SET body = jsonb_set(body, '{tokens,zz}', '"1"') WHERE name = ${`mock-${APP}`}`.execute(db())
+		const pd = await promotionProgress(UID, sk)
+		expect(pd.step).toBe('live')
+		expect(pd.drift).toContain('style')
+		expect(pd.next).toBe('promote')
+		await promoteVibe(APP)
+		const pc = await promotionProgress(UID, sk)
+		expect(pc.next).toBeNull()
+		// metadata editing: label/description change, the id NEVER does (wire-stable).
+		const meta = await editSkillMeta(APP, { label: 'Zzz Finanzen', description: 'test description' })
+		expect(meta.error).toBeUndefined()
+		const skRow = await sql<{ id: string; label: string; description: string }>`
+			SELECT id, label, description FROM skill WHERE id = ${APP}
+		`.execute(db())
+		expect(skRow.rows[0].label).toBe('Zzz Finanzen')
+		expect(skRow.rows[0].description).toBe('test description')
+		expect((await editSkillMeta('no-such-skill', { label: 'x' })).error).toContain('no skill')
 	}, 30000)
 
 	test('(d) FULLY INTERACTIVE: a crud-added record shows up in the sandbox actor\'s next run', async () => {

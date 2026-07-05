@@ -18,7 +18,7 @@ import { schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
 import { listMockups, mockupCaps } from './mockup-caps'
-import { promoteCaps, promotionStatusLines } from './promote-caps'
+import { promoteCaps, promoteVibe, promotionStatusLines } from './promote-caps'
 import { ontologyCaps } from './ontology'
 import { mutationCaps, queryCaps } from './query-caps'
 import { recordActorRun } from './skills-run'
@@ -914,6 +914,23 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 			return c.json({ ok: true, result: { deployed: r.count, url: r.url } })
 		} catch (e) {
 			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 502)
+		}
+	}
+	// board 0113/0117 — a CONFIRMED promote: copy the mock vibes live (first promote or a redesign).
+	if (body.action.tool === 'promote_skill') {
+		const app = String(body.action.app ?? '').trim()
+		if (!app) return c.json({ ok: false, error: 'no_app' }, 400)
+		try {
+			await promoteVibe(app)
+			void recordActorRun(session.user.id, {
+				flowId: 'skillify',
+				nodeId: 'promote',
+				label: `promote ${app}`,
+				outputs: [app]
+			})
+			return c.json({ ok: true, result: { app } })
+		} catch (e) {
+			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500)
 		}
 	}
 	// board 0101 — a confirmed destructive MUTATION: apply the (already validated + stored) mutation spec as

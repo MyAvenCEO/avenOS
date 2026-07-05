@@ -68,7 +68,8 @@ d('board 0115 — skillify mockups: wiring, gates, the mock- wall, the viewer', 
 			'promote',
 			'improve_skill',
 			'sync_actors',
-			'connect_skills'
+			'connect_skills',
+			'edit_skill'
 		]
 		expect(await advertisedTools('skillify')).toEqual(ALL)
 		expect((await chatToolDefinitionsFor('skillify')).map((x) => x.function.name)).toEqual(ALL)

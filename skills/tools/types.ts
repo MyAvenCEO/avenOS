@@ -97,6 +97,8 @@ export type ToolCtx = {
 		available(): Promise<string[]>
 		/** Bake a user rule into a LIVE skill's data_crud instructions (GLM rewrite, wording-only graft). */
 		improve(name: string, instruction: string): Promise<{ app?: string; description?: string; error?: string }>
+		/** Edit skill METADATA (label/description) — the id stays wire-stable. */
+		editMeta(name: string, patch: { label?: string; description?: string }): Promise<{ app?: string; label?: string; error?: string }>
 		/** ADD-ONLY upgrade: bring a live skill to the Planner-grade granularity (per-step flow nodes +
 		 *  per-verb cards). Missing pieces are added; nothing is rewritten. */
 		syncActors(name: string): Promise<{ app?: string; addedNodes?: string[]; addedVibes?: string[]; error?: string }>
@@ -112,6 +114,7 @@ export type ToolCtx = {
 			seeded: boolean
 			live: boolean
 			next: 'mint_data' | 'wire_actors' | 'seed_data' | 'promote' | null
+			drift?: string[]
 		}>
 	}
 	/** board 0100 — the ontology actor's server caps (GLM-5.2 mint + data_schema registry). Injected only
