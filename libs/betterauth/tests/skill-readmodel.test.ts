@@ -28,7 +28,11 @@ d('board 0114 — the Skills read-model + generic tracing', () => {
 		const inv = flows.find((f) => f.id === 'inventory')
 		expect(inv).toBeDefined()
 		expect(inv?.name).toBe('Inventory')
-		expect((inv?.nodes as { id: string }[]).map((n) => n.id)).toEqual(['data_crud', 'locations'])
+		// sync_* connectors are DYNAMIC user config (board 0117) — the fixed core must be there,
+		// whatever connectors the user has wired.
+		expect(
+			(inv?.nodes as { id: string }[]).map((n) => n.id).filter((id) => !id.startsWith('sync_'))
+		).toEqual(['data_crud', 'locations'])
 	})
 
 	test('the Planner is the LIVING explicit-flow override: mode nodes + dispatch edges + vibes', async () => {

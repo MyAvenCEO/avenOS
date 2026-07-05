@@ -623,6 +623,12 @@ export const CONNECT_INSTRUCTIONS = [
 	'caps.ops(name, params) is the ONLY capability — and it is SCOPED to exactly the two schemas below;',
 	'calling any other op throws.',
 	'',
+	'OP SIGNATURES (exact — get these wrong and the smoke gate rejects the code):',
+	'- caps.ops("<type>.list", {})                 → { rows: [ { id, ...fields } ] }  — ALWAYS .rows, never .items',
+	'- caps.ops("<type>.create", { field: value }) → ONE row per call (loop for batches); returns { ids }',
+	'- caps.ops("<type>.update", { id, field: value }) → one row per call',
+	'- caps.ops("<type>.delete", { id })',
+	'',
 	'HOW YOU ARE CALLED (the trigger contract — handle ALL three):',
 	'- msg = { trigger: { schema: "<sourceSchema>" } } — a row of that schema was just written: reconcile',
 	'  the OTHER side per the USER RULE (e.g. a new purchase transaction ⇒ raise the matching stock).',
@@ -763,19 +769,31 @@ export async function smokeRunConnector(
 				'use PLAIN SYNCHRONOUS style — caps.ops() returns the result directly; async/await/Promise/.then are not supported in the sandbox'
 		}
 	const byType = new Map(contracts.map((c) => [c.type, c]))
-	const stubOps = async (name: unknown) => {
+	let listCalls = 0
+	const stubOps = async (name: unknown, params: unknown) => {
 		const n = String(name)
 		const type = n.split('.')[0]
 		if (!byType.has(type)) throw new Error(`op "${n}" not granted — this actor's scopes: ${[...byType.keys()].map((t) => `ops:${t}`).join(', ')}`)
 		if (n.endsWith('.list')) {
+			listCalls++
 			const c = byType.get(type)
 			return { rows: (c?.sample ?? []).map((r, i) => ({ id: `s${i}`, ...(r as object) })) }
 		}
+		// STRICT mutation signatures (the live "0 erstellt" bug: batch {items} silently no-ops in the
+		// engine): create/update take ONE row of named fields per call — validate against the sample.
+		const c = byType.get(type)
+		const fieldKeys = new Set(Object.keys((c?.sample?.[0] as object | undefined) ?? {}))
+		const arg = (params ?? {}) as Record<string, unknown>
+		if ('items' in arg || 'rows' in arg)
+			throw new Error(`${n} takes ONE row object per call ({ field: value, … }) — loop for batches, never { items: [...] }`)
+		if (fieldKeys.size && !Object.keys(arg).some((k) => fieldKeys.has(k) || k === 'id'))
+			throw new Error(`${n} got no known fields — pass a single row object like ${JSON.stringify(c?.sample?.[0] ?? {})}`)
 		return { ok: true, ids: ['stub'] }
 	}
 	// all THREE call paths must settle and return a summary: manual sync + a trigger from EITHER side
 	// (the trigger seam is bi-directional by construction — caps subscribe both schemas).
 	const msgs: unknown[] = [{}, ...contracts.map((c) => ({ trigger: { schema: c.type } }))]
+	listCalls = 0
 	for (const msg of msgs) {
 		try {
 			const state = (await runActorCode(code, msg, { ops: stubOps }, {})) as Record<string, unknown>
@@ -787,6 +805,10 @@ export async function smokeRunConnector(
 			return { ok: false, error: e instanceof Error ? e.message : String(e) }
 		}
 	}
+	// a connector that never LISTED anything cannot have reconciled data — the live "0 erstellt" bug
+	// shape (res.items on a { rows } result → empty loops → plausible summary). Fail it here.
+	if (listCalls === 0)
+		return { ok: false, error: 'the connector never read any data — use caps.ops("<type>.list", {}) and read result.rows' }
 	return { ok: true }
 }
 

@@ -31,9 +31,15 @@ d('board 0113 — the Inventory skill, pure config, end to end from the DB', () 
 		const menu = await skillMenu()
 		expect(menu.some((s) => s.id === 'inventory')).toBe(true)
 		// board 0112 — the inventory skill now also carries the `locations` grid actor.
-		expect(await advertisedTools('inventory')).toEqual(['data_crud', 'locations'])
+		expect((await advertisedTools('inventory')).filter((t) => !t.startsWith('sync_'))).toEqual([
+			'data_crud',
+			'locations'
+		])
 		const defs = await chatToolDefinitionsFor('inventory')
-		expect(defs.map((x) => x.function.name)).toEqual(['data_crud', 'locations'])
+		expect(defs.map((x) => x.function.name).filter((t) => !t.startsWith('sync_'))).toEqual([
+			'data_crud',
+			'locations'
+		])
 		expect(JSON.stringify(defs[0]?.function.parameters)).toContain('inventory') // the inventory mailbox
 	})
 

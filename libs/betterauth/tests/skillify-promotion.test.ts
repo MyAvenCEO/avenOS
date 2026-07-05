@@ -268,6 +268,19 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		)
 		expect(asyncStyle.ok).toBe(false)
 		expect(asyncStyle.error).toContain('SYNCHRONOUS')
+		// the LIVE "0 erstellt" bug shapes, now structurally rejected:
+		const neverReads = await smokeRunConnector(
+			"function handle(m,c){ return { summary: 'nichts gelesen' } }",
+			[{ type: 'record', ops: [], sample: [{ name: 'x', amount: '1' }] }]
+		)
+		expect(neverReads.ok).toBe(false)
+		expect(neverReads.error).toContain('never read')
+		const batchItems = await smokeRunConnector(
+			"function handle(m,c){ var r = c.ops('record.list',{}); c.ops('record.create', { items: r.rows }); return { summary: 'x' } }",
+			[{ type: 'record', ops: [], sample: [{ name: 'x', amount: '1' }] }]
+		)
+		expect(batchItems.ok).toBe(false)
+		expect(batchItems.error).toContain('ONE row object')
 		const escape = await smokeRunConnector(
 			"function handle(m,c){ c.ops('goal.list',{}); return { summary: 'x' } }",
 			[{ type: 'record', ops: [], sample: [] }]
