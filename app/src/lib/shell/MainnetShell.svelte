@@ -12,14 +12,13 @@ import MailInbox from '$lib/shell/MailInbox.svelte'
 import MainnetChat from '$lib/shell/MainnetChat.svelte'
 import MainnetDb from '$lib/shell/MainnetDb.svelte'
 import MainnetFly from '$lib/shell/MainnetFly.svelte'
-import MainnetVibes from '$lib/shell/MainnetVibes.svelte'
 import { nav } from '$lib/shell/nav.svelte'
 
 // Mainnet (Alberobello) shell: ONE top nav bar — Chat | Vibes | DB | Fly on the left; weekly
 // MINDS + the signed-in account NAME on the right. Clicking the name opens the Account Settings
 // view (profile, plans, billing, usage, vault keys, Admin for admins, log out). The website
 // Composer lives under Vibes; Skills/Runs live inside the DB viewer. board 0053/0054/0055/0110.
-type Tab = 'chat' | 'vibes' | 'draw' | 'db' | 'fly' | 'mail'
+type Tab = 'chat' | 'draw' | 'db' | 'fly' | 'mail'
 type SettingsCategory = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'admin'
 let tab = $state<Tab>('chat')
 let settings = $state(false)
@@ -78,7 +77,6 @@ const isAdmin = $derived(user?.role === 'admin')
 // Mail is an ADMIN-ONLY tab (the /api/inbox/* endpoints are server-gated to admins too). board 0060.
 const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'chat', label: t('mainnet.nav.chat') },
-	{ id: 'vibes', label: t('mainnet.nav.vibes') },
 	{ id: 'draw', label: t('mainnet.nav.draw') },
 	{ id: 'db', label: t('mainnet.nav.db') },
 	{ id: 'fly', label: t('mainnet.nav.fly') },
@@ -118,8 +116,6 @@ function openTab(id: Tab): void {
 		<AccountSettings category={settingsCategory} />
 	{:else if tab === 'chat'}
 		<MainnetChat />
-	{:else if tab === 'vibes'}
-		<MainnetVibes />
 	{:else if tab === 'draw'}
 		<DrawCanvas />
 	{:else if tab === 'fly'}
