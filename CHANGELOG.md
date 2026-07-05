@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.6...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **ci:** forensics greps the boot/error lines (the migrate listing drowned the FAILED text) ([#37](https://github.com/MyAvenCEO/avenOS/issues/37)) ([5fa298d](https://github.com/MyAvenCEO/avenOS/commit/5fa298d04a91a4e5f45706d122d837d03ce47956))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.5...v) (2026-07-05)
 
 
