@@ -69,7 +69,7 @@ const timeOf = (at: number): string =>
 				<StatusCard
 					status={statusOf(r.use)}
 					totalSeconds={0}
-					title={r.name.toUpperCase()}
+					title={r.name}
 					description={r.use ? (r.use.detail ?? timeOf(r.use.at)) : r.blurb}
 					selected={selectedSkill === r.skill}
 					showTimer={true}
