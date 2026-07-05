@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.11...v) (2026-07-05)
+
+
+### Features
+
+* **0119:** dispatch as system skill — prompts as DB config + full context transparency ([#44](https://github.com/MyAvenCEO/avenOS/issues/44)) ([316e15e](https://github.com/MyAvenCEO/avenOS/commit/316e15ef45d4ff9791096f6e5d52aa8851ec4c20))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.10...v) (2026-07-05)
 
 
