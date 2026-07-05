@@ -1,3 +1,10 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.7...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **deploy:** migration 0113 — ensure data_bundles exists (the 0058 IF-EXISTS rename no-op) ([#39](https://github.com/MyAvenCEO/avenOS/issues/39)) ([70eeb45](https://github.com/MyAvenCEO/avenOS/commit/70eeb45c677ba1c42e4c599b2950ca22cb034c08))
+* **deploy:** replay-safe migrations 0073/0080/0081 — the next-channel boot blocker ([#38](https://github.com/MyAvenCEO/avenOS/issues/38)) ([49515aa](https://github.com/MyAvenCEO/avenOS/commit/49515aa2fa0ac9eb6950f9ac643be625d9142ee6))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.6...v) (2026-07-05)
 
 
