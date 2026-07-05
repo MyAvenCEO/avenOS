@@ -4,7 +4,6 @@ import { browser } from '$app/environment'
 // board 0110 — the idle AI button IS the avenOS logo: the freigestellt (cut-out) mark, disabled by default,
 // the full-colour clean mark on hover/active. No circle chrome.
 import logoClean from '$lib/assets/logo/logo_clean.svg'
-import logoDisabled from '$lib/assets/logo/logo_clean_disabled.svg'
 import {
 	asrState,
 	startDownload as startAsrDownload,
@@ -882,7 +881,7 @@ const pillClass = $derived.by(() => {
 		// board 0110 — the idle AI icon is the bare avenOS logo (no circle chrome); 25% larger than the old 56px.
 		// board 0112 — !overflow-visible so the soft glow behind the mark isn't CLIPPED to the square wrapper
 		// (base sets overflow-hidden for the pill animations) — the clip was the "squared outline".
-		return `${base} size-[4.375rem] shrink-0 items-center justify-center p-0 !overflow-visible`
+		return `${base} size-[3.5rem] shrink-0 items-center justify-center p-0 !overflow-visible`
 	}
 	if (mode === 'listening') {
 		if (isMobile) {
@@ -974,7 +973,7 @@ const pillClass = $derived.by(() => {
 		<div class={pillClass} role="group">
 			<button
 				type="button"
-				class="group relative flex size-[4.375rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+				class="group relative flex size-[3.5rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
 				{disabled}
 				onpointerdown={(e) => {
 					void focusShellWebview()
@@ -1005,17 +1004,11 @@ const pillClass = $derived.by(() => {
 					aria-hidden="true"
 					class="pointer-events-none absolute inset-[12%] rounded-full opacity-55 blur-[12px] transition-all duration-200 group-hover:inset-[6%] group-hover:opacity-90 [background:radial-gradient(circle,color-mix(in_srgb,var(--color-primary)_30%,transparent),transparent_70%)]"
 				></span>
-				<!-- board 0110 — disabled mark at rest, full-colour clean mark on hover / active / focus -->
-				<img
-					src={logoDisabled}
-					alt="avenOS"
-					class="pointer-events-none absolute inset-0 size-full object-contain p-1 transition-opacity duration-150 group-hover:opacity-0 group-active:opacity-0 group-focus-visible:opacity-0"
-				/>
+				<!-- board 0119m — the full-colour clean mark is the DEFAULT (no disabled/inactive swap). -->
 				<img
 					src={logoClean}
-					alt=""
-					aria-hidden="true"
-					class="pointer-events-none absolute inset-0 size-full object-contain p-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-active:opacity-100 group-focus-visible:opacity-100"
+					alt="avenOS"
+					class="pointer-events-none absolute inset-0 size-full object-contain p-1"
 				/>
 			</button>
 		</div>
@@ -1062,7 +1055,7 @@ const pillClass = $derived.by(() => {
 		<div class="relative flex items-center justify-center">
 			<button
 				type="button"
-				class="flex size-[4.375rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-status-success)_55%,transparent)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
+				class="flex size-[3.5rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-status-success)_55%,transparent)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
 				onclick={commitVoiceNote}
 				aria-label="Submit voice note as intent (mock)"
 			>
@@ -1079,7 +1072,7 @@ const pillClass = $derived.by(() => {
 			</button>
 			<button
 				type="button"
-				class="absolute top-1/2 left-1/2 flex size-9 -translate-y-1/2 translate-x-[2.9rem] items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_2px_10px_-3px_rgba(0,0,0,0.25)] outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
+				class="absolute top-1/2 left-1/2 flex size-8 -translate-y-1/2 translate-x-[2.35rem] items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_2px_10px_-3px_rgba(0,0,0,0.25)] outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
 				onclick={() => void stopListening()}
 				aria-label="Cancel voice note"
 			>
