@@ -198,7 +198,20 @@ app.get('/billing/success', (c) =>
 // Self-bootstrap the schema before serving any request, so a fresh Neon DB works with
 // no manual migrate step. Awaited at module load — Bun finishes evaluating this module
 // (top-level await) before it starts the server below. board 0050.
+// board 0119h — BOOT WATCHDOG: kysely-neon queries are HTTP fetches with NO client timeout, so a
+// wedged Neon endpoint hangs this await FOREVER (machine up, port never opened, zero log output —
+// the live next outage signature). Log the phase and kill the process loudly if it sticks, so fly
+// restart-loops WITH a readable cause instead of silently never listening.
+console.log('[boot] phase: schema bootstrap + migrations …')
+const bootWatchdog = setTimeout(() => {
+	console.error(
+		'[boot] STUCK >60s in schema bootstrap/migrations — exiting so fly restarts; check the Neon endpoint for this environment'
+	)
+	process.exit(1)
+}, 60_000)
 await bootstrapSchema()
+clearTimeout(bootWatchdog)
+console.log('[boot] schema bootstrap complete')
 
 // Best-effort: refresh per-model pricing from Tinfoil on boot (recordUsage also
 // lazily syncs if a model is unseen). Never blocks startup.
@@ -218,4 +231,5 @@ const port = Number(new URL(process.env.BETTER_AUTH_URL ?? 'http://localhost:878
 // long-lived SSE stream (GET /api/events) and any AI response that pauses >10s, which churned the
 // WKWebView connection pool and surfaced as "Load failed" across the app. 120s comfortably covers
 // the 15s SSE keep-alive and model think-pauses. board 0055.
+console.log(`[boot] ready — listening on :${port}`)
 export default { port, idleTimeout: 120, fetch: app.fetch }
