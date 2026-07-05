@@ -83,7 +83,6 @@ const frameSidesClass = $derived(mirror ? 'border-y-0 border-l-0' : 'border-y-0 
 			: 'bg-surface-card hover:bg-surface-card-hover'} {extraClass}"
 >
 	<div class="flex items-stretch {mirror ? '' : 'flex-row-reverse'}">
-		{#if showTimer}
 		<div
 			class="-m-px flex min-w-[2.75rem] shrink-0 flex-col items-center justify-center gap-px self-stretch {mirror
 				? 'rounded-l-[var(--radius-lg)]'
@@ -94,10 +93,11 @@ const frameSidesClass = $derived(mirror ? 'border-y-0 border-l-0' : 'border-y-0 
 					: `${STATUS_TIMER_BG_REST[status]} ${STATUS_TIMER_BG_HOVER[status]} ${STATUS_STRIP_TEXT[status]} ${STATUS_STRIP_TEXT_HOVER[status]}`}"
 			aria-hidden="true"
 		>
-			<span class="text-[12px] tabular-nums">{dur.main}</span>
-			<span class="text-[7px] font-medium uppercase">{dur.unit}</span>
+			{#if showTimer}
+				<span class="text-[12px] tabular-nums">{dur.main}</span>
+				<span class="text-[7px] font-medium uppercase">{dur.unit}</span>
+			{/if}
 		</div>
-		{/if}
 		<div
 			class="min-w-0 flex-1 space-y-0 py-1.5 pr-2 pl-2 {mirror ? 'text-right' : ''} {archived
 				? 'bg-transparent opacity-70'
