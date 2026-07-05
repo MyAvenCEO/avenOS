@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.2...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **deploy:** lazy Tauri imports in aven-vibes sandbox — the Fly boot crash ([#33](https://github.com/MyAvenCEO/avenOS/issues/33)) ([3224d7b](https://github.com/MyAvenCEO/avenOS/commit/3224d7bc111f04a025b43736e874e37b7e35a3f2))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.1...v) (2026-07-05)
 
 
