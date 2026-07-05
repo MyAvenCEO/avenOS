@@ -274,7 +274,7 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 			[{ type: 'record', ops: [], sample: [{ name: 'x', amount: '1' }] }]
 		)
 		expect(neverReads.ok).toBe(false)
-		expect(neverReads.error).toContain('never read')
+		expect(String(neverReads.error)).toMatch(/never read|changed NOTHING/)
 		const batchItems = await smokeRunConnector(
 			"function handle(m,c){ var r = c.ops('record.list',{}); c.ops('record.create', { items: r.rows }); return { summary: 'x' } }",
 			[{ type: 'record', ops: [], sample: [{ name: 'x', amount: '1' }] }]
@@ -289,8 +289,9 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		expect(escape.error).toContain('not granted')
 		// the seam-fixed connector wires end-to-end: actor row (scoped caps) + composite node.
 		// PLAIN SYNC style — several blocking caps calls in one run (the fixed sandbox contract).
+		// satisfies the SEMANTIC tripwire: a source-side change touches the target (one todo row).
 		const CODE =
-			"function handle(msg, caps){ var r = caps.ops('record.list', {}); var n = (r && r.rows ? r.rows.length : 0); var r2 = caps.ops('record.list', {}); return { summary: n + ' Einträge geprüft.' } }"
+			"function handle(msg, caps){ var r = caps.ops('record.list', {}); var n = (r && r.rows ? r.rows.length : 0); var trig = msg && msg.trigger ? msg.trigger.schema : null; if (trig === 'record' || !trig) { caps.ops('todos.create', { title: 'Sync-Eintrag (Test 0117)' }) } return { summary: n + ' Einträge geprüft.' } }"
 		const res = await connectSkills(UID, APP, 'todos', 'Ausgaben werden als Aufgaben nachgehalten', CODE)
 		expect(res.error).toBeUndefined()
 		expect(res.tool).toBe('sync_todos')
@@ -338,6 +339,15 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		const D = db()
 		await sql`DELETE FROM flow WHERE id = ${APP}`.execute(D)
 		await sql`DELETE FROM actor WHERE skill_id = 'todos' AND name = 'sync_todos'`.execute(D)
+		// the connector test-code creates real todos rows on its live runs — tear them down by title.
+		try {
+			const live = (await runNamedOp(UID, 'todos.list', {})) as { rows?: { id: string; title?: string }[] }
+			for (const row of live.rows ?? [])
+				if (String(row.title ?? '').includes('Sync-Eintrag (Test 0117)'))
+					await runNamedOp(UID, 'todos.delete', { id: row.id })
+		} catch {
+			/* best-effort cleanup */
+		}
 		for (const t of ['vibe_view', 'vibe_style', 'vibe_logic', 'vibe_source'])
 			await sql`DELETE FROM ${sql.raw(t)} WHERE name IN ('record-created', 'record-edited')`.execute(D)
 		// tear the promoted app back down (skill, actors, flow-free), the data layer, and the vibes.
@@ -353,5 +363,5 @@ d('board 0113 — mockup → full skill promotion (GLM seams stubbed, everything
 		await sql`DELETE FROM data_schema WHERE user_id = ${UID} AND name LIKE 'zzz_%'`.execute(D)
 		for (const t of ['vibe_view', 'vibe_style', 'vibe_logic', 'vibe_source'])
 			await sql`DELETE FROM ${sql.raw(t)} WHERE name IN (${APP}, ${`mock-${APP}`})`.execute(D)
-	})
+	}, 30000)
 })

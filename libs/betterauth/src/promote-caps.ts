@@ -637,6 +637,9 @@ export const CONNECT_INSTRUCTIONS = [
 	'  if the reverse direction makes no sense, do nothing and say so in the summary.',
 	'- msg = {} (no trigger) — a MANUAL full sync: reconcile everything, both directions where sensible.',
 	'RETURN a state object with at least { "summary": "<one German sentence: what was synced/changed>" }.',
+	'SIGN CONVENTIONS: read each schema\u2019s data rules CAREFULLY and map them EXACTLY — e.g. when the',
+	'rules say purchases are NEGATIVE amounts, then amount < 0 IS a purchase (Kauf ⇒ Bestand steigt) and',
+	'amount > 0 is a sale. Getting the sign backwards silently reconciles nothing.',
 	'Idempotence matters: running the connector twice must not double-apply (match by name/label before',
 	'creating; prefer update over create when a matching target row exists).',
 	'PLAIN SYNCHRONOUS style ONLY: `function handle(msg, caps) { var r = caps.ops("x.list", {}); ... }` —',
@@ -770,6 +773,7 @@ export async function smokeRunConnector(
 		}
 	const byType = new Map(contracts.map((c) => [c.type, c]))
 	let listCalls = 0
+	let mutationCalls = 0
 	const stubOps = async (name: unknown, params: unknown) => {
 		const n = String(name)
 		const type = n.split('.')[0]
@@ -788,13 +792,18 @@ export async function smokeRunConnector(
 			throw new Error(`${n} takes ONE row object per call ({ field: value, … }) — loop for batches, never { items: [...] }`)
 		if (fieldKeys.size && !Object.keys(arg).some((k) => fieldKeys.has(k) || k === 'id'))
 			throw new Error(`${n} got no known fields — pass a single row object like ${JSON.stringify(c?.sample?.[0] ?? {})}`)
+		mutationCalls++
 		return { ok: true, ids: ['stub'] }
 	}
 	// all THREE call paths must settle and return a summary: manual sync + a trigger from EITHER side
 	// (the trigger seam is bi-directional by construction — caps subscribe both schemas).
 	const msgs: unknown[] = [{}, ...contracts.map((c) => ({ trigger: { schema: c.type } }))]
 	listCalls = 0
+	const sourceType = contracts[0]?.type
 	for (const msg of msgs) {
+		const isSourceTrigger =
+			!!sourceType && (msg as { trigger?: { schema?: string } })?.trigger?.schema === sourceType
+		const before = mutationCalls
 		try {
 			const state = (await runActorCode(code, msg, { ops: stubOps }, {})) as Record<string, unknown>
 			if (!state || typeof state !== 'object')
@@ -804,6 +813,15 @@ export async function smokeRunConnector(
 		} catch (e) {
 			return { ok: false, error: e instanceof Error ? e.message : String(e) }
 		}
+		// SEMANTIC tripwire (the live sign-inversion bug: purchases counted as sales ⇒ net 0 ⇒ a
+		// plausible "0 erstellt" no-op): with the sample data, a source-side change MUST touch the
+		// target at least once. A zero-mutation source-trigger run is a broken rule mapping.
+		if (isSourceTrigger && mutationCalls === before)
+			return {
+				ok: false,
+				error:
+					'the source-trigger run changed NOTHING on the target — re-check the sign conventions in the data rules (e.g. purchases are NEGATIVE amounts) and the name matching against the sample rows'
+			}
 	}
 	// a connector that never LISTED anything cannot have reconciled data — the live "0 erstellt" bug
 	// shape (res.items on a { rows } result → empty loops → plausible summary). Fail it here.
