@@ -128,3 +128,12 @@ smoke gate mandatory; no fuzzy resolution; everything config-as-data.
   descriptions incl. improve_skill-earned wording — the German-numbers rule
   reaches the connector author), and the smoke gate runs ALL THREE call paths.
   114/0 (×3 consecutive; one Neon flake) · tsc clean.
+
+- `2026-07-05` — DEBUGGED + re-authored under the hardened gate: the live "0
+  Inventarartikel erstellt" was GLM reading `.items` off { rows } list results
+  + batch {items} on single-row mutation ops — both now impossible (op-shape
+  prompt 0106 + structural smoke refusals: strict stubs, must-read-data check).
+  GLM re-authored in 181s, first try, verified: reads .rows · single-row
+  mutations · sync style · trigger-direction branches · mirror row on inventory
+  refreshed. One transient GLM stream stall on the way surfaced honestly via
+  the 45s idle abort (the exact failure that used to wedge "Thinking…").
