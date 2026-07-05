@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.9...v) (2026-07-05)
+
+
+### Features
+
+* **0119:** split the voice UI — submit/cancel replace the logo button, centered ([#42](https://github.com/MyAvenCEO/avenOS/issues/42)) ([9fd75cd](https://github.com/MyAvenCEO/avenOS/commit/9fd75cd008c92254ccf206489fa8b05465d28e50))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.8...v) (2026-07-05)
 
 
