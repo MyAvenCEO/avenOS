@@ -1,5 +1,11 @@
-import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+// board 0119g — Tauri APIs are imported LAZILY: this module rides the package index into the
+// SERVER graph (betterauth imports the vibe validators), and a static @tauri-apps import crashed
+// the Fly boot ("Cannot find module @tauri-apps/api/core"). Dynamic imports keep the client
+// behavior identical (Vite bundles them) while the server never resolves them.
+import type { UnlistenFn } from '@tauri-apps/api/event'
+
+const tauriCore = () => import('@tauri-apps/api/core')
+const tauriEvent = () => import('@tauri-apps/api/event')
 import type { InterfaceDef, StyleDef, UiFixtureShell, ViewDef } from './engine/types.js'
 
 export const SANDBOX_QJS_STATE_EVENT = 'sandbox-qjs://state'
@@ -25,6 +31,7 @@ export type SandboxQjsStateEvent = {
 export async function sessionMount(
 	request: SandboxQjsMountRequest
 ): Promise<SandboxQjsMountResult> {
+	const { invoke } = await tauriCore()
 	return invoke<SandboxQjsMountResult>('plugin:sandbox-quickjs|session_mount', { request })
 }
 
@@ -33,6 +40,7 @@ export async function sessionDispatch(args: {
 	send: string
 	payload?: Record<string, unknown>
 }): Promise<{ ok: boolean; state?: Record<string, unknown> }> {
+	const { invoke } = await tauriCore()
 	return invoke('plugin:sandbox-quickjs|session_dispatch', {
 		request: {
 			sessionId: args.sessionId,
@@ -43,6 +51,7 @@ export async function sessionDispatch(args: {
 }
 
 export async function sessionUnmount(sessionId: string): Promise<void> {
+	const { invoke } = await tauriCore()
 	await invoke('plugin:sandbox-quickjs|session_unmount', { request: { sessionId } })
 }
 
@@ -57,6 +66,7 @@ export async function sessionRunTool(req: {
 	toolArgs?: unknown
 	data?: unknown
 }): Promise<unknown> {
+	const { invoke } = await tauriCore()
 	return invoke('plugin:sandbox-quickjs|run_tool', {
 		request: { logic: req.logic, name: req.name, args: req.toolArgs ?? {}, data: req.data ?? null }
 	})
@@ -65,6 +75,7 @@ export async function sessionRunTool(req: {
 export async function listenSandboxQjsState(
 	handler: (event: SandboxQjsStateEvent) => void
 ): Promise<UnlistenFn> {
+	const { listen } = await tauriEvent()
 	return listen<SandboxQjsStateEvent>(SANDBOX_QJS_STATE_EVENT, (e) => handler(e.payload))
 }
 
