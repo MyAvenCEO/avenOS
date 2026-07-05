@@ -628,7 +628,7 @@ function handleTranscribeError(message: string): void {
 			<!-- brand-gold (logo star #DEA657) 4px ROUNDED outline around the main content area only:
 			     skillify is editing a skill right now. -->
 			<div
-				class="pointer-events-none absolute inset-2 z-[70] rounded-[var(--radius-xl)]"
+				class="pointer-events-none absolute inset-y-2 right-2 left-2 z-[70] rounded-[var(--radius-xl)] md:right-[15.5rem] md:left-[15.5rem]"
 				style="box-shadow: inset 0 0 0 4px #DEA657"
 			></div>
 		{/if}
