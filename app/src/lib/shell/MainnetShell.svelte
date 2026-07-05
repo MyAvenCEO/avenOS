@@ -77,8 +77,8 @@ const isAdmin = $derived(user?.role === 'admin')
 // Mail is an ADMIN-ONLY tab (the /api/inbox/* endpoints are server-gated to admins too). board 0060.
 const tabs = $derived<{ id: Tab; label: string }[]>([
 	{ id: 'chat', label: t('mainnet.nav.chat') },
-	{ id: 'draw', label: t('mainnet.nav.draw') },
 	{ id: 'db', label: t('mainnet.nav.db') },
+	{ id: 'draw', label: t('mainnet.nav.draw') },
 	{ id: 'fly', label: t('mainnet.nav.fly') },
 	// board 0107 — Skills + Runs (the actor-model explorer) now live INSIDE the DB viewer as their own
 	// categories (SKILLS = the flow template viewer + node/config aside; RUNS = the step trace, no graph),
@@ -143,7 +143,7 @@ function openTab(id: Tab): void {
 				aria-current={tab === item.id && !settings ? 'page' : undefined}
 				onclick={() => openTab(item.id)}
 			>
-				{item.label}
+				{item.label.toUpperCase()}
 			</button>
 		{/each}
 
