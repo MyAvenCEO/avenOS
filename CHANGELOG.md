@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.3...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **deploy:** boot watchdog + phase logs + always-on app-log forensics in CI ([#34](https://github.com/MyAvenCEO/avenOS/issues/34)) ([6a89fbe](https://github.com/MyAvenCEO/avenOS/commit/6a89fbe8409a0b872446fc4ef9508df32d81b910))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.2...v) (2026-07-05)
 
 
