@@ -50,6 +50,19 @@ let currentVibeId = $state<number | null>(null)
 const currentVibe = $derived(vibeHistory.find((v) => v.id === currentVibeId) ?? null)
 // board 0118b — the overlay shows ONLY the latest exchange bubble (badges are stage/rail concerns).
 const lastMessage = $derived([...messages].reverse().find((m) => !m.vibe) ?? null)
+// board 0119f — TOAST: the bubble stays while a turn streams, then auto-hides 2.5s after settling.
+let bubbleVisible = $state(false)
+$effect(() => {
+	const m = lastMessage
+	if (!m) {
+		bubbleVisible = false
+		return
+	}
+	bubbleVisible = true
+	if (m.pending || busy) return // keep while the turn is still streaming/working
+	const timer = setTimeout(() => (bubbleVisible = false), 2500)
+	return () => clearTimeout(timer)
+})
 let busy = $state(false)
 let currentSessionId = $state<string | null>(null)
 let nextId = 0
@@ -768,7 +781,7 @@ function handleTranscribeError(message: string): void {
 						{editStreamTail}
 					</div>
 				{/if}
-				{#if lastMessage}
+				{#if lastMessage && bubbleVisible}
 					<!-- the ONE bubble: the latest human message or assistant reply, centered. -->
 					<div
 						class="max-w-[85%] rounded-[var(--radius-lg)] px-3.5 py-2 text-center text-xs leading-relaxed shadow-sm {lastMessage.role ===
