@@ -656,13 +656,13 @@ function handleTranscribeError(message: string): void {
 				style="box-shadow: inset 0 0 0 3px #DEA657"
 			></div>
 		{/if}
-		<div class="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center">
+		<div class="pointer-events-none absolute inset-x-0 top-1 z-20 flex justify-center">
 			<div
-				class="border-border bg-card/95 pointer-events-auto flex items-center gap-1 rounded-full border p-0.5 shadow-sm backdrop-blur"
+				class="border-border bg-card/95 pointer-events-auto flex items-center gap-0.5 rounded-full border p-0.5 shadow-sm backdrop-blur"
 			>
 				<button
 					type="button"
-					class="rounded-full px-3.5 py-1 text-[11px] font-semibold tracking-wide uppercase transition-colors {mainTab ===
+					class="rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase transition-colors {mainTab ===
 					'display'
 						? 'bg-primary text-primary-foreground'
 						: 'text-muted-foreground hover:text-foreground'}"
@@ -672,7 +672,7 @@ function handleTranscribeError(message: string): void {
 				</button>
 				<button
 					type="button"
-					class="rounded-full px-3.5 py-1 text-[11px] font-semibold tracking-wide uppercase transition-colors {mainTab ===
+					class="rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase transition-colors {mainTab ===
 					'flows'
 						? 'bg-primary text-primary-foreground'
 						: 'text-muted-foreground hover:text-foreground'}"
@@ -686,7 +686,7 @@ function handleTranscribeError(message: string): void {
 		     (md+): wide vibes (the website composer) lay out inside it instead of underneath the
 		     overlay cards. Mobile keeps the plain padding (asides hidden there). -->
 		<div
-			class="min-h-0 flex-1 overflow-y-auto px-6 pt-14 md:px-[15.5rem]"
+			class="min-h-0 flex-1 overflow-y-auto px-6 pt-9 md:px-[15.5rem]"
 			style="padding-bottom: 11rem"
 		>
 			{#if mainTab === 'flows'}
