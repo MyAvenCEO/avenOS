@@ -1049,46 +1049,51 @@ const pillClass = $derived.by(() => {
 					></span>
 				{/each}
 			</div>
-			<!-- Always show submit/cancel — incl. hold-to-record (long-press) mode, so there is
-			     always a visible way to commit or stop even if release-to-submit doesn't fire. -->
+			<!-- board 0119m — a right spacer mirrors the timer so the waveform stays centered; the
+			     submit/cancel controls moved OUT of the pill (below, at the logo AI-button position). -->
 			<div
-				class={`flex shrink-0 items-center justify-end ${isMobile ? 'gap-1.5 pl-1' : 'w-[4.5rem] gap-2'}`}
+				class={`shrink-0 ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
+				aria-hidden="true"
+			></div>
+		</div>
+		<!-- board 0119m — SUBMIT / CANCEL are NOT part of the waveform animation: they sit where the
+		     logo AI button is — the big ✓ dead-center (same size as the logo), a smaller × to its
+		     right (absolutely placed so the ✓ never shifts off-centre). -->
+		<div class="relative flex items-center justify-center">
+			<button
+				type="button"
+				class="flex size-[4.375rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-status-success)_55%,transparent)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
+				onclick={commitVoiceNote}
+				aria-label="Submit voice note as intent (mock)"
 			>
-				<button
-					type="button"
-					class="flex size-8 shrink-0 items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
-					onclick={commitVoiceNote}
-					aria-label="Submit voice note as intent (mock)"
+				<svg
+					class="size-8"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
 				>
-					<svg
-						class="size-4"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
-					</svg>
-				</button>
-				<button
-					type="button"
-					class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 text-primary-foreground transition-opacity hover:bg-primary-foreground/25"
-					onclick={() => void stopListening()}
-					aria-label="Stop listening"
+					<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
+				</svg>
+			</button>
+			<button
+				type="button"
+				class="absolute top-1/2 left-1/2 flex size-9 -translate-y-1/2 translate-x-[2.9rem] items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_2px_10px_-3px_rgba(0,0,0,0.25)] outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
+				onclick={() => void stopListening()}
+				aria-label="Cancel voice note"
+			>
+				<svg
+					class="size-4"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
 				>
-					<svg
-						class="size-4"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
 		</div>
 	{:else if mode === 'preparing'}
 		<div class={pillClass} role="status" aria-live="polite">
