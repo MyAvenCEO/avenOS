@@ -202,15 +202,27 @@ app.get('/billing/success', (c) =>
 // wedged Neon endpoint hangs this await FOREVER (machine up, port never opened, zero log output —
 // the live next outage signature). Log the phase and kill the process loudly if it sticks, so fly
 // restart-loops WITH a readable cause instead of silently never listening.
+// board 0119h/i — RESILIENT BOOT: retry the schema bootstrap forever with a per-attempt timeout,
+// logging every failure's real cause. A broken/suspended DB endpoint (the live next outage: the
+// Neon compute wedged right after the big migration catch-up) no longer kills or hangs the
+// machine — it stays up, keeps logging, and SELF-HEALS the moment the endpoint returns.
 console.log('[boot] phase: schema bootstrap + migrations …')
-const bootWatchdog = setTimeout(() => {
-	console.error(
-		'[boot] STUCK >60s in schema bootstrap/migrations — exiting so fly restarts; check the Neon endpoint for this environment'
-	)
-	process.exit(1)
-}, 60_000)
-await bootstrapSchema()
-clearTimeout(bootWatchdog)
+for (let attempt = 1; ; attempt++) {
+	try {
+		await Promise.race([
+			bootstrapSchema(),
+			new Promise((_, reject) =>
+				setTimeout(() => reject(new Error('attempt timed out after 45s (DB endpoint hanging?)')), 45_000)
+			)
+		])
+		break
+	} catch (e) {
+		console.error(
+			`[boot] schema bootstrap attempt ${attempt} FAILED: ${e instanceof Error ? e.message : String(e)} — retrying in 10s`
+		)
+		await new Promise((r) => setTimeout(r, 10_000))
+	}
+}
 console.log('[boot] schema bootstrap complete')
 
 // Best-effort: refresh per-model pricing from Tinfoil on boot (recordUsage also
