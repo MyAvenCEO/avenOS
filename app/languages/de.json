@@ -974,7 +974,7 @@
 	},
 	"mainnet": {
 		"nav": {
-			"chat": "Chat",
+			"chat": "Intent",
 			"vibes": "Vibes",
 			"schemas": "Schemas",
 			"db": "DB",
