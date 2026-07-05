@@ -16,6 +16,7 @@ import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { enterSkill } from '$lib/data/client'
 import { consumeSse } from '$lib/net/sse'
 import FlowStatusStrip from '$lib/shell/FlowStatusStrip.svelte'
+import SkillFlowView from '$lib/shell/SkillFlowView.svelte'
 import SkillsUsedAside, { type SkillUse } from '$lib/shell/SkillsUsedAside.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
 import VibeCard from '$lib/shell/VibeCard.svelte'
@@ -702,10 +703,8 @@ function handleTranscribeError(message: string): void {
 			style="padding-bottom: 11rem"
 		>
 			{#if mainTab === 'flows'}
-				<div
-					class="text-muted-foreground flex h-full items-center justify-center text-sm leading-relaxed"
-				>
-					Flows — bald verfügbar.
+				<div class="mx-auto h-full w-full max-w-[64rem]">
+					<SkillFlowView skillId={asideSkill} />
 				</div>
 			{:else if currentVibe}
 				{#key currentVibe.id}
