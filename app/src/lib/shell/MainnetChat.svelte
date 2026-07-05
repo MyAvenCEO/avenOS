@@ -45,7 +45,6 @@ let messages = $state<ChatMessage[]>([])
 let vibeHistory = $state<VibeEntry[]>([])
 let currentVibeId = $state<number | null>(null)
 const currentVibe = $derived(vibeHistory.find((v) => v.id === currentVibeId) ?? null)
-const vibeLabel = (schema: string): string => schema.replace(/^mock-/, '').replace(/-/g, ' ')
 // board 0118b — the overlay shows ONLY the latest exchange bubble (badges are stage/rail concerns).
 const lastMessage = $derived([...messages].reverse().find((m) => !m.vibe) ?? null)
 let busy = $state(false)
@@ -700,23 +699,4 @@ function handleTranscribeError(message: string): void {
 		</div>
 	</div>
 
-	<!-- board 0118 — THE RAIL: minimal vibe history (newest first); click restores it to the stage. -->
-	{#if vibeHistory.length > 0}
-		<aside class="border-border hidden w-44 shrink-0 overflow-y-auto border-l md:block">
-			<div class="flex flex-col gap-1 p-2">
-				{#each [...vibeHistory].reverse() as v (v.id)}
-					<button
-						type="button"
-						class="rounded-[var(--radius-lg)] border px-2.5 py-1.5 text-left text-[11px] transition-colors {v.id ===
-						currentVibeId
-							? 'border-primary/60 bg-card text-foreground'
-							: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
-						onclick={() => (currentVibeId = v.id)}
-					>
-						<span class="block truncate">{vibeLabel(v.schema)}</span>
-					</button>
-				{/each}
-			</div>
-		</aside>
-	{/if}
 </div>
