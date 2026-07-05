@@ -3,7 +3,6 @@ import { createQuery } from '@tanstack/svelte-query'
 import type { Flow } from '@avenos/aven-skills'
 import { listFlows } from '$lib/data/client'
 import StatusCard from '$lib/intents/StatusCard.svelte'
-import type { CardStatus } from '$lib/intents/types'
 
 // board 0118d/e — the LIVE FLOW ASIDE (moved from the top strip; design borrowed from the testnet
 // "intents" screen: StatusCard rows with colored side strips, mirrored for the right edge). When a
@@ -56,12 +55,6 @@ function toolFor(n: FlowNode): ToolStatus | null {
 		null
 	)
 }
-function statusOf(tl: ToolStatus | null): CardStatus {
-	if (!tl) return 'archived' // quiet/pending — the muted driftwood strip
-	if (tl.status === 'running') return 'running'
-	if (tl.status === 'error') return 'error'
-	return 'success'
-}
 function secondsOf(tl: ToolStatus | null): number {
 	if (!tl || tl.status !== 'running' || !tl.startedAt) return 0
 	return Math.max(0, Math.round((nowMs - tl.startedAt) / 1000))
@@ -81,12 +74,12 @@ function secondsOf(tl: ToolStatus | null): number {
 			{#each nodes as n (n.id)}
 				{@const tl = toolFor(n)}
 				<StatusCard
-					status={statusOf(tl)}
+					status={'archived'}
 					totalSeconds={secondsOf(tl)}
 					title={(n.name ?? n.id) + (n.flowRef ? ' ▸' : '')}
 					description={tl?.detail ?? n.note ?? n.actor ?? ''}
 					selected={tl?.status === 'running'}
-					showTimer={tl?.status === 'running'}
+					showTimer={true}
 					mirror={true}
 					skillRow={true}
 					extraClass="w-full"

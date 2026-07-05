@@ -3,7 +3,6 @@ import { createQuery } from '@tanstack/svelte-query'
 import type { Flow } from '@avenos/aven-skills'
 import { listFlows } from '$lib/data/client'
 import StatusCard from '$lib/intents/StatusCard.svelte'
-import type { CardStatus } from '$lib/intents/types'
 
 // board 0118f/0119c — the LEFT ASIDE: ALL available skills, always (the flows read-model IS the
 // skill list), in the intents design language. Recently used skills float to the top carrying
@@ -45,8 +44,6 @@ const rows = $derived.by((): Row[] => {
 
 const timeOf = (at: number): string =>
 	new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-const statusOf = (u: SkillUse | null): CardStatus =>
-	!u ? 'archived' : u.status === 'running' ? 'running' : u.status === 'error' ? 'error' : 'success'
 </script>
 
 {#if rows.length > 0}
@@ -61,12 +58,12 @@ const statusOf = (u: SkillUse | null): CardStatus =>
 		<div class="pointer-events-auto flex min-h-0 flex-col gap-1.5 overflow-y-auto">
 			{#each rows as r (r.skill)}
 				<StatusCard
-					status={statusOf(r.use)}
+					status={'archived'}
 					totalSeconds={0}
 					title={r.name}
 					description={r.use ? (r.use.detail ?? timeOf(r.use.at)) : ''}
 					selected={selectedSkill === r.skill}
-					showTimer={r.use?.status === 'running'}
+					showTimer={true}
 					onclick={() => onSelect(r.skill)}
 					skillRow={true}
 					extraClass="w-full"
