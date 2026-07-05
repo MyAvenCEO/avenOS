@@ -625,9 +625,10 @@ function handleTranscribeError(message: string): void {
 			<FlowStatusStrip skillId={asideSkill} {toolActivity} nowMs={nowTick} />
 		{/if}
 		{#if editingSkill}
-			<!-- brand-gold (logo star #DEA657) 4px full-screen outline: skill editing in progress -->
+			<!-- brand-gold (logo star #DEA657) 4px ROUNDED outline around the main content area only:
+			     skillify is editing a skill right now. -->
 			<div
-				class="pointer-events-none fixed inset-0 z-[70]"
+				class="pointer-events-none absolute inset-2 z-[70] rounded-[var(--radius-xl)]"
 				style="box-shadow: inset 0 0 0 4px #DEA657"
 			></div>
 		{/if}
