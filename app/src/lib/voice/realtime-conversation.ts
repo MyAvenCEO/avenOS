@@ -1,0 +1,181 @@
+/**
+ * Hands-free realtime CONVERSATION controller (board 0120 slice B): the mic stays open, an energy
+ * VAD auto-endpoints each utterance (commit on a pause), the server streams the spoken reply back,
+ * and it loops — a continuous voice roundtrip. Barge-in: a loud enough onset while the AI is
+ * speaking cancels playback and starts listening again.
+ *
+ * It does NOT own the mic — the caller (IntentComposer) feeds captured 16 kHz frames via
+ * {@link RealtimeConversation.pushFrame}. The WebSocket client and the audio sink are injectable so
+ * the state machine is unit-testable without a real socket or Web Audio.
+ */
+import {
+	floatToPcm16,
+	openRealtimeVoice,
+	pcm16ToFloat32,
+	type RealtimeVoiceClient,
+	type RealtimeVoiceHandlers,
+	realtimeWsUrl
+} from './realtime-voice'
+import { createVad, rms, type Vad } from './vad'
+
+/** `listening` (feeding STT, VAD-endpointing) → `thinking` (turn running) → `speaking` (playing TTS). */
+export type ConversationState = 'listening' | 'thinking' | 'speaking'
+
+/** Where decoded TTS audio goes. Abstracted so tests inject a fake and the default uses Web Audio. */
+export type AudioSink = {
+	play(bytes: ArrayBuffer, sampleRate: number): void
+	stop(): void
+	/** ms of audio still scheduled — used to return to listening only once the reply finished. */
+	pendingMs(): number
+}
+
+export type ConversationHandlers = {
+	onCaption?: (text: string) => void
+	onReplyText?: (full: string) => void
+	onState?: (state: ConversationState) => void
+	onError?: (message: string) => void
+}
+
+export type RealtimeConversation = {
+	/** Feed one captured mic frame (float32 @ 16 kHz) with its capture time. */
+	pushFrame(pcm16k: Float32Array, nowMs: number): void
+	/** End the conversation: stop playback + close the socket. */
+	stop(): void
+	readonly state: ConversationState
+}
+
+/** Gap-free Web Audio sink over a (blessed) AudioContext. */
+export function webAudioSink(ctx: AudioContext): AudioSink {
+	let nextStart = 0
+	const sources = new Set<AudioBufferSourceNode>()
+	return {
+		play(bytes, sampleRate) {
+			const samples = pcm16ToFloat32(bytes)
+			if (samples.length === 0) return
+			if (ctx.state === 'suspended') void ctx.resume()
+			const buffer = ctx.createBuffer(1, samples.length, sampleRate)
+			buffer.getChannelData(0).set(samples)
+			const src = ctx.createBufferSource()
+			src.buffer = buffer
+			src.connect(ctx.destination)
+			const at = Math.max(ctx.currentTime, nextStart)
+			src.start(at)
+			nextStart = at + buffer.duration
+			sources.add(src)
+			src.onended = () => sources.delete(src)
+		},
+		stop() {
+			for (const s of sources) {
+				try {
+					s.stop()
+				} catch {
+					/* already stopped */
+				}
+			}
+			sources.clear()
+			nextStart = 0
+		},
+		pendingMs() {
+			return Math.max(0, (nextStart - ctx.currentTime) * 1000)
+		}
+	}
+}
+
+/**
+ * Start a hands-free conversation. Provide a BLESSED `audioContext` (created inside the tap gesture)
+ * so playback isn't stuck suspended on iOS/WKWebView — that off-gesture-suspended context is why the
+ * reply "never speaks back". `bargeThreshold` (RMS) is intentionally higher than the VAD threshold so
+ * the AI's own voice leaking into the mic doesn't false-trigger a barge-in.
+ */
+export function startRealtimeConversation(opts: {
+	baseUrl: string
+	token: string
+	audioContext?: AudioContext
+	handlers?: ConversationHandlers
+	bargeThreshold?: number
+	vad?: Vad
+	audioSink?: AudioSink
+	clientFactory?: (url: string, handlers: RealtimeVoiceHandlers) => RealtimeVoiceClient
+	setTimeoutFn?: (fn: () => void, ms: number) => void
+}): RealtimeConversation {
+	const h = opts.handlers ?? {}
+	const vad = opts.vad ?? createVad()
+	const bargeThreshold = opts.bargeThreshold ?? 0.05
+	const later = opts.setTimeoutFn ?? ((fn, ms) => void setTimeout(fn, ms))
+	const sink: AudioSink =
+		opts.audioSink ??
+		(opts.audioContext
+			? webAudioSink(opts.audioContext)
+			: { play: () => {}, stop: () => {}, pendingMs: () => 0 })
+
+	let state: ConversationState = 'listening'
+	let sampleRate = 24_000
+	let reply = ''
+
+	const setState = (s: ConversationState) => {
+		if (s === state) return
+		state = s
+		if (s === 'listening') vad.reset()
+		h.onState?.(s)
+	}
+
+	const clientHandlers: RealtimeVoiceHandlers = {
+		onCaption: (t) => h.onCaption?.(t),
+		onReply: (delta) => {
+			reply += delta
+			h.onReplyText?.(reply)
+		},
+		onReplyDone: (full) => {
+			reply = full
+			h.onReplyText?.(reply)
+		},
+		onAudioInfo: (sr) => {
+			sampleRate = sr
+		},
+		onAudio: (bytes) => {
+			setState('speaking')
+			sink.play(bytes, sampleRate)
+		},
+		onTurnDone: () => {
+			// Return to listening only after the queued reply audio has finished playing.
+			reply = ''
+			const wait = sink.pendingMs()
+			if (wait <= 0) setState('listening')
+			else later(() => setState('listening'), wait)
+		},
+		onError: (m) => h.onError?.(m)
+	}
+
+	const client = opts.clientFactory
+		? opts.clientFactory(realtimeWsUrl(opts.baseUrl, opts.token), clientHandlers)
+		: openRealtimeVoice({ url: realtimeWsUrl(opts.baseUrl, opts.token), handlers: clientHandlers })
+
+	return {
+		get state() {
+			return state
+		},
+		pushFrame(pcm16k: Float32Array, nowMs: number) {
+			const energy = rms(pcm16k)
+			if (state === 'listening') {
+				client.feed(floatToPcm16(pcm16k))
+				if (vad.push(energy, nowMs) === 'end') {
+					client.commit()
+					setState('thinking')
+				}
+			} else if (state === 'speaking') {
+				// Barge-in: a clearly-voiced onset (above the higher threshold) interrupts the AI.
+				if (energy >= bargeThreshold) {
+					sink.stop()
+					setState('listening')
+					client.feed(floatToPcm16(pcm16k))
+					vad.push(energy, nowMs)
+				}
+			}
+			// `thinking`: ignore mic — the server is running the turn.
+		},
+		stop() {
+			sink.stop()
+			client.cancel()
+		}
+	}
+}

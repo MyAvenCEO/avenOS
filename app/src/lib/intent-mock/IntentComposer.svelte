@@ -24,7 +24,10 @@ import {
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { AUTH_BASE_URL, getBearerToken } from '$lib/auth/auth-client'
 import { voiceMode } from '$lib/settings/voice-mode-store'
-import { type RealtimeTurn, startRealtimeTurn } from '$lib/voice/realtime-turn'
+import {
+	type RealtimeConversation,
+	startRealtimeConversation
+} from '$lib/voice/realtime-conversation'
 
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
 const TYPING_TEXTAREA_MAX_ROWS = 12
@@ -414,8 +417,8 @@ function formatAttachmentSummary(): string {
 onDestroy(() => {
 	clearLongPressTimer()
 	teardownRecording()
-	realtimeTurn?.cancel()
-	realtimeTurn = null
+	realtimeConversation?.stop()
+	realtimeConversation = null
 	for (const a of attachmentsUnmountSnapshot) revokeAttachmentPreview(a)
 })
 
@@ -546,8 +549,8 @@ let voicePartial = $state('')
 let liveStreaming = false
 /** Unsubscribe from the live `asr:transcribe-progress` stream. */
 let stopProgress: (() => void) | null = null
-/** Active server-orchestrated realtime voice turn (board 0120), when in `realtime` mode. */
-let realtimeTurn: RealtimeTurn | null = null
+/** Active hands-free realtime voice conversation (board 0120), when in `realtime` mode. */
+let realtimeConversation: RealtimeConversation | null = null
 /** The latest caption text — used as the user's line when the realtime turn completes. */
 let lastCaption = ''
 
@@ -600,7 +603,14 @@ async function beginCapture() {
 	try {
 		if (!audioCtx) armAudioContext()
 		if (!audioCtx) throw new Error('Microphone unavailable')
-		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+		// echoCancellation keeps the AI's own TTS (played back on the same device) from leaking into
+		// the open mic during a hands-free conversation — otherwise the STT would transcribe the AI
+		// and barge-in would false-trigger. board 0120 slice B.
+		const stream = await navigator.mediaDevices.getUserMedia({
+			audio: useRemoteRealtime
+				? { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+				: true
+		})
 		mediaStream = stream
 		// iOS shows the mic-permission grant as a multi-second modal; a mode/teardown effect can
 		// null `audioCtx` while we await it. Without re-validating, the `audioCtx.state` read below
@@ -618,29 +628,23 @@ async function beginCapture() {
 			lastCaption = ''
 			try {
 				if (useRemoteRealtime) {
-					// Server-orchestrated realtime turn: captions stream in during capture; the reply
-					// audio is played by the controller after commit. board 0120.
-					realtimeTurn = startRealtimeTurn({
+					// Hands-free conversation: the mic stays open, an energy VAD auto-endpoints each
+					// utterance, the server streams the spoken reply back (played through the blessed
+					// capture AudioContext so it isn't stuck suspended), and it loops until the user
+					// taps to stop. board 0120 slice B.
+					realtimeConversation = startRealtimeConversation({
 						baseUrl: AUTH_BASE_URL,
 						token: getBearerToken(),
+						audioContext: audioCtx ?? undefined,
 						handlers: {
 							onCaption: (t) => {
 								voicePartial = t
 								lastCaption = t
 							},
-							onDone: (assistant) => {
-								transcribing = false
-								if (assistant && lastCaption.trim()) onVoiceReply?.(lastCaption.trim(), assistant)
-								realtimeTurn?.cancel()
-								realtimeTurn = null
-								voicePartial = ''
+							onReplyText: (full) => {
+								if (full.trim() && lastCaption.trim()) onVoiceReply?.(lastCaption.trim(), full.trim())
 							},
-							onError: (m) => {
-								transcribing = false
-								onTranscribeError?.(m)
-								realtimeTurn?.cancel()
-								realtimeTurn = null
-							}
+							onError: (m) => onTranscribeError?.(m)
 						}
 					})
 					liveStreaming = true
@@ -654,8 +658,8 @@ async function beginCapture() {
 			} catch {
 				stopProgress?.()
 				stopProgress = null
-				realtimeTurn?.cancel()
-				realtimeTurn = null
+				realtimeConversation?.stop()
+				realtimeConversation = null
 				liveStreaming = false
 			}
 		}
@@ -667,7 +671,7 @@ async function beginCapture() {
 			// Stream each chunk live at 16 kHz; the VAD closes segments on pauses.
 			if (liveStreaming) {
 				const ds = downsample(input, recordedSampleRate, TARGET_SAMPLE_RATE)
-				if (realtimeTurn) realtimeTurn.feed(ds)
+				if (realtimeConversation) realtimeConversation.pushFrame(ds, performance.now())
 				else void feedLiveTranscription(ds)
 			}
 		}
@@ -817,13 +821,14 @@ async function commitVoiceNote() {
 	mode = 'collapsed'
 	openMicCooldownUntilMs = performance.now() + 280
 
-	if (wasLive && realtimeTurn) {
-		// Realtime mode (board 0120): end the USER turn; the server now runs LLM + streams TTS audio
-		// back (played by the controller). `onDone` (set when the turn started) clears `transcribing`
-		// and hands the finished exchange to `onVoiceReply`.
-		transcribing = true
+	if (wasLive && realtimeConversation) {
+		// Realtime mode (board 0120 slice B): the conversation is hands-free — the VAD auto-commits
+		// each utterance and the reply is spoken back in a loop. Tapping the mic ENDS the whole
+		// conversation (the mic was already closed by teardownRecording above).
+		realtimeConversation.stop()
+		realtimeConversation = null
 		liveStreaming = false
-		realtimeTurn.commit()
+		voicePartial = ''
 	} else if (wasLive) {
 		// Finish the live session: flush the trailing speech, get the full transcript,
 		// and only NOW submit to the chat (partials were preview-only).
