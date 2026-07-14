@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.14-next.1...v) (2026-07-14)
+
+
+### Features
+
+* **0120:** hands-free realtime voice conversation — auto-VAD, barge-in, reliable speak-back ([#46](https://github.com/MyAvenCEO/avenOS/issues/46)) ([c625061](https://github.com/MyAvenCEO/avenOS/commit/c6250610dad637fdb33e486cec7a8dd826a20e2d))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.12...v) (2026-07-14)
 
 
