@@ -1,7 +1,7 @@
 {
 	"name": "@AvenOS/app",
 	"private": true,
-	"version": "26.7.5-next.12",
+	"version": "26.7.14-next.1",
 	"type": "module",
 	"scripts": {
 		"predev": "bun ../scripts/free-dev-server-port.ts",

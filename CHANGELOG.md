@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.12...v) (2026-07-14)
+
+
+### Features
+
+* **0120:** e2ee TEE realtime live voice (Voxtral STT→LLM→TTS, server-orchestrated) + mode switch ([#45](https://github.com/MyAvenCEO/avenOS/issues/45)) ([61ab15d](https://github.com/MyAvenCEO/avenOS/commit/61ab15def8b6d644e59b9fd8adb7961c47f4c111))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.11...v) (2026-07-05)
 
 
