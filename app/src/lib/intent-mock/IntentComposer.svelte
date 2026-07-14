@@ -22,6 +22,9 @@ import {
 	transcribeAudio
 } from '$lib/intent-mock/transcribe'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { AUTH_BASE_URL, getBearerToken } from '$lib/auth/auth-client'
+import { voiceMode } from '$lib/settings/voice-mode-store'
+import { type RealtimeTurn, startRealtimeTurn } from '$lib/voice/realtime-turn'
 
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
 const TYPING_TEXTAREA_MAX_ROWS = 12
@@ -101,7 +104,14 @@ let {
 	 */
 	voicePrep = null,
 	/** Surface a transcription/microphone error to the parent (no message is posted). */
-	onTranscribeError
+	onTranscribeError,
+	/**
+	 * Realtime live-voice mode (board 0120): when the voice-mode switch is `realtime`, the SERVER
+	 * runs the whole STT→LLM→TTS turn and streams audio back (played here). If the surface provides
+	 * this, it receives the finished `(userText, assistantText)` so it can record the exchange in its
+	 * thread; without it, the turn is still spoken but not persisted by the surface.
+	 */
+	onVoiceReply
 }: {
 	onSubmitMessage?: (text: string, files: File[]) => void
 	onModeChange?: (mode: Mode) => void
@@ -121,6 +131,7 @@ let {
 	onVoiceUnavailableClick?: () => void
 	voicePrep?: VoicePrep | null
 	onTranscribeError?: (message: string) => void
+	onVoiceReply?: (userText: string, assistantText: string) => void
 } = $props()
 
 // On-device transcription is the default whenever we're in the Tauri runtime, so
@@ -403,6 +414,8 @@ function formatAttachmentSummary(): string {
 onDestroy(() => {
 	clearLongPressTimer()
 	teardownRecording()
+	realtimeTurn?.cancel()
+	realtimeTurn = null
 	for (const a of attachmentsUnmountSnapshot) revokeAttachmentPreview(a)
 })
 
@@ -533,12 +546,21 @@ let voicePartial = $state('')
 let liveStreaming = false
 /** Unsubscribe from the live `asr:transcribe-progress` stream. */
 let stopProgress: (() => void) | null = null
+/** Active server-orchestrated realtime voice turn (board 0120), when in `realtime` mode. */
+let realtimeTurn: RealtimeTurn | null = null
+/** The latest caption text — used as the user's line when the realtime turn completes. */
+let lastCaption = ''
 
 // The default on-device route (Tauri runtime, no caller-injected transcriber) uses
 // the live VAD-streaming path: PCM is fed to the backend during capture and the
 // transcript streams back as a preview. A caller-supplied `onTranscribeAudio` keeps
 // the single-shot offline path.
 const useLiveStream = $derived(tauriRuntime && !onTranscribeAudio)
+// Realtime live-voice (board 0120): server-orchestrated STT→LLM→TTS. Active only when the voice-mode
+// switch is `realtime`, we're signed in (bearer present for the ws), and the live path is in play.
+const useRemoteRealtime = $derived(
+	useLiveStream && $voiceMode === 'realtime' && !!getBearerToken()
+)
 
 /**
  * Create + resume the AudioContext INSIDE the user-gesture call stack (the mic tap). A context
@@ -593,15 +615,47 @@ async function beginCapture() {
 		// the processor, so the first fed chunks have somewhere to land.
 		if (useLiveStream) {
 			voicePartial = ''
+			lastCaption = ''
 			try {
-				await startLiveTranscription()
-				stopProgress = await subscribeTranscribeProgress((p) => {
-					voicePartial = p.text
-				})
-				liveStreaming = true
+				if (useRemoteRealtime) {
+					// Server-orchestrated realtime turn: captions stream in during capture; the reply
+					// audio is played by the controller after commit. board 0120.
+					realtimeTurn = startRealtimeTurn({
+						baseUrl: AUTH_BASE_URL,
+						token: getBearerToken(),
+						handlers: {
+							onCaption: (t) => {
+								voicePartial = t
+								lastCaption = t
+							},
+							onDone: (assistant) => {
+								transcribing = false
+								if (assistant && lastCaption.trim()) onVoiceReply?.(lastCaption.trim(), assistant)
+								realtimeTurn?.cancel()
+								realtimeTurn = null
+								voicePartial = ''
+							},
+							onError: (m) => {
+								transcribing = false
+								onTranscribeError?.(m)
+								realtimeTurn?.cancel()
+								realtimeTurn = null
+							}
+						}
+					})
+					liveStreaming = true
+				} else {
+					await startLiveTranscription()
+					stopProgress = await subscribeTranscribeProgress((p) => {
+						voicePartial = p.text
+					})
+					liveStreaming = true
+				}
 			} catch {
 				stopProgress?.()
 				stopProgress = null
+				realtimeTurn?.cancel()
+				realtimeTurn = null
 				liveStreaming = false
 			}
 		}
@@ -612,7 +666,9 @@ async function beginCapture() {
 			pcmChunks.push(input)
 			// Stream each chunk live at 16 kHz; the VAD closes segments on pauses.
 			if (liveStreaming) {
-				void feedLiveTranscription(downsample(input, recordedSampleRate, TARGET_SAMPLE_RATE))
+				const ds = downsample(input, recordedSampleRate, TARGET_SAMPLE_RATE)
+				if (realtimeTurn) realtimeTurn.feed(ds)
+				else void feedLiveTranscription(ds)
 			}
 		}
 		// Sink through a muted gain node so ScriptProcessor fires without feedback.
@@ -761,7 +817,14 @@ async function commitVoiceNote() {
 	mode = 'collapsed'
 	openMicCooldownUntilMs = performance.now() + 280
 
-	if (wasLive) {
+	if (wasLive && realtimeTurn) {
+		// Realtime mode (board 0120): end the USER turn; the server now runs LLM + streams TTS audio
+		// back (played by the controller). `onDone` (set when the turn started) clears `transcribing`
+		// and hands the finished exchange to `onVoiceReply`.
+		transcribing = true
+		liveStreaming = false
+		realtimeTurn.commit()
+	} else if (wasLive) {
 		// Finish the live session: flush the trailing speech, get the full transcript,
 		// and only NOW submit to the chat (partials were preview-only).
 		transcribing = true

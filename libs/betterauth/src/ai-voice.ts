@@ -170,3 +170,262 @@ export async function aiVoiceRealtimeConfig(c: Context): Promise<Response> {
 		intent: 'transcription'
 	})
 }
+
+// ───────────────────────── server-side voice orchestration ─────────────────────────
+//
+// Lowest-latency topology (board 0120): the client streams mic audio over ONE duplex WebSocket and
+// the SERVER runs the whole STT→LLM→TTS turn against the colocated Tinfoil enclaves, so the
+// intermediate transcript + reply text never round-trip back to the phone. Everything below is the
+// server orchestrator that the `/api/ai/voice/realtime/ws` route drives.
+
+/** Default upstream STT WebSocket (OpenAI-Realtime-compatible) on the Tinfoil enclave. */
+const TINFOIL_REALTIME_WS =
+	process.env.TINFOIL_REALTIME_WS_URL ?? 'wss://inference.tinfoil.sh/v1/realtime'
+/** Sample rate of the TTS PCM we forward down to the client (voxtral-tts default). */
+export const TTS_SAMPLE_RATE = 24_000
+
+/** Build the upstream STT WebSocket URL — `?intent=transcription` selects Tinfoil's OpenAI-Realtime
+ *  translation layer; `model` pins the realtime STT model. */
+export function realtimeUpstreamUrl(
+	models: VoiceModels = resolveVoiceModels(),
+	base: string = TINFOIL_REALTIME_WS
+): string {
+	const u = new URL(base)
+	u.searchParams.set('intent', 'transcription')
+	u.searchParams.set('model', models.stt)
+	return u.toString()
+}
+
+/** Validate the bearer passed as the ws `?token=` (browsers can't set WebSocket headers). */
+export async function sessionFromBearer(token: string | null | undefined): Promise<unknown> {
+	if (!token) return null
+	const { auth } = await import('./auth')
+	return auth.api.getSession({ headers: new Headers({ Authorization: `Bearer ${token}` }) })
+}
+
+/**
+ * Parse one upstream STT event (OpenAI-Realtime-compatible) into a transcript delta or final.
+ * Tolerant of the exact event id: `…transcription.delta` (partial), `…transcription.completed` /
+ * `…done` (final), reading `delta` or `transcript`.
+ */
+export function parseTranscriptEvent(raw: unknown): { delta?: string; final?: string } {
+	if (typeof raw !== 'string') return {}
+	let msg: Record<string, unknown>
+	try {
+		msg = JSON.parse(raw) as Record<string, unknown>
+	} catch {
+		return {}
+	}
+	const type = String(msg.type ?? '')
+	const text =
+		typeof msg.delta === 'string'
+			? msg.delta
+			: typeof msg.transcript === 'string'
+				? msg.transcript
+				: ''
+	if (type.endsWith('.delta')) return { delta: text }
+	if (type.endsWith('.completed') || type.endsWith('.done')) return { final: text }
+	return {}
+}
+
+/**
+ * Incrementally split a growing reply buffer into COMPLETE sentences for sentence-chunked TTS:
+ * returns each sentence terminated by `.`/`!`/`?` (plus a trailing closing quote/bracket) and the
+ * `rest` to keep buffering — so the first sentence starts synthesizing while the LLM is still
+ * generating the next.
+ */
+export function chunkSentences(buffer: string): { sentences: string[]; rest: string } {
+	const sentences: string[] = []
+	const re = /[^.!?]*[.!?]+["')\]]*\s*/g
+	let lastIndex = 0
+	for (let m = re.exec(buffer); m !== null; m = re.exec(buffer)) {
+		const s = m[0].trim()
+		if (s) sentences.push(s)
+		lastIndex = re.lastIndex
+	}
+	return { sentences, rest: buffer.slice(lastIndex) }
+}
+
+/** Minimal WebSocket surface (the upstream STT socket), kept abstract so the orchestrator is
+ *  testable with a fake socket. */
+export type WebSocketLike = {
+	readyState: number
+	send(data: ArrayBufferLike | ArrayBufferView | string): void
+	close(code?: number, reason?: string): void
+}
+
+/** Downstream sink the orchestrator writes to (adapted to the hono/Bun ws in `server.ts`). */
+export type VoiceDownstream = {
+	/** Send a JSON control/text event (caption, reply, reply_done, audio_info, turn_done, error). */
+	sendEvent(ev: Record<string, unknown>): void
+	/** Send a binary TTS audio frame. */
+	sendAudio(bytes: ArrayBuffer): void
+}
+
+/** The orchestrator surface the route wires the two sockets into. */
+export type VoiceOrchestrator = {
+	/** A frame from the client: binary = mic PCM16 (→ STT upstream); string = `{t:'commit'|'cancel'}`. */
+	onClientFrame(data: string | ArrayBuffer): void
+	/** The STT upstream opened. */
+	onUpstreamOpen(): void
+	/** A frame from the STT upstream (transcript deltas/finals). */
+	onUpstreamFrame(data: unknown): void
+	/** Tear down. */
+	close(): void
+}
+
+/**
+ * Create the STT→LLM→TTS orchestrator for one connection. `upstream` is the (already-created) STT
+ * WebSocket to Tinfoil; `down` writes to the client. On the client's `commit`, the accumulated
+ * transcript drives a streaming LLM turn whose reply is sentence-chunked into TTS and streamed back
+ * as audio. `fetchImpl` is injectable for tests; the live loop is HITL-verified (needs the enclave).
+ */
+export function createVoiceOrchestrator(deps: {
+	down: VoiceDownstream
+	upstream: WebSocketLike
+	apiKey: string
+	baseUrl?: string
+	models?: VoiceModels
+	fetchImpl?: typeof fetch
+}): VoiceOrchestrator {
+	const base = deps.baseUrl ?? process.env.TINFOIL_BASE_URL ?? 'https://inference.tinfoil.sh/v1'
+	const models = deps.models ?? resolveVoiceModels()
+	const f = deps.fetchImpl ?? fetch
+	let caption = ''
+	let upstreamOpen = false
+	let pendingCommit = false
+	const upstreamQueue: ArrayBuffer[] = []
+	let turnRunning = false
+
+	const COMMIT = JSON.stringify({ type: 'input_audio_buffer.commit' })
+	const flushUpstream = () => {
+		for (const b of upstreamQueue.splice(0)) deps.upstream.send(b)
+		if (pendingCommit) {
+			pendingCommit = false
+			deps.upstream.send(COMMIT)
+		}
+	}
+	const close = () => {
+		try {
+			deps.upstream.close()
+		} catch {
+			/* already closing */
+		}
+	}
+
+	async function synthesize(sentence: string, first: boolean): Promise<void> {
+		const res = await f(`${base}/audio/speech`, {
+			method: 'POST',
+			headers: { Authorization: `Bearer ${deps.apiKey}`, 'Content-Type': 'application/json' },
+			body: JSON.stringify(buildSpeechRequest({ text: sentence, model: models.tts }))
+		})
+		if (!res.ok) return
+		const bytes = await res.arrayBuffer()
+		if (first) deps.down.sendEvent({ t: 'audio_info', sampleRate: TTS_SAMPLE_RATE })
+		deps.down.sendAudio(bytes)
+	}
+
+	async function runTurn(transcript: string): Promise<void> {
+		if (turnRunning || !transcript.trim()) return
+		turnRunning = true
+		try {
+			const res = await f(`${base}/chat/completions`, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${deps.apiKey}`, 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					model: models.llm,
+					messages: [{ role: 'user', content: transcript }],
+					stream: true
+				})
+			})
+			if (!res.ok || !res.body) {
+				deps.down.sendEvent({ t: 'error', message: `llm ${res.status}` })
+				return
+			}
+			const reader = res.body.getReader()
+			const decoder = new TextDecoder()
+			let sse = ''
+			let reply = ''
+			let pending = ''
+			let firstAudio = true
+			for (;;) {
+				const { done, value } = await reader.read()
+				if (done) break
+				sse += decoder.decode(value, { stream: true })
+				const events = sse.split('\n\n')
+				sse = events.pop() ?? ''
+				for (const ev of events) {
+					const line = ev.split('\n').find((l) => l.startsWith('data:'))
+					if (!line) continue
+					const payload = line.slice(5).trim()
+					if (payload === '[DONE]') continue
+					let json: { choices?: { delta?: { content?: string } }[] }
+					try {
+						json = JSON.parse(payload)
+					} catch {
+						continue
+					}
+					const delta = json.choices?.[0]?.delta?.content
+					if (!delta) continue
+					reply += delta
+					pending += delta
+					deps.down.sendEvent({ t: 'reply', text: delta })
+					const { sentences, rest } = chunkSentences(pending)
+					pending = rest
+					for (const s of sentences) {
+						await synthesize(s, firstAudio)
+						firstAudio = false
+					}
+				}
+			}
+			const tail = pending.trim()
+			if (tail) await synthesize(tail, firstAudio)
+			deps.down.sendEvent({ t: 'reply_done', text: reply })
+			deps.down.sendEvent({ t: 'turn_done' })
+		} catch (e) {
+			deps.down.sendEvent({ t: 'error', message: e instanceof Error ? e.message : String(e) })
+		} finally {
+			turnRunning = false
+		}
+	}
+
+	return {
+		onUpstreamOpen() {
+			upstreamOpen = true
+			flushUpstream()
+		},
+		onUpstreamFrame(data) {
+			const { delta, final } = parseTranscriptEvent(data)
+			if (delta) {
+				caption += delta
+				deps.down.sendEvent({ t: 'caption', text: caption })
+			}
+			if (final !== undefined) {
+				const transcript = final || caption
+				deps.down.sendEvent({ t: 'caption', text: transcript })
+				caption = ''
+				void runTurn(transcript)
+			}
+		},
+		onClientFrame(data) {
+			if (typeof data !== 'string') {
+				if (upstreamOpen && deps.upstream.readyState === 1) deps.upstream.send(data)
+				else upstreamQueue.push(data)
+				return
+			}
+			let msg: { t?: string }
+			try {
+				msg = JSON.parse(data) as { t?: string }
+			} catch {
+				return
+			}
+			if (msg.t === 'commit') {
+				if (upstreamOpen && deps.upstream.readyState === 1) deps.upstream.send(COMMIT)
+				else pendingCommit = true
+			} else if (msg.t === 'cancel') {
+				close()
+			}
+		},
+		close
+	}
+}

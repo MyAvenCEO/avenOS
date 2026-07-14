@@ -279,6 +279,22 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — E2E wiring + **architecture pivot to server-side orchestration**. Latency
+  correction (user): the STT→LLM→TTS chaining must be SERVER-side, not client-orchestrated —
+  one duplex socket (phone streams mic up, receives caption/reply/audio down); aven-node runs
+  the whole turn against the colocated Tinfoil enclaves so the transcript/reply never
+  round-trip to the phone. Implemented: `createVoiceOrchestrator` (STT relay → LLM SSE stream
+  → sentence-chunked TTS → audio down) + `/api/ai/voice/realtime/ws` Bun WebSocket route
+  (`createBunWebSocket`, `?token=` bearer gate) + thin client (`realtime-voice.ts`
+  duplex + `realtime-turn.ts` playback) + `IntentComposer` dispatch (realtime mode streams to
+  the server turn, plays audio, surfaces the exchange via new `onVoiceReply`). On-device path
+  intact. Orchestrator unit-tested with injected fetch/sockets (full turn: caption → reply →
+  2 TTS frames → reply_done → turn_done; deferred-commit). app 74 pass · betterauth ai-voice
+  12 pass · betterauth tsc 0 · svelte-check 0 errors. **Trade-off recorded:** server-side
+  chaining ⇒ aven-node sees plaintext (matches the proxy-terminated choice); mutually exclusive
+  with EHBP true-e2ee unless aven-node itself runs in a TEE (follow-on). **Still open:** voice
+  tool-calling (edit todos by voice — orchestrator LLM has no tools yet); live HITL verify on
+  TestFlight + server deploy (`deploy:server:sprite`).
 - `2026-07-14` — Build (discover → build → review). Implemented the reviewable unit:
   proxy broker `libs/betterauth/src/ai-voice.ts` (`aiVoiceSpeech` → `/v1/audio/speech`,
   `aiVoiceRealtimeConfig`; pure `resolveVoiceModels`/`voiceAuthError`/`buildSpeechRequest`,

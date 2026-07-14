@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { createBunWebSocket } from 'hono/bun'
 import { cors } from 'hono/cors'
 import {
 	aiChat,
@@ -9,7 +10,16 @@ import {
 	aiUsage,
 	aiUsageRecent
 } from './ai'
-import { aiVoiceRealtimeConfig, aiVoiceSpeech } from './ai-voice'
+import {
+	aiVoiceRealtimeConfig,
+	aiVoiceSpeech,
+	createVoiceOrchestrator,
+	realtimeUpstreamUrl,
+	resolveVoiceModels,
+	sessionFromBearer,
+	type VoiceDownstream,
+	type WebSocketLike
+} from './ai-voice'
 import { auth, TRUSTED_ORIGINS } from './auth'
 import {
 	billingCancel,
@@ -49,6 +59,10 @@ import { listRuns, runSkill } from './skills-run'
 import { syncPricing } from './usage'
 import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
 import { getVibe } from './vibe-registry'
+
+// Bun WebSocket adapter for the realtime voice route (board 0120). The returned `websocket`
+// handler is attached to the server export below so Bun.serve upgrades connections.
+const { upgradeWebSocket, websocket } = createBunWebSocket()
 
 const app = new Hono()
 
@@ -99,6 +113,84 @@ app.get('/api/ai/sessions/:id/messages', aiSessionMessages)
 // Realtime live-voice broker (board 0120): TTS synthesis + realtime STT session config, both session-gated.
 app.post('/api/ai/voice/speech', aiVoiceSpeech)
 app.get('/api/ai/voice/realtime', aiVoiceRealtimeConfig)
+
+// Realtime live-voice DUPLEX socket (board 0120): the SERVER orchestrates the whole STT→LLM→TTS
+// turn against the colocated Tinfoil enclaves, so the transcript + reply never round-trip to the
+// phone. The client streams mic PCM16 up and receives caption/reply text + TTS audio down. Auth is
+// the Better Auth bearer passed as `?token=` (browsers can't set WebSocket headers).
+app.get(
+	'/api/ai/voice/realtime/ws',
+	async (c, next) => {
+		const session = await sessionFromBearer(c.req.query('token'))
+		if (!session) return c.json({ error: 'unauthorized' }, 401)
+		if (!process.env.TINFOIL_API_KEY) return c.json({ error: 'voice unavailable' }, 503)
+		return next()
+	},
+	upgradeWebSocket(() => {
+		const key = process.env.TINFOIL_API_KEY as string
+		const models = resolveVoiceModels()
+		// DOM's WebSocket ctor has no headers arg; Bun's does. Cast to the header-aware shape.
+		const UpstreamWS = WebSocket as unknown as new (
+			url: string,
+			opts?: { headers?: Record<string, string> }
+		) => WebSocket
+		let orchestrator: ReturnType<typeof createVoiceOrchestrator> | null = null
+		let upstream: WebSocket | null = null
+		return {
+			onOpen(_evt, ws) {
+				upstream = new UpstreamWS(realtimeUpstreamUrl(models), {
+					headers: { Authorization: `Bearer ${key}` }
+				})
+				upstream.binaryType = 'arraybuffer'
+				const down: VoiceDownstream = {
+					sendEvent: (e) => {
+						try {
+							ws.send(JSON.stringify(e))
+						} catch {
+							/* client gone */
+						}
+					},
+					sendAudio: (b) => {
+						try {
+							ws.send(b)
+						} catch {
+							/* client gone */
+						}
+					}
+				}
+				orchestrator = createVoiceOrchestrator({
+					down,
+					upstream: upstream as unknown as WebSocketLike,
+					apiKey: key,
+					models
+				})
+				upstream.onopen = () => orchestrator?.onUpstreamOpen()
+				upstream.onmessage = (ev: MessageEvent) => orchestrator?.onUpstreamFrame(ev.data)
+				upstream.onerror = () => {
+					try {
+						ws.close(1011, 'stt upstream error')
+					} catch {
+						/* closing */
+					}
+				}
+				upstream.onclose = () => {
+					try {
+						ws.close()
+					} catch {
+						/* closing */
+					}
+				}
+			},
+			onMessage(evt) {
+				const data = evt.data
+				orchestrator?.onClientFrame(typeof data === 'string' ? data : (data as ArrayBuffer))
+			},
+			onClose() {
+				orchestrator?.close()
+			}
+		}
+	})
+)
 app.post('/api/admin/set-tier', aiSetTier)
 
 // Flow/skill CONFIG templates (board 0087, Layer A) — admin-only CRUD; the Skills/Runs UI reads
@@ -248,4 +340,4 @@ const port = Number(new URL(process.env.BETTER_AUTH_URL ?? 'http://localhost:878
 // WKWebView connection pool and surfaced as "Load failed" across the app. 120s comfortably covers
 // the 15s SSE keep-alive and model think-pauses. board 0055.
 console.log(`[boot] ready — listening on :${port}`)
-export default { port, idleTimeout: 120, fetch: app.fetch }
+export default { port, idleTimeout: 120, fetch: app.fetch, websocket }
