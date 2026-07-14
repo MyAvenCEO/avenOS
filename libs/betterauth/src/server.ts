@@ -9,6 +9,7 @@ import {
 	aiUsage,
 	aiUsageRecent
 } from './ai'
+import { aiVoiceRealtimeConfig, aiVoiceSpeech } from './ai-voice'
 import { auth, TRUSTED_ORIGINS } from './auth'
 import {
 	billingCancel,
@@ -95,6 +96,9 @@ app.get('/api/ai/usage/recent', aiUsageRecent)
 app.post('/api/ai/confirm', aiConfirmAction)
 app.get('/api/ai/sessions', aiSessions)
 app.get('/api/ai/sessions/:id/messages', aiSessionMessages)
+// Realtime live-voice broker (board 0120): TTS synthesis + realtime STT session config, both session-gated.
+app.post('/api/ai/voice/speech', aiVoiceSpeech)
+app.get('/api/ai/voice/realtime', aiVoiceRealtimeConfig)
 app.post('/api/admin/set-tier', aiSetTier)
 
 // Flow/skill CONFIG templates (board 0087, Layer A) — admin-only CRUD; the Skills/Runs UI reads
