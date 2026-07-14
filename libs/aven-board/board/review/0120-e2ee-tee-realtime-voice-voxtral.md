@@ -279,6 +279,15 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — **Voice can now edit todos (tool-calling wired).** The orchestrator's LLM
+  stage now routes through the server's own `/api/ai/chat` (with the caller's bearer), reusing
+  the FULL chat tool loop — skill routing, `data_crud`/todos, persistence — so "add a todo to
+  buy milk" spoken actually writes the todo and the spoken reply confirms it. No duplication of
+  the sophisticated `streamWithTools` skill router; the voice turn just consumes its SSE and
+  sentence-chunks the reply into TTS (`aven_tool` events tolerated). Falls back to a plain
+  `/chat/completions` when no chat endpoint/bearer. New unit test drives the chat-endpoint path
+  (asserts bearer + transcript forwarded, tool event tolerated, reply spoken). betterauth
+  ai-voice 13 pass · tsc 0 · files biome-clean.
 - `2026-07-14` — E2E wiring + **architecture pivot to server-side orchestration**. Latency
   correction (user): the STT→LLM→TTS chaining must be SERVER-side, not client-orchestrated —
   one duplex socket (phone streams mic up, receives caption/reply/audio down); aven-node runs

@@ -278,7 +278,13 @@ export type VoiceOrchestrator = {
  * Create the STT→LLM→TTS orchestrator for one connection. `upstream` is the (already-created) STT
  * WebSocket to Tinfoil; `down` writes to the client. On the client's `commit`, the accumulated
  * transcript drives a streaming LLM turn whose reply is sentence-chunked into TTS and streamed back
- * as audio. `fetchImpl` is injectable for tests; the live loop is HITL-verified (needs the enclave).
+ * as audio.
+ *
+ * The LLM stage runs through the server's own `chatEndpoint` (`/api/ai/chat`) with the caller's
+ * bearer `token` when both are given — so the voice turn reuses the FULL chat tool loop (skill
+ * routing, `data_crud`/todos, persistence): "add a todo to buy milk" actually writes the todo, and
+ * the spoken reply confirms it. Without them it falls back to a plain `/chat/completions` (chat, no
+ * tools). `fetchImpl` is injectable for tests; the live loop is HITL-verified (needs the enclave).
  */
 export function createVoiceOrchestrator(deps: {
 	down: VoiceDownstream
@@ -287,6 +293,10 @@ export function createVoiceOrchestrator(deps: {
 	baseUrl?: string
 	models?: VoiceModels
 	fetchImpl?: typeof fetch
+	/** Internal `/api/ai/chat` URL — routes the LLM turn through the full tool loop (todos/skills). */
+	chatEndpoint?: string
+	/** Better Auth bearer for the internal chat call (the ws `?token=`). */
+	token?: string
 }): VoiceOrchestrator {
 	const base = deps.baseUrl ?? process.env.TINFOIL_BASE_URL ?? 'https://inference.tinfoil.sh/v1'
 	const models = deps.models ?? resolveVoiceModels()
@@ -329,9 +339,15 @@ export function createVoiceOrchestrator(deps: {
 		if (turnRunning || !transcript.trim()) return
 		turnRunning = true
 		try {
-			const res = await f(`${base}/chat/completions`, {
+			// Prefer the internal chat pipeline (tools/todos/skills) when we have the endpoint + bearer;
+			// else a plain completion. Both emit OpenAI-style SSE with `choices[].delta.content`.
+			const useChat = !!deps.chatEndpoint && !!deps.token
+			const url = useChat ? (deps.chatEndpoint as string) : `${base}/chat/completions`
+			const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+			headers.Authorization = `Bearer ${useChat ? (deps.token as string) : deps.apiKey}`
+			const res = await f(url, {
 				method: 'POST',
-				headers: { Authorization: `Bearer ${deps.apiKey}`, 'Content-Type': 'application/json' },
+				headers,
 				body: JSON.stringify({
 					model: models.llm,
 					messages: [{ role: 'user', content: transcript }],

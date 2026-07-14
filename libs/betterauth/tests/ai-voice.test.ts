@@ -181,6 +181,63 @@ describe('createVoiceOrchestrator', () => {
 		expect(audioFrames).toBe(2)
 	})
 
+	test('routes the LLM turn through /api/ai/chat with the bearer (tool loop → todos)', async () => {
+		const up = fakeUpstream()
+		const events: Record<string, unknown>[] = []
+		const down: VoiceDownstream = { sendEvent: (e) => void events.push(e), sendAudio: () => {} }
+		let chatUrl = ''
+		let chatAuth: string | undefined
+		let chatBody: { messages?: { content?: string }[] } = {}
+		const fetchImpl = (async (url: string, init?: RequestInit) => {
+			if (String(url).endsWith('/api/ai/chat')) {
+				chatUrl = String(url)
+				chatAuth = (init?.headers as Record<string, string>)?.Authorization
+				chatBody = JSON.parse(String(init?.body))
+				// full chat pipeline emits an aven_tool event (a todo write) + content deltas
+				const enc = new TextEncoder()
+				const stream = new ReadableStream<Uint8Array>({
+					start(ctrl) {
+						ctrl.enqueue(
+							enc.encode(`data: ${JSON.stringify({ aven_tool: { name: 'data_crud' } })}\n\n`)
+						)
+						ctrl.enqueue(
+							enc.encode(
+								`data: ${JSON.stringify({ choices: [{ delta: { content: 'Added it.' } }] })}\n\n`
+							)
+						)
+						ctrl.enqueue(enc.encode('data: [DONE]\n\n'))
+						ctrl.close()
+					}
+				})
+				return new Response(stream, { status: 200 })
+			}
+			if (String(url).endsWith('/audio/speech'))
+				return new Response(new Uint8Array([1]), { status: 200 })
+			return new Response('nope', { status: 404 })
+		}) as unknown as typeof fetch
+
+		const orch = createVoiceOrchestrator({
+			down,
+			upstream: up.ws,
+			apiKey: 'k',
+			baseUrl: 'https://enclave/v1',
+			chatEndpoint: 'http://127.0.0.1:8787/api/ai/chat',
+			token: 'bearer-xyz',
+			fetchImpl
+		})
+		orch.onUpstreamOpen()
+		orch.onUpstreamFrame(
+			JSON.stringify({ type: 'x.transcription.completed', transcript: 'add a todo to buy milk' })
+		)
+		for (let i = 0; i < 50 && !events.some((e) => e.t === 'turn_done'); i++) {
+			await new Promise((r) => setTimeout(r, 0))
+		}
+		expect(chatUrl).toBe('http://127.0.0.1:8787/api/ai/chat')
+		expect(chatAuth).toBe('Bearer bearer-xyz') // caller's session, so the tool loop runs as the user
+		expect(chatBody.messages?.[0]?.content).toBe('add a todo to buy milk')
+		expect(events.find((e) => e.t === 'reply_done')?.text).toBe('Added it.') // aven_tool event tolerated
+	})
+
 	test('commit before upstream-open is deferred, then flushed as the STT commit control', () => {
 		const up = fakeUpstream()
 		up.ws.readyState = 0 // not open yet

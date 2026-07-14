@@ -126,9 +126,16 @@ app.get(
 		if (!process.env.TINFOIL_API_KEY) return c.json({ error: 'voice unavailable' }, 503)
 		return next()
 	},
-	upgradeWebSocket(() => {
+	upgradeWebSocket((c) => {
 		const key = process.env.TINFOIL_API_KEY as string
 		const models = resolveVoiceModels()
+		// Route the voice LLM turn through our OWN /api/ai/chat so it reuses the full tool loop
+		// (skill routing, data_crud/todos, persistence) — "add a todo …" spoken actually writes it.
+		const token = c.req.query('token') ?? ''
+		const selfPort = Number(
+			new URL(process.env.BETTER_AUTH_URL ?? 'http://localhost:8787').port || 8787
+		)
+		const chatEndpoint = `http://127.0.0.1:${selfPort}/api/ai/chat`
 		// DOM's WebSocket ctor has no headers arg; Bun's does. Cast to the header-aware shape.
 		const UpstreamWS = WebSocket as unknown as new (
 			url: string,
@@ -162,7 +169,9 @@ app.get(
 					down,
 					upstream: upstream as unknown as WebSocketLike,
 					apiKey: key,
-					models
+					models,
+					chatEndpoint,
+					token
 				})
 				upstream.onopen = () => orchestrator?.onUpstreamOpen()
 				upstream.onmessage = (ev: MessageEvent) => orchestrator?.onUpstreamFrame(ev.data)
