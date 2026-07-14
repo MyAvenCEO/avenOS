@@ -279,6 +279,20 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — **Hands-free conversation (slice B): auto-VAD + continuous mic + barge-in +
+  reliable speak-back.** UX fix — realtime was push-to-talk and the reply often never played
+  (root cause: the turn closed the AudioContext on `turn_done`, and an off-gesture context is
+  suspended → silent). Now: the mic stays open, an energy VAD (`vad.ts`) auto-endpoints each
+  utterance (commit on a pause), the server streams the spoken reply, and it loops until the
+  user taps to stop — a continuous roundtrip. New `realtime-conversation.ts` frame-driven state
+  machine (`listening → thinking → speaking`) reuses the **blessed capture AudioContext** for
+  gap-free playback (no more suspended-context silence), does barge-in (a loud onset while the
+  AI speaks cancels playback + resumes listening), and enables `echoCancellation` so the AI's
+  own voice doesn't leak into the mic. `IntentComposer` feeds frames via `pushFrame`; the mic
+  button now starts/stops the whole conversation. Replaced the single-turn `realtime-turn.ts`.
+  Unit-tested: VAD onset/hangover, auto-endpoint→commit, audio→speaking→turn_done→listening,
+  barge-in, caption/reply surfacing. app suite **81 pass** · svelte-check **0 errors** ·
+  new files biome-clean. Live tuning (VAD threshold, barge sensitivity, echo) is HITL.
 - `2026-07-14` — **Voice can now edit todos (tool-calling wired).** The orchestrator's LLM
   stage now routes through the server's own `/api/ai/chat` (with the caller's bearer), reusing
   the FULL chat tool loop — skill routing, `data_crud`/todos, persistence — so "add a todo to
