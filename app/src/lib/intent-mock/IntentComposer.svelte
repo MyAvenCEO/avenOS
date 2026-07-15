@@ -560,6 +560,8 @@ let stopProgress: (() => void) | null = null
 let realtimeConversation: RealtimeConversation | null = null
 /** Live phase of the hands-free conversation, shown as an on-screen indicator (null = inactive). */
 let convState = $state<ConversationState | null>(null)
+/** Latest server pipeline breadcrumb (TEMP diagnostic, -next only). */
+let voiceStatus = $state('')
 /** The latest caption text — used as the user's line when the realtime turn completes. */
 let lastCaption = ''
 
@@ -664,6 +666,9 @@ async function beginCapture() {
 						},
 						onState: (s) => {
 							convState = s
+						},
+						onStatus: (t) => {
+							voiceStatus = t
 						},
 						onError: (m) => onTranscribeError?.(m)
 					}
@@ -1086,9 +1091,13 @@ const pillClass = $derived.by(() => {
 		</div>
 	{/if}
 	{#if showVoiceDebug}
-		<!-- TEMP staging diagnostic (board 0120): shows the realtime-gate values. Remove once confirmed. -->
-		<div class="mx-auto mb-1 font-mono text-[9px] tracking-tight text-muted-foreground/70">
-			{voiceDebugLine}
+		<!-- TEMP staging diagnostic (board 0120): realtime-gate values + latest server pipeline
+		     breadcrumb. Remove once the roundtrip is confirmed. -->
+		<div class="mx-auto mb-1 font-mono text-[9px] leading-tight tracking-tight text-muted-foreground/70">
+			<div>{voiceDebugLine}</div>
+			{#if voiceStatus}
+				<div class="text-amber-600/80">{voiceStatus}</div>
+			{/if}
 		</div>
 	{/if}
 	{#if mode === 'collapsed'}
