@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.1...v) (2026-07-15)
+
+
+### Features
+
+* **0120:** realtime voice hands-free UX — start-to-stream, big red stop, live captions ([#48](https://github.com/MyAvenCEO/avenOS/issues/48)) ([9a74120](https://github.com/MyAvenCEO/avenOS/commit/9a741201991a56d1ed7176cd531e05cb51c737c2))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.14-next.2...v) (2026-07-15)
 
 
