@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.2...v) (2026-07-15)
+
+
+### Bug Fixes
+
+* **0120:** realtime voice actually engages — decouple from Tauri, on-device model, stale bearer ([#49](https://github.com/MyAvenCEO/avenOS/issues/49)) ([5673e4d](https://github.com/MyAvenCEO/avenOS/commit/5673e4d64c1ad6a1c74719254bb0320d7e84e6cd))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.1...v) (2026-07-15)
 
 
