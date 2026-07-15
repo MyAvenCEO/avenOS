@@ -279,6 +279,16 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — **Realtime wasn't engaging at all — fixed the gating.** Root causes: (1) the
+  `useRemoteRealtime` derived read `getBearerToken()` NON-reactively, so a bearer restored after
+  mount left it latched `false`; (2) it required the Tauri runtime; (3) `openListening` blocked on
+  the on-device **Parakeet** model being downloaded/ready (via `effectiveVoiceReason`) and routed
+  to the "preparing/download" path — but realtime is remote and needs no local model; (4)
+  `armAudioContext`/`beginCapture` bailed when there was no on-device transcriber. Fixes: realtime
+  now engages purely on the voice-mode switch (`!onTranscribeAudio && voiceMode==='realtime'`),
+  independent of Tauri and the local model; the **bearer is read FRESH when a turn starts**;
+  `openListening` starts realtime directly (bypassing the Parakeet gate); the audio-context/capture
+  guards allow realtime without a local transcriber. svelte-check 0 errors · app 81 pass.
 - `2026-07-14` — Realtime UX fix (user feedback: felt like the legacy record→✓/✗ flow, no
   continuous conversation). (1) **Gesture**: in realtime mode the mic no longer commits/stops
   on release — long-press STARTS a persistent hands-free conversation that runs until stopped

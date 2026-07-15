@@ -568,11 +568,11 @@ let lastCaption = ''
 // transcript streams back as a preview. A caller-supplied `onTranscribeAudio` keeps
 // the single-shot offline path.
 const useLiveStream = $derived(tauriRuntime && !onTranscribeAudio)
-// Realtime live-voice (board 0120): server-orchestrated STT→LLM→TTS. Active only when the voice-mode
-// switch is `realtime`, we're signed in (bearer present for the ws), and the live path is in play.
-const useRemoteRealtime = $derived(
-	useLiveStream && $voiceMode === 'realtime' && !!getBearerToken()
-)
+// Realtime live-voice (board 0120): server-orchestrated STT→LLM→TTS. It is a REMOTE (network)
+// feature — it needs neither the Tauri runtime nor the on-device Parakeet model — so it engages
+// purely on the voice-mode switch. The bearer is read FRESH when a turn starts (not baked into this
+// derived), so a token restored after mount can't leave this latched `false`.
+const useRemoteRealtime = $derived(!onTranscribeAudio && $voiceMode === 'realtime')
 
 /**
  * Create + resume the AudioContext INSIDE the user-gesture call stack (the mic tap). A context
@@ -582,7 +582,8 @@ const useRemoteRealtime = $derived(
  * model is ready — always begins on a RUNNING context. Cheap: no mic is opened here.
  */
 function armAudioContext() {
-	if (!effectiveTranscribe || audioCtx) return
+	if (audioCtx) return
+	if (!useRemoteRealtime && !effectiveTranscribe) return
 	try {
 		const Ctx: typeof AudioContext =
 			window.AudioContext ??
@@ -607,7 +608,8 @@ function armAudioContext() {
  * "listening" records real audio on the first try.
  */
 async function beginCapture() {
-	if (!effectiveTranscribe || recording) return
+	if (recording) return
+	if (!useRemoteRealtime && !effectiveTranscribe) return
 	pcmChunks = []
 	try {
 		if (!audioCtx) armAudioContext()
@@ -632,48 +634,52 @@ async function beginCapture() {
 		recordedSampleRate = audioCtx.sampleRate
 		// Live path: open the streaming session + subscribe to partials BEFORE wiring
 		// the processor, so the first fed chunks have somewhere to land.
-		if (useLiveStream) {
+		if (useRemoteRealtime) {
+			// Hands-free conversation: the mic stays open, an energy VAD auto-endpoints each utterance,
+			// the server streams the spoken reply back (played through the blessed capture AudioContext
+			// so it isn't stuck suspended), and it loops until the user taps to stop. Remote/network —
+			// no on-device model needed. board 0120 slice B.
 			voicePartial = ''
 			lastCaption = ''
 			try {
-				if (useRemoteRealtime) {
-					// Hands-free conversation: the mic stays open, an energy VAD auto-endpoints each
-					// utterance, the server streams the spoken reply back (played through the blessed
-					// capture AudioContext so it isn't stuck suspended), and it loops until the user
-					// taps to stop. board 0120 slice B.
-					realtimeConversation = startRealtimeConversation({
-						baseUrl: AUTH_BASE_URL,
-						token: getBearerToken(),
-						audioContext: audioCtx ?? undefined,
-						handlers: {
-							onCaption: (t) => {
-								voicePartial = t
-								lastCaption = t
-							},
-							onReplyText: (full) => {
-								if (full.trim() && lastCaption.trim()) onVoiceReply?.(lastCaption.trim(), full.trim())
-							},
-							onState: (s) => {
-								convState = s
-							},
-							onError: (m) => onTranscribeError?.(m)
-						}
-					})
-					convState = 'listening'
-					liveStreaming = true
-				} else {
-					await startLiveTranscription()
-					stopProgress = await subscribeTranscribeProgress((p) => {
-						voicePartial = p.text
-					})
-					liveStreaming = true
-				}
+				realtimeConversation = startRealtimeConversation({
+					baseUrl: AUTH_BASE_URL,
+					token: getBearerToken(), // read FRESH here so a late-restored bearer still works
+					audioContext: audioCtx ?? undefined,
+					handlers: {
+						onCaption: (t) => {
+							voicePartial = t
+							lastCaption = t
+						},
+						onReplyText: (full) => {
+							if (full.trim() && lastCaption.trim()) onVoiceReply?.(lastCaption.trim(), full.trim())
+						},
+						onState: (s) => {
+							convState = s
+						},
+						onError: (m) => onTranscribeError?.(m)
+					}
+				})
+				convState = 'listening'
+				liveStreaming = true
 			} catch {
-				stopProgress?.()
-				stopProgress = null
 				realtimeConversation?.stop()
 				realtimeConversation = null
 				convState = null
+				liveStreaming = false
+			}
+		} else if (useLiveStream) {
+			voicePartial = ''
+			lastCaption = ''
+			try {
+				await startLiveTranscription()
+				stopProgress = await subscribeTranscribeProgress((p) => {
+					voicePartial = p.text
+				})
+				liveStreaming = true
+			} catch {
+				stopProgress?.()
+				stopProgress = null
 				liveStreaming = false
 			}
 		}
@@ -742,6 +748,13 @@ function openListening() {
 	// Bless the AudioContext now, inside the tap gesture — even if we have to wait for the model —
 	// so capture begins on a RUNNING context whether it starts now or auto-starts once ready.
 	armAudioContext()
+	// Realtime (remote) voice needs no on-device model — start it directly, bypassing the Parakeet
+	// download/readiness gate below (that gate only applies to on-device transcription).
+	if (useRemoteRealtime) {
+		void beginCapture()
+		mode = 'listening'
+		return
+	}
 	// Model not ready → don't record yet; morph the pill into the inline download/load progress.
 	if (effectiveVoiceReason != null) {
 		// Auto-start the download+load on first entry into audio mode (mirrors the LFM model
@@ -829,7 +842,7 @@ async function commitVoiceNote() {
 
 	// Live path: the audio was already streamed during capture — just stop the mic.
 	// Offline path: encode the captured buffer before tearing down the listening UI.
-	const wasLive = useLiveStream && liveStreaming
+	const wasLive = liveStreaming // true for realtime OR on-device live (both set it on start)
 	const captured = effectiveTranscribe && !wasLive ? collectRecording() : null
 	if (wasLive) teardownRecording()
 
