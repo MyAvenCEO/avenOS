@@ -279,6 +279,16 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — **ROOT CAUSE FOUND: Tauri CSP blocked the WebSocket.** On-device diagnostic
+  (added on -next) showed `RT=ON · mode=realtime · bearer=y · tauri=y` — the gate WAS passing —
+  yet the UI stayed on the on-device path. Cause: `app/src-tauri/tauri.conf.json` `connect-src`
+  allowed `https://api.next.aven.ceo` but NOT `wss://` (CSP treats the schemes separately), so
+  `new WebSocket('wss://api.next.aven.ceo/…')` threw a SecurityError synchronously →
+  `startRealtimeConversation` was caught → `convState` reset to null → silent fallback to
+  on-device capture + a text reply. Fix: added `wss://api.next.aven.ceo wss://*.aven.ceo` (and
+  `wss://localhost/127.0.0.1` in devCsp) to `connect-src`; and the realtime catch now surfaces
+  the error via `onTranscribeError` instead of silently dropping to on-device. svelte-check 0
+  errors. (Needs the next app build to verify on-device.)
 - `2026-07-14` — **Realtime wasn't engaging at all — fixed the gating.** Root causes: (1) the
   `useRemoteRealtime` derived read `getBearerToken()` NON-reactively, so a bearer restored after
   mount left it latched `false`; (2) it required the Tauri runtime; (3) `openListening` blocked on
