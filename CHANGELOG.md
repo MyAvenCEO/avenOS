@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.5...v) (2026-07-15)
+
+
+### Bug Fixes
+
+* **0120:** realtime turn — base64 audio framing, always-recover, + breadcrumbs ([#52](https://github.com/MyAvenCEO/avenOS/issues/52)) ([6e8650c](https://github.com/MyAvenCEO/avenOS/commit/6e8650c71fd0d946298f8a00251e8d502851d9b6))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.4...v) (2026-07-15)
 
 
