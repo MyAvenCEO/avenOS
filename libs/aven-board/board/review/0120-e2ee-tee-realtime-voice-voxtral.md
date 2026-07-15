@@ -279,6 +279,15 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — Realtime UX fix (user feedback: felt like the legacy record→✓/✗ flow, no
+  continuous conversation). (1) **Gesture**: in realtime mode the mic no longer commits/stops
+  on release — long-press STARTS a persistent hands-free conversation that runs until stopped
+  (push-to-talk release-to-commit only applies to on-device mode). (2) **Dedicated realtime
+  view**: replaced the waveform + ✓/✗ with live STT **captions** + phase (Listening/Thinking/
+  Speaking) + a single **big red STOP button** (× inside) that ends the stream. (3) `stopListening`
+  (cancel/Escape) now tears down the conversation. (4) `MainnetChat` passes `onVoiceReply` so the
+  spoken exchange also appears as text in the Alberobello thread (server already persisted it —
+  no double-LLM). svelte-check 0 errors · app 81 pass · no new lint.
 - `2026-07-14` — On-screen conversation-phase indicator: a small pulsing dot + label
   (**Listening… / Thinking… / Speaking…**) in the listening UI, driven by the controller's
   `onState`, so the hands-free loop has visible feedback. svelte-check 0 errors · app 81 pass.
