@@ -573,6 +573,14 @@ const useLiveStream = $derived(tauriRuntime && !onTranscribeAudio)
 // purely on the voice-mode switch. The bearer is read FRESH when a turn starts (not baked into this
 // derived), so a token restored after mount can't leave this latched `false`.
 const useRemoteRealtime = $derived(!onTranscribeAudio && $voiceMode === 'realtime')
+// TEMP diagnostic (board 0120): on the -next staging channel only, surface the realtime-gate values
+// so we can SEE on-device why realtime did/didn't engage. Remove once confirmed working.
+const showVoiceDebug = $derived(
+	typeof __APP_VERSION__ === 'string' && __APP_VERSION__.includes('-next') && !onTranscribeAudio
+)
+const voiceDebugLine = $derived(
+	`voice: RT=${useRemoteRealtime ? 'ON' : 'off'} · mode=${$voiceMode} · bearer=${getBearerToken() ? 'y' : 'n'} · tauri=${tauriRuntime ? 'y' : 'n'}`
+)
 
 /**
  * Create + resume the AudioContext INSIDE the user-gesture call stack (the mic tap). A context
@@ -1070,6 +1078,12 @@ const pillClass = $derived.by(() => {
 					</div>
 				{/each}
 			</div>
+		</div>
+	{/if}
+	{#if showVoiceDebug}
+		<!-- TEMP staging diagnostic (board 0120): shows the realtime-gate values. Remove once confirmed. -->
+		<div class="mx-auto mb-1 font-mono text-[9px] tracking-tight text-muted-foreground/70">
+			{voiceDebugLine}
 		</div>
 	{/if}
 	{#if mode === 'collapsed'}
