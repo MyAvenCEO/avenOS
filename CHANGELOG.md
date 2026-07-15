@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.4...v) (2026-07-15)
+
+
+### Bug Fixes
+
+* **0120:** allow wss:// in Tauri CSP — realtime WebSocket was CSP-blocked (root cause) ([#51](https://github.com/MyAvenCEO/avenOS/issues/51)) ([759ada1](https://github.com/MyAvenCEO/avenOS/commit/759ada157e9202a040776f289de67046ad348039))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.3...v) (2026-07-15)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.2...v) (2026-07-15)
 
