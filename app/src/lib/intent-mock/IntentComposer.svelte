@@ -272,7 +272,10 @@ function onMobileCollapsedPointerDown(e: PointerEvent) {
 		longPressTimer = null
 		lastTapAtMs = 0
 		holdActive = true
-		listeningSubmitOnRelease = true
+		// Realtime mode (board 0120): the mic starts a HANDS-FREE conversation — the mic stays open,
+		// the VAD auto-commits each utterance, and the AI speaks back in a loop. Releasing the finger
+		// must NOT end it (that's the old push-to-talk behaviour); the on-screen Stop button ends it.
+		listeningSubmitOnRelease = !useRemoteRealtime
 		openListening()
 		// Opening the listening viewer replaces the element that captured this pointer, so its
 		// pointerup never fires on it — catch the release at the window level so hold-to-record
@@ -282,7 +285,8 @@ function onMobileCollapsedPointerDown(e: PointerEvent) {
 			window.removeEventListener('pointercancel', onHoldRelease)
 			if (!holdActive) return
 			holdActive = false
-			if (mode === 'listening') void commitVoiceNote()
+			// In realtime mode the conversation keeps running after release (hands-free).
+			if (mode === 'listening' && !useRemoteRealtime) void commitVoiceNote()
 		}
 		window.addEventListener('pointerup', onHoldRelease)
 		window.addEventListener('pointercancel', onHoldRelease)
@@ -298,7 +302,8 @@ function onMobileCollapsedPointerUp(e: PointerEvent) {
 
 	if (holdActive || (mode === 'listening' && listeningSubmitOnRelease)) {
 		holdActive = false
-		if (mode === 'listening') void commitVoiceNote()
+		// Realtime mode keeps the hands-free conversation open on release; only push-to-talk commits.
+		if (mode === 'listening' && !useRemoteRealtime) void commitVoiceNote()
 		return
 	}
 
@@ -326,7 +331,7 @@ function onMobileCollapsedPointerCancel(e: PointerEvent) {
 	}
 	if (holdActive || (mode === 'listening' && listeningSubmitOnRelease)) {
 		holdActive = false
-		if (mode === 'listening') void commitVoiceNote()
+		if (mode === 'listening' && !useRemoteRealtime) void commitVoiceNote()
 	}
 }
 
@@ -777,7 +782,14 @@ function dismissPreparing() {
 async function stopListening() {
 	// Cancelled (not submitted): drain the live session so its worker exits and the
 	// transcript is discarded — nothing is posted to the chat.
-	if (liveStreaming) void finishLiveTranscription().catch(() => {})
+	if (realtimeConversation) {
+		// Realtime mode: end the hands-free conversation (close the socket + stop playback).
+		realtimeConversation.stop()
+		realtimeConversation = null
+		convState = null
+	} else if (liveStreaming) {
+		void finishLiveTranscription().catch(() => {})
+	}
 	teardownRecording()
 	autoRecordWhenReady = false
 	suppressTextEffect = true
@@ -1094,35 +1106,65 @@ const pillClass = $derived.by(() => {
 		</div>
 	{:else if mode === 'listening'}
 		{#if convState}
-			<!-- Hands-free conversation phase (board 0120 slice B): live feedback so the user knows
-			     whether it's hearing them, thinking, or speaking back. -->
-			<div class="mx-auto mb-1.5 flex items-center gap-1.5 text-[11px] font-medium tracking-wide">
+			<!-- REALTIME hands-free conversation (board 0120): phase + live STT captions, and a single
+			     big red STOP button. The VAD auto-commits each utterance and the AI speaks back in a
+			     loop — no per-utterance submit; tap the red × to end the conversation. -->
+			<div class="mx-auto mb-2 flex items-center gap-1.5 text-[12px] font-medium tracking-wide">
 				<span
-					class="size-1.5 rounded-full {convState === 'listening'
-						? 'animate-pulse bg-emerald-500'
-						: convState === 'thinking'
-							? 'animate-pulse bg-amber-500'
-							: 'bg-sky-500'}"
+					class="size-2 rounded-full {convState === 'thinking'
+						? 'animate-pulse bg-amber-500'
+						: convState === 'speaking'
+							? 'animate-pulse bg-sky-500'
+							: 'animate-pulse bg-emerald-500'}"
 				></span>
 				<span class="text-foreground/70">
-					{convState === 'listening'
-						? 'Listening…'
-						: convState === 'thinking'
-							? 'Thinking…'
-							: 'Speaking…'}
+					{convState === 'thinking'
+						? 'Thinking…'
+						: convState === 'speaking'
+							? 'Speaking…'
+							: 'Listening…'}
 				</span>
 			</div>
-		{/if}
-		{#if voicePartial}
-			<!-- Live transcript preview: streams as the VAD closes each segment on a
-			     pause. Preview only — it is posted to the chat solely on submit. -->
 			<div
-				class="mx-auto mb-1.5 max-h-20 max-w-[min(36rem,80vw)] overflow-y-auto rounded-2xl bg-muted/40 px-3 py-2 text-left text-sm leading-snug text-foreground/80 max-sm:max-w-none"
+				class="mx-auto mb-3 max-h-24 min-h-[2.5rem] max-w-[min(36rem,80vw)] overflow-y-auto rounded-2xl bg-muted/40 px-3 py-2 text-center text-sm leading-snug text-foreground/80 max-sm:max-w-none"
 				aria-live="polite"
 			>
-				{voicePartial}
+				{voicePartial || 'Say something…'}
 			</div>
-		{/if}
+			<div class="flex items-center justify-center">
+				<button
+					type="button"
+					class="relative flex size-[4.5rem] shrink-0 touch-manipulation items-center justify-center rounded-full bg-red-600 text-white shadow-[0_10px_30px_-8px_rgba(220,38,38,0.55)] outline-none transition-transform select-none active:scale-95 focus-visible:ring-2 focus-visible:ring-red-500/50"
+					onclick={() => void stopListening()}
+					aria-label="Stop live voice conversation"
+				>
+					<span
+						class="absolute inset-0 animate-ping rounded-full bg-red-500/40"
+						aria-hidden="true"
+					></span>
+					<svg
+						class="relative size-8"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+		{:else}
+			{#if voicePartial}
+				<!-- Live transcript preview: streams as the VAD closes each segment on a
+				     pause. Preview only — it is posted to the chat solely on submit. -->
+				<div
+					class="mx-auto mb-1.5 max-h-20 max-w-[min(36rem,80vw)] overflow-y-auto rounded-2xl bg-muted/40 px-3 py-2 text-left text-sm leading-snug text-foreground/80 max-sm:max-w-none"
+					aria-live="polite"
+				>
+					{voicePartial}
+				</div>
+			{/if}
 		<div class={pillClass} role="group">
 			<div
 				class={`flex shrink-0 items-center justify-start ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
@@ -1188,6 +1230,7 @@ const pillClass = $derived.by(() => {
 				</svg>
 			</button>
 		</div>
+		{/if}
 	{:else if mode === 'preparing'}
 		<div class={pillClass} role="status" aria-live="polite">
 			<div class="flex items-center justify-between gap-2">

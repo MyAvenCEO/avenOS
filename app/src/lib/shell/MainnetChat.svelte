@@ -647,6 +647,18 @@ function handleTranscribeError(message: string): void {
 	]
 	scrollToBottom()
 }
+
+// Realtime hands-free voice (board 0120): the server already ran the STT→LLM→TTS turn (and
+// persisted it), so this only mirrors the spoken exchange into the visible thread — it does NOT
+// re-call the LLM (that's why it's separate from onSubmitMessage).
+function handleVoiceReply(userText: string, assistantText: string): void {
+	messages = [
+		...messages,
+		{ id: nextId++, role: 'user', text: userText },
+		{ id: nextId++, role: 'assistant', text: assistantText }
+	]
+	scrollToBottom()
+}
 </script>
 
 <div class="flex min-h-0 flex-1 bg-background">
@@ -821,6 +833,7 @@ function handleTranscribeError(message: string): void {
 						submitBusy={busy}
 						onSubmitMessage={handleSubmit}
 						onTranscribeError={handleTranscribeError}
+						onVoiceReply={handleVoiceReply}
 					/>
 				</div>
 			</div>
