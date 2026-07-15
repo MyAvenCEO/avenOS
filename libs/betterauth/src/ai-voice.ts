@@ -308,14 +308,47 @@ export function createVoiceOrchestrator(deps: {
 	let turnRunning = false
 
 	const COMMIT = JSON.stringify({ type: 'input_audio_buffer.commit' })
+	// TEMP diagnostic breadcrumbs → surfaced on the client's -next debug line so we can SEE the
+	// pipeline (STT handshake, transcript, LLM). Remove once the roundtrip is confirmed.
+	const dbg = (text: string) => deps.down.sendEvent({ t: 'status', text })
+	// Tinfoil's /v1/realtime (OpenAI-Realtime-compatible via ?intent=transcription) takes audio as
+	// `input_audio_buffer.append` events with base64 PCM16 — NOT raw binary frames. Wrap each chunk.
+	const sendAudioUpstream = (buf: ArrayBuffer) => {
+		const audio = Buffer.from(buf).toString('base64')
+		deps.upstream.send(JSON.stringify({ type: 'input_audio_buffer.append', audio }))
+	}
 	const flushUpstream = () => {
-		for (const b of upstreamQueue.splice(0)) deps.upstream.send(b)
+		for (const b of upstreamQueue.splice(0)) sendAudioUpstream(b)
 		if (pendingCommit) {
 			pendingCommit = false
 			deps.upstream.send(COMMIT)
 		}
 	}
+	// Watchdog: if a commit yields no transcript in time, don't hang in "thinking" forever — run the
+	// turn on whatever caption we have, or recover with turn_done.
+	let watchdog: ReturnType<typeof setTimeout> | null = null
+	const clearWatchdog = () => {
+		if (watchdog) {
+			clearTimeout(watchdog)
+			watchdog = null
+		}
+	}
+	const startWatchdog = () => {
+		clearWatchdog()
+		watchdog = setTimeout(() => {
+			if (turnRunning) return
+			dbg('[watchdog] no transcript after commit')
+			if (caption.trim()) {
+				const t = caption
+				caption = ''
+				void runTurn(t)
+			} else {
+				deps.down.sendEvent({ t: 'turn_done' })
+			}
+		}, 12_000)
+	}
 	const close = () => {
+		clearWatchdog()
 		try {
 			deps.upstream.close()
 		} catch {
@@ -338,6 +371,7 @@ export function createVoiceOrchestrator(deps: {
 	async function runTurn(transcript: string): Promise<void> {
 		if (turnRunning || !transcript.trim()) return
 		turnRunning = true
+		dbg(`[llm start] "${transcript.slice(0, 60)}"`)
 		try {
 			// Prefer the internal chat pipeline (tools/todos/skills) when we have the endpoint + bearer;
 			// else a plain completion. Both emit OpenAI-style SSE with `choices[].delta.content`.
@@ -355,9 +389,11 @@ export function createVoiceOrchestrator(deps: {
 				})
 			})
 			if (!res.ok || !res.body) {
+				dbg(`[llm http ${res.status}]`)
 				deps.down.sendEvent({ t: 'error', message: `llm ${res.status}` })
 				return
 			}
+			dbg('[llm streaming]')
 			const reader = res.body.getReader()
 			const decoder = new TextDecoder()
 			let sse = ''
@@ -396,11 +432,15 @@ export function createVoiceOrchestrator(deps: {
 			}
 			const tail = pending.trim()
 			if (tail) await synthesize(tail, firstAudio)
+			dbg(`[llm done] ${reply.length} chars`)
 			deps.down.sendEvent({ t: 'reply_done', text: reply })
-			deps.down.sendEvent({ t: 'turn_done' })
 		} catch (e) {
-			deps.down.sendEvent({ t: 'error', message: e instanceof Error ? e.message : String(e) })
+			const m = e instanceof Error ? e.message : String(e)
+			dbg(`[llm error] ${m}`)
+			deps.down.sendEvent({ t: 'error', message: m })
 		} finally {
+			// ALWAYS return the client to listening — never leave it stuck in "thinking".
+			deps.down.sendEvent({ t: 'turn_done' })
 			turnRunning = false
 		}
 	}
@@ -408,25 +448,37 @@ export function createVoiceOrchestrator(deps: {
 	return {
 		onUpstreamOpen() {
 			upstreamOpen = true
+			dbg('[stt open]')
 			flushUpstream()
 		},
 		onUpstreamFrame(data) {
+			// Surface non-delta upstream events (handshake, errors, completion) so we can see the
+			// actual protocol Tinfoil speaks. Deltas are frequent — don't spam those.
 			const { delta, final } = parseTranscriptEvent(data)
+			if (delta === undefined && final === undefined && typeof data === 'string') {
+				dbg(`[up] ${data.slice(0, 140)}`)
+			}
 			if (delta) {
 				caption += delta
 				deps.down.sendEvent({ t: 'caption', text: caption })
 			}
 			if (final !== undefined) {
+				clearWatchdog()
 				const transcript = final || caption
-				deps.down.sendEvent({ t: 'caption', text: transcript })
 				caption = ''
-				void runTurn(transcript)
+				if (transcript.trim()) {
+					deps.down.sendEvent({ t: 'caption', text: transcript })
+					void runTurn(transcript)
+				} else {
+					dbg('[empty transcript]')
+					deps.down.sendEvent({ t: 'turn_done' })
+				}
 			}
 		},
 		onClientFrame(data) {
 			if (typeof data !== 'string') {
-				if (upstreamOpen && deps.upstream.readyState === 1) deps.upstream.send(data)
-				else upstreamQueue.push(data)
+				if (upstreamOpen && deps.upstream.readyState === 1) sendAudioUpstream(data as ArrayBuffer)
+				else upstreamQueue.push(data as ArrayBuffer)
 				return
 			}
 			let msg: { t?: string }
@@ -436,8 +488,10 @@ export function createVoiceOrchestrator(deps: {
 				return
 			}
 			if (msg.t === 'commit') {
+				dbg('[client commit]')
 				if (upstreamOpen && deps.upstream.readyState === 1) deps.upstream.send(COMMIT)
 				else pendingCommit = true
+				startWatchdog()
 			} else if (msg.t === 'cancel') {
 				close()
 			}

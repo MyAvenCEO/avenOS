@@ -279,6 +279,15 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — Realtime UI now shows (CSP fixed) but the turn hung in "thinking" — no
+  transcript/reply/recovery. Two bugs + diagnostics: (1) **audio framing** — we sent raw binary
+  PCM but Tinfoil's `/v1/realtime` (OpenAI-compat) wants `input_audio_buffer.append` events with
+  base64 PCM16; the server now wraps each chunk. (2) **no recovery** — `runTurn` now sends
+  `turn_done` in `finally` (never leaves the client stuck in "thinking"), plus a 12 s post-commit
+  **watchdog** and empty-transcript recovery. Added server **breadcrumbs** (`t:'status'`) forwarded
+  to the client's -next debug line (stt open / raw upstream events / llm start·streaming·done /
+  errors) so any remaining protocol mismatch is visible on-screen. betterauth tsc 0 · ai-voice 13
+  pass · app 81 pass · svelte-check 0 errors.
 - `2026-07-14` — **ROOT CAUSE FOUND: Tauri CSP blocked the WebSocket.** On-device diagnostic
   (added on -next) showed `RT=ON · mode=realtime · bearer=y · tauri=y` — the gate WAS passing —
   yet the UI stayed on the on-device path. Cause: `app/src-tauri/tauri.conf.json` `connect-src`

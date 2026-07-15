@@ -70,6 +70,7 @@ export type VoiceServerEvent =
 	| { kind: 'audio'; bytes: ArrayBuffer }
 	| { kind: 'turn_done' }
 	| { kind: 'error'; message: string }
+	| { kind: 'status'; text: string }
 	| { kind: 'unknown' }
 
 /** Classify one inbound WebSocket frame: binary → audio, JSON string → a typed event. */
@@ -103,6 +104,8 @@ export function classifyVoiceServerEvent(data: unknown): VoiceServerEvent {
 			return { kind: 'turn_done' }
 		case 'error':
 			return { kind: 'error', message: typeof msg.message === 'string' ? msg.message : 'error' }
+		case 'status':
+			return { kind: 'status', text }
 		default:
 			return { kind: 'unknown' }
 	}
@@ -117,6 +120,7 @@ export type RealtimeVoiceHandlers = {
 	onAudio?: (bytes: ArrayBuffer) => void
 	onTurnDone?: () => void
 	onError?: (message: string) => void
+	onStatus?: (text: string) => void
 }
 
 /** Drives one duplex voice connection. `feed` streams mic PCM16 up; `commit` ends the user turn. */
@@ -176,6 +180,9 @@ export function openRealtimeVoice(opts: {
 				break
 			case 'error':
 				h.onError?.(e.message)
+				break
+			case 'status':
+				h.onStatus?.(e.text)
 				break
 			default:
 				break
