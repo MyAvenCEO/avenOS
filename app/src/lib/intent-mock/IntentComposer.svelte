@@ -670,11 +670,16 @@ async function beginCapture() {
 				})
 				convState = 'listening'
 				liveStreaming = true
-			} catch {
+			} catch (e) {
+				// Don't silently drop to on-device — surface WHY realtime failed (e.g. a CSP block on the
+				// wss connection throws here synchronously). board 0120.
 				realtimeConversation?.stop()
 				realtimeConversation = null
 				convState = null
 				liveStreaming = false
+				onTranscribeError?.(
+					`Live voice failed to start: ${e instanceof Error ? e.message : String(e)}`
+				)
 			}
 		} else if (useLiveStream) {
 			voicePartial = ''
