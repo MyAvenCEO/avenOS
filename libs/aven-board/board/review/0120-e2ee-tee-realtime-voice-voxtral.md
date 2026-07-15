@@ -279,6 +279,9 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — On-screen conversation-phase indicator: a small pulsing dot + label
+  (**Listening… / Thinking… / Speaking…**) in the listening UI, driven by the controller's
+  `onState`, so the hands-free loop has visible feedback. svelte-check 0 errors · app 81 pass.
 - `2026-07-14` — **Hands-free conversation (slice B): auto-VAD + continuous mic + barge-in +
   reliable speak-back.** UX fix — realtime was push-to-talk and the reply often never played
   (root cause: the turn closed the AudioContext on `turn_done`, and an off-gesture context is

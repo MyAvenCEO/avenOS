@@ -25,6 +25,7 @@ import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { AUTH_BASE_URL, getBearerToken } from '$lib/auth/auth-client'
 import { voiceMode } from '$lib/settings/voice-mode-store'
 import {
+	type ConversationState,
 	type RealtimeConversation,
 	startRealtimeConversation
 } from '$lib/voice/realtime-conversation'
@@ -419,6 +420,7 @@ onDestroy(() => {
 	teardownRecording()
 	realtimeConversation?.stop()
 	realtimeConversation = null
+	convState = null
 	for (const a of attachmentsUnmountSnapshot) revokeAttachmentPreview(a)
 })
 
@@ -551,6 +553,8 @@ let liveStreaming = false
 let stopProgress: (() => void) | null = null
 /** Active hands-free realtime voice conversation (board 0120), when in `realtime` mode. */
 let realtimeConversation: RealtimeConversation | null = null
+/** Live phase of the hands-free conversation, shown as an on-screen indicator (null = inactive). */
+let convState = $state<ConversationState | null>(null)
 /** The latest caption text — used as the user's line when the realtime turn completes. */
 let lastCaption = ''
 
@@ -644,9 +648,13 @@ async function beginCapture() {
 							onReplyText: (full) => {
 								if (full.trim() && lastCaption.trim()) onVoiceReply?.(lastCaption.trim(), full.trim())
 							},
+							onState: (s) => {
+								convState = s
+							},
 							onError: (m) => onTranscribeError?.(m)
 						}
 					})
+					convState = 'listening'
 					liveStreaming = true
 				} else {
 					await startLiveTranscription()
@@ -660,6 +668,7 @@ async function beginCapture() {
 				stopProgress = null
 				realtimeConversation?.stop()
 				realtimeConversation = null
+				convState = null
 				liveStreaming = false
 			}
 		}
@@ -827,6 +836,7 @@ async function commitVoiceNote() {
 		// conversation (the mic was already closed by teardownRecording above).
 		realtimeConversation.stop()
 		realtimeConversation = null
+		convState = null
 		liveStreaming = false
 		voicePartial = ''
 	} else if (wasLive) {
@@ -1083,6 +1093,26 @@ const pillClass = $derived.by(() => {
 			</button>
 		</div>
 	{:else if mode === 'listening'}
+		{#if convState}
+			<!-- Hands-free conversation phase (board 0120 slice B): live feedback so the user knows
+			     whether it's hearing them, thinking, or speaking back. -->
+			<div class="mx-auto mb-1.5 flex items-center gap-1.5 text-[11px] font-medium tracking-wide">
+				<span
+					class="size-1.5 rounded-full {convState === 'listening'
+						? 'animate-pulse bg-emerald-500'
+						: convState === 'thinking'
+							? 'animate-pulse bg-amber-500'
+							: 'bg-sky-500'}"
+				></span>
+				<span class="text-foreground/70">
+					{convState === 'listening'
+						? 'Listening…'
+						: convState === 'thinking'
+							? 'Thinking…'
+							: 'Speaking…'}
+				</span>
+			</div>
+		{/if}
 		{#if voicePartial}
 			<!-- Live transcript preview: streams as the VAD closes each segment on a
 			     pause. Preview only — it is posted to the chat solely on submit. -->
