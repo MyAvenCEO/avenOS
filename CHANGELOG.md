@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.14-next.2...v) (2026-07-15)
+
+
+### Features
+
+* **0120:** on-screen conversation-phase indicator (Listening/Thinking/Speaking) ([#47](https://github.com/MyAvenCEO/avenOS/issues/47)) ([8caa36b](https://github.com/MyAvenCEO/avenOS/commit/8caa36b43873aa9fc8b64f0df08e0d231149b640))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.14-next.1...v) (2026-07-14)
 
 
