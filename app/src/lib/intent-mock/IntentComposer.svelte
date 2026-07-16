@@ -1,6 +1,9 @@
 <script lang="ts">
 import { onDestroy, tick } from 'svelte'
 import { browser } from '$app/environment'
+// board 0110 — the idle AI button IS the avenOS logo: the freigestellt (cut-out) mark, disabled by default,
+// the full-colour clean mark on hover/active. No circle chrome.
+import logoClean from '$lib/assets/logo/logo_clean.svg'
 import {
 	asrState,
 	startDownload as startAsrDownload,
@@ -9,10 +12,6 @@ import {
 	voicePrep as voicePrepOf,
 	voiceUnavailableReason as voiceUnavailableReasonOf
 } from '$lib/asr/model-download-store'
-// board 0110 — the idle AI button IS the avenOS logo: the freigestellt (cut-out) mark, disabled by default,
-// the full-colour clean mark on hover/active. No circle chrome.
-import logoClean from '$lib/assets/logo/logo_clean.svg'
-import { AUTH_BASE_URL, getBearerToken } from '$lib/auth/auth-client'
 import { downsample, encodeForModel, TARGET_SAMPLE_RATE } from '$lib/intent-mock/audio-encode'
 import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
 import {
@@ -23,12 +22,6 @@ import {
 	transcribeAudio
 } from '$lib/intent-mock/transcribe'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import { voiceMode } from '$lib/settings/voice-mode-store'
-import {
-	type ConversationState,
-	type RealtimeConversation,
-	startRealtimeConversation
-} from '$lib/voice/realtime-conversation'
 
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
 const TYPING_TEXTAREA_MAX_ROWS = 12
@@ -108,15 +101,7 @@ let {
 	 */
 	voicePrep = null,
 	/** Surface a transcription/microphone error to the parent (no message is posted). */
-	onTranscribeError,
-	/**
-	 * Realtime live-voice mode (board 0120): when the voice-mode switch is `realtime`, the SERVER
-	 * runs the whole STT→LLM→TTS turn and streams audio back (played here). If the surface provides
-	 * this, it receives the finished `(userText, assistantText)` so it can record the exchange in its
-	 * thread; without it, the turn is still spoken but not persisted by the surface.
-	 */
-	onVoiceReply,
-	onVoiceChatEvent
+	onTranscribeError
 }: {
 	onSubmitMessage?: (text: string, files: File[]) => void
 	onModeChange?: (mode: Mode) => void
@@ -136,8 +121,6 @@ let {
 	onVoiceUnavailableClick?: () => void
 	voicePrep?: VoicePrep | null
 	onTranscribeError?: (message: string) => void
-	onVoiceReply?: (userText: string, assistantText: string) => void
-	onVoiceChatEvent?: (json: Record<string, unknown>) => void
 } = $props()
 
 // On-device transcription is the default whenever we're in the Tauri runtime, so
@@ -274,10 +257,7 @@ function onMobileCollapsedPointerDown(e: PointerEvent) {
 		longPressTimer = null
 		lastTapAtMs = 0
 		holdActive = true
-		// Realtime mode (board 0120): the mic starts a HANDS-FREE conversation — the mic stays open,
-		// the VAD auto-commits each utterance, and the AI speaks back in a loop. Releasing the finger
-		// must NOT end it (that's the old push-to-talk behaviour); the on-screen Stop button ends it.
-		listeningSubmitOnRelease = !useRemoteRealtime
+		listeningSubmitOnRelease = true
 		openListening()
 		// Opening the listening viewer replaces the element that captured this pointer, so its
 		// pointerup never fires on it — catch the release at the window level so hold-to-record
@@ -287,8 +267,7 @@ function onMobileCollapsedPointerDown(e: PointerEvent) {
 			window.removeEventListener('pointercancel', onHoldRelease)
 			if (!holdActive) return
 			holdActive = false
-			// In realtime mode the conversation keeps running after release (hands-free).
-			if (mode === 'listening' && !useRemoteRealtime) void commitVoiceNote()
+			if (mode === 'listening') void commitVoiceNote()
 		}
 		window.addEventListener('pointerup', onHoldRelease)
 		window.addEventListener('pointercancel', onHoldRelease)
@@ -304,8 +283,7 @@ function onMobileCollapsedPointerUp(e: PointerEvent) {
 
 	if (holdActive || (mode === 'listening' && listeningSubmitOnRelease)) {
 		holdActive = false
-		// Realtime mode keeps the hands-free conversation open on release; only push-to-talk commits.
-		if (mode === 'listening' && !useRemoteRealtime) void commitVoiceNote()
+		if (mode === 'listening') void commitVoiceNote()
 		return
 	}
 
@@ -333,7 +311,7 @@ function onMobileCollapsedPointerCancel(e: PointerEvent) {
 	}
 	if (holdActive || (mode === 'listening' && listeningSubmitOnRelease)) {
 		holdActive = false
-		if (mode === 'listening' && !useRemoteRealtime) void commitVoiceNote()
+		if (mode === 'listening') void commitVoiceNote()
 	}
 }
 
@@ -425,9 +403,6 @@ function formatAttachmentSummary(): string {
 onDestroy(() => {
 	clearLongPressTimer()
 	teardownRecording()
-	realtimeConversation?.stop()
-	realtimeConversation = null
-	convState = null
 	for (const a of attachmentsUnmountSnapshot) revokeAttachmentPreview(a)
 })
 
@@ -558,51 +533,12 @@ let voicePartial = $state('')
 let liveStreaming = false
 /** Unsubscribe from the live `asr:transcribe-progress` stream. */
 let stopProgress: (() => void) | null = null
-/** Active hands-free realtime voice conversation (board 0120), when in `realtime` mode. */
-let realtimeConversation: RealtimeConversation | null = null
-/** Live phase of the hands-free conversation, shown as an on-screen indicator (null = inactive). */
-let convState = $state<ConversationState | null>(null)
-/** Recent server pipeline breadcrumbs (TEMP diagnostic, -next only) — accumulated so nothing is
- *  missed (a single latest line got overwritten before it could be read). */
-let voiceStatusLines = $state<string[]>([])
-let voiceLogsCopied = $state(false)
-/** Which tab the realtime voice MODAL shows: the conversation, or the diagnostic logs. */
-let voiceTab = $state<'talk' | 'logs'>('talk')
-
-/** Copy the gate line + all accumulated breadcrumbs to the clipboard (debug helper). */
-async function copyVoiceLogs(): Promise<void> {
-	const text = [voiceDebugLine, ...voiceStatusLines].join('\n')
-	try {
-		await navigator.clipboard.writeText(text)
-		voiceLogsCopied = true
-		setTimeout(() => {
-			voiceLogsCopied = false
-		}, 1500)
-	} catch {
-		/* clipboard unavailable */
-	}
-}
-/** The latest caption text — used as the user's line when the realtime turn completes. */
-let lastCaption = ''
 
 // The default on-device route (Tauri runtime, no caller-injected transcriber) uses
 // the live VAD-streaming path: PCM is fed to the backend during capture and the
 // transcript streams back as a preview. A caller-supplied `onTranscribeAudio` keeps
 // the single-shot offline path.
 const useLiveStream = $derived(tauriRuntime && !onTranscribeAudio)
-// Realtime live-voice (board 0120): server-orchestrated STT→LLM→TTS. It is a REMOTE (network)
-// feature — it needs neither the Tauri runtime nor the on-device Parakeet model — so it engages
-// purely on the voice-mode switch. The bearer is read FRESH when a turn starts (not baked into this
-// derived), so a token restored after mount can't leave this latched `false`.
-const useRemoteRealtime = $derived(!onTranscribeAudio && $voiceMode === 'realtime')
-// TEMP diagnostic (board 0120): on the -next staging channel only, surface the realtime-gate values
-// so we can SEE on-device why realtime did/didn't engage. Remove once confirmed working.
-const showVoiceDebug = $derived(
-	typeof __APP_VERSION__ === 'string' && __APP_VERSION__.includes('-next') && !onTranscribeAudio
-)
-const voiceDebugLine = $derived(
-	`voice: RT=${useRemoteRealtime ? 'ON' : 'off'} · mode=${$voiceMode} · bearer=${getBearerToken() ? 'y' : 'n'} · tauri=${tauriRuntime ? 'y' : 'n'}`
-)
 
 /**
  * Create + resume the AudioContext INSIDE the user-gesture call stack (the mic tap). A context
@@ -612,8 +548,7 @@ const voiceDebugLine = $derived(
  * model is ready — always begins on a RUNNING context. Cheap: no mic is opened here.
  */
 function armAudioContext() {
-	if (audioCtx) return
-	if (!useRemoteRealtime && !effectiveTranscribe) return
+	if (!effectiveTranscribe || audioCtx) return
 	try {
 		const Ctx: typeof AudioContext =
 			window.AudioContext ??
@@ -638,20 +573,12 @@ function armAudioContext() {
  * "listening" records real audio on the first try.
  */
 async function beginCapture() {
-	if (recording) return
-	if (!useRemoteRealtime && !effectiveTranscribe) return
+	if (!effectiveTranscribe || recording) return
 	pcmChunks = []
 	try {
 		if (!audioCtx) armAudioContext()
 		if (!audioCtx) throw new Error('Microphone unavailable')
-		// echoCancellation keeps the AI's own TTS (played back on the same device) from leaking into
-		// the open mic during a hands-free conversation — otherwise the STT would transcribe the AI
-		// and barge-in would false-trigger. board 0120 slice B.
-		const stream = await navigator.mediaDevices.getUserMedia({
-			audio: useRemoteRealtime
-				? { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-				: true
-		})
+		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 		mediaStream = stream
 		// iOS shows the mic-permission grant as a multi-second modal; a mode/teardown effect can
 		// null `audioCtx` while we await it. Without re-validating, the `audioCtx.state` read below
@@ -664,54 +591,8 @@ async function beginCapture() {
 		recordedSampleRate = audioCtx.sampleRate
 		// Live path: open the streaming session + subscribe to partials BEFORE wiring
 		// the processor, so the first fed chunks have somewhere to land.
-		if (useRemoteRealtime) {
-			// Hands-free conversation: the mic stays open, an energy VAD auto-endpoints each utterance,
-			// the server streams the spoken reply back (played through the blessed capture AudioContext
-			// so it isn't stuck suspended), and it loops until the user taps to stop. Remote/network —
-			// no on-device model needed. board 0120 slice B.
+		if (useLiveStream) {
 			voicePartial = ''
-			lastCaption = ''
-			voiceStatusLines = []
-			voiceTab = 'talk'
-			try {
-				realtimeConversation = startRealtimeConversation({
-					baseUrl: AUTH_BASE_URL,
-					token: getBearerToken(), // read FRESH here so a late-restored bearer still works
-					audioContext: audioCtx ?? undefined,
-					handlers: {
-						onCaption: (t) => {
-							voicePartial = t
-							lastCaption = t
-						},
-						onReplyText: (full) => {
-							if (full.trim() && lastCaption.trim()) onVoiceReply?.(lastCaption.trim(), full.trim())
-						},
-						onState: (s) => {
-							convState = s
-						},
-						onStatus: (t) => {
-							voiceStatusLines = [...voiceStatusLines, t].slice(-12)
-						},
-						onChatEvent: (json) => onVoiceChatEvent?.(json),
-						onError: (m) => onTranscribeError?.(m)
-					}
-				})
-				convState = 'listening'
-				liveStreaming = true
-			} catch (e) {
-				// Don't silently drop to on-device — surface WHY realtime failed (e.g. a CSP block on the
-				// wss connection throws here synchronously). board 0120.
-				realtimeConversation?.stop()
-				realtimeConversation = null
-				convState = null
-				liveStreaming = false
-				onTranscribeError?.(
-					`Live voice failed to start: ${e instanceof Error ? e.message : String(e)}`
-				)
-			}
-		} else if (useLiveStream) {
-			voicePartial = ''
-			lastCaption = ''
 			try {
 				await startLiveTranscription()
 				stopProgress = await subscribeTranscribeProgress((p) => {
@@ -731,9 +612,7 @@ async function beginCapture() {
 			pcmChunks.push(input)
 			// Stream each chunk live at 16 kHz; the VAD closes segments on pauses.
 			if (liveStreaming) {
-				const ds = downsample(input, recordedSampleRate, TARGET_SAMPLE_RATE)
-				if (realtimeConversation) realtimeConversation.pushFrame(ds, performance.now())
-				else void feedLiveTranscription(ds)
+				void feedLiveTranscription(downsample(input, recordedSampleRate, TARGET_SAMPLE_RATE))
 			}
 		}
 		// Sink through a muted gain node so ScriptProcessor fires without feedback.
@@ -789,13 +668,6 @@ function openListening() {
 	// Bless the AudioContext now, inside the tap gesture — even if we have to wait for the model —
 	// so capture begins on a RUNNING context whether it starts now or auto-starts once ready.
 	armAudioContext()
-	// Realtime (remote) voice needs no on-device model — start it directly, bypassing the Parakeet
-	// download/readiness gate below (that gate only applies to on-device transcription).
-	if (useRemoteRealtime) {
-		void beginCapture()
-		mode = 'listening'
-		return
-	}
 	// Model not ready → don't record yet; morph the pill into the inline download/load progress.
 	if (effectiveVoiceReason != null) {
 		// Auto-start the download+load on first entry into audio mode (mirrors the LFM model
@@ -836,14 +708,7 @@ function dismissPreparing() {
 async function stopListening() {
 	// Cancelled (not submitted): drain the live session so its worker exits and the
 	// transcript is discarded — nothing is posted to the chat.
-	if (realtimeConversation) {
-		// Realtime mode: end the hands-free conversation (close the socket + stop playback).
-		realtimeConversation.stop()
-		realtimeConversation = null
-		convState = null
-	} else if (liveStreaming) {
-		void finishLiveTranscription().catch(() => {})
-	}
+	if (liveStreaming) void finishLiveTranscription().catch(() => {})
 	teardownRecording()
 	autoRecordWhenReady = false
 	suppressTextEffect = true
@@ -883,7 +748,7 @@ async function commitVoiceNote() {
 
 	// Live path: the audio was already streamed during capture — just stop the mic.
 	// Offline path: encode the captured buffer before tearing down the listening UI.
-	const wasLive = liveStreaming // true for realtime OR on-device live (both set it on start)
+	const wasLive = useLiveStream && liveStreaming
 	const captured = effectiveTranscribe && !wasLive ? collectRecording() : null
 	if (wasLive) teardownRecording()
 
@@ -896,16 +761,7 @@ async function commitVoiceNote() {
 	mode = 'collapsed'
 	openMicCooldownUntilMs = performance.now() + 280
 
-	if (wasLive && realtimeConversation) {
-		// Realtime mode (board 0120 slice B): the conversation is hands-free — the VAD auto-commits
-		// each utterance and the reply is spoken back in a loop. Tapping the mic ENDS the whole
-		// conversation (the mic was already closed by teardownRecording above).
-		realtimeConversation.stop()
-		realtimeConversation = null
-		convState = null
-		liveStreaming = false
-		voicePartial = ''
-	} else if (wasLive) {
+	if (wasLive) {
 		// Finish the live session: flush the trailing speech, get the full transcript,
 		// and only NOW submit to the chat (partials were preview-only).
 		transcribing = true
@@ -1043,130 +899,6 @@ const pillClass = $derived.by(() => {
 })
 </script>
 
-<!-- REALTIME hands-free conversation MODAL (board 0120): a full, SOLID-background overlay that
-     scopes the whole live-voice experience — Talk (phase + live STT captions + big red STOP) and a
-     Logs tab (diagnostics). Shown whenever a realtime conversation is active. -->
-{#if convState}
-	<!-- board 0120 — the live-voice UI is a BOTTOM SHEET (~1/3 height), not a fullscreen takeover, so
-	     the chat/vibes behind it stay fully visible (no dimming scrim). The sheet has a solid
-	     background so its Talk/Logs tabs read clearly. -->
-	<div
-		class="bg-background border-border fixed inset-x-0 bottom-0 z-50 flex h-[34vh] min-h-[16rem] flex-col rounded-t-2xl border-t shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom)]"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Live voice"
-	>
-		<!-- Tabs + close -->
-		<div class="border-border flex shrink-0 items-center gap-1 border-b px-3 pt-2.5 pb-2">
-			<button
-				type="button"
-				class="rounded-[var(--radius)] px-3 py-1.5 text-[13px] font-medium transition-colors {voiceTab ===
-				'talk'
-					? 'bg-primary/10 text-foreground'
-					: 'text-muted-foreground hover:bg-card'}"
-				onclick={() => (voiceTab = 'talk')}
-			>
-				Talk
-			</button>
-			{#if showVoiceDebug}
-				<button
-					type="button"
-					class="rounded-[var(--radius)] px-3 py-1.5 text-[13px] font-medium transition-colors {voiceTab ===
-					'logs'
-						? 'bg-primary/10 text-foreground'
-						: 'text-muted-foreground hover:bg-card'}"
-					onclick={() => (voiceTab = 'logs')}
-				>
-					Logs
-				</button>
-			{/if}
-			<button
-				type="button"
-				class="text-muted-foreground hover:text-foreground ml-auto -m-1 p-1"
-				aria-label="End conversation"
-				onclick={() => void stopListening()}
-			>
-				<svg
-					class="size-5"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					viewBox="0 0 24 24"
-					aria-hidden="true"
-				>
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-				</svg>
-			</button>
-		</div>
-
-		{#if voiceTab === 'talk'}
-			<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-4">
-				<div class="flex items-center gap-2 text-[13px] font-medium tracking-wide">
-					<span
-						class="size-2.5 rounded-full {convState === 'thinking'
-							? 'animate-pulse bg-amber-500'
-							: convState === 'speaking'
-								? 'animate-pulse bg-sky-500'
-								: 'animate-pulse bg-emerald-500'}"
-					></span>
-					<span class="text-foreground/70">
-						{convState === 'thinking'
-							? 'Thinking…'
-							: convState === 'speaking'
-								? 'Speaking… (talk to interrupt)'
-								: 'Listening…'}
-					</span>
-				</div>
-				<div
-					class="min-h-0 w-full max-w-md flex-1 overflow-y-auto text-center text-base leading-relaxed text-foreground/90"
-					aria-live="polite"
-				>
-					{voicePartial || 'Say something…'}
-				</div>
-				<button
-					type="button"
-					class="relative flex size-16 shrink-0 touch-manipulation items-center justify-center rounded-full bg-red-600 text-white shadow-[0_12px_36px_-8px_rgba(220,38,38,0.6)] outline-none transition-transform select-none active:scale-95 focus-visible:ring-2 focus-visible:ring-red-500/50"
-					onclick={() => void stopListening()}
-					aria-label="Stop live voice conversation"
-				>
-					<span
-						class="absolute inset-0 animate-ping rounded-full bg-red-500/40"
-						aria-hidden="true"
-					></span>
-					<svg
-						class="relative size-7"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-		{:else}
-			<div class="flex min-h-0 flex-1 flex-col gap-2 p-4">
-				<div class="flex items-center gap-2">
-					<span class="font-mono text-[10px] text-muted-foreground">{voiceDebugLine}</span>
-					<button
-						type="button"
-						class="border-border rounded border px-1.5 py-0.5 text-[10px] hover:bg-card"
-						onclick={() => void copyVoiceLogs()}
-					>
-						{voiceLogsCopied ? 'copied ✓' : 'copy logs'}
-					</button>
-				</div>
-				<div class="min-h-0 flex-1 overflow-y-auto font-mono text-[10px] leading-relaxed">
-					{#each voiceStatusLines as line, i (i)}
-						<div class="text-amber-600/90">{line}</div>
-					{/each}
-				</div>
-			</div>
-		{/if}
-	</div>
-{/if}
-
 <div
 	class={rowCluster
 		? 'flex shrink-0 flex-col items-center justify-center gap-2'
@@ -1279,84 +1011,85 @@ const pillClass = $derived.by(() => {
 					src={logoClean}
 					alt="avenOS"
 					class="pointer-events-none absolute inset-0 size-full object-contain p-1 transition-transform duration-200 ease-out group-hover:scale-[1.08] group-active:scale-95"
-				>
+				/>
 			</button>
 		</div>
 	{:else if mode === 'listening'}
-		{#if !convState}
-			{#if voicePartial}
-				<!-- Live transcript preview: streams as the VAD closes each segment on a
-				     pause. Preview only — it is posted to the chat solely on submit. -->
-				<div
-					class="mx-auto mb-1.5 max-h-20 max-w-[min(36rem,80vw)] overflow-y-auto rounded-2xl bg-muted/40 px-3 py-2 text-left text-sm leading-snug text-foreground/80 max-sm:max-w-none"
-					aria-live="polite"
-				>
-					{voicePartial}
-				</div>
-			{/if}
-			<div class={pillClass} role="group">
-				<div
-					class={`flex shrink-0 items-center justify-start ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
-				>
-					<span class="font-mono text-[10px] font-bold tracking-wider opacity-80 tabular-nums"
-						>{timerLabel}</span
-					>
-				</div>
-				<div
-					class="flex min-h-7 min-w-0 flex-1 items-end justify-center gap-px px-1 py-1 sm:px-2"
-					aria-hidden="true"
-				>
-					{#each barIndices as i (i)}
-						<span
-							class="intent-mock-bar inline-block h-7 w-0.5 shrink-0 rounded-full bg-primary-foreground/75"
-							style={`animation-delay: ${i * 0.08}s`}
-						></span>
-					{/each}
-				</div>
-				<!-- board 0119m — a right spacer mirrors the timer so the waveform stays centered; the
-			     submit/cancel controls moved OUT of the pill (below, at the logo AI-button position). -->
-				<div class={`shrink-0 ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`} aria-hidden="true"></div>
-			</div>
-			<!-- board 0119m — SUBMIT / CANCEL are NOT part of the waveform animation: they sit where the
-		     logo AI button is — the big ✓ dead-center (same size as the logo), a smaller × to its
-		     right (absolutely placed so the ✓ never shifts off-centre). -->
-			<div class="relative flex items-center justify-center">
-				<button
-					type="button"
-					class="flex size-[3.5rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-status-success)_55%,transparent)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
-					onclick={commitVoiceNote}
-					aria-label="Submit voice note as intent (mock)"
-				>
-					<svg
-						class="size-8"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
-					</svg>
-				</button>
-				<button
-					type="button"
-					class="absolute top-1/2 left-1/2 flex size-8 -translate-y-1/2 translate-x-[2.35rem] items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_2px_10px_-3px_rgba(0,0,0,0.25)] outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
-					onclick={() => void stopListening()}
-					aria-label="Cancel voice note"
-				>
-					<svg
-						class="size-4"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
+		{#if voicePartial}
+			<!-- Live transcript preview: streams as the VAD closes each segment on a
+			     pause. Preview only — it is posted to the chat solely on submit. -->
+			<div
+				class="mx-auto mb-1.5 max-h-20 max-w-[min(36rem,80vw)] overflow-y-auto rounded-2xl bg-muted/40 px-3 py-2 text-left text-sm leading-snug text-foreground/80 max-sm:max-w-none"
+				aria-live="polite"
+			>
+				{voicePartial}
 			</div>
 		{/if}
+		<div class={pillClass} role="group">
+			<div
+				class={`flex shrink-0 items-center justify-start ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
+			>
+				<span class="font-mono text-[10px] font-bold tracking-wider opacity-80 tabular-nums"
+					>{timerLabel}</span
+				>
+			</div>
+			<div
+				class="flex min-h-7 min-w-0 flex-1 items-end justify-center gap-px px-1 py-1 sm:px-2"
+				aria-hidden="true"
+			>
+				{#each barIndices as i (i)}
+					<span
+						class="intent-mock-bar inline-block h-7 w-0.5 shrink-0 rounded-full bg-primary-foreground/75"
+						style={`animation-delay: ${i * 0.08}s`}
+					></span>
+				{/each}
+			</div>
+			<!-- board 0119m — a right spacer mirrors the timer so the waveform stays centered; the
+			     submit/cancel controls moved OUT of the pill (below, at the logo AI-button position). -->
+			<div
+				class={`shrink-0 ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
+				aria-hidden="true"
+			></div>
+		</div>
+		<!-- board 0119m — SUBMIT / CANCEL are NOT part of the waveform animation: they sit where the
+		     logo AI button is — the big ✓ dead-center (same size as the logo), a smaller × to its
+		     right (absolutely placed so the ✓ never shifts off-centre). -->
+		<div class="relative flex items-center justify-center">
+			<button
+				type="button"
+				class="flex size-[3.5rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-status-success)_55%,transparent)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
+				onclick={commitVoiceNote}
+				aria-label="Submit voice note as intent (mock)"
+			>
+				<svg
+					class="size-8"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
+				</svg>
+			</button>
+			<button
+				type="button"
+				class="absolute top-1/2 left-1/2 flex size-8 -translate-y-1/2 translate-x-[2.35rem] items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_2px_10px_-3px_rgba(0,0,0,0.25)] outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
+				onclick={() => void stopListening()}
+				aria-label="Cancel voice note"
+			>
+				<svg
+					class="size-4"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
 	{:else if mode === 'preparing'}
 		<div class={pillClass} role="status" aria-live="polite">
 			<div class="flex items-center justify-between gap-2">
