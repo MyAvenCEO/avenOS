@@ -279,6 +279,14 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — Tool cards work for some todos but not confirm/other skills, and still no spoken
+  reply. Fixes: (1) **all skills + HITL** — the orchestrator now forwards EVERY chat event
+  (`aven_tool/hitl/vibe/edit/edit_chunk`) as `{t:'chat', json}`; `MainnetChat.handleVoiceChatEvent`
+  runs them through the same `upsertTool`/`addHitl`/`appendVibe`/`applyEdit` handlers as the typed
+  chat — so the delete **confirmation modal** and every skill work in voice too. (2) **TTS
+  playback** made format-agnostic — request **WAV** from the enclave and decode with Web Audio
+  `decodeAudioData` (no raw-PCM sample-rate guessing), serialized for gap-free playback; `[tts …]`
+  breadcrumb kept to confirm. betterauth tsc 0 · ai-voice 13 pass · app 81 pass · svelte-check 0.
 - `2026-07-14` — Transcription + LLM text work; two gaps: no tool-result cards, no spoken reply.
   Tools DO run (the turn routes through `/api/ai/chat`'s tool loop) but the orchestrator dropped
   the `aven_vibe`/`aven_tool` SSE events. Fix: forward `aven_vibe` → client → `MainnetChat`

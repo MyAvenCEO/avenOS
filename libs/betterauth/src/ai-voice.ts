@@ -360,7 +360,9 @@ export function createVoiceOrchestrator(deps: {
 		const res = await f(`${base}/audio/speech`, {
 			method: 'POST',
 			headers: { Authorization: `Bearer ${deps.apiKey}`, 'Content-Type': 'application/json' },
-			body: JSON.stringify(buildSpeechRequest({ text: sentence, model: models.tts }))
+			// Request WAV (a self-describing container) so the client can decode it with Web Audio's
+			// decodeAudioData regardless of the enclave's sample rate — no raw-PCM rate guessing.
+			body: JSON.stringify(buildSpeechRequest({ text: sentence, model: models.tts, format: 'wav' }))
 		})
 		if (!res.ok) {
 			const detail = await res.text().catch(() => '')
@@ -416,28 +418,22 @@ export function createVoiceOrchestrator(deps: {
 					if (!line) continue
 					const payload = line.slice(5).trim()
 					if (payload === '[DONE]') continue
-					let json: {
+					let json: Record<string, unknown> & {
 						choices?: { delta?: { content?: string } }[]
-						aven_vibe?: { schema?: string; data?: unknown }
-						aven_tool?: { name?: string; status?: string }
 					}
 					try {
 						json = JSON.parse(payload)
 					} catch {
 						continue
 					}
-					// Forward tool activity + result cards so the voice turn shows them like the typed
-					// chat does (todos, mutation-result, …) — tools run server-side either way.
-					if (json.aven_tool) {
-						dbg(`[tool ${json.aven_tool.name ?? '?'} ${json.aven_tool.status ?? ''}]`)
-					}
-					if (json.aven_vibe) {
-						dbg(`[vibe ${json.aven_vibe.schema ?? '?'}]`)
-						deps.down.sendEvent({
-							t: 'vibe',
-							schema: json.aven_vibe.schema ?? '',
-							data: json.aven_vibe.data
-						})
+					// Forward EVERY chat event (aven_tool / aven_hitl / aven_vibe / aven_edit /
+					// aven_edit_chunk) verbatim so the voice turn behaves exactly like the typed chat —
+					// tool cards, the delete-confirmation (HITL) modal, website edits, all skills. The
+					// client re-runs them through MainnetChat's shared event handler.
+					const avenKeys = Object.keys(json).filter((k) => k.startsWith('aven_'))
+					if (avenKeys.length > 0) {
+						dbg(`[chat-event ${avenKeys.join(',')}]`)
+						deps.down.sendEvent({ t: 'chat', json })
 					}
 					const delta = json.choices?.[0]?.delta?.content
 					if (!delta) continue

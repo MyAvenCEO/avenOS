@@ -11,7 +11,6 @@
 import {
 	floatToPcm16,
 	openRealtimeVoice,
-	pcm16ToFloat32,
 	type RealtimeVoiceClient,
 	type RealtimeVoiceHandlers,
 	realtimeWsUrl
@@ -23,7 +22,7 @@ export type ConversationState = 'listening' | 'thinking' | 'speaking'
 
 /** Where decoded TTS audio goes. Abstracted so tests inject a fake and the default uses Web Audio. */
 export type AudioSink = {
-	play(bytes: ArrayBuffer, sampleRate: number): void
+	play(bytes: ArrayBuffer, sampleRate?: number): void
 	stop(): void
 	/** ms of audio still scheduled — used to return to listening only once the reply finished. */
 	pendingMs(): number
@@ -35,7 +34,7 @@ export type ConversationHandlers = {
 	onState?: (state: ConversationState) => void
 	onError?: (message: string) => void
 	onStatus?: (text: string) => void
-	onVibe?: (schema: string, data?: unknown) => void
+	onChatEvent?: (json: Record<string, unknown>) => void
 }
 
 export type RealtimeConversation = {
@@ -46,27 +45,42 @@ export type RealtimeConversation = {
 	readonly state: ConversationState
 }
 
-/** Gap-free Web Audio sink over a (blessed) AudioContext. */
+/**
+ * Gap-free Web Audio sink over a (blessed) AudioContext. Each server audio frame is a self-contained
+ * clip (WAV) decoded with `decodeAudioData` — format- and sample-rate-agnostic. Decodes are chained
+ * so clips play back-to-back in order.
+ */
 export function webAudioSink(ctx: AudioContext): AudioSink {
 	let nextStart = 0
+	let chain: Promise<void> = Promise.resolve()
+	let stopped = false
 	const sources = new Set<AudioBufferSourceNode>()
 	return {
-		play(bytes, sampleRate) {
-			const samples = pcm16ToFloat32(bytes)
-			if (samples.length === 0) return
-			if (ctx.state === 'suspended') void ctx.resume()
-			const buffer = ctx.createBuffer(1, samples.length, sampleRate)
-			buffer.getChannelData(0).set(samples)
-			const src = ctx.createBufferSource()
-			src.buffer = buffer
-			src.connect(ctx.destination)
-			const at = Math.max(ctx.currentTime, nextStart)
-			src.start(at)
-			nextStart = at + buffer.duration
-			sources.add(src)
-			src.onended = () => sources.delete(src)
+		play(bytes) {
+			// decodeAudioData detaches its input — copy so the caller's ArrayBuffer stays intact.
+			const copy = bytes.slice(0)
+			stopped = false
+			chain = chain.then(async () => {
+				let buffer: AudioBuffer
+				try {
+					buffer = await ctx.decodeAudioData(copy)
+				} catch {
+					return // undecodable chunk — skip
+				}
+				if (stopped) return
+				if (ctx.state === 'suspended') await ctx.resume()
+				const src = ctx.createBufferSource()
+				src.buffer = buffer
+				src.connect(ctx.destination)
+				const at = Math.max(ctx.currentTime, nextStart)
+				src.start(at)
+				nextStart = at + buffer.duration
+				sources.add(src)
+				src.onended = () => sources.delete(src)
+			})
 		},
 		stop() {
+			stopped = true
 			for (const s of sources) {
 				try {
 					s.stop()
@@ -147,7 +161,7 @@ export function startRealtimeConversation(opts: {
 		},
 		onError: (m) => h.onError?.(m),
 		onStatus: (t) => h.onStatus?.(t),
-		onVibe: (schema, data) => h.onVibe?.(schema, data)
+		onChatEvent: (json) => h.onChatEvent?.(json)
 	}
 
 	const client = opts.clientFactory

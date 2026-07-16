@@ -71,7 +71,7 @@ export type VoiceServerEvent =
 	| { kind: 'turn_done' }
 	| { kind: 'error'; message: string }
 	| { kind: 'status'; text: string }
-	| { kind: 'vibe'; schema: string; data?: unknown }
+	| { kind: 'chat'; json: Record<string, unknown> }
 	| { kind: 'unknown' }
 
 /** Classify one inbound WebSocket frame: binary → audio, JSON string → a typed event. */
@@ -107,11 +107,10 @@ export function classifyVoiceServerEvent(data: unknown): VoiceServerEvent {
 			return { kind: 'error', message: typeof msg.message === 'string' ? msg.message : 'error' }
 		case 'status':
 			return { kind: 'status', text }
-		case 'vibe':
+		case 'chat':
 			return {
-				kind: 'vibe',
-				schema: typeof msg.schema === 'string' ? msg.schema : '',
-				data: msg.data
+				kind: 'chat',
+				json: msg.json && typeof msg.json === 'object' ? (msg.json as Record<string, unknown>) : {}
 			}
 		default:
 			return { kind: 'unknown' }
@@ -128,7 +127,7 @@ export type RealtimeVoiceHandlers = {
 	onTurnDone?: () => void
 	onError?: (message: string) => void
 	onStatus?: (text: string) => void
-	onVibe?: (schema: string, data?: unknown) => void
+	onChatEvent?: (json: Record<string, unknown>) => void
 }
 
 /** Drives one duplex voice connection. `feed` streams mic PCM16 up; `commit` ends the user turn. */
@@ -192,8 +191,8 @@ export function openRealtimeVoice(opts: {
 			case 'status':
 				h.onStatus?.(e.text)
 				break
-			case 'vibe':
-				h.onVibe?.(e.schema, e.data)
+			case 'chat':
+				h.onChatEvent?.(e.json)
 				break
 			default:
 				break
