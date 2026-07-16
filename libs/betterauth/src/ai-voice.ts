@@ -183,6 +183,12 @@ const TINFOIL_REALTIME_WS =
 	process.env.TINFOIL_REALTIME_WS_URL ?? 'wss://inference.tinfoil.sh/v1/realtime'
 /** Sample rate of the TTS PCM we forward down to the client (voxtral-tts default). */
 export const TTS_SAMPLE_RATE = 24_000
+/** Hardcoded spoken language (board 0120): the voice reply is asked to be German so the enclave
+ *  replies + speaks in the same language the user speaks. Override with `TINFOIL_VOICE_LANG`. */
+export const VOICE_LANG = process.env.TINFOIL_VOICE_LANG?.trim() || 'de'
+/** voxtral-tts requires a NAMED speaker — `default` is rejected 400 ("Invalid speaker"). Valid ones
+ *  include casual_female / casual_male. Override with `TINFOIL_TTS_VOICE`. */
+export const TTS_VOICE = process.env.TINFOIL_TTS_VOICE?.trim() || 'casual_female'
 
 /** Build the upstream STT WebSocket URL — `?intent=transcription` selects Tinfoil's OpenAI-Realtime
  *  translation layer; `model` pins the realtime STT model. */
@@ -193,6 +199,7 @@ export function realtimeUpstreamUrl(
 	const u = new URL(base)
 	u.searchParams.set('intent', 'transcription')
 	u.searchParams.set('model', models.stt)
+	u.searchParams.set('language', VOICE_LANG)
 	return u.toString()
 }
 
@@ -360,9 +367,11 @@ export function createVoiceOrchestrator(deps: {
 		const res = await f(`${base}/audio/speech`, {
 			method: 'POST',
 			headers: { Authorization: `Bearer ${deps.apiKey}`, 'Content-Type': 'application/json' },
-			// Request WAV (a self-describing container) so the client can decode it with Web Audio's
-			// decodeAudioData regardless of the enclave's sample rate — no raw-PCM rate guessing.
-			body: JSON.stringify(buildSpeechRequest({ text: sentence, model: models.tts, format: 'wav' }))
+			// Named speaker (voxtral-tts rejects 'default') + WAV (self-describing container so the
+			// client decodes with Web Audio decodeAudioData regardless of the enclave's sample rate).
+			body: JSON.stringify(
+				buildSpeechRequest({ text: sentence, model: models.tts, voice: TTS_VOICE, format: 'wav' })
+			)
 		})
 		if (!res.ok) {
 			const detail = await res.text().catch(() => '')
@@ -391,7 +400,15 @@ export function createVoiceOrchestrator(deps: {
 				headers,
 				body: JSON.stringify({
 					model: models.llm,
-					messages: [{ role: 'user', content: transcript }],
+					// Hardcode the spoken language (German by default) so the reply — which is what gets
+					// spoken back by TTS — matches what the user speaks. board 0120.
+					messages: [
+						{
+							role: 'system',
+							content: `You are a voice assistant. Always reply in the user's language (${VOICE_LANG}). Keep replies short and natural for speech.`
+						},
+						{ role: 'user', content: transcript }
+					],
 					stream: true
 				})
 			})

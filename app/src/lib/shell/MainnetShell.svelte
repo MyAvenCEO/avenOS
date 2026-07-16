@@ -1,5 +1,6 @@
 <script lang="ts">
 import { createQuery, useQueryClient } from '@tanstack/svelte-query'
+import { fade, fly } from 'svelte/transition'
 import { authClient } from '$lib/auth/auth-client'
 import { syncBilling } from '$lib/billing/checkout'
 import { fmtMinds } from '$lib/billing/minds'
@@ -22,6 +23,23 @@ type SettingsCategory = 'profile' | 'plans' | 'billing' | 'usage' | 'vault' | 'a
 let tab = $state<Tab>('chat')
 let settings = $state(false)
 let settingsCategory = $state<SettingsCategory>('profile')
+
+// board 0120 — on mobile the section tabs collapse into a left hamburger slide-menu (the bottom bar
+// only has room for the credits + name there). Desktop keeps the inline tab row.
+const MOBILE_MQ = '(max-width: 639px)'
+let isMobile = $state(false)
+let menuOpen = $state(false)
+$effect(() => {
+	if (typeof window === 'undefined') return
+	const mq = window.matchMedia(MOBILE_MQ)
+	const sync = () => {
+		isMobile = mq.matches
+		if (!isMobile) menuOpen = false
+	}
+	sync()
+	mq.addEventListener('change', sync)
+	return () => mq.removeEventListener('change', sync)
+})
 
 // Honor cross-view deep links (e.g. a flow schema badge → DB tab). board 0083.
 $effect(() => {
@@ -87,11 +105,11 @@ const tabs = $derived<{ id: Tab; label: string }[]>([
 function openTab(id: Tab): void {
 	tab = id
 	settings = false
+	menuOpen = false
 }
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background">
-
 	{#if justUpgraded}
 		<div
 			class="border-primary/30 bg-primary/10 text-foreground flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 text-sm"
@@ -127,21 +145,46 @@ function openTab(id: Tab): void {
 		class="font-display pointer-events-none fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 px-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[10px] font-bold tracking-wider uppercase"
 		aria-label="Mainnet sections"
 	>
-		{#each tabs as item, i (item.id)}
-			{#if i > 0}
-				<span class="select-none opacity-25" aria-hidden="true">|</span>
-			{/if}
+		{#if isMobile}
+			<!-- board 0120 — hamburger opens the left slide-menu (tabs live there on mobile). -->
 			<button
 				type="button"
-				class="pointer-events-auto transition-opacity hover:opacity-80 {tab === item.id && !settings
-					? 'opacity-95'
-					: 'opacity-40'}"
-				aria-current={tab === item.id && !settings ? 'page' : undefined}
-				onclick={() => openTab(item.id)}
+				class="pointer-events-auto flex items-center gap-1.5 transition-opacity hover:opacity-80"
+				onclick={() => (menuOpen = true)}
+				aria-label="Open menu"
+				aria-expanded={menuOpen}
 			>
-				{item.label.toUpperCase()}
+				<svg
+					class="size-4"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16" />
+				</svg>
+				<span class="opacity-95"
+					>{(settings ? t('selfNav.self') : tabs.find((x) => x.id === tab)?.label ?? '').toUpperCase()}</span
+				>
 			</button>
-		{/each}
+		{:else}
+			{#each tabs as item, i (item.id)}
+				{#if i > 0}
+					<span class="select-none opacity-25" aria-hidden="true">|</span>
+				{/if}
+				<button
+					type="button"
+					class="pointer-events-auto transition-opacity hover:opacity-80 {tab === item.id && !settings
+						? 'opacity-95'
+						: 'opacity-40'}"
+					aria-current={tab === item.id && !settings ? 'page' : undefined}
+					onclick={() => openTab(item.id)}
+				>
+					{item.label.toUpperCase()}
+				</button>
+			{/each}
+		{/if}
 
 		<div class="ml-auto flex items-center gap-3">
 			{#if usageQuery.data?.credit}
@@ -164,4 +207,70 @@ function openTab(id: Tab): void {
 			{/if}
 		</div>
 	</nav>
+
+	<!-- board 0120 — mobile left slide-menu: the section tabs + account, opened by the hamburger. -->
+	{#if isMobile && menuOpen}
+		<button
+			type="button"
+			class="fixed inset-0 z-40 bg-black/40"
+			aria-label="Close menu"
+			onclick={() => (menuOpen = false)}
+			transition:fade={{ duration: 150 }}
+		></button>
+		<aside
+			class="bg-background fixed inset-y-0 left-0 z-50 flex w-64 max-w-[80vw] flex-col gap-1 border-r border-border p-4 pt-[max(1rem,env(safe-area-inset-top))] shadow-2xl"
+			transition:fly={{ x: -288, duration: 200 }}
+		>
+			<div class="mb-2 flex items-center justify-between">
+				<span class="font-display text-[11px] font-bold tracking-[0.14em] uppercase opacity-50">
+					{t('mainnet.chat.title')}
+				</span>
+				<button
+					type="button"
+					class="text-muted-foreground hover:text-foreground -m-1 p-1"
+					aria-label="Close menu"
+					onclick={() => (menuOpen = false)}
+				>
+					<svg
+						class="size-5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+			{#each tabs as item (item.id)}
+				<button
+					type="button"
+					class="font-display rounded-[var(--radius)] px-3 py-2.5 text-left text-sm font-bold tracking-wider uppercase transition-colors {tab ===
+						item.id && !settings
+						? 'bg-primary/10 text-foreground'
+						: 'text-muted-foreground hover:bg-card'}"
+					aria-current={tab === item.id && !settings ? 'page' : undefined}
+					onclick={() => openTab(item.id)}
+				>
+					{item.label}
+				</button>
+			{/each}
+			{#if displayName}
+				<button
+					type="button"
+					class="mt-auto truncate rounded-[var(--radius)] px-3 py-2.5 text-left text-sm transition-colors {settings
+						? 'bg-primary/10 text-foreground'
+						: 'text-muted-foreground hover:bg-card'}"
+					title={user?.email}
+					onclick={() => {
+						settings = true
+						menuOpen = false
+					}}
+				>
+					{displayName}
+				</button>
+			{/if}
+		</aside>
+	{/if}
 </div>

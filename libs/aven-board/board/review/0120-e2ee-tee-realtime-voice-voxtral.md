@@ -279,6 +279,14 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — **TTS root cause found + UX pass.** The on-screen breadcrumb (now accumulated)
+  showed `[tts FAIL http 400 Invalid speaker 'default'. …casual_female, casual_male…]` — voxtral-tts
+  rejects `voice:'default'`. Fix: use a NAMED speaker (`casual_female`, env `TINFOIL_TTS_VOICE`).
+  Also hardcoded **German** (`TINFOIL_VOICE_LANG=de`): STT `language` hint + a system prompt so the
+  spoken reply matches the user's language. Plus: **copy-logs** button in the debug area; **mobile
+  hamburger** — the bottom section tabs collapse into a left slide-menu on ≤639px (`MainnetShell`);
+  and the whole realtime talk UI is now a **solid-background modal** with **Talk** + **Logs** tabs
+  (scopes the conversation instead of floating over the chat). app 81 pass · svelte-check 0 · tsc 0.
 - `2026-07-14` — Tool cards work for some todos but not confirm/other skills, and still no spoken
   reply. Fixes: (1) **all skills + HITL** — the orchestrator now forwards EVERY chat event
   (`aven_tool/hitl/vibe/edit/edit_chunk`) as `{t:'chat', json}`; `MainnetChat.handleVoiceChatEvent`
