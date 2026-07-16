@@ -149,10 +149,16 @@ export function startRealtimeConversation(opts: {
 			sampleRate = sr
 		},
 		onAudio: (bytes) => {
+			// Drop stray audio from an interrupted turn that's still draining after a barge-in put us
+			// back in listening — otherwise it would flip us back to speaking and talk over the user.
+			if (state === 'listening') return
 			setState('speaking')
 			sink.play(bytes, sampleRate)
 		},
 		onTurnDone: () => {
+			// Ignore a stale turn_done that lands after a barge-in already returned us to listening
+			// (the interrupted turn's finalizer). Only a live thinking/speaking turn ends here.
+			if (state === 'listening') return
 			// Return to listening only after the queued reply audio has finished playing.
 			reply = ''
 			const wait = sink.pendingMs()
@@ -180,16 +186,17 @@ export function startRealtimeConversation(opts: {
 					client.commit()
 					setState('thinking')
 				}
-			} else if (state === 'speaking') {
-				// Barge-in: a clearly-voiced onset (above the higher threshold) interrupts the AI.
-				if (energy >= bargeThreshold) {
-					sink.stop()
-					setState('listening')
-					client.feed(floatToPcm16(pcm16k))
-					vad.push(energy, nowMs)
-				}
+			} else if (energy >= bargeThreshold) {
+				// Barge-in from EITHER `speaking` (AI talking) OR `thinking` (turn still running): a
+				// clearly-voiced onset (above the higher-than-VAD threshold) overwrites the current
+				// interaction with a fresh request. Stop any playback, tell the server to abort the
+				// in-flight turn (keeping the socket), and start listening to the new utterance.
+				sink.stop()
+				client.interrupt()
+				setState('listening')
+				client.feed(floatToPcm16(pcm16k))
+				vad.push(energy, nowMs)
 			}
-			// `thinking`: ignore mic — the server is running the turn.
 		},
 		stop() {
 			sink.stop()

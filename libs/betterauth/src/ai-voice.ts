@@ -313,6 +313,9 @@ export function createVoiceOrchestrator(deps: {
 	let pendingCommit = false
 	const upstreamQueue: ArrayBuffer[] = []
 	let turnRunning = false
+	// Barge-in: the client can `interrupt` a running turn (it started talking again). We abort the
+	// in-flight LLM fetch + stop enqueuing/sending TTS, but keep the socket for the next utterance.
+	let turnAbort: AbortController | null = null
 
 	const COMMIT = JSON.stringify({ type: 'input_audio_buffer.commit' })
 	// TEMP diagnostic breadcrumbs → surfaced on the client's -next debug line so we can SEE the
@@ -363,7 +366,8 @@ export function createVoiceOrchestrator(deps: {
 		}
 	}
 
-	async function synthesize(sentence: string, first: boolean): Promise<void> {
+	async function synthesize(sentence: string, first: boolean, t0: number): Promise<void> {
+		const started = Date.now()
 		const res = await f(`${base}/audio/speech`, {
 			method: 'POST',
 			headers: { Authorization: `Bearer ${deps.apiKey}`, 'Content-Type': 'application/json' },
@@ -379,7 +383,8 @@ export function createVoiceOrchestrator(deps: {
 			return
 		}
 		const bytes = await res.arrayBuffer()
-		dbg(`[tts ok ${res.headers.get('content-type') ?? '?'} ${bytes.byteLength}b]`)
+		// PERF: synth latency for THIS clip + ms since the turn started (first-audio latency matters).
+		dbg(`[tts ok ${bytes.byteLength}b synth=${Date.now() - started}ms t+${Date.now() - t0}ms]`)
 		if (first) deps.down.sendEvent({ t: 'audio_info', sampleRate: TTS_SAMPLE_RATE })
 		deps.down.sendAudio(bytes)
 	}
@@ -387,6 +392,21 @@ export function createVoiceOrchestrator(deps: {
 	async function runTurn(transcript: string): Promise<void> {
 		if (turnRunning || !transcript.trim()) return
 		turnRunning = true
+		const abort = new AbortController()
+		turnAbort = abort
+		const t0 = Date.now()
+		// PERF: TTS runs on its OWN sequential chain so synthesizing a sentence never blocks reading
+		// the next LLM tokens (the previous `await synthesize` inside the read loop serialized the
+		// whole pipeline → the big delay). Clips still play in order.
+		let ttsChain: Promise<void> = Promise.resolve()
+		let ttsCount = 0
+		const enqueueTts = (text: string) => {
+			if (abort.signal.aborted) return // barge-in — don't synthesize the abandoned reply
+			const first = ttsCount++ === 0
+			ttsChain = ttsChain
+				.then(() => (abort.signal.aborted ? undefined : synthesize(text, first, t0)))
+				.catch(() => {})
+		}
 		dbg(`[llm start] "${transcript.slice(0, 60)}"`)
 		try {
 			// Prefer the internal chat pipeline (tools/todos/skills) when we have the endpoint + bearer;
@@ -398,6 +418,7 @@ export function createVoiceOrchestrator(deps: {
 			const res = await f(url, {
 				method: 'POST',
 				headers,
+				signal: abort.signal,
 				body: JSON.stringify({
 					model: models.llm,
 					// Hardcode the spoken language (German by default) so the reply — which is what gets
@@ -405,7 +426,10 @@ export function createVoiceOrchestrator(deps: {
 					messages: [
 						{
 							role: 'system',
-							content: `You are a voice assistant. Always reply in the user's language (${VOICE_LANG}). Keep replies short and natural for speech.`
+							content:
+								VOICE_LANG === 'de'
+									? 'Du bist ein Sprachassistent. Antworte IMMER auf Deutsch, kurz und natürlich zum Vorlesen.'
+									: `You are a voice assistant. Always reply in ${VOICE_LANG}. Keep replies short and natural for speech.`
 						},
 						{ role: 'user', content: transcript }
 					],
@@ -423,8 +447,8 @@ export function createVoiceOrchestrator(deps: {
 			let sse = ''
 			let reply = ''
 			let pending = ''
-			let firstAudio = true
 			for (;;) {
+				if (abort.signal.aborted) break // barge-in — stop reading the abandoned reply
 				const { done, value } = await reader.read()
 				if (done) break
 				sse += decoder.decode(value, { stream: true })
@@ -454,29 +478,39 @@ export function createVoiceOrchestrator(deps: {
 					}
 					const delta = json.choices?.[0]?.delta?.content
 					if (!delta) continue
+					if (reply === '') dbg(`[llm first-token t+${Date.now() - t0}ms]`)
 					reply += delta
 					pending += delta
 					deps.down.sendEvent({ t: 'reply', text: delta })
 					const { sentences, rest } = chunkSentences(pending)
 					pending = rest
-					for (const s of sentences) {
-						await synthesize(s, firstAudio)
-						firstAudio = false
-					}
+					// Enqueue TTS (non-blocking) — keep reading the LLM while it synthesizes.
+					for (const s of sentences) enqueueTts(s)
 				}
 			}
-			const tail = pending.trim()
-			if (tail) await synthesize(tail, firstAudio)
-			dbg(`[llm done] ${reply.length} chars`)
-			deps.down.sendEvent({ t: 'reply_done', text: reply })
+			if (abort.signal.aborted) {
+				dbg(`[turn interrupted t+${Date.now() - t0}ms]`)
+			} else {
+				const tail = pending.trim()
+				if (tail) enqueueTts(tail)
+				dbg(`[llm done] ${reply.length} chars t+${Date.now() - t0}ms`)
+				deps.down.sendEvent({ t: 'reply_done', text: reply })
+				await ttsChain // let all clips finish synthesizing + streaming before we end the turn
+				dbg(`[turn done t+${Date.now() - t0}ms]`)
+			}
 		} catch (e) {
-			const m = e instanceof Error ? e.message : String(e)
-			dbg(`[llm error] ${m}`)
-			deps.down.sendEvent({ t: 'error', message: m })
+			if (abort.signal.aborted) {
+				dbg(`[turn interrupted t+${Date.now() - t0}ms]`)
+			} else {
+				const m = e instanceof Error ? e.message : String(e)
+				dbg(`[llm error] ${m}`)
+				deps.down.sendEvent({ t: 'error', message: m })
+			}
 		} finally {
 			// ALWAYS return the client to listening — never leave it stuck in "thinking".
 			deps.down.sendEvent({ t: 'turn_done' })
 			turnRunning = false
+			if (turnAbort === abort) turnAbort = null
 		}
 	}
 
@@ -527,6 +561,12 @@ export function createVoiceOrchestrator(deps: {
 				if (upstreamOpen && deps.upstream.readyState === 1) deps.upstream.send(COMMIT)
 				else pendingCommit = true
 				startWatchdog()
+			} else if (msg.t === 'interrupt') {
+				// Barge-in: abort the running turn but keep the socket — the next utterance is already
+				// streaming up. The aborted turn's finalizer sends its own turn_done.
+				dbg('[client interrupt]')
+				caption = ''
+				turnAbort?.abort()
 			} else if (msg.t === 'cancel') {
 				close()
 			}

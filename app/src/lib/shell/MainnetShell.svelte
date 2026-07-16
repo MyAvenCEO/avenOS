@@ -110,6 +110,16 @@ function openTab(id: Tab): void {
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background">
+	<!-- board 0120 — on mobile the weekly MINDS live TOP-RIGHT (the bottom bar only has room for the
+	     hamburger + name there); desktop keeps them in the bottom nav's right cluster. -->
+	{#if isMobile && usageQuery.data?.credit}
+		<span
+			class="font-display pointer-events-none fixed right-3 top-[max(0.4rem,env(safe-area-inset-top))] z-30 tabular-nums text-[10px] font-bold tracking-wider uppercase opacity-60"
+			title={t('mainnet.chat.credits')}
+		>
+			{fmtMinds(usageQuery.data.credit.remainingUsd)} {t('mainnet.chat.creditsLeft')}
+		</span>
+	{/if}
 	{#if justUpgraded}
 		<div
 			class="border-primary/30 bg-primary/10 text-foreground flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 text-sm"
@@ -187,7 +197,8 @@ function openTab(id: Tab): void {
 		{/if}
 
 		<div class="ml-auto flex items-center gap-3">
-			{#if usageQuery.data?.credit}
+			{#if usageQuery.data?.credit && !isMobile}
+				<!-- Desktop only — on mobile the credits live top-right (above). -->
 				<span class="tabular-nums opacity-60" title={t('mainnet.chat.credits')}>
 					{fmtMinds(usageQuery.data.credit.remainingUsd)} {t('mainnet.chat.creditsLeft')}
 				</span>

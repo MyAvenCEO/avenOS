@@ -130,10 +130,13 @@ export type RealtimeVoiceHandlers = {
 	onChatEvent?: (json: Record<string, unknown>) => void
 }
 
-/** Drives one duplex voice connection. `feed` streams mic PCM16 up; `commit` ends the user turn. */
+/** Drives one duplex voice connection. `feed` streams mic PCM16 up; `commit` ends the user turn;
+ *  `interrupt` aborts the in-flight server turn (barge-in) but KEEPS the socket open for the next
+ *  utterance; `cancel` tears the whole connection down. */
 export type RealtimeVoiceClient = {
 	feed(pcm16: Int16Array): void
 	commit(): void
+	interrupt(): void
 	cancel(): void
 }
 
@@ -210,6 +213,11 @@ export function openRealtimeVoice(opts: {
 		},
 		commit() {
 			sendOrQueue(JSON.stringify({ t: 'commit' }))
+		},
+		interrupt() {
+			// Barge-in: abort the running turn server-side WITHOUT closing the socket, so the very next
+			// utterance streams up on the same connection with no reconnect latency.
+			sendOrQueue(JSON.stringify({ t: 'interrupt' }))
 		},
 		cancel() {
 			try {

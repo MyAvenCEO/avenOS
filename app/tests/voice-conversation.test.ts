@@ -43,6 +43,7 @@ function fakeClient() {
 		return {
 			feed: () => calls.push('feed'),
 			commit: () => calls.push('commit'),
+			interrupt: () => calls.push('interrupt'),
 			cancel: () => calls.push('cancel')
 		}
 	}
@@ -91,16 +92,20 @@ describe('startRealtimeConversation', () => {
 			baseUrl: 'https://api.test',
 			token: 't',
 			clientFactory: client.factory,
-			audioSink: sink
+			audioSink: sink,
+			vad: createVad({ threshold: 0.015, hangoverMs: 700 })
 		})
-		client.h().onAudio?.(new Uint8Array([0, 0, 0, 0]).buffer)
+		conv.pushFrame(loud(), 0) // speak
+		conv.pushFrame(quiet(), 800) // pause → commit → thinking
+		expect(conv.state).toBe('thinking')
+		client.h().onAudio?.(new Uint8Array([0, 0, 0, 0]).buffer) // reply audio → speaking
 		expect(conv.state).toBe('speaking')
 		expect(sink.played).toBe(1)
 		client.h().onTurnDone?.()
 		expect(conv.state).toBe('listening') // pendingMs 0 → immediate
 	})
 
-	test('barge-in: a loud onset while speaking stops playback and resumes listening', () => {
+	test('barge-in: a loud onset while speaking stops playback, interrupts the turn, resumes listening', () => {
 		const client = fakeClient()
 		const sink = fakeSink()
 		const conv = startRealtimeConversation({
@@ -108,12 +113,59 @@ describe('startRealtimeConversation', () => {
 			token: 't',
 			clientFactory: client.factory,
 			audioSink: sink,
-			bargeThreshold: 0.05
+			bargeThreshold: 0.05,
+			vad: createVad({ threshold: 0.015, hangoverMs: 700 })
 		})
+		conv.pushFrame(loud(), 0) // speak
+		conv.pushFrame(quiet(), 800) // pause → thinking
 		client.h().onAudio?.(new Uint8Array([1, 2]).buffer) // → speaking
 		expect(conv.state).toBe('speaking')
-		conv.pushFrame(loud(), 1000) // rms 0.2 > barge threshold
+		conv.pushFrame(loud(), 2000) // rms 0.2 > barge threshold
 		expect(sink.stops).toBeGreaterThanOrEqual(1)
+		expect(client.calls).toContain('interrupt')
+		expect(conv.state).toBe('listening')
+	})
+
+	test('barge-in while THINKING interrupts the in-flight turn and starts a fresh utterance', () => {
+		const client = fakeClient()
+		const sink = fakeSink()
+		const conv = startRealtimeConversation({
+			baseUrl: 'https://api.test',
+			token: 't',
+			clientFactory: client.factory,
+			audioSink: sink,
+			bargeThreshold: 0.05,
+			vad: createVad({ threshold: 0.015, hangoverMs: 700 })
+		})
+		// Drive to thinking: speak, then pause → commit.
+		conv.pushFrame(loud(), 0)
+		conv.pushFrame(quiet(), 800)
+		expect(conv.state).toBe('thinking')
+		client.calls.length = 0
+		// Talk again while the server is still thinking → interrupt + back to listening + feed the new frame.
+		conv.pushFrame(loud(), 2000)
+		expect(client.calls).toContain('interrupt')
+		expect(client.calls).toContain('feed')
+		expect(conv.state).toBe('listening')
+	})
+
+	test('a stale turn_done after a barge-in does not yank the new utterance out of listening', () => {
+		const client = fakeClient()
+		const sink = fakeSink()
+		const conv = startRealtimeConversation({
+			baseUrl: 'https://api.test',
+			token: 't',
+			clientFactory: client.factory,
+			audioSink: sink,
+			bargeThreshold: 0.05,
+			vad: createVad({ threshold: 0.015, hangoverMs: 700 })
+		})
+		conv.pushFrame(loud(), 0) // speak
+		conv.pushFrame(quiet(), 800) // pause → thinking
+		client.h().onAudio?.(new Uint8Array([1, 2]).buffer) // → speaking
+		conv.pushFrame(loud(), 2000) // barge-in → listening
+		expect(conv.state).toBe('listening')
+		client.h().onTurnDone?.() // the interrupted turn's late finalizer — must be ignored
 		expect(conv.state).toBe('listening')
 	})
 
