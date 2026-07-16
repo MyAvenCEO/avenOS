@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.1...v) (2026-07-16)
+
+
+### Bug Fixes
+
+* **0120:** voice — all skills + delete-confirm modal, format-agnostic TTS playback ([#54](https://github.com/MyAvenCEO/avenOS/issues/54)) ([01f94da](https://github.com/MyAvenCEO/avenOS/commit/01f94daa154a68bd5902c243a09bf2246c3b7a1e))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.6...v) (2026-07-16)
 
 
