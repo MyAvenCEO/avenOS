@@ -565,6 +565,23 @@ let convState = $state<ConversationState | null>(null)
 /** Recent server pipeline breadcrumbs (TEMP diagnostic, -next only) — accumulated so nothing is
  *  missed (a single latest line got overwritten before it could be read). */
 let voiceStatusLines = $state<string[]>([])
+let voiceLogsCopied = $state(false)
+/** Which tab the realtime voice MODAL shows: the conversation, or the diagnostic logs. */
+let voiceTab = $state<'talk' | 'logs'>('talk')
+
+/** Copy the gate line + all accumulated breadcrumbs to the clipboard (debug helper). */
+async function copyVoiceLogs(): Promise<void> {
+	const text = [voiceDebugLine, ...voiceStatusLines].join('\n')
+	try {
+		await navigator.clipboard.writeText(text)
+		voiceLogsCopied = true
+		setTimeout(() => {
+			voiceLogsCopied = false
+		}, 1500)
+	} catch {
+		/* clipboard unavailable */
+	}
+}
 /** The latest caption text — used as the user's line when the realtime turn completes. */
 let lastCaption = ''
 
@@ -655,6 +672,7 @@ async function beginCapture() {
 			voicePartial = ''
 			lastCaption = ''
 			voiceStatusLines = []
+			voiceTab = 'talk'
 			try {
 				realtimeConversation = startRealtimeConversation({
 					baseUrl: AUTH_BASE_URL,
@@ -1025,6 +1043,105 @@ const pillClass = $derived.by(() => {
 })
 </script>
 
+<!-- REALTIME hands-free conversation MODAL (board 0120): a full, SOLID-background overlay that
+     scopes the whole live-voice experience — Talk (phase + live STT captions + big red STOP) and a
+     Logs tab (diagnostics). Shown whenever a realtime conversation is active. -->
+{#if convState}
+	<div class="bg-background fixed inset-0 z-50 flex flex-col" role="dialog" aria-modal="true" aria-label="Live voice">
+		<!-- Tabs + close -->
+		<div class="border-border flex shrink-0 items-center gap-1 border-b px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
+			<button
+				type="button"
+				class="rounded-[var(--radius)] px-3 py-1.5 text-[13px] font-medium transition-colors {voiceTab ===
+				'talk'
+					? 'bg-primary/10 text-foreground'
+					: 'text-muted-foreground hover:bg-card'}"
+				onclick={() => (voiceTab = 'talk')}
+			>
+				Talk
+			</button>
+			{#if showVoiceDebug}
+				<button
+					type="button"
+					class="rounded-[var(--radius)] px-3 py-1.5 text-[13px] font-medium transition-colors {voiceTab ===
+					'logs'
+						? 'bg-primary/10 text-foreground'
+						: 'text-muted-foreground hover:bg-card'}"
+					onclick={() => (voiceTab = 'logs')}
+				>
+					Logs
+				</button>
+			{/if}
+			<button
+				type="button"
+				class="text-muted-foreground hover:text-foreground ml-auto -m-1 p-1"
+				aria-label="End conversation"
+				onclick={() => void stopListening()}
+			>
+				<svg class="size-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+
+		{#if voiceTab === 'talk'}
+			<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 p-6">
+				<div class="flex items-center gap-2 text-[13px] font-medium tracking-wide">
+					<span
+						class="size-2.5 rounded-full {convState === 'thinking'
+							? 'animate-pulse bg-amber-500'
+							: convState === 'speaking'
+								? 'animate-pulse bg-sky-500'
+								: 'animate-pulse bg-emerald-500'}"
+					></span>
+					<span class="text-foreground/70">
+						{convState === 'thinking'
+							? 'Thinking…'
+							: convState === 'speaking'
+								? 'Speaking…'
+								: 'Listening…'}
+					</span>
+				</div>
+				<div
+					class="max-h-[40vh] w-full max-w-md overflow-y-auto text-center text-lg leading-relaxed text-foreground/90"
+					aria-live="polite"
+				>
+					{voicePartial || 'Say something…'}
+				</div>
+				<button
+					type="button"
+					class="relative flex size-20 shrink-0 touch-manipulation items-center justify-center rounded-full bg-red-600 text-white shadow-[0_12px_36px_-8px_rgba(220,38,38,0.6)] outline-none transition-transform select-none active:scale-95 focus-visible:ring-2 focus-visible:ring-red-500/50"
+					onclick={() => void stopListening()}
+					aria-label="Stop live voice conversation"
+				>
+					<span class="absolute inset-0 animate-ping rounded-full bg-red-500/40" aria-hidden="true"></span>
+					<svg class="relative size-9" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+		{:else}
+			<div class="flex min-h-0 flex-1 flex-col gap-2 p-4">
+				<div class="flex items-center gap-2">
+					<span class="font-mono text-[10px] text-muted-foreground">{voiceDebugLine}</span>
+					<button
+						type="button"
+						class="border-border rounded border px-1.5 py-0.5 text-[10px] hover:bg-card"
+						onclick={() => void copyVoiceLogs()}
+					>
+						{voiceLogsCopied ? 'copied ✓' : 'copy logs'}
+					</button>
+				</div>
+				<div class="min-h-0 flex-1 overflow-y-auto font-mono text-[10px] leading-relaxed">
+					{#each voiceStatusLines as line, i (i)}
+						<div class="text-amber-600/90">{line}</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+	</div>
+{/if}
+
 <div
 	class={rowCluster
 		? 'flex shrink-0 flex-col items-center justify-center gap-2'
@@ -1095,16 +1212,6 @@ const pillClass = $derived.by(() => {
 			</div>
 		</div>
 	{/if}
-	{#if showVoiceDebug}
-		<!-- TEMP staging diagnostic (board 0120): realtime-gate values + latest server pipeline
-		     breadcrumb. Remove once the roundtrip is confirmed. -->
-		<div class="mx-auto mb-1 max-h-40 overflow-y-auto font-mono text-[9px] leading-tight tracking-tight text-muted-foreground/70">
-			<div>{voiceDebugLine}</div>
-			{#each voiceStatusLines as line, i (i)}
-				<div class="text-amber-600/80">{line}</div>
-			{/each}
-		</div>
-	{/if}
 	{#if mode === 'collapsed'}
 		<div class={pillClass} role="group">
 			<button
@@ -1151,56 +1258,7 @@ const pillClass = $derived.by(() => {
 			</button>
 		</div>
 	{:else if mode === 'listening'}
-		{#if convState}
-			<!-- REALTIME hands-free conversation (board 0120): phase + live STT captions, and a single
-			     big red STOP button. The VAD auto-commits each utterance and the AI speaks back in a
-			     loop — no per-utterance submit; tap the red × to end the conversation. -->
-			<div class="mx-auto mb-2 flex items-center gap-1.5 text-[12px] font-medium tracking-wide">
-				<span
-					class="size-2 rounded-full {convState === 'thinking'
-						? 'animate-pulse bg-amber-500'
-						: convState === 'speaking'
-							? 'animate-pulse bg-sky-500'
-							: 'animate-pulse bg-emerald-500'}"
-				></span>
-				<span class="text-foreground/70">
-					{convState === 'thinking'
-						? 'Thinking…'
-						: convState === 'speaking'
-							? 'Speaking…'
-							: 'Listening…'}
-				</span>
-			</div>
-			<div
-				class="mx-auto mb-3 max-h-24 min-h-[2.5rem] max-w-[min(36rem,80vw)] overflow-y-auto rounded-2xl bg-muted/40 px-3 py-2 text-center text-sm leading-snug text-foreground/80 max-sm:max-w-none"
-				aria-live="polite"
-			>
-				{voicePartial || 'Say something…'}
-			</div>
-			<div class="flex items-center justify-center">
-				<button
-					type="button"
-					class="relative flex size-[4.5rem] shrink-0 touch-manipulation items-center justify-center rounded-full bg-red-600 text-white shadow-[0_10px_30px_-8px_rgba(220,38,38,0.55)] outline-none transition-transform select-none active:scale-95 focus-visible:ring-2 focus-visible:ring-red-500/50"
-					onclick={() => void stopListening()}
-					aria-label="Stop live voice conversation"
-				>
-					<span
-						class="absolute inset-0 animate-ping rounded-full bg-red-500/40"
-						aria-hidden="true"
-					></span>
-					<svg
-						class="relative size-8"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-		{:else}
+		{#if !convState}
 			{#if voicePartial}
 				<!-- Live transcript preview: streams as the VAD closes each segment on a
 				     pause. Preview only — it is posted to the chat solely on submit. -->
