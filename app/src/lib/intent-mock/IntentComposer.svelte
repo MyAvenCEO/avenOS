@@ -562,8 +562,9 @@ let stopProgress: (() => void) | null = null
 let realtimeConversation: RealtimeConversation | null = null
 /** Live phase of the hands-free conversation, shown as an on-screen indicator (null = inactive). */
 let convState = $state<ConversationState | null>(null)
-/** Latest server pipeline breadcrumb (TEMP diagnostic, -next only). */
-let voiceStatus = $state('')
+/** Recent server pipeline breadcrumbs (TEMP diagnostic, -next only) — accumulated so nothing is
+ *  missed (a single latest line got overwritten before it could be read). */
+let voiceStatusLines = $state<string[]>([])
 /** The latest caption text — used as the user's line when the realtime turn completes. */
 let lastCaption = ''
 
@@ -653,6 +654,7 @@ async function beginCapture() {
 			// no on-device model needed. board 0120 slice B.
 			voicePartial = ''
 			lastCaption = ''
+			voiceStatusLines = []
 			try {
 				realtimeConversation = startRealtimeConversation({
 					baseUrl: AUTH_BASE_URL,
@@ -670,7 +672,7 @@ async function beginCapture() {
 							convState = s
 						},
 						onStatus: (t) => {
-							voiceStatus = t
+							voiceStatusLines = [...voiceStatusLines, t].slice(-12)
 						},
 						onChatEvent: (json) => onVoiceChatEvent?.(json),
 						onError: (m) => onTranscribeError?.(m)
@@ -1096,11 +1098,11 @@ const pillClass = $derived.by(() => {
 	{#if showVoiceDebug}
 		<!-- TEMP staging diagnostic (board 0120): realtime-gate values + latest server pipeline
 		     breadcrumb. Remove once the roundtrip is confirmed. -->
-		<div class="mx-auto mb-1 font-mono text-[9px] leading-tight tracking-tight text-muted-foreground/70">
+		<div class="mx-auto mb-1 max-h-40 overflow-y-auto font-mono text-[9px] leading-tight tracking-tight text-muted-foreground/70">
 			<div>{voiceDebugLine}</div>
-			{#if voiceStatus}
-				<div class="text-amber-600/80">{voiceStatus}</div>
-			{/if}
+			{#each voiceStatusLines as line, i (i)}
+				<div class="text-amber-600/80">{line}</div>
+			{/each}
 		</div>
 	{/if}
 	{#if mode === 'collapsed'}
