@@ -834,6 +834,8 @@ function handleVoiceReply(userText: string, assistantText: string): void {
 						onSubmitMessage={handleSubmit}
 						onTranscribeError={handleTranscribeError}
 						onVoiceReply={handleVoiceReply}
+						onVoiceVibe={(schema, data) =>
+							appendVibe(schema, data as Record<string, unknown> | undefined)}
 					/>
 				</div>
 			</div>

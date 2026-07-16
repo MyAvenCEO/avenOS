@@ -35,6 +35,7 @@ export type ConversationHandlers = {
 	onState?: (state: ConversationState) => void
 	onError?: (message: string) => void
 	onStatus?: (text: string) => void
+	onVibe?: (schema: string, data?: unknown) => void
 }
 
 export type RealtimeConversation = {
@@ -145,7 +146,8 @@ export function startRealtimeConversation(opts: {
 			else later(() => setState('listening'), wait)
 		},
 		onError: (m) => h.onError?.(m),
-		onStatus: (t) => h.onStatus?.(t)
+		onStatus: (t) => h.onStatus?.(t),
+		onVibe: (schema, data) => h.onVibe?.(schema, data)
 	}
 
 	const client = opts.clientFactory
