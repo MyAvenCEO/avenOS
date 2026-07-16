@@ -234,7 +234,11 @@ describe('createVoiceOrchestrator', () => {
 		}
 		expect(chatUrl).toBe('http://127.0.0.1:8787/api/ai/chat')
 		expect(chatAuth).toBe('Bearer bearer-xyz') // caller's session, so the tool loop runs as the user
-		expect(chatBody.messages?.find((m) => m.role === 'user')?.content).toBe('add a todo to buy milk')
+		// Mirrors typed chat: ONE user turn (no injected system message that would break skill routing),
+		// carrying the transcript (a German output hint may be appended).
+		expect(chatBody.messages).toHaveLength(1)
+		expect(chatBody.messages?.[0]?.role).toBe('user')
+		expect(chatBody.messages?.[0]?.content).toContain('add a todo to buy milk')
 		expect(events.find((e) => e.t === 'reply_done')?.text).toBe('Added it.') // aven_tool event tolerated
 	})
 
