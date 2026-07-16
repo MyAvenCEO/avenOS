@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.3...v) (2026-07-16)
+
+
+### Bug Fixes
+
+* **0120:** TTS speaker + German + copy-logs + mobile hamburger + voice modal ([#56](https://github.com/MyAvenCEO/avenOS/issues/56)) ([a8d5434](https://github.com/MyAvenCEO/avenOS/commit/a8d5434a0744373260d4d388c5c4cecc2dfae12d))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.2...v) (2026-07-16)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.1...v) (2026-07-16)
 
