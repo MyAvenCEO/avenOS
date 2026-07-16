@@ -1,9 +1,6 @@
 <script lang="ts">
 import { onDestroy, tick } from 'svelte'
 import { browser } from '$app/environment'
-// board 0110 — the idle AI button IS the avenOS logo: the freigestellt (cut-out) mark, disabled by default,
-// the full-colour clean mark on hover/active. No circle chrome.
-import logoClean from '$lib/assets/logo/logo_clean.svg'
 import {
 	asrState,
 	startDownload as startAsrDownload,
@@ -12,6 +9,10 @@ import {
 	voicePrep as voicePrepOf,
 	voiceUnavailableReason as voiceUnavailableReasonOf
 } from '$lib/asr/model-download-store'
+// board 0110 — the idle AI button IS the avenOS logo: the freigestellt (cut-out) mark, disabled by default,
+// the full-colour clean mark on hover/active. No circle chrome.
+import logoClean from '$lib/assets/logo/logo_clean.svg'
+import { AUTH_BASE_URL, getBearerToken } from '$lib/auth/auth-client'
 import { downsample, encodeForModel, TARGET_SAMPLE_RATE } from '$lib/intent-mock/audio-encode'
 import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
 import {
@@ -22,7 +23,6 @@ import {
 	transcribeAudio
 } from '$lib/intent-mock/transcribe'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import { AUTH_BASE_URL, getBearerToken } from '$lib/auth/auth-client'
 import { voiceMode } from '$lib/settings/voice-mode-store'
 import {
 	type ConversationState,
@@ -1047,9 +1047,18 @@ const pillClass = $derived.by(() => {
      scopes the whole live-voice experience — Talk (phase + live STT captions + big red STOP) and a
      Logs tab (diagnostics). Shown whenever a realtime conversation is active. -->
 {#if convState}
-	<div class="bg-background fixed inset-0 z-50 flex flex-col" role="dialog" aria-modal="true" aria-label="Live voice">
+	<!-- board 0120 — the live-voice UI is a BOTTOM SHEET (~1/3 height), not a fullscreen takeover, so
+	     the chat/vibes behind it stay visible. A non-interactive scrim dims the rest; the sheet has a
+	     solid background so its Talk/Logs tabs read clearly. -->
+	<div class="pointer-events-none fixed inset-0 z-40 bg-black/30" aria-hidden="true"></div>
+	<div
+		class="bg-background border-border fixed inset-x-0 bottom-0 z-50 flex h-[34vh] min-h-[16rem] flex-col rounded-t-2xl border-t shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom)]"
+		role="dialog"
+		aria-modal="true"
+		aria-label="Live voice"
+	>
 		<!-- Tabs + close -->
-		<div class="border-border flex shrink-0 items-center gap-1 border-b px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
+		<div class="border-border flex shrink-0 items-center gap-1 border-b px-3 pt-2.5 pb-2">
 			<button
 				type="button"
 				class="rounded-[var(--radius)] px-3 py-1.5 text-[13px] font-medium transition-colors {voiceTab ===
@@ -1078,14 +1087,21 @@ const pillClass = $derived.by(() => {
 				aria-label="End conversation"
 				onclick={() => void stopListening()}
 			>
-				<svg class="size-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+				<svg
+					class="size-5"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
 					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
 				</svg>
 			</button>
 		</div>
 
 		{#if voiceTab === 'talk'}
-			<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 p-6">
+			<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-4">
 				<div class="flex items-center gap-2 text-[13px] font-medium tracking-wide">
 					<span
 						class="size-2.5 rounded-full {convState === 'thinking'
@@ -1098,24 +1114,34 @@ const pillClass = $derived.by(() => {
 						{convState === 'thinking'
 							? 'Thinking…'
 							: convState === 'speaking'
-								? 'Speaking…'
+								? 'Speaking… (talk to interrupt)'
 								: 'Listening…'}
 					</span>
 				</div>
 				<div
-					class="max-h-[40vh] w-full max-w-md overflow-y-auto text-center text-lg leading-relaxed text-foreground/90"
+					class="min-h-0 w-full max-w-md flex-1 overflow-y-auto text-center text-base leading-relaxed text-foreground/90"
 					aria-live="polite"
 				>
 					{voicePartial || 'Say something…'}
 				</div>
 				<button
 					type="button"
-					class="relative flex size-20 shrink-0 touch-manipulation items-center justify-center rounded-full bg-red-600 text-white shadow-[0_12px_36px_-8px_rgba(220,38,38,0.6)] outline-none transition-transform select-none active:scale-95 focus-visible:ring-2 focus-visible:ring-red-500/50"
+					class="relative flex size-16 shrink-0 touch-manipulation items-center justify-center rounded-full bg-red-600 text-white shadow-[0_12px_36px_-8px_rgba(220,38,38,0.6)] outline-none transition-transform select-none active:scale-95 focus-visible:ring-2 focus-visible:ring-red-500/50"
 					onclick={() => void stopListening()}
 					aria-label="Stop live voice conversation"
 				>
-					<span class="absolute inset-0 animate-ping rounded-full bg-red-500/40" aria-hidden="true"></span>
-					<svg class="relative size-9" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+					<span
+						class="absolute inset-0 animate-ping rounded-full bg-red-500/40"
+						aria-hidden="true"
+					></span>
+					<svg
+						class="relative size-7"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
 				</button>
@@ -1254,7 +1280,7 @@ const pillClass = $derived.by(() => {
 					src={logoClean}
 					alt="avenOS"
 					class="pointer-events-none absolute inset-0 size-full object-contain p-1 transition-transform duration-200 ease-out group-hover:scale-[1.08] group-active:scale-95"
-				/>
+				>
 			</button>
 		</div>
 	{:else if mode === 'listening'}
@@ -1269,71 +1295,68 @@ const pillClass = $derived.by(() => {
 					{voicePartial}
 				</div>
 			{/if}
-		<div class={pillClass} role="group">
-			<div
-				class={`flex shrink-0 items-center justify-start ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
-			>
-				<span class="font-mono text-[10px] font-bold tracking-wider opacity-80 tabular-nums"
-					>{timerLabel}</span
+			<div class={pillClass} role="group">
+				<div
+					class={`flex shrink-0 items-center justify-start ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
 				>
-			</div>
-			<div
-				class="flex min-h-7 min-w-0 flex-1 items-end justify-center gap-px px-1 py-1 sm:px-2"
-				aria-hidden="true"
-			>
-				{#each barIndices as i (i)}
-					<span
-						class="intent-mock-bar inline-block h-7 w-0.5 shrink-0 rounded-full bg-primary-foreground/75"
-						style={`animation-delay: ${i * 0.08}s`}
-					></span>
-				{/each}
-			</div>
-			<!-- board 0119m — a right spacer mirrors the timer so the waveform stays centered; the
+					<span class="font-mono text-[10px] font-bold tracking-wider opacity-80 tabular-nums"
+						>{timerLabel}</span
+					>
+				</div>
+				<div
+					class="flex min-h-7 min-w-0 flex-1 items-end justify-center gap-px px-1 py-1 sm:px-2"
+					aria-hidden="true"
+				>
+					{#each barIndices as i (i)}
+						<span
+							class="intent-mock-bar inline-block h-7 w-0.5 shrink-0 rounded-full bg-primary-foreground/75"
+							style={`animation-delay: ${i * 0.08}s`}
+						></span>
+					{/each}
+				</div>
+				<!-- board 0119m — a right spacer mirrors the timer so the waveform stays centered; the
 			     submit/cancel controls moved OUT of the pill (below, at the logo AI-button position). -->
-			<div
-				class={`shrink-0 ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
-				aria-hidden="true"
-			></div>
-		</div>
-		<!-- board 0119m — SUBMIT / CANCEL are NOT part of the waveform animation: they sit where the
+				<div class={`shrink-0 ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`} aria-hidden="true"></div>
+			</div>
+			<!-- board 0119m — SUBMIT / CANCEL are NOT part of the waveform animation: they sit where the
 		     logo AI button is — the big ✓ dead-center (same size as the logo), a smaller × to its
 		     right (absolutely placed so the ✓ never shifts off-centre). -->
-		<div class="relative flex items-center justify-center">
-			<button
-				type="button"
-				class="flex size-[3.5rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-status-success)_55%,transparent)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
-				onclick={commitVoiceNote}
-				aria-label="Submit voice note as intent (mock)"
-			>
-				<svg
-					class="size-8"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.5"
-					viewBox="0 0 24 24"
-					aria-hidden="true"
+			<div class="relative flex items-center justify-center">
+				<button
+					type="button"
+					class="flex size-[3.5rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-status-success)_55%,transparent)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
+					onclick={commitVoiceNote}
+					aria-label="Submit voice note as intent (mock)"
 				>
-					<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
-				</svg>
-			</button>
-			<button
-				type="button"
-				class="absolute top-1/2 left-1/2 flex size-8 -translate-y-1/2 translate-x-[2.35rem] items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_2px_10px_-3px_rgba(0,0,0,0.25)] outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
-				onclick={() => void stopListening()}
-				aria-label="Cancel voice note"
-			>
-				<svg
-					class="size-4"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					viewBox="0 0 24 24"
-					aria-hidden="true"
+					<svg
+						class="size-8"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
+					</svg>
+				</button>
+				<button
+					type="button"
+					class="absolute top-1/2 left-1/2 flex size-8 -translate-y-1/2 translate-x-[2.35rem] items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_2px_10px_-3px_rgba(0,0,0,0.25)] outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
+					onclick={() => void stopListening()}
+					aria-label="Cancel voice note"
 				>
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-				</svg>
-			</button>
-		</div>
+					<svg
+						class="size-4"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
 		{/if}
 	{:else if mode === 'preparing'}
 		<div class={pillClass} role="status" aria-live="polite">

@@ -10,13 +10,13 @@ import {
 	writeSrcFiles
 } from '$lib/composer/active-spark'
 import Composer from '$lib/composer/Composer.svelte'
+import { enterSkill } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
-import { enterSkill } from '$lib/data/client'
 import { consumeSse } from '$lib/net/sse'
-import FlowStatusStrip from '$lib/shell/FlowStatusStrip.svelte'
 import ActorDetailAside from '$lib/shell/ActorDetailAside.svelte'
+import FlowStatusStrip from '$lib/shell/FlowStatusStrip.svelte'
 import SkillFlowView from '$lib/shell/SkillFlowView.svelte'
 import SkillsUsedAside, { type SkillUse } from '$lib/shell/SkillsUsedAside.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
@@ -235,7 +235,10 @@ function appendNote(text: string): void {
 /** board 0099 — the delete actor: flow a todos-deleted summary card showing what was removed. */
 function appendVibe(vibe: string, vibeData?: Record<string, unknown>): void {
 	const ref = pushVibe(vibe, vibeData)
-	messages = [...messages, { id: nextId++, role: 'assistant', text: '', vibe, vibeData, vibeRef: ref }]
+	messages = [
+		...messages,
+		{ id: nextId++, role: 'assistant', text: '', vibe, vibeData, vibeRef: ref }
+	]
 	scrollToBottom()
 }
 function declineHitl(req: HitlRequest): void {
@@ -374,7 +377,14 @@ async function loadSessionMessages(id: string): Promise<void> {
 					}
 				}
 				const ref = pushVibe(schema, vibeData)
-				return { id: nextId++, role: 'assistant' as const, text: '', vibe: schema, vibeData, vibeRef: ref }
+				return {
+					id: nextId++,
+					role: 'assistant' as const,
+					text: '',
+					vibe: schema,
+					vibeData,
+					vibeRef: ref
+				}
 			}
 			return {
 				id: nextId++,
@@ -588,7 +598,14 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 				: data
 		// board 0118 — the vibe goes to the STAGE; the chat stream gets only the badge.
 		const ref = pushVibe(schema, vibeData)
-		const card: ChatMessage = { id: nextId++, role: 'assistant', text: '', vibe: schema, vibeData, vibeRef: ref }
+		const card: ChatMessage = {
+			id: nextId++,
+			role: 'assistant',
+			text: '',
+			vibe: schema,
+			vibeData,
+			vibeRef: ref
+		}
 		const idx = messages.findIndex((m) => m.id === pendingId)
 		messages =
 			idx < 0 ? [...messages, card] : [...messages.slice(0, idx), card, ...messages.slice(idx)]
@@ -709,7 +726,12 @@ function handleVoiceChatEvent(raw: Record<string, unknown>): void {
 				style="box-shadow: inset 0 0 0 3px #DEA657"
 			></div>
 		{/if}
-		<div class="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center">
+		<!-- board 0120 — on mobile (no side asides) the bar gets a SOLID background so the vibe stage
+		     scrolls cleanly BELOW it instead of showing through behind the switcher. Desktop keeps the
+		     transparent overlay (the stage is scoped between the two asides there). -->
+		<div
+			class="bg-background pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center border-b border-border/40 md:border-0 md:bg-transparent"
+		>
 			<div
 				class="font-display pointer-events-auto flex items-center gap-2 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-1.5 text-[10px] font-bold tracking-wider uppercase"
 			>
@@ -738,7 +760,7 @@ function handleVoiceChatEvent(raw: Record<string, unknown>): void {
 		     (md+): wide vibes (the website composer) lay out inside it instead of underneath the
 		     overlay cards. Mobile keeps the plain padding (asides hidden there). -->
 		<div
-			class="min-h-0 flex-1 overflow-y-auto px-6 pt-9 md:pl-[15.5rem] {mainTab === 'flows'
+			class="min-h-0 flex-1 overflow-y-auto px-6 pt-[max(2.75rem,calc(env(safe-area-inset-top)+2.5rem))] md:pt-9 md:pl-[15.5rem] {mainTab === 'flows'
 				? 'pb-11 md:pr-3'
 				: 'md:pr-[15.5rem]'}"
 			style={mainTab === 'flows' ? '' : 'padding-bottom: 11rem'}
@@ -756,7 +778,11 @@ function handleVoiceChatEvent(raw: Record<string, unknown>): void {
 						/>
 					</div>
 					<div class="hidden min-w-0 flex-1 basis-1/2 md:block">
-						<ActorDetailAside skillId={flowActorSkill ?? asideSkill} actorName={flowActor} node={flowNode} />
+						<ActorDetailAside
+							skillId={flowActorSkill ?? asideSkill}
+							actorName={flowActor}
+							node={flowNode}
+						/>
 					</div>
 				</div>
 			{:else if currentVibe}
@@ -787,7 +813,9 @@ function handleVoiceChatEvent(raw: Record<string, unknown>): void {
 					{/if}
 				{/key}
 			{:else}
-				<div class="text-muted-foreground flex h-full items-center justify-center text-sm leading-relaxed">
+				<div
+					class="text-muted-foreground flex h-full items-center justify-center text-sm leading-relaxed"
+				>
 					{t('mainnet.chat.empty')}
 				</div>
 			{/if}
@@ -798,7 +826,9 @@ function handleVoiceChatEvent(raw: Record<string, unknown>): void {
 		<div
 			class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
 		>
-			<div class="pointer-events-auto mx-auto flex w-full max-w-[44rem] flex-col items-center gap-2">
+			<div
+				class="pointer-events-auto mx-auto flex w-full max-w-[44rem] flex-col items-center gap-2"
+			>
 				{#each hitlRequests as req (req.id)}
 					{@const v = hitlVerb(req.tool)}
 					<div
@@ -861,5 +891,4 @@ function handleVoiceChatEvent(raw: Record<string, unknown>): void {
 			</div>
 		</div>
 	</div>
-
 </div>

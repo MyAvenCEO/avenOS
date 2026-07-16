@@ -403,7 +403,9 @@ export function createVoiceOrchestrator(deps: {
 		const enqueueTts = (text: string) => {
 			if (abort.signal.aborted) return // barge-in — don't synthesize the abandoned reply
 			const first = ttsCount++ === 0
-			ttsChain = ttsChain.then(() => (abort.signal.aborted ? undefined : synthesize(text, first, t0))).catch(() => {})
+			ttsChain = ttsChain
+				.then(() => (abort.signal.aborted ? undefined : synthesize(text, first, t0)))
+				.catch(() => {})
 		}
 		dbg(`[llm start] "${transcript.slice(0, 60)}"`)
 		try {
