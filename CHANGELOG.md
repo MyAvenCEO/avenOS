@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.6...v) (2026-07-16)
+
+
+### Bug Fixes
+
+* **0120:** forward tool-result cards to voice turns + TTS breadcrumb ([#53](https://github.com/MyAvenCEO/avenOS/issues/53)) ([8c64516](https://github.com/MyAvenCEO/avenOS/commit/8c6451643979460fefe1d59c2c0ea257b51918e5))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.5...v) (2026-07-15)
 
 
