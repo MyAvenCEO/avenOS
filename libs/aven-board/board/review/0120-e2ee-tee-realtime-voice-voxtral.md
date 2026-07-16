@@ -279,6 +279,18 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-16` — **Perf + barge-in + mobile layout.** (1) PERF: the SSE read loop `await`-ed each
+  `synthesize()` inline, serializing LLM streaming behind TTS → seconds of first-audio delay. TTS
+  now runs on its own promise chain (`enqueueTts`) so sentences synthesize while the LLM keeps
+  streaming; added `[llm first-token]`/`[tts ok synth=Xms t+Yms]`/`[turn done]` timing breadcrumbs.
+  (2) Forced a German system prompt so LLM+TTS always speak German. (3) **Barge-in**: talking again
+  now interrupts BOTH `thinking` and `speaking` — the client sends an `interrupt` control (distinct
+  from `cancel`/teardown); the server aborts the LLM fetch + stops the TTS queue and keeps the
+  socket; guards drop the interrupted turn's stray audio + late `turn_done`. (4) Mobile: credits →
+  fixed top-right; live-voice UI → bottom sheet (~1/3) with solid bg + scrim instead of fullscreen;
+  DISPLAY/FLOWS switcher gets a solid bg so the vibe stage scrolls below it, not behind. app voice
+  suites green (conversation 9 pass, realtime-voice), betterauth ai-voice 13 pass, tsc 0,
+  svelte-check 0 errors.
 - `2026-07-14` — **TTS root cause found + UX pass.** The on-screen breadcrumb (now accumulated)
   showed `[tts FAIL http 400 Invalid speaker 'default'. …casual_female, casual_male…]` — voxtral-tts
   rejects `voice:'default'`. Fix: use a NAMED speaker (`casual_female`, env `TINFOIL_TTS_VOICE`).
