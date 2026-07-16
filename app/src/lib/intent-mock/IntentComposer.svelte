@@ -1048,9 +1048,8 @@ const pillClass = $derived.by(() => {
      Logs tab (diagnostics). Shown whenever a realtime conversation is active. -->
 {#if convState}
 	<!-- board 0120 — the live-voice UI is a BOTTOM SHEET (~1/3 height), not a fullscreen takeover, so
-	     the chat/vibes behind it stay visible. A non-interactive scrim dims the rest; the sheet has a
-	     solid background so its Talk/Logs tabs read clearly. -->
-	<div class="pointer-events-none fixed inset-0 z-40 bg-black/30" aria-hidden="true"></div>
+	     the chat/vibes behind it stay fully visible (no dimming scrim). The sheet has a solid
+	     background so its Talk/Logs tabs read clearly. -->
 	<div
 		class="bg-background border-border fixed inset-x-0 bottom-0 z-50 flex h-[34vh] min-h-[16rem] flex-col rounded-t-2xl border-t shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom)]"
 		role="dialog"

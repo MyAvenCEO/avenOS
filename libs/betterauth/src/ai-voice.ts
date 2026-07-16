@@ -61,6 +61,9 @@ export type SpeechRequest = {
 	input: string
 	voice: string
 	response_format: string
+	/** ISO code (e.g. `de`) — Voxtral TTS is multilingual; without it German text is read with English
+	 *  phonemes → garbled/overlong audio. Only present when a language is passed. */
+	language?: string
 }
 
 /**
@@ -73,14 +76,17 @@ export function buildSpeechRequest(opts: {
 	model: string
 	voice?: string
 	format?: string
+	language?: string
 }): SpeechRequest {
 	const text = opts.text?.trim() ?? ''
 	if (!text) throw new Error('text required')
+	const language = opts.language?.trim()
 	return {
 		model: opts.model,
 		input: text,
 		voice: opts.voice?.trim() || 'default',
-		response_format: opts.format?.trim() || 'pcm'
+		response_format: opts.format?.trim() || 'pcm',
+		...(language ? { language } : {})
 	}
 }
 
@@ -374,7 +380,15 @@ export function createVoiceOrchestrator(deps: {
 			// Named speaker (voxtral-tts rejects 'default') + WAV (self-describing container so the
 			// client decodes with Web Audio decodeAudioData regardless of the enclave's sample rate).
 			body: JSON.stringify(
-				buildSpeechRequest({ text: sentence, model: models.tts, voice: TTS_VOICE, format: 'wav' })
+				// language pins German pronunciation (Voxtral is multilingual) — must match the reply
+				// language, which we force to German below, or the speech garbles.
+				buildSpeechRequest({
+					text: sentence,
+					model: models.tts,
+					voice: TTS_VOICE,
+					format: 'wav',
+					language: VOICE_LANG
+				})
 			)
 		})
 		if (!res.ok) {
@@ -415,26 +429,38 @@ export function createVoiceOrchestrator(deps: {
 			const url = useChat ? (deps.chatEndpoint as string) : `${base}/chat/completions`
 			const headers: Record<string, string> = { 'Content-Type': 'application/json' }
 			headers.Authorization = `Bearer ${useChat ? (deps.token as string) : deps.apiKey}`
+			// German directive appended to the USER turn (never a system message): the reply — which
+			// TTS speaks — must be German so it matches the German TTS `language`, but injecting a
+			// SYSTEM prompt into /api/ai/chat broke the pipeline's own skill routing (asking for the
+			// inventory returned todos) and its language. A trailing hint keys routing off the same
+			// words while still steering the output language. board 0120.
+			const userContent =
+				VOICE_LANG === 'de' ? `${transcript}\n\n(Antworte bitte kurz auf Deutsch.)` : transcript
+			// Through /api/ai/chat we MIRROR the typed-chat request shape EXACTLY (just the user turn,
+			// no forced model) so voice routes skills + runs tools identically to typing. The raw
+			// /chat/completions fallback (no pipeline, no tools) still needs the explicit model + a
+			// system persona.
+			const body = useChat
+				? { messages: [{ role: 'user', content: userContent }], stream: true }
+				: {
+						model: models.llm,
+						messages: [
+							{
+								role: 'system',
+								content:
+									VOICE_LANG === 'de'
+										? 'Du bist ein Sprachassistent. Antworte IMMER auf Deutsch, kurz und natürlich zum Vorlesen.'
+										: `You are a voice assistant. Always reply in ${VOICE_LANG}. Keep replies short and natural for speech.`
+							},
+							{ role: 'user', content: transcript }
+						],
+						stream: true
+					}
 			const res = await f(url, {
 				method: 'POST',
 				headers,
 				signal: abort.signal,
-				body: JSON.stringify({
-					model: models.llm,
-					// Hardcode the spoken language (German by default) so the reply — which is what gets
-					// spoken back by TTS — matches what the user speaks. board 0120.
-					messages: [
-						{
-							role: 'system',
-							content:
-								VOICE_LANG === 'de'
-									? 'Du bist ein Sprachassistent. Antworte IMMER auf Deutsch, kurz und natürlich zum Vorlesen.'
-									: `You are a voice assistant. Always reply in ${VOICE_LANG}. Keep replies short and natural for speech.`
-						},
-						{ role: 'user', content: transcript }
-					],
-					stream: true
-				})
+				body: JSON.stringify(body)
 			})
 			if (!res.ok || !res.body) {
 				dbg(`[llm http ${res.status}]`)
