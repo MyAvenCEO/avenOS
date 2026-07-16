@@ -362,8 +362,13 @@ export function createVoiceOrchestrator(deps: {
 			headers: { Authorization: `Bearer ${deps.apiKey}`, 'Content-Type': 'application/json' },
 			body: JSON.stringify(buildSpeechRequest({ text: sentence, model: models.tts }))
 		})
-		if (!res.ok) return
+		if (!res.ok) {
+			const detail = await res.text().catch(() => '')
+			dbg(`[tts FAIL http ${res.status} ${detail.slice(0, 100)}]`)
+			return
+		}
 		const bytes = await res.arrayBuffer()
+		dbg(`[tts ok ${res.headers.get('content-type') ?? '?'} ${bytes.byteLength}b]`)
 		if (first) deps.down.sendEvent({ t: 'audio_info', sampleRate: TTS_SAMPLE_RATE })
 		deps.down.sendAudio(bytes)
 	}
@@ -393,7 +398,7 @@ export function createVoiceOrchestrator(deps: {
 				deps.down.sendEvent({ t: 'error', message: `llm ${res.status}` })
 				return
 			}
-			dbg('[llm streaming]')
+			dbg(useChat ? '[llm streaming via chat+tools]' : '[llm streaming via completions]')
 			const reader = res.body.getReader()
 			const decoder = new TextDecoder()
 			let sse = ''
@@ -411,11 +416,28 @@ export function createVoiceOrchestrator(deps: {
 					if (!line) continue
 					const payload = line.slice(5).trim()
 					if (payload === '[DONE]') continue
-					let json: { choices?: { delta?: { content?: string } }[] }
+					let json: {
+						choices?: { delta?: { content?: string } }[]
+						aven_vibe?: { schema?: string; data?: unknown }
+						aven_tool?: { name?: string; status?: string }
+					}
 					try {
 						json = JSON.parse(payload)
 					} catch {
 						continue
+					}
+					// Forward tool activity + result cards so the voice turn shows them like the typed
+					// chat does (todos, mutation-result, …) — tools run server-side either way.
+					if (json.aven_tool) {
+						dbg(`[tool ${json.aven_tool.name ?? '?'} ${json.aven_tool.status ?? ''}]`)
+					}
+					if (json.aven_vibe) {
+						dbg(`[vibe ${json.aven_vibe.schema ?? '?'}]`)
+						deps.down.sendEvent({
+							t: 'vibe',
+							schema: json.aven_vibe.schema ?? '',
+							data: json.aven_vibe.data
+						})
 					}
 					const delta = json.choices?.[0]?.delta?.content
 					if (!delta) continue

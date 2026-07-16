@@ -279,6 +279,13 @@ git status --porcelain # only the Files-to-touch paths
 
 Newest first.
 
+- `2026-07-14` — Transcription + LLM text work; two gaps: no tool-result cards, no spoken reply.
+  Tools DO run (the turn routes through `/api/ai/chat`'s tool loop) but the orchestrator dropped
+  the `aven_vibe`/`aven_tool` SSE events. Fix: forward `aven_vibe` → client → `MainnetChat`
+  renders the cards (todos/mutation-result) like the typed chat; `onVoiceVibe` prop threads it
+  through. Breadcrumbs added: `[llm streaming via chat+tools]`, `[tool …]`, `[vibe …]`, and
+  crucially `[tts ok <ctype> <bytes>b]` / `[tts FAIL http …]` to diagnose the silent TTS on-device.
+  betterauth tsc 0 · ai-voice 13 pass · app 81 pass · svelte-check 0 errors.
 - `2026-07-14` — Realtime UI now shows (CSP fixed) but the turn hung in "thinking" — no
   transcript/reply/recovery. Two bugs + diagnostics: (1) **audio framing** — we sent raw binary
   PCM but Tinfoil's `/v1/realtime` (OpenAI-compat) wants `input_audio_buffer.append` events with
