@@ -664,39 +664,6 @@ function handleTranscribeError(message: string): void {
 	]
 	scrollToBottom()
 }
-
-// Realtime hands-free voice (board 0120): the server already ran the STT→LLM→TTS turn (and
-// persisted it), so this only mirrors the spoken exchange into the visible thread — it does NOT
-// re-call the LLM (that's why it's separate from onSubmitMessage).
-function handleVoiceReply(userText: string, assistantText: string): void {
-	messages = [
-		...messages,
-		{ id: nextId++, role: 'user', text: userText },
-		{ id: nextId++, role: 'assistant', text: assistantText }
-	]
-	scrollToBottom()
-}
-
-// Shared dispatch for one chat stream event — used by BOTH the typed-chat SSE loop and the realtime
-// voice turn, so every skill/tool behaves identically: tool activity, result cards, website edits,
-// and the HITL (delete) confirmation modal. board 0120.
-type ChatEventJson = {
-	aven_vibe?: { schema?: string; data?: Record<string, unknown> }
-	aven_edit?: { files?: Record<string, string> }
-	aven_tool?: ToolStatus
-	aven_hitl?: { id: string; tool: string; label: string; action: Record<string, unknown> }
-	aven_edit_chunk?: { text?: string }
-}
-// Realtime voice forwards each chat event (aven_tool/hitl/vibe/edit) from the server orchestrator;
-// run it through the SAME module-level handlers the typed chat uses, so voice gets tool cards, the
-// HITL (delete) confirmation modal, and every skill exactly like typing does.
-function handleVoiceChatEvent(raw: Record<string, unknown>): void {
-	const json = raw as ChatEventJson
-	if (json.aven_tool) upsertTool(json.aven_tool)
-	if (json.aven_hitl) addHitl(json.aven_hitl)
-	if (json.aven_vibe?.schema) appendVibe(json.aven_vibe.schema, json.aven_vibe.data)
-	if (json.aven_edit?.files) void applyEdit(json.aven_edit.files)
-}
 </script>
 
 <div class="flex min-h-0 flex-1 bg-background">
@@ -884,8 +851,6 @@ function handleVoiceChatEvent(raw: Record<string, unknown>): void {
 						submitBusy={busy}
 						onSubmitMessage={handleSubmit}
 						onTranscribeError={handleTranscribeError}
-						onVoiceReply={handleVoiceReply}
-						onVoiceChatEvent={handleVoiceChatEvent}
 					/>
 				</div>
 			</div>
