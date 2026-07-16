@@ -116,7 +116,7 @@ let {
 	 * thread; without it, the turn is still spoken but not persisted by the surface.
 	 */
 	onVoiceReply,
-	onVoiceVibe
+	onVoiceChatEvent
 }: {
 	onSubmitMessage?: (text: string, files: File[]) => void
 	onModeChange?: (mode: Mode) => void
@@ -137,7 +137,7 @@ let {
 	voicePrep?: VoicePrep | null
 	onTranscribeError?: (message: string) => void
 	onVoiceReply?: (userText: string, assistantText: string) => void
-	onVoiceVibe?: (schema: string, data?: unknown) => void
+	onVoiceChatEvent?: (json: Record<string, unknown>) => void
 } = $props()
 
 // On-device transcription is the default whenever we're in the Tauri runtime, so
@@ -672,7 +672,7 @@ async function beginCapture() {
 						onStatus: (t) => {
 							voiceStatus = t
 						},
-						onVibe: (schema, data) => onVoiceVibe?.(schema, data),
+						onChatEvent: (json) => onVoiceChatEvent?.(json),
 						onError: (m) => onTranscribeError?.(m)
 					}
 				})
