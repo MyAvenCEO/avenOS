@@ -99,13 +99,13 @@ export class VoiceEngine {
 		this.openTimer = setTimeout(() => {
 			if (this.status !== 'connected') {
 				this.opts.onError?.(
-					'Sprachverbindung zu Google kam nicht zustande (Netzwerk/Vertex Live). Bitte erneut versuchen.'
+					'Sprachverbindung zu Google kam nicht zustande (Netzwerk/VPN). Bitte erneut versuchen.'
 				)
 				this.setStatus('error')
 				this.manualClose = true
 				this.ws?.close()
 			}
-		}, 15_000)
+		}, 55_000)
 
 		ws.onopen = () => {
 			const setup: VoiceSetup = {

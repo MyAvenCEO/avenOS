@@ -23,26 +23,41 @@ import {
 } from '../protocol'
 
 const PROJECT = process.env.GOOGLE_CLOUD_PROJECT
-const LOCATION = process.env.GOOGLE_CLOUD_LOCATION ?? 'europe-west1'
+// Resilience: an ORDERED list of regions to try. The first is the residency
+// preference (EU); the rest are fallbacks for when a region's Live service
+// flakes (documented europe-west1 native-audio instability). Override via
+// GOOGLE_CLOUD_LOCATIONS (comma-separated) or the single GOOGLE_CLOUD_LOCATION.
+const LOCATIONS = (
+	process.env.GOOGLE_CLOUD_LOCATIONS ??
+	`${process.env.GOOGLE_CLOUD_LOCATION ?? 'europe-west1'},us-central1`
+)
+	.split(',')
+	.map((s) => s.trim())
+	.filter(Boolean)
 const VERTEX = Boolean(PROJECT)
 const MODEL =
 	process.env.GEMINI_LIVE_MODEL ??
 	(VERTEX ? 'gemini-live-2.5-flash-native-audio' : 'gemini-3.1-flash-live-preview')
 
+const CONNECT_TIMEOUT_MS = Number(process.env.VOICE_CONNECT_TIMEOUT_MS ?? 10_000)
+const MAX_ATTEMPTS = Number(process.env.VOICE_CONNECT_ATTEMPTS ?? 4)
+
 const saJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 
-function makeClient(): GoogleGenAI {
+function makeClient(location: string): GoogleGenAI {
 	if (VERTEX) {
 		return new GoogleGenAI({
 			vertexai: true,
 			project: PROJECT,
-			location: LOCATION,
+			location,
 			...(saJson ? { googleAuthOptions: { credentials: JSON.parse(saJson) } } : {})
 		})
 	}
 	const apiKey = process.env.GOOGLE_AI_API_KEY ?? process.env.GEMINI_API_KEY
 	return new GoogleGenAI({ apiKey })
 }
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 /** Server-side tool surface: executed in-process (credentials/caps stay server-side). */
 export type VoiceServerTools = {
@@ -73,7 +88,7 @@ export type VoiceBridge = {
 
 /** Human-readable config summary for boot logs. */
 export function describeVoiceBackend(): string {
-	return `${MODEL} [${VERTEX ? `vertex:${LOCATION}` : 'developer-api'}]`
+	return `${MODEL} [${VERTEX ? `vertex:${LOCATIONS.join('→')}` : 'developer-api'}]`
 }
 
 /**
@@ -93,46 +108,128 @@ export function createVoiceBridge(
 	const doneById = new Map<string, unknown>()
 	const recentByArgs = new Map<string, { out: unknown; ts: number }>()
 
-	async function startSession(setup: VoiceSetup): Promise<void> {
+	// Resilient connect: try each region, per-attempt timeout, backoff between
+	// attempts. Resolves once Vertex confirms the WS is open; rejects if an
+	// attempt times out / errors so the loop can fall back to the next region.
+	function connectOnce(setup: VoiceSetup, location: string): Promise<Session> {
 		const voice =
 			setup.voice && (VOICE_ALLOWLIST as readonly string[]).includes(setup.voice)
 				? setup.voice
 				: DEFAULT_VOICE
-		const ai = makeClient()
+		const ai = makeClient(location)
 		const systemInstruction = opts.serverTools?.instructionsSuffix
 			? `${setup.instructions}\n\n${opts.serverTools.instructionsSuffix}`
 			: setup.instructions
-		session = await ai.live.connect({
-			model: MODEL,
-			config: {
-				responseModalities: [Modality.AUDIO],
-				systemInstruction,
-				speechConfig: {
-					voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
-					languageCode: setup.languageCode ?? DEFAULT_LANGUAGE
-				},
-				inputAudioTranscription: {},
-				outputAudioTranscription: {},
-				...((() => {
-					const all = [...(opts.serverTools?.declarations ?? []), ...setup.tools]
-					return all.length ? { tools: [{ functionDeclarations: all }] } : {}
-				})())
-			},
-			callbacks: {
-				onopen: () => send({ type: 'open' }),
-				onmessage: (m: LiveServerMessage) => {
-					// Forward EVERY audio part — the final flush of a turn bundles
-					// several parts in one message; dropping any clips the last word.
-					for (const part of m.serverContent?.modelTurn?.parts ?? []) {
-						if (part.inlineData?.data) send({ type: 'audio', data: part.inlineData.data })
+		return new Promise<Session>((resolve, reject) => {
+			let settled = false
+			const timer = setTimeout(() => {
+				if (!settled) {
+					settled = true
+					reject(new Error(`connect timeout (${location})`))
+				}
+			}, CONNECT_TIMEOUT_MS)
+			ai.live
+				.connect({
+					model: MODEL,
+					config: {
+						responseModalities: [Modality.AUDIO],
+						systemInstruction,
+						speechConfig: {
+							voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
+							languageCode: setup.languageCode ?? DEFAULT_LANGUAGE
+						},
+						inputAudioTranscription: {},
+						outputAudioTranscription: {},
+						...((() => {
+							const all = [...(opts.serverTools?.declarations ?? []), ...setup.tools]
+							return all.length ? { tools: [{ functionDeclarations: all }] } : {}
+						})())
+					},
+					callbacks: {
+						onopen: () => {
+							if (!settled) {
+								settled = true
+								clearTimeout(timer)
+							}
+							send({ type: 'open' })
+						},
+						onmessage: (m: LiveServerMessage) => onLiveMessage(m),
+						onerror: (e: ErrorEvent) => {
+							if (!settled) {
+								settled = true
+								clearTimeout(timer)
+								reject(new Error(e.message || 'live error'))
+							} else if (!closed) {
+								send({ type: 'error', message: e.message })
+							}
+						},
+						onclose: (e: CloseEvent) => {
+							if (!settled) {
+								settled = true
+								clearTimeout(timer)
+								reject(new Error(`closed before open: ${e.reason || e.code}`))
+							} else if (!closed) {
+								send({ type: 'error', message: `Live-Session geschlossen: ${e.reason || e.code}` })
+							}
+						}
 					}
-					if (m.serverContent?.interrupted) send({ type: 'interrupted' })
-					if (m.serverContent?.turnComplete) send({ type: 'turnComplete' })
-					const inT = m.serverContent?.inputTranscription?.text
-					if (inT) send({ type: 'transcript', role: 'user', text: inT })
-					const outT = m.serverContent?.outputTranscription?.text
-					if (outT) send({ type: 'transcript', role: 'assistant', text: outT })
-					if (m.toolCall?.functionCalls?.length) {
+				})
+				.then((s) => {
+					// If timeout already fired, discard this late session.
+					if (settled && !session) {
+						void s.close?.()
+						return
+					}
+					session = s
+					resolve(s)
+				})
+				.catch((err) => {
+					if (!settled) {
+						settled = true
+						clearTimeout(timer)
+						reject(err instanceof Error ? err : new Error(String(err)))
+					}
+				})
+		})
+	}
+
+	async function startSession(setup: VoiceSetup): Promise<void> {
+		let lastErr = ''
+		for (let attempt = 0; attempt < MAX_ATTEMPTS && !closed; attempt++) {
+			const location = VERTEX ? LOCATIONS[attempt % LOCATIONS.length] : 'developer-api'
+			try {
+				await connectOnce(setup, location)
+				return // success — session is live, callbacks stream via onLiveMessage
+			} catch (e) {
+				lastErr = e instanceof Error ? e.message : String(e)
+				session = undefined
+				if (attempt < MAX_ATTEMPTS - 1) await sleep(Math.min(500 * 2 ** attempt, 4000))
+			}
+		}
+		if (!closed) {
+			send({
+				type: 'error',
+				message: `Sprachverbindung zu Google kam nach ${MAX_ATTEMPTS} Versuchen nicht zustande (${lastErr}). Netzwerk/VPN prüfen und erneut versuchen.`
+			})
+		}
+	}
+
+	// Shared live-message handler (used once a session is open).
+	function onLiveMessage(m: LiveServerMessage): void {
+		{
+			{
+				// Forward EVERY audio part — the final flush of a turn bundles
+				// several parts in one message; dropping any clips the last word.
+				for (const part of m.serverContent?.modelTurn?.parts ?? []) {
+					if (part.inlineData?.data) send({ type: 'audio', data: part.inlineData.data })
+				}
+				if (m.serverContent?.interrupted) send({ type: 'interrupted' })
+				if (m.serverContent?.turnComplete) send({ type: 'turnComplete' })
+				const inT = m.serverContent?.inputTranscription?.text
+				if (inT) send({ type: 'transcript', role: 'user', text: inT })
+				const outT = m.serverContent?.outputTranscription?.text
+				if (outT) send({ type: 'transcript', role: 'assistant', text: outT })
+				if (m.toolCall?.functionCalls?.length) {
 						const calls = m.toolCall.functionCalls.map((c) => ({
 							id: c.id ?? '',
 							name: c.name ?? '',
@@ -196,14 +293,9 @@ export function createVoiceBridge(
 									})
 								})
 						}
-					}
-				},
-				onerror: (e: ErrorEvent) => send({ type: 'error', message: e.message }),
-				onclose: (e: CloseEvent) => {
-					if (!closed) send({ type: 'error', message: `Live-Session geschlossen: ${e.reason || e.code}` })
 				}
 			}
-		})
+		}
 	}
 
 	return {
