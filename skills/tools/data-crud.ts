@@ -177,7 +177,7 @@ function resolveId(given: string, rows: Rec[]): string {
 	// the model often can't see ids (the card shows names) and passes the NAME/TITLE instead ("the toaster")
 	// — match the primary label so an update/delete still hits the right row. board 0112.
 	const gl = g.toLowerCase()
-	const byLabel = rows.find((r) => String(r.title ?? r.name ?? '').toLowerCase() === gl)
+	const byLabel = rows.find((r) => String(r.title ?? r.name ?? r.label ?? r.person ?? '').toLowerCase() === gl)
 	return byLabel ? String(byLabel.id) : g
 }
 
@@ -236,7 +236,7 @@ export const dataCrud: ToolActor = {
 			// entries and REPORT them; with nothing left to write, return an error listing the real names so
 			// the model corrects itself in the follow-up round (it knows the right spelling from the card).
 			const liveIds = new Set(liveRows.map((r) => String(r.id)))
-			const label = (r: Rec) => String(r.title ?? r.name ?? r.id)
+			const label = (r: Rec) => String(r.title ?? r.name ?? r.label ?? r.person ?? r.id)
 			const notFound: string[] = []
 			if (args.action === 'update' && args.items) {
 				for (const i of args.items) if (!liveIds.has(String((i as Rec).id))) notFound.push(String((i as Rec).id))
@@ -268,7 +268,7 @@ export const dataCrud: ToolActor = {
 		if (args.action === 'delete') {
 			const ids = (args.ids ?? []).filter((x): x is string => typeof x === 'string' && !!x)
 			// name each row generically (title for todos, name for inventory/…) so the confirm card says WHAT.
-			const byId = new Map((liveRows ?? []).map((r) => [String(r.id), String(r.title ?? r.name ?? '')]))
+			const byId = new Map((liveRows ?? []).map((r) => [String(r.id), String(r.title ?? r.name ?? r.label ?? r.person ?? '')]))
 			const deleted = ids.map((id) => ({ id, title: byId.get(id) ?? '' }))
 			const names = deleted.map((d) => d.title).filter(Boolean)
 			const noun = schema === 'todos' ? 'todo' : schema

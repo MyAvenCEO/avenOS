@@ -82,6 +82,23 @@ export async function vibeExists(name: string): Promise<boolean> {
 	return r.rows.length > 0
 }
 
+/**
+ * The vibe NAME that renders a data schema — for the realtime post-mutation refresh (SSOT). Most skills
+ * name their vibe = their schema (todos, inventory), so a `<schema>` view is preferred. When they differ
+ * (calendar/dienstplan reuse or rename: manifest {vibe, schema}), fall back to a skill whose
+ * manifest.schema matches. Returns null if no view renders this schema.
+ */
+export async function vibeForSchema(schema: string): Promise<string | null> {
+	if (await vibeExists(schema)) return schema
+	const r = await sql<{ vibe: string }>`
+		SELECT manifest->>'vibe' AS vibe FROM skill
+		WHERE manifest->>'schema' = ${schema} AND manifest->>'vibe' IS NOT NULL
+		LIMIT 1
+	`.execute(db())
+	const vibe = r.rows[0]?.vibe
+	return vibe && (await vibeExists(vibe)) ? vibe : null
+}
+
 export async function loadVibe(name: string): Promise<VibeBundle | null> {
 	const one = async (table: string): Promise<unknown> => {
 		const r = await sql<{

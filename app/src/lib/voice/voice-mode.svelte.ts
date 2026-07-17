@@ -116,12 +116,7 @@ class VoiceMode {
 					this.toolEvents = [...this.toolEvents.slice(-19), msg]
 					// The ACTOR declared its vibes (schema + state) server-side — same
 					// contract as chat's aven_vibe; no client-side mapping tables.
-					for (const v of msg.vibes ?? []) {
-						this.vibeQueue = [
-							...this.vibeQueue.slice(-9),
-							{ seq: this.#vibeSeq++, schema: v.schema, data: v.data }
-						]
-					}
+					for (const v of msg.vibes ?? []) this.#pushVibe(v.schema, v.data)
 				} else if (msg.type === 'hitl') {
 					this.pendingHitl = msg
 				}
@@ -147,13 +142,24 @@ class VoiceMode {
 				},
 				body: JSON.stringify({ action: hitl.action })
 			})
+			const data = (await res.json().catch(() => null)) as
+				| { error?: string; vibe?: { schema: string; data?: unknown } }
+				| null
 			if (!res.ok) {
-				const err = (await res.json().catch(() => null)) as { error?: string } | null
-				this.error = err?.error ?? `Bestätigung fehlgeschlagen (HTTP ${res.status})`
+				this.error = data?.error ?? `Bestätigung fehlgeschlagen (HTTP ${res.status})`
+			} else if (data?.vibe?.schema) {
+				// REALTIME: the confirmed delete returns the skill's refreshed vibe — push it
+				// so the stage reflects the deletion immediately (same as create/update).
+				this.#pushVibe(data.vibe.schema, data.vibe.data)
 			}
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : 'Bestätigung fehlgeschlagen'
 		}
+	}
+
+	/** Append a vibe to the stage queue (from a tool event or a confirmed HITL result). */
+	#pushVibe(schema: string, data?: unknown): void {
+		this.vibeQueue = [...this.vibeQueue.slice(-9), { seq: this.#vibeSeq++, schema, data }]
 	}
 
 	dismissHitl(): void {

@@ -18,7 +18,7 @@ import { ontologyCaps } from './ontology'
 import { promoteCaps } from './promote-caps'
 import { mutationCaps, queryCaps } from './query-caps'
 import { typeCaps } from './type-caps'
-import { vibeExists } from './vibe-registry'
+import { vibeExists, vibeForSchema } from './vibe-registry'
 
 type VoiceVibe = { schema: string; data?: unknown }
 
@@ -304,17 +304,21 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 				)
 				const declared = out.vibe ? (Array.isArray(out.vibe) ? out.vibe : [out.vibe]) : []
 				let vibes = await existingVibes(declared as VoiceVibe[])
-				// Realtime refresh: a mutation whose declared `<schema>-edited` card has no
-				// DB rows (e.g. inventory) would leave a stale stage. Fall back to re-pushing
-				// the BASE list vibe with fresh data so the stage reflects the mutation —
-				// generic for any schema, same effect todos gets from its -edited card.
+				// REALTIME BY DEFAULT: every data_crud mutation refreshes the skill's vibe with
+				// fresh data so the stage always reflects the change — regardless of whether the
+				// vibe is named after the schema (todos, inventory) or differs (dienstplan→shift,
+				// via manifest). When the actor already produced a valid card (todos-created/
+				// -edited), we keep it; otherwise we push the resolved vibe with the live list.
 				const schema = typeof args.schema === 'string' ? args.schema : ''
 				const isMutation =
 					name === 'data_crud' && ['create', 'update', 'delete'].includes(String(args.action))
-				if (isMutation && schema && vibes.length === 0 && (await vibeExists(schema).catch(() => false))) {
-					const fresh = await crud(userId, { schema, action: 'list' } as Parameters<typeof crud>[1])
-					const rows = (fresh as { items?: unknown } | undefined)?.items ?? fresh
-					vibes = [{ schema, data: { items: rows } }]
+				if (isMutation && schema && vibes.length === 0) {
+					const vibeName = await vibeForSchema(schema).catch(() => null)
+					if (vibeName) {
+						const fresh = await crud(userId, { schema, action: 'list' } as Parameters<typeof crud>[1])
+						const rows = (fresh as { items?: unknown } | undefined)?.items ?? fresh
+						vibes = [{ schema: vibeName, data: { items: rows } }]
+					}
 				}
 				return { content: out.content, hitl: out.hitl, detail: out.detail, vibes }
 			}
