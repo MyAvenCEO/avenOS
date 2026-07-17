@@ -160,6 +160,15 @@ class VoiceMode {
 		this.pendingHitl = null
 	}
 
+	/** True when the pending HITL is destructive (delete) — drives the red vs. brand-primary confirm button. */
+	get hitlDanger(): boolean {
+		const h = this.pendingHitl
+		if (!h) return false
+		const a = h.action as Record<string, unknown> | null
+		const act = typeof a?.action === 'string' ? a.action : ''
+		return act === 'delete' || /delete|lösch|entfern|remove/i.test(`${h.tool} ${h.label}`)
+	}
+
 	/** Full call log (transcript + tool runs) as plain text — for the copy button. */
 	exportLog(): string {
 		const lines: string[] = []

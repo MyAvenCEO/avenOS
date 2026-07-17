@@ -976,7 +976,9 @@ const pillClass = $derived.by(() => {
 		{#if voiceMode.pendingHitl}
 			<!-- aven-voice HITL: the actor asked for human confirmation (e.g. delete/deploy). -->
 			<div
-				class="mx-auto mb-2 flex max-w-[min(36rem,80vw)] items-center gap-3 rounded-2xl border border-destructive/40 bg-background px-4 py-3 text-sm shadow-lg"
+				class="mx-auto mb-2 flex max-w-[min(36rem,80vw)] items-center gap-3 rounded-2xl border {voiceMode.hitlDanger
+					? 'border-destructive/40'
+					: 'border-border'} bg-background px-4 py-3 text-sm shadow-lg"
 				role="alertdialog"
 				aria-label="Bestätigung erforderlich"
 			>
@@ -988,9 +990,12 @@ const pillClass = $derived.by(() => {
 				>
 					Ablehnen
 				</button>
+				<!-- Destructive HITL (delete) confirms in brand danger, everything else in brand primary. -->
 				<button
 					type="button"
-					class="shrink-0 rounded-full bg-destructive px-3.5 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+					class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition hover:opacity-90 {voiceMode.hitlDanger
+						? 'bg-destructive text-white'
+						: 'bg-primary text-primary-foreground'}"
 					onclick={() => void voiceMode.confirmHitl()}
 				>
 					Bestätigen
