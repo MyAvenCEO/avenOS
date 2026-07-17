@@ -300,6 +300,17 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 						.map((r) => String(r?.id))
 						.filter((x) => x && x !== 'undefined')
 				)
+				// "Delete ALL": a delete with no ids AND no filter means every row of this
+				// schema (e.g. "lösch alle Schichten"). Resolve to the real row UUIDs so the
+				// HITL confirm removes the whole set — still by exact id, one confirmation.
+				if (
+					String(args.action) === 'delete' &&
+					!(Array.isArray(args.ids) && args.ids.length) &&
+					!args.filter &&
+					idSet.size
+				) {
+					args.ids = [...idSet]
+				}
 				const targets =
 					String(args.action) === 'delete'
 						? (Array.isArray(args.ids) ? args.ids : []).map((x) => String(x))
