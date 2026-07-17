@@ -118,13 +118,27 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 		async execute(name, rawArgs) {
 			const args = (rawArgs ?? {}) as Record<string, unknown>
 
-			// 0) show_website — same contract as chat: the composer vibe is
+			// 0a) show_website — same contract as chat: the composer vibe is
 			//    client-special-cased (viewer reads local files), no registry row.
 			if (name === 'show_website') {
 				return {
 					content: { ok: true, shown: 'website composer (read-only)' },
 					detail: 'website viewer ready',
 					vibes: [{ schema: 'composer' }]
+				}
+			}
+
+			// 0b) show_calendar — render the calendar vibe over the CURRENT tasks
+			//     (same todos data, time-grouped view). The vibe_logic buckets by due.
+			if (name === 'show_calendar') {
+				const listed = await crud(userId, { schema: 'todos', action: 'list' } as Parameters<
+					typeof crud
+				>[1]).catch(() => null)
+				const items = (listed as { items?: unknown } | null)?.items ?? listed ?? []
+				return {
+					content: { ok: true, shown: 'calendar' },
+					detail: 'calendar',
+					vibes: await existingVibes([{ schema: 'calendar', data: { items } }])
 				}
 			}
 
