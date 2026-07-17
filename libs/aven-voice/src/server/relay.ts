@@ -44,6 +44,19 @@ function makeClient(): GoogleGenAI {
 	return new GoogleGenAI({ apiKey })
 }
 
+/** Server-side tool surface: executed in-process (credentials/caps stay server-side). */
+export type VoiceServerTools = {
+	declarations: import('../protocol').VoiceToolDeclaration[]
+	execute: (
+		name: string,
+		args: unknown
+	) => Promise<{ content: unknown; hitl?: { label: string; action: unknown }; detail?: string }>
+}
+
+export type VoiceBridgeOptions = {
+	serverTools?: VoiceServerTools
+}
+
 export type VoiceBridge = {
 	/** Feed raw text frames from the browser socket here. */
 	handleMessage: (raw: string) => void
@@ -61,9 +74,13 @@ export function describeVoiceBackend(): string {
  * lazily on the client's 'setup' message so each surface picks its own
  * instructions/tools/voice.
  */
-export function createVoiceBridge(send: (msg: ServerMessage) => void): VoiceBridge {
+export function createVoiceBridge(
+	send: (msg: ServerMessage) => void,
+	opts: VoiceBridgeOptions = {}
+): VoiceBridge {
 	let session: Session | undefined
 	let closed = false
+	const serverToolNames = new Set(opts.serverTools?.declarations.map((d) => d.name) ?? [])
 
 	async function startSession(setup: VoiceSetup): Promise<void> {
 		const voice =
@@ -82,7 +99,10 @@ export function createVoiceBridge(send: (msg: ServerMessage) => void): VoiceBrid
 				},
 				inputAudioTranscription: {},
 				outputAudioTranscription: {},
-				...(setup.tools.length ? { tools: [{ functionDeclarations: setup.tools }] } : {})
+				...((() => {
+					const all = [...(opts.serverTools?.declarations ?? []), ...setup.tools]
+					return all.length ? { tools: [{ functionDeclarations: all }] } : {}
+				})())
 			},
 			callbacks: {
 				onopen: () => send({ type: 'open' }),
@@ -99,14 +119,44 @@ export function createVoiceBridge(send: (msg: ServerMessage) => void): VoiceBrid
 					const outT = m.serverContent?.outputTranscription?.text
 					if (outT) send({ type: 'transcript', role: 'assistant', text: outT })
 					if (m.toolCall?.functionCalls?.length) {
-						send({
-							type: 'toolCall',
-							calls: m.toolCall.functionCalls.map((c) => ({
-								id: c.id ?? '',
-								name: c.name ?? '',
-								args: c.args
-							}))
-						})
+						const calls = m.toolCall.functionCalls.map((c) => ({
+							id: c.id ?? '',
+							name: c.name ?? '',
+							args: c.args
+						}))
+						const clientCalls = calls.filter((c) => !serverToolNames.has(c.name))
+						const serverCalls = calls.filter((c) => serverToolNames.has(c.name))
+						if (clientCalls.length) send({ type: 'toolCall', calls: clientCalls })
+						for (const c of serverCalls) {
+							send({ type: 'toolEvent', id: c.id, name: c.name, args: c.args, status: 'running' })
+							void opts.serverTools!
+								.execute(c.name, c.args)
+								.then((out) => {
+									if (out.hitl) {
+										send({ type: 'hitl', id: c.id, tool: c.name, label: out.hitl.label, action: out.hitl.action })
+									}
+									send({
+										type: 'toolEvent',
+										id: c.id,
+										name: c.name,
+										args: c.args,
+										status: 'done',
+										detail: out.detail
+									})
+									session?.sendToolResponse({
+										functionResponses: [{ id: c.id, name: c.name, response: { output: out.content } }]
+									})
+								})
+								.catch((err) => {
+									const message = err instanceof Error ? err.message : 'tool failed'
+									send({ type: 'toolEvent', id: c.id, name: c.name, args: c.args, status: 'error', detail: message })
+									session?.sendToolResponse({
+										functionResponses: [
+											{ id: c.id, name: c.name, response: { output: { ok: false, error: message } } }
+										]
+									})
+								})
+						}
 					}
 				},
 				onerror: (e: ErrorEvent) => send({ type: 'error', message: e.message }),

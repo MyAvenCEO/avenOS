@@ -9,6 +9,7 @@ import {
 	describeVoiceBackend,
 	type VoiceBridge
 } from '@avenos/aven-voice/server'
+import { buildVoiceServerTools } from './voice-tools'
 import { createBunWebSocket } from 'hono/bun'
 import type { Context, Next } from 'hono'
 import { auth } from './auth'
@@ -28,14 +29,30 @@ export async function voiceSessionGuard(c: Context, next: Next): Promise<Respons
 	if (token && !headers.get('authorization')) headers.set('authorization', `Bearer ${token}`)
 	const session = await auth.api.getSession({ headers })
 	if (!session) return c.json({ error: 'unauthorized' }, 401)
+	c.set('voiceUserId' as never, session.user.id as never)
 	await next()
 }
 
-export const voiceLive = upgradeWebSocket(() => {
+export const voiceLive = upgradeWebSocket((c) => {
+	const userId = c.get('voiceUserId' as never) as string | undefined
 	let bridge: VoiceBridge | undefined
 	return {
 		onOpen(_evt, ws) {
-			bridge = createVoiceBridge((msg) => ws.send(JSON.stringify(msg)))
+			const send = (msg: unknown) => ws.send(JSON.stringify(msg))
+			if (!userId) {
+				send({ type: 'error', message: 'unauthorized' })
+				return
+			}
+			// Tools are the SAME registry chat uses — built per connection so the
+			// skill menu (DB config) is fresh; execution is bound to this user.
+			void buildVoiceServerTools(userId)
+				.then((serverTools) => {
+					bridge = createVoiceBridge(send, { serverTools })
+				})
+				.catch((err) => {
+					console.error('[betterauth] voice tools build failed:', err)
+					bridge = createVoiceBridge(send)
+				})
 		},
 		onMessage(evt) {
 			if (typeof evt.data === 'string') bridge?.handleMessage(evt.data)

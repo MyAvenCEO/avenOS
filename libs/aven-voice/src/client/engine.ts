@@ -28,6 +28,8 @@ export type VoiceEngineOptions = {
 	voice?: string
 	languageCode?: string
 	onStatus?: (status: VoiceStatus) => void
+	/** Raw hook for informational messages (toolEvent, hitl, …). */
+	onServerMessage?: (msg: ServerMessage) => void
 	onTranscript?: (line: TranscriptLine, isDelta: boolean) => void
 	onError?: (message: string) => void
 }
@@ -99,7 +101,11 @@ export class VoiceEngine {
 			}
 			ws.send(JSON.stringify(setup))
 		}
-		ws.onmessage = (ev) => void this.handleServerMessage(JSON.parse(ev.data) as ServerMessage)
+		ws.onmessage = (ev) => {
+			const msg = JSON.parse(ev.data) as ServerMessage
+			this.opts.onServerMessage?.(msg)
+			void this.handleServerMessage(msg)
+		}
 		ws.onerror = () => {
 			this.opts.onError?.('Voice-Relay nicht erreichbar')
 			this.setStatus('error')

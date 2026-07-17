@@ -9,134 +9,52 @@
  * so voice edits land in the real store and SSE-invalidate the UI.
  */
 import { VoiceEngine, type TranscriptLine, type VoiceStatus } from '@avenos/aven-voice'
+import type { ServerMessage } from '@avenos/aven-voice'
 import { getBearerToken } from '$lib/auth/auth-client'
-import { createTodos, deleteTodo, listTodos, updateTodos } from '$lib/data/client'
 
 const AUTH_ORIGIN =
 	(import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined) || 'https://api.next.aven.ceo'
 
 const INSTRUCTIONS = `Du bist avenOS' schneller Sprachassistent. Sprich immer Deutsch, außer der Nutzer wechselt die Sprache.
 Halte Antworten kurz — ein bis zwei Sätze.
-Du verwaltest die Todo-Liste des Nutzers über Tools.
-Für mehrere Artikel: IMMER ein einziger Batch-Aufruf (create_todos/update_todos), danach genau EINE kurze Bestätigung. Wiederhole dich nie.
-"habe ich schon" / "ist erledigt" / "gekauft" bedeutet abhaken (done=true) — NIEMALS löschen.
-Löschen nur bei ausdrücklichem "löschen/entfernen".
+Du steuerst avenOS über Tools: Todos, Inventar, Planner, Website, Ontology und weitere Skills.
+Erledige jede Anfrage in möglichst EINER Tool-Runde (Batch-Argumente nutzen), danach genau EINE kurze Bestätigung. Wiederhole dich nie.
+"habe ich schon" / "ist erledigt" / "gekauft" bedeutet abhaken/als erledigt markieren — NIEMALS löschen.
+Löschen nur bei ausdrücklichem "löschen/entfernen"; destruktive Aktionen erfordern Bestätigung (HITL).
 Bei relativen Zeiten (morgen, in 2 Stunden): rufe zuerst get_current_time auf, antworte darauf nicht, sondern rufe direkt das nächste Tool mit dem ISO-Datum auf.`
 
 const TOOLS = [
 	{
-		name: 'list_todos',
-		description: 'Listet alle Todos mit IDs, Status und Fälligkeit.',
-		parametersJsonSchema: { type: 'object', properties: {} }
-	},
-	{
-		name: 'create_todos',
-		description:
-			'Legt ein oder mehrere Todos an — alle in EINEM Aufruf. Fälligkeit (due, ISO 8601) optional.',
-		parametersJsonSchema: {
-			type: 'object',
-			properties: {
-				items: {
-					type: 'array',
-					items: {
-						type: 'object',
-						properties: {
-							title: { type: 'string' },
-							due: { type: 'string', description: 'Optional, ISO 8601 mit Zeitzone' }
-						},
-						required: ['title']
-					}
-				}
-			},
-			required: ['items']
-		}
-	},
-	{
-		name: 'update_todos',
-		description:
-			'Ändert ein oder mehrere Todos in EINEM Aufruf: done (abhaken/reaktivieren), title (umbenennen), due (Fälligkeit, leer = entfernen). IDs kommen aus list_todos.',
-		parametersJsonSchema: {
-			type: 'object',
-			properties: {
-				items: {
-					type: 'array',
-					items: {
-						type: 'object',
-						properties: {
-							id: { type: 'string' },
-							done: { type: 'boolean' },
-							title: { type: 'string' },
-							due: { type: 'string' }
-						},
-						required: ['id']
-					}
-				}
-			},
-			required: ['items']
-		}
-	},
-	{
-		name: 'delete_todos',
-		description: 'Löscht Todos endgültig — nur nach ausdrücklichem Nutzerwunsch. IDs aus list_todos.',
-		parametersJsonSchema: {
-			type: 'object',
-			properties: { ids: { type: 'array', items: { type: 'string' } } },
-			required: ['ids']
-		}
-	},
-	{
 		name: 'get_current_time',
 		description:
-			'Aktuelles Datum, Uhrzeit, Zeitzone. IMMER zuerst bei relativen Zeitangaben aufrufen.',
+			'Aktuelles Datum, Uhrzeit, Zeitzone des Nutzers. IMMER zuerst bei relativen Zeitangaben aufrufen.',
 		parametersJsonSchema: { type: 'object', properties: {} }
 	}
 ]
 
-async function executeTool(name: string, rawArgs: unknown): Promise<unknown> {
-	try {
-		switch (name) {
-			case 'list_todos':
-				return { todos: await listTodos() }
-			case 'create_todos': {
-				const items = ((rawArgs as { items?: unknown[] })?.items ?? []).map((it) => {
-					const o = it as { title?: unknown; due?: unknown }
-					return {
-						title: String(o?.title ?? '').trim(),
-						...(typeof o?.due === 'string' && o.due ? { due: o.due } : {})
-					}
-				})
-				await createTodos(items.filter((i) => i.title))
-				return { ok: true, created: items.map((i) => i.title) }
-			}
-			case 'update_todos': {
-				const items = ((rawArgs as { items?: unknown[] })?.items ?? []) as {
-					id: string
-					done?: boolean
-					title?: string
-					due?: string
-				}[]
-				await updateTodos(items)
-				return { ok: true, updated: items.map((i) => i.id) }
-			}
-			case 'delete_todos': {
-				const ids = ((rawArgs as { ids?: unknown[] })?.ids ?? []).map(String)
-				for (const id of ids) await deleteTodo(id)
-				return { ok: true, deleted: ids }
-			}
-			case 'get_current_time': {
-				const d = new Date()
-				return {
-					iso: d.toISOString(),
-					local: d.toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short' }),
-					timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-				}
-			}
-			default:
-				return { ok: false, error: `Unbekanntes Tool: ${name}` }
+async function executeTool(name: string): Promise<unknown> {
+	if (name === 'get_current_time') {
+		const d = new Date()
+		return {
+			iso: d.toISOString(),
+			local: d.toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short' }),
+			timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
 		}
-	} catch (err) {
-		return { ok: false, error: err instanceof Error ? err.message : 'Tool-Fehler' }
 	}
+	return { ok: false, error: `Unbekanntes Tool: ${name}` }
+}
+
+export type VoiceToolEvent = Extract<ServerMessage, { type: 'toolEvent' }>
+export type VoiceHitl = Extract<ServerMessage, { type: 'hitl' }>
+
+/** Tool → Vibe-View, die die Shell beim jeweiligen Tool-Lauf zeigen soll. board aven-voice. */
+const TOOL_VIBES: Record<string, string> = {
+	data_crud: 'todos',
+	todos: 'todos',
+	inventory: 'inventory',
+	locations: 'inventory-locations',
+	goals: 'goals',
+	planner: 'goals'
 }
 
 class VoiceMode {
@@ -144,6 +62,10 @@ class VoiceMode {
 	active = $state(false)
 	error = $state<string | null>(null)
 	transcript = $state<TranscriptLine[]>([])
+	toolEvents = $state<VoiceToolEvent[]>([])
+	pendingHitl = $state<VoiceHitl | null>(null)
+	/** Vibe-View-Name passend zum letzten Tool-Lauf (Shell rendert sie daneben). */
+	activeVibe = $state<string | null>(null)
 
 	#engine: VoiceEngine | null = null
 
@@ -173,6 +95,15 @@ class VoiceMode {
 			},
 			onError: (m) => {
 				this.error = m
+			},
+			onServerMessage: (msg) => {
+				if (msg.type === 'toolEvent') {
+					this.toolEvents = [...this.toolEvents.slice(-9), msg]
+					const vibe = TOOL_VIBES[msg.name]
+					if (vibe) this.activeVibe = vibe
+				} else if (msg.type === 'hitl') {
+					this.pendingHitl = msg
+				}
 			}
 		})
 		this.#engine.start()
@@ -183,6 +114,7 @@ class VoiceMode {
 		this.#engine?.stop()
 		this.#engine = null
 		this.active = false
+		this.pendingHitl = null
 	}
 }
 

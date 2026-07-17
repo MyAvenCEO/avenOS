@@ -32,6 +32,17 @@ export type ClientMessage =
 
 export type ServerMessage =
 	| { type: 'open' }
+	// Informational: a server-executed tool ran (for UI chips / vibe switching).
+	| {
+			type: 'toolEvent'
+			id: string
+			name: string
+			args: unknown
+			status: 'running' | 'done' | 'error'
+			detail?: string
+	  }
+	// Server tool requested human confirmation (e.g. destructive delete).
+	| { type: 'hitl'; id: string; tool: string; label: string; action: unknown }
 	| { type: 'audio'; data: string } // base64 PCM16 @ 24kHz
 	| { type: 'toolCall'; calls: { id: string; name: string; args: unknown }[] }
 	| { type: 'transcript'; role: 'user' | 'assistant'; text: string }
