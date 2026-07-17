@@ -2,7 +2,7 @@
 // server can load it for the booking step without the renderer. Source: app/static/skills/bookkeeping
 // /konten.json (same data the avenSKILLS/bookkeeping view shows).
 
-import skr04 from './vibes/invoice/skr04.json'
+import skr04 from './skr04.json'
 
 export type SkrAccount = { konto: string; funktion: string; bezeichnung: string }
 

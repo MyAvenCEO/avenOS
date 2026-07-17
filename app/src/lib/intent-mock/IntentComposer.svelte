@@ -1,6 +1,9 @@
 <script lang="ts">
 import { onDestroy, tick } from 'svelte'
 import { browser } from '$app/environment'
+// board 0110 — the idle AI button IS the avenOS logo: the freigestellt (cut-out) mark, disabled by default,
+// the full-colour clean mark on hover/active. No circle chrome.
+import logoClean from '$lib/assets/logo/logo_clean.svg'
 import {
 	asrState,
 	startDownload as startAsrDownload,
@@ -875,7 +878,10 @@ const pillClass = $derived.by(() => {
 	const base =
 		'flex max-w-full overflow-hidden transition-[width,max-width,background-color,border-color,border-radius,box-shadow,padding] duration-[360ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]'
 	if (mode === 'collapsed') {
-		return `${base} h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary p-0 text-primary-foreground shadow-[0_8px_24px_-8px_color-mix(in_srgb,var(--color-primary)_50%,transparent)]`
+		// board 0110 — the idle AI icon is the bare avenOS logo (no circle chrome); 25% larger than the old 56px.
+		// board 0112 — !overflow-visible so the soft glow behind the mark isn't CLIPPED to the square wrapper
+		// (base sets overflow-hidden for the pill animations) — the clip was the "squared outline".
+		return `${base} size-[3.5rem] shrink-0 items-center justify-center p-0 !overflow-visible`
 	}
 	if (mode === 'listening') {
 		if (isMobile) {
@@ -967,7 +973,7 @@ const pillClass = $derived.by(() => {
 		<div class={pillClass} role="group">
 			<button
 				type="button"
-				class="flex h-14 w-14 shrink-0 touch-manipulation select-none items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+				class="group relative flex size-[3.5rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
 				{disabled}
 				onpointerdown={(e) => {
 					void focusShellWebview()
@@ -991,21 +997,21 @@ const pillClass = $derived.by(() => {
 					? 'Tap to type, double-tap for voice stream, hold to record (mock)'
 					: 'Start voice note (mock)'}
 			>
-				<svg
-					class="size-6"
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
+				<!-- board 0112 — a soft CIRCULAR glow behind the mark lifts it off the cream background (a
+				     radial gradient, not a shape-tracing drop-shadow → no squared petal silhouette). Constant
+				     at rest AND on hover — the hover highlight is the scale only (board 0119m). -->
+				<span
 					aria-hidden="true"
-				>
-					<path d="M0 0h24v24H0z" fill="none" />
-					<path
-						fill="none"
-						stroke="currentColor"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M15 19c1.2-3.678 2.526-5.005 6-6c-3.474-.995-4.8-2.322-6-6c-1.2 3.678-2.526 5.005-6 6c3.474.995 4.8 2.322 6 6Zm-8-9c.6-1.84 1.263-2.503 3-3c-1.737-.497-2.4-1.16-3-3c-.6 1.84-1.263 2.503-3 3c1.737.497 2.4 1.16 3 3Zm1.5 10c.3-.92.631-1.251 1.5-1.5c-.869-.249-1.2-.58-1.5-1.5c-.3.92-.631 1.251-1.5 1.5c.869.249 1.2.58 1.5 1.5Z"
-					/>
-				</svg>
+					class="pointer-events-none absolute inset-[12%] rounded-full opacity-55 blur-[12px] [background:radial-gradient(circle,color-mix(in_srgb,var(--color-primary)_30%,transparent),transparent_70%)]"
+				></span>
+				<!-- board 0119m — the full-colour clean mark is the DEFAULT (no disabled/inactive swap).
+				     Hover highlight = a MINIMAL transform (scale-up, no reflow → never displaces the
+				     button) + a hair more contrast; a tiny press-in on active. -->
+				<img
+					src={logoClean}
+					alt="avenOS"
+					class="pointer-events-none absolute inset-0 size-full object-contain p-1 transition-transform duration-200 ease-out group-hover:scale-[1.08] group-active:scale-95"
+				/>
 			</button>
 		</div>
 	{:else if mode === 'listening'}
@@ -1038,46 +1044,51 @@ const pillClass = $derived.by(() => {
 					></span>
 				{/each}
 			</div>
-			<!-- Always show submit/cancel — incl. hold-to-record (long-press) mode, so there is
-			     always a visible way to commit or stop even if release-to-submit doesn't fire. -->
+			<!-- board 0119m — a right spacer mirrors the timer so the waveform stays centered; the
+			     submit/cancel controls moved OUT of the pill (below, at the logo AI-button position). -->
 			<div
-				class={`flex shrink-0 items-center justify-end ${isMobile ? 'gap-1.5 pl-1' : 'w-[4.5rem] gap-2'}`}
+				class={`shrink-0 ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
+				aria-hidden="true"
+			></div>
+		</div>
+		<!-- board 0119m — SUBMIT / CANCEL are NOT part of the waveform animation: they sit where the
+		     logo AI button is — the big ✓ dead-center (same size as the logo), a smaller × to its
+		     right (absolutely placed so the ✓ never shifts off-centre). -->
+		<div class="relative flex items-center justify-center">
+			<button
+				type="button"
+				class="flex size-[3.5rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-status-success)_55%,transparent)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
+				onclick={commitVoiceNote}
+				aria-label="Submit voice note as intent (mock)"
 			>
-				<button
-					type="button"
-					class="flex size-8 shrink-0 items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
-					onclick={commitVoiceNote}
-					aria-label="Submit voice note as intent (mock)"
+				<svg
+					class="size-8"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
 				>
-					<svg
-						class="size-4"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
-					</svg>
-				</button>
-				<button
-					type="button"
-					class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 text-primary-foreground transition-opacity hover:bg-primary-foreground/25"
-					onclick={() => void stopListening()}
-					aria-label="Stop listening"
+					<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
+				</svg>
+			</button>
+			<button
+				type="button"
+				class="absolute top-1/2 left-1/2 flex size-8 -translate-y-1/2 translate-x-[2.35rem] items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_2px_10px_-3px_rgba(0,0,0,0.25)] outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
+				onclick={() => void stopListening()}
+				aria-label="Cancel voice note"
+			>
+				<svg
+					class="size-4"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
 				>
-					<svg
-						class="size-4"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
 		</div>
 	{:else if mode === 'preparing'}
 		<div class={pillClass} role="status" aria-live="polite">
@@ -1236,7 +1247,7 @@ const pillClass = $derived.by(() => {
 							oninput={resizeComposer}
 							onkeydown={onTextareaKeydown}
 							onblur={collapseIfEmpty}
-							class="min-h-9 max-sm:min-h-[2.7rem] max-h-[min(24rem,calc(100vh-12rem))] w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2 max-sm:py-[0.6rem] px-0 text-sm max-sm:text-[1.05rem] leading-snug font-medium tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:min-h-10 sm:py-2.5 sm:text-xl sm:leading-tight"
+							class="min-h-9 max-sm:min-h-[2.7rem] max-h-[min(24rem,calc(100vh-12rem))] w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2 max-sm:py-[0.6rem] px-0 text-sm max-sm:text-[1.05rem] leading-snug font-normal tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:min-h-10 sm:py-2.5 sm:text-base sm:leading-tight"
 						></textarea>
 					</form>
 					<button

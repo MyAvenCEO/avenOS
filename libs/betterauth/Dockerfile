@@ -18,7 +18,7 @@ COPY . .
 # so `bun install` neither requires the excluded workspace members (app/docs/ARCHIVE — bun
 # errors on a missing literal workspace) nor pulls the app's heavy deps. Also drop the root
 # lifecycle scripts (the `prepare` hook needs a .env we don't ship). board 0056.
-RUN bun --eval "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['libs/betterauth','libs/aven-vibes','skills'];delete p.scripts;fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
+RUN bun --eval "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['libs/betterauth','libs/aven-vibes','libs/aven-skills','libs/aven-ontology','skills'];delete p.scripts;fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
  && bun install --ignore-scripts
 
 ENV NODE_ENV=production

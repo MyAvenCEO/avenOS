@@ -1,0 +1,819 @@
+{
+  "pacna": {
+    "name": "hopes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "hoper", "definition": "the one who hopes/wishes", "example": "the patient", "kind": "ref", "references": "*" },
+      "x2": { "role": "wished event", "definition": "the hoped-for event", "example": "a full recovery", "kind": "value", "type": "string" },
+      "x3": { "role": "likelihood", "definition": "expected probability (0-1)", "example": "0.7", "kind": "value", "type": "number" }
+    }
+  },
+  "pagbu": {
+    "name": "part",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "part", "definition": "the part/component/portion", "example": "an engine cylinder", "kind": "ref", "references": "*" },
+      "x2": { "role": "whole", "definition": "the whole it belongs to", "example": "the engine", "kind": "ref", "references": "*" }
+    }
+  },
+  "pagre": {
+    "name": "passes through",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "passer", "definition": "the thing passing through", "example": "the light beam", "kind": "ref", "references": "*" },
+      "x2": { "role": "barrier", "definition": "the barrier/medium/portal traversed", "example": "the window", "kind": "ref", "references": "*" },
+      "x3": { "role": "destination side", "definition": "the side arrived at", "example": "the inside of the room", "kind": "ref", "references": "*" },
+      "x4": { "role": "origin side", "definition": "the side departed from", "example": "the street outside", "kind": "ref", "references": "*" }
+    }
+  },
+  "pajni": {
+    "name": "judges",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "judge", "definition": "the one who judges/arbitrates", "example": "the referee", "kind": "ref", "references": "*" },
+      "x2": { "role": "matter", "definition": "the matter being decided", "example": "the disputed penalty", "kind": "value", "type": "string" }
+    }
+  },
+  "palci": {
+    "name": "evil",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "evil one", "definition": "the wicked/depraved entity", "example": "the tyrant", "kind": "ref", "references": "*" },
+      "x2": { "role": "standard", "definition": "standard of morality applied", "example": "common ethics", "kind": "value", "type": "string" }
+    }
+  },
+  "palku": {
+    "name": "pants",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pants", "definition": "the trousers/leggings", "example": "a pair of jeans", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "material of the pants", "example": "denim", "kind": "value", "type": "string" }
+    }
+  },
+  "palne": {
+    "name": "tray",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "tray", "definition": "the tray/platter/flat container", "example": "a serving tray", "kind": "ref", "references": "*" },
+      "x2": { "role": "contents", "definition": "what the tray holds", "example": "teacups", "kind": "ref", "references": "*" },
+      "x3": { "role": "material", "definition": "material of the tray", "example": "stainless steel", "kind": "value", "type": "string" }
+    }
+  },
+  "palta": {
+    "name": "plate",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "plate", "definition": "the plate/dish/saucer", "example": "a dinner plate", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "material of the plate", "example": "porcelain", "kind": "value", "type": "string" }
+    }
+  },
+  "pambe": {
+    "name": "pump",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pump", "definition": "the pump/injector apparatus", "example": "a water pump", "kind": "ref", "references": "*" },
+      "x2": { "role": "fluid", "definition": "fluid being pumped", "example": "well water", "kind": "ref", "references": "*" },
+      "x3": { "role": "destination", "definition": "where the fluid goes to", "example": "the storage tank", "kind": "ref", "references": "*" },
+      "x4": { "role": "source", "definition": "where the fluid comes from", "example": "the underground aquifer", "kind": "ref", "references": "*" },
+      "x5": { "role": "means", "definition": "means of pumping", "example": "an electric motor", "kind": "value", "type": "string" }
+    }
+  },
+  "panci": {
+    "name": "odor",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "odor", "definition": "the odor/scent/smell", "example": "the smell of coffee", "kind": "ref", "references": "*" },
+      "x2": { "role": "emitter", "definition": "what emits the odor", "example": "a fresh brew", "kind": "ref", "references": "*" },
+      "x3": { "role": "detector", "definition": "observer/sensor that detects it", "example": "a passerby", "kind": "ref", "references": "*" }
+    }
+  },
+  "pandi": {
+    "name": "punctuates",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "punctuator", "definition": "agent who punctuates", "example": "the editor", "kind": "ref", "references": "*" },
+      "x2": { "role": "expression", "definition": "the expression being punctuated", "example": "the sentence", "kind": "value", "type": "string" },
+      "x3": { "role": "symbol", "definition": "punctuation symbol/word used", "example": "a comma", "kind": "value", "type": "string" },
+      "x4": { "role": "effect", "definition": "syntactic/semantic effect", "example": "marking a pause", "kind": "value", "type": "string" }
+    }
+  },
+  "panje": {
+    "name": "sponge",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "sponge", "definition": "the sponge/porous material", "example": "a kitchen sponge", "kind": "ref", "references": "*" }
+    }
+  },
+  "panka": {
+    "name": "park",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "park", "definition": "the park/land reserve", "example": "Central Park", "kind": "ref", "references": "*" },
+      "x2": { "role": "manager", "definition": "community/polity managing it", "example": "the city council", "kind": "ref", "references": "*" },
+      "x3": { "role": "purpose", "definition": "purpose of the reserve", "example": "public recreation", "kind": "value", "type": "string" }
+    }
+  },
+  "panlo": {
+    "name": "slice",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "slice", "definition": "the thin flat portion", "example": "a slice of bread", "kind": "ref", "references": "*" },
+      "x2": { "role": "whole", "definition": "the mass it is cut from", "example": "the loaf", "kind": "ref", "references": "*" }
+    }
+  },
+  "panpi": {
+    "name": "at peace",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "peaceful one", "definition": "the party at peace", "example": "the nation", "kind": "ref", "references": "*" },
+      "x2": { "role": "counterpart", "definition": "the party peace is held with", "example": "its neighbor", "kind": "ref", "references": "*" }
+    }
+  },
+  "panra": {
+    "name": "parallels",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "parallel", "definition": "the thing that parallels", "example": "the new highway", "kind": "ref", "references": "*" },
+      "x2": { "role": "counterpart", "definition": "what it parallels", "example": "the old road", "kind": "ref", "references": "*" },
+      "x3": { "role": "differing property", "definition": "the property they differ in", "example": "surface width", "kind": "value", "type": "string" },
+      "x4": { "role": "standard", "definition": "standard/geometry of comparison", "example": "Euclidean geometry", "kind": "value", "type": "string" }
+    }
+  },
+  "pante": {
+    "name": "protests",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "protester", "definition": "the one who protests/objects", "example": "the activist", "kind": "ref", "references": "*" },
+      "x2": { "role": "grievance", "definition": "event/state objected to", "example": "the new tax", "kind": "value", "type": "string" },
+      "x3": { "role": "audience", "definition": "audience of the protest", "example": "the parliament", "kind": "ref", "references": "*" },
+      "x4": { "role": "action", "definition": "action of protesting", "example": "a sit-in", "kind": "value", "type": "string" }
+    }
+  },
+  "panzi": {
+    "name": "offspring",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "offspring", "definition": "the child/offspring/hybrid", "example": "the newborn", "kind": "ref", "references": "*" },
+      "x2": { "role": "parent", "definition": "parent(s) of the offspring", "example": "the mother and father", "kind": "ref", "references": "*" }
+    }
+  },
+  "papri": {
+    "name": "page",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "page", "definition": "the physical page/leaf", "example": "page 42", "kind": "ref", "references": "*" },
+      "x2": { "role": "document", "definition": "the book/document of pages", "example": "the novel", "kind": "ref", "references": "*" }
+    }
+  },
+  "parbi": {
+    "name": "ratio",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "ratio", "definition": "the ratio/rate value", "example": "3:1", "kind": "value", "type": "number" },
+      "x2": { "role": "numerator", "definition": "quantity in the numerator", "example": "30 km", "kind": "value", "type": "quantity" },
+      "x3": { "role": "denominator", "definition": "quantity in the denominator", "example": "10 liters", "kind": "value", "type": "quantity" }
+    }
+  },
+  "pastu": {
+    "name": "robe",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "robe", "definition": "the robe/gown/full-body garment", "example": "a wizard's robe", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "material of the robe", "example": "silk", "kind": "value", "type": "string" }
+    }
+  },
+  "patfu": {
+    "name": "father",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "father", "definition": "the father", "example": "John", "kind": "ref", "references": "*" },
+      "x2": { "role": "child", "definition": "the child fathered", "example": "his daughter", "kind": "ref", "references": "*" }
+    }
+  },
+  "patlu": {
+    "name": "potato",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "potato", "definition": "the potato tuber", "example": "a baking potato", "kind": "ref", "references": "*" },
+      "x2": { "role": "variety", "definition": "variety/cultivar of potato", "example": "Russet", "kind": "value", "type": "string" }
+    }
+  },
+  "patxu": {
+    "name": "pot",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pot", "definition": "the pot/kettle/deep container", "example": "a stockpot", "kind": "ref", "references": "*" },
+      "x2": { "role": "contents", "definition": "what the pot contains", "example": "soup", "kind": "ref", "references": "*" },
+      "x3": { "role": "material", "definition": "material/properties of the pot", "example": "cast iron", "kind": "value", "type": "string" }
+    }
+  },
+  "pelji": {
+    "name": "paper",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "paper", "definition": "the paper", "example": "a sheet of A4", "kind": "ref", "references": "*" },
+      "x2": { "role": "source", "definition": "source of the paper", "example": "wood pulp", "kind": "ref", "references": "*" }
+    }
+  },
+  "pelxu": {
+    "name": "yellow",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "yellow thing", "definition": "the yellow/golden thing", "example": "a banana", "kind": "ref", "references": "*" }
+    }
+  },
+  "pemci": {
+    "name": "poem",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "poem", "definition": "the poem/verse", "example": "a sonnet", "kind": "ref", "references": "*" },
+      "x2": { "role": "subject", "definition": "plot/theme/subject of the poem", "example": "lost love", "kind": "value", "type": "string" },
+      "x3": { "role": "author", "definition": "author of the poem", "example": "the poet", "kind": "ref", "references": "*" },
+      "x4": { "role": "audience", "definition": "intended audience", "example": "young readers", "kind": "ref", "references": "*" }
+    }
+  },
+  "penbi": {
+    "name": "pen",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pen", "definition": "the pen", "example": "a fountain pen", "kind": "ref", "references": "*" },
+      "x2": { "role": "ink", "definition": "ink used", "example": "blue ink", "kind": "ref", "references": "*" },
+      "x3": { "role": "process", "definition": "process applying the ink", "example": "a rolling ball tip", "kind": "value", "type": "string" }
+    }
+  },
+  "pencu": {
+    "name": "touches",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "toucher", "definition": "agent who touches", "example": "the child", "kind": "ref", "references": "*" },
+      "x2": { "role": "touched", "definition": "thing being touched", "example": "the stove", "kind": "ref", "references": "*" },
+      "x3": { "role": "instrument", "definition": "locus/instrument doing the touching", "example": "a fingertip", "kind": "value", "type": "string" },
+      "x4": { "role": "locus", "definition": "locus touched on the object", "example": "the hot surface", "kind": "value", "type": "string" }
+    }
+  },
+  "pendo": {
+    "name": "friend",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "friend", "definition": "the one who is a friend", "example": "Maria", "kind": "ref", "references": "*" },
+      "x2": { "role": "befriended", "definition": "the one befriended", "example": "her classmate", "kind": "ref", "references": "*" }
+    }
+  },
+  "penmi": {
+    "name": "meets",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "meeter", "definition": "the one who meets", "example": "the delegate", "kind": "ref", "references": "*" },
+      "x2": { "role": "met", "definition": "the one encountered", "example": "the ambassador", "kind": "ref", "references": "*" },
+      "x3": { "role": "location", "definition": "location of the meeting", "example": "the lobby", "kind": "ref", "references": "*" }
+    }
+  },
+  "pensi": {
+    "name": "thinks",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thinker", "definition": "the one who thinks/reflects", "example": "the philosopher", "kind": "ref", "references": "*" },
+      "x2": { "role": "subject", "definition": "subject/concept thought about", "example": "free will", "kind": "value", "type": "string" }
+    }
+  },
+  "perli": {
+    "name": "pear",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pear", "definition": "the pear fruit", "example": "a ripe Bartlett pear", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain of pear", "example": "Pyrus communis", "kind": "value", "type": "string" }
+    }
+  },
+  "pesxu": {
+    "name": "paste",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "paste", "definition": "the paste/pulp/dough/slurry", "example": "bread dough", "kind": "ref", "references": "*" },
+      "x2": { "role": "composition", "definition": "composition of the paste", "example": "flour and water", "kind": "value", "type": "string" }
+    }
+  },
+  "petso": {
+    "name": "peta",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "quantity", "definition": "the quantity that is 10^15 of the unit", "example": "one petabyte", "kind": "value", "type": "quantity" },
+      "x2": { "role": "unit", "definition": "the base unit being multiplied", "example": "bytes", "kind": "value", "type": "string" },
+      "x3": { "role": "dimension", "definition": "dimension/aspect measured", "example": "data size", "kind": "value", "type": "string" }
+    }
+  },
+  "pezli": {
+    "name": "leaf",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "leaf", "definition": "the leaf/foliage", "example": "a maple leaf", "kind": "ref", "references": "*" },
+      "x2": { "role": "plant", "definition": "the plant it grows on", "example": "the maple tree", "kind": "ref", "references": "*" }
+    }
+  },
+  "picti": {
+    "name": "trillionth",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "quantity", "definition": "the quantity that is 10^-12 of the unit", "example": "one picosecond", "kind": "value", "type": "quantity" },
+      "x2": { "role": "unit", "definition": "the base unit being divided", "example": "seconds", "kind": "value", "type": "string" },
+      "x3": { "role": "dimension", "definition": "dimension/aspect measured", "example": "duration", "kind": "value", "type": "string" }
+    }
+  },
+  "pijne": {
+    "name": "pin",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pin", "definition": "the pin/peg fastener", "example": "a safety pin", "kind": "ref", "references": "*" },
+      "x2": { "role": "fastened", "definition": "what it fastens to/pierces", "example": "the fabric", "kind": "ref", "references": "*" },
+      "x3": { "role": "material", "definition": "material/properties of the pin", "example": "steel", "kind": "value", "type": "string" }
+    }
+  },
+  "pikci": {
+    "name": "begs",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "supplicant", "definition": "the one who begs/pleads", "example": "the beggar", "kind": "ref", "references": "*" },
+      "x2": { "role": "petitioned", "definition": "the one being implored", "example": "the king", "kind": "ref", "references": "*" },
+      "x3": { "role": "request", "definition": "what is begged for", "example": "mercy", "kind": "value", "type": "string" }
+    }
+  },
+  "pikta": {
+    "name": "ticket",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "ticket", "definition": "the ticket", "example": "a concert ticket", "kind": "ref", "references": "*" },
+      "x2": { "role": "holder", "definition": "the one entitled by the ticket", "example": "the ticket holder", "kind": "ref", "references": "*" },
+      "x3": { "role": "entitlement", "definition": "the privilege granted", "example": "entry to the show", "kind": "value", "type": "string" },
+      "x4": { "role": "conditions", "definition": "conditions of the entitlement", "example": "valid for one night only", "kind": "value", "type": "string" }
+    }
+  },
+  "pilji": {
+    "name": "multiplies",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "product", "definition": "the product/result", "example": "12", "kind": "value", "type": "number" },
+      "x2": { "role": "multiplicand", "definition": "first factor", "example": "3", "kind": "value", "type": "number" },
+      "x3": { "role": "multiplier", "definition": "second factor", "example": "4", "kind": "value", "type": "number" }
+    }
+  },
+  "pilka": {
+    "name": "crust",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "crust", "definition": "the crust/rind/peel/skin", "example": "the bread crust", "kind": "ref", "references": "*" },
+      "x2": { "role": "covered", "definition": "what it covers", "example": "the loaf", "kind": "ref", "references": "*" }
+    }
+  },
+  "pilno": {
+    "name": "uses",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "user", "definition": "the one who uses", "example": "the carpenter", "kind": "ref", "references": "*" },
+      "x2": { "role": "tool", "definition": "tool/apparatus/material used", "example": "a hammer", "kind": "ref", "references": "*" },
+      "x3": { "role": "purpose", "definition": "purpose of the use", "example": "driving nails", "kind": "value", "type": "string" }
+    }
+  },
+  "pimlu": {
+    "name": "feather",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "feather", "definition": "the feather/plume/plumage", "example": "a peacock feather", "kind": "ref", "references": "*" },
+      "x2": { "role": "animal", "definition": "animal/species it belongs to", "example": "a peacock", "kind": "ref", "references": "*" }
+    }
+  },
+  "pinca": {
+    "name": "urine",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "urine", "definition": "the urine", "example": "a urine sample", "kind": "ref", "references": "*" },
+      "x2": { "role": "producer", "definition": "the organism producing it", "example": "the patient", "kind": "ref", "references": "*" }
+    }
+  },
+  "pindi": {
+    "name": "poor",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "poor one", "definition": "the impoverished entity", "example": "the homeless man", "kind": "ref", "references": "*" },
+      "x2": { "role": "lacked goods", "definition": "goods/possessions lacked", "example": "savings", "kind": "value", "type": "string" }
+    }
+  },
+  "pinfu": {
+    "name": "prisoner",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "prisoner", "definition": "the captive/prisoner", "example": "the inmate", "kind": "ref", "references": "*" },
+      "x2": { "role": "captor", "definition": "the one holding them captive", "example": "the warden", "kind": "ref", "references": "*" },
+      "x3": { "role": "means", "definition": "means/force of confinement", "example": "iron bars", "kind": "value", "type": "string" }
+    }
+  },
+  "pinji": {
+    "name": "genital",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "organ", "definition": "the clitoris/penis body-part", "example": "the penis", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "the body it belongs to", "example": "the patient", "kind": "ref", "references": "*" }
+    }
+  },
+  "pinka": {
+    "name": "comment",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "comment", "definition": "the comment/remark text", "example": "\"well done\"", "kind": "value", "type": "string" },
+      "x2": { "role": "subject", "definition": "subject of the remark", "example": "the performance", "kind": "value", "type": "string" },
+      "x3": { "role": "commenter", "definition": "the one making the remark", "example": "the reviewer", "kind": "ref", "references": "*" },
+      "x4": { "role": "audience", "definition": "audience of the remark", "example": "the readers", "kind": "ref", "references": "*" }
+    }
+  },
+  "pinsi": {
+    "name": "pencil",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pencil", "definition": "the pencil/crayon/stylus", "example": "a graphite pencil", "kind": "ref", "references": "*" },
+      "x2": { "role": "marking material", "definition": "lead/marking material applied", "example": "graphite", "kind": "ref", "references": "*" },
+      "x3": { "role": "frame", "definition": "frame/support material", "example": "cedar wood", "kind": "value", "type": "string" }
+    }
+  },
+  "pinta": {
+    "name": "flat",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "flat thing", "definition": "the flat/level/horizontal thing", "example": "the tabletop", "kind": "ref", "references": "*" },
+      "x2": { "role": "reference", "definition": "gravity/frame of reference", "example": "Earth's gravity", "kind": "value", "type": "string" }
+    }
+  },
+  "pinxe": {
+    "name": "drinks",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "drinker", "definition": "agent who drinks", "example": "the runner", "kind": "ref", "references": "*" },
+      "x2": { "role": "beverage", "definition": "beverage/liquid drunk", "example": "water", "kind": "ref", "references": "*" },
+      "x3": { "role": "container", "definition": "container/source drunk from", "example": "a glass", "kind": "ref", "references": "*" }
+    }
+  },
+  "pipno": {
+    "name": "piano",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "keyboard instrument", "definition": "the piano/organ/keyboard instrument", "example": "a grand piano", "kind": "ref", "references": "*" }
+    }
+  },
+  "pixra": {
+    "name": "picture",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "picture", "definition": "the picture/illustration", "example": "a portrait", "kind": "ref", "references": "*" },
+      "x2": { "role": "subject", "definition": "what the picture shows", "example": "a smiling woman", "kind": "value", "type": "string" },
+      "x3": { "role": "artist", "definition": "the artist who made it", "example": "the painter", "kind": "ref", "references": "*" },
+      "x4": { "role": "medium", "definition": "medium of the picture", "example": "oil on canvas", "kind": "value", "type": "string" }
+    }
+  },
+  "plana": {
+    "name": "plump",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "plump one", "definition": "the fat/obese entity", "example": "the well-fed cat", "kind": "ref", "references": "*" },
+      "x2": { "role": "standard", "definition": "standard of plumpness", "example": "average body weight", "kind": "value", "type": "string" }
+    }
+  },
+  "platu": {
+    "name": "plans",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "planner", "definition": "agent who plans/designs", "example": "the architect", "kind": "ref", "references": "*" },
+      "x2": { "role": "plan", "definition": "the plan/design/arrangement", "example": "the building blueprint", "kind": "value", "type": "string" },
+      "x3": { "role": "process", "definition": "state/process the plan is for", "example": "the construction", "kind": "value", "type": "string" }
+    }
+  },
+  "pleji": {
+    "name": "pays",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "payer", "definition": "the one who pays", "example": "the customer", "kind": "ref", "references": "*" },
+      "x2": { "role": "payment", "definition": "the payment made", "example": "50 euros", "kind": "value", "type": "quantity" },
+      "x3": { "role": "payee", "definition": "the recipient of payment", "example": "the shop", "kind": "ref", "references": "*" },
+      "x4": { "role": "goods", "definition": "goods/services paid for", "example": "groceries", "kind": "value", "type": "string" }
+    }
+  },
+  "plibu": {
+    "name": "pubic area",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pubic area", "definition": "the pubic area/external genitalia", "example": "the groin", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "the body it belongs to", "example": "the patient", "kind": "ref", "references": "*" }
+    }
+  },
+  "plini": {
+    "name": "planet",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "planet", "definition": "the planet", "example": "Mars", "kind": "ref", "references": "*" },
+      "x2": { "role": "star", "definition": "what it revolves around", "example": "the Sun", "kind": "ref", "references": "*" },
+      "x3": { "role": "characteristics", "definition": "planetary characteristics", "example": "rocky and red", "kind": "value", "type": "string" },
+      "x4": { "role": "orbital parameters", "definition": "orbital parameters", "example": "687-day orbit", "kind": "value", "type": "string" }
+    }
+  },
+  "plipe": {
+    "name": "jumps",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "jumper", "definition": "the one who leaps/jumps", "example": "the athlete", "kind": "ref", "references": "*" },
+      "x2": { "role": "destination", "definition": "where the jump lands", "example": "the far ledge", "kind": "ref", "references": "*" },
+      "x3": { "role": "origin", "definition": "where the jump starts", "example": "the diving board", "kind": "ref", "references": "*" },
+      "x4": { "role": "height", "definition": "height reached", "example": "two meters", "kind": "value", "type": "quantity" },
+      "x5": { "role": "propellant", "definition": "what propels the jump", "example": "the leg muscles", "kind": "value", "type": "string" }
+    }
+  },
+  "plise": {
+    "name": "apple",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "apple", "definition": "the apple fruit", "example": "a red apple", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain of apple", "example": "Granny Smith", "kind": "value", "type": "string" }
+    }
+  },
+  "plita": {
+    "name": "plane",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "plane", "definition": "the flat 2-D plane", "example": "the cutting plane", "kind": "ref", "references": "*" },
+      "x2": { "role": "points", "definition": "set of points defining it", "example": "three corner points", "kind": "value", "type": "string" }
+    }
+  },
+  "plixa": {
+    "name": "plows",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "plower", "definition": "agent who plows/tills", "example": "the farmer", "kind": "ref", "references": "*" },
+      "x2": { "role": "land", "definition": "what is plowed", "example": "the field", "kind": "ref", "references": "*" },
+      "x3": { "role": "tool", "definition": "tool used to plow", "example": "a steel plow", "kind": "ref", "references": "*" },
+      "x4": { "role": "propellant", "definition": "what propels the tool", "example": "an ox team", "kind": "value", "type": "string" }
+    }
+  },
+  "pluja": {
+    "name": "complicated",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "complex thing", "definition": "the complicated thing", "example": "the tax code", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of complexity", "example": "its exemption rules", "kind": "value", "type": "string" },
+      "x3": { "role": "standard", "definition": "standard of complexity", "example": "a layperson's understanding", "kind": "value", "type": "string" }
+    }
+  },
+  "pluka": {
+    "name": "pleasant",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pleasant thing", "definition": "event/state that pleases", "example": "the warm bath", "kind": "value", "type": "string" },
+      "x2": { "role": "pleased one", "definition": "the one pleased", "example": "the bather", "kind": "ref", "references": "*" },
+      "x3": { "role": "conditions", "definition": "conditions of pleasure", "example": "after a long day", "kind": "value", "type": "string" }
+    }
+  },
+  "pluta": {
+    "name": "route",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "route", "definition": "the route/path/way", "example": "the scenic trail", "kind": "ref", "references": "*" },
+      "x2": { "role": "destination", "definition": "where the route goes to", "example": "the summit", "kind": "ref", "references": "*" },
+      "x3": { "role": "origin", "definition": "where the route starts", "example": "the trailhead", "kind": "ref", "references": "*" },
+      "x4": { "role": "waypoints", "definition": "points defining the route", "example": "the ridge overlook", "kind": "value", "type": "string" }
+    }
+  },
+  "polje": {
+    "name": "folds",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "folder", "definition": "force that folds/creases", "example": "the origami artist", "kind": "ref", "references": "*" },
+      "x2": { "role": "folded", "definition": "what is folded", "example": "the paper", "kind": "ref", "references": "*" },
+      "x3": { "role": "crease", "definition": "locus/form of the crease", "example": "a diagonal crease", "kind": "value", "type": "string" }
+    }
+  },
+  "polno": {
+    "name": "polynesian",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "polynesian thing", "definition": "the thing reflecting Polynesian culture", "example": "the hula dance", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of the culture reflected", "example": "traditional dance", "kind": "value", "type": "string" }
+    }
+  },
+  "ponjo": {
+    "name": "japanese",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "japanese thing", "definition": "the thing reflecting Japanese culture", "example": "the tea ceremony", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of the culture reflected", "example": "ritual etiquette", "kind": "value", "type": "string" }
+    }
+  },
+  "ponse": {
+    "name": "possesses",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "owner", "definition": "the owner/proprietor", "example": "the landlord", "kind": "ref", "references": "*" },
+      "x2": { "role": "possession", "definition": "what is owned", "example": "the apartment", "kind": "ref", "references": "*" },
+      "x3": { "role": "standard", "definition": "law/custom of ownership", "example": "property law", "kind": "value", "type": "string" }
+    }
+  },
+  "porpi": {
+    "name": "breaks",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "broken thing", "definition": "the thing that breaks/shatters", "example": "the vase", "kind": "ref", "references": "*" },
+      "x2": { "role": "pieces", "definition": "the resulting pieces", "example": "shards of glass", "kind": "ref", "references": "*" }
+    }
+  },
+  "porsi": {
+    "name": "sequence",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "ordered set", "definition": "the sequenced/ordered set", "example": "the sorted list", "kind": "ref", "references": "*" },
+      "x2": { "role": "ordering rule", "definition": "comparison/rules of ordering", "example": "alphabetical order", "kind": "value", "type": "string" },
+      "x3": { "role": "unordered set", "definition": "the unordered source set", "example": "the raw list of names", "kind": "ref", "references": "*" }
+    }
+  },
+  "porto": {
+    "name": "portuguese",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "portuguese thing", "definition": "the thing reflecting Portuguese culture", "example": "fado music", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of the culture reflected", "example": "musical tradition", "kind": "value", "type": "string" }
+    }
+  },
+  "prali": {
+    "name": "profit",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "profit", "definition": "the profit/gain/benefit", "example": "a 10% return", "kind": "value", "type": "quantity" },
+      "x2": { "role": "beneficiary", "definition": "who the profit accrues to", "example": "the investor", "kind": "ref", "references": "*" },
+      "x3": { "role": "activity", "definition": "activity yielding the profit", "example": "the stock sale", "kind": "value", "type": "string" }
+    }
+  },
+  "prami": {
+    "name": "loves",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "lover", "definition": "the one who loves", "example": "the mother", "kind": "ref", "references": "*" },
+      "x2": { "role": "beloved", "definition": "the one loved", "example": "her child", "kind": "ref", "references": "*" }
+    }
+  },
+  "prane": {
+    "name": "perfect",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "perfect thing", "definition": "the flawless/ideal thing", "example": "the diamond", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "property/aspect of perfection", "example": "its clarity", "kind": "value", "type": "string" }
+    }
+  },
+  "preja": {
+    "name": "spreads",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "spreader", "definition": "what spreads/expands", "example": "the wildfire", "kind": "ref", "references": "*" },
+      "x2": { "role": "extent", "definition": "what it spreads over/into", "example": "the forest", "kind": "ref", "references": "*" },
+      "x3": { "role": "initial state", "definition": "initial state before spreading", "example": "a single spark", "kind": "value", "type": "string" }
+    }
+  },
+  "prenu": {
+    "name": "person",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "person", "definition": "the person/people", "example": "Alice", "kind": "ref", "references": "*" }
+    }
+  },
+  "preti": {
+    "name": "question",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "question", "definition": "the question/query text", "example": "\"what time is it?\"", "kind": "value", "type": "string" },
+      "x2": { "role": "subject", "definition": "subject of the question", "example": "the current time", "kind": "value", "type": "string" },
+      "x3": { "role": "questioner", "definition": "the one asking", "example": "the student", "kind": "ref", "references": "*" },
+      "x4": { "role": "audience", "definition": "audience of the question", "example": "the teacher", "kind": "ref", "references": "*" }
+    }
+  },
+  "prije": {
+    "name": "wise",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "wise one", "definition": "the wise/sage entity", "example": "the elder", "kind": "ref", "references": "*" },
+      "x2": { "role": "matter", "definition": "matter of wisdom", "example": "human nature", "kind": "value", "type": "string" },
+      "x3": { "role": "observer", "definition": "observer judging the wisdom", "example": "her students", "kind": "ref", "references": "*" }
+    }
+  },
+  "prina": {
+    "name": "print",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "print", "definition": "the print/impression/image", "example": "a fingerprint", "kind": "ref", "references": "*" },
+      "x2": { "role": "surface", "definition": "surface the print is on", "example": "the glass", "kind": "ref", "references": "*" },
+      "x3": { "role": "implement", "definition": "tool/object making the print", "example": "an inked finger", "kind": "ref", "references": "*" }
+    }
+  },
+  "pritu": {
+    "name": "right side",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "right thing", "definition": "the thing on the right side", "example": "the right hand", "kind": "ref", "references": "*" },
+      "x2": { "role": "reference", "definition": "what it is to the right of", "example": "the body", "kind": "ref", "references": "*" },
+      "x3": { "role": "frame", "definition": "frame of reference faced", "example": "facing forward", "kind": "value", "type": "string" }
+    }
+  },
+  "prosa": {
+    "name": "prose",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "prose", "definition": "the prose work", "example": "the essay", "kind": "ref", "references": "*" },
+      "x2": { "role": "subject", "definition": "plot/theme/subject of the prose", "example": "city life", "kind": "value", "type": "string" },
+      "x3": { "role": "author", "definition": "author of the prose", "example": "the writer", "kind": "ref", "references": "*" },
+      "x4": { "role": "audience", "definition": "intended audience", "example": "general readers", "kind": "ref", "references": "*" }
+    }
+  },
+  "pruce": {
+    "name": "process",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "process", "definition": "the process", "example": "photosynthesis", "kind": "ref", "references": "*" },
+      "x2": { "role": "inputs", "definition": "inputs to the process", "example": "sunlight and water", "kind": "ref", "references": "*" },
+      "x3": { "role": "outputs", "definition": "outputs/results", "example": "glucose and oxygen", "kind": "ref", "references": "*" },
+      "x4": { "role": "stages", "definition": "steps/stages passed through", "example": "the light reactions", "kind": "value", "type": "string" }
+    }
+  },
+  "pruni": {
+    "name": "elastic",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "elastic thing", "definition": "the elastic/springy thing", "example": "a rubber band", "kind": "ref", "references": "*" }
+    }
+  },
+  "pruxi": {
+    "name": "spirit",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "spirit", "definition": "the spiritual/ghostly being or energy", "example": "the ghost", "kind": "ref", "references": "*" }
+    }
+  },
+  "pulce": {
+    "name": "dust",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "dust", "definition": "the dust/precipitate", "example": "a layer of dust", "kind": "ref", "references": "*" },
+      "x2": { "role": "source", "definition": "source of the dust", "example": "crumbling plaster", "kind": "ref", "references": "*" },
+      "x3": { "role": "medium", "definition": "medium/surface it settles on", "example": "the shelf", "kind": "ref", "references": "*" }
+    }
+  },
+  "pulji": {
+    "name": "police",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "police officer", "definition": "the police officer/enforcer", "example": "the patrol officer", "kind": "ref", "references": "*" },
+      "x2": { "role": "law", "definition": "law/rule/order enforced", "example": "traffic regulations", "kind": "value", "type": "string" }
+    }
+  },
+  "pulni": {
+    "name": "pulley",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "pulley", "definition": "the pulley tool", "example": "a block and tackle", "kind": "ref", "references": "*" },
+      "x2": { "role": "function", "definition": "action/function performed", "example": "lifting heavy loads", "kind": "value", "type": "string" },
+      "x3": { "role": "axle", "definition": "axle it rotates on", "example": "a steel axle", "kind": "ref", "references": "*" }
+    }
+  },
+  "punji": {
+    "name": "puts",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "placer", "definition": "agent who puts/places", "example": "the waiter", "kind": "ref", "references": "*" },
+      "x2": { "role": "placed", "definition": "thing being placed", "example": "the plate", "kind": "ref", "references": "*" },
+      "x3": { "role": "locus", "definition": "surface/locus placed on", "example": "the table", "kind": "ref", "references": "*" }
+    }
+  },
+  "punli": {
+    "name": "swelling",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "swelling", "definition": "the swelling/protrusion", "example": "a bump", "kind": "ref", "references": "*" },
+      "x2": { "role": "location", "definition": "where the swelling is", "example": "on the forehead", "kind": "ref", "references": "*" },
+      "x3": { "role": "material", "definition": "material of the swelling", "example": "fluid", "kind": "value", "type": "string" }
+    }
+  },
+  "purci": {
+    "name": "past",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "earlier event", "definition": "the thing in the past/before", "example": "the Stone Age", "kind": "ref", "references": "*" },
+      "x2": { "role": "later event", "definition": "the thing it precedes", "example": "the modern era", "kind": "ref", "references": "*" }
+    }
+  },
+  "purdi": {
+    "name": "garden",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "garden", "definition": "the garden/cultivated field", "example": "the vegetable garden", "kind": "ref", "references": "*" },
+      "x2": { "role": "gardener", "definition": "family/community/farmer tending it", "example": "the household", "kind": "ref", "references": "*" },
+      "x3": { "role": "crop", "definition": "plants/crop grown", "example": "tomatoes", "kind": "ref", "references": "*" }
+    }
+  },
+  "purmo": {
+    "name": "powder",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "powder", "definition": "the powder", "example": "a heap of flour", "kind": "ref", "references": "*" },
+      "x2": { "role": "material", "definition": "material the powder is made of", "example": "wheat", "kind": "value", "type": "string" }
+    }
+  }
+}

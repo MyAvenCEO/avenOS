@@ -1,7 +1,8 @@
 {
 	"$comment": "avenOS brand design system — single source of truth for vibe views (shadow-DOM) and a mirror of the app's app.css @theme tokens. Values are codified from the canonical reference card (GoalsDashboard 'cashflow / your climb'): rounded-xl cards, p-6 padding, gap-6 sections, 11px tracked uppercase eyebrows, dark-blue ink. The StyleEngine flattens these into CSS custom properties on :host (e.g. `text` -> --text). Keep names in sync with app.css. To retheme the whole vibe layer, edit here.",
 
-	"font-sans": "'Chillax', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+	"font-sans": "'AzeretMono', 'Chillax', ui-monospace, SFMono-Regular, monospace",
+	"font-display": "'ClashDisplay', 'Chillax', ui-sans-serif, system-ui, sans-serif",
 	"font-mono": "'JetBrains Mono', ui-monospace, Menlo, monospace",
 
 	"ink": "#1f2a3d",

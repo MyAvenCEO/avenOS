@@ -1,30 +1,50 @@
 <script lang="ts">
 import {
-	EXAMPLE_FLOWS,
 	type Flow,
 	isComposite,
 	RESOURCE_LABEL,
 	type RecipeNode,
 	resourceSchema
 } from '@avenos/aven-skills'
+import { createQuery } from '@tanstack/svelte-query'
+import { listFlows } from '$lib/data/client'
 import { t } from '$lib/i18n'
+import ActorConfig from '$lib/shell/ActorConfig.svelte'
 import FlowGraph from '$lib/shell/FlowGraph.svelte'
 import { openDbSchema } from '$lib/shell/nav.svelte'
+import TodosVibe from '$lib/shell/TodosVibe.svelte'
+import VibeCard from '$lib/shell/VibeCard.svelte'
+
+// board 0113 — the Skills preview renders ANY vibe schema through the same generic host (no allow-list).
 
 // board 0083 — Skills view = TEMPLATES only, rendered via the shared FlowGraph (real edges + labels,
 // pan/zoom). Left = skill list, center = the flow DAG (composites navigate into sub-skills), right =
 // the selected actor's config. Instance runs + traces live in RunsView.
 let { containerName = 'aven-vibes-skills' }: { containerName?: string } = $props()
 
-let selectedId = $state<string>(EXAMPLE_FLOWS[0]?.id ?? '')
-let selectedNodeId = $state<string | null>(null)
+// Skills load from the admin flow-config API (board 0087) — no static import.
+const flowsQuery = createQuery(() => ({ queryKey: ['flows'], queryFn: listFlows }))
+const flows = $derived<Flow[]>(flowsQuery.data ?? [])
 
-const selected = $derived<Flow | null>(EXAMPLE_FLOWS.find((f) => f.id === selectedId) ?? null)
+let selectedId = $state<string>('')
+let selectedNodeId = $state<string | null>(null)
+// Default-select the first skill once flows load.
+$effect(() => {
+	if (!selectedId && flows.length > 0) selectedId = flows[0].id
+})
+
+const selected = $derived<Flow | null>(flows.find((f) => f.id === selectedId) ?? null)
 const nodeById = $derived(new Map((selected?.nodes ?? []).map((n) => [n.id, n])))
 const selectedNode = $derived<RecipeNode | null>(
 	selectedNodeId ? (nodeById.get(selectedNodeId) ?? null) : null
 )
 
+// board 0099 — preview the SELECTED actor's vibe below the flow graph. Each todos actor names its
+// vibe (todos / todos-created / todos-edited / todos-deleted); render it with illustrative sample data
+// so the template view shows what that actor produces, without needing a live run.
+const previewVibe = $derived<string>(selectedNode?.vibe ?? '')
+// board 0114 — preview data comes from the vibe_source registry (VibeCard falls back to the bundle's
+// example source when no data is passed) — the hardcoded per-vibe sample maps are gone.
 function resLabel(flow: Flow | null, k: string): string {
 	return flow?.resourceLabels?.[k] ?? RESOURCE_LABEL[k] ?? k
 }
@@ -49,7 +69,7 @@ function onSelect(id: string): void {
 	<aside class="border-border flex w-48 shrink-0 flex-col rounded-[var(--radius-lg)] border">
 		<p class="border-border border-b p-3 text-sm font-semibold">{t('mainnet.skills.title')}</p>
 		<div class="min-h-0 flex-1 overflow-y-auto p-1.5">
-			{#each EXAMPLE_FLOWS as f (f.id)}
+			{#each flows as f (f.id)}
 				<button
 					type="button"
 					class="mb-1 block w-full rounded-[var(--radius)] px-2.5 py-2 text-left transition-colors {f.id ===
@@ -77,8 +97,31 @@ function onSelect(id: string): void {
 					<h2 class="text-foreground text-base font-semibold">{selected.name}</h2>
 					<p class="text-muted-foreground text-xs">{selected.description}</p>
 				</div>
-				<div class="min-h-0 flex-1">
+				<!-- Top: the actor flow — click a node to preview its vibe. -->
+				<div class="border-border h-64 shrink-0 border-b">
 					<FlowGraph flow={selected} {selectedNodeId} {onSelect} />
+				</div>
+				<!-- Bottom: the selected actor's vibe view (with sample data for the template). board 0099. -->
+				<div class="min-h-0 flex-1 overflow-auto p-4">
+					{#if selectedNode && previewVibe === 'todos'}
+						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
+							Vibe · {previewVibe}
+						</p>
+						<TodosVibe containerName={`skills-preview-${selectedNodeId}`} />
+					{:else if selectedNode && previewVibe}
+						<p class="text-muted-foreground mb-3 text-[10px] font-semibold tracking-wide uppercase">
+							Vibe · {previewVibe}
+						</p>
+						<VibeCard schema={previewVibe} containerName={`skills-preview-${selectedNodeId}`} />
+					{:else if selectedNode}
+						<p class="text-muted-foreground text-center text-sm">
+							Keine Vibe-Vorschau für diesen Aktor.
+						</p>
+					{:else}
+						<p class="text-muted-foreground text-center text-sm">
+							Aktor im Graphen wählen, um seine Vibe zu sehen.
+						</p>
+					{/if}
 				</div>
 			</div>
 		{/if}
@@ -175,32 +218,9 @@ function onSelect(id: string): void {
 						</div>
 					</div>
 				{/if}
-				{#if selectedNode.tools?.length}
-					<div>
-						<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
-							Tools
-						</p>
-						<div class="flex flex-wrap gap-1">
-							{#each selectedNode.tools as tool (tool)}
-								<span class="bg-muted text-foreground rounded px-1.5 py-0.5 font-mono text-[10px]"
-									>{tool}</span
-								>
-							{/each}
-						</div>
-					</div>
-				{/if}
-				{#if selectedNode.system_prompt}
-					<div>
-						<p class="text-muted-foreground mb-1 text-[10px] font-semibold tracking-wide uppercase">
-							System-Prompt
-						</p>
-						<p
-							class="text-foreground border-border bg-muted/20 rounded border p-2 text-[11px] leading-relaxed whitespace-pre-wrap"
-						>
-							{selectedNode.system_prompt}
-						</p>
-					</div>
-				{/if}
+				<!-- board 0099 — the actor's inspectable config: system prompt + tool-call definitions
+				     (name · description · parameter JSON-Schema), shared with the Runs detail aside. -->
+				<ActorConfig node={selectedNode} promptOpen />
 			</div>
 		</aside>
 	{/if}

@@ -67,9 +67,68 @@ export interface DataValueTable {
 	id: string
 	user_id: string
 	schema_id: string
+	// board 0100 — a predication IS its predicate + x1–x5 cells, so those are real columns now
+	// (only Lojban x1–x5 predications are legal; the shape is enforced by the DB, not a jsonb blob).
+	// `data` is kept transitionally (nullable) but no longer written; the columns are the SSOT.
+	predicate: string | null
+	x1: string | null
+	x2: string | null
+	x3: string | null
+	x4: string | null
+	x5: string | null
 	data: unknown
 	created_at: Generated<Date>
 	updated_at: Generated<Date>
+}
+
+// Flow/skill CONFIG templates (board 0087, Layer A). System structure — admin-owned CRUD,
+// seeded from @avenos/aven-skills EXAMPLE_FLOWS by a migration. NOT user data: distinct from
+// the dynamic data_schema/data_value store. Columns mirror the `Flow` type; node/edge graphs
+// are JSONB. See [[two-layer-schema-split]].
+export interface FlowTable {
+	id: string
+	name: string
+	description: string
+	nodes: unknown
+	edges: unknown
+	triggers: unknown
+	resource_labels: unknown
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
+// BUNDLE registry (board 0088/0102) — `data_bundles`, in the dynamic-data namespace. Each row is a
+// declarative bundle spec (an aven-ontology Bundle/TypeSpec): which predicates cluster into a kind + how
+// they read back flat. The generic engine loads it at runtime, so there is NO per-type code. A bundle is
+// AI-mintable at runtime like a predicate is, so it belongs beside data_schema/data_value, not with the
+// admin `flow` config. See [[two-layer-schema-split]].
+export interface DataBundlesTable {
+	type: string
+	spec: unknown
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
+// Content-addressed raw-artifact store (board 0089) — original source bytes for any ingesting skill,
+// keyed by sha256 (bytea). Behind the abstracted ArtifactStore; only the hash enters the predications.
+export interface ArtifactTable {
+	sha256: string
+	bytes: unknown
+	mime: string
+	size: number
+	created_at: Generated<Date>
+}
+
+// Persisted skill RUN traces (board 0089) — the FlowRun event-log from the generic runner, per user.
+export interface FlowRunTable {
+	id: string
+	user_id: string
+	flow_id: string
+	label: string
+	status: string
+	trace: unknown
+	started_at: Date | null
+	created_at: Generated<Date>
 }
 
 export type DataHistoryOperation = 'UPDATE' | 'DELETE'
@@ -205,6 +264,10 @@ export interface Database {
 	user: UserTable
 	data_schema: DataSchemaTable
 	data_value: DataValueTable
+	flow: FlowTable
+	data_bundles: DataBundlesTable
+	artifact: ArtifactTable
+	flow_run: FlowRunTable
 	data_schema_history: DataSchemaHistoryTable
 	data_value_history: DataValueHistoryTable
 	polar_event: PolarEventTable

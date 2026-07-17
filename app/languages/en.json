@@ -323,6 +323,19 @@
 		"selectPairedPeer": "Select a paired peer…",
 		"noLabel": "(no label)"
 	},
+	"draw": {
+		"tools": "Drawing tools",
+		"pen": "Pen",
+		"eraser": "Eraser",
+		"select": "Select",
+		"clear": "Clear",
+		"colors": "Colours",
+		"addImage": "Image",
+		"zoom": "Zoom",
+		"zoomIn": "Zoom in",
+		"zoomOut": "Zoom out",
+		"resetView": "Reset view"
+	},
 	"intents": {
 		"title": "Intents",
 		"pageTitle": "Intents mock — @AvenOS/app",
@@ -997,8 +1010,9 @@
 	},
 	"mainnet": {
 		"nav": {
-			"chat": "Chat",
+			"chat": "Intents",
 			"vibes": "Vibes",
+			"draw": "Draw",
 			"schemas": "Schemas",
 			"db": "DB",
 			"fly": "Fly",
@@ -1124,7 +1138,47 @@
 			"emptyTable": "No entries for this schema yet.",
 			"rows": "rows",
 			"tabSchema": "Schema",
-			"tabData": "Data"
+			"tabData": "Data",
+			"detail": "Detail",
+			"attached": "predications attached",
+			"close": "Close",
+			"gismuTitle": "Canonical Lojban gismu the place structure derives from",
+			"rawSchema": "Raw JSON Schema",
+			"dynamic": "Dynamic",
+			"vibes": "Vibes",
+			"emptySpecs": "None yet — ask a question or request a change in chat to author one.",
+			"sec": {
+				"schemas": "Schemas",
+				"values": "Values",
+				"bundles": "Bundles",
+				"operations": "Operations",
+				"vibes": "Vibes"
+			},
+			"vibe": {
+				"summary": "Summary",
+				"summaryHint": "This card renders through the engine from its vibe.* rows (view + style + logic) — the same path chat/Runs use. No per-view Svelte. The tabs show the raw config."
+			},
+			"reg": {
+				"types": "Bundles",
+				"data_operations": "Operations",
+				"vibe_view": "Views",
+				"vibe_style": "Styles",
+				"vibe_logic": "Logic"
+			},
+			"regHint": {
+				"types": "Composite types — a bundle is a named set of traits (which predicates cluster into a kind) + a view (how they read back flat). Bundles COMPILE to the operations below.",
+				"data_operations": "The unified operation registry — queries (ask) and mutations (change) as one validated-spec table. GLM-authored ops are yours; bundle-derived ops are global.",
+				"vibe_view": "vibe_view — the ViewDef trees (the layout/structure of each card), rendered by the engine with no per-view Svelte.",
+				"vibe_style": "vibe_style — the StyleDef tokens (the visual styling of each card), config-as-data.",
+				"vibe_logic": "vibe_logic — the sandbox-quickjs JS that maps data into each view (the template's query/mapping logic)."
+			},
+			"place": {
+				"place": "Place",
+				"role": "Role",
+				"meaning": "Meaning",
+				"kind": "Kind",
+				"example": "Example"
+			}
 		},
 		"auth": {
 			"tag": "mainnet / alberobello",

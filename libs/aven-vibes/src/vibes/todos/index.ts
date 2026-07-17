@@ -2,13 +2,14 @@ import type { UiFixtureShell } from '../../engine/types.js'
 import todoInterface from './interface.json'
 import todoLogic from './logic.js?raw'
 import todoSource from './source.json'
+import { withBrand } from '../../brand-style.js'
 import { todoStyle } from './style.js'
 import todoTools from './tools.json'
 import { todoView } from './view.js'
 
 export const todosShell: UiFixtureShell = {
 	view: todoView,
-	style: todoStyle,
+	style: withBrand(todoStyle), // TS-path: compose the brand base locally (the DB path composes at serve)
 	source: todoSource as Record<string, unknown>,
 	interface: todoInterface,
 	logic: todoLogic

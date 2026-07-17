@@ -11,6 +11,7 @@ import {
 } from '@avenos/aven-skills'
 import { Background, Controls, type Edge, MarkerType, type Node, SvelteFlow } from '@xyflow/svelte'
 import '@xyflow/svelte/dist/style.css'
+import FlowGroupBox from '$lib/shell/FlowGroupBox.svelte'
 import FlowNodeCard from '$lib/shell/FlowNodeCard.svelte'
 
 // board 0083 — reusable Svelte Flow canvas for a Flow template. Lays the DAG into columns
@@ -22,18 +23,21 @@ let {
 	nodeStates = {},
 	selectedNodeId = null,
 	onSelect,
-	draggable = true
+	draggable = true,
+	groups = {}
 }: {
 	flow: Flow | null
 	nodeStates?: Record<string, NodeState>
 	selectedNodeId?: string | null
 	onSelect?: (id: string) => void
 	draggable?: boolean
+	/** prefix → label for the flattened sub-flow groups (e.g. `capture` → "Map Brain (Invoice)"). board 0094. */
+	groups?: Record<string, string>
 } = $props()
 
 let nodes = $state.raw<Node[]>([])
 let edges = $state.raw<Edge[]>([])
-const nodeTypes = { recipe: FlowNodeCard }
+const nodeTypes = { recipe: FlowNodeCard, subflow: FlowGroupBox }
 
 function resLabel(f: Flow, k: string): string {
 	return f.resourceLabels?.[k] ?? RESOURCE_LABEL[k] ?? k
@@ -50,7 +54,8 @@ function flowName(id?: string): string {
 function buildGraph(
 	f: Flow,
 	states: Record<string, NodeState>,
-	sel: string | null
+	sel: string | null,
+	grp: Record<string, string>
 ): { nodes: Node[]; edges: Edge[] } {
 	const depth = flowDepths(f)
 	const byCol: Record<number, RecipeNode[]> = {}
@@ -92,7 +97,31 @@ function buildGraph(
 		label: e.when,
 		markerEnd: { type: MarkerType.ArrowClosed }
 	}))
-	return { nodes: ns, edges: es }
+	// dotted sub-flow backdrops: one box wrapping the flattened steps of each parent group (id prefix),
+	// so you can see which actors belong to which sub-flow. Rendered BEHIND the cards. board 0094.
+	const PAD = 18
+	const LABEL = 18
+	const CARD_H = 134
+	const groupNodes: Node[] = []
+	for (const [prefix, label] of Object.entries(grp)) {
+		const kids = ns.filter((n) => n.id.startsWith(`${prefix}/`))
+		if (kids.length === 0) continue
+		const minX = Math.min(...kids.map((k) => k.position.x))
+		const minY = Math.min(...kids.map((k) => k.position.y))
+		const maxX = Math.max(...kids.map((k) => k.position.x)) + NODE_W
+		const maxY = Math.max(...kids.map((k) => k.position.y)) + CARD_H
+		groupNodes.push({
+			id: `group:${prefix}`,
+			type: 'subflow',
+			position: { x: minX - PAD, y: minY - PAD - LABEL },
+			data: { label },
+			selectable: false,
+			draggable: false,
+			zIndex: -1,
+			style: `width:${maxX - minX + PAD * 2}px;height:${maxY - minY + PAD * 2 + LABEL}px`
+		})
+	}
+	return { nodes: [...groupNodes, ...ns], edges: es }
 }
 
 // Rebuild when the flow, run states, or selection changes (positions stay deterministic = no jump).
@@ -105,7 +134,7 @@ $effect(() => {
 		edges = []
 		return
 	}
-	const g = buildGraph(f, st, sel)
+	const g = buildGraph(f, st, sel, groups)
 	nodes = g.nodes
 	edges = g.edges
 })

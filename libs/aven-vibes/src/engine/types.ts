@@ -16,6 +16,10 @@ export type ViewDef = {
 } & ViewNode
 
 export type StyleDef = {
+	/** board 0115 — REFERENCE another vibe_style row as the base layer (e.g. 'brand'): the server
+	 *  composes base-under-own at serve time, so shared styling lives in ONE row instead of being
+	 *  baked into every style. */
+	extends?: string
 	tokens?: Record<string, unknown>
 	components?: Record<string, Record<string, unknown>>
 	selectors?: Record<string, Record<string, unknown>>

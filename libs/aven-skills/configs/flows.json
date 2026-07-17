@@ -20,6 +20,7 @@
 				"id": "classify",
 				"name": "Classify",
 				"actor": "classify_document",
+				"vibe": "bookkeeping",
 				"inputs": ["document"],
 				"outputs": ["document"],
 				"note": "Detect the document type via LLM (invoice / bank statement / contract / …)",
@@ -407,6 +408,36 @@
 				"kind": "resource",
 				"on": "image"
 			}
+		]
+	},
+	{
+		"id": "project-planner",
+		"name": "Project Planner",
+		"description": "Break a goal into todos and manage them as task/valid/due/prioritized gismu predications. board 0087.",
+		"nodes": [
+			{
+				"id": "plan",
+				"name": "Plan",
+				"actor": "llm",
+				"inputs": ["goal"],
+				"outputs": ["task"],
+				"system_prompt": "You are a project planner. Break the user's goal into concrete, atomic tasks and create them via the todos tool.",
+				"llm": { "model": "claude-sonnet-4-6", "mode": "tool" },
+				"tools": ["todos"]
+			},
+			{
+				"id": "todos",
+				"name": "Todos",
+				"actor": "renderTodos",
+				"inputs": ["task"],
+				"outputs": ["task"]
+			}
+		],
+		"edges": [
+			{ "from": "plan", "to": "todos", "resource": "task" }
+		],
+		"triggers": [
+			{ "kind": "resource", "on": "goal" }
 		]
 	}
 ]

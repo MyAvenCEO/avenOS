@@ -173,6 +173,18 @@ jobs:
           POSTMARK_INBOUND_SECRET: ${{ secrets.POSTMARK_INBOUND_SECRET }}
           POSTMARK_INBOUND_USER: ${{ secrets.POSTMARK_INBOUND_USER }}
 
+      - name: App logs (always — boot forensics)
+        # board 0119h — the machine's own stdout after every deploy attempt: a boot hang/crash is
+        # never invisible again (this is how the silent next outage gets a readable cause).
+        if: always()
+        run: |
+          echo "── error/boot lines ──"
+          flyctl logs --app api-next-aven-ceo --no-tail 2>&1 | grep -aiE "\[boot\]|failed|error|panic" | grep -av "\[migrate\] 0" | tail -60 || true
+          echo "── raw tail ──"
+          flyctl logs --app api-next-aven-ceo --no-tail 2>&1 | tail -30 || true
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
   release-macos:
     name: macOS build → TestFlight
     needs: release
@@ -182,6 +194,7 @@ jobs:
     # repo secrets stay available inside an environment-scoped job, so this is additive.
     environment: next
     steps:
+
       - name: Checkout next at the release commit (full history + tags)
         uses: actions/checkout@v5
         with:

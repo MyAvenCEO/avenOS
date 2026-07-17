@@ -27,6 +27,12 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		background: 'var(--bg-a)',
 		color: 'var(--text)',
 		margin: '0',
+		// board 0112 — the engine puts `container-type: inline-size` on :host (for container queries). On
+		// WebKit (Tauri/macOS) that makes an auto-width host SHRINK-TO-FIT its content, collapsing the inline
+		// size — so a grid child never gets a definite width and `auto-fill` fell back to a single column.
+		// Pinning the host to 100% of its (definite) parent restores a real width for the grid to fill.
+		display: 'block',
+		width: '100%',
 		minHeight: '100%',
 		height: '100%',
 		letterSpacing: '-0.011em'
@@ -79,6 +85,7 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		color: 'var(--muted-strong)'
 	},
 	'.grid-card-title': {
+		fontFamily: 'var(--font-display)',
 		fontSize: 'var(--fs-title)',
 		fontWeight: '500',
 		color: 'var(--text)'
@@ -128,7 +135,7 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 	}
 }
 
-function mergeDeep(
+export function mergeDeep(
 	base: Record<string, unknown>,
 	over: Record<string, unknown>
 ): Record<string, unknown> {

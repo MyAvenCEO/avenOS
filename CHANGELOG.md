@@ -1,3 +1,157 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.6...v) (2026-07-16)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.5...v) (2026-07-16)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.4...v) (2026-07-16)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.3...v) (2026-07-16)
+
+
+### Bug Fixes
+
+* **0120:** TTS speaker + German + copy-logs + mobile hamburger + voice modal ([#56](https://github.com/MyAvenCEO/avenOS/issues/56)) ([a8d5434](https://github.com/MyAvenCEO/avenOS/commit/a8d5434a0744373260d4d388c5c4cecc2dfae12d))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.2...v) (2026-07-16)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.1...v) (2026-07-16)
+
+
+### Bug Fixes
+
+* **0120:** voice — all skills + delete-confirm modal, format-agnostic TTS playback ([#54](https://github.com/MyAvenCEO/avenOS/issues/54)) ([01f94da](https://github.com/MyAvenCEO/avenOS/commit/01f94daa154a68bd5902c243a09bf2246c3b7a1e))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.6...v) (2026-07-16)
+
+
+### Bug Fixes
+
+* **0120:** forward tool-result cards to voice turns + TTS breadcrumb ([#53](https://github.com/MyAvenCEO/avenOS/issues/53)) ([8c64516](https://github.com/MyAvenCEO/avenOS/commit/8c6451643979460fefe1d59c2c0ea257b51918e5))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.5...v) (2026-07-15)
+
+
+### Bug Fixes
+
+* **0120:** realtime turn — base64 audio framing, always-recover, + breadcrumbs ([#52](https://github.com/MyAvenCEO/avenOS/issues/52)) ([6e8650c](https://github.com/MyAvenCEO/avenOS/commit/6e8650c71fd0d946298f8a00251e8d502851d9b6))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.4...v) (2026-07-15)
+
+
+### Bug Fixes
+
+* **0120:** allow wss:// in Tauri CSP — realtime WebSocket was CSP-blocked (root cause) ([#51](https://github.com/MyAvenCEO/avenOS/issues/51)) ([759ada1](https://github.com/MyAvenCEO/avenOS/commit/759ada157e9202a040776f289de67046ad348039))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.3...v) (2026-07-15)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.2...v) (2026-07-15)
+
+
+### Bug Fixes
+
+* **0120:** realtime voice actually engages — decouple from Tauri, on-device model, stale bearer ([#49](https://github.com/MyAvenCEO/avenOS/issues/49)) ([5673e4d](https://github.com/MyAvenCEO/avenOS/commit/5673e4d64c1ad6a1c74719254bb0320d7e84e6cd))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.15-next.1...v) (2026-07-15)
+
+
+### Features
+
+* **0120:** realtime voice hands-free UX — start-to-stream, big red stop, live captions ([#48](https://github.com/MyAvenCEO/avenOS/issues/48)) ([9a74120](https://github.com/MyAvenCEO/avenOS/commit/9a741201991a56d1ed7176cd531e05cb51c737c2))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.14-next.2...v) (2026-07-15)
+
+
+### Features
+
+* **0120:** on-screen conversation-phase indicator (Listening/Thinking/Speaking) ([#47](https://github.com/MyAvenCEO/avenOS/issues/47)) ([8caa36b](https://github.com/MyAvenCEO/avenOS/commit/8caa36b43873aa9fc8b64f0df08e0d231149b640))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.14-next.1...v) (2026-07-14)
+
+
+### Features
+
+* **0120:** hands-free realtime voice conversation — auto-VAD, barge-in, reliable speak-back ([#46](https://github.com/MyAvenCEO/avenOS/issues/46)) ([c625061](https://github.com/MyAvenCEO/avenOS/commit/c6250610dad637fdb33e486cec7a8dd826a20e2d))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.12...v) (2026-07-14)
+
+
+### Features
+
+* **0120:** e2ee TEE realtime live voice (Voxtral STT→LLM→TTS, server-orchestrated) + mode switch ([#45](https://github.com/MyAvenCEO/avenOS/issues/45)) ([61ab15d](https://github.com/MyAvenCEO/avenOS/commit/61ab15def8b6d644e59b9fd8adb7961c47f4c111))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.11...v) (2026-07-05)
+
+
+### Features
+
+* **0119:** dispatch as system skill — prompts as DB config + full context transparency ([#44](https://github.com/MyAvenCEO/avenOS/issues/44)) ([316e15e](https://github.com/MyAvenCEO/avenOS/commit/316e15ef45d4ff9791096f6e5d52aa8851ec4c20))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.10...v) (2026-07-05)
+
+
+### Features
+
+* **0119:** voice + logo button polish; Flows tab reuses the left-aside skill ([#43](https://github.com/MyAvenCEO/avenOS/issues/43)) ([b9d10a9](https://github.com/MyAvenCEO/avenOS/commit/b9d10a9252ddaad7c23723f86ac74fa8fb1cf5ca))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.9...v) (2026-07-05)
+
+
+### Features
+
+* **0119:** split the voice UI — submit/cancel replace the logo button, centered ([#42](https://github.com/MyAvenCEO/avenOS/issues/42)) ([9fd75cd](https://github.com/MyAvenCEO/avenOS/commit/9fd75cd008c92254ccf206489fa8b05465d28e50))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.8...v) (2026-07-05)
+
+
+### Features
+
+* **0119:** wire the Flows tab — the routed skill's node tree full-screen (DB Skills read-model) ([#41](https://github.com/MyAvenCEO/avenOS/issues/41)) ([97b2bc0](https://github.com/MyAvenCEO/avenOS/commit/97b2bc0caa9dedd5814f07580a177c2eeb51340a))
+* remove the Fly tab (read-only orgs viewer — not needed) ([#40](https://github.com/MyAvenCEO/avenOS/issues/40)) ([872441f](https://github.com/MyAvenCEO/avenOS/commit/872441f0aefec9706e1b1e53eee5cb27f11d8626))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.7...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **deploy:** migration 0113 — ensure data_bundles exists (the 0058 IF-EXISTS rename no-op) ([#39](https://github.com/MyAvenCEO/avenOS/issues/39)) ([70eeb45](https://github.com/MyAvenCEO/avenOS/commit/70eeb45c677ba1c42e4c599b2950ca22cb034c08))
+* **deploy:** replay-safe migrations 0073/0080/0081 — the next-channel boot blocker ([#38](https://github.com/MyAvenCEO/avenOS/issues/38)) ([49515aa](https://github.com/MyAvenCEO/avenOS/commit/49515aa2fa0ac9eb6950f9ac643be625d9142ee6))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.6...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **ci:** forensics greps the boot/error lines (the migrate listing drowned the FAILED text) ([#37](https://github.com/MyAvenCEO/avenOS/issues/37)) ([5fa298d](https://github.com/MyAvenCEO/avenOS/commit/5fa298d04a91a4e5f45706d122d837d03ce47956))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.5...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **ci:** move the boot-forensics logs step into the deploy-auth job (it had landed in release-macos) ([#36](https://github.com/MyAvenCEO/avenOS/issues/36)) ([cdb8794](https://github.com/MyAvenCEO/avenOS/commit/cdb879424af47846229abec1989cb77631e0ee26))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.4...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **deploy:** resilient boot — bootstrap retries forever with per-attempt timeout + logged cause ([#35](https://github.com/MyAvenCEO/avenOS/issues/35)) ([1f73222](https://github.com/MyAvenCEO/avenOS/commit/1f73222d081c31ddc135574dfc8b338ec76b147d))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.3...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **deploy:** boot watchdog + phase logs + always-on app-log forensics in CI ([#34](https://github.com/MyAvenCEO/avenOS/issues/34)) ([6a89fbe](https://github.com/MyAvenCEO/avenOS/commit/6a89fbe8409a0b872446fc4ef9508df32d81b910))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.2...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **deploy:** lazy Tauri imports in aven-vibes sandbox — the Fly boot crash ([#33](https://github.com/MyAvenCEO/avenOS/issues/33)) ([3224d7b](https://github.com/MyAvenCEO/avenOS/commit/3224d7bc111f04a025b43736e874e37b7e35a3f2))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.5-next.1...v) (2026-07-05)
+
+
+### Bug Fixes
+
+* **deploy:** betterauth Fly image needs aven-skills + aven-ontology workspaces ([#32](https://github.com/MyAvenCEO/avenOS/issues/32)) ([e912bd6](https://github.com/MyAvenCEO/avenOS/commit/e912bd60a9b3890830e71f6fc00e158be3430970))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.2-next.1...v) (2026-07-05)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.1-next.3...v) (2026-07-02)
+
+
+### Features
+
+* **app:** Draw canvas — bounded zoom, reference images, pen colours ([#30](https://github.com/MyAvenCEO/avenOS/issues/30)) ([15f7c3c](https://github.com/MyAvenCEO/avenOS/commit/15f7c3c74cfddcd310d7a3f571ca48f6ba71eef7))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.1-next.2...v) (2026-07-01)
+
+
+### Bug Fixes
+
+* **app:** move the /draw scratchpad into the mainnet (Alberobello) shell ([#29](https://github.com/MyAvenCEO/avenOS/issues/29)) ([632dd30](https://github.com/MyAvenCEO/avenOS/commit/632dd3040375954a087bf4d955b6b31ffbd5eba1))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.1-next.1...v) (2026-07-01)
+
+
+### Features
+
+* **app:** Apple Pencil scratchpad — a /draw main (in-memory web canvas) ([#28](https://github.com/MyAvenCEO/avenOS/issues/28)) ([3d7ec1a](https://github.com/MyAvenCEO/avenOS/commit/3d7ec1a0a40d4ec2f47fa8e5a9958cfe5a6916ee))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.23-next.1...v) (2026-07-01)
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.7...v) (2026-06-23)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.22-next.6...v) (2026-06-22)
 
 

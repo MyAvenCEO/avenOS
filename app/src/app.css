@@ -56,13 +56,42 @@
 	font-display: swap;
 }
 
+/* Clash Display — the TITLE + BRAND display face (board 0110). Self-hosted woff2; `--font-display` points
+ * here so every heading + the avenOS wordmark render in it. Default title weight is Light (300). */
+@font-face { font-family: "ClashDisplay"; src: url("$lib/assets/fonts/ClashDisplay-Extralight.woff2") format("woff2"); font-weight: 200; font-style: normal; font-display: swap; }
+@font-face { font-family: "ClashDisplay"; src: url("$lib/assets/fonts/ClashDisplay-Light.woff2") format("woff2"); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: "ClashDisplay"; src: url("$lib/assets/fonts/ClashDisplay-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "ClashDisplay"; src: url("$lib/assets/fonts/ClashDisplay-Medium.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "ClashDisplay"; src: url("$lib/assets/fonts/ClashDisplay-Semibold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "ClashDisplay"; src: url("$lib/assets/fonts/ClashDisplay-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+
+/* Azeret Mono — the BODY / default text face (board 0110). Self-hosted woff2; default body weight is
+ * Thin (100). Bolder weights available for emphasis; titles stay Clash Display, code stays JetBrains Mono. */
+@font-face { font-family: "AzeretMono"; src: url("$lib/assets/fonts/AzeretMono-Thin.woff2") format("woff2"); font-weight: 100; font-style: normal; font-display: swap; }
+@font-face { font-family: "AzeretMono"; src: url("$lib/assets/fonts/AzeretMono-ExtraLight.woff2") format("woff2"); font-weight: 200; font-style: normal; font-display: swap; }
+@font-face { font-family: "AzeretMono"; src: url("$lib/assets/fonts/AzeretMono-Light.woff2") format("woff2"); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: "AzeretMono"; src: url("$lib/assets/fonts/AzeretMono-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "AzeretMono"; src: url("$lib/assets/fonts/AzeretMono-Medium.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "AzeretMono"; src: url("$lib/assets/fonts/AzeretMono-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "AzeretMono"; src: url("$lib/assets/fonts/AzeretMono-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+
+/* board 0110 — the avenOS brand wordmark in Clash Display: `aven` light + lowercase, `OS` bold + uppercase.
+ * Wrap the two parts in .wm-aven / .wm-os spans; bare text falls back to the light base weight. */
 .avenos-wordmark {
-	font-family: "Ouroboros", ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+	font-family: var(--font-display);
 	font-size: clamp(2.75rem, 9vw, 3.5rem);
-	font-weight: 400;
+	font-weight: 300;
 	line-height: 1;
 	letter-spacing: -0.02em;
 	color: var(--color-brand-navy, #1e293b);
+}
+.avenos-wordmark .wm-aven {
+	font-weight: 300;
+	text-transform: lowercase;
+}
+.avenos-wordmark .wm-os {
+	font-weight: 700;
+	text-transform: uppercase;
 }
 
 /*
@@ -97,8 +126,10 @@
 	 * later be upgraded to a dedicated display face by editing only this one line —
 	 * components reference `font-display`, not "Chillax", so nothing else changes.
 	 * `--font-serif` is kept as an alias too; the app no longer relies on a serif. */
-	--font-sans: "Chillax", ui-sans-serif, system-ui, sans-serif;
-	--font-display: "Chillax", ui-sans-serif, system-ui, sans-serif;
+	/* board 0110 — the default body/UI text face is Azeret Mono (default weight Thin, set on `body`). */
+	--font-sans: "AzeretMono", "Chillax", ui-monospace, SFMono-Regular, monospace;
+	/* titles + the brand wordmark use Clash Display. */
+	--font-display: "ClashDisplay", "Chillax", ui-sans-serif, system-ui, sans-serif;
 	--font-serif: "Chillax", ui-sans-serif, system-ui, sans-serif;
 	--font-mono: "JetBrains Mono", ui-monospace, monospace;
 
@@ -233,6 +264,8 @@
 
 	body {
 		@apply bg-background text-foreground font-sans tracking-tight;
+		/* board 0110 — Azeret Mono ExtraLight is the default body/text weight (one up from Thin). */
+		font-weight: 200;
 	}
 
 	/* Design-system titles. Components don't need to opt in — bare h1–h6 inherit
@@ -245,7 +278,8 @@
 	h5,
 	h6 {
 		font-family: var(--font-display);
-		font-weight: 500;
+		/* board 0110 — Clash Display Light is the default title weight (thin/elegant). */
+		font-weight: 300;
 		letter-spacing: -0.02em;
 		line-height: 1.15;
 		text-wrap: balance;

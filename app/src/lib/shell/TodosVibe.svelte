@@ -4,63 +4,105 @@ import { createTodosShell } from '@avenos/aven-vibes'
 import AvenVibeView from '@avenos/aven-vibes/AvenVibeView.svelte'
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query'
 import {
-	createValue,
-	type DataValue,
-	deleteValue,
-	ensureSchema,
-	listValues,
-	updateValue
+	createTodos,
+	deleteTodo,
+	listTodos,
+	loadVibeBundle,
+	type Todo,
+	type TodoFilter,
+	updateTodos
 } from '$lib/data/client'
 import { t } from '$lib/i18n'
-import { qk } from '$lib/query/client'
 
-// The unified todos vibe: the aven-vibes todos vibe (JSON view/style + QuickJS) with its
-// CRUD wired to the betterauth /api/data store. Single source of truth for the todos UI —
-// reused in both the Vibes tab and the chat stream. board 0054.
-let { containerName = 'aven-vibes-todos' }: { containerName?: string } = $props()
+// The interactive todos list vibe: the aven-vibes todos vibe (JSON view/style + QuickJS) with its CRUD
+// wired to the betterauth /api/data store. Single source of truth for the live list UI — reused in the
+// chat stream, the Skills preview, and the flow-step view. board 0054.
+// board 0095: the view/style/logic LOAD from the DB `vibe.*` registry (config-as-data) and override the
+// file defaults — the app renders the vibe from the DB through the engine. The file shell supplies the
+// interface/source defaults + renders instantly while the DB bundle resolves (it is identical).
+// board 0111: the created/edited/deleted "what changed" summaries render through VibeCard from their own
+// vibe.* rows (schema todos-created/-edited/-deleted); this component only owns the live `all` list.
+// board 0107 — an optional universal filter {field,value,op}; the vibe's OWN fetch applies it, so the
+// rendered list is the SAME filtered subset the chat query returned (one data path, SSOT).
+let {
+	containerName = 'aven-vibes-todos',
+	filter
+}: { containerName?: string; filter?: TodoFilter } = $props()
 
-type Todo = { title: string; done: boolean }
-
-const TODOS_SCHEMA = {
-	type: 'object',
-	properties: { title: { type: 'string', minLength: 1 }, done: { type: 'boolean' } },
-	required: ['title'],
-	additionalProperties: false
-}
-
-const shell = createTodosShell()
+const base = createTodosShell()
+const vibeQuery = createQuery(() => ({
+	queryKey: ['vibe', 'todos'],
+	queryFn: () => loadVibeBundle('todos')
+}))
+const shell = $derived(
+	vibeQuery.data
+		? {
+				...base,
+				view: vibeQuery.data.view as typeof base.view,
+				style: vibeQuery.data.style as typeof base.style,
+				logic: vibeQuery.data.logic
+			}
+		: base
+)
 const queryClient = useQueryClient()
 
-let schemaId = $state<string | null>(null)
 let err = $state<string | null>(null)
-let schemaStarted = false
 
-// Resolve the todos schema id once; the values query stays disabled until it's known.
-$effect(() => {
-	if (schemaStarted) return
-	schemaStarted = true
-	void (async () => {
-		try {
-			schemaId = await ensureSchema('todos', TODOS_SCHEMA)
-		} catch (e) {
-			err = e instanceof Error ? e.message : String(e)
-		}
-	})()
-})
-
-// Todos rows — live via TanStack Query, keyed on the schema id. The SSE 'data' event invalidates
-// ['data'] so edits from anywhere (chat tool calls, other devices) refetch with no manual reload.
-// board 0055.
+// Todos load from the predication path (/api/data/todos → executeTodos → v_task). board 0087.
+// Keyed under ['data'] so the SSE 'data' event invalidates it — edits from the chat tool or
+// here refetch with no manual reload. board 0055.
 const valuesQuery = createQuery(() => ({
-	queryKey: schemaId ? qk.values(schemaId) : ['data', 'values', 'pending'],
-	queryFn: () => listValues<Todo>(schemaId as string),
-	enabled: !!schemaId
+	queryKey: ['data', 'todos', filter ?? null],
+	queryFn: () => listTodos(filter)
 }))
-const rows = $derived<DataValue<Todo>[]>(valuesQuery.data ?? [])
+const rows = $derived<Todo[]>(valuesQuery.data ?? [])
+
+// Human relative due. A DATE-ONLY due ("YYYY-MM-DD") is a whole-DAY deadline — compare by calendar day so
+// "today" reads "today" (NOT "13 hours overdue" — the old bug of parsing a bare date as UTC midnight). A
+// due WITH a time keeps hour/minute precision. board 0105.
+function relDue(iso: string | null | undefined): string {
+	if (!iso) return ''
+	const s = iso.trim()
+	if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+		// day-granular: compare local calendar days.
+		const [y, m, d] = s.split('-').map(Number)
+		const dueDay = new Date(y, m - 1, d)
+		const today = new Date()
+		today.setHours(0, 0, 0, 0)
+		const days = Math.round((dueDay.getTime() - today.getTime()) / 86_400_000)
+		if (days === 0) return 'today'
+		if (days === 1) return 'tomorrow'
+		if (days === -1) return 'yesterday'
+		return days < 0 ? `${-days} days overdue` : `in ${days} days`
+	}
+	const d = new Date(s)
+	if (Number.isNaN(d.getTime())) return ''
+	const ms = d.getTime() - Date.now()
+	const past = ms < 0
+	const abs = Math.abs(ms)
+	const day = Math.floor(abs / 86_400_000)
+	const hr = Math.floor(abs / 3_600_000)
+	const min = Math.floor(abs / 60_000)
+	let unit: string
+	if (day >= 1) unit = `${day} day${day === 1 ? '' : 's'}`
+	else if (hr >= 1) unit = `${hr} hour${hr === 1 ? '' : 's'}`
+	else unit = `${Math.max(1, min)} min`
+	return past ? `${unit} overdue` : `in ${unit}`
+}
 
 const source = $derived({
 	title: t('mainnet.todos.title'),
-	items: rows.map((r) => ({ id: r.id, text: r.data.title, done: r.data.done === true })),
+	items: rows.map((r) => ({
+		id: r.id,
+		text: r.title,
+		done: r.done === true,
+		// due/priority predications → inline brand chips (board 0087); due as a relative label
+		due: relDue(r.due),
+		priority: r.priority ?? '',
+		// board 0112 — Planner: goal chip + sub-task nesting flow into the vibe source.
+		goal: r.goal ?? '',
+		parent: r.parent ?? ''
+	})),
 	labels: {
 		listEyebrow: t('identities.todos.listEyebrow'),
 		openLabel: t('identities.todos.openLabel'),
@@ -79,19 +121,17 @@ const source = $derived({
 // event covers other clients; this makes the local edit snap instantly). board 0055.
 const mutation = createMutation(() => ({
 	mutationFn: async (event: UiEvent) => {
-		const sid = schemaId
-		if (!sid) return
 		if (event.send === 'ADD_ITEM') {
 			const title = String(event.payload?.text ?? '').trim()
-			if (title) await createValue<Todo>(sid, { title, done: false })
+			if (title) await createTodos([{ title }])
 		} else if (event.send === 'TOGGLE_ITEM') {
 			const row = rows.find((r) => r.id === String(event.payload?.id ?? ''))
-			if (row) await updateValue<Todo>(row.id, { ...row.data, done: !row.data.done })
+			if (row) await updateTodos([{ id: row.id, done: !row.done }])
 		} else if (event.send === 'DELETE_ITEM') {
 			const id = String(event.payload?.id ?? '')
-			if (id) await deleteValue(id)
+			if (id) await deleteTodo(id)
 		} else if (event.send === 'CLEAR_DONE') {
-			for (const row of rows.filter((r) => r.data.done === true)) await deleteValue(row.id)
+			for (const row of rows.filter((r) => r.done === true)) await deleteTodo(row.id)
 		}
 		// SET_DRAFT is DOM-local — no host action.
 	},
@@ -102,7 +142,7 @@ const mutation = createMutation(() => ({
 }))
 
 function handleEvent(event: UiEvent): void {
-	if (!schemaId || mutation.isPending) return
+	if (mutation.isPending) return
 	err = null
 	mutation.mutate(event)
 }

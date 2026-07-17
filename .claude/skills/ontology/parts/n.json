@@ -1,0 +1,289 @@
+{
+  "nalci": {
+    "name": "wing",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "wing", "definition": "the wing body-part", "example": "left wing", "kind": "ref", "references": "*" },
+      "x2": { "role": "owner", "definition": "creature the wing belongs to", "example": "eagle", "kind": "ref", "references": "*" }
+    }
+  },
+  "namcu": {
+    "name": "number",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "number", "definition": "numeric value/quantity", "example": "42", "kind": "value", "type": "number" }
+    }
+  },
+  "nanba": {
+    "name": "bread",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "bread", "definition": "a quantity of bread", "example": "sourdough loaf", "kind": "ref", "references": "*" },
+      "x2": { "role": "grains", "definition": "grains the bread is made from", "example": "wheat", "kind": "value", "type": "string" }
+    }
+  },
+  "nanca": {
+    "name": "year",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "duration", "definition": "interval lasting some years", "example": "2 years", "kind": "value", "type": "quantity" },
+      "x2": { "role": "count", "definition": "number of years", "example": "2", "kind": "value", "type": "number" },
+      "x3": { "role": "standard", "definition": "measurement standard", "example": "Gregorian calendar", "kind": "value", "type": "string" }
+    }
+  },
+  "nandu": {
+    "name": "difficult",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "task", "definition": "the difficult thing", "example": "the exam", "kind": "value", "type": "string" },
+      "x2": { "role": "agent", "definition": "one who finds it hard", "example": "the student", "kind": "ref", "references": "*" },
+      "x3": { "role": "conditions", "definition": "conditions under which it is hard", "example": "without preparation", "kind": "value", "type": "string" }
+    }
+  },
+  "nanla": {
+    "name": "boy",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "boy", "definition": "a young male person", "example": "Tom", "kind": "ref", "references": "*" },
+      "x2": { "role": "age", "definition": "age of the boy", "example": "10 years", "kind": "value", "type": "quantity" },
+      "x3": { "role": "standard", "definition": "maturity standard", "example": "by local norms", "kind": "value", "type": "string" }
+    }
+  },
+  "nanmu": {
+    "name": "man",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "man", "definition": "a male humanoid person", "example": "John", "kind": "ref", "references": "*" }
+    }
+  },
+  "nanvi": {
+    "name": "nano",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "billionth", "definition": "a billionth of something", "example": "1 nanometer", "kind": "value", "type": "quantity" },
+      "x2": { "role": "whole", "definition": "the quantity being divided", "example": "a meter", "kind": "value", "type": "quantity" },
+      "x3": { "role": "aspect", "definition": "dimension/aspect measured", "example": "length", "kind": "value", "type": "string" }
+    }
+  },
+  "narge": {
+    "name": "nut",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "nut", "definition": "a hard-shelled fruit", "example": "walnut", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "plant the nut comes from", "example": "walnut tree", "kind": "value", "type": "string" },
+      "x3": { "role": "shell", "definition": "shell of the nut", "example": "hard brown shell", "kind": "ref", "references": "*" },
+      "x4": { "role": "kernel", "definition": "edible kernel inside", "example": "the meat", "kind": "ref", "references": "*" }
+    }
+  },
+  "narju": {
+    "name": "orange",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "orange thing", "definition": "something orange-colored", "example": "the sunset", "kind": "value", "type": "string" }
+    }
+  },
+  "natfe": {
+    "name": "contradict",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "statement", "definition": "claim that contradicts", "example": "the rebuttal", "kind": "value", "type": "string" },
+      "x2": { "role": "negated claim", "definition": "claim being refuted", "example": "the original assertion", "kind": "value", "type": "string" },
+      "x3": { "role": "logic", "definition": "rules/logic of refutation", "example": "classical logic", "kind": "value", "type": "string" }
+    }
+  },
+  "natmi": {
+    "name": "nation",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "nation", "definition": "a nation/ethnic group", "example": "the Basque nation", "kind": "ref", "references": "*" },
+      "x2": { "role": "peoples", "definition": "peoples making up the nation", "example": "the Basque people", "kind": "ref", "references": "*" }
+    }
+  },
+  "navni": {
+    "name": "noble gas",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "noble gas", "definition": "a quantity of noble gas", "example": "the helium", "kind": "ref", "references": "*" },
+      "x2": { "role": "type", "definition": "type of noble gas", "example": "neon", "kind": "value", "type": "string" }
+    }
+  },
+  "naxle": {
+    "name": "canal",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "canal", "definition": "a canal/channel", "example": "the Suez Canal", "kind": "ref", "references": "*" },
+      "x2": { "role": "destination", "definition": "where the canal leads to", "example": "the Red Sea", "kind": "ref", "references": "*" },
+      "x3": { "role": "origin", "definition": "where the canal leads from", "example": "the Mediterranean", "kind": "ref", "references": "*" },
+      "x4": { "role": "route", "definition": "route of the canal", "example": "across the isthmus", "kind": "value", "type": "string" }
+    }
+  },
+  "nazbi": {
+    "name": "nose",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "nose", "definition": "the nose body-part", "example": "her nose", "kind": "ref", "references": "*" },
+      "x2": { "role": "owner", "definition": "creature the nose belongs to", "example": "the dog", "kind": "ref", "references": "*" },
+      "x3": { "role": "nostrils", "definition": "nostrils/nasal passages", "example": "two nostrils", "kind": "ref", "references": "*" }
+    }
+  },
+  "nejni": {
+    "name": "energy",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "energy", "definition": "a quantity of energy", "example": "the kinetic energy", "kind": "value", "type": "quantity" },
+      "x2": { "role": "type", "definition": "type of energy", "example": "thermal", "kind": "value", "type": "string" },
+      "x3": { "role": "form", "definition": "form the energy takes", "example": "heat", "kind": "value", "type": "string" }
+    }
+  },
+  "nelci": {
+    "name": "likes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "liker", "definition": "one who is fond of something", "example": "Maria", "kind": "ref", "references": "*" },
+      "x2": { "role": "liked", "definition": "object/state liked", "example": "jazz music", "kind": "value", "type": "string" }
+    }
+  },
+  "nenri": {
+    "name": "inside",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "inner thing", "definition": "thing that is inside", "example": "the cat", "kind": "ref", "references": "*" },
+      "x2": { "role": "container", "definition": "thing it is inside of", "example": "the box", "kind": "ref", "references": "*" }
+    }
+  },
+  "nicte": {
+    "name": "night",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "night", "definition": "a nighttime period", "example": "last night", "kind": "value", "type": "date-time" },
+      "x2": { "role": "day", "definition": "day the night belongs to", "example": "Friday", "kind": "value", "type": "date-time" },
+      "x3": { "role": "location", "definition": "location of the night", "example": "Berlin", "kind": "ref", "references": "*" }
+    }
+  },
+  "nikle": {
+    "name": "nickel",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "nickel", "definition": "a quantity of nickel", "example": "the nickel coating", "kind": "ref", "references": "*" }
+    }
+  },
+  "nilce": {
+    "name": "furnishes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "furniture", "definition": "furniture items", "example": "the sofa", "kind": "ref", "references": "*" },
+      "x2": { "role": "location", "definition": "location being furnished", "example": "the living room", "kind": "ref", "references": "*" },
+      "x3": { "role": "purpose", "definition": "purpose/function served", "example": "seating", "kind": "value", "type": "string" }
+    }
+  },
+  "nimre": {
+    "name": "citrus",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "citrus", "definition": "a citrus fruit/tree", "example": "the lemon", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain", "example": "Meyer lemon", "kind": "value", "type": "string" }
+    }
+  },
+  "ninmu": {
+    "name": "woman",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "woman", "definition": "a female humanoid person", "example": "Anna", "kind": "ref", "references": "*" }
+    }
+  },
+  "nirna": {
+    "name": "nerve",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "nerve", "definition": "a nerve/neuron body-part", "example": "the optic nerve", "kind": "ref", "references": "*" },
+      "x2": { "role": "owner", "definition": "creature the nerve belongs to", "example": "the patient", "kind": "ref", "references": "*" }
+    }
+  },
+  "nitcu": {
+    "name": "needs",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "needer", "definition": "one who needs something", "example": "the team", "kind": "ref", "references": "*" },
+      "x2": { "role": "necessity", "definition": "thing needed", "example": "more funding", "kind": "value", "type": "string" },
+      "x3": { "role": "purpose", "definition": "purpose/action requiring it", "example": "to finish the project", "kind": "value", "type": "string" }
+    }
+  },
+  "nivji": {
+    "name": "knits",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "knitter", "definition": "agent who knits", "example": "grandmother", "kind": "ref", "references": "*" },
+      "x2": { "role": "product", "definition": "cloth/object knitted", "example": "a scarf", "kind": "ref", "references": "*" },
+      "x3": { "role": "yarn", "definition": "yarn/thread used", "example": "wool yarn", "kind": "ref", "references": "*" }
+    }
+  },
+  "nixli": {
+    "name": "girl",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "girl", "definition": "a young female person", "example": "Lily", "kind": "ref", "references": "*" },
+      "x2": { "role": "age", "definition": "age of the girl", "example": "8 years", "kind": "value", "type": "quantity" },
+      "x3": { "role": "standard", "definition": "maturity standard", "example": "by local norms", "kind": "value", "type": "string" }
+    }
+  },
+  "nobli": {
+    "name": "noble",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "noble", "definition": "an aristocratic/high-born person", "example": "the duke", "kind": "ref", "references": "*" },
+      "x2": { "role": "standard", "definition": "culture/society defining nobility", "example": "medieval England", "kind": "value", "type": "string" }
+    }
+  },
+  "notci": {
+    "name": "message",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "message", "definition": "a message/notice", "example": "the memo", "kind": "ref", "references": "*" },
+      "x2": { "role": "subject", "definition": "subject of the message", "example": "the meeting time", "kind": "value", "type": "string" },
+      "x3": { "role": "author", "definition": "author of the message", "example": "the manager", "kind": "ref", "references": "*" },
+      "x4": { "role": "audience", "definition": "intended audience", "example": "the team", "kind": "ref", "references": "*" }
+    }
+  },
+  "nukni": {
+    "name": "magenta",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "magenta thing", "definition": "something magenta-colored", "example": "the flower", "kind": "value", "type": "string" }
+    }
+  },
+  "nupre": {
+    "name": "promises",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "promiser", "definition": "agent who promises", "example": "the contractor", "kind": "ref", "references": "*" },
+      "x2": { "role": "promise", "definition": "event/state promised", "example": "to deliver on time", "kind": "value", "type": "string" },
+      "x3": { "role": "beneficiary", "definition": "one promised to", "example": "the client", "kind": "ref", "references": "*" }
+    }
+  },
+  "nurma": {
+    "name": "rural area",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rural area", "definition": "a rural/rustic area", "example": "the countryside", "kind": "ref", "references": "*" },
+      "x2": { "role": "region", "definition": "wider region it is part of", "example": "Bavaria", "kind": "ref", "references": "*" }
+    }
+  },
+  "nutli": {
+    "name": "neutral",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "neutral party", "definition": "one not taking sides", "example": "Switzerland", "kind": "ref", "references": "*" },
+      "x2": { "role": "scale", "definition": "scale/dissension stayed neutral on", "example": "the political dispute", "kind": "value", "type": "string" }
+    }
+  },
+  "nuzba": {
+    "name": "news",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "news", "definition": "news/new information", "example": "the announcement", "kind": "value", "type": "string" },
+      "x2": { "role": "subject", "definition": "subject of the news", "example": "the election", "kind": "value", "type": "string" },
+      "x3": { "role": "source", "definition": "source of the news", "example": "the press agency", "kind": "ref", "references": "*" },
+      "x4": { "role": "observer", "definition": "one informed by the news", "example": "the public", "kind": "ref", "references": "*" }
+    }
+  }
+}

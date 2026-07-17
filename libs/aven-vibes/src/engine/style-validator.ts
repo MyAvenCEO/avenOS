@@ -2,10 +2,14 @@ import { CSS_INJECTION_PATTERNS, FORBIDDEN_PATH_KEYS, SAFE_TAGS } from './securi
 import type { StyleDef } from './types.js'
 
 const FORBIDDEN_STYLE_KEYS = new Set(['rawCss', 'rawCSS', 'raw_css'])
-const TOP_LEVEL_STYLE_KEYS = new Set(['tokens', 'components', 'selectors'])
+const TOP_LEVEL_STYLE_KEYS = new Set(['tokens', 'components', 'selectors', 'extends'])
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/
 const SAFE_CLASS = /^[A-Za-z][A-Za-z0-9_-]*$/
 const MEDIA_RULE = /^@media\s*\(\s*(?:max|min)-width\s*:\s*\d+(?:px|rem|em)\s*\)$/
+// board 0114 — @container queries are a default vibe capability (the engine puts inline-size containment
+// on the view root). Allowed with the SAME strict shape as @media: a single max/min-width size query —
+// no style() queries, no container names, nothing else.
+const CONTAINER_RULE = /^@container\s*\(\s*(?:max|min)-width\s*:\s*\d+(?:px|rem|em)\s*\)$/
 const KEYFRAMES_RULE = /^@keyframes\s+[A-Za-z][A-Za-z0-9_-]*$/
 const KEYFRAME_STEP = /^(from|to|(?:100|[1-9]?\d)%)$/
 const SELECTOR_SYMBOLS = new Set(' .,;:*#>+~=[]"\'()_-'.replace(';', '').split(''))
@@ -49,6 +53,8 @@ const ALLOWED_CSS_PROPERTIES = new Set([
 	'listStyle',
 	'margin',
 	'marginBottom',
+	'marginLeft',
+	'marginRight',
 	'marginTop',
 	'maxHeight',
 	'maxWidth',
@@ -60,10 +66,14 @@ const ALLOWED_CSS_PROPERTIES = new Set([
 	'overflow',
 	'overflowY',
 	'padding',
+	'paddingBottom',
+	'paddingLeft',
+	'paddingRight',
 	'paddingTop',
 	'placeContent',
 	'textAlign',
 	'textDecoration',
+	'textOverflow',
 	'textTransform',
 	'transform',
 	'transition',
@@ -224,6 +234,12 @@ function validateSelectors(selectors: Record<string, Record<string, unknown>>, p
 			validateSelectors(styles as Record<string, Record<string, unknown>>, `${path}.${selector}`)
 			continue
 		}
+		if (selector.startsWith('@container')) {
+			if (!CONTAINER_RULE.test(selector))
+				throw new Error(`[aven-ui] Forbidden at-rule in ${path}: ${selector}`)
+			validateSelectors(styles as Record<string, Record<string, unknown>>, `${path}.${selector}`)
+			continue
+		}
 		if (selector.startsWith('@'))
 			throw new Error(`[aven-ui] Forbidden at-rule in ${path}: ${selector}`)
 		assertSafeSelector(selector, path)
@@ -246,6 +262,12 @@ export function validateStyleDef(style: StyleDef, path = 'style'): void {
 				`[aven-ui] Forbidden style field "${key}" at ${path}. Raw CSS is not allowed.`
 			)
 		}
+	}
+	// board 0115 — `extends` REFERENCES another vibe_style row as the base layer (composed server-side).
+	// A safe row name only — never CSS, never a path.
+	if ('extends' in style && style.extends !== undefined) {
+		if (typeof style.extends !== 'string' || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(style.extends))
+			throw new Error(`[aven-ui] Invalid extends ref at ${path}: must be a kebab-case style name`)
 	}
 	validateTokenTree(style.tokens, `${path}.tokens`)
 	if (style.components) {

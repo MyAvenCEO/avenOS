@@ -1,0 +1,484 @@
+{
+  "racli": {
+    "name": "sane",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "behavior", "definition": "action/activity that is rational", "example": "saving for retirement", "kind": "value", "type": "string" },
+      "x2": { "role": "standard", "definition": "standard of rationality", "example": "common sense", "kind": "value", "type": "string" }
+    }
+  },
+  "ractu": {
+    "name": "rabbit",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rabbit", "definition": "the rabbit/hare", "example": "the brown hare in the field", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed", "example": "European rabbit", "kind": "value", "type": "string" }
+    }
+  },
+  "radno": {
+    "name": "radians",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "angle", "definition": "angular measure in radians", "example": "an arc of 1.57 rad", "kind": "ref", "references": "*" },
+      "x2": { "role": "quantity", "definition": "number of radians", "example": "3.14", "kind": "value", "type": "quantity" },
+      "x3": { "role": "standard", "definition": "measurement standard", "example": "SI radian", "kind": "value", "type": "string" }
+    }
+  },
+  "rafsi": {
+    "name": "affix",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "affix", "definition": "the affix/combining form", "example": "the prefix 're-'", "kind": "value", "type": "string" },
+      "x2": { "role": "concept", "definition": "word/concept it represents", "example": "the concept of repetition", "kind": "value", "type": "string" },
+      "x3": { "role": "form", "definition": "form/properties", "example": "three-letter CVC form", "kind": "value", "type": "string" },
+      "x4": { "role": "language", "definition": "language", "example": "Lojban", "kind": "value", "type": "string" }
+    }
+  },
+  "ragve": {
+    "name": "across",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "object on the far side", "example": "the house across the river", "kind": "ref", "references": "*" },
+      "x2": { "role": "boundary", "definition": "gap/boundary crossed", "example": "the river", "kind": "ref", "references": "*" },
+      "x3": { "role": "reference", "definition": "reference point", "example": "our village", "kind": "ref", "references": "*" }
+    }
+  },
+  "rakso": {
+    "name": "iraqi",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "reflects Iraqi culture", "example": "Baghdad cuisine", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of culture", "example": "in its architecture", "kind": "value", "type": "string" }
+    }
+  },
+  "raktu": {
+    "name": "troubles",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "trouble source", "definition": "thing/event that disturbs", "example": "the constant noise", "kind": "ref", "references": "*" },
+      "x2": { "role": "person", "definition": "person troubled", "example": "the tenant", "kind": "ref", "references": "*" },
+      "x3": { "role": "problem", "definition": "problem caused", "example": "loss of sleep", "kind": "value", "type": "string" }
+    }
+  },
+  "ralci": {
+    "name": "delicate",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "fragile/refined object", "example": "the antique vase", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property of fragility", "example": "its thin glass walls", "kind": "value", "type": "string" }
+    }
+  },
+  "ralju": {
+    "name": "principal",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "chief thing", "definition": "the main/leading one", "example": "the head office", "kind": "ref", "references": "*" },
+      "x2": { "role": "set", "definition": "set it leads", "example": "all branch offices", "kind": "value", "type": "string" },
+      "x3": { "role": "property", "definition": "property of significance", "example": "decision-making authority", "kind": "value", "type": "string" }
+    }
+  },
+  "ralte": {
+    "name": "keeps",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "keeper", "definition": "one who retains", "example": "the collector", "kind": "ref", "references": "*" },
+      "x2": { "role": "kept thing", "definition": "thing held in possession", "example": "the rare coin", "kind": "ref", "references": "*" }
+    }
+  },
+  "randa": {
+    "name": "yields",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "yielder", "definition": "one who surrenders", "example": "the defending army", "kind": "ref", "references": "*" },
+      "x2": { "role": "force", "definition": "force/agent yielded to", "example": "the besiegers", "kind": "ref", "references": "*" },
+      "x3": { "role": "conditions", "definition": "conditions of surrender", "example": "after the siege ran out of food", "kind": "value", "type": "string" }
+    }
+  },
+  "rango": {
+    "name": "organ",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "organ", "definition": "the body organ", "example": "the liver", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "body/species it belongs to", "example": "the human body", "kind": "ref", "references": "*" },
+      "x3": { "role": "function", "definition": "function performed", "example": "filtering toxins", "kind": "value", "type": "string" }
+    }
+  },
+  "ranji": {
+    "name": "continues",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "event", "definition": "event that persists", "example": "the rainfall", "kind": "value", "type": "string" },
+      "x2": { "role": "interval", "definition": "interval over which it continues", "example": "for three days", "kind": "value", "type": "string" }
+    }
+  },
+  "ranmi": {
+    "name": "myth",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "myth", "definition": "the legend/myth", "example": "the legend of King Arthur", "kind": "ref", "references": "*" },
+      "x2": { "role": "subject", "definition": "what the myth is about", "example": "the founding of the city", "kind": "value", "type": "string" },
+      "x3": { "role": "mythos", "definition": "mythos it belongs to", "example": "Greek mythology", "kind": "value", "type": "string" },
+      "x4": { "role": "culture", "definition": "culture of origin", "example": "ancient Athens", "kind": "value", "type": "string" }
+    }
+  },
+  "ransu": {
+    "name": "bronze",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "bronze", "definition": "the bronze quantity", "example": "the cast bronze statue", "kind": "ref", "references": "*" },
+      "x2": { "role": "composition", "definition": "composition included", "example": "copper and tin", "kind": "value", "type": "string" }
+    }
+  },
+  "ranti": {
+    "name": "soft",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "soft/malleable object", "example": "the lump of clay", "kind": "ref", "references": "*" },
+      "x2": { "role": "force", "definition": "force it yields to", "example": "a gentle press", "kind": "value", "type": "string" },
+      "x3": { "role": "conditions", "definition": "conditions of softness", "example": "at room temperature", "kind": "value", "type": "string" }
+    }
+  },
+  "ranxi": {
+    "name": "ironic",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "ironic situation", "example": "the fire station burning down", "kind": "value", "type": "string" },
+      "x2": { "role": "expectation", "definition": "expectation contradicted", "example": "fire stations being safe", "kind": "value", "type": "string" },
+      "x3": { "role": "aspect", "definition": "aspect of irony", "example": "in its outcome", "kind": "value", "type": "string" }
+    }
+  },
+  "rapli": {
+    "name": "repeats",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "action", "definition": "repeated action", "example": "the drumbeat", "kind": "value", "type": "string" },
+      "x2": { "role": "count", "definition": "number of occurrences", "example": "ten times", "kind": "value", "type": "quantity" }
+    }
+  },
+  "rarna": {
+    "name": "natural",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "natural/spontaneous thing", "example": "the wild forest", "kind": "ref", "references": "*" }
+    }
+  },
+  "ratcu": {
+    "name": "rat",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rat", "definition": "the rat", "example": "the rat in the sewer", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed", "example": "brown rat", "kind": "value", "type": "string" }
+    }
+  },
+  "ratni": {
+    "name": "atom",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "atom", "definition": "the atom", "example": "a carbon atom", "kind": "ref", "references": "*" },
+      "x2": { "role": "element", "definition": "element/atomic number", "example": "carbon (6)", "kind": "value", "type": "string" },
+      "x3": { "role": "isotope", "definition": "isotope/atomic weight", "example": "carbon-14", "kind": "value", "type": "string" }
+    }
+  },
+  "rebla": {
+    "name": "tail",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "tail", "definition": "the tail/appendage", "example": "the cat's tail", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "body it belongs to", "example": "the cat", "kind": "ref", "references": "*" }
+    }
+  },
+  "rectu": {
+    "name": "meat",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "meat", "definition": "the meat/flesh", "example": "the cut of beef", "kind": "ref", "references": "*" },
+      "x2": { "role": "source", "definition": "source animal", "example": "the cow", "kind": "ref", "references": "*" }
+    }
+  },
+  "remna": {
+    "name": "human",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "human", "definition": "the human being", "example": "the woman at the door", "kind": "ref", "references": "*" }
+    }
+  },
+  "renro": {
+    "name": "throws",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thrower", "definition": "one who throws", "example": "the pitcher", "kind": "ref", "references": "*" },
+      "x2": { "role": "projectile", "definition": "thing thrown", "example": "the baseball", "kind": "ref", "references": "*" },
+      "x3": { "role": "target", "definition": "direction/target", "example": "toward home plate", "kind": "ref", "references": "*" }
+    }
+  },
+  "renvi": {
+    "name": "survives",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "survivor", "definition": "one who endures", "example": "the lone hiker", "kind": "ref", "references": "*" },
+      "x2": { "role": "ordeal", "definition": "what is endured", "example": "the blizzard", "kind": "value", "type": "string" },
+      "x3": { "role": "duration", "definition": "duration endured", "example": "for three nights", "kind": "value", "type": "string" }
+    }
+  },
+  "respa": {
+    "name": "reptile",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "reptile", "definition": "the reptile", "example": "the green iguana", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/breed", "example": "green iguana", "kind": "value", "type": "string" }
+    }
+  },
+  "ricfu": {
+    "name": "rich",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rich one", "definition": "wealthy person/entity", "example": "the merchant", "kind": "ref", "references": "*" },
+      "x2": { "role": "wealth", "definition": "goods/aspect of wealth", "example": "land and gold", "kind": "value", "type": "string" }
+    }
+  },
+  "rigni": {
+    "name": "disgusting",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "repugnant thing", "example": "the rotten meat", "kind": "ref", "references": "*" },
+      "x2": { "role": "observer", "definition": "one disgusted", "example": "the diners", "kind": "ref", "references": "*" },
+      "x3": { "role": "conditions", "definition": "conditions of disgust", "example": "in the heat", "kind": "value", "type": "string" }
+    }
+  },
+  "rijno": {
+    "name": "silver",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "silver", "definition": "the silver quantity", "example": "the silver necklace", "kind": "ref", "references": "*" },
+      "x2": { "role": "composition", "definition": "composition included", "example": "sterling alloy", "kind": "value", "type": "string" }
+    }
+  },
+  "rilti": {
+    "name": "rhythm",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rhythm", "definition": "the rhythm/beat", "example": "a steady 4/4 beat", "kind": "value", "type": "string" },
+      "x2": { "role": "music", "definition": "music/form it belongs to", "example": "the jazz tune", "kind": "ref", "references": "*" }
+    }
+  },
+  "rimni": {
+    "name": "rhymes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "word", "definition": "first rhyming word", "example": "'cat'", "kind": "value", "type": "string" },
+      "x2": { "role": "word", "definition": "second rhyming word", "example": "'hat'", "kind": "value", "type": "string" },
+      "x3": { "role": "language", "definition": "language/phonetics", "example": "English phonetics", "kind": "value", "type": "string" },
+      "x4": { "role": "correspondence", "definition": "sound correspondence", "example": "the '-at' ending", "kind": "value", "type": "string" }
+    }
+  },
+  "rinci": {
+    "name": "drains",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "liquid", "definition": "fluid that drains", "example": "the bathwater", "kind": "ref", "references": "*" },
+      "x2": { "role": "source", "definition": "source drained from", "example": "the tub", "kind": "ref", "references": "*" },
+      "x3": { "role": "drain", "definition": "drain/strainer", "example": "the plughole", "kind": "ref", "references": "*" },
+      "x4": { "role": "force", "definition": "force of draining", "example": "gravity", "kind": "value", "type": "string" }
+    }
+  },
+  "rinju": {
+    "name": "restrained",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "restrained one", "definition": "thing held back", "example": "the leashed dog", "kind": "ref", "references": "*" },
+      "x2": { "role": "restraint", "definition": "the restraint used", "example": "the leash", "kind": "ref", "references": "*" },
+      "x3": { "role": "event", "definition": "event prevented", "example": "running into traffic", "kind": "value", "type": "string" }
+    }
+  },
+  "rinka": {
+    "name": "causes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "cause", "definition": "event/state causing", "example": "the heavy rain", "kind": "value", "type": "string" },
+      "x2": { "role": "effect", "definition": "effect produced", "example": "the flooding", "kind": "value", "type": "string" },
+      "x3": { "role": "conditions", "definition": "conditions of causation", "example": "with blocked drains", "kind": "value", "type": "string" }
+    }
+  },
+  "rinsa": {
+    "name": "greets",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "greeter", "definition": "one who greets", "example": "the host", "kind": "ref", "references": "*" },
+      "x2": { "role": "greeted", "definition": "one greeted", "example": "the arriving guest", "kind": "ref", "references": "*" },
+      "x3": { "role": "manner", "definition": "manner of greeting", "example": "with a handshake", "kind": "value", "type": "string" }
+    }
+  },
+  "rirci": {
+    "name": "rare",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rare one", "definition": "uncommon member", "example": "the albino deer", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property of rarity", "example": "its white coat", "kind": "value", "type": "string" },
+      "x3": { "role": "set", "definition": "set among which rare", "example": "the local deer herd", "kind": "value", "type": "string" }
+    }
+  },
+  "rirni": {
+    "name": "parent",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "parent", "definition": "one who raises", "example": "the mother", "kind": "ref", "references": "*" },
+      "x2": { "role": "child", "definition": "child raised", "example": "the young son", "kind": "ref", "references": "*" }
+    }
+  },
+  "rirxe": {
+    "name": "river",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "river", "definition": "the river", "example": "the Rhine", "kind": "ref", "references": "*" },
+      "x2": { "role": "land mass", "definition": "land mass it crosses", "example": "central Europe", "kind": "ref", "references": "*" },
+      "x3": { "role": "watershed", "definition": "watershed drained", "example": "the Alpine basin", "kind": "ref", "references": "*" },
+      "x4": { "role": "terminus", "definition": "where it drains into", "example": "the North Sea", "kind": "ref", "references": "*" }
+    }
+  },
+  "rismi": {
+    "name": "rice",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rice", "definition": "the rice quantity", "example": "a bowl of rice", "kind": "ref", "references": "*" },
+      "x2": { "role": "cultivar", "definition": "strain/cultivar", "example": "basmati", "kind": "value", "type": "string" }
+    }
+  },
+  "risna": {
+    "name": "heart",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "heart", "definition": "the heart", "example": "the patient's heart", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "body it belongs to", "example": "the patient", "kind": "ref", "references": "*" }
+    }
+  },
+  "ritli": {
+    "name": "rite",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rite", "definition": "the ceremony/ritual", "example": "the wedding ceremony", "kind": "ref", "references": "*" },
+      "x2": { "role": "purpose", "definition": "purpose/goal", "example": "joining two families", "kind": "value", "type": "string" },
+      "x3": { "role": "community", "definition": "custom/community", "example": "the village tradition", "kind": "value", "type": "string" },
+      "x4": { "role": "form", "definition": "form/rules", "example": "exchange of vows", "kind": "value", "type": "string" }
+    }
+  },
+  "rivbi": {
+    "name": "avoids",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "avoider", "definition": "one who avoids", "example": "the fugitive", "kind": "ref", "references": "*" },
+      "x2": { "role": "avoided event", "definition": "event escaped", "example": "capture", "kind": "value", "type": "string" },
+      "x3": { "role": "action", "definition": "action of avoidance", "example": "hiding in the woods", "kind": "value", "type": "string" }
+    }
+  },
+  "rokci": {
+    "name": "rock",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rock", "definition": "the rock/stone", "example": "the granite boulder", "kind": "ref", "references": "*" },
+      "x2": { "role": "composition", "definition": "type/composition", "example": "granite", "kind": "value", "type": "string" },
+      "x3": { "role": "location", "definition": "location of origin", "example": "the quarry", "kind": "ref", "references": "*" }
+    }
+  },
+  "romge": {
+    "name": "chrome",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "surface", "definition": "polished metallic surface", "example": "the car bumper", "kind": "ref", "references": "*" },
+      "x2": { "role": "metal", "definition": "metal of the surface", "example": "chromium", "kind": "value", "type": "string" }
+    }
+  },
+  "ropno": {
+    "name": "european",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "reflects European culture", "example": "the cathedral", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of culture", "example": "in its Gothic style", "kind": "value", "type": "string" }
+    }
+  },
+  "rorci": {
+    "name": "procreates",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "progenitor", "definition": "one who begets", "example": "the father", "kind": "ref", "references": "*" },
+      "x2": { "role": "offspring", "definition": "offspring begotten", "example": "the child", "kind": "ref", "references": "*" },
+      "x3": { "role": "coparent", "definition": "the coparent", "example": "the mother", "kind": "ref", "references": "*" }
+    }
+  },
+  "rotsu": {
+    "name": "thick",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "thick object", "example": "the oak plank", "kind": "ref", "references": "*" },
+      "x2": { "role": "dimension", "definition": "dimension of thickness", "example": "front to back", "kind": "value", "type": "string" },
+      "x3": { "role": "standard", "definition": "standard of comparison", "example": "compared to plywood", "kind": "value", "type": "string" }
+    }
+  },
+  "rozgu": {
+    "name": "rose",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "rose", "definition": "the rose flower", "example": "the red rose", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/strain", "example": "hybrid tea rose", "kind": "value", "type": "string" }
+    }
+  },
+  "ruble": {
+    "name": "weak",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "weak one", "definition": "feeble thing/person", "example": "the elderly patient", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property of weakness", "example": "grip strength", "kind": "value", "type": "string" },
+      "x3": { "role": "standard", "definition": "standard of comparison", "example": "compared to a healthy adult", "kind": "value", "type": "string" }
+    }
+  },
+  "rufsu": {
+    "name": "rough",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "rough/coarse-textured thing", "example": "the sandpaper", "kind": "ref", "references": "*" }
+    }
+  },
+  "runme": {
+    "name": "melts",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "thing that melts", "example": "the ice cube", "kind": "ref", "references": "*" },
+      "x2": { "role": "temperature", "definition": "melting temperature", "example": "0 degrees Celsius", "kind": "value", "type": "quantity" },
+      "x3": { "role": "pressure", "definition": "pressure condition", "example": "one atmosphere", "kind": "value", "type": "quantity" }
+    }
+  },
+  "runta": {
+    "name": "dissolves",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "solute", "definition": "thing that dissolves", "example": "the sugar", "kind": "ref", "references": "*" },
+      "x2": { "role": "solvent", "definition": "solvent it dissolves in", "example": "the hot water", "kind": "ref", "references": "*" },
+      "x3": { "role": "solution", "definition": "resulting solution", "example": "sweet tea", "kind": "ref", "references": "*" },
+      "x4": { "role": "conditions", "definition": "conditions of dissolving", "example": "with stirring", "kind": "value", "type": "string" }
+    }
+  },
+  "rupnu": {
+    "name": "dollars",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "amount", "definition": "amount in major money units", "example": "fifty dollars", "kind": "ref", "references": "*" },
+      "x2": { "role": "quantity", "definition": "numeric quantity", "example": "50", "kind": "value", "type": "quantity" },
+      "x3": { "role": "monetary system", "definition": "monetary system", "example": "US dollar", "kind": "value", "type": "string" }
+    }
+  },
+  "rusko": {
+    "name": "russian",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "thing", "definition": "reflects Russian culture", "example": "the novel", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of culture", "example": "in its language", "kind": "value", "type": "string" }
+    }
+  },
+  "rutni": {
+    "name": "artifact",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "artifact", "definition": "the man-made object", "example": "the bronze sword", "kind": "ref", "references": "*" },
+      "x2": { "role": "maker", "definition": "people/culture that made it", "example": "the smith", "kind": "ref", "references": "*" }
+    }
+  }
+}

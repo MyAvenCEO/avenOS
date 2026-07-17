@@ -123,8 +123,13 @@ export class StyleEngine {
 		const cssVars = Object.entries(flatTokens)
 			.map(([name, value]) => `  ${name}: ${value};`)
 			.join('\n')
+		// board 0114 — @container queries are a DEFAULT capability, but the containment lives on the VIEW
+		// ROOT (:host > *:first-child), never on :host itself: inline-size containment on the host made
+		// WebKit (Tauri/WKWebView) shrink it to content width, collapsing every `repeat(auto-fill, …)`
+		// grid to one column. The view root has a definite width (100% of the sized host), so containment
+		// there is layout-safe AND child selectors can @container-query against it.
 		const sanitizedName = containerName.replace(/[^a-zA-Z0-9-_]/g, '-').replace(/-+/g, '-')
-		return `:host {\n  container-type: inline-size;\n  container-name: ${sanitizedName};\n${cssVars}\n}\n`
+		return `:host {\n${cssVars}\n}\n:host > *:first-child {\n  container-type: inline-size;\n  container-name: ${sanitizedName};\n}\n`
 	}
 
 	private compileModifierStyles(

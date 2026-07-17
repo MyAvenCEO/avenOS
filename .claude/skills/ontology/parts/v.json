@@ -1,0 +1,375 @@
+{
+  "vacri": {
+    "name": "air",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "air", "definition": "the quantity of air/atmosphere", "example": "the morning air", "kind": "ref", "references": "*" },
+      "x2": { "role": "planet", "definition": "planet whose atmosphere it is", "example": "Earth", "kind": "ref", "references": "*" },
+      "x3": { "role": "composition", "definition": "gases making up the air", "example": "nitrogen and oxygen", "kind": "value", "type": "string" }
+    }
+  },
+  "vajni": {
+    "name": "important",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "significant thing", "definition": "the important object/event", "example": "the deadline", "kind": "ref", "references": "*" },
+      "x2": { "role": "audience", "definition": "person/event it matters to", "example": "the manager", "kind": "ref", "references": "*" },
+      "x3": { "role": "aspect", "definition": "aspect or reason for importance", "example": "for the launch", "kind": "value", "type": "string" }
+    }
+  },
+  "valsi": {
+    "name": "word",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "word", "definition": "the word/lexical unit", "example": "\"freedom\"", "kind": "value", "type": "string" },
+      "x2": { "role": "meaning", "definition": "what the word means/causes", "example": "the concept of liberty", "kind": "value", "type": "string" },
+      "x3": { "role": "language", "definition": "language of the word", "example": "English", "kind": "value", "type": "string" }
+    }
+  },
+  "vamji": {
+    "name": "value",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "worth", "definition": "the equivalent value/worth", "example": "50 dollars", "kind": "value", "type": "quantity" },
+      "x2": { "role": "item", "definition": "item(s) of value being valued", "example": "the antique vase", "kind": "ref", "references": "*" },
+      "x3": { "role": "beneficiary", "definition": "the one to whom it is worth", "example": "the collector", "kind": "ref", "references": "*" },
+      "x4": { "role": "purpose", "definition": "use/appreciation it has value for", "example": "for resale", "kind": "value", "type": "string" }
+    }
+  },
+  "vamtu": {
+    "name": "vomits",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "vomiter", "definition": "the one who vomits", "example": "the seasick passenger", "kind": "ref", "references": "*" },
+      "x2": { "role": "vomit", "definition": "what is regurgitated", "example": "the spoiled meal", "kind": "value", "type": "string" }
+    }
+  },
+  "vanbi": {
+    "name": "environment",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "surroundings", "definition": "the environment/context/ambience", "example": "the bustling office", "kind": "ref", "references": "*" },
+      "x2": { "role": "subject", "definition": "what is surrounded by it", "example": "the new employee", "kind": "ref", "references": "*" }
+    }
+  },
+  "vanci": {
+    "name": "evening",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "evening", "definition": "the evening period", "example": "a quiet evening", "kind": "value", "type": "date-time" },
+      "x2": { "role": "day", "definition": "day the evening belongs to", "example": "Friday", "kind": "value", "type": "date-time" },
+      "x3": { "role": "location", "definition": "place the evening occurs", "example": "Tokyo", "kind": "ref", "references": "*" }
+    }
+  },
+  "vanju": {
+    "name": "wine",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "wine", "definition": "the quantity of wine", "example": "a glass of Merlot", "kind": "ref", "references": "*" },
+      "x2": { "role": "fruit", "definition": "fruit/grapes it is made from", "example": "Cabernet grapes", "kind": "ref", "references": "*" }
+    }
+  },
+  "vasru": {
+    "name": "contains",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "container", "definition": "the vessel that holds contents", "example": "the bottle", "kind": "ref", "references": "*" },
+      "x2": { "role": "contents", "definition": "what is contained within", "example": "the water", "kind": "ref", "references": "*" }
+    }
+  },
+  "vasxu": {
+    "name": "breathes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "breather", "definition": "the one who breathes", "example": "the swimmer", "kind": "ref", "references": "*" },
+      "x2": { "role": "gas", "definition": "gas that is breathed", "example": "oxygen", "kind": "value", "type": "string" }
+    }
+  },
+  "vecnu": {
+    "name": "sells",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "seller", "definition": "the one who sells/vends", "example": "the merchant", "kind": "ref", "references": "*" },
+      "x2": { "role": "goods", "definition": "goods/service sold", "example": "a used car", "kind": "ref", "references": "*" },
+      "x3": { "role": "buyer", "definition": "the one who buys", "example": "the customer", "kind": "ref", "references": "*" },
+      "x4": { "role": "price", "definition": "amount/cost of the sale", "example": "12000 dollars", "kind": "value", "type": "quantity" }
+    }
+  },
+  "venfu": {
+    "name": "avenges",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "avenger", "definition": "the one taking revenge", "example": "the wronged brother", "kind": "ref", "references": "*" },
+      "x2": { "role": "target", "definition": "person retaliated against", "example": "the betrayer", "kind": "ref", "references": "*" },
+      "x3": { "role": "wrong", "definition": "the wrong being avenged", "example": "the broken promise", "kind": "value", "type": "string" },
+      "x4": { "role": "vengeance", "definition": "the act of vengeance", "example": "exposing the secret", "kind": "value", "type": "string" }
+    }
+  },
+  "vensa": {
+    "name": "spring",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "spring", "definition": "the springtime season", "example": "an early spring", "kind": "value", "type": "date-time" },
+      "x2": { "role": "year", "definition": "year of the spring", "example": "2026", "kind": "value", "type": "date-time" },
+      "x3": { "role": "location", "definition": "place the spring occurs", "example": "northern Europe", "kind": "ref", "references": "*" }
+    }
+  },
+  "verba": {
+    "name": "child",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "child", "definition": "the young person/juvenile", "example": "a six-year-old", "kind": "ref", "references": "*" },
+      "x2": { "role": "age", "definition": "age of the child", "example": "6 years", "kind": "value", "type": "quantity" },
+      "x3": { "role": "standard", "definition": "standard of immaturity", "example": "by legal age", "kind": "value", "type": "string" }
+    }
+  },
+  "vibna": {
+    "name": "vagina",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "vagina", "definition": "the vagina body-part", "example": "the vagina", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "whose body-part it is", "example": "the patient", "kind": "ref", "references": "*" }
+    }
+  },
+  "vidni": {
+    "name": "monitor",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "screen", "definition": "the video monitor/screen", "example": "a 27-inch display", "kind": "ref", "references": "*" },
+      "x2": { "role": "function", "definition": "function it serves", "example": "showing the dashboard", "kind": "value", "type": "string" }
+    }
+  },
+  "vidru": {
+    "name": "virus",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "virus", "definition": "the virus", "example": "the influenza virus", "kind": "ref", "references": "*" },
+      "x2": { "role": "species", "definition": "species/defining property", "example": "influenza A", "kind": "value", "type": "string" },
+      "x3": { "role": "host", "definition": "what it can infect", "example": "human lungs", "kind": "ref", "references": "*" }
+    }
+  },
+  "vifne": {
+    "name": "fresh",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "fresh thing", "definition": "the fresh/unspoiled item", "example": "the just-picked lettuce", "kind": "ref", "references": "*" }
+    }
+  },
+  "vikmi": {
+    "name": "excretes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "body", "definition": "the body that excretes", "example": "the kidney", "kind": "ref", "references": "*" },
+      "x2": { "role": "waste", "definition": "the waste excreted", "example": "urine", "kind": "value", "type": "string" },
+      "x3": { "role": "source", "definition": "source of the waste", "example": "the bloodstream", "kind": "ref", "references": "*" },
+      "x4": { "role": "route", "definition": "means/route of excretion", "example": "via the urethra", "kind": "value", "type": "string" }
+    }
+  },
+  "viknu": {
+    "name": "viscous",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "viscous thing", "definition": "the thick/viscous substance", "example": "the honey", "kind": "ref", "references": "*" },
+      "x2": { "role": "conditions", "definition": "conditions of viscosity", "example": "at room temperature", "kind": "value", "type": "string" }
+    }
+  },
+  "vimcu": {
+    "name": "removes",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "remover", "definition": "the one who removes/subtracts", "example": "the editor", "kind": "ref", "references": "*" },
+      "x2": { "role": "removed", "definition": "what is taken away", "example": "the duplicate row", "kind": "ref", "references": "*" },
+      "x3": { "role": "source", "definition": "where it is removed from", "example": "the table", "kind": "ref", "references": "*" },
+      "x4": { "role": "remainder", "definition": "result/remnant left", "example": "the cleaned dataset", "kind": "ref", "references": "*" }
+    }
+  },
+  "vindu": {
+    "name": "poison",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "poison", "definition": "the poison/toxin", "example": "the snake venom", "kind": "ref", "references": "*" },
+      "x2": { "role": "victim", "definition": "what it is toxic to", "example": "the prey", "kind": "ref", "references": "*" }
+    }
+  },
+  "vinji": {
+    "name": "airplane",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "airplane", "definition": "the aircraft", "example": "a Boeing 737", "kind": "ref", "references": "*" },
+      "x2": { "role": "payload", "definition": "passengers/cargo carried", "example": "180 passengers", "kind": "ref", "references": "*" },
+      "x3": { "role": "propulsion", "definition": "means of propulsion", "example": "jet engines", "kind": "value", "type": "string" }
+    }
+  },
+  "vipsi": {
+    "name": "deputy",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "deputy", "definition": "the deputy/vice/subordinate", "example": "the vice president", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect/principle of subordination", "example": "in operations", "kind": "value", "type": "string" },
+      "x3": { "role": "principal", "definition": "the principal served", "example": "the president", "kind": "ref", "references": "*" }
+    }
+  },
+  "virnu": {
+    "name": "brave",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "brave one", "definition": "the courageous one", "example": "the firefighter", "kind": "ref", "references": "*" },
+      "x2": { "role": "activity", "definition": "activity shown bravery in", "example": "entering the burning building", "kind": "value", "type": "string" },
+      "x3": { "role": "standard", "definition": "standard of bravery", "example": "by community standards", "kind": "value", "type": "string" }
+    }
+  },
+  "viska": {
+    "name": "sees",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "viewer", "definition": "the one who sees", "example": "the observer", "kind": "ref", "references": "*" },
+      "x2": { "role": "seen", "definition": "what is perceived visually", "example": "the sunset", "kind": "ref", "references": "*" },
+      "x3": { "role": "conditions", "definition": "conditions of viewing", "example": "in dim light", "kind": "value", "type": "string" }
+    }
+  },
+  "vitci": {
+    "name": "irregular",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "irregular thing", "definition": "the intermittent thing", "example": "the heartbeat", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "property/aspect of irregularity", "example": "in timing", "kind": "value", "type": "string" }
+    }
+  },
+  "vitke": {
+    "name": "visits",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "guest", "definition": "the visitor/guest", "example": "the tourist", "kind": "ref", "references": "*" },
+      "x2": { "role": "host", "definition": "the one being visited", "example": "the host family", "kind": "ref", "references": "*" },
+      "x3": { "role": "venue", "definition": "place/event of the visit", "example": "the museum", "kind": "ref", "references": "*" }
+    }
+  },
+  "vitno": {
+    "name": "permanent",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "permanent thing", "definition": "the lasting/eternal thing", "example": "the mountain", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property that is permanent", "example": "its location", "kind": "value", "type": "string" },
+      "x3": { "role": "standard", "definition": "standard/time-span of permanence", "example": "over millennia", "kind": "value", "type": "string" }
+    }
+  },
+  "vlagi": {
+    "name": "vulva",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "vulva", "definition": "the vulva body-part", "example": "the vulva", "kind": "ref", "references": "*" },
+      "x2": { "role": "body", "definition": "whose body-part it is", "example": "the patient", "kind": "ref", "references": "*" }
+    }
+  },
+  "vlile": {
+    "name": "violent",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "violent event", "definition": "the act/state of violence", "example": "the riot", "kind": "ref", "references": "*" }
+    }
+  },
+  "vlina": {
+    "name": "disjunction",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "disjunction", "definition": "the logical alternation", "example": "the OR clause", "kind": "value", "type": "string" },
+      "x2": { "role": "first claim", "definition": "first alternative proposition", "example": "the door is open", "kind": "value", "type": "boolean" },
+      "x3": { "role": "second claim", "definition": "second alternative proposition", "example": "the window is open", "kind": "value", "type": "boolean" }
+    }
+  },
+  "vlipa": {
+    "name": "powerful",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "powerful one", "definition": "the one with power", "example": "the CEO", "kind": "ref", "references": "*" },
+      "x2": { "role": "outcome", "definition": "what it can bring about", "example": "a company-wide change", "kind": "value", "type": "string" },
+      "x3": { "role": "conditions", "definition": "conditions of the power", "example": "with board approval", "kind": "value", "type": "string" }
+    }
+  },
+  "vofli": {
+    "name": "flies",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "flier", "definition": "the one that flies", "example": "the eagle", "kind": "ref", "references": "*" },
+      "x2": { "role": "lift means", "definition": "lifting/propulsion means", "example": "flapping wings", "kind": "value", "type": "string" }
+    }
+  },
+  "voksa": {
+    "name": "voice",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "voice", "definition": "the voice/speech sound", "example": "a deep baritone", "kind": "value", "type": "string" },
+      "x2": { "role": "speaker", "definition": "individual whose voice it is", "example": "the narrator", "kind": "ref", "references": "*" }
+    }
+  },
+  "vorme": {
+    "name": "doorway",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "doorway", "definition": "the doorway/gateway/access", "example": "the front door", "kind": "ref", "references": "*" },
+      "x2": { "role": "side a", "definition": "one space it connects", "example": "the hallway", "kind": "ref", "references": "*" },
+      "x3": { "role": "side b", "definition": "the other space it connects", "example": "the living room", "kind": "ref", "references": "*" },
+      "x4": { "role": "structure", "definition": "structure it belongs to", "example": "the house", "kind": "ref", "references": "*" }
+    }
+  },
+  "vraga": {
+    "name": "lever",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "lever", "definition": "the lever tool", "example": "the crowbar", "kind": "ref", "references": "*" },
+      "x2": { "role": "function", "definition": "action it performs", "example": "prying open the crate", "kind": "value", "type": "string" },
+      "x3": { "role": "fulcrum", "definition": "the fulcrum pivot point", "example": "the edge of the box", "kind": "ref", "references": "*" },
+      "x4": { "role": "arm", "definition": "the lever arm", "example": "the steel bar", "kind": "ref", "references": "*" }
+    }
+  },
+  "vreji": {
+    "name": "record",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "record", "definition": "the record/log of data", "example": "the audit log", "kind": "ref", "references": "*" },
+      "x2": { "role": "data", "definition": "the data/facts recorded", "example": "the login timestamps", "kind": "value", "type": "string" },
+      "x3": { "role": "subject", "definition": "object/event the record is about", "example": "the user session", "kind": "ref", "references": "*" },
+      "x4": { "role": "medium", "definition": "medium it is preserved in", "example": "a database", "kind": "value", "type": "string" }
+    }
+  },
+  "vreta": {
+    "name": "reclines",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "recliner", "definition": "the one lying/resting", "example": "the patient", "kind": "ref", "references": "*" },
+      "x2": { "role": "surface", "definition": "what is reclined on", "example": "the couch", "kind": "ref", "references": "*" }
+    }
+  },
+  "vrici": {
+    "name": "miscellaneous",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "assortment", "definition": "the various/assorted set", "example": "a box of odds and ends", "kind": "ref", "references": "*" },
+      "x2": { "role": "property", "definition": "property they vary in", "example": "in shape and color", "kind": "value", "type": "string" }
+    }
+  },
+  "vrude": {
+    "name": "virtuous",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "virtuous one", "definition": "the moral/saintly one", "example": "the volunteer", "kind": "ref", "references": "*" },
+      "x2": { "role": "standard", "definition": "standard of virtue", "example": "by ethical norms", "kind": "value", "type": "string" }
+    }
+  },
+  "vrusi": {
+    "name": "taste",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "flavor", "definition": "the taste/flavor", "example": "a bitter taste", "kind": "value", "type": "string" },
+      "x2": { "role": "source", "definition": "what emits the flavor", "example": "the coffee", "kind": "ref", "references": "*" }
+    }
+  },
+  "vukro": {
+    "name": "ukrainian",
+    "source": "lojban",
+    "places": {
+      "x1": { "role": "ukrainian thing", "definition": "what reflects Ukrainian culture", "example": "the folk dance", "kind": "ref", "references": "*" },
+      "x2": { "role": "aspect", "definition": "aspect of Ukrainian-ness", "example": "in cuisine", "kind": "value", "type": "string" }
+    }
+  }
+}

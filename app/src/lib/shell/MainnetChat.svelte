@@ -10,22 +10,21 @@ import {
 	writeSrcFiles
 } from '$lib/composer/active-spark'
 import Composer from '$lib/composer/Composer.svelte'
+import { enterSkill } from '$lib/data/client'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { pendingMainnetFileDrop } from '$lib/intents/global-file-drop'
 import { consumeSse } from '$lib/net/sse'
-import AddressbookVibe from '$lib/shell/AddressbookVibe.svelte'
-import BookingsVibe from '$lib/shell/BookingsVibe.svelte'
-import BookkeepingVibe from '$lib/shell/BookkeepingVibe.svelte'
-import DocCompareVibe from '$lib/shell/DocCompareVibe.svelte'
-import FinanceVibe from '$lib/shell/FinanceVibe.svelte'
-import InvoiceBookingVibe from '$lib/shell/InvoiceBookingVibe.svelte'
-import InvoiceCreateVibe from '$lib/shell/InvoiceCreateVibe.svelte'
-import InvoiceMatchVibe from '$lib/shell/InvoiceMatchVibe.svelte'
-import RunsView from '$lib/shell/RunsView.svelte'
-import SkillsView from '$lib/shell/SkillsView.svelte'
+import ActorDetailAside from '$lib/shell/ActorDetailAside.svelte'
+import FlowStatusStrip from '$lib/shell/FlowStatusStrip.svelte'
+import SkillFlowView from '$lib/shell/SkillFlowView.svelte'
+import SkillsUsedAside, { type SkillUse } from '$lib/shell/SkillsUsedAside.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
-import TransactionsVibe from '$lib/shell/TransactionsVibe.svelte'
+import VibeCard from '$lib/shell/VibeCard.svelte'
+
+// board 0113 — ANY vibe schema renders from its DB vibe.* rows through the generic VibeCard host (no
+// client allow-list: a config-minted skill's card works with zero client change; a schema without rows
+// gets VibeCard's soft error). Only `todos` (live interactive list) and `composer` stay special-cased.
 
 type ChatMessage = {
 	id: number
@@ -36,15 +35,46 @@ type ChatMessage = {
 	vibe?: string
 	/** Classification/metadata payload for ephemeral vibes (bookkeeping). */
 	vibeData?: Record<string, unknown>
+	/** The stage-history entry this badge selects (board 0118). */
+	vibeRef?: number
 }
+
+// board 0118 — the STAGE model (Samuel): no continuous card stream. ONE current vibe fills the
+// stage (each new vibe REPLACES it); the right rail scrolls the history; chat is a bottom overlay
+// card whose history shows minimal badges instead of inline vibe cards.
+type VibeEntry = { id: number; schema: string; data?: Record<string, unknown> }
 
 type SessionRow = { id: string; title: string }
 
 let messages = $state<ChatMessage[]>([])
+let vibeHistory = $state<VibeEntry[]>([])
+let currentVibeId = $state<number | null>(null)
+const currentVibe = $derived(vibeHistory.find((v) => v.id === currentVibeId) ?? null)
+// board 0118b — the overlay shows ONLY the latest exchange bubble (badges are stage/rail concerns).
+const lastMessage = $derived([...messages].reverse().find((m) => !m.vibe) ?? null)
+// board 0119f — TOAST: the bubble stays while a turn streams, then auto-hides 2.5s after settling.
+let bubbleVisible = $state(false)
+$effect(() => {
+	const m = lastMessage
+	if (!m) {
+		bubbleVisible = false
+		return
+	}
+	bubbleVisible = true
+	if (m.pending || busy) return // keep while the turn is still streaming/working
+	const timer = setTimeout(() => (bubbleVisible = false), 2500)
+	return () => clearTimeout(timer)
+})
 let busy = $state(false)
-let sessions = $state<SessionRow[]>([])
 let currentSessionId = $state<string | null>(null)
 let nextId = 0
+/** Push a vibe onto the stage (+ history) and return its id for the chat badge. board 0118. */
+function pushVibe(schema: string, data?: Record<string, unknown>): number {
+	const id = nextId++
+	vibeHistory = [...vibeHistory, { id, schema, data }]
+	currentVibeId = id
+	return id
+}
 let scrollEl = $state<HTMLDivElement | null>(null)
 let contentEl = $state<HTMLDivElement | null>(null)
 let initialized = false
@@ -67,11 +97,6 @@ $effect(() => {
 	void tick().then(() => ref.openWithFiles(files))
 	pendingMainnetFileDrop.set(null)
 })
-// Session switcher is collapsed by default so the conversation is centered + full-width; a tiny
-// toggle button opens the chats viewer. board 0055.
-let showSessions = $state(false)
-// Main-area sub-tabs: the conversation vs the Skills (flow/recipe) view. board 0083.
-let mainTab = $state<'chat' | 'skills' | 'runs'>('chat')
 // The active spark's current src/ files (path→content), loaded into the AI context before each send
 // so the edit_website tool can diff/create across them (sent as the body's `publicFiles`). board 0057.
 let publicFiles: Record<string, string> = {}
@@ -86,6 +111,44 @@ type ToolStatus = {
 	startedAt?: number
 }
 let toolActivity = $state<ToolStatus[]>([])
+// board 0118d — the routed skill of the current turn (from the dispatch chip) drives the top
+// flow-status strip: the skill's flow with live per-step states, so the user knows where we are.
+const routedSkill = $derived(
+	toolActivity
+		.find((tl) => tl.id === 'dispatch')
+		?.detail?.replace('→', '')
+		.trim() ?? null
+)
+// board 0119b — main-area tabs: DISPLAY (the vibe stage) | FLOWS (placeholder, not wired yet).
+let mainTab = $state<'display' | 'flows'>('display')
+// board 0118f — recent skills (left aside) + a pinned flow selection (right aside override).
+let skillUses = $state<SkillUse[]>([])
+let pinnedSkill = $state<string | null>(null)
+const asideSkill = $derived(pinnedSkill ?? routedSkill)
+// board 0119n — the flow node selected in the FLOWS tab drives the right detail aside.
+let flowActor = $state<string | null>(null)
+let flowActorSkill = $state<string | null>(null)
+// the selected flow NODE — carries step-level overrides (vibe/hitl) over the shared actor config.
+let flowNode = $state<{ id?: string; vibe?: string; hitl?: boolean } | null>(null)
+// board 0118e — EDIT MODE = a SKILLIFY-FAMILY tool is running, wherever the router landed
+// (Samuel: improve_skill on banking IS skillify work — the tool rides on the target skill only for
+// routing resilience). Design tools + promotion steps + the upgrade seams; viewing (mockups) and
+// ordinary data turns never trigger it.
+const SKILLIFY_TOOLS = new Set([
+	'create_mockup',
+	'edit_mockup',
+	'plan_app',
+	'mint_data',
+	'wire_actors',
+	'seed_data',
+	'promote',
+	'improve_skill',
+	'sync_actors',
+	'connect_skills'
+])
+const editingSkill = $derived(
+	toolActivity.some((tl) => tl.status === 'running' && SKILLIFY_TOOLS.has(tl.name))
+)
 // Live GLM edit stream (reasoning + diff text) for the current turn, shown in a scrolling panel so
 // the user sees what the website model is actually writing — not just "thinking". board 0056.
 let editStream = $state('')
@@ -106,6 +169,26 @@ function upsertTool(tl: ToolStatus): void {
 	} else {
 		const startedAt = toolActivity[i].startedAt
 		toolActivity = toolActivity.map((x, j) => (j === i ? { ...tl, startedAt } : x))
+	}
+	// board 0118f — the LEFT aside's "latest skills utilized": one row per skill, newest first.
+	if (tl.id === 'dispatch' && tl.detail.startsWith('→')) {
+		const skill = tl.detail.replace('→', '').trim()
+		if (skill) {
+			pinnedSkill = null // a new turn unpins any manual flow selection
+			skillUses = [
+				{ skill, at: Date.now(), status: 'running' as const },
+				...skillUses.filter((u) => u.skill !== skill)
+			].slice(0, 8)
+			// board 0119 — SKILL MANIFEST: ground the stage in the skill's DEFAULT view first (its
+			// context), then the actual actor's card replaces it. If a tool vibe already landed for
+			// this turn (fast tools), the default must NOT overwrite it.
+			const before = vibeHistory.length
+			void enterSkill(skill)
+				.then((view) => {
+					if (view && vibeHistory.length === before) pushVibe(view.vibe, view.data)
+				})
+				.catch(() => {})
+		}
 	}
 }
 // Ticks every second while a tool is running, to drive the live elapsed-time counter.
@@ -141,11 +224,21 @@ function removeHitl(id: string): void {
 /** Action-specific confirm/decline button labels (delete vs publish vs …) + the confirm intent. */
 function hitlVerb(tool: string): { confirm: string; decline: string; danger: boolean } {
 	if (tool === 'deploy_website') return { confirm: 'Publish', decline: 'Cancel', danger: false }
+	if (tool === 'promote') return { confirm: 'Live schalten', decline: 'Abbrechen', danger: false }
+	if (tool === 'mutate') return { confirm: 'Apply', decline: 'Cancel', danger: true } // board 0101
 	return { confirm: 'Delete', decline: 'Keep', danger: true }
 }
 /** Append a short assistant note (e.g. the publish result) into the conversation. */
 function appendNote(text: string): void {
 	messages = [...messages, { id: nextId++, role: 'assistant', text }]
+}
+/** board 0099 — the delete actor: flow a todos-deleted summary card showing what was removed. */
+function appendVibe(vibe: string, vibeData?: Record<string, unknown>): void {
+	const ref = pushVibe(vibe, vibeData)
+	messages = [
+		...messages,
+		{ id: nextId++, role: 'assistant', text: '', vibe, vibeData, vibeRef: ref }
+	]
 	scrollToBottom()
 }
 function declineHitl(req: HitlRequest): void {
@@ -167,13 +260,28 @@ async function confirmHitl(req: HitlRequest): Promise<void> {
 		})
 		const data = (await res.json().catch(() => null)) as {
 			ok?: boolean
-			result?: { url?: string; deployed?: number }
+			result?: { url?: string; deployed?: number; vibe?: string; data?: Record<string, unknown> }
 			error?: string
 		} | null
 		if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`)
 		if (req.tool === 'deploy_website') {
 			appendNote(`✅ Published — live at ${data.result?.url ?? 'www.next.aven.ceo'}`)
+		} else if (req.tool === 'promote') {
+			appendNote(`✅ „${String((req.action as { app?: string }).app ?? 'Skill')}" ist live.`)
+			void queryClient.invalidateQueries({ queryKey: ['flows'] })
+		} else if (req.tool === 'mutate') {
+			// board 0101 — a confirmed structural mutation: flow the diff card, then refresh the live data.
+			if (data.result?.vibe === 'mutation-result') appendVibe('mutation-result', data.result.data)
+			void queryClient.invalidateQueries({ queryKey: ['data'] })
 		} else {
+			// board 0099 — a confirmed todos delete streams a todos-deleted card listing EVERY removed task
+			// (a batch delete removes many), then refreshes the live list. Other deletes just refresh.
+			if (req.action.schema === 'todos') {
+				const items = Array.isArray(req.action._deleted)
+					? (req.action._deleted as { id: string; title: string }[])
+					: []
+				appendVibe('todos-deleted', { items })
+			}
 			void queryClient.invalidateQueries({ queryKey: ['data'] })
 		}
 	} catch (e) {
@@ -217,8 +325,9 @@ function scrollToBottom(): void {
 	})
 }
 
-// Refresh the user's session list (most-recent first) for the left switcher.
-async function refreshSessions(): Promise<void> {
+// Load the single rolling conversation (the most-recent server session) into the view. There is no
+// session switcher — one continuous context, hydrated on mount so it survives restarts. board 0111.
+async function loadRollingSession(): Promise<void> {
 	if (!AI_BASE) return
 	const token = getBearerToken()
 	if (!token) return
@@ -227,12 +336,11 @@ async function refreshSessions(): Promise<void> {
 			credentials: 'include',
 			headers: { Authorization: `Bearer ${token}` }
 		})
-		if (res.ok) {
-			const { sessions: rows } = (await res.json()) as { sessions: SessionRow[] }
-			sessions = rows ?? []
-		}
+		if (!res.ok) return
+		const { sessions: rows } = (await res.json()) as { sessions: SessionRow[] }
+		if (rows?.length) await loadSessionMessages(rows[0].id)
 	} catch {
-		/* keep the current list on failure */
+		/* start fresh on failure */
 	}
 }
 
@@ -268,7 +376,15 @@ async function loadSessionMessages(id: string): Promise<void> {
 						/* malformed payload — render the empty card */
 					}
 				}
-				return { id: nextId++, role: 'assistant' as const, text: '', vibe: schema, vibeData }
+				const ref = pushVibe(schema, vibeData)
+				return {
+					id: nextId++,
+					role: 'assistant' as const,
+					text: '',
+					vibe: schema,
+					vibeData,
+					vibeRef: ref
+				}
 			}
 			return {
 				id: nextId++,
@@ -282,26 +398,10 @@ async function loadSessionMessages(id: string): Promise<void> {
 	}
 }
 
-/** Switch to a session from the left list. */
-function selectSession(id: string): void {
-	if (busy || id === currentSessionId) return
-	void loadSessionMessages(id)
-}
-
-/** Start a new conversation: next message creates a fresh server-side session. */
-function newChat(): void {
-	if (busy) return
-	messages = []
-	currentSessionId = null
-}
-
 $effect(() => {
 	if (initialized) return
 	initialized = true
-	void (async () => {
-		await refreshSessions()
-		if (sessions.length > 0) await loadSessionMessages(sessions[0].id)
-	})()
+	void loadRollingSession()
 })
 
 // Stick to the bottom while the conversation grows. A ResizeObserver on the message column fires
@@ -480,10 +580,14 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 	// vibeData carries ephemeral classification payload for the bookkeeping vibe. board 0063.
 	const turnVibes = new Set<string>()
 	const insertVibe = (schema: string, data?: Record<string, unknown>): void => {
-		if (turnVibes.has(schema)) return
-		turnVibes.add(schema)
+		const dk = `${schema}\n${data === undefined ? '' : JSON.stringify(data)}`
+		if (turnVibes.has(dk)) return
+		turnVibes.add(dk)
 		const wantsPreview = schema === 'bookkeeping' || schema === 'doc-compare'
-		const vibeData: Record<string, unknown> =
+		// board 0115 — data stays UNCOERCED (no `?? {}`): a data-less vibe (a mockup show/mint) must reach
+		// VibeCard as undefined so it renders the vibe's EXAMPLE source — `{}` fed the identity mapper an
+		// empty state and rendered a BLANK card on the live turn (while the reloaded history was fine).
+		const vibeData: Record<string, unknown> | undefined =
 			wantsPreview && data
 				? {
 						...data,
@@ -491,8 +595,17 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 							? { fileUrl: previewImage.dataUrl, mimeType: previewImage.mimeType }
 							: {})
 					}
-				: (data ?? {})
-		const card: ChatMessage = { id: nextId++, role: 'assistant', text: '', vibe: schema, vibeData }
+				: data
+		// board 0118 — the vibe goes to the STAGE; the chat stream gets only the badge.
+		const ref = pushVibe(schema, vibeData)
+		const card: ChatMessage = {
+			id: nextId++,
+			role: 'assistant',
+			text: '',
+			vibe: schema,
+			vibeData,
+			vibeRef: ref
+		}
 		const idx = messages.findIndex((m) => m.id === pendingId)
 		messages =
 			idx < 0 ? [...messages, card] : [...messages.slice(0, idx), card, ...messages.slice(idx)]
@@ -530,8 +643,12 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 		)
 	} finally {
 		busy = false
+		// settle the newest skill-use row: error if any tool errored this turn, else success.
+		const turnErrored = toolActivity.some((tl) => tl.status === 'error')
+		skillUses = skillUses.map((u, i) =>
+			i === 0 && u.status === 'running' ? { ...u, status: turnErrored ? 'error' : 'success' } : u
+		)
 		scrollToBottom()
-		void refreshSessions()
 		void queryClient.invalidateQueries({ queryKey: ['usage'] })
 		void queryClient.invalidateQueries({ queryKey: ['data'] })
 	}
@@ -550,298 +667,183 @@ function handleTranscribeError(message: string): void {
 </script>
 
 <div class="flex min-h-0 flex-1 bg-background">
-	<!-- Left: session switcher — collapsed by default, opened by the tiny "Chats" toggle -->
-	{#if showSessions}
-		<aside
-			class="border-border flex w-56 shrink-0 flex-col border-r pt-[max(0.75rem,env(safe-area-inset-top))]"
+	<!-- board 0118 — THE STAGE: one current vibe, full width/height; each new vibe replaces it. -->
+	<div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+		<SkillsUsedAside
+			uses={skillUses}
+			selectedSkill={asideSkill}
+			onSelect={(skill) => {
+				pinnedSkill = skill
+				// board 0119 — selecting a skill ENTERS it: the stage shows its default view.
+				void enterSkill(skill)
+					.then((view) => {
+						if (view) pushVibe(view.vibe, view.data)
+					})
+					.catch(() => {})
+			}}
+		/>
+		{#if asideSkill && mainTab !== 'flows'}
+			<FlowStatusStrip skillId={asideSkill} {toolActivity} nowMs={nowTick} />
+		{/if}
+		{#if editingSkill}
+			<!-- brand-gold (logo star #DEA657) 4px ROUNDED outline around the main content area only:
+			     skillify is editing a skill right now. -->
+			<div
+				class="pointer-events-none absolute top-8 right-2 bottom-2 left-2 z-[70] rounded-[var(--radius-xl)] md:right-[15.5rem] md:left-[15.5rem]"
+				style="box-shadow: inset 0 0 0 3px #DEA657"
+			></div>
+		{/if}
+		<!-- board 0120 — on mobile (no side asides) the bar gets a SOLID background so the vibe stage
+		     scrolls cleanly BELOW it instead of showing through behind the switcher. Desktop keeps the
+		     transparent overlay (the stage is scoped between the two asides there). -->
+		<div
+			class="bg-background pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center border-b border-border/40 md:border-0 md:bg-transparent"
 		>
-			<div class="flex items-center gap-1.5 px-3 pb-2">
+			<div
+				class="font-display pointer-events-auto flex items-center gap-2 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-1.5 text-[10px] font-bold tracking-wider uppercase"
+			>
 				<button
 					type="button"
-					class="border-border hover:bg-card flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius)] border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40"
-					onclick={newChat}
-					disabled={busy || (messages.length === 0 && currentSessionId === null)}
+					class="transition-opacity hover:opacity-80 {mainTab === 'display'
+						? 'opacity-95'
+						: 'opacity-40'}"
+					onclick={() => (mainTab = 'display')}
 				>
-					+ {t('mainnet.chat.newChat')}
+					DISPLAY
 				</button>
+				<span class="select-none opacity-25" aria-hidden="true">|</span>
 				<button
 					type="button"
-					class="text-muted-foreground hover:text-foreground hover:bg-card rounded-[var(--radius)] px-2 py-1.5 text-xs transition-colors"
-					onclick={() => (showSessions = false)}
-					aria-label="Close chats"
-					title="Close"
+					class="transition-opacity hover:opacity-80 {mainTab === 'flows'
+						? 'opacity-95'
+						: 'opacity-40'}"
+					onclick={() => (mainTab = 'flows')}
 				>
-					✕
+					FLOWS
 				</button>
 			</div>
-			<div class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-				{#if sessions.length === 0}
-					<p class="text-muted-foreground px-2 py-2 text-[11px] leading-relaxed">
-						{t('mainnet.chat.noSessions')}
-					</p>
-				{/if}
-				{#each sessions as s (s.id)}
-					<button
-						type="button"
-						class="mb-0.5 block w-full truncate rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {s.id ===
-					currentSessionId
-						? 'bg-primary/10 text-foreground font-medium'
-						: 'text-muted-foreground hover:bg-card'}"
-						title={s.title}
-						onclick={() => selectSession(s.id)}
-						disabled={busy}
-					>
-						{s.title || t('mainnet.chat.untitled')}
-					</button>
-				{/each}
-			</div>
-		</aside>
-	{/if}
-
-	<!-- Right: the conversation (truly centered when the switcher is collapsed) -->
-	<div class="flex min-h-0 min-w-0 flex-1 flex-col pt-2">
-		<!-- Chat | Skills sub-tabs for the main view area. board 0083. -->
-		<div class="border-border flex shrink-0 gap-1 border-b px-4 pb-1">
-			<button
-				type="button"
-				class="rounded-[var(--radius)] px-2.5 py-1 text-[13px] transition-colors {mainTab === 'chat'
-					? 'bg-primary/10 text-foreground font-medium'
-					: 'text-muted-foreground hover:bg-card'}"
-				onclick={() => (mainTab = 'chat')}
-			>
-				{t('mainnet.nav.chat')}
-			</button>
-			<button
-				type="button"
-				class="rounded-[var(--radius)] px-2.5 py-1 text-[13px] transition-colors {mainTab === 'skills'
-					? 'bg-primary/10 text-foreground font-medium'
-					: 'text-muted-foreground hover:bg-card'}"
-				onclick={() => (mainTab = 'skills')}
-			>
-				{t('mainnet.skills.tab')}
-			</button>
-			<button
-				type="button"
-				class="rounded-[var(--radius)] px-2.5 py-1 text-[13px] transition-colors {mainTab === 'runs'
-					? 'bg-primary/10 text-foreground font-medium'
-					: 'text-muted-foreground hover:bg-card'}"
-				onclick={() => (mainTab = 'runs')}
-			>
-				{t('mainnet.runs.tab')}
-			</button>
 		</div>
-		{#if mainTab === 'skills'}
-			<!-- No scroll here: SkillsView fills the area and each of its columns scrolls on its own. -->
-			<div class="flex min-h-0 min-w-0 flex-1 p-4">
-				<SkillsView containerName="aven-vibes-skills-tab" />
-			</div>
-		{:else if mainTab === 'runs'}
-			<div class="flex min-h-0 min-w-0 flex-1 p-4">
-				<RunsView containerName="aven-vibes-runs-tab" />
-			</div>
-		{:else}
-			{#if !showSessions}
-				<div class="shrink-0 px-4 pb-1">
-					<button
-						type="button"
-						class="text-muted-foreground hover:text-foreground hover:bg-card inline-flex items-center gap-1.5 rounded-[var(--radius)] px-2 py-1 text-xs transition-colors"
-						onclick={() => (showSessions = true)}
-						title="Open chats"
-					>
-						<svg
-							width="15"
-							height="15"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
+		<!-- board 0119d — the stage content is SCOPED to the inner column between the two asides
+		     (md+): wide vibes (the website composer) lay out inside it instead of underneath the
+		     overlay cards. Mobile keeps the plain padding (asides hidden there). -->
+		<div
+			class="min-h-0 flex-1 overflow-y-auto px-6 pt-[max(2.75rem,calc(env(safe-area-inset-top)+2.5rem))] md:pt-9 md:pl-[15.5rem] {mainTab === 'flows'
+				? 'pb-11 md:pr-3'
+				: 'md:pr-[15.5rem]'}"
+			style={mainTab === 'flows' ? '' : 'padding-bottom: 11rem'}
+		>
+			{#if mainTab === 'flows'}
+				<div class="flex h-full min-h-0 gap-3">
+					<div class="min-w-0 flex-1 basis-1/2">
+						<SkillFlowView
+							skillId={asideSkill}
+							onNodeSelect={(actor, inSkill, node) => {
+								flowActor = actor
+								flowActorSkill = inSkill
+								flowNode = node ?? null
+							}}
+						/>
+					</div>
+					<div class="hidden min-w-0 flex-1 basis-1/2 md:block">
+						<ActorDetailAside
+							skillId={flowActorSkill ?? asideSkill}
+							actorName={flowActor}
+							node={flowNode}
+						/>
+					</div>
+				</div>
+			{:else if currentVibe}
+				{#key currentVibe.id}
+					{#if currentVibe.schema === 'todos'}
+						<div class="mx-auto w-full max-w-[64rem]">
+							<TodosVibe
+								containerName={`aven-vibes-stage-${currentVibe.id}`}
+								filter={currentVibe.data?.filter as
+									| { field: string; value?: unknown; op?: string }
+									| undefined}
+							/>
+						</div>
+					{:else if currentVibe.schema === 'composer'}
+						<div
+							class="border-border h-full min-h-[24rem] w-full overflow-hidden rounded-[var(--radius-xl)] border bg-[var(--color-surface-soft)]"
 						>
-							<rect x="3" y="4" width="18" height="16" rx="2" />
-							<line x1="9" y1="4" x2="9" y2="20" />
-						</svg>
-						Chats
-					</button>
+							<Composer />
+						</div>
+					{:else}
+						<div class="mx-auto w-full max-w-[64rem]">
+							<VibeCard
+								schema={currentVibe.schema}
+								data={currentVibe.data}
+								containerName={`aven-vibes-stage-${currentVibe.id}`}
+							/>
+						</div>
+					{/if}
+				{/key}
+			{:else}
+				<div
+					class="text-muted-foreground flex h-full items-center justify-center text-sm leading-relaxed"
+				>
+					{t('mainnet.chat.empty')}
 				</div>
 			{/if}
-			<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
-				<div bind:this={contentEl} class="mx-auto flex w-full max-w-[52rem] flex-col gap-3 py-4">
-					{#if messages.length === 0}
-						<div class="text-muted-foreground py-16 text-center text-sm leading-relaxed">
-							{t('mainnet.chat.empty')}
-						</div>
-					{/if}
-					{#each messages as message (message.id)}
-						{#if message.vibe}
-							<!-- Vibes flow into the stream. Data vibes size to content (capped + scroll); the
-						     Composer needs a definite height, so it renders in a fixed-height card. -->
-							{#if message.vibe === 'todos'}
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<TodosVibe containerName={`aven-vibes-chat-${message.id}`} />
-								</div>
-							{:else if message.vibe === 'composer'}
-								<div
-									class="border-border h-[70vh] w-full overflow-hidden rounded-[var(--radius-lg)] border"
-								>
-									<Composer />
-								</div>
-							{:else if message.vibe === 'bookkeeping'}
-								<!-- Compact standalone classification card (component self-sizes). board 0070. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<BookkeepingVibe
-										containerName={`aven-vibes-chat-${message.id}`}
-										data={message.vibeData}
-									/>
-								</div>
-							{:else if message.vibe === 'doc-compare'}
-								<!-- Compare needs room: break out of the 52rem chat column and center a wider
-							     card on the viewport so the doc + extracted fields sit 50/50. board 0064. -->
-								<div
-									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
-								>
-									<DocCompareVibe
-										containerName={`aven-vibes-chat-${message.id}`}
-										data={message.vibeData}
-									/>
-								</div>
-							{:else if message.vibe === 'invoice-match'}
-								<!-- Compact reconciliation summary (invoice excerpt ↔ matched tx). board 0070. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<InvoiceMatchVibe
-										containerName={`aven-vibes-chat-${message.id}`}
-										data={message.vibeData}
-									/>
-								</div>
-							{:else if message.vibe === 'invoice-booking'}
-								<!-- Compact booking summary (invoice excerpt → SKR04 Buchungssatz). board 0070. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<InvoiceBookingVibe
-										containerName={`aven-vibes-chat-${message.id}`}
-										data={message.vibeData}
-									/>
-								</div>
-							{:else if message.vibe === 'tx'}
-								<!-- Live transactions list — same max width as todos (component self-constrains). 0068. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<TransactionsVibe containerName={`aven-vibes-chat-${message.id}`} />
-								</div>
-							{:else if message.vibe === 'booking'}
-								<!-- Bookings: list self-centers at max-w-2xl; the 50/50 prüf detail breaks out wide. 0071/0077. -->
-								<div
-									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
-								>
-									<BookingsVibe containerName={`aven-vibes-chat-${message.id}`} />
-								</div>
-							{:else if message.vibe === 'bwa'}
-								<!-- BWA / finance snapshot (computed from bookings + tx). board 0072. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<FinanceVibe containerName={`aven-vibes-chat-${message.id}`} />
-								</div>
-							{:else if message.vibe === 'addressbook'}
-								<!-- Addressbook: contacts list + detail (Stammdaten / Belege). board 0082. -->
-								<div
-									class="relative left-1/2 max-h-[85vh] w-[min(84rem,94vw)] max-w-none -translate-x-1/2 overflow-y-auto"
-								>
-									<AddressbookVibe containerName={`aven-vibes-chat-${message.id}`} />
-								</div>
-							{:else if message.vibe === 'invoice-create'}
-								<!-- Outgoing invoice authoring view (doc emitted by the invoicing tools). board 0082. -->
-								<div class="max-h-[80vh] w-full overflow-y-auto">
-									<InvoiceCreateVibe
-										containerName={`aven-vibes-chat-${message.id}`}
-										data={message.vibeData}
-									/>
-								</div>
-							{/if}
-						{:else}
-							<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
-								<div
-									class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-sm leading-relaxed {message.role ===
-							'user'
-								? 'bg-primary text-primary-foreground'
-								: 'border-border bg-card text-foreground border'}{message.pending
-								? ' animate-pulse italic opacity-60'
-								: ''}"
-								>
-									{message.text}
-								</div>
-							</div>
-						{/if}
-					{/each}
-				</div>
-			</div>
+		</div>
 
-			<div class="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-				<div class="mx-auto w-full max-w-[52rem]">
-					{#each hitlRequests as req (req.id)}
-						{@const v = hitlVerb(req.tool)}
-						<!-- a small confirm card: question on top, buttons at the bottom; dismissed on click -->
-						<div
-							class="border-border bg-card mx-auto mb-2 max-w-xs rounded-[var(--radius-lg)] border px-4 py-3 text-center text-[13px] shadow-sm"
-						>
-							<p class="text-foreground mb-3 font-medium">{req.label}</p>
-							<div class="flex justify-center gap-2">
-								<!-- decline always LEFT, confirm always RIGHT -->
-								<button
-									type="button"
-									class="border-border hover:bg-muted rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors"
-									onclick={() => declineHitl(req)}
-								>
-									{v.decline}
-								</button>
-								<button
-									type="button"
-									class="rounded-full px-4 py-1.5 text-xs font-semibold transition-colors {v.danger
+		<!-- board 0118b — CHAT OVERLAY, minimal: NO history, NO container card — just the latest
+		     exchange bubble centered directly above the AI button, plus live tool/actor chips. -->
+		<div
+			class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+		>
+			<div
+				class="pointer-events-auto mx-auto flex w-full max-w-[44rem] flex-col items-center gap-2"
+			>
+				{#each hitlRequests as req (req.id)}
+					{@const v = hitlVerb(req.tool)}
+					<div
+						class="border-border bg-card max-w-xs rounded-[var(--radius-lg)] border px-4 py-2.5 text-center text-[13px] shadow-sm"
+					>
+						<p class="text-foreground mb-2 font-medium">{req.label}</p>
+						<div class="flex justify-center gap-2">
+							<button
+								type="button"
+								class="border-border hover:bg-muted rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors"
+								onclick={() => declineHitl(req)}
+							>
+								{v.decline}
+							</button>
+							<button
+								type="button"
+								class="rounded-full px-4 py-1.5 text-xs font-semibold transition-colors {v.danger
 									? 'border-destructive/50 text-destructive hover:bg-destructive/10 border'
 									: 'bg-primary text-primary-foreground hover:opacity-90'}"
-									onclick={() => void confirmHitl(req)}
-								>
-									{v.confirm}
-								</button>
-							</div>
+								onclick={() => void confirmHitl(req)}
+							>
+								{v.confirm}
+							</button>
 						</div>
-					{/each}
-					{#if editStream}
-						<!-- live GLM edit stream: reasoning + diff text as the website model writes it -->
-						<div
-							bind:this={streamEl}
-							class="border-border bg-card text-muted-foreground mb-2 max-h-36 overflow-y-auto rounded-[var(--radius-lg)] border px-3 py-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap"
-						>
-							{editStreamTail}
-						</div>
-					{/if}
-					{#if toolActivity.length > 0}
-						<div class="flex flex-wrap justify-center gap-1.5 pb-2">
-							{#each toolActivity as tool (tool.id)}
-								<span
-									class="border-border bg-card inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] {tool.status ===
-								'error'
-									? 'text-destructive'
-									: 'text-muted-foreground'}"
-									title={tool.detail}
-								>
-									{#if tool.status === 'running'}
-										<span
-											class="bg-primary inline-block h-1.5 w-1.5 animate-pulse rounded-full"
-										></span>
-									{:else if tool.status === 'done'}
-										<span class="text-primary">✓</span>
-									{:else}
-										<span class="text-destructive">✕</span>
-									{/if}
-									<b class="text-foreground font-semibold">{tool.name}</b>
-									<span class="opacity-80">{tool.detail}</span>
-									{#if tool.status === 'running' && tool.startedAt}
-										<span class="text-foreground/60 tabular-nums">
-											· {Math.max(0, Math.round((nowTick - tool.startedAt) / 1000))}s
-										</span>
-									{/if}
-								</span>
-							{/each}
-						</div>
-					{/if}
+					</div>
+				{/each}
+				{#if editStream}
+					<div
+						bind:this={streamEl}
+						class="border-border bg-card/90 text-muted-foreground max-h-20 w-full overflow-y-auto rounded-[var(--radius-lg)] border px-3 py-1.5 font-mono text-[10px] leading-relaxed break-words whitespace-pre-wrap shadow-sm backdrop-blur"
+					>
+						{editStreamTail}
+					</div>
+				{/if}
+				{#if lastMessage && bubbleVisible}
+					<!-- the ONE bubble: the latest human message or assistant reply, centered. -->
+					<div
+						class="max-w-[85%] rounded-[var(--radius-lg)] px-3.5 py-2 text-center text-xs leading-relaxed shadow-sm {lastMessage.role ===
+						'user'
+							? 'bg-primary text-primary-foreground'
+							: 'border-border bg-card/95 text-foreground border backdrop-blur'}{lastMessage.pending
+							? ' animate-pulse italic opacity-60'
+							: ''}"
+					>
+						{lastMessage.text}
+					</div>
+				{/if}
+				<div class="w-full">
 					<IntentComposer
 						bind:this={composerRef}
 						placeholder={t('mainnet.chat.placeholder')}
@@ -852,6 +854,6 @@ function handleTranscribeError(message: string): void {
 					/>
 				</div>
 			</div>
-		{/if}
+		</div>
 	</div>
 </div>

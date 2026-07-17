@@ -5,7 +5,6 @@
 // could drive execution later. Pure (no DOM): just the schema + our existing skills as data.
 
 import flowsJson from '../configs/flows.json'
-import runsJson from '../configs/runs.json'
 import type { LlmConfig } from './capability.js'
 import type { LogLevel } from './pipeline/types.js'
 
@@ -102,8 +101,11 @@ export type RecipeNode = {
 	/** Products — what the actor emits (≥1). >1 = fan-out by kind. */
 	outputs: ResourceKind[]
 	note?: string
-	/** The actor's system prompt (for LLM steps). */
+	/** The actor's system prompt (for LLM steps). board 0093: the SSOT for an extractor's instructions. */
 	system_prompt?: string
+	/** The tool-call / output JSON Schema the LLM step extracts to. board 0093: embedded here (the DRY
+	 *  SSOT) so a generic extractor is driven entirely by node config — no per-doctype actor code. */
+	schema?: Record<string, unknown>
 	/** The LLM config the actor runs with (for LLM steps). */
 	llm?: LlmConfig
 	/** The tools/functions the actor invokes (ids into the capability `TOOL_SPECS`). */
@@ -116,6 +118,29 @@ export type RecipeNode = {
 	config?: Record<string, unknown>
 	/** Human-in-the-loop: this step waits for a person to review/accept before continuing. */
 	hitl?: boolean
+	/** The user-facing vibe card this step renders (e.g. "bookkeeping", "doc-compare", "invoice-booking").
+	 *  The runner copies it onto the TraceStep so chat + the Runs explorer show the SAME card. board 0091. */
+	vibe?: string
+	/** Which output kind feeds the vibe card's data (default: the first output). E.g. `enrich` shows
+	 *  its `contact` output, not its primary `invoice`. board 0094. */
+	vibeOutput?: string
+	/** board 0100 — GENERIC attached context: reference material appended to this actor's prompt/behavior
+	 *  at runtime (e.g. a reference dictionary, a live registry). The config UI resolves each `provider`
+	 *  through the universal `/api/context/:provider` endpoint and shows it, so it's transparent WHAT is in
+	 *  the actor's context window — for ANY actor, not a per-skill special case. */
+	context?: NodeContext[]
+}
+
+/** A generic attached-context resource declared on a node — resolved by the universal context endpoint. */
+export type NodeContext = {
+	/** human label shown in the config UI, e.g. "Gismu dictionary (TSV)" */
+	label: string
+	/** the registered provider key the `/api/context/:provider` endpoint resolves (e.g. "gismu"). */
+	provider: string
+	/** optional argument the provider needs (e.g. provider "type" + arg "todos" → that type's recipe). */
+	arg?: string
+	/** optional one-line note (size / source / what it's for). */
+	note?: string
 }
 
 /** A directed connection (a message channel). `when` = a branch guard; `kind` = data (a resource
@@ -419,13 +444,8 @@ export const FLOW_SCHEMA = {
 /** Our real skills + a Minecraft demo — loaded from pure JSON config (flows.json). board 0083. */
 export const EXAMPLE_FLOWS: Flow[] = flowsJson as unknown as Flow[]
 
-/** Example instance RUNS (with traces) — separate from the Flow templates. From runs.json. */
-export const EXAMPLE_RUNS: FlowRun[] = runsJson as unknown as FlowRun[]
-
-/** The runs (instances) of a given flow template. */
-export function runsForFlow(flowId: string): FlowRun[] {
-	return EXAMPLE_RUNS.filter((r) => r.flowId === flowId)
-}
+// Runs are no longer seeded fixtures — they are the REAL persisted flow_run rows produced by the
+// generic runner (board 0089/0090); the app reads them from GET /api/skills/runs, not from here.
 
 /** The index of a run's CURRENT step = the first 'running' step, else the last traced step (else -1). */
 export function currentStepIndex(run: FlowRun | null): number {

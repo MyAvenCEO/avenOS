@@ -1,52 +1,29 @@
-import {
-	BOOKING_SCHEMA,
-	type BookingPick,
-	type BookingRecord,
-	buildBookingRecord
-} from '@avenos/aven-vibes/booking'
-import { CONTACT_SCHEMA, contactDisplayName, mintContactId } from '@avenos/aven-vibes/contact'
-import {
-	enrichFields,
-	matchContact,
-	type PartyInput,
-	partiesFromDoc,
-	partyToContactFields
-} from '@avenos/aven-vibes/contact-match'
-import { getDoctype } from '@avenos/aven-vibes/doctypes'
-import {
-	computeInvoiceTotals,
-	INVOICE_DOC_SCHEMA,
-	type InvoiceDoc,
-	type InvoiceLine,
-	requiredFieldsMissing
-} from '@avenos/aven-vibes/invoice-doc'
-import { assignInvoiceNumber, type InvoiceState } from '@avenos/aven-vibes/invoice-number'
-import {
-	bestInvoiceMatch,
-	buildMatchRecord,
-	type InvoiceMatch,
-	invoiceTotal,
-	invoiceVendor,
-	MATCH_SCHEMA
-} from '@avenos/aven-vibes/match'
-import { skrForPrompt } from '@avenos/aven-vibes/skr'
-import { CHAT_TOOLS } from '@avenos/aven-vibes/tools'
-import {
-	bankStatementToTransactions,
-	newTransactions,
-	TX_SCHEMA,
-	type TxRecord
-} from '@avenos/aven-vibes/tx'
 import { editWebsiteDiff, WEBSITE_MODEL } from '@avenos/skills/composer'
 import { deployHost, deploySite, tigrisStorageFromEnv } from '@avenos/skills/composer/publish'
+import {
+	assembleSystemContext,
+	type RouterRequest,
+	routeSkill,
+	TOOL_ACTORS
+} from '@avenos/skills/tools'
+import { actorConfig, chatToolDefinitionsFor, skillManifest, skillMenu } from './config'
+import { registerContextProvider, resolveContext } from './context'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { TIERS } from './billing'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
+import { crud, runCodeActor, runNamedOp } from './actor-run'
 import { creditStatus, FIXED_ALLOWANCE_USD } from './credits'
-import { ensureDocSchema, executeDataTool, schemasPromptHint } from './data'
+import { schemasPromptHint } from './data'
 import { db } from './db'
 import { publish } from './events'
+import { listMockups, mockupCaps } from './mockup-caps'
+import { promoteCaps, promoteVibe, promotionStatusLines } from './promote-caps'
+import { ontologyCaps } from './ontology'
+import { mutationCaps, queryCaps } from './query-caps'
+import { recordActorRun } from './skills-run'
+import { vibeExists } from './vibe-registry'
+import { typeCaps } from './type-caps'
 import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './usage'
 
 /**
@@ -60,6 +37,28 @@ import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './u
  */
 const TINFOIL_BASE_URL = process.env.TINFOIL_BASE_URL ?? 'https://inference.tinfoil.sh/v1'
 const TINFOIL_MODEL = process.env.TINFOIL_MODEL ?? 'gemma4-31b'
+
+// board 0119q — Tier-3 skill hints are MANIFEST CONFIG, not code branches: a skill declares
+// `hint_providers` (resolved live per turn through the SAME context registry the UI reads) and/or
+// `hint_static` (a fixed block) in skill.manifest. These two providers wrap the live-data
+// assemblers the old hardcoded todos/skillify branches called.
+registerContextProvider('todos_snapshot', async (uid) => ({
+	kind: 'text',
+	label: 'Live todos snapshot',
+	text: await schemasPromptHint(uid).catch(() => ''),
+	meta: { source: 'live data assembler — data.ts · schemasPromptHint()' }
+}))
+registerContextProvider('promotion_status', async (uid) => {
+	const lines = await promotionStatusLines(uid).catch(() => [] as string[])
+	return {
+		kind: 'text',
+		label: 'Mockups + promotion status',
+		text: lines.length
+			? `EXISTING MOCKUPS + PROMOTION STATUS (use the EXACT names; when the user continues a promotion, call the named next step — do NOT restart at plan_app):\n${lines.join('\n')}`
+			: '',
+		meta: { source: 'live data assembler — promote-caps.ts · promotionStatusLines()' }
+	}
+})
 // Max time a streaming round may go without receiving any bytes before we abort it (a stalled
 // upstream must not wedge the stream open forever). Resets on every chunk. board 0055.
 const STREAM_IDLE_MS = 60_000
@@ -83,443 +82,51 @@ const CARD_REPLY_NOTE =
 	'it as prose, bullet points, or a Markdown table unless the user explicitly asks.'
 
 /**
- * Full type-specific extraction (board 0064): a focused, non-streaming vision pass that forces the
- * model to fill the doctype's JSON Schema as a single tool, driven by the doctype's system prompt,
- * over the same rasterized page images the classify step saw. Returns the parsed fields or null.
+ * Recover tool calls the model emitted as TEXT instead of a structured `tool_calls` field — gemma
+ * does this in VISION mode (e.g. `_call:run_skill{skill: "doc-ingest"}`, optionally wrapped in
+ * `<|tool_call>…<tool_call|>`). Without this, an image-turn tool call (like run_skill) would be lost.
+ * Gated: only consulted when no structured call arrived but a clear `call:NAME{…}` marker is present. board 0089.
  */
-async function extractDocFields(
-	key: string,
-	model: string,
-	doctype: { system_prompt: string; schema: Record<string, unknown> },
-	attachments: { mimeType: string; b64: string }[]
-): Promise<Record<string, unknown> | null> {
-	const imageBlocks = attachments
-		.filter((a) => a.mimeType.startsWith('image/'))
-		.map((a) => ({ type: 'image_url', image_url: { url: `data:${a.mimeType};base64,${a.b64}` } }))
-	if (imageBlocks.length === 0) return null
-	const tool = {
-		type: 'function',
-		function: {
-			name: 'emit_fields',
-			description: 'Return the extracted document fields matching the schema.',
-			parameters: doctype.schema
+function parseTextToolCalls(content: string): { id: string; name: string; args: string }[] {
+	const out: { id: string; name: string; args: string }[] = []
+	const re = /call:\s*(\w+)\s*(\{[\s\S]*?\})/g
+	let m: RegExpExecArray | null
+	let n = 0
+	while ((m = re.exec(content)) !== null) {
+		let args: Record<string, unknown> = {}
+		try {
+			// lenient: quote unquoted keys + normalize single quotes → JSON
+			const jsonish = m[2].replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"')
+			args = JSON.parse(jsonish) as Record<string, unknown>
+		} catch {
+			args = {}
 		}
+		out.push({ id: `txt_${n++}`, name: m[1], args: JSON.stringify(args) })
 	}
-	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
-		method: 'POST',
-		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			model,
-			messages: [
-				{ role: 'system', content: doctype.system_prompt },
-				{
-					role: 'user',
-					content: [
-						{ type: 'text', text: 'Extract every field from this document.' },
-						...imageBlocks
-					]
-				}
-			],
-			tools: [tool],
-			tool_choice: { type: 'function', function: { name: 'emit_fields' } },
-			stream: false
-		})
-	}).catch((e) => {
-		console.error('[ai] extract vision fetch threw:', e)
-		return null
-	})
-	if (!res?.ok) {
-		const detail = res ? await res.text().catch(() => '') : 'no response'
-		console.error(`[ai] extract vision HTTP ${res?.status ?? '???'}:`, detail.slice(0, 600))
-		return null
-	}
-	const data = (await res.json().catch(() => null)) as {
-		choices?: { message?: { tool_calls?: { function?: { arguments?: string } }[] } }[]
-	} | null
-	const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments
-	if (!args) {
-		console.error(
-			'[ai] extract vision: no tool_call args returned:',
-			JSON.stringify(data).slice(0, 400)
-		)
-		return null
-	}
-	try {
-		const parsed = JSON.parse(args)
-		return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
-	} catch (e) {
-		console.error('[ai] extract vision: tool args not JSON:', e, args.slice(0, 300))
-		return null
-	}
+	return out
 }
 
 /**
- * board 0065 — fan a bank statement's transactions out into the user's `tx` schema/table,
- * idempotently: skip any dedup_key we already stored (so re-extracting the same statement adds
- * nothing). Returns the count of NEW transactions stored.
+ * Guarantee a tool-call's `arguments` are valid JSON before we echo the assistant turn back to Tinfoil.
+ * gemma sometimes streams a TRUNCATED tool call (e.g. an unterminated string when it hits a token cap or
+ * multi-item op); forwarding that raw makes the NEXT round 400 ("Unterminated string…") and kills the
+ * whole stream. Re-serialize a lenient parse; if it's unsalvageable, fall back to `{}` so the tool just
+ * reports an error and the model can retry — never a hard 400. board 0099.
  */
-async function fanOutTransactions(
-	userId: string,
-	extracted: Record<string, unknown>,
-	sourceValueId: string | null
-): Promise<number> {
-	const txs = bankStatementToTransactions(extracted, sourceValueId)
-	if (txs.length === 0) return 0
-	await ensureDocSchema(userId, 'tx', TX_SCHEMA)
-	const existing = (await executeDataTool(userId, { schema: 'tx', action: 'list' })) as {
-		items?: { dedup_key?: string }[]
-	}
-	const seen = new Set(
-		(existing.items ?? []).map((i) => i.dedup_key).filter((k): k is string => typeof k === 'string')
-	)
-	const fresh = newTransactions(txs, seen)
-	if (fresh.length === 0) return 0
-	const res = (await executeDataTool(userId, {
-		schema: 'tx',
-		action: 'create',
-		items: fresh as unknown as Record<string, unknown>[]
-	})) as { created?: string[] }
-	return res.created?.length ?? 0
-}
-
-/**
- * board 0066 — reconcile an extracted invoice against the user's stored `tx` records: query the tx
- * table, find the best paying transaction (amount-required), and persist a `match` row. Returns the
- * match (for the invoice-match vibe) or null when nothing reconciles.
- */
-async function matchInvoiceAgainstTx(
-	key: string,
-	model: string,
-	userId: string,
-	extracted: Record<string, unknown>,
-	invoiceValueId: string | null
-): Promise<InvoiceMatch | null> {
-	const listed = (await executeDataTool(userId, { schema: 'tx', action: 'list' })) as {
-		items?: Record<string, unknown>[]
-	}
-	const txs = (listed.items ?? []) as unknown as TxRecord[]
-	// DYNAMIC matching: let the model reconcile (handles cross-currency USD/EUR via original_amount,
-	// fuzzy amounts/fees, vendor naming, date proximity). Fall back to the deterministic matcher.
-	let match = await matchInvoiceLLM(key, model, extracted, txs)
-	if (!match) match = bestInvoiceMatch(extracted, txs)
+function sanitizeToolArgs(raw: string): string {
+	const s = raw || '{}'
 	try {
-		await ensureDocSchema(userId, 'match', MATCH_SCHEMA)
-		const record = buildMatchRecord(invoiceValueId, extracted, match)
-		await executeDataTool(userId, {
-			schema: 'match',
-			action: 'create',
-			items: [record as unknown as Record<string, unknown>]
-		})
-	} catch (e) {
-		console.error('[ai] match persist failed:', e)
-	}
-	return match
-}
-
-/**
- * Dynamic invoice↔tx reconciliation: a focused tool call where the model picks the paying
- * transaction from the candidate list. It reasons about CROSS-CURRENCY payments (a USD invoice paid
- * as a EUR debit — match the tx `original_amount`/`original_currency`), small FX fees, vendor naming
- * in the Verwendungszweck, and date proximity. Returns an InvoiceMatch or null. board 0066/0069.
- */
-async function matchInvoiceLLM(
-	key: string,
-	model: string,
-	invoice: Record<string, unknown>,
-	txs: TxRecord[]
-): Promise<InvoiceMatch | null> {
-	if (txs.length === 0) return null
-	const target = invoiceTotal(invoice)
-	const hdr =
-		invoice.header && typeof invoice.header === 'object'
-			? (invoice.header as Record<string, unknown>)
-			: {}
-	// Line-item / title text helps bridge vendor↔product naming (e.g. invoice vendor
-	// "ActiveCampaign, LLC" → tx "POSTMARKAPP.COM"; "Cursor" → "CURSOR, AI POWERED IDE").
-	const stmts = Array.isArray(invoice.statements) ? invoice.statements : []
-	const lineText = stmts
-		.flatMap((s) => {
-			const li = s && typeof s === 'object' ? (s as Record<string, unknown>).line_items : null
-			return Array.isArray(li) ? li : []
-		})
-		.map((li) => {
-			const r = li && typeof li === 'object' ? (li as Record<string, unknown>) : {}
-			return [r.title, r.description].filter((x) => typeof x === 'string').join(' ')
-		})
-		.filter(Boolean)
-		.join(' · ')
-		.slice(0, 400)
-	const invSummary = {
-		vendor: invoiceVendor(invoice),
-		total: target,
-		currency: typeof hdr.currency === 'string' ? hdr.currency : null,
-		invoice_number: typeof hdr.invoice_number === 'string' ? hdr.invoice_number : null,
-		order_number: typeof hdr.order_number === 'string' ? hdr.order_number : null,
-		date: typeof hdr.issue_date === 'string' ? hdr.issue_date : null,
-		line_items: lineText
-	}
-	const candidates = txs.slice(0, 400).map((t) => ({
-		dedup_key: t.dedup_key,
-		date: t.booking_date ?? t.value_date,
-		amount: t.amount,
-		currency: t.currency,
-		original_amount: t.original_amount,
-		original_currency: t.original_currency,
-		counterparty: t.counterparty_name ?? t.counterparty_iban,
-		// the description usually carries the merchant name AND an FX rate like "1 EUR = 1,1783 USD"
-		description: t.description
-	}))
-	const tool = {
-		type: 'function',
-		function: {
-			name: 'pick_match',
-			description: 'Record which transaction paid the invoice (or none).',
-			parameters: {
-				type: 'object',
-				properties: {
-					tx_dedup_key: {
-						type: ['string', 'null'],
-						description: 'dedup_key of the paying transaction, or null if none plausibly matches.'
-					},
-					confidence: { type: 'string', enum: ['high', 'medium', 'low', 'none'] },
-					reason: {
-						type: 'string',
-						description: 'One short sentence (German) explaining the choice.'
-					}
-				},
-				required: ['tx_dedup_key', 'confidence', 'reason']
-			}
-		}
-	}
-	const system =
-		'You are a German bookkeeping assistant. Pick the SINGLE bank transaction that PAID this ' +
-		'invoice, or NONE.\n' +
-		'- AMOUNT first: the tx (an outgoing debit, usually negative) should equal the invoice total. ' +
-		'CROSS-CURRENCY: a USD invoice paid as a EUR debit — compare the tx original_amount/' +
-		'original_currency, or apply the FX rate often printed in the description (e.g. "1 EUR = ' +
-		'1,1783 USD"). Allow small FX fees / rounding (about ±3%).\n' +
-		'- VENDOR: the invoice vendor or its product/brand should appear in the tx counterparty or ' +
-		'description (e.g. "ActiveCampaign"<->"POSTMARKAPP", "Cursor"<->"CURSOR"); use line_items.\n' +
-		'- DATE: the payment is usually on/after the invoice date, within a few weeks.\n' +
-		'Call pick_match with the tx dedup_key, or null if nothing plausibly matches.'
-	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
-		method: 'POST',
-		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			model,
-			messages: [
-				{ role: 'system', content: system },
-				{
-					role: 'user',
-					content: `Invoice:\n${JSON.stringify(invSummary)}\n\nTransactions:\n${JSON.stringify(candidates)}`
-				}
-			],
-			tools: [tool],
-			tool_choice: { type: 'function', function: { name: 'pick_match' } },
-			stream: false
-		})
-	}).catch(() => null)
-	if (!res?.ok) return null
-	const data = (await res.json().catch(() => null)) as {
-		choices?: { message?: { tool_calls?: { function?: { arguments?: string } }[] } }[]
-	} | null
-	const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments
-	if (!args) return null
-	let pick: { tx_dedup_key?: string | null; confidence?: string; reason?: string } | null = null
-	try {
-		pick = JSON.parse(args)
+		JSON.parse(s)
+		return s
 	} catch {
-		return null
-	}
-	const matchedKey = typeof pick?.tx_dedup_key === 'string' ? pick.tx_dedup_key : null
-	if (!matchedKey) return null
-	const tx = txs.find((x) => x.dedup_key === matchedKey)
-	if (!tx) return null
-	const confidence: InvoiceMatch['confidence'] =
-		pick?.confidence === 'high' ? 'high' : pick?.confidence === 'none' ? 'none' : 'medium'
-	if (confidence === 'none') return null
-	return { tx, confidence, reasons: pick?.reason ? [pick.reason] : [], target: target ?? 0 }
-}
-
-async function bookInvoice(
-	key: string,
-	model: string,
-	userId: string,
-	invoice: Record<string, unknown>,
-	match: InvoiceMatch | null,
-	invoiceValueId: string | null
-): Promise<BookingRecord | null> {
-	const hdr =
-		invoice.header && typeof invoice.header === 'object'
-			? (invoice.header as Record<string, unknown>)
-			: {}
-	const invSummary = {
-		vendor: invoiceVendor(invoice),
-		total: invoiceTotal(invoice),
-		currency: typeof hdr.currency === 'string' ? hdr.currency : null,
-		invoice_number: typeof hdr.invoice_number === 'string' ? hdr.invoice_number : null,
-		date: typeof hdr.issue_date === 'string' ? hdr.issue_date : null,
-		booking_summary: typeof invoice.booking_summary === 'string' ? invoice.booking_summary : null,
-		totals: invoice.totals ?? null,
-		statements: invoice.statements ?? null
-	}
-	const paidVia = match
-		? {
-				konto_hint: '1800',
-				amount: match.tx.amount,
-				date: match.tx.booking_date ?? match.tx.value_date,
-				text: match.tx.description
-			}
-		: null
-	const tool = {
-		type: 'function',
-		function: {
-			name: 'book_invoice',
-			description:
-				'Record the SKR04 Buchungssatz for this invoice. Use a Splitbuchung (multiple `lines`) ' +
-				'when the invoice mixes VAT rates, cost types, private/business shares, or Skonto.',
-			parameters: {
-				type: 'object',
-				properties: {
-					lines: {
-						type: 'array',
-						minItems: 1,
-						description:
-							'The EXPENSE (Soll) positions — NET only. ONE line for a simple invoice; MULTIPLE ' +
-							'lines (a Splitbuchung) when positions need different EXPENSE accounts or VAT rates. ' +
-							'Do NOT add a Vorsteuer/VAT line and do NOT pick a VAT account — the system posts the ' +
-							'Abziehbare Vorsteuer automatically from each position net + tax_treatment.',
-						items: {
-							type: 'object',
-							properties: {
-								soll_konto: {
-									type: 'string',
-									description:
-										'SKR04 EXPENSE/asset konto for THIS position (4 digits, EXACTLY as in the chart). NOT a VAT account.'
-								},
-								net_amount: {
-									type: ['number', 'null'],
-									description:
-										'NET amount of this position (ohne USt). If only gross is known, set gross_amount instead.'
-								},
-								gross_amount: {
-									type: ['number', 'null'],
-									description:
-										'Gross of this position — only if net is not separately known; the system derives net + VAT.'
-								},
-								tax_treatment: {
-									type: 'string',
-									enum: ['vat_19', 'vat_7', 'reverse_charge', 'intra_eu', 'none'],
-									description:
-										'VAT treatment of THIS position: vat_19 / vat_7 = domestic German input VAT (system posts Abziehbare Vorsteuer 1406/1401); reverse_charge = §13b foreign supplier; intra_eu = innergemeinschaftlicher Erwerb; none = steuerfrei / no deductible VAT.'
-								},
-								cost_treatment: {
-									type: ['string', 'null'],
-									enum: ['standard', 'bewirtung', null],
-									description:
-										'Set "bewirtung" for a RESTAURANT / entertainment receipt (Bewirtungsbeleg, "Bewirtete Personen"): the system books the §4 Abs.5 EStG 70/30 split (6640 abziehbar + 6644 nicht abziehbar) with full Vorsteuer — pass the FULL net + vat_19. Otherwise "standard" or omit.'
-								},
-								note: {
-									type: ['string', 'null'],
-									description: 'Short German label of what this position is (e.g. "Druckerpapier").'
-								}
-							},
-							required: ['soll_konto', 'tax_treatment']
-						}
-					},
-					haben_konto: {
-						type: 'string',
-						description:
-							'Credit/contra account: the bank/payment konto it was paid from (e.g. 1800 Bank), 4 digits from the chart.'
-					},
-					buchungstext: {
-						type: ['string', 'null'],
-						description: 'Short German Buchungstext (vendor + what it is).'
-					},
-					confidence: {
-						type: 'string',
-						enum: ['high', 'medium', 'low'],
-						description:
-							'Your confidence in the chosen ACCOUNT(s): high = the standard/obvious konto for this Vorgang; medium = plausible but some judgement; low = unsure or a fallback account. Rate it honestly.'
-					},
-					reason: {
-						type: 'string',
-						description: 'One short German sentence justifying the account choice(s).'
-					}
-				},
-				required: ['lines', 'haben_konto', 'confidence', 'reason']
-			}
+		try {
+			const repaired = s.replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"')
+			JSON.parse(repaired)
+			return repaired
+		} catch {
+			return '{}'
 		}
 	}
-	const system =
-		'You are a German bookkeeper booking ONE incoming supplier invoice into the SKR04 chart. ' +
-		'For EACH EXPENSE position choose the best Soll expense/asset account — rely especially on ' +
-		'`booking_summary` (a bookkeeper-oriented description of the Leistung/Vorgang), plus the vendor + ' +
-		'line items; e.g. software/SaaS subscriptions → an IT/software-costs account, hosting → ' +
-		'IT/communication costs. The CREDIT (Haben) is the account it was paid from — use 1800 (Bank) ' +
-		'unless context says otherwise. Pick every konto STRICTLY from the provided SKR04 chart (exact ' +
-		'4-digit konto).\n\n' +
-		'AMOUNTS + VAT: give each position as NET (net_amount, ohne USt) plus a `tax_treatment`. Do NOT ' +
-		'add a Vorsteuer line and do NOT pick a VAT/Umsatzsteuer account — the system posts the ' +
-		'Abziehbare Vorsteuer (SKR04 1406 for 19%, 1401 for 7%) AUTOMATICALLY from net + tax_treatment, ' +
-		'so the Buchungssatz balances. tax_treatment: vat_19 / vat_7 = normal domestic German input VAT; ' +
-		'reverse_charge = §13b foreign supplier (no deductible input VAT in the payment); intra_eu = ' +
-		'innergemeinschaftlicher Erwerb; none = steuerfrei or a non-EU supplier billing without VAT.\n\n' +
-		'SPLITBUCHUNG: emit MULTIPLE expense `lines` when ONE invoice mixes different VAT rates (7% vs ' +
-		'19%), different cost types (Bürobedarf + Reinigung + Bewirtung → separate konten), or private ' +
-		'vs business shares. For a simple single-rate invoice, emit exactly ONE expense line.\n\n' +
-		'BEWIRTUNG: a RESTAURANT bill / entertainment receipt (Restaurantrechnung, Bewirtungsbeleg, a ' +
-		'"Bewirtete Personen" field, food & drinks) → ONE line with cost_treatment "bewirtung", the FULL ' +
-		'net, tax_treatment vat_19, soll_konto 6640. The system applies the §4 Abs.5 EStG 70/30 split ' +
-		'(6640 + 6644) and the full Vorsteuer itself — do not split it yourself.\n\n' +
-		'ALWAYS pick the single best-fitting SKR04 expense account for a clear business expense and call ' +
-		'book_invoice — never return without an account. If genuinely unsure, use the closest sonstige ' +
-		'betrieblicher Aufwand konto rather than nothing, and set `confidence` to "low".\n\n' +
-		'CONFIDENCE: rate `confidence` honestly for how sure you are about the ACCOUNT choice — "high" ' +
-		'for an obvious/standard konto, "medium" when it needed judgement, "low" for a guess/fallback.'
-	const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
-		method: 'POST',
-		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			model,
-			messages: [
-				{ role: 'system', content: system },
-				{
-					role: 'user',
-					content: `SKR04 chart (konto<TAB>bezeichnung):\n${skrForPrompt()}\n\nInvoice summary (lean on booking_summary to pick the account):\n${JSON.stringify(invSummary)}\n\nFull invoice JSON:\n${JSON.stringify(invoice)}\n\nPaid via:\n${JSON.stringify(paidVia)}`
-				}
-			],
-			tools: [tool],
-			tool_choice: { type: 'function', function: { name: 'book_invoice' } },
-			stream: false
-		})
-	}).catch(() => null)
-	let pick: BookingPick | null = null
-	if (res?.ok) {
-		const data = (await res.json().catch(() => null)) as {
-			choices?: { message?: { tool_calls?: { function?: { arguments?: string } }[] } }[]
-		} | null
-		const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments
-		if (args) {
-			try {
-				pick = JSON.parse(args) as BookingPick
-			} catch {
-				pick = null
-			}
-		}
-	}
-	const record = buildBookingRecord(invoiceValueId, invoice, pick)
-	try {
-		await ensureDocSchema(userId, 'booking', BOOKING_SCHEMA)
-		await executeDataTool(userId, {
-			schema: 'booking',
-			action: 'create',
-			items: [record as unknown as Record<string, unknown>]
-		})
-	} catch (e) {
-		console.error('[ai] booking persist failed:', e)
-	}
-	return record
 }
 
 export async function aiChat(c: Context): Promise<Response> {
@@ -644,121 +251,6 @@ type StreamDelta = {
  * OpenAI-style SSE, tool calls are assembled and executed against the data store (scoped to
  * the user), their results fed back, until the model returns a final answer. board 0054.
  */
-// board 0082 — outgoing invoicing helpers (pure shaping; the tool branches do the persist/emit).
-const CONTACT_FIELD_KEYS = [
-	'type',
-	'name',
-	'legal_form',
-	'street',
-	'zip',
-	'city',
-	'country',
-	'vat_id',
-	'tax_number',
-	'email',
-	'phone',
-	'iban',
-	'bic',
-	'bank_name',
-	'contact_person',
-	'register_court',
-	'register_number',
-	'managing_director',
-	'notes'
-] as const
-
-function contactFieldsFromPick(p: Record<string, unknown>): Record<string, unknown> {
-	const out: Record<string, unknown> = {}
-	for (const k of CONTACT_FIELD_KEYS) if (p[k] != null) out[k] = p[k]
-	return out
-}
-
-function partyFromContact(c: Record<string, unknown> | null): Record<string, unknown> | null {
-	if (!c) return null
-	const pick = (k: string) => (typeof c[k] === 'string' && c[k] ? (c[k] as string) : null)
-	return {
-		name: pick('name'),
-		legal_form: pick('legal_form'),
-		street: pick('street'),
-		zip: pick('zip'),
-		city: pick('city'),
-		country: pick('country'),
-		vat_id: pick('vat_id'),
-		tax_number: pick('tax_number'),
-		iban: pick('iban'),
-		bic: pick('bic'),
-		bank_name: pick('bank_name'),
-		register_court: pick('register_court'),
-		register_number: pick('register_number'),
-		managing_director: pick('managing_director')
-	}
-}
-
-/**
- * board 0082 — after a doc extract, harvest its parties (vendor + buyer / account holder), match them
- * against the addressbook (USt-IdNr → IBAN → name), and create/enrich contacts. The buyer/account
- * holder is the user's SELF-company candidate: when none is marked yet, return a hint so the chat asks
- * "is this your company?" (answerable in free text → set_my_company). Returns the hint + touched count.
- */
-async function enrichAddressbookFromDoc(
-	userId: string,
-	docType: string,
-	extracted: Record<string, unknown>
-): Promise<{ hint: string | null; touched: number }> {
-	const { vendor, self } = partiesFromDoc(docType, extracted)
-	if (!vendor?.name && !self?.name) return { hint: null, touched: 0 }
-	await ensureDocSchema(userId, 'contact', CONTACT_SCHEMA)
-	const contacts = ((
-		(await executeDataTool(userId, { schema: 'contact', action: 'list' })) as {
-			items?: Record<string, unknown>[]
-		}
-	).items ?? []) as (Record<string, unknown> & { id?: string })[]
-	const hasSelf = contacts.some((c) => c.is_self)
-	const ids = contacts.map((c) => String(c.short_id ?? '')).filter(Boolean)
-	let touched = 0
-
-	const upsert = async (
-		party: PartyInput | undefined
-	): Promise<{ id: string; name: string } | null> => {
-		if (!party?.name) return null
-		const match = matchContact(party, contacts)
-		if (match?.id) {
-			const patch = enrichFields(match, party)
-			if (Object.keys(patch).length > 0) {
-				await executeDataTool(userId, {
-					schema: 'contact',
-					action: 'update',
-					items: [{ id: match.id, ...patch }]
-				})
-				touched++
-			}
-			return { id: match.id, name: String(match.name ?? party.name) }
-		}
-		const fields = partyToContactFields(party)
-		const shortId = mintContactId(Math.random, ids)
-		ids.push(shortId)
-		const res = (await executeDataTool(userId, {
-			schema: 'contact',
-			action: 'create',
-			items: [{ short_id: shortId, is_self: false, ...fields }]
-		})) as { created?: string[] }
-		const id = res.created?.[0] ?? ''
-		if (id) {
-			contacts.push({ id, short_id: shortId, ...(fields as Record<string, unknown>) })
-			touched++
-		}
-		return id ? { id, name: String(fields.name ?? party.name) } : null
-	}
-
-	await upsert(vendor)
-	const selfContact = await upsert(self)
-	const hint =
-		!hasSelf && selfContact
-			? `Es ist noch keine eigene Firma (Stammdaten) gesetzt. Frage den Nutzer kurz, ob „${selfContact.name}" seine eigene Firma ist; wenn ja, rufe set_my_company(contact_value_id="${selfContact.id}") auf.`
-			: null
-	return { hint, touched }
-}
-
 function streamWithTools(opts: {
 	key: string
 	model: string
@@ -796,7 +288,16 @@ function streamWithTools(opts: {
 				detail: string,
 				status: 'running' | 'done' | 'error'
 			) => emit({ aven_tool: { id, name, detail, status } })
-			const msgs: unknown[] = [...messages]
+			// PERF (board 0105): the client sends the FULL session history, and Tinfoil re-prefills every
+			// message each round — an ever-growing prompt is the dominant chat cost. Cap the context to the
+			// last SESSION_CONTEXT_LIMIT conversational messages (the leading system message, if any, is
+			// always kept — it carries the instructions + the schema hint merge below). Server-side tool
+			// rounds aren't in this client history (they're persisted separately), so slicing is safe.
+			const SESSION_CONTEXT_LIMIT = 5
+			const hist = messages as { role?: string }[]
+			const lead = hist[0]?.role === 'system' ? [hist[0]] : []
+			const convo = lead.length ? hist.slice(1) : hist
+			const msgs: unknown[] = [...lead, ...convo.slice(-SESSION_CONTEXT_LIMIT)]
 			// Inject image attachments as multimodal content into the last user message so the
 			// vision model (Gemma 4 31B) can see them — needed for classify_document. board 0063.
 			if (attachments.length > 0) {
@@ -831,154 +332,113 @@ function streamWithTools(opts: {
 			let promptTokens = 0
 			let completionTokens = 0
 			const emittedVibes = new Set<string>()
-			// The doc type already extracted this turn (auto-chained after classify, or via the
-			// extract_document tool) — guards against a double extraction if the model also calls the
-			// tool after we auto-ran it. board 0076.
-			let extractedType: string | null = null
-			// Run the full type-specific extraction for a classified doc (board 0064/0076): vision pass →
-			// validate+persist → tx fan-out / invoice reconcile+book → emit doc-compare + booking cards.
-			// Factored out so it runs BOTH when the model calls extract_document AND auto-chained right
-			// after classify — so the extract step never silently fails to trigger.
-			const performExtraction = async (
-				docTypeName: string,
-				tcId: string
-			): Promise<{
-				extracted: boolean
-				stored: boolean
-				txAdded: number
-				match?: { status: string; confidence?: string }
-				addressbookHint?: string | null
-			}> => {
-				const doctype = getDoctype(docTypeName)
-				emitTool(tcId, 'extract_document', docTypeName || 'document', 'running')
-				let extracted: Record<string, unknown> | null = null
-				let stored = false
-				let txAdded = 0
-				let createdId: string | null = null
-				let invoiceMatch: InvoiceMatch | null = null
-				let invoiceBooking: BookingRecord | null = null
-				let addressbookHint: string | null = null
-				if (doctype && attachments.length > 0) {
-					// The 2nd vision pass can take 10–30s with no bytes; re-emit 'running' every 5s so the
-					// client's idle watchdog doesn't abort the stream ("Fetch is aborted"). board 0064.
-					const ping = setInterval(
-						() => emitTool(tcId, 'extract_document', `${docTypeName} · extracting…`, 'running'),
-						5_000
-					)
-					try {
-						extracted = await extractDocFields(key, model, doctype, attachments)
-					} finally {
-						clearInterval(ping)
-					}
-					if (extracted) {
-						// Stamp the source file's content hash (it was persisted to the PRIVATE store on the
-						// client) into the extracted doc so the JSON references the original. board 0082.
-						if (fileHashes[0]) extracted.file_hash = fileHashes[0]
-						try {
-							await ensureDocSchema(userId, docTypeName, doctype.schema)
-							const result = (await executeDataTool(userId, {
-								schema: docTypeName,
-								action: 'create',
-								items: [extracted]
-							})) as { ok?: boolean; created?: string[] }
-							stored = result?.ok === true
-							createdId = result?.created?.[0] ?? null
-							if (docTypeName === 'bank_statement') {
-								txAdded = await fanOutTransactions(userId, extracted, createdId)
-							}
-							if (docTypeName === 'invoice') {
-								invoiceMatch = await matchInvoiceAgainstTx(key, model, userId, extracted, createdId)
-								invoiceBooking = await bookInvoice(
-									key,
-									model,
-									userId,
-									extracted,
-									invoiceMatch,
-									createdId
-								)
-							}
-							// board 0082 — harvest + match-make the doc's parties into the addressbook (the buyer /
-							// account holder is the self-company candidate, surfaced via the returned hint).
-							try {
-								addressbookHint = (await enrichAddressbookFromDoc(userId, docTypeName, extracted))
-									.hint
-							} catch (e2) {
-								console.error('[ai] addressbook enrich failed:', e2)
-							}
-						} catch (e) {
-							console.error('[ai] extract persist failed:', e)
-						}
-					}
-				}
-				if (extracted) extractedType = docTypeName
-				emitTool(
-					tcId,
-					'extract_document',
-					stored
-						? `${docTypeName} · stored${txAdded > 0 ? ` · +${txAdded} tx` : ''}`
-						: docTypeName || 'document',
-					extracted ? 'done' : 'error'
-				)
-				if (extracted && !emittedVibes.has('doc-compare')) {
-					emittedVibes.add('doc-compare')
-					const previewAtt = attachments.find((a) => a.mimeType.startsWith('image/'))
-					const dcData = {
-						type: docTypeName,
-						extracted,
-						fileUrl: previewAtt ? `data:${previewAtt.mimeType};base64,${previewAtt.b64}` : null,
-						mimeType: previewAtt?.mimeType ?? null
-					}
-					emit({ aven_vibe: { schema: 'doc-compare', data: dcData } })
-					await persistMessage(
-						chatSessionId,
-						'assistant',
-						`${VIBE_MARKER}doc-compare\n${JSON.stringify(dcData)}`
-					).catch((e) => console.error('[ai] persist doc-compare vibe marker failed:', e))
-				}
-				if (extracted && docTypeName === 'invoice' && !emittedVibes.has('invoice-booking')) {
-					emittedVibes.add('invoice-booking')
-					const hdr =
-						extracted.header && typeof extracted.header === 'object'
-							? (extracted.header as Record<string, unknown>)
-							: {}
-					const currency = typeof hdr.currency === 'string' ? hdr.currency : ''
-					const ibData = {
-						invoice: extracted,
-						match: invoiceMatch,
-						booking: invoiceBooking,
-						currency
-					}
-					emit({ aven_vibe: { schema: 'invoice-booking', data: ibData } })
-					await persistMessage(
-						chatSessionId,
-						'assistant',
-						`${VIBE_MARKER}invoice-booking\n${JSON.stringify(ibData)}`
-					).catch((e) => console.error('[ai] persist invoice-booking vibe marker failed:', e))
-				}
-				return {
-					extracted: !!extracted,
-					stored,
-					txAdded,
-					match: invoiceMatch
-						? { status: 'matched', confidence: invoiceMatch.confidence }
-						: docTypeName === 'invoice'
-							? { status: 'unmatched' }
-							: undefined,
-					addressbookHint
-				}
-			}
 			// Running copy of the website files for this turn — each edit_website merges its changed
 			// files into THIS, so edits compound across files + calls. Seeded from the client. board 0055.
 			const turnFiles: Record<string, string> = { ...publicFiles }
 			try {
-				// Tell the model the exact schema field names so data_crud writes validate. MERGE the
-				// hint into the existing leading system message — a SECOND system message makes Tinfoil
-				// 400 (only the first turn worked, before any schema existed → no hint). board 0055.
-				const hint = await schemasPromptHint(userId).catch(() => '')
+				// board 0106 — DISPATCH (Tier 1): a tiny SCHEMA-FREE gemma call routes this turn to ONE skill,
+				// so only that skill's tools enter context below (Tier 2) and its heavy context loads lazily
+				// (Tier 3). Any error falls back to the default skill inside routeSkill, so routing never
+				// blocks a turn. The router carries no tool schemas / no hint — it stays cheap on purpose.
+				const routerCall = async (req: RouterRequest): Promise<string> => {
+					const r = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
+						method: 'POST',
+						headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+						body: JSON.stringify(req)
+					})
+					if (!r.ok) throw new Error(`router ${r.status}`)
+					const j = (await r.json()) as { choices?: { message?: { content?: string } }[] }
+					return j.choices?.[0]?.message?.content ?? ''
+				}
+				const lastUser = [...msgs]
+					.reverse()
+					.find((m) => (m as { role?: string }).role === 'user') as
+					| { content?: string | { type: string; text?: string }[] }
+					| undefined
+				const routeText =
+					typeof lastUser?.content === 'string'
+						? lastUser.content
+						: (lastUser?.content ?? [])
+								.filter(
+									(b): b is { type: string; text?: string } =>
+										typeof b === 'object' && b.type === 'text'
+								)
+								.map((b) => b.text ?? '')
+								.join(' ')
+				// board 0106 — surface the router as its own state chip (like a tool call) so the roundtrip
+				// stays transparent: the user sees `dispatch → todos` flip running→done, not a silent gap
+				// before the first tool badge. One stable chip id per turn (toolActivity resets each turn).
+				emitTool('dispatch', 'dispatch', 'routing…', 'running')
+				// board 0110 — the router menu + advertised tools now come from the DB skill/actor registries
+				// (config-as-data), not hardcoded TS; both fall back to the TS seed if the tables are empty.
+				// board 0119q — the router SCAFFOLD PROMPT too: DB actor `dispatch` (skill dispatch).
+				const [menu, dispatchCfg] = await Promise.all([
+					skillMenu(),
+					actorConfig('dispatch').catch(() => null)
+				])
+			// board 0113 — the router sees the conversation TAIL (last few user/assistant turns) so
+				// continuations route by understanding, not keywords.
+				const tail = (messages as { role?: string; content?: unknown }[])
+					.filter(
+						(m) =>
+							(m.role === 'user' || m.role === 'assistant') &&
+							typeof m.content === 'string' &&
+							!m.content.startsWith(VIBE_MARKER) // persisted card markers are payload, not talk
+					)
+					.slice(-5, -1)
+					.map((m) => `${m.role}: ${String(m.content).slice(0, 200)}`)
+					.join('\n')
+				const skillId = await routeSkill(
+					routerCall,
+					routeText,
+					model,
+					menu,
+					tail || undefined,
+					dispatchCfg?.prompt ?? undefined
+				)
+				emitTool('dispatch', 'dispatch', `→ ${skillId}`, 'done')
+				console.log(`[ai] dispatch → ${skillId}`)
+				// board 0114 — the route decision itself is observable: one trace per turn naming the
+				// chosen skill (absorbs board 0109).
+				void recordActorRun(userId, {
+					flowId: 'dispatch',
+					nodeId: 'route',
+					label: `→ ${skillId}`,
+					outputs: [skillId]
+				})
+				// Tier 2 — resolve the routed skill's actors' mailboxes ONCE (same every round). board 0110.
+				const toolDefs = await chatToolDefinitionsFor(skillId)
+				// board 0113 — HARD tool-set enforcement: only the routed skill's advertised tools may run
+				// this turn. Without it a hallucinated call executed ANY inline handler ("nochmal" routed to
+				// todos, gemma invented edit_website, and GLM started rewriting the WEBSITE mid-promotion).
+				const advertisedSet = new Set(toolDefs.map((d) => d.function.name))
+
+				// board 0119q — the BASE system prompt is DB config too (actor `chat` on the dispatch
+				// skill); the client's SYSTEM_PROMPT constant is only the seed/fallback when the row is
+				// absent. Server-enforced so the prompt is editable + transparent like any actor's.
+				const baseCfg = await actorConfig('chat').catch(() => null)
+				if (baseCfg?.prompt) {
+					const base = msgs[0] as { role?: string; content?: string } | undefined
+					if (base?.role === 'system') base.content = baseCfg.prompt
+					else msgs.unshift({ role: 'system', content: baseCfg.prompt })
+				}
+				// Tier 3 — per-skill context hints are MANIFEST CONFIG (board 0119q), not code branches:
+				// the routed skill's manifest declares `hint_providers` (resolved live through the SAME
+				// context registry the config UI reads — what the LLM gets IS what the panel shows) and/or
+				// `hint_static`. MERGE into the leading system message — a SECOND system message makes
+				// Tinfoil 400. board 0055 / 0106 / 0113.
+				const manifest = await skillManifest(skillId).catch(() => null)
+				const hintParts: string[] = []
+				for (const providerKey of manifest?.hint_providers ?? []) {
+					const p = await resolveContext(providerKey, userId).catch(() => null)
+					if (p?.text) hintParts.push(p.text)
+				}
+				if (manifest?.hint_static) hintParts.push(manifest.hint_static)
+				const hint = hintParts.join('\n')
 				if (hint) {
 					const first = msgs[0] as { role?: string; content?: string } | undefined
 					if (first?.role === 'system') {
-						first.content = `${first.content ?? ''}\n\n${hint}`.trim()
+						first.content = assembleSystemContext(skillId, first.content ?? '', hint)
 					} else {
 						msgs.unshift({ role: 'system', content: hint })
 					}
@@ -998,7 +458,12 @@ function streamWithTools(opts: {
 						res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 							method: 'POST',
 							headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-							body: JSON.stringify({ model, messages: msgs, tools: CHAT_TOOLS, stream: true }),
+							body: JSON.stringify({
+								model,
+								messages: msgs,
+								tools: toolDefs,
+								stream: true
+							}),
 							signal: ac.signal
 						})
 					} catch {
@@ -1075,8 +540,20 @@ function streamWithTools(opts: {
 					}
 					promptTokens += roundPrompt
 					completionTokens += roundCompletion
-					const callList = Object.values(calls)
+					let callList = Object.values(calls)
+					// gemma vision mode sometimes emits tool calls as TEXT — recover them so they dispatch.
+					if (callList.length === 0 && /call:\s*\w+\s*\{/.test(roundContent)) {
+						callList = parseTextToolCalls(roundContent)
+					}
 					if (callList.length === 0) break // model gave its final answer (already streamed)
+					// Repair any truncated/malformed tool-call JSON BEFORE echoing the turn back — a raw
+					// unterminated string 400s the next Tinfoil round + kills the stream. board 0099.
+					for (const tc of callList) tc.args = sanitizeToolArgs(tc.args)
+					// PERF (board 0105): count tool calls whose actor already produced the human reply (its
+					// `response`). If EVERY call this round self-replied, we skip the next round — a whole
+					// stateless re-prefill of the system prompt + tools + growing convo just to regenerate a
+					// sentence the model already wrote. Halves latency on the common write/list turn.
+					let selfReplied = 0
 					// Tool round: record the assistant tool-call turn, run each tool, feed results back.
 					msgs.push({
 						role: 'assistant',
@@ -1092,7 +569,172 @@ function streamWithTools(opts: {
 						try {
 							parsed = JSON.parse(tc.args || '{}')
 						} catch {
-							/* leave empty; executeDataTool will report the error */
+							/* leave empty; crud() will report the error */
+						}
+						// board 0113 — the enforcement gate: an un-advertised tool call NEVER executes.
+						if (!advertisedSet.has(tc.name)) {
+							msgs.push({
+								role: 'tool',
+								tool_call_id: tc.id,
+								content: JSON.stringify({
+									ok: false,
+									error: `tool "${tc.name}" is not available on the current skill (${skillId}). Use only the advertised tools.`
+								})
+							})
+							emitTool(tc.id, tc.name, 'not on this skill', 'error')
+							continue
+						}
+						// board 0099 — REGISTRY DISPATCH: a chat tool is an actor (config+behavior) in
+						// @avenos/skills/tools. data_crud (the whole Todos hub) routes here; the loop stays generic —
+						// new tool = one module + one registry line, no loop edit. Server caps are injected via ctx.
+						const actor = TOOL_ACTORS[tc.name]
+						if (actor) {
+							// Show the tool chip + start its timer BEFORE running the actor — a mint can take ~50s —
+							// and keep the stream + timer alive with a 5s ping (else the client's 90s idle watchdog
+							// aborts a long tool). One chip per tool_call id; re-emitting 'running' updates it. board 0100.
+							const runDetail =
+								[parsed.action, parsed.schema]
+									.filter((x) => typeof x === 'string' && x)
+									.join(' ') || tc.name
+							emitTool(tc.id, tc.name, runDetail, 'running')
+							const ping = setInterval(() => emitTool(tc.id, tc.name, runDetail, 'running'), 5_000)
+							const out = await actor
+								.handle(
+									{
+										userId,
+										data: (a) => crud(userId, a),
+										ops: (n, p) => runNamedOp(userId, n, p ?? {}), // board 0112 — named-op cap (e.g. the goals aggregate)
+										ontology: ontologyCaps(userId), // board 0100 — GLM mint + data_schema registry caps
+										query: queryCaps(userId), // board 0101 — GLM-authored validated query specs
+										mutate: mutationCaps(userId), // board 0101 — GLM-authored validated mutation specs
+										bundle: typeCaps(userId), // board 0102 — GLM-authored composite types (data_bundles)
+										// board 0115 — GLM mockup authoring streams its raw tokens into the SAME live
+										// panel the website skill uses (no dead "Thinking…" during a mint/refine).
+										mockup: mockupCaps((text) => emit({ aven_edit_chunk: { text } })),
+										// board 0113/0117 — stepwise promotion + connectors; authoring tokens stream
+									// into the SAME live panel the mockup/website edits use (no dead "Thinking…").
+									promote: promoteCaps(userId, (text) => emit({ aven_edit_chunk: { text } }))
+									},
+									parsed
+								)
+								.finally(() => clearInterval(ping))
+							if (out.hitl) {
+								// HITL: show a confirm/decline card and DON'T execute (the delete actor). aiConfirmAction runs it.
+								emit({
+									aven_hitl: {
+										id: tc.id,
+										tool: tc.name,
+										label: out.hitl.label,
+										action: out.hitl.action
+									}
+								})
+								msgs.push({
+									role: 'tool',
+									tool_call_id: tc.id,
+									content: JSON.stringify(out.content)
+								})
+								emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
+								continue
+							}
+							msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out.content) })
+							if (out.reply) {
+								emit({ choices: [{ delta: { content: out.reply } }] })
+								assistant += out.reply
+								selfReplied++
+							}
+							// The actor decides WHICH vibe(s) (todos → its mode card; skillify steps → the
+							// stepper + the step's content card). The loop does the plumbing + dedup — keyed
+							// by schema+data so an IDENTICAL re-emit is dropped but a newer state (the same
+							// stepper at a later step) still renders.
+							const vibes = out.vibe ? (Array.isArray(out.vibe) ? out.vibe : [out.vibe]) : []
+							for (const v of vibes) {
+								const key = `${v.schema}\n${v.data === undefined ? '' : JSON.stringify(v.data)}`
+								if (emittedVibes.has(key)) continue
+								emittedVibes.add(key)
+								// a schema without vibe rows (e.g. a promoted skill's raw entity type) gets NO
+								// card — the text reply stands; never a client-side "konnte nicht geladen" error.
+								if (!(await vibeExists(v.schema).catch(() => true))) continue
+								const { schema, data } = v
+								emit({ aven_vibe: data === undefined ? { schema } : { schema, data } })
+								await persistMessage(
+									chatSessionId,
+									'assistant',
+									data === undefined
+										? `${VIBE_MARKER}${schema}`
+										: `${VIBE_MARKER}${schema}\n${JSON.stringify(data)}`
+								).catch((e) => console.error('[ai] persist vibe marker failed:', e))
+							}
+							// board 0114 — GENERIC tracing at the ONE dispatch seam: every executed tool call
+							// records a run keyed by the ROUTED skill + the actor (tool) name — no per-skill
+							// schema-prefix sniffing, so a config-minted skill is traced from birth.
+							const traceVibe = vibes[vibes.length - 1]
+							void recordActorRun(userId, {
+								flowId: skillId,
+								nodeId: tc.name,
+								label: out.detail ?? tc.name,
+								vibe: traceVibe?.schema,
+								vibeData: traceVibe?.data,
+								outputs: [traceVibe?.schema ?? skillId]
+							})
+							emitTool(tc.id, tc.name, out.detail ?? tc.name, 'done')
+							continue
+						}
+						// board 0113 — a DB-ONLY actor with sandboxed `code` is a FIRST-CLASS chat tool: no TS
+						// handler exists (the skill was minted as pure config), so resolve the actor row by name
+						// and run its QuickJS code with ONLY its granted caps. The state it returns feeds its
+						// vibe card directly (the example-source contract). The 0111 seat, finally occupied.
+						const dbActor = TOOL_ACTORS[tc.name] ? null : await actorConfig(tc.name)
+						if (dbActor?.code) {
+							emitTool(tc.id, tc.name, 'sandbox', 'running')
+							const ping2 = setInterval(() => emitTool(tc.id, tc.name, 'sandbox', 'running'), 5_000)
+							try {
+								const run = await runCodeActor(dbActor, parsed, userId)
+								const state = run.ran ? (run.result as Record<string, unknown>) : null
+								msgs.push({
+									role: 'tool',
+									tool_call_id: tc.id,
+									content: JSON.stringify({ ok: !!state, note: CARD_REPLY_NOTE })
+								})
+								const schema = dbActor.vibe
+								if (state && schema && !emittedVibes.has(schema)) {
+									emittedVibes.add(schema)
+									emit({ aven_vibe: { schema, data: state } })
+									await persistMessage(
+										chatSessionId,
+										'assistant',
+										`${VIBE_MARKER}${schema}\n${JSON.stringify(state)}`
+									).catch((e) => console.error('[ai] persist sandbox vibe failed:', e))
+								}
+								const saidReply =
+									typeof parsed.response === 'string' && parsed.response.trim()
+										? parsed.response.trim()
+										: `Here is your ${String(schema ?? tc.name).replace(/-/g, ' ')}.`
+								emit({ choices: [{ delta: { content: saidReply } }] })
+								assistant += saidReply
+								selfReplied++
+								void recordActorRun(userId, {
+									flowId: skillId,
+									nodeId: tc.name,
+									label: `sandbox ${tc.name}`,
+									vibe: schema ?? undefined,
+									vibeData: state ?? undefined,
+									outputs: [schema ?? skillId]
+								})
+								emitTool(tc.id, tc.name, 'done', 'done')
+							} catch (e) {
+								msgs.push({
+									role: 'tool',
+									tool_call_id: tc.id,
+									content: JSON.stringify({
+										ok: false,
+										error: e instanceof Error ? e.message : String(e)
+									})
+								})
+								emitTool(tc.id, tc.name, 'sandbox error', 'error')
+							} finally {
+								clearInterval(ping2)
+							}
+							continue
 						}
 						// Read-only website viewer: flow the Composer vibe into the chat — no data op, so
 						// the data_crud (todos etc.) path is untouched. board 0055.
@@ -1115,257 +757,6 @@ function streamWithTools(opts: {
 								)
 							}
 							emitTool(tc.id, 'show_website', 'website viewer ready', 'done')
-							continue
-						}
-						// BWA / finance snapshot: flow the computed finance vibe into the chat. No data op —
-						// the view is computed client-side from the user's bookings + tx. board 0072.
-						if (tc.name === 'show_finances') {
-							emitTool(tc.id, 'show_finances', 'opening finance snapshot', 'running')
-							msgs.push({
-								role: 'tool',
-								tool_call_id: tc.id,
-								content: JSON.stringify({
-									ok: true,
-									shown: 'finance snapshot (BWA)',
-									note: CARD_REPLY_NOTE
-								})
-							})
-							if (!emittedVibes.has('bwa')) {
-								emittedVibes.add('bwa')
-								emit({ aven_vibe: { schema: 'bwa' } })
-								await persistMessage(chatSessionId, 'assistant', `${VIBE_MARKER}bwa`).catch((e) =>
-									console.error('[ai] persist bwa vibe marker failed:', e)
-								)
-							}
-							emitTool(tc.id, 'show_finances', 'finance snapshot ready', 'done')
-							continue
-						}
-						// board 0082 — outgoing invoicing + addressbook tools. Contacts/invoices are JSON in /api/data;
-						// the server mints contact ids, assigns fortlaufende numbers, computes VAT. PDF render is client-side.
-						if (
-							tc.name === 'upsert_contact' ||
-							tc.name === 'set_my_company' ||
-							tc.name === 'query_contacts' ||
-							tc.name === 'create_invoice' ||
-							tc.name === 'update_invoice' ||
-							tc.name === 'set_invoice_state' ||
-							tc.name === 'save_invoice_pdf'
-						) {
-							const reply = typeof parsed.response === 'string' ? parsed.response : ''
-							emitTool(tc.id, tc.name, tc.name, 'running')
-							let toolResult: Record<string, unknown> = { ok: true }
-							const emitVibe = (schema: string, data?: unknown) => {
-								emit({ aven_vibe: data === undefined ? { schema } : { schema, data } })
-								const marker =
-									data === undefined
-										? `${VIBE_MARKER}${schema}`
-										: `${VIBE_MARKER}${schema}\n${JSON.stringify(data)}`
-								void persistMessage(chatSessionId, 'assistant', marker).catch(() => {})
-							}
-							try {
-								await ensureDocSchema(userId, 'contact', CONTACT_SCHEMA)
-								const listContacts = async (): Promise<Record<string, unknown>[]> =>
-									(
-										(await executeDataTool(userId, { schema: 'contact', action: 'list' })) as {
-											items?: Record<string, unknown>[]
-										}
-									).items ?? []
-								if (tc.name === 'query_contacts') {
-									const items = await listContacts()
-									emitVibe('addressbook')
-									toolResult = { ok: true, count: items.length, note: CARD_REPLY_NOTE }
-								} else if (tc.name === 'upsert_contact') {
-									const fields = contactFieldsFromPick(parsed)
-									const contacts = await listContacts()
-									// Resolve the target: an explicit id, else DEDUPE against an existing contact
-									// (USt-IdNr → IBAN → name) so we never create a duplicate. board 0082.
-									let targetId =
-										typeof parsed.contact_value_id === 'string' && parsed.contact_value_id
-											? parsed.contact_value_id
-											: (matchContact(fields as PartyInput, contacts)?.id ?? null)
-									if (targetId) {
-										await executeDataTool(userId, {
-											schema: 'contact',
-											action: 'update',
-											items: [{ id: targetId, ...fields }]
-										})
-										toolResult = { ok: true, contact_value_id: targetId, updated: true }
-									} else {
-										const shortId = mintContactId(
-											Math.random,
-											contacts.map((c) => String(c.short_id ?? '')).filter(Boolean)
-										)
-										const res = (await executeDataTool(userId, {
-											schema: 'contact',
-											action: 'create',
-											items: [{ short_id: shortId, is_self: false, ...fields }]
-										})) as { created?: string[] }
-										targetId = res.created?.[0] ?? null
-										toolResult = { ok: true, contact_value_id: targetId, short_id: shortId }
-									}
-									emitVibe('addressbook')
-								} else if (tc.name === 'set_my_company') {
-									await executeDataTool(userId, {
-										schema: 'contact',
-										action: 'update',
-										items: [{ id: parsed.contact_value_id, is_self: true }]
-									})
-									emitVibe('addressbook')
-									toolResult = { ok: true, set: 'is_self' }
-								} else {
-									// invoice tools — need invoice_doc schema, the seller (my company), and existing numbers.
-									await ensureDocSchema(userId, 'invoice_doc', INVOICE_DOC_SCHEMA)
-									const contacts = await listContacts()
-									const myCompany = contacts.find((c) => c.is_self) ?? null
-									const invoices =
-										(
-											(await executeDataTool(userId, {
-												schema: 'invoice_doc',
-												action: 'list'
-											})) as { items?: Record<string, unknown>[] }
-										).items ?? []
-									const numbers = invoices.map((i) => String(i.number ?? '')).filter(Boolean)
-									const persistDoc = async (doc: InvoiceDoc) => {
-										await executeDataTool(userId, {
-											schema: 'invoice_doc',
-											action: 'create',
-											items: [doc as unknown as Record<string, unknown>]
-										})
-										emitVibe('invoice-create', doc)
-									}
-									if (tc.name === 'create_invoice') {
-										// resolve the customer: existing contact, or create one from `customer`.
-										let customer =
-											typeof parsed.contact_value_id === 'string'
-												? (contacts.find((c) => c.id === parsed.contact_value_id) ?? null)
-												: null
-										if (!customer && parsed.customer && typeof parsed.customer === 'object') {
-											const cf = contactFieldsFromPick(parsed.customer as Record<string, unknown>)
-											const shortId = mintContactId(
-												Math.random,
-												contacts.map((c) => String(c.short_id ?? '')).filter(Boolean)
-											)
-											const res = (await executeDataTool(userId, {
-												schema: 'contact',
-												action: 'create',
-												items: [{ short_id: shortId, is_self: false, type: 'company', ...cf }]
-											})) as { created?: string[] }
-											customer = { id: res.created?.[0] ?? null, short_id: shortId, ...cf }
-											emitVibe('addressbook')
-										}
-										const shortId = String(customer?.short_id ?? 'XXXXXXXX')
-										const lines = (Array.isArray(parsed.lines) ? parsed.lines : []) as InvoiceLine[]
-										const number = assignInvoiceNumber(numbers, 'entwurf', shortId)
-										const doc: InvoiceDoc = {
-											number,
-											state: 'entwurf',
-											version: 1,
-											contact_short_id: shortId,
-											contact_value_id: (customer?.id as string) ?? null,
-											issue_date: typeof parsed.issue_date === 'string' ? parsed.issue_date : null,
-											service_date: null,
-											service_period:
-												typeof parsed.service_period === 'string' ? parsed.service_period : null,
-											seller: partyFromContact(myCompany) as InvoiceDoc['seller'],
-											buyer: partyFromContact(customer) as InvoiceDoc['buyer'],
-											lines,
-											totals: computeInvoiceTotals(lines),
-											currency: 'EUR',
-											note: typeof parsed.note === 'string' ? parsed.note : null,
-											pdf_file_hash: null,
-											supersedes: null
-										}
-										await persistDoc(doc)
-										const missing = requiredFieldsMissing(doc)
-										toolResult = {
-											ok: true,
-											number,
-											totals: doc.totals,
-											my_company_set: !!myCompany,
-											missing_required_fields: missing,
-											note:
-												missing.length || !myCompany
-													? 'Ask the user (free text/voice) for the missing fields, then update_invoice / upsert the seller.'
-													: CARD_REPLY_NOTE
-										}
-									} else if (tc.name === 'update_invoice') {
-										const prior =
-											invoices
-												.filter((i) => i.number === parsed.number)
-												.sort((a, b) => Number(b.version ?? 0) - Number(a.version ?? 0))[0] ?? null
-										const base = (prior ?? {}) as unknown as InvoiceDoc
-										const lines = (
-											Array.isArray(parsed.lines) ? parsed.lines : (base.lines ?? [])
-										) as InvoiceLine[]
-										const doc: InvoiceDoc = {
-											...base,
-											version: Number(base.version ?? 0) + 1,
-											issue_date:
-												typeof parsed.issue_date === 'string'
-													? parsed.issue_date
-													: (base.issue_date ?? null),
-											service_period:
-												typeof parsed.service_period === 'string'
-													? parsed.service_period
-													: (base.service_period ?? null),
-											note: typeof parsed.note === 'string' ? parsed.note : (base.note ?? null),
-											lines,
-											totals: computeInvoiceTotals(lines),
-											pdf_file_hash: null,
-											supersedes: String(parsed.number)
-										}
-										await persistDoc(doc)
-										toolResult = {
-											ok: true,
-											number: doc.number,
-											version: doc.version,
-											totals: doc.totals,
-											note: CARD_REPLY_NOTE
-										}
-									} else if (tc.name === 'set_invoice_state') {
-										const prior =
-											invoices
-												.filter((i) => i.number === parsed.number)
-												.sort((a, b) => Number(b.version ?? 0) - Number(a.version ?? 0))[0] ?? null
-										const base = (prior ?? {}) as unknown as InvoiceDoc
-										const state = parsed.state as InvoiceState
-										const shortId = String(base.contact_short_id ?? 'XXXXXXXX')
-										const number = assignInvoiceNumber(numbers, state, shortId)
-										const doc: InvoiceDoc = {
-											...base,
-											number,
-											state,
-											version: 1,
-											pdf_file_hash: null,
-											supersedes: String(parsed.number)
-										}
-										await persistDoc(doc)
-										toolResult = { ok: true, number, state, note: CARD_REPLY_NOTE }
-									} else if (tc.name === 'save_invoice_pdf') {
-										// The PDF is rendered client-side (HTML template → print). Flow the invoice card so the client
-										// can render + store it in the PRIVATE file store and stamp the hash. board 0082 Phase E.
-										const doc =
-											invoices
-												.filter((i) => i.number === parsed.number)
-												.sort((a, b) => Number(b.version ?? 0) - Number(a.version ?? 0))[0] ?? null
-										if (doc) emitVibe('invoice-create', doc)
-										emit({ aven_invoice_pdf: { number: parsed.number } })
-										toolResult = {
-											ok: true,
-											number: parsed.number,
-											note: 'The client renders + stores the PDF.'
-										}
-									}
-								}
-							} catch (e) {
-								toolResult = { ok: false, error: e instanceof Error ? e.message : String(e) }
-							}
-							msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(toolResult) })
-							if (reply) {
-								emit({ choices: [{ delta: { content: reply } }] })
-								assistant += reply
-							}
-							emitTool(tc.id, tc.name, tc.name, 'done')
 							continue
 						}
 						// Website edit: the chat model passed an instruction — GLM returns SEARCH/REPLACE diff
@@ -1461,189 +852,13 @@ function streamWithTools(opts: {
 									note: 'A publish confirm card was shown. Do NOT deploy or retry — just tell the user you asked them to confirm publishing.'
 								})
 							})
-							continue
-						}
-						// Bookkeeping: classify_document — the model already determined the type and
-						// metadata from the multimodal content. Emit the vibe card with that data. 0063.
-						if (tc.name === 'classify_document') {
-							const docType = typeof parsed.docType === 'string' ? parsed.docType : 'other'
-							const title = typeof parsed.title === 'string' ? parsed.title : ''
-							const description = typeof parsed.description === 'string' ? parsed.description : ''
-							const booking_summary =
-								typeof parsed.booking_summary === 'string' ? parsed.booking_summary : ''
-							const tags = Array.isArray(parsed.tags) ? (parsed.tags as unknown[]).map(String) : []
-							const issuer = typeof parsed.issuer === 'string' ? parsed.issuer : ''
-							const recipient = typeof parsed.recipient === 'string' ? parsed.recipient : ''
-							const parties = Array.isArray(parsed.parties)
-								? (parsed.parties as unknown[]).map(String)
-								: []
-							const reply =
-								typeof parsed.response === 'string' ? parsed.response : 'Dokument klassifiziert.'
-							emitTool(tc.id, 'classify_document', `${docType}: ${title}`, 'running')
-							if (!emittedVibes.has('bookkeeping')) {
-								emittedVibes.add('bookkeeping')
-								const previewAtt = attachments.find((a) => a.mimeType.startsWith('image/'))
-								const bkData = {
-									docType,
-									title,
-									description,
-									booking_summary,
-									tags,
-									issuer,
-									recipient,
-									parties,
-									fileUrl: previewAtt
-										? `data:${previewAtt.mimeType};base64,${previewAtt.b64}`
-										: null,
-									mimeType: previewAtt?.mimeType ?? null
-								}
-								emit({ aven_vibe: { schema: 'bookkeeping', data: bkData } })
-								// Persist the marker WITH its data + preview image so the card (and its thumbnail)
-								// re-hydrate after reload. board 0067/0074.
-								await persistMessage(
-									chatSessionId,
-									'assistant',
-									`${VIBE_MARKER}bookkeeping\n${JSON.stringify(bkData)}`
-								).catch((e) => console.error('[ai] persist bookkeeping vibe marker failed:', e))
-							}
-							emitTool(tc.id, 'classify_document', `${docType}: ${title}`, 'done')
-							// Auto-chain the extract step (board 0076): the model sometimes classifies and then stops
-							// without calling extract_document. For an extractable type with images, run extraction
-							// here directly so it never silently fails to trigger.
-							const extractable =
-								(docType === 'invoice' || docType === 'bank_statement' || docType === 'contract') &&
-								attachments.length > 0
-							let autoExtract: Awaited<ReturnType<typeof performExtraction>> | null = null
-							if (extractable && !extractedType) {
-								autoExtract = await performExtraction(docType, `${tc.id}:extract`)
-							}
-							msgs.push({
-								role: 'tool',
-								tool_call_id: tc.id,
-								content: JSON.stringify({
-									ok: true,
-									docType,
-									title,
-									description,
-									tags,
-									issuer,
-									recipient,
-									parties,
-									...(autoExtract
-										? {
-												extracted: autoExtract.extracted,
-												stored: autoExtract.stored,
-												// Addressbook auto-enriched from the parties; the hint (if any) asks the user to
-												// confirm their own company. Else: extraction already ran, reply briefly. board 0082.
-												note:
-													autoExtract.addressbookHint ??
-													'Extraction already ran automatically — do NOT call extract_document. Reply with one short sentence.'
-											}
-										: {})
-								})
-							})
-							emit({ choices: [{ delta: { content: reply } }] })
-							assistant += reply
-							continue
-						}
-						// Bookkeeping: extract_document — full type-specific extraction (factored into performExtraction,
-						// also auto-chained after classify). Skip if classify already ran it for this type. board 0064/0076.
-						if (tc.name === 'extract_document') {
-							const docTypeName = typeof parsed.type === 'string' ? parsed.type : ''
-							const reply =
-								typeof parsed.response === 'string' ? parsed.response : 'Dokument extrahiert.'
-							const summary =
-								extractedType === docTypeName
-									? {
-											extracted: true,
-											stored: true,
-											txAdded: 0,
-											match: undefined,
-											addressbookHint: null as string | null
-										}
-									: await performExtraction(docTypeName, tc.id)
-							msgs.push({
-								role: 'tool',
-								tool_call_id: tc.id,
-								content: JSON.stringify({
-									ok: !!summary.extracted,
-									type: docTypeName,
-									stored: summary.stored,
-									validated: summary.stored,
-									transactions_added: summary.txAdded,
-									match: summary.match,
-									// board 0082 — addressbook auto-enriched from the parties; when the user's own
-									// company isn't set yet, this asks them to confirm it (free text).
-									...(summary.addressbookHint ? { note: summary.addressbookHint } : {})
-								})
-							})
-							emit({ choices: [{ delta: { content: reply } }] })
-							assistant += reply
-							continue
-						}
-						const dataDetail =
-							`${typeof parsed.action === 'string' ? parsed.action : ''} ${typeof parsed.schema === 'string' ? parsed.schema : ''}`.trim() ||
-							'data'
-						// HITL: never DELETE without explicit confirmation — show a confirm/decline card and
-						// DON'T execute. The user approves via /api/ai/confirm, which runs it. board 0055.
-						if (parsed.action === 'delete') {
-							const schema = typeof parsed.schema === 'string' ? parsed.schema : 'data'
-							const id = typeof parsed.id === 'string' ? parsed.id : ''
-							emit({
-								aven_hitl: {
-									id: tc.id,
-									tool: 'data_crud',
-									label: `Delete from "${schema}"${id ? ` (#${id.slice(0, 8)})` : ''}?`,
-									action: parsed
-								}
-							})
-							msgs.push({
-								role: 'tool',
-								tool_call_id: tc.id,
-								content: JSON.stringify({
-									ok: false,
-									status: 'awaiting_user_confirmation',
-									note: 'A confirm/decline card was shown to the user. Do NOT delete or retry — just tell them you asked them to confirm.'
-								})
-							})
-							continue
-						}
-						emitTool(tc.id, tc.name || 'data_crud', dataDetail, 'running')
-						let result: unknown
-						try {
-							result = await executeDataTool(userId, parsed)
-						} catch (e) {
-							result = { ok: false, error: e instanceof Error ? e.message : String(e) }
-						}
-						// A `list` renders a vibe card, so tell the model to answer tersely (don't re-dump the
-						// rows as a Markdown table). Scoped to THIS tool result, not a global prompt. board 0075.
-						const resultPayload =
-							parsed.action === 'list' &&
-							result &&
-							typeof result === 'object' &&
-							!Array.isArray(result)
-								? { ...(result as Record<string, unknown>), note: CARD_REPLY_NOTE }
-								: result
-						msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(resultPayload) })
-						emitTool(tc.id, tc.name || 'data_crud', dataDetail, 'done')
-						// Signal the client to flow a live vibe card for the touched schema into the
-						// message stream (the same data this CRUD just changed), and persist a marker
-						// message so the card reappears when the session is reloaded. One per schema
-						// per turn. board 0054.
-						if (
-							typeof parsed.schema === 'string' &&
-							parsed.schema &&
-							!emittedVibes.has(parsed.schema)
-						) {
-							emittedVibes.add(parsed.schema)
-							emit({ aven_vibe: { schema: parsed.schema } })
-							await persistMessage(
-								chatSessionId,
-								'assistant',
-								`${VIBE_MARKER}${parsed.schema}`
-							).catch((e) => console.error('[ai] persist vibe marker failed:', e))
 						}
 					}
+					// PERF (board 0105): every tool call this round already emitted its own reply → the
+					// answer is fully streamed and the card shows the result. Skip the extra round (a full
+					// stateless re-prefill of prompt+tools+convo just to restate what the model already said).
+					// query / HITL / website narration don't self-reply, so they still get a follow-up round.
+					if (selfReplied > 0 && selfReplied === callList.length) break
 				}
 			} catch (e) {
 				emit({
@@ -1706,7 +921,7 @@ export async function aiUsageRecent(c: Context): Promise<Response> {
 
 /**
  * HITL: run a data action the user explicitly confirmed (e.g. a delete the model proposed and
- * which the tool loop deliberately did NOT execute). Session-gated; executeDataTool publishes a
+ * which the tool loop deliberately did NOT execute). Session-gated; crud() publishes a
  * `data` event so the live vibe refreshes. board 0055.
  */
 export async function aiConfirmAction(c: Context): Promise<Response> {
@@ -1734,8 +949,64 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 502)
 		}
 	}
+	// board 0113/0117 — a CONFIRMED promote: copy the mock vibes live (first promote or a redesign).
+	if (body.action.tool === 'promote_skill') {
+		const app = String(body.action.app ?? '').trim()
+		if (!app) return c.json({ ok: false, error: 'no_app' }, 400)
+		try {
+			await promoteVibe(app)
+			void recordActorRun(session.user.id, {
+				flowId: 'skillify',
+				nodeId: 'promote',
+				label: `promote ${app}`,
+				outputs: [app]
+			})
+			return c.json({ ok: true, result: { app } })
+		} catch (e) {
+			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500)
+		}
+	}
+	// board 0101 — a confirmed destructive MUTATION: apply the (already validated + stored) mutation spec as
+	// one transaction and record the run. The tool loop deliberately did NOT run it.
+	if (body.action.tool === 'mutate') {
+		const spec = body.action.spec
+		const request = typeof body.action.request === 'string' ? body.action.request : 'mutation'
+		if (!spec || typeof spec !== 'object') return c.json({ ok: false, error: 'no_spec' }, 400)
+		try {
+			const result = await mutationCaps(session.user.id).apply(spec as never)
+			void recordActorRun(session.user.id, {
+				flowId: 'ontology',
+				nodeId: 'mutate',
+				label: `mutate — ${request}`,
+				vibe: 'mutation-result',
+				vibeData: { request, spec, ops: result.ops },
+				outputs: ['ops']
+			})
+			return c.json({
+				ok: true,
+				result: { vibe: 'mutation-result', data: { request, spec, ops: result.ops } }
+			})
+		} catch (e) {
+			return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500)
+		}
+	}
 	try {
-		const result = await executeDataTool(session.user.id, body.action)
+		const result = await crud(session.user.id, body.action as Parameters<typeof crud>[1])
+		// board 0114 — a confirmed delete records GENERICALLY for any schema (the schema name doubles as
+		// the owning skill id for data hubs); todos keeps its deleted-summary card vibe.
+		if (body.action.action === 'delete') {
+			const schema = String(body.action.schema ?? 'data')
+			const items = Array.isArray(body.action._deleted)
+				? (body.action._deleted as { id: string; title: string }[])
+				: []
+			void recordActorRun(session.user.id, {
+				flowId: schema,
+				nodeId: 'data_crud',
+				label: items.length > 1 ? `delete ${items.length} ${schema}` : `delete ${schema}`,
+				...(schema === 'todos' ? { vibe: 'todos-deleted', vibeData: { items } } : {}),
+				outputs: [schema]
+			})
+		}
 		return c.json({ ok: true, result })
 	} catch (e) {
 		return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500)

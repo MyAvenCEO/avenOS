@@ -495,6 +495,69 @@ function patchAccelerateFramework() {
 	)
 }
 
+/**
+ * Ship a UNIVERSAL app (iPhone + iPad). cargo-mobile2's iOS template never sets
+ * TARGETED_DEVICE_FAMILY, and Info.ios.plist doesn't set UIDeviceFamily — so the built
+ * app's device family falls back to Xcode's implicit default, leaving iPad availability
+ * to chance across Xcode / cargo-mobile2 versions. Pin it to "1,2" so the SAME signed
+ * .ipa installs and runs on iPad from the same App Store record (an "iPad app" is just an
+ * iOS app whose device family includes iPad — no separate binary, target, or pipeline).
+ *
+ * All modern iPads are arm64 + Metal, so the template's UIRequiredDeviceCapabilities:
+ * [arm64, metal] and the statically-linked local-llama Metal path already satisfy iPad.
+ *
+ * Patch BOTH project.yml (the xcodegen source, in case of a regen) and the already
+ * generated project.pbxproj (which `tauri ios build` consumes as-is). The pbxproj still
+ * carries the cargo-mobile2 macOS target, so the SDKROOT discriminator scopes the setting
+ * to the iOS configs only (macOS uses `SDKROOT = macosx;`). Idempotent.
+ */
+function patchTargetedDeviceFamily() {
+	const FAMILY = '"1,2"'
+
+	const projectYml = path.join(genApple, 'project.yml')
+	if (existsSync(projectYml)) {
+		let yml = readFileSync(projectYml, 'utf8')
+		if (!yml.includes('TARGETED_DEVICE_FAMILY')) {
+			// The template only emits ARCHS inside the iOS target's settings.base, so it's a
+			// precise anchor for adding the device family to that same block.
+			const m = yml.match(/^([ \t]*)ARCHS: /m)
+			if (m) {
+				const indent = m[1]
+				yml = yml.replace(
+					/^([ \t]*)ARCHS: /m,
+					`${indent}TARGETED_DEVICE_FAMILY: ${FAMILY}\n${indent}ARCHS: `
+				)
+				writeFileSync(projectYml, yml, 'utf8')
+				console.log(
+					'[tauri-ios-asc] patched project.yml (TARGETED_DEVICE_FAMILY = 1,2 — universal iPhone/iPad)'
+				)
+			}
+		}
+	}
+
+	const pbxproj = path.join(genApple, 'aven-os-app.xcodeproj/project.pbxproj')
+	if (!existsSync(pbxproj)) return
+	let pbx = readFileSync(pbxproj, 'utf8')
+	if (pbx.includes('TARGETED_DEVICE_FAMILY')) return // already set (idempotent)
+	if (!pbx.includes('SDKROOT = iphoneos;')) {
+		// Anchor absent — fail loud rather than silently ship an iPhone-only build.
+		console.error(
+			'tauri-ios-asc: no `SDKROOT = iphoneos;` in project.pbxproj — cannot pin TARGETED_DEVICE_FAMILY (iPad support). The cargo-mobile2 template layout may have changed; update patchTargetedDeviceFamily().'
+		)
+		process.exit(1)
+	}
+	// Every iOS build config (Debug + Release) carries `SDKROOT = iphoneos;`; the macOS
+	// target uses `macosx`, so replaceAll scopes the setting to the iPhone/iPad configs.
+	pbx = pbx.replaceAll(
+		'SDKROOT = iphoneos;',
+		`SDKROOT = iphoneos;\n\t\t\t\tTARGETED_DEVICE_FAMILY = ${FAMILY};`
+	)
+	writeFileSync(pbxproj, pbx, 'utf8')
+	console.log(
+		'[tauri-ios-asc] patched project.pbxproj (TARGETED_DEVICE_FAMILY = 1,2 — universal iPhone/iPad)'
+	)
+}
+
 function patchPodfile() {
 	const podfile = path.join(genApple, 'Podfile')
 	if (!existsSync(podfile)) return
@@ -582,6 +645,7 @@ async function main() {
 	ensureRustToolchainReady()
 	patchXcodeRustScript()
 	patchAccelerateFramework()
+	patchTargetedDeviceFamily()
 
 	const workspace = path.join(genApple, 'aven-os-app.xcodeproj/project.xcworkspace')
 	ensureIosDevicePlatform(workspace, 'aven-os-app_iOS')

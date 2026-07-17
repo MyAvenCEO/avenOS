@@ -310,6 +310,19 @@
 		"selectPairedPeer": "Gepairten Peer auswählen…",
 		"noLabel": "(kein Label)"
 	},
+	"draw": {
+		"tools": "Zeichenwerkzeuge",
+		"pen": "Stift",
+		"eraser": "Radierer",
+		"select": "Auswählen",
+		"clear": "Löschen",
+		"colors": "Farben",
+		"addImage": "Bild",
+		"zoom": "Zoom",
+		"zoomIn": "Vergrößern",
+		"zoomOut": "Verkleinern",
+		"resetView": "Ansicht zurücksetzen"
+	},
 	"intents": {
 		"title": "Intents",
 		"pageTitle": "Intents mock — @AvenOS/app",
@@ -974,8 +987,9 @@
 	},
 	"mainnet": {
 		"nav": {
-			"chat": "Chat",
+			"chat": "Intents",
 			"vibes": "Vibes",
+			"draw": "Zeichnen",
 			"schemas": "Schemas",
 			"db": "DB",
 			"fly": "Fly",
@@ -1101,7 +1115,47 @@
 			"emptyTable": "Noch keine Einträge für dieses Schema.",
 			"rows": "Einträge",
 			"tabSchema": "Schema",
-			"tabData": "Daten"
+			"tabData": "Daten",
+			"detail": "Detail",
+			"attached": "Prädikationen verknüpft",
+			"close": "Schließen",
+			"gismuTitle": "Kanonisches Lojban-Gismu, von dem die Stellenstruktur abgeleitet ist",
+			"rawSchema": "JSON-Schema (roh)",
+			"dynamic": "Dynamisch",
+			"vibes": "Vibes",
+			"emptySpecs": "Noch keine — stelle im Chat eine Frage oder wünsche eine Änderung, um eine anzulegen.",
+			"sec": {
+				"schemas": "Schemas",
+				"values": "Werte",
+				"bundles": "Bundles",
+				"operations": "Operationen",
+				"vibes": "Vibes"
+			},
+			"vibe": {
+				"summary": "Zusammenfassung",
+				"summaryHint": "Diese Karte rendert über den Engine aus ihren vibe.*-Zeilen (view + style + logic) — derselbe Pfad wie Chat/Runs. Kein per-View-Svelte. Die Tabs zeigen die rohe Konfiguration."
+			},
+			"reg": {
+				"types": "Bundles",
+				"data_operations": "Operationen",
+				"vibe_view": "Views",
+				"vibe_style": "Styles",
+				"vibe_logic": "Logic"
+			},
+			"regHint": {
+				"types": "Composite Types — ein Bundle ist ein benannter Satz Traits (welche Prädikate eine Art bilden) + eine View (wie sie flach zurückgelesen werden). Bundles KOMPILIEREN zu den Operationen unten.",
+				"data_operations": "Die vereinheitlichte Operations-Registry — Abfragen (lesen) und Mutationen (ändern) als eine validierte-Spec-Tabelle. GLM-verfasste Ops gehören dir; Bundle-abgeleitete Ops sind global.",
+				"vibe_view": "vibe_view — die ViewDef-Bäume (Layout/Struktur jeder Karte), vom Engine gerendert, ohne per-View-Svelte.",
+				"vibe_style": "vibe_style — die StyleDef-Tokens (visuelles Styling jeder Karte), Config-as-Data.",
+				"vibe_logic": "vibe_logic — das sandbox-quickjs-JS, das Daten in jede View abbildet (die Query-/Mapping-Logik des Templates)."
+			},
+			"place": {
+				"place": "Stelle",
+				"role": "Rolle",
+				"meaning": "Bedeutung",
+				"kind": "Art",
+				"example": "Beispiel"
+			}
 		},
 		"auth": {
 			"tag": "mainnet / alberobello",
