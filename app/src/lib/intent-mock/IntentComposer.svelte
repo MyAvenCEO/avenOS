@@ -1034,24 +1034,34 @@ const pillClass = $derived.by(() => {
 					class="pointer-events-none absolute inset-[12%] rounded-full opacity-55 blur-[12px] [background:radial-gradient(circle,color-mix(in_srgb,var(--color-primary)_30%,transparent),transparent_70%)]"
 				></span>
 				{#if voiceMode.active}
-					<!-- aven-voice: live session — pulsing rings on the mark; click again stops. -->
+					<!-- aven-voice: recording — red stop button with an X; pulsing ring behind. -->
 					<span
 						aria-hidden="true"
-						class="pointer-events-none absolute inset-0 rounded-full bg-primary/15 motion-safe:animate-ping"
+						class="pointer-events-none absolute inset-0 rounded-full bg-red-500/25 motion-safe:animate-ping"
 					></span>
 					<span
-						aria-hidden="true"
-						class="pointer-events-none absolute -inset-1.5 rounded-full border border-primary/30 motion-safe:animate-pulse"
-					></span>
+						class="pointer-events-none absolute inset-[8%] flex items-center justify-center rounded-full bg-red-500 shadow-md transition-transform duration-200 ease-out group-hover:scale-[1.05] group-active:scale-95"
+					>
+						<svg
+							class="size-6 text-white"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							aria-hidden="true"
+						>
+							<path d="M18 6 6 18M6 6l12 12" />
+						</svg>
+					</span>
+				{:else}
+					<!-- board 0119m — the full-colour clean mark is the DEFAULT (no disabled/inactive swap). -->
+					<img
+						src={logoClean}
+						alt="avenOS"
+						class="pointer-events-none absolute inset-0 size-full object-contain p-1 transition-transform duration-200 ease-out group-hover:scale-[1.08] group-active:scale-95"
+					/>
 				{/if}
-				<!-- board 0119m — the full-colour clean mark is the DEFAULT (no disabled/inactive swap).
-				     Hover highlight = a MINIMAL transform (scale-up, no reflow → never displaces the
-				     button) + a hair more contrast; a tiny press-in on active. -->
-				<img
-					src={logoClean}
-					alt="avenOS"
-					class="pointer-events-none absolute inset-0 size-full object-contain p-1 transition-transform duration-200 ease-out group-hover:scale-[1.08] group-active:scale-95"
-				/>
 			</button>
 		</div>
 	{:else if mode === 'listening'}

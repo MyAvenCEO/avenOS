@@ -144,7 +144,9 @@ export function createVoiceBridge(
 										detail: out.detail
 									})
 									session?.sendToolResponse({
-										functionResponses: [{ id: c.id, name: c.name, response: { output: out.content } }]
+										functionResponses: [
+											{ ...(c.id ? { id: c.id } : {}), name: c.name, response: { output: out.content } }
+										]
 									})
 								})
 								.catch((err) => {
@@ -152,7 +154,11 @@ export function createVoiceBridge(
 									send({ type: 'toolEvent', id: c.id, name: c.name, args: c.args, status: 'error', detail: message })
 									session?.sendToolResponse({
 										functionResponses: [
-											{ id: c.id, name: c.name, response: { output: { ok: false, error: message } } }
+											{
+												...(c.id ? { id: c.id } : {}),
+												name: c.name,
+												response: { output: { ok: false, error: message } }
+											}
 										]
 									})
 								})
@@ -190,7 +196,7 @@ export function createVoiceBridge(
 			} else if (msg.type === 'toolResponse' && Array.isArray(msg.responses)) {
 				session.sendToolResponse({
 					functionResponses: msg.responses.map((r) => ({
-						id: r.id,
+						...(r.id ? { id: r.id } : {}),
 						name: r.name,
 						response: { output: r.response }
 					}))
