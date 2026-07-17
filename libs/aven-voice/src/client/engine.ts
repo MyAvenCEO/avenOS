@@ -99,7 +99,7 @@ export class VoiceEngine {
 		this.openTimer = setTimeout(() => {
 			if (this.status !== 'connected') {
 				this.opts.onError?.(
-					'Sprachverbindung zu Google kam nicht zustande (Netzwerk/VPN). Bitte erneut versuchen.'
+					'Der Echtzeit-Stream zu Google kommt über dieses Netz nicht durch (oft Mobilfunk-Hotspot). Über WLAN erneut versuchen.'
 				)
 				this.setStatus('error')
 				this.manualClose = true

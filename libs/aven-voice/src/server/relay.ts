@@ -198,19 +198,31 @@ export function createVoiceBridge(
 		for (let attempt = 0; attempt < MAX_ATTEMPTS && !closed; attempt++) {
 			const location = VERTEX ? LOCATIONS[attempt % LOCATIONS.length] : 'developer-api'
 			send({ type: 'status', phase: 'connecting', attempt: attempt + 1, total: MAX_ATTEMPTS, region: location })
+			const t0 = Date.now()
+			console.log(`[voice] connect attempt ${attempt + 1}/${MAX_ATTEMPTS} → ${MODEL} @ ${location}`)
 			try {
 				await connectOnce(setup, location)
+				console.log(`[voice] connected @ ${location} in ${Date.now() - t0}ms`)
 				return // success — session is live, callbacks stream via onLiveMessage
 			} catch (e) {
 				lastErr = e instanceof Error ? e.message : String(e)
+				console.error(
+					`[voice] attempt ${attempt + 1} FAILED @ ${location} after ${Date.now() - t0}ms: ${lastErr}`
+				)
 				session = undefined
 				if (attempt < MAX_ATTEMPTS - 1) await sleep(Math.min(500 * 2 ** attempt, 4000))
 			}
 		}
 		if (!closed) {
+			// Distinguish the diagnosed condition: the WS to *.googleapis.com never
+			// opens (connect timeout) while normal HTTPS works — typically a mobile
+			// carrier proxying/optimising Google traffic and breaking WS upgrades.
+			const wsBlocked = /timeout|closed before open/i.test(lastErr)
 			send({
 				type: 'error',
-				message: `Sprachverbindung zu Google kam nach ${MAX_ATTEMPTS} Versuchen nicht zustande (${lastErr}). Netzwerk/VPN prüfen und erneut versuchen.`
+				message: wsBlocked
+					? `Der Echtzeit-Audio-Stream zu Google wird von diesem Netz blockiert (nach ${MAX_ATTEMPTS} Versuchen, ${LOCATIONS.join('/')}). Normales Internet läuft, aber WebSockets zu Google kommen nicht durch — häufig bei Mobilfunk-Hotspots (Carrier-Proxy). Über WLAN erneut versuchen.`
+					: `Sprachverbindung fehlgeschlagen (${lastErr}).`
 			})
 		}
 	}
