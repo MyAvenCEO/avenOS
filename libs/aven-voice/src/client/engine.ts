@@ -44,6 +44,7 @@ export class VoiceEngine {
 	private active = false
 	private manualClose = false
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+	private openTimer: ReturnType<typeof setTimeout> | null = null
 	private toolResults = new Map<string, unknown>()
 	private recentByArgs = new Map<string, { response: unknown; ts: number }>()
 	private assistantTurnDone = false
@@ -66,6 +67,7 @@ export class VoiceEngine {
 		this.active = false
 		this.manualClose = true
 		if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+		if (this.openTimer) clearTimeout(this.openTimer)
 		this.ws?.close()
 		this.ws = null
 		this.teardownAudio()
@@ -90,6 +92,20 @@ export class VoiceEngine {
 		this.recentByArgs.clear()
 		const ws = new WebSocket(this.opts.url)
 		this.ws = ws
+
+		// Watchdog: if the Gemini session never confirms open (network/Vertex Live
+		// degraded), surface a clear error instead of silently doing nothing.
+		if (this.openTimer) clearTimeout(this.openTimer)
+		this.openTimer = setTimeout(() => {
+			if (this.status !== 'connected') {
+				this.opts.onError?.(
+					'Sprachverbindung zu Google kam nicht zustande (Netzwerk/Vertex Live). Bitte erneut versuchen.'
+				)
+				this.setStatus('error')
+				this.manualClose = true
+				this.ws?.close()
+			}
+		}, 15_000)
 
 		ws.onopen = () => {
 			const setup: VoiceSetup = {
@@ -121,6 +137,7 @@ export class VoiceEngine {
 	private async handleServerMessage(msg: ServerMessage): Promise<void> {
 		switch (msg.type) {
 			case 'open':
+				if (this.openTimer) { clearTimeout(this.openTimer); this.openTimer = null }
 				this.setStatus('connected')
 				if (this.active) void this.startCapture()
 				break
