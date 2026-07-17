@@ -231,16 +231,18 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 			}
 
 			// 0c) show_dienstplan — render the roster vibe over the CURRENT shifts
-			//     (week overview grouped by weekday). Mirrors show_calendar.
+			//     (week overview grouped by weekday). Optional `week` pages the view
+			//     (0=this, 1=next, -1=last); the vibe logic computes that week's dates.
 			if (name === 'show_dienstplan') {
 				const listed = await crud(userId, { schema: 'shift', action: 'list' } as Parameters<
 					typeof crud
 				>[1]).catch(() => null)
 				const items = (listed as { items?: unknown } | null)?.items ?? listed ?? []
+				const weekOffset = Number.isFinite(Number(args.week)) ? Number(args.week) : 0
 				return {
-					content: { ok: true, shown: 'dienstplan' },
+					content: { ok: true, shown: 'dienstplan', week: weekOffset },
 					detail: 'dienstplan',
-					vibes: await existingVibes([{ schema: 'dienstplan', data: { items } }])
+					vibes: await existingVibes([{ schema: 'dienstplan', data: { items, weekOffset } }])
 				}
 			}
 
@@ -307,17 +309,29 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 				// REALTIME BY DEFAULT: every data_crud mutation refreshes the skill's vibe with
 				// fresh data so the stage always reflects the change — regardless of whether the
 				// vibe is named after the schema (todos, inventory) or differs (dienstplan→shift,
-				// via manifest). When the actor already produced a valid card (todos-created/
-				// -edited), we keep it; otherwise we push the resolved vibe with the live list.
+				// via manifest). A `list` renders the dedicated `<vibe>-list` view when the skill
+				// has one (dienstplan-list = shifts per person), else the primary vibe. When the
+				// actor already produced a valid card (todos-created/-edited), we keep it.
 				const schema = typeof args.schema === 'string' ? args.schema : ''
 				const isMutation =
 					name === 'data_crud' && ['create', 'update', 'delete'].includes(String(args.action))
-				if (isMutation && schema && vibes.length === 0) {
-					const vibeName = await vibeForSchema(schema).catch(() => null)
-					if (vibeName) {
-						const fresh = await crud(userId, { schema, action: 'list' } as Parameters<typeof crud>[1])
-						const rows = (fresh as { items?: unknown } | undefined)?.items ?? fresh
-						vibes = [{ schema: vibeName, data: { items: rows } }]
+				const isList = name === 'data_crud' && String(args.action) === 'list'
+				if ((isMutation || isList) && schema && vibes.length === 0) {
+					const primary = await vibeForSchema(schema).catch(() => null)
+					if (primary) {
+						let target = primary
+						// the actor's list result already respects any filter — reuse its data.
+						let data = (declared[0] as VoiceVibe | undefined)?.data
+						if (isList && (await vibeExists(`${primary}-list`).catch(() => false))) {
+							target = `${primary}-list`
+						}
+						if (data === undefined) {
+							const fresh = await crud(userId, { schema, action: 'list' } as Parameters<
+								typeof crud
+							>[1])
+							data = { items: (fresh as { items?: unknown } | undefined)?.items ?? fresh }
+						}
+						vibes = [{ schema: target, data }]
 					}
 				}
 				return { content: out.content, hitl: out.hitl, detail: out.detail, vibes }
