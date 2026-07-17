@@ -12,7 +12,7 @@ import { TOOL_ACTORS } from '@avenos/skills/tools'
 import type { VoiceServerTools } from '@avenos/aven-voice/server'
 import { crud, runCodeActor, runNamedOp } from './actor-run'
 import { actorConfig, chatToolDefinitionsFor, skillMenu } from './config'
-import { schemasPromptHint } from './data'
+import { bundleFieldContract, schemasPromptHint } from './data'
 import { mockupCaps } from './mockup-caps'
 import { ontologyCaps } from './ontology'
 import { promoteCaps } from './promote-caps'
@@ -131,9 +131,25 @@ async function existingVibes(vibes: VoiceVibe[]): Promise<VoiceVibe[]> {
 export async function buildVoiceServerTools(userId: string): Promise<VoiceServerTools> {
 	const { declarations, schemaBindings } = await voiceToolSurface()
 	const hint = await schemasPromptHint(userId).catch(() => '')
+	// Per-schema FIELD contract (SSOT from the bundles): tell the model the exact
+	// field names up front so it never sends type/date/name and needs a retry.
+	const schemaNames = [
+		...new Set(schemaBindings.map((b) => b.match(/=\s*"([a-z0-9_-]+)"/i)?.[1]).filter(Boolean))
+	] as string[]
+	const fieldLines = (
+		await Promise.all(
+			schemaNames.map(async (s) => {
+				const c = await bundleFieldContract(s).catch(() => null)
+				return c?.fields.length ? `- "${s}": Felder ${c.fields.join(', ')}` : ''
+			})
+		)
+	).filter(Boolean)
 	const instructionsSuffix = [
 		'Verfügbare data_crud-Schemas je Skill (nutze EXAKT diese Namen, rate nie):',
 		...schemaBindings,
+		...(fieldLines.length
+			? ['create/update: pro Objekt NUR diese Felder je Schema (keine anderen Namen wie type/date/name):', ...fieldLines]
+			: []),
 		hint,
 		'Für einen anderen Bereich wechselst du einfach das schema-Feld von data_crud.',
 		'Zum Ändern oder Löschen: rufe IMMER ZUERST list auf, lies die Ergebnisse, und nutze dann delete/update mit den EXAKTEN ids daraus — nie einen Namen im id-Feld, nie einen filter. Kommt "unknown-id" zurück, enthält die Antwort die aktuelle Liste mit den echten ids: wähle daraus und rufe erneut auf.'
@@ -153,6 +169,45 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 
 			// 0a) show_website — same contract as chat: the composer vibe is
 			//    client-special-cased (viewer reads local files), no registry row.
+			if (
+				name === 'data_crud' &&
+				typeof args.schema === 'string' &&
+				['create', 'update'].includes(String(args.action)) &&
+				Array.isArray(args.items)
+			) {
+				// Field contract: create/update items must use the schema's REAL fields.
+				// The model tends to send generic names (type/date/name) — silently
+				// dropped by the write layer, creating invisible partial rows. Check each
+				// item against the bundle's field contract (SSOT); on any unknown field or
+				// a missing primary, DON'T write — hand back the exact valid fields so the
+				// model retries correctly. No aliasing.
+				const contract = await bundleFieldContract(args.schema).catch(() => null)
+				if (contract && contract.fields.length) {
+					const allowed = new Set([...contract.fields, 'id', 'response'])
+					const unknownKeys = new Set<string>()
+					let missingPrimary = false
+					for (const it of args.items as Record<string, unknown>[]) {
+						for (const k of Object.keys(it)) if (!allowed.has(k)) unknownKeys.add(k)
+						if (String(args.action) === 'create' && contract.primary && !it[contract.primary]) {
+							missingPrimary = true
+						}
+					}
+					if (unknownKeys.size || missingPrimary) {
+						return {
+							content: {
+								ok: false,
+								error: 'unknown-fields',
+								message: `Nutze für "${args.schema}" GENAU diese Felder pro Objekt: ${contract.fields.join(', ')}${contract.primary ? ` (${contract.primary} ist Pflicht)` : ''}. Keine anderen Namen (nicht type/date/name), Zeiten als "HH:MM", Tag als Wochenname. Ruf create/update erneut mit diesen Feldern auf.`,
+								schema: args.schema,
+								fields: contract.fields,
+								...(unknownKeys.size ? { rejectedFields: [...unknownKeys] } : {})
+							},
+							detail: `${args.schema}: bitte echte Felder verwenden`
+						}
+					}
+				}
+			}
+
 			if (name === 'show_website') {
 				return {
 					content: { ok: true, shown: 'website composer (read-only)' },

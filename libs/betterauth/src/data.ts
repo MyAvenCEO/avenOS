@@ -326,6 +326,19 @@ export async function schemasPromptHint(uid: string): Promise<string> {
 
 
 
+/** The INPUT-FIELD contract for a bundle schema (SSOT for what data_crud accepts on create/update):
+ *  the projected field names the caller should send (minus derived `owner`), and the required primary
+ *  field. Lets the tool surface tell the model the EXACT fields instead of it guessing type/date/name. */
+export async function bundleFieldContract(
+	schema: string
+): Promise<{ fields: string[]; primary: string | null } | null> {
+	const spec = await bundleSpec(schema)
+	if (!spec) return null
+	const fields = Object.keys(spec.project ?? {}).filter((f) => f !== 'owner')
+	const primaryPart = (spec.parts ?? []).find((p) => p.kind === 'primary')
+	return { fields, primary: primaryPart?.field ?? null }
+}
+
 /** A registered bundle's spec from the `data_bundles` registry — the transparency provider's read. */
 async function bundleSpec(name: string): Promise<TypeSpec | null> {
 	const row = await db()
