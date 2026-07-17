@@ -124,34 +124,94 @@ const CALENDAR_VIEW = {
 }
 
 const CALENDAR_STYLE = {
-	'.cal-container': { display: 'flex', 'flex-direction': 'column', gap: '1rem', 'max-width': '46rem', margin: '0 auto', 'font-family': "'JetBrains Mono', ui-monospace, Menlo, monospace", color: 'var(--text, #1f2a3d)' },
-	'.cal-card': { 'border-radius': '1.25rem', border: '1px solid rgba(31,42,61,0.12)', background: 'rgba(255,255,255,0.55)', padding: '1.25rem 1.4rem', 'backdrop-filter': 'blur(6px)' },
-	'.cal-card--head': { display: 'flex', 'align-items': 'flex-end', 'justify-content': 'space-between', gap: '1rem' },
-	'.cal-eyebrow': { 'font-size': '11px', 'font-weight': '700', 'text-transform': 'uppercase', 'letter-spacing': '0.12em', color: 'rgba(31,42,61,0.45)' },
-	'.cal-title': { 'font-size': '1.4rem', 'font-weight': '600', margin: '0.1rem 0 0' },
-	'.cal-head-stat': { 'text-align': 'right' },
-	'.cal-field-label': { 'font-size': '10px', 'text-transform': 'uppercase', 'letter-spacing': '0.1em', color: 'rgba(31,42,61,0.45)' },
-	'.cal-accent': { 'font-size': '1.6rem', 'font-weight': '700', color: 'var(--brand-accent, #e6b34d)' },
-	'.cal-card--list': { padding: '0.6rem 0.4rem' },
-	'.cal-list': { 'list-style': 'none', margin: '0', padding: '0' },
-	'.cal-empty[data-empty="true"]': { padding: '1.5rem', 'text-align': 'center', color: 'rgba(31,42,61,0.5)', 'font-size': '13px' },
-	'.cal-row': { display: 'flex', 'align-items': 'center', gap: '0.8rem', padding: '0.6rem 1rem', 'border-bottom': '1px solid rgba(31,42,61,0.06)' },
-	'.cal-row:last-child': { 'border-bottom': 'none' },
-	'.cal-row.section': { 'padding-top': '1rem', 'padding-bottom': '0.35rem', 'border-bottom': 'none', gap: '0.5rem' },
-	'.cal-section': { 'font-size': '11px', 'font-weight': '700', 'text-transform': 'uppercase', 'letter-spacing': '0.1em', color: 'rgba(31,42,61,0.75)' },
-	'.cal-section:empty': { display: 'none' },
-	'.cal-section-count': { 'font-size': '10px', 'font-weight': '700', color: 'rgba(31,42,61,0.4)' },
-	'.cal-section-count:empty': { display: 'none' },
-	'.cal-dot': { width: '7px', height: '7px', 'border-radius': '9999px', background: 'rgba(31,42,61,0.35)', flex: '0 0 auto' },
-	'.cal-row.section .cal-dot': { display: 'none' },
-	'.cal-row.overdue .cal-dot': { background: '#c15b40' },
-	'.cal-row.today .cal-dot': { background: '#2e7d52' },
-	'.cal-row-text': { flex: '1 1 auto', 'font-size': '13px' },
-	'.cal-row-text:empty': { display: 'none' },
-	'.cal-chip': { 'border-radius': '9999px', border: '1px solid rgba(31,42,61,0.15)', background: 'rgba(255,255,255,0.6)', padding: '0.15rem 0.6rem', 'font-size': '11px', color: 'rgba(31,42,61,0.6)' },
-	'.cal-chip:empty': { display: 'none' },
-	'.cal-chip--time': { 'font-variant-numeric': 'tabular-nums' },
-	'.cal-row.overdue .cal-chip--time': { color: '#c15b40', 'border-color': 'rgba(193,91,64,0.4)' }
+	// White-label: extend the brand token layer — every color/radius/font comes
+	// from var(--…) brand tokens (danger/ok/muted/surface/…), nothing hardcoded.
+	extends: 'brand',
+	tokens: {},
+	selectors: {
+		'.cal-container': {
+			display: 'flex',
+			flexDirection: 'column',
+			gap: '1rem',
+			maxWidth: '46rem',
+			margin: '0 auto',
+			fontFamily: 'var(--font-mono)',
+			color: 'var(--text)'
+		},
+		'.cal-card': {
+			border: '1px solid var(--border)',
+			background: 'var(--surface)',
+			borderRadius: 'var(--radius-card)',
+			padding: '1.25rem 1.4rem'
+		},
+		'.cal-card--head': {
+			display: 'flex',
+			alignItems: 'flex-end',
+			justifyContent: 'space-between',
+			gap: '1rem'
+		},
+		'.cal-eyebrow': {
+			fontSize: 'var(--fs-eyebrow)',
+			fontWeight: '700',
+			textTransform: 'uppercase',
+			letterSpacing: 'var(--tracking-eyebrow)',
+			color: 'var(--muted)'
+		},
+		'.cal-title': { fontSize: 'var(--fs-hero)', fontWeight: '600', margin: '0.1rem 0 0' },
+		'.cal-head-stat': { textAlign: 'right' },
+		'.cal-field-label': {
+			fontSize: 'var(--fs-micro)',
+			textTransform: 'uppercase',
+			letterSpacing: 'var(--tracking-eyebrow)',
+			color: 'var(--muted)'
+		},
+		'.cal-accent': { fontSize: 'var(--fs-amount)', fontWeight: '700', color: 'var(--brand-accent)' },
+		'.cal-card--list': { padding: '0.6rem 0.4rem' },
+		'.cal-list': { listStyle: 'none', margin: '0', padding: '0' },
+		'.cal-empty': { padding: '1.5rem', textAlign: 'center', color: 'var(--muted)', fontSize: 'var(--fs-body)' },
+		'.cal-row': {
+			display: 'flex',
+			alignItems: 'center',
+			gap: '0.8rem',
+			padding: '0.6rem 1rem',
+			borderBottom: '1px solid var(--border-soft)'
+		},
+		'.cal-row.section': { paddingTop: '1rem', paddingBottom: '0.35rem', borderBottom: 'none', gap: '0.5rem' },
+		'.cal-section': {
+			fontSize: 'var(--fs-eyebrow)',
+			fontWeight: '700',
+			textTransform: 'uppercase',
+			letterSpacing: 'var(--tracking-eyebrow)',
+			color: 'var(--muted-strong)'
+		},
+		'.cal-section:empty': { display: 'none' },
+		'.cal-section-count': { fontSize: 'var(--fs-micro)', fontWeight: '700', color: 'var(--muted)' },
+		'.cal-section-count:empty': { display: 'none' },
+		'.cal-dot': {
+			minWidth: '7px',
+			maxWidth: '7px',
+			height: '7px',
+			borderRadius: 'var(--radius-pill)',
+			background: 'var(--muted)',
+			flex: '0 0 auto'
+		},
+		'.cal-row.section .cal-dot': { display: 'none' },
+		'.cal-row.overdue .cal-dot': { background: 'var(--danger)' },
+		'.cal-row.today .cal-dot': { background: 'var(--ok)' },
+		'.cal-row-text': { flex: '1 1 auto', fontSize: 'var(--fs-body)' },
+		'.cal-row-text:empty': { display: 'none' },
+		'.cal-chip': {
+			borderRadius: 'var(--radius-pill)',
+			border: '1px solid var(--border)',
+			background: 'var(--surface-2)',
+			padding: '0.15rem 0.6rem',
+			fontSize: 'var(--fs-label)',
+			color: 'var(--muted-strong)'
+		},
+		'.cal-chip:empty': { display: 'none' },
+		'.cal-chip--time': { fontVariantNumeric: 'tabular-nums' },
+		'.cal-row.overdue .cal-chip--time': { color: 'var(--danger)', borderColor: 'var(--danger)' }
+	}
 }
 
 // ES5-style (sandbox-quickjs): bucket tasks by their relative due label into
