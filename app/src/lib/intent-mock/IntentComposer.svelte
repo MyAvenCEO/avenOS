@@ -983,17 +983,17 @@ const pillClass = $derived.by(() => {
 				<span class="min-w-0 flex-1 truncate font-medium">{voiceMode.pendingHitl.label}</span>
 				<button
 					type="button"
-					class="shrink-0 rounded-full bg-destructive px-3.5 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
-					onclick={() => void voiceMode.confirmHitl()}
-				>
-					Bestätigen
-				</button>
-				<button
-					type="button"
 					class="shrink-0 rounded-full border border-border bg-background px-3.5 py-1.5 text-xs font-semibold transition hover:bg-muted"
 					onclick={() => voiceMode.dismissHitl()}
 				>
 					Ablehnen
+				</button>
+				<button
+					type="button"
+					class="shrink-0 rounded-full bg-destructive px-3.5 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+					onclick={() => void voiceMode.confirmHitl()}
+				>
+					Bestätigen
 				</button>
 			</div>
 		{/if}
