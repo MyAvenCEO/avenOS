@@ -136,7 +136,7 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 		...schemaBindings,
 		hint,
 		'Für einen anderen Bereich wechselst du einfach das schema-Feld von data_crud.',
-		'Zum Löschen oder gezielten Ändern: rufe ZUERST list auf, dann delete/update mit den ECHTEN ids aus dem Ergebnis — niemals mit einem filter statt ids.'
+		'Zum Ändern oder Löschen: rufe IMMER ZUERST list auf, lies die Ergebnisse, und nutze dann delete/update mit den EXAKTEN ids daraus — nie einen Namen im id-Feld, nie einen filter. Kommt "unknown-id" zurück, enthält die Antwort die aktuelle Liste mit den echten ids: wähle daraus und rufe erneut auf.'
 	]
 		.filter(Boolean)
 		.join('\n')
@@ -175,30 +175,54 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 				}
 			}
 
-			// data_crud delete/update with a filter but no ids: the actor honors ids
-			// only, so resolve the filter to real ids FIRST (the voice model tends to
-			// pass filters). Keeps HITL delete + targeted update working end-to-end.
+			// Ids are Postgres UUIDs — the model must NEVER invent them. Instead of
+			// guessing/matching server-side, we keep the intelligence in the tool loop:
+			// every update/delete is checked against the LIVE rows, and if any target id
+			// isn't a real one (the model passed a name, a made-up id, or a filter), we
+			// DON'T execute — we hand back the actual rows (id + label) and tell the model
+			// to read them and retry with the exact ids. It then self-corrects. No
+			// hardcoded name-matching, no regex; the model does the picking.
 			if (
 				name === 'data_crud' &&
 				typeof args.schema === 'string' &&
-				['delete', 'update'].includes(String(args.action)) &&
-				args.filter &&
-				!(Array.isArray(args.ids) && args.ids.length)
+				['delete', 'update'].includes(String(args.action))
 			) {
 				const listed = await crud(userId, {
 					schema: args.schema,
-					action: 'list',
-					filter: args.filter
+					action: 'list'
 				} as Parameters<typeof crud>[1]).catch(() => null)
-				const rows = ((listed as { items?: unknown } | null)?.items ?? listed) as
-					| { id?: unknown }[]
-					| undefined
-				const ids = Array.isArray(rows)
-					? rows.map((r) => r?.id).filter((x): x is string => typeof x === 'string')
-					: []
-				if (ids.length) {
-					args.ids = ids
-					delete args.filter
+				const rows = (((listed as { items?: unknown } | null)?.items ?? listed) ??
+					[]) as Record<string, unknown>[]
+				const idSet = new Set(
+					(Array.isArray(rows) ? rows : [])
+						.map((r) => String(r?.id))
+						.filter((x) => x && x !== 'undefined')
+				)
+				const targets =
+					String(args.action) === 'delete'
+						? (Array.isArray(args.ids) ? args.ids : []).map((x) => String(x))
+						: (Array.isArray(args.items) ? args.items : []).map((it) =>
+								String((it as Record<string, unknown>)?.id)
+							)
+				const usedFilter = String(args.action) === 'delete' && !!args.filter && !targets.length
+				const unknown = targets.filter((id) => !idSet.has(id))
+				if (usedFilter || unknown.length) {
+					// Surface the real data so the model reads it and retries with true ids.
+					const current = (Array.isArray(rows) ? rows : []).map((r) => ({
+						id: r.id,
+						label: r.title ?? r.name ?? r.label ?? r.text ?? ''
+					}))
+					return {
+						content: {
+							ok: false,
+							error: 'unknown-id',
+							message:
+								'Nutze die EXAKTE id aus der aktuellen Liste (keine Namen, kein filter). Ruf mit diesen ids erneut auf.',
+							schema: args.schema,
+							items: current
+						},
+						detail: `${args.schema}: bitte echte id verwenden`
+					}
 				}
 			}
 
