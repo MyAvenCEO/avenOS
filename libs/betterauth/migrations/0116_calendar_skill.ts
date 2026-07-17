@@ -301,6 +301,9 @@ function initState(source) {
 		var due = parseDue(it)
 		var days = due ? daysUntil(due.d) : labelDays(it.due)
 		var b = bucketOf(days)
+		// A calendar shows SCHEDULED work only — tasks without a due date live
+		// in the todos list, not here.
+		if (b === 4) continue
 		groups[b].push({
 			text: it.text || it.title || '',
 			time: due ? chipLabel(due.d, days, due.allDay) : String(it.due || ''),
