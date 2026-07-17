@@ -50,7 +50,17 @@ function makeClient(location: string): GoogleGenAI {
 			vertexai: true,
 			project: PROJECT,
 			location,
-			...(saJson ? { googleAuthOptions: { credentials: JSON.parse(saJson) } } : {})
+			// scopes are REQUIRED with explicit SA credentials: without them the
+			// token exchange never completes and live.connect hangs silently
+			// (ADC carries scopes implicitly, an SA key does not).
+			...(saJson
+				? {
+						googleAuthOptions: {
+							credentials: JSON.parse(saJson),
+							scopes: ['https://www.googleapis.com/auth/cloud-platform']
+						}
+					}
+				: {})
 		})
 	}
 	const apiKey = process.env.GOOGLE_AI_API_KEY ?? process.env.GEMINI_API_KEY
