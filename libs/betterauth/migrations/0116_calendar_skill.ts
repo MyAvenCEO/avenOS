@@ -133,7 +133,8 @@ const CALENDAR_STYLE = {
 			display: 'flex',
 			flexDirection: 'column',
 			gap: '1rem',
-			maxWidth: '46rem',
+			width: '100%',
+			maxWidth: 'var(--max-w)',
 			margin: '0 auto',
 			fontFamily: 'var(--font-mono)',
 			color: 'var(--text)'
@@ -158,7 +159,7 @@ const CALENDAR_STYLE = {
 			color: 'var(--muted)'
 		},
 		'.cal-title': { fontSize: 'var(--fs-hero)', fontWeight: '600', margin: '0.1rem 0 0' },
-		'.cal-head-stat': { textAlign: 'right' },
+		'.cal-head-stat': { textAlign: 'right', flexShrink: '0' },
 		'.cal-field-label': {
 			fontSize: 'var(--fs-micro)',
 			textTransform: 'uppercase',
@@ -198,9 +199,12 @@ const CALENDAR_STYLE = {
 		'.cal-row.section .cal-dot': { display: 'none' },
 		'.cal-row.overdue .cal-dot': { background: 'var(--danger)' },
 		'.cal-row.today .cal-dot': { background: 'var(--ok)' },
-		'.cal-row-text': { flex: '1 1 auto', fontSize: 'var(--fs-body)' },
+		'.cal-row-text': { flex: '1', minWidth: '0', fontSize: 'var(--fs-body)' },
 		'.cal-row-text:empty': { display: 'none' },
 		'.cal-chip': {
+			display: 'inline-flex',
+			alignItems: 'center',
+			flexShrink: '0',
 			borderRadius: 'var(--radius-pill)',
 			border: '1px solid var(--border)',
 			background: 'var(--surface-2)',
@@ -219,7 +223,26 @@ const CALENDAR_STYLE = {
 // list (header rows carry `header`, task rows carry `text`). Read-only:
 // changes come from voice/chat, not an inline form.
 const CALENDAR_LOGIC = `
-function dueDays(label) {
+function pad(n) { return (n < 10 ? '0' : '') + n }
+
+// Real rows carry due as an ISO string ("2026-07-18T14:00:00Z"); parse that
+// first. Relative labels ("in 2 Tagen", "heute") stay as a fallback so the
+// view also works when a producer hands it derived labels.
+// Returns { d, allDay }: date-only strings ("2026-07-17") are ALL-DAY and
+// parsed as LOCAL dates (new Date('YYYY-MM-DD') would be UTC midnight and
+// shift to 02:00 local). A T00:00 timestamp is treated as all-day too — the
+// model writes midnight when the user gave no time.
+function parseDue(it) {
+	var raw = String(it.dueIso || it.dueRaw || it.due || '')
+	if (!raw) return null
+	var dm = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+	if (dm) return { d: new Date(+dm[1], +dm[2] - 1, +dm[3]), allDay: true }
+	var d = new Date(raw)
+	if (isNaN(d.getTime())) return null
+	return { d: d, allDay: /[T ]00:00/.test(raw) }
+}
+
+function labelDays(label) {
 	if (!label) return null
 	var s = String(label).toLowerCase()
 	if (s.indexOf('overdue') !== -1) {
@@ -231,6 +254,13 @@ function dueDays(label) {
 	var m = s.match(/(\\d+)/)
 	if (m && s.indexOf('in ') !== -1) return parseInt(m[1], 10)
 	return null
+}
+
+function daysUntil(d) {
+	var now = new Date()
+	var a = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+	var b = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+	return Math.round((b.getTime() - a.getTime()) / 86400000)
 }
 
 function bucketOf(days) {
@@ -249,12 +279,17 @@ var BUCKETS = [
 	{ label: 'Ohne Frist', kind: 'none' }
 ]
 
-function timeOf(item) {
-	// carry a HH:MM if the raw due had a time; else the relative label
-	var raw = item.dueRaw || item.dueIso || ''
-	var tm = String(raw).match(/[T ](\\d{2}:\\d{2})/)
-	if (tm) return tm[1]
-	return item.due || ''
+var WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+
+// Human chip: today → "14:00" / "heute"; this week → "Sa 14:00"; else "18.07.".
+function chipLabel(d, days, allDay) {
+	if (d === null) return ''
+	var hasTime = !allDay
+	var hh = pad(d.getHours()) + ':' + pad(d.getMinutes())
+	var dd = pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.'
+	if (days === 0) return hasTime ? hh : 'heute'
+	if (days > 0 && days <= 6) return WEEKDAYS[d.getDay()] + (hasTime ? ' ' + hh : '')
+	return dd + (hasTime ? ' ' + hh : '')
 }
 
 function initState(source) {
@@ -263,14 +298,15 @@ function initState(source) {
 	var groups = [[], [], [], [], []]
 	for (var i = 0; i < items.length; i++) {
 		var it = items[i]
-		var d = dueDays(it.due)
-		var b = bucketOf(d)
+		var due = parseDue(it)
+		var days = due ? daysUntil(due.d) : labelDays(it.due)
+		var b = bucketOf(days)
 		groups[b].push({
 			text: it.text || it.title || '',
-			time: timeOf(it),
+			time: due ? chipLabel(due.d, days, due.allDay) : String(it.due || ''),
 			priority: it.priority || '',
 			kind: BUCKETS[b].kind,
-			days: d === null ? 9999 : d
+			ts: due ? due.d.getTime() : 9007199254740991
 		})
 	}
 	var rows = []
@@ -278,7 +314,7 @@ function initState(source) {
 	for (var g = 0; g < groups.length; g++) {
 		var list = groups[g]
 		if (!list.length) continue
-		list.sort(function (a, b) { return a.days - b.days })
+		list.sort(function (a, b) { return a.ts - b.ts })
 		rows.push({ header: BUCKETS[g].label, count: String(list.length), text: '', time: '', priority: '', kind: BUCKETS[g].kind, rowClass: 'cal-row section ' + BUCKETS[g].kind })
 		for (var j = 0; j < list.length; j++) {
 			var r = list[j]
