@@ -175,6 +175,20 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 				}
 			}
 
+			// 0c) show_dienstplan — render the roster vibe over the CURRENT shifts
+			//     (week overview grouped by weekday). Mirrors show_calendar.
+			if (name === 'show_dienstplan') {
+				const listed = await crud(userId, { schema: 'shift', action: 'list' } as Parameters<
+					typeof crud
+				>[1]).catch(() => null)
+				const items = (listed as { items?: unknown } | null)?.items ?? listed ?? []
+				return {
+					content: { ok: true, shown: 'dienstplan' },
+					detail: 'dienstplan',
+					vibes: await existingVibes([{ schema: 'dienstplan', data: { items } }])
+				}
+			}
+
 			// Ids are Postgres UUIDs — the model must NEVER invent them. Instead of
 			// guessing/matching server-side, we keep the intelligence in the tool loop:
 			// every update/delete is checked against the LIVE rows, and if any target id
