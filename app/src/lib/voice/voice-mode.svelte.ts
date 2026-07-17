@@ -71,6 +71,8 @@ class VoiceMode {
 	/** Vibes the executed actors declared (schema + data), in arrival order —
 	 *  the shell's stage consumes them exactly like chat's aven_vibe events. */
 	vibeQueue = $state<{ seq: number; schema: string; data?: unknown }[]>([])
+	/** Live connect progress for the connecting state (attempt/region). */
+	connecting = $state<{ attempt: number; total: number; region: string } | null>(null)
 	#vibeSeq = 0
 
 	#engine: VoiceEngine | null = null
@@ -85,6 +87,7 @@ class VoiceMode {
 		this.transcript = []
 		this.toolEvents = []
 		this.vibeQueue = []
+		this.connecting = null
 		const wsOrigin = AUTH_ORIGIN.replace(/^http/, 'ws')
 		const token = getBearerToken()
 		const url = `${wsOrigin}/api/voice/live${token ? `?token=${encodeURIComponent(token)}` : ''}`
@@ -105,7 +108,11 @@ class VoiceMode {
 				this.error = m
 			},
 			onServerMessage: (msg) => {
-				if (msg.type === 'toolEvent') {
+				if (msg.type === 'status' && msg.phase === 'connecting') {
+					this.connecting = { attempt: msg.attempt, total: msg.total, region: msg.region }
+				} else if (msg.type === 'open') {
+					this.connecting = null
+				} else if (msg.type === 'toolEvent') {
 					this.toolEvents = [...this.toolEvents.slice(-19), msg]
 					// The ACTOR declared its vibes (schema + state) server-side — same
 					// contract as chat's aven_vibe; no client-side mapping tables.
@@ -173,6 +180,7 @@ class VoiceMode {
 		this.#engine = null
 		this.active = false
 		this.pendingHitl = null
+		this.connecting = null
 	}
 }
 

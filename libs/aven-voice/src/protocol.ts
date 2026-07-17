@@ -32,6 +32,8 @@ export type ClientMessage =
 
 export type ServerMessage =
 	| { type: 'open' }
+	// Connection progress (retry/region) — for a visible connecting state.
+	| { type: 'status'; phase: 'connecting'; attempt: number; total: number; region: string }
 	// Informational: a server-executed tool ran (for UI chips / vibe switching).
 	| {
 			type: 'toolEvent'

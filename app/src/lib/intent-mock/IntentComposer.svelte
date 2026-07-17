@@ -1032,6 +1032,14 @@ const pillClass = $derived.by(() => {
 				{/if}
 			</div>
 		{/if}
+		{#if voiceMode.status === 'connecting'}
+			<div class="mx-auto mb-1.5 flex max-w-[min(36rem,80vw)] items-center gap-2 rounded-full border border-amber-400/40 bg-background px-4 py-1.5 text-xs shadow-md">
+				<span class="size-2 rounded-full bg-amber-400 motion-safe:animate-pulse"></span>
+				<span class="font-medium text-foreground/80">
+					Verbinde mit Google…{voiceMode.connecting ? ` (Versuch ${voiceMode.connecting.attempt}/${voiceMode.connecting.total} · ${voiceMode.connecting.region})` : ''}
+				</span>
+			</div>
+		{/if}
 		{#if voiceMode.error}
 			<div class="mx-auto mb-1.5 max-w-[min(36rem,80vw)] rounded-xl bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
 				{voiceMode.error}
@@ -1072,7 +1080,20 @@ const pillClass = $derived.by(() => {
 					aria-hidden="true"
 					class="pointer-events-none absolute inset-[12%] rounded-full opacity-55 blur-[12px] [background:radial-gradient(circle,color-mix(in_srgb,var(--color-primary)_30%,transparent),transparent_70%)]"
 				></span>
-				{#if voiceMode.active}
+				{#if voiceMode.status === 'connecting'}
+					<!-- aven-voice: CONNECTING — amber pulsing ring + spinner (not yet recording). -->
+					<span
+						aria-hidden="true"
+						class="pointer-events-none absolute inset-0 rounded-full bg-amber-400/30 motion-safe:animate-ping"
+					></span>
+					<span
+						class="pointer-events-none absolute inset-[8%] flex items-center justify-center rounded-full bg-amber-400 shadow-md"
+					>
+						<span
+							class="size-5 rounded-full border-[3px] border-white/40 border-t-white motion-safe:animate-spin"
+						></span>
+					</span>
+				{:else if voiceMode.active}
 					<!-- aven-voice: recording — red stop button with an X; pulsing ring behind. -->
 					<span
 						aria-hidden="true"

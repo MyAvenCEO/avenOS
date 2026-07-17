@@ -197,6 +197,7 @@ export function createVoiceBridge(
 		let lastErr = ''
 		for (let attempt = 0; attempt < MAX_ATTEMPTS && !closed; attempt++) {
 			const location = VERTEX ? LOCATIONS[attempt % LOCATIONS.length] : 'developer-api'
+			send({ type: 'status', phase: 'connecting', attempt: attempt + 1, total: MAX_ATTEMPTS, region: location })
 			try {
 				await connectOnce(setup, location)
 				return // success — session is live, callbacks stream via onLiveMessage
