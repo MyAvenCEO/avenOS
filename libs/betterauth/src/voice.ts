@@ -36,6 +36,7 @@ export async function voiceSessionGuard(c: Context, next: Next): Promise<Respons
 export const voiceLive = upgradeWebSocket((c) => {
 	const userId = c.get('voiceUserId' as never) as string | undefined
 	let bridge: VoiceBridge | undefined
+	const pending: string[] = []
 	return {
 		onOpen(_evt, ws) {
 			const send = (msg: unknown) => ws.send(JSON.stringify(msg))
@@ -45,17 +46,23 @@ export const voiceLive = upgradeWebSocket((c) => {
 			}
 			// Tools are the SAME registry chat uses — built per connection so the
 			// skill menu (DB config) is fresh; execution is bound to this user.
+			// The client's 'setup' frame arrives IMMEDIATELY after open, i.e. while
+			// the tool build (DB reads) is still in flight — queue frames until the
+			// bridge exists, else the session silently never starts.
 			void buildVoiceServerTools(userId)
-				.then((serverTools) => {
-					bridge = createVoiceBridge(send, { serverTools })
-				})
 				.catch((err) => {
 					console.error('[betterauth] voice tools build failed:', err)
-					bridge = createVoiceBridge(send)
+					return undefined
+				})
+				.then((serverTools) => {
+					bridge = createVoiceBridge(send, serverTools ? { serverTools } : {})
+					for (const raw of pending.splice(0)) bridge.handleMessage(raw)
 				})
 		},
 		onMessage(evt) {
-			if (typeof evt.data === 'string') bridge?.handleMessage(evt.data)
+			if (typeof evt.data !== 'string') return
+			if (bridge) bridge.handleMessage(evt.data)
+			else pending.push(evt.data)
 		},
 		onClose() {
 			bridge?.close()
