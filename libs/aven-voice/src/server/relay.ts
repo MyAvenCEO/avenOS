@@ -50,7 +50,12 @@ export type VoiceServerTools = {
 	execute: (
 		name: string,
 		args: unknown
-	) => Promise<{ content: unknown; hitl?: { label: string; action: unknown }; detail?: string }>
+	) => Promise<{
+		content: unknown
+		hitl?: { label: string; action: unknown }
+		detail?: string
+		vibes?: { schema: string; data?: unknown }[]
+	}>
 }
 
 export type VoiceBridgeOptions = {
@@ -141,7 +146,8 @@ export function createVoiceBridge(
 										name: c.name,
 										args: c.args,
 										status: 'done',
-										detail: out.detail
+										detail: out.detail,
+										vibes: out.vibes
 									})
 									session?.sendToolResponse({
 										functionResponses: [

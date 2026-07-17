@@ -973,24 +973,39 @@ const pillClass = $derived.by(() => {
 		</div>
 	{/if}
 	{#if mode === 'collapsed'}
-		{#if voiceMode.active && voiceMode.transcript.length > 0}
+		{#if voiceMode.active && (voiceMode.transcript.length > 0 || voiceMode.toolEvents.length > 0)}
+			<!-- aven-voice: ONE call card — transcript + tool log + copy, solid bg. -->
 			<div
-				class="mx-auto mb-2 max-h-24 max-w-[min(36rem,80vw)] space-y-1.5 overflow-y-auto rounded-2xl border border-border bg-background px-4 py-3 text-left text-sm leading-snug text-foreground shadow-lg max-sm:max-w-none"
+				class="relative mx-auto mb-2 max-h-32 max-w-[min(36rem,80vw)] overflow-y-auto rounded-2xl border border-border bg-background px-4 py-3 text-left text-sm leading-snug text-foreground shadow-lg max-sm:max-w-none"
 				aria-live="polite"
 			>
-				{#each voiceMode.transcript.slice(-3) as line, i (i)}
-					<p class={line.role === 'user' ? 'font-medium' : 'opacity-75'}>{line.text}</p>
-				{/each}
-			</div>
-		{/if}
-		{#if voiceMode.active && voiceMode.toolEvents.length > 0}
-			{@const ev = voiceMode.toolEvents[voiceMode.toolEvents.length - 1]}
-			<div class="mx-auto mb-1.5 flex max-w-[min(36rem,80vw)] justify-center">
-				<span
-					class="rounded-full border border-border bg-background px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider shadow-md {ev.status === 'error' ? 'text-destructive' : 'opacity-70'}"
+				<button
+					type="button"
+					class="absolute right-2 top-2 rounded-md border border-border bg-background px-1.5 py-1 opacity-60 transition-opacity hover:opacity-100"
+					aria-label="Gesprächs- und Tool-Log kopieren"
+					title="Kompletten Verlauf kopieren"
+					onclick={() => navigator.clipboard.writeText(voiceMode.exportLog())}
 				>
-					{ev.name}{ev.detail ? ` · ${ev.detail}` : ''} · {ev.status}
-				</span>
+					<svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<rect x="9" y="9" width="13" height="13" rx="2" />
+						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+					</svg>
+				</button>
+				<div class="space-y-1.5 pr-8">
+					{#each voiceMode.transcript.slice(-3) as line, i (i)}
+						<p class={line.role === 'user' ? 'font-medium' : 'opacity-75'}>{line.text}</p>
+					{/each}
+				</div>
+				{#if voiceMode.toolEvents.length > 0}
+					{@const ev = voiceMode.toolEvents[voiceMode.toolEvents.length - 1]}
+					<div class="mt-2 border-t border-border pt-1.5">
+						<span
+							class="font-mono text-[10px] font-bold uppercase tracking-wider {ev.status === 'error' ? 'text-destructive' : 'opacity-60'}"
+						>
+							{ev.name}{ev.detail ? ` · ${ev.detail}` : ''} · {ev.status}
+						</span>
+					</div>
+				{/if}
 			</div>
 		{/if}
 		{#if voiceMode.error}

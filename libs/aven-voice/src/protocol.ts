@@ -40,6 +40,8 @@ export type ServerMessage =
 			args: unknown
 			status: 'running' | 'done' | 'error'
 			detail?: string
+			/** Vibe views the executed actor declared (schema + state data). */
+			vibes?: { schema: string; data?: unknown }[]
 	  }
 	// Server tool requested human confirmation (e.g. destructive delete).
 	| { type: 'hitl'; id: string; tool: string; label: string; action: unknown }

@@ -1,24 +1,27 @@
 // avenVOICE server tools (board: aven-voice) — the voice session gets the SAME
-// tool surface as chat: every skill's advertised tools, executed through the
-// same TOOL_ACTORS registry with the same capability context ai.ts injects.
-// One registry line adds a tool to chat AND voice; nothing is client-side.
+// tool surface as chat, fully DYNAMIC and with identical semantics:
+//   • declarations: skillMenu() × chatToolDefinitionsFor() (DB-driven config)
+//   • TS actors: TOOL_ACTORS registry, same capability ctx ai.ts injects,
+//     the actor's own `out.vibe` declarations drive the stage (board 0118)
+//   • DB-only actors (config-minted skills, e.g. banking): resolved by name
+//     via actorConfig() and run sandboxed through runCodeActor — their
+//     `vibe` + returned state feed the vibe card (board 0113)
+// One registry/config row adds a tool to chat AND voice; nothing is hardcoded.
 
 import { TOOL_ACTORS } from '@avenos/skills/tools'
 import type { VoiceServerTools } from '@avenos/aven-voice/server'
-import { crud, runNamedOp } from './actor-run'
-import { chatToolDefinitionsFor, skillMenu } from './config'
+import { crud, runCodeActor, runNamedOp } from './actor-run'
+import { actorConfig, chatToolDefinitionsFor, skillMenu } from './config'
 import { mockupCaps } from './mockup-caps'
 import { ontologyCaps } from './ontology'
 import { promoteCaps } from './promote-caps'
 import { mutationCaps, queryCaps } from './query-caps'
 import { typeCaps } from './type-caps'
+import { vibeExists } from './vibe-registry'
 
-/**
- * Union of all skills' chat tools, converted to Live-API declarations.
- * Voice spans skills within one session, so unlike chat (which advertises
- * per-dispatched-skill) the whole menu is available; the actor registry is
- * still the single execution gate.
- */
+type VoiceVibe = { schema: string; data?: unknown }
+
+/** Union of all skills' chat tools, converted to Live-API declarations. */
 export async function voiceToolDeclarations(): Promise<VoiceServerTools['declarations']> {
 	const menu = await skillMenu()
 	const seen = new Map<string, VoiceServerTools['declarations'][number]>()
@@ -52,18 +55,56 @@ function voiceCtx(userId: string) {
 	}
 }
 
+/** Same guard chat applies: a schema without vibe rows gets no card. */
+async function existingVibes(vibes: VoiceVibe[]): Promise<VoiceVibe[]> {
+	const out: VoiceVibe[] = []
+	for (const v of vibes) {
+		if (await vibeExists(v.schema).catch(() => true)) out.push(v)
+	}
+	return out
+}
+
 export async function buildVoiceServerTools(userId: string): Promise<VoiceServerTools> {
 	const declarations = await voiceToolDeclarations()
 	return {
 		declarations,
-		async execute(name, args) {
+		async execute(name, rawArgs) {
+			const args = (rawArgs ?? {}) as Record<string, unknown>
+
+			// 1) TS actor (skills/tools registry) — the actor declares its vibes.
 			const actor = TOOL_ACTORS[name]
-			if (!actor) return { content: { ok: false, error: `tool "${name}" is not available` } }
-			const out = await actor.handle(
-				voiceCtx(userId) as Parameters<(typeof actor)['handle']>[0],
-				(args ?? {}) as Parameters<(typeof actor)['handle']>[1]
-			)
-			return { content: out.content, hitl: out.hitl, detail: out.detail }
+			if (actor) {
+				const out = await actor.handle(
+					voiceCtx(userId) as Parameters<(typeof actor)['handle']>[0],
+					args
+				)
+				const declared = out.vibe ? (Array.isArray(out.vibe) ? out.vibe : [out.vibe]) : []
+				return {
+					content: out.content,
+					hitl: out.hitl,
+					detail: out.detail,
+					vibes: await existingVibes(declared as VoiceVibe[])
+				}
+			}
+
+			// 2) DB-only actor (config-minted skill, board 0113): sandboxed code, its
+			//    `vibe` + returned state feed the card — same contract as chat.
+			const dbActor = await actorConfig(name).catch(() => null)
+			if (dbActor?.code) {
+				const run = await runCodeActor(dbActor, args, userId)
+				const state = run.ran ? (run.result as Record<string, unknown>) : null
+				const vibes =
+					state && dbActor.vibe
+						? await existingVibes([{ schema: dbActor.vibe, data: state }])
+						: []
+				return {
+					content: state ?? { ok: false, error: 'actor run failed' },
+					detail: dbActor.vibe ?? name,
+					vibes
+				}
+			}
+
+			return { content: { ok: false, error: `tool "${name}" is not available` } }
 		}
 	}
 }

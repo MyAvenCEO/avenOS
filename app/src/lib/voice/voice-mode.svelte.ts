@@ -47,16 +47,6 @@ async function executeTool(name: string): Promise<unknown> {
 export type VoiceToolEvent = Extract<ServerMessage, { type: 'toolEvent' }>
 export type VoiceHitl = Extract<ServerMessage, { type: 'hitl' }>
 
-/** Tool → Vibe-View, die die Shell beim jeweiligen Tool-Lauf zeigen soll. board aven-voice. */
-const TOOL_VIBES: Record<string, string> = {
-	data_crud: 'todos',
-	todos: 'todos',
-	inventory: 'inventory',
-	locations: 'inventory-locations',
-	goals: 'goals',
-	planner: 'goals'
-}
-
 class VoiceMode {
 	status = $state<VoiceStatus>('disconnected')
 	active = $state(false)
@@ -64,8 +54,10 @@ class VoiceMode {
 	transcript = $state<TranscriptLine[]>([])
 	toolEvents = $state<VoiceToolEvent[]>([])
 	pendingHitl = $state<VoiceHitl | null>(null)
-	/** Vibe-View-Name passend zum letzten Tool-Lauf (Shell rendert sie daneben). */
-	activeVibe = $state<string | null>(null)
+	/** Vibes the executed actors declared (schema + data), in arrival order —
+	 *  the shell's stage consumes them exactly like chat's aven_vibe events. */
+	vibeQueue = $state<{ seq: number; schema: string; data?: unknown }[]>([])
+	#vibeSeq = 0
 
 	#engine: VoiceEngine | null = null
 
@@ -98,13 +90,15 @@ class VoiceMode {
 			},
 			onServerMessage: (msg) => {
 				if (msg.type === 'toolEvent') {
-					this.toolEvents = [...this.toolEvents.slice(-9), msg]
-					// data_crud carries its target schema (todos/inventory/…) in the args —
-					// that IS the stage vibe; static map only as fallback for other tools.
-					const argSchema = (msg.args as { schema?: unknown } | undefined)?.schema
-					const vibe =
-						(typeof argSchema === 'string' && argSchema) || TOOL_VIBES[msg.name] || null
-					if (vibe) this.activeVibe = vibe
+					this.toolEvents = [...this.toolEvents.slice(-19), msg]
+					// The ACTOR declared its vibes (schema + state) server-side — same
+					// contract as chat's aven_vibe; no client-side mapping tables.
+					for (const v of msg.vibes ?? []) {
+						this.vibeQueue = [
+							...this.vibeQueue.slice(-9),
+							{ seq: this.#vibeSeq++, schema: v.schema, data: v.data }
+						]
+					}
 				} else if (msg.type === 'hitl') {
 					this.pendingHitl = msg
 				}
@@ -112,6 +106,21 @@ class VoiceMode {
 		})
 		this.#engine.start()
 		this.active = true
+	}
+
+	/** Full call log (transcript + tool runs) as plain text — for the copy button. */
+	exportLog(): string {
+		const lines: string[] = []
+		for (const t of this.transcript) lines.push(`${t.role === 'user' ? 'DU' : 'AGENT'}: ${t.text}`)
+		if (this.toolEvents.length) {
+			lines.push('', '── TOOL CALLS ──')
+			for (const ev of this.toolEvents) {
+				lines.push(
+					`${ev.name} ${ev.detail ? `(${ev.detail}) ` : ''}[${ev.status}] args=${JSON.stringify(ev.args ?? {})}`
+				)
+			}
+		}
+		return lines.join('\n')
 	}
 
 	stop(): void {

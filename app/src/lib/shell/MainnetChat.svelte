@@ -76,15 +76,15 @@ function pushVibe(schema: string, data?: Record<string, unknown>): number {
 	currentVibeId = id
 	return id
 }
-// board aven-voice — the STAGE follows the voice session: every voice tool run
-// that names a schema pushes that vibe, exactly like a chat turn would.
-let lastVoiceVibeKey = ''
+// board aven-voice — the STAGE follows the voice session: the executed actor's
+// own vibe declarations (schema + data) land here exactly like chat turns.
+let lastVoiceVibeSeq = -1
 $effect(() => {
-	const vibe = voiceMode.activeVibe
-	const key = `${vibe}#${voiceMode.toolEvents.length}`
-	if (!vibe || key === lastVoiceVibeKey) return
-	lastVoiceVibeKey = key
-	pushVibe(vibe)
+	for (const v of voiceMode.vibeQueue) {
+		if (v.seq <= lastVoiceVibeSeq) continue
+		lastVoiceVibeSeq = v.seq
+		pushVibe(v.schema, v.data as Record<string, unknown> | undefined)
+	}
 })
 let scrollEl = $state<HTMLDivElement | null>(null)
 let contentEl = $state<HTMLDivElement | null>(null)
