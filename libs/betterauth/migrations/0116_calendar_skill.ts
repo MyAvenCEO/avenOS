@@ -90,13 +90,55 @@ const CALENDAR_VIEW = {
 				]
 			},
 			{
+				// The actual calendar: 7 day columns (today + 6), events as blocks.
+				class: 'cal-card cal-card--week',
+				children: [
+					{ text: '$emptyMessage', class: 'cal-empty' },
+					{
+						class: 'cal-week',
+						children: [
+							{
+								$each: {
+									items: '$days',
+									template: {
+										class: '$$dayClass',
+										children: [
+											{
+												class: 'cal-day-head',
+												children: [
+													{ text: '$$wd', class: 'cal-day-wd' },
+													{ text: '$$dnum', class: 'cal-day-num' }
+												]
+											},
+											{
+												// pure $each: events append directly into the day cell
+												$each: {
+													items: '$$items',
+													template: {
+														class: '$$evClass',
+														children: [
+															{ text: '$$time', class: 'cal-ev-time' },
+															{ text: '$$text', class: 'cal-ev-text' }
+														]
+													}
+												}
+											}
+										]
+									}
+								}
+							}
+						]
+					}
+				]
+			},
+			{
+				// Outside the week window: overdue + later, compact strips (hidden when empty).
 				class: 'cal-card cal-card--list',
 				children: [
 					{
 						tag: 'ul',
 						class: 'cal-list',
 						children: [
-							{ tag: 'li', text: '$emptyMessage', attrs: { 'data-empty': 'true' }, class: 'cal-empty' },
 							{
 								$each: {
 									items: '$rows',
@@ -167,9 +209,55 @@ const CALENDAR_STYLE = {
 			color: 'var(--muted)'
 		},
 		'.cal-accent': { fontSize: 'var(--fs-amount)', fontWeight: '700', color: 'var(--brand-accent)' },
-		'.cal-card--list': { padding: '0.6rem 0.4rem' },
+		'.cal-card--week': { padding: '1.1rem 1.2rem' },
+		'.cal-week': { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem' },
+		'.cal-day': {
+			minWidth: '0',
+			display: 'flex',
+			flexDirection: 'column',
+			gap: '0.4rem',
+			padding: '0.5rem 0.45rem',
+			borderRadius: 'var(--radius-inner)',
+			border: '1px solid transparent'
+		},
+		'.cal-day.today': { background: 'var(--surface-2)', border: '1px solid var(--border)' },
+		'.cal-day-head': {
+			display: 'flex',
+			alignItems: 'baseline',
+			justifyContent: 'space-between',
+			gap: '0.3rem',
+			borderBottom: '1px solid var(--border-soft)',
+			paddingBottom: '0.35rem'
+		},
+		'.cal-day-wd': {
+			fontSize: 'var(--fs-eyebrow)',
+			fontWeight: '700',
+			textTransform: 'uppercase',
+			letterSpacing: 'var(--tracking-eyebrow)',
+			color: 'var(--muted)'
+		},
+		'.cal-day.today .cal-day-wd': { color: 'var(--brand-accent)' },
+		'.cal-day-num': { fontSize: 'var(--fs-micro)', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' },
+		'.cal-ev': {
+			borderLeft: '2px solid var(--brand-accent)',
+			background: 'var(--surface-2)',
+			borderRadius: 'var(--radius-inner)',
+			padding: '0.3rem 0.4rem',
+			display: 'flex',
+			flexDirection: 'column',
+			gap: '0.1rem'
+		},
+		'.cal-day.today .cal-ev': { background: 'var(--surface)' },
+		'.cal-ev.high': { borderLeft: '2px solid var(--danger)' },
+		'.cal-ev-time': { fontSize: 'var(--fs-micro)', color: 'var(--muted-strong)', fontVariantNumeric: 'tabular-nums' },
+		'.cal-ev-time:empty': { display: 'none' },
+		'.cal-ev-text': { fontSize: 'var(--fs-label)', lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis' },
+		'@media (max-width: 640px)': { '.cal-week': { gridTemplateColumns: '1fr' } },
+		'.cal-card--list': { padding: '0.6rem 0.4rem', display: 'none' },
+		'.cal-card--list:has(.cal-row)': { display: 'block' },
 		'.cal-list': { listStyle: 'none', margin: '0', padding: '0' },
 		'.cal-empty': { padding: '1.5rem', textAlign: 'center', color: 'var(--muted)', fontSize: 'var(--fs-body)' },
+		'.cal-empty:empty': { display: 'none' },
 		'.cal-row': {
 			display: 'flex',
 			alignItems: 'center',
@@ -225,17 +313,12 @@ const CALENDAR_STYLE = {
 const CALENDAR_LOGIC = `
 function pad(n) { return (n < 10 ? '0' : '') + n }
 
-// Real rows carry due as an ISO string ("2026-07-18T14:00:00Z"); parse that
-// first. Relative labels ("in 2 Tagen", "heute") stay as a fallback so the
-// view also works when a producer hands it derived labels.
-// Returns { d, allDay }: date-only strings ("2026-07-17") are ALL-DAY and
-// parsed as LOCAL dates (new Date('YYYY-MM-DD') would be UTC midnight and
-// shift to 02:00 local). A T00:00 timestamp is treated as all-day too — the
-// model writes midnight when the user gave no time.
+// Real rows carry due as an ISO string; date-only strings are ALL-DAY and
+// parsed as LOCAL dates. A T00:00 timestamp counts as all-day too.
 function parseDue(it) {
 	var raw = String(it.dueIso || it.dueRaw || it.due || '')
 	if (!raw) return null
-	var dm = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+	var dm = raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/)
 	if (dm) return { d: new Date(+dm[1], +dm[2] - 1, +dm[3]), allDay: true }
 	var d = new Date(raw)
 	if (isNaN(d.getTime())) return null
@@ -263,76 +346,89 @@ function daysUntil(d) {
 	return Math.round((b.getTime() - a.getTime()) / 86400000)
 }
 
-function bucketOf(days) {
-	if (days === null) return 4
-	if (days < 0) return 0
-	if (days === 0) return 1
-	if (days <= 6) return 2
-	return 3
-}
-
-var BUCKETS = [
-	{ label: 'Überfällig', kind: 'overdue' },
-	{ label: 'Heute', kind: 'today' },
-	{ label: 'Diese Woche', kind: 'week' },
-	{ label: 'Später', kind: 'later' },
-	{ label: 'Ohne Frist', kind: 'none' }
-]
-
 var WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 
-// Human chip: today → "14:00" / "heute"; this week → "Sa 14:00"; else "18.07.".
-function chipLabel(d, days, allDay) {
-	if (d === null) return ''
-	var hasTime = !allDay
+function stripTime(d, days, allDay) {
+	if (!d) return ''
 	var hh = pad(d.getHours()) + ':' + pad(d.getMinutes())
 	var dd = pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.'
-	if (days === 0) return hasTime ? hh : 'heute'
-	if (days > 0 && days <= 6) return WEEKDAYS[d.getDay()] + (hasTime ? ' ' + hh : '')
-	return dd + (hasTime ? ' ' + hh : '')
+	return dd + (allDay ? '' : ' ' + hh)
 }
 
 function initState(source) {
 	source = source || {}
 	var items = (source.items || []).filter(function (it) { return !it.done })
-	var groups = [[], [], [], [], []]
-	for (var i = 0; i < items.length; i++) {
-		var it = items[i]
-		var due = parseDue(it)
-		var days = due ? daysUntil(due.d) : labelDays(it.due)
-		var b = bucketOf(days)
-		// A calendar shows SCHEDULED work only — tasks without a due date live
-		// in the todos list, not here.
-		if (b === 4) continue
-		groups[b].push({
-			text: it.text || it.title || '',
-			time: due ? chipLabel(due.d, days, due.allDay) : String(it.due || ''),
-			priority: it.priority || '',
-			kind: BUCKETS[b].kind,
-			ts: due ? due.d.getTime() : 9007199254740991
+	var now = new Date()
+
+	// The 7-day grid: today + 6 following days, one column each.
+	var days = []
+	for (var i = 0; i < 7; i++) {
+		var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i)
+		days.push({
+			wd: i === 0 ? 'Heute' : WEEKDAYS[d.getDay()],
+			dnum: pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.',
+			dayClass: 'cal-day' + (i === 0 ? ' today' : ''),
+			items: []
 		})
 	}
-	var rows = []
+
+	var overdue = []
+	var later = []
 	var dueCount = 0
-	for (var g = 0; g < groups.length; g++) {
-		var list = groups[g]
-		if (!list.length) continue
-		list.sort(function (a, b) { return a.ts - b.ts })
-		rows.push({ header: BUCKETS[g].label, count: String(list.length), text: '', time: '', priority: '', kind: BUCKETS[g].kind, rowClass: 'cal-row section ' + BUCKETS[g].kind })
-		for (var j = 0; j < list.length; j++) {
-			var r = list[j]
-			if (g <= 2) dueCount++
-			rows.push({ header: '', count: '', text: r.text, time: r.time, priority: r.priority, kind: r.kind, rowClass: 'cal-row ' + r.kind })
+	for (var k = 0; k < items.length; k++) {
+		var it = items[k]
+		var due = parseDue(it)
+		var rel = due ? daysUntil(due.d) : labelDays(it.due)
+		if (rel === null) continue // dueless tasks live in the todos list, not here
+		var ev = {
+			text: it.text || it.title || '',
+			priority: it.priority || '',
+			ts: due ? due.d.getTime() : 9007199254740991,
+			_due: due,
+			_rel: rel
+		}
+		if (rel >= 0 && rel <= 6) {
+			ev.time = due && !due.allDay ? pad(due.d.getHours()) + ':' + pad(due.d.getMinutes()) : ''
+			ev.evClass = 'cal-ev' + (ev.priority === 'high' ? ' high' : '')
+			days[rel].items.push(ev)
+			dueCount++
+		} else if (rel < 0) {
+			overdue.push(ev)
+		} else {
+			later.push(ev)
 		}
 	}
+	for (var g = 0; g < 7; g++) days[g].items.sort(function (a, b) { return a.ts - b.ts })
+
+	// Strips below the grid: overdue first, then later — same row markup.
+	var rows = []
+	function pushStrip(label, kind, list) {
+		if (!list.length) return
+		list.sort(function (a, b) { return a.ts - b.ts })
+		rows.push({ header: label, count: String(list.length), text: '', time: '', priority: '', kind: kind, rowClass: 'cal-row section ' + kind })
+		for (var j = 0; j < list.length; j++) {
+			var r = list[j]
+			rows.push({
+				header: '', count: '',
+				text: r.text,
+				time: r._due ? stripTime(r._due.d, r._rel, r._due.allDay) : '',
+				priority: r.priority, kind: kind, rowClass: 'cal-row ' + kind
+			})
+		}
+	}
+	pushStrip('Überfällig', 'overdue', overdue)
+	pushStrip('Später', 'later', later)
+
+	var total = dueCount + overdue.length + later.length
 	return {
 		eyebrow: 'Kalender',
 		title: 'Was ansteht',
-		dueLabel: 'Heute + diese Woche',
+		dueLabel: 'Nächste 7 Tage',
 		dueCount: String(dueCount),
+		days: days,
 		rows: rows,
-		isEmpty: rows.length === 0,
-		emptyMessage: 'Keine terminierten Aufgaben — sag z. B. „Zahnarzt morgen 10 Uhr".'
+		isEmpty: total === 0,
+		emptyMessage: total === 0 ? 'Keine terminierten Aufgaben — sag z. B. „Zahnarzt morgen 10 Uhr".' : ''
 	}
 }
 
