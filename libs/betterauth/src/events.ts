@@ -11,7 +11,7 @@ import type { Context } from 'hono'
  * at load). `eventsStream` imports it lazily so `publish`/`subscribe` stay unit-testable
  * without the server's env.
  */
-export type ChangeEvent = { entity: 'data' | 'usage' | 'billing' }
+export type ChangeEvent = { entity: 'data' | 'usage' | 'billing' | 'chain' }
 
 type Listener = (ev: ChangeEvent) => void
 const listeners = new Map<string, Set<Listener>>()

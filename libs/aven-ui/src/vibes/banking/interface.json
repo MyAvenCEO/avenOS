@@ -1,0 +1,9 @@
+{
+	"properties": {
+		"SET_MINT_AMOUNT": { "properties": { "value": {} } },
+		"SET_SEND_AMOUNT": { "properties": { "value": {} } },
+		"SET_RECIPIENT": { "properties": { "address": {}, "email": {} } },
+		"MINT": { "properties": {} },
+		"SEND": { "properties": {} }
+	}
+}

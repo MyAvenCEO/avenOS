@@ -16,8 +16,17 @@ import { auth } from './auth'
 const { upgradeWebSocket, websocket } = createBunWebSocket()
 export { websocket as voiceWebsocket }
 
-/** Only signed-in users may open a voice session (same gate as /api/ai/*). */
+/**
+ * Only signed-in users may open a voice session (same gate as /api/ai/*).
+ * VOICE_DEV_BYPASS=1 skips the check for LOCAL development without the full
+ * auth stack (Neon/OAuth env) — never set this in a deployed environment.
+ */
 export async function voiceSessionGuard(c: Context, next: Next): Promise<Response | void> {
+	if (process.env.VOICE_DEV_BYPASS === '1') {
+		console.warn('[betterauth] VOICE_DEV_BYPASS active — /api/voice/live is UNAUTHENTICATED')
+		await next()
+		return
+	}
 	const session = await auth.api.getSession({ headers: c.req.raw.headers })
 	if (!session) return c.json({ error: 'unauthorized' }, 401)
 	await next()

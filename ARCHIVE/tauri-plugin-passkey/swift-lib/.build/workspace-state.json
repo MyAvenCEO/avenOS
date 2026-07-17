@@ -1,0 +1,30 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-rs",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/Brendonovich/swift-rs",
+          "name" : "SwiftRs"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "f64a4514de07f450ec5b6aa297624cd3479d9579",
+            "version" : "1.0.7"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-rs"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}

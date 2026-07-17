@@ -154,6 +154,48 @@ export interface InboundEmailTable {
 	received_at: Generated<Date>
 }
 
+// Internal chain (board 0088). Fake-but-realistic on-Postgres token ledger for aEUR.
+// Money is in INTEGER MINOR UNITS stored in PG `bigint` columns; the Neon driver returns
+// `bigint` as a string, so `amount`/`total_supply` are typed `string` here and converted
+// to `number` at the store boundary (KyselyChainStore in chain.ts).
+export interface ChainAccountTable {
+	address: string
+	user_id: string
+	pubkey: string
+	created_at: Generated<Date>
+}
+
+export interface ChainTokenTable {
+	symbol: string
+	name: string
+	decimals: number
+	minter_address: string | null
+	total_supply: string
+}
+
+export interface ChainTxTable {
+	id: string
+	seq: number
+	kind: string
+	token: string
+	from_address: string | null
+	to_address: string
+	amount: string
+	caller: string
+	nonce: string
+	signature: string
+	prev_hash: string
+	hash: string
+	created_at: Generated<Date>
+}
+
+export interface ChainContractTable {
+	address: string
+	kind: string
+	state: unknown
+	created_at: Generated<Date>
+}
+
 export interface Database {
 	ai_usage: AiUsageTable
 	inbound_email: InboundEmailTable
@@ -168,6 +210,10 @@ export interface Database {
 	polar_event: PolarEventTable
 	vault: VaultTable
 	secret: SecretTable
+	chain_account: ChainAccountTable
+	chain_token: ChainTokenTable
+	chain_tx: ChainTxTable
+	chain_contract: ChainContractTable
 }
 
 let cached: Kysely<Database> | null = null
