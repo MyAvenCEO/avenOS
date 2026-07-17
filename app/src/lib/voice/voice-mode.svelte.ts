@@ -21,7 +21,9 @@ Du steuerst avenOS über Tools: Todos, Inventar, Planner, Website, Ontology und 
 Erledige jede Anfrage in möglichst EINER Tool-Runde (Batch-Argumente nutzen), danach genau EINE kurze Bestätigung. Wiederhole dich nie.
 "habe ich schon" / "ist erledigt" / "gekauft" bedeutet abhaken/als erledigt markieren — NIEMALS löschen.
 Löschen nur bei ausdrücklichem "löschen/entfernen"; destruktive Aktionen erfordern Bestätigung (HITL).
-Bei relativen Zeiten (morgen, in 2 Stunden): rufe zuerst get_current_time auf, antworte darauf nicht, sondern rufe direkt das nächste Tool mit dem ISO-Datum auf.`
+ZEIT-REGEL (immer befolgen): Sobald eine Anfrage IRGENDEINE Datums- oder Zeitangabe enthält — absolut (heute, 14. Juli, Freitag) ODER relativ (in 6 Stunden, morgen Mittag, nächste Woche) ODER implizit "heute" (z.B. "ich habe X für 12,32 € gekauft") — rufe ZUERST get_current_time auf. Sprich nach get_current_time NICHT, sondern rechne die genannte Zeit auf localIso und rufe im selben Zug das eigentliche Tool (data_crud create/update) mit dem berechneten ISO-Datum (mit Offset) im due- bzw. date-Feld auf.
+Gilt für Todos (due) UND Transaktionen (date, z.B. Kauf "heute"). Ohne Datumsbezug wird get_current_time NICHT aufgerufen.
+Beispiel: "Ich hab heute für 12,32 € Schuhe gekauft" → get_current_time → data_crud create transaction {name:"Schuhe", amount:"-12.32", date:<heute-ISO>}.`
 
 const TOOLS = [
 	{
@@ -35,10 +37,22 @@ const TOOLS = [
 async function executeTool(name: string): Promise<unknown> {
 	if (name === 'get_current_time') {
 		const d = new Date()
+		const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+		// Local ISO WITH the user's offset, so the model can add hours/days and
+		// emit a correct due/date without guessing the timezone.
+		const pad = (n: number) => String(n).padStart(2, '0')
+		const off = -d.getTimezoneOffset()
+		const offStr = `${off >= 0 ? '+' : '-'}${pad(Math.abs(off) / 60)}:${pad(Math.abs(off) % 60)}`
+		const localIso =
+			`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+			`T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${offStr}`
 		return {
-			iso: d.toISOString(),
-			local: d.toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short' }),
-			timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+			localIso,
+			utcIso: d.toISOString(),
+			weekday: d.toLocaleDateString('de-DE', { weekday: 'long' }),
+			human: d.toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short' }),
+			timezone: tz,
+			hint: 'Rechne relative Zeiten (in X Stunden, morgen, Freitag Mittag) auf localIso drauf und gib das Ergebnis als ISO 8601 mit Offset als due/date weiter.'
 		}
 	}
 	return { ok: false, error: `Unbekanntes Tool: ${name}` }
