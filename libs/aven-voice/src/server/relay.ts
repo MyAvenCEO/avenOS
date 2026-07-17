@@ -115,8 +115,10 @@ export function createVoiceBridge(
 	const serverToolNames = new Set(opts.serverTools?.declarations.map((d) => d.name) ?? [])
 	// Vertex re-emits tool calls (sometimes with fresh ids) — answer repeats from
 	// cache instead of executing twice (a duplicate `create` would double data).
-	const doneById = new Map<string, unknown>()
-	const recentByArgs = new Map<string, { out: unknown; ts: number }>()
+	type ToolOut = Awaited<ReturnType<NonNullable<typeof opts.serverTools>['execute']>>
+	// Cache the FULL tool output (content + vibes) so a deduped call can still refresh the stage.
+	const doneById = new Map<string, ToolOut>()
+	const recentByArgs = new Map<string, { out: ToolOut; ts: number }>()
 
 	// Resilient connect: try each region, per-attempt timeout, backoff between
 	// attempts. Resolves once Vertex confirms the WS is open; rejects if an
@@ -269,17 +271,37 @@ export function createVoiceBridge(
 						if (clientCalls.length) send({ type: 'toolCall', calls: clientCalls })
 						for (const c of serverCalls) {
 							const argsKey = c.name + JSON.stringify(c.args ?? {})
+							// READ tools (show_*, data_crud list) are cheap + must always show FRESH data —
+							// never dedup them. Dedup only guards repeated MUTATIONS from double-writing.
+							const isRead =
+								c.name.startsWith('show_') ||
+								(c.name === 'data_crud' &&
+									(c.args as { action?: unknown } | undefined)?.action === 'list')
 							const cachedById = c.id ? doneById.get(c.id) : undefined
 							const cachedByArgs = recentByArgs.get(argsKey)
-							const cached =
-								cachedById ??
-								(cachedByArgs && Date.now() - cachedByArgs.ts < 10_000
-									? cachedByArgs.out
-									: undefined)
+							const cached = isRead
+								? undefined
+								: (cachedById ??
+									(cachedByArgs && Date.now() - cachedByArgs.ts < 10_000
+										? cachedByArgs.out
+										: undefined))
 							if (cached !== undefined) {
+								// Still refresh the stage with the cached vibe — a duplicate mutation must
+								// not re-write, but the UI should reflect the (already-applied) result.
+								if (cached.vibes?.length || cached.detail) {
+									send({
+										type: 'toolEvent',
+										id: c.id,
+										name: c.name,
+										args: c.args,
+										status: 'done',
+										detail: cached.detail,
+										vibes: cached.vibes
+									})
+								}
 								session?.sendToolResponse({
 									functionResponses: [
-										{ ...(c.id ? { id: c.id } : {}), name: c.name, response: { output: cached } }
+										{ ...(c.id ? { id: c.id } : {}), name: c.name, response: { output: cached.content } }
 									]
 								})
 								continue
@@ -288,8 +310,8 @@ export function createVoiceBridge(
 							void opts.serverTools!
 								.execute(c.name, c.args)
 								.then((out) => {
-									if (c.id) doneById.set(c.id, out.content)
-									recentByArgs.set(argsKey, { out: out.content, ts: Date.now() })
+									if (c.id) doneById.set(c.id, out)
+									recentByArgs.set(argsKey, { out, ts: Date.now() })
 									if (out.hitl) {
 										send({ type: 'hitl', id: c.id, tool: c.name, label: out.hitl.label, action: out.hitl.action })
 									}
