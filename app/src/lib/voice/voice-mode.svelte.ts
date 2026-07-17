@@ -110,6 +110,35 @@ class VoiceMode {
 		this.active = true
 	}
 
+	/** Confirm the pending HITL action via the SAME endpoint chat's card uses. */
+	async confirmHitl(): Promise<void> {
+		const hitl = this.pendingHitl
+		if (!hitl) return
+		this.pendingHitl = null
+		try {
+			const token = getBearerToken()
+			const res = await fetch(`${AUTH_ORIGIN}/api/ai/confirm`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: {
+					'Content-Type': 'application/json',
+					...(token ? { Authorization: `Bearer ${token}` } : {})
+				},
+				body: JSON.stringify({ action: hitl.action })
+			})
+			if (!res.ok) {
+				const err = (await res.json().catch(() => null)) as { error?: string } | null
+				this.error = err?.error ?? `Bestätigung fehlgeschlagen (HTTP ${res.status})`
+			}
+		} catch (e) {
+			this.error = e instanceof Error ? e.message : 'Bestätigung fehlgeschlagen'
+		}
+	}
+
+	dismissHitl(): void {
+		this.pendingHitl = null
+	}
+
 	/** Full call log (transcript + tool runs) as plain text — for the copy button. */
 	exportLog(): string {
 		const lines: string[] = []

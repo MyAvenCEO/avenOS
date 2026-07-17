@@ -21,6 +21,14 @@ import { vibeExists } from './vibe-registry'
 
 type VoiceVibe = { schema: string; data?: unknown }
 
+/**
+ * Tools whose chat implementation needs the CLIENT'S files round-tripped per
+ * turn (website source lives in Tauri fs) — the voice protocol doesn't carry
+ * that yet, so they are not advertised rather than advertised-but-broken.
+ * board aven-voice follow-up: file roundtrip over the voice WS.
+ */
+const NOT_VOICE_READY = new Set(['edit_website', 'deploy_website'])
+
 /** Union of all skills' chat tools, converted to Live-API declarations. */
 export async function voiceToolDeclarations(): Promise<VoiceServerTools['declarations']> {
 	const menu = await skillMenu()
@@ -28,6 +36,7 @@ export async function voiceToolDeclarations(): Promise<VoiceServerTools['declara
 	for (const skill of menu) {
 		const defs = await chatToolDefinitionsFor(skill.id).catch(() => [])
 		for (const d of defs) {
+			if (NOT_VOICE_READY.has(d.function.name)) continue
 			if (seen.has(d.function.name)) continue
 			seen.set(d.function.name, {
 				name: d.function.name,
@@ -70,6 +79,16 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 		declarations,
 		async execute(name, rawArgs) {
 			const args = (rawArgs ?? {}) as Record<string, unknown>
+
+			// 0) show_website — same contract as chat: the composer vibe is
+			//    client-special-cased (viewer reads local files), no registry row.
+			if (name === 'show_website') {
+				return {
+					content: { ok: true, shown: 'website composer (read-only)' },
+					detail: 'website viewer ready',
+					vibes: [{ schema: 'composer' }]
+				}
+			}
 
 			// 1) TS actor (skills/tools registry) — the actor declares its vibes.
 			const actor = TOOL_ACTORS[name]

@@ -973,6 +973,30 @@ const pillClass = $derived.by(() => {
 		</div>
 	{/if}
 	{#if mode === 'collapsed'}
+		{#if voiceMode.pendingHitl}
+			<!-- aven-voice HITL: the actor asked for human confirmation (e.g. delete/deploy). -->
+			<div
+				class="mx-auto mb-2 flex max-w-[min(36rem,80vw)] items-center gap-3 rounded-2xl border border-destructive/40 bg-background px-4 py-3 text-sm shadow-lg"
+				role="alertdialog"
+				aria-label="Bestätigung erforderlich"
+			>
+				<span class="min-w-0 flex-1 truncate font-medium">{voiceMode.pendingHitl.label}</span>
+				<button
+					type="button"
+					class="shrink-0 rounded-full bg-destructive px-3.5 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+					onclick={() => void voiceMode.confirmHitl()}
+				>
+					Bestätigen
+				</button>
+				<button
+					type="button"
+					class="shrink-0 rounded-full border border-border bg-background px-3.5 py-1.5 text-xs font-semibold transition hover:bg-muted"
+					onclick={() => voiceMode.dismissHitl()}
+				>
+					Ablehnen
+				</button>
+			</div>
+		{/if}
 		{#if voiceMode.active && (voiceMode.transcript.length > 0 || voiceMode.toolEvents.length > 0)}
 			<!-- aven-voice: ONE call card — transcript + tool log + copy, solid bg. -->
 			<div
