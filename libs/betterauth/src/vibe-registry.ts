@@ -90,6 +90,16 @@ export async function vibeExists(name: string): Promise<boolean> {
  */
 export async function vibeForSchema(schema: string): Promise<string | null> {
 	if (await vibeExists(schema)) return schema
+	// The data_crud actor bound to this schema names the render vibe (SSOT). One skill may bind
+	// SEVERAL schemas to one vibe (dienstplan: slot + shift → 'dienstplan'); the mailbox mentions
+	// each in quotes, so a literal match on the actor's mailbox resolves any of them.
+	const a = await sql<{ vibe: string }>`
+		SELECT vibe FROM actor
+		WHERE name = 'data_crud' AND vibe IS NOT NULL AND position(${`"${schema}"`} in mailbox::text) > 0
+		LIMIT 1
+	`.execute(db())
+	if (a.rows[0]?.vibe && (await vibeExists(a.rows[0].vibe))) return a.rows[0].vibe
+	// fallback: a skill manifest whose schema matches.
 	const r = await sql<{ vibe: string }>`
 		SELECT manifest->>'vibe' AS vibe FROM skill
 		WHERE manifest->>'schema' = ${schema} AND manifest->>'vibe' IS NOT NULL

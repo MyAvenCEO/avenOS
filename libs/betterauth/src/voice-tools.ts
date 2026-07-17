@@ -77,14 +77,15 @@ export async function voiceToolSurface(): Promise<{
 		const defs = await chatToolDefinitionsFor(skill.id).catch(() => [])
 		for (const d of defs) {
 			if (d.function.name === 'data_crud') {
-				const desc = String(d.function.description ?? '')
-				// pull the bound schema from the skill's data_crud param description
+				// a skill may bind SEVERAL schemas (dienstplan: "slot" + "shift"); the schema
+				// param description names each in quotes — harvest them all so the model knows
+				// every real schema name (SSOT: the skill config).
 				const schemaDesc = String(
 					(d.function.parameters?.properties as { schema?: { description?: string } } | undefined)
 						?.schema?.description ?? ''
 				)
-				const m = (schemaDesc + ' ' + desc).match(/"([a-z0-9_-]+)"/i)
-				if (m) bindings.push(`- Skill "${skill.id}": data_crud schema = "${m[1]}"`)
+				const names = [...new Set([...schemaDesc.matchAll(/"([a-z0-9_-]+)"/gi)].map((mm) => mm[1]))]
+				for (const n of names) bindings.push(`- Skill "${skill.id}": data_crud schema = "${n}"`)
 			}
 			if (NOT_VOICE_READY.has(d.function.name)) continue
 			if (seen.has(d.function.name)) continue
@@ -117,6 +118,39 @@ function voiceCtx(userId: string) {
 		mockup: mockupCaps(noop),
 		promote: promoteCaps(userId, noop)
 	}
+}
+
+/**
+ * Vibes that MERGE several schemas into one card. dienstplan overlays the `slot` templates with the
+ * `shift` assignments (open vs filled). One place, documented — a candidate for config-as-data later.
+ */
+const MULTI_SCHEMA_VIBES: Record<string, { key: string; schema: string }[]> = {
+	dienstplan: [
+		{ key: 'slots', schema: 'slot' },
+		{ key: 'shifts', schema: 'shift' }
+	]
+}
+
+/** Build the data source for a vibe: merge-vibes fetch all their schemas; others list the one schema. */
+export async function vibeSource(
+	userId: string,
+	vibeName: string,
+	fallbackSchema: string,
+	extra: Record<string, unknown> = {}
+): Promise<Record<string, unknown>> {
+	const spec = MULTI_SCHEMA_VIBES[vibeName]
+	if (spec) {
+		const out: Record<string, unknown> = { ...extra }
+		for (const { key, schema } of spec) {
+			const r = await crud(userId, { schema, action: 'list' } as Parameters<typeof crud>[1]).catch(
+				() => null
+			)
+			out[key] = (r as { items?: unknown } | null)?.items ?? r ?? []
+		}
+		return out
+	}
+	const r = await crud(userId, { schema: fallbackSchema, action: 'list' } as Parameters<typeof crud>[1])
+	return { items: (r as { items?: unknown } | undefined)?.items ?? r, ...extra }
 }
 
 /** Same guard chat applies: a schema without vibe rows gets no card. */
@@ -234,15 +268,12 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 			//     (week overview grouped by weekday). Optional `week` pages the view
 			//     (0=this, 1=next, -1=last); the vibe logic computes that week's dates.
 			if (name === 'show_dienstplan') {
-				const listed = await crud(userId, { schema: 'shift', action: 'list' } as Parameters<
-					typeof crud
-				>[1]).catch(() => null)
-				const items = (listed as { items?: unknown } | null)?.items ?? listed ?? []
 				const weekOffset = Number.isFinite(Number(args.week)) ? Number(args.week) : 0
+				const data = await vibeSource(userId, 'dienstplan', 'shift', { weekOffset })
 				return {
 					content: { ok: true, shown: 'dienstplan', week: weekOffset },
 					detail: 'dienstplan',
-					vibes: await existingVibes([{ schema: 'dienstplan', data: { items, weekOffset } }])
+					vibes: await existingVibes([{ schema: 'dienstplan', data }])
 				}
 			}
 
@@ -320,16 +351,22 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 					const primary = await vibeForSchema(schema).catch(() => null)
 					if (primary) {
 						let target = primary
-						// the actor's list result already respects any filter — reuse its data.
-						let data = (declared[0] as VoiceVibe | undefined)?.data
-						if (isList && (await vibeExists(`${primary}-list`).catch(() => false))) {
-							target = `${primary}-list`
-						}
-						if (data === undefined) {
-							const fresh = await crud(userId, { schema, action: 'list' } as Parameters<
-								typeof crud
-							>[1])
-							data = { items: (fresh as { items?: unknown } | undefined)?.items ?? fresh }
+						let data: unknown
+						if (isList) {
+							// list: reuse the actor's already-FILTERED result; route to the dedicated
+							// `<vibe>-list` view when the skill has one (dienstplan-list = per person).
+							if (await vibeExists(`${primary}-list`).catch(() => false)) target = `${primary}-list`
+							data = (declared[0] as VoiceVibe | undefined)?.data
+							if (data === undefined) {
+								const fresh = await crud(userId, { schema, action: 'list' } as Parameters<
+									typeof crud
+								>[1])
+								data = { items: (fresh as { items?: unknown } | undefined)?.items ?? fresh }
+							}
+						} else {
+							// mutation: push FRESH, FULL data so the stage reflects the whole current
+							// state (merge-vibes fetch every schema they overlay, e.g. slots + shifts).
+							data = await vibeSource(userId, target, schema)
 						}
 						vibes = [{ schema: target, data }]
 					}

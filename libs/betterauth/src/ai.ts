@@ -23,6 +23,7 @@ import { ontologyCaps } from './ontology'
 import { mutationCaps, queryCaps } from './query-caps'
 import { recordActorRun } from './skills-run'
 import { vibeExists, vibeForSchema } from './vibe-registry'
+import { vibeSource } from './voice-tools'
 import { typeCaps } from './type-caps'
 import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './usage'
 
@@ -1010,12 +1011,9 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 			// stage right after the confirmed delete — for ANY schema (todos, shift→dienstplan …).
 			const vibeName = await vibeForSchema(schema).catch(() => null)
 			if (vibeName) {
-				const fresh = await crud(session.user.id, {
-					schema,
-					action: 'list'
-				} as Parameters<typeof crud>[1]).catch(() => null)
-				const rows = (fresh as { items?: unknown } | null)?.items ?? fresh ?? []
-				return c.json({ ok: true, result, vibe: { schema: vibeName, data: { items: rows } } })
+				// merge-vibes (dienstplan) fetch every schema they overlay, not just the deleted one.
+				const data = await vibeSource(session.user.id, vibeName, schema).catch(() => ({}))
+				return c.json({ ok: true, result, vibe: { schema: vibeName, data } })
 			}
 		}
 		return c.json({ ok: true, result })
