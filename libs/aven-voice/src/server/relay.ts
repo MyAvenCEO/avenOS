@@ -86,6 +86,10 @@ export function createVoiceBridge(
 	let session: Session | undefined
 	let closed = false
 	const serverToolNames = new Set(opts.serverTools?.declarations.map((d) => d.name) ?? [])
+	// Vertex re-emits tool calls (sometimes with fresh ids) — answer repeats from
+	// cache instead of executing twice (a duplicate `create` would double data).
+	const doneById = new Map<string, unknown>()
+	const recentByArgs = new Map<string, { out: unknown; ts: number }>()
 
 	async function startSession(setup: VoiceSetup): Promise<void> {
 		const voice =
@@ -133,10 +137,28 @@ export function createVoiceBridge(
 						const serverCalls = calls.filter((c) => serverToolNames.has(c.name))
 						if (clientCalls.length) send({ type: 'toolCall', calls: clientCalls })
 						for (const c of serverCalls) {
+							const argsKey = c.name + JSON.stringify(c.args ?? {})
+							const cachedById = c.id ? doneById.get(c.id) : undefined
+							const cachedByArgs = recentByArgs.get(argsKey)
+							const cached =
+								cachedById ??
+								(cachedByArgs && Date.now() - cachedByArgs.ts < 10_000
+									? cachedByArgs.out
+									: undefined)
+							if (cached !== undefined) {
+								session?.sendToolResponse({
+									functionResponses: [
+										{ ...(c.id ? { id: c.id } : {}), name: c.name, response: { output: cached } }
+									]
+								})
+								continue
+							}
 							send({ type: 'toolEvent', id: c.id, name: c.name, args: c.args, status: 'running' })
 							void opts.serverTools!
 								.execute(c.name, c.args)
 								.then((out) => {
+									if (c.id) doneById.set(c.id, out.content)
+									recentByArgs.set(argsKey, { out: out.content, ts: Date.now() })
 									if (out.hitl) {
 										send({ type: 'hitl', id: c.id, tool: c.name, label: out.hitl.label, action: out.hitl.action })
 									}

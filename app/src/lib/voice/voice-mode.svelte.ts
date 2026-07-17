@@ -69,6 +69,8 @@ class VoiceMode {
 	start(): void {
 		this.error = null
 		this.transcript = []
+		this.toolEvents = []
+		this.vibeQueue = []
 		const wsOrigin = AUTH_ORIGIN.replace(/^http/, 'ws')
 		const token = getBearerToken()
 		const url = `${wsOrigin}/api/voice/live${token ? `?token=${encodeURIComponent(token)}` : ''}`
