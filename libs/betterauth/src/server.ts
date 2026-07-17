@@ -24,6 +24,14 @@ import {
 } from './billing'
 import { bootstrapSchema } from './bootstrap'
 import {
+	chainAccount,
+	chainMint,
+	chainToken,
+	chainTransfer,
+	chainTxs,
+	chainUsers
+} from './chain-routes'
+import {
 	createSchema,
 	createValue,
 	deleteValue,
@@ -35,6 +43,7 @@ import { eventsStream } from './events'
 import { inboxGet, inboxList, mailInbox } from './inbox'
 import { syncPricing } from './usage'
 import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
+import { voiceLive, voiceSessionGuard, voiceWebsocket } from './voice'
 
 const app = new Hono()
 
@@ -66,6 +75,10 @@ app.use('/api/vault/*', cors(corsOptions))
 // Admin-only inbound-mail viewer (board 0060). The /webhooks/inbox/mail receiver is server-to-server
 // (no CORS); these /api/inbox/* read endpoints are browser-called by the app, so they need CORS.
 app.use('/api/inbox/*', cors(corsOptions))
+// Internal chain / aEUR banking (board 0088). Browser-called by the Banking vibe.
+app.use('/api/chain/*', cors(corsOptions))
+// avenVOICE realtime relay — WS upgrade, session-gated (cookie/bearer rides the upgrade request).
+app.use('/api/voice/*', cors(corsOptions))
 
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
@@ -77,6 +90,10 @@ app.post('/api/ai/confirm', aiConfirmAction)
 app.get('/api/ai/sessions', aiSessions)
 app.get('/api/ai/sessions/:id/messages', aiSessionMessages)
 app.post('/api/admin/set-tier', aiSetTier)
+
+// avenVOICE: realtime voice bridge to Gemini Live (Enterprise). One WS per client;
+// the surface sends its own instructions/tools in the first frame. board: aven-voice.
+app.get('/api/voice/live', voiceSessionGuard, voiceLive)
 
 // Generic schema-driven user data (board 0053): schemas + schema-validated values.
 app.post('/api/data/schemas', createSchema)
@@ -116,6 +133,15 @@ app.post('/webhooks/inbox/mail', mailInbox)
 // Admin-only inbound-mail viewer: list (headline fields) + one message's full detail. board 0060.
 app.get('/api/inbox/messages', inboxList)
 app.get('/api/inbox/messages/:id', inboxGet)
+
+// Internal chain / aEUR banking (board 0088): session-gated; mint + the recipient list are
+// admin-only. Symbolic signing + hash-chained ledger behind swappable ports (real chain later).
+app.get('/api/chain/account', chainAccount)
+app.get('/api/chain/token', chainToken)
+app.get('/api/chain/txs', chainTxs)
+app.get('/api/chain/users', chainUsers)
+app.post('/api/chain/mint', chainMint)
+app.post('/api/chain/transfer', chainTransfer)
 
 // Apple App Site Association (AASA) — lets the native macOS/iOS app use passkeys (WebAuthn PRF)
 // with rp.id = this host (api.next.aven.ceo). Served at the well-known path over HTTPS, no
@@ -164,4 +190,4 @@ const port = Number(new URL(process.env.BETTER_AUTH_URL ?? 'http://localhost:878
 // long-lived SSE stream (GET /api/events) and any AI response that pauses >10s, which churned the
 // WKWebView connection pool and surfaced as "Load failed" across the app. 120s comfortably covers
 // the 15s SSE keep-alive and model think-pauses. board 0055.
-export default { port, idleTimeout: 120, fetch: app.fetch }
+export default { port, idleTimeout: 120, fetch: app.fetch, websocket: voiceWebsocket }
