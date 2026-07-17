@@ -190,11 +190,19 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 	]
 		.filter(Boolean)
 		.join('\n')
+	// Session-scoped: which week of the roster the user is currently looking at, so an edit stays on
+	// the planned week instead of snapping back to the current week (set by show_dienstplan / assign).
+	let dienstplanWeek = 0
 	return {
 		declarations,
 		instructionsSuffix,
 		async execute(name, rawArgs) {
 			const args = sanitizeToolArgs(rawArgs ?? {}) as Record<string, unknown>
+			// assign_shift on the roster defaults to the week the user is viewing, and updates it.
+			if (name === 'assign_shift') {
+				if (!Number.isFinite(Number(args.week))) args.week = dienstplanWeek
+				else dienstplanWeek = Number(args.week)
+			}
 			// items must be value OBJECTS — the model sometimes slips the action
 			// string into the array; keep only real entries.
 			if (Array.isArray(args.items)) {
@@ -269,6 +277,7 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 			//     (0=this, 1=next, -1=last); the vibe logic computes that week's dates.
 			if (name === 'show_dienstplan') {
 				const weekOffset = Number.isFinite(Number(args.week)) ? Number(args.week) : 0
+				dienstplanWeek = weekOffset
 				const data = await vibeSource(userId, 'dienstplan', 'shift', { weekOffset })
 				return {
 					content: { ok: true, shown: 'dienstplan', week: weekOffset },
@@ -377,7 +386,9 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 						} else {
 							// mutation: push FRESH, FULL data so the stage reflects the whole current
 							// state (merge-vibes fetch every schema they overlay, e.g. slots + shifts).
-							data = await vibeSource(userId, target, schema)
+							// Keep the roster on the week the user is viewing, not the current week.
+							const extra = target === 'dienstplan' ? { weekOffset: dienstplanWeek } : {}
+							data = await vibeSource(userId, target, schema, extra)
 						}
 						vibes = [{ schema: target, data }]
 					}
