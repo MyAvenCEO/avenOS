@@ -20,6 +20,7 @@ import FlowStatusStrip from '$lib/shell/FlowStatusStrip.svelte'
 import SkillFlowView from '$lib/shell/SkillFlowView.svelte'
 import SkillsUsedAside, { type SkillUse } from '$lib/shell/SkillsUsedAside.svelte'
 import TodosVibe from '$lib/shell/TodosVibe.svelte'
+import { voiceMode } from '$lib/voice/voice-mode.svelte'
 import VibeCard from '$lib/shell/VibeCard.svelte'
 
 // board 0113 — ANY vibe schema renders from its DB vibe.* rows through the generic VibeCard host (no
@@ -75,6 +76,16 @@ function pushVibe(schema: string, data?: Record<string, unknown>): number {
 	currentVibeId = id
 	return id
 }
+// board aven-voice — the STAGE follows the voice session: every voice tool run
+// that names a schema pushes that vibe, exactly like a chat turn would.
+let lastVoiceVibeKey = ''
+$effect(() => {
+	const vibe = voiceMode.activeVibe
+	const key = `${vibe}#${voiceMode.toolEvents.length}`
+	if (!vibe || key === lastVoiceVibeKey) return
+	lastVoiceVibeKey = key
+	pushVibe(vibe)
+})
 let scrollEl = $state<HTMLDivElement | null>(null)
 let contentEl = $state<HTMLDivElement | null>(null)
 let initialized = false

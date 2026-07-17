@@ -99,7 +99,11 @@ class VoiceMode {
 			onServerMessage: (msg) => {
 				if (msg.type === 'toolEvent') {
 					this.toolEvents = [...this.toolEvents.slice(-9), msg]
-					const vibe = TOOL_VIBES[msg.name]
+					// data_crud carries its target schema (todos/inventory/…) in the args —
+					// that IS the stage vibe; static map only as fallback for other tools.
+					const argSchema = (msg.args as { schema?: unknown } | undefined)?.schema
+					const vibe =
+						(typeof argSchema === 'string' && argSchema) || TOOL_VIBES[msg.name] || null
 					if (vibe) this.activeVibe = vibe
 				} else if (msg.type === 'hitl') {
 					this.pendingHitl = msg

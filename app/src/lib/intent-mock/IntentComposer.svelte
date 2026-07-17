@@ -975,7 +975,7 @@ const pillClass = $derived.by(() => {
 	{#if mode === 'collapsed'}
 		{#if voiceMode.active && voiceMode.transcript.length > 0}
 			<div
-				class="mx-auto mb-2 max-h-24 max-w-[min(36rem,80vw)] space-y-1.5 overflow-y-auto rounded-2xl bg-muted/40 px-4 py-3 text-left text-sm leading-snug text-foreground/80 max-sm:max-w-none"
+				class="mx-auto mb-2 max-h-24 max-w-[min(36rem,80vw)] space-y-1.5 overflow-y-auto rounded-2xl border border-border bg-background px-4 py-3 text-left text-sm leading-snug text-foreground shadow-lg max-sm:max-w-none"
 				aria-live="polite"
 			>
 				{#each voiceMode.transcript.slice(-3) as line, i (i)}
@@ -987,7 +987,7 @@ const pillClass = $derived.by(() => {
 			{@const ev = voiceMode.toolEvents[voiceMode.toolEvents.length - 1]}
 			<div class="mx-auto mb-1.5 flex max-w-[min(36rem,80vw)] justify-center">
 				<span
-					class="rounded-full border border-border bg-background/80 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider {ev.status === 'error' ? 'text-destructive' : 'opacity-70'}"
+					class="rounded-full border border-border bg-background px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider shadow-md {ev.status === 'error' ? 'text-destructive' : 'opacity-70'}"
 				>
 					{ev.name}{ev.detail ? ` · ${ev.detail}` : ''} · {ev.status}
 				</span>
