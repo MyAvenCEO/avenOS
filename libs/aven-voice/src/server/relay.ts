@@ -47,6 +47,8 @@ function makeClient(): GoogleGenAI {
 /** Server-side tool surface: executed in-process (credentials/caps stay server-side). */
 export type VoiceServerTools = {
 	declarations: import('../protocol').VoiceToolDeclaration[]
+	/** Appended to the surface's system instructions (e.g. live schema hints). */
+	instructionsSuffix?: string
 	execute: (
 		name: string,
 		args: unknown
@@ -97,11 +99,14 @@ export function createVoiceBridge(
 				? setup.voice
 				: DEFAULT_VOICE
 		const ai = makeClient()
+		const systemInstruction = opts.serverTools?.instructionsSuffix
+			? `${setup.instructions}\n\n${opts.serverTools.instructionsSuffix}`
+			: setup.instructions
 		session = await ai.live.connect({
 			model: MODEL,
 			config: {
 				responseModalities: [Modality.AUDIO],
-				systemInstruction: setup.instructions,
+				systemInstruction,
 				speechConfig: {
 					voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
 					languageCode: setup.languageCode ?? DEFAULT_LANGUAGE
