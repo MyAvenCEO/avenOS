@@ -23,6 +23,34 @@ import { vibeExists } from './vibe-registry'
 type VoiceVibe = { schema: string; data?: unknown }
 
 /**
+ * Gemini Live occasionally emits malformed tool args: keys wrapped in literal
+ * quotes ({ '"id"': … } instead of { id: … }), JSON payloads as strings, or a
+ * stray action string inside `items` (["update", {…}]). Normalize recursively
+ * so actors always see clean shapes — otherwise updates silently match nothing.
+ */
+function sanitizeToolArgs(v: unknown): unknown {
+	if (Array.isArray(v)) return v.map(sanitizeToolArgs)
+	if (v && typeof v === 'object') {
+		const out: Record<string, unknown> = {}
+		for (const [k, val] of Object.entries(v)) {
+			out[k.trim().replace(/^"+|"+$/g, '')] = sanitizeToolArgs(val)
+		}
+		return out
+	}
+	if (typeof v === 'string') {
+		const t = v.trim()
+		if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+			try {
+				return sanitizeToolArgs(JSON.parse(t))
+			} catch {
+				return v
+			}
+		}
+	}
+	return v
+}
+
+/**
  * Tools whose chat implementation needs the CLIENT'S files round-tripped per
  * turn (website source lives in Tauri fs) — the voice protocol doesn't carry
  * that yet, so they are not advertised rather than advertised-but-broken.
@@ -116,7 +144,12 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 		declarations,
 		instructionsSuffix,
 		async execute(name, rawArgs) {
-			const args = (rawArgs ?? {}) as Record<string, unknown>
+			const args = sanitizeToolArgs(rawArgs ?? {}) as Record<string, unknown>
+			// items must be value OBJECTS — the model sometimes slips the action
+			// string into the array; keep only real entries.
+			if (Array.isArray(args.items)) {
+				args.items = args.items.filter((x) => x && typeof x === 'object' && !Array.isArray(x))
+			}
 
 			// 0a) show_website — same contract as chat: the composer vibe is
 			//    client-special-cased (viewer reads local files), no registry row.
