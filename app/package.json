@@ -54,6 +54,7 @@
 		"github-slugger": "^2",
 		"marked": "^15",
 		"pdfjs-dist": "^5.7.284",
-		"xterm-pty": "^0.12.0"
+		"xterm-pty": "^0.12.0",
+		"@avenos/aven-voice": "workspace:*"
 	}
 }

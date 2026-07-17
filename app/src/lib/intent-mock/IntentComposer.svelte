@@ -21,6 +21,9 @@ import {
 	subscribeTranscribeProgress,
 	transcribeAudio
 } from '$lib/intent-mock/transcribe'
+// board aven-voice — realtime speech-to-speech (Gemini Live via betterauth relay) is the DEFAULT
+// voice mode on desktop; the Parakeet push-to-talk flow below stays as the mobile/fallback path.
+import { voiceMode } from '$lib/voice/voice-mode.svelte'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
@@ -970,6 +973,21 @@ const pillClass = $derived.by(() => {
 		</div>
 	{/if}
 	{#if mode === 'collapsed'}
+		{#if voiceMode.active && voiceMode.transcript.length > 0}
+			<div
+				class="mx-auto mb-1.5 max-h-20 max-w-[min(36rem,80vw)] overflow-y-auto rounded-2xl bg-muted/40 px-3 py-2 text-left text-sm leading-snug text-foreground/80 max-sm:max-w-none"
+				aria-live="polite"
+			>
+				{#each voiceMode.transcript.slice(-3) as line, i (i)}
+					<p class={line.role === 'user' ? 'font-medium' : 'opacity-75'}>{line.text}</p>
+				{/each}
+			</div>
+		{/if}
+		{#if voiceMode.error}
+			<div class="mx-auto mb-1.5 max-w-[min(36rem,80vw)] rounded-xl bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+				{voiceMode.error}
+			</div>
+		{/if}
 		<div class={pillClass} role="group">
 			<button
 				type="button"
@@ -990,12 +1008,13 @@ const pillClass = $derived.by(() => {
 						e.preventDefault()
 						return
 					}
-					listeningSubmitOnRelease = false
-					openListening()
+					voiceMode.toggle()
 				}}
 				aria-label={isMobile
 					? 'Tap to type, double-tap for voice stream, hold to record (mock)'
-					: 'Start voice note (mock)'}
+					: voiceMode.active
+						? 'Sprachmodus stoppen'
+						: 'Sprachmodus starten (realtime)'}
 			>
 				<!-- board 0112 — a soft CIRCULAR glow behind the mark lifts it off the cream background (a
 				     radial gradient, not a shape-tracing drop-shadow → no squared petal silhouette). Constant
@@ -1004,6 +1023,17 @@ const pillClass = $derived.by(() => {
 					aria-hidden="true"
 					class="pointer-events-none absolute inset-[12%] rounded-full opacity-55 blur-[12px] [background:radial-gradient(circle,color-mix(in_srgb,var(--color-primary)_30%,transparent),transparent_70%)]"
 				></span>
+				{#if voiceMode.active}
+					<!-- aven-voice: live session — pulsing rings on the mark; click again stops. -->
+					<span
+						aria-hidden="true"
+						class="pointer-events-none absolute inset-0 rounded-full bg-primary/15 motion-safe:animate-ping"
+					></span>
+					<span
+						aria-hidden="true"
+						class="pointer-events-none absolute -inset-1.5 rounded-full border border-primary/30 motion-safe:animate-pulse"
+					></span>
+				{/if}
 				<!-- board 0119m — the full-colour clean mark is the DEFAULT (no disabled/inactive swap).
 				     Hover highlight = a MINIMAL transform (scale-up, no reflow → never displaces the
 				     button) + a hair more contrast; a tiny press-in on active. -->

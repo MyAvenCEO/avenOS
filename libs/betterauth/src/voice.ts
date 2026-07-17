@@ -18,16 +18,15 @@ export { websocket as voiceWebsocket }
 
 /**
  * Only signed-in users may open a voice session (same gate as /api/ai/*).
- * VOICE_DEV_BYPASS=1 skips the check for LOCAL development without the full
- * auth stack (Neon/OAuth env) — never set this in a deployed environment.
+ * Browser WebSockets can't set an Authorization header on the upgrade request,
+ * so the bearer token may ride as `?token=` instead (WKWebView drops the
+ * cross-site cookie — same reason the app uses bearer everywhere).
  */
 export async function voiceSessionGuard(c: Context, next: Next): Promise<Response | void> {
-	if (process.env.VOICE_DEV_BYPASS === '1') {
-		console.warn('[betterauth] VOICE_DEV_BYPASS active — /api/voice/live is UNAUTHENTICATED')
-		await next()
-		return
-	}
-	const session = await auth.api.getSession({ headers: c.req.raw.headers })
+	const headers = new Headers(c.req.raw.headers)
+	const token = c.req.query('token')
+	if (token && !headers.get('authorization')) headers.set('authorization', `Bearer ${token}`)
+	const session = await auth.api.getSession({ headers })
 	if (!session) return c.json({ error: 'unauthorized' }, 401)
 	await next()
 }

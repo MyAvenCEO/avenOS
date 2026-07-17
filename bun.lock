@@ -32,6 +32,7 @@
         "@avenos/aven-city": "workspace:*",
         "@avenos/aven-skills": "workspace:*",
         "@avenos/aven-ui": "workspace:*",
+        "@avenos/aven-voice": "workspace:*",
         "@avenos/docs": "workspace:*",
         "@avenos/skills": "workspace:*",
         "@better-auth/passkey": "^1.6.20",
