@@ -121,10 +121,16 @@ export function createVoiceBridge(
 			? `${setup.instructions}\n\n${opts.serverTools.instructionsSuffix}`
 			: setup.instructions
 		return new Promise<Session>((resolve, reject) => {
+			// settled = the connect RACE has a winner (open/timeout/error). Only the
+			// timeout path discards a late session. `open` no longer flips settled —
+			// that was the self-close bug (settled+no-session → .then closed it).
 			let settled = false
+			let timedOut = false
+			let opened = false
 			const timer = setTimeout(() => {
 				if (!settled) {
 					settled = true
+					timedOut = true
 					reject(new Error(`connect timeout (${location})`))
 				}
 			}, CONNECT_TIMEOUT_MS)
@@ -147,11 +153,8 @@ export function createVoiceBridge(
 					},
 					callbacks: {
 						onopen: () => {
-							if (!settled) {
-								settled = true
-								clearTimeout(timer)
-							}
-							send({ type: 'open' })
+							opened = true
+							if (!timedOut) send({ type: 'open' })
 						},
 						onmessage: (m: LiveServerMessage) => onLiveMessage(m),
 						onerror: (e: ErrorEvent) => {
@@ -159,7 +162,7 @@ export function createVoiceBridge(
 								settled = true
 								clearTimeout(timer)
 								reject(new Error(e.message || 'live error'))
-							} else if (!closed) {
+							} else if (!timedOut && !closed) {
 								send({ type: 'error', message: e.message })
 							}
 						},
@@ -168,19 +171,22 @@ export function createVoiceBridge(
 								settled = true
 								clearTimeout(timer)
 								reject(new Error(`closed before open: ${e.reason || e.code}`))
-							} else if (!closed) {
+							} else if (!timedOut && !closed) {
 								send({ type: 'error', message: `Live-Session geschlossen: ${e.reason || e.code}` })
 							}
 						}
 					}
 				})
 				.then((s) => {
-					// If timeout already fired, discard this late session.
-					if (settled && !session) {
+					if (timedOut) {
+						// A later attempt owns the client now — discard this stale session.
 						void s.close?.()
 						return
 					}
+					settled = true
+					clearTimeout(timer)
 					session = s
+					if (!opened) send({ type: 'open' })
 					resolve(s)
 				})
 				.catch((err) => {
