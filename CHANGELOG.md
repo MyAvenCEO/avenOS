@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.7...v) (2026-07-18)
+
+
+### Features
+
+* aven-voice — realtime voice mode + calendar/dienstplan/kontakte skills ([#60](https://github.com/MyAvenCEO/avenOS/issues/60)) ([4403817](https://github.com/MyAvenCEO/avenOS/commit/440381794ac1f7b3dd48aa173936d43deb5acc73)), closes [#pushVibe](https://github.com/MyAvenCEO/avenOS/issues/pushVibe)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.6...v) (2026-07-16)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.5...v) (2026-07-16)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.4...v) (2026-07-16)
