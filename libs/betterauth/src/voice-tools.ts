@@ -154,8 +154,8 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 			: []),
 		hint,
 		'Für einen anderen Bereich wechselst du einfach das schema-Feld von data_crud.',
-		'ALLE Einträge eines Schemas löschen ("lösch alle Schichten/Kontakte/…"): rufe data_crud action:"delete" mit NUR dem schema auf — OHNE ids, OHNE filter, OHNE vorher zu listen. Der Server löst alle echten ids auf und zeigt EINE Bestätigungskarte. Liste dafür NICHT erst auf.',
-		'EINZELNE gezielte Änderung/Löschung: rufe ZUERST list auf, lies die Ergebnisse, und nutze dann delete/update mit den EXAKTEN ids daraus — nie einen Namen im id-Feld, nie einen filter. Kommt "unknown-id" zurück, enthält die Antwort die aktuelle Liste mit den echten ids: wähle daraus und rufe erneut auf.'
+		'ALLE Einträge eines Schemas löschen ("lösch alle Schichten/Kontakte/…"): rufe data_crud action:"delete" mit dem schema und all:true auf — OHNE ids, OHNE filter, OHNE vorher zu listen. Der Server löst alle echten ids auf und zeigt EINE Bestätigungskarte.',
+		'EINZELNE gezielte Löschung/Änderung (z. B. "lösch das Todo Einkaufen"): rufe ZUERST list auf, lies die Ergebnisse, und nutze dann delete/update mit den EXAKTEN ids daraus (nie all:true, nie ein Name im id-Feld, nie ein filter). Kommt "unknown-id" zurück, enthält die Antwort die aktuelle Liste mit den echten ids: wähle die GEWÜNSCHTEN aus und rufe erneut auf.'
 	]
 		.filter(Boolean)
 		.join('\n')
@@ -285,43 +285,40 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 					typeof args.filter === 'object' &&
 					Object.keys(args.filter as Record<string, unknown>).length > 0
 				if (!hasFilter) delete args.filter
-				// "Delete ALL": a delete with no ids AND no filter means every row of this
-				// schema (e.g. "lösch alle Schichten"). Resolve to the real row UUIDs so the
-				// HITL confirm removes the whole set — still by exact id, one confirmation.
-				if (
-					String(args.action) === 'delete' &&
-					!(Array.isArray(args.ids) && args.ids.length) &&
-					!hasFilter &&
-					idSet.size
-				) {
-					args.ids = [...idSet]
-				}
-				const targets =
-					String(args.action) === 'delete'
+				// "Delete ALL" is EXPLICIT ONLY: the model must pass all:true (from "lösch alles").
+					// A bare delete (no ids) is NOT treated as delete-all — otherwise a specific delete
+					// where the model forgot the id would wipe everything.
+					const isDelete = String(args.action) === 'delete'
+					const wantsAll = isDelete && args.all === true && idSet.size > 0
+					if (wantsAll) args.ids = [...idSet]
+					delete args.all
+					const targets = isDelete
 						? (Array.isArray(args.ids) ? args.ids : []).map((x) => String(x))
 						: (Array.isArray(args.items) ? args.items : []).map((it) =>
 								String((it as Record<string, unknown>)?.id)
 							)
-				const usedFilter = String(args.action) === 'delete' && hasFilter && !targets.length
-				const unknown = targets.filter((id) => !idSet.has(id))
-				if (usedFilter || unknown.length) {
-					// Surface the real data so the model reads it and retries with true ids.
-					const current = (Array.isArray(rows) ? rows : []).map((r) => ({
-						id: r.id,
-						label: r.title ?? r.name ?? r.label ?? r.text ?? ''
-					}))
-					return {
-						content: {
-							ok: false,
-							error: 'unknown-id',
-							message:
-								'Nutze die EXAKTE id aus der aktuellen Liste (keine Namen, kein filter). Ruf mit diesen ids erneut auf.',
-							schema: args.schema,
-							items: current
-						},
-						detail: `${args.schema}: bitte echte id verwenden`
+					const usedFilter = isDelete && hasFilter && !targets.length
+					// A delete that resolved to NO real ids (bare, a filter, or invented ids) must NOT run —
+					// surface the live rows so the model retries with exact ids (or all:true for everything).
+					const noTargets = isDelete && !targets.length && !wantsAll
+					const unknown = targets.filter((id) => !idSet.has(id))
+					if (usedFilter || unknown.length || noTargets) {
+						const current = (Array.isArray(rows) ? rows : []).map((r) => ({
+							id: r.id,
+							label: r.title ?? r.name ?? r.label ?? r.text ?? r.person ?? ''
+						}))
+						return {
+							content: {
+								ok: false,
+								error: 'unknown-id',
+								message:
+									'Zum Löschen EINZELNER Einträge: rufe delete mit deren EXAKTEN ids aus dieser Liste auf (kein Name, kein filter). Zum Löschen ALLER: rufe delete mit all:true auf.',
+								schema: args.schema,
+								items: current
+							},
+							detail: `${args.schema}: bitte ids oder all:true`
+						}
 					}
-				}
 			}
 
 			// 1) TS actor (skills/tools registry) — the actor declares its vibes.
