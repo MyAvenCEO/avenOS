@@ -156,7 +156,8 @@ jobs:
             "POLAR_API_KEY=${POLAR_API_KEY:-}" \
             "POLAR_WEBHOOK_SECRET=${POLAR_WEBHOOK_SECRET:-}" \
             "POSTMARK_INBOUND_SECRET=${POSTMARK_INBOUND_SECRET:-}" \
-            "POSTMARK_INBOUND_USER=${POSTMARK_INBOUND_USER:-}"; do
+            "POSTMARK_INBOUND_USER=${POSTMARK_INBOUND_USER:-}" \
+            "GOOGLE_SERVICE_ACCOUNT_JSON=${GOOGLE_SERVICE_ACCOUNT_JSON:-}"; do
             [ -n "${kv#*=}" ] && args+=("$kv")
           done
           if [ ${#args[@]} -gt 0 ]; then flyctl secrets set --app "$APP" --stage "${args[@]}"; fi
@@ -172,6 +173,9 @@ jobs:
           POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
           POSTMARK_INBOUND_SECRET: ${{ secrets.POSTMARK_INBOUND_SECRET }}
           POSTMARK_INBOUND_USER: ${{ secrets.POSTMARK_INBOUND_USER }}
+          # Gemini Enterprise (Vertex) service-account key for the aven-voice Live relay —
+          # store the FULL sa JSON (one-lined, `jq -c .`) in the next environment.
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
 
       - name: App logs (always — boot forensics)
         # board 0119h — the machine's own stdout after every deploy attempt: a boot hang/crash is

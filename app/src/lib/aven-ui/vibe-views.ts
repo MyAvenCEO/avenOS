@@ -1,6 +1,7 @@
 import type { UiFixtureShell } from '@avenos/aven-ui'
 import { createBankStatementShell } from '@avenos/aven-ui/vibes/bank-statement'
 import { createBankTransfersShell } from '@avenos/aven-ui/vibes/bank-transfers'
+import { createBankingShell } from '@avenos/aven-ui/vibes/banking'
 import { createChatShell } from '@avenos/aven-ui/vibes/chat'
 import { createContractShell } from '@avenos/aven-ui/vibes/contract'
 import { createErrorShell } from '@avenos/aven-ui/vibes/error'
@@ -21,6 +22,7 @@ export type VibeViewId =
 	| 'invoice'
 	| 'bank-transfers'
 	| 'bank-statement'
+	| 'banking'
 	| 'contract'
 	| 'members'
 	| 'chat'
@@ -37,6 +39,8 @@ export interface VibeView {
 	shell: UiFixtureShell
 	containerName: string
 	interactive: boolean
+	/** Root nav item is gated to admins (the API behind it is admin-gated too). board 0088. */
+	adminOnly?: boolean
 }
 
 export const vibeViewList: VibeView[] = [
@@ -64,6 +68,16 @@ export const vibeViewList: VibeView[] = [
 		shell: createBankStatementShell(),
 		containerName: 'aven-ui-bank-statement',
 		interactive: false
+	},
+	{
+		id: 'banking',
+		label: 'Banking',
+		description:
+			'aEUR-Wallet (avenEURO): Adresse + Guthaben, Prägen (nur Admin), Senden an andere Nutzer und die signierte, hash-verkettete Transaktionshistorie. Interne Chain (chain_*), später gegen eine echte Chain austauschbar.',
+		shell: createBankingShell(),
+		containerName: 'aven-ui-banking',
+		interactive: true,
+		adminOnly: true
 	},
 	{
 		id: 'contract',

@@ -29,3 +29,70 @@ export {
 } from './vibes/todos/index.js'
 // AvenVibeView (Svelte) is exposed via the package subpath
 // "@avenos/aven-vibes/AvenVibeView.svelte" (tsc can't resolve .svelte here).
+
+// ── dev-line (board 0064/0084) doc/invoice/banking exports — merged union ──
+export {
+	CONTACT_SCHEMA,
+	type Contact,
+	type ContactType,
+	contactDisplayName,
+	mapContactToView,
+	mintContactId
+} from './contact.js'
+export {
+	enrichFields,
+	matchContact,
+	normalizeName,
+	type PartyInput,
+	partiesFromDoc,
+	partyToContactFields
+} from './contact-match.js'
+export {
+	assignInvoiceNumber,
+	type InvoiceState,
+	invoiceNumber,
+	nextSeq,
+	parseInvoiceNumber,
+	STATE_PREFIX
+} from './invoice-number.js'
+export type { DocView } from './vibes/_doc/types.js'
+export {
+	createBankStatementShell,
+	mapBankStatementToView
+} from './vibes/bank-statement/index.js'
+export {
+	bookkeepingLogic,
+	bookkeepingShell,
+	bookkeepingSource,
+	bookkeepingStyle,
+	bookkeepingTools,
+	bookkeepingView,
+	createBookkeepingShell
+} from './vibes/bookkeeping/index.js'
+export { createContractShell, mapContractToView } from './vibes/contract/index.js'
+export {
+	createDocCompareShell,
+	type DocType,
+	isDocType,
+	mapDocView
+} from './vibes/doc-compare/index.js'
+export {
+	type BookingRecord,
+	mapBookingToView
+} from './vibes/invoice/booking.js'
+export { createInvoiceShell, mapInvoiceToView } from './vibes/invoice/index.js'
+export {
+	computeInvoiceTotals,
+	INVOICE_DOC_SCHEMA,
+	type InvoiceDoc,
+	type InvoiceLine,
+	invoiceDocToDoctype,
+	mapInvoiceDocToView,
+	requiredFieldsMissing
+} from './vibes/invoice/invoice-doc.js'
+export {
+	bestInvoiceMatch,
+	type InvoiceMatch,
+	type MatchConfidence,
+	mapMatchToView
+} from './vibes/invoice/match.js'

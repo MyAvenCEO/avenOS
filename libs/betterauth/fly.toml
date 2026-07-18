@@ -7,7 +7,7 @@
 #
 # Runtime SECRETS are NOT in this file — set them once with `fly secrets set` (see README):
 #   BETTER_AUTH_SECRET, NEON_PG_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
-#   TINFOIL_API_KEY, POLAR_API_KEY.
+#   TINFOIL_API_KEY, POLAR_API_KEY, GOOGLE_SERVICE_ACCOUNT_JSON (aven-voice Live relay).
 
 # App lives in the avenCEO fly.io org (NOT the legacy "maia city" org). The org is bound at
 # `fly apps create --org avenceo`; CI uses an app-scoped deploy token so it can't touch
@@ -23,6 +23,10 @@ primary_region = "fra"   # near the Neon eu-central-1 Postgres
   BETTER_AUTH_URL = "https://api.next.aven.ceo"
   PUBLIC_BETTER_AUTH_URL = "https://api.next.aven.ceo"
   POLAR_SERVER = "sandbox"
+  # aven-voice Live relay (Gemini Enterprise/Vertex). Pure-EU by request: locations list
+  # is ONLY europe-west1 — no us-central1 fallback in deployed envs (data residency).
+  GOOGLE_CLOUD_PROJECT = "avenceo"
+  GOOGLE_CLOUD_LOCATIONS = "europe-west1"
 
 [http_service]
   internal_port = 8787

@@ -1,0 +1,53 @@
+{
+	"address": "0x9f2a4c11e7b3d6082a5f1c0934ab77de10c4e2b1",
+	"isAdmin": true,
+	"balance": 95000,
+	"totalSupply": 100000,
+	"token": { "symbol": "aEUR", "name": "avenEURO", "decimals": 2 },
+	"recipients": [
+		{
+			"id": "u_b",
+			"email": "lena@aven.ceo",
+			"address": "0x3c7b9d2e51fa84c0d6b1e9072af35c81bb40e6a2"
+		},
+		{
+			"id": "u_c",
+			"email": "mara@aven.ceo",
+			"address": "0x71d0a8f4c2e96b350187de42a9cf6018e5b27c44"
+		}
+	],
+	"txs": [
+		{
+			"id": "tx1",
+			"seq": 1,
+			"kind": "mint",
+			"from_address": null,
+			"to_address": "0x9f2a4c11e7b3d6082a5f1c0934ab77de10c4e2b1",
+			"amount": 100000,
+			"verified": true
+		},
+		{
+			"id": "tx2",
+			"seq": 2,
+			"kind": "transfer",
+			"from_address": "0x9f2a4c11e7b3d6082a5f1c0934ab77de10c4e2b1",
+			"to_address": "0x3c7b9d2e51fa84c0d6b1e9072af35c81bb40e6a2",
+			"amount": 5000,
+			"verified": true
+		}
+	],
+	"labels": {
+		"walletEyebrow": "aEUR Wallet",
+		"addressLabel": "Adresse",
+		"mintTitle": "Prägen (nur Admin)",
+		"mintButton": "Prägen",
+		"sendTitle": "Senden",
+		"sendButton": "Senden",
+		"recipientLabel": "Empfänger",
+		"amountPlaceholder": "Betrag, z. B. 50,00",
+		"historyTitle": "Transaktionen",
+		"chainTag": "signiert · hash-verkettet",
+		"emptyHistory": "Noch keine Transaktionen.",
+		"noRecipients": "Keine weiteren Nutzer."
+	}
+}

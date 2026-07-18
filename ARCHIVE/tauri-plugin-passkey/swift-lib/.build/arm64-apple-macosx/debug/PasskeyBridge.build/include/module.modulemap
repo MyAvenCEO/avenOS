@@ -1,0 +1,3 @@
+module PasskeyBridge {
+    header "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/include/PasskeyBridge-Swift.h"
+}

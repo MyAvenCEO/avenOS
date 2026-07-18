@@ -1,0 +1,13 @@
+{
+	"title": "Kontoauszug",
+	"subtitle": "Kontoauszug",
+	"sections": [
+		{
+			"title": "Auszug",
+			"cards": [],
+			"rows": [{ "k": "Status", "v": "Datei anhängen und extrahieren lassen." }],
+			"columns": [],
+			"tableRows": []
+		}
+	]
+}

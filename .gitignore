@@ -78,3 +78,4 @@ target/
 # Local dev preview config (machine-specific absolute paths)
 /.claude/launch.json
 
+ARCHIVE/tauri-plugin-passkey/swift-lib/.build/

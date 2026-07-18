@@ -21,6 +21,9 @@ import {
 	subscribeTranscribeProgress,
 	transcribeAudio
 } from '$lib/intent-mock/transcribe'
+// board aven-voice — realtime speech-to-speech (Gemini Live via betterauth relay) is the DEFAULT
+// voice mode on desktop; the Parakeet push-to-talk flow below stays as the mobile/fallback path.
+import { voiceMode } from '$lib/voice/voice-mode.svelte'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
@@ -442,9 +445,9 @@ $effect(() => {
 			if (isMobile) return
 			if (isSpace) {
 				e.preventDefault()
-				if (performance.now() < openMicCooldownUntilMs) return
-				listeningSubmitOnRelease = false
-				openListening()
+				// board aven-voice — Space toggles the REALTIME voice mode (default),
+				// not the legacy Parakeet listening flow.
+				voiceMode.toggle()
 				return
 			}
 			if (e.metaKey || e.ctrlKey || e.altKey) return
@@ -970,6 +973,83 @@ const pillClass = $derived.by(() => {
 		</div>
 	{/if}
 	{#if mode === 'collapsed'}
+		{#if voiceMode.pendingHitl}
+			<!-- aven-voice HITL: the actor asked for human confirmation (e.g. delete/deploy). -->
+			<div
+				class="mx-auto mb-2 flex max-w-[min(36rem,80vw)] items-center gap-3 rounded-2xl border {voiceMode.hitlDanger
+					? 'border-destructive/40'
+					: 'border-border'} bg-background px-4 py-3 text-sm shadow-lg"
+				role="alertdialog"
+				aria-label="Bestätigung erforderlich"
+			>
+				<span class="min-w-0 flex-1 truncate font-medium">{voiceMode.pendingHitl.label}</span>
+				<button
+					type="button"
+					class="shrink-0 rounded-full border border-border bg-background px-3.5 py-1.5 text-xs font-semibold transition hover:bg-muted"
+					onclick={() => voiceMode.dismissHitl()}
+				>
+					Ablehnen
+				</button>
+				<!-- Destructive HITL (delete) confirms in brand danger, everything else in brand primary. -->
+				<button
+					type="button"
+					class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition hover:opacity-90 {voiceMode.hitlDanger
+						? 'bg-destructive text-white'
+						: 'bg-primary text-primary-foreground'}"
+					onclick={() => void voiceMode.confirmHitl()}
+				>
+					Bestätigen
+				</button>
+			</div>
+		{/if}
+		{#if voiceMode.active && (voiceMode.transcript.length > 0 || voiceMode.toolEvents.length > 0)}
+			<!-- aven-voice: ONE call card — transcript + tool log + copy, solid bg. -->
+			<div
+				class="relative mx-auto mb-2 max-h-32 max-w-[min(36rem,80vw)] overflow-y-auto rounded-2xl border border-border bg-background px-4 py-3 text-left text-sm leading-snug text-foreground shadow-lg max-sm:max-w-none"
+				aria-live="polite"
+			>
+				<button
+					type="button"
+					class="absolute right-2 top-2 rounded-md border border-border bg-background px-1.5 py-1 opacity-60 transition-opacity hover:opacity-100"
+					aria-label="Gesprächs- und Tool-Log kopieren"
+					title="Kompletten Verlauf kopieren"
+					onclick={() => navigator.clipboard.writeText(voiceMode.exportLog())}
+				>
+					<svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<rect x="9" y="9" width="13" height="13" rx="2" />
+						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+					</svg>
+				</button>
+				<div class="space-y-1.5 pr-8">
+					{#each voiceMode.transcript.slice(-3) as line, i (i)}
+						<p class={line.role === 'user' ? 'font-medium' : 'opacity-75'}>{line.text}</p>
+					{/each}
+				</div>
+				{#if voiceMode.toolEvents.length > 0}
+					{@const ev = voiceMode.toolEvents[voiceMode.toolEvents.length - 1]}
+					<div class="mt-2 border-t border-border pt-1.5">
+						<span
+							class="font-mono text-[10px] font-bold uppercase tracking-wider {ev.status === 'error' ? 'text-destructive' : 'opacity-60'}"
+						>
+							{ev.name}{ev.detail ? ` · ${ev.detail}` : ''} · {ev.status}
+						</span>
+					</div>
+				{/if}
+			</div>
+		{/if}
+		{#if voiceMode.status === 'connecting'}
+			<div class="mx-auto mb-1.5 flex max-w-[min(36rem,80vw)] items-center gap-2 rounded-full border border-amber-400/40 bg-background px-4 py-1.5 text-xs shadow-md">
+				<span class="size-2 rounded-full bg-amber-400 motion-safe:animate-pulse"></span>
+				<span class="font-medium text-foreground/80">
+					Verbinde mit Google…{voiceMode.connecting ? ` (Versuch ${voiceMode.connecting.attempt}/${voiceMode.connecting.total} · ${voiceMode.connecting.region})` : ''}
+				</span>
+			</div>
+		{/if}
+		{#if voiceMode.error}
+			<div class="mx-auto mb-1.5 max-w-[min(36rem,80vw)] rounded-xl bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+				{voiceMode.error}
+			</div>
+		{/if}
 		<div class={pillClass} role="group">
 			<button
 				type="button"
@@ -990,12 +1070,13 @@ const pillClass = $derived.by(() => {
 						e.preventDefault()
 						return
 					}
-					listeningSubmitOnRelease = false
-					openListening()
+					voiceMode.toggle()
 				}}
 				aria-label={isMobile
 					? 'Tap to type, double-tap for voice stream, hold to record (mock)'
-					: 'Start voice note (mock)'}
+					: voiceMode.active
+						? 'Sprachmodus stoppen'
+						: 'Sprachmodus starten (realtime)'}
 			>
 				<!-- board 0112 — a soft CIRCULAR glow behind the mark lifts it off the cream background (a
 				     radial gradient, not a shape-tracing drop-shadow → no squared petal silhouette). Constant
@@ -1004,14 +1085,48 @@ const pillClass = $derived.by(() => {
 					aria-hidden="true"
 					class="pointer-events-none absolute inset-[12%] rounded-full opacity-55 blur-[12px] [background:radial-gradient(circle,color-mix(in_srgb,var(--color-primary)_30%,transparent),transparent_70%)]"
 				></span>
-				<!-- board 0119m — the full-colour clean mark is the DEFAULT (no disabled/inactive swap).
-				     Hover highlight = a MINIMAL transform (scale-up, no reflow → never displaces the
-				     button) + a hair more contrast; a tiny press-in on active. -->
-				<img
-					src={logoClean}
-					alt="avenOS"
-					class="pointer-events-none absolute inset-0 size-full object-contain p-1 transition-transform duration-200 ease-out group-hover:scale-[1.08] group-active:scale-95"
-				/>
+				{#if voiceMode.status === 'connecting'}
+					<!-- aven-voice: CONNECTING — amber pulsing ring + spinner (not yet recording). -->
+					<span
+						aria-hidden="true"
+						class="pointer-events-none absolute inset-0 rounded-full bg-amber-400/30 motion-safe:animate-ping"
+					></span>
+					<span
+						class="pointer-events-none absolute inset-[8%] flex items-center justify-center rounded-full bg-amber-400 shadow-md"
+					>
+						<span
+							class="size-5 rounded-full border-[3px] border-white/40 border-t-white motion-safe:animate-spin"
+						></span>
+					</span>
+				{:else if voiceMode.active}
+					<!-- aven-voice: recording — red stop button with an X; pulsing ring behind. -->
+					<span
+						aria-hidden="true"
+						class="pointer-events-none absolute inset-0 rounded-full bg-red-500/25 motion-safe:animate-ping"
+					></span>
+					<span
+						class="pointer-events-none absolute inset-[8%] flex items-center justify-center rounded-full bg-red-500 shadow-md transition-transform duration-200 ease-out group-hover:scale-[1.05] group-active:scale-95"
+					>
+						<svg
+							class="size-6 text-white"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							aria-hidden="true"
+						>
+							<path d="M18 6 6 18M6 6l12 12" />
+						</svg>
+					</span>
+				{:else}
+					<!-- board 0119m — the full-colour clean mark is the DEFAULT (no disabled/inactive swap). -->
+					<img
+						src={logoClean}
+						alt="avenOS"
+						class="pointer-events-none absolute inset-0 size-full object-contain p-1 transition-transform duration-200 ease-out group-hover:scale-[1.08] group-active:scale-95"
+					/>
+				{/if}
 			</button>
 		</div>
 	{:else if mode === 'listening'}

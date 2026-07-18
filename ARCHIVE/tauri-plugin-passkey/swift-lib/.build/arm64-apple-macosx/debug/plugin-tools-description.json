@@ -1,0 +1,456 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.PasskeyBridge-arm64-apple-macosx26.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/sources",
+      "importPath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/Sources/PasskeyBridge/ApplePasskeyHandler.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/Sources/PasskeyBridge/Exports.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/Modules/SwiftRs.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "PasskeyBridge",
+      "moduleOutputPath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/Modules/PasskeyBridge.swiftmodule",
+      "objects" : [
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/ApplePasskeyHandler.swift.o",
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/Exports.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx15.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j8",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/include/PasskeyBridge-Swift.h",
+        "-swift-version",
+        "6",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "swift_lib"
+      ],
+      "outputFileMapPath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/ApplePasskeyHandler.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/Exports.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/Modules/PasskeyBridge.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/Sources/PasskeyBridge/ApplePasskeyHandler.swift",
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/Sources/PasskeyBridge/Exports.swift"
+      ],
+      "tempsPath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.SwiftRs-arm64-apple-macosx26.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/sources",
+      "importPath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/checkouts/swift-rs/src-swift/lib.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "SwiftRs",
+      "moduleOutputPath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/Modules/SwiftRs.swiftmodule",
+      "objects" : [
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/lib.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx10.13",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j8",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/include/SwiftRs-Swift.h",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-suppress-warnings"
+      ],
+      "outputFileMapPath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/lib.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/Modules/SwiftRs.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/checkouts/swift-rs/src-swift/lib.swift"
+      ],
+      "tempsPath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "PasskeyBridge" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "PasskeyBridge",
+      "-package-name",
+      "swift_lib",
+      "-c",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/Sources/PasskeyBridge/ApplePasskeyHandler.swift",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/Sources/PasskeyBridge/Exports.swift",
+      "-I",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx15.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j8",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/include/PasskeyBridge-Swift.h",
+      "-swift-version",
+      "6",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "swift_lib",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ],
+    "SwiftRs" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "SwiftRs",
+      "-c",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/checkouts/swift-rs/src-swift/lib.swift",
+      "-I",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx10.13",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j8",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/include/SwiftRs-Swift.h",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-suppress-warnings",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "PasskeyBridge" : [
+      "SwiftRs"
+    ],
+    "SwiftRs" : [
+
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/Sources/PasskeyBridge/ApplePasskeyHandler.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/Sources/PasskeyBridge/Exports.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/sources"
+    },
+    "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/ApplePasskeyHandler.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.build/Exports.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/lib.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/PasskeyBridge.product/Objects.LinkFileList"
+    },
+    "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/checkouts/swift-rs/src-swift/lib.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/sources"
+    },
+    "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}

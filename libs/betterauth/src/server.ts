@@ -23,6 +23,14 @@ import {
 	refreshTierProducts
 } from './billing'
 import { bootstrapSchema } from './bootstrap'
+import {
+	chainAccount,
+	chainMint,
+	chainToken,
+	chainTransfer,
+	chainTxs,
+	chainUsers
+} from './chain-routes'
 import { contextRoute } from './context'
 import {
 	createSchema,
@@ -48,6 +56,7 @@ import { listRuns, runSkill } from './skills-run'
 import { syncPricing } from './usage'
 import { deleteSecret, getVault, listSecrets, putSecret, putVault } from './vault'
 import { getVibe } from './vibe-registry'
+import { voiceLive, voiceSessionGuard, voiceWebsocket } from './voice'
 
 const app = new Hono()
 
@@ -85,6 +94,10 @@ app.use('/api/vault/*', cors(corsOptions))
 // Admin-only inbound-mail viewer (board 0060). The /webhooks/inbox/mail receiver is server-to-server
 // (no CORS); these /api/inbox/* read endpoints are browser-called by the app, so they need CORS.
 app.use('/api/inbox/*', cors(corsOptions))
+// Internal chain / aEUR banking (board 0088). Browser-called by the Banking vibe.
+app.use('/api/chain/*', cors(corsOptions))
+// avenVOICE realtime relay — WS upgrade, session-gated (cookie/bearer rides the upgrade request).
+app.use('/api/voice/*', cors(corsOptions))
 
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
@@ -118,6 +131,17 @@ app.get('/api/admin/types', listTypes)
 app.get('/api/admin/types/:type', getType)
 app.post('/api/admin/types', upsertType)
 app.delete('/api/admin/types/:type', deleteType)
+// avenVOICE: realtime voice bridge to Gemini Live (Enterprise). One WS per client;
+// the surface sends its own instructions/tools in the first frame. board: aven-voice.
+app.get('/api/voice/live', voiceSessionGuard, voiceLive)
+
+// Internal chain / aEUR banking (board 0088): session-gated; mint + recipient list admin-only.
+app.get('/api/chain/account', chainAccount)
+app.get('/api/chain/token', chainToken)
+app.get('/api/chain/txs', chainTxs)
+app.get('/api/chain/users', chainUsers)
+app.post('/api/chain/mint', chainMint)
+app.post('/api/chain/transfer', chainTransfer)
 
 // Generic schema-driven user data (board 0053): schemas + schema-validated values.
 app.post('/api/data/schemas', createSchema)
@@ -244,4 +268,4 @@ const port = Number(new URL(process.env.BETTER_AUTH_URL ?? 'http://localhost:878
 // WKWebView connection pool and surfaced as "Load failed" across the app. 120s comfortably covers
 // the 15s SSE keep-alive and model think-pauses. board 0055.
 console.log(`[boot] ready — listening on :${port}`)
-export default { port, idleTimeout: 120, fetch: app.fetch }
+export default { port, idleTimeout: 120, fetch: app.fetch, websocket: voiceWebsocket }

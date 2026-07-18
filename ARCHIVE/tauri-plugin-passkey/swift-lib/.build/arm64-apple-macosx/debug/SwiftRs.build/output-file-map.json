@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/master.swiftdeps"
+  },
+  "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/checkouts/swift-rs/src-swift/lib.swift": {
+    "dependencies": "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/lib.d",
+    "object": "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/lib.swift.o",
+    "swiftmodule": "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/lib~partial.swiftmodule",
+    "swift-dependencies": "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/lib.swiftdeps",
+    "diagnostics": "/Users/samuelandert/Documents/Development/MaiaOS/libs/tauri-plugin-apple-passkey/swift-lib/.build/arm64-apple-macosx/debug/SwiftRs.build/lib.dia"
+  }
+}

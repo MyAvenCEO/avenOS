@@ -82,6 +82,36 @@ export async function vibeExists(name: string): Promise<boolean> {
 	return r.rows.length > 0
 }
 
+/**
+ * The vibe NAME that renders a data schema — for the realtime post-mutation refresh (SSOT). Most skills
+ * name their vibe = their schema (todos, inventory), so a `<schema>` view is preferred. When they differ
+ * (calendar/dienstplan reuse or rename: manifest {vibe, schema}), fall back to a skill whose
+ * manifest.schema matches. Returns null if no view renders this schema.
+ */
+export async function vibeForSchema(schema: string): Promise<string | null> {
+	if (await vibeExists(schema)) return schema
+	// The data_crud actor bound to this schema names the render vibe (SSOT). One skill may bind
+	// SEVERAL schemas to one vibe (dienstplan: slot + shift → 'dienstplan'); the mailbox mentions
+	// each in quotes, so a literal match on the actor's mailbox resolves any of them.
+	// Match the schema name inside the schema param's DESCRIPTION (extracted with ->> so it is
+	// unescaped — mailbox::text keeps JSON's \"…\" escaping, which broke a plain substring match).
+	const a = await sql<{ vibe: string }>`
+		SELECT vibe FROM actor
+		WHERE name = 'data_crud' AND vibe IS NOT NULL
+			AND mailbox->'parameters'->'properties'->'schema'->>'description' ILIKE ${`%"${schema}"%`}
+		LIMIT 1
+	`.execute(db())
+	if (a.rows[0]?.vibe && (await vibeExists(a.rows[0].vibe))) return a.rows[0].vibe
+	// fallback: a skill manifest whose schema matches.
+	const r = await sql<{ vibe: string }>`
+		SELECT manifest->>'vibe' AS vibe FROM skill
+		WHERE manifest->>'schema' = ${schema} AND manifest->>'vibe' IS NOT NULL
+		LIMIT 1
+	`.execute(db())
+	const vibe = r.rows[0]?.vibe
+	return vibe && (await vibeExists(vibe)) ? vibe : null
+}
+
 export async function loadVibe(name: string): Promise<VibeBundle | null> {
 	const one = async (table: string): Promise<unknown> => {
 		const r = await sql<{

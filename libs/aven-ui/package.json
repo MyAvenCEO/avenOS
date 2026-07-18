@@ -11,6 +11,7 @@
 		"./vibes/invoice": "./src/vibes/invoice/index.ts",
 		"./vibes/bank-transfers": "./src/vibes/bank-transfers/index.ts",
 		"./vibes/bank-statement": "./src/vibes/bank-statement/index.ts",
+		"./vibes/banking": "./src/vibes/banking/index.ts",
 		"./vibes/contract": "./src/vibes/contract/index.ts",
 		"./vibes/members": "./src/vibes/members/index.ts",
 		"./vibes/files": "./src/vibes/files/index.ts",

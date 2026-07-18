@@ -23,6 +23,7 @@ import { ontologyCaps } from './ontology'
 import { mutationCaps, queryCaps } from './query-caps'
 import { recordActorRun } from './skills-run'
 import { vibeExists } from './vibe-registry'
+import { refreshVibeForSchema } from './vibe-refresh'
 import { typeCaps } from './type-caps'
 import { getRecentUsage, getUsageStats, recordUsage, type TokenUsage } from './usage'
 
@@ -1006,6 +1007,10 @@ export async function aiConfirmAction(c: Context): Promise<Response> {
 				...(schema === 'todos' ? { vibe: 'todos-deleted', vibeData: { items } } : {}),
 				outputs: [schema]
 			})
+			// REALTIME: return the skill's refreshed vibe so the caller (voice/chat) updates the
+			// stage right after the confirmed delete — for ANY schema (todos, shift→dienstplan …).
+			const vibe = await refreshVibeForSchema(session.user.id, schema).catch(() => null)
+				if (vibe) return c.json({ ok: true, result, vibe })
 		}
 		return c.json({ ok: true, result })
 	} catch (e) {
