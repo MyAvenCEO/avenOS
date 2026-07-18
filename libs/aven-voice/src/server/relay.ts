@@ -286,6 +286,11 @@ export function createVoiceBridge(
 										? cachedByArgs.out
 										: undefined))
 							if (cached !== undefined) {
+								// A pending confirmation (e.g. "delete all") must RE-SHOW its card when the
+								// model repeats the call — otherwise a deduped retry silently swallows the HITL.
+								if (cached.hitl) {
+									send({ type: 'hitl', id: c.id, tool: c.name, label: cached.hitl.label, action: cached.hitl.action })
+								}
 								// Still refresh the stage with the cached vibe — a duplicate mutation must
 								// not re-write, but the UI should reflect the (already-applied) result.
 								if (cached.vibes?.length || cached.detail) {

@@ -277,13 +277,20 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 						.map((r) => String(r?.id))
 						.filter((x) => x && x !== 'undefined')
 				)
+				// An EMPTY filter ({}) is not a real filter — treat it as absent so it can't block a
+				// delete-all (the model sometimes sends filter:{}).
+				const hasFilter =
+					!!args.filter &&
+					typeof args.filter === 'object' &&
+					Object.keys(args.filter as Record<string, unknown>).length > 0
+				if (!hasFilter) delete args.filter
 				// "Delete ALL": a delete with no ids AND no filter means every row of this
 				// schema (e.g. "lösch alle Schichten"). Resolve to the real row UUIDs so the
 				// HITL confirm removes the whole set — still by exact id, one confirmation.
 				if (
 					String(args.action) === 'delete' &&
 					!(Array.isArray(args.ids) && args.ids.length) &&
-					!args.filter &&
+					!hasFilter &&
 					idSet.size
 				) {
 					args.ids = [...idSet]
@@ -294,7 +301,7 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 						: (Array.isArray(args.items) ? args.items : []).map((it) =>
 								String((it as Record<string, unknown>)?.id)
 							)
-				const usedFilter = String(args.action) === 'delete' && !!args.filter && !targets.length
+				const usedFilter = String(args.action) === 'delete' && hasFilter && !targets.length
 				const unknown = targets.filter((id) => !idSet.has(id))
 				if (usedFilter || unknown.length) {
 					// Surface the real data so the model reads it and retries with true ids.
