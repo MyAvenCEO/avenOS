@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.18-next.1...v) (2026-07-18)
+
+
+### Bug Fixes
+
+* **ci:** add libs/aven-voice to betterauth Docker workspace list ([#61](https://github.com/MyAvenCEO/avenOS/issues/61)) ([9597e50](https://github.com/MyAvenCEO/avenOS/commit/9597e50a30445d4199c1c59c8cf93c56fd30123b))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.16-next.7...v) (2026-07-18)
 
 
