@@ -93,9 +93,12 @@ export async function vibeForSchema(schema: string): Promise<string | null> {
 	// The data_crud actor bound to this schema names the render vibe (SSOT). One skill may bind
 	// SEVERAL schemas to one vibe (dienstplan: slot + shift → 'dienstplan'); the mailbox mentions
 	// each in quotes, so a literal match on the actor's mailbox resolves any of them.
+	// Match the schema name inside the schema param's DESCRIPTION (extracted with ->> so it is
+	// unescaped — mailbox::text keeps JSON's \"…\" escaping, which broke a plain substring match).
 	const a = await sql<{ vibe: string }>`
 		SELECT vibe FROM actor
-		WHERE name = 'data_crud' AND vibe IS NOT NULL AND position(${`"${schema}"`} in mailbox::text) > 0
+		WHERE name = 'data_crud' AND vibe IS NOT NULL
+			AND mailbox->'parameters'->'properties'->'schema'->>'description' ILIKE ${`%"${schema}"%`}
 		LIMIT 1
 	`.execute(db())
 	if (a.rows[0]?.vibe && (await vibeExists(a.rows[0].vibe))) return a.rows[0].vibe
