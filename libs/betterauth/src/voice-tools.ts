@@ -154,7 +154,8 @@ export async function buildVoiceServerTools(userId: string): Promise<VoiceServer
 			: []),
 		hint,
 		'Für einen anderen Bereich wechselst du einfach das schema-Feld von data_crud.',
-		'Zum Ändern oder Löschen: rufe IMMER ZUERST list auf, lies die Ergebnisse, und nutze dann delete/update mit den EXAKTEN ids daraus — nie einen Namen im id-Feld, nie einen filter. Kommt "unknown-id" zurück, enthält die Antwort die aktuelle Liste mit den echten ids: wähle daraus und rufe erneut auf.'
+		'ALLE Einträge eines Schemas löschen ("lösch alle Schichten/Kontakte/…"): rufe data_crud action:"delete" mit NUR dem schema auf — OHNE ids, OHNE filter, OHNE vorher zu listen. Der Server löst alle echten ids auf und zeigt EINE Bestätigungskarte. Liste dafür NICHT erst auf.',
+		'EINZELNE gezielte Änderung/Löschung: rufe ZUERST list auf, lies die Ergebnisse, und nutze dann delete/update mit den EXAKTEN ids daraus — nie einen Namen im id-Feld, nie einen filter. Kommt "unknown-id" zurück, enthält die Antwort die aktuelle Liste mit den echten ids: wähle daraus und rufe erneut auf.'
 	]
 		.filter(Boolean)
 		.join('\n')
