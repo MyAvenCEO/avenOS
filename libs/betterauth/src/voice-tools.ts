@@ -19,6 +19,7 @@ import { promoteCaps } from './promote-caps'
 import { mutationCaps, queryCaps } from './query-caps'
 import { typeCaps } from './type-caps'
 import { vibeExists, vibeForSchema } from './vibe-registry'
+import { vibeSource } from './vibe-refresh'
 
 type VoiceVibe = { schema: string; data?: unknown }
 
@@ -118,39 +119,6 @@ function voiceCtx(userId: string) {
 		mockup: mockupCaps(noop),
 		promote: promoteCaps(userId, noop)
 	}
-}
-
-/**
- * Vibes that MERGE several schemas into one card. dienstplan overlays the `slot` templates with the
- * `shift` assignments (open vs filled). One place, documented — a candidate for config-as-data later.
- */
-const MULTI_SCHEMA_VIBES: Record<string, { key: string; schema: string }[]> = {
-	dienstplan: [
-		{ key: 'slots', schema: 'slot' },
-		{ key: 'shifts', schema: 'shift' }
-	]
-}
-
-/** Build the data source for a vibe: merge-vibes fetch all their schemas; others list the one schema. */
-export async function vibeSource(
-	userId: string,
-	vibeName: string,
-	fallbackSchema: string,
-	extra: Record<string, unknown> = {}
-): Promise<Record<string, unknown>> {
-	const spec = MULTI_SCHEMA_VIBES[vibeName]
-	if (spec) {
-		const out: Record<string, unknown> = { ...extra }
-		for (const { key, schema } of spec) {
-			const r = await crud(userId, { schema, action: 'list' } as Parameters<typeof crud>[1]).catch(
-				() => null
-			)
-			out[key] = (r as { items?: unknown } | null)?.items ?? r ?? []
-		}
-		return out
-	}
-	const r = await crud(userId, { schema: fallbackSchema, action: 'list' } as Parameters<typeof crud>[1])
-	return { items: (r as { items?: unknown } | undefined)?.items ?? r, ...extra }
 }
 
 /** Same guard chat applies: a schema without vibe rows gets no card. */
