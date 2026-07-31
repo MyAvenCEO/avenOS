@@ -972,8 +972,9 @@
 	"networkSelect": {
 		"kicker": "Netzwerk wählen",
 		"title": "Wähle deine Welt.",
-		"subtitle": "Wähle das Netzwerk, das du betreten möchtest. Später kannst du innerhalb der App nicht mehr wechseln.",
+		"subtitle": "Wähle die Welt, die du betreten möchtest. Du wählst bei jeder Anmeldung neu — die letzte ist schon ausgewählt.",
 		"enter": "Betreten",
+		"lastUsed": "Zuletzt",
 		"testnet": {
 			"tag": "testnet / abagana",
 			"title": "Abagana",
@@ -983,6 +984,11 @@
 			"tag": "mainnet / alberobello",
 			"title": "Alberobello",
 			"body": "Die neue Welt — ein separates Netzwerk mit eigenem Onboarding. Im Moment öffnet es direkt einen Chat."
+		},
+		"city": {
+			"tag": "world / avencity",
+			"title": "avenCITY",
+			"body": "Eine prozedural erzeugte Hex-Insel aus Ton. Land zonieren, Siedlungen gründen und sehen, wie viele Menschen sie wirklich ernährt."
 		}
 	},
 	"mainnet": {

@@ -8,9 +8,12 @@ export const NETWORK_PATH_DISPLAY = `.avenOS/${NETWORK_SEED}`
  * the full, crypto-backed experience (vault, signup, accounts, sync). mainnet
  * ("alberobello") is a separate world that currently renders a mocked chat UI only —
  * no vault/crypto is wired yet (its data root is established under
- * `<Documents>/.avenOS/ceo.aven/mainnet/alberobello`).
+ * `<Documents>/.avenOS/ceo.aven/mainnet/alberobello`). city ("avenCITY") is the
+ * third world: the three.js hex island from `@avenos/aven-city`. It holds its
+ * state in the running scene, so unlike the other two it has NO seed and no data
+ * root — see NETWORKS below.
  */
-export type NetworkId = 'testnet' | 'mainnet'
+export type NetworkId = 'testnet' | 'mainnet' | 'city'
 
 export type NetworkInfo = {
 	id: NetworkId
@@ -22,7 +25,12 @@ export type NetworkInfo = {
 	codename: string
 }
 
-export const NETWORKS: Record<NetworkId, NetworkInfo> = {
+/**
+ * Partial on purpose: only worlds that own a seeded data root appear here. city
+ * deliberately has no entry — nothing about avenCITY is persisted to
+ * `<Documents>/.avenOS/` yet, and a placeholder seed would claim otherwise.
+ */
+export const NETWORKS: Partial<Record<NetworkId, NetworkInfo>> = {
 	testnet: {
 		id: 'testnet',
 		seed: NETWORK_SEED,

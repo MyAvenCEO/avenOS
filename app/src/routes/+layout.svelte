@@ -24,6 +24,7 @@ import { type VaultListEntry, vaultCardTitle, vaultList } from '$lib/settings/va
 import { vaultUiSettingsGet } from '$lib/settings/vault-ui-settings'
 import { navigateApp } from '$lib/shell'
 import AuthGate from '$lib/shell/AuthGate.svelte'
+import AvenCityWorld from '$lib/shell/AvenCityWorld.svelte'
 import HumanSafeGate from '$lib/shell/HumanSafeGate.svelte'
 import MainnetShell from '$lib/shell/MainnetShell.svelte'
 import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
@@ -347,8 +348,14 @@ $effect(() => {
 	<div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
 		{#if $selectedNetwork === null}
 			<!-- Step 0: Select Network. All current features (vault, signup, accounts, sync) live on
-		     testnet/abagana. mainnet/alberobello is a separate world (mocked chat UI for now). -->
+		     testnet/abagana. mainnet/alberobello is a separate world (mocked chat UI for now);
+		     city/avenCITY is the three.js island. Shown on every sign-in, with the last world
+		     pre-selected — see network-store.ts. -->
 			<NetworkSelect />
+		{:else if $selectedNetwork === 'city'}
+			<!-- avenCITY: the game IS the world. It renders full-screen and owns its own scene, so
+			     it gets no app chrome, no gate and no file-drop overlay. Leaving is the HUD's job. -->
+			<AvenCityWorld />
 		{:else if $selectedNetwork === 'mainnet'}
 			<!-- Protected screen: Google sign-in gates the mainnet shell (Chat | Vibes). board 0050/0054. -->
 			<AuthGate>
