@@ -17,6 +17,7 @@ Repo-root automation for the **Tauri app**, **App Store releases**, and **aven-d
 | `dev:ocr-example` | — | Python OCR CLI help (`ARCHIVE/ocr-example`) |
 | `clean:app:rust` | `clean-app-tauri-target.ts` | Wipe shared `target/rust` (mac dev uses this) |
 | `verify:aven-db` | `verify-aven-db-gates.sh` | Post–re-vendor Rust + `app` check gates |
+| `icons` | `generate-app-icons.ts` | Rebuild every app icon from one svg/png/jpg source |
 | `fetch:webcm` | `fetch-webcm.ts` | Download webcm into `app/static/webcm/` |
 | `build:app:linux` | `build-app-linux.ts` | Linux Tauri build with native dependency preflight |
 | `release:app:*` | `release-app.ts` | macOS `.pkg` / iOS `.ipa` build + altool upload |
@@ -29,7 +30,7 @@ Repo-root automation for the **Tauri app**, **App Store releases**, and **aven-d
 | `apple-env.ts` | `release-app`, `build-appstore-macos`, `tauri-ios-asc` |
 | `build-appstore-macos.ts` | `release-app.ts` (mac) |
 | `tauri-ios-asc.ts` | `app` `tauri:ios:build:asc`, `release-app.ts` (ios) |
-| `generate-ios-icons.py` | `tauri-ios-asc.ts` |
+| `generate-app-icons.ts` | `bun run icons`, `tauri-ios-asc.ts` (iOS sizes + xcassets sync) |
 
 ## Manual / rare (not in `package.json`)
 

@@ -29,6 +29,7 @@
 		"release:app:all": "bun ./scripts/release-app.ts all",
 		"release:app:mac": "AVENOS_ENV_FILE=.env.samuel AVENOS_APP_ENV_FILE=../.env.samuel bun --env-file=.env.samuel ./scripts/release-app.ts mac",
 		"release:app:ios": "bun ./scripts/release-app.ts ios",
+		"icons": "bun ./scripts/generate-app-icons.ts",
 		"fetch:webcm": "bun run ./scripts/fetch-webcm.ts",
 		"setup:polar": "curl -fsSL https://polar.sh/install.sh | bash && echo 'Installed. Next: run `polar login` and choose Sandbox — then dev:app:mac/linux auto-starts the webhook tunnel.'",
 		"next-version": "bun ./scripts/next-version.ts",
@@ -51,6 +52,7 @@
 		"@commitlint/config-conventional": "^21.0.2",
 		"concurrently": "^9.2.1",
 		"conventional-changelog-cli": "^5.0.0",
-		"semver": "^7.8.4"
+		"semver": "^7.8.4",
+		"sharp": "^0.35.3"
 	}
 }

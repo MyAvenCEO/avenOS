@@ -2,6 +2,7 @@
 import { t } from '$lib/i18n'
 import type { NetworkId } from '$lib/settings/network'
 import { selectNetwork } from '$lib/settings/network-store'
+import AvenLogo from '$lib/ui/AvenLogo.svelte'
 
 const options: { id: NetworkId; tagKey: string; titleKey: string; bodyKey: string }[] = [
 	{
@@ -28,6 +29,7 @@ function choose(id: NetworkId): void {
 >
 	<div class="w-full max-w-3xl">
 		<div class="mb-8 text-center">
+			<AvenLogo class="mx-auto mb-4 h-14 w-auto" />
 			<p class="text-muted-foreground text-[10px] font-bold tracking-[0.2em] uppercase">
 				{t('networkSelect.kicker')}
 			</p>
