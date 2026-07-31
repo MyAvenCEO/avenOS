@@ -279,25 +279,41 @@ function newWorld(): void {
 	<div class="avencity fixed inset-0">
 		<canvas bind:this={canvas} class="block h-full w-full"></canvas>
 
-		<!-- HUD -->
-		<div class="pointer-events-none absolute inset-0 flex flex-col justify-between p-5 md:p-7">
-			<div class="flex items-start justify-between gap-3">
-				<div class="hud-pill">
+		<!-- HUD. The top padding is deliberately tighter than the rest: the readout
+		     strip reads as a status bar and belongs against the edge, while the
+		     bottom row stays clear of the screen edge. -->
+		<div
+			class="pointer-events-none absolute inset-0 flex flex-col justify-between px-5 pt-2 pb-5 md:px-7 md:pt-3 md:pb-7"
+		>
+			<div class="flex items-start justify-between gap-2">
+				<div class="hud-pill hud-pill-sm">
 					<span class="font-semibold">avenCITY</span>
 					<span class="hud-label">world {seed}</span>
 				</div>
 				<!-- the right-hand column: what stands, then what can be built -->
 				<div class="flex flex-col items-end gap-3">
-					<div class="flex flex-wrap justify-end gap-2">
+					<div class="flex flex-wrap justify-end gap-1.5">
 						{#each readouts as { icon, value, label } (label)}
-							<div class="hud-pill">
-								<Icon name={icon} class="h-4 w-4 opacity-70" />
+							<div class="hud-pill hud-pill-sm">
+								<Icon name={icon} class="h-3.5 w-3.5 opacity-70" />
 								<span class="font-semibold tabular-nums">{value}</span>
 								<span class="hud-label">{label}</span>
 							</div>
 						{/each}
 					</div>
 
+					<DomeRail
+						enabled={buildable}
+						{standing}
+						hint={selected.length === 0 ? 'select a hex' : buildable ? null : 'not on water'}
+						onpick={build}
+					/>
+				</div>
+			</div>
+
+			<div class="flex items-end justify-between gap-3">
+				<!-- Bottom left: the zoning law, and whatever is selected under it. -->
+				<div class="flex flex-col items-start gap-3">
 					<!--
 					The zoning law. The bars are the law and the buttons are how you
 					write it: turn zoning on, span-select ground, and press a use.
@@ -351,66 +367,58 @@ function newWorld(): void {
 						</div>
 					{/if}
 
-					<DomeRail
-						enabled={buildable}
-						{standing}
-						hint={selected.length === 0 ? 'select a hex' : buildable ? null : 'not on water'}
-						onpick={build}
-					/>
-				</div>
-			</div>
-
-			<div class="flex items-end justify-between gap-3">
-				<!-- Tile inspector -->
-				{#if selected.length > 1}
-					<div class="hud-pill !items-start flex-col gap-2 !rounded-3xl !px-5 !py-4">
-						<div class="flex items-baseline gap-3">
-							<span class="font-semibold">{selected.length} hexes</span>
-							<span class="hud-label">
-								{targets.length === selected.length
+					<!-- Tile inspector -->
+					{#if selected.length > 1}
+						<div class="hud-pill !items-start flex-col gap-2 !rounded-3xl !px-5 !py-4">
+							<div class="flex items-baseline gap-3">
+								<span class="font-semibold">{selected.length} hexes</span>
+								<span class="hud-label">
+									{targets.length === selected.length
 								? 'span selected'
 								: `${targets.length} buildable`}
-							</span>
-						</div>
-						<div class="flex flex-wrap gap-1.5">
-							{#each [...new Set(selected.flatMap(tileResources))] as res}
-								<span
-									class="flex items-center gap-1.5 rounded-full bg-sky px-2.5 py-1 font-mono text-[0.65rem] tracking-[0.08em] text-ink"
-								>
-									<ResourceIcon name={res} class="h-3.5 w-3.5" />
-									{res}
 								</span>
-							{/each}
+							</div>
+							<div class="flex flex-wrap gap-1.5">
+								{#each [...new Set(selected.flatMap(tileResources))] as res}
+									<span
+										class="flex items-center gap-1.5 rounded-full bg-sky px-2.5 py-1 font-mono text-[0.65rem] tracking-[0.08em] text-ink"
+									>
+										<ResourceIcon name={res} class="h-3.5 w-3.5" />
+										{res}
+									</span>
+								{/each}
+							</div>
 						</div>
-					</div>
-				{:else if selected.length === 1}
-					<div class="hud-pill !items-start flex-col gap-2 !rounded-3xl !px-5 !py-4">
-						<div class="flex items-baseline gap-3">
-							<span class="font-semibold">Hex {selected[0].q},{selected[0].r}</span>
-							<span class="hud-label">{selected[0].biomes.join(' + ')}</span>
+					{:else if selected.length === 1}
+						<div class="hud-pill !items-start flex-col gap-2 !rounded-3xl !px-5 !py-4">
+							<div class="flex items-baseline gap-3">
+								<span class="font-semibold">Hex {selected[0].q},{selected[0].r}</span>
+								<span class="hud-label">{selected[0].biomes.join(' + ')}</span>
+							</div>
+							<div class="flex flex-col gap-0.5">
+								{#each facts as [ name, value ]}
+									<div class="flex items-baseline gap-2 font-mono text-[0.62rem] tracking-[0.06em]">
+										<span class="w-12 text-ink-soft">{name}</span>
+										<span class="text-ink">{value}</span>
+									</div>
+								{/each}
+							</div>
+							<div class="flex flex-wrap gap-1.5">
+								{#each tileResources(selected[0]) as res}
+									<span
+										class="flex items-center gap-1.5 rounded-full bg-sky px-2.5 py-1 font-mono text-[0.65rem] tracking-[0.08em] text-ink"
+									>
+										<ResourceIcon name={res} class="h-3.5 w-3.5" />
+										{res}
+									</span>
+								{/each}
+							</div>
 						</div>
-						<div class="flex flex-col gap-0.5">
-							{#each facts as [ name, value ]}
-								<div class="flex items-baseline gap-2 font-mono text-[0.62rem] tracking-[0.06em]">
-									<span class="w-12 text-ink-soft">{name}</span>
-									<span class="text-ink">{value}</span>
-								</div>
-							{/each}
-						</div>
-						<div class="flex flex-wrap gap-1.5">
-							{#each tileResources(selected[0]) as res}
-								<span
-									class="flex items-center gap-1.5 rounded-full bg-sky px-2.5 py-1 font-mono text-[0.65rem] tracking-[0.08em] text-ink"
-								>
-									<ResourceIcon name={res} class="h-3.5 w-3.5" />
-									{res}
-								</span>
-							{/each}
-						</div>
-					</div>
-				{:else}
-					<span class="hud-pill hud-label">tap a hex · shift-drag to span</span>
-				{/if}
+					{:else}
+						<span class="hud-pill hud-label">tap a hex · shift-drag to span</span>
+					{/if}
+				</div>
+
 				<div class="flex items-center gap-2">
 					<button
 						class="hud-pill hud-btn pointer-events-auto font-semibold"

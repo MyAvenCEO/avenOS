@@ -12,7 +12,9 @@ import { clearNetwork } from '$lib/settings/network-store'
  * without this button the world would be a one-way door.
  *
  * It sits under the game's own "avenCITY / world N" pill and borrows the HUD
- * styling so it reads as part of the world rather than app chrome bolted on.
+ * styling — including the compact `hud-pill-sm` the top strip uses — so it reads
+ * as part of the world rather than app chrome bolted on. The top offset tracks
+ * that strip's height; if the readout row changes size, this moves with it.
  */
 </script>
 
@@ -20,7 +22,7 @@ import { clearNetwork } from '$lib/settings/network-store'
 
 <button
 	type="button"
-	class="hud-pill hud-btn hud-label pointer-events-auto fixed top-[4.25rem] left-5 z-[110] md:top-[4.75rem] md:left-7"
+	class="hud-pill hud-pill-sm hud-btn hud-label pointer-events-auto fixed top-[2.6rem] left-5 z-[110] md:top-[2.9rem] md:left-7"
 	onclick={() => clearNetwork()}
 >
 	← {t('networkSelect.kicker')}
