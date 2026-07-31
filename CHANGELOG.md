@@ -1,3 +1,32 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.31-next.1...v) (2026-07-31)
+
+
+* feat!: strip avenOS to the avenCITY seed (0121) (#63) ([53cfa8a](https://github.com/MyAvenCEO/avenOS/commit/53cfa8a6c71ea11a4974365532df8703872a7ac3)), closes [#63](https://github.com/MyAvenCEO/avenOS/issues/63)
+
+
+### BREAKING CHANGES
+
+* the vault, sync, auth, skills, vibes and flows are gone. They
+are recoverable from git history; the biometric and passkey material was lifted
+into ARCHIVE/ first (see the previous commit).
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+* docs(board): 0121 built — every criterion checked, build → review
+
+All nine acceptance criteria proven from command output. Corrected one during
+the build: the "no dead references" grep had no --glob '!**/*.md', so it matched
+47 board cards in the shipped-work archive (which must name what they recorded),
+this card itself, and the "Removed by 0121" list in scripts/README.md.
+Documentation of deleted things is not a dead reference.
+
+Logged the four things the spec did not anticipate — build.rs was entirely
+workarounds for deps that no longer exist, the Tauri capabilities and bundle
+resources still referenced deleted plugins, dev-app-desktop imported the deleted
+aven-server, and the three release scripts the card promised to keep all
+provisioned onnxruntime — plus the residual dead AI paths in tauri-ios-asc.ts.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.18-next.2...v) (2026-07-31)
 
 
