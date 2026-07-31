@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.31-next.2...v) (2026-07-31)
+
+
+### Bug Fixes
+
+* **ci:** drop the sherpa-onnx iOS steps left behind by the strip ([#64](https://github.com/MyAvenCEO/avenOS/issues/64)) ([fdb6e73](https://github.com/MyAvenCEO/avenOS/commit/fdb6e73c81d4704a9447898ba14dfb312366881e))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.31-next.1...v) (2026-07-31)
 
 
