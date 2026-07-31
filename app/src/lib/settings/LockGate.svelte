@@ -34,6 +34,7 @@ import {
 	vaultSelect
 } from '$lib/settings/vault'
 import { vaultUiSettingsSetLocale } from '$lib/settings/vault-ui-settings'
+import AvenLogo from '$lib/ui/AvenLogo.svelte'
 
 type PeerStatus = {
 	platformSupported: boolean
@@ -403,6 +404,7 @@ async function finalizeCreate(): Promise<void> {
 			class="relative z-10 flex min-h-full flex-col items-center justify-center gap-6 px-6 py-10"
 		>
 			<div class="max-w-md space-y-2 text-center">
+				<AvenLogo class="mx-auto mb-4 h-20 w-auto" />
 				<h1 id="lock-title" class="avenos-wordmark">avenOS</h1>
 				<p class="text-muted-foreground text-sm leading-relaxed">
 					{t('lockGate.tagline')}

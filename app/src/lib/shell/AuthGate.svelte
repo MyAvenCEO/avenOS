@@ -4,6 +4,7 @@ import DebugCopy from '$lib/debug/DebugCopy.svelte'
 import { t } from '$lib/i18n'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { clearNetwork } from '$lib/settings/network-store'
+import AvenLogo from '$lib/ui/AvenLogo.svelte'
 
 // Protected-screen gate for mainnet/alberobello: no session ⇒ Continue with Google;
 // session ⇒ render the slotted children (the mocked chat). board 0050.
@@ -68,6 +69,7 @@ async function continueWithGoogle(): Promise<void> {
 		<div
 			class="border-border bg-card w-full max-w-sm rounded-[var(--radius-lg)] border p-6 text-center"
 		>
+			<AvenLogo class="mx-auto mb-4 h-12 w-auto" />
 			<p class="text-primary text-[10px] font-bold tracking-[0.18em] uppercase">
 				{t('mainnet.auth.tag')}
 			</p>
