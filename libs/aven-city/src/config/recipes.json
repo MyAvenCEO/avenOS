@@ -1,0 +1,102 @@
+{
+	"_note": "avenCITY recipe book — v0.3. The composition layer is the ONLY configured economics: what goes in, what comes out, which dome runs it. Prices are never configured — the open market decides. batchesPerDay is the LV.1 base; the SPEED vertical adds batches, EFFICIENCY reduces inputs, MARGIN raises realized revenue (see domes.json). Extraction recipes have no inputs but require the hex biome.",
+	"recipes": [
+		{
+			"id": "extract",
+			"dome": "FACTORY",
+			"kind": "extraction",
+			"requiresBiome": true,
+			"inputs": {},
+			"output": "biome yield table (biomes.json)",
+			"batchesPerDay": 1
+		},
+
+		{
+			"id": "mill_flour",
+			"dome": "FACTORY",
+			"inputs": { "GRAIN": 2 },
+			"output": { "FLOUR": 1 },
+			"batchesPerDay": 8
+		},
+		{
+			"id": "bake_bread",
+			"dome": "FACTORY",
+			"inputs": { "FLOUR": 1, "WATER": 1, "WOOD": 1 },
+			"output": { "BREAD": 2 },
+			"batchesPerDay": 6
+		},
+		{
+			"id": "cook_meals",
+			"dome": "LIVING",
+			"kind": "permaculture",
+			"inputs": { "GRAIN": 1, "HERBS": 1, "WATER": 1 },
+			"output": { "MEAL": 2 },
+			"batchesPerDay": 4,
+			"_note": "LIVING domes cook from their own gardens — food is architecture."
+		},
+
+		{
+			"id": "saw_planks",
+			"dome": "FACTORY",
+			"inputs": { "WOOD": 2 },
+			"output": { "PLANK": 1 },
+			"batchesPerDay": 8
+		},
+		{
+			"id": "fire_bricks",
+			"dome": "FACTORY",
+			"inputs": { "CLAY": 2, "WOOD": 1 },
+			"output": { "BRICK": 1 },
+			"batchesPerDay": 6
+		},
+		{
+			"id": "melt_glass",
+			"dome": "FACTORY",
+			"inputs": { "SAND": 2, "WOOD": 1 },
+			"output": { "GLASS": 1 },
+			"batchesPerDay": 6
+		},
+		{
+			"id": "smelt_metal",
+			"dome": "FACTORY",
+			"inputs": { "ORE": 2, "WOOD": 2 },
+			"output": { "METAL": 1 },
+			"batchesPerDay": 4
+		},
+		{
+			"id": "forge_tools",
+			"dome": "FACTORY",
+			"inputs": { "METAL": 1, "PLANK": 1 },
+			"output": { "TOOL": 1 },
+			"batchesPerDay": 4
+		},
+		{
+			"id": "weave_cloth",
+			"dome": "FACTORY",
+			"inputs": { "FIBER": 2 },
+			"output": { "CLOTH": 1 },
+			"batchesPerDay": 6
+		},
+		{
+			"id": "solar_power",
+			"dome": "FACTORY",
+			"inputs": { "SUN": 2, "GLASS": 1 },
+			"output": { "POWER": 4 },
+			"batchesPerDay": 6,
+			"_note": "GLASS is the capex feedstock for panels, consumed slowly per batch."
+		},
+
+		{
+			"id": "host_joy",
+			"dome": "VENUE",
+			"inputs": { "POWER": 1, "CLOTH": 1 },
+			"output": { "JOY": 6 },
+			"batchesPerDay": 2,
+			"postMVP": true
+		}
+	],
+	"permaculture": {
+		"_note": "Every LIVING dome passively harvests its integrated gardens, independent of its cook_meals recipe.",
+		"outputPerDay": { "GRAIN": 8, "HERBS": 2 }
+	}
+}

@@ -1,0 +1,97 @@
+/* avenCITY — base + HUD primitives. The world is the UI; this is just the
+ * thin floating layer above the canvas.
+ *
+ * Ported into avenOS: what the standalone repo put on `html`/`body` now hangs
+ * off `.avencity`, the game's own root. avenCITY is one of three worlds sharing
+ * a document — a global `body { background: sky; overflow: hidden }` would
+ * repaint Abagana and Alberobello too. The focus ring and reduced-motion rule
+ * are scoped the same way, for the same reason. */
+
+@layer base {
+	.avencity {
+		color-scheme: light;
+		height: 100%;
+		background-color: var(--color-sky);
+		color: var(--color-ink);
+		font-weight: 500;
+		-webkit-font-smoothing: antialiased;
+		overflow: hidden;
+	}
+
+	.avencity :focus-visible {
+		outline: 2px solid var(--color-coral);
+		outline-offset: 3px;
+		border-radius: 999px;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.avencity *,
+		.avencity *::before,
+		.avencity *::after {
+			animation-duration: 0.01ms !important;
+			transition-duration: 0.01ms !important;
+		}
+	}
+}
+
+@layer components {
+	/*
+	 * Floating glass capsule — the only HUD container.
+	 *
+	 * The world behind it is the point, so the card lets it through: a
+	 * translucent fill over a blur, a bright top edge where light would
+	 * catch, and a darker hairline where it would fall away. Kept subtle —
+	 * enough to read as glass, never enough to fight the island for
+	 * attention.
+	 */
+	.hud-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.625rem;
+		padding: 0.625rem 1.125rem;
+		border-radius: 999px;
+		background-color: color-mix(in srgb, var(--color-cloud) 48%, transparent);
+		backdrop-filter: blur(14px) saturate(1.4);
+		-webkit-backdrop-filter: blur(14px) saturate(1.4);
+		border: 1px solid color-mix(in srgb, white 45%, transparent);
+		box-shadow:
+			var(--hud-shadow),
+			inset 0 1px 0 color-mix(in srgb, white 70%, transparent),
+			inset 0 -1px 0 color-mix(in srgb, var(--color-ink) 6%, transparent);
+		color: var(--color-ink);
+		font-size: 0.875rem;
+		white-space: nowrap;
+	}
+
+	/* Chromium composites a blurred pane wrongly over a moving canvas unless
+	 * it owns a layer, so give every card one. */
+	.hud-pill {
+		transform: translateZ(0);
+	}
+
+	.hud-btn {
+		cursor: pointer;
+		border: none;
+		transition:
+			transform 140ms cubic-bezier(0.3, 0.6, 0.3, 1),
+			box-shadow 140ms cubic-bezier(0.3, 0.6, 0.3, 1);
+	}
+	.hud-btn:hover {
+		transform: translateY(-1px);
+		box-shadow:
+			0 4px 10px rgb(58 74 80 / 0.1),
+			0 16px 40px -12px rgb(58 74 80 / 0.3);
+	}
+	.hud-btn:active {
+		transform: translateY(0);
+	}
+
+	.hud-label {
+		font-family: var(--font-mono);
+		font-size: 0.6875rem;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.14em;
+		color: var(--color-ink-soft);
+	}
+}

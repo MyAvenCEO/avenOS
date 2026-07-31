@@ -1,0 +1,72 @@
+{
+	"_note": "avenCITY dome units — v0.3. Domes are the only ownable assets (via SPARKminds); the land under them belongs to the CITY SPARK (biomes.json). Every dome has per-day NEEDS that scale with its level — higher levels produce more and consume more. levelMultiplier applies to production batches AND the dividend stream.",
+	"levels": {
+		"max": 5,
+		"levelMultiplier": [1, 2, 4, 8, 16]
+	},
+	"buildCosts": {
+		"_note": "Materials bought at open-market prices by the City Treasury when a spark funds. Costs per level are cumulative upgrades of the shell.",
+		"LV1": { "PLANK": 8, "BRICK": 6, "GLASS": 4 },
+		"LV2": { "PLANK": 12, "BRICK": 10, "GLASS": 8, "TOOL": 2 },
+		"LV3": { "PLANK": 20, "BRICK": 16, "GLASS": 12, "TOOL": 4, "METAL": 4 },
+		"LV4": { "PLANK": 32, "BRICK": 26, "GLASS": 20, "TOOL": 8, "METAL": 10, "STONE": 20 },
+		"LV5": { "PLANK": 50, "BRICK": 40, "GLASS": 32, "TOOL": 16, "METAL": 20, "STONE": 40 }
+	},
+	"needsPerDay": {
+		"_note": "What a dome consumes to keep running, per game day, BY LEVEL — bought at market by its Aven. Grows with level: scale ambition, scale appetite.",
+		"FACTORY": {
+			"LV1": { "WATER": 2, "POWER": 1 },
+			"LV2": { "WATER": 4, "POWER": 2, "TOOL": 1 },
+			"LV3": { "WATER": 8, "POWER": 4, "TOOL": 2 },
+			"LV4": { "WATER": 14, "POWER": 8, "TOOL": 3, "CLOTH": 2 },
+			"LV5": { "WATER": 24, "POWER": 14, "TOOL": 5, "CLOTH": 4 }
+		},
+		"LIVING": {
+			"LV1": { "WATER": 4, "POWER": 1 },
+			"LV2": { "WATER": 8, "POWER": 2, "CLOTH": 1 },
+			"LV3": { "WATER": 14, "POWER": 4, "CLOTH": 2, "TOOL": 1 },
+			"LV4": { "WATER": 22, "POWER": 8, "CLOTH": 4, "TOOL": 2 },
+			"LV5": { "WATER": 34, "POWER": 14, "CLOTH": 6, "TOOL": 3 }
+		},
+		"VENUE": {
+			"LV1": { "WATER": 2, "POWER": 2 },
+			"LV2": { "WATER": 4, "POWER": 4, "CLOTH": 2 },
+			"LV3": { "WATER": 8, "POWER": 8, "CLOTH": 4 },
+			"LV4": { "WATER": 14, "POWER": 14, "CLOTH": 6, "TOOL": 2 },
+			"LV5": { "WATER": 22, "POWER": 24, "CLOTH": 10, "TOOL": 4 }
+		}
+	},
+	"types": {
+		"LIVING": {
+			"housesPerLevel": [6, 12, 24, 48, 96],
+			"income": [
+				"residential rent (dome sets the price, residents choose)",
+				"MEAL sales",
+				"surplus GRAIN/HERBS sales"
+			],
+			"production": "permaculture (recipes.json) + cook_meals"
+		},
+		"FACTORY": {
+			"recipeSlots": 1,
+			"income": ["output sales at open market"],
+			"production": "exactly one recipe from recipes.json"
+		},
+		"VENUE": {
+			"postMVP": true,
+			"income": ["JOY sales", "neighbourhood bonus (open question)"],
+			"production": "host_joy"
+		}
+	},
+	"upgradeVerticals": {
+		"_note": "Independent LV.1-5 tracks per dome, paid from dome treasury or a new SPARKmind raise (dilution). Cost: 60 HEARTS x current level per step, spent buying materials/services at market.",
+		"SPEED": { "effectPerLevel": "+1 batch per day" },
+		"EFFICIENCY": { "effectPerLevel": "-10% recipe inputs" },
+		"MARGIN": { "effectPerLevel": "+10% realized revenue per unit" }
+	},
+	"sparks": {
+		"founderMinStake": 24,
+		"sparkmindsPerHeart": 1,
+		"defaultRaiseWindowDays": 7,
+		"dividends": "stream in real time, pro-rata per SPARKmind, scaled by levelMultiplier"
+	}
+}

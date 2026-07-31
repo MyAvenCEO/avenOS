@@ -1,0 +1,28 @@
+{
+	"_note": "avenCITY resource tree — v0.3. Tier 0 = base resources anchored to biomes (see biomes.json). Tier 1+ exist only through recipes (see recipes.json). Citizen needs live in citizens.json, dome needs in domes.json. Prices are NOT configured anywhere: the market is open, sellers ask what they want.",
+	"resources": [
+		{ "id": "WATER", "tier": 0, "biome": "RIVER" },
+		{ "id": "CLAY", "tier": 0, "biome": "RIVER" },
+		{ "id": "WOOD", "tier": 0, "biome": "FOREST" },
+		{ "id": "HERBS", "tier": 0, "biome": "FOREST" },
+		{ "id": "STONE", "tier": 0, "biome": "MOUNTAIN" },
+		{ "id": "ORE", "tier": 0, "biome": "MOUNTAIN" },
+		{ "id": "GRAIN", "tier": 0, "biome": "MEADOW" },
+		{ "id": "FIBER", "tier": 0, "biome": "MEADOW" },
+		{ "id": "SAND", "tier": 0, "biome": "DUNES" },
+		{ "id": "SUN", "tier": 0, "biome": "DUNES" },
+
+		{ "id": "FLOUR", "tier": 1 },
+		{ "id": "PLANK", "tier": 1 },
+		{ "id": "BRICK", "tier": 1 },
+		{ "id": "GLASS", "tier": 1 },
+		{ "id": "METAL", "tier": 1 },
+		{ "id": "CLOTH", "tier": 1 },
+		{ "id": "POWER", "tier": 1 },
+
+		{ "id": "MEAL", "tier": 2, "satisfies": "FOOD" },
+		{ "id": "BREAD", "tier": 2, "satisfies": "FOOD" },
+		{ "id": "TOOL", "tier": 2 },
+		{ "id": "JOY", "tier": 2, "satisfies": "JOY", "producedBy": "VENUE" }
+	]
+}

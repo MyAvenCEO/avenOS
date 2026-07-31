@@ -1,0 +1,30 @@
+/* ============================================================================
+ * avenCITY — style tokens
+ * "Clay World" — soft low-poly pastel. A fresh start: no relation to any
+ * earlier identity. The world itself (the Three.js map) carries the look;
+ * this layer only styles the thin HUD floating above it.
+ *
+ * Ported from the standalone avenCITY repo into avenOS. Two deliberate changes
+ * so the game can share a page with the rest of the app:
+ *   - the `--font-sans` / `--font-mono` overrides are gone. avenOS already
+ *     self-hosts Chillax and AzeretMono app-wide, and redefining them here as
+ *     @theme would restyle every other world too.
+ *   - everything else is unchanged; these colour names (sky, sea, cloud, ink,
+ *     coral) do not collide with any avenOS token.
+ * ========================================================================= */
+
+@theme {
+	/* --- The sky the world floats in --------------------------------------- */
+	--color-sky: #cde9ec; /* page + scene background, must match scene.ts */
+	--color-sea: #8fc9cd; /* the water disc the island sits on */
+
+	/* --- HUD ---------------------------------------------------------------- */
+	--color-cloud: #ffffff; /* HUD pills */
+	--color-ink: #3a4a50; /* HUD text */
+	--color-ink-soft: #7b8d94; /* secondary HUD text */
+	--color-coral: #f09a8b; /* the one accent — actions, highlights */
+}
+
+:root {
+	--hud-shadow: 0 2px 6px rgb(58 74 80 / 0.08), 0 10px 30px -10px rgb(58 74 80 / 0.25);
+}
