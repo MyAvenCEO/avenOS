@@ -47,8 +47,11 @@ const standingLevel = $derived(
 const TERRACES: Record<number, number> = { 2: 0, 3: 1, 4: 1, 5: 2 }
 </script>
 
+<!-- 44vh, not 62: the rail shares a column with the readout strip, and whatever
+     it takes comes straight off the bottom row. At 62vh a selected hex had ~200px
+     left for the zoning card AND the inspector. It scrolls either way. -->
 <div
-	class="hud-pill pointer-events-auto max-h-[62vh] !flex-col !items-stretch gap-1.5 overflow-y-auto !rounded-3xl !px-3 !py-3"
+	class="hud-pill pointer-events-auto max-h-[44vh] !flex-col !items-stretch gap-1.5 overflow-y-auto !rounded-2xl !px-2.5 !py-2"
 >
 	<span class="hud-label text-center">
 		{#if !enabled}

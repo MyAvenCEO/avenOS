@@ -285,13 +285,15 @@ function newWorld(): void {
 		<div
 			class="pointer-events-none absolute inset-0 flex flex-col justify-between px-5 pt-2 pb-5 md:px-7 md:pt-3 md:pb-7"
 		>
-			<div class="flex items-start justify-between gap-2">
+			<!-- `shrink-0`: the status strip and the build rail keep their size, so the
+			     bottom row is the one that gives way when the screen runs short. -->
+			<div class="flex shrink-0 items-start justify-between gap-2">
 				<div class="hud-pill hud-pill-sm">
 					<span class="font-semibold">avenCITY</span>
 					<span class="hud-label">world {seed}</span>
 				</div>
 				<!-- the right-hand column: what stands, then what can be built -->
-				<div class="flex flex-col items-end gap-3">
+				<div class="flex flex-col items-end gap-2">
 					<div class="flex flex-wrap justify-end gap-1.5">
 						{#each readouts as { icon, value, label } (label)}
 							<div class="hud-pill hud-pill-sm">
@@ -311,9 +313,15 @@ function newWorld(): void {
 				</div>
 			</div>
 
-			<div class="flex items-end justify-between gap-3">
+			<!-- `min-h-0` is load-bearing: a flex child defaults to min-height:auto, so a
+			     tall selection used to push this row — and the controls on its right —
+			     straight off the bottom of the screen. It shrinks now, and the left
+			     column scrolls inside whatever height is left. -->
+			<div class="flex min-h-0 items-end justify-between gap-2">
 				<!-- Bottom left: the zoning law, and whatever is selected under it. -->
-				<div class="flex flex-col items-start gap-3">
+				<div
+					class="pointer-events-auto flex max-h-full min-h-0 flex-col items-start gap-2 overflow-y-auto"
+				>
 					<!--
 					The zoning law. The bars are the law and the buttons are how you
 					write it: turn zoning on, span-select ground, and press a use.
@@ -321,7 +329,9 @@ function newWorld(): void {
 					once a zone has taken land the others were meant to have.
 				-->
 					{#if stats.landHexes > 0}
-						<div class="hud-pill !w-60 !flex-col !items-stretch gap-2 !rounded-3xl !px-4 !py-3">
+						<div
+							class="hud-pill !w-56 shrink-0 !flex-col !items-stretch gap-1.5 !rounded-2xl !px-3 !py-2"
+						>
 							<button
 								class="hud-label pointer-events-auto flex items-center justify-between"
 								onclick={() => (zoningMode = !zoningMode)}
@@ -369,8 +379,10 @@ function newWorld(): void {
 
 					<!-- Tile inspector -->
 					{#if selected.length > 1}
-						<div class="hud-pill !items-start flex-col gap-2 !rounded-3xl !px-5 !py-4">
-							<div class="flex items-baseline gap-3">
+						<div
+							class="hud-pill hud-pill-sm !items-start shrink-0 flex-col !gap-1.5 !rounded-2xl !px-3 !py-2"
+						>
+							<div class="flex items-baseline gap-2">
 								<span class="font-semibold">{selected.length} hexes</span>
 								<span class="hud-label">
 									{targets.length === selected.length
@@ -381,17 +393,19 @@ function newWorld(): void {
 							<div class="flex flex-wrap gap-1.5">
 								{#each [...new Set(selected.flatMap(tileResources))] as res}
 									<span
-										class="flex items-center gap-1.5 rounded-full bg-sky px-2.5 py-1 font-mono text-[0.65rem] tracking-[0.08em] text-ink"
+										class="flex items-center gap-1 rounded-full bg-sky px-2 py-0.5 font-mono text-[0.6rem] tracking-[0.06em] text-ink"
 									>
-										<ResourceIcon name={res} class="h-3.5 w-3.5" />
+										<ResourceIcon name={res} class="h-3 w-3" />
 										{res}
 									</span>
 								{/each}
 							</div>
 						</div>
 					{:else if selected.length === 1}
-						<div class="hud-pill !items-start flex-col gap-2 !rounded-3xl !px-5 !py-4">
-							<div class="flex items-baseline gap-3">
+						<div
+							class="hud-pill hud-pill-sm !items-start shrink-0 flex-col !gap-1.5 !rounded-2xl !px-3 !py-2"
+						>
+							<div class="flex items-baseline gap-2">
 								<span class="font-semibold">Hex {selected[0].q},{selected[0].r}</span>
 								<span class="hud-label">{selected[0].biomes.join(' + ')}</span>
 							</div>
@@ -406,27 +420,34 @@ function newWorld(): void {
 							<div class="flex flex-wrap gap-1.5">
 								{#each tileResources(selected[0]) as res}
 									<span
-										class="flex items-center gap-1.5 rounded-full bg-sky px-2.5 py-1 font-mono text-[0.65rem] tracking-[0.08em] text-ink"
+										class="flex items-center gap-1 rounded-full bg-sky px-2 py-0.5 font-mono text-[0.6rem] tracking-[0.06em] text-ink"
 									>
-										<ResourceIcon name={res} class="h-3.5 w-3.5" />
+										<ResourceIcon name={res} class="h-3 w-3" />
 										{res}
 									</span>
 								{/each}
 							</div>
 						</div>
 					{:else}
-						<span class="hud-pill hud-label">tap a hex · shift-drag to span</span>
+						<span class="hud-pill hud-pill-sm hud-label shrink-0"
+							>tap a hex · shift-drag to span</span
+						>
 					{/if}
 				</div>
 
-				<div class="flex items-center gap-2">
+				<!-- `shrink-0`: these are the world's controls, so they hold their size and
+				     stay on screen no matter how much is selected on the left. -->
+				<div class="flex shrink-0 items-center gap-1.5">
 					<button
-						class="hud-pill hud-btn pointer-events-auto font-semibold"
+						class="hud-pill hud-pill-sm hud-btn pointer-events-auto font-semibold"
 						onclick={() => (sandbox = true)}
 					>
 						biome sandbox
 					</button>
-					<button class="hud-pill hud-btn pointer-events-auto font-semibold" onclick={newWorld}>
+					<button
+						class="hud-pill hud-pill-sm hud-btn pointer-events-auto font-semibold"
+						onclick={newWorld}
+					>
 						↻ new world
 					</button>
 					<DayNightSlider onchange={(h) => api?.setHour(h)} />

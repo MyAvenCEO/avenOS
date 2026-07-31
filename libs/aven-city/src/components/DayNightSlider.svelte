@@ -24,8 +24,8 @@ const phase = $derived(
 ) as 'moon' | 'dusk' | 'sun'
 </script>
 
-<div class="hud-pill pointer-events-auto !gap-3">
-	<Icon name={phase} class="h-4 w-4 opacity-70" />
+<div class="hud-pill hud-pill-sm pointer-events-auto !gap-2">
+	<Icon name={phase} class="h-3.5 w-3.5 opacity-70" />
 	<input
 		type="range"
 		min="0"
@@ -41,9 +41,10 @@ const phase = $derived(
 
 <style>
 input[type="range"] {
-	width: 9rem;
+	/* sized to the compact HUD scale the rest of the bottom row uses */
+	width: 7rem;
 	appearance: none;
-	height: 0.3rem;
+	height: 0.25rem;
 	border-radius: 999px;
 	background: linear-gradient(
 		90deg,
