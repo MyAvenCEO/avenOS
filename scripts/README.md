@@ -1,6 +1,8 @@
 # AvenOS scripts
 
-Repo-root automation for the **Tauri app**, **App Store releases**, and **aven-db** maintenance. Marketing site (`libs/aven-website`) has no scripts here.
+Repo-root automation for the **avenCITY Tauri app** and its **App Store / GitHub
+releases**. Nothing here deploys to a server — card 0121 removed the relay and
+the auth API along with the worlds that needed them.
 
 ## Wired in root `package.json` (daily use)
 
@@ -11,22 +13,23 @@ Repo-root automation for the **Tauri app**, **App Store releases**, and **aven-d
 | `dev:app:mac` | `dev-app-macos.ts` | Tauri dev (macOS) |
 | `dev:app:linux` | `dev-app-linux.ts` | Tauri dev (Linux) |
 | `dev:app:ios` | `dev-app-ios.ts` | iOS Simulator dev |
-| `dev:app2x:mac` / `dev:app2x:linux` | `dev-two-instances.ts` | Two desktop instances (UI QA) |
-| `dev:all` | — | `aven-website` + `app` concurrently |
-| `dev:aven-website` | — | Marketing SvelteKit site |
-| `dev:ocr-example` | — | Python OCR CLI help (`ARCHIVE/ocr-example`) |
-| `clean:app:rust` | `clean-app-tauri-target.ts` | Wipe shared `target/rust` (mac dev uses this) |
-| `verify:aven-db` | `verify-aven-db-gates.sh` | Post–re-vendor Rust + `app` check gates |
+| `clean:app:rust` | `clean-app-tauri-target.ts` | Wipe shared `target/rust` |
+| `gc:rust` | `gc-rust-target.sh` | Reclaim space in the shared Rust target dir |
 | `icons` | `generate-app-icons.ts` | Rebuild every app icon from one svg/png/jpg source |
-| `fetch:webcm` | `fetch-webcm.ts` | Download webcm into `app/static/webcm/` |
-| `build:app:linux` | `build-app-linux.ts` | Linux Tauri build with native dependency preflight |
+| `build:app:mac` | `build-appstore-macos.ts` | Signed Mac App Store `.pkg` |
+| `build:app:linux` | `build-app-linux.ts` | Linux build with native dependency preflight |
 | `release:app:*` | `release-app.ts` | macOS `.pkg` / iOS `.ipa` build + altool upload |
+| `next-version` / `set-version` | `next-version.ts`, `set-version.ts` | CalVer derivation + stamping |
+| `release:next` | `release-next.ts` | Cut the `next` prerelease locally |
 
 ## Called indirectly (keep)
 
 | File | Used by |
 |------|---------|
-| `free-dev-server-port.ts` | `app` predev, all `dev-app-*`, `dev-two-instances` |
+| `free-dev-server-port.ts` | `app` predev, all `dev-app-*` |
+| `dev-app-desktop.ts` | `dev-app-macos.ts`, `dev-app-linux.ts` |
+| `rust-toolchain.ts` | `tauri-ios-asc.ts`, desktop dev |
+| `linux-native-deps.ts` | `build-app-linux.ts`, `dev-app-linux.ts` |
 | `apple-env.ts` | `release-app`, `build-appstore-macos`, `tauri-ios-asc` |
 | `build-appstore-macos.ts` | `release-app.ts` (mac) |
 | `tauri-ios-asc.ts` | `app` `tauri:ios:build:asc`, `release-app.ts` (ios) |
@@ -36,14 +39,12 @@ Repo-root automation for the **Tauri app**, **App Store releases**, and **aven-d
 
 | File | When |
 |------|------|
-| `revendor-aven-db.sh` | Re-copy Maia `jazz-tools` into `libs/aven-db` (see `libs/aven-db/UPSTREAM.md`) |
 | `apple-env.local.template` | Copy → `.env.apple.local` for signing/upload |
 
-## Removed (P2P/relay rip-out)
+## Removed by card 0121 (the avenCITY strip)
 
-- `p2p-signal.ts`, `relay-env.ts`, `relay-bootstrap.ts`, `deploy-relay-fly.ts`, `derive-relay-pubkey.ts`, `migrate-relay-seed-to-env.ts`
-- `libs/aven-relay/`, `libs/tauri-plugin-p2p/`, `scripts/remote-relay-dht-smoke/`
-
-## Docs package
-
-`docs/scripts/check-word-count.ts` — run via `bun run docs:words` from `app/` (not this folder).
+- `aven-server.ts`, `deploy-aven-node-sprite.ts` — relay / server deploy
+- `revendor-aven-db.sh`, `verify-aven-db-gates.sh` — CRDT store vendoring + gates
+- `ensure-sidecar.ts`, `fetch-onnxruntime.ts`, `build-sherpa-ios.sh`, `moss-tts-nano-tokenizer.py` — on-device AI sidecars
+- `fetch-webcm.ts` — webcm assets
+- `dev-two-instances.ts` — two-device peer-sync QA

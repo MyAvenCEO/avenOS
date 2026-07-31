@@ -1,10 +1,11 @@
 /* avenCITY — base + HUD primitives. The world is the UI; this is just the
  * thin floating layer above the canvas.
  *
- * Ported into avenOS: what the standalone repo put on `html`/`body` now hangs
- * off `.avencity`, the game's own root. avenCITY is one of three worlds sharing
- * a document — a global `body { background: sky; overflow: hidden }` would
- * repaint Abagana and Alberobello too. The focus ring and reduced-motion rule
+ * Ported into avenOS: what the standalone repo put on `html`/`body` hangs off
+ * `.avencity`, the game's own root. The game is the only screen today, so this
+ * costs nothing — but a stylesheet that repaints `body` is a lib deciding what
+ * the host application looks like, and it would have to be unpicked the first
+ * time anything renders beside it. The focus ring and the reduced-motion rule
  * are scoped the same way, for the same reason. */
 
 @layer base {

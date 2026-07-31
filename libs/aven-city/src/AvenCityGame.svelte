@@ -15,7 +15,6 @@ import {
 	isFactory,
 	type PlacedKind,
 	settlementCapacity,
-	settlementKinds,
 	ZONE_COLORS,
 	type Zone
 } from './game/three/buildWorld'
@@ -410,7 +409,7 @@ function newWorld(): void {
 								<span class="hud-label">{selected[0].biomes.join(' + ')}</span>
 							</div>
 							<div class="flex flex-col gap-0.5">
-								{#each facts as [ name, value ]}
+								{#each facts as [name, value]}
 									<div class="flex items-baseline gap-2 font-mono text-[0.62rem] tracking-[0.06em]">
 										<span class="w-12 text-ink-soft">{name}</span>
 										<span class="text-ink">{value}</span>

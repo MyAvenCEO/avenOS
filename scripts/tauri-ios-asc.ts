@@ -29,7 +29,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal } from './apple-env'
-import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 import { generateIosIcons, syncIosXcassets } from './generate-app-icons.ts'
 import {
 	readRustToolchainChannel,
@@ -260,26 +259,6 @@ function writeAvenIosCompileEnv() {
 		`export AVENOS_SERVER_WS_URL=${shellEscapeSingleQuoted(wsUrl)}`
 	]
 
-	// On-device voice (Parakeet via sherpa-onnx) needs the iOS arm64 static libs.
-	// `sherpa-onnx-sys` has no iOS auto-download — point it at the libs staged by
-	// scripts/build-sherpa-ios.sh. Without this the `local-voice` build fails with
-	// "Unsupported target for sherpa-onnx prebuilt libs". If the dir is missing we
-	// warn but still write the env (so the cargo error is the clear next signal).
-	const sherpaLibDir = path.join(tauriDir, 'vendor/sherpa-ios/lib')
-	if (existsSync(sherpaLibDir)) {
-		lines.push(`export SHERPA_ONNX_LIB_DIR=${shellEscapeSingleQuoted(sherpaLibDir)}`)
-	} else {
-		console.warn(
-			'[tauri-ios-asc] sherpa-onnx iOS libs not found at %s — run scripts/build-sherpa-ios.sh first, ' +
-				'or build with `--no-default-features` (no on-device voice).',
-			sherpaLibDir
-		)
-	}
-	// Native Google sign-in (board 0050): the Desktop client id/secret are option_env!-baked
-	// into network.rs (google_oauth_config). macOS gets them from the direct cargo build env,
-	// but the iOS compile only sees THIS file — so forward them when present (CI sets them from
-	// the `next` GitHub Environment). Without this the shipped iOS app reports "GOOGLE_CLIENT_ID
-	// not set" at sign-in.
 	const googleId = process.env.GOOGLE_CLIENT_ID?.trim()
 	const googleSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()
 	if (googleId) lines.push(`export GOOGLE_CLIENT_ID=${shellEscapeSingleQuoted(googleId)}`)
@@ -638,7 +617,6 @@ async function main() {
 	// tauri.conf.json declares onnxruntime/libonnxruntime.dylib as a bundled resource, so
 	// generate_context! requires the file to exist at build time. Fetch it (same as the mac
 	// build); the standalone dylib is stripped from the archive later (Apple bans it on iOS).
-	ensureOnnxruntimeDylib('arm64')
 	writeAvenIosCompileEnv()
 	patchPodfile()
 	ensureRustToolchainReady()
@@ -720,7 +698,6 @@ async function main() {
 	// linked — no dylib). Tauri CLI 2.x has NO `--no-default-features` (only additive `-f/--features`),
 	// so iOS-incompatible features (Tinfoil cloud client, TTS/embedding onnxruntime dylibs) MUST be
 	// kept OUT of the crate `default` set (see app/src-tauri/Cargo.toml) — they can't be stripped here.
-	tauriArgs.push('--features', 'local-voice,local-llama')
 
 	const r = spawnSync('bunx', tauriArgs, { cwd: appDir, stdio: 'inherit', env: tauriEnv })
 	if (r.status !== 0) {

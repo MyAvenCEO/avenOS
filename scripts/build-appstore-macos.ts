@@ -27,7 +27,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal } from './apple-env'
-import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'app')
@@ -113,28 +112,11 @@ async function main() {
 	copyFileSync(profileSrc, profileDest)
 	console.log(`[build-appstore-macos] copied provisioning profile → ${profileDest}`)
 
-	// On-device LLM runtime: the onnxruntime dylib is bundled as a Tauri resource
-	// (see tauri.conf.json `resources`). Ensure it's present before `tauri build`, else
-	// generate_context! fails on the missing resource.
-	const onnxDylib = ensureOnnxruntimeDylib('arm64')
-	console.log('[build-appstore-macos] onnxruntime dylib provisioned')
-	// Re-sign it with OUR distribution identity. It ships signed by Microsoft, and Tauri's
-	// macOS signing is SHALLOW (it signs the main executable + the .app bundle, NOT nested
-	// dylibs), so without this the dylib keeps Microsoft's signature and App Store Connect
-	// rejects the build: "90238 Invalid signature … libonnxruntime.dylib: code failed to
-	// satisfy specified code requirement(s)". Sign the SOURCE binary with hardened runtime
-	// (to match the app) so Tauri copies the correctly-signed dylib into the bundle BEFORE it
-	// seals the .app (which then hashes this signed dylib into a valid seal).
-	const onnxSign = spawnSync(
-		'codesign',
-		['--force', '--options', 'runtime', '--timestamp', '--sign', signId, onnxDylib],
-		{ stdio: 'inherit' }
-	)
-	if (onnxSign.status !== 0) {
-		console.error('[build-appstore-macos] failed to codesign onnxruntime dylib')
-		process.exit(onnxSign.status ?? 1)
-	}
-	console.log('[build-appstore-macos] re-signed onnxruntime dylib → distribution identity')
+	// Card 0121 removed the bundled onnxruntime dylib. It used to be provisioned here and
+	// then re-signed with OUR distribution identity — it shipped signed by Microsoft, and
+	// Tauri's macOS signing is shallow (main executable + .app bundle, never nested dylibs),
+	// so App Store Connect rejected the build with "90238 Invalid signature". With no native
+	// dependencies left, the .app has nothing nested to sign.
 
 	mkdirSync(path.join(repoRoot, 'dist'), { recursive: true })
 	const mergeDir = mkdtempSync(path.join(repoRoot, 'dist', 'macos-appstore-tmp-'))
@@ -171,10 +153,6 @@ async function main() {
 		'--ci',
 		'-t',
 		tauriTarget,
-		// Desktop gets the full on-device AI stack (STT is default; llama LLM + MOSS
-		// TTS live behind `desktop-ai`). iOS omits this — it ships STT-only.
-		'--features',
-		'desktop-ai',
 		'--bundles',
 		'app',
 		'--config',
@@ -201,12 +179,6 @@ async function main() {
 	]) {
 		delete tauriEnv[key]
 	}
-
-	// Bake the sync relay URL into the release binary (read at compile time via
-	// `option_env!("AVENOS_SERVER_WS_URL")` in app/src-tauri/src/jazz). Override by
-	// exporting AVENOS_SERVER_WS_URL; defaults to the hosted aven-ceo relay.
-	tauriEnv.AVENOS_SERVER_WS_URL =
-		process.env.AVENOS_SERVER_WS_URL || 'wss://aven-ceo-bmrha.sprites.app/sync'
 
 	// Wipe the SvelteKit static output FIRST so `generate_context!` embeds a CONSISTENT asset set.
 	// A stale `build/` (e.g. left by a prior iOS/mac build with different chunk hashes) makes the

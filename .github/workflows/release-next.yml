@@ -1,24 +1,20 @@
 name: release-next
 
-# CalVer staging channel. On merge into `next` (deploy-relay + release-macos run in
-# parallel after the tag is cut):
+# CalVer staging channel. On merge into `next`, the three app builds run in
+# parallel once the tag is cut:
 #   1. release       — derive YY.M.micro-next.N, stamp every package, changelog, tag, prerelease.
-#   2. deploy-relay  — rebuild the aven-node relay on its Sprite at the release commit and
-#                      recreate it from a WIPED store (WIPE=1). `next` is a throwaway dev/staging
-#                      channel, so every deploy resets the relay to a clean slate.
-#   2b. deploy-auth  — deploy the betterauth (Bun/Hono) API to fly.io as a single machine
-#                      (https://api.next.aven.ceo). Stateless — schema self-bootstraps. The
-#                      `next` GitHub Environment is the single source of truth for ALL secrets
-#                      (FLY_API_TOKEN + the runtime secrets); the job stages them onto the fly
-#                      app before deploying.
-#   3. release-macos — build the signed Mac App Store .pkg on a macOS runner and upload it to
+#   2. release-macos — build the signed Mac App Store .pkg on a macOS runner and upload it to
 #                      TestFlight (CFBundleVersion = github.run_number). Apple creds are
 #                      REPOSITORY secrets (cross-channel: next AND main); see job for the list.
-#   4. release-ios   — build the signed .ipa on a macOS runner (tauri ios init + manual signing)
+#   3. release-ios   — build the signed .ipa on a macOS runner (tauri ios init + manual signing)
 #                      and upload to TestFlight. Reuses the same repo Apple secrets + IOS_MOBILEPROVISION_BASE64.
-#   5. release-linux — build the x86_64 Linux app (.deb + AppImage) on ubuntu and attach it to
+#   4. release-linux — build the x86_64 Linux app (.deb + AppImage) on ubuntu and attach it to
 #                      the GitHub prerelease (Linux has no app store, so the release asset IS the
-#                      distribution channel). Same env baking as macOS/iOS (auth URL + Google).
+#                      distribution channel).
+#
+# This channel deploys NOTHING to a server. Card 0121 removed the aven-node relay
+# (Sprite) and the betterauth API (fly.io) along with the worlds that needed them;
+# avenCITY runs entirely on the device.
 
 on:
   push:
@@ -69,125 +65,6 @@ jobs:
         run: bun run release:next
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  deploy-relay:
-    name: deploy aven-node relay (Sprite)
-    needs: release
-    runs-on: ubuntu-latest
-    # Pull AVEN_SIGNER_SECRET + SPRITE_API_KEY from the `next` GitHub Environment.
-    environment: next
-    steps:
-      - name: Checkout next at the release commit (full history)
-        uses: actions/checkout@v5
-        with:
-          ref: next
-          fetch-depth: 0
-
-      - name: Set up bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install the sprite CLI
-        run: |
-          curl -fsSL https://sprites.dev/install.sh | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Authenticate sprite CLI
-        run: sprite auth setup --token "$SPRITE_API_KEY"
-        env:
-          SPRITE_API_KEY: ${{ secrets.SPRITE_API_KEY }}
-
-      - name: Deploy relay at the release commit (clean-slate WIPE — next is staging)
-        # Ships a source tarball of the release commit to the Sprite, rebuilds aven-node,
-        # and recreates the service from a WIPED store. `next` is a throwaway dev/staging
-        # channel, so every deploy resets the relay to a clean slate (devices re-onboard,
-        # sparks re-replicate). Blocks ~10–15 min on the on-Sprite cargo build.
-        run: bun ./scripts/deploy-aven-node-sprite.ts
-        env:
-          AVEN_SIGNER_SECRET: ${{ secrets.AVEN_SIGNER_SECRET }}
-          # Build from the checked-out HEAD (the release/bump commit the tag points to),
-          # so the relay's schema hash matches what the apps will ship from the same commit.
-          AVEN_SERVER_BUILD: "1"
-          # Staging: wipe + recreate the durable store on every deploy.
-          WIPE: "1"
-
-  deploy-auth:
-    name: deploy betterauth API (fly.io)
-    needs: release
-    runs-on: ubuntu-latest
-    # FLY_API_TOKEN comes from the `next` GitHub Environment (same env as deploy-relay).
-    environment: next
-    steps:
-      - name: Checkout next at the release commit
-        uses: actions/checkout@v5
-        with:
-          ref: next
-
-      - name: Set up flyctl
-        uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Sync secrets from the next environment, then deploy (single machine)
-        # The `next` GitHub Environment is the single source of truth for runtime secrets:
-        # stage them onto the fly app, then deploy so ONE release applies both the new image
-        # and the staged secrets. BETTER_AUTH_SECRET must stay STABLE across deploys (it signs
-        # sessions/bearer tokens — changing it logs everyone out), so it lives here, not
-        # regenerated. POLAR_API_KEY is optional (only staged when present).
-        # Build context is the repo root; --ha=false provisions exactly ONE machine.
-        run: |
-          set -euo pipefail
-          APP=api-next-aven-ceo
-          # flyctl reads FLY_API_TOKEN — the org-wide GitHub secret of the same name, holding
-          # an avenCEO org token. Fail clearly if it's missing, else flyctl dies with a cryptic
-          # "You must be authenticated to view this".
-          if [ -z "${FLY_API_TOKEN:-}" ]; then
-            echo "::error::FLY_API_TOKEN is empty. Set the org secret FLY_API_TOKEN to an avenCEO token: fly tokens create org -o avenceo"
-            exit 1
-          fi
-          # Verify the token can actually see this app (catches a wrong-org token early).
-          flyctl secrets list --app "$APP" >/dev/null
-          # Stage only the secrets that are actually provided — a missing one is left as-is on
-          # the app (so the deploy never fails on an unset value, and present ones still sync).
-          args=()
-          for kv in \
-            "BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}" \
-            "NEON_PG_KEY=${NEON_PG_KEY:-}" \
-            "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}" \
-            "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}" \
-            "TINFOIL_API_KEY=${TINFOIL_API_KEY:-}" \
-            "POLAR_API_KEY=${POLAR_API_KEY:-}" \
-            "POLAR_WEBHOOK_SECRET=${POLAR_WEBHOOK_SECRET:-}" \
-            "POSTMARK_INBOUND_SECRET=${POSTMARK_INBOUND_SECRET:-}" \
-            "POSTMARK_INBOUND_USER=${POSTMARK_INBOUND_USER:-}" \
-            "GOOGLE_SERVICE_ACCOUNT_JSON=${GOOGLE_SERVICE_ACCOUNT_JSON:-}"; do
-            [ -n "${kv#*=}" ] && args+=("$kv")
-          done
-          if [ ${#args[@]} -gt 0 ]; then flyctl secrets set --app "$APP" --stage "${args[@]}"; fi
-          flyctl deploy --remote-only --ha=false --config libs/betterauth/fly.toml --dockerfile libs/betterauth/Dockerfile .
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-          NEON_PG_KEY: ${{ secrets.NEON_PG_KEY }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          TINFOIL_API_KEY: ${{ secrets.TINFOIL_API_KEY }}
-          POLAR_API_KEY: ${{ secrets.POLAR_API_KEY }}
-          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
-          POSTMARK_INBOUND_SECRET: ${{ secrets.POSTMARK_INBOUND_SECRET }}
-          POSTMARK_INBOUND_USER: ${{ secrets.POSTMARK_INBOUND_USER }}
-          # Gemini Enterprise (Vertex) service-account key for the aven-voice Live relay —
-          # store the FULL sa JSON (one-lined, `jq -c .`) in the next environment.
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-
-      - name: App logs (always — boot forensics)
-        # board 0119h — the machine's own stdout after every deploy attempt: a boot hang/crash is
-        # never invisible again (this is how the silent next outage gets a readable cause).
-        if: always()
-        run: |
-          echo "── error/boot lines ──"
-          flyctl logs --app api-next-aven-ceo --no-tail 2>&1 | grep -aiE "\[boot\]|failed|error|panic" | grep -av "\[migrate\] 0" | tail -60 || true
-          echo "── raw tail ──"
-          flyctl logs --app api-next-aven-ceo --no-tail 2>&1 | tail -30 || true
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
   release-macos:
     name: macOS build → TestFlight

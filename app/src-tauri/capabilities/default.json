@@ -7,13 +7,7 @@
 		"core:default",
 		"core:window:default",
 		"core:webview:default",
-		"core:webview:allow-create-webview-window",
 		"core:event:default",
-		"self:default",
-		"vault:default",
-		"sandbox-quickjs:default",
-		"clipboard-manager:allow-write-text",
-		"opener:default",
-		"google-auth:default"
+		"opener:default"
 	]
 }

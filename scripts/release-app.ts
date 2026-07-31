@@ -81,8 +81,6 @@ type ParsedArgs = {
 	buildNumber?: string
 	skipBuild: boolean
 	skipUpload: boolean
-	/** `all` redeploys the relay (clean-slate sprite) by default; mac/ios never do. */
-	deploySprite: boolean
 }
 
 function parseTarget(raw: string): Target[] {
@@ -113,14 +111,11 @@ function parseArgs(): ParsedArgs {
 	const positional: string[] = []
 	let skipBuild = false
 	let skipUpload = false
-	let noSprite = false
 	for (const a of args) {
 		if (a === '--no-upload') skipUpload = true
 		else if (a === '--no-build') skipBuild = true
-		else if (a === '--no-sprite') noSprite = true
 		else positional.push(a)
 	}
-	const isAll = positional[0]?.toLowerCase() === 'all'
 	const targets = parseTarget(positional[0])
 	const buildNumber = positional[1]?.trim() || undefined
 	if (buildNumber && !/^\d+$/.test(buildNumber)) {
@@ -131,12 +126,11 @@ function parseArgs(): ParsedArgs {
 	}
 	if (process.env.AVEN_NO_UPLOAD?.trim()) skipUpload = true
 	if (process.env.AVEN_NO_BUILD?.trim()) skipBuild = true
-	if (process.env.AVEN_NO_SPRITE?.trim()) noSprite = true
 	if (skipBuild && skipUpload) {
 		console.error('release-app: --no-build and --no-upload together leave nothing to do.')
 		process.exit(1)
 	}
-	return { targets, buildNumber, skipBuild, skipUpload, deploySprite: isAll && !noSprite }
+	return { targets, buildNumber, skipBuild, skipUpload }
 }
 
 function resolveBundleVersion(target: Target, positional?: string): string | undefined {
@@ -166,78 +160,6 @@ function runScript(spec: TargetSpec, env: Record<string, string>): number {
 		stdio: 'inherit',
 		env: targetEnv
 	})
-	return r.status ?? 1
-}
-
-function git(args: string[]): { status: number; out: string } {
-	const r = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' })
-	return { status: r.status ?? 1, out: `${r.stdout ?? ''}${r.stderr ?? ''}`.trim() }
-}
-
-/**
- * Push-from-main preflight for the clean-slate relay deploy. The Sprite rebuilds
- * aven-node from its own git checkout, so its SchemaHash matches the devices ONLY if
- * the exact commit we build the apps from is already on the remote it pulls. We
- * therefore require a clean tree (the apps build the working tree — uncommitted code
- * the Sprite can't reproduce would re-introduce the skew), then push HEAD and pin the
- * Sprite to that SHA. Returns the release commit to build everywhere.
- */
-function gitPushPreflight(): string {
-	const dirty = git(['status', '--porcelain'])
-	if (dirty.out) {
-		console.error(
-			'[release-app] working tree is dirty — commit or stash first.\n' +
-				'  The apps build the working tree; the Sprite rebuilds from a pushed commit. They must match.\n' +
-				`  Uncommitted changes:\n${dirty.out}`
-		)
-		process.exit(1)
-	}
-	const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']).out
-	const sha = git(['rev-parse', 'HEAD']).out
-	if (!sha) {
-		console.error('[release-app] could not resolve HEAD commit.')
-		process.exit(1)
-	}
-	if (branch !== 'main') {
-		console.warn(
-			`[release-app] ⚠ releasing from "${branch}", not main. The Sprite will be pinned to ${sha.slice(0, 12)} regardless,\n` +
-				'  but double-check this is the commit you mean to ship. (--no-sprite skips the relay + this push.)'
-		)
-	}
-	console.log(
-		`[release-app] pushing ${branch}@${sha.slice(0, 12)} so the Sprite can rebuild the same commit…`
-	)
-	const push = git(['push', 'origin', 'HEAD'])
-	if (push.status !== 0) {
-		console.error(
-			`[release-app] git push failed — the Sprite would build a stale commit. Aborting.\n${push.out}`
-		)
-		process.exit(1)
-	}
-	// Confirm the remote actually has this commit before we rely on it.
-	const onRemote = git(['branch', '-r', '--contains', sha])
-	if (onRemote.status !== 0 || !onRemote.out) {
-		console.error(
-			`[release-app] ${sha.slice(0, 12)} is not on any remote branch after push. Aborting.`
-		)
-		process.exit(1)
-	}
-	console.log(`[release-app] ✓ ${sha.slice(0, 12)} is on the remote.`)
-	return sha
-}
-
-/** Clean-slate relay: rebuild aven-node @ releaseSha on the Sprite, wipe its store, restart. */
-function deploySpriteCleanSlate(releaseSha: string): number {
-	console.log('\n[release-app] ─── SPRITE (clean slate) ───')
-	const r = spawnSync(
-		'bun',
-		['--env-file=.env', path.join(repoRoot, 'scripts', 'deploy-aven-node-sprite.ts')],
-		{
-			cwd: repoRoot,
-			stdio: 'inherit',
-			env: { ...process.env, WIPE: '1', AVEN_SERVER_BUILD_REF: releaseSha }
-		}
-	)
 	return r.status ?? 1
 }
 
@@ -328,19 +250,7 @@ type StepResult = {
 }
 
 function main(): void {
-	const { targets, buildNumber, skipBuild, skipUpload, deploySprite } = parseArgs()
-
-	// Push-from-main BEFORE any long build so a dirty tree / failed push aborts fast and
-	// the relay is guaranteed to rebuild the exact commit the apps build.
-	let releaseSha: string | undefined
-	if (deploySprite) {
-		releaseSha = gitPushPreflight()
-		console.log(
-			'[release-app] relay clean-slate ON → after apps upload, the Sprite rebuilds @ this commit, wipes its store, restarts.'
-		)
-	} else {
-		console.log('[release-app] --no-sprite (or non-all target) → relay untouched, no git push.')
-	}
+	const { targets, buildNumber, skipBuild, skipUpload } = parseArgs()
 
 	if (buildNumber) {
 		console.log(
@@ -428,21 +338,6 @@ function main(): void {
 		}
 
 		results.push({ target, build: buildLabel, buildSecs, uploadSecs, uploaded, ok: true })
-	}
-
-	// Relay last: the apps are uploaded, so a relay failure here doesn't strand a
-	// half-done release — and we never wipe the prod Sprite before the apps are in.
-	if (deploySprite && releaseSha) {
-		const status = deploySpriteCleanSlate(releaseSha)
-		if (status !== 0) {
-			console.error(
-				`[release-app] ✗ sprite clean-slate deploy failed (exit ${status}).\n` +
-					'  Apps are uploaded but the relay was NOT redeployed — it may still hold the old schema.\n' +
-					`  Re-run just the relay:  WIPE=1 AVEN_SERVER_BUILD_REF=${releaseSha} bun run deploy:server:sprite`
-			)
-			process.exit(status)
-		}
-		console.log('[release-app] ✓ sprite redeployed clean @ release commit.')
 	}
 
 	console.log(`\n[release-app] all targets done in ${fmtSecs(Date.now() - started)}`)

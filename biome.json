@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
 	"root": true,
 	"vcs": {
 		"enabled": true,
@@ -12,11 +12,17 @@
 		"includes": [
 			"**",
 			"!!**/bun.lock",
-			"!!ARCHIVE/ocr-example",
 			"!!.claude",
 			"!!**/permissions/schemas",
 			"!!app/src-tauri/gen",
-			"!!app/static/skills"
+			"// ARCHIVE is parked reference source (card 0121). It is deliberately",
+			"// outside the workspaces and is not maintained, so linting it only",
+			"// produces noise about code nobody is editing.",
+			"!!ARCHIVE",
+			"// SVGs here are design assets (the app icon and the logo), not markup we",
+			"// author. a11y rules want a <title> in them, which would mean editing the",
+			"// artwork to satisfy a linter.",
+			"!!**/*.svg"
 		]
 	},
 	"formatter": {
@@ -29,7 +35,7 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true
+			"preset": "recommended"
 		}
 	},
 	"javascript": {
@@ -63,12 +69,6 @@
 		}
 	},
 	"overrides": [
-		{
-			"includes": ["libs/aven-ui/src/vibes/**/logic.js"],
-			"linter": {
-				"enabled": false
-			}
-		},
 		{
 			"includes": ["**/*.svelte"],
 			"linter": {
