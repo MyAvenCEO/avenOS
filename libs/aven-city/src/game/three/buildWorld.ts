@@ -251,14 +251,21 @@ function hexShape(radius: number): THREE.Shape {
 	return shape
 }
 
-/** Rounded clay prism — extruded hex with multi-segment bevel, depth -> +Y. */
+/**
+ * Rounded clay prism — extruded hex with multi-segment bevel, depth -> +Y.
+ *
+ * 2 bevel segments rather than 3: the bevel is BEVEL wide on a hex of radius 1,
+ * so the rounding is a couple of pixels at the zoom you actually play at, and
+ * the third ring bought nothing you can see. It costs a third of every prism on
+ * the island, twice over — once building the geometry, once drawing it.
+ */
 function hexPrism(radius: number, height: number): THREE.ExtrudeGeometry {
 	const geo = new THREE.ExtrudeGeometry(hexShape(radius - BEVEL), {
 		depth: height - BEVEL,
 		bevelEnabled: true,
 		bevelThickness: BEVEL,
 		bevelSize: BEVEL,
-		bevelSegments: 3
+		bevelSegments: 2
 	})
 	geo.rotateX(-Math.PI / 2)
 	return geo
@@ -511,7 +518,12 @@ function buildBaseGeo(tile: HexTile, rng: Rng, field: FieldSampler): THREE.Buffe
  * two hundred a hex, to rediscover the same vector fifty thousand times an
  * island. That alone was most of what a big world spent on its ground.
  */
-const DISC_N = 6 // subdivisions per sector edge
+// 4, not 6. The disc is flat and its colours come from a field that is smooth
+// across tile borders, so this only sets how finely that gradient is sampled
+// INSIDE one hex — and a hex is small on screen. Dropping two steps takes the
+// disc from 216 triangles to 96, i.e. 55% of the island's ground vertices, for
+// a difference you have to zoom in to find.
+const DISC_N = 4 // subdivisions per sector edge
 const DISC_TRIS = 6 * DISC_N * DISC_N
 const DISC_VERTS = DISC_TRIS * 3
 
