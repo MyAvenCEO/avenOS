@@ -1,0 +1,9 @@
+/* The avenCITY design system, as consumed inside avenOS.
+ *
+ * The standalone repo's layout.css also did `@import 'tailwindcss'` and pulled
+ * in fonts.css. Neither belongs here: avenOS imports Tailwind once in
+ * app/src/app.css (which already `@source`s this lib, so the game's utility
+ * classes are generated), and it already self-hosts Chillax + AzeretMono. */
+
+@import "./tokens.css";
+@import "./base.css";

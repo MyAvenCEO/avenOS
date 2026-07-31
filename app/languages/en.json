@@ -995,8 +995,9 @@
 	"networkSelect": {
 		"kicker": "Select network",
 		"title": "Choose your world.",
-		"subtitle": "Pick the network you want to enter. You can't switch later from inside the app.",
+		"subtitle": "Pick the world you want to enter. You choose again every time you sign in — the one you were in last is already selected.",
 		"enter": "Enter",
+		"lastUsed": "Last used",
 		"testnet": {
 			"tag": "testnet / abagana",
 			"title": "Abagana",
@@ -1006,6 +1007,11 @@
 			"tag": "mainnet / alberobello",
 			"title": "Alberobello",
 			"body": "The new world — a separate network with its own onboarding. Right now it opens straight into a chat."
+		},
+		"city": {
+			"tag": "world / avencity",
+			"title": "avenCITY",
+			"body": "A procedurally generated clay hex island. Zone the land, found settlements, and see what it can actually feed."
 		}
 	},
 	"mainnet": {

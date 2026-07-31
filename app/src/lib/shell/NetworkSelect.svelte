@@ -1,7 +1,8 @@
 <script lang="ts">
 import { t } from '$lib/i18n'
 import type { NetworkId } from '$lib/settings/network'
-import { selectNetwork } from '$lib/settings/network-store'
+import { lastNetwork, selectNetwork } from '$lib/settings/network-store'
+import AvenLogo from '$lib/ui/AvenLogo.svelte'
 
 const options: { id: NetworkId; tagKey: string; titleKey: string; bodyKey: string }[] = [
 	{
@@ -15,19 +16,36 @@ const options: { id: NetworkId; tagKey: string; titleKey: string; bodyKey: strin
 		tagKey: 'networkSelect.mainnet.tag',
 		titleKey: 'networkSelect.mainnet.title',
 		bodyKey: 'networkSelect.mainnet.body'
+	},
+	{
+		id: 'city',
+		tagKey: 'networkSelect.city.tag',
+		titleKey: 'networkSelect.city.title',
+		bodyKey: 'networkSelect.city.body'
 	}
 ]
 
 function choose(id: NetworkId): void {
 	selectNetwork(id)
 }
+
+/**
+ * The intro shows on every sign-in, so returning to the same world has to be
+ * cheap: the card you picked last time is marked and takes focus, which makes
+ * it one Enter away. It is a starting point, never a commitment — the other
+ * cards are exactly as clickable.
+ */
+function focusIfLast(node: HTMLButtonElement, id: NetworkId) {
+	if (id === $lastNetwork) node.focus()
+}
 </script>
 
 <div
 	class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto bg-background p-6"
 >
-	<div class="w-full max-w-3xl">
+	<div class="w-full max-w-4xl">
 		<div class="mb-8 text-center">
+			<AvenLogo class="mx-auto mb-4 h-14 w-auto" />
 			<p class="text-muted-foreground text-[10px] font-bold tracking-[0.2em] uppercase">
 				{t('networkSelect.kicker')}
 			</p>
@@ -39,13 +57,24 @@ function choose(id: NetworkId): void {
 			</p>
 		</div>
 
-		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 			{#each options as option (option.id)}
+				{@const isLast = option.id === $lastNetwork}
 				<button
 					type="button"
-					class="border-border bg-card hover:border-primary/60 hover:bg-card/80 group flex flex-col rounded-[var(--radius-lg)] border p-5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+					use:focusIfLast={option.id}
+					class="bg-card hover:border-primary/60 hover:bg-card/80 group relative flex flex-col rounded-[var(--radius-lg)] border p-5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 {isLast
+						? 'border-primary'
+						: 'border-border'}"
 					onclick={() => choose(option.id)}
 				>
+					{#if isLast}
+						<span
+							class="bg-primary text-primary-foreground absolute -top-2 right-4 rounded-full px-2 py-0.5 text-[9px] font-bold tracking-[0.14em] uppercase"
+						>
+							{t('networkSelect.lastUsed')}
+						</span>
+					{/if}
 					<span class="text-primary text-[10px] font-bold tracking-[0.18em] uppercase">
 						{t(option.tagKey)}
 					</span>
@@ -56,7 +85,9 @@ function choose(id: NetworkId): void {
 						{t(option.bodyKey)}
 					</span>
 					<span
-						class="text-primary mt-4 text-xs font-semibold opacity-0 transition-opacity group-hover:opacity-100"
+						class="text-primary mt-4 text-xs font-semibold transition-opacity group-hover:opacity-100 {isLast
+							? 'opacity-100'
+							: 'opacity-0'}"
 					>
 						{t('networkSelect.enter')}
 						→

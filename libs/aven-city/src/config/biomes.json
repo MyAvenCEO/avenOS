@@ -1,0 +1,30 @@
+{
+	"_note": "avenCITY biomes — v0.4. TEN biomes, each extracting exactly ONE resource. Every hex is composed of 1 or 2 biomes; extraction requires a FACTORY dome on a hex with the matching biome. yieldPerBatch = units per extraction batch at dome LV.1. All land belongs to the CITY SPARK — hexes are rented, never sold.",
+	"biomes": [
+		{ "id": "LAKE", "resources": { "WATER": 8 } },
+		{ "id": "CLAYPIT", "resources": { "CLAY": 5 } },
+		{ "id": "FOREST", "resources": { "WOOD": 6 } },
+		{ "id": "GROVE", "resources": { "HERBS": 4 } },
+		{ "id": "MOUNTAIN", "resources": { "STONE": 6 } },
+		{ "id": "ORECLIFF", "resources": { "ORE": 4 } },
+		{ "id": "MEADOW", "resources": { "GRAIN": 8 } },
+		{ "id": "FIBERFIELD", "resources": { "FIBER": 5 } },
+		{ "id": "DUNES", "resources": { "SAND": 6 } },
+		{ "id": "SUNPLAINS", "resources": { "SUN": 8 } }
+	],
+	"hexes": {
+		"biomesPerHex": { "min": 1, "max": 2 },
+		"unlock": {
+			"totalCost": 300000,
+			"minFounders": 10,
+			"sharePerFounder": 30000,
+			"paidTo": "CITY_SPARK",
+			"_note": "A new hexagon opens only when at least 10 citizens pool 300,000 HEARTS. Every spawning player's grant earmarks exactly one founder share."
+		},
+		"groundRent": {
+			"perLevelPerDay": 6,
+			"paidTo": "CITY_SPARK",
+			"_note": "Every dome pays ground rent scaled by its level: LV.1 = 6/day, LV.5 = 30/day. Land is used, never owned."
+		}
+	}
+}

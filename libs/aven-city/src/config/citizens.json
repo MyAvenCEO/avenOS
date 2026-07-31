@@ -1,0 +1,40 @@
+{
+	"_note": "avenCITY citizens — v0.3. Every human has per-day needs that scale with their lifestyle LEVEL and grow over time. Zero wages exist: income is the heart drip + dividend streams. The founding grant is every player's first investment, received at spawn.",
+	"foundingGrant": {
+		"total": 50000,
+		"earmarked": {
+			"hexUnlockShare": 30000,
+			"_note": "Locked to exactly one founder share of a new hexagon unlock (10 shares x 30,000 = 300,000, see biomes.json). Ten new citizens = one new hex: population growth IS city growth."
+		},
+		"free": {
+			"investmentBudget": 20000,
+			"_note": "Freely investable into sparks, domes, upgrades. Subject to demurrage like all held hearts — deploy it or watch it melt."
+		}
+	},
+	"income": {
+		"heartsPerDay": 24,
+		"mintedPer": "game hour (1 heart / 2.5 real minutes)",
+		"demurragePerDay": 0.07,
+		"wages": null
+	},
+	"lifestyleLevels": {
+		"_note": "Needs per game day BY LEVEL. Levels rise with tenure — the cost of living grows over time, so freedom must be re-earned at each stage (lifestyle inflation as mechanic). HOME slots reference LIVING-dome residency; rent is set by the dome.",
+		"levelUp": { "every": "1 game year (365 game days ≈ 15 real days)", "max": 5 },
+		"needsPerDay": {
+			"LV1": { "WATER": 1, "FOOD": 1, "HOME": 1 },
+			"LV2": { "WATER": 2, "FOOD": 2, "HOME": 1, "JOY": 1 },
+			"LV3": { "WATER": 2, "FOOD": 3, "HOME": 2, "JOY": 2, "CLOTH": 1 },
+			"LV4": { "WATER": 3, "FOOD": 4, "HOME": 2, "JOY": 3, "CLOTH": 2 },
+			"LV5": { "WATER": 4, "FOOD": 6, "HOME": 3, "JOY": 4, "CLOTH": 3 }
+		},
+		"unmetNeeds": {
+			"_note": "Open question: reduce next day's heart minting per unmet need, floor 12/day. Not settled.",
+			"proposal": { "heartsPenaltyPerNeed": 6, "floor": 12 }
+		}
+	},
+	"freedom": {
+		"condition": "dividend streams >= cost of living AT CURRENT LIFESTYLE LEVEL for 7 consecutive game days",
+		"note": "Because needs grow with level, freedom is not a one-time badge — it must be held as life gets bigger.",
+		"cityScore": "Freedom Rate: share of citizens currently free"
+	}
+}

@@ -30,6 +30,7 @@ import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal } from './apple-env'
 import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
+import { generateIosIcons, syncIosXcassets } from './generate-app-icons.ts'
 import {
 	readRustToolchainChannel,
 	rustToolchainShellExports,
@@ -204,24 +205,22 @@ function syncEntitlements() {
 	console.log(`[tauri-ios-asc] synced entitlements → ${entitlementsDest}`)
 }
 
-/** Scale `app-icon-source.png` into ios/ sizes (avoids `tauri icon --ios-color` badge transform). */
-function generateIosIconsFromSource() {
-	const source = path.join(tauriDir, 'icons/app-icon-source.png')
+/** Scale the icon source into ios/ sizes (avoids `tauri icon --ios-color` badge transform). */
+async function generateIosIconsFromSource() {
+	// iOS applies its own mask and rejects alpha → prefer the full-bleed square source.
+	const iosSource = path.join(tauriDir, 'icons/app-icon-source-ios.png')
+	const source = existsSync(iosSource)
+		? iosSource
+		: path.join(tauriDir, 'icons/app-icon-source.png')
 	const iosIconsDir = path.join(tauriDir, 'icons/ios')
-	const genScript = path.join(repoRoot, 'scripts/generate-ios-icons.py')
 	if (!existsSync(source)) {
 		console.error(
-			'tauri-ios-asc: missing icons/app-icon-source.png — add a 1024×1024 PNG (see scripts/generate-ios-icons.py)'
+			'tauri-ios-asc: missing icons/app-icon-source.png — run `bun run icons <file.svg|png|jpg>`'
 		)
 		process.exit(1)
 	}
-	const r = spawnSync('python3', [genScript, source, iosIconsDir], { encoding: 'utf8' })
-	if (r.status !== 0) {
-		console.error('tauri-ios-asc: generate-ios-icons failed')
-		if (r.stderr) console.error(r.stderr)
-		process.exit(r.status ?? 1)
-	}
-	if (r.stdout?.trim()) console.log(r.stdout.trimEnd())
+	await generateIosIcons(source, iosIconsDir)
+	syncIosXcassets(iosIconsDir)
 }
 
 /** Fail fast when Xcode has no eligible iphoneos destination (common after fresh Xcode install). */
@@ -635,7 +634,7 @@ async function main() {
 	const version = readPackageVersion()
 
 	syncEntitlements()
-	generateIosIconsFromSource()
+	await generateIosIconsFromSource()
 	// tauri.conf.json declares onnxruntime/libonnxruntime.dylib as a bundled resource, so
 	// generate_context! requires the file to exist at build time. Fetch it (same as the mac
 	// build); the standalone dylib is stripped from the archive later (Apple bans it on iOS).

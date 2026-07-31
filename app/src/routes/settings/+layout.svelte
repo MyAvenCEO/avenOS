@@ -6,6 +6,7 @@ import { t } from '$lib/i18n'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { pickVaultRowForIdentity } from '$lib/settings/active-vault-ui'
 import { clearDeviceSession, deviceSession } from '$lib/settings/device-session-store'
+import { clearNetwork } from '$lib/settings/network-store'
 import { provideSelfContext } from '$lib/settings/self-context.svelte'
 import { type VaultListEntry, vaultCardTitle, vaultList } from '$lib/settings/vault'
 import { settingsNavSections } from '$lib/shell/settings-nav'
@@ -68,10 +69,12 @@ const profileName = $derived.by(() => {
 
 const profileDevice = $derived(activeVault?.deviceLabel?.trim() ?? '')
 
-/** Lock the identity (back to the picker) — lets you switch accounts within one
- * app run for testing. */
+/** Lock the identity, then leave the world — signing out lands on Select Network
+ * with Abagana pre-selected, the same as it does on Alberobello. The device
+ * session goes FIRST so no unlocked vault outlives the world it belonged to. */
 async function logout(): Promise<void> {
 	await clearDeviceSession()
+	clearNetwork()
 }
 </script>
 
