@@ -347,15 +347,34 @@ export function createScene(canvas: HTMLCanvasElement, options: SceneOptions = {
 				const at = selection.findIndex((t) => `${t.q},${t.r}` === k)
 				selection = at >= 0 ? selection.filter((_, i) => i !== at) : [...selection, tile]
 			}
+		} else if (!tile) {
+			selection = []
 		} else {
-			selection = tile ? [tile] : []
+			// Tapping the hex that is already the whole selection lets go of it, so
+			// the tap that picked a hex also drops it. Without this the only way to
+			// clear was to find open water — on a fully settled island there is none.
+			// A tap on ONE hex of a span still collapses the span onto it; that is a
+			// narrowing, not an undo.
+			const isOnlySelection =
+				selection.length === 1 && `${selection[0].q},${selection[0].r}` === `${tile.q},${tile.r}`
+			selection = isOnlySelection ? [] : [tile]
 		}
+		showSelection()
+	}
+
+	/** Escape clears the selection — the same way it dismisses anything else. */
+	function onKeyDown(e: KeyboardEvent): void {
+		if (e.key !== 'Escape' || selection.length === 0) return
+		selection = []
 		showSelection()
 	}
 
 	canvas.addEventListener('pointerdown', onPointerDown)
 	canvas.addEventListener('pointermove', onPointerMove)
 	canvas.addEventListener('pointerup', onPointerUp)
+	// on window, not the canvas: the canvas never holds focus, so a keydown on it
+	// would only ever arrive if the user had clicked it AND nothing else took focus
+	window.addEventListener('keydown', onKeyDown)
 
 	function resize(): void {
 		const w = canvas.clientWidth
@@ -426,6 +445,7 @@ export function createScene(canvas: HTMLCanvasElement, options: SceneOptions = {
 			canvas.removeEventListener('pointerdown', onPointerDown)
 			canvas.removeEventListener('pointermove', onPointerMove)
 			canvas.removeEventListener('pointerup', onPointerUp)
+			window.removeEventListener('keydown', onKeyDown)
 			marquee.remove()
 			rig.dispose()
 			daylight.dispose()
