@@ -8,7 +8,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dirs = [
 	path.join(root, 'target/rust'),
 	path.join(root, 'app/src-tauri/target'),
-	path.join(root, 'libs/aven-db/target'),
 	// Legacy wrong target-dir (../../../target/rust from app/src-tauri).
 	path.join(root, '..', 'target/rust')
 ]

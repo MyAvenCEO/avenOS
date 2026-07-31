@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 import { ensureLinuxNativeDeps } from './linux-native-deps.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -13,14 +12,6 @@ if (!env.AVENOS_APP_ENV_FILE && env.AVENOS_ENV_FILE) {
 	const envFile = env.AVENOS_ENV_FILE.trim()
 	const absoluteEnvFile = path.isAbsolute(envFile) ? envFile : path.join(repoRoot, envFile)
 	env.AVENOS_APP_ENV_FILE = path.relative(path.join(repoRoot, 'app'), absoluteEnvFile)
-}
-
-try {
-	env.AVENOS_ORT_DYLIB = ensureOnnxruntimeDylib(process.arch === 'x64' ? 'x86_64' : 'arm64')
-} catch (e) {
-	console.warn(
-		`[build:app:linux] onnxruntime provisioning skipped: ${e instanceof Error ? e.message : e}`
-	)
 }
 
 const child = Bun.spawn(['bun', 'run', '--cwd', 'app', 'tauri:build:linux'], {

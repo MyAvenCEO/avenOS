@@ -1,4 +1,0 @@
-{
-	"description": "Optional bundled schema snapshots (hash → manifest) when a vault has no copy under db/schema_snapshots/. Most migrations rely on per-vault stamps written at connect. Empty = clean day-0 schema (signers + dataVault rename); storage wiped, no backward compatibility maintained.",
-	"snapshots": []
-}

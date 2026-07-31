@@ -10,15 +10,12 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		prerender: {
-			// Dynamic app routes (e.g. /sparks/[sparkId]) are client-only; static shell uses fallback.
-			handleUnseenRoutes: 'ignore'
-		},
 		adapter: adapter({ fallback: 'index.html', strict: false }),
+		// Source-aliased so the game compiles from libs/ rather than a build artifact
+		// and edits there hot-reload. app.css `@source`s the same path, so Tailwind
+		// still generates the HUD's utility classes.
 		alias: {
-			'@avenos/aven-city': path.resolve(__dirname, '../libs/aven-city/src/index.ts'),
-			'@avenos/aven-board': path.resolve(__dirname, '../libs/aven-board/src/index.ts'),
-			'@avenos/docs': path.resolve(__dirname, '../docs')
+			'@avenos/aven-city': path.resolve(__dirname, '../libs/aven-city/src/index.ts')
 		}
 	}
 }

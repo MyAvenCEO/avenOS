@@ -1,6 +1,3 @@
-[profile.dev.package.scrypt]
-opt-level = 3
-
 # Strip heavy debuginfo from third-party deps in dev builds. The dev default is
 # full debuginfo (`debug = 2`) embedded into every dep's artifacts in deps/, which
 # — multiplied across the Tauri dep tree and each target triple — was the bulk of a
@@ -19,10 +16,11 @@ incremental = false
 [package]
 name = "aven-os-app"
 version = "26.7.31-next.1"
-description = "Aven OS desktop shell"
+description = "avenCITY desktop shell"
 authors = ["Aven"]
 edition = "2021"
 rust-version = "1.93"
+
 [lib]
 name = "aven_os_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -31,100 +29,19 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "aven-os-app"
 path = "src/main.rs"
 
-[features]
-# DEFAULT = STT only — iOS-SAFE, builds on BOTH desktop and iOS with no extra flags.
-# WHY only STT: Tauri CLI 2.x has NO `--no-default-features` (only additive `-f/--features`), so
-# anything in `default` is FORCED into the iOS build — and the Tinfoil cloud client + the TTS/
-# embedding onnxruntime dylibs CANNOT ship on iOS. So they must NOT live in `default`; they're
-# opt-in via `desktop-ai` instead. Cloud is still ON out-of-the-box for desktop: every desktop
-# entry point (`dev:app:mac`, `release:app`) passes `--features desktop-ai`, which includes
-# `tinfoil`. Only a bare `cargo build` with no features lacks cloud (CI/quick-check, not how the
-# app runs). The on-device LLM (`local-llama`, llama.cpp/Metal, statically linked) DOES link on
-# iOS, so the iOS scripts add it via `--features local-voice,local-llama`.
-default = ["local-voice"]
-# Desktop (macOS) bundle of on-device AI on top of STT: llama.cpp LLM + MOSS TTS,
-# plus the Tinfoil confidential-cloud chat path (activates only when `TINFOIL_API_KEY`
-# is set in the env — local dev). macOS release + dev pass `--features desktop-ai`.
-# iOS opts into `local-llama` directly (LLM yes, TTS no — see above).
-desktop-ai = ["local-llama", "local-tts", "tinfoil", "brain-gemma"]
-# Real on-device brain embeddings (EmbeddingGemma-300m ONNX via aven-brain/models).
-# Desktop-only for now (needs the bundled onnxruntime dylib, like local-tts).
-brain-gemma = ["aven-brain/models"]
-# Confidential CLOUD chat (Tinfoil enclave, OpenAI-compatible tool calling) — board 0021.
-# Desktop/local-dev only; the webview drives the tool loop via `tinfoil_chat`.
-tinfoil = ["dep:aven-ai", "aven-ai/tinfoil"]
-# On-device voice-note transcription (NVIDIA Parakeet-TDT-0.6b-v3 via the
-# `sherpa-onnx` crate, ONNX/int8). The `sherpa-onnx-sys` build script downloads
-# prebuilt static libs (incl. onnxruntime); iOS uses the vendored arm64 libs.
-local-voice = ["dep:aven-ai", "aven-ai/stt"]
-# On-device text LLM (LFM2.5-8B-A1B ONNX via onnxruntime/`ort`). OFF by default —
-# superseded by `local-llama` (llama.cpp). `ort` uses `load-dynamic`, so the build
-# is light; the onnxruntime dylib ships in the app bundle (still needed for TTS).
-local-llm = ["dep:aven-ai", "aven-ai/llm"]
-# On-device text LLM via llama.cpp (LFM2.5-1.2B GGUF, Metal, statically linked — no dylib).
-# The replacement for `local-llm` (ONNX). ON by default.
-local-llama = ["dep:aven-ai", "aven-ai/llama"]
-# On-device text-to-speech (MOSS-TTS-Nano ONNX via onnxruntime/`ort`). ON by
-# default. Uses the same `ort` load-dynamic onnxruntime dylib (bundled in the app);
-# the tiny (0.1B + 20M) weights download on demand. Artifacts await the export track.
-local-tts = ["dep:aven-ai", "aven-ai/tts"]
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-# Rewrite ggml static archives on iOS (dedupe colliding object basenames) — see build.rs.
-ar = "0.9"
 
+# The shell hosts avenCITY, which is entirely webview-side (three.js). Nothing
+# here needs crypto, storage, sync or on-device AI, so the feature matrix that
+# used to gate them went with the worlds that used it (card 0121).
 [dependencies]
-async-trait = "0.1"
-# On-device AI core (Tauri-free): STT via sherpa-onnx + model download/cache, and
-# the future Gemma/LLM path. The heavy native deps live here, gated by its
-# `stt` / `gemma` features. Only compiled with `local-voice` / `gemma`.
-aven-ai = { path = "../../libs/aven-ai", optional = true, default-features = false }
-aven-db = { version = "26.7.31-next.1", default-features = false, features = ["client-p2p"] }
-aven-brain = { path = "../../libs/aven-brain" }
-aven-caps = { path = "../../libs/aven-caps" }
-aven-p2p = { path = "../../libs/aven-p2p" }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Device-side authenticated fetch to the Fly.io API (board 0055) — the webview can't reach
-# api.fly.io (CSP + CORS), so the `fly_fetch` command proxies it natively.
-reqwest = "0.12"
-sha2 = "0.10"
-tauri-plugin-self = { path = "../../libs/tauri-plugin-self" }
-tauri-plugin-vault = { path = "../../libs/tauri-plugin-vault" }
-tauri-plugin-sandbox-quickjs = { path = "../../libs/tauri-plugin-sandbox-quickjs" }
-tauri-plugin-clipboard-manager = "2"
-tauri-plugin-opener = "2"
-tauri-plugin-google-auth = "0.5"
-base64 = "0.22"
-hex = "0.4"
-p256 = "0.13"
-rand_core = { version = "0.6", features = ["getrandom"] }
 tauri = { version = "2", features = ["macos-private-api", "unstable"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync"] }
-tracing = "0.1"
-uuid = { version = "1", features = ["serde", "v4"] }
-biscuit-auth = { version = "6", features = ["datalog-macro"] }
-chacha20poly1305 = { version = "0.10", features = ["std"] }
-curve25519-dalek = { version = "4", default-features = false, features = ["alloc"] }
-ed25519-dalek = { version = "2", features = ["zeroize"] }
-hkdf = "0.12"
-multibase = "0.9"
-x25519-dalek = { version = "2", features = ["static_secrets"] }
-zeroize = { version = "1", features = ["derive"] }
+tauri-plugin-opener = "2"
 env_logger = "0.11.10"
-tracing-log = "0.2.0"
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 oslog = { version = "0.2", features = ["logger"] }
-
-# Vendored aven-db (jazz2 alpha.50) with AvenOS P2P patches:
-# `QueryManager` write paths used to `.map_err(|_| QueryError::ObjectNotFound(id))`,
-# which collapses BranchNotFound / ParentNotFound / StorageError into a single
-# misleading "ObjectNotFound" string. The vendored copy preserves the real
-# upstream error via `QueryError::InternalError(format!("{:?}", e))` so we can
-# diagnose the "row visible on read, write fails" failure mode. Pin to local
-# path to keep dev iteration fast; review the diff before bumping versions.
-[patch.crates-io]
-aven-db = { path = "../../libs/aven-db" }

@@ -5,7 +5,7 @@
  *   - every workspace package.json (app, libs/*, docs — NOT ARCHIVE/* or root)
  *   - every first-party Cargo.toml `[package].version` (libs/**, app/src-tauri)
  *   - **internal** crate dependency requirements inside those Cargo.toml (so e.g.
- *     `aven-db = { version = "X", … }` tracks aven-db's own version — external deps
+ *     external workspace deps keep their own versions — only our packages are stamped
  *     like tokio are untouched). Without this, bumping a crate past `^0.0.1` breaks
  *     cargo resolution for any sibling that pins it.
  *   - app/src-tauri/tauri.conf.json
