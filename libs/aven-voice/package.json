@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/aven-voice",
 	"private": true,
-	"version": "26.7.18-next.2",
+	"version": "26.7.31-next.1",
 	"type": "module",
 	"description": "avenVOICE — realtime bidirectional voice for avenOS on Gemini Live (Enterprise/Vertex, europe-west1 default). Client engine (AudioWorklets, barge-in, tool-call bridge) + server relay (mounts on the betterauth Bun/Hono server; credentials stay server-side).",
 	"main": "./src/index.ts",

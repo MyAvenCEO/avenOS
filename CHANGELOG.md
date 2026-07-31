@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.18-next.2...v) (2026-07-31)
+
+
+### Features
+
+* brain app icon, avenCITY as a third world, and Select Network on every sign-in ([#62](https://github.com/MyAvenCEO/avenOS/issues/62)) ([769943b](https://github.com/MyAvenCEO/avenOS/commit/769943b265e43b168dcc22e94290753e29a3b02a)), closes [#fff](https://github.com/MyAvenCEO/avenOS/issues/fff)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.18-next.1...v) (2026-07-18)
 
 
