@@ -337,7 +337,7 @@ $effect(() => {
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 	<div
-		class="mx-auto -mt-2 w-full rounded-full bg-primary px-5 py-2.5 text-primary-foreground {typing
+		class="mx-auto -mt-2 w-full rounded-full bg-primary py-2.5 pr-2.5 pl-5 text-primary-foreground {typing
 			? 'max-w-lg'
 			: 'max-w-72'}"
 		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
