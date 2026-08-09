@@ -57,6 +57,15 @@ const START_WINDOWS: usize = 2;
 /// later; the cost of being eager is losing half the question.
 const END_WINDOWS: usize = 40;
 
+/// Audio kept from *before* speech was detected, in samples (512 ms).
+///
+/// Detection is necessarily late: the windows that prove someone is talking
+/// have already gone by, and Silero needs a moment of signal before its
+/// probability climbs at all. Without this the utterance began ~100-200 ms in,
+/// which is exactly where the first word's opening consonant lives — so the
+/// first word arrived clipped or missing, every other sentence.
+const PREROLL: usize = 8192;
+
 /// While the assistant is talking, speech has to be much more convincing.
 ///
 /// `echoCancellation` is requested but does not hold in this webview, so the
@@ -97,6 +106,9 @@ struct Engine {
 	run_silence: usize,
 	/// Loudest sample in the current utterance, for the normalization gain.
 	peak: f32,
+	/// The most recent [`PREROLL`] samples, kept whether or not anyone is
+	/// talking, so an utterance can start slightly before it was noticed.
+	preroll: Vec<f32>,
 }
 
 /// What one push of microphone audio produced.
@@ -162,6 +174,7 @@ impl Engine {
 			run_speech: 0,
 			run_silence: 0,
 			peak: 0.0,
+			preroll: Vec::with_capacity(PREROLL * 2),
 		})
 	}
 
@@ -291,7 +304,16 @@ fn push_into(engine: &mut Engine, pcm: &[f32], echo_risk: bool) -> Result<AsrEve
 			event.started = true;
 			engine.model.reset();
 			engine.peak = 0.0;
-			log::debug!(target: "avenos::asr", "speech started");
+			// Rewind: the utterance starts where the sound did, not where it was
+			// noticed. Without this the first word loses its opening consonant.
+			for sample in &engine.preroll {
+				engine.peak = engine.peak.max(sample.abs());
+			}
+			engine.asr_buf.extend_from_slice(&engine.preroll);
+			log::debug!(
+				target: "avenos::asr",
+				"speech started ({} ms of pre-roll)", engine.preroll.len() * 1000 / 16_000
+			);
 		}
 
 		// Keep feeding the recognizer through short pauses; only a closed
@@ -301,6 +323,14 @@ fn push_into(engine: &mut Engine, pcm: &[f32], echo_risk: bool) -> Result<AsrEve
 				engine.peak = engine.peak.max(sample.abs());
 			}
 			engine.asr_buf.extend_from_slice(&window);
+		}
+
+		// Kept for every window, talking or not — this is what the next utterance
+		// will rewind into. Appended after the checks above so it never contains
+		// the window currently being handled.
+		engine.preroll.extend_from_slice(&window);
+		if engine.preroll.len() > PREROLL {
+			engine.preroll.drain(..engine.preroll.len() - PREROLL);
 		}
 
 		if engine.speaking && engine.run_silence >= END_WINDOWS {
@@ -338,6 +368,7 @@ pub async fn asr_reset(state: State<'_, AsrState>) -> Result<(), String> {
 		engine.run_speech = 0;
 		engine.run_silence = 0;
 		engine.peak = 0.0;
+		engine.preroll.clear();
 	}
 	Ok(())
 }
