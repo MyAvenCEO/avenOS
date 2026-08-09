@@ -28,13 +28,13 @@ const chat = chatActor.core
 const listener = listenerActor.core
 
 /**
- * Which surface fills the middle of the screen: the skills workspace, or the
- * conversation. One Skills tab rather than one per skill — which skill it
- * shows is meant to follow the conversation automatically later; today it is
- * the only skill there is. The workspace is the default; chat is how work
- * gets asked for.
+ * Which surface fills the middle of the screen. Views are exactly that in
+ * the actor world: renderings over actor state, owning nothing — the work
+ * items view is the first. Actors is the registry itself; Chat is how work
+ * gets asked for. The view is the default because the workspace is the
+ * point.
  */
-let tab = $state<'skills' | 'actors' | 'chat'>('skills')
+let tab = $state<'views' | 'actors' | 'chat'>('views')
 
 /**
  * Voice is the default, except where there is no voice.
@@ -173,7 +173,7 @@ $effect(() => {
 	<header class="flex flex-col items-center">
 		<!-- Compact tabs, centred: the skills workspace and the conversation. -->
 		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
-			{#each [{ id: 'skills' as const, label: 'Skills' }, { id: 'actors' as const, label: 'Actors' }, { id: 'chat' as const, label: 'Chat' }] as t (t.id)}
+			{#each [{ id: 'views' as const, label: 'Views' }, { id: 'actors' as const, label: 'Actors' }, { id: 'chat' as const, label: 'Chat' }] as t (t.id)}
 				<button
 					type="button"
 					onclick={() => {
