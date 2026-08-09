@@ -151,7 +151,15 @@ export class Speaker {
 		void this.#drain()
 	}
 
-	/** One utterance at a time, so sentences do not overlap. */
+	/**
+	 * Speak the queue, one sentence at a time — but synthesize ahead.
+	 *
+	 * Synthesizing and playing in strict sequence put a synthesis-shaped hole
+	 * between every pair of sentences, because the next one was not even started
+	 * until the previous had finished playing. Since a sentence takes less time
+	 * to make than to say, starting the next one immediately hides that work
+	 * entirely behind the current sentence's audio.
+	 */
 	async #drain(): Promise<void> {
 		if (this.#draining) return
 		this.#draining = true
@@ -159,10 +167,15 @@ export class Speaker {
 
 		try {
 			const generation = this.#generation
-			while (this.#queue.length > 0 && generation === this.#generation) {
-				const next = this.#queue.shift()
-				if (next === undefined) break
-				await this.#say(next)
+			// Already in flight while the sentence before it is still playing.
+			let ahead: Promise<AudioBuffer | null> | null = null
+
+			while ((this.#queue.length > 0 || ahead) && generation === this.#generation) {
+				const current = ahead ?? this.#synthesize(this.#queue.shift() ?? '')
+				ahead = this.#queue.length > 0 ? this.#synthesize(this.#queue.shift() ?? '') : null
+
+				const buffer = await current
+				if (buffer && generation === this.#generation) await this.#play(buffer)
 			}
 		} catch (err) {
 			this.failure = err instanceof Error ? err.message : String(err)
@@ -172,7 +185,10 @@ export class Speaker {
 		}
 	}
 
-	async #say(text: string): Promise<void> {
+	/** Turn one sentence into audio, or nothing if it was interrupted meanwhile. */
+	async #synthesize(text: string): Promise<AudioBuffer | null> {
+		if (text.trim() === '') return null
+
 		// `resumeAudio()` normally created this from the send click; a reply that
 		// somehow arrives first still gets a context rather than being dropped.
 		this.#context ??= new AudioContext()
@@ -182,12 +198,18 @@ export class Speaker {
 		// The command answers with a WAV as raw bytes rather than a JSON array of
 		// a few hundred thousand floats, so decoding is the browser's own job.
 		const wav = await invoke<ArrayBuffer>('tts_speak', { text, lang: 'de' })
-		if (generation !== this.#generation) return
-		const buffer = await context.decodeAudioData(wav)
+		if (generation !== this.#generation) return null
 
+		const buffer = await context.decodeAudioData(wav)
 		// Interrupted while this was being made. Play it and the user would hear
 		// the sentence they just talked over.
-		if (generation !== this.#generation) return
+		return generation === this.#generation ? buffer : null
+	}
+
+	/** Play one buffer, resolving when it has finished. */
+	async #play(buffer: AudioBuffer): Promise<void> {
+		const context = this.#context
+		if (!context) return
 
 		await new Promise<void>((resolve) => {
 			const source = context.createBufferSource()

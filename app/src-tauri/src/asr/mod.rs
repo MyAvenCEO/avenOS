@@ -49,13 +49,13 @@ const SPEECH_THRESHOLD: f32 = 0.5;
 /// ~64 ms of speech opens an utterance. Short, because this is what gates
 /// barge-in and a slow open makes interrupting feel unresponsive.
 const START_WINDOWS: usize = 2;
-/// ~1.3 s of quiet closes it.
+/// ~1 s of quiet closes it.
 ///
-/// Was 800 ms, which fired in the pause people leave before the last clause of
-/// a sentence — utterances were cut at "…ist es richtig" and the rest was lost.
-/// The cost of being generous here is only that the reply starts a little
-/// later; the cost of being eager is losing half the question.
-const END_WINDOWS: usize = 40;
+/// 800 ms fired in the pause people leave before the last clause of a sentence,
+/// and utterances were cut at "…ist es richtig". 1.3 s fixed that but is felt
+/// directly as delay, since nothing happens at all until this elapses. A second
+/// keeps the clause intact while giving a third of it back.
+const END_WINDOWS: usize = 31;
 
 /// Audio kept from *before* speech was detected, in samples (512 ms).
 ///
@@ -212,10 +212,12 @@ impl Engine {
 			let tail = self.normalized(&tail);
 			self.model.transcribe_chunk(&tail)?;
 		}
-		// Silence flushes whatever the decoder is still holding on to.
-		for _ in 0..3 {
-			self.model.transcribe_chunk(&vec![0.0; ASR_CHUNK])?;
-		}
+		// One chunk of silence to flush whatever the decoder is still holding.
+		// Upstream's batch example pushes three, but each is a full 560 ms
+		// inference standing between the user finishing their sentence and the
+		// reply beginning, and the extra two add nothing that the padded tail
+		// above has not already flushed.
+		self.model.transcribe_chunk(&vec![0.0; ASR_CHUNK])?;
 		Ok(self.model.get_transcript())
 	}
 }
