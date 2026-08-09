@@ -176,3 +176,83 @@ describe('execution engine', () => {
 		expect(result.wire).toContain('kaputt')
 	})
 })
+
+describe('backward chaining (SLD)', () => {
+	const contract = (id: string, requires: string[], produces: string[]) =>
+		new Actor({ id, name: id, description: '', tags: [], methods: [], requires, produces })
+
+	test('a chain proves down to external facts', () => {
+		const bus = new MessageBus()
+		bus.register(contract('chat', ['utterance(T)'], ['reply(R)']))
+		const proof = bus.prove('reply(R)')
+		expect(proof.satisfied).toBe(true)
+		expect(proof.actor).toBe('chat')
+		// utterance has no producer — an external fact, satisfied as an input.
+		expect(proof.children[0].external).toBe(true)
+		expect(proof.children[0].satisfied).toBe(true)
+	})
+
+	test('backtracking: when the first producer cannot be satisfied, the next wins', () => {
+		const bus = new MessageBus()
+		// Producer 1 needs magic — provable only via a producer that needs the
+		// impossible not(exists) while exists IS produced. Producer 2 needs an
+		// external fact and succeeds.
+		bus.register(contract('exists-maker', [], ['exists(E)']))
+		bus.register(contract('broken', ['not(exists(E))'], ['goal(G)']))
+		bus.register(contract('working', ['fact(F)'], ['goal(G)']))
+		const proof = bus.prove('goal(G)')
+		expect(proof.satisfied).toBe(true)
+		expect(proof.actor).toBe('working')
+	})
+
+	test('negation as failure: not(p) holds exactly when nothing produces p', () => {
+		const bus = new MessageBus()
+		bus.register(contract('a', ['not(missing(M))'], ['ok(A)']))
+		expect(bus.prove('ok(A)').satisfied).toBe(true)
+		// Now something produces missing — the negation collapses.
+		bus.register(contract('m', [], ['missing(M)']))
+		expect(bus.prove('ok(A)').satisfied).toBe(false)
+		expect(bus.unsatisfied('ok(A)')).toBe(true)
+	})
+
+	test('cycles terminate and read coinductively', () => {
+		const bus = new MessageBus()
+		bus.register(contract('hen', ['egg(E)'], ['chicken(C)']))
+		bus.register(contract('egg', ['chicken(C)'], ['egg(E)']))
+		expect(bus.prove('chicken(C)').satisfied).toBe(true)
+	})
+})
+
+describe('supervision', () => {
+	test('a handler that throws once is retried and succeeds silently', async () => {
+		let calls = 0
+		const actor = new Actor(
+			{ id: 'flaky', name: 'flaky', description: '', tags: [], methods: [] },
+			{
+				work: () => {
+					calls++
+					if (calls === 1) throw new Error('transient')
+					return { record: '{"ok":true}', wire: 'geschafft' }
+				}
+			}
+		)
+		const result = await actor.deliver('work', {})
+		expect(result.wire).toBe('geschafft')
+		expect(actor.failures).toBe(0)
+	})
+
+	test('a handler that keeps throwing is recorded after the retry', async () => {
+		const actor = new Actor(
+			{ id: 'dead', name: 'dead', description: '', tags: [], methods: [] },
+			{
+				work: () => {
+					throw new Error('permanent')
+				}
+			}
+		)
+		const result = await actor.deliver('work', {})
+		expect(JSON.parse(result.record).ok).toBe(false)
+		expect(actor.failures).toBe(1)
+		expect(actor.lastError).toContain('permanent')
+	})
+})

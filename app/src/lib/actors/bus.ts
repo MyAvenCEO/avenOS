@@ -164,6 +164,89 @@ export class MessageBus {
 	}
 
 	/**
+	 * Backward chaining: prove a goal SLD-style over the registry.
+	 *
+	 * To prove p: find the actors whose produces unify with p; for each
+	 * candidate (in registry order — trying the next on failure IS the
+	 * backtracking), recursively prove every requirement. A requirement no
+	 * actor produces is an external fact — satisfied as an input from the
+	 * world. `not(p)` is negation-as-failure: satisfied exactly when p has no
+	 * producer. Cycles count as satisfied-by-assumption (the coinductive
+	 * reading) so recursion terminates.
+	 *
+	 * Purely static — nothing runs. The tree is the execution PLAN: walk it
+	 * postorder and you have the message order; the proof tree is the trace
+	 * the runtime will one day emit.
+	 */
+	prove(goal: string, visited: Set<string> = new Set()): ProofStep {
+		const naf = goal.trim().match(/^not\((.+)\)$/)
+		if (naf) {
+			const inner = naf[1]
+			const producers = this.actors().filter((a) =>
+				a.produces.some((p) => functor(p) === functor(inner))
+			)
+			return {
+				predicate: goal,
+				actor: null,
+				external: false,
+				negated: true,
+				satisfied: producers.length === 0,
+				children: []
+			}
+		}
+
+		const name = functor(goal)
+		if (visited.has(name)) {
+			return {
+				predicate: goal,
+				actor: null,
+				external: false,
+				negated: false,
+				satisfied: true,
+				children: []
+			}
+		}
+
+		const producers = this.actors().filter((a) => a.produces.some((p) => functor(p) === name))
+		if (producers.length === 0) {
+			return {
+				predicate: goal,
+				actor: null,
+				external: true,
+				negated: false,
+				satisfied: true,
+				children: []
+			}
+		}
+
+		const nextVisited = new Set(visited)
+		nextVisited.add(name)
+		let lastAttempt: ProofStep | null = null
+		for (const producer of producers) {
+			const children = producer.requires.map((r) => this.prove(r, nextVisited))
+			const attempt: ProofStep = {
+				predicate: goal,
+				actor: producer.manifest.id,
+				external: false,
+				negated: false,
+				satisfied: children.every((c) => c.satisfied),
+				children
+			}
+			if (attempt.satisfied) return attempt
+			lastAttempt = attempt
+		}
+		return lastAttempt as ProofStep
+	}
+
+	/**
+	 * A goal is unerfüllt when its proof fails — the provability check the
+	 * old flow templates carried, now against the live registry.
+	 */
+	unsatisfied(goal: string): boolean {
+		return !this.prove(goal).satisfied
+	}
+
+	/**
 	 * Solver stages for layout: actors whose requirements are external facts
 	 * fire first; everyone else joins as their inputs become available.
 	 */
@@ -189,6 +272,22 @@ export class MessageBus {
 		}
 		return result
 	}
+}
+
+/**
+ * One node of a proof tree: the goal predicate, who was chosen to produce
+ * it, and the sub-proofs of that producer's requirements.
+ */
+export interface ProofStep {
+	predicate: string
+	/** The producing actor, or null when the goal is external or unproven. */
+	actor: string | null
+	/** external: nobody produces it, so it must arrive from outside — a fact. */
+	external: boolean
+	/** negation-as-failure: goal of the form not(p) — satisfied iff p is unprovable. */
+	negated: boolean
+	satisfied: boolean
+	children: ProofStep[]
 }
 
 /** The app's one bus. Tests build their own. */

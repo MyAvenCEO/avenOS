@@ -10,7 +10,7 @@ import { SPARKS, STATUS_LABEL, type WorkItemStatus, type WorkItemsActor } from '
  * line, title, chip row — all in the app's cream world rather than the
  * reference's gray one.
  */
-const { store }: { store: WorkItemsActor } = $props()
+const { actor }: { actor: WorkItemsActor } = $props()
 
 let newWorkItem = $state('')
 /** Card id in flight during a drag, so columns know what is being dropped. */
@@ -29,30 +29,30 @@ const PILL: Record<WorkItemStatus, string> = {
 	done: 'bg-status-success/10 text-status-success'
 }
 
-const done = $derived(store.visible.filter((t) => t.status === 'done').length)
+const done = $derived(actor.visible.filter((t) => t.status === 'done').length)
 const pct = $derived(
-	store.visible.length === 0 ? 0 : Math.round((done / store.visible.length) * 100)
+	actor.visible.length === 0 ? 0 : Math.round((done / actor.visible.length) * 100)
 )
 
 function addWorkItem(event: SubmitEvent) {
 	event.preventDefault()
 	if (newWorkItem.trim() === '') return
-	store.create(newWorkItem)
+	actor.create(newWorkItem)
 	newWorkItem = ''
 }
 
 function drop(status: WorkItemStatus) {
-	if (dragging) store.update(dragging, { status })
+	if (dragging) actor.update(dragging, { status })
 	dragging = null
 }
 
 /** One step left or right through the columns, for mouse-less moves. */
 function shift(id: string, by: -1 | 1) {
-	const todo = store.byId(id)
+	const todo = actor.byId(id)
 	if (!todo) return
 	const at = COLUMNS.findIndex((c) => c.status === todo.status)
 	const next = COLUMNS[at + by]
-	if (next) store.update(id, { status: next.status })
+	if (next) actor.update(id, { status: next.status })
 }
 </script>
 
@@ -95,7 +95,7 @@ function shift(id: string, by: -1 | 1) {
 	     white check when done. -->
 	<button
 		type="button"
-		onclick={() => store.toggle(todo.id)}
+		onclick={() => actor.toggle(todo.id)}
 		aria-label={todo.status === 'done' ? 'Wieder öffnen' : 'Abhaken'}
 		class="flex size-5 shrink-0 items-center justify-center rounded-full transition-colors {todo.status ===
 		'done'
@@ -120,7 +120,7 @@ function shift(id: string, by: -1 | 1) {
 	<div class="flex items-center justify-between gap-3">
 		<h2 class="font-semibold text-[15px]">Aufgaben</h2>
 
-		{#if store.visible.length > 0}
+		{#if actor.visible.length > 0}
 			<!-- The reference card's progress grammar: check, count, bar, percent. -->
 			<span
 				class="flex items-center gap-2.5 rounded-full bg-[#fffdf7] px-3.5 py-1.5 text-[13px] shadow-[0_1px_3px_rgba(30,41,59,0.08)]"
@@ -135,7 +135,7 @@ function shift(id: string, by: -1 | 1) {
 						stroke-linejoin="round"
 					/>
 				</svg>
-				<span class="font-medium">{done} von {store.visible.length}</span>
+				<span class="font-medium">{done} von {actor.visible.length}</span>
 				<span class="h-1.5 w-24 overflow-hidden rounded-full bg-foreground/10">
 					<span
 						class="block h-full rounded-full bg-status-success transition-[width]"
@@ -153,9 +153,9 @@ function shift(id: string, by: -1 | 1) {
 		<span
 			class="rounded-full bg-[#fffdf7] px-3 py-1.5 text-foreground/40 text-xs shadow-[0_1px_3px_rgba(30,41,59,0.08)]"
 		>
-			{SPARKS.find((s) => s.id === store.active)?.name}
+			{SPARKS.find((s) => s.id === actor.active)?.name}
 			·
-			{store.view === 'board' ? 'Board' : 'Liste'}
+			{actor.view === 'board' ? 'Board' : 'Liste'}
 		</span>
 	</div>
 
@@ -167,9 +167,9 @@ function shift(id: string, by: -1 | 1) {
 		>
 	</form>
 
-	{#if store.view === 'list'}
+	{#if actor.view === 'list'}
 		<ul class="min-h-0 flex-1 space-y-2 overflow-y-auto">
-			{#each store.visible as todo (todo.id)}
+			{#each actor.visible as todo (todo.id)}
 				<li
 					class="group flex items-center gap-3 rounded-2xl border border-foreground/5 bg-[#fffdf7] px-4 py-3 text-sm shadow-[0_1px_3px_rgba(30,41,59,0.06),0_4px_12px_rgba(30,41,59,0.04)] transition-shadow hover:shadow-[0_2px_6px_rgba(30,41,59,0.08),0_8px_20px_rgba(30,41,59,0.06)]"
 				>
@@ -185,7 +185,7 @@ function shift(id: string, by: -1 | 1) {
 					     one step around open → doing → done. -->
 					<button
 						type="button"
-						onclick={() => store.cycle(todo.id)}
+						onclick={() => actor.cycle(todo.id)}
 						title="Status weiterschalten"
 						class="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-xs transition-transform active:scale-95 {PILL[
 							todo.status
@@ -196,7 +196,7 @@ function shift(id: string, by: -1 | 1) {
 					</button>
 					<button
 						type="button"
-						onclick={() => store.remove(todo.id)}
+						onclick={() => actor.remove(todo.id)}
 						class="shrink-0 text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
 						aria-label="Löschen"
 					>
@@ -232,12 +232,12 @@ function shift(id: string, by: -1 | 1) {
 						</span>
 						<h3 class="font-medium text-[13px] text-foreground/60">{column.label}</h3>
 						<span class="ml-auto text-foreground/30 text-xs">
-							{store.visible.filter((t) => t.status === column.status).length}
+							{actor.visible.filter((t) => t.status === column.status).length}
 						</span>
 					</div>
 
 					<ul class="min-h-0 flex-1 space-y-2 overflow-y-auto">
-						{#each store.visible.filter((t) => t.status === column.status) as todo (todo.id)}
+						{#each actor.visible.filter((t) => t.status === column.status) as todo (todo.id)}
 							{@const spark = SPARKS.find((sp) => sp.id === todo.spark)}
 							<li
 								draggable="true"
@@ -255,7 +255,7 @@ function shift(id: string, by: -1 | 1) {
 									<span class="font-mono uppercase">{todo.id.slice(0, 6)}</span>
 									<button
 										type="button"
-										onclick={() => store.remove(todo.id)}
+										onclick={() => actor.remove(todo.id)}
 										class="ml-auto opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
 										aria-label="Löschen"
 									>

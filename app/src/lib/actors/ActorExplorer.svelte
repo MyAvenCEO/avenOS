@@ -1,6 +1,6 @@
 <script lang="ts">
 import { type Actor, functor } from './actor'
-import { bus } from './bus'
+import { bus, type ProofStep } from './bus'
 
 /**
  * The actor explorer: every actor in the registry on the left, everything
@@ -40,6 +40,20 @@ const feeders = $derived(bus.edges().filter((e) => e.to === selected.manifest.id
 const fed = $derived(bus.edges().filter((e) => e.from === selected.manifest.id))
 const instance = $derived(selected.instanceState())
 
+// ---- the prover: pick any predicate as a goal, get its SLD proof tree
+let goal = $state('')
+let proof = $state<ProofStep | null>(null)
+
+function prove(g: string) {
+	goal = g
+	proof = bus.prove(g)
+}
+
+function proveCustom(event: SubmitEvent) {
+	event.preventDefault()
+	if (goal.trim() !== '') proof = bus.prove(goal.trim())
+}
+
 // ---- the interview
 let question = $state('')
 let answer = $state('')
@@ -62,6 +76,43 @@ async function ask(event: SubmitEvent) {
 	<span class="rounded-md px-1.5 py-0.5 font-mono text-[0.6875rem] {hue(predicate)}">
 		{predicate}
 	</span>
+{/snippet}
+
+{#snippet proofNode(step: ProofStep)}
+	<!-- One node of the proof tree: goal, verdict, and how it was grounded. -->
+	<div class="flex flex-col gap-1">
+		<div class="flex flex-wrap items-center gap-1.5">
+			<span
+				class="{step.satisfied ? 'text-status-success' : 'text-status-error'} font-mono text-xs"
+			>
+				{step.satisfied ? '✓' : '✗'}
+			</span>
+			{@render pill(step.predicate)}
+			{#if step.negated}
+				<span class="rounded-md bg-foreground/5 px-1.5 py-0.5 text-[0.625rem] text-foreground/50">
+					negation as failure
+				</span>
+			{:else if step.external}
+				<span class="rounded-md bg-foreground/5 px-1.5 py-0.5 text-[0.625rem] text-foreground/50">
+					externes Faktum
+				</span>
+			{:else if step.actor}
+				<span class="text-[0.6875rem] text-foreground/50">
+					⊢ {bus.get(step.actor)?.manifest.name ?? step.actor}
+				</span>
+			{/if}
+			{#if !step.satisfied}
+				<span class="text-[0.6875rem] text-status-error">unerfüllt</span>
+			{/if}
+		</div>
+		{#if step.children.length > 0}
+			<div class="ml-4 flex flex-col gap-1 border-foreground/10 border-l pl-3">
+				{#each step.children as child, i (`${child.predicate}${i}`)}
+					{@render proofNode(child)}
+				{/each}
+			</div>
+		{/if}
+	</div>
 {/snippet}
 
 <div class="flex min-h-0 flex-1 gap-5 text-foreground">
@@ -96,6 +147,33 @@ async function ask(event: SubmitEvent) {
 	</nav>
 
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto pb-2">
+		<!-- The solver's forward reading of the whole registry: who can fire
+		     first, who becomes possible after — stages, derived like all else. -->
+		<div class="flex flex-wrap items-center gap-2 text-xs">
+			<span class="text-foreground/40">Stufen:</span>
+			{#each bus.stages() as stage, i (`s${i}`)}
+				{#if i > 0}
+					<span class="text-foreground/25">→</span>
+				{/if}
+				<span class="flex gap-1 rounded-full border border-foreground/10 px-2 py-0.5">
+					{#each stage as a (a.manifest.id)}
+						<button
+							type="button"
+							onclick={() => {
+								selected = a
+								answer = ''
+							}}
+							class="transition-opacity {selected.manifest.id === a.manifest.id
+								? ''
+								: 'opacity-50 hover:opacity-100'}"
+						>
+							{a.manifest.name}
+						</button>
+					{/each}
+				</span>
+			{/each}
+		</div>
+
 		<!-- ------------------------------------------------ TEMPLATE (the class) -->
 		<section
 			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
@@ -229,6 +307,49 @@ async function ask(event: SubmitEvent) {
 					{/each}
 				</div>
 			</div>
+		</section>
+
+		<!-- --------------------------------- BEWEIS: SLD backward chaining, live -->
+		<section
+			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+		>
+			<div class="flex flex-wrap items-center gap-2 pb-2">
+				<h3 class="font-semibold text-sm">Beweis</h3>
+				<span class="text-[0.6875rem] text-foreground/40">
+					Ziel wählen — der Solver sucht rückwärts Produzenten und beweist deren Bedarf, mit
+					Backtracking; not(…) gilt als Negation-as-Failure.
+				</span>
+			</div>
+			<div class="flex flex-wrap items-center gap-1.5 pb-2">
+				{#each selected.produces as p, i (`g${i}`)}
+					<button
+						type="button"
+						onclick={() => prove(p)}
+						class="rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[0.6875rem] transition-colors hover:border-primary/40 {goal ===
+						p
+							? 'border-primary/50'
+							: ''}"
+					>
+						⊢ {p}
+					</button>
+				{/each}
+				<form onsubmit={proveCustom} class="flex items-center gap-1.5">
+					<input
+						bind:value={goal}
+						placeholder="eigenes Ziel, z.B. reply(R) oder not(x(Y))"
+						class="w-56 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
+					>
+					<button
+						type="submit"
+						class="rounded-full bg-primary px-3 py-1 text-[0.6875rem] text-primary-foreground"
+					>
+						beweisen
+					</button>
+				</form>
+			</div>
+			{#if proof}
+				{@render proofNode(proof)}
+			{/if}
 		</section>
 
 		<!-- ----------------------------------------------- ask(): the interview -->

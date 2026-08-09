@@ -79,6 +79,17 @@ export function manifestProse(m: Manifest): string {
 export class Actor {
 	readonly manifest: Manifest
 	#handlers: Record<string, Handler>
+	/**
+	 * The actor's face — the UI component that renders it, colocated with the
+	 * actor the way Abject gives every object its own window. Views are
+	 * derived from the registry: an actor with a face appears on the Views
+	 * surface, one without doesn't. Typed loosely because Svelte component
+	 * variance fights any precise annotation; the render site casts.
+	 */
+	face?: unknown
+	/** Supervision bookkeeping: how often handlers died, and the last reason. */
+	failures = 0
+	lastError: string | null = null
 
 	constructor(manifest: Manifest, handlers: Record<string, Handler> = {}) {
 		this.manifest = manifest
@@ -156,12 +167,22 @@ export class Actor {
 			})
 			return { record, wire: `${this.manifest.id} kennt ${method} nicht` }
 		}
-		try {
-			return await handler(payload)
-		} catch (err) {
-			const reason = err instanceof Error ? err.message : String(err)
-			const record = JSON.stringify({ ok: false, error: `${method} scheiterte: ${reason}` })
-			return { record, wire: `${method} scheiterte: ${reason}` }
+		// Supervision as backtracking, the runtime half: a handler that throws
+		// gets one fresh attempt — the Erlang restart in miniature. Only after
+		// the retry also dies is the failure recorded and returned as a
+		// structured result; ok:false results are answers, not crashes, and are
+		// never retried.
+		for (let attempt = 0; ; attempt++) {
+			try {
+				return await handler(payload)
+			} catch (err) {
+				const reason = err instanceof Error ? err.message : String(err)
+				if (attempt === 0) continue
+				this.failures++
+				this.lastError = `${method}: ${reason}`
+				const record = JSON.stringify({ ok: false, error: `${method} scheiterte: ${reason}` })
+				return { record, wire: `${method} scheiterte: ${reason}` }
+			}
 		}
 	}
 

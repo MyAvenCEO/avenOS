@@ -3,10 +3,11 @@ import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
 import ActorExplorer from '$lib/actors/ActorExplorer.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
+import { bus } from '$lib/actors/bus'
 import { chatActor, summarizeCall } from '$lib/actors/chat.actor.svelte'
+import { facesBound } from '$lib/actors/faces'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
-import WorkItemsView from '$lib/actors/WorkItemsView.svelte'
 import { workItems } from '$lib/actors/workitems.svelte'
 
 /**
@@ -296,11 +297,16 @@ $effect(() => {
 			<ActorExplorer />
 		</div>
 	{:else}
-		<!-- The skills workspace. Today that is the todo list; the plan is for
-		     this surface to switch between skill views as the conversation moves.
-		     3xl rather than lg: the board lays three columns side by side. -->
-		<div class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-			<WorkItemsView store={workItems} />
+		<!-- Views, derived from the registry: every actor that carries a face
+		     renders it here. Nothing is listed by hand — register an actor with
+		     a face and it appears (facesBound imports the bindings). -->
+		<div class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-4">
+			{#if facesBound}
+				{#each bus.actors().filter((a) => a.face) as a (a.manifest.id)}
+					{@const Face = a.face as import('svelte').Component<{ actor: typeof a }>}
+					<Face actor={a} />
+				{/each}
+			{/if}
 		</div>
 	{/if}
 
