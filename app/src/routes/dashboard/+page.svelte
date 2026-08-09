@@ -77,7 +77,7 @@ const chat = new Chat(
  * the only skill there is. The workspace is the default; chat is how work
  * gets asked for.
  */
-let tab = $state<'skills' | 'chat'>('skills')
+let tab = $state<'skills' | 'flows' | 'chat'>('skills')
 
 const listener = new Listener({
 	// Barge-in. This fires on voice activity alone, ~64ms in, with nothing yet
@@ -232,10 +232,10 @@ $effect(() => {
 </svelte:head>
 
 <main class="mx-auto flex min-h-0 min-w-0 max-w-6xl flex-1 flex-col gap-4 p-4 pb-2 sm:p-6 sm:pb-3">
-	<header class="flex flex-col items-center gap-1.5">
+	<header class="flex flex-col items-center">
 		<!-- Compact tabs, centred: the skills workspace and the conversation. -->
 		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
-			{#each [{ id: 'skills' as const, label: 'Skills' }, { id: 'chat' as const, label: 'Chat' }] as t (t.id)}
+			{#each [{ id: 'skills' as const, label: 'Skills' }, { id: 'flows' as const, label: 'Flows' }, { id: 'chat' as const, label: 'Chat' }] as t (t.id)}
 				<button
 					type="button"
 					onclick={() => {
@@ -249,8 +249,6 @@ $effect(() => {
 				</button>
 			{/each}
 		</nav>
-		<!-- Where you are, as a quiet stamp under the navigation. -->
-		<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Dashboard</p>
 	</header>
 
 	{#if tab === 'chat'}
@@ -352,6 +350,13 @@ $effect(() => {
 					</p>
 				{/if}
 			</div>
+		</div>
+	{:else if tab === 'flows'}
+		<!-- Flows: reserved. The tab exists so the shape of the app is already
+		     true; the surface follows. -->
+		<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2">
+			<p class="font-semibold text-lg">Flows</p>
+			<p class="text-foreground/40 text-sm">Coming soon.</p>
 		</div>
 	{:else}
 		<!-- The skills workspace. Today that is the todo list; the plan is for

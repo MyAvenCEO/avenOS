@@ -248,7 +248,7 @@ function shift(id: string, by: -1 | 1) {
 								ondragend={() => {
 									dragging = null
 								}}
-								class="group cursor-grab rounded-xl border border-foreground/5 bg-[#fffdf7] px-3.5 py-3 shadow-[0_1px_3px_rgba(30,41,59,0.06),0_4px_12px_rgba(30,41,59,0.04)] transition-shadow hover:shadow-[0_2px_6px_rgba(30,41,59,0.08),0_8px_20px_rgba(30,41,59,0.06)] active:cursor-grabbing"
+								class="group cursor-grab rounded-xl border border-foreground/5 bg-[#fffdf7] px-3.5 py-3 active:cursor-grabbing"
 							>
 								<!-- The reference card grammar: id line, then title, then chips. -->
 								<div class="flex items-center gap-1.5 text-foreground/35 text-xs">
