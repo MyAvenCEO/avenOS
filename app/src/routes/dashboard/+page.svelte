@@ -72,11 +72,13 @@ const chat = new Chat(
 )
 
 /**
- * Which surface fills the middle of the screen: a skill's view, or the
- * conversation. The skills are the workspace and the chat is how work gets
- * asked for, so the first skill is the default.
+ * Which surface fills the middle of the screen: the skills workspace, or the
+ * conversation. One Skills tab rather than one per skill — which skill it
+ * shows is meant to follow the conversation automatically later; today it is
+ * the only skill there is. The workspace is the default; chat is how work
+ * gets asked for.
  */
-let tab = $state<string>('todos')
+let tab = $state<'skills' | 'chat'>('skills')
 
 const listener = new Listener({
 	// Barge-in. This fires on voice activity alone, ~64ms in, with nothing yet
@@ -234,11 +236,11 @@ $effect(() => {
 	<header class="relative flex items-center justify-between gap-4">
 		<h1 class="text-2xl">Dashboard</h1>
 
-		<!-- Compact tabs, dead centre: one per skill, plus the conversation. -->
+		<!-- Compact tabs, dead centre: the skills workspace and the conversation. -->
 		<nav
 			class="-translate-x-1/2 absolute left-1/2 flex gap-0.5 rounded-full border border-border p-0.5 text-xs"
 		>
-			{#each [...skills.map((s) => ({ id: s.id, label: s.label })), { id: 'chat', label: 'Chat' }] as t (t.id)}
+			{#each [{ id: 'skills' as const, label: 'Skills' }, { id: 'chat' as const, label: 'Chat' }] as t (t.id)}
 				<button
 					type="button"
 					onclick={() => {
@@ -275,6 +277,7 @@ $effect(() => {
 					Clear
 				</button>
 			{/if}
+			<a href="/dashboard/settings" class="underline underline-offset-4">Einstellungen</a>
 			<a href="/" class="underline underline-offset-4">Back</a>
 		</div>
 	</header>
@@ -354,7 +357,9 @@ $effect(() => {
 				</p>
 			{/if}
 		</div>
-	{:else if tab === 'todos'}
+	{:else}
+		<!-- The skills workspace. Today that is the todo list; the plan is for
+		     this surface to switch between skill views as the conversation moves. -->
 		<div class="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col">
 			<TodosView todos={todosSkill.store} />
 		</div>
@@ -368,7 +373,16 @@ $effect(() => {
 	     panel below it narrows instead, holding only a status word and two
 	     buttons. -->
 	<div class="mx-auto flex min-h-16 w-full max-w-lg items-end justify-center">
-		{#if activity.current}
+		{#if listener.partial !== '' && tab !== 'chat'}
+			<!-- What is being heard, as it is being heard — the live recognizer
+			     output, so you can watch your words arrive while the list view is
+			     open. Dashed like the transcript's own pending bubble. -->
+			<div
+				class="w-full rounded-xl border border-border border-dashed bg-surface-card px-4 py-3 text-xs opacity-70"
+			>
+				{listener.partial}
+			</div>
+		{:else if activity.current}
 			{@const entry = activity.current}
 			<div
 				class="flex w-full gap-2 rounded-xl border border-border bg-surface-card px-4 py-3 text-xs"

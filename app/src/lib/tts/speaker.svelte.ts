@@ -1,5 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { settings } from '$lib/settings.svelte'
 
 /**
  * Speaks the assistant's reply out loud, in German, while it is still being
@@ -311,7 +312,9 @@ export class Speaker {
 		this.inflight++
 		let wav: ArrayBuffer
 		try {
-			wav = await invoke<ArrayBuffer>('tts_speak', { text, lang: 'de' })
+			// The voice is read here, per sentence, so a change in the settings
+			// page applies from the very next spoken sentence.
+			wav = await invoke<ArrayBuffer>('tts_speak', { text, lang: 'de', voice: settings.voice })
 		} finally {
 			this.inflight--
 		}
