@@ -68,7 +68,7 @@ async function preview(voice: Voice) {
 	<section class="flex flex-col gap-3">
 		<h2 class="text-sm">Modell</h2>
 		<p
-			class="rounded-xl border border-border bg-surface-card px-4 py-3 font-mono text-xs opacity-70"
+			class="rounded-xl border border-foreground/5 bg-[#fffdf7] px-4 py-3 font-mono text-xs opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			qwen/qwen3.5-122b-a10b · RedPill TEE
 		</p>
@@ -81,7 +81,9 @@ async function preview(voice: Voice) {
 		</div>
 
 		{#if !isTauri()}
-			<p class="rounded-xl border border-border bg-surface-card px-4 py-3 text-xs opacity-60">
+			<p
+				class="rounded-xl border border-foreground/5 bg-[#fffdf7] px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
 				Die Stimme läuft nur in der App — im Browser gibt es nichts zu hören.
 			</p>
 		{/if}
@@ -89,10 +91,10 @@ async function preview(voice: Voice) {
 		<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
 			{#each VOICES as voice (voice)}
 				<li
-					class="group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors {settings.voice ===
+					class="group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-colors {settings.voice ===
 					voice
-						? 'border-primary bg-surface-card'
-						: 'border-border bg-surface-card'}"
+						? 'border-primary bg-[#fffdf7]'
+						: 'border-foreground/5 bg-[#fffdf7]'}"
 				>
 					<button
 						type="button"

@@ -215,8 +215,8 @@ function shift(id: string, by: -1 | 1) {
 			{#each COLUMNS as column (column.status)}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="flex min-h-0 flex-col gap-2.5 rounded-2xl bg-surface-card-selected/70 p-2.5 transition-colors {dragging
-						? 'bg-surface-card-selected'
+					class="flex min-h-0 flex-col gap-2.5 rounded-2xl border border-foreground/5 bg-surface-soft/60 p-2.5 transition-colors {dragging
+						? 'bg-surface-soft'
 						: ''}"
 					ondragover={(e) => e.preventDefault()}
 					ondrop={() => drop(column.status)}
