@@ -1,4 +1,5 @@
 <script lang="ts">
+import ActorGraph from './ActorGraph.svelte'
 import { type Actor, functor } from './actor'
 import { bus, type ProofStep } from './bus'
 
@@ -39,6 +40,8 @@ function hue(p: string): string {
 const feeders = $derived(bus.edges().filter((e) => e.to === selected.manifest.id))
 const fed = $derived(bus.edges().filter((e) => e.from === selected.manifest.id))
 const instance = $derived(selected.instanceState())
+
+let graph = $state(false)
 
 // ---- the prover: pick any predicate as a goal, get its SLD proof tree
 let goal = $state('')
@@ -148,8 +151,20 @@ async function ask(event: SubmitEvent) {
 
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto pb-2">
 		<!-- The solver's forward reading of the whole registry: who can fire
-		     first, who becomes possible after — stages, derived like all else. -->
+		     first, who becomes possible after — stages, derived like all else.
+		     The graph is the same truth as a picture; a proof lights its path. -->
 		<div class="flex flex-wrap items-center gap-2 text-xs">
+			<button
+				type="button"
+				onclick={() => {
+					graph = !graph
+				}}
+				class="rounded-full border px-2.5 py-0.5 transition-colors {graph
+					? 'border-primary bg-primary text-primary-foreground'
+					: 'border-foreground/10 opacity-60 hover:opacity-100'}"
+			>
+				Graph
+			</button>
 			<span class="text-foreground/40">Stufen:</span>
 			{#each bus.stages() as stage, i (`s${i}`)}
 				{#if i > 0}
@@ -173,6 +188,17 @@ async function ask(event: SubmitEvent) {
 				</span>
 			{/each}
 		</div>
+
+		{#if graph}
+			<ActorGraph
+				{proof}
+				{selected}
+				onselect={(actor) => {
+					selected = actor
+					answer = ''
+				}}
+			/>
+		{/if}
 
 		<!-- ------------------------------------------------ TEMPLATE (the class) -->
 		<section
