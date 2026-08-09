@@ -90,6 +90,11 @@ pub struct AsrEvent {
 	pub delta: String,
 	/// Everything recognized in the current utterance.
 	pub transcript: String,
+	/// Highest speech probability Silero gave any window in this batch.
+	///
+	/// Surfaced purely so the threshold can be judged against what the model
+	/// actually sees on this microphone, rather than tuned by guesswork.
+	pub probability: f32,
 }
 
 fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
@@ -230,7 +235,9 @@ fn push_into(engine: &mut Engine, pcm: &[f32]) -> Result<AsrEvent> {
 
 	while engine.vad_buf.len() >= VAD_WINDOW {
 		let window: Vec<f32> = engine.vad_buf.drain(..VAD_WINDOW).collect();
-		let speech = engine.vad.predict(&window)? >= SPEECH_THRESHOLD;
+		let probability = engine.vad.predict(&window)?;
+		event.probability = event.probability.max(probability);
+		let speech = probability >= SPEECH_THRESHOLD;
 
 		if speech {
 			engine.run_speech += 1;

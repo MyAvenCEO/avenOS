@@ -40,6 +40,7 @@ interface AsrEvent {
 	ended: boolean
 	delta: string
 	transcript: string
+	probability: number
 }
 
 export class Listener {
@@ -63,6 +64,8 @@ export class Listener {
 	rate = $state(0)
 	/** Batches sent to the recognizer, so a dead pipeline is visible as zero. */
 	pushes = $state(0)
+	/** Highest speech probability Silero has reported recently. */
+	probability = $state(0)
 	failure = $state<string | null>(null)
 
 	#hooks: ListenerHooks
@@ -214,6 +217,9 @@ export class Listener {
 			// Raw bytes, not a JSON array: 8 KB instead of ~40 KB per batch, and no
 			// parse of 2048 numbers on either side.
 			const event = await invoke<AsrEvent>('asr_push', new Uint8Array(pcm.buffer))
+
+			// Decays, so the peak of a phrase stays readable for a moment.
+			this.probability = Math.max(event.probability, this.probability * 0.9)
 
 			if (event.started) {
 				this.partial = ''

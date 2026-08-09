@@ -188,7 +188,9 @@ $effect(() => {
 						     recognizer without attaching a debugger. -->
 						<p class="pt-6 font-mono text-[10px] opacity-30">
 							{listener.rate}
-							Hz · Pegel {listener.level.toFixed(3)} · {listener.pushes} Blöcke
+							Hz · Pegel {listener.level.toFixed(3)} · Sprache {listener.probability.toFixed(2)} ·
+							{listener.pushes}
+							Blöcke
 						</p>
 					{:else if listener.status === 'preparing'}
 						<p class="text-sm opacity-40">
