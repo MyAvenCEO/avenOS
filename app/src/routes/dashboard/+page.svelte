@@ -178,7 +178,7 @@ $effect(() => {
 	<header class="flex items-baseline justify-between gap-4">
 		<h1 class="text-2xl">Dashboard</h1>
 		<div class="flex items-center gap-3 text-xs opacity-50">
-			<span>phala/gemma-4-31b-it</span>
+			<span>qwen3.6-35b-a3b</span>
 
 			{#if chat.turns.length > 0}
 				<button

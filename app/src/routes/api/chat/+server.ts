@@ -23,11 +23,17 @@ export const prerender = false
 const REDPILL_CHAT_URL = 'https://api.redpill.ai/v1/chat/completions'
 
 /**
- * The *confidential* Gemma, not the plain `google/gemma-4-31b-it` route —
- * `phala/…` ids are the ones served inside a TEE, which is the entire reason
- * for going through RedPill rather than straight to a model host.
+ * All ids here are TEE routes, which is the entire reason for going through
+ * RedPill rather than straight to a model host.
+ *
+ * Qwen replaced Gemma after a head-to-head with the dashboard's own payload:
+ * same time to first token (1.3s) and tool round (1.5s) — it is a 3B-active
+ * MoE — but with a chat template that has a real tool lane, where Gemma
+ * intermittently wrote calls as Python into the name field and, on bad runs,
+ * corrupted its own stream outright. Thinking is disabled below; left on, the
+ * same request took 8.4s to the first token.
  */
-const MODEL = 'phala/gemma-4-31b-it'
+const MODEL = 'qwen/qwen3.6-35b-a3b'
 
 export const POST: RequestHandler = async ({ request, fetch }) => {
 	const apiKey = env.PHALA_API_KEY
@@ -48,12 +54,11 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			model: MODEL,
 			messages,
 			stream: true,
-			// This deployment intermittently collapses into repeating one token —
-			// observed as `}` streamed until the output budget ran out. A modest
-			// penalty makes each repetition of the same token less likely than the
-			// last, which breaks exactly that loop while leaving prose essentially
-			// untouched; the client's stream guard is the backstop, this is the
-			// prevention.
+			// No deliberation before a voice reply — with thinking on, time to
+			// first token measured 8.4s against 1.3s without.
+			chat_template_kwargs: { enable_thinking: false },
+			// Kept from the Gemma era as cheap insurance against one-token loops;
+			// the client's stream guards are the backstop.
 			frequency_penalty: 0.3,
 			// Tools are shaped here rather than in the client so the wire format
 			// stays a detail of the proxy. Omitted entirely when there are none —
