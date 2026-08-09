@@ -27,3 +27,10 @@ export class WorkItemsSkill implements Skill {
 		return summarize(name, resultJson)
 	}
 }
+
+/**
+ * The one instance. The spark rail lives in the dashboard layout while the
+ * workspace lives in the page — both must see the same store, so the skill is
+ * a singleton rather than something each surface constructs for itself.
+ */
+export const workItemsSkill = new WorkItemsSkill()

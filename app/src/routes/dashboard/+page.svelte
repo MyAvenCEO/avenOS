@@ -5,7 +5,7 @@ import { Listener } from '$lib/asr/listener.svelte'
 import { Chat } from '$lib/chat/chat.svelte'
 import type { Activity } from '$lib/skills/activity.svelte'
 import { ACTIVITY_LABELS, ToolActivity } from '$lib/skills/activity.svelte'
-import { SPARKS, WorkItemsSkill } from '$lib/skills/workitems'
+import { workItemsSkill } from '$lib/skills/workitems'
 import WorkItemsView from '$lib/skills/workitems/WorkItemsView.svelte'
 import { Speaker } from '$lib/tts/speaker.svelte'
 
@@ -26,7 +26,6 @@ const speaker = new Speaker()
  * dashboard only composes: tool specs concatenate, a call is offered to each
  * skill until one claims it, and every skill is a tab.
  */
-const workItemsSkill = new WorkItemsSkill()
 const skills = [workItemsSkill]
 
 const activity = new ToolActivity()
@@ -232,406 +231,341 @@ $effect(() => {
 	<title>Dashboard · avenOS</title>
 </svelte:head>
 
-<div class="flex h-dvh">
-	<!-- The spark rail: which context everything operates in, Discord-style —
-	     global, always visible, one circle per spark with its initials. The
-	     active one squares off and carries the edge indicator. Clicking and
-	     saying "zeig die Team-Liste" write the same state. -->
-	<aside class="flex w-16 shrink-0 flex-col items-center gap-3 border-border border-r py-4">
-		{#each SPARKS as spark (spark.id)}
-			{@const active = workItemsSkill.store.active === spark.id}
-			<button
-				type="button"
-				onclick={() => {
-					workItemsSkill.store.active = spark.id
-				}}
-				title={spark.name}
-				aria-label="Spark {spark.name}"
-				class="relative flex size-11 items-center justify-center text-xs transition-all {active
-					? 'rounded-2xl bg-primary text-primary-foreground'
-					: 'rounded-full border border-border bg-surface-card opacity-70 hover:rounded-2xl hover:opacity-100'}"
-			>
-				{spark.id.slice(0, 2).toUpperCase()}
-				{#if active}
-					<span class="-left-[13px] absolute h-6 w-1 rounded-full bg-primary"></span>
-				{/if}
-			</button>
-		{/each}
-
-		<!-- The rail's foot: settings and the way out. Both leave or reconfigure
-		     the whole workspace, so they live under the contexts, not in the page
-		     chrome. -->
-		<a
-			href="/dashboard/settings"
-			title="Einstellungen"
-			aria-label="Einstellungen"
-			class="mt-auto flex size-11 items-center justify-center rounded-full border border-border bg-surface-card opacity-60 transition-all hover:rounded-2xl hover:opacity-100"
-		>
-			<!-- gear -->
-			<svg
-				viewBox="0 0 24 24"
-				class="size-4"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="1.5"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<circle cx="12" cy="12" r="3" />
-				<path
-					d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"
-				/>
-			</svg>
-		</a>
-		<a href="/" class="pb-1 text-[0.6875rem] opacity-40 transition-opacity hover:opacity-100">
-			- back -
-		</a>
-	</aside>
-
-	<main
-		class="mx-auto flex min-h-0 min-w-0 max-w-6xl flex-1 flex-col gap-4 p-4 pb-2 sm:p-6 sm:pb-3"
-	>
-		<header class="relative flex items-center justify-between gap-4">
-			<h1 class="text-2xl">Dashboard</h1>
-
-			<!-- Compact tabs, dead centre: the skills workspace and the conversation. -->
-			<nav
-				class="-translate-x-1/2 absolute left-1/2 flex gap-0.5 rounded-full border border-border p-0.5 text-xs"
-			>
-				{#each [{ id: 'skills' as const, label: 'Skills' }, { id: 'chat' as const, label: 'Chat' }] as t (t.id)}
-					<button
-						type="button"
-						onclick={() => {
+<main class="mx-auto flex min-h-0 min-w-0 max-w-6xl flex-1 flex-col gap-4 p-4 pb-2 sm:p-6 sm:pb-3">
+	<header class="flex flex-col items-center gap-1.5">
+		<!-- Compact tabs, centred: the skills workspace and the conversation. -->
+		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
+			{#each [{ id: 'skills' as const, label: 'Skills' }, { id: 'chat' as const, label: 'Chat' }] as t (t.id)}
+				<button
+					type="button"
+					onclick={() => {
 						tab = t.id
 					}}
-						class="rounded-full px-3 py-1 transition-colors {tab === t.id
+					class="rounded-full px-3 py-1 transition-colors {tab === t.id
 						? 'bg-primary text-primary-foreground'
 						: 'opacity-60 hover:opacity-100'}"
-					>
-						{t.label}
-					</button>
-				{/each}
-			</nav>
+				>
+					{t.label}
+				</button>
+			{/each}
+		</nav>
+		<!-- Where you are, as a quiet stamp under the navigation. -->
+		<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Dashboard</p>
+	</header>
 
-			<div class="flex items-center gap-3 text-xs opacity-50">
-				<span>qwen3.5-122b-a10b</span>
-			</div>
-		</header>
-
-		{#if tab === 'chat'}
-			<div class="flex min-h-0 flex-1 flex-col gap-2">
-				<!-- Chat-scoped actions: they operate on this conversation, so they
+	{#if tab === 'chat'}
+		<div class="flex min-h-0 flex-1 flex-col gap-2">
+			<!-- Chat-scoped actions: they operate on this conversation, so they
 				     live with it rather than in the global chrome. -->
-				{#if chat.turns.length > 0}
-					<div class="flex justify-end gap-3 text-xs opacity-50">
-						<button type="button" class="underline underline-offset-4" onclick={exportLog}>
-							{exported ? 'Kopiert' : 'Export'}
-						</button>
-						<button
-							type="button"
-							class="underline underline-offset-4"
-							onclick={() => {
+			{#if chat.turns.length > 0}
+				<div class="flex justify-end gap-3 text-xs opacity-50">
+					<button type="button" class="underline underline-offset-4" onclick={exportLog}>
+						{exported ? 'Kopiert' : 'Export'}
+					</button>
+					<button
+						type="button"
+						class="underline underline-offset-4"
+						onclick={() => {
 								chat.clear()
 								speaker.silence()
 								activity.clear()
 								void listener.reset()
 							}}
-						>
-							Clear
-						</button>
-					</div>
-				{/if}
+					>
+						Clear
+					</button>
+				</div>
+			{/if}
 
-				<div bind:this={log} class="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
-					{#each chat.turns as turn (turn.id)}
-						<div class="flex flex-col gap-1" class:items-end={turn.role === 'user'}>
-							<!-- What the turn's tools actually did, kept with the reply they
+			<div bind:this={log} class="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
+				{#each chat.turns as turn (turn.id)}
+					<div class="flex flex-col gap-1" class:items-end={turn.role === 'user'}>
+						<!-- What the turn's tools actually did, kept with the reply they
 				     produced. The toast is the glance; this is the record. -->
-							{#each turn.calls ?? [] as call, i (i)}
-								{@const entry = summarizeCall(call.name, call.result)}
-								{#if entry}
-									<div class="flex gap-2 pl-1 text-xs opacity-60">
-										<span
-											class="w-3 shrink-0 text-center font-mono"
-											class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
-											class:text-status-working={entry.kind === 'doing'}
-											class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
-										>
-											{ACTIVITY_LABELS[entry.kind].mark}
-										</span>
-										<span class="min-w-0">
-											{ACTIVITY_LABELS[entry.kind].label}
-											{entry.titles.length > 0
+						{#each turn.calls ?? [] as call, i (i)}
+							{@const entry = summarizeCall(call.name, call.result)}
+							{#if entry}
+								<div class="flex gap-2 pl-1 text-xs opacity-60">
+									<span
+										class="w-3 shrink-0 text-center font-mono"
+										class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
+										class:text-status-working={entry.kind === 'doing'}
+										class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
+									>
+										{ACTIVITY_LABELS[entry.kind].mark}
+									</span>
+									<span class="min-w-0">
+										{ACTIVITY_LABELS[entry.kind].label}
+										{entry.titles.length > 0
 									? `: ${entry.titles.join(', ')}`
 									: entry.note
 										? ` · ${entry.note}`
 										: ''}
-										</span>
-									</div>
-								{/if}
-							{/each}
-							<div
-								class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed"
-								class:bg-primary={turn.role === 'user'}
-								class:text-primary-foreground={turn.role === 'user'}
-								class:bg-surface-card={turn.role === 'assistant'}
-								class:border={turn.role === 'assistant'}
-								class:border-border={turn.role === 'assistant'}
-							>
-								{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
-									<!-- Thinking. Three dots breathing in sequence, not a frozen
-						     ellipsis that reads as a hung reply. -->
-									<span class="flex items-center gap-1 py-1.5" aria-label="Denkt nach">
-										<span class="size-1.5 animate-bounce rounded-full bg-current opacity-40"></span>
-										<span
-											class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
-										></span>
-										<span
-											class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
-										></span>
 									</span>
-								{:else}
-									{turn.content}
-								{/if}
-							</div>
-						</div>
-					{/each}
-
-					<!-- What is being heard right now, before the utterance closes. Sits where
-	     the user bubble will land so the text does not jump when it does. -->
-					{#if listener.partial !== ''}
-						<div class="flex justify-end">
-							<div
-								class="max-w-[85%] whitespace-pre-wrap rounded-2xl border border-dashed border-border px-4 py-3 text-sm leading-relaxed opacity-50"
-							>
-								{listener.partial}
-							</div>
-						</div>
-					{/if}
-
-					{#if chat.failure || speaker.failure || listener.failure}
-						<p
-							class="rounded-2xl border border-status-error/30 bg-status-error-muted px-4 py-3 text-sm text-status-error-strong"
+								</div>
+							{/if}
+						{/each}
+						<div
+							class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed"
+							class:bg-primary={turn.role === 'user'}
+							class:text-primary-foreground={turn.role === 'user'}
+							class:bg-surface-card={turn.role === 'assistant'}
+							class:border={turn.role === 'assistant'}
+							class:border-border={turn.role === 'assistant'}
 						>
-							{chat.failure ?? speaker.failure ?? listener.failure}
-						</p>
-					{/if}
-				</div>
+							{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
+								<!-- Thinking. Three dots breathing in sequence, not a frozen
+						     ellipsis that reads as a hung reply. -->
+								<span class="flex items-center gap-1 py-1.5" aria-label="Denkt nach">
+									<span class="size-1.5 animate-bounce rounded-full bg-current opacity-40"></span>
+									<span
+										class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
+									></span>
+									<span
+										class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
+									></span>
+								</span>
+							{:else}
+								{turn.content}
+							{/if}
+						</div>
+					</div>
+				{/each}
+
+				<!-- What is being heard right now, before the utterance closes. Sits where
+	     the user bubble will land so the text does not jump when it does. -->
+				{#if listener.partial !== ''}
+					<div class="flex justify-end">
+						<div
+							class="max-w-[85%] whitespace-pre-wrap rounded-2xl border border-dashed border-border px-4 py-3 text-sm leading-relaxed opacity-50"
+						>
+							{listener.partial}
+						</div>
+					</div>
+				{/if}
+
+				{#if chat.failure || speaker.failure || listener.failure}
+					<p
+						class="rounded-2xl border border-status-error/30 bg-status-error-muted px-4 py-3 text-sm text-status-error-strong"
+					>
+						{chat.failure ?? speaker.failure ?? listener.failure}
+					</p>
+				{/if}
 			</div>
-		{:else}
-			<!-- The skills workspace. Today that is the todo list; the plan is for
+		</div>
+	{:else}
+		<!-- The skills workspace. Today that is the todo list; the plan is for
 		     this surface to switch between skill views as the conversation moves.
 		     3xl rather than lg: the board lays three columns side by side. -->
-			<div class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-				<WorkItemsView store={workItemsSkill.store} />
-			</div>
-		{/if}
+		<div class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+			<WorkItemsView store={workItemsSkill.store} />
+		</div>
+	{/if}
 
-		<!-- What the tools just did, as a toast. One at a time, three seconds: a
+	<!-- What the tools just did, as a toast. One at a time, three seconds: a
 	     glance to confirm the list changed the way you meant, not a log to read.
 	     Reserving the space keeps the input panel still as toasts come and go;
 	     bottom-aligned in it, so the toast hugs the panel it belongs to. The
 	     toast carries the content, so it keeps the full width; in voice mode the
 	     panel below it narrows instead, holding only a status word and two
 	     buttons. -->
-		<div class="mx-auto flex min-h-16 w-full max-w-lg items-end justify-center">
-			{#if listener.partial !== '' && tab !== 'chat'}
-				<!-- What is being heard, as it is being heard — the live recognizer
+	<div class="mx-auto flex min-h-16 w-full max-w-lg items-end justify-center">
+		{#if listener.partial !== '' && tab !== 'chat'}
+			<!-- What is being heard, as it is being heard — the live recognizer
 			     output, so you can watch your words arrive while the list view is
 			     open. Dashed like the transcript's own pending bubble. -->
-				<div
-					class="w-full rounded-xl border border-border border-dashed bg-surface-card px-4 py-3 text-xs opacity-70"
-				>
-					{listener.partial}
-				</div>
-			{:else if activity.current}
-				{@const entry = activity.current}
-				<div
-					class="flex w-full gap-2 rounded-xl border border-border bg-surface-card px-4 py-3 text-xs"
-				>
-					<span
-						class="w-3 shrink-0 text-center font-mono"
-						class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
-						class:text-status-working={entry.kind === 'doing'}
-						class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
-						class:opacity-30={entry.kind === 'read' ||
+			<div
+				class="w-full rounded-xl border border-border border-dashed bg-surface-card px-4 py-3 text-xs opacity-70"
+			>
+				{listener.partial}
+			</div>
+		{:else if activity.current}
+			{@const entry = activity.current}
+			<div
+				class="flex w-full gap-2 rounded-xl border border-border bg-surface-card px-4 py-3 text-xs"
+			>
+				<span
+					class="w-3 shrink-0 text-center font-mono"
+					class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
+					class:text-status-working={entry.kind === 'doing'}
+					class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
+					class:opacity-30={entry.kind === 'read' ||
 						entry.kind === 'reopened' ||
 						entry.kind === 'renamed'}
-					>
-						{ACTIVITY_LABELS[entry.kind].mark}
-					</span>
-					<div class="min-w-0 flex-1">
-						<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
-						{#if entry.titles.length > 0}
-							<!-- One per line. Run together with separators, five items became
+				>
+					{ACTIVITY_LABELS[entry.kind].mark}
+				</span>
+				<div class="min-w-0 flex-1">
+					<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
+					{#if entry.titles.length > 0}
+						<!-- One per line. Run together with separators, five items became
 						     a sentence that ran off the edge and told you nothing. -->
-							<ul class="pt-0.5">
-								{#each entry.titles as title (title)}
-									<li class="leading-relaxed">{title}</li>
-								{/each}
-							</ul>
-						{:else if entry.note}
-							<span class="opacity-40">· {entry.note}</span>
-						{/if}
-					</div>
+						<ul class="pt-0.5">
+							{#each entry.titles as title (title)}
+								<li class="leading-relaxed">{title}</li>
+							{/each}
+						</ul>
+					{:else if entry.note}
+						<span class="opacity-40">· {entry.note}</span>
+					{/if}
 				</div>
-			{/if}
-		</div>
+			</div>
+		{/if}
+	</div>
 
-		<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
+	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
-		<div
-			class="mx-auto -mt-2 w-full rounded-full bg-primary py-2.5 pr-2.5 pl-5 text-primary-foreground {typing
+	<div
+		class="mx-auto -mt-2 w-full rounded-full bg-primary py-2.5 pr-2.5 pl-5 text-primary-foreground {typing
 			? 'max-w-lg'
 			: 'max-w-72'}"
-			title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
-		>
-			<div class="flex items-center gap-3">
-				{#if typing}
-					<form bind:this={form} onsubmit={submit} class="flex flex-1 items-center gap-2">
-						<textarea
-							bind:value={draft}
-							onkeydown={onKeydown}
-							rows="1"
-							placeholder="Schreiben…"
-							class="field-sizing-content max-h-32 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-primary-foreground/40"
-						></textarea>
-						<!-- Same shape as the mode toggle next to it, so the panel ends in a
+		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
+	>
+		<div class="flex items-center gap-3">
+			{#if typing}
+				<form bind:this={form} onsubmit={submit} class="flex flex-1 items-center gap-2">
+					<textarea
+						bind:value={draft}
+						onkeydown={onKeydown}
+						rows="1"
+						placeholder="Schreiben…"
+						class="field-sizing-content max-h-32 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-primary-foreground/40"
+					></textarea>
+					<!-- Same shape as the mode toggle next to it, so the panel ends in a
 					     matched pair of round icon buttons rather than a word and a circle. -->
-						<button
-							type="submit"
-							disabled={draft.trim() === ''}
-							title="Senden"
-							aria-label="Senden"
-							class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-all hover:bg-primary-foreground/10 disabled:opacity-30 disabled:hover:bg-transparent"
+					<button
+						type="submit"
+						disabled={draft.trim() === ''}
+						title="Senden"
+						aria-label="Senden"
+						class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-all hover:bg-primary-foreground/10 disabled:opacity-30 disabled:hover:bg-transparent"
+					>
+						<!-- arrow up: send -->
+						<svg
+							viewBox="0 0 24 24"
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
 						>
-							<!-- arrow up: send -->
-							<svg
-								viewBox="0 0 24 24"
-								class="size-4"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<path d="M12 19V5" />
-								<path d="m5 12 7-7 7 7" />
-							</svg>
-						</button>
-					</form>
-				{:else}
-					<!-- While listening the dot follows the microphone level, so a dead
+							<path d="M12 19V5" />
+							<path d="m5 12 7-7 7 7" />
+						</svg>
+					</button>
+				</form>
+			{:else}
+				<!-- While listening the dot follows the microphone level, so a dead
 				     input is visible as a dot that never moves. -->
-					<span
-						class="inline-block size-2 shrink-0 rounded-full transition-transform"
-						class:bg-status-error={phase.key === 'hearing' || phase.key === 'idle'}
-						class:bg-status-success={phase.key === 'speaking'}
-						class:bg-status-working={phase.key === 'thinking' ||
+				<span
+					class="inline-block size-2 shrink-0 rounded-full transition-transform"
+					class:bg-status-error={phase.key === 'hearing' || phase.key === 'idle'}
+					class:bg-status-success={phase.key === 'speaking'}
+					class:bg-status-working={phase.key === 'thinking' ||
 						phase.key === 'loading' ||
 						phase.key === 'starting'}
-						class:bg-primary-foreground={phase.key === 'denied' || phase.key === 'text'}
-						class:animate-pulse={phase.key === 'thinking' ||
+					class:bg-primary-foreground={phase.key === 'denied' || phase.key === 'text'}
+					class:animate-pulse={phase.key === 'thinking' ||
 						phase.key === 'loading' ||
 						phase.key === 'starting'}
-						style={phase.key === 'hearing' || phase.key === 'idle'
+					style={phase.key === 'hearing' || phase.key === 'idle'
 						? `transform: scale(${1 + Math.min(listener.level, 1) * 2})`
 						: ''}
-					></span>
-					{#if phase.key === 'blocked'}
-						<!-- The whole label is the button. There is nothing else to do in this
+				></span>
+				{#if phase.key === 'blocked'}
+					<!-- The whole label is the button. There is nothing else to do in this
 					     state, and a separate control next to it would just be a second
 					     thing to read before the obvious one. -->
-						<button
-							type="button"
-							onclick={() => speaker.resumeAudio()}
-							class="flex-1 text-left text-sm underline underline-offset-4"
-						>
-							{phase.label}
-						</button>
-					{:else}
-						<span class="flex-1 text-sm">{phase.label}</span>
-					{/if}
-					{#if chat.streaming || speaker.speaking}
-						<!-- Same circle as its neighbours, but filled: it is the one action
+					<button
+						type="button"
+						onclick={() => speaker.resumeAudio()}
+						class="flex-1 text-left text-sm underline underline-offset-4"
+					>
+						{phase.label}
+					</button>
+				{:else}
+					<span class="flex-1 text-sm">{phase.label}</span>
+				{/if}
+				{#if chat.streaming || speaker.speaking}
+					<!-- Same circle as its neighbours, but filled: it is the one action
 					     that matters while the assistant is talking, so it gets the
 					     inverted colors instead of an outline. -->
-						<button
-							type="button"
-							onclick={() => {
-							chat.stop()
-							speaker.silence()
-						}}
-							title="Stopp"
-							aria-label="Stopp"
-							class="shrink-0 rounded-full bg-status-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
-						>
-							<svg viewBox="0 0 24 24" class="size-4" fill="currentColor">
-								<rect x="7" y="7" width="10" height="10" rx="1.5" />
-							</svg>
-						</button>
-					{/if}
-				{/if}
-
-				<!-- Only where there is something to switch to. In the browser there is
-			     no recognizer at all, so text is not a mode there — it is the whole
-			     interface, and a button offering to leave it leads nowhere. -->
-				{#if isTauri()}
-					<!-- An icon rather than a word: it sits next to live status text, and a
-				     second label there reads as another thing to be understood. -->
 					<button
 						type="button"
 						onclick={() => {
-						typing = !typing
-					}}
-						class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
-						title={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
-						aria-label={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
+							chat.stop()
+							speaker.silence()
+						}}
+						title="Stopp"
+						aria-label="Stopp"
+						class="shrink-0 rounded-full bg-status-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
 					>
-						{#if typing}
-							<!-- microphone: go back to speaking -->
-							<svg
-								viewBox="0 0 24 24"
-								class="size-4"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
-								<path d="M5 11a7 7 0 0 0 14 0" />
-								<path d="M12 18v3" />
-							</svg>
-						{:else}
-							<!-- keyboard: switch to typing -->
-							<svg
-								viewBox="0 0 24 24"
-								class="size-4"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<rect x="2.5" y="6" width="19" height="12" rx="2" />
-								<path d="M7 10h.01M11 10h.01M15 10h.01M17.5 10h.01M7.5 14h9" />
-							</svg>
-						{/if}
+						<svg viewBox="0 0 24 24" class="size-4" fill="currentColor">
+							<rect x="7" y="7" width="10" height="10" rx="1.5" />
+						</svg>
 					</button>
 				{/if}
-			</div>
+			{/if}
 
-			{#if phase.key === 'loading'}
-				<div class="mt-3 h-1 overflow-hidden rounded-full bg-primary-foreground/20">
-					<div
-						class="h-full rounded-full bg-primary-foreground transition-[width]"
-						style="width: {Math.round(
-						(listener.status === 'preparing' ? listener.progress : speaker.progress) * 100
-					)}%"
-					></div>
-				</div>
+			<!-- Only where there is something to switch to. In the browser there is
+			     no recognizer at all, so text is not a mode there — it is the whole
+			     interface, and a button offering to leave it leads nowhere. -->
+			{#if isTauri()}
+				<!-- An icon rather than a word: it sits next to live status text, and a
+				     second label there reads as another thing to be understood. -->
+				<button
+					type="button"
+					onclick={() => {
+						typing = !typing
+					}}
+					class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
+					title={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
+					aria-label={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
+				>
+					{#if typing}
+						<!-- microphone: go back to speaking -->
+						<svg
+							viewBox="0 0 24 24"
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+							<path d="M5 11a7 7 0 0 0 14 0" />
+							<path d="M12 18v3" />
+						</svg>
+					{:else}
+						<!-- keyboard: switch to typing -->
+						<svg
+							viewBox="0 0 24 24"
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<rect x="2.5" y="6" width="19" height="12" rx="2" />
+							<path d="M7 10h.01M11 10h.01M15 10h.01M17.5 10h.01M7.5 14h9" />
+						</svg>
+					{/if}
+				</button>
 			{/if}
 		</div>
-	</main>
-</div>
+
+		{#if phase.key === 'loading'}
+			<div class="mt-3 h-1 overflow-hidden rounded-full bg-primary-foreground/20">
+				<div
+					class="h-full rounded-full bg-primary-foreground transition-[width]"
+					style="width: {Math.round(
+						(listener.status === 'preparing' ? listener.progress : speaker.progress) * 100
+					)}%"
+				></div>
+			</div>
+		{/if}
+	</div>
+</main>

@@ -31,7 +31,6 @@
 		"vite": "^8.0.7"
 	},
 	"dependencies": {
-		"@avenos/aven-city": "workspace:*",
 		"@tauri-apps/api": "^2",
 		"@tauri-apps/plugin-opener": "^2.5.4",
 		"three": "^0.185.1"

@@ -117,9 +117,7 @@ function shift(id: string, by: -1 | 1) {
 	</button>
 {/snippet}
 
-<div
-	class="flex min-h-0 flex-1 flex-col gap-4 rounded-3xl bg-surface-soft p-4 text-foreground sm:p-5"
->
+<div class="flex min-h-0 flex-1 flex-col gap-4 text-foreground">
 	<div class="flex items-center justify-between gap-3">
 		<h2 class="font-semibold text-[15px]">Aufgaben</h2>
 

@@ -51,11 +51,28 @@ async function preview(voice: Voice) {
 	<title>Einstellungen · avenOS</title>
 </svelte:head>
 
-<main class="mx-auto flex h-dvh max-w-lg flex-col gap-6 p-4 sm:p-6">
-	<header class="flex items-baseline justify-between gap-4">
-		<h1 class="text-2xl">Einstellungen</h1>
-		<a href="/dashboard" class="text-xs underline underline-offset-4 opacity-50">Zurück</a>
+<main class="mx-auto flex min-h-0 min-w-0 max-w-lg flex-1 flex-col gap-6 p-4 sm:p-6">
+	<header class="relative flex flex-col items-center gap-1.5">
+		<!-- The same quiet route stamp the dashboard wears. -->
+		<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Einstellungen</p>
+		<a
+			href="/dashboard"
+			class="absolute right-0 top-0 text-xs underline underline-offset-4 opacity-50"
+		>
+			Zurück
+		</a>
 	</header>
+
+	<!-- The brain, named here rather than in the app chrome: which model answers
+	     is configuration, not something to stare at all day. -->
+	<section class="flex flex-col gap-3">
+		<h2 class="text-sm">Modell</h2>
+		<p
+			class="rounded-xl border border-border bg-surface-card px-4 py-3 font-mono text-xs opacity-70"
+		>
+			qwen/qwen3.5-122b-a10b · RedPill TEE
+		</p>
+	</section>
 
 	<section class="flex min-h-0 flex-col gap-3">
 		<div class="flex items-baseline justify-between">
