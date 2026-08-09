@@ -352,12 +352,28 @@ $effect(() => {
 						placeholder="Schreiben…"
 						class="field-sizing-content max-h-32 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-primary-foreground/40"
 					></textarea>
+					<!-- Same shape as the mode toggle next to it, so the panel ends in a
+					     matched pair of round icon buttons rather than a word and a circle. -->
 					<button
 						type="submit"
 						disabled={draft.trim() === ''}
-						class="text-sm underline underline-offset-4 transition-opacity disabled:opacity-30"
+						title="Senden"
+						aria-label="Senden"
+						class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-all hover:bg-primary-foreground/10 disabled:opacity-30 disabled:hover:bg-transparent"
 					>
-						Senden
+						<!-- arrow up: send -->
+						<svg
+							viewBox="0 0 24 24"
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M12 19V5" />
+							<path d="m5 12 7-7 7 7" />
+						</svg>
 					</button>
 				</form>
 			{:else}
