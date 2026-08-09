@@ -53,9 +53,16 @@ const START_WINDOWS: usize = 2;
 /// that every speaker makes, short enough not to feel like a wait.
 const END_WINDOWS: usize = 25;
 
-/// Floor for the normalization gain, so a quiet lead-in is not amplified 100x
-/// into hiss. Caps the boost at 20x.
-const MIN_PEAK: f32 = 0.05;
+/// What a normalized utterance should peak at. Short of 1.0 on purpose, so a
+/// sample louder than anything heard so far has somewhere to go instead of
+/// being clipped flat.
+const TARGET_PEAK: f32 = 0.7;
+
+/// Hard cap on the boost. A microphone peaking at 0.05 would otherwise be
+/// amplified 20x and clipped against 1.0 on every loud syllable — distortion
+/// the recognizer reads as garbled consonants. Quiet-but-clean beats loud-and-
+/// square-waved.
+const MAX_GAIN: f32 = 8.0;
 
 #[derive(Default)]
 pub struct AsrState {
@@ -144,14 +151,16 @@ impl Engine {
 
 	/// Scale a chunk toward full range before handing it to the recognizer.
 	///
-	/// Upstream's example normalizes the whole recording to peak 1.0 first, and
-	/// the model expects that. A microphone signal peaks nearer 0.05–0.3, so
-	/// feeding it raw is quiet enough to transcribe as nothing at all — which is
-	/// exactly what happened. Streaming cannot see the whole utterance, so the
-	/// gain follows the loudest sample heard so far, floored so that a silent
-	/// lead-in is not amplified into noise.
+	/// Upstream's example normalizes the whole recording before streaming it and
+	/// the model expects that, but a live utterance cannot be seen whole, so the
+	/// gain follows the loudest sample heard so far.
+	///
+	/// Both bounds matter. Aiming at 1.0 meant every sample at the running peak
+	/// landed exactly on the clamp, so any later syllable louder than the last
+	/// one was squared off — and a 20x boost on a quiet microphone turned room
+	/// noise into something with the shape of speech.
 	fn normalized(&self, chunk: &[f32]) -> Vec<f32> {
-		let gain = 1.0 / self.peak.max(MIN_PEAK);
+		let gain = (TARGET_PEAK / self.peak.max(1e-4)).min(MAX_GAIN);
 		chunk.iter().map(|s| (s * gain).clamp(-1.0, 1.0)).collect()
 	}
 

@@ -66,14 +66,17 @@ export class Listener {
 	pushes = $state(0)
 	/** Highest speech probability Silero has reported recently. */
 	probability = $state(0)
+	/** Batches thrown away because the recognizer fell too far behind. */
+	dropped = $state(0)
 	failure = $state<string | null>(null)
 
 	#hooks: ListenerHooks
 	#context: AudioContext | null = null
 	#stream: MediaStream | null = null
 	#node: AudioWorkletNode | null = null
-	/** Serializes pushes — overlapping invokes would reorder the audio. */
-	#busy = false
+	/** Batches waiting to go to the recognizer, in order. */
+	#queue: Float32Array[] = []
+	#draining = false
 
 	constructor(hooks: ListenerHooks = {}) {
 		this.#hooks = hooks
@@ -197,22 +200,53 @@ export class Listener {
 		return out
 	}
 
-	async #push(raw: Float32Array): Promise<void> {
+	/**
+	 * Take one batch from the worklet.
+	 *
+	 * Queued, never dropped. Discarding a batch because the recognizer was busy
+	 * meant audio that simply never happened as far as both models were
+	 * concerned: words came out garbled, and the VAD's silence counting was
+	 * wrong, which made segmentation ragged too. Transcription runs a little
+	 * faster than realtime, so a queue drains rather than grows.
+	 */
+	#push(raw: Float32Array): void {
+		if (this.status !== 'listening') return
 		const pcm = this.#toSixteenK(raw)
-		// Dropping a batch is better than queueing them: if Rust falls behind,
-		// a backlog would make every later interrupt progressively later.
-		// Cheap enough to do on every batch, and it must run even when a push is
-		// dropped, or the meter would read zero exactly when we most want it.
+
 		let sum = 0
 		for (const sample of pcm) sum += sample * sample
 		const rms = Math.sqrt(sum / pcm.length)
 		// Decay slowly so the eye can follow it; rise immediately.
 		this.level = Math.max(rms * 4, this.level * 0.8)
 
-		if (this.#busy || this.status !== 'listening') return
-		this.#busy = true
-		this.pushes++
+		this.#queue.push(pcm)
+		// A bound is still needed, or a stall would grow an unbounded backlog and
+		// every later interrupt would arrive progressively later. ~3s of audio.
+		while (this.#queue.length > 24) {
+			this.#queue.shift()
+			this.dropped++
+		}
+		void this.#drain()
+	}
 
+	/** Send queued batches in order, one at a time. */
+	async #drain(): Promise<void> {
+		if (this.#draining) return
+		this.#draining = true
+
+		try {
+			while (this.#queue.length > 0 && this.status === 'listening') {
+				const pcm = this.#queue.shift()
+				if (!pcm) break
+				this.pushes++
+				await this.#send(pcm)
+			}
+		} finally {
+			this.#draining = false
+		}
+	}
+
+	async #send(pcm: Float32Array): Promise<void> {
 		try {
 			// Raw bytes, not a JSON array: 8 KB instead of ~40 KB per batch, and no
 			// parse of 2048 numbers on either side.
@@ -239,8 +273,6 @@ export class Listener {
 			}
 		} catch (err) {
 			this.failure = err instanceof Error ? err.message : String(err)
-		} finally {
-			this.#busy = false
 		}
 	}
 }
