@@ -409,8 +409,9 @@ $effect(() => {
 					<span class="flex-1 text-sm">{phase.label}</span>
 				{/if}
 				{#if chat.streaming || speaker.speaking}
-					<!-- Same circle as its neighbours; a square inside is the universal
-					     stop glyph. -->
+					<!-- Same circle as its neighbours, but filled: it is the one action
+					     that matters while the assistant is talking, so it gets the
+					     inverted colors instead of an outline. -->
 					<button
 						type="button"
 						onclick={() => {
@@ -419,7 +420,7 @@ $effect(() => {
 						}}
 						title="Stopp"
 						aria-label="Stopp"
-						class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
+						class="shrink-0 rounded-full bg-primary-foreground p-2 text-primary transition-opacity hover:opacity-80"
 					>
 						<svg viewBox="0 0 24 24" class="size-4" fill="currentColor">
 							<rect x="7" y="7" width="10" height="10" rx="1.5" />
