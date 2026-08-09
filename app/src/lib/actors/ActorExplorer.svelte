@@ -42,6 +42,7 @@ const fed = $derived(bus.edges().filter((e) => e.from === selected.manifest.id))
 const instance = $derived(selected.instanceState())
 
 let graph = $state(false)
+let focusGraph = $state(true)
 
 // ---- the prover: pick any predicate as a goal, get its SLD proof tree
 let goal = $state('')
@@ -165,6 +166,20 @@ async function ask(event: SubmitEvent) {
 			>
 				Graph
 			</button>
+			{#if graph}
+				<button
+					type="button"
+					onclick={() => {
+						focusGraph = !focusGraph
+					}}
+					title="Nur den gewählten Actor und seine direkten Partner zeigen; Klick auf einen Nachbarn zentriert ihn"
+					class="rounded-full border px-2.5 py-0.5 transition-colors {focusGraph
+						? 'border-primary bg-primary text-primary-foreground'
+						: 'border-foreground/10 opacity-60 hover:opacity-100'}"
+				>
+					Fokus
+				</button>
+			{/if}
 			<span class="text-foreground/40">Stufen:</span>
 			{#each bus.stages() as stage, i (`s${i}`)}
 				{#if i > 0}
@@ -193,6 +208,7 @@ async function ask(event: SubmitEvent) {
 			<ActorGraph
 				{proof}
 				{selected}
+				focus={focusGraph}
 				onselect={(actor) => {
 					selected = actor
 					answer = ''

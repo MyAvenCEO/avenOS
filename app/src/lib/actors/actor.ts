@@ -96,18 +96,22 @@ export class Actor {
 		this.#handlers = handlers
 	}
 
-	/** Every contract this actor participates in, method- and actor-level. */
+	/** Every contract this actor participates in, method- and actor-level, deduped. */
 	get requires(): Predicate[] {
 		return [
-			...(this.manifest.requires ?? []),
-			...this.manifest.methods.flatMap((m) => m.requires ?? [])
+			...new Set([
+				...(this.manifest.requires ?? []),
+				...this.manifest.methods.flatMap((m) => m.requires ?? [])
+			])
 		]
 	}
 
 	get produces(): Predicate[] {
 		return [
-			...(this.manifest.produces ?? []),
-			...this.manifest.methods.flatMap((m) => m.produces ?? [])
+			...new Set([
+				...(this.manifest.produces ?? []),
+				...this.manifest.methods.flatMap((m) => m.produces ?? [])
+			])
 		]
 	}
 

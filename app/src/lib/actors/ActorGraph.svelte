@@ -18,10 +18,13 @@ import GraphNode from './GraphNode.svelte'
 const {
 	proof = null,
 	selected = null,
+	focus = false,
 	onselect
 }: {
 	proof?: ProofStep | null
 	selected?: Actor | null
+	/** Ego view: the selected actor centered, only its direct partners shown. */
+	focus?: boolean
 	onselect?: (actor: Actor) => void
 } = $props()
 
@@ -58,18 +61,68 @@ const verdicts = $derived.by(() => {
 	return map
 })
 
+/**
+ * Focus: the ego graph. The selected actor sits centered; whoever feeds it
+ * stands in the left column, whomever it feeds in the right. Clicking a
+ * neighbor re-centers on it — that is the traversal: you walk the mesh one
+ * relationship at a time.
+ */
+const ego = $derived.by(() => {
+	if (!focus || !selected) return null
+	const id = selected.manifest.id
+	const feeders = [
+		...new Set(
+			bus
+				.edges()
+				.filter((e) => e.to === id)
+				.map((e) => e.from)
+		)
+	]
+	const fed = [
+		...new Set(
+			bus
+				.edges()
+				.filter((e) => e.from === id)
+				.map((e) => e.to)
+		)
+	]
+	return { id, feeders: feeders.filter((f) => !fed.includes(f) || true), fed }
+})
+
 const nodes = $derived.by<Node[]>(() => {
+	const centerId = selected?.manifest.id
+	const make = (actor: Actor, x: number, y: number): Node => {
+		const verdict = verdicts ? (verdicts.get(actor.manifest.id) ?? ('idle' as const)) : null
+		return {
+			id: actor.manifest.id,
+			type: 'actor',
+			position: { x, y },
+			data: { actor, hue, verdict, center: actor.manifest.id === centerId },
+			selected: actor.manifest.id === centerId
+		}
+	}
+
+	if (ego) {
+		const result: Node[] = []
+		const tallest = Math.max(ego.feeders.length, ego.fed.length, 1)
+		const middle = ((tallest - 1) * 210) / 2
+		ego.feeders.forEach((id, y) => {
+			const actor = bus.get(id)
+			if (actor) result.push(make(actor, 0, y * 210))
+		})
+		const center = bus.get(ego.id)
+		if (center) result.push(make(center, 320, middle))
+		ego.fed.forEach((id, y) => {
+			const actor = bus.get(id)
+			if (actor && !result.some((n) => n.id === id)) result.push(make(actor, 640, y * 210))
+		})
+		return result
+	}
+
 	const result: Node[] = []
 	bus.stages().forEach((stage, x) => {
 		stage.forEach((actor, y) => {
-			const verdict = verdicts ? (verdicts.get(actor.manifest.id) ?? ('idle' as const)) : null
-			result.push({
-				id: actor.manifest.id,
-				type: 'actor',
-				position: { x: x * 300, y: y * 210 },
-				data: { actor, hue, verdict },
-				selected: selected?.manifest.id === actor.manifest.id
-			})
+			result.push(make(actor, x * 300, y * 210))
 		})
 	})
 	return result
@@ -77,7 +130,8 @@ const nodes = $derived.by<Node[]>(() => {
 
 const edges = $derived.by<Edge[]>(() => {
 	const onPath = verdicts
-	return bus.edges().map((e) => {
+	const shown = ego ? bus.edges().filter((e) => e.from === ego.id || e.to === ego.id) : bus.edges()
+	return shown.map((e) => {
 		const lit = onPath ? onPath.has(e.from) && onPath.has(e.to) : true
 		return {
 			id: `${e.from}-${e.predicate}-${e.to}`,
@@ -96,7 +150,9 @@ const edges = $derived.by<Edge[]>(() => {
 const nodeTypes = { actor: GraphNode }
 </script>
 
-<div class="h-[420px] shrink-0 overflow-hidden rounded-2xl border border-foreground/5 bg-surface-soft/60">
+<div
+	class="h-[420px] shrink-0 overflow-hidden rounded-2xl border border-foreground/5 bg-surface-soft/60"
+>
 	<SvelteFlow
 		{nodes}
 		{edges}

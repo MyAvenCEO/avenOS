@@ -15,6 +15,7 @@ const {
 		actor: Actor
 		hue: (p: string) => string
 		verdict: 'satisfied' | 'unsatisfied' | 'idle' | null
+		center?: boolean
 	}
 } = $props()
 
@@ -26,7 +27,9 @@ const ring = $derived(
 			? 'border-status-error ring-2 ring-status-error/30'
 			: data.verdict === 'idle'
 				? 'border-foreground/5 opacity-40'
-				: 'border-foreground/5'
+				: data.center
+					? 'border-primary ring-2 ring-primary/20'
+					: 'border-foreground/5'
 )
 </script>
 
