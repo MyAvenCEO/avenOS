@@ -46,14 +46,43 @@ export class MessageBus {
 		return this.#actors.get(id)
 	}
 
-	/** Route one envelope to its actor. Unknown addressees answer as errors. */
-	send(envelope: Envelope): HandlerResult {
+	/** Route one envelope into its actor's mailbox. Unknown addressees error. */
+	send(envelope: Envelope): Promise<HandlerResult> {
 		const actor = this.#actors.get(envelope.to)
 		if (!actor) {
 			const record = JSON.stringify({ ok: false, error: `kein Actor ${envelope.to}` })
-			return { record, wire: `kein Actor ${envelope.to}` }
+			return Promise.resolve({ record, wire: `kein Actor ${envelope.to}` })
 		}
-		return actor.receive(envelope.method, envelope.payload)
+		return actor.deliver(envelope.method, envelope.payload)
+	}
+
+	/**
+	 * The execution engine, forward-chaining: emitting a predicate delivers it
+	 * to every actor whose requires unifies with its functor — the handler for
+	 * a subscribed predicate is the handler named after the functor. This is
+	 * produce/require as ROUTING rather than documentation: the graph the
+	 * explorer derives is the graph that runs.
+	 */
+	emit(
+		predicate: string,
+		payload: Record<string, unknown>,
+		from = 'system'
+	): Promise<HandlerResult[]> {
+		const name = functor(predicate)
+		const targets = this.actors().filter(
+			(a) => a.requires.some((r) => functor(r) === name) && a.handles(name)
+		)
+		return Promise.all(
+			targets.map((t) =>
+				this.send({
+					id: `env_${nextEnvelope++}`,
+					from,
+					to: t.manifest.id,
+					method: name,
+					payload
+				})
+			)
+		)
 	}
 
 	/** Interview an actor — the one path on which the injected LLM may speak. */
@@ -93,11 +122,11 @@ export class MessageBus {
 	}
 
 	/** Tool-call bridge: a named method becomes an ordinary envelope. */
-	dispatch(from: string, method: string, payload: Record<string, unknown>): HandlerResult {
+	dispatch(from: string, method: string, payload: Record<string, unknown>): Promise<HandlerResult> {
 		const owner = this.actors().find((a) => a.handles(method))
 		if (!owner) {
 			const record = JSON.stringify({ ok: false, error: `unbekanntes Werkzeug ${method}` })
-			return { record, wire: `unbekanntes Werkzeug ${method}` }
+			return Promise.resolve({ record, wire: `unbekanntes Werkzeug ${method}` })
 		}
 		return this.send({
 			id: `env_${nextEnvelope++}`,

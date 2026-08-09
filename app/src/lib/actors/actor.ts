@@ -56,7 +56,7 @@ export interface HandlerResult {
 	wire: string
 }
 
-export type Handler = (payload: Record<string, unknown>) => HandlerResult
+export type Handler = (payload: Record<string, unknown>) => HandlerResult | Promise<HandlerResult>
 
 /** The natural-language service an ask() consults; injected, never imported. */
 export type Llm = (system: string, question: string) => Promise<string>
@@ -112,8 +112,42 @@ export class Actor {
 		return method in this.#handlers
 	}
 
-	/** One ordinary message: deterministic, no LLM anywhere in this path. */
-	receive(method: string, payload: Record<string, unknown>): HandlerResult {
+	/**
+	 * The mailbox: messages are processed strictly one at a time, in arrival
+	 * order — the actor-model guarantee that makes per-actor reasoning local.
+	 * Ordinary messages stay deterministic (no LLM anywhere in this path); a
+	 * handler that throws is contained as a structured error result and the
+	 * mailbox keeps pumping.
+	 */
+	#mailbox: {
+		method: string
+		payload: Record<string, unknown>
+		resolve: (r: HandlerResult) => void
+	}[] = []
+	#pumping = false
+
+	deliver(method: string, payload: Record<string, unknown>): Promise<HandlerResult> {
+		return new Promise((resolve) => {
+			this.#mailbox.push({ method, payload, resolve })
+			void this.#pump()
+		})
+	}
+
+	async #pump(): Promise<void> {
+		if (this.#pumping) return
+		this.#pumping = true
+		try {
+			while (this.#mailbox.length > 0) {
+				const message = this.#mailbox.shift()
+				if (!message) break
+				message.resolve(await this.#handle(message.method, message.payload))
+			}
+		} finally {
+			this.#pumping = false
+		}
+	}
+
+	async #handle(method: string, payload: Record<string, unknown>): Promise<HandlerResult> {
 		const handler = this.#handlers[method]
 		if (!handler) {
 			const record = JSON.stringify({
@@ -122,7 +156,13 @@ export class Actor {
 			})
 			return { record, wire: `${this.manifest.id} kennt ${method} nicht` }
 		}
-		return handler(payload)
+		try {
+			return await handler(payload)
+		} catch (err) {
+			const reason = err instanceof Error ? err.message : String(err)
+			const record = JSON.stringify({ ok: false, error: `${method} scheiterte: ${reason}` })
+			return { record, wire: `${method} scheiterte: ${reason}` }
+		}
 	}
 
 	/**

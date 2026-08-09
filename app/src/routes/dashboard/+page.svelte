@@ -2,16 +2,12 @@
 import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
 import ActorExplorer from '$lib/actors/ActorExplorer.svelte'
-import type { Activity } from '$lib/actors/activity.svelte'
-import { ACTIVITY_LABELS, ToolActivity } from '$lib/actors/activity.svelte'
-import { bus } from '$lib/actors/bus'
-import { SEED_ACTORS } from '$lib/actors/seed'
+import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
+import { chatActor, summarizeCall } from '$lib/actors/chat.actor.svelte'
+import { listenerActor } from '$lib/actors/listener.actor.svelte'
+import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import WorkItemsView from '$lib/actors/WorkItemsView.svelte'
 import { workItems } from '$lib/actors/workitems.svelte'
-import { Listener } from '$lib/asr/listener.svelte'
-import { Chat } from '$lib/chat/chat.svelte'
-import { streamChat } from '$lib/chat/redpill'
-import { Speaker } from '$lib/tts/speaker.svelte'
 
 /**
  * Dashboard — a chat against RedPill's confidential Gemma
@@ -22,88 +18,14 @@ import { Speaker } from '$lib/tts/speaker.svelte'
  * entirely on-device.
  */
 
-const speaker = new Speaker()
-
 /**
- * The registry: everything the dashboard can do is an actor on the bus.
- * WorkItems is real; the intent-router chain is seeded as contract-carrying
- * stubs so the mesh has its shape before the execution engine exists.
+ * The page constructs nothing. The mesh assembles itself in the actor
+ * modules — registration, contracts, the emit wiring — and this file merely
+ * renders the actors' state. The aliases keep the template readable.
  */
-bus.register(workItems)
-for (const actor of SEED_ACTORS) bus.register(actor)
-
-// The one LLM in the system, injected once. Only ask() may reach it —
-// ordinary messages stay deterministic.
-bus.llm = async (system, question) => {
-	let text = ''
-	for await (const event of streamChat(
-		[
-			{ role: 'system', content: system },
-			{ role: 'user', content: question }
-		],
-		[]
-	)) {
-		if (event.kind === 'text') text += event.text
-	}
-	return text
-}
-
-const activity = new ToolActivity()
-
-/** One displayable entry for a call — the owning actor knows its own words. */
-function summarizeCall(name: string, record: string): Omit<Activity, 'id'> | null {
-	if (name === 'actor_ask') {
-		try {
-			const parsed = JSON.parse(record)
-			return { kind: 'asked', titles: [String(parsed.actor ?? '')], note: undefined }
-		} catch {
-			return null
-		}
-	}
-	return workItems.summarize(name, record)
-}
-
-// Every delta goes to the bubble and to the speaker at the same time, so the
-// first sentence is usually being read out while the model is still writing.
-const chat = new Chat(
-	{
-		onDelta: (text) => speaker.feed(text),
-		onDone: () => speaker.flush(),
-		// Tool calls mean the real answer is still coming; unsay the placeholder.
-		onRestart: () => speaker.silence()
-	},
-	// The model's tools ARE the registry: specs derive from manifests, a call
-	// becomes an ordinary envelope on the bus. Register an actor, the model
-	// can call it.
-	{
-		specs: bus.toolSpecs().map(({ name, description, parameters }) => ({
-			name,
-			description,
-			parameters
-		})),
-		run: async (name, args) => {
-			let payload: Record<string, unknown> = {}
-			try {
-				payload = args.trim() === '' ? {} : JSON.parse(args)
-			} catch {
-				const record = JSON.stringify({ ok: false, error: `unlesbare Argumente: ${args}` })
-				return { record, wire: `unlesbare Argumente` }
-			}
-			if (name === 'actor_ask') {
-				const answer = await bus.ask(String(payload.actor ?? ''), String(payload.question ?? ''))
-				const result = {
-					record: JSON.stringify({ ok: true, actor: payload.actor, answer }),
-					wire: answer
-				}
-				activity.show(summarizeCall(name, result.record))
-				return result
-			}
-			const result = bus.dispatch('chat', name, payload)
-			activity.show(summarizeCall(name, result.record))
-			return result
-		}
-	}
-)
+const speaker = speakerActor.core
+const chat = chatActor.core
+const listener = listenerActor.core
 
 /**
  * Which surface fills the middle of the screen: the skills workspace, or the
@@ -113,25 +35,6 @@ const chat = new Chat(
  * gets asked for.
  */
 let tab = $state<'skills' | 'actors' | 'chat'>('skills')
-
-const listener = new Listener({
-	// Barge-in. This fires on voice activity alone, ~64ms in, with nothing yet
-	// transcribed — which is the only way interrupting feels like interrupting
-	// a person rather than cancelling a download.
-	onSpeechStart: () => {
-		// Unconditional. Both are no-ops when idle, and the conditional version
-		// could miss the window where a reply is streaming but the first sentence
-		// has not reached the speaker yet — talking there left the request running
-		// and the answer arrived anyway, on top of whatever was said next.
-		speaker.silence()
-		chat.stop()
-	},
-	// A finished utterance is just a message. No send button in the loop.
-	onUtterance: (text) => {
-		speaker.resumeAudio()
-		chat.send(text)
-	}
-})
 
 /**
  * Voice is the default, except where there is no voice.

@@ -65,3 +65,6 @@ export class ToolActivity {
 		}, LINGER)
 	}
 }
+
+/** The one toast — page renders it, actors feed it. */
+export const activity = new ToolActivity()

@@ -39,15 +39,15 @@ function pair() {
 }
 
 describe('actor core', () => {
-	test('an envelope reaches the right handler', () => {
+	test('an envelope reaches the right handler', async () => {
 		const { bus } = pair()
-		const result = bus.dispatch('test', 'make_thing', {})
+		const result = await bus.dispatch('test', 'make_thing', {})
 		expect(result.wire).toBe('ein Ding gemacht')
 	})
 
-	test('an unknown method answers as a structured error, never throws', () => {
+	test('an unknown method answers as a structured error, never throws', async () => {
 		const { bus } = pair()
-		const result = bus.dispatch('test', 'no_such_method', {})
+		const result = await bus.dispatch('test', 'no_such_method', {})
 		expect(JSON.parse(result.record).ok).toBe(false)
 		expect(result.wire).toContain('no_such_method')
 	})
@@ -100,5 +100,79 @@ describe('actor core', () => {
 		const names = bus.toolSpecs().map((s) => s.name)
 		expect(names).toContain('make_thing')
 		expect(names).toContain('actor_ask')
+	})
+})
+
+describe('execution engine', () => {
+	test('emit fans out to exactly the actors whose requires unify', async () => {
+		const bus = new MessageBus()
+		const seen: string[] = []
+		const listenerFor = (id: string) =>
+			new Actor(
+				{
+					id,
+					name: id,
+					description: '',
+					tags: [],
+					methods: [],
+					requires: ['thing(X)'],
+					produces: []
+				},
+				{
+					thing: (p) => {
+						seen.push(`${id}:${p.value}`)
+						return { record: '{"ok":true}', wire: 'ok' }
+					}
+				}
+			)
+		bus.register(listenerFor('a'))
+		bus.register(listenerFor('b'))
+		// c requires something else and must NOT receive the emit
+		bus.register(
+			new Actor(
+				{ id: 'c', name: 'c', description: '', tags: [], methods: [], requires: ['other(Y)'] },
+				{
+					other: () => {
+						seen.push('c')
+						return { record: '{"ok":true}', wire: 'ok' }
+					}
+				}
+			)
+		)
+		await bus.emit('thing(T)', { value: 1 })
+		expect(seen.sort()).toEqual(['a:1', 'b:1'])
+	})
+
+	test('a mailbox processes async handlers strictly one at a time, in order', async () => {
+		const log: string[] = []
+		const actor = new Actor(
+			{ id: 's', name: 's', description: '', tags: [], methods: [] },
+			{
+				slow: async (p) => {
+					log.push(`start:${p.n}`)
+					// The first message dawdles; without a real mailbox the second
+					// would interleave and finish first.
+					await new Promise((r) => setTimeout(r, p.n === 1 ? 30 : 1))
+					log.push(`end:${p.n}`)
+					return { record: '{"ok":true}', wire: 'ok' }
+				}
+			}
+		)
+		await Promise.all([actor.deliver('slow', { n: 1 }), actor.deliver('slow', { n: 2 })])
+		expect(log).toEqual(['start:1', 'end:1', 'start:2', 'end:2'])
+	})
+
+	test('a throwing handler is contained as a structured error', async () => {
+		const actor = new Actor(
+			{ id: 't', name: 't', description: '', tags: [], methods: [] },
+			{
+				boom: () => {
+					throw new Error('kaputt')
+				}
+			}
+		)
+		const result = await actor.deliver('boom', {})
+		expect(JSON.parse(result.record).ok).toBe(false)
+		expect(result.wire).toContain('kaputt')
 	})
 })
