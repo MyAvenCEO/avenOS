@@ -54,7 +54,8 @@ export const TODO_TOOLS: ToolSpec[] = [
 		name: 'todo_update',
 		description:
 			'Ändert eine oder mehrere Aufgaben — erledigt ja/nein, oder den Titel. Alle gemeinten ' +
-			'Aufgaben in einem Aufruf.',
+			'Aufgaben in einem Aufruf. Das ist der Normalfall: „habe ich schon", „brauche ich ' +
+			'nicht mehr", „ist erledigt", „hab ich gemacht" heißen alle done=true, nicht löschen.',
 		parameters: {
 			type: 'object',
 			properties: {
@@ -68,8 +69,9 @@ export const TODO_TOOLS: ToolSpec[] = [
 	{
 		name: 'todo_delete',
 		description:
-			'Löscht eine oder mehrere Aufgaben endgültig. Für erledigt nutze todo_update mit ' +
-			'done=true, nicht das hier.',
+			'Löscht eine oder mehrere Aufgaben unwiderruflich. Nur wenn jemand ausdrücklich ' +
+			'löschen, entfernen oder streichen sagt. Etwas erledigt zu haben ist kein Grund zu ' +
+			'löschen — dafür ist todo_update mit done=true da. Im Zweifel abhaken, nicht löschen.',
 		parameters: {
 			type: 'object',
 			properties: { ids: IDS },
