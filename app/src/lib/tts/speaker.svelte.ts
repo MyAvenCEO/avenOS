@@ -40,6 +40,20 @@ export class Speaker {
 	failure = $state<string | null>(null)
 	/** Weight download, 0..1. Only meaningful while `preparing`. */
 	progress = $state(0)
+	/**
+	 * What the output device is doing, and how much work is in flight.
+	 *
+	 * A voice that goes quiet has two very different causes that look identical
+	 * from the outside — synthesis that never comes back, and audio scheduled
+	 * into a context that is not running — and no error is raised for either.
+	 * These three make the difference visible: sentences out at Rust, buffers
+	 * that came back, and whether the speakers are actually awake.
+	 */
+	output = $state<AudioContextState | 'none'>('none')
+	inflight = $state(0)
+	decoded = $state(0)
+	/** Seconds between now and where the last sentence was placed on the timeline. */
+	lead = $state(0)
 
 	#context: AudioContext | null = null
 	/** Text seen since the last sentence was queued. */
@@ -131,10 +145,18 @@ export class Speaker {
 
 	/** The output context, woken if it can be and unblocked when it cannot. */
 	#audio(): AudioContext {
-		this.#context ??= new AudioContext()
+		if (!this.#context) {
+			this.#context = new AudioContext()
+			this.#context.onstatechange = () => {
+				this.output = this.#context?.state ?? 'none'
+			}
+		}
 		const context = this.#context
+		this.output = context.state
 		if (context.state === 'suspended') {
-			void context.resume()
+			void context.resume().then(() => {
+				this.output = context.state
+			})
 			this.#arm()
 		}
 		return context
@@ -259,10 +281,17 @@ export class Speaker {
 
 		// The command answers with a WAV as raw bytes rather than a JSON array of
 		// a few hundred thousand floats, so decoding is the browser's own job.
-		const wav = await invoke<ArrayBuffer>('tts_speak', { text, lang: 'de' })
+		this.inflight++
+		let wav: ArrayBuffer
+		try {
+			wav = await invoke<ArrayBuffer>('tts_speak', { text, lang: 'de' })
+		} finally {
+			this.inflight--
+		}
 		if (generation !== this.#generation) return null
 
 		const buffer = await context.decodeAudioData(wav)
+		this.decoded++
 		// Interrupted while this was being made. Play it and the user would hear
 		// the sentence they just talked over.
 		return generation === this.#generation ? buffer : null
@@ -289,5 +318,6 @@ export class Speaker {
 		this.#sources.add(source)
 		source.start(at)
 		this.#playhead = at + buffer.duration
+		this.lead = Math.round((at - context.currentTime) * 10) / 10
 	}
 }

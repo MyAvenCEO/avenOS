@@ -125,6 +125,10 @@ const phase = $derived.by(() => {
 			? { key: 'starting', label: 'Ohren starten…' }
 			: { key: 'loading', label: `Ohren laden ${Math.round(listener.progress * 100)}%` }
 	if (listener.speech) return { key: 'hearing', label: 'Hört zu' }
+	// Audio output that never got a user gesture. Saying "Spricht" over a sleeping
+	// device is the one state that gives you nothing to act on — this one you can
+	// tap, and one tap fixes it for the rest of the session.
+	if (speaker.output === 'suspended') return { key: 'blocked', label: 'Ton aktivieren' }
 	if (speaker.speaking) return { key: 'speaking', label: 'Spricht' }
 	if (chat.streaming) return { key: 'thinking', label: 'Denkt nach' }
 	if (listener.status === 'listening') return { key: 'idle', label: 'Bereit' }
@@ -364,7 +368,20 @@ $effect(() => {
 						? `transform: scale(${1 + Math.min(listener.level, 1) * 2})`
 						: ''}
 				></span>
-				<span class="flex-1 text-sm">{phase.label}</span>
+				{#if phase.key === 'blocked'}
+					<!-- The whole label is the button. There is nothing else to do in this
+					     state, and a separate control next to it would just be a second
+					     thing to read before the obvious one. -->
+					<button
+						type="button"
+						onclick={() => speaker.resumeAudio()}
+						class="flex-1 text-left text-sm underline underline-offset-4"
+					>
+						{phase.label}
+					</button>
+				{:else}
+					<span class="flex-1 text-sm">{phase.label}</span>
+				{/if}
 				{#if chat.streaming || speaker.speaking}
 					<button
 						type="button"
@@ -427,6 +444,17 @@ $effect(() => {
 				</button>
 			{/if}
 		</div>
+
+		<!-- Only while the voice is working, and only in the app. "Spricht" with no
+		     sound has two causes that look the same from outside — synthesis that
+		     never returns, and audio scheduled into a device that is not running —
+		     and this is the difference: sentences out, buffers back, device state. -->
+		{#if speaker.speaking || speaker.output === 'suspended'}
+			<p class="mt-2 font-mono text-[0.6875rem] opacity-40">
+				{speaker.inflight}
+				unterwegs · {speaker.decoded} fertig · Ausgabe {speaker.output}
+			</p>
+		{/if}
 
 		{#if phase.key === 'loading'}
 			<div class="mt-3 h-1 overflow-hidden rounded-full bg-primary-foreground/20">
