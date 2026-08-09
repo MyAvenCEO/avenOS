@@ -200,3 +200,41 @@ fn wav_bytes(samples: &[f32], sample_rate: i32) -> Vec<u8> {
 	}
 	out
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// How long does one sentence take to synthesize, per denoising step?
+	///
+	/// This is the number that decides how quickly a reply starts speaking:
+	/// nothing is heard until the first sentence exists as audio, and the cost is
+	/// near-constant per sentence rather than proportional to its length. Ignored
+	/// by default because it needs the downloaded weights.
+	#[test]
+	#[ignore = "needs the downloaded models"]
+	fn measures_synthesis_latency() {
+		let home = std::env::var("HOME").unwrap();
+		let dir = format!("{home}/Library/Caches/ceo.aven.os/tts/supertonic-3");
+		let mut tts = supertonic::load_text_to_speech(&dir, false).expect("models should open");
+		let style =
+			supertonic::load_voice_style(&[format!("{dir}/{DEFAULT_VOICE}.json")], false).unwrap();
+
+		for steps in [8usize, 4, 3, 2] {
+			// First call warms the sessions; report the second.
+			for round in 0..2 {
+				let started = std::time::Instant::now();
+				let (samples, _) = tts
+					.call("Klar, einen Moment.", "de", &style, steps, SPEED, CHUNK_SILENCE)
+					.expect("synthesis should work");
+				if round == 1 {
+					println!(
+						"  {steps} steps -> {:.0} ms for {:.2}s of audio",
+						started.elapsed().as_secs_f32() * 1000.0,
+						samples.len() as f32 / tts.sample_rate as f32
+					);
+				}
+			}
+		}
+	}
+}

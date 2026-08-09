@@ -13,10 +13,19 @@ import { type ChatMessage, streamChat, type ToolSpec } from './redpill'
  * the results in hand; that repeats until it replies with prose.
  */
 
+/**
+ * The five-word rule earns its place: nothing is spoken until a sentence
+ * boundary arrives, so the opening sentence's length sets the time to first
+ * audio. A short one is synthesized and playing while the rest is still being
+ * written, and the reply begins in a fraction of the time.
+ */
 const SYSTEM_PROMPT =
 	'Du bist avenOS, ein knapper und direkter Assistent mit einer Aufgabenliste. ' +
-	'Antworte immer auf Deutsch, in wenigen Sätzen, in reinem Fließtext ohne Markdown, ' +
-	'Listen oder Emojis — deine Antwort wird vorgelesen. ' +
+	'Antworte immer auf Deutsch, in reinem Fließtext ohne Markdown, Listen oder ' +
+	'Emojis — deine Antwort wird vorgelesen. ' +
+	'Dein erster Satz ist immer sehr kurz, höchstens fünf Wörter, und endet mit ' +
+	'einem Punkt: eine knappe Bestätigung oder ein Einstieg wie „Klar, einen Moment." ' +
+	'Alles Weitere kommt in den Sätzen danach. ' +
 	'Verwalte Aufgaben ausschließlich über die Werkzeuge, nie aus dem Gedächtnis: ' +
 	'rufe todo_list auf, bevor du über die Liste sprichst. ' +
 	'Bestätige knapp, was du getan hast, und lies Listen als Fließtext vor.'

@@ -55,7 +55,7 @@ const START_WINDOWS: usize = 2;
 /// and utterances were cut at "…ist es richtig". 1.3 s fixed that but is felt
 /// directly as delay, since nothing happens at all until this elapses. A second
 /// keeps the clause intact while giving a third of it back.
-const END_WINDOWS: usize = 31;
+const END_WINDOWS: usize = 40;
 
 /// Audio kept from *before* speech was detected, in samples (512 ms).
 ///

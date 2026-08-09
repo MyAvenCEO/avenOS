@@ -53,7 +53,18 @@ export class Speaker {
 	 * started under an older generation is discarded instead.
 	 */
 	#generation = 0
-	#current: AudioBufferSourceNode | null = null
+	/** Everything scheduled and not yet finished, so `silence()` can stop it. */
+	#sources = new Set<AudioBufferSourceNode>()
+	/**
+	 * Context time at which the last scheduled sentence ends.
+	 *
+	 * Playback is scheduled on the audio clock rather than started when the
+	 * previous sentence's `onended` fires. Waiting for that callback and only
+	 * then calling `start()` costs an event-loop turn plus the audio callback's
+	 * own latency between every pair of sentences — audible as a stutter even
+	 * when the audio itself is ready.
+	 */
+	#playhead = 0
 
 	constructor() {
 		// Synthesis lives in the Rust side, so a plain browser tab has no `invoke`
@@ -133,8 +144,9 @@ export class Speaker {
 	silence(): void {
 		this.#queue = []
 		this.#pending = ''
-		this.#current?.stop()
-		this.#current = null
+		for (const source of this.#sources) source.stop()
+		this.#sources.clear()
+		this.#playhead = 0
 		this.#generation++
 		// Nothing is coming out of the speakers now, so say so immediately rather
 		// than waiting for the drain loop to unwind. The recognizer raises its
@@ -167,7 +179,7 @@ export class Speaker {
 
 		try {
 			const generation = this.#generation
-			// Already in flight while the sentence before it is still playing.
+			// Always one sentence in flight beyond the one being handled.
 			let ahead: Promise<AudioBuffer | null> | null = null
 
 			while ((this.#queue.length > 0 || ahead) && generation === this.#generation) {
@@ -175,13 +187,17 @@ export class Speaker {
 				ahead = this.#queue.length > 0 ? this.#synthesize(this.#queue.shift() ?? '') : null
 
 				const buffer = await current
-				if (buffer && generation === this.#generation) await this.#play(buffer)
+				// Scheduled, not awaited: the next sentence is synthesized while this
+				// one plays, and lands on the timeline exactly where it ends.
+				if (buffer && generation === this.#generation) this.#schedule(buffer)
 			}
 		} catch (err) {
 			this.failure = err instanceof Error ? err.message : String(err)
 		} finally {
 			this.#draining = false
-			this.speaking = false
+			// `speaking` is cleared by the last source ending, not here — audio is
+			// still on the timeline after the loop stops queueing it.
+			if (this.#sources.size === 0) this.speaking = false
 		}
 	}
 
@@ -206,21 +222,24 @@ export class Speaker {
 		return generation === this.#generation ? buffer : null
 	}
 
-	/** Play one buffer, resolving when it has finished. */
-	async #play(buffer: AudioBuffer): Promise<void> {
+	/** Put one buffer on the timeline, immediately after whatever precedes it. */
+	#schedule(buffer: AudioBuffer): void {
 		const context = this.#context
 		if (!context) return
 
-		await new Promise<void>((resolve) => {
-			const source = context.createBufferSource()
-			source.buffer = buffer
-			source.connect(context.destination)
-			source.onended = () => {
-				this.#current = null
-				resolve()
-			}
-			this.#current = source
-			source.start()
-		})
+		// A hair in the future when starting fresh, so the first sentence is not
+		// scheduled in the past while the graph spins up.
+		const at = Math.max(context.currentTime + 0.02, this.#playhead)
+		const source = context.createBufferSource()
+		source.buffer = buffer
+		source.connect(context.destination)
+		source.onended = () => {
+			this.#sources.delete(source)
+			if (this.#sources.size === 0 && !this.#draining) this.speaking = false
+		}
+
+		this.#sources.add(source)
+		source.start(at)
+		this.#playhead = at + buffer.duration
 	}
 }
