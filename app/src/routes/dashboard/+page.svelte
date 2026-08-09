@@ -1,4 +1,5 @@
 <script lang="ts">
+import { onMount } from 'svelte'
 import { Listener } from '$lib/asr/listener.svelte'
 import { Chat } from '$lib/chat/chat.svelte'
 import { Todos } from '$lib/todos/store.svelte'
@@ -56,9 +57,15 @@ const listener = new Listener({
 	}
 })
 
-// Hands-free by default: the mic opens as soon as the page does. The permission
-// prompt is the one gesture the browser insists on, and it appears on its own.
-$effect(() => {
+// Hands-free by default: the mic opens as soon as the page does.
+//
+// `onMount`, emphatically not `$effect`. An effect tracks what its body reads,
+// and `start()` both reads and writes `listener.status` — so the write
+// invalidated the effect, the cleanup tore the audio graph down, and it started
+// over, forever. The microphone was genuinely open the whole time (macOS even
+// showed the orange indicator), but the worklet never survived long enough to
+// deliver a single batch.
+onMount(() => {
 	void listener.start()
 	return () => listener.stop()
 })
