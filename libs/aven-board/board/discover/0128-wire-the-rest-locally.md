@@ -5,7 +5,7 @@ owner: claude
 created: 2026-08-09
 updated: 2026-08-09
 tags: [actors, abject, prolog, unification, trace, registry]
-goal: "`bun run check` exits 0 AND `bun test app/tests/actors.test.ts` exits 0 including new tests (term parsing + unification with variable binding: intent(M, hoch) unifies with intent(X, hoch) but not intent(X, niedrig); prove() carries bindings; registry actor answers registry_list with every registered id; actor_create registers a manifest-only actor that immediately appears in edges()/prove(); the trace records an envelope with sender, method and ok) AND the explorer shows a Trace panel (`grep -n \"Trace\" app/src/lib/actors/ActorExplorer.svelte` non-empty) AND the registry actor is registered (`grep -n \"registry\" app/src/lib/actors/*.ts` shows a RegistryActor) AND every Acceptance criterion below is checked"
+goal: "`bun run check` exits 0 AND `bun test app/tests/actors.test.ts` exits 0 including new tests (term parsing + unification with variable binding: intent(M, hoch) unifies with intent(X, hoch) but not intent(X, niedrig); ROUTING uses the same unification — an emit of status(offen) does not reach a consumer of status(erledigt); prove() carries bindings; registry actor answers registry_list with every registered id; actor_create registers a manifest-only actor that immediately appears in edges()/prove() AND survives a simulated reload via persisted manifests; the trace records an envelope, an emit fan-out and an ask() interview) AND the explorer shows a Trace panel (`grep -n \"Trace\" app/src/lib/actors/ActorExplorer.svelte` non-empty) AND created manifests persist (`grep -n \"localStorage\" app/src/lib/actors/registry.actor*.ts` non-empty) AND every Acceptance criterion below is checked"
 ---
 
 # Wire the rest, locally
@@ -35,6 +35,16 @@ against today's registry:
    bindings through the tree (rendered in the proof UI); edges()/emit() use unifiability
    instead of functor equality. Constants must match: `intent(X, hoch)` no longer unifies with
    `intent(M, niedrig)`.
+
+Decided in discovery (user-confirmed, all three on the recommended option):
+- **Created actors persist**: actor_create manifests save to localStorage and rehydrate as
+  contract-actors at boot — spoken into existence and it stays; handlers arrive with the
+  execution engine.
+- **Unify everywhere**: one matching rule for prover AND router — emit/edges use full term
+  unifiability, so `status(offen)` no longer reaches a consumer of `status(erledigt)`. The
+  graph you prove is the graph that runs.
+- **Trace everything on the bus**: envelopes, emit fan-outs, and ask() interviews — the
+  complete biography, filterable per actor.
 
 Explicitly out (user): capabilities/permission gates, P2P/CRDT, KnowledgeBase. Out (needs typed
 payload execution): runProof, proxy generation, self-healing, scrum loop.
@@ -72,10 +82,11 @@ runtime actor creation by the model, and proofs that bind variables.
 ## Acceptance criteria
 
 - [ ] unify: variable binding, constant mismatch rejection, variable-variable, bindings threaded
-      through prove() and visible in the proof UI
+      through prove() and visible in the proof UI; routing (emit/edges) uses the same rule
 - [ ] registry_list names every actor; registry_describe returns manifest prose
-- [ ] actor_create by the model: new actor visible in registry list, graph, and provable
-- [ ] Trace panel shows the envelopes of a live turn, filterable by actor
+- [ ] actor_create by the model: new actor visible in registry list, graph, and provable;
+      its manifest survives reload (localStorage rehydration)
+- [ ] Trace panel shows the envelopes, emits and asks of a live turn, filterable by actor
 - [ ] All prior 18 tests still green; `bun run check` exits 0
 
 ## Verification
@@ -88,3 +99,6 @@ runtime actor creation by the model, and proofs that bind variables.
 
 - 2026-08-09 — discovered (from the e2e audit): the four wireable-now pieces named, exclusions
   confirmed by user (capabilities, P2P, KnowledgeBase); card written to discover/.
+- 2026-08-09 — discovery round 2 (/aven-discover): three load-bearing decisions confirmed —
+  persist created manifests (localStorage rehydration), unify everywhere (router = prover),
+  trace everything on the bus incl. ask(). Goal + criteria updated. Ready for /aven-build.
