@@ -221,11 +221,22 @@ impl Engine {
 			let tail = self.normalized(&tail);
 			self.model.transcribe_chunk(&tail)?;
 		}
-		// No trailing silence chunk at all. Upstream's batch example pushes three,
-		// but every one is a full inference standing between the user finishing a
-		// sentence and the reply starting — and by the time an utterance closes,
-		// a second of real silence has already been streamed through the decoder
-		// while the end-of-turn threshold ran down. It has been flushed already.
+		// Three chunks of silence, as upstream does, and not one of them optional.
+		//
+		// The decoder emits lazily: its last tokens only come out once more frames
+		// go through it, and three to five words' worth were still inside. Cutting
+		// this to one chunk, then to none, lost the end of every sentence — and the
+		// reference test missed it both times, because that recording has a second
+		// of trailing silence baked in which flushed the decoder by accident. Live,
+		// an utterance closes the instant silence is detected and nothing more is
+		// ever pushed.
+		//
+		// It was removed as a latency saving. It never was one worth having: the
+		// same optimization that made everything else quick applies here, so three
+		// inferences now cost what part of one used to.
+		for _ in 0..3 {
+			self.model.transcribe_chunk(&vec![0.0; ASR_CHUNK])?;
+		}
 		Ok(self.model.get_transcript())
 	}
 }
@@ -517,5 +528,12 @@ mod tests {
 			started.elapsed().as_secs_f32()
 		);
 		assert!(!transcript.trim().is_empty(), "recognized nothing at all");
+		// The end of the sentence, not just the start of it. Removing the decoder
+		// flush left the last three to five words inside the model, which an
+		// is-it-empty check happily passes.
+		assert!(
+			transcript.to_lowercase().contains("ohne cloud"),
+			"lost the tail of the utterance: {transcript:?}"
+		);
 	}
 }
