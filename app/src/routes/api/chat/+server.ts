@@ -26,14 +26,15 @@ const REDPILL_CHAT_URL = 'https://api.redpill.ai/v1/chat/completions'
  * All ids here are TEE routes, which is the entire reason for going through
  * RedPill rather than straight to a model host.
  *
- * Qwen replaced Gemma after a head-to-head with the dashboard's own payload:
- * same time to first token (1.3s) and tool round (1.5s) — it is a 3B-active
- * MoE — but with a chat template that has a real tool lane, where Gemma
- * intermittently wrote calls as Python into the name field and, on bad runs,
- * corrupted its own stream outright. Thinking is disabled below; left on, the
- * same request took 8.4s to the first token.
+ * Chosen by benchmark against the dashboard's own payload. Gemma corrupted
+ * its stream and wrote calls as Python; the 3B-active qwen3.6-35b-a3b matched
+ * Gemma's speed but not its judgement. This one is both the strongest and the
+ * fastest measured: 122B with 10B active, ttft 1.1-1.3s, tool call complete
+ * in 1.3s — against 1.7-2.6s for glm-5.2 and 2.6-4.4s for kimi-k2.5, the next
+ * models up. Thinking is disabled below; with it on, Qwen routes spend many
+ * seconds deliberating before the first token.
  */
-const MODEL = 'qwen/qwen3.6-35b-a3b'
+const MODEL = 'qwen/qwen3.5-122b-a10b'
 
 export const POST: RequestHandler = async ({ request, fetch }) => {
 	const apiKey = env.PHALA_API_KEY

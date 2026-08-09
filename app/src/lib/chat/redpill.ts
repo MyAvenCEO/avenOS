@@ -6,7 +6,7 @@
  * unit-tested and reused outside a component.
  */
 
-export type ChatRole = 'system' | 'user' | 'assistant'
+export type ChatRole = 'system' | 'user' | 'assistant' | 'tool'
 
 export interface ToolCall {
 	id: string
@@ -16,19 +16,23 @@ export interface ToolCall {
 }
 
 /**
- * One message on the wire.
+ * One message on the wire — the standard OpenAI shape, tool lane included.
  *
- * Deliberately without `tool_calls` or a `tool` role, though both are in the
- * OpenAI schema this endpoint otherwise speaks. Gemma's chat template has only
- * user and model turns: sending a tool result back as `role: "tool"` makes the
- * model return an entirely empty turn, and from there it starts narrating tool
- * calls as prose and reciting its own system prompt. Results go back as user
- * messages instead, which it handles correctly. The model can still *emit*
- * tool calls — that half works fine.
+ * It was not always this. Gemma's chat template had no tool role: sending a
+ * result back as `role: "tool"` got an empty turn back, so results traveled
+ * as user messages and every tool round left a synthetic assistant filler in
+ * the history. Qwen imitated exactly that scaffolding — final answers of
+ * literal "…", duplicated create calls — because to a model with a real tool
+ * lane the workaround itself looks like degenerate conversation. With calls
+ * and results in their proper fields, there is nothing fake to imitate.
  */
 export interface ChatMessage {
 	role: ChatRole
 	content: string
+	/** Assistant turns only: the calls made in that turn. */
+	tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
+	/** Tool turns only: which call this result answers. */
+	tool_call_id?: string
 }
 
 /** A tool as the model is told about it. */

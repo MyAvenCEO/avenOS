@@ -24,18 +24,25 @@ const SYSTEM_PROMPT =
 	'Antworte immer auf Deutsch, in reinem Fließtext ohne Markdown, Listen oder ' +
 	'Emojis — deine Antwort wird vorgelesen. ' +
 	'Dein erster Satz ist immer sehr kurz, höchstens fünf Wörter, und endet mit ' +
-	'einem Punkt: eine knappe Bestätigung oder ein Einstieg wie „Klar, einen Moment." ' +
-	'Alles Weitere kommt in den Sätzen danach. ' +
-	'Du änderst die Liste ausschließlich über die Werkzeuge, nie aus dem Gedächtnis. ' +
-	'Aufgaben werden immer über ihre id angesprochen, nie über den Titel — rufe also ' +
-	'todo_list auf, bevor du etwas änderst, löschst oder über die Liste sprichst, und ' +
-	'nimm die ids von dort. Mehrere Aufgaben immer in einem einzigen Aufruf. ' +
-	'Behaupte niemals, etwas eingetragen, geändert, abgehakt oder gelöscht zu haben, ' +
-	'ohne im selben Zug das passende Werkzeug aufzurufen — eine Bestätigung ohne ' +
-	'Werkzeugaufruf ist eine Lüge. Sagt jemand, etwas sei erledigt, rufe todo_update ' +
-	'mit done=true auf. Lies Listen als Fließtext vor. ' +
-	'Wenn du Werkzeuge aufrufst, schreibe im selben Zug keinen Text — deine Antwort ' +
-	'kommt erst, wenn du die Ergebnisse hast, und zwar dann in einem Stück.'
+	'einem Punkt. Alles Weitere kommt in den Sätzen danach. ' +
+	'Handle sofort: rufe die Werkzeuge im selben Zug auf, in dem du von einer ' +
+	'Änderung erfährst. Sage niemals, dass du etwas notiert hast, gleich anlegst ' +
+	'oder dich darum kümmerst — entweder du hast das Werkzeug aufgerufen und ' +
+	'bestätigst das Ergebnis, oder du stellst eine kurze Rückfrage. Ein „habe ich ' +
+	'notiert" ohne Werkzeugaufruf ist eine Lüge. ' +
+	'Jede Aufgabe ist ein eigener Eintrag mit kurzem Titel — hänge nie mehrere ' +
+	'Dinge an einen bestehenden Titel an. „Vier gesunde Zutaten" heißt: vier ' +
+	'einzelne Aufgaben, die du dir selbst ausdenkst. ' +
+	'Aufgaben werden immer über ihre id angesprochen, nie über den Titel — rufe ' +
+	'todo_list auf, bevor du etwas änderst, löschst oder über die Liste sprichst. ' +
+	'Mehrere Aufgaben immer in einem einzigen Aufruf. ' +
+	'Sagt jemand, etwas sei erledigt, rufe todo_update mit done=true auf; gelöscht ' +
+	'wird nur auf ausdrücklichen Wunsch. Lies Listen als Fließtext vor. ' +
+	'Die Nachrichten kommen aus einer Spracherkennung und sind manchmal mitten im ' +
+	'Satz abgeschnitten. Wirkt eine Nachricht wie die Fortsetzung der vorigen, ' +
+	'behandle beide zusammen als eine Anfrage. ' +
+	'Wenn du Werkzeuge aufrufst, schreibe im selben Zug keinen Text — deine ' +
+	'Antwort kommt erst, wenn du die Ergebnisse hast, und zwar dann in einem Stück.'
 
 /**
  * Hard stop on tool rounds, so a model that keeps calling cannot loop forever.
@@ -58,6 +65,22 @@ const DEGENERATE = /[^\p{L}\p{Nd}]{20}$/u
 
 /** What to shave off a reply cut short by the degeneration guard. */
 const TRAILING_JUNK = /[^\p{L}\p{Nd}]+$/u
+
+/**
+ * A reply that claims or promises list work.
+ *
+ * Qwen's failure mode is the polite deferral — "Habe ich notiert.", "Ich lege
+ * nun die Aufgabe an." — prose in place of a tool call, with the list
+ * untouched. A reply matching this in a round that called no tools is not
+ * accepted: the model is told once to execute, and only what comes back after
+ * that stands.
+ */
+const CLAIMS_ACTION =
+	/notier|hinzugefügt|hinzufüg|angelegt|aktualisiert|gelöscht|abgehakt|markiert|eingetragen|erstellt|\bich (füge|lege|trage|erstelle|kümmere|werde)\b/i
+
+const NUDGE =
+	'Du hast kein Werkzeug aufgerufen — auf der Liste ist nichts passiert. ' +
+	'Führe die Änderung jetzt mit den Werkzeugen aus, ohne Text.'
 
 /**
  * The other collapse: a whole sentence repeated verbatim, on and on —
@@ -147,9 +170,21 @@ export class Chat {
 		this.#abort = new AbortController()
 
 		try {
+			let nudged = false
 			for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
 				const calls = await this.#round(reply)
-				if (calls.length === 0) break
+				if (calls.length === 0) {
+					// Said it did something, called nothing. Once per turn, the claim
+					// is bounced back as an instruction to actually do it.
+					if (!nudged && CLAIMS_ACTION.test(reply.content)) {
+						nudged = true
+						reply.content = ''
+						this.#sink.onRestart?.()
+						this.#wire.push({ role: 'user', content: NUDGE })
+						continue
+					}
+					break
+				}
 
 				// Anything said before calling a tool was a placeholder — "Alles klar,
 				// mache ich." — and the real answer comes in the next round. Keeping
@@ -161,17 +196,13 @@ export class Chat {
 					this.#sink.onRestart?.()
 				}
 
-				// Results go back as a user turn. See ChatMessage — a `tool` role
-				// makes this model answer with nothing at all.
-				const results = calls.map((call) => {
+				// One tool message per call, addressed by id — the format the model's
+				// own template expects, so nothing here reads as conversation.
+				for (const call of calls) {
 					const { record, wire } = this.#tools.run(call.name, call.arguments)
 					reply.calls?.push({ name: call.name, result: record })
-					return `${call.name} → ${wire}`
-				})
-				this.#wire.push({
-					role: 'user',
-					content: `Ergebnis der Werkzeuge:\n${results.join('\n')}`
-				})
+					this.#wire.push({ role: 'tool', tool_call_id: call.id, content: wire })
+				}
 			}
 			this.#sink.onDone?.()
 		} catch (err) {
@@ -239,13 +270,28 @@ export class Chat {
 
 		// Repaired before anything reads the name: this model sometimes writes the
 		// whole call into the name field as Python.
-		const asked = [...calls.values()].filter((c) => c.name !== '').map(repairCall)
-		// Never an empty assistant turn — a blank message is another way to get a
-		// blank reply out of this model — but never a narrated one either. Writing
-		// "Ich rufe todo_delete auf." into its own history taught it to answer
-		// with narration instead of calls; the results message that follows names
-		// the tools anyway, so a neutral ellipsis carries no pattern to imitate.
-		this.#wire.push({ role: 'assistant', content: content || '…' })
+		// Repaired before anything reads the name, and with ids guaranteed —
+		// the tool results reference their call by id.
+		const asked = [...calls.values()]
+			.filter((c) => c.name !== '')
+			.map(repairCall)
+			.map((c, i) => ({ ...c, id: c.id || `call_${i}` }))
+
+		// The turn goes into the history exactly as the model made it: prose in
+		// content, calls in tool_calls. The synthetic fillers of the Gemma era
+		// ("Ich rufe X auf.", a bare "…") each ended up imitated as answers —
+		// what sits here is what the model learns a reply looks like.
+		this.#wire.push({
+			role: 'assistant',
+			content,
+			...(asked.length > 0 && {
+				tool_calls: asked.map((c) => ({
+					id: c.id,
+					type: 'function' as const,
+					function: { name: c.name, arguments: c.arguments }
+				}))
+			})
+		})
 		return asked
 	}
 
