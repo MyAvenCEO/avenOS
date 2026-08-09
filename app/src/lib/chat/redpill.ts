@@ -44,6 +44,31 @@ export type StreamEvent =
 	| { kind: 'tool'; index: number; id?: string; name?: string; args?: string }
 
 /**
+ * Characters this assistant is expected to produce: Latin with the German
+ * accents, digits, whitespace, and ordinary punctuation.
+ */
+const EXPECTED = /[^\p{Script=Latin}\p{Nd}\p{P}\p{Zs}\n\r€$%+<=>^`|~°²³µ]/gu
+
+/**
+ * Drop characters the model had no business emitting.
+ *
+ * `phala/gemma-4-31b-it` intermittently corrupts its own output — doubled
+ * fragments, stray capitals, and Arabic or CJK codepoints dropped into German
+ * sentences ("Ja" arriving as "JaLHيJa"). Measured at roughly two replies in
+ * six on a bad run and none in twelve on a good one, with tools, temperature
+ * and the system prompt all ruled out as causes, and the non-TEE route to the
+ * same weights affected too.
+ *
+ * So this treats the symptom, deliberately. It matters most for the voice: the
+ * synthesizer will earnestly attempt to pronounce an Arabic letter dropped into
+ * a German clause. The cost is that genuinely non-Latin replies are mangled,
+ * which is an acceptable trade for an assistant that only speaks German.
+ */
+export function sanitize(text: string): string {
+	return text.replace(EXPECTED, '')
+}
+
+/**
  * Pull events out of one OpenAI-compatible SSE frame.
  *
  * Returns nothing for frames with no payload — the `[DONE]` sentinel, the
@@ -63,7 +88,8 @@ export function eventsFromFrame(frame: string): StreamEvent[] {
 
 		const events: StreamEvent[] = []
 		if (typeof delta.content === 'string' && delta.content !== '') {
-			events.push({ kind: 'text', text: delta.content })
+			const text = sanitize(delta.content)
+			if (text !== '') events.push({ kind: 'text', text })
 		}
 		for (const call of delta.tool_calls ?? []) {
 			events.push({
