@@ -10,6 +10,7 @@
 export type ActivityKind =
 	| 'created'
 	| 'done'
+	| 'doing'
 	| 'reopened'
 	| 'renamed'
 	| 'deleted'
@@ -70,6 +71,7 @@ export class ToolActivity {
 export const ACTIVITY_LABELS: Record<ActivityKind, { mark: string; label: string }> = {
 	created: { mark: '+', label: 'angelegt' },
 	done: { mark: '✓', label: 'abgehakt' },
+	doing: { mark: '◐', label: 'in Arbeit' },
 	reopened: { mark: '○', label: 'wieder offen' },
 	renamed: { mark: '✎', label: 'umbenannt' },
 	deleted: { mark: '×', label: 'gelöscht' },

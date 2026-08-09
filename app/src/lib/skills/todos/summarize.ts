@@ -38,11 +38,19 @@ export function summarize(name: string, resultJson: string): Omit<Activity, 'id'
 		case 'todo_update': {
 			const changed = titles('updated')
 			if (changed.length === 0) return null
-			// The same tool does three different things; which one matters more
-			// to a reader than the fact that an update occurred.
-			const first = (result.updated as { done?: boolean; title?: string }[])[0]
+			// The same tool does several different things; which one matters more
+			// to a reader than the fact that an update occurred. The kind follows
+			// the resulting status — a title-only edit keeps its old status, which
+			// is why "renamed" is the fallback rather than a case.
+			const first = (result.updated as { status?: string; title?: string }[])[0]
 			const kind: ActivityKind =
-				first?.done === true ? 'done' : first?.done === false ? 'reopened' : 'renamed'
+				first?.status === 'done'
+					? 'done'
+					: first?.status === 'doing'
+						? 'doing'
+						: first?.status === 'open'
+							? 'reopened'
+							: 'renamed'
 			return { kind, titles: changed }
 		}
 

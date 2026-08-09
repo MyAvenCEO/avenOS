@@ -1,5 +1,5 @@
 import type { ToolSpec } from '$lib/chat/redpill'
-import type { Todos } from './store.svelte'
+import type { TodoStatus, Todos } from './store.svelte'
 
 /**
  * The todo list, described to the model and wired to the store.
@@ -18,6 +18,18 @@ import type { Todos } from './store.svelte'
  * rounds, and clearing a finished list ran out of rounds entirely and answered
  * with a narration of the deletes it had failed to make.
  */
+
+/** How a status is written on the wire and read back to the model. */
+const STATUS_WIRE: Record<string, TodoStatus> = {
+	offen: 'open',
+	in_arbeit: 'doing',
+	erledigt: 'done'
+}
+export const STATUS_LABEL: Record<TodoStatus, string> = {
+	open: 'offen',
+	doing: 'in Arbeit',
+	done: 'erledigt'
+}
 
 const IDS = {
 	type: 'array',
@@ -53,14 +65,23 @@ export const TODO_TOOLS: ToolSpec[] = [
 	{
 		name: 'todo_update',
 		description:
-			'Ändert eine oder mehrere Aufgaben — erledigt ja/nein, oder den Titel. Alle gemeinten ' +
-			'Aufgaben in einem Aufruf. Das ist der Normalfall: „habe ich schon", „brauche ich ' +
-			'nicht mehr", „ist erledigt", „hab ich gemacht" heißen alle done=true, nicht löschen.',
+			'Ändert eine oder mehrere Aufgaben — Status oder Titel. Alle gemeinten Aufgaben in ' +
+			'einem Aufruf. Das ist der Normalfall: „habe ich schon", „ist erledigt", „hab ich ' +
+			'gemacht" heißen alle status=erledigt, nicht löschen. „Fange ich gerade an", „bin ' +
+			'ich dran", „mache ich gerade" heißen status=in_arbeit.',
 		parameters: {
 			type: 'object',
 			properties: {
 				ids: IDS,
-				done: { type: 'boolean', description: 'true = erledigt, false = wieder offen.' },
+				status: {
+					type: 'string',
+					enum: ['offen', 'in_arbeit', 'erledigt'],
+					description: 'Neuer Status der Aufgaben.'
+				},
+				done: {
+					type: 'boolean',
+					description: 'Kurzform: true = erledigt, false = offen. status geht vor.'
+				},
 				title: { type: 'string', description: 'Neuer Titel. Nur sinnvoll bei genau einer id.' }
 			},
 			required: ['ids']
@@ -125,8 +146,8 @@ export function describeResult(resultJson: string): string {
 		return resultJson
 	}
 
-	const line = (t: { id?: string; title?: string; done?: boolean }) =>
-		`${t.id} ${t.title} (${t.done ? 'erledigt' : 'offen'})`
+	const line = (t: { id?: string; title?: string; status?: TodoStatus }) =>
+		`${t.id} ${t.title} (${t.status ? STATUS_LABEL[t.status] : 'offen'})`
 	const parts: string[] = []
 
 	if (result.ok === false && typeof result.error === 'string') {
@@ -185,9 +206,12 @@ export function runTodoTool(todos: Todos, name: string, rawArgs: string): string
 			const ids = idList(args.ids)
 			if (ids.length === 0) return missingIds(todos)
 
-			const changes: { title?: string; done?: boolean } = {}
+			const changes: { title?: string; status?: TodoStatus } = {}
 			if (typeof args.title === 'string') changes.title = args.title
-			if (typeof args.done === 'boolean') changes.done = args.done
+			// `status` wins; `done` stays as the shorthand the model reaches for.
+			if (typeof args.status === 'string' && args.status in STATUS_WIRE)
+				changes.status = STATUS_WIRE[args.status]
+			else if (typeof args.done === 'boolean') changes.status = args.done ? 'done' : 'open'
 
 			const unknown = ids.filter((id) => !todos.byId(id))
 			const updated = ids.map((id) => todos.update(id, changes)).filter((t) => t !== undefined)

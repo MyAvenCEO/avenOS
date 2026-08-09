@@ -295,6 +295,7 @@ $effect(() => {
 								<span
 									class="w-3 shrink-0 text-center font-mono"
 									class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
+									class:text-status-working={entry.kind === 'doing'}
 									class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
 								>
 									{ACTIVITY_LABELS[entry.kind].mark}
@@ -359,8 +360,9 @@ $effect(() => {
 		</div>
 	{:else}
 		<!-- The skills workspace. Today that is the todo list; the plan is for
-		     this surface to switch between skill views as the conversation moves. -->
-		<div class="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col">
+		     this surface to switch between skill views as the conversation moves.
+		     3xl rather than lg: the board lays three columns side by side. -->
+		<div class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
 			<TodosView todos={todosSkill.store} />
 		</div>
 	{/if}
@@ -390,6 +392,7 @@ $effect(() => {
 				<span
 					class="w-3 shrink-0 text-center font-mono"
 					class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
+					class:text-status-working={entry.kind === 'doing'}
 					class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
 					class:opacity-30={entry.kind === 'read' ||
 						entry.kind === 'reopened' ||
