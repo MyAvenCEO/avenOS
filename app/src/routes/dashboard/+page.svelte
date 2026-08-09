@@ -337,7 +337,7 @@ $effect(() => {
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 	<div
-		class="mx-auto -mt-2 w-full rounded-xl bg-primary px-4 pt-3 pb-2 text-primary-foreground {typing
+		class="mx-auto -mt-2 w-full rounded-full bg-primary px-5 py-2.5 text-primary-foreground {typing
 			? 'max-w-lg'
 			: 'max-w-72'}"
 		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
@@ -454,17 +454,6 @@ $effect(() => {
 				</button>
 			{/if}
 		</div>
-
-		<!-- Only while the voice is working, and only in the app. "Spricht" with no
-		     sound has two causes that look the same from outside — synthesis that
-		     never returns, and audio scheduled into a device that is not running —
-		     and this is the difference: sentences out, buffers back, device state. -->
-		{#if speaker.speaking || speaker.output === 'suspended'}
-			<p class="mt-2 font-mono text-[0.6875rem] opacity-40">
-				{speaker.inflight}
-				unterwegs · {speaker.decoded} fertig · Ausgabe {speaker.output}
-			</p>
-		{/if}
 
 		{#if phase.key === 'loading'}
 			<div class="mt-3 h-1 overflow-hidden rounded-full bg-primary-foreground/20">
