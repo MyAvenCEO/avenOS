@@ -19,6 +19,16 @@ pub const WINDOW: usize = 512;
 const SAMPLE_RATE: i64 = 16_000;
 const STATE_DIM: usize = 128;
 
+/// Samples of the *previous* window prepended to this one.
+///
+/// This is not optional and not documented in the graph: v5's reference wrapper
+/// concatenates 64 samples of context (32 at 8 kHz) before every call, so the
+/// tensor it really consumes is 576 long. The ONNX input dimension is dynamic,
+/// so feeding it a bare 512 raises no error at all — it just returns a near
+/// constant ~0.0005 for every window forever, which is indistinguishable from
+/// "the microphone is silent" and was exactly the bug here.
+const CONTEXT: usize = 64;
+
 pub const MODEL_URL: &str =
 	"https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx";
 
@@ -26,6 +36,8 @@ pub struct Vad {
 	session: Session,
 	/// `[2, batch, 128]` — carried between windows.
 	state: Array3<f32>,
+	/// Tail of the previous window, prepended to the next. See [`CONTEXT`].
+	context: Vec<f32>,
 }
 
 impl Vad {
@@ -36,6 +48,7 @@ impl Vad {
 		Ok(Self {
 			session,
 			state: Array3::zeros((2, 1, STATE_DIM)),
+			context: vec![0.0; CONTEXT],
 		})
 	}
 
@@ -43,7 +56,11 @@ impl Vad {
 	pub fn predict(&mut self, window: &[f32]) -> Result<f32> {
 		debug_assert_eq!(window.len(), WINDOW);
 
-		let audio = Array2::from_shape_vec((1, window.len()), window.to_vec())?;
+		// context ++ window, which is what the model is actually trained on.
+		let mut framed = Vec::with_capacity(CONTEXT + WINDOW);
+		framed.extend_from_slice(&self.context);
+		framed.extend_from_slice(window);
+		let audio = Array2::from_shape_vec((1, framed.len()), framed)?;
 		let rate = Array1::from_vec(vec![SAMPLE_RATE]);
 
 		let outputs = self.session.run(ort::inputs! {
@@ -62,6 +79,8 @@ impl Vad {
 			)?;
 		}
 
+		self.context = window[window.len() - CONTEXT..].to_vec();
+
 		let (_, probability) = outputs["output"].try_extract_tensor::<f32>()?;
 		Ok(probability.first().copied().unwrap_or(0.0))
 	}
@@ -69,5 +88,6 @@ impl Vad {
 	/// Forget everything heard so far.
 	pub fn reset(&mut self) {
 		self.state = Array3::zeros((2, 1, STATE_DIM));
+		self.context = vec![0.0; CONTEXT];
 	}
 }

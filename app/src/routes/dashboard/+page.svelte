@@ -45,6 +45,29 @@ $effect(() => {
 	return () => listener.stop()
 })
 
+/**
+ * One state for the whole conversation, instead of one per component.
+ *
+ * The pieces each know their own status, but what you actually want to see is
+ * whose turn it is — and the order matters: speaking wins over thinking because
+ * the reply is still streaming while the first sentence is already being read
+ * out, and hearing wins over everything because interrupting is allowed.
+ */
+const phase = $derived.by(() => {
+	if (listener.status === 'denied') return { key: 'denied', label: 'Kein Mikrofon' }
+	if (listener.status === 'error' || speaker.status === 'error')
+		return { key: 'error', label: 'Fehler' }
+	if (speaker.status === 'preparing')
+		return { key: 'loading', label: `Stimme lädt ${Math.round(speaker.progress * 100)}%` }
+	if (listener.status === 'preparing')
+		return { key: 'loading', label: `Ohren laden ${Math.round(listener.progress * 100)}%` }
+	if (listener.speech) return { key: 'hearing', label: 'Hört zu' }
+	if (speaker.speaking) return { key: 'speaking', label: 'Spricht' }
+	if (chat.streaming) return { key: 'thinking', label: 'Denkt nach' }
+	if (listener.status === 'listening') return { key: 'idle', label: 'Bereit' }
+	return { key: 'text', label: 'Nur Text' }
+})
+
 let draft = $state('')
 let log: HTMLDivElement | null = $state(null)
 let form: HTMLFormElement | null = $state(null)
@@ -87,41 +110,28 @@ $effect(() => {
 		<div class="flex items-center gap-3 text-xs opacity-50">
 			<span>phala/gemma-4-31b-it</span>
 
-			<!-- Passive status, not switches: both ears and voice are simply on.
-			     The dot is the important part — "ready" in words is easy to read as
-			     "ready to be started", which is exactly the wrong idea. -->
-			{#if listener.status !== 'unavailable'}
+			<!-- Whose turn it is, in one place. Not a switch: nothing here starts or
+			     stops anything, it only says what the system is doing. -->
+			<span
+				class="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1"
+				class:opacity-100={phase.key !== 'idle'}
+				title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
+			>
+				<!-- While listening the dot follows the microphone level, so a dead
+				     input is visible as a dot that never moves. -->
 				<span
-					class="flex items-center gap-1.5"
-					title="Nemotron 3.5 · Silero VAD · deutsch, on-device"
-				>
-					{#if listener.status === 'preparing'}
-						Ohren laden… {Math.round(listener.progress * 100)}%
-					{:else if listener.status === 'denied'}
-						Kein Mikrofon — bitte in den Systemeinstellungen erlauben
-					{:else if listener.status === 'error'}
-						Ohren fehlgeschlagen
-					{:else}
-						<span
-							class="inline-block size-1.5 rounded-full bg-status-error"
-							class:animate-pulse={listener.speech}
-						></span>
-						{listener.speech ? 'Hört zu…' : 'Mikrofon an'}
-					{/if}
-				</span>
-			{/if}
-
-			{#if speaker.status !== 'unavailable'}
-				<span title="Supertonic-3 · Stimme M5 · deutsch, on-device (Rust/ONNX)">
-					{#if speaker.status === 'preparing'}
-						Stimme lädt… {Math.round(speaker.progress * 100)}%
-					{:else if speaker.status === 'error'}
-						Stimme fehlgeschlagen
-					{:else}
-						{speaker.speaking ? 'Spricht' : 'Stimme bereit'}
-					{/if}
-				</span>
-			{/if}
+					class="inline-block size-1.5 rounded-full transition-transform"
+					class:bg-status-error={phase.key === 'hearing' || phase.key === 'idle'}
+					class:bg-status-success={phase.key === 'speaking'}
+					class:bg-status-working={phase.key === 'thinking' || phase.key === 'loading'}
+					class:bg-muted-foreground={phase.key === 'denied' || phase.key === 'text'}
+					class:animate-pulse={phase.key === 'thinking' || phase.key === 'loading'}
+					style={phase.key === 'hearing' || phase.key === 'idle'
+						? `transform: scale(${1 + Math.min(listener.level, 1) * 2.5})`
+						: ''}
+				></span>
+				{phase.label}
+			</span>
 
 			{#if chat.turns.length > 0}
 				<button

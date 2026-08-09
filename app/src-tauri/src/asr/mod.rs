@@ -14,6 +14,7 @@
 //! echo cancellation for free, and without it the agent hears itself through
 //! the speakers and interrupts itself the instant it starts talking.
 
+use std::path::Path;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result};
@@ -52,6 +53,10 @@ const START_WINDOWS: usize = 2;
 /// that every speaker makes, short enough not to feel like a wait.
 const END_WINDOWS: usize = 25;
 
+/// Floor for the normalization gain, so a quiet lead-in is not amplified 100x
+/// into hiss. Caps the boost at 20x.
+const MIN_PEAK: f32 = 0.05;
+
 #[derive(Default)]
 pub struct AsrState {
 	engine: Mutex<Option<Engine>>,
@@ -67,6 +72,8 @@ struct Engine {
 	speaking: bool,
 	run_speech: usize,
 	run_silence: usize,
+	/// Loudest sample in the current utterance, for the normalization gain.
+	peak: f32,
 }
 
 /// What one push of microphone audio produced.
@@ -93,40 +100,62 @@ fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
 		.collect();
 	ensure_files(app, "asr", &wanted)?;
 
-	let mut model =
-		Nemotron::from_pretrained(&dir, None).context("failed to open the Nemotron ONNX sessions")?;
-
-	match model.mode() {
-		NemotronMode::Multilingual => model
-			.set_target_lang(LANG)
-			.with_context(|| format!("{LANG} not accepted by this model"))?,
-		NemotronMode::EnglishOnly => {
-			anyhow::bail!("the English-only Nemotron was downloaded; German needs the 3.5 multilingual build")
-		}
-	}
-
 	let vad_path = cache_dir(app, "asr", "silero-vad")?.join("silero_vad.onnx");
 	ensure_file(app, "asr", vad::MODEL_URL, &vad_path)?;
-	let vad = Vad::open(&vad_path)?;
 
-	Ok(Engine {
-		model,
-		vad,
-		vad_buf: Vec::with_capacity(VAD_WINDOW * 4),
-		asr_buf: Vec::with_capacity(ASR_CHUNK * 2),
-		speaking: false,
-		run_speech: 0,
-		run_silence: 0,
-	})
+	Engine::open(&dir, &vad_path)
 }
 
 impl Engine {
+	/// Open both models from paths that already exist.
+	///
+	/// Separate from [`load_engine`] so it can be driven from a test without an
+	/// `AppHandle` — which is how the recognizer gets exercised against a known
+	/// recording rather than only through a live microphone.
+	pub fn open(model_dir: &Path, vad_path: &Path) -> Result<Self> {
+		let mut model = Nemotron::from_pretrained(model_dir, None)
+			.context("failed to open the Nemotron ONNX sessions")?;
+
+		match model.mode() {
+			NemotronMode::Multilingual => model
+				.set_target_lang(LANG)
+				.with_context(|| format!("{LANG} not accepted by this model"))?,
+			NemotronMode::EnglishOnly => anyhow::bail!(
+				"the English-only Nemotron was downloaded; German needs the 3.5 multilingual build"
+			),
+		}
+
+		Ok(Engine {
+			model,
+			vad: Vad::open(vad_path)?,
+			vad_buf: Vec::with_capacity(VAD_WINDOW * 4),
+			asr_buf: Vec::with_capacity(ASR_CHUNK * 2),
+			speaking: false,
+			run_speech: 0,
+			run_silence: 0,
+			peak: 0.0,
+		})
+	}
+
+	/// Scale a chunk toward full range before handing it to the recognizer.
+	///
+	/// Upstream's example normalizes the whole recording to peak 1.0 first, and
+	/// the model expects that. A microphone signal peaks nearer 0.05–0.3, so
+	/// feeding it raw is quiet enough to transcribe as nothing at all — which is
+	/// exactly what happened. Streaming cannot see the whole utterance, so the
+	/// gain follows the loudest sample heard so far, floored so that a silent
+	/// lead-in is not amplified into noise.
+	fn normalized(&self, chunk: &[f32]) -> Vec<f32> {
+		let gain = 1.0 / self.peak.max(MIN_PEAK);
+		chunk.iter().map(|s| (s * gain).clamp(-1.0, 1.0)).collect()
+	}
+
 	/// Run whatever whole ASR chunks have accumulated, returning their text.
 	fn drain_asr(&mut self) -> Result<String> {
 		let mut delta = String::new();
 		while self.asr_buf.len() >= ASR_CHUNK {
 			let chunk: Vec<f32> = self.asr_buf.drain(..ASR_CHUNK).collect();
-			delta.push_str(&self.model.transcribe_chunk(&chunk)?);
+			delta.push_str(&self.model.transcribe_chunk(&self.normalized(&chunk))?);
 		}
 		Ok(delta)
 	}
@@ -134,16 +163,16 @@ impl Engine {
 	/// Close the utterance: pad the tail to a whole chunk, push silence so the
 	/// model emits what it is still holding, then hand back the full transcript.
 	fn finish(&mut self) -> Result<String> {
-		let mut delta = String::new();
 		if !self.asr_buf.is_empty() {
 			let mut tail: Vec<f32> = std::mem::take(&mut self.asr_buf);
 			tail.resize(ASR_CHUNK, 0.0);
-			delta.push_str(&self.model.transcribe_chunk(&tail)?);
+			let tail = self.normalized(&tail);
+			self.model.transcribe_chunk(&tail)?;
 		}
+		// Silence flushes whatever the decoder is still holding on to.
 		for _ in 0..3 {
-			delta.push_str(&self.model.transcribe_chunk(&vec![0.0; ASR_CHUNK])?);
+			self.model.transcribe_chunk(&vec![0.0; ASR_CHUNK])?;
 		}
-		let _ = delta;
 		Ok(self.model.get_transcript())
 	}
 }
@@ -165,21 +194,25 @@ pub async fn asr_prepare(app: tauri::AppHandle, state: State<'_, AsrState>) -> R
 /// what changed, so the UI can react to speech starting (interrupt the agent)
 /// and ending (send the utterance) without polling anything.
 #[tauri::command]
-pub async fn asr_push(
-	state: State<'_, AsrState>,
-	pcm: Vec<f32>,
-) -> Result<AsrEvent, String> {
+pub async fn asr_push(state: State<'_, AsrState>, pcm: Vec<f32>) -> Result<AsrEvent, String> {
 	let mut guard = state.engine.lock().map_err(|e| e.to_string())?;
 	let Some(engine) = guard.as_mut() else {
 		return Err("asr_prepare has not run".into());
 	};
+	push_into(engine, &pcm).map_err(|e| format!("{e:#}"))
+}
 
+/// The whole VAD + recognition step for one batch of audio.
+///
+/// Split out of the command so the test can drive it with a recording — the
+/// only way to tell a broken recognizer apart from audio that never arrived.
+fn push_into(engine: &mut Engine, pcm: &[f32]) -> Result<AsrEvent> {
 	let mut event = AsrEvent::default();
-	engine.vad_buf.extend_from_slice(&pcm);
+	engine.vad_buf.extend_from_slice(pcm);
 
 	while engine.vad_buf.len() >= VAD_WINDOW {
 		let window: Vec<f32> = engine.vad_buf.drain(..VAD_WINDOW).collect();
-		let speech = engine.vad.predict(&window).map_err(|e| format!("{e:#}"))? >= SPEECH_THRESHOLD;
+		let speech = engine.vad.predict(&window)? >= SPEECH_THRESHOLD;
 
 		if speech {
 			engine.run_speech += 1;
@@ -193,25 +226,34 @@ pub async fn asr_push(
 			engine.speaking = true;
 			event.started = true;
 			engine.model.reset();
+			engine.peak = 0.0;
+			log::debug!(target: "avenos::asr", "speech started");
 		}
 
 		// Keep feeding the recognizer through short pauses; only a closed
 		// utterance stops the audio going in.
 		if engine.speaking {
+			for sample in &window {
+				engine.peak = engine.peak.max(sample.abs());
+			}
 			engine.asr_buf.extend_from_slice(&window);
 		}
 
 		if engine.speaking && engine.run_silence >= END_WINDOWS {
 			engine.speaking = false;
 			event.ended = true;
-			event.transcript = engine.finish().map_err(|e| format!("{e:#}"))?;
+			event.transcript = engine.finish()?;
 			engine.asr_buf.clear();
+			log::info!(
+				target: "avenos::asr",
+				"utterance (peak {:.3}): {:?}", engine.peak, event.transcript
+			);
 			break;
 		}
 	}
 
 	if engine.speaking {
-		event.delta = engine.drain_asr().map_err(|e| format!("{e:#}"))?;
+		event.delta = engine.drain_asr()?;
 		event.transcript = engine.model.get_transcript();
 	}
 	event.speech = engine.speaking;
@@ -231,6 +273,129 @@ pub async fn asr_reset(state: State<'_, AsrState>) -> Result<(), String> {
 		engine.speaking = false;
 		engine.run_speech = 0;
 		engine.run_silence = 0;
+		engine.peak = 0.0;
 	}
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// What does the VAD actually say about known speech?
+	#[test]
+	#[ignore = "needs the downloaded models and a WAV"]
+	fn vad_detects_speech() {
+		let home = std::env::var("HOME").unwrap();
+		let vad_path = format!("{home}/Library/Caches/ceo.aven.os/asr/silero-vad/silero_vad.onnx");
+		let mut vad = Vad::open(Path::new(&vad_path)).expect("vad should open");
+
+		let path = std::env::var("ASR_TEST_WAV").expect("set ASR_TEST_WAV");
+		let mut reader = hound::WavReader::open(&path).expect("wav should open");
+		let spec = reader.spec();
+		let source: Vec<f32> = reader
+			.samples::<i16>()
+			.map(|s| s.unwrap() as f32 / 32768.0)
+			.collect();
+		let ratio = spec.sample_rate as f32 / 16_000.0;
+		let out_len = (source.len() as f32 / ratio) as usize;
+		let audio: Vec<f32> = (0..out_len)
+			.map(|i| source[((i as f32 * ratio) as usize).min(source.len() - 1)])
+			.collect();
+
+		let mut probs = Vec::new();
+		for window in audio.chunks(VAD_WINDOW) {
+			if window.len() < VAD_WINDOW {
+				break;
+			}
+			probs.push(vad.predict(window).expect("predict should work"));
+		}
+		let max = probs.iter().cloned().fold(0.0f32, f32::max);
+		let over = probs.iter().filter(|p| **p >= 0.5).count();
+		println!(
+			"{} windows, max prob {max:.4}, {over} over 0.5, first 12: {:?}",
+			probs.len(),
+			&probs[..12.min(probs.len())]
+		);
+		assert!(max >= 0.5, "VAD never saw speech in a file that is entirely speech");
+	}
+
+	/// Drive the recognizer with a recording instead of a live microphone.
+	///
+	/// Ignored by default because it needs the ~2.6 GB of weights on disk. Run it
+	/// when the mic produces nothing, to tell "the recognizer is broken" apart
+	/// from "the audio never reached it":
+	///
+	/// ```sh
+	/// ASR_TEST_WAV=/path/to/german.wav cargo test --manifest-path app/src-tauri/Cargo.toml \
+	///   transcribes_a_recording -- --ignored --nocapture
+	/// ```
+	#[test]
+	#[ignore = "needs the downloaded models and a WAV"]
+	fn transcribes_a_recording() {
+		let home = std::env::var("HOME").unwrap();
+		let cache = format!("{home}/Library/Caches/ceo.aven.os/asr");
+		let mut engine = Engine::open(
+			Path::new(&cache).join("nemotron-3.5-streaming").as_path(),
+			Path::new(&cache).join("silero-vad/silero_vad.onnx").as_path(),
+		)
+		.expect("models should open");
+
+		let path = std::env::var("ASR_TEST_WAV").expect("set ASR_TEST_WAV");
+		let mut reader = hound::WavReader::open(&path).expect("wav should open");
+		let spec = reader.spec();
+		let source: Vec<f32> = match spec.sample_format {
+			hound::SampleFormat::Float => reader.samples::<f32>().map(|s| s.unwrap()).collect(),
+			hound::SampleFormat::Int => reader
+				.samples::<i16>()
+				.map(|s| s.unwrap() as f32 / 32768.0)
+				.collect(),
+		};
+		let mono: Vec<f32> = source
+			.chunks(spec.channels as usize)
+			.map(|c| c.iter().sum::<f32>() / c.len() as f32)
+			.collect();
+
+		// Linear resample to 16 kHz — crude, but this is a smoke test, and the
+		// browser does the real conversion in production.
+		let ratio = spec.sample_rate as f32 / 16_000.0;
+		let out_len = (mono.len() as f32 / ratio) as usize;
+		let audio: Vec<f32> = (0..out_len)
+			.map(|i| mono[((i as f32 * ratio) as usize).min(mono.len() - 1)])
+			.collect();
+
+		println!(
+			"{:.2}s of audio at 16 kHz, peak {:.3}",
+			audio.len() as f32 / 16_000.0,
+			audio.iter().fold(0.0f32, |a, &b| a.max(b.abs()))
+		);
+
+		// Same 2048-sample batches the AudioWorklet sends.
+		let started = std::time::Instant::now();
+		let mut transcript = String::new();
+		for batch in audio.chunks(2048) {
+			let event = push_into(&mut engine, batch).expect("push should succeed");
+			if event.started {
+				println!("  [vad] speech started");
+			}
+			if event.ended {
+				println!("  [vad] speech ended -> {:?}", event.transcript);
+				transcript = event.transcript;
+			}
+		}
+		// Trailing silence, so the closing threshold is actually reached.
+		for _ in 0..40 {
+			let event = push_into(&mut engine, &[0.0; 2048]).expect("push should succeed");
+			if event.ended {
+				println!("  [vad] speech ended -> {:?}", event.transcript);
+				transcript = event.transcript;
+			}
+		}
+
+		println!(
+			"transcript: {transcript:?}  (in {:.2}s)",
+			started.elapsed().as_secs_f32()
+		);
+		assert!(!transcript.trim().is_empty(), "recognized nothing at all");
+	}
 }

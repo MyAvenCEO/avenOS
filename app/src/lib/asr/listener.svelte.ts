@@ -50,6 +50,15 @@ export class Listener {
 	partial = $state('')
 	/** Weight download, 0..1. Only meaningful while `preparing`. */
 	progress = $state(0)
+	/**
+	 * Input level, 0..1, computed here rather than in Rust.
+	 *
+	 * This exists to answer one question without guessing: a level pinned at
+	 * zero while the status says listening means the stream resolved but macOS
+	 * is handing us silence — a permission problem — which looks identical from
+	 * the outside to a recognizer that is not working.
+	 */
+	level = $state(0)
 	failure = $state<string | null>(null)
 
 	#hooks: ListenerHooks
@@ -151,6 +160,14 @@ export class Listener {
 	async #push(pcm: Float32Array): Promise<void> {
 		// Dropping a batch is better than queueing them: if Rust falls behind,
 		// a backlog would make every later interrupt progressively later.
+		// Cheap enough to do on every batch, and it must run even when a push is
+		// dropped, or the meter would read zero exactly when we most want it.
+		let sum = 0
+		for (const sample of pcm) sum += sample * sample
+		const rms = Math.sqrt(sum / pcm.length)
+		// Decay slowly so the eye can follow it; rise immediately.
+		this.level = Math.max(rms * 4, this.level * 0.8)
+
 		if (this.#busy || this.status !== 'listening') return
 		this.#busy = true
 
