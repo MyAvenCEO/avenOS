@@ -70,23 +70,28 @@ const verdicts = $derived.by(() => {
 const ego = $derived.by(() => {
 	if (!focus || !selected) return null
 	const id = selected.manifest.id
-	const feeders = [
-		...new Set(
-			bus
-				.edges()
-				.filter((e) => e.to === id)
-				.map((e) => e.from)
-		)
-	]
-	const fed = [
-		...new Set(
-			bus
-				.edges()
-				.filter((e) => e.from === id)
-				.map((e) => e.to)
-		)
-	]
-	return { id, feeders: feeders.filter((f) => !fed.includes(f) || true), fed }
+	const feeders = new Set(
+		bus
+			.edges()
+			.filter((e) => e.to === id)
+			.map((e) => e.from)
+	)
+	const fed = new Set(
+		bus
+			.edges()
+			.filter((e) => e.from === id)
+			.map((e) => e.to)
+	)
+	// The tool channel counts as a relation: the chat reaches every actor
+	// with methods, so those pairs belong in each other's ego view.
+	if (id === 'chat') {
+		for (const a of bus.actors()) {
+			if (a.manifest.id !== 'chat' && a.manifest.methods.length > 0) fed.add(a.manifest.id)
+		}
+	} else if (selected.manifest.methods.length > 0 && bus.get('chat')) {
+		feeders.add('chat')
+	}
+	return { id, feeders: [...feeders], fed: [...fed].filter((f) => !feeders.has(f)) }
 })
 
 const nodes = $derived.by<Node[]>(() => {
@@ -131,7 +136,7 @@ const nodes = $derived.by<Node[]>(() => {
 const edges = $derived.by<Edge[]>(() => {
 	const onPath = verdicts
 	const shown = ego ? bus.edges().filter((e) => e.from === ego.id || e.to === ego.id) : bus.edges()
-	return shown.map((e) => {
+	const contractEdges: Edge[] = shown.map((e) => {
 		const lit = onPath ? onPath.has(e.from) && onPath.has(e.to) : true
 		return {
 			id: `${e.from}-${e.predicate}-${e.to}`,
@@ -145,6 +150,28 @@ const edges = $derived.by<Edge[]>(() => {
 			labelStyle: `font-size: 10px; fill: rgba(30,41,59,${lit ? 0.6 : 0.25});`
 		}
 	})
+
+	// The tool channel, drawn as what it is: the chat can address every actor
+	// that exposes methods, because its tool list derives from their
+	// manifests. A different stroke from contract edges — envelopes, not
+	// emits — and just as derived: nothing here is wired by hand either.
+	const caller = bus.get('chat')
+	const toolEdges: Edge[] = caller
+		? bus
+				.actors()
+				.filter((a) => a.manifest.id !== 'chat' && a.manifest.methods.length > 0)
+				.filter((a) => !ego || ego.id === 'chat' || ego.id === a.manifest.id)
+				.map((a) => ({
+					id: `tools-chat-${a.manifest.id}`,
+					source: 'chat',
+					target: a.manifest.id,
+					label: `${a.manifest.methods.length} Werkzeuge`,
+					animated: false,
+					style: 'stroke: rgba(30,41,59,0.3); stroke-dasharray: 6 4;',
+					labelStyle: 'font-size: 10px; fill: rgba(30,41,59,0.4);'
+				}))
+		: []
+	return [...contractEdges, ...toolEdges]
 })
 
 const nodeTypes = { actor: GraphNode }
