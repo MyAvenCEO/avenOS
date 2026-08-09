@@ -257,6 +257,28 @@ $effect(() => {
 				{/if}
 			</button>
 		{/each}
+
+		<!-- The way out lives at the foot of the context rail, not in the page
+		     chrome — it leaves the whole workspace, so it sits below the sparks. -->
+		<a
+			href="/"
+			title="Zurück zur Startseite"
+			aria-label="Zurück zur Startseite"
+			class="mt-auto flex size-11 items-center justify-center rounded-full border border-border bg-surface-card opacity-60 transition-all hover:rounded-2xl hover:opacity-100"
+		>
+			<svg
+				viewBox="0 0 24 24"
+				class="size-4"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path d="M19 12H5" />
+				<path d="m11 18-6-6 6-6" />
+			</svg>
+		</a>
 	</aside>
 
 	<main
@@ -287,105 +309,109 @@ $effect(() => {
 			<div class="flex items-center gap-3 text-xs opacity-50">
 				<span>qwen3.5-122b-a10b</span>
 
-				{#if chat.turns.length > 0}
-					<!-- Everything the model saw and did, as JSON — for pasting into a
-				     debugging session when a flow went sideways. -->
-					<button type="button" class="underline underline-offset-4" onclick={exportLog}>
-						{exported ? 'Kopiert' : 'Export'}
-					</button>
-					<button
-						type="button"
-						class="underline underline-offset-4"
-						onclick={() => {
-						chat.clear()
-						speaker.silence()
-						activity.clear()
-						void listener.reset()
-					}}
-					>
-						Clear
-					</button>
-				{/if}
 				<a href="/dashboard/settings" class="underline underline-offset-4">Einstellungen</a>
-				<a href="/" class="underline underline-offset-4">Back</a>
 			</div>
 		</header>
 
 		{#if tab === 'chat'}
-			<div bind:this={log} class="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
-				{#each chat.turns as turn (turn.id)}
-					<div class="flex flex-col gap-1" class:items-end={turn.role === 'user'}>
-						<!-- What the turn's tools actually did, kept with the reply they
+			<div class="flex min-h-0 flex-1 flex-col gap-2">
+				<!-- Chat-scoped actions: they operate on this conversation, so they
+				     live with it rather than in the global chrome. -->
+				{#if chat.turns.length > 0}
+					<div class="flex justify-end gap-3 text-xs opacity-50">
+						<button type="button" class="underline underline-offset-4" onclick={exportLog}>
+							{exported ? 'Kopiert' : 'Export'}
+						</button>
+						<button
+							type="button"
+							class="underline underline-offset-4"
+							onclick={() => {
+								chat.clear()
+								speaker.silence()
+								activity.clear()
+								void listener.reset()
+							}}
+						>
+							Clear
+						</button>
+					</div>
+				{/if}
+
+				<div bind:this={log} class="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
+					{#each chat.turns as turn (turn.id)}
+						<div class="flex flex-col gap-1" class:items-end={turn.role === 'user'}>
+							<!-- What the turn's tools actually did, kept with the reply they
 				     produced. The toast is the glance; this is the record. -->
-						{#each turn.calls ?? [] as call, i (i)}
-							{@const entry = summarizeCall(call.name, call.result)}
-							{#if entry}
-								<div class="flex gap-2 pl-1 text-xs opacity-60">
-									<span
-										class="w-3 shrink-0 text-center font-mono"
-										class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
-										class:text-status-working={entry.kind === 'doing'}
-										class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
-									>
-										{ACTIVITY_LABELS[entry.kind].mark}
-									</span>
-									<span class="min-w-0">
-										{ACTIVITY_LABELS[entry.kind].label}
-										{entry.titles.length > 0
+							{#each turn.calls ?? [] as call, i (i)}
+								{@const entry = summarizeCall(call.name, call.result)}
+								{#if entry}
+									<div class="flex gap-2 pl-1 text-xs opacity-60">
+										<span
+											class="w-3 shrink-0 text-center font-mono"
+											class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
+											class:text-status-working={entry.kind === 'doing'}
+											class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
+										>
+											{ACTIVITY_LABELS[entry.kind].mark}
+										</span>
+										<span class="min-w-0">
+											{ACTIVITY_LABELS[entry.kind].label}
+											{entry.titles.length > 0
 									? `: ${entry.titles.join(', ')}`
 									: entry.note
 										? ` · ${entry.note}`
 										: ''}
-									</span>
-								</div>
-							{/if}
-						{/each}
-						<div
-							class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed"
-							class:bg-primary={turn.role === 'user'}
-							class:text-primary-foreground={turn.role === 'user'}
-							class:bg-surface-card={turn.role === 'assistant'}
-							class:border={turn.role === 'assistant'}
-							class:border-border={turn.role === 'assistant'}
-						>
-							{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
-								<!-- Thinking. Three dots breathing in sequence, not a frozen
+										</span>
+									</div>
+								{/if}
+							{/each}
+							<div
+								class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed"
+								class:bg-primary={turn.role === 'user'}
+								class:text-primary-foreground={turn.role === 'user'}
+								class:bg-surface-card={turn.role === 'assistant'}
+								class:border={turn.role === 'assistant'}
+								class:border-border={turn.role === 'assistant'}
+							>
+								{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
+									<!-- Thinking. Three dots breathing in sequence, not a frozen
 						     ellipsis that reads as a hung reply. -->
-								<span class="flex items-center gap-1 py-1.5" aria-label="Denkt nach">
-									<span class="size-1.5 animate-bounce rounded-full bg-current opacity-40"></span>
-									<span
-										class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
-									></span>
-									<span
-										class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
-									></span>
-								</span>
-							{:else}
-								{turn.content}
-							{/if}
+									<span class="flex items-center gap-1 py-1.5" aria-label="Denkt nach">
+										<span class="size-1.5 animate-bounce rounded-full bg-current opacity-40"></span>
+										<span
+											class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
+										></span>
+										<span
+											class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
+										></span>
+									</span>
+								{:else}
+									{turn.content}
+								{/if}
+							</div>
 						</div>
-					</div>
-				{/each}
+					{/each}
 
-				<!-- What is being heard right now, before the utterance closes. Sits where
+					<!-- What is being heard right now, before the utterance closes. Sits where
 	     the user bubble will land so the text does not jump when it does. -->
-				{#if listener.partial !== ''}
-					<div class="flex justify-end">
-						<div
-							class="max-w-[85%] whitespace-pre-wrap rounded-2xl border border-dashed border-border px-4 py-3 text-sm leading-relaxed opacity-50"
-						>
-							{listener.partial}
+					{#if listener.partial !== ''}
+						<div class="flex justify-end">
+							<div
+								class="max-w-[85%] whitespace-pre-wrap rounded-2xl border border-dashed border-border px-4 py-3 text-sm leading-relaxed opacity-50"
+							>
+								{listener.partial}
+							</div>
 						</div>
-					</div>
-				{/if}
+					{/if}
 
-				{#if chat.failure || speaker.failure || listener.failure}
-					<p
-						class="rounded-2xl border border-status-error/30 bg-status-error-muted px-4 py-3 text-sm text-status-error-strong"
-					>
-						{chat.failure ?? speaker.failure ?? listener.failure}
-					</p>
-				{/if}
+					{#if chat.failure || speaker.failure || listener.failure}
+						<p
+							class="rounded-2xl border border-status-error/30 bg-status-error-muted px-4 py-3 text-sm text-status-error-strong"
+						>
+							{chat.failure ?? speaker.failure ?? listener.failure}
+						</p>
+					{/if}
+				</div>
 			</div>
 		{:else}
 			<!-- The skills workspace. Today that is the todo list; the plan is for
