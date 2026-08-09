@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { TodoStatus, Todos } from './store.svelte'
+import { SPARKS, type TodoStatus, type Todos } from './store.svelte'
 import { STATUS_LABEL } from './tools'
 
 /**
@@ -49,10 +49,28 @@ function shift(id: string, by: -1 | 1) {
 <div class="flex min-h-0 flex-1 flex-col gap-3">
 	<div class="flex items-center justify-between gap-3">
 		<h2 class="text-sm">Aufgaben</h2>
+
+		<!-- The spark: which project context is on screen. New todos — typed or
+		     spoken without a spark — land in the active one. -->
+		<div class="flex gap-0.5 rounded-full border border-border p-0.5">
+			{#each SPARKS as spark (spark.id)}
+				<button
+					type="button"
+					onclick={() => {
+						todos.active = spark.id
+					}}
+					class="rounded-full px-2.5 py-0.5 text-xs transition-colors {todos.active === spark.id
+						? 'bg-primary text-primary-foreground'
+						: 'opacity-50 hover:opacity-100'}"
+				>
+					{spark.name}
+				</button>
+			{/each}
+		</div>
 		<span class="flex-1 text-right text-xs opacity-40">
 			{todos.open.length}
-			offen{todos.items.length > todos.open.length
-				? ` · ${todos.items.length - todos.open.length} erledigt`
+			offen{todos.visible.length > todos.open.length
+				? ` · ${todos.visible.length - todos.open.length} erledigt`
 				: ''}
 		</span>
 
@@ -117,7 +135,7 @@ function shift(id: string, by: -1 | 1) {
 
 	{#if view === 'list'}
 		<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
-			{#each todos.items as todo (todo.id)}
+			{#each todos.visible as todo (todo.id)}
 				<li
 					class="group flex items-center gap-2 rounded-xl border border-border bg-surface-card px-3 py-2 text-sm"
 				>
@@ -178,12 +196,12 @@ function shift(id: string, by: -1 | 1) {
 					<div class="flex items-baseline justify-between px-1">
 						<h3 class="text-xs opacity-60">{column.label}</h3>
 						<span class="text-xs opacity-30">
-							{todos.items.filter((t) => t.status === column.status).length}
+							{todos.visible.filter((t) => t.status === column.status).length}
 						</span>
 					</div>
 
 					<ul class="min-h-0 flex-1 space-y-2 overflow-y-auto">
-						{#each todos.items.filter((t) => t.status === column.status) as todo (todo.id)}
+						{#each todos.visible.filter((t) => t.status === column.status) as todo (todo.id)}
 							<li
 								draggable="true"
 								ondragstart={() => {

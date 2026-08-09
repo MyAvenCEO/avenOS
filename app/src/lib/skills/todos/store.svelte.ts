@@ -15,10 +15,28 @@
  */
 export type TodoStatus = 'open' | 'doing' | 'done'
 
+/**
+ * A spark is the project context a todo lives in — every todo belongs to
+ * exactly one. Two fixed examples for now ("me" for your own things, "team"
+ * for shared ones); dynamic sparks are the obvious next step, which is why
+ * they are data rather than a union type.
+ */
+export interface Spark {
+	id: string
+	name: string
+}
+
+export const SPARKS: Spark[] = [
+	{ id: 'me', name: 'Me' },
+	{ id: 'team', name: 'Team' }
+]
+
 export interface Todo {
 	id: string
 	title: string
 	status: TodoStatus
+	/** The spark this todo belongs to. Exactly one, always. */
+	spark: string
 }
 
 /**
@@ -34,27 +52,38 @@ const id = () => crypto.randomUUID().slice(0, 8)
 
 export class Todos {
 	items = $state<Todo[]>([])
+	/** The spark the view shows and new todos land in. */
+	active = $state<string>('me')
+
+	/** The active spark's todos — what the view actually renders. */
+	get visible(): Todo[] {
+		return this.items.filter((t) => t.spark === this.active)
+	}
 
 	get open(): Todo[] {
-		return this.items.filter((t) => t.status !== 'done')
+		return this.visible.filter((t) => t.status !== 'done')
 	}
 
 	byId(id: string): Todo | undefined {
 		return this.items.find((t) => t.id === id)
 	}
 
-	create(title: string): Todo {
-		this.items.push({ id: id(), title: title.trim(), status: 'open' })
+	create(title: string, spark: string = this.active): Todo {
+		this.items.push({ id: id(), title: title.trim(), status: 'open', spark })
 		// Return the item as stored, not the literal: `items` is a `$state` proxy
 		// and only writes through the proxy are tracked.
 		return this.items[this.items.length - 1]
 	}
 
-	update(id: string, changes: { title?: string; status?: TodoStatus }): Todo | undefined {
+	update(
+		id: string,
+		changes: { title?: string; status?: TodoStatus; spark?: string }
+	): Todo | undefined {
 		const todo = this.byId(id)
 		if (!todo) return undefined
 		if (changes.title !== undefined) todo.title = changes.title.trim()
 		if (changes.status !== undefined) todo.status = changes.status
+		if (changes.spark !== undefined) todo.spark = changes.spark
 		return todo
 	}
 
@@ -81,9 +110,10 @@ export class Todos {
 		return todo
 	}
 
+	/** Scoped to the active spark — "räum die Liste auf" means the visible one. */
 	clearDone(): Todo[] {
-		const removed = this.items.filter((t) => t.status === 'done')
-		this.items = this.items.filter((t) => t.status !== 'done')
+		const removed = this.visible.filter((t) => t.status === 'done')
+		this.items = this.items.filter((t) => t.spark !== this.active || t.status !== 'done')
 		return removed
 	}
 }

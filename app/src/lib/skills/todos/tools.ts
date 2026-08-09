@@ -1,5 +1,5 @@
 import type { ToolSpec } from '$lib/chat/redpill'
-import type { TodoStatus, Todos } from './store.svelte'
+import { SPARKS, type TodoStatus, type Todos } from './store.svelte'
 
 /**
  * The todo list, described to the model and wired to the store.
@@ -31,6 +31,14 @@ export const STATUS_LABEL: Record<TodoStatus, string> = {
 	done: 'erledigt'
 }
 
+const SPARK = {
+	type: 'string',
+	enum: SPARKS.map((s) => s.id),
+	description:
+		'Der Projekt-Kontext (Spark): "me" für eigene Dinge, "team" für gemeinsame. ' +
+		'Ohne Angabe gilt der gerade aktive Spark.'
+}
+
 const IDS = {
 	type: 'array',
 	items: { type: 'string' },
@@ -41,8 +49,9 @@ export const TODO_TOOLS: ToolSpec[] = [
 	{
 		name: 'todo_list',
 		description:
-			'Gibt alle Aufgaben mit id und Status zurück. Rufe das auf, bevor du über die Liste ' +
-			'sprichst, und immer bevor du etwas änderst oder löschst — du brauchst die ids.',
+			'Gibt alle Aufgaben mit id, Status und Spark zurück — über alle Sparks. Rufe das ' +
+			'auf, bevor du über die Liste sprichst, und immer bevor du etwas änderst oder ' +
+			'löschst — du brauchst die ids.',
 		parameters: { type: 'object', properties: {} }
 	},
 	{
@@ -57,7 +66,8 @@ export const TODO_TOOLS: ToolSpec[] = [
 					type: 'array',
 					items: { type: 'string' },
 					description: 'Die Titel, kurz und in der Sprache des Nutzers.'
-				}
+				},
+				spark: SPARK
 			},
 			required: ['titles']
 		}
@@ -82,7 +92,8 @@ export const TODO_TOOLS: ToolSpec[] = [
 					type: 'boolean',
 					description: 'Kurzform: true = erledigt, false = offen. status geht vor.'
 				},
-				title: { type: 'string', description: 'Neuer Titel. Nur sinnvoll bei genau einer id.' }
+				title: { type: 'string', description: 'Neuer Titel. Nur sinnvoll bei genau einer id.' },
+				spark: SPARK
 			},
 			required: ['ids']
 		}
@@ -107,6 +118,13 @@ export const TODO_TOOLS: ToolSpec[] = [
 		parameters: { type: 'object', properties: {} }
 	}
 ]
+
+/** A valid spark from the arguments, or the active one. */
+function sparkOf(args: Record<string, unknown>, todos: Todos): string {
+	return typeof args.spark === 'string' && SPARKS.some((s) => s.id === args.spark)
+		? args.spark
+		: todos.active
+}
 
 /** Accepts a list, a single string, or nothing — models are inconsistent here. */
 function idList(value: unknown): string[] {
@@ -146,8 +164,8 @@ export function describeResult(resultJson: string): string {
 		return resultJson
 	}
 
-	const line = (t: { id?: string; title?: string; status?: TodoStatus }) =>
-		`${t.id} ${t.title} (${t.status ? STATUS_LABEL[t.status] : 'offen'})`
+	const line = (t: { id?: string; title?: string; status?: TodoStatus; spark?: string }) =>
+		`${t.id} ${t.title} (${t.status ? STATUS_LABEL[t.status] : 'offen'}, ${t.spark ?? 'me'})`
 	const parts: string[] = []
 
 	if (result.ok === false && typeof result.error === 'string') {
@@ -199,15 +217,18 @@ export function runTodoTool(todos: Todos, name: string, rawArgs: string): string
 				.map((t) => t.trim())
 				.filter((t) => t !== '')
 			if (titles.length === 0) return JSON.stringify({ ok: false, error: 'keine Titel angegeben' })
-			return JSON.stringify({ ok: true, created: titles.map((t) => todos.create(t)) })
+			const spark = sparkOf(args, todos)
+			return JSON.stringify({ ok: true, created: titles.map((t) => todos.create(t, spark)) })
 		}
 
 		case 'todo_update': {
 			const ids = idList(args.ids)
 			if (ids.length === 0) return missingIds(todos)
 
-			const changes: { title?: string; status?: TodoStatus } = {}
+			const changes: { title?: string; status?: TodoStatus; spark?: string } = {}
 			if (typeof args.title === 'string') changes.title = args.title
+			if (typeof args.spark === 'string' && SPARKS.some((s) => s.id === args.spark))
+				changes.spark = args.spark
 			// `status` wins; `done` stays as the shorthand the model reaches for.
 			if (typeof args.status === 'string' && args.status in STATUS_WIRE)
 				changes.status = STATUS_WIRE[args.status]
