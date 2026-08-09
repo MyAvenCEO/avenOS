@@ -108,6 +108,52 @@ function missingIds(todos: Todos): string {
 }
 
 /**
+ * The same result, in plain German, for the model's eyes.
+ *
+ * The raw JSON goes to the activity card; what goes back on the wire must not.
+ * Feeding results back as JSON filled the history with braces and quotes, and
+ * the model — whose chat template has no real tool lane — started continuing
+ * the pattern instead of answering: replies degenerated into streams of `}`
+ * with shreds of its own instructions mixed in. Prose with the same facts
+ * (ids included, so addressing still works) carries no pattern to fall into.
+ */
+export function describeResult(resultJson: string): string {
+	let result: Record<string, unknown>
+	try {
+		result = JSON.parse(resultJson)
+	} catch {
+		return resultJson
+	}
+
+	const line = (t: { id?: string; title?: string; done?: boolean }) =>
+		`${t.id} ${t.title} (${t.done ? 'erledigt' : 'offen'})`
+	const parts: string[] = []
+
+	if (result.ok === false && typeof result.error === 'string') {
+		parts.push(`Fehler: ${result.error}`)
+	}
+	const GROUPS = [
+		['todos', 'Liste'],
+		['created', 'neu angelegt'],
+		['updated', 'geändert'],
+		['deleted', 'gelöscht']
+	] as const
+	for (const [key, label] of GROUPS) {
+		const items = result[key]
+		if (!Array.isArray(items)) continue
+		parts.push(
+			items.length === 0
+				? `${label}: nichts`
+				: `${label} (${items.length}): ${items.map(line).join('; ')}`
+		)
+	}
+	if (Array.isArray(result.unbekannteIds) && result.unbekannteIds.length > 0) {
+		parts.push(`unbekannte ids: ${result.unbekannteIds.join(', ')}`)
+	}
+	return parts.join('. ') || resultJson
+}
+
+/**
  * Run one tool call against the store.
  *
  * Always answers with something the model can read back, including on failure —

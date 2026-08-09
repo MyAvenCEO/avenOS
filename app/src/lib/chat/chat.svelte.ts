@@ -1,4 +1,4 @@
-import { type ChatMessage, streamChat, type ToolSpec } from './redpill'
+import { type ChatMessage, repairCall, streamChat, type ToolSpec } from './redpill'
 
 /**
  * The dashboard's conversation.
@@ -46,6 +46,18 @@ const SYSTEM_PROMPT =
  * auf." ended up on screen as an answer while nothing was deleted.
  */
 const MAX_TOOL_ROUNDS = 8
+
+/**
+ * A reply that has stopped being language.
+ *
+ * Thirty-two consecutive characters with no letter and no digit do not occur in
+ * German prose; they are the model stuck in a punctuation loop (streams of `}`
+ * were the observed shape). Checked against the tail as the reply streams.
+ */
+const DEGENERATE = /[^\p{L}\p{Nd}]{32}$/u
+
+/** What to shave off a reply cut short by the degeneration guard. */
+const TRAILING_JUNK = /[^\p{L}\p{Nd}]+$/u
 
 export interface Turn {
 	id: string
@@ -178,6 +190,16 @@ export class Chat {
 				content += event.text
 				reply.content += event.text
 				this.#sink.onDelta?.(event.text)
+				// The model sometimes collapses into emitting punctuation forever —
+				// `}` after `}` after `}` — and would keep going for its whole output
+				// budget. No German sentence has thirty-two straight characters
+				// without a letter or digit, so that tail is the collapse itself:
+				// stop the stream, cut the junk, and let what was said stand.
+				if (DEGENERATE.test(content)) {
+					content = content.replace(TRAILING_JUNK, '')
+					reply.content = content
+					break
+				}
 				continue
 			}
 
@@ -189,14 +211,15 @@ export class Chat {
 			calls.set(event.index, call)
 		}
 
-		const asked = [...calls.values()].filter((c) => c.name !== '')
-		// Never an empty assistant turn: a blank message is another way to get a
-		// blank reply out of this model.
-		this.#wire.push({
-			role: 'assistant',
-			content:
-				content || (asked.length > 0 ? `Ich rufe ${asked.map((c) => c.name).join(', ')} auf.` : '…')
-		})
+		// Repaired before anything reads the name: this model sometimes writes the
+		// whole call into the name field as Python.
+		const asked = [...calls.values()].filter((c) => c.name !== '').map(repairCall)
+		// Never an empty assistant turn — a blank message is another way to get a
+		// blank reply out of this model — but never a narrated one either. Writing
+		// "Ich rufe todo_delete auf." into its own history taught it to answer
+		// with narration instead of calls; the results message that follows names
+		// the tools anyway, so a neutral ellipsis carries no pattern to imitate.
+		this.#wire.push({ role: 'assistant', content: content || '…' })
 		return asked
 	}
 

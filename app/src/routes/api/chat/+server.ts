@@ -48,6 +48,13 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			model: MODEL,
 			messages,
 			stream: true,
+			// This deployment intermittently collapses into repeating one token —
+			// observed as `}` streamed until the output budget ran out. A modest
+			// penalty makes each repetition of the same token less likely than the
+			// last, which breaks exactly that loop while leaving prose essentially
+			// untouched; the client's stream guard is the backstop, this is the
+			// prevention.
+			frequency_penalty: 0.3,
 			// Tools are shaped here rather than in the client so the wire format
 			// stays a detail of the proxy. Omitted entirely when there are none —
 			// an empty array reads as "you have no tools", which is true but makes

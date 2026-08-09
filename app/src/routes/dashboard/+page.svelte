@@ -5,7 +5,7 @@ import { Listener } from '$lib/asr/listener.svelte'
 import { Chat } from '$lib/chat/chat.svelte'
 import { ACTIVITY_LABELS, ToolActivity } from '$lib/todos/activity.svelte'
 import { Todos } from '$lib/todos/store.svelte'
-import { runTodoTool, TODO_TOOLS } from '$lib/todos/tools'
+import { describeResult, runTodoTool, TODO_TOOLS } from '$lib/todos/tools'
 import { Speaker } from '$lib/tts/speaker.svelte'
 
 /**
@@ -40,7 +40,9 @@ const chat = new Chat(
 			// Summarized from the result, not the request — what the list did, not
 			// what the model asked for.
 			activity.record(name, result)
-			return result
+			// The model gets prose, not JSON. Braces fed back into the history are a
+			// pattern it falls into instead of answering.
+			return describeResult(result)
 		}
 	}
 )

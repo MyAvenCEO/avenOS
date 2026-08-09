@@ -215,7 +215,10 @@ export class Speaker {
 
 	#enqueue(text: string): void {
 		const trimmed = text.trim()
-		if (trimmed === '') return
+		// Nothing without a letter is worth saying. When the model degenerates it
+		// streams bare punctuation — `}` upon `}` — and the synthesizer would
+		// earnestly try to pronounce it.
+		if (trimmed === '' || !/\p{L}/u.test(trimmed)) return
 		this.#queue.push(trimmed)
 		void this.#drain()
 	}

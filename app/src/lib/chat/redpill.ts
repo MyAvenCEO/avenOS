@@ -64,8 +64,14 @@ const EXPECTED = /[^\p{Script=Latin}\p{Nd}\p{P}\p{Zs}\n\r€$%+<=>^`|~°²³µ]/
  * a German clause. The cost is that genuinely non-Latin replies are mangled,
  * which is an acceptable trade for an assistant that only speaks German.
  */
+/**
+ * Chat-template control tokens leaking into the prose (`<|"|>`, `<|im_end|>`)
+ * — never something to show, let alone pronounce.
+ */
+const CONTROL_TOKENS = /<\|[^|>]{0,24}\|>/g
+
 export function sanitize(text: string): string {
-	return text.replace(EXPECTED, '')
+	return text.replace(CONTROL_TOKENS, '').replace(EXPECTED, '')
 }
 
 /**
@@ -107,6 +113,48 @@ export function eventsFromFrame(frame: string): StreamEvent[] {
 		// anything reaching this point is genuinely malformed and worth skipping
 		// rather than throwing away the rest of the response.
 		return []
+	}
+}
+
+/**
+ * Undo the model writing a tool call as code.
+ *
+ * The OpenAI shape is a bare `name` plus JSON `arguments`. This model
+ * intermittently emits the whole call as Python instead — the name arrives as
+ * `todo_create(titles=['Mehr Wasser trinken'])` with empty arguments — and
+ * every such call failed as an unknown tool, after which the model cheerfully
+ * confirmed work it had not done. The paren split recovers the name; the
+ * kwargs are rewritten to JSON (quotes, True/False/None) and validated, so a
+ * repair that does not parse falls through to the normal unreadable-arguments
+ * error rather than inventing arguments.
+ */
+export function repairCall(call: ToolCall): ToolCall {
+	const paren = call.name.indexOf('(')
+	if (paren === -1) return call
+
+	const name = call.name.slice(0, paren).trim()
+	// The call may be split across name and arguments mid-token; the paren tail
+	// plus whatever landed in arguments is the full kwargs text.
+	const inner = (call.name.slice(paren) + call.arguments)
+		.trim()
+		.replace(/^\(/, '')
+		.replace(/\)$/, '')
+
+	if (inner.trim() === '') return { ...call, name, arguments: '{}' }
+
+	const json = `{${inner
+		.replace(/(\w+)\s*=/g, '"$1":')
+		.replace(/'/g, '"')
+		.replace(/\bTrue\b/g, 'true')
+		.replace(/\bFalse\b/g, 'false')
+		.replace(/\bNone\b/g, 'null')}}`
+	try {
+		JSON.parse(json)
+		return { ...call, name, arguments: json }
+	} catch {
+		// Not rescuable — keep the recovered name so the runner's complaint is
+		// about the arguments, which is the part that is actually wrong.
+		return { ...call, name, arguments: inner }
 	}
 }
 
