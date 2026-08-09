@@ -4,74 +4,113 @@ import type { Todos } from './store.svelte'
 /**
  * The todo list, described to the model and wired to the store.
  *
- * The descriptions are written for a model that is being spoken to, not typed
- * at: it will be handed "streich Milch kaufen", never an id, so every tool that
- * addresses an existing item accepts the title as well and the store does the
- * matching. Insisting on ids would mean the model had to call `todo_list`
- * before it could do anything, which is a round trip the user hears as a pause.
+ * Two decisions shape all of this.
+ *
+ * Everything addresses todos by **id**, never by title. Titles came from a
+ * speech recognizer and were matched by substring in both directions, so "Sport"
+ * could tick off "Sport machen" or, just as happily, the wrong item — and did.
+ * An id has to be read from a `todo_list` result, which means the model has
+ * looked at the list before changing it. When it guesses one anyway, the error
+ * says so plainly and hands back the list so it can retry immediately.
+ *
+ * Everything is **batched**. Five todos is one call, not five; ticking off three
+ * is one call, not three. Asked for five tasks the model previously burned five
+ * rounds, and clearing a finished list ran out of rounds entirely and answered
+ * with a narration of the deletes it had failed to make.
  */
+
+const IDS = {
+	type: 'array',
+	items: { type: 'string' },
+	description: 'Eine oder mehrere ids, exakt so wie todo_list sie geliefert hat.'
+}
 
 export const TODO_TOOLS: ToolSpec[] = [
 	{
+		name: 'todo_list',
+		description:
+			'Gibt alle Aufgaben mit id und Status zurück. Rufe das auf, bevor du über die Liste ' +
+			'sprichst, und immer bevor du etwas änderst oder löschst — du brauchst die ids.',
+		parameters: { type: 'object', properties: {} }
+	},
+	{
 		name: 'todo_create',
-		description: 'Legt eine neue Aufgabe an. Nutze das, sobald jemand etwas erledigen möchte.',
+		description:
+			'Legt eine oder mehrere neue Aufgaben an. Mehrere Aufgaben immer in einem einzigen ' +
+			'Aufruf, nicht nacheinander.',
 		parameters: {
 			type: 'object',
 			properties: {
-				title: {
-					type: 'string',
-					description: 'Worum es geht, kurz und in der Sprache des Nutzers.'
+				titles: {
+					type: 'array',
+					items: { type: 'string' },
+					description: 'Die Titel, kurz und in der Sprache des Nutzers.'
 				}
 			},
-			required: ['title']
+			required: ['titles']
 		}
-	},
-	{
-		name: 'todo_list',
-		description:
-			'Gibt alle Aufgaben mit Status zurück. Nutze das, bevor du über die Liste sprichst — rate nie.',
-		parameters: { type: 'object', properties: {} }
 	},
 	{
 		name: 'todo_update',
 		description:
-			'Ändert eine Aufgabe: Titel, oder erledigt ja/nein. Die Aufgabe wird über ihren Titel gefunden.',
+			'Ändert eine oder mehrere Aufgaben — erledigt ja/nein, oder den Titel. Alle gemeinten ' +
+			'Aufgaben in einem Aufruf.',
 		parameters: {
 			type: 'object',
 			properties: {
-				todo: { type: 'string', description: 'Titel (oder id) der gemeinten Aufgabe.' },
-				title: { type: 'string', description: 'Neuer Titel, falls er sich ändern soll.' },
-				done: { type: 'boolean', description: 'true = erledigt, false = wieder offen.' }
+				ids: IDS,
+				done: { type: 'boolean', description: 'true = erledigt, false = wieder offen.' },
+				title: { type: 'string', description: 'Neuer Titel. Nur sinnvoll bei genau einer id.' }
 			},
-			required: ['todo']
+			required: ['ids']
+		}
+	},
+	{
+		name: 'todo_delete',
+		description:
+			'Löscht eine oder mehrere Aufgaben endgültig. Für erledigt nutze todo_update mit ' +
+			'done=true, nicht das hier.',
+		parameters: {
+			type: 'object',
+			properties: { ids: IDS },
+			required: ['ids']
 		}
 	},
 	{
 		name: 'todo_clear_done',
 		description:
-			'Löscht alle bereits erledigten Aufgaben auf einmal. Nutze das für „lösche alles ' +
-			'Erledigte" statt vieler einzelner Aufrufe.',
+			'Löscht alle bereits erledigten Aufgaben auf einmal. Dafür brauchst du keine ids und ' +
+			'kein vorheriges todo_list.',
 		parameters: { type: 'object', properties: {} }
-	},
-	{
-		name: 'todo_delete',
-		description: 'Löscht eine Aufgabe endgültig. Für "erledigt" nutze todo_update mit done=true.',
-		parameters: {
-			type: 'object',
-			properties: {
-				todo: { type: 'string', description: 'Titel (oder id) der gemeinten Aufgabe.' }
-			},
-			required: ['todo']
-		}
 	}
 ]
+
+/** Accepts a list, a single string, or nothing — models are inconsistent here. */
+function idList(value: unknown): string[] {
+	if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string')
+	return typeof value === 'string' && value !== '' ? [value] : []
+}
+
+/**
+ * Hand the list back along with the complaint.
+ *
+ * A bare "you need ids" costs a whole extra round while the model calls
+ * `todo_list` to learn what it could have been told right here.
+ */
+function missingIds(todos: Todos): string {
+	return JSON.stringify({
+		ok: false,
+		error: 'keine gültigen ids übergeben — nimm die ids aus dieser Liste',
+		todos: todos.items
+	})
+}
 
 /**
  * Run one tool call against the store.
  *
- * Always answers with something the model can read back, including when the
- * item was not found — a silent failure would have it cheerfully confirm a
- * deletion that never happened.
+ * Always answers with something the model can read back, including on failure —
+ * a silent no-op would have it cheerfully confirm a deletion that never
+ * happened, which is precisely what it used to do.
  */
 export function runTodoTool(todos: Todos, name: string, rawArgs: string): string {
 	let args: Record<string, unknown> = {}
@@ -81,37 +120,45 @@ export function runTodoTool(todos: Todos, name: string, rawArgs: string): string
 		return JSON.stringify({ ok: false, error: `konnte die Argumente nicht lesen: ${rawArgs}` })
 	}
 
-	const target = typeof args.todo === 'string' ? args.todo : ''
-
 	switch (name) {
-		case 'todo_create': {
-			const title = typeof args.title === 'string' ? args.title.trim() : ''
-			if (title === '') return JSON.stringify({ ok: false, error: 'kein Titel angegeben' })
-			return JSON.stringify({ ok: true, created: todos.create(title) })
-		}
-
 		case 'todo_list':
 			return JSON.stringify({ ok: true, todos: todos.items })
 
-		case 'todo_clear_done':
-			return JSON.stringify({ ok: true, deleted: todos.clearDone() })
+		case 'todo_create': {
+			const titles = (Array.isArray(args.titles) ? args.titles : [args.titles])
+				.filter((t): t is string => typeof t === 'string')
+				.map((t) => t.trim())
+				.filter((t) => t !== '')
+			if (titles.length === 0) return JSON.stringify({ ok: false, error: 'keine Titel angegeben' })
+			return JSON.stringify({ ok: true, created: titles.map((t) => todos.create(t)) })
+		}
 
 		case 'todo_update': {
+			const ids = idList(args.ids)
+			if (ids.length === 0) return missingIds(todos)
+
 			const changes: { title?: string; done?: boolean } = {}
 			if (typeof args.title === 'string') changes.title = args.title
 			if (typeof args.done === 'boolean') changes.done = args.done
-			const updated = todos.update(target, changes)
-			return updated
-				? JSON.stringify({ ok: true, updated })
-				: JSON.stringify({ ok: false, error: `keine Aufgabe gefunden für "${target}"` })
+
+			const unknown = ids.filter((id) => !todos.byId(id))
+			const updated = ids.map((id) => todos.update(id, changes)).filter((t) => t !== undefined)
+			return JSON.stringify({ ok: updated.length > 0, updated, unbekannteIds: unknown })
 		}
 
 		case 'todo_delete': {
-			const removed = todos.remove(target)
-			return removed
-				? JSON.stringify({ ok: true, deleted: removed })
-				: JSON.stringify({ ok: false, error: `keine Aufgabe gefunden für "${target}"` })
+			const ids = idList(args.ids)
+			if (ids.length === 0) return missingIds(todos)
+
+			// Resolved before removing, so the reply can name what actually went.
+			const targets = ids.map((id) => todos.byId(id)).filter((t) => t !== undefined)
+			const unknown = ids.filter((id) => !targets.some((t) => t.id === id))
+			const deleted = targets.map((t) => todos.remove(t.id)).filter((t) => t !== undefined)
+			return JSON.stringify({ ok: deleted.length > 0, deleted, unbekannteIds: unknown })
 		}
+
+		case 'todo_clear_done':
+			return JSON.stringify({ ok: true, deleted: todos.clearDone() })
 
 		default:
 			return JSON.stringify({ ok: false, error: `unbekanntes Werkzeug ${name}` })

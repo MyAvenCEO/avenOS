@@ -33,6 +33,9 @@ const chat = new Chat(
 	{ specs: TODO_TOOLS, run: (name, args) => runTodoTool(todos, name, args) }
 )
 
+/** Voice is the default; text is the escape hatch, not the other way round. */
+let typing = $state(false)
+
 let newTodo = $state('')
 
 function addTodo(event: SubmitEvent) {
@@ -267,39 +270,80 @@ $effect(() => {
 		</aside>
 	</div>
 
-	<!-- What the system is doing, given its own card rather than a corner of the
-	     header. In a voice-first interface this is the primary feedback: there is
-	     no button being pressed, so the only way to know it heard you is to see
-	     it say so. -->
+	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
+	     reads as the active surface rather than another card on a pale page. -->
 	<div
-		class="mx-auto w-full max-w-lg rounded-2xl border border-border bg-surface-card px-5 py-3"
+		class="mx-auto w-full max-w-lg rounded-2xl bg-primary px-4 py-3 text-primary-foreground"
 		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
 	>
-		<div class="flex items-center justify-center gap-2.5 text-sm">
-			<!-- While listening the dot follows the microphone level, so a dead
-			     input is visible as a dot that never moves. -->
-			<span
-				class="inline-block size-2 shrink-0 rounded-full transition-transform"
-				class:bg-status-error={phase.key === 'hearing' || phase.key === 'idle'}
-				class:bg-status-success={phase.key === 'speaking'}
-				class:bg-status-working={phase.key === 'thinking' ||
-					phase.key === 'loading' ||
-					phase.key === 'starting'}
-				class:bg-muted-foreground={phase.key === 'denied' || phase.key === 'text'}
-				class:animate-pulse={phase.key === 'thinking' ||
-					phase.key === 'loading' ||
-					phase.key === 'starting'}
-				style={phase.key === 'hearing' || phase.key === 'idle'
-					? `transform: scale(${1 + Math.min(listener.level, 1) * 2})`
-					: ''}
-			></span>
-			<span>{phase.label}</span>
+		<div class="flex items-center gap-3">
+			{#if typing}
+				<form bind:this={form} onsubmit={submit} class="flex flex-1 items-center gap-2">
+					<textarea
+						bind:value={draft}
+						onkeydown={onKeydown}
+						rows="1"
+						placeholder="Schreiben…"
+						class="field-sizing-content max-h-32 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-primary-foreground/40"
+					></textarea>
+					<button
+						type="submit"
+						disabled={draft.trim() === ''}
+						class="text-sm underline underline-offset-4 transition-opacity disabled:opacity-30"
+					>
+						Senden
+					</button>
+				</form>
+			{:else}
+				<!-- While listening the dot follows the microphone level, so a dead
+				     input is visible as a dot that never moves. -->
+				<span
+					class="inline-block size-2 shrink-0 rounded-full transition-transform"
+					class:bg-status-error={phase.key === 'hearing' || phase.key === 'idle'}
+					class:bg-status-success={phase.key === 'speaking'}
+					class:bg-status-working={phase.key === 'thinking' ||
+						phase.key === 'loading' ||
+						phase.key === 'starting'}
+					class:bg-primary-foreground={phase.key === 'denied' || phase.key === 'text'}
+					class:animate-pulse={phase.key === 'thinking' ||
+						phase.key === 'loading' ||
+						phase.key === 'starting'}
+					style={phase.key === 'hearing' || phase.key === 'idle'
+						? `transform: scale(${1 + Math.min(listener.level, 1) * 2})`
+						: ''}
+				></span>
+				<span class="flex-1 text-sm">{phase.label}</span>
+				{#if chat.streaming || speaker.speaking}
+					<button
+						type="button"
+						onclick={() => {
+							chat.stop()
+							speaker.silence()
+						}}
+						class="text-sm underline underline-offset-4"
+					>
+						Stopp
+					</button>
+				{/if}
+			{/if}
+
+			<!-- Voice is the default, so this is a way out and back, not a mode picker. -->
+			<button
+				type="button"
+				onclick={() => {
+					typing = !typing
+				}}
+				class="shrink-0 rounded-full border border-primary-foreground/25 px-2.5 py-1 text-xs transition-colors hover:bg-primary-foreground/10"
+				title={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
+			>
+				{typing ? 'Sprechen' : 'Tippen'}
+			</button>
 		</div>
 
 		{#if phase.key === 'loading'}
-			<div class="mt-3 h-1 overflow-hidden rounded-full bg-border">
+			<div class="mt-3 h-1 overflow-hidden rounded-full bg-primary-foreground/20">
 				<div
-					class="h-full rounded-full bg-status-working transition-[width]"
+					class="h-full rounded-full bg-primary-foreground transition-[width]"
 					style="width: {Math.round(
 						(listener.status === 'preparing' ? listener.progress : speaker.progress) * 100
 					)}%"
@@ -307,35 +351,4 @@ $effect(() => {
 			</div>
 		{/if}
 	</div>
-
-	<form bind:this={form} onsubmit={submit} class="mx-auto flex w-full max-w-lg items-end gap-2">
-		<textarea
-			bind:value={draft}
-			onkeydown={onKeydown}
-			rows="1"
-			placeholder="Message…"
-			class="field-sizing-content max-h-40 flex-1 resize-none rounded-2xl border border-border bg-input px-4 py-3 text-sm outline-none focus:border-primary-soft"
-		></textarea>
-
-		{#if chat.streaming}
-			<button
-				type="button"
-				onclick={() => {
-					chat.stop()
-					speaker.silence()
-				}}
-				class="rounded-full border border-border px-5 py-3 text-sm transition-colors hover:bg-surface-card-hover"
-			>
-				Stop
-			</button>
-		{:else}
-			<button
-				type="submit"
-				disabled={draft.trim() === ''}
-				class="rounded-full bg-primary px-5 py-3 text-sm text-primary-foreground transition-opacity disabled:opacity-30"
-			>
-				Send
-			</button>
-		{/if}
-	</form>
 </main>
