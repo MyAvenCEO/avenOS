@@ -47,6 +47,13 @@ export const TODO_TOOLS: ToolSpec[] = [
 		}
 	},
 	{
+		name: 'todo_clear_done',
+		description:
+			'Löscht alle bereits erledigten Aufgaben auf einmal. Nutze das für „lösche alles ' +
+			'Erledigte" statt vieler einzelner Aufrufe.',
+		parameters: { type: 'object', properties: {} }
+	},
+	{
 		name: 'todo_delete',
 		description: 'Löscht eine Aufgabe endgültig. Für "erledigt" nutze todo_update mit done=true.',
 		parameters: {
@@ -85,6 +92,9 @@ export function runTodoTool(todos: Todos, name: string, rawArgs: string): string
 
 		case 'todo_list':
 			return JSON.stringify({ ok: true, todos: todos.items })
+
+		case 'todo_clear_done':
+			return JSON.stringify({ ok: true, deleted: todos.clearDone() })
 
 		case 'todo_update': {
 			const changes: { title?: string; done?: boolean } = {}

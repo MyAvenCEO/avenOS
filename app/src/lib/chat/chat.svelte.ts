@@ -35,8 +35,15 @@ const SYSTEM_PROMPT =
 	'Wenn du Werkzeuge aufrufst, schreibe im selben Zug keinen Text — deine Antwort ' +
 	'kommt erst, wenn du die Ergebnisse hast, und zwar dann in einem Stück.'
 
-/** Hard stop on tool rounds, so a model that keeps calling cannot loop forever. */
-const MAX_TOOL_ROUNDS = 4
+/**
+ * Hard stop on tool rounds, so a model that keeps calling cannot loop forever.
+ *
+ * Deleting everything finished takes list, then one delete per item, then the
+ * answer — and four rounds ran out partway, leaving whatever the last round had
+ * written as the final reply. That is how "Ich rufe todo_delete, todo_delete…
+ * auf." ended up on screen as an answer while nothing was deleted.
+ */
+const MAX_TOOL_ROUNDS = 8
 
 export interface Turn {
 	id: string
