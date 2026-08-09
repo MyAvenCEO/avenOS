@@ -6,7 +6,7 @@
  * unit-tested and reused outside a component.
  */
 
-export type ChatRole = 'system' | 'user' | 'assistant' | 'tool'
+export type ChatRole = 'system' | 'user' | 'assistant'
 
 export interface ToolCall {
 	id: string
@@ -15,13 +15,20 @@ export interface ToolCall {
 	arguments: string
 }
 
+/**
+ * One message on the wire.
+ *
+ * Deliberately without `tool_calls` or a `tool` role, though both are in the
+ * OpenAI schema this endpoint otherwise speaks. Gemma's chat template has only
+ * user and model turns: sending a tool result back as `role: "tool"` makes the
+ * model return an entirely empty turn, and from there it starts narrating tool
+ * calls as prose and reciting its own system prompt. Results go back as user
+ * messages instead, which it handles correctly. The model can still *emit*
+ * tool calls — that half works fine.
+ */
 export interface ChatMessage {
 	role: ChatRole
 	content: string
-	/** Present on an assistant turn that decided to call something. */
-	tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
-	/** Present on a tool result, tying it back to the call. */
-	tool_call_id?: string
 }
 
 /** A tool as the model is told about it. */

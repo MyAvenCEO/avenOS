@@ -90,14 +90,16 @@ export class Chat {
 				const calls = await this.#round(reply)
 				if (calls.length === 0) break
 
-				for (const call of calls) {
+				// Results go back as a user turn. See ChatMessage — a `tool` role
+				// makes this model answer with nothing at all.
+				const results = calls.map((call) => {
 					reply.tools?.push(call.name)
-					this.#wire.push({
-						role: 'tool',
-						tool_call_id: call.id,
-						content: this.#tools.run(call.name, call.arguments)
-					})
-				}
+					return `${call.name} → ${this.#tools.run(call.name, call.arguments)}`
+				})
+				this.#wire.push({
+					role: 'user',
+					content: `Ergebnis der Werkzeuge:\n${results.join('\n')}`
+				})
 			}
 			this.#sink.onDone?.()
 		} catch (err) {
@@ -143,16 +145,12 @@ export class Chat {
 		}
 
 		const asked = [...calls.values()].filter((c) => c.name !== '')
+		// Never an empty assistant turn: a blank message is another way to get a
+		// blank reply out of this model.
 		this.#wire.push({
 			role: 'assistant',
-			content,
-			...(asked.length > 0 && {
-				tool_calls: asked.map((c) => ({
-					id: c.id,
-					type: 'function' as const,
-					function: { name: c.name, arguments: c.arguments }
-				}))
-			})
+			content:
+				content || (asked.length > 0 ? `Ich rufe ${asked.map((c) => c.name).join(', ')} auf.` : '…')
 		})
 		return asked
 	}
