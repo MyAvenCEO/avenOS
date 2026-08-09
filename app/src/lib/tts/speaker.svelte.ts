@@ -24,6 +24,9 @@ import { listen } from '@tauri-apps/api/event'
  */
 const BOUNDARY = /[.!?:]\s/g
 
+/** Anything WebKit counts as the gesture that unblocks audio output. */
+const GESTURES = ['pointerdown', 'keydown', 'touchstart'] as const
+
 export type SpeakerStatus = 'unavailable' | 'preparing' | 'ready' | 'error'
 
 export class Speaker {
@@ -65,6 +68,8 @@ export class Speaker {
 	 * when the audio itself is ready.
 	 */
 	#playhead = 0
+	/** Whether a gesture listener is already waiting to wake the output. */
+	#armed = false
 
 	constructor() {
 		// Synthesis lives in the Rust side, so a plain browser tab has no `invoke`
@@ -107,14 +112,44 @@ export class Speaker {
 	}
 
 	/**
-	 * Open (or wake) the output device. Call from a user gesture — sending a
-	 * message is the natural one — because an AudioContext created outside of one
-	 * starts suspended and the first reply would be silent.
+	 * Open (or wake) the output device.
+	 *
+	 * An AudioContext created outside a user gesture starts suspended, and WebKit
+	 * will not honour `resume()` until a gesture has happened at least once. In a
+	 * conversation that is entirely spoken there is no gesture — the app opens,
+	 * the mic is already listening, and nobody ever clicks anything. Everything
+	 * then behaves as though it were speaking (sources scheduled, `speaking` set,
+	 * the panel reading "Spricht") while the output device is quietly asleep.
+	 *
+	 * So this is called on every send *and* armed to fire on the first click or
+	 * keypress whenever it happens, whichever comes first.
 	 */
 	resumeAudio(): void {
 		if (!this.on) return
+		this.#audio()
+	}
+
+	/** The output context, woken if it can be and unblocked when it cannot. */
+	#audio(): AudioContext {
 		this.#context ??= new AudioContext()
-		if (this.#context.state === 'suspended') void this.#context.resume()
+		const context = this.#context
+		if (context.state === 'suspended') {
+			void context.resume()
+			this.#arm()
+		}
+		return context
+	}
+
+	/** Resume on the next gesture of any kind, once. */
+	#arm(): void {
+		if (this.#armed) return
+		this.#armed = true
+		const wake = () => {
+			void this.#context?.resume()
+			for (const event of GESTURES) window.removeEventListener(event, wake)
+			this.#armed = false
+		}
+		for (const event of GESTURES) window.addEventListener(event, wake, { passive: true })
 	}
 
 	/** Feed one streamed delta. Whole sentences are queued as they complete. */
@@ -176,28 +211,40 @@ export class Speaker {
 		if (this.#draining) return
 		this.#draining = true
 		this.speaking = true
+		// Last turn's failure, if any, has been on screen until now. One bad
+		// sentence should not label the voice broken forever.
+		this.failure = null
 
 		try {
-			const generation = this.#generation
 			// Always one sentence in flight beyond the one being handled.
 			let ahead: Promise<AudioBuffer | null> | null = null
 
-			while ((this.#queue.length > 0 || ahead) && generation === this.#generation) {
+			// No generation check in the condition. `silence()` empties the queue,
+			// so the loop ends on its own — whereas exiting early left anything
+			// queued afterwards stranded, because `#enqueue` sees `#draining` still
+			// true and returns without starting a new drain. That is how the voice
+			// went silent after the first interruption: the sentences were made and
+			// then never spoken.
+			while (this.#queue.length > 0 || ahead) {
 				const current = ahead ?? this.#synthesize(this.#queue.shift() ?? '')
 				ahead = this.#queue.length > 0 ? this.#synthesize(this.#queue.shift() ?? '') : null
 
+				// Null when it was interrupted mid-synthesis; nothing to play.
 				const buffer = await current
 				// Scheduled, not awaited: the next sentence is synthesized while this
 				// one plays, and lands on the timeline exactly where it ends.
-				if (buffer && generation === this.#generation) this.#schedule(buffer)
+				if (buffer) this.#schedule(buffer)
 			}
 		} catch (err) {
 			this.failure = err instanceof Error ? err.message : String(err)
 		} finally {
 			this.#draining = false
-			// `speaking` is cleared by the last source ending, not here — audio is
+			// Anything queued while this was unwinding would otherwise sit there
+			// forever, since `#enqueue` declines to start a second drain.
+			if (this.#queue.length > 0) void this.#drain()
+			// `speaking` is otherwise cleared by the last source ending — audio is
 			// still on the timeline after the loop stops queueing it.
-			if (this.#sources.size === 0) this.speaking = false
+			else if (this.#sources.size === 0) this.speaking = false
 		}
 	}
 
@@ -205,10 +252,9 @@ export class Speaker {
 	async #synthesize(text: string): Promise<AudioBuffer | null> {
 		if (text.trim() === '') return null
 
-		// `resumeAudio()` normally created this from the send click; a reply that
-		// somehow arrives first still gets a context rather than being dropped.
-		this.#context ??= new AudioContext()
-		const context = this.#context
+		// `resumeAudio()` normally opened this already; a reply that somehow
+		// arrives first still gets a context rather than being dropped.
+		const context = this.#audio()
 		const generation = this.#generation
 
 		// The command answers with a WAV as raw bytes rather than a JSON array of
@@ -224,8 +270,10 @@ export class Speaker {
 
 	/** Put one buffer on the timeline, immediately after whatever precedes it. */
 	#schedule(buffer: AudioBuffer): void {
-		const context = this.#context
-		if (!context) return
+		// Checked here too: a context can be suspended again between sentences (the
+		// window losing focus is enough), and scheduling into a stopped clock plays
+		// nothing while looking exactly like success.
+		const context = this.#audio()
 
 		// A hair in the future when starting fresh, so the first sentence is not
 		// scheduled in the past while the graph spins up.

@@ -31,8 +31,8 @@ export interface Activity {
 	note?: string
 }
 
-/** Enough to see the last exchange without the panel becoming a log. */
-const KEEP = 4
+/** How long one result stays on screen. */
+const LINGER = 3000
 
 interface Todo {
 	title: string
@@ -41,10 +41,22 @@ interface Todo {
 let nextId = 0
 
 export class ToolActivity {
-	entries = $state<Activity[]>([])
+	/**
+	 * The one result currently being shown, if any.
+	 *
+	 * A toast rather than a list. Several calls can land in a single turn, and a
+	 * growing stack of them pushed the input panel down the screen and turned a
+	 * glanceable "did that work?" into something to read. The newest replaces
+	 * whatever is there; each stands for three seconds and then goes.
+	 */
+	current = $state<Activity | null>(null)
+
+	#timer: ReturnType<typeof setTimeout> | null = null
 
 	clear(): void {
-		this.entries = []
+		if (this.#timer) clearTimeout(this.#timer)
+		this.#timer = null
+		this.current = null
 	}
 
 	/**
@@ -108,8 +120,15 @@ export class ToolActivity {
 	#push(entry: Omit<Activity, 'id'>): void {
 		// A no-op read is worth showing; a no-op edit is noise.
 		if (entry.titles.length === 0 && entry.kind !== 'read' && entry.kind !== 'failed') return
-		this.entries.push({ ...entry, id: nextId++ })
-		if (this.entries.length > KEEP) this.entries = this.entries.slice(-KEEP)
+
+		if (this.#timer) clearTimeout(this.#timer)
+		this.current = { ...entry, id: nextId++ }
+		// Captured, so a toast replaced before its time is up cannot have the
+		// newer one dismissed by the older one's timer.
+		const shown = this.current.id
+		this.#timer = setTimeout(() => {
+			if (this.current?.id === shown) this.current = null
+		}, LINGER)
 	}
 }
 

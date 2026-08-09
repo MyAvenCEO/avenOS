@@ -114,6 +114,10 @@ const phase = $derived.by(() => {
 	if (listener.status === 'denied') return { key: 'denied', label: 'Kein Mikrofon' }
 	if (listener.status === 'error' || speaker.status === 'error')
 		return { key: 'error', label: 'Fehler' }
+	// A sentence that fails to synthesize does not stop the voice for good, so it
+	// keeps `status` — but it must not just go quiet either, which is
+	// indistinguishable from the voice being broken.
+	if (speaker.failure) return { key: 'error', label: `Stimme: ${speaker.failure}` }
 	if (speaker.status === 'preparing')
 		return { key: 'loading', label: `Stimme lädt ${Math.round(speaker.progress * 100)}%` }
 	if (listener.status === 'preparing')
@@ -283,44 +287,40 @@ $effect(() => {
 		</aside>
 	</div>
 
-	<!-- What the tools did to the list, in words. A light card against the dark
-	     input panel below it, so the pair reads as one unit: what just happened,
-	     and what you say next. Sits here because "did that actually work?" is
-	     asked at the moment of speaking, not by scrolling back. -->
-	{#if activity.entries.length > 0}
-		<div
-			class="mx-auto w-full max-w-lg space-y-2 rounded-2xl border border-border bg-surface-card px-4 py-3"
-		>
-			{#each activity.entries as entry (entry.id)}
-				<div class="flex gap-2 text-xs">
-					<span
-						class="w-3 shrink-0 text-center font-mono"
-						class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
-						class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
-						class:opacity-30={entry.kind === 'read' ||
-							entry.kind === 'reopened' ||
-							entry.kind === 'renamed'}
-					>
-						{ACTIVITY_LABELS[entry.kind].mark}
-					</span>
-					<div class="min-w-0 flex-1">
-						<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
-						{#if entry.titles.length > 0}
-							<!-- One per line. Run together with separators, five items became
-							     a sentence that ran off the edge and told you nothing. -->
-							<ul class="pt-0.5">
-								{#each entry.titles as title (title)}
-									<li class="leading-relaxed">{title}</li>
-								{/each}
-							</ul>
-						{:else if entry.note}
-							<span class="opacity-40">· {entry.note}</span>
-						{/if}
-					</div>
+	<!-- What the tools just did, as a toast. One at a time, three seconds: a
+	     glance to confirm the list changed the way you meant, not a log to read.
+	     Reserving the space keeps the input panel still as toasts come and go. -->
+	<div class="mx-auto min-h-16 w-full max-w-lg">
+		{#if activity.current}
+			{@const entry = activity.current}
+			<div class="flex gap-2 rounded-2xl border border-border bg-surface-card px-4 py-3 text-xs">
+				<span
+					class="w-3 shrink-0 text-center font-mono"
+					class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
+					class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
+					class:opacity-30={entry.kind === 'read' ||
+						entry.kind === 'reopened' ||
+						entry.kind === 'renamed'}
+				>
+					{ACTIVITY_LABELS[entry.kind].mark}
+				</span>
+				<div class="min-w-0 flex-1">
+					<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
+					{#if entry.titles.length > 0}
+						<!-- One per line. Run together with separators, five items became
+						     a sentence that ran off the edge and told you nothing. -->
+						<ul class="pt-0.5">
+							{#each entry.titles as title (title)}
+								<li class="leading-relaxed">{title}</li>
+							{/each}
+						</ul>
+					{:else if entry.note}
+						<span class="opacity-40">· {entry.note}</span>
+					{/if}
 				</div>
-			{/each}
-		</div>
-	{/if}
+			</div>
+		{/if}
+	</div>
 
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
