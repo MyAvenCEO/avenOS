@@ -17,6 +17,11 @@ class AsrTap extends AudioWorkletProcessor {
 		super()
 		this.buffer = new Float32Array(BATCH)
 		this.filled = 0
+		// `sampleRate` is a global in here and is the rate the context ACTUALLY
+		// runs at, which is not always the one that was asked for — Safari has a
+		// history of ignoring the constructor hint. Everything downstream assumes
+		// 16 kHz, so the real figure has to be reported rather than trusted.
+		this.port.postMessage({ rate: sampleRate })
 	}
 
 	process(inputs) {

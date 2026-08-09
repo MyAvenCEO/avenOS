@@ -177,6 +177,12 @@ $effect(() => {
 						<p class="pt-2 text-xs opacity-40">
 							Das Mikrofon ist offen. Du kannst mich jederzeit unterbrechen.
 						</p>
+						<!-- Visible so a dead microphone can be told from a deaf
+						     recognizer without attaching a debugger. -->
+						<p class="pt-6 font-mono text-[10px] opacity-30">
+							{listener.rate}
+							Hz · Pegel {listener.level.toFixed(3)} · {listener.pushes} Blöcke
+						</p>
 					{:else if listener.status === 'preparing'}
 						<p class="text-sm opacity-40">
 							Die Ohren laden — {Math.round(listener.progress * 100)}% von etwa 2,6 GB.

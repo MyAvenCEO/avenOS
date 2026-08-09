@@ -59,6 +59,10 @@ export class Listener {
 	 * the outside to a recognizer that is not working.
 	 */
 	level = $state(0)
+	/** What the audio context actually runs at. Should be 16000. */
+	rate = $state(0)
+	/** Batches sent to the recognizer, so a dead pipeline is visible as zero. */
+	pushes = $state(0)
 	failure = $state<string | null>(null)
 
 	#hooks: ListenerHooks
@@ -123,7 +127,14 @@ export class Listener {
 			await this.#context.audioWorklet.addModule('/asr-worklet.js')
 
 			this.#node = new AudioWorkletNode(this.#context, 'asr-tap')
-			this.#node.port.onmessage = (event) => void this.#push(event.data as Float32Array)
+			this.#node.port.onmessage = (event) => {
+				// The worklet's first message is its real sample rate, not audio.
+				if (!(event.data instanceof Float32Array)) {
+					this.rate = (event.data as { rate: number }).rate
+					return
+				}
+				void this.#push(event.data)
+			}
 			this.#context.createMediaStreamSource(this.#stream).connect(this.#node)
 			// Not connected to the destination on purpose — this is a tap, and
 			// routing the mic to the speakers would be a feedback loop.
@@ -157,7 +168,34 @@ export class Listener {
 		if (this.available) await invoke('asr_reset').catch(() => {})
 	}
 
-	async #push(pcm: Float32Array): Promise<void> {
+	/**
+	 * Bring a batch to 16 kHz if the context did not honour the request.
+	 *
+	 * `new AudioContext({ sampleRate })` is a hint, not a promise — Safari in
+	 * particular has a history of running at the device rate regardless. Both
+	 * models are built for 16 kHz, and audio at 48 kHz labelled as 16 kHz is
+	 * speech played at a third speed as far as they are concerned: the VAD sees
+	 * nothing and the recognizer would produce nonsense.
+	 */
+	#toSixteenK(pcm: Float32Array): Float32Array {
+		if (this.rate === 0 || this.rate === 16_000) return pcm
+
+		const ratio = this.rate / 16_000
+		const out = new Float32Array(Math.floor(pcm.length / ratio))
+		for (let i = 0; i < out.length; i++) {
+			// Average the source samples this output sample spans, rather than
+			// picking one — plain decimation aliases badly enough to matter.
+			const from = Math.floor(i * ratio)
+			const to = Math.min(Math.floor((i + 1) * ratio), pcm.length)
+			let sum = 0
+			for (let j = from; j < to; j++) sum += pcm[j]
+			out[i] = to > from ? sum / (to - from) : 0
+		}
+		return out
+	}
+
+	async #push(raw: Float32Array): Promise<void> {
+		const pcm = this.#toSixteenK(raw)
 		// Dropping a batch is better than queueing them: if Rust falls behind,
 		// a backlog would make every later interrupt progressively later.
 		// Cheap enough to do on every batch, and it must run even when a push is
@@ -170,6 +208,7 @@ export class Listener {
 
 		if (this.#busy || this.status !== 'listening') return
 		this.#busy = true
+		this.pushes++
 
 		try {
 			// Raw bytes, not a JSON array: 8 KB instead of ~40 KB per batch, and no
