@@ -24,6 +24,13 @@ import { listen } from '@tauri-apps/api/event'
  */
 const BOUNDARY = /[.!?:]\s/g
 
+/**
+ * Where a clause can be cut if the turn's opening sentence runs long. Only
+ * used before the first audio of a turn is out: mid-turn, whole sentences
+ * give the synthesizer better prosody and the pipeline is already ahead.
+ */
+const CLAUSE = /[,;–]\s/g
+
 /** Anything WebKit counts as the gesture that unblocks audio output. */
 const GESTURES = ['pointerdown', 'keydown', 'touchstart'] as const
 
@@ -84,6 +91,8 @@ export class Speaker {
 	#playhead = 0
 	/** Whether a gesture listener is already waiting to wake the output. */
 	#armed = false
+	/** Whether this turn's first audio is already out (see CLAUSE). */
+	#opened = false
 	/** Pending frozen-clock check, at most one. */
 	#watchdog: ReturnType<typeof setTimeout> | null = null
 
@@ -186,6 +195,15 @@ export class Speaker {
 		BOUNDARY.lastIndex = 0
 		let cut = -1
 		for (const match of this.#pending.matchAll(BOUNDARY)) cut = match.index + match[0].length
+
+		// No full sentence yet, and nothing spoken this turn: if the opening
+		// sentence is running long, a clause break is boundary enough. The prompt
+		// asks for a five-word opener precisely so audio starts early — this
+		// covers the replies where the model ignores that.
+		if (cut === -1 && !this.#opened && this.#pending.length > 48) {
+			CLAUSE.lastIndex = 0
+			for (const match of this.#pending.matchAll(CLAUSE)) cut = match.index + match[0].length
+		}
 		if (cut === -1) return
 
 		this.#enqueue(this.#pending.slice(0, cut))
@@ -197,6 +215,8 @@ export class Speaker {
 		if (!this.on) return
 		this.#enqueue(this.#pending)
 		this.#pending = ''
+		// The turn is over; the next reply opens fresh.
+		this.#opened = false
 	}
 
 	/** Stop speaking and drop anything queued. */
@@ -206,6 +226,7 @@ export class Speaker {
 		for (const source of this.#sources) source.stop()
 		this.#sources.clear()
 		this.#playhead = 0
+		this.#opened = false
 		this.#generation++
 		// Nothing is coming out of the speakers now, so say so immediately rather
 		// than waiting for the drain loop to unwind. The recognizer raises its
@@ -221,6 +242,7 @@ export class Speaker {
 		// streams bare punctuation — `}` upon `}` — and the synthesizer would
 		// earnestly try to pronounce it.
 		if (trimmed === '' || !/\p{L}/u.test(trimmed)) return
+		this.#opened = true
 		this.#queue.push(trimmed)
 		void this.#drain()
 	}
