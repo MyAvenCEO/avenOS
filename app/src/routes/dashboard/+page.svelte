@@ -3,7 +3,7 @@ import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
 import { Listener } from '$lib/asr/listener.svelte'
 import { Chat } from '$lib/chat/chat.svelte'
-import { ACTIVITY_LABELS, ToolActivity } from '$lib/todos/activity.svelte'
+import { ACTIVITY_LABELS, summarize, ToolActivity } from '$lib/todos/activity.svelte'
 import { Todos } from '$lib/todos/store.svelte'
 import { describeResult, runTodoTool, TODO_TOOLS } from '$lib/todos/tools'
 import { Speaker } from '$lib/tts/speaker.svelte'
@@ -41,8 +41,9 @@ const chat = new Chat(
 			// what the model asked for.
 			activity.record(name, result)
 			// The model gets prose, not JSON. Braces fed back into the history are a
-			// pattern it falls into instead of answering.
-			return describeResult(result)
+			// pattern it falls into instead of answering; the transcript keeps the
+			// structured result.
+			return { record: result, wire: describeResult(result) }
 		}
 	}
 )
@@ -201,6 +202,30 @@ $effect(() => {
 		<div bind:this={log} class="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
 			{#each chat.turns as turn (turn.id)}
 				<div class="flex flex-col gap-1" class:items-end={turn.role === 'user'}>
+					<!-- What the turn's tools actually did, kept with the reply they
+					     produced. The toast is the glance; this is the record. -->
+					{#each turn.calls ?? [] as call, i (i)}
+						{@const entry = summarize(call.name, call.result)}
+						{#if entry}
+							<div class="flex gap-2 pl-1 text-xs opacity-60">
+								<span
+									class="w-3 shrink-0 text-center font-mono"
+									class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
+									class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
+								>
+									{ACTIVITY_LABELS[entry.kind].mark}
+								</span>
+								<span class="min-w-0">
+									{ACTIVITY_LABELS[entry.kind].label}
+									{entry.titles.length > 0
+										? `: ${entry.titles.join(', ')}`
+										: entry.note
+											? ` · ${entry.note}`
+											: ''}
+								</span>
+							</div>
+						{/if}
+					{/each}
 					<div
 						class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed"
 						class:bg-primary={turn.role === 'user'}

@@ -63,8 +63,8 @@ export interface Turn {
 	id: string
 	role: 'user' | 'assistant'
 	content: string
-	/** Names of tools run during this turn, for the transcript. */
-	tools?: string[]
+	/** Every tool call this turn ran, with its result, for the transcript. */
+	calls?: { name: string; result: string }[]
 }
 
 /** Hooks for anything that wants the reply as it arrives — the speaker, today. */
@@ -77,7 +77,12 @@ export interface ChatSink {
 
 export interface ChatTools {
 	specs: ToolSpec[]
-	run: (name: string, args: string) => string
+	/**
+	 * Run one call. `record` is the machine-readable result, kept on the turn
+	 * for the transcript; `wire` is what the model reads back — the two differ
+	 * because the model gets prose where the transcript wants structure.
+	 */
+	run: (name: string, args: string) => { record: string; wire: string }
 }
 
 let nextId = 0
@@ -93,7 +98,10 @@ export class Chat {
 	#sink: ChatSink
 	#tools: ChatTools
 
-	constructor(sink: ChatSink = {}, tools: ChatTools = { specs: [], run: () => '' }) {
+	constructor(
+		sink: ChatSink = {},
+		tools: ChatTools = { specs: [], run: () => ({ record: '', wire: '' }) }
+	) {
 		this.#sink = sink
 		this.#tools = tools
 	}
@@ -116,7 +124,7 @@ export class Chat {
 		// pushed and mutating it would update the data and tell no one — the
 		// reply would stream into a bubble that never re-renders.
 		const replyId = id()
-		this.turns.push({ id: replyId, role: 'assistant', content: '', tools: [] })
+		this.turns.push({ id: replyId, role: 'assistant', content: '', calls: [] })
 		const reply = this.turns[this.turns.length - 1]
 
 		this.streaming = true
@@ -140,8 +148,9 @@ export class Chat {
 				// Results go back as a user turn. See ChatMessage — a `tool` role
 				// makes this model answer with nothing at all.
 				const results = calls.map((call) => {
-					reply.tools?.push(call.name)
-					return `${call.name} → ${this.#tools.run(call.name, call.arguments)}`
+					const { record, wire } = this.#tools.run(call.name, call.arguments)
+					reply.calls?.push({ name: call.name, result: record })
+					return `${call.name} → ${wire}`
 				})
 				this.#wire.push({
 					role: 'user',

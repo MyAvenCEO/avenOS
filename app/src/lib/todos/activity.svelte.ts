@@ -40,6 +40,64 @@ interface Todo {
 
 let nextId = 0
 
+/**
+ * Read one tool result into a displayable entry, or nothing for a no-op.
+ *
+ * Parsing the result rather than trusting the call means a request to delete
+ * three items that only matched one shows as one deletion. Shared between the
+ * toast and the transcript, so the fleeting and the permanent record of a call
+ * can never disagree.
+ */
+export function summarize(name: string, resultJson: string): Omit<Activity, 'id'> | null {
+	let result: Record<string, unknown>
+	try {
+		result = JSON.parse(resultJson)
+	} catch {
+		return null
+	}
+
+	const titles = (key: string): string[] =>
+		Array.isArray(result[key]) ? (result[key] as Todo[]).map((t) => t?.title).filter(Boolean) : []
+
+	if (result.ok === false) {
+		return {
+			kind: 'failed',
+			titles: [],
+			note: typeof result.error === 'string' ? result.error : name
+		}
+	}
+
+	switch (name) {
+		case 'todo_create':
+			return { kind: 'created', titles: titles('created') }
+
+		case 'todo_update': {
+			const changed = titles('updated')
+			if (changed.length === 0) return null
+			// The same tool does three different things; which one matters more
+			// to a reader than the fact that an update occurred.
+			const first = (result.updated as { done?: boolean; title?: string }[])[0]
+			const kind: ActivityKind =
+				first?.done === true ? 'done' : first?.done === false ? 'reopened' : 'renamed'
+			return { kind, titles: changed }
+		}
+
+		case 'todo_delete':
+		case 'todo_clear_done':
+			return { kind: 'deleted', titles: titles('deleted') }
+
+		case 'todo_list':
+			return {
+				kind: 'read',
+				titles: [],
+				note: `${(result.todos as unknown[])?.length ?? 0} Aufgaben gelesen`
+			}
+
+		default:
+			return null
+	}
+}
+
 export class ToolActivity {
 	/**
 	 * The one result currently being shown, if any.
@@ -59,68 +117,13 @@ export class ToolActivity {
 		this.current = null
 	}
 
-	/**
-	 * Read one tool result and add a line for it.
-	 *
-	 * Parsing the result rather than trusting the call means a request to delete
-	 * three items that only matched one shows as one deletion.
-	 */
+	/** Show one tool result as the current toast. */
 	record(name: string, resultJson: string): void {
-		let result: Record<string, unknown>
-		try {
-			result = JSON.parse(resultJson)
-		} catch {
-			return
-		}
-
-		const titles = (key: string): string[] =>
-			Array.isArray(result[key]) ? (result[key] as Todo[]).map((t) => t?.title).filter(Boolean) : []
-
-		if (result.ok === false) {
-			this.#push({
-				kind: 'failed',
-				titles: [],
-				note: typeof result.error === 'string' ? result.error : name
-			})
-			return
-		}
-
-		switch (name) {
-			case 'todo_create':
-				this.#push({ kind: 'created', titles: titles('created') })
-				break
-
-			case 'todo_update': {
-				const changed = titles('updated')
-				if (changed.length === 0) break
-				// The same tool does three different things; which one matters more
-				// to a reader than the fact that an update occurred.
-				const first = (result.updated as { done?: boolean; title?: string }[])[0]
-				const kind: ActivityKind =
-					first?.done === true ? 'done' : first?.done === false ? 'reopened' : 'renamed'
-				this.#push({ kind, titles: changed })
-				break
-			}
-
-			case 'todo_delete':
-			case 'todo_clear_done':
-				this.#push({ kind: 'deleted', titles: titles('deleted') })
-				break
-
-			case 'todo_list':
-				this.#push({
-					kind: 'read',
-					titles: [],
-					note: `${(result.todos as unknown[])?.length ?? 0} Aufgaben gelesen`
-				})
-				break
-		}
+		const entry = summarize(name, resultJson)
+		if (entry) this.#push(entry)
 	}
 
 	#push(entry: Omit<Activity, 'id'>): void {
-		// A no-op read is worth showing; a no-op edit is noise.
-		if (entry.titles.length === 0 && entry.kind !== 'read' && entry.kind !== 'failed') return
-
 		if (this.#timer) clearTimeout(this.#timer)
 		this.current = { ...entry, id: nextId++ }
 		// Captured, so a toast replaced before its time is up cannot have the
