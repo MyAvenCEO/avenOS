@@ -409,15 +409,21 @@ $effect(() => {
 					<span class="flex-1 text-sm">{phase.label}</span>
 				{/if}
 				{#if chat.streaming || speaker.speaking}
+					<!-- Same circle as its neighbours; a square inside is the universal
+					     stop glyph. -->
 					<button
 						type="button"
 						onclick={() => {
 							chat.stop()
 							speaker.silence()
 						}}
-						class="text-sm underline underline-offset-4"
+						title="Stopp"
+						aria-label="Stopp"
+						class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
 					>
-						Stopp
+						<svg viewBox="0 0 24 24" class="size-4" fill="currentColor">
+							<rect x="7" y="7" width="10" height="10" rx="1.5" />
+						</svg>
 					</button>
 				{/if}
 			{/if}
