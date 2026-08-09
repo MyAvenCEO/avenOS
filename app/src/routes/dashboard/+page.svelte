@@ -420,7 +420,7 @@ $effect(() => {
 						}}
 						title="Stopp"
 						aria-label="Stopp"
-						class="shrink-0 rounded-full bg-primary-foreground p-2 text-primary transition-opacity hover:opacity-80"
+						class="shrink-0 rounded-full bg-status-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
 					>
 						<svg viewBox="0 0 24 24" class="size-4" fill="currentColor">
 							<rect x="7" y="7" width="10" height="10" rx="1.5" />
