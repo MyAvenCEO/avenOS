@@ -327,16 +327,48 @@ $effect(() => {
 				{/if}
 			{/if}
 
-			<!-- Voice is the default, so this is a way out and back, not a mode picker. -->
+			<!-- Voice is the default, so this is a way out and back, not a mode
+			     picker. An icon rather than a word: it sits next to live status text
+			     and a second label there reads as another thing to be understood. -->
 			<button
 				type="button"
 				onclick={() => {
 					typing = !typing
 				}}
-				class="shrink-0 rounded-full border border-primary-foreground/25 px-2.5 py-1 text-xs transition-colors hover:bg-primary-foreground/10"
+				class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
 				title={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
+				aria-label={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
 			>
-				{typing ? 'Sprechen' : 'Tippen'}
+				{#if typing}
+					<!-- microphone: go back to speaking -->
+					<svg
+						viewBox="0 0 24 24"
+						class="size-4"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+						<path d="M5 11a7 7 0 0 0 14 0" />
+						<path d="M12 18v3" />
+					</svg>
+				{:else}
+					<!-- keyboard: switch to typing -->
+					<svg
+						viewBox="0 0 24 24"
+						class="size-4"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<rect x="2.5" y="6" width="19" height="12" rx="2" />
+						<path d="M7 10h.01M11 10h.01M15 10h.01M17.5 10h.01M7.5 14h9" />
+					</svg>
+				{/if}
 			</button>
 		</div>
 
