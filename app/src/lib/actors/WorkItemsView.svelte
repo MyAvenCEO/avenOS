@@ -1,6 +1,5 @@
 <script lang="ts">
-import { SPARKS, type WorkItemStatus, type WorkItems } from './store.svelte'
-import { STATUS_LABEL } from './tools'
+import { SPARKS, STATUS_LABEL, type WorkItemStatus, type WorkItemsActor } from './workitems.svelte'
 
 /**
  * The todo list, hand-operable, in two shapes.
@@ -11,7 +10,7 @@ import { STATUS_LABEL } from './tools'
  * line, title, chip row — all in the app's cream world rather than the
  * reference's gray one.
  */
-const { store }: { store: WorkItems } = $props()
+const { store }: { store: WorkItemsActor } = $props()
 
 let newWorkItem = $state('')
 /** Card id in flight during a drag, so columns know what is being dropped. */

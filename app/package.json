@@ -18,12 +18,13 @@
 		"tauri:ios:build:asc": "bun ../scripts/tauri-ios-asc.ts"
 	},
 	"devDependencies": {
-		"@tauri-apps/cli": "^2",
-		"@types/node": "^22.13.9",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.57.0",
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@tailwindcss/vite": "^4.2.4",
+		"@tauri-apps/cli": "^2",
+		"@types/bun": "^1.3.14",
+		"@types/node": "^22.13.9",
 		"svelte": "^5.55.2",
 		"svelte-check": "^4.4.6",
 		"tailwindcss": "^4.2.4",
@@ -33,6 +34,7 @@
 	"dependencies": {
 		"@tauri-apps/api": "^2",
 		"@tauri-apps/plugin-opener": "^2.5.4",
+		"@xyflow/svelte": "^1.6.2",
 		"three": "^0.185.1"
 	}
 }

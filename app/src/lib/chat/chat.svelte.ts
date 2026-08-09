@@ -127,9 +127,13 @@ export interface ChatTools {
 	/**
 	 * Run one call. `record` is the machine-readable result, kept on the turn
 	 * for the transcript; `wire` is what the model reads back — the two differ
-	 * because the model gets prose where the transcript wants structure.
+	 * because the model gets prose where the transcript wants structure. May be
+	 * async: the ask() path consults an LLM.
 	 */
-	run: (name: string, args: string) => { record: string; wire: string }
+	run: (
+		name: string,
+		args: string
+	) => { record: string; wire: string } | Promise<{ record: string; wire: string }>
 }
 
 let nextId = 0
@@ -212,7 +216,7 @@ export class Chat {
 				// One tool message per call, addressed by id — the format the model's
 				// own template expects, so nothing here reads as conversation.
 				for (const call of calls) {
-					const { record, wire } = this.#tools.run(call.name, call.arguments)
+					const { record, wire } = await this.#tools.run(call.name, call.arguments)
 					reply.calls?.push({ name: call.name, result: record })
 					this.#wire.push({ role: 'tool', tool_call_id: call.id, content: wire })
 				}

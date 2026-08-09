@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Snippet } from 'svelte'
-import { SPARKS, workItemsSkill } from '$lib/skills/workitems'
+import { SPARKS, workItems } from '$lib/actors/workitems.svelte'
 
 /**
  * The dashboard shell: the spark rail on the left, the route's surface on the
@@ -15,11 +15,11 @@ const { children }: { children: Snippet } = $props()
 <div class="flex h-dvh">
 	<aside class="flex w-16 shrink-0 flex-col items-center gap-3 border-border border-r py-4">
 		{#each SPARKS as spark (spark.id)}
-			{@const active = workItemsSkill.store.active === spark.id}
+			{@const active = workItems.active === spark.id}
 			<button
 				type="button"
 				onclick={() => {
-					workItemsSkill.store.active = spark.id
+					workItems.active = spark.id
 				}}
 				title={spark.name}
 				aria-label="Spark {spark.name}"

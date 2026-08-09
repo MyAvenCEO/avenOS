@@ -1,13 +1,16 @@
 <script lang="ts">
 import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
+import ActorsFlowView from '$lib/actors/ActorsFlowView.svelte'
+import type { Activity } from '$lib/actors/activity.svelte'
+import { ACTIVITY_LABELS, ToolActivity } from '$lib/actors/activity.svelte'
+import { bus } from '$lib/actors/bus'
+import { SEED_ACTORS } from '$lib/actors/seed'
+import WorkItemsView from '$lib/actors/WorkItemsView.svelte'
+import { workItems } from '$lib/actors/workitems.svelte'
 import { Listener } from '$lib/asr/listener.svelte'
 import { Chat } from '$lib/chat/chat.svelte'
-import type { Activity } from '$lib/skills/activity.svelte'
-import { ACTIVITY_LABELS, ToolActivity } from '$lib/skills/activity.svelte'
-import FlowsView from '$lib/skills/flows/FlowsView.svelte'
-import { workItemsSkill } from '$lib/skills/workitems'
-import WorkItemsView from '$lib/skills/workitems/WorkItemsView.svelte'
+import { streamChat } from '$lib/chat/redpill'
 import { Speaker } from '$lib/tts/speaker.svelte'
 
 /**
@@ -22,22 +25,42 @@ import { Speaker } from '$lib/tts/speaker.svelte'
 const speaker = new Speaker()
 
 /**
- * The skill registry. Each skill is a self-contained tool cluster in its own
- * folder under lib/skills — tools, executor, result language, view. The
- * dashboard only composes: tool specs concatenate, a call is offered to each
- * skill until one claims it, and every skill is a tab.
+ * The registry: everything the dashboard can do is an actor on the bus.
+ * WorkItems is real; the intent-router chain is seeded as contract-carrying
+ * stubs so the mesh has its shape before the execution engine exists.
  */
-const skills = [workItemsSkill]
+bus.register(workItems)
+for (const actor of SEED_ACTORS) bus.register(actor)
+
+// The one LLM in the system, injected once. Only ask() may reach it —
+// ordinary messages stay deterministic.
+bus.llm = async (system, question) => {
+	let text = ''
+	for await (const event of streamChat(
+		[
+			{ role: 'system', content: system },
+			{ role: 'user', content: question }
+		],
+		[]
+	)) {
+		if (event.kind === 'text') text += event.text
+	}
+	return text
+}
 
 const activity = new ToolActivity()
 
-/** The one place a call name is resolved to the skill that owns it. */
-function summarizeCall(name: string, result: string): Omit<Activity, 'id'> | null {
-	for (const skill of skills) {
-		const entry = skill.summarize(name, result)
-		if (entry) return entry
+/** One displayable entry for a call — the owning actor knows its own words. */
+function summarizeCall(name: string, record: string): Omit<Activity, 'id'> | null {
+	if (name === 'actor_ask') {
+		try {
+			const parsed = JSON.parse(record)
+			return { kind: 'asked', titles: [String(parsed.actor ?? '')], note: undefined }
+		} catch {
+			return null
+		}
 	}
-	return null
+	return workItems.summarize(name, record)
 }
 
 // Every delta goes to the bubble and to the speaker at the same time, so the
@@ -49,24 +72,35 @@ const chat = new Chat(
 		// Tool calls mean the real answer is still coming; unsay the placeholder.
 		onRestart: () => speaker.silence()
 	},
-	// The model manages the same stores the skill views do — there is no second
-	// copy of anything, which is what makes voice and mouse agree.
+	// The model's tools ARE the registry: specs derive from manifests, a call
+	// becomes an ordinary envelope on the bus. Register an actor, the model
+	// can call it.
 	{
-		specs: skills.flatMap((skill) => skill.tools),
-		run: (name, args) => {
-			for (const skill of skills) {
-				const result = skill.run(name, args)
-				if (result) {
-					// Summarized from the result, not the request — what actually
-					// happened, not what the model asked for.
-					activity.show(skill.summarize(name, result.record))
-					return result
+		specs: bus.toolSpecs().map(({ name, description, parameters }) => ({
+			name,
+			description,
+			parameters
+		})),
+		run: async (name, args) => {
+			let payload: Record<string, unknown> = {}
+			try {
+				payload = args.trim() === '' ? {} : JSON.parse(args)
+			} catch {
+				const record = JSON.stringify({ ok: false, error: `unlesbare Argumente: ${args}` })
+				return { record, wire: `unlesbare Argumente` }
+			}
+			if (name === 'actor_ask') {
+				const answer = await bus.ask(String(payload.actor ?? ''), String(payload.question ?? ''))
+				const result = {
+					record: JSON.stringify({ ok: true, actor: payload.actor, answer }),
+					wire: answer
 				}
+				activity.show(summarizeCall(name, result.record))
+				return result
 			}
-			return {
-				record: JSON.stringify({ ok: false, error: `unbekanntes Werkzeug ${name}` }),
-				wire: `unbekanntes Werkzeug ${name}`
-			}
+			const result = bus.dispatch('chat', name, payload)
+			activity.show(summarizeCall(name, result.record))
+			return result
 		}
 	}
 )
@@ -357,14 +391,14 @@ $effect(() => {
 		     them — facts in, actor stages, goals out. aven → skills → flows →
 		     actors; descriptive today, executable later. -->
 		<div class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col">
-			<FlowsView />
+			<ActorsFlowView />
 		</div>
 	{:else}
 		<!-- The skills workspace. Today that is the todo list; the plan is for
 		     this surface to switch between skill views as the conversation moves.
 		     3xl rather than lg: the board lays three columns side by side. -->
 		<div class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-			<WorkItemsView store={workItemsSkill.store} />
+			<WorkItemsView store={workItems} />
 		</div>
 	{/if}
 
