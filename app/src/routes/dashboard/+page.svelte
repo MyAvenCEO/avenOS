@@ -142,29 +142,6 @@ $effect(() => {
 		<div class="flex items-center gap-3 text-xs opacity-50">
 			<span>phala/gemma-4-31b-it</span>
 
-			<!-- Whose turn it is, in one place. Not a switch: nothing here starts or
-			     stops anything, it only says what the system is doing. -->
-			<span
-				class="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1"
-				class:opacity-100={phase.key !== 'idle'}
-				title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
-			>
-				<!-- While listening the dot follows the microphone level, so a dead
-				     input is visible as a dot that never moves. -->
-				<span
-					class="inline-block size-1.5 rounded-full transition-transform"
-					class:bg-status-error={phase.key === 'hearing' || phase.key === 'idle'}
-					class:bg-status-success={phase.key === 'speaking'}
-					class:bg-status-working={phase.key === 'thinking' || phase.key === 'loading'}
-					class:bg-muted-foreground={phase.key === 'denied' || phase.key === 'text'}
-					class:animate-pulse={phase.key === 'thinking' || phase.key === 'loading'}
-					style={phase.key === 'hearing' || phase.key === 'idle'
-						? `transform: scale(${1 + Math.min(listener.level, 1) * 2.5})`
-						: ''}
-				></span>
-				{phase.label}
-			</span>
-
 			{#if chat.turns.length > 0}
 				<button
 					type="button"
@@ -184,31 +161,6 @@ $effect(() => {
 
 	<div class="flex min-h-0 flex-1 gap-6">
 		<div bind:this={log} class="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
-			{#if chat.turns.length === 0}
-				<div class="pt-16 text-center">
-					{#if listener.status === 'listening'}
-						<p class="text-base">Sprich einfach los.</p>
-						<p class="pt-2 text-xs opacity-40">
-							Das Mikrofon ist offen. Du kannst mich jederzeit unterbrechen.
-						</p>
-						<!-- Visible so a dead microphone can be told from a deaf
-						     recognizer without attaching a debugger. -->
-						<p class="pt-6 font-mono text-[10px] opacity-30">
-							{listener.rate}
-							Hz · Pegel {listener.level.toFixed(3)} · Sprache {listener.probability.toFixed(2)} ·
-							{listener.pushes}
-							Blöcke
-						</p>
-					{:else if listener.status === 'preparing'}
-						<p class="text-sm opacity-40">
-							Die Ohren laden — {Math.round(listener.progress * 100)}% von etwa 2,6 GB.
-						</p>
-					{:else}
-						<p class="text-sm opacity-40">Schreib etwas.</p>
-					{/if}
-				</div>
-			{/if}
-
 			{#each chat.turns as turn (turn.id)}
 				<div class="flex flex-col gap-1" class:items-end={turn.role === 'user'}>
 					<!-- What it actually did, not just what it says it did. -->
@@ -309,7 +261,70 @@ $effect(() => {
 		</aside>
 	</div>
 
-	<form bind:this={form} onsubmit={submit} class="flex items-end gap-2">
+	<!-- What the system is doing, given its own card rather than a corner of the
+	     header. In a voice-first interface this is the primary feedback: there is
+	     no button being pressed, so the only way to know it heard you is to see
+	     it say so. -->
+	<div
+		class="mx-auto w-full max-w-lg rounded-2xl border border-border bg-surface-card px-5 py-3"
+		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
+	>
+		{#if chat.turns.length === 0}
+			<div class="pb-3 text-center">
+				{#if listener.status === 'listening'}
+					<p class="text-base">Sprich einfach los.</p>
+					<p class="pt-1 text-xs opacity-40">
+						Das Mikrofon ist offen. Du kannst mich jederzeit unterbrechen.
+					</p>
+				{:else}
+					<p class="text-sm opacity-40">Schreib etwas.</p>
+				{/if}
+			</div>
+		{/if}
+
+		<div class="flex items-center justify-center gap-2.5 text-sm">
+			<!-- While listening the dot follows the microphone level, so a dead
+			     input is visible as a dot that never moves. -->
+			<span
+				class="inline-block size-2 shrink-0 rounded-full transition-transform"
+				class:bg-status-error={phase.key === 'hearing' || phase.key === 'idle'}
+				class:bg-status-success={phase.key === 'speaking'}
+				class:bg-status-working={phase.key === 'thinking' || phase.key === 'loading'}
+				class:bg-muted-foreground={phase.key === 'denied' || phase.key === 'text'}
+				class:animate-pulse={phase.key === 'thinking' || phase.key === 'loading'}
+				style={phase.key === 'hearing' || phase.key === 'idle'
+					? `transform: scale(${1 + Math.min(listener.level, 1) * 2})`
+					: ''}
+			></span>
+			<span>{phase.label}</span>
+		</div>
+
+		{#if phase.key === 'loading'}
+			<div class="mt-3 h-1 overflow-hidden rounded-full bg-border">
+				<div
+					class="h-full rounded-full bg-status-working transition-[width]"
+					style="width: {Math.round(
+						(listener.status === 'preparing' ? listener.progress : speaker.progress) * 100
+					)}%"
+				></div>
+			</div>
+		{:else if listener.status === 'listening'}
+			<!-- Kept visible so a dead microphone can be told from a deaf
+			     recognizer without attaching a debugger. -->
+			<p class="mt-2 text-center font-mono text-[10px] opacity-25">
+				{listener.rate}
+				Hz · Pegel {listener.level.toFixed(3)} · Sprache
+				{listener.probability.toFixed(
+					2
+				)}
+				· {listener.pushes} Blöcke{listener.dropped > 0
+					? ` · ${listener.dropped} verworfen`
+					: ''}
+			</p>
+		{/if}
+	</div>
+
+	<form bind:this={form} onsubmit={submit} class="mx-auto flex w-full max-w-lg items-end gap-2">
 		<textarea
 			bind:value={draft}
 			onkeydown={onKeydown}
