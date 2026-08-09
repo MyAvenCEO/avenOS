@@ -32,6 +32,17 @@ pub struct Progress {
 	pub done: bool,
 }
 
+/// Tell the webview which phase a feature is in.
+///
+/// Downloading and opening are entirely different waits — the first has a
+/// percentage and happens once ever, the second is eight seconds of ONNX
+/// session creation on every launch. Showing a download bar stuck at 0% during
+/// the second is how "loading 0%" ends up on screen for eight seconds looking
+/// like something has hung.
+pub fn stage(app: &tauri::AppHandle, feature: &str, stage: &str) {
+	let _ = app.emit("model-stage", (feature.to_string(), stage.to_string()));
+}
+
 /// A per-feature directory under the app cache, e.g. `…/Caches/ceo.aven.os/tts/supertonic-3`.
 ///
 /// `AVEN_MODEL_DIR` overrides the base, which is how a dev machine points at an

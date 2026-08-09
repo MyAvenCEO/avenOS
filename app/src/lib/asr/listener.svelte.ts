@@ -66,6 +66,15 @@ export class Listener {
 	pushes = $state(0)
 	/** Highest speech probability Silero has reported recently. */
 	probability = $state(0)
+	/**
+	 * Which wait this is: fetching weights, or opening them.
+	 *
+	 * They are nothing alike. The download has a percentage and happens once
+	 * ever; opening is ~8 s of ONNX session creation for 2.45 GB of tensors, on
+	 * every single launch. Showing a download bar at 0% through the second is how
+	 * "laden 0%" sits on screen looking hung.
+	 */
+	stage = $state<'download' | 'load' | 'ready'>('download')
 	/** Batches thrown away because the recognizer fell too far behind. */
 	dropped = $state(0)
 	failure = $state<string | null>(null)
@@ -109,10 +118,14 @@ export class Listener {
 				if (payload.feature !== 'asr' || payload.total === 0) return
 				this.progress = payload.received / payload.total
 			})
+			const unstage = await listen<[string, string]>('model-stage', ({ payload }) => {
+				if (payload[0] === 'asr') this.stage = payload[1] as typeof this.stage
+			})
 			try {
 				await invoke('asr_prepare')
 			} finally {
 				unlisten()
+				unstage()
 			}
 
 			this.#stream = await navigator.mediaDevices.getUserMedia({

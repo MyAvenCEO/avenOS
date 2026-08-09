@@ -24,7 +24,9 @@ const todos = new Todos()
 const chat = new Chat(
 	{
 		onDelta: (text) => speaker.feed(text),
-		onDone: () => speaker.flush()
+		onDone: () => speaker.flush(),
+		// Tool calls mean the real answer is still coming; unsay the placeholder.
+		onRestart: () => speaker.silence()
 	},
 	// The model manages the same list the buttons below do — there is no second
 	// copy of the todos anywhere, which is what makes voice and mouse agree.
@@ -94,7 +96,9 @@ const phase = $derived.by(() => {
 	if (speaker.status === 'preparing')
 		return { key: 'loading', label: `Stimme lädt ${Math.round(speaker.progress * 100)}%` }
 	if (listener.status === 'preparing')
-		return { key: 'loading', label: `Ohren laden ${Math.round(listener.progress * 100)}%` }
+		return listener.stage === 'load'
+			? { key: 'starting', label: 'Ohren starten…' }
+			: { key: 'loading', label: `Ohren laden ${Math.round(listener.progress * 100)}%` }
 	if (listener.speech) return { key: 'hearing', label: 'Hört zu' }
 	if (speaker.speaking) return { key: 'speaking', label: 'Spricht' }
 	if (chat.streaming) return { key: 'thinking', label: 'Denkt nach' }
@@ -278,9 +282,13 @@ $effect(() => {
 				class="inline-block size-2 shrink-0 rounded-full transition-transform"
 				class:bg-status-error={phase.key === 'hearing' || phase.key === 'idle'}
 				class:bg-status-success={phase.key === 'speaking'}
-				class:bg-status-working={phase.key === 'thinking' || phase.key === 'loading'}
+				class:bg-status-working={phase.key === 'thinking' ||
+					phase.key === 'loading' ||
+					phase.key === 'starting'}
 				class:bg-muted-foreground={phase.key === 'denied' || phase.key === 'text'}
-				class:animate-pulse={phase.key === 'thinking' || phase.key === 'loading'}
+				class:animate-pulse={phase.key === 'thinking' ||
+					phase.key === 'loading' ||
+					phase.key === 'starting'}
 				style={phase.key === 'hearing' || phase.key === 'idle'
 					? `transform: scale(${1 + Math.min(listener.level, 1) * 2})`
 					: ''}

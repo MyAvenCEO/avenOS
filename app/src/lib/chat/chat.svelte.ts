@@ -31,7 +31,9 @@ const SYSTEM_PROMPT =
 	'Behaupte niemals, etwas eingetragen, geändert, abgehakt oder gelöscht zu haben, ' +
 	'ohne im selben Zug das passende Werkzeug aufzurufen — eine Bestätigung ohne ' +
 	'Werkzeugaufruf ist eine Lüge. Sagt jemand, etwas sei erledigt, rufe todo_update ' +
-	'mit done=true auf. Lies Listen als Fließtext vor.'
+	'mit done=true auf. Lies Listen als Fließtext vor. ' +
+	'Wenn du Werkzeuge aufrufst, schreibe im selben Zug keinen Text — deine Antwort ' +
+	'kommt erst, wenn du die Ergebnisse hast, und zwar dann in einem Stück.'
 
 /** Hard stop on tool rounds, so a model that keeps calling cannot loop forever. */
 const MAX_TOOL_ROUNDS = 4
@@ -48,6 +50,8 @@ export interface Turn {
 export interface ChatSink {
 	onDelta?: (text: string) => void
 	onDone?: () => void
+	/** The turn is starting over after tool calls — drop what was said so far. */
+	onRestart?: () => void
 }
 
 export interface ChatTools {
@@ -101,6 +105,16 @@ export class Chat {
 			for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
 				const calls = await this.#round(reply)
 				if (calls.length === 0) break
+
+				// Anything said before calling a tool was a placeholder — "Alles klar,
+				// mache ich." — and the real answer comes in the next round. Keeping
+				// both meant two spoken responses per turn and one bubble with both
+				// jammed together, so the placeholder is dropped from the bubble and
+				// unsaid by the speaker.
+				if (reply.content !== '') {
+					reply.content = ''
+					this.#sink.onRestart?.()
+				}
 
 				// Results go back as a user turn. See ChatMessage — a `tool` role
 				// makes this model answer with nothing at all.

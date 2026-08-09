@@ -26,7 +26,7 @@ use std::sync::Mutex;
 use anyhow::{Context, Result};
 use tauri::State;
 
-use crate::assets::{cache_dir, ensure_file, ensure_files};
+use crate::assets::{cache_dir, ensure_file, ensure_files, stage};
 
 /// Everything the synthesizer needs, published as one HuggingFace revision.
 /// `vector_estimator` is by far the largest at ~245 MB.
@@ -91,6 +91,7 @@ impl Engine {
 }
 
 fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
+	stage(app, "tts", "download");
 	let dir = cache_dir(app, "tts", "supertonic-3")?;
 	let wanted: Vec<(String, PathBuf)> = MODEL_FILES
 		.iter()
@@ -98,6 +99,7 @@ fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
 		.collect();
 	ensure_files(app, "tts", &wanted)?;
 
+	stage(app, "tts", "load");
 	let tts = supertonic::load_text_to_speech(&dir.to_string_lossy(), false)
 		.context("failed to open the Supertonic ONNX sessions")?;
 
@@ -108,6 +110,7 @@ fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
 	};
 	// Warm the default so the first sentence does not pay for a fetch.
 	engine.ensure_style(app, DEFAULT_VOICE)?;
+	stage(app, "tts", "ready");
 	Ok(engine)
 }
 

@@ -21,7 +21,7 @@ use anyhow::{Context, Result};
 use parakeet_rs::{Nemotron, NemotronMode};
 use serde::Serialize;
 use tauri::State;
-use crate::assets::{cache_dir, ensure_file, ensure_files};
+use crate::assets::{cache_dir, ensure_file, ensure_files, stage};
 
 mod vad;
 use vad::{Vad, WINDOW as VAD_WINDOW};
@@ -136,6 +136,7 @@ pub struct AsrEvent {
 }
 
 fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
+	stage(app, "asr", "download");
 	let dir = cache_dir(app, "asr", "nemotron-3.5-streaming")?;
 	let wanted: Vec<(String, std::path::PathBuf)> = MODEL_FILES
 		.iter()
@@ -146,7 +147,12 @@ fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
 	let vad_path = cache_dir(app, "asr", "silero-vad")?.join("silero_vad.onnx");
 	ensure_file(app, "asr", vad::MODEL_URL, &vad_path)?;
 
-	Engine::open(&dir, &vad_path)
+	// Roughly eight seconds, every launch, cached or not: ORT has to read and
+	// prepare 2.45 GB of external tensor data before the first word can be heard.
+	stage(app, "asr", "load");
+	let engine = Engine::open(&dir, &vad_path);
+	stage(app, "asr", "ready");
+	engine
 }
 
 impl Engine {
@@ -380,6 +386,21 @@ pub async fn asr_reset(state: State<'_, AsrState>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	/// How long does opening the already-downloaded models take?
+	#[test]
+	#[ignore = "needs the downloaded models"]
+	fn measures_load_time() {
+		let home = std::env::var("HOME").unwrap();
+		let cache = format!("{home}/Library/Caches/ceo.aven.os/asr");
+		let started = std::time::Instant::now();
+		let _engine = Engine::open(
+			Path::new(&cache).join("nemotron-3.5-streaming").as_path(),
+			Path::new(&cache).join("silero-vad/silero_vad.onnx").as_path(),
+		)
+		.expect("models should open");
+		println!("  cold open: {:.2}s", started.elapsed().as_secs_f32());
+	}
 
 	/// What does the VAD actually say about known speech?
 	#[test]
