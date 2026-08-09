@@ -48,6 +48,8 @@ export interface Manifest {
 	/** Actor-level contracts, for actors whose role is one transformation. */
 	requires?: Predicate[]
 	produces?: Predicate[]
+	/** Declared LLM actor: its description becomes its instruction (board 0129). */
+	llm?: boolean
 }
 
 /** What a handler gives back: a record for the UI, prose for the model. */

@@ -6,6 +6,7 @@ import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
 import { bus } from '$lib/actors/bus'
 import { chatActor, summarizeCall } from '$lib/actors/chat.actor.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
+import { registryTick } from '$lib/actors/reactivity.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import { isWindow } from '$lib/actors/window.actor.svelte'
 import { windowsBound } from '$lib/actors/windows'
@@ -303,10 +304,29 @@ $effect(() => {
 		     model toggles them by message, the explorer interviews them.
 		     (windowsBound imports the bindings.) -->
 		<div class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-4">
-			{#if windowsBound}
+			{#if windowsBound && registryTick.v >= 0}
 				{#each bus.actors().filter(isWindow).filter((w) => w.open) as w (w.manifest.id)}
 					{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
-					<Face actor={w.subject} />
+					<section class="flex min-h-0 flex-col rounded-2xl">
+						<div class="flex items-center gap-2 pb-2">
+							<span class="font-semibold text-[15px]">{w.subject.manifest.name}</span>
+							<span class="font-mono text-[0.625rem] text-foreground/35">
+								{w.subject.manifest.id}
+							</span>
+							<button
+								type="button"
+								onclick={() => {
+									w.open = false
+								}}
+								title="Fenster ausblenden"
+								aria-label="Fenster ausblenden"
+								class="ml-auto text-foreground/30 transition-colors hover:text-foreground"
+							>
+								×
+							</button>
+						</div>
+						<Face actor={w.subject} />
+					</section>
 				{:else}
 					<p class="pt-10 text-center text-foreground/40 text-sm">
 						Alle Fenster sind ausgeblendet. Sag zum Beispiel „zeig das Aufgaben-Fenster".

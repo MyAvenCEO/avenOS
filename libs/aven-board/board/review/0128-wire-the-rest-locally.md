@@ -102,3 +102,13 @@ runtime actor creation by the model, and proofs that bind variables.
 - 2026-08-09 — discovery round 2 (/aven-discover): three load-bearing decisions confirmed —
   persist created manifests (localStorage rehydration), unify everywhere (router = prover),
   trace everything on the bus incl. ask(). Goal + criteria updated. Ready for /aven-build.
+- 2026-08-09 — built (+ scope the user added mid-build): term.ts unification (variables bind,
+  constants reject, standardizing-apart rename), routing = prover rule, prove() with bindings
+  shown as chips; trace ring buffer (send/emit/ask) + explorer Trace panel; RegistryActor with
+  registry_list/describe + actor_create/actor_update/actor_delete, localStorage persistence and
+  rehydration; created actors get automatic generic-face windows (DefaultActorView) framed on
+  the Views tab; registry reactivity tick. Two production bugs found and fixed along the way:
+  actor_create's schema-less object param silently broke ALL tool calling (full properties
+  schema now), and the deferral net gained the "steht auf der Liste" family. 25 tests green.
+  Live-verified end to end: tool calling restored; "Erschaffe einen Kalender-Actor…" → created,
+  provable, windowed, persisted across reload. Moving to review/.

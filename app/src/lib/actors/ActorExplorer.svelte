@@ -1,7 +1,9 @@
 <script lang="ts">
 import ActorGraph from './ActorGraph.svelte'
 import { type Actor, functor } from './actor'
-import { bus, type ProofStep } from './bus'
+import { bus, type ProofStep, type TraceEntry } from './bus'
+import { registryTick } from './reactivity.svelte'
+import { isVariable, resolve } from './term'
 import { isWindow } from './window.actor.svelte'
 
 /**
@@ -59,6 +61,34 @@ function proveCustom(event: SubmitEvent) {
 	if (goal.trim() !== '') proof = bus.prove(goal.trim())
 }
 
+// ---- the trace: poll-refreshed biography of the bus
+let traceTick = $state(0)
+let traceOnlySelected = $state(true)
+$effect(() => {
+	const timer = setInterval(() => {
+		traceTick++
+	}, 1500)
+	return () => clearInterval(timer)
+})
+const traceRows = $derived.by<TraceEntry[]>(() => {
+	void traceTick
+	const rows = [...bus.traceLog].reverse()
+	return (
+		traceOnlySelected
+			? rows.filter(
+					(e) => e.from === selected.manifest.id || e.to.split(',').includes(selected.manifest.id)
+				)
+			: rows
+	).slice(0, 30)
+})
+
+/** Constant bindings only — `M = hoch` is information, `M = X@chat` is noise. */
+function constantBindings(step: ProofStep): [string, string][] {
+	return Object.entries(step.bindings)
+		.map(([variable, value]) => [variable, resolve(value, step.bindings)] as [string, string])
+		.filter(([variable, value]) => !isVariable(value) && !variable.includes('@'))
+}
+
 // ---- the interview
 let question = $state('')
 let answer = $state('')
@@ -109,6 +139,14 @@ async function ask(event: SubmitEvent) {
 			{#if !step.satisfied}
 				<span class="text-[0.6875rem] text-status-error">unerfüllt</span>
 			{/if}
+			{#each constantBindings(step) as [variable, value] (variable)}
+				<span
+					class="rounded-md bg-primary/5 px-1.5 py-0.5 font-mono text-[0.625rem] text-primary/70"
+				>
+					{variable}
+					= {value}
+				</span>
+			{/each}
 		</div>
 		{#if step.children.length > 0}
 			<div class="ml-4 flex flex-col gap-1 border-foreground/10 border-l pl-3">
@@ -123,7 +161,9 @@ async function ask(event: SubmitEvent) {
 <div class="flex min-h-0 flex-1 gap-5 text-foreground">
 	<!-- Every actor in the registry, the running and the merely declared alike. -->
 	<nav class="flex w-48 shrink-0 flex-col gap-1 overflow-y-auto text-sm">
-		<p class="px-2 pb-1 text-[0.625rem] text-foreground/35 uppercase tracking-[0.2em]">Actors</p>
+		<p class="px-2 pb-1 text-[0.625rem] text-foreground/35 uppercase tracking-[0.2em]">
+			Actors {registryTick.v >= 0 ? '' : ''}
+		</p>
 		{#each bus.actors() as actor (actor.manifest.id)}
 			{@const live = actor.instanceState() !== null}
 			<button
@@ -509,6 +549,50 @@ async function ask(event: SubmitEvent) {
 			</div>
 			{#if proof}
 				{@render proofNode(proof)}
+			{/if}
+		</section>
+
+		<!-- ------------------------- TRACE: the bus's biography, per actor -->
+		<section
+			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+		>
+			<div class="flex items-center gap-2 pb-2">
+				<h3 class="font-semibold text-sm">Trace</h3>
+				<span class="text-[0.6875rem] text-foreground/40">
+					alles was über den Bus lief — Envelopes, Emits, Interviews
+				</span>
+				<button
+					type="button"
+					onclick={() => {
+						traceOnlySelected = !traceOnlySelected
+					}}
+					class="ml-auto rounded-full border px-2 py-0.5 text-[0.6875rem] transition-colors {traceOnlySelected
+						? 'border-primary/40 text-primary/80'
+						: 'border-foreground/10 opacity-60 hover:opacity-100'}"
+				>
+					nur {selected.manifest.name}
+				</button>
+			</div>
+			{#if traceRows.length === 0}
+				<p class="text-foreground/40 text-xs">Noch nichts — sprich mit dem System.</p>
+			{:else}
+				<div class="flex max-h-56 flex-col gap-0.5 overflow-y-auto font-mono text-[0.6875rem]">
+					{#each traceRows as e (e.seq)}
+						<div class="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-foreground/[0.03]">
+							<span class="w-8 shrink-0 text-foreground/35">
+								{e.kind === 'emit' ? '⚡' : e.kind === 'ask' ? '?' : '→'}
+							</span>
+							<span class="shrink-0 text-foreground/50">{e.from}</span>
+							<span class="text-foreground/25">→</span>
+							<span class="shrink-0 text-foreground/50">{e.to}</span>
+							<span class="min-w-0 flex-1 truncate">{e.method}</span>
+							<span class={e.ok ? 'text-status-success' : 'text-status-error'}>
+								{e.ok ? '✓' : '✗'}
+							</span>
+							<span class="w-10 shrink-0 text-right text-foreground/30">{e.ms}ms</span>
+						</div>
+					{/each}
+				</div>
 			{/if}
 		</section>
 

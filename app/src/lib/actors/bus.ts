@@ -1,6 +1,7 @@
 import type { MethodSpec } from './actor'
 import { type Actor, functor, type HandlerResult, type Llm } from './actor'
 import { singleton } from './singleton'
+import { type Bindings, rename, resolve, unifiable, unify } from './term'
 
 /**
  * The substrate: every message between any two parties flows here.
@@ -30,13 +31,45 @@ export interface DerivedEdge {
 	predicate: string
 }
 
+export interface TraceEntry {
+	seq: number
+	at: number
+	kind: 'send' | 'emit' | 'ask'
+	from: string
+	to: string
+	method: string
+	ok: boolean
+	ms: number
+}
+
+let traceSeq = 0
+
 export class MessageBus {
 	#actors = new Map<string, Actor>()
+	/**
+	 * The biography: everything that crossed the bus — envelopes, emit
+	 * fan-outs, ask() interviews — newest last, capped. Instances stop living
+	 * in an eternal anonymous present.
+	 */
+	traceLog: TraceEntry[] = []
+
+	#record(entry: Omit<TraceEntry, 'seq'>): void {
+		this.traceLog.push({ ...entry, seq: traceSeq++ })
+		if (this.traceLog.length > 200) this.traceLog.splice(0, this.traceLog.length - 200)
+	}
 	/** The one LLM in the system, injected once; actors reach it only via ask. */
 	llm?: Llm
+	/** UI seam: called on registry changes; the app wires reactivity here. */
+	onChange?: () => void
 
 	register(actor: Actor): void {
 		this.#actors.set(actor.manifest.id, actor)
+		this.onChange?.()
+	}
+
+	unregister(id: string): void {
+		this.#actors.delete(id)
+		this.onChange?.()
 	}
 
 	actors(): Actor[] {
@@ -48,13 +81,39 @@ export class MessageBus {
 	}
 
 	/** Route one envelope into its actor's mailbox. Unknown addressees error. */
-	send(envelope: Envelope): Promise<HandlerResult> {
+	async send(envelope: Envelope): Promise<HandlerResult> {
 		const actor = this.#actors.get(envelope.to)
+		const started = Date.now()
 		if (!actor) {
 			const record = JSON.stringify({ ok: false, error: `kein Actor ${envelope.to}` })
-			return Promise.resolve({ record, wire: `kein Actor ${envelope.to}` })
+			this.#record({
+				at: started,
+				kind: 'send',
+				from: envelope.from,
+				to: envelope.to,
+				method: envelope.method,
+				ok: false,
+				ms: 0
+			})
+			return { record, wire: `kein Actor ${envelope.to}` }
 		}
-		return actor.deliver(envelope.method, envelope.payload)
+		const result = await actor.deliver(envelope.method, envelope.payload)
+		let ok = true
+		try {
+			ok = JSON.parse(result.record).ok !== false
+		} catch {
+			// non-JSON records count as fine
+		}
+		this.#record({
+			at: started,
+			kind: 'send',
+			from: envelope.from,
+			to: envelope.to,
+			method: envelope.method,
+			ok,
+			ms: Date.now() - started
+		})
+		return result
 	}
 
 	/**
@@ -70,9 +129,20 @@ export class MessageBus {
 		from = 'system'
 	): Promise<HandlerResult[]> {
 		const name = functor(predicate)
+		// Same rule as the prover: unifiability, not functor equality — an emit
+		// of status(offen) never reaches a consumer of status(erledigt).
 		const targets = this.actors().filter(
-			(a) => a.requires.some((r) => functor(r) === name) && a.handles(name)
+			(a) => a.requires.some((r) => unifiable(r, predicate)) && a.handles(name)
 		)
+		this.#record({
+			at: Date.now(),
+			kind: 'emit',
+			from,
+			to: targets.map((t) => t.manifest.id).join(',') || '—',
+			method: name,
+			ok: targets.length > 0,
+			ms: 0
+		})
 		return Promise.all(
 			targets.map((t) =>
 				this.send({
@@ -89,8 +159,19 @@ export class MessageBus {
 	/** Interview an actor — the one path on which the injected LLM may speak. */
 	async ask(actorId: string, question: string): Promise<string> {
 		const actor = this.#actors.get(actorId)
+		const started = Date.now()
 		if (!actor) return `Es gibt keinen Actor ${actorId}.`
-		return actor.ask(question, this.llm)
+		const answer = await actor.ask(question, this.llm)
+		this.#record({
+			at: started,
+			kind: 'ask',
+			from: 'human/model',
+			to: actorId,
+			method: 'ask',
+			ok: true,
+			ms: Date.now() - started
+		})
+		return answer
 	}
 
 	/**
@@ -146,11 +227,10 @@ export class MessageBus {
 	edges(): DerivedEdge[] {
 		const result: DerivedEdge[] = []
 		for (const producer of this.actors()) {
-			const made = new Set(producer.produces.map(functor))
 			for (const consumer of this.actors()) {
 				if (consumer === producer) continue
 				for (const need of consumer.requires) {
-					if (made.has(functor(need))) {
+					if (producer.produces.some((p) => unifiable(p, need))) {
 						result.push({
 							from: producer.manifest.id,
 							to: consumer.manifest.id,
@@ -178,20 +258,19 @@ export class MessageBus {
 	 * postorder and you have the message order; the proof tree is the trace
 	 * the runtime will one day emit.
 	 */
-	prove(goal: string, visited: Set<string> = new Set()): ProofStep {
+	prove(goal: string, visited: Set<string> = new Set(), bindings: Bindings = {}): ProofStep {
 		const naf = goal.trim().match(/^not\((.+)\)$/)
 		if (naf) {
 			const inner = naf[1]
-			const producers = this.actors().filter((a) =>
-				a.produces.some((p) => functor(p) === functor(inner))
-			)
+			const producers = this.actors().filter((a) => a.produces.some((p) => unifiable(p, inner)))
 			return {
 				predicate: goal,
 				actor: null,
 				external: false,
 				negated: true,
 				satisfied: producers.length === 0,
-				children: []
+				children: [],
+				bindings
 			}
 		}
 
@@ -203,34 +282,62 @@ export class MessageBus {
 				external: false,
 				negated: false,
 				satisfied: true,
-				children: []
+				children: [],
+				bindings
 			}
 		}
 
-		const producers = this.actors().filter((a) => a.produces.some((p) => functor(p) === name))
-		if (producers.length === 0) {
+		// Candidate producers are found by UNIFICATION now, not name equality:
+		// a producer of intent(M, niedrig) is no candidate for intent(X, hoch).
+		// Each candidate's variables are renamed into its own namespace before
+		// unifying, the way SLD resolution standardizes clauses apart.
+		const candidates = this.actors()
+			.map((a) => {
+				const head = a.produces.find((p) => {
+					const u = unify(goal, rename(p, a.manifest.id), bindings)
+					return u !== null
+				})
+				return head ? { actor: a, head: rename(head, a.manifest.id) } : null
+			})
+			.filter((c) => c !== null)
+
+		if (candidates.length === 0) {
+			const anyProducer = this.actors().some((a) => a.produces.some((p) => functor(p) === name))
+			// No producer of this functor at all → an external fact, satisfied
+			// as an input from the world. A producer with CLASHING constants is
+			// not external — it is an unsatisfied goal.
 			return {
 				predicate: goal,
 				actor: null,
-				external: true,
+				external: !anyProducer,
 				negated: false,
-				satisfied: true,
-				children: []
+				satisfied: !anyProducer,
+				children: [],
+				bindings
 			}
 		}
 
 		const nextVisited = new Set(visited)
 		nextVisited.add(name)
 		let lastAttempt: ProofStep | null = null
-		for (const producer of producers) {
-			const children = producer.requires.map((r) => this.prove(r, nextVisited))
+		for (const { actor, head } of candidates) {
+			const headBindings = unify(goal, head, bindings)
+			if (headBindings === null) continue
+			let current = headBindings
+			const children: ProofStep[] = []
+			for (const r of actor.requires) {
+				const child = this.prove(rename(r, actor.manifest.id), nextVisited, current)
+				children.push(child)
+				if (child.satisfied) current = child.bindings
+			}
 			const attempt: ProofStep = {
 				predicate: goal,
-				actor: producer.manifest.id,
+				actor: actor.manifest.id,
 				external: false,
 				negated: false,
 				satisfied: children.every((c) => c.satisfied),
-				children
+				children,
+				bindings: current
 			}
 			if (attempt.satisfied) return attempt
 			lastAttempt = attempt
@@ -251,14 +358,16 @@ export class MessageBus {
 	 * fire first; everyone else joins as their inputs become available.
 	 */
 	stages(): Actor[][] {
-		const producedByAnyone = new Set(this.actors().flatMap((a) => a.produces.map(functor)))
-		const known = new Set<string>()
+		const allProduced = this.actors().flatMap((a) => a.produces)
+		const known: string[] = []
 		const pending = [...this.actors()]
 		const result: Actor[][] = []
 
 		while (pending.length > 0) {
 			const ready = pending.filter((a) =>
-				a.requires.every((r) => known.has(functor(r)) || !producedByAnyone.has(functor(r)))
+				a.requires.every(
+					(r) => known.some((k) => unifiable(k, r)) || !allProduced.some((p) => unifiable(p, r))
+				)
 			)
 			if (ready.length === 0) {
 				result.push(pending.splice(0))
@@ -266,7 +375,7 @@ export class MessageBus {
 			}
 			for (const actor of ready) {
 				pending.splice(pending.indexOf(actor), 1)
-				for (const p of actor.produces) known.add(functor(p))
+				known.push(...actor.produces)
 			}
 			result.push(ready)
 		}
@@ -288,6 +397,8 @@ export interface ProofStep {
 	negated: boolean
 	satisfied: boolean
 	children: ProofStep[]
+	/** The substitution at this node — which variables became what. */
+	bindings: Bindings
 }
 
 /** The app's one bus. Tests build their own. */

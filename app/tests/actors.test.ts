@@ -256,3 +256,139 @@ describe('supervision', () => {
 		expect(actor.lastError).toContain('permanent')
 	})
 })
+
+describe('term unification (0128)', () => {
+	test('variables bind, constants must match', async () => {
+		const { unify, unifiable } = await import('../src/lib/actors/term')
+		expect(unify('intent(M, hoch)', 'intent(X, hoch)')).not.toBeNull()
+		expect(unify('intent(M, hoch)', 'intent(X, niedrig)')).toBeNull()
+		const bound = unify('intent(M, hoch)', 'intent(X, Class)')
+		expect(bound?.Class).toBe('hoch')
+		expect(unifiable('interrupted()', 'interrupted()')).toBe(true)
+	})
+
+	test('ROUTING uses the same rule: mismatched constants never arrive', async () => {
+		const bus = new MessageBus()
+		const seen: string[] = []
+		bus.register(
+			new Actor(
+				{
+					id: 'done-only', name: '', description: '', tags: [], methods: [],
+					requires: ['status(erledigt)']
+				},
+				{
+					status: () => {
+						seen.push('done-only')
+						return { record: '{"ok":true}', wire: 'ok' }
+					}
+				}
+			)
+		)
+		await bus.emit('status(offen)', {})
+		expect(seen).toEqual([])
+		await bus.emit('status(erledigt)', {})
+		expect(seen).toEqual(['done-only'])
+	})
+
+	test('prove() selects producers by unification and carries bindings', () => {
+		const bus = new MessageBus()
+		const c = (id: string, req: string[], prod: string[]) =>
+			new Actor({ id, name: id, description: '', tags: [], methods: [], requires: req, produces: prod })
+		bus.register(c('low', [], ['intent(M, niedrig)']))
+		bus.register(c('high', [], ['intent(M, hoch)']))
+		const proof = bus.prove('intent(X, hoch)')
+		expect(proof.satisfied).toBe(true)
+		expect(proof.actor).toBe('high')
+	})
+})
+
+describe('registry actor (0128)', () => {
+	function fakeStore() {
+		const map = new Map<string, string>()
+		return {
+			getItem: (k: string) => map.get(k) ?? null,
+			setItem: (k: string, v: string) => void map.set(k, v),
+			raw: map
+		}
+	}
+
+	test('registry_list names every registered actor', async () => {
+		const bus = new MessageBus()
+		bus.register(new Actor({ id: 'a', name: 'A', description: '', tags: [], methods: [] }))
+		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
+		bus.register(new RegistryActor(bus, null))
+		const result = await bus.dispatch('test', 'registry_list', {})
+		expect(result.wire).toContain('a')
+		expect(result.wire).toContain('registry')
+	})
+
+	test('actor_update edits created actors only; actor_delete removes them', async () => {
+		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
+		const store = fakeStore()
+		const bus = new MessageBus()
+		bus.register(new RegistryActor(bus, store))
+		await bus.dispatch('test', 'actor_create', {
+			id: 'cal', name: 'Kalender', description: 'Termine.', produces: ['termin(T)']
+		})
+		const updated = await bus.dispatch('test', 'actor_update', {
+			id: 'cal', description: 'Termine und Erinnerungen.', llm: true
+		})
+		expect(JSON.parse(updated.record).ok).toBe(true)
+		expect(bus.get('cal')?.manifest.description).toBe('Termine und Erinnerungen.')
+		expect(bus.get('cal')?.manifest.llm).toBe(true)
+		// code actors are not editable
+		const denied = await bus.dispatch('test', 'actor_update', { id: 'registry', llm: true })
+		expect(JSON.parse(denied.record).ok).toBe(false)
+		// delete removes actor and persistence
+		await bus.dispatch('test', 'actor_delete', { id: 'cal' })
+		expect(bus.get('cal')).toBeUndefined()
+		const bus2 = new MessageBus()
+		bus2.register(new RegistryActor(bus2, store))
+		expect(bus2.get('cal')).toBeUndefined()
+	})
+
+	test('actor_create registers, joins the mesh, and survives a reload', async () => {
+		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
+		const store = fakeStore()
+		const bus = new MessageBus()
+		bus.register(new RegistryActor(bus, store))
+		const result = await bus.dispatch('test', 'actor_create', {
+			manifest: {
+				id: 'summarizer', name: 'Summarizer',
+				description: 'Fasst Text zusammen.',
+				requires: ['text(M)'], produces: ['zusammenfassung(M)'], llm: true
+			}
+		})
+		expect(JSON.parse(result.record).ok).toBe(true)
+		// instantly part of the mesh: provable and edged
+		expect(bus.prove('zusammenfassung(M)').actor).toBe('summarizer')
+		// a fresh bus with the same store rehydrates it — spoken and it stays
+		const bus2 = new MessageBus()
+		bus2.register(new RegistryActor(bus2, store))
+		expect(bus2.get('summarizer')).toBeDefined()
+		expect(bus2.get('summarizer')?.manifest.llm).toBe(true)
+	})
+})
+
+describe('trace (0128)', () => {
+	test('the bus records sends, emits and asks', async () => {
+		const bus = new MessageBus()
+		const actor = new Actor(
+			{
+				id: 't', name: 'T', description: 'Testactor.', tags: [], methods: [],
+				requires: ['ping(P)']
+			},
+			{ ping: () => ({ record: '{"ok":true}', wire: 'pong' }) }
+		)
+		bus.register(actor)
+		await bus.emit('ping(P)', {})
+		await bus.ask('t', 'Wer bist du?')
+		const kinds = bus.traceLog.map((e) => e.kind)
+		expect(kinds).toContain('emit')
+		expect(kinds).toContain('send')
+		expect(kinds).toContain('ask')
+		const send = bus.traceLog.find((e) => e.kind === 'send')
+		expect(send?.to).toBe('t')
+		expect(send?.ok).toBe(true)
+	})
+})

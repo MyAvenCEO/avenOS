@@ -88,7 +88,7 @@ const TRAILING_JUNK = /[^\p{L}\p{Nd}]+$/u
  * that stands.
  */
 const CLAIMS_ACTION =
-	/notier|hinzugefügt|hinzufüg|angelegt|aktualisiert|gelöscht|abgehakt|markiert|eingetragen|erstellt|\bich (füge|lege|trage|erstelle|kümmere|werde)\b/i
+	/notier|hinzugefügt|hinzufüg|angelegt|aktualisiert|gelöscht|abgehakt|markiert|eingetragen|erstellt|registriert|erschaffen|steht auf|stehen auf|auf der liste|auf deiner liste|von der liste|\bich (füge|lege|trage|erstelle|kümmere|werde)\b/i
 
 const NUDGE =
 	'Du hast kein Werkzeug aufgerufen — auf der Liste ist nichts passiert. ' +
