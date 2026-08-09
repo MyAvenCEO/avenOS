@@ -193,8 +193,26 @@ pub async fn asr_prepare(app: tauri::AppHandle, state: State<'_, AsrState>) -> R
 /// The webview sends these continuously while the mic is open; each returns
 /// what changed, so the UI can react to speech starting (interrupt the agent)
 /// and ending (send the utterance) without polling anything.
+/// Audio arrives as a raw little-endian f32 body rather than as JSON.
+///
+/// A 2048-sample batch is 8 KB of bytes but roughly 40 KB as a JSON array of
+/// numbers, eight times a second, each needing a parse on both sides. That was
+/// enough to make Tauri's custom IPC protocol fall back to `postMessage`, which
+/// adds latency to the one path that has to stay quick — the batches that carry
+/// the start of speech, and therefore barge-in.
 #[tauri::command]
-pub async fn asr_push(state: State<'_, AsrState>, pcm: Vec<f32>) -> Result<AsrEvent, String> {
+pub async fn asr_push(
+	state: State<'_, AsrState>,
+	request: tauri::ipc::Request<'_>,
+) -> Result<AsrEvent, String> {
+	let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+		return Err("asr_push expects a raw f32 body".into());
+	};
+	let pcm: Vec<f32> = bytes
+		.chunks_exact(4)
+		.map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+		.collect();
+
 	let mut guard = state.engine.lock().map_err(|e| e.to_string())?;
 	let Some(engine) = guard.as_mut() else {
 		return Err("asr_prepare has not run".into());

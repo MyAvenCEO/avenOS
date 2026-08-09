@@ -172,7 +172,9 @@ export class Listener {
 		this.#busy = true
 
 		try {
-			const event = await invoke<AsrEvent>('asr_push', { pcm: Array.from(pcm) })
+			// Raw bytes, not a JSON array: 8 KB instead of ~40 KB per batch, and no
+			// parse of 2048 numbers on either side.
+			const event = await invoke<AsrEvent>('asr_push', new Uint8Array(pcm.buffer))
 
 			if (event.started) {
 				this.partial = ''

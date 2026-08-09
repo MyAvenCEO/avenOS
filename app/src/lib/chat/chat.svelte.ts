@@ -1,20 +1,35 @@
-import { type ChatMessage, streamChat } from './redpill'
+import { type ChatMessage, streamChat, type ToolSpec } from './redpill'
 
 /**
- * The dashboard's chat state.
+ * The dashboard's conversation.
  *
- * One conversation, held in memory. The assistant's message is appended empty
- * and then grown token by token, so the UI renders the reply as it is written
- * rather than after it finishes.
+ * Two histories, deliberately: `turns` is what a person sees, and `#wire` is
+ * what the model sees — the same exchange plus the tool calls and their
+ * results, which nobody wants rendered as chat bubbles but the model needs in
+ * order to know what it already did.
+ *
+ * A turn is not finished when the first response ends. If the model asked for
+ * tools, they are run and the whole thing is sent back so it can answer with
+ * the results in hand; that repeats until it replies with prose.
  */
 
 const SYSTEM_PROMPT =
-	'Du bist avenOS, ein knapper und direkter Assistent. Antworte immer auf Deutsch, ' +
-	'in wenigen Sätzen, sofern nicht mehr verlangt wird. Antworte in reinem Fließtext ' +
-	'ohne Markdown, Listen oder Emojis — deine Antwort wird vorgelesen.'
+	'Du bist avenOS, ein knapper und direkter Assistent mit einer Aufgabenliste. ' +
+	'Antworte immer auf Deutsch, in wenigen Sätzen, in reinem Fließtext ohne Markdown, ' +
+	'Listen oder Emojis — deine Antwort wird vorgelesen. ' +
+	'Verwalte Aufgaben ausschließlich über die Werkzeuge, nie aus dem Gedächtnis: ' +
+	'rufe todo_list auf, bevor du über die Liste sprichst. ' +
+	'Bestätige knapp, was du getan hast, und lies Listen als Fließtext vor.'
 
-export interface Turn extends ChatMessage {
+/** Hard stop on tool rounds, so a model that keeps calling cannot loop forever. */
+const MAX_TOOL_ROUNDS = 4
+
+export interface Turn {
 	id: string
+	role: 'user' | 'assistant'
+	content: string
+	/** Names of tools run during this turn, for the transcript. */
+	tools?: string[]
 }
 
 /** Hooks for anything that wants the reply as it arrives — the speaker, today. */
@@ -23,22 +38,27 @@ export interface ChatSink {
 	onDone?: () => void
 }
 
+export interface ChatTools {
+	specs: ToolSpec[]
+	run: (name: string, args: string) => string
+}
+
 let nextId = 0
 const id = () => `t${nextId++}`
 
 export class Chat {
-	/** Everything the user sees. The system prompt is deliberately not in here. */
 	turns = $state<Turn[]>([])
-	/** True from the moment we send until the last token lands. */
 	streaming = $state(false)
-	/** Set when a request fails, cleared on the next send. */
 	failure = $state<string | null>(null)
 
+	#wire: ChatMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }]
 	#abort: AbortController | null = null
 	#sink: ChatSink
+	#tools: ChatTools
 
-	constructor(sink: ChatSink = {}) {
+	constructor(sink: ChatSink = {}, tools: ChatTools = { specs: [], run: () => '' }) {
 		this.#sink = sink
+		this.#tools = tools
 	}
 
 	get canSend(): boolean {
@@ -51,6 +71,7 @@ export class Chat {
 
 		this.failure = null
 		this.turns.push({ id: id(), role: 'user', content: prompt })
+		this.#wire.push({ role: 'user', content: prompt })
 
 		// Push first, then take the reference back OUT of the array. `turns` is a
 		// `$state` proxy: it hands out a proxied view on read, and only writes
@@ -58,23 +79,25 @@ export class Chat {
 		// pushed and mutating it would update the data and tell no one — the
 		// reply would stream into a bubble that never re-renders.
 		const replyId = id()
-		this.turns.push({ id: replyId, role: 'assistant', content: '' })
+		this.turns.push({ id: replyId, role: 'assistant', content: '', tools: [] })
 		const reply = this.turns[this.turns.length - 1]
 
 		this.streaming = true
 		this.#abort = new AbortController()
 
 		try {
-			const history: ChatMessage[] = [
-				{ role: 'system', content: SYSTEM_PROMPT },
-				// `reply` is already in `turns` and is still empty — sending it would
-				// hand the model a trailing blank assistant turn.
-				...this.turns.slice(0, -1).map(({ role, content }) => ({ role, content }))
-			]
+			for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+				const calls = await this.#round(reply)
+				if (calls.length === 0) break
 
-			for await (const delta of streamChat(history, this.#abort.signal)) {
-				reply.content += delta
-				this.#sink.onDelta?.(delta)
+				for (const call of calls) {
+					reply.tools?.push(call.name)
+					this.#wire.push({
+						role: 'tool',
+						tool_call_id: call.id,
+						content: this.#tools.run(call.name, call.arguments)
+					})
+				}
 			}
 			this.#sink.onDone?.()
 		} catch (err) {
@@ -90,6 +113,50 @@ export class Chat {
 		}
 	}
 
+	/**
+	 * One request/response. Streams any prose into `reply` and returns the tool
+	 * calls the model asked for, which the caller runs before going round again.
+	 */
+	async #round(reply: Turn): Promise<{ id: string; name: string; arguments: string }[]> {
+		let content = ''
+		// Keyed by the index the model assigns, since fragments interleave.
+		const calls = new Map<number, { id: string; name: string; arguments: string }>()
+
+		for await (const event of streamChat(
+			this.#wire,
+			this.#tools.specs,
+			this.#abort?.signal ?? undefined
+		)) {
+			if (event.kind === 'text') {
+				content += event.text
+				reply.content += event.text
+				this.#sink.onDelta?.(event.text)
+				continue
+			}
+
+			const call = calls.get(event.index) ?? { id: '', name: '', arguments: '' }
+			if (event.id) call.id = event.id
+			if (event.name) call.name = event.name
+			// Arguments stream in as JSON fragments and are only valid concatenated.
+			if (event.args) call.arguments += event.args
+			calls.set(event.index, call)
+		}
+
+		const asked = [...calls.values()].filter((c) => c.name !== '')
+		this.#wire.push({
+			role: 'assistant',
+			content,
+			...(asked.length > 0 && {
+				tool_calls: asked.map((c) => ({
+					id: c.id,
+					type: 'function' as const,
+					function: { name: c.name, arguments: c.arguments }
+				}))
+			})
+		})
+		return asked
+	}
+
 	/** Stop mid-reply. Whatever has arrived so far stays on screen. */
 	stop(): void {
 		this.#abort?.abort()
@@ -98,6 +165,7 @@ export class Chat {
 	clear(): void {
 		this.stop()
 		this.turns = []
+		this.#wire = [{ role: 'system', content: SYSTEM_PROMPT }]
 		this.failure = null
 	}
 }

@@ -35,7 +35,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 		error(500, 'PHALA_API_KEY is unset — add it to the worktree .env and restart vite')
 	}
 
-	const { messages } = await request.json()
+	const { messages, tools } = await request.json()
 	if (!Array.isArray(messages)) error(400, 'body must be { messages: [{ role, content }] }')
 
 	const upstream = await fetch(REDPILL_CHAT_URL, {
@@ -44,7 +44,19 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			'content-type': 'application/json',
 			authorization: `Bearer ${apiKey}`
 		},
-		body: JSON.stringify({ model: MODEL, messages, stream: true })
+		body: JSON.stringify({
+			model: MODEL,
+			messages,
+			stream: true,
+			// Tools are shaped here rather than in the client so the wire format
+			// stays a detail of the proxy. Omitted entirely when there are none —
+			// an empty array reads as "you have no tools", which is true but makes
+			// some models apologize about it.
+			...(Array.isArray(tools) &&
+				tools.length > 0 && {
+					tools: tools.map((tool) => ({ type: 'function', function: tool }))
+				})
+		})
 	})
 
 	if (!upstream.ok || !upstream.body) {
