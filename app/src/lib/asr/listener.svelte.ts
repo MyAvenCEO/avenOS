@@ -1,4 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
 /**
  * The open microphone.
@@ -25,6 +26,14 @@ export interface ListenerHooks {
 	onUtterance?: (text: string) => void
 }
 
+/** Weight-download progress, emitted by the Rust side while fetching. */
+interface ModelProgress {
+	feature: string
+	received: number
+	total: number
+	done: boolean
+}
+
 interface AsrEvent {
 	speech: boolean
 	started: boolean
@@ -39,6 +48,8 @@ export class Listener {
 	speech = $state(false)
 	/** What has been heard so far in the utterance being spoken. */
 	partial = $state('')
+	/** Weight download, 0..1. Only meaningful while `preparing`. */
+	progress = $state(0)
 	failure = $state<string | null>(null)
 
 	#hooks: ListenerHooks
@@ -73,7 +84,17 @@ export class Listener {
 		this.failure = null
 
 		try {
-			await invoke('asr_prepare')
+			// The recognizer is a 2.6 GB download the first time. Subscribe before
+			// asking for it, or the whole thing finishes before we are listening.
+			const unlisten = await listen<ModelProgress>('model-progress', ({ payload }) => {
+				if (payload.feature !== 'asr' || payload.total === 0) return
+				this.progress = payload.received / payload.total
+			})
+			try {
+				await invoke('asr_prepare')
+			} finally {
+				unlisten()
+			}
 
 			this.#stream = await navigator.mediaDevices.getUserMedia({
 				audio: {

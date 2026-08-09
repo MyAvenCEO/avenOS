@@ -1,14 +1,36 @@
 //! Model files on disk.
 //!
-//! Both the voice and the ears pull multi-hundred-megabyte weights from
-//! HuggingFace on first run, so the fetching and the cache layout live here
-//! rather than being written twice.
+//! Both the voice and the ears pull weights from HuggingFace on first run — the
+//! recognizer's `encoder.onnx.data` alone is 2.45 GB — so the fetching, the
+//! cache layout, the progress reporting and the resume logic live here rather
+//! than being written twice.
 
 use std::fs;
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use tauri::Manager;
+use serde::Serialize;
+use tauri::{Emitter, Manager};
+
+/// How often to tell the UI, in bytes. At 8 MB a 2.45 GB file reports ~300
+/// times; per-chunk would be tens of thousands of events and cost more than the
+/// download itself.
+const REPORT_EVERY: u64 = 8 * 1024 * 1024;
+
+const BUFFER: usize = 256 * 1024;
+
+/// Emitted as `model-progress` while weights are being fetched.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Progress {
+	/// Which engine is loading — `"asr"` or `"tts"`.
+	pub feature: String,
+	pub received: u64,
+	/// Total across everything still missing. Zero if the server would not say.
+	pub total: u64,
+	pub done: bool,
+}
 
 /// A per-feature directory under the app cache, e.g. `…/Caches/ceo.aven.os/tts/supertonic-3`.
 ///
@@ -25,35 +47,122 @@ pub fn cache_dir(app: &tauri::AppHandle, feature: &str, model: &str) -> Result<P
 	Ok(base.join(feature).join(model))
 }
 
-/// Fetch `url` to `dest` unless it is already there.
+fn content_length(url: &str) -> Option<u64> {
+	ureq::head(url)
+		.call()
+		.ok()?
+		.header("content-length")?
+		.parse()
+		.ok()
+}
+
+/// Fetch every `(url, dest)` not already on disk, reporting overall progress.
 ///
-/// Written to a `.part` file first and renamed on success, so an interrupted
-/// download cannot leave a truncated 2 GB tensor file behind that then fails to
-/// load with something inscrutable.
-pub fn ensure_file(url: &str, dest: &Path) -> Result<()> {
-	if dest.exists() {
+/// `feature` names the engine in the emitted events so the UI can tell the ears
+/// loading from the voice loading.
+pub fn ensure_files(app: &tauri::AppHandle, feature: &str, files: &[(String, PathBuf)]) -> Result<()> {
+	let missing: Vec<&(String, PathBuf)> = files.iter().filter(|(_, p)| !p.exists()).collect();
+	if missing.is_empty() {
 		return Ok(());
 	}
+
+	// One HEAD per file up front so the bar has a denominator. Cheap next to
+	// what follows, and a percentage is the whole point — without a total this
+	// would be a spinner that happens to move.
+	let total: u64 = missing.iter().filter_map(|(url, _)| content_length(url)).sum();
+
+	// Bytes already sitting in `.part` files count as received, or resuming a
+	// 2 GB download would appear to start from zero.
+	let resumable: u64 = missing
+		.iter()
+		.filter_map(|(_, dest)| fs::metadata(dest.with_extension("part")).ok())
+		.map(|m| m.len())
+		.sum();
+
+	let emit = |received: u64, done: bool| {
+		let _ = app.emit(
+			"model-progress",
+			Progress {
+				feature: feature.to_string(),
+				received,
+				total,
+				done,
+			},
+		);
+	};
+
+	let mut received = resumable;
+	emit(received, false);
+
+	for (url, dest) in missing {
+		received = fetch(url, dest, received, &emit)?;
+	}
+
+	emit(received.max(total), true);
+	Ok(())
+}
+
+/// Stream one file to disk, resuming a partial download if one is there.
+///
+/// Copied straight through rather than buffered: reading 2.45 GB into a Vec to
+/// write it back out would cost that much RAM for nothing. The `.part` file is
+/// renamed into place only on success, so an interrupted run can never leave a
+/// truncated tensor file that later fails to load with something inscrutable.
+fn fetch(url: &str, dest: &Path, already: u64, emit: &impl Fn(u64, bool)) -> Result<u64> {
 	if let Some(parent) = dest.parent() {
 		fs::create_dir_all(parent)?;
 	}
-
-	log::info!(target: "avenos::assets", "downloading {url}");
-	let response = ureq::get(url)
-		.call()
-		.with_context(|| format!("failed to fetch {url}"))?;
-
-	// Copied straight to disk rather than buffered. The recognizer's
-	// `encoder.onnx.data` is ~2.45 GB, and reading that into a Vec first would
-	// mean holding all of it in memory to write it back out again.
 	let part = dest.with_extension("part");
+
+	// A 2.45 GB download is worth resuming rather than restarting, which also
+	// means a rebuild mid-download does not throw the gigabytes away.
+	let resume_from = fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+	let mut request = ureq::get(url);
+	if resume_from > 0 {
+		request = request.set("range", &format!("bytes={resume_from}-"));
+	}
+
+	log::info!(target: "avenos::assets", "downloading {url} (from byte {resume_from})");
+	let response = request.call().with_context(|| format!("failed to fetch {url}"))?;
+
+	// 206 means the range was honoured; anything else means starting over, and
+	// the running total has to be walked back so the bar does not overshoot.
+	let resumed = response.status() == 206 && resume_from > 0;
+	let mut file = if resumed {
+		let mut f = fs::OpenOptions::new().write(true).open(&part)?;
+		f.seek(std::io::SeekFrom::Start(resume_from))?;
+		f
+	} else {
+		fs::File::create(&part)?
+	};
+
+	let mut running = if resumed { already } else { already.saturating_sub(resume_from) };
+	let mut since_report = 0u64;
 	let mut reader = response.into_reader();
-	let mut file = fs::File::create(&part)?;
-	let written = std::io::copy(&mut reader, &mut file)?;
+	let mut buffer = vec![0u8; BUFFER];
+
+	loop {
+		let read = reader.read(&mut buffer)?;
+		if read == 0 {
+			break;
+		}
+		file.write_all(&buffer[..read])?;
+		running += read as u64;
+		since_report += read as u64;
+		if since_report >= REPORT_EVERY {
+			since_report = 0;
+			emit(running, false);
+		}
+	}
+
 	file.sync_all()?;
 	drop(file);
-
 	fs::rename(&part, dest)?;
-	log::info!(target: "avenos::assets", "fetched {} ({written} bytes)", dest.display());
-	Ok(())
+	log::info!(target: "avenos::assets", "fetched {}", dest.display());
+	Ok(running)
+}
+
+/// Single-file convenience for the small extras (a voice style, the VAD model).
+pub fn ensure_file(app: &tauri::AppHandle, feature: &str, url: &str, dest: &Path) -> Result<()> {
+	ensure_files(app, feature, &[(url.to_string(), dest.to_path_buf())])
 }

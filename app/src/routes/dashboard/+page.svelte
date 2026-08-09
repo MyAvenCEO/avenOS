@@ -91,7 +91,7 @@ $effect(() => {
 			{#if listener.status !== 'unavailable'}
 				<span title="Nemotron 3.5 · Silero VAD · deutsch, on-device">
 					{#if listener.status === 'preparing'}
-						Ohren laden…
+						Ohren laden… {Math.round(listener.progress * 100)}%
 					{:else if listener.status === 'denied'}
 						Kein Mikrofon
 					{:else if listener.status === 'error'}
@@ -105,7 +105,7 @@ $effect(() => {
 			{#if speaker.status !== 'unavailable'}
 				<span title="Supertonic-3 · Stimme M5 · deutsch, on-device (Rust/ONNX)">
 					{#if speaker.status === 'preparing'}
-						Stimme lädt…
+						Stimme lädt… {Math.round(speaker.progress * 100)}%
 					{:else if speaker.status === 'error'}
 						Stimme fehlgeschlagen
 					{:else}

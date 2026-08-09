@@ -1,4 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
 /**
  * Speaks the assistant's reply out loud, in German, while it is still being
@@ -34,6 +35,8 @@ export class Speaker {
 	status = $state<SpeakerStatus>('unavailable')
 	speaking = $state(false)
 	failure = $state<string | null>(null)
+	/** Weight download, 0..1. Only meaningful while `preparing`. */
+	progress = $state(0)
 
 	#context: AudioContext | null = null
 	/** Text seen since the last sentence was queued. */
@@ -63,7 +66,18 @@ export class Speaker {
 		this.status = 'preparing'
 		this.failure = null
 		try {
-			await invoke('tts_prepare')
+			const unlisten = await listen<{ feature: string; received: number; total: number }>(
+				'model-progress',
+				({ payload }) => {
+					if (payload.feature !== 'tts' || payload.total === 0) return
+					this.progress = payload.received / payload.total
+				}
+			)
+			try {
+				await invoke('tts_prepare')
+			} finally {
+				unlisten()
+			}
 			this.status = 'ready'
 		} catch (err) {
 			this.status = 'error'

@@ -20,7 +20,7 @@ use anyhow::{Context, Result};
 use parakeet_rs::{Nemotron, NemotronMode};
 use serde::Serialize;
 use tauri::State;
-use crate::assets::{cache_dir, ensure_file};
+use crate::assets::{cache_dir, ensure_file, ensure_files};
 
 mod vad;
 use vad::{Vad, WINDOW as VAD_WINDOW};
@@ -87,9 +87,11 @@ pub struct AsrEvent {
 
 fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
 	let dir = cache_dir(app, "asr", "nemotron-3.5-streaming")?;
-	for name in MODEL_FILES {
-		ensure_file(&format!("{MODEL_BASE}/{name}"), &dir.join(name))?;
-	}
+	let wanted: Vec<(String, std::path::PathBuf)> = MODEL_FILES
+		.iter()
+		.map(|name| (format!("{MODEL_BASE}/{name}"), dir.join(name)))
+		.collect();
+	ensure_files(app, "asr", &wanted)?;
 
 	let mut model =
 		Nemotron::from_pretrained(&dir, None).context("failed to open the Nemotron ONNX sessions")?;
@@ -104,7 +106,7 @@ fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
 	}
 
 	let vad_path = cache_dir(app, "asr", "silero-vad")?.join("silero_vad.onnx");
-	ensure_file(vad::MODEL_URL, &vad_path)?;
+	ensure_file(app, "asr", vad::MODEL_URL, &vad_path)?;
 	let vad = Vad::open(&vad_path)?;
 
 	Ok(Engine {

@@ -26,7 +26,7 @@ use std::sync::Mutex;
 use anyhow::{Context, Result};
 use tauri::State;
 
-use crate::assets::{cache_dir, ensure_file};
+use crate::assets::{cache_dir, ensure_file, ensure_files};
 
 /// Everything the synthesizer needs, published as one HuggingFace revision.
 /// `vector_estimator` is by far the largest at ~245 MB.
@@ -77,12 +77,12 @@ impl Engine {
 	/// Deliberately returns nothing rather than a reference: the caller reads
 	/// `self.styles` and `self.tts` as separate fields, which the borrow checker
 	/// allows, whereas handing back a borrow of `self` would not.
-	fn ensure_style(&mut self, voice: &str) -> Result<()> {
+	fn ensure_style(&mut self, app: &tauri::AppHandle, voice: &str) -> Result<()> {
 		if self.styles.contains_key(voice) {
 			return Ok(());
 		}
 		let path = self.dir.join(format!("{voice}.json"));
-		ensure_file(&format!("{VOICE_BASE}/{voice}.json"), &path)?;
+		ensure_file(app, "tts", &format!("{VOICE_BASE}/{voice}.json"), &path)?;
 		let style = supertonic::load_voice_style(&[path.to_string_lossy().to_string()], false)
 			.with_context(|| format!("failed to load voice style {voice}"))?;
 		self.styles.insert(voice.to_string(), style);
@@ -92,9 +92,11 @@ impl Engine {
 
 fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
 	let dir = cache_dir(app, "tts", "supertonic-3")?;
-	for name in MODEL_FILES {
-		ensure_file(&format!("{MODEL_BASE}/{name}"), &dir.join(name))?;
-	}
+	let wanted: Vec<(String, PathBuf)> = MODEL_FILES
+		.iter()
+		.map(|name| (format!("{MODEL_BASE}/{name}"), dir.join(name)))
+		.collect();
+	ensure_files(app, "tts", &wanted)?;
 
 	let tts = supertonic::load_text_to_speech(&dir.to_string_lossy(), false)
 		.context("failed to open the Supertonic ONNX sessions")?;
@@ -105,7 +107,7 @@ fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
 		dir,
 	};
 	// Warm the default so the first sentence does not pay for a fetch.
-	engine.ensure_style(DEFAULT_VOICE)?;
+	engine.ensure_style(app, DEFAULT_VOICE)?;
 	Ok(engine)
 }
 
@@ -152,7 +154,7 @@ pub async fn tts_speak(
 	}
 	let engine = guard.as_mut().expect("engine loaded above");
 
-	engine.ensure_style(&voice).map_err(|e| format!("{e:#}"))?;
+	engine.ensure_style(&app, &voice).map_err(|e| format!("{e:#}"))?;
 
 	let started = std::time::Instant::now();
 	// `styles` and `tts` are disjoint fields, so one can be read while the other
