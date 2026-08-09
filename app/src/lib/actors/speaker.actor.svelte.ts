@@ -1,5 +1,6 @@
 import { Speaker } from '$lib/tts/speaker.svelte'
 import { Actor } from './actor'
+import { singleton } from './singleton'
 
 /**
  * The voice as an actor. The proven TTS internals (gapless clock, sentence
@@ -63,5 +64,5 @@ export class SpeakerActor extends Actor {
 
 import { bus as _bus } from './bus'
 
-export const speakerActor = new SpeakerActor()
+export const speakerActor = singleton('aven.speaker', () => new SpeakerActor())
 _bus.register(speakerActor)

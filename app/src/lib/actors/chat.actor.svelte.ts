@@ -4,6 +4,7 @@ import type { Activity } from './activity.svelte'
 import { activity } from './activity.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
+import { singleton } from './singleton'
 import { workItems } from './workitems.svelte'
 
 /**
@@ -137,5 +138,5 @@ bus.llm = async (system, question) => {
 }
 
 bus.register(workItems)
-export const chatActor = new ChatActor()
+export const chatActor = singleton('aven.chat', () => new ChatActor())
 bus.register(chatActor)

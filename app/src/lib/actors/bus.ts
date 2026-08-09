@@ -1,5 +1,6 @@
 import type { MethodSpec } from './actor'
 import { type Actor, functor, type HandlerResult, type Llm } from './actor'
+import { singleton } from './singleton'
 
 /**
  * The substrate: every message between any two parties flows here.
@@ -191,4 +192,4 @@ export class MessageBus {
 }
 
 /** The app's one bus. Tests build their own. */
-export const bus = new MessageBus()
+export const bus = singleton('aven.bus', () => new MessageBus())

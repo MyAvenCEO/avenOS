@@ -1,6 +1,7 @@
 import { Listener } from '$lib/asr/listener.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
+import { singleton } from './singleton'
 
 /**
  * The ears as an actor. VAD + recognition stay in Listener; the wrapper
@@ -48,5 +49,5 @@ export class ListenerActor extends Actor {
 
 import { bus as _bus } from './bus'
 
-export const listenerActor = new ListenerActor()
+export const listenerActor = singleton('aven.listener', () => new ListenerActor())
 _bus.register(listenerActor)

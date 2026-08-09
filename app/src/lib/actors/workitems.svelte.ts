@@ -1,5 +1,6 @@
 import type { Activity, ActivityKind } from './activity.svelte'
 import { Actor, type HandlerResult } from './actor'
+import { singleton } from './singleton'
 
 /**
  * The work-item actor — the todo app, rebuilt as one actor.
@@ -435,4 +436,4 @@ export class WorkItemsActor extends Actor {
 }
 
 /** The one instance — rail, views, and bus all see the same state. */
-export const workItems = new WorkItemsActor()
+export const workItems = singleton('aven.workitems', () => new WorkItemsActor())
