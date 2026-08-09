@@ -146,4 +146,15 @@ export class Actor {
 	protected situation(): string {
 		return ''
 	}
+
+	/**
+	 * The template/instance split, made explicit. The manifest is the CLASS —
+	 * the timeless contract: what this kind of actor is, does, requires and
+	 * produces. `instanceState()` is the INSTANCE — what this particular
+	 * running one holds right now. Stubs return null: they are templates that
+	 * no execution has instantiated yet.
+	 */
+	instanceState(): Record<string, unknown> | null {
+		return null
+	}
 }

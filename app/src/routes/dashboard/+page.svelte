@@ -1,7 +1,7 @@
 <script lang="ts">
 import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
-import ActorsFlowView from '$lib/actors/ActorsFlowView.svelte'
+import ActorExplorer from '$lib/actors/ActorExplorer.svelte'
 import type { Activity } from '$lib/actors/activity.svelte'
 import { ACTIVITY_LABELS, ToolActivity } from '$lib/actors/activity.svelte'
 import { bus } from '$lib/actors/bus'
@@ -112,7 +112,7 @@ const chat = new Chat(
  * the only skill there is. The workspace is the default; chat is how work
  * gets asked for.
  */
-let tab = $state<'skills' | 'flows' | 'chat'>('skills')
+let tab = $state<'skills' | 'actors' | 'chat'>('skills')
 
 const listener = new Listener({
 	// Barge-in. This fires on voice activity alone, ~64ms in, with nothing yet
@@ -270,7 +270,7 @@ $effect(() => {
 	<header class="flex flex-col items-center">
 		<!-- Compact tabs, centred: the skills workspace and the conversation. -->
 		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
-			{#each [{ id: 'skills' as const, label: 'Skills' }, { id: 'flows' as const, label: 'Flows' }, { id: 'chat' as const, label: 'Chat' }] as t (t.id)}
+			{#each [{ id: 'skills' as const, label: 'Skills' }, { id: 'actors' as const, label: 'Actors' }, { id: 'chat' as const, label: 'Chat' }] as t (t.id)}
 				<button
 					type="button"
 					onclick={() => {
@@ -386,12 +386,11 @@ $effect(() => {
 				{/if}
 			</div>
 		</div>
-	{:else if tab === 'flows'}
-		<!-- The recipe book: flow templates rendered as the rule solver reads
-		     them — facts in, actor stages, goals out. aven → skills → flows →
-		     actors; descriptive today, executable later. -->
-		<div class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col">
-			<ActorsFlowView />
+	{:else if tab === 'actors'}
+		<!-- The actor explorer: everything the registry knows about every actor,
+		     template and instance kept as the two concepts they are. -->
+		<div class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
+			<ActorExplorer />
 		</div>
 	{:else}
 		<!-- The skills workspace. Today that is the todo list; the plan is for

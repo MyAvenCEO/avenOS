@@ -357,6 +357,17 @@ export class WorkItemsActor extends Actor {
 
 	// ------------------------------------------------------------ self-talk
 
+	override instanceState(): Record<string, unknown> {
+		return {
+			'Aufgaben gesamt': this.items.length,
+			offen: this.items.filter((t) => t.status === 'open').length,
+			'in Arbeit': this.items.filter((t) => t.status === 'doing').length,
+			erledigt: this.items.filter((t) => t.status === 'done').length,
+			'aktiver Spark': this.active,
+			Ansicht: this.view === 'board' ? 'Board' : 'Liste'
+		}
+	}
+
 	protected override situation(): string {
 		const bySpark = SPARKS.map(
 			(s) =>

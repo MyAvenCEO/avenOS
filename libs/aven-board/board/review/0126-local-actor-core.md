@@ -1,11 +1,11 @@
 ---
-title: Local actor core — one primitive, ask(), derived flows (Svelte Flow)
+title: Local actor core — one primitive, ask(), actor explorer
 summary: Decomplexify the dashboard's skills/flows/actors ontology into ONE primitive, the Actor (Abject-inspired, local-only, no P2P) — { id, manifest, handlers, mailbox } on a minimal message bus. Every actor answers ask() (the one LLM-touching handler; manifest fallback without LLM). The model's tool list is DERIVED from the registry's manifests instead of hand-assembled; tool calls become ordinary envelopes. Flow templates are deleted — truest to the theory ("compression, not abstraction"), the Flows tab renders the LIVE registry as a Svelte Flow (@xyflow/svelte) graph, edges derived by unifying produces→requires contracts, grouped by tags. WorkItems becomes the first real actor; the intent-router chain seeds as contract-carrying stub actors.
 owner: claude
 created: 2026-08-09
 updated: 2026-08-09
 tags: [actors, abject, flows, architecture, svelte-flow]
-goal: "`bun run check` exits 0 AND `bun test app/tests/actors.test.ts` exits 0 (envelope routing via the bus; edge derivation from produces→requires unification; ask() falls back to manifest prose when no LLM is injected) AND the chat's tool specs are derived from the actor registry, not imported constants (`grep -n \"toolSpecs\\|bus\\.\" app/src/routes/dashboard/+page.svelte` shows registry-derived specs and bus dispatch) AND the Flows tab renders @xyflow/svelte (`grep -rn \"@xyflow/svelte\" app/src/lib/actors app/src/routes | grep -v node_modules` non-empty) AND app/src/lib/skills/flows/template.ts is deleted AND every Acceptance criterion below is checked"
+goal: "`bun run check` exits 0 AND `bun test app/tests/actors.test.ts` exits 0 (envelope routing via the bus; edge derivation from produces→requires unification; ask() falls back to manifest prose when no LLM is injected) AND the chat's tool specs are derived from the actor registry, not imported constants AND the Actors tab renders the explorer (`grep -n \"ActorExplorer\" app/src/routes/dashboard/+page.svelte` non-empty) with template and instance as separate cards AND app/src/lib/skills is deleted AND every Acceptance criterion below is checked"
 ---
 
 # Local actor core — one primitive, ask(), derived flows
@@ -101,3 +101,8 @@ the registry and rendered in Svelte Flow.
 
 - 2026-08-09 — discovered: consolidation decided (Actor naming, ask() in slice, pure derivation,
   minimal envelope, Svelte Flow); card written straight to discover/.
+- 2026-08-09 — built: actor.ts/bus.ts/workitems/seed + 9 tests green; skills/ deleted; tools
+  derived from registry; live-verified (create via bus, template/instance cards, derived
+  relations, ask() with LLM). Mid-build pivot (user): Svelte Flow mesh replaced by the Actor
+  Explorer (left list, right detail, template vs instance as two concepts); @xyflow removed.
+  Moved to review/.
