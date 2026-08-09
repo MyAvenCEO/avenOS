@@ -5,6 +5,7 @@ import { Listener } from '$lib/asr/listener.svelte'
 import { Chat } from '$lib/chat/chat.svelte'
 import type { Activity } from '$lib/skills/activity.svelte'
 import { ACTIVITY_LABELS, ToolActivity } from '$lib/skills/activity.svelte'
+import FlowsView from '$lib/skills/flows/FlowsView.svelte'
 import { workItemsSkill } from '$lib/skills/workitems'
 import WorkItemsView from '$lib/skills/workitems/WorkItemsView.svelte'
 import { Speaker } from '$lib/tts/speaker.svelte'
@@ -352,11 +353,11 @@ $effect(() => {
 			</div>
 		</div>
 	{:else if tab === 'flows'}
-		<!-- Flows: reserved. The tab exists so the shape of the app is already
-		     true; the surface follows. -->
-		<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2">
-			<p class="font-semibold text-lg">Flows</p>
-			<p class="text-foreground/40 text-sm">Coming soon.</p>
+		<!-- The recipe book: flow templates rendered as the rule solver reads
+		     them — facts in, actor stages, goals out. aven → skills → flows →
+		     actors; descriptive today, executable later. -->
+		<div class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col">
+			<FlowsView />
 		</div>
 	{:else}
 		<!-- The skills workspace. Today that is the todo list; the plan is for
