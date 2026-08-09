@@ -20,13 +20,13 @@
 mod supertonic;
 
 use std::collections::HashMap;
-use std::fs;
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result};
-use tauri::{Manager, State};
+use tauri::State;
+
+use crate::assets::{cache_dir, ensure_file};
 
 /// Everything the synthesizer needs, published as one HuggingFace revision.
 /// `vector_estimator` is by far the largest at ~245 MB.
@@ -46,8 +46,8 @@ const VOICE_BASE: &str = "https://huggingface.co/Supertone/supertonic-3/resolve/
 /// demand, so auditioning one costs ~290 KB rather than another model download.
 pub const VOICES: &[&str] = &["M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5"];
 
-/// M1 — the default, and the one avenOS speaks with unless asked otherwise.
-const DEFAULT_VOICE: &str = "M1";
+/// M5 — the voice avenOS speaks with.
+const DEFAULT_VOICE: &str = "M5";
 
 /// Denoising steps. Upstream's default; lower trades quality for latency.
 const TOTAL_STEPS: usize = 8;
@@ -90,48 +90,8 @@ impl Engine {
 	}
 }
 
-/// Where models live. `AVEN_TTS_MODEL_DIR` overrides it, which is how a dev
-/// machine reuses an existing copy instead of pulling 400 MB again.
-fn model_dir(app: &tauri::AppHandle) -> Result<PathBuf> {
-	if let Ok(dir) = std::env::var("AVEN_TTS_MODEL_DIR") {
-		return Ok(PathBuf::from(dir));
-	}
-	let base = app
-		.path()
-		.app_cache_dir()
-		.context("no app cache dir on this platform")?;
-	Ok(base.join("tts").join("supertonic-3"))
-}
-
-/// Fetch `url` to `dest` unless it is already there.
-///
-/// Written to a `.part` file first so an interrupted download cannot leave a
-/// truncated model behind that then fails to load with something inscrutable.
-fn ensure_file(url: &str, dest: &Path) -> Result<()> {
-	if dest.exists() {
-		return Ok(());
-	}
-	if let Some(parent) = dest.parent() {
-		fs::create_dir_all(parent)?;
-	}
-
-	log::info!(target: "avenos::tts", "downloading {url}");
-	let response = ureq::get(url)
-		.call()
-		.with_context(|| format!("failed to fetch {url}"))?;
-
-	let mut bytes = Vec::new();
-	response.into_reader().read_to_end(&mut bytes)?;
-
-	let part = dest.with_extension("part");
-	fs::write(&part, &bytes)?;
-	fs::rename(&part, dest)?;
-	log::info!(target: "avenos::tts", "fetched {} ({} bytes)", dest.display(), bytes.len());
-	Ok(())
-}
-
 fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
-	let dir = model_dir(app)?;
+	let dir = cache_dir(app, "tts", "supertonic-3")?;
 	for name in MODEL_FILES {
 		ensure_file(&format!("{MODEL_BASE}/{name}"), &dir.join(name))?;
 	}
@@ -147,12 +107,6 @@ fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
 	// Warm the default so the first sentence does not pay for a fetch.
 	engine.ensure_style(DEFAULT_VOICE)?;
 	Ok(engine)
-}
-
-/// The presets the UI can offer.
-#[tauri::command]
-pub fn tts_voices() -> Vec<String> {
-	VOICES.iter().map(|v| v.to_string()).collect()
 }
 
 /// Load the models, downloading them on first run.

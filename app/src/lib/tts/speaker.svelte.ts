@@ -34,10 +34,6 @@ export class Speaker {
 	status = $state<SpeakerStatus>('unavailable')
 	speaking = $state(false)
 	failure = $state<string | null>(null)
-	/** The ten Supertonic presets, once the Rust side has told us. */
-	voices = $state<string[]>([])
-	/** Switching takes effect on the next sentence; a fetch of ~290 KB at most. */
-	voice = $state('M1')
 
 	#context: AudioContext | null = null
 	/** Text seen since the last sentence was queued. */
@@ -67,26 +63,12 @@ export class Speaker {
 		this.status = 'preparing'
 		this.failure = null
 		try {
-			this.voices = await invoke<string[]>('tts_voices')
 			await invoke('tts_prepare')
 			this.status = 'ready'
 		} catch (err) {
 			this.status = 'error'
 			this.failure = err instanceof Error ? err.message : String(err)
 		}
-	}
-
-	/**
-	 * Speak a sample in `voice` so it can be auditioned without waiting for the
-	 * model to say something. Interrupts whatever is playing, since the point is
-	 * to hear this one.
-	 */
-	async audition(voice: string): Promise<void> {
-		this.voice = voice
-		if (!this.on) return
-		this.silence()
-		this.resumeAudio()
-		this.#enqueue(`Hallo, ich bin ${voice} und so klinge ich auf Deutsch.`)
 	}
 
 	/**
@@ -166,7 +148,7 @@ export class Speaker {
 
 		// The command answers with a WAV as raw bytes rather than a JSON array of
 		// a few hundred thousand floats, so decoding is the browser's own job.
-		const wav = await invoke<ArrayBuffer>('tts_speak', { text, lang: 'de', voice: this.voice })
+		const wav = await invoke<ArrayBuffer>('tts_speak', { text, lang: 'de' })
 		const buffer = await context.decodeAudioData(wav)
 
 		// `silence()` may have fired while we were synthesizing; don't start a

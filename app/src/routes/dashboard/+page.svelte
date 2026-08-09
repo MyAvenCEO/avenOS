@@ -1,11 +1,12 @@
 <script lang="ts">
+import { Listener } from '$lib/asr/listener.svelte'
 import { Chat } from '$lib/chat/chat.svelte'
 import { Speaker } from '$lib/tts/speaker.svelte'
 
 /**
  * Dashboard — a chat against RedPill's confidential Gemma
  * (`phala/gemma-4-31b-it`), streamed token by token, spoken aloud in German by
- * Moonshine as it arrives.
+ * Supertonic as it arrives, and listened to with Nemotron + Silero VAD.
  *
  * The split is deliberate: the brain is remote and attested, the voice is
  * entirely on-device.
@@ -18,6 +19,30 @@ const speaker = new Speaker()
 const chat = new Chat({
 	onDelta: (text) => speaker.feed(text),
 	onDone: () => speaker.flush()
+})
+
+const listener = new Listener({
+	// Barge-in. This fires on voice activity alone, ~64ms in, with nothing yet
+	// transcribed — which is the only way interrupting feels like interrupting
+	// a person rather than cancelling a download.
+	onSpeechStart: () => {
+		if (speaker.speaking || chat.streaming) {
+			speaker.silence()
+			chat.stop()
+		}
+	},
+	// A finished utterance is just a message. No send button in the loop.
+	onUtterance: (text) => {
+		speaker.resumeAudio()
+		chat.send(text)
+	}
+})
+
+// Hands-free by default: the mic opens as soon as the page does. The permission
+// prompt is the one gesture the browser insists on, and it appears on its own.
+$effect(() => {
+	void listener.start()
+	return () => listener.stop()
 })
 
 let draft = $state('')
@@ -62,23 +87,23 @@ $effect(() => {
 		<div class="flex items-center gap-3 text-xs opacity-50">
 			<span>phala/gemma-4-31b-it</span>
 
-			<!-- Audition any of the ten presets; picking one speaks a sample. -->
-			{#if speaker.voices.length > 0}
-				<select
-					value={speaker.voice}
-					onchange={(e) => speaker.audition(e.currentTarget.value)}
-					class="rounded-full border border-border bg-surface-card px-2 py-1 text-xs"
-					title="Supertonic-3 Stimme — Auswahl spricht eine Probe"
-				>
-					{#each speaker.voices as voice (voice)}
-						<option value={voice}>{voice}</option>
-					{/each}
-				</select>
+			<!-- Passive status, not switches: both ears and voice are simply on. -->
+			{#if listener.status !== 'unavailable'}
+				<span title="Nemotron 3.5 · Silero VAD · deutsch, on-device">
+					{#if listener.status === 'preparing'}
+						Ohren laden…
+					{:else if listener.status === 'denied'}
+						Kein Mikrofon
+					{:else if listener.status === 'error'}
+						Ohren fehlgeschlagen
+					{:else}
+						{listener.speech ? 'Hört zu' : 'Bereit'}
+					{/if}
+				</span>
 			{/if}
 
-			<!-- Passive status, not a switch: the voice is on wherever it can be. -->
 			{#if speaker.status !== 'unavailable'}
-				<span title="Supertonic-3 · Stimme M1 · deutsch, on-device (Rust/ONNX)">
+				<span title="Supertonic-3 · Stimme M5 · deutsch, on-device (Rust/ONNX)">
 					{#if speaker.status === 'preparing'}
 						Stimme lädt…
 					{:else if speaker.status === 'error'}
@@ -96,6 +121,7 @@ $effect(() => {
 					onclick={() => {
 						chat.clear()
 						speaker.silence()
+						void listener.reset()
 					}}
 				>
 					Clear
@@ -128,11 +154,23 @@ $effect(() => {
 			</div>
 		{/each}
 
-		{#if chat.failure || speaker.failure}
+		<!-- What is being heard right now, before the utterance closes. Sits where
+		     the user bubble will land so the text does not jump when it does. -->
+		{#if listener.partial !== ''}
+			<div class="flex justify-end">
+				<div
+					class="max-w-[85%] whitespace-pre-wrap rounded-2xl border border-dashed border-border px-4 py-3 text-sm leading-relaxed opacity-50"
+				>
+					{listener.partial}
+				</div>
+			</div>
+		{/if}
+
+		{#if chat.failure || speaker.failure || listener.failure}
 			<p
 				class="rounded-2xl border border-status-error/30 bg-status-error-muted px-4 py-3 text-sm text-status-error-strong"
 			>
-				{chat.failure ?? speaker.failure}
+				{chat.failure ?? speaker.failure ?? listener.failure}
 			</p>
 		{/if}
 	</div>

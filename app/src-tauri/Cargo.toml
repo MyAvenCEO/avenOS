@@ -57,9 +57,15 @@ hound = "3.5"
 rustfft = "6.2"
 unicode-normalization = "0.1"
 regex = "1.10"
-# Fetches the ~400 MB of weights on first run. Blocking and tiny; the commands
-# that call it are already async and off the UI thread.
+# Fetches model weights on first run. Blocking and tiny; the commands that call
+# it are already async and off the UI thread.
 ureq = "2"
+
+# On-device German speech recognition (src/asr). Nemotron 3.5 streaming for the
+# words, Silero VAD (driven directly, see src/asr/vad.rs) for knowing when
+# someone is talking — both ONNX, same runtime as the voice above.
+parakeet-rs = "0.3"
+
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 oslog = { version = "0.2", features = ["logger"] }
