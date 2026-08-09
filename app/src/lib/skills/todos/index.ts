@@ -3,7 +3,7 @@ import { Todos } from './store.svelte'
 import { summarize } from './summarize'
 import { describeResult, runTodoTool, TODO_TOOLS } from './tools'
 
-export { Todos } from './store.svelte'
+export { SPARKS, Todos } from './store.svelte'
 
 /**
  * The todo list as a skill: its store, its tools, its result language and its
