@@ -11,4 +11,9 @@ import { AvenCityGame } from '@avenos/aven-city'
 	<title>avenCITY</title>
 </svelte:head>
 
-<AvenCityGame />
+<!-- The game keeps its own typographic voice: the app-wide switch to Inter
+     deliberately excludes this world, so its DOM text stays on the stack it
+     was designed against. -->
+<div style="font-family: 'AzeretMono', 'Chillax', ui-monospace, monospace" class="contents">
+	<AvenCityGame />
+</div>

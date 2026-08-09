@@ -152,6 +152,17 @@
 	font-display: swap;
 }
 
+/* Inter — THE app typeface (variable, weights 100-900 in one file). Every
+ * surface except the game runs on it: body text at 400, medium UI labels at
+ * 500, titles at 600. One family, weight does the differentiating. */
+@font-face {
+	font-family: "InterVariable";
+	src: url("$lib/assets/fonts/InterVariable.woff2") format("woff2");
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
 /* board 0110 — the avenOS brand wordmark in Clash Display: `aven` light + lowercase, `OS` bold + uppercase.
  * Wrap the two parts in .wm-aven / .wm-os spans; bare text falls back to the light base weight. */
 .avenos-wordmark {
@@ -198,17 +209,20 @@
  *     · Selected: #EFEADA  (--color-surface-card-selected)      — slightly more saturated eggshell
  */
 @theme {
-	/* Chillax is the single typeface across body, UI, and titles. `--font-display`
+	/* Inter is the single typeface across body, UI, titles and badges — one
+	 * family, differentiated purely by weight and size. The old stacks
+	 * (AzeretMono body, ClashDisplay titles, Chillax fallback) made every
+	 * surface speak a different voice. `--font-display`
 	 * is intentionally a SEPARATE token (today aliased to Chillax) so headings can
 	 * later be upgraded to a dedicated display face by editing only this one line —
 	 * components reference `font-display`, not "Chillax", so nothing else changes.
 	 * `--font-serif` is kept as an alias too; the app no longer relies on a serif. */
 	/* board 0110 — the default body/UI text face is Azeret Mono (default weight Thin, set on `body`). */
-	--font-sans: "AzeretMono", "Chillax", ui-monospace, SFMono-Regular, monospace;
-	/* titles + the brand wordmark use Clash Display. */
-	--font-display: "ClashDisplay", "Chillax", ui-sans-serif, system-ui, sans-serif;
-	--font-serif: "Chillax", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: "JetBrains Mono", ui-monospace, monospace;
+	--font-sans: "InterVariable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+	--font-display: "InterVariable", ui-sans-serif, system-ui, sans-serif;
+	--font-serif: "InterVariable", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "InterVariable", ui-sans-serif, system-ui, sans-serif;
 
 	/* Chillax has noticeably heavier strokes than Inter at the same numeric
 	 * weight, so titles and highlighted items read too bold. Re-tune the weight
@@ -216,8 +230,8 @@
 	 * utility across all components gets lighter without per-component edits.
 	 * Result tier: body 400 · medium/title 500 · strong emphasis 600 (was 700). */
 	--font-weight-medium: 500;
-	--font-weight-semibold: 500;
-	--font-weight-bold: 600;
+	--font-weight-semibold: 600;
+	--font-weight-bold: 700;
 
 	--color-brand-navy: #1e293b;
 	--color-status-success-base: #2f5d50;
@@ -340,14 +354,14 @@
 	}
 
 	body {
-		@apply bg-background text-foreground font-sans tracking-tight;
-		/* board 0110 — Azeret Mono ExtraLight is the default body/text weight (one up from Thin). */
-		font-weight: 200;
+		@apply bg-background text-foreground font-sans;
+		/* Inter regular; tracking is per-role now (titles tighten, body stays). */
+		font-weight: 400;
 	}
 
 	/* Design-system titles. Components don't need to opt in — bare h1–h6 inherit
-	 * the display face, a tighter tracking, and a balanced weight tuned for
-	 * Chillax's geometric forms. Swap `--font-display` to retheme all titles. */
+	 * the display face and role: Inter semibold, gently tightened, the way the
+	 * face is designed to be set at display sizes. */
 	h1,
 	h2,
 	h3,
@@ -355,9 +369,8 @@
 	h5,
 	h6 {
 		font-family: var(--font-display);
-		/* board 0110 — Clash Display Light is the default title weight (thin/elegant). */
-		font-weight: 300;
-		letter-spacing: -0.02em;
+		font-weight: 600;
+		letter-spacing: -0.015em;
 		line-height: 1.15;
 		text-wrap: balance;
 	}
