@@ -58,6 +58,12 @@ export function summarize(name: string, resultJson: string): Omit<Activity, 'id'
 		case 'todo_clear_done':
 			return { kind: 'deleted', titles: titles('deleted') }
 
+		case 'todo_show': {
+			const view = result.view === 'board' ? 'Board' : 'Liste'
+			const spark = result.spark === 'team' ? 'Team' : 'Me'
+			return { kind: 'switched', titles: [], note: `${view} · ${spark}` }
+		}
+
 		case 'todo_list':
 			return {
 				kind: 'read',

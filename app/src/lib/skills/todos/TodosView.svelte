@@ -12,8 +12,6 @@ import { STATUS_LABEL } from './tools'
 const { todos }: { todos: Todos } = $props()
 
 let newTodo = $state('')
-/** Which shape the list takes. Session-local; the data is identical. */
-let view = $state<'list' | 'board'>('list')
 
 /** Card id in flight during a drag, so columns know what is being dropped. */
 let dragging = $state<string | null>(null)
@@ -50,23 +48,6 @@ function shift(id: string, by: -1 | 1) {
 	<div class="flex items-center justify-between gap-3">
 		<h2 class="text-sm">Aufgaben</h2>
 
-		<!-- The spark: which project context is on screen. New todos — typed or
-		     spoken without a spark — land in the active one. -->
-		<div class="flex gap-0.5 rounded-full border border-border p-0.5">
-			{#each SPARKS as spark (spark.id)}
-				<button
-					type="button"
-					onclick={() => {
-						todos.active = spark.id
-					}}
-					class="rounded-full px-2.5 py-0.5 text-xs transition-colors {todos.active === spark.id
-						? 'bg-primary text-primary-foreground'
-						: 'opacity-50 hover:opacity-100'}"
-				>
-					{spark.name}
-				</button>
-			{/each}
-		</div>
 		<span class="flex-1 text-right text-xs opacity-40">
 			{todos.open.length}
 			offen{todos.visible.length > todos.open.length
@@ -74,55 +55,14 @@ function shift(id: string, by: -1 | 1) {
 				: ''}
 		</span>
 
-		<!-- The shape switch: list or board, same data either way. -->
-		<div class="flex gap-0.5 rounded-full border border-border p-0.5">
-			<button
-				type="button"
-				onclick={() => {
-					view = 'list'
-				}}
-				title="Liste"
-				aria-label="Listenansicht"
-				class="rounded-full p-1.5 transition-colors {view === 'list'
-					? 'bg-primary text-primary-foreground'
-					: 'opacity-50 hover:opacity-100'}"
-			>
-				<svg
-					viewBox="0 0 24 24"
-					class="size-3.5"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-				>
-					<path d="M4 6h16M4 12h16M4 18h16" />
-				</svg>
-			</button>
-			<button
-				type="button"
-				onclick={() => {
-					view = 'board'
-				}}
-				title="Board"
-				aria-label="Boardansicht"
-				class="rounded-full p-1.5 transition-colors {view === 'board'
-					? 'bg-primary text-primary-foreground'
-					: 'opacity-50 hover:opacity-100'}"
-			>
-				<svg
-					viewBox="0 0 24 24"
-					class="size-3.5"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-				>
-					<rect x="3.5" y="4" width="5" height="16" rx="1" />
-					<rect x="9.5" y="4" width="5" height="10" rx="1" />
-					<rect x="15.5" y="4" width="5" height="13" rx="1" />
-				</svg>
-			</button>
-		</div>
+		<!-- Which spark and shape are on screen. Read-only on purpose: switching
+		     is a conversation move — "zeig mir das Board", "zeig die Team-Liste" —
+		     handled by the todo_show tool, never by a button. -->
+		<span class="rounded-full border border-border px-2.5 py-0.5 text-xs opacity-50">
+			{SPARKS.find((s) => s.id === todos.active)?.name}
+			·
+			{todos.view === 'board' ? 'Board' : 'Liste'}
+		</span>
 	</div>
 
 	<form onsubmit={addTodo}>
@@ -133,7 +73,7 @@ function shift(id: string, by: -1 | 1) {
 		>
 	</form>
 
-	{#if view === 'list'}
+	{#if todos.view === 'list'}
 		<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
 			{#each todos.visible as todo (todo.id)}
 				<li

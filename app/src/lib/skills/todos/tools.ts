@@ -111,6 +111,24 @@ export const TODO_TOOLS: ToolSpec[] = [
 		}
 	},
 	{
+		name: 'todo_show',
+		description:
+			'Wechselt, was der Nutzer sieht: die Ansicht (liste oder board) und/oder den ' +
+			'aktiven Spark. „Zeig mir das Board" heißt view=board; „zeig meine Liste" heißt ' +
+			'spark=me; „zeig die Team-Aufgaben als Board" heißt beides. Ändert keine Daten.',
+		parameters: {
+			type: 'object',
+			properties: {
+				view: {
+					type: 'string',
+					enum: ['liste', 'board'],
+					description: 'Die Form: liste oder board.'
+				},
+				spark: SPARK
+			}
+		}
+	},
+	{
 		name: 'todo_clear_done',
 		description:
 			'Löscht alle bereits erledigten Aufgaben auf einmal. Dafür brauchst du keine ids und ' +
@@ -189,6 +207,12 @@ export function describeResult(resultJson: string): string {
 	if (Array.isArray(result.unbekannteIds) && result.unbekannteIds.length > 0) {
 		parts.push(`unbekannte ids: ${result.unbekannteIds.join(', ')}`)
 	}
+	// todo_show answers with the new view state, not with items.
+	if (typeof result.view === 'string') {
+		parts.push(
+			`Angezeigt wird jetzt: ${result.view === 'board' ? 'Board' : 'Liste'}, Spark ${result.spark}`
+		)
+	}
 	return parts.join('. ') || resultJson
 }
 
@@ -248,6 +272,14 @@ export function runTodoTool(todos: Todos, name: string, rawArgs: string): string
 			const unknown = ids.filter((id) => !targets.some((t) => t.id === id))
 			const deleted = targets.map((t) => todos.remove(t.id)).filter((t) => t !== undefined)
 			return JSON.stringify({ ok: deleted.length > 0, deleted, unbekannteIds: unknown })
+		}
+
+		case 'todo_show': {
+			if (args.view === 'liste' || args.view === 'board')
+				todos.view = args.view === 'board' ? 'board' : 'list'
+			if (typeof args.spark === 'string' && SPARKS.some((s) => s.id === args.spark))
+				todos.active = args.spark
+			return JSON.stringify({ ok: true, view: todos.view, spark: todos.active })
 		}
 
 		case 'todo_clear_done':

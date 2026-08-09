@@ -54,6 +54,12 @@ export class Todos {
 	items = $state<Todo[]>([])
 	/** The spark the view shows and new todos land in. */
 	active = $state<string>('me')
+	/**
+	 * Which shape the workspace renders, list or board. Lives here rather than
+	 * in the component because switching is a tool call — "zeig mir das Board"
+	 * — never a button.
+	 */
+	view = $state<'list' | 'board'>('list')
 
 	/** The active spark's todos — what the view actually renders. */
 	get visible(): Todo[] {

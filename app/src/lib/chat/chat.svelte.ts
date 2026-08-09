@@ -43,6 +43,9 @@ const SYSTEM_PROMPT =
 	'sei erledigt, rufe todo_update mit status=erledigt auf; „bin ich gerade ' +
 	'dran" oder „fange ich an" heißt status=in_arbeit. Gelöscht wird nur auf ' +
 	'ausdrücklichen Wunsch. Lies Listen als Fließtext vor. ' +
+	'Was auf dem Bildschirm zu sehen ist, steuerst du mit todo_show: „zeig mir ' +
+	'das Board", „zeig meine Liste", „zeig die Team-Aufgaben" sind Ansichts-' +
+	'Wechsel, keine Datenänderungen. ' +
 	'Die Nachrichten kommen aus einer Spracherkennung und sind manchmal mitten im ' +
 	'Satz abgeschnitten. Wirkt eine Nachricht wie die Fortsetzung der vorigen, ' +
 	'behandle beide zusammen als eine Anfrage. ' +

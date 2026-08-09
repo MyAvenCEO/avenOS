@@ -15,6 +15,7 @@ export type ActivityKind =
 	| 'renamed'
 	| 'deleted'
 	| 'read'
+	| 'switched'
 	| 'failed'
 
 export interface Activity {
@@ -76,5 +77,6 @@ export const ACTIVITY_LABELS: Record<ActivityKind, { mark: string; label: string
 	renamed: { mark: '✎', label: 'umbenannt' },
 	deleted: { mark: '×', label: 'gelöscht' },
 	read: { mark: '↻', label: 'Liste gelesen' },
+	switched: { mark: '⇄', label: 'Ansicht' },
 	failed: { mark: '!', label: 'fehlgeschlagen' }
 }
