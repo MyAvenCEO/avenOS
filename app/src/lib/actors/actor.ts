@@ -124,6 +124,22 @@ export class Actor {
 	}
 
 	/**
+	 * The handler's actual source — derived from the running function, never
+	 * stored ("compression, not abstraction"): change the handler and the
+	 * next read changes with it. This is the Abject move of answering from
+	 * one's own code, minus the LLM.
+	 */
+	handlerSource(method: string): string | null {
+		const handler = this.#handlers[method]
+		return handler ? handler.toString() : null
+	}
+
+	/** Messages waiting in the mailbox right now. */
+	get pending(): number {
+		return this.#mailbox.length
+	}
+
+	/**
 	 * The mailbox: messages are processed strictly one at a time, in arrival
 	 * order — the actor-model guarantee that makes per-actor reasoning local.
 	 * Ordinary messages stay deterministic (no LLM anywhere in this path); a

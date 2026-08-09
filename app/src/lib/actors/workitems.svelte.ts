@@ -79,7 +79,6 @@ export class WorkItemsActor extends Actor {
 					'Führt die Aufgabenliste: anlegen, Status ändern, löschen, anzeigen. ' +
 					'Jede Aufgabe gehört zu genau einem Spark und hat einen von drei Status.',
 				tags: ['todo'],
-				requires: ['work(M, Spark)'],
 				produces: ['workitem(W)'],
 				methods: [
 					{

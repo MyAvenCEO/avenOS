@@ -232,11 +232,38 @@ async function ask(event: SubmitEvent) {
 								{method.description}
 							</p>
 							{#if Object.keys((method.parameters as { properties?: Record<string, unknown> }).properties ?? {}).length > 0}
-								<p class="pt-1 font-mono text-[0.6875rem] text-foreground/35">
-									{Object.keys(
-										(method.parameters as { properties?: Record<string, unknown> }).properties ?? {}
-									).join(' · ')}
-								</p>
+								<details class="pt-1">
+									<summary
+										class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
+									>
+										Schema:
+										{Object.keys(
+											(method.parameters as { properties?: Record<string, unknown> }).properties ??
+												{}
+										).join(' · ')}
+									</summary>
+									<pre
+										class="mt-1 overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
+									>{JSON.stringify(
+											method.parameters,
+											null,
+											2
+										)}</pre>
+								</details>
+							{/if}
+							{#if selected.handlerSource(method.name)}
+								<details class="pt-1">
+									<summary
+										class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
+									>
+										Code — der laufende Handler, aus der Funktion selbst gelesen
+									</summary>
+									<pre
+										class="mt-1 overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
+									>{selected.handlerSource(
+											method.name
+										)}</pre>
+								</details>
 							{/if}
 						</div>
 					{/each}
@@ -267,6 +294,16 @@ async function ask(event: SubmitEvent) {
 							<dd class="font-medium">{value}</dd>
 						</div>
 					{/each}
+					<div>
+						<dt class="text-[0.6875rem] text-foreground/40">Mailbox</dt>
+						<dd class="font-medium">{selected.pending} wartend</dd>
+					</div>
+					<div>
+						<dt class="text-[0.6875rem] text-foreground/40">Handler-Fehler</dt>
+						<dd class="font-medium {selected.failures > 0 ? 'text-status-error' : ''}">
+							{selected.failures}{selected.lastError ? ` · ${selected.lastError}` : ''}
+						</dd>
+					</div>
 				</dl>
 			{:else}
 				<p class="text-foreground/40 text-sm">
@@ -307,6 +344,66 @@ async function ask(event: SubmitEvent) {
 					{/each}
 				</div>
 			</div>
+			{#if selected.manifest.methods.length > 0}
+				<p class="pt-2 text-[0.6875rem] text-foreground/40">
+					Zusätzlich: alle {selected.manifest.methods.length} Methoden sind über den Chat erreichbar
+					— die Werkzeugliste des Modells wird aus diesem Manifest abgeleitet.
+				</p>
+			{/if}
+		</section>
+
+		<!-- ------------------------------------- FACE: the actor's own window -->
+		<section
+			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+		>
+			<div class="flex items-center gap-2 pb-1">
+				<h3 class="font-semibold text-sm">Face</h3>
+				<span
+					class="size-1.5 rounded-full {selected.face ? 'bg-status-success' : 'bg-foreground/20'}"
+				></span>
+			</div>
+			{#if selected.face}
+				{@const Face = selected.face as import('svelte').Component<{ actor: typeof selected }>}
+				<p class="pb-2 text-[0.6875rem] text-foreground/40">
+					Dieser Actor malt sein eigenes Fenster — dieselbe Komponente, die der Views-Tab aus der
+					Registry ableitet, hier live auf demselben Zustand:
+				</p>
+				<details>
+					<summary class="cursor-pointer text-foreground/50 text-xs hover:text-foreground/80">
+						Face einblenden
+					</summary>
+					<div class="mt-2 max-h-80 overflow-y-auto rounded-xl border border-foreground/10 p-3">
+						<Face actor={selected} />
+					</div>
+				</details>
+			{:else}
+				<p class="text-foreground/40 text-sm">
+					Kein Face — dieser Actor arbeitet unsichtbar; sein Zustand ist trotzdem oben ablesbar.
+				</p>
+			{/if}
+		</section>
+
+		<!-- ------------------------------- CONFIG: the manifest, raw and derived -->
+		<section
+			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+		>
+			<h3 class="pb-1 font-semibold text-sm">Config</h3>
+			<p class="pb-2 text-[0.6875rem] text-foreground/40">
+				Das rohe Manifest — die einzige gespeicherte Wahrheit über diesen Actor. Alles andere
+				(Werkzeugliste, Kanten, Stufen, Beweise, dieses Panel) wird daraus abgeleitet.
+			</p>
+			<details>
+				<summary class="cursor-pointer text-foreground/50 text-xs hover:text-foreground/80">
+					Manifest als JSON
+				</summary>
+				<pre
+					class="mt-1 max-h-72 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
+				>{JSON.stringify(
+						selected.manifest,
+						null,
+						2
+					)}</pre>
+			</details>
 		</section>
 
 		<!-- --------------------------------- BEWEIS: SLD backward chaining, live -->
