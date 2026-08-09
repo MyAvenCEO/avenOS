@@ -49,16 +49,16 @@ const SPEECH_THRESHOLD: f32 = 0.5;
 /// ~64 ms of speech opens an utterance. Short, because this is what gates
 /// barge-in and a slow open makes interrupting feel unresponsive.
 const START_WINDOWS: usize = 2;
-/// ~600 ms of quiet closes it.
+/// ~900 ms of quiet closes it.
 ///
-/// 800 ms once cut questions off at "…ist es richtig", which is why this sat at
-/// 1.3 s. Both of those measurements predate the two fixes that made the VAD
-/// trustworthy — audio is no longer discarded when the recognizer is busy, and
-/// an utterance now rewinds into 512 ms of pre-roll — so the earlier figure was
-/// measuring a gappy signal rather than a real pause. Every millisecond here is
-/// felt directly, because nothing at all happens until it elapses. If clauses
-/// start getting clipped again, this is the first number to raise.
-const END_WINDOWS: usize = 19;
+/// 600 ms turned dictation into confetti: "Kannst du auch noch — drei null —
+/// Packungen dazu packen" arrived as three utterances, each answered on its
+/// own, and the model edited the wrong todo trying to make sense of the
+/// shards. People pause mid-thought for most of a second; end-of-turn has to
+/// outlast that. Every millisecond here is felt directly, because nothing at
+/// all happens until it elapses — but answering a half-request fast is worse
+/// than answering the whole one a third of a second later.
+const END_WINDOWS: usize = 28;
 
 /// Audio kept from *before* speech was detected, in samples (512 ms).
 ///
