@@ -49,13 +49,16 @@ const SPEECH_THRESHOLD: f32 = 0.5;
 /// ~64 ms of speech opens an utterance. Short, because this is what gates
 /// barge-in and a slow open makes interrupting feel unresponsive.
 const START_WINDOWS: usize = 2;
-/// ~1 s of quiet closes it.
+/// ~600 ms of quiet closes it.
 ///
-/// 800 ms fired in the pause people leave before the last clause of a sentence,
-/// and utterances were cut at "…ist es richtig". 1.3 s fixed that but is felt
-/// directly as delay, since nothing happens at all until this elapses. A second
-/// keeps the clause intact while giving a third of it back.
-const END_WINDOWS: usize = 40;
+/// 800 ms once cut questions off at "…ist es richtig", which is why this sat at
+/// 1.3 s. Both of those measurements predate the two fixes that made the VAD
+/// trustworthy — audio is no longer discarded when the recognizer is busy, and
+/// an utterance now rewinds into 512 ms of pre-roll — so the earlier figure was
+/// measuring a gappy signal rather than a real pause. Every millisecond here is
+/// felt directly, because nothing at all happens until it elapses. If clauses
+/// start getting clipped again, this is the first number to raise.
+const END_WINDOWS: usize = 19;
 
 /// Audio kept from *before* speech was detected, in samples (512 ms).
 ///
@@ -212,12 +215,11 @@ impl Engine {
 			let tail = self.normalized(&tail);
 			self.model.transcribe_chunk(&tail)?;
 		}
-		// One chunk of silence to flush whatever the decoder is still holding.
-		// Upstream's batch example pushes three, but each is a full 560 ms
-		// inference standing between the user finishing their sentence and the
-		// reply beginning, and the extra two add nothing that the padded tail
-		// above has not already flushed.
-		self.model.transcribe_chunk(&vec![0.0; ASR_CHUNK])?;
+		// No trailing silence chunk at all. Upstream's batch example pushes three,
+		// but every one is a full inference standing between the user finishing a
+		// sentence and the reply starting — and by the time an utterance closes,
+		// a second of real silence has already been streamed through the decoder
+		// while the end-of-turn threshold ran down. It has been flushed already.
 		Ok(self.model.get_transcript())
 	}
 }
