@@ -63,10 +63,9 @@ const EXPECTED = /[^\p{Script=Latin}\p{Nd}\p{P}\p{Zs}\n\r€$%+<=>^`|~°²³µ]/
  * synthesizer will earnestly attempt to pronounce an Arabic letter dropped into
  * a German clause. The cost is that genuinely non-Latin replies are mangled,
  * which is an acceptable trade for an assistant that only speaks German.
- */
-/**
- * Chat-template control tokens leaking into the prose (`<|"|>`, `<|im_end|>`)
- * — never something to show, let alone pronounce.
+ *
+ * Also strips chat-template control tokens leaking into the prose (`<|"|>`,
+ * `<|im_end|>`) — never something to show, let alone pronounce.
  */
 const CONTROL_TOKENS = /<\|[^|>]{0,24}\|>/g
 
@@ -94,7 +93,10 @@ export function eventsFromFrame(frame: string): StreamEvent[] {
 
 		const events: StreamEvent[] = []
 		if (typeof delta.content === 'string' && delta.content !== '') {
-			const text = sanitize(delta.content)
+			// Prose additionally loses braces and pipes: German Fließtext has no use
+			// for either, and single stray `}`s — leaked call syntax — slip under
+			// any run-length guard. Arguments keep theirs; JSON needs them.
+			const text = sanitize(delta.content).replace(/[{}|]/g, '')
 			if (text !== '') events.push({ kind: 'text', text })
 		}
 		for (const call of delta.tool_calls ?? []) {
@@ -103,7 +105,13 @@ export function eventsFromFrame(frame: string): StreamEvent[] {
 				index: call.index ?? 0,
 				id: call.id,
 				name: call.function?.name,
+				// Sanitized like prose: the serving corruption hits this stream too,
+				// and a stray Arabic glyph inside a title otherwise lands on the todo
+				// list itself. The filter keeps JSON punctuation, so valid arguments
+				// pass through untouched.
 				args: call.function?.arguments
+					? sanitize(call.function.arguments)
+					: call.function?.arguments
 			})
 		}
 		return events

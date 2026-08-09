@@ -50,14 +50,30 @@ const MAX_TOOL_ROUNDS = 8
 /**
  * A reply that has stopped being language.
  *
- * Thirty-two consecutive characters with no letter and no digit do not occur in
+ * Twenty consecutive characters with no letter and no digit do not occur in
  * German prose; they are the model stuck in a punctuation loop (streams of `}`
  * were the observed shape). Checked against the tail as the reply streams.
  */
-const DEGENERATE = /[^\p{L}\p{Nd}]{32}$/u
+const DEGENERATE = /[^\p{L}\p{Nd}]{20}$/u
 
 /** What to shave off a reply cut short by the degeneration guard. */
 const TRAILING_JUNK = /[^\p{L}\p{Nd}]+$/u
+
+/**
+ * The other collapse: a whole sentence repeated verbatim, on and on —
+ * "Lerne ich deine Aufgaben. Was ist zu tun?" six times in a row. Letters
+ * throughout, so the junk guard cannot see it. If the last 32 characters
+ * already appear at least twice earlier in the reply, the model is looping;
+ * everything from the second occurrence on is noise.
+ */
+function loopStart(content: string): number {
+	if (content.length < 96) return -1
+	const gram = content.slice(-32)
+	const first = content.indexOf(gram)
+	if (first === -1 || first >= content.length - 64) return -1
+	const second = content.indexOf(gram, first + 1)
+	return second !== -1 && second < content.length - 32 ? second : -1
+}
 
 export interface Turn {
 	id: string
@@ -204,8 +220,9 @@ export class Chat {
 				// budget. No German sentence has thirty-two straight characters
 				// without a letter or digit, so that tail is the collapse itself:
 				// stop the stream, cut the junk, and let what was said stand.
-				if (DEGENERATE.test(content)) {
-					content = content.replace(TRAILING_JUNK, '')
+				const looped = loopStart(content)
+				if (DEGENERATE.test(content) || looped !== -1) {
+					content = (looped !== -1 ? content.slice(0, looped) : content).replace(TRAILING_JUNK, '')
 					reply.content = content
 					break
 				}

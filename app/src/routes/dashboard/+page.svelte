@@ -234,8 +234,21 @@ $effect(() => {
 						class:border={turn.role === 'assistant'}
 						class:border-border={turn.role === 'assistant'}
 					>
-						{turn.content ||
-						(turn.role === 'assistant' && chat.streaming ? '…' : '')}
+						{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
+							<!-- Thinking. Three dots breathing in sequence, not a frozen
+							     ellipsis that reads as a hung reply. -->
+							<span class="flex items-center gap-1 py-1.5" aria-label="Denkt nach">
+								<span class="size-1.5 animate-bounce rounded-full bg-current opacity-40"></span>
+								<span
+									class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
+								></span>
+								<span
+									class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
+								></span>
+							</span>
+						{:else}
+							{turn.content}
+						{/if}
 					</div>
 				</div>
 			{/each}
