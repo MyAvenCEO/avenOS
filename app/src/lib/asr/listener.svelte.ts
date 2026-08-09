@@ -167,6 +167,17 @@ export class Listener {
 		if (this.status === 'listening') this.status = 'preparing'
 	}
 
+	/**
+	 * Tell the recognizer whether the assistant is audible right now.
+	 *
+	 * While it is, speech has to clear a much higher bar before it counts —
+	 * otherwise the microphone hears the assistant through the speakers and
+	 * barge-in kills every reply the moment it starts.
+	 */
+	setOutputActive(active: boolean): void {
+		if (this.available) void invoke('asr_output_active', { active }).catch(() => {})
+	}
+
 	/** Throw away a half-heard utterance, e.g. when the chat is cleared. */
 	async reset(): Promise<void> {
 		this.partial = ''

@@ -49,9 +49,23 @@ const SPEECH_THRESHOLD: f32 = 0.5;
 /// ~64 ms of speech opens an utterance. Short, because this is what gates
 /// barge-in and a slow open makes interrupting feel unresponsive.
 const START_WINDOWS: usize = 2;
-/// ~800 ms of quiet closes it. Long enough to survive the pause mid-sentence
-/// that every speaker makes, short enough not to feel like a wait.
-const END_WINDOWS: usize = 25;
+/// ~1.3 s of quiet closes it.
+///
+/// Was 800 ms, which fired in the pause people leave before the last clause of
+/// a sentence — utterances were cut at "…ist es richtig" and the rest was lost.
+/// The cost of being generous here is only that the reply starts a little
+/// later; the cost of being eager is losing half the question.
+const END_WINDOWS: usize = 40;
+
+/// While the assistant is talking, speech has to be much more convincing.
+///
+/// `echoCancellation` is requested but does not hold in this webview, so the
+/// microphone hears the assistant through the speakers. At the normal gate that
+/// registered as the user talking and barge-in killed the reply the instant it
+/// began — the empty bubbles. Echo is intermittent and rarely scores this high
+/// for this long, whereas someone actually interrupting does.
+const ECHO_THRESHOLD: f32 = 0.92;
+const ECHO_START_WINDOWS: usize = 8;
 
 /// What a normalized utterance should peak at. Short of 1.0 on purpose, so a
 /// sample louder than anything heard so far has somewhere to go instead of
@@ -67,6 +81,8 @@ const MAX_GAIN: f32 = 8.0;
 #[derive(Default)]
 pub struct AsrState {
 	engine: Mutex<Option<Engine>>,
+	/// True while the assistant's own voice is coming out of the speakers.
+	speaking: std::sync::atomic::AtomicBool,
 }
 
 struct Engine {
@@ -231,14 +247,28 @@ pub async fn asr_push(
 	let Some(engine) = guard.as_mut() else {
 		return Err("asr_prepare has not run".into());
 	};
-	push_into(engine, &pcm).map_err(|e| format!("{e:#}"))
+	let echo_risk = state.speaking.load(std::sync::atomic::Ordering::Relaxed);
+	push_into(engine, &pcm, echo_risk).map_err(|e| format!("{e:#}"))
+}
+
+/// Tell the recognizer whether the assistant is currently audible.
+#[tauri::command]
+pub fn asr_output_active(state: State<'_, AsrState>, active: bool) {
+	state
+		.speaking
+		.store(active, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// The whole VAD + recognition step for one batch of audio.
 ///
 /// Split out of the command so the test can drive it with a recording — the
 /// only way to tell a broken recognizer apart from audio that never arrived.
-fn push_into(engine: &mut Engine, pcm: &[f32]) -> Result<AsrEvent> {
+fn push_into(engine: &mut Engine, pcm: &[f32], echo_risk: bool) -> Result<AsrEvent> {
+	let (threshold, to_open) = if echo_risk {
+		(ECHO_THRESHOLD, ECHO_START_WINDOWS)
+	} else {
+		(SPEECH_THRESHOLD, START_WINDOWS)
+	};
 	let mut event = AsrEvent::default();
 	engine.vad_buf.extend_from_slice(pcm);
 
@@ -246,7 +276,7 @@ fn push_into(engine: &mut Engine, pcm: &[f32]) -> Result<AsrEvent> {
 		let window: Vec<f32> = engine.vad_buf.drain(..VAD_WINDOW).collect();
 		let probability = engine.vad.predict(&window)?;
 		event.probability = event.probability.max(probability);
-		let speech = probability >= SPEECH_THRESHOLD;
+		let speech = probability >= threshold;
 
 		if speech {
 			engine.run_speech += 1;
@@ -256,7 +286,7 @@ fn push_into(engine: &mut Engine, pcm: &[f32]) -> Result<AsrEvent> {
 			engine.run_speech = 0;
 		}
 
-		if !engine.speaking && engine.run_speech >= START_WINDOWS {
+		if !engine.speaking && engine.run_speech >= to_open {
 			engine.speaking = true;
 			event.started = true;
 			engine.model.reset();
@@ -408,7 +438,7 @@ mod tests {
 		let started = std::time::Instant::now();
 		let mut transcript = String::new();
 		for batch in audio.chunks(2048) {
-			let event = push_into(&mut engine, batch).expect("push should succeed");
+			let event = push_into(&mut engine, batch, false).expect("push should succeed");
 			if event.started {
 				println!("  [vad] speech started");
 			}
@@ -419,7 +449,7 @@ mod tests {
 		}
 		// Trailing silence, so the closing threshold is actually reached.
 		for _ in 0..40 {
-			let event = push_into(&mut engine, &[0.0; 2048]).expect("push should succeed");
+			let event = push_into(&mut engine, &[0.0; 2048], false).expect("push should succeed");
 			if event.ended {
 				println!("  [vad] speech ended -> {:?}", event.transcript);
 				transcript = event.transcript;

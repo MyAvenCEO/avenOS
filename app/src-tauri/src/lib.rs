@@ -92,7 +92,8 @@ pub fn run() {
 			tts::tts_speak,
 			asr::asr_prepare,
 			asr::asr_push,
-			asr::asr_reset
+			asr::asr_reset,
+			asr::asr_output_active
 		])
 		.setup(|app| {
 			// The webview is the whole surface, so give it focus on launch —

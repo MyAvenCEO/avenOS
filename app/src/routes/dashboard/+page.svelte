@@ -70,6 +70,13 @@ onMount(() => {
 	return () => listener.stop()
 })
 
+// The recognizer needs to know when its own voice is in the room. Reading
+// `speaker.speaking` is the tracked dependency; `setOutputActive` writes no
+// reactive state, so this cannot feed back into itself.
+$effect(() => {
+	listener.setOutputActive(speaker.speaking)
+})
+
 /**
  * One state for the whole conversation, instead of one per component.
  *
