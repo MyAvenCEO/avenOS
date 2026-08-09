@@ -5,11 +5,11 @@ import { STATUS_LABEL } from './tools'
 /**
  * The todo list, hand-operable, in two shapes.
  *
- * Styled to the reference cards, deliberately more literally than the rest of
- * the app: white cards with soft diffuse shadows on a whisper-gray canvas,
- * vivid status colors (amber in progress, green complete), near-black type on
- * the system sans. The status colors are hardcoded here rather than drawn
- * from the brand tokens because matching the reference is the point.
+ * The reference cards' layout on the brand's palette: warm-white rounded
+ * cards with soft shadows floating on eggshell wells, the status drawn as a
+ * shape inside tinted pills, board cards carrying the Linear grammar — id
+ * line, title, chip row — all in the app's cream world rather than the
+ * reference's gray one.
  */
 const { todos }: { todos: Todos } = $props()
 
@@ -25,9 +25,9 @@ const COLUMNS: { status: TodoStatus; label: string }[] = [
 
 /** Pill colors per status, sampled from the reference. */
 const PILL: Record<TodoStatus, string> = {
-	open: 'bg-[#f2f3f5] text-[#8b8f98]',
-	doing: 'bg-[#fdf3e7] text-[#e28800]',
-	done: 'bg-[#e9f9ef] text-[#17a34a]'
+	open: 'bg-foreground/5 text-foreground/45',
+	doing: 'bg-status-info/20 text-[#a06818]',
+	done: 'bg-status-success/10 text-status-success'
 }
 
 const done = $derived(todos.visible.filter((t) => t.status === 'done').length)
@@ -100,8 +100,8 @@ function shift(id: string, by: -1 | 1) {
 		aria-label={todo.status === 'done' ? 'Wieder öffnen' : 'Abhaken'}
 		class="flex size-5 shrink-0 items-center justify-center rounded-full transition-colors {todo.status ===
 		'done'
-			? 'bg-[#1f2937]'
-			: 'border-[1.5px] border-[#d6d9de] hover:border-[#9aa0a9]'}"
+			? 'bg-primary'
+			: 'border-[1.5px] border-foreground/20 hover:border-foreground/40'}"
 	>
 		{#if todo.status === 'done'}
 			<svg viewBox="0 0 16 16" class="size-3" fill="none">
@@ -118,7 +118,7 @@ function shift(id: string, by: -1 | 1) {
 {/snippet}
 
 <div
-	class="flex min-h-0 flex-1 flex-col gap-4 rounded-3xl bg-[#f7f7f8] p-4 font-[-apple-system,BlinkMacSystemFont,'Inter','Segoe_UI',sans-serif] text-[#1a1d23] sm:p-5"
+	class="flex min-h-0 flex-1 flex-col gap-4 rounded-3xl bg-surface-soft p-4 font-[-apple-system,BlinkMacSystemFont,'Inter','Segoe_UI',sans-serif] text-foreground sm:p-5"
 >
 	<div class="flex items-center justify-between gap-3">
 		<h2 class="font-semibold text-[15px]">Aufgaben</h2>
@@ -126,9 +126,9 @@ function shift(id: string, by: -1 | 1) {
 		{#if todos.visible.length > 0}
 			<!-- The reference card's progress grammar: check, count, bar, percent. -->
 			<span
-				class="flex items-center gap-2.5 rounded-full bg-white px-3.5 py-1.5 text-[13px] shadow-[0_1px_3px_rgba(0,0,0,0.07)]"
+				class="flex items-center gap-2.5 rounded-full bg-[#fffdf7] px-3.5 py-1.5 text-[13px] shadow-[0_1px_3px_rgba(30,41,59,0.08)]"
 			>
-				<svg viewBox="0 0 16 16" class="size-4 text-[#b3b8c0]" fill="none">
+				<svg viewBox="0 0 16 16" class="size-4 text-foreground/30" fill="none">
 					<circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.5" />
 					<path
 						d="M5.4 8.2 L7.2 10 L10.8 6.2"
@@ -139,13 +139,13 @@ function shift(id: string, by: -1 | 1) {
 					/>
 				</svg>
 				<span class="font-medium">{done} von {todos.visible.length}</span>
-				<span class="h-1.5 w-24 overflow-hidden rounded-full bg-[#e9eaec]">
+				<span class="h-1.5 w-24 overflow-hidden rounded-full bg-foreground/10">
 					<span
-						class="block h-full rounded-full bg-[#22c55e] transition-[width]"
+						class="block h-full rounded-full bg-status-success transition-[width]"
 						style="width: {pct}%"
 					></span>
 				</span>
-				<span class="text-[#8b8f98]">{pct}%</span>
+				<span class="text-foreground/40">{pct}%</span>
 			</span>
 		{/if}
 		<span class="flex-1"></span>
@@ -154,7 +154,7 @@ function shift(id: string, by: -1 | 1) {
 		     is a conversation move — "zeig mir das Board", "zeig die Team-Liste" —
 		     handled by the todo_show tool, never by a button. -->
 		<span
-			class="rounded-full bg-white px-3 py-1.5 text-[#8b8f98] text-xs shadow-[0_1px_3px_rgba(0,0,0,0.07)]"
+			class="rounded-full bg-[#fffdf7] px-3 py-1.5 text-foreground/40 text-xs shadow-[0_1px_3px_rgba(30,41,59,0.08)]"
 		>
 			{SPARKS.find((s) => s.id === todos.active)?.name}
 			·
@@ -166,7 +166,7 @@ function shift(id: string, by: -1 | 1) {
 		<input
 			bind:value={newTodo}
 			placeholder="Aufgabe hinzufügen…"
-			class="w-full rounded-xl border border-black/5 bg-white px-4 py-2.5 text-sm shadow-[0_1px_3px_rgba(0,0,0,0.05)] outline-none transition-shadow placeholder:text-[#b3b8c0] focus:shadow-[0_1px_3px_rgba(0,0,0,0.07),0_0_0_3px_rgba(31,41,55,0.06)]"
+			class="w-full rounded-xl border border-foreground/5 bg-[#fffdf7] px-4 py-2.5 text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none transition-shadow placeholder:text-foreground/30 focus:shadow-[0_1px_3px_rgba(30,41,59,0.07),0_0_0_3px_rgba(30,41,59,0.06)]"
 		>
 	</form>
 
@@ -174,13 +174,13 @@ function shift(id: string, by: -1 | 1) {
 		<ul class="min-h-0 flex-1 space-y-2 overflow-y-auto">
 			{#each todos.visible as todo (todo.id)}
 				<li
-					class="group flex items-center gap-3 rounded-2xl border border-black/5 bg-white px-4 py-3 text-sm shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-[0_2px_6px_rgba(0,0,0,0.08),0_8px_20px_rgba(0,0,0,0.06)]"
+					class="group flex items-center gap-3 rounded-2xl border border-foreground/5 bg-[#fffdf7] px-4 py-3 text-sm shadow-[0_1px_3px_rgba(30,41,59,0.06),0_4px_12px_rgba(30,41,59,0.04)] transition-shadow hover:shadow-[0_2px_6px_rgba(30,41,59,0.08),0_8px_20px_rgba(30,41,59,0.06)]"
 				>
 					{@render check(todo)}
 					<span
-						class="flex-1 font-medium leading-snug"
-						class:line-through={todo.status === 'done'}
-						class:text-[#b3b8c0]={todo.status === 'done'}
+						class="flex-1 font-medium leading-snug {todo.status === 'done'
+							? 'text-foreground/30 line-through'
+							: ''}"
 					>
 						{todo.title}
 					</span>
@@ -200,14 +200,14 @@ function shift(id: string, by: -1 | 1) {
 					<button
 						type="button"
 						onclick={() => todos.remove(todo.id)}
-						class="shrink-0 text-[#b3b8c0] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[#1a1d23]"
+						class="shrink-0 text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
 						aria-label="Löschen"
 					>
 						×
 					</button>
 				</li>
 			{:else}
-				<li class="pt-8 text-center text-[#b3b8c0] text-[13px]">
+				<li class="pt-8 text-center text-[13px] text-foreground/30">
 					Noch nichts. Sag zum Beispiel „setz Milch kaufen auf die Liste“.
 				</li>
 			{/each}
@@ -217,8 +217,8 @@ function shift(id: string, by: -1 | 1) {
 			{#each COLUMNS as column (column.status)}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="flex min-h-0 flex-col gap-2.5 rounded-2xl bg-[#eff0f2] p-2.5 transition-colors {dragging
-						? 'bg-[#e9ebee]'
+					class="flex min-h-0 flex-col gap-2.5 rounded-2xl bg-surface-card-selected/70 p-2.5 transition-colors {dragging
+						? 'bg-surface-card-selected'
 						: ''}"
 					ondragover={(e) => e.preventDefault()}
 					ondrop={() => drop(column.status)}
@@ -226,21 +226,22 @@ function shift(id: string, by: -1 | 1) {
 					<div class="flex items-center gap-2 px-1.5 pt-0.5">
 						<span
 							class={column.status === 'open'
-								? 'text-[#8b8f98]'
+								? 'text-foreground/35'
 								: column.status === 'doing'
-									? 'text-[#e28800]'
-									: 'text-[#22c55e]'}
+									? 'text-[#a06818]'
+									: 'text-status-success'}
 						>
 							{@render glyph(column.status)}
 						</span>
-						<h3 class="font-medium text-[#5c616b] text-[13px]">{column.label}</h3>
-						<span class="ml-auto text-[#b3b8c0] text-xs">
+						<h3 class="font-medium text-[13px] text-foreground/60">{column.label}</h3>
+						<span class="ml-auto text-foreground/30 text-xs">
 							{todos.visible.filter((t) => t.status === column.status).length}
 						</span>
 					</div>
 
 					<ul class="min-h-0 flex-1 space-y-2 overflow-y-auto">
 						{#each todos.visible.filter((t) => t.status === column.status) as todo (todo.id)}
+							{@const spark = SPARKS.find((sp) => sp.id === todo.spark)}
 							<li
 								draggable="true"
 								ondragstart={() => {
@@ -249,44 +250,60 @@ function shift(id: string, by: -1 | 1) {
 								ondragend={() => {
 									dragging = null
 								}}
-								class="group cursor-grab rounded-xl border border-black/5 bg-white px-3.5 py-3 font-medium text-sm leading-snug shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-[0_2px_6px_rgba(0,0,0,0.08),0_8px_20px_rgba(0,0,0,0.06)] active:cursor-grabbing"
-								class:text-[#b3b8c0]={todo.status === 'done'}
+								class="group cursor-grab rounded-xl border border-foreground/5 bg-[#fffdf7] px-3.5 py-3 shadow-[0_1px_3px_rgba(30,41,59,0.06),0_4px_12px_rgba(30,41,59,0.04)] transition-shadow hover:shadow-[0_2px_6px_rgba(30,41,59,0.08),0_8px_20px_rgba(30,41,59,0.06)] active:cursor-grabbing"
 							>
-								<div class="flex items-start gap-2">
-									<span class="flex-1" class:line-through={todo.status === 'done'}>
-										{todo.title}
-									</span>
+								<!-- The reference card grammar: id line, then title, then chips. -->
+								<div class="flex items-center gap-1.5 text-foreground/35 text-xs">
+									{@render glyph(todo.status)}
+									<span class="font-mono uppercase">{todo.id.slice(0, 6)}</span>
 									<button
 										type="button"
 										onclick={() => todos.remove(todo.id)}
-										class="shrink-0 text-[#b3b8c0] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[#1a1d23]"
+										class="ml-auto opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
 										aria-label="Löschen"
 									>
 										×
 									</button>
 								</div>
-								<!-- Arrows for mouse-less moves; drag works too. -->
+
 								<div
-									class="flex justify-between pt-1.5 text-[#b3b8c0] opacity-0 transition-opacity group-hover:opacity-100"
+									class="py-1.5 font-medium text-sm leading-snug {todo.status === 'done'
+										? 'text-foreground/30 line-through'
+										: ''}"
 								>
-									<button
-										type="button"
-										onclick={() => shift(todo.id, -1)}
-										disabled={column.status === 'open'}
-										class="px-1 hover:text-[#1a1d23] disabled:invisible"
-										aria-label="Nach links"
+									{todo.title}
+								</div>
+
+								<div class="flex items-center gap-1.5">
+									<span
+										class="flex items-center gap-1.5 rounded-md border border-foreground/10 px-1.5 py-0.5 text-foreground/60 text-xs"
 									>
-										‹
-									</button>
-									<button
-										type="button"
-										onclick={() => shift(todo.id, 1)}
-										disabled={column.status === 'done'}
-										class="px-1 hover:text-[#1a1d23] disabled:invisible"
-										aria-label="Nach rechts"
+										<span class="size-1.5 rounded-full" style="background: {spark?.color}"></span>
+										{spark?.name}
+									</span>
+									<!-- Arrows for mouse-less moves; drag works too. -->
+									<span
+										class="ml-auto flex gap-0.5 text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100"
 									>
-										›
-									</button>
+										<button
+											type="button"
+											onclick={() => shift(todo.id, -1)}
+											disabled={column.status === 'open'}
+											class="px-1 hover:text-foreground disabled:invisible"
+											aria-label="Nach links"
+										>
+											‹
+										</button>
+										<button
+											type="button"
+											onclick={() => shift(todo.id, 1)}
+											disabled={column.status === 'done'}
+											class="px-1 hover:text-foreground disabled:invisible"
+											aria-label="Nach rechts"
+										>
+											›
+										</button>
+									</span>
 								</div>
 							</li>
 						{/each}

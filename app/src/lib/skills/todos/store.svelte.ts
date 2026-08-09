@@ -24,11 +24,13 @@ export type TodoStatus = 'open' | 'doing' | 'done'
 export interface Spark {
 	id: string
 	name: string
+	/** The spark's dot color, used wherever a todo is labeled with its spark. */
+	color: string
 }
 
 export const SPARKS: Spark[] = [
-	{ id: 'me', name: 'Me' },
-	{ id: 'team', name: 'Team' }
+	{ id: 'me', name: 'Me', color: '#d4a373' },
+	{ id: 'team', name: 'Team', color: '#7e6ead' }
 ]
 
 export interface Todo {
