@@ -139,6 +139,41 @@ const phase = $derived.by(() => {
 })
 
 let draft = $state('')
+/** Flips briefly after an export so the button itself confirms the copy. */
+let exported = $state(false)
+
+/**
+ * The session as JSON on the clipboard — model, the exact wire messages
+ * (tool_calls, arguments, results by id), and the rendered turns. Made to be
+ * pasted into a debugging session when a flow went sideways, so the fix can
+ * start from what the model actually saw instead of a retelling.
+ */
+async function exportLog() {
+	const log = JSON.stringify(
+		{
+			model: 'qwen/qwen3.5-122b-a10b',
+			exportedAt: new Date().toISOString(),
+			...(chat.export() as object)
+		},
+		null,
+		2
+	)
+	try {
+		await navigator.clipboard.writeText(log)
+	} catch {
+		// Clipboard denied (unfocused window, old webview) — download instead.
+		const url = URL.createObjectURL(new Blob([log], { type: 'application/json' }))
+		const a = document.createElement('a')
+		a.href = url
+		a.download = 'aven-chat-log.json'
+		a.click()
+		URL.revokeObjectURL(url)
+	}
+	exported = true
+	setTimeout(() => {
+		exported = false
+	}, 2000)
+}
 let log: HTMLDivElement | null = $state(null)
 let form: HTMLFormElement | null = $state(null)
 
@@ -181,6 +216,11 @@ $effect(() => {
 			<span>qwen3.5-122b-a10b</span>
 
 			{#if chat.turns.length > 0}
+				<!-- Everything the model saw and did, as JSON — for pasting into a
+				     debugging session when a flow went sideways. -->
+				<button type="button" class="underline underline-offset-4" onclick={exportLog}>
+					{exported ? 'Kopiert' : 'Export'}
+				</button>
 				<button
 					type="button"
 					class="underline underline-offset-4"

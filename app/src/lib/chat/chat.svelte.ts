@@ -300,6 +300,23 @@ export class Chat {
 		return asked
 	}
 
+	/**
+	 * The whole conversation as one JSON document, for pasting into a debugging
+	 * session.
+	 *
+	 * `wire` is the part that matters: the exact messages the model saw and
+	 * produced — system prompt, tool_calls with their raw arguments, tool
+	 * results by id. The rendered `turns` ride along so the human-visible side
+	 * (including what the stream guards cut) can be compared against it.
+	 */
+	export(): unknown {
+		return {
+			wire: this.#wire,
+			turns: this.turns,
+			failure: this.failure
+		}
+	}
+
 	/** Stop mid-reply. Whatever has arrived so far stays on screen. */
 	stop(): void {
 		this.#abort?.abort()
