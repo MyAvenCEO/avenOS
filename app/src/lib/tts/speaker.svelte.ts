@@ -43,6 +43,16 @@ export class Speaker {
 	#pending = ''
 	#queue: string[] = []
 	#draining = false
+	/**
+	 * Bumped by every `silence()`.
+	 *
+	 * Synthesis is a round trip to Rust, so at any moment a sentence may be
+	 * half-made. Checking a boolean after the await was not enough — `#draining`
+	 * stays true for the whole loop — so an interrupted sentence still arrived
+	 * and played a moment later, over the top of whatever was said next. Work
+	 * started under an older generation is discarded instead.
+	 */
+	#generation = 0
 	#current: AudioBufferSourceNode | null = null
 
 	constructor() {
@@ -125,6 +135,7 @@ export class Speaker {
 		this.#pending = ''
 		this.#current?.stop()
 		this.#current = null
+		this.#generation++
 		// Nothing is coming out of the speakers now, so say so immediately rather
 		// than waiting for the drain loop to unwind. The recognizer raises its
 		// threshold while this is true — leaving it set after a barge-in left it
@@ -147,7 +158,8 @@ export class Speaker {
 		this.speaking = true
 
 		try {
-			while (this.#queue.length > 0) {
+			const generation = this.#generation
+			while (this.#queue.length > 0 && generation === this.#generation) {
 				const next = this.#queue.shift()
 				if (next === undefined) break
 				await this.#say(next)
@@ -165,15 +177,17 @@ export class Speaker {
 		// somehow arrives first still gets a context rather than being dropped.
 		this.#context ??= new AudioContext()
 		const context = this.#context
+		const generation = this.#generation
 
 		// The command answers with a WAV as raw bytes rather than a JSON array of
 		// a few hundred thousand floats, so decoding is the browser's own job.
 		const wav = await invoke<ArrayBuffer>('tts_speak', { text, lang: 'de' })
+		if (generation !== this.#generation) return
 		const buffer = await context.decodeAudioData(wav)
 
-		// `silence()` may have fired while we were synthesizing; don't start a
-		// clip the user has already cancelled.
-		if (!this.#draining) return
+		// Interrupted while this was being made. Play it and the user would hear
+		// the sentence they just talked over.
+		if (generation !== this.#generation) return
 
 		await new Promise<void>((resolve) => {
 			const source = context.createBufferSource()

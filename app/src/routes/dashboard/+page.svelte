@@ -45,10 +45,12 @@ const listener = new Listener({
 	// transcribed — which is the only way interrupting feels like interrupting
 	// a person rather than cancelling a download.
 	onSpeechStart: () => {
-		if (speaker.speaking || chat.streaming) {
-			speaker.silence()
-			chat.stop()
-		}
+		// Unconditional. Both are no-ops when idle, and the conditional version
+		// could miss the window where a reply is streaming but the first sentence
+		// has not reached the speaker yet — talking there left the request running
+		// and the answer arrived anyway, on top of whatever was said next.
+		speaker.silence()
+		chat.stop()
 	},
 	// A finished utterance is just a message. No send button in the loop.
 	onUtterance: (text) => {

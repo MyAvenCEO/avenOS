@@ -103,7 +103,17 @@ export class Chat {
 			}
 			this.#sink.onDone?.()
 		} catch (err) {
-			if (!this.#abort?.signal.aborted) {
+			if (this.#abort?.signal.aborted) {
+				// Interrupted. The assistant turn still has to go into the history,
+				// even half-finished: the stream threw before `#round` could record
+				// it, which would leave two user turns back to back — the malformed
+				// shape that makes this model start improvising around the hole.
+				this.#wire.push({
+					role: 'assistant',
+					content: reply.content || '(unterbrochen)'
+				})
+				if (reply.content === '') this.turns = this.turns.filter((t) => t.id !== replyId)
+			} else {
 				this.failure = err instanceof Error ? err.message : String(err)
 				// Drop the stub rather than leaving an empty bubble behind. A reply
 				// that got partway through is kept — it is still worth reading.
