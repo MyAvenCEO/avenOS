@@ -269,19 +269,6 @@ $effect(() => {
 		class="mx-auto w-full max-w-lg rounded-2xl border border-border bg-surface-card px-5 py-3"
 		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
 	>
-		{#if chat.turns.length === 0}
-			<div class="pb-3 text-center">
-				{#if listener.status === 'listening'}
-					<p class="text-base">Sprich einfach los.</p>
-					<p class="pt-1 text-xs opacity-40">
-						Das Mikrofon ist offen. Du kannst mich jederzeit unterbrechen.
-					</p>
-				{:else}
-					<p class="text-sm opacity-40">Schreib etwas.</p>
-				{/if}
-			</div>
-		{/if}
-
 		<div class="flex items-center justify-center gap-2.5 text-sm">
 			<!-- While listening the dot follows the microphone level, so a dead
 			     input is visible as a dot that never moves. -->
@@ -308,19 +295,6 @@ $effect(() => {
 					)}%"
 				></div>
 			</div>
-		{:else if listener.status === 'listening'}
-			<!-- Kept visible so a dead microphone can be told from a deaf
-			     recognizer without attaching a debugger. -->
-			<p class="mt-2 text-center font-mono text-[10px] opacity-25">
-				{listener.rate}
-				Hz · Pegel {listener.level.toFixed(3)} · Sprache
-				{listener.probability.toFixed(
-					2
-				)}
-				· {listener.pushes} Blöcke{listener.dropped > 0
-					? ` · ${listener.dropped} verworfen`
-					: ''}
-			</p>
 		{/if}
 	</div>
 

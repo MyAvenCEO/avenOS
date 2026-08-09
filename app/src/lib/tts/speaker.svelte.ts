@@ -125,6 +125,12 @@ export class Speaker {
 		this.#pending = ''
 		this.#current?.stop()
 		this.#current = null
+		// Nothing is coming out of the speakers now, so say so immediately rather
+		// than waiting for the drain loop to unwind. The recognizer raises its
+		// threshold while this is true — leaving it set after a barge-in left it
+		// demanding 0.92 for eight straight windows, which ordinary speech does
+		// not sustain, and it simply stopped hearing anything.
+		this.speaking = false
 	}
 
 	#enqueue(text: string): void {
