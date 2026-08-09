@@ -3,9 +3,10 @@ import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
 import { Listener } from '$lib/asr/listener.svelte'
 import { Chat } from '$lib/chat/chat.svelte'
-import { ACTIVITY_LABELS, summarize, ToolActivity } from '$lib/todos/activity.svelte'
-import { Todos } from '$lib/todos/store.svelte'
-import { describeResult, runTodoTool, TODO_TOOLS } from '$lib/todos/tools'
+import type { Activity } from '$lib/skills/activity.svelte'
+import { ACTIVITY_LABELS, ToolActivity } from '$lib/skills/activity.svelte'
+import { TodosSkill } from '$lib/skills/todos'
+import TodosView from '$lib/skills/todos/TodosView.svelte'
 import { Speaker } from '$lib/tts/speaker.svelte'
 
 /**
@@ -19,11 +20,28 @@ import { Speaker } from '$lib/tts/speaker.svelte'
 
 const speaker = new Speaker()
 
-// Every delta goes to the bubble and to the speaker at the same time, so the
-// first sentence is usually being read out while the model is still writing.
-const todos = new Todos()
+/**
+ * The skill registry. Each skill is a self-contained tool cluster in its own
+ * folder under lib/skills — tools, executor, result language, view. The
+ * dashboard only composes: tool specs concatenate, a call is offered to each
+ * skill until one claims it, and every skill is a tab.
+ */
+const todosSkill = new TodosSkill()
+const skills = [todosSkill]
+
 const activity = new ToolActivity()
 
+/** The one place a call name is resolved to the skill that owns it. */
+function summarizeCall(name: string, result: string): Omit<Activity, 'id'> | null {
+	for (const skill of skills) {
+		const entry = skill.summarize(name, result)
+		if (entry) return entry
+	}
+	return null
+}
+
+// Every delta goes to the bubble and to the speaker at the same time, so the
+// first sentence is usually being read out while the model is still writing.
 const chat = new Chat(
 	{
 		onDelta: (text) => speaker.feed(text),
@@ -31,31 +49,34 @@ const chat = new Chat(
 		// Tool calls mean the real answer is still coming; unsay the placeholder.
 		onRestart: () => speaker.silence()
 	},
-	// The model manages the same list the buttons below do — there is no second
-	// copy of the todos anywhere, which is what makes voice and mouse agree.
+	// The model manages the same stores the skill views do — there is no second
+	// copy of anything, which is what makes voice and mouse agree.
 	{
-		specs: TODO_TOOLS,
+		specs: skills.flatMap((skill) => skill.tools),
 		run: (name, args) => {
-			const result = runTodoTool(todos, name, args)
-			// Summarized from the result, not the request — what the list did, not
-			// what the model asked for.
-			activity.record(name, result)
-			// The model gets prose, not JSON. Braces fed back into the history are a
-			// pattern it falls into instead of answering; the transcript keeps the
-			// structured result.
-			return { record: result, wire: describeResult(result) }
+			for (const skill of skills) {
+				const result = skill.run(name, args)
+				if (result) {
+					// Summarized from the result, not the request — what actually
+					// happened, not what the model asked for.
+					activity.show(skill.summarize(name, result.record))
+					return result
+				}
+			}
+			return {
+				record: JSON.stringify({ ok: false, error: `unbekanntes Werkzeug ${name}` }),
+				wire: `unbekanntes Werkzeug ${name}`
+			}
 		}
 	}
 )
 
-let newTodo = $state('')
-
-function addTodo(event: SubmitEvent) {
-	event.preventDefault()
-	if (newTodo.trim() === '') return
-	todos.create(newTodo)
-	newTodo = ''
-}
+/**
+ * Which surface fills the middle of the screen: a skill's view, or the
+ * conversation. The skills are the workspace and the chat is how work gets
+ * asked for, so the first skill is the default.
+ */
+let tab = $state<string>('todos')
 
 const listener = new Listener({
 	// Barge-in. This fires on voice activity alone, ~64ms in, with nothing yet
@@ -210,8 +231,28 @@ $effect(() => {
 </svelte:head>
 
 <main class="mx-auto flex h-dvh max-w-6xl flex-col gap-4 p-4 pb-2 sm:p-6 sm:pb-3">
-	<header class="flex items-baseline justify-between gap-4">
+	<header class="relative flex items-center justify-between gap-4">
 		<h1 class="text-2xl">Dashboard</h1>
+
+		<!-- Compact tabs, dead centre: one per skill, plus the conversation. -->
+		<nav
+			class="-translate-x-1/2 absolute left-1/2 flex gap-0.5 rounded-full border border-border p-0.5 text-xs"
+		>
+			{#each [...skills.map((s) => ({ id: s.id, label: s.label })), { id: 'chat', label: 'Chat' }] as t (t.id)}
+				<button
+					type="button"
+					onclick={() => {
+						tab = t.id
+					}}
+					class="rounded-full px-3 py-1 transition-colors {tab === t.id
+						? 'bg-primary text-primary-foreground'
+						: 'opacity-60 hover:opacity-100'}"
+				>
+					{t.label}
+				</button>
+			{/each}
+		</nav>
+
 		<div class="flex items-center gap-3 text-xs opacity-50">
 			<span>qwen3.5-122b-a10b</span>
 
@@ -238,14 +279,14 @@ $effect(() => {
 		</div>
 	</header>
 
-	<div class="flex min-h-0 flex-1 gap-6">
+	{#if tab === 'chat'}
 		<div bind:this={log} class="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
 			{#each chat.turns as turn (turn.id)}
 				<div class="flex flex-col gap-1" class:items-end={turn.role === 'user'}>
 					<!-- What the turn's tools actually did, kept with the reply they
-					     produced. The toast is the glance; this is the record. -->
+				     produced. The toast is the glance; this is the record. -->
 					{#each turn.calls ?? [] as call, i (i)}
-						{@const entry = summarize(call.name, call.result)}
+						{@const entry = summarizeCall(call.name, call.result)}
 						{#if entry}
 							<div class="flex gap-2 pl-1 text-xs opacity-60">
 								<span
@@ -258,10 +299,10 @@ $effect(() => {
 								<span class="min-w-0">
 									{ACTIVITY_LABELS[entry.kind].label}
 									{entry.titles.length > 0
-										? `: ${entry.titles.join(', ')}`
-										: entry.note
-											? ` · ${entry.note}`
-											: ''}
+									? `: ${entry.titles.join(', ')}`
+									: entry.note
+										? ` · ${entry.note}`
+										: ''}
 								</span>
 							</div>
 						{/if}
@@ -276,7 +317,7 @@ $effect(() => {
 					>
 						{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
 							<!-- Thinking. Three dots breathing in sequence, not a frozen
-							     ellipsis that reads as a hung reply. -->
+						     ellipsis that reads as a hung reply. -->
 							<span class="flex items-center gap-1 py-1.5" aria-label="Denkt nach">
 								<span class="size-1.5 animate-bounce rounded-full bg-current opacity-40"></span>
 								<span
@@ -294,7 +335,7 @@ $effect(() => {
 			{/each}
 
 			<!-- What is being heard right now, before the utterance closes. Sits where
-		     the user bubble will land so the text does not jump when it does. -->
+	     the user bubble will land so the text does not jump when it does. -->
 			{#if listener.partial !== ''}
 				<div class="flex justify-end">
 					<div
@@ -313,63 +354,11 @@ $effect(() => {
 				</p>
 			{/if}
 		</div>
-
-		<!-- The same list the model edits. Voice and mouse are the same operations
-	     on the same store, so a spoken todo and a typed one are indistinguishable. -->
-		<aside class="flex w-72 min-h-0 flex-col gap-3">
-			<div class="flex items-baseline justify-between">
-				<h2 class="text-sm">Aufgaben</h2>
-				<span class="text-xs opacity-40">
-					{todos.open.length}
-					offen{todos.items.length > todos.open.length
-					? ` · ${todos.items.length - todos.open.length} erledigt`
-					: ''}
-				</span>
-			</div>
-
-			<form onsubmit={addTodo}>
-				<input
-					bind:value={newTodo}
-					placeholder="Aufgabe hinzufügen…"
-					class="w-full rounded-full border border-border bg-input px-4 py-2 text-sm outline-none focus:border-primary-soft"
-				>
-			</form>
-
-			<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
-				{#each todos.items as todo (todo.id)}
-					<li
-						class="group flex items-center gap-2 rounded-xl border border-border bg-surface-card px-3 py-2 text-sm"
-					>
-						<input
-							type="checkbox"
-							checked={todo.done}
-							onchange={() => todos.toggle(todo.id)}
-							class="size-3.5 shrink-0 accent-primary"
-						>
-						<span
-							class="flex-1 leading-snug"
-							class:line-through={todo.done}
-							class:opacity-40={todo.done}
-						>
-							{todo.title}
-						</span>
-						<button
-							type="button"
-							onclick={() => todos.remove(todo.id)}
-							class="shrink-0 opacity-0 transition-opacity group-hover:opacity-40 hover:!opacity-100"
-							aria-label="Löschen"
-						>
-							×
-						</button>
-					</li>
-				{:else}
-					<li class="pt-6 text-center text-xs opacity-40">
-						Noch nichts. Sag zum Beispiel „setz Milch kaufen auf die Liste“.
-					</li>
-				{/each}
-			</ul>
-		</aside>
-	</div>
+	{:else if tab === 'todos'}
+		<div class="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col">
+			<TodosView todos={todosSkill.store} />
+		</div>
+	{/if}
 
 	<!-- What the tools just did, as a toast. One at a time, three seconds: a
 	     glance to confirm the list changed the way you meant, not a log to read.
