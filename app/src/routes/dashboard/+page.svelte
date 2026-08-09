@@ -5,9 +5,10 @@ import ActorExplorer from '$lib/actors/ActorExplorer.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
 import { bus } from '$lib/actors/bus'
 import { chatActor, summarizeCall } from '$lib/actors/chat.actor.svelte'
-import { facesBound } from '$lib/actors/faces'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
+import { isWindow } from '$lib/actors/window.actor.svelte'
+import { windowsBound } from '$lib/actors/windows'
 import { workItems } from '$lib/actors/workitems.svelte'
 
 /**
@@ -297,14 +298,19 @@ $effect(() => {
 			<ActorExplorer />
 		</div>
 	{:else}
-		<!-- Views, derived from the registry: every actor that carries a face
-		     renders it here. Nothing is listed by hand — register an actor with
-		     a face and it appears (facesBound imports the bindings). -->
+		<!-- Views, derived from the registry: every OPEN window actor renders
+		     its component over its subject's state. Windows are actors — the
+		     model toggles them by message, the explorer interviews them.
+		     (windowsBound imports the bindings.) -->
 		<div class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-4">
-			{#if facesBound}
-				{#each bus.actors().filter((a) => a.face) as a (a.manifest.id)}
-					{@const Face = a.face as import('svelte').Component<{ actor: typeof a }>}
-					<Face actor={a} />
+			{#if windowsBound}
+				{#each bus.actors().filter(isWindow).filter((w) => w.open) as w (w.manifest.id)}
+					{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
+					<Face actor={w.subject} />
+				{:else}
+					<p class="pt-10 text-center text-foreground/40 text-sm">
+						Alle Fenster sind ausgeblendet. Sag zum Beispiel „zeig das Aufgaben-Fenster".
+					</p>
 				{/each}
 			{/if}
 		</div>

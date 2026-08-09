@@ -2,6 +2,7 @@
 import ActorGraph from './ActorGraph.svelte'
 import { type Actor, functor } from './actor'
 import { bus, type ProofStep } from './bus'
+import { isWindow } from './window.actor.svelte'
 
 /**
  * The actor explorer: every actor in the registry on the left, everything
@@ -401,27 +402,47 @@ async function ask(event: SubmitEvent) {
 			<div class="flex items-center gap-2 pb-1">
 				<h3 class="font-semibold text-sm">Face</h3>
 				<span
-					class="size-1.5 rounded-full {selected.face ? 'bg-status-success' : 'bg-foreground/20'}"
+					class="size-1.5 rounded-full {isWindow(selected) ? 'bg-status-success' : 'bg-foreground/20'}"
 				></span>
 			</div>
-			{#if selected.face}
-				{@const Face = selected.face as import('svelte').Component<{ actor: typeof selected }>}
+			{#if isWindow(selected)}
+				{@const Face = selected.component as import('svelte').Component<{
+					actor: typeof selected.subject
+				}>}
 				<p class="pb-2 text-[0.6875rem] text-foreground/40">
-					Dieser Actor malt sein eigenes Fenster — dieselbe Komponente, die der Views-Tab aus der
-					Registry ableitet, hier live auf demselben Zustand:
+					Dieses Fenster ist selbst ein Actor: es konsumiert den Zustand von
+					{selected.subject.manifest.name}
+					und malt ihn — hier live:
 				</p>
 				<details>
 					<summary class="cursor-pointer text-foreground/50 text-xs hover:text-foreground/80">
-						Face einblenden
+						Fenster einblenden
 					</summary>
 					<div class="mt-2 max-h-80 overflow-y-auto rounded-xl border border-foreground/10 p-3">
-						<Face actor={selected} />
+						<Face actor={selected.subject} />
 					</div>
 				</details>
 			{:else}
-				<p class="text-foreground/40 text-sm">
-					Kein Face — dieser Actor arbeitet unsichtbar; sein Zustand ist trotzdem oben ablesbar.
-				</p>
+				{@const win = bus.actors().filter(isWindow).find((a) => a.subject === selected)}
+				{#if win}
+					<p class="text-foreground/40 text-sm">
+						Dieser Actor malt nicht selbst — sein Fenster ist ein eigener Actor:
+						<button
+							type="button"
+							onclick={() => {
+								selected = win
+								answer = ''
+							}}
+							class="underline underline-offset-4 hover:text-foreground"
+						>
+							{win.manifest.name}
+						</button>
+					</p>
+				{:else}
+					<p class="text-foreground/40 text-sm">
+						Kein Fenster — dieser Actor arbeitet unsichtbar; sein Zustand ist oben ablesbar.
+					</p>
+				{/if}
 			{/if}
 		</section>
 

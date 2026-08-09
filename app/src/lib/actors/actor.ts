@@ -79,14 +79,6 @@ export function manifestProse(m: Manifest): string {
 export class Actor {
 	readonly manifest: Manifest
 	#handlers: Record<string, Handler>
-	/**
-	 * The actor's face — the UI component that renders it, colocated with the
-	 * actor the way Abject gives every object its own window. Views are
-	 * derived from the registry: an actor with a face appears on the Views
-	 * surface, one without doesn't. Typed loosely because Svelte component
-	 * variance fights any precise annotation; the render site casts.
-	 */
-	face?: unknown
 	/** Supervision bookkeeping: how often handlers died, and the last reason. */
 	failures = 0
 	lastError: string | null = null
