@@ -26,16 +26,16 @@ const SYSTEM_PROMPT =
 	'Dein erster Satz ist immer sehr kurz, höchstens fünf Wörter, und endet mit ' +
 	'einem Punkt. Alles Weitere kommt in den Sätzen danach. ' +
 	'Handle sofort: rufe die Werkzeuge im selben Zug auf, in dem du von einer ' +
-	'Änderung erfährst. Sage niemals, dass du etwas notiert hast, gleich anlegst ' +
-	'oder dich darum kümmerst — entweder du hast das Werkzeug aufgerufen und ' +
-	'bestätigst das Ergebnis, oder du stellst eine kurze Rückfrage. Ein „habe ich ' +
-	'notiert" ohne Werkzeugaufruf ist eine Lüge. ' +
+	'Änderung erfährst, und mehrere Aufgaben immer in einem einzigen Aufruf. ' +
+	'Nach den Werkzeugen antwortest du dem Menschen wie in einem Gespräch: kurz ' +
+	'sagen, was jetzt Sache ist — „Erledigt. Milch steht auf der Liste." oder ' +
+	'„Alles klar, beide sind abgehakt." Sprich nie über Werkzeuge, ids, ' +
+	'Bestätigungen oder Aktionen; ids sind rein intern und werden nie vorgelesen. ' +
 	'Jede Aufgabe ist ein eigener Eintrag mit kurzem Titel — hänge nie mehrere ' +
 	'Dinge an einen bestehenden Titel an. „Vier gesunde Zutaten" heißt: vier ' +
 	'einzelne Aufgaben, die du dir selbst ausdenkst. ' +
-	'Aufgaben werden immer über ihre id angesprochen, nie über den Titel — rufe ' +
+	'Aufgaben werden über ihre id angesprochen, nie über den Titel — rufe ' +
 	'todo_list auf, bevor du etwas änderst, löschst oder über die Liste sprichst. ' +
-	'Mehrere Aufgaben immer in einem einzigen Aufruf. ' +
 	'Sagt jemand, etwas sei erledigt, rufe todo_update mit done=true auf; gelöscht ' +
 	'wird nur auf ausdrücklichen Wunsch. Lies Listen als Fließtext vor. ' +
 	'Die Nachrichten kommen aus einer Spracherkennung und sind manchmal mitten im ' +
@@ -174,9 +174,14 @@ export class Chat {
 			for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
 				const calls = await this.#round(reply)
 				if (calls.length === 0) {
-					// Said it did something, called nothing. Once per turn, the claim
-					// is bounced back as an instruction to actually do it.
-					if (!nudged && CLAIMS_ACTION.test(reply.content)) {
+					// Said it did something, called nothing — in the WHOLE turn. The
+					// round alone is the wrong scope: the natural closing sentence
+					// after a successful tool round ("Fenster öffnen ist abgehakt.")
+					// names the action too, and bouncing that accused the model of
+					// lying right after it did the work — to which it answered ever
+					// more defensively ("wurde bereits ausgeführt, wie die IDs
+					// zeigen"). Only a turn that ran nothing at all gets the nudge.
+					if (!nudged && (reply.calls?.length ?? 0) === 0 && CLAIMS_ACTION.test(reply.content)) {
 						nudged = true
 						reply.content = ''
 						this.#sink.onRestart?.()
