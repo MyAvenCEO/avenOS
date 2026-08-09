@@ -84,7 +84,7 @@ pub fn run() {
 		// On-device German speech. The engine is built lazily on first use, so
 		// this costs nothing for a session that never turns the voice on.
 		.manage(tts::TtsState::default())
-		.invoke_handler(tauri::generate_handler![tts::tts_prepare, tts::tts_speak])
+		.invoke_handler(tauri::generate_handler![tts::tts_prepare, tts::tts_speak, tts::tts_voices])
 		.setup(|app| {
 			// The webview is the whole surface, so give it focus on launch —
 			// otherwise the first click is spent activating the window.

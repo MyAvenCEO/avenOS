@@ -62,6 +62,20 @@ $effect(() => {
 		<div class="flex items-center gap-3 text-xs opacity-50">
 			<span>phala/gemma-4-31b-it</span>
 
+			<!-- Audition any of the ten presets; picking one speaks a sample. -->
+			{#if speaker.voices.length > 0}
+				<select
+					value={speaker.voice}
+					onchange={(e) => speaker.audition(e.currentTarget.value)}
+					class="rounded-full border border-border bg-surface-card px-2 py-1 text-xs"
+					title="Supertonic-3 Stimme — Auswahl spricht eine Probe"
+				>
+					{#each speaker.voices as voice (voice)}
+						<option value={voice}>{voice}</option>
+					{/each}
+				</select>
+			{/if}
+
 			<!-- Passive status, not a switch: the voice is on wherever it can be. -->
 			{#if speaker.status !== 'unavailable'}
 				<span title="Supertonic-3 · Stimme M1 · deutsch, on-device (Rust/ONNX)">

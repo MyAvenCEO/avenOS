@@ -19,6 +19,7 @@
 
 mod supertonic;
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -41,10 +42,12 @@ const MODEL_FILES: &[&str] = &[
 const MODEL_BASE: &str = "https://huggingface.co/Supertone/supertonic-3/resolve/main/onnx";
 const VOICE_BASE: &str = "https://huggingface.co/Supertone/supertonic-3/resolve/main/voice_styles";
 
-/// M1 — the default male preset, and the voice picked for avenOS. The other
-/// nine (M2-M5, F1-F5) are the same download shape, so switching is a one-line
-/// change plus a file fetch.
-const VOICE: &str = "M1";
+/// The ten presets Supertonic publishes. Each is a single JSON file fetched on
+/// demand, so auditioning one costs ~290 KB rather than another model download.
+pub const VOICES: &[&str] = &["M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5"];
+
+/// M1 — the default, and the one avenOS speaks with unless asked otherwise.
+const DEFAULT_VOICE: &str = "M1";
 
 /// Denoising steps. Upstream's default; lower trades quality for latency.
 const TOTAL_STEPS: usize = 8;
@@ -62,7 +65,29 @@ pub struct TtsState {
 
 struct Engine {
 	tts: supertonic::TextToSpeech,
-	style: supertonic::Style,
+	/// Styles are cached per voice so switching back to one already auditioned
+	/// costs nothing. The ONNX sessions above are shared by all of them.
+	styles: HashMap<String, supertonic::Style>,
+	dir: PathBuf,
+}
+
+impl Engine {
+	/// Fetch and decode `voice` if it is not cached yet.
+	///
+	/// Deliberately returns nothing rather than a reference: the caller reads
+	/// `self.styles` and `self.tts` as separate fields, which the borrow checker
+	/// allows, whereas handing back a borrow of `self` would not.
+	fn ensure_style(&mut self, voice: &str) -> Result<()> {
+		if self.styles.contains_key(voice) {
+			return Ok(());
+		}
+		let path = self.dir.join(format!("{voice}.json"));
+		ensure_file(&format!("{VOICE_BASE}/{voice}.json"), &path)?;
+		let style = supertonic::load_voice_style(&[path.to_string_lossy().to_string()], false)
+			.with_context(|| format!("failed to load voice style {voice}"))?;
+		self.styles.insert(voice.to_string(), style);
+		Ok(())
+	}
 }
 
 /// Where models live. `AVEN_TTS_MODEL_DIR` overrides it, which is how a dev
@@ -105,26 +130,29 @@ fn ensure_file(url: &str, dest: &Path) -> Result<()> {
 	Ok(())
 }
 
-fn ensure_models(dir: &Path) -> Result<PathBuf> {
+fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
+	let dir = model_dir(app)?;
 	for name in MODEL_FILES {
 		ensure_file(&format!("{MODEL_BASE}/{name}"), &dir.join(name))?;
 	}
-	let voice = dir.join(format!("{VOICE}.json"));
-	ensure_file(&format!("{VOICE_BASE}/{VOICE}.json"), &voice)?;
-	Ok(voice)
+
+	let tts = supertonic::load_text_to_speech(&dir.to_string_lossy(), false)
+		.context("failed to open the Supertonic ONNX sessions")?;
+
+	let mut engine = Engine {
+		tts,
+		styles: HashMap::new(),
+		dir,
+	};
+	// Warm the default so the first sentence does not pay for a fetch.
+	engine.ensure_style(DEFAULT_VOICE)?;
+	Ok(engine)
 }
 
-fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
-	let dir = model_dir(app)?;
-	let voice_path = ensure_models(&dir)?;
-
-	let dir_str = dir.to_string_lossy().to_string();
-	let tts = supertonic::load_text_to_speech(&dir_str, false)
-		.context("failed to open the Supertonic ONNX sessions")?;
-	let style = supertonic::load_voice_style(&[voice_path.to_string_lossy().to_string()], false)
-		.context("failed to load the voice style")?;
-
-	Ok(Engine { tts, style })
+/// The presets the UI can offer.
+#[tauri::command]
+pub fn tts_voices() -> Vec<String> {
+	VOICES.iter().map(|v| v.to_string()).collect()
 }
 
 /// Load the models, downloading them on first run.
@@ -153,8 +181,13 @@ pub async fn tts_speak(
 	state: State<'_, TtsState>,
 	text: String,
 	lang: Option<String>,
+	voice: Option<String>,
 ) -> Result<tauri::ipc::Response, String> {
 	let lang = lang.unwrap_or_else(|| "de".to_string());
+	let voice = voice.unwrap_or_else(|| DEFAULT_VOICE.to_string());
+	if !VOICES.contains(&voice.as_str()) {
+		return Err(format!("unknown voice {voice}"));
+	}
 	if text.trim().is_empty() {
 		return Err("nothing to say".into());
 	}
@@ -165,10 +198,15 @@ pub async fn tts_speak(
 	}
 	let engine = guard.as_mut().expect("engine loaded above");
 
+	engine.ensure_style(&voice).map_err(|e| format!("{e:#}"))?;
+
 	let started = std::time::Instant::now();
+	// `styles` and `tts` are disjoint fields, so one can be read while the other
+	// is mutated.
+	let style = &engine.styles[&voice];
 	let (samples, _duration) = engine
 		.tts
-		.call(&text, &lang, &engine.style, TOTAL_STEPS, SPEED, CHUNK_SILENCE)
+		.call(&text, &lang, style, TOTAL_STEPS, SPEED, CHUNK_SILENCE)
 		.map_err(|e| format!("synthesis failed: {e:#}"))?;
 
 	let rate = engine.tts.sample_rate;
