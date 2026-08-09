@@ -173,7 +173,7 @@ $effect(() => {
 	<title>Dashboard · avenOS</title>
 </svelte:head>
 
-<main class="mx-auto flex h-dvh max-w-6xl flex-col gap-4 p-4 sm:p-6">
+<main class="mx-auto flex h-dvh max-w-6xl flex-col gap-4 p-4 pb-2 sm:p-6 sm:pb-3">
 	<header class="flex items-baseline justify-between gap-4">
 		<h1 class="text-2xl">Dashboard</h1>
 		<div class="flex items-center gap-3 text-xs opacity-50">
@@ -295,11 +295,18 @@ $effect(() => {
 
 	<!-- What the tools just did, as a toast. One at a time, three seconds: a
 	     glance to confirm the list changed the way you meant, not a log to read.
-	     Reserving the space keeps the input panel still as toasts come and go. -->
-	<div class="mx-auto min-h-16 w-full max-w-lg">
+	     Reserving the space keeps the input panel still as toasts come and go;
+	     bottom-aligned in it, so the toast hugs the panel it belongs to. In
+	     voice mode it is half the panel's width — a caption to the conversation,
+	     not a second panel. -->
+	<div class="mx-auto flex min-h-16 w-full max-w-lg items-end justify-center">
 		{#if activity.current}
 			{@const entry = activity.current}
-			<div class="flex gap-2 rounded-2xl border border-border bg-surface-card px-4 py-3 text-xs">
+			<div
+				class="flex w-full gap-2 rounded-xl border border-border bg-surface-card px-4 py-3 text-xs {typing
+					? ''
+					: 'max-w-64'}"
+			>
 				<span
 					class="w-3 shrink-0 text-center font-mono"
 					class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
@@ -331,7 +338,7 @@ $effect(() => {
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 	<div
-		class="mx-auto w-full max-w-lg rounded-2xl bg-primary px-4 py-3 text-primary-foreground"
+		class="mx-auto -mt-2 w-full max-w-lg rounded-xl bg-primary px-4 pt-3 pb-2 text-primary-foreground"
 		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
 	>
 		<div class="flex items-center gap-3">

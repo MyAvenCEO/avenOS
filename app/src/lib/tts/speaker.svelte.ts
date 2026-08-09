@@ -84,6 +84,8 @@ export class Speaker {
 	#playhead = 0
 	/** Whether a gesture listener is already waiting to wake the output. */
 	#armed = false
+	/** Pending frozen-clock check, at most one. */
+	#watchdog: ReturnType<typeof setTimeout> | null = null
 
 	constructor() {
 		// Synthesis lives in the Rust side, so a plain browser tab has no `invoke`
@@ -322,5 +324,33 @@ export class Speaker {
 		source.start(at)
 		this.#playhead = at + buffer.duration
 		this.lead = Math.round((at - context.currentTime) * 10) / 10
+		this.#watch(context)
+	}
+
+	/**
+	 * Notice a context whose clock is not moving, and put it down.
+	 *
+	 * WebKit can leave a context in state "running" whose currentTime never
+	 * advances — sources get scheduled onto a timeline that is standing still,
+	 * `onended` never fires, and the panel reads "Spricht" over silence with no
+	 * error anywhere. Observed when another context won the shared pipeline.
+	 * A clock that has not moved a second after scheduling is that case: name
+	 * it, close the context, and let the next sentence start from a fresh one.
+	 */
+	#watch(context: AudioContext): void {
+		if (this.#watchdog) return
+		const before = context.currentTime
+		this.#watchdog = setTimeout(() => {
+			this.#watchdog = null
+			if (this.#context !== context || this.#sources.size === 0) return
+			if (context.currentTime > before) return
+			this.failure = 'Audio-Ausgabe eingefroren — Gerät wird neu geöffnet'
+			void context.close()
+			this.#context = null
+			this.#sources.clear()
+			this.#playhead = 0
+			this.speaking = false
+			this.output = 'none'
+		}, 1200)
 	}
 }

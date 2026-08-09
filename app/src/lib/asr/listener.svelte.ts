@@ -139,9 +139,15 @@ export class Listener {
 				}
 			})
 
-			// 16 kHz here means the browser resamples on the way in and the worklet
-			// can hand Rust exactly what Silero and Nemotron both expect.
-			this.#context = new AudioContext({ sampleRate: 16_000 })
+			// Device rate, deliberately — never ask for 16 kHz here. WebKit has one
+			// audio pipeline for the whole webview, and whichever context is created
+			// first sets its rate: this one exists before the speaker's, so a 16 kHz
+			// request left the speaker's 44.1 kHz context with a clock that reported
+			// "running" and never advanced — six sentences synthesized, scheduled,
+			// and silent, with "Spricht" stuck on screen. `#toSixteenK` resamples on
+			// the way to the recognizer instead, which it had to be able to do
+			// anyway, because the 16 kHz request was only ever a hint.
+			this.#context = new AudioContext()
 			await this.#context.resume()
 			await this.#context.audioWorklet.addModule('/asr-worklet.js')
 
