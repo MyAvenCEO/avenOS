@@ -1,7 +1,9 @@
 <script lang="ts">
+import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
 import { Listener } from '$lib/asr/listener.svelte'
 import { Chat } from '$lib/chat/chat.svelte'
+import { ACTIVITY_LABELS, ToolActivity } from '$lib/todos/activity.svelte'
 import { Todos } from '$lib/todos/store.svelte'
 import { runTodoTool, TODO_TOOLS } from '$lib/todos/tools'
 import { Speaker } from '$lib/tts/speaker.svelte'
@@ -20,6 +22,7 @@ const speaker = new Speaker()
 // Every delta goes to the bubble and to the speaker at the same time, so the
 // first sentence is usually being read out while the model is still writing.
 const todos = new Todos()
+const activity = new ToolActivity()
 
 const chat = new Chat(
 	{
@@ -30,11 +33,17 @@ const chat = new Chat(
 	},
 	// The model manages the same list the buttons below do — there is no second
 	// copy of the todos anywhere, which is what makes voice and mouse agree.
-	{ specs: TODO_TOOLS, run: (name, args) => runTodoTool(todos, name, args) }
+	{
+		specs: TODO_TOOLS,
+		run: (name, args) => {
+			const result = runTodoTool(todos, name, args)
+			// Summarized from the result, not the request — what the list did, not
+			// what the model asked for.
+			activity.record(name, result)
+			return result
+		}
+	}
 )
-
-/** Voice is the default; text is the escape hatch, not the other way round. */
-let typing = $state(false)
 
 let newTodo = $state('')
 
@@ -63,6 +72,15 @@ const listener = new Listener({
 		chat.send(text)
 	}
 })
+
+/**
+ * Voice is the default, except where there is no voice.
+ *
+ * In a plain browser tab the recognizer is unavailable, and starting in voice
+ * mode there means an empty panel with no way to say anything until you find
+ * the icon. Text is the only mode that works, so it is the one to start in.
+ */
+let typing = $state(!isTauri())
 
 // Hands-free by default: the mic opens as soon as the page does.
 //
@@ -158,6 +176,7 @@ $effect(() => {
 					onclick={() => {
 						chat.clear()
 						speaker.silence()
+						activity.clear()
 						void listener.reset()
 					}}
 				>
@@ -172,12 +191,6 @@ $effect(() => {
 		<div bind:this={log} class="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
 			{#each chat.turns as turn (turn.id)}
 				<div class="flex flex-col gap-1" class:items-end={turn.role === 'user'}>
-					<!-- What it actually did, not just what it says it did. -->
-					{#if turn.tools && turn.tools.length > 0}
-						<span class="text-[10px] uppercase tracking-widest opacity-30">
-							{turn.tools.join(' · ')}
-						</span>
-					{/if}
 					<div
 						class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed"
 						class:bg-primary={turn.role === 'user'}
@@ -270,6 +283,45 @@ $effect(() => {
 		</aside>
 	</div>
 
+	<!-- What the tools did to the list, in words. A light card against the dark
+	     input panel below it, so the pair reads as one unit: what just happened,
+	     and what you say next. Sits here because "did that actually work?" is
+	     asked at the moment of speaking, not by scrolling back. -->
+	{#if activity.entries.length > 0}
+		<div
+			class="mx-auto w-full max-w-lg space-y-2 rounded-2xl border border-border bg-surface-card px-4 py-3"
+		>
+			{#each activity.entries as entry (entry.id)}
+				<div class="flex gap-2 text-xs">
+					<span
+						class="w-3 shrink-0 text-center font-mono"
+						class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
+						class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
+						class:opacity-30={entry.kind === 'read' ||
+							entry.kind === 'reopened' ||
+							entry.kind === 'renamed'}
+					>
+						{ACTIVITY_LABELS[entry.kind].mark}
+					</span>
+					<div class="min-w-0 flex-1">
+						<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
+						{#if entry.titles.length > 0}
+							<!-- One per line. Run together with separators, five items became
+							     a sentence that ran off the edge and told you nothing. -->
+							<ul class="pt-0.5">
+								{#each entry.titles as title (title)}
+									<li class="leading-relaxed">{title}</li>
+								{/each}
+							</ul>
+						{:else if entry.note}
+							<span class="opacity-40">· {entry.note}</span>
+						{/if}
+					</div>
+				</div>
+			{/each}
+		</div>
+	{/if}
+
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 	<div
@@ -327,49 +379,53 @@ $effect(() => {
 				{/if}
 			{/if}
 
-			<!-- Voice is the default, so this is a way out and back, not a mode
-			     picker. An icon rather than a word: it sits next to live status text
-			     and a second label there reads as another thing to be understood. -->
-			<button
-				type="button"
-				onclick={() => {
-					typing = !typing
-				}}
-				class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
-				title={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
-				aria-label={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
-			>
-				{#if typing}
-					<!-- microphone: go back to speaking -->
-					<svg
-						viewBox="0 0 24 24"
-						class="size-4"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
-						<path d="M5 11a7 7 0 0 0 14 0" />
-						<path d="M12 18v3" />
-					</svg>
-				{:else}
-					<!-- keyboard: switch to typing -->
-					<svg
-						viewBox="0 0 24 24"
-						class="size-4"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<rect x="2.5" y="6" width="19" height="12" rx="2" />
-						<path d="M7 10h.01M11 10h.01M15 10h.01M17.5 10h.01M7.5 14h9" />
-					</svg>
-				{/if}
-			</button>
+			<!-- Only where there is something to switch to. In the browser there is
+			     no recognizer at all, so text is not a mode there — it is the whole
+			     interface, and a button offering to leave it leads nowhere. -->
+			{#if isTauri()}
+				<!-- An icon rather than a word: it sits next to live status text, and a
+				     second label there reads as another thing to be understood. -->
+				<button
+					type="button"
+					onclick={() => {
+						typing = !typing
+					}}
+					class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
+					title={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
+					aria-label={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
+				>
+					{#if typing}
+						<!-- microphone: go back to speaking -->
+						<svg
+							viewBox="0 0 24 24"
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+							<path d="M5 11a7 7 0 0 0 14 0" />
+							<path d="M12 18v3" />
+						</svg>
+					{:else}
+						<!-- keyboard: switch to typing -->
+						<svg
+							viewBox="0 0 24 24"
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<rect x="2.5" y="6" width="19" height="12" rx="2" />
+							<path d="M7 10h.01M11 10h.01M15 10h.01M17.5 10h.01M7.5 14h9" />
+						</svg>
+					{/if}
+				</button>
+			{/if}
 		</div>
 
 		{#if phase.key === 'loading'}
