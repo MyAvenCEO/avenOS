@@ -1,23 +1,23 @@
 import type { Skill } from '../skill'
-import { Todos } from './store.svelte'
+import { WorkItems } from './store.svelte'
 import { summarize } from './summarize'
-import { describeResult, runTodoTool, TODO_TOOLS } from './tools'
+import { describeResult, runWorkItemTool, WORKITEM_TOOLS } from './tools'
 
-export { SPARKS, Todos } from './store.svelte'
+export { SPARKS, WorkItems } from './store.svelte'
 
 /**
  * The todo list as a skill: its store, its tools, its result language and its
- * view (TodosView.svelte), all in this folder.
+ * view (WorkItemsView.svelte), all in this folder.
  */
-export class TodosSkill implements Skill {
-	id = 'todos'
-	label = 'Todos'
-	tools = TODO_TOOLS
-	store = new Todos()
+export class WorkItemsSkill implements Skill {
+	id = 'workitems'
+	label = 'Work Items'
+	tools = WORKITEM_TOOLS
+	store = new WorkItems()
 
 	run(name: string, args: string): { record: string; wire: string } | null {
 		if (!this.tools.some((tool) => tool.name === name)) return null
-		const record = runTodoTool(this.store, name, args)
+		const record = runWorkItemTool(this.store, name, args)
 		// The model gets prose, not JSON — braces fed back into a history are a
 		// pattern to fall into; the raw record stays for transcript and toast.
 		return { record, wire: describeResult(record) }

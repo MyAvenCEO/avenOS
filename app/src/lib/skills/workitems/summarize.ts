@@ -1,6 +1,6 @@
 import type { Activity, ActivityKind } from '../activity.svelte'
 
-interface Todo {
+interface WorkItem {
 	title: string
 }
 
@@ -21,7 +21,9 @@ export function summarize(name: string, resultJson: string): Omit<Activity, 'id'
 	}
 
 	const titles = (key: string): string[] =>
-		Array.isArray(result[key]) ? (result[key] as Todo[]).map((t) => t?.title).filter(Boolean) : []
+		Array.isArray(result[key])
+			? (result[key] as WorkItem[]).map((t) => t?.title).filter(Boolean)
+			: []
 
 	if (result.ok === false) {
 		return {
@@ -32,10 +34,10 @@ export function summarize(name: string, resultJson: string): Omit<Activity, 'id'
 	}
 
 	switch (name) {
-		case 'todo_create':
+		case 'workitem_create':
 			return { kind: 'created', titles: titles('created') }
 
-		case 'todo_update': {
+		case 'workitem_update': {
 			const changed = titles('updated')
 			if (changed.length === 0) return null
 			// The same tool does several different things; which one matters more
@@ -54,21 +56,21 @@ export function summarize(name: string, resultJson: string): Omit<Activity, 'id'
 			return { kind, titles: changed }
 		}
 
-		case 'todo_delete':
-		case 'todo_clear_done':
+		case 'workitem_delete':
+		case 'workitem_clear_done':
 			return { kind: 'deleted', titles: titles('deleted') }
 
-		case 'todo_show': {
+		case 'workitem_show': {
 			const view = result.view === 'board' ? 'Board' : 'Liste'
 			const spark = result.spark === 'team' ? 'Team' : 'Me'
 			return { kind: 'switched', titles: [], note: `${view} · ${spark}` }
 		}
 
-		case 'todo_list':
+		case 'workitem_list':
 			return {
 				kind: 'read',
 				titles: [],
-				note: `${(result.todos as unknown[])?.length ?? 0} Aufgaben gelesen`
+				note: `${(result.store as unknown[])?.length ?? 0} Aufgaben gelesen`
 			}
 
 		default:

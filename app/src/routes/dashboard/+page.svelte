@@ -5,8 +5,8 @@ import { Listener } from '$lib/asr/listener.svelte'
 import { Chat } from '$lib/chat/chat.svelte'
 import type { Activity } from '$lib/skills/activity.svelte'
 import { ACTIVITY_LABELS, ToolActivity } from '$lib/skills/activity.svelte'
-import { SPARKS, TodosSkill } from '$lib/skills/todos'
-import TodosView from '$lib/skills/todos/TodosView.svelte'
+import { SPARKS, WorkItemsSkill } from '$lib/skills/workitems'
+import WorkItemsView from '$lib/skills/workitems/WorkItemsView.svelte'
 import { Speaker } from '$lib/tts/speaker.svelte'
 
 /**
@@ -26,8 +26,8 @@ const speaker = new Speaker()
  * dashboard only composes: tool specs concatenate, a call is offered to each
  * skill until one claims it, and every skill is a tab.
  */
-const todosSkill = new TodosSkill()
-const skills = [todosSkill]
+const workItemsSkill = new WorkItemsSkill()
+const skills = [workItemsSkill]
 
 const activity = new ToolActivity()
 
@@ -239,11 +239,11 @@ $effect(() => {
 	     saying "zeig die Team-Liste" write the same state. -->
 	<aside class="flex w-16 shrink-0 flex-col items-center gap-3 border-border border-r py-4">
 		{#each SPARKS as spark (spark.id)}
-			{@const active = todosSkill.store.active === spark.id}
+			{@const active = workItemsSkill.store.active === spark.id}
 			<button
 				type="button"
 				onclick={() => {
-					todosSkill.store.active = spark.id
+					workItemsSkill.store.active = spark.id
 				}}
 				title={spark.name}
 				aria-label="Spark {spark.name}"
@@ -258,14 +258,16 @@ $effect(() => {
 			</button>
 		{/each}
 
-		<!-- The way out lives at the foot of the context rail, not in the page
-		     chrome — it leaves the whole workspace, so it sits below the sparks. -->
+		<!-- The rail's foot: settings and the way out. Both leave or reconfigure
+		     the whole workspace, so they live under the contexts, not in the page
+		     chrome. -->
 		<a
-			href="/"
-			title="Zurück zur Startseite"
-			aria-label="Zurück zur Startseite"
+			href="/dashboard/settings"
+			title="Einstellungen"
+			aria-label="Einstellungen"
 			class="mt-auto flex size-11 items-center justify-center rounded-full border border-border bg-surface-card opacity-60 transition-all hover:rounded-2xl hover:opacity-100"
 		>
+			<!-- gear -->
 			<svg
 				viewBox="0 0 24 24"
 				class="size-4"
@@ -275,9 +277,14 @@ $effect(() => {
 				stroke-linecap="round"
 				stroke-linejoin="round"
 			>
-				<path d="M19 12H5" />
-				<path d="m11 18-6-6 6-6" />
+				<circle cx="12" cy="12" r="3" />
+				<path
+					d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"
+				/>
 			</svg>
+		</a>
+		<a href="/" class="pb-1 text-[0.6875rem] opacity-40 transition-opacity hover:opacity-100">
+			- back -
 		</a>
 	</aside>
 
@@ -308,8 +315,6 @@ $effect(() => {
 
 			<div class="flex items-center gap-3 text-xs opacity-50">
 				<span>qwen3.5-122b-a10b</span>
-
-				<a href="/dashboard/settings" class="underline underline-offset-4">Einstellungen</a>
 			</div>
 		</header>
 
@@ -418,7 +423,7 @@ $effect(() => {
 		     this surface to switch between skill views as the conversation moves.
 		     3xl rather than lg: the board lays three columns side by side. -->
 			<div class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-				<TodosView todos={todosSkill.store} />
+				<WorkItemsView store={workItemsSkill.store} />
 			</div>
 		{/if}
 

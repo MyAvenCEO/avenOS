@@ -3,7 +3,7 @@
  *
  * Voice and mouse go through the same operations, which is the point: a todo
  * added by speaking is indistinguishable from one typed in, because there is
- * only one place where todos exist.
+ * only one place where store exist.
  *
  * In memory only. Reloading loses everything; persistence is a separate problem
  * and pretending otherwise here would just make it harder to add later.
@@ -13,7 +13,7 @@
  * Three states rather than a done-flag: a kanban needs a middle, and "I am on
  * it" is real information a checkbox cannot hold.
  */
-export type TodoStatus = 'open' | 'doing' | 'done'
+export type WorkItemStatus = 'open' | 'doing' | 'done'
 
 /**
  * A spark is the project context a todo lives in — every todo belongs to
@@ -33,10 +33,10 @@ export const SPARKS: Spark[] = [
 	{ id: 'team', name: 'Team', color: '#7e6ead' }
 ]
 
-export interface Todo {
+export interface WorkItem {
 	id: string
 	title: string
-	status: TodoStatus
+	status: WorkItemStatus
 	/** The spark this todo belongs to. Exactly one, always. */
 	spark: string
 }
@@ -45,16 +45,16 @@ export interface Todo {
  * Short, unique, and stable for the life of a todo.
  *
  * A slice of a UUID rather than the whole thing: the model has to copy these
- * back from a `todo_list` result, and thirty-six characters of hex is a lot of
+ * back from a `workitem_list` result, and thirty-six characters of hex is a lot of
  * surface to copy wrongly for no benefit on a list this size. Counters like
  * `t0` were worse — they are guessable, and a model that guesses an id edits
  * the wrong todo with complete confidence.
  */
 const id = () => crypto.randomUUID().slice(0, 8)
 
-export class Todos {
-	items = $state<Todo[]>([])
-	/** The spark the view shows and new todos land in. */
+export class WorkItems {
+	items = $state<WorkItem[]>([])
+	/** The spark the view shows and new store land in. */
 	active = $state<string>('me')
 	/**
 	 * Which shape the workspace renders, list or board. Lives here rather than
@@ -63,20 +63,20 @@ export class Todos {
 	 */
 	view = $state<'list' | 'board'>('list')
 
-	/** The active spark's todos — what the view actually renders. */
-	get visible(): Todo[] {
+	/** The active spark's store — what the view actually renders. */
+	get visible(): WorkItem[] {
 		return this.items.filter((t) => t.spark === this.active)
 	}
 
-	get open(): Todo[] {
+	get open(): WorkItem[] {
 		return this.visible.filter((t) => t.status !== 'done')
 	}
 
-	byId(id: string): Todo | undefined {
+	byId(id: string): WorkItem | undefined {
 		return this.items.find((t) => t.id === id)
 	}
 
-	create(title: string, spark: string = this.active): Todo {
+	create(title: string, spark: string = this.active): WorkItem {
 		this.items.push({ id: id(), title: title.trim(), status: 'open', spark })
 		// Return the item as stored, not the literal: `items` is a `$state` proxy
 		// and only writes through the proxy are tracked.
@@ -85,8 +85,8 @@ export class Todos {
 
 	update(
 		id: string,
-		changes: { title?: string; status?: TodoStatus; spark?: string }
-	): Todo | undefined {
+		changes: { title?: string; status?: WorkItemStatus; spark?: string }
+	): WorkItem | undefined {
 		const todo = this.byId(id)
 		if (!todo) return undefined
 		if (changes.title !== undefined) todo.title = changes.title.trim()
@@ -95,7 +95,7 @@ export class Todos {
 		return todo
 	}
 
-	remove(id: string): Todo | undefined {
+	remove(id: string): WorkItem | undefined {
 		const todo = this.byId(id)
 		if (!todo) return undefined
 		this.items = this.items.filter((t) => t.id !== id)
@@ -103,7 +103,7 @@ export class Todos {
 	}
 
 	/** The checkbox gesture: anything not done becomes done, done reopens. */
-	toggle(id: string): Todo | undefined {
+	toggle(id: string): WorkItem | undefined {
 		const todo = this.byId(id)
 		if (!todo) return undefined
 		todo.status = todo.status === 'done' ? 'open' : 'done'
@@ -111,7 +111,7 @@ export class Todos {
 	}
 
 	/** The badge gesture: one step around open → doing → done → open. */
-	cycle(id: string): Todo | undefined {
+	cycle(id: string): WorkItem | undefined {
 		const todo = this.byId(id)
 		if (!todo) return undefined
 		todo.status = todo.status === 'open' ? 'doing' : todo.status === 'doing' ? 'done' : 'open'
@@ -119,7 +119,7 @@ export class Todos {
 	}
 
 	/** Scoped to the active spark — "räum die Liste auf" means the visible one. */
-	clearDone(): Todo[] {
+	clearDone(): WorkItem[] {
 		const removed = this.visible.filter((t) => t.status === 'done')
 		this.items = this.items.filter((t) => t.spark !== this.active || t.status !== 'done')
 		return removed

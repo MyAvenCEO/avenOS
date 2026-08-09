@@ -1,5 +1,5 @@
 <script lang="ts">
-import { SPARKS, type TodoStatus, type Todos } from './store.svelte'
+import { SPARKS, type WorkItemStatus, type WorkItems } from './store.svelte'
 import { STATUS_LABEL } from './tools'
 
 /**
@@ -11,53 +11,53 @@ import { STATUS_LABEL } from './tools'
  * line, title, chip row — all in the app's cream world rather than the
  * reference's gray one.
  */
-const { todos }: { todos: Todos } = $props()
+const { store }: { store: WorkItems } = $props()
 
-let newTodo = $state('')
+let newWorkItem = $state('')
 /** Card id in flight during a drag, so columns know what is being dropped. */
 let dragging = $state<string | null>(null)
 
-const COLUMNS: { status: TodoStatus; label: string }[] = [
+const COLUMNS: { status: WorkItemStatus; label: string }[] = [
 	{ status: 'open', label: 'Offen' },
 	{ status: 'doing', label: 'In Arbeit' },
 	{ status: 'done', label: 'Erledigt' }
 ]
 
 /** Pill colors per status, sampled from the reference. */
-const PILL: Record<TodoStatus, string> = {
+const PILL: Record<WorkItemStatus, string> = {
 	open: 'bg-foreground/5 text-foreground/45',
 	doing: 'bg-status-info/20 text-[#a06818]',
 	done: 'bg-status-success/10 text-status-success'
 }
 
-const done = $derived(todos.visible.filter((t) => t.status === 'done').length)
+const done = $derived(store.visible.filter((t) => t.status === 'done').length)
 const pct = $derived(
-	todos.visible.length === 0 ? 0 : Math.round((done / todos.visible.length) * 100)
+	store.visible.length === 0 ? 0 : Math.round((done / store.visible.length) * 100)
 )
 
-function addTodo(event: SubmitEvent) {
+function addWorkItem(event: SubmitEvent) {
 	event.preventDefault()
-	if (newTodo.trim() === '') return
-	todos.create(newTodo)
-	newTodo = ''
+	if (newWorkItem.trim() === '') return
+	store.create(newWorkItem)
+	newWorkItem = ''
 }
 
-function drop(status: TodoStatus) {
-	if (dragging) todos.update(dragging, { status })
+function drop(status: WorkItemStatus) {
+	if (dragging) store.update(dragging, { status })
 	dragging = null
 }
 
 /** One step left or right through the columns, for mouse-less moves. */
 function shift(id: string, by: -1 | 1) {
-	const todo = todos.byId(id)
+	const todo = store.byId(id)
 	if (!todo) return
 	const at = COLUMNS.findIndex((c) => c.status === todo.status)
 	const next = COLUMNS[at + by]
-	if (next) todos.update(id, { status: next.status })
+	if (next) store.update(id, { status: next.status })
 }
 </script>
 
-{#snippet glyph(status: TodoStatus)}
+{#snippet glyph(status: WorkItemStatus)}
 	<!-- The status as a shape, not just a word: dashed ring = offen, half-filled
 	     ring = in Arbeit, filled check = erledigt. -->
 	{#if status === 'open'}
@@ -91,12 +91,12 @@ function shift(id: string, by: -1 | 1) {
 	{/if}
 {/snippet}
 
-{#snippet check(todo: { id: string; status: TodoStatus })}
+{#snippet check(todo: { id: string; status: WorkItemStatus })}
 	<!-- The reference checklist's control: a ring that fills near-black with a
 	     white check when done. -->
 	<button
 		type="button"
-		onclick={() => todos.toggle(todo.id)}
+		onclick={() => store.toggle(todo.id)}
 		aria-label={todo.status === 'done' ? 'Wieder öffnen' : 'Abhaken'}
 		class="flex size-5 shrink-0 items-center justify-center rounded-full transition-colors {todo.status ===
 		'done'
@@ -123,7 +123,7 @@ function shift(id: string, by: -1 | 1) {
 	<div class="flex items-center justify-between gap-3">
 		<h2 class="font-semibold text-[15px]">Aufgaben</h2>
 
-		{#if todos.visible.length > 0}
+		{#if store.visible.length > 0}
 			<!-- The reference card's progress grammar: check, count, bar, percent. -->
 			<span
 				class="flex items-center gap-2.5 rounded-full bg-[#fffdf7] px-3.5 py-1.5 text-[13px] shadow-[0_1px_3px_rgba(30,41,59,0.08)]"
@@ -138,7 +138,7 @@ function shift(id: string, by: -1 | 1) {
 						stroke-linejoin="round"
 					/>
 				</svg>
-				<span class="font-medium">{done} von {todos.visible.length}</span>
+				<span class="font-medium">{done} von {store.visible.length}</span>
 				<span class="h-1.5 w-24 overflow-hidden rounded-full bg-foreground/10">
 					<span
 						class="block h-full rounded-full bg-status-success transition-[width]"
@@ -152,27 +152,27 @@ function shift(id: string, by: -1 | 1) {
 
 		<!-- Which spark and shape are on screen. Read-only on purpose: switching
 		     is a conversation move — "zeig mir das Board", "zeig die Team-Liste" —
-		     handled by the todo_show tool, never by a button. -->
+		     handled by the workitem_show tool, never by a button. -->
 		<span
 			class="rounded-full bg-[#fffdf7] px-3 py-1.5 text-foreground/40 text-xs shadow-[0_1px_3px_rgba(30,41,59,0.08)]"
 		>
-			{SPARKS.find((s) => s.id === todos.active)?.name}
+			{SPARKS.find((s) => s.id === store.active)?.name}
 			·
-			{todos.view === 'board' ? 'Board' : 'Liste'}
+			{store.view === 'board' ? 'Board' : 'Liste'}
 		</span>
 	</div>
 
-	<form onsubmit={addTodo}>
+	<form onsubmit={addWorkItem}>
 		<input
-			bind:value={newTodo}
+			bind:value={newWorkItem}
 			placeholder="Aufgabe hinzufügen…"
 			class="w-full rounded-xl border border-foreground/5 bg-[#fffdf7] px-4 py-2.5 text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none transition-shadow placeholder:text-foreground/30 focus:shadow-[0_1px_3px_rgba(30,41,59,0.07),0_0_0_3px_rgba(30,41,59,0.06)]"
 		>
 	</form>
 
-	{#if todos.view === 'list'}
+	{#if store.view === 'list'}
 		<ul class="min-h-0 flex-1 space-y-2 overflow-y-auto">
-			{#each todos.visible as todo (todo.id)}
+			{#each store.visible as todo (todo.id)}
 				<li
 					class="group flex items-center gap-3 rounded-2xl border border-foreground/5 bg-[#fffdf7] px-4 py-3 text-sm shadow-[0_1px_3px_rgba(30,41,59,0.06),0_4px_12px_rgba(30,41,59,0.04)] transition-shadow hover:shadow-[0_2px_6px_rgba(30,41,59,0.08),0_8px_20px_rgba(30,41,59,0.06)]"
 				>
@@ -188,7 +188,7 @@ function shift(id: string, by: -1 | 1) {
 					     one step around open → doing → done. -->
 					<button
 						type="button"
-						onclick={() => todos.cycle(todo.id)}
+						onclick={() => store.cycle(todo.id)}
 						title="Status weiterschalten"
 						class="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-xs transition-transform active:scale-95 {PILL[
 							todo.status
@@ -199,7 +199,7 @@ function shift(id: string, by: -1 | 1) {
 					</button>
 					<button
 						type="button"
-						onclick={() => todos.remove(todo.id)}
+						onclick={() => store.remove(todo.id)}
 						class="shrink-0 text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
 						aria-label="Löschen"
 					>
@@ -235,12 +235,12 @@ function shift(id: string, by: -1 | 1) {
 						</span>
 						<h3 class="font-medium text-[13px] text-foreground/60">{column.label}</h3>
 						<span class="ml-auto text-foreground/30 text-xs">
-							{todos.visible.filter((t) => t.status === column.status).length}
+							{store.visible.filter((t) => t.status === column.status).length}
 						</span>
 					</div>
 
 					<ul class="min-h-0 flex-1 space-y-2 overflow-y-auto">
-						{#each todos.visible.filter((t) => t.status === column.status) as todo (todo.id)}
+						{#each store.visible.filter((t) => t.status === column.status) as todo (todo.id)}
 							{@const spark = SPARKS.find((sp) => sp.id === todo.spark)}
 							<li
 								draggable="true"
@@ -258,7 +258,7 @@ function shift(id: string, by: -1 | 1) {
 									<span class="font-mono uppercase">{todo.id.slice(0, 6)}</span>
 									<button
 										type="button"
-										onclick={() => todos.remove(todo.id)}
+										onclick={() => store.remove(todo.id)}
 										class="ml-auto opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
 										aria-label="Löschen"
 									>

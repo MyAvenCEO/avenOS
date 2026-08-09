@@ -35,15 +35,15 @@ const SYSTEM_PROMPT =
 	'Dinge an einen bestehenden Titel an. „Vier gesunde Zutaten" heißt: vier ' +
 	'einzelne Aufgaben, die du dir selbst ausdenkst. ' +
 	'Aufgaben werden über ihre id angesprochen, nie über den Titel — rufe ' +
-	'todo_list auf, bevor du etwas änderst, löschst oder über die Liste sprichst. ' +
+	'workitem_list auf, bevor du etwas änderst, löschst oder über die Liste sprichst. ' +
 	'Jede Aufgabe gehört zu genau einem Spark, dem Projekt-Kontext: "me" für ' +
 	'eigene Dinge, "team" für gemeinsame. Ohne Angabe gilt der aktive Spark. Sagt ' +
 	'jemand „auf die Team-Liste" oder „fürs Team", nimm spark=team. ' +
 	'Aufgaben haben drei Status: offen, in_arbeit, erledigt. Sagt jemand, etwas ' +
-	'sei erledigt, rufe todo_update mit status=erledigt auf; „bin ich gerade ' +
+	'sei erledigt, rufe workitem_update mit status=erledigt auf; „bin ich gerade ' +
 	'dran" oder „fange ich an" heißt status=in_arbeit. Gelöscht wird nur auf ' +
 	'ausdrücklichen Wunsch. Lies Listen als Fließtext vor. ' +
-	'Was auf dem Bildschirm zu sehen ist, steuerst du mit todo_show: „zeig mir ' +
+	'Was auf dem Bildschirm zu sehen ist, steuerst du mit workitem_show: „zeig mir ' +
 	'das Board", „zeig meine Liste", „zeig die Team-Aufgaben" sind Ansichts-' +
 	'Wechsel, keine Datenänderungen. ' +
 	'Die Nachrichten kommen aus einer Spracherkennung und sind manchmal mitten im ' +
@@ -57,7 +57,7 @@ const SYSTEM_PROMPT =
  *
  * Deleting everything finished takes list, then one delete per item, then the
  * answer — and four rounds ran out partway, leaving whatever the last round had
- * written as the final reply. That is how "Ich rufe todo_delete, todo_delete…
+ * written as the final reply. That is how "Ich rufe workitem_delete, workitem_delete…
  * auf." ended up on screen as an answer while nothing was deleted.
  */
 const MAX_TOOL_ROUNDS = 8
