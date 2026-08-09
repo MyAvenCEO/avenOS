@@ -15,7 +15,7 @@
     },
     "app": {
       "name": "@AvenOS/app",
-      "version": "26.7.18-next.2",
+      "version": "26.7.31-next.3",
       "dependencies": {
         "@avenos/aven-city": "workspace:*",
         "@tauri-apps/api": "^2",
@@ -38,7 +38,7 @@
     },
     "libs/aven-board": {
       "name": "@avenos/aven-board",
-      "version": "26.7.18-next.2",
+      "version": "26.7.31-next.3",
       "dependencies": {
         "dompurify": "^3",
         "github-slugger": "^2",
@@ -51,7 +51,7 @@
     },
     "libs/aven-city": {
       "name": "@avenos/aven-city",
-      "version": "26.7.18-next.2",
+      "version": "26.7.31-next.3",
       "dependencies": {
         "three": "^0.185.1",
       },
