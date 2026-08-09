@@ -87,17 +87,26 @@ $effect(() => {
 		<div class="flex items-center gap-3 text-xs opacity-50">
 			<span>phala/gemma-4-31b-it</span>
 
-			<!-- Passive status, not switches: both ears and voice are simply on. -->
+			<!-- Passive status, not switches: both ears and voice are simply on.
+			     The dot is the important part — "ready" in words is easy to read as
+			     "ready to be started", which is exactly the wrong idea. -->
 			{#if listener.status !== 'unavailable'}
-				<span title="Nemotron 3.5 · Silero VAD · deutsch, on-device">
+				<span
+					class="flex items-center gap-1.5"
+					title="Nemotron 3.5 · Silero VAD · deutsch, on-device"
+				>
 					{#if listener.status === 'preparing'}
 						Ohren laden… {Math.round(listener.progress * 100)}%
 					{:else if listener.status === 'denied'}
-						Kein Mikrofon
+						Kein Mikrofon — bitte in den Systemeinstellungen erlauben
 					{:else if listener.status === 'error'}
 						Ohren fehlgeschlagen
 					{:else}
-						{listener.speech ? 'Hört zu' : 'Bereit'}
+						<span
+							class="inline-block size-1.5 rounded-full bg-status-error"
+							class:animate-pulse={listener.speech}
+						></span>
+						{listener.speech ? 'Hört zu…' : 'Mikrofon an'}
 					{/if}
 				</span>
 			{/if}
@@ -133,9 +142,20 @@ $effect(() => {
 
 	<div bind:this={log} class="flex-1 space-y-4 overflow-y-auto">
 		{#if chat.turns.length === 0}
-			<p class="pt-16 text-center text-sm opacity-40">
-				Confidential inference in a TEE. Say something.
-			</p>
+			<div class="pt-16 text-center">
+				{#if listener.status === 'listening'}
+					<p class="text-base">Sprich einfach los.</p>
+					<p class="pt-2 text-xs opacity-40">
+						Das Mikrofon ist offen. Du kannst mich jederzeit unterbrechen.
+					</p>
+				{:else if listener.status === 'preparing'}
+					<p class="text-sm opacity-40">
+						Die Ohren laden — {Math.round(listener.progress * 100)}% von etwa 2,6 GB.
+					</p>
+				{:else}
+					<p class="text-sm opacity-40">Schreib etwas.</p>
+				{/if}
+			</div>
 		{/if}
 
 		{#each chat.turns as turn (turn.id)}
