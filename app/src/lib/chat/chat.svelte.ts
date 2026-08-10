@@ -59,7 +59,10 @@ const SYSTEM_PROMPT =
 	'composer_revise with instruction=…. Changing an EXISTING actor — its ' +
 	'behavior OR its window UI, face, layout — is actor_update with ' +
 	'instruction=…; faces are part of the manifest and fully editable. You ' +
-	'never design manifests or faces yourself. ' +
+	'never design manifests or faces yourself. When several actors duplicate one ' +
+	'concept (three calendars, say), call registry_list to see them, then ' +
+	'composer_consolidate with ids=[…] — the composer merges them into one ' +
+	'actor, migrates all records, and removes the duplicates after commit. ' +
 	'Messages come from speech recognition and are sometimes cut off ' +
 	'mid-sentence. If a message reads like the continuation of the previous ' +
 	'one, treat both together as one request. ' +

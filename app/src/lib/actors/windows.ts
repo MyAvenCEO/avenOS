@@ -90,12 +90,31 @@ registryActor.onCreated = (actor, fresh) => {
 		}
 	}
 	bus.register(window)
+	// Named extra views: one more window per declared face, all sharing this
+	// actor — the workitems list/board pattern, driven by data.
+	for (const named of actor.manifest.faces ?? []) {
+		const namedId = `${actor.manifest.id}-${named.key}-window`
+		if (!bus.get(namedId)) {
+			bus.register(
+				new WindowActor(actor, SpecFaceView, {
+					key: `${actor.manifest.id}-${named.key}`,
+					name: named.name,
+					props: { spec: named.spec },
+					open: false
+				})
+			)
+		}
+	}
 }
 registryActor.onRemoved = (id) => {
 	const windowId = `${id}-window`
 	const window = bus.get(windowId)
 	if (window && isWindow(window) && window.open) stagedRemovals.add(windowId)
-	bus.unregister(windowId)
+	// Every window whose subject this is goes with it — the default one AND
+	// all named views.
+	for (const w of bus.actors()) {
+		if (isWindow(w) && w.subject.manifest.id === id) bus.unregister(w.manifest.id)
+	}
 }
 registryActor.onDeleted = (id) => {
 	clearRecords(id)

@@ -129,6 +129,12 @@ export interface Manifest {
 	llm?: boolean | LlmSettings
 	/** The actor's window UI, declared as data; absent = the generic face. */
 	face?: FaceSpec
+	/**
+	 * Additional named views — the workitems pattern (list + board over one
+	 * subject) as data: each entry becomes its OWN window actor sharing this
+	 * actor's state and records. One core, many faces.
+	 */
+	faces?: { key: string; name: string; spec: FaceSpec }[]
 }
 
 /** The declared model lane, normalized: null when the actor is not an llm actor. */

@@ -157,6 +157,22 @@ export class RecordActor extends Actor {
 		return this.records.at(-1)?.data
 	}
 
+	/**
+	 * Take over another actor's records wholesale, timestamps intact — the
+	 * migration half of consolidation. Sorted afterwards so merged histories
+	 * interleave chronologically instead of source by source.
+	 */
+	adopt(records: StoredRecord[]): void {
+		const known = new Set(this.records.map((r) => r.id))
+		for (const record of records) {
+			this.records.push(
+				known.has(record.id) ? { ...record, id: crypto.randomUUID().slice(0, 8) } : record
+			)
+		}
+		this.records.sort((a, b) => a.at - b.at)
+		this.#persist()
+	}
+
 	forget(recordId: string): void {
 		this.records = this.records.filter((r) => r.id !== recordId)
 		this.#persist()

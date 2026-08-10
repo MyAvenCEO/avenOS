@@ -12,9 +12,10 @@ import type { RecordActor } from './created.actor.svelte'
  * cards, action buttons that send ordinary messages. No generated code,
  * no eval: the face is data, the renderer is the only program.
  */
-const { actor }: { actor: Actor } = $props()
+/** A named face passes its own spec; the default window falls back to manifest.face. */
+const { actor, spec: specOverride }: { actor: Actor; spec?: import('./actor').FaceSpec } = $props()
 
-const spec = $derived(actor.manifest.face ?? { elements: [] })
+const spec = $derived(specOverride ?? actor.manifest.face ?? { elements: [] })
 const keeper = $derived(actor as RecordActor)
 const instance = $derived(actor.instanceState())
 

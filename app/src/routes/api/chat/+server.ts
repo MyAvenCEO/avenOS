@@ -72,6 +72,10 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			// Kept from the Gemma era as cheap insurance against one-token loops;
 			// the client's stream guards are the backstop.
 			frequency_penalty: 0.3,
+			// Explicit and generous: reasoning models spend their deliberation
+			// from the SAME completion budget, and the server's default cap
+			// truncated the composer's long manifests mid-JSON.
+			max_tokens: 16384,
 			...(heat !== null && { temperature: heat }),
 			// Tools are shaped here rather than in the client so the wire format
 			// stays a detail of the proxy. Omitted entirely when there are none —

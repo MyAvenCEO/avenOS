@@ -41,6 +41,20 @@ function sanitizeFace(raw: unknown): FaceSpec | undefined {
 	return kept.length > 0 ? { elements: kept } : undefined
 }
 
+/** Named extra views: each becomes its own window over the same actor. */
+function sanitizeFaces(raw: unknown): Manifest['faces'] {
+	if (!Array.isArray(raw)) return undefined
+	const kept = raw.flatMap((f) => {
+		if (!f || typeof f !== 'object') return []
+		const entry = f as { key?: unknown; name?: unknown; spec?: unknown }
+		const spec = sanitizeFace(entry.spec)
+		return typeof entry.key === 'string' && typeof entry.name === 'string' && spec
+			? [{ key: entry.key, name: entry.name, spec }]
+			: []
+	})
+	return kept.length > 0 ? kept : undefined
+}
+
 /**
  * Fold the llm field into its canonical shape: `true`, settings object, or
  * absent. Tool calls deliver model/temperature as flat llm_model /
@@ -301,7 +315,11 @@ export class RegistryActor extends Actor {
 			'description is the execution instruction, and stable field names are what ' +
 			'keep the cards consistent. ' +
 			'The face is part of the manifest: when asked to change the UI or layout, ' +
-			'rework the face elements exactly like any other field.'
+			'rework the face elements exactly like any other field. ' +
+			'When an actor deserves SEVERAL views (a list and a stats dashboard, say), ' +
+			'declare "faces": [{"key":short,"name":window title,"spec":{"elements":[...]}}] ' +
+			'— each becomes its own switchable window over the SAME actor and records; ' +
+			'never create a second actor just for another view of the same data.'
 		)
 	}
 
@@ -382,7 +400,8 @@ export class RegistryActor extends Actor {
 			// the default is on; a manifest may still pin a lane or (explicitly)
 			// declare false-by-omission is not a thing here.
 			llm: normalizeLlm(m.llm, p.llm_model, p.llm_temperature) ?? true,
-			face: sanitizeFace((m as Manifest).face)
+			face: sanitizeFace((m as Manifest).face),
+			faces: sanitizeFaces((m as Manifest).faces)
 		}
 		const actor = this.#makeActor(manifest)
 		this.#bus.register(actor)
@@ -436,7 +455,8 @@ export class RegistryActor extends Actor {
 				? composed.produces.filter((r): r is string => typeof r === 'string')
 				: existing.produces,
 			llm: composed.llm !== undefined ? normalizeLlm(composed.llm) : existing.llm,
-			face: composed.face !== undefined ? sanitizeFace(composed.face) : existing.face
+			face: composed.face !== undefined ? sanitizeFace(composed.face) : existing.face,
+			faces: composed.faces !== undefined ? sanitizeFaces(composed.faces) : existing.faces
 		}
 		const merged: Manifest = {
 			...base,
