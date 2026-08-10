@@ -67,6 +67,17 @@ export class MessageBus {
 	}
 	/** The one LLM in the system, injected once; actors reach it only via ask. */
 	llm?: Llm
+	/**
+	 * How machine output is parsed out of model text; the app injects the
+	 * string-aware extractor. Default: plain JSON.parse, fine for tests.
+	 */
+	extractJson: (text: string) => unknown = (text) => {
+		try {
+			return JSON.parse(text)
+		} catch {
+			return null
+		}
+	}
 	/** UI seam: called on registry changes; the app wires reactivity here. */
 	onChange?: () => void
 
@@ -584,10 +595,10 @@ export class MessageBus {
 					? ` Reuse EXACTLY the field names of this previous record: ${JSON.stringify(latest)}`
 					: '')
 			try {
-				// The actor's own lane: its manifest picks model and sampling.
-				const answer = await this.llm(system, JSON.stringify(payload), lane)
-				const bare = answer.replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*?$/, '$1')
-				const parsed = JSON.parse(bare)
+				// The actor's own lane: its manifest picks model and sampling; the
+				// json flag rides along so the server enforces object output.
+				const answer = await this.llm(system, JSON.stringify(payload), { ...lane, json: true })
+				const parsed = this.extractJson(answer)
 				if (!parsed || typeof parsed !== 'object') throw new Error('not an object')
 				// The memory seam: a record-keeping actor remembers what it just
 				// produced — running "make an appointment" IS filling the calendar.

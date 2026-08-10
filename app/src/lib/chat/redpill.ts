@@ -253,6 +253,8 @@ export const COMPOSER_MODEL = 'moonshotai/kimi-k3'
 export interface CompleteOptions {
 	model?: string
 	temperature?: number
+	/** Enforce JSON output server-side (response_format json_object). */
+	json?: boolean
 	/**
 	 * Live progress: reasoning models stream their deliberation as
 	 * `reasoning_content` long before any answer text arrives. Surfacing it is
@@ -272,7 +274,8 @@ export async function complete(
 			messages,
 			tools: [],
 			model: options.model ?? COMPOSER_MODEL,
-			...(typeof options.temperature === 'number' && { temperature: options.temperature })
+			...(typeof options.temperature === 'number' && { temperature: options.temperature }),
+			...(options.json === true && { json: true })
 		})
 	})
 	if (!response.ok || !response.body) throw new Error(await failureText(response))
@@ -311,4 +314,59 @@ export async function complete(
 		reader.cancel().catch(() => {})
 	}
 	return text
+}
+
+/**
+ * Pull the first parseable JSON object out of model text, string-aware.
+ *
+ * The greedy first-{-to-last-} span dies the moment a model splices prose
+ * between two objects ("I apologize—let me provide the correct manifest…").
+ * This walks the text, collects every balanced top-level object, and returns
+ * the first one that parses — preferring the LAST candidates, since a model
+ * that corrected itself put the good object at the end.
+ */
+export function extractJsonObject(text: string): unknown {
+	try {
+		return JSON.parse(text)
+	} catch {
+		// fall through to the scan
+	}
+	const candidates: string[] = []
+	let depth = 0
+	let start = -1
+	let inString = false
+	let escaped = false
+	for (let i = 0; i < text.length; i++) {
+		const ch = text[i]
+		if (inString) {
+			if (escaped) escaped = false
+			else if (ch === '\\') escaped = true
+			else if (ch === '"') inString = false
+			continue
+		}
+		if (ch === '"') inString = true
+		else if (ch === '{') {
+			if (depth === 0) start = i
+			depth++
+		} else if (ch === '}') {
+			depth--
+			if (depth === 0 && start !== -1) {
+				candidates.push(text.slice(start, i + 1))
+				start = -1
+			}
+			if (depth < 0) depth = 0
+		}
+	}
+	for (const candidate of candidates.reverse()) {
+		try {
+			return JSON.parse(candidate)
+		} catch {
+			try {
+				return JSON.parse(candidate.replace(/,\s*([}\]])/g, '$1').replace(/[\u201c\u201d]/g, '"'))
+			} catch {
+				// next candidate
+			}
+		}
+	}
+	return null
 }

@@ -670,3 +670,24 @@ describe('created actors execute by default', () => {
 		expect(run2.status).toBe('ok')
 	})
 })
+
+describe('json extraction from model text', () => {
+	test('survives the observed failure shapes', async () => {
+		const { extractJsonObject } = await import('../src/lib/chat/redpill')
+		// clean object
+		expect(extractJsonObject('{"a":1}')).toEqual({ a: 1 })
+		// prose apology spliced between a broken and a good object (seen live)
+		const spliced =
+			'{"id":"habit-stre ak-hub"} I apologize—let me provide the correct manifest cleanly: ' +
+			'{"id":"habit-hub","name":"Habit Hub","description":"Keeps one record per habit."}'
+		expect((extractJsonObject(spliced) as { id: string }).id).toBe('habit-hub')
+		// markdown fences + trailing chatter
+		expect(
+			extractJsonObject('```json\n{"ping":"pong"}\n```\nHope this helps!')
+		).toEqual({ ping: 'pong' })
+		// trailing comma healed
+		expect(extractJsonObject('{"a":[1,2,],}')).toEqual({ a: [1, 2] })
+		// nothing parseable
+		expect(extractJsonObject('no json here')).toBeNull()
+	})
+})

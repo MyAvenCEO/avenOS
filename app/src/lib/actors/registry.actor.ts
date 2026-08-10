@@ -327,9 +327,7 @@ export class RegistryActor extends Actor {
 		if (!this.composer) return null
 		const taken = this.#bus.actors().map((a) => a.manifest.id)
 		const answer = await this.composer(RegistryActor.composerSystem(taken), user)
-		// Models fence JSON in ```json ... ``` no matter what you ask — unwrap.
-		const bare = answer.replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*?$/, '$1')
-		const parsed = this.#parse(bare)
+		const parsed = this.#bus.extractJson(answer)
 		return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
 	}
 

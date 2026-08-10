@@ -49,7 +49,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 		error(500, 'PHALA_API_KEY is unset — add it to the worktree .env and restart vite')
 	}
 
-	const { messages, tools, model, temperature } = await request.json()
+	const { messages, tools, model, temperature, json } = await request.json()
 	if (!Array.isArray(messages)) error(400, 'body must be { messages: [{ role, content }] }')
 	const chosen = typeof model === 'string' && MODELS.has(model) ? model : MODEL
 	// Per-actor sampling: manifests may declare a temperature; clamp it here so
@@ -76,6 +76,10 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			// from the SAME completion budget, and the server's default cap
 			// truncated the composer's long manifests mid-JSON.
 			max_tokens: 16384,
+			// Machine lanes (composer, llm actors) ask for enforced JSON: the
+			// server constrains generation grammatically, which ends the whole
+			// class of prose-apologies-spliced-into-manifests failures.
+			...(json === true && { response_format: { type: 'json_object' } }),
 			...(heat !== null && { temperature: heat }),
 			// Tools are shaped here rather than in the client so the wire format
 			// stays a detail of the proxy. Omitted entirely when there are none —

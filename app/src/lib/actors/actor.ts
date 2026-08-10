@@ -152,8 +152,16 @@ export interface HandlerResult {
 
 export type Handler = (payload: Record<string, unknown>) => HandlerResult | Promise<HandlerResult>
 
-/** The natural-language service an ask() consults; injected, never imported. */
-export type Llm = (system: string, question: string, settings?: LlmSettings) => Promise<string>
+/**
+ * The natural-language service an ask() consults; injected, never imported.
+ * `json` rides along on machine lanes (llm-actor execution) so the transport
+ * can enforce object output; ask() leaves it unset and gets prose.
+ */
+export type Llm = (
+	system: string,
+	question: string,
+	settings?: LlmSettings & { json?: boolean }
+) => Promise<string>
 
 /** The manifest, spoken — the fallback self-description and the LLM's context. */
 export function manifestProse(m: Manifest): string {

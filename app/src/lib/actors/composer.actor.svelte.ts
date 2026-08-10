@@ -1,4 +1,4 @@
-import { complete } from '$lib/chat/redpill'
+import { complete, extractJsonObject } from '$lib/chat/redpill'
 import { Actor, keepsRecords, type Manifest } from './actor'
 import type { MessageBus } from './bus'
 import type { RecordActor, StoredRecord } from './created.actor.svelte'
@@ -263,6 +263,7 @@ export class ComposerActor extends Actor {
 			],
 			{
 				...lane,
+				json: true,
 				onDelta: (delta) => {
 					if (delta.reasoning) {
 						pendingReasoning += delta.reasoning
@@ -273,32 +274,22 @@ export class ComposerActor extends Actor {
 			}
 		)
 		flush()
-		const bare = answer.replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*?$/, '$1')
-		// Two attempts: verbatim, then with the classic model artifacts healed
-		// (trailing commas, smart quotes). Repairs that still fail are logged
-		// whole — a silent "no readable manifest" was undebuggable.
-		for (const candidate of [
-			bare,
-			bare.replace(/,\s*([}\]])/g, '$1').replace(/[\u201c\u201d]/g, '"')
-		]) {
-			try {
-				const parsed = JSON.parse(candidate)
-				if (
-					parsed &&
-					typeof parsed === 'object' &&
-					typeof parsed.id === 'string' &&
-					typeof parsed.name === 'string' &&
-					typeof parsed.description === 'string'
-				) {
-					return parsed as Manifest
-				}
-			} catch {
-				// try the next repair
-			}
+		// String-aware balanced scan: finds the good object even when the model
+		// spliced prose or a failed attempt around it. JSON mode upstream makes
+		// this rare; the scanner makes it survivable.
+		const parsed = extractJsonObject(answer) as Partial<Manifest> | null
+		if (
+			parsed &&
+			typeof parsed === 'object' &&
+			typeof parsed.id === 'string' &&
+			typeof parsed.name === 'string' &&
+			typeof parsed.description === 'string'
+		) {
+			return parsed as Manifest
 		}
 		console.warn('[composer] unparseable manifest answer:', answer)
-		this.#note(`unparseable answer, starts: ${bare.slice(0, 120)}…`, false)
-		this.#recordFailure(lane, user, 'unparseable manifest JSON', bare)
+		this.#note(`unparseable answer, starts: ${answer.slice(0, 120)}…`, false)
+		this.#recordFailure(lane, user, 'unparseable manifest JSON', answer)
 		return null
 	}
 
