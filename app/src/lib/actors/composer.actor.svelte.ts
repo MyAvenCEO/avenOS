@@ -27,6 +27,20 @@ export interface ComposerStep {
 	ok: boolean
 }
 
+/** One failed design attempt — the trace self-healing feeds on. */
+export interface DesignFailure {
+	at: number
+	/** Which lane produced it ('kimi-k3', 'fast lane', …). */
+	lane: string
+	/** What the attempt was for, truncated. */
+	task: string
+	reason: string
+	/** How the rejected answer began — enough to diagnose, small enough to keep. */
+	sample: string
+}
+
+const FAILURE_KEY = 'aven.composer-failures'
+
 export class ComposerActor extends Actor {
 	stage = $state<ComposerStage>('idle')
 	wish = $state('')
@@ -39,6 +53,13 @@ export class ComposerActor extends Actor {
 
 	/** When the current draft is a merge: the source actors it replaces. */
 	mergeSources = $state<string[]>([])
+	/**
+	 * Failed design attempts, persisted across reloads — the composer's own
+	 * biography of what went wrong. The retry prompt quotes the last failure
+	 * (learning, not re-rolling), the face shows them, and composer_failures
+	 * hands them to the voice model on request.
+	 */
+	designFailures = $state<DesignFailure[]>([])
 
 	/** UI seam: called when the flow starts, so the face can take the stage. */
 	onStage?: () => void
@@ -123,13 +144,27 @@ export class ComposerActor extends Actor {
 					name: 'composer_discard',
 					description: 'Throws the current draft away and resets the flow.',
 					parameters: { type: 'object', properties: {} }
+				},
+				{
+					name: 'composer_failures',
+					description:
+						'Lists the recent failed design attempts (lane, task, reason, how the ' +
+						'rejected answer began) — the trace to consult when drafting misbehaves.',
+					parameters: { type: 'object', properties: {} }
 				}
 			]
 		})
 		this.#bus = bus
+		try {
+			const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(FAILURE_KEY) : null
+			if (raw) this.designFailures = JSON.parse(raw) as DesignFailure[]
+		} catch {
+			// an unreadable log starts empty
+		}
 		this.bind({
 			composer_draft: (p) => this.#draft(p),
 			composer_consolidate: (p) => this.#consolidate(p),
+			composer_failures: () => this.#listFailures(),
 			composer_revise: (p) => this.#revise(p),
 			composer_commit: () => this.#commit(),
 			composer_discard: () => this.#discard()
@@ -153,12 +188,54 @@ export class ComposerActor extends Actor {
 		// beautiful one that doesn't.
 		const lanes = [this.#lane(), this.#lane(), {}]
 		for (let attempt = 0; attempt < lanes.length; attempt++) {
-			const manifest = await this.#designOnce(user, lanes[attempt])
+			// Learning, not re-rolling: the retry prompt quotes what was wrong
+			// with the previous attempt, so the model can avoid repeating it.
+			const last = this.designFailures.at(-1)
+			const lesson =
+				attempt > 0 && last
+					? ` Your previous attempt was rejected (${last.reason}); it began: ${last.sample.slice(0, 160)} — answer with ONE valid, complete JSON object and nothing else.`
+					: ''
+			const manifest = await this.#designOnce(user + lesson, lanes[attempt])
 			if (manifest) return manifest
-			if (attempt === 0) this.#note('answer was garbled — asking again…', false)
+			if (attempt === 0) this.#note('answer was garbled — retrying with the failure quoted…', false)
 			if (attempt === 1) this.#note('kimi keeps garbling — falling back to the fast lane…', false)
 		}
 		return null
+	}
+
+	#recordFailure(lane: { model?: string }, task: string, reason: string, sample: string): void {
+		this.designFailures.push({
+			at: Date.now(),
+			lane: lane.model ?? 'fast lane',
+			task: task.slice(0, 100),
+			reason,
+			sample: sample.slice(0, 300)
+		})
+		if (this.designFailures.length > 20)
+			this.designFailures.splice(0, this.designFailures.length - 20)
+		try {
+			if (typeof localStorage !== 'undefined') {
+				localStorage.setItem(FAILURE_KEY, JSON.stringify(this.designFailures))
+			}
+		} catch {
+			// persistence is best-effort
+		}
+	}
+
+	#listFailures() {
+		const lines = this.designFailures
+			.slice(-10)
+			.map(
+				(f) =>
+					`${new Date(f.at).toLocaleString()} [${f.lane}] ${f.task}: ${f.reason} — began: ${f.sample.slice(0, 120)}`
+			)
+		return {
+			record: JSON.stringify({ ok: true, failures: this.designFailures.slice(-10) }),
+			wire:
+				lines.length === 0
+					? 'No design failures on record.'
+					: `Design failures (${lines.length} recent): ${lines.join(' ;; ')}`
+		}
 	}
 
 	async #designOnce(
@@ -221,6 +298,7 @@ export class ComposerActor extends Actor {
 		}
 		console.warn('[composer] unparseable manifest answer:', answer)
 		this.#note(`unparseable answer, starts: ${bare.slice(0, 120)}…`, false)
+		this.#recordFailure(lane, user, 'unparseable manifest JSON', bare)
 		return null
 	}
 

@@ -247,4 +247,27 @@ function revise(event: SubmitEvent) {
 			</button>
 		{/if}
 	{/if}
+
+	{#if actor.designFailures.length > 0}
+		<!-- The failure trace: what went wrong across sessions. Retries quote
+		     the newest entry back to the model — this is the self-healing loop
+		     made visible. -->
+		<details class="pt-1">
+			<summary class="cursor-pointer text-[0.6875rem] text-foreground/40 hover:text-foreground/70">
+				{actor.designFailures.length}
+				failed design attempts on record
+			</summary>
+			<div class="flex flex-col gap-1.5 pt-2 font-mono text-[0.6875rem]">
+				{#each [...actor.designFailures].reverse().slice(0, 8) as failure (`${failure.at}`)}
+					<div class="rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+						<p class="text-foreground/50">
+							{new Date(failure.at).toLocaleString()}
+							· {failure.lane} · {failure.reason}
+						</p>
+						<p class="break-all pt-0.5 text-foreground/35">{failure.sample.slice(0, 160)}…</p>
+					</div>
+				{/each}
+			</div>
+		</details>
+	{/if}
 </div>
