@@ -44,6 +44,42 @@ async function ask(event: SubmitEvent) {
 		busy = false
 	}
 }
+
+// The face is not just a manifest viewer: the engine runs right here. The
+// first produced predicate is the actor's natural goal; facts feed its
+// external requirements.
+const runGoal = $derived(actor.produces[0] ?? null)
+let factsText = $state('')
+let running = $state(false)
+let runSummary = $state('')
+
+async function execute(event: SubmitEvent) {
+	event.preventDefault()
+	if (!runGoal || running) return
+	let facts: Record<string, unknown> = {}
+	if (factsText.trim() !== '') {
+		// A bare sentence is the common case by voice — wrap it as the payload
+		// of the first external requirement instead of demanding JSON.
+		try {
+			facts = JSON.parse(factsText)
+		} catch {
+			const first = actor.requires[0]
+			facts = first ? { [functor(first)]: { text: factsText.trim() } } : {}
+		}
+	}
+	running = true
+	runSummary = ''
+	try {
+		const run = await bus.satisfy(runGoal, facts)
+		const last = run.steps.at(-1)
+		runSummary =
+			run.status === 'ok'
+				? `✓ ${runGoal} → ${JSON.stringify(last?.out ?? {})}`
+				: `✗ gescheitert: ${JSON.stringify(last?.out ?? {})}`
+	} finally {
+		running = false
+	}
+}
 </script>
 
 <div class="flex flex-col gap-3 text-foreground">
@@ -73,8 +109,33 @@ async function ask(event: SubmitEvent) {
 		</dl>
 	{:else}
 		<p class="text-foreground/40 text-xs">
-			Reines Template — Verträge deklariert, Ausführung kommt mit der Flow-Engine.
+			Reines Template — Verträge deklariert; die Engine führt sie aus{actor.manifest.llm
+				? ' (llm: das Modell antwortet als dieser Actor)'
+				: ''}.
 		</p>
+	{/if}
+
+	{#if runGoal}
+		<form onsubmit={execute} class="flex items-center gap-2">
+			<span class="shrink-0 font-mono text-[0.6875rem] text-foreground/40">⊢ {runGoal}</span>
+			<input
+				bind:value={factsText}
+				placeholder={actor.requires.length > 0
+					? `Eingabe für ${actor.requires.map(functor).join(', ')}…`
+					: 'ohne Eingabe'}
+				class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-4 py-2 text-sm outline-none placeholder:text-foreground/30"
+			>
+			<button
+				type="submit"
+				disabled={running}
+				class="rounded-full bg-primary px-4 py-2 text-primary-foreground text-sm transition-opacity disabled:opacity-30"
+			>
+				{running ? 'läuft…' : 'Ausführen'}
+			</button>
+		</form>
+		{#if runSummary}
+			<p class="break-all font-mono text-[0.6875rem] leading-relaxed">{runSummary}</p>
+		{/if}
 	{/if}
 
 	<form onsubmit={ask} class="flex items-center gap-2">

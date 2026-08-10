@@ -309,7 +309,7 @@ $effect(() => {
 					{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
 					<section class="flex min-h-0 flex-col rounded-2xl">
 						<div class="flex items-center gap-2 pb-2">
-							<span class="font-semibold text-[15px]">{w.subject.manifest.name}</span>
+							<span class="font-semibold text-[15px]">{w.manifest.name}</span>
 							<span class="font-mono text-[0.625rem] text-foreground/35">
 								{w.subject.manifest.id}
 							</span>
@@ -325,11 +325,15 @@ $effect(() => {
 								×
 							</button>
 						</div>
-						<Face actor={w.subject} />
+						<Face actor={w.subject} {...w.props} />
 					</section>
 				{:else}
 					<p class="pt-10 text-center text-foreground/40 text-sm">
-						Alle Fenster sind ausgeblendet. Sag zum Beispiel „zeig das Aufgaben-Fenster".
+						Kein Fenster offen. Sag zum Beispiel
+						{#each bus.actors().filter(isWindow) as w, i (w.manifest.id)}
+							{i > 0 ? ' oder' : ''}
+							„zeig {w.manifest.name}"
+						{/each}
 					</p>
 				{/each}
 			{/if}

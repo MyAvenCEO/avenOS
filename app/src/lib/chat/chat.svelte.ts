@@ -47,9 +47,16 @@ const SYSTEM_PROMPT =
 	'sei erledigt, rufe workitem_update mit status=erledigt auf; „bin ich gerade ' +
 	'dran" oder „fange ich an" heißt status=in_arbeit. Gelöscht wird nur auf ' +
 	'ausdrücklichen Wunsch. Lies Listen als Fließtext vor. ' +
-	'Was auf dem Bildschirm zu sehen ist, steuerst du mit workitem_show: „zeig mir ' +
-	'das Board", „zeig meine Liste", „zeig die Team-Aufgaben" sind Ansichts-' +
-	'Wechsel, keine Datenänderungen. ' +
+	'Auf dem Bildschirm ist immer genau ein Fenster zu sehen; umgeschaltet wird ' +
+	'mit den *_window_toggle-Werkzeugen und open=true, das vorige Fenster ' +
+	'verschwindet dabei von selbst. „Zeig die Liste" heißt liste_window_toggle, ' +
+	'„zeig das Board" heißt board_window_toggle, „zeig den Kalender" heißt ' +
+	'kalender_window_toggle — jeweils mit open=true. workitem_show wechselt nur ' +
+	'noch den Spark: „zeig die Team-Aufgaben" heißt spark=team. Alles davon sind ' +
+	'Ansichts-Wechsel, keine Datenänderungen. ' +
+	'Soll ein neuer Actor entstehen oder sich einer ändern, reiche den Wunsch ' +
+	'wörtlich weiter: actor_create mit wunsch=…, actor_update mit anweisung=… — ' +
+	'das Manifest entwirft ein eigenes Composer-Modell, nicht du. ' +
 	'Die Nachrichten kommen aus einer Spracherkennung und sind manchmal mitten im ' +
 	'Satz abgeschnitten. Wirkt eine Nachricht wie die Fortsetzung der vorigen, ' +
 	'behandle beide zusammen als eine Anfrage. ' +
@@ -148,7 +155,10 @@ export class Chat {
 	streaming = $state(false)
 	failure = $state<string | null>(null)
 
-	#wire: ChatMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }]
+	// The system prompt is NOT stored here — it is prepended per request, so a
+	// long-lived singleton Chat always speaks with the current prompt instead
+	// of whatever was compiled in when the instance was born.
+	#wire: ChatMessage[] = []
 	#abort: AbortController | null = null
 	#sink: ChatSink
 	#tools: ChatTools
@@ -259,7 +269,7 @@ export class Chat {
 		const calls = new Map<number, { id: string; name: string; arguments: string }>()
 
 		for await (const event of streamChat(
-			this.#wire,
+			[{ role: 'system', content: SYSTEM_PROMPT }, ...this.#wire],
 			this.#tools.specs,
 			this.#abort?.signal ?? undefined
 		)) {
@@ -327,7 +337,7 @@ export class Chat {
 	 */
 	export(): unknown {
 		return {
-			wire: this.#wire,
+			wire: [{ role: 'system', content: SYSTEM_PROMPT }, ...this.#wire],
 			turns: this.turns,
 			failure: this.failure
 		}
@@ -341,7 +351,7 @@ export class Chat {
 	clear(): void {
 		this.stop()
 		this.turns = []
-		this.#wire = [{ role: 'system', content: SYSTEM_PROMPT }]
+		this.#wire = []
 		this.failure = null
 	}
 }

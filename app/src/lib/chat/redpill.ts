@@ -198,12 +198,13 @@ async function failureText(response: Response): Promise<string> {
 export async function* streamChat(
 	messages: ChatMessage[],
 	tools: ToolSpec[],
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	model?: string
 ): AsyncGenerator<StreamEvent> {
 	const response = await fetch('/api/chat', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ messages, tools }),
+		body: JSON.stringify({ messages, tools, ...(model && { model }) }),
 		signal
 	})
 
@@ -234,4 +235,55 @@ export async function* streamChat(
 	} finally {
 		reader.cancel().catch(() => {})
 	}
+}
+
+/**
+ * The composer lane: one whole completion from the stronger, slower model.
+ *
+ * Drafting an actor manifest is design work, not conversation — nobody is
+ * waiting on a first token, and getting the contract right beats getting it
+ * fast. So it runs on kimi-k3 while the voice loop stays on the fast lane.
+ *
+ * Deliberately NOT built on streamChat's events: the prose lane strips braces
+ * and pipes as anti-glitch armor, which would gut the JSON this lane exists to
+ * produce. The frames are read raw here — output for a machine, not a voice.
+ */
+export const COMPOSER_MODEL = 'moonshotai/kimi-k3'
+
+export async function complete(messages: ChatMessage[], model = COMPOSER_MODEL): Promise<string> {
+	const response = await fetch('/api/chat', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ messages, tools: [], model })
+	})
+	if (!response.ok || !response.body) throw new Error(await failureText(response))
+
+	const reader = response.body.getReader()
+	const decoder = new TextDecoder()
+	let buffer = ''
+	let text = ''
+	try {
+		while (true) {
+			const { done, value } = await reader.read()
+			if (done) break
+			buffer += decoder.decode(value, { stream: true })
+			const frames = buffer.split('\n\n')
+			buffer = frames.pop() ?? ''
+			for (const frame of frames) {
+				const line = frame.split('\n').find((l) => l.startsWith('data:'))
+				if (!line) continue
+				const data = line.slice('data:'.length).trim()
+				if (data === '' || data === '[DONE]') continue
+				try {
+					const content = JSON.parse(data)?.choices?.[0]?.delta?.content
+					if (typeof content === 'string') text += content
+				} catch {
+					// partial frames cannot occur (blank-line buffering); skip junk
+				}
+			}
+		}
+	} finally {
+		reader.cancel().catch(() => {})
+	}
+	return text
 }

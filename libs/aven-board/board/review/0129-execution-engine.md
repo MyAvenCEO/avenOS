@@ -66,11 +66,11 @@ runtime backtracking, LLM actors as declared, and runs as first-class visible hi
 
 ## Acceptance criteria
 
-- [ ] Deterministic chain runs with value passing through shared variables
-- [ ] Runtime backtracking: failed producer abandoned, alternative completes, both recorded
-- [ ] llm:true actor executes via injected LLM; without one, fails structured
-- [ ] Runs panel shows per-step state; Ausführen runs a goal with facts from the UI
-- [ ] goal_run callable by the model; all prior tests green; `bun run check` exits 0
+- [x] Deterministic chain runs with value passing through shared variables
+- [x] Runtime backtracking: failed producer abandoned, alternative completes, both recorded
+- [x] llm:true actor executes via injected LLM; without one, fails structured
+- [x] Runs panel shows per-step state; Ausführen runs a goal with facts from the UI
+- [x] goal_run callable by the model; all prior tests green; `bun run check` exits 0
 
 ## Verification
 
@@ -81,6 +81,18 @@ runtime backtracking, LLM actors as declared, and runs as first-class visible hi
 
 ## Progress log
 
+- 2026-08-09 — BUILT: bus.satisfy() executes the proof tree postorder (clause-body handler =
+  the produced functor; payload = requirement outputs keyed by functor over external facts);
+  runtime backtracking across producers with both attempts on the run; llm:true actors get a
+  receive-time handler over bus.llm (raw complete() lane — the prose lane's brace-stripping
+  had gutted the JSON, fixed); goal_run on the registry; explorer Beweis card gained
+  Ausführen + facts input and a Runs panel (expandable per-step, Versuch-Badge); the generic
+  face runs its first produced goal directly (freeform input wraps as first requirement).
+  30/30 tests green incl. the 5 engine tests; bun run check 0 errors. Live: voice-minted
+  "uebersetzer" (Kimi-K3 composer, separate model lane) translated real text via goal_run
+  AND via its face. Beyond the card: composer lane (actor_create/update take wunsch/
+  anweisung, kimi-k3 drafts the manifest), single-active window rule, board+list as own
+  window actors.
 - 2026-08-09 — discovered (/aven-discover, "the next round"): scope = proofs run; three
   load-bearing decisions confirmed (llm-actors as declared kind, runtime backtracking, runs in
   the explorer with Ausführen). Depends on 0128 building first.

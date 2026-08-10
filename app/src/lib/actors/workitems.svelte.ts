@@ -67,8 +67,6 @@ export class WorkItemsActor extends Actor {
 	items = $state<WorkItem[]>([])
 	/** The spark the views show and new items land in. */
 	active = $state<string>('me')
-	/** Which shape the workspace renders — switched by message, not button. */
-	view = $state<'list' | 'board'>('list')
 
 	constructor() {
 		super(
@@ -152,19 +150,16 @@ export class WorkItemsActor extends Actor {
 					{
 						name: 'workitem_show',
 						description:
-							'Wechselt, was der Nutzer sieht: die Ansicht (liste oder board) und/oder den ' +
-							'aktiven Spark. „Zeig mir das Board" heißt view=board; „zeig meine Liste" heißt ' +
-							'spark=me. Ändert keine Daten.',
+							'Wechselt den aktiven Spark: „zeig meine Liste" heißt spark=me, „zeig die ' +
+							'Team-Aufgaben" heißt spark=team. Ändert keine Daten. Für die FORM (Liste ' +
+							'oder Board) gibt es eigene Fenster: liste_window_toggle und ' +
+							'board_window_toggle.',
 						parameters: {
 							type: 'object',
 							properties: {
-								view: {
-									type: 'string',
-									enum: ['liste', 'board'],
-									description: 'Die Form: liste oder board.'
-								},
 								spark: SPARK_PARAM
-							}
+							},
+							required: ['spark']
 						}
 					},
 					{
@@ -337,12 +332,8 @@ export class WorkItemsActor extends Actor {
 	}
 
 	#show(p: Record<string, unknown>): HandlerResult {
-		if (p.view === 'liste' || p.view === 'board') this.view = p.view === 'board' ? 'board' : 'list'
 		if (typeof p.spark === 'string' && SPARKS.some((s) => s.id === p.spark)) this.active = p.spark
-		return this.#ok(
-			{ ok: true, view: this.view, spark: this.active },
-			`Angezeigt wird jetzt: ${this.view === 'board' ? 'Board' : 'Liste'}, Spark ${this.active}`
-		)
+		return this.#ok({ ok: true, spark: this.active }, `Aktiver Spark ist jetzt ${this.active}.`)
 	}
 
 	#clearDone(): HandlerResult {
@@ -363,8 +354,7 @@ export class WorkItemsActor extends Actor {
 			offen: this.items.filter((t) => t.status === 'open').length,
 			'in Arbeit': this.items.filter((t) => t.status === 'doing').length,
 			erledigt: this.items.filter((t) => t.status === 'done').length,
-			'aktiver Spark': this.active,
-			Ansicht: this.view === 'board' ? 'Board' : 'Liste'
+			'aktiver Spark': this.active
 		}
 	}
 
@@ -373,7 +363,7 @@ export class WorkItemsActor extends Actor {
 			(s) =>
 				`${s.name}: ${this.items.filter((t) => t.spark === s.id && t.status !== 'done').length} offen`
 		).join(', ')
-		return `${this.items.length} Aufgaben (${bySpark}); Ansicht ${this.view}, aktiver Spark ${this.active}.`
+		return `${this.items.length} Aufgaben (${bySpark}); aktiver Spark ${this.active}.`
 	}
 
 	/** One displayable entry out of a raw handler record, or null for a no-op. */
@@ -424,9 +414,8 @@ export class WorkItemsActor extends Actor {
 					note: `${(record.items as unknown[])?.length ?? 0} Aufgaben gelesen`
 				}
 			case 'workitem_show': {
-				const view = record.view === 'board' ? 'Board' : 'Liste'
 				const spark = record.spark === 'team' ? 'Team' : 'Me'
-				return { kind: 'switched', titles: [], note: `${view} · ${spark}` }
+				return { kind: 'switched', titles: [], note: `Spark ${spark}` }
 			}
 			default:
 				return null

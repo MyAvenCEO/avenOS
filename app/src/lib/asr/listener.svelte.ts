@@ -77,6 +77,8 @@ export class Listener {
 	stage = $state<'download' | 'load' | 'ready'>('download')
 	/** Batches thrown away because the recognizer fell too far behind. */
 	dropped = $state(0)
+	/** Times the capture graph was rebuilt by the watchdog — drift made visible. */
+	restarts = $state(0)
 	failure = $state<string | null>(null)
 
 	#hooks: ListenerHooks
@@ -86,6 +88,28 @@ export class Listener {
 	/** Batches waiting to go to the recognizer, in order. */
 	#queue: Float32Array[] = []
 	#draining = false
+	/** The models are loaded once per app run; rebuilds must not re-download. */
+	#prepared = false
+	/** Re-entry latch — `status` is for the UI, not for concurrency control. */
+	#starting = false
+	#rebuilding = false
+	/** True between start() and stop(): the watchdog only heals wanted audio. */
+	#wantListening = false
+	/** When the worklet last delivered audio; the watchdog's heartbeat. */
+	#lastFrameAt = 0
+	#watchdog: ReturnType<typeof setInterval> | null = null
+	/** Last value sent to the echo gate, re-synced by the watchdog. */
+	#outputActive = false
+	#onDeviceChange = () => {
+		// The default input just changed (AirPods on/off, dock, …). The old track
+		// often keeps "capturing" the vanished device — eternal silence that
+		// looks exactly like a broken recognizer. Take the new default.
+		if (this.#wantListening) void this.#rebuild('devicechange')
+	}
+	/** asr_push failures in a row; a streak means the engine needs a reset. */
+	#errorStreak = 0
+	/** Utterances that ended with no text in a row — a deaf recognizer's tell. */
+	#emptyEnds = 0
 
 	constructor(hooks: ListenerHooks = {}) {
 		this.#hooks = hooks
@@ -100,87 +124,204 @@ export class Listener {
 	 *
 	 * Called from a user gesture, because that is what a microphone permission
 	 * prompt wants. ~2.6 GB on the very first run.
+	 *
+	 * Reentrant by design: stop()/start() across route changes must always end
+	 * with a live graph. The old guard compared against `status === 'preparing'`
+	 * — which stop() itself set — so one visit to the settings page killed the
+	 * microphone until the next app launch while the UI kept looking fine.
 	 */
 	async start(): Promise<void> {
-		if (this.status === 'listening' || this.status === 'preparing') return
+		if (this.#starting || this.status === 'listening') return
 		if (!this.available) {
 			this.status = 'unavailable'
 			return
 		}
 
+		this.#starting = true
+		this.#wantListening = true
 		this.status = 'preparing'
 		this.failure = null
 
 		try {
-			// The recognizer is a 2.6 GB download the first time. Subscribe before
-			// asking for it, or the whole thing finishes before we are listening.
-			const unlisten = await listen<ModelProgress>('model-progress', ({ payload }) => {
-				if (payload.feature !== 'asr' || payload.total === 0) return
-				this.progress = payload.received / payload.total
-			})
-			const unstage = await listen<[string, string]>('model-stage', ({ payload }) => {
-				if (payload[0] === 'asr') this.stage = payload[1] as typeof this.stage
-			})
-			try {
-				await invoke('asr_prepare')
-			} finally {
-				unlisten()
-				unstage()
+			if (!this.#prepared) {
+				// The recognizer is a 2.6 GB download the first time. Subscribe before
+				// asking for it, or the whole thing finishes before we are listening.
+				const unlisten = await listen<ModelProgress>('model-progress', ({ payload }) => {
+					if (payload.feature !== 'asr' || payload.total === 0) return
+					this.progress = payload.received / payload.total
+				})
+				const unstage = await listen<[string, string]>('model-stage', ({ payload }) => {
+					if (payload[0] === 'asr') this.stage = payload[1] as typeof this.stage
+				})
+				try {
+					await invoke('asr_prepare')
+					this.#prepared = true
+				} finally {
+					unlisten()
+					unstage()
+				}
 			}
 
-			this.#stream = await navigator.mediaDevices.getUserMedia({
-				audio: {
-					// Without AEC the agent's own voice comes back through the mic and
-					// trips the barge-in the moment it starts speaking.
-					echoCancellation: true,
-					noiseSuppression: true,
-					autoGainControl: true,
-					channelCount: 1
-				}
-			})
-
-			// Device rate, deliberately — never ask for 16 kHz here. WebKit has one
-			// audio pipeline for the whole webview, and whichever context is created
-			// first sets its rate: this one exists before the speaker's, so a 16 kHz
-			// request left the speaker's 44.1 kHz context with a clock that reported
-			// "running" and never advanced — six sentences synthesized, scheduled,
-			// and silent, with "Spricht" stuck on screen. `#toSixteenK` resamples on
-			// the way to the recognizer instead, which it had to be able to do
-			// anyway, because the 16 kHz request was only ever a hint.
-			this.#context = new AudioContext()
-			await this.#context.resume()
-			await this.#context.audioWorklet.addModule('/asr-worklet.js')
-
-			this.#node = new AudioWorkletNode(this.#context, 'asr-tap')
-			this.#node.port.onmessage = (event) => {
-				// The worklet's first message is its real sample rate, not audio.
-				if (!(event.data instanceof Float32Array)) {
-					this.rate = (event.data as { rate: number }).rate
-					return
-				}
-				void this.#push(event.data)
-			}
-			this.#context.createMediaStreamSource(this.#stream).connect(this.#node)
-			// Not connected to the destination on purpose — this is a tap, and
-			// routing the mic to the speakers would be a feedback loop.
-
+			await this.#capture()
 			this.status = 'listening'
+			navigator.mediaDevices.addEventListener?.('devicechange', this.#onDeviceChange)
+			this.#watch()
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err)
 			this.status = /permission|denied|NotAllowed/i.test(message) ? 'denied' : 'error'
 			this.failure = message
-			this.stop()
+			this.#teardownCapture()
+		} finally {
+			this.#starting = false
 		}
 	}
 
-	stop(): void {
+	/** Open the microphone graph: stream → context → worklet tap. */
+	async #capture(): Promise<void> {
+		this.#teardownCapture()
+
+		this.#stream = await navigator.mediaDevices.getUserMedia({
+			audio: {
+				// Without AEC the agent's own voice comes back through the mic and
+				// trips the barge-in the moment it starts speaking.
+				echoCancellation: true,
+				noiseSuppression: true,
+				autoGainControl: true,
+				channelCount: 1
+			}
+		})
+
+		// Device rate, deliberately — never ask for 16 kHz here. WebKit has one
+		// audio pipeline for the whole webview, and whichever context is created
+		// first sets its rate: this one exists before the speaker's, so a 16 kHz
+		// request left the speaker's 44.1 kHz context with a clock that reported
+		// "running" and never advanced — six sentences synthesized, scheduled,
+		// and silent, with "Spricht" stuck on screen. `#toSixteenK` resamples on
+		// the way to the recognizer instead, which it had to be able to do
+		// anyway, because the 16 kHz request was only ever a hint.
+		this.#context = new AudioContext()
+		// The worklet reports its true rate in its first message, but that message
+		// is not guaranteed to win the race against the first audio batch — and a
+		// rate of 0 would send device-rate audio to a 16 kHz recognizer, which the
+		// VAD hears as nothing at all. The context knows its rate right now.
+		this.rate = this.#context.sampleRate
+		await this.#context.resume()
+		await this.#context.audioWorklet.addModule('/asr-worklet.js')
+
+		this.#node = new AudioWorkletNode(this.#context, 'asr-tap')
+		this.#node.port.onmessage = (event) => {
+			// The worklet's first message is its real sample rate, not audio.
+			if (!(event.data instanceof Float32Array)) {
+				this.rate = (event.data as { rate: number }).rate
+				return
+			}
+			this.#lastFrameAt = Date.now()
+			void this.#push(event.data)
+		}
+		this.#context.createMediaStreamSource(this.#stream).connect(this.#node)
+		// Not connected to the destination on purpose — this is a tap, and
+		// routing the mic to the speakers would be a feedback loop.
+
+		// A track that mutes or ends (device unplugged, input route stolen) is
+		// silence that reports itself — take the signal instead of waiting for
+		// the frame watchdog to infer it.
+		for (const track of this.#stream.getTracks()) {
+			track.onended = () => {
+				if (this.#wantListening) void this.#rebuild('track ended')
+			}
+			track.onmute = () => {
+				// Mutes flicker during route changes; only a mute that HOLDS is real.
+				setTimeout(() => {
+					if (this.#wantListening && this.#stream?.getTracks().some((t) => t.muted)) {
+						void this.#rebuild('track muted')
+					}
+				}, 1200)
+			}
+		}
+		this.#context.onstatechange = () => {
+			if (this.#context?.state === 'suspended' && this.#wantListening) {
+				void this.#context.resume()
+			}
+		}
+
+		this.#lastFrameAt = Date.now()
+	}
+
+	#teardownCapture(): void {
 		this.#node?.port.close()
 		this.#node?.disconnect()
 		this.#node = null
-		for (const track of this.#stream?.getTracks() ?? []) track.stop()
+		for (const track of this.#stream?.getTracks() ?? []) {
+			track.onended = null
+			track.onmute = null
+			track.stop()
+		}
 		this.#stream = null
+		if (this.#context) this.#context.onstatechange = null
 		void this.#context?.close()
 		this.#context = null
+	}
+
+	/**
+	 * Tear the graph down and open it again, models untouched. This is the one
+	 * answer to every way the capture side dies quietly — frozen worklet,
+	 * vanished device, suspended context — because a fresh graph on the current
+	 * default device is correct in all of them.
+	 */
+	async #rebuild(reason: string): Promise<void> {
+		if (this.#rebuilding || !this.#wantListening) return
+		this.#rebuilding = true
+		console.warn(`[listener] rebuilding capture: ${reason}`)
+		try {
+			await this.#capture()
+			this.restarts++
+			if (this.status !== 'listening') this.status = 'listening'
+			this.failure = null
+		} catch (err) {
+			// getUserMedia can fail transiently mid route-change; the watchdog
+			// keeps retrying as long as listening is wanted.
+			this.failure = err instanceof Error ? err.message : String(err)
+			this.status = 'error'
+		} finally {
+			this.#rebuilding = false
+		}
+	}
+
+	/**
+	 * The heartbeat. "Bereit" on screen while nothing reaches the recognizer is
+	 * the one failure the UI cannot show on its own — so the watchdog measures
+	 * the actual audio flow and heals instead of hoping:
+	 * - no worklet frames for 3 s while listening → rebuild the graph
+	 * - a failed rebuild (status error) → try again
+	 * - the echo gate is re-synced every tick, because one lost IPC otherwise
+	 *   leaves the 0.92 barge-in threshold on FOREVER — the mic looks alive,
+	 *   the level meter moves, and ordinary speech never counts again.
+	 */
+	#watch(): void {
+		if (this.#watchdog) return
+		this.#watchdog = setInterval(() => {
+			if (!this.#wantListening) return
+			void invoke('asr_output_active', { active: this.#outputActive }).catch(() => {})
+			if (this.status === 'error') {
+				void this.#rebuild('retry after error')
+				return
+			}
+			if (this.status !== 'listening') return
+			if (this.#context?.state === 'suspended') void this.#context.resume()
+			if (Date.now() - this.#lastFrameAt > 3000) {
+				void this.#rebuild(`no audio frames for ${Date.now() - this.#lastFrameAt}ms`)
+			}
+		}, 1500)
+	}
+
+	stop(): void {
+		this.#wantListening = false
+		if (this.#watchdog) {
+			clearInterval(this.#watchdog)
+			this.#watchdog = null
+		}
+		navigator.mediaDevices.removeEventListener?.('devicechange', this.#onDeviceChange)
+		this.#teardownCapture()
 		this.speech = false
 		this.partial = ''
 		if (this.status === 'listening') this.status = 'preparing'
@@ -191,9 +332,12 @@ export class Listener {
 	 *
 	 * While it is, speech has to clear a much higher bar before it counts —
 	 * otherwise the microphone hears the assistant through the speakers and
-	 * barge-in kills every reply the moment it starts.
+	 * barge-in kills every reply the moment it starts. The value is remembered
+	 * and re-sent by the watchdog: this flag silently stuck on `true` was one
+	 * of the ways the mic "listened" without ever transcribing.
 	 */
 	setOutputActive(active: boolean): void {
+		this.#outputActive = active
 		if (this.available) void invoke('asr_output_active', { active }).catch(() => {})
 	}
 
@@ -281,6 +425,7 @@ export class Listener {
 			// Raw bytes, not a JSON array: 8 KB instead of ~40 KB per batch, and no
 			// parse of 2048 numbers on either side.
 			const event = await invoke<AsrEvent>('asr_push', new Uint8Array(pcm.buffer))
+			this.#errorStreak = 0
 
 			// Decays, so the peak of a phrase stays readable for a moment.
 			this.probability = Math.max(event.probability, this.probability * 0.9)
@@ -299,10 +444,37 @@ export class Listener {
 			if (event.ended) {
 				const text = event.transcript.trim()
 				this.partial = ''
-				if (text !== '') this.#hooks.onUtterance?.(text)
+				if (text !== '') {
+					this.#emptyEnds = 0
+					this.#hooks.onUtterance?.(text)
+				} else {
+					// "Hört zu" happened, then… nothing: the VAD opened an utterance
+					// the recognizer heard nothing in. Once is a cough. Twice in a
+					// row is a wedged model or corrupt audio — reset the engine and
+					// rebuild the graph rather than staying quietly deaf.
+					this.#emptyEnds++
+					console.warn(
+						`[listener] utterance ended EMPTY (#${this.#emptyEnds}, ` +
+							`prob ${this.probability.toFixed(2)}, level ${this.level.toFixed(3)}, ` +
+							`rate ${this.rate}, pushes ${this.pushes})`
+					)
+					if (this.#emptyEnds >= 2) {
+						this.#emptyEnds = 0
+						await invoke('asr_reset').catch(() => {})
+						void this.#rebuild('two empty utterances in a row')
+					}
+				}
 			}
 		} catch (err) {
 			this.failure = err instanceof Error ? err.message : String(err)
+			// One failed push is noise; a streak is a wedged engine. Resetting it
+			// costs a half-heard utterance and buys back the microphone — audio
+			// silently erroring forever WAS "Bereit" with no transcription.
+			if (++this.#errorStreak >= 3) {
+				this.#errorStreak = 0
+				console.warn(`[listener] asr_push failing repeatedly, resetting engine: ${this.failure}`)
+				await invoke('asr_reset').catch(() => {})
+			}
 		}
 	}
 }

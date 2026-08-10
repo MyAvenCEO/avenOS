@@ -36,14 +36,22 @@ const REDPILL_CHAT_URL = 'https://api.redpill.ai/v1/chat/completions'
  */
 const MODEL = 'qwen/qwen3.5-122b-a10b'
 
+/**
+ * Second lane: the actor composer. Drafting a manifest is slow, careful work —
+ * exactly what the voice lane must not be — so it goes to a stronger model and
+ * latency is accepted. Allowlisted so the client cannot request arbitrary ids.
+ */
+const MODELS = new Set([MODEL, 'moonshotai/kimi-k3'])
+
 export const POST: RequestHandler = async ({ request, fetch }) => {
 	const apiKey = env.PHALA_API_KEY
 	if (!apiKey) {
 		error(500, 'PHALA_API_KEY is unset — add it to the worktree .env and restart vite')
 	}
 
-	const { messages, tools } = await request.json()
+	const { messages, tools, model } = await request.json()
 	if (!Array.isArray(messages)) error(400, 'body must be { messages: [{ role, content }] }')
+	const chosen = typeof model === 'string' && MODELS.has(model) ? model : MODEL
 
 	const upstream = await fetch(REDPILL_CHAT_URL, {
 		method: 'POST',
@@ -52,7 +60,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			authorization: `Bearer ${apiKey}`
 		},
 		body: JSON.stringify({
-			model: MODEL,
+			model: chosen,
 			messages,
 			stream: true,
 			// No deliberation before a voice reply — with thinking on, time to

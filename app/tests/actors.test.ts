@@ -392,3 +392,135 @@ describe('trace (0128)', () => {
 		expect(send?.ok).toBe(true)
 	})
 })
+
+describe('execution engine (0129)', () => {
+	/** A producer whose clause-body handler is named after what it produces. */
+	function producer(
+		id: string,
+		requires: string[],
+		produces: string,
+		body: (p: Record<string, unknown>) => { record: string; wire: string }
+	) {
+		return new Actor(
+			{
+				id, name: id, description: `Erzeugt ${produces}.`, tags: ['test'],
+				methods: [], requires, produces: [produces]
+			},
+			{ [functor(produces)]: body }
+		)
+	}
+
+	test('a two-step chain executes with value passing', async () => {
+		const bus = new MessageBus()
+		bus.register(
+			producer('quelle', [], 'fact(X)', () => ({
+				record: JSON.stringify({ ok: true, wert: 5 }),
+				wire: 'Fakt erzeugt'
+			}))
+		)
+		bus.register(
+			producer('rechner', ['fact(X)'], 'result(Y)', (p) => {
+				const fact = p.fact as { wert: number }
+				return {
+					record: JSON.stringify({ ok: true, wert: fact.wert * 2 }),
+					wire: 'verdoppelt'
+				}
+			})
+		)
+		const run = await bus.satisfy('result(Y)')
+		expect(run.status).toBe('ok')
+		const last = run.steps.at(-1)
+		expect(last?.actor).toBe('rechner')
+		// The second actor received the first actor's output through the contract.
+		expect((last?.in.fact as { wert: number }).wert).toBe(5)
+		expect((last?.out as { wert: number }).wert).toBe(10)
+	})
+
+	test('runtime backtracking abandons a failing producer and records both attempts', async () => {
+		const bus = new MessageBus()
+		// Registered FIRST, so it is the first candidate — and it always throws.
+		bus.register(
+			producer('kaputt', [], 'result(Y)', () => {
+				throw new Error('immer kaputt')
+			})
+		)
+		bus.register(
+			producer('heil', [], 'result(Y)', () => ({
+				record: JSON.stringify({ ok: true, wert: 1 }),
+				wire: 'geht'
+			}))
+		)
+		const run = await bus.satisfy('result(Y)')
+		expect(run.status).toBe('ok')
+		const attempts = run.steps.filter((s) => s.predicate === 'result(Y)')
+		expect(attempts.length).toBe(2)
+		expect(attempts[0].actor).toBe('kaputt')
+		expect(attempts[0].ok).toBe(false)
+		expect(attempts[0].attempt).toBe(1)
+		expect(attempts[1].actor).toBe('heil')
+		expect(attempts[1].ok).toBe(true)
+		expect(attempts[1].attempt).toBe(2)
+	})
+
+	test('an llm:true actor with no handlers executes via the injected LLM', async () => {
+		const bus = new MessageBus()
+		let seenSystem = ''
+		let seenPayload = ''
+		bus.llm = async (system, question) => {
+			seenSystem = system
+			seenPayload = question
+			return '{"termin":"Dienstag 14 Uhr"}'
+		}
+		bus.register(
+			new Actor({
+				id: 'kalender', name: 'Kalender', description: 'Erstellt Termine aus Anfragen.',
+				tags: ['created'], methods: [], requires: ['anfrage(A)'],
+				produces: ['termin(T)'], llm: true
+			})
+		)
+		const run = await bus.satisfy('termin(T)', { anfrage: { text: 'Zahnarzt Dienstag' } })
+		expect(run.status).toBe('ok')
+		// The manifest description IS the instruction, the fact payload the input.
+		expect(seenSystem).toContain('Erstellt Termine aus Anfragen.')
+		expect(seenPayload).toContain('Zahnarzt Dienstag')
+		const last = run.steps.at(-1)
+		expect(last?.actor).toBe('kalender')
+		expect((last?.out as { termin: string }).termin).toBe('Dienstag 14 Uhr')
+	})
+
+	test('an llm:true actor without an injected LLM fails structured, not thrown', async () => {
+		const bus = new MessageBus()
+		bus.register(
+			new Actor({
+				id: 'kalender', name: 'Kalender', description: 'Erstellt Termine.', tags: [],
+				methods: [], requires: [], produces: ['termin(T)'], llm: true
+			})
+		)
+		const run = await bus.satisfy('termin(T)')
+		expect(run.status).toBe('failed')
+		const last = run.steps.at(-1)
+		expect(last?.ok).toBe(false)
+		expect(JSON.stringify(last?.out)).toContain('LLM')
+	})
+
+	test('a run records goal, status and per-step state', async () => {
+		const bus = new MessageBus()
+		bus.register(
+			producer('quelle', [], 'fact(X)', () => ({
+				record: JSON.stringify({ ok: true, wert: 5 }),
+				wire: 'Fakt'
+			}))
+		)
+		const run = await bus.satisfy('fact(X)')
+		expect(run.goal).toBe('fact(X)')
+		expect(run.status).toBe('ok')
+		expect(run.steps.length).toBe(1)
+		const step = run.steps[0]
+		expect(step.actor).toBe('quelle')
+		expect(step.predicate).toBe('fact(X)')
+		expect(step.in).toEqual({})
+		expect(step.ok).toBe(true)
+		expect(typeof step.duration).toBe('number')
+		expect(bus.runs().map((r) => r.id)).toContain(run.id)
+	})
+})

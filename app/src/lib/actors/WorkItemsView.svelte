@@ -10,7 +10,8 @@ import { SPARKS, STATUS_LABEL, type WorkItemStatus, type WorkItemsActor } from '
  * line, title, chip row — all in the app's cream world rather than the
  * reference's gray one.
  */
-const { actor }: { actor: WorkItemsActor } = $props()
+/** Which face this window renders — the list and the board are two windows now. */
+const { actor, mode = 'list' }: { actor: WorkItemsActor; mode?: 'list' | 'board' } = $props()
 
 let newWorkItem = $state('')
 /** Card id in flight during a drag, so columns know what is being dropped. */
@@ -147,15 +148,14 @@ function shift(id: string, by: -1 | 1) {
 		{/if}
 		<span class="flex-1"></span>
 
-		<!-- Which spark and shape are on screen. Read-only on purpose: switching
-		     is a conversation move — "zeig mir das Board", "zeig die Team-Liste" —
-		     handled by the workitem_show tool, never by a button. -->
+		<!-- Which spark is on screen. Read-only on purpose: switching is a
+		     conversation move — "zeig die Team-Liste" — handled by the
+		     workitem_show tool, never by a button. The SHAPE is no longer
+		     state here at all: list and board are two window actors. -->
 		<span
 			class="rounded-full bg-[#fffdf7] px-3 py-1.5 text-foreground/40 text-xs shadow-[0_1px_3px_rgba(30,41,59,0.08)]"
 		>
 			{SPARKS.find((s) => s.id === actor.active)?.name}
-			·
-			{actor.view === 'board' ? 'Board' : 'Liste'}
 		</span>
 	</div>
 
@@ -167,7 +167,7 @@ function shift(id: string, by: -1 | 1) {
 		>
 	</form>
 
-	{#if actor.view === 'list'}
+	{#if mode === 'list'}
 		<ul class="min-h-0 flex-1 space-y-2 overflow-y-auto">
 			{#each actor.visible as todo (todo.id)}
 				<li

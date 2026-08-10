@@ -89,6 +89,39 @@ function constantBindings(step: ProofStep): [string, string][] {
 		.filter(([variable, value]) => !isVariable(value) && !variable.includes('@'))
 }
 
+// ---- the engine: run the proven plan for real, watch the runs pile up
+let factsText = $state('')
+let running = $state(false)
+let runError = $state('')
+
+async function runGoal() {
+	const g = goal.trim()
+	if (g === '' || running) return
+	runError = ''
+	let facts: Record<string, unknown> = {}
+	if (factsText.trim() !== '') {
+		try {
+			facts = JSON.parse(factsText)
+		} catch {
+			runError = 'facts ist kein gültiges JSON'
+			return
+		}
+	}
+	running = true
+	try {
+		await bus.satisfy(g, facts)
+		proof = bus.prove(g)
+		traceTick++
+	} finally {
+		running = false
+	}
+}
+
+const runRows = $derived.by(() => {
+	void traceTick
+	return [...bus.runs()].reverse()
+})
+
 // ---- the interview
 let question = $state('')
 let answer = $state('')
@@ -459,7 +492,9 @@ async function ask(event: SubmitEvent) {
 						Fenster einblenden
 					</summary>
 					<div class="mt-2 max-h-80 overflow-y-auto rounded-xl border border-foreground/10 p-3">
-						<Face actor={selected.subject} />
+						<!-- The window's props ride along — they are what make the
+						     Kanban-Board window a BOARD and not another list. -->
+						<Face actor={selected.subject} {...selected.props} />
 					</div>
 				</details>
 			{:else}
@@ -549,6 +584,81 @@ async function ask(event: SubmitEvent) {
 			</div>
 			{#if proof}
 				{@render proofNode(proof)}
+			{/if}
+
+			<!-- Ausführen: the plan above, walked for real — postorder messages,
+			     runtime backtracking, llm-actors over the injected model. -->
+			<div class="flex flex-wrap items-center gap-1.5 pt-3">
+				<input
+					bind:value={factsText}
+					placeholder={'externe Fakten als JSON, z.B. {"anfrage": {"text": "…"}}'}
+					class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
+				>
+				<button
+					type="button"
+					onclick={runGoal}
+					disabled={goal.trim() === '' || running}
+					class="rounded-full bg-primary px-3 py-1 text-[0.6875rem] text-primary-foreground transition-opacity disabled:opacity-30"
+				>
+					{running ? 'läuft…' : 'Ausführen'}
+				</button>
+				{#if runError}
+					<span class="text-[0.6875rem] text-status-error">{runError}</span>
+				{/if}
+			</div>
+		</section>
+
+		<!-- --------------------------- RUNS: executed goals, step by step -->
+		<section
+			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+		>
+			<div class="flex items-center gap-2 pb-2">
+				<h3 class="font-semibold text-sm">Runs</h3>
+				<span class="text-[0.6875rem] text-foreground/40">
+					ausgeführte Ziele — jeder Schritt eine Nachricht, Backtracking sichtbar
+				</span>
+			</div>
+			{#if runRows.length === 0}
+				<p class="text-foreground/40 text-xs">
+					Noch keine Runs — wähle oben ein Ziel und drücke Ausführen, oder sag „führe … aus".
+				</p>
+			{:else}
+				<div class="flex max-h-72 flex-col gap-1 overflow-y-auto">
+					{#each runRows as run (run.id)}
+						<details class="rounded-lg border border-foreground/5 px-2 py-1">
+							<summary class="flex cursor-pointer items-center gap-2 font-mono text-[0.6875rem]">
+								<span class={run.status === 'ok' ? 'text-status-success' : 'text-status-error'}>
+									{run.status === 'ok' ? '✓' : '✗'}
+								</span>
+								<span class="text-foreground/50">{run.id}</span>
+								<span class="min-w-0 flex-1 truncate">⊢ {run.goal}</span>
+								<span class="text-foreground/35">{run.steps.length} Schritte</span>
+							</summary>
+							<div class="flex flex-col gap-0.5 py-1 pl-5 font-mono text-[0.6875rem]">
+								{#each run.steps as step, i (`${run.id}s${i}`)}
+									<div class="flex items-start gap-2">
+										<span class={step.ok ? 'text-status-success' : 'text-status-error'}>
+											{step.ok ? '✓' : '✗'}
+										</span>
+										<span class="shrink-0 text-foreground/50">{step.actor ?? 'extern'}</span>
+										<span class="min-w-0 flex-1 truncate">{step.predicate}</span>
+										{#if step.attempt > 1}
+											<span class="shrink-0 rounded bg-status-info/20 px-1 text-[#a06818]">
+												Versuch {step.attempt}
+											</span>
+										{/if}
+										<span class="w-10 shrink-0 text-right text-foreground/30">
+											{step.duration}ms
+										</span>
+									</div>
+									<div class="truncate pl-5 text-foreground/40">
+										in {JSON.stringify(step.in)} → {JSON.stringify(step.out)}
+									</div>
+								{/each}
+							</div>
+						</details>
+					{/each}
+				</div>
 			{/if}
 		</section>
 

@@ -1,5 +1,5 @@
 import { Chat } from '$lib/chat/chat.svelte'
-import { streamChat } from '$lib/chat/redpill'
+import { complete } from '$lib/chat/redpill'
 import type { Activity } from './activity.svelte'
 import { activity } from './activity.svelte'
 import { Actor } from './actor'
@@ -48,11 +48,17 @@ export class ChatActor extends Actor {
 				}
 			},
 			{
-				specs: bus.toolSpecs().map(({ name, description, parameters }) => ({
-					name,
-					description,
-					parameters
-				})),
+				// A getter, not a snapshot: the registry grows at runtime (created
+				// actors, their windows), and a list frozen at construction would
+				// hide every late arrival from the model — which is exactly how
+				// "zeig den Kalender" once had no tool to call.
+				get specs() {
+					return bus.toolSpecs().map(({ name, description, parameters }) => ({
+						name,
+						description,
+						parameters
+					}))
+				},
 				run: async (name, args) => {
 					let payload: Record<string, unknown> = {}
 					try {
@@ -117,6 +123,18 @@ export function summarizeCall(name: string, record: string): Omit<Activity, 'id'
 			return null
 		}
 	}
+	if (name.endsWith('_window_toggle')) {
+		try {
+			const parsed = JSON.parse(record)
+			return {
+				kind: 'switched',
+				titles: [],
+				note: `Fenster ${String(parsed.window ?? '').replace(/-window$/, '')} ${parsed.open ? 'an' : 'aus'}`
+			}
+		} catch {
+			return null
+		}
+	}
 	return workItems.summarize(name, record)
 }
 
@@ -124,22 +142,29 @@ export function summarizeCall(name: string, record: string): Omit<Activity, 'id'
  * Registration and the one LLM, in dependency order: work items first so the
  * chat's derived tool list contains them, the pipeline actors after.
  */
-bus.llm = async (system, question) => {
-	let text = ''
-	for await (const event of streamChat(
+// Over the RAW lane, deliberately: the prose stream strips braces as
+// anti-glitch armor, but ask() answers survive that fine while llm-actor
+// EXECUTION returns JSON that must arrive intact. Fast model — this lane
+// sits in the voice loop's latency budget.
+bus.llm = (system, question) =>
+	complete(
 		[
 			{ role: 'system', content: system },
 			{ role: 'user', content: question }
 		],
-		[]
-	)) {
-		if (event.kind === 'text') text += event.text
-	}
-	return text
-}
+		'qwen/qwen3.5-122b-a10b'
+	)
 
 bus.register(workItems)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
+// The composer lane: manifest design goes to the stronger, slower model —
+// assigned every module load so an HMR-surviving singleton never keeps a
+// stale closure.
+registryActor.composer = (system, user) =>
+	complete([
+		{ role: 'system', content: system },
+		{ role: 'user', content: user }
+	])
 bus.register(registryActor)
 export const chatActor = singleton('aven.chat', () => new ChatActor())
 bus.register(chatActor)

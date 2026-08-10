@@ -275,6 +275,11 @@ pub async fn asr_push(
 	let pcm: Vec<f32> = bytes
 		.chunks_exact(4)
 		.map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+		// A single NaN from the capture side would ride through the peak
+		// tracking (NaN gain) into the recognizer's streaming cache and poison
+		// every inference after it — empty transcripts on perfectly good audio
+		// until the next reset. Silence is the honest substitute.
+		.map(|v| if v.is_finite() { v } else { 0.0 })
 		.collect();
 
 	let mut guard = state.engine.lock().map_err(|e| e.to_string())?;
@@ -310,7 +315,14 @@ fn push_into(engine: &mut Engine, pcm: &[f32], echo_risk: bool) -> Result<AsrEve
 		let window: Vec<f32> = engine.vad_buf.drain(..VAD_WINDOW).collect();
 		let probability = engine.vad.predict(&window)?;
 		event.probability = event.probability.max(probability);
-		let speech = probability >= threshold;
+		// The raised echo gate exists to keep an utterance from OPENING on the
+		// assistant's own voice. Once one is open, the person is already talking
+		// (barge-in has fired and the speakers are going quiet) — judging their
+		// ongoing speech at 0.92 counted most of it as silence, closed the
+		// utterance mid-word, and returned fragments or nothing: "Hört zu" with
+		// no transcription ever arriving.
+		let gate = if engine.speaking { SPEECH_THRESHOLD } else { threshold };
+		let speech = probability >= gate;
 
 		if speech {
 			engine.run_speech += 1;
@@ -359,10 +371,20 @@ fn push_into(engine: &mut Engine, pcm: &[f32], echo_risk: bool) -> Result<AsrEve
 			event.ended = true;
 			event.transcript = engine.finish()?;
 			engine.asr_buf.clear();
-			log::info!(
-				target: "avenos::asr",
-				"utterance (peak {:.3}): {:?}", engine.peak, event.transcript
-			);
+			if event.transcript.trim().is_empty() {
+				// The line that tells silent failure modes apart: peak ~0 means
+				// the mic handed us silence the VAD somehow opened on; a healthy
+				// peak with empty text means the recognizer itself came up empty.
+				log::warn!(
+					target: "avenos::asr",
+					"utterance came back EMPTY (peak {:.3}, echo gate {})", engine.peak, echo_risk
+				);
+			} else {
+				log::info!(
+					target: "avenos::asr",
+					"utterance (peak {:.3}): {:?}", engine.peak, event.transcript
+				);
+			}
 			break;
 		}
 	}

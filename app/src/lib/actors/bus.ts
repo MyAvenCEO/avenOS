@@ -1,5 +1,5 @@
 import type { MethodSpec } from './actor'
-import { type Actor, functor, type HandlerResult, type Llm } from './actor'
+import { type Actor, functor, type HandlerResult, type Llm, manifestProse } from './actor'
 import { singleton } from './singleton'
 import { type Bindings, rename, resolve, unifiable, unify } from './term'
 
@@ -381,6 +381,203 @@ export class MessageBus {
 		}
 		return result
 	}
+
+	// ------------------------------------------------------- execution engine
+
+	/** Past runs, newest last, capped — the biography of executed goals. */
+	#runs: Run[] = []
+
+	runs(): Run[] {
+		return [...this.#runs]
+	}
+
+	/**
+	 * The execution engine, backward-chaining: what prove() plans, satisfy()
+	 * RUNS. Same candidate order, same unification, same backtracking — but a
+	 * chosen producer is now actually delivered a message, and a step that
+	 * fails at runtime (structured error, dead handler, bad LLM output) sends
+	 * the walk to the next producer of the same predicate, exactly like the
+	 * static prover. The whole walk is recorded as a Run, step by step.
+	 *
+	 * Conventions, deliberately Prolog-shaped:
+	 * - The handler named after a PRODUCED functor is the clause body: to make
+	 *   `termin(T)` real, the chosen producer's `termin` handler runs.
+	 * - Its payload is the outputs of its satisfied requirements, keyed by
+	 *   their functor, over the caller-supplied external `facts`.
+	 * - An actor declared `llm: true` with no such handler gets one synthesized
+	 *   at receive time: manifest prose as instruction, payload in, JSON out.
+	 *   No injected LLM = a structured step failure, not a throw.
+	 */
+	async satisfy(goal: string, facts: Record<string, unknown> = {}): Promise<Run> {
+		const run: Run = {
+			id: `run_${nextRun++}`,
+			goal,
+			status: 'failed',
+			startedAt: Date.now(),
+			steps: []
+		}
+		const result = await this.#satisfyGoal(goal, facts, new Set(), {}, run)
+		run.status = result.ok ? 'ok' : 'failed'
+		this.#runs.push(run)
+		if (this.#runs.length > 50) this.#runs.splice(0, this.#runs.length - 50)
+		return run
+	}
+
+	async #satisfyGoal(
+		goal: string,
+		facts: Record<string, unknown>,
+		visited: Set<string>,
+		bindings: Bindings,
+		run: Run
+	): Promise<{ ok: boolean; out: unknown; bindings: Bindings }> {
+		// Negation and cycles stay STATIC judgements — running p to learn that
+		// not(p) holds would be absurd, and a cycle is satisfied by assumption.
+		const naf = goal.trim().match(/^not\((.+)\)$/)
+		if (naf) {
+			const step = this.prove(goal, visited, bindings)
+			return { ok: step.satisfied, out: {}, bindings }
+		}
+		const name = functor(goal)
+		if (visited.has(name)) return { ok: true, out: {}, bindings }
+
+		const candidates = this.actors()
+			.map((a) => {
+				const head = a.produces.find(
+					(p) => unify(goal, rename(p, a.manifest.id), bindings) !== null
+				)
+				return head ? { actor: a, head: rename(head, a.manifest.id) } : null
+			})
+			.filter((c) => c !== null)
+
+		if (candidates.length === 0) {
+			const anyProducer = this.actors().some((a) => a.produces.some((p) => functor(p) === name))
+			const out = (facts[name] as Record<string, unknown> | undefined) ?? {}
+			run.steps.push({
+				actor: null,
+				predicate: goal,
+				in: {},
+				out,
+				ok: !anyProducer,
+				duration: 0,
+				attempt: 1
+			})
+			// No producer at all → an external fact, its payload from `facts`.
+			// A producer with clashing constants → a genuinely failed goal.
+			return { ok: !anyProducer, out, bindings }
+		}
+
+		const nextVisited = new Set(visited)
+		nextVisited.add(name)
+		let attempt = 0
+		for (const { actor, head } of candidates) {
+			attempt++
+			const headBindings = unify(goal, head, bindings)
+			if (headBindings === null) continue
+			let current = headBindings
+
+			// Satisfy the requirements first — postorder, values flowing up.
+			const payload: Record<string, unknown> = {}
+			let childrenOk = true
+			for (const r of actor.requires) {
+				const child = await this.#satisfyGoal(
+					rename(r, actor.manifest.id),
+					facts,
+					nextVisited,
+					current,
+					run
+				)
+				if (!child.ok) {
+					childrenOk = false
+					break
+				}
+				current = child.bindings
+				payload[functor(r)] = child.out
+			}
+			if (!childrenOk) continue
+
+			const started = Date.now()
+			const executed = await this.#execute(actor, name, payload)
+			run.steps.push({
+				actor: actor.manifest.id,
+				predicate: goal,
+				in: payload,
+				out: executed.out,
+				ok: executed.ok,
+				duration: Date.now() - started,
+				attempt
+			})
+			if (executed.ok) return { ok: true, out: executed.out, bindings: current }
+			// Runtime backtracking: this producer failed for real — try the next.
+		}
+		return { ok: false, out: {}, bindings }
+	}
+
+	/** One step: deliver to the clause-body handler, or synthesize the llm one. */
+	async #execute(
+		actor: Actor,
+		method: string,
+		payload: Record<string, unknown>
+	): Promise<{ ok: boolean; out: unknown }> {
+		if (actor.handles(method)) {
+			const result = await actor.deliver(method, payload)
+			let out: unknown = result.record
+			let ok = true
+			try {
+				const parsed = JSON.parse(result.record)
+				out = parsed
+				ok = parsed?.ok !== false
+			} catch {
+				// non-JSON records count as fine, verbatim
+			}
+			return { ok, out }
+		}
+		if (actor.manifest.llm === true) {
+			if (!this.llm) {
+				return { ok: false, out: { ok: false, error: 'llm-Actor ohne injiziertes LLM' } }
+			}
+			const system =
+				`${manifestProse(actor.manifest)}\n` +
+				`Du BIST dieser Actor und führst jetzt aus: erzeuge "${method}" aus der Eingabe. ` +
+				'Antworte mit GENAU einem JSON-Objekt (ohne Markdown), das dein Ergebnis trägt.'
+			try {
+				const answer = await this.llm(system, JSON.stringify(payload))
+				const bare = answer.replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*?$/, '$1')
+				const parsed = JSON.parse(bare)
+				if (!parsed || typeof parsed !== 'object') throw new Error('kein Objekt')
+				return { ok: true, out: parsed }
+			} catch (err) {
+				const reason = err instanceof Error ? err.message : String(err)
+				return { ok: false, out: { ok: false, error: `llm-Ausführung scheiterte: ${reason}` } }
+			}
+		}
+		return {
+			ok: false,
+			out: { ok: false, error: `${actor.manifest.id} hat weder Handler noch llm:true` }
+		}
+	}
+}
+
+let nextRun = 0
+
+/** One executed (or failed) step of a run — the proof tree, walked for real. */
+export interface RunStep {
+	/** The producing actor, or null for an external fact / unproducible goal. */
+	actor: string | null
+	predicate: string
+	in: Record<string, unknown>
+	out: unknown
+	ok: boolean
+	duration: number
+	/** Which candidate producer this was — >1 means backtracking happened. */
+	attempt: number
+}
+
+export interface Run {
+	id: string
+	goal: string
+	status: 'ok' | 'failed'
+	startedAt: number
+	steps: RunStep[]
 }
 
 /**

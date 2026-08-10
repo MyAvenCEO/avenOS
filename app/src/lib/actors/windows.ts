@@ -17,22 +17,61 @@ import { workItems } from './workitems.svelte'
  * real one. The registry's hooks keep windows in step with create, update
  * and delete — and rehydrated actors are announced after the hooks exist.
  */
-export const workItemsWindow = singleton(
-	'aven.window.workitems',
-	() => new WindowActor(workItems, WorkItemsView)
+export const listeWindow = singleton(
+	'aven.window.liste',
+	() =>
+		new WindowActor(workItems, WorkItemsView, {
+			key: 'liste',
+			name: 'Aufgaben-Liste',
+			props: { mode: 'list' }
+		})
 )
-bus.register(workItemsWindow)
+export const boardWindow = singleton(
+	'aven.window.board',
+	() =>
+		new WindowActor(workItems, WorkItemsView, {
+			key: 'board',
+			name: 'Kanban-Board',
+			props: { mode: 'board' },
+			open: false
+		})
+)
+// The board and the list are two FACES of the same subject — each its own
+// window actor, switched like any other ("zeig das Board"). The combined
+// workitems-window from before this split may linger on the HMR-surviving
+// bus; clear it so it cannot shadow the pair.
+bus.unregister('workitems-window')
+bus.register(listeWindow)
+bus.register(boardWindow)
 
 bus.onChange = () => {
 	registryTick.v++
 }
 
-registryActor.onCreated = (actor) => {
+/** Windows whose actor was just removed while shown — updates keep the stage. */
+const stagedRemovals = new Set<string>()
+
+registryActor.onCreated = (actor, fresh) => {
 	const windowId = `${actor.manifest.id}-window`
-	if (!bus.get(windowId)) bus.register(new WindowActor(actor, DefaultActorView))
+	if (bus.get(windowId)) return
+	// Freshly spoken actors take the stage (their window opens and the others
+	// close — the single-active rule); rehydrated ones wait quietly. An update
+	// (remove + recreate) keeps whatever stage state the window had.
+	const staged = stagedRemovals.delete(windowId)
+	const open = fresh || staged
+	const window = new WindowActor(actor, DefaultActorView, { open })
+	if (open) {
+		for (const other of bus.actors()) {
+			if (isWindow(other)) other.open = false
+		}
+	}
+	bus.register(window)
 }
 registryActor.onRemoved = (id) => {
-	bus.unregister(`${id}-window`)
+	const windowId = `${id}-window`
+	const window = bus.get(windowId)
+	if (window && isWindow(window) && window.open) stagedRemovals.add(windowId)
+	bus.unregister(windowId)
 }
 registryActor.announceExisting()
 

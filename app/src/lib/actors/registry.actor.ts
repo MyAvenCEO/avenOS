@@ -31,8 +31,14 @@ export class RegistryActor extends Actor {
 	 * them. Optional so the registry stays pure in tests — the windows module
 	 * wires them in the app.
 	 */
-	onCreated?: (actor: Actor) => void
+	onCreated?: (actor: Actor, fresh: boolean) => void
 	onRemoved?: (id: string) => void
+	/**
+	 * The composer seam: a second, stronger model that DESIGNS manifests from
+	 * freeform wishes, while the fast voice model merely relays the wish.
+	 * Injected by the app (kimi-k3 via the proxy), absent in tests.
+	 */
+	composer?: (system: string, user: string) => Promise<string>
 
 	constructor(bus: MessageBus, store: ManifestStore | null = defaultStore()) {
 		super({
@@ -60,13 +66,18 @@ export class RegistryActor extends Actor {
 				{
 					name: 'actor_create',
 					description:
-						'Erschafft einen neuen Actor. Verträge als Prädikate wie "text(M)" — ' +
-						'Großbuchstabe = Variable. Der Actor erscheint sofort im Mesh, bekommt ein ' +
-						'eigenes Fenster auf dem Views-Tab und überlebt Neustarts. Noch ohne eigenen ' +
-						'Code — reine Verträge (llm:true für spätere LLM-Ausführung).',
+						'Erschafft einen neuen Actor. Am einfachsten: gib unter "wunsch" frei an, was ' +
+						'der Actor tun soll — ein stärkeres Composer-Modell entwirft daraus das ' +
+						'Manifest samt Verträgen. Alternativ die Felder direkt setzen: Verträge als ' +
+						'Prädikate wie "text(M)", Großbuchstabe = Variable. Der Actor erscheint sofort ' +
+						'im Mesh, bekommt ein eigenes Fenster und überlebt Neustarts.',
 					parameters: {
 						type: 'object',
 						properties: {
+							wunsch: {
+								type: 'string',
+								description: 'Freitext: was der Actor tun soll. Der Composer entwirft das Manifest.'
+							},
 							id: { type: 'string', description: 'Kurz, kebab-case, z.B. "kalender".' },
 							name: { type: 'string', description: 'Anzeigename.' },
 							description: { type: 'string', description: 'Was der Actor tut, deutsch.' },
@@ -82,20 +93,24 @@ export class RegistryActor extends Actor {
 								description: 'Prädikate, die der Actor erzeugt, z.B. ["termin(T)"].'
 							},
 							llm: { type: 'boolean' }
-						},
-						required: ['id', 'name', 'description']
+						}
 					}
 				},
 				{
 					name: 'actor_update',
 					description:
-						'Ändert einen zur Laufzeit erschaffenen Actor: name, description, tags, ' +
-						'requires, produces oder llm. Nur übergebene Felder ändern sich. Actors aus ' +
-						'Code (workitems, chat, …) sind nicht änderbar.',
+						'Ändert einen zur Laufzeit erschaffenen Actor. Am einfachsten: gib unter ' +
+						'"anweisung" frei an, was sich ändern soll — der Composer überarbeitet das ' +
+						'Manifest. Alternativ Felder direkt setzen; nur übergebene ändern sich. ' +
+						'Actors aus Code (workitems, chat, …) sind nicht änderbar.',
 					parameters: {
 						type: 'object',
 						properties: {
 							id: { type: 'string', description: 'Die id des zu ändernden Actors.' },
+							anweisung: {
+								type: 'string',
+								description: 'Freitext: was am Actor anders werden soll.'
+							},
 							name: { type: 'string' },
 							description: { type: 'string' },
 							tags: { type: 'array', items: { type: 'string' } },
@@ -116,6 +131,26 @@ export class RegistryActor extends Actor {
 						properties: { id: { type: 'string' } },
 						required: ['id']
 					}
+				},
+				{
+					name: 'goal_run',
+					description:
+						'Führt ein Ziel wirklich aus: beweist es über die Verträge und läuft den Plan — ' +
+						'jeder Schritt eine Nachricht an seinen Produzenten, llm-Actors antworten über ' +
+						'das Modell. Ziel als Prädikat wie "termin(T)". facts liefert externe Prädikate ' +
+						'als JSON-Objekt, z.B. {"anfrage": {"text": "Zahnarzt Dienstag"}}.',
+					parameters: {
+						type: 'object',
+						properties: {
+							goal: { type: 'string', description: 'Das Ziel-Prädikat, z.B. "termin(T)".' },
+							facts: {
+								type: 'object',
+								description: 'Externe Fakten: Funktor → Payload-Objekt.',
+								additionalProperties: true
+							}
+						},
+						required: ['goal']
+					}
 				}
 			]
 		})
@@ -126,7 +161,8 @@ export class RegistryActor extends Actor {
 			registry_describe: (p) => this.#describe(p),
 			actor_create: (p) => this.#create(p),
 			actor_update: (p) => this.#update(p),
-			actor_delete: (p) => this.#delete(p)
+			actor_delete: (p) => this.#delete(p),
+			goal_run: (p) => this.#run(p)
 		})
 		this.#rehydrate()
 	}
@@ -157,15 +193,63 @@ export class RegistryActor extends Actor {
 		return { record: JSON.stringify({ ok: true, manifest: actor.manifest }), wire: prose }
 	}
 
-	#create(p: Record<string, unknown>) {
+	/**
+	 * The composer prompt — the design brief a stronger model turns a wish
+	 * into a manifest with. Kept here so registry semantics (what a manifest
+	 * IS) and the words that teach them live side by side.
+	 */
+	static composerSystem(taken: string[]): string {
+		return (
+			'Du entwirfst Actor-Manifeste für ein lokales Actor-Mesh. Antworte mit GENAU ' +
+			'einem JSON-Objekt, ohne Markdown, ohne Erklärtext: {"id": kebab-case (nicht ' +
+			`vergeben; vergeben sind: ${taken.join(', ')}), "name": Anzeigename, ` +
+			'"description": ein deutscher Satz, was der Actor tut, "tags": string[], ' +
+			'"requires": Prädikate die er braucht, "produces": Prädikate die er erzeugt, ' +
+			'"llm": true wenn seine Arbeit Sprachverständnis braucht. Prädikate sind ' +
+			'Prolog-artig: kleingeschriebener Funktor, Argumente mit Großbuchstaben sind ' +
+			'Variablen, z.B. "anfrage(A)" oder "termin(T)". Wähle Verträge so, dass der ' +
+			'Actor an bestehende Prädikate anschließt, wenn der Wunsch das nahelegt.'
+		)
+	}
+
+	async #compose(user: string): Promise<Record<string, unknown> | null> {
+		if (!this.composer) return null
+		const taken = this.#bus.actors().map((a) => a.manifest.id)
+		const answer = await this.composer(RegistryActor.composerSystem(taken), user)
+		// Models fence JSON in ```json ... ``` no matter what you ask — unwrap.
+		const bare = answer.replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*?$/, '$1')
+		const parsed = this.#parse(bare)
+		return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+	}
+
+	async #create(p: Record<string, unknown>) {
+		// A freeform wish goes to the composer lane: the fast voice model
+		// relays intent, the strong model does the design work.
+		let composed: Record<string, unknown> | null = null
+		if (typeof p.wunsch === 'string' && p.wunsch.trim() !== '') {
+			if (!this.composer) {
+				return {
+					record: JSON.stringify({ ok: false, error: 'kein Composer verfügbar' }),
+					wire: 'Der Composer ist nicht verfügbar — bitte die Manifest-Felder direkt angeben.'
+				}
+			}
+			composed = await this.#compose(`Entwirf einen neuen Actor. Wunsch: ${p.wunsch}`)
+			if (!composed) {
+				return {
+					record: JSON.stringify({ ok: false, error: 'Composer lieferte kein Manifest' }),
+					wire: 'Der Composer hat kein lesbares Manifest geliefert.'
+				}
+			}
+		}
 		// Manifest fields may arrive flat (the schema) or nested under
-		// `manifest` (models love wrapping) — accept both.
+		// `manifest` (models love wrapping) — accept both, composer first.
 		const raw =
-			typeof p.manifest === 'string'
+			composed ??
+			(typeof p.manifest === 'string'
 				? this.#parse(p.manifest)
 				: p.manifest && typeof p.manifest === 'object'
 					? p.manifest
-					: p
+					: p)
 		if (!raw || typeof raw !== 'object') {
 			return {
 				record: JSON.stringify({ ok: false, error: 'kein lesbares Manifest' }),
@@ -205,7 +289,7 @@ export class RegistryActor extends Actor {
 		const actor = new Actor(manifest)
 		this.#bus.register(actor)
 		this.#persist(manifest)
-		this.onCreated?.(actor)
+		this.onCreated?.(actor, true)
 		return {
 			record: JSON.stringify({ ok: true, created: manifest }),
 			wire:
@@ -214,7 +298,7 @@ export class RegistryActor extends Actor {
 		}
 	}
 
-	#update(p: Record<string, unknown>) {
+	async #update(p: Record<string, unknown>) {
 		const id = String(p.id ?? '')
 		const existing = this.#persisted().find((m) => m.id === id)
 		if (!existing) {
@@ -223,27 +307,59 @@ export class RegistryActor extends Actor {
 				wire: `${id} wurde nicht zur Laufzeit erschaffen und ist nicht änderbar.`
 			}
 		}
-		const merged: Manifest = {
+		// Freeform instruction → the composer rewrites the manifest; explicit
+		// fields passed alongside still win below.
+		let composed: Partial<Manifest> = {}
+		if (typeof p.anweisung === 'string' && p.anweisung.trim() !== '') {
+			const drafted = await this.#compose(
+				`Überarbeite dieses Manifest (id bleibt "${id}"): ${JSON.stringify(existing)}. ` +
+					`Änderungswunsch: ${p.anweisung}`
+			)
+			if (!drafted) {
+				return {
+					record: JSON.stringify({ ok: false, error: 'Composer lieferte kein Manifest' }),
+					wire: 'Der Composer hat kein lesbares Manifest geliefert.'
+				}
+			}
+			composed = drafted as Partial<Manifest>
+		}
+		const base: Manifest = {
 			...existing,
-			name: typeof p.name === 'string' ? p.name : existing.name,
-			description: typeof p.description === 'string' ? p.description : existing.description,
+			name: typeof composed.name === 'string' ? composed.name : existing.name,
+			description:
+				typeof composed.description === 'string' ? composed.description : existing.description,
+			tags: Array.isArray(composed.tags)
+				? [...composed.tags.filter((t) => typeof t === 'string'), 'created']
+				: existing.tags,
+			requires: Array.isArray(composed.requires)
+				? composed.requires.filter((r): r is string => typeof r === 'string')
+				: existing.requires,
+			produces: Array.isArray(composed.produces)
+				? composed.produces.filter((r): r is string => typeof r === 'string')
+				: existing.produces,
+			llm: typeof composed.llm === 'boolean' ? composed.llm : existing.llm
+		}
+		const merged: Manifest = {
+			...base,
+			name: typeof p.name === 'string' ? p.name : base.name,
+			description: typeof p.description === 'string' ? p.description : base.description,
 			tags: Array.isArray(p.tags)
 				? [...p.tags.filter((t) => typeof t === 'string'), 'created']
-				: existing.tags,
+				: base.tags,
 			requires: Array.isArray(p.requires)
 				? p.requires.filter((r): r is string => typeof r === 'string')
-				: existing.requires,
+				: base.requires,
 			produces: Array.isArray(p.produces)
 				? p.produces.filter((r): r is string => typeof r === 'string')
-				: existing.produces,
-			llm: typeof p.llm === 'boolean' ? p.llm : existing.llm
+				: base.produces,
+			llm: typeof p.llm === 'boolean' ? p.llm : base.llm
 		}
 		// Replace in place: same id re-registers the fresh actor over the old.
 		this.onRemoved?.(id)
 		const actor = new Actor(merged)
 		this.#bus.register(actor)
 		this.#persist(merged)
-		this.onCreated?.(actor)
+		this.onCreated?.(actor, false)
 		return {
 			record: JSON.stringify({ ok: true, updated: merged }),
 			wire: `Actor ${id} ist aktualisiert.`
@@ -269,6 +385,25 @@ export class RegistryActor extends Actor {
 			record: JSON.stringify({ ok: true, deleted: id }),
 			wire: `Actor ${id} ist entfernt.`
 		}
+	}
+
+	async #run(p: Record<string, unknown>) {
+		const goal = String(p.goal ?? '').trim()
+		if (goal === '') {
+			return {
+				record: JSON.stringify({ ok: false, error: 'kein Ziel' }),
+				wire: 'Es fehlt das Ziel-Prädikat.'
+			}
+		}
+		const facts = p.facts && typeof p.facts === 'object' ? (p.facts as Record<string, unknown>) : {}
+		const run = await this.#bus.satisfy(goal, facts)
+		const last = run.steps.at(-1)
+		const wire =
+			run.status === 'ok'
+				? `Ziel ${goal} erfüllt in ${run.steps.length} Schritten. Ergebnis: ${JSON.stringify(last?.out ?? {})}`
+				: `Ziel ${goal} gescheitert nach ${run.steps.length} Schritten` +
+					`${last ? `; letzter Schritt: ${JSON.stringify(last.out)}` : ''}.`
+		return { record: JSON.stringify({ ok: run.status === 'ok', run }), wire }
 	}
 
 	#parse(text: string): unknown {
@@ -302,7 +437,7 @@ export class RegistryActor extends Actor {
 			if (!this.#bus.get(manifest.id)) {
 				const actor = new Actor(manifest)
 				this.#bus.register(actor)
-				this.onCreated?.(actor)
+				this.onCreated?.(actor, false)
 			}
 		}
 	}
@@ -311,7 +446,7 @@ export class RegistryActor extends Actor {
 	announceExisting(): void {
 		for (const manifest of this.#persisted()) {
 			const actor = this.#bus.get(manifest.id)
-			if (actor) this.onCreated?.(actor)
+			if (actor) this.onCreated?.(actor, false)
 		}
 	}
 
