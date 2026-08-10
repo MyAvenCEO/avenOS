@@ -524,3 +524,149 @@ describe('execution engine (0129)', () => {
 		expect(bus.runs().map((r) => r.id)).toContain(run.id)
 	})
 })
+
+describe('per-actor llm lane (manifest llm settings)', () => {
+	test('an llm actor with its own settings hands them to the injected model', async () => {
+		const bus = new MessageBus()
+		let seen: unknown = null
+		bus.llm = async (_system, _question, settings) => {
+			seen = settings
+			return '{"summary":"done"}'
+		}
+		bus.register(
+			new Actor({
+				id: 'summarizer', name: 'Summarizer', description: 'Summarizes text.',
+				tags: [], methods: [], requires: [], produces: ['summary(S)'],
+				llm: { model: 'moonshotai/kimi-k3', temperature: 0.2 }
+			})
+		)
+		const run = await bus.satisfy('summary(S)')
+		expect(run.status).toBe('ok')
+		expect(seen).toEqual({ model: 'moonshotai/kimi-k3', temperature: 0.2 })
+	})
+
+	test('llm true still executes on the default lane', async () => {
+		const bus = new MessageBus()
+		let seen: unknown = 'untouched'
+		bus.llm = async (_system, _question, settings) => {
+			seen = settings
+			return '{"ok":true}'
+		}
+		bus.register(
+			new Actor({
+				id: 'plain', name: 'Plain', description: 'Plain llm actor.',
+				tags: [], methods: [], requires: [], produces: ['thing(T)'], llm: true
+			})
+		)
+		const run = await bus.satisfy('thing(T)')
+		expect(run.status).toBe('ok')
+		// true normalizes to empty settings — the injected lane's defaults apply.
+		expect(seen).toEqual({})
+	})
+})
+
+describe('faces + records (composed mini apps)', () => {
+	test('the registry builds created actors through the injected factory', async () => {
+		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
+		const backing = new Map<string, string>()
+		const store = {
+			getItem: (k: string) => backing.get(k) ?? null,
+			setItem: (k: string, v: string) => void backing.set(k, v)
+		}
+		class Marked extends Actor {}
+		const bus = new MessageBus()
+		const registry = new RegistryActor(bus, store, (m) => new Marked(m))
+		bus.register(registry)
+		void registry.deliver('actor_create', {
+			id: 'notes', name: 'Notes', description: 'Keeps notes.'
+		})
+		return registry.deliver('actor_create', { id: 'x', name: 'X', description: 'x' }).then(() => {
+			expect(bus.get('notes')).toBeInstanceOf(Marked)
+			// rehydration goes through the factory too
+			const bus2 = new MessageBus()
+			bus2.register(new RegistryActor(bus2, store, (m) => new Marked(m)))
+			expect(bus2.get('notes')).toBeInstanceOf(Marked)
+		})
+	})
+
+	test('a declared face survives create, unknown elements are dropped', async () => {
+		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
+		const backing = new Map<string, string>()
+		const store = {
+			getItem: (k: string) => backing.get(k) ?? null,
+			setItem: (k: string, v: string) => void backing.set(k, v)
+		}
+		const bus = new MessageBus()
+		const registry = new RegistryActor(bus, store)
+		bus.register(registry)
+		await registry.deliver('actor_create', {
+			id: 'cal', name: 'Calendar', description: 'Keeps appointments.',
+			produces: ['appointment(A)'], llm: true,
+			face: {
+				elements: [
+					{ kind: 'note', text: 'Your appointments.' },
+					{ kind: 'run', goal: 'appointment(A)', label: 'Add' },
+					{ kind: 'records', title: 'Appointments' },
+					{ kind: 'hologram', text: 'not a thing' }
+				]
+			}
+		})
+		const face = bus.get('cal')?.manifest.face
+		expect(face?.elements.length).toBe(3)
+		expect(face?.elements.map((e) => e.kind)).toEqual(['note', 'run', 'records'])
+	})
+
+	test('a successful llm execution is remembered by a record-keeping actor', async () => {
+		const bus = new MessageBus()
+		bus.llm = async () => '{"when":"Tuesday 14:00","what":"dentist"}'
+		const kept: unknown[] = []
+		class Keeper extends Actor {
+			remember(out: unknown) {
+				kept.push(out)
+			}
+		}
+		bus.register(
+			new Keeper({
+				id: 'cal', name: 'Calendar', description: 'Keeps appointments.',
+				tags: [], methods: [], requires: ['request(R)'],
+				produces: ['appointment(A)'], llm: true
+			})
+		)
+		const run = await bus.satisfy('appointment(A)', { request: { text: 'dentist tuesday 2pm' } })
+		expect(run.status).toBe('ok')
+		expect(kept.length).toBe(1)
+		expect((kept[0] as { what: string }).what).toBe('dentist')
+	})
+})
+
+describe('created actors execute by default', () => {
+	test('create without llm still yields an executable llm actor, rehydration included', async () => {
+		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
+		const backing = new Map<string, string>()
+		const store = {
+			getItem: (k: string) => backing.get(k) ?? null,
+			setItem: (k: string, v: string) => void backing.set(k, v)
+		}
+		const bus = new MessageBus()
+		bus.llm = async () => '{"habit":"meditate"}'
+		bus.register(new RegistryActor(bus, store))
+		await bus.dispatch('t', 'actor_create', {
+			id: 'habits', name: 'Habits', description: 'Tracks habits.', produces: ['habit(H)']
+		})
+		expect(bus.get('habits')?.manifest.llm).toBe(true)
+		const run = await bus.satisfy('habit(H)')
+		expect(run.status).toBe('ok')
+
+		// a LEGACY persisted manifest without llm heals on rehydration
+		backing.set(
+			'aven.created-actors',
+			JSON.stringify([{ id: 'old', name: 'Old', description: 'Legacy.', tags: [], methods: [], produces: ['thing(T)'] }])
+		)
+		const bus2 = new MessageBus()
+		bus2.llm = async () => '{"ok":true}'
+		bus2.register(new RegistryActor(bus2, store))
+		expect(bus2.get('old')?.manifest.llm).toBe(true)
+		const run2 = await bus2.satisfy('thing(T)')
+		expect(run2.status).toBe('ok')
+	})
+})

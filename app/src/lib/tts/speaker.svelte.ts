@@ -369,7 +369,7 @@ export class Speaker {
 			this.#watchdog = null
 			if (this.#context !== context || this.#sources.size === 0) return
 			if (context.currentTime > before) return
-			this.failure = 'Audio-Ausgabe eingefroren — Gerät wird neu geöffnet'
+			this.failure = 'audio output frozen — reopening the device'
 			void context.close()
 			this.#context = null
 			this.#sources.clear()

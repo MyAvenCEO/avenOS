@@ -4,6 +4,8 @@ import type { Activity } from './activity.svelte'
 import { activity } from './activity.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
+import { ComposerActor } from './composer.actor.svelte'
+import { RecordActor } from './created.actor.svelte'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
 import { workItems } from './workitems.svelte'
@@ -26,8 +28,8 @@ export class ChatActor extends Actor {
 			id: 'chat',
 			name: 'Chat',
 			description:
-				'Das Gespräch: nimmt Äußerungen entgegen, denkt mit dem Modell, ruft Werkzeuge ' +
-				'über den Bus auf und streamt die Antwort satzweise hinaus.',
+				'The conversation: takes utterances, thinks with the model, calls tools ' +
+				'over the bus, and streams the reply out sentence by sentence.',
 			tags: ['voice', 'todo'],
 			methods: [],
 			requires: ['utterance(T)', 'interrupted()'],
@@ -64,8 +66,8 @@ export class ChatActor extends Actor {
 					try {
 						payload = args.trim() === '' ? {} : JSON.parse(args)
 					} catch {
-						const record = JSON.stringify({ ok: false, error: `unlesbare Argumente: ${args}` })
-						return { record, wire: 'unlesbare Argumente' }
+						const record = JSON.stringify({ ok: false, error: `unreadable arguments: ${args}` })
+						return { record, wire: 'unreadable arguments' }
 					}
 					if (name === 'actor_ask') {
 						const answer = await bus.ask(
@@ -102,14 +104,14 @@ export class ChatActor extends Actor {
 
 	override instanceState(): Record<string, unknown> {
 		return {
-			Turns: this.core.turns.length,
-			streamt: this.core.streaming ? 'ja' : 'nein',
-			Modell: 'qwen3.5-122b-a10b'
+			turns: this.core.turns.length,
+			streaming: this.core.streaming ? 'yes' : 'no',
+			model: 'qwen3.5-122b-a10b'
 		}
 	}
 
 	protected override situation(): string {
-		return `${this.core.turns.length} Turns bisher${this.core.streaming ? ', antwortet gerade' : ''}.`
+		return `${this.core.turns.length} turns so far${this.core.streaming ? ', replying right now' : ''}.`
 	}
 }
 
@@ -129,7 +131,7 @@ export function summarizeCall(name: string, record: string): Omit<Activity, 'id'
 			return {
 				kind: 'switched',
 				titles: [],
-				note: `Fenster ${String(parsed.window ?? '').replace(/-window$/, '')} ${parsed.open ? 'an' : 'aus'}`
+				note: `window ${String(parsed.window ?? '').replace(/-window$/, '')} ${parsed.open ? 'on' : 'off'}`
 			}
 		} catch {
 			return null
@@ -146,17 +148,27 @@ export function summarizeCall(name: string, record: string): Omit<Activity, 'id'
 // anti-glitch armor, but ask() answers survive that fine while llm-actor
 // EXECUTION returns JSON that must arrive intact. Fast model — this lane
 // sits in the voice loop's latency budget.
-bus.llm = (system, question) =>
+bus.llm = (system, question, settings) =>
 	complete(
 		[
 			{ role: 'system', content: system },
 			{ role: 'user', content: question }
 		],
-		'qwen/qwen3.5-122b-a10b'
+		{
+			// Default lane = the fast voice model; a manifest's own llm settings
+			// override it — the composer declares kimi, a summarizer stays fast.
+			model: settings?.model ?? 'qwen/qwen3.5-122b-a10b',
+			temperature: settings?.temperature
+		}
 	)
 
 bus.register(workItems)
-export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
+// Created actors become RecordActors: memory, persistence, generic
+// records/forget methods — injected here so the registry stays pure in tests.
+export const registryActor = singleton(
+	'aven.registry',
+	() => new RegistryActor(bus, undefined, (m) => new RecordActor(m, bus))
+)
 // The composer lane: manifest design goes to the stronger, slower model —
 // assigned every module load so an HMR-surviving singleton never keeps a
 // stale closure.
@@ -166,5 +178,7 @@ registryActor.composer = (system, user) =>
 		{ role: 'user', content: user }
 	])
 bus.register(registryActor)
+export const composerActor = singleton('aven.composer', () => new ComposerActor(bus))
+bus.register(composerActor)
 export const chatActor = singleton('aven.chat', () => new ChatActor())
 bus.register(chatActor)

@@ -24,16 +24,16 @@ export interface Activity {
 }
 
 export const ACTIVITY_LABELS: Record<ActivityKind, { mark: string; label: string }> = {
-	created: { mark: '+', label: 'angelegt' },
-	done: { mark: '✓', label: 'abgehakt' },
-	doing: { mark: '◐', label: 'in Arbeit' },
-	reopened: { mark: '○', label: 'wieder offen' },
-	renamed: { mark: '✎', label: 'umbenannt' },
-	deleted: { mark: '×', label: 'gelöscht' },
-	read: { mark: '↻', label: 'Liste gelesen' },
-	switched: { mark: '⇄', label: 'Ansicht' },
-	asked: { mark: '?', label: 'gefragt' },
-	failed: { mark: '!', label: 'fehlgeschlagen' }
+	created: { mark: '+', label: 'created' },
+	done: { mark: '✓', label: 'done' },
+	doing: { mark: '◐', label: 'in progress' },
+	reopened: { mark: '○', label: 'reopened' },
+	renamed: { mark: '✎', label: 'renamed' },
+	deleted: { mark: '×', label: 'deleted' },
+	read: { mark: '↻', label: 'list read' },
+	switched: { mark: '⇄', label: 'view' },
+	asked: { mark: '?', label: 'asked' },
+	failed: { mark: '!', label: 'failed' }
 }
 
 /** How long one result stays on screen. */

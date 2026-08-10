@@ -165,7 +165,7 @@ const edges = $derived.by<Edge[]>(() => {
 					id: `tools-chat-${a.manifest.id}`,
 					source: 'chat',
 					target: a.manifest.id,
-					label: `${a.manifest.methods.length} Werkzeuge`,
+					label: `${a.manifest.methods.length} tools`,
 					animated: false,
 					style: 'stroke: rgba(30,41,59,0.3); stroke-dasharray: 6 4;',
 					labelStyle: 'font-size: 10px; fill: rgba(30,41,59,0.4);'

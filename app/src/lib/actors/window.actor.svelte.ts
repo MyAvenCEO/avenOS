@@ -33,13 +33,13 @@ export class WindowActor extends Actor {
 	constructor(subject: Actor, component: unknown, face: WindowFace = {}) {
 		const key = face.key ?? subject.manifest.id
 		const id = `${key}-window`
-		const name = face.name ?? `${subject.manifest.name} Fenster`
+		const name = face.name ?? `${subject.manifest.name} Window`
 		super({
 			id,
 			name,
 			description:
-				`Das Fenster „${name}" von ${subject.manifest.name}: rendert dessen Zustand als ` +
-				'bedienbare Oberfläche. Ein- und ausblendbar per Nachricht.',
+				`The "${name}" window of ${subject.manifest.name}: renders its state as an ` +
+				'operable surface. Shown and hidden by message.',
 			tags: ['window'],
 			// The window consumes what its subject produces — that IS the
 			// relation, and the graph draws it without anyone wiring it.
@@ -49,12 +49,12 @@ export class WindowActor extends Actor {
 				{
 					name: `${key}_window_toggle`,
 					description:
-						`Zeigt „${name}" auf dem Views-Tab (open=true) oder blendet es aus. ` +
-						'Ohne Argument wird umgeschaltet.',
+						`Shows "${name}" on the Views tab (open=true) or hides it. ` +
+						'Without an argument it toggles.',
 					parameters: {
 						type: 'object',
 						properties: {
-							open: { type: 'boolean', description: 'true = einblenden, false = ausblenden.' }
+							open: { type: 'boolean', description: 'true = show, false = hide.' }
 						}
 					}
 				}
@@ -77,7 +77,7 @@ export class WindowActor extends Actor {
 				}
 				return {
 					record: JSON.stringify({ ok: true, window: id, open: this.open }),
-					wire: this.open ? `${name} ist jetzt zu sehen.` : `„${name}" ist ausgeblendet.`
+					wire: this.open ? `${name} is now on screen.` : `"${name}" is hidden.`
 				}
 			}
 		})
@@ -85,13 +85,13 @@ export class WindowActor extends Actor {
 
 	override instanceState(): Record<string, unknown> {
 		return {
-			Zustand: this.open ? 'eingeblendet' : 'ausgeblendet',
-			Subjekt: this.subject.manifest.id
+			state: this.open ? 'shown' : 'hidden',
+			subject: this.subject.manifest.id
 		}
 	}
 
 	protected override situation(): string {
-		return `${this.open ? 'Eingeblendet' : 'Ausgeblendet'}; zeigt den Zustand von ${this.subject.manifest.name}.`
+		return `${this.open ? 'Shown' : 'Hidden'}; renders the state of ${this.subject.manifest.name}.`
 	}
 }
 

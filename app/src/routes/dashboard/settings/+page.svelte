@@ -48,25 +48,25 @@ async function preview(voice: Voice) {
 </script>
 
 <svelte:head>
-	<title>Einstellungen · avenOS</title>
+	<title>Settings · avenOS</title>
 </svelte:head>
 
 <main class="mx-auto flex min-h-0 min-w-0 max-w-lg flex-1 flex-col gap-6 p-4 sm:p-6">
 	<header class="relative flex flex-col items-center gap-1.5">
 		<!-- The same quiet route stamp the dashboard wears. -->
-		<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Einstellungen</p>
+		<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Settings</p>
 		<a
 			href="/dashboard"
 			class="absolute right-0 top-0 text-xs underline underline-offset-4 opacity-50"
 		>
-			Zurück
+			Back
 		</a>
 	</header>
 
 	<!-- The brain, named here rather than in the app chrome: which model answers
 	     is configuration, not something to stare at all day. -->
 	<section class="flex flex-col gap-3">
-		<h2 class="text-sm">Modell</h2>
+		<h2 class="text-sm">Model</h2>
 		<p
 			class="rounded-xl border border-foreground/5 bg-[#fffdf7] px-4 py-3 font-mono text-xs opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
@@ -76,15 +76,15 @@ async function preview(voice: Voice) {
 
 	<section class="flex min-h-0 flex-col gap-3">
 		<div class="flex items-baseline justify-between">
-			<h2 class="text-sm">Stimme</h2>
-			<span class="text-xs opacity-40">gilt ab dem nächsten Satz</span>
+			<h2 class="text-sm">Voice</h2>
+			<span class="text-xs opacity-40">applies from the next sentence</span>
 		</div>
 
 		{#if !isTauri()}
 			<p
 				class="rounded-xl border border-foreground/5 bg-[#fffdf7] px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			>
-				Die Stimme läuft nur in der App — im Browser gibt es nichts zu hören.
+				The voice only runs in the app — there is nothing to hear in the browser.
 			</p>
 		{/if}
 
@@ -115,7 +115,7 @@ async function preview(voice: Voice) {
 							{/if}
 						</span>
 						<span class="flex-1">
-							{voice.startsWith('M') ? 'Männlich' : 'Weiblich'}
+							{voice.startsWith('M') ? 'Male' : 'Female'}
 							{voice.slice(1)}
 							<span class="pl-1 font-mono text-xs opacity-40">{voice}</span>
 						</span>
@@ -126,8 +126,8 @@ async function preview(voice: Voice) {
 							type="button"
 							onclick={() => preview(voice)}
 							disabled={playing !== null}
-							title="Anhören"
-							aria-label="Stimme {voice} anhören"
+							title="Play"
+							aria-label="Play voice {voice}"
 							class="shrink-0 rounded-full border border-border p-2 transition-colors hover:bg-primary/5 disabled:opacity-30"
 						>
 							{#if playing === voice}

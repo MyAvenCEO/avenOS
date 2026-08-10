@@ -25,8 +25,8 @@ export class ListenerActor extends Actor {
 			id: 'listener',
 			name: 'Listener',
 			description:
-				'Die Ohren: Silero-VAD und Nemotron-Erkennung on-device. Fertige Äußerungen ' +
-				'werden als utterance emittiert, Dazwischenreden als unterbrochen.',
+				'The ears: Silero VAD and Nemotron recognition on-device. Finished utterances ' +
+				'are emitted as utterance(T), talking over the assistant as interrupted().',
 			tags: ['voice'],
 			methods: [],
 			requires: [],
@@ -36,14 +36,14 @@ export class ListenerActor extends Actor {
 
 	override instanceState(): Record<string, unknown> {
 		return {
-			Status: this.core.status,
-			'hört gerade': this.core.speech ? 'ja' : 'nein',
-			Abtastrate: this.core.rate || '—'
+			status: this.core.status,
+			hearing: this.core.speech ? 'yes' : 'no',
+			'sample rate': this.core.rate || '—'
 		}
 	}
 
 	protected override situation(): string {
-		return `Status ${this.core.status}${this.core.speech ? ', hört gerade jemanden' : ''}.`
+		return `Status ${this.core.status}${this.core.speech ? ', hearing someone right now' : ''}.`
 	}
 }
 

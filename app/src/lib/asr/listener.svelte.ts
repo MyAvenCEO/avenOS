@@ -85,6 +85,9 @@ export class Listener {
 	#context: AudioContext | null = null
 	#stream: MediaStream | null = null
 	#node: AudioWorkletNode | null = null
+	#source: MediaStreamAudioSourceNode | null = null
+	/** Rebuild rate limit — churn on the shared pipeline breaks the speaker. */
+	#lastRebuildAt = 0
 	/** Batches waiting to go to the recognizer, in order. */
 	#queue: Float32Array[] = []
 	#draining = false
@@ -176,9 +179,50 @@ export class Listener {
 		}
 	}
 
-	/** Open the microphone graph: stream → context → worklet tap. */
+	/**
+	 * Open the microphone graph: stream → context → worklet tap.
+	 *
+	 * The context and worklet are REUSED across rebuilds, emphatically. WebKit
+	 * runs one audio pipeline for the whole webview: closing and reopening a
+	 * context reconfigures it for everyone, and a rebuild storm (a muted mic
+	 * retriggering the frame watchdog every 3 s) froze the SPEAKER's output —
+	 * "Speaking" on screen, sentences scheduled onto a clock that ticked into
+	 * a dead route. A rebuild now swaps only the mic stream; the context is
+	 * recreated exclusively when it is genuinely gone.
+	 */
 	async #capture(): Promise<void> {
-		this.#teardownCapture()
+		this.#releaseStream()
+
+		if (!this.#context || this.#context.state === 'closed') {
+			// Device rate, deliberately — never ask for 16 kHz here. Whichever
+			// context is created first sets the shared pipeline's rate: a 16 kHz
+			// request once left the speaker's 44.1 kHz context with a clock that
+			// reported "running" and never advanced. `#toSixteenK` resamples on
+			// the way to the recognizer instead.
+			this.#context = new AudioContext()
+			await this.#context.audioWorklet.addModule('/asr-worklet.js')
+			this.#node = new AudioWorkletNode(this.#context, 'asr-tap')
+			this.#node.port.onmessage = (event) => {
+				// The worklet's first message is its real sample rate, not audio.
+				if (!(event.data instanceof Float32Array)) {
+					this.rate = (event.data as { rate: number }).rate
+					return
+				}
+				this.#lastFrameAt = Date.now()
+				void this.#push(event.data)
+			}
+			this.#context.onstatechange = () => {
+				if (this.#context?.state === 'suspended' && this.#wantListening) {
+					void this.#context.resume()
+				}
+			}
+		}
+		// The worklet reports its true rate in its first message, but that message
+		// is not guaranteed to win the race against the first audio batch — and a
+		// rate of 0 would send device-rate audio to a 16 kHz recognizer, which the
+		// VAD hears as nothing at all. The context knows its rate right now.
+		this.rate = this.#context.sampleRate
+		await this.#context.resume()
 
 		this.#stream = await navigator.mediaDevices.getUserMedia({
 			audio: {
@@ -190,35 +234,9 @@ export class Listener {
 				channelCount: 1
 			}
 		})
-
-		// Device rate, deliberately — never ask for 16 kHz here. WebKit has one
-		// audio pipeline for the whole webview, and whichever context is created
-		// first sets its rate: this one exists before the speaker's, so a 16 kHz
-		// request left the speaker's 44.1 kHz context with a clock that reported
-		// "running" and never advanced — six sentences synthesized, scheduled,
-		// and silent, with "Spricht" stuck on screen. `#toSixteenK` resamples on
-		// the way to the recognizer instead, which it had to be able to do
-		// anyway, because the 16 kHz request was only ever a hint.
-		this.#context = new AudioContext()
-		// The worklet reports its true rate in its first message, but that message
-		// is not guaranteed to win the race against the first audio batch — and a
-		// rate of 0 would send device-rate audio to a 16 kHz recognizer, which the
-		// VAD hears as nothing at all. The context knows its rate right now.
-		this.rate = this.#context.sampleRate
-		await this.#context.resume()
-		await this.#context.audioWorklet.addModule('/asr-worklet.js')
-
-		this.#node = new AudioWorkletNode(this.#context, 'asr-tap')
-		this.#node.port.onmessage = (event) => {
-			// The worklet's first message is its real sample rate, not audio.
-			if (!(event.data instanceof Float32Array)) {
-				this.rate = (event.data as { rate: number }).rate
-				return
-			}
-			this.#lastFrameAt = Date.now()
-			void this.#push(event.data)
-		}
-		this.#context.createMediaStreamSource(this.#stream).connect(this.#node)
+		if (!this.#node) throw new Error('worklet node missing after capture setup')
+		this.#source = this.#context.createMediaStreamSource(this.#stream)
+		this.#source.connect(this.#node)
 		// Not connected to the destination on purpose — this is a tap, and
 		// routing the mic to the speakers would be a feedback loop.
 
@@ -238,39 +256,44 @@ export class Listener {
 				}, 1200)
 			}
 		}
-		this.#context.onstatechange = () => {
-			if (this.#context?.state === 'suspended' && this.#wantListening) {
-				void this.#context.resume()
-			}
-		}
 
 		this.#lastFrameAt = Date.now()
 	}
 
-	#teardownCapture(): void {
-		this.#node?.port.close()
-		this.#node?.disconnect()
-		this.#node = null
+	/** Drop the mic stream and its source node; context and worklet stay. */
+	#releaseStream(): void {
+		this.#source?.disconnect()
+		this.#source = null
 		for (const track of this.#stream?.getTracks() ?? []) {
 			track.onended = null
 			track.onmute = null
 			track.stop()
 		}
 		this.#stream = null
+	}
+
+	#teardownCapture(): void {
+		this.#releaseStream()
+		this.#node?.port.close()
+		this.#node?.disconnect()
+		this.#node = null
 		if (this.#context) this.#context.onstatechange = null
 		void this.#context?.close()
 		this.#context = null
 	}
 
 	/**
-	 * Tear the graph down and open it again, models untouched. This is the one
-	 * answer to every way the capture side dies quietly — frozen worklet,
-	 * vanished device, suspended context — because a fresh graph on the current
-	 * default device is correct in all of them.
+	 * Swap the microphone stream, models and audio pipeline untouched. This is
+	 * the one answer to every way the capture side dies quietly — vanished
+	 * device, stolen route, muted track — and it deliberately does NOT touch
+	 * the AudioContext (see #capture). Rate-limited: a permanently silent mic
+	 * must degrade to a slow retry, not a pipeline-thrashing loop.
 	 */
 	async #rebuild(reason: string): Promise<void> {
 		if (this.#rebuilding || !this.#wantListening) return
+		if (Date.now() - this.#lastRebuildAt < 8000) return
 		this.#rebuilding = true
+		this.#lastRebuildAt = Date.now()
 		console.warn(`[listener] rebuilding capture: ${reason}`)
 		try {
 			await this.#capture()

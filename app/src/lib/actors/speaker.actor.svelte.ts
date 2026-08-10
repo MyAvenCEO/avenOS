@@ -17,8 +17,8 @@ export class SpeakerActor extends Actor {
 			id: 'speaker',
 			name: 'Speaker',
 			description:
-				'Die Stimme: spricht Antworten satzweise, während sie noch geschrieben werden. ' +
-				'On-device Supertonic-TTS; verstummt sofort bei Unterbrechung.',
+				'The voice: speaks replies sentence by sentence while they are still being ' +
+				'written. On-device Supertonic TTS; goes silent instantly on interruption.',
 			tags: ['voice'],
 			methods: [],
 			requires: ['delta(D)', 'reply(R)', 'discard(R)', 'interrupted()', 'utterance(T)'],
@@ -51,14 +51,14 @@ export class SpeakerActor extends Actor {
 
 	override instanceState(): Record<string, unknown> {
 		return {
-			Status: this.core.status,
-			spricht: this.core.speaking ? 'ja' : 'nein',
-			Ausgabe: this.core.output
+			status: this.core.status,
+			speaking: this.core.speaking ? 'yes' : 'no',
+			output: this.core.output
 		}
 	}
 
 	protected override situation(): string {
-		return `Status ${this.core.status}, ${this.core.speaking ? 'spricht gerade' : 'still'}.`
+		return `Status ${this.core.status}, ${this.core.speaking ? 'speaking right now' : 'quiet'}.`
 	}
 }
 

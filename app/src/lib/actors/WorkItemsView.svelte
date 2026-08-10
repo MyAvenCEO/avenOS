@@ -18,9 +18,9 @@ let newWorkItem = $state('')
 let dragging = $state<string | null>(null)
 
 const COLUMNS: { status: WorkItemStatus; label: string }[] = [
-	{ status: 'open', label: 'Offen' },
-	{ status: 'doing', label: 'In Arbeit' },
-	{ status: 'done', label: 'Erledigt' }
+	{ status: 'open', label: 'Open' },
+	{ status: 'doing', label: 'In Progress' },
+	{ status: 'done', label: 'Done' }
 ]
 
 /** Pill colors per status, sampled from the reference. */
@@ -97,7 +97,7 @@ function shift(id: string, by: -1 | 1) {
 	<button
 		type="button"
 		onclick={() => actor.toggle(todo.id)}
-		aria-label={todo.status === 'done' ? 'Wieder öffnen' : 'Abhaken'}
+		aria-label={todo.status === 'done' ? 'Reopen' : 'Check off'}
 		class="flex size-5 shrink-0 items-center justify-center rounded-full transition-colors {todo.status ===
 		'done'
 			? 'bg-primary'
@@ -119,7 +119,7 @@ function shift(id: string, by: -1 | 1) {
 
 <div class="flex min-h-0 flex-1 flex-col gap-4 text-foreground">
 	<div class="flex items-center justify-between gap-3">
-		<h2 class="font-semibold text-[15px]">Aufgaben</h2>
+		<h2 class="font-semibold text-[15px]">Tasks</h2>
 
 		{#if actor.visible.length > 0}
 			<!-- The reference card's progress grammar: check, count, bar, percent. -->
@@ -136,7 +136,7 @@ function shift(id: string, by: -1 | 1) {
 						stroke-linejoin="round"
 					/>
 				</svg>
-				<span class="font-medium">{done} von {actor.visible.length}</span>
+				<span class="font-medium">{done} of {actor.visible.length}</span>
 				<span class="h-1.5 w-24 overflow-hidden rounded-full bg-foreground/10">
 					<span
 						class="block h-full rounded-full bg-status-success transition-[width]"
@@ -162,7 +162,7 @@ function shift(id: string, by: -1 | 1) {
 	<form onsubmit={addWorkItem}>
 		<input
 			bind:value={newWorkItem}
-			placeholder="Aufgabe hinzufügen…"
+			placeholder="Add a task…"
 			class="w-full rounded-xl border border-foreground/5 bg-[#fffdf7] px-4 py-2.5 text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none transition-shadow placeholder:text-foreground/30 focus:shadow-[0_1px_3px_rgba(30,41,59,0.07),0_0_0_3px_rgba(30,41,59,0.06)]"
 		>
 	</form>
@@ -186,7 +186,7 @@ function shift(id: string, by: -1 | 1) {
 					<button
 						type="button"
 						onclick={() => actor.cycle(todo.id)}
-						title="Status weiterschalten"
+						title="Cycle status"
 						class="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-xs transition-transform active:scale-95 {PILL[
 							todo.status
 						]}"
@@ -198,14 +198,14 @@ function shift(id: string, by: -1 | 1) {
 						type="button"
 						onclick={() => actor.remove(todo.id)}
 						class="shrink-0 text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
-						aria-label="Löschen"
+						aria-label="Delete"
 					>
 						×
 					</button>
 				</li>
 			{:else}
 				<li class="pt-8 text-center text-[13px] text-foreground/30">
-					Noch nichts. Sag zum Beispiel „setz Milch kaufen auf die Liste“.
+					Nothing yet. Say, for example, "put buy milk on the list".
 				</li>
 			{/each}
 		</ul>
@@ -257,7 +257,7 @@ function shift(id: string, by: -1 | 1) {
 										type="button"
 										onclick={() => actor.remove(todo.id)}
 										class="ml-auto opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
-										aria-label="Löschen"
+										aria-label="Delete"
 									>
 										×
 									</button>

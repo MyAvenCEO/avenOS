@@ -38,6 +38,78 @@ export interface MethodSpec {
 	produces?: Predicate[]
 }
 
+/** Per-actor model lane: which model answers as this actor, and how. */
+export interface LlmSettings {
+	/** Model id; unset = the app's default execution model. */
+	model?: string
+	temperature?: number
+}
+
+/**
+ * A face as DATA — the composed UI of an actor's window, declared instead of
+ * coded. One universal renderer interprets these; the composer designs them
+ * the same way it designs contracts. Compression, not abstraction: the face
+ * spec lives in the manifest, persists with it, and regenerates the UI on
+ * every render.
+ */
+/**
+ * How one record renders as a card: which FIELDS of the record data land
+ * where. All optional — the renderer infers sensible slots from common field
+ * names when no mapping is declared, so old faces upgrade for free.
+ */
+export interface RecordItemSpec {
+	/** Field for the card's headline. */
+	title?: string
+	/** Field for the secondary line. */
+	subtitle?: string
+	/** Fields rendered as small pills (status, streak, …). */
+	badges?: string[]
+	/** Numeric field rendered as a progress bar (0..1 or 0..100). */
+	progress?: string
+	/** Fields for the quiet meta line (dates, reminders, …). */
+	meta?: string[]
+}
+
+export type FaceElement =
+	| { kind: 'note'; text: string }
+	/** The actor's live instance state as a key/value grid. */
+	| { kind: 'state' }
+	/** The records this actor keeps — its memory, rendered as cards. */
+	| { kind: 'records'; title?: string; item?: RecordItemSpec }
+	/** Aggregate tiles over the records: counts, sums, latest values. */
+	| {
+			kind: 'stats'
+			items: {
+				label: string
+				field?: string
+				aggregate?: 'count' | 'latest' | 'sum' | 'max'
+			}[]
+	  }
+	/** An input that executes a goal through the engine, typed text as the fact. */
+	| { kind: 'run'; goal: string; label?: string; placeholder?: string }
+	/** A button that sends one fixed message to the mesh. */
+	| { kind: 'action'; method: string; label: string; payload?: Record<string, unknown> }
+
+export interface FaceSpec {
+	elements: FaceElement[]
+}
+
+/**
+ * The memory seam: an actor that keeps records. The engine calls `remember`
+ * with each successful llm-execution output, so running "make an appointment"
+ * IS what fills the calendar. Duck-typed so the bus needs no import of any
+ * concrete class.
+ */
+export interface RecordKeeper {
+	remember(out: unknown): void
+	/** The newest record's data, if any — the shape template for the next run. */
+	latestRecord?(): unknown
+}
+
+export function keepsRecords(actor: Actor): actor is Actor & RecordKeeper {
+	return typeof (actor as Partial<RecordKeeper>).remember === 'function'
+}
+
 export interface Manifest {
 	id: string
 	name: string
@@ -48,8 +120,22 @@ export interface Manifest {
 	/** Actor-level contracts, for actors whose role is one transformation. */
 	requires?: Predicate[]
 	produces?: Predicate[]
-	/** Declared LLM actor: its description becomes its instruction (board 0129). */
-	llm?: boolean
+	/**
+	 * Declared LLM actor: its description becomes its instruction (board
+	 * 0129). `true` = default lane; an object picks the model and sampling
+	 * for THIS actor — the composer runs kimi while a summarizer runs the
+	 * fast lane, each declared in its own manifest.
+	 */
+	llm?: boolean | LlmSettings
+	/** The actor's window UI, declared as data; absent = the generic face. */
+	face?: FaceSpec
+}
+
+/** The declared model lane, normalized: null when the actor is not an llm actor. */
+export function llmSettings(m: Manifest): LlmSettings | null {
+	if (m.llm === true) return {}
+	if (m.llm && typeof m.llm === 'object') return m.llm
+	return null
 }
 
 /** What a handler gives back: a record for the UI, prose for the model. */
@@ -61,21 +147,21 @@ export interface HandlerResult {
 export type Handler = (payload: Record<string, unknown>) => HandlerResult | Promise<HandlerResult>
 
 /** The natural-language service an ask() consults; injected, never imported. */
-export type Llm = (system: string, question: string) => Promise<string>
+export type Llm = (system: string, question: string, settings?: LlmSettings) => Promise<string>
 
 /** The manifest, spoken — the fallback self-description and the LLM's context. */
 export function manifestProse(m: Manifest): string {
 	const contracts = (spec: { requires?: Predicate[]; produces?: Predicate[] }) => {
 		const parts: string[] = []
-		if (spec.requires?.length) parts.push(`braucht ${spec.requires.join(', ')}`)
-		if (spec.produces?.length) parts.push(`erzeugt ${spec.produces.join(', ')}`)
+		if (spec.requires?.length) parts.push(`requires ${spec.requires.join(', ')}`)
+		if (spec.produces?.length) parts.push(`produces ${spec.produces.join(', ')}`)
 		return parts.length > 0 ? ` (${parts.join('; ')})` : ''
 	}
 	const methods =
 		m.methods.length > 0
-			? ` Methoden: ${m.methods.map((x) => `${x.name} — ${x.description}${contracts(x)}`).join(' · ')}`
+			? ` Methods: ${m.methods.map((x) => `${x.name} — ${x.description}${contracts(x)}`).join(' · ')}`
 			: ''
-	return `Ich bin ${m.name} (${m.id}). ${m.description}${contracts(m)}.${methods}`
+	return `I am ${m.name} (${m.id}). ${m.description}${contracts(m)}.${methods}`
 }
 
 export class Actor {
@@ -177,9 +263,9 @@ export class Actor {
 		if (!handler) {
 			const record = JSON.stringify({
 				ok: false,
-				error: `${this.manifest.id} kennt ${method} nicht`
+				error: `${this.manifest.id} does not know ${method}`
 			})
-			return { record, wire: `${this.manifest.id} kennt ${method} nicht` }
+			return { record, wire: `${this.manifest.id} does not know ${method}` }
 		}
 		// Supervision as backtracking, the runtime half: a handler that throws
 		// gets one fresh attempt — the Erlang restart in miniature. Only after
@@ -194,8 +280,8 @@ export class Actor {
 				if (attempt === 0) continue
 				this.failures++
 				this.lastError = `${method}: ${reason}`
-				const record = JSON.stringify({ ok: false, error: `${method} scheiterte: ${reason}` })
-				return { record, wire: `${method} scheiterte: ${reason}` }
+				const record = JSON.stringify({ ok: false, error: `${method} failed: ${reason}` })
+				return { record, wire: `${method} failed: ${reason}` }
 			}
 		}
 	}
@@ -208,11 +294,11 @@ export class Actor {
 	async ask(question: string, llm?: Llm): Promise<string> {
 		const self = manifestProse(this.manifest)
 		const state = this.situation()
-		const context = state ? `${self} Aktueller Zustand: ${state}` : self
+		const context = state ? `${self} Current state: ${state}` : self
 		if (!llm) return context
 		return llm(
-			`Du bist der Actor "${this.manifest.name}" in avenOS und antwortest als du selbst, ` +
-				`knapp und auf Deutsch. Alles was du über dich weißt: ${context}`,
+			`You are the actor "${this.manifest.name}" in avenOS, answering as yourself, ` +
+				`briefly, in the language of the question. Everything you know about yourself: ${context}`,
 			question
 		)
 	}

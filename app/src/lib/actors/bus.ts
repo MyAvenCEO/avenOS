@@ -1,5 +1,13 @@
 import type { MethodSpec } from './actor'
-import { type Actor, functor, type HandlerResult, type Llm, manifestProse } from './actor'
+import {
+	type Actor,
+	functor,
+	type HandlerResult,
+	keepsRecords,
+	type Llm,
+	llmSettings,
+	manifestProse
+} from './actor'
 import { singleton } from './singleton'
 import { type Bindings, rename, resolve, unifiable, unify } from './term'
 
@@ -85,7 +93,7 @@ export class MessageBus {
 		const actor = this.#actors.get(envelope.to)
 		const started = Date.now()
 		if (!actor) {
-			const record = JSON.stringify({ ok: false, error: `kein Actor ${envelope.to}` })
+			const record = JSON.stringify({ ok: false, error: `no actor ${envelope.to}` })
 			this.#record({
 				at: started,
 				kind: 'send',
@@ -95,7 +103,7 @@ export class MessageBus {
 				ok: false,
 				ms: 0
 			})
-			return { record, wire: `kein Actor ${envelope.to}` }
+			return { record, wire: `no actor ${envelope.to}` }
 		}
 		const result = await actor.deliver(envelope.method, envelope.payload)
 		let ok = true
@@ -160,7 +168,7 @@ export class MessageBus {
 	async ask(actorId: string, question: string): Promise<string> {
 		const actor = this.#actors.get(actorId)
 		const started = Date.now()
-		if (!actor) return `Es gibt keinen Actor ${actorId}.`
+		if (!actor) return `There is no actor ${actorId}.`
 		const answer = await actor.ask(question, this.llm)
 		this.#record({
 			at: started,
@@ -187,15 +195,15 @@ export class MessageBus {
 			{
 				name: 'actor_ask',
 				description:
-					'Stelle einem Actor eine Frage in natürlicher Sprache — er antwortet als er ' +
-					`selbst. Verfügbare Actors: ${this.actors()
+					'Ask an actor a question in natural language — it answers as itself. ' +
+					`Available actors: ${this.actors()
 						.map((a) => a.manifest.id)
 						.join(', ')}.`,
 				parameters: {
 					type: 'object',
 					properties: {
-						actor: { type: 'string', description: 'Die id des Actors.' },
-						question: { type: 'string', description: 'Die Frage.' }
+						actor: { type: 'string', description: 'The actor id.' },
+						question: { type: 'string', description: 'The question.' }
 					},
 					required: ['actor', 'question']
 				}
@@ -207,8 +215,8 @@ export class MessageBus {
 	dispatch(from: string, method: string, payload: Record<string, unknown>): Promise<HandlerResult> {
 		const owner = this.actors().find((a) => a.handles(method))
 		if (!owner) {
-			const record = JSON.stringify({ ok: false, error: `unbekanntes Werkzeug ${method}` })
-			return Promise.resolve({ record, wire: `unbekanntes Werkzeug ${method}` })
+			const record = JSON.stringify({ ok: false, error: `unknown tool ${method}` })
+			return Promise.resolve({ record, wire: `unknown tool ${method}` })
 		}
 		return this.send({
 			id: `env_${nextEnvelope++}`,
@@ -346,7 +354,7 @@ export class MessageBus {
 	}
 
 	/**
-	 * A goal is unerfüllt when its proof fails — the provability check the
+	 * A goal is unsatisfied when its proof fails — the provability check the
 	 * old flow templates carried, now against the live registry.
 	 */
 	unsatisfied(goal: string): boolean {
@@ -440,6 +448,24 @@ export class MessageBus {
 		const name = functor(goal)
 		if (visited.has(name)) return { ok: true, out: {}, bindings }
 
+		// Supplied facts are ground unit clauses and they win FIRST — exactly
+		// Prolog's clause order. Without this, a calendar requiring utterance(U)
+		// sent the engine off to "execute" the listener (its producer) instead
+		// of taking the text the caller just typed as that very utterance.
+		if (name in facts) {
+			const out = (facts[name] as Record<string, unknown> | undefined) ?? {}
+			run.steps.push({
+				actor: null,
+				predicate: goal,
+				in: {},
+				out,
+				ok: true,
+				duration: 0,
+				attempt: 1
+			})
+			return { ok: true, out, bindings }
+		}
+
 		const candidates = this.actors()
 			.map((a) => {
 				const head = a.produces.find(
@@ -494,9 +520,13 @@ export class MessageBus {
 				payload[functor(r)] = child.out
 			}
 			if (!childrenOk) continue
+			// A producer with no requirements gets the supplied facts wholesale —
+			// otherwise the caller's input would evaporate before an llm actor
+			// that declares no inputs ever sees it.
+			if (actor.requires.length === 0) Object.assign(payload, facts)
 
 			const started = Date.now()
-			const executed = await this.#execute(actor, name, payload)
+			const executed = await this.execute(actor, name, payload)
 			run.steps.push({
 				actor: actor.manifest.id,
 				predicate: goal,
@@ -512,8 +542,14 @@ export class MessageBus {
 		return { ok: false, out: {}, bindings }
 	}
 
-	/** One step: deliver to the clause-body handler, or synthesize the llm one. */
-	async #execute(
+	/**
+	 * One step: deliver to the clause-body handler, or synthesize the llm one.
+	 * Public because it is ALSO the direct lane: a record actor's generic
+	 * `_add` executes its own actor here, bypassing candidate search — "add
+	 * to THIS calendar" must never land on some other producer of the same
+	 * functor.
+	 */
+	async execute(
 		actor: Actor,
 		method: string,
 		payload: Record<string, unknown>
@@ -531,28 +567,40 @@ export class MessageBus {
 			}
 			return { ok, out }
 		}
-		if (actor.manifest.llm === true) {
+		const lane = llmSettings(actor.manifest)
+		if (lane) {
 			if (!this.llm) {
-				return { ok: false, out: { ok: false, error: 'llm-Actor ohne injiziertes LLM' } }
+				return { ok: false, out: { ok: false, error: 'llm actor without an injected LLM' } }
 			}
+			const latest = keepsRecords(actor) ? actor.latestRecord?.() : undefined
 			const system =
 				`${manifestProse(actor.manifest)}\n` +
-				`Du BIST dieser Actor und führst jetzt aus: erzeuge "${method}" aus der Eingabe. ` +
-				'Antworte mit GENAU einem JSON-Objekt (ohne Markdown), das dein Ergebnis trägt.'
+				`You ARE this actor, executing now: produce "${method}" from the input. ` +
+				'Reply with EXACTLY one JSON object (no markdown) carrying your result. ' +
+				'Keep it FLAT — short lowercase field names, no wrapper object.' +
+				// Records that change shape every run render as chaos. The newest
+				// record IS the schema: same fields, same names, every time.
+				(latest !== undefined
+					? ` Reuse EXACTLY the field names of this previous record: ${JSON.stringify(latest)}`
+					: '')
 			try {
-				const answer = await this.llm(system, JSON.stringify(payload))
+				// The actor's own lane: its manifest picks model and sampling.
+				const answer = await this.llm(system, JSON.stringify(payload), lane)
 				const bare = answer.replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*?$/, '$1')
 				const parsed = JSON.parse(bare)
-				if (!parsed || typeof parsed !== 'object') throw new Error('kein Objekt')
+				if (!parsed || typeof parsed !== 'object') throw new Error('not an object')
+				// The memory seam: a record-keeping actor remembers what it just
+				// produced — running "make an appointment" IS filling the calendar.
+				if (keepsRecords(actor)) actor.remember(parsed)
 				return { ok: true, out: parsed }
 			} catch (err) {
 				const reason = err instanceof Error ? err.message : String(err)
-				return { ok: false, out: { ok: false, error: `llm-Ausführung scheiterte: ${reason}` } }
+				return { ok: false, out: { ok: false, error: `llm execution failed: ${reason}` } }
 			}
 		}
 		return {
 			ok: false,
-			out: { ok: false, error: `${actor.manifest.id} hat weder Handler noch llm:true` }
+			out: { ok: false, error: `${actor.manifest.id} has neither a handler nor llm:true` }
 		}
 	}
 }

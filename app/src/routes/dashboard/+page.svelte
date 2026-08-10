@@ -77,28 +77,28 @@ $effect(() => {
  * out, and hearing wins over everything because interrupting is allowed.
  */
 const phase = $derived.by(() => {
-	if (listener.status === 'denied') return { key: 'denied', label: 'Kein Mikrofon' }
+	if (listener.status === 'denied') return { key: 'denied', label: 'No microphone' }
 	if (listener.status === 'error' || speaker.status === 'error')
-		return { key: 'error', label: 'Fehler' }
+		return { key: 'error', label: 'Error' }
 	// A sentence that fails to synthesize does not stop the voice for good, so it
 	// keeps `status` — but it must not just go quiet either, which is
 	// indistinguishable from the voice being broken.
-	if (speaker.failure) return { key: 'error', label: `Stimme: ${speaker.failure}` }
+	if (speaker.failure) return { key: 'error', label: `Voice: ${speaker.failure}` }
 	if (speaker.status === 'preparing')
-		return { key: 'loading', label: `Stimme lädt ${Math.round(speaker.progress * 100)}%` }
+		return { key: 'loading', label: `Voice loading ${Math.round(speaker.progress * 100)}%` }
 	if (listener.status === 'preparing')
 		return listener.stage === 'load'
-			? { key: 'starting', label: 'Ohren starten…' }
-			: { key: 'loading', label: `Ohren laden ${Math.round(listener.progress * 100)}%` }
-	if (listener.speech) return { key: 'hearing', label: 'Hört zu' }
+			? { key: 'starting', label: 'Ears starting…' }
+			: { key: 'loading', label: `Ears loading ${Math.round(listener.progress * 100)}%` }
+	if (listener.speech) return { key: 'hearing', label: 'Listening' }
 	// Audio output that never got a user gesture. Saying "Spricht" over a sleeping
 	// device is the one state that gives you nothing to act on — this one you can
 	// tap, and one tap fixes it for the rest of the session.
-	if (speaker.output === 'suspended') return { key: 'blocked', label: 'Ton aktivieren' }
-	if (speaker.speaking) return { key: 'speaking', label: 'Spricht' }
-	if (chat.streaming) return { key: 'thinking', label: 'Denkt nach' }
-	if (listener.status === 'listening') return { key: 'idle', label: 'Bereit' }
-	return { key: 'text', label: 'Nur Text' }
+	if (speaker.output === 'suspended') return { key: 'blocked', label: 'Enable audio' }
+	if (speaker.speaking) return { key: 'speaking', label: 'Speaking' }
+	if (chat.streaming) return { key: 'thinking', label: 'Thinking' }
+	if (listener.status === 'listening') return { key: 'idle', label: 'Ready' }
+	return { key: 'text', label: 'Text only' }
 })
 
 let draft = $state('')
@@ -199,7 +199,7 @@ $effect(() => {
 			{#if chat.turns.length > 0}
 				<div class="flex justify-end gap-3 text-xs opacity-50">
 					<button type="button" class="underline underline-offset-4" onclick={exportLog}>
-						{exported ? 'Kopiert' : 'Export'}
+						{exported ? 'Copied' : 'Export'}
 					</button>
 					<button
 						type="button"
@@ -255,7 +255,7 @@ $effect(() => {
 							{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
 								<!-- Thinking. Three dots breathing in sequence, not a frozen
 						     ellipsis that reads as a hung reply. -->
-								<span class="flex items-center gap-1 py-1.5" aria-label="Denkt nach">
+								<span class="flex items-center gap-1 py-1.5" aria-label="Thinking">
 									<span class="size-1.5 animate-bounce rounded-full bg-current opacity-40"></span>
 									<span
 										class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
@@ -318,8 +318,8 @@ $effect(() => {
 								onclick={() => {
 									w.open = false
 								}}
-								title="Fenster ausblenden"
-								aria-label="Fenster ausblenden"
+								title="Hide window"
+								aria-label="Hide window"
 								class="ml-auto text-foreground/30 transition-colors hover:text-foreground"
 							>
 								×
@@ -329,10 +329,10 @@ $effect(() => {
 					</section>
 				{:else}
 					<p class="pt-10 text-center text-foreground/40 text-sm">
-						Kein Fenster offen. Sag zum Beispiel
+						No window open. Say, for example,
 						{#each bus.actors().filter(isWindow) as w, i (w.manifest.id)}
 							{i > 0 ? ' oder' : ''}
-							„zeig {w.manifest.name}"
+							"show {w.manifest.name}"
 						{/each}
 					</p>
 				{/each}
@@ -397,7 +397,7 @@ $effect(() => {
 		class="mx-auto -mt-2 w-full rounded-full bg-primary py-2.5 pr-2.5 pl-5 text-primary-foreground {typing
 			? 'max-w-lg'
 			: 'max-w-72'}"
-		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — alles on-device"
+		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
 	>
 		<div class="flex items-center gap-3">
 			{#if typing}
@@ -406,7 +406,7 @@ $effect(() => {
 						bind:value={draft}
 						onkeydown={onKeydown}
 						rows="1"
-						placeholder="Schreiben…"
+						placeholder="Write…"
 						class="field-sizing-content max-h-32 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-primary-foreground/40"
 					></textarea>
 					<!-- Same shape as the mode toggle next to it, so the panel ends in a
@@ -414,8 +414,8 @@ $effect(() => {
 					<button
 						type="submit"
 						disabled={draft.trim() === ''}
-						title="Senden"
-						aria-label="Senden"
+						title="Send"
+						aria-label="Send"
 						class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-all hover:bg-primary-foreground/10 disabled:opacity-30 disabled:hover:bg-transparent"
 					>
 						<!-- arrow up: send -->
@@ -475,8 +475,8 @@ $effect(() => {
 							chat.stop()
 							speaker.silence()
 						}}
-						title="Stopp"
-						aria-label="Stopp"
+						title="Stop"
+						aria-label="Stop"
 						class="shrink-0 rounded-full bg-status-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
 					>
 						<svg viewBox="0 0 24 24" class="size-4" fill="currentColor">
@@ -498,8 +498,8 @@ $effect(() => {
 						typing = !typing
 					}}
 					class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
-					title={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
-					aria-label={typing ? 'Zurück zur Sprache' : 'Stattdessen tippen'}
+					title={typing ? 'Back to voice' : 'Type instead'}
+					aria-label={typing ? 'Back to voice' : 'Type instead'}
 				>
 					{#if typing}
 						<!-- microphone: go back to speaking -->

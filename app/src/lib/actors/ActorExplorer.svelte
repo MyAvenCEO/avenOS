@@ -103,7 +103,7 @@ async function runGoal() {
 		try {
 			facts = JSON.parse(factsText)
 		} catch {
-			runError = 'facts ist kein gültiges JSON'
+			runError = 'facts is not valid JSON'
 			return
 		}
 	}
@@ -162,7 +162,7 @@ async function ask(event: SubmitEvent) {
 				</span>
 			{:else if step.external}
 				<span class="rounded-md bg-foreground/5 px-1.5 py-0.5 text-[0.625rem] text-foreground/50">
-					externes Faktum
+					external fact
 				</span>
 			{:else if step.actor}
 				<span class="text-[0.6875rem] text-foreground/50">
@@ -170,7 +170,7 @@ async function ask(event: SubmitEvent) {
 				</span>
 			{/if}
 			{#if !step.satisfied}
-				<span class="text-[0.6875rem] text-status-error">unerfüllt</span>
+				<span class="text-[0.6875rem] text-status-error">unsatisfied</span>
 			{/if}
 			{#each constantBindings(step) as [variable, value] (variable)}
 				<span
@@ -213,7 +213,7 @@ async function ask(event: SubmitEvent) {
 				<span class="flex items-center gap-1.5 leading-tight">
 					<span
 						class="size-1.5 shrink-0 rounded-full {live ? 'bg-status-success' : 'bg-foreground/20'}"
-						title={live ? 'Instanz läuft' : 'nur Template'}
+						title={live ? 'instance running' : 'template only'}
 					></span>
 					{actor.manifest.name}
 				</span>
@@ -246,15 +246,15 @@ async function ask(event: SubmitEvent) {
 					onclick={() => {
 						focusGraph = !focusGraph
 					}}
-					title="Nur den gewählten Actor und seine direkten Partner zeigen; Klick auf einen Nachbarn zentriert ihn"
+					title="Show only the selected actor and its direct partners; clicking a neighbor centers it"
 					class="rounded-full border px-2.5 py-0.5 transition-colors {focusGraph
 						? 'border-primary bg-primary text-primary-foreground'
 						: 'border-foreground/10 opacity-60 hover:opacity-100'}"
 				>
-					Fokus
+					Focus
 				</button>
 			{/if}
-			<span class="text-foreground/40">Stufen:</span>
+			<span class="text-foreground/40">Stages:</span>
 			{#each bus.stages() as stage, i (`s${i}`)}
 				{#if i > 0}
 					<span class="text-foreground/25">→</span>
@@ -314,7 +314,7 @@ async function ask(event: SubmitEvent) {
 
 			{#if selected.requires.length > 0 || selected.produces.length > 0}
 				<div class="flex flex-wrap items-center gap-1.5 pb-3 text-xs">
-					<span class="text-foreground/40">Vertrag:</span>
+					<span class="text-foreground/40">Contract:</span>
 					{#each selected.requires as r, i (`r${i}`)}
 						{@render pill(r)}
 					{/each}
@@ -328,7 +328,7 @@ async function ask(event: SubmitEvent) {
 			{#if selected.manifest.methods.length > 0}
 				<div class="flex flex-col gap-2">
 					<h4 class="text-[0.6875rem] text-foreground/40 uppercase tracking-wide">
-						Methoden ({selected.manifest.methods.length})
+						Methods ({selected.manifest.methods.length})
 					</h4>
 					{#each selected.manifest.methods as method (method.name)}
 						<div class="rounded-xl border border-foreground/5 bg-surface-soft/60 px-3 py-2">
@@ -386,8 +386,7 @@ async function ask(event: SubmitEvent) {
 				</div>
 			{:else}
 				<p class="text-foreground/40 text-xs">
-					Keine Methoden — dieser Actor ist reine Transformation, sein Vertrag ist die ganze
-					Schnittstelle.
+					No methods — this actor is pure transformation; its contract is the whole interface.
 				</p>
 			{/if}
 		</section>
@@ -397,7 +396,7 @@ async function ask(event: SubmitEvent) {
 			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			<div class="flex items-center gap-2 pb-2">
-				<h3 class="font-semibold text-sm">Instanz</h3>
+				<h3 class="font-semibold text-sm">Instance</h3>
 				<span
 					class="size-1.5 rounded-full {instance ? 'bg-status-success' : 'bg-foreground/20'}"
 				></span>
@@ -412,10 +411,10 @@ async function ask(event: SubmitEvent) {
 					{/each}
 					<div>
 						<dt class="text-[0.6875rem] text-foreground/40">Mailbox</dt>
-						<dd class="font-medium">{selected.pending} wartend</dd>
+						<dd class="font-medium">{selected.pending} waiting</dd>
 					</div>
 					<div>
-						<dt class="text-[0.6875rem] text-foreground/40">Handler-Fehler</dt>
+						<dt class="text-[0.6875rem] text-foreground/40">Handler errors</dt>
 						<dd class="font-medium {selected.failures > 0 ? 'text-status-error' : ''}">
 							{selected.failures}{selected.lastError ? ` · ${selected.lastError}` : ''}
 						</dd>
@@ -423,8 +422,8 @@ async function ask(event: SubmitEvent) {
 				</dl>
 			{:else}
 				<p class="text-foreground/40 text-sm">
-					Nur Template — noch keine laufende Instanz. Der Vertrag ist deklariert, die Ausführung
-					kommt mit der Flow-Engine.
+					Template only — no running instance yet. The contract is declared; the engine executes it
+					on demand.
 				</p>
 			{/if}
 		</section>
@@ -433,37 +432,35 @@ async function ask(event: SubmitEvent) {
 		<section
 			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
-			<h3 class="pb-2 font-semibold text-sm">Relationen</h3>
+			<h3 class="pb-2 font-semibold text-sm">Relations</h3>
 			<div class="grid gap-3 text-sm sm:grid-cols-2">
 				<div>
-					<h4 class="pb-1.5 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">
-						Wird gespeist von
-					</h4>
+					<h4 class="pb-1.5 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">Fed by</h4>
 					{#each feeders as edge, i (`f${i}`)}
 						<p class="flex items-center gap-1.5 py-0.5">
 							<span class="font-medium">{bus.get(edge.from)?.manifest.name}</span>
 							{@render pill(edge.predicate)}
 						</p>
 					{:else}
-						<p class="text-foreground/40 text-xs">niemandem — Eingang von außen</p>
+						<p class="text-foreground/40 text-xs">nobody — input from outside</p>
 					{/each}
 				</div>
 				<div>
-					<h4 class="pb-1.5 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">Speist</h4>
+					<h4 class="pb-1.5 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">Feeds</h4>
 					{#each fed as edge, i (`t${i}`)}
 						<p class="flex items-center gap-1.5 py-0.5">
 							{@render pill(edge.predicate)}
 							<span class="font-medium">{bus.get(edge.to)?.manifest.name}</span>
 						</p>
 					{:else}
-						<p class="text-foreground/40 text-xs">niemanden — Ausgang nach außen</p>
+						<p class="text-foreground/40 text-xs">nobody — output to the outside</p>
 					{/each}
 				</div>
 			</div>
 			{#if selected.manifest.methods.length > 0}
 				<p class="pt-2 text-[0.6875rem] text-foreground/40">
-					Zusätzlich: alle {selected.manifest.methods.length} Methoden sind über den Chat erreichbar
-					— die Werkzeugliste des Modells wird aus diesem Manifest abgeleitet.
+					Also: all {selected.manifest.methods.length} methods are reachable through the chat — the
+					model's tool list is derived from this manifest.
 				</p>
 			{/if}
 		</section>
@@ -483,13 +480,13 @@ async function ask(event: SubmitEvent) {
 					actor: typeof selected.subject
 				}>}
 				<p class="pb-2 text-[0.6875rem] text-foreground/40">
-					Dieses Fenster ist selbst ein Actor: es konsumiert den Zustand von
+					This window is an actor itself: it consumes the state of
 					{selected.subject.manifest.name}
-					und malt ihn — hier live:
+					and paints it — live, here:
 				</p>
 				<details>
 					<summary class="cursor-pointer text-foreground/50 text-xs hover:text-foreground/80">
-						Fenster einblenden
+						Show window
 					</summary>
 					<div class="mt-2 max-h-80 overflow-y-auto rounded-xl border border-foreground/10 p-3">
 						<!-- The window's props ride along — they are what make the
@@ -501,7 +498,7 @@ async function ask(event: SubmitEvent) {
 				{@const win = bus.actors().filter(isWindow).find((a) => a.subject === selected)}
 				{#if win}
 					<p class="text-foreground/40 text-sm">
-						Dieser Actor malt nicht selbst — sein Fenster ist ein eigener Actor:
+						This actor does not paint itself — its window is its own actor:
 						<button
 							type="button"
 							onclick={() => {
@@ -515,7 +512,7 @@ async function ask(event: SubmitEvent) {
 					</p>
 				{:else}
 					<p class="text-foreground/40 text-sm">
-						Kein Fenster — dieser Actor arbeitet unsichtbar; sein Zustand ist oben ablesbar.
+						No window — this actor works invisibly; its state is readable above.
 					</p>
 				{/if}
 			{/if}
@@ -527,12 +524,12 @@ async function ask(event: SubmitEvent) {
 		>
 			<h3 class="pb-1 font-semibold text-sm">Config</h3>
 			<p class="pb-2 text-[0.6875rem] text-foreground/40">
-				Das rohe Manifest — die einzige gespeicherte Wahrheit über diesen Actor. Alles andere
-				(Werkzeugliste, Kanten, Stufen, Beweise, dieses Panel) wird daraus abgeleitet.
+				The raw manifest — the only stored truth about this actor. Everything else (tool list,
+				edges, stages, proofs, this panel) is derived from it.
 			</p>
 			<details>
 				<summary class="cursor-pointer text-foreground/50 text-xs hover:text-foreground/80">
-					Manifest als JSON
+					Manifest as JSON
 				</summary>
 				<pre
 					class="mt-1 max-h-72 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
@@ -549,10 +546,10 @@ async function ask(event: SubmitEvent) {
 			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			<div class="flex flex-wrap items-center gap-2 pb-2">
-				<h3 class="font-semibold text-sm">Beweis</h3>
+				<h3 class="font-semibold text-sm">Proof</h3>
 				<span class="text-[0.6875rem] text-foreground/40">
-					Ziel wählen — der Solver sucht rückwärts Produzenten und beweist deren Bedarf, mit
-					Backtracking; not(…) gilt als Negation-as-Failure.
+					Pick a goal — the solver searches backwards for producers and proves their needs, with
+					backtracking; not(…) is negation as failure.
 				</span>
 			</div>
 			<div class="flex flex-wrap items-center gap-1.5 pb-2">
@@ -571,14 +568,14 @@ async function ask(event: SubmitEvent) {
 				<form onsubmit={proveCustom} class="flex items-center gap-1.5">
 					<input
 						bind:value={goal}
-						placeholder="eigenes Ziel, z.B. reply(R) oder not(x(Y))"
+						placeholder="own goal, e.g. reply(R) or not(x(Y))"
 						class="w-56 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
 					>
 					<button
 						type="submit"
 						class="rounded-full bg-primary px-3 py-1 text-[0.6875rem] text-primary-foreground"
 					>
-						beweisen
+						prove
 					</button>
 				</form>
 			</div>
@@ -586,12 +583,12 @@ async function ask(event: SubmitEvent) {
 				{@render proofNode(proof)}
 			{/if}
 
-			<!-- Ausführen: the plan above, walked for real — postorder messages,
+			<!-- Run: the plan above, walked for real — postorder messages,
 			     runtime backtracking, llm-actors over the injected model. -->
 			<div class="flex flex-wrap items-center gap-1.5 pt-3">
 				<input
 					bind:value={factsText}
-					placeholder={'externe Fakten als JSON, z.B. {"anfrage": {"text": "…"}}'}
+					placeholder={'external facts as JSON, e.g. {"request": {"text": "…"}}'}
 					class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
 				>
 				<button
@@ -600,7 +597,7 @@ async function ask(event: SubmitEvent) {
 					disabled={goal.trim() === '' || running}
 					class="rounded-full bg-primary px-3 py-1 text-[0.6875rem] text-primary-foreground transition-opacity disabled:opacity-30"
 				>
-					{running ? 'läuft…' : 'Ausführen'}
+					{running ? 'running…' : 'Run'}
 				</button>
 				{#if runError}
 					<span class="text-[0.6875rem] text-status-error">{runError}</span>
@@ -615,12 +612,12 @@ async function ask(event: SubmitEvent) {
 			<div class="flex items-center gap-2 pb-2">
 				<h3 class="font-semibold text-sm">Runs</h3>
 				<span class="text-[0.6875rem] text-foreground/40">
-					ausgeführte Ziele — jeder Schritt eine Nachricht, Backtracking sichtbar
+					executed goals — every step one message, backtracking visible
 				</span>
 			</div>
 			{#if runRows.length === 0}
 				<p class="text-foreground/40 text-xs">
-					Noch keine Runs — wähle oben ein Ziel und drücke Ausführen, oder sag „führe … aus".
+					No runs yet — pick a goal above and press Run, or say "run …".
 				</p>
 			{:else}
 				<div class="flex max-h-72 flex-col gap-1 overflow-y-auto">
@@ -632,7 +629,7 @@ async function ask(event: SubmitEvent) {
 								</span>
 								<span class="text-foreground/50">{run.id}</span>
 								<span class="min-w-0 flex-1 truncate">⊢ {run.goal}</span>
-								<span class="text-foreground/35">{run.steps.length} Schritte</span>
+								<span class="text-foreground/35">{run.steps.length} steps</span>
 							</summary>
 							<div class="flex flex-col gap-0.5 py-1 pl-5 font-mono text-[0.6875rem]">
 								{#each run.steps as step, i (`${run.id}s${i}`)}
@@ -640,11 +637,11 @@ async function ask(event: SubmitEvent) {
 										<span class={step.ok ? 'text-status-success' : 'text-status-error'}>
 											{step.ok ? '✓' : '✗'}
 										</span>
-										<span class="shrink-0 text-foreground/50">{step.actor ?? 'extern'}</span>
+										<span class="shrink-0 text-foreground/50">{step.actor ?? 'external'}</span>
 										<span class="min-w-0 flex-1 truncate">{step.predicate}</span>
 										{#if step.attempt > 1}
 											<span class="shrink-0 rounded bg-status-info/20 px-1 text-[#a06818]">
-												Versuch {step.attempt}
+												attempt {step.attempt}
 											</span>
 										{/if}
 										<span class="w-10 shrink-0 text-right text-foreground/30">
@@ -669,7 +666,7 @@ async function ask(event: SubmitEvent) {
 			<div class="flex items-center gap-2 pb-2">
 				<h3 class="font-semibold text-sm">Trace</h3>
 				<span class="text-[0.6875rem] text-foreground/40">
-					alles was über den Bus lief — Envelopes, Emits, Interviews
+					everything that crossed the bus — envelopes, emits, interviews
 				</span>
 				<button
 					type="button"
@@ -680,11 +677,11 @@ async function ask(event: SubmitEvent) {
 						? 'border-primary/40 text-primary/80'
 						: 'border-foreground/10 opacity-60 hover:opacity-100'}"
 				>
-					nur {selected.manifest.name}
+					only {selected.manifest.name}
 				</button>
 			</div>
 			{#if traceRows.length === 0}
-				<p class="text-foreground/40 text-xs">Noch nichts — sprich mit dem System.</p>
+				<p class="text-foreground/40 text-xs">Nothing yet — talk to the system.</p>
 			{:else}
 				<div class="flex max-h-56 flex-col gap-0.5 overflow-y-auto font-mono text-[0.6875rem]">
 					{#each traceRows as e (e.seq)}
@@ -714,7 +711,7 @@ async function ask(event: SubmitEvent) {
 			<form onsubmit={ask} class="flex items-center gap-2">
 				<input
 					bind:value={question}
-					placeholder={`Frag ${selected.manifest.name}…`}
+					placeholder={`Ask ${selected.manifest.name}…`}
 					class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-4 py-2 text-sm outline-none placeholder:text-foreground/30"
 				>
 				<button

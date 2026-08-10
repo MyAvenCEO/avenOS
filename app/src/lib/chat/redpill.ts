@@ -250,11 +250,30 @@ export async function* streamChat(
  */
 export const COMPOSER_MODEL = 'moonshotai/kimi-k3'
 
-export async function complete(messages: ChatMessage[], model = COMPOSER_MODEL): Promise<string> {
+export interface CompleteOptions {
+	model?: string
+	temperature?: number
+	/**
+	 * Live progress: reasoning models stream their deliberation as
+	 * `reasoning_content` long before any answer text arrives. Surfacing it is
+	 * the difference between "working…" and actually watching the model think.
+	 */
+	onDelta?: (delta: { reasoning?: string; text?: string }) => void
+}
+
+export async function complete(
+	messages: ChatMessage[],
+	options: CompleteOptions = {}
+): Promise<string> {
 	const response = await fetch('/api/chat', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ messages, tools: [], model })
+		body: JSON.stringify({
+			messages,
+			tools: [],
+			model: options.model ?? COMPOSER_MODEL,
+			...(typeof options.temperature === 'number' && { temperature: options.temperature })
+		})
 	})
 	if (!response.ok || !response.body) throw new Error(await failureText(response))
 
@@ -275,8 +294,14 @@ export async function complete(messages: ChatMessage[], model = COMPOSER_MODEL):
 				const data = line.slice('data:'.length).trim()
 				if (data === '' || data === '[DONE]') continue
 				try {
-					const content = JSON.parse(data)?.choices?.[0]?.delta?.content
-					if (typeof content === 'string') text += content
+					const delta = JSON.parse(data)?.choices?.[0]?.delta
+					if (typeof delta?.content === 'string' && delta.content !== '') {
+						text += delta.content
+						options.onDelta?.({ text: delta.content })
+					}
+					if (typeof delta?.reasoning_content === 'string' && delta.reasoning_content !== '') {
+						options.onDelta?.({ reasoning: delta.reasoning_content })
+					}
 				} catch {
 					// partial frames cannot occur (blank-line buffering); skip junk
 				}

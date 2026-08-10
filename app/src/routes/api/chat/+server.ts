@@ -49,9 +49,12 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 		error(500, 'PHALA_API_KEY is unset — add it to the worktree .env and restart vite')
 	}
 
-	const { messages, tools, model } = await request.json()
+	const { messages, tools, model, temperature } = await request.json()
 	if (!Array.isArray(messages)) error(400, 'body must be { messages: [{ role, content }] }')
 	const chosen = typeof model === 'string' && MODELS.has(model) ? model : MODEL
+	// Per-actor sampling: manifests may declare a temperature; clamp it here so
+	// the client can never request something the upstream would reject.
+	const heat = typeof temperature === 'number' ? Math.max(0, Math.min(2, temperature)) : null
 
 	const upstream = await fetch(REDPILL_CHAT_URL, {
 		method: 'POST',
@@ -69,6 +72,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			// Kept from the Gemma era as cheap insurance against one-token loops;
 			// the client's stream guards are the backstop.
 			frequency_penalty: 0.3,
+			...(heat !== null && { temperature: heat }),
 			// Tools are shaped here rather than in the client so the wire format
 			// stays a detail of the proxy. Omitted entirely when there are none —
 			// an empty array reads as "you have no tools", which is true but makes

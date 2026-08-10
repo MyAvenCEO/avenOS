@@ -35,15 +35,16 @@ export interface WorkItem {
 }
 
 export const STATUS_LABEL: Record<WorkItemStatus, string> = {
-	open: 'offen',
-	doing: 'in Arbeit',
-	done: 'erledigt'
+	open: 'open',
+	doing: 'in progress',
+	done: 'done'
 }
 
+/** Tool-boundary statuses are English like every other code-level word. */
 const STATUS_WIRE: Record<string, WorkItemStatus> = {
-	offen: 'open',
-	in_arbeit: 'doing',
-	erledigt: 'done'
+	open: 'open',
+	in_progress: 'doing',
+	done: 'done'
 }
 
 /** Short and unguessable — the model copies these back from workitem_list. */
@@ -53,14 +54,14 @@ const SPARK_PARAM = {
 	type: 'string',
 	enum: SPARKS.map((s) => s.id),
 	description:
-		'Der Projekt-Kontext (Spark): "me" für eigene Dinge, "team" für gemeinsame. ' +
-		'Ohne Angabe gilt der gerade aktive Spark.'
+		'The project context (spark): "me" for personal things, "team" for shared ' +
+		'ones. Without it the currently active spark applies.'
 }
 
 const IDS_PARAM = {
 	type: 'array',
 	items: { type: 'string' },
-	description: 'Eine oder mehrere ids, exakt so wie workitem_list sie geliefert hat.'
+	description: 'One or more ids, exactly as workitem_list returned them.'
 }
 
 export class WorkItemsActor extends Actor {
@@ -74,31 +75,31 @@ export class WorkItemsActor extends Actor {
 				id: 'workitems',
 				name: 'Work Items',
 				description:
-					'Führt die Aufgabenliste: anlegen, Status ändern, löschen, anzeigen. ' +
-					'Jede Aufgabe gehört zu genau einem Spark und hat einen von drei Status.',
+					'Keeps the task list: create, change status, delete, show. Every task ' +
+					'belongs to exactly one spark and has one of three statuses.',
 				tags: ['todo'],
 				produces: ['workitem(W)'],
 				methods: [
 					{
 						name: 'workitem_list',
 						description:
-							'Gibt alle Aufgaben mit id, Status und Spark zurück — über alle Sparks. Rufe das ' +
-							'auf, bevor du über die Liste sprichst, und immer bevor du etwas änderst oder ' +
-							'löschst — du brauchst die ids.',
+							'Returns every task with id, status and spark — across all sparks. Call this ' +
+							'before talking about the list, and always before changing or deleting ' +
+							'anything — you need the ids.',
 						parameters: { type: 'object', properties: {} }
 					},
 					{
 						name: 'workitem_create',
 						description:
-							'Legt eine oder mehrere neue Aufgaben an. Mehrere Aufgaben immer in einem ' +
-							'einzigen Aufruf, nicht nacheinander.',
+							'Creates one or more new tasks. Multiple tasks always go in one single ' +
+							'call, never one after another.',
 						parameters: {
 							type: 'object',
 							properties: {
 								titles: {
 									type: 'array',
 									items: { type: 'string' },
-									description: 'Die Titel, kurz und in der Sprache des Nutzers.'
+									description: 'The titles, short, in the language the user spoke.'
 								},
 								spark: SPARK_PARAM
 							},
@@ -109,26 +110,25 @@ export class WorkItemsActor extends Actor {
 					{
 						name: 'workitem_update',
 						description:
-							'Ändert eine oder mehrere Aufgaben — Status oder Titel. Alle gemeinten Aufgaben ' +
-							'in einem Aufruf. „habe ich schon", „ist erledigt", „hab ich gemacht" heißen alle ' +
-							'status=erledigt, nicht löschen. „Fange ich gerade an", „bin ich dran" heißen ' +
-							'status=in_arbeit.',
+							'Changes one or more tasks — status or title. Every task meant goes in one ' +
+							'call. "already did it" and "that is done" mean status=done, not delete. ' +
+							'"just starting" and "working on it" mean status=in_progress.',
 						parameters: {
 							type: 'object',
 							properties: {
 								ids: IDS_PARAM,
 								status: {
 									type: 'string',
-									enum: ['offen', 'in_arbeit', 'erledigt'],
-									description: 'Neuer Status der Aufgaben.'
+									enum: ['open', 'in_progress', 'done'],
+									description: 'The new status of the tasks.'
 								},
 								done: {
 									type: 'boolean',
-									description: 'Kurzform: true = erledigt, false = offen. status geht vor.'
+									description: 'Shorthand: true = done, false = open. status wins.'
 								},
 								title: {
 									type: 'string',
-									description: 'Neuer Titel. Nur sinnvoll bei genau einer id.'
+									description: 'The new title. Only sensible with exactly one id.'
 								},
 								spark: SPARK_PARAM
 							},
@@ -138,9 +138,9 @@ export class WorkItemsActor extends Actor {
 					{
 						name: 'workitem_delete',
 						description:
-							'Löscht eine oder mehrere Aufgaben unwiderruflich. Nur wenn jemand ausdrücklich ' +
-							'löschen, entfernen oder streichen sagt. Etwas erledigt zu haben ist kein Grund — ' +
-							'dafür ist workitem_update mit status=erledigt da. Im Zweifel abhaken.',
+							'Deletes one or more tasks irreversibly. Only when someone explicitly asks ' +
+							'to delete, remove or strike. Having finished something is no reason — that ' +
+							'is workitem_update with status=done. When in doubt, check off.',
 						parameters: {
 							type: 'object',
 							properties: { ids: IDS_PARAM },
@@ -150,10 +150,9 @@ export class WorkItemsActor extends Actor {
 					{
 						name: 'workitem_show',
 						description:
-							'Wechselt den aktiven Spark: „zeig meine Liste" heißt spark=me, „zeig die ' +
-							'Team-Aufgaben" heißt spark=team. Ändert keine Daten. Für die FORM (Liste ' +
-							'oder Board) gibt es eigene Fenster: liste_window_toggle und ' +
-							'board_window_toggle.',
+							'Switches the active spark: "show my list" means spark=me, "show the team ' +
+							'tasks" means spark=team. Changes no data. The SHAPE (list or board) has its ' +
+							'own windows: list_window_toggle and board_window_toggle.',
 						parameters: {
 							type: 'object',
 							properties: {
@@ -165,7 +164,7 @@ export class WorkItemsActor extends Actor {
 					{
 						name: 'workitem_clear_done',
 						description:
-							'Löscht alle bereits erledigten Aufgaben des aktiven Sparks auf einmal. Keine ids nötig.',
+							'Deletes every already-done task of the active spark at once. No ids needed.',
 						parameters: { type: 'object', properties: {} }
 					}
 				]
@@ -254,8 +253,8 @@ export class WorkItemsActor extends Actor {
 	#list(): HandlerResult {
 		const wire =
 			this.items.length === 0
-				? 'Liste: nichts'
-				: `Liste (${this.items.length}): ${this.items.map((t) => this.#line(t)).join('; ')}`
+				? 'list: empty'
+				: `list (${this.items.length}): ${this.items.map((t) => this.#line(t)).join('; ')}`
 		return this.#ok({ ok: true, items: this.items }, wire)
 	}
 
@@ -271,9 +270,9 @@ export class WorkItemsActor extends Actor {
 	}
 
 	#missingIds(): HandlerResult {
-		const wire = `keine gültigen ids übergeben — nimm die ids aus dieser Liste. ${this.#list().wire}`
+		const wire = `no valid ids given — take the ids from this list. ${this.#list().wire}`
 		return {
-			record: this.#json({ ok: false, error: 'keine gültigen ids übergeben', items: this.items }),
+			record: this.#json({ ok: false, error: 'no valid ids given', items: this.items }),
 			wire
 		}
 	}
@@ -285,14 +284,14 @@ export class WorkItemsActor extends Actor {
 			.filter((t) => t !== '')
 		if (titles.length === 0)
 			return {
-				record: this.#json({ ok: false, error: 'keine Titel angegeben' }),
-				wire: 'keine Titel angegeben'
+				record: this.#json({ ok: false, error: 'no titles given' }),
+				wire: 'no titles given'
 			}
 		const spark = this.#sparkOf(p)
 		const created = titles.map((t) => this.create(t, spark))
 		return this.#ok(
 			{ ok: true, created },
-			`neu angelegt (${created.length}): ${created.map((t) => this.#line(t)).join('; ')}`
+			`created (${created.length}): ${created.map((t) => this.#line(t)).join('; ')}`
 		)
 	}
 
@@ -311,11 +310,11 @@ export class WorkItemsActor extends Actor {
 		const updated = ids.map((id) => this.update(id, changes)).filter((t) => t !== undefined)
 		const wire =
 			updated.length === 0
-				? `nichts geändert; unbekannte ids: ${unknown.join(', ')}`
-				: `geändert (${updated.length}): ${updated.map((t) => this.#line(t)).join('; ')}${
-						unknown.length > 0 ? `. unbekannte ids: ${unknown.join(', ')}` : ''
+				? `nothing changed; unknown ids: ${unknown.join(', ')}`
+				: `changed (${updated.length}): ${updated.map((t) => this.#line(t)).join('; ')}${
+						unknown.length > 0 ? `. unknown ids: ${unknown.join(', ')}` : ''
 					}`
-		return this.#ok({ ok: updated.length > 0, updated, unbekannteIds: unknown }, wire)
+		return this.#ok({ ok: updated.length > 0, updated, unknownIds: unknown }, wire)
 	}
 
 	#delete(p: Record<string, unknown>): HandlerResult {
@@ -326,14 +325,14 @@ export class WorkItemsActor extends Actor {
 		const deleted = targets.map((t) => this.remove(t.id)).filter((t) => t !== undefined)
 		const wire =
 			deleted.length === 0
-				? `nichts gelöscht; unbekannte ids: ${unknown.join(', ')}`
-				: `gelöscht (${deleted.length}): ${deleted.map((t) => this.#line(t)).join('; ')}`
-		return this.#ok({ ok: deleted.length > 0, deleted, unbekannteIds: unknown }, wire)
+				? `nothing deleted; unknown ids: ${unknown.join(', ')}`
+				: `deleted (${deleted.length}): ${deleted.map((t) => this.#line(t)).join('; ')}`
+		return this.#ok({ ok: deleted.length > 0, deleted, unknownIds: unknown }, wire)
 	}
 
 	#show(p: Record<string, unknown>): HandlerResult {
 		if (typeof p.spark === 'string' && SPARKS.some((s) => s.id === p.spark)) this.active = p.spark
-		return this.#ok({ ok: true, spark: this.active }, `Aktiver Spark ist jetzt ${this.active}.`)
+		return this.#ok({ ok: true, spark: this.active }, `The active spark is now ${this.active}.`)
 	}
 
 	#clearDone(): HandlerResult {
@@ -341,8 +340,8 @@ export class WorkItemsActor extends Actor {
 		this.items = this.items.filter((t) => t.spark !== this.active || t.status !== 'done')
 		const wire =
 			removed.length === 0
-				? 'gelöscht: nichts'
-				: `gelöscht (${removed.length}): ${removed.map((t) => this.#line(t)).join('; ')}`
+				? 'deleted: nothing'
+				: `deleted (${removed.length}): ${removed.map((t) => this.#line(t)).join('; ')}`
 		return this.#ok({ ok: true, deleted: removed }, wire)
 	}
 
@@ -350,20 +349,20 @@ export class WorkItemsActor extends Actor {
 
 	override instanceState(): Record<string, unknown> {
 		return {
-			'Aufgaben gesamt': this.items.length,
-			offen: this.items.filter((t) => t.status === 'open').length,
-			'in Arbeit': this.items.filter((t) => t.status === 'doing').length,
-			erledigt: this.items.filter((t) => t.status === 'done').length,
-			'aktiver Spark': this.active
+			'tasks total': this.items.length,
+			open: this.items.filter((t) => t.status === 'open').length,
+			'in progress': this.items.filter((t) => t.status === 'doing').length,
+			done: this.items.filter((t) => t.status === 'done').length,
+			'active spark': this.active
 		}
 	}
 
 	protected override situation(): string {
 		const bySpark = SPARKS.map(
 			(s) =>
-				`${s.name}: ${this.items.filter((t) => t.spark === s.id && t.status !== 'done').length} offen`
+				`${s.name}: ${this.items.filter((t) => t.spark === s.id && t.status !== 'done').length} open`
 		).join(', ')
-		return `${this.items.length} Aufgaben (${bySpark}); aktiver Spark ${this.active}.`
+		return `${this.items.length} tasks (${bySpark}); active spark ${this.active}.`
 	}
 
 	/** One displayable entry out of a raw handler record, or null for a no-op. */
@@ -411,7 +410,7 @@ export class WorkItemsActor extends Actor {
 				return {
 					kind: 'read',
 					titles: [],
-					note: `${(record.items as unknown[])?.length ?? 0} Aufgaben gelesen`
+					note: `${(record.items as unknown[])?.length ?? 0} tasks read`
 				}
 			case 'workitem_show': {
 				const spark = record.spark === 'team' ? 'Team' : 'Me'

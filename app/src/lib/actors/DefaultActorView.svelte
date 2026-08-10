@@ -63,8 +63,8 @@ async function execute(event: SubmitEvent) {
 		try {
 			facts = JSON.parse(factsText)
 		} catch {
-			const first = actor.requires[0]
-			facts = first ? { [functor(first)]: { text: factsText.trim() } } : {}
+			const text = factsText.trim()
+			facts = Object.fromEntries(actor.requires.map((r) => [functor(r), { text }]))
 		}
 	}
 	running = true
@@ -75,7 +75,7 @@ async function execute(event: SubmitEvent) {
 		runSummary =
 			run.status === 'ok'
 				? `✓ ${runGoal} → ${JSON.stringify(last?.out ?? {})}`
-				: `✗ gescheitert: ${JSON.stringify(last?.out ?? {})}`
+				: `✗ failed: ${JSON.stringify(last?.out ?? {})}`
 	} finally {
 		running = false
 	}
@@ -87,7 +87,7 @@ async function execute(event: SubmitEvent) {
 
 	{#if actor.requires.length > 0 || actor.produces.length > 0}
 		<div class="flex flex-wrap items-center gap-1.5 text-xs">
-			<span class="text-foreground/40">Vertrag:</span>
+			<span class="text-foreground/40">Contract:</span>
 			{#each actor.requires as r, i (`r${i}`)}
 				<span class="rounded-md px-1.5 py-0.5 font-mono text-[0.6875rem] {hue(r)}">{r}</span>
 			{/each}
@@ -109,8 +109,8 @@ async function execute(event: SubmitEvent) {
 		</dl>
 	{:else}
 		<p class="text-foreground/40 text-xs">
-			Reines Template — Verträge deklariert; die Engine führt sie aus{actor.manifest.llm
-				? ' (llm: das Modell antwortet als dieser Actor)'
+			Pure template — contracts declared; the engine executes them{actor.manifest.llm
+				? ' (llm: the model answers as this actor)'
 				: ''}.
 		</p>
 	{/if}
@@ -121,8 +121,8 @@ async function execute(event: SubmitEvent) {
 			<input
 				bind:value={factsText}
 				placeholder={actor.requires.length > 0
-					? `Eingabe für ${actor.requires.map(functor).join(', ')}…`
-					: 'ohne Eingabe'}
+					? `Input for ${actor.requires.map(functor).join(', ')}…`
+					: 'no input needed'}
 				class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-4 py-2 text-sm outline-none placeholder:text-foreground/30"
 			>
 			<button
@@ -130,7 +130,7 @@ async function execute(event: SubmitEvent) {
 				disabled={running}
 				class="rounded-full bg-primary px-4 py-2 text-primary-foreground text-sm transition-opacity disabled:opacity-30"
 			>
-				{running ? 'läuft…' : 'Ausführen'}
+				{running ? 'running…' : 'Run'}
 			</button>
 		</form>
 		{#if runSummary}
@@ -141,7 +141,7 @@ async function execute(event: SubmitEvent) {
 	<form onsubmit={ask} class="flex items-center gap-2">
 		<input
 			bind:value={question}
-			placeholder={`Frag ${actor.manifest.name}…`}
+			placeholder={`Ask ${actor.manifest.name}…`}
 			class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-4 py-2 text-sm outline-none placeholder:text-foreground/30"
 		>
 		<button
@@ -149,7 +149,7 @@ async function execute(event: SubmitEvent) {
 			disabled={question.trim() === '' || busy}
 			class="rounded-full bg-primary px-4 py-2 text-primary-foreground text-sm transition-opacity disabled:opacity-30"
 		>
-			{busy ? '…' : 'Fragen'}
+			{busy ? '…' : 'Ask'}
 		</button>
 	</form>
 	{#if answer}
