@@ -33,6 +33,7 @@ function sanitizeFace(raw: unknown): FaceSpec | undefined {
 		const el = e as FaceElement
 		if (el.kind === 'note') return typeof el.text === 'string'
 		if (el.kind === 'state' || el.kind === 'records') return true
+		if (el.kind === 'stats') return Array.isArray(el.items)
 		if (el.kind === 'run') return typeof el.goal === 'string'
 		if (el.kind === 'action') return typeof el.method === 'string' && typeof el.label === 'string'
 		return false
@@ -283,13 +284,22 @@ export class RegistryActor extends Actor {
 			'predicates when the wish suggests it. ' +
 			'Also design "face": {"elements": [...]} — the actor\'s own window UI, ' +
 			'composed from exactly these blocks: {"kind":"note","text":...} one short ' +
-			'orienting line telling the user what to SAY; {"kind":"records","title":...} ' +
-			'the list of results the actor keeps (every successful run is remembered); ' +
-			'{"kind":"state"} its live state grid. ' +
+			'orienting line telling the user what to SAY; {"kind":"stats","items": ' +
+			'[{"label":...,"aggregate":"count"|"sum"|"max"|"latest","field":...}]} ' +
+			'aggregate tiles over the records; {"kind":"records","title":...,"item": ' +
+			'{"title":field,"subtitle":field,"badges":[fields],"progress":numericField, ' +
+			'"meta":[fields]}} the kept results as designed cards — the item mapping ' +
+			'says which record field is the headline, which are pills, which draws a ' +
+			'progress bar; {"kind":"state"} its live state grid. ' +
 			'Design law: every face is pure VOICE-CONTROLLED RESULT VISUALIZATION. ' +
 			'NO input fields, NO buttons, NO forms — ever. All functionality is reached ' +
-			'by speaking; the window only shows state and results. Typical face: one ' +
-			'note, then records. ' +
+			'by speaking; the window only shows state and results. Typical face: note, ' +
+			'stats, records with an item mapping. ' +
+			'CRITICAL: state in the description the EXACT flat record fields this actor ' +
+			'must produce on every run (e.g. "produces records {name, status, streak, ' +
+			'progress}") and make the item mapping use exactly those fields — the ' +
+			'description is the execution instruction, and stable field names are what ' +
+			'keep the cards consistent. ' +
 			'The face is part of the manifest: when asked to change the UI or layout, ' +
 			'rework the face elements exactly like any other field.'
 		)

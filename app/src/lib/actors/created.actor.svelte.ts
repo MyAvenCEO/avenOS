@@ -136,8 +136,25 @@ export class RecordActor extends Actor {
 
 	/** The engine's memory seam: keep what a successful execution produced. */
 	remember(out: unknown): void {
-		this.records.push({ id: crypto.randomUUID().slice(0, 8), at: Date.now(), data: out })
+		// Models love wrapping the payload once more ({"habit": {...}}) —
+		// unwrap single-key envelopes so records store FLAT and render clean.
+		let data = out
+		while (
+			data &&
+			typeof data === 'object' &&
+			Object.keys(data).length === 1 &&
+			typeof Object.values(data)[0] === 'object' &&
+			Object.values(data)[0] !== null
+		) {
+			data = Object.values(data)[0]
+		}
+		this.records.push({ id: crypto.randomUUID().slice(0, 8), at: Date.now(), data })
 		this.#persist()
+	}
+
+	/** The newest record — the shape template the engine shows the model. */
+	latestRecord(): unknown {
+		return this.records.at(-1)?.data
 	}
 
 	forget(recordId: string): void {
@@ -191,7 +208,7 @@ export class RecordActor extends Actor {
 		return {
 			records: this.records.length,
 			...(this.records.length > 0 && {
-				latest: JSON.stringify(this.records.at(-1)?.data).slice(0, 60)
+				'last entry': new Date(this.records.at(-1)?.at ?? 0).toLocaleString()
 			})
 		}
 	}
