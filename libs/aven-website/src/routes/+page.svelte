@@ -129,10 +129,7 @@ const roadmap = [
 				— jedoch nur, wenn die neuen Werkzeuge jedem Einzelnen wirklich gehören.
 			</p>
 			<p class="mt-5 text-[16px] font-medium text-foreground/90 sm:text-[17px]">
-				Ownership ist der Schlüssel:
-				<strong class="font-semibold text-foreground"
-					>Dein eigener avenCEO baut dir, was dir gehört.</strong
-				>
+				<strong class="font-semibold text-foreground">Ownership ist der Schlüssel.</strong>
 			</p>
 		</div>
 	</section>
