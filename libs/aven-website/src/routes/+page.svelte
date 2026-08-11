@@ -125,10 +125,11 @@ const roadmap = [
 				Wir können unsere Zivilisation endlich vom Überlebensmodus in die Fülle führen —
 				<strong class="font-medium text-foreground/85"
 					>Solarpunk‑Utopie statt Cyberpunk‑Dystopie</strong
-				>. Und das entscheidet sich daran, wem die neuen Werkzeuge gehören.
+				>
+				— jedoch nur, wenn die neuen Werkzeuge jedem Einzelnen wirklich gehören.
 			</p>
 			<p class="mt-5 text-[16px] font-medium text-foreground/90 sm:text-[17px]">
-				Ownership ist der Schlüssel.
+				Ownership ist der Schlüssel:
 				<strong class="font-semibold text-foreground"
 					>Dein eigener avenCEO baut dir, was dir gehört.</strong
 				>
