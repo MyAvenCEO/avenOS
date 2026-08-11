@@ -77,7 +77,6 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							<p class="mt-1 text-2xl font-bold tabular-nums tracking-tight text-foreground">
 								{avenIdPriceEur}&nbsp;€
 							</p>
-							<p class="mt-1 text-[11px] text-foreground/55">in jedem CXO‑Plan enthalten</p>
 						</div>
 					</div>
 					<p

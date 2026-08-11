@@ -18,15 +18,6 @@ const beamSeedSamuelProfile = 'Samuel Andert'
 
 const paletteHuman = paletteFromCommaString('f7ead9,ccc7a8,88b499,305669,222e49')
 const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
-
-const stattStacks = [
-	'Notion · Confluence · interne Wikis',
-	'Webflow · Contentful · schwere WordPress-Stacks',
-	'Zapier · Make · n8n Cloud',
-	'HubSpot · Salesforce · Pipedrive',
-	'Asana · Monday · Linear · ClickUp',
-	'sevDesk · Lexoffice · Odoo / SAP B1 Cloud'
-] as const
 </script>
 
 <div lang="de" class="min-h-screen bg-background text-foreground font-sans antialiased">
@@ -78,9 +69,11 @@ const stattStacks = [
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
 					<strong class="font-medium text-foreground/85">Post‑AGI</strong>
-					heißt einfach: KI erledigt fast jede Arbeit am Bildschirm so gut wie ein Mensch —
-					schreiben, planen, verkaufen — rund um die Uhr. Ab dann gibt es nur zwei Drehbücher für
-					dein Leben:
+					heißt einfach: KI erledigt fast jede Arbeit so gut wie ein Mensch —
+					<strong class="font-medium text-foreground/85"
+						>Kopfarbeit heute, mit Robotern bald auch Handarbeit</strong
+					>
+					— rund um die Uhr. Ab dann gibt es nur zwei Drehbücher für dein Leben:
 				</p>
 			</div>
 
@@ -121,7 +114,7 @@ const stattStacks = [
 						</li>
 					</ul>
 					<p
-						class="mt-5 border-t border-white/10 pt-4 font-serif text-[15px] font-light leading-snug text-white/85 sm:text-base"
+						class="mt-5 border-t border-white/10 pt-4 font-serif text-[1.25rem] font-light leading-snug text-white sm:text-[1.4rem]"
 					>
 						Dein Leben läuft nach dem Plan von jemand anderem.
 					</p>
@@ -163,7 +156,7 @@ const stattStacks = [
 						</li>
 					</ul>
 					<p
-						class="mt-5 border-t border-foreground/10 pt-4 font-serif text-[15px] font-light leading-snug text-foreground sm:text-base"
+						class="mt-5 border-t border-foreground/10 pt-4 font-serif text-[1.25rem] font-light leading-snug text-foreground sm:text-[1.4rem]"
 					>
 						Dein volles Potenzial, in deiner Hand.
 					</p>
@@ -210,8 +203,8 @@ const stattStacks = [
 				</p>
 				<p class="text-pretty">
 					Das nennen wir einen
-					<strong class="font-medium text-foreground/88">Spark</strong>. Deshalb rechnet avenCEO
-					nicht in Seats, sondern in Sparks — dein erster ist dein Leben selbst.
+					<strong class="font-medium text-foreground/88">Spark</strong>
+					— dein erster ist dein Leben selbst.
 				</p>
 			</div>
 			<p
@@ -400,117 +393,6 @@ const stattStacks = [
 					</p>
 				</div>
 			</div>
-		</div>
-	</section>
-
-	<section class="border-b border-border/40 px-5 py-12 sm:px-8 sm:py-16">
-		<div class="mx-auto max-w-2xl">
-			<div class="text-center">
-				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-					Own your life
-				</p>
-				<h2
-					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
-				>
-					Was dir gehört
-				</h2>
-			</div>
-			<ul class="mt-8 space-y-3 text-[14px] leading-snug text-foreground/76 sm:text-[15px]">
-				<li class="flex gap-3">
-					<span
-						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
-						aria-hidden="true"
-					></span>
-					<span
-						><strong class="font-medium text-foreground/85">Deine Einkommensströme</strong>
-						— Produkte, Shop, Kunden: aufgebaut unter deinem Namen, nicht auf einer Plattform, die
-						dich morgen aussperrt</span
-					>
-				</li>
-				<li class="flex gap-3">
-					<span
-						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
-						aria-hidden="true"
-					></span>
-					<span
-						><strong class="font-medium text-foreground/85">Deine Daten</strong>
-						— Ende‑zu‑Ende verschlüsselt, mit Schlüsseln, die nur du kontrollierst</span
-					>
-				</li>
-				<li class="flex gap-3">
-					<span
-						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
-						aria-hidden="true"
-					></span>
-					<span
-						><strong class="font-medium text-foreground/85">Deine KI</strong>
-						— dein Aven gehört dir: Open‑Source‑Stack, selbst hostbar, bis auf eigene Hardware —
-						kein Vendor Lock‑in</span
-					>
-				</li>
-				<li class="flex gap-3">
-					<span
-						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
-						aria-hidden="true"
-					></span>
-					<span
-						><strong class="font-medium text-foreground/85">Dein Name</strong>
-						— maia.aven.ceo und mail@maia.aven.ceo: deine Identität im Netz, einmalig vergeben</span
-					>
-				</li>
-				<li class="flex gap-3">
-					<span
-						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
-						aria-hidden="true"
-					></span>
-					<span
-						><strong class="font-medium text-foreground/85">Deine Zeit</strong>
-						— den Alltag betreibt dein Aven; du triffst die Entscheidungen, die Eigentümer treffen</span
-					>
-				</li>
-			</ul>
-		</div>
-	</section>
-
-	<section
-		class="border-b border-border/40 px-5 py-10 sm:px-8 sm:py-12"
-		aria-labelledby="weniger-abos-heading"
-	>
-		<div class="mx-auto max-w-4xl space-y-5">
-			<div class="text-center">
-				<p
-					class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40 sm:text-[11px]"
-				>
-					Own your stack
-				</p>
-				<h2
-					id="weniger-abos-heading"
-					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
-				>
-					Miete weniger. Besitze mehr.
-				</h2>
-				<p
-					class="mx-auto mt-4 max-w-2xl text-[15px] leading-snug text-foreground/68 sm:text-base sm:leading-relaxed"
-				>
-					Zu viele parallele Fremd‑Abos spalten Arbeit und Daten auf viele Fremdstellen ohne
-					geteiltes Gedächtnis.
-					<strong class="font-medium text-foreground/80">Gebündelt in Skills</strong>
-					heißt oft weniger Dritt‑Konten und weniger Hin und Her zwischen Teams ohne gemeinsamen
-					Kontext.
-				</p>
-			</div>
-			<ul class="grid gap-2.5 sm:grid-cols-2">
-				{#each stattStacks as stack (stack)}
-					<li
-						class="rounded-xl border border-border/40 bg-white/55 px-3.5 py-3 text-sm font-medium leading-snug text-foreground ring-1 ring-black/3 sm:px-4"
-					>
-						<span class="text-[10px] font-bold uppercase tracking-[0.14em] text-foreground/40"
-							>Statt</span
-						>
-						<span class="mt-0.5 block">{stack}</span>
-					</li>
-				{/each}
-			</ul>
 		</div>
 	</section>
 

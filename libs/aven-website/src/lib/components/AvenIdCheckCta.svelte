@@ -42,9 +42,8 @@ const wrapperClass =
 		Wie eine Domain — aber für dein zweites Gehirn:
 		<strong class="font-medium text-foreground/82">maia.aven.ceo</strong>
 		und passende Mail unter
-		<strong class="font-medium text-foreground/82">mail@maia.aven.ceo</strong>. Gilt 1&nbsp;Jahr —
-		in jedem CXO‑Plan schon enthalten. Jeden Namen gibt es genau einmal: ist er vergeben, ist er
-		weg.
+		<strong class="font-medium text-foreground/82">mail@maia.aven.ceo</strong>. Gilt 1&nbsp;Jahr.
+		Jeden Namen gibt es genau einmal: ist er vergeben, ist er weg.
 	</p>
 	<div class="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
 		<label
