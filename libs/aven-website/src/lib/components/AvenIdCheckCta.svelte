@@ -31,7 +31,7 @@ const wrapperClass =
 
 <form onsubmit={submit} class={wrapperClass} aria-label="avenID sichern">
 	<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-tuscan-sun">
-		Jeder Name nur einmal · wer zuerst kommt
+		Warteliste · Jeder Name nur einmal
 	</p>
 	<h3
 		class="mt-2 text-xl font-semibold tracking-tight text-pretty text-foreground sm:text-2xl md:text-[1.65rem]"
@@ -43,7 +43,8 @@ const wrapperClass =
 		<strong class="font-medium text-foreground/82">maia.aven.ceo</strong>
 		und passende Mail unter
 		<strong class="font-medium text-foreground/82">mail@maia.aven.ceo</strong>. Gilt 1&nbsp;Jahr.
-		Jeden Namen gibt es genau einmal: ist er vergeben, ist er weg.
+		Jeden Namen gibt es genau einmal: ist er vergeben, ist er weg — wer zuerst kommt, gründet
+		zuerst.
 	</p>
 	<div class="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
 		<label

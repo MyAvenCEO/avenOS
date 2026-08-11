@@ -540,13 +540,17 @@ const roadmap = [
 		<div class="mx-auto max-w-2xl">
 			<div class="pb-6 text-center">
 				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-					Schritt 1
+					Starte jetzt · First come, first serve
 				</p>
 				<h2
 					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					Dein Name ist dein erstes Asset.
+					So fängt dein souveränes Gründerleben an.
 				</h2>
+				<p class="mx-auto mt-3 max-w-lg text-[15px] leading-snug text-foreground/68 sm:text-base">
+					Setz dich auf die Warteliste — dein Name ist dein erstes Asset, und jeden gibt es nur
+					einmal.
+				</p>
 			</div>
 			<AvenIdCheckCta variant="banner" />
 		</div>
