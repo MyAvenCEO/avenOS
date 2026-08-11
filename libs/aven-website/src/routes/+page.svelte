@@ -505,36 +505,33 @@ const roadmap = [
 						</div>
 					</li>
 				{/each}
-				<li class="relative pl-12 sm:pl-0">
-					<span
-						class="absolute top-0.5 left-4 flex size-7 -translate-x-1/2 items-center justify-center rounded-full bg-tuscan-sun text-[15px] text-foreground ring-1 ring-black/8 sm:left-1/2"
-						aria-hidden="true"
-					>
-						↻
-					</span>
-					<div class="sm:mr-auto sm:w-[calc(50%-2.5rem)] sm:text-right">
-						<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 sm:justify-end">
-							<span class="font-mono text-[13px] font-bold tracking-[0.06em] text-tuscan-sun">
-								Repeat
-							</span>
-							<span
-								class="rounded-full bg-tuscan-sun/25 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8a6238]"
-							>
-								Jeder Spark & jede Beteiligung = ein Asset
-							</span>
-						</div>
-						<p class="mt-2 text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
-							Dein Spark trägt sich selbst — Zeit zu reinvestieren,
-							<strong class="font-medium text-foreground/85">50/50</strong>: Die eine Hälfte startet
-							deinen nächsten eigenen Spark. Die andere Hälfte investierst du über
-							<strong class="font-medium text-foreground/85">tokenize(it)</strong>
-							in die Level‑5‑Sparks anderer Gründer. Eigene Sparks plus Beteiligungen — so wächst
-							dein Portfolio auf
-							<strong class="font-medium text-foreground/85">10+ Assets</strong>.
-						</p>
-					</div>
-				</li>
 			</ol>
+
+			<!-- Repeat, centered below the ladder: reinvest into the other sparks. -->
+			<div class="mt-6 text-center">
+				<span
+					class="mx-auto flex size-7 items-center justify-center rounded-full bg-tuscan-sun text-[15px] text-foreground ring-1 ring-black/8"
+					aria-hidden="true"
+				>
+					↻
+				</span>
+				<div class="mt-3 flex flex-wrap items-baseline justify-center gap-x-3 gap-y-1">
+					<span class="font-mono text-[13px] font-bold tracking-[0.06em] text-tuscan-sun">
+						Repeat
+					</span>
+					<span
+						class="rounded-full bg-tuscan-sun/25 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8a6238]"
+					>
+						Jede Beteiligung = ein neues Asset
+					</span>
+				</div>
+				<p class="mx-auto mt-2 max-w-md text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
+					Dein Spark trägt sich selbst — reinvestiere über
+					<strong class="font-medium text-foreground/85">tokenize(it)</strong>
+					in die Level‑5‑Sparks anderer Gründer. So wächst dein Portfolio auf
+					<strong class="font-medium text-foreground/85">10+ Assets</strong>.
+				</p>
+			</div>
 		</div>
 	</section>
 
