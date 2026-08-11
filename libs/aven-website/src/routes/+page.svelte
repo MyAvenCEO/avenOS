@@ -27,35 +27,41 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 const roadmap = [
 	{
 		tier: 'avenID',
+		price: '25 €/Jahr',
 		unlock: 'Deine Vision',
 		pitch: 'Die Entscheidung in dich und deinen Aven ist der Anfang von allem.'
 	},
 	{
 		tier: 'avenCOO',
+		price: '377 €/m',
 		unlock: 'Dein erstes Angebot',
 		pitch:
 			'Deine erste eigene Spark‑Firma mit eigenem Produkt: Du lernst verkaufen und dienen — mehr geben, als du nimmst.'
 	},
 	{
 		tier: 'avenCMO',
+		price: '610 €/m',
 		unlock: 'Deine Brand',
 		pitch:
 			'Storytelling wird Besitz: deine avenBrand wächst über Social Media und Blog — Reichweite, die dir gehört.'
 	},
 	{
 		tier: 'avenCTO',
+		price: '987 €/m',
 		unlock: 'Deine Automation',
 		pitch:
 			'Das Prozess‑Gehirn: dein avenCTO optimiert sich im Loop und übernimmt Schritt für Schritt den Betrieb.'
 	},
 	{
 		tier: 'avenCPO',
+		price: '1.597 €/m',
 		unlock: 'Dein skalierendes Produkt',
 		pitch:
 			'Skaliere dein Produkt, das Product‑Market‑Fit gefunden hat — der Brandbeschleuniger: Beteilige deine Community und Partner über tokenize(it).'
 	},
 	{
 		tier: 'avenCEO',
+		price: '2.584 €/m',
 		unlock: 'Deine KI‑Hardware',
 		pitch:
 			'Volle Souveränität: deine Intelligenz läuft auf eigener, dedizierter Hardware — dein Spark trägt sich selbst.'
@@ -497,6 +503,9 @@ const roadmap = [
 									class="rounded-full bg-tuscan-sun/25 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8a6238]"
 								>
 									Unlock · {level.unlock}
+								</span>
+								<span class="font-mono text-[11px] font-normal text-foreground/40">
+									{level.price}
 								</span>
 							</div>
 							<p class="mt-2 text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
