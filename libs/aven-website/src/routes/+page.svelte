@@ -49,8 +49,8 @@ const stattStacks = [
 			>
 				<p class="text-pretty text-[16px] font-medium text-foreground/85 sm:text-[17px]">
 					Die Zukunft gehört dem
-					<strong class="font-semibold text-foreground">souveränen Gründer</strong>, der mit seinem
-					<strong class="font-semibold text-foreground">avenCEO</strong>
+					<strong class="font-semibold text-foreground">souveränen Gründer</strong>, der mit seiner
+					<strong class="font-semibold text-foreground">avenCEO&nbsp;(KI)</strong>
 					<strong class="font-semibold text-foreground">5+ Assets</strong>
 					aufbaut, statt abhängig von
 					<strong class="font-semibold text-foreground">1x Zeit gegen Geld</strong>
@@ -77,10 +77,12 @@ const stattStacks = [
 					JETZT ist der perfekte Moment, der Creator deines souveränen Lebens zu sein.
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
-					In der Post‑AGI‑Welt gibt es nur zwei Seiten: Entweder du
+					<strong class="font-medium text-foreground/85">Post‑AGI</strong>
+					heißt einfach: KI erledigt fast jede Arbeit am Bildschirm so gut wie ein Mensch —
+					schreiben, planen, verkaufen — rund um die Uhr. Ab dann gibt es nur zwei Seiten: Entweder
+					du
 					<strong class="font-medium text-foreground/85">besitzt Assets</strong>
-					— oder dein Leben gehört denen, die welche besitzen. Das Zeitfenster ist kurz.
-					<strong class="font-medium text-foreground/85">Bereite dich jetzt vor.</strong>
+					— oder dein Leben gehört denen, die welche besitzen.
 				</p>
 			</div>
 			<div class="mt-10 grid gap-4 sm:grid-cols-3">
@@ -109,10 +111,9 @@ const stattStacks = [
 						Die Sicherheit von morgen
 					</p>
 					<p class="mt-3 text-[14px] leading-snug text-foreground/78">
-						Post‑AGI‑Sicherheit heißt Eigentum:
-						<strong class="font-medium text-foreground/88">mindestens 1 Asset</strong>
-						— ein Produkt, ein Einkommensstrom, deine Daten, deine KI. Besser:
-						<strong class="font-medium text-foreground/88">5+</strong>.
+						Post‑AGI‑Sicherheit heißt Eigentum: ein Portfolio aus
+						<strong class="font-medium text-foreground/88">5+ Assets</strong>
+						— Produkte, Einkommensströme, deine Daten, deine KI, dein Name.
 					</p>
 				</div>
 			</div>
