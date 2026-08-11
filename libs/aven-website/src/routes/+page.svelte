@@ -60,7 +60,7 @@ const letterDate = (() => {
 	>
 		<div class="mx-auto max-w-3xl text-center">
 			<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-				An alle, die von ihrer Arbeit leben,
+				An Gründer — und an Angestellte, die Gründer werden wollen,
 			</p>
 			<h1
 				id="home-hero-heading"
@@ -172,7 +172,8 @@ const letterDate = (() => {
 				<p class="text-pretty">
 					Die Firma der Zukunft hat kein Büro, keine Abteilungen, keine vierzig Angestellten. Sie
 					ist ein Funke:
-					<strong class="font-medium text-foreground/88">ein Mensch mit einer Vision</strong> und
+					<strong class="font-medium text-foreground/88">ein Mensch mit einer Vision</strong>
+					und
 					<strong class="font-medium text-foreground/88"
 						>ein Aven, der die ganze Firma dazu betreibt</strong
 					>
@@ -215,8 +216,12 @@ const letterDate = (() => {
 						>weltweit ersten echten agentischen CEOs der Welt</strong
 					>
 					— kein Chatbot am Rand, sondern
-					<strong class="font-medium text-foreground/80">KI im Gründerteam</strong>, die Firma,
-					Produkt und Alltag von Grund auf mit aufbauen.
+					<strong class="font-medium text-foreground/80">KI im Gründerteam</strong>. Zwei Sparks
+					laufen bereits: der
+					<strong class="font-medium text-foreground/82">Maia Holding Spark</strong>
+					und der
+					<strong class="font-medium text-foreground/82">avenCEO Spark</strong>
+					— die Firma, die gerade diese Seite baut.
 				</p>
 			</header>
 
@@ -286,9 +291,9 @@ const letterDate = (() => {
 						</div>
 					</div>
 					<p
-						class="mt-4 border-t border-border/25 pt-3 text-center font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-tuscan-sun sm:text-[10px]"
+						class="mt-4 border-t border-border/25 pt-3 text-center font-mono text-[10px] font-bold tracking-[0.2em] text-tuscan-sun sm:text-[11px]"
 					>
-						= ein Spark
+						= Maia Holding Spark
 					</p>
 				</div>
 
@@ -357,9 +362,9 @@ const letterDate = (() => {
 						</div>
 					</div>
 					<p
-						class="mt-4 border-t border-border/25 pt-3 text-center font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-tuscan-sun sm:text-[10px]"
+						class="mt-4 border-t border-border/25 pt-3 text-center font-mono text-[10px] font-bold tracking-[0.2em] text-tuscan-sun sm:text-[11px]"
 					>
-						= ein Spark
+						= avenCEO Spark
 					</p>
 				</div>
 			</div>
@@ -605,7 +610,7 @@ const letterDate = (() => {
 				<h2
 					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					Dein Name ist dein erster Asset.
+					Dein Name ist dein erstes Asset.
 				</h2>
 			</div>
 			<AvenIdCheckCta variant="banner" />
