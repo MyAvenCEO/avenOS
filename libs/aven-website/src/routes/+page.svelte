@@ -105,6 +105,35 @@ const roadmap = [
 		</div>
 	</section>
 
+	<!-- Vision: the grand arc — survival mode to abundance, solarpunk over cyberpunk. -->
+	<section
+		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
+		aria-labelledby="vision-heading"
+	>
+		<div class="mx-auto max-w-2xl text-center">
+			<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
+				Vision · Das große Ganze
+			</p>
+			<p
+				id="vision-heading"
+				class="mt-6 font-serif text-[1.35rem] font-light leading-snug text-pretty text-foreground sm:text-[1.6rem]"
+			>
+				Du spürst es: Die Welt verändert sich schneller als in jedem Moment der Geschichte — und
+				genau deshalb ist jetzt die beste Zeit, am Leben zu sein.
+			</p>
+			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
+				Wir können unsere Zivilisation endlich vom Überlebensmodus in die Fülle führen —
+				<strong class="font-medium text-foreground/85"
+					>Solarpunk‑Utopie statt Cyberpunk‑Dystopie</strong
+				>. Und das entscheidet sich daran, wem die neuen Werkzeuge gehören.
+			</p>
+			<p class="mt-5 text-[16px] font-medium text-foreground/90 sm:text-[17px]">
+				Ownership ist der Schlüssel.
+				<strong class="font-semibold text-foreground">Sparks sind das Medium.</strong>
+			</p>
+		</div>
+	</section>
+
 	<!-- The shift: the FOMO that is simply true — post-AGI touches everyone. -->
 	<section
 		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
