@@ -72,9 +72,10 @@ const letterDate = (() => {
 				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
 			>
 				<p class="text-pretty">
-					Die Zukunft gehört denen, die
-					<strong class="font-medium text-foreground">5+ Einkommensströme besitzen</strong>
-					— statt Zeit gegen Geld zu tauschen. Werde Gründer und lass
+					Die Zukunft gehört denen, die sich ein
+					<strong class="font-medium text-foreground">souveränes Leben</strong>
+					aufbauen — <strong class="font-medium text-foreground">5+ Assets besitzen</strong>, statt
+					davon abhängig zu sein, Zeit gegen Geld zu tauschen. Werde Gründer und lass
 					<strong class="font-medium text-foreground">deinen Aven</strong>
 					arbeiten.
 				</p>
