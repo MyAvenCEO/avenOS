@@ -33,9 +33,9 @@ function linkCls(isActive: boolean) {
 			<a href="/pricing" class={linkCls(active === 'pricing')}>Preise</a>
 			<a
 				href="/waitlist"
-				class="rounded-full border border-border/80 bg-white/15 px-3 py-1 opacity-95 transition-opacity hover:opacity-100"
+				class="rounded-full border border-border/80 bg-white/15 px-3 py-1 normal-case opacity-95 transition-opacity hover:opacity-100"
 			>
-				Warteliste
+				avenID sichern
 			</a>
 		</nav>
 	</div>

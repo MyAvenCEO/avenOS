@@ -15,9 +15,8 @@ import { skillsIncludedIn } from '$lib/skills/loader'
 
 const openSourceGithubHref = 'https://github.com/jaensen/avenOS'
 
-/** Both prices are stated, not derived: paying yearly is the cheaper deal. */
-const avenIdPricePerMonthEur = '2,50'
-const avenIdPricePerYearEur = 25
+/** One number, one promise: 25 € once, your name for a year. */
+const avenIdPriceEur = 25
 
 const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 </script>
@@ -58,7 +57,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								<strong class="text-tuscan-sun">{claimedName}</strong>.aven.ceo
 							</p>
 							<p class="mt-1 text-[11px] leading-snug text-foreground/60">
-								für 25&nbsp;€ im Jahr — Verfügbarkeit bestätigen wir bei der Buchung.
+								für einmalig 25&nbsp;€ (gilt 1 Jahr) — Verfügbarkeit bestätigen wir bei der Buchung.
 							</p>
 						</div>
 					{/if}
@@ -73,14 +72,12 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 					<div class="mt-3 space-y-2">
 						<div class="text-center">
 							<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
-								Pro Monat
+								Einmalig · gilt 1 Jahr
 							</p>
 							<p class="mt-1 text-2xl font-bold tabular-nums tracking-tight text-foreground">
-								{avenIdPricePerMonthEur}&nbsp;€
+								{avenIdPriceEur}&nbsp;€
 							</p>
-							<p class="mt-1 text-[11px] text-foreground/55">
-								oder {avenIdPricePerYearEur}&nbsp;€ im Jahr · in jedem CXO‑Plan enthalten
-							</p>
+							<p class="mt-1 text-[11px] text-foreground/55">in jedem CXO‑Plan enthalten</p>
 						</div>
 					</div>
 					<p

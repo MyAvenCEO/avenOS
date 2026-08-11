@@ -51,7 +51,7 @@ const slugLabels: Record<string, string> = {
 					href="/waitlist"
 					class="rounded-full border border-border/80 bg-white/15 px-3 py-1 opacity-95 hover:opacity-100 transition-opacity"
 				>
-					Warteliste
+					avenID sichern
 				</a>
 			</nav>
 		</div>

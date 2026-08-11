@@ -64,26 +64,19 @@ const letterDate = (() => {
 			</p>
 			<h1
 				id="home-hero-heading"
-				class="mt-5 font-sans text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-4xl md:text-[2.75rem] md:leading-[1.08]"
+				class="mx-auto mt-5 max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
-				Own your life.
+				Es wird Zeit, der Kapitän deines Lebens zu sein.
 			</h1>
-			<p
-				class="mx-auto mt-4 max-w-2xl font-serif text-[clamp(1.15rem,2.8vw,1.55rem)] font-light leading-snug tracking-tight text-foreground/78"
-			>
-				Es wird Zeit, dein Leben zu ownen.
-			</p>
 			<div
 				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
 			>
 				<p class="text-pretty">
-					Der klassische Job verschwindet gerade — leise, Quartal für Quartal.
-					<strong class="font-medium text-foreground">Sicher ist nur, was dir gehört:</strong>
-					deine Einkommensströme, deine Daten, deine KI. Die Antwort ist nicht der nächste Job,
-					sondern <strong class="font-medium text-foreground">Eigentum</strong> — gründe mindestens
-					ein Asset und lass
-					<strong class="font-medium text-foreground">deinen avenCEO</strong>
-					die Firma dazu betreiben.
+					Die Zukunft gehört denen, die
+					<strong class="font-medium text-foreground">5+ Einkommensströme besitzen</strong>
+					— statt Zeit gegen Geld zu tauschen. Werde Gründer und lass
+					<strong class="font-medium text-foreground">deinen Aven</strong>
+					arbeiten.
 				</p>
 			</div>
 		</div>
@@ -186,7 +179,7 @@ const letterDate = (() => {
 				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
 			>
 				Jeder Mensch wird Gründer. Alles, was du dazu brauchst, ist
-				<strong class="font-sans font-semibold text-foreground">dein avenCEO</strong>.
+				<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
 			</p>
 		</div>
 	</section>

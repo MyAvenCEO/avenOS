@@ -29,21 +29,22 @@ const wrapperClass =
 		: 'rounded-2xl border border-border/40 bg-white/55 px-5 py-7 ring-1 ring-black/5 sm:px-8 sm:py-8'
 </script>
 
-<form onsubmit={submit} class={wrapperClass} aria-label="avenCEO‑Name zur Warteliste">
+<form onsubmit={submit} class={wrapperClass} aria-label="avenID sichern">
 	<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-tuscan-sun">
 		Jeder Name nur einmal · wer zuerst kommt
 	</p>
 	<h3
 		class="mt-2 text-xl font-semibold tracking-tight text-pretty text-foreground sm:text-2xl md:text-[1.65rem]"
 	>
-		Sichere dir deinen avenCEO‑Namen für 2,50&nbsp;€ im Monat
+		Sichere dir deine avenID für einmalig 25&nbsp;€
 	</h3>
 	<p class="mt-3 max-w-2xl text-[14px] leading-snug text-foreground/68 sm:text-[15px]">
 		Wie eine Domain — aber für dein zweites Gehirn:
 		<strong class="font-medium text-foreground/82">maia.aven.ceo</strong>
 		und passende Mail unter
-		<strong class="font-medium text-foreground/82">mail@maia.aven.ceo</strong>. Oder 25&nbsp;€ im
-		Jahr — in jedem CXO‑Plan schon enthalten.
+		<strong class="font-medium text-foreground/82">mail@maia.aven.ceo</strong>. Gilt 1&nbsp;Jahr —
+		in jedem CXO‑Plan schon enthalten. Jeden Namen gibt es genau einmal: ist er vergeben, ist er
+		weg.
 	</p>
 	<div class="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
 		<label
@@ -65,7 +66,7 @@ const wrapperClass =
 			disabled={!slug}
 			class="inline-flex min-h-12 shrink-0 items-center justify-center rounded-full bg-foreground px-7 text-[13px] font-semibold text-background transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40 sm:px-8"
 		>
-			Weiter zur Warteliste →
+			avenID sichern →
 		</button>
 	</div>
 	<p class="mt-3 text-[12px] leading-snug text-foreground/55">
