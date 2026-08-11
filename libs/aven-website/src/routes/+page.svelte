@@ -42,25 +42,18 @@ const stattStacks = [
 				class="mx-auto max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
 				Der traditionelle Job stirbt.
-				<span class="mt-1 block">Nur wer Eigentum hat, überlebt.</span>
+				<span class="mt-1 block">Wer mit seinem avenCEO Assets kreiert, überlebt.</span>
 			</h1>
 			<div
 				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
 			>
 				<p class="text-pretty text-[16px] font-medium text-foreground/85 sm:text-[17px]">
 					Die Zukunft gehört dem
-					<strong class="font-semibold text-foreground">souveränen Gründer</strong>, der mit seiner
-					<strong class="font-semibold text-foreground">avenCEO&nbsp;(KI)</strong>
+					<strong class="font-semibold text-foreground">souveränen Gründer</strong>, der
 					<strong class="font-semibold text-foreground">5+ Assets</strong>
-					aufbaut, statt abhängig von
+					aufbaut, statt
 					<strong class="font-semibold text-foreground">1x Zeit gegen Geld</strong>
-					tauschen zu sein.
-				</p>
-				<p class="mt-5 text-pretty text-[16px] font-medium text-foreground/85 sm:text-[17px]">
-					<strong class="font-semibold text-foreground"
-						>Assets aufbauen ist Investieren mit Zinseszins</strong
-					>
-					— ein Gehalt bleibt linear.
+					zu tauschen.
 				</p>
 			</div>
 		</div>
