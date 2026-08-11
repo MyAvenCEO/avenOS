@@ -34,7 +34,8 @@ const roadmap = [
 		tier: 'avenID',
 		price: '100 €/Jahr',
 		offer: 'Deine Vision bekommt einen Namen',
-		pitch: 'Die Entscheidung in dich und deinen Aven ist der Anfang von allem.'
+		pitch:
+			'Die Entscheidung in dein souveränes Gründerleben und deinen Aven ist der Anfang von allem.'
 	},
 	{
 		tier: 'avenCOO',
@@ -129,7 +130,9 @@ const roadmap = [
 				— jedoch nur, wenn die neuen Werkzeuge jedem Einzelnen wirklich gehören.
 			</p>
 			<p class="mt-5 text-[16px] font-medium text-foreground/90 sm:text-[17px]">
-				<strong class="font-semibold text-foreground">Ownership ist der Schlüssel.</strong>
+				<strong class="font-semibold text-foreground"
+					>Ownership — statt Zeit gegen Geld — ist die einzige Lösung.</strong
+				>
 			</p>
 		</div>
 	</section>
@@ -157,9 +160,10 @@ const roadmap = [
 					— kollabiert, sobald KI fast jede Arbeit so gut erledigt wie ein Mensch: Kopfarbeit heute,
 					mit Robotern bald auch Handarbeit, rund um die Uhr,
 					<strong class="font-medium text-foreground/85">zum Preis von Strom</strong>. Dann bleibt
-					nur eine Einkommensquelle —
-					<strong class="font-medium text-foreground/85">das, was dir gehört</strong>
-					— und nur zwei Drehbücher für dein Leben:
+					nur eine Einkommensquelle — das, was dir gehört — und nur eine Frage:
+					<strong class="font-medium text-foreground/85"
+						>Besitzt du die KI, die die neue Arbeit leistet — oder nicht?</strong
+					>
 				</p>
 			</div>
 
