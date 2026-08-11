@@ -29,8 +29,7 @@ const roadmap = [
 		tier: 'avenID',
 		price: '25 €/Jahr',
 		asset: 'Deine Vision',
-		pitch:
-			'Die Entscheidung ist das erste Asset: 25 € in deine eigene avenCEO‑Identität — dein Name, deine Marke, dein Anfang.'
+		pitch: 'Die Entscheidung in dich und deinen Aven ist das erste Asset.'
 	},
 	{
 		tier: 'avenCOO',
@@ -503,6 +502,30 @@ const roadmap = [
 						</p>
 					</li>
 				{/each}
+				<li class="relative pt-2">
+					<span
+						class="absolute -left-[2.55rem] top-2.5 flex size-7 items-center justify-center rounded-full bg-tuscan-sun text-[15px] text-foreground ring-1 ring-black/8 sm:-left-[3.05rem]"
+						aria-hidden="true"
+					>
+						↻
+					</span>
+					<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+						<span class="font-mono text-[13px] font-bold tracking-[0.06em] text-tuscan-sun">
+							Repeat
+						</span>
+						<span
+							class="rounded-full bg-tuscan-sun/25 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8a6238]"
+						>
+							Spark für Spark
+						</span>
+					</div>
+					<p class="mt-2 max-w-xl text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
+						Dein erster Spark trägt sich selbst — also gründest du den nächsten. Das Spiel beginnt
+						von vorn: der nächste Spark, und der danach — bis dein Portfolio bei
+						<strong class="font-medium text-foreground/85">5+ Assets</strong>
+						steht.
+					</p>
+				</li>
 			</ol>
 
 			<div
