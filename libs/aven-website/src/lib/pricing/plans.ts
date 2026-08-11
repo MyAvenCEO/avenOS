@@ -5,8 +5,8 @@
  * Five roles, each one the previous plus more: avenCOO runs the paperwork,
  * avenCMO the market, avenCTO the internal tools, avenCPO the product,
  * avenCEO the whole company alongside you. Every tier carries a monthly fee
- * and a revenue share that shrinks as the fee grows — the further up, the
- * more we are partners rather than a vendor.
+ * and a revenue share that GROWS with the role — the further up, the deeper
+ * we are in the outcome, until avenCEO is effectively a co-founder deal.
  *
  * The skills page filters by THIS, not by publisher: what matters to a buyer
  * is which plan a skill comes with, not which of us built it.
@@ -20,7 +20,7 @@ export interface Plan {
 	/** One line on what this role takes off your desk. */
 	role: string
 	eurPerMonth: number
-	/** Revenue share in percent, on top of the monthly fee. */
+	/** Revenue share in percent, on top of the monthly fee; rises with the tier. */
 	revenueSharePct: number
 	/** What this tier adds; the tiers below are always included. */
 	features: string[]
@@ -35,9 +35,11 @@ export const PLANS: Plan[] = [
 		name: 'avenCOO',
 		role: 'Operations — Papierkram, Post, Zahlen',
 		eurPerMonth: 377,
-		revenueSharePct: 25,
+		revenueSharePct: 5,
 		features: [
+			'avenCEO-Name inklusive (maia.aven.ceo + mail@maia.aven.ceo)',
 			'2 Sparks (Personal + Company)',
+			'Max. 1 Std KI/Tag (Fair Use)',
 			'POST-Inbox',
 			'E-Mail-Inbox',
 			'Aller Papierkram',
@@ -53,11 +55,11 @@ export const PLANS: Plan[] = [
 		name: 'avenCMO',
 		role: 'Markt — Reichweite, Inhalte, Pipeline',
 		eurPerMonth: 610,
-		revenueSharePct: 20,
+		revenueSharePct: 10,
 		highlight: true,
 		features: [
 			'3 Sparks',
-			'x Tokens',
+			'Max. 2 Std KI/Tag (Fair Use)',
 			'Blog',
 			'Social-Media-APIs',
 			'CRM & Sales Tools',
@@ -70,26 +72,32 @@ export const PLANS: Plan[] = [
 		role: 'Technik — interne Werkzeuge auf Zuruf',
 		eurPerMonth: 987,
 		revenueSharePct: 15,
-		features: ['4 Sparks', 'y Tokens', 'Composer (interne Tools bauen)']
+		features: ['4 Sparks', 'Max. 3 Std KI/Tag (Fair Use)', 'Composer (interne Tools bauen)']
 	},
 	{
 		id: 'avencpo',
 		name: 'avenCPO',
 		role: 'Produkt — was deine Kunden anfassen',
 		eurPerMonth: 1597,
-		revenueSharePct: 10,
-		features: ['5 Sparks', 'z Tokens', 'Composer (Kundenprodukte bauen)']
+		revenueSharePct: 20,
+		features: [
+			'5 Sparks',
+			'Max. 6 Std KI/Tag (Fair Use)',
+			'Composer (Kundenprodukte bauen)',
+			'Offizieller Marketplace-Reseller: wir verkaufen deine Produkte auf Kommission und übernehmen Steuerlast und Abwicklung'
+		]
 	},
 	{
 		id: 'avenceo',
 		name: 'avenCEO',
 		role: 'Das Ganze — wir sind faktisch Co-Founder',
 		eurPerMonth: 2584,
-		revenueSharePct: 5,
+		revenueSharePct: 25,
 		features: [
 			'Unbegrenzte Sparks',
-			'Unbegrenzte interne KI-Inferenz (Fair Use) auf eigener Hardware — Wartung durch uns',
+			'24 Std KI/Tag (Fair Use) — unbegrenzte interne Inferenz auf eigener Hardware, Wartung durch uns',
 			'tokenizeit-Adapter (Community-Investments)',
+			'Offizieller Marketplace-Reseller inklusive — Kommission, Steuerlast und Abwicklung liegen bei uns',
 			'Faktisch Co-Founder'
 		]
 	}

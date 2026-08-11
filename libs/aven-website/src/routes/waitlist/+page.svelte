@@ -266,7 +266,7 @@ function onStepKeydown(e: KeyboardEvent, stage: 1 | 2 | 3) {
 									name="preferredName"
 									autocomplete="off"
 									spellcheck="false"
-									placeholder="dein-name"
+									placeholder="maia"
 									onkeydown={(e) => onStepKeydown(e, 1)}
 									class="min-w-0 flex-1 bg-transparent py-3 text-[15px] font-medium tracking-tight text-foreground outline-none placeholder:text-foreground/35"
 								>
@@ -286,7 +286,7 @@ function onStepKeydown(e: KeyboardEvent, stage: 1 | 2 | 3) {
 						{#if preferredSlug}
 							<p class="mt-2 text-[12px] text-foreground/55">
 								<strong class="font-semibold text-foreground/72">{preferredSlug}.aven.ceo</strong>
-								<span class="text-foreground/35"> · </span>{preferredSlug}@aven.ceo
+								<span class="text-foreground/35"> · </span>mail@{preferredSlug}.aven.ceo
 							</p>
 						{/if}
 						<p class="mt-2 text-[11px] leading-snug text-foreground/42">

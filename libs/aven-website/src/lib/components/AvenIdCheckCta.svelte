@@ -31,18 +31,19 @@ const wrapperClass =
 
 <form onsubmit={submit} class={wrapperClass} aria-label="avenCEO‑Name zur Warteliste">
 	<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-tuscan-sun">
-		Limited Time Offer · Nur 10× Early&nbsp;Bird
+		Dein Name im Netz
 	</p>
 	<h3
 		class="mt-2 text-xl font-semibold tracking-tight text-pretty text-foreground sm:text-2xl md:text-[1.65rem]"
 	>
-		Sichere dir deinen avenCEO‑Namen für 8&nbsp;€ statt 55&nbsp;€
+		Sichere dir deinen avenCEO‑Namen für 2,50&nbsp;€ im Monat
 	</h3>
 	<p class="mt-3 max-w-2xl text-[14px] leading-snug text-foreground/68 sm:text-[15px]">
 		Wie eine Domain — aber für dein zweites Gehirn:
-		<strong class="font-medium text-foreground/82">dein-name.aven.ceo</strong>
+		<strong class="font-medium text-foreground/82">maia.aven.ceo</strong>
 		und passende Mail unter
-		<strong class="font-medium text-foreground/82">dein-name@aven.ceo</strong>.
+		<strong class="font-medium text-foreground/82">mail@maia.aven.ceo</strong>. Oder 25&nbsp;€ im
+		Jahr — in jedem CXO‑Plan schon enthalten.
 	</p>
 	<div class="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
 		<label
@@ -54,7 +55,7 @@ const wrapperClass =
 				name="aven-name"
 				autocomplete="off"
 				spellcheck="false"
-				placeholder="dein-name"
+				placeholder="maia"
 				class="min-w-0 flex-1 bg-transparent py-3 text-[15px] font-medium tracking-tight text-foreground outline-none placeholder:text-foreground/35"
 			>
 			<span class="shrink-0 font-mono text-[13px] text-foreground/55">.aven.ceo</span>
@@ -68,10 +69,8 @@ const wrapperClass =
 		</button>
 	</div>
 	<p class="mt-3 text-[12px] leading-snug text-foreground/55">
-		Beispiel: <strong class="font-semibold text-foreground/75">samuel.aven.ceo</strong>
+		Beispiel: <strong class="font-semibold text-foreground/75">maia.aven.ceo</strong>
 		<span class="text-foreground/45"> · </span>
-		samuel@aven.ceo
-		<span class="text-foreground/45"> · </span>
-		Forever‑Bonus: dauerhafter Zugang zu Maia&nbsp;City
+		mail@maia.aven.ceo
 	</p>
 </form>

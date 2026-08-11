@@ -2,7 +2,7 @@
 	<title>Preise — aven.ceo · avenCEO</title>
 	<meta
 		name="description"
-		content="Fünf Rollen, ein Stack: avenCOO, avenCMO, avenCTO, avenCPO, avenCEO — Monatspreis plus Umsatzbeteiligung, jede Stufe enthält die darunter. Sichere dir jetzt deine AvenID für 8 € statt 55 €."
+		content="Fünf Rollen, ein Stack: avenCOO, avenCMO, avenCTO, avenCPO, avenCEO — Monatspreis plus Umsatzbeteiligung, jede Stufe enthält die darunter. Sichere dir jetzt deinen avenCEO-Namen für 25 €."
 	>
 </svelte:head>
 
@@ -15,11 +15,9 @@ import { skillsIncludedIn } from '$lib/skills/loader'
 
 const openSourceGithubHref = 'https://github.com/jaensen/avenOS'
 
-const avenIdPriceStandardEur = 55
-const avenIdPriceEarlyBirdEur = 8
-const avenIdDiscountVsStandardPct = Math.round(
-	((avenIdPriceStandardEur - avenIdPriceEarlyBirdEur) / avenIdPriceStandardEur) * 100
-)
+/** Both prices are stated, not derived: paying yearly is the cheaper deal. */
+const avenIdPricePerMonthEur = '2,50'
+const avenIdPricePerYearEur = 25
 
 const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 </script>
@@ -60,46 +58,28 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								<strong class="text-tuscan-sun">{claimedName}</strong>.aven.ceo
 							</p>
 							<p class="mt-1 text-[11px] leading-snug text-foreground/60">
-								für 8&nbsp;€ statt 55&nbsp;€ — Verfügbarkeit bestätigen wir bei der Buchung.
+								für 25&nbsp;€ im Jahr — Verfügbarkeit bestätigen wir bei der Buchung.
 							</p>
 						</div>
 					{/if}
 					<div class="text-center">
+						<!-- The tier is the name itself: avenID, spelled like the rest. -->
 						<p
-							class="mt-2 text-lg font-bold uppercase tracking-[0.14em] text-foreground sm:text-xl sm:tracking-[0.12em]"
+							class="mt-2 font-mono text-lg font-bold tracking-[0.06em] text-foreground sm:text-xl"
 						>
-							Aven CEO – ID
+							avenID
 						</p>
 					</div>
 					<div class="mt-3 space-y-2">
-						<div class="grid grid-cols-2 gap-x-3 gap-y-1">
+						<div class="text-center">
 							<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
-								Early&nbsp;Bird
+								Pro Monat
 							</p>
-							<p
-								class="text-right text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45"
-							>
-								Standard
+							<p class="mt-1 text-2xl font-bold tabular-nums tracking-tight text-foreground">
+								{avenIdPricePerMonthEur}&nbsp;€
 							</p>
-							<div class="flex min-w-0 flex-nowrap items-center justify-start gap-x-2">
-								<span
-									class="shrink-0 text-2xl font-bold tabular-nums tracking-tight text-foreground"
-									>{avenIdPriceEarlyBirdEur}&nbsp;€</span
-								>
-								<span
-									class="inline-flex shrink-0 items-center rounded-full border border-border/45 bg-tuscan-sun/55 px-2 py-0.5 text-[13px] font-semibold tabular-nums leading-none tracking-tight text-foreground ring-1 ring-black/6 sm:text-sm"
-									title={`Ersparnis gegenüber Standard (${avenIdPriceStandardEur}\u00a0€)`}
-								>
-									−{avenIdDiscountVsStandardPct}&nbsp;%</span
-								>
-							</div>
-							<p class="text-right text-2xl font-bold tabular-nums tracking-tight text-foreground">
-								{avenIdPriceStandardEur}&nbsp;€
-							</p>
-							<p
-								class="col-span-2 mt-2 text-center text-[12px] font-semibold uppercase tracking-[0.14em] text-tuscan-sun sm:text-[13px]"
-							>
-								Nur noch 10x Early&nbsp;Bird
+							<p class="mt-1 text-[11px] text-foreground/55">
+								oder {avenIdPricePerYearEur}&nbsp;€ im Jahr · in jedem CXO‑Plan enthalten
 							</p>
 						</div>
 					</div>
@@ -108,44 +88,12 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							<strong class="font-medium text-foreground/82">4&nbsp;Std</strong>
 							avenCEO Test‑Zugang
 						</li>
-						<li>Sichere dir deine AvenID</li>
 						<li>
-							z.&nbsp;B. <strong class="font-semibold text-foreground/82">AvenBob</strong>
-							<span class="text-foreground/55">· bob.aven.ceo · bob@aven.ceo</span>
-						</li>
-						<li>Exklusiver Social‑CEO‑Netzwerk‑Zugang</li>
-						<li>
-							Einfaches
-							<strong class="font-medium text-foreground/82">One‑Click‑Self‑Hosting</strong>
-							mit deiner Aven&nbsp;ID
-							<span class="text-foreground/55">· BYO API‑Keys</span>
+							z.&nbsp;B. <strong class="font-semibold text-foreground/82">maia</strong>
+							<span class="text-foreground/55">· maia.aven.ceo · mail@maia.aven.ceo</span>
 						</li>
 					</ul>
 					<div class="mt-3 flex min-h-0 flex-1 flex-col justify-end gap-2">
-						<div class="border-t border-foreground/8 pt-3 text-center">
-							<p
-								class="font-mono text-[8px] font-bold uppercase tracking-[0.22em] text-foreground/45"
-							>
-								Bonus
-							</p>
-							<p
-								class="mt-1 text-center text-[9px] leading-snug text-foreground/62 sm:text-[10px] sm:leading-[1.42]"
-							>
-								<strong class="font-medium text-foreground/78">Dauerhafter Zugang</strong>
-								zu Maia&nbsp;City — das
-								<strong class="font-medium text-foreground/78">CEO‑Gründerspiel</strong>, in dem wir
-								skizzieren, wie wir
-								<strong class="font-medium text-foreground/82"
-									>menschliche Städte von morgen</strong
-								>
-								in den Arbeitsalltag einweben. Eine
-								<strong class="font-medium text-foreground/82"
-									>Post‑AGI‑Wirtschaftssimulation</strong
-								>: Gründerinnen und Gründer erproben kühnere und freundlichere Rhythmen von
-								Wirtschaft, Fürsorge und
-								<strong class="font-medium text-foreground/82">besseren Lebensweisen</strong>.
-							</p>
-						</div>
 						<div class="flex justify-center">
 							<a
 								href={claimedName
@@ -153,7 +101,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 										: '/waitlist?intent=aven-id'}
 								class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90 sm:text-[13px]"
 							>
-								Aven Name sichern
+								avenID sichern
 							</a>
 						</div>
 					</div>
