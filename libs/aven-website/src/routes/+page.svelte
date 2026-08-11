@@ -37,12 +37,9 @@ const stattStacks = [
 		aria-labelledby="home-hero-heading"
 	>
 		<div class="mx-auto max-w-3xl text-center">
-			<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-				An jeden Gründer — und jeden Angestellten, der es werden will,
-			</p>
 			<h1
 				id="home-hero-heading"
-				class="mx-auto mt-5 max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
+				class="mx-auto max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
 				Der traditionelle Job stirbt.
 				<span class="mt-1 block">Nur wer Eigentum hat, überlebt.</span>
@@ -55,9 +52,9 @@ const stattStacks = [
 					<strong class="font-semibold text-foreground">souveränen Gründer</strong>, der mit seinem
 					<strong class="font-semibold text-foreground">avenCEO</strong>
 					<strong class="font-semibold text-foreground">5+ Assets</strong>
-					aufbaut, anstatt
-					<strong class="font-semibold text-foreground">1x Zeit</strong>
-					gegen Geld zu tauschen.
+					aufbaut, statt abhängig von
+					<strong class="font-semibold text-foreground">1x Zeit gegen Geld</strong>
+					tauschen zu sein.
 				</p>
 			</div>
 		</div>
@@ -77,7 +74,7 @@ const stattStacks = [
 					id="shift-heading"
 					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					JETZT ist der perfekte Moment, der Creator deines Lebens zu sein.
+					JETZT ist der perfekte Moment, der Creator deines souveränen Lebens zu sein.
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
 					In der Post‑AGI‑Welt gibt es nur zwei Seiten: Entweder du
