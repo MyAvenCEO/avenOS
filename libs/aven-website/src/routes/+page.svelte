@@ -66,7 +66,7 @@ const letterDate = (() => {
 				id="home-hero-heading"
 				class="mx-auto mt-5 max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
-				Es wird Zeit, der Kapitän deines Lebens zu sein.
+				Es wird Zeit, der Creator deines Lebens zu sein.
 			</h1>
 			<div
 				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
