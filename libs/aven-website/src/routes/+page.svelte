@@ -10,6 +10,8 @@
 import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
+import SkillMarketplaceCard from '$lib/components/SkillMarketplaceCard.svelte'
+import { loadSkills } from '$lib/skills/loader'
 import danielPhoto from '../images/daniel.png'
 import samuelPhoto from '../images/samuel.jpg'
 
@@ -17,6 +19,9 @@ import samuelPhoto from '../images/samuel.jpg'
 const beamSeedSamuelProfile = 'Samuel Andert'
 
 const paletteHuman = paletteFromCommaString('f7ead9,ccc7a8,88b499,305669,222e49')
+/** A taste of the marketplace: the first six skills, the full list lives at /skills. */
+const skillsPreview = loadSkills('de').slice(0, 6)
+
 const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 
 /**
@@ -442,6 +447,44 @@ const roadmap = [
 					</p>
 				</div>
 			</div>
+		</div>
+	</section>
+
+	<!-- Skills preview: what an Aven can already do, straight from the marketplace. -->
+	<section
+		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
+		aria-labelledby="skills-preview-heading"
+	>
+		<div class="mx-auto max-w-5xl">
+			<div class="mx-auto max-w-2xl text-center">
+				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
+					Skills Marketplace
+				</p>
+				<h2
+					id="skills-preview-heading"
+					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+				>
+					Fertige Skills für deinen Spark.
+				</h2>
+				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
+					Dein Aven lernt per Skill — installieren statt entwickeln. Ein Auszug:
+				</p>
+			</div>
+
+			<div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+				{#each skillsPreview as skill (skill.slug)}
+					<SkillMarketplaceCard {skill} />
+				{/each}
+			</div>
+
+			<p class="mt-8 text-center">
+				<a
+					href="/skills"
+					class="inline-flex items-center gap-1.5 font-mono text-[12px] font-bold uppercase tracking-[0.18em] text-foreground/60 transition-colors hover:text-foreground"
+				>
+					Alle Skills im Marketplace →
+				</a>
+			</p>
 		</div>
 	</section>
 
