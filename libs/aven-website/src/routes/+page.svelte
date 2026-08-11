@@ -129,7 +129,7 @@ const roadmap = [
 			</p>
 			<p class="mt-5 text-[16px] font-medium text-foreground/90 sm:text-[17px]">
 				Ownership ist der Schlüssel.
-				<strong class="font-semibold text-foreground">Sparks sind das Medium.</strong>
+				<strong class="font-semibold text-foreground">Dein eigener avenCEO ist das Medium.</strong>
 			</p>
 		</div>
 	</section>
