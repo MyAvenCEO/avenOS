@@ -10,20 +10,11 @@
 import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
-import { loadPublishersWithSkills, skillDetailHref } from '$lib/skills/loader'
 import danielPhoto from '../images/daniel.png'
 import samuelPhoto from '../images/samuel.jpg'
 
 /** Beam “seed” string — hero beam geometry matches Samuel’s early‑alpha profile. */
 const beamSeedSamuelProfile = 'Samuel Andert'
-
-const publishersForHome = loadPublishersWithSkills('de')
-const homepageFeaturedSkills = publishersForHome.flatMap((pub) =>
-	pub.featuredSlugs.flatMap((slug) => {
-		const s = pub.skills.find((x) => x.slug === slug)
-		return s ? [s] : []
-	})
-)
 
 const paletteHuman = paletteFromCommaString('f7ead9,ccc7a8,88b499,305669,222e49')
 const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
@@ -36,19 +27,6 @@ const stattStacks = [
 	'Asana · Monday · Linear · ClickUp',
 	'sevDesk · Lexoffice · Odoo / SAP B1 Cloud'
 ] as const
-
-/** Kalendertag in Europe/Berlin — für den Brieftext „heute". */
-const letterDate = (() => {
-	const now = new Date()
-	const iso = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
-	const display = new Intl.DateTimeFormat('de-DE', {
-		day: 'numeric',
-		month: 'long',
-		year: 'numeric',
-		timeZone: 'Europe/Berlin'
-	}).format(now)
-	return { iso, display }
-})()
 </script>
 
 <div lang="de" class="min-h-screen bg-background text-foreground font-sans antialiased">
@@ -66,7 +44,7 @@ const letterDate = (() => {
 				id="home-hero-heading"
 				class="mx-auto mt-5 max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
-				Es wird Zeit, der Creator deines Lebens zu sein.
+				JETZT ist der perfekte Moment, der Creator deines Lebens zu sein.
 			</h1>
 			<div
 				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
@@ -75,8 +53,12 @@ const letterDate = (() => {
 					Die Zukunft gehört denen, die sich ein
 					<strong class="font-medium text-foreground">souveränes Leben</strong>
 					aufbauen — <strong class="font-medium text-foreground">5+ Assets besitzen</strong>, statt
-					davon abhängig zu sein, Zeit gegen Geld zu tauschen. Werde Gründer und lass
-					<strong class="font-medium text-foreground">deinen Aven</strong>
+					von <strong class="font-medium text-foreground">1x</strong> Zeit gegen Geld tauschen
+					abhängig zu sein.
+				</p>
+				<p class="mt-5 text-[16px] font-medium text-pretty text-foreground/88 sm:text-[17px]">
+					Werde Gründer — und lass
+					<strong class="font-semibold text-foreground">deinen Aven</strong>
 					arbeiten.
 				</p>
 			</div>
@@ -179,8 +161,11 @@ const letterDate = (() => {
 			<p
 				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
 			>
-				Jeder Mensch wird Gründer. Alles, was du dazu brauchst, ist
-				<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
+				Jeder Mensch wird Gründer.
+				<span class="mt-2 block">
+					Alles, was du dazu brauchst, ist
+					<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
+				</span>
 			</p>
 		</div>
 	</section>
@@ -359,125 +344,6 @@ const letterDate = (() => {
 					</p>
 				</div>
 			</div>
-		</div>
-	</section>
-
-	<section
-		class="border-b border-border/40 bg-gradient-to-b from-transparent via-white/20 to-transparent px-5 py-14 sm:px-8 sm:py-20"
-	>
-		<div class="mx-auto max-w-6xl">
-			<article class="mx-auto max-w-2xl text-center">
-				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
-					So baust du deinen Spark
-				</p>
-				<h2
-					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl md:text-[2.125rem]"
-				>
-					Vom Intent zum Asset&nbsp;— vier Schritte, bis dein avenCEO die Firma trägt.
-				</h2>
-				<p
-					class="mt-6 text-[1.05rem] font-medium leading-snug text-foreground/82 sm:text-[1.125rem]"
-				>
-					Als Eigentümer arbeitest du nicht alles zweimal mit dem Kopf: Du formulierst einen
-					<strong class="font-medium text-foreground/85">Intent</strong>
-					—
-					<strong class="font-medium text-foreground/85">dein avenCEO</strong>
-					baut Skills, verknüpft Arbeit und Gedächtnis und wird mit jedem Feedback klüger — bis die
-					Zusammenarbeit sich im Alltag anfühlt wie
-					<strong class="font-medium text-foreground/85"
-						>ein zweites Gehirn unter deiner Aufsicht</strong
-					>.
-				</p>
-				<ol class="mt-10 mx-auto max-w-xl list-none space-y-0 p-0">
-					{#each [
-							'Du gibst einen klaren Intent',
-							'Dein Aven erstellt oder verbessert den passenden Skill',
-							'Durch dein tägliches Feedback fängt dein avenCEO an, sich selbst zu optimieren.',
-							'Woche für Woche wird dein Aven immer mehr zu deinem zweiten Gehirn.'
-						] as step, i (step)}
-						<li class="border-b border-border/35 py-6 first:border-t first:border-border/45">
-							<div class="flex flex-col items-center gap-2 sm:gap-2.5">
-								<span
-									class="font-mono text-[11px] font-bold tabular-nums tracking-[0.08em] text-foreground/38"
-									>{String(i + 1).padStart(2, '0')}</span
-								>
-								<p
-									class="max-w-md text-[15px] font-medium leading-snug text-foreground/86 sm:text-[1.02rem]"
-								>
-									{step}
-								</p>
-							</div>
-						</li>
-					{/each}
-				</ol>
-				<div class="mx-auto mt-7 w-full max-w-4xl text-left">
-					<p
-						class="text-center font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-foreground/42"
-					>
-						Featured Skills · Marketplace
-					</p>
-					<ul
-						class="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4"
-						aria-label="Featured Skills aus dem Marketplace"
-					>
-						{#each homepageFeaturedSkills as skill (skill.slug)}
-							<li>
-								<a
-									href={skillDetailHref(skill.slug, 'de')}
-									class="flex h-full min-h-[6.5rem] flex-col gap-1 rounded-xl border border-border/35 bg-white/55 px-2.5 py-2 text-left ring-1 ring-black/4 transition-colors hover:border-border/65 hover:bg-white/75 sm:min-h-0 sm:px-3 sm:py-2.5"
-								>
-									<span
-										class="font-mono text-[8px] font-bold uppercase tracking-[0.18em] text-foreground/44"
-										>{skill.publisher.displayName}</span
-									>
-									<span
-										class="font-mono text-[11px] font-bold leading-tight tracking-[0.06em] text-foreground/88 sm:text-[12px]"
-										>{skill.slug}</span
-									>
-									<span class="mt-0.5 text-[10px] leading-snug text-foreground/58 sm:text-[11px]"
-										>{skill.oneLineCopy}</span
-									>
-								</a>
-							</li>
-						{/each}
-					</ul>
-					<p class="mt-5 text-center">
-						<a
-							href="/skills"
-							class="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-tuscan-sun/90 underline-offset-4 transition-colors hover:text-tuscan-sun hover:underline"
-						>
-							Alle Skills im Marketplace →
-						</a>
-					</p>
-				</div>
-				<div
-					class="mx-auto mt-14 w-full max-w-xl border-t-2 border-tuscan-sun px-6 pt-8 text-center sm:mt-16 sm:px-8 sm:pt-9"
-					aria-label="Worauf du dich einstellen kannst"
-				>
-					<p class="font-mono text-[10px] font-bold uppercase tracking-[0.32em] text-tuscan-sun">
-						Zeithorizont
-					</p>
-					<div class="mt-7 space-y-6 text-pretty sm:space-y-7">
-						<p
-							class="font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
-						>
-							Nach&nbsp;<strong class="font-sans font-semibold tabular-nums text-tuscan-sun"
-								>30&nbsp;Tagen</strong
-							>{' '}
-							spürst du die erste Entlastung.
-						</p>
-						<hr class="mx-auto w-full max-w-xs border-border/35" aria-hidden="true">
-						<p
-							class="font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
-						>
-							Nach&nbsp;<strong class="font-sans font-semibold tabular-nums text-tuscan-sun"
-								>90&nbsp;Tagen</strong
-							>{' '}
-							ist avenCEO nicht mehr aus deinem Leben wegzudenken.
-						</p>
-					</div>
-				</div>
-			</article>
 		</div>
 	</section>
 
