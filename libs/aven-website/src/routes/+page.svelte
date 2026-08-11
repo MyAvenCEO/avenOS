@@ -36,7 +36,7 @@ const roadmap = [
 		price: '377 €/m',
 		offer: 'Verkaufe dein erstes Angebot',
 		pitch:
-			'Deine erste eigene Spark‑Firma mit eigenem Produkt: Du lernst verkaufen und dienen — mehr geben, als du nimmst.'
+			'Deine erste eigene Spark‑Firma mit eigenem Produkt: Du lernst verkaufen und dienen — mehr geben, als du nimmst: der No. 1 Schlüssel zu einem erfolgreichen Spark.'
 	},
 	{
 		tier: 'avenCMO',
