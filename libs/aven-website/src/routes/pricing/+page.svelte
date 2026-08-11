@@ -2,7 +2,7 @@
 	<title>Preise — aven.ceo · avenCEO</title>
 	<meta
 		name="description"
-		content="Fünf Rollen, ein Stack: avenCOO, avenCMO, avenCTO, avenCPO, avenCEO — Monatspreis plus Umsatzbeteiligung, jede Stufe enthält die darunter. Sichere dir jetzt deinen avenCEO-Namen für 25 €."
+		content="Fünf Rollen, ein Stack: avenCOO, avenCMO, avenCTO, avenCPO, avenCEO — Monatspreis plus Umsatzbeteiligung, jede Stufe enthält die darunter. Sichere dir jetzt deinen avenCEO-Namen für 100 €."
 	>
 </svelte:head>
 
@@ -15,8 +15,8 @@ import { skillsIncludedIn } from '$lib/skills/loader'
 
 const openSourceGithubHref = 'https://github.com/jaensen/avenOS'
 
-/** One number, one promise: 25 € once, your name for a year. */
-const avenIdPriceEur = 25
+/** One number, one promise: 100 € once, your name for a year. */
+const avenIdPriceEur = 100
 
 const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 </script>
@@ -57,7 +57,8 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								<strong class="text-tuscan-sun">{claimedName}</strong>.aven.ceo
 							</p>
 							<p class="mt-1 text-[11px] leading-snug text-foreground/60">
-								für einmalig 25&nbsp;€ (gilt 1 Jahr) — Verfügbarkeit bestätigen wir bei der Buchung.
+								für einmalig 100&nbsp;€ (gilt 1 Jahr) — Verfügbarkeit bestätigen wir bei der
+								Buchung.
 							</p>
 						</div>
 					{/if}

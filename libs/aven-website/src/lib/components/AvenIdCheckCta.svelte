@@ -36,7 +36,7 @@ const wrapperClass =
 	<h3
 		class="mt-2 text-xl font-semibold tracking-tight text-pretty text-foreground sm:text-2xl md:text-[1.65rem]"
 	>
-		Sichere dir deine avenID für einmalig 25&nbsp;€
+		Sichere dir deine avenID für einmalig 100&nbsp;€
 	</h3>
 	<p class="mt-3 max-w-2xl text-[14px] leading-snug text-foreground/68 sm:text-[15px]">
 		Wie eine Domain — aber für deinen Aven:

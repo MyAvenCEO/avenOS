@@ -27,7 +27,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 const roadmap = [
 	{
 		tier: 'avenID',
-		price: '25 €/Jahr',
+		price: '100 €/Jahr',
 		offer: 'Deine Vision bekommt einen Namen',
 		pitch: 'Die Entscheidung in dich und deinen Aven ist der Anfang von allem.'
 	},
