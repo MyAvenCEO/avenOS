@@ -50,7 +50,7 @@ const stattStacks = [
 				<p class="text-pretty text-[16px] font-medium text-foreground/85 sm:text-[17px]">
 					Die Zukunft gehört dem
 					<strong class="font-semibold text-foreground">souveränen Gründer</strong>, der mit seinem
-					<strong class="font-semibold text-foreground">avenCEO</strong>
+					avenCEO Agenten
 					<strong class="font-semibold text-foreground">5+ Assets</strong>
 					aufbaut, statt
 					<strong class="font-semibold text-foreground">1x Zeit gegen Geld</strong>
