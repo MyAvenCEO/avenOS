@@ -20,51 +20,45 @@ const paletteHuman = paletteFromCommaString('f7ead9,ccc7a8,88b499,305669,222e49'
 const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 
 /**
- * The ladder from 0 to hero: six tiers, six asset types. Levels are unlocked
- * by INCOME, not by appetite — you only step up once your spark earns more
- * than the next tier costs, so growth funds itself.
+ * The ladder builds ONE spark; every finished spark is one asset. The
+ * repeat step is the point: reinvest 50/50, mint the next asset, until the
+ * portfolio stands at 10+.
  */
 const roadmap = [
 	{
 		tier: 'avenID',
-		price: '25 €/Jahr',
-		asset: 'Deine Vision',
-		pitch: 'Die Entscheidung in dich und deinen Aven ist das erste Asset.'
+		unlock: 'Deine Vision',
+		pitch: 'Die Entscheidung in dich und deinen Aven ist der Anfang von allem.'
 	},
 	{
 		tier: 'avenCOO',
-		price: '377 €/m',
-		asset: 'Dein erstes Angebot',
+		unlock: 'Dein erstes Angebot',
 		pitch:
-			'Deine erste eigene Firma mit eigenem Produkt: Du lernst verkaufen und dienen — mehr geben, als du nimmst.'
+			'Deine erste eigene Spark‑Firma mit eigenem Produkt: Du lernst verkaufen und dienen — mehr geben, als du nimmst.'
 	},
 	{
 		tier: 'avenCMO',
-		price: '610 €/m',
-		asset: 'Deine Brand',
+		unlock: 'Deine Brand',
 		pitch:
 			'Storytelling wird Besitz: deine avenBrand wächst über Social Media und Blog — Reichweite, die dir gehört.'
 	},
 	{
 		tier: 'avenCTO',
-		price: '987 €/m',
-		asset: 'Deine Automation',
+		unlock: 'Deine Automation',
 		pitch:
 			'Das Prozess‑Gehirn: dein avenCTO optimiert sich im Loop und übernimmt Schritt für Schritt den Betrieb.'
 	},
 	{
 		tier: 'avenCPO',
-		price: '1.597 €/m',
-		asset: 'Dein skalierendes Produkt',
+		unlock: 'Dein skalierendes Produkt',
 		pitch:
-			'KI baut dein Kundenprodukt — und über tokenize(it) investieren Community und Partner direkt mit.'
+			'Skaliere dein Produkt, das Product‑Market‑Fit gefunden hat — der Brandbeschleuniger: Beteilige deine Community und Partner über tokenize(it).'
 	},
 	{
 		tier: 'avenCEO',
-		price: '2.584 €/m',
-		asset: 'Deine KI‑Hardware',
+		unlock: 'Deine KI‑Hardware',
 		pitch:
-			'Volle Souveränität: deine Intelligenz läuft auf eigener, dedizierter Hardware — auch das letzte Asset gehört dir.'
+			'Volle Souveränität: deine Intelligenz läuft auf eigener, dedizierter Hardware — dein Spark trägt sich selbst.'
 	}
 ] as const
 </script>
@@ -91,7 +85,7 @@ const roadmap = [
 					Die Zukunft gehört dem
 					<strong class="font-semibold text-foreground">souveränen Gründer</strong>, der mit seinem
 					avenCEO Agenten
-					<strong class="font-semibold text-foreground">5+ Assets</strong>
+					<strong class="font-semibold text-foreground">10+ Assets</strong>
 					aufbaut, statt
 					<strong class="font-semibold text-foreground">1x Zeit gegen Geld</strong>
 					zu tauschen.
@@ -192,7 +186,7 @@ const roadmap = [
 								aria-hidden="true"
 							></span>
 							<span
-								>Ein Portfolio aus 5+ Assets: Produkte, Einkommensströme, deine Daten, deine KI,
+								>Ein Portfolio aus 10+ Assets: Produkte, Einkommensströme, deine Daten, deine KI,
 								dein Name.</span
 							>
 						</li>
@@ -445,12 +439,12 @@ const roadmap = [
 		</div>
 	</section>
 
-	<!-- The ladder: 0 → hero, one asset type per tier, unlocked by income. -->
+	<!-- The ladder builds ONE spark; every repeat mints a new asset. -->
 	<section
 		class="border-b border-border/40 bg-gradient-to-b from-transparent via-white/20 to-transparent px-5 py-16 sm:px-8 sm:py-24"
 		aria-labelledby="roadmap-heading"
 	>
-		<div class="mx-auto max-w-3xl">
+		<div class="mx-auto max-w-4xl">
 			<div class="mx-auto max-w-2xl text-center">
 				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
 					Deine Roadmap · 0 → Hero
@@ -459,23 +453,26 @@ const roadmap = [
 					id="roadmap-heading"
 					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					Sechs Stufen. Sechs Assets. Ein souveränes Gründerleben.
+					Vom 1. Spark — über 6 Levels — zu 10+ Assets.
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
-					Jede Stufe schaltet einen neuen
-					<strong class="font-medium text-foreground/85">Asset‑Typ</strong>
-					frei — und du levelst erst auf, wenn dein Spark
+					Sechs Levels bauen deinen ersten Spark — du levelst erst auf, wenn er
 					<strong class="font-medium text-foreground/85"
-						>mehr verdient, als die nächste Stufe kostet</strong
-					>.
+						>mehr verdient, als das nächste Level kostet</strong
+					>. Und jeder fertige Spark ist
+					<strong class="font-medium text-foreground/85">ein Asset</strong>.
 				</p>
 			</div>
 
-			<ol class="relative mt-12 space-y-0 border-l border-border/60 pl-8 sm:pl-10">
+			<ol class="relative mt-14">
+				<span
+					class="absolute top-1 bottom-1 left-4 w-px -translate-x-1/2 bg-border/60 sm:left-1/2"
+					aria-hidden="true"
+				></span>
 				{#each roadmap as level, i (level.tier)}
-					<li class="relative pb-10 last:pb-0">
+					<li class="relative pb-12 pl-12 sm:pl-0">
 						<span
-							class="absolute -left-[2.55rem] top-0.5 flex size-7 items-center justify-center rounded-full font-mono text-[10px] font-bold sm:-left-[3.05rem] {i ===
+							class="absolute top-0.5 left-4 flex size-7 -translate-x-1/2 items-center justify-center rounded-full font-mono text-[10px] font-bold sm:left-1/2 {i ===
 							roadmap.length - 1
 								? 'bg-foreground text-background'
 								: 'bg-tuscan-sun/60 text-foreground ring-1 ring-black/6'}"
@@ -483,64 +480,61 @@ const roadmap = [
 						>
 							{i + 1}
 						</span>
-						<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-							<span class="font-mono text-[13px] font-bold tracking-[0.06em] text-foreground">
-								{level.tier}
-							</span>
-							<span class="font-mono text-[11px] tabular-nums text-foreground/45">
-								{level.price}
-							</span>
-							<span
-								class="rounded-full bg-tuscan-sun/25 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8a6238]"
+						<div
+							class="sm:w-[calc(50%-2.5rem)] {i % 2 === 0
+								? 'sm:mr-auto sm:text-right'
+								: 'sm:ml-auto'}"
+						>
+							<div
+								class="flex flex-wrap items-baseline gap-x-3 gap-y-1 {i % 2 === 0
+									? 'sm:justify-end'
+									: ''}"
 							>
-								Asset #{i + 1}
-								· {level.asset}
-							</span>
+								<span class="font-mono text-[13px] font-bold tracking-[0.06em] text-foreground">
+									{level.tier}
+								</span>
+								<span
+									class="rounded-full bg-tuscan-sun/25 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8a6238]"
+								>
+									Unlock · {level.unlock}
+								</span>
+							</div>
+							<p class="mt-2 text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
+								{level.pitch}
+							</p>
 						</div>
-						<p class="mt-2 max-w-xl text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
-							{level.pitch}
-						</p>
 					</li>
 				{/each}
-				<li class="relative pt-2">
+				<li class="relative pl-12 sm:pl-0">
 					<span
-						class="absolute -left-[2.55rem] top-2.5 flex size-7 items-center justify-center rounded-full bg-tuscan-sun text-[15px] text-foreground ring-1 ring-black/8 sm:-left-[3.05rem]"
+						class="absolute top-0.5 left-4 flex size-7 -translate-x-1/2 items-center justify-center rounded-full bg-tuscan-sun text-[15px] text-foreground ring-1 ring-black/8 sm:left-1/2"
 						aria-hidden="true"
 					>
 						↻
 					</span>
-					<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-						<span class="font-mono text-[13px] font-bold tracking-[0.06em] text-tuscan-sun">
-							Repeat
-						</span>
-						<span
-							class="rounded-full bg-tuscan-sun/25 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8a6238]"
-						>
-							Spark für Spark
-						</span>
+					<div class="sm:mr-auto sm:w-[calc(50%-2.5rem)] sm:text-right">
+						<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 sm:justify-end">
+							<span class="font-mono text-[13px] font-bold tracking-[0.06em] text-tuscan-sun">
+								Repeat
+							</span>
+							<span
+								class="rounded-full bg-tuscan-sun/25 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8a6238]"
+							>
+								Jeder Spark & jede Beteiligung = ein Asset
+							</span>
+						</div>
+						<p class="mt-2 text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
+							Dein Spark trägt sich selbst — Zeit zu reinvestieren,
+							<strong class="font-medium text-foreground/85">50/50</strong>: Die eine Hälfte startet
+							deinen nächsten eigenen Spark. Die andere Hälfte investierst du über
+							<strong class="font-medium text-foreground/85">tokenize(it)</strong>
+							in die Level‑5‑Sparks anderer Gründer. Eigene Sparks plus Beteiligungen — so wächst
+							dein Portfolio auf
+							<strong class="font-medium text-foreground/85">10+ Assets</strong>.
+						</p>
 					</div>
-					<p class="mt-2 max-w-xl text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
-						Dein erster Spark trägt sich selbst — also gründest du den nächsten. Das Spiel beginnt
-						von vorn: der nächste Spark, und der danach — bis dein Portfolio bei
-						<strong class="font-medium text-foreground/85">5+ Assets</strong>
-						steht.
-					</p>
 				</li>
 			</ol>
-
-			<div
-				class="mx-auto mt-12 max-w-xl rounded-2xl border border-tuscan-sun/35 bg-tuscan-sun/12 px-5 py-6 text-center ring-1 ring-tuscan-sun/20 sm:px-8"
-			>
-				<p class="font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-tuscan-sun">
-					Die Level‑Up‑Regel
-				</p>
-				<p
-					class="mt-3 font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.25rem]"
-				>
-					Jede Stufe verdient die nächste: Du steigst erst auf, wenn dein Einkommen die neue Stufe
-					trägt — <strong class="font-sans font-semibold">Wachstum ohne Risiko‑Sprung</strong>.
-				</p>
-			</div>
 		</div>
 	</section>
 
