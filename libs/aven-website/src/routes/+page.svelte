@@ -56,6 +56,12 @@ const stattStacks = [
 					<strong class="font-semibold text-foreground">1x Zeit gegen Geld</strong>
 					tauschen zu sein.
 				</p>
+				<p class="mt-5 text-pretty text-[16px] font-medium text-foreground/85 sm:text-[17px]">
+					<strong class="font-semibold text-foreground"
+						>Assets aufbauen ist Investieren mit Zinseszins</strong
+					>
+					— ein Gehalt bleibt linear.
+				</p>
 			</div>
 		</div>
 	</section>
