@@ -465,8 +465,7 @@ const roadmap = [
 					Sechs Levels bauen deinen ersten Spark — du levelst erst auf, wenn er
 					<strong class="font-medium text-foreground/85"
 						>mehr verdient, als das nächste Level kostet</strong
-					>. Und jeder fertige Spark ist
-					<strong class="font-medium text-foreground/85">ein Asset</strong>.
+					>.
 				</p>
 			</div>
 

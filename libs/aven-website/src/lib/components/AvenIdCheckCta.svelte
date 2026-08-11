@@ -39,7 +39,7 @@ const wrapperClass =
 		Sichere dir deine avenID für einmalig 25&nbsp;€
 	</h3>
 	<p class="mt-3 max-w-2xl text-[14px] leading-snug text-foreground/68 sm:text-[15px]">
-		Wie eine Domain — aber für dein zweites Gehirn:
+		Wie eine Domain — aber für deinen Aven:
 		<strong class="font-medium text-foreground/82">maia.aven.ceo</strong>
 		und passende Mail unter
 		<strong class="font-medium text-foreground/82">mail@maia.aven.ceo</strong>. Gilt 1&nbsp;Jahr.
