@@ -44,7 +44,8 @@ const stattStacks = [
 				id="home-hero-heading"
 				class="mx-auto mt-5 max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
-				JETZT ist der perfekte Moment, der Creator deines Lebens zu sein.
+				Der Angestellten‑Job stirbt.
+				<span class="mt-1 block">Nur wer Eigentum hat, überlebt.</span>
 			</h1>
 			<div
 				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
@@ -77,7 +78,7 @@ const stattStacks = [
 					id="shift-heading"
 					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					Der Angestellten‑Job stirbt. Eigentum bleibt.
+					JETZT ist der perfekte Moment, der Creator deines Lebens zu sein.
 				</h2>
 			</div>
 			<div class="mt-10 grid gap-4 sm:grid-cols-3">
