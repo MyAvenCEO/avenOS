@@ -18,6 +18,56 @@ const beamSeedSamuelProfile = 'Samuel Andert'
 
 const paletteHuman = paletteFromCommaString('f7ead9,ccc7a8,88b499,305669,222e49')
 const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
+
+/**
+ * The ladder from 0 to hero: six tiers, six asset types. Levels are unlocked
+ * by INCOME, not by appetite — you only step up once your spark earns more
+ * than the next tier costs, so growth funds itself.
+ */
+const roadmap = [
+	{
+		tier: 'avenID',
+		price: '25 €/Jahr',
+		asset: 'Deine Vision',
+		pitch:
+			'Die Entscheidung ist das erste Asset: 25 € in deine eigene avenCEO‑Identität — dein Name, deine Marke, dein Anfang.'
+	},
+	{
+		tier: 'avenCOO',
+		price: '377 €/m',
+		asset: 'Dein erstes Angebot',
+		pitch:
+			'Deine erste eigene Firma mit eigenem Produkt: Du lernst verkaufen und dienen — mehr geben, als du nimmst.'
+	},
+	{
+		tier: 'avenCMO',
+		price: '610 €/m',
+		asset: 'Deine Brand',
+		pitch:
+			'Storytelling wird Besitz: deine avenBrand wächst über Social Media und Blog — Reichweite, die dir gehört.'
+	},
+	{
+		tier: 'avenCTO',
+		price: '987 €/m',
+		asset: 'Deine Automation',
+		pitch:
+			'Das Prozess‑Gehirn: dein avenCTO optimiert sich im Loop und übernimmt Schritt für Schritt den Betrieb.'
+	},
+	{
+		tier: 'avenCPO',
+		price: '1.597 €/m',
+		asset: 'Dein skalierendes Produkt',
+		pitch:
+			'KI baut dein Kundenprodukt — und über tokenize(it) investieren Community und Partner direkt mit.'
+	},
+	{
+		tier: 'avenCEO',
+		price: '2.584 €/m',
+		asset: 'Deine KI‑Hardware',
+		pitch:
+			'Volle Souveränität: deine Intelligenz läuft auf eigener, dedizierter Hardware — auch das letzte Asset gehört dir.'
+	}
+] as const
 </script>
 
 <div lang="de" class="min-h-screen bg-background text-foreground font-sans antialiased">
@@ -392,6 +442,81 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 						= avenCEO Spark
 					</p>
 				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- The ladder: 0 → hero, one asset type per tier, unlocked by income. -->
+	<section
+		class="border-b border-border/40 bg-gradient-to-b from-transparent via-white/20 to-transparent px-5 py-16 sm:px-8 sm:py-24"
+		aria-labelledby="roadmap-heading"
+	>
+		<div class="mx-auto max-w-3xl">
+			<div class="mx-auto max-w-2xl text-center">
+				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
+					Deine Roadmap · 0 → Hero
+				</p>
+				<h2
+					id="roadmap-heading"
+					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+				>
+					Sechs Stufen. Sechs Assets. Ein souveränes Gründerleben.
+				</h2>
+				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
+					Jede Stufe schaltet einen neuen
+					<strong class="font-medium text-foreground/85">Asset‑Typ</strong>
+					frei — und du levelst erst auf, wenn dein Spark
+					<strong class="font-medium text-foreground/85"
+						>mehr verdient, als die nächste Stufe kostet</strong
+					>.
+				</p>
+			</div>
+
+			<ol class="relative mt-12 space-y-0 border-l border-border/60 pl-8 sm:pl-10">
+				{#each roadmap as level, i (level.tier)}
+					<li class="relative pb-10 last:pb-0">
+						<span
+							class="absolute -left-[2.55rem] top-0.5 flex size-7 items-center justify-center rounded-full font-mono text-[10px] font-bold sm:-left-[3.05rem] {i ===
+							roadmap.length - 1
+								? 'bg-foreground text-background'
+								: 'bg-tuscan-sun/60 text-foreground ring-1 ring-black/6'}"
+							aria-hidden="true"
+						>
+							{i + 1}
+						</span>
+						<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+							<span class="font-mono text-[13px] font-bold tracking-[0.06em] text-foreground">
+								{level.tier}
+							</span>
+							<span class="font-mono text-[11px] tabular-nums text-foreground/45">
+								{level.price}
+							</span>
+							<span
+								class="rounded-full bg-tuscan-sun/25 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8a6238]"
+							>
+								Asset #{i + 1}
+								· {level.asset}
+							</span>
+						</div>
+						<p class="mt-2 max-w-xl text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
+							{level.pitch}
+						</p>
+					</li>
+				{/each}
+			</ol>
+
+			<div
+				class="mx-auto mt-12 max-w-xl rounded-2xl border border-tuscan-sun/35 bg-tuscan-sun/12 px-5 py-6 text-center ring-1 ring-tuscan-sun/20 sm:px-8"
+			>
+				<p class="font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-tuscan-sun">
+					Die Level‑Up‑Regel
+				</p>
+				<p
+					class="mt-3 font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.25rem]"
+				>
+					Jede Stufe verdient die nächste: Du steigst erst auf, wenn dein Einkommen die neue Stufe
+					trägt — <strong class="font-sans font-semibold">Wachstum ohne Risiko‑Sprung</strong>.
+				</p>
 			</div>
 		</div>
 	</section>
