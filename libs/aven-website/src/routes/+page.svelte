@@ -129,7 +129,9 @@ const roadmap = [
 			</p>
 			<p class="mt-5 text-[16px] font-medium text-foreground/90 sm:text-[17px]">
 				Ownership ist der Schlüssel.
-				<strong class="font-semibold text-foreground">Dein eigener avenCEO ist das Medium.</strong>
+				<strong class="font-semibold text-foreground"
+					>Dein eigener avenCEO baut dir, was dir gehört.</strong
+				>
 			</p>
 		</div>
 	</section>
@@ -156,7 +158,14 @@ const roadmap = [
 					<strong class="font-medium text-foreground/85"
 						>Kopfarbeit heute, mit Robotern bald auch Handarbeit</strong
 					>
-					— rund um die Uhr. Ab dann gibt es nur zwei Drehbücher für dein Leben:
+					— rund um die Uhr, zum Preis von Strom.
+				</p>
+				<p class="mx-auto mt-3 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
+					Damit bricht der Deal, auf dem die alte Wirtschaft steht:
+					<strong class="font-medium text-foreground/85">Zeit gegen Geld</strong>. Wenn niemand mehr
+					seine Arbeitszeit verkaufen kann, bleibt nur eine Einkommensquelle übrig —
+					<strong class="font-medium text-foreground/85">das, was dir gehört</strong>. Ab dann gibt
+					es nur zwei Drehbücher für dein Leben:
 				</p>
 			</div>
 
