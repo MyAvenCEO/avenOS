@@ -44,21 +44,20 @@ const stattStacks = [
 				id="home-hero-heading"
 				class="mx-auto mt-5 max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
-				Der Angestellten‑Job stirbt.
+				Der traditionelle Job stirbt.
 				<span class="mt-1 block">Nur wer Eigentum hat, überlebt.</span>
 			</h1>
 			<div
 				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
 			>
-				<p class="text-pretty">
-					Die Zukunft gehört denen, die
-					<strong class="font-medium text-foreground">5+ Assets besitzen</strong>, statt von
-					<strong class="font-medium text-foreground">1x Zeit</strong> gegen Geld tauschen
-					abhängig zu sein.
-				</p>
-				<p class="mt-5 text-[16px] font-medium text-pretty text-foreground/88 sm:text-[17px]">
-					Der souveräne Gründer gestaltet die Vision —
-					<strong class="font-semibold text-foreground">sein avenCEO arbeitet</strong>.
+				<p class="text-pretty text-[16px] font-medium text-foreground/85 sm:text-[17px]">
+					Die Zukunft gehört dem
+					<strong class="font-semibold text-foreground">souveränen Gründer</strong>, der mit seinem
+					<strong class="font-semibold text-foreground">avenCEO</strong>
+					<strong class="font-semibold text-foreground">5+ Assets</strong>
+					aufbaut, anstatt
+					<strong class="font-semibold text-foreground">1x Zeit</strong>
+					gegen Geld zu tauschen.
 				</p>
 			</div>
 		</div>
@@ -80,6 +79,12 @@ const stattStacks = [
 				>
 					JETZT ist der perfekte Moment, der Creator deines Lebens zu sein.
 				</h2>
+				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
+					In der Post‑AGI‑Welt gibt es nur zwei Seiten: Entweder du
+					<strong class="font-medium text-foreground/85">besitzt Assets</strong>
+					— oder dein Leben gehört denen, die welche besitzen. Das Zeitfenster ist kurz.
+					<strong class="font-medium text-foreground/85">Bereite dich jetzt vor.</strong>
+				</p>
 			</div>
 			<div class="mt-10 grid gap-4 sm:grid-cols-3">
 				<div class="rounded-2xl border border-border/40 bg-white/45 p-5 ring-1 ring-black/4">
@@ -87,9 +92,9 @@ const stattStacks = [
 						Arbeitszeit
 					</p>
 					<p class="mt-3 text-[14px] leading-snug text-foreground/78">
-						KI erledigt Angestellten‑Arbeit schneller, billiger, rund um die Uhr. Wer nur Zeit
-						verkauft, konkurriert ab jetzt mit
-						<strong class="font-medium text-foreground/88">Grenzkosten nahe null</strong>.
+						KI erledigt Kopfarbeit schneller, billiger, rund um die Uhr. Wer nur Zeit verkauft,
+						konkurriert ab jetzt mit
+						<strong class="font-medium text-foreground/88">dem Preis von Strom</strong>.
 					</p>
 				</div>
 				<div class="rounded-2xl border border-border/40 bg-white/45 p-5 ring-1 ring-black/4">
@@ -97,9 +102,9 @@ const stattStacks = [
 						Betroffen: alle
 					</p>
 					<p class="mt-3 text-[14px] leading-snug text-foreground/78">
-						Das ist keine Branchen‑Nachricht. Es betrifft
-						<strong class="font-medium text-foreground/88">jeden einzelnen Menschen</strong>, der
-						von einem Gehalt lebt — auch die, die es noch nicht spüren.
+						Keine Branchen‑Nachricht: Es trifft
+						<strong class="font-medium text-foreground/88">jeden, der von einem Gehalt lebt</strong>
+						— auch die, die es heute noch nicht spüren.
 					</p>
 				</div>
 				<div class="rounded-2xl border border-border/40 bg-white/45 p-5 ring-1 ring-black/4">
@@ -107,9 +112,10 @@ const stattStacks = [
 						Die Sicherheit von morgen
 					</p>
 					<p class="mt-3 text-[14px] leading-snug text-foreground/78">
-						Post‑AGI‑Sicherheit heißt:
-						<strong class="font-medium text-foreground/88">mindestens 1 Asset besitzen</strong>
-						— ein Produkt, einen Einkommensstrom, deine Daten, deine KI.
+						Post‑AGI‑Sicherheit heißt Eigentum:
+						<strong class="font-medium text-foreground/88">mindestens 1 Asset</strong>
+						— ein Produkt, ein Einkommensstrom, deine Daten, deine KI. Besser:
+						<strong class="font-medium text-foreground/88">5+</strong>.
 					</p>
 				</div>
 			</div>
