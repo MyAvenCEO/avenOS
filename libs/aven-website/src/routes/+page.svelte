@@ -50,16 +50,14 @@ const stattStacks = [
 				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
 			>
 				<p class="text-pretty">
-					Die Zukunft gehört denen, die sich ein
-					<strong class="font-medium text-foreground">souveränes Leben</strong>
-					aufbauen — <strong class="font-medium text-foreground">5+ Assets besitzen</strong>, statt
-					von <strong class="font-medium text-foreground">1x</strong> Zeit gegen Geld tauschen
+					Die Zukunft gehört denen, die
+					<strong class="font-medium text-foreground">5+ Assets besitzen</strong>, statt von
+					<strong class="font-medium text-foreground">1x Zeit</strong> gegen Geld tauschen
 					abhängig zu sein.
 				</p>
 				<p class="mt-5 text-[16px] font-medium text-pretty text-foreground/88 sm:text-[17px]">
-					Werde Gründer — und lass
-					<strong class="font-semibold text-foreground">deinen Aven</strong>
-					arbeiten.
+					Der souveräne Gründer gestaltet die Vision —
+					<strong class="font-semibold text-foreground">sein avenCEO arbeitet</strong>.
 				</p>
 			</div>
 		</div>
