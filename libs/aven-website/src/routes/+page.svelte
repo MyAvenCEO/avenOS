@@ -233,8 +233,8 @@ const roadmap = [
 								aria-hidden="true"
 							></span>
 							<span
-								>Ein Portfolio aus 10+ Assets: Produkte, Einkommensströme, deine Daten, deine KI,
-								dein Name.</span
+								>Ein Portfolio aus 10+ Assets: Firmen, geboren aus deinen Visionen und betrieben von
+								deinem Aven — plus Beteiligungen an denen anderer Gründer.</span
 							>
 						</li>
 						<li class="flex gap-2.5">
