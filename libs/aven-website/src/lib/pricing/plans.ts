@@ -3,8 +3,8 @@
  * marketplace.
  *
  * Five roles, each one the previous plus more: avenCOO runs the paperwork,
- * avenCMO the market, avenCTO the internal tools, avenCPO the product,
- * avenCEO the whole company alongside you. Every tier carries a monthly fee
+ * avenCTO the internal tools and the encrypted ground it stands on, avenCMO
+ * the market, avenCPO the product, avenCEO the whole company alongside you. Every tier carries a monthly fee
  * and a revenue share that GROWS with the role — the further up, the deeper
  * we are in the outcome, until avenCEO is effectively a co-founder deal.
  *
@@ -12,7 +12,7 @@
  * is which plan a skill comes with, not which of us built it.
  */
 
-export type PlanId = 'avencoo' | 'avencmo' | 'avencto' | 'avencpo' | 'avenceo'
+export type PlanId = 'avencoo' | 'avencto' | 'avencmo' | 'avencpo' | 'avenceo'
 
 export interface Plan {
 	id: PlanId
@@ -51,28 +51,32 @@ export const PLANS: Plan[] = [
 		]
 	},
 	{
-		id: 'avencmo',
-		name: 'avenCMO',
-		role: 'Markt — Reichweite, Inhalte, Pipeline',
+		id: 'avencto',
+		name: 'avenCTO',
+		role: 'Technik — interne Werkzeuge auf Zuruf',
 		eurPerMonth: 610,
 		revenueSharePct: 10,
-		highlight: true,
 		features: [
 			'3 Sparks',
 			'Max. 2 Std KI/Tag (Fair Use)',
-			'Blog',
-			'Social-Media-APIs',
-			'CRM & Sales Tools',
+			'Composer (interne Tools bauen)',
 			'E2EE (TEE-gehosteter Server)'
 		]
 	},
 	{
-		id: 'avencto',
-		name: 'avenCTO',
-		role: 'Technik — interne Werkzeuge auf Zuruf',
+		id: 'avencmo',
+		name: 'avenCMO',
+		role: 'Markt — Reichweite, Inhalte, Pipeline',
 		eurPerMonth: 987,
 		revenueSharePct: 15,
-		features: ['4 Sparks', 'Max. 3 Std KI/Tag (Fair Use)', 'Composer (interne Tools bauen)']
+		highlight: true,
+		features: [
+			'4 Sparks',
+			'Max. 3 Std KI/Tag (Fair Use)',
+			'Blog',
+			'Social-Media-APIs',
+			'CRM & Sales Tools'
+		]
 	},
 	{
 		id: 'avencpo',

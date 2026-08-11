@@ -83,7 +83,12 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							</p>
 						</div>
 					</div>
-					<ul class="mt-4 space-y-1.5 text-left text-[12px] leading-snug text-foreground/75">
+					<p
+						class="mt-3 text-center font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-tuscan-sun"
+					>
+						Jeder Name existiert genau einmal
+					</p>
+					<ul class="mt-3 space-y-1.5 text-left text-[12px] leading-snug text-foreground/75">
 						<li>
 							<strong class="font-medium text-foreground/82">4&nbsp;Std</strong>
 							avenCEO Test‑Zugang
@@ -91,6 +96,12 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 						<li>
 							z.&nbsp;B. <strong class="font-semibold text-foreground/82">maia</strong>
 							<span class="text-foreground/55">· maia.aven.ceo · mail@maia.aven.ceo</span>
+						</li>
+						<li>
+							<strong class="font-medium text-foreground/82">Einmalig vergeben</strong>
+							<span class="text-foreground/55">
+								· wer ihn zuerst nimmt, behält ihn — es gibt keinen zweiten</span
+							>
 						</li>
 					</ul>
 					<div class="mt-3 flex min-h-0 flex-1 flex-col justify-end gap-2">

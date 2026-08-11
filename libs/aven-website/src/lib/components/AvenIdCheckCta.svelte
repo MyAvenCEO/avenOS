@@ -31,7 +31,7 @@ const wrapperClass =
 
 <form onsubmit={submit} class={wrapperClass} aria-label="avenCEO‑Name zur Warteliste">
 	<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-tuscan-sun">
-		Dein Name im Netz
+		Jeder Name nur einmal · wer zuerst kommt
 	</p>
 	<h3
 		class="mt-2 text-xl font-semibold tracking-tight text-pretty text-foreground sm:text-2xl md:text-[1.65rem]"
