@@ -281,7 +281,7 @@ const chainSteps = [
 	<footer
 		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] font-mono text-foreground/30"
 	>
-		Aven Maia · avenOS
+		avenCEO · avenOS · Own your life
 	</footer>
 </div>
 

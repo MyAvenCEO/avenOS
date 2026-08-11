@@ -1,8 +1,8 @@
 <svelte:head>
-	<title>aven.ceo — avenCEO · dein privates zweites Gehirn für Gründer &amp; CEOs</title>
+	<title>aven.ceo — Own your life · avenCEO</title>
 	<meta
 		name="description"
-		content="Lieber Gründer und CEO: 10+ Stunden mehr Zeit pro Woche für Vision, Produkt und das Leben, das wirklich zählt. Dein avenCEO verwandelt deine Arbeitsweise in selbstoptimierende KI-Skills und arbeitet einen Großteil deines zeitraubenden Unternehmer-Alltags ab."
+		content="Der klassische Job stirbt in der Post-AGI-Welt. Sicher ist nur, was dir gehört: Werde Gründer mit deinem avenCEO — 1 Mensch + 1 Aven = ein Spark, die Firma der Zukunft. Own your life: deine Einkommensströme, deine Daten, deine KI."
 	>
 </svelte:head>
 
@@ -60,33 +60,136 @@ const letterDate = (() => {
 	>
 		<div class="mx-auto max-w-3xl text-center">
 			<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-				Lieber Gründer und CEO,
+				An alle, die von ihrer Arbeit leben,
 			</p>
 			<h1
 				id="home-hero-heading"
-				class="mt-5 font-sans text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl md:text-[2.1rem] md:leading-[1.12]"
+				class="mt-5 font-sans text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-4xl md:text-[2.75rem] md:leading-[1.08]"
 			>
-				10+ Stunden mehr Zeit pro Woche
+				Own your life.
 			</h1>
 			<p
 				class="mx-auto mt-4 max-w-2xl font-serif text-[clamp(1.15rem,2.8vw,1.55rem)] font-light leading-snug tracking-tight text-foreground/78"
 			>
-				Für Vision, Produkt und das Leben, das wirklich zählt.
+				Dein Leben. Deine Einkommensströme. Deine Daten. Deine&nbsp;KI.
 			</p>
 			<div
 				class="mx-auto mt-10 max-w-xl space-y-4 border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
 			>
 				<p class="text-pretty">
-					<strong class="font-medium text-foreground">Dein avenCEO</strong>
-					verwandelt deine Arbeitsweise in
-					<strong class="font-medium text-foreground">selbstoptimierende KI‑Skills</strong>
-					und arbeitet so einen Großteil
-					<strong class="font-medium text-foreground"
-						>deines zeitraubenden Unternehmer‑Alltags</strong
-					>
-					ab.
+					Der klassische Job verschwindet gerade — leise, Quartal für Quartal. In der Post‑AGI‑Welt
+					verkauft niemand mehr sicher seine Arbeitszeit.
+					<strong class="font-medium text-foreground">Sicher ist nur, was dir gehört.</strong>
+				</p>
+				<p class="text-pretty">
+					Die Antwort ist nicht der nächste Job. Die Antwort ist
+					<strong class="font-medium text-foreground">Eigentum</strong>: Werde Gründerin oder
+					Gründer von mindestens einem Asset — und lass
+					<strong class="font-medium text-foreground">deinen avenCEO</strong>
+					die Firma dazu betreiben.
 				</p>
 			</div>
+		</div>
+	</section>
+
+	<!-- The shift: the FOMO that is simply true — post-AGI touches everyone. -->
+	<section
+		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
+		aria-labelledby="shift-heading"
+	>
+		<div class="mx-auto max-w-4xl">
+			<div class="mx-auto max-w-2xl text-center">
+				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-tuscan-sun">
+					Post‑AGI · Warum jetzt
+				</p>
+				<h2
+					id="shift-heading"
+					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+				>
+					Der Angestellten‑Job stirbt. Eigentum bleibt.
+				</h2>
+			</div>
+			<div class="mt-10 grid gap-4 sm:grid-cols-3">
+				<div class="rounded-2xl border border-border/40 bg-white/45 p-5 ring-1 ring-black/4">
+					<p class="font-mono text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/42">
+						Arbeitszeit
+					</p>
+					<p class="mt-3 text-[14px] leading-snug text-foreground/78">
+						KI erledigt Angestellten‑Arbeit schneller, billiger, rund um die Uhr. Wer nur Zeit
+						verkauft, konkurriert ab jetzt mit
+						<strong class="font-medium text-foreground/88">Grenzkosten nahe null</strong>.
+					</p>
+				</div>
+				<div class="rounded-2xl border border-border/40 bg-white/45 p-5 ring-1 ring-black/4">
+					<p class="font-mono text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/42">
+						Betroffen: alle
+					</p>
+					<p class="mt-3 text-[14px] leading-snug text-foreground/78">
+						Das ist keine Branchen‑Nachricht. Es betrifft
+						<strong class="font-medium text-foreground/88">jeden einzelnen Menschen</strong>, der
+						von einem Gehalt lebt — auch die, die es noch nicht spüren.
+					</p>
+				</div>
+				<div class="rounded-2xl border border-border/40 bg-white/45 p-5 ring-1 ring-black/4">
+					<p class="font-mono text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/42">
+						Die Sicherheit von morgen
+					</p>
+					<p class="mt-3 text-[14px] leading-snug text-foreground/78">
+						Post‑AGI‑Sicherheit heißt:
+						<strong class="font-medium text-foreground/88">mindestens 1 Asset besitzen</strong>
+						— ein Produkt, einen Einkommensstrom, deine Daten, deine KI.
+					</p>
+				</div>
+			</div>
+			<p
+				class="mx-auto mt-10 max-w-xl text-center font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
+			>
+				Der beste Zeitpunkt anzufangen ist,
+				<strong class="font-sans font-semibold text-tuscan-sun">bevor es alle tun</strong>.
+			</p>
+		</div>
+	</section>
+
+	<!-- The thesis: the company of the future, named. -->
+	<section
+		class="border-b border-border/40 bg-linear-to-b from-white/25 via-white/10 to-transparent px-5 py-16 sm:px-8 sm:py-24"
+		aria-labelledby="spark-heading"
+	>
+		<div class="mx-auto max-w-3xl text-center">
+			<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
+				Die Firma der Zukunft
+			</p>
+			<h2
+				id="spark-heading"
+				class="mt-5 font-serif text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
+			>
+				1&nbsp;Mensch + 1&nbsp;Aven =
+				<span class="text-tuscan-sun">ein Spark</span>.
+			</h2>
+			<div
+				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
+			>
+				<p class="text-pretty">
+					Die Firma der Zukunft hat kein Büro, keine Abteilungen, keine vierzig Angestellten. Sie
+					ist ein Funke:
+					<strong class="font-medium text-foreground/88">ein Mensch mit einer Vision</strong> und
+					<strong class="font-medium text-foreground/88"
+						>ein Aven, der die ganze Firma dazu betreibt</strong
+					>
+					— Operations, Technik, Markt, Produkt.
+				</p>
+				<p class="text-pretty">
+					Das nennen wir einen
+					<strong class="font-medium text-foreground/88">Spark</strong>. Deshalb rechnet avenCEO
+					nicht in Seats, sondern in Sparks — dein erster ist dein Leben selbst.
+				</p>
+			</div>
+			<p
+				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
+			>
+				Jeder Mensch wird Gründer. Alles, was du dazu brauchst, ist
+				<strong class="font-sans font-semibold text-foreground">dein avenCEO</strong>.
+			</p>
 		</div>
 	</section>
 
@@ -97,7 +200,7 @@ const letterDate = (() => {
 		<div class="mx-auto max-w-5xl">
 			<header class="mx-auto max-w-2xl text-center">
 				<p class="font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-foreground/40">
-					Von den Gründern
+					Die ersten zwei Sparks
 				</p>
 				<h2
 					class="mt-2 font-serif text-[clamp(1.5rem,4vw,2.15rem)] font-light leading-tight tracking-tight text-foreground/90"
@@ -183,9 +286,9 @@ const letterDate = (() => {
 						</div>
 					</div>
 					<p
-						class="mt-4 border-t border-border/25 pt-3 text-center font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-foreground/48 sm:text-[10px]"
+						class="mt-4 border-t border-border/25 pt-3 text-center font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-tuscan-sun sm:text-[10px]"
 					>
-						10× Founder
+						= ein Spark
 					</p>
 				</div>
 
@@ -254,9 +357,9 @@ const letterDate = (() => {
 						</div>
 					</div>
 					<p
-						class="mt-4 border-t border-border/25 pt-3 text-center font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-foreground/48 sm:text-[10px]"
+						class="mt-4 border-t border-border/25 pt-3 text-center font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-tuscan-sun sm:text-[10px]"
 					>
-						10× Founder
+						= ein Spark
 					</p>
 				</div>
 			</div>
@@ -269,18 +372,17 @@ const letterDate = (() => {
 		<div class="mx-auto max-w-6xl">
 			<article class="mx-auto max-w-2xl text-center">
 				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
-					10× Founder · Zweites Gehirn
+					So baust du deinen Spark
 				</p>
 				<h2
 					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl md:text-[2.125rem]"
 				>
-					So wird dein avenCEO zu deinem zweiten Gehirn&nbsp;— vier Schritte zum Tempo eines 10×
-					Founders.
+					Vom Intent zum Asset&nbsp;— vier Schritte, bis dein avenCEO die Firma trägt.
 				</h2>
 				<p
 					class="mt-6 text-[1.05rem] font-medium leading-snug text-foreground/82 sm:text-[1.125rem]"
 				>
-					Wie ein 10× Founder arbeitest du nicht alles zweimal mit dem Kopf: Du formulierst einen
+					Als Eigentümer arbeitest du nicht alles zweimal mit dem Kopf: Du formulierst einen
 					<strong class="font-medium text-foreground/85">Intent</strong>
 					—
 					<strong class="font-medium text-foreground/85">dein avenCEO</strong>
@@ -387,12 +489,12 @@ const letterDate = (() => {
 		<div class="mx-auto max-w-2xl">
 			<div class="text-center">
 				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-					Benefits
+					Own your life
 				</p>
 				<h2
 					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					Was du gewinnst
+					Was dir gehört
 				</h2>
 			</div>
 			<ul class="mt-8 space-y-3 text-[14px] leading-snug text-foreground/76 sm:text-[15px]">
@@ -401,30 +503,10 @@ const letterDate = (() => {
 						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
 						aria-hidden="true"
 					></span>
-					<span>10+ Stunden pro Woche mehr Zeit für das, was dir wirklich wichtig ist</span>
-				</li>
-				<li class="flex gap-3">
 					<span
-						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
-						aria-hidden="true"
-					></span>
-					<span>Weniger mentaler Ballast, klarerer Kopf, mehr Energie</span>
-				</li>
-				<li class="flex gap-3">
-					<span
-						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
-						aria-hidden="true"
-					></span>
-					<span>Ein persönliches Asset, das du über alle Unternehmen hinweg mitnimmst</span>
-				</li>
-				<li class="flex gap-3">
-					<span
-						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
-						aria-hidden="true"
-					></span>
-					<span
-						>Höchste Datensicherheit — Ende‑zu‑Ende‑Verschlüsselung mit Schlüsseln, die nur du
-						kontrollierst</span
+						><strong class="font-medium text-foreground/85">Deine Einkommensströme</strong>
+						— Produkte, Shop, Kunden: aufgebaut unter deinem Namen, nicht auf einer Plattform, die
+						dich morgen aussperrt</span
 					>
 				</li>
 				<li class="flex gap-3">
@@ -433,9 +515,39 @@ const letterDate = (() => {
 						aria-hidden="true"
 					></span>
 					<span
-						><strong class="font-medium text-foreground/85"
-							>Kein Vendor Lock-in — dein zweites Gehirn gehört dir.</strong
-						></span
+						><strong class="font-medium text-foreground/85">Deine Daten</strong>
+						— Ende‑zu‑Ende verschlüsselt, mit Schlüsseln, die nur du kontrollierst</span
+					>
+				</li>
+				<li class="flex gap-3">
+					<span
+						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
+						aria-hidden="true"
+					></span>
+					<span
+						><strong class="font-medium text-foreground/85">Deine KI</strong>
+						— dein Aven gehört dir: Open‑Source‑Stack, selbst hostbar, bis auf eigene Hardware —
+						kein Vendor Lock‑in</span
+					>
+				</li>
+				<li class="flex gap-3">
+					<span
+						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
+						aria-hidden="true"
+					></span>
+					<span
+						><strong class="font-medium text-foreground/85">Dein Name</strong>
+						— maia.aven.ceo und mail@maia.aven.ceo: deine Identität im Netz, einmalig vergeben</span
+					>
+				</li>
+				<li class="flex gap-3">
+					<span
+						class="mt-1.5 size-2 shrink-0 rounded-full bg-tuscan-sun ring-2 ring-black/8"
+						aria-hidden="true"
+					></span>
+					<span
+						><strong class="font-medium text-foreground/85">Deine Zeit</strong>
+						— den Alltag betreibt dein Aven; du triffst die Entscheidungen, die Eigentümer treffen</span
 					>
 				</li>
 			</ul>
@@ -451,13 +563,13 @@ const letterDate = (() => {
 				<p
 					class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40 sm:text-[11px]"
 				>
-					Abos &amp; Daten
+					Own your stack
 				</p>
 				<h2
 					id="weniger-abos-heading"
 					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					Dieselbe Arbeit in einem Skill · weniger parallele Fremd‑Abos
+					Miete weniger. Besitze mehr.
 				</h2>
 				<p
 					class="mx-auto mt-4 max-w-2xl text-[15px] leading-snug text-foreground/68 sm:text-base sm:leading-relaxed"
@@ -486,6 +598,16 @@ const letterDate = (() => {
 
 	<section class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-16">
 		<div class="mx-auto max-w-2xl">
+			<div class="pb-6 text-center">
+				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+					Schritt 1
+				</p>
+				<h2
+					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+				>
+					Dein Name ist dein erster Asset.
+				</h2>
+			</div>
 			<AvenIdCheckCta variant="banner" />
 		</div>
 	</section>
@@ -493,7 +615,7 @@ const letterDate = (() => {
 	<footer
 		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] font-mono text-foreground/30"
 	>
-		Aven Maia · avenOS
+		avenCEO · avenOS · Own your life
 	</footer>
 </div>
 
