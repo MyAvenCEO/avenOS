@@ -60,7 +60,7 @@ const letterDate = (() => {
 	>
 		<div class="mx-auto max-w-3xl text-center">
 			<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-				An Gründer — und an Angestellte, die Gründer werden wollen,
+				An jeden Gründer — und jeden Angestellten, der es werden will,
 			</p>
 			<h1
 				id="home-hero-heading"
@@ -71,20 +71,17 @@ const letterDate = (() => {
 			<p
 				class="mx-auto mt-4 max-w-2xl font-serif text-[clamp(1.15rem,2.8vw,1.55rem)] font-light leading-snug tracking-tight text-foreground/78"
 			>
-				Dein Leben. Deine Einkommensströme. Deine Daten. Deine&nbsp;KI.
+				Es wird Zeit, dein Leben zu ownen.
 			</p>
 			<div
-				class="mx-auto mt-10 max-w-xl space-y-4 border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
+				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
 			>
 				<p class="text-pretty">
-					Der klassische Job verschwindet gerade — leise, Quartal für Quartal. In der Post‑AGI‑Welt
-					verkauft niemand mehr sicher seine Arbeitszeit.
-					<strong class="font-medium text-foreground">Sicher ist nur, was dir gehört.</strong>
-				</p>
-				<p class="text-pretty">
-					Die Antwort ist nicht der nächste Job. Die Antwort ist
-					<strong class="font-medium text-foreground">Eigentum</strong>: Werde Gründerin oder
-					Gründer von mindestens einem Asset — und lass
+					Der klassische Job verschwindet gerade — leise, Quartal für Quartal.
+					<strong class="font-medium text-foreground">Sicher ist nur, was dir gehört:</strong>
+					deine Einkommensströme, deine Daten, deine KI. Die Antwort ist nicht der nächste Job,
+					sondern <strong class="font-medium text-foreground">Eigentum</strong> — gründe mindestens
+					ein Asset und lass
 					<strong class="font-medium text-foreground">deinen avenCEO</strong>
 					die Firma dazu betreiben.
 				</p>
