@@ -547,8 +547,9 @@ const roadmap = [
 					So fängt dein souveränes Gründerleben an.
 				</h2>
 				<p class="mx-auto mt-3 max-w-lg text-[15px] leading-snug text-foreground/68 sm:text-base">
-					Setz dich auf die Warteliste — dein Name ist dein erstes Asset, und jeden gibt es nur
-					einmal.
+					avenCEO startet invite‑only: Die Warteliste wird der Reihe nach freigeschaltet —
+					<strong class="font-medium text-foreground/85">wer zuerst steht, gründet zuerst</strong>.
+					Und dein Name ist dein erstes Asset: Jeden gibt es nur einmal.
 				</p>
 			</div>
 			<AvenIdCheckCta variant="banner" />
