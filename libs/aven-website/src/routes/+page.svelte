@@ -494,13 +494,13 @@ const roadmap = [
 		<div class="mx-auto max-w-5xl">
 			<div class="mx-auto max-w-2xl text-center">
 				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
-					Skills Marketplace
+					Aven Skills
 				</p>
 				<h2
 					id="skills-preview-heading"
 					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					Fertige Skills für deinen Spark.
+					Fertige Skills für deinen Aven.
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
 					Dein Aven lernt per Skill — installieren statt entwickeln. Ein Auszug:
@@ -518,7 +518,7 @@ const roadmap = [
 					href="/skills"
 					class="inline-flex items-center gap-1.5 font-mono text-[12px] font-bold uppercase tracking-[0.18em] text-foreground/60 transition-colors hover:text-foreground"
 				>
-					Alle Skills im Marketplace →
+					Alle Skills ansehen →
 				</a>
 			</p>
 		</div>
