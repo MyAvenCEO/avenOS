@@ -74,53 +74,106 @@ const stattStacks = [
 					id="shift-heading"
 					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					JETZT ist der perfekte Moment, der Creator deines souveränen Lebens zu sein.
+					JETZT ist der perfekte Moment, der Creator deines vollen Lebenspotenzials zu sein.
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
 					<strong class="font-medium text-foreground/85">Post‑AGI</strong>
 					heißt einfach: KI erledigt fast jede Arbeit am Bildschirm so gut wie ein Mensch —
-					schreiben, planen, verkaufen — rund um die Uhr. Ab dann gibt es nur zwei Seiten: Entweder
-					du
-					<strong class="font-medium text-foreground/85">besitzt Assets</strong>
-					— oder dein Leben gehört denen, die welche besitzen.
+					schreiben, planen, verkaufen — rund um die Uhr. Ab dann gibt es nur zwei Drehbücher für
+					dein Leben:
 				</p>
 			</div>
-			<div class="mt-10 grid gap-4 sm:grid-cols-3">
-				<div class="rounded-2xl border border-border/40 bg-white/45 p-5 ring-1 ring-black/4">
-					<p class="font-mono text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/42">
-						Arbeitszeit
+
+			<!-- The emotional fork: the same future, seen from both sides. -->
+			<div class="mt-10 grid gap-4 sm:grid-cols-2">
+				<div class="rounded-2xl bg-[#222e49] p-6 ring-1 ring-black/20 sm:p-7">
+					<p class="font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-white/40">
+						Ohne Assets
 					</p>
-					<p class="mt-3 text-[14px] leading-snug text-foreground/78">
-						KI erledigt Kopfarbeit schneller, billiger, rund um die Uhr. Wer nur Zeit verkauft,
-						konkurriert ab jetzt mit
-						<strong class="font-medium text-foreground/88">dem Preis von Strom</strong>.
+					<h3 class="mt-2 text-lg font-semibold tracking-tight text-white sm:text-xl">
+						Das fremdbestimmte Drehbuch
+					</h3>
+					<ul class="mt-4 space-y-2.5 text-[14px] leading-snug text-white/72">
+						<li class="flex gap-2.5">
+							<span
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-white/25"
+								aria-hidden="true"
+							></span>
+							<span>Deine Arbeitszeit konkurriert mit dem Preis von Strom.</span>
+						</li>
+						<li class="flex gap-2.5">
+							<span
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-white/25"
+								aria-hidden="true"
+							></span>
+							<span
+								>Jedes Gehalt ist ersetzbar — auch deins, auch wenn du es noch nicht spürst.</span
+							>
+						</li>
+						<li class="flex gap-2.5">
+							<span
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-white/25"
+								aria-hidden="true"
+							></span>
+							<span
+								>Deine Daten, deine Aufmerksamkeit, dein Alltag gehören den Plattformen anderer.</span
+							>
+						</li>
+					</ul>
+					<p
+						class="mt-5 border-t border-white/10 pt-4 font-serif text-[15px] font-light leading-snug text-white/85 sm:text-base"
+					>
+						Dein Leben läuft nach dem Plan von jemand anderem.
 					</p>
 				</div>
-				<div class="rounded-2xl border border-border/40 bg-white/45 p-5 ring-1 ring-black/4">
-					<p class="font-mono text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/42">
-						Betroffen: alle
+
+				<div class="rounded-2xl bg-tuscan-sun/55 p-6 ring-1 ring-black/6 sm:p-7">
+					<p class="font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-foreground/45">
+						Mit deinen Assets
 					</p>
-					<p class="mt-3 text-[14px] leading-snug text-foreground/78">
-						Keine Branchen‑Nachricht: Es trifft
-						<strong class="font-medium text-foreground/88">jeden, der von einem Gehalt lebt</strong>
-						— auch die, die es heute noch nicht spüren.
-					</p>
-				</div>
-				<div class="rounded-2xl border border-border/40 bg-white/45 p-5 ring-1 ring-black/4">
-					<p class="font-mono text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/42">
-						Die Sicherheit von morgen
-					</p>
-					<p class="mt-3 text-[14px] leading-snug text-foreground/78">
-						Post‑AGI‑Sicherheit heißt Eigentum: ein Portfolio aus
-						<strong class="font-medium text-foreground/88">5+ Assets</strong>
-						— Produkte, Einkommensströme, deine Daten, deine KI, dein Name.
+					<h3 class="mt-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+						Das selbstbestimmte Drehbuch
+					</h3>
+					<ul class="mt-4 space-y-2.5 text-[14px] leading-snug text-foreground/75">
+						<li class="flex gap-2.5">
+							<span
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/30"
+								aria-hidden="true"
+							></span>
+							<span
+								>Dein avenCEO arbeitet rund um die Uhr — für dich, nicht für einen Konzern.</span
+							>
+						</li>
+						<li class="flex gap-2.5">
+							<span
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/30"
+								aria-hidden="true"
+							></span>
+							<span
+								>Ein Portfolio aus 5+ Assets: Produkte, Einkommensströme, deine Daten, deine KI,
+								dein Name.</span
+							>
+						</li>
+						<li class="flex gap-2.5">
+							<span
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/30"
+								aria-hidden="true"
+							></span>
+							<span>Du gestaltest — Vision, Beziehungen, das Leben, das wirklich zählt.</span>
+						</li>
+					</ul>
+					<p
+						class="mt-5 border-t border-foreground/10 pt-4 font-serif text-[15px] font-light leading-snug text-foreground sm:text-base"
+					>
+						Dein volles Potenzial, in deiner Hand.
 					</p>
 				</div>
 			</div>
+
 			<p
 				class="mx-auto mt-10 max-w-xl text-center font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
 			>
-				Der beste Zeitpunkt anzufangen ist,
+				Beide Drehbücher beginnen heute. Wähle deins,
 				<strong class="font-sans font-semibold text-tuscan-sun">bevor es alle tun</strong>.
 			</p>
 		</div>
