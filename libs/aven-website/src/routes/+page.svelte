@@ -151,19 +151,15 @@ const roadmap = [
 					JETZT ist der perfekte Moment, der Creator deines vollen Lebenspotenzials zu sein.
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
-					<strong class="font-medium text-foreground/85">Post‑AGI</strong>
-					heißt einfach: KI erledigt fast jede Arbeit so gut wie ein Mensch —
-					<strong class="font-medium text-foreground/85"
-						>Kopfarbeit heute, mit Robotern bald auch Handarbeit</strong
-					>
-					— rund um die Uhr, zum Preis von Strom.
-				</p>
-				<p class="mx-auto mt-3 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
-					Damit bricht der Deal, auf dem die alte Wirtschaft steht:
-					<strong class="font-medium text-foreground/85">Zeit gegen Geld</strong>. Wenn niemand mehr
-					seine Arbeitszeit verkaufen kann, bleibt nur eine Einkommensquelle übrig —
-					<strong class="font-medium text-foreground/85">das, was dir gehört</strong>. Ab dann gibt
-					es nur zwei Drehbücher für dein Leben:
+					<strong class="font-medium text-foreground/85">Post‑AGI‑Ökonomie</strong>
+					heißt: Die Basis der alten Wirtschaft —
+					<strong class="font-medium text-foreground/85">Zeit gegen Geld</strong>
+					— kollabiert, sobald KI fast jede Arbeit so gut erledigt wie ein Mensch: Kopfarbeit heute,
+					mit Robotern bald auch Handarbeit, rund um die Uhr,
+					<strong class="font-medium text-foreground/85">zum Preis von Strom</strong>. Dann bleibt
+					nur eine Einkommensquelle —
+					<strong class="font-medium text-foreground/85">das, was dir gehört</strong>
+					— und nur zwei Drehbücher für dein Leben:
 				</p>
 			</div>
 
