@@ -198,12 +198,12 @@ describe('composer recipe (0137): CLARIFY holds for the human', () => {
 		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
 		expect(composer.state.phase).toBe('failed')
+		// plan gets ONE resample; a lane that keeps failing spends it too
 		const history = composer.state.history as { excerpt: string }[]
-		expect(history.length).toBe(1)
+		expect(history.length).toBe(2)
 		expect(history[0].excerpt).toContain('lane_error')
 		expect(history[0].excerpt).toContain('boom upstream (504)')
-		// and the note tells the truth — this was no three-round scrum
-		expect(String(composer.state.note)).toContain('died before drafting')
+		expect(String(composer.state.note)).toContain('retries are spent')
 	})
 })
 
@@ -341,7 +341,7 @@ describe('composer recipe (0137): DRAFT ⇄ PROBE is the declared scrum cycle', 
 		// the stepper shows where it died, and the note owns the spent rounds
 		const rows = composer.state.stepRows as { mark: string }[]
 		expect(rows.some((r) => r.mark === '✕')).toBe(true)
-		expect(String(composer.state.note)).toContain('three rounds')
+		expect(String(composer.state.note)).toContain('retries are spent')
 	})
 })
 

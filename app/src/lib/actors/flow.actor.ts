@@ -95,7 +95,7 @@ function present(s) {
 		s.holding
 			? 'Answer by voice \\u2014 one answer may cover all questions.'
 			: s.phase === 'failed' && s.tries > 0
-				? 'Say it again or differently \\u2014 three rounds were spent.'
+				? 'Say it again or differently \\u2014 the retries are spent.'
 				: s.phase === 'failed'
 					? 'The run died before drafting \\u2014 the error below says why.'
 					: s.phase === 'staged'

@@ -269,6 +269,19 @@ export interface CompleteOptions {
 	onDelta?: (delta: { reasoning?: string; text?: string }) => void
 }
 
+/**
+ * Degeneration guard for the machine lane: a model stuck in a repetition
+ * loop ("stop_stop_stop…", "_z_z_z_z…") pads until max_tokens — minutes of
+ * burn for guaranteed garbage. A ≥12-char unit repeated 7+ times back to
+ * back does not occur in real JSON or code; catching it aborts the stream
+ * early and turns the burn into a structured lane failure the scrum round
+ * can retry.
+ */
+export function looksDegenerate(tail: string): boolean {
+	if (tail.length < 400) return false
+	return /(.{12,64}?)\1{6,}/s.test(tail.slice(-512))
+}
+
 export async function complete(
 	messages: ChatMessage[],
 	options: CompleteOptions = {}
@@ -291,6 +304,10 @@ export async function complete(
 	const decoder = new TextDecoder()
 	let buffer = ''
 	let text = ''
+	// The degeneration guard watches BOTH lanes: answer text and reasoning —
+	// repetition loops usually start in the deliberation.
+	let watched = ''
+	let nextCheck = 1024
 	try {
 		while (true) {
 			const { done, value } = await reader.read()
@@ -307,13 +324,23 @@ export async function complete(
 					const delta = JSON.parse(data)?.choices?.[0]?.delta
 					if (typeof delta?.content === 'string' && delta.content !== '') {
 						text += delta.content
+						watched += delta.content
 						options.onDelta?.({ text: delta.content })
 					}
 					if (typeof delta?.reasoning_content === 'string' && delta.reasoning_content !== '') {
+						watched += delta.reasoning_content
 						options.onDelta?.({ reasoning: delta.reasoning_content })
 					}
 				} catch {
 					// partial frames cannot occur (blank-line buffering); skip junk
+				}
+			}
+			if (watched.length >= nextCheck) {
+				nextCheck = watched.length + 1024
+				if (looksDegenerate(watched)) {
+					throw new Error(
+						`degenerate model output — repetition loop after ~${Math.round(watched.length / 4)} tokens`
+					)
 				}
 			}
 		}

@@ -35,7 +35,9 @@ export const COMPOSER_RECIPE: Recipe = {
 	steps: [
 		{ actor: 'clarify', label: 'Clarify', hold: 'human' },
 		{ actor: 'scout', label: 'Scout' },
-		{ actor: 'plan', label: 'Plan' },
+		// A plan that dies (lane failure, degeneration loop) gets ONE resample
+		// — it shares the run's failure budget with the scrum cycle below.
+		{ actor: 'plan', label: 'Plan', onFail: { backTo: 'plan', maxRuns: 2 } },
 		{ actor: 'draft', label: 'Draft', onFail: { backTo: 'draft', maxRuns: 3 } },
 		{ actor: 'probe', label: 'Probe', onFail: { backTo: 'draft', maxRuns: 3 } },
 		{ actor: 'stage', label: 'Stage', hold: 'button' }
