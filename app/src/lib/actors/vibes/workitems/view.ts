@@ -4,6 +4,10 @@ import type { ViewDef } from '@avenos/aven-ui'
  * The two faces of workitems, as validated JSON: the list and the board —
  * one actor, one reducer, two windows. Every interactive element sends an
  * event the sandboxed logic reduces; the view itself computes nothing.
+ *
+ * `$each` sits ON the container node — a child-wrapped `$each` inserts an
+ * anonymous div between container and items, which breaks grid/flex
+ * relationships (the stacked-kanban bug).
  */
 
 export const workitemsListView: ViewDef = {
@@ -49,37 +53,33 @@ export const workitemsListView: ViewDef = {
 			{
 				tag: 'ul',
 				class: 'wi-list',
-				children: [
-					{
-						$each: {
-							items: '$rows',
-							template: {
-								tag: 'li',
-								class: '$$rowClass',
-								children: [
-									{
-										tag: 'input',
-										attrs: {
-											type: 'checkbox',
-											checked: '$$checked',
-											'aria-label': 'Toggle done'
-										},
-										$on: { change: { send: 'TOGGLE', payload: { id: '$$id' } } }
-									},
-									{ class: 'wi-row-title', text: '$$title' },
-									{ class: '$$badgeClass', text: '$$statusLabel' },
-									{
-										tag: 'button',
-										class: 'wi-delete',
-										attrs: { type: 'button', 'aria-label': 'Delete' },
-										text: '×',
-										$on: { click: { send: 'DELETE', payload: { id: '$$id' } } }
-									}
-								]
+				$each: {
+					items: '$rows',
+					template: {
+						tag: 'li',
+						class: '$$rowClass',
+						children: [
+							{
+								tag: 'input',
+								attrs: {
+									type: 'checkbox',
+									checked: '$$checked',
+									'aria-label': 'Toggle done'
+								},
+								$on: { change: { send: 'TOGGLE', payload: { id: '$$id' } } }
+							},
+							{ class: 'wi-row-title', text: '$$title' },
+							{ class: '$$badgeClass', text: '$$statusLabel' },
+							{
+								tag: 'button',
+								class: 'wi-delete',
+								attrs: { type: 'button', 'aria-label': 'Delete' },
+								text: '×',
+								$on: { click: { send: 'DELETE', payload: { id: '$$id' } } }
 							}
-						}
+						]
 					}
-				]
+				}
 			},
 			{
 				class: 'wi-foot',
@@ -115,48 +115,40 @@ export const workitemsBoardView: ViewDef = {
 			},
 			{
 				class: 'wi-board',
-				children: [
-					{
-						$each: {
-							items: '$columns',
-							template: {
-								class: 'wi-column',
+				$each: {
+					items: '$columns',
+					template: {
+						class: 'wi-column',
+						children: [
+							{
+								class: 'wi-column-head',
 								children: [
-									{
-										class: 'wi-column-head',
+									{ class: 'wi-column-label', text: '$$label' },
+									{ class: 'wi-column-count', text: '$$count' }
+								]
+							},
+							{
+								class: 'wi-column-body',
+								$each: {
+									items: '$$rows',
+									template: {
+										class: 'wi-card',
 										children: [
-											{ class: 'wi-column-label', text: '$$label' },
-											{ class: 'wi-column-count', text: '$$count' }
-										]
-									},
-									{
-										class: 'wi-column-body',
-										children: [
+											{ class: 'wi-card-title', text: '$$title' },
 											{
-												$each: {
-													items: '$$rows',
-													template: {
-														class: 'wi-card',
-														children: [
-															{ class: 'wi-card-title', text: '$$title' },
-															{
-																tag: 'button',
-																class: '$$badgeClass',
-																attrs: { type: 'button' },
-																text: '$$statusLabel',
-																$on: { click: { send: 'CYCLE', payload: { id: '$$id' } } }
-															}
-														]
-													}
-												}
+												tag: 'button',
+												class: '$$badgeClass',
+												attrs: { type: 'button' },
+												text: '$$statusLabel',
+												$on: { click: { send: 'CYCLE', payload: { id: '$$id' } } }
 											}
 										]
 									}
-								]
+								}
 							}
-						}
+						]
 					}
-				]
+				}
 			}
 		]
 	}

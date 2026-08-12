@@ -5,7 +5,12 @@ import { type StyleDef, withBrand } from '@avenos/aven-ui'
  * serve the list and the board, so the two windows read as one app.
  */
 const selectors: StyleDef['selectors'] = {
-	'.wi-shell': { display: 'flex', flexDirection: 'column', gap: 'var(--gap-section)' },
+	'.wi-shell': {
+		width: '100%',
+		display: 'flex',
+		flexDirection: 'column',
+		gap: 'var(--gap-section)'
+	},
 
 	'.wi-head': {
 		display: 'flex',
@@ -155,4 +160,8 @@ const selectors: StyleDef['selectors'] = {
 	'.wi-card .wi-badge': { alignSelf: 'flex-start', cursor: 'pointer' }
 }
 
-export const workitemsStyle: StyleDef = withBrand({ selectors })
+/**
+ * Task surfaces breathe at 6xl (72rem) — wider than the brand's 56rem
+ * default; the token override wins over the brand layer.
+ */
+export const workitemsStyle: StyleDef = withBrand({ tokens: { 'max-w': '72rem' }, selectors })
