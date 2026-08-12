@@ -218,6 +218,18 @@ export class WorkItemsActor extends Actor {
 		return this.vibeState
 	}
 
+	/**
+	 * The membrane seam: raw model text is parsed by the SANDBOXED shape(),
+	 * never by the host. Garbage returns null and the state stays exactly
+	 * what it was.
+	 */
+	shapeModelText(rawText: string): { state?: Record<string, unknown>; ops?: unknown[] } | null {
+		if (!this.#session) return null
+		const shaped = this.#session.shape(this.vibeState, rawText)
+		if (shaped?.state) this.vibeState = shaped.state
+		return shaped
+	}
+
 	get items(): WorkItem[] {
 		return (this.vibeState.items as WorkItem[]) ?? []
 	}

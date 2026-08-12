@@ -6,7 +6,8 @@ import {
 	keepsRecords,
 	type Llm,
 	llmSettings,
-	manifestProse
+	manifestProse,
+	shapesModelText
 } from './actor'
 import { singleton } from './singleton'
 import { type Bindings, rename, resolve, unifiable, unify } from './term'
@@ -65,8 +66,30 @@ export class MessageBus {
 		this.traceLog.push({ ...entry, seq: traceSeq++ })
 		if (this.traceLog.length > 200) this.traceLog.splice(0, this.traceLog.length - 200)
 	}
-	/** The one LLM in the system, injected once; actors reach it only via ask. */
-	llm?: Llm
+	/**
+	 * The model lane, derived — never injected. The registered `llm` ACTOR is
+	 * the only door to the model (abject: the LLM is a service actor); this
+	 * closure turns a message to it back into the plain Llm function ask()
+	 * and the execution engine consume. No llm actor registered = no lane.
+	 */
+	llmLane(): Llm | undefined {
+		const actor = this.#actors.get('llm')
+		if (!actor) return undefined
+		return async (system, question, settings) => {
+			const result = await actor.deliver('llm_complete', {
+				system,
+				question,
+				...(settings && { settings })
+			})
+			try {
+				const parsed = JSON.parse(result.record) as { ok?: boolean; text?: unknown }
+				if (parsed.ok !== false) return String(parsed.text ?? '')
+			} catch {
+				// fall through to the failure below
+			}
+			throw new Error(result.wire)
+		}
+	}
 	/**
 	 * How machine output is parsed out of model text; the app injects the
 	 * string-aware extractor. Default: plain JSON.parse, fine for tests.
@@ -180,7 +203,7 @@ export class MessageBus {
 		const actor = this.#actors.get(actorId)
 		const started = Date.now()
 		if (!actor) return `There is no actor ${actorId}.`
-		const answer = await actor.ask(question, this.llm)
+		const answer = await actor.ask(question, this.llmLane())
 		this.#record({
 			at: started,
 			kind: 'ask',
@@ -580,8 +603,9 @@ export class MessageBus {
 		}
 		const lane = llmSettings(actor.manifest)
 		if (lane) {
-			if (!this.llm) {
-				return { ok: false, out: { ok: false, error: 'llm actor without an injected LLM' } }
+			const llm = this.llmLane()
+			if (!llm) {
+				return { ok: false, out: { ok: false, error: 'no llm actor in the mesh' } }
 			}
 			const latest = keepsRecords(actor) ? actor.latestRecord?.() : undefined
 			const system =
@@ -597,7 +621,16 @@ export class MessageBus {
 			try {
 				// The actor's own lane: its manifest picks model and sampling; the
 				// json flag rides along so the server enforces object output.
-				const answer = await this.llm(system, JSON.stringify(payload), { ...lane, json: true })
+				const answer = await llm(system, JSON.stringify(payload), { ...lane, json: true })
+				// The membrane seam (0130): an actor whose vibe logic exports
+				// shape() parses the raw text INSIDE its sandbox — the host never
+				// interprets model output for it. Malformed text = structured
+				// failure, actor state untouched.
+				if (shapesModelText(actor)) {
+					const shaped = actor.shapeModelText(answer)
+					if (!shaped) throw new Error('the model answer did not shape into ops')
+					return { ok: true, out: shaped as unknown as Record<string, unknown> }
+				}
 				const parsed = this.extractJson(answer)
 				if (!parsed || typeof parsed !== 'object') throw new Error('not an object')
 				// The memory seam: a record-keeping actor remembers what it just

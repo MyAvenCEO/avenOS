@@ -6,6 +6,7 @@ import { Actor } from './actor'
 import { bus } from './bus'
 import { catalog } from './catalog'
 import { RecordActor } from './created.actor.svelte'
+import { LlmActor } from './llm.actor'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
 import { workItems } from './workitems.svelte'
@@ -144,24 +145,29 @@ export function summarizeCall(name: string, record: string): Omit<Activity, 'id'
  * Registration and the one LLM, in dependency order: work items first so the
  * chat's derived tool list contains them, the pipeline actors after.
  */
-// Over the RAW lane, deliberately: the prose stream strips braces as
-// anti-glitch armor, but ask() answers survive that fine while llm-actor
-// EXECUTION returns JSON that must arrive intact. Fast model — this lane
-// sits in the voice loop's latency budget.
-bus.llm = (system, question, settings) =>
-	complete(
-		[
-			{ role: 'system', content: system },
-			{ role: 'user', content: question }
-		],
-		{
-			// Default lane = the fast voice model; a manifest's own llm settings
-			// override it — an actor may pin its own model in its manifest.
-			model: settings?.model ?? 'qwen/qwen3.5-122b-a10b',
-			temperature: settings?.temperature,
-			json: (settings as { json?: boolean } | undefined)?.json
-		}
-	)
+// The model as a service ACTOR (0130): the mesh reaches the model only by
+// message to `llm`, and this transport is the single client of the server
+// proxy — model default, sampling, and JSON mode have one home.
+export const llmActor = singleton(
+	'aven.llm',
+	() =>
+		new LlmActor((system, question, settings) =>
+			complete(
+				[
+					{ role: 'system', content: system },
+					{ role: 'user', content: question }
+				],
+				{
+					// Default lane = the fast voice model; a manifest's own llm
+					// settings override it per actor.
+					model: settings?.model ?? 'qwen/qwen3.5-122b-a10b',
+					temperature: settings?.temperature,
+					json: settings?.json
+				}
+			)
+		)
+)
+bus.register(llmActor)
 bus.extractJson = extractJsonObject
 
 bus.register(workItems)

@@ -38,6 +38,37 @@ function pair() {
 	return { bus, source, sink }
 }
 
+/**
+ * The model as a service actor, faked for tests (0130): the bus derives its
+ * lane from the registered `llm` actor — no ambient function anywhere.
+ */
+function registerFakeLlm(
+	bus: MessageBus,
+	answer: (system: string, question: string, settings?: Record<string, unknown>) => string
+) {
+	bus.register(
+		new Actor(
+			{
+				id: 'llm',
+				name: 'LLM',
+				description: 'Fake model lane.',
+				tags: ['system'],
+				methods: []
+			},
+			{
+				llm_complete: async (p) => {
+					const text = answer(
+						String(p.system ?? ''),
+						String(p.question ?? ''),
+						(p.settings as Record<string, unknown>) ?? undefined
+					)
+					return { record: JSON.stringify({ ok: true, text }), wire: text }
+				}
+			}
+		)
+	)
+}
+
 describe('actor core', () => {
 	test('an envelope reaches the right handler', async () => {
 		const { bus } = pair()
@@ -78,10 +109,10 @@ describe('actor core', () => {
 	test('ask() with an LLM answers as itself, manifest as context', async () => {
 		const { bus } = pair()
 		let seenSystem = ''
-		bus.llm = async (system, question) => {
+		registerFakeLlm(bus, (system, question) => {
 			seenSystem = system
 			return `Antwort auf: ${question}`
-		}
+		})
 		const answer = await bus.ask('sink', 'Was brauchst du?')
 		expect(answer).toBe('Antwort auf: Was brauchst du?')
 		expect(seenSystem).toContain('Sink')
@@ -443,11 +474,11 @@ describe('execution engine (0129)', () => {
 		const bus = new MessageBus()
 		let seenSystem = ''
 		let seenPayload = ''
-		bus.llm = async (system, question) => {
+		registerFakeLlm(bus, (system, question) => {
 			seenSystem = system
 			seenPayload = question
 			return '{"termin":"Dienstag 14 Uhr"}'
-		}
+		})
 		bus.register(
 			new Actor({
 				id: 'kalender',
@@ -470,7 +501,7 @@ describe('execution engine (0129)', () => {
 		expect((last?.out as { termin: string }).termin).toBe('Dienstag 14 Uhr')
 	})
 
-	test('an llm:true actor without an injected LLM fails structured, not thrown', async () => {
+	test('an llm:true actor without an llm actor in the mesh fails structured, not thrown', async () => {
 		const bus = new MessageBus()
 		bus.register(
 			new Actor({
@@ -488,7 +519,7 @@ describe('execution engine (0129)', () => {
 		expect(run.status).toBe('failed')
 		const last = run.steps.at(-1)
 		expect(last?.ok).toBe(false)
-		expect(JSON.stringify(last?.out)).toContain('LLM')
+		expect(JSON.stringify(last?.out)).toContain('no llm actor')
 	})
 
 	test('a run records goal, status and per-step state', async () => {
@@ -517,10 +548,10 @@ describe('per-actor llm lane (manifest llm settings)', () => {
 	test('an llm actor with its own settings hands them to the injected model', async () => {
 		const bus = new MessageBus()
 		let seen: unknown = null
-		bus.llm = async (_system, _question, settings) => {
+		registerFakeLlm(bus, (_system, _question, settings) => {
 			seen = settings
 			return '{"summary":"done"}'
-		}
+		})
 		bus.register(
 			new Actor({
 				id: 'summarizer',
@@ -541,10 +572,10 @@ describe('per-actor llm lane (manifest llm settings)', () => {
 	test('llm true still executes on the default lane', async () => {
 		const bus = new MessageBus()
 		let seen: unknown = 'untouched'
-		bus.llm = async (_system, _question, settings) => {
+		registerFakeLlm(bus, (_system, _question, settings) => {
 			seen = settings
 			return '{"ok":true}'
-		}
+		})
 		bus.register(
 			new Actor({
 				id: 'plain',
@@ -585,7 +616,7 @@ describe('catalog (code is the source of truth)', () => {
 		const { catalog } = await import('../src/lib/actors/catalog')
 		const { withRecordMethods } = await import('../src/lib/actors/records')
 		const bus = new MessageBus()
-		bus.llm = async () => '{"title":"dentist","when":"Tuesday 14:00"}'
+		registerFakeLlm(bus, () => '{"title":"dentist","when":"Tuesday 14:00"}')
 		// The running app wraps each manifest in a RecordActor; its manifest
 		// augmentation is this pure function, so the mesh shape is identical.
 		for (const manifest of catalog) bus.register(new Actor(withRecordMethods(manifest)))
@@ -601,7 +632,7 @@ describe('catalog (code is the source of truth)', () => {
 
 	test('a successful llm execution is remembered by a record-keeping actor', async () => {
 		const bus = new MessageBus()
-		bus.llm = async () => '{"when":"Tuesday 14:00","what":"dentist"}'
+		registerFakeLlm(bus, () => '{"when":"Tuesday 14:00","what":"dentist"}')
 		const kept: unknown[] = []
 		class Keeper extends Actor {
 			remember(out: unknown) {
@@ -624,6 +655,54 @@ describe('catalog (code is the source of truth)', () => {
 		expect(run.status).toBe('ok')
 		expect(kept.length).toBe(1)
 		expect((kept[0] as { what: string }).what).toBe('dentist')
+	})
+})
+
+describe('the membrane seam (0130): actors shape their own model text', () => {
+	function shaper(shape: (raw: string) => { state?: Record<string, unknown> } | null) {
+		return new (class extends Actor {
+			shapeModelText(rawText: string) {
+				return shape(rawText)
+			}
+		})({
+			id: 'vibey',
+			name: 'Vibey',
+			description: 'Shapes its own model output.',
+			tags: [],
+			methods: [],
+			requires: [],
+			produces: ['thing(T)'],
+			llm: true
+		})
+	}
+
+	test('the sandbox-side shape wins over host extraction', async () => {
+		const bus = new MessageBus()
+		registerFakeLlm(bus, () => 'model prose the host must never parse {"x":1}')
+		let seenRaw = ''
+		bus.register(
+			shaper((raw) => {
+				seenRaw = raw
+				return { state: { shaped: true } }
+			})
+		)
+		// host extraction would have found {"x":1} — the actor's shape decides instead
+		bus.extractJson = () => {
+			throw new Error('the host must not parse model text for a shaping actor')
+		}
+		const run = await bus.satisfy('thing(T)')
+		expect(run.status).toBe('ok')
+		expect(seenRaw).toContain('model prose')
+		expect(JSON.stringify(run.steps.at(-1)?.out)).toContain('shaped')
+	})
+
+	test('malformed model output = structured failure, no state applied', async () => {
+		const bus = new MessageBus()
+		registerFakeLlm(bus, () => 'garbage that is not ops')
+		bus.register(shaper(() => null))
+		const run = await bus.satisfy('thing(T)')
+		expect(run.status).toBe('failed')
+		expect(JSON.stringify(run.steps.at(-1)?.out)).toContain('did not shape')
 	})
 })
 

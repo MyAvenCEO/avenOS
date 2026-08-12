@@ -128,6 +128,20 @@ export function keepsRecords(actor: Actor): actor is Actor & RecordKeeper {
 	return typeof (actor as Partial<RecordKeeper>).remember === 'function'
 }
 
+/**
+ * The membrane seam (0130): an actor whose sandboxed logic exports shape()
+ * parses raw model text ITSELF — the host hands the string in and receives
+ * structured ops or null, never interpreting the text. Duck-typed like the
+ * record seam.
+ */
+export interface ModelTextShaper {
+	shapeModelText(rawText: string): { state?: Record<string, unknown>; ops?: unknown[] } | null
+}
+
+export function shapesModelText(actor: Actor): actor is Actor & ModelTextShaper {
+	return typeof (actor as Partial<ModelTextShaper>).shapeModelText === 'function'
+}
+
 export interface Manifest {
 	id: string
 	name: string
