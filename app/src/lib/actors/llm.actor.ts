@@ -14,10 +14,24 @@ import { Actor, type LlmSettings } from './actor'
  * actor-model guarantee, accepted deliberately over parallel calls.
  */
 
+/**
+ * Host-side ride-alongs on the lane settings. They travel ONLY between host
+ * functions (cap impl → dispatch payload → transport) — never through the
+ * sandbox membrane and never into a request body: the transport picks them
+ * off before serializing.
+ */
+export interface LaneExtras {
+	json?: boolean
+	/** Abort seam: Stop kills the fetch, not just the reply stream. */
+	signal?: AbortSignal
+	/** Live progress: streamed reasoning/text while the model works. */
+	onDelta?: (delta: { reasoning?: string; text?: string }) => void
+}
+
 export type LlmTransport = (
 	system: string,
 	question: string,
-	settings?: LlmSettings & { json?: boolean }
+	settings?: LlmSettings & LaneExtras
 ) => Promise<string>
 
 export class LlmActor extends Actor {
@@ -53,7 +67,7 @@ export class LlmActor extends Actor {
 			llm_complete: async (p) => {
 				const settings =
 					p.settings && typeof p.settings === 'object'
-						? (p.settings as LlmSettings & { json?: boolean })
+						? (p.settings as LlmSettings & LaneExtras)
 						: undefined
 				const text = await this.#transport(
 					String(p.system ?? ''),

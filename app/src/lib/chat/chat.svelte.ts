@@ -188,6 +188,15 @@ export class Chat {
 		return !this.streaming
 	}
 
+	/**
+	 * The live turn's abort signal. Long-running tool work (the composer's and
+	 * negotiator's model lanes) hooks its fetches to it — pressing Stop must
+	 * stop the PROCESS, not just the reply stream.
+	 */
+	get signal(): AbortSignal | undefined {
+		return this.#abort?.signal
+	}
+
 	async send(text: string): Promise<void> {
 		const prompt = text.trim()
 		if (prompt === '' || this.streaming) return

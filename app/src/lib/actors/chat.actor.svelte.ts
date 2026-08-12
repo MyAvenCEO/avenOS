@@ -204,7 +204,10 @@ export const llmActor = singleton(
 					// settings override it per actor.
 					model: settings?.model ?? 'qwen/qwen3.5-122b-a10b',
 					temperature: settings?.temperature,
-					json: settings?.json
+					json: settings?.json,
+					// Host ride-alongs: Stop aborts the fetch, progress streams out.
+					signal: settings?.signal,
+					onDelta: settings?.onDelta
 				}
 			)
 		)
@@ -229,11 +232,22 @@ export const catalogActors = catalog.map((manifest) =>
 	singleton(`aven.actor.${manifest.id}`, () => new ReactiveActor(manifest))
 )
 for (const actor of catalogActors) bus.register(actor)
+/**
+ * The host seams both draft actors share: the live turn's abort signal (the
+ * Stop button must stop the PROCESS, not just the reply stream — chatActor
+ * is declared below, the closures evaluate lazily at call time) and the
+ * activity strip as progress line ("the process is visible, not magic").
+ */
+const turnSignal = () => chatActor.core.signal
+const showProgress = (note: string) => activity.show({ kind: 'doing', titles: [], note })
 /** The Negotiator (0131): drafts bridges between incompatible actors, HITL-gated. */
 class ReactiveNegotiator extends NegotiatorActor {
 	state = $state<Record<string, unknown>>({})
 }
-export const negotiatorActor = singleton('aven.negotiator', () => new ReactiveNegotiator(bus))
+export const negotiatorActor = singleton(
+	'aven.negotiator',
+	() => new ReactiveNegotiator(bus, { signal: turnSignal, onProgress: showProgress })
+)
 bus.register(negotiatorActor)
 /**
  * The Composer (0135): wish → proofs → drafted actor, staged live as "next".
@@ -244,7 +258,12 @@ class ReactiveComposer extends ComposerActor {
 }
 export const composerActor = singleton(
 	'aven.composer',
-	() => new ReactiveComposer(bus, (manifest) => new ReactiveActor(manifest))
+	() =>
+		new ReactiveComposer(bus, {
+			make: (manifest) => new ReactiveActor(manifest),
+			signal: turnSignal,
+			onProgress: showProgress
+		})
 )
 bus.register(composerActor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))

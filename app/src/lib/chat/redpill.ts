@@ -256,6 +256,12 @@ export interface CompleteOptions {
 	/** Enforce JSON output server-side (response_format json_object). */
 	json?: boolean
 	/**
+	 * Abort seam: pressing Stop must stop the PROCESS — without a signal the
+	 * chat turn dies but the design fetch keeps streaming and its result still
+	 * lands. Wired from the live turn's controller.
+	 */
+	signal?: AbortSignal
+	/**
 	 * Live progress: reasoning models stream their deliberation as
 	 * `reasoning_content` long before any answer text arrives. Surfacing it is
 	 * the difference between "working…" and actually watching the model think.
@@ -276,7 +282,8 @@ export async function complete(
 			model: options.model ?? COMPOSER_MODEL,
 			...(typeof options.temperature === 'number' && { temperature: options.temperature }),
 			...(options.json === true && { json: true })
-		})
+		}),
+		signal: options.signal
 	})
 	if (!response.ok || !response.body) throw new Error(await failureText(response))
 

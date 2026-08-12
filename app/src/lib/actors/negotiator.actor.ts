@@ -352,7 +352,11 @@ export function proxyManifest(draft: ProxyDraft): Manifest {
 }
 
 export class NegotiatorActor extends Actor {
-	constructor(bus: MessageBus) {
+	constructor(
+		bus: MessageBus,
+		options: { signal?: () => AbortSignal | undefined; onProgress?: (note: string) => void } = {}
+	) {
+		const progress = options.onProgress
 		super(
 			NEGOTIATOR_MANIFEST,
 			{},
@@ -368,13 +372,17 @@ export class NegotiatorActor extends Actor {
 						produces: actor.produces
 					}
 				},
-				ask: async (p) =>
-					await bus.ask(String(p.actor ?? ''), String(p.question ?? ''), 'negotiator'),
+				ask: async (p) => {
+					progress?.(`Negotiator interviews ${String(p.actor ?? '')}…`)
+					return await bus.ask(String(p.actor ?? ''), String(p.question ?? ''), 'negotiator')
+				},
 				complete: async (p) => {
+					progress?.('Negotiator drafts the bridge…')
 					const result = await bus.dispatch('negotiator', 'llm_complete', {
 						system: String(p.system ?? ''),
 						question: String(p.question ?? ''),
-						settings: { json: true }
+						// Stop must stop the draft, not just the reply stream.
+						settings: { json: true, signal: options.signal?.() }
 					})
 					try {
 						const parsed = JSON.parse(result.record) as { ok?: boolean; text?: unknown }

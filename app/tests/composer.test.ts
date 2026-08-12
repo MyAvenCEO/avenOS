@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { Actor, type Manifest } from '../src/lib/actors/actor'
 import { MessageBus } from '../src/lib/actors/bus'
-import { COMPOSER_SETTINGS, ComposerActor } from '../src/lib/actors/composer.actor'
+import {
+	COMPOSER_SETTINGS,
+	ComposerActor,
+	type ComposerOptions
+} from '../src/lib/actors/composer.actor'
 import { isStaged } from '../src/lib/actors/draft-pipeline'
 import { instanceWindows } from '../src/lib/actors/instance-windows'
 
@@ -76,7 +80,11 @@ interface LlmCall {
 }
 
 /** The model lane, faked: plan JSON, interview prose, and the draft. */
-function mesh(draftAnswer: string = JSON.stringify(HABIT_DRAFT), planAnswer: string = PLAN_ANSWER) {
+function mesh(
+	draftAnswer: string = JSON.stringify(HABIT_DRAFT),
+	planAnswer: string = PLAN_ANSWER,
+	options: ComposerOptions = {}
+) {
 	const bus = new MessageBus()
 	const calls: LlmCall[] = []
 	bus.register(
@@ -101,7 +109,7 @@ function mesh(draftAnswer: string = JSON.stringify(HABIT_DRAFT), planAnswer: str
 		)
 	)
 	bus.register(new Actor(WORKITEM_EXEMPLAR))
-	const composer = new ComposerActor(bus)
+	const composer = new ComposerActor(bus, options)
 	bus.register(composer)
 	return { bus, composer, calls }
 }
@@ -255,5 +263,54 @@ describe('composer (0135): promote and discard are button-only', () => {
 		// wait for the sandbox to boot before poking the reducer directly
 		const outcome = await composer.applyEvent({ send: 'PROMOTE' })
 		expect((outcome.record as { ok: boolean }).ok).toBe(false)
+	})
+})
+
+describe('composer (0135): Stop stops the PROCESS, and progress is visible', () => {
+	test('the turn signal reaches the lane; abort = structured failure, kept in history', async () => {
+		const controller = new AbortController()
+		const bus = new MessageBus()
+		let sawSignal = false
+		bus.register(
+			new Actor(
+				{ id: 'llm', name: 'LLM', description: 'Fake model lane.', tags: ['system'], methods: [] },
+				{
+					llm_complete: async (p) => {
+						const signal = (p.settings as { signal?: AbortSignal } | undefined)?.signal
+						sawSignal = signal !== undefined
+						// like a real fetch: never resolves, rejects on abort
+						await new Promise((_, reject) => {
+							if (signal?.aborted) return reject(new Error('aborted'))
+							signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+								once: true
+							})
+						})
+						return { record: '', wire: '' }
+					}
+				}
+			)
+		)
+		bus.register(new Actor(WORKITEM_EXEMPLAR))
+		const composer = new ComposerActor(bus, { signal: () => controller.signal })
+		bus.register(composer)
+		const pending = bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		controller.abort()
+		const result = await pending
+		expect(sawSignal).toBe(true)
+		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
+		// the process ENDED — structured failure, nothing staged, history kept
+		expect(composer.state.phase).toBe('failed')
+		expect((composer.state.history as unknown[]).length).toBe(1)
+		expect(bus.get('habit')).toBeUndefined()
+	})
+
+	test('progress lines flow through the caps while the compose runs', async () => {
+		const notes: string[] = []
+		const { bus } = mesh(undefined, undefined, { onProgress: (note) => notes.push(note) })
+		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		expect(notes.some((n) => n.includes('proofs'))).toBe(true)
+		expect(notes.some((n) => n.includes('designs'))).toBe(true)
+		expect(notes.some((n) => n.includes('interviews workitem'))).toBe(true)
+		expect(notes.some((n) => n.includes('Membrane'))).toBe(true)
 	})
 })

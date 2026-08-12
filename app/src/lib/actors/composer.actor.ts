@@ -107,7 +107,7 @@ function present(s) {
 					? 'Interviewing\\u2026'
 					: s.phase === 'drafting'
 						? 'Kimi is designing\\u2026'
-						: 'Composer'
+						: 'Idle \\u2014 nothing staged yet'
 	var note =
 		s.phase === 'staged'
 			? 'The proofs below are PROVEN — the instance is live. Promote makes it production, Discard disposes it.'
@@ -618,8 +618,19 @@ export const COMPOSER_SETTINGS = {
 	json: true
 }
 
+/** Host seams the app wires in; tests run without any of them. */
+export interface ComposerOptions {
+	/** Reactive subclass for staged instances, so their windows update. */
+	make?: (manifest: Manifest) => Actor
+	/** The live turn's abort signal — Stop must stop the compose, not just the reply. */
+	signal?: () => AbortSignal | undefined
+	/** Progress line for the activity strip: the process is visible, not magic. */
+	onProgress?: (note: string) => void
+}
+
 export class ComposerActor extends Actor {
-	constructor(bus: MessageBus, make?: (manifest: Manifest) => Actor) {
+	constructor(bus: MessageBus, options: ComposerOptions = {}) {
+		const progress = options.onProgress
 		super(
 			COMPOSER_MANIFEST,
 			{},
@@ -635,13 +646,33 @@ export class ComposerActor extends Actor {
 						methods: a.manifest.methods.map((m) => m.name)
 					})),
 				manifest: (p) => bus.get(String(p.actor ?? ''))?.manifest ?? null,
-				ask: async (p) =>
-					await bus.ask(String(p.actor ?? ''), String(p.question ?? ''), 'composer'),
+				ask: async (p) => {
+					progress?.(`Composer interviews ${String(p.actor ?? '')}…`)
+					return await bus.ask(String(p.actor ?? ''), String(p.question ?? ''), 'composer')
+				},
 				complete: async (p) => {
+					// The one reduce runs for minutes — the caps ARE the progress
+					// seam: label the round, then tick the stream as Kimi works.
+					const label = String(p.system ?? '').includes('PLAN round')
+						? 'Composer writes the proofs'
+						: 'Kimi designs the actor'
+					progress?.(`${label}…`)
+					let streamed = 0
+					let lastTick = 0
 					const result = await bus.dispatch('composer', 'llm_complete', {
 						system: String(p.system ?? ''),
 						question: String(p.question ?? ''),
-						settings: COMPOSER_SETTINGS
+						settings: {
+							...COMPOSER_SETTINGS,
+							signal: options.signal?.(),
+							onDelta: (delta: { reasoning?: string; text?: string }) => {
+								streamed += (delta.reasoning?.length ?? 0) + (delta.text?.length ?? 0)
+								const now = Date.now()
+								if (now - lastTick < 800) return
+								lastTick = now
+								progress?.(`${label}… ~${Math.round(streamed / 4)} tokens`)
+							}
+						}
 					})
 					try {
 						const parsed = JSON.parse(result.record) as { ok?: boolean; text?: unknown }
@@ -651,12 +682,14 @@ export class ComposerActor extends Actor {
 					}
 					return ''
 				},
-				probe: async (p) =>
-					await probeDraft(
+				probe: async (p) => {
+					progress?.('Membrane: validating and proving the draft…')
+					return await probeDraft(
 						p.draft as unknown as ActorDraft,
 						(p.proofs as unknown as Proof[]) ?? []
-					),
-				stage: (p) => stageDraft(bus, p.draft as unknown as ActorDraft, make),
+					)
+				},
+				stage: (p) => stageDraft(bus, p.draft as unknown as ActorDraft, options.make),
 				promote: (p) => promoteStaged(bus, String(p.to ?? '')),
 				discard: (p) => discardStaged(bus, String(p.to ?? ''))
 			}
