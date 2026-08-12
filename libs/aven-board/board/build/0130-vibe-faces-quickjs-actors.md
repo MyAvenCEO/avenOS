@@ -218,4 +218,6 @@ rg -n 'FaceSpec|SpecFaceView|WorkItemsView' app/src || echo "face path retired"
 
 Newest entry first.
 
+- `2026-08-12` — **Step 1 done**: `libs/aven-ui` + `libs/tauri-plugin-sandbox-quickjs` recovered from `53cfa8a6^`; vibes pruned to the `chat` reference fixture (exports updated, style-validator test repointed — 4 pass); wired as workspace dep of the app (`@avenos/aven-ui` + `quickjs-emscripten` in app/package.json, links verified). App check stays green. Card moved discover→build.
+
 - `2026-08-12` — Discovery with Samuel: recover `libs/aven-ui` as the ONE face renderer (JSON→HTML/CSS, brand.style.json, validators/whitelist) and drop `FaceSpec`; architecture stays abject.world-near (mesh, mailbox, ask, caps) — only the face layer is taken from the vibes. Actor = vibe; ALL actor logic incl. LLM-output shaping runs in a QuickJS **WASM** VM in the webview (`quickjs-emscripten`), the recovered Rust plugin stays unwired for later cap-bearing actors. Catalog reduced to the essentials — todos/workitems as the full-CRUD proof, plus registry and the speech path; calendar/habits/notes deleted. Measurable via `tests/vibe-sandbox.test.ts` (validation · fail-closed+fuel · voice/UI parity · sandbox-only model parsing) plus the retired-face-path grep. Written into `discover/`.

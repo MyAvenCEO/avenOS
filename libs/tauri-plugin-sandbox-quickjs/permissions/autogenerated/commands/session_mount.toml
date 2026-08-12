@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-session-mount"
+description = "Enables the session_mount command without any pre-configured scope."
+commands.allow = ["session_mount"]
+
+[[permission]]
+identifier = "deny-session-mount"
+description = "Denies the session_mount command without any pre-configured scope."
+commands.deny = ["session_mount"]

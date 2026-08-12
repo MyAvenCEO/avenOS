@@ -32,9 +32,11 @@
 		"vite": "^8.0.7"
 	},
 	"dependencies": {
+		"@avenos/aven-ui": "workspace:*",
 		"@tauri-apps/api": "^2",
 		"@tauri-apps/plugin-opener": "^2.5.4",
 		"@xyflow/svelte": "^1.6.2",
+		"quickjs-emscripten": "^0.31.0",
 		"three": "^0.185.1"
 	}
 }
