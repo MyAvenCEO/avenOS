@@ -297,16 +297,24 @@ export class Actor {
 	/**
 	 * The interview. Answers as itself from its own manifest (and whatever the
 	 * subclass adds via `situation()`); the LLM is consulted when one is given
-	 * and the manifest prose stands in when not.
+	 * and the manifest prose stands in when not. Caller-aware per the Ask
+	 * Protocol: the answer may depend on WHO asks — a fellow actor gets
+	 * protocol detail where a human gets orientation.
 	 */
-	async ask(question: string, llm?: Llm): Promise<string> {
+	async ask(question: string, llm?: Llm, asker?: string): Promise<string> {
 		const self = manifestProse(this.manifest)
 		const state = this.situation()
 		const context = state ? `${self} Current state: ${state}` : self
 		if (!llm) return context
 		return llm(
 			`You are the actor "${this.manifest.name}" in avenOS, answering as yourself, ` +
-				`briefly, in the language of the question. Everything you know about yourself: ${context}`,
+				'briefly, in the language of the question. ' +
+				(asker
+					? `You are being asked by "${asker}" — tailor the answer to them: a human wants ` +
+						'orientation, a fellow actor or the chat model wants exact method names and ' +
+						'payload shapes to collaborate. '
+					: '') +
+				`Everything you know about yourself: ${context}`,
 			question
 		)
 	}

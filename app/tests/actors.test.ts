@@ -113,10 +113,13 @@ describe('actor core', () => {
 			seenSystem = system
 			return `Antwort auf: ${question}`
 		})
-		const answer = await bus.ask('sink', 'Was brauchst du?')
+		const answer = await bus.ask('sink', 'Was brauchst du?', 'scheduler')
 		expect(answer).toBe('Antwort auf: Was brauchst du?')
 		expect(seenSystem).toContain('Sink')
 		expect(seenSystem).toContain('thing(X)')
+		// caller-aware (Ask Protocol): the answer may depend on WHO asks
+		expect(seenSystem).toContain('scheduler')
+		expect(bus.traceLog.find((e) => e.kind === 'ask')?.from).toBe('scheduler')
 	})
 
 	test('the manifest prose names every method and contract', () => {

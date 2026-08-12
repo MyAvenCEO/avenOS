@@ -201,16 +201,20 @@ export class MessageBus {
 		)
 	}
 
-	/** Interview an actor — the one path on which the injected LLM may speak. */
-	async ask(actorId: string, question: string): Promise<string> {
+	/**
+	 * Interview an actor — the one path on which the model lane may speak.
+	 * Caller-aware (Ask Protocol): `asker` names who is asking, flows into
+	 * the answer AND into the trace as the sender.
+	 */
+	async ask(actorId: string, question: string, asker = 'human'): Promise<string> {
 		const actor = this.#actors.get(actorId)
 		const started = Date.now()
 		if (!actor) return `There is no actor ${actorId}.`
-		const answer = await actor.ask(question, this.llmLane())
+		const answer = await actor.ask(question, this.llmLane(), asker)
 		this.#record({
 			at: started,
 			kind: 'ask',
-			from: 'human/model',
+			from: asker,
 			to: actorId,
 			method: 'ask',
 			ok: true,

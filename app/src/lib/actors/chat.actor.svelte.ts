@@ -72,7 +72,8 @@ export class ChatActor extends Actor {
 					if (name === 'actor_ask') {
 						const answer = await bus.ask(
 							String(payload.actor ?? ''),
-							String(payload.question ?? '')
+							String(payload.question ?? ''),
+							'chat'
 						)
 						const result = {
 							record: JSON.stringify({ ok: true, actor: payload.actor, answer }),
