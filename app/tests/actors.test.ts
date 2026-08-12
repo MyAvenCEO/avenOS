@@ -365,7 +365,8 @@ describe('registry actor (0128)', () => {
 		bus.register(new RegistryActor(bus))
 		const tools = bus.toolSpecs().map((t) => t.name)
 		expect(tools).toContain('registry_list')
-		expect(tools).toContain('goal_run')
+		// the engine has no manual gateway: goals run through real tools/voice
+		expect(tools).not.toContain('goal_run')
 		expect(tools).not.toContain('actor_create')
 		expect(tools).not.toContain('actor_update')
 		expect(tools).not.toContain('actor_delete')

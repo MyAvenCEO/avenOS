@@ -69,8 +69,8 @@ export class WorkItemsActor extends Actor {
 
 	constructor() {
 		super({
-			id: 'workitems',
-			name: 'Work Items',
+			id: 'workitem',
+			name: 'Workitem',
 			description:
 				'Keeps the task list: create, change status, delete, show. Every task ' +
 				'belongs to exactly one spark and has one of three statuses.',

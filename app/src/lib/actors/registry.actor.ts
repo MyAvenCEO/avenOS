@@ -9,8 +9,6 @@ import type { MessageBus } from './bus'
  *
  * - `actors`   → a snapshot of the mesh (rows, no references)
  * - `manifest` → one actor's manifest by id, or null
- * - `satisfy`  → the engine: prove + execute a goal (async; the asyncified
- *   VM suspends while the engine runs)
  *
  * It no longer CREATES actors. The set of actors is declared in code — the
  * codebase is the source of truth, not a browser store.
@@ -90,26 +88,6 @@ function reduce(state, ev) {
 		}
 	}
 
-	if (ev.send === 'RUN') {
-		var goal = String(ev.payload.goal || '').trim()
-		if (goal === '') {
-			return {
-				state: next,
-				said: 'The goal predicate is missing.',
-				record: { ok: false, error: 'no goal' }
-			}
-		}
-		var run = cap('satisfy', { goal: goal, facts: ev.payload.facts || {} })
-		var last = run.steps.length > 0 ? run.steps[run.steps.length - 1] : null
-		var said =
-			run.status === 'ok'
-				? 'Goal ' + goal + ' satisfied in ' + run.steps.length + ' steps. Result: ' +
-					JSON.stringify((last && last.out) || {})
-				: 'Goal ' + goal + ' failed after ' + run.steps.length + ' steps' +
-					(last ? '; last step: ' + JSON.stringify(last.out) : '') + '.'
-		return { state: next, said: said, record: { ok: run.status === 'ok', run: run } }
-	}
-
 	return state
 }
 
@@ -125,7 +103,7 @@ const REGISTRY_MANIFEST: Manifest = {
 		'The directory itself, as an actor: knows every actor in the mesh, describes ' +
 		'them, and runs goals over their contracts.',
 	tags: ['system'],
-	capabilities: ['actors', 'manifest', 'satisfy', 'spawn', 'dispose'],
+	capabilities: ['actors', 'manifest', 'spawn', 'dispose'],
 	logic: REGISTRY_LOGIC,
 	methods: [
 		{
@@ -153,7 +131,7 @@ const REGISTRY_MANIFEST: Manifest = {
 			parameters: {
 				type: 'object',
 				properties: {
-					template: { type: 'string', description: 'The template id, e.g. "workitems".' },
+					template: { type: 'string', description: 'The template id, e.g. "workitem".' },
 					name: { type: 'string', description: 'Short display name, e.g. "Umzug".' }
 				},
 				required: ['template']
@@ -173,27 +151,6 @@ const REGISTRY_MANIFEST: Manifest = {
 				required: ['to']
 			},
 			event: { send: 'DISPOSE' }
-		},
-		{
-			name: 'goal_run',
-			description:
-				'Actually executes a goal: proves it over the contracts and runs the plan — ' +
-				'each step one message to its producer, llm actors answering through the ' +
-				'model. Goal as a predicate like "summary(S)". facts supplies external ' +
-				'predicates as a JSON object, e.g. {"text": {"text": "dentist Tuesday"}}.',
-			parameters: {
-				type: 'object',
-				properties: {
-					goal: { type: 'string', description: 'The goal predicate, e.g. "summary(S)".' },
-					facts: {
-						type: 'object',
-						description: 'External facts: functor → payload object.',
-						additionalProperties: true
-					}
-				},
-				required: ['goal']
-			},
-			event: { send: 'RUN' }
 		}
 	]
 }
@@ -225,12 +182,7 @@ export class RegistryActor extends Actor {
 				dispose: (p) => {
 					const gone = bus.dispose(String(p.to ?? ''))
 					return gone ? { uuid: gone.uuid, name: gone.instanceName } : null
-				},
-				satisfy: async (p) =>
-					await bus.satisfy(
-						String(p.goal ?? ''),
-						(p.facts as Record<string, unknown> | undefined) ?? {}
-					)
+				}
 			}
 		)
 		this.#bus = bus

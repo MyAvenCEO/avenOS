@@ -22,7 +22,7 @@ export const listWindow = singleton(
 	() =>
 		new WindowActor(workItems, AvenUiView, {
 			key: 'list',
-			name: 'Task List'
+			name: 'Project List'
 		})
 )
 export const boardWindow = singleton(

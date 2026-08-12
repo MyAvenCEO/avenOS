@@ -53,7 +53,7 @@ const SYSTEM_PROMPT =
 	'Call registry_list when you are unsure which actors or instances exist. ' +
 	'Actor TEMPLATES are fixed and ship with the app — but templates can run as ' +
 	'several INSTANCES: "make me a second list for the move" means spawn with ' +
-	'template=workitems and a short name. Address a specific instance by adding ' +
+	'template=workitem and a short name. Address a specific instance by adding ' +
 	'to=<name or uuid from registry_list> on any tool; without it the default ' +
 	'instance is meant. dispose removes a spawned instance on explicit request. ' +
 	'Messages come from speech recognition and are sometimes cut off ' +

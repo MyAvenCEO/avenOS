@@ -185,7 +185,7 @@ bus.extractJson = extractJsonObject
 bus.register(workItems)
 // The task list may exist many times — "make me a list for the move" spawns
 // a fresh instance with its own sandbox state and windows.
-bus.spawnable('workitems', () => new WorkItemsActor())
+bus.spawnable('workitem', () => new WorkItemsActor())
 /**
  * The catalog, live: every manifest declared in code joins the mesh at boot
  * — registered before the chat actor so the derived tool list carries them
