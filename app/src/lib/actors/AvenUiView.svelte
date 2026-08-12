@@ -17,7 +17,7 @@ import type { VibeEvent } from './sandbox'
 
 interface VibeSubject extends Actor {
 	vibeState: Record<string, unknown>
-	applyEvent(event: VibeEvent): Promise<Record<string, unknown>>
+	applyEvent(event: VibeEvent): Promise<unknown>
 }
 
 function isVibeSubject(a: Actor): a is VibeSubject {

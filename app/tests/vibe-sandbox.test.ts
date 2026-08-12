@@ -45,11 +45,11 @@ describe('vibe sandbox (0130 slice A)', () => {
 		const session = await createSession(COUNTER_LOGIC)
 		try {
 			const s0 = session.initState({ start: 0 })
-			const s1 = session.reduce(s0, { send: 'INC' })
-			const s2 = session.reduce(s1, { send: 'ADD', payload: { n: 40 } })
+			const s1 = session.reduce(s0, { send: 'INC' }).state
+			const s2 = session.reduce(s1, { send: 'ADD', payload: { n: 40 } }).state
 			expect(s2.count).toBe(41)
 			// unknown events are a no-op, never a crash
-			expect(session.reduce(s2, { send: 'NOPE' }).count).toBe(41)
+			expect(session.reduce(s2, { send: 'NOPE' }).state.count).toBe(41)
 		} finally {
 			session.dispose()
 		}
@@ -81,7 +81,7 @@ describe('vibe sandbox (0130 slice A)', () => {
 			// a module can never actually arrive
 			session.reduce({}, { send: 'IMPORT' })
 			session.pump()
-			expect(session.reduce({}, { send: 'CHECK' })).toEqual({ importOutcome: 'rejected' })
+			expect(session.reduce({}, { send: 'CHECK' }).state).toEqual({ importOutcome: 'rejected' })
 			// the Function-constructor escape reaches only the VM's own globals,
 			// where fetch still does not exist
 			const probe = await createSession(`
@@ -94,7 +94,7 @@ describe('vibe sandbox (0130 slice A)', () => {
 				}
 			`)
 			try {
-				expect(probe.reduce({}, { send: 'X' })).toEqual({
+				expect(probe.reduce({}, { send: 'X' }).state).toEqual({
 					hasFetch: 'undefined',
 					hasProcess: 'undefined'
 				})
@@ -180,15 +180,22 @@ describe('workitems vibe (0130 slice B — parity + validation)', () => {
 		try {
 			// the click path: the add form submits ADD {text}
 			let uiState = ui.initState({})
-			uiState = ui.reduce(uiState, { send: 'ADD', payload: { text: 'Buy milk' } })
-			uiState = ui.reduce(uiState, { send: 'TOGGLE', payload: { id: 'w1' } })
+			uiState = ui.reduce(uiState, { send: 'ADD', payload: { text: 'Buy milk' } }).state
+			uiState = ui.reduce(uiState, { send: 'TOGGLE', payload: { id: 'w1' } }).state
 			// the voice path: workitem_create + workitem_update map to the same events
 			let voiceState = voice.initState({})
-			voiceState = voice.reduce(voiceState, { send: 'CREATE', payload: { titles: ['Buy milk'] } })
+			const spoken = voice.reduce(voiceState, {
+				send: 'CREATE',
+				payload: { titles: ['Buy milk'] }
+			})
+			// the sandbox authors the words AND the structured record itself
+			expect(spoken.said).toBe('created (1): w1 Buy milk (open, me)')
+			expect((spoken.record?.created as { id: string }[])[0]?.id).toBe('w1')
+			voiceState = spoken.state
 			voiceState = voice.reduce(voiceState, {
 				send: 'UPDATE',
 				payload: { ids: ['w1'], status: 'done' }
-			})
+			}).state
 			expect(JSON.stringify(uiState)).toBe(JSON.stringify(voiceState))
 		} finally {
 			ui.dispose()

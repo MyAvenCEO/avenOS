@@ -1,20 +1,21 @@
 import type { Activity, ActivityKind } from './activity.svelte'
-import { Actor, type HandlerResult, type VibeSpec } from './actor'
-import { createSession, type VibeEvent, type VibeSession } from './sandbox'
+import type { VibeSpec } from './actor'
 import { singleton } from './singleton'
+import { VibeActor } from './vibe.actor'
 import { workitemsLogic } from './vibes/workitems/logic'
 import { workitemsStyle } from './vibes/workitems/style'
 import { workitemsBoardView, workitemsListView } from './vibes/workitems/view'
 
 /**
  * The work-item actor — the todo app as one actor whose BEHAVIOUR lives in
- * the sandbox (0130).
+ * the sandbox (0130), and whose METHODS are pure data.
  *
- * The CRUD logic is data (vibes/workitems/logic.ts), evaluated in a QuickJS
- * VM; this class holds the manifest, maps voice tools and UI events onto
- * the SAME reducer events, and mirrors the reduced state into a Svelte
- * $state so windows and rail re-render. Voice and mouse are byte-identical
- * by construction: both are `session.reduce(state, event)`.
+ * No handler in this file: every tool declares its reducer event in the
+ * manifest, the VibeActor base binds ONE generic adapter for all of them
+ * (and again under the produced functor, so the proof engine executes the
+ * same reduce), and the sandbox authors both the words (`said`) and the
+ * structured result (`record`). What remains here is Svelte reactivity,
+ * the view API for rail and layout, and the activity summaries.
  */
 
 export type WorkItemStatus = 'open' | 'doing' | 'done'
@@ -35,12 +36,6 @@ export interface WorkItem {
 	title: string
 	status: WorkItemStatus
 	spark: string
-}
-
-export const STATUS_LABEL: Record<WorkItemStatus, string> = {
-	open: 'open',
-	doing: 'in progress',
-	done: 'done'
 }
 
 const SPARK_PARAM = {
@@ -69,8 +64,12 @@ const boardVibe: VibeSpec = {
 	logic: workitemsLogic
 }
 
-export class WorkItemsActor extends Actor {
-	/** The full view state the sandbox last produced — windows render THIS. */
+export class WorkItemsActor extends VibeActor {
+	/**
+	 * The full view state the sandbox last produced — windows render THIS.
+	 * Declared $state HERE (the base only `declare`s it) so reactivity lives
+	 * in the Svelte layer and the base stays test-runnable.
+	 */
 	vibeState = $state<Record<string, unknown>>({
 		items: [],
 		rows: [],
@@ -80,155 +79,117 @@ export class WorkItemsActor extends Actor {
 		sparkName: 'Me',
 		empty: true
 	})
-	#session: VibeSession | null = null
-	#ready: Promise<void>
 
 	constructor() {
-		super(
-			{
-				id: 'workitems',
-				name: 'Work Items',
-				description:
-					'Keeps the task list: create, change status, delete, show. Every task ' +
-					'belongs to exactly one spark and has one of three statuses.',
-				tags: ['todo'],
-				produces: ['workitem(W)'],
-				vibe: listVibe,
-				vibes: [{ key: 'board', name: 'Kanban Board', spec: boardVibe }],
-				methods: [
-					{
-						name: 'workitem_list',
-						description:
-							'Returns every task with id, status and spark — across all sparks. Call this ' +
-							'before talking about the list, and always before changing or deleting ' +
-							'anything — you need the ids.',
-						parameters: { type: 'object', properties: {} }
-					},
-					{
-						name: 'workitem_create',
-						description:
-							'Creates one or more new tasks. Multiple tasks always go in one single ' +
-							'call, never one after another.',
-						parameters: {
-							type: 'object',
-							properties: {
-								titles: {
-									type: 'array',
-									items: { type: 'string' },
-									description: 'The titles, short, in the language the user spoke.'
-								},
-								spark: SPARK_PARAM
+		super({
+			id: 'workitems',
+			name: 'Work Items',
+			description:
+				'Keeps the task list: create, change status, delete, show. Every task ' +
+				'belongs to exactly one spark and has one of three statuses.',
+			tags: ['todo'],
+			produces: ['workitem(W)'],
+			vibe: listVibe,
+			vibes: [{ key: 'board', name: 'Kanban Board', spec: boardVibe }],
+			methods: [
+				{
+					name: 'workitem_list',
+					description:
+						'Returns every task with id, status and spark — across all sparks. Call this ' +
+						'before talking about the list, and always before changing or deleting ' +
+						'anything — you need the ids.',
+					parameters: { type: 'object', properties: {} },
+					event: { send: 'LIST' }
+				},
+				{
+					name: 'workitem_create',
+					description:
+						'Creates one or more new tasks. Multiple tasks always go in one single ' +
+						'call, never one after another.',
+					parameters: {
+						type: 'object',
+						properties: {
+							titles: {
+								type: 'array',
+								items: { type: 'string' },
+								description: 'The titles, short, in the language the user spoke.'
 							},
-							required: ['titles']
+							spark: SPARK_PARAM
 						},
-						produces: ['workitem(W)']
+						required: ['titles']
 					},
-					{
-						name: 'workitem_update',
-						description:
-							'Changes one or more tasks — status or title. Every task meant goes in one ' +
-							'call. "already did it" and "that is done" mean status=done, not delete. ' +
-							'"just starting" and "working on it" mean status=in_progress.',
-						parameters: {
-							type: 'object',
-							properties: {
-								ids: IDS_PARAM,
-								status: {
-									type: 'string',
-									enum: ['open', 'in_progress', 'done'],
-									description: 'The new status of the tasks.'
-								},
-								done: {
-									type: 'boolean',
-									description: 'Shorthand: true = done, false = open. status wins.'
-								},
-								title: {
-									type: 'string',
-									description: 'The new title. Only sensible with exactly one id.'
-								},
-								spark: SPARK_PARAM
+					produces: ['workitem(W)'],
+					event: { send: 'CREATE' }
+				},
+				{
+					name: 'workitem_update',
+					description:
+						'Changes one or more tasks — status or title. Every task meant goes in one ' +
+						'call. "already did it" and "that is done" mean status=done, not delete. ' +
+						'"just starting" and "working on it" mean status=in_progress.',
+					parameters: {
+						type: 'object',
+						properties: {
+							ids: IDS_PARAM,
+							status: {
+								type: 'string',
+								enum: ['open', 'in_progress', 'done'],
+								description: 'The new status of the tasks.'
 							},
-							required: ['ids']
-						}
-					},
-					{
-						name: 'workitem_delete',
-						description:
-							'Deletes one or more tasks irreversibly. Only when someone explicitly asks ' +
-							'to delete, remove or strike. Having finished something is no reason — that ' +
-							'is workitem_update with status=done. When in doubt, check off.',
-						parameters: {
-							type: 'object',
-							properties: { ids: IDS_PARAM },
-							required: ['ids']
-						}
-					},
-					{
-						name: 'workitem_show',
-						description:
-							'Switches the active spark: "show my list" means spark=me, "show the team ' +
-							'tasks" means spark=team. Changes no data. The SHAPE (list or board) has its ' +
-							'own windows: list_window_toggle and board_window_toggle.',
-						parameters: {
-							type: 'object',
-							properties: {
-								spark: SPARK_PARAM
+							done: {
+								type: 'boolean',
+								description: 'Shorthand: true = done, false = open. status wins.'
 							},
-							required: ['spark']
-						}
+							title: {
+								type: 'string',
+								description: 'The new title. Only sensible with exactly one id.'
+							},
+							spark: SPARK_PARAM
+						},
+						required: ['ids']
 					},
-					{
-						name: 'workitem_clear_done',
-						description:
-							'Deletes every already-done task of the active spark at once. No ids needed.',
-						parameters: { type: 'object', properties: {} }
-					}
-				]
-			},
-			{}
-		)
-		this.#ready = this.#boot()
-		// Handlers close over `this`; the base class stores them by name.
-		this.bind({
-			workitem_list: () => this.#list(),
-			workitem_create: (p) => this.#create(p),
-			workitem_update: (p) => this.#update(p),
-			workitem_delete: (p) => this.#delete(p),
-			workitem_show: (p) => this.#show(p),
-			workitem_clear_done: () => this.#clearDone()
+					event: { send: 'UPDATE' }
+				},
+				{
+					name: 'workitem_delete',
+					description:
+						'Deletes one or more tasks irreversibly. Only when someone explicitly asks ' +
+						'to delete, remove or strike. Having finished something is no reason — that ' +
+						'is workitem_update with status=done. When in doubt, check off.',
+					parameters: {
+						type: 'object',
+						properties: { ids: IDS_PARAM },
+						required: ['ids']
+					},
+					event: { send: 'DELETE' }
+				},
+				{
+					name: 'workitem_show',
+					description:
+						'Switches the active spark: "show my list" means spark=me, "show the team ' +
+						'tasks" means spark=team. Changes no data. The SHAPE (list or board) has its ' +
+						'own windows: list_window_toggle and board_window_toggle.',
+					parameters: {
+						type: 'object',
+						properties: {
+							spark: SPARK_PARAM
+						},
+						required: ['spark']
+					},
+					event: { send: 'SHOW' }
+				},
+				{
+					name: 'workitem_clear_done',
+					description:
+						'Deletes every already-done task of the active spark at once. No ids needed.',
+					parameters: { type: 'object', properties: {} },
+					event: { send: 'CLEAR_DONE' }
+				}
+			]
 		})
 	}
 
-	async #boot(): Promise<void> {
-		this.#session = await createSession(workitemsLogic)
-		this.vibeState = this.#session.initState({})
-	}
-
 	// ------------------------------------------------------------- view API
-
-	/**
-	 * The one door for every state change — UI events (from the vibe
-	 * windows) and voice tools alike land here, so the two paths cannot
-	 * drift apart.
-	 */
-	async applyEvent(event: VibeEvent): Promise<Record<string, unknown>> {
-		await this.#ready
-		if (!this.#session) throw new Error('workitems session missing')
-		this.vibeState = this.#session.reduce(this.vibeState, event)
-		return this.vibeState
-	}
-
-	/**
-	 * The membrane seam: raw model text is parsed by the SANDBOXED shape(),
-	 * never by the host. Garbage returns null and the state stays exactly
-	 * what it was.
-	 */
-	shapeModelText(rawText: string): { state?: Record<string, unknown>; ops?: unknown[] } | null {
-		if (!this.#session) return null
-		const shaped = this.#session.shape(this.vibeState, rawText)
-		if (shaped?.state) this.vibeState = shaped.state
-		return shaped
-	}
 
 	get items(): WorkItem[] {
 		return (this.vibeState.items as WorkItem[]) ?? []
@@ -253,116 +214,6 @@ export class WorkItemsActor extends Actor {
 
 	byId(id: string): WorkItem | undefined {
 		return this.items.find((t) => t.id === id)
-	}
-
-	// ------------------------------------------------------------- handlers
-
-	#json(value: unknown): string {
-		return JSON.stringify(value)
-	}
-
-	#line(t: WorkItem): string {
-		return `${t.id} ${t.title} (${STATUS_LABEL[t.status]}, ${t.spark})`
-	}
-
-	#ok(record: Record<string, unknown>, wire: string): HandlerResult {
-		return { record: this.#json(record), wire }
-	}
-
-	#list(): HandlerResult {
-		const wire =
-			this.items.length === 0
-				? 'list: empty'
-				: `list (${this.items.length}): ${this.items.map((t) => this.#line(t)).join('; ')}`
-		return this.#ok({ ok: true, items: this.items }, wire)
-	}
-
-	#idList(value: unknown): string[] {
-		if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string')
-		return typeof value === 'string' && value !== '' ? [value] : []
-	}
-
-	#missingIds(): HandlerResult {
-		const wire = `no valid ids given — take the ids from this list. ${this.#list().wire}`
-		return {
-			record: this.#json({ ok: false, error: 'no valid ids given', items: this.items }),
-			wire
-		}
-	}
-
-	async #create(p: Record<string, unknown>): Promise<HandlerResult> {
-		const titles = (Array.isArray(p.titles) ? p.titles : [p.titles])
-			.filter((t): t is string => typeof t === 'string')
-			.map((t) => t.trim())
-			.filter((t) => t !== '')
-		if (titles.length === 0)
-			return {
-				record: this.#json({ ok: false, error: 'no titles given' }),
-				wire: 'no titles given'
-			}
-		const before = new Set(this.items.map((t) => t.id))
-		await this.applyEvent({
-			send: 'CREATE',
-			payload: { titles, ...(typeof p.spark === 'string' && { spark: p.spark }) }
-		})
-		const created = this.items.filter((t) => !before.has(t.id))
-		return this.#ok(
-			{ ok: true, created },
-			`created (${created.length}): ${created.map((t) => this.#line(t)).join('; ')}`
-		)
-	}
-
-	async #update(p: Record<string, unknown>): Promise<HandlerResult> {
-		const ids = this.#idList(p.ids)
-		if (ids.length === 0) return this.#missingIds()
-		const known = new Set(this.items.map((t) => t.id))
-		const unknown = ids.filter((id) => !known.has(id))
-		await this.applyEvent({
-			send: 'UPDATE',
-			payload: {
-				ids,
-				...(typeof p.status === 'string' && { status: p.status }),
-				...(typeof p.done === 'boolean' && { done: p.done }),
-				...(typeof p.title === 'string' && { title: p.title }),
-				...(typeof p.spark === 'string' && { spark: p.spark })
-			}
-		})
-		const updated = ids.map((id) => this.byId(id)).filter((t) => t !== undefined)
-		const wire =
-			updated.length === 0
-				? `nothing changed; unknown ids: ${unknown.join(', ')}`
-				: `changed (${updated.length}): ${updated.map((t) => this.#line(t)).join('; ')}${
-						unknown.length > 0 ? `. unknown ids: ${unknown.join(', ')}` : ''
-					}`
-		return this.#ok({ ok: updated.length > 0, updated, unknownIds: unknown }, wire)
-	}
-
-	async #delete(p: Record<string, unknown>): Promise<HandlerResult> {
-		const ids = this.#idList(p.ids)
-		if (ids.length === 0) return this.#missingIds()
-		const targets = ids.map((id) => this.byId(id)).filter((t) => t !== undefined)
-		const unknown = ids.filter((id) => !targets.some((t) => t.id === id))
-		await this.applyEvent({ send: 'DELETE', payload: { ids } })
-		const wire =
-			targets.length === 0
-				? `nothing deleted; unknown ids: ${unknown.join(', ')}`
-				: `deleted (${targets.length}): ${targets.map((t) => this.#line(t)).join('; ')}`
-		return this.#ok({ ok: targets.length > 0, deleted: targets, unknownIds: unknown }, wire)
-	}
-
-	async #show(p: Record<string, unknown>): Promise<HandlerResult> {
-		await this.applyEvent({ send: 'SHOW', payload: { spark: String(p.spark ?? '') } })
-		return this.#ok({ ok: true, spark: this.active }, `The active spark is now ${this.active}.`)
-	}
-
-	async #clearDone(): Promise<HandlerResult> {
-		const removed = this.visible.filter((t) => t.status === 'done')
-		await this.applyEvent({ send: 'CLEAR_DONE' })
-		const wire =
-			removed.length === 0
-				? 'deleted: nothing'
-				: `deleted (${removed.length}): ${removed.map((t) => this.#line(t)).join('; ')}`
-		return this.#ok({ ok: true, deleted: removed }, wire)
 	}
 
 	// ------------------------------------------------------------ self-talk

@@ -19,7 +19,28 @@ var SPARKS = [
 	{ id: 'team', name: 'Team' }
 ]
 var STATUS_LABEL = { open: 'Open', doing: 'In Progress', done: 'Done' }
+var WIRE_LABEL = { open: 'open', doing: 'in progress', done: 'done' }
 var WIRE_STATUS = { open: 'open', in_progress: 'doing', done: 'done' }
+
+/** One task, spoken — the wire format the model reads ids from. */
+function line(item) {
+	return item.id + ' ' + item.title + ' (' + WIRE_LABEL[item.status] + ', ' + item.spark + ')'
+}
+
+function lines(items) {
+	var out = []
+	for (var i = 0; i < items.length; i++) out.push(line(items[i]))
+	return out.join('; ')
+}
+
+function listSaid(items) {
+	return items.length === 0 ? 'list: empty' : 'list (' + items.length + '): ' + lines(items)
+}
+
+/** A full outcome: the next state plus what the sandbox SAYS about it. */
+function speak(domain, said, record) {
+	return { state: present(domain), said: said, record: record }
+}
 
 function isSpark(id) {
 	for (var i = 0; i < SPARKS.length; i++) if (SPARKS[i].id === id) return true
@@ -136,39 +157,84 @@ function reduce(state, ev) {
 			titles = [payload.text]
 		}
 		var spark = isSpark(payload.spark) ? payload.spark : domain.active
+		var created = []
 		for (i = 0; i < titles.length; i++) {
 			var title = titles[i].trim()
 			if (title === '') continue
-			domain.items.push({ id: 'w' + domain.nextId++, title: title, status: 'open', spark: spark })
+			var made = { id: 'w' + domain.nextId++, title: title, status: 'open', spark: spark }
+			domain.items.push(made)
+			created.push(made)
 		}
-		return present(domain)
+		if (created.length === 0)
+			return speak(domain, 'no titles given', { ok: false, error: 'no titles given' })
+		return speak(domain, 'created (' + created.length + '): ' + lines(created), {
+			ok: true,
+			created: created
+		})
 	}
 
 	if (ev.send === 'UPDATE') {
 		var ids = idList(payload)
+		if (ids.length === 0)
+			return speak(
+				domain,
+				'no valid ids given — take the ids from this list. ' + listSaid(domain.items),
+				{ ok: false, error: 'no valid ids given', items: domain.items }
+			)
 		var status = WIRE_STATUS[payload.status]
 		if (!status && typeof payload.done === 'boolean') status = payload.done ? 'done' : 'open'
+		var updated = []
+		var unknown = []
 		for (i = 0; i < ids.length; i++) {
 			item = byId(domain.items, ids[i])
-			if (!item) continue
+			if (!item) {
+				unknown.push(ids[i])
+				continue
+			}
 			if (status) item.status = status
 			if (typeof payload.title === 'string' && payload.title.trim() !== '')
 				item.title = payload.title.trim()
 			if (isSpark(payload.spark)) item.spark = payload.spark
+			updated.push(item)
 		}
-		return present(domain)
+		var said =
+			updated.length === 0
+				? 'nothing changed; unknown ids: ' + unknown.join(', ')
+				: 'changed (' + updated.length + '): ' + lines(updated) +
+					(unknown.length > 0 ? '. unknown ids: ' + unknown.join(', ') : '')
+		return speak(domain, said, { ok: updated.length > 0, updated: updated, unknownIds: unknown })
 	}
 
 	if (ev.send === 'DELETE') {
 		var gone = idList(payload)
+		if (gone.length === 0)
+			return speak(
+				domain,
+				'no valid ids given — take the ids from this list. ' + listSaid(domain.items),
+				{ ok: false, error: 'no valid ids given', items: domain.items }
+			)
 		var kept = []
+		var deleted = []
+		var missing = []
+		for (var g = 0; g < gone.length; g++) {
+			if (!byId(domain.items, gone[g])) missing.push(gone[g])
+		}
 		for (i = 0; i < domain.items.length; i++) {
 			var keep = true
 			for (var j = 0; j < gone.length; j++) if (domain.items[i].id === gone[j]) keep = false
 			if (keep) kept.push(domain.items[i])
+			else deleted.push(domain.items[i])
 		}
 		domain.items = kept
-		return present(domain)
+		var saidDel =
+			deleted.length === 0
+				? 'nothing deleted; unknown ids: ' + missing.join(', ')
+				: 'deleted (' + deleted.length + '): ' + lines(deleted)
+		return speak(domain, saidDel, {
+			ok: deleted.length > 0,
+			deleted: deleted,
+			unknownIds: missing
+		})
 	}
 
 	if (ev.send === 'TOGGLE') {
@@ -186,17 +252,30 @@ function reduce(state, ev) {
 
 	if (ev.send === 'SHOW') {
 		if (isSpark(payload.spark)) domain.active = payload.spark
-		return present(domain)
+		return speak(domain, 'The active spark is now ' + domain.active + '.', {
+			ok: true,
+			spark: domain.active
+		})
 	}
 
 	if (ev.send === 'CLEAR_DONE') {
 		var left = []
+		var cleared = []
 		for (i = 0; i < domain.items.length; i++) {
 			if (domain.items[i].spark !== domain.active || domain.items[i].status !== 'done')
 				left.push(domain.items[i])
+			else cleared.push(domain.items[i])
 		}
 		domain.items = left
-		return present(domain)
+		return speak(
+			domain,
+			cleared.length === 0 ? 'deleted: nothing' : 'deleted (' + cleared.length + '): ' + lines(cleared),
+			{ ok: true, deleted: cleared }
+		)
+	}
+
+	if (ev.send === 'LIST') {
+		return speak(domain, listSaid(domain.items), { ok: true, items: domain.items })
 	}
 
 	return state
@@ -223,7 +302,8 @@ function shape(state, rawText) {
 		var op = parsed.ops[i]
 		var send = op && EVENT_FOR[op.op]
 		if (!send) return null
-		next = reduce(next, { send: send, payload: op })
+		var outcome = reduce(next, { send: send, payload: op })
+		next = outcome.state || outcome
 		applied.push({ op: op.op })
 	}
 	return { state: next, ops: applied }

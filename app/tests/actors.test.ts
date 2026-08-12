@@ -717,6 +717,70 @@ describe('the membrane seam (0130): actors shape their own model text', () => {
 	})
 })
 
+describe('one primitive (0130): declared events serve tools, UI and the proof engine', () => {
+	const TODO_LOGIC = `
+		function initState(source) { return { items: [], n: 0 } }
+		function reduce(state, ev) {
+			if (ev.send === 'CREATE') {
+				var items = state.items.concat([{ id: 'x' + (state.n + 1), title: ev.payload.title }])
+				return {
+					state: { items: items, n: state.n + 1 },
+					said: 'created ' + ev.payload.title,
+					record: { ok: true, created: items[items.length - 1] }
+				}
+			}
+			return state
+		}
+		function shape(state, raw) { return null }
+	`
+
+	async function todoActor() {
+		const { VibeActor } = await import('../src/lib/actors/vibe.actor')
+		class TestVibe extends VibeActor {
+			vibeState: Record<string, unknown> = {}
+		}
+		return new TestVibe({
+			id: 'todo',
+			name: 'Todo',
+			description: 'Keeps todos.',
+			tags: [],
+			methods: [
+				{
+					name: 'todo_create',
+					description: 'Creates one todo.',
+					parameters: { type: 'object', properties: { title: { type: 'string' } } },
+					produces: ['todo(T)'],
+					event: { send: 'CREATE' }
+				}
+			],
+			vibe: {
+				view: { content: {} },
+				style: {},
+				logic: TODO_LOGIC
+			}
+		})
+	}
+
+	test('the generic adapter speaks what the sandbox said', async () => {
+		const bus = new MessageBus()
+		bus.register(await todoActor())
+		const result = await bus.dispatch('test', 'todo_create', { title: 'Milk' })
+		expect(result.wire).toBe('created Milk')
+		expect(JSON.parse(result.record)).toEqual({ ok: true, created: { id: 'x1', title: 'Milk' } })
+	})
+
+	test('the SAME declared event is the Prolog clause: satisfy() lands in the sandbox', async () => {
+		const bus = new MessageBus()
+		const actor = await todoActor()
+		bus.register(actor)
+		const run = await bus.satisfy('todo(T)', { title: 'Bread' })
+		expect(run.status).toBe('ok')
+		expect((actor.vibeState.items as { title: string }[])[0]?.title).toBe('Bread')
+		// no llm was needed anywhere: the clause body was the deterministic reducer
+		expect(bus.traceLog.filter((e) => e.kind === 'step').length).toBe(run.steps.length)
+	})
+})
+
 describe('json extraction from model text', () => {
 	test('survives the observed failure shapes', async () => {
 		const { extractJsonObject } = await import('../src/lib/chat/redpill')

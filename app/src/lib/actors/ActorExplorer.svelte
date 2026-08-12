@@ -341,31 +341,56 @@ async function ask(event: SubmitEvent) {
 					{/each}
 				</div>
 				<!-- The relations are the contract, unified against the registry —
-				     derived here, never stored, never their own section. -->
-				<div
-					class="flex flex-wrap items-center gap-x-3 gap-y-1 pb-3 text-[0.6875rem] text-foreground/45"
-				>
-					<span>
-						fed by
-						{#each feeders as edge, i (`f${i}`)}
-							<span class="font-medium text-foreground/70">
-								{bus.get(edge.from)?.manifest.name}</span
-							>{i < feeders.length - 1 ? ',' : ''}
-						{:else}
-							<span>nobody — input from outside</span>
-						{/each}
+				     derived here, never stored: the actor's neighborhood as a
+				     clickable mini graph, feeders → self → fed. -->
+				<div class="flex flex-wrap items-center gap-1.5 pb-3 text-[0.6875rem]">
+					{#each feeders as edge, i (`f${i}`)}
+						<button
+							type="button"
+							onclick={() => {
+								const a = bus.get(edge.from)
+								if (a) {
+									selected = a
+									answer = ''
+								}
+							}}
+							class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
+						>
+							{bus.get(edge.from)?.manifest.name}
+						</button>
+						<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
+					{:else}
+						<span class="text-foreground/35">outside</span>
+						<span class="font-mono text-foreground/35">→</span>
+					{/each}
+					<span
+						class="rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5 font-semibold text-foreground/85"
+					>
+						{selected.manifest.name}
 					</span>
-					<span>
-						feeds
-						{#each fed as edge, i (`t${i}`)}
-							<span class="font-medium text-foreground/70"> {bus.get(edge.to)?.manifest.name}</span>
-							{i < fed.length - 1 ? ',' : ''}
-						{:else}
-							<span>nobody — output to the outside</span>
-						{/each}
-					</span>
+					{#each fed as edge, i (`t${i}`)}
+						<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
+						<button
+							type="button"
+							onclick={() => {
+								const a = bus.get(edge.to)
+								if (a) {
+									selected = a
+									answer = ''
+								}
+							}}
+							class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
+						>
+							{bus.get(edge.to)?.manifest.name}
+						</button>
+					{:else}
+						<span class="font-mono text-foreground/35">→</span>
+						<span class="text-foreground/35">outside</span>
+					{/each}
 					{#if selected.manifest.methods.length > 0}
-						<span>all {selected.manifest.methods.length} methods reachable through the chat</span>
+						<span class="pl-1 text-foreground/35">
+							· all {selected.manifest.methods.length} methods reachable through the chat
+						</span>
 					{/if}
 				</div>
 			{/if}
@@ -412,14 +437,18 @@ async function ask(event: SubmitEvent) {
 										)}</pre>
 								</details>
 							{/if}
-							{#if selected.handlerSource(method.name)}
+							{#if method.event}
+								<p class="pt-1 font-mono text-[0.6875rem] text-foreground/40">
+									→ <span class="font-semibold text-foreground/60">{method.event.send}</span>
+									— declared event; ONE generic adapter reduces it in the sandbox (Logic below). The
+									same clause serves voice, UI and the proof engine.
+								</p>
+							{:else if selected.handlerSource(method.name)}
 								<details class="pt-1">
 									<summary
 										class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
 									>
-										{selected.manifest.vibe
-											? 'Adapter — host-side mapping; the behaviour is the sandboxed logic below'
-											: 'Code — the running handler, read from the function itself'}
+										Code — the running handler, read from the function itself
 									</summary>
 									<pre
 										class="mt-1 overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"

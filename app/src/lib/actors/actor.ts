@@ -55,6 +55,13 @@ export interface MethodSpec {
 	parameters: Record<string, unknown>
 	requires?: Predicate[]
 	produces?: Predicate[]
+	/**
+	 * Declared behaviour (0130): the tool call IS this event into the actor's
+	 * sandboxed reducer — payload passes through verbatim. With it, no handler
+	 * is written by hand: ONE generic adapter serves every declared method,
+	 * and the method doubles as the Prolog clause body for its `produces`.
+	 */
+	event?: { send: string }
 }
 
 /** Per-actor model lane: which model answers as this actor, and how. */

@@ -33,6 +33,19 @@ export interface ShapeResult {
 	ops?: unknown[]
 }
 
+/**
+ * What one reduction yields. Plain-state returns stay valid (a reducer may
+ * just return the next state); a full return also SPEAKS: `said` is the
+ * wire sentence for the model, `record` the structured result fragment —
+ * both authored in the sandbox, so the host carries zero behaviour
+ * knowledge, not even the words.
+ */
+export interface ReduceOutcome {
+	state: Record<string, unknown>
+	said?: string
+	record?: Record<string, unknown>
+}
+
 /** Wall-clock budget per call into the VM; a spinning reducer dies here. */
 const FUEL_MS = 250
 /** Heap cap per session — vibe logic is state shaping, not data science. */
@@ -61,11 +74,25 @@ export class VibeSession {
 		return this.#object(out, 'initState')
 	}
 
-	reduce(state: Record<string, unknown>, event: VibeEvent): Record<string, unknown> {
-		const out = this.#call(
-			`reduce(${JSON.stringify(state)}, ${JSON.stringify({ send: event.send, payload: event.payload ?? {} })})`
+	reduce(state: Record<string, unknown>, event: VibeEvent): ReduceOutcome {
+		const out = this.#object(
+			this.#call(
+				`reduce(${JSON.stringify(state)}, ${JSON.stringify({ send: event.send, payload: event.payload ?? {} })})`
+			),
+			'reduce'
 		)
-		return this.#object(out, 'reduce')
+		// Normalize both shapes: a full outcome carries `state`; a bare next
+		// state IS the state.
+		if (out.state && typeof out.state === 'object' && !Array.isArray(out.state)) {
+			return {
+				state: out.state as Record<string, unknown>,
+				...(typeof out.said === 'string' && { said: out.said }),
+				...(out.record && typeof out.record === 'object'
+					? { record: out.record as Record<string, unknown> }
+					: {})
+			}
+		}
+		return { state: out }
 	}
 
 	/**
