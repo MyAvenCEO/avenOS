@@ -44,7 +44,23 @@ const feeders = $derived(bus.edges().filter((e) => e.to === selected.manifest.id
 const fed = $derived(bus.edges().filter((e) => e.from === selected.manifest.id))
 const instance = $derived(selected.instanceState())
 
-let graph = $state(false)
+/**
+ * The one detail filter (right aside): which lens renders. 'all' = the whole
+ * biography top to bottom, graph first — the default.
+ */
+type ExplorerView = 'all' | 'graph' | 'template' | 'instance' | 'face' | 'proof' | 'trace' | 'ask'
+let view = $state<ExplorerView>('all')
+const VIEWS: { key: ExplorerView; label: string }[] = [
+	{ key: 'all', label: 'All' },
+	{ key: 'graph', label: 'Graph' },
+	{ key: 'template', label: 'Template' },
+	{ key: 'instance', label: 'Instance' },
+	{ key: 'face', label: 'Face' },
+	{ key: 'proof', label: 'Proof' },
+	{ key: 'trace', label: 'Trace' },
+	{ key: 'ask', label: 'ask()' }
+]
+const show = (k: ExplorerView) => view === 'all' || view === k
 let focusGraph = $state(true)
 
 // ---- the prover: pick any predicate as a goal, get its SLD proof tree
@@ -242,525 +258,527 @@ async function ask(event: SubmitEvent) {
 	</nav>
 
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto pb-2">
-		<!-- The solver's forward reading of the whole registry: who can fire
-		     first, who becomes possible after — stages, derived like all else.
-		     The graph is the same truth as a picture; a proof lights its path. -->
-		<div class="flex flex-wrap items-center gap-2 text-xs">
-			<button
-				type="button"
-				onclick={() => {
-					graph = !graph
-				}}
-				class="rounded-full border px-2.5 py-0.5 transition-colors {graph
-					? 'border-primary bg-primary text-primary-foreground'
-					: 'border-foreground/10 opacity-60 hover:opacity-100'}"
+		<!-- The graph: the registry's derived truth as a picture — same
+		     unification as the edges and the prover; a proof lights its path. -->
+		{#if show('graph')}
+			<section
+				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			>
-				Graph
-			</button>
-			{#if graph}
-				<button
-					type="button"
-					onclick={() => {
-						focusGraph = !focusGraph
+				<div class="flex items-center gap-2 pb-2">
+					<h3 class="font-semibold text-sm">Graph</h3>
+					<span class="text-[0.6875rem] text-foreground/40">
+						derived from the contracts — nothing is wired by hand
+					</span>
+					<button
+						type="button"
+						onclick={() => {
+							focusGraph = !focusGraph
+						}}
+						title="Show only the selected actor and its direct partners; clicking a neighbor centers it"
+						class="ml-auto rounded-full border px-2.5 py-0.5 text-xs transition-colors {focusGraph
+							? 'border-primary bg-primary text-primary-foreground'
+							: 'border-foreground/10 opacity-60 hover:opacity-100'}"
+					>
+						Focus
+					</button>
+				</div>
+				<ActorGraph
+					{proof}
+					{selected}
+					focus={focusGraph}
+					onselect={(actor) => {
+						selected = actor
+						answer = ''
 					}}
-					title="Show only the selected actor and its direct partners; clicking a neighbor centers it"
-					class="rounded-full border px-2.5 py-0.5 transition-colors {focusGraph
-						? 'border-primary bg-primary text-primary-foreground'
-						: 'border-foreground/10 opacity-60 hover:opacity-100'}"
-				>
-					Focus
-				</button>
-			{/if}
-			<span class="text-foreground/40">Stages:</span>
-			{#each bus.stages() as stage, i (`s${i}`)}
-				{#if i > 0}
-					<span class="text-foreground/25">→</span>
-				{/if}
-				<span class="flex gap-1 rounded-full border border-foreground/10 px-2 py-0.5">
-					{#each stage as a (a.manifest.id)}
-						<button
-							type="button"
-							onclick={() => {
-								selected = a
-								answer = ''
-							}}
-							class="transition-opacity {selected.manifest.id === a.manifest.id
-								? ''
-								: 'opacity-50 hover:opacity-100'}"
-						>
-							{a.manifest.name}
-						</button>
-					{/each}
-				</span>
-			{/each}
-		</div>
-
-		{#if graph}
-			<ActorGraph
-				{proof}
-				{selected}
-				focus={focusGraph}
-				onselect={(actor) => {
-					selected = actor
-					answer = ''
-				}}
-			/>
+				/>
+			</section>
 		{/if}
 
-		<!-- ------------------------------------------------ TEMPLATE (the class) -->
-		<section
-			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-		>
-			<div class="flex items-baseline justify-between gap-3 pb-1">
-				<h3 class="font-semibold text-sm">Template</h3>
-				<span class="font-mono text-[0.6875rem] text-foreground/35">{selected.manifest.id}</span>
-			</div>
-			<p class="pb-3 text-foreground/60 text-sm leading-relaxed">
-				{selected.manifest.description}
-			</p>
+		{#if show('template')}
+			<!-- ------------------------------------------------ TEMPLATE (the class) -->
+			<section
+				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
+				<div class="flex items-baseline justify-between gap-3 pb-1">
+					<h3 class="font-semibold text-sm">Template</h3>
+					<span class="font-mono text-[0.6875rem] text-foreground/35">{selected.manifest.id}</span>
+				</div>
+				<p class="pb-3 text-foreground/60 text-sm leading-relaxed">
+					{selected.manifest.description}
+				</p>
 
-			<div class="flex flex-wrap items-center gap-1 pb-3">
-				{#each selected.manifest.tags as t (t)}
-					<span
-						class="rounded-md border border-foreground/10 px-1.5 py-0.5 text-[0.6875rem] text-foreground/60"
-					>
-						{t}
-					</span>
-				{/each}
-			</div>
-
-			{#if selected.requires.length > 0 || selected.produces.length > 0}
-				<div class="flex flex-wrap items-center gap-1.5 pb-1 text-xs">
-					<span class="text-foreground/40">Contract:</span>
-					{#each selected.requires as r, i (`r${i}`)}
-						{@render pill(r)}
-					{/each}
-					<span class="text-foreground/30">→</span>
-					{#each selected.produces as p, i (`p${i}`)}
-						{@render pill(p)}
+				<div class="flex flex-wrap items-center gap-1 pb-3">
+					{#each selected.manifest.tags as t (t)}
+						<span
+							class="rounded-md border border-foreground/10 px-1.5 py-0.5 text-[0.6875rem] text-foreground/60"
+						>
+							{t}
+						</span>
 					{/each}
 				</div>
-				<!-- The relations are the contract, unified against the registry —
+
+				{#if selected.requires.length > 0 || selected.produces.length > 0}
+					<div class="flex flex-wrap items-center gap-1.5 pb-1 text-xs">
+						<span class="text-foreground/40">Contract:</span>
+						{#each selected.requires as r, i (`r${i}`)}
+							{@render pill(r)}
+						{/each}
+						<span class="text-foreground/30">→</span>
+						{#each selected.produces as p, i (`p${i}`)}
+							{@render pill(p)}
+						{/each}
+					</div>
+					<!-- The relations are the contract, unified against the registry —
 				     derived here, never stored: the actor's neighborhood as a
 				     clickable mini graph, feeders → self → fed. -->
-				<div class="flex flex-wrap items-center gap-1.5 pb-3 text-[0.6875rem]">
-					{#each feeders as edge, i (`f${i}`)}
-						<button
-							type="button"
-							onclick={() => {
+					<div class="flex flex-wrap items-center gap-1.5 pb-3 text-[0.6875rem]">
+						{#each feeders as edge, i (`f${i}`)}
+							<button
+								type="button"
+								onclick={() => {
 								const a = bus.get(edge.from)
 								if (a) {
 									selected = a
 									answer = ''
 								}
 							}}
-							class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
+								class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
+							>
+								{bus.get(edge.from)?.manifest.name}
+							</button>
+							<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
+						{:else}
+							<span class="text-foreground/35">outside</span>
+							<span class="font-mono text-foreground/35">→</span>
+						{/each}
+						<span
+							class="rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5 font-semibold text-foreground/85"
 						>
-							{bus.get(edge.from)?.manifest.name}
-						</button>
-						<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
-					{:else}
-						<span class="text-foreground/35">outside</span>
-						<span class="font-mono text-foreground/35">→</span>
-					{/each}
-					<span
-						class="rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5 font-semibold text-foreground/85"
-					>
-						{selected.manifest.name}
-					</span>
-					{#each fed as edge, i (`t${i}`)}
-						<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
-						<button
-							type="button"
-							onclick={() => {
+							{selected.manifest.name}
+						</span>
+						{#each fed as edge, i (`t${i}`)}
+							<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
+							<button
+								type="button"
+								onclick={() => {
 								const a = bus.get(edge.to)
 								if (a) {
 									selected = a
 									answer = ''
 								}
 							}}
-							class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
-						>
-							{bus.get(edge.to)?.manifest.name}
-						</button>
-					{:else}
-						<span class="font-mono text-foreground/35">→</span>
-						<span class="text-foreground/35">outside</span>
-					{/each}
-					{#if selected.manifest.methods.length > 0}
-						<span class="pl-1 text-foreground/35">
-							· all {selected.manifest.methods.length} methods reachable through the chat
-						</span>
-					{/if}
-				</div>
-			{/if}
+								class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
+							>
+								{bus.get(edge.to)?.manifest.name}
+							</button>
+						{:else}
+							<span class="font-mono text-foreground/35">→</span>
+							<span class="text-foreground/35">outside</span>
+						{/each}
+						{#if selected.manifest.methods.length > 0}
+							<span class="pl-1 text-foreground/35">
+								· all {selected.manifest.methods.length} methods reachable through the chat
+							</span>
+						{/if}
+					</div>
+				{/if}
 
-			{#if selected.manifest.methods.length > 0}
-				<div class="flex flex-col gap-2">
-					<h4 class="text-[0.6875rem] text-foreground/40 uppercase tracking-wide">
-						Methods ({selected.manifest.methods.length})
-					</h4>
-					{#each selected.manifest.methods as method (method.name)}
-						<div class="rounded-xl border border-foreground/5 bg-surface-soft/60 px-3 py-2">
-							<div class="flex flex-wrap items-center gap-1.5">
-								<span class="font-medium font-mono text-xs">{method.name}</span>
-								{#each method.requires ?? [] as r, i (`r${i}`)}
-									{@render pill(r)}
-								{/each}
-								{#if (method.requires?.length ?? 0) > 0 || (method.produces?.length ?? 0) > 0}
-									<span class="text-[0.6875rem] text-foreground/30">→</span>
-								{/if}
-								{#each method.produces ?? [] as p, i (`p${i}`)}
-									{@render pill(p)}
-								{/each}
-							</div>
-							<p class="pt-1 text-[0.75rem] text-foreground/50 leading-relaxed">
-								{method.description}
-							</p>
-							{#if Object.keys((method.parameters as { properties?: Record<string, unknown> }).properties ?? {}).length > 0}
-								<details class="pt-1">
-									<summary
-										class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
-									>
-										Schema:
-										{Object.keys(
+				{#if selected.manifest.methods.length > 0}
+					<div class="flex flex-col gap-2">
+						<h4 class="text-[0.6875rem] text-foreground/40 uppercase tracking-wide">
+							Methods ({selected.manifest.methods.length})
+						</h4>
+						{#each selected.manifest.methods as method (method.name)}
+							<div class="rounded-xl border border-foreground/5 bg-surface-soft/60 px-3 py-2">
+								<div class="flex flex-wrap items-center gap-1.5">
+									<span class="font-medium font-mono text-xs">{method.name}</span>
+									{#each method.requires ?? [] as r, i (`r${i}`)}
+										{@render pill(r)}
+									{/each}
+									{#if (method.requires?.length ?? 0) > 0 || (method.produces?.length ?? 0) > 0}
+										<span class="text-[0.6875rem] text-foreground/30">→</span>
+									{/if}
+									{#each method.produces ?? [] as p, i (`p${i}`)}
+										{@render pill(p)}
+									{/each}
+								</div>
+								<p class="pt-1 text-[0.75rem] text-foreground/50 leading-relaxed">
+									{method.description}
+								</p>
+								{#if Object.keys((method.parameters as { properties?: Record<string, unknown> }).properties ?? {}).length > 0}
+									<details class="pt-1">
+										<summary
+											class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
+										>
+											Schema:
+											{Object.keys(
 											(method.parameters as { properties?: Record<string, unknown> }).properties ??
 												{}
 										).join(' · ')}
-									</summary>
-									<pre
-										class="mt-1 overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
-									>{JSON.stringify(
+										</summary>
+										<pre
+											class="mt-1 overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
+										>{JSON.stringify(
 											method.parameters,
 											null,
 											2
 										)}</pre>
-								</details>
-							{/if}
-							{#if method.event}
-								<p class="pt-1 font-mono text-[0.6875rem] text-foreground/40">
-									→ <span class="font-semibold text-foreground/60">{method.event.send}</span>
-									— declared event; ONE generic adapter reduces it in the sandbox (Logic below). The
-									same clause serves voice, UI and the proof engine.
-								</p>
-							{:else if selected.handlerSource(method.name)}
-								<details class="pt-1">
-									<summary
-										class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
-									>
-										Code — the running handler, read from the function itself
-									</summary>
-									<pre
-										class="mt-1 overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
-									>{selected.handlerSource(
+									</details>
+								{/if}
+								{#if method.event}
+									<p class="pt-1 font-mono text-[0.6875rem] text-foreground/40">
+										→ <span class="font-semibold text-foreground/60">{method.event.send}</span>
+										— declared event; ONE generic adapter reduces it in the sandbox (Logic below).
+										The same clause serves voice, UI and the proof engine.
+									</p>
+								{:else if selected.handlerSource(method.name)}
+									<details class="pt-1">
+										<summary
+											class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
+										>
+											Code — the running handler, read from the function itself
+										</summary>
+										<pre
+											class="mt-1 overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
+										>{selected.handlerSource(
 											method.name
 										)}</pre>
-								</details>
-							{/if}
-						</div>
-					{/each}
-				</div>
-			{:else}
-				<p class="text-foreground/40 text-xs">
-					No methods — this actor is pure transformation; its contract is the whole interface.
-				</p>
-			{/if}
+									</details>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="text-foreground/40 text-xs">
+						No methods — this actor is pure transformation; its contract is the whole interface.
+					</p>
+				{/if}
 
-			<!-- The sandboxed program — where the behaviour actually lives. Part
+				<!-- The sandboxed program — where the behaviour actually lives. Part
 			     of the manifest, so it lives HERE, not in a section of its own. -->
-			{#if selected.manifest.vibe}
-				<details class="pt-3">
+				{#if selected.manifest.vibe}
+					<details class="pt-3">
+						<summary
+							class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
+						>
+							Logic — the sandboxed program (QuickJS): initState, reduce and shape run there, never
+							in the host
+						</summary>
+						<pre
+							class="mt-1 max-h-96 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
+						>{selected.manifest.vibe.logic.trim()}</pre>
+					</details>
+				{/if}
+
+				<!-- The manifest raw — the only stored truth; everything above is a
+			     rendering of it, so the JSON belongs to the same section. -->
+				<details class="pt-2">
 					<summary
 						class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
 					>
-						Logic — the sandboxed program (QuickJS): initState, reduce and shape run there, never in
-						the host
+						Manifest as JSON — the only stored truth; tools, edges, stages and this panel are
+						derived from it
 					</summary>
 					<pre
-						class="mt-1 max-h-96 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
-					>{selected.manifest.vibe.logic.trim()}</pre>
-				</details>
-			{/if}
-
-			<!-- The manifest raw — the only stored truth; everything above is a
-			     rendering of it, so the JSON belongs to the same section. -->
-			<details class="pt-2">
-				<summary
-					class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
-				>
-					Manifest as JSON — the only stored truth; tools, edges, stages and this panel are derived
-					from it
-				</summary>
-				<pre
-					class="mt-1 max-h-72 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
-				>{JSON.stringify(
+						class="mt-1 max-h-72 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
+					>{JSON.stringify(
 						selected.manifest,
 						null,
 						2
 					)}</pre>
-			</details>
-		</section>
+				</details>
+			</section>
+		{/if}
 
-		<!-- --------------------------------------------- INSTANZ (the running one) -->
-		<section
-			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-		>
-			<div class="flex items-center gap-2 pb-2">
-				<h3 class="font-semibold text-sm">Instance</h3>
-				<span
-					class="size-1.5 rounded-full {instance ? 'bg-status-success' : 'bg-foreground/20'}"
-				></span>
-			</div>
-			{#if instance}
-				<dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-3">
-					{#each Object.entries(instance) as [key, value] (key)}
+		{#if show('instance')}
+			<!-- --------------------------------------------- INSTANZ (the running one) -->
+			<section
+				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
+				<div class="flex items-center gap-2 pb-2">
+					<h3 class="font-semibold text-sm">Instance</h3>
+					<span
+						class="size-1.5 rounded-full {instance ? 'bg-status-success' : 'bg-foreground/20'}"
+					></span>
+				</div>
+				{#if instance}
+					<dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-3">
+						{#each Object.entries(instance) as [key, value] (key)}
+							<div>
+								<dt class="text-[0.6875rem] text-foreground/40">{key}</dt>
+								<dd class="font-medium">{value}</dd>
+							</div>
+						{/each}
 						<div>
-							<dt class="text-[0.6875rem] text-foreground/40">{key}</dt>
-							<dd class="font-medium">{value}</dd>
+							<dt class="text-[0.6875rem] text-foreground/40">Mailbox</dt>
+							<dd class="font-medium">{selected.pending} waiting</dd>
 						</div>
-					{/each}
-					<div>
-						<dt class="text-[0.6875rem] text-foreground/40">Mailbox</dt>
-						<dd class="font-medium">{selected.pending} waiting</dd>
-					</div>
-					<div>
-						<dt class="text-[0.6875rem] text-foreground/40">Handler errors</dt>
-						<dd class="font-medium {selected.failures > 0 ? 'text-status-error' : ''}">
-							{selected.failures}{selected.lastError ? ` · ${selected.lastError}` : ''}
-						</dd>
-					</div>
-				</dl>
-			{:else}
-				<p class="text-foreground/40 text-sm">
-					Template only — no running instance yet. The contract is declared; the engine executes it
-					on demand.
-				</p>
-			{/if}
-		</section>
+						<div>
+							<dt class="text-[0.6875rem] text-foreground/40">Handler errors</dt>
+							<dd class="font-medium {selected.failures > 0 ? 'text-status-error' : ''}">
+								{selected.failures}{selected.lastError ? ` · ${selected.lastError}` : ''}
+							</dd>
+						</div>
+					</dl>
+				{:else}
+					<p class="text-foreground/40 text-sm">
+						Template only — no running instance yet. The contract is declared; the engine executes
+						it on demand.
+					</p>
+				{/if}
+			</section>
+		{/if}
 
-		<!-- ------------------------------------- FACE: the actor's own window -->
-		<section
-			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-		>
-			<div class="flex items-center gap-2 pb-1">
-				<h3 class="font-semibold text-sm">Face</h3>
-				<span
-					class="size-1.5 rounded-full {isWindow(selected) ? 'bg-status-success' : 'bg-foreground/20'}"
-				></span>
-			</div>
-			{#if isWindow(selected)}
-				{@const Face = selected.component as import('svelte').Component<{
+		{#if show('face')}
+			<!-- ------------------------------------- FACE: the actor's own window -->
+			<section
+				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
+				<div class="flex items-center gap-2 pb-1">
+					<h3 class="font-semibold text-sm">Face</h3>
+					<span
+						class="size-1.5 rounded-full {isWindow(selected) ? 'bg-status-success' : 'bg-foreground/20'}"
+					></span>
+				</div>
+				{#if isWindow(selected)}
+					{@const Face = selected.component as import('svelte').Component<{
 					actor: typeof selected.subject
 				}>}
-				<p class="pb-2 text-[0.6875rem] text-foreground/40">
-					This window is an actor itself: it consumes the state of
-					{selected.subject.manifest.name}
-					and paints it — live, here:
-				</p>
-				<details>
-					<summary class="cursor-pointer text-foreground/50 text-xs hover:text-foreground/80">
-						Show window
-					</summary>
-					<div class="mt-2 max-h-80 overflow-y-auto rounded-xl border border-foreground/10 p-3">
-						<!-- The window's props ride along — they are what make the
+					<p class="pb-2 text-[0.6875rem] text-foreground/40">
+						This window is an actor itself: it consumes the state of
+						{selected.subject.manifest.name}
+						and paints it — live, here:
+					</p>
+					<details>
+						<summary class="cursor-pointer text-foreground/50 text-xs hover:text-foreground/80">
+							Show window
+						</summary>
+						<div class="mt-2 max-h-80 overflow-y-auto rounded-xl border border-foreground/10 p-3">
+							<!-- The window's props ride along — they are what make the
 						     Kanban-Board window a BOARD and not another list. -->
-						<Face actor={selected.subject} {...selected.props} />
-					</div>
-				</details>
-			{:else}
-				{@const win = bus.actors().filter(isWindow).find((a) => a.subject === selected)}
-				{#if win}
-					<p class="text-foreground/40 text-sm">
-						This actor does not paint itself — its window is its own actor:
-						<button
-							type="button"
-							onclick={() => {
+							<Face actor={selected.subject} {...selected.props} />
+						</div>
+					</details>
+				{:else}
+					{@const win = bus.actors().filter(isWindow).find((a) => a.subject === selected)}
+					{#if win}
+						<p class="text-foreground/40 text-sm">
+							This actor does not paint itself — its window is its own actor:
+							<button
+								type="button"
+								onclick={() => {
 								selected = win
 								answer = ''
 							}}
-							class="underline underline-offset-4 hover:text-foreground"
-						>
-							{win.manifest.name}
-						</button>
-					</p>
-				{:else}
-					<p class="text-foreground/40 text-sm">
-						No window — this actor works invisibly; its state is readable above.
-					</p>
+								class="underline underline-offset-4 hover:text-foreground"
+							>
+								{win.manifest.name}
+							</button>
+						</p>
+					{:else}
+						<p class="text-foreground/40 text-sm">
+							No window — this actor works invisibly; its state is readable above.
+						</p>
+					{/if}
 				{/if}
-			{/if}
-		</section>
+			</section>
+		{/if}
 
-		<!-- --------------------------------- BEWEIS: SLD backward chaining, live -->
-		<section
-			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-		>
-			<div class="flex flex-wrap items-center gap-2 pb-2">
-				<h3 class="font-semibold text-sm">Proof</h3>
-				<span class="text-[0.6875rem] text-foreground/40">
-					Pick a goal — the solver searches backwards for producers and proves their needs, with
-					backtracking; not(…) is negation as failure.
-				</span>
-			</div>
-			<div class="flex flex-wrap items-center gap-1.5 pb-2">
-				{#each selected.produces as p, i (`g${i}`)}
-					<button
-						type="button"
-						onclick={() => prove(p)}
-						class="rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[0.6875rem] transition-colors hover:border-primary/40 {goal ===
+		{#if show('proof')}
+			<!-- --------------------------------- BEWEIS: SLD backward chaining, live -->
+			<section
+				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
+				<div class="flex flex-wrap items-center gap-2 pb-2">
+					<h3 class="font-semibold text-sm">Proof</h3>
+					<span class="text-[0.6875rem] text-foreground/40">
+						Pick a goal — the solver searches backwards for producers and proves their needs, with
+						backtracking; not(…) is negation as failure.
+					</span>
+				</div>
+				<div class="flex flex-wrap items-center gap-1.5 pb-2">
+					{#each selected.produces as p, i (`g${i}`)}
+						<button
+							type="button"
+							onclick={() => prove(p)}
+							class="rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[0.6875rem] transition-colors hover:border-primary/40 {goal ===
 						p
 							? 'border-primary/50'
 							: ''}"
-					>
-						⊢ {p}
-					</button>
-				{/each}
-				<form onsubmit={proveCustom} class="flex items-center gap-1.5">
+						>
+							⊢ {p}
+						</button>
+					{/each}
+					<form onsubmit={proveCustom} class="flex items-center gap-1.5">
+						<input
+							bind:value={goal}
+							placeholder="own goal, e.g. reply(R) or not(x(Y))"
+							class="w-56 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
+						>
+						<button
+							type="submit"
+							class="rounded-full bg-primary px-3 py-1 text-[0.6875rem] text-primary-foreground"
+						>
+							prove
+						</button>
+					</form>
+				</div>
+				{#if proof}
+					{@render proofNode(proof)}
+				{/if}
+
+				<!-- Run: the plan above, walked for real — postorder messages,
+			     runtime backtracking, llm-actors over the injected model. -->
+				<div class="flex flex-wrap items-center gap-1.5 pt-3">
 					<input
-						bind:value={goal}
-						placeholder="own goal, e.g. reply(R) or not(x(Y))"
-						class="w-56 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
+						bind:value={factsText}
+						placeholder={'external facts as JSON, e.g. {"request": {"text": "…"}}'}
+						class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
+					>
+					<button
+						type="button"
+						onclick={runGoal}
+						disabled={goal.trim() === '' || running}
+						class="rounded-full bg-primary px-3 py-1 text-[0.6875rem] text-primary-foreground transition-opacity disabled:opacity-30"
+					>
+						{running ? 'running…' : 'Run'}
+					</button>
+					{#if runError}
+						<span class="text-[0.6875rem] text-status-error">{runError}</span>
+					{/if}
+				</div>
+			</section>
+		{/if}
+
+		{#if show('trace')}
+			<!-- ------------------------- TRACE: the bus's biography, per actor -->
+			<section
+				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
+				<div class="flex items-center gap-2 pb-2">
+					<h3 class="font-semibold text-sm">Trace</h3>
+					<span class="text-[0.6875rem] text-foreground/40">
+						everything that crossed the bus — runs grouped, backtracking visible
+					</span>
+					<button
+						type="button"
+						onclick={() => {
+						traceOnlySelected = !traceOnlySelected
+					}}
+						class="ml-auto rounded-full border px-2 py-0.5 text-[0.6875rem] transition-colors {traceOnlySelected
+						? 'border-primary/40 text-primary/80'
+						: 'border-foreground/10 opacity-60 hover:opacity-100'}"
+					>
+						only {selected.manifest.name}
+					</button>
+				</div>
+				{#if activityRows.length === 0}
+					<p class="text-foreground/40 text-xs">
+						Nothing yet — talk to the system, or run a goal above.
+					</p>
+				{:else}
+					<div class="flex max-h-72 flex-col gap-0.5 overflow-y-auto font-mono text-[0.6875rem]">
+						{#each activityRows as row (row.kind === 'run' ? row.run.id : row.e.seq)}
+							{#if row.kind === 'run'}
+								<details class="rounded-lg border border-foreground/5 px-2 py-1">
+									<summary class="flex cursor-pointer items-center gap-2">
+										<span
+											class={row.run.status === 'ok' ? 'text-status-success' : 'text-status-error'}
+										>
+											{row.run.status === 'ok' ? '✓' : '✗'}
+										</span>
+										<span class="text-foreground/50">{row.run.id}</span>
+										<span class="min-w-0 flex-1 truncate">⊢ {row.run.goal}</span>
+										<span class="text-foreground/35">{row.run.steps.length} steps</span>
+									</summary>
+									<div class="flex flex-col gap-0.5 py-1 pl-5">
+										{#each row.run.steps as step, i (`${row.run.id}s${i}`)}
+											<div class="flex items-start gap-2">
+												<span class={step.ok ? 'text-status-success' : 'text-status-error'}>
+													{step.ok ? '✓' : '✗'}
+												</span>
+												<span class="shrink-0 text-foreground/50">{step.actor ?? 'external'}</span>
+												<span class="min-w-0 flex-1 truncate">{step.predicate}</span>
+												{#if step.attempt > 1}
+													<span class="shrink-0 rounded bg-status-info/20 px-1 text-[#a06818]">
+														attempt {step.attempt}
+													</span>
+												{/if}
+												<span class="w-10 shrink-0 text-right text-foreground/30">
+													{step.duration}ms
+												</span>
+											</div>
+											<div class="truncate pl-5 text-foreground/40">
+												in {JSON.stringify(step.in)} → {JSON.stringify(step.out)}
+											</div>
+										{/each}
+									</div>
+								</details>
+							{:else}
+								{@const e = row.e}
+								<div class="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-foreground/[0.03]">
+									<span class="w-8 shrink-0 text-foreground/35">
+										{e.kind === 'emit' ? '⚡' : e.kind === 'ask' ? '?' : '→'}
+									</span>
+									<span class="shrink-0 text-foreground/50">{e.from}</span>
+									<span class="text-foreground/25">→</span>
+									<span class="shrink-0 text-foreground/50">{e.to}</span>
+									<span class="min-w-0 flex-1 truncate">{e.method}</span>
+									<span class={e.ok ? 'text-status-success' : 'text-status-error'}>
+										{e.ok ? '✓' : '✗'}
+									</span>
+									<span class="w-10 shrink-0 text-right text-foreground/30">{e.ms}ms</span>
+								</div>
+							{/if}
+						{/each}
+					</div>
+				{/if}
+			</section>
+		{/if}
+
+		{#if show('ask')}
+			<!-- ----------------------------------------------- ask(): the interview -->
+			<section
+				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
+				<h3 class="pb-2 font-semibold text-sm">ask()</h3>
+				<form onsubmit={ask} class="flex items-center gap-2">
+					<input
+						bind:value={question}
+						placeholder={`Ask ${selected.manifest.name}…`}
+						class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-4 py-2 text-sm outline-none placeholder:text-foreground/30"
 					>
 					<button
 						type="submit"
-						class="rounded-full bg-primary px-3 py-1 text-[0.6875rem] text-primary-foreground"
+						disabled={question.trim() === '' || busy}
+						class="rounded-full bg-primary px-4 py-2 text-primary-foreground text-sm transition-opacity disabled:opacity-30"
 					>
-						prove
+						{busy ? '…' : 'Fragen'}
 					</button>
 				</form>
-			</div>
-			{#if proof}
-				{@render proofNode(proof)}
-			{/if}
-
-			<!-- Run: the plan above, walked for real — postorder messages,
-			     runtime backtracking, llm-actors over the injected model. -->
-			<div class="flex flex-wrap items-center gap-1.5 pt-3">
-				<input
-					bind:value={factsText}
-					placeholder={'external facts as JSON, e.g. {"request": {"text": "…"}}'}
-					class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
-				>
-				<button
-					type="button"
-					onclick={runGoal}
-					disabled={goal.trim() === '' || running}
-					class="rounded-full bg-primary px-3 py-1 text-[0.6875rem] text-primary-foreground transition-opacity disabled:opacity-30"
-				>
-					{running ? 'running…' : 'Run'}
-				</button>
-				{#if runError}
-					<span class="text-[0.6875rem] text-status-error">{runError}</span>
+				{#if answer}
+					<p class="pt-3 text-sm leading-relaxed">{answer}</p>
 				{/if}
-			</div>
-		</section>
-
-		<!-- ------------------------- TRACE: the bus's biography, per actor -->
-		<section
-			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-		>
-			<div class="flex items-center gap-2 pb-2">
-				<h3 class="font-semibold text-sm">Trace</h3>
-				<span class="text-[0.6875rem] text-foreground/40">
-					everything that crossed the bus — runs grouped, backtracking visible
-				</span>
-				<button
-					type="button"
-					onclick={() => {
-						traceOnlySelected = !traceOnlySelected
-					}}
-					class="ml-auto rounded-full border px-2 py-0.5 text-[0.6875rem] transition-colors {traceOnlySelected
-						? 'border-primary/40 text-primary/80'
-						: 'border-foreground/10 opacity-60 hover:opacity-100'}"
-				>
-					only {selected.manifest.name}
-				</button>
-			</div>
-			{#if activityRows.length === 0}
-				<p class="text-foreground/40 text-xs">
-					Nothing yet — talk to the system, or run a goal above.
-				</p>
-			{:else}
-				<div class="flex max-h-72 flex-col gap-0.5 overflow-y-auto font-mono text-[0.6875rem]">
-					{#each activityRows as row (row.kind === 'run' ? row.run.id : row.e.seq)}
-						{#if row.kind === 'run'}
-							<details class="rounded-lg border border-foreground/5 px-2 py-1">
-								<summary class="flex cursor-pointer items-center gap-2">
-									<span
-										class={row.run.status === 'ok' ? 'text-status-success' : 'text-status-error'}
-									>
-										{row.run.status === 'ok' ? '✓' : '✗'}
-									</span>
-									<span class="text-foreground/50">{row.run.id}</span>
-									<span class="min-w-0 flex-1 truncate">⊢ {row.run.goal}</span>
-									<span class="text-foreground/35">{row.run.steps.length} steps</span>
-								</summary>
-								<div class="flex flex-col gap-0.5 py-1 pl-5">
-									{#each row.run.steps as step, i (`${row.run.id}s${i}`)}
-										<div class="flex items-start gap-2">
-											<span class={step.ok ? 'text-status-success' : 'text-status-error'}>
-												{step.ok ? '✓' : '✗'}
-											</span>
-											<span class="shrink-0 text-foreground/50">{step.actor ?? 'external'}</span>
-											<span class="min-w-0 flex-1 truncate">{step.predicate}</span>
-											{#if step.attempt > 1}
-												<span class="shrink-0 rounded bg-status-info/20 px-1 text-[#a06818]">
-													attempt {step.attempt}
-												</span>
-											{/if}
-											<span class="w-10 shrink-0 text-right text-foreground/30">
-												{step.duration}ms
-											</span>
-										</div>
-										<div class="truncate pl-5 text-foreground/40">
-											in {JSON.stringify(step.in)} → {JSON.stringify(step.out)}
-										</div>
-									{/each}
-								</div>
-							</details>
-						{:else}
-							{@const e = row.e}
-							<div class="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-foreground/[0.03]">
-								<span class="w-8 shrink-0 text-foreground/35">
-									{e.kind === 'emit' ? '⚡' : e.kind === 'ask' ? '?' : '→'}
-								</span>
-								<span class="shrink-0 text-foreground/50">{e.from}</span>
-								<span class="text-foreground/25">→</span>
-								<span class="shrink-0 text-foreground/50">{e.to}</span>
-								<span class="min-w-0 flex-1 truncate">{e.method}</span>
-								<span class={e.ok ? 'text-status-success' : 'text-status-error'}>
-									{e.ok ? '✓' : '✗'}
-								</span>
-								<span class="w-10 shrink-0 text-right text-foreground/30">{e.ms}ms</span>
-							</div>
-						{/if}
-					{/each}
-				</div>
-			{/if}
-		</section>
-
-		<!-- ----------------------------------------------- ask(): the interview -->
-		<section
-			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-		>
-			<h3 class="pb-2 font-semibold text-sm">ask()</h3>
-			<form onsubmit={ask} class="flex items-center gap-2">
-				<input
-					bind:value={question}
-					placeholder={`Ask ${selected.manifest.name}…`}
-					class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-4 py-2 text-sm outline-none placeholder:text-foreground/30"
-				>
-				<button
-					type="submit"
-					disabled={question.trim() === '' || busy}
-					class="rounded-full bg-primary px-4 py-2 text-primary-foreground text-sm transition-opacity disabled:opacity-30"
-				>
-					{busy ? '…' : 'Fragen'}
-				</button>
-			</form>
-			{#if answer}
-				<p class="pt-3 text-sm leading-relaxed">{answer}</p>
-			{/if}
-		</section>
+			</section>
+		{/if}
 	</div>
+
+	<!-- The lens list: filters WHICH part of the actor's biography renders.
+	     Slim, right, always visible — the sections themselves stay one column. -->
+	<nav class="flex w-24 shrink-0 flex-col gap-1 text-xs">
+		<p class="px-2 pb-1 text-[0.625rem] text-foreground/35 uppercase tracking-[0.2em]">View</p>
+		{#each VIEWS as v (v.key)}
+			<button
+				type="button"
+				onclick={() => {
+					view = v.key
+				}}
+				class="rounded-lg px-2.5 py-1.5 text-left transition-colors {view === v.key
+					? 'border border-foreground/5 bg-[#fffdf7] font-medium shadow-[0_1px_3px_rgba(30,41,59,0.05)]'
+					: 'opacity-60 hover:opacity-100'}"
+			>
+				{v.label}
+			</button>
+		{/each}
+	</nav>
 </div>

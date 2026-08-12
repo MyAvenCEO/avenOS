@@ -308,7 +308,8 @@ $effect(() => {
 				{#each bus.actors().filter(isWindow).filter((w) => w.open) as w (w.manifest.id)}
 					{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
 					<section class="flex min-h-0 flex-col rounded-2xl">
-						<div class="flex items-center gap-2 pb-2">
+						<!-- Centered under the tab pill; the close sits quietly on the right. -->
+						<div class="relative flex items-baseline justify-center gap-2 pb-2">
 							<span class="font-semibold text-[15px]">{w.manifest.name}</span>
 							<span class="font-mono text-[0.625rem] text-foreground/35">
 								{w.subject.manifest.id}
@@ -320,7 +321,7 @@ $effect(() => {
 								}}
 								title="Hide window"
 								aria-label="Hide window"
-								class="ml-auto text-foreground/30 transition-colors hover:text-foreground"
+								class="absolute top-0 right-0 text-foreground/30 transition-colors hover:text-foreground"
 							>
 								×
 							</button>
