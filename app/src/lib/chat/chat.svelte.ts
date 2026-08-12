@@ -64,9 +64,13 @@ const SYSTEM_PROMPT =
 	'compose with wish=<their words>. The Composer may HOLD SEVERAL times: ' +
 	'first with clarify questions (the result carries clarifying=[...] — read ' +
 	'them out), later with a UI MOCKUP shown in the composer window (the user ' +
-	'says what to change, or approves). EVERY time the user answers while the ' +
-	'composer holds, relay it VERBATIM with compose_answer text=<their words>; ' +
-	'the chain continues on its own. It scouts ' +
+	'says what to change, or approves). While the composer HOLDS, EVERY user ' +
+	'message \u2014 including bare approvals like "passt", "weiter", "bestätigt" ' +
+	'\u2014 MUST be relayed verbatim with compose_answer text=<their words>. ' +
+	'Never ask your own follow-up instead and never claim confirmation is ' +
+	'impossible: MOCKUP approval happens BY VOICE through compose_answer; only ' +
+	'the final Promote of the staged instance is a button. The chain continues ' +
+	'on its own. It scouts ' +
 	'the mesh first (an existing actor may simply be spawned instead), writes ' +
 	'measurable proofs, designs in up to three rounds, and stages the result as ' +
 	'a LIVE instance the user can try right away. Promotion to production ' +

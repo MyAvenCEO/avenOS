@@ -154,7 +154,9 @@ function reduce(state, ev) {
 		record: {
 			ok: true, hold: true, phase: 'mockup',
 			view: parsed.view, style: parsed.style || {}, sample: parsed.sample || {},
-			say: 'The face is staged \\u2014 say what to change, or say passt to continue.'
+			say: feedback
+				? 'The face was UPDATED as asked \\u2014 look again: say what to change, or approve by saying passt.'
+				: 'The face is staged \\u2014 say what to change, or say passt to continue.'
 		}
 	}
 }
