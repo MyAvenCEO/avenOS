@@ -643,6 +643,32 @@ describe('catalog (code is the source of truth, reduced — 0130)', () => {
 	})
 })
 
+describe('runs ARE trace entries (merged biography)', () => {
+	test('every executed step lands in the trace carrying its run id', async () => {
+		const bus = new MessageBus()
+		bus.register(
+			new Actor(
+				{
+					id: 'quelle',
+					name: 'Quelle',
+					description: 'Produces facts.',
+					tags: [],
+					methods: [],
+					requires: [],
+					produces: ['fact(X)']
+				},
+				{ fact: () => ({ record: '{"ok":true,"wert":5}', wire: 'ok' }) }
+			)
+		)
+		const run = await bus.satisfy('fact(X)')
+		const steps = bus.traceLog.filter((e) => e.kind === 'step')
+		expect(steps.length).toBe(run.steps.length)
+		expect(steps.every((e) => e.run === run.id)).toBe(true)
+		expect(steps[0]?.to).toBe('quelle')
+		expect(steps[0]?.method).toBe('fact(X)')
+	})
+})
+
 describe('the membrane seam (0130): actors shape their own model text', () => {
 	function shaper(shape: (raw: string) => { state?: Record<string, unknown> } | null) {
 		return new (class extends Actor {

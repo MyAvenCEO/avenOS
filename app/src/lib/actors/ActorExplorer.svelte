@@ -1,7 +1,7 @@
 <script lang="ts">
 import ActorGraph from './ActorGraph.svelte'
 import { type Actor, functor } from './actor'
-import { bus, type ProofStep, type TraceEntry } from './bus'
+import { bus, type ProofStep, type Run, type TraceEntry } from './bus'
 import { registryTick } from './reactivity.svelte'
 import { isVariable, resolve } from './term'
 import { isWindow } from './window.actor.svelte'
@@ -70,13 +70,35 @@ $effect(() => {
 	}, 1500)
 	return () => clearInterval(timer)
 })
-const traceRows = $derived.by<TraceEntry[]>(() => {
+/**
+ * Runs and trace are the SAME events — a run is a group of step entries.
+ * The stream shows each run once (as a collapsible group, payload detail
+ * from bus.runs()) in the position of its newest step, everything else flat.
+ */
+type ActivityRow = { kind: 'entry'; e: TraceEntry } | { kind: 'run'; run: Run; at: number }
+const activityRows = $derived.by<ActivityRow[]>(() => {
 	void traceTick
-	const rows = [...bus.traceLog].reverse()
+	const runsById = new Map(bus.runs().map((r) => [r.id, r]))
+	const rows: ActivityRow[] = []
+	const seenRuns = new Set<string>()
+	for (const e of [...bus.traceLog].reverse()) {
+		if (e.kind === 'step' && e.run) {
+			if (seenRuns.has(e.run)) continue
+			seenRuns.add(e.run)
+			const run = runsById.get(e.run)
+			if (run) rows.push({ kind: 'run', run, at: e.at })
+			else rows.push({ kind: 'entry', e })
+			continue
+		}
+		rows.push({ kind: 'entry', e })
+	}
 	return (
 		traceOnlySelected
-			? rows.filter(
-					(e) => e.from === selected.manifest.id || e.to.split(',').includes(selected.manifest.id)
+			? rows.filter((row) =>
+					row.kind === 'run'
+						? row.run.steps.some((step) => step.actor === selected.manifest.id)
+						: row.e.from === selected.manifest.id ||
+							row.e.to.split(',').includes(selected.manifest.id)
 				)
 			: rows
 	).slice(0, 30)
@@ -116,11 +138,6 @@ async function runGoal() {
 		running = false
 	}
 }
-
-const runRows = $derived.by(() => {
-	void traceTick
-	return [...bus.runs()].reverse()
-})
 
 // ---- the interview
 let question = $state('')
@@ -605,60 +622,6 @@ async function ask(event: SubmitEvent) {
 			</div>
 		</section>
 
-		<!-- --------------------------- RUNS: executed goals, step by step -->
-		<section
-			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-		>
-			<div class="flex items-center gap-2 pb-2">
-				<h3 class="font-semibold text-sm">Runs</h3>
-				<span class="text-[0.6875rem] text-foreground/40">
-					executed goals — every step one message, backtracking visible
-				</span>
-			</div>
-			{#if runRows.length === 0}
-				<p class="text-foreground/40 text-xs">
-					No runs yet — pick a goal above and press Run, or say "run …".
-				</p>
-			{:else}
-				<div class="flex max-h-72 flex-col gap-1 overflow-y-auto">
-					{#each runRows as run (run.id)}
-						<details class="rounded-lg border border-foreground/5 px-2 py-1">
-							<summary class="flex cursor-pointer items-center gap-2 font-mono text-[0.6875rem]">
-								<span class={run.status === 'ok' ? 'text-status-success' : 'text-status-error'}>
-									{run.status === 'ok' ? '✓' : '✗'}
-								</span>
-								<span class="text-foreground/50">{run.id}</span>
-								<span class="min-w-0 flex-1 truncate">⊢ {run.goal}</span>
-								<span class="text-foreground/35">{run.steps.length} steps</span>
-							</summary>
-							<div class="flex flex-col gap-0.5 py-1 pl-5 font-mono text-[0.6875rem]">
-								{#each run.steps as step, i (`${run.id}s${i}`)}
-									<div class="flex items-start gap-2">
-										<span class={step.ok ? 'text-status-success' : 'text-status-error'}>
-											{step.ok ? '✓' : '✗'}
-										</span>
-										<span class="shrink-0 text-foreground/50">{step.actor ?? 'external'}</span>
-										<span class="min-w-0 flex-1 truncate">{step.predicate}</span>
-										{#if step.attempt > 1}
-											<span class="shrink-0 rounded bg-status-info/20 px-1 text-[#a06818]">
-												attempt {step.attempt}
-											</span>
-										{/if}
-										<span class="w-10 shrink-0 text-right text-foreground/30">
-											{step.duration}ms
-										</span>
-									</div>
-									<div class="truncate pl-5 text-foreground/40">
-										in {JSON.stringify(step.in)} → {JSON.stringify(step.out)}
-									</div>
-								{/each}
-							</div>
-						</details>
-					{/each}
-				</div>
-			{/if}
-		</section>
-
 		<!-- ------------------------- TRACE: the bus's biography, per actor -->
 		<section
 			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
@@ -666,7 +629,7 @@ async function ask(event: SubmitEvent) {
 			<div class="flex items-center gap-2 pb-2">
 				<h3 class="font-semibold text-sm">Trace</h3>
 				<span class="text-[0.6875rem] text-foreground/40">
-					everything that crossed the bus — envelopes, emits, interviews
+					everything that crossed the bus — runs grouped, backtracking visible
 				</span>
 				<button
 					type="button"
@@ -680,24 +643,64 @@ async function ask(event: SubmitEvent) {
 					only {selected.manifest.name}
 				</button>
 			</div>
-			{#if traceRows.length === 0}
-				<p class="text-foreground/40 text-xs">Nothing yet — talk to the system.</p>
+			{#if activityRows.length === 0}
+				<p class="text-foreground/40 text-xs">
+					Nothing yet — talk to the system, or run a goal above.
+				</p>
 			{:else}
-				<div class="flex max-h-56 flex-col gap-0.5 overflow-y-auto font-mono text-[0.6875rem]">
-					{#each traceRows as e (e.seq)}
-						<div class="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-foreground/[0.03]">
-							<span class="w-8 shrink-0 text-foreground/35">
-								{e.kind === 'emit' ? '⚡' : e.kind === 'ask' ? '?' : '→'}
-							</span>
-							<span class="shrink-0 text-foreground/50">{e.from}</span>
-							<span class="text-foreground/25">→</span>
-							<span class="shrink-0 text-foreground/50">{e.to}</span>
-							<span class="min-w-0 flex-1 truncate">{e.method}</span>
-							<span class={e.ok ? 'text-status-success' : 'text-status-error'}>
-								{e.ok ? '✓' : '✗'}
-							</span>
-							<span class="w-10 shrink-0 text-right text-foreground/30">{e.ms}ms</span>
-						</div>
+				<div class="flex max-h-72 flex-col gap-0.5 overflow-y-auto font-mono text-[0.6875rem]">
+					{#each activityRows as row (row.kind === 'run' ? row.run.id : row.e.seq)}
+						{#if row.kind === 'run'}
+							<details class="rounded-lg border border-foreground/5 px-2 py-1">
+								<summary class="flex cursor-pointer items-center gap-2">
+									<span
+										class={row.run.status === 'ok' ? 'text-status-success' : 'text-status-error'}
+									>
+										{row.run.status === 'ok' ? '✓' : '✗'}
+									</span>
+									<span class="text-foreground/50">{row.run.id}</span>
+									<span class="min-w-0 flex-1 truncate">⊢ {row.run.goal}</span>
+									<span class="text-foreground/35">{row.run.steps.length} steps</span>
+								</summary>
+								<div class="flex flex-col gap-0.5 py-1 pl-5">
+									{#each row.run.steps as step, i (`${row.run.id}s${i}`)}
+										<div class="flex items-start gap-2">
+											<span class={step.ok ? 'text-status-success' : 'text-status-error'}>
+												{step.ok ? '✓' : '✗'}
+											</span>
+											<span class="shrink-0 text-foreground/50">{step.actor ?? 'external'}</span>
+											<span class="min-w-0 flex-1 truncate">{step.predicate}</span>
+											{#if step.attempt > 1}
+												<span class="shrink-0 rounded bg-status-info/20 px-1 text-[#a06818]">
+													attempt {step.attempt}
+												</span>
+											{/if}
+											<span class="w-10 shrink-0 text-right text-foreground/30">
+												{step.duration}ms
+											</span>
+										</div>
+										<div class="truncate pl-5 text-foreground/40">
+											in {JSON.stringify(step.in)} → {JSON.stringify(step.out)}
+										</div>
+									{/each}
+								</div>
+							</details>
+						{:else}
+							{@const e = row.e}
+							<div class="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-foreground/[0.03]">
+								<span class="w-8 shrink-0 text-foreground/35">
+									{e.kind === 'emit' ? '⚡' : e.kind === 'ask' ? '?' : '→'}
+								</span>
+								<span class="shrink-0 text-foreground/50">{e.from}</span>
+								<span class="text-foreground/25">→</span>
+								<span class="shrink-0 text-foreground/50">{e.to}</span>
+								<span class="min-w-0 flex-1 truncate">{e.method}</span>
+								<span class={e.ok ? 'text-status-success' : 'text-status-error'}>
+									{e.ok ? '✓' : '✗'}
+								</span>
+								<span class="w-10 shrink-0 text-right text-foreground/30">{e.ms}ms</span>
+							</div>
+						{/if}
 					{/each}
 				</div>
 			{/if}

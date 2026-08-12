@@ -43,12 +43,15 @@ export interface DerivedEdge {
 export interface TraceEntry {
 	seq: number
 	at: number
-	kind: 'send' | 'emit' | 'ask'
+	/** 'step' = one executed run step — a run is a GROUP of trace entries. */
+	kind: 'send' | 'emit' | 'ask' | 'step'
 	from: string
 	to: string
 	method: string
 	ok: boolean
 	ms: number
+	/** The run this entry belongs to; only on kind 'step'. */
+	run?: string
 }
 
 let traceSeq = 0
@@ -450,6 +453,25 @@ export class MessageBus {
 	 *   at receive time: manifest prose as instruction, payload in, JSON out.
 	 *   No injected LLM = a structured step failure, not a throw.
 	 */
+	/**
+	 * A run step IS a bus message — so it lands in the one biography too,
+	 * carrying its run id. Runs and trace are the same events; the Runs list
+	 * keeps only the payload detail (in/out) the flat trace does not.
+	 */
+	#recordStep(run: Run, step: RunStep): void {
+		run.steps.push(step)
+		this.#record({
+			at: Date.now() - step.duration,
+			kind: 'step',
+			from: 'engine',
+			to: step.actor ?? 'external',
+			method: step.predicate,
+			ok: step.ok,
+			ms: step.duration,
+			run: run.id
+		})
+	}
+
 	async satisfy(goal: string, facts: Record<string, unknown> = {}): Promise<Run> {
 		const run: Run = {
 			id: `run_${nextRun++}`,
@@ -488,7 +510,7 @@ export class MessageBus {
 		// of taking the text the caller just typed as that very utterance.
 		if (name in facts) {
 			const out = (facts[name] as Record<string, unknown> | undefined) ?? {}
-			run.steps.push({
+			this.#recordStep(run, {
 				actor: null,
 				predicate: goal,
 				in: {},
@@ -512,7 +534,7 @@ export class MessageBus {
 		if (candidates.length === 0) {
 			const anyProducer = this.actors().some((a) => a.produces.some((p) => functor(p) === name))
 			const out = (facts[name] as Record<string, unknown> | undefined) ?? {}
-			run.steps.push({
+			this.#recordStep(run, {
 				actor: null,
 				predicate: goal,
 				in: {},
@@ -561,7 +583,7 @@ export class MessageBus {
 
 			const started = Date.now()
 			const executed = await this.execute(actor, name, payload)
-			run.steps.push({
+			this.#recordStep(run, {
 				actor: actor.manifest.id,
 				predicate: goal,
 				in: payload,
