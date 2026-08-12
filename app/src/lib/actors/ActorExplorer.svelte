@@ -729,18 +729,24 @@ async function ask(event: SubmitEvent) {
 								</details>
 							{:else}
 								{@const e = row.e}
-								<div class="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-foreground/[0.03]">
-									<span class="w-8 shrink-0 text-foreground/35">
-										{e.kind === 'emit' ? '⚡' : e.kind === 'ask' ? '?' : '→'}
-									</span>
-									<span class="shrink-0 text-foreground/50">{e.from}</span>
-									<span class="text-foreground/25">→</span>
-									<span class="shrink-0 text-foreground/50">{e.to}</span>
-									<span class="min-w-0 flex-1 truncate">{e.method}</span>
-									<span class={e.ok ? 'text-status-success' : 'text-status-error'}>
-										{e.ok ? '✓' : '✗'}
-									</span>
-									<span class="w-10 shrink-0 text-right text-foreground/30">{e.ms}ms</span>
+								<div class="rounded px-1 py-0.5 hover:bg-foreground/[0.03]">
+									<div class="flex items-center gap-2">
+										<span class="w-8 shrink-0 text-foreground/35">
+											{e.kind === 'emit' ? '⚡' : e.kind === 'ask' ? '?' : '→'}
+										</span>
+										<span class="shrink-0 text-foreground/50">{e.from}</span>
+										<span class="text-foreground/25">→</span>
+										<span class="shrink-0 text-foreground/50">{e.to}</span>
+										<span class="min-w-0 flex-1 truncate">{e.method}</span>
+										<span class={e.ok ? 'text-status-success' : 'text-status-error'}>
+											{e.ok ? '✓' : '✗'}
+										</span>
+										<span class="w-10 shrink-0 text-right text-foreground/30">{e.ms}ms</span>
+									</div>
+									{#if e.note}
+										<!-- a ✗ without its reason is not a trace -->
+										<div class="pl-10 text-[0.6875rem] text-status-error/80">{e.note}</div>
+									{/if}
 								</div>
 							{/if}
 						{/each}

@@ -52,6 +52,8 @@ export interface TraceEntry {
 	ms: number
 	/** The run this entry belongs to; only on kind 'step'. */
 	run?: string
+	/** The failure, verbatim — a ✗ without its reason is not a trace. */
+	note?: string
 }
 
 let traceSeq = 0
@@ -215,8 +217,11 @@ export class MessageBus {
 		}
 		const result = await actor.deliver(envelope.method, envelope.payload)
 		let ok = true
+		let note: string | undefined
 		try {
-			ok = JSON.parse(result.record).ok !== false
+			const parsed = JSON.parse(result.record) as { ok?: boolean; error?: unknown }
+			ok = parsed.ok !== false
+			if (!ok && parsed.error) note = String(parsed.error).slice(0, 200)
 		} catch {
 			// non-JSON records count as fine
 		}
@@ -227,7 +232,8 @@ export class MessageBus {
 			to: shown,
 			method: envelope.method,
 			ok,
-			ms: Date.now() - started
+			ms: Date.now() - started,
+			...(note && { note })
 		})
 		return await this.#pump(actor, result)
 	}
@@ -318,7 +324,8 @@ export class MessageBus {
 				to: actor.instanceName,
 				method: event.send,
 				ok: full.ok !== false,
-				ms: Date.now() - started
+				ms: Date.now() - started,
+				...(full.ok === false && full.error ? { note: String(full.error).slice(0, 200) } : {})
 			})
 		}
 	}

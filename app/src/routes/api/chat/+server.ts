@@ -83,8 +83,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			}),
 			// Explicit and generous: reasoning models spend their deliberation
 			// from the SAME completion budget, and the server's default cap
-			// truncated long structured answers mid-JSON.
-			max_tokens: 16384,
+			// truncated long structured answers mid-JSON. The design lane gets
+			// double — kimi WITH thinking burned 16k mid-draft in the live test.
+			max_tokens: chosen === MODEL ? 16384 : 32768,
 			// Machine lanes (llm actors) ask for enforced JSON: the
 			// server constrains generation grammatically, which ends the whole
 			// class of prose-apologies-spliced-into-manifests failures.

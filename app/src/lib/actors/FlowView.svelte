@@ -23,7 +23,8 @@ interface StepRow {
 const stepRows = $derived((actor.state?.stepRows as StepRow[]) ?? [])
 const viewStep = $derived(Number(actor.state?.viewStep ?? -1))
 const goalRows = $derived((actor.state?.goalRows as { quote: string }[]) ?? [])
-const failedRows = $derived((actor.state?.failedRows as { error: string; excerpt: string }[]) ?? [])
+/** ALL round failures, live during the run — not only the final obituary. */
+const history = $derived((actor.state?.history as { error: string; excerpt: string }[]) ?? [])
 const produced = $derived((actor.state?.producedRows as { id: string; status: string }[]) ?? [])
 const phase = $derived(String(actor.state?.phase ?? 'idle'))
 const stepActor = $derived(bus.get(String(actor.state?.activeStep ?? '')))
@@ -78,9 +79,15 @@ function tap(row: StepRow) {
 		</p>
 	{/each}
 
-	{#each failedRows as row, i (i)}
+	{#each history as row, i (i)}
 		<div class="flex flex-col gap-2 rounded-xl border border-foreground/10 bg-white/60 p-4">
-			<p class="text-sm">{row.error}</p>
+			<p class="text-sm">
+				<span
+					class="mr-2 rounded-full border border-foreground/15 px-2 py-0.5 font-mono text-[0.6875rem] text-foreground/50"
+					>Runde {i + 1}</span
+				>
+				{row.error}
+			</p>
 			{#if row.excerpt}
 				<pre
 					class="max-h-32 overflow-auto rounded-lg bg-foreground/5 p-2 font-mono text-[0.6875rem] whitespace-pre-wrap"

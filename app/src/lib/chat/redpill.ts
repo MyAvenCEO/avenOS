@@ -342,6 +342,10 @@ export async function complete(
 	// repetition loops usually start in the deliberation.
 	let watched = ''
 	let nextCheck = 1024
+	// Reasoning and answer share ONE completion budget. When the budget dies
+	// mid-answer the server just stops — the only witness is finish_reason,
+	// and a silently truncated JSON must be an ERROR, not a parse mystery.
+	let finishReason = ''
 	try {
 		while (true) {
 			const { done, value } = await reader.read()
@@ -355,7 +359,11 @@ export async function complete(
 				const data = line.slice('data:'.length).trim()
 				if (data === '' || data === '[DONE]') continue
 				try {
-					const delta = JSON.parse(data)?.choices?.[0]?.delta
+					const choice = JSON.parse(data)?.choices?.[0]
+					const delta = choice?.delta
+					if (typeof choice?.finish_reason === 'string' && choice.finish_reason !== '') {
+						finishReason = choice.finish_reason
+					}
 					if (typeof delta?.content === 'string' && delta.content !== '') {
 						text += delta.content
 						watched += delta.content
@@ -380,6 +388,12 @@ export async function complete(
 		}
 	} finally {
 		reader.cancel().catch(() => {})
+	}
+	if (finishReason === 'length') {
+		throw new Error(
+			'completion budget exhausted (finish_reason=length) — the answer was truncated ' +
+				`after ~${Math.round(watched.length / 4)} streamed tokens (reasoning included)`
+		)
 	}
 	return text
 }
