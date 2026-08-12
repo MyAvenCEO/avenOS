@@ -5,7 +5,6 @@ import { activity } from './activity.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
 import { catalog } from './catalog'
-import { RecordActor } from './created.actor.svelte'
 import { LlmActor } from './llm.actor'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
@@ -172,13 +171,12 @@ bus.extractJson = extractJsonObject
 
 bus.register(workItems)
 /**
- * The catalog, live: every manifest declared in code becomes a RecordActor —
- * it executes through the model and remembers what it produced. Registered
- * before the chat actor so the derived tool list carries them from the first
- * turn. The codebase is the source of truth; only the records are stored.
+ * The catalog, live: every manifest declared in code joins the mesh at boot
+ * — registered before the chat actor so the derived tool list carries them
+ * from the first turn. The codebase is the source of truth.
  */
 export const catalogActors = catalog.map((manifest) =>
-	singleton(`aven.actor.${manifest.id}`, () => new RecordActor(manifest, bus))
+	singleton(`aven.actor.${manifest.id}`, () => new Actor(manifest))
 )
 for (const actor of catalogActors) bus.register(actor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))

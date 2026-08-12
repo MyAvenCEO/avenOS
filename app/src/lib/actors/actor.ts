@@ -65,54 +65,6 @@ export interface LlmSettings {
 }
 
 /**
- * A face as DATA — the composed UI of an actor's window, declared instead of
- * coded. One universal renderer interprets these. Compression, not
- * abstraction: the face spec lives in the manifest right next to the
- * contracts, and regenerates the UI on every render.
- */
-/**
- * How one record renders as a card: which FIELDS of the record data land
- * where. All optional — the renderer infers sensible slots from common field
- * names when no mapping is declared, so old faces upgrade for free.
- */
-export interface RecordItemSpec {
-	/** Field for the card's headline. */
-	title?: string
-	/** Field for the secondary line. */
-	subtitle?: string
-	/** Fields rendered as small pills (status, streak, …). */
-	badges?: string[]
-	/** Numeric field rendered as a progress bar (0..1 or 0..100). */
-	progress?: string
-	/** Fields for the quiet meta line (dates, reminders, …). */
-	meta?: string[]
-}
-
-export type FaceElement =
-	| { kind: 'note'; text: string }
-	/** The actor's live instance state as a key/value grid. */
-	| { kind: 'state' }
-	/** The records this actor keeps — its memory, rendered as cards. */
-	| { kind: 'records'; title?: string; item?: RecordItemSpec }
-	/** Aggregate tiles over the records: counts, sums, latest values. */
-	| {
-			kind: 'stats'
-			items: {
-				label: string
-				field?: string
-				aggregate?: 'count' | 'latest' | 'sum' | 'max'
-			}[]
-	  }
-	/** An input that executes a goal through the engine, typed text as the fact. */
-	| { kind: 'run'; goal: string; label?: string; placeholder?: string }
-	/** A button that sends one fixed message to the mesh. */
-	| { kind: 'action'; method: string; label: string; payload?: Record<string, unknown> }
-
-export interface FaceSpec {
-	elements: FaceElement[]
-}
-
-/**
  * The memory seam: an actor that keeps records. The engine calls `remember`
  * with each successful llm-execution output, so running "make an appointment"
  * IS what fills the calendar. Duck-typed so the bus needs no import of any
@@ -159,22 +111,17 @@ export interface Manifest {
 	 * summarizer stays on the fast lane, each declared in its own manifest.
 	 */
 	llm?: boolean | LlmSettings
-	/** The actor's window UI, declared as data; absent = the generic face. */
-	face?: FaceSpec
 	/**
 	 * The actor's face as a vibe (0130): validated view/style JSON rendered
-	 * by aven-ui, behaviour sandboxed in QuickJS. Replaces `face`; an actor
-	 * carrying both renders the vibe.
+	 * by aven-ui, behaviour sandboxed in QuickJS — the actor paints its own
+	 * face, the host only renders.
 	 */
 	vibe?: VibeSpec
-	/** Additional named vibes — each its own window over the SAME actor. */
-	vibes?: { key: string; name: string; spec: VibeSpec }[]
 	/**
-	 * Additional named views — the workitems pattern (list + board over one
-	 * subject) as data: each entry becomes its OWN window actor sharing this
-	 * actor's state and records. One core, many faces.
+	 * Additional named vibes — the workitems pattern (list + board over one
+	 * subject): each entry becomes its OWN window over the SAME actor.
 	 */
-	faces?: { key: string; name: string; spec: FaceSpec }[]
+	vibes?: { key: string; name: string; spec: VibeSpec }[]
 }
 
 /** The declared model lane, normalized: null when the actor is not an llm actor. */

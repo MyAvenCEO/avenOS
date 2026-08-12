@@ -1,9 +1,7 @@
 import AvenUiView from './AvenUiView.svelte'
 import { bus } from './bus'
 import { catalogActors } from './chat.actor.svelte'
-import DefaultActorView from './DefaultActorView.svelte'
 import { registryTick } from './reactivity.svelte'
-import SpecFaceView from './SpecFaceView.svelte'
 import { singleton } from './singleton'
 import { isWindow, WindowActor } from './window.actor.svelte'
 import { workItems } from './workitems.svelte'
@@ -48,22 +46,17 @@ bus.onChange = () => {
 	registryTick.v++
 }
 
-// One window per catalog actor, plus one per extra named face. Closed on
+// One window per catalog actor, plus one per extra named vibe. Closed on
 // boot: the stage belongs to whoever the user asks for.
 for (const actor of catalogActors) {
-	const component = actor.manifest.vibe
-		? AvenUiView
-		: actor.manifest.face
-			? SpecFaceView
-			: DefaultActorView
 	if (!bus.get(`${actor.manifest.id}-window`)) {
-		bus.register(new WindowActor(actor, component, { open: false }))
+		bus.register(new WindowActor(actor, AvenUiView, { open: false }))
 	}
-	for (const named of actor.manifest.faces ?? []) {
+	for (const named of actor.manifest.vibes ?? []) {
 		const id = `${actor.manifest.id}-${named.key}-window`
 		if (!bus.get(id)) {
 			bus.register(
-				new WindowActor(actor, SpecFaceView, {
+				new WindowActor(actor, AvenUiView, {
 					key: `${actor.manifest.id}-${named.key}`,
 					name: named.name,
 					props: { spec: named.spec },

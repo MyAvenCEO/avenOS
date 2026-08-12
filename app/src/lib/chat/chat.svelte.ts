@@ -50,13 +50,10 @@ const SYSTEM_PROMPT =
 	'list" means list_window_toggle, "show the board" means board_window_toggle ' +
 	'— each with open=true. workitem_show only switches the spark. All of these ' +
 	'are view changes, never data changes. ' +
-	'Besides the tasks there are further actors, each keeping its own records: ' +
-	'put something in with <id>_add (text = the spoken content, verbatim), read ' +
-	'with <id>_records, remove with <id>_forget — "put the appointment in" means ' +
-	"calling the calendar actor's _add tool. Call registry_list when you are " +
-	'unsure which actors exist. The set of actors is fixed and ships with the ' +
-	'app: you can neither create, change nor delete them — if someone asks for a ' +
-	'new actor, say that it has to be built into the app. ' +
+	'Call registry_list when you are unsure which actors exist. The set of ' +
+	'actors is fixed and ships with the app: you can neither create, change nor ' +
+	'delete them — if someone asks for a new actor, say that it has to be built ' +
+	'into the app. ' +
 	'Messages come from speech recognition and are sometimes cut off ' +
 	'mid-sentence. If a message reads like the continuation of the previous ' +
 	'one, treat both together as one request. ' +

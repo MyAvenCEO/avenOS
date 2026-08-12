@@ -596,38 +596,23 @@ describe('per-actor llm lane (manifest llm settings)', () => {
 	})
 })
 
-describe('catalog (code is the source of truth)', () => {
-	test('every declared manifest carries id, contracts and an executable lane', async () => {
+describe('catalog (code is the source of truth, reduced — 0130)', () => {
+	test('the demo actors are gone and every entry is a vibe', async () => {
 		const { catalog } = await import('../src/lib/actors/catalog')
-		expect(catalog.length).toBeGreaterThan(0)
+		const { validateStyleDef, validateViewDef } = await import('@avenos/aven-ui')
 		const ids = catalog.map((m) => m.id)
-		expect(new Set(ids).size).toBe(ids.length)
-		for (const manifest of catalog) {
-			expect(manifest.id).not.toBe('')
-			expect(manifest.description.length).toBeGreaterThan(0)
-			// no handlers in code = the model IS the execution
-			expect(manifest.llm).toBeTruthy()
-			expect((manifest.produces ?? []).length).toBeGreaterThan(0)
-			expect((manifest.face?.elements ?? []).length).toBeGreaterThan(0)
+		for (const gone of ['calendar', 'habits', 'notes']) {
+			expect(ids).not.toContain(gone)
 		}
-	})
-
-	test('a catalog actor joins the mesh, is provable, and carries the voice verbs', async () => {
-		const { catalog } = await import('../src/lib/actors/catalog')
-		const { withRecordMethods } = await import('../src/lib/actors/records')
-		const bus = new MessageBus()
-		registerFakeLlm(bus, () => '{"title":"dentist","when":"Tuesday 14:00"}')
-		// The running app wraps each manifest in a RecordActor; its manifest
-		// augmentation is this pure function, so the mesh shape is identical.
-		for (const manifest of catalog) bus.register(new Actor(withRecordMethods(manifest)))
-		expect(bus.get('calendar')).toBeDefined()
-		expect(bus.prove('appointment(A)').actor).toBe('calendar')
-		const tools = bus.toolSpecs().map((t) => t.name)
-		expect(tools).toContain('calendar_add')
-		expect(tools).toContain('calendar_records')
-		expect(tools).toContain('calendar_forget')
-		const run = await bus.satisfy('appointment(A)', { request: { text: 'dentist tuesday 2pm' } })
-		expect(run.status).toBe('ok')
+		// whatever the catalog declares must arrive as a validating vibe
+		for (const manifest of catalog) {
+			expect(manifest.vibe).toBeDefined()
+			// biome-ignore lint/style/noNonNullAssertion: asserted above
+			const vibe = manifest.vibe!
+			expect(() => validateViewDef(vibe.view)).not.toThrow()
+			expect(() => validateStyleDef(vibe.style)).not.toThrow()
+			expect(typeof vibe.logic).toBe('string')
+		}
 	})
 
 	test('a successful llm execution is remembered by a record-keeping actor', async () => {
