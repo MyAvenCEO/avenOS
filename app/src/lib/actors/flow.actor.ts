@@ -403,9 +403,18 @@ export class FlowActor extends Actor {
 					(problem.predicate ? ` (${problem.predicate})` : '')
 			)
 		}
+		// The graph must SHOW the flow fed by its steps: every step's produced
+		// predicate is something this flow consumes into its data — declared as
+		// requires, the derived graph draws step → flow without hand-wiring,
+		// and the inter-step edges (plan → draft → probe) come from the steps'
+		// own contracts.
+		const stepFeeds = [
+			...new Set(recipe.steps.flatMap((step) => bus.get(step.actor)?.produces ?? []))
+		]
 		super(
 			{
 				...manifest,
+				requires: [...(manifest.requires ?? []), ...recipe.inputs, ...stepFeeds],
 				capabilities: ['promote', 'discard'],
 				logic: FLOW_LOGIC,
 				source: { recipe }

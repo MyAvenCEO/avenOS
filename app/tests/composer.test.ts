@@ -339,6 +339,19 @@ describe('composer recipe (0137): phases are real actors, pumped and traced', ()
 		expect(rows.every((r) => r.mark === '✓')).toBe(true)
 	})
 
+	test('the derived graph shows the flow FED by its steps, and the step chain itself', () => {
+		const { bus } = mesh()
+		const edges = bus.edges()
+		// every step feeds the composer — no hand-wiring, pure contracts
+		for (const step of ['clarify', 'scout', 'plan', 'mockup', 'draft', 'probe', 'stage']) {
+			expect(edges.some((e) => e.from === step && e.to === 'composer')).toBe(true)
+		}
+		// and the chain between the steps is visible too
+		expect(edges.some((e) => e.from === 'plan' && e.to === 'draft')).toBe(true)
+		expect(edges.some((e) => e.from === 'mockup' && e.to === 'draft')).toBe(true)
+		expect(edges.some((e) => e.from === 'draft' && e.to === 'probe')).toBe(true)
+	})
+
 	test('a step actor is independently dispatchable — plan alone writes proofs', async () => {
 		const { bus } = mesh()
 		const result = await bus.dispatch('test', 'plan_run', {
