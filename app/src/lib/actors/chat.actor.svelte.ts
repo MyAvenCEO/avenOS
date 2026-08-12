@@ -8,7 +8,7 @@ import { catalog } from './catalog'
 import { LlmActor } from './llm.actor'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
-import { workItems } from './workitems.svelte'
+import { WorkItemsActor, workItems } from './workitems.svelte'
 
 /**
  * The brain as an actor. The conversation machinery (streaming, tool rounds,
@@ -68,6 +68,18 @@ export class ChatActor extends Actor {
 					} catch {
 						const record = JSON.stringify({ ok: false, error: `unreadable arguments: ${args}` })
 						return { record, wire: 'unreadable arguments' }
+					}
+					if (name === 'send') {
+						const inner =
+							payload.payload && typeof payload.payload === 'object'
+								? (payload.payload as Record<string, unknown>)
+								: {}
+						const result = await bus.dispatch('chat', String(payload.method ?? ''), {
+							...inner,
+							to: payload.to
+						})
+						activity.show(summarizeCall(String(payload.method ?? ''), result.record))
+						return result
 					}
 					if (name === 'actor_ask') {
 						const answer = await bus.ask(
@@ -171,6 +183,9 @@ bus.register(llmActor)
 bus.extractJson = extractJsonObject
 
 bus.register(workItems)
+// The task list may exist many times — "make me a list for the move" spawns
+// a fresh instance with its own sandbox state and windows.
+bus.spawnable('workitems', () => new WorkItemsActor())
 /**
  * The catalog, live: every manifest declared in code joins the mesh at boot
  * — registered before the chat actor so the derived tool list carries them

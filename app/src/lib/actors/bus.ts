@@ -76,7 +76,7 @@ export class MessageBus {
 	 * and the execution engine consume. No llm actor registered = no lane.
 	 */
 	llmLane(): Llm | undefined {
-		const actor = this.#actors.get('llm')
+		const actor = this.get('llm')
 		if (!actor) return undefined
 		return async (system, question, settings) => {
 			const result = await actor.deliver('llm_complete', {
@@ -107,13 +107,29 @@ export class MessageBus {
 	/** UI seam: called on registry changes; the app wires reactivity here. */
 	onChange?: () => void
 
+	/**
+	 * Identity vs discovery (0133): actors are stored by UUID — the envelope
+	 * address; names are an INDEX. A template name (manifest.id) resolves to
+	 * its default instance (the first registered), a unique instance name to
+	 * that instance. Spawned copies of a template register under their own
+	 * uuid without touching the default.
+	 */
+	#byName = new Map<string, string>()
+
 	register(actor: Actor): void {
-		this.#actors.set(actor.manifest.id, actor)
+		this.#actors.set(actor.uuid, actor)
+		if (!this.#byName.has(actor.manifest.id)) this.#byName.set(actor.manifest.id, actor.uuid)
+		if (!this.#byName.has(actor.instanceName)) this.#byName.set(actor.instanceName, actor.uuid)
 		this.onChange?.()
 	}
 
-	unregister(id: string): void {
-		this.#actors.delete(id)
+	unregister(ref: string): void {
+		const actor = this.get(ref)
+		if (!actor) return
+		this.#actors.delete(actor.uuid)
+		for (const [name, uuid] of this.#byName) {
+			if (uuid === actor.uuid) this.#byName.delete(name)
+		}
 		this.onChange?.()
 	}
 
@@ -121,13 +137,54 @@ export class MessageBus {
 		return [...this.#actors.values()]
 	}
 
-	get(id: string): Actor | undefined {
-		return this.#actors.get(id)
+	/** Resolve uuid OR name (template name = its default instance). */
+	get(ref: string): Actor | undefined {
+		return this.#actors.get(ref) ?? this.#actors.get(this.#byName.get(ref) ?? '')
+	}
+
+	/**
+	 * Spawn seam (0133): templates that may be instantiated register a
+	 * factory; spawn/dispose are ENGINE primitives — the registry actor
+	 * reaches them as capabilities, the UI reflects them via the hooks.
+	 */
+	#factories = new Map<string, () => Actor>()
+	onSpawned?: (actor: Actor) => void
+	onDisposed?: (actor: Actor) => void
+
+	spawnable(template: string, factory: () => Actor): void {
+		this.#factories.set(template, factory)
+	}
+
+	canSpawn(template: string): boolean {
+		return this.#factories.has(template)
+	}
+
+	spawn(template: string, name?: string): Actor | null {
+		const factory = this.#factories.get(template)
+		if (!factory) return null
+		const actor = factory()
+		actor.instanceName =
+			name && name.trim() !== '' && !this.#byName.has(name.trim())
+				? name.trim()
+				: `${template}-${actor.uuid.slice(0, 4)}`
+		this.register(actor)
+		this.onSpawned?.(actor)
+		return actor
+	}
+
+	dispose(ref: string): Actor | null {
+		const actor = this.get(ref)
+		if (!actor) return null
+		// The default instance is code-owned; only spawned copies die.
+		if (this.#byName.get(actor.manifest.id) === actor.uuid) return null
+		this.unregister(actor.uuid)
+		this.onDisposed?.(actor)
+		return actor
 	}
 
 	/** Route one envelope into its actor's mailbox. Unknown addressees error. */
 	async send(envelope: Envelope): Promise<HandlerResult> {
-		const actor = this.#actors.get(envelope.to)
+		const actor = this.get(envelope.to)
 		const started = Date.now()
 		if (!actor) {
 			const record = JSON.stringify({ ok: false, error: `no actor ${envelope.to}` })
@@ -207,7 +264,7 @@ export class MessageBus {
 	 * the answer AND into the trace as the sender.
 	 */
 	async ask(actorId: string, question: string, asker = 'human'): Promise<string> {
-		const actor = this.#actors.get(actorId)
+		const actor = this.get(actorId)
 		const started = Date.now()
 		if (!actor) return `There is no actor ${actorId}.`
 		const answer = await actor.ask(question, this.llmLane(), asker)
@@ -230,20 +287,64 @@ export class MessageBus {
 	 * interview actors the same way a human does.
 	 */
 	toolSpecs(): MethodSpec[] {
-		const specs = this.actors().flatMap((a) => a.manifest.methods)
+		// Instances share their template's methods — dedupe by name; every
+		// spec gains the envelope address `to` (uuid or unique instance name,
+		// omitted = default instance). Named tools are schema sugar over the
+		// ONE primitive below.
+		const seen = new Set<string>()
+		const specs: MethodSpec[] = []
+		for (const actor of this.actors()) {
+			for (const method of actor.manifest.methods) {
+				if (seen.has(method.name)) continue
+				seen.add(method.name)
+				const properties = (method.parameters as { properties?: Record<string, unknown> })
+					.properties
+				specs.push({
+					...method,
+					parameters: {
+						...method.parameters,
+						properties: {
+							...properties,
+							to: {
+								type: 'string',
+								description:
+									'Instance address (uuid or name from registry_list). Omit for the default instance.'
+							}
+						}
+					}
+				})
+			}
+		}
 		return [
 			...specs,
+			{
+				// The primitive itself, exposed: one envelope — to, method,
+				// payload. Everything above is derived sugar over this.
+				name: 'send',
+				description:
+					'Send one message to one actor instance: the universal envelope. Use when ' +
+					'no named tool fits or to address a specific instance directly.',
+				parameters: {
+					type: 'object',
+					properties: {
+						to: { type: 'string', description: 'Instance uuid or name.' },
+						method: { type: 'string', description: 'The method to deliver.' },
+						payload: { type: 'object', additionalProperties: true }
+					},
+					required: ['to', 'method']
+				}
+			},
 			{
 				name: 'actor_ask',
 				description:
 					'Ask an actor a question in natural language — it answers as itself. ' +
 					`Available actors: ${this.actors()
-						.map((a) => a.manifest.id)
+						.map((a) => a.instanceName)
 						.join(', ')}.`,
 				parameters: {
 					type: 'object',
 					properties: {
-						actor: { type: 'string', description: 'The actor id.' },
+						actor: { type: 'string', description: 'The actor id, name or uuid.' },
 						question: { type: 'string', description: 'The question.' }
 					},
 					required: ['actor', 'question']
@@ -252,9 +353,19 @@ export class MessageBus {
 		]
 	}
 
-	/** Tool-call bridge: a named method becomes an ordinary envelope. */
+	/**
+	 * Tool-call bridge: a named method becomes an ordinary envelope. `to` in
+	 * the payload addresses an INSTANCE (uuid or unique name — abject's
+	 * routing.to); without it the default instance answers. The address is
+	 * routing, not data — it never reaches the handler payload.
+	 */
 	dispatch(from: string, method: string, payload: Record<string, unknown>): Promise<HandlerResult> {
-		const owner = this.actors().find((a) => a.handles(method))
+		const { to, ...rest } = payload
+		const addressed = typeof to === 'string' && to !== '' ? this.get(to) : undefined
+		// `to` is routing ONLY when the addressee actually answers the method —
+		// otherwise it is data (dispose's target, say) and stays in the payload.
+		const routed = addressed?.handles(method) ? addressed : undefined
+		const owner = routed ?? this.actors().find((a) => a.handles(method))
 		if (!owner) {
 			const record = JSON.stringify({ ok: false, error: `unknown tool ${method}` })
 			return Promise.resolve({ record, wire: `unknown tool ${method}` })
@@ -262,9 +373,9 @@ export class MessageBus {
 		return this.send({
 			id: `env_${nextEnvelope++}`,
 			from,
-			to: owner.manifest.id,
+			to: owner.uuid,
 			method,
-			payload
+			payload: routed ? rest : payload
 		})
 	}
 

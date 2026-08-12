@@ -61,6 +61,12 @@ const VIEWS: { key: ExplorerView; label: string }[] = [
 ]
 const show = (k: ExplorerView) => view === k
 let focusGraph = $state(true)
+let spawnName = $state('')
+/** The mesh, reactive: bus.actors() re-read on every registry change. */
+const meshActors = $derived.by(() => {
+	void registryTick.v
+	return bus.actors()
+})
 
 // ---- the prover: pick any predicate as a goal, get its SLD proof tree
 let goal = $state('')
@@ -229,7 +235,7 @@ async function ask(event: SubmitEvent) {
 		<p class="px-2 pb-1 text-[0.625rem] text-foreground/35 uppercase tracking-[0.2em]">
 			Actors {registryTick.v >= 0 ? '' : ''}
 		</p>
-		{#each bus.actors() as actor (actor.manifest.id)}
+		{#each meshActors as actor (actor.uuid)}
 			{@const live = actor.instanceState() !== null}
 			<button
 				type="button"
@@ -237,8 +243,7 @@ async function ask(event: SubmitEvent) {
 					selected = actor
 					answer = ''
 				}}
-				class="rounded-xl px-3 py-2 text-left transition-colors {selected.manifest.id ===
-				actor.manifest.id
+				class="rounded-xl px-3 py-2 text-left transition-colors {selected.uuid === actor.uuid
 					? 'border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)]'
 					: 'opacity-60 hover:opacity-100'}"
 			>
@@ -247,7 +252,9 @@ async function ask(event: SubmitEvent) {
 						class="size-1.5 shrink-0 rounded-full {live ? 'bg-status-success' : 'bg-foreground/20'}"
 						title={live ? 'instance running' : 'template only'}
 					></span>
-					{actor.manifest.name}
+					{actor.instanceName === actor.manifest.id
+						? actor.manifest.name
+						: `${actor.manifest.name} · ${actor.instanceName}`}
 				</span>
 				<span class="block pl-3 text-[0.6875rem] text-foreground/40">
 					{actor.manifest.tags.join(' · ')}
@@ -496,12 +503,90 @@ async function ask(event: SubmitEvent) {
 		{/if}
 
 		{#if show('instance')}
-			<!-- --------------------------------------------- INSTANZ (the running one) -->
+			<!-- ----------------- INSTANCES: one template, n running instances -->
 			<section
 				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			>
 				<div class="flex items-center gap-2 pb-2">
-					<h3 class="font-semibold text-sm">Instance</h3>
+					<h3 class="font-semibold text-sm">Instances</h3>
+					<span class="text-[0.6875rem] text-foreground/40">
+						one manifest, n running instances — uuid is the address, the name is metadata
+					</span>
+				</div>
+				<div class="flex flex-col gap-1 pb-3">
+					{#each meshActors.filter((a) => a.manifest.id === selected.manifest.id) as inst (inst.uuid)}
+						{@const isDefault = bus.get(inst.manifest.id)?.uuid === inst.uuid}
+						<div
+							class="flex items-center gap-2 rounded-lg border border-foreground/5 px-2 py-1.5 {inst.uuid ===
+							selected.uuid
+								? 'bg-surface-soft/80'
+								: ''}"
+						>
+							<button
+								type="button"
+								onclick={() => {
+									selected = inst
+									answer = ''
+								}}
+								class="min-w-0 flex-1 truncate text-left text-sm font-medium hover:underline"
+							>
+								{inst.instanceName}
+							</button>
+							{#if isDefault}
+								<span
+									class="rounded-full border border-foreground/10 px-1.5 text-[0.625rem] text-foreground/45"
+								>
+									default
+								</span>
+							{/if}
+							<span class="font-mono text-[0.625rem] text-foreground/35">
+								{inst.uuid.slice(0, 8)}
+							</span>
+							{#if !isDefault}
+								<button
+									type="button"
+									onclick={() => {
+										void bus.dispatch('explorer', 'dispose', { to: inst.uuid })
+									}}
+									title="Dispose this instance"
+									class="text-foreground/30 transition-colors hover:text-status-error"
+								>
+									×
+								</button>
+							{/if}
+						</div>
+					{/each}
+				</div>
+				{#if bus.canSpawn(selected.manifest.id)}
+					<form
+						onsubmit={(event) => {
+							event.preventDefault()
+							const name = spawnName.trim()
+							spawnName = ''
+							void bus.dispatch('explorer', 'spawn', {
+								template: selected.manifest.id,
+								...(name !== '' && { name })
+							})
+						}}
+						class="flex items-center gap-2 pb-3"
+					>
+						<input
+							bind:value={spawnName}
+							placeholder="new instance name…"
+							class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
+						>
+						<button
+							type="submit"
+							class="rounded-full border border-foreground/10 px-2.5 py-0.5 text-[0.6875rem] transition-colors hover:border-primary/40"
+						>
+							Spawn
+						</button>
+					</form>
+				{/if}
+				<div class="flex items-center gap-2 pb-2">
+					<h4 class="text-[0.6875rem] text-foreground/40 uppercase tracking-wide">
+						{selected.instanceName}
+					</h4>
 					<span
 						class="size-1.5 rounded-full {instance ? 'bg-status-success' : 'bg-foreground/20'}"
 					></span>

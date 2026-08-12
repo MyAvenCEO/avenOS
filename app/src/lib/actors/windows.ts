@@ -1,6 +1,7 @@
 import AvenUiView from './AvenUiView.svelte'
 import { bus } from './bus'
 import { catalogActors } from './chat.actor.svelte'
+import { instanceWindows } from './instance-windows'
 import { registryTick } from './reactivity.svelte'
 import { singleton } from './singleton'
 import { isWindow, WindowActor } from './window.actor.svelte'
@@ -64,6 +65,32 @@ for (const actor of catalogActors) {
 				})
 			)
 		}
+	}
+}
+
+// Spawned instances get their windows the moment they exist — same views,
+// their own state; dispose takes the windows with it (0133). The first
+// window opens: a spoken "make me a second list" should be SEEN.
+bus.onSpawned = (actor) => {
+	instanceWindows(actor.manifest, actor.instanceName).forEach((w, i) => {
+		if (bus.get(`${w.key}-window`)) return
+		const window = new WindowActor(actor, AvenUiView, {
+			key: w.key,
+			name: w.name,
+			props: { view: w.view, style: w.style },
+			open: i === 0
+		})
+		if (i === 0) {
+			for (const other of bus.actors()) {
+				if (isWindow(other)) other.open = false
+			}
+		}
+		bus.register(window)
+	})
+}
+bus.onDisposed = (actor) => {
+	for (const w of bus.actors()) {
+		if (isWindow(w) && w.subject === actor) bus.unregister(w.manifest.id)
 	}
 }
 

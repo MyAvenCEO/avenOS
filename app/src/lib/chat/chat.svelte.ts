@@ -50,10 +50,12 @@ const SYSTEM_PROMPT =
 	'list" means list_window_toggle, "show the board" means board_window_toggle ' +
 	'— each with open=true. workitem_show only switches the spark. All of these ' +
 	'are view changes, never data changes. ' +
-	'Call registry_list when you are unsure which actors exist. The set of ' +
-	'actors is fixed and ships with the app: you can neither create, change nor ' +
-	'delete them — if someone asks for a new actor, say that it has to be built ' +
-	'into the app. ' +
+	'Call registry_list when you are unsure which actors or instances exist. ' +
+	'Actor TEMPLATES are fixed and ship with the app — but templates can run as ' +
+	'several INSTANCES: "make me a second list for the move" means spawn with ' +
+	'template=workitems and a short name. Address a specific instance by adding ' +
+	'to=<name or uuid from registry_list> on any tool; without it the default ' +
+	'instance is meant. dispose removes a spawned instance on explicit request. ' +
 	'Messages come from speech recognition and are sometimes cut off ' +
 	'mid-sentence. If a message reads like the continuation of the previous ' +
 	'one, treat both together as one request. ' +

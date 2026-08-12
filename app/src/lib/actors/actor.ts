@@ -174,6 +174,17 @@ export function manifestProse(m: Manifest): string {
 
 export class Actor {
 	readonly manifest: Manifest
+	/**
+	 * The instance identity (0133): a global uuid, minted at construction —
+	 * the envelope address. The manifest id is the TEMPLATE's durable name
+	 * (abject's TypeId); this is the runtime one (abject's AbjectId).
+	 */
+	readonly uuid: string = crypto.randomUUID()
+	/**
+	 * The instance's display name — metadata for discovery, never identity.
+	 * The default instance of a template goes by the template id itself.
+	 */
+	instanceName: string
 	#handlers: Record<string, Handler>
 	/** Supervision bookkeeping: how often handlers died, and the last reason. */
 	failures = 0
@@ -196,6 +207,7 @@ export class Actor {
 		caps: Record<string, Capability> = {}
 	) {
 		this.manifest = manifest
+		this.instanceName = manifest.id
 		this.#handlers = handlers
 		if (manifest.logic) this.#ready = this.#boot(manifest, caps)
 		// The generic adapter, bound for every declared method — and again
