@@ -61,10 +61,12 @@ const SYSTEM_PROMPT =
 	'drafted and shown in the Negotiator window; approval happens ONLY by a ' +
 	'button press — there is no approve tool, so never claim you approved. ' +
 	'When someone wants a NEW KIND of actor ("build me a habit tracker"), call ' +
-	'compose with wish=<their words>. The Composer may first HOLD and ask the ' +
-	'user clarify questions (the result carries clarifying=[...]) — read them ' +
-	'out, and when the user answers, relay it VERBATIM with compose_answer ' +
-	'text=<their words>; the compose chain then continues on its own. It scouts ' +
+	'compose with wish=<their words>. The Composer may HOLD SEVERAL times: ' +
+	'first with clarify questions (the result carries clarifying=[...] — read ' +
+	'them out), later with a UI MOCKUP shown in the composer window (the user ' +
+	'says what to change, or approves). EVERY time the user answers while the ' +
+	'composer holds, relay it VERBATIM with compose_answer text=<their words>; ' +
+	'the chain continues on its own. It scouts ' +
 	'the mesh first (an existing actor may simply be spawned instead), writes ' +
 	'measurable proofs, designs in up to three rounds, and stages the result as ' +
 	'a LIVE instance the user can try right away. Promotion to production ' +

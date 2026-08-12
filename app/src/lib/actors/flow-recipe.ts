@@ -28,6 +28,13 @@ export interface RecipeStep {
 	 */
 	hold?: 'human' | 'button'
 	/**
+	 * Where a human answer resumes: 'next' (default) proceeds down the
+	 * chain — the clarify pattern; 'self' RE-ENTERS the holding step with
+	 * the answer as feedback — the mockup pattern: iterate on the face by
+	 * voice until the step itself declares approval (no hold in its record).
+	 */
+	resume?: 'self' | 'next'
+	/**
 	 * The scrum seam: when this step fails, jump back to `backTo` with the
 	 * error riding in flow data as `retry` — at most `maxRuns` failures
 	 * across the whole run before the flow fails for good.

@@ -115,6 +115,25 @@ export function exportCode(manifest: Manifest): string {
 }
 
 /**
+ * The face half of the membrane, standalone: the MOCKUP step (0138) proves
+ * a drafted view/style the moment it is parsed — an invalid face never
+ * reaches the human's eyes.
+ */
+export function validateFace(view?: Manifest['view'], style?: Manifest['style']): ProbeResult {
+	try {
+		if (view) validateViewDef(view)
+	} catch (err) {
+		return { ok: false, stage: 'view', error: reason(err) }
+	}
+	try {
+		if (style) validateStyleDef(style)
+	} catch (err) {
+		return { ok: false, stage: 'style', error: reason(err) }
+	}
+	return { ok: true }
+}
+
+/**
  * The membrane, in probe order: cheap static validation first, then the
  * sandbox (syntax, initState shape, a smoke reduce), then the PROOFS — the
  * draft runs on an isolated scratch bus and must satisfy the measurable
@@ -123,19 +142,15 @@ export function exportCode(manifest: Manifest): string {
  */
 export async function probeDraft(draft: ActorDraft, proofs: Proof[] = []): Promise<ProbeResult> {
 	const manifest = draftManifest(draft)
+	const face = validateFace(draft.view, draft.style)
+	if (!face.ok) return face
 	try {
-		if (draft.view) validateViewDef(draft.view)
-		for (const named of draft.views ?? []) validateViewDef(named.view)
-	} catch (err) {
-		return { ok: false, stage: 'view', error: reason(err) }
-	}
-	try {
-		if (draft.style) validateStyleDef(draft.style)
 		for (const named of draft.views ?? []) {
+			validateViewDef(named.view)
 			if (named.style) validateStyleDef(named.style)
 		}
 	} catch (err) {
-		return { ok: false, stage: 'style', error: reason(err) }
+		return { ok: false, stage: 'view', error: reason(err) }
 	}
 
 	// The sandbox probe: evaluate, seed, smoke — in a throwaway session.

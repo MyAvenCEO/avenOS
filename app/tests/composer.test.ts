@@ -7,12 +7,11 @@ import { isStaged } from '../src/lib/actors/draft-pipeline'
 import { instanceWindows } from '../src/lib/actors/instance-windows'
 
 /**
- * The composer as RECIPE #1 (0137): six step actors under the generic flow
- * engine, behaving exactly as the 0136 machine did — CLARIFY holds for the
- * human, SCOUT rules reuse before negotiate before compose, PLAN writes the
- * proofs, DRAFT⇄PROBE is the scrum cycle (three runs, the membrane error in
- * the next brief), STAGE holds for the button. Every phase is a real actor,
- * every hop a pump entry.
+ * The composer as RECIPE #1 (0137/0138): step actors under the generic flow
+ * engine — CLARIFY holds for the human, SCOUT rules the verdict ladder,
+ * PLAN writes the proofs, MOCKUP designs ONLY the face and holds while the
+ * human iterates on it by VOICE, DRAFT designs the logic against face and
+ * proofs, PROBE⇄DRAFT is the scrum cycle, STAGE holds for the button.
  */
 
 const HABIT_LOGIC = `function initState(source) { return { count: 0 } }
@@ -29,6 +28,7 @@ function reduce(state, ev) {
 }
 function shape(state, rawText) { return null }`
 
+/** The LOGIC draft — no view, no style: the face comes from the mockup. */
 const HABIT_DRAFT = {
 	id: 'habit',
 	description: 'Tracks habit streaks from done days.',
@@ -45,9 +45,7 @@ const HABIT_DRAFT = {
 			event: { send: 'STREAK' }
 		}
 	],
-	logic: HABIT_LOGIC,
-	view: { content: { class: 'habit', children: [{ text: '$count' }] } },
-	style: { selectors: { '.habit': { display: 'flex' } } }
+	logic: HABIT_LOGIC
 }
 
 const BROKEN_DRAFT = { ...HABIT_DRAFT, logic: 'function initState( {' }
@@ -61,6 +59,14 @@ const COMPOSE_VERDICT = JSON.stringify({
 const PLAN_ANSWER = JSON.stringify({
 	proofs: [{ goal: 'streak(S)', seed: { done: ['mon', 'tue', 'wed'] }, expect: { streak: 3 } }]
 })
+
+const MOCKUP_FACE = {
+	view: { content: { class: 'habit', children: [{ text: '$count' }] } },
+	style: { selectors: { '.habit': { display: 'flex' } } },
+	sample: { count: 3 }
+}
+const MOCKUP_JSON = JSON.stringify(MOCKUP_FACE)
+const APPROVED_JSON = JSON.stringify({ approved: true })
 
 /** The house exemplar the design brief quotes — a slim stand-in manifest. */
 const WORKITEM_EXEMPLAR: Manifest = {
@@ -90,6 +96,8 @@ interface MeshOptions {
 	plan?: string
 	/** One design answer per scrum round, consumed in order (last one repeats). */
 	drafts?: string[]
+	/** One mockup answer per mockup run, consumed in order (last one repeats). */
+	mockups?: string[]
 	/** Calls whose system contains this marker FAIL at the lane (ok:false). */
 	failLane?: string
 	steps?: StepOptions
@@ -109,6 +117,7 @@ function mesh(options: MeshOptions = {}) {
 	meshBuses.push(bus)
 	const calls: LlmCall[] = []
 	let designCall = 0
+	let mockupCall = 0
 	bus.register(
 		new Actor(
 			{ id: 'llm', name: 'LLM', description: 'Fake model lane.', tags: ['system'], methods: [] },
@@ -127,15 +136,22 @@ function mesh(options: MeshOptions = {}) {
 						}
 					}
 					const drafts = options.drafts ?? [JSON.stringify(HABIT_DRAFT)]
+					const mockups = options.mockups ?? [MOCKUP_JSON, APPROVED_JSON]
 					const text = call.system.includes('CLARIFY round')
 						? (options.clarify ?? NO_QUESTIONS)
 						: call.system.includes('SCOUT round')
 							? (options.scout ?? COMPOSE_VERDICT)
 							: call.system.includes('PLAN round')
 								? (options.plan ?? PLAN_ANSWER)
-								: call.system.includes('design ONE complete avenOS actor')
-									? drafts[Math.min(designCall++, drafts.length - 1)]
-									: 'I emit flat JSON records; see my manifest.'
+								: call.system.includes('design ONLY the FACE')
+									? mockups[
+											options.mockups
+												? Math.min(mockupCall++, mockups.length - 1)
+												: mockupCall++ % mockups.length
+										]
+									: call.system.includes('design the LOGIC')
+										? drafts[Math.min(designCall++, drafts.length - 1)]
+										: 'I emit flat JSON records; see my manifest.'
 					return { record: JSON.stringify({ ok: true, text }), wire: text }
 				}
 			}
@@ -145,43 +161,55 @@ function mesh(options: MeshOptions = {}) {
 	for (const step of createComposerSteps(bus, options.steps ?? {})) bus.register(step)
 	const composer = new ComposerActor(bus)
 	bus.register(composer)
-	const designCalls = () =>
-		calls.filter((c) => c.system.includes('design ONE complete avenOS actor'))
+	const designCalls = () => calls.filter((c) => c.system.includes('design the LOGIC'))
+	const mockupCalls = () => calls.filter((c) => c.system.includes('design ONLY the FACE'))
 	const pumped = () => bus.traceLog.filter((e) => e.from === 'pump').map((e) => e.method)
 	const stepRuns = () =>
 		bus.traceLog
 			.filter((e) => e.from === 'composer' && e.method.endsWith('_run'))
 			.map((e) => e.method)
 	const data = () => composer.state.data as Record<string, Record<string, unknown>>
-	return { bus, composer, calls, designCalls, pumped, stepRuns, data }
+	/** compose, then approve the mockup hold — the straight-through chain. */
+	const through = async (wish = 'a habit tracker') => {
+		const first = await bus.dispatch('test', 'compose', { wish })
+		const record = JSON.parse(first.record) as { held?: string }
+		if (record.held === 'mockup') {
+			return await bus.dispatch('test', 'compose_answer', { text: 'passt so' })
+		}
+		return first
+	}
+	return { bus, composer, calls, designCalls, mockupCalls, pumped, stepRuns, data, through }
 }
 
-describe('composer recipe (0137): CLARIFY holds for the human', () => {
-	test('a vague wish returns questions and HOLDS — compose_answer resumes to staged', async () => {
-		const { bus, composer, pumped, data } = mesh({
+describe('composer recipe (0138): CLARIFY holds, then the MOCKUP holds', () => {
+	test('a vague wish asks first; the answer leads to the mockup hold; approval stages', async () => {
+		const { bus, composer, data } = mesh({
 			clarify: JSON.stringify({ questions: ['Which habits?', 'Daily or weekly?'] })
 		})
 		const held = await bus.dispatch('test', 'compose', { wish: 'ein Habit Tracker' })
-		const heldRecord = JSON.parse(held.record) as { ok: boolean; clarifying: string[] }
+		const heldRecord = JSON.parse(held.record) as { clarifying: string[]; held: string }
 		expect(heldRecord.clarifying).toEqual(['Which habits?', 'Daily or weekly?'])
-		expect(held.wire).toContain('Which habits?')
-		// the machine HOLDS: only the clarify hop ran, nothing exists yet
+		expect(heldRecord.held).toBe('clarify')
 		expect(composer.state.phase).toBe('clarifying')
-		expect(pumped().length).toBe(2)
-		expect(bus.get('habit')).toBeUndefined()
-		// the human answers by voice — the chain resumes and runs to staged
-		const resumed = await bus.dispatch('test', 'compose_answer', {
+		// the human answers — the chain runs on and holds again at the FACE
+		const atMockup = await bus.dispatch('test', 'compose_answer', {
 			text: 'Meditation und Sport, täglich'
 		})
-		expect((JSON.parse(resumed.record) as { ok: boolean }).ok).toBe(true)
+		expect((JSON.parse(atMockup.record) as { held: string }).held).toBe('mockup')
+		expect(composer.state.phase).toBe('mockup')
+		expect(data().clarify_answer?.text).toBe('Meditation und Sport, täglich')
+		expect(bus.get('habit')).toBeUndefined()
+		// approval releases the face — the chain designs the logic and stages
+		const staged = await bus.dispatch('test', 'compose_answer', { text: 'passt so' })
+		expect((JSON.parse(staged.record) as { ok: boolean }).ok).toBe(true)
 		expect(composer.state.phase).toBe('staged')
-		expect(data().answers?.text).toBe('Meditation und Sport, täglich')
+		expect(data().mockup_answer?.text).toBe('passt so')
 		expect(bus.get('habit')).toBeDefined()
 	})
 
-	test('a precise wish (no questions) chains straight through to staged', async () => {
-		const { bus, composer } = mesh()
-		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker with streaks' })
+	test('a precise wish still holds once — at the face', async () => {
+		const { bus, composer, through } = mesh()
+		const result = await through()
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(true)
 		expect(composer.state.phase).toBe('staged')
 		expect(bus.get('habit')).toBeDefined()
@@ -198,7 +226,6 @@ describe('composer recipe (0137): CLARIFY holds for the human', () => {
 		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
 		expect(composer.state.phase).toBe('failed')
-		// plan gets ONE resample; a lane that keeps failing spends it too
 		const history = composer.state.history as { excerpt: string }[]
 		expect(history.length).toBe(2)
 		expect(history[0].excerpt).toContain('lane_error')
@@ -207,15 +234,89 @@ describe('composer recipe (0137): CLARIFY holds for the human', () => {
 	})
 })
 
+describe('composer recipe (0138): the face comes before the logic', () => {
+	test('mockup runs before any logic design; the design brief has NO view in its schema', async () => {
+		const { calls, through } = mesh()
+		await through()
+		const mockupIndex = calls.findIndex((c) => c.system.includes('design ONLY the FACE'))
+		const designIndex = calls.findIndex((c) => c.system.includes('design the LOGIC'))
+		expect(mockupIndex).toBeGreaterThanOrEqual(0)
+		expect(designIndex).toBeGreaterThan(mockupIndex)
+		// the logic brief: face is GIVEN, never redesigned
+		expect(calls[designIndex].system).toContain('NO view')
+		expect(calls[designIndex].question).toContain('"mockup"')
+	})
+
+	test('the mockup step exposes face/faceStyle/sample — the live preview state', async () => {
+		const { bus, composer } = mesh()
+		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		expect(composer.state.phase).toBe('mockup')
+		const mockupStep = bus.get('mockup')
+		expect(mockupStep?.state.face).toEqual(MOCKUP_FACE.view)
+		expect(mockupStep?.state.sample).toEqual(MOCKUP_FACE.sample)
+		// the flow data carries the face for every later step
+		const mockupOut = (composer.state.data as Record<string, Record<string, unknown>>).mockup
+		expect(mockupOut.view).toEqual(MOCKUP_FACE.view)
+	})
+
+	test('VOICE iteration on the face: feedback re-enters the mockup, approval releases it', async () => {
+		const changed = JSON.stringify({
+			...MOCKUP_FACE,
+			view: { content: { class: 'habit', children: [{ tag: 'h1', text: '$count' }] } }
+		})
+		const { bus, composer, mockupCalls } = mesh({
+			mockups: [MOCKUP_JSON, changed, APPROVED_JSON]
+		})
+		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		expect(composer.state.phase).toBe('mockup')
+		// change request → the mockup re-runs WITH the feedback and the previous face
+		const second = await bus.dispatch('test', 'compose_answer', {
+			text: 'mach den Titel größer'
+		})
+		expect((JSON.parse(second.record) as { held: string }).held).toBe('mockup')
+		expect(mockupCalls().length).toBe(2)
+		expect(mockupCalls()[1].question).toContain('mach den Titel größer')
+		expect(mockupCalls()[1].question).toContain('"previous"')
+		// the face CHANGED on stage
+		const face = bus.get('mockup')?.state.face as { content: { children: { tag?: string }[] } }
+		expect(face.content.children[0].tag).toBe('h1')
+		// approval → the logic is designed against the CHANGED face
+		await bus.dispatch('test', 'compose_answer', { text: 'passt' })
+		expect(composer.state.phase).toBe('staged')
+		const staged = bus.get('habit')?.manifest.view as { content: { children: { tag?: string }[] } }
+		expect(staged.content.children[0].tag).toBe('h1')
+	})
+
+	test('an invalid face never holds — it re-enters with the validator error in the brief', async () => {
+		const badFace = JSON.stringify({
+			...MOCKUP_FACE,
+			view: { content: { class: 'habit', children: [{ text: 'done? yes: no' }] } }
+		})
+		const { bus, composer, mockupCalls } = mesh({
+			mockups: [badFace, MOCKUP_JSON, APPROVED_JSON]
+		})
+		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		// the second mockup call carried the exact validator error as retry
+		expect(mockupCalls().length).toBe(2)
+		expect(mockupCalls()[1].question).toContain('"retry"')
+		expect(mockupCalls()[1].question).toContain('Ternary')
+		// and the run holds on the VALID face, one failure in the history
+		expect(composer.state.phase).toBe('mockup')
+		expect((composer.state.history as unknown[]).length).toBe(1)
+	})
+})
+
 describe('composer recipe (0137): phases are real actors, pumped and traced', () => {
 	test('every phase is its own pump hop AND its own step dispatch in the biography', async () => {
-		const { bus, pumped, stepRuns } = mesh()
-		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		const { pumped, stepRuns, through } = mesh()
+		await through()
 		expect(pumped().every((m) => m === 'STEP' || m === 'STEP_DONE')).toBe(true)
 		expect(stepRuns()).toEqual([
 			'clarify_run',
 			'scout_run',
 			'plan_run',
+			'mockup_run',
+			'mockup_run',
 			'draft_run',
 			'probe_run',
 			'stage_run'
@@ -223,13 +324,14 @@ describe('composer recipe (0137): phases are real actors, pumped and traced', ()
 	})
 
 	test('the stepper rides in real flow state: all marks proven after staging', async () => {
-		const { bus, composer } = mesh()
-		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		const { composer, through } = mesh()
+		await through()
 		const rows = composer.state.stepRows as { mark: string; label: string }[]
 		expect(rows.map((r) => r.label)).toEqual([
 			'Clarify',
 			'Scout',
 			'Plan',
+			'Mockup',
 			'Draft',
 			'Probe',
 			'Stage'
@@ -249,22 +351,18 @@ describe('composer recipe (0137): phases are real actors, pumped and traced', ()
 	})
 
 	test('proofs come BEFORE the design call, and the brief quotes proofs + exemplar', async () => {
-		const { bus, calls, data } = mesh()
-		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		const { calls, data, through } = mesh()
+		await through()
 		const planIndex = calls.findIndex((c) => c.system.includes('PLAN round'))
-		const designIndex = calls.findIndex((c) =>
-			c.system.includes('design ONE complete avenOS actor')
-		)
+		const designIndex = calls.findIndex((c) => c.system.includes('design the LOGIC'))
 		expect(planIndex).toBeGreaterThanOrEqual(0)
 		expect(designIndex).toBeGreaterThan(planIndex)
 		const design = calls[designIndex]
 		expect(design.question).toContain('streak(S)')
 		expect(design.question).toContain('"proofs"')
 		expect(design.question).toContain('Keeps the task list.')
-		// caller-aware mesh interview from the SCOUT step
 		expect(calls.some((c) => c.system.includes('asked by "composer"'))).toBe(true)
 		expect(((data().scout?.interviews ?? []) as unknown[]).length).toBe(1)
-		// the kimi lane on every composer completion
 		for (const call of [calls[planIndex], design]) {
 			expect(call.settings?.model).toBe(COMPOSER_SETTINGS.model)
 			expect(call.settings?.json).toBe(true)
@@ -273,7 +371,7 @@ describe('composer recipe (0137): phases are real actors, pumped and traced', ()
 })
 
 describe('composer recipe (0137): the SCOUT verdict ladder', () => {
-	test('reuse spawns the instance DIRECTLY — no draft, no staging', async () => {
+	test('reuse spawns the instance DIRECTLY — no mockup, no draft, no staging', async () => {
 		const { bus, composer, stepRuns } = mesh({
 			scout: JSON.stringify({
 				verdict: 'reuse',
@@ -288,7 +386,6 @@ describe('composer recipe (0137): the SCOUT verdict ladder', () => {
 		expect(record.reused.name).toBe('habits')
 		expect(bus.get('habits')).toBeDefined()
 		expect(composer.state.phase).toBe('reused')
-		// the ladder stopped at its second rung: nothing was designed
 		expect(stepRuns()).toEqual(['clarify_run', 'scout_run'])
 		expect(bus.get('habit')).toBeUndefined()
 	})
@@ -313,14 +410,13 @@ describe('composer recipe (0137): the SCOUT verdict ladder', () => {
 
 describe('composer recipe (0137): DRAFT ⇄ PROBE is the declared scrum cycle', () => {
 	test('a membrane failure re-enters DRAFT with the error in the brief; round 2 stages', async () => {
-		const { bus, composer, designCalls } = mesh({
+		const { bus, composer, designCalls, through } = mesh({
 			drafts: [JSON.stringify(BROKEN_DRAFT), JSON.stringify(HABIT_DRAFT)]
 		})
-		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		const result = await through()
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(true)
 		expect(composer.state.phase).toBe('staged')
 		expect(bus.get('habit')).toBeDefined()
-		// two design rounds ran; the second brief carried the exact error
 		expect(designCalls().length).toBe(2)
 		const history = composer.state.history as { error: string }[]
 		expect(history.length).toBe(1)
@@ -333,16 +429,15 @@ describe('composer recipe (0137): DRAFT ⇄ PROBE is the declared scrum cycle', 
 	})
 
 	test('three failed rounds = structured failure with the full history', async () => {
-		const { bus, composer, designCalls } = mesh({
+		const { bus, composer, designCalls, through } = mesh({
 			drafts: [JSON.stringify(BROKEN_DRAFT)]
 		})
-		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		const result = await through()
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
 		expect(composer.state.phase).toBe('failed')
 		expect((composer.state.history as unknown[]).length).toBe(3)
 		expect(designCalls().length).toBe(3)
 		expect(bus.get('habit')).toBeUndefined()
-		// the stepper shows where it died, and the note owns the spent rounds
 		const rows = composer.state.stepRows as { mark: string }[]
 		expect(rows.some((r) => r.mark === '✕')).toBe(true)
 		expect(String(composer.state.note)).toContain('retries are spent')
@@ -356,7 +451,6 @@ describe('composer recipe (0137): Stop stops the pumping', () => {
 		const { bus, composer, pumped } = mesh()
 		bus.pumpSignal = () => controller.signal
 		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		// START itself committed (running), but the pump never ran a step
 		expect((JSON.parse(result.record) as { next?: unknown }).next).toBeDefined()
 		expect(pumped()).toEqual([])
 		expect(composer.state.phase).toBe('running')
@@ -402,10 +496,10 @@ describe('composer recipe (0137): Stop stops the pumping', () => {
 	})
 })
 
-describe('composer recipe (0137): staging stays live, promote stays button-only', () => {
-	test('the staged instance is a REAL tagged actor, usable via dispatch', async () => {
-		const { bus, composer } = mesh()
-		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+describe('composer recipe (0138): staging wears the mockup, promote stays button-only', () => {
+	test('the staged instance is REAL, tagged, usable — and carries the mockup face', async () => {
+		const { bus, composer, through } = mesh()
+		await through()
 		const habit = bus.get('habit')
 		expect(habit).toBeDefined()
 		// biome-ignore lint/style/noNonNullAssertion: asserted above
@@ -414,6 +508,9 @@ describe('composer recipe (0137): staging stays live, promote stays button-only'
 		expect(staged.id).toBe('habit')
 		const run = await bus.dispatch('test', 'habit_streak', { done: ['a', 'b'] })
 		expect((JSON.parse(run.record) as { streak: number }).streak).toBe(2)
+		// THE FACE: the staged manifest wears the approved mockup
+		// biome-ignore lint/style/noNonNullAssertion: asserted above
+		expect(habit!.manifest.view).toEqual(MOCKUP_FACE.view)
 		// biome-ignore lint/style/noNonNullAssertion: asserted above
 		expect(instanceWindows(habit!.manifest, habit!.instanceName).length).toBe(1)
 	})
@@ -425,13 +522,12 @@ describe('composer recipe (0137): staging stays live, promote stays button-only'
 		expect(names).toContain('compose_answer')
 		expect(names.some((n) => n.includes('promote'))).toBe(false)
 		expect(names.some((n) => n.includes('discard'))).toBe(false)
-		// the six steps are dispatchable, but never voice tools
 		expect(names.some((n) => n.endsWith('_run'))).toBe(false)
 	})
 
 	test('PROMOTE drops the tag and exports; DISCARD disposes', async () => {
-		const { bus, composer } = mesh()
-		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		const { bus, composer, through } = mesh()
+		await through()
 		// biome-ignore lint/style/noNonNullAssertion: staged above
 		const uuid = bus.get('habit')!.uuid
 		const promoted = await composer.applyEvent({ send: 'PROMOTE' })
@@ -442,8 +538,7 @@ describe('composer recipe (0137): staging stays live, promote stays button-only'
 		expect(record.code).toContain('catalog')
 		expect(record.code).toContain('habit_streak')
 		expect((composer.state.produced as unknown[]).length).toBe(1)
-		// a second run stages again; DISCARD takes it away for good
-		await bus.dispatch('test', 'compose', { wish: 'another habit tracker' })
+		await through('another habit tracker')
 		const discarded = await composer.applyEvent({ send: 'DISCARD' })
 		expect((discarded.record as { ok: boolean }).ok).toBe(true)
 	})

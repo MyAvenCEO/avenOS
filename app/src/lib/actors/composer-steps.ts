@@ -2,7 +2,7 @@ import type { Manifest, MethodSpec, Predicate } from './actor'
 import { Actor } from './actor'
 import type { MessageBus } from './bus'
 import { COMPOSER_SETTINGS } from './composer.actor'
-import { type ActorDraft, type Proof, probeDraft, stageDraft } from './draft-pipeline'
+import { type ActorDraft, type Proof, probeDraft, stageDraft, validateFace } from './draft-pipeline'
 
 /**
  * The composer's six phases as SIX FULL ACTORS (0137) — each with its own
@@ -50,28 +50,115 @@ const PLAN_BRIEF =
 	'seeds — a proof must be checkable by running it.'
 
 const DESIGN_BRIEF =
-	'You design ONE complete avenOS actor. Reply with EXACTLY one JSON object, no ' +
-	'markdown: {"id": kebab-case, "description": one sentence, "tags": [strings], ' +
-	'"methods": [{"name": snake_case, "description": when to call it, "parameters": ' +
-	'a JSON schema object, "produces": ["pred(X)"] where fitting, "event": {"send": ' +
-	'"EVENT"}, "hitl": short imperative label ONLY on destructive entries}], ' +
-	'"logic": a QuickJS program as a STRING defining initState(source), ' +
-	'reduce(state, ev) and shape(state, rawText), "view": an aven-ui ViewDef, ' +
-	'"style": an aven-ui StyleDef}. House rules: methods declare events, never ' +
+	'You design the LOGIC of ONE avenOS actor — its FACE is already designed and ' +
+	'GIVEN as input.mockup (view, style, sample). Reply with EXACTLY one JSON ' +
+	'object, no markdown: {"id": kebab-case, "description": one sentence, "tags": ' +
+	'[strings], "methods": [{"name": snake_case, "description": when to call it, ' +
+	'"parameters": a JSON schema object, "produces": ["pred(X)"] where fitting, ' +
+	'"event": {"send": "EVENT"}, "hitl": short imperative label ONLY on ' +
+	'destructive entries}], "logic": a QuickJS program as a STRING defining ' +
+	'initState(source), reduce(state, ev) and shape(state, rawText)}. NO view, NO ' +
+	'style — the face is fixed. House rules: methods declare events, never ' +
 	'handlers — reduce switches on ev.send and returns {state: nextState, said: one ' +
 	'short sentence, record: {ok: true, ...flat result fields}}; reduce must ' +
-	'tolerate an empty ev.payload (a smoke test sends one); shape returns null. The ' +
-	'view is data: nodes {tag, class, text, children, attrs}, lists via $each ON ' +
-	'the container ({items: "$stateField", template: {"text": "$$itemField"}}), ' +
-	'clicks via $on: {click: {send: "EVENT"}}; NO conditionals or ternaries — empty ' +
-	'arrays render nothing; style.selectors uses brand tokens like var(--fs-hero), ' +
-	'var(--fs-body), var(--radius-card), var(--surface), var(--border), ' +
-	'var(--muted). YOUR ACTOR MUST MAKE EVERY GIVEN PROOF SATISFIABLE: each proof ' +
-	"goal appears in some method's produces, and reducing that method's event " +
-	'with the proof seed as ev.payload returns a record carrying exactly the ' +
-	'expected fields. If the input carries "retry", your PREVIOUS attempt failed ' +
-	'the membrane with exactly retry.error — fix that, do not repeat it. The ' +
-	'exemplar manifest shows the house style — imitate it.'
+	'tolerate an empty ev.payload (a smoke test sends one); shape returns null. ' +
+	'YOUR STATE SHAPE MUST MATCH THE FACE: initState and every reduce return a ' +
+	'state carrying exactly the fields the given view binds (see input.mockup.' +
+	'sample for the shape — same field names, same types). YOUR ACTOR MUST MAKE ' +
+	"EVERY GIVEN PROOF SATISFIABLE: each proof goal appears in some method's " +
+	"produces, and reducing that method's event with the proof seed as " +
+	'ev.payload returns a record carrying exactly the expected fields. If the ' +
+	'input carries "retry", your PREVIOUS attempt failed the membrane with ' +
+	'exactly retry.error — fix that, do not repeat it. The exemplar manifest ' +
+	'shows the house style — imitate it.'
+
+const MOCKUP_BRIEF =
+	'You design ONLY the FACE of an avenOS actor — no logic, no methods. Reply ' +
+	'with EXACTLY one JSON object, no markdown: EITHER {"approved": true} — ONLY ' +
+	'when input.feedback is a clear approval of the previous mockup (passt, ' +
+	'weiter, ok so, looks good) — OR {"view": an aven-ui ViewDef, "style": an ' +
+	'aven-ui StyleDef, "sample": a plausible example state object filling every ' +
+	'bound field of the view}. View rules: nodes {tag, class, text, children, ' +
+	'attrs}, lists via $each ON the container ({items: "$stateField", template: ' +
+	'{"text": "$$itemField"}}), clicks via $on: {click: {send: "EVENT"}}; NO ' +
+	'conditionals or ternaries — empty arrays render nothing; style.selectors ' +
+	'uses brand tokens like var(--fs-hero), var(--fs-body), var(--radius-card), ' +
+	'var(--surface), var(--border), var(--muted). If input carries "feedback" ' +
+	'with change requests, redesign the PREVIOUS mockup (input.previous) applying ' +
+	'them faithfully. If input carries "retry", your previous face failed ' +
+	'validation with exactly retry.error — fix that.'
+
+const MOCKUP_LOGIC = `
+function present(s) {
+	return {
+		face: s.view, faceStyle: s.style, sample: s.sample, approved: s.approved,
+		title: s.approved ? 'Face approved' : s.view ? 'The face is staged' : 'Mockup',
+		note: s.approved
+			? 'The logic is designed against this face.'
+			: s.view
+				? 'Say what to change \\u2014 or say passt to continue.'
+				: 'Designs ONLY the face: view, style, and a sample state \\u2014 iterated by voice.',
+		ticker: '', streamRows: []
+	}
+}
+function initState(source) { return present({ view: null, style: null, sample: {}, approved: false }) }
+function reduce(state, ev) {
+	if (ev.send !== 'RUN') return state
+	var wish = ev.payload.wish && ev.payload.wish.text ? String(ev.payload.wish.text) : ''
+	var clar = ev.payload.clarify_answer && ev.payload.clarify_answer.text ? String(ev.payload.clarify_answer.text) : ''
+	var proofs = ev.payload.plan && ev.payload.plan.proofs ? ev.payload.plan.proofs : []
+	var feedback = ev.payload.mockup_answer && ev.payload.mockup_answer.text ? String(ev.payload.mockup_answer.text) : ''
+	var prior = ev.payload.mockup && ev.payload.mockup.view
+		? { view: ev.payload.mockup.view, style: ev.payload.mockup.style, sample: ev.payload.mockup.sample }
+		: null
+	var keep = {
+		view: state.face || null, style: state.faceStyle || null,
+		sample: state.sample || {}, approved: false
+	}
+	var raw = cap('complete', {
+		system: ${JSON.stringify(MOCKUP_BRIEF)},
+		question: JSON.stringify({
+			wish: wish, clarifications: clar, proofs: proofs,
+			feedback: feedback, previous: prior, retry: ev.payload.retry || null
+		})
+	})
+	var parsed = null
+	try { parsed = JSON.parse(raw) } catch (e) { parsed = null }
+	if (parsed && parsed.approved === true && prior) {
+		return {
+			state: present({ view: prior.view, style: prior.style, sample: prior.sample, approved: true }),
+			said: 'The face is approved \\u2014 the logic comes next.',
+			record: { ok: true, approved: true, view: prior.view, style: prior.style, sample: prior.sample }
+		}
+	}
+	if (!parsed || !parsed.view) {
+		return {
+			state: present(keep),
+			said: 'The model did not return a usable face.',
+			record: { ok: false, error: 'the model did not return a usable face', excerpt: String(raw).slice(0, 240) }
+		}
+	}
+	var valid = cap('validate', { view: parsed.view, style: parsed.style || {} })
+	if (!valid || valid.ok !== true) {
+		var verr = valid && valid.error ? String(valid.error) : 'face validation failed'
+		return {
+			state: present(keep),
+			said: 'The face failed validation: ' + verr,
+			record: { ok: false, error: verr, excerpt: String(raw).slice(0, 240) }
+		}
+	}
+	return {
+		state: present({ view: parsed.view, style: parsed.style || {}, sample: parsed.sample || {}, approved: false }),
+		said: '',
+		record: {
+			ok: true, hold: true, phase: 'mockup',
+			view: parsed.view, style: parsed.style || {}, sample: parsed.sample || {},
+			say: 'The face is staged \\u2014 say what to change, or say passt to continue.'
+		}
+	}
+}
+function shape(state, rawText) { return null }
+`
 
 /** The shared face vocabulary of every step window. */
 const STEP_STYLE = {
@@ -243,7 +330,7 @@ function initState(source) { return present({ interviews: [], verdict: null }) }
 function reduce(state, ev) {
 	if (ev.send !== 'RUN') return state
 	var wish = ev.payload.wish && ev.payload.wish.text ? String(ev.payload.wish.text) : ''
-	var answers = ev.payload.answers && ev.payload.answers.text ? [String(ev.payload.answers.text)] : []
+	var answers = ev.payload.clarify_answer && ev.payload.clarify_answer.text ? [String(ev.payload.clarify_answer.text)] : []
 	var rows = cap('actors')
 	var raw = cap('complete', {
 		system: ${JSON.stringify(SCOUT_BRIEF)},
@@ -306,7 +393,7 @@ function initState(source) { return present({ proofs: [] }) }
 function reduce(state, ev) {
 	if (ev.send !== 'RUN') return state
 	var wish = ev.payload.wish && ev.payload.wish.text ? String(ev.payload.wish.text) : ''
-	var answers = ev.payload.answers && ev.payload.answers.text ? [String(ev.payload.answers.text)] : []
+	var answers = ev.payload.clarify_answer && ev.payload.clarify_answer.text ? [String(ev.payload.clarify_answer.text)] : []
 	var interviews = ev.payload.scout && ev.payload.scout.interviews ? ev.payload.scout.interviews : []
 	var raw = cap('complete', {
 		system: ${JSON.stringify(PLAN_BRIEF)},
@@ -351,7 +438,7 @@ function initState(source) { return present({ draft: null, round: 0 }) }
 function reduce(state, ev) {
 	if (ev.send !== 'RUN') return state
 	var wish = ev.payload.wish && ev.payload.wish.text ? String(ev.payload.wish.text) : ''
-	var answers = ev.payload.answers && ev.payload.answers.text ? [String(ev.payload.answers.text)] : []
+	var answers = ev.payload.clarify_answer && ev.payload.clarify_answer.text ? [String(ev.payload.clarify_answer.text)] : []
 	var proofs = ev.payload.plan && ev.payload.plan.proofs ? ev.payload.plan.proofs : []
 	var interviews = ev.payload.scout && ev.payload.scout.interviews ? ev.payload.scout.interviews : []
 	var retry = ev.payload.retry || null
@@ -359,7 +446,10 @@ function reduce(state, ev) {
 	var exemplar = cap('manifest', { actor: 'workitem' })
 	var raw = cap('complete', {
 		system: ${JSON.stringify(DESIGN_BRIEF)},
-		question: JSON.stringify({ wish: wish, answers: answers, proofs: proofs, interviews: interviews, exemplar: exemplar, retry: retry })
+		question: JSON.stringify({
+			wish: wish, answers: answers, proofs: proofs, interviews: interviews,
+			mockup: ev.payload.mockup || null, exemplar: exemplar, retry: retry
+		})
 	})
 	var draft = null
 	try { draft = JSON.parse(raw) } catch (e) { draft = null }
@@ -395,6 +485,10 @@ function reduce(state, ev) {
 	if (ev.send !== 'RUN') return state
 	var draft = ev.payload.draft && ev.payload.draft.draft ? ev.payload.draft.draft : null
 	var proofs = ev.payload.plan && ev.payload.plan.proofs ? ev.payload.plan.proofs : []
+	if (draft && ev.payload.mockup && ev.payload.mockup.view) {
+		draft.view = ev.payload.mockup.view
+		draft.style = ev.payload.mockup.style || {}
+	}
 	if (!draft) {
 		return { state: present({ ok: false, result: 'no draft to probe' }),
 			said: 'There is no draft to probe.',
@@ -432,6 +526,10 @@ function initState(source) { return present({ staged: null }) }
 function reduce(state, ev) {
 	if (ev.send !== 'RUN') return state
 	var draft = ev.payload.draft && ev.payload.draft.draft ? ev.payload.draft.draft : null
+	if (draft && ev.payload.mockup && ev.payload.mockup.view) {
+		draft.view = ev.payload.mockup.view
+		draft.style = ev.payload.mockup.style || {}
+	}
 	if (!draft) {
 		return { state: present({ staged: null }),
 			said: 'There is nothing to stage.',
@@ -656,6 +754,32 @@ export function createComposerSteps(bus: MessageBus, options: StepOptions = {}):
 		planSeam
 	)
 
+	const mockupSeam: StepSeam = {}
+	const mockup = makeStep(
+		options,
+		{
+			id: 'mockup',
+			name: 'Mockup',
+			description:
+				'The flow step that designs ONLY the face — view, style and a sample ' +
+				'state — rendered live as a preview and iterated by VOICE until the ' +
+				'human approves; only then does any logic get designed.',
+			tags: ['step'],
+			capabilities: ['complete', 'validate'],
+			logic: MOCKUP_LOGIC,
+			view: stepView('Mockup', []),
+			style: STEP_STYLE,
+			methods: [
+				runMethod('mockup', 'Designs the face over the flow data.', ['plan(P)'], ['mockup(M)'])
+			]
+		},
+		{
+			complete: completeCap(bus, options, mockupSeam),
+			validate: (p) => validateFace(p.view as Manifest['view'], p.style as Manifest['style'])
+		},
+		mockupSeam
+	)
+
 	const draftSeam: StepSeam = {}
 	const draft = makeStep(
 		options,
@@ -687,7 +811,12 @@ export function createComposerSteps(bus: MessageBus, options: StepOptions = {}):
 			]),
 			style: STEP_STYLE,
 			methods: [
-				runMethod('draft', 'Designs the actor over the flow data.', ['plan(P)'], ['draft(D)'])
+				runMethod(
+					'draft',
+					'Designs the actor over the flow data.',
+					['plan(P)', 'mockup(M)'],
+					['draft(D)']
+				)
 			]
 		},
 		{
@@ -773,5 +902,5 @@ export function createComposerSteps(bus: MessageBus, options: StepOptions = {}):
 		stageSeam
 	)
 
-	return [clarify, scout, plan, draft, probe, stage]
+	return [clarify, scout, plan, mockup, draft, probe, stage]
 }

@@ -38,6 +38,32 @@ const stepRecord = $derived.by(() => {
 	return data?.[String(actor.state?.activeStep ?? '')]
 })
 let showJson = $state(false)
+/**
+ * The LIVE face preview (0138): any step exposing face/faceStyle/sample in
+ * its state (the mockup) gets its DRAFTED view rendered over the sample —
+ * the human iterates on this by voice before any logic exists.
+ */
+const facePreview = $derived.by(() => {
+	const st = stepActor?.state as Record<string, unknown> | undefined
+	if (!st?.face || !stepActor) return null
+	return {
+		uuid: stepActor.uuid,
+		manifest: {
+			id: 'face-preview',
+			name: 'Face preview',
+			description: '',
+			tags: [],
+			methods: [],
+			logic: 'preview',
+			view: st.face,
+			style: st.faceStyle ?? {}
+		},
+		state: (st.sample as Record<string, unknown>) ?? {}
+	} as unknown as Actor
+})
+const faceKey = $derived(
+	facePreview ? JSON.stringify((stepActor?.state as Record<string, unknown>)?.face ?? null) : ''
+)
 
 function tap(row: StepRow) {
 	showJson = false
@@ -101,6 +127,18 @@ function tap(row: StepRow) {
 		{#key stepActor.uuid}
 			<AvenUiView actor={stepActor} />
 		{/key}
+	{/if}
+
+	<!-- The mockup's drafted view, LIVE over its sample state (0138). -->
+	{#if facePreview}
+		<div class="rounded-2xl border border-foreground/20 border-dashed p-4">
+			<p class="mb-2 font-mono text-[0.6875rem] text-foreground/40 uppercase tracking-widest">
+				Live preview
+			</p>
+			{#key faceKey}
+				<AvenUiView actor={facePreview} />
+			{/key}
+		</div>
 	{/if}
 
 	<!-- The machine truth under the face: the step's parsed JSON record. -->

@@ -81,9 +81,9 @@ const GATE = stepManifest(
 	`function initState(s) { return {} }
 	function reduce(state, ev) {
 		if (ev.send !== 'RUN') return state
-		var answered = ev.payload.answers && ev.payload.answers.text
+		var answered = ev.payload.gate_answer && ev.payload.gate_answer.text
 		if (answered) {
-			return { state: {}, said: 'gate open', record: { ok: true, answered: String(ev.payload.answers.text) } }
+			return { state: {}, said: 'gate open', record: { ok: true, answered: String(ev.payload.gate_answer.text) } }
 		}
 		return { state: {}, said: 'gate asks', record: { ok: true, hold: true, questions: ['Really?'], phase: 'gated' } }
 	}
@@ -175,7 +175,9 @@ describe('flow engine (0137): a recipe is data, the engine is generic', () => {
 		expect((JSON.parse(resumed.record) as { ok: boolean }).ok).toBe(true)
 		expect(flow.state.phase).toBe('done')
 		// ONE hold round: the gate is not re-run — the answer lands in flow data
-		expect((flow.state.data as Record<string, { text?: string }>).answers?.text).toBe('yes really')
+		expect((flow.state.data as Record<string, { text?: string }>).gate_answer?.text).toBe(
+			'yes really'
+		)
 		expect((flow.state.data as Record<string, { value?: string }>).double?.value).toBe('hihi')
 	})
 

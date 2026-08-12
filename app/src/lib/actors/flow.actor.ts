@@ -86,7 +86,8 @@ function present(s) {
 					: Math.max(s.cursor, 0)
 	var active = s.recipe.steps[activeIndex]
 	var title =
-		s.holding ? 'A few questions first'
+		s.holding && s.phase === 'mockup' ? 'The face is staged'
+		: s.holding ? 'A few questions first'
 		: running ? labelOf(s.recipe.steps[Math.min(s.cursor + 1, s.recipe.steps.length - 1)]) + '\\u2026'
 		: s.phase === 'staged' && s.staged ? 'Staged: ' + s.staged.id
 		: s.phase === 'failed' ? 'Draft failed'
@@ -95,8 +96,10 @@ function present(s) {
 		: s.phase === 'done' ? s.recipe.name + ' \\u2014 done'
 		: 'Idle \\u2014 nothing staged yet'
 	var note =
-		s.holding
-			? 'Answer by voice \\u2014 one answer may cover all questions.'
+		s.holding && s.phase === 'mockup'
+			? 'Say what to change \\u2014 or say passt to continue to the logic.'
+			: s.holding
+				? 'Answer by voice \\u2014 one answer may cover all questions.'
 			: s.phase === 'failed' && s.tries > 0
 				? 'Say it again or differently \\u2014 the retries are spent.'
 				: s.phase === 'failed'
@@ -192,9 +195,16 @@ function reduce(state, ev) {
 				record: { ok: false, error: 'not holding' }
 			}
 		}
-		s.data.answers = { ok: true, text: String(ev.payload.text || '') }
+		// The answer is keyed PER STEP (clarify_answer, mockup_answer, ...) so
+		// later steps keep seeing the clarify context untouched. resume:'self'
+		// re-enters the holding step with the answer as feedback — the mockup
+		// iteration; the default proceeds down the chain — the clarify pattern.
+		var holdStep = s.recipe.steps[s.cursor]
+		var key = holdStep ? holdStep.actor + '_answer' : 'answers'
+		s.data[key] = { ok: true, text: String(ev.payload.text || '') }
 		s.holding = false
 		s.phase = 'running'
+		if (holdStep && holdStep.resume === 'self') s.cursor = s.cursor - 1
 		return {
 			state: present(s),
 			said: 'Thanks \\u2014 the flow continues.',
@@ -275,7 +285,9 @@ function reduce(state, ev) {
 			var qs = out.questions || []
 			return {
 				state: present(s),
-				said: 'Before I design, tell me: ' + qs.join(' \\u00b7 '),
+				// The holding step may speak for itself (the mockup: "say what to
+				// change"); the question join is the clarify default.
+				said: out.say ? String(out.say) : 'Before I design, tell me: ' + qs.join(' \\u00b7 '),
 				record: { ok: true, clarifying: qs, held: st.actor }
 			}
 		}
