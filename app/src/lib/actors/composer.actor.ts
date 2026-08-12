@@ -196,6 +196,7 @@ function present(s) {
 		title: title,
 		note: note,
 		ticker: '',
+		streamRows: [],
 		phaseRows: stepRows(s),
 		goalRows: goalRows,
 		questionRows: questionRows,
@@ -581,6 +582,13 @@ const COMPOSER_MANIFEST: Manifest = {
 				},
 				{ class: 'cp-ticker', text: '$ticker' },
 				{
+					class: 'cp-streambox',
+					$each: {
+						items: '$streamRows',
+						template: { tag: 'pre', class: 'cp-stream', text: '$$text' }
+					}
+				},
+				{
 					class: 'cp-goal',
 					$each: { items: '$goalRows', template: { class: 'cp-quote', text: '$$quote' } }
 				},
@@ -725,6 +733,17 @@ const COMPOSER_MANIFEST: Manifest = {
 				fontFamily: 'var(--font-mono)',
 				fontSize: 'var(--fs-micro)',
 				color: 'var(--muted)'
+			},
+			'.cp-stream': {
+				margin: '0',
+				padding: '0.6rem 0.75rem',
+				borderRadius: 'var(--radius-inner)',
+				background: 'var(--bg-a)',
+				fontFamily: 'var(--font-mono)',
+				fontSize: 'var(--fs-micro)',
+				color: 'var(--muted-strong)',
+				whiteSpace: 'pre-wrap',
+				overflowWrap: 'anywhere'
 			},
 			'.cp-goal': { display: 'flex', flexDirection: 'column' },
 			'.cp-quote': {
@@ -942,7 +961,7 @@ export class ComposerActor extends Actor {
 		// The one remaining host write (0136): the token ticker. Phases commit
 		// real state now; only the stream count is narrated by the host while
 		// a completion is in flight, and the next commit clears it.
-		const seam: { tick?: (note: string) => void } = {}
+		const seam: { tick?: (note: string, stream?: string) => void } = {}
 		super(
 			COMPOSER_MANIFEST,
 			{},
@@ -963,6 +982,10 @@ export class ComposerActor extends Actor {
 				complete: async (p) => {
 					let streamed = 0
 					let lastTick = 0
+					// The live tail: WHAT the model is writing right now — reasoning
+					// and answer text alike — not just how much. 8.5k tokens behind a
+					// bare counter was dead air; this is the window watching Kimi work.
+					let tail = ''
 					const result = await bus.dispatch('composer', 'llm_complete', {
 						system: String(p.system ?? ''),
 						question: String(p.question ?? ''),
@@ -971,10 +994,11 @@ export class ComposerActor extends Actor {
 							signal: options.signal?.(),
 							onDelta: (delta: { reasoning?: string; text?: string }) => {
 								streamed += (delta.reasoning?.length ?? 0) + (delta.text?.length ?? 0)
+								tail = (tail + (delta.reasoning ?? '') + (delta.text ?? '')).slice(-700)
 								const now = Date.now()
 								if (now - lastTick < 500) return
 								lastTick = now
-								seam.tick?.(`kimi · ~${Math.round(streamed / 4)} tokens`)
+								seam.tick?.(`kimi · ~${Math.round(streamed / 4)} tokens`, tail)
 							}
 						}
 					})
@@ -1011,8 +1035,12 @@ export class ComposerActor extends Actor {
 				}
 			}
 		)
-		seam.tick = (note) => {
-			this.state = { ...(this.state ?? {}), ticker: note }
+		seam.tick = (note, stream) => {
+			this.state = {
+				...(this.state ?? {}),
+				ticker: note,
+				...(stream && { streamRows: [{ text: stream }] })
+			}
 		}
 	}
 }
