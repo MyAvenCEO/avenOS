@@ -5,7 +5,7 @@ owner: Claude Code (build agent)
 created: 2026-08-12
 updated: 2026-08-12
 tags: [actors, ui, sandbox, security, config-as-data]
-goal: "`cd app && bun test tests/vibe-sandbox.test.ts` exits 0 — proving (1) RENDERER: every actor's vibe passes validateViewDef/validateStyleDef from @avenos/aven-ui and its logic produces the initial state from `source`; (2) SANDBOX FAIL-CLOSED: actor logic runs in a QuickJS WASM VM where fetch/import/process/require and any non-injected capability THROW and a `while(true)` reducer is killed by fuel; (3) SSOT PARITY: the workitems CRUD reducer in the sandbox produces byte-identical state for a UI event and for the equivalent voice/LLM path, and raw model text is shaped into ops INSIDE the sandbox (a host that receives malformed model output changes no state); (4) REDUCTION: `app/src/lib/actors/catalog.ts` declares only the essential actors (no calendar/habits/notes) and `rg -n 'FaceSpec|SpecFaceView|WorkItemsView' app/src` returns nothing; AND `cd app && bun test` plus `bun run check` (0 errors) stay green"
+goal: "`cd app && bun test tests/vibe-sandbox.test.ts` exits 0 — proving (1) RENDERER: every actor's vibe passes validateViewDef/validateStyleDef from @avenos/aven-ui and its logic produces the initial state from `source`; (2) SANDBOX FAIL-CLOSED: actor logic runs in a QuickJS WASM VM where fetch/import/process/require and any non-injected capability THROW and a `while(true)` reducer is killed by fuel; (3) SSOT PARITY: the workitems CRUD reducer in the sandbox produces byte-identical state for a UI event and for the equivalent voice/LLM path, and raw model text is shaped into ops INSIDE the sandbox (a host that receives malformed model output changes no state); (4) CAPS: a manifest declares `requiredCapabilities`/`providedCapabilities`, the sandbox injects EXACTLY the required ones, and the LLM is reachable only as a capability (`llm`) served by an actor — not as an ambient host function; (5) REDUCTION: `app/src/lib/actors/catalog.ts` declares only the essential actors (no calendar/habits/notes) and `rg -n 'FaceSpec|SpecFaceView|WorkItemsView' app/src` returns nothing; AND `cd app && bun test` plus `bun run check` (0 errors) stay green"
 ---
 
 # Faces as vibes, actor code in QuickJS — recover aven-ui, sandbox the mesh
@@ -58,7 +58,55 @@ QuickJS WASM sandbox; workitems proves it with full CRUD from both voice and mou
 
 **Completion condition** (identical to frontmatter `goal`):
 
-> `cd app && bun test tests/vibe-sandbox.test.ts` exits 0 — proving (1) RENDERER: every actor's vibe passes `validateViewDef`/`validateStyleDef` from `@avenos/aven-ui` and its logic produces the initial state from `source`; (2) SANDBOX FAIL-CLOSED: actor logic runs in a QuickJS WASM VM where `fetch`/`import`/`process`/`require` and any non-injected capability THROW and a `while(true)` reducer is killed by fuel; (3) SSOT PARITY: the workitems CRUD reducer in the sandbox produces byte-identical state for a UI event and for the equivalent voice/LLM path, and raw model text is shaped into ops INSIDE the sandbox (a host that receives malformed model output changes no state); (4) REDUCTION: `app/src/lib/actors/catalog.ts` declares only the essential actors (no calendar/habits/notes) and `rg -n 'FaceSpec|SpecFaceView|WorkItemsView' app/src` returns nothing; AND `cd app && bun test` plus `bun run check` (0 errors) stay green.
+> `cd app && bun test tests/vibe-sandbox.test.ts` exits 0 — proving (1) RENDERER: every actor's vibe passes `validateViewDef`/`validateStyleDef` from `@avenos/aven-ui` and its logic produces the initial state from `source`; (2) SANDBOX FAIL-CLOSED: actor logic runs in a QuickJS WASM VM where `fetch`/`import`/`process`/`require` and any non-injected capability THROW and a `while(true)` reducer is killed by fuel; (3) SSOT PARITY: the workitems CRUD reducer in the sandbox produces byte-identical state for a UI event and for the equivalent voice/LLM path, and raw model text is shaped into ops INSIDE the sandbox (a host that receives malformed model output changes no state); (4) CAPS: a manifest declares `requiredCapabilities`/`providedCapabilities`, the sandbox injects EXACTLY the required ones, and the LLM is reachable only as a capability (`llm`) served by an actor — not as an ambient host function; (5) REDUCTION: `app/src/lib/actors/catalog.ts` declares only the essential actors (no calendar/habits/notes) and `rg -n 'FaceSpec|SpecFaceView|WorkItemsView' app/src` returns nothing; AND `cd app && bun test` plus `bun run check` (0 errors) stay green.
+
+## Abject-Abgleich (double-checked 2026-08-12)
+
+Every claim below was read off abject.world and compared with the code in
+`app/src/lib/actors/`.
+
+**Already the same shape — keep it:**
+
+| abject.world | ours |
+| --- | --- |
+| Abject = actor: address, mailbox, private state, one message at a time, supervisor restarts the dead | `Actor` + `#mailbox`/`#pump` (strictly sequential), `failures`/`lastError`, one silent retry |
+| "One house rule Erlang never had: every actor must answer `ask`" — the one handler that may consult an LLM | `Actor.ask()`, LLM-optional, falls back to manifest prose |
+| "Compression, not abstraction": the answer is derived from the running code, never stored | `handlerSource()` reads the live function; `manifestProse()` derives from the manifest |
+| One MessageBus as substrate; system services are abjects too | `bus.ts`; the registry is itself an actor |
+| Envelope with correlation | `Envelope {id, from, to, method, payload, correlationId?}` |
+| "Every Abject paints its own face"; the organism has a body | windows ARE actors (`WindowActor`), and 0130 makes the face data |
+| Capability-gated containment, no ambient authority | ← the gap this card closes |
+| Identity = key, workspaces LOCAL/PRIVATE/PUBLIC | already stronger on our side: avenID, sealed vaults, spark ACLs ([[0037]], [[0040]], [[0047]], [[0049]]) |
+
+**Deltas this card now closes:**
+
+1. **Capabilities in the manifest.** abject declares `requiredCapabilities` /
+   `providedCapabilities`; we have none, so the sandbox has nothing to gate on. Added:
+   both fields on `Manifest`, injected verbatim into the VM, nothing else reachable.
+2. **The LLM becomes an actor.** Today `bus.llm` is an injected host function — ambient
+   authority by another name. abject's rule: "the LLM is a service Abject, summoned when
+   needed, silent otherwise." So the model lane becomes an actor, and sandboxed code
+   reaches it only through the `llm` capability, i.e. by message.
+
+**Deliberate deviations (named, not accidental):**
+
+- **No ObjectCreator/Factory.** abject speaks abjects into existence; we removed exactly
+  that (composer) so the codebase stays the source of truth. Revisit only with a review
+  gate — the mesh model itself is unaffected.
+- **DOM instead of an X11-style Canvas compositor.** We render validated JSON into a
+  shadow root; the principle ("each actor paints its own face") is identical, the medium
+  is HTML/CSS, which is what the recovered aven-ui engine does natively.
+- **SLD prover instead of ScrumMaster/TupleSpace scrums.** Our planning is deterministic
+  backward chaining over contracts ([[0129]]); abject re-plans in LLM rounds. Both are
+  "no frozen pipeline", ours is cheaper and testable. Scrum-style re-planning stays open
+  as a follow-on, not part of this card.
+- **No Negotiator/ProxyGenerator/HealthMonitor yet.** Self-healing proxies between
+  incompatible actors are a real abject feature we lack; supervision retry is our stand-in.
+  Follow-on card.
+- **QuickJS WASM in the webview, not a worker pool.** abject isolates untrusted code in
+  worker threads; we start in the main thread's VM (same capability gating, no thread
+  isolation) because it keeps browser dev and native identical. Moving the VM into a Web
+  Worker is a follow-on once the shape holds.
 
 ## Approach
 
@@ -76,8 +124,10 @@ entry points, all JSON-marshalled across the boundary:
 - `reduce(state, {send, payload})` → the next state (UI events AND internal messages),
 - `shape(state, rawModelText)` → `{ops, state}` — the ONLY place model output is parsed.
 
-Capabilities are injected as host functions built strictly from the manifest's `caps`
-list; nothing else exists in the VM. Fuel (interrupt deadline) + memory cap bound every
+Capabilities are injected as host functions built strictly from the manifest's
+`requiredCapabilities`; nothing else exists in the VM. The `llm` capability is served by
+the LLM ACTOR (see the abject check above), so sandboxed code reaches the model by
+message, never by ambient function. Fuel (interrupt deadline) + memory cap bound every
 call. This is 0111's proven shape, ported to the client.
 
 **3 — Actor = vibe.** `Manifest` loses `face`/`faces` and gains
@@ -132,6 +182,7 @@ the sandbox? Everything after that is porting.
 - [ ] Fail-closed: `fetch`, `import()`, `require`, `process` and any non-granted capability throw inside the VM; a runaway loop is killed by fuel. (test)
 - [ ] Parity/SSOT: UI event and voice path produce identical workitems state; the same reducer serves both. (test)
 - [ ] Model text is parsed only in the sandbox: malformed output leaves host state untouched. (test)
+- [ ] Caps declared and enforced: a manifest's `requiredCapabilities` are the ONLY host functions in the VM; the model is reachable only through the `llm` capability served by the LLM actor. (test)
 - [ ] Catalog reduced; `rg -n 'FaceSpec|SpecFaceView|WorkItemsView' app/src` is empty.
 - [ ] `cd app && bun test` and `bun run check` (0 errors) green.
 - [ ] **(HITL / review)** Native Mac app: the todos window renders through aven-ui with brand tokens, and add/toggle/delete work by voice AND by click.
