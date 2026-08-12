@@ -11,9 +11,9 @@ import { workItems } from './workitems.svelte'
  * registered like everyone else. The Views surface derives from the
  * registry; the model can toggle any of these by message.
  *
- * Catalog actors get their windows here too: the declared face goes to the
- * universal renderer, extra named faces become their own switchable windows
- * over the SAME actor, and an actor without a face keeps the generic one.
+ * Catalog actors get their windows here too: the declared view goes to the
+ * universal renderer, extra named views become their own switchable windows
+ * over the SAME actor, and an actor without a view keeps the generic one.
  * All of it follows from code — nothing is created at runtime.
  */
 export const listWindow = singleton(

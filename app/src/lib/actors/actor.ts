@@ -26,12 +26,12 @@ import type { StyleDef, ViewDef } from '@avenos/aven-ui'
 export type Predicate = string
 
 /**
- * A vibe: the actor's face as pure data + sandboxed behaviour (0130).
+ * A vibe: the actor's view as pure data + sandboxed behaviour (0130).
  *
  * `view`/`style` are validated JSON the aven-ui engine renders into a shadow
  * root; `logic` is the QuickJS-sandboxed program exporting
  * `initState`/`reduce`/`shape`; `source` seeds the initial state. The actor
- * paints its own face — the host renders, never interprets.
+ * paints its own view — the host renders, never interprets.
  */
 export interface VibeSpec {
 	view: ViewDef
@@ -94,7 +94,9 @@ export function keepsRecords(actor: Actor): actor is Actor & RecordKeeper {
  * record seam.
  */
 export interface ModelTextShaper {
-	shapeModelText(rawText: string): { state?: Record<string, unknown>; ops?: unknown[] } | null
+	shapeModelText(
+		rawText: string
+	): Promise<{ state?: Record<string, unknown>; ops?: unknown[] } | null>
 }
 
 export function shapesModelText(actor: Actor): actor is Actor & ModelTextShaper {
@@ -119,9 +121,16 @@ export interface Manifest {
 	 */
 	llm?: boolean | LlmSettings
 	/**
-	 * The actor's face as a vibe (0130): validated view/style JSON rendered
+	 * The actor's granted capabilities (fail-closed): ONLY these host doors
+	 * exist inside its sandbox — everything else throws. Names resolve
+	 * against what the constructing wiring provides; an undeclared or
+	 * unprovided capability simply does not exist.
+	 */
+	capabilities?: string[]
+	/**
+	 * The actor's view as a vibe (0130): validated view/style JSON rendered
 	 * by aven-ui, behaviour sandboxed in QuickJS — the actor paints its own
-	 * face, the host only renders.
+	 * view, the host only renders.
 	 */
 	vibe?: VibeSpec
 	/**

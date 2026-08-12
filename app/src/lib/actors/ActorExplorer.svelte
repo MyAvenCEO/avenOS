@@ -48,13 +48,13 @@ const instance = $derived(selected.instanceState())
  * The one detail filter (right aside): which lens renders. The manifest —
  * the actor's template, the only stored truth — is where reading starts.
  */
-type ExplorerView = 'manifest' | 'graph' | 'instance' | 'face' | 'proof' | 'trace' | 'ask'
+type ExplorerView = 'manifest' | 'graph' | 'instance' | 'view' | 'proof' | 'trace' | 'ask'
 let view = $state<ExplorerView>('manifest')
 const VIEWS: { key: ExplorerView; label: string }[] = [
 	{ key: 'manifest', label: 'Manifest' },
 	{ key: 'graph', label: 'Graph' },
 	{ key: 'instance', label: 'Instance' },
-	{ key: 'face', label: 'Face' },
+	{ key: 'view', label: 'View' },
 	{ key: 'proof', label: 'Proof' },
 	{ key: 'trace', label: 'Trace' },
 	{ key: 'ask', label: 'ask()' }
@@ -501,20 +501,24 @@ async function ask(event: SubmitEvent) {
 					></span>
 				</div>
 				{#if instance}
-					<dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-3">
+					<dl class="flex flex-col text-sm">
 						{#each Object.entries(instance) as [key, value] (key)}
-							<div>
+							<div
+								class="flex items-baseline justify-between gap-4 border-b border-foreground/5 py-1.5 last:border-0"
+							>
 								<dt class="text-[0.6875rem] text-foreground/40">{key}</dt>
-								<dd class="font-medium">{value}</dd>
+								<dd class="text-right font-medium">{value}</dd>
 							</div>
 						{/each}
-						<div>
+						<div
+							class="flex items-baseline justify-between gap-4 border-b border-foreground/5 py-1.5"
+						>
 							<dt class="text-[0.6875rem] text-foreground/40">Mailbox</dt>
-							<dd class="font-medium">{selected.pending} waiting</dd>
+							<dd class="text-right font-medium">{selected.pending} waiting</dd>
 						</div>
-						<div>
+						<div class="flex items-baseline justify-between gap-4 py-1.5">
 							<dt class="text-[0.6875rem] text-foreground/40">Handler errors</dt>
-							<dd class="font-medium {selected.failures > 0 ? 'text-status-error' : ''}">
+							<dd class="text-right font-medium {selected.failures > 0 ? 'text-status-error' : ''}">
 								{selected.failures}{selected.lastError ? ` · ${selected.lastError}` : ''}
 							</dd>
 						</div>
@@ -528,19 +532,19 @@ async function ask(event: SubmitEvent) {
 			</section>
 		{/if}
 
-		{#if show('face')}
+		{#if show('view')}
 			<!-- ------------------------------------- FACE: the actor's own window -->
 			<section
 				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			>
 				<div class="flex items-center gap-2 pb-1">
-					<h3 class="font-semibold text-sm">Face</h3>
+					<h3 class="font-semibold text-sm">View</h3>
 					<span
 						class="size-1.5 rounded-full {isWindow(selected) ? 'bg-status-success' : 'bg-foreground/20'}"
 					></span>
 				</div>
 				{#if isWindow(selected)}
-					{@const Face = selected.component as import('svelte').Component<{
+					{@const View = selected.component as import('svelte').Component<{
 					actor: typeof selected.subject
 				}>}
 					<p class="pb-2 text-[0.6875rem] text-foreground/40">
@@ -548,16 +552,11 @@ async function ask(event: SubmitEvent) {
 						{selected.subject.manifest.name}
 						and paints it — live, here:
 					</p>
-					<details>
-						<summary class="cursor-pointer text-foreground/50 text-xs hover:text-foreground/80">
-							Show window
-						</summary>
-						<div class="mt-2 max-h-80 overflow-y-auto rounded-xl border border-foreground/10 p-3">
-							<!-- The window's props ride along — they are what make the
+					<div class="max-h-[32rem] overflow-y-auto rounded-xl border border-foreground/10 p-3">
+						<!-- The window's props ride along — they are what make the
 						     Kanban-Board window a BOARD and not another list. -->
-							<Face actor={selected.subject} {...selected.props} />
-						</div>
-					</details>
+						<View actor={selected.subject} {...selected.props} />
+					</div>
 				{:else}
 					{@const win = bus.actors().filter(isWindow).find((a) => a.subject === selected)}
 					{#if win}

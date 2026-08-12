@@ -5,7 +5,7 @@ import type { Actor, VibeSpec } from './actor'
 import type { VibeEvent } from './sandbox'
 
 /**
- * THE face renderer (0130): one component that mounts any actor's vibe —
+ * THE view renderer (0130): one component that mounts any actor's vibe —
  * validated view/style JSON through the aven-ui engine into a shadow root.
  *
  * State never originates here. The subject actor owns its vibe state (the

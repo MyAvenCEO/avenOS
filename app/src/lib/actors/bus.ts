@@ -653,7 +653,7 @@ export class MessageBus {
 				// interprets model output for it. Malformed text = structured
 				// failure, actor state untouched.
 				if (shapesModelText(actor)) {
-					const shaped = actor.shapeModelText(answer)
+					const shaped = await actor.shapeModelText(answer)
 					if (!shaped) throw new Error('the model answer did not shape into ops')
 					return { ok: true, out: shaped as unknown as Record<string, unknown> }
 				}

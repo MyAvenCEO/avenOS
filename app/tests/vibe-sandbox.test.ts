@@ -32,7 +32,7 @@ describe('vibe sandbox (0130 slice A)', () => {
 	test('initState derives the rendered state from source', async () => {
 		const session = await createSession(COUNTER_LOGIC)
 		try {
-			expect(session.initState({ start: 4, label: 'Habits' })).toEqual({
+			expect(await session.initState({ start: 4, label: 'Habits' })).toEqual({
 				count: 4,
 				label: 'Habits'
 			})
@@ -44,12 +44,12 @@ describe('vibe sandbox (0130 slice A)', () => {
 	test('reduce is the one state transition for UI events and messages alike', async () => {
 		const session = await createSession(COUNTER_LOGIC)
 		try {
-			const s0 = session.initState({ start: 0 })
-			const s1 = session.reduce(s0, { send: 'INC' }).state
-			const s2 = session.reduce(s1, { send: 'ADD', payload: { n: 40 } }).state
+			const s0 = await session.initState({ start: 0 })
+			const s1 = (await session.reduce(s0, { send: 'INC' })).state
+			const s2 = (await session.reduce(s1, { send: 'ADD', payload: { n: 40 } })).state
 			expect(s2.count).toBe(41)
 			// unknown events are a no-op, never a crash
-			expect(session.reduce(s2, { send: 'NOPE' }).state.count).toBe(41)
+			expect((await session.reduce(s2, { send: 'NOPE' })).state.count).toBe(41)
 		} finally {
 			session.dispose()
 		}
@@ -75,13 +75,15 @@ describe('vibe sandbox (0130 slice A)', () => {
 		`)
 		try {
 			for (const send of ['FETCH', 'REQUIRE', 'PROCESS']) {
-				expect(() => session.reduce({}, { send })).toThrow(SandboxError)
+				await expect(session.reduce({}, { send })).rejects.toThrow(SandboxError)
 			}
 			// dynamic import: no module loader exists, so the promise REJECTS —
 			// a module can never actually arrive
-			session.reduce({}, { send: 'IMPORT' })
+			await session.reduce({}, { send: 'IMPORT' })
 			session.pump()
-			expect(session.reduce({}, { send: 'CHECK' }).state).toEqual({ importOutcome: 'rejected' })
+			expect((await session.reduce({}, { send: 'CHECK' })).state).toEqual({
+				importOutcome: 'rejected'
+			})
 			// the Function-constructor escape reaches only the VM's own globals,
 			// where fetch still does not exist
 			const probe = await createSession(`
@@ -94,7 +96,7 @@ describe('vibe sandbox (0130 slice A)', () => {
 				}
 			`)
 			try {
-				expect(probe.reduce({}, { send: 'X' }).state).toEqual({
+				expect((await probe.reduce({}, { send: 'X' })).state).toEqual({
 					hasFetch: 'undefined',
 					hasProcess: 'undefined'
 				})
@@ -113,9 +115,9 @@ describe('vibe sandbox (0130 slice A)', () => {
 		`)
 		try {
 			const before = Date.now()
-			expect(() => session.reduce({}, { send: 'SPIN' })).toThrow()
-			// the deadline is a quarter second — well under a hung test runner
-			expect(Date.now() - before).toBeLessThan(2000)
+			await expect(session.reduce({}, { send: 'SPIN' })).rejects.toThrow()
+			// one second of pure VM fuel — well under a hung test runner
+			expect(Date.now() - before).toBeLessThan(5000)
 		} finally {
 			session.dispose()
 		}
@@ -128,15 +130,15 @@ describe('vibe sandbox (0130 slice A)', () => {
 	test('shape parses model text behind the membrane; garbage returns null', async () => {
 		const session = await createSession(COUNTER_LOGIC)
 		try {
-			const state = session.initState({ start: 1 })
+			const state = await session.initState({ start: 1 })
 			// a well-formed model answer becomes structured ops + state
-			const good = session.shape(state, '{"count": 9}')
+			const good = await session.shape(state, '{"count": 9}')
 			expect(good?.state?.count).toBe(9)
 			expect(good?.ops).toEqual([{ op: 'set', count: 9 }])
 			// malformed model output yields null — the HOST state is whatever it
 			// was; nothing threw, nothing mutated
-			expect(session.shape(state, 'I apologize, as an AI I cannot…')).toBeNull()
-			expect(session.shape(state, '{"count": "NaN-ish"}')).toBeNull()
+			expect(await session.shape(state, 'I apologize, as an AI I cannot…')).toBeNull()
+			expect(await session.shape(state, '{"count": "NaN-ish"}')).toBeNull()
 			expect(state.count).toBe(1)
 		} finally {
 			session.dispose()
@@ -160,7 +162,7 @@ describe('workitems vibe (0130 slice B — parity + validation)', () => {
 		const { workitemsLogic } = await import('../src/lib/actors/vibes/workitems/logic')
 		const session = await createSession(workitemsLogic)
 		try {
-			const state = session.initState({
+			const state = await session.initState({
 				items: [{ title: 'Milk', status: 'done', spark: 'me' }],
 				active: 'me'
 			})
@@ -179,12 +181,12 @@ describe('workitems vibe (0130 slice B — parity + validation)', () => {
 		const voice = await createSession(workitemsLogic)
 		try {
 			// the click path: the add form submits ADD {text}
-			let uiState = ui.initState({})
-			uiState = ui.reduce(uiState, { send: 'ADD', payload: { text: 'Buy milk' } }).state
-			uiState = ui.reduce(uiState, { send: 'TOGGLE', payload: { id: 'w1' } }).state
+			let uiState = await ui.initState({})
+			uiState = (await ui.reduce(uiState, { send: 'ADD', payload: { text: 'Buy milk' } })).state
+			uiState = (await ui.reduce(uiState, { send: 'TOGGLE', payload: { id: 'w1' } })).state
 			// the voice path: workitem_create + workitem_update map to the same events
-			let voiceState = voice.initState({})
-			const spoken = voice.reduce(voiceState, {
+			let voiceState = await voice.initState({})
+			const spoken = await voice.reduce(voiceState, {
 				send: 'CREATE',
 				payload: { titles: ['Buy milk'] }
 			})
@@ -192,10 +194,12 @@ describe('workitems vibe (0130 slice B — parity + validation)', () => {
 			expect(spoken.said).toBe('created (1): w1 Buy milk (open, me)')
 			expect((spoken.record?.created as { id: string }[])[0]?.id).toBe('w1')
 			voiceState = spoken.state
-			voiceState = voice.reduce(voiceState, {
-				send: 'UPDATE',
-				payload: { ids: ['w1'], status: 'done' }
-			}).state
+			voiceState = (
+				await voice.reduce(voiceState, {
+					send: 'UPDATE',
+					payload: { ids: ['w1'], status: 'done' }
+				})
+			).state
 			expect(JSON.stringify(uiState)).toBe(JSON.stringify(voiceState))
 		} finally {
 			ui.dispose()
@@ -207,8 +211,8 @@ describe('workitems vibe (0130 slice B — parity + validation)', () => {
 		const { workitemsLogic } = await import('../src/lib/actors/vibes/workitems/logic')
 		const session = await createSession(workitemsLogic)
 		try {
-			const state = session.initState({})
-			const shaped = session.shape(
+			const state = await session.initState({})
+			const shaped = await session.shape(
 				state,
 				'{"ops": [{"op": "create", "titles": ["From the model"]}]}'
 			)
@@ -216,9 +220,53 @@ describe('workitems vibe (0130 slice B — parity + validation)', () => {
 			const next = shaped?.state as Record<string, unknown>
 			expect((next.items as { title: string }[])[0]?.title).toBe('From the model')
 			// prose, wrong shapes, unknown ops — all null, host state untouched
-			expect(session.shape(state, 'Sure! Here is what I did…')).toBeNull()
-			expect(session.shape(state, '{"ops": [{"op": "drop_table"}]}')).toBeNull()
+			expect(await session.shape(state, 'Sure! Here is what I did…')).toBeNull()
+			expect(await session.shape(state, '{"ops": [{"op": "drop_table"}]}')).toBeNull()
 			expect((state.items as unknown[]).length).toBe(0)
+		} finally {
+			session.dispose()
+		}
+	})
+})
+
+describe('capabilities (the ONE host seam, fail-closed)', () => {
+	const CAP_LOGIC = `
+		function initState() { return { n: 0 } }
+		function reduce(state, ev) {
+			if (ev.send === 'ASK_HOST') {
+				var got = cap('answer', { q: ev.payload.q })
+				return { state: { n: got.n }, said: 'host said ' + got.n }
+			}
+			if (ev.send === 'STEAL') {
+				return { state: { n: cap('filesystem', {}).n } }
+			}
+			return state
+		}
+		function shape() { return null }
+	`
+
+	test('an ASYNC granted capability suspends the VM and reads synchronously inside', async () => {
+		const session = await createSession(CAP_LOGIC, {
+			answer: async (p) => {
+				await new Promise((r) => setTimeout(r, 50))
+				return { n: String(p.q).length }
+			}
+		})
+		try {
+			const out = await session.reduce({ n: 0 }, { send: 'ASK_HOST', payload: { q: 'hello' } })
+			expect(out.state.n).toBe(5)
+			expect(out.said).toBe('host said 5')
+		} finally {
+			session.dispose()
+		}
+	})
+
+	test('an ungranted capability throws — what is not granted does not exist', async () => {
+		const session = await createSession(CAP_LOGIC, {
+			answer: () => ({ n: 1 })
+		})
+		try {
+			await expect(session.reduce({ n: 0 }, { send: 'STEAL' })).rejects.toThrow(/not granted/)
 		} finally {
 			session.dispose()
 		}

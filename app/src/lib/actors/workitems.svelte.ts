@@ -52,7 +52,7 @@ const IDS_PARAM = {
 	description: 'One or more ids, exactly as workitem_list returned them.'
 }
 
-/** The two faces over the one reducer — both declared, neither coded. */
+/** The two views over the one reducer — both declared, neither coded. */
 const listVibe: VibeSpec = {
 	view: workitemsListView,
 	style: workitemsStyle,

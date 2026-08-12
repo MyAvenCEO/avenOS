@@ -1,7 +1,7 @@
 import type { ViewDef } from '@avenos/aven-ui'
 
 /**
- * The two faces of workitems, as validated JSON: the list and the board —
+ * The two views of workitems, as validated JSON: the list and the board —
  * one actor, one reducer, two windows. Every interactive element sends an
  * event the sandboxed logic reduces; the view itself computes nothing.
  *

@@ -1,7 +1,7 @@
 import { type StyleDef, withBrand } from '@avenos/aven-ui'
 
 /**
- * One style for both workitems faces, on brand tokens — the same selectors
+ * One style for both workitems views, on brand tokens — the same selectors
  * serve the list and the board, so the two windows read as one app.
  */
 const selectors: StyleDef['selectors'] = {

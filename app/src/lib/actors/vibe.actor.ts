@@ -1,5 +1,11 @@
 import { Actor, functor, type Manifest } from './actor'
-import { createSession, type ReduceOutcome, type VibeEvent, type VibeSession } from './sandbox'
+import {
+	type Capability,
+	createSession,
+	type ReduceOutcome,
+	type VibeEvent,
+	type VibeSession
+} from './sandbox'
 
 /**
  * The vibe actor: an actor whose ENTIRE behaviour is its sandboxed logic —
@@ -29,9 +35,9 @@ export class VibeActor extends Actor {
 	#session: VibeSession | null = null
 	#ready: Promise<void>
 
-	constructor(manifest: Manifest) {
+	constructor(manifest: Manifest, caps: Record<string, Capability> = {}) {
 		super(manifest, {})
-		this.#ready = this.#boot(manifest)
+		this.#ready = this.#boot(manifest, caps)
 		// The generic adapter, bound for every declared method — and again
 		// under the produced functor, which makes it the engine's clause body.
 		for (const method of manifest.methods) {
@@ -46,11 +52,16 @@ export class VibeActor extends Actor {
 		}
 	}
 
-	async #boot(manifest: Manifest): Promise<void> {
+	async #boot(manifest: Manifest, caps: Record<string, Capability>): Promise<void> {
 		const logic = manifest.vibe?.logic
 		if (!logic) return
-		this.#session = await createSession(logic)
-		this.vibeState = this.#session.initState(manifest.vibe?.source ?? {})
+		// Fail-closed grants: the session receives EXACTLY the declared and
+		// provided capabilities — an undeclared name never enters the VM.
+		const granted = Object.fromEntries(
+			(manifest.capabilities ?? []).flatMap((name) => (caps[name] ? [[name, caps[name]]] : []))
+		)
+		this.#session = await createSession(logic, granted)
+		this.vibeState = await this.#session.initState(manifest.vibe?.source ?? {})
 	}
 
 	/**
@@ -60,7 +71,7 @@ export class VibeActor extends Actor {
 	async applyEvent(event: VibeEvent): Promise<ReduceOutcome> {
 		await this.#ready
 		if (!this.#session) throw new Error(`${this.manifest.id} has no vibe session`)
-		const outcome = this.#session.reduce(this.vibeState, event)
+		const outcome = await this.#session.reduce(this.vibeState, event)
 		this.vibeState = outcome.state
 		return outcome
 	}
@@ -70,9 +81,12 @@ export class VibeActor extends Actor {
 	 * never by the host. Garbage returns null and the state stays exactly
 	 * what it was.
 	 */
-	shapeModelText(rawText: string): { state?: Record<string, unknown>; ops?: unknown[] } | null {
+	async shapeModelText(
+		rawText: string
+	): Promise<{ state?: Record<string, unknown>; ops?: unknown[] } | null> {
+		await this.#ready
 		if (!this.#session) return null
-		const shaped = this.#session.shape(this.vibeState, rawText)
+		const shaped = await this.#session.shape(this.vibeState, rawText)
 		if (shaped?.state) this.vibeState = shaped.state
 		return shaped
 	}

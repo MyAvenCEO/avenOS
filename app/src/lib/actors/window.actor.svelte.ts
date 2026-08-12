@@ -13,8 +13,8 @@ import { bus } from './bus'
  * The Views surface derives from the registry: every open window renders
  * its component over its subject's state. Nothing is listed by hand.
  */
-export interface WindowFace {
-	/** Window identity; defaults to the subject id. Two faces over one subject differ here. */
+export interface WindowView {
+	/** Window identity; defaults to the subject id. Two views over one subject differ here. */
 	key?: string
 	/** Display name; defaults to "<subject> Fenster". */
 	name?: string
@@ -30,10 +30,10 @@ export class WindowActor extends Actor {
 	readonly component: unknown
 	readonly props: Record<string, unknown>
 
-	constructor(subject: Actor, component: unknown, face: WindowFace = {}) {
-		const key = face.key ?? subject.manifest.id
+	constructor(subject: Actor, component: unknown, view: WindowView = {}) {
+		const key = view.key ?? subject.manifest.id
 		const id = `${key}-window`
-		const name = face.name ?? `${subject.manifest.name} Window`
+		const name = view.name ?? `${subject.manifest.name} Window`
 		super({
 			id,
 			name,
@@ -62,12 +62,12 @@ export class WindowActor extends Actor {
 		})
 		this.subject = subject
 		this.component = component
-		this.props = face.props ?? {}
-		this.open = face.open ?? true
+		this.props = view.props ?? {}
+		this.open = view.open ?? true
 		this.bind({
 			[`${key}_window_toggle`]: (p) => {
 				this.open = typeof p.open === 'boolean' ? p.open : !this.open
-				// One face at a time, like a window manager showing one screen:
+				// One view at a time, like a window manager showing one screen:
 				// opening this window closes every other. "Zeig mir den Kalender"
 				// REPLACES the Aufgaben, it does not stack beside them.
 				if (this.open) {
