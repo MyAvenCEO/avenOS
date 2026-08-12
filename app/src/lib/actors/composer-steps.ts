@@ -574,7 +574,12 @@ function completeCap(bus: MessageBus, options: StepOptions, seam: StepSeam) {
 			settings: {
 				...COMPOSER_SETTINGS,
 				signal: options.signal?.(),
-				onDelta: (delta: { reasoning?: string; text?: string }) => {
+				onDelta: (delta: { reasoning?: string; text?: string; status?: string }) => {
+					if (delta.status) {
+						// lane-level waits (rate-limit backoff) — show them verbatim
+						seam.tick?.(delta.status)
+						return
+					}
 					streamed += (delta.reasoning?.length ?? 0) + (delta.text?.length ?? 0)
 					tail = (tail + (delta.reasoning ?? '') + (delta.text ?? '')).slice(-700)
 					const now = Date.now()

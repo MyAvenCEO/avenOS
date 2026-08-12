@@ -216,9 +216,27 @@ export async function* streamChat(
 	const decoder = new TextDecoder()
 	let buffer = ''
 
+	// The stall watchdog: a reasoning model streams its deliberation, so 75s
+	// of TOTAL silence is a wedged lane, not patience — fail loudly instead
+	// of hanging the step forever.
+	const STALL_MS = 75_000
+	const readWithStall = async () => {
+		let timer: ReturnType<typeof setTimeout> | undefined
+		const stall = new Promise<never>((_, reject) => {
+			timer = setTimeout(
+				() => reject(new Error(`lane stalled \u2014 no stream frames for ${STALL_MS / 1000}s`)),
+				STALL_MS
+			)
+		})
+		try {
+			return await Promise.race([reader.read(), stall])
+		} finally {
+			clearTimeout(timer)
+		}
+	}
 	try {
 		while (true) {
-			const { done, value } = await reader.read()
+			const { done, value } = await readWithStall()
 			if (done) break
 
 			buffer += decoder.decode(value, { stream: true })
@@ -265,8 +283,10 @@ export interface CompleteOptions {
 	 * Live progress: reasoning models stream their deliberation as
 	 * `reasoning_content` long before any answer text arrives. Surfacing it is
 	 * the difference between "working…" and actually watching the model think.
+	 * `status` carries lane-level waits (rate-limit backoff) — silence that
+	 * LOOKS like a hang must say what it is.
 	 */
-	onDelta?: (delta: { reasoning?: string; text?: string }) => void
+	onDelta?: (delta: { reasoning?: string; text?: string; status?: string }) => void
 }
 
 /**
@@ -328,7 +348,10 @@ export async function complete(
 		if (response.ok && response.body) break
 		const failure = await failureText(response)
 		if (attempt < 2 && /rate.?limit|429/i.test(failure)) {
-			await backoff(15_000 * (attempt + 1), options.signal)
+			const wait = 15_000 * (attempt + 1)
+			// The wait must be VISIBLE — a silent backoff reads as a hang.
+			options.onDelta?.({ status: `rate limited \u2014 retry ${attempt + 2} in ${wait / 1000}s` })
+			await backoff(wait, options.signal)
 			continue
 		}
 		throw new Error(failure)
@@ -346,9 +369,27 @@ export async function complete(
 	// mid-answer the server just stops — the only witness is finish_reason,
 	// and a silently truncated JSON must be an ERROR, not a parse mystery.
 	let finishReason = ''
+	// The stall watchdog: a reasoning model streams its deliberation, so 75s
+	// of TOTAL silence is a wedged lane, not patience — fail loudly instead
+	// of hanging the step forever.
+	const STALL_MS = 75_000
+	const readWithStall = async () => {
+		let timer: ReturnType<typeof setTimeout> | undefined
+		const stall = new Promise<never>((_, reject) => {
+			timer = setTimeout(
+				() => reject(new Error(`lane stalled \u2014 no stream frames for ${STALL_MS / 1000}s`)),
+				STALL_MS
+			)
+		})
+		try {
+			return await Promise.race([reader.read(), stall])
+		} finally {
+			clearTimeout(timer)
+		}
+	}
 	try {
 		while (true) {
-			const { done, value } = await reader.read()
+			const { done, value } = await readWithStall()
 			if (done) break
 			buffer += decoder.decode(value, { stream: true })
 			const frames = buffer.split('\n\n')
