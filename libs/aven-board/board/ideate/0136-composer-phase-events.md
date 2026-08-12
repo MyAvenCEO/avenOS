@@ -1,54 +1,101 @@
 ---
-title: Composer-Phasen als echte Events — die Prozess-Schritte werden das Interface
-summary: Der monolithische COMPOSE-reduce wird in Phasen-Events zerlegt (PLAN → INTERVIEW → DRAFT → PROBE → STAGE) mit echten State-Commits pro Phase; das Host-Overlay entfällt, jeder Schritt landet als eigener Trace-Eintrag, und die Scrum-Schleife (Re-Draft mit Fehler-Kontext) bekommt ihre natürlichen Andockpunkte
+title: Composer-Phasen als echte Events — Mensch-Interview, Reuse-Prüfung, Scrum-Schleife
+summary: Der monolithische COMPOSE-reduce wird eine echte State-Machine (CLARIFY → SCOUT → PLAN → DRAFT → PROBE → STAGE) mit Commit pro Phase; CLARIFY befragt den MENSCHEN (HITL-Rückfragen zu Features, wartend — im Monolith unmöglich), SCOUT prüft Reuse (bestehende Actors/Instanzen) vor Negotiate vor Compose, und eine gescheiterte PROBE re-entert als neue DRAFT-Runde mit Fehler-Kontext (Scrum) statt Single-Shot-Tod
 owner: unassigned
 created: 2026-08-12
 updated: 2026-08-12
-tags: [actors, composer, state-machine, scrum]
+tags: [actors, composer, state-machine, scrum, hitl]
 ---
 
-# Composer-Phasen als echte Events — die Prozess-Schritte werden das Interface
+# Composer-Phasen als echte Events — Mensch-Interview, Reuse-Prüfung, Scrum-Schleife
 
 ## Context
 
-Samuels Frage im 0135-Review: „Sollte der Composer nicht eigentlich die
-verschiedenen Methods/Interface-Tools für jeden seiner Progress-Steps haben?"
+Zwei Befunde aus Samuels 0135-Live-Review (2026-08-12):
 
-Die Antwort hat zwei Hälften:
+1. **„Interview" heißt ZUERST der Mensch.** Samuels Klärung: das Interview
+   soll erst herausfinden, wie die App GENAU funktionieren soll — Features,
+   Grenzen — als HITL-Rückfragen an den Menschen (die Discover-Philosophie,
+   vom Composer am Menschen ausgeführt). DANACH erst die Mesh: können
+   bestehende Actors das schon (Reuse — ggf. reicht eine Instanz)? Muss
+   verhandelt werden (Negotiator-Bridge)? Nur was fehlt, wird komponiert.
+   **Im heutigen Monolith-reduce ist Stufe 1 unmöglich** — ein reduce kann
+   nicht anhalten und auf menschliche Antworten warten. Eine State-Machine
+   kann: die CLARIFY-Phase hält, zeigt die Fragen im Fenster, die nächste
+   Antwort treibt sie weiter.
+2. **Single-Shot verbrennt echte Läufe.** Der Habit-Tracker-Lauf war fast
+   perfekt (3 saubere Proofs, 2 exzellente Mesh-Interviews: workitem „kein
+   recurrence-Attribut", metric „kann keine Streaks") — und starb nach ~2
+   Minuten Kimi-Arbeit an `expecting ';'` (Syntaxfehler in der generierten
+   Logic, mutmaßlich abgeschnittene Antwort). Die Membran hielt korrekt,
+   aber der ganze Lauf war verloren. Die Scrum-Schleife — Re-Draft mit exakt
+   diesem Fehler als Kontext, `state.history` existiert seit 0135 — hätte
+   das mit einer Runde geheilt.
 
-1. **Als TOOLS (voice-callbar): bewusst NEIN.** compose bleibt der eine
-   Eingang. Würden plan/draft/probe/stage/promote einzelne Tools, könnte das
-   Voice-Modell direkt stagen oder promoten — das Button-only-Gesetz wäre
-   gebrochen. Die Schritte sind heute schon im Manifest sichtbar, aber als
-   das, was sie sind: **Capabilities** (die 8 fail-closed Host-Türen unter
-   „Behaviour & containment") — was der Composer vom Host erbitten DARF,
-   nicht was andere von ihm verlangen können.
+Dazu Samuels Interface-Frage: Steps als voice-callbare TOOLS = nein
+(Button-only-Gesetz; die Schritte sind als Capabilities sichtbar). Steps als
+interne EVENTS mit echten Commits = ja, genau diese Karte.
 
-2. **Als interne EVENTS: JA — das ist die richtige Evolution.** Heute läuft
-   die ganze Pipeline in EINEM reduce; der State committet erst am Ende,
-   weshalb 0135 den Fortschritt als transientes Host-Overlay erzählt (die
-   Sandbox bleibt Owner, aber der Prozess selbst ist keine echte
-   State-Machine). Der Ziel-Zustand: PLAN → INTERVIEW → DRAFT → PROBE →
-   STAGE als deklarierte Reducer-Events mit echtem Commit pro Phase.
+## Idea — die Phasen
 
-## Idea
+**CLARIFY (neu — der Mensch zuerst).** Aus dem Wunsch entstehen 1–3
+konkrete Feature-Rückfragen an den MENSCHEN (kimi-Lane), im Composer-Fenster
+als Fragekarten. Die Machine HÄLT. Antworten kommen per Stimme/Chat
+(compose_answer-Tool oder Folge-Utterance) und committen die Phase.
+Skip-Regel: ist der Wunsch schon präzise, überspringt CLARIFY sich selbst.
 
-- **Continuation-Pump im Host:** ein reduce-Outcome darf `record.next =
-  {send, payload}` tragen; der Host (Bus oder Actor-Basis) pumpt das nächste
-  Event in die Mailbox. Die Sandbox bleibt je Phase kurzlebig — kein
-  minutenlanger suspendierter reduce mehr.
-- **Echte Phasen-Commits:** das Fenster rendert idle → interviewing →
-  drafting → staged aus ECHTEM State — das 0135-Overlay (Steps/Ticker via
-  Caps) wird gelöscht, nur der Token-Ticker bleibt Host-Naht.
-- **Jede Phase ein Trace-Eintrag:** der Prozess wird Biography — sichtbar in
-  der Trace-Lens, abbrechbar zwischen Phasen (Stop verwirft einfach das
-  next-Event statt einen Fetch zu killen).
-- **Scrum-Andockpunkt:** eine gescheiterte PROBE-Phase kann als neue
-  DRAFT-Runde mit Fehler-Kontext re-entern (state.history ist seit 0135 da)
-  — die Scrum-Schleife wird ein Event-Zyklus statt neuer Maschinerie.
-- **Resumability:** ein Neustart mitten im Compose verliert nur die aktuelle
-  Phase, nicht den ganzen Lauf.
+**SCOUT (neu — Reuse vor Negotiate vor Compose).** Mesh-Interviews wie
+heute (caller-aware ask), aber mit expliziter Verdikt-Leiter: (a) ein
+bestehender Actor/eine Instanz DECKT den Wunsch → Vorschlag statt Neubau
+(spawn/Config), (b) Vokabular-Lücke zwischen Bestehenden → an den Negotiator
+verweisen, (c) wirklich neu → weiter zu PLAN. Das Verdikt steht im Fenster.
 
-Messbar später via: composer.test.ts prüft echte Zwischen-States (nach PLAN
-ist phase='interviewing' OHNE Host-Overlay), Trace trägt einen Eintrag pro
-Phase, Stop zwischen Phasen verwirft das next-Event, 0135-Kette bleibt grün.
+**PLAN.** Proofs first wie in 0135 — jetzt als eigene Phase mit eigenem
+Commit (die Proofs erscheinen als echter State, nicht als Overlay).
+
+**DRAFT → PROBE (Scrum-Zyklus).** Kimi entwirft gegen Proofs + Interviews +
+Clarify-Antworten. Scheitert die PROBE, re-entert DRAFT mit dem exakten
+Membran-Fehler + dem letzten Draft als Kontext — max. N Runden (2–3), dann
+strukturierter failed-State wie heute. `state.history` trägt jede Runde.
+
+**STAGE.** Wie 0135: echte Instanz, Tag staging, Promote/Discard button-only.
+
+## Die Composer-View: ein Phasen-Stepper (Samuels Nachtrag)
+
+Das Fenster bekommt eine klare Pro-Schritt-Fluss-UI über allem: ein
+**Stepper** (CLARIFY · SCOUT · PLAN · DRAFT · PROBE · STAGE) als
+Fortschritts-Leiste — jeder Schritt ein Chip mit Zustand (✓ erledigt,
+◐ aktiv, ○ ausstehend, ✕ gescheitert), die Scrum-Runden als Zähler am
+DRAFT-Chip (z. B. „Draft ②"). Darunter rendert IMMER der Inhalt der aktiven
+Phase (Fragekarten in CLARIFY, Verdikt in SCOUT, Proof-Karten in PLAN,
+Ticker in DRAFT, Fehler in PROBE, Draft-Karte + Buttons in STAGE);
+erledigte Schritte sind antippbar und zeigen ihren committeten Inhalt —
+möglich, WEIL jede Phase ein echter State-Commit ist. Datengetrieben ohne
+Conditionals: der Stepper ist ein $each über `state.phaseRows`, der
+Inhaltsbereich rendert leere Arrays der Nicht-Phasen zu nichts (das
+bewährte Muster).
+
+## Mechanik
+
+- **Continuation-Pump:** ein reduce-Outcome darf `record.next = {send,
+  payload}` tragen; der Host pumpt das nächste Event in die Mailbox. Kein
+  minutenlang suspendierter reduce mehr; Stop verwirft schlicht das
+  next-Event. CLARIFY trägt KEIN next — sie wartet auf den Menschen.
+- **Echte Phasen-Commits:** das Fenster rendert aus echtem State; das
+  0135-Host-Overlay (Steps/Ticker via Caps) wird gelöscht — nur der
+  Token-Ticker bleibt Host-Naht.
+- **Jede Phase ein Trace-Eintrag** — der Prozess wird Biography; Neustart
+  verliert nur die aktuelle Phase.
+
+Messbar später via: composer.test.ts — (1) CLARIFY hält (kein next, Fragen
+im State), eine Antwort committet weiter; (2) SCOUT-Verdikt reuse/negotiate/
+compose je nach Mesh-Lage; (3) DRAFT-PROBE-Schleife: erster Draft mit
+Syntaxfehler, zweiter (mit Fehler-Kontext im Brief, per Test belegt) staged;
+(4) Zwischen-States sind ECHT (kein Overlay), `state.phaseRows` trägt den
+Stepper mit ✓/◐/○/✕ und Scrum-Rundenzähler; (5) Stop zwischen Phasen
+verwirft das next-Event; (6) 0135-Kette bleibt grün.
+
+## Progress log
+
+- `2026-08-12` — Umgeschrieben nach Samuels Review-Befunden: CLARIFY-Phase (Mensch-Interview als HITL-Rückfragen — braucht die State-Machine zwingend), SCOUT mit Reuse-vor-Negotiate-vor-Compose-Verdikt, DRAFT↔PROBE als Scrum-Zyklus (der Habit-Tracker-Lauf starb Single-Shot an `expecting ';'` nach 2 Minuten Kimi-Arbeit — genau der Fall, den die Schleife heilt).
+- `2026-08-12` — Erstfassung: Phasen-Events als Antwort auf die Interface-Frage (Steps als Events, nicht als Tools).
