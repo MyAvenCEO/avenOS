@@ -165,6 +165,16 @@ export class Listener {
 				}
 			}
 
+			// A webview reload leaves the RUST engine exactly where the old page
+			// dropped it: possibly mid-utterance, echo gate possibly latched high
+			// (0.92 barge-in threshold on ordinary speech). The watchdog would heal
+			// both — after 1.5 s and a couple of sacrificed utterances. The first
+			// words after a reload were exactly that sacrifice: "Hört zu" on
+			// screen, nothing transcribed, nothing submitted. Start from a
+			// known-clean engine instead.
+			await invoke('asr_reset').catch(() => {})
+			this.setOutputActive(false)
+
 			await this.#capture()
 			this.status = 'listening'
 			navigator.mediaDevices.addEventListener?.('devicechange', this.#onDeviceChange)
