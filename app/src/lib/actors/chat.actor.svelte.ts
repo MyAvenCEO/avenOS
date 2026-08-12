@@ -237,18 +237,34 @@ for (const actor of catalogActors) bus.register(actor)
  * is declared below, the closures evaluate lazily at call time) and the
  * activity strip as progress line ("the process is visible, not magic").
  */
-const turnSignal = () => chatActor.core.signal
+/**
+ * The WORK signal — deliberately NOT the chat turn's abort. Barge-in fires
+ * `interrupted` on voice activity alone (~64ms, even a cough) and stops the
+ * REPLY; if long-running work (a compose chain, a negotiation draft) hung on
+ * the same controller, speaking while Kimi designs killed the whole run —
+ * exactly the 163s PLAN death in Samuel's live test. Work dies only on the
+ * explicit Stop button, which calls stopWork() alongside chat.stop().
+ */
+let workController: AbortController | null = null
+const workSignal = () => {
+	workController ??= new AbortController()
+	return workController.signal
+}
+export function stopWork(): void {
+	workController?.abort()
+	workController = null
+}
 const showProgress = (note: string) => activity.show({ kind: 'doing', titles: [], note })
-// The continuation pump halts between phases when the turn is aborted —
+// The continuation pump halts between phases when the WORK is stopped —
 // Stop discards the composer's next event instead of killing a fetch.
-bus.pumpSignal = turnSignal
+bus.pumpSignal = workSignal
 /** The Negotiator (0131): drafts bridges between incompatible actors, HITL-gated. */
 class ReactiveNegotiator extends NegotiatorActor {
 	state = $state<Record<string, unknown>>({})
 }
 export const negotiatorActor = singleton(
 	'aven.negotiator',
-	() => new ReactiveNegotiator(bus, { signal: turnSignal, onProgress: showProgress })
+	() => new ReactiveNegotiator(bus, { signal: workSignal, onProgress: showProgress })
 )
 bus.register(negotiatorActor)
 /**
@@ -263,7 +279,7 @@ export const composerActor = singleton(
 	() =>
 		new ReactiveComposer(bus, {
 			make: (manifest) => new ReactiveActor(manifest),
-			signal: turnSignal
+			signal: workSignal
 			// No activity wiring: the composer narrates its process in its OWN
 			// window (steps, ticker, interviews), which compose fronts.
 		})

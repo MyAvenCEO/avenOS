@@ -93,6 +93,8 @@ interface MeshOptions {
 	plan?: string
 	/** One design answer per scrum round, consumed in order (last one repeats). */
 	drafts?: string[]
+	/** Calls whose system contains this marker FAIL at the lane (ok:false). */
+	failLane?: string
 	composer?: ComposerOptions
 }
 
@@ -112,6 +114,12 @@ function mesh(options: MeshOptions = {}) {
 						...(p.settings ? { settings: p.settings as Record<string, unknown> } : {})
 					}
 					calls.push(call)
+					if (options.failLane && call.system.includes(options.failLane)) {
+						return {
+							record: JSON.stringify({ ok: false, error: 'boom upstream (504)' }),
+							wire: 'boom upstream (504)'
+						}
+					}
 					const drafts = options.drafts ?? [JSON.stringify(HABIT_DRAFT)]
 					const text = call.system.includes('CLARIFY round')
 						? (options.clarify ?? NO_QUESTIONS)
@@ -171,6 +179,21 @@ describe('composer (0136): CLARIFY holds for the human', () => {
 		const { bus } = mesh()
 		const result = await bus.dispatch('test', 'compose_answer', { text: 'hello?' })
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
+	})
+
+	test('a LANE failure is visible, not silent: the real cause lands in the history', async () => {
+		// the 163s live death: the plan completion itself failed upstream — the
+		// window must show WHY, not just "no proofs"
+		const { bus, composer } = mesh({ failLane: 'PLAN round' })
+		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
+		expect(composer.state.phase).toBe('failed')
+		const history = composer.state.history as { excerpt: string }[]
+		expect(history.length).toBe(1)
+		expect(history[0].excerpt).toContain('lane_error')
+		expect(history[0].excerpt).toContain('boom upstream (504)')
+		// and the note tells the truth — this was no three-round scrum
+		expect(String(composer.state.note)).toContain('died before drafting')
 	})
 })
 

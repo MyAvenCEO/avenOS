@@ -174,9 +174,11 @@ function present(s) {
 				? 'Round ' + s.round + ' of 3 \\u2014 the membrane error rides in the brief.'
 				: s.phase === 'staged'
 					? 'The proofs below are PROVEN \\u2014 the instance is live. Promote makes it production, Discard disposes it.'
-					: s.phase === 'failed'
+					: s.phase === 'failed' && s.failedAt >= 3
 						? 'Say it again or differently \\u2014 three rounds were spent.'
-						: 'Proofs first \\u2014 the measurable "done" comes before any design.'
+						: s.phase === 'failed'
+							? 'The run died before drafting \\u2014 the error below says why.'
+							: 'Proofs first \\u2014 the measurable "done" comes before any design.'
 	return {
 		phase: s.phase,
 		goal: s.goal,
@@ -353,13 +355,14 @@ function reduce(state, ev) {
 	}
 
 	if (ev.send === 'PLAN') {
-		var plan = parse(cap('complete', {
+		var planRaw = cap('complete', {
 			system: ${JSON.stringify(PLAN_BRIEF)},
 			question: JSON.stringify({ wish: s.goal, answers: s.answers, interviews: s.interviews })
-		}))
+		})
+		var plan = parse(planRaw)
 		if (!plan || !plan.proofs || plan.proofs.length === 0) {
 			return failed(
-				s, 'the plan round produced no proofs', '', 2,
+				s, 'the plan round produced no proofs', String(planRaw).slice(0, 240), 2,
 				'I could not derive a measurable definition of done \\u2014 nothing was drafted.'
 			)
 		}
@@ -976,12 +979,21 @@ export class ComposerActor extends Actor {
 						}
 					})
 					try {
-						const parsed = JSON.parse(result.record) as { ok?: boolean; text?: unknown }
+						const parsed = JSON.parse(result.record) as {
+							ok?: boolean
+							text?: unknown
+							error?: unknown
+						}
 						if (parsed.ok !== false) return String(parsed.text ?? '')
+						// The lane FAILED (timeout, abort, HTTP error) — say so as
+						// DATA: the sandbox parses this, finds no proofs/draft, and
+						// keeps the real cause in its failure excerpt. A silent ''
+						// was how "the plan round produced no proofs" hid a 163s
+						// upstream death.
+						return JSON.stringify({ lane_error: String(parsed.error ?? result.wire) })
 					} catch {
-						// fall through
+						return JSON.stringify({ lane_error: result.wire.slice(0, 200) })
 					}
-					return ''
 				},
 				probe: async (p) =>
 					await probeDraft(

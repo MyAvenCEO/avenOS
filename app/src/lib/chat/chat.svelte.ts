@@ -194,9 +194,10 @@ export class Chat {
 	}
 
 	/**
-	 * The live turn's abort signal. Long-running tool work (the composer's and
-	 * negotiator's model lanes) hooks its fetches to it — pressing Stop must
-	 * stop the PROCESS, not just the reply stream.
+	 * The live turn's abort signal — the REPLY scope only. Long-running work
+	 * (composer, negotiator) deliberately hangs on the separate work signal
+	 * in the actor wiring: barge-in fires on any voice activity and must not
+	 * kill a design run.
 	 */
 	get signal(): AbortSignal | undefined {
 		return this.#abort?.signal

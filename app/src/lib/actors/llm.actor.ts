@@ -34,8 +34,25 @@ export type LlmTransport = (
 	settings?: LlmSettings & LaneExtras
 ) => Promise<string>
 
+/** One completed (or failed) lane call, kept for the under-the-hood view. */
+interface Exchange {
+	at: number
+	model: string
+	ok: boolean
+	ms: number
+	question: string
+	answer: string
+}
+
 export class LlmActor extends Actor {
 	#transport: LlmTransport
+	/**
+	 * The lane's own biography: the last completions with excerpts, surfaced
+	 * through instanceState so the Explorer's Instances lens answers "what did
+	 * the model ACTUALLY say" — a 163s upstream death must be readable, not
+	 * inferred from a bare ok:false.
+	 */
+	#log: Exchange[] = []
 
 	constructor(transport: LlmTransport) {
 		super({
@@ -69,17 +86,51 @@ export class LlmActor extends Actor {
 					p.settings && typeof p.settings === 'object'
 						? (p.settings as LlmSettings & LaneExtras)
 						: undefined
-				const text = await this.#transport(
-					String(p.system ?? ''),
-					String(p.question ?? ''),
-					settings
-				)
-				return { record: JSON.stringify({ ok: true, text }), wire: text }
+				const started = Date.now()
+				const entry: Exchange = {
+					at: started,
+					model: settings?.model ?? 'default',
+					ok: false,
+					ms: 0,
+					question: String(p.question ?? '').slice(0, 160),
+					answer: ''
+				}
+				try {
+					const text = await this.#transport(
+						String(p.system ?? ''),
+						String(p.question ?? ''),
+						settings
+					)
+					entry.ok = true
+					entry.answer = text.slice(0, 200)
+					return { record: JSON.stringify({ ok: true, text }), wire: text }
+				} catch (err) {
+					entry.answer = `ERROR: ${err instanceof Error ? err.message : String(err)}`.slice(0, 200)
+					throw err
+				} finally {
+					entry.ms = Date.now() - started
+					this.#log.push(entry)
+					if (this.#log.length > 12) this.#log.splice(0, this.#log.length - 12)
+				}
 			}
 		})
 	}
 
 	protected override situation(): string {
-		return 'I relay completions to the inference proxy; the mesh reaches the model only through me.'
+		const last = this.#log.at(-1)
+		const tail = last
+			? ` Last call: ${last.model}, ${last.ms}ms, ${last.ok ? 'ok' : `FAILED — ${last.answer}`}.`
+			: ''
+		return `I relay completions to the inference proxy; the mesh reaches the model only through me.${tail}`
+	}
+
+	override instanceState(): Record<string, unknown> {
+		return {
+			completions: this.#log.filter((e) => e.ok).length,
+			failures: this.#log.filter((e) => !e.ok).length,
+			log: this.#log
+				.slice(-6)
+				.map((e) => `${e.ok ? '✓' : '✕'} ${e.model} ${e.ms}ms — ${e.answer || e.question}`)
+		}
 	}
 }

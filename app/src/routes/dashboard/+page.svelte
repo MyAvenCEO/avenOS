@@ -8,6 +8,7 @@ import {
 	chatActor,
 	composerActor,
 	negotiatorActor,
+	stopWork,
 	summarizeCall
 } from '$lib/actors/chat.actor.svelte'
 import { confirmHeld, hitlQueue, rejectHeld } from '$lib/actors/hitl.svelte'
@@ -572,7 +573,11 @@ $effect(() => {
 					<button
 						type="button"
 						onclick={() => {
+							// The button stops EVERYTHING: the reply stream AND the work
+							// lane (compose chains, negotiation drafts). Barge-in by voice
+							// stops only the reply — work survives the user talking.
 							chat.stop()
+							stopWork()
 							speaker.silence()
 						}}
 						title="Stop"
