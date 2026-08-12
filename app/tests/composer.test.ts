@@ -1,21 +1,18 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { Actor, type Manifest } from '../src/lib/actors/actor'
 import { MessageBus } from '../src/lib/actors/bus'
-import {
-	COMPOSER_SETTINGS,
-	ComposerActor,
-	type ComposerOptions
-} from '../src/lib/actors/composer.actor'
+import { COMPOSER_SETTINGS, ComposerActor } from '../src/lib/actors/composer.actor'
+import { createComposerSteps, type StepOptions } from '../src/lib/actors/composer-steps'
 import { isStaged } from '../src/lib/actors/draft-pipeline'
 import { instanceWindows } from '../src/lib/actors/instance-windows'
 
 /**
- * The 0136 proof: the composer is a REAL state machine — CLARIFY holds for
- * the human, SCOUT rules reuse before negotiate before compose, PLAN writes
- * the proofs, DRAFT⇄PROBE is the scrum cycle (three rounds, the membrane
- * error rides in the next brief), STAGE holds for the button. Phases chain
- * through the bus's continuation pump: every hop a real state commit and its
- * own trace entry; Stop stops the pumping.
+ * The composer as RECIPE #1 (0137): six step actors under the generic flow
+ * engine, behaving exactly as the 0136 machine did — CLARIFY holds for the
+ * human, SCOUT rules reuse before negotiate before compose, PLAN writes the
+ * proofs, DRAFT⇄PROBE is the scrum cycle (three runs, the membrane error in
+ * the next brief), STAGE holds for the button. Every phase is a real actor,
+ * every hop a pump entry.
  */
 
 const HABIT_LOGIC = `function initState(source) { return { count: 0 } }
@@ -95,12 +92,21 @@ interface MeshOptions {
 	drafts?: string[]
 	/** Calls whose system contains this marker FAIL at the lane (ok:false). */
 	failLane?: string
-	composer?: ComposerOptions
+	steps?: StepOptions
 }
+
+/** Every test's mesh gives its WASM runtimes back afterwards. */
+const meshBuses: MessageBus[] = []
+afterEach(() => {
+	for (const bus of meshBuses.splice(0)) {
+		for (const actor of bus.actors()) actor.dispose()
+	}
+})
 
 /** The model lane, faked and routed by the brief markers of each phase. */
 function mesh(options: MeshOptions = {}) {
 	const bus = new MessageBus()
+	meshBuses.push(bus)
 	const calls: LlmCall[] = []
 	let designCall = 0
 	bus.register(
@@ -136,26 +142,32 @@ function mesh(options: MeshOptions = {}) {
 		)
 	)
 	bus.register(new Actor(WORKITEM_EXEMPLAR))
-	const composer = new ComposerActor(bus, options.composer ?? {})
+	for (const step of createComposerSteps(bus, options.steps ?? {})) bus.register(step)
+	const composer = new ComposerActor(bus)
 	bus.register(composer)
 	const designCalls = () =>
 		calls.filter((c) => c.system.includes('design ONE complete avenOS actor'))
 	const pumped = () => bus.traceLog.filter((e) => e.from === 'pump').map((e) => e.method)
-	return { bus, composer, calls, designCalls, pumped }
+	const stepRuns = () =>
+		bus.traceLog
+			.filter((e) => e.from === 'composer' && e.method.endsWith('_run'))
+			.map((e) => e.method)
+	const data = () => composer.state.data as Record<string, Record<string, unknown>>
+	return { bus, composer, calls, designCalls, pumped, stepRuns, data }
 }
 
-describe('composer (0136): CLARIFY holds for the human', () => {
+describe('composer recipe (0137): CLARIFY holds for the human', () => {
 	test('a vague wish returns questions and HOLDS — compose_answer resumes to staged', async () => {
-		const { bus, composer, pumped } = mesh({
+		const { bus, composer, pumped, data } = mesh({
 			clarify: JSON.stringify({ questions: ['Which habits?', 'Daily or weekly?'] })
 		})
 		const held = await bus.dispatch('test', 'compose', { wish: 'ein Habit Tracker' })
 		const heldRecord = JSON.parse(held.record) as { ok: boolean; clarifying: string[] }
 		expect(heldRecord.clarifying).toEqual(['Which habits?', 'Daily or weekly?'])
 		expect(held.wire).toContain('Which habits?')
-		// the machine HOLDS: no phase ran past clarify, nothing exists yet
+		// the machine HOLDS: only the clarify hop ran, nothing exists yet
 		expect(composer.state.phase).toBe('clarifying')
-		expect(pumped()).toEqual([])
+		expect(pumped().length).toBe(2)
 		expect(bus.get('habit')).toBeUndefined()
 		// the human answers by voice — the chain resumes and runs to staged
 		const resumed = await bus.dispatch('test', 'compose_answer', {
@@ -163,7 +175,7 @@ describe('composer (0136): CLARIFY holds for the human', () => {
 		})
 		expect((JSON.parse(resumed.record) as { ok: boolean }).ok).toBe(true)
 		expect(composer.state.phase).toBe('staged')
-		expect(composer.state.answers).toEqual(['Meditation und Sport, täglich'])
+		expect(data().answers?.text).toBe('Meditation und Sport, täglich')
 		expect(bus.get('habit')).toBeDefined()
 	})
 
@@ -175,15 +187,13 @@ describe('composer (0136): CLARIFY holds for the human', () => {
 		expect(bus.get('habit')).toBeDefined()
 	})
 
-	test('compose_answer outside clarifying fails structured', async () => {
+	test('compose_answer outside a hold fails structured', async () => {
 		const { bus } = mesh()
 		const result = await bus.dispatch('test', 'compose_answer', { text: 'hello?' })
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
 	})
 
 	test('a LANE failure is visible, not silent: the real cause lands in the history', async () => {
-		// the 163s live death: the plan completion itself failed upstream — the
-		// window must show WHY, not just "no proofs"
 		const { bus, composer } = mesh({ failLane: 'PLAN round' })
 		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
@@ -197,17 +207,25 @@ describe('composer (0136): CLARIFY holds for the human', () => {
 	})
 })
 
-describe('composer (0136): phases are REAL — pumped, committed, traced', () => {
-	test('every phase is its own pump hop in the one biography', async () => {
-		const { bus, pumped } = mesh()
+describe('composer recipe (0137): phases are real actors, pumped and traced', () => {
+	test('every phase is its own pump hop AND its own step dispatch in the biography', async () => {
+		const { bus, pumped, stepRuns } = mesh()
 		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		expect(pumped()).toEqual(['SCOUT', 'PLAN', 'DRAFT', 'PROBE', 'STAGE'])
+		expect(pumped().every((m) => m === 'STEP' || m === 'STEP_DONE')).toBe(true)
+		expect(stepRuns()).toEqual([
+			'clarify_run',
+			'scout_run',
+			'plan_run',
+			'draft_run',
+			'probe_run',
+			'stage_run'
+		])
 	})
 
-	test('the stepper rides in real state: all marks proven after staging', async () => {
+	test('the stepper rides in real flow state: all marks proven after staging', async () => {
 		const { bus, composer } = mesh()
 		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		const rows = composer.state.phaseRows as { mark: string; label: string }[]
+		const rows = composer.state.stepRows as { mark: string; label: string }[]
 		expect(rows.map((r) => r.label)).toEqual([
 			'Clarify',
 			'Scout',
@@ -219,8 +237,19 @@ describe('composer (0136): phases are REAL — pumped, committed, traced', () =>
 		expect(rows.every((r) => r.mark === '✓')).toBe(true)
 	})
 
+	test('a step actor is independently dispatchable — plan alone writes proofs', async () => {
+		const { bus } = mesh()
+		const result = await bus.dispatch('test', 'plan_run', {
+			wish: { text: 'a habit tracker' },
+			scout: { interviews: [] }
+		})
+		const record = JSON.parse(result.record) as { ok: boolean; proofs: { goal: string }[] }
+		expect(record.ok).toBe(true)
+		expect(record.proofs.map((p) => p.goal)).toEqual(['streak(S)'])
+	})
+
 	test('proofs come BEFORE the design call, and the brief quotes proofs + exemplar', async () => {
-		const { bus, calls, composer } = mesh()
+		const { bus, calls, data } = mesh()
 		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
 		const planIndex = calls.findIndex((c) => c.system.includes('PLAN round'))
 		const designIndex = calls.findIndex((c) =>
@@ -232,9 +261,9 @@ describe('composer (0136): phases are REAL — pumped, committed, traced', () =>
 		expect(design.question).toContain('streak(S)')
 		expect(design.question).toContain('"proofs"')
 		expect(design.question).toContain('Keeps the task list.')
-		// caller-aware mesh interview from the SCOUT phase
+		// caller-aware mesh interview from the SCOUT step
 		expect(calls.some((c) => c.system.includes('asked by "composer"'))).toBe(true)
-		expect((composer.state.interviews as unknown[]).length).toBe(1)
+		expect(((data().scout?.interviews ?? []) as unknown[]).length).toBe(1)
 		// the kimi lane on every composer completion
 		for (const call of [calls[planIndex], design]) {
 			expect(call.settings?.model).toBe(COMPOSER_SETTINGS.model)
@@ -243,9 +272,9 @@ describe('composer (0136): phases are REAL — pumped, committed, traced', () =>
 	})
 })
 
-describe('composer (0136): the SCOUT verdict ladder', () => {
+describe('composer recipe (0137): the SCOUT verdict ladder', () => {
 	test('reuse spawns the instance DIRECTLY — no draft, no staging', async () => {
-		const { bus, composer, pumped } = mesh({
+		const { bus, composer, stepRuns } = mesh({
 			scout: JSON.stringify({
 				verdict: 'reuse',
 				reason: 'the task list already tracks daily items',
@@ -259,8 +288,8 @@ describe('composer (0136): the SCOUT verdict ladder', () => {
 		expect(record.reused.name).toBe('habits')
 		expect(bus.get('habits')).toBeDefined()
 		expect(composer.state.phase).toBe('reused')
-		// the ladder stopped at its first rung: nothing was designed
-		expect(pumped()).toEqual(['SCOUT'])
+		// the ladder stopped at its second rung: nothing was designed
+		expect(stepRuns()).toEqual(['clarify_run', 'scout_run'])
 		expect(bus.get('habit')).toBeUndefined()
 	})
 
@@ -282,7 +311,7 @@ describe('composer (0136): the SCOUT verdict ladder', () => {
 	})
 })
 
-describe('composer (0136): DRAFT ⇄ PROBE is the scrum cycle', () => {
+describe('composer recipe (0137): DRAFT ⇄ PROBE is the declared scrum cycle', () => {
 	test('a membrane failure re-enters DRAFT with the error in the brief; round 2 stages', async () => {
 		const { bus, composer, designCalls } = mesh({
 			drafts: [JSON.stringify(BROKEN_DRAFT), JSON.stringify(HABIT_DRAFT)]
@@ -309,30 +338,32 @@ describe('composer (0136): DRAFT ⇄ PROBE is the scrum cycle', () => {
 		expect((composer.state.history as unknown[]).length).toBe(3)
 		expect(designCalls().length).toBe(3)
 		expect(bus.get('habit')).toBeUndefined()
-		// the stepper shows where it died
-		const rows = composer.state.phaseRows as { mark: string }[]
+		// the stepper shows where it died, and the note owns the spent rounds
+		const rows = composer.state.stepRows as { mark: string }[]
 		expect(rows.some((r) => r.mark === '✕')).toBe(true)
+		expect(String(composer.state.note)).toContain('three rounds')
 	})
 })
 
-describe('composer (0136): Stop stops the pumping', () => {
+describe('composer recipe (0137): Stop stops the pumping', () => {
 	test('an aborted pump signal halts the chain between phases — nothing staged', async () => {
 		const controller = new AbortController()
 		controller.abort()
 		const { bus, composer, pumped } = mesh()
 		bus.pumpSignal = () => controller.signal
 		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		// COMPOSE itself committed (scouting is next), but the pump never ran
+		// START itself committed (running), but the pump never ran a step
 		expect((JSON.parse(result.record) as { next?: unknown }).next).toBeDefined()
 		expect(pumped()).toEqual([])
-		expect(composer.state.phase).toBe('scouting')
+		expect(composer.state.phase).toBe('running')
 		expect(bus.get('habit')).toBeUndefined()
 	})
 
-	test('the turn signal reaches the model lane itself — an abort ends the run', async () => {
+	test('the work signal reaches the model lane of the steps — an abort ends the run', async () => {
 		const controller = new AbortController()
-		const bus = new MessageBus()
 		let sawSignal = false
+		const bus = new MessageBus()
+		meshBuses.push(bus)
 		bus.register(
 			new Actor(
 				{ id: 'llm', name: 'LLM', description: 'Fake model lane.', tags: ['system'], methods: [] },
@@ -352,8 +383,11 @@ describe('composer (0136): Stop stops the pumping', () => {
 			)
 		)
 		bus.register(new Actor(WORKITEM_EXEMPLAR))
-		bus.pumpSignal = () => controller.signal
-		const composer = new ComposerActor(bus, { signal: () => controller.signal })
+		for (const step of createComposerSteps(bus, { signal: () => controller.signal })) {
+			bus.register(step)
+		}
+		// the pump stays open on purpose: the signal must reach the LANE itself
+		const composer = new ComposerActor(bus)
 		bus.register(composer)
 		const pending = bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
 		controller.abort()
@@ -364,7 +398,7 @@ describe('composer (0136): Stop stops the pumping', () => {
 	})
 })
 
-describe('composer (0136): staging stays live, promote stays button-only', () => {
+describe('composer recipe (0137): staging stays live, promote stays button-only', () => {
 	test('the staged instance is a REAL tagged actor, usable via dispatch', async () => {
 		const { bus, composer } = mesh()
 		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
@@ -380,13 +414,15 @@ describe('composer (0136): staging stays live, promote stays button-only', () =>
 		expect(instanceWindows(habit!.manifest, habit!.instanceName).length).toBe(1)
 	})
 
-	test('no promote/discard tool exists; compose_answer does', () => {
+	test('no promote/discard tool exists; step entries stay engine-only', () => {
 		const { bus } = mesh()
 		const names = bus.toolSpecs().map((t) => t.name)
 		expect(names).toContain('compose')
 		expect(names).toContain('compose_answer')
 		expect(names.some((n) => n.includes('promote'))).toBe(false)
 		expect(names.some((n) => n.includes('discard'))).toBe(false)
+		// the six steps are dispatchable, but never voice tools
+		expect(names.some((n) => n.endsWith('_run'))).toBe(false)
 	})
 
 	test('PROMOTE drops the tag and exports; DISCARD disposes', async () => {

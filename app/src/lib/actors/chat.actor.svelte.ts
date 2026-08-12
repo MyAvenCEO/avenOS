@@ -6,6 +6,7 @@ import { Actor } from './actor'
 import { bus } from './bus'
 import { catalog } from './catalog'
 import { ComposerActor } from './composer.actor'
+import { createComposerSteps } from './composer-steps'
 import { LlmActor } from './llm.actor'
 import { NegotiatorActor } from './negotiator.actor'
 import { RegistryActor } from './registry.actor'
@@ -268,22 +269,28 @@ export const negotiatorActor = singleton(
 )
 bus.register(negotiatorActor)
 /**
- * The Composer (0135): wish → proofs → drafted actor, staged live as "next".
- * Staged instances come from the reactive factory so their windows update.
+ * The composer's six phases as six FULL step actors (0137) — registered
+ * BEFORE the flow so the recipe validates against the mesh. Reactive, so
+ * their faces (and the live model stream) render inside the flow window.
+ */
+export const composerSteps = singleton('aven.composer.steps', () =>
+	createComposerSteps(bus, {
+		signal: workSignal,
+		make: (manifest) => new ReactiveActor(manifest),
+		step: (manifest, caps) => new ReactiveActor(manifest, {}, caps)
+	})
+)
+for (const step of composerSteps) {
+	if (!bus.get(step.manifest.id)) bus.register(step)
+}
+/**
+ * The Composer (0137): RECIPE #1 of the flow engine — wish → clarify hold →
+ * scout ladder → proofs → scrum-drafted actor, staged live as "next".
  */
 class ReactiveComposer extends ComposerActor {
 	state = $state<Record<string, unknown>>({})
 }
-export const composerActor = singleton(
-	'aven.composer',
-	() =>
-		new ReactiveComposer(bus, {
-			make: (manifest) => new ReactiveActor(manifest),
-			signal: workSignal
-			// No activity wiring: the composer narrates its process in its OWN
-			// window (steps, ticker, interviews), which compose fronts.
-		})
-)
+export const composerActor = singleton('aven.composer', () => new ReactiveComposer(bus))
 bus.register(composerActor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
 bus.register(registryActor)

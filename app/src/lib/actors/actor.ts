@@ -59,6 +59,12 @@ export interface MethodSpec {
 	 * tool. UI clicks bypass the gate (a click IS the button press).
 	 */
 	hitl?: string
+	/**
+	 * Engine-only entry (0137): dispatchable like any method, but never part
+	 * of the model's tool list — flow STEPS are driven by their orchestrator,
+	 * not by voice.
+	 */
+	internal?: boolean
 }
 
 /** Per-actor model lane: which model answers as this actor, and how. */
@@ -242,6 +248,16 @@ export class Actor {
 		)
 		this.#session = await createSession(manifest.logic ?? '', granted)
 		this.state = await this.#session.initState(manifest.source ?? {})
+	}
+
+	/**
+	 * Free the sandbox session — a QuickJS runtime is real WASM memory, and
+	 * actors that leave the mesh (disposed instances, probe scratch, test
+	 * meshes) must give it back or the module heap eventually runs dry.
+	 */
+	dispose(): void {
+		this.#session?.dispose()
+		this.#session = null
 	}
 
 	/**

@@ -1,6 +1,7 @@
 import AvenUiView from './AvenUiView.svelte'
 import { bus } from './bus'
 import { catalogActors, composerActor, negotiatorActor } from './chat.actor.svelte'
+import FlowView from './FlowView.svelte'
 import { instanceWindows } from './instance-windows'
 import { registryTick } from './reactivity.svelte'
 import { singleton } from './singleton'
@@ -80,12 +81,12 @@ export const negotiatorWindow = singleton(
 )
 bus.register(negotiatorWindow)
 
-// The composer (0135) paints its whole process — goal, proofs, interviews,
-// the staged draft with its buttons — as its own window.
+// The composer (0137) is a FLOW — its window is the generic flow chrome:
+// stepper + the active step actor's OWN face, terminal cards, buttons.
 export const composerWindow = singleton(
 	'aven.window.composer',
 	() =>
-		new WindowActor(composerActor, AvenUiView, {
+		new WindowActor(composerActor, FlowView, {
 			key: 'composer',
 			name: 'Composer',
 			open: false

@@ -153,33 +153,39 @@ export async function probeDraft(draft: ActorDraft, proofs: Proof[] = []): Promi
 
 	// The proofs: a scratch mesh nobody else sees — register the draft, walk
 	// each goal with the prover, compare the final record to the expectation.
+	// The scratch actor's sandbox is freed afterwards, pass or fail.
 	const scratch = new MessageBus()
-	scratch.register(new Actor(manifest))
-	for (const proof of proofs) {
-		const run = await scratch.satisfy(proof.goal, proof.seed ?? {})
-		if (run.status !== 'ok') {
-			return {
-				ok: false,
-				stage: 'proof',
-				proof: proof.goal,
-				error: `proof ${proof.goal} is not satisfiable with the given seed`
-			}
-		}
-		const out = run.steps.at(-1)?.out as Record<string, unknown> | undefined
-		for (const [key, want] of Object.entries(proof.expect ?? {})) {
-			if (JSON.stringify(out?.[key]) !== JSON.stringify(want)) {
+	const probeActor = new Actor(manifest)
+	scratch.register(probeActor)
+	try {
+		for (const proof of proofs) {
+			const run = await scratch.satisfy(proof.goal, proof.seed ?? {})
+			if (run.status !== 'ok') {
 				return {
 					ok: false,
 					stage: 'proof',
 					proof: proof.goal,
-					error:
-						`proof ${proof.goal}: expected ${key}=${JSON.stringify(want)}, ` +
-						`got ${JSON.stringify(out?.[key])}`
+					error: `proof ${proof.goal} is not satisfiable with the given seed`
+				}
+			}
+			const out = run.steps.at(-1)?.out as Record<string, unknown> | undefined
+			for (const [key, want] of Object.entries(proof.expect ?? {})) {
+				if (JSON.stringify(out?.[key]) !== JSON.stringify(want)) {
+					return {
+						ok: false,
+						stage: 'proof',
+						proof: proof.goal,
+						error:
+							`proof ${proof.goal}: expected ${key}=${JSON.stringify(want)}, ` +
+							`got ${JSON.stringify(out?.[key])}`
+					}
 				}
 			}
 		}
+		return { ok: true }
+	} finally {
+		probeActor.dispose()
 	}
-	return { ok: true }
 }
 
 function reason(err: unknown): string {
