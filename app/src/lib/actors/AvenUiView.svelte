@@ -2,6 +2,7 @@
 import { AvenUiEngine, type StyleDef, type UiEvent, type ViewDef } from '@avenos/aven-ui'
 import { onDestroy } from 'svelte'
 import type { Actor } from './actor'
+import { bus } from './bus'
 import type { ActorEvent } from './sandbox'
 
 /**
@@ -45,7 +46,9 @@ async function mount(element: HTMLElement): Promise<void> {
 		engine = new AvenUiEngine({
 			container: element,
 			onEvent: (event: UiEvent) => {
-				actor.applyEvent(event as ActorEvent).catch((err) => {
+				// Through the bus, never behind its back — the click becomes a
+				// message and shows up in the trace like every other sender.
+				bus.uiEvent('ui', actor.uuid, event as ActorEvent).catch((err) => {
 					renderError = err instanceof Error ? err.message : String(err)
 				})
 			}

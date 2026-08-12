@@ -645,6 +645,44 @@ describe('catalog (code is the source of truth, reduced — 0130)', () => {
 	})
 })
 
+describe('the biography is complete: UI clicks and dispatches speak names', () => {
+	test('a UI event reduces through the sandbox AND lands in the trace', async () => {
+		const bus = new MessageBus()
+		const actor = new Actor({
+			id: 'todo',
+			name: 'Todo',
+			description: 'Keeps todos.',
+			tags: [],
+			methods: [],
+			logic: `
+				function initState() { return { n: 0 } }
+				function reduce(state, ev) { return { n: state.n + 1 } }
+				function shape() { return null }
+			`
+		})
+		bus.register(actor)
+		await bus.uiEvent('ui', actor.uuid, { send: 'BUMP' })
+		expect(actor.state.n).toBe(1)
+		const entry = bus.traceLog.find((e) => e.method === 'BUMP')
+		expect(entry?.from).toBe('ui')
+		// the trace speaks names, never uuids
+		expect(entry?.to).toBe('todo')
+	})
+
+	test('dispatch traces the instance name, not the uuid', async () => {
+		const bus = new MessageBus()
+		bus.register(
+			new Actor(
+				{ id: 'a', name: 'A', description: '', tags: [], methods: [] },
+				{ ping: () => ({ record: '{"ok":true}', wire: 'pong' }) }
+			)
+		)
+		await bus.dispatch('test', 'ping', {})
+		const entry = bus.traceLog.find((e) => e.method === 'ping')
+		expect(entry?.to).toBe('a')
+	})
+})
+
 describe('runs ARE trace entries (merged biography)', () => {
 	test('every executed step lands in the trace carrying its run id', async () => {
 		const bus = new MessageBus()

@@ -185,6 +185,9 @@ export class MessageBus {
 	/** Route one envelope into its actor's mailbox. Unknown addressees error. */
 	async send(envelope: Envelope): Promise<HandlerResult> {
 		const actor = this.get(envelope.to)
+		// The biography speaks names: envelopes route by uuid, the trace shows
+		// the instance name — uuids are addresses, not prose.
+		const shown = actor?.instanceName ?? envelope.to
 		const started = Date.now()
 		if (!actor) {
 			const record = JSON.stringify({ ok: false, error: `no actor ${envelope.to}` })
@@ -192,7 +195,7 @@ export class MessageBus {
 				at: started,
 				kind: 'send',
 				from: envelope.from,
-				to: envelope.to,
+				to: shown,
 				method: envelope.method,
 				ok: false,
 				ms: 0
@@ -210,7 +213,7 @@ export class MessageBus {
 			at: started,
 			kind: 'send',
 			from: envelope.from,
-			to: envelope.to,
+			to: shown,
 			method: envelope.method,
 			ok,
 			ms: Date.now() - started
@@ -351,6 +354,36 @@ export class MessageBus {
 				}
 			}
 		]
+	}
+
+	/**
+	 * The UI event door (0133 debug): a click in a view is a MESSAGE like any
+	 * other — it reduces through the actor's sandbox AND lands in the one
+	 * biography. Views must never call applyEvent behind the bus's back.
+	 */
+	async uiEvent(
+		from: string,
+		ref: string,
+		event: { send: string; payload?: Record<string, unknown> }
+	): Promise<void> {
+		const actor = this.get(ref)
+		const started = Date.now()
+		if (!actor) return
+		let ok = true
+		try {
+			await actor.applyEvent(event)
+		} catch {
+			ok = false
+		}
+		this.#record({
+			at: started,
+			kind: 'send',
+			from,
+			to: actor.instanceName,
+			method: event.send,
+			ok,
+			ms: Date.now() - started
+		})
 	}
 
 	/**
