@@ -98,10 +98,10 @@ export class ChatActor extends Actor {
 						return result
 					}
 					// compose fronts the composer window BEFORE the work starts — the
-					// process (steps, ticker, interviews) plays in the composer's own
-					// view, not as a toast. When staging succeeds, the staged
+					// process (stepper, ticker, interviews) plays in the composer's
+					// own view, not as a toast. When staging succeeds, the staged
 					// instance's first window takes the stage through the spawn hook.
-					if (name === 'compose') {
+					if (name === 'compose' || name === 'compose_answer') {
 						for (const other of bus.actors()) {
 							if (isWindow(other)) other.open = false
 						}
@@ -239,6 +239,9 @@ for (const actor of catalogActors) bus.register(actor)
  */
 const turnSignal = () => chatActor.core.signal
 const showProgress = (note: string) => activity.show({ kind: 'doing', titles: [], note })
+// The continuation pump halts between phases when the turn is aborted —
+// Stop discards the composer's next event instead of killing a fetch.
+bus.pumpSignal = turnSignal
 /** The Negotiator (0131): drafts bridges between incompatible actors, HITL-gated. */
 class ReactiveNegotiator extends NegotiatorActor {
 	state = $state<Record<string, unknown>>({})

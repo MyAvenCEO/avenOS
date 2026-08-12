@@ -10,11 +10,12 @@ import { isStaged } from '../src/lib/actors/draft-pipeline'
 import { instanceWindows } from '../src/lib/actors/instance-windows'
 
 /**
- * The 0135 proof: a wish becomes a complete actor — but PROOFS FIRST. The
- * interview writes the measurable definition of done (Prolog goals + seeds)
- * before the model sees a line of logic; the membrane PROVES the draft on a
- * scratch bus; a valid draft runs live as a staging instance ("next");
- * Promote is button-only and returns the catalog-ready export.
+ * The 0136 proof: the composer is a REAL state machine — CLARIFY holds for
+ * the human, SCOUT rules reuse before negotiate before compose, PLAN writes
+ * the proofs, DRAFT⇄PROBE is the scrum cycle (three rounds, the membrane
+ * error rides in the next brief), STAGE holds for the button. Phases chain
+ * through the bus's continuation pump: every hop a real state commit and its
+ * own trace entry; Stop stops the pumping.
  */
 
 const HABIT_LOGIC = `function initState(source) { return { count: 0 } }
@@ -52,9 +53,16 @@ const HABIT_DRAFT = {
 	style: { selectors: { '.habit': { display: 'flex' } } }
 }
 
-const PLAN_ANSWER = JSON.stringify({
-	proofs: [{ goal: 'streak(S)', seed: { done: ['mon', 'tue', 'wed'] }, expect: { streak: 3 } }],
+const BROKEN_DRAFT = { ...HABIT_DRAFT, logic: 'function initState( {' }
+
+const NO_QUESTIONS = JSON.stringify({ questions: [] })
+const COMPOSE_VERDICT = JSON.stringify({
+	verdict: 'compose',
+	reason: 'nothing in the mesh counts streaks',
 	ask: [{ actor: 'workitem', question: 'What exact payload shape do your records carry?' }]
+})
+const PLAN_ANSWER = JSON.stringify({
+	proofs: [{ goal: 'streak(S)', seed: { done: ['mon', 'tue', 'wed'] }, expect: { streak: 3 } }]
 })
 
 /** The house exemplar the design brief quotes — a slim stand-in manifest. */
@@ -79,14 +87,20 @@ interface LlmCall {
 	settings?: Record<string, unknown>
 }
 
-/** The model lane, faked: plan JSON, interview prose, and the draft. */
-function mesh(
-	draftAnswer: string = JSON.stringify(HABIT_DRAFT),
-	planAnswer: string = PLAN_ANSWER,
-	options: ComposerOptions = {}
-) {
+interface MeshOptions {
+	clarify?: string
+	scout?: string
+	plan?: string
+	/** One design answer per scrum round, consumed in order (last one repeats). */
+	drafts?: string[]
+	composer?: ComposerOptions
+}
+
+/** The model lane, faked and routed by the brief markers of each phase. */
+function mesh(options: MeshOptions = {}) {
 	const bus = new MessageBus()
 	const calls: LlmCall[] = []
+	let designCall = 0
 	bus.register(
 		new Actor(
 			{ id: 'llm', name: 'LLM', description: 'Fake model lane.', tags: ['system'], methods: [] },
@@ -98,47 +112,107 @@ function mesh(
 						...(p.settings ? { settings: p.settings as Record<string, unknown> } : {})
 					}
 					calls.push(call)
-					const text = call.system.includes('PLAN round')
-						? planAnswer
-						: call.system.includes('design ONE complete avenOS actor')
-							? draftAnswer
-							: 'I emit flat JSON records; see my manifest.'
+					const drafts = options.drafts ?? [JSON.stringify(HABIT_DRAFT)]
+					const text = call.system.includes('CLARIFY round')
+						? (options.clarify ?? NO_QUESTIONS)
+						: call.system.includes('SCOUT round')
+							? (options.scout ?? COMPOSE_VERDICT)
+							: call.system.includes('PLAN round')
+								? (options.plan ?? PLAN_ANSWER)
+								: call.system.includes('design ONE complete avenOS actor')
+									? drafts[Math.min(designCall++, drafts.length - 1)]
+									: 'I emit flat JSON records; see my manifest.'
 					return { record: JSON.stringify({ ok: true, text }), wire: text }
 				}
 			}
 		)
 	)
 	bus.register(new Actor(WORKITEM_EXEMPLAR))
-	const composer = new ComposerActor(bus, options)
+	const composer = new ComposerActor(bus, options.composer ?? {})
 	bus.register(composer)
-	return { bus, composer, calls }
+	const designCalls = () =>
+		calls.filter((c) => c.system.includes('design ONE complete avenOS actor'))
+	const pumped = () => bus.traceLog.filter((e) => e.from === 'pump').map((e) => e.method)
+	return { bus, composer, calls, designCalls, pumped }
 }
 
-describe('composer (0135): interview writes the proofs FIRST', () => {
-	test('compose asks caller-aware, proofs exist before the design call, kimi lane set', async () => {
-		const { bus, composer, calls } = mesh()
+describe('composer (0136): CLARIFY holds for the human', () => {
+	test('a vague wish returns questions and HOLDS — compose_answer resumes to staged', async () => {
+		const { bus, composer, pumped } = mesh({
+			clarify: JSON.stringify({ questions: ['Which habits?', 'Daily or weekly?'] })
+		})
+		const held = await bus.dispatch('test', 'compose', { wish: 'ein Habit Tracker' })
+		const heldRecord = JSON.parse(held.record) as { ok: boolean; clarifying: string[] }
+		expect(heldRecord.clarifying).toEqual(['Which habits?', 'Daily or weekly?'])
+		expect(held.wire).toContain('Which habits?')
+		// the machine HOLDS: no phase ran past clarify, nothing exists yet
+		expect(composer.state.phase).toBe('clarifying')
+		expect(pumped()).toEqual([])
+		expect(bus.get('habit')).toBeUndefined()
+		// the human answers by voice — the chain resumes and runs to staged
+		const resumed = await bus.dispatch('test', 'compose_answer', {
+			text: 'Meditation und Sport, täglich'
+		})
+		expect((JSON.parse(resumed.record) as { ok: boolean }).ok).toBe(true)
+		expect(composer.state.phase).toBe('staged')
+		expect(composer.state.answers).toEqual(['Meditation und Sport, täglich'])
+		expect(bus.get('habit')).toBeDefined()
+	})
+
+	test('a precise wish (no questions) chains straight through to staged', async () => {
+		const { bus, composer } = mesh()
 		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker with streaks' })
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(true)
-		// the proofs landed in state — the measurable "done" for the wish
-		const proofs = composer.state.proofs as { goal: string }[]
-		expect(proofs.map((p) => p.goal)).toEqual(['streak(S)'])
-		// ORDER: the plan round ran BEFORE the design round — proofs first
+		expect(composer.state.phase).toBe('staged')
+		expect(bus.get('habit')).toBeDefined()
+	})
+
+	test('compose_answer outside clarifying fails structured', async () => {
+		const { bus } = mesh()
+		const result = await bus.dispatch('test', 'compose_answer', { text: 'hello?' })
+		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
+	})
+})
+
+describe('composer (0136): phases are REAL — pumped, committed, traced', () => {
+	test('every phase is its own pump hop in the one biography', async () => {
+		const { bus, pumped } = mesh()
+		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		expect(pumped()).toEqual(['SCOUT', 'PLAN', 'DRAFT', 'PROBE', 'STAGE'])
+	})
+
+	test('the stepper rides in real state: all marks proven after staging', async () => {
+		const { bus, composer } = mesh()
+		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		const rows = composer.state.phaseRows as { mark: string; label: string }[]
+		expect(rows.map((r) => r.label)).toEqual([
+			'Clarify',
+			'Scout',
+			'Plan',
+			'Draft',
+			'Probe',
+			'Stage'
+		])
+		expect(rows.every((r) => r.mark === '✓')).toBe(true)
+	})
+
+	test('proofs come BEFORE the design call, and the brief quotes proofs + exemplar', async () => {
+		const { bus, calls, composer } = mesh()
+		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
 		const planIndex = calls.findIndex((c) => c.system.includes('PLAN round'))
 		const designIndex = calls.findIndex((c) =>
 			c.system.includes('design ONE complete avenOS actor')
 		)
 		expect(planIndex).toBeGreaterThanOrEqual(0)
 		expect(designIndex).toBeGreaterThan(planIndex)
-		// the design brief quotes the proofs AND the house exemplar verbatim
 		const design = calls[designIndex]
 		expect(design.question).toContain('streak(S)')
 		expect(design.question).toContain('"proofs"')
 		expect(design.question).toContain('Keeps the task list.')
-		// caller-aware interview: the ask names the composer as asker
-		const interviews = calls.filter((c) => c.system.includes('asked by "composer"'))
-		expect(interviews.length).toBe(1)
+		// caller-aware mesh interview from the SCOUT phase
+		expect(calls.some((c) => c.system.includes('asked by "composer"'))).toBe(true)
 		expect((composer.state.interviews as unknown[]).length).toBe(1)
-		// the kimi lane: plan and design completions carry the composer settings
+		// the kimi lane on every composer completion
 		for (const call of [calls[planIndex], design]) {
 			expect(call.settings?.model).toBe(COMPOSER_SETTINGS.model)
 			expect(call.settings?.json).toBe(true)
@@ -146,128 +220,93 @@ describe('composer (0135): interview writes the proofs FIRST', () => {
 	})
 })
 
-describe('composer (0135): the membrane — nothing invalid reaches the mesh', () => {
-	test('garbage model output = structured failure, kept in state.history', async () => {
-		const { bus, composer } = mesh('Sure! Here is an actor I would suggest…')
+describe('composer (0136): the SCOUT verdict ladder', () => {
+	test('reuse spawns the instance DIRECTLY — no draft, no staging', async () => {
+		const { bus, composer, pumped } = mesh({
+			scout: JSON.stringify({
+				verdict: 'reuse',
+				reason: 'the task list already tracks daily items',
+				reuse: { template: 'workitem', name: 'habits' }
+			})
+		})
+		bus.spawnable('workitem', () => new Actor(WORKITEM_EXEMPLAR))
 		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		const record = JSON.parse(result.record) as { ok: boolean; error: string }
-		expect(record.ok).toBe(false)
+		const record = JSON.parse(result.record) as { ok: boolean; reused: { name: string } }
+		expect(record.ok).toBe(true)
+		expect(record.reused.name).toBe('habits')
+		expect(bus.get('habits')).toBeDefined()
+		expect(composer.state.phase).toBe('reused')
+		// the ladder stopped at its first rung: nothing was designed
+		expect(pumped()).toEqual(['SCOUT'])
 		expect(bus.get('habit')).toBeUndefined()
-		expect(composer.state.phase).toBe('failed')
-		// the RETROSPECTIVE seed: the failure is KEPT, wish + error + excerpt
-		const history = composer.state.history as { wish: string; error: string; excerpt: string }[]
+	})
+
+	test('negotiate advises the bridge — no draft, no staging', async () => {
+		const { bus, composer } = mesh({
+			scout: JSON.stringify({
+				verdict: 'negotiate',
+				reason: 'metric and imperial-display cover it but do not meet',
+				negotiate: { from: 'metric', to: 'imperial-display' }
+			})
+		})
+		const result = await bus.dispatch('test', 'compose', { wish: 'show km as miles' })
+		const record = JSON.parse(result.record) as { ok: boolean; negotiate: { from: string } }
+		expect(record.ok).toBe(true)
+		expect(record.negotiate.from).toBe('metric')
+		expect(result.wire).toContain('negotiate')
+		expect(composer.state.phase).toBe('negotiate')
+		expect(bus.get('habit')).toBeUndefined()
+	})
+})
+
+describe('composer (0136): DRAFT ⇄ PROBE is the scrum cycle', () => {
+	test('a membrane failure re-enters DRAFT with the error in the brief; round 2 stages', async () => {
+		const { bus, composer, designCalls } = mesh({
+			drafts: [JSON.stringify(BROKEN_DRAFT), JSON.stringify(HABIT_DRAFT)]
+		})
+		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(true)
+		expect(composer.state.phase).toBe('staged')
+		expect(bus.get('habit')).toBeDefined()
+		// two design rounds ran; the second brief carried the exact error
+		expect(designCalls().length).toBe(2)
+		const history = composer.state.history as { error: string }[]
 		expect(history.length).toBe(1)
-		expect(history[0].wish).toBe('a habit tracker')
-		expect(history[0].excerpt).toContain('Sure!')
+		expect(designCalls()[1].question).toContain('"retry"')
+		expect(designCalls()[1].question).toContain(JSON.stringify(history[0].error).slice(1, 30))
 	})
 
-	test('a logic syntax error fails with the exact wording, nothing staged', async () => {
-		const broken = JSON.stringify({ ...HABIT_DRAFT, logic: 'function initState( {' })
-		const { bus, composer } = mesh(broken)
-		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		const record = JSON.parse(result.record) as { ok: boolean; error: string }
-		expect(record.ok).toBe(false)
-		expect(bus.get('habit')).toBeUndefined()
-		expect((composer.state.history as unknown[]).length).toBe(1)
-	})
-
-	test('a draft that fails its OWN proof is rejected — the error names the proof', async () => {
-		// the logic lies: it returns streak+1, so the proven expectation breaks
-		const lying = JSON.stringify({
-			...HABIT_DRAFT,
-			logic: HABIT_LOGIC.replace('streak: days.length', 'streak: days.length + 1')
+	test('three failed rounds = structured failure with the full history', async () => {
+		const { bus, composer, designCalls } = mesh({
+			drafts: [JSON.stringify(BROKEN_DRAFT)]
 		})
-		const { bus } = mesh(lying)
-		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		const record = JSON.parse(result.record) as { ok: boolean; error: string }
-		expect(record.ok).toBe(false)
-		expect(record.error).toContain('streak(S)')
-		expect(bus.get('habit')).toBeUndefined()
-	})
-
-	test('a view violation (conditional DSL) never reaches staging', async () => {
-		const badView = JSON.stringify({
-			...HABIT_DRAFT,
-			view: { content: { class: 'habit', children: [{ text: { $if: '$count' } }] } }
-		})
-		const { bus } = mesh(badView)
 		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
+		expect(composer.state.phase).toBe('failed')
+		expect((composer.state.history as unknown[]).length).toBe(3)
+		expect(designCalls().length).toBe(3)
+		expect(bus.get('habit')).toBeUndefined()
+		// the stepper shows where it died
+		const rows = composer.state.phaseRows as { mark: string }[]
+		expect(rows.some((r) => r.mark === '✕')).toBe(true)
+	})
+})
+
+describe('composer (0136): Stop stops the pumping', () => {
+	test('an aborted pump signal halts the chain between phases — nothing staged', async () => {
+		const controller = new AbortController()
+		controller.abort()
+		const { bus, composer, pumped } = mesh()
+		bus.pumpSignal = () => controller.signal
+		const result = await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		// COMPOSE itself committed (scouting is next), but the pump never ran
+		expect((JSON.parse(result.record) as { next?: unknown }).next).toBeDefined()
+		expect(pumped()).toEqual([])
+		expect(composer.state.phase).toBe('scouting')
 		expect(bus.get('habit')).toBeUndefined()
 	})
-})
 
-describe('composer (0135): staging — the draft runs live as "next"', () => {
-	test('a valid draft is a REAL tagged instance, usable via dispatch', async () => {
-		const { bus, composer } = mesh()
-		await bus.dispatch('test', 'compose', { wish: 'a habit tracker with streaks' })
-		const habit = bus.get('habit')
-		expect(habit).toBeDefined()
-		// biome-ignore lint/style/noNonNullAssertion: asserted above
-		expect(isStaged(habit!.uuid)).toBe(true)
-		// the composer still holds it pending
-		const staged = composer.state.staged as { uuid: string; id: string }
-		expect(staged.id).toBe('habit')
-		// biome-ignore lint/style/noNonNullAssertion: asserted above
-		expect(staged.uuid).toBe(habit!.uuid)
-		// USABLE: the staged instance answers its tools like any actor
-		const run = await bus.dispatch('test', 'habit_streak', { done: ['a', 'b'] })
-		expect((JSON.parse(run.record) as { streak: number }).streak).toBe(2)
-		// windows are derivable through the existing instance-window mechanic
-		// biome-ignore lint/style/noNonNullAssertion: asserted above
-		expect(instanceWindows(habit!.manifest, habit!.instanceName).length).toBe(1)
-	})
-})
-
-describe('composer (0135): promote and discard are button-only', () => {
-	test('no promote/discard tool exists — the model cannot promote', () => {
-		const { bus } = mesh()
-		const names = bus.toolSpecs().map((t) => t.name)
-		expect(names).toContain('compose')
-		expect(names.some((n) => n.includes('promote'))).toBe(false)
-		expect(names.some((n) => n.includes('discard'))).toBe(false)
-	})
-
-	test('PROMOTE drops the staging tag and returns the catalog-ready export', async () => {
-		const { bus, composer } = mesh()
-		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		// biome-ignore lint/style/noNonNullAssertion: staged above
-		const uuid = bus.get('habit')!.uuid
-		const outcome = await composer.applyEvent({ send: 'PROMOTE' })
-		const record = outcome.record as { ok: boolean; code: string }
-		expect(record.ok).toBe(true)
-		// production: still registered, no longer staged
-		expect(bus.get('habit')).toBeDefined()
-		expect(isStaged(uuid)).toBe(false)
-		// the export: catalog-ready, committing it makes the actor permanent
-		expect(record.code).toContain('catalog')
-		expect(record.code).toContain('habit_streak')
-		expect(composer.state.staged).toBeNull()
-		expect((composer.state.produced as unknown[]).length).toBe(1)
-	})
-
-	test('DISCARD disposes the staging instance for good', async () => {
-		const { bus, composer } = mesh()
-		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		// biome-ignore lint/style/noNonNullAssertion: staged above
-		const uuid = bus.get('habit')!.uuid
-		const outcome = await composer.applyEvent({ send: 'DISCARD' })
-		expect((outcome.record as { ok: boolean }).ok).toBe(true)
-		expect(bus.get('habit')).toBeUndefined()
-		expect(isStaged(uuid)).toBe(false)
-		expect(composer.state.staged).toBeNull()
-	})
-
-	test('PROMOTE without a staged draft fails structured', async () => {
-		const { composer } = mesh()
-		// wait for the sandbox to boot before poking the reducer directly
-		const outcome = await composer.applyEvent({ send: 'PROMOTE' })
-		expect((outcome.record as { ok: boolean }).ok).toBe(false)
-	})
-})
-
-describe('composer (0135): Stop stops the PROCESS, and progress is visible', () => {
-	test('the turn signal reaches the lane; abort = structured failure, kept in history', async () => {
+	test('the turn signal reaches the model lane itself — an abort ends the run', async () => {
 		const controller = new AbortController()
 		const bus = new MessageBus()
 		let sawSignal = false
@@ -278,7 +317,6 @@ describe('composer (0135): Stop stops the PROCESS, and progress is visible', () 
 					llm_complete: async (p) => {
 						const signal = (p.settings as { signal?: AbortSignal } | undefined)?.signal
 						sawSignal = signal !== undefined
-						// like a real fetch: never resolves, rejects on abort
 						await new Promise((_, reject) => {
 							if (signal?.aborted) return reject(new Error('aborted'))
 							signal?.addEventListener('abort', () => reject(new Error('aborted')), {
@@ -291,67 +329,65 @@ describe('composer (0135): Stop stops the PROCESS, and progress is visible', () 
 			)
 		)
 		bus.register(new Actor(WORKITEM_EXEMPLAR))
+		bus.pumpSignal = () => controller.signal
 		const composer = new ComposerActor(bus, { signal: () => controller.signal })
 		bus.register(composer)
 		const pending = bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
 		controller.abort()
-		const result = await pending
+		await pending
 		expect(sawSignal).toBe(true)
-		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
-		// the process ENDED — structured failure, nothing staged, history kept
-		expect(composer.state.phase).toBe('failed')
-		expect((composer.state.history as unknown[]).length).toBe(1)
 		expect(bus.get('habit')).toBeUndefined()
+		expect(composer.state.phase).not.toBe('staged')
+	})
+})
+
+describe('composer (0136): staging stays live, promote stays button-only', () => {
+	test('the staged instance is a REAL tagged actor, usable via dispatch', async () => {
+		const { bus, composer } = mesh()
+		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		const habit = bus.get('habit')
+		expect(habit).toBeDefined()
+		// biome-ignore lint/style/noNonNullAssertion: asserted above
+		expect(isStaged(habit!.uuid)).toBe(true)
+		const staged = composer.state.staged as { uuid: string; id: string }
+		expect(staged.id).toBe('habit')
+		const run = await bus.dispatch('test', 'habit_streak', { done: ['a', 'b'] })
+		expect((JSON.parse(run.record) as { streak: number }).streak).toBe(2)
+		// biome-ignore lint/style/noNonNullAssertion: asserted above
+		expect(instanceWindows(habit!.manifest, habit!.instanceName).length).toBe(1)
 	})
 
-	test('progress lines flow through the caps while the compose runs', async () => {
-		const notes: string[] = []
-		const { bus } = mesh(undefined, undefined, { onProgress: (note) => notes.push(note) })
-		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		expect(notes.some((n) => n.includes('proofs'))).toBe(true)
-		expect(notes.some((n) => n.includes('designs'))).toBe(true)
-		expect(notes.some((n) => n.includes('Interviewing workitem'))).toBe(true)
-		expect(notes.some((n) => n.includes('Membrane'))).toBe(true)
+	test('no promote/discard tool exists; compose_answer does', () => {
+		const { bus } = mesh()
+		const names = bus.toolSpecs().map((t) => t.name)
+		expect(names).toContain('compose')
+		expect(names).toContain('compose_answer')
+		expect(names.some((n) => n.includes('promote'))).toBe(false)
+		expect(names.some((n) => n.includes('discard'))).toBe(false)
 	})
 
-	test('the composer WINDOW narrates the live process; the sandbox truth wins at the end', async () => {
-		const box: { composer?: ComposerActor } = {}
-		let midRun: { phase?: unknown; steps?: unknown[]; goal?: unknown } = {}
-		const bus = new MessageBus()
-		bus.register(
-			new Actor(
-				{ id: 'llm', name: 'LLM', description: 'Fake model lane.', tags: ['system'], methods: [] },
-				{
-					llm_complete: async (p) => {
-						const system = String(p.system ?? '')
-						// mid-run peek: while the design call is in flight, the host
-						// overlay must already narrate the process in the window state
-						if (system.includes('design ONE complete avenOS actor')) {
-							midRun = {
-								phase: box.composer?.state.phase,
-								steps: box.composer?.state.processRows as unknown[],
-								goal: box.composer?.state.goal
-							}
-						}
-						const text = system.includes('PLAN round')
-							? PLAN_ANSWER
-							: system.includes('design ONE complete avenOS actor')
-								? JSON.stringify(HABIT_DRAFT)
-								: 'I emit flat JSON records.'
-						return { record: JSON.stringify({ ok: true, text }), wire: text }
-					}
-				}
-			)
-		)
-		bus.register(new Actor(WORKITEM_EXEMPLAR))
-		box.composer = new ComposerActor(bus)
-		bus.register(box.composer)
+	test('PROMOTE drops the tag and exports; DISCARD disposes', async () => {
+		const { bus, composer } = mesh()
 		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
-		expect(midRun.phase).toBe('drafting')
-		expect((midRun.steps as unknown[]).length).toBeGreaterThan(0)
-		expect(midRun.goal).toBe('a habit tracker')
-		// afterwards the sandbox outcome replaced the overlay wholesale
-		expect(box.composer.state.phase).toBe('staged')
-		expect(box.composer.state.processRows).toBeUndefined()
+		// biome-ignore lint/style/noNonNullAssertion: staged above
+		const uuid = bus.get('habit')!.uuid
+		const promoted = await composer.applyEvent({ send: 'PROMOTE' })
+		const record = promoted.record as { ok: boolean; code: string }
+		expect(record.ok).toBe(true)
+		expect(bus.get('habit')).toBeDefined()
+		expect(isStaged(uuid)).toBe(false)
+		expect(record.code).toContain('catalog')
+		expect(record.code).toContain('habit_streak')
+		expect((composer.state.produced as unknown[]).length).toBe(1)
+		// a second run stages again; DISCARD takes it away for good
+		await bus.dispatch('test', 'compose', { wish: 'another habit tracker' })
+		const discarded = await composer.applyEvent({ send: 'DISCARD' })
+		expect((discarded.record as { ok: boolean }).ok).toBe(true)
+	})
+
+	test('PROMOTE without a staged draft fails structured', async () => {
+		const { composer } = mesh()
+		const outcome = await composer.applyEvent({ send: 'PROMOTE' })
+		expect((outcome.record as { ok: boolean }).ok).toBe(false)
 	})
 })

@@ -227,7 +227,63 @@ export class MessageBus {
 			ok,
 			ms: Date.now() - started
 		})
-		return result
+		return await this.#pump(actor, result)
+	}
+
+	/**
+	 * The continuation seam (0136): halted = the pump stops BETWEEN phases —
+	 * pressing Stop discards the next event instead of killing a fetch. The
+	 * app wires the live turn's abort signal here.
+	 */
+	pumpSignal?: () => AbortSignal | undefined
+
+	/**
+	 * The continuation pump (0136): a record carrying `next: {send, payload}`
+	 * drives the SAME actor's state machine forward — each hop commits real
+	 * state and lands in the one biography as its own entry. This is how a
+	 * long process (the composer's phases) stops being one suspended reduce:
+	 * the sandbox returns between phases, the host pumps, Stop simply stops
+	 * pumping.
+	 */
+	async #pump(actor: Actor, first: HandlerResult): Promise<HandlerResult> {
+		let result = first
+		for (;;) {
+			let next: { send: string; payload?: Record<string, unknown> } | null = null
+			try {
+				const parsed = JSON.parse(result.record) as {
+					next?: { send?: unknown; payload?: unknown }
+				}
+				if (parsed?.next && typeof parsed.next.send === 'string') {
+					next = {
+						send: parsed.next.send,
+						...(parsed.next.payload && typeof parsed.next.payload === 'object'
+							? { payload: parsed.next.payload as Record<string, unknown> }
+							: {})
+					}
+				}
+			} catch {
+				// non-JSON records carry no continuation
+			}
+			if (!next) return result
+			if (this.pumpSignal?.()?.aborted) return result
+			const started = Date.now()
+			const outcome = await actor.applyEvent({ send: next.send, payload: next.payload ?? {} })
+			const record = outcome.record ?? { ok: true }
+			const full = 'ok' in record ? record : { ok: true, ...record }
+			result = {
+				record: JSON.stringify(full),
+				wire: outcome.said ?? JSON.stringify(full)
+			}
+			this.#record({
+				at: started,
+				kind: 'send',
+				from: 'pump',
+				to: actor.instanceName,
+				method: next.send,
+				ok: full.ok !== false,
+				ms: Date.now() - started
+			})
+		}
 	}
 
 	/**
