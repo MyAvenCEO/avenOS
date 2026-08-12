@@ -207,7 +207,8 @@ export const llmActor = singleton(
 					json: settings?.json,
 					// Host ride-alongs: Stop aborts the fetch, progress streams out.
 					signal: settings?.signal,
-					onDelta: settings?.onDelta
+					onDelta: settings?.onDelta,
+					maxTokens: settings?.maxTokens
 				}
 			)
 		)

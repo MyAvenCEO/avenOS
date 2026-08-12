@@ -117,6 +117,7 @@ function reduce(state, ev) {
 	}
 	var raw = cap('complete', {
 		system: ${JSON.stringify(MOCKUP_BRIEF)},
+		budget: 16384,
 		question: JSON.stringify({
 			wish: wish, clarifications: clar, proofs: proofs,
 			feedback: feedback, previous: prior, retry: ev.payload.retry || null
@@ -301,7 +302,8 @@ function reduce(state, ev) {
 			said: 'There is no wish to clarify.',
 			record: { ok: false, error: 'empty wish' } }
 	}
-	var raw = cap('complete', { system: ${JSON.stringify(CLARIFY_BRIEF)}, question: JSON.stringify({ wish: wish }) })
+	var raw = cap('complete', { system: ${JSON.stringify(CLARIFY_BRIEF)},
+		budget: 4096, question: JSON.stringify({ wish: wish }) })
 	var parsed = null
 	try { parsed = JSON.parse(raw) } catch (e) { parsed = null }
 	var qs = parsed && parsed.questions ? parsed.questions : []
@@ -334,6 +336,7 @@ function reduce(state, ev) {
 	var rows = cap('actors')
 	var raw = cap('complete', {
 		system: ${JSON.stringify(SCOUT_BRIEF)},
+		budget: 6144,
 		question: JSON.stringify({ wish: wish, answers: answers, actors: rows })
 	})
 	var verdict = null
@@ -397,6 +400,7 @@ function reduce(state, ev) {
 	var interviews = ev.payload.scout && ev.payload.scout.interviews ? ev.payload.scout.interviews : []
 	var raw = cap('complete', {
 		system: ${JSON.stringify(PLAN_BRIEF)},
+		budget: 8192,
 		question: JSON.stringify({ wish: wish, answers: answers, interviews: interviews })
 	})
 	var plan = null
@@ -446,6 +450,7 @@ function reduce(state, ev) {
 	var exemplar = cap('manifest', { actor: 'workitem' })
 	var raw = cap('complete', {
 		system: ${JSON.stringify(DESIGN_BRIEF)},
+		budget: 24576,
 		question: JSON.stringify({
 			wish: wish, answers: answers, proofs: proofs, interviews: interviews,
 			mockup: ev.payload.mockup || null, exemplar: exemplar, retry: retry
@@ -573,6 +578,8 @@ function completeCap(bus: MessageBus, options: StepOptions, seam: StepSeam) {
 			question: String(p.question ?? ''),
 			settings: {
 				...COMPOSER_SETTINGS,
+				// The step sizes its own ask — rate limits count REQUESTED tokens.
+				...(typeof p.budget === 'number' && { maxTokens: p.budget }),
 				signal: options.signal?.(),
 				onDelta: (delta: { reasoning?: string; text?: string; status?: string }) => {
 					if (delta.status) {

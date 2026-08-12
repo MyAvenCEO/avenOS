@@ -274,6 +274,12 @@ export interface CompleteOptions {
 	/** Enforce JSON output server-side (response_format json_object). */
 	json?: boolean
 	/**
+	 * Requested completion budget. Rate limits are computed on REQUESTED
+	 * tokens — a clarify round asking for 32k burns the whole minute window
+	 * for ten lines of questions. Size the ask to the need; the proxy clamps.
+	 */
+	maxTokens?: number
+	/**
 	 * Abort seam: pressing Stop must stop the PROCESS — without a signal the
 	 * chat turn dies but the design fetch keeps streaming and its result still
 	 * lands. Wired from the live turn's controller.
@@ -341,7 +347,8 @@ export async function complete(
 				tools: [],
 				model: options.model ?? COMPOSER_MODEL,
 				...(typeof options.temperature === 'number' && { temperature: options.temperature }),
-				...(options.json === true && { json: true })
+				...(options.json === true && { json: true }),
+				...(typeof options.maxTokens === 'number' && { max_tokens: options.maxTokens })
 			}),
 			signal: options.signal
 		})

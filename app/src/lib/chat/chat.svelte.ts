@@ -115,7 +115,7 @@ const TRAILING_JUNK = /[^\p{L}\p{Nd}]+$/u
  * that stands.
  */
 const CLAIMS_ACTION =
-	/notier|hinzugefügt|hinzufüg|angelegt|aktualisiert|gelöscht|abgehakt|markiert|eingetragen|erstellt|registriert|erschaffen|steht auf|stehen auf|auf der liste|auf deiner liste|von der liste|\bich (füge|lege|trage|erstelle|kümmere|werde)\b|\badded\b|\bcreated\b|\bdeleted\b|\bremoved\b|\bupdated\b|\bchecked off\b|\bmarked\b|\bnoted\b|\bis on (the|your) list\b|\bare on (the|your) list\b|\bI('ll| will| have|'ve)? (add|create|delete|remove|update|take care)\b/i
+	/notier|hinzugefügt|hinzufüg|angelegt|aktualisiert|gelöscht|abgehakt|markiert|eingetragen|erstellt|registriert|erschaffen|steht auf|stehen auf|auf der liste|auf deiner liste|von der liste|ist jetzt sichtbar|wird angezeigt|ist jetzt auf dem bildschirm|ist jetzt zu sehen|wird geöffnet|is now (visible|shown|on screen)|\bich (füge|lege|trage|erstelle|kümmere|werde)\b|\badded\b|\bcreated\b|\bdeleted\b|\bremoved\b|\bupdated\b|\bchecked off\b|\bmarked\b|\bnoted\b|\bis on (the|your) list\b|\bare on (the|your) list\b|\bI('ll| will| have|'ve)? (add|create|delete|remove|update|take care)\b/i
 
 const NUDGE =
 	'You called no tool — nothing happened on the list. ' +

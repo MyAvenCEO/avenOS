@@ -49,7 +49,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 		error(500, 'PHALA_API_KEY is unset — add it to the worktree .env and restart vite')
 	}
 
-	const { messages, tools, model, temperature, json } = await request.json()
+	const { messages, tools, model, temperature, json, max_tokens } = await request.json()
 	if (!Array.isArray(messages)) error(400, 'body must be { messages: [{ role, content }] }')
 	const chosen = typeof model === 'string' && MODELS.has(model) ? model : MODEL
 	// Per-actor sampling: manifests may declare a temperature; clamp it here so
@@ -85,7 +85,14 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			// from the SAME completion budget, and the server's default cap
 			// truncated long structured answers mid-JSON. The design lane gets
 			// double — kimi WITH thinking burned 16k mid-draft in the live test.
-			max_tokens: chosen === MODEL ? 16384 : 32768,
+			// Clients may ask for LESS (rate limits count REQUESTED tokens);
+			// the lane ceiling clamps whatever they ask for.
+			max_tokens:
+				typeof max_tokens === 'number'
+					? Math.max(256, Math.min(chosen === MODEL ? 16384 : 32768, max_tokens))
+					: chosen === MODEL
+						? 16384
+						: 32768,
 			// Machine lanes (llm actors) ask for enforced JSON: the
 			// server constrains generation grammatically, which ends the whole
 			// class of prose-apologies-spliced-into-manifests failures.

@@ -24,6 +24,8 @@ export interface LaneExtras {
 	json?: boolean
 	/** Abort seam: Stop kills the fetch, not just the reply stream. */
 	signal?: AbortSignal
+	/** Requested completion budget — sized to the step's need. */
+	maxTokens?: number
 	/** Live progress: streamed reasoning/text while the model works. */
 	onDelta?: (delta: { reasoning?: string; text?: string }) => void
 }
