@@ -282,23 +282,51 @@ export function looksDegenerate(tail: string): boolean {
 	return /(.{12,64}?)\1{6,}/s.test(tail.slice(-512))
 }
 
+/** Wait out a rate limit without ignoring the Stop button. */
+function backoff(ms: number, signal?: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) return reject(new Error('aborted during rate-limit backoff'))
+		const timer = setTimeout(resolve, ms)
+		signal?.addEventListener(
+			'abort',
+			() => {
+				clearTimeout(timer)
+				reject(new Error('aborted during rate-limit backoff'))
+			},
+			{ once: true }
+		)
+	})
+}
+
 export async function complete(
 	messages: ChatMessage[],
 	options: CompleteOptions = {}
 ): Promise<string> {
-	const response = await fetch('/api/chat', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({
-			messages,
-			tools: [],
-			model: options.model ?? COMPOSER_MODEL,
-			...(typeof options.temperature === 'number' && { temperature: options.temperature }),
-			...(options.json === true && { json: true })
-		}),
-		signal: options.signal
-	})
-	if (!response.ok || !response.body) throw new Error(await failureText(response))
+	// Rate limits heal by WAITING — an instant retry (the flow's resample)
+	// hits the same wall. The design lane is slow work anyway; two spaced
+	// attempts beat failing the whole run because a minute was busy.
+	let response: Response
+	for (let attempt = 0; ; attempt++) {
+		response = await fetch('/api/chat', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				messages,
+				tools: [],
+				model: options.model ?? COMPOSER_MODEL,
+				...(typeof options.temperature === 'number' && { temperature: options.temperature }),
+				...(options.json === true && { json: true })
+			}),
+			signal: options.signal
+		})
+		if (response.ok && response.body) break
+		const failure = await failureText(response)
+		if (attempt < 2 && /rate.?limit|429/i.test(failure)) {
+			await backoff(15_000 * (attempt + 1), options.signal)
+			continue
+		}
+		throw new Error(failure)
+	}
 
 	const reader = response.body.getReader()
 	const decoder = new TextDecoder()

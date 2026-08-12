@@ -326,6 +326,10 @@ describe('composer recipe (0137): DRAFT ⇄ PROBE is the declared scrum cycle', 
 		expect(history.length).toBe(1)
 		expect(designCalls()[1].question).toContain('"retry"')
 		expect(designCalls()[1].question).toContain(JSON.stringify(history[0].error).slice(1, 30))
+		// the stepper wears the round HONESTLY: only the re-entered step counts
+		const rows = composer.state.stepRows as { label: string }[]
+		expect(rows.some((r) => r.label === 'Draft 2/3')).toBe(true)
+		expect(rows.some((r) => r.label.startsWith('Plan '))).toBe(false)
 	})
 
 	test('three failed rounds = structured failure with the full history', async () => {

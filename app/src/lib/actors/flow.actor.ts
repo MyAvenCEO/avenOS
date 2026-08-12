@@ -38,8 +38,11 @@ function stepRows(s) {
 	for (var i = 0; i < s.recipe.steps.length; i++) {
 		var st = s.recipe.steps[i]
 		var label = labelOf(st)
-		if (s.tries > 0 && st.onFail && st.onFail.backTo === st.actor) {
-			label = label + ' ' + (s.tries + 1) + '/' + st.onFail.maxRuns
+		// Round counting is HONEST: only the step that actually re-entered
+		// (retryStep) wears the counter, capped at its own budget — a global
+		// tries must not label steps that never ran.
+		if (s.tries > 0 && s.retryStep === st.actor && st.onFail) {
+			label = label + ' ' + Math.min(s.tries + 1, st.onFail.maxRuns) + '/' + st.onFail.maxRuns
 		}
 		var mark = '\\u25cb'
 		if (s.phase === 'failed') {
@@ -113,6 +116,7 @@ function present(s) {
 		failedAt: s.failedAt,
 		holding: s.holding,
 		viewStep: s.viewStep,
+		retryStep: s.retryStep,
 		title: title,
 		note: note,
 		activeStep: active ? active.actor : '',
@@ -128,7 +132,7 @@ function initState(source) {
 	return present({
 		recipe: source.recipe, phase: 'idle', data: {}, cursor: -1, tries: 0,
 		history: [], staged: null, produced: [], failedAt: -1, holding: false,
-		viewStep: -1
+		viewStep: -1, retryStep: null
 	})
 }
 
@@ -137,7 +141,8 @@ function copy(state) {
 		recipe: state.recipe, phase: state.phase, data: state.data,
 		cursor: state.cursor, tries: state.tries, history: state.history.slice(),
 		staged: state.staged, produced: state.produced.slice(),
-		failedAt: state.failedAt, holding: state.holding, viewStep: state.viewStep
+		failedAt: state.failedAt, holding: state.holding, viewStep: state.viewStep,
+		retryStep: state.retryStep
 	}
 }
 
@@ -154,6 +159,7 @@ function reduce(state, ev) {
 		s.failedAt = -1
 		s.holding = false
 		s.viewStep = -1
+		s.retryStep = null
 		for (var k in ev.payload) {
 			var v = ev.payload[k]
 			s.data[k] = v && typeof v === 'object' ? v : { text: String(v == null ? '' : v) }
@@ -236,6 +242,7 @@ function reduce(state, ev) {
 			if (st.onFail) {
 				if (s.tries + 1 < st.onFail.maxRuns) {
 					s.tries = s.tries + 1
+					s.retryStep = st.onFail.backTo
 					s.data.retry = { error: String(out.error || ''), previous: String(out.excerpt || '') }
 					s.cursor = stepIndexOf(s.recipe, st.onFail.backTo) - 1
 					s.phase = 'running'
