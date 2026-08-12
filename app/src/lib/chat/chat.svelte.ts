@@ -50,19 +50,13 @@ const SYSTEM_PROMPT =
 	'list" means list_window_toggle, "show the board" means board_window_toggle ' +
 	'— each with open=true. workitem_show only switches the spark. All of these ' +
 	'are view changes, never data changes. ' +
-	'Created actors keep records: put something in with <id>_add (text = the ' +
-	'spoken content, verbatim), read with <id>_records, remove with <id>_forget ' +
-	'— "trag den Termin ein" means calling the calendar actor\'s _add tool. ' +
-	'When someone wants a NEW actor, call composer_draft with wish=… verbatim — ' +
-	'the Composer window opens and shows the draft. When they approve ("yes", ' +
-	'"register it", "commit"), call composer_commit; change requests go through ' +
-	'composer_revise with instruction=…. Changing an EXISTING actor — its ' +
-	'behavior OR its window UI, face, layout — is actor_update with ' +
-	'instruction=…; faces are part of the manifest and fully editable. You ' +
-	'never design manifests or faces yourself. When several actors duplicate one ' +
-	'concept (three calendars, say), call registry_list to see them, then ' +
-	'composer_consolidate with ids=[…] — the composer merges them into one ' +
-	'actor, migrates all records, and removes the duplicates after commit. ' +
+	'Besides the tasks there are further actors, each keeping its own records: ' +
+	'put something in with <id>_add (text = the spoken content, verbatim), read ' +
+	'with <id>_records, remove with <id>_forget — "put the appointment in" means ' +
+	"calling the calendar actor's _add tool. Call registry_list when you are " +
+	'unsure which actors exist. The set of actors is fixed and ships with the ' +
+	'app: you can neither create, change nor delete them — if someone asks for a ' +
+	'new actor, say that it has to be built into the app. ' +
 	'Messages come from speech recognition and are sometimes cut off ' +
 	'mid-sentence. If a message reads like the continuation of the previous ' +
 	'one, treat both together as one request. ' +

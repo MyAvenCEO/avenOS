@@ -238,7 +238,7 @@ export async function* streamChat(
 }
 
 /**
- * The composer lane: one whole completion from the stronger, slower model.
+ * The design lane: one whole completion from the stronger, slower model.
  *
  * Drafting an actor manifest is design work, not conversation — nobody is
  * waiting on a first token, and getting the contract right beats getting it

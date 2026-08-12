@@ -273,7 +273,11 @@ describe('term unification (0128)', () => {
 		bus.register(
 			new Actor(
 				{
-					id: 'done-only', name: '', description: '', tags: [], methods: [],
+					id: 'done-only',
+					name: '',
+					description: '',
+					tags: [],
+					methods: [],
 					requires: ['status(erledigt)']
 				},
 				{
@@ -293,7 +297,15 @@ describe('term unification (0128)', () => {
 	test('prove() selects producers by unification and carries bindings', () => {
 		const bus = new MessageBus()
 		const c = (id: string, req: string[], prod: string[]) =>
-			new Actor({ id, name: id, description: '', tags: [], methods: [], requires: req, produces: prod })
+			new Actor({
+				id,
+				name: id,
+				description: '',
+				tags: [],
+				methods: [],
+				requires: req,
+				produces: prod
+			})
 		bus.register(c('low', [], ['intent(M, niedrig)']))
 		bus.register(c('high', [], ['intent(M, hoch)']))
 		const proof = bus.prove('intent(X, hoch)')
@@ -303,70 +315,26 @@ describe('term unification (0128)', () => {
 })
 
 describe('registry actor (0128)', () => {
-	function fakeStore() {
-		const map = new Map<string, string>()
-		return {
-			getItem: (k: string) => map.get(k) ?? null,
-			setItem: (k: string, v: string) => void map.set(k, v),
-			raw: map
-		}
-	}
-
 	test('registry_list names every registered actor', async () => {
 		const bus = new MessageBus()
 		bus.register(new Actor({ id: 'a', name: 'A', description: '', tags: [], methods: [] }))
 		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
-		bus.register(new RegistryActor(bus, null))
+		bus.register(new RegistryActor(bus))
 		const result = await bus.dispatch('test', 'registry_list', {})
 		expect(result.wire).toContain('a')
 		expect(result.wire).toContain('registry')
 	})
 
-	test('actor_update edits created actors only; actor_delete removes them', async () => {
+	test('the registry cannot create, change or delete actors', async () => {
 		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
-		const store = fakeStore()
 		const bus = new MessageBus()
-		bus.register(new RegistryActor(bus, store))
-		await bus.dispatch('test', 'actor_create', {
-			id: 'cal', name: 'Kalender', description: 'Termine.', produces: ['termin(T)']
-		})
-		const updated = await bus.dispatch('test', 'actor_update', {
-			id: 'cal', description: 'Termine und Erinnerungen.', llm: true
-		})
-		expect(JSON.parse(updated.record).ok).toBe(true)
-		expect(bus.get('cal')?.manifest.description).toBe('Termine und Erinnerungen.')
-		expect(bus.get('cal')?.manifest.llm).toBe(true)
-		// code actors are not editable
-		const denied = await bus.dispatch('test', 'actor_update', { id: 'registry', llm: true })
-		expect(JSON.parse(denied.record).ok).toBe(false)
-		// delete removes actor and persistence
-		await bus.dispatch('test', 'actor_delete', { id: 'cal' })
-		expect(bus.get('cal')).toBeUndefined()
-		const bus2 = new MessageBus()
-		bus2.register(new RegistryActor(bus2, store))
-		expect(bus2.get('cal')).toBeUndefined()
-	})
-
-	test('actor_create registers, joins the mesh, and survives a reload', async () => {
-		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
-		const store = fakeStore()
-		const bus = new MessageBus()
-		bus.register(new RegistryActor(bus, store))
-		const result = await bus.dispatch('test', 'actor_create', {
-			manifest: {
-				id: 'summarizer', name: 'Summarizer',
-				description: 'Fasst Text zusammen.',
-				requires: ['text(M)'], produces: ['zusammenfassung(M)'], llm: true
-			}
-		})
-		expect(JSON.parse(result.record).ok).toBe(true)
-		// instantly part of the mesh: provable and edged
-		expect(bus.prove('zusammenfassung(M)').actor).toBe('summarizer')
-		// a fresh bus with the same store rehydrates it — spoken and it stays
-		const bus2 = new MessageBus()
-		bus2.register(new RegistryActor(bus2, store))
-		expect(bus2.get('summarizer')).toBeDefined()
-		expect(bus2.get('summarizer')?.manifest.llm).toBe(true)
+		bus.register(new RegistryActor(bus))
+		const tools = bus.toolSpecs().map((t) => t.name)
+		expect(tools).toContain('registry_list')
+		expect(tools).toContain('goal_run')
+		expect(tools).not.toContain('actor_create')
+		expect(tools).not.toContain('actor_update')
+		expect(tools).not.toContain('actor_delete')
 	})
 })
 
@@ -375,7 +343,11 @@ describe('trace (0128)', () => {
 		const bus = new MessageBus()
 		const actor = new Actor(
 			{
-				id: 't', name: 'T', description: 'Testactor.', tags: [], methods: [],
+				id: 't',
+				name: 'T',
+				description: 'Testactor.',
+				tags: [],
+				methods: [],
 				requires: ['ping(P)']
 			},
 			{ ping: () => ({ record: '{"ok":true}', wire: 'pong' }) }
@@ -403,8 +375,13 @@ describe('execution engine (0129)', () => {
 	) {
 		return new Actor(
 			{
-				id, name: id, description: `Erzeugt ${produces}.`, tags: ['test'],
-				methods: [], requires, produces: [produces]
+				id,
+				name: id,
+				description: `Erzeugt ${produces}.`,
+				tags: ['test'],
+				methods: [],
+				requires,
+				produces: [produces]
 			},
 			{ [functor(produces)]: body }
 		)
@@ -473,9 +450,14 @@ describe('execution engine (0129)', () => {
 		}
 		bus.register(
 			new Actor({
-				id: 'kalender', name: 'Kalender', description: 'Erstellt Termine aus Anfragen.',
-				tags: ['created'], methods: [], requires: ['anfrage(A)'],
-				produces: ['termin(T)'], llm: true
+				id: 'kalender',
+				name: 'Kalender',
+				description: 'Erstellt Termine aus Anfragen.',
+				tags: ['created'],
+				methods: [],
+				requires: ['anfrage(A)'],
+				produces: ['termin(T)'],
+				llm: true
 			})
 		)
 		const run = await bus.satisfy('termin(T)', { anfrage: { text: 'Zahnarzt Dienstag' } })
@@ -492,8 +474,14 @@ describe('execution engine (0129)', () => {
 		const bus = new MessageBus()
 		bus.register(
 			new Actor({
-				id: 'kalender', name: 'Kalender', description: 'Erstellt Termine.', tags: [],
-				methods: [], requires: [], produces: ['termin(T)'], llm: true
+				id: 'kalender',
+				name: 'Kalender',
+				description: 'Erstellt Termine.',
+				tags: [],
+				methods: [],
+				requires: [],
+				produces: ['termin(T)'],
+				llm: true
 			})
 		)
 		const run = await bus.satisfy('termin(T)')
@@ -535,14 +523,19 @@ describe('per-actor llm lane (manifest llm settings)', () => {
 		}
 		bus.register(
 			new Actor({
-				id: 'summarizer', name: 'Summarizer', description: 'Summarizes text.',
-				tags: [], methods: [], requires: [], produces: ['summary(S)'],
+				id: 'summarizer',
+				name: 'Summarizer',
+				description: 'Summarizes text.',
+				tags: [],
+				methods: [],
+				requires: [],
+				produces: ['summary(S)'],
 				llm: { model: 'moonshotai/kimi-k3', temperature: 0.2 }
 			})
 		)
 		const run = await bus.satisfy('summary(S)')
 		expect(run.status).toBe('ok')
-		expect(seen).toEqual({ model: 'moonshotai/kimi-k3', temperature: 0.2 })
+		expect(seen).toEqual({ model: 'moonshotai/kimi-k3', temperature: 0.2, json: true })
 	})
 
 	test('llm true still executes on the default lane', async () => {
@@ -554,66 +547,56 @@ describe('per-actor llm lane (manifest llm settings)', () => {
 		}
 		bus.register(
 			new Actor({
-				id: 'plain', name: 'Plain', description: 'Plain llm actor.',
-				tags: [], methods: [], requires: [], produces: ['thing(T)'], llm: true
+				id: 'plain',
+				name: 'Plain',
+				description: 'Plain llm actor.',
+				tags: [],
+				methods: [],
+				requires: [],
+				produces: ['thing(T)'],
+				llm: true
 			})
 		)
 		const run = await bus.satisfy('thing(T)')
 		expect(run.status).toBe('ok')
-		// true normalizes to empty settings — the injected lane's defaults apply.
-		expect(seen).toEqual({})
+		// true normalizes to empty settings — the injected lane's defaults apply;
+		// the execution lane always asks for enforced JSON on top.
+		expect(seen).toEqual({ json: true })
 	})
 })
 
-describe('faces + records (composed mini apps)', () => {
-	test('the registry builds created actors through the injected factory', async () => {
-		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
-		const backing = new Map<string, string>()
-		const store = {
-			getItem: (k: string) => backing.get(k) ?? null,
-			setItem: (k: string, v: string) => void backing.set(k, v)
+describe('catalog (code is the source of truth)', () => {
+	test('every declared manifest carries id, contracts and an executable lane', async () => {
+		const { catalog } = await import('../src/lib/actors/catalog')
+		expect(catalog.length).toBeGreaterThan(0)
+		const ids = catalog.map((m) => m.id)
+		expect(new Set(ids).size).toBe(ids.length)
+		for (const manifest of catalog) {
+			expect(manifest.id).not.toBe('')
+			expect(manifest.description.length).toBeGreaterThan(0)
+			// no handlers in code = the model IS the execution
+			expect(manifest.llm).toBeTruthy()
+			expect((manifest.produces ?? []).length).toBeGreaterThan(0)
+			expect((manifest.face?.elements ?? []).length).toBeGreaterThan(0)
 		}
-		class Marked extends Actor {}
-		const bus = new MessageBus()
-		const registry = new RegistryActor(bus, store, (m) => new Marked(m))
-		bus.register(registry)
-		void registry.deliver('actor_create', {
-			id: 'notes', name: 'Notes', description: 'Keeps notes.'
-		})
-		return registry.deliver('actor_create', { id: 'x', name: 'X', description: 'x' }).then(() => {
-			expect(bus.get('notes')).toBeInstanceOf(Marked)
-			// rehydration goes through the factory too
-			const bus2 = new MessageBus()
-			bus2.register(new RegistryActor(bus2, store, (m) => new Marked(m)))
-			expect(bus2.get('notes')).toBeInstanceOf(Marked)
-		})
 	})
 
-	test('a declared face survives create, unknown elements are dropped', async () => {
-		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
-		const backing = new Map<string, string>()
-		const store = {
-			getItem: (k: string) => backing.get(k) ?? null,
-			setItem: (k: string, v: string) => void backing.set(k, v)
-		}
+	test('a catalog actor joins the mesh, is provable, and carries the voice verbs', async () => {
+		const { catalog } = await import('../src/lib/actors/catalog')
+		const { withRecordMethods } = await import('../src/lib/actors/records')
 		const bus = new MessageBus()
-		const registry = new RegistryActor(bus, store)
-		bus.register(registry)
-		await registry.deliver('actor_create', {
-			id: 'cal', name: 'Calendar', description: 'Keeps appointments.',
-			produces: ['appointment(A)'], llm: true,
-			face: {
-				elements: [
-					{ kind: 'note', text: 'Your appointments.' },
-					{ kind: 'run', goal: 'appointment(A)', label: 'Add' },
-					{ kind: 'records', title: 'Appointments' },
-					{ kind: 'hologram', text: 'not a thing' }
-				]
-			}
-		})
-		const face = bus.get('cal')?.manifest.face
-		expect(face?.elements.length).toBe(3)
-		expect(face?.elements.map((e) => e.kind)).toEqual(['note', 'run', 'records'])
+		bus.llm = async () => '{"title":"dentist","when":"Tuesday 14:00"}'
+		// The running app wraps each manifest in a RecordActor; its manifest
+		// augmentation is this pure function, so the mesh shape is identical.
+		for (const manifest of catalog) bus.register(new Actor(withRecordMethods(manifest)))
+		expect(bus.get('calendar')).toBeDefined()
+		expect(bus.prove('appointment(A)').actor).toBe('calendar')
+		const tools = bus.toolSpecs().map((t) => t.name)
+		expect(tools).toContain('calendar_add')
+		expect(tools).toContain('calendar_records')
+		expect(tools).toContain('calendar_forget')
+		const run = await bus.satisfy('appointment(A)', { request: { text: 'dentist tuesday 2pm' } })
+		expect(run.status).toBe('ok')
 	})
 
 	test('a successful llm execution is remembered by a record-keeping actor', async () => {
@@ -627,47 +610,20 @@ describe('faces + records (composed mini apps)', () => {
 		}
 		bus.register(
 			new Keeper({
-				id: 'cal', name: 'Calendar', description: 'Keeps appointments.',
-				tags: [], methods: [], requires: ['request(R)'],
-				produces: ['appointment(A)'], llm: true
+				id: 'cal',
+				name: 'Calendar',
+				description: 'Keeps appointments.',
+				tags: [],
+				methods: [],
+				requires: ['request(R)'],
+				produces: ['appointment(A)'],
+				llm: true
 			})
 		)
 		const run = await bus.satisfy('appointment(A)', { request: { text: 'dentist tuesday 2pm' } })
 		expect(run.status).toBe('ok')
 		expect(kept.length).toBe(1)
 		expect((kept[0] as { what: string }).what).toBe('dentist')
-	})
-})
-
-describe('created actors execute by default', () => {
-	test('create without llm still yields an executable llm actor, rehydration included', async () => {
-		const { RegistryActor } = await import('../src/lib/actors/registry.actor')
-		const backing = new Map<string, string>()
-		const store = {
-			getItem: (k: string) => backing.get(k) ?? null,
-			setItem: (k: string, v: string) => void backing.set(k, v)
-		}
-		const bus = new MessageBus()
-		bus.llm = async () => '{"habit":"meditate"}'
-		bus.register(new RegistryActor(bus, store))
-		await bus.dispatch('t', 'actor_create', {
-			id: 'habits', name: 'Habits', description: 'Tracks habits.', produces: ['habit(H)']
-		})
-		expect(bus.get('habits')?.manifest.llm).toBe(true)
-		const run = await bus.satisfy('habit(H)')
-		expect(run.status).toBe('ok')
-
-		// a LEGACY persisted manifest without llm heals on rehydration
-		backing.set(
-			'aven.created-actors',
-			JSON.stringify([{ id: 'old', name: 'Old', description: 'Legacy.', tags: [], methods: [], produces: ['thing(T)'] }])
-		)
-		const bus2 = new MessageBus()
-		bus2.llm = async () => '{"ok":true}'
-		bus2.register(new RegistryActor(bus2, store))
-		expect(bus2.get('old')?.manifest.llm).toBe(true)
-		const run2 = await bus2.satisfy('thing(T)')
-		expect(run2.status).toBe('ok')
 	})
 })
 
@@ -682,9 +638,9 @@ describe('json extraction from model text', () => {
 			'{"id":"habit-hub","name":"Habit Hub","description":"Keeps one record per habit."}'
 		expect((extractJsonObject(spliced) as { id: string }).id).toBe('habit-hub')
 		// markdown fences + trailing chatter
-		expect(
-			extractJsonObject('```json\n{"ping":"pong"}\n```\nHope this helps!')
-		).toEqual({ ping: 'pong' })
+		expect(extractJsonObject('```json\n{"ping":"pong"}\n```\nHope this helps!')).toEqual({
+			ping: 'pong'
+		})
 		// trailing comma healed
 		expect(extractJsonObject('{"a":[1,2,],}')).toEqual({ a: [1, 2] })
 		// nothing parseable

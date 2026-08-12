@@ -4,7 +4,7 @@ import type { Activity } from './activity.svelte'
 import { activity } from './activity.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
-import { ComposerActor } from './composer.actor.svelte'
+import { catalog } from './catalog'
 import { RecordActor } from './created.actor.svelte'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
@@ -156,7 +156,7 @@ bus.llm = (system, question, settings) =>
 		],
 		{
 			// Default lane = the fast voice model; a manifest's own llm settings
-			// override it — the composer declares kimi, a summarizer stays fast.
+			// override it — an actor may pin its own model in its manifest.
 			model: settings?.model ?? 'qwen/qwen3.5-122b-a10b',
 			temperature: settings?.temperature,
 			json: (settings as { json?: boolean } | undefined)?.json
@@ -165,25 +165,17 @@ bus.llm = (system, question, settings) =>
 bus.extractJson = extractJsonObject
 
 bus.register(workItems)
-// Created actors become RecordActors: memory, persistence, generic
-// records/forget methods — injected here so the registry stays pure in tests.
-export const registryActor = singleton(
-	'aven.registry',
-	() => new RegistryActor(bus, undefined, (m) => new RecordActor(m, bus))
+/**
+ * The catalog, live: every manifest declared in code becomes a RecordActor —
+ * it executes through the model and remembers what it produced. Registered
+ * before the chat actor so the derived tool list carries them from the first
+ * turn. The codebase is the source of truth; only the records are stored.
+ */
+export const catalogActors = catalog.map((manifest) =>
+	singleton(`aven.actor.${manifest.id}`, () => new RecordActor(manifest, bus))
 )
-// The composer lane: manifest design goes to the stronger, slower model —
-// assigned every module load so an HMR-surviving singleton never keeps a
-// stale closure.
-registryActor.composer = (system, user) =>
-	complete(
-		[
-			{ role: 'system', content: system },
-			{ role: 'user', content: user }
-		],
-		{ json: true }
-	)
+for (const actor of catalogActors) bus.register(actor)
+export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
 bus.register(registryActor)
-export const composerActor = singleton('aven.composer', () => new ComposerActor(bus))
-bus.register(composerActor)
 export const chatActor = singleton('aven.chat', () => new ChatActor())
 bus.register(chatActor)

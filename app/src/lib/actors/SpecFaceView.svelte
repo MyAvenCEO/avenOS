@@ -6,8 +6,8 @@ import type { RecordActor } from './created.actor.svelte'
 
 /**
  * The universal face renderer: one component that interprets a manifest's
- * declared `face` spec. The composer designs the spec the same way it
- * designs contracts; this file turns it into a working mini app — inputs
+ * declared `face` spec. The catalog declares the spec next to the
+ * contracts; this file turns it into a working mini app — inputs
  * that run goals through the engine, the actor's remembered records as
  * cards, action buttons that send ordinary messages. No generated code,
  * no eval: the face is data, the renderer is the only program.

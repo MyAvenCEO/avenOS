@@ -1,19 +1,20 @@
 import { Actor, functor, type Manifest } from './actor'
 import type { MessageBus } from './bus'
+import { withRecordMethods } from './records'
 
 /**
- * What a created actor actually becomes: an actor with MEMORY.
+ * What a catalog manifest becomes at runtime: an actor with MEMORY.
  *
  * A contract-only template can be proven and executed, but a calendar that
- * cannot hold appointments is not a calendar. So every actor spoken into
- * existence is a RecordActor: it keeps a persisted list of records, and the
- * engine feeds it — each successful llm execution's output is remembered
- * (the bus calls `remember` through the RecordKeeper seam). The face's
- * `records` element renders exactly this list; running "make an appointment"
- * IS what fills the calendar.
+ * cannot hold appointments is not a calendar. So every catalog actor is a
+ * RecordActor: it keeps a list of records, and the engine feeds it — each
+ * successful llm execution's output is remembered (the bus calls `remember`
+ * through the RecordKeeper seam). The face's `records` element renders
+ * exactly this list; running "make an appointment" IS what fills the
+ * calendar.
  *
- * Two generic methods ride along on every created actor so the model can
- * read and prune the memory by voice: `<id>_records` and `<id>_forget`.
+ * The DEFINITION lives in code (catalog.ts); only these records live in the
+ * browser. Generic voice verbs come from withRecordMethods.
  */
 
 export interface StoredRecord {
@@ -29,65 +30,9 @@ export class RecordActor extends Actor {
 	#bus: MessageBus | null
 
 	constructor(manifest: Manifest, bus: MessageBus | null = null) {
-		const methods = [...manifest.methods]
+		const full = withRecordMethods(manifest)
 		const goal = manifest.produces?.[0]
-		// The voice's obvious verb: "trag den Termin ein" needs a tool that
-		// SAYS it adds entries — goal_run is the same engine but no model maps
-		// a calendar wish onto it. One generic add per created actor.
-		if (goal && !methods.some((m) => m.name === `${manifest.id}_add`)) {
-			methods.push({
-				name: `${manifest.id}_add`,
-				description:
-					`Adds one entry to ${manifest.name} (${manifest.id}): executes its goal ` +
-					`${goal} with the given text as input and keeps the result as a record. ` +
-					'Use this whenever the user wants to put something into this actor.',
-				parameters: {
-					type: 'object',
-					properties: {
-						text: {
-							type: 'string',
-							description: 'What to add, verbatim as the user said it.'
-						}
-					},
-					required: ['text']
-				},
-				produces: [goal]
-			})
-		}
-		if (!methods.some((m) => m.name === `${manifest.id}_records`)) {
-			methods.push({
-				name: `${manifest.id}_records`,
-				description: `Lists the records ${manifest.name} currently keeps.`,
-				parameters: { type: 'object', properties: {} }
-			})
-		}
-		if (!methods.some((m) => m.name === `${manifest.id}_forget`)) {
-			methods.push({
-				name: `${manifest.id}_forget`,
-				description:
-					`Removes one record from ${manifest.name} by its record id ` +
-					`(as ${manifest.id}_records returned it), or all of them with all=true.`,
-				parameters: {
-					type: 'object',
-					properties: {
-						record: { type: 'string', description: 'The record id to remove.' },
-						all: { type: 'boolean', description: 'true = forget everything.' }
-					}
-				}
-			})
-		}
-		// No declared face? Every record actor still gets one — pure
-		// voice-first visualization: what to say, and what it remembered.
-		const face = manifest.face ?? {
-			elements: [
-				{
-					kind: 'note' as const,
-					text: `${manifest.description} Speak to it — say what you want added.`
-				},
-				{ kind: 'records' as const }
-			]
-		}
-		super({ ...manifest, methods, face })
+		super(full)
 		this.#bus = bus
 		this.#load()
 		this.bind({
@@ -129,8 +74,7 @@ export class RecordActor extends Actor {
 			record: JSON.stringify({ ok: executed.ok, added: executed.out }),
 			wire: executed.ok
 				? `Added to ${this.manifest.name}: ${JSON.stringify(executed.out)}`
-				: `Adding failed: ${JSON.stringify(executed.out)} — actor_update with an ` +
-					'instruction can rework this actor to fix it.'
+				: `Adding failed: ${JSON.stringify(executed.out)}`
 		}
 	}
 

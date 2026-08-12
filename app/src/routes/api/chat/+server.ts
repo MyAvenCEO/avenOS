@@ -37,9 +37,9 @@ const REDPILL_CHAT_URL = 'https://api.redpill.ai/v1/chat/completions'
 const MODEL = 'qwen/qwen3.5-122b-a10b'
 
 /**
- * Second lane: the actor composer. Drafting a manifest is slow, careful work —
- * exactly what the voice lane must not be — so it goes to a stronger model and
- * latency is accepted. Allowlisted so the client cannot request arbitrary ids.
+ * Second lane: the slower, stronger model, for work an actor's manifest pins
+ * to it — careful reasoning where latency is acceptable, unlike the voice
+ * lane. Allowlisted so the client cannot request arbitrary ids.
  */
 const MODELS = new Set([MODEL, 'moonshotai/kimi-k3'])
 
@@ -74,9 +74,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			frequency_penalty: 0.3,
 			// Explicit and generous: reasoning models spend their deliberation
 			// from the SAME completion budget, and the server's default cap
-			// truncated the composer's long manifests mid-JSON.
+			// truncated long structured answers mid-JSON.
 			max_tokens: 16384,
-			// Machine lanes (composer, llm actors) ask for enforced JSON: the
+			// Machine lanes (llm actors) ask for enforced JSON: the
 			// server constrains generation grammatically, which ends the whole
 			// class of prose-apologies-spliced-into-manifests failures.
 			...(json === true && { response_format: { type: 'json_object' } }),

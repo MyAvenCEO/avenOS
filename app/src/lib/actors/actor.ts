@@ -47,10 +47,9 @@ export interface LlmSettings {
 
 /**
  * A face as DATA — the composed UI of an actor's window, declared instead of
- * coded. One universal renderer interprets these; the composer designs them
- * the same way it designs contracts. Compression, not abstraction: the face
- * spec lives in the manifest, persists with it, and regenerates the UI on
- * every render.
+ * coded. One universal renderer interprets these. Compression, not
+ * abstraction: the face spec lives in the manifest right next to the
+ * contracts, and regenerates the UI on every render.
  */
 /**
  * How one record renders as a card: which FIELDS of the record data land
@@ -123,8 +122,8 @@ export interface Manifest {
 	/**
 	 * Declared LLM actor: its description becomes its instruction (board
 	 * 0129). `true` = default lane; an object picks the model and sampling
-	 * for THIS actor — the composer runs kimi while a summarizer runs the
-	 * fast lane, each declared in its own manifest.
+	 * for THIS actor — a careful worker may pin a slower model while a
+	 * summarizer stays on the fast lane, each declared in its own manifest.
 	 */
 	llm?: boolean | LlmSettings
 	/** The actor's window UI, declared as data; absent = the generic face. */
