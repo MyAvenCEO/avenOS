@@ -330,7 +330,7 @@ async function ask(event: SubmitEvent) {
 			</div>
 
 			{#if selected.requires.length > 0 || selected.produces.length > 0}
-				<div class="flex flex-wrap items-center gap-1.5 pb-3 text-xs">
+				<div class="flex flex-wrap items-center gap-1.5 pb-1 text-xs">
 					<span class="text-foreground/40">Contract:</span>
 					{#each selected.requires as r, i (`r${i}`)}
 						{@render pill(r)}
@@ -339,6 +339,34 @@ async function ask(event: SubmitEvent) {
 					{#each selected.produces as p, i (`p${i}`)}
 						{@render pill(p)}
 					{/each}
+				</div>
+				<!-- The relations are the contract, unified against the registry —
+				     derived here, never stored, never their own section. -->
+				<div
+					class="flex flex-wrap items-center gap-x-3 gap-y-1 pb-3 text-[0.6875rem] text-foreground/45"
+				>
+					<span>
+						fed by
+						{#each feeders as edge, i (`f${i}`)}
+							<span class="font-medium text-foreground/70">
+								{bus.get(edge.from)?.manifest.name}</span
+							>{i < feeders.length - 1 ? ',' : ''}
+						{:else}
+							<span>nobody — input from outside</span>
+						{/each}
+					</span>
+					<span>
+						feeds
+						{#each fed as edge, i (`t${i}`)}
+							<span class="font-medium text-foreground/70"> {bus.get(edge.to)?.manifest.name}</span>
+							{i < fed.length - 1 ? ',' : ''}
+						{:else}
+							<span>nobody — output to the outside</span>
+						{/each}
+					</span>
+					{#if selected.manifest.methods.length > 0}
+						<span>all {selected.manifest.methods.length} methods reachable through the chat</span>
+					{/if}
 				</div>
 			{/if}
 
@@ -389,7 +417,9 @@ async function ask(event: SubmitEvent) {
 									<summary
 										class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
 									>
-										Code — der laufende Handler, aus der Funktion selbst gelesen
+										{selected.manifest.vibe
+											? 'Adapter — host-side mapping; the behaviour is the sandboxed logic below'
+											: 'Code — the running handler, read from the function itself'}
 									</summary>
 									<pre
 										class="mt-1 overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
@@ -406,6 +436,40 @@ async function ask(event: SubmitEvent) {
 					No methods — this actor is pure transformation; its contract is the whole interface.
 				</p>
 			{/if}
+
+			<!-- The sandboxed program — where the behaviour actually lives. Part
+			     of the manifest, so it lives HERE, not in a section of its own. -->
+			{#if selected.manifest.vibe}
+				<details class="pt-3">
+					<summary
+						class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
+					>
+						Logic — the sandboxed program (QuickJS): initState, reduce and shape run there, never in
+						the host
+					</summary>
+					<pre
+						class="mt-1 max-h-96 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
+					>{selected.manifest.vibe.logic.trim()}</pre>
+				</details>
+			{/if}
+
+			<!-- The manifest raw — the only stored truth; everything above is a
+			     rendering of it, so the JSON belongs to the same section. -->
+			<details class="pt-2">
+				<summary
+					class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
+				>
+					Manifest as JSON — the only stored truth; tools, edges, stages and this panel are derived
+					from it
+				</summary>
+				<pre
+					class="mt-1 max-h-72 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
+				>{JSON.stringify(
+						selected.manifest,
+						null,
+						2
+					)}</pre>
+			</details>
 		</section>
 
 		<!-- --------------------------------------------- INSTANZ (the running one) -->
@@ -441,43 +505,6 @@ async function ask(event: SubmitEvent) {
 				<p class="text-foreground/40 text-sm">
 					Template only — no running instance yet. The contract is declared; the engine executes it
 					on demand.
-				</p>
-			{/if}
-		</section>
-
-		<!-- ------------------------------------- RELATIONEN (derived, never stored) -->
-		<section
-			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-		>
-			<h3 class="pb-2 font-semibold text-sm">Relations</h3>
-			<div class="grid gap-3 text-sm sm:grid-cols-2">
-				<div>
-					<h4 class="pb-1.5 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">Fed by</h4>
-					{#each feeders as edge, i (`f${i}`)}
-						<p class="flex items-center gap-1.5 py-0.5">
-							<span class="font-medium">{bus.get(edge.from)?.manifest.name}</span>
-							{@render pill(edge.predicate)}
-						</p>
-					{:else}
-						<p class="text-foreground/40 text-xs">nobody — input from outside</p>
-					{/each}
-				</div>
-				<div>
-					<h4 class="pb-1.5 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">Feeds</h4>
-					{#each fed as edge, i (`t${i}`)}
-						<p class="flex items-center gap-1.5 py-0.5">
-							{@render pill(edge.predicate)}
-							<span class="font-medium">{bus.get(edge.to)?.manifest.name}</span>
-						</p>
-					{:else}
-						<p class="text-foreground/40 text-xs">nobody — output to the outside</p>
-					{/each}
-				</div>
-			</div>
-			{#if selected.manifest.methods.length > 0}
-				<p class="pt-2 text-[0.6875rem] text-foreground/40">
-					Also: all {selected.manifest.methods.length} methods are reachable through the chat — the
-					model's tool list is derived from this manifest.
 				</p>
 			{/if}
 		</section>
@@ -533,29 +560,6 @@ async function ask(event: SubmitEvent) {
 					</p>
 				{/if}
 			{/if}
-		</section>
-
-		<!-- ------------------------------- CONFIG: the manifest, raw and derived -->
-		<section
-			class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-		>
-			<h3 class="pb-1 font-semibold text-sm">Config</h3>
-			<p class="pb-2 text-[0.6875rem] text-foreground/40">
-				The raw manifest — the only stored truth about this actor. Everything else (tool list,
-				edges, stages, proofs, this panel) is derived from it.
-			</p>
-			<details>
-				<summary class="cursor-pointer text-foreground/50 text-xs hover:text-foreground/80">
-					Manifest as JSON
-				</summary>
-				<pre
-					class="mt-1 max-h-72 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
-				>{JSON.stringify(
-						selected.manifest,
-						null,
-						2
-					)}</pre>
-			</details>
 		</section>
 
 		<!-- --------------------------------- BEWEIS: SLD backward chaining, live -->
