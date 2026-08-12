@@ -45,22 +45,21 @@ const fed = $derived(bus.edges().filter((e) => e.from === selected.manifest.id))
 const instance = $derived(selected.instanceState())
 
 /**
- * The one detail filter (right aside): which lens renders. 'all' = the whole
- * biography top to bottom, graph first — the default.
+ * The one detail filter (right aside): which lens renders. The manifest —
+ * the actor's template, the only stored truth — is where reading starts.
  */
-type ExplorerView = 'all' | 'graph' | 'template' | 'instance' | 'face' | 'proof' | 'trace' | 'ask'
-let view = $state<ExplorerView>('all')
+type ExplorerView = 'manifest' | 'graph' | 'instance' | 'face' | 'proof' | 'trace' | 'ask'
+let view = $state<ExplorerView>('manifest')
 const VIEWS: { key: ExplorerView; label: string }[] = [
-	{ key: 'all', label: 'All' },
+	{ key: 'manifest', label: 'Manifest' },
 	{ key: 'graph', label: 'Graph' },
-	{ key: 'template', label: 'Template' },
 	{ key: 'instance', label: 'Instance' },
 	{ key: 'face', label: 'Face' },
 	{ key: 'proof', label: 'Proof' },
 	{ key: 'trace', label: 'Trace' },
 	{ key: 'ask', label: 'ask()' }
 ]
-const show = (k: ExplorerView) => view === 'all' || view === k
+const show = (k: ExplorerView) => view === k
 let focusGraph = $state(true)
 
 // ---- the prover: pick any predicate as a goal, get its SLD proof tree
@@ -294,13 +293,13 @@ async function ask(event: SubmitEvent) {
 			</section>
 		{/if}
 
-		{#if show('template')}
+		{#if show('manifest')}
 			<!-- ------------------------------------------------ TEMPLATE (the class) -->
 			<section
 				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			>
 				<div class="flex items-baseline justify-between gap-3 pb-1">
-					<h3 class="font-semibold text-sm">Template</h3>
+					<h3 class="font-semibold text-sm">Manifest</h3>
 					<span class="font-mono text-[0.6875rem] text-foreground/35">{selected.manifest.id}</span>
 				</div>
 				<p class="pb-3 text-foreground/60 text-sm leading-relaxed">
