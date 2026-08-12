@@ -316,9 +316,16 @@ async function ask(event: SubmitEvent) {
 					{/each}
 				</div>
 
-				{#if selected.requires.length > 0 || selected.produces.length > 0}
-					<div class="flex flex-wrap items-center gap-1.5 pb-1 text-xs">
-						<span class="text-foreground/40">Contract:</span>
+				<!-- THE INTERFACE — one concept, two halves. The dataflow half
+				     (requires → produces, driving unification and the prover) and
+				     the callable half (named entries with schema + declared event)
+				     are the same set: Actor.requires/produces already aggregate
+				     both levels, and an entry carries its own contract. Always
+				     rendered — a message-only actor is not section-less. -->
+				<h4 class="pb-1 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">Interface</h4>
+				<div class="flex flex-wrap items-center gap-1.5 pb-1 text-xs">
+					<span class="text-foreground/40">Dataflow:</span>
+					{#if selected.requires.length > 0 || selected.produces.length > 0}
 						{#each selected.requires as r, i (`r${i}`)}
 							{@render pill(r)}
 						{/each}
@@ -326,67 +333,66 @@ async function ask(event: SubmitEvent) {
 						{#each selected.produces as p, i (`p${i}`)}
 							{@render pill(p)}
 						{/each}
-					</div>
-					<!-- The relations are the contract, unified against the registry —
+					{:else}
+						<span class="text-foreground/40">none — reachable by message only</span>
+					{/if}
+				</div>
+				<!-- The relations are the contract, unified against the registry —
 				     derived here, never stored: the actor's neighborhood as a
 				     clickable mini graph, feeders → self → fed. -->
-					<div class="flex flex-wrap items-center gap-1.5 pb-3 text-[0.6875rem]">
-						{#each feeders as edge, i (`f${i}`)}
-							<button
-								type="button"
-								onclick={() => {
+				<div class="flex flex-wrap items-center gap-1.5 pb-3 text-[0.6875rem]">
+					{#each feeders as edge, i (`f${i}`)}
+						<button
+							type="button"
+							onclick={() => {
 								const a = bus.get(edge.from)
 								if (a) {
 									selected = a
 									answer = ''
 								}
 							}}
-								class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
-							>
-								{bus.get(edge.from)?.manifest.name}
-							</button>
-							<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
-						{:else}
-							<span class="text-foreground/35">outside</span>
-							<span class="font-mono text-foreground/35">→</span>
-						{/each}
-						<span
-							class="rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5 font-semibold text-foreground/85"
+							class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
 						>
-							{selected.manifest.name}
-						</span>
-						{#each fed as edge, i (`t${i}`)}
-							<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
-							<button
-								type="button"
-								onclick={() => {
+							{bus.get(edge.from)?.manifest.name}
+						</button>
+						<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
+					{:else}
+						<span class="text-foreground/35">outside</span>
+						<span class="font-mono text-foreground/35">→</span>
+					{/each}
+					<span
+						class="rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5 font-semibold text-foreground/85"
+					>
+						{selected.manifest.name}
+					</span>
+					{#each fed as edge, i (`t${i}`)}
+						<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
+						<button
+							type="button"
+							onclick={() => {
 								const a = bus.get(edge.to)
 								if (a) {
 									selected = a
 									answer = ''
 								}
 							}}
-								class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
-							>
-								{bus.get(edge.to)?.manifest.name}
-							</button>
-						{:else}
-							<span class="font-mono text-foreground/35">→</span>
-							<span class="text-foreground/35">outside</span>
-						{/each}
-						{#if selected.manifest.methods.length > 0}
-							<span class="pl-1 text-foreground/35">
-								· all {selected.manifest.methods.length} methods reachable through the chat
-							</span>
-						{/if}
-					</div>
-				{/if}
+							class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
+						>
+							{bus.get(edge.to)?.manifest.name}
+						</button>
+					{:else}
+						<span class="font-mono text-foreground/35">→</span>
+						<span class="text-foreground/35">outside</span>
+					{/each}
+					{#if selected.manifest.methods.length > 0}
+						<span class="pl-1 text-foreground/35">
+							· all {selected.manifest.methods.length} entries reachable through the chat
+						</span>
+					{/if}
+				</div>
 
 				{#if selected.manifest.methods.length > 0}
 					<div class="flex flex-col gap-2">
-						<h4 class="text-[0.6875rem] text-foreground/40 uppercase tracking-wide">
-							Methods ({selected.manifest.methods.length})
-						</h4>
 						{#each selected.manifest.methods as method (method.name)}
 							<div class="rounded-xl border border-foreground/5 bg-surface-soft/60 px-3 py-2">
 								<div class="flex flex-wrap items-center gap-1.5">
