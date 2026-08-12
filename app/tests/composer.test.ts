@@ -310,7 +310,48 @@ describe('composer (0135): Stop stops the PROCESS, and progress is visible', () 
 		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
 		expect(notes.some((n) => n.includes('proofs'))).toBe(true)
 		expect(notes.some((n) => n.includes('designs'))).toBe(true)
-		expect(notes.some((n) => n.includes('interviews workitem'))).toBe(true)
+		expect(notes.some((n) => n.includes('Interviewing workitem'))).toBe(true)
 		expect(notes.some((n) => n.includes('Membrane'))).toBe(true)
+	})
+
+	test('the composer WINDOW narrates the live process; the sandbox truth wins at the end', async () => {
+		const box: { composer?: ComposerActor } = {}
+		let midRun: { phase?: unknown; steps?: unknown[]; goal?: unknown } = {}
+		const bus = new MessageBus()
+		bus.register(
+			new Actor(
+				{ id: 'llm', name: 'LLM', description: 'Fake model lane.', tags: ['system'], methods: [] },
+				{
+					llm_complete: async (p) => {
+						const system = String(p.system ?? '')
+						// mid-run peek: while the design call is in flight, the host
+						// overlay must already narrate the process in the window state
+						if (system.includes('design ONE complete avenOS actor')) {
+							midRun = {
+								phase: box.composer?.state.phase,
+								steps: box.composer?.state.processRows as unknown[],
+								goal: box.composer?.state.goal
+							}
+						}
+						const text = system.includes('PLAN round')
+							? PLAN_ANSWER
+							: system.includes('design ONE complete avenOS actor')
+								? JSON.stringify(HABIT_DRAFT)
+								: 'I emit flat JSON records.'
+						return { record: JSON.stringify({ ok: true, text }), wire: text }
+					}
+				}
+			)
+		)
+		bus.register(new Actor(WORKITEM_EXEMPLAR))
+		box.composer = new ComposerActor(bus)
+		bus.register(box.composer)
+		await bus.dispatch('test', 'compose', { wish: 'a habit tracker' })
+		expect(midRun.phase).toBe('drafting')
+		expect((midRun.steps as unknown[]).length).toBeGreaterThan(0)
+		expect(midRun.goal).toBe('a habit tracker')
+		// afterwards the sandbox outcome replaced the overlay wholesale
+		expect(box.composer.state.phase).toBe('staged')
+		expect(box.composer.state.processRows).toBeUndefined()
 	})
 })

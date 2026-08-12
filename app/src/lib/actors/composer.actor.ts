@@ -344,6 +344,22 @@ const COMPOSER_MANIFEST: Manifest = {
 					$each: { items: '$goalRows', template: { class: 'cp-quote', text: '$$quote' } }
 				},
 				{
+					// The live process (host-overlaid while the one reduce runs):
+					// each step a row, ✓ done, ◐ current — the composer's own
+					// window shows the work, not a toast next to the voice pill.
+					class: 'cp-process',
+					$each: {
+						items: '$processRows',
+						template: {
+							class: 'cp-step',
+							children: [
+								{ class: 'cp-step-mark', text: '$$mark' },
+								{ class: 'cp-step-label', text: '$$label' }
+							]
+						}
+					}
+				},
+				{
 					class: 'cp-proofs',
 					$each: {
 						items: '$proofRows',
@@ -447,6 +463,16 @@ const COMPOSER_MANIFEST: Manifest = {
 			'.cp-title': { margin: '0', fontSize: 'var(--fs-hero)', fontWeight: '500' },
 			'.cp-note': { marginTop: '0.25rem', fontSize: 'var(--fs-body)', color: 'var(--muted)' },
 			'.cp-goal': { display: 'flex', flexDirection: 'column' },
+			'.cp-process': { display: 'flex', flexDirection: 'column', gap: '0.35rem' },
+			'.cp-step': {
+				display: 'flex',
+				alignItems: 'baseline',
+				gap: '0.5rem',
+				fontSize: 'var(--fs-small)',
+				color: 'var(--muted-strong)'
+			},
+			'.cp-step-mark': { fontFamily: 'var(--font-mono)', color: 'var(--muted)' },
+			'.cp-step-label': { fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-micro)' },
 			'.cp-quote': {
 				padding: '0.5rem 0.9rem',
 				borderLeft: '3px solid var(--border)',
@@ -628,9 +654,28 @@ export interface ComposerOptions {
 	onProgress?: (note: string) => void
 }
 
+/**
+ * The live-process seam: while the ONE compose reduce runs (minutes — the
+ * sandbox commits state only at the end), the host caps overlay transient
+ * display state onto `state` so the composer's OWN window shows the work:
+ * steps with ✓/◐ marks, the token ticker, interviews as they land. The
+ * final sandbox outcome overwrites the overlay wholesale — the sandbox
+ * stays the owner of truth, the host only narrates what it is doing.
+ */
+interface ProcessSeam {
+	begin?: (wish: string) => void
+	step?: (label: string, patch?: Record<string, unknown>) => void
+	tick?: (label: string) => void
+	interview?: (actor: string, answer: string) => void
+}
+
 export class ComposerActor extends Actor {
+	#seam: ProcessSeam
+
 	constructor(bus: MessageBus, options: ComposerOptions = {}) {
-		const progress = options.onProgress
+		// The box pattern: cap closures are built before super() returns, so
+		// they reach the overlay through this box, filled in right after.
+		const seam: ProcessSeam = {}
 		super(
 			COMPOSER_MANIFEST,
 			{},
@@ -647,16 +692,16 @@ export class ComposerActor extends Actor {
 					})),
 				manifest: (p) => bus.get(String(p.actor ?? ''))?.manifest ?? null,
 				ask: async (p) => {
-					progress?.(`Composer interviews ${String(p.actor ?? '')}…`)
-					return await bus.ask(String(p.actor ?? ''), String(p.question ?? ''), 'composer')
+					const actor = String(p.actor ?? '')
+					seam.step?.(`Interviewing ${actor}`)
+					const answer = await bus.ask(actor, String(p.question ?? ''), 'composer')
+					seam.interview?.(actor, answer)
+					return answer
 				},
 				complete: async (p) => {
-					// The one reduce runs for minutes — the caps ARE the progress
-					// seam: label the round, then tick the stream as Kimi works.
-					const label = String(p.system ?? '').includes('PLAN round')
-						? 'Composer writes the proofs'
-						: 'Kimi designs the actor'
-					progress?.(`${label}…`)
+					const plan = String(p.system ?? '').includes('PLAN round')
+					const label = plan ? 'Writing the proofs (kimi)' : 'Kimi designs the actor'
+					seam.step?.(label, plan ? {} : { phase: 'drafting', title: 'Kimi is designing…' })
 					let streamed = 0
 					let lastTick = 0
 					const result = await bus.dispatch('composer', 'llm_complete', {
@@ -668,9 +713,9 @@ export class ComposerActor extends Actor {
 							onDelta: (delta: { reasoning?: string; text?: string }) => {
 								streamed += (delta.reasoning?.length ?? 0) + (delta.text?.length ?? 0)
 								const now = Date.now()
-								if (now - lastTick < 800) return
+								if (now - lastTick < 500) return
 								lastTick = now
-								progress?.(`${label}… ~${Math.round(streamed / 4)} tokens`)
+								seam.tick?.(`${label} · ~${Math.round(streamed / 4)} tokens`)
 							}
 						}
 					})
@@ -683,16 +728,72 @@ export class ComposerActor extends Actor {
 					return ''
 				},
 				probe: async (p) => {
-					progress?.('Membrane: validating and proving the draft…')
+					seam.step?.('Membrane: validating & proving')
 					return await probeDraft(
 						p.draft as unknown as ActorDraft,
 						(p.proofs as unknown as Proof[]) ?? []
 					)
 				},
-				stage: (p) => stageDraft(bus, p.draft as unknown as ActorDraft, options.make),
+				stage: (p) => {
+					seam.step?.('Staging the instance')
+					return stageDraft(bus, p.draft as unknown as ActorDraft, options.make)
+				},
 				promote: (p) => promoteStaged(bus, String(p.to ?? '')),
 				discard: (p) => discardStaged(bus, String(p.to ?? ''))
 			}
 		)
+
+		const process: { label: string; state: 'done' | 'doing' }[] = []
+		let interviews: { actor: string; answer: string }[] = []
+		// The opening patch survives the boot race: a fresh actor's initState
+		// commit can land AFTER begin() ran and wipe it, so the first step
+		// merges it again — by then the reduce (and thus the boot) has begun.
+		let opening: Record<string, unknown> | null = null
+		const rows = () =>
+			process.map((s) => ({ mark: s.state === 'doing' ? '◐' : '✓', label: s.label }))
+		const overlay = (patch: Record<string, unknown>) => {
+			this.state = { ...(this.state ?? {}), ...patch }
+		}
+		seam.begin = (wish) => {
+			process.length = 0
+			interviews = []
+			opening = {
+				phase: 'interviewing',
+				goal: wish,
+				title: 'Interviewing…',
+				note: 'Proofs first — the measurable "done" comes before any design.',
+				goalRows: wish ? [{ quote: wish }] : [],
+				proofRows: [],
+				interviewRows: [],
+				stagedRows: [],
+				failedRows: [],
+				processRows: []
+			}
+			overlay(opening)
+		}
+		seam.step = (label, patch = {}) => {
+			for (const s of process) s.state = 'done'
+			process.push({ label, state: 'doing' })
+			overlay({ ...(opening ?? {}), processRows: rows(), ...patch })
+			opening = null
+			options.onProgress?.(`${label}…`)
+		}
+		seam.tick = (label) => {
+			const current = process[process.length - 1]
+			if (!current) return
+			current.label = label
+			overlay({ processRows: rows() })
+		}
+		seam.interview = (actor, answer) => {
+			interviews.push({ actor, answer })
+			overlay({ interviewRows: interviews.slice() })
+		}
+		this.#seam = seam
+	}
+
+	/** compose enters here — the overlay starts BEFORE the reduce does. */
+	override deliver(method: string, payload: Record<string, unknown>) {
+		if (method === 'compose') this.#seam.begin?.(String(payload.wish ?? ''))
+		return super.deliver(method, payload)
 	}
 }

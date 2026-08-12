@@ -97,28 +97,27 @@ export class ChatActor extends Actor {
 						activity.show(summarizeCall(name, result.record))
 						return result
 					}
+					// compose fronts the composer window BEFORE the work starts — the
+					// process (steps, ticker, interviews) plays in the composer's own
+					// view, not as a toast. When staging succeeds, the staged
+					// instance's first window takes the stage through the spawn hook.
+					if (name === 'compose') {
+						for (const other of bus.actors()) {
+							if (isWindow(other)) other.open = false
+						}
+						const gate = bus.get('composer-window')
+						if (gate && isWindow(gate)) gate.open = true
+					}
 					const result = await bus.dispatch('chat', name, payload)
-					// A draft takes the stage — it must be SEEN, not hunted for; same
-					// single-active rule as every window. negotiate fronts its review
-					// gate; compose fronts the composer window ONLY when nothing was
-					// staged (a staged draft's own first window already took the stage
-					// through the spawn hook — the best preview is the running actor).
-					if (name === 'negotiate' || name === 'compose') {
+					// A drafted bridge takes the stage: the review gate must be SEEN,
+					// not hunted for — same single-active rule as every window.
+					if (name === 'negotiate') {
 						try {
-							const parsed = JSON.parse(result.record) as { ok?: boolean; staged?: unknown }
-							const gateWindow =
-								name === 'negotiate'
-									? parsed.ok
-										? 'negotiator-window'
-										: null
-									: parsed.staged
-										? null
-										: 'composer-window'
-							if (gateWindow) {
+							if ((JSON.parse(result.record) as { ok?: boolean }).ok) {
 								for (const other of bus.actors()) {
 									if (isWindow(other)) other.open = false
 								}
-								const gate = bus.get(gateWindow)
+								const gate = bus.get('negotiator-window')
 								if (gate && isWindow(gate)) gate.open = true
 							}
 						} catch {
@@ -261,8 +260,9 @@ export const composerActor = singleton(
 	() =>
 		new ReactiveComposer(bus, {
 			make: (manifest) => new ReactiveActor(manifest),
-			signal: turnSignal,
-			onProgress: showProgress
+			signal: turnSignal
+			// No activity wiring: the composer narrates its process in its OWN
+			// window (steps, ticker, interviews), which compose fronts.
 		})
 )
 bus.register(composerActor)
