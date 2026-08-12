@@ -5,7 +5,7 @@ owner: Claude Code (build agent)
 created: 2026-08-12
 updated: 2026-08-12
 tags: [actors, composer, object-creator, staging, sandbox]
-goal: "`cd app && bun test tests/composer.test.ts` exits 0 — proving with a FAKED llm actor: (1) INTERVIEW: compose(wish) asks the mesh caller-aware (asker='composer'), quotes a house exemplar (workitem manifest) into the design brief, and the model call carries settings.model='moonshotai/kimi-k3'; (2) MEMBRANE: the draft passes validateViewDef/validateStyleDef AND a sandbox probe (logic evaluates, initState returns an object, a smoke reduce runs) BEFORE anything is staged — an invalid draft is a structured failure with the exact error, nothing enters the mesh (single-shot, no auto-retry); (3) STAGING: a valid draft is spawned as a LIVE staging instance (tagged staging, windows derivable, usable via dispatch) while the composer still holds it pending; (4) PROMOTE is button-only (no promote/discard tool in toolSpecs): the PROMOTE event drops the staging tag and returns a catalog-ready TS export, DISCARD disposes the staged instance and its windows; (5) SHARED PIPELINE: the negotiator is REWIRED onto the same shared draft-pipeline module (membrane → stage → promote/export) while remaining its own actor, and the 0131 bridge chain (metric → proxy → miles) still proves end-to-end; AND `cd app && bun test` plus `bun run check` (0 errors) stay green"
+goal: "`cd app && bun test tests/composer.test.ts` exits 0 — proving with a FAKED llm actor: (1) INTERVIEW: compose(wish) asks the mesh caller-aware (asker='composer'), quotes a house exemplar (workitem manifest) into the design brief, and the model call carries settings.model='moonshotai/kimi-k3'; (2) MEMBRANE: the draft passes validateViewDef/validateStyleDef AND a sandbox probe (logic evaluates, initState returns an object, a smoke reduce runs) BEFORE anything is staged — an invalid draft is a structured failure with the exact error, nothing enters the mesh (single-shot, no auto-retry), AND the failure is KEPT as an entry in state.history (wish + error + model excerpt) so the future scrum loop has its legacy context; (3) STAGING: a valid draft is spawned as a LIVE staging instance (tagged staging, windows derivable, usable via dispatch) while the composer still holds it pending; (4) PROMOTE is button-only (no promote/discard tool in toolSpecs): the PROMOTE event drops the staging tag and returns a catalog-ready TS export, DISCARD disposes the staged instance and its windows; (5) SHARED PIPELINE: the negotiator is REWIRED onto the same shared draft-pipeline module (membrane → stage → promote/export) while remaining its own actor, and the 0131 bridge chain (metric → proxy → miles) still proves end-to-end; AND `cd app && bun test` plus `bun run check` (0 errors) stay green"
 ---
 
 # Composer — der ObjectCreator: Wunsch → Actor, staged wie next/production
@@ -78,7 +78,11 @@ HINTER der Membran: Garbage → `{ok:false, error}` mit Modell-Auszug, Phase →
    `initState(source)` muss ein Objekt liefern, ein Smoke-`reduce` mit dem
    ersten deklarierten Event darf nicht werfen.
 Jeder Fehler → strukturierte Meldung mit dem exakten Wortlaut (said spricht
-ihn), Phase → `idle`. Kein Auto-Retry (Entscheidung 4).
+ihn), Phase → `idle`. Kein Auto-Retry (Entscheidung 4). **Aber: der Fehler
+wird BEHALTEN, nicht verworfen** — er landet als Eintrag in
+`state.history[]` (wish, exakter Fehler, Modell-Auszug). Das ist das
+Retrospective-Futter: die spätere Scrum-Schleife promptet „letzter Draft +
+diese Fehlerhistorie → nächste Runde", ohne neue Maschinerie.
 
 **Schritt 4 — Staging („next").** Cap `stage` {draft}: spawnt den Draft als
 echte Instanz — Tag `staging`, instanceName `<id>`, Fenster entstehen über die
@@ -97,7 +101,31 @@ Staging-Instanz samt Fenstern; der Draft verfällt.
 **Schritt 6 — Retrospective (Folgekarten).** Läuft ein produzierter Actor
 schief, wird die Trace-Fehlerhistorie zum Heal-Re-Draft-Kontext
 (Self-Healing-Karte); die Scrum-Schleife (Auto-Retry mit Fehler-Kontext,
-Änderungswunsch = neue Runde) ist der zweite benannte Folge-Slice.
+Änderungswunsch = neue Runde) ist der zweite benannte Folge-Slice. Slice 1
+legt dafür den Boden: Membran-/Parse-Fehler liegen strukturiert in
+`state.history[]` (Schritt 3), Laufzeitfehler der Staging-Instanz in der
+Bus-Trace unter ihren Run-Ids — der Legacy-Kontext für die nächste
+Iteration existiert also bereits, die Folgekarte muss ihn nur prompten.
+
+## Zukunftssicherheit — Update/Migration ist derselbe Flow (abject-Alinierung)
+
+Bewusst OUT OF SCOPE für Slice 1: Multi-Actor-Ensembles (ein Wunsch, der
+mehrere Actors braucht) und Edit/Merge an Bestehendem. Aber die Architektur
+ist dafür schon richtig geschnitten, denn abject kennt kein separates
+Migrations-Framework — **ein Update IST eine weitere Goal-Runde durch
+dieselbe Maschinerie** (Plan → Scrum → Review → Retrospective). Drei
+Invarianten sichern die Kompatibilität, alle drei existieren bereits:
+
+1. **Identität bleibt, Implementierung wechselt** — die uuid ist die
+   Adresse (abjects AbjectId), das Manifest ist das versionierte Artefakt.
+   Ein Edit = neue Version als „next"-Instanz NEBEN der Production stagen,
+   ausprobieren, Promote = Swap. Genau die Staging-Architektur dieser Karte.
+2. **State-Migration hat einen Hook** — `initState(source)` nimmt seit 0130
+   einen source-Parameter: die neue Logic bekommt den alten State und
+   migriert ihn selbst. Für Updates wird der Hook nur benutzt, nicht gebaut.
+3. **Verträge verhandeln statt brechen** — ändert eine neue Version ihr
+   Vokabular, ist das ein Negotiator-Fall (Bridge), kein Breaking Change.
+   Deshalb ist „zwei Actors, eine Pipeline" auch update-technisch richtig.
 
 ## Die Composer-View (Zustände des einen Fensters)
 
@@ -139,7 +167,7 @@ $each-Conditional-Muster):
 ## Acceptance criteria
 
 - [ ] Interview caller-aware ('composer') + Hausvorbild im Brief + kimi-k3-Settings am complete-Cap. (Test)
-- [ ] Membran: invalider Draft (View-Verstoß ODER Logic-Syntaxfehler ODER initState-Nichtobjekt) = strukturierter Fehler mit Wortlaut, nichts gestaged. (Test)
+- [ ] Membran: invalider Draft (View-Verstoß ODER Logic-Syntaxfehler ODER initState-Nichtobjekt) = strukturierter Fehler mit Wortlaut, nichts gestaged, Fehler als `state.history`-Eintrag behalten (Retrospective-Futter). (Test)
 - [ ] Staging: valider Draft läuft als Instanz (tag staging, dispatch-bar), Composer hält pending. (Test)
 - [ ] Promote button-only (kein Tool), entfernt staging, liefert TS-Export; Discard disposed Instanz + Fenster. (Test)
 - [ ] Negotiator bleibt eigener Actor, intern auf die geteilte Pipeline umverdrahtet; 0131-Bridge-Kette (metric→proxy→miles) weiter grün. (Test)
@@ -166,5 +194,6 @@ cd app && bun test && bun run check
 
 Newest entry first.
 
+- `2026-08-12` — Nachschärfung (Samuel-Fragen): Multi-Actor + Edit/Merge explizit out of scope, aber Update/Migration als abject-alinierter Zukunftspfad dokumentiert (Update = neue Goal-Runde: uuid-Identität bleibt, initState(source) als Migrations-Hook, Vokabular-Änderung = Negotiator-Fall). Membran-Fehler werden ab Slice 1 in state.history behalten (+ Goal/Acceptance) — der Legacy-Fehlerkontext für die Scrum-Schleife existiert damit von Anfang an.
 - `2026-08-12` — Korrektur Samuel (final): ZWEI Actors — Composer und Negotiator getrennt wie bei abject (ObjectCreator/Negotiator), geteilte Draft-Pipeline als Host-Modul; Karte entsprechend umgeschrieben.
 - `2026-08-12` — Discovery mit Samuel: zunächst EIN Composer erwogen, Slice 1 = voller Actor, STAGING statt Preview (Draft läuft live als „next"-Instanz, Promote = „production" + Code-Export, button-only), Single-Shot-Generierung (Membran-Fehler wörtlich melden, kein Auto-Retry — Scrum-Schleife als Folge-Slice), Kimi-k3-Lane für alle Composer-Completions. Ausführungs-Schritte und die fünf View-Zustände des Composer-Fensters im Detail spezifiziert; messbar via composer.test.ts (Interview/Membran/Staging/button-only-Promote/0131-Kette). Karte direkt in discover/.
