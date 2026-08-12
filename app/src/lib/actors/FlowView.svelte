@@ -27,8 +27,19 @@ const failedRows = $derived((actor.state?.failedRows as { error: string; excerpt
 const produced = $derived((actor.state?.producedRows as { id: string; status: string }[]) ?? [])
 const phase = $derived(String(actor.state?.phase ?? 'idle'))
 const stepActor = $derived(bus.get(String(actor.state?.activeStep ?? '')))
+/**
+ * The displayed step's RECORD in flow data — the parsed JSON the model's
+ * round actually produced (proofs, verdict, the whole draft). One
+ * disclosure per step: the face above, the machine truth below.
+ */
+const stepRecord = $derived.by(() => {
+	const data = actor.state?.data as Record<string, unknown> | undefined
+	return data?.[String(actor.state?.activeStep ?? '')]
+})
+let showJson = $state(false)
 
 function tap(row: StepRow) {
+	showJson = false
 	void bus.uiEvent('ui', actor.uuid, {
 		send: 'SHOW_STEP',
 		payload: { index: row.index === viewStep ? -1 : row.index }
@@ -83,6 +94,30 @@ function tap(row: StepRow) {
 		{#key stepActor.uuid}
 			<AvenUiView actor={stepActor} />
 		{/key}
+	{/if}
+
+	<!-- The machine truth under the face: the step's parsed JSON record. -->
+	{#if stepRecord}
+		<div class="flex flex-col gap-2">
+			<button
+				type="button"
+				onclick={() => (showJson = !showJson)}
+				class="self-start rounded-full border border-foreground/10 px-2.5 py-1 font-mono text-[0.6875rem] text-foreground/50 transition-colors hover:border-foreground/25"
+			>
+				{'{ }'}
+				{showJson ? 'hide' : 'show'}
+				step JSON
+			</button>
+			{#if showJson}
+				<pre
+					class="max-h-72 overflow-auto rounded-xl bg-foreground/5 p-3 font-mono text-[0.6875rem] whitespace-pre-wrap"
+				>{JSON.stringify(
+						stepRecord,
+						null,
+						2
+					)}</pre>
+			{/if}
+		</div>
 	{/if}
 
 	{#if phase === 'staged'}

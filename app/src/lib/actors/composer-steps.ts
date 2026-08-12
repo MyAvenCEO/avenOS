@@ -117,6 +117,19 @@ const STEP_STYLE = {
 			fontSize: 'var(--fs-small)',
 			fontWeight: '600'
 		},
+		'.st-question': { flexDirection: 'row', alignItems: 'baseline', gap: '0.6rem' },
+		'.st-num': {
+			minWidth: '1.5rem',
+			height: '1.5rem',
+			display: 'flex',
+			alignItems: 'center',
+			justifyContent: 'center',
+			borderRadius: 'var(--radius-pill)',
+			background: 'var(--primary)',
+			color: 'var(--primary-foreground)',
+			fontSize: 'var(--fs-micro)',
+			fontWeight: '600'
+		},
 		'.st-body': { fontSize: 'var(--fs-small)', color: 'var(--muted-strong)' },
 		'.st-pre': {
 			margin: '0',
@@ -176,8 +189,12 @@ function stepView(label: string, rows: Record<string, unknown>[]): Manifest['vie
 
 const CLARIFY_LOGIC = `
 function present(s) {
+	// The questionnaire: numbered question cards — structured model output
+	// gets a semantic face, never a JSON dump.
 	var rows = []
-	for (var i = 0; i < s.questions.length; i++) rows.push({ q: s.questions[i] })
+	for (var i = 0; i < s.questions.length; i++) {
+		rows.push({ n: String(i + 1), q: s.questions[i] })
+	}
 	return {
 		questions: s.questions,
 		title: s.questions.length > 0 ? 'Questions for the human' : s.ran ? 'Nothing to clarify' : 'Clarify',
@@ -527,7 +544,16 @@ export function createComposerSteps(bus: MessageBus, options: StepOptions = {}):
 			view: stepView('Clarify', [
 				{
 					class: 'st-rows',
-					$each: { items: '$questionRows', template: { class: 'st-row', text: '$$q' } }
+					$each: {
+						items: '$questionRows',
+						template: {
+							class: 'st-row st-question',
+							children: [
+								{ class: 'st-num', text: '$$n' },
+								{ class: 'st-body', text: '$$q' }
+							]
+						}
+					}
 				}
 			]),
 			style: STEP_STYLE,
