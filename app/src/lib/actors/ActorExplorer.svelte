@@ -624,32 +624,26 @@ async function ask(event: SubmitEvent) {
 		{/if}
 
 		{#if show('view')}
-			<!-- ------------------------------------- FACE: the actor's own window -->
-			<section
-				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-			>
-				<div class="flex items-center gap-2 pb-1">
-					<h3 class="font-semibold text-sm">View</h3>
-					<span
-						class="size-1.5 rounded-full {isWindow(selected) ? 'bg-status-success' : 'bg-foreground/20'}"
-					></span>
-				</div>
-				{#if isWindow(selected)}
-					{@const View = selected.component as import('svelte').Component<{
+			<!-- The window itself, edge to edge: no chrome, no caption — the
+			     card FILLS the column and only the content inside it scrolls. -->
+			{#if isWindow(selected)}
+				{@const View = selected.component as import('svelte').Component<{
 					actor: typeof selected.subject
 				}>}
-					<p class="pb-2 text-[0.6875rem] text-foreground/40">
-						This window is an actor itself: it consumes the state of
-						{selected.subject.manifest.name}
-						and paints it — live, here:
-					</p>
-					<div class="max-h-[32rem] overflow-y-auto rounded-xl border border-foreground/10 p-3">
+				<div
+					class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+				>
+					<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
 						<!-- The window's props ride along — they are what make the
 						     Kanban-Board window a BOARD and not another list. -->
 						<View actor={selected.subject} {...selected.props} />
 					</div>
-				{:else}
-					{@const win = bus.actors().filter(isWindow).find((a) => a.subject === selected)}
+				</div>
+			{:else}
+				{@const win = bus.actors().filter(isWindow).find((a) => a.subject === selected)}
+				<section
+					class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+				>
 					{#if win}
 						<p class="text-foreground/40 text-sm">
 							This actor does not paint itself — its window is its own actor:
@@ -669,8 +663,8 @@ async function ask(event: SubmitEvent) {
 							No window — this actor works invisibly; its state is readable above.
 						</p>
 					{/if}
-				{/if}
-			</section>
+				</section>
+			{/if}
 		{/if}
 
 		{#if show('proof')}
