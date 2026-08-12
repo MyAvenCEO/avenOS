@@ -18,6 +18,25 @@ describe('looksDegenerate', () => {
 		expect(looksDegenerate('prose '.repeat(20) + 'TRUE_'.repeat(80))).toBe(true)
 	})
 
+	test('catches the frequency-penalty word salad — novel words, never repeating', () => {
+		// live-observed: one endless snake_case "word" of ever-new tokens
+		const salad =
+			'x'.repeat(100) +
+			'ial_transactions_processed_within_system_boundaries_defined_by_network_diagrams_' +
+			'data_flow_entity_relationship_sequence_use_case_class_component_deployment_' +
+			'state_machine_activity_and_other_uml_modeling_techniques_used_to_communicate_' +
+			'design_decisions_among_team_members_across_disciplines_engineering_product'
+		expect(looksDegenerate(salad)).toBe(true)
+		// a normal JSON answer is full of punctuation — never 240 unbroken chars
+		expect(
+			looksDegenerate(
+				JSON.stringify({
+					proofs: [{ goal: 'deadline(D)', seed: { tasks: ['a', 'b'] }, expect: { missing: 1 } }]
+				}).repeat(4)
+			)
+		).toBe(false)
+	})
+
 	test('stays quiet on real machine output', () => {
 		const proofs = JSON.stringify({
 			proofs: [

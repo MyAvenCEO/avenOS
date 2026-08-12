@@ -279,7 +279,13 @@ export interface CompleteOptions {
  */
 export function looksDegenerate(tail: string): boolean {
 	if (tail.length < 400) return false
-	return /(.{12,64}?)\1{6,}/s.test(tail.slice(-512))
+	const window = tail.slice(-512)
+	// Verbatim repetition: a ≥12-char unit looping back to back.
+	if (/(.{12,64}?)\1{6,}/s.test(window)) return true
+	// Novel-word salad: frequency-penalty flight produces one endless "word"
+	// that never repeats and never closes — 240+ chars without whitespace or
+	// any JSON punctuation do not occur in real keys, values, or code.
+	return /[^\s"'{}[\],:]{240,}/.test(window)
 }
 
 /** Wait out a rate limit without ignoring the Stop button. */

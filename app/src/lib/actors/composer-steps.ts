@@ -606,7 +606,12 @@ export function createComposerSteps(bus: MessageBus, options: StepOptions = {}):
 		{
 			actors: rowsOf,
 			complete: completeCap(bus, options, scoutSeam),
-			ask: async (p) => await bus.ask(String(p.actor ?? ''), String(p.question ?? ''), 'composer'),
+			// The interview phase narrates itself — no dead air while the mesh
+			// answers; the sandbox commits the transcript when the step ends.
+			ask: async (p) => {
+				scoutSeam.tick?.(`interviewing ${String(p.actor ?? '')}…`)
+				return await bus.ask(String(p.actor ?? ''), String(p.question ?? ''), 'composer')
+			},
 			spawn: (p) => {
 				const spawned = bus.spawn(String(p.template ?? ''), p.name ? String(p.name) : undefined)
 				return spawned ? { uuid: spawned.uuid, name: spawned.instanceName } : null

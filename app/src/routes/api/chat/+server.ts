@@ -66,12 +66,21 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			model: chosen,
 			messages,
 			stream: true,
-			// No deliberation before a voice reply — with thinking on, time to
-			// first token measured 8.4s against 1.3s without.
-			chat_template_kwargs: { enable_thinking: false },
-			// Kept from the Gemma era as cheap insurance against one-token loops;
-			// the client's stream guards are the backstop.
-			frequency_penalty: 0.3,
+			// The VOICE lane's insurance stays on the voice lane ONLY. Both of
+			// these poisoned the kimi design lane: frequency_penalty punishes the
+			// very tokens a long constrained-JSON answer must repeat (quotes,
+			// braces) until the model flees into endless NOVEL word salad — the
+			// live-observed snake_case gibberish; and enable_thinking:false is a
+			// Qwen template kwarg that strips a reasoning model of exactly the
+			// deliberation careful design work is paying for.
+			...(chosen === MODEL && {
+				// No deliberation before a voice reply — with thinking on, time to
+				// first token measured 8.4s against 1.3s without.
+				chat_template_kwargs: { enable_thinking: false },
+				// Kept from the Gemma era as cheap insurance against one-token
+				// loops; the client's stream guards are the backstop.
+				frequency_penalty: 0.3
+			}),
 			// Explicit and generous: reasoning models spend their deliberation
 			// from the SAME completion budget, and the server's default cap
 			// truncated long structured answers mid-JSON.
