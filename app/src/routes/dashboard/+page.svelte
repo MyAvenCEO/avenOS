@@ -310,7 +310,10 @@ $effect(() => {
 		     its component over its subject's state. Windows are actors — the
 		     model toggles them by message, the explorer interviews them.
 		     (windowsBound imports the bindings.) -->
-		<div class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4">
+		<!-- overflow-y-auto is load-bearing: without it a tall window (the
+		     mockup's live preview) overflows UNDER the voice pill instead of
+		     scrolling; the bottom padding lets the last content clear it. -->
+		<div class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto pb-8">
 			{#if windowsBound && registryTick.v >= 0}
 				{#each bus.actors().filter(isWindow).filter((w) => w.open) as w (w.manifest.id)}
 					{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
