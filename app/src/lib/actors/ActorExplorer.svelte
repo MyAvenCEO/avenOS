@@ -461,7 +461,7 @@ async function ask(event: SubmitEvent) {
 
 				<!-- The sandboxed program — where the behaviour actually lives. Part
 			     of the manifest, so it lives HERE, not in a section of its own. -->
-				{#if selected.manifest.vibe}
+				{#if selected.manifest.logic}
 					<details class="pt-3">
 						<summary
 							class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
@@ -471,7 +471,7 @@ async function ask(event: SubmitEvent) {
 						</summary>
 						<pre
 							class="mt-1 max-h-96 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
-						>{selected.manifest.vibe.logic.trim()}</pre>
+						>{selected.manifest.logic.trim()}</pre>
 					</details>
 				{/if}
 

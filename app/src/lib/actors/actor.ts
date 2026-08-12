@@ -21,26 +21,16 @@
  */
 
 import type { StyleDef, ViewDef } from '@avenos/aven-ui'
+import {
+	type ActorEvent,
+	type Capability,
+	createSession,
+	type LogicSession,
+	type ReduceOutcome
+} from './sandbox'
 
 /** A predicate as written in a contract: `mail(M)`, `intent(M, Class)`. */
 export type Predicate = string
-
-/**
- * A vibe: the actor's view as pure data + sandboxed behaviour (0130).
- *
- * `view`/`style` are validated JSON the aven-ui engine renders into a shadow
- * root; `logic` is the QuickJS-sandboxed program exporting
- * `initState`/`reduce`/`shape`; `source` seeds the initial state. The actor
- * paints its own view — the host renders, never interprets.
- */
-export interface VibeSpec {
-	view: ViewDef
-	style: StyleDef
-	/** Seed data handed to the logic's initState; defaults to {}. */
-	source?: Record<string, unknown>
-	/** The sandboxed program. Shared across an actor's vibes via the manifest. */
-	logic: string
-}
 
 /** `mail(M)` → `mail` — predicates unify on their functor name. */
 export function functor(p: Predicate): string {
@@ -93,14 +83,8 @@ export function keepsRecords(actor: Actor): actor is Actor & RecordKeeper {
  * structured ops or null, never interpreting the text. Duck-typed like the
  * record seam.
  */
-export interface ModelTextShaper {
-	shapeModelText(
-		rawText: string
-	): Promise<{ state?: Record<string, unknown>; ops?: unknown[] } | null>
-}
-
-export function shapesModelText(actor: Actor): actor is Actor & ModelTextShaper {
-	return typeof (actor as Partial<ModelTextShaper>).shapeModelText === 'function'
+export function shapesModelText(actor: Actor): boolean {
+	return typeof actor.manifest.logic === 'string' && actor.manifest.logic !== ''
 }
 
 export interface Manifest {
@@ -128,16 +112,23 @@ export interface Manifest {
 	 */
 	capabilities?: string[]
 	/**
-	 * The actor's view as a vibe (0130): validated view/style JSON rendered
-	 * by aven-ui, behaviour sandboxed in QuickJS — the actor paints its own
-	 * view, the host only renders.
+	 * The sandboxed program (0130): the actor's ENTIRE behaviour as data —
+	 * initState/reduce/shape run in the QuickJS VM, never in the host.
 	 */
-	vibe?: VibeSpec
+	logic?: string
+	/** Seed data handed to the logic's initState; defaults to {}. */
+	source?: Record<string, unknown>
 	/**
-	 * Additional named vibes — the workitems pattern (list + board over one
-	 * subject): each entry becomes its OWN window over the SAME actor.
+	 * The actor's view as data: validated JSON the aven-ui engine renders
+	 * into a shadow root — the actor paints its own view, the host renders.
 	 */
-	vibes?: { key: string; name: string; spec: VibeSpec }[]
+	view?: ViewDef
+	style?: StyleDef
+	/**
+	 * Additional named views — the workitems pattern (list + board over one
+	 * subject): each becomes its OWN window over the SAME actor and logic.
+	 */
+	views?: { key: string; name: string; view: ViewDef; style?: StyleDef }[]
 }
 
 /** The declared model lane, normalized: null when the actor is not an llm actor. */
@@ -188,9 +179,84 @@ export class Actor {
 	failures = 0
 	lastError: string | null = null
 
-	constructor(manifest: Manifest, handlers: Record<string, Handler> = {}) {
+	/**
+	 * The sandboxed half (0130): when the manifest carries `logic`, the actor
+	 * boots a LogicSession — reduce/shape/initState run in the QuickJS VM,
+	 * `state` mirrors the latest result. Subclasses that want reactivity
+	 * `declare` nothing extra — they redeclare `state` with $state; the base
+	 * never initializes the field (that would shadow a subclass accessor).
+	 */
+	declare state: Record<string, unknown>
+	#session: LogicSession | null = null
+	#ready: Promise<void> = Promise.resolve()
+
+	constructor(
+		manifest: Manifest,
+		handlers: Record<string, Handler> = {},
+		caps: Record<string, Capability> = {}
+	) {
 		this.manifest = manifest
 		this.#handlers = handlers
+		if (manifest.logic) this.#ready = this.#boot(manifest, caps)
+		// The generic adapter, bound for every declared method — and again
+		// under the produced functor, which makes it the engine's clause body.
+		for (const method of manifest.methods) {
+			const send = method.event?.send
+			if (!send) continue
+			const adapter = (p: Record<string, unknown>) => this.#adapt(send, p)
+			this.bind({ [method.name]: adapter })
+			const produced = method.produces?.[0]
+			if (produced && !this.handles(functor(produced))) {
+				this.bind({ [functor(produced)]: adapter })
+			}
+		}
+	}
+
+	async #boot(manifest: Manifest, caps: Record<string, Capability>): Promise<void> {
+		// Fail-closed grants: the session receives EXACTLY the declared and
+		// provided capabilities — an undeclared name never enters the VM.
+		const granted = Object.fromEntries(
+			(manifest.capabilities ?? []).flatMap((name) => (caps[name] ? [[name, caps[name]]] : []))
+		)
+		this.#session = await createSession(manifest.logic ?? '', granted)
+		this.state = await this.#session.initState(manifest.source ?? {})
+	}
+
+	/**
+	 * The one door for every state change — UI events, voice tools and the
+	 * proof engine all land here, so the paths cannot drift apart.
+	 */
+	async applyEvent(event: ActorEvent): Promise<ReduceOutcome> {
+		await this.#ready
+		if (!this.#session) throw new Error(`${this.manifest.id} has no logic session`)
+		const outcome = await this.#session.reduce(this.state, event)
+		this.state = outcome.state
+		return outcome
+	}
+
+	/**
+	 * The membrane seam: raw model text is parsed by the SANDBOXED shape(),
+	 * never by the host. Garbage returns null and the state stays exactly
+	 * what it was.
+	 */
+	async shapeModelText(
+		rawText: string
+	): Promise<{ state?: Record<string, unknown>; ops?: unknown[] } | null> {
+		await this.#ready
+		if (!this.#session) return null
+		const shaped = await this.#session.shape(this.state, rawText)
+		if (shaped?.state) this.state = shaped.state
+		return shaped
+	}
+
+	/** Tool payload → event, verbatim; the sandbox answers with words and data. */
+	async #adapt(send: string, payload: Record<string, unknown>) {
+		const outcome = await this.applyEvent({ send, payload })
+		const record = outcome.record ?? { ok: true }
+		return {
+			record: JSON.stringify('ok' in record ? record : { ok: true, ...record }),
+			wire: outcome.said ?? JSON.stringify(record)
+		}
 	}
 
 	/** Every contract this actor participates in, method- and actor-level, deduped. */

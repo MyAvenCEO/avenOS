@@ -1,17 +1,16 @@
 import type { Activity, ActivityKind } from './activity.svelte'
-import type { VibeSpec } from './actor'
+import { Actor } from './actor'
 import { singleton } from './singleton'
-import { VibeActor } from './vibe.actor'
-import { workitemsLogic } from './vibes/workitems/logic'
-import { workitemsStyle } from './vibes/workitems/style'
-import { workitemsBoardView, workitemsListView } from './vibes/workitems/view'
+import { workitemsLogic } from './views/workitems/logic'
+import { workitemsStyle } from './views/workitems/style'
+import { workitemsBoardView, workitemsListView } from './views/workitems/view'
 
 /**
  * The work-item actor — the todo app as one actor whose BEHAVIOUR lives in
  * the sandbox (0130), and whose METHODS are pure data.
  *
  * No handler in this file: every tool declares its reducer event in the
- * manifest, the VibeActor base binds ONE generic adapter for all of them
+ * manifest, the Actor base binds ONE generic adapter for all of them
  * (and again under the produced functor, so the proof engine executes the
  * same reduce), and the sandbox authors both the words (`said`) and the
  * structured result (`record`). What remains here is Svelte reactivity,
@@ -52,25 +51,13 @@ const IDS_PARAM = {
 	description: 'One or more ids, exactly as workitem_list returned them.'
 }
 
-/** The two views over the one reducer — both declared, neither coded. */
-const listVibe: VibeSpec = {
-	view: workitemsListView,
-	style: workitemsStyle,
-	logic: workitemsLogic
-}
-const boardVibe: VibeSpec = {
-	view: workitemsBoardView,
-	style: workitemsStyle,
-	logic: workitemsLogic
-}
-
-export class WorkItemsActor extends VibeActor {
+export class WorkItemsActor extends Actor {
 	/**
 	 * The full view state the sandbox last produced — windows render THIS.
 	 * Declared $state HERE (the base only `declare`s it) so reactivity lives
 	 * in the Svelte layer and the base stays test-runnable.
 	 */
-	vibeState = $state<Record<string, unknown>>({
+	state = $state<Record<string, unknown>>({
 		items: [],
 		rows: [],
 		columns: [],
@@ -89,8 +76,10 @@ export class WorkItemsActor extends VibeActor {
 				'belongs to exactly one spark and has one of three statuses.',
 			tags: ['todo'],
 			produces: ['workitem(W)'],
-			vibe: listVibe,
-			vibes: [{ key: 'board', name: 'Kanban Board', spec: boardVibe }],
+			logic: workitemsLogic,
+			view: workitemsListView,
+			style: workitemsStyle,
+			views: [{ key: 'board', name: 'Kanban Board', view: workitemsBoardView }],
 			methods: [
 				{
 					name: 'workitem_list',
@@ -192,11 +181,11 @@ export class WorkItemsActor extends VibeActor {
 	// ------------------------------------------------------------- view API
 
 	get items(): WorkItem[] {
-		return (this.vibeState.items as WorkItem[]) ?? []
+		return (this.state.items as WorkItem[]) ?? []
 	}
 
 	get active(): string {
-		return String(this.vibeState.active ?? 'me')
+		return String(this.state.active ?? 'me')
 	}
 
 	/** The rail's spark switch — routed through the reducer like everything. */

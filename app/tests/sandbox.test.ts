@@ -28,7 +28,7 @@ function shape(state, rawText) {
 }
 `
 
-describe('vibe sandbox (0130 slice A)', () => {
+describe('logic sandbox (0130 slice A)', () => {
 	test('initState derives the rendered state from source', async () => {
 		const session = await createSession(COUNTER_LOGIC)
 		try {
@@ -146,20 +146,20 @@ describe('vibe sandbox (0130 slice A)', () => {
 	})
 })
 
-describe('workitems vibe (0130 slice B — parity + validation)', () => {
+describe('workitems logic (0130 slice B — parity + validation)', () => {
 	test('both faces validate and the style passes the whitelist', async () => {
 		const { validateStyleDef, validateViewDef } = await import('@avenos/aven-ui')
 		const { workitemsBoardView, workitemsListView } = await import(
-			'../src/lib/actors/vibes/workitems/view'
+			'../src/lib/actors/views/workitems/view'
 		)
-		const { workitemsStyle } = await import('../src/lib/actors/vibes/workitems/style')
+		const { workitemsStyle } = await import('../src/lib/actors/views/workitems/style')
 		expect(() => validateViewDef(workitemsListView)).not.toThrow()
 		expect(() => validateViewDef(workitemsBoardView)).not.toThrow()
 		expect(() => validateStyleDef(workitemsStyle)).not.toThrow()
 	})
 
 	test('initState derives the rendered state from source', async () => {
-		const { workitemsLogic } = await import('../src/lib/actors/vibes/workitems/logic')
+		const { workitemsLogic } = await import('../src/lib/actors/views/workitems/logic')
 		const session = await createSession(workitemsLogic)
 		try {
 			const state = await session.initState({
@@ -176,7 +176,7 @@ describe('workitems vibe (0130 slice B — parity + validation)', () => {
 	})
 
 	test('PARITY: the UI event and the equivalent voice call are byte-identical', async () => {
-		const { workitemsLogic } = await import('../src/lib/actors/vibes/workitems/logic')
+		const { workitemsLogic } = await import('../src/lib/actors/views/workitems/logic')
 		const ui = await createSession(workitemsLogic)
 		const voice = await createSession(workitemsLogic)
 		try {
@@ -208,7 +208,7 @@ describe('workitems vibe (0130 slice B — parity + validation)', () => {
 	})
 
 	test('shape applies model ops through the SAME transitions; garbage changes nothing', async () => {
-		const { workitemsLogic } = await import('../src/lib/actors/vibes/workitems/logic')
+		const { workitemsLogic } = await import('../src/lib/actors/views/workitems/logic')
 		const session = await createSession(workitemsLogic)
 		try {
 			const state = await session.initState({})

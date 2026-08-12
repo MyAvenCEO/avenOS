@@ -600,21 +600,20 @@ describe('per-actor llm lane (manifest llm settings)', () => {
 })
 
 describe('catalog (code is the source of truth, reduced — 0130)', () => {
-	test('the demo actors are gone and every entry is a vibe', async () => {
+	test('the demo actors are gone and every entry is logic + views', async () => {
 		const { catalog } = await import('../src/lib/actors/catalog')
 		const { validateStyleDef, validateViewDef } = await import('@avenos/aven-ui')
 		const ids = catalog.map((m) => m.id)
 		for (const gone of ['calendar', 'habits', 'notes']) {
 			expect(ids).not.toContain(gone)
 		}
-		// whatever the catalog declares must arrive as a validating vibe
+		// whatever the catalog declares must arrive as logic + validating views
 		for (const manifest of catalog) {
-			expect(manifest.vibe).toBeDefined()
+			expect(typeof manifest.logic).toBe('string')
+			expect(manifest.view).toBeDefined()
 			// biome-ignore lint/style/noNonNullAssertion: asserted above
-			const vibe = manifest.vibe!
-			expect(() => validateViewDef(vibe.view)).not.toThrow()
-			expect(() => validateStyleDef(vibe.style)).not.toThrow()
-			expect(typeof vibe.logic).toBe('string')
+			expect(() => validateViewDef(manifest.view!)).not.toThrow()
+			expect(() => validateStyleDef(manifest.style ?? {})).not.toThrow()
 		}
 	})
 
@@ -673,47 +672,43 @@ describe('runs ARE trace entries (merged biography)', () => {
 })
 
 describe('the membrane seam (0130): actors shape their own model text', () => {
-	function shaper(shape: (raw: string) => { state?: Record<string, unknown> } | null) {
-		return new (class extends Actor {
-			shapeModelText(rawText: string) {
-				return shape(rawText)
-			}
-		})({
-			id: 'vibey',
-			name: 'Vibey',
+	function shaper(shapeBody: string) {
+		// A real logic actor: shape() runs IN the sandbox, not on a subclass.
+		return new Actor({
+			id: 'shaping',
+			name: 'Shaping',
 			description: 'Shapes its own model output.',
 			tags: [],
 			methods: [],
 			requires: [],
 			produces: ['thing(T)'],
-			llm: true
+			llm: true,
+			logic: `
+				function initState() { return {} }
+				function reduce(state, ev) { return state }
+				function shape(state, rawText) { ${shapeBody} }
+			`
 		})
 	}
 
 	test('the sandbox-side shape wins over host extraction', async () => {
 		const bus = new MessageBus()
 		registerFakeLlm(bus, () => 'model prose the host must never parse {"x":1}')
-		let seenRaw = ''
-		bus.register(
-			shaper((raw) => {
-				seenRaw = raw
-				return { state: { shaped: true } }
-			})
-		)
+		bus.register(shaper('return { state: { shaped: true, saw: rawText.slice(0, 11) } }'))
 		// host extraction would have found {"x":1} — the actor's shape decides instead
 		bus.extractJson = () => {
 			throw new Error('the host must not parse model text for a shaping actor')
 		}
 		const run = await bus.satisfy('thing(T)')
 		expect(run.status).toBe('ok')
-		expect(seenRaw).toContain('model prose')
 		expect(JSON.stringify(run.steps.at(-1)?.out)).toContain('shaped')
+		expect(JSON.stringify(run.steps.at(-1)?.out)).toContain('model prose')
 	})
 
 	test('malformed model output = structured failure, no state applied', async () => {
 		const bus = new MessageBus()
 		registerFakeLlm(bus, () => 'garbage that is not ops')
-		bus.register(shaper(() => null))
+		bus.register(shaper('return null'))
 		const run = await bus.satisfy('thing(T)')
 		expect(run.status).toBe('failed')
 		expect(JSON.stringify(run.steps.at(-1)?.out)).toContain('did not shape')
@@ -737,12 +732,10 @@ describe('one primitive (0130): declared events serve tools, UI and the proof en
 		function shape(state, raw) { return null }
 	`
 
-	async function todoActor() {
-		const { VibeActor } = await import('../src/lib/actors/vibe.actor')
-		class TestVibe extends VibeActor {
-			vibeState: Record<string, unknown> = {}
-		}
-		return new TestVibe({
+	function todoActor() {
+		// No subclass, no special class: ONE Actor — logic in the manifest is
+		// all it takes.
+		return new Actor({
 			id: 'todo',
 			name: 'Todo',
 			description: 'Keeps todos.',
@@ -756,17 +749,13 @@ describe('one primitive (0130): declared events serve tools, UI and the proof en
 					event: { send: 'CREATE' }
 				}
 			],
-			vibe: {
-				view: { content: {} },
-				style: {},
-				logic: TODO_LOGIC
-			}
+			logic: TODO_LOGIC
 		})
 	}
 
 	test('the generic adapter speaks what the sandbox said', async () => {
 		const bus = new MessageBus()
-		bus.register(await todoActor())
+		bus.register(todoActor())
 		const result = await bus.dispatch('test', 'todo_create', { title: 'Milk' })
 		expect(result.wire).toBe('created Milk')
 		expect(JSON.parse(result.record)).toEqual({ ok: true, created: { id: 'x1', title: 'Milk' } })
@@ -774,11 +763,11 @@ describe('one primitive (0130): declared events serve tools, UI and the proof en
 
 	test('the SAME declared event is the Prolog clause: satisfy() lands in the sandbox', async () => {
 		const bus = new MessageBus()
-		const actor = await todoActor()
+		const actor = todoActor()
 		bus.register(actor)
 		const run = await bus.satisfy('todo(T)', { title: 'Bread' })
 		expect(run.status).toBe('ok')
-		expect((actor.vibeState.items as { title: string }[])[0]?.title).toBe('Bread')
+		expect((actor.state.items as { title: string }[])[0]?.title).toBe('Bread')
 		// no llm was needed anywhere: the clause body was the deterministic reducer
 		expect(bus.traceLog.filter((e) => e.kind === 'step').length).toBe(run.steps.length)
 	})

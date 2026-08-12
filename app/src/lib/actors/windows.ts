@@ -30,7 +30,7 @@ export const boardWindow = singleton(
 		new WindowActor(workItems, AvenUiView, {
 			key: 'board',
 			name: 'Kanban Board',
-			props: { spec: workItems.manifest.vibes?.[0]?.spec },
+			props: { view: workItems.manifest.views?.[0]?.view },
 			open: false
 		})
 )
@@ -46,20 +46,20 @@ bus.onChange = () => {
 	registryTick.v++
 }
 
-// One window per catalog actor, plus one per extra named vibe. Closed on
+// One window per catalog actor, plus one per extra named view. Closed on
 // boot: the stage belongs to whoever the user asks for.
 for (const actor of catalogActors) {
 	if (!bus.get(`${actor.manifest.id}-window`)) {
 		bus.register(new WindowActor(actor, AvenUiView, { open: false }))
 	}
-	for (const named of actor.manifest.vibes ?? []) {
+	for (const named of actor.manifest.views ?? []) {
 		const id = `${actor.manifest.id}-${named.key}-window`
 		if (!bus.get(id)) {
 			bus.register(
 				new WindowActor(actor, AvenUiView, {
 					key: `${actor.manifest.id}-${named.key}`,
 					name: named.name,
-					props: { spec: named.spec },
+					props: { view: named.view, style: named.style },
 					open: false
 				})
 			)

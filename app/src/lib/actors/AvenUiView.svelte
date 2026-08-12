@@ -1,34 +1,29 @@
 <script lang="ts">
-import { AvenUiEngine, type UiEvent } from '@avenos/aven-ui'
+import { AvenUiEngine, type StyleDef, type UiEvent, type ViewDef } from '@avenos/aven-ui'
 import { onDestroy } from 'svelte'
-import type { Actor, VibeSpec } from './actor'
-import type { VibeEvent } from './sandbox'
+import type { Actor } from './actor'
+import type { ActorEvent } from './sandbox'
 
 /**
- * THE view renderer (0130): one component that mounts any actor's vibe —
+ * THE view renderer (0130): one component that mounts any actor's view —
  * validated view/style JSON through the aven-ui engine into a shadow root.
  *
- * State never originates here. The subject actor owns its vibe state (the
- * sandbox reduces it); this component renders that state and forwards every
- * UI event back to `applyEvent`, the same door the voice tools use. Two
+ * State never originates here. The actor owns its state (the sandbox
+ * reduces it); this component renders that state and forwards every UI
+ * event back to `applyEvent`, the same door the voice tools use. Two
  * windows over one actor (list + board) are just two AvenUiViews with
- * different specs over the SAME state.
+ * different view defs over the SAME state.
  */
 
-interface VibeSubject extends Actor {
-	vibeState: Record<string, unknown>
-	applyEvent(event: VibeEvent): Promise<unknown>
-}
+/** A named view window passes its own defs; defaults are the manifest's. */
+const {
+	actor,
+	view: viewOverride,
+	style: styleOverride
+}: { actor: Actor; view?: ViewDef; style?: StyleDef } = $props()
 
-function isVibeSubject(a: Actor): a is VibeSubject {
-	return 'vibeState' in a && 'applyEvent' in a
-}
-
-/** A named vibe window passes its own spec; the default window falls back to manifest.vibe. */
-const { actor, spec: specOverride }: { actor: Actor; spec?: VibeSpec } = $props()
-
-const spec = $derived(specOverride ?? actor.manifest.vibe)
-const subject = $derived(isVibeSubject(actor) ? actor : null)
+const viewDef = $derived(viewOverride ?? actor.manifest.view)
+const styleDef = $derived(styleOverride ?? actor.manifest.style ?? {})
 
 let engine: AvenUiEngine | null = null
 let mounted = $state(false)
@@ -44,18 +39,18 @@ function attachHost(element: HTMLElement) {
 }
 
 async function mount(element: HTMLElement): Promise<void> {
-	if (!spec || !subject) return
+	if (!viewDef || !actor.manifest.logic) return
 	renderError = null
 	try {
 		engine = new AvenUiEngine({
 			container: element,
 			onEvent: (event: UiEvent) => {
-				subject.applyEvent(event as VibeEvent).catch((err) => {
+				actor.applyEvent(event as ActorEvent).catch((err) => {
 					renderError = err instanceof Error ? err.message : String(err)
 				})
 			}
 		})
-		await engine.mount({ view: spec.view, style: spec.style, state: subject.vibeState })
+		await engine.mount({ view: viewDef, style: styleDef, state: actor.state ?? {} })
 		mounted = true
 	} catch (err) {
 		renderError = err instanceof Error ? err.message : String(err)
@@ -64,7 +59,7 @@ async function mount(element: HTMLElement): Promise<void> {
 
 // The actor's state is the single source; every reduction re-renders.
 $effect(() => {
-	const state = subject?.vibeState
+	const state = actor.state
 	if (engine && mounted && state) void engine.replaceState(state)
 })
 
@@ -77,8 +72,8 @@ onDestroy(() => {
 {#if renderError}
 	<p class="shrink-0 px-1 text-sm text-red-600" role="alert">{renderError}</p>
 {/if}
-{#if spec && subject}
+{#if viewDef && actor.manifest.logic}
 	<div {@attach attachHost} class="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto"></div>
 {:else}
-	<p class="text-muted-foreground px-1 text-sm">{actor.manifest.name} has no vibe to render.</p>
+	<p class="text-muted-foreground px-1 text-sm">{actor.manifest.name} has no view to render.</p>
 {/if}

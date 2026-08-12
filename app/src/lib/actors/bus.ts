@@ -648,7 +648,7 @@ export class MessageBus {
 				// The actor's own lane: its manifest picks model and sampling; the
 				// json flag rides along so the server enforces object output.
 				const answer = await llm(system, JSON.stringify(payload), { ...lane, json: true })
-				// The membrane seam (0130): an actor whose vibe logic exports
+				// The membrane seam (0130): an actor whose logic exports
 				// shape() parses the raw text INSIDE its sandbox — the host never
 				// interprets model output for it. Malformed text = structured
 				// failure, actor state untouched.

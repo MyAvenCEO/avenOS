@@ -8,8 +8,8 @@ import {
 /**
  * The containment layer (0130): every actor's logic runs HERE, in a QuickJS
  * VM compiled to WASM — one path for browser dev and the native app alike,
- * one path for EVERY actor: there is no distinction between "system" and
- * "vibe" actors, only logic in the sandbox and capabilities at the seam.
+ * one path for EVERY actor: no actor caste, only logic in the sandbox and
+ * capabilities at the seam.
  *
  * The VM's surface is empty by construction. There is no fetch, no require,
  * no process, no import, no timer — a fresh QuickJS context never had them;
@@ -30,7 +30,7 @@ import {
  * wall-clock deadline per call, and the runtime carries a memory cap.
  */
 
-export interface VibeEvent {
+export interface ActorEvent {
 	send: string
 	payload?: Record<string, unknown>
 }
@@ -65,7 +65,7 @@ export type Capability = (payload: Record<string, unknown>) => unknown | Promise
  * does not kill its caller.
  */
 const FUEL_MS = 1000
-/** Heap cap per session — vibe logic is state shaping, not data science. */
+/** Heap cap per session — actor logic is state shaping, not data science. */
 const MEMORY_LIMIT = 32 * 1024 * 1024
 
 export class SandboxError extends Error {}
@@ -82,7 +82,7 @@ function quickjs(): Promise<QuickJSAsyncWASMModule> {
  * called through JSON until `dispose`. Sessions are cheap; contexts share
  * the module but nothing else.
  */
-export class VibeSession {
+export class LogicSession {
 	#runtime: QuickJSAsyncRuntime
 	#vm: QuickJSAsyncContext
 	#deadline = 0
@@ -98,7 +98,7 @@ export class VibeSession {
 		return this.#object(out, 'initState')
 	}
 
-	async reduce(state: Record<string, unknown>, event: VibeEvent): Promise<ReduceOutcome> {
+	async reduce(state: Record<string, unknown>, event: ActorEvent): Promise<ReduceOutcome> {
 		const out = this.#object(
 			await this.#call(
 				`reduce(${JSON.stringify(state)}, ${JSON.stringify({ send: event.send, payload: event.payload ?? {} })})`
@@ -206,12 +206,12 @@ function reasonText(reason: unknown): string {
 export async function createSession(
 	logic: string,
 	caps: Record<string, Capability> = {}
-): Promise<VibeSession> {
+): Promise<LogicSession> {
 	const module = await quickjs()
 	const runtime = module.newRuntime()
 	runtime.setMemoryLimit(MEMORY_LIMIT)
 	const vm = runtime.newContext()
-	const session = new VibeSession(runtime, vm)
+	const session = new LogicSession(runtime, vm)
 	// The interrupt handler is the fuel: called by the engine mid-execution,
 	// returning true aborts the current evaluation.
 	runtime.setInterruptHandler(() => Date.now() > session.deadline)

@@ -1,12 +1,11 @@
-import type { Manifest } from './actor'
+import { Actor, type Manifest } from './actor'
 import type { MessageBus } from './bus'
-import { VibeActor } from './vibe.actor'
 
 /**
- * The registry as an actor — and since 0130's unification, as a VIBE ACTOR:
- * there is no "system actor" caste. Its behaviour (list, describe, run a
- * goal) is sandboxed logic in its own manifest; the host appears only as
- * three granted capabilities, fail-closed:
+ * The registry as an actor — no caste, no special path (0130): its
+ * behaviour (list, describe, run a goal) is sandboxed logic in its own
+ * manifest; the host appears only as three granted capabilities,
+ * fail-closed:
  *
  * - `actors`   → a snapshot of the mesh (rows, no references)
  * - `manifest` → one actor's manifest by id, or null
@@ -95,7 +94,7 @@ const REGISTRY_MANIFEST: Manifest = {
 		'them, and runs goals over their contracts.',
 	tags: ['system'],
 	capabilities: ['actors', 'manifest', 'satisfy'],
-	vibe: { view: { content: {} }, style: {}, logic: REGISTRY_LOGIC },
+	logic: REGISTRY_LOGIC,
 	methods: [
 		{
 			name: 'registry_list',
@@ -137,27 +136,30 @@ const REGISTRY_MANIFEST: Manifest = {
 	]
 }
 
-export class RegistryActor extends VibeActor {
-	vibeState: Record<string, unknown> = {}
+export class RegistryActor extends Actor {
 	#bus: MessageBus
 
 	constructor(bus: MessageBus) {
-		super(REGISTRY_MANIFEST, {
-			actors: () =>
-				bus.actors().map((a) => ({
-					id: a.manifest.id,
-					name: a.manifest.name,
-					tags: a.manifest.tags,
-					methods: a.manifest.methods.length,
-					live: a.instanceState() !== null
-				})),
-			manifest: (p) => bus.get(String(p.actor ?? ''))?.manifest ?? null,
-			satisfy: async (p) =>
-				await bus.satisfy(
-					String(p.goal ?? ''),
-					(p.facts as Record<string, unknown> | undefined) ?? {}
-				)
-		})
+		super(
+			REGISTRY_MANIFEST,
+			{},
+			{
+				actors: () =>
+					bus.actors().map((a) => ({
+						id: a.manifest.id,
+						name: a.manifest.name,
+						tags: a.manifest.tags,
+						methods: a.manifest.methods.length,
+						live: a.instanceState() !== null
+					})),
+				manifest: (p) => bus.get(String(p.actor ?? ''))?.manifest ?? null,
+				satisfy: async (p) =>
+					await bus.satisfy(
+						String(p.goal ?? ''),
+						(p.facts as Record<string, unknown> | undefined) ?? {}
+					)
+			}
+		)
 		this.#bus = bus
 	}
 
