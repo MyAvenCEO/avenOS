@@ -5,7 +5,7 @@ owner: Claude Code (build agent)
 created: 2026-08-12
 updated: 2026-08-12
 tags: [actors, composer, object-creator, staging, sandbox]
-goal: "`cd app && bun test tests/composer.test.ts` exits 0 — proving with a FAKED llm actor: (1) INTERVIEW: compose(wish) asks the mesh caller-aware (asker='composer'), quotes a house exemplar (workitem manifest) into the design brief, and the model call carries settings.model='moonshotai/kimi-k3'; (2) MEMBRANE: the draft passes validateViewDef/validateStyleDef AND a sandbox probe (logic evaluates, initState returns an object, a smoke reduce runs) BEFORE anything is staged — an invalid draft is a structured failure with the exact error, nothing enters the mesh (single-shot, no auto-retry), AND the failure is KEPT as an entry in state.history (wish + error + model excerpt) so the future scrum loop has its legacy context; (3) STAGING: a valid draft is spawned as a LIVE staging instance (tagged staging, windows derivable, usable via dispatch) while the composer still holds it pending; (4) PROMOTE is button-only (no promote/discard tool in toolSpecs): the PROMOTE event drops the staging tag and returns a catalog-ready TS export, DISCARD disposes the staged instance and its windows; (5) SHARED PIPELINE: the negotiator is REWIRED onto the same shared draft-pipeline module (membrane → stage → promote/export) while remaining its own actor, and the 0131 bridge chain (metric → proxy → miles) still proves end-to-end; AND `cd app && bun test` plus `bun run check` (0 errors) stay green"
+goal: "`cd app && bun test tests/composer.test.ts` exits 0 — proving with a FAKED llm actor: (1) INTERVIEW, PROOFS FIRST: compose(wish) asks the mesh caller-aware (asker='composer'), writes state.proofs (Prolog goals + seed payloads + expected record keys) BEFORE the design call, quotes both the proofs and a house exemplar (workitem manifest) into the design brief, and the model call carries settings.model='moonshotai/kimi-k3'; (2) MEMBRANE: the draft passes validateViewDef/validateStyleDef AND a sandbox probe (logic evaluates, initState returns an object, a smoke reduce runs) AND every proof from state.proofs is satisfied on an isolated scratch bus (satisfy(goal, seed) ends ok with the expected record keys) BEFORE anything is staged — an invalid draft is a structured failure with the exact error, nothing enters the mesh (single-shot, no auto-retry), AND the failure is KEPT as an entry in state.history (wish + error + model excerpt) so the future scrum loop has its legacy context; (3) STAGING: a valid draft is spawned as a LIVE staging instance (tagged staging, windows derivable, usable via dispatch) while the composer still holds it pending; (4) PROMOTE is button-only (no promote/discard tool in toolSpecs): the PROMOTE event drops the staging tag and returns a catalog-ready TS export, DISCARD disposes the staged instance and its windows; (5) SHARED PIPELINE: the negotiator is REWIRED onto the same shared draft-pipeline module (membrane → stage → promote/export) while remaining its own actor, and the 0131 bridge chain (metric → proxy → miles) still proves end-to-end; AND `cd app && bun test` plus `bun run check` (0 errors) stay green"
 ---
 
 # Composer — der ObjectCreator: Wunsch → Actor, staged wie next/production
@@ -52,7 +52,22 @@ Wunsch wird wörtlich ins Composer-State-Goal gelegt (`state.goal`), Phase →
 Bridge-Draft). (`negotiate` bleibt beim Negotiator-Actor — anderes Tool,
 anderes Fenster, dieselbe Pipeline darunter.)
 
-**Schritt 1 — Interview (Plan-Runde).** Caps, fail-closed:
+**Schritt 1 — Interview (Plan-Runde): PROOFS FIRST.** Das Interview endet
+nicht mit Prosa, sondern mit dem messbaren „done" — dieselbe Philosophie wie
+das Discover-Skill selbst („AI is brilliant at what can be measured"):
+BEVOR irgendetwas entworfen wird, schreibt der Composer aus dem Wunsch die
+**Proofs** in `state.proofs[]`:
+
+```
+{ goal: 'streak(H, S)', seed: { habit: 'meditieren', done: [d1, d2, d3] },
+  expect: { streak: 3 } }
+```
+
+— Prolog-Ziele (die Contracts, die der neue Actor `produces`), konkrete
+Seed-Payloads und die erwarteten Record-Felder. Die Proofs SIND die
+Definition von „gut" für den menschlichen Intent; sie stehen im Fenster,
+bevor Kimi eine Zeile Logic sieht, und der Design-Brief zitiert sie wörtlich
+(„build the actor that makes these goals satisfiable"). Caps, fail-closed:
 - `actors` → Registry-Snapshot: vergebene Ids/Namen (Kollisionsschutz),
   vorhandene Contracts (Andock-Kandidaten).
 - `manifest` {actor} → das HAUSVORBILD: das workitem-Manifest (Logic, View,
@@ -77,6 +92,12 @@ HINTER der Membran: Garbage → `{ok:false, error}` mit Modell-Auszug, Phase →
 2. Probe-Sandbox: `createSession(draft.logic)` (Syntaxfehler fangen),
    `initState(source)` muss ein Objekt liefern, ein Smoke-`reduce` mit dem
    ersten deklarierten Event darf nicht werfen.
+3. **Die Proofs laufen** — auf einem SCRATCH-Bus (isoliert, die echte Mesh
+   sieht nichts): der Draft wird dort als Probe-Instanz registriert, und
+   jeder Proof aus Schritt 1 muss beweisbar sein — `satisfy(goal, seed)`
+   endet `ok` und der letzte Record trägt die erwarteten Felder. Ein Draft,
+   der seine eigene Definition von „done" nicht erfüllt, erreicht weder
+   Staging noch Mensch; der Fehler nennt den gescheiterten Proof beim Namen.
 Jeder Fehler → strukturierte Meldung mit dem exakten Wortlaut (said spricht
 ihn), Phase → `idle`. Kein Auto-Retry (Entscheidung 4). **Aber: der Fehler
 wird BEHALTEN, nicht verworfen** — er landet als Eintrag in
@@ -137,12 +158,16 @@ $each-Conditional-Muster):
    produzierten Actors dieser Session (Name, Status-Chip staging/production).
 2. **interviewing** — Goal als Zitat, darunter die Interview-Zeilen (wen er
    fragt, was geantwortet wurde) als kleine Karten — der Prozess ist sichtbar,
-   nicht magisch.
+   nicht magisch. Sobald die Proofs stehen, erscheinen sie hier als eigene
+   Karten (Prolog-Ziel + Seed + Erwartung) — der Mensch sieht die Definition
+   von „done", BEVOR entworfen wird.
 3. **drafting** — Goal + „Kimi entwirft…" (die Modell-Lane läuft; kimi-k3).
-4. **staged** — die Draft-Karte: id, description, Contract-Pills, Entries
-   (Name + Event-Chip + hitl-Badge), Logic-Vorschau (gekürzt, aufklappbar via
-   Logic-Lens des staged Actors), Hinweis „Läuft als Staging-Instanz — probier
-   sie aus". Buttons **Promote** / **Discard** ($on → PROMOTE/DISCARD).
+4. **staged** — die Draft-Karte: id, description, Contract-Pills, **die
+   Proofs als grüne Chips** (Ziel + „bewiesen" — sie SIND hier grün, sonst
+   wäre nichts gestaged), Entries (Name + Event-Chip + hitl-Badge),
+   Logic-Vorschau (gekürzt, aufklappbar via Logic-Lens des staged Actors),
+   Hinweis „Läuft als Staging-Instanz — probier sie aus". Buttons
+   **Promote** / **Discard** ($on → PROMOTE/DISCARD).
 5. **failed** — der exakte Membran- oder Parse-Fehler als Karte, mit dem
    Modell-Auszug; Note „Sag es nochmal oder anders — single-shot, kein
    Auto-Retry."
@@ -167,7 +192,8 @@ $each-Conditional-Muster):
 ## Acceptance criteria
 
 - [ ] Interview caller-aware ('composer') + Hausvorbild im Brief + kimi-k3-Settings am complete-Cap. (Test)
-- [ ] Membran: invalider Draft (View-Verstoß ODER Logic-Syntaxfehler ODER initState-Nichtobjekt) = strukturierter Fehler mit Wortlaut, nichts gestaged, Fehler als `state.history`-Eintrag behalten (Retrospective-Futter). (Test)
+- [ ] Proofs first: `state.proofs` (Prolog-Ziel + Seed + erwartete Record-Felder) existieren VOR dem Design-Call und stehen wörtlich im Brief. (Test)
+- [ ] Membran: invalider Draft (View-Verstoß ODER Logic-Syntaxfehler ODER initState-Nichtobjekt ODER gescheiterter Proof auf dem Scratch-Bus) = strukturierter Fehler mit Wortlaut bzw. Proof-Name, nichts gestaged, Fehler als `state.history`-Eintrag behalten (Retrospective-Futter). (Test)
 - [ ] Staging: valider Draft läuft als Instanz (tag staging, dispatch-bar), Composer hält pending. (Test)
 - [ ] Promote button-only (kein Tool), entfernt staging, liefert TS-Export; Discard disposed Instanz + Fenster. (Test)
 - [ ] Negotiator bleibt eigener Actor, intern auf die geteilte Pipeline umverdrahtet; 0131-Bridge-Kette (metric→proxy→miles) weiter grün. (Test)
@@ -194,6 +220,7 @@ cd app && bun test && bun run check
 
 Newest entry first.
 
+- `2026-08-12` — Proofs first (Samuel): das Interview endet mit `state.proofs` (Prolog-Ziele + Seeds + erwartete Record-Felder) BEVOR entworfen wird — die Proofs sind die Definition von „done" für den menschlichen Intent (dieselbe Philosophie wie das Discover-Skill, abjects Plan-Runde). Membran-Schritt 3 neu: alle Proofs müssen auf einem isolierten Scratch-Bus via satisfy() beweisbar sein, sonst kein Staging; staged-View zeigt die Proofs als grüne Chips. Goal + Acceptance entsprechend erweitert.
 - `2026-08-12` — Nachschärfung (Samuel-Fragen): Multi-Actor + Edit/Merge explizit out of scope, aber Update/Migration als abject-alinierter Zukunftspfad dokumentiert (Update = neue Goal-Runde: uuid-Identität bleibt, initState(source) als Migrations-Hook, Vokabular-Änderung = Negotiator-Fall). Membran-Fehler werden ab Slice 1 in state.history behalten (+ Goal/Acceptance) — der Legacy-Fehlerkontext für die Scrum-Schleife existiert damit von Anfang an.
 - `2026-08-12` — Korrektur Samuel (final): ZWEI Actors — Composer und Negotiator getrennt wie bei abject (ObjectCreator/Negotiator), geteilte Draft-Pipeline als Host-Modul; Karte entsprechend umgeschrieben.
 - `2026-08-12` — Discovery mit Samuel: zunächst EIN Composer erwogen, Slice 1 = voller Actor, STAGING statt Preview (Draft läuft live als „next"-Instanz, Promote = „production" + Code-Export, button-only), Single-Shot-Generierung (Membran-Fehler wörtlich melden, kein Auto-Retry — Scrum-Schleife als Folge-Slice), Kimi-k3-Lane für alle Composer-Completions. Ausführungs-Schritte und die fünf View-Zustände des Composer-Fensters im Detail spezifiziert; messbar via composer.test.ts (Interview/Membran/Staging/button-only-Promote/0131-Kette). Karte direkt in discover/.
