@@ -60,6 +60,12 @@ const SYSTEM_PROMPT =
 	'negotiate with from=<producer> and to=<consumer> — a translator proxy is ' +
 	'drafted and shown in the Negotiator window; approval happens ONLY by a ' +
 	'button press — there is no approve tool, so never claim you approved. ' +
+	'When someone wants a NEW KIND of actor ("build me a habit tracker"), call ' +
+	'compose with wish=<their words> — the Composer writes measurable proofs, ' +
+	'designs the actor, and stages it as a LIVE instance the user can try right ' +
+	'away. Promotion to production happens ONLY by a button press — there is no ' +
+	'promote tool, so never claim you promoted; say the draft is staged and the ' +
+	'user decides with Promote or Discard. ' +
 	'Destructive actions (deleting tasks, disposing instances) are HELD the ' +
 	'same way: the call returns held=..., a bar appears for the human, and ' +
 	'only their button press executes it. Say that you have prepared it and ' +

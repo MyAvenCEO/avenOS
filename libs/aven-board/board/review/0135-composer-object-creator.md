@@ -191,13 +191,13 @@ $each-Conditional-Muster):
 
 ## Acceptance criteria
 
-- [ ] Interview caller-aware ('composer') + Hausvorbild im Brief + kimi-k3-Settings am complete-Cap. (Test)
-- [ ] Proofs first: `state.proofs` (Prolog-Ziel + Seed + erwartete Record-Felder) existieren VOR dem Design-Call und stehen wörtlich im Brief. (Test)
-- [ ] Membran: invalider Draft (View-Verstoß ODER Logic-Syntaxfehler ODER initState-Nichtobjekt ODER gescheiterter Proof auf dem Scratch-Bus) = strukturierter Fehler mit Wortlaut bzw. Proof-Name, nichts gestaged, Fehler als `state.history`-Eintrag behalten (Retrospective-Futter). (Test)
-- [ ] Staging: valider Draft läuft als Instanz (tag staging, dispatch-bar), Composer hält pending. (Test)
-- [ ] Promote button-only (kein Tool), entfernt staging, liefert TS-Export; Discard disposed Instanz + Fenster. (Test)
-- [ ] Negotiator bleibt eigener Actor, intern auf die geteilte Pipeline umverdrahtet; 0131-Bridge-Kette (metric→proxy→miles) weiter grün. (Test)
-- [ ] Suite + Check grün.
+- [x] Interview caller-aware ('composer') + Hausvorbild im Brief + kimi-k3-Settings am complete-Cap. (Test)
+- [x] Proofs first: `state.proofs` (Prolog-Ziel + Seed + erwartete Record-Felder) existieren VOR dem Design-Call und stehen wörtlich im Brief. (Test)
+- [x] Membran: invalider Draft (View-Verstoß ODER Logic-Syntaxfehler ODER initState-Nichtobjekt ODER gescheiterter Proof auf dem Scratch-Bus) = strukturierter Fehler mit Wortlaut bzw. Proof-Name, nichts gestaged, Fehler als `state.history`-Eintrag behalten (Retrospective-Futter). (Test)
+- [x] Staging: valider Draft läuft als Instanz (tag staging, dispatch-bar), Composer hält pending. (Test)
+- [x] Promote button-only (kein Tool), entfernt staging, liefert TS-Export; Discard disposed Instanz + Fenster. (Test)
+- [x] Negotiator bleibt eigener Actor, intern auf die geteilte Pipeline umverdrahtet; 0131-Bridge-Kette (metric→proxy→miles) weiter grün. (Test)
+- [x] Suite + Check grün (80/80 Tests, svelte-check 0 Fehler).
 - [ ] **(HITL)** Per Stimme „Ich will einen Habit-Tracker mit Streaks" → Composer-Fenster zeigt Interview→Draft→Staged, die Staging-Instanz ist benutzbar, Promote per Button, Export-Code im Record.
 
 ## Verification
@@ -220,6 +220,7 @@ cd app && bun test && bun run check
 
 Newest entry first.
 
+- `2026-08-12` — GEBAUT (Slice 1 komplett, alle Kriterien grün): `draft-pipeline.ts` als geteilte Maschinerie (draftManifest, probeDraft = Validatoren + Sandbox-Probe + Proofs auf Scratch-Bus, stageDraft/promoteStaged/discardStaged/registerDraft, exportCode, Staging-Tag-Set als Singleton); `composer.actor.ts` mit sandboxed COMPOSE/PROMOTE/DISCARD-Logic (Plan-Runde schreibt state.proofs VOR dem Design-Call, state.history behält jeden Fehler, 8 fail-closed Caps, kimi-k3-Settings fest am complete-Cap); Negotiator-register-Cap auf registerDraft umverdrahtet (proxyManifest = Alias über draftManifest); Wiring: ReactiveComposer + Composer-Fenster + Staged-HUD-Leiste (Promote/Discard buttons-only via uiEvent) + compose-Intent im Chat-Prompt; nach erfolgreichem Staging nimmt das FENSTER DER STAGING-INSTANZ die Bühne (Spawn-Hook), das Composer-Fenster nur bei Fehlschlag. ABWEICHUNG von „Files to touch": das Negotiator-Fenster bleibt BESTEHEN (Composer-Fenster kommt dazu) — Entscheidung 1 („0131 bleibt unangetastet geliefert") schlägt die Fenster-Ersetzungs-Notiz. 10 neue Tests in composer.test.ts, Suite 80/80, Check 0 Fehler.
 - `2026-08-12` — Proofs first (Samuel): das Interview endet mit `state.proofs` (Prolog-Ziele + Seeds + erwartete Record-Felder) BEVOR entworfen wird — die Proofs sind die Definition von „done" für den menschlichen Intent (dieselbe Philosophie wie das Discover-Skill, abjects Plan-Runde). Membran-Schritt 3 neu: alle Proofs müssen auf einem isolierten Scratch-Bus via satisfy() beweisbar sein, sonst kein Staging; staged-View zeigt die Proofs als grüne Chips. Goal + Acceptance entsprechend erweitert.
 - `2026-08-12` — Nachschärfung (Samuel-Fragen): Multi-Actor + Edit/Merge explizit out of scope, aber Update/Migration als abject-alinierter Zukunftspfad dokumentiert (Update = neue Goal-Runde: uuid-Identität bleibt, initState(source) als Migrations-Hook, Vokabular-Änderung = Negotiator-Fall). Membran-Fehler werden ab Slice 1 in state.history behalten (+ Goal/Acceptance) — der Legacy-Fehlerkontext für die Scrum-Schleife existiert damit von Anfang an.
 - `2026-08-12` — Korrektur Samuel (final): ZWEI Actors — Composer und Negotiator getrennt wie bei abject (ObjectCreator/Negotiator), geteilte Draft-Pipeline als Host-Modul; Karte entsprechend umgeschrieben.

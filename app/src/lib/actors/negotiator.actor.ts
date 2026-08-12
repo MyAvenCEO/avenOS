@@ -1,6 +1,7 @@
 import type { Manifest } from './actor'
 import { Actor } from './actor'
 import type { MessageBus } from './bus'
+import { type ActorDraft, draftManifest, registerDraft } from './draft-pipeline'
 
 /**
  * The Negotiator (0131) — abject's Ask Protocol, stage 2: two actors whose
@@ -341,30 +342,13 @@ export interface ProxyDraft {
 }
 
 /**
- * The drafted proxy as a full manifest: one synthesized TRANSLATE entry so
- * the generic adapter binds it AND the produced functor — the bridge is an
- * ordinary clause the prover can walk.
+ * The drafted proxy as a full manifest — since 0135 an alias over the SHARED
+ * draft pipeline: the contract-only draft gets its synthesized TRANSLATE
+ * entry there, so the generic adapter binds it AND the produced functor and
+ * the bridge is an ordinary clause the prover can walk.
  */
 export function proxyManifest(draft: ProxyDraft): Manifest {
-	return {
-		id: draft.id,
-		name: draft.id,
-		description: draft.description,
-		tags: ['proxy'],
-		logic: draft.logic,
-		requires: [],
-		produces: [],
-		methods: [
-			{
-				name: `${draft.id}_translate`,
-				description: draft.description,
-				parameters: { type: 'object', properties: {}, additionalProperties: true },
-				requires: draft.requires,
-				produces: draft.produces,
-				event: { send: 'TRANSLATE' }
-			}
-		]
-	}
+	return draftManifest({ ...draft, tags: ['proxy'] })
 }
 
 export class NegotiatorActor extends Actor {
@@ -400,17 +384,11 @@ export class NegotiatorActor extends Actor {
 					}
 					return ''
 				},
-				register: (p) => {
-					const draft = p.draft as ProxyDraft
-					const manifest = proxyManifest(draft)
-					const proxy = new Actor(manifest)
-					bus.register(proxy)
-					// The catalog-ready export: definitions stay code-ownable.
-					const code =
-						`// Approved bridge — add to app/src/lib/actors/catalog.ts to keep it:\n` +
-						JSON.stringify(manifest, null, '\t')
-					return { uuid: proxy.uuid, name: proxy.instanceName, code }
-				}
+				// Since 0135 the SHARED draft pipeline registers and exports; the
+				// negotiator's human gate already sat before this call (button-only
+				// APPROVE), so the bridge goes straight to production.
+				register: (p) =>
+					registerDraft(bus, { ...(p.draft as ProxyDraft), tags: ['proxy'] } as ActorDraft)
 			}
 		)
 	}

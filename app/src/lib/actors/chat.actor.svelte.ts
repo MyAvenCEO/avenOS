@@ -5,6 +5,7 @@ import { activity } from './activity.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
 import { catalog } from './catalog'
+import { ComposerActor } from './composer.actor'
 import { LlmActor } from './llm.actor'
 import { NegotiatorActor } from './negotiator.actor'
 import { RegistryActor } from './registry.actor'
@@ -97,15 +98,27 @@ export class ChatActor extends Actor {
 						return result
 					}
 					const result = await bus.dispatch('chat', name, payload)
-					// A drafted bridge takes the stage: the review gate must be SEEN,
-					// not hunted for — same single-active rule as every window.
-					if (name === 'negotiate') {
+					// A draft takes the stage — it must be SEEN, not hunted for; same
+					// single-active rule as every window. negotiate fronts its review
+					// gate; compose fronts the composer window ONLY when nothing was
+					// staged (a staged draft's own first window already took the stage
+					// through the spawn hook — the best preview is the running actor).
+					if (name === 'negotiate' || name === 'compose') {
 						try {
-							if ((JSON.parse(result.record) as { ok?: boolean }).ok) {
+							const parsed = JSON.parse(result.record) as { ok?: boolean; staged?: unknown }
+							const gateWindow =
+								name === 'negotiate'
+									? parsed.ok
+										? 'negotiator-window'
+										: null
+									: parsed.staged
+										? null
+										: 'composer-window'
+							if (gateWindow) {
 								for (const other of bus.actors()) {
 									if (isWindow(other)) other.open = false
 								}
-								const gate = bus.get('negotiator-window')
+								const gate = bus.get(gateWindow)
 								if (gate && isWindow(gate)) gate.open = true
 							}
 						} catch {
@@ -222,6 +235,18 @@ class ReactiveNegotiator extends NegotiatorActor {
 }
 export const negotiatorActor = singleton('aven.negotiator', () => new ReactiveNegotiator(bus))
 bus.register(negotiatorActor)
+/**
+ * The Composer (0135): wish → proofs → drafted actor, staged live as "next".
+ * Staged instances come from the reactive factory so their windows update.
+ */
+class ReactiveComposer extends ComposerActor {
+	state = $state<Record<string, unknown>>({})
+}
+export const composerActor = singleton(
+	'aven.composer',
+	() => new ReactiveComposer(bus, (manifest) => new ReactiveActor(manifest))
+)
+bus.register(composerActor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
 bus.register(registryActor)
 export const chatActor = singleton('aven.chat', () => new ChatActor())

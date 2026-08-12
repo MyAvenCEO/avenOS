@@ -1,6 +1,6 @@
 import AvenUiView from './AvenUiView.svelte'
 import { bus } from './bus'
-import { catalogActors, negotiatorActor } from './chat.actor.svelte'
+import { catalogActors, composerActor, negotiatorActor } from './chat.actor.svelte'
 import { instanceWindows } from './instance-windows'
 import { registryTick } from './reactivity.svelte'
 import { singleton } from './singleton'
@@ -79,6 +79,19 @@ export const negotiatorWindow = singleton(
 		})
 )
 bus.register(negotiatorWindow)
+
+// The composer (0135) paints its whole process — goal, proofs, interviews,
+// the staged draft with its buttons — as its own window.
+export const composerWindow = singleton(
+	'aven.window.composer',
+	() =>
+		new WindowActor(composerActor, AvenUiView, {
+			key: 'composer',
+			name: 'Composer',
+			open: false
+		})
+)
+bus.register(composerWindow)
 
 // Spawned instances get their windows the moment they exist — same views,
 // their own state; dispose takes the windows with it (0133). The first
