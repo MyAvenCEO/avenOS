@@ -1,7 +1,7 @@
 <script lang="ts">
 import ActorGraph from './ActorGraph.svelte'
 import { type Actor, functor } from './actor'
-import { bus, type ProofStep, type Run, type TraceEntry } from './bus'
+import { bus, type Run, type TraceEntry } from './bus'
 import { registryTick } from './reactivity.svelte'
 import { isVariable, resolve } from './term'
 import { isWindow } from './window.actor.svelte'
@@ -48,16 +48,16 @@ const instance = $derived(selected.instanceState())
  * The one detail filter (right aside): which lens renders. The manifest —
  * the actor's template, the only stored truth — is where reading starts.
  */
-type ExplorerView = 'manifest' | 'graph' | 'instance' | 'view' | 'proof' | 'trace' | 'ask'
+type ExplorerView = 'manifest' | 'view' | 'instance' | 'graph' | 'logic' | 'json' | 'trace' | 'ask'
 let view = $state<ExplorerView>('manifest')
 const VIEWS: { key: ExplorerView; label: string }[] = [
 	{ key: 'manifest', label: 'Manifest' },
-	{ key: 'graph', label: 'Graph' },
-	{ key: 'instance', label: 'Instance' },
 	{ key: 'view', label: 'View' },
-	{ key: 'proof', label: 'Proof' },
-	{ key: 'trace', label: 'Trace' },
-	{ key: 'ask', label: 'ask()' }
+	{ key: 'instance', label: 'Instances' },
+	{ key: 'graph', label: 'Graph' },
+	{ key: 'logic', label: 'Logic' },
+	{ key: 'json', label: 'JSON' },
+	{ key: 'trace', label: 'Trace' }
 ]
 const show = (k: ExplorerView) => view === k
 let focusGraph = $state(true)
@@ -67,20 +67,6 @@ const meshActors = $derived.by(() => {
 	void registryTick.v
 	return bus.actors()
 })
-
-// ---- the prover: pick any predicate as a goal, get its SLD proof tree
-let goal = $state('')
-let proof = $state<ProofStep | null>(null)
-
-function prove(g: string) {
-	goal = g
-	proof = bus.prove(g)
-}
-
-function proveCustom(event: SubmitEvent) {
-	event.preventDefault()
-	if (goal.trim() !== '') proof = bus.prove(goal.trim())
-}
 
 // ---- the trace: poll-refreshed biography of the bus
 let traceTick = $state(0)
@@ -125,41 +111,6 @@ const activityRows = $derived.by<ActivityRow[]>(() => {
 	).slice(0, 30)
 })
 
-/** Constant bindings only — `M = hoch` is information, `M = X@chat` is noise. */
-function constantBindings(step: ProofStep): [string, string][] {
-	return Object.entries(step.bindings)
-		.map(([variable, value]) => [variable, resolve(value, step.bindings)] as [string, string])
-		.filter(([variable, value]) => !isVariable(value) && !variable.includes('@'))
-}
-
-// ---- the engine: run the proven plan for real, watch the runs pile up
-let factsText = $state('')
-let running = $state(false)
-let runError = $state('')
-
-async function runGoal() {
-	const g = goal.trim()
-	if (g === '' || running) return
-	runError = ''
-	let facts: Record<string, unknown> = {}
-	if (factsText.trim() !== '') {
-		try {
-			facts = JSON.parse(factsText)
-		} catch {
-			runError = 'facts is not valid JSON'
-			return
-		}
-	}
-	running = true
-	try {
-		await bus.satisfy(g, facts)
-		proof = bus.prove(g)
-		traceTick++
-	} finally {
-		running = false
-	}
-}
-
 // ---- the interview
 let question = $state('')
 let answer = $state('')
@@ -182,51 +133,6 @@ async function ask(event: SubmitEvent) {
 	<span class="rounded-md px-1.5 py-0.5 font-mono text-[0.6875rem] {hue(predicate)}">
 		{predicate}
 	</span>
-{/snippet}
-
-{#snippet proofNode(step: ProofStep)}
-	<!-- One node of the proof tree: goal, verdict, and how it was grounded. -->
-	<div class="flex flex-col gap-1">
-		<div class="flex flex-wrap items-center gap-1.5">
-			<span
-				class="{step.satisfied ? 'text-status-success' : 'text-status-error'} font-mono text-xs"
-			>
-				{step.satisfied ? '✓' : '✗'}
-			</span>
-			{@render pill(step.predicate)}
-			{#if step.negated}
-				<span class="rounded-md bg-foreground/5 px-1.5 py-0.5 text-[0.625rem] text-foreground/50">
-					negation as failure
-				</span>
-			{:else if step.external}
-				<span class="rounded-md bg-foreground/5 px-1.5 py-0.5 text-[0.625rem] text-foreground/50">
-					external fact
-				</span>
-			{:else if step.actor}
-				<span class="text-[0.6875rem] text-foreground/50">
-					⊢ {bus.get(step.actor)?.manifest.name ?? step.actor}
-				</span>
-			{/if}
-			{#if !step.satisfied}
-				<span class="text-[0.6875rem] text-status-error">unsatisfied</span>
-			{/if}
-			{#each constantBindings(step) as [variable, value] (variable)}
-				<span
-					class="rounded-md bg-primary/5 px-1.5 py-0.5 font-mono text-[0.625rem] text-primary/70"
-				>
-					{variable}
-					= {value}
-				</span>
-			{/each}
-		</div>
-		{#if step.children.length > 0}
-			<div class="ml-4 flex flex-col gap-1 border-foreground/10 border-l pl-3">
-				{#each step.children as child, i (`${child.predicate}${i}`)}
-					{@render proofNode(child)}
-				{/each}
-			</div>
-		{/if}
-	</div>
 {/snippet}
 
 <div class="flex min-h-0 flex-1 gap-5 text-foreground">
@@ -289,7 +195,6 @@ async function ask(event: SubmitEvent) {
 					</button>
 				</div>
 				<ActorGraph
-					{proof}
 					{selected}
 					focus={focusGraph}
 					onselect={(actor) => {
@@ -301,19 +206,15 @@ async function ask(event: SubmitEvent) {
 		{/if}
 
 		{#if show('manifest')}
-			<!-- ------------------------------------------------ TEMPLATE (the class) -->
+			<!-- THE SELF-DESCRIPTION: the manifest read as documentation — what
+			     this actor is, what it can do, how it connects, where its
+			     behaviour runs, and the interview. Deep artifacts (the program,
+			     the raw JSON) have their own lenses. -->
 			<section
-				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-5 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			>
-				<div class="flex items-baseline justify-between gap-3 pb-1">
-					<h3 class="font-semibold text-sm">Manifest</h3>
-					<span class="font-mono text-[0.6875rem] text-foreground/35">{selected.manifest.id}</span>
-				</div>
-				<p class="pb-3 text-foreground/60 text-sm leading-relaxed">
-					{selected.manifest.description}
-				</p>
-
-				<div class="flex flex-wrap items-center gap-1 pb-3">
+				<div class="flex items-baseline gap-3">
+					<h3 class="font-semibold text-lg">{selected.instanceName}</h3>
 					{#each selected.manifest.tags as t (t)}
 						<span
 							class="rounded-md border border-foreground/10 px-1.5 py-0.5 text-[0.6875rem] text-foreground/60"
@@ -321,184 +222,279 @@ async function ask(event: SubmitEvent) {
 							{t}
 						</span>
 					{/each}
-				</div>
-
-				<!-- THE INTERFACE — one concept, two halves. The dataflow half
-				     (requires → produces, driving unification and the prover) and
-				     the callable half (named entries with schema + declared event)
-				     are the same set: Actor.requires/produces already aggregate
-				     both levels, and an entry carries its own contract. Always
-				     rendered — a message-only actor is not section-less. -->
-				<h4 class="pb-1 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">Interface</h4>
-				<div class="flex flex-wrap items-center gap-1.5 pb-1 text-xs">
-					<span class="text-foreground/40">Dataflow:</span>
-					{#if selected.requires.length > 0 || selected.produces.length > 0}
-						{#each selected.requires as r, i (`r${i}`)}
-							{@render pill(r)}
-						{/each}
-						<span class="text-foreground/30">→</span>
-						{#each selected.produces as p, i (`p${i}`)}
-							{@render pill(p)}
-						{/each}
-					{:else}
-						<span class="text-foreground/40">none — reachable by message only</span>
-					{/if}
-				</div>
-				<!-- The relations are the contract, unified against the registry —
-				     derived here, never stored: the actor's neighborhood as a
-				     clickable mini graph, feeders → self → fed. -->
-				<div class="flex flex-wrap items-center gap-1.5 pb-3 text-[0.6875rem]">
-					{#each feeders as edge, i (`f${i}`)}
-						<button
-							type="button"
-							onclick={() => {
-								const a = bus.get(edge.from)
-								if (a) {
-									selected = a
-									answer = ''
-								}
-							}}
-							class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
-						>
-							{bus.get(edge.from)?.manifest.name}
-						</button>
-						<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
-					{:else}
-						<span class="text-foreground/35">outside</span>
-						<span class="font-mono text-foreground/35">→</span>
-					{/each}
 					<span
-						class="rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5 font-semibold text-foreground/85"
-					>
-						{selected.manifest.name}
+						class="size-1.5 rounded-full {selected.instanceState() !== null
+							? 'bg-status-success'
+							: 'bg-foreground/20'}"
+					></span>
+					<span class="ml-auto font-mono text-[0.6875rem] text-foreground/35">
+						{selected.uuid.slice(0, 8)}
 					</span>
-					{#each fed as edge, i (`t${i}`)}
-						<span class="font-mono text-foreground/35">—{edge.predicate}→</span>
-						<button
-							type="button"
-							onclick={() => {
-								const a = bus.get(edge.to)
-								if (a) {
-									selected = a
-									answer = ''
-								}
-							}}
-							class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
-						>
-							{bus.get(edge.to)?.manifest.name}
-						</button>
-					{:else}
-						<span class="font-mono text-foreground/35">→</span>
-						<span class="text-foreground/35">outside</span>
-					{/each}
-					{#if selected.manifest.methods.length > 0}
-						<span class="pl-1 text-foreground/35">
-							· all {selected.manifest.methods.length} entries reachable through the chat
-						</span>
-					{/if}
 				</div>
+				<p class="pt-2 pb-4 text-foreground/70 text-sm leading-relaxed">
+					{selected.manifest.description}
+				</p>
 
+				<!-- What it can do: every callable entry, read like an API doc. -->
+				<h4 class="pb-1.5 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">
+					What it can do
+				</h4>
 				{#if selected.manifest.methods.length > 0}
-					<div class="flex flex-col gap-2">
+					<div class="flex flex-col gap-2 pb-4">
 						{#each selected.manifest.methods as method (method.name)}
+							{@const fields = Object.keys(
+								(method.parameters as { properties?: Record<string, unknown> }).properties ?? {}
+							)}
 							<div class="rounded-xl border border-foreground/5 bg-surface-soft/60 px-3 py-2">
 								<div class="flex flex-wrap items-center gap-1.5">
 									<span class="font-medium font-mono text-xs">{method.name}</span>
-									{#each method.requires ?? [] as r, i (`r${i}`)}
-										{@render pill(r)}
-									{/each}
-									{#if (method.requires?.length ?? 0) > 0 || (method.produces?.length ?? 0) > 0}
-										<span class="text-[0.6875rem] text-foreground/30">→</span>
+									{#if method.event}
+										<span
+											class="rounded-full border border-primary/25 bg-primary/5 px-1.5 text-[0.625rem] text-foreground/60"
+										>
+											→ {method.event.send} · sandboxed
+										</span>
 									{/if}
-									{#each method.produces ?? [] as p, i (`p${i}`)}
-										{@render pill(p)}
+									{#each method.produces ?? [] as pr, i (`mp${i}`)}
+										{@render pill(pr)}
 									{/each}
 								</div>
 								<p class="pt-1 text-[0.75rem] text-foreground/50 leading-relaxed">
 									{method.description}
 								</p>
-								{#if Object.keys((method.parameters as { properties?: Record<string, unknown> }).properties ?? {}).length > 0}
-									<details class="pt-1">
-										<summary
-											class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
-										>
-											Schema:
-											{Object.keys(
-											(method.parameters as { properties?: Record<string, unknown> }).properties ??
-												{}
-										).join(' · ')}
-										</summary>
-										<pre
-											class="mt-1 overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
-										>{JSON.stringify(
-											method.parameters,
-											null,
-											2
-										)}</pre>
-									</details>
-								{/if}
-								{#if method.event}
-									<p class="pt-1 font-mono text-[0.6875rem] text-foreground/40">
-										→ <span class="font-semibold text-foreground/60">{method.event.send}</span>
-										— declared event; ONE generic adapter reduces it in the sandbox (Logic below).
-										The same clause serves voice, UI and the proof engine.
+								{#if fields.length > 0}
+									<p class="pt-0.5 font-mono text-[0.625rem] text-foreground/35">
+										{fields.join(' · ')}
 									</p>
-								{:else if selected.handlerSource(method.name)}
-									<details class="pt-1">
-										<summary
-											class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
-										>
-											Code — the running handler, read from the function itself
-										</summary>
-										<pre
-											class="mt-1 overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
-										>{selected.handlerSource(
-											method.name
-										)}</pre>
-									</details>
 								{/if}
 							</div>
 						{/each}
 					</div>
 				{:else}
-					<p class="text-foreground/40 text-xs">
-						No methods — this actor is pure transformation; its contract is the whole interface.
+					<p class="pb-4 text-foreground/50 text-sm">
+						Nothing to call — this actor is pure transformation; its dataflow below is the whole
+						interface.
 					</p>
 				{/if}
 
-				<!-- The sandboxed program — where the behaviour actually lives. Part
-			     of the manifest, so it lives HERE, not in a section of its own. -->
-				{#if selected.manifest.logic}
-					<details class="pt-3">
-						<summary
-							class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
-						>
-							Logic — the sandboxed program (QuickJS): initState, reduce and shape run there, never
-							in the host
-						</summary>
-						<pre
-							class="mt-1 max-h-96 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
-						>{selected.manifest.logic.trim()}</pre>
-					</details>
-				{/if}
+				<!-- How it connects: the contract as sentences, neighbors clickable. -->
+				<h4 class="pb-1.5 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">
+					How it connects
+				</h4>
+				<div class="flex flex-col gap-1 pb-4 text-foreground/60 text-sm">
+					{#if selected.requires.length > 0}
+						<p class="flex flex-wrap items-center gap-1.5">
+							Listens for
+							{#each selected.requires as r, i (`r${i}`)}
+								{@render pill(r)}
+							{/each}
+							{#if feeders.length > 0}
+								— fed by
+								{#each feeders as edge, i (`f${i}`)}
+									<button
+										type="button"
+										onclick={() => {
+											const a = bus.get(edge.from)
+											if (a) {
+												selected = a
+												answer = ''
+											}
+										}}
+										class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
+									>
+										{bus.get(edge.from)?.manifest.name}
+									</button>
+								{/each}
+							{:else}
+								— from outside
+							{/if}
+						</p>
+					{/if}
+					{#if selected.produces.length > 0}
+						<p class="flex flex-wrap items-center gap-1.5">
+							Produces
+							{#each selected.produces as pr, i (`p${i}`)}
+								{@render pill(pr)}
+							{/each}
+							{#if fed.length > 0}
+								— feeding
+								{#each fed as edge, i (`t${i}`)}
+									<button
+										type="button"
+										onclick={() => {
+											const a = bus.get(edge.to)
+											if (a) {
+												selected = a
+												answer = ''
+											}
+										}}
+										class="rounded-full border border-foreground/10 px-2 py-0.5 font-medium text-foreground/70 transition-colors hover:border-primary/40 hover:text-foreground"
+									>
+										{bus.get(edge.to)?.manifest.name}
+									</button>
+								{/each}
+							{:else}
+								— for whoever asks
+							{/if}
+						</p>
+					{/if}
+					{#if selected.requires.length === 0 && selected.produces.length === 0}
+						<p>No dataflow — reachable by message only.</p>
+					{/if}
+					{#if selected.manifest.methods.length > 0}
+						<p class="text-[0.75rem] text-foreground/40">
+							All {selected.manifest.methods.length} entries are reachable through the chat, and
+							addressable per instance via <span class="font-mono">to</span>.
+						</p>
+					{/if}
+				</div>
 
-				<!-- The manifest raw — the only stored truth; everything above is a
-			     rendering of it, so the JSON belongs to the same section. -->
-				<details class="pt-2">
-					<summary
-						class="cursor-pointer font-mono text-[0.6875rem] text-foreground/35 hover:text-foreground/60"
+				<!-- Where its behaviour runs — and what it may touch. -->
+				<h4 class="pb-1.5 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">
+					Behaviour & containment
+				</h4>
+				<div class="flex flex-col gap-1 pb-4 text-foreground/60 text-sm">
+					{#if selected.manifest.logic}
+						<p>
+							Runs fully sandboxed — {selected.manifest.logic.trim().split('\n').length} lines of
+							logic in its own QuickJS VM (see
+							<button
+								type="button"
+								onclick={() => {
+									view = 'logic'
+								}}
+								class="underline underline-offset-4 hover:text-foreground"
+							>
+								Logic
+							</button>).
+						</p>
+						<p class="flex flex-wrap items-center gap-1.5">
+							{#if (selected.manifest.capabilities ?? []).length > 0}
+								Host doors, fail-closed:
+								{#each selected.manifest.capabilities ?? [] as cap (cap)}
+									<span
+										class="rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[0.6875rem] text-foreground/60"
+									>
+										{cap}
+									</span>
+								{/each}
+							{:else}
+								No host doors — fully contained.
+							{/if}
+						</p>
+					{:else}
+						<p>
+							Host code — reviewed TypeScript in the repo (see
+							<button
+								type="button"
+								onclick={() => {
+									view = 'logic'
+								}}
+								class="underline underline-offset-4 hover:text-foreground"
+							>
+								Logic
+							</button>).
+						</p>
+					{/if}
+					{#if selected.manifest.view}
+						<p>
+							Paints {1 + (selected.manifest.views?.length ?? 0)}
+							{1 + (selected.manifest.views?.length ?? 0) === 1 ? 'view' : 'views'}
+							(see
+							<button
+								type="button"
+								onclick={() => {
+									view = 'view'
+								}}
+								class="underline underline-offset-4 hover:text-foreground"
+							>
+								View
+							</button>).
+						</p>
+					{/if}
+				</div>
+
+				<!-- The interview — part of the self-description, not a lens. -->
+				<h4 class="pb-1.5 text-[0.6875rem] text-foreground/40 uppercase tracking-wide">ask()</h4>
+				<form onsubmit={ask} class="flex items-center gap-2">
+					<input
+						bind:value={question}
+						placeholder={`Ask ${selected.instanceName}…`}
+						class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-4 py-2 text-sm outline-none placeholder:text-foreground/30"
 					>
-						Manifest as JSON — the only stored truth; tools, edges, stages and this panel are
-						derived from it
-					</summary>
+					<button
+						type="submit"
+						disabled={question.trim() === '' || busy}
+						class="rounded-full bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-opacity disabled:opacity-40"
+					>
+						{busy ? '…' : 'Ask'}
+					</button>
+				</form>
+				{#if answer !== ''}
+					<p class="pt-3 text-foreground/75 text-sm leading-relaxed">{answer}</p>
+				{/if}
+			</section>
+		{/if}
+
+		{#if show('logic')}
+			<!-- THE PROGRAM: where the behaviour actually lives, verbatim. -->
+			<section
+				class="flex min-h-0 flex-1 flex-col rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
+				<div class="flex items-center gap-2 pb-2">
+					<h3 class="font-semibold text-sm">Logic</h3>
+					<span class="text-[0.6875rem] text-foreground/40">
+						{selected.manifest.logic
+							? 'the sandboxed program — initState, reduce and shape run in the QuickJS VM, never in the host'
+							: 'host handlers — read from the running functions themselves'}
+					</span>
+				</div>
+				{#if selected.manifest.logic}
 					<pre
-						class="mt-1 max-h-72 overflow-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
-					>{JSON.stringify(
+						class="min-h-0 flex-1 overflow-auto rounded-lg bg-foreground/[0.04] p-3 font-mono text-[0.6875rem] leading-relaxed"
+					>{selected.manifest.logic.trim()}</pre>
+				{:else}
+					<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+						{#each selected.manifest.methods as method (method.name)}
+							{#if selected.handlerSource(method.name)}
+								<div>
+									<p class="pb-1 font-medium font-mono text-xs">{method.name}</p>
+									<pre
+										class="overflow-x-auto rounded-lg bg-foreground/[0.04] p-2 font-mono text-[0.625rem] leading-relaxed"
+									>{selected.handlerSource(
+											method.name
+										)}</pre>
+								</div>
+							{/if}
+						{:else}
+							<p class="text-foreground/40 text-sm">
+								No behaviour beyond the mailbox — pure transformation.
+							</p>
+						{/each}
+					</div>
+				{/if}
+			</section>
+		{/if}
+
+		{#if show('json')}
+			<!-- THE RAW TRUTH: the manifest verbatim — everything else derives. -->
+			<section
+				class="flex min-h-0 flex-1 flex-col rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
+				<div class="flex items-center gap-2 pb-2">
+					<h3 class="font-semibold text-sm">JSON</h3>
+					<span class="text-[0.6875rem] text-foreground/40">
+						the manifest, verbatim — the only stored truth; tools, edges and every lens derive from
+						it
+					</span>
+				</div>
+				<pre
+					class="min-h-0 flex-1 overflow-auto rounded-lg bg-foreground/[0.04] p-3 font-mono text-[0.6875rem] leading-relaxed"
+				>{JSON.stringify(
 						selected.manifest,
 						null,
 						2
 					)}</pre>
-				</details>
 			</section>
 		{/if}
 
@@ -667,72 +663,6 @@ async function ask(event: SubmitEvent) {
 			{/if}
 		{/if}
 
-		{#if show('proof')}
-			<!-- --------------------------------- BEWEIS: SLD backward chaining, live -->
-			<section
-				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-			>
-				<div class="flex flex-wrap items-center gap-2 pb-2">
-					<h3 class="font-semibold text-sm">Proof</h3>
-					<span class="text-[0.6875rem] text-foreground/40">
-						Pick a goal — the solver searches backwards for producers and proves their needs, with
-						backtracking; not(…) is negation as failure.
-					</span>
-				</div>
-				<div class="flex flex-wrap items-center gap-1.5 pb-2">
-					{#each selected.produces as p, i (`g${i}`)}
-						<button
-							type="button"
-							onclick={() => prove(p)}
-							class="rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[0.6875rem] transition-colors hover:border-primary/40 {goal ===
-						p
-							? 'border-primary/50'
-							: ''}"
-						>
-							⊢ {p}
-						</button>
-					{/each}
-					<form onsubmit={proveCustom} class="flex items-center gap-1.5">
-						<input
-							bind:value={goal}
-							placeholder="own goal, e.g. reply(R) or not(x(Y))"
-							class="w-56 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
-						>
-						<button
-							type="submit"
-							class="rounded-full bg-primary px-3 py-1 text-[0.6875rem] text-primary-foreground"
-						>
-							prove
-						</button>
-					</form>
-				</div>
-				{#if proof}
-					{@render proofNode(proof)}
-				{/if}
-
-				<!-- Run: the plan above, walked for real — postorder messages,
-			     runtime backtracking, llm-actors over the injected model. -->
-				<div class="flex flex-wrap items-center gap-1.5 pt-3">
-					<input
-						bind:value={factsText}
-						placeholder={'external facts as JSON, e.g. {"request": {"text": "…"}}'}
-						class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-3 py-1 font-mono text-[0.6875rem] outline-none placeholder:text-foreground/30"
-					>
-					<button
-						type="button"
-						onclick={runGoal}
-						disabled={goal.trim() === '' || running}
-						class="rounded-full bg-primary px-3 py-1 text-[0.6875rem] text-primary-foreground transition-opacity disabled:opacity-30"
-					>
-						{running ? 'running…' : 'Run'}
-					</button>
-					{#if runError}
-						<span class="text-[0.6875rem] text-status-error">{runError}</span>
-					{/if}
-				</div>
-			</section>
-		{/if}
-
 		{#if show('trace')}
 			<!-- ------------------------- TRACE: the bus's biography, per actor -->
 			<section
@@ -815,32 +745,6 @@ async function ask(event: SubmitEvent) {
 							{/if}
 						{/each}
 					</div>
-				{/if}
-			</section>
-		{/if}
-
-		{#if show('ask')}
-			<!-- ----------------------------------------------- ask(): the interview -->
-			<section
-				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-			>
-				<h3 class="pb-2 font-semibold text-sm">ask()</h3>
-				<form onsubmit={ask} class="flex items-center gap-2">
-					<input
-						bind:value={question}
-						placeholder={`Ask ${selected.manifest.name}…`}
-						class="min-w-0 flex-1 rounded-full border border-foreground/5 bg-surface-soft/60 px-4 py-2 text-sm outline-none placeholder:text-foreground/30"
-					>
-					<button
-						type="submit"
-						disabled={question.trim() === '' || busy}
-						class="rounded-full bg-primary px-4 py-2 text-primary-foreground text-sm transition-opacity disabled:opacity-30"
-					>
-						{busy ? '…' : 'Fragen'}
-					</button>
-				</form>
-				{#if answer}
-					<p class="pt-3 text-sm leading-relaxed">{answer}</p>
 				{/if}
 			</section>
 		{/if}
