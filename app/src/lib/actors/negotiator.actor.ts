@@ -60,11 +60,22 @@ function reduce(state, ev) {
 				record: { ok: false, error: 'unknown actor' }
 			}
 		}
+		// Direction is OUR job, not the caller's: the side that PRODUCES is the
+		// producer, the side that REQUIRES is the consumer — swap if the pair
+		// arrived the other way around.
 		if (a.produces.length === 0 || b.requires.length === 0) {
-			return {
-				state: present(s),
-				said: a.id + ' produces nothing or ' + b.id + ' requires nothing — no bridge to build.',
-				record: { ok: false, error: 'no contract to bridge' }
+			if (b.produces.length > 0 && a.requires.length > 0) {
+				var swap = a
+				a = b
+				b = swap
+			} else {
+				return {
+					state: present(s),
+					said:
+						'Between ' + a.id + ' and ' + b.id +
+						' there is nothing to bridge — neither direction has a producer facing a consumer.',
+					record: { ok: false, error: 'no contract to bridge' }
+				}
 			}
 		}
 		var saysA = cap('ask', {
@@ -299,9 +310,10 @@ const NEGOTIATOR_MANIFEST: Manifest = {
 		{
 			name: 'negotiate',
 			description:
-				'When two actors cannot understand each other: interviews producer and ' +
-				'consumer, drafts a translator proxy via the model, and holds it for ' +
-				'approval. from = the producing actor, to = the consuming actor.',
+				'When two actors cannot understand each other: interviews both sides, ' +
+				'drafts a translator proxy via the model, and holds it for approval. ' +
+				'Order does not matter — producer and consumer are detected from the ' +
+				'contracts.',
 			parameters: {
 				type: 'object',
 				properties: {

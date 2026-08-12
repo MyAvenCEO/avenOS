@@ -113,6 +113,19 @@ describe('negotiator (0131): interview, gate, bridge, export', () => {
 		expect(consumer?.state.miles).toBeCloseTo(6.21, 1)
 	})
 
+	test('direction does not matter — the pair is oriented by its contracts', async () => {
+		const { bus } = mesh()
+		// the human said it the other way around: consumer first
+		const result = await bus.dispatch('test', 'negotiate', {
+			from: 'imperial-display',
+			to: 'metric'
+		})
+		const record = JSON.parse(result.record) as { ok: boolean; draft: { requires: string[] } }
+		expect(record.ok).toBe(true)
+		// the draft still bridges producer → consumer
+		expect(record.draft.requires).toEqual(['metric(M)'])
+	})
+
 	test('reject discards the draft; approve afterwards fails structured', async () => {
 		const { bus } = mesh()
 		await bus.dispatch('test', 'negotiate', { from: 'metric', to: 'imperial-display' })
