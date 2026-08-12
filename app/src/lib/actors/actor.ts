@@ -20,8 +20,27 @@
  * judgment; the derivation regenerates with the registry).
  */
 
+import type { StyleDef, ViewDef } from '@avenos/aven-ui'
+
 /** A predicate as written in a contract: `mail(M)`, `intent(M, Class)`. */
 export type Predicate = string
+
+/**
+ * A vibe: the actor's face as pure data + sandboxed behaviour (0130).
+ *
+ * `view`/`style` are validated JSON the aven-ui engine renders into a shadow
+ * root; `logic` is the QuickJS-sandboxed program exporting
+ * `initState`/`reduce`/`shape`; `source` seeds the initial state. The actor
+ * paints its own face — the host renders, never interprets.
+ */
+export interface VibeSpec {
+	view: ViewDef
+	style: StyleDef
+	/** Seed data handed to the logic's initState; defaults to {}. */
+	source?: Record<string, unknown>
+	/** The sandboxed program. Shared across an actor's vibes via the manifest. */
+	logic: string
+}
 
 /** `mail(M)` → `mail` — predicates unify on their functor name. */
 export function functor(p: Predicate): string {
@@ -128,6 +147,14 @@ export interface Manifest {
 	llm?: boolean | LlmSettings
 	/** The actor's window UI, declared as data; absent = the generic face. */
 	face?: FaceSpec
+	/**
+	 * The actor's face as a vibe (0130): validated view/style JSON rendered
+	 * by aven-ui, behaviour sandboxed in QuickJS. Replaces `face`; an actor
+	 * carrying both renders the vibe.
+	 */
+	vibe?: VibeSpec
+	/** Additional named vibes — each its own window over the SAME actor. */
+	vibes?: { key: string; name: string; spec: VibeSpec }[]
 	/**
 	 * Additional named views — the workitems pattern (list + board over one
 	 * subject) as data: each entry becomes its OWN window actor sharing this

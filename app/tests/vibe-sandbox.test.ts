@@ -143,3 +143,77 @@ describe('vibe sandbox (0130 slice A)', () => {
 		}
 	})
 })
+
+describe('workitems vibe (0130 slice B — parity + validation)', () => {
+	test('both faces validate and the style passes the whitelist', async () => {
+		const { validateStyleDef, validateViewDef } = await import('@avenos/aven-ui')
+		const { workitemsBoardView, workitemsListView } = await import(
+			'../src/lib/actors/vibes/workitems/view'
+		)
+		const { workitemsStyle } = await import('../src/lib/actors/vibes/workitems/style')
+		expect(() => validateViewDef(workitemsListView)).not.toThrow()
+		expect(() => validateViewDef(workitemsBoardView)).not.toThrow()
+		expect(() => validateStyleDef(workitemsStyle)).not.toThrow()
+	})
+
+	test('initState derives the rendered state from source', async () => {
+		const { workitemsLogic } = await import('../src/lib/actors/vibes/workitems/logic')
+		const session = await createSession(workitemsLogic)
+		try {
+			const state = session.initState({
+				items: [{ title: 'Milk', status: 'done', spark: 'me' }],
+				active: 'me'
+			})
+			expect((state.items as unknown[]).length).toBe(1)
+			expect((state.counts as { done: number }).done).toBe(1)
+			expect(state.sparkName).toBe('Me')
+			expect(state.progressText).toBe('1 of 1 done')
+		} finally {
+			session.dispose()
+		}
+	})
+
+	test('PARITY: the UI event and the equivalent voice call are byte-identical', async () => {
+		const { workitemsLogic } = await import('../src/lib/actors/vibes/workitems/logic')
+		const ui = await createSession(workitemsLogic)
+		const voice = await createSession(workitemsLogic)
+		try {
+			// the click path: the add form submits ADD {text}
+			let uiState = ui.initState({})
+			uiState = ui.reduce(uiState, { send: 'ADD', payload: { text: 'Buy milk' } })
+			uiState = ui.reduce(uiState, { send: 'TOGGLE', payload: { id: 'w1' } })
+			// the voice path: workitem_create + workitem_update map to the same events
+			let voiceState = voice.initState({})
+			voiceState = voice.reduce(voiceState, { send: 'CREATE', payload: { titles: ['Buy milk'] } })
+			voiceState = voice.reduce(voiceState, {
+				send: 'UPDATE',
+				payload: { ids: ['w1'], status: 'done' }
+			})
+			expect(JSON.stringify(uiState)).toBe(JSON.stringify(voiceState))
+		} finally {
+			ui.dispose()
+			voice.dispose()
+		}
+	})
+
+	test('shape applies model ops through the SAME transitions; garbage changes nothing', async () => {
+		const { workitemsLogic } = await import('../src/lib/actors/vibes/workitems/logic')
+		const session = await createSession(workitemsLogic)
+		try {
+			const state = session.initState({})
+			const shaped = session.shape(
+				state,
+				'{"ops": [{"op": "create", "titles": ["From the model"]}]}'
+			)
+			expect(shaped).not.toBeNull()
+			const next = shaped?.state as Record<string, unknown>
+			expect((next.items as { title: string }[])[0]?.title).toBe('From the model')
+			// prose, wrong shapes, unknown ops — all null, host state untouched
+			expect(session.shape(state, 'Sure! Here is what I did…')).toBeNull()
+			expect(session.shape(state, '{"ops": [{"op": "drop_table"}]}')).toBeNull()
+			expect((state.items as unknown[]).length).toBe(0)
+		} finally {
+			session.dispose()
+		}
+	})
+})

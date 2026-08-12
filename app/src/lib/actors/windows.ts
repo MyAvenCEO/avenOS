@@ -1,10 +1,10 @@
+import AvenUiView from './AvenUiView.svelte'
 import { bus } from './bus'
 import { catalogActors } from './chat.actor.svelte'
 import DefaultActorView from './DefaultActorView.svelte'
 import { registryTick } from './reactivity.svelte'
 import SpecFaceView from './SpecFaceView.svelte'
 import { singleton } from './singleton'
-import WorkItemsView from './WorkItemsView.svelte'
 import { isWindow, WindowActor } from './window.actor.svelte'
 import { workItems } from './workitems.svelte'
 
@@ -21,19 +21,18 @@ import { workItems } from './workitems.svelte'
 export const listWindow = singleton(
 	'aven.window.list',
 	() =>
-		new WindowActor(workItems, WorkItemsView, {
+		new WindowActor(workItems, AvenUiView, {
 			key: 'list',
-			name: 'Task List',
-			props: { mode: 'list' }
+			name: 'Task List'
 		})
 )
 export const boardWindow = singleton(
 	'aven.window.board',
 	() =>
-		new WindowActor(workItems, WorkItemsView, {
+		new WindowActor(workItems, AvenUiView, {
 			key: 'board',
 			name: 'Kanban Board',
-			props: { mode: 'board' },
+			props: { spec: workItems.manifest.vibes?.[0]?.spec },
 			open: false
 		})
 )
@@ -52,7 +51,11 @@ bus.onChange = () => {
 // One window per catalog actor, plus one per extra named face. Closed on
 // boot: the stage belongs to whoever the user asks for.
 for (const actor of catalogActors) {
-	const component = actor.manifest.face ? SpecFaceView : DefaultActorView
+	const component = actor.manifest.vibe
+		? AvenUiView
+		: actor.manifest.face
+			? SpecFaceView
+			: DefaultActorView
 	if (!bus.get(`${actor.manifest.id}-window`)) {
 		bus.register(new WindowActor(actor, component, { open: false }))
 	}
