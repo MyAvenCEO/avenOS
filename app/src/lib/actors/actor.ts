@@ -211,15 +211,18 @@ export class Actor {
 		this.#handlers = handlers
 		if (manifest.logic) this.#ready = this.#boot(manifest, caps)
 		// The generic adapter, bound for every declared method — and again
-		// under the produced functor, which makes it the engine's clause body.
+		// under the produced functor (the engine's clause body) AND the
+		// required functor (the emit receiver): a consumer entry that requires
+		// imperial(I) IS where imperial emissions land.
 		for (const method of manifest.methods) {
 			const send = method.event?.send
 			if (!send) continue
 			const adapter = (p: Record<string, unknown>) => this.#adapt(send, p)
 			this.bind({ [method.name]: adapter })
-			const produced = method.produces?.[0]
-			if (produced && !this.handles(functor(produced))) {
-				this.bind({ [functor(produced)]: adapter })
+			for (const predicate of [method.produces?.[0], method.requires?.[0]]) {
+				if (predicate && !this.handles(functor(predicate))) {
+					this.bind({ [functor(predicate)]: adapter })
+				}
 			}
 		}
 	}

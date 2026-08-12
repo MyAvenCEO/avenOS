@@ -6,6 +6,7 @@ import { Actor } from './actor'
 import { bus } from './bus'
 import { catalog } from './catalog'
 import { LlmActor } from './llm.actor'
+import { NegotiatorActor } from './negotiator.actor'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
 import { WorkItemsActor, workItems } from './workitems.svelte'
@@ -189,12 +190,22 @@ bus.spawnable('workitem', () => new WorkItemsActor())
 /**
  * The catalog, live: every manifest declared in code joins the mesh at boot
  * — registered before the chat actor so the derived tool list carries them
- * from the first turn. The codebase is the source of truth.
+ * from the first turn. The codebase is the source of truth. Reactive here
+ * (not in the base): windows re-render when the sandbox reduces.
  */
+class ReactiveActor extends Actor {
+	state = $state<Record<string, unknown>>({})
+}
 export const catalogActors = catalog.map((manifest) =>
-	singleton(`aven.actor.${manifest.id}`, () => new Actor(manifest))
+	singleton(`aven.actor.${manifest.id}`, () => new ReactiveActor(manifest))
 )
 for (const actor of catalogActors) bus.register(actor)
+/** The Negotiator (0131): drafts bridges between incompatible actors, HITL-gated. */
+class ReactiveNegotiator extends NegotiatorActor {
+	state = $state<Record<string, unknown>>({})
+}
+export const negotiatorActor = singleton('aven.negotiator', () => new ReactiveNegotiator(bus))
+bus.register(negotiatorActor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
 bus.register(registryActor)
 export const chatActor = singleton('aven.chat', () => new ChatActor())

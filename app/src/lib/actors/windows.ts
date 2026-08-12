@@ -1,6 +1,6 @@
 import AvenUiView from './AvenUiView.svelte'
 import { bus } from './bus'
-import { catalogActors } from './chat.actor.svelte'
+import { catalogActors, negotiatorActor } from './chat.actor.svelte'
 import { instanceWindows } from './instance-windows'
 import { registryTick } from './reactivity.svelte'
 import { singleton } from './singleton'
@@ -67,6 +67,18 @@ for (const actor of catalogActors) {
 		}
 	}
 }
+
+// The negotiator paints its own review gate — a window like any other.
+export const negotiatorWindow = singleton(
+	'aven.window.negotiator',
+	() =>
+		new WindowActor(negotiatorActor, AvenUiView, {
+			key: 'negotiator',
+			name: 'Negotiator',
+			open: false
+		})
+)
+bus.register(negotiatorWindow)
 
 // Spawned instances get their windows the moment they exist — same views,
 // their own state; dispose takes the windows with it (0133). The first

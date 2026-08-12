@@ -56,6 +56,10 @@ const SYSTEM_PROMPT =
 	'template=workitem and a short name. Address a specific instance by adding ' +
 	'to=<name or uuid from registry_list> on any tool; without it the default ' +
 	'instance is meant. dispose removes a spawned instance on explicit request. ' +
+	'When two actors cannot understand each other (vocabulary mismatch), call ' +
+	'negotiate with from=<producer> and to=<consumer> — a translator proxy is ' +
+	'drafted and shown in the Negotiator window; it runs only after the human ' +
+	'approves (negotiator_approve) and can be discarded (negotiator_reject). ' +
 	'Messages come from speech recognition and are sometimes cut off ' +
 	'mid-sentence. If a message reads like the continuation of the previous ' +
 	'one, treat both together as one request. ' +
