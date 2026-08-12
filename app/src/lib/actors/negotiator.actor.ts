@@ -33,9 +33,11 @@ function present(s) {
 		registered: s.registered,
 		title: s.pending
 			? 'Draft pending: ' + s.pending.id
-			: s.registered.length > 0
-				? s.registered.length + ' bridge(s) live'
-				: 'Idle — no negotiation yet',
+			: s.registered.length === 1
+				? '1 bridge live'
+				: s.registered.length > 1
+					? s.registered.length + ' bridges live'
+					: 'Idle — no negotiation yet',
 		note: s.pending
 			? 'Review the generated logic below, then approve or reject. Nothing runs before approval.'
 			: 'Say "negotiate <producer> with <consumer>" when two actors cannot understand each other.',
@@ -244,6 +246,8 @@ const NEGOTIATOR_MANIFEST: Manifest = {
 		selectors: {
 			'.ng-shell': {
 				width: '100%',
+				maxWidth: '48rem',
+				minWidth: '0',
 				display: 'flex',
 				flexDirection: 'column',
 				gap: 'var(--gap-section)'
@@ -323,20 +327,6 @@ const NEGOTIATOR_MANIFEST: Manifest = {
 				required: ['from', 'to']
 			},
 			event: { send: 'NEGOTIATE' }
-		},
-		{
-			name: 'negotiator_approve',
-			description:
-				'Registers the pending proxy draft for this session and returns a ' +
-				'catalog-ready code snippet. Only on explicit human approval.',
-			parameters: { type: 'object', properties: {} },
-			event: { send: 'APPROVE' }
-		},
-		{
-			name: 'negotiator_reject',
-			description: 'Discards the pending proxy draft.',
-			parameters: { type: 'object', properties: {} },
-			event: { send: 'REJECT' }
 		}
 	]
 }

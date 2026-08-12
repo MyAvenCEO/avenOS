@@ -11,6 +11,22 @@ import type { Manifest } from './actor'
  * has something real to bridge in front of a human: negotiate them, review
  * the drafted proxy, approve, and watch km flow as miles.
  */
+/** One look for both demo gauges — a value card on brand tokens. */
+const DEMO_STYLE = {
+	selectors: {
+		'.dm-shell': { width: '100%', maxWidth: '28rem' },
+		'.dm-card': { display: 'flex', flexDirection: 'column', gap: '0.5rem' },
+		'.dm-row': { display: 'flex', alignItems: 'baseline', gap: '0.5rem' },
+		'.dm-value': { fontSize: 'var(--fs-amount)', fontWeight: '600', lineHeight: '1' },
+		'.dm-unit': {
+			fontFamily: 'var(--font-mono)',
+			fontSize: 'var(--fs-body)',
+			color: 'var(--muted)'
+		},
+		'.dm-note': { fontSize: 'var(--fs-micro)', color: 'var(--muted)' }
+	}
+}
+
 export const catalog: Manifest[] = [
 	{
 		id: 'metric',
@@ -21,13 +37,18 @@ export const catalog: Manifest[] = [
 		tags: ['demo'],
 		logic: `
 function initState(source) {
-	return { measured: 0, lastKm: null, note: 'Say a distance — I measure in kilometres.' }
+	return {
+		measured: 0,
+		display: '—',
+		unit: 'km',
+		note: 'Say a distance — I measure in kilometres.'
+	}
 }
 function reduce(state, ev) {
 	if (ev.send === 'MEASURE') {
 		var km = typeof ev.payload.km === 'number' ? ev.payload.km : 42
 		return {
-			state: { measured: state.measured + 1, lastKm: km, note: state.note },
+			state: { measured: state.measured + 1, display: String(km), unit: 'km', note: state.note },
 			said: 'measured ' + km + ' km',
 			record: { ok: true, km: km }
 		}
@@ -40,15 +61,26 @@ function shape(state, rawText) {
 `,
 		view: {
 			content: {
-				class: 'brand-shell',
+				class: 'brand-shell dm-shell',
 				children: [
-					{ class: 'eyebrow', text: 'Metric' },
-					{ tag: 'h1', text: '$lastKm' },
-					{ text: '$note' }
+					{
+						class: 'card dm-card',
+						children: [
+							{ class: 'eyebrow', text: 'Metric' },
+							{
+								class: 'dm-row',
+								children: [
+									{ class: 'dm-value', text: '$display' },
+									{ class: 'dm-unit', text: '$unit' }
+								]
+							},
+							{ class: 'dm-note', text: '$note' }
+						]
+					}
 				]
 			}
 		},
-		style: {},
+		style: DEMO_STYLE,
 		methods: [
 			{
 				name: 'metric_measure',
@@ -71,7 +103,11 @@ function shape(state, rawText) {
 		tags: ['demo'],
 		logic: `
 function initState(source) {
-	return { miles: '—', note: 'Waiting for imperial data ({miles}). I do not speak metric.' }
+	return {
+		display: '—',
+		unit: 'mi',
+		note: 'Waiting for imperial data ({miles}). I do not speak metric — bridge me.'
+	}
 }
 function reduce(state, ev) {
 	if (ev.send === 'SHOW') {
@@ -83,7 +119,7 @@ function reduce(state, ev) {
 					: null
 		if (miles === null) return state
 		return {
-			state: { miles: miles, note: 'Latest distance, in miles.' },
+			state: { display: String(miles), unit: 'mi', note: 'Latest distance, in miles.' },
 			said: 'showing ' + miles + ' miles',
 			record: { ok: true, shown: miles }
 		}
@@ -96,15 +132,26 @@ function shape(state, rawText) {
 `,
 		view: {
 			content: {
-				class: 'brand-shell',
+				class: 'brand-shell dm-shell',
 				children: [
-					{ class: 'eyebrow', text: 'Imperial' },
-					{ tag: 'h1', text: '$miles' },
-					{ text: '$note' }
+					{
+						class: 'card dm-card',
+						children: [
+							{ class: 'eyebrow', text: 'Imperial' },
+							{
+								class: 'dm-row',
+								children: [
+									{ class: 'dm-value', text: '$display' },
+									{ class: 'dm-unit', text: '$unit' }
+								]
+							},
+							{ class: 'dm-note', text: '$note' }
+						]
+					}
 				]
 			}
 		},
-		style: {},
+		style: DEMO_STYLE,
 		methods: [
 			{
 				name: 'imperial_show',

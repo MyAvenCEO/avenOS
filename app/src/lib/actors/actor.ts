@@ -52,6 +52,13 @@ export interface MethodSpec {
 	 * and the method doubles as the Prolog clause body for its `produces`.
 	 */
 	event?: { send: string }
+	/**
+	 * The human gate: a short imperative label ('Delete tasks irreversibly').
+	 * A dispatch of this entry is HELD — it executes only after a physical
+	 * button press in the HUD. Voice cannot confirm; confirming is not a
+	 * tool. UI clicks bypass the gate (a click IS the button press).
+	 */
+	hitl?: string
 }
 
 /** Per-actor model lane: which model answers as this actor, and how. */

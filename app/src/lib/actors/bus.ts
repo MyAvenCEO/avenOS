@@ -56,6 +56,15 @@ export interface TraceEntry {
 
 let traceSeq = 0
 
+/** One message waiting for a human button press — the universal HITL unit. */
+export interface HeldMessage {
+	id: string
+	actor: string
+	method: string
+	label: string
+	detail: string
+}
+
 export class MessageBus {
 	#actors = new Map<string, Actor>()
 	/**
@@ -403,13 +412,55 @@ export class MessageBus {
 			const record = JSON.stringify({ ok: false, error: `unknown tool ${method}` })
 			return Promise.resolve({ record, wire: `unknown tool ${method}` })
 		}
-		return this.send({
+		const envelope = {
 			id: `env_${nextEnvelope++}`,
 			from,
 			to: owner.uuid,
 			method,
 			payload: routed ? rest : payload
-		})
+		}
+		// The human gate (universal HITL): a declared `hitl` entry is HELD —
+		// the message exists, but only a physical button press releases it.
+		// Confirming is NOT a tool; voice cannot do it.
+		const spec = owner.manifest.methods.find((m) => m.name === method)
+		if (spec?.hitl && this.onHold) {
+			const id = `held_${nextEnvelope++}`
+			this.#held.set(id, () => this.send(envelope))
+			this.onHold({
+				id,
+				actor: owner.instanceName,
+				method,
+				label: spec.hitl,
+				detail: JSON.stringify(envelope.payload)
+			})
+			return Promise.resolve({
+				record: JSON.stringify({ ok: true, held: id, confirmation: 'required' }),
+				wire:
+					`${spec.hitl} — held for the human. A button press in the HUD confirms; ` +
+					'voice cannot confirm. Tell the user to press Confirm or Reject.'
+			})
+		}
+		return this.send(envelope)
+	}
+
+	/** Held messages: the queue behind the one HITL bar. */
+	#held = new Map<string, () => Promise<HandlerResult>>()
+	onHold?: (held: HeldMessage) => void
+	onHeldResolved?: (id: string) => void
+
+	async confirmHeld(id: string): Promise<HandlerResult> {
+		const run = this.#held.get(id)
+		this.#held.delete(id)
+		this.onHeldResolved?.(id)
+		if (!run) {
+			return { record: JSON.stringify({ ok: false, error: 'nothing held' }), wire: 'nothing held' }
+		}
+		return await run()
+	}
+
+	rejectHeld(id: string): void {
+		this.#held.delete(id)
+		this.onHeldResolved?.(id)
 	}
 
 	/**

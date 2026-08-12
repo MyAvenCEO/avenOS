@@ -150,7 +150,8 @@ const REGISTRY_MANIFEST: Manifest = {
 				},
 				required: ['to']
 			},
-			event: { send: 'DISPOSE' }
+			event: { send: 'DISPOSE' },
+			hitl: 'Dispose this instance'
 		}
 	]
 }

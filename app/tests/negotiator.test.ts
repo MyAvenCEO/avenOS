@@ -82,8 +82,12 @@ describe('negotiator (0131): interview, gate, bridge, export', () => {
 	test('approve registers the bridge and the prover walks producer → proxy', async () => {
 		const { bus } = mesh()
 		await bus.dispatch('test', 'negotiate', { from: 'metric', to: 'imperial-display' })
-		const approved = await bus.dispatch('test', 'negotiator_approve', {})
-		const record = JSON.parse(approved.record) as {
+		// approval is BUTTON-ONLY: no tool exists — the HUD button applies the event
+		expect(bus.toolSpecs().some((t) => t.name === 'negotiator_approve')).toBe(false)
+		const negotiator = bus.get('negotiator')
+		// biome-ignore lint/style/noNonNullAssertion: registered in mesh()
+		const approvedOutcome = await negotiator!.applyEvent({ send: 'APPROVE' })
+		const record = approvedOutcome.record as {
 			ok: boolean
 			registered: { uuid: string }
 			code: string
@@ -105,12 +109,14 @@ describe('negotiator (0131): interview, gate, bridge, export', () => {
 	test('the translated payload reaches the consumer through an ordinary emit', async () => {
 		const { bus } = mesh()
 		await bus.dispatch('test', 'negotiate', { from: 'metric', to: 'imperial-display' })
-		await bus.dispatch('test', 'negotiator_approve', {})
+		// biome-ignore lint/style/noNonNullAssertion: registered in mesh()
+		await bus.get('negotiator')!.applyEvent({ send: 'APPROVE' })
 		const run = await bus.satisfy('imperial(I)', { km: 10 })
 		const translated = run.steps.at(-1)?.out as { miles: number }
 		await bus.emit('imperial(I)', { miles: translated.miles }, 'test')
 		const consumer = bus.get('imperial-display')
-		expect(consumer?.state.miles).toBeCloseTo(6.21, 1)
+		expect(consumer?.state.display).toBe('6.21')
+		expect(consumer?.state.unit).toBe('mi')
 	})
 
 	test('direction does not matter — the pair is oriented by its contracts', async () => {
@@ -129,10 +135,12 @@ describe('negotiator (0131): interview, gate, bridge, export', () => {
 	test('reject discards the draft; approve afterwards fails structured', async () => {
 		const { bus } = mesh()
 		await bus.dispatch('test', 'negotiate', { from: 'metric', to: 'imperial-display' })
-		const rejected = await bus.dispatch('test', 'negotiator_reject', {})
-		expect((JSON.parse(rejected.record) as { ok: boolean }).ok).toBe(true)
-		const approved = await bus.dispatch('test', 'negotiator_approve', {})
-		expect((JSON.parse(approved.record) as { ok: boolean }).ok).toBe(false)
+		// biome-ignore lint/style/noNonNullAssertion: registered in mesh()
+		const negotiator = bus.get('negotiator')!
+		const rejected = await negotiator.applyEvent({ send: 'REJECT' })
+		expect((rejected.record as { ok: boolean }).ok).toBe(true)
+		const approved = await negotiator.applyEvent({ send: 'APPROVE' })
+		expect((approved.record as { ok: boolean }).ok).toBe(false)
 		expect(bus.get('metric-imperial-proxy')).toBeUndefined()
 	})
 
@@ -143,8 +151,9 @@ describe('negotiator (0131): interview, gate, bridge, export', () => {
 			to: 'imperial-display'
 		})
 		expect((JSON.parse(result.record) as { ok: boolean }).ok).toBe(false)
-		const approved = await bus.dispatch('test', 'negotiator_approve', {})
-		expect((JSON.parse(approved.record) as { ok: boolean }).ok).toBe(false)
+		// biome-ignore lint/style/noNonNullAssertion: registered in mesh()
+		const approved = await bus.get('negotiator')!.applyEvent({ send: 'APPROVE' })
+		expect((approved.record as { ok: boolean }).ok).toBe(false)
 	})
 
 	test('unknown actors and contract-less pairs fail structured', async () => {
@@ -157,5 +166,124 @@ describe('negotiator (0131): interview, gate, bridge, export', () => {
 			to: 'imperial-display'
 		})
 		expect((JSON.parse(contractless.record) as { ok: boolean }).ok).toBe(false)
+	})
+})
+
+describe('the human gate (universal HITL): held messages resolve by button only', () => {
+	test('a hitl entry is HELD on dispatch; confirm executes, voice cannot', async () => {
+		const bus = new MessageBus()
+		const heldSeen: string[] = []
+		bus.onHold = (h) => heldSeen.push(h.id)
+		bus.register(
+			new Actor({
+				id: 'todo',
+				name: 'Todo',
+				description: 'Keeps todos.',
+				tags: [],
+				logic: `
+					function initState() { return { items: ['a', 'b'] } }
+					function reduce(state, ev) {
+						if (ev.send === 'DELETE') {
+							return { state: { items: [] }, said: 'deleted all', record: { ok: true } }
+						}
+						return state
+					}
+					function shape() { return null }
+				`,
+				methods: [
+					{
+						name: 'todo_delete',
+						description: 'Deletes everything.',
+						parameters: { type: 'object', properties: {} },
+						event: { send: 'DELETE' },
+						hitl: 'Delete everything irreversibly'
+					}
+				]
+			})
+		)
+		const held = await bus.dispatch('chat', 'todo_delete', {})
+		const heldRecord = JSON.parse(held.record) as { ok: boolean; held: string }
+		expect(heldRecord.held).toBe(heldSeen[0])
+		expect(held.wire).toContain('voice cannot confirm')
+		// NOT executed yet (a no-op event awaits the boot and reads the state)
+		// biome-ignore lint/style/noNonNullAssertion: registered above
+		const before = await bus.get('todo')!.applyEvent({ send: 'NOOP' })
+		expect(before.state.items).toEqual(['a', 'b'])
+		// there is no confirm tool the model could call
+		expect(bus.toolSpecs().some((t) => t.name.includes('confirm'))).toBe(false)
+		// the button press executes the held message
+		const result = await bus.confirmHeld(heldRecord.held)
+		expect(result.wire).toBe('deleted all')
+		expect(bus.get('todo')?.state.items).toEqual([])
+	})
+
+	test('reject drops the held message; a second confirm finds nothing', async () => {
+		const bus = new MessageBus()
+		bus.onHold = () => {}
+		bus.register(
+			new Actor({
+				id: 'todo',
+				name: 'Todo',
+				description: 'Keeps todos.',
+				tags: [],
+				logic: `
+					function initState() { return { items: ['a'] } }
+					function reduce(state, ev) {
+						if (ev.send === 'DELETE') return { state: { items: [] }, said: 'gone', record: { ok: true } }
+						return state
+					}
+					function shape() { return null }
+				`,
+				methods: [
+					{
+						name: 'todo_delete',
+						description: 'Deletes everything.',
+						parameters: { type: 'object', properties: {} },
+						event: { send: 'DELETE' },
+						hitl: 'Delete everything'
+					}
+				]
+			})
+		)
+		const held = await bus.dispatch('chat', 'todo_delete', {})
+		const id = (JSON.parse(held.record) as { held: string }).held
+		bus.rejectHeld(id)
+		// biome-ignore lint/style/noNonNullAssertion: registered above
+		const after = await bus.get('todo')!.applyEvent({ send: 'NOOP' })
+		expect(after.state.items).toEqual(['a'])
+		const nothing = await bus.confirmHeld(id)
+		expect((JSON.parse(nothing.record) as { ok: boolean }).ok).toBe(false)
+	})
+
+	test('without a HUD (no onHold), the gate stays open for tests — no silent loss', async () => {
+		const bus = new MessageBus()
+		bus.register(
+			new Actor({
+				id: 'todo',
+				name: 'Todo',
+				description: 'Keeps todos.',
+				tags: [],
+				logic: `
+					function initState() { return { items: ['a'] } }
+					function reduce(state, ev) {
+						if (ev.send === 'DELETE') return { state: { items: [] }, said: 'gone', record: { ok: true } }
+						return state
+					}
+					function shape() { return null }
+				`,
+				methods: [
+					{
+						name: 'todo_delete',
+						description: 'Deletes everything.',
+						parameters: { type: 'object', properties: {} },
+						event: { send: 'DELETE' },
+						hitl: 'Delete everything'
+					}
+				]
+			})
+		)
+		// headless: no HUD wired — the dispatch executes directly (tests, scripts)
+		const result = await bus.dispatch('chat', 'todo_delete', {})
+		expect(result.wire).toBe('gone')
 	})
 })

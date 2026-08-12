@@ -58,8 +58,12 @@ const SYSTEM_PROMPT =
 	'instance is meant. dispose removes a spawned instance on explicit request. ' +
 	'When two actors cannot understand each other (vocabulary mismatch), call ' +
 	'negotiate with from=<producer> and to=<consumer> — a translator proxy is ' +
-	'drafted and shown in the Negotiator window; it runs only after the human ' +
-	'approves (negotiator_approve) and can be discarded (negotiator_reject). ' +
+	'drafted and shown in the Negotiator window; approval happens ONLY by a ' +
+	'button press — there is no approve tool, so never claim you approved. ' +
+	'Destructive actions (deleting tasks, disposing instances) are HELD the ' +
+	'same way: the call returns held=..., a bar appears for the human, and ' +
+	'only their button press executes it. Say that you have prepared it and ' +
+	'the user must press Confirm. ' +
 	'Messages come from speech recognition and are sometimes cut off ' +
 	'mid-sentence. If a message reads like the continuation of the previous ' +
 	'one, treat both together as one request. ' +

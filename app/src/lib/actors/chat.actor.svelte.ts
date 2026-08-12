@@ -9,6 +9,7 @@ import { LlmActor } from './llm.actor'
 import { NegotiatorActor } from './negotiator.actor'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
+import { isWindow } from './window.actor.svelte'
 import { WorkItemsActor, workItems } from './workitems.svelte'
 
 /**
@@ -96,6 +97,21 @@ export class ChatActor extends Actor {
 						return result
 					}
 					const result = await bus.dispatch('chat', name, payload)
+					// A drafted bridge takes the stage: the review gate must be SEEN,
+					// not hunted for — same single-active rule as every window.
+					if (name === 'negotiate') {
+						try {
+							if ((JSON.parse(result.record) as { ok?: boolean }).ok) {
+								for (const other of bus.actors()) {
+									if (isWindow(other)) other.open = false
+								}
+								const gate = bus.get('negotiator-window')
+								if (gate && isWindow(gate)) gate.open = true
+							}
+						} catch {
+							// unreadable result stages nothing
+						}
+					}
 					activity.show(summarizeCall(name, result.record))
 					return result
 				}
