@@ -1634,6 +1634,8 @@ const hitlPosteingang: Recipe = {
 	]
 }
 
+import { intentsTriage } from './intents-config'
+
 export const recipes: Recipe[] = [
 	inboxTriage,
 	belegeExtrahieren,
@@ -1643,5 +1645,6 @@ export const recipes: Recipe[] = [
 	buchungsvorgang,
 	datevExport,
 	hitlPosteingang,
-	hitlWhitelist
+	hitlWhitelist,
+	intentsTriage
 ]

@@ -30,6 +30,8 @@ export interface Skill {
 	provides: string[]
 }
 
+import { intentsSkill } from './intents-config'
+
 export const skills: Skill[] = [
 	{
 		id: 'inbox',
@@ -60,5 +62,6 @@ export const skills: Skill[] = [
 		entry: 'hitl-posteingang',
 		accepts: ['freigabe', 'fehler', 'unklar'],
 		provides: ['entscheidung', 'actor-caps']
-	}
+	},
+	intentsSkill
 ]
