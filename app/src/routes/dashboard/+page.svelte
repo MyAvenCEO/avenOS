@@ -10,7 +10,8 @@ import { registryTick } from '$lib/actors/reactivity.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import { isWindow } from '$lib/actors/window.actor.svelte'
 import { windowsBound } from '$lib/actors/windows'
-import { workItems } from '$lib/actors/workitems.svelte'
+import FibuExplorer from '$lib/fibu/FibuExplorer.svelte'
+import RecipeFlow from '$lib/fibu/RecipeFlow.svelte'
 
 /**
  * Dashboard — a chat against RedPill's confidential Gemma
@@ -37,7 +38,10 @@ const listener = listenerActor.core
  * gets asked for. The view is the default because the workspace is the
  * point.
  */
-let tab = $state<'views' | 'actors' | 'chat'>('views')
+let tab = $state<'views' | 'actors' | 'chat' | 'fibu' | 'skills'>('views')
+
+/** The workspaces that want the whole window rather than reading width. */
+const wide = $derived(tab === 'fibu' || tab === 'skills')
 
 /**
  * Voice is the default, except where there is no voice.
@@ -172,11 +176,19 @@ $effect(() => {
 	<title>Dashboard · avenOS</title>
 </svelte:head>
 
-<main class="mx-auto flex min-h-0 min-w-0 max-w-6xl flex-1 flex-col gap-4 p-4 pb-2 sm:p-6 sm:pb-3">
+<!-- Buchhaltung und Skills sind Arbeitsflächen im Inbox-Layout und bekommen
+     die volle Fensterbreite; die übrigen Tabs bleiben auf Lesebreite zentriert.
+     Ein einziges 8px-Raster (gap-2/p-2) trägt alle Abstände: Fensterkante →
+     Tabs → Fläche → Voice-Panel → Fensterkante. -->
+<main
+	class="mx-auto flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2 {wide
+		? 'w-full max-w-none'
+		: 'max-w-6xl'}"
+>
 	<header class="flex flex-col items-center">
 		<!-- Compact tabs, centred: the skills workspace and the conversation. -->
 		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
-			{#each [{ id: 'views' as const, label: 'Views' }, { id: 'actors' as const, label: 'Actors' }, { id: 'chat' as const, label: 'Chat' }] as t (t.id)}
+			{#each [{ id: 'views' as const, label: 'Views' }, { id: 'actors' as const, label: 'Actors' }, { id: 'chat' as const, label: 'Chat' }, { id: 'fibu' as const, label: 'Buchhaltung' }, { id: 'skills' as const, label: 'Skills' }] as t (t.id)}
 				<button
 					type="button"
 					onclick={() => {
@@ -292,6 +304,19 @@ $effect(() => {
 				{/if}
 			</div>
 		</div>
+	{:else if tab === 'fibu'}
+		<!-- FiBu, hardcoded and read-only (board 0131): the lowest booking
+		     primitive — Rechnungsposition → Buchungszeilen — over mock data,
+		     deliberately outside the actor/vibe world. -->
+		<div class="flex min-h-0 w-full flex-1 flex-col">
+			<FibuExplorer />
+		</div>
+	{:else if tab === 'skills'}
+		<!-- The skill library (board 0132): flows as JSON configs on a canvas,
+		     grouped by the skills that bring them. No engine — declarations. -->
+		<div class="flex min-h-0 w-full flex-1 flex-col">
+			<RecipeFlow />
+		</div>
 	{:else if tab === 'actors'}
 		<!-- The actor explorer: everything the registry knows about every actor,
 		     template and instance kept as the two concepts they are. -->
@@ -346,55 +371,59 @@ $effect(() => {
 	     bottom-aligned in it, so the toast hugs the panel it belongs to. The
 	     toast carries the content, so it keeps the full width; in voice mode the
 	     panel below it narrows instead, holding only a status word and two
-	     buttons. -->
-	<div class="mx-auto flex min-h-16 w-full max-w-lg items-end justify-center">
-		{#if listener.partial !== '' && tab !== 'chat'}
-			<!-- What is being heard, as it is being heard — the live recognizer
+	     buttons. The FiBu workspace drops the strip entirely — the inbox layout
+	     wants every pixel of height, and even an empty flex child would double
+	     the gap between the view and the panel. -->
+	{#if !wide}
+		<div class="mx-auto flex min-h-16 w-full max-w-lg items-end justify-center">
+			{#if listener.partial !== '' && tab !== 'chat'}
+				<!-- What is being heard, as it is being heard — the live recognizer
 			     output, so you can watch your words arrive while the list view is
 			     open. Dashed like the transcript's own pending bubble. -->
-			<div
-				class="w-full rounded-xl border border-border border-dashed bg-surface-card px-4 py-3 text-xs opacity-70"
-			>
-				{listener.partial}
-			</div>
-		{:else if activity.current}
-			{@const entry = activity.current}
-			<div
-				class="flex w-full gap-2 rounded-xl border border-border bg-surface-card px-4 py-3 text-xs"
-			>
-				<span
-					class="w-3 shrink-0 text-center font-mono"
-					class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
-					class:text-status-working={entry.kind === 'doing'}
-					class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
-					class:opacity-30={entry.kind === 'read' ||
+				<div
+					class="w-full rounded-xl border border-border border-dashed bg-surface-card px-4 py-3 text-xs opacity-70"
+				>
+					{listener.partial}
+				</div>
+			{:else if activity.current}
+				{@const entry = activity.current}
+				<div
+					class="flex w-full gap-2 rounded-xl border border-border bg-surface-card px-4 py-3 text-xs"
+				>
+					<span
+						class="w-3 shrink-0 text-center font-mono"
+						class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
+						class:text-status-working={entry.kind === 'doing'}
+						class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
+						class:opacity-30={entry.kind === 'read' ||
 						entry.kind === 'reopened' ||
 						entry.kind === 'renamed'}
-				>
-					{ACTIVITY_LABELS[entry.kind].mark}
-				</span>
-				<div class="min-w-0 flex-1">
-					<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
-					{#if entry.titles.length > 0}
-						<!-- One per line. Run together with separators, five items became
+					>
+						{ACTIVITY_LABELS[entry.kind].mark}
+					</span>
+					<div class="min-w-0 flex-1">
+						<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
+						{#if entry.titles.length > 0}
+							<!-- One per line. Run together with separators, five items became
 						     a sentence that ran off the edge and told you nothing. -->
-						<ul class="pt-0.5">
-							{#each entry.titles as title (title)}
-								<li class="leading-relaxed">{title}</li>
-							{/each}
-						</ul>
-					{:else if entry.note}
-						<span class="opacity-40">· {entry.note}</span>
-					{/if}
+							<ul class="pt-0.5">
+								{#each entry.titles as title (title)}
+									<li class="leading-relaxed">{title}</li>
+								{/each}
+							</ul>
+						{:else if entry.note}
+							<span class="opacity-40">· {entry.note}</span>
+						{/if}
+					</div>
 				</div>
-			</div>
-		{/if}
-	</div>
+			{/if}
+		</div>
+	{/if}
 
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 	<div
-		class="mx-auto -mt-2 w-full rounded-full bg-primary py-2.5 pr-2.5 pl-5 text-primary-foreground {typing
+		class="mx-auto w-full rounded-full bg-primary py-2.5 pr-2.5 pl-5 text-primary-foreground {typing
 			? 'max-w-lg'
 			: 'max-w-72'}"
 		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"

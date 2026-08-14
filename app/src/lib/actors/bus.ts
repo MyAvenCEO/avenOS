@@ -9,7 +9,7 @@ import {
 	manifestProse
 } from './actor'
 import { singleton } from './singleton'
-import { type Bindings, rename, resolve, unifiable, unify } from './term'
+import { type Bindings, rename, unifiable, unify } from './term'
 
 /**
  * The substrate: every message between any two parties flows here.
