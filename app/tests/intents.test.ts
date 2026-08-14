@@ -60,30 +60,49 @@ describe('intents: die kleinste Triage', () => {
 		})
 	})
 
-	test('Todo und Unbekanntes landen bei einem Menschen IM Flow, nicht im HITL-Skill', () => {
-		for (const [branch, gate] of [
-			['todo', 'todo-bestaetigen'],
-			['unbekannt', 'unklares-einordnen']
-		]) {
-			const target = intentsTriage.edges.find((e) => e.from === 'weiche' && e.fromPort === branch)
-			expect(target?.to).toBe(gate)
-			expect(node(gate)?.kind).toBe('hitl')
-			expect(node(gate)?.transform.type).toBe('hitl:inline')
-			// Absente Autonomie heißt: beaufsichtigt. Ein Gate entscheidet nie selbst.
-			expect(node(gate)?.autonomie).toBeUndefined()
-		}
-		// Das Todo zählt erst, wenn ein Mensch es übernimmt.
-		expect(node('todo-bestaetigen')?.transform.config.aktionen).toContain('übernehmen')
+	test('Todo läuft ohne Rückfrage durch — auf eine Liste, nicht an ein Gate', () => {
+		const ziel = intentsTriage.edges.find((e) => e.from === 'weiche' && e.fromPort === 'todo')
+		expect(ziel?.to).toBe('als-todo-anlegen')
+		expect(node('als-todo-anlegen')?.kind).toBe('transform')
+		expect(node('als-todo-anlegen')?.transform.type).toBe('list:append')
+		// Dieselbe Mechanik wie bei der Idee, nur eine andere Liste: ein Todo
+		// ist keine Entscheidung, sondern ein Eintrag.
+		expect(node('als-todo-anlegen')?.transform.config.liste).toBe('todo-liste')
+		expect(node('out-todos')?.transform.type).toBe('sink:list')
+		// Und es gibt kein Gate mehr, das ein Todo aufhielte.
+		expect(intentsTriage.nodes.some((n) => n.id === 'todo-bestaetigen')).toBe(false)
+		expect(intentsSkill.provides).toContain('todo')
+	})
+
+	test('nur das Unklare geht an einen Menschen IM Flow, nicht in den HITL-Skill', () => {
+		const ziel = intentsTriage.edges.find((e) => e.from === 'weiche' && e.fromPort === 'unbekannt')
+		expect(ziel?.to).toBe('unklares-einordnen')
+		expect(node('unklares-einordnen')?.kind).toBe('hitl')
+		expect(node('unklares-einordnen')?.transform.type).toBe('hitl:inline')
+		// Absente Autonomie heißt: beaufsichtigt. Ein Gate entscheidet nie selbst.
+		expect(node('unklares-einordnen')?.autonomie).toBeUndefined()
+		// Es ist das EINZIGE Gate des Flows.
+		expect(intentsTriage.nodes.filter((n) => n.kind === 'hitl')).toHaveLength(1)
 		// Die Vereinfachung ausdrücklich: keine Skill-Grenze, kein handoff.
 		expect(intentsTriage.nodes.some((n) => n.kind === 'handoff')).toBe(false)
 		expect(intentsSkill.provides).not.toContain('unklar')
 	})
 
-	test('beide Gates münden in EINEN Ausgang, und der Port ist ein Entweder-oder', () => {
-		const out = node('out-erledigt')
-		const feeding = intentsTriage.edges.filter((e) => e.to === 'out-erledigt')
-		expect(feeding.length).toBe(2)
-		expect(out?.inputs.find((p) => p.name === 'erledigt')?.mode).toBe('any')
+	test('jeder Zweig endet in einem Ausgang — kein Zweig verläuft im Sand', () => {
+		const ausgaenge = new Set(
+			intentsTriage.nodes.filter((n) => n.kind === 'output').map((n) => n.id)
+		)
+		expect(ausgaenge).toEqual(new Set(['out-board', 'out-todos', 'out-erledigt']))
+		for (const port of ['idee', 'todo', 'unbekannt']) {
+			// Ein Schritt hinter der Weiche, dann der Ausgang.
+			const mitte = intentsTriage.edges.find((e) => e.from === 'weiche' && e.fromPort === port)?.to
+			const danach = intentsTriage.edges.find((e) => e.from === mitte)?.to
+			expect(ausgaenge.has(String(danach))).toBe(true)
+		}
+		// Der Entscheidungs-Ausgang bleibt ein Entweder-oder, auch mit nur
+		// noch einem Gate davor: der Port ist eine Aussage über den Ausgang,
+		// nicht über die Zahl seiner Zuflüsse.
+		expect(node('out-erledigt')?.inputs.find((p) => p.name === 'erledigt')?.mode).toBe('any')
 	})
 
 	test('flach und blattständig: ein Flow, kein Subflow, keine Verschachtelung', () => {

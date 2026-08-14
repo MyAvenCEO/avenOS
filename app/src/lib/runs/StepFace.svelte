@@ -3,7 +3,7 @@ import { AvenUiEngine } from '@avenos/aven-ui'
 import { onDestroy } from 'svelte'
 import type { RecipeNodeConfig } from '../fibu/recipe-config'
 import type { FlowRun } from './mock-runs'
-import { faceFor, faceState } from './step-faces'
+import { faceFor, faceState, type Halt } from './step-faces'
 
 /**
  * Der Host für ein Schritt-Gesicht: mountet den ViewDef durch DIESELBE
@@ -16,22 +16,21 @@ import { faceFor, faceState } from './step-faces'
  * darin täten nichts, also nimmt es gar keine erst entgegen.
  */
 
-// `zustand` statt `state`: eine Variable dieses Namens im Scope macht die
-// $state-Rune mehrdeutig — Svelte liest sie sonst als Store-Zugriff.
 const {
 	node,
-	zustand,
-	ergebnis,
-	run
+	halt,
+	run,
+	ziele = {}
 }: {
 	node: RecipeNodeConfig
-	zustand: 'done' | 'current' | 'pending'
-	ergebnis?: string
+	halt: Halt
 	run: FlowRun
+	/** Port → Name des Zielknotens, aus den Kanten des Rezepts. */
+	ziele?: Record<string, string>
 } = $props()
 
 const face = $derived(faceFor(node))
-const daten = $derived(faceState(node, run, zustand, ergebnis))
+const daten = $derived(faceState(node, run, halt, ziele))
 
 let engine: AvenUiEngine | null = null
 let host = $state<HTMLElement | null>(null)

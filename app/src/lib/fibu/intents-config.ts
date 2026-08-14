@@ -55,6 +55,9 @@ export const intentsTriage: Recipe = {
 				type: 'llm:classify',
 				config: {
 					klassen: ['idee', 'todo', 'unbekannt'],
+					// Unter der Schwelle wird nicht geraten, sondern zurückgefallen —
+					// dieselbe Regel wie in der Beleg-Triage, nur andere Klassen.
+					schwelle: 0.6,
 					fallback: 'unbekannt',
 					ausgabe: { intent: 'klasse', notiz: 'unverändert' }
 				}
@@ -93,7 +96,7 @@ export const intentsTriage: Recipe = {
 					nach: 'intent',
 					zweige: {
 						idee: 'Etwas, das man bauen oder verfolgen könnte.',
-						todo: 'Etwas, das getan werden muss — gegengezeichnet von einem Menschen, bevor es zählt.',
+						todo: 'Etwas, das getan werden muss — kommt ohne Rückfrage auf die Todo-Liste.',
 						unbekannt: 'Alles Übrige — bewusst kein vierter Zweig, sondern der Auffangzweig.'
 					}
 				}
@@ -152,22 +155,44 @@ export const intentsTriage: Recipe = {
 			outputs: []
 		},
 		{
-			id: 'todo-bestaetigen',
-			kind: 'hitl',
-			name: 'Todo bestätigen',
+			id: 'als-todo-anlegen',
+			kind: 'transform',
+			name: 'Als Todo anlegen',
 			description:
-				'Der Mensch im Flow: das erkannte Todo steht mit seiner Notiz auf einer Karte und zählt erst, wenn es jemand übernimmt. Nichts läuft hier von allein weiter.',
+				'Dasselbe wie bei der Idee, nur in die andere Liste: aus der Notiz wird ein Eintrag. Ein Todo braucht keine Gegenzeichnung — es steht auf der Liste, und wer es erledigt, hakt es dort ab.',
 			transform: {
-				type: 'hitl:inline',
+				type: 'list:append',
 				config: {
-					rolle: 'ich',
-					karte: ['notiz', 'todo'],
-					aktionen: ['übernehmen', 'verschieben', 'verwerfen'],
-					warteschlange: 'im-flow'
+					liste: 'todo-liste',
+					felder: ['titel', 'notiz', 'erfasst'],
+					idempotent_ueber: 'notiz-id'
 				}
 			},
+			autonomie: {
+				modus: 'auto',
+				freigabe: {
+					durch: 'system',
+					seit: '2026-08-14',
+					nachweis:
+						'Anhängen an eine Liste, idempotent über die Notiz-Id — ein falsch gelandetes Todo ist auf der Liste sofort sichtbar und in einem Klick wieder weg.'
+				},
+				fehler: 'retry'
+			},
 			inputs: [{ name: 'todo' }],
-			outputs: [{ name: 'erledigt' }]
+			outputs: [{ name: 'eintrag' }]
+		},
+		{
+			id: 'out-todos',
+			kind: 'output',
+			name: 'Todo-Liste',
+			description:
+				'Was zu tun ist, an einem Ort — ohne Zwischenschritt, ohne Warteschlange. Die Entscheidung fällt beim Abhaken, nicht bei der Aufnahme.',
+			transform: {
+				type: 'sink:list',
+				config: { liste: 'todo-liste', ansicht: 'liste', sortierung: 'erfasst-absteigend' }
+			},
+			inputs: [{ name: 'eintrag' }],
+			outputs: []
 		},
 		{
 			id: 'unklares-einordnen',
@@ -192,7 +217,7 @@ export const intentsTriage: Recipe = {
 			kind: 'output',
 			name: 'Vom Menschen erledigt',
 			description:
-				'Der gemeinsame Ausgang beider Gates. Der Port ist ein Entweder-oder: pro Notiz kommt genau eine Entscheidung an, nie zwei.',
+				'Der Ausgang des Auffangzweigs: hier landet, was ein Mensch von Hand entschieden hat. Der Port bleibt ein Entweder-oder — pro Notiz kommt genau eine Entscheidung an, nie zwei.',
 			transform: {
 				type: 'sink:log',
 				config: { protokoll: 'intents-entscheidungen', felder: ['notiz', 'aktion', 'wer', 'wann'] }
@@ -212,7 +237,7 @@ export const intentsTriage: Recipe = {
 			to: 'out-board',
 			toPort: 'eintrag'
 		},
-		{ id: 'it5', from: 'weiche', fromPort: 'todo', to: 'todo-bestaetigen', toPort: 'todo' },
+		{ id: 'it5', from: 'weiche', fromPort: 'todo', to: 'als-todo-anlegen', toPort: 'todo' },
 		{
 			id: 'it6',
 			from: 'weiche',
@@ -222,10 +247,10 @@ export const intentsTriage: Recipe = {
 		},
 		{
 			id: 'it7',
-			from: 'todo-bestaetigen',
-			fromPort: 'erledigt',
-			to: 'out-erledigt',
-			toPort: 'erledigt'
+			from: 'als-todo-anlegen',
+			fromPort: 'eintrag',
+			to: 'out-todos',
+			toPort: 'eintrag'
 		},
 		{
 			id: 'it8',
@@ -241,9 +266,9 @@ export const intentsSkill: Skill = {
 	id: 'intents',
 	name: 'Intents',
 	description:
-		'Der kleinste Triage-Skill: Notizen rein, ein Etikett drauf — Idee, Todo oder Unbekanntes. Ideen landen auf dem Ideen-Board, Todos und Unklares gehen an einen Menschen, der im Flow selbst sitzt. Ein Flow, keine Subflows, keine Skill-Grenze: das Modell auf seiner kleinsten sinnvollen Stufe.',
+		'Der kleinste Triage-Skill: Notizen rein, ein Etikett drauf — Idee, Todo oder Unbekanntes. Ideen landen auf dem Ideen-Board, Todos auf der Todo-Liste, und nur das Unklare geht an einen Menschen, der im Flow selbst sitzt. Ein Flow, keine Subflows, keine Skill-Grenze: das Modell auf seiner kleinsten sinnvollen Stufe.',
 	flows: ['intents-triage'],
 	entry: 'intents-triage',
 	accepts: ['notiz'],
-	provides: ['idee']
+	provides: ['idee', 'todo']
 }

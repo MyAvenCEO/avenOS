@@ -2,6 +2,7 @@
 import { type RecipeNodeConfig, recipes } from '../fibu/recipe-config'
 import { type FlowRun, runs } from './mock-runs'
 import StepFace from './StepFace.svelte'
+import type { Halt } from './step-faces'
 
 /**
  * Der Prozess-Betrachter: EIN Viewer für die Läufe ALLER Flows.
@@ -36,14 +37,9 @@ const recipeOf = (id: string) => recipes.find((r) => r.id === id)
 const recipe = $derived(recipeOf(selected.flow))
 const nodeOf = (id: string): RecipeNodeConfig | undefined => recipe?.nodes.find((n) => n.id === id)
 
-type StepState = 'done' | 'current' | 'pending'
-interface Stufe {
-	node: string
-	state: StepState
-	um?: string
-	ergebnis?: string
-	port?: string
-}
+type StepState = Halt['state']
+/** Ein Halt plus seine Knoten-Id — genau das, was das Gesicht braucht. */
+type Stufe = Halt & { node: string }
 
 /** Der Weg als Kette: Erledigtes, die Position, das Bevorstehende. */
 const stufen = $derived<Stufe[]>([
@@ -51,7 +47,8 @@ const stufen = $derived<Stufe[]>([
 		node: s.node,
 		state: 'done' as const,
 		um: s.um,
-		ergebnis: s.ergebnis
+		ergebnis: s.ergebnis,
+		guete: s.guete
 	})),
 	{ node: selected.bei, state: 'current' as const },
 	...(recipe?.edges ?? [])
@@ -66,6 +63,19 @@ const aktiv = $derived(
 		stufen[0]
 )
 const knoten = $derived(nodeOf(aktiv?.node ?? ''))
+
+/**
+ * Wohin die Ausgänge des gezeigten Schritts führen — aus den Kanten, mit
+ * dem Namen des Zielknotens. Ein Rezept muss seine Zweige nicht
+ * beschriften; dann beschriftet sie ihr Ziel.
+ */
+const ziele = $derived(
+	Object.fromEntries(
+		(recipe?.edges ?? [])
+			.filter((e) => e.from === aktiv?.node && e.fromPort)
+			.map((e) => [e.fromPort, nodeOf(e.to)?.name ?? e.to])
+	)
+)
 
 /** Läufe nach Flow gruppiert: die Aside zeigt, dass es mehrere sind. */
 const gruppen = $derived(
@@ -83,16 +93,6 @@ const STATUS: Record<FlowRun['status'], { label: string; klasse: string }> = {
 }
 
 const MARK: Record<StepState, string> = { done: '✓', current: '◐', pending: '○' }
-
-const KIND_LABEL: Record<string, string> = {
-	input: 'Eingang',
-	transform: 'Transformation',
-	route: 'Weiche',
-	hitl: 'Menschliches Gate',
-	subflow: 'Unterflow',
-	handoff: 'Skill-Grenze',
-	output: 'Ausgang'
-}
 
 const zeit = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' })
 
@@ -141,7 +141,6 @@ function waehle(run: FlowRun) {
 	>
 		<header class="flex flex-wrap items-baseline gap-3">
 			<h2 class="font-display font-semibold text-lg">{selected.titel}</h2>
-			<span class="font-mono text-foreground/40 text-xs">{selected.id}</span>
 			<span class="text-foreground/50 text-xs">
 				{recipe?.name ?? selected.flow}
 				· {zeit.format(new Date(selected.erfasst))}
@@ -151,82 +150,20 @@ function waehle(run: FlowRun) {
 			</span>
 		</header>
 
-		<!-- ZUERST das Gesicht: was an dieser Stelle konkret passiert, gezeigt
-		     statt beschrieben — ein ViewDef, gerendert von derselben aven-ui-
-		     Engine wie die Actor-Faces. -->
-		{#if knoten}
-			{#key `${selected.id}:${aktiv?.node}`}
-				<StepFace
-					node={knoten}
-					zustand={aktiv?.state ?? 'current'}
-					ergebnis={aktiv?.ergebnis}
-					run={selected}
-				/>
-			{/key}
-		{/if}
-
-		<!-- Danach die Einordnung des Halts: was er ist, wo er steht — die
-		     Metadaten zum Bild darüber. Was der Schritt TUT, steht im
-		     Gesicht; hier steht nur, was er IST. -->
+		<!-- NUR das Gesicht. Knotenart, transform.type, Beschreibung,
+		     Autonomie und der Gegenstand waren Innereien des Rezepts — ein
+		     Mensch will sehen, was passiert, nicht wie es verdrahtet ist. Die
+		     Technik kommt später als eigener Reiter zurück, nicht hier. -->
 		<section
-			class="rounded-2xl border p-4 {aktiv?.state === 'pending'
-				? 'border-border border-dashed'
+			class="rounded-2xl border p-5 {aktiv?.state === 'pending'
+				? 'border-border border-dashed bg-surface-card/40'
 				: 'border-border bg-surface-card'}"
 		>
-			<div class="flex flex-wrap items-baseline gap-2 pb-2">
-				<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-					{KIND_LABEL[knoten?.kind ?? ''] ?? 'Schritt'}
-					· {knoten?.name ?? aktiv?.node}
-				</h3>
-				<span class="font-mono text-[0.625rem] text-foreground/35">{knoten?.transform.type}</span>
-				<span
-					class="ml-auto font-mono text-[0.625rem] {aktiv?.state === 'done'
-						? 'text-status-success'
-						: aktiv?.state === 'current'
-							? 'text-primary'
-							: 'text-foreground/35'}"
-				>
-					{aktiv?.state === 'done'
-						? `abgeschlossen ${aktiv.um ?? ''}`
-						: aktiv?.state === 'current'
-							? 'hier steht der Lauf'
-							: `steht bevor · über Port „${aktiv?.port}"`}
-				</span>
-			</div>
-
-			<p class="text-sm leading-relaxed">{knoten?.description}</p>
-
-			{#if aktiv?.state === 'done' && aktiv.ergebnis}
-				<p class="pt-3 text-sm">
-					<span class="pr-2 font-mono text-foreground/40 text-xs">Ergebnis</span>
-					{aktiv.ergebnis}
-				</p>
+			{#if knoten && aktiv}
+				{#key `${selected.id}:${aktiv.node}`}
+					<StepFace node={knoten} halt={aktiv} run={selected} {ziele} />
+				{/key}
 			{/if}
-
-			<!-- Die Autonomie ist die einzige Angabe, die weder im Gesicht noch
-			     im Stepper vorkommt — und die wichtigste für den Menschen:
-			     ohne Block ist der Schritt beaufsichtigt. -->
-			<p class="pt-3 font-mono text-[0.625rem] text-foreground/35">
-				{knoten?.autonomie
-					? `${knoten.autonomie.modus} · Fehler → ${knoten.autonomie.fehler}${knoten.autonomie.freigabe ? ` · freigegeben von ${knoten.autonomie.freigabe.durch}` : ''}`
-					: 'beaufsichtigt · keine Autonomie im Rezept'}
-			</p>
-		</section>
-
-		<!-- Was durch den Flow läuft: gilt für den ganzen Lauf, nicht für
-		     einen Halt — deshalb unter der Schritt-Fläche. -->
-		<section class="rounded-2xl border border-border bg-surface-card p-4">
-			<h3 class="pb-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-				Gegenstand
-			</h3>
-			<dl class="flex flex-col gap-2">
-				{#each Object.entries(selected.gegenstand) as [feld, wert] (feld)}
-					<div class="flex gap-3 text-sm">
-						<dt class="w-24 shrink-0 font-mono text-foreground/40 text-xs">{feld}</dt>
-						<dd class="min-w-0 flex-1 leading-relaxed">{wert}</dd>
-					</div>
-				{/each}
-			</dl>
 		</section>
 	</div>
 

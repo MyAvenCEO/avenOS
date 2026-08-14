@@ -27,8 +27,15 @@ export interface FlowRun {
 	status: RunStatus
 	/** Die aktuelle Position: eine Knoten-Id des Rezepts. */
 	bei: string
-	/** Der zurückgelegte Weg, in Reihenfolge — jeder Halt mit Ergebnis. */
-	weg: { node: string; um: string; ergebnis?: string }[]
+	/**
+	 * Der zurückgelegte Weg, in Reihenfolge — jeder Halt mit Ergebnis.
+	 *
+	 * `guete` trägt die Konfidenz je Klasse, wo ein Schritt einordnet: das
+	 * Rezept verlangt sie ("Konfidenz pflicht", Schwelle im Config), also
+	 * gehört sie in den Lauf und nicht in die Ansicht. Ohne sie könnte ein
+	 * Mensch nicht sehen, ob ein Urteil knapp oder klar war.
+	 */
+	weg: { node: string; um: string; ergebnis?: string; guete?: Record<string, number> }[]
 	/** Was durch den Flow läuft. Frei geformt, die Ansicht zeigt es als Kartentext. */
 	gegenstand: Record<string, string>
 }
@@ -44,7 +51,12 @@ export const runs: FlowRun[] = [
 		bei: 'out-board',
 		weg: [
 			{ node: 'in-notiz', um: '09:12' },
-			{ node: 'klassifizieren', um: '09:12', ergebnis: 'idee' },
+			{
+				node: 'klassifizieren',
+				um: '09:12',
+				ergebnis: 'idee',
+				guete: { idee: 0.88, todo: 0.07, unbekannt: 0.05 }
+			},
 			{ node: 'weiche', um: '09:12', ergebnis: 'Zweig idee' },
 			{ node: 'als-idee-anlegen', um: '09:12', ergebnis: 'Eintrag #14 angelegt' }
 		],
@@ -58,14 +70,20 @@ export const runs: FlowRun[] = [
 		id: 'r-002',
 		flow: 'intents-triage',
 		titel: 'Fibu-Ordner umbenennen',
-		kurz: 'Todo · wartet auf dich',
+		kurz: 'Todo · steht auf der Liste',
 		erfasst: '2026-08-14T10:03:00',
-		status: 'wartet',
-		bei: 'todo-bestaetigen',
+		status: 'fertig',
+		bei: 'out-todos',
 		weg: [
 			{ node: 'in-notiz', um: '10:03' },
-			{ node: 'klassifizieren', um: '10:03', ergebnis: 'todo' },
-			{ node: 'weiche', um: '10:03', ergebnis: 'Zweig todo' }
+			{
+				node: 'klassifizieren',
+				um: '10:03',
+				ergebnis: 'todo',
+				guete: { todo: 0.81, idee: 0.13, unbekannt: 0.06 }
+			},
+			{ node: 'weiche', um: '10:03', ergebnis: 'Zweig todo' },
+			{ node: 'als-todo-anlegen', um: '10:03', ergebnis: 'Eintrag #7 angelegt' }
 		],
 		gegenstand: {
 			notiz:
@@ -83,7 +101,13 @@ export const runs: FlowRun[] = [
 		bei: 'unklares-einordnen',
 		weg: [
 			{ node: 'in-notiz', um: '10:41' },
-			{ node: 'klassifizieren', um: '10:41', ergebnis: 'unbekannt (kein klares Urteil)' },
+			{
+				node: 'klassifizieren',
+				um: '10:41',
+				ergebnis: 'unbekannt (keine Klasse über der Schwelle)',
+				// Höchster Wert 0,41 — unter 0,6, also Rückfall statt Rateversuch.
+				guete: { idee: 0.41, unbekannt: 0.34, todo: 0.25 }
+			},
 			{ node: 'weiche', um: '10:41', ergebnis: 'Zweig unbekannt' }
 		],
 		gegenstand: {
@@ -100,7 +124,12 @@ export const runs: FlowRun[] = [
 		bei: 'out-board',
 		weg: [
 			{ node: 'in-notiz', um: '18:22' },
-			{ node: 'klassifizieren', um: '18:22', ergebnis: 'idee' },
+			{
+				node: 'klassifizieren',
+				um: '18:22',
+				ergebnis: 'idee',
+				guete: { idee: 0.93, todo: 0.04, unbekannt: 0.03 }
+			},
 			{ node: 'weiche', um: '18:22', ergebnis: 'Zweig idee' },
 			{ node: 'als-idee-anlegen', um: '18:22', ergebnis: 'Eintrag #11 angelegt' }
 		],
@@ -114,15 +143,22 @@ export const runs: FlowRun[] = [
 		id: 'r-005',
 		flow: 'intents-triage',
 		titel: 'Stall-Watchdog auch für die Voice-Lane',
-		kurz: 'Todo · übernommen, erledigt',
+		kurz: 'Unklar · von Hand als Todo abgelegt',
 		erfasst: '2026-08-13T16:05:00',
 		status: 'fertig',
 		bei: 'out-erledigt',
 		weg: [
 			{ node: 'in-notiz', um: '16:05' },
-			{ node: 'klassifizieren', um: '16:05', ergebnis: 'todo' },
-			{ node: 'weiche', um: '16:05', ergebnis: 'Zweig todo' },
-			{ node: 'todo-bestaetigen', um: '16:31', ergebnis: 'übernommen von Samuel' }
+			{
+				node: 'klassifizieren',
+				um: '16:05',
+				// Knapp unter der Schwelle: das Modell tendierte zu Todo, durfte
+				// aber nicht — die Klasse kam dann vom Menschen.
+				ergebnis: 'unbekannt (keine Klasse über der Schwelle)',
+				guete: { todo: 0.55, idee: 0.29, unbekannt: 0.16 }
+			},
+			{ node: 'weiche', um: '16:05', ergebnis: 'Zweig unbekannt' },
+			{ node: 'unklares-einordnen', um: '16:31', ergebnis: 'als-todo · Samuel' }
 		],
 		gegenstand: {
 			notiz:
@@ -156,8 +192,13 @@ export const runs: FlowRun[] = [
 			{ node: 'in-upload', um: '08:44' },
 			{ node: 'annehmen', um: '08:44', ergebnis: 'normalisiert' },
 			{ node: 'trennen', um: '08:45', ergebnis: '1 Vorgang' },
-			{ node: 'klassifizieren', um: '08:45', ergebnis: 'keine Klasse über Schwelle' },
-			{ node: 'triage', um: '08:45', ergebnis: 'Zweig unklar' }
+			{
+				node: 'klassifizieren',
+				um: '08:45',
+				ergebnis: 'keine Klasse über der Schwelle',
+				guete: { beleg: 0.62, transaktionen: 0.11 }
+			},
+			{ node: 'triage', um: '08:45', ergebnis: 'Zweig unbekannt' }
 		],
 		gegenstand: {
 			datei: 'scan-2026-08-12-0003.pdf',

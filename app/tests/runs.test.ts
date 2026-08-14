@@ -57,8 +57,9 @@ describe('flow runs: die Instanz-Seite hängt am Rezept', () => {
 	test('jedes Gate, an dem ein Lauf wartet, deklariert seine Aktionen im Rezept', () => {
 		for (const run of runs.filter((r) => r.status === 'wartet')) {
 			const node = byId.get(run.flow)?.nodes.find((n) => n.id === run.bei)
-			expect(Array.isArray(node?.transform.config.aktionen)).toBe(true)
-			expect((node?.transform.config.aktionen as string[]).length).toBeGreaterThan(0)
+			const aktionen = node?.transform.config.aktionen
+			expect(Array.isArray(aktionen)).toBe(true)
+			expect((aktionen as string[]).length).toBeGreaterThan(0)
 		}
 	})
 })
