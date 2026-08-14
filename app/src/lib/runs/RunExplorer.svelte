@@ -1,6 +1,7 @@
 <script lang="ts">
 import { type RecipeNodeConfig, recipes } from '../fibu/recipe-config'
 import { type FlowRun, runs } from './mock-runs'
+import StepFace from './StepFace.svelte'
 
 /**
  * Der Prozess-Betrachter: EIN Viewer für die Läufe ALLER Flows.
@@ -65,13 +66,6 @@ const aktiv = $derived(
 		stufen[0]
 )
 const knoten = $derived(nodeOf(aktiv?.node ?? ''))
-
-/** Gates deklarieren ihre Aktionen im Rezept — die Ansicht erfindet keine. */
-const aktionen = $derived(
-	Array.isArray(knoten?.transform.config.aktionen)
-		? (knoten?.transform.config.aktionen as string[])
-		: []
-)
 
 /** Läufe nach Flow gruppiert: die Aside zeigt, dass es mehrere sind. */
 const gruppen = $derived(
@@ -157,15 +151,27 @@ function waehle(run: FlowRun) {
 			</span>
 		</header>
 
-		<!-- Die Detailfläche des GEWÄHLTEN Halts: was dort geschah, geschieht
-		     oder geschehen wird — verzweigt über Zustand und Knotenart, nie
-		     über die Sorte des Gegenstands. -->
+		<!-- ZUERST das Gesicht: was an dieser Stelle konkret passiert, gezeigt
+		     statt beschrieben — ein ViewDef, gerendert von derselben aven-ui-
+		     Engine wie die Actor-Faces. -->
+		{#if knoten}
+			{#key `${selected.id}:${aktiv?.node}`}
+				<StepFace
+					node={knoten}
+					zustand={aktiv?.state ?? 'current'}
+					ergebnis={aktiv?.ergebnis}
+					run={selected}
+				/>
+			{/key}
+		{/if}
+
+		<!-- Danach die Einordnung des Halts: was er ist, wo er steht — die
+		     Metadaten zum Bild darüber. Was der Schritt TUT, steht im
+		     Gesicht; hier steht nur, was er IST. -->
 		<section
-			class="rounded-2xl border p-4 {aktiv?.state === 'current' && knoten?.kind === 'hitl'
-				? 'border-primary/40 bg-surface-cream/40'
-				: aktiv?.state === 'pending'
-					? 'border-border border-dashed'
-					: 'border-border bg-surface-card'}"
+			class="rounded-2xl border p-4 {aktiv?.state === 'pending'
+				? 'border-border border-dashed'
+				: 'border-border bg-surface-card'}"
 		>
 			<div class="flex flex-wrap items-baseline gap-2 pb-2">
 				<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
@@ -190,47 +196,21 @@ function waehle(run: FlowRun) {
 
 			<p class="text-sm leading-relaxed">{knoten?.description}</p>
 
-			{#if aktiv?.state === 'done'}
-				{#if aktiv.ergebnis}
-					<p class="pt-3 text-sm">
-						<span class="pr-2 font-mono text-foreground/40 text-xs">Ergebnis</span>
-						{aktiv.ergebnis}
-					</p>
-				{:else}
-					<p class="pt-3 text-foreground/40 text-xs">Ohne eigenes Ergebnis durchlaufen.</p>
-				{/if}
-			{:else if aktiv?.state === 'pending'}
-				<p class="pt-3 text-foreground/40 text-xs">
-					Platzhalter: noch nicht erreicht — hier käme, was dieser Schritt tun wird.
-				</p>
-			{:else if knoten?.kind === 'hitl'}
-				<div class="flex flex-wrap gap-2 pt-3">
-					{#each aktionen as a (a)}
-						<span class="rounded-full border border-border bg-surface-card px-3 py-1 text-xs">
-							{a}
-						</span>
-					{/each}
-				</div>
-				<p class="pt-3 text-foreground/40 text-xs">
-					Platzhalter: die Aktionen stehen so im Rezept — ausgeführt wird hier noch nichts.
-				</p>
-			{:else if knoten?.kind === 'output'}
-				<p class="pt-3 font-mono text-foreground/50 text-xs">
-					{JSON.stringify(knoten.transform.config)}
-				</p>
-				<p class="pt-2 text-foreground/40 text-xs">
-					Platzhalter: hier käme die Zielansicht — die Liste, das Protokoll, die Datei.
-				</p>
-			{:else if knoten?.kind === 'handoff'}
-				<p class="pt-3 text-foreground/50 text-xs">
-					Übergeben an Skill <span class="font-mono">{knoten.handoff?.skill}</span> — der Lauf endet
-					hier und wird dort zu einem neuen.
-				</p>
-			{:else}
-				<p class="pt-3 text-foreground/40 text-xs">
-					Platzhalter: läuft gerade — hier käme der Live-Zustand des Schritts.
+			{#if aktiv?.state === 'done' && aktiv.ergebnis}
+				<p class="pt-3 text-sm">
+					<span class="pr-2 font-mono text-foreground/40 text-xs">Ergebnis</span>
+					{aktiv.ergebnis}
 				</p>
 			{/if}
+
+			<!-- Die Autonomie ist die einzige Angabe, die weder im Gesicht noch
+			     im Stepper vorkommt — und die wichtigste für den Menschen:
+			     ohne Block ist der Schritt beaufsichtigt. -->
+			<p class="pt-3 font-mono text-[0.625rem] text-foreground/35">
+				{knoten?.autonomie
+					? `${knoten.autonomie.modus} · Fehler → ${knoten.autonomie.fehler}${knoten.autonomie.freigabe ? ` · freigegeben von ${knoten.autonomie.freigabe.durch}` : ''}`
+					: 'beaufsichtigt · keine Autonomie im Rezept'}
+			</p>
 		</section>
 
 		<!-- Was durch den Flow läuft: gilt für den ganzen Lauf, nicht für
