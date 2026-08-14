@@ -4,13 +4,7 @@ import { onMount } from 'svelte'
 import ActorExplorer from '$lib/actors/ActorExplorer.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
 import { bus } from '$lib/actors/bus'
-import {
-	chatActor,
-	composerActor,
-	negotiatorActor,
-	stopWork,
-	summarizeCall
-} from '$lib/actors/chat.actor.svelte'
+import { chatActor, negotiatorActor, stopWork, summarizeCall } from '$lib/actors/chat.actor.svelte'
 import { confirmHeld, hitlQueue, rejectHeld } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
@@ -463,38 +457,6 @@ $effect(() => {
 			</button>
 		</div>
 	{/if}
-	<!-- The staged bar (0135): a composed draft runs live as "next" — this is
-	     its production gate. Same law as every gate: buttons only. -->
-	{#if composerActor.state.staged}
-		{@const staged = composerActor.state.staged as { id: string; description: string }}
-		<div
-			class="mx-auto mb-2 flex w-full max-w-2xl items-center gap-3 rounded-2xl border border-foreground/10 bg-[#fffdf7] px-4 py-2.5 shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
-		>
-			<div class="min-w-0 flex-1">
-				<p class="font-medium text-sm">Staged: <span class="font-mono">{staged.id}</span></p>
-				<p class="truncate text-[0.75rem] text-foreground/50">{staged.description}</p>
-			</div>
-			<button
-				type="button"
-				onclick={() => {
-					void bus.uiEvent('hitl', 'composer', { send: 'PROMOTE' })
-				}}
-				class="shrink-0 rounded-full bg-primary px-4 py-1.5 font-medium text-primary-foreground text-sm"
-			>
-				Promote
-			</button>
-			<button
-				type="button"
-				onclick={() => {
-					void bus.uiEvent('hitl', 'composer', { send: 'DISCARD' })
-				}}
-				class="shrink-0 rounded-full border border-foreground/10 px-4 py-1.5 font-medium text-foreground/60 text-sm"
-			>
-				Discard
-			</button>
-		</div>
-	{/if}
-
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 	<div

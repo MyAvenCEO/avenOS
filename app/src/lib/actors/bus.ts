@@ -235,99 +235,7 @@ export class MessageBus {
 			ms: Date.now() - started,
 			...(note && { note })
 		})
-		return await this.#pump(actor, result)
-	}
-
-	/**
-	 * The continuation seam (0136): halted = the pump stops BETWEEN phases —
-	 * pressing Stop discards the next event instead of killing a fetch. The
-	 * app wires the live turn's abort signal here.
-	 */
-	pumpSignal?: () => AbortSignal | undefined
-
-	/**
-	 * The continuation pump (0136/0137): a record carrying `next: {send,
-	 * payload}` drives the SAME actor's state machine forward — each hop
-	 * commits real state and lands in the one biography as its own entry.
-	 * A record carrying `call: {method, payload, resume}` asks the HOST to
-	 * dispatch another actor between reduces and pump the parsed result back
-	 * in as the `resume` event — actor calls actor WITHOUT nested sandbox
-	 * suspension (the asyncified WASM module allows exactly one suspended
-	 * VM at a time; the flow engine lives on this seam). Stop simply stops
-	 * pumping.
-	 */
-	async #pump(actor: Actor, first: HandlerResult): Promise<HandlerResult> {
-		let result = first
-		for (;;) {
-			let next: { send: string; payload?: Record<string, unknown> } | null = null
-			let call: {
-				method: string
-				payload?: Record<string, unknown>
-				resume: string
-			} | null = null
-			try {
-				const parsed = JSON.parse(result.record) as {
-					next?: { send?: unknown; payload?: unknown }
-					call?: { method?: unknown; payload?: unknown; resume?: unknown }
-				}
-				if (
-					parsed?.call &&
-					typeof parsed.call.method === 'string' &&
-					typeof parsed.call.resume === 'string'
-				) {
-					call = {
-						method: parsed.call.method,
-						resume: parsed.call.resume,
-						...(parsed.call.payload && typeof parsed.call.payload === 'object'
-							? { payload: parsed.call.payload as Record<string, unknown> }
-							: {})
-					}
-				} else if (parsed?.next && typeof parsed.next.send === 'string') {
-					next = {
-						send: parsed.next.send,
-						...(parsed.next.payload && typeof parsed.next.payload === 'object'
-							? { payload: parsed.next.payload as Record<string, unknown> }
-							: {})
-					}
-				}
-			} catch {
-				// non-JSON records carry no continuation
-			}
-			if (!next && !call) return result
-			if (this.pumpSignal?.()?.aborted) return result
-			const started = Date.now()
-			let event: { send: string; payload?: Record<string, unknown> }
-			if (call) {
-				const called = await this.dispatch(actor.instanceName, call.method, call.payload ?? {})
-				let out: Record<string, unknown>
-				try {
-					out = JSON.parse(called.record) as Record<string, unknown>
-				} catch {
-					out = { ok: false, error: 'unparseable call record' }
-				}
-				event = { send: call.resume, payload: { out } }
-			} else {
-				// biome-ignore lint/style/noNonNullAssertion: one of the two is set
-				event = next!
-			}
-			const outcome = await actor.applyEvent({ send: event.send, payload: event.payload ?? {} })
-			const record = outcome.record ?? { ok: true }
-			const full = 'ok' in record ? record : { ok: true, ...record }
-			result = {
-				record: JSON.stringify(full),
-				wire: outcome.said ?? JSON.stringify(full)
-			}
-			this.#record({
-				at: started,
-				kind: 'send',
-				from: 'pump',
-				to: actor.instanceName,
-				method: event.send,
-				ok: full.ok !== false,
-				ms: Date.now() - started,
-				...(full.ok === false && full.error ? { note: String(full.error).slice(0, 200) } : {})
-			})
-		}
+		return result
 	}
 
 	/**
@@ -407,9 +315,6 @@ export class MessageBus {
 		const specs: MethodSpec[] = []
 		for (const actor of this.actors()) {
 			for (const method of actor.manifest.methods) {
-				// Engine-only entries (flow steps) stay dispatchable but never
-				// become voice tools — the orchestrator drives them, not the model.
-				if (method.internal) continue
 				if (seen.has(method.name)) continue
 				seen.add(method.name)
 				const properties = (method.parameters as { properties?: Record<string, unknown> })

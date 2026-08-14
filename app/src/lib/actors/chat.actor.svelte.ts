@@ -5,8 +5,6 @@ import { activity } from './activity.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
 import { catalog } from './catalog'
-import { ComposerActor } from './composer.actor'
-import { createComposerSteps } from './composer-steps'
 import { LlmActor } from './llm.actor'
 import { NegotiatorActor } from './negotiator.actor'
 import { RegistryActor } from './registry.actor'
@@ -97,17 +95,6 @@ export class ChatActor extends Actor {
 						}
 						activity.show(summarizeCall(name, result.record))
 						return result
-					}
-					// compose fronts the composer window BEFORE the work starts — the
-					// process (stepper, ticker, interviews) plays in the composer's
-					// own view, not as a toast. When staging succeeds, the staged
-					// instance's first window takes the stage through the spawn hook.
-					if (name === 'compose' || name === 'compose_answer') {
-						for (const other of bus.actors()) {
-							if (isWindow(other)) other.open = false
-						}
-						const gate = bus.get('composer-window')
-						if (gate && isWindow(gate)) gate.open = true
 					}
 					const result = await bus.dispatch('chat', name, payload)
 					// A drafted bridge takes the stage: the review gate must be SEEN,
@@ -242,10 +229,10 @@ for (const actor of catalogActors) bus.register(actor)
 /**
  * The WORK signal — deliberately NOT the chat turn's abort. Barge-in fires
  * `interrupted` on voice activity alone (~64ms, even a cough) and stops the
- * REPLY; if long-running work (a compose chain, a negotiation draft) hung on
- * the same controller, speaking while Kimi designs killed the whole run —
- * exactly the 163s PLAN death in Samuel's live test. Work dies only on the
- * explicit Stop button, which calls stopWork() alongside chat.stop().
+ * REPLY; if long-running work (a negotiation draft) hung on the same
+ * controller, speaking while the model designs killed the whole run. Work
+ * dies only on the explicit Stop button, which calls stopWork() alongside
+ * chat.stop().
  */
 let workController: AbortController | null = null
 const workSignal = () => {
@@ -257,9 +244,6 @@ export function stopWork(): void {
 	workController = null
 }
 const showProgress = (note: string) => activity.show({ kind: 'doing', titles: [], note })
-// The continuation pump halts between phases when the WORK is stopped —
-// Stop discards the composer's next event instead of killing a fetch.
-bus.pumpSignal = workSignal
 /** The Negotiator (0131): drafts bridges between incompatible actors, HITL-gated. */
 class ReactiveNegotiator extends NegotiatorActor {
 	state = $state<Record<string, unknown>>({})
@@ -269,30 +253,6 @@ export const negotiatorActor = singleton(
 	() => new ReactiveNegotiator(bus, { signal: workSignal, onProgress: showProgress })
 )
 bus.register(negotiatorActor)
-/**
- * The composer's six phases as six FULL step actors (0137) — registered
- * BEFORE the flow so the recipe validates against the mesh. Reactive, so
- * their faces (and the live model stream) render inside the flow window.
- */
-export const composerSteps = singleton('aven.composer.steps', () =>
-	createComposerSteps(bus, {
-		signal: workSignal,
-		make: (manifest) => new ReactiveActor(manifest),
-		step: (manifest, caps) => new ReactiveActor(manifest, {}, caps)
-	})
-)
-for (const step of composerSteps) {
-	if (!bus.get(step.manifest.id)) bus.register(step)
-}
-/**
- * The Composer (0137): RECIPE #1 of the flow engine — wish → clarify hold →
- * scout ladder → proofs → scrum-drafted actor, staged live as "next".
- */
-class ReactiveComposer extends ComposerActor {
-	state = $state<Record<string, unknown>>({})
-}
-export const composerActor = singleton('aven.composer', () => new ReactiveComposer(bus))
-bus.register(composerActor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
 bus.register(registryActor)
 export const chatActor = singleton('aven.chat', () => new ChatActor())

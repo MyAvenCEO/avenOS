@@ -59,12 +59,6 @@ export interface MethodSpec {
 	 * tool. UI clicks bypass the gate (a click IS the button press).
 	 */
 	hitl?: string
-	/**
-	 * Engine-only entry (0137): dispatchable like any method, but never part
-	 * of the model's tool list — flow STEPS are driven by their orchestrator,
-	 * not by voice.
-	 */
-	internal?: boolean
 }
 
 /** Per-actor model lane: which model answers as this actor, and how. */

@@ -266,7 +266,7 @@ export async function* streamChat(
  * and pipes as anti-glitch armor, which would gut the JSON this lane exists to
  * produce. The frames are read raw here — output for a machine, not a voice.
  */
-export const COMPOSER_MODEL = 'moonshotai/kimi-k3'
+export const DESIGN_MODEL = 'moonshotai/kimi-k3'
 
 export interface CompleteOptions {
 	model?: string
@@ -345,7 +345,7 @@ export async function complete(
 			body: JSON.stringify({
 				messages,
 				tools: [],
-				model: options.model ?? COMPOSER_MODEL,
+				model: options.model ?? DESIGN_MODEL,
 				...(typeof options.temperature === 'number' && { temperature: options.temperature }),
 				...(options.json === true && { json: true }),
 				...(typeof options.maxTokens === 'number' && { max_tokens: options.maxTokens })
