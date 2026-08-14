@@ -13,6 +13,7 @@ import { isWindow } from '$lib/actors/window.actor.svelte'
 import { windowsBound } from '$lib/actors/windows'
 import FibuExplorer from '$lib/fibu/FibuExplorer.svelte'
 import RecipeFlow from '$lib/fibu/RecipeFlow.svelte'
+import RunExplorer from '$lib/runs/RunExplorer.svelte'
 
 /**
  * Dashboard — a chat against RedPill's confidential Gemma
@@ -39,10 +40,10 @@ const listener = listenerActor.core
  * gets asked for. The view is the default because the workspace is the
  * point.
  */
-let tab = $state<'views' | 'actors' | 'chat' | 'fibu' | 'skills'>('views')
+let tab = $state<'views' | 'actors' | 'chat' | 'fibu' | 'skills' | 'intents'>('views')
 
 /** The workspaces that want the whole window rather than reading width. */
-const wide = $derived(tab === 'fibu' || tab === 'skills')
+const wide = $derived(tab === 'fibu' || tab === 'skills' || tab === 'intents')
 
 /**
  * Voice is the default, except where there is no voice.
@@ -189,7 +190,7 @@ $effect(() => {
 	<header class="flex flex-col items-center">
 		<!-- Compact tabs, centred: the skills workspace and the conversation. -->
 		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
-			{#each [{ id: 'views' as const, label: 'Views' }, { id: 'actors' as const, label: 'Actors' }, { id: 'chat' as const, label: 'Chat' }, { id: 'fibu' as const, label: 'Buchhaltung' }, { id: 'skills' as const, label: 'Skills' }] as t (t.id)}
+			{#each [{ id: 'views' as const, label: 'Views' }, { id: 'actors' as const, label: 'Actors' }, { id: 'chat' as const, label: 'Chat' }, { id: 'fibu' as const, label: 'Buchhaltung' }, { id: 'skills' as const, label: 'Skills' }, { id: 'intents' as const, label: 'Intents' }] as t (t.id)}
 				<button
 					type="button"
 					onclick={() => {
@@ -311,6 +312,13 @@ $effect(() => {
 		     deliberately outside the actor/vibe world. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
 			<FibuExplorer />
+		</div>
+	{:else if tab === 'intents'}
+		<!-- Der Prozess-Betrachter: Läufe statt Definitionen, EIN Viewer für
+		     alle Flows. Die Detailfläche hängt an der Knotenart, an der der
+		     Lauf steht — nicht an der Sorte des Gegenstands. -->
+		<div class="flex min-h-0 w-full flex-1 flex-col">
+			<RunExplorer />
 		</div>
 	{:else if tab === 'skills'}
 		<!-- The skill library (board 0140): flows as JSON configs on a canvas,
