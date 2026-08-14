@@ -12,9 +12,10 @@ import { type FlowRun, runs } from './mock-runs'
  * Schrittnamen, die Art des Schritts, die möglichen Aktionen eines Gates,
  * das Ziel eines Sinks, die nächsten Schritte aus den Kanten.
  *
- * Der Weg ist ein Stepper von links nach rechts und zugleich die
- * Navigation: jeder Halt ist anklickbar und zeigt darunter seine eigene
- * Detailfläche — erledigte Schritte zeigen, was dort geschah, der
+ * Der Weg steht als Stepper in der rechten Aside, von oben nach unten —
+ * dieselbe Grammatik wie die Lens-Aside des Actor-Explorers: eine schmale
+ * Spalte, die bestimmt, WAS in der Mitte steht. Jeder Halt ist anklickbar
+ * und zeigt in der Mitte seine eigene Detailfläche — erledigte Schritte zeigen, was dort geschah, der
  * aktuelle zeigt den Zustand, kommende zeigen, was bevorsteht. Ohne
  * Zutun steht die Auswahl auf dem aktuellen Schritt; ein Wechsel des
  * Laufs setzt sie dorthin zurück.
@@ -142,7 +143,7 @@ function waehle(run: FlowRun) {
 	</nav>
 
 	<div
-		class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-r-2xl border border-border border-l-0 bg-surface-card/30 p-5"
+		class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto border-border border-y bg-surface-card/30 p-5"
 	>
 		<header class="flex flex-wrap items-baseline gap-3">
 			<h2 class="font-display font-semibold text-lg">{selected.titel}</h2>
@@ -155,45 +156,6 @@ function waehle(run: FlowRun) {
 				{STATUS[selected.status].label}
 			</span>
 		</header>
-
-		<!-- Der Weg als Stepper: von links nach rechts, jeder Halt anklickbar.
-		     Namen, Reihenfolge und das Bevorstehende kommen aus dem Rezept. -->
-		<nav class="flex items-center gap-1 overflow-x-auto pb-1">
-			{#each stufen as s, i (s.node + i)}
-				{#if i > 0}
-					<span class="shrink-0 text-foreground/20">—</span>
-				{/if}
-				<button
-					type="button"
-					onclick={() => {
-						stepId = s.node
-					}}
-					title={nodeOf(s.node)?.description}
-					class="flex shrink-0 items-baseline gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors
-						{aktiv?.node === s.node
-						? 'border-primary bg-primary text-primary-foreground'
-						: s.state === 'pending'
-							? 'border-border/60 border-dashed text-foreground/40 hover:border-foreground/30'
-							: 'border-border bg-surface-card hover:border-foreground/30'}"
-				>
-					<span
-						class="font-mono {aktiv?.node === s.node
-							? ''
-							: s.state === 'done'
-								? 'text-status-success'
-								: s.state === 'current'
-									? 'text-primary'
-									: ''}"
-					>
-						{MARK[s.state]}
-					</span>
-					<span class="max-w-40 truncate font-medium">{nodeOf(s.node)?.name ?? s.node}</span>
-					{#if s.um}
-						<span class="font-mono opacity-50">{s.um}</span>
-					{/if}
-				</button>
-			{/each}
-		</nav>
 
 		<!-- Die Detailfläche des GEWÄHLTEN Halts: was dort geschah, geschieht
 		     oder geschehen wird — verzweigt über Zustand und Knotenart, nie
@@ -287,4 +249,48 @@ function waehle(run: FlowRun) {
 			</dl>
 		</section>
 	</div>
+
+	<!-- Der Weg als Stepper: oben nach unten, rechts — schmal, immer
+	     sichtbar, und zugleich die Navigation über den Lauf. Namen,
+	     Reihenfolge und das Bevorstehende kommen aus dem Rezept. -->
+	<nav
+		class="flex w-56 shrink-0 flex-col overflow-y-auto rounded-r-2xl border border-border border-l-0 bg-surface-card/50 py-3"
+	>
+		<p class="px-4 pb-2 text-[0.625rem] text-foreground/35 uppercase tracking-[0.2em]">Weg</p>
+		{#each stufen as s, i (s.node + i)}
+			<button
+				type="button"
+				onclick={() => {
+					stepId = s.node
+				}}
+				title={nodeOf(s.node)?.description}
+				class="mx-2 flex items-baseline gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs transition-colors {aktiv?.node ===
+				s.node
+					? 'border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)]'
+					: 'hover:bg-surface-card'}"
+			>
+				<span
+					class="w-3 shrink-0 text-center font-mono {s.state === 'done'
+						? 'text-status-success'
+						: s.state === 'current'
+							? 'text-primary'
+							: 'text-foreground/30'}"
+				>
+					{MARK[s.state]}
+				</span>
+				<span class="min-w-0 flex-1">
+					<span
+						class="block leading-snug {s.state === 'pending'
+							? 'text-foreground/45'
+							: 'font-medium'}"
+					>
+						{nodeOf(s.node)?.name ?? s.node}
+					</span>
+					<span class="block pt-0.5 font-mono text-[0.625rem] text-foreground/35">
+						{s.um ?? (s.state === 'pending' ? `über „${s.port}"` : 'jetzt')}
+					</span>
+				</span>
+			</button>
+		{/each}
+	</nav>
 </div>
