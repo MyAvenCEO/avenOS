@@ -12,34 +12,63 @@ import { type FlowRun, runs } from './mock-runs'
  * Schrittnamen, die Art des Schritts, die möglichen Aktionen eines Gates,
  * das Ziel eines Sinks, die nächsten Schritte aus den Kanten.
  *
+ * Der Weg ist ein Stepper von links nach rechts und zugleich die
+ * Navigation: jeder Halt ist anklickbar und zeigt darunter seine eigene
+ * Detailfläche — erledigte Schritte zeigen, was dort geschah, der
+ * aktuelle zeigt den Zustand, kommende zeigen, was bevorsteht. Ohne
+ * Zutun steht die Auswahl auf dem aktuellen Schritt; ein Wechsel des
+ * Laufs setzt sie dorthin zurück.
+ *
  * Deshalb ist die Detailseite kein Switch über Klassen wie "Idee, Todo,
- * Unbekanntes", sondern über die KNOTENART, an der der Lauf gerade steht:
+ * Unbekanntes", sondern über die KNOTENART plus den Zustand des Schritts:
  * ein Gate wartet, ein Sink hat angenommen, eine Transformation läuft,
  * eine Skill-Grenze hat übergeben. Ein neuer Flow braucht dafür nichts —
  * der Buchhaltungs-Lauf unten in der Liste ist der Beleg.
  */
 
 let selected = $state<FlowRun>(runs[0])
+/** Angeklickter Halt; null heißt "der aktuelle" — die Vorgabe. */
+let stepId = $state<string | null>(null)
 
 const recipeOf = (id: string) => recipes.find((r) => r.id === id)
 const recipe = $derived(recipeOf(selected.flow))
 const nodeOf = (id: string): RecipeNodeConfig | undefined => recipe?.nodes.find((n) => n.id === id)
 
-/** Der Schritt, an dem der Lauf steht — die Detailseite hängt an seiner Art. */
-const hier = $derived(nodeOf(selected.bei))
+type StepState = 'done' | 'current' | 'pending'
+interface Stufe {
+	node: string
+	state: StepState
+	um?: string
+	ergebnis?: string
+	port?: string
+}
 
-/** Was als Nächstes käme: die Ziele der ausgehenden Kanten. */
-const naechste = $derived(
-	(recipe?.edges ?? [])
+/** Der Weg als Kette: Erledigtes, die Position, das Bevorstehende. */
+const stufen = $derived<Stufe[]>([
+	...selected.weg.map((s) => ({
+		node: s.node,
+		state: 'done' as const,
+		um: s.um,
+		ergebnis: s.ergebnis
+	})),
+	{ node: selected.bei, state: 'current' as const },
+	...(recipe?.edges ?? [])
 		.filter((e) => e.from === selected.bei)
-		.map((e) => ({ node: nodeOf(e.to), port: e.fromPort }))
-		.filter((x) => x.node !== undefined)
+		.map((e) => ({ node: e.to, state: 'pending' as const, port: e.fromPort }))
+])
+
+/** Ohne Klick steht die Auswahl auf dem aktuellen Schritt. */
+const aktiv = $derived(
+	stufen.find((s) => s.node === stepId && stepId !== null) ??
+		stufen.find((s) => s.state === 'current') ??
+		stufen[0]
 )
+const knoten = $derived(nodeOf(aktiv?.node ?? ''))
 
 /** Gates deklarieren ihre Aktionen im Rezept — die Ansicht erfindet keine. */
 const aktionen = $derived(
-	Array.isArray(hier?.transform.config.aktionen)
-		? (hier?.transform.config.aktionen as string[])
+	Array.isArray(knoten?.transform.config.aktionen)
+		? (knoten?.transform.config.aktionen as string[])
 		: []
 )
 
@@ -58,6 +87,8 @@ const STATUS: Record<FlowRun['status'], { label: string; klasse: string }> = {
 	fertig: { label: 'fertig', klasse: 'text-status-success' }
 }
 
+const MARK: Record<StepState, string> = { done: '✓', current: '◐', pending: '○' }
+
 const KIND_LABEL: Record<string, string> = {
 	input: 'Eingang',
 	transform: 'Transformation',
@@ -69,6 +100,12 @@ const KIND_LABEL: Record<string, string> = {
 }
 
 const zeit = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' })
+
+function waehle(run: FlowRun) {
+	selected = run
+	// Ein neuer Lauf beginnt immer bei seinem aktuellen Schritt.
+	stepId = null
+}
 </script>
 
 <div class="flex min-h-0 flex-1">
@@ -87,9 +124,7 @@ const zeit = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' })
 			{#each g.items as r (r.id)}
 				<button
 					type="button"
-					onclick={() => {
-						selected = r
-					}}
+					onclick={() => waehle(r)}
 					class="border-border/50 border-b px-4 py-3 text-left transition-colors {selected.id === r.id
 						? 'bg-surface-cream'
 						: 'hover:bg-surface-card'}"
@@ -121,43 +156,123 @@ const zeit = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' })
 			</span>
 		</header>
 
-		<!-- Der Weg: zurückgelegte Schritte, die aktuelle Position, das was
-		     folgen könnte. Namen und Reihenfolge kommen aus dem Rezept. -->
-		<section class="rounded-2xl border border-border bg-surface-card p-4">
-			<h3 class="pb-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">Weg</h3>
-			<ol class="flex flex-col gap-2">
-				{#each selected.weg as schritt, i (i)}
-					{@const n = nodeOf(schritt.node)}
-					<li class="flex items-baseline gap-3 text-sm">
-						<span class="w-4 shrink-0 text-center font-mono text-status-success">✓</span>
-						<span class="w-44 shrink-0 truncate">{n?.name ?? schritt.node}</span>
-						<span class="w-12 shrink-0 font-mono text-foreground/40 text-xs">{schritt.um}</span>
-						<span class="min-w-0 flex-1 truncate text-foreground/60 text-xs">
-							{schritt.ergebnis ?? ''}
-						</span>
-					</li>
-				{/each}
-				<li class="flex items-baseline gap-3 text-sm">
-					<span class="w-4 shrink-0 text-center font-mono text-primary">◐</span>
-					<span class="w-44 shrink-0 truncate font-semibold">{hier?.name ?? selected.bei}</span>
-					<span class="w-12 shrink-0"></span>
-					<span class="min-w-0 flex-1 truncate text-foreground/50 text-xs">
-						{KIND_LABEL[hier?.kind ?? ''] ?? hier?.kind}
-						· {hier?.transform.type}
+		<!-- Der Weg als Stepper: von links nach rechts, jeder Halt anklickbar.
+		     Namen, Reihenfolge und das Bevorstehende kommen aus dem Rezept. -->
+		<nav class="flex items-center gap-1 overflow-x-auto pb-1">
+			{#each stufen as s, i (s.node + i)}
+				{#if i > 0}
+					<span class="shrink-0 text-foreground/20">—</span>
+				{/if}
+				<button
+					type="button"
+					onclick={() => {
+						stepId = s.node
+					}}
+					title={nodeOf(s.node)?.description}
+					class="flex shrink-0 items-baseline gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors
+						{aktiv?.node === s.node
+						? 'border-primary bg-primary text-primary-foreground'
+						: s.state === 'pending'
+							? 'border-border/60 border-dashed text-foreground/40 hover:border-foreground/30'
+							: 'border-border bg-surface-card hover:border-foreground/30'}"
+				>
+					<span
+						class="font-mono {aktiv?.node === s.node
+							? ''
+							: s.state === 'done'
+								? 'text-status-success'
+								: s.state === 'current'
+									? 'text-primary'
+									: ''}"
+					>
+						{MARK[s.state]}
 					</span>
-				</li>
-				{#each naechste as n, i (i)}
-					<li class="flex items-baseline gap-3 text-foreground/40 text-sm">
-						<span class="w-4 shrink-0 text-center font-mono">○</span>
-						<span class="w-44 shrink-0 truncate">{n.node?.name}</span>
-						<span class="w-12 shrink-0"></span>
-						<span class="min-w-0 flex-1 truncate text-xs">über Port „{n.port}"</span>
-					</li>
-				{/each}
-			</ol>
+					<span class="max-w-40 truncate font-medium">{nodeOf(s.node)?.name ?? s.node}</span>
+					{#if s.um}
+						<span class="font-mono opacity-50">{s.um}</span>
+					{/if}
+				</button>
+			{/each}
+		</nav>
+
+		<!-- Die Detailfläche des GEWÄHLTEN Halts: was dort geschah, geschieht
+		     oder geschehen wird — verzweigt über Zustand und Knotenart, nie
+		     über die Sorte des Gegenstands. -->
+		<section
+			class="rounded-2xl border p-4 {aktiv?.state === 'current' && knoten?.kind === 'hitl'
+				? 'border-primary/40 bg-surface-cream/40'
+				: aktiv?.state === 'pending'
+					? 'border-border border-dashed'
+					: 'border-border bg-surface-card'}"
+		>
+			<div class="flex flex-wrap items-baseline gap-2 pb-2">
+				<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+					{KIND_LABEL[knoten?.kind ?? ''] ?? 'Schritt'}
+					· {knoten?.name ?? aktiv?.node}
+				</h3>
+				<span class="font-mono text-[0.625rem] text-foreground/35">{knoten?.transform.type}</span>
+				<span
+					class="ml-auto font-mono text-[0.625rem] {aktiv?.state === 'done'
+						? 'text-status-success'
+						: aktiv?.state === 'current'
+							? 'text-primary'
+							: 'text-foreground/35'}"
+				>
+					{aktiv?.state === 'done'
+						? `abgeschlossen ${aktiv.um ?? ''}`
+						: aktiv?.state === 'current'
+							? 'hier steht der Lauf'
+							: `steht bevor · über Port „${aktiv?.port}"`}
+				</span>
+			</div>
+
+			<p class="text-sm leading-relaxed">{knoten?.description}</p>
+
+			{#if aktiv?.state === 'done'}
+				{#if aktiv.ergebnis}
+					<p class="pt-3 text-sm">
+						<span class="pr-2 font-mono text-foreground/40 text-xs">Ergebnis</span>
+						{aktiv.ergebnis}
+					</p>
+				{:else}
+					<p class="pt-3 text-foreground/40 text-xs">Ohne eigenes Ergebnis durchlaufen.</p>
+				{/if}
+			{:else if aktiv?.state === 'pending'}
+				<p class="pt-3 text-foreground/40 text-xs">
+					Platzhalter: noch nicht erreicht — hier käme, was dieser Schritt tun wird.
+				</p>
+			{:else if knoten?.kind === 'hitl'}
+				<div class="flex flex-wrap gap-2 pt-3">
+					{#each aktionen as a (a)}
+						<span class="rounded-full border border-border bg-surface-card px-3 py-1 text-xs">
+							{a}
+						</span>
+					{/each}
+				</div>
+				<p class="pt-3 text-foreground/40 text-xs">
+					Platzhalter: die Aktionen stehen so im Rezept — ausgeführt wird hier noch nichts.
+				</p>
+			{:else if knoten?.kind === 'output'}
+				<p class="pt-3 font-mono text-foreground/50 text-xs">
+					{JSON.stringify(knoten.transform.config)}
+				</p>
+				<p class="pt-2 text-foreground/40 text-xs">
+					Platzhalter: hier käme die Zielansicht — die Liste, das Protokoll, die Datei.
+				</p>
+			{:else if knoten?.kind === 'handoff'}
+				<p class="pt-3 text-foreground/50 text-xs">
+					Übergeben an Skill <span class="font-mono">{knoten.handoff?.skill}</span> — der Lauf endet
+					hier und wird dort zu einem neuen.
+				</p>
+			{:else}
+				<p class="pt-3 text-foreground/40 text-xs">
+					Platzhalter: läuft gerade — hier käme der Live-Zustand des Schritts.
+				</p>
+			{/if}
 		</section>
 
-		<!-- Was durch den Flow läuft: frei geformte Felder, roh gezeigt. -->
+		<!-- Was durch den Flow läuft: gilt für den ganzen Lauf, nicht für
+		     einen Halt — deshalb unter der Schritt-Fläche. -->
 		<section class="rounded-2xl border border-border bg-surface-card p-4">
 			<h3 class="pb-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
 				Gegenstand
@@ -170,53 +285,6 @@ const zeit = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' })
 					</div>
 				{/each}
 			</dl>
-		</section>
-
-		<!-- Die Platzhalter-Fläche: nicht nach Klasse, sondern nach der ART des
-		     Schritts, an dem der Lauf steht. Das ist der ganze Trick. -->
-		<section
-			class="rounded-2xl border border-dashed p-4 {hier?.kind === 'hitl'
-				? 'border-primary/40 bg-surface-cream/40'
-				: 'border-border'}"
-		>
-			<h3 class="pb-2 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-				{KIND_LABEL[hier?.kind ?? ''] ?? 'Schritt'}
-				· {hier?.name}
-			</h3>
-
-			{#if hier?.kind === 'hitl'}
-				<p class="text-sm">{hier.description}</p>
-				<div class="flex flex-wrap gap-2 pt-3">
-					{#each aktionen as a (a)}
-						<span class="rounded-full border border-border bg-surface-card px-3 py-1 text-xs">
-							{a}
-						</span>
-					{/each}
-				</div>
-				<p class="pt-3 text-foreground/40 text-xs">
-					Platzhalter: die Aktionen stehen so im Rezept — ausgeführt wird hier noch nichts.
-				</p>
-			{:else if hier?.kind === 'output'}
-				<p class="text-sm">{hier.description}</p>
-				<p class="pt-3 font-mono text-foreground/50 text-xs">
-					{hier.transform.type}
-					· {JSON.stringify(hier.transform.config)}
-				</p>
-				<p class="pt-2 text-foreground/40 text-xs">
-					Platzhalter: hier käme die Zielansicht — die Liste, das Protokoll, die Datei.
-				</p>
-			{:else if hier?.kind === 'handoff'}
-				<p class="text-sm">{hier.description}</p>
-				<p class="pt-3 text-foreground/50 text-xs">
-					Übergeben an Skill <span class="font-mono">{hier.handoff?.skill}</span> — der Lauf endet
-					hier und wird dort zu einem neuen.
-				</p>
-			{:else}
-				<p class="text-sm">{hier?.description}</p>
-				<p class="pt-3 text-foreground/40 text-xs">
-					Platzhalter: läuft gerade — hier käme der Live-Zustand des Schritts.
-				</p>
-			{/if}
 		</section>
 	</div>
 </div>
