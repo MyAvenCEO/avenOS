@@ -442,10 +442,11 @@ describe('execution engine (0129)', () => {
 		const run = await bus.satisfy('result(Y)')
 		expect(run.status).toBe('ok')
 		const last = run.steps.at(-1)
-		expect(last?.actor).toBe('rechner')
+		if (!last) throw new Error('run produced no steps')
+		expect(last.actor).toBe('rechner')
 		// The second actor received the first actor's output through the contract.
-		expect((last?.in.fact as { wert: number }).wert).toBe(5)
-		expect((last?.out as { wert: number }).wert).toBe(10)
+		expect((last.in.fact as { wert: number }).wert).toBe(5)
+		expect((last.out as { wert: number }).wert).toBe(10)
 	})
 
 	test('runtime backtracking abandons a failing producer and records both attempts', async () => {
@@ -501,8 +502,9 @@ describe('execution engine (0129)', () => {
 		expect(seenSystem).toContain('Erstellt Termine aus Anfragen.')
 		expect(seenPayload).toContain('Zahnarzt Dienstag')
 		const last = run.steps.at(-1)
-		expect(last?.actor).toBe('kalender')
-		expect((last?.out as { termin: string }).termin).toBe('Dienstag 14 Uhr')
+		if (!last) throw new Error('run produced no steps')
+		expect(last.actor).toBe('kalender')
+		expect((last.out as { termin: string }).termin).toBe('Dienstag 14 Uhr')
 	})
 
 	test('an llm:true actor without an llm actor in the mesh fails structured, not thrown', async () => {
