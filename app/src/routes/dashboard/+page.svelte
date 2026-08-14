@@ -306,14 +306,14 @@ $effect(() => {
 			</div>
 		</div>
 	{:else if tab === 'fibu'}
-		<!-- FiBu, hardcoded and read-only (board 0131): the lowest booking
+		<!-- FiBu, hardcoded and read-only (board 0139): the lowest booking
 		     primitive — Rechnungsposition → Buchungszeilen — over mock data,
 		     deliberately outside the actor/vibe world. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
 			<FibuExplorer />
 		</div>
 	{:else if tab === 'skills'}
-		<!-- The skill library (board 0132): flows as JSON configs on a canvas,
+		<!-- The skill library (board 0140): flows as JSON configs on a canvas,
 		     grouped by the skills that bring them. No engine — declarations. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
 			<RecipeFlow />

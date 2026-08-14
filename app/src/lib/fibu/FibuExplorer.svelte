@@ -4,7 +4,7 @@ import { type Rechnung, rechnungen, summe } from './mock-data'
 /**
  * The FiBu explorer: incoming invoices on the left, the selected one as
  * master-detail on the right — positions above, the derived Buchungssatz
- * below. Read-only by design (board 0131): this view exists to *see* the
+ * below. Read-only by design (board 0139): this view exists to *see* the
  * lowest primitive, Rechnungsposition → 1..n Buchungszeilen, before any
  * engine is built.
  *

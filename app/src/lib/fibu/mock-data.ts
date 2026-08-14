@@ -1,5 +1,5 @@
 /**
- * FiBu — the lowest booking primitive, hardcoded (board 0131).
+ * FiBu — the lowest booking primitive, hardcoded (board 0139).
  *
  * The unit of processing is the Rechnungsposition, not the Rechnung: one
  * position derives 1..n Buchungszeilen, and one Buchungszeile can draw on

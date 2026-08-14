@@ -153,7 +153,7 @@ git diff --stat
 ## Hand-off
 
 ```
-/aven-build 0131
+/aven-build 0139
 ```
 
 …oder direkt:
@@ -164,6 +164,7 @@ git diff --stat
 
 ## Progress log
 
+- `2026-08-14` — Umnummeriert 0131 → 0139: beim Merge der Fibu-Arbeit in die Actor-Linie kollidierten die Nummern (0131/0132 waren dort bereits vergeben und aus vier Quelldateien referenziert). Inhalt unverändert; Code-Kommentare mitgezogen.
 - `2026-08-14` — Spacing-Iteration: einheitliches 8px-Raster für alle Abstände
   (`gap-2`/`p-2` am Dashboard-`main`, `-mt-2` am Voice-Panel entfernt,
   Toast-Streifen im FiBu-Tab per `{#if}` ganz entfernt statt kollabiert,

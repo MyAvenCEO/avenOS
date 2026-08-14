@@ -12,7 +12,7 @@ goal: "`bun test app/tests/fibu-recipe.test.ts`, `bun run check` und `bun run li
 
 ## Context
 
-Folge-Card zu [[0131]]. Bevor die Flow-Engine gebaut wird, wollen wir Rezepte
+Folge-Card zu [[0139]]. Bevor die Flow-Engine gebaut wird, wollen wir Rezepte
 **sehen und als Daten festnageln**: ein Rezept ist ein gerichteter Graph mit
 n Inputs → Transformationen → n Outputs. Jeder Schritt ist node-/actor-artig —
 benannte Ports als Kontrakt, genau **eine eigene `transform`-Sektion**
@@ -68,11 +68,12 @@ bun run lint
 ## Hand-off
 
 ```
-/aven-review 0132
+/aven-review 0140
 ```
 
 ## Progress log
 
+- `2026-08-14` — Umnummeriert 0132 → 0140: beim Merge der Fibu-Arbeit in die Actor-Linie kollidierten die Nummern (0131/0132 waren dort bereits vergeben und aus vier Quelldateien referenziert). Inhalt unverändert; Code-Kommentare mitgezogen.
 - `2026-08-14` — Tabs flachgezogen (User): kein Sub-Tab mehr unter
   »Buchhaltung«, stattdessen **»Buchhaltung«** (Belegansicht) und **»Skills«**
   (Flow-Canvas) gleichrangig in der Haupt-Tab-Leiste; `FibuWorkspace.svelte`

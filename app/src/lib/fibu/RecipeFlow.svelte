@@ -9,7 +9,7 @@ import { skills } from './skill-config'
 
 /**
  * The recipe explorer: a Node-RED-style canvas over pure JSON configs
- * (board 0132). One flow per screen — a subflow is a single violet,
+ * (board 0140). One flow per screen — a subflow is a single violet,
  * dashed summary node, and clicking it walks into that flow's own canvas.
  * The breadcrumb is the way back up. Right: the selected step, readable by
  * default, its raw JSON one tab away. No engine yet: nothing here runs,
