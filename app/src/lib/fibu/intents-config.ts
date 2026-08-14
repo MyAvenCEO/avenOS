@@ -9,7 +9,7 @@
  *
  * Zwei Vereinfachungen sind Absicht, nicht Nachlässigkeit:
  *
- * - **Der Mensch sitzt IM Flow**, nicht hinter einer Skill-Grenze. Frage
+ * - **Der Mensch sitzt IM Flow**, nicht hinter einer Skill-Grenze. Todo
  *   und Unbekanntes laufen auf `hitl`-Knoten im selben Rezept statt per
  *   `handoff` an den HITL-Skill. Für einen Test-Skill ist die Übergabe
  *   Zeremonie; der generische HITL-Skill bleibt der Weg, sobald mehrere
@@ -30,14 +30,14 @@ export const intentsTriage: Recipe = {
 	id: 'intents-triage',
 	name: 'Intents-Triage',
 	description:
-		'Eine Notiz kommt rein und bekommt genau ein Etikett: Idee, Frage oder Unbekanntes. Ideen landen auf dem Board, alles andere geht sofort an einen Menschen — im selben Flow, ohne Umweg über einen anderen Skill.',
+		'Eine Notiz kommt rein und bekommt genau ein Etikett: Idee, Todo oder Unbekanntes. Ideen landen auf dem Board, Todos und Unklares gehen an einen Menschen — im selben Flow, ohne Umweg über einen anderen Skill.',
 	nodes: [
 		{
 			id: 'in-notiz',
 			kind: 'input',
 			name: 'Notizen',
 			description:
-				'Der Eingang: freier Text, wie er beim Denken entsteht — ein Satz, ein Fetzen, eine Frage an sich selbst.',
+				'Der Eingang: freier Text, wie er beim Denken entsteht — ein Satz, ein Fetzen, ein halber Gedanke.',
 			transform: {
 				type: 'source:notes',
 				config: { felder: ['text', 'erfasst'], format: 'freitext' }
@@ -50,18 +50,18 @@ export const intentsTriage: Recipe = {
 			kind: 'transform',
 			name: 'Einordnen',
 			description:
-				'Genau ein Etikett pro Notiz. Was sich nicht klar als Idee oder Frage lesen lässt, ist unbekannt — die Klasse ist ein Urteil, kein Rateversuch.',
+				'Genau ein Etikett pro Notiz. Was sich nicht klar als Idee oder Todo lesen lässt, ist unbekannt — die Klasse ist ein Urteil, kein Rateversuch.',
 			transform: {
 				type: 'llm:classify',
 				config: {
-					klassen: ['idee', 'frage', 'unbekannt'],
+					klassen: ['idee', 'todo', 'unbekannt'],
 					fallback: 'unbekannt',
 					ausgabe: { intent: 'klasse', notiz: 'unverändert' }
 				}
 			},
 			llm: {
 				purpose:
-					'Ordnet eine freie Notiz genau einer der drei Klassen zu und lässt den Text dabei unangetastet.',
+					'Ordnet eine freie Notiz genau einer der drei Klassen zu — Idee, Todo oder Unbekanntes — und lässt den Text dabei unangetastet.',
 				constraints: [
 					'Genau eine Klasse pro Notiz — keine Mehrfachzuordnung, keine Zwischenstufen.',
 					'Nur die drei deklarierten Klassen; alles Zweifelhafte ist "unbekannt" statt geraten.',
@@ -93,7 +93,7 @@ export const intentsTriage: Recipe = {
 					nach: 'intent',
 					zweige: {
 						idee: 'Etwas, das man bauen oder verfolgen könnte.',
-						frage: 'Etwas, das eine Antwort braucht, bevor es weitergeht.',
+						todo: 'Etwas, das getan werden muss — gegengezeichnet von einem Menschen, bevor es zählt.',
 						unbekannt: 'Alles Übrige — bewusst kein vierter Zweig, sondern der Auffangzweig.'
 					}
 				}
@@ -109,7 +109,7 @@ export const intentsTriage: Recipe = {
 				fehler: 'hitl'
 			},
 			inputs: [{ name: 'intent' }],
-			outputs: [{ name: 'idee' }, { name: 'frage' }, { name: 'unbekannt' }]
+			outputs: [{ name: 'idee' }, { name: 'todo' }, { name: 'unbekannt' }]
 		},
 		{
 			id: 'als-idee-anlegen',
@@ -152,21 +152,21 @@ export const intentsTriage: Recipe = {
 			outputs: []
 		},
 		{
-			id: 'frage-beantworten',
+			id: 'todo-bestaetigen',
 			kind: 'hitl',
-			name: 'Frage beantworten',
+			name: 'Todo bestätigen',
 			description:
-				'Der Mensch im Flow: die Frage steht mit ihrer Notiz auf einer Karte, die Antwort schließt sie. Nichts läuft hier von allein weiter.',
+				'Der Mensch im Flow: das erkannte Todo steht mit seiner Notiz auf einer Karte und zählt erst, wenn es jemand übernimmt. Nichts läuft hier von allein weiter.',
 			transform: {
 				type: 'hitl:inline',
 				config: {
 					rolle: 'ich',
-					karte: ['notiz', 'frage'],
-					aktionen: ['antworten', 'verwerfen'],
+					karte: ['notiz', 'todo'],
+					aktionen: ['übernehmen', 'verschieben', 'verwerfen'],
 					warteschlange: 'im-flow'
 				}
 			},
-			inputs: [{ name: 'frage' }],
+			inputs: [{ name: 'todo' }],
 			outputs: [{ name: 'erledigt' }]
 		},
 		{
@@ -180,7 +180,7 @@ export const intentsTriage: Recipe = {
 				config: {
 					rolle: 'ich',
 					karte: ['notiz'],
-					aktionen: ['als-idee', 'als-frage', 'verwerfen'],
+					aktionen: ['als-idee', 'als-todo', 'verwerfen'],
 					warteschlange: 'im-flow'
 				}
 			},
@@ -212,7 +212,7 @@ export const intentsTriage: Recipe = {
 			to: 'out-board',
 			toPort: 'eintrag'
 		},
-		{ id: 'it5', from: 'weiche', fromPort: 'frage', to: 'frage-beantworten', toPort: 'frage' },
+		{ id: 'it5', from: 'weiche', fromPort: 'todo', to: 'todo-bestaetigen', toPort: 'todo' },
 		{
 			id: 'it6',
 			from: 'weiche',
@@ -222,7 +222,7 @@ export const intentsTriage: Recipe = {
 		},
 		{
 			id: 'it7',
-			from: 'frage-beantworten',
+			from: 'todo-bestaetigen',
 			fromPort: 'erledigt',
 			to: 'out-erledigt',
 			toPort: 'erledigt'
@@ -241,7 +241,7 @@ export const intentsSkill: Skill = {
 	id: 'intents',
 	name: 'Intents',
 	description:
-		'Der kleinste Triage-Skill: Notizen rein, ein Etikett drauf — Idee, Frage oder Unbekanntes. Ideen landen auf dem Ideen-Board, Fragen und Unklares gehen an einen Menschen, der im Flow selbst sitzt. Ein Flow, keine Subflows, keine Skill-Grenze: das Modell auf seiner kleinsten sinnvollen Stufe.',
+		'Der kleinste Triage-Skill: Notizen rein, ein Etikett drauf — Idee, Todo oder Unbekanntes. Ideen landen auf dem Ideen-Board, Todos und Unklares gehen an einen Menschen, der im Flow selbst sitzt. Ein Flow, keine Subflows, keine Skill-Grenze: das Modell auf seiner kleinsten sinnvollen Stufe.',
 	flows: ['intents-triage'],
 	entry: 'intents-triage',
 	accepts: ['notiz'],

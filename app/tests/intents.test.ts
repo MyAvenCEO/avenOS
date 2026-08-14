@@ -32,7 +32,7 @@ describe('intents: die kleinste Triage', () => {
 	test('klassifiziert wird in genau drei Klassen, Unbekanntes ist der Auffang', () => {
 		const klass = node('klassifizieren')
 		expect(klass?.kind).toBe('transform')
-		expect(klass?.transform.config.klassen).toEqual(['idee', 'frage', 'unbekannt'])
+		expect(klass?.transform.config.klassen).toEqual(['idee', 'todo', 'unbekannt'])
 		expect(klass?.transform.config.fallback).toBe('unbekannt')
 		// Es ist ein Modell-Aufruf — also mit erklärtem Zweck und harten Grenzen.
 		expect(klass?.llm?.purpose).toBeTruthy()
@@ -40,7 +40,7 @@ describe('intents: die kleinste Triage', () => {
 		// Und die Weiche kennt exakt dieselben drei Zweige, keinen vierten.
 		const weiche = node('weiche')
 		expect(weiche?.kind).toBe('route')
-		expect(weiche?.outputs.map((p) => p.name)).toEqual(['idee', 'frage', 'unbekannt'])
+		expect(weiche?.outputs.map((p) => p.name)).toEqual(['idee', 'todo', 'unbekannt'])
 	})
 
 	test('Idee führt auf ein BOARD — eine Liste, keine zweite Notizsammlung', () => {
@@ -60,9 +60,9 @@ describe('intents: die kleinste Triage', () => {
 		})
 	})
 
-	test('Frage und Unbekanntes landen bei einem Menschen IM Flow, nicht im HITL-Skill', () => {
+	test('Todo und Unbekanntes landen bei einem Menschen IM Flow, nicht im HITL-Skill', () => {
 		for (const [branch, gate] of [
-			['frage', 'frage-beantworten'],
+			['todo', 'todo-bestaetigen'],
 			['unbekannt', 'unklares-einordnen']
 		]) {
 			const target = intentsTriage.edges.find((e) => e.from === 'weiche' && e.fromPort === branch)
@@ -72,6 +72,8 @@ describe('intents: die kleinste Triage', () => {
 			// Absente Autonomie heißt: beaufsichtigt. Ein Gate entscheidet nie selbst.
 			expect(node(gate)?.autonomie).toBeUndefined()
 		}
+		// Das Todo zählt erst, wenn ein Mensch es übernimmt.
+		expect(node('todo-bestaetigen')?.transform.config.aktionen).toContain('übernehmen')
 		// Die Vereinfachung ausdrücklich: keine Skill-Grenze, kein handoff.
 		expect(intentsTriage.nodes.some((n) => n.kind === 'handoff')).toBe(false)
 		expect(intentsSkill.provides).not.toContain('unklar')
