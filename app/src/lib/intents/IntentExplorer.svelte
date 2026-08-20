@@ -1,5 +1,6 @@
 <script lang="ts">
 import {
+	alleLaeufe,
 	eingaenge,
 	type Intent,
 	type IntentStatus,
@@ -50,13 +51,14 @@ const GLYPH: Record<RunZustand, { mark: string; klasse: string }> = {
 /** Die Zusammenfassung ist abgeleitet — generisch für jeden Intent. */
 const bilanz = $derived.by(() => {
 	const n = (z: RunZustand) => ausgewaehlt.runs.filter((r) => r.zustand === z).length
-	const teile = [
-		`${ausgewaehlt.runs.length} ${ausgewaehlt.runs.length === 1 ? 'Skill-Lauf' : 'Skill-Läufe'}`
-	]
+	const teile = [`${ausgewaehlt.runs.length} ${ausgewaehlt.runs.length === 1 ? 'Skill' : 'Skills'}`]
 	if (n('fertig')) teile.push(`${n('fertig')} fertig`)
 	if (n('laeuft')) teile.push(`${n('laeuft')} läuft`)
 	if (n('wartet-mensch')) teile.push(`${n('wartet-mensch')} wartet auf dich`)
 	if (n('wartet-ergebnis')) teile.push(`${n('wartet-ergebnis')} wartet auf Ergebnisse`)
+	// Die Rekursion zählt mit: komponierte Skills bringen eigene Läufe.
+	const gesamt = alleLaeufe(ausgewaehlt).length
+	if (gesamt > ausgewaehlt.runs.length) teile.push(`${gesamt} Läufe insgesamt`)
 	return teile.join(' · ')
 })
 

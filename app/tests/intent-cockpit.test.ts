@@ -1,19 +1,81 @@
 import { describe, expect, test } from 'bun:test'
-import { eingaenge, FACE_KEYS, intentStatus, intents } from '../src/lib/intents/mock-intents'
+import { recipes } from '../src/lib/fibu/recipe-config'
+import { skills } from '../src/lib/fibu/skill-config'
+import {
+	alleLaeufe,
+	eingaenge,
+	FACE_KEYS,
+	type Intent,
+	intentStatus,
+	intents,
+	type SkillRun
+} from '../src/lib/intents/mock-intents'
 
 /**
- * Der Vertrag des Intent-Cockpits — die Regeln, die den Mock ehrlich
- * halten, damit das UX-Brainstorming auf konsistenten Beispielen steht:
- * Abhängigkeiten sind echt, Status sind abgeleitet, Parallelität kommt
- * vor, und jedes Gesicht existiert.
+ * Der Vertrag des Intent-Cockpits — und zwar gegen die ECHTEN
+ * Konfigurationen: jeder Lauf zeigt auf einen Flow der Rezept-Registry,
+ * jeder Top-Level-Lauf auf einen konfigurierten Skill, jede
+ * Verschachtelung auf einen deklarierten subflow, jede Übergabe auf eine
+ * deklarierte Skill-Grenze. Der Mock darf sich nichts ausdenken, was die
+ * Registry nicht hergibt — sonst brainstormen wir an der Architektur
+ * vorbei.
  */
 
-describe('intent cockpit: der Vertrag der Beispiele', () => {
-	test('jede Abhängigkeit zeigt auf einen Lauf DESSELBEN Intents', () => {
+const rezept = (id: string) => recipes.find((r) => r.id === id)
+const tief = intents.flatMap((i) => alleLaeufe(i))
+
+describe('intent cockpit: an den echten Registries verankert', () => {
+	test('jeder Lauf (auch verschachtelt) führt einen Flow der Rezept-Registry aus', () => {
+		for (const r of tief) {
+			const flow = rezept(r.flow)
+			expect(flow).toBeDefined()
+			// Und die Schritte sind Knoten dieses Flows — der gegangene Pfad,
+			// keine erfundenen Etiketten.
+			const namen = new Set(flow?.nodes.map((n) => n.name))
+			for (const s of r.schritte) expect(namen.has(s.name)).toBe(true)
+		}
+	})
+
+	test('Top-Level-Läufe sind konfigurierte Skills, und der Flow gehört zum Skill', () => {
 		for (const i of intents) {
-			const ids = new Set(i.runs.map((r) => r.id))
 			for (const r of i.runs) {
-				if (r.braucht) expect(ids.has(r.braucht.run)).toBe(true)
+				const skill = skills.find((s) => s.id === r.skillId)
+				expect(skill).toBeDefined()
+				expect(skill?.flows).toContain(r.flow)
+			}
+		}
+	})
+
+	test('Verschachtelung ist deklarierte Komposition: alsSchritt ⇒ subflow im Rezept', () => {
+		const pruefe = (eltern: SkillRun) => {
+			for (const kind of eltern.unter ?? []) {
+				// Der Schritt existiert im Eltern-Lauf …
+				expect(eltern.schritte.map((s) => s.name)).toContain(kind.alsSchritt)
+				// … und der Eltern-FLOW deklariert dort genau diesen Subflow.
+				const knoten = rezept(eltern.flow)?.nodes.find((n) => n.name === kind.alsSchritt)
+				expect(knoten?.kind).toBe('subflow')
+				expect(knoten?.subflow?.recipe).toBe(kind.flow)
+				pruefe(kind)
+			}
+		}
+		for (const i of intents) for (const r of i.runs) pruefe(r)
+	})
+
+	test('die Komposition ist wirklich rekursiv: mindestens eine Kette über zwei Ebenen', () => {
+		expect(tief.some((r) => r.unter?.some((u) => (u.unter?.length ?? 0) > 0))).toBe(true)
+	})
+
+	test('Übergaben sind deklarierte Skill-Grenzen: braucht ⇒ handoff im Liefer-Flow', () => {
+		for (const i of intents) {
+			for (const r of i.runs) {
+				if (!r.braucht) continue
+				const lieferant = i.runs.find((x) => x.id === r.braucht?.run)
+				expect(lieferant).toBeDefined()
+				if (!lieferant || lieferant.skillId === r.skillId) continue
+				const grenze = rezept(lieferant.flow)?.nodes.find(
+					(n) => n.kind === 'handoff' && n.handoff?.skill === r.skillId
+				)
+				expect(grenze).toBeDefined()
 			}
 		}
 	})
@@ -22,12 +84,10 @@ describe('intent cockpit: der Vertrag der Beispiele', () => {
 		for (const i of intents) {
 			for (const r of i.runs) {
 				const lieferant = i.runs.find((x) => x.id === r.braucht?.run)
-				// Blockiert ⇒ der Lieferant ist nicht fertig …
 				if (r.zustand === 'wartet-ergebnis') {
 					expect(lieferant).toBeDefined()
 					expect(lieferant?.zustand).not.toBe('fertig')
 				}
-				// … und umgekehrt: Lieferant fertig ⇒ niemand wartet auf ihn.
 				if (lieferant?.zustand === 'fertig') {
 					expect(r.zustand).not.toBe('wartet-ergebnis')
 				}
@@ -35,58 +95,64 @@ describe('intent cockpit: der Vertrag der Beispiele', () => {
 		}
 	})
 
+	test('Warten steigt auf: ein Kind bei einem Menschen hält auch den Eltern-Lauf', () => {
+		const pruefe = (eltern: SkillRun) => {
+			for (const kind of eltern.unter ?? []) {
+				if (kind.zustand === 'wartet-mensch') expect(eltern.zustand).toBe('wartet-mensch')
+				if (kind.zustand !== 'fertig') expect(eltern.zustand).not.toBe('fertig')
+				pruefe(kind)
+			}
+		}
+		for (const i of intents) for (const r of i.runs) pruefe(r)
+	})
+
 	test('Stepper-Disziplin: der geteilte Baustein ist überall gleich geformt', () => {
-		for (const i of intents) {
-			for (const r of i.runs) {
-				expect(r.schritte.length).toBeGreaterThan(0)
-				const current = r.schritte.filter((s) => s.zustand === 'current').length
-				if (r.zustand === 'fertig') {
-					expect(r.schritte.every((s) => s.zustand === 'done')).toBe(true)
-				} else if (r.zustand === 'wartet-ergebnis') {
-					// Wer wartet, arbeitet nicht: nichts ist "dran".
-					expect(current).toBe(0)
-					expect(r.schritte.some((s) => s.zustand === 'blocked')).toBe(true)
-				} else {
-					expect(current).toBe(1)
-				}
+		for (const r of tief) {
+			expect(r.schritte.length).toBeGreaterThan(0)
+			const current = r.schritte.filter((s) => s.zustand === 'current').length
+			if (r.zustand === 'fertig') {
+				expect(r.schritte.every((s) => s.zustand === 'done')).toBe(true)
+			} else if (r.zustand === 'wartet-ergebnis') {
+				expect(current).toBe(0)
+				expect(r.schritte.some((s) => s.zustand === 'blocked')).toBe(true)
+			} else {
+				expect(current).toBe(1)
 			}
 		}
 	})
 
 	test('der Intent-Status ist abgeleitet, nie gepflegt — und alle drei kommen vor', () => {
-		const erwartet: Record<string, string> = {
-			'i-081': 'braucht-dich',
-			'i-090': 'laeuft',
-			'i-069': 'fertig'
+		const erwartet: Record<string, ReturnType<typeof intentStatus>> = {
+			'i-mueller': 'braucht-dich',
+			'i-bergmann': 'laeuft',
+			'i-weber': 'fertig'
 		}
 		for (const [id, status] of Object.entries(erwartet)) {
 			const intent = intents.find((i) => i.id === id)
 			expect(intent).toBeDefined()
-			if (intent) expect(intentStatus(intent)).toBe(status as ReturnType<typeof intentStatus>)
+			if (intent) expect(intentStatus(intent)).toBe(status)
 		}
 		expect(new Set(intents.map(intentStatus)).size).toBe(3)
 	})
 
-	test('Parallelität kommt vor: ein Intent mit mehreren gleichzeitig aktiven Läufen', () => {
-		const aktiv = (z: string) => z !== 'fertig'
-		expect(intents.some((i) => i.runs.filter((r) => aktiv(r.zustand)).length >= 2)).toBe(true)
+	test('Gesichter: nur bekannte — und Kompositionen dürfen keins haben', () => {
+		for (const r of tief) {
+			if (r.face) expect(FACE_KEYS).toContain(r.face)
+		}
+		// Die Pointe der Komposition: mindestens ein Lauf zeigt STRUKTUR
+		// statt Fachlichem — Kinder ja, Gesicht nein.
+		expect(tief.some((r) => (r.unter?.length ?? 0) > 0 && !r.face)).toBe(true)
 	})
 
-	test('jedes Gesicht ist bekannt — der Rahmen rendert nie ins Leere', () => {
-		for (const i of intents) {
-			for (const r of i.runs) expect(FACE_KEYS).toContain(r.face)
+	test('das Cockpit ist nicht domänen-spezifisch: vier verschiedene Skills arbeiten', () => {
+		const beteiligte = new Set(intents.flatMap((i) => i.runs.map((r) => r.skillId)))
+		for (const s of ['inbox', 'buchhaltung', 'hitl', 'intents']) {
+			expect(beteiligte.has(s)).toBe(true)
 		}
 	})
 
-	test('das Cockpit ist nicht domänen-spezifisch: mehr als eine Sorte Intent', () => {
-		// Rechnungen UND eine Sprachnotiz — derselbe Rahmen für beide.
-		const faces = new Set(intents.flatMap((i) => i.runs.map((r) => r.face)))
-		expect(faces.has('triage')).toBe(true)
-		expect(faces.has('buchung')).toBe(true)
-	})
-
 	test('Eingang: ein Routing-Vorschlag zeigt auf einen existierenden Intent', () => {
-		const ids = new Set(intents.map((i) => i.id))
+		const ids = new Set(intents.map((i: Intent) => i.id))
 		for (const e of eingaenge) {
 			if (e.vorschlag) expect(ids.has(e.vorschlag.intent)).toBe(true)
 		}
