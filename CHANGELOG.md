@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.4...v) (2026-08-20)
+
+
+### Bug Fixes
+
+* **intents:** scope HITL gates to their context; columns stretch to the HITL edge ([#70](https://github.com/MyAvenCEO/avenOS/issues/70)) ([023e909](https://github.com/MyAvenCEO/avenOS/commit/023e909a458ad261834e5cb2bf018d142c5040a3))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.3...v) (2026-08-20)
 
 
