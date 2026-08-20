@@ -582,13 +582,15 @@ $effect(() => {
 })
 
 let centerEl: HTMLElement | null = $state(null)
+let transcriptEl: HTMLElement | null = $state(null)
 $effect(() => {
 	void chat.turns.length
 	void chat.turns.at(-1)?.content
 	void selected.log.length
 	void talk.open
 	void registryTick.v
-	centerEl?.scrollTo({ top: centerEl.scrollHeight })
+	const el = talk.open ? transcriptEl : centerEl
+	el?.scrollTo({ top: el.scrollHeight })
 })
 
 const DOT: Record<string, string> = {
@@ -742,33 +744,57 @@ const DOT: Record<string, string> = {
 	<!-- CENTER: activity log / artifact preview / skill stepper. -->
 	<main
 		bind:this={centerEl}
-		class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+		class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)] {talk.open
+			? ''
+			: 'gap-4 overflow-y-auto p-6'}"
+		style="margin-bottom: var(--dock-h, 0px)"
 	>
 		{#if talk.open}
-			<!-- TALK TO MAIA: the traditional AI-chat view — free-form asks,
-			     inline view queries, and intents extracted on the fly. Input is
-			     the global voice/text pill below. Mocked transcript. -->
-			<header class="flex items-center gap-2.5">
-				<span class="block size-9 shrink-0 overflow-hidden rounded-full border border-border">
-					<img src="/aven-logo.svg" alt="" class="size-full object-cover">
-				</span>
-				<div class="min-w-0">
-					<h1 class="font-semibold text-lg leading-tight">MAIA</h1>
-					<p class="text-foreground/45 text-xs">
-						freie Fragen · Inline-Views · Intents extrahieren — sprich oder tippe unten
-					</p>
-				</div>
-			</header>
-			<div class="border-border border-b"></div>
+			<!-- TALK TO MAIA — no header: the top HALF is the inline view region
+			     (full width, no chrome), the conversation flows below it. -->
+			{@const openWindows = registryTick.v >= 0
+				? bus
+						.actors()
+						.filter(isWindow)
+						.filter((w) => w.open && w.subject.manifest.id !== 'chat')
+				: []}
+			<div class="relative h-1/2 shrink-0 overflow-y-auto border-border border-b bg-[#fffdf7]">
+				{#if openWindows.length === 0}
+					<div class="flex h-full flex-col items-center justify-center gap-3 text-center">
+						<span class="block size-12 overflow-hidden rounded-full border border-border">
+							<img src="/aven-logo.svg" alt="" class="size-full object-cover">
+						</span>
+						<p class="text-foreground/40 text-sm">
+							„Zeig mir die Todos" — die Ansicht erscheint hier.
+						</p>
+					</div>
+				{:else}
+					{#each openWindows as w (w.manifest.id)}
+						{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
+						<button
+							type="button"
+							onclick={() => {
+								w.open = false
+								registryTick.v++
+							}}
+							title="Ansicht schließen"
+							aria-label="Ansicht schließen"
+							class="absolute top-2 right-3 z-10 text-foreground/30 transition-colors hover:text-foreground"
+						>
+							×
+						</button>
+						<Face actor={w.subject} {...w.props} />
+					{/each}
+				{/if}
+			</div>
 
-			<div class="flex flex-col gap-4 pt-2">
+			<!-- the conversation, below the view region -->
+			<div bind:this={transcriptEl} class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
 				{#if chat.turns.length === 0}
-					<p class="pt-8 text-center text-foreground/40 text-sm">
+					<p class="pt-4 text-center text-foreground/40 text-sm">
 						Sprich oder tippe unten — Fragen, Aufträge, oder „zeig mir die Todos".
 					</p>
 				{/if}
-
-				<!-- the REAL transcript, straight from the chat actor -->
 				{#each chat.turns as turn (turn.id)}
 					<div class="flex" class:justify-end={turn.role === 'user'}>
 						<div
@@ -793,38 +819,6 @@ const DOT: Record<string, string> = {
 						</div>
 					</div>
 				{/each}
-
-				<!-- INLINE VIEWS: every open window actor renders in the chat —
-				     "zeig mir das Board" opens the board RIGHT HERE. -->
-				{#if registryTick.v >= 0}
-					{#each bus
-						.actors()
-						.filter(isWindow)
-						.filter((w) => w.open && w.subject.manifest.id !== 'chat') as w (w.manifest.id)}
-						{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
-						<section class="rounded-xl border border-border bg-[#fffdf7] p-4">
-							<div class="relative flex items-baseline justify-center gap-2 pb-2">
-								<span class="font-semibold text-[13px]">{w.manifest.name}</span>
-								<span class="font-mono text-[0.5625rem] text-foreground/35">
-									{w.subject.manifest.id}
-								</span>
-								<button
-									type="button"
-									onclick={() => {
-										w.open = false
-										registryTick.v++
-									}}
-									title="Ansicht schließen"
-									aria-label="Ansicht schließen"
-									class="absolute top-0 right-0 text-foreground/30 transition-colors hover:text-foreground"
-								>
-									×
-								</button>
-							</div>
-							<Face actor={w.subject} {...w.props} />
-						</section>
-					{/each}
-				{/if}
 			</div>
 		{:else if skillView}
 			<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
@@ -1162,73 +1156,75 @@ const DOT: Record<string, string> = {
 	</main>
 
 	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
-	<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
-		<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-			Skills · {(talk.open ? TALK_SKILLS : selected.skills).length}
-		</h2>
-		{#each talk.open ? TALK_SKILLS : selected.skills as s (s.skill)}
-			<button
-				type="button"
-				onclick={() => {
+	{#if !talk.open}
+		<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
+			<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+				Skills · {selected.skills.length}
+			</h2>
+			{#each selected.skills as s (s.skill)}
+				<button
+					type="button"
+					onclick={() => {
 					skillView = skillView?.skill === s.skill ? null : s
 					preview = null
 				}}
-				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {skillView?.skill ===
+					class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {skillView?.skill ===
 				s.skill
 					? 'border-foreground/15 bg-surface-card-selected'
 					: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
-			>
-				<div class="flex items-center gap-2">
-					<span
-						class="size-1.5 shrink-0 rounded-full {s.state === 'done'
+				>
+					<div class="flex items-center gap-2">
+						<span
+							class="size-1.5 shrink-0 rounded-full {s.state === 'done'
 							? 'bg-[#2f5d50]'
 							: s.state === 'waiting'
 								? 'bg-[#c15b40]'
 								: 'bg-[#a06818]'}"
-					></span>
-					<span class="font-medium font-mono text-xs">{s.skill}</span>
-					<span class="ml-auto font-mono text-[0.625rem] text-foreground/40">
-						{s.state === 'done' ? 'fertig' : s.state === 'waiting' ? 'wartet' : 'läuft'}
-					</span>
-				</div>
-				<p class="pt-1 text-[0.6875rem] text-foreground/50 leading-relaxed">{s.note}</p>
-			</button>
-		{/each}
+						></span>
+						<span class="font-medium font-mono text-xs">{s.skill}</span>
+						<span class="ml-auto font-mono text-[0.625rem] text-foreground/40">
+							{s.state === 'done' ? 'fertig' : s.state === 'waiting' ? 'wartet' : 'läuft'}
+						</span>
+					</div>
+					<p class="pt-1 text-[0.6875rem] text-foreground/50 leading-relaxed">{s.note}</p>
+				</button>
+			{/each}
 
-		{#if !talk.open}
-			<h2 class="px-1 pt-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-				Artefakte · {selected.artifacts.length}
-			</h2>
-			{#each selected.artifacts as artifact (artifact.title)}
-				<button
-					type="button"
-					onclick={() => {
+			{#if !talk.open}
+				<h2 class="px-1 pt-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+					Artefakte · {selected.artifacts.length}
+				</h2>
+				{#each selected.artifacts as artifact (artifact.title)}
+					<button
+						type="button"
+						onclick={() => {
 						preview = preview?.title === artifact.title ? null : artifact
 						skillView = null
 					}}
-					class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
+						class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
 					artifact.title
 						? 'border-foreground/15 bg-surface-card-selected'
 						: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
-				>
-					<div class="flex items-center gap-2">
-						<span
-							class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
-						>
-							{KIND_LABEL[artifact.kind]}
-						</span>
-						<div class="min-w-0">
-							<p class="truncate font-medium text-xs">{artifact.title}</p>
-							<p class="truncate text-[0.6875rem] text-foreground/45">{artifact.note}</p>
+					>
+						<div class="flex items-center gap-2">
+							<span
+								class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
+							>
+								{KIND_LABEL[artifact.kind]}
+							</span>
+							<div class="min-w-0">
+								<p class="truncate font-medium text-xs">{artifact.title}</p>
+								<p class="truncate text-[0.6875rem] text-foreground/45">{artifact.note}</p>
+							</div>
 						</div>
-					</div>
-				</button>
-			{/each}
-		{/if}
+					</button>
+				{/each}
+			{/if}
 
-		<p class="px-1 pt-2 text-[0.625rem] text-foreground/35 leading-relaxed">
-			Ein Intent kombiniert Artefakte und Skill-Flows, um eine Aufgabe zu lösen. Alles hier ist ein
-			Mock — die Pipeline (ingest → classify → intents → skill-flows) kommt später.
-		</p>
-	</aside>
+			<p class="px-1 pt-2 text-[0.625rem] text-foreground/35 leading-relaxed">
+				Ein Intent kombiniert Artefakte und Skill-Flows, um eine Aufgabe zu lösen. Alles hier ist
+				ein Mock — die Pipeline (ingest → classify → intents → skill-flows) kommt später.
+			</p>
+		</aside>
+	{/if}
 </div>
