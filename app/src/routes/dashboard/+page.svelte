@@ -96,6 +96,13 @@ function beginConversation() {
 	void listener.start()
 }
 
+/** Clear whatever error is showing above the pill; the next good turn clears it anyway. */
+function dismissError() {
+	chat.failure = null
+	speaker.failure = null
+	listener.failure = null
+}
+
 // The recognizer needs to know when its own voice is in the room. Reading
 // `speaker.speaking` is the tracked dependency; `setOutputActive` writes no
 // reactive state, so this cannot feed back into itself.
@@ -328,14 +335,6 @@ $effect(() => {
 						</div>
 					</div>
 				{/if}
-
-				{#if chat.failure || speaker.failure || listener.failure}
-					<p
-						class="rounded-2xl border border-status-error/30 bg-status-error-muted px-4 py-3 text-sm text-status-error-strong"
-					>
-						{chat.failure ?? speaker.failure ?? listener.failure}
-					</p>
-				{/if}
 			</div>
 		</div>
 	{:else if tab === 'skills'}
@@ -449,6 +448,39 @@ $effect(() => {
 					</div>
 				</div>
 			{/if}
+		</div>
+	{/if}
+
+	<!-- Errors surface HERE, above the voice area — the same universal band as
+	     the human gate, so a failed reply (a dead lane, an unset key) is visible
+	     from any tab and in voice mode, not buried in the chat stream. The × or
+	     the next successful turn clears it. -->
+	{#if chat.failure || speaker.failure || listener.failure}
+		<div
+			class="mx-auto mb-2 flex w-full max-w-2xl items-start gap-3 rounded-2xl border border-status-error/40 bg-status-error-muted px-4 py-2.5 text-status-error-strong shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
+		>
+			<span class="shrink-0 pt-0.5 font-mono text-sm">✗</span>
+			<p class="min-w-0 flex-1 text-sm leading-snug">
+				{chat.failure ?? speaker.failure ?? listener.failure}
+			</p>
+			<button
+				type="button"
+				onclick={dismissError}
+				title="Dismiss"
+				aria-label="Dismiss error"
+				class="-mr-1 shrink-0 rounded-full p-1 transition-colors hover:bg-status-error/15"
+			>
+				<svg
+					viewBox="0 0 24 24"
+					class="size-4"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+					stroke-linecap="round"
+				>
+					<path d="M6 6l12 12M18 6L6 18" />
+				</svg>
+			</button>
 		</div>
 	{/if}
 
