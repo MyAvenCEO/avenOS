@@ -4,11 +4,12 @@
  * actor/flow architecture: no bus, no skills, hardcoded data only. Three
  * panes in the mail-app reading:
  *
- *   left   — the intent stream (one card per intent, by type)
- *   center — the ACTIVITY LOG: the intent's journey as a timeline —
- *            dots on a line, entry cards for the rich steps
- *   right  — the cluster: ARTIFACTS the intent combines, and the SKILLS
- *            it drives, each with where it currently stands
+ *   left   — the intent stream (compact cards, cream selection)
+ *   center — the ACTIVITY LOG (every entry TYPED by the skill that wrote
+ *            it), OR an artifact preview (full width), OR a skill's
+ *            flow stepper — depending on what is selected
+ *   right  — SKILLS (each with where it stands; click → stepper) above
+ *            ARTIFACTS (click → preview)
  *
  * An intent combines many artifacts and skill/flows to solve one task —
  * fed by the (invisible) inbox flow: ingest → archive → classify →
@@ -19,6 +20,8 @@ interface LogEntry {
 	step: string
 	when: string
 	state: 'done' | 'running' | 'waiting'
+	/** WHICH skill wrote this entry — every log line is typed. */
+	skill: string
 	note?: string
 	/** A rich entry renders as a card on the timeline (like a mail preview). */
 	card?: { title: string; text: string }
@@ -34,6 +37,8 @@ interface SkillStatus {
 	skill: string
 	state: 'done' | 'running' | 'waiting'
 	note: string
+	/** How many of the skill's flow steps are completed for this intent. */
+	step: number
 }
 interface MockIntent {
 	id: string
@@ -73,6 +78,16 @@ const KIND_LABEL: Record<string, string> = {
 	statement: 'KONTO'
 }
 
+/** Every skill's canonical flow — the stepper the right aside opens. */
+const SKILL_STEPS: Record<string, string[]> = {
+	inbox: ['Eingang', 'Klassifiziert', 'Intent', 'Geroutet'],
+	todos: ['Angelegt', 'Offen', 'Erledigt'],
+	calendar: ['Eingetragen', 'Erinnert', 'Frist'],
+	docs: ['Entwurf', 'Freigabe', 'Erledigt'],
+	brain: ['Erkannt', 'Verknüpft', 'Angereichert'],
+	abgleich: ['Wartet', 'Abgeglichen', 'Abgehakt']
+}
+
 const INTENTS: MockIntent[] = [
 	{
 		id: 'krankenkasse',
@@ -87,12 +102,14 @@ const INTENTS: MockIntent[] = [
 				step: 'Brief eingegangen',
 				when: '12.08. · 14:02',
 				state: 'done',
+				skill: 'inbox',
 				note: 'Post-Scan · als Artefakt archiviert'
 			},
 			{
 				step: 'Klassifiziert',
 				when: '12.08. · 14:02',
 				state: 'done',
+				skill: 'inbox',
 				card: {
 					title: 'Krankenversicherung · Frist erkannt',
 					text: 'Absender: Techniker Krankenkasse. Gefordert: Einkommensnachweis. Frist: 15.09. — Zuversicht 96 %.'
@@ -102,24 +119,28 @@ const INTENTS: MockIntent[] = [
 				step: 'Intent extrahiert',
 				when: '12.08. · 14:03',
 				state: 'done',
+				skill: 'inbox',
 				note: '„Nachweis einreichen bis zur Frist" — ein Todo, ein Termin, ein Entwurf'
 			},
 			{
 				step: 'Todo angelegt',
 				when: '12.08. · 14:03',
 				state: 'done',
+				skill: 'todos',
 				note: '„Nachweis einreichen" · fällig 12.09. · @me'
 			},
 			{
 				step: 'Kalender-Frist eingetragen',
 				when: '12.08. · 14:03',
 				state: 'done',
+				skill: 'calendar',
 				note: '15.09. · ganztägig'
 			},
 			{
 				step: 'Antwortentwurf wartet auf Freigabe',
 				when: 'heute · 09:12',
 				state: 'waiting',
+				skill: 'docs',
 				card: {
 					title: 'Entwurf: Antwort an die TK',
 					text: 'Sehr geehrte Damen und Herren, anbei der angeforderte Einkommensnachweis für den Zeitraum…'
@@ -135,11 +156,11 @@ const INTENTS: MockIntent[] = [
 			{ kind: 'entity', title: '[[Versicherungen 2025]]', note: 'Brain · 4 Verknüpfungen' }
 		],
 		skills: [
-			{ skill: 'inbox', state: 'done', note: 'klassifiziert · Intent extrahiert' },
-			{ skill: 'todos', state: 'done', note: '1 Todo angelegt · offen' },
-			{ skill: 'calendar', state: 'done', note: 'Frist 15.09. eingetragen' },
-			{ skill: 'docs', state: 'waiting', note: 'Antwortentwurf wartet auf Freigabe' },
-			{ skill: 'brain', state: 'running', note: 'verknüpft mit [[Versicherungen 2025]]' }
+			{ skill: 'inbox', state: 'done', note: 'klassifiziert · Intent extrahiert', step: 4 },
+			{ skill: 'todos', state: 'done', note: '1 Todo angelegt · offen', step: 2 },
+			{ skill: 'calendar', state: 'done', note: 'Frist 15.09. eingetragen', step: 1 },
+			{ skill: 'docs', state: 'waiting', note: 'Antwortentwurf wartet auf Freigabe', step: 1 },
+			{ skill: 'brain', state: 'running', note: 'verknüpft mit [[Versicherungen 2025]]', step: 2 }
 		]
 	},
 	{
@@ -155,12 +176,14 @@ const INTENTS: MockIntent[] = [
 				step: 'Rechnung hochgeladen',
 				when: 'heute · 08:44',
 				state: 'done',
+				skill: 'inbox',
 				note: 'rechnung-buerostuhl.pdf · archiviert'
 			},
 			{
 				step: 'Klassifiziert',
 				when: 'heute · 08:44',
 				state: 'done',
+				skill: 'inbox',
 				card: {
 					title: 'Rechnung · 249,00 €',
 					text: 'Möbelhaus Nord GmbH · Zahlungsziel 30.08. · IBAN erkannt · Skonto: keins.'
@@ -170,12 +193,14 @@ const INTENTS: MockIntent[] = [
 				step: 'Todo angelegt',
 				when: 'heute · 08:45',
 				state: 'done',
+				skill: 'todos',
 				note: '„Bürostuhl bezahlen — 249 €" · fällig 30.08.'
 			},
 			{
 				step: 'Wartet auf Zahlung',
 				when: 'seit heute',
 				state: 'running',
+				skill: 'abgleich',
 				note: 'der nächste Kontoauszug hakt das Todo automatisch ab'
 			}
 		],
@@ -185,9 +210,9 @@ const INTENTS: MockIntent[] = [
 			{ kind: 'person', title: 'Möbelhaus Nord GmbH', note: 'Firma · Lieferant' }
 		],
 		skills: [
-			{ skill: 'inbox', state: 'done', note: 'klassifiziert als Rechnung' },
-			{ skill: 'todos', state: 'done', note: '1 Todo angelegt · offen' },
-			{ skill: 'abgleich', state: 'running', note: 'wartet auf den nächsten Kontoauszug' }
+			{ skill: 'inbox', state: 'done', note: 'klassifiziert als Rechnung', step: 4 },
+			{ skill: 'todos', state: 'done', note: '1 Todo angelegt · offen', step: 2 },
+			{ skill: 'abgleich', state: 'running', note: 'wartet auf den nächsten Kontoauszug', step: 0 }
 		]
 	},
 	{
@@ -203,12 +228,14 @@ const INTENTS: MockIntent[] = [
 				step: 'Sammel-Intent gestartet',
 				when: '02.08.',
 				state: 'done',
+				skill: 'brain',
 				note: 'langlaufend: alles für die Erklärung 2023'
 			},
 			{
 				step: 'Artefakte verknüpft',
 				when: 'laufend',
 				state: 'done',
+				skill: 'brain',
 				card: {
 					title: '12 Artefakte im Brain',
 					text: 'Rechnungen (7), Kontoauszüge (4), Lohnsteuerbescheinigung (1) — jedes neue Dokument wird automatisch zugeordnet.'
@@ -218,12 +245,14 @@ const INTENTS: MockIntent[] = [
 				step: 'Todo hält die Frist',
 				when: '02.08.',
 				state: 'done',
+				skill: 'todos',
 				note: '„Unterlagen an Steuerberater" · fällig 20.09.'
 			},
 			{
 				step: 'Sammelt weiter',
 				when: 'laufend',
 				state: 'running',
+				skill: 'docs',
 				note: 'fehlend laut Checkliste: Spendenquittungen, Handwerkerrechnungen'
 			}
 		],
@@ -235,9 +264,14 @@ const INTENTS: MockIntent[] = [
 			{ kind: 'person', title: 'StB Kanzlei Meier', note: 'Firma · Steuerberatung' }
 		],
 		skills: [
-			{ skill: 'brain', state: 'running', note: '12 Artefakte verknüpft · sammelt weiter' },
-			{ skill: 'todos', state: 'done', note: 'Frist-Todo angelegt' },
-			{ skill: 'docs', state: 'running', note: 'ordnet neue Dokumente automatisch zu' }
+			{
+				skill: 'brain',
+				state: 'running',
+				note: '12 Artefakte verknüpft · sammelt weiter',
+				step: 2
+			},
+			{ skill: 'todos', state: 'done', note: 'Frist-Todo angelegt', step: 2 },
+			{ skill: 'docs', state: 'running', note: 'ordnet neue Dokumente automatisch zu', step: 1 }
 		]
 	},
 	{
@@ -252,12 +286,14 @@ const INTENTS: MockIntent[] = [
 				step: 'Kontoauszug hochgeladen',
 				when: 'gestern · 18:40',
 				state: 'done',
+				skill: 'inbox',
 				note: 'kontoauszug-07.csv · 38 Transaktionen'
 			},
 			{
 				step: 'Abgeglichen',
 				when: 'gestern · 18:41',
 				state: 'done',
+				skill: 'abgleich',
 				card: {
 					title: '6 Zahlungen zugeordnet, 1 nachgefragt',
 					text: '31 bekannte Daueraufträge übersprungen. 6 offene Rechnungen automatisch abgehakt; „Miete August" wurde von dir bestätigt.'
@@ -267,6 +303,7 @@ const INTENTS: MockIntent[] = [
 				step: 'Todos abgehakt',
 				when: 'gestern · 18:41',
 				state: 'done',
+				skill: 'todos',
 				note: '6 Rechnungs-Todos → erledigt'
 			}
 		],
@@ -275,8 +312,8 @@ const INTENTS: MockIntent[] = [
 			{ kind: 'todo', title: 'Miete August überweisen', note: 'erledigt · abgeglichen' }
 		],
 		skills: [
-			{ skill: 'abgleich', state: 'done', note: '38 Transaktionen · 7 zugeordnet' },
-			{ skill: 'todos', state: 'done', note: '6 Todos abgehakt' }
+			{ skill: 'abgleich', state: 'done', note: '38 Transaktionen · 7 zugeordnet', step: 3 },
+			{ skill: 'todos', state: 'done', note: '6 Todos abgehakt', step: 3 }
 		]
 	},
 	{
@@ -291,25 +328,28 @@ const INTENTS: MockIntent[] = [
 				step: 'Auftrag erfasst',
 				when: 'gestern · 21:15',
 				state: 'done',
+				skill: 'inbox',
 				note: 'freier Auftrag aus dem Chat'
 			},
 			{
 				step: 'Intent extrahiert',
 				when: 'gestern · 21:15',
 				state: 'done',
+				skill: 'inbox',
 				note: 'Kündigung: Vertrag finden, Frist prüfen, Schreiben aufsetzen'
 			},
 			{
 				step: 'Vertrag wird gesucht',
 				when: 'seit gestern',
 				state: 'running',
+				skill: 'docs',
 				note: 'Archiv-Suche nach dem FitX-Vertrag läuft'
 			}
 		],
 		artifacts: [{ kind: 'entity', title: '[[FitX Vertrag]]', note: 'Brain · gesucht…' }],
 		skills: [
-			{ skill: 'docs', state: 'running', note: 'durchsucht das Archiv' },
-			{ skill: 'brain', state: 'waiting', note: 'wartet auf den Vertrag' }
+			{ skill: 'docs', state: 'running', note: 'durchsucht das Archiv', step: 0 },
+			{ skill: 'brain', state: 'waiting', note: 'wartet auf den Vertrag', step: 0 }
 		]
 	}
 ]
@@ -318,11 +358,12 @@ let selectedId = $state(INTENTS[0].id)
 const selected = $derived(INTENTS.find((i) => i.id === selectedId) ?? INTENTS[0])
 
 /**
- * Artifact preview: clicking an artifact swaps the center from the activity
- * log to an example view of WHAT the artifact is — one mock preview per
- * kind. Selecting an intent (or the back button) returns to the log.
+ * The center shows ONE of three things: the activity log (default), an
+ * artifact preview, or a skill's flow stepper. Selecting an intent — or
+ * the back button — returns to the log.
  */
 let preview = $state<MockArtifact | null>(null)
+let skillView = $state<SkillStatus | null>(null)
 
 const DOT: Record<string, string> = {
 	done: 'bg-[#2f5d50] text-white',
@@ -331,8 +372,21 @@ const DOT: Record<string, string> = {
 }
 </script>
 
+{#snippet backButton()}
+	<button
+		type="button"
+		onclick={() => {
+			preview = null
+			skillView = null
+		}}
+		class="ml-auto shrink-0 rounded-full border border-foreground/10 px-3 py-1 text-foreground/60 text-xs transition-colors hover:bg-surface-card"
+	>
+		← Zurück zum Verlauf
+	</button>
+{/snippet}
+
 <div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden">
-	<!-- LEFT: the intent stream — compact cards; the selected one inverts. -->
+	<!-- LEFT: the intent stream — compact cards, cream selection. -->
 	<aside class="flex w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-4">
 		<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
 			Intents · {INTENTS.length}
@@ -344,6 +398,7 @@ const DOT: Record<string, string> = {
 				onclick={() => {
 					selectedId = intent.id
 					preview = null
+					skillView = null
 				}}
 				class="rounded-xl border px-3.5 py-2.5 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
 					? 'border-foreground/15 bg-surface-card-selected'
@@ -355,18 +410,14 @@ const DOT: Record<string, string> = {
 					>
 						{intent.type}
 					</span>
-					<span class="ml-auto font-mono text-[0.5625rem] {'text-foreground/35'}">
-						{intent.when}
-					</span>
+					<span class="ml-auto font-mono text-[0.5625rem] text-foreground/35">{intent.when}</span>
 				</div>
 				<p class="pt-1 font-semibold text-[13px] leading-snug">{intent.title}</p>
 				<div class="flex items-center gap-2 pt-1">
-					<span class="text-[0.625rem] {'text-foreground/45'}">
-						{intent.source}
-					</span>
+					<span class="text-[0.625rem] text-foreground/45">{intent.source}</span>
 					{#if intent.deadline}
 						<span
-							class="rounded-full px-1.5 py-0.5 font-mono text-[0.5625rem] {'bg-[#c15b40]/10 text-[#9c4832]'}"
+							class="rounded-full bg-[#c15b40]/10 px-1.5 py-0.5 font-mono text-[#9c4832] text-[0.5625rem]"
 						>
 							{intent.deadline}
 						</span>
@@ -385,12 +436,106 @@ const DOT: Record<string, string> = {
 		{/each}
 	</aside>
 
-	<!-- CENTER: the activity log — the intent's journey as a timeline. -->
+	<!-- CENTER: activity log / artifact preview / skill stepper. -->
 	<main
 		class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 	>
-		{#if preview}
-			<!-- ARTIFACT PREVIEW: what the clicked artifact IS, by example. -->
+		{#if skillView}
+			<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
+			{@const steps = SKILL_STEPS[skillView.skill] ?? []}
+			{@const skillLog = selected.log.filter((e) => e.skill === skillView?.skill)}
+			<header class="flex items-center gap-3">
+				<span
+					class="size-2 shrink-0 rounded-full {skillView.state === 'done'
+						? 'bg-[#2f5d50]'
+						: skillView.state === 'waiting'
+							? 'bg-[#c15b40]'
+							: 'bg-[#a06818]'}"
+				></span>
+				<div class="min-w-0">
+					<h1 class="font-mono font-semibold text-lg leading-tight">{skillView.skill}</h1>
+					<p class="text-foreground/45 text-xs">{skillView.note}</p>
+				</div>
+				{@render backButton()}
+			</header>
+			<div class="border-border border-b"></div>
+
+			<!-- the stepper: the skill's canonical flow, current position marked -->
+			<ol class="flex items-center gap-0 pt-2">
+				{#each steps as label, i (label)}
+					{@const done = i < skillView.step}
+					{@const current = i === skillView.step}
+					<li class="flex flex-1 items-center">
+						<div class="flex flex-col items-center gap-1.5">
+							<span
+								class="flex size-8 items-center justify-center rounded-full font-mono text-xs {done
+									? 'bg-[#2f5d50] text-white'
+									: current
+										? skillView.state === 'waiting'
+											? 'bg-[#c15b40] text-white ring-4 ring-[#c15b40]/15'
+											: 'bg-[#a06818] text-white ring-4 ring-[#a06818]/15'
+										: 'bg-surface-soft text-foreground/40'}"
+							>
+								{#if done}
+									<svg
+										viewBox="0 0 24 24"
+										class="size-3.5"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="3"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<path d="m5 13 4 4L19 7" />
+									</svg>
+								{:else}
+									{i + 1}
+								{/if}
+							</span>
+							<span
+								class="whitespace-nowrap text-[0.6875rem] {done || current
+									? 'font-medium'
+									: 'text-foreground/40'}"
+							>
+								{label}
+							</span>
+						</div>
+						{#if i < steps.length - 1}
+							<div
+								class="mx-2 mb-5 h-px flex-1 {i < skillView.step
+									? 'bg-[#2f5d50]/40'
+									: 'bg-foreground/10'}"
+							></div>
+						{/if}
+					</li>
+				{/each}
+			</ol>
+
+			<!-- what this skill logged into the intent's stream -->
+			{#if skillLog.length > 0}
+				<h2 class="pt-4 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+					Log dieses Skills
+				</h2>
+				<ul class="flex flex-col gap-2">
+					{#each skillLog as entry (entry.step)}
+						<li class="flex items-baseline gap-3 text-sm">
+							<span class="font-mono text-[0.625rem] text-foreground/35">{entry.when}</span>
+							<span class="min-w-0 flex-1">{entry.step}</span>
+							<span
+								class="font-mono text-[0.625rem] {entry.state === 'done'
+									? 'text-[#2f5d50]'
+									: entry.state === 'waiting'
+										? 'text-[#9c4832]'
+										: 'text-[#a06818]'}"
+							>
+								{entry.state === 'done' ? '✓' : entry.state === 'waiting' ? '⏸' : '⟳'}
+							</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		{:else if preview}
+			<!-- ARTIFACT PREVIEW: full width — header, a divider, the view. -->
 			<header class="flex items-center gap-2">
 				<span
 					class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
@@ -401,22 +546,12 @@ const DOT: Record<string, string> = {
 					<h1 class="truncate font-semibold text-lg leading-tight">{preview.title}</h1>
 					<p class="text-foreground/45 text-xs">{preview.note}</p>
 				</div>
-				<button
-					type="button"
-					onclick={() => {
-						preview = null
-					}}
-					class="ml-auto shrink-0 rounded-full border border-foreground/10 px-3 py-1 text-foreground/60 text-xs transition-colors hover:bg-surface-card"
-				>
-					← Zurück zum Verlauf
-				</button>
+				{@render backButton()}
 			</header>
+			<div class="border-border border-b"></div>
 
 			{#if preview.kind === 'doc'}
-				<!-- a document page, sketched -->
-				<div
-					class="mx-auto w-full max-w-xl rounded-xl border border-border bg-white p-8 shadow-[0_2px_12px_rgba(30,41,59,0.06)]"
-				>
+				<div class="w-full pt-2">
 					<div class="flex items-baseline justify-between pb-6">
 						<span class="font-semibold text-sm">{preview.title.replace('.pdf', '')}</span>
 						<span class="font-mono text-[0.625rem] text-foreground/40">Seite 1 / 2</span>
@@ -425,7 +560,7 @@ const DOT: Record<string, string> = {
 						<div class="mb-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
 					{/each}
 					<div class="mt-5 rounded-lg border border-[#a06818]/30 bg-[#a06818]/8 px-4 py-3">
-						<p class="font-mono text-[0.625rem] text-[#a06818] uppercase tracking-wide">
+						<p class="font-mono text-[#a06818] text-[0.625rem] uppercase tracking-wide">
 							Extrahiert
 						</p>
 						<p class="pt-1 text-xs leading-relaxed">{preview.note}</p>
@@ -435,24 +570,20 @@ const DOT: Record<string, string> = {
 					{/each}
 				</div>
 			{:else if preview.kind === 'todo'}
-				<div
-					class="mx-auto w-full max-w-xl rounded-xl border border-border bg-white px-5 py-4 shadow-[0_2px_12px_rgba(30,41,59,0.06)]"
-				>
+				<div class="w-full pt-2">
 					<div class="flex items-center gap-3">
 						<span
 							class="flex size-5 items-center justify-center rounded-md border-2 border-foreground/20"
 						></span>
 						<span class="flex-1 font-medium text-sm">{preview.title}</span>
-						<span class="rounded-full bg-surface-soft px-2 py-0.5 font-mono text-[0.625rem]"
-							>todos</span
-						>
+						<span class="rounded-full bg-surface-soft px-2 py-0.5 font-mono text-[0.625rem]">
+							todos
+						</span>
 					</div>
 					<p class="pt-2 pl-8 text-foreground/50 text-xs">{preview.note}</p>
 				</div>
 			{:else if preview.kind === 'calendar'}
-				<div
-					class="mx-auto flex w-full max-w-xl items-center gap-4 rounded-xl border border-border bg-white px-5 py-4 shadow-[0_2px_12px_rgba(30,41,59,0.06)]"
-				>
+				<div class="flex w-full items-center gap-4 pt-2">
 					<div
 						class="flex size-14 flex-col items-center justify-center rounded-xl bg-[#c15b40]/10 text-[#9c4832]"
 					>
@@ -465,9 +596,7 @@ const DOT: Record<string, string> = {
 					</div>
 				</div>
 			{:else if preview.kind === 'person'}
-				<div
-					class="mx-auto w-full max-w-xl rounded-xl border border-border bg-white px-5 py-5 shadow-[0_2px_12px_rgba(30,41,59,0.06)]"
-				>
+				<div class="w-full pt-2">
 					<div class="flex items-center gap-4">
 						<span
 							class="flex size-12 items-center justify-center rounded-full bg-[#7e6ead]/15 font-semibold text-[#655687] text-sm"
@@ -489,37 +618,34 @@ const DOT: Record<string, string> = {
 					</div>
 				</div>
 			{:else if preview.kind === 'statement'}
-				<div
-					class="mx-auto w-full max-w-xl overflow-hidden rounded-xl border border-border bg-white shadow-[0_2px_12px_rgba(30,41,59,0.06)]"
-				>
-					<div class="border-border border-b px-5 py-3 font-medium text-sm">{preview.title}</div>
+				<div class="w-full pt-2">
 					{#each [{ d: '28.07.', t: 'Miete August', a: '−1.150,00 €', m: 'abgeglichen ✓' }, { d: '25.07.', t: 'Möbelhaus Nord GmbH', a: '−249,00 €', m: 'Rechnung zugeordnet ✓' }, { d: '24.07.', t: 'Gehalt', a: '+3.480,00 €', m: '' }] as row (row.d + row.t)}
-						<div class="flex items-center gap-3 border-border/50 border-b px-5 py-2.5 text-xs">
-							<span class="w-12 font-mono text-foreground/40">{row.d}</span>
+						<div class="flex items-center gap-3 border-border/60 border-b py-2.5 text-sm">
+							<span class="w-14 font-mono text-foreground/40 text-xs">{row.d}</span>
 							<span class="min-w-0 flex-1 truncate">{row.t}</span>
 							<span class="font-mono {row.a.startsWith('+') ? 'text-[#2f5d50]' : ''}">{row.a}</span>
-							<span class="w-32 text-right text-[0.625rem] text-foreground/40">{row.m}</span>
+							<span class="w-40 text-right text-[0.6875rem] text-foreground/40">{row.m}</span>
 						</div>
 					{/each}
 				</div>
 			{:else}
-				<!-- brain entity: the wikilink card -->
-				<div
-					class="mx-auto w-full max-w-xl rounded-xl border border-border bg-white px-5 py-5 shadow-[0_2px_12px_rgba(30,41,59,0.06)]"
-				>
+				<!-- brain entity: the wikilink view -->
+				<div class="w-full pt-2">
 					<p class="font-mono text-[#655687] text-sm">{preview.title}</p>
 					<p class="pt-1 text-foreground/50 text-xs">{preview.note}</p>
 					<div class="mt-4 flex flex-wrap gap-1.5">
 						{#each ['[[Krankenkasse]]', '[[Einkommensnachweis]]', '[[Fristen 2025]]', '[[Steuer 2023]]'] as link (link)}
 							<span
 								class="rounded-full bg-[#7e6ead]/10 px-2.5 py-1 font-mono text-[#655687] text-[0.625rem]"
-								>{link}</span
 							>
+								{link}
+							</span>
 						{/each}
 					</div>
 				</div>
 			{/if}
 		{:else}
+			<!-- ACTIVITY LOG: the intent's journey, every entry typed by skill. -->
 			<header>
 				<div class="flex items-center gap-2">
 					<span
@@ -544,18 +670,16 @@ const DOT: Record<string, string> = {
 				<p class="pt-1 text-foreground/45 text-xs">{selected.source} · {selected.when}</p>
 			</header>
 
-			<!-- The timeline: dots on one line, cards for the rich entries. -->
 			<ol class="flex flex-col">
 				{#each selected.log as entry, i (entry.step + i)}
 					<li class="relative flex gap-3 pb-5">
-						<!-- the connector line, drawn segment by segment -->
 						{#if i < selected.log.length - 1}
 							<span class="absolute top-6 bottom-0 left-[11px] w-px bg-foreground/10"></span>
 						{/if}
 						<span
 							class="z-10 mt-0.5 flex size-[23px] shrink-0 items-center justify-center rounded-full {DOT[
-							entry.state
-						]}"
+								entry.state
+							]}"
 						>
 							{#if entry.state === 'done'}
 								<svg
@@ -597,6 +721,17 @@ const DOT: Record<string, string> = {
 						<div class="min-w-0 flex-1">
 							<div class="flex items-baseline gap-2">
 								<span class="font-medium text-sm">{entry.step}</span>
+								<!-- the entry is TYPED: which skill wrote it -->
+								<button
+									type="button"
+									onclick={() => {
+										skillView = selected.skills.find((s) => s.skill === entry.skill) ?? null
+										preview = null
+									}}
+									class="rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[0.5625rem] text-foreground/55 transition-colors hover:bg-surface-card-selected"
+								>
+									{entry.skill}
+								</button>
 								<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
 									{entry.when}
 								</span>
@@ -633,15 +768,22 @@ const DOT: Record<string, string> = {
 		{/if}
 	</main>
 
-	<!-- RIGHT: the cluster — the artifacts this intent combines, and the
-	     skills it drives with where each currently stands. -->
+	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
 	<aside class="flex w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-4">
 		<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
 			Skills · {selected.skills.length}
 		</h2>
 		{#each selected.skills as s (s.skill)}
-			<div
-				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] px-4 py-3 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			<button
+				type="button"
+				onclick={() => {
+					skillView = skillView?.skill === s.skill ? null : s
+					preview = null
+				}}
+				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {skillView?.skill ===
+				s.skill
+					? 'border-foreground/15 bg-surface-card-selected'
+					: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
 			>
 				<div class="flex items-center gap-2">
 					<span
@@ -657,7 +799,7 @@ const DOT: Record<string, string> = {
 					</span>
 				</div>
 				<p class="pt-1 text-[0.6875rem] text-foreground/50 leading-relaxed">{s.note}</p>
-			</div>
+			</button>
 		{/each}
 
 		<h2 class="px-1 pt-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
@@ -668,6 +810,7 @@ const DOT: Record<string, string> = {
 				type="button"
 				onclick={() => {
 					preview = preview?.title === artifact.title ? null : artifact
+					skillView = null
 				}}
 				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
 				artifact.title

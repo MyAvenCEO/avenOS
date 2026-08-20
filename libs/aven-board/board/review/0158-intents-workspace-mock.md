@@ -50,6 +50,12 @@ Mock only: hardcoded data, no bus/skills imports (like the current placeholder).
 
 ## Progress log
 
+- `2026-08-20` — Iteration 3 (Samuel): activity log TYPED per skill (each entry carries
+  a clickable skill chip); skill cards match artifact-card roundedness; clicking a skill
+  opens its FLOW STEPPER in the center (canonical steps, current position ringed, plus
+  the skill's own log lines); artifact preview is full-width — generic header + divider +
+  the view on the same bg, no sub-cards. Tabs reordered Intents·Views·Skills (Intents
+  default) in the prior iteration. Live-verified.
 - `2026-08-20` — Iteration 2 (Samuel): full-width layout for the workspaces (views keeps
   reading width); selected intent card fully INVERTED (navy bg, light text) instead of
   border/ring; left aside compacted to w-72 (same width as the right aside); Skills
