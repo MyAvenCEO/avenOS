@@ -13,7 +13,8 @@ import { isWindow } from '$lib/actors/window.actor.svelte'
 import { windowsBound } from '$lib/actors/windows'
 import FibuExplorer from '$lib/fibu/FibuExplorer.svelte'
 import RecipeFlow from '$lib/fibu/RecipeFlow.svelte'
-import IntentExplorer from '$lib/intents/IntentExplorer.svelte'
+import MeshCockpit from '$lib/mesh/MeshCockpit.svelte'
+import MeshRegistry from '$lib/mesh/MeshRegistry.svelte'
 
 /**
  * Dashboard — a chat against RedPill's confidential Gemma
@@ -314,17 +315,17 @@ $effect(() => {
 			<FibuExplorer />
 		</div>
 	{:else if tab === 'intents'}
-		<!-- Intent-Cockpit (UX-Brainstorm, hartkodiert): alles ist ein Intent;
-		     je Intent arbeiten parallele Skill-Läufe — geteilter Rahmen
-		     (Stepper, Abhängigkeiten, Zustand), eigenes Gesicht pro Skill. -->
+		<!-- The mesh cockpit (first-principles collapse): intents are actors
+		     born from events; everything on screen derives from message
+		     threads — states, boards, paths, faces. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
-			<IntentExplorer />
+			<MeshCockpit />
 		</div>
 	{:else if tab === 'skills'}
-		<!-- The skill library (board 0140): flows as JSON configs on a canvas,
-		     grouped by the skills that bring them. No engine — declarations. -->
+		<!-- The declared mesh: one primitive (actor), coordinators as
+		     "skills", wiring derived from provides ∩ requires. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
-			<RecipeFlow />
+			<MeshRegistry />
 		</div>
 	{:else if tab === 'actors'}
 		<!-- The actor explorer: everything the registry knows about every actor,
