@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.6...v) (2026-08-20)
+
+
+### Features
+
+* **shell:** MAIA becomes a global context in the spark rail; talk = 25% chat / 75% views ([#72](https://github.com/MyAvenCEO/avenOS/issues/72)) ([ce2f16f](https://github.com/MyAvenCEO/avenOS/commit/ce2f16f271f8568676f698520aa81b8c4a0b5ddf))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.5...v) (2026-08-20)
 
 
