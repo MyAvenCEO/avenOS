@@ -1,17 +1,17 @@
 <script lang="ts">
 import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
-import ActorExplorer from '$lib/actors/ActorExplorer.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
 import { bus } from '$lib/actors/bus'
-import { chatActor, summarizeCall } from '$lib/actors/chat.actor.svelte'
+import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { confirmHeld, hitlQueue, rejectHeld } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import { isWindow } from '$lib/actors/window.actor.svelte'
 import { windowsBound } from '$lib/actors/windows'
-import MeshFlow from '$lib/mesh/MeshFlow.svelte'
+import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
+import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
 
 /**
  * Dashboard — a chat against RedPill's confidential Gemma
@@ -38,10 +38,7 @@ const listener = listenerActor.core
  * gets asked for. The view is the default because the workspace is the
  * point.
  */
-let tab = $state<'views' | 'actors' | 'chat' | 'skills'>('views')
-
-/** The workspaces that want the whole window rather than reading width. */
-const wide = $derived(tab === 'skills')
+let tab = $state<'views' | 'skills' | 'intents'>('intents')
 
 /**
  * Voice is the default, except where there is no voice.
@@ -93,6 +90,8 @@ function endConversation() {
 function beginConversation() {
 	conversing = true
 	typing = false
+	// Voice mode always speaks: clear any mute left over from a text session.
+	speaker.muted = false
 	void listener.start()
 }
 
@@ -146,44 +145,24 @@ const phase = $derived.by(() => {
 	return { key: 'text', label: 'Text only' }
 })
 
-let draft = $state('')
-/** Flips briefly after an export so the button itself confirms the copy. */
-let exported = $state(false)
+// Model-load percent (STT or TTS, whichever is preparing). Kept as a number so
+// the loading bar and its label can share ONE line — no second row that grows
+// the pill's height.
+const loadPct = $derived(
+	Math.round((listener.status === 'preparing' ? listener.progress : speaker.progress) * 100)
+)
 
-/**
- * The session as JSON on the clipboard — model, the exact wire messages
- * (tool_calls, arguments, results by id), and the rendered turns. Made to be
- * pasted into a debugging session when a flow went sideways, so the fix can
- * start from what the model actually saw instead of a retelling.
- */
-async function exportLog() {
-	const log = JSON.stringify(
-		{
-			model: 'qwen/qwen3.5-122b-a10b',
-			exportedAt: new Date().toISOString(),
-			...(chat.export() as object)
-		},
-		null,
-		2
-	)
-	try {
-		await navigator.clipboard.writeText(log)
-	} catch {
-		// Clipboard denied (unfocused window, old webview) — download instead.
-		const url = URL.createObjectURL(new Blob([log], { type: 'application/json' }))
-		const a = document.createElement('a')
-		a.href = url
-		a.download = 'aven-chat-log.json'
-		a.click()
-		URL.revokeObjectURL(url)
-	}
-	exported = true
-	setTimeout(() => {
-		exported = false
-	}, 2000)
-}
-let log: HTMLDivElement | null = $state(null)
+let draft = $state('')
+
 let form: HTMLFormElement | null = $state(null)
+let textareaEl: HTMLTextAreaElement | null = $state(null)
+
+// Switching to text mode should land the cursor in the field — no second click
+// to start writing. The effect fires when `typing` flips true and the textarea
+// has mounted; focusing an already-focused field is a harmless no-op.
+$effect(() => {
+	if (typing && textareaEl) textareaEl.focus()
+})
 
 function submit(event: SubmitEvent) {
 	event.preventDefault()
@@ -202,15 +181,6 @@ function onKeydown(event: KeyboardEvent) {
 		form?.requestSubmit()
 	}
 }
-
-// Follow the stream. Reading `turns` and the last turn's content is what makes
-// this re-run on every token, not just on every message.
-$effect(() => {
-	const last = chat.turns.at(-1)
-	void chat.turns.length
-	void last?.content
-	log?.scrollTo({ top: log.scrollHeight })
-})
 </script>
 
 <svelte:head>
@@ -221,15 +191,17 @@ $effect(() => {
      die volle Fensterbreite; die übrigen Tabs bleiben auf Lesebreite zentriert.
      Ein einziges 8px-Raster (gap-2/p-2) trägt alle Abstände: Fensterkante →
      Tabs → Fläche → Voice-Panel → Fensterkante. -->
+<!-- The workspaces (skills, intents) take the whole window; views stay at
+     reading width. -->
 <main
-	class="mx-auto flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2 {wide
-		? 'w-full max-w-none'
-		: 'max-w-6xl'}"
+	class="mx-auto flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2 {tab === 'views'
+		? 'max-w-6xl'
+		: 'w-full max-w-none'}"
 >
 	<header class="flex flex-col items-center">
-		<!-- Compact tabs, centred: the skills workspace and the conversation. -->
+		<!-- Compact tabs, centred: the workspace, the registry, the conversation. -->
 		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
-			{#each [{ id: 'views' as const, label: 'Views' }, { id: 'actors' as const, label: 'Actors' }, { id: 'chat' as const, label: 'Chat' }, { id: 'skills' as const, label: 'Skills' }] as t (t.id)}
+			{#each [{ id: 'intents' as const, label: 'Intents' }, { id: 'views' as const, label: 'Views' }, { id: 'skills' as const, label: 'Skills' }] as t (t.id)}
 				<button
 					type="button"
 					onclick={() => {
@@ -245,110 +217,15 @@ $effect(() => {
 		</nav>
 	</header>
 
-	{#if tab === 'chat'}
-		<div class="flex min-h-0 flex-1 flex-col gap-2">
-			<!-- Chat-scoped actions: they operate on this conversation, so they
-				     live with it rather than in the global chrome. -->
-			{#if chat.turns.length > 0}
-				<div class="flex justify-end gap-3 text-xs opacity-50">
-					<button type="button" class="underline underline-offset-4" onclick={exportLog}>
-						{exported ? 'Copied' : 'Export'}
-					</button>
-					<button
-						type="button"
-						class="underline underline-offset-4"
-						onclick={() => {
-								chat.clear()
-								speaker.silence()
-								activity.clear()
-								void listener.reset()
-							}}
-					>
-						Clear
-					</button>
-				</div>
-			{/if}
-
-			<div bind:this={log} class="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
-				{#each chat.turns as turn (turn.id)}
-					<div class="flex flex-col gap-1" class:items-end={turn.role === 'user'}>
-						<!-- What the turn's tools actually did, kept with the reply they
-				     produced. The toast is the glance; this is the record. -->
-						{#each turn.calls ?? [] as call, i (i)}
-							{@const entry = summarizeCall(call.name, call.result)}
-							{#if entry}
-								<div class="flex gap-2 pl-1 text-xs opacity-60">
-									<span
-										class="w-3 shrink-0 text-center font-mono"
-										class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
-										class:text-status-working={entry.kind === 'doing'}
-										class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
-									>
-										{ACTIVITY_LABELS[entry.kind].mark}
-									</span>
-									<span class="min-w-0">
-										{ACTIVITY_LABELS[entry.kind].label}
-										{entry.titles.length > 0
-									? `: ${entry.titles.join(', ')}`
-									: entry.note
-										? ` · ${entry.note}`
-										: ''}
-									</span>
-								</div>
-							{/if}
-						{/each}
-						<div
-							class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed"
-							class:bg-primary={turn.role === 'user'}
-							class:text-primary-foreground={turn.role === 'user'}
-							class:bg-surface-card={turn.role === 'assistant'}
-							class:border={turn.role === 'assistant'}
-							class:border-border={turn.role === 'assistant'}
-						>
-							{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
-								<!-- Thinking. Three dots breathing in sequence, not a frozen
-						     ellipsis that reads as a hung reply. -->
-								<span class="flex items-center gap-1 py-1.5" aria-label="Thinking">
-									<span class="size-1.5 animate-bounce rounded-full bg-current opacity-40"></span>
-									<span
-										class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
-									></span>
-									<span
-										class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
-									></span>
-								</span>
-							{:else}
-								{turn.content}
-							{/if}
-						</div>
-					</div>
-				{/each}
-
-				<!-- What is being heard right now, before the utterance closes. Sits where
-	     the user bubble will land so the text does not jump when it does. -->
-				{#if listener.partial !== ''}
-					<div class="flex justify-end">
-						<div
-							class="max-w-[85%] whitespace-pre-wrap rounded-2xl border border-dashed border-border px-4 py-3 text-sm leading-relaxed opacity-50"
-						>
-							{listener.partial}
-						</div>
-					</div>
-				{/if}
-			</div>
-		</div>
+	{#if tab === 'intents'}
+		<!-- Intents — a hardcoded placeholder surface, deliberately OUTSIDE the
+		     actor/flow architecture for now: pure mock, no bus, no skills. -->
+		<IntentsPlaceholder />
 	{:else if tab === 'skills'}
-		<!-- The declared mesh on the canvas: one primitive (actor),
-		     coordinators as "skills", every wire derived from
-		     provides ∩ requires at render time. -->
+		<!-- The skills platform: a skill is a collection of composable
+		     workflows; the canvas draws them n8n-style, every wire derived. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
-			<MeshFlow />
-		</div>
-	{:else if tab === 'actors'}
-		<!-- The actor explorer: everything the registry knows about every actor,
-		     template and instance kept as the two concepts they are. -->
-		<div class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
-			<ActorExplorer />
+			<SkillsPlatform />
 		</div>
 	{:else}
 		<!-- Views, derived from the registry: every OPEN window actor renders
@@ -360,6 +237,26 @@ $effect(() => {
 		     scrolling; the bottom padding lets the last content clear it. -->
 		<div class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto pb-8">
 			{#if windowsBound && registryTick.v >= 0}
+				<!-- The deterministic window switch (0149): one button per window,
+				     the same one-at-a-time rule as the *_window_toggle tools. Voice
+				     drives the same state — but a click NEVER depends on the model
+				     choosing to call a tool. -->
+				<nav class="flex justify-center gap-0.5 rounded-full text-xs">
+					{#each bus.actors().filter(isWindow) as w (w.manifest.id)}
+						<button
+							type="button"
+							onclick={() => {
+								for (const other of bus.actors().filter(isWindow)) other.open = other === w
+								registryTick.v++
+							}}
+							class="rounded-full border px-3 py-1 transition-colors {w.open
+								? 'border-primary/20 bg-surface-cream font-medium'
+								: 'border-transparent opacity-50 hover:opacity-100'}"
+						>
+							{w.manifest.name}
+						</button>
+					{/each}
+				</nav>
 				{#each bus.actors().filter(isWindow).filter((w) => w.open) as w (w.manifest.id)}
 					{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
 					<section class="flex min-h-0 flex-col rounded-2xl">
@@ -405,9 +302,9 @@ $effect(() => {
 	     buttons. The FiBu workspace drops the strip entirely — the inbox layout
 	     wants every pixel of height, and even an empty flex child would double
 	     the gap between the view and the panel. -->
-	{#if !wide}
+	{#if true}
 		<div class="mx-auto flex min-h-16 w-full max-w-lg items-end justify-center">
-			{#if listener.partial !== '' && tab !== 'chat'}
+			{#if listener.partial !== ''}
 				<!-- What is being heard, as it is being heard — the live recognizer
 			     output, so you can watch your words arrive while the list view is
 			     open. Dashed like the transcript's own pending bubble. -->
@@ -517,45 +414,76 @@ $effect(() => {
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 	<div
-		class="mx-auto rounded-full bg-primary text-primary-foreground {phase.key === 'off'
-			? 'w-fit p-2'
-			: typing
-				? 'w-full max-w-lg p-2.5'
-				: 'w-full max-w-80 p-2.5'}"
+		class="mx-auto {phase.key === 'off'
+			? 'w-fit'
+			: `rounded-full bg-primary text-primary-foreground ${typing ? 'w-full max-w-lg p-2.5' : 'w-full max-w-80 p-2.5'}`}"
 		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
 	>
 		<div class="flex items-center {phase.key === 'off' ? '' : 'gap-3'}">
-			<!-- Ending the conversation is its own act, distinct from the stop
-			     button above: that one interrupts a reply and leaves the ears
-			     open, this one closes them. Hidden once ended — the logo is the
-			     way back. -->
+			<!-- The input-mode switch sits LEFT: it changes how you talk, so it leads
+			     the panel; leaving the conversation is the last resort and sits at
+			     the far right. -->
 			{#if isTauri() && phase.key !== 'off'}
 				<button
 					type="button"
-					onclick={endConversation}
-					title="End conversation"
-					aria-label="End conversation"
-					class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:border-status-error/60 hover:bg-status-error/20"
+					onclick={() => {
+						typing = !typing
+						if (typing) {
+							// Text mode is silent AND deaf: close the ears (STT) and mute
+							// the voice (TTS) so a typed reply is read, not heard. The models
+							// stay loaded — the switch back is instant.
+							listener.stop()
+							speaker.silence()
+							speaker.muted = true
+						} else {
+							// Back to voice: unmute and reopen the ears. beginConversation
+							// starts a session that had ended; otherwise just re-arm the mic.
+							speaker.muted = false
+							if (!conversing) beginConversation()
+							else void listener.start()
+						}
+					}}
+					class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
+					title={typing ? 'Back to voice' : 'Type instead'}
+					aria-label={typing ? 'Back to voice' : 'Type instead'}
 				>
-					<!-- power: leave the conversation -->
-					<svg
-						viewBox="0 0 24 24"
-						class="size-4"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<path d="M12 3v9" />
-						<path d="M6.6 6.6a8 8 0 1 0 10.8 0" />
-					</svg>
+					{#if typing}
+						<!-- microphone: go back to speaking -->
+						<svg
+							viewBox="0 0 24 24"
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+							<path d="M5 11a7 7 0 0 0 14 0" />
+							<path d="M12 18v3" />
+						</svg>
+					{:else}
+						<!-- keyboard: switch to typing -->
+						<svg
+							viewBox="0 0 24 24"
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<rect x="2.5" y="6" width="19" height="12" rx="2" />
+							<path d="M7 10h.01M11 10h.01M15 10h.01M17.5 10h.01M7.5 14h9" />
+						</svg>
+					{/if}
 				</button>
 			{/if}
 
 			{#if typing}
 				<form bind:this={form} onsubmit={submit} class="flex flex-1 items-center gap-2">
 					<textarea
+						bind:this={textareaEl}
 						bind:value={draft}
 						onkeydown={onKeydown}
 						rows="1"
@@ -595,21 +523,28 @@ $effect(() => {
 					onclick={beginConversation}
 					title="Start conversation"
 					aria-label="Start conversation"
-					class="group flex items-center gap-3 pr-4 text-left"
+					class="group relative block size-14 overflow-visible rounded-full"
 				>
-					<!-- The mark itself is the button: no ring, no inner box — just
-					     the circle, breathing evenly inside the pill. -->
-					<span class="block size-10 shrink-0 overflow-hidden rounded-full">
-						<img
-							src="/aven-logo.svg"
-							alt=""
-							class="size-full object-cover transition-transform group-hover:scale-105"
-						>
-					</span>
-					<!-- A button label, not a status line: full weight, full contrast,
-					     because this is the one thing to press. -->
-					<span class="whitespace-nowrap font-medium text-sm tracking-tight">
+					<!-- The label is a standing tooltip above the mark — a light eggshell
+					     chip with a little arrow pointing down at the circle, shown always
+					     so the one thing to press names itself. -->
+					<span
+						class="-translate-x-1/2 pointer-events-none absolute bottom-full left-1/2 mb-2.5 whitespace-nowrap rounded-full border border-border bg-surface-cream px-3 py-1 font-medium text-foreground text-xs shadow-sm"
+					>
 						Start conversation
+						<!-- The arrow: an eggshell diamond, its two lower sides bordered, so
+						     it reads as the tail of the chip pointing at the button. -->
+						<span
+							class="-bottom-[5px] -translate-x-1/2 absolute left-1/2 size-2 rotate-45 border-border border-r border-b bg-surface-cream"
+						></span>
+					</span>
+					<!-- The mark itself: a bordered circle with air between edge and logo.
+					     Hover deepens the cream a touch — the border stays exactly as it
+					     is; the whole gesture is a whisper, not a repaint. -->
+					<span
+						class="block size-full rounded-full border border-border bg-surface-cream p-1.5 transition-colors group-hover:bg-surface-card-selected"
+					>
+						<img src="/aven-logo.svg" alt="" class="size-full rounded-full object-cover">
 					</span>
 				</button>
 			{:else}
@@ -641,6 +576,19 @@ $effect(() => {
 					>
 						{phase.label}
 					</button>
+				{:else if phase.key === 'loading'}
+					<!-- Loading stays on the one line: the word, a thin inline bar, and the
+					     percent — never a second row that would grow the pill. -->
+					<span class="flex flex-1 items-center gap-2 text-sm">
+						<span class="shrink-0 opacity-80">{phase.label.replace(/\s*\d+%$/, '')}</span>
+						<span class="h-1 min-w-6 flex-1 overflow-hidden rounded-full bg-primary-foreground/20">
+							<span
+								class="block h-full rounded-full bg-primary-foreground transition-[width]"
+								style="width: {loadPct}%"
+							></span>
+						</span>
+						<span class="shrink-0 text-xs tabular-nums opacity-70">{loadPct}%</span>
+					</span>
 				{:else}
 					<span class="flex-1 text-sm">{phase.label}</span>
 				{/if}
@@ -670,64 +618,32 @@ $effect(() => {
 			<!-- Only where there is something to switch to. In the browser there is
 			     no recognizer at all, so text is not a mode there — it is the whole
 			     interface, and a button offering to leave it leads nowhere. -->
+			<!-- Ending the conversation: the hang-up, far right — a phone put down,
+			     not a power switch. Hidden once ended; the logo is the way back. -->
 			{#if isTauri() && phase.key !== 'off'}
-				<!-- An icon rather than a word: it sits next to live status text, and a
-				     second label there reads as another thing to be understood. -->
 				<button
 					type="button"
-					onclick={() => {
-						typing = !typing
-						// Coming back from text: the ears may have been closed, so
-						// reopening them is part of the switch, not a separate act.
-						if (!typing && !conversing) beginConversation()
-					}}
-					class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
-					title={typing ? 'Back to voice' : 'Type instead'}
-					aria-label={typing ? 'Back to voice' : 'Type instead'}
+					onclick={endConversation}
+					title="End conversation"
+					aria-label="End conversation"
+					class="shrink-0 rounded-full bg-status-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
 				>
-					{#if typing}
-						<!-- microphone: go back to speaking -->
-						<svg
-							viewBox="0 0 24 24"
-							class="size-4"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
-							<path d="M5 11a7 7 0 0 0 14 0" />
-							<path d="M12 18v3" />
-						</svg>
-					{:else}
-						<!-- keyboard: switch to typing -->
-						<svg
-							viewBox="0 0 24 24"
-							class="size-4"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<rect x="2.5" y="6" width="19" height="12" rx="2" />
-							<path d="M7 10h.01M11 10h.01M15 10h.01M17.5 10h.01M7.5 14h9" />
-						</svg>
-					{/if}
+					<!-- hang-up: the handset rotated OFF the hook — disconnect, not dial -->
+					<svg
+						viewBox="0 0 24 24"
+						class="size-4 rotate-[135deg]"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path
+							d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"
+						/>
+					</svg>
 				</button>
 			{/if}
 		</div>
-
-		{#if phase.key === 'loading'}
-			<div class="mt-3 h-1 overflow-hidden rounded-full bg-primary-foreground/20">
-				<div
-					class="h-full rounded-full bg-primary-foreground transition-[width]"
-					style="width: {Math.round(
-						(listener.status === 'preparing' ? listener.progress : speaker.progress) * 100
-					)}%"
-				></div>
-			</div>
-		{/if}
 	</div>
 </main>

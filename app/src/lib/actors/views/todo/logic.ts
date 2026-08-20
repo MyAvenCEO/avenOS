@@ -1,10 +1,16 @@
 /**
- * The workitems behaviour, as DATA — a QuickJS program, not host code.
+ * The todo behaviour, as DATA — a QuickJS program, not host code.
  *
  * Voice tools and UI clicks both end here: the actor maps either into the
  * same events and calls `reduce`, so the two paths are byte-identical by
  * construction (the parity the 0130 goal asserts). IDs are a deterministic
  * counter (`w1`, `w2`, …) — same events in, same state out, every time.
+ *
+ * The STATE MACHINE is not hardcoded here: `composeTodoProgram(machine)`
+ * prepends the states, the legal status moves, and the board cycle order
+ * from `todo-machine.pl` as data (STATES / STATUS_MOVES / CYCLE), and the
+ * reducer gates every transition against them — the SAME `.pl` that draws
+ * the Skills canvas. Flow-as-data beside behaviour-as-data, one VM.
  *
  * `shape` is the only place raw model text becomes operations: it parses,
  * validates, and applies through the SAME transitions as reduce; anything
@@ -13,7 +19,18 @@
  * Kept as an exported string (not a .js?raw import) so bun tests and vite
  * load it the same way.
  */
-export const workitemsLogic = `
+import type { Machine } from '../../machine'
+
+/** The machine, injected as a data prelude in front of the behaviour. */
+export function composeTodoProgram(machine: Machine): string {
+	const prelude =
+		`var STATES = ${JSON.stringify(machine.states)}\n` +
+		`var STATUS_MOVES = ${JSON.stringify(machine.statusMoves())}\n` +
+		`var CYCLE = ${JSON.stringify(machine.cycles)}\n`
+	return prelude + todoLogic
+}
+
+export const todoLogic = `
 var SPARKS = [
 	{ id: 'me', name: 'Me' },
 	{ id: 'team', name: 'Team' }
@@ -22,9 +39,27 @@ var STATUS_LABEL = { open: 'Open', doing: 'In Progress', done: 'Done' }
 var WIRE_LABEL = { open: 'open', doing: 'in progress', done: 'done' }
 var WIRE_STATUS = { open: 'open', in_progress: 'doing', done: 'done' }
 
+/** May a task move directly between these two statuses? (from the .pl) */
+function legalStatus(from, to) {
+	if (from === to) return true
+	for (var i = 0; i < STATUS_MOVES.length; i++)
+		if (STATUS_MOVES[i].from === from && STATUS_MOVES[i].to === to) return true
+	return false
+}
+
+/** The board button's next status after this one — the .pl cycle order. */
+function nextStatus(from) {
+	for (var i = 0; i < CYCLE.length; i++) if (CYCLE[i].from === from) return CYCLE[i].to
+	return from
+}
+
 /** One task, spoken — the wire format the model reads ids from. */
 function line(item) {
-	return item.id + ' ' + item.title + ' (' + WIRE_LABEL[item.status] + ', ' + item.spark + ')'
+	var meta = metaLabel(item)
+	return (
+		item.id + ' ' + item.title + ' (' + WIRE_LABEL[item.status] + ', ' + item.spark +
+		(meta !== '' ? ', ' + meta : '') + ')'
+	)
 }
 
 function lines(items) {
@@ -52,12 +87,34 @@ function sparkName(id) {
 	return id
 }
 
+/** due as words: a single datetime or a range, whatever was given. */
+function dueLabel(due) {
+	if (!due) return ''
+	if (typeof due === 'string') return due
+	if (due.date) return String(due.date)
+	if (due.start && due.end) return String(due.start) + ' → ' + String(due.end)
+	if (due.start) return 'from ' + String(due.start)
+	return ''
+}
+
+/** One quiet line under the title: #tags · due · @responsible. */
+function metaLabel(item) {
+	var parts = []
+	var tags = item.tags || []
+	for (var i = 0; i < tags.length; i++) parts.push('#' + tags[i])
+	var due = dueLabel(item.due)
+	if (due !== '') parts.push(due)
+	if (item.responsible) parts.push('@' + item.responsible)
+	return parts.join(' · ')
+}
+
 function row(item) {
 	return {
 		id: item.id,
 		title: item.title,
 		status: item.status,
 		spark: item.spark,
+		metaLabel: metaLabel(item),
 		statusLabel: STATUS_LABEL[item.status],
 		checked: item.status === 'done',
 		rowClass: 'wi-row' + (item.status === 'done' ? ' wi-row--done' : ''),
@@ -77,7 +134,7 @@ function present(domain) {
 	var counts = { open: 0, doing: 0, done: 0, total: visible.length }
 	for (i = 0; i < visible.length; i++) counts[visible[i].status]++
 	var columns = []
-	var statuses = ['open', 'doing', 'done']
+	var statuses = STATES
 	for (i = 0; i < statuses.length; i++) {
 		var colRows = []
 		for (var j = 0; j < rows.length; j++) {
@@ -104,6 +161,25 @@ function present(domain) {
 	}
 }
 
+/** Tags: an array of short strings, everything else dropped. */
+function cleanTags(x) {
+	if (Object.prototype.toString.call(x) !== '[object Array]') return []
+	var out = []
+	for (var i = 0; i < x.length; i++) if (typeof x[i] === 'string' && x[i] !== '') out.push(x[i])
+	return out
+}
+
+/** Due: a datetime string, {date}, or {start,end} range — else nothing. */
+function cleanDue(x) {
+	if (typeof x === 'string' && x !== '') return x
+	if (!x || typeof x !== 'object') return null
+	if (typeof x.date === 'string') return { date: x.date }
+	if (typeof x.start === 'string') {
+		return typeof x.end === 'string' ? { start: x.start, end: x.end } : { start: x.start }
+	}
+	return null
+}
+
 function initState(source) {
 	var items = []
 	var raw = (source && source.items) || []
@@ -115,7 +191,10 @@ function initState(source) {
 			id: 'w' + nextId++,
 			title: it.title,
 			status: STATUS_LABEL[it.status] ? it.status : 'open',
-			spark: isSpark(it.spark) ? it.spark : 'me'
+			spark: isSpark(it.spark) ? it.spark : 'me',
+			tags: cleanTags(it.tags),
+			due: cleanDue(it.due),
+			responsible: typeof it.responsible === 'string' ? it.responsible : ''
 		})
 	}
 	return present({
@@ -161,7 +240,15 @@ function reduce(state, ev) {
 		for (i = 0; i < titles.length; i++) {
 			var title = titles[i].trim()
 			if (title === '') continue
-			var made = { id: 'w' + domain.nextId++, title: title, status: 'open', spark: spark }
+			var made = {
+				id: 'w' + domain.nextId++,
+				title: title,
+				status: 'open',
+				spark: spark,
+				tags: cleanTags(payload.tags),
+				due: cleanDue(payload.due),
+				responsible: typeof payload.responsible === 'string' ? payload.responsible : ''
+			}
 			domain.items.push(made)
 			created.push(made)
 		}
@@ -185,24 +272,61 @@ function reduce(state, ev) {
 		if (!status && typeof payload.done === 'boolean') status = payload.done ? 'done' : 'open'
 		var updated = []
 		var unknown = []
+		var rejected = []
 		for (i = 0; i < ids.length; i++) {
 			item = byId(domain.items, ids[i])
 			if (!item) {
 				unknown.push(ids[i])
 				continue
 			}
-			if (status) item.status = status
-			if (typeof payload.title === 'string' && payload.title.trim() !== '')
+			var changed = false
+			// The gate: a status change is applied only if the machine allows
+			// that move; an illegal one (e.g. done -> doing) is refused, the
+			// task left untouched.
+			if (status && status !== item.status) {
+				if (legalStatus(item.status, status)) {
+					item.status = status
+					changed = true
+				} else {
+					rejected.push(item.id + ' ' + item.status + '->' + status)
+				}
+			}
+			if (typeof payload.title === 'string' && payload.title.trim() !== '') {
 				item.title = payload.title.trim()
-			if (isSpark(payload.spark)) item.spark = payload.spark
-			updated.push(item)
+				changed = true
+			}
+			if (payload.tags !== undefined) {
+				item.tags = cleanTags(payload.tags)
+				changed = true
+			}
+			if (payload.due !== undefined) {
+				item.due = cleanDue(payload.due)
+				changed = true
+			}
+			if (typeof payload.responsible === 'string') {
+				item.responsible = payload.responsible
+				changed = true
+			}
+			if (isSpark(payload.spark)) {
+				item.spark = payload.spark
+				changed = true
+			}
+			if (changed) updated.push(item)
 		}
+		var notes = []
+		if (unknown.length > 0) notes.push('unknown ids: ' + unknown.join(', '))
+		if (rejected.length > 0) notes.push('illegal transition: ' + rejected.join(', '))
 		var said =
 			updated.length === 0
-				? 'nothing changed; unknown ids: ' + unknown.join(', ')
+				? 'nothing changed' + (notes.length > 0 ? '; ' + notes.join('; ') : '')
 				: 'changed (' + updated.length + '): ' + lines(updated) +
-					(unknown.length > 0 ? '. unknown ids: ' + unknown.join(', ') : '')
-		return speak(domain, said, { ok: updated.length > 0, updated: updated, unknownIds: unknown })
+					(notes.length > 0 ? '. ' + notes.join('; ') : '')
+		return speak(domain, said, {
+			ok: updated.length > 0,
+			updated: updated,
+			unknownIds: unknown,
+			rejected: rejected
+		})
 	}
 
 	if (ev.send === 'DELETE') {
@@ -239,14 +363,16 @@ function reduce(state, ev) {
 
 	if (ev.send === 'TOGGLE') {
 		item = byId(domain.items, payload.id)
-		if (item) item.status = item.status === 'done' ? 'open' : 'done'
+		if (item) {
+			var toggled = item.status === 'done' ? 'open' : 'done'
+			if (legalStatus(item.status, toggled)) item.status = toggled
+		}
 		return present(domain)
 	}
 
 	if (ev.send === 'CYCLE') {
 		item = byId(domain.items, payload.id)
-		if (item)
-			item.status = item.status === 'open' ? 'doing' : item.status === 'doing' ? 'done' : 'open'
+		if (item) item.status = nextStatus(item.status)
 		return present(domain)
 	}
 

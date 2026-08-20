@@ -21,6 +21,7 @@
  */
 
 import type { StyleDef, ViewDef } from '@avenos/aven-ui'
+import { contractsOf, parseProgram } from './machine'
 import {
 	type ActorEvent,
 	type Capability,
@@ -28,6 +29,7 @@ import {
 	type LogicSession,
 	type ReduceOutcome
 } from './sandbox'
+import { unifiable } from './term'
 
 /** A predicate as written in a contract: `mail(M)`, `intent(M, Class)`. */
 export type Predicate = string
@@ -36,6 +38,30 @@ export type Predicate = string
 export function functor(p: Predicate): string {
 	const at = p.indexOf('(')
 	return (at === -1 ? p : p.slice(0, at)).trim()
+}
+
+/**
+ * THE MERGE LAW (0148) — a composite's interface, derived from its members
+ * and never stored:
+ *
+ *   requires = ⋃ members.requires \ ⋃ members.produces   (unsatisfied inputs)
+ *   produces = ⋃ members.produces                        (everything offered)
+ *
+ * Abject, Prolog and category theory agree: the composite is the rule
+ * `skill(X,Z) :- a(X,Y), b(Y,Z)` — the internally-bound `Y` disappears from
+ * the head, the free `X`/`Z` are the boundary. Matching is by unification,
+ * the same rule that derives every edge.
+ */
+export function compositeInterface(members: { requires: Predicate[]; produces: Predicate[] }[]): {
+	requires: Predicate[]
+	produces: Predicate[]
+} {
+	const produced = members.flatMap((m) => m.produces)
+	const required = members.flatMap((m) => m.requires)
+	return {
+		requires: [...new Set(required.filter((r) => !produced.some((p) => unifiable(p, r))))],
+		produces: [...new Set(produced)]
+	}
 }
 
 export interface MethodSpec {
@@ -119,6 +145,14 @@ export interface Manifest {
 	 */
 	capabilities?: string[]
 	/**
+	 * The actor's state machine as data — the `.pl` source (parsed by
+	 * machine.ts). The FLOW declaration, distinct from `logic` (behaviour):
+	 * every actor is a statechart, and this is where it says so. Sandbox
+	 * actors also inject it into their program; the canvas reads it to draw
+	 * the actor's FSM.
+	 */
+	machine?: string
+	/**
 	 * The sandboxed program (0130): the actor's ENTIRE behaviour as data —
 	 * initState/reduce/shape run in the QuickJS VM, never in the host.
 	 */
@@ -132,7 +166,7 @@ export interface Manifest {
 	view?: ViewDef
 	style?: StyleDef
 	/**
-	 * Additional named views — the workitems pattern (list + board over one
+	 * Additional named views — the todo pattern (list + board over one
 	 * subject): each becomes its OWN window over the SAME actor and logic.
 	 */
 	views?: { key: string; name: string; view: ViewDef; style?: StyleDef }[]
@@ -164,21 +198,6 @@ export type Llm = (
 	settings?: LlmSettings & { json?: boolean }
 ) => Promise<string>
 
-/** The manifest, spoken — the fallback self-description and the LLM's context. */
-export function manifestProse(m: Manifest): string {
-	const contracts = (spec: { requires?: Predicate[]; produces?: Predicate[] }) => {
-		const parts: string[] = []
-		if (spec.requires?.length) parts.push(`requires ${spec.requires.join(', ')}`)
-		if (spec.produces?.length) parts.push(`produces ${spec.produces.join(', ')}`)
-		return parts.length > 0 ? ` (${parts.join('; ')})` : ''
-	}
-	const methods =
-		m.methods.length > 0
-			? ` Methods: ${m.methods.map((x) => `${x.name} — ${x.description}${contracts(x)}`).join(' · ')}`
-			: ''
-	return `I am ${m.name} (${m.id}). ${m.description}${contracts(m)}.${methods}`
-}
-
 export class Actor {
 	readonly manifest: Manifest
 	/**
@@ -207,6 +226,13 @@ export class Actor {
 	declare state: Record<string, unknown>
 	#session: LogicSession | null = null
 	#ready: Promise<void> = Promise.resolve()
+	/**
+	 * The `.pl` as SSOT for contracts too (across actors, not just within):
+	 * `requires(P)`/`produces(P)` facts in the machine, parsed once. When the
+	 * machine declares them they ARE the actor-level contracts — the TS
+	 * manifest arrays are only for actors without a machine.
+	 */
+	#contracts: { requires: Predicate[]; produces: Predicate[] } | null = null
 
 	constructor(
 		manifest: Manifest,
@@ -216,6 +242,10 @@ export class Actor {
 		this.manifest = manifest
 		this.instanceName = manifest.id
 		this.#handlers = handlers
+		if (manifest.machine) {
+			const c = contractsOf(parseProgram(manifest.machine))
+			if (c.requires.length > 0 || c.produces.length > 0) this.#contracts = c
+		}
 		if (manifest.logic) this.#ready = this.#boot(manifest, caps)
 		// The generic adapter, bound for every declared method — and again
 		// under the produced functor (the engine's clause body) AND the
@@ -291,20 +321,29 @@ export class Actor {
 		}
 	}
 
+	/**
+	 * Coordinator gestalt (0148): the member actors this one composes. A
+	 * composite is the Prolog rule `skill(X,Z) :- a(X,Y), b(Y,Z)` — and its
+	 * interface is DERIVED from the members by the merge law, never stored.
+	 */
+	members: Actor[] = []
+
 	/** Every contract this actor participates in, method- and actor-level, deduped. */
 	get requires(): Predicate[] {
+		if (this.members.length > 0) return compositeInterface(this.members).requires
 		return [
 			...new Set([
-				...(this.manifest.requires ?? []),
+				...(this.#contracts?.requires ?? this.manifest.requires ?? []),
 				...this.manifest.methods.flatMap((m) => m.requires ?? [])
 			])
 		]
 	}
 
 	get produces(): Predicate[] {
+		if (this.members.length > 0) return compositeInterface(this.members).produces
 		return [
 			...new Set([
-				...(this.manifest.produces ?? []),
+				...(this.#contracts?.produces ?? this.manifest.produces ?? []),
 				...this.manifest.methods.flatMap((m) => m.produces ?? [])
 			])
 		]
@@ -399,36 +438,6 @@ export class Actor {
 				return { record, wire: `${method} failed: ${reason}` }
 			}
 		}
-	}
-
-	/**
-	 * The interview. Answers as itself from its own manifest (and whatever the
-	 * subclass adds via `situation()`); the LLM is consulted when one is given
-	 * and the manifest prose stands in when not. Caller-aware per the Ask
-	 * Protocol: the answer may depend on WHO asks — a fellow actor gets
-	 * protocol detail where a human gets orientation.
-	 */
-	async ask(question: string, llm?: Llm, asker?: string): Promise<string> {
-		const self = manifestProse(this.manifest)
-		const state = this.situation()
-		const context = state ? `${self} Current state: ${state}` : self
-		if (!llm) return context
-		return llm(
-			`You are the actor "${this.manifest.name}" in avenOS, answering as yourself, ` +
-				'briefly, in the language of the question. ' +
-				(asker
-					? `You are being asked by "${asker}" — tailor the answer to them: a human wants ` +
-						'orientation, a fellow actor or the chat model wants exact method names and ' +
-						'payload shapes to collaborate. '
-					: '') +
-				`Everything you know about yourself: ${context}`,
-			question
-		)
-	}
-
-	/** Live state, in words, for ask(). Subclasses override; default: nothing. */
-	protected situation(): string {
-		return ''
 	}
 
 	/**

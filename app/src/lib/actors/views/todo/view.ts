@@ -1,7 +1,7 @@
 import type { ViewDef } from '@avenos/aven-ui'
 
 /**
- * The two views of workitems, as validated JSON: the list and the board —
+ * The two views of todo, as validated JSON: the list and the board —
  * one actor, one reducer, two windows. Every interactive element sends an
  * event the sandboxed logic reduces; the view itself computes nothing.
  *
@@ -10,7 +10,7 @@ import type { ViewDef } from '@avenos/aven-ui'
  * relationships (the stacked-kanban bug).
  */
 
-export const workitemsListView: ViewDef = {
+export const todoListView: ViewDef = {
 	content: {
 		class: 'brand-shell wi-shell',
 		children: [
@@ -33,24 +33,6 @@ export const workitemsListView: ViewDef = {
 				]
 			},
 			{
-				tag: 'form',
-				class: 'wi-add',
-				$on: { submit: { send: 'ADD', payload: { text: '$draft' } } },
-				children: [
-					{
-						tag: 'input',
-						class: 'wi-add-input',
-						attrs: {
-							type: 'text',
-							placeholder: 'Add a task…',
-							'data-aven-field': 'draft',
-							autocomplete: 'off'
-						}
-					},
-					{ tag: 'button', class: 'wi-add-btn', attrs: { type: 'submit' }, text: 'Add' }
-				]
-			},
-			{
 				tag: 'ul',
 				class: 'wi-list',
 				$each: {
@@ -68,7 +50,13 @@ export const workitemsListView: ViewDef = {
 								},
 								$on: { change: { send: 'TOGGLE', payload: { id: '$$id' } } }
 							},
-							{ class: 'wi-row-title', text: '$$title' },
+							{
+								class: 'wi-row-main',
+								children: [
+									{ class: 'wi-row-title', text: '$$title' },
+									{ class: 'wi-row-meta', text: '$$metaLabel' }
+								]
+							},
 							{ class: '$$badgeClass', text: '$$statusLabel' },
 							{
 								tag: 'button',
@@ -98,7 +86,7 @@ export const workitemsListView: ViewDef = {
 	}
 }
 
-export const workitemsBoardView: ViewDef = {
+export const todoBoardView: ViewDef = {
 	content: {
 		class: 'brand-shell wi-shell',
 		children: [

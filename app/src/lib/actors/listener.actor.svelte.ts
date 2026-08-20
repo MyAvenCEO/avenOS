@@ -1,6 +1,7 @@
 import { Listener } from '$lib/asr/listener.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
+import listenerMachineSource from './listener-machine.pl?raw'
 import { singleton } from './singleton'
 
 /**
@@ -29,8 +30,8 @@ export class ListenerActor extends Actor {
 				'are emitted as utterance(T), talking over the assistant as interrupted().',
 			tags: ['voice'],
 			methods: [],
-			requires: [],
-			produces: ['utterance(T)', 'interrupted()']
+			// Flow AND contracts from the one `.pl` — produces(utterance(T)) etc.
+			machine: listenerMachineSource
 		})
 	}
 
@@ -40,10 +41,6 @@ export class ListenerActor extends Actor {
 			hearing: this.core.speech ? 'yes' : 'no',
 			'sample rate': this.core.rate || '—'
 		}
-	}
-
-	protected override situation(): string {
-		return `Status ${this.core.status}${this.core.speech ? ', hearing someone right now' : ''}.`
 	}
 }
 

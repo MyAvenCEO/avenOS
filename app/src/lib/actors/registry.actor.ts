@@ -3,14 +3,13 @@ import type { MessageBus } from './bus'
 
 /**
  * The registry as an actor — no caste, no special path (0130): its
- * behaviour (list, describe, run a goal) is sandboxed logic in its own
- * manifest; the host appears only as three granted capabilities,
- * fail-closed:
+ * behaviour (list, describe) is sandboxed logic in its own manifest; the
+ * host appears only as granted capabilities, fail-closed:
  *
  * - `actors`   → a snapshot of the mesh (rows, no references)
  * - `manifest` → one actor's manifest by id, or null
  *
- * It no longer CREATES actors. The set of actors is declared in code — the
+ * It does not CREATE actors. The set of actors is declared in code — the
  * codebase is the source of truth, not a browser store.
  */
 
@@ -56,38 +55,6 @@ function reduce(state, ev) {
 		return { state: next, said: prose(m), record: { ok: true, manifest: m } }
 	}
 
-	if (ev.send === 'SPAWN') {
-		var spawned = cap('spawn', { template: ev.payload.template, name: ev.payload.name })
-		if (!spawned) {
-			return {
-				state: next,
-				said: 'Template ' + ev.payload.template + ' cannot be instantiated.',
-				record: { ok: false, error: 'not spawnable: ' + ev.payload.template }
-			}
-		}
-		return {
-			state: next,
-			said: 'Instance "' + spawned.name + '" of ' + ev.payload.template + ' is running.',
-			record: { ok: true, spawned: spawned }
-		}
-	}
-
-	if (ev.send === 'DISPOSE') {
-		var gone = cap('dispose', { to: ev.payload.to })
-		if (!gone) {
-			return {
-				state: next,
-				said: 'Nothing disposed — unknown instance or the default one (it stays).',
-				record: { ok: false, error: 'not disposable: ' + ev.payload.to }
-			}
-		}
-		return {
-			state: next,
-			said: 'Instance "' + gone.name + '" is gone.',
-			record: { ok: true, disposed: gone }
-		}
-	}
-
 	return state
 }
 
@@ -100,10 +67,10 @@ const REGISTRY_MANIFEST: Manifest = {
 	id: 'registry',
 	name: 'Registry',
 	description:
-		'The directory itself, as an actor: knows every actor in the mesh, describes ' +
-		'them, and runs goals over their contracts.',
+		'The directory itself, as an actor: knows every actor in the mesh and describes ' +
+		'them from their manifests.',
 	tags: ['system'],
-	capabilities: ['actors', 'manifest', 'spawn', 'dispose'],
+	capabilities: ['actors', 'manifest'],
 	logic: REGISTRY_LOGIC,
 	methods: [
 		{
@@ -121,44 +88,11 @@ const REGISTRY_MANIFEST: Manifest = {
 				required: ['actor']
 			},
 			event: { send: 'DESCRIBE' }
-		},
-		{
-			name: 'spawn',
-			description:
-				'Creates a NEW instance of an actor template — "make me a second list" means ' +
-				'spawn with template=workitems and a short name. The instance gets its own ' +
-				'state and windows; address it via to=<name or uuid> on any tool.',
-			parameters: {
-				type: 'object',
-				properties: {
-					template: { type: 'string', description: 'The template id, e.g. "workitem".' },
-					name: { type: 'string', description: 'Short display name, e.g. "Umzug".' }
-				},
-				required: ['template']
-			},
-			event: { send: 'SPAWN' }
-		},
-		{
-			name: 'dispose',
-			description:
-				'Removes a spawned instance and its windows for good. The default instance ' +
-				'of a template cannot be disposed. Only on explicit request.',
-			parameters: {
-				type: 'object',
-				properties: {
-					to: { type: 'string', description: 'Instance uuid or name.' }
-				},
-				required: ['to']
-			},
-			event: { send: 'DISPOSE' },
-			hitl: 'Dispose this instance'
 		}
 	]
 }
 
 export class RegistryActor extends Actor {
-	#bus: MessageBus
-
 	constructor(bus: MessageBus) {
 		super(
 			REGISTRY_MANIFEST,
@@ -167,33 +101,18 @@ export class RegistryActor extends Actor {
 				actors: () =>
 					bus.actors().map((a) => ({
 						uuid: a.uuid,
-						template: a.manifest.id,
 						id: a.manifest.id,
 						name: a.instanceName,
 						tags: a.manifest.tags,
 						methods: a.manifest.methods.length,
-						live: a.instanceState() !== null,
-						default: bus.get(a.manifest.id)?.uuid === a.uuid
+						live: a.instanceState() !== null
 					})),
-				manifest: (p) => bus.get(String(p.actor ?? ''))?.manifest ?? null,
-				spawn: (p) => {
-					const spawned = bus.spawn(String(p.template ?? ''), p.name ? String(p.name) : undefined)
-					return spawned ? { uuid: spawned.uuid, name: spawned.instanceName } : null
-				},
-				dispose: (p) => {
-					const gone = bus.dispose(String(p.to ?? ''))
-					return gone ? { uuid: gone.uuid, name: gone.instanceName } : null
-				}
+				manifest: (p) => bus.get(String(p.actor ?? ''))?.manifest ?? null
 			}
 		)
-		this.#bus = bus
-	}
-
-	protected override situation(): string {
-		return `${this.#bus.actors().length} actors in the mesh, all declared in code.`
 	}
 
 	override instanceState(): Record<string, unknown> {
-		return { actors: this.#bus.actors().length }
+		return { queries: Number(this.state?.queries ?? 0) }
 	}
 }

@@ -49,6 +49,12 @@ export class Speaker {
 	/** Weight download, 0..1. Only meaningful while `preparing`. */
 	progress = $state(0)
 	/**
+	 * Text mode mutes the voice: `feed`/`flush` become no-ops so a reply typed
+	 * and read on screen is never spoken. The models stay loaded — unmuting is
+	 * instant. Separate from `silence()`, which stops what is playing NOW.
+	 */
+	muted = $state(false)
+	/**
 	 * What the output device is doing, and how much work is in flight.
 	 *
 	 * A voice that goes quiet has two very different causes that look identical
@@ -188,7 +194,7 @@ export class Speaker {
 
 	/** Feed one streamed delta. Whole sentences are queued as they complete. */
 	feed(delta: string): void {
-		if (!this.on) return
+		if (!this.on || this.muted) return
 		this.#pending += delta
 
 		// Everything up to the last boundary is complete; the tail is still being
@@ -213,7 +219,7 @@ export class Speaker {
 
 	/** Speak whatever is left once the reply has finished streaming. */
 	flush(): void {
-		if (!this.on) return
+		if (!this.on || this.muted) return
 		this.#enqueue(this.#pending)
 		this.#pending = ''
 		// The turn is over; the next reply opens fresh.
