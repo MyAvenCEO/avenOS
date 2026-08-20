@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.3...v) (2026-08-20)
+
+
+### Features
+
+* **intents:** real chat in Talk-to-MAIA with inline actor views; Views tab retired ([#69](https://github.com/MyAvenCEO/avenOS/issues/69)) ([c2cc8da](https://github.com/MyAvenCEO/avenOS/commit/c2cc8da18d94d6b7d4c79cd1375d6adb740575da))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.2...v) (2026-08-20)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.1...v) (2026-08-20)
 
