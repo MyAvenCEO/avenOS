@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.1...v) (2026-08-20)
+
+
+### Features
+
+* **voice:** surface errors above the pill, not buried in the chat stream ([ed8e333](https://github.com/MyAvenCEO/avenOS/commit/ed8e3332aa47d557fc3c9144bf03dcdfdd1d1144))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.31-next.3...v) (2026-08-20)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.7.31-next.2...v) (2026-07-31)
 
