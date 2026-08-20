@@ -389,7 +389,7 @@ function onKeydown(event: KeyboardEvent) {
 	     two physical buttons centred underneath. -->
 	{#each hitlQueue.items as held (held.id)}
 		<div
-			class="mx-auto mb-2 flex min-h-36 w-full flex-col items-center justify-between gap-4 rounded-2xl bg-primary px-6 py-5 text-primary-foreground shadow-[0_4px_16px_rgba(30,41,59,0.15)]"
+			class="mx-auto mb-2 flex min-h-36 w-full max-w-[calc(100%-37.5rem)] flex-col items-center justify-between gap-4 rounded-2xl bg-primary px-6 py-5 text-primary-foreground shadow-[0_4px_16px_rgba(30,41,59,0.15)]"
 		>
 			<div class="min-w-0 text-center">
 				<p class="font-medium text-base">{held.label}</p>

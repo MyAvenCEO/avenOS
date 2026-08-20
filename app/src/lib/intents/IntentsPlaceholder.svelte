@@ -461,6 +461,25 @@ const selected = $derived(INTENTS.find((i) => i.id === selectedId) ?? INTENTS[0]
  */
 let talkMode = $state(false)
 
+/** What the global chat runs on: the inbox and the intent router — no artifacts yet. */
+const TALK_SKILLS: SkillStatus[] = [
+	{
+		skill: 'inbox',
+		state: 'running',
+		note: 'hört zu · klassifiziert jede Freiform-Eingabe',
+		workflow: 'intake',
+		done: ['mail-trigger', 'upload-trigger', 'normalize'],
+		current: 'classify'
+	},
+	{
+		skill: 'router',
+		state: 'running',
+		note: 'extrahiert Intents und routet sie zu ihren Skills',
+		workflow: 'route',
+		done: []
+	}
+]
+
 /** Done intents rest in the archive — a toggle, closed by default. */
 let archiveOpen = $state(false)
 const activeIntents = $derived(INTENTS.filter((i) => i.status !== 'done'))
@@ -565,9 +584,9 @@ const DOT: Record<string, string> = {
 	</button>
 {/snippet}
 
-<div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden">
+<div class="flex h-full min-h-0 w-full flex-1 gap-3 overflow-hidden">
 	<!-- LEFT: the intent stream — compact cards, cream selection. -->
-	<aside class="flex w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-4">
+	<aside class="flex h-full w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
 		<!-- The generic AI chat — above the intents: free-form + view queries. -->
 		<button
 			type="button"
@@ -595,7 +614,7 @@ const DOT: Record<string, string> = {
 			Intents · {activeIntents.length}
 		</h2>
 		{#each activeIntents as intent (intent.id)}
-			{@const sel = selectedId === intent.id}
+			{@const sel = selectedId === intent.id && !talkMode}
 			<button
 				type="button"
 				onclick={() => {
@@ -662,7 +681,7 @@ const DOT: Record<string, string> = {
 		</button>
 		{#if archiveOpen}
 			{#each archivedIntents as intent (intent.id)}
-				{@const sel = selectedId === intent.id}
+				{@const sel = selectedId === intent.id && !talkMode}
 				<button
 					type="button"
 					onclick={() => {
@@ -807,17 +826,24 @@ const DOT: Record<string, string> = {
 				class="h-[340px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/60"
 			>
 				{#key skillView.skill}
-					<SvelteFlow
-						nodes={sfNodes}
-						edges={sfEdges}
-						nodeTypes={sfNodeTypes}
-						fitView
-						minZoom={0.15}
-						proOptions={{ hideAttribution: true }}
-					>
-						<Background bgColor="transparent" patternColor="rgba(30,41,59,0.08)" />
-						<FitView w={sfW} h={sfH} />
-					</SvelteFlow>
+					{#if sfNodes.length === 0}
+						<p class="flex h-full items-center justify-center text-foreground/40 text-sm">
+							{skillView.skill}
+							— Template folgt; die Instanz läuft als Teil der Inbox-Pipeline.
+						</p>
+					{:else}
+						<SvelteFlow
+							nodes={sfNodes}
+							edges={sfEdges}
+							nodeTypes={sfNodeTypes}
+							fitView
+							minZoom={0.15}
+							proOptions={{ hideAttribution: true }}
+						>
+							<Background bgColor="transparent" patternColor="rgba(30,41,59,0.08)" />
+							<FitView w={sfW} h={sfH} />
+						</SvelteFlow>
+					{/if}
 				{/key}
 			</div>
 
@@ -1109,11 +1135,11 @@ const DOT: Record<string, string> = {
 	</main>
 
 	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
-	<aside class="flex w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-4">
+	<aside class="flex h-full w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
 		<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-			Skills · {selected.skills.length}
+			Skills · {(talkMode ? TALK_SKILLS : selected.skills).length}
 		</h2>
-		{#each selected.skills as s (s.skill)}
+		{#each talkMode ? TALK_SKILLS : selected.skills as s (s.skill)}
 			<button
 				type="button"
 				onclick={() => {
@@ -1142,34 +1168,36 @@ const DOT: Record<string, string> = {
 			</button>
 		{/each}
 
-		<h2 class="px-1 pt-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-			Artefakte · {selected.artifacts.length}
-		</h2>
-		{#each selected.artifacts as artifact (artifact.title)}
-			<button
-				type="button"
-				onclick={() => {
-					preview = preview?.title === artifact.title ? null : artifact
-					skillView = null
-				}}
-				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
-				artifact.title
-					? 'border-foreground/15 bg-surface-card-selected'
-					: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
-			>
-				<div class="flex items-center gap-2">
-					<span
-						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
-					>
-						{KIND_LABEL[artifact.kind]}
-					</span>
-					<div class="min-w-0">
-						<p class="truncate font-medium text-xs">{artifact.title}</p>
-						<p class="truncate text-[0.6875rem] text-foreground/45">{artifact.note}</p>
+		{#if !talkMode}
+			<h2 class="px-1 pt-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+				Artefakte · {selected.artifacts.length}
+			</h2>
+			{#each selected.artifacts as artifact (artifact.title)}
+				<button
+					type="button"
+					onclick={() => {
+						preview = preview?.title === artifact.title ? null : artifact
+						skillView = null
+					}}
+					class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
+					artifact.title
+						? 'border-foreground/15 bg-surface-card-selected'
+						: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
+				>
+					<div class="flex items-center gap-2">
+						<span
+							class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
+						>
+							{KIND_LABEL[artifact.kind]}
+						</span>
+						<div class="min-w-0">
+							<p class="truncate font-medium text-xs">{artifact.title}</p>
+							<p class="truncate text-[0.6875rem] text-foreground/45">{artifact.note}</p>
+						</div>
 					</div>
-				</div>
-			</button>
-		{/each}
+				</button>
+			{/each}
+		{/if}
 
 		<p class="px-1 pt-2 text-[0.625rem] text-foreground/35 leading-relaxed">
 			Ein Intent kombiniert Artefakte und Skill-Flows, um eine Aufgabe zu lösen. Alles hier ist ein
