@@ -37,9 +37,40 @@ export interface LaidOutEdge {
 export interface MeshLayout {
 	nodes: LaidOutNode[]
 	edges: LaidOutEdge[]
+	doors: Door[]
 }
 
-export function layoutCoordinator(actors: Actor[], coordinatorId: string): MeshLayout {
+/**
+ * A DOOR: the old handoff node, recovered as an inference. Coordinator
+ * C hands to coordinator O iff C provides what O requires — the same
+ * functor rule as every other wire, one level up. The canvas draws it
+ * as a boundary tile; clicking walks into the receiving skill.
+ */
+export interface Door {
+	id: string
+	to: Actor
+	functors: string[]
+}
+
+export function doors(actors: Actor[], coordinatorId: string, roots: Actor[]): Door[] {
+	const c = find(actors, coordinatorId)
+	if (!c) return []
+	const provides = new Set(c.manifest.provides ?? [])
+	return roots
+		.filter((o) => o.id !== coordinatorId)
+		.map((o) => ({
+			id: `door:${o.id}`,
+			to: o,
+			functors: (o.manifest.requires ?? []).filter((f) => provides.has(f))
+		}))
+		.filter((d) => d.functors.length > 0)
+}
+
+export function layoutCoordinator(
+	actors: Actor[],
+	coordinatorId: string,
+	roots: Actor[] = []
+): MeshLayout {
 	const coordinator = find(actors, coordinatorId)
 	const members = (coordinator?.members ?? [])
 		.map((id) => find(actors, id))
@@ -85,13 +116,36 @@ export function layoutCoordinator(actors: Actor[], coordinatorId: string): MeshL
 		}
 	})
 
+	// The doors: one boundary tile per receiving skill, one column past
+	// the members, wired from whichever member provides the functor.
+	const exits = doors(actors, coordinatorId, roots)
+	const doorX = columns.length * (NODE_W + COL_GAP)
+	const doorH = (d: Door) => HEAD_H + Math.max(d.functors.length, 1) * PORT_H
+	const doorsTotal = exits.reduce((h, d) => h + doorH(d), 0) + ROW_GAP * (exits.length - 1)
+	let doorY = (tallest - doorsTotal) / 2
+	const doorEdges: LaidOutEdge[] = []
+	for (const d of exits) {
+		nodes.push({ id: d.id, position: { x: doorX, y: doorY }, actor: d.to })
+		doorY += doorH(d) + ROW_GAP
+		for (const m of members) {
+			const shared = (m.manifest.provides ?? []).filter((f) => d.functors.includes(f))
+			for (const f of shared) {
+				doorEdges.push({ id: `${m.id}-${f}-${d.id}`, source: m.id, target: d.id, label: f })
+			}
+		}
+	}
+
 	return {
 		nodes,
-		edges: wires.map((e, i) => ({
-			id: `${e.from}-${e.functor}-${e.to}-${i}`,
-			source: e.from,
-			target: e.to,
-			label: e.functor
-		}))
+		doors: exits,
+		edges: [
+			...wires.map((e, i) => ({
+				id: `${e.from}-${e.functor}-${e.to}-${i}`,
+				source: e.from,
+				target: e.to,
+				label: e.functor
+			})),
+			...doorEdges
+		]
 	}
 }

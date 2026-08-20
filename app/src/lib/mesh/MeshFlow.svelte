@@ -28,7 +28,7 @@ let canvasH = $state(0)
 
 const currentId = $derived(trail[trail.length - 1])
 const current = $derived(find(registry, currentId))
-const laid = $derived(layoutCoordinator(registry, currentId))
+const laid = $derived(layoutCoordinator(registry, currentId, roots))
 const selected = $derived(laid.nodes.find((n) => n.id === selectedId)?.actor ?? null)
 
 /** Absent autonomy is not "unknown" — it IS the strict default. */
@@ -54,7 +54,7 @@ function buildNodes(l: typeof laid, sel: string | null): Node[] {
 		id: n.id,
 		type: 'actor',
 		position: n.position,
-		data: { actor: n.actor, selected: n.id === sel }
+		data: { actor: n.actor, selected: n.id === sel, door: n.id.startsWith('door:') }
 	}))
 }
 function buildEdges(l: typeof laid, sel: string | null): Edge[] {
@@ -160,7 +160,12 @@ const actorJson = (a: Actor) => JSON.stringify(a, null, 2)
 					minZoom={0.15}
 					proOptions={{ hideAttribution: true }}
 					onnodeclick={({ node }) => {
-						// A coordinator member is a door: clicking walks in.
+						// An inferred boundary walks into the receiving skill; a
+						// coordinator member walks in; a leaf selects.
+						if (node.id.startsWith('door:')) {
+							openRoot(node.id.slice('door:'.length))
+							return
+						}
 						const actor = laid.nodes.find((n) => n.id === node.id)?.actor
 						if ((actor?.members?.length ?? 0) > 0) enter(node.id)
 						else selectedId = selectedId === node.id ? null : node.id
@@ -278,6 +283,26 @@ const actorJson = (a: Actor) => JSON.stringify(a, null, 2)
 						{/if}
 					</section>
 
+					{#if selected.manifest.config}
+						<section>
+							<h4
+								class="pb-1.5 font-semibold text-[0.625rem] text-foreground/50 uppercase tracking-wide"
+							>
+								Config
+							</h4>
+							<dl>
+								{#each Object.entries(selected.manifest.config) as [key, value] (key)}
+									<div class="flex gap-2 border-border/40 border-b py-1.5 last:border-0">
+										<dt class="w-28 shrink-0 font-mono text-foreground/50">{key}</dt>
+										<dd class="min-w-0 break-words font-mono">
+											{typeof value === 'string' ? value : JSON.stringify(value)}
+										</dd>
+									</div>
+								{/each}
+							</dl>
+						</section>
+					{/if}
+
 					<section>
 						<h4
 							class="pb-1.5 font-semibold text-[0.625rem] text-foreground/50 uppercase tracking-wide"
@@ -307,8 +332,8 @@ const actorJson = (a: Actor) => JSON.stringify(a, null, 2)
 				<p class="pt-1 text-foreground/60 text-xs leading-relaxed">{current?.manifest.about}</p>
 			</div>
 			<div class="px-4 py-3 text-foreground/50 text-xs leading-relaxed">
-				{laid.nodes.length}
-				member actors · {laid.edges.length} derived wires
+				{laid.nodes.length - laid.doors.length}
+				member actors · {laid.edges.length} derived wires · {laid.doors.length} inferred boundaries
 				<br><br>
 				Click an actor for its manifest. Dashed violet tiles are whole coordinators — one click
 				walks in, the breadcrumb walks back out. Every wire is inferred from provides ∩ requires,

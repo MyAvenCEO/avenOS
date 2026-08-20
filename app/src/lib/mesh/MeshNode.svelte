@@ -9,7 +9,7 @@ import type { Actor } from './model'
  * dashed violet door: a whole actor colony standing in one box, click
  * to walk in.
  */
-const { data }: { data: { actor: Actor; selected: boolean } } = $props()
+const { data }: { data: { actor: Actor; selected: boolean; door?: boolean } } = $props()
 
 const a = $derived(data.actor)
 const m = $derived(a.manifest)
@@ -30,23 +30,30 @@ const BADGE: Record<string, string> = {
 </script>
 
 <div
-	class="w-64 rounded-xl px-3.5 py-3 font-sans text-foreground shadow-[0_1px_3px_rgba(30,41,59,0.06)] transition-all {isCoordinator
-		? 'border-2 border-[#7e6ead]/50 border-dashed bg-[#7e6ead]/[0.04]'
-		: 'border border-foreground/5 bg-[#fffdf7]'} {data.selected
+	class="w-64 rounded-xl px-3.5 py-3 font-sans text-foreground shadow-[0_1px_3px_rgba(30,41,59,0.06)] transition-all {data.door
+		? 'border-2 border-[#2f5d50]/50 border-dashed bg-[#2f5d50]/[0.04]'
+		: isCoordinator
+			? 'border-2 border-[#7e6ead]/50 border-dashed bg-[#7e6ead]/[0.04]'
+			: 'border border-foreground/5 bg-[#fffdf7]'} {data.selected
 		? 'border-primary ring-2 ring-primary/20'
 		: ''}"
 >
 	<Handle type="target" position={Position.Left} />
 	<div class="flex items-center gap-1.5 pb-1">
 		<span
-			class="rounded-md px-1.5 py-0.5 font-mono text-[0.625rem] {BADGE[verb] ?? BADGE.transform}"
+			class="rounded-md px-1.5 py-0.5 font-mono text-[0.625rem] {data.door
+				? 'bg-[#2f5d50]/15 text-[#2f5d50]'
+				: (BADGE[verb] ?? BADGE.transform)}"
 		>
-			{verb}
+			{data.door ? 'skill' : verb}
 		</span>
-		<span class="font-medium text-sm leading-tight">{m.name}</span>
+		<span class="font-medium text-sm leading-tight">{data.door ? `→ ${m.name}` : m.name}</span>
 	</div>
 	<div class="flex items-center gap-1.5 pb-1.5">
-		{#if isCoordinator}
+		{#if data.door}
+			<span class="font-mono text-[#2f5d50] text-[0.625rem]">inferred boundary</span>
+			<span class="ml-auto text-[#2f5d50] text-[0.625rem]">open →</span>
+		{:else if isCoordinator}
 			<span class="font-mono text-[#655687] text-[0.625rem]">{a.members?.length} members</span>
 			<span class="ml-auto text-[#655687] text-[0.625rem]">open →</span>
 		{:else}

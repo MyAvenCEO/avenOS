@@ -45,6 +45,9 @@ export interface Manifest {
 	provides?: string[]
 	autonomy?: Autonomy
 	llm?: { purpose: string; constraints?: string[] }
+	/** Declarative knobs — thresholds, schemas, rules: the abject manifest's
+	 * "interface specification" part. Domain knowledge lives HERE, visible. */
+	config?: Record<string, unknown>
 	tags?: string[]
 	/** The actor's face: JSON rendered by the aven-ui engine. */
 	face?: { view: ViewDef; style: StyleDef }
