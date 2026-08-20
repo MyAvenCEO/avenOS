@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.7...v) (2026-08-20)
+
+
+### Features
+
+* **voice:** auto-switch to text on first keystroke, back to voice on send ([#73](https://github.com/MyAvenCEO/avenOS/issues/73)) ([04407f5](https://github.com/MyAvenCEO/avenOS/commit/04407f5e616b8c3606c9d43e29397fc27f4107e9))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.6...v) (2026-08-20)
 
 
