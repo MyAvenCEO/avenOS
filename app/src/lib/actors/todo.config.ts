@@ -37,8 +37,9 @@ const SPARK_PARAM = {
 	type: 'string',
 	enum: SPARKS.map((s) => s.id),
 	description:
-		'The spark (context): "me" for personal things, "team" for shared ' +
-		'ones. Without it the currently active spark applies.'
+		'The spark (context). OMIT this unless the user explicitly names one — ' +
+		'without it the currently ACTIVE spark applies, which is almost always ' +
+		'right. "me" = personal, "team" = shared.'
 }
 
 const IDS_PARAM = {

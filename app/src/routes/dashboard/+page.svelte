@@ -178,6 +178,46 @@ $effect(() => {
 	if (typing && textareaEl) textareaEl.focus()
 })
 
+/**
+ * Text mode is silent AND deaf: the ears close, the voice mutes — a typed
+ * reply is read, not heard. The models stay loaded; the way back is instant.
+ */
+function enterTyping(seed = '') {
+	if (typing) return
+	typing = true
+	if (seed) draft += seed
+	listener.stop()
+	speaker.silence()
+	speaker.muted = true
+}
+
+/** Back to voice: unmute the mouth and reopen the ears. */
+function leaveTyping() {
+	typing = false
+	speaker.muted = false
+	if (conversing) void listener.start()
+}
+
+/**
+ * Voice→text without a click: the first printable keystroke IS the mode
+ * switch — start typing anywhere and the pill becomes the input, seeded
+ * with that very character.
+ */
+function onGlobalKeydown(event: KeyboardEvent) {
+	if (typing || !conversing) return
+	if (event.metaKey || event.ctrlKey || event.altKey) return
+	if (event.key.length !== 1) return
+	const el = document.activeElement
+	if (
+		el instanceof HTMLInputElement ||
+		el instanceof HTMLTextAreaElement ||
+		(el instanceof HTMLElement && el.isContentEditable)
+	)
+		return
+	event.preventDefault()
+	enterTyping(event.key)
+}
+
 function submit(event: SubmitEvent) {
 	event.preventDefault()
 	// The send click is the user gesture the audio device needs; without it the
@@ -186,6 +226,8 @@ function submit(event: SubmitEvent) {
 	const text = draft
 	draft = ''
 	chat.send(text)
+	// Submitting hands the turn back to the voice: hands-free is the default.
+	leaveTyping()
 }
 
 /** Enter sends, shift+enter makes a newline — the usual bargain. */
@@ -196,6 +238,8 @@ function onKeydown(event: KeyboardEvent) {
 	}
 }
 </script>
+
+<svelte:window onkeydown={onGlobalKeydown} />
 
 <svelte:head>
 	<title>Dashboard · avenOS</title>
@@ -392,20 +436,11 @@ function onKeydown(event: KeyboardEvent) {
 					<button
 						type="button"
 						onclick={() => {
-						typing = !typing
 						if (typing) {
-							// Text mode is silent AND deaf: close the ears (STT) and mute
-							// the voice (TTS) so a typed reply is read, not heard. The models
-							// stay loaded — the switch back is instant.
-							listener.stop()
-							speaker.silence()
-							speaker.muted = true
-						} else {
-							// Back to voice: unmute and reopen the ears. beginConversation
-							// starts a session that had ended; otherwise just re-arm the mic.
-							speaker.muted = false
 							if (!conversing) beginConversation()
-							else void listener.start()
+							else leaveTyping()
+						} else {
+							enterTyping()
 						}
 					}}
 						class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
