@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.5...v) (2026-08-20)
+
+
+### Features
+
+* **intents:** split talk layout — top-half inline view, floating dock, edge-to-edge asides ([#71](https://github.com/MyAvenCEO/avenOS/issues/71)) ([259c370](https://github.com/MyAvenCEO/avenOS/commit/259c370c753780f1c5076d6bee21e7e1c44262d8))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.4...v) (2026-08-20)
 
 
