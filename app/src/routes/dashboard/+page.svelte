@@ -8,9 +8,9 @@ import { confirmHeld, hitlQueue, rejectHeld } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
-import { isWindow } from '$lib/actors/window.actor.svelte'
 import { windowsBound } from '$lib/actors/windows'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
+import { talk } from '$lib/intents/talk.svelte'
 import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
 
 /**
@@ -38,7 +38,7 @@ const listener = listenerActor.core
  * gets asked for. The view is the default because the workspace is the
  * point.
  */
-let tab = $state<'views' | 'skills' | 'intents'>('intents')
+let tab = $state<'skills' | 'intents'>('intents')
 
 /**
  * Voice is the default, except where there is no voice.
@@ -107,6 +107,16 @@ function dismissError() {
 // reactive state, so this cannot feed back into itself.
 $effect(() => {
 	listener.setOutputActive(speaker.speaking)
+})
+
+// Any conversation activity — typed or spoken — lands the user in the one
+// conversation surface: the Talk-to-MAIA view on the Intents tab, where the
+// reply (and any inline view it opens) appears.
+$effect(() => {
+	if (chat.turns.length > 0) {
+		talk.open = true
+		tab = 'intents'
+	}
 })
 
 /**
@@ -193,15 +203,11 @@ function onKeydown(event: KeyboardEvent) {
      Tabs → Fläche → Voice-Panel → Fensterkante. -->
 <!-- The workspaces (skills, intents) take the whole window; views stay at
      reading width. -->
-<main
-	class="mx-auto flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2 {tab === 'views'
-		? 'max-w-6xl'
-		: 'w-full max-w-none'}"
->
+<main class="mx-auto flex min-h-0 min-w-0 w-full max-w-none flex-1 flex-col gap-2 p-2">
 	<header class="flex flex-col items-center">
 		<!-- Compact tabs, centred: the workspace, the registry, the conversation. -->
 		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
-			{#each [{ id: 'intents' as const, label: 'Intents' }, { id: 'views' as const, label: 'Views' }, { id: 'skills' as const, label: 'Skills' }] as t (t.id)}
+			{#each [{ id: 'intents' as const, label: 'Intents' }, { id: 'skills' as const, label: 'Skills' }] as t (t.id)}
 				<button
 					type="button"
 					onclick={() => {
@@ -226,70 +232,6 @@ function onKeydown(event: KeyboardEvent) {
 		     workflows; the canvas draws them n8n-style, every wire derived. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
 			<SkillsPlatform />
-		</div>
-	{:else}
-		<!-- Views, derived from the registry: every OPEN window actor renders
-		     its component over its subject's state. Windows are actors — the
-		     model toggles them by message, the explorer interviews them.
-		     (windowsBound imports the bindings.) -->
-		<!-- overflow-y-auto is load-bearing: without it a tall window (the
-		     mockup's live preview) overflows UNDER the voice pill instead of
-		     scrolling; the bottom padding lets the last content clear it. -->
-		<div class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto pb-8">
-			{#if windowsBound && registryTick.v >= 0}
-				<!-- The deterministic window switch (0149): one button per window,
-				     the same one-at-a-time rule as the *_window_toggle tools. Voice
-				     drives the same state — but a click NEVER depends on the model
-				     choosing to call a tool. -->
-				<nav class="flex justify-center gap-0.5 rounded-full text-xs">
-					{#each bus.actors().filter(isWindow) as w (w.manifest.id)}
-						<button
-							type="button"
-							onclick={() => {
-								for (const other of bus.actors().filter(isWindow)) other.open = other === w
-								registryTick.v++
-							}}
-							class="rounded-full border px-3 py-1 transition-colors {w.open
-								? 'border-primary/20 bg-surface-cream font-medium'
-								: 'border-transparent opacity-50 hover:opacity-100'}"
-						>
-							{w.manifest.name}
-						</button>
-					{/each}
-				</nav>
-				{#each bus.actors().filter(isWindow).filter((w) => w.open) as w (w.manifest.id)}
-					{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
-					<section class="flex min-h-0 flex-col rounded-2xl">
-						<!-- Centered under the tab pill; the close sits quietly on the right. -->
-						<div class="relative flex items-baseline justify-center gap-2 pb-2">
-							<span class="font-semibold text-[15px]">{w.manifest.name}</span>
-							<span class="font-mono text-[0.625rem] text-foreground/35">
-								{w.subject.manifest.id}
-							</span>
-							<button
-								type="button"
-								onclick={() => {
-									w.open = false
-								}}
-								title="Hide window"
-								aria-label="Hide window"
-								class="absolute top-0 right-0 text-foreground/30 transition-colors hover:text-foreground"
-							>
-								×
-							</button>
-						</div>
-						<Face actor={w.subject} {...w.props} />
-					</section>
-				{:else}
-					<p class="pt-10 text-center text-foreground/40 text-sm">
-						No window open. Say, for example,
-						{#each bus.actors().filter(isWindow) as w, i (w.manifest.id)}
-							{i > 0 ? ' oder' : ''}
-							"show {w.manifest.name}"
-						{/each}
-					</p>
-				{/each}
-			{/if}
 		</div>
 	{/if}
 

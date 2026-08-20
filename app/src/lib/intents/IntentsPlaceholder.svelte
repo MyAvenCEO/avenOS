@@ -1,11 +1,16 @@
 <script lang="ts">
 import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
 import '@xyflow/svelte/dist/style.css'
+import { bus } from '$lib/actors/bus'
+import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
+import { registryTick } from '$lib/actors/reactivity.svelte'
+import { isWindow } from '$lib/actors/window.actor.svelte'
 import FitView from '$lib/mesh/FitView.svelte'
 import FlowNode from '$lib/skills/FlowNode.svelte'
 import { layoutWorkflow } from '$lib/skills/flow-layout'
 import { skillById } from '$lib/skills/registry'
+import { talk } from './talk.svelte'
 
 /**
  * The Intents workspace — instances MOCKED (0158), but the skill flows are
@@ -454,12 +459,13 @@ let selectedId = $state(INTENTS[0].id)
 const selected = $derived(INTENTS.find((i) => i.id === selectedId) ?? INTENTS[0])
 
 /**
- * Talk to MAIA — the generic AI chat, above the intents: free-form asks
- * (from which intents get extracted, managed, triggered), and every
- * inline view query ("show me all todos") that has no intent template.
- * Mocked transcript; the input is the global voice/text pill.
+ * Talk to MAIA — the REAL chat: the transcript comes from the chat actor,
+ * the input from the global voice/text pill, and the answers may be
+ * INLINE VIEWS — every window actor the model (or a click) opens renders
+ * right here in the conversation. The Views tab is gone; this is where
+ * views live now.
  */
-let talkMode = $state(false)
+const chat = chatActor.core
 
 /** What the global chat runs on: the inbox and the intent router — no artifacts yet. */
 const TALK_SKILLS: SkillStatus[] = [
@@ -564,6 +570,21 @@ const sfNodeTypes = { flow: FlowNode }
 let sfW = $state(0)
 let sfH = $state(0)
 
+/**
+ * The center column follows its content: like a chat, the newest thing —
+ * a fresh log entry, a streamed reply, an opened inline view — is always
+ * in sight at the bottom.
+ */
+let centerEl: HTMLElement | null = $state(null)
+$effect(() => {
+	void chat.turns.length
+	void chat.turns.at(-1)?.content
+	void selected.log.length
+	void talk.open
+	void registryTick.v
+	centerEl?.scrollTo({ top: centerEl.scrollHeight })
+})
+
 const DOT: Record<string, string> = {
 	done: 'bg-[#2f5d50] text-white',
 	running: 'bg-[#a06818] text-white',
@@ -591,11 +612,11 @@ const DOT: Record<string, string> = {
 		<button
 			type="button"
 			onclick={() => {
-				talkMode = true
+				talk.open = true
 				preview = null
 				skillView = null
 			}}
-			class="flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {talkMode
+			class="flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {talk.open
 				? 'border-foreground/15 bg-surface-card-selected'
 				: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
 		>
@@ -614,14 +635,14 @@ const DOT: Record<string, string> = {
 			Intents · {activeIntents.length}
 		</h2>
 		{#each activeIntents as intent (intent.id)}
-			{@const sel = selectedId === intent.id && !talkMode}
+			{@const sel = selectedId === intent.id && !talk.open}
 			<button
 				type="button"
 				onclick={() => {
 					selectedId = intent.id
 					preview = null
 					skillView = null
-					talkMode = false
+					talk.open = false
 				}}
 				class="rounded-xl border px-3.5 py-2.5 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
 					? 'border-foreground/15 bg-surface-card-selected'
@@ -681,14 +702,14 @@ const DOT: Record<string, string> = {
 		</button>
 		{#if archiveOpen}
 			{#each archivedIntents as intent (intent.id)}
-				{@const sel = selectedId === intent.id && !talkMode}
+				{@const sel = selectedId === intent.id && !talk.open}
 				<button
 					type="button"
 					onclick={() => {
 						selectedId = intent.id
 						preview = null
 						skillView = null
-						talkMode = false
+						talk.open = false
 					}}
 					class="rounded-xl border px-3.5 py-2.5 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
 						? 'border-foreground/15 bg-surface-card-selected opacity-100'
@@ -714,9 +735,10 @@ const DOT: Record<string, string> = {
 
 	<!-- CENTER: activity log / artifact preview / skill stepper. -->
 	<main
+		bind:this={centerEl}
 		class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 	>
-		{#if talkMode}
+		{#if talk.open}
 			<!-- TALK TO MAIA: the traditional AI-chat view — free-form asks,
 			     inline view queries, and intents extracted on the fly. Input is
 			     the global voice/text pill below. Mocked transcript. -->
@@ -734,70 +756,69 @@ const DOT: Record<string, string> = {
 			<div class="border-border border-b"></div>
 
 			<div class="flex flex-col gap-4 pt-2">
-				<!-- a view query: the answer IS an inline view -->
-				<div class="flex justify-end">
-					<div
-						class="max-w-[75%] rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground text-sm"
-					>
-						Zeig mir alle offenen Todos
-					</div>
-				</div>
-				<div class="flex flex-col gap-2">
-					<div
-						class="max-w-[85%] rounded-2xl border border-border bg-surface-card px-4 py-2.5 text-sm"
-					>
-						Drei offene Todos — zwei davon mit Frist:
-					</div>
-					<!-- the inline view: a mini todo list, rendered right in the chat -->
-					<div class="max-w-[85%] rounded-xl border border-border bg-[#fffdf7] px-4 py-3">
-						{#each [{ t: 'Nachweis einreichen', m: 'fällig 12.09. · @me' }, { t: 'Bürostuhl bezahlen', m: 'fällig 30.08. · #rechnung' }, { t: 'Unterlagen an Steuerberater', m: 'fällig 20.09.' }] as row (row.t)}
-							<div class="flex items-center gap-2.5 border-border/50 border-b py-1.5 last:border-0">
-								<span class="size-3.5 rounded border-2 border-foreground/20"></span>
-								<span class="min-w-0 flex-1 truncate text-xs">{row.t}</span>
-								<span class="shrink-0 text-[0.625rem] text-foreground/40">{row.m}</span>
-							</div>
-						{/each}
-					</div>
-				</div>
+				{#if chat.turns.length === 0}
+					<p class="pt-8 text-center text-foreground/40 text-sm">
+						Sprich oder tippe unten — Fragen, Aufträge, oder „zeig mir die Todos".
+					</p>
+				{/if}
 
-				<!-- a free-form ask: MAIA extracts an intent from it -->
-				<div class="flex justify-end">
-					<div
-						class="max-w-[75%] rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground text-sm"
-					>
-						Kündige bitte mein Fitnessstudio
-					</div>
-				</div>
-				<div class="flex flex-col gap-2">
-					<div
-						class="max-w-[85%] rounded-2xl border border-border bg-surface-card px-4 py-2.5 text-sm"
-					>
-						Verstanden — daraus habe ich einen Intent gemacht. Ich suche den Vertrag im Archiv und
-						prüfe die Kündigungsfrist.
-					</div>
-					<!-- the extracted intent, as a chip that jumps to it -->
-					<button
-						type="button"
-						onclick={() => {
-							selectedId = 'fitnessstudio'
-							talkMode = false
-						}}
-						class="flex w-fit items-center gap-2 rounded-xl border border-[#8a6238]/30 bg-[#8a6238]/8 px-3.5 py-2 text-left transition-colors hover:bg-[#8a6238]/15"
-					>
-						<span
-							class="rounded-full bg-[#8a6238]/15 px-2 py-0.5 font-mono text-[#8a6238] text-[0.5625rem]"
+				<!-- the REAL transcript, straight from the chat actor -->
+				{#each chat.turns as turn (turn.id)}
+					<div class="flex" class:justify-end={turn.role === 'user'}>
+						<div
+							class="max-w-[75%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed {turn.role ===
+							'user'
+								? 'bg-primary text-primary-foreground'
+								: 'border border-border bg-surface-card'}"
 						>
-							auftrag
-						</span>
-						<span class="font-medium text-xs">„Kündige das Fitnessstudio"</span>
-						<span class="font-mono text-[0.625rem] text-foreground/40">→ Intent öffnen</span>
-					</button>
-				</div>
+							{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
+								<span class="flex items-center gap-1 py-1" aria-label="Thinking">
+									<span class="size-1.5 animate-bounce rounded-full bg-current opacity-40"></span>
+									<span
+										class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
+									></span>
+									<span
+										class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
+									></span>
+								</span>
+							{:else}
+								{turn.content}
+							{/if}
+						</div>
+					</div>
+				{/each}
 
-				<p class="pt-2 text-center text-[0.625rem] text-foreground/35">
-					Alles Freiform ohne Intent-/Skill-Template landet hier — Antworten, Inline-Views, neue
-					Intents. Eingabe global über die Voice-/Text-Pill.
-				</p>
+				<!-- INLINE VIEWS: every open window actor renders in the chat —
+				     "zeig mir das Board" opens the board RIGHT HERE. -->
+				{#if registryTick.v >= 0}
+					{#each bus
+						.actors()
+						.filter(isWindow)
+						.filter((w) => w.open && w.subject.manifest.id !== 'chat') as w (w.manifest.id)}
+						{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
+						<section class="rounded-xl border border-border bg-[#fffdf7] p-4">
+							<div class="relative flex items-baseline justify-center gap-2 pb-2">
+								<span class="font-semibold text-[13px]">{w.manifest.name}</span>
+								<span class="font-mono text-[0.5625rem] text-foreground/35">
+									{w.subject.manifest.id}
+								</span>
+								<button
+									type="button"
+									onclick={() => {
+										w.open = false
+										registryTick.v++
+									}}
+									title="Ansicht schließen"
+									aria-label="Ansicht schließen"
+									class="absolute top-0 right-0 text-foreground/30 transition-colors hover:text-foreground"
+								>
+									×
+								</button>
+							</div>
+							<Face actor={w.subject} {...w.props} />
+						</section>
+					{/each}
+				{/if}
 			</div>
 		{:else if skillView}
 			<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
@@ -1137,9 +1158,9 @@ const DOT: Record<string, string> = {
 	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
 	<aside class="flex h-full w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
 		<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-			Skills · {(talkMode ? TALK_SKILLS : selected.skills).length}
+			Skills · {(talk.open ? TALK_SKILLS : selected.skills).length}
 		</h2>
-		{#each talkMode ? TALK_SKILLS : selected.skills as s (s.skill)}
+		{#each talk.open ? TALK_SKILLS : selected.skills as s (s.skill)}
 			<button
 				type="button"
 				onclick={() => {
@@ -1168,7 +1189,7 @@ const DOT: Record<string, string> = {
 			</button>
 		{/each}
 
-		{#if !talkMode}
+		{#if !talk.open}
 			<h2 class="px-1 pt-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
 				Artefakte · {selected.artifacts.length}
 			</h2>
