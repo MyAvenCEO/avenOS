@@ -1,3 +1,17 @@
+# Speech models are unusably slow at the dev default of opt-level 0. Measured on
+# this machine: 9.2s of audio took 86s to transcribe unoptimized and 2s in a
+# release build — a factor of forty, and the reason both the pause between
+# spoken sentences and the wait after speaking were so long. The inference is
+# ndarray and ONNX Runtime glue, which is exactly the kind of code that depends
+# on inlining and elided bounds checks.
+#
+# Dependencies (ort, parakeet-rs, ndarray) get full optimization since they are
+# built once. This crate gets opt-level 2, which keeps its own rebuilds quick
+# enough for `tauri dev` while still making the vendored Supertonic pipeline in
+# src/tts/supertonic.rs run at a sensible speed.
+[profile.dev]
+opt-level = 2
+
 # Strip heavy debuginfo from third-party deps in dev builds. The dev default is
 # full debuginfo (`debug = 2`) embedded into every dep's artifacts in deps/, which
 # — multiplied across the Tauri dep tree and each target triple — was the bulk of a
@@ -5,6 +19,7 @@
 # drops variable/type debug data. Our own workspace crates keep full debug.
 [profile.dev.package."*"]
 debug = "line-tables-only"
+opt-level = 3
 
 # Release/store builds don't benefit from incremental (no iterative recompiles),
 # but the repo-wide `[build] incremental = true` (.cargo/config.toml, for fast dev)
@@ -42,6 +57,30 @@ serde_json = "1"
 tauri = { version = "2", features = ["macos-private-api", "unstable"] }
 tauri-plugin-opener = "2"
 env_logger = "0.11.10"
+
+# On-device German TTS — Supertonic-3 through ONNX Runtime (src/tts).
+# Versions match the upstream reference implementation the inference code is
+# vendored from, so it can be diffed against theirs when they publish a new
+# model revision.
+anyhow = "1"
+ort = "2.0.0-rc.7"
+ndarray = { version = "0.17", features = ["rayon"] }
+rand = "0.8"
+rand_distr = "0.4"
+rayon = "1.10"
+hound = "3.5"
+rustfft = "6.2"
+unicode-normalization = "0.1"
+regex = "1.10"
+# Fetches model weights on first run. Blocking and tiny; the commands that call
+# it are already async and off the UI thread.
+ureq = "2"
+
+# On-device German speech recognition (src/asr). Nemotron 3.5 streaming for the
+# words, Silero VAD (driven directly, see src/asr/vad.rs) for knowing when
+# someone is talking — both ONNX, same runtime as the voice above.
+parakeet-rs = "0.3"
+
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 oslog = { version = "0.2", features = ["logger"] }

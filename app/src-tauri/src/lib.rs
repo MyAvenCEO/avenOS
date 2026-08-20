@@ -8,6 +8,10 @@
 //! Logging survives on purpose: a silent Rust side is what makes a TestFlight
 //! build undebuggable.
 
+mod asr;
+mod assets;
+mod tts;
+
 use tauri::Manager;
 
 /// macOS/iOS route through `os_log` (subsystem `ceo.aven.os`) because iPhone
@@ -79,6 +83,18 @@ pub fn run() {
 	tauri::Builder::default()
 		// Open external URLs in the system browser so the game window stays put.
 		.plugin(tauri_plugin_opener::init())
+		// On-device German speech, both directions. Both engines are built lazily
+		// on first use, so a session that never speaks or listens pays nothing.
+		.manage(tts::TtsState::default())
+		.manage(asr::AsrState::default())
+		.invoke_handler(tauri::generate_handler![
+			tts::tts_prepare,
+			tts::tts_speak,
+			asr::asr_prepare,
+			asr::asr_push,
+			asr::asr_reset,
+			asr::asr_output_active
+		])
 		.setup(|app| {
 			// The webview is the whole surface, so give it focus on launch —
 			// otherwise the first click is spent activating the window.

@@ -8,6 +8,7 @@
 	],
 	"scripts": {
 		"dev:app": "bun --env-file=.env run --cwd app dev",
+		"dev:website": "bun --env-file=.env run --cwd libs/aven-website dev",
 		"dev:app:all": "bun --env-file=.env ./scripts/dev-app-all.ts",
 		"dev:app:mac": "AVENOS_ENV_FILE=.env.samuel AVENOS_APP_ENV_FILE=../.env.samuel bun --env-file=.env.samuel ./scripts/dev-app-macos.ts",
 		"dev:app:ios": "bun --env-file=.env ./scripts/dev-app-ios.ts",
