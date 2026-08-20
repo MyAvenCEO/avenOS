@@ -38,6 +38,8 @@ export interface HeldMessage {
 	method: string
 	label: string
 	detail: string
+	/** The intent this gate belongs to; absent = it belongs to the conversation. */
+	context?: string
 }
 
 export class MessageBus {

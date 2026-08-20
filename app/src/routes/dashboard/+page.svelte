@@ -224,9 +224,12 @@ function onKeydown(event: KeyboardEvent) {
 	</header>
 
 	{#if tab === 'intents'}
-		<!-- Intents — a hardcoded placeholder surface, deliberately OUTSIDE the
-		     actor/flow architecture for now: pure mock, no bus, no skills. -->
-		<IntentsPlaceholder />
+		<!-- The intents workspace fills everything between the tabs and the
+		     HITL bar — the wrapper carries the flex-1 so the three columns
+		     stretch to the full available height. -->
+		<div class="flex min-h-0 w-full flex-1">
+			<IntentsPlaceholder />
+		</div>
 	{:else if tab === 'skills'}
 		<!-- The skills platform: a skill is a collection of composable
 		     workflows; the canvas draws them n8n-style, every wire derived. -->
@@ -244,8 +247,8 @@ function onKeydown(event: KeyboardEvent) {
 	     buttons. The FiBu workspace drops the strip entirely — the inbox layout
 	     wants every pixel of height, and even an empty flex child would double
 	     the gap between the view and the panel. -->
-	{#if true}
-		<div class="mx-auto flex min-h-16 w-full max-w-lg items-end justify-center">
+	{#if listener.partial !== '' || activity.current}
+		<div class="mx-auto flex w-full max-w-lg items-end justify-center">
 			{#if listener.partial !== ''}
 				<!-- What is being heard, as it is being heard — the live recognizer
 			     output, so you can watch your words arrive while the list view is
@@ -329,7 +332,9 @@ function onKeydown(event: KeyboardEvent) {
 	<!-- THE human gate, inverted like the voice pill itself: the same dark
 	     marine surface, full main width, the question centred on top and the
 	     two physical buttons centred underneath. -->
-	{#each hitlQueue.items as held (held.id)}
+	{#each hitlQueue.items.filter((h) =>
+		tab === 'intents' && (h.context ? !talk.open && talk.intentContext === h.context : talk.open)
+	) as held (held.id)}
 		<div
 			class="mx-auto mb-2 flex min-h-36 w-full max-w-[calc(100%-37.5rem)] flex-col items-center justify-between gap-4 rounded-2xl bg-primary px-6 py-5 text-primary-foreground shadow-[0_4px_16px_rgba(30,41,59,0.15)]"
 		>
