@@ -8,6 +8,8 @@ import { singleton } from '$lib/actors/singleton'
  */
 class TalkState {
 	open = $state(false)
+	/** The intent currently in view (null while talking) — HITL gates scope to it. */
+	intentContext = $state<string | null>(null)
 }
 
 export const talk = singleton('aven.talk', () => new TalkState())

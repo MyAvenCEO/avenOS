@@ -510,7 +510,8 @@ if (!hitlQueue.items.some((h) => h.id === 'mock-docs-tk')) {
 		actor: 'docs',
 		method: 'draft_approve',
 		label: 'Antwortentwurf an die TK freigeben',
-		detail: 'Intent „Krankenkasse: Nachweis bis 15.09." · Entwurf bereit'
+		detail: 'Intent „Krankenkasse: Nachweis bis 15.09." · Entwurf bereit',
+		context: 'krankenkasse'
 	})
 }
 
@@ -575,6 +576,11 @@ let sfH = $state(0)
  * a fresh log entry, a streamed reply, an opened inline view — is always
  * in sight at the bottom.
  */
+// HITL gates scope to what is on screen: the selected intent, or the talk.
+$effect(() => {
+	talk.intentContext = talk.open ? null : selectedId
+})
+
 let centerEl: HTMLElement | null = $state(null)
 $effect(() => {
 	void chat.turns.length
@@ -605,9 +611,9 @@ const DOT: Record<string, string> = {
 	</button>
 {/snippet}
 
-<div class="flex h-full min-h-0 w-full flex-1 gap-3 overflow-hidden">
+<div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden">
 	<!-- LEFT: the intent stream — compact cards, cream selection. -->
-	<aside class="flex h-full w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
+	<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
 		<!-- The generic AI chat — above the intents: free-form + view queries. -->
 		<button
 			type="button"
@@ -1156,7 +1162,7 @@ const DOT: Record<string, string> = {
 	</main>
 
 	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
-	<aside class="flex h-full w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
+	<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
 		<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
 			Skills · {(talk.open ? TALK_SKILLS : selected.skills).length}
 		</h2>
