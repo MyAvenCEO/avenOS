@@ -254,7 +254,11 @@ function reduce(state, ev) {
 		}
 		if (created.length === 0)
 			return speak(domain, 'no titles given', { ok: false, error: 'no titles given' })
-		return speak(domain, 'created (' + created.length + '): ' + lines(created), {
+		// A creation into ANOTHER spark than the one on screen must be said,
+		// or the list looks like it silently swallowed the tasks.
+		var sparkNote =
+			spark !== domain.active ? ' — in spark ' + spark + ', not visible on the current view' : ''
+		return speak(domain, 'created (' + created.length + '): ' + lines(created) + sparkNote, {
 			ok: true,
 			created: created
 		})
