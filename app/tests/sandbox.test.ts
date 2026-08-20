@@ -146,21 +146,22 @@ describe('logic sandbox (0130 slice A)', () => {
 	})
 })
 
-describe('workitems logic (0130 slice B — parity + validation)', () => {
+describe('todo logic (0130 slice B — parity + validation)', () => {
 	test('both faces validate and the style passes the whitelist', async () => {
 		const { validateStyleDef, validateViewDef } = await import('@avenos/aven-ui')
-		const { workitemsBoardView, workitemsListView } = await import(
-			'../src/lib/actors/views/workitems/view'
-		)
-		const { workitemsStyle } = await import('../src/lib/actors/views/workitems/style')
-		expect(() => validateViewDef(workitemsListView)).not.toThrow()
-		expect(() => validateViewDef(workitemsBoardView)).not.toThrow()
-		expect(() => validateStyleDef(workitemsStyle)).not.toThrow()
+		const { todoBoardView, todoListView } = await import('../src/lib/actors/views/todo/view')
+		const { todoStyle } = await import('../src/lib/actors/views/todo/style')
+		expect(() => validateViewDef(todoListView)).not.toThrow()
+		expect(() => validateViewDef(todoBoardView)).not.toThrow()
+		expect(() => validateStyleDef(todoStyle)).not.toThrow()
 	})
 
 	test('initState derives the rendered state from source', async () => {
-		const { workitemsLogic } = await import('../src/lib/actors/views/workitems/logic')
-		const session = await createSession(workitemsLogic)
+		const { composeTodoProgram } = await import('../src/lib/actors/views/todo/logic')
+		const { loadMachine } = await import('../src/lib/actors/machine')
+		const todoMachineSource = (await import('../src/lib/actors/todo-machine.pl?raw')).default
+		const todoLogic = composeTodoProgram(loadMachine(todoMachineSource))
+		const session = await createSession(todoLogic)
 		try {
 			const state = await session.initState({
 				items: [{ title: 'Milk', status: 'done', spark: 'me' }],
@@ -176,15 +177,18 @@ describe('workitems logic (0130 slice B — parity + validation)', () => {
 	})
 
 	test('PARITY: the UI event and the equivalent voice call are byte-identical', async () => {
-		const { workitemsLogic } = await import('../src/lib/actors/views/workitems/logic')
-		const ui = await createSession(workitemsLogic)
-		const voice = await createSession(workitemsLogic)
+		const { composeTodoProgram } = await import('../src/lib/actors/views/todo/logic')
+		const { loadMachine } = await import('../src/lib/actors/machine')
+		const todoMachineSource = (await import('../src/lib/actors/todo-machine.pl?raw')).default
+		const todoLogic = composeTodoProgram(loadMachine(todoMachineSource))
+		const ui = await createSession(todoLogic)
+		const voice = await createSession(todoLogic)
 		try {
 			// the click path: the add form submits ADD {text}
 			let uiState = await ui.initState({})
 			uiState = (await ui.reduce(uiState, { send: 'ADD', payload: { text: 'Buy milk' } })).state
 			uiState = (await ui.reduce(uiState, { send: 'TOGGLE', payload: { id: 'w1' } })).state
-			// the voice path: workitem_create + workitem_update map to the same events
+			// the voice path: todo_create + todo_update map to the same events
 			let voiceState = await voice.initState({})
 			const spoken = await voice.reduce(voiceState, {
 				send: 'CREATE',
@@ -192,7 +196,7 @@ describe('workitems logic (0130 slice B — parity + validation)', () => {
 			})
 			// the sandbox authors the words AND the structured record itself
 			expect(spoken.said).toBe('created (1): w1 Buy milk (open, me)')
-			expect((spoken.record?.created as { id: string }[])[0]?.id).toBe('w1')
+			expect((spoken.record as { created: { id: string }[] }).created[0]?.id).toBe('w1')
 			voiceState = spoken.state
 			voiceState = (
 				await voice.reduce(voiceState, {
@@ -208,8 +212,11 @@ describe('workitems logic (0130 slice B — parity + validation)', () => {
 	})
 
 	test('shape applies model ops through the SAME transitions; garbage changes nothing', async () => {
-		const { workitemsLogic } = await import('../src/lib/actors/views/workitems/logic')
-		const session = await createSession(workitemsLogic)
+		const { composeTodoProgram } = await import('../src/lib/actors/views/todo/logic')
+		const { loadMachine } = await import('../src/lib/actors/machine')
+		const todoMachineSource = (await import('../src/lib/actors/todo-machine.pl?raw')).default
+		const todoLogic = composeTodoProgram(loadMachine(todoMachineSource))
+		const session = await createSession(todoLogic)
 		try {
 			const state = await session.initState({})
 			const shaped = await session.shape(

@@ -1,6 +1,7 @@
 import { Speaker } from '$lib/tts/speaker.svelte'
 import { Actor } from './actor'
 import { singleton } from './singleton'
+import speakerMachineSource from './speaker-machine.pl?raw'
 
 /**
  * The voice as an actor. The proven TTS internals (gapless clock, sentence
@@ -21,8 +22,8 @@ export class SpeakerActor extends Actor {
 				'written. On-device Supertonic TTS; goes silent instantly on interruption.',
 			tags: ['voice'],
 			methods: [],
-			requires: ['delta(D)', 'reply(R)', 'discard(R)', 'interrupted()', 'utterance(T)'],
-			produces: []
+			// Flow AND contracts from the one `.pl` — requires(delta(D)) etc.
+			machine: speakerMachineSource
 		})
 		this.bind({
 			delta: (p) => {
@@ -55,10 +56,6 @@ export class SpeakerActor extends Actor {
 			speaking: this.core.speaking ? 'yes' : 'no',
 			output: this.core.output
 		}
-	}
-
-	protected override situation(): string {
-		return `Status ${this.core.status}, ${this.core.speaking ? 'speaking right now' : 'quiet'}.`
 	}
 }
 

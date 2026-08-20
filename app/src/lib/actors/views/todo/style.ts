@@ -1,7 +1,7 @@
 import { type StyleDef, withBrand } from '@avenos/aven-ui'
 
 /**
- * One style for both workitems views, on brand tokens — the same selectors
+ * One style for both todo views, on brand tokens — the same selectors
  * serve the list and the board, so the two windows read as one app.
  */
 const selectors: StyleDef['selectors'] = {
@@ -75,6 +75,9 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.wi-row--done': { opacity: '0.55' },
 	'.wi-row--done .wi-row-title': { textDecoration: 'line-through' },
+	'.wi-row-main': { flex: '1', minWidth: '0', display: 'flex', flexDirection: 'column' },
+	'.wi-row-meta': { fontSize: '11px', opacity: '0.55' },
+
 	'.wi-row-title': { flex: '1', minWidth: '0', fontSize: 'var(--fs-body)' },
 
 	'.wi-badge': {
@@ -164,4 +167,4 @@ const selectors: StyleDef['selectors'] = {
  * Task surfaces breathe at 6xl (72rem) — wider than the brand's 56rem
  * default; the token override wins over the brand layer.
  */
-export const workitemsStyle: StyleDef = withBrand({ tokens: { 'max-w': '72rem' }, selectors })
+export const todoStyle: StyleDef = withBrand({ tokens: { 'max-w': '72rem' }, selectors })

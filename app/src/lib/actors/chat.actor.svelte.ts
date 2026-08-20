@@ -4,10 +4,13 @@ import type { Activity } from './activity.svelte'
 import { activity } from './activity.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
+import chatMachineSource from './chat-machine.pl?raw'
 import { LlmActor } from './llm.actor'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
-import { WorkItemsActor, workItems } from './workitems.svelte'
+import { summarizeRecord } from './summarize'
+import { todoActor } from './todo.svelte'
+import { chatStyle, chatView } from './views/chat/view'
 
 /**
  * The brain as an actor. The conversation machinery (streaming, tool rounds,
@@ -22,6 +25,34 @@ import { WorkItemsActor, workItems } from './workitems.svelte'
 export class ChatActor extends Actor {
 	readonly core: Chat
 
+	/**
+	 * The window projection: the conversation as renderable state for the
+	 * universal view engine. Replaced wholesale on every turn event so the
+	 * chat WINDOW re-renders like any other actor view.
+	 */
+	state = $state<Record<string, unknown>>({
+		rows: [],
+		statusText: '',
+		statusClass: 'ch-status ch-status--hidden'
+	})
+
+	#project() {
+		const rows = this.core.turns.map((t) => {
+			const me = t.role === 'user'
+			return {
+				id: t.id,
+				content: t.content === '' ? '…' : t.content,
+				rowClass: `ch-row${me ? ' ch-row--me' : ''}`,
+				bubbleClass: `ch-bubble${me ? ' ch-bubble--me' : ''}`
+			}
+		})
+		this.state = {
+			rows,
+			statusText: this.core.streaming ? 'thinking…' : rows.length === 0 ? 'Say something.' : '',
+			statusClass: `ch-status${this.core.streaming || rows.length === 0 ? '' : ' ch-status--hidden'}`
+		}
+	}
+
 	constructor() {
 		super({
 			id: 'chat',
@@ -31,21 +62,32 @@ export class ChatActor extends Actor {
 				'over the bus, and streams the reply out sentence by sentence.',
 			tags: ['voice', 'todo'],
 			methods: [],
-			requires: ['utterance(T)', 'interrupted()'],
-			produces: ['delta(D)', 'reply(R)', 'discard(R)']
+			// Flow AND contracts from the one `.pl` — the turn machine plus
+			// requires(utterance(T)) / produces(delta(D)) etc.
+			machine: chatMachineSource,
+			view: chatView,
+			style: chatStyle
 		})
 
 		this.core = new Chat(
 			{
 				onDelta: (text) => {
+					this.#project()
 					void bus.emit('delta(D)', { text }, 'chat')
 				},
 				onDone: () => {
+					this.#project()
 					void bus.emit('reply(R)', {}, 'chat')
 				},
 				// Tool calls mean the real answer is still coming; unsay the placeholder.
 				onRestart: () => {
+					this.#project()
 					void bus.emit('discard(R)', {}, 'chat')
+				},
+				// Every turn boundary (user push, reply push, clear) re-projects
+				// the window state.
+				onTurn: () => {
+					this.#project()
 				}
 			},
 			{
@@ -73,24 +115,8 @@ export class ChatActor extends Actor {
 							payload.payload && typeof payload.payload === 'object'
 								? (payload.payload as Record<string, unknown>)
 								: {}
-						const result = await bus.dispatch('chat', String(payload.method ?? ''), {
-							...inner,
-							to: payload.to
-						})
+						const result = await bus.dispatch('chat', String(payload.method ?? ''), inner)
 						activity.show(summarizeCall(String(payload.method ?? ''), result.record))
-						return result
-					}
-					if (name === 'actor_ask') {
-						const answer = await bus.ask(
-							String(payload.actor ?? ''),
-							String(payload.question ?? ''),
-							'chat'
-						)
-						const result = {
-							record: JSON.stringify({ ok: true, actor: payload.actor, answer }),
-							wire: answer
-						}
-						activity.show(summarizeCall(name, result.record))
 						return result
 					}
 					const result = await bus.dispatch('chat', name, payload)
@@ -121,22 +147,10 @@ export class ChatActor extends Actor {
 			model: 'qwen3.5-122b-a10b'
 		}
 	}
-
-	protected override situation(): string {
-		return `${this.core.turns.length} turns so far${this.core.streaming ? ', replying right now' : ''}.`
-	}
 }
 
 /** One displayable entry for a call — the owning actor knows its own words. */
 export function summarizeCall(name: string, record: string): Omit<Activity, 'id'> | null {
-	if (name === 'actor_ask') {
-		try {
-			const parsed = JSON.parse(record)
-			return { kind: 'asked', titles: [String(parsed.actor ?? '')] }
-		} catch {
-			return null
-		}
-	}
 	if (name.endsWith('_window_toggle')) {
 		try {
 			const parsed = JSON.parse(record)
@@ -149,7 +163,7 @@ export function summarizeCall(name: string, record: string): Omit<Activity, 'id'
 			return null
 		}
 	}
-	return workItems.summarize(name, record)
+	return summarizeRecord(name, record)
 }
 
 /**
@@ -185,10 +199,7 @@ export const llmActor = singleton(
 bus.register(llmActor)
 bus.extractJson = extractJsonObject
 
-bus.register(workItems)
-// The task list may exist many times — "make me a list for the move" spawns
-// a fresh instance with its own sandbox state and windows.
-bus.spawnable('workitem', () => new WorkItemsActor())
+bus.register(todoActor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
 bus.register(registryActor)
 export const chatActor = singleton('aven.chat', () => new ChatActor())

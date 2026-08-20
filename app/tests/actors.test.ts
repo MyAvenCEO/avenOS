@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { Actor, functor, manifestProse } from '../src/lib/actors/actor'
+import { Actor, functor } from '../src/lib/actors/actor'
 import { MessageBus } from '../src/lib/actors/bus'
 
 /** Two tiny actors whose contracts chain: source produces what sink requires. */
@@ -38,37 +38,6 @@ function pair() {
 	return { bus, source, sink }
 }
 
-/**
- * The model as a service actor, faked for tests (0130): the bus derives its
- * lane from the registered `llm` actor — no ambient function anywhere.
- */
-function registerFakeLlm(
-	bus: MessageBus,
-	answer: (system: string, question: string, settings?: Record<string, unknown>) => string
-) {
-	bus.register(
-		new Actor(
-			{
-				id: 'llm',
-				name: 'LLM',
-				description: 'Fake model lane.',
-				tags: ['system'],
-				methods: []
-			},
-			{
-				llm_complete: async (p) => {
-					const text = answer(
-						String(p.system ?? ''),
-						String(p.question ?? ''),
-						(p.settings as Record<string, unknown>) ?? undefined
-					)
-					return { record: JSON.stringify({ ok: true, text }), wire: text }
-				}
-			}
-		)
-	)
-}
-
 describe('actor core', () => {
 	test('an envelope reaches the right handler', async () => {
 		const { bus } = pair()
@@ -99,41 +68,11 @@ describe('actor core', () => {
 		expect(ids).toEqual([['source'], ['sink']])
 	})
 
-	test('ask() without an LLM answers with manifest prose', async () => {
-		const { source } = pair()
-		const answer = await source.ask('Was bist du?')
-		expect(answer).toContain('Source')
-		expect(answer).toContain('make_thing')
-	})
-
-	test('ask() with an LLM answers as itself, manifest as context', async () => {
-		const { bus } = pair()
-		let seenSystem = ''
-		registerFakeLlm(bus, (system, question) => {
-			seenSystem = system
-			return `Antwort auf: ${question}`
-		})
-		const answer = await bus.ask('sink', 'Was brauchst du?', 'scheduler')
-		expect(answer).toBe('Antwort auf: Was brauchst du?')
-		expect(seenSystem).toContain('Sink')
-		expect(seenSystem).toContain('thing(X)')
-		// caller-aware (Ask Protocol): the answer may depend on WHO asks
-		expect(seenSystem).toContain('scheduler')
-		expect(bus.traceLog.find((e) => e.kind === 'ask')?.from).toBe('scheduler')
-	})
-
-	test('the manifest prose names every method and contract', () => {
-		const { source } = pair()
-		const prose = manifestProse(source.manifest)
-		expect(prose).toContain('make_thing')
-		expect(prose).toContain('thing(T)')
-	})
-
-	test('the derived tool list carries every method plus actor_ask', () => {
+	test('the derived tool list carries every method plus the send primitive', () => {
 		const { bus } = pair()
 		const names = bus.toolSpecs().map((s) => s.name)
 		expect(names).toContain('make_thing')
-		expect(names).toContain('actor_ask')
+		expect(names).toContain('send')
 	})
 })
 
@@ -313,33 +252,6 @@ describe('registry actor (0128)', () => {
 	})
 })
 
-describe('trace (0128)', () => {
-	test('the bus records sends, emits and asks', async () => {
-		const bus = new MessageBus()
-		const actor = new Actor(
-			{
-				id: 't',
-				name: 'T',
-				description: 'Testactor.',
-				tags: [],
-				methods: [],
-				requires: ['ping(P)']
-			},
-			{ ping: () => ({ record: '{"ok":true}', wire: 'pong' }) }
-		)
-		bus.register(actor)
-		await bus.emit('ping(P)', {})
-		await bus.ask('t', 'Wer bist du?')
-		const kinds = bus.traceLog.map((e) => e.kind)
-		expect(kinds).toContain('emit')
-		expect(kinds).toContain('send')
-		expect(kinds).toContain('ask')
-		const send = bus.traceLog.find((e) => e.kind === 'send')
-		expect(send?.to).toBe('t')
-		expect(send?.ok).toBe(true)
-	})
-})
-
 describe('execution engine (0129)', () => {
 	/** A producer whose clause-body handler is named after what it produces. */
 	function producer(
@@ -376,8 +288,8 @@ describe('catalog (code is the source of truth, reduced — 0130)', () => {
 	})
 })
 
-describe('the biography is complete: UI clicks and dispatches speak names', () => {
-	test('a UI event reduces through the sandbox AND lands in the trace', async () => {
+describe('the UI event door reduces through the sandbox', () => {
+	test('a UI event reduces through the actor sandbox', async () => {
 		const bus = new MessageBus()
 		const actor = new Actor({
 			id: 'todo',
@@ -394,27 +306,8 @@ describe('the biography is complete: UI clicks and dispatches speak names', () =
 		bus.register(actor)
 		await bus.uiEvent('ui', actor.uuid, { send: 'BUMP' })
 		expect(actor.state.n).toBe(1)
-		const entry = bus.traceLog.find((e) => e.method === 'BUMP')
-		expect(entry?.from).toBe('ui')
-		// the trace speaks names, never uuids
-		expect(entry?.to).toBe('todo')
-	})
-
-	test('dispatch traces the instance name, not the uuid', async () => {
-		const bus = new MessageBus()
-		bus.register(
-			new Actor(
-				{ id: 'a', name: 'A', description: '', tags: [], methods: [] },
-				{ ping: () => ({ record: '{"ok":true}', wire: 'pong' }) }
-			)
-		)
-		await bus.dispatch('test', 'ping', {})
-		const entry = bus.traceLog.find((e) => e.method === 'ping')
-		expect(entry?.to).toBe('a')
 	})
 })
-
-describe('runs ARE trace entries (merged biography)', () => {})
 
 describe('the membrane seam (0130): actors shape their own model text', () => {
 	function shaper(shapeBody: string) {

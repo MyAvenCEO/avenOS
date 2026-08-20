@@ -1,5 +1,6 @@
 import { Actor } from './actor'
 import { bus } from './bus'
+import windowMachineSource from './window-machine.pl?raw'
 
 /**
  * A window is an actor too — the Abject Canvas idea taken literally. The
@@ -41,6 +42,8 @@ export class WindowActor extends Actor {
 				`The "${name}" window of ${subject.manifest.name}: renders its state as an ` +
 				'operable surface. Shown and hidden by message.',
 			tags: ['window'],
+			// Every actor is a statechart; a window's is shown ⇄ hidden.
+			machine: windowMachineSource,
 			// The window consumes what its subject produces — that IS the
 			// relation, and the graph draws it without anyone wiring it.
 			requires: [...subject.produces],
@@ -88,10 +91,6 @@ export class WindowActor extends Actor {
 			state: this.open ? 'shown' : 'hidden',
 			subject: this.subject.manifest.id
 		}
-	}
-
-	protected override situation(): string {
-		return `${this.open ? 'Shown' : 'Hidden'}; renders the state of ${this.subject.manifest.name}.`
 	}
 }
 

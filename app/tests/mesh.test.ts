@@ -1,113 +1,110 @@
 import { describe, expect, test } from 'bun:test'
-import { doors, layoutCoordinator } from '../src/lib/mesh/mesh-layout'
-import { type Actor, ask, edges, find } from '../src/lib/mesh/model'
-import { registry } from '../src/lib/mesh/registry'
+import { loadMachine } from '../src/lib/actors/machine'
+import machineSource from '../src/lib/actors/todo-machine.pl?raw'
+import { layoutMachine } from '../src/lib/mesh/machine-layout'
 
 /**
- * The contracts of the collapsed DECLARATION model — one primitive
- * (Actor), wiring derived from provides ∩ requires, ask() answering
- * from the manifest. The instance side (threads, run/state/board) was
- * removed with the Intents cockpit (0141); these are the claims the
- * Skills canvas still stands on.
+ * The machine and its diagram. `todo-machine.pl` is the source of truth; the
+ * fact-only engine (machine.ts) answers goals by unification, and the canvas
+ * draws it state-as-node (0145). The old declared-mesh mock (registry/model/
+ * coordinator layout) was deleted in 0146 — the Actors viewer renders every
+ * actor's machine from its manifest, fed by the live bus.
  */
 
-const actors: Actor[] = registry
+describe('machine: the fact-only Prolog reader over todo-machine.pl', () => {
+	const m = loadMachine(machineSource)
 
-describe('mesh: one primitive, coordinators are actors with members', () => {
-	test('every member reference resolves, and a coordinator has members', () => {
-		for (const a of registry) {
-			for (const m of a.members ?? []) expect(find(actors, m)).toBeDefined()
-		}
-		expect(registry.some((a) => (a.members?.length ?? 0) > 0)).toBe(true)
-		expect(registry.some((a) => !a.members)).toBe(true)
+	test('the three kanban states and their bookends parse', () => {
+		expect(m.states.sort()).toEqual(['doing', 'done', 'open'])
+		expect(m.initial).toEqual(['open'])
+		expect(m.terminal).toEqual(['done'])
 	})
 
-	test('ask(): every actor answers from its manifest — the abject fallback', () => {
-		for (const a of actors) {
-			const answer = ask(a)
-			expect(answer.length).toBeGreaterThan(0)
-			expect(answer).toContain(a.manifest.name)
-		}
+	test('transitions unify out as (event, from, to) triples', () => {
+		expect(m.transitions).toContainEqual({ event: 'create', from: 'none', to: 'open' })
+		expect(m.transitions).toContainEqual({ event: 'start', from: 'open', to: 'doing' })
+		expect(m.transitions).toContainEqual({ event: 'finish', from: 'doing', to: 'done' })
+		expect(m.transitions).toContainEqual({ event: 'complete', from: 'open', to: 'done' })
+		// delete fires from all three real states.
+		expect(
+			m.transitions
+				.filter((t) => t.event === 'delete')
+				.map((t) => t.from)
+				.sort()
+		).toEqual(['doing', 'done', 'open'])
 	})
 
-	test('terminology is english, functor-style — no legacy umlauts in the model', () => {
-		const surface = JSON.stringify({
-			ids: actors.map((a) => a.id),
-			functors: actors.flatMap((a) => [
-				...(a.manifest.requires ?? []),
-				...(a.manifest.provides ?? [])
-			])
-		})
-		expect(/[äöüß]/i.test(surface)).toBe(false)
+	test('legal()/legalStatus() are the live-app gate: only declared moves pass', () => {
+		expect(m.legal('finish', 'doing', 'done')).toBe(true)
+		expect(m.legalStatus('open', 'doing')).toBe(true)
+		expect(m.legalStatus('open', 'done')).toBe(true) // the checkbox (complete)
+		expect(m.legalStatus('done', 'doing')).toBe(false) // no slipping back
 	})
-})
 
-describe('mesh: the wiring is derived, never stored', () => {
-	test('edges are provides ∩ requires — never stored', () => {
-		for (const a of registry) expect('edges' in a).toBe(false)
-		// The full intake lane: three sources feed accept, cases split,
-		// classify, triage — and the statement branch has its own switch.
-		const inbox = edges(actors, 'inbox')
-		expect(inbox).toContainEqual({ from: 'mail', to: 'accept', functor: 'intake' })
-		expect(inbox).toContainEqual({ from: 'upload-src', to: 'accept', functor: 'intake' })
-		expect(inbox).toContainEqual({ from: 'accept', to: 'split', functor: 'item' })
-		expect(inbox).toContainEqual({ from: 'split', to: 'classify-item', functor: 'case' })
-		expect(inbox).toContainEqual({ from: 'classify-item', to: 'triage', functor: 'class' })
-		expect(inbox).toContainEqual({ from: 'triage', to: 'extract', functor: 'document' })
-		expect(inbox).toContainEqual({ from: 'triage', to: 'statement-route', functor: 'statement' })
-		expect(inbox).toContainEqual({ from: 'statement-route', to: 'parse-csv', functor: 'csv-file' })
-		// Inside extract: the format switch fans into three reads; the scan
-		// read is its own colony whose reading gets shaped.
-		const ex = edges(actors, 'extract')
-		expect(ex).toContainEqual({ from: 'doc-route', to: 'parse-einvoice', functor: 'e-invoice' })
-		expect(ex).toContainEqual({ from: 'doc-route', to: 'read-scan', functor: 'scan' })
-		expect(ex).toContainEqual({ from: 'read-scan', to: 'shape-positions', functor: 'reading' })
-		// Inside book: tax logic feeds the lines, validation feeds BOTH
-		// approvals, and only the bookkeeper's approval reaches the lock.
-		const book = edges(actors, 'book')
-		expect(book).toContainEqual({ from: 'classify-cost', to: 'tax', functor: 'category' })
-		expect(book).toContainEqual({ from: 'tax', to: 'derive-lines', functor: 'tax-set' })
-		expect(book).toContainEqual({ from: 'validate', to: 'approve-gf', functor: 'valid' })
-		expect(book).toContainEqual({ from: 'validate', to: 'approve', functor: 'valid' })
-		expect(book).toContainEqual({ from: 'approve', to: 'lock', functor: 'approval' })
-		expect(book).toContainEqual({ from: 'validate', to: 'tax-route', functor: 'valid' })
-		expect(book).toContainEqual({ from: 'tax-route', to: 'vat-due', functor: 'cash' })
-		// And the whitelist loop exists: autonomy is earned, per actor.
-		const wl = edges(actors, 'whitelist')
-		expect(wl).toContainEqual({ from: 'balance', to: 'review', functor: 'record' })
-		expect(wl).toContainEqual({ from: 'review', to: 'promote', functor: 'ready' })
-		expect(wl).toContainEqual({ from: 'review', to: 'demote', functor: 'slipping' })
+	test('nextStates()/nextStatus() answer what a task may do next', () => {
+		expect(m.nextStates('open')).toContainEqual({ event: 'start', to: 'doing' })
+		expect(m.nextStatus('open')).toBe('doing')
+		expect(m.nextStatus('doing')).toBe('done')
+		expect(
+			m
+				.nextStates('done')
+				.map((n) => n.event)
+				.sort()
+		).toEqual(['clear_done', 'delete', 'reopen'])
+	})
+
+	test('guards and views come through', () => {
+		expect(m.guards).toContainEqual({ event: 'clear_done', cond: 'status(done)' })
+		expect(m.views.sort()).toEqual(['board', 'list'])
+		expect(
+			m.shows
+				.filter((s) => s.view === 'board')
+				.map((s) => s.state)
+				.sort()
+		).toEqual(['doing', 'done', 'open'])
 	})
 })
 
-describe('mesh: the canvas draws the derivation', () => {
-	const coordinators = registry.filter((a) => (a.members?.length ?? 0) > 0)
-	const roots = coordinators.filter((c) => !coordinators.some((o) => o.members?.includes(c.id)))
+describe('layoutMachine — states as nodes, transitions as arrows (0145)', () => {
+	const m = loadMachine(machineSource)
+	const laid = layoutMachine(m)
 
-	test('every member placed, every wire inferred, only doors beyond', () => {
-		for (const c of coordinators) {
-			const laid = layoutCoordinator(registry, c.id, roots)
-			const ids = new Set(laid.nodes.map((n) => n.id))
-			for (const m of c.members ?? []) expect(ids.has(m)).toBe(true)
-			for (const e of laid.edges) {
-				expect(ids.has(e.source)).toBe(true)
-				expect(ids.has(e.target)).toBe(true)
-			}
-			for (const n of laid.nodes) {
-				if (!c.members?.includes(n.id)) expect(n.id.startsWith('door:')).toBe(true)
-			}
-		}
+	test('one node per real state, plus the entry/exit voids', () => {
+		const stateNodes = laid.nodes.filter((n) => n.kind === 'state').map((n) => n.label)
+		expect(stateNodes.sort()).toEqual(['doing', 'done', 'open'])
+		// create comes from the void, delete/clear go to it.
+		expect(laid.nodes.some((n) => n.kind === 'entry')).toBe(true)
+		expect(laid.nodes.some((n) => n.kind === 'exit')).toBe(true)
+		// the initial/terminal are marked, for the ring.
+		expect(laid.nodes.find((n) => n.label === 'open')?.initial).toBe(true)
+		expect(laid.nodes.find((n) => n.label === 'done')?.terminal).toBe(true)
 	})
 
-	test('the old handoffs reappear as inferences: skill boundaries are doors', () => {
-		const to = (from: string) => doors(registry, from, roots).map((d) => d.to.id)
-		// The inbox hands positions/transactions to accounting and the
-		// unknown to the human desk — nobody stored these boundaries.
-		expect(to('inbox')).toContain('accounting')
-		expect(to('inbox')).toContain('human-desk')
-		// Accounting hands locked bookings to the month close.
-		expect(to('accounting')).toContain('close')
-		// The desk's decisions feed the whitelist: autonomy is earned.
-		expect(to('human-desk')).toContain('whitelist')
+	test('one edge per transition, the event as its label', () => {
+		expect(laid.edges.length).toBe(m.transitions.length)
+		expect(laid.edges).toContainEqual(
+			expect.objectContaining({ source: 'state:open', target: 'state:doing', label: 'start' })
+		)
+		expect(laid.edges).toContainEqual(
+			expect.objectContaining({ source: 'state:doing', target: 'state:done', label: 'finish' })
+		)
+		expect(laid.edges).toContainEqual(
+			expect.objectContaining({ source: 'state:open', target: 'state:done', label: 'complete' })
+		)
+		expect(laid.edges).toContainEqual(
+			expect.objectContaining({ source: 'state:done', target: 'state:open', label: 'reopen' })
+		)
+		expect(laid.edges).toContainEqual(
+			expect.objectContaining({ source: 'entry', target: 'state:open', label: 'create' })
+		)
+		// every deletion lands on the exit void.
+		expect(laid.edges.filter((e) => e.target === 'exit').length).toBeGreaterThanOrEqual(4)
+	})
+
+	test('states sit in cycle order along one row', () => {
+		const row = laid.nodes.filter((n) => n.kind === 'state')
+		expect(row.every((n) => n.position.y === 0)).toBe(true)
+		const byX = [...row].sort((a, b) => a.position.x - b.position.x).map((n) => n.label)
+		expect(byX).toEqual(['open', 'doing', 'done'])
 	})
 })

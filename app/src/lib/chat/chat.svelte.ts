@@ -36,30 +36,24 @@ const SYSTEM_PROMPT =
 	'Every task is its own entry with a short title — never append several ' +
 	'things to an existing title. "Four healthy ingredients" means four separate ' +
 	'tasks you think up yourself. ' +
-	'Tasks are addressed by their id, never by title — call workitem_list ' +
+	'Tasks are addressed by their id, never by title — call todo_list ' +
 	'before you change, delete, or talk about the list. ' +
-	'Every task belongs to exactly one spark, the project context: "me" for ' +
+	'Every task belongs to exactly one spark, the spark context: "me" for ' +
 	'personal things, "team" for shared ones. Without a mention, the active ' +
 	'spark applies; "for the team" means spark=team. ' +
 	'Tasks have three statuses: open, in_progress, done. When someone says a ' +
-	'thing is finished, call workitem_update with status=done; "just starting" ' +
+	'thing is finished, call todo_update with status=done; "just starting" ' +
 	'means status=in_progress. Deleting happens only on explicit request. Read ' +
 	'lists out as flowing prose. ' +
 	'Exactly one window is on screen at a time; switch with the *_window_toggle ' +
 	'tools and open=true — the previous window disappears by itself. "Show the ' +
 	'list" means list_window_toggle, "show the board" means board_window_toggle ' +
-	'— each with open=true. workitem_show only switches the spark. All of these ' +
+	'— each with open=true. todo_show only switches the spark. All of these ' +
 	'are view changes, never data changes. ' +
-	'Call registry_list when you are unsure which actors or instances exist. ' +
-	'Actor TEMPLATES are fixed and ship with the app — but templates can run as ' +
-	'several INSTANCES: "make me a second list for the move" means spawn with ' +
-	'template=workitem and a short name. Address a specific instance by adding ' +
-	'to=<name or uuid from registry_list> on any tool; without it the default ' +
-	'instance is meant. dispose removes a spawned instance on explicit request. ' +
-	'Destructive actions (deleting tasks, disposing instances) are HELD the ' +
-	'same way: the call returns held=..., a bar appears for the human, and ' +
-	'only their button press executes it. Say that you have prepared it and ' +
-	'the user must press Confirm. ' +
+	'Call registry_list when you are unsure which actors exist. ' +
+	'Destructive actions are HELD: the call returns held=..., a bar appears ' +
+	'for the human, and only their button press executes it. Say that you ' +
+	'have prepared it and the user must press Confirm. ' +
 	'Messages come from speech recognition and are sometimes cut off ' +
 	'mid-sentence. If a message reads like the continuation of the previous ' +
 	'one, treat both together as one request. ' +
@@ -71,7 +65,7 @@ const SYSTEM_PROMPT =
  *
  * Deleting everything finished takes list, then one delete per item, then the
  * answer — and four rounds ran out partway, leaving whatever the last round had
- * written as the final reply. That is how "Ich rufe workitem_delete, workitem_delete…
+ * written as the final reply. That is how "Ich rufe todo_delete, todo_delete…
  * auf." ended up on screen as an answer while nothing was deleted.
  */
 const MAX_TOOL_ROUNDS = 8
@@ -134,6 +128,8 @@ export interface ChatSink {
 	onDone?: () => void
 	/** The turn is starting over after tool calls — drop what was said so far. */
 	onRestart?: () => void
+	/** A turn boundary: a bubble was pushed or the log cleared — re-render. */
+	onTurn?: () => void
 }
 
 export interface ChatTools {
@@ -206,6 +202,7 @@ export class Chat {
 		const reply = this.turns[this.turns.length - 1]
 
 		this.streaming = true
+		this.#sink.onTurn?.()
 		this.#abort = new AbortController()
 
 		try {
@@ -366,5 +363,6 @@ export class Chat {
 		this.turns = []
 		this.#wire = []
 		this.failure = null
+		this.#sink.onTurn?.()
 	}
 }

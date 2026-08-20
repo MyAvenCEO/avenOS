@@ -40,7 +40,9 @@ function attachHost(element: HTMLElement) {
 }
 
 async function mount(element: HTMLElement): Promise<void> {
-	if (!viewDef || !actor.manifest.logic) return
+	// A view renders whether the behaviour is sandboxed (logic) or host code
+	// (the chat) — the engine only needs the view def and the actor's state.
+	if (!viewDef) return
 	renderError = null
 	try {
 		engine = new AvenUiEngine({
@@ -75,7 +77,7 @@ onDestroy(() => {
 {#if renderError}
 	<p class="shrink-0 px-1 text-sm text-red-600" role="alert">{renderError}</p>
 {/if}
-{#if viewDef && actor.manifest.logic}
+{#if viewDef}
 	<div {@attach attachHost} class="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto"></div>
 {:else}
 	<p class="text-muted-foreground px-1 text-sm">{actor.manifest.name} has no view to render.</p>

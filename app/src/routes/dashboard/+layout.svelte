@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Snippet } from 'svelte'
-import { SPARKS, workItems } from '$lib/actors/workitems.svelte'
+import { SPARKS, todoActor } from '$lib/actors/todo.svelte'
 
 /**
  * The dashboard shell: the spark rail on the left, the route's surface on the
@@ -15,11 +15,13 @@ const { children }: { children: Snippet } = $props()
 <div class="flex h-dvh">
 	<aside class="flex w-16 shrink-0 flex-col items-center gap-3 border-border border-r py-4">
 		{#each SPARKS as spark (spark.id)}
-			{@const active = workItems.active === spark.id}
+			{@const active = todoActor.state.active === spark.id}
 			<button
 				type="button"
 				onclick={() => {
-					workItems.active = spark.id
+					// The active spark is reducer state like any other — switch it
+					// through the SHOW event, the same door the voice tool uses.
+					void todoActor.applyEvent({ send: 'SHOW', payload: { spark: spark.id } })
 				}}
 				title={spark.name}
 				aria-label="Spark {spark.name}"

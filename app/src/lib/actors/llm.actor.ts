@@ -118,14 +118,6 @@ export class LlmActor extends Actor {
 		})
 	}
 
-	protected override situation(): string {
-		const last = this.#log.at(-1)
-		const tail = last
-			? ` Last call: ${last.model}, ${last.ms}ms, ${last.ok ? 'ok' : `FAILED — ${last.answer}`}.`
-			: ''
-		return `I relay completions to the inference proxy; the mesh reaches the model only through me.${tail}`
-	}
-
 	override instanceState(): Record<string, unknown> {
 		return {
 			completions: this.#log.filter((e) => e.ok).length,
