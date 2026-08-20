@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.8...v) (2026-08-20)
+
+
+### Features
+
+* **identity:** add checkout, passkey enrollment, and Hetzner deployment ([#74](https://github.com/MyAvenCEO/avenOS/issues/74)) ([518df36](https://github.com/MyAvenCEO/avenOS/commit/518df36eec25d3bf444729a6b00561176ebd0850))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.7...v) (2026-08-20)
 
 
