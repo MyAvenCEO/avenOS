@@ -4,9 +4,7 @@ import type { Actor } from './actor'
 
 /**
  * One actor as a graph node: name, live-dot, and its contracts as pills —
- * requires on top, produces below. When a proof is active the node wears its
- * verdict: green ring if it carries a satisfied step, red if an unsatisfied
- * one, dimmed when it plays no part.
+ * requires on top, produces below. The selected actor wears a ring.
  */
 const {
 	data
@@ -14,23 +12,12 @@ const {
 	data: {
 		actor: Actor
 		hue: (p: string) => string
-		verdict: 'satisfied' | 'unsatisfied' | 'idle' | null
 		center?: boolean
 	}
 } = $props()
 
 const m = $derived(data.actor.manifest)
-const ring = $derived(
-	data.verdict === 'satisfied'
-		? 'border-status-success ring-2 ring-status-success/30'
-		: data.verdict === 'unsatisfied'
-			? 'border-status-error ring-2 ring-status-error/30'
-			: data.verdict === 'idle'
-				? 'border-foreground/5 opacity-40'
-				: data.center
-					? 'border-primary ring-2 ring-primary/20'
-					: 'border-foreground/5'
-)
+const ring = $derived(data.center ? 'border-primary ring-2 ring-primary/20' : 'border-foreground/5')
 </script>
 
 <div

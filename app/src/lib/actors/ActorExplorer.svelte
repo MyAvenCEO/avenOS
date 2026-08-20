@@ -1,7 +1,7 @@
 <script lang="ts">
 import ActorGraph from './ActorGraph.svelte'
 import { type Actor, functor } from './actor'
-import { bus, type Run, type TraceEntry } from './bus'
+import { bus, type TraceEntry } from './bus'
 import { registryTick } from './reactivity.svelte'
 import { isWindow } from './window.actor.svelte'
 
@@ -76,35 +76,14 @@ $effect(() => {
 	}, 1500)
 	return () => clearInterval(timer)
 })
-/**
- * Runs and trace are the SAME events — a run is a group of step entries.
- * The stream shows each run once (as a collapsible group, payload detail
- * from bus.runs()) in the position of its newest step, everything else flat.
- */
-type ActivityRow = { kind: 'entry'; e: TraceEntry } | { kind: 'run'; run: Run; at: number }
-const activityRows = $derived.by<ActivityRow[]>(() => {
+/** The activity stream: every message that crossed the bus, newest first. */
+const activityRows = $derived.by<TraceEntry[]>(() => {
 	void traceTick
-	const runsById = new Map(bus.runs().map((r) => [r.id, r]))
-	const rows: ActivityRow[] = []
-	const seenRuns = new Set<string>()
-	for (const e of [...bus.traceLog].reverse()) {
-		if (e.kind === 'step' && e.run) {
-			if (seenRuns.has(e.run)) continue
-			seenRuns.add(e.run)
-			const run = runsById.get(e.run)
-			if (run) rows.push({ kind: 'run', run, at: e.at })
-			else rows.push({ kind: 'entry', e })
-			continue
-		}
-		rows.push({ kind: 'entry', e })
-	}
+	const rows = [...bus.traceLog].reverse()
 	return (
 		traceOnlySelected
-			? rows.filter((row) =>
-					row.kind === 'run'
-						? row.run.steps.some((step) => step.actor === selected.manifest.id)
-						: row.e.from === selected.manifest.id ||
-							row.e.to.split(',').includes(selected.manifest.id)
+			? rows.filter(
+					(e) => e.from === selected.manifest.id || e.to.split(',').includes(selected.manifest.id)
 				)
 			: rows
 	).slice(0, 30)
@@ -169,8 +148,8 @@ async function ask(event: SubmitEvent) {
 	</nav>
 
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto pb-2">
-		<!-- The graph: the registry's derived truth as a picture — same
-		     unification as the edges and the prover; a proof lights its path. -->
+		<!-- The graph: the registry's derived truth as a picture — the same
+		     unification that derives the edges, laid out by the solver stages. -->
 		{#if show('graph')}
 			<section
 				class="rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
@@ -686,68 +665,30 @@ async function ask(event: SubmitEvent) {
 				</div>
 				{#if activityRows.length === 0}
 					<p class="text-foreground/40 text-xs">
-						Nothing yet — talk to the system, or run a goal above.
+						Nothing yet — talk to the system to see messages cross the bus.
 					</p>
 				{:else}
 					<div class="flex max-h-72 flex-col gap-0.5 overflow-y-auto font-mono text-[0.6875rem]">
-						{#each activityRows as row (row.kind === 'run' ? row.run.id : row.e.seq)}
-							{#if row.kind === 'run'}
-								<details class="rounded-lg border border-foreground/5 px-2 py-1">
-									<summary class="flex cursor-pointer items-center gap-2">
-										<span
-											class={row.run.status === 'ok' ? 'text-status-success' : 'text-status-error'}
-										>
-											{row.run.status === 'ok' ? '✓' : '✗'}
-										</span>
-										<span class="text-foreground/50">{row.run.id}</span>
-										<span class="min-w-0 flex-1 truncate">⊢ {row.run.goal}</span>
-										<span class="text-foreground/35">{row.run.steps.length} steps</span>
-									</summary>
-									<div class="flex flex-col gap-0.5 py-1 pl-5">
-										{#each row.run.steps as step, i (`${row.run.id}s${i}`)}
-											<div class="flex items-start gap-2">
-												<span class={step.ok ? 'text-status-success' : 'text-status-error'}>
-													{step.ok ? '✓' : '✗'}
-												</span>
-												<span class="shrink-0 text-foreground/50">{step.actor ?? 'external'}</span>
-												<span class="min-w-0 flex-1 truncate">{step.predicate}</span>
-												{#if step.attempt > 1}
-													<span class="shrink-0 rounded bg-status-info/20 px-1 text-[#a06818]">
-														attempt {step.attempt}
-													</span>
-												{/if}
-												<span class="w-10 shrink-0 text-right text-foreground/30">
-													{step.duration}ms
-												</span>
-											</div>
-											<div class="truncate pl-5 text-foreground/40">
-												in {JSON.stringify(step.in)} → {JSON.stringify(step.out)}
-											</div>
-										{/each}
-									</div>
-								</details>
-							{:else}
-								{@const e = row.e}
-								<div class="rounded px-1 py-0.5 hover:bg-foreground/[0.03]">
-									<div class="flex items-center gap-2">
-										<span class="w-8 shrink-0 text-foreground/35">
-											{e.kind === 'emit' ? '⚡' : e.kind === 'ask' ? '?' : '→'}
-										</span>
-										<span class="shrink-0 text-foreground/50">{e.from}</span>
-										<span class="text-foreground/25">→</span>
-										<span class="shrink-0 text-foreground/50">{e.to}</span>
-										<span class="min-w-0 flex-1 truncate">{e.method}</span>
-										<span class={e.ok ? 'text-status-success' : 'text-status-error'}>
-											{e.ok ? '✓' : '✗'}
-										</span>
-										<span class="w-10 shrink-0 text-right text-foreground/30">{e.ms}ms</span>
-									</div>
-									{#if e.note}
-										<!-- a ✗ without its reason is not a trace -->
-										<div class="pl-10 text-[0.6875rem] text-status-error/80">{e.note}</div>
-									{/if}
+						{#each activityRows as e (e.seq)}
+							<div class="rounded px-1 py-0.5 hover:bg-foreground/[0.03]">
+								<div class="flex items-center gap-2">
+									<span class="w-8 shrink-0 text-foreground/35">
+										{e.kind === 'emit' ? '⚡' : e.kind === 'ask' ? '?' : '→'}
+									</span>
+									<span class="shrink-0 text-foreground/50">{e.from}</span>
+									<span class="text-foreground/25">→</span>
+									<span class="shrink-0 text-foreground/50">{e.to}</span>
+									<span class="min-w-0 flex-1 truncate">{e.method}</span>
+									<span class={e.ok ? 'text-status-success' : 'text-status-error'}>
+										{e.ok ? '✓' : '✗'}
+									</span>
+									<span class="w-10 shrink-0 text-right text-foreground/30">{e.ms}ms</span>
 								</div>
-							{/if}
+								{#if e.note}
+									<!-- a ✗ without its reason is not a trace -->
+									<div class="pl-10 text-[0.6875rem] text-status-error/80">{e.note}</div>
+								{/if}
+							</div>
 						{/each}
 					</div>
 				{/if}

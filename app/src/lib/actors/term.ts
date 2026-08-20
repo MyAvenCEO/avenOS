@@ -68,15 +68,3 @@ export function unify(a: string, b: string, bindings: Bindings = {}): Bindings |
 export function unifiable(a: string, b: string): boolean {
 	return unify(a, b) !== null
 }
-
-/**
- * Rename a predicate's variables into a producer-local namespace — SLD's
- * "standardizing apart". The namespace goes AFTER the variable (`E@hen`)
- * so the result still starts uppercase and still reads as a variable.
- */
-export function rename(predicate: string, space: string): string {
-	const t = parseTerm(predicate)
-	if (t.args.length === 0) return predicate
-	const args = t.args.map((arg) => (isVariable(arg) ? `${arg}@${space}` : arg))
-	return `${t.functor}(${args.join(', ')})`
-}

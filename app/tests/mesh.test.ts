@@ -1,50 +1,25 @@
 import { describe, expect, test } from 'bun:test'
 import { doors, layoutCoordinator } from '../src/lib/mesh/mesh-layout'
-import {
-	actorState,
-	ask,
-	board,
-	delivered,
-	edges,
-	engaged,
-	faceState,
-	find,
-	intentState,
-	memberState,
-	needs,
-	openAsks,
-	path,
-	subtree,
-	YOU
-} from '../src/lib/mesh/model'
+import { type Actor, ask, edges, find } from '../src/lib/mesh/model'
 import { registry } from '../src/lib/mesh/registry'
-import { intents, loose, threads } from '../src/lib/mesh/threads'
 
 /**
- * The contracts of the collapsed model: ONE primitive (Actor), ONE
- * relation (Message), everything else derived. These tests are the
- * first-principles claims themselves — if one breaks, the collapse
- * leaked a second mechanism back in.
+ * The contracts of the collapsed DECLARATION model — one primitive
+ * (Actor), wiring derived from provides ∩ requires, ask() answering
+ * from the manifest. The instance side (threads, run/state/board) was
+ * removed with the Intents cockpit (0141); these are the claims the
+ * Skills canvas still stands on.
  */
 
-const actors = [...registry, ...intents]
-const log = (id: string) => threads.find((t) => t.intent === id)?.log ?? []
+const actors: Actor[] = registry
 
-describe('mesh: one primitive, three gestalts', () => {
-	test('every member reference resolves, and composition has no cycles', () => {
+describe('mesh: one primitive, coordinators are actors with members', () => {
+	test('every member reference resolves, and a coordinator has members', () => {
 		for (const a of registry) {
 			for (const m of a.members ?? []) expect(find(actors, m)).toBeDefined()
-			// subtree terminates and contains itself — the seen-set holds.
-			expect(subtree(actors, a.id)).toContain(a.id)
 		}
-	})
-
-	test('gestalts are fields, not types: coordinators have members, intents are born', () => {
 		expect(registry.some((a) => (a.members?.length ?? 0) > 0)).toBe(true)
 		expect(registry.some((a) => !a.members)).toBe(true)
-		for (const i of intents) expect(i.born).toBeDefined()
-		// And an intent-shaped actor lives in the SAME type as a worker.
-		expect(intents.every((i) => typeof i.id === 'string' && i.manifest !== undefined)).toBe(true)
 	})
 
 	test('ask(): every actor answers from its manifest — the abject fallback', () => {
@@ -67,9 +42,8 @@ describe('mesh: one primitive, three gestalts', () => {
 	})
 })
 
-describe('mesh: everything else is derived', () => {
+describe('mesh: the wiring is derived, never stored', () => {
 	test('edges are provides ∩ requires — never stored', () => {
-		// No actor carries an edge list; the graph emerges.
 		for (const a of registry) expect('edges' in a).toBe(false)
 		// The full intake lane: three sources feed accept, cases split,
 		// classify, triage — and the statement branch has its own switch.
@@ -104,105 +78,21 @@ describe('mesh: everything else is derived', () => {
 		expect(wl).toContainEqual({ from: 'review', to: 'promote', functor: 'ready' })
 		expect(wl).toContainEqual({ from: 'review', to: 'demote', functor: 'slipping' })
 	})
+})
 
-	test('needs = requires − delivered: an open requirement IS an open ask', () => {
-		// Fresh invoice: nothing delivered yet — accounting still needs both.
-		expect(needs(actors, 'accounting', log('i-fresh'))).toEqual(['positions', 'transactions'])
-		// Müller: positions and match were delivered IN THIS thread; the
-		// transactions came from another intent (the bank statement) — so
-		// within this thread they honestly remain an undelivered declared
-		// need. Cross-intent facts arrive as messages, like everything.
-		expect(needs(actors, 'accounting', log('i-mueller'))).toEqual(['transactions'])
-		expect(delivered(log('i-mueller')).has('positions')).toBe(true)
-	})
+describe('mesh: the canvas draws the derivation', () => {
+	const coordinators = registry.filter((a) => (a.members?.length ?? 0) > 0)
+	const roots = coordinators.filter((c) => !coordinators.some((o) => o.members?.includes(c.id)))
 
-	test('states are read off the thread, never stored', () => {
-		expect(intentState(actors, 'i-mueller', log('i-mueller'))).toBe('needs-you')
-		expect(intentState(actors, 'i-fresh', log('i-fresh'))).toBe('working')
-		expect(intentState(actors, 'i-weber', log('i-weber'))).toBe('done')
-		expect(intentState(actors, 'i-month', log('i-month'))).toBe('working')
-		expect(intentState(actors, 'i-note', log('i-note'))).toBe('needs-you')
-		// Coordinator states inside a thread:
-		expect(actorState(actors, 'inbox', log('i-mueller'))).toBe('done')
-		expect(actorState(actors, 'accounting', log('i-mueller'))).toBe('needs-you')
-		expect(actorState(actors, 'accounting', log('i-fresh'))).toBe('waiting')
-		expect(actorState(actors, 'inbox', log('i-fresh'))).toBe('working')
-	})
-
-	test('the path is the chain of open asks — depth as a call stack', () => {
-		expect(path(actors, 'inbox', log('i-fresh'))).toEqual(['extract', 'ocr'])
-		// Müller: the accounting stack runs through book down to the human —
-		// the open ask to YOU is the tip of the stack.
-		expect(path(actors, 'accounting', log('i-mueller'))).toEqual(['book', 'you'])
-	})
-
-	test('member positions derive: done / current / pending', () => {
-		const l = log('i-fresh')
-		expect(memberState('ocr', l)).toBe('current')
-		expect(memberState('parse-csv', l)).toBe('pending')
-		expect(memberState('ocr', log('i-mueller'))).toBe('done')
-	})
-
-	test('a month waits on intents the same way anything waits: open asks', () => {
-		const b = board(actors, 'i-month', log('i-month'))
-		expect(b.map((x) => x.actor.id)).toEqual(['i-mueller', 'i-fresh', 'i-statement', 'i-weber'])
-		expect(b.filter((x) => x.done).map((x) => x.actor.id)).toEqual(['i-weber'])
-	})
-
-	test('the human is just an actor: needs-you = an open ask addressed to you', () => {
-		const open = openAsks(log('i-mueller'))
-		expect(open.some((m) => m.to === YOU)).toBe(true)
-		// And the answer will be a message like any other — nothing special stored.
-	})
-
-	test('engaged coordinators derive from the thread, not from a run table', () => {
-		expect(engaged(actors, 'i-mueller', log('i-mueller'))).toEqual(['inbox', 'accounting'])
-		expect(engaged(actors, 'i-statement', log('i-statement'))).toEqual([
-			'inbox',
-			'accounting',
-			'human-desk'
-		])
-	})
-
-	test('face state is the merged facts of the replies', () => {
-		const fs = faceState(actors, 'accounting', log('i-mueller'))
-		expect(Array.isArray(fs.lines)).toBe(true)
-		expect(fs.pair).toContain('MUELLER')
-		const inboxFs = faceState(actors, 'inbox', log('i-mueller'))
-		expect(inboxFs.read).toContain('RE-2026-081')
-	})
-
-	test('an unrouted event is a message without `to` — routing is addressing', () => {
-		for (const e of loose) {
-			expect(e.to).toBeUndefined()
-			if (e.suggest) expect(find(actors, e.suggest.intent)).toBeDefined()
-		}
-	})
-
-	test('threads only speak to known addresses', () => {
-		const known = new Set([...actors.map((a) => a.id), YOU])
-		const sources = new Set(['upload', 'bank', 'voice', 'period'])
-		for (const t of threads) {
-			for (const m of t.log) {
-				expect(known.has(m.from) || sources.has(m.from)).toBe(true)
-				if (m.to) expect(known.has(m.to) || sources.has(m.to)).toBe(true)
-			}
-		}
-	})
-
-	test('the canvas lays out derivation: every member placed, every wire inferred', () => {
-		const coordinators = registry.filter((a) => (a.members?.length ?? 0) > 0)
-		const roots = coordinators.filter((c) => !coordinators.some((o) => o.members?.includes(c.id)))
+	test('every member placed, every wire inferred, only doors beyond', () => {
 		for (const c of coordinators) {
 			const laid = layoutCoordinator(registry, c.id, roots)
 			const ids = new Set(laid.nodes.map((n) => n.id))
-			// Every member gets a position, every wire stays on the canvas …
 			for (const m of c.members ?? []) expect(ids.has(m)).toBe(true)
 			for (const e of laid.edges) {
 				expect(ids.has(e.source)).toBe(true)
 				expect(ids.has(e.target)).toBe(true)
 			}
-			// … and beyond the members only inferred doors exist.
 			for (const n of laid.nodes) {
 				if (!c.members?.includes(n.id)) expect(n.id.startsWith('door:')).toBe(true)
 			}
@@ -210,8 +100,6 @@ describe('mesh: everything else is derived', () => {
 	})
 
 	test('the old handoffs reappear as inferences: skill boundaries are doors', () => {
-		const coordinators = registry.filter((a) => (a.members?.length ?? 0) > 0)
-		const roots = coordinators.filter((c) => !coordinators.some((o) => o.members?.includes(c.id)))
 		const to = (from: string) => doors(registry, from, roots).map((d) => d.to.id)
 		// The inbox hands positions/transactions to accounting and the
 		// unknown to the human desk — nobody stored these boundaries.

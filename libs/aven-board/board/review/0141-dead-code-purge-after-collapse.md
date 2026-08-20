@@ -106,11 +106,11 @@ grep that no deleted symbol is referenced anywhere but its own definition.
 
 ## Acceptance criteria
 
-- [ ] `bun run check` exits 0 (proven by the `0 ERRORS` line in transcript).
-- [ ] `bun test` reports `0 fail` (proven by the summary line).
-- [ ] `git grep -n "recipe-config\|skill-config\|intents-config\|mesh/threads\|bus.prove\|\.satisfy(\|bus.runs\|ProofStep\|RunStep"` under `app/src` returns nothing (all references gone, not commented).
-- [ ] `git diff --stat main...HEAD` (or the branch base) shows net `-3500` lines or more under `app/`.
-- [ ] The Skills canvas still renders 13 nodes / 14 derived edges (DOM check), Actors tab lists LLM/Workitem/Registry/Chat/Listener/Speaker, and the voice pill starts/ends — proven by a browser check in the transcript.
+- [x] `bun run check` exits 0 (proven by the `0 ERRORS` line in transcript).
+- [x] `bun test` reports `0 fail` (proven by the summary line).
+- [x] `git grep -n "recipe-config\|skill-config\|intents-config\|mesh/threads\|bus.prove\|\.satisfy(\|bus.runs\|ProofStep\|RunStep"` under `app/src` returns nothing (all references gone, not commented).
+- [x] `git diff --stat main...HEAD` (or the branch base) shows net `-3500` lines or more under `app/`.
+- [x] The Skills canvas still renders 13 nodes / 14 derived edges (DOM check), Actors tab lists LLM/Workitem/Registry/Chat/Listener/Speaker, and the voice pill starts/ends — proven by a browser check in the transcript.
 
 ## Verification
 
@@ -122,6 +122,18 @@ git diff --stat          # → net ≤ -3500 under app/
 ```
 
 ## Progress log
+
+- 2026-08-20 — BUILT. Four slices executed, each check+test-green:
+  A) deleted `src/lib/fibu/` (2442) + 4 tests (782); B) deleted `mesh/threads.ts`,
+  stripped `model.ts` to Actor/find/ask/edges, rewrote mesh.test to the graph
+  contracts; C) excised the prove/satisfy/execute engine + Run/RunStep/ProofStep
+  from bus.ts (923→526), removed the dead run-grouping in ActorExplorer and the
+  proof/verdict chain in ActorGraph/GraphNode, dropped `term.rename`, and
+  parse-dropped 17 engine tests from actors.test.ts; D) stray comment/empty-state
+  fixes + final sweep. Result: `bun run check` 0 errors, `bun test` 53 pass 0
+  fail, `git diff --stat` net **-4923** lines under app/ (goal ≥3500), grep for
+  deleted symbols empty, browser: Skills 13 nodes/14 edges, Actors lists the six
+  live actors, Graph/Trace/voice render. Card → review/.
 
 - 2026-08-20 — Spec written. Full-repo import sweep confirmed the dead-vs-live
   split; four independent slices carved (fibu configs, mesh instance side,

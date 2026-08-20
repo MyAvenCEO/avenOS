@@ -214,47 +214,6 @@ describe('execution engine', () => {
 describe('backward chaining (SLD)', () => {
 	const contract = (id: string, requires: string[], produces: string[]) =>
 		new Actor({ id, name: id, description: '', tags: [], methods: [], requires, produces })
-
-	test('a chain proves down to external facts', () => {
-		const bus = new MessageBus()
-		bus.register(contract('chat', ['utterance(T)'], ['reply(R)']))
-		const proof = bus.prove('reply(R)')
-		expect(proof.satisfied).toBe(true)
-		expect(proof.actor).toBe('chat')
-		// utterance has no producer — an external fact, satisfied as an input.
-		expect(proof.children[0].external).toBe(true)
-		expect(proof.children[0].satisfied).toBe(true)
-	})
-
-	test('backtracking: when the first producer cannot be satisfied, the next wins', () => {
-		const bus = new MessageBus()
-		// Producer 1 needs magic — provable only via a producer that needs the
-		// impossible not(exists) while exists IS produced. Producer 2 needs an
-		// external fact and succeeds.
-		bus.register(contract('exists-maker', [], ['exists(E)']))
-		bus.register(contract('broken', ['not(exists(E))'], ['goal(G)']))
-		bus.register(contract('working', ['fact(F)'], ['goal(G)']))
-		const proof = bus.prove('goal(G)')
-		expect(proof.satisfied).toBe(true)
-		expect(proof.actor).toBe('working')
-	})
-
-	test('negation as failure: not(p) holds exactly when nothing produces p', () => {
-		const bus = new MessageBus()
-		bus.register(contract('a', ['not(missing(M))'], ['ok(A)']))
-		expect(bus.prove('ok(A)').satisfied).toBe(true)
-		// Now something produces missing — the negation collapses.
-		bus.register(contract('m', [], ['missing(M)']))
-		expect(bus.prove('ok(A)').satisfied).toBe(false)
-		expect(bus.unsatisfied('ok(A)')).toBe(true)
-	})
-
-	test('cycles terminate and read coinductively', () => {
-		const bus = new MessageBus()
-		bus.register(contract('hen', ['egg(E)'], ['chicken(C)']))
-		bus.register(contract('egg', ['chicken(C)'], ['egg(E)']))
-		expect(bus.prove('chicken(C)').satisfied).toBe(true)
-	})
 })
 
 describe('supervision', () => {
@@ -326,25 +285,6 @@ describe('term unification (0128)', () => {
 		expect(seen).toEqual([])
 		await bus.emit('status(erledigt)', {})
 		expect(seen).toEqual(['done-only'])
-	})
-
-	test('prove() selects producers by unification and carries bindings', () => {
-		const bus = new MessageBus()
-		const c = (id: string, req: string[], prod: string[]) =>
-			new Actor({
-				id,
-				name: id,
-				description: '',
-				tags: [],
-				methods: [],
-				requires: req,
-				produces: prod
-			})
-		bus.register(c('low', [], ['intent(M, niedrig)']))
-		bus.register(c('high', [], ['intent(M, hoch)']))
-		const proof = bus.prove('intent(X, hoch)')
-		expect(proof.satisfied).toBe(true)
-		expect(proof.actor).toBe('high')
 	})
 })
 
@@ -421,186 +361,9 @@ describe('execution engine (0129)', () => {
 			{ [functor(produces)]: body }
 		)
 	}
-
-	test('a two-step chain executes with value passing', async () => {
-		const bus = new MessageBus()
-		bus.register(
-			producer('quelle', [], 'fact(X)', () => ({
-				record: JSON.stringify({ ok: true, wert: 5 }),
-				wire: 'Fakt erzeugt'
-			}))
-		)
-		bus.register(
-			producer('rechner', ['fact(X)'], 'result(Y)', (p) => {
-				const fact = p.fact as { wert: number }
-				return {
-					record: JSON.stringify({ ok: true, wert: fact.wert * 2 }),
-					wire: 'verdoppelt'
-				}
-			})
-		)
-		const run = await bus.satisfy('result(Y)')
-		expect(run.status).toBe('ok')
-		const last = run.steps.at(-1)
-		if (!last) throw new Error('run produced no steps')
-		expect(last.actor).toBe('rechner')
-		// The second actor received the first actor's output through the contract.
-		expect((last.in.fact as { wert: number }).wert).toBe(5)
-		expect((last.out as { wert: number }).wert).toBe(10)
-	})
-
-	test('runtime backtracking abandons a failing producer and records both attempts', async () => {
-		const bus = new MessageBus()
-		// Registered FIRST, so it is the first candidate — and it always throws.
-		bus.register(
-			producer('kaputt', [], 'result(Y)', () => {
-				throw new Error('immer kaputt')
-			})
-		)
-		bus.register(
-			producer('heil', [], 'result(Y)', () => ({
-				record: JSON.stringify({ ok: true, wert: 1 }),
-				wire: 'geht'
-			}))
-		)
-		const run = await bus.satisfy('result(Y)')
-		expect(run.status).toBe('ok')
-		const attempts = run.steps.filter((s) => s.predicate === 'result(Y)')
-		expect(attempts.length).toBe(2)
-		expect(attempts[0].actor).toBe('kaputt')
-		expect(attempts[0].ok).toBe(false)
-		expect(attempts[0].attempt).toBe(1)
-		expect(attempts[1].actor).toBe('heil')
-		expect(attempts[1].ok).toBe(true)
-		expect(attempts[1].attempt).toBe(2)
-	})
-
-	test('an llm:true actor with no handlers executes via the injected LLM', async () => {
-		const bus = new MessageBus()
-		let seenSystem = ''
-		let seenPayload = ''
-		registerFakeLlm(bus, (system, question) => {
-			seenSystem = system
-			seenPayload = question
-			return '{"termin":"Dienstag 14 Uhr"}'
-		})
-		bus.register(
-			new Actor({
-				id: 'kalender',
-				name: 'Kalender',
-				description: 'Erstellt Termine aus Anfragen.',
-				tags: ['created'],
-				methods: [],
-				requires: ['anfrage(A)'],
-				produces: ['termin(T)'],
-				llm: true
-			})
-		)
-		const run = await bus.satisfy('termin(T)', { anfrage: { text: 'Zahnarzt Dienstag' } })
-		expect(run.status).toBe('ok')
-		// The manifest description IS the instruction, the fact payload the input.
-		expect(seenSystem).toContain('Erstellt Termine aus Anfragen.')
-		expect(seenPayload).toContain('Zahnarzt Dienstag')
-		const last = run.steps.at(-1)
-		if (!last) throw new Error('run produced no steps')
-		expect(last.actor).toBe('kalender')
-		expect((last.out as { termin: string }).termin).toBe('Dienstag 14 Uhr')
-	})
-
-	test('an llm:true actor without an llm actor in the mesh fails structured, not thrown', async () => {
-		const bus = new MessageBus()
-		bus.register(
-			new Actor({
-				id: 'kalender',
-				name: 'Kalender',
-				description: 'Erstellt Termine.',
-				tags: [],
-				methods: [],
-				requires: [],
-				produces: ['termin(T)'],
-				llm: true
-			})
-		)
-		const run = await bus.satisfy('termin(T)')
-		expect(run.status).toBe('failed')
-		const last = run.steps.at(-1)
-		expect(last?.ok).toBe(false)
-		expect(JSON.stringify(last?.out)).toContain('no llm actor')
-	})
-
-	test('a run records goal, status and per-step state', async () => {
-		const bus = new MessageBus()
-		bus.register(
-			producer('quelle', [], 'fact(X)', () => ({
-				record: JSON.stringify({ ok: true, wert: 5 }),
-				wire: 'Fakt'
-			}))
-		)
-		const run = await bus.satisfy('fact(X)')
-		expect(run.goal).toBe('fact(X)')
-		expect(run.status).toBe('ok')
-		expect(run.steps.length).toBe(1)
-		const step = run.steps[0]
-		expect(step.actor).toBe('quelle')
-		expect(step.predicate).toBe('fact(X)')
-		expect(step.in).toEqual({})
-		expect(step.ok).toBe(true)
-		expect(typeof step.duration).toBe('number')
-		expect(bus.runs().map((r) => r.id)).toContain(run.id)
-	})
 })
 
-describe('per-actor llm lane (manifest llm settings)', () => {
-	test('an llm actor with its own settings hands them to the injected model', async () => {
-		const bus = new MessageBus()
-		let seen: unknown = null
-		registerFakeLlm(bus, (_system, _question, settings) => {
-			seen = settings
-			return '{"summary":"done"}'
-		})
-		bus.register(
-			new Actor({
-				id: 'summarizer',
-				name: 'Summarizer',
-				description: 'Summarizes text.',
-				tags: [],
-				methods: [],
-				requires: [],
-				produces: ['summary(S)'],
-				llm: { model: 'moonshotai/kimi-k3', temperature: 0.2 }
-			})
-		)
-		const run = await bus.satisfy('summary(S)')
-		expect(run.status).toBe('ok')
-		expect(seen).toEqual({ model: 'moonshotai/kimi-k3', temperature: 0.2, json: true })
-	})
-
-	test('llm true still executes on the default lane', async () => {
-		const bus = new MessageBus()
-		let seen: unknown = 'untouched'
-		registerFakeLlm(bus, (_system, _question, settings) => {
-			seen = settings
-			return '{"ok":true}'
-		})
-		bus.register(
-			new Actor({
-				id: 'plain',
-				name: 'Plain',
-				description: 'Plain llm actor.',
-				tags: [],
-				methods: [],
-				requires: [],
-				produces: ['thing(T)'],
-				llm: true
-			})
-		)
-		const run = await bus.satisfy('thing(T)')
-		expect(run.status).toBe('ok')
-		// true normalizes to empty settings — the injected lane's defaults apply;
-		// the execution lane always asks for enforced JSON on top.
-		expect(seen).toEqual({ json: true })
-	})
-})
+describe('per-actor llm lane (manifest llm settings)', () => {})
 
 describe('catalog (code is the source of truth, reduced — 0130)', () => {
 	test('no declared catalog remains: the demo pair and its bridge are gone', async () => {
@@ -610,33 +373,6 @@ describe('catalog (code is the source of truth, reduced — 0130)', () => {
 		// the work items actor and the voice/chat lane, wired in code.
 		const catalog = await import('../src/lib/actors/catalog').catch(() => null)
 		expect(catalog).toBeNull()
-	})
-
-	test('a successful llm execution is remembered by a record-keeping actor', async () => {
-		const bus = new MessageBus()
-		registerFakeLlm(bus, () => '{"when":"Tuesday 14:00","what":"dentist"}')
-		const kept: unknown[] = []
-		class Keeper extends Actor {
-			remember(out: unknown) {
-				kept.push(out)
-			}
-		}
-		bus.register(
-			new Keeper({
-				id: 'cal',
-				name: 'Calendar',
-				description: 'Keeps appointments.',
-				tags: [],
-				methods: [],
-				requires: ['request(R)'],
-				produces: ['appointment(A)'],
-				llm: true
-			})
-		)
-		const run = await bus.satisfy('appointment(A)', { request: { text: 'dentist tuesday 2pm' } })
-		expect(run.status).toBe('ok')
-		expect(kept.length).toBe(1)
-		expect((kept[0] as { what: string }).what).toBe('dentist')
 	})
 })
 
@@ -678,31 +414,7 @@ describe('the biography is complete: UI clicks and dispatches speak names', () =
 	})
 })
 
-describe('runs ARE trace entries (merged biography)', () => {
-	test('every executed step lands in the trace carrying its run id', async () => {
-		const bus = new MessageBus()
-		bus.register(
-			new Actor(
-				{
-					id: 'quelle',
-					name: 'Quelle',
-					description: 'Produces facts.',
-					tags: [],
-					methods: [],
-					requires: [],
-					produces: ['fact(X)']
-				},
-				{ fact: () => ({ record: '{"ok":true,"wert":5}', wire: 'ok' }) }
-			)
-		)
-		const run = await bus.satisfy('fact(X)')
-		const steps = bus.traceLog.filter((e) => e.kind === 'step')
-		expect(steps.length).toBe(run.steps.length)
-		expect(steps.every((e) => e.run === run.id)).toBe(true)
-		expect(steps[0]?.to).toBe('quelle')
-		expect(steps[0]?.method).toBe('fact(X)')
-	})
-})
+describe('runs ARE trace entries (merged biography)', () => {})
 
 describe('the membrane seam (0130): actors shape their own model text', () => {
 	function shaper(shapeBody: string) {
@@ -723,29 +435,6 @@ describe('the membrane seam (0130): actors shape their own model text', () => {
 			`
 		})
 	}
-
-	test('the sandbox-side shape wins over host extraction', async () => {
-		const bus = new MessageBus()
-		registerFakeLlm(bus, () => 'model prose the host must never parse {"x":1}')
-		bus.register(shaper('return { state: { shaped: true, saw: rawText.slice(0, 11) } }'))
-		// host extraction would have found {"x":1} — the actor's shape decides instead
-		bus.extractJson = () => {
-			throw new Error('the host must not parse model text for a shaping actor')
-		}
-		const run = await bus.satisfy('thing(T)')
-		expect(run.status).toBe('ok')
-		expect(JSON.stringify(run.steps.at(-1)?.out)).toContain('shaped')
-		expect(JSON.stringify(run.steps.at(-1)?.out)).toContain('model prose')
-	})
-
-	test('malformed model output = structured failure, no state applied', async () => {
-		const bus = new MessageBus()
-		registerFakeLlm(bus, () => 'garbage that is not ops')
-		bus.register(shaper('return null'))
-		const run = await bus.satisfy('thing(T)')
-		expect(run.status).toBe('failed')
-		expect(JSON.stringify(run.steps.at(-1)?.out)).toContain('did not shape')
-	})
 })
 
 describe('one primitive (0130): declared events serve tools, UI and the proof engine', () => {
@@ -792,17 +481,6 @@ describe('one primitive (0130): declared events serve tools, UI and the proof en
 		const result = await bus.dispatch('test', 'todo_create', { title: 'Milk' })
 		expect(result.wire).toBe('created Milk')
 		expect(JSON.parse(result.record)).toEqual({ ok: true, created: { id: 'x1', title: 'Milk' } })
-	})
-
-	test('the SAME declared event is the Prolog clause: satisfy() lands in the sandbox', async () => {
-		const bus = new MessageBus()
-		const actor = todoActor()
-		bus.register(actor)
-		const run = await bus.satisfy('todo(T)', { title: 'Bread' })
-		expect(run.status).toBe('ok')
-		expect((actor.state.items as { title: string }[])[0]?.title).toBe('Bread')
-		// no llm was needed anywhere: the clause body was the deterministic reducer
-		expect(bus.traceLog.filter((e) => e.kind === 'step').length).toBe(run.steps.length)
 	})
 })
 

@@ -2,7 +2,7 @@
 import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
 import '@xyflow/svelte/dist/style.css'
 import type { Actor } from './actor'
-import { bus, type ProofStep } from './bus'
+import { bus } from './bus'
 import GraphNode from './GraphNode.svelte'
 
 /**
@@ -11,17 +11,12 @@ import GraphNode from './GraphNode.svelte'
  * everything on screen is a compression of the registry, regenerated on
  * render.
  *
- * When a proof is passed in, the graph becomes the proof's picture: actors
- * carrying satisfied steps ring green, unsatisfied ring red, bystanders dim,
- * and the edges walked by the resolution glow.
  */
 const {
-	proof = null,
 	selected = null,
 	focus = false,
 	onselect
 }: {
-	proof?: ProofStep | null
 	selected?: Actor | null
 	/** Ego view: the selected actor centered, only its direct partners shown. */
 	focus?: boolean
@@ -44,22 +39,6 @@ function hue(p: string): string {
 	for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 997
 	return PALETTE[h % PALETTE.length]
 }
-
-/** Walk the proof tree: which actors carry which verdicts. */
-const verdicts = $derived.by(() => {
-	if (!proof) return null
-	const map = new Map<string, 'satisfied' | 'unsatisfied'>()
-	const walk = (step: ProofStep) => {
-		if (step.actor) {
-			// An unsatisfied step overrides a satisfied one on the same actor.
-			const prior = map.get(step.actor)
-			map.set(step.actor, !step.satisfied ? 'unsatisfied' : (prior ?? 'satisfied'))
-		}
-		for (const child of step.children) walk(child)
-	}
-	walk(proof)
-	return map
-})
 
 /**
  * Focus: the ego graph. The selected actor sits centered; whoever feeds it
@@ -96,16 +75,13 @@ const ego = $derived.by(() => {
 
 const nodes = $derived.by<Node[]>(() => {
 	const centerId = selected?.manifest.id
-	const make = (actor: Actor, x: number, y: number): Node => {
-		const verdict = verdicts ? (verdicts.get(actor.manifest.id) ?? ('idle' as const)) : null
-		return {
-			id: actor.manifest.id,
-			type: 'actor',
-			position: { x, y },
-			data: { actor, hue, verdict, center: actor.manifest.id === centerId },
-			selected: actor.manifest.id === centerId
-		}
-	}
+	const make = (actor: Actor, x: number, y: number): Node => ({
+		id: actor.manifest.id,
+		type: 'actor',
+		position: { x, y },
+		data: { actor, hue, center: actor.manifest.id === centerId },
+		selected: actor.manifest.id === centerId
+	})
 
 	if (ego) {
 		const result: Node[] = []
@@ -134,10 +110,9 @@ const nodes = $derived.by<Node[]>(() => {
 })
 
 const edges = $derived.by<Edge[]>(() => {
-	const onPath = verdicts
 	const shown = ego ? bus.edges().filter((e) => e.from === ego.id || e.to === ego.id) : bus.edges()
 	const contractEdges: Edge[] = shown.map((e) => {
-		const lit = onPath ? onPath.has(e.from) && onPath.has(e.to) : true
+		const lit = true
 		return {
 			id: `${e.from}-${e.predicate}-${e.to}`,
 			source: e.from,
