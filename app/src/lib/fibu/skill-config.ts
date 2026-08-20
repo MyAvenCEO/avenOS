@@ -28,6 +28,27 @@ export interface Skill {
 	accepts: string[]
 	/** What this skill hands on. */
 	provides: string[]
+	/**
+	 * Sub-skills this skill composes — the same doctrine as flows, one
+	 * level up: the registry stays FLAT (a sub-skill is a full skill,
+	 * installable on its own), membership is a named set. Buchhaltung
+	 * GROUPS Buchungsvorgang and Monatsabschluss; it does not own them.
+	 */
+	skills?: string[]
+}
+
+/**
+ * A skill's effective flows: its own plus everything its sub-skills
+ * bring, recursively. The seen-set makes composition cycle-proof.
+ */
+export function skillFlows(id: string, alle: Skill[], seen = new Set<string>()): string[] {
+	if (seen.has(id)) return []
+	seen.add(id)
+	const skill = alle.find((s) => s.id === id)
+	if (!skill) return []
+	return [
+		...new Set([...skill.flows, ...(skill.skills ?? []).flatMap((u) => skillFlows(u, alle, seen))])
+	]
 }
 
 import { intentsSkill } from './intents-config'
@@ -47,11 +68,12 @@ export const skills: Skill[] = [
 		id: 'buchhaltung',
 		name: 'Buchhaltung',
 		description:
-			'Aus Daten werden Buchungen: Zahlungen gegen offene Posten abgleichen, Positionen kontieren, Buchungszeilen ableiten, Soll/Ist. Komponiert den Buchungsvorgang als Subflow — der ist zugleich ein eigener Skill, denn Flows sind flach und dürfen in mehreren Skills liegen. Der Monatsabschluss ist bewusst KEIN Teil mehr: anderer Takt, eigene Grenze.',
+			'Aus Daten werden Buchungen: Zahlungen gegen offene Posten abgleichen, Positionen kontieren, Buchungszeilen ableiten, Soll/Ist. Komponiert zwei Unter-Skills: den Buchungsvorgang (steuerlicher Kern, läuft zugleich als Subflow) und den Monatsabschluss (Perioden-Takt, eigene Grenze). Beide gehören ZUR Buchhaltung — und bleiben trotzdem eigenständig installierbar.',
 		flows: ['eingangsrechnung-buchen', 'zahlungsabgleich', 'buchungsvorgang'],
 		entry: 'eingangsrechnung-buchen',
 		accepts: ['positionen', 'transaktionen'],
-		provides: ['buchungsstapel', 'unklar']
+		provides: ['buchungsstapel', 'unklar'],
+		skills: ['buchen', 'abschluss']
 	},
 	{
 		id: 'buchen',
@@ -67,7 +89,7 @@ export const skills: Skill[] = [
 		id: 'abschluss',
 		name: 'Monatsabschluss',
 		description:
-			'Der Perioden-Skill: läuft am Monatsende, nicht am Beleg. Sammelt Festgeschriebenes, bildet Stapel, faltet Vorsteuer, schreibt und prüft die EXTF-Datei für den Berater. Sein Eingang ist die Periode — deshalb eine eigene Skill-Grenze statt eines weiteren Buchhaltungs-Flows.',
+			'Der Perioden-Skill der Buchhaltung: läuft am Monatsende, nicht am Beleg. Sammelt Festgeschriebenes, bildet Stapel, faltet Vorsteuer, schreibt und prüft die EXTF-Datei für den Berater. Sein Eingang ist die Periode — eigene Grenze, aber Teil des Buchhaltungs-Skills.',
 		flows: ['datev-export'],
 		entry: 'datev-export',
 		accepts: ['festgeschrieben'],

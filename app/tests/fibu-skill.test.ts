@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { recipes } from '../src/lib/fibu/recipe-config'
-import { skills } from '../src/lib/fibu/skill-config'
+import { skillFlows, skills } from '../src/lib/fibu/skill-config'
 
 /**
  * Skills are named sets over a FLAT flow registry, plus a contract. What
@@ -91,6 +91,17 @@ describe('fibu skills', () => {
 		const buchen = skills.find((s) => s.id === 'buchen')
 		expect(buchen?.flows).toEqual(['buchungsvorgang'])
 		expect(fibu.flows).toContain('buchungsvorgang')
+		// But both REMAIN skills OF Buchhaltung: membership is explicit
+		// (sub-skill sets), not implied by flow overlap — and every named
+		// sub-skill exists in the flat registry.
+		expect(fibu.skills).toEqual(['buchen', 'abschluss'])
+		for (const u of fibu.skills ?? []) {
+			expect(skills.some((x) => x.id === u)).toBe(true)
+		}
+		// The umbrella's EFFECTIVE flows resolve recursively: the DATEV
+		// export is reachable through Buchhaltung again — via its sub-skill.
+		expect(skillFlows('buchhaltung', skills)).toContain('datev-export')
+		expect(skillFlows('buchhaltung', skills)).toContain('buchungsvorgang')
 		// The work contract lines up: positions and transactions flow onward.
 		for (const p of ['positionen', 'transaktionen']) expect(fibu.accepts).toContain(p)
 		// HITL is generic: it takes the three kinds of interruption from ANY
