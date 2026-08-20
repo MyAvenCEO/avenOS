@@ -1,14 +1,15 @@
 # AvenOS scripts
 
-Repo-root automation for the **avenCITY Tauri app** and its **App Store / GitHub
-releases**. Nothing here deploys to a server — card 0121 removed the relay and
-the auth API along with the worlds that needed them.
+Repo-root automation for the **avenCITY Tauri app**, the Aven API, and releases.
 
 ## Wired in root `package.json` (daily use)
 
 | Script | File | Purpose |
 |--------|------|---------|
 | `dev:app` | — | Browser-only Vite in `app/` |
+| `dev:api` | — | Identity API development server in `services/aven-api` |
+| `build:api` / `check:api` / `test:api` | — | API build and verification |
+| `db:migrate:api` | — | Explicit API database migration |
 | `dev:app:all` | `dev-app-all.ts` | macOS/Linux Tauri dev (dispatches to platform script) |
 | `dev:app:mac` | `dev-app-macos.ts` | Tauri dev (macOS) |
 | `dev:app:linux` | `dev-app-linux.ts` | Tauri dev (Linux) |

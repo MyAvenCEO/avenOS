@@ -1,6 +1,6 @@
 # AvenOS
 
-Bun **monorepo** (layout inspired by [MaiaOS](https://github.com/)): active code under `libs/`, `app/`, and `docs/`; legacy or optional packages under `ARCHIVE/`.
+Bun **monorepo**: active code lives under `libs/`, `app/`, `services/`, and `docs/`; legacy or optional packages live under `ARCHIVE/`.
 
 | Package | Description |
 |---------|-------------|
@@ -12,6 +12,8 @@ Bun **monorepo** (layout inspired by [MaiaOS](https://github.com/)): active code
 | **`libs/aven-vibe-sandbox`** | `@avenos/aven-vibe-sandbox` — MCP app sandbox host (iframe / Tauri WebView) |
 | **`docs`** | `@avenos/docs` — Markdown for in-app docs (self, network, sparks, deploy, content) |
 | **`app`** | `@AvenOS/app` — Tauri + SvelteKit shell (identity, local Groove, docs, vibe-apps) |
+| **`services/aven-api`** | `@avenos/aven-api` — checkout, email setup login, passkeys, downloads, and customer environments |
+| **`infrastructure/identity`** | Pulumi — Hetzner foundation and DNS for `id.next.aven.ceo` |
 | **`ARCHIVE/ocr-example`** | Python Gemini OCR/JSON extract CLI (optional; separate `pip` venv) |
 | **`ARCHIVE/tauri-plugin-passkey`** | macOS passkey Tauri plugin (archived; not wired into `app` today) |
 
@@ -37,6 +39,7 @@ bun run dev:app:mac        # Tauri desktop app on macOS
 bun run dev:app:ios        # Tauri in iOS Simulator — `tauri ios dev [device]` (macOS + Xcode; run ios init once)
 bun run dev:app:linux      # Tauri desktop app on Linux
 bun run dev:app            # SvelteKit only in browser (:1420), no Tauri shell
+bun run dev:api            # Identity API and checkout UI
 
 # or from the package folder
 cd libs/aven-website && bun run dev
@@ -101,6 +104,10 @@ bun run dev:app:linux
 bun run lint
 bun run lint:fix
 ```
+
+API verification runs from the root with `bun run check:api`, `bun run test:api`, and `bun run build:api`. See [`services/aven-api/README.md`](services/aven-api/README.md) for PostgreSQL, Mailpit, migrations, and workers.
+
+Infrastructure validation runs with `bun run test:infra`. Provisioning and deployment use protected GitHub Environment values and encrypted Pulumi state in a private Hetzner Object Storage bucket; see [`infrastructure/identity/README.md`](infrastructure/identity/README.md). Do not commit deployment `.env` files, Pulumi stack configuration/state, or credentials.
 
 ## Reference — recreate Svelte app
 

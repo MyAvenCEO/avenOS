@@ -100,7 +100,7 @@ fn load_engine(app: &tauri::AppHandle) -> Result<Engine> {
 	ensure_files(app, "tts", &wanted)?;
 
 	stage(app, "tts", "load");
-	let tts = supertonic::load_text_to_speech(&dir.to_string_lossy(), false)
+	let tts = supertonic::load_text_to_speech(&dir.to_string_lossy())
 		.context("failed to open the Supertonic ONNX sessions")?;
 
 	let mut engine = Engine {
@@ -219,7 +219,7 @@ mod tests {
 	fn measures_synthesis_latency() {
 		let home = std::env::var("HOME").unwrap();
 		let dir = format!("{home}/Library/Caches/ceo.aven.os/tts/supertonic-3");
-		let mut tts = supertonic::load_text_to_speech(&dir, false).expect("models should open");
+		let mut tts = supertonic::load_text_to_speech(&dir).expect("models should open");
 		let style =
 			supertonic::load_voice_style(&[format!("{dir}/{DEFAULT_VOICE}.json")], false).unwrap();
 

@@ -29,7 +29,8 @@
 	<array>
 		<string>applinks:aven.ceo</string>
 		<string>webcredentials:aven.ceo</string>
-		<string>webcredentials:api.next.aven.ceo</string>
+		<string>webcredentials:id.aven.ceo</string>
+		<string>webcredentials:id.next.aven.ceo</string>
 	</array>
 </dict>
 </plist>

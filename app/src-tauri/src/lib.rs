@@ -14,6 +14,111 @@ mod tts;
 
 use tauri::Manager;
 
+/// Load the official shared ONNX Runtime before either speech engine creates a
+/// session. Linux uses dynamic loading because the crate's static distribution
+/// requires a newer glibc/libstdc++ ABI than our Ubuntu 22.04 baseline.
+///
+/// CUDA is registered on the environment, so every ASR, VAD, and TTS session
+/// attempts GPU execution first. ONNX Runtime keeps unsupported graph nodes on
+/// CPU and falls back to CPU entirely when the CUDA provider or its libraries
+/// are unavailable.
+#[cfg(target_os = "linux")]
+fn init_onnxruntime(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+	let bundled = app
+		.path()
+		.resource_dir()?
+		.join("onnxruntime")
+		.join("libonnxruntime.dylib");
+	let path = std::env::var_os("ORT_DYLIB_PATH")
+		.map(std::path::PathBuf::from)
+		.filter(|path| path.is_file())
+		.unwrap_or(bundled);
+	if !path.is_file() {
+		return Err(std::io::Error::new(
+			std::io::ErrorKind::NotFound,
+			format!("ONNX Runtime shared library not found at {}", path.display()),
+		)
+		.into());
+	}
+	let gpu_mode = std::env::var("AVEN_SPEECH_GPU")
+		.unwrap_or_else(|_| "auto".to_string())
+		.to_ascii_lowercase();
+	let request_cuda = match gpu_mode.as_str() {
+		"auto" | "cuda" => true,
+		"cpu" | "off" | "0" => false,
+		other => {
+			log::warn!(
+				target: "avenos::voice",
+				"unknown AVEN_SPEECH_GPU={other:?}; using auto"
+			);
+			true
+		}
+	};
+	let runtime_has_cuda = path
+		.parent()
+		.is_some_and(|dir| dir.join("libonnxruntime_providers_cuda.so").is_file());
+	let try_cuda = request_cuda && runtime_has_cuda;
+	if request_cuda && !runtime_has_cuda {
+		log::info!(
+			target: "avenos::voice",
+			"CUDA execution provider is not bundled; speech will use CPU"
+		);
+	}
+
+	let mut runtime = ort::init_from(&path)?
+		.with_name("avenos-speech")
+		.with_telemetry(false);
+	if try_cuda {
+		runtime = runtime.with_execution_providers([ort::ep::CUDA::default().build()]);
+	}
+	runtime.commit();
+	log::info!(
+		target: "avenos::voice",
+		"ONNX Runtime loaded from {}; speech compute preference: {}",
+		path.display(),
+		if try_cuda { "CUDA with CPU fallback" } else { "CPU" }
+	);
+	Ok(())
+}
+
+/// WebKitGTK does not provide permission UI for an embedded application. Its
+/// default `permission-request` handler therefore rejects `getUserMedia`, even
+/// though capture works in a normal browser. Enable the media features and
+/// grant only audio-only user-media requests from our main webview.
+#[cfg(target_os = "linux")]
+fn configure_linux_microphone(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+	let webview = app.get_webview("main").ok_or_else(|| {
+		std::io::Error::new(std::io::ErrorKind::NotFound, "main webview not found")
+	})?;
+	webview.with_webview(|webview| {
+		use webkit2gtk::glib::prelude::Cast;
+		use webkit2gtk::{
+			PermissionRequestExt, SettingsExt, UserMediaPermissionRequest,
+			UserMediaPermissionRequestExt, WebViewExt,
+		};
+
+		let inner = webview.inner();
+		if let Some(settings) = inner.settings() {
+			settings.set_enable_webrtc(true);
+			settings.set_enable_media_stream(true);
+			settings.set_media_playback_requires_user_gesture(false);
+		}
+		inner.connect_permission_request(|_, request| {
+			let Some(media) = request.downcast_ref::<UserMediaPermissionRequest>() else {
+				return false;
+			};
+			if media.is_for_audio_device() && !media.is_for_video_device() {
+				request.allow();
+				log::info!(target: "avenos::voice", "granted microphone permission");
+				true
+			} else {
+				false
+			}
+		});
+	})?;
+	Ok(())
+}
+
 /// macOS/iOS route through `os_log` (subsystem `ceo.aven.os`) because iPhone
 /// Console streaming is unreliable off-device.
 #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -96,6 +201,12 @@ pub fn run() {
 			asr::asr_output_active
 		])
 		.setup(|app| {
+			#[cfg(target_os = "linux")]
+			{
+				init_onnxruntime(app)?;
+				configure_linux_microphone(app)?;
+			}
+
 			// The webview is the whole surface, so give it focus on launch —
 			// otherwise the first click is spent activating the window.
 			if let Some(window) = app.get_webview_window("main") {

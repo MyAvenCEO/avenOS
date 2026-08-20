@@ -4,10 +4,13 @@
 	"type": "module",
 	"workspaces": [
 		"libs/*",
-		"app"
+		"app",
+		"services/*",
+		"infrastructure/*"
 	],
 	"scripts": {
 		"dev:app": "bun --env-file=.env run --cwd app dev",
+		"dev:api": "bun --env-file=.env run --cwd services/aven-api dev",
 		"dev:website": "bun --env-file=.env run --cwd libs/aven-website dev",
 		"dev:app:all": "bun --env-file=.env ./scripts/dev-app-all.ts",
 		"dev:app:mac": "AVENOS_ENV_FILE=.env.samuel AVENOS_APP_ENV_FILE=../.env.samuel bun --env-file=.env.samuel ./scripts/dev-app-macos.ts",
@@ -28,6 +31,11 @@
 		"changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
 		"release:next": "bun ./scripts/release-next.ts",
 		"check": "bun run --cwd app check",
+		"build:api": "bun run --cwd services/aven-api build",
+		"check:api": "bun run --cwd services/aven-api check",
+		"test:api": "bun run --cwd services/aven-api test",
+		"test:infra": "bun run --cwd infrastructure/identity test",
+		"db:migrate:api": "bun run --cwd services/aven-api db:migrate",
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
 		"format": "bunx biome format --write ."
