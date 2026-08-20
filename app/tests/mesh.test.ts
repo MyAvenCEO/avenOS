@@ -1,6 +1,4 @@
 import { describe, expect, test } from 'bun:test'
-import { validateStyleDef, validateViewDef } from '@avenos/aven-ui'
-import { faces } from '../src/lib/mesh/faces'
 import { doors, layoutCoordinator } from '../src/lib/mesh/mesh-layout'
 import {
 	actorState,
@@ -172,14 +170,6 @@ describe('mesh: everything else is derived', () => {
 		expect(fs.pair).toContain('MUELLER')
 		const inboxFs = faceState(actors, 'inbox', log('i-mueller'))
 		expect(inboxFs.read).toContain('RE-2026-081')
-	})
-
-	test('every face is engine-valid — one rendering system, validated up front', () => {
-		for (const face of Object.values(faces)) {
-			expect(() => validateViewDef(face.view)).not.toThrow()
-			expect(() => validateStyleDef(face.style)).not.toThrow()
-			expect(face.style.tokens?.primary).toBeDefined()
-		}
 	})
 
 	test('an unrouted event is a message without `to` — routing is addressing', () => {

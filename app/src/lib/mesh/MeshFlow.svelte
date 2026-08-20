@@ -1,7 +1,7 @@
 <script lang="ts">
 import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
 import '@xyflow/svelte/dist/style.css'
-import RecipeFit from '../fibu/RecipeFit.svelte'
+import FitView from './FitView.svelte'
 import MeshNode from './MeshNode.svelte'
 import { layoutCoordinator } from './mesh-layout'
 import { type Actor, ask, find } from './model'
@@ -175,7 +175,7 @@ const actorJson = (a: Actor) => JSON.stringify(a, null, 2)
 					}}
 				>
 					<Background bgColor="transparent" patternColor="rgba(30,41,59,0.08)" />
-					<RecipeFit w={canvasW} h={canvasH} />
+					<FitView w={canvasW} h={canvasH} />
 				</SvelteFlow>
 			{/key}
 		</div>
