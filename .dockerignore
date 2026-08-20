@@ -1,13 +1,24 @@
-# Keep the aven-node build context small: the Dockerfile only needs
-# libs/, .cargo/, and rust-toolchain.toml.
+# Keep service and application build contexts free of local state and secrets.
 target
 **/target
 node_modules
 **/node_modules
 .git
-app
+.idea
+**/.idea
+.agent-state
+.claude
+.env
+.env.*
+**/.env
+**/.env.*
+app/**
+!app/package.json
 docs
 ARCHIVE
 scripts
+sidecars
+packages
+**/TestResults
 .cursor
 .vscode

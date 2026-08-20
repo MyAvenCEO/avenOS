@@ -13,6 +13,7 @@
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 import { freeDevServerPort } from './free-dev-server-port.ts'
 import { ensureLinuxNativeDeps } from './linux-native-deps.ts'
 
@@ -67,6 +68,7 @@ export async function runDesktopDev(requestedPlatform = currentDesktopPlatform()
 	freeDevServerPort(1420)
 
 	const env = desktopEnv(platform)
+	if (platform === 'linux') env.ORT_DYLIB_PATH = ensureOnnxruntimeDylib()
 
 	console.log(
 		`[${task}] avenCITY (${label}) · Host-UI: SvelteKit @ http://127.0.0.1:1420 (dev-only, embedded in ${webview})\n`

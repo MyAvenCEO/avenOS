@@ -1,0 +1,33 @@
+FROM oven/bun:1.3.13 AS manifests
+WORKDIR /repo
+COPY package.json bun.lock ./
+COPY app/package.json app/package.json
+COPY libs/aven-board/package.json libs/aven-board/package.json
+COPY libs/aven-ui/package.json libs/aven-ui/package.json
+COPY libs/aven-website/package.json libs/aven-website/package.json
+COPY infrastructure/identity/package.json infrastructure/identity/package.json
+COPY services/aven-api/package.json services/aven-api/package.json
+
+FROM manifests AS build
+RUN bun install --frozen-lockfile --filter @avenos/aven-api
+COPY services/aven-api services/aven-api
+RUN bun --cwd services/aven-api build
+
+FROM manifests AS production-dependencies
+RUN bun install --frozen-lockfile --production --filter @avenos/aven-api
+
+FROM oven/bun:1.3.13
+WORKDIR /repo/services/aven-api
+ENV NODE_ENV=production
+COPY --from=production-dependencies /repo/node_modules /repo/node_modules
+COPY --from=production-dependencies /repo/services/aven-api/node_modules ./node_modules
+COPY --from=build /repo/services/aven-api/build ./build
+COPY --from=build /repo/services/aven-api/src ./src
+COPY --from=build /repo/services/aven-api/scripts ./scripts
+COPY --from=build /repo/services/aven-api/migrations ./migrations
+COPY --from=build /repo/services/aven-api/package.json ./package.json
+EXPOSE 3000
+USER bun
+HEALTHCHECK --interval=5s --timeout=3s --start-period=15s --retries=30 \
+  CMD bun -e "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["bun", "build/index.js"]

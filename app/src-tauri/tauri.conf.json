@@ -34,7 +34,7 @@
 				"frame-src": "'self' blob: http://localhost:*",
 				"object-src": "'self' blob:",
 				"worker-src": "'self' blob:",
-				"connect-src": "'self' ipc: http://ipc.localhost blob: https://cdn.jsdelivr.net https://api.next.aven.ceo https://*.aven.ceo",
+				"connect-src": "'self' ipc: http://ipc.localhost blob: https://cdn.jsdelivr.net https://id.next.aven.ceo https://*.aven.ceo",
 				"base-uri": "'self'",
 				"form-action": "'self'"
 			},
@@ -48,7 +48,7 @@
 				"frame-src": "'self' blob: http://localhost:* http://127.0.0.1:*",
 				"object-src": "'self' blob:",
 				"worker-src": "'self' blob:",
-				"connect-src": "'self' ipc: http://ipc.localhost blob: https://cdn.jsdelivr.net https://api.next.aven.ceo https://*.aven.ceo ws://localhost:* ws://127.0.0.1:* http://localhost:* http://127.0.0.1:*",
+				"connect-src": "'self' ipc: http://ipc.localhost blob: https://cdn.jsdelivr.net https://id.next.aven.ceo https://*.aven.ceo ws://localhost:* ws://127.0.0.1:* http://localhost:* http://127.0.0.1:*",
 				"base-uri": "'self'",
 				"form-action": "'self'"
 			},

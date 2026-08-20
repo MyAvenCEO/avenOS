@@ -22,13 +22,23 @@ node_modules
 .DS_Store
 Thumbs.db
 
+# Local editor and agent state
+**/.idea/
+/.agent-state/
+
 # Env
 .env
 .env.*
 !.env.example
-!.env.test
-# Committed: non-secret PUBLIC_ build config for production builds (the deployed auth API).
-!.env.production
+
+# Pulumi DIY-backend state and environment-specific stack configuration
+**/.pulumi/
+/infrastructure/**/Pulumi.*.yaml
+
+# One-time identity deployment trust bootstrap files
+/aven-identity-next-deploy
+/aven-identity-next-deploy.pub
+/aven-identity-next-known-hosts
 
 # Jaensen local SQLite (do not commit)
 /.jaensen/state.db

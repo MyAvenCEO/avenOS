@@ -1,20 +1,7 @@
 name: release-next
 
-# CalVer staging channel. On merge into `next`, the three app builds run in
-# parallel once the tag is cut:
-#   1. release       — derive YY.M.micro-next.N, stamp every package, changelog, tag, prerelease.
-#   2. release-macos — build the signed Mac App Store .pkg on a macOS runner and upload it to
-#                      TestFlight (CFBundleVersion = github.run_number). Apple creds are
-#                      REPOSITORY secrets (cross-channel: next AND main); see job for the list.
-#   3. release-ios   — build the signed .ipa on a macOS runner (tauri ios init + manual signing)
-#                      and upload to TestFlight. Reuses the same repo Apple secrets + IOS_MOBILEPROVISION_BASE64.
-#   4. release-linux — build the x86_64 Linux app (.deb + AppImage) on ubuntu and attach it to
-#                      the GitHub prerelease (Linux has no app store, so the release asset IS the
-#                      distribution channel).
-#
-# This channel deploys NOTHING to a server. Card 0121 removed the aven-node relay
-# (Sprite) and the betterauth API (fly.io) along with the worlds that needed them;
-# avenCITY runs entirely on the device.
+# CalVer staging channel: validate the identity API, cut the release, publish
+# and deploy its immutable image, then build the signed app artifacts.
 
 on:
   push:
@@ -28,8 +15,47 @@ permissions:
   contents: write
 
 jobs:
+  identity-validate:
+    name: identity API validation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: aven-ci
+          POSTGRES_DB: aven
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aven"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      TEST_ADMIN_DATABASE_URL: postgres://postgres:aven-ci@127.0.0.1:5432/postgres
+      DATABASE_URL: postgres://postgres:aven-ci@127.0.0.1:5432/aven
+      PUBLIC_BASE_URL: http://localhost:3000
+      WEBAUTHN_RP_ID: localhost
+      BETTER_AUTH_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+      EMAIL_QUEUE_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bunx biome check services/aven-api
+      - run: bunx biome check infrastructure/identity
+      - run: bun run check:api
+      - run: bun run test:api
+      - run: bun run test:infra
+      - run: bun run db:migrate:api && bun run db:migrate:api
+      - run: bun run build:api
+      - run: docker build -f services/aven-api/Dockerfile -t aven-api:validation .
+
   release:
     name: tag + changelog
+    needs: identity-validate
     runs-on: ubuntu-latest
     steps:
       # Load the avenOS deploy key (SSH) so the release commit + tag can be pushed to the
@@ -66,9 +92,250 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  publish-identity-image:
+    name: publish identity image
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ghcr.io/myavenceo/aven-api
+      commit: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: next
+          fetch-depth: 0
+      - id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: services/aven-api/Dockerfile
+          push: true
+          tags: ghcr.io/myavenceo/aven-api:sha-${{ steps.commit.outputs.sha }}
+
+  deploy-identity-infrastructure-next:
+    name: update identity infrastructure
+    needs: release
+    runs-on: ubuntu-latest
+    environment: next
+    concurrency:
+      group: identity-infrastructure-next
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    outputs:
+      deploy-host: ${{ steps.infrastructure.outputs.ipv4Address }}
+      deploy-user: ${{ steps.infrastructure.outputs.deployUser }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: next
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run test:infra
+      - name: Validate state backend settings
+        env:
+          STATE_BUCKET: ${{ vars.PULUMI_STATE_S3_BUCKET }}
+          STATE_REGION: ${{ vars.PULUMI_STATE_S3_REGION }}
+          STACK_NAME: ${{ vars.PULUMI_STACK }}
+        run: |
+          set -euo pipefail
+          [[ "$STATE_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]
+          [[ "$STATE_BUCKET" != *..* ]]
+          test "$STATE_REGION" = "hel1"
+          test "$STACK_NAME" = "organization/aven-identity/next"
+      - name: Apply infrastructure
+        id: infrastructure
+        uses: pulumi/actions@8e5e406f4007fca908480587cb9893c07090f58d # v7
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.PULUMI_STATE_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PULUMI_STATE_S3_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.PULUMI_STATE_S3_REGION }}
+          AWS_DEFAULT_REGION: ${{ vars.PULUMI_STATE_S3_REGION }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          HETZNER_COMPUTE_TOKEN: ${{ secrets.HETZNER_COMPUTE_TOKEN }}
+          HETZNER_DNS_TOKEN: ${{ secrets.HETZNER_DNS_TOKEN }}
+          HETZNER_LOCATION: ${{ vars.HETZNER_LOCATION }}
+          HETZNER_SERVER_TYPE: ${{ vars.HETZNER_SERVER_TYPE }}
+          HETZNER_SERVER_ARCHITECTURE: ${{ vars.HETZNER_SERVER_ARCHITECTURE }}
+          HETZNER_OS_IMAGE: ${{ vars.HETZNER_OS_IMAGE }}
+          HETZNER_VOLUME_SIZE_GB: ${{ vars.HETZNER_VOLUME_SIZE_GB }}
+          HETZNER_ENABLE_BACKUPS: ${{ vars.HETZNER_ENABLE_BACKUPS }}
+          SSH_ALLOWED_CIDRS: ${{ vars.SSH_ALLOWED_CIDRS }}
+          DEPLOY_SSH_PUBLIC_KEY: ${{ vars.DEPLOY_SSH_PUBLIC_KEY }}
+          PULUMI_SKIP_UPDATE_CHECK: "true"
+        with:
+          command: up
+          stack-name: ${{ vars.PULUMI_STACK }}
+          work-dir: infrastructure/identity
+          cloud-url: "s3://${{ vars.PULUMI_STATE_S3_BUCKET }}/avenos/identity?endpoint=${{ vars.PULUMI_STATE_S3_REGION }}.your-objectstorage.com&region=${{ vars.PULUMI_STATE_S3_REGION }}&s3ForcePathStyle=true&awssdk=v2"
+          secrets-provider: passphrase
+          upsert: true
+          refresh: true
+          diff: true
+          comment-on-summary: true
+
+  deploy-identity-next:
+    name: deploy identity API
+    needs: [publish-identity-image, deploy-identity-infrastructure-next]
+    runs-on: ubuntu-latest
+    environment: next
+    concurrency:
+      group: identity-next
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: next
+
+      - name: Materialize deployment files
+        env:
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          IDENTITY_DOMAIN: ${{ vars.IDENTITY_DOMAIN }}
+          WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID }}
+          DOWNLOAD_URL: ${{ vars.DOWNLOAD_URL }}
+          SMTP_FROM: ${{ vars.SMTP_FROM }}
+          NAME_PRICE_EUR: ${{ vars.NAME_PRICE_EUR }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          EMAIL_QUEUE_ENCRYPTION_KEY: ${{ secrets.EMAIL_QUEUE_ENCRYPTION_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          AVEN_MIGRATOR_PASSWORD: ${{ secrets.AVEN_MIGRATOR_PASSWORD }}
+          AVEN_SERVER_PASSWORD: ${{ secrets.AVEN_SERVER_PASSWORD }}
+          AVEN_EMAIL_WORKER_PASSWORD: ${{ secrets.AVEN_EMAIL_WORKER_PASSWORD }}
+          AVEN_ENVIRONMENT_WORKER_PASSWORD: ${{ secrets.AVEN_ENVIRONMENT_WORKER_PASSWORD }}
+          AVEN_PROVISIONER_PASSWORD: ${{ secrets.AVEN_PROVISIONER_PASSWORD }}
+          SMTP_URL: ${{ secrets.SMTP_URL }}
+          CREEM_API_KEY: ${{ secrets.CREEM_API_KEY }}
+          CREEM_PRODUCT_ID: ${{ secrets.CREEM_PRODUCT_ID }}
+          CREEM_WEBHOOK_SECRET: ${{ secrets.CREEM_WEBHOOK_SECRET }}
+          IMAGE: ${{ needs.publish-identity-image.outputs.image }}@${{ needs.publish-identity-image.outputs.digest }}
+          VERSION: ${{ needs.publish-identity-image.outputs.commit }}
+        run: |
+          set -euo pipefail
+          if [ "$PUBLIC_BASE_URL" != "https://$IDENTITY_DOMAIN" ] || [ "$WEBAUTHN_RP_ID" != "$IDENTITY_DOMAIN" ]; then
+            echo "::error::PUBLIC_BASE_URL, IDENTITY_DOMAIN, and WEBAUTHN_RP_ID do not match."
+            exit 1
+          fi
+          install -m 700 -d "$RUNNER_TEMP/identity-deploy/deploy"
+          install -m 644 services/aven-api/docker-compose.yml "$RUNNER_TEMP/identity-deploy/docker-compose.yml"
+          install -m 644 services/aven-api/docker-compose.deploy.yml "$RUNNER_TEMP/identity-deploy/docker-compose.deploy.yml"
+          install -m 755 services/aven-api/deploy/db-init.sh "$RUNNER_TEMP/identity-deploy/deploy/db-init.sh"
+          install -m 644 services/aven-api/deploy/Caddyfile "$RUNNER_TEMP/identity-deploy/deploy/Caddyfile"
+          install -m 600 /dev/null "$RUNNER_TEMP/identity-deploy/.env"
+          {
+            printf 'NODE_ENV=production\n'
+            printf 'PUBLIC_BASE_URL=%s\n' "$PUBLIC_BASE_URL"
+            printf 'IDENTITY_DOMAIN=%s\n' "$IDENTITY_DOMAIN"
+            printf 'WEBAUTHN_RP_ID=%s\n' "$WEBAUTHN_RP_ID"
+            printf 'DOWNLOAD_URL=%s\n' "$DOWNLOAD_URL"
+            printf 'SMTP_FROM=%s\n' "$SMTP_FROM"
+            printf 'NAME_PRICE_EUR=%s\n' "$NAME_PRICE_EUR"
+            printf 'APPLICATION_VERSION=%s\n' "$VERSION"
+            printf 'AVEN_API_IMAGE=%s\n' "$IMAGE"
+            printf 'BETTER_AUTH_SECRET=%s\n' "$BETTER_AUTH_SECRET"
+            printf 'EMAIL_QUEUE_ENCRYPTION_KEY=%s\n' "$EMAIL_QUEUE_ENCRYPTION_KEY"
+            printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
+            printf 'AVEN_MIGRATOR_PASSWORD=%s\n' "$AVEN_MIGRATOR_PASSWORD"
+            printf 'AVEN_SERVER_PASSWORD=%s\n' "$AVEN_SERVER_PASSWORD"
+            printf 'AVEN_EMAIL_WORKER_PASSWORD=%s\n' "$AVEN_EMAIL_WORKER_PASSWORD"
+            printf 'AVEN_ENVIRONMENT_WORKER_PASSWORD=%s\n' "$AVEN_ENVIRONMENT_WORKER_PASSWORD"
+            printf 'AVEN_PROVISIONER_PASSWORD=%s\n' "$AVEN_PROVISIONER_PASSWORD"
+            printf 'SMTP_URL=%s\n' "$SMTP_URL"
+            printf 'CREEM_API_KEY=%s\n' "$CREEM_API_KEY"
+            printf 'CREEM_PRODUCT_ID=%s\n' "$CREEM_PRODUCT_ID"
+            printf 'CREEM_WEBHOOK_SECRET=%s\n' "$CREEM_WEBHOOK_SECRET"
+          } > "$RUNNER_TEMP/identity-deploy/.env"
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/ssh/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/ssh/key" "$RUNNER_TEMP/ssh/known_hosts"
+
+      - name: Install and start immutable image
+        env:
+          DEPLOY_HOST: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-host }}
+          DEPLOY_USER: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-user }}
+          GHCR_USER: ${{ vars.GHCR_USER }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          ssh_args=(-i "$RUNNER_TEMP/ssh/key" -o BatchMode=yes -o ConnectTimeout=5 -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o StrictHostKeyChecking=yes)
+          remote="$DEPLOY_USER@$DEPLOY_HOST"
+          upload="/tmp/aven-api-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ready=false
+          for _ in $(seq 1 120); do
+            if ssh "${ssh_args[@]}" "$remote" "test -f /var/lib/aven/cloud-init-complete"; then
+              ready=true
+              break
+            fi
+            sleep 5
+          done
+          if [ "$ready" != true ]; then
+            echo "::error::The host did not finish cloud-init within ten minutes."
+            exit 1
+          fi
+          # The generated upload path is intentionally expanded by this runner.
+          # shellcheck disable=SC2029
+          ssh "${ssh_args[@]}" "$remote" "install -m 700 -d '$upload'"
+          scp "${ssh_args[@]}" -r "$RUNNER_TEMP/identity-deploy/." "$remote:$upload/"
+          # The configured registry username is intentionally expanded by this runner.
+          # shellcheck disable=SC2029
+          printf '%s' "$GHCR_READ_TOKEN" | ssh "${ssh_args[@]}" "$remote" "sudo docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+          # The generated upload path is intentionally expanded by this runner.
+          # shellcheck disable=SC2029
+          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' /opt/aven-api/deploy/db-init.sh && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml up -d db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-deps app email-worker environment-worker caddy && rm -rf '$upload'"
+
+      - name: Remove temporary host upload
+        if: always()
+        continue-on-error: true
+        env:
+          DEPLOY_HOST: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-host }}
+          DEPLOY_USER: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-user }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          ssh -i "$RUNNER_TEMP/ssh/key" -o BatchMode=yes -o ConnectTimeout=5 -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" "rm -rf '/tmp/aven-api-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}'"
+
+      - name: Verify deployment
+        env:
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+        run: |
+          curl --fail --retry 20 --retry-delay 3 --retry-all-errors "$PUBLIC_BASE_URL/api/health/ready"
+          overall=""
+          for _ in $(seq 1 20); do
+            overall="$(curl --fail --silent "$PUBLIC_BASE_URL/api/health/status" | jq -r .overall || true)"
+            [ "$overall" = "healthy" ] && break
+            sleep 3
+          done
+          test "$overall" = "healthy"
+          curl --fail "$PUBLIC_BASE_URL/api/meta"
+          curl --fail "$PUBLIC_BASE_URL/.well-known/apple-app-site-association"
+
   release-macos:
     name: macOS build → TestFlight
-    needs: release
+    needs: [release, deploy-identity-next]
     runs-on: macos-15 # Apple Silicon (free on public repos); builds the aarch64 .app
     # Scoped to `next` so the build can bake the next-channel Google OAuth creds into the
     # binary. Apple credentials are REPOSITORY secrets (cross-channel — signing next AND main);
@@ -160,7 +427,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           # Point the shipped next build at the deployed auth API (baked into the Vite bundle
           # via the PUBLIC_ prefix). A real env var, so it wins over any .env file.
-          PUBLIC_BETTER_AUTH_URL: https://api.next.aven.ceo
+          PUBLIC_BETTER_AUTH_URL: ${{ vars.PUBLIC_BASE_URL }}
           # Bake the native-sign-in Google Desktop client into the Rust binary (network.rs
           # option_env!), so the shipped app has it without a process env. Must be the SAME
           # client the auth server verifies the idToken audience against.
@@ -169,7 +436,7 @@ jobs:
 
   release-ios:
     name: iOS build → TestFlight
-    needs: release
+    needs: [release, deploy-identity-next]
     runs-on: macos-15 # Apple Silicon; builds the aarch64-apple-ios .ipa
     # Scoped to `next` to bake the next-channel Google OAuth creds (additive — repo Apple
     # secrets stay available). Reuses the same repository Apple secrets as the macOS job.
@@ -269,7 +536,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           # Point the shipped next build at the deployed auth API (baked into the Vite bundle
           # via the PUBLIC_ prefix). A real env var, so it wins over any .env file.
-          PUBLIC_BETTER_AUTH_URL: https://api.next.aven.ceo
+          PUBLIC_BETTER_AUTH_URL: ${{ vars.PUBLIC_BASE_URL }}
           # Bake the native-sign-in Google Desktop client into the Rust binary (network.rs
           # option_env!), so the shipped app has it without a process env. Must be the SAME
           # client the auth server verifies the idToken audience against.
@@ -278,7 +545,7 @@ jobs:
 
   release-linux:
     name: Linux x86_64 build → release asset
-    needs: release
+    needs: [release, deploy-identity-next]
     runs-on: ubuntu-latest
     # `next` env for the Google Desktop client (baked into the binary via network.rs option_env!).
     environment: next
@@ -315,7 +582,7 @@ jobs:
         # FUSE requirement on the CI runner. No App Store signing — Linux ships via this asset.
         run: bun run build:app:linux
         env:
-          PUBLIC_BETTER_AUTH_URL: https://api.next.aven.ceo
+          PUBLIC_BETTER_AUTH_URL: ${{ vars.PUBLIC_BASE_URL }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           APPIMAGE_EXTRACT_AND_RUN: "1"

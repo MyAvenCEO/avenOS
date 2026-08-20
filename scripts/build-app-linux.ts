@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 import { ensureLinuxNativeDeps } from './linux-native-deps.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -8,6 +9,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 ensureLinuxNativeDeps('build:app:linux')
 
 const env: NodeJS.ProcessEnv = { ...process.env }
+env.ORT_DYLIB_PATH = ensureOnnxruntimeDylib()
 if (!env.AVENOS_APP_ENV_FILE && env.AVENOS_ENV_FILE) {
 	const envFile = env.AVENOS_ENV_FILE.trim()
 	const absoluteEnvFile = path.isAbsolute(envFile) ? envFile : path.join(repoRoot, envFile)

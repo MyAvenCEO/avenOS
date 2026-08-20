@@ -812,13 +812,9 @@ pub fn load_voice_style(voice_style_paths: &[String], verbose: bool) -> Result<S
     })
 }
 
-/// Load TTS components
-pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool) -> Result<TextToSpeech> {
-    if use_gpu {
-        anyhow::bail!("GPU mode is not supported yet");
-    }
-    println!("Using CPU for inference\n");
-
+/// Load TTS components. Execution providers are selected once on the shared
+/// ONNX Runtime environment before these sessions are created.
+pub fn load_text_to_speech(onnx_dir: &str) -> Result<TextToSpeech> {
     let cfgs = load_cfgs(onnx_dir)?;
 
     let dp_path = format!("{}/duration_predictor.onnx", onnx_dir);
