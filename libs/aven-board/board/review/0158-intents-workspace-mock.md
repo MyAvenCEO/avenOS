@@ -50,6 +50,12 @@ Mock only: hardcoded data, no bus/skills imports (like the current placeholder).
 
 ## Progress log
 
+- `2026-08-20` — Iteration 5 (Samuel): left aside gains "Talk to MAIA" ABOVE the INTENTS
+  divider — the generic AI chat (mock transcript: an inline todo-view answer to "zeig mir
+  alle offenen Todos", plus a free-form ask MAIA turns into an extracted-intent chip that
+  jumps to the intent); done intents fold into a closed-by-default ARCHIV toggle section.
+  Global HITL card restyled: full main width, min-height, title/description top-centered,
+  Confirm/Reject bottom-centered, INVERTED marine like the voice pill.
 - `2026-08-20` — Iteration 4 (Samuel): TEMPLATE ↔ INSTANCE SYNC — the skill flows in the
   intent screen are now the REAL templates from lib/skills/registry (docs/calendar/brain/
   abgleich added as declared SkillDefs → the catalog holds all 6 epic skills); clicking a

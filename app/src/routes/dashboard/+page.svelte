@@ -384,31 +384,36 @@ function onKeydown(event: KeyboardEvent) {
 	<!-- THE human gate, universal: every held message — a destructive tool
 	     call, a drafted bridge — surfaces HERE, above the voice pill, and
 	     resolves only by a physical button press. Voice cannot confirm. -->
+	<!-- THE human gate, inverted like the voice pill itself: the same dark
+	     marine surface, full main width, the question centred on top and the
+	     two physical buttons centred underneath. -->
 	{#each hitlQueue.items as held (held.id)}
 		<div
-			class="mx-auto mb-2 flex w-full max-w-2xl items-center gap-3 rounded-2xl border border-foreground/10 bg-[#fffdf7] px-4 py-2.5 shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
+			class="mx-auto mb-2 flex min-h-36 w-full flex-col items-center justify-between gap-4 rounded-2xl bg-primary px-6 py-5 text-primary-foreground shadow-[0_4px_16px_rgba(30,41,59,0.15)]"
 		>
-			<div class="min-w-0 flex-1">
-				<p class="font-medium text-sm">{held.label}</p>
-				<p class="truncate font-mono text-[0.6875rem] text-foreground/45">
+			<div class="min-w-0 text-center">
+				<p class="font-medium text-base">{held.label}</p>
+				<p class="pt-1 font-mono text-[0.6875rem] text-primary-foreground/50">
 					{held.actor}
 					· {held.method} · {held.detail}
 				</p>
 			</div>
-			<button
-				type="button"
-				onclick={() => confirmHeld(held.id)}
-				class="shrink-0 rounded-full bg-primary px-4 py-1.5 font-medium text-primary-foreground text-sm"
-			>
-				Confirm
-			</button>
-			<button
-				type="button"
-				onclick={() => rejectHeld(held.id)}
-				class="shrink-0 rounded-full border border-foreground/10 px-4 py-1.5 font-medium text-foreground/60 text-sm"
-			>
-				Reject
-			</button>
+			<div class="flex items-center gap-3">
+				<button
+					type="button"
+					onclick={() => confirmHeld(held.id)}
+					class="rounded-full bg-primary-foreground px-6 py-2 font-medium text-primary text-sm transition-opacity hover:opacity-90"
+				>
+					Confirm
+				</button>
+				<button
+					type="button"
+					onclick={() => rejectHeld(held.id)}
+					class="rounded-full border border-primary-foreground/30 px-6 py-2 font-medium text-primary-foreground/70 text-sm transition-colors hover:bg-primary-foreground/10"
+				>
+					Reject
+				</button>
+			</div>
 		</div>
 	{/each}
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it

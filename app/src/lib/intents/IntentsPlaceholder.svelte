@@ -454,6 +454,19 @@ let selectedId = $state(INTENTS[0].id)
 const selected = $derived(INTENTS.find((i) => i.id === selectedId) ?? INTENTS[0])
 
 /**
+ * Talk to MAIA — the generic AI chat, above the intents: free-form asks
+ * (from which intents get extracted, managed, triggered), and every
+ * inline view query ("show me all todos") that has no intent template.
+ * Mocked transcript; the input is the global voice/text pill.
+ */
+let talkMode = $state(false)
+
+/** Done intents rest in the archive — a toggle, closed by default. */
+let archiveOpen = $state(false)
+const activeIntents = $derived(INTENTS.filter((i) => i.status !== 'done'))
+const archivedIntents = $derived(INTENTS.filter((i) => i.status === 'done'))
+
+/**
  * The center shows ONE of three things: the activity log (default), an
  * artifact preview, or a skill's flow stepper. Selecting an intent — or
  * the back button — returns to the log.
@@ -555,10 +568,33 @@ const DOT: Record<string, string> = {
 <div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden">
 	<!-- LEFT: the intent stream — compact cards, cream selection. -->
 	<aside class="flex w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-4">
-		<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-			Intents · {INTENTS.length}
+		<!-- The generic AI chat — above the intents: free-form + view queries. -->
+		<button
+			type="button"
+			onclick={() => {
+				talkMode = true
+				preview = null
+				skillView = null
+			}}
+			class="flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {talkMode
+				? 'border-foreground/15 bg-surface-card-selected'
+				: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
+		>
+			<span class="block size-7 shrink-0 overflow-hidden rounded-full border border-border">
+				<img src="/aven-logo.svg" alt="" class="size-full object-cover">
+			</span>
+			<span class="min-w-0">
+				<span class="block font-semibold text-[13px] leading-snug">Talk to MAIA</span>
+				<span class="block text-[0.625rem] text-foreground/45">
+					freie Fragen · Views · neue Intents
+				</span>
+			</span>
+		</button>
+
+		<h2 class="px-1 pt-2 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+			Intents · {activeIntents.length}
 		</h2>
-		{#each INTENTS as intent (intent.id)}
+		{#each activeIntents as intent (intent.id)}
 			{@const sel = selectedId === intent.id}
 			<button
 				type="button"
@@ -566,6 +602,7 @@ const DOT: Record<string, string> = {
 					selectedId = intent.id
 					preview = null
 					skillView = null
+					talkMode = false
 				}}
 				class="rounded-xl border px-3.5 py-2.5 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
 					? 'border-foreground/15 bg-surface-card-selected'
@@ -601,13 +638,149 @@ const DOT: Record<string, string> = {
 				</div>
 			</button>
 		{/each}
+
+		<!-- The archive: done intents rest here, folded away by default. -->
+		<button
+			type="button"
+			onclick={() => {
+				archiveOpen = !archiveOpen
+			}}
+			class="flex items-center gap-1.5 px-1 pt-3 text-left font-semibold text-foreground/50 text-xs uppercase tracking-wide transition-colors hover:text-foreground/80"
+		>
+			<svg
+				viewBox="0 0 24 24"
+				class="size-3 transition-transform {archiveOpen ? 'rotate-90' : ''}"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path d="m9 6 6 6-6 6" />
+			</svg>
+			Archiv · {archivedIntents.length}
+		</button>
+		{#if archiveOpen}
+			{#each archivedIntents as intent (intent.id)}
+				{@const sel = selectedId === intent.id}
+				<button
+					type="button"
+					onclick={() => {
+						selectedId = intent.id
+						preview = null
+						skillView = null
+						talkMode = false
+					}}
+					class="rounded-xl border px-3.5 py-2.5 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
+						? 'border-foreground/15 bg-surface-card-selected opacity-100'
+						: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
+				>
+					<div class="flex items-center gap-2">
+						<span
+							class="rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_STYLE[intent.type]}"
+						>
+							{intent.type}
+						</span>
+						<span class="ml-auto font-mono text-[0.5625rem] text-foreground/35">{intent.when}</span>
+					</div>
+					<p class="pt-1 font-semibold text-[13px] leading-snug">{intent.title}</p>
+					<div class="flex items-center gap-2 pt-1">
+						<span class="text-[0.625rem] text-foreground/45">{intent.source}</span>
+						<span class="ml-auto font-mono text-[#2f5d50] text-[0.5625rem]">erledigt</span>
+					</div>
+				</button>
+			{/each}
+		{/if}
 	</aside>
 
 	<!-- CENTER: activity log / artifact preview / skill stepper. -->
 	<main
 		class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 	>
-		{#if skillView}
+		{#if talkMode}
+			<!-- TALK TO MAIA: the traditional AI-chat view — free-form asks,
+			     inline view queries, and intents extracted on the fly. Input is
+			     the global voice/text pill below. Mocked transcript. -->
+			<header class="flex items-center gap-2.5">
+				<span class="block size-9 shrink-0 overflow-hidden rounded-full border border-border">
+					<img src="/aven-logo.svg" alt="" class="size-full object-cover">
+				</span>
+				<div class="min-w-0">
+					<h1 class="font-semibold text-lg leading-tight">MAIA</h1>
+					<p class="text-foreground/45 text-xs">
+						freie Fragen · Inline-Views · Intents extrahieren — sprich oder tippe unten
+					</p>
+				</div>
+			</header>
+			<div class="border-border border-b"></div>
+
+			<div class="flex flex-col gap-4 pt-2">
+				<!-- a view query: the answer IS an inline view -->
+				<div class="flex justify-end">
+					<div
+						class="max-w-[75%] rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground text-sm"
+					>
+						Zeig mir alle offenen Todos
+					</div>
+				</div>
+				<div class="flex flex-col gap-2">
+					<div
+						class="max-w-[85%] rounded-2xl border border-border bg-surface-card px-4 py-2.5 text-sm"
+					>
+						Drei offene Todos — zwei davon mit Frist:
+					</div>
+					<!-- the inline view: a mini todo list, rendered right in the chat -->
+					<div class="max-w-[85%] rounded-xl border border-border bg-[#fffdf7] px-4 py-3">
+						{#each [{ t: 'Nachweis einreichen', m: 'fällig 12.09. · @me' }, { t: 'Bürostuhl bezahlen', m: 'fällig 30.08. · #rechnung' }, { t: 'Unterlagen an Steuerberater', m: 'fällig 20.09.' }] as row (row.t)}
+							<div class="flex items-center gap-2.5 border-border/50 border-b py-1.5 last:border-0">
+								<span class="size-3.5 rounded border-2 border-foreground/20"></span>
+								<span class="min-w-0 flex-1 truncate text-xs">{row.t}</span>
+								<span class="shrink-0 text-[0.625rem] text-foreground/40">{row.m}</span>
+							</div>
+						{/each}
+					</div>
+				</div>
+
+				<!-- a free-form ask: MAIA extracts an intent from it -->
+				<div class="flex justify-end">
+					<div
+						class="max-w-[75%] rounded-2xl bg-primary px-4 py-2.5 text-primary-foreground text-sm"
+					>
+						Kündige bitte mein Fitnessstudio
+					</div>
+				</div>
+				<div class="flex flex-col gap-2">
+					<div
+						class="max-w-[85%] rounded-2xl border border-border bg-surface-card px-4 py-2.5 text-sm"
+					>
+						Verstanden — daraus habe ich einen Intent gemacht. Ich suche den Vertrag im Archiv und
+						prüfe die Kündigungsfrist.
+					</div>
+					<!-- the extracted intent, as a chip that jumps to it -->
+					<button
+						type="button"
+						onclick={() => {
+							selectedId = 'fitnessstudio'
+							talkMode = false
+						}}
+						class="flex w-fit items-center gap-2 rounded-xl border border-[#8a6238]/30 bg-[#8a6238]/8 px-3.5 py-2 text-left transition-colors hover:bg-[#8a6238]/15"
+					>
+						<span
+							class="rounded-full bg-[#8a6238]/15 px-2 py-0.5 font-mono text-[#8a6238] text-[0.5625rem]"
+						>
+							auftrag
+						</span>
+						<span class="font-medium text-xs">„Kündige das Fitnessstudio"</span>
+						<span class="font-mono text-[0.625rem] text-foreground/40">→ Intent öffnen</span>
+					</button>
+				</div>
+
+				<p class="pt-2 text-center text-[0.625rem] text-foreground/35">
+					Alles Freiform ohne Intent-/Skill-Template landet hier — Antworten, Inline-Views, neue
+					Intents. Eingabe global über die Voice-/Text-Pill.
+				</p>
+			</div>
+		{:else if skillView}
 			<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
 			{@const skillLog = selected.log.filter((e) => e.skill === skillView?.skill)}
 			<header class="flex items-center gap-3">
