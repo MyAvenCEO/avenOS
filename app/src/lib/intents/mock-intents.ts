@@ -114,6 +114,11 @@ export function fund<T>(run: SkillRun, schluessel: string): T | undefined {
 	return undefined
 }
 
+/** Welche GANZEN Intents diesen Intent speisen — leer für die meisten. */
+export function gespeist(intent: Intent): string[] {
+	return [...new Set(intent.runs.flatMap((r) => r.braucht?.intents ?? []))]
+}
+
 /** Alle Läufe eines Intents, rekursiv — für Bilanz und Verträge. */
 export function alleLaeufe(intent: Intent): SkillRun[] {
 	const raus: SkillRun[] = []
@@ -557,8 +562,8 @@ export const intents: Intent[] = [
 		runs: [
 			{
 				id: 'r-monat-export',
-				skill: 'Buchhaltung',
-				skillId: 'buchhaltung',
+				skill: 'Monatsabschluss',
+				skillId: 'abschluss',
 				flow: 'datev-export',
 				zweck: 'Festgeschriebenes bündeln, Vorsteuer falten, EXTF schreiben',
 				zustand: 'wartet-ergebnis',

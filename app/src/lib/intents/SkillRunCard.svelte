@@ -20,6 +20,8 @@ const { run, alle }: { run: SkillRun; alle: SkillRun[] } = $props()
 const SIGNATUREN: Record<string, typeof InboxSignatur> = {
 	inbox: InboxSignatur,
 	buchhaltung: BuchhaltungSignatur,
+	buchen: BuchhaltungSignatur,
+	abschluss: BuchhaltungSignatur,
 	hitl: HitlSignatur,
 	intents: IntentsSignatur
 }
@@ -38,11 +40,6 @@ const speiser = $derived(
 		.filter((i) => i !== undefined)
 		.map((i) => ({ titel: i.titel, status: intentStatus(i) }))
 )
-const GLYPH: Record<IntentStatus, { mark: string; klasse: string }> = {
-	fertig: { mark: '✓', klasse: 'text-status-success' },
-	'braucht-dich': { mark: '●', klasse: 'text-primary' },
-	laeuft: { mark: '◐', klasse: 'text-status-working' }
-}
 
 const PILL: Record<SkillRun['zustand'], { label: string; klasse: string }> = {
 	laeuft: { label: 'läuft', klasse: 'text-status-working' },
@@ -70,31 +67,14 @@ const PILL: Record<SkillRun['zustand'], { label: string; klasse: string }> = {
 	<Spur {run} />
 
 	{#if run.braucht?.intents && run.zustand === 'wartet-ergebnis'}
-		<!-- Der Sammelstand: dieser Lauf wartet nicht auf einen Nachbarn,
-		     sondern auf GANZE Intents. Jeder Chip ist einer — und man
-		     sieht sofort, wer noch aufhält. -->
-		<div class="flex flex-col gap-1.5">
-			<p class="font-mono text-[0.625rem] text-status-working">
-				◇ wartet auf „{run.braucht.was}" —
-				{speiser.filter((x) => x.status === 'fertig').length}
-				von {speiser.length} liegen vor.
-			</p>
-			<div class="flex flex-wrap gap-1.5">
-				{#each speiser as x (x.titel)}
-					<span
-						class="flex items-baseline gap-1.5 rounded-full border px-2.5 py-0.5 text-[0.6875rem] {x.status ===
-						'fertig'
-							? 'border-border/60 text-foreground/45'
-							: 'border-border bg-surface-card'}"
-					>
-						<span class="font-mono text-[0.5625rem] {GLYPH[x.status].klasse}">
-							{GLYPH[x.status].mark}
-						</span>
-						{x.titel}
-					</span>
-				{/each}
-			</div>
-		</div>
+		<!-- Intent-weite Abhängigkeit: hier nur der Stand in einer Zeile —
+		     das BRETT mit den einzelnen Vorgängen rendert der Explorer,
+		     denn es ist die Übersicht des Intents, nicht dieser Karte. -->
+		<p class="font-mono text-[0.625rem] text-status-working">
+			◇ wartet auf „{run.braucht.was}" —
+			{speiser.filter((x) => x.status === 'fertig').length}
+			von {speiser.length} liegen vor.
+		</p>
 	{:else if run.braucht && run.zustand === 'wartet-ergebnis'}
 		<p class="font-mono text-[0.625rem] text-status-working">
 			◇ wartet auf „{run.braucht.was}" aus {lieferant?.skill ?? run.braucht.run} — läuft von allein

@@ -47,11 +47,31 @@ export const skills: Skill[] = [
 		id: 'buchhaltung',
 		name: 'Buchhaltung',
 		description:
-			'Aus Daten werden Buchungen: Zahlungen gegen offene Posten abgleichen, Positionen kontieren, Buchungszeilen ableiten, Soll/Ist, Vier-Augen-Freigabe und Festschreibung mit Anker. Der DATEV-Export gehört dazu — er läuft am Periodenende, nicht am Beleg.',
-		flows: ['eingangsrechnung-buchen', 'zahlungsabgleich', 'buchungsvorgang', 'datev-export'],
+			'Aus Daten werden Buchungen: Zahlungen gegen offene Posten abgleichen, Positionen kontieren, Buchungszeilen ableiten, Soll/Ist. Komponiert den Buchungsvorgang als Subflow — der ist zugleich ein eigener Skill, denn Flows sind flach und dürfen in mehreren Skills liegen. Der Monatsabschluss ist bewusst KEIN Teil mehr: anderer Takt, eigene Grenze.',
+		flows: ['eingangsrechnung-buchen', 'zahlungsabgleich', 'buchungsvorgang'],
 		entry: 'eingangsrechnung-buchen',
 		accepts: ['positionen', 'transaktionen'],
-		provides: ['buchungsstapel', 'extf-datei', 'unklar', 'fehler']
+		provides: ['buchungsstapel', 'unklar']
+	},
+	{
+		id: 'buchen',
+		name: 'Buchungsvorgang',
+		description:
+			'Der steuerliche Kern als eigene Einheit: Leistungsart klassifizieren, Steuerlogik, Buchungszeilen ableiten, validieren, Vier-Augen-Freigabe, Festschreibung mit Anker. Läuft als Subflow in der Buchhaltung UND als eigener Skill — derselbe flache Flow, zwei Verträge.',
+		flows: ['buchungsvorgang'],
+		entry: 'buchungsvorgang',
+		accepts: ['positionen', 'abgeglichen'],
+		provides: ['buchungsstapel', 'unklar']
+	},
+	{
+		id: 'abschluss',
+		name: 'Monatsabschluss',
+		description:
+			'Der Perioden-Skill: läuft am Monatsende, nicht am Beleg. Sammelt Festgeschriebenes, bildet Stapel, faltet Vorsteuer, schreibt und prüft die EXTF-Datei für den Berater. Sein Eingang ist die Periode — deshalb eine eigene Skill-Grenze statt eines weiteren Buchhaltungs-Flows.',
+		flows: ['datev-export'],
+		entry: 'datev-export',
+		accepts: ['festgeschrieben'],
+		provides: ['extf-datei', 'fehler']
 	},
 	{
 		id: 'hitl',

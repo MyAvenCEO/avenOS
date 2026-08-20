@@ -76,11 +76,21 @@ describe('fibu skills', () => {
 		// The inbox owns ingest and reading — triage, extraction, OCR.
 		expect(inbox.flows).toEqual(['inbox-triage', 'belege-extrahieren', 'scan-zu-dokument'])
 		expect(inbox.entry).toBe('inbox-triage')
-		// Booking owns matching, the tax pipeline and the DATEV exchange path.
+		// Booking owns matching and the tax pipeline. The DATEV exchange
+		// moved OUT: the month-close runs on the period, not the item, so
+		// it is its own skill boundary now.
 		expect(fibu.flows).toContain('zahlungsabgleich')
 		expect(fibu.flows).toContain('buchungsvorgang')
-		expect(fibu.flows).toContain('datev-export')
+		expect(fibu.flows).not.toContain('datev-export')
 		expect(fibu.entry).toBe('eingangsrechnung-buchen')
+		const abschluss = skills.find((s) => s.id === 'abschluss')
+		expect(abschluss?.flows).toEqual(['datev-export'])
+		expect(abschluss?.entry).toBe('datev-export')
+		// And the booking core is BOTH: a subflow inside buchhaltung and a
+		// skill of its own — flows are flat, sets may overlap.
+		const buchen = skills.find((s) => s.id === 'buchen')
+		expect(buchen?.flows).toEqual(['buchungsvorgang'])
+		expect(fibu.flows).toContain('buchungsvorgang')
 		// The work contract lines up: positions and transactions flow onward.
 		for (const p of ['positionen', 'transaktionen']) expect(fibu.accepts).toContain(p)
 		// HITL is generic: it takes the three kinds of interruption from ANY
