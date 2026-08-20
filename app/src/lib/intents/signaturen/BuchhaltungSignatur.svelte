@@ -16,11 +16,16 @@ const gewaehlt = $derived(fund<string>(run, 'gewaehlt'))
 const freigabe = $derived(fund<string>(run, 'freigabe'))
 const festschreibbar = $derived(fund<boolean>(run, 'festschreibbar'))
 const festgeschrieben = $derived(fund<string>(run, 'festgeschrieben'))
+const fakt = $derived(fund<string>(run, 'fakt'))
 </script>
 
 <div class="flex flex-col gap-2 {run.zustand === 'wartet-ergebnis' ? 'opacity-50' : ''}">
 	{#if zeilen.length === 0}
-		<p class="text-foreground/40 text-xs">— Zeilen entstehen aus den Positionen —</p>
+		<!-- Nicht jeder Buchhaltungs-Flow trägt Zeilen: der Abgleich und
+		     der Export sprechen in einem Fakt statt im T-Konto. -->
+		<p class="{fakt ? 'text-foreground/70' : 'text-foreground/40'} text-xs">
+			{fakt ?? '— Zeilen entstehen aus den Positionen —'}
+		</p>
 	{:else}
 		<div class="grid grid-cols-[1fr_auto_auto] gap-x-4 font-mono text-[0.6875rem]">
 			<span class="text-[0.5625rem] text-foreground/35 uppercase">Konto</span>

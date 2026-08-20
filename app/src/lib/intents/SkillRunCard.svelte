@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { SkillRun } from './mock-intents'
+import { type IntentStatus, intentStatus, intents, type SkillRun } from './mock-intents'
 import Spur from './Spur.svelte'
 import BuchhaltungSignatur from './signaturen/BuchhaltungSignatur.svelte'
 import HitlSignatur from './signaturen/HitlSignatur.svelte'
@@ -27,6 +27,23 @@ const Signatur = $derived(run.skillId ? SIGNATUREN[run.skillId] : null)
 
 const lieferant = $derived(alle.find((r) => r.id === run.braucht?.run))
 
+/**
+ * Abhängigkeiten auf GANZE Intents (der Monatsabschluss wartet auf alle
+ * Beleg-Intents): aufgelöst zu Titel + Status, damit die Karte zeigt,
+ * WER den Sammelstand noch aufhält.
+ */
+const speiser = $derived(
+	(run.braucht?.intents ?? [])
+		.map((id) => intents.find((i) => i.id === id))
+		.filter((i) => i !== undefined)
+		.map((i) => ({ titel: i.titel, status: intentStatus(i) }))
+)
+const GLYPH: Record<IntentStatus, { mark: string; klasse: string }> = {
+	fertig: { mark: '✓', klasse: 'text-status-success' },
+	'braucht-dich': { mark: '●', klasse: 'text-primary' },
+	laeuft: { mark: '◐', klasse: 'text-status-working' }
+}
+
 const PILL: Record<SkillRun['zustand'], { label: string; klasse: string }> = {
 	laeuft: { label: 'läuft', klasse: 'text-status-working' },
 	'wartet-mensch': { label: 'wartet auf dich', klasse: 'text-primary' },
@@ -52,7 +69,33 @@ const PILL: Record<SkillRun['zustand'], { label: string; klasse: string }> = {
 
 	<Spur {run} />
 
-	{#if run.braucht && run.zustand === 'wartet-ergebnis'}
+	{#if run.braucht?.intents && run.zustand === 'wartet-ergebnis'}
+		<!-- Der Sammelstand: dieser Lauf wartet nicht auf einen Nachbarn,
+		     sondern auf GANZE Intents. Jeder Chip ist einer — und man
+		     sieht sofort, wer noch aufhält. -->
+		<div class="flex flex-col gap-1.5">
+			<p class="font-mono text-[0.625rem] text-status-working">
+				◇ wartet auf „{run.braucht.was}" —
+				{speiser.filter((x) => x.status === 'fertig').length}
+				von {speiser.length} liegen vor.
+			</p>
+			<div class="flex flex-wrap gap-1.5">
+				{#each speiser as x (x.titel)}
+					<span
+						class="flex items-baseline gap-1.5 rounded-full border px-2.5 py-0.5 text-[0.6875rem] {x.status ===
+						'fertig'
+							? 'border-border/60 text-foreground/45'
+							: 'border-border bg-surface-card'}"
+					>
+						<span class="font-mono text-[0.5625rem] {GLYPH[x.status].klasse}">
+							{GLYPH[x.status].mark}
+						</span>
+						{x.titel}
+					</span>
+				{/each}
+			</div>
+		</div>
+	{:else if run.braucht && run.zustand === 'wartet-ergebnis'}
 		<p class="font-mono text-[0.625rem] text-status-working">
 			◇ wartet auf „{run.braucht.was}" aus {lieferant?.skill ?? run.braucht.run} — läuft von allein
 			weiter, sobald es vorliegt.

@@ -69,7 +69,7 @@ describe('intent cockpit: an den echten Registries verankert', () => {
 	test('Übergaben sind deklarierte Skill-Grenzen: braucht ⇒ handoff im Liefer-Flow', () => {
 		for (const i of intents) {
 			for (const r of i.runs) {
-				if (!r.braucht) continue
+				if (!r.braucht?.run) continue
 				const lieferant = i.runs.find((x) => x.id === r.braucht?.run)
 				expect(lieferant).toBeDefined()
 				if (!lieferant || lieferant.skillId === r.skillId) continue
@@ -81,9 +81,47 @@ describe('intent cockpit: an den echten Registries verankert', () => {
 		}
 	})
 
+	test('der Monat wartet auf GANZE Intents — Belege sind Intents, der Monat auch', () => {
+		const monat = intents.find((i) => i.id === 'i-monat')
+		const exportRun = monat?.runs.find((r) => r.flow === 'datev-export')
+		expect(exportRun?.braucht?.intents).toBeDefined()
+		const ids = new Set(intents.map((i) => i.id))
+		for (const ref of exportRun?.braucht?.intents ?? []) {
+			expect(ids.has(ref)).toBe(true)
+			// Und niemals zirkulär: der Monat wartet nicht auf sich selbst.
+			expect(ref).not.toBe('i-monat')
+		}
+		// Solange auch nur ein gespeister Intent offen ist, wartet der Monat.
+		const speiser = (exportRun?.braucht?.intents ?? []).map((ref) =>
+			intents.find((i) => i.id === ref)
+		)
+		expect(speiser.some((i) => i && intentStatus(i) !== 'fertig')).toBe(true)
+		expect(exportRun?.zustand).toBe('wartet-ergebnis')
+	})
+
+	test('der Kontoauszug nimmt den CSV-Pfad durch DENSELBEN Inbox-Flow', () => {
+		const inbox = intents.find((i) => i.id === 'i-auszug')?.runs.find((r) => r.skillId === 'inbox')
+		expect(inbox?.flow).toBe('inbox-triage')
+		const namen = inbox?.schritte.map((st) => st.name) ?? []
+		expect(namen).toContain('Auszugsweiche')
+		expect(namen).toContain('CSV parsen')
+		// Der Beleg-Zweig bleibt unbetreten: ein Flow, zwei Pfade.
+		expect(namen).not.toContain('Belege extrahieren')
+	})
+
 	test('wartet-ergebnis heißt: das Gebrauchte liegt wirklich noch nicht vor', () => {
 		for (const i of intents) {
 			for (const r of i.runs) {
+				if (r.braucht?.intents) {
+					// Intent-weite Abhängigkeit: blockiert genau dann, wenn
+					// mindestens ein gespeister Intent noch offen ist.
+					const offen = r.braucht.intents.some((ref) => {
+						const ziel = intents.find((x) => x.id === ref)
+						return ziel !== undefined && intentStatus(ziel) !== 'fertig'
+					})
+					expect(r.zustand === 'wartet-ergebnis').toBe(offen)
+					continue
+				}
 				const lieferant = i.runs.find((x) => x.id === r.braucht?.run)
 				if (r.zustand === 'wartet-ergebnis') {
 					expect(lieferant).toBeDefined()

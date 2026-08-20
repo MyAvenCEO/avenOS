@@ -41,8 +41,14 @@ export interface SkillRun {
 	/** Was dieser Lauf FÜR DIESEN Intent tut — ein Satz, kein Typ. */
 	zweck: string
 	zustand: RunZustand
-	/** Wovon dieser Lauf abhängt: ein GESCHWISTER-Lauf + das Stück. */
-	braucht?: { run: string; was: string }
+	/**
+	 * Wovon dieser Lauf abhängt — zwei Reichweiten, ein Mechanismus:
+	 * `run` = ein Geschwister-Lauf im selben Intent (Skill-Grenze);
+	 * `intents` = GANZE andere Intents (der Monatsabschluss wartet auf
+	 * alle Beleg-Intents des Monats — ein Beleg ist ein Intent, der
+	 * Monat auch, und der eine speist den anderen).
+	 */
+	braucht?: { run?: string; intents?: string[]; was: string }
 	/** Schrittnamen = Knotennamen des Flows (der gegangene Pfad). */
 	schritte: Schritt[]
 	/** Frei geformt — nur die Signatur des Skills versteht ihre Daten. */
@@ -470,6 +476,107 @@ export const intents: Intent[] = [
 							festgeschrieben: 'Journal J-2026-0803 · 13.08.2026'
 						}
 					}
+				]
+			}
+		]
+	},
+	{
+		id: 'i-auszug',
+		titel: 'Kontoauszug August · CSV',
+		ziel: 'Die Umsätze einlesen und gegen die offenen Posten abgleichen.',
+		quelle: 'aus Bank-Export „auszug-2026-08.csv"',
+		erfasst: '19.08. 07:30',
+		runs: [
+			{
+				id: 'r-auszug-inbox',
+				skill: 'Inbox',
+				skillId: 'inbox',
+				flow: 'inbox-triage',
+				zweck: 'Aus dem CSV lesbare Transaktionen machen',
+				zustand: 'fertig',
+				// DERSELBE Inbox-Flow wie beim Beleg — nur der andere Pfad:
+				// die Triage schickt Auszüge über die Auszugsweiche, nicht
+				// über die Belegextraktion.
+				daten: { fakt: 'auszug-2026-08.csv · 18 Umsätze gelesen' },
+				schritte: [
+					{ name: 'Upload', zustand: 'done' },
+					{ name: 'Annehmen', zustand: 'done' },
+					{ name: 'Vorgänge trennen', zustand: 'done' },
+					{ name: 'Klassifizieren', zustand: 'done' },
+					{ name: 'Triage', zustand: 'done' },
+					{ name: 'Auszugsweiche', zustand: 'done' },
+					{ name: 'CSV parsen', zustand: 'done' },
+					{ name: '→ Buchhaltung', zustand: 'done' }
+				]
+			},
+			{
+				id: 'r-auszug-abgleich',
+				skill: 'Buchhaltung',
+				skillId: 'buchhaltung',
+				flow: 'zahlungsabgleich',
+				zweck: 'Umsätze gegen offene Posten matchen',
+				zustand: 'fertig',
+				braucht: { run: 'r-auszug-inbox', was: 'Transaktionen (Übergabe)' },
+				daten: { fakt: '15 von 18 Umsätzen automatisch abgeglichen — 3 an die Klärung' },
+				schritte: [
+					{ name: 'Transaktionen', zustand: 'done' },
+					{ name: 'Zahlung matchen', zustand: 'done' },
+					{ name: 'Abgeglichene Zahlungen', zustand: 'done' },
+					{ name: '→ HITL', zustand: 'done' }
+				]
+			},
+			{
+				id: 'r-auszug-hitl',
+				skill: 'HITL',
+				skillId: 'hitl',
+				flow: 'hitl-posteingang',
+				zweck: 'Drei Umsätze ohne Gegenstück brauchen ein Urteil',
+				zustand: 'wartet-mensch',
+				braucht: { run: 'r-auszug-abgleich', was: 'Übergabe „unklar"' },
+				schritte: [
+					{ name: 'Unklares', zustand: 'done' },
+					{ name: 'Nach Risiko sortieren', zustand: 'done' },
+					{ name: 'Entscheiden', zustand: 'current' }
+				],
+				daten: {
+					notiz: '−89,00 € · „AMAZON MKTP" · 16.08. — und 2 weitere ohne offenen Posten',
+					befund: 'kein offener Posten passt · Risiko niedrig · 1 von 3',
+					aktionen: ['zuordnen', 'als privat', 'vertagen']
+				}
+			}
+		]
+	},
+	{
+		id: 'i-monat',
+		titel: 'Monatsabschluss August 2026',
+		ziel: 'Alle Buchungen des Monats festschreiben und als EXTF an den Berater geben.',
+		// Der Ursprung ist die PERIODE, kein Ereignis von außen: der
+		// DATEV-Export läuft am Monatsende, nicht am Beleg.
+		quelle: 'aus Periode „August 2026"',
+		erfasst: '01.08.',
+		runs: [
+			{
+				id: 'r-monat-export',
+				skill: 'Buchhaltung',
+				skillId: 'buchhaltung',
+				flow: 'datev-export',
+				zweck: 'Festgeschriebenes bündeln, Vorsteuer falten, EXTF schreiben',
+				zustand: 'wartet-ergebnis',
+				// Die große Abhängigkeit: nicht ein Geschwister-Lauf, sondern
+				// GANZE Intents — jeder Beleg ist ein Intent, und der Monat
+				// wartet auf sie alle.
+				braucht: {
+					intents: ['i-mueller', 'i-liefer', 'i-bergmann', 'i-weber', 'i-auszug'],
+					was: 'alle Vorgänge des Monats festgeschrieben'
+				},
+				daten: { fakt: 'August 2026 · 1 von 5 Vorgängen abgeschlossen · EXTF wartet' },
+				schritte: [
+					{ name: 'Festgeschriebene Buchungen', zustand: 'blocked' },
+					{ name: 'Stapel bilden', zustand: 'pending' },
+					{ name: 'Vorsteuer falten', zustand: 'pending' },
+					{ name: 'EXTF schreiben', zustand: 'pending' },
+					{ name: 'Prüfen', zustand: 'pending' },
+					{ name: 'EXTF-Datei', zustand: 'pending' }
 				]
 			}
 		]
