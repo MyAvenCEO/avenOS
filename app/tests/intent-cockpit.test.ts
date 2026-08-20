@@ -4,11 +4,12 @@ import { skills } from '../src/lib/fibu/skill-config'
 import {
 	alleLaeufe,
 	eingaenge,
-	FACE_KEYS,
+	fund,
 	type Intent,
 	intentStatus,
 	intents,
-	type SkillRun
+	type SkillRun,
+	spur
 } from '../src/lib/intents/mock-intents'
 
 /**
@@ -135,15 +136,39 @@ describe('intent cockpit: an den echten Registries verankert', () => {
 		expect(new Set(intents.map(intentStatus)).size).toBe(3)
 	})
 
-	test('Gesichter: nur bekannte — und Kompositionen dürfen keins haben', () => {
-		for (const r of tief) {
-			if (r.face) expect(FACE_KEYS).toContain(r.face)
+	test('die Spur drückt Tiefe zu einem Pfad platt — bis zum arbeitenden Blatt', () => {
+		// Bergmann: drei Ebenen Komposition ⇒ drei Pfadglieder, Blatt zuletzt.
+		const inbox = intents
+			.find((i) => i.id === 'i-bergmann')
+			?.runs.find((r) => r.skillId === 'inbox')
+		expect(inbox).toBeDefined()
+		if (!inbox) return
+		expect(spur(inbox).pfad).toEqual(['Belege extrahieren', 'Scan lesen', 'Vision-OCR'])
+		// Und generell: wer arbeitet oder auf einen Menschen wartet, hat
+		// einen nicht-leeren Pfad; wer fertig ist, hat keinen.
+		for (const i of intents) {
+			for (const r of i.runs) {
+				const p = spur(r).pfad
+				if (r.zustand === 'laeuft' || r.zustand === 'wartet-mensch') {
+					expect(p.length).toBeGreaterThan(0)
+				}
+				if (r.zustand === 'fertig') expect(p.length).toBe(0)
+			}
 		}
-		// Die Pointe der Komposition: mindestens ein Lauf zeigt STRUKTUR
-		// statt Fachlichem — Kinder ja, Gesicht nein.
-		expect(tief.some((r) => (r.unter?.length ?? 0) > 0 && !r.face)).toBe(true)
 	})
 
+	test('fund() holt die Fakten der Blätter an die Karte', () => {
+		// Die Buchungszeilen liegen im verschachtelten Buchungsvorgang —
+		// die Karte fragt den Baum, nicht eine zweite Datenablage.
+		const buchhaltung = intents
+			.find((i) => i.id === 'i-mueller')
+			?.runs.find((r) => r.skillId === 'buchhaltung')
+		expect(buchhaltung).toBeDefined()
+		if (!buchhaltung) return
+		expect(buchhaltung.daten?.zeilen).toBeUndefined()
+		expect(fund(buchhaltung, 'zeilen')).toBeDefined()
+		expect(fund<boolean>(buchhaltung, 'festschreibbar')).toBe(true)
+	})
 	test('das Cockpit ist nicht domänen-spezifisch: vier verschiedene Skills arbeiten', () => {
 		const beteiligte = new Set(intents.flatMap((i) => i.runs.map((r) => r.skillId)))
 		for (const s of ['inbox', 'buchhaltung', 'hitl', 'intents']) {

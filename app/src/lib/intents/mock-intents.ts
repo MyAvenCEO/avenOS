@@ -30,10 +30,6 @@ export interface Schritt {
 	zustand: 'done' | 'current' | 'blocked' | 'pending'
 }
 
-/** Die Gesichter, die es gibt — der Rahmen kennt nur diesen Schlüssel. */
-export const FACE_KEYS = ['match', 'buchung', 'triage'] as const
-export type FaceKey = (typeof FACE_KEYS)[number]
-
 export interface SkillRun {
 	id: string
 	/** Anzeigename; bei Top-Level-Läufen der Skill, bei Kindern der Flow. */
@@ -49,9 +45,7 @@ export interface SkillRun {
 	braucht?: { run: string; was: string }
 	/** Schrittnamen = Knotennamen des Flows (der gegangene Pfad). */
 	schritte: Schritt[]
-	/** Optional: Kompositionen haben keins — ihr Inhalt sind die Kinder. */
-	face?: FaceKey
-	/** Frei geformt — nur das jeweilige Gesicht versteht seine Daten. */
+	/** Frei geformt — nur die Signatur des Skills versteht ihre Daten. */
 	daten?: Record<string, unknown>
 	/** Welcher Schritt des ELTERN-Laufs dieser Lauf ist (nur bei Kindern). */
 	alsSchritt?: string
@@ -83,6 +77,35 @@ export function intentStatus(intent: Intent): IntentStatus {
 	if (intent.runs.some((r) => r.zustand === 'wartet-mensch')) return 'braucht-dich'
 	if (intent.runs.every((r) => r.zustand === 'fertig')) return 'fertig'
 	return 'laeuft'
+}
+
+/**
+ * Die SPUR eines Laufs: die Rekursion, plattgedrückt auf das, was ein
+ * Mensch braucht. Oben die eigenen Schritte als Punkte; darunter — egal
+ * wie tief die Komposition ist — EINE Pfadzeile vom aktuellen Schritt
+ * bis zum Blatt, an dem wirklich gearbeitet wird. Tiefe ist ein Pfad,
+ * keine Schachtel.
+ */
+export function spur(run: SkillRun): { pfad: string[]; erledigt: number } {
+	const pfad: string[] = []
+	let aktuell: SkillRun | undefined = run
+	while (aktuell) {
+		const dran: Schritt | undefined = aktuell.schritte.find((s) => s.zustand === 'current')
+		if (!dran) break
+		pfad.push(dran.name)
+		aktuell = aktuell.unter?.find((u) => u.alsSchritt === dran.name)
+	}
+	return { pfad, erledigt: run.schritte.filter((s) => s.zustand === 'done').length }
+}
+
+/** Sucht einen Daten-Schlüssel im Baum — das Blatt weiß es, die Karte fragt. */
+export function fund<T>(run: SkillRun, schluessel: string): T | undefined {
+	if (run.daten && schluessel in run.daten) return run.daten[schluessel] as T
+	for (const u of run.unter ?? []) {
+		const w = fund<T>(u, schluessel)
+		if (w !== undefined) return w
+	}
+	return undefined
 }
 
 /** Alle Läufe eines Intents, rekursiv — für Bilanz und Verträge. */
@@ -125,6 +148,7 @@ export const intents: Intent[] = [
 				flow: 'inbox-triage',
 				zweck: 'Aus dem Scan lesbare Positionen machen',
 				zustand: 'fertig',
+				daten: { fakt: 'RE-2026-081 · 3 Positionen gelesen · Konfidenz 91 %' },
 				schritte: [
 					{ name: 'Upload', zustand: 'done' },
 					{ name: 'Annehmen', zustand: 'done' },
@@ -196,7 +220,6 @@ export const intents: Intent[] = [
 							{ name: 'Zahlung matchen', zustand: 'done' },
 							{ name: 'Abgeglichene Zahlungen', zustand: 'done' }
 						],
-						face: 'match',
 						daten: {
 							gewaehlt: '12.08. · −450,00 € · „MUELLER GMBH RE081 DANKE"',
 							score: 0.92,
@@ -218,13 +241,13 @@ export const intents: Intent[] = [
 							{ name: 'Freigabe Buchhalter', zustand: 'current' },
 							{ name: 'Festschreiben', zustand: 'pending' }
 						],
-						face: 'buchung',
 						daten: {
 							zeilen: [
 								{ konto: '6815', bez: 'Bürobedarf', soll: '378,15', haben: '' },
 								{ konto: '1406', bez: 'Vorsteuer 19 %', soll: '71,85', haben: '' },
 								{ konto: '3300', bez: 'Verbindlichkeiten aLuL', soll: '', haben: '450,00' }
 							],
+							summe: '450,00',
 							festschreibbar: true
 						}
 					}
@@ -246,6 +269,7 @@ export const intents: Intent[] = [
 				flow: 'inbox-triage',
 				zweck: 'Den Scan einer Klasse zuordnen',
 				zustand: 'fertig',
+				daten: { fakt: 'keine Klasse über der Schwelle — an HITL übergeben' },
 				schritte: [
 					{ name: 'Upload', zustand: 'done' },
 					{ name: 'Annehmen', zustand: 'done' },
@@ -268,7 +292,6 @@ export const intents: Intent[] = [
 					{ name: 'Nach Risiko sortieren', zustand: 'done' },
 					{ name: 'Entscheiden', zustand: 'current' }
 				],
-				face: 'triage',
 				daten: {
 					notiz: 'scan-2026-08-12-0003.pdf — vermutlich ein Lieferschein',
 					befund: 'kein Belegtyp über der Schwelle — weder Rechnung noch Kontoauszug',
@@ -297,10 +320,14 @@ export const intents: Intent[] = [
 					{ name: 'Intent-Weiche', zustand: 'done' },
 					{ name: 'Unklares einordnen', zustand: 'current' }
 				],
-				face: 'triage',
 				daten: {
 					notiz: 'irgendwas mit Sichtbarkeit und Vertrauen — später nochmal denken',
 					befund: 'kein klares Urteil — bester Wert 41 % unter der Schwelle',
+					klassen: [
+						{ label: 'idee', wert: 0.41 },
+						{ label: 'todo', wert: 0.31 },
+						{ label: 'unbekannt', wert: 0.28 }
+					],
 					aktionen: ['als-idee', 'als-todo', 'verwerfen']
 				}
 			}
@@ -320,6 +347,7 @@ export const intents: Intent[] = [
 				flow: 'inbox-triage',
 				zweck: 'Aus dem Scan lesbare Positionen machen',
 				zustand: 'laeuft',
+				daten: { fakt: 'liest den Scan — Schema „rechnung" gewählt' },
 				schritte: [
 					{ name: 'Upload', zustand: 'done' },
 					{ name: 'Annehmen', zustand: 'done' },
@@ -394,6 +422,7 @@ export const intents: Intent[] = [
 				flow: 'inbox-triage',
 				zweck: 'Aus dem Scan lesbare Positionen machen',
 				zustand: 'fertig',
+				daten: { fakt: 'RE-2026-069 · 2 Positionen gelesen · Konfidenz 95 %' },
 				schritte: [
 					{ name: 'Upload', zustand: 'done' },
 					{ name: 'Annehmen', zustand: 'done' },
@@ -431,13 +460,13 @@ export const intents: Intent[] = [
 							{ name: 'Freigabe Buchhalter', zustand: 'done' },
 							{ name: 'Festschreiben', zustand: 'done' }
 						],
-						face: 'buchung',
 						daten: {
 							zeilen: [
 								{ konto: '6805', bez: 'Telefon', soll: '747,90', haben: '' },
 								{ konto: '1406', bez: 'Vorsteuer 19 %', soll: '142,10', haben: '' },
 								{ konto: '3300', bez: 'Verbindlichkeiten aLuL', soll: '', haben: '890,00' }
 							],
+							summe: '890,00',
 							festgeschrieben: 'Journal J-2026-0803 · 13.08.2026'
 						}
 					}
