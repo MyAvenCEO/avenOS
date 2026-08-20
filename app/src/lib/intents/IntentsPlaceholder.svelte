@@ -1,19 +1,28 @@
 <script lang="ts">
+import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
+import '@xyflow/svelte/dist/style.css'
+import { hitlQueue } from '$lib/actors/hitl.svelte'
+import FitView from '$lib/mesh/FitView.svelte'
+import FlowNode from '$lib/skills/FlowNode.svelte'
+import { layoutWorkflow } from '$lib/skills/flow-layout'
+import { skillById } from '$lib/skills/registry'
+
 /**
- * The Intents workspace — MOCKED (0158), deliberately outside the
- * actor/flow architecture: no bus, no skills, hardcoded data only. Three
- * panes in the mail-app reading:
+ * The Intents workspace — instances MOCKED (0158), but the skill flows are
+ * the REAL templates from the skills registry: template and instance are
+ * one source. Three panes in the mail-app reading:
  *
  *   left   — the intent stream (compact cards, cream selection)
  *   center — the ACTIVITY LOG (every entry TYPED by the skill that wrote
- *            it), OR an artifact preview (full width), OR a skill's
- *            flow stepper — depending on what is selected
- *   right  — SKILLS (each with where it stands; click → stepper) above
+ *            it), OR an artifact preview (full width), OR the skill's
+ *            ACTUAL workflow rendered as the n8n canvas with the
+ *            instance state overlaid on its nodes
+ *   right  — SKILLS (click → the instance-on-template flow) above
  *            ARTIFACTS (click → preview)
  *
- * An intent combines many artifacts and skill/flows to solve one task —
- * fed by the (invisible) inbox flow: ingest → archive → classify →
- * extract intents → trigger skill-flows.
+ * A PENDING HITL never lives in the log alone: it surfaces in the global
+ * HITL bar above the voice pill (the one confirm interface); the log
+ * keeps the entry as history. Submitted/answered gates stay log lines.
  */
 
 interface LogEntry {
@@ -37,8 +46,12 @@ interface SkillStatus {
 	skill: string
 	state: 'done' | 'running' | 'waiting'
 	note: string
-	/** How many of the skill's flow steps are completed for this intent. */
-	step: number
+	/** Which workflow of the TEMPLATE this instance runs. */
+	workflow: string
+	/** Node ids (of the template workflow) already completed. */
+	done: string[]
+	/** The node the instance currently sits on, if any. */
+	current?: string
 }
 interface MockIntent {
 	id: string
@@ -76,16 +89,6 @@ const KIND_LABEL: Record<string, string> = {
 	person: 'WER',
 	entity: 'BRAIN',
 	statement: 'KONTO'
-}
-
-/** Every skill's canonical flow — the stepper the right aside opens. */
-const SKILL_STEPS: Record<string, string[]> = {
-	inbox: ['Eingang', 'Klassifiziert', 'Intent', 'Geroutet'],
-	todos: ['Angelegt', 'Offen', 'Erledigt'],
-	calendar: ['Eingetragen', 'Erinnert', 'Frist'],
-	docs: ['Entwurf', 'Freigabe', 'Erledigt'],
-	brain: ['Erkannt', 'Verknüpft', 'Angereichert'],
-	abgleich: ['Wartet', 'Abgeglichen', 'Abgehakt']
 }
 
 const INTENTS: MockIntent[] = [
@@ -156,11 +159,44 @@ const INTENTS: MockIntent[] = [
 			{ kind: 'entity', title: '[[Versicherungen 2025]]', note: 'Brain · 4 Verknüpfungen' }
 		],
 		skills: [
-			{ skill: 'inbox', state: 'done', note: 'klassifiziert · Intent extrahiert', step: 4 },
-			{ skill: 'todos', state: 'done', note: '1 Todo angelegt · offen', step: 2 },
-			{ skill: 'calendar', state: 'done', note: 'Frist 15.09. eingetragen', step: 1 },
-			{ skill: 'docs', state: 'waiting', note: 'Antwortentwurf wartet auf Freigabe', step: 1 },
-			{ skill: 'brain', state: 'running', note: 'verknüpft mit [[Versicherungen 2025]]', step: 2 }
+			{
+				skill: 'inbox',
+				state: 'done',
+				note: 'klassifiziert · Intent extrahiert',
+				workflow: 'intake',
+				done: ['mail-trigger', 'upload-trigger', 'normalize', 'classify', 'route']
+			},
+			{
+				skill: 'todos',
+				state: 'done',
+				note: '1 Todo angelegt · offen',
+				workflow: 'capture',
+				done: ['voice-trigger', 'create', 'list-view', 'board-view']
+			},
+			{
+				skill: 'calendar',
+				state: 'done',
+				note: 'Frist 15.09. eingetragen',
+				workflow: 'frist',
+				done: ['date-trigger', 'schedule'],
+				current: 'remind'
+			},
+			{
+				skill: 'docs',
+				state: 'waiting',
+				note: 'Antwortentwurf wartet auf Freigabe',
+				workflow: 'respond',
+				done: ['request-trigger', 'draft'],
+				current: 'approve'
+			},
+			{
+				skill: 'brain',
+				state: 'running',
+				note: 'verknüpft mit [[Versicherungen 2025]]',
+				workflow: 'verknuepfen',
+				done: ['entity-trigger', 'resolve', 'link'],
+				current: 'enrich'
+			}
 		]
 	},
 	{
@@ -210,9 +246,28 @@ const INTENTS: MockIntent[] = [
 			{ kind: 'person', title: 'Möbelhaus Nord GmbH', note: 'Firma · Lieferant' }
 		],
 		skills: [
-			{ skill: 'inbox', state: 'done', note: 'klassifiziert als Rechnung', step: 4 },
-			{ skill: 'todos', state: 'done', note: '1 Todo angelegt · offen', step: 2 },
-			{ skill: 'abgleich', state: 'running', note: 'wartet auf den nächsten Kontoauszug', step: 0 }
+			{
+				skill: 'inbox',
+				state: 'done',
+				note: 'klassifiziert als Rechnung',
+				workflow: 'intake',
+				done: ['mail-trigger', 'upload-trigger', 'normalize', 'classify', 'route']
+			},
+			{
+				skill: 'todos',
+				state: 'done',
+				note: '1 Todo angelegt · offen',
+				workflow: 'capture',
+				done: ['voice-trigger', 'create', 'list-view', 'board-view']
+			},
+			{
+				skill: 'abgleich',
+				state: 'running',
+				note: 'wartet auf den nächsten Kontoauszug',
+				workflow: 'match',
+				done: [],
+				current: 'statement-trigger'
+			}
 		]
 	},
 	{
@@ -268,10 +323,25 @@ const INTENTS: MockIntent[] = [
 				skill: 'brain',
 				state: 'running',
 				note: '12 Artefakte verknüpft · sammelt weiter',
-				step: 2
+				workflow: 'verknuepfen',
+				done: ['entity-trigger', 'resolve', 'link'],
+				current: 'enrich'
 			},
-			{ skill: 'todos', state: 'done', note: 'Frist-Todo angelegt', step: 2 },
-			{ skill: 'docs', state: 'running', note: 'ordnet neue Dokumente automatisch zu', step: 1 }
+			{
+				skill: 'todos',
+				state: 'done',
+				note: 'Frist-Todo angelegt',
+				workflow: 'capture',
+				done: ['voice-trigger', 'create', 'list-view']
+			},
+			{
+				skill: 'docs',
+				state: 'running',
+				note: 'ordnet neue Dokumente automatisch zu',
+				workflow: 'respond',
+				done: ['request-trigger'],
+				current: 'draft'
+			}
 		]
 	},
 	{
@@ -312,8 +382,20 @@ const INTENTS: MockIntent[] = [
 			{ kind: 'todo', title: 'Miete August überweisen', note: 'erledigt · abgeglichen' }
 		],
 		skills: [
-			{ skill: 'abgleich', state: 'done', note: '38 Transaktionen · 7 zugeordnet', step: 3 },
-			{ skill: 'todos', state: 'done', note: '6 Todos abgehakt', step: 3 }
+			{
+				skill: 'abgleich',
+				state: 'done',
+				note: '38 Transaktionen · 7 zugeordnet',
+				workflow: 'match',
+				done: ['statement-trigger', 'match', 'tick']
+			},
+			{
+				skill: 'todos',
+				state: 'done',
+				note: '6 Todos abgehakt',
+				workflow: 'capture',
+				done: ['voice-trigger', 'create', 'list-view', 'board-view']
+			}
 		]
 	},
 	{
@@ -348,8 +430,22 @@ const INTENTS: MockIntent[] = [
 		],
 		artifacts: [{ kind: 'entity', title: '[[FitX Vertrag]]', note: 'Brain · gesucht…' }],
 		skills: [
-			{ skill: 'docs', state: 'running', note: 'durchsucht das Archiv', step: 0 },
-			{ skill: 'brain', state: 'waiting', note: 'wartet auf den Vertrag', step: 0 }
+			{
+				skill: 'docs',
+				state: 'running',
+				note: 'durchsucht das Archiv',
+				workflow: 'respond',
+				done: ['request-trigger'],
+				current: 'draft'
+			},
+			{
+				skill: 'brain',
+				state: 'waiting',
+				note: 'wartet auf den Vertrag',
+				workflow: 'verknuepfen',
+				done: [],
+				current: 'entity-trigger'
+			}
 		]
 	}
 ]
@@ -364,6 +460,77 @@ const selected = $derived(INTENTS.find((i) => i.id === selectedId) ?? INTENTS[0]
  */
 let preview = $state<MockArtifact | null>(null)
 let skillView = $state<SkillStatus | null>(null)
+
+/**
+ * The pending HITL of the mock surfaces where every held message lives:
+ * the GLOBAL bar above the voice pill. Seeded once; Confirm/Reject there
+ * simply clears it (the mock has nothing to execute).
+ */
+if (!hitlQueue.items.some((h) => h.id === 'mock-docs-tk')) {
+	hitlQueue.items.push({
+		id: 'mock-docs-tk',
+		actor: 'docs',
+		method: 'draft_approve',
+		label: 'Antwortentwurf an die TK freigeben',
+		detail: 'Intent „Krankenkasse: Nachweis bis 15.09." · Entwurf bereit'
+	})
+}
+
+/**
+ * The selected skill instance rendered ON its template workflow — the
+ * same layout + node cards as the Skills viewer, the instance state
+ * (done/current) overlaid per node.
+ */
+let sfNodes = $state.raw<Node[]>([])
+let sfEdges = $state.raw<Edge[]>([])
+$effect.pre(() => {
+	const view = skillView
+	if (!view) {
+		sfNodes = []
+		sfEdges = []
+		return
+	}
+	const template = skillById(view.skill)
+	const wf = template?.workflows.find((w) => w.id === view.workflow) ?? template?.workflows[0]
+	if (!wf) {
+		sfNodes = []
+		sfEdges = []
+		return
+	}
+	const laid = layoutWorkflow(wf)
+	sfNodes = laid.nodes.map((n) => ({
+		id: n.id,
+		type: 'flow',
+		position: n.position,
+		draggable: false,
+		data: {
+			node: n.node,
+			selected: false,
+			instance: view.done.includes(n.id)
+				? ('done' as const)
+				: n.id === view.current
+					? view.state === 'waiting'
+						? ('waiting' as const)
+						: ('running' as const)
+					: undefined
+		}
+	}))
+	sfEdges = laid.edges.map((e, i) => ({
+		id: `${e.from}-${e.predicate}-${e.to}-${i}`,
+		source: e.from,
+		target: e.to,
+		label: e.predicate,
+		type: 'smoothstep',
+		style: 'stroke: rgba(47,93,80,0.5); stroke-width: 1.5;',
+		labelStyle: 'font-size: 10px; fill: rgba(30,41,59,0.7);',
+		labelBgStyle: 'fill: #f8f6ef;',
+		labelBgPadding: [4, 2] as [number, number],
+		labelBgBorderRadius: 4
+	}))
+})
+const sfNodeTypes = { flow: FlowNode }
+let sfW = $state(0)
+let sfH = $state(0)
 
 const DOT: Record<string, string> = {
 	done: 'bg-[#2f5d50] text-white',
@@ -442,7 +609,6 @@ const DOT: Record<string, string> = {
 	>
 		{#if skillView}
 			<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
-			{@const steps = SKILL_STEPS[skillView.skill] ?? []}
 			{@const skillLog = selected.log.filter((e) => e.skill === skillView?.skill)}
 			<header class="flex items-center gap-3">
 				<span
@@ -460,56 +626,27 @@ const DOT: Record<string, string> = {
 			</header>
 			<div class="border-border border-b"></div>
 
-			<!-- the stepper: the skill's canonical flow, current position marked -->
-			<ol class="flex items-center gap-0 pt-2">
-				{#each steps as label, i (label)}
-					{@const done = i < skillView.step}
-					{@const current = i === skillView.step}
-					<li class="flex flex-1 items-center">
-						<div class="flex flex-col items-center gap-1.5">
-							<span
-								class="flex size-8 items-center justify-center rounded-full font-mono text-xs {done
-									? 'bg-[#2f5d50] text-white'
-									: current
-										? skillView.state === 'waiting'
-											? 'bg-[#c15b40] text-white ring-4 ring-[#c15b40]/15'
-											: 'bg-[#a06818] text-white ring-4 ring-[#a06818]/15'
-										: 'bg-surface-soft text-foreground/40'}"
-							>
-								{#if done}
-									<svg
-										viewBox="0 0 24 24"
-										class="size-3.5"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="3"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<path d="m5 13 4 4L19 7" />
-									</svg>
-								{:else}
-									{i + 1}
-								{/if}
-							</span>
-							<span
-								class="whitespace-nowrap text-[0.6875rem] {done || current
-									? 'font-medium'
-									: 'text-foreground/40'}"
-							>
-								{label}
-							</span>
-						</div>
-						{#if i < steps.length - 1}
-							<div
-								class="mx-2 mb-5 h-px flex-1 {i < skillView.step
-									? 'bg-[#2f5d50]/40'
-									: 'bg-foreground/10'}"
-							></div>
-						{/if}
-					</li>
-				{/each}
-			</ol>
+			<!-- the ACTUAL template workflow (same cards as the Skills viewer),
+			     the instance state overlaid: ✓ done, amber running, red waiting -->
+			<div
+				bind:clientWidth={sfW}
+				bind:clientHeight={sfH}
+				class="h-[340px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/60"
+			>
+				{#key skillView.skill}
+					<SvelteFlow
+						nodes={sfNodes}
+						edges={sfEdges}
+						nodeTypes={sfNodeTypes}
+						fitView
+						minZoom={0.15}
+						proOptions={{ hideAttribution: true }}
+					>
+						<Background bgColor="transparent" patternColor="rgba(30,41,59,0.08)" />
+						<FitView w={sfW} h={sfH} />
+					</SvelteFlow>
+				{/key}
+			</div>
 
 			<!-- what this skill logged into the intent's stream -->
 			{#if skillLog.length > 0}
@@ -629,18 +766,59 @@ const DOT: Record<string, string> = {
 					{/each}
 				</div>
 			{:else}
-				<!-- brain entity: the wikilink view -->
-				<div class="w-full pt-2">
-					<p class="font-mono text-[#655687] text-sm">{preview.title}</p>
-					<p class="pt-1 text-foreground/50 text-xs">{preview.note}</p>
-					<div class="mt-4 flex flex-wrap gap-1.5">
-						{#each ['[[Krankenkasse]]', '[[Einkommensnachweis]]', '[[Fristen 2025]]', '[[Steuer 2023]]'] as link (link)}
+				<!-- brain entity: an Obsidian-style markdown note with wikilinks -->
+				<div class="w-full max-w-2xl pt-2 font-mono text-[13px] leading-relaxed">
+					<p class="text-foreground/35">---</p>
+					<p class="text-foreground/55">
+						tags: <span class="text-[#a06818]">#versicherung #frist</span>
+					</p>
+					<p class="text-foreground/55">erstellt: 2025-08-12 · quelle: inbox</p>
+					<p class="pb-3 text-foreground/35">---</p>
+					<h1 class="pb-2 font-sans font-semibold text-xl">
+						{preview.title.replaceAll('[', '').replaceAll(']', '')}
+					</h1>
+					<p class="pb-3 text-foreground/75">
+						Sammelt alles rund um Versicherungen in 2025. Der Brief der
+						<span
+							class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+							>[[Techniker Krankenkasse]]</span
+						>
+						verlangt einen
+						<span
+							class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+							>[[Einkommensnachweis]]</span
+						>
+						bis zur Frist am 15.09. — das Todo hängt an
+						<span
+							class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+							>[[Fristen 2025]]</span
+						>.
+					</p>
+					<p class="pb-1 text-foreground/75">## Offen</p>
+					<p class="pb-0.5 text-foreground/75">
+						- [ ] Nachweis einreichen <span class="text-foreground/40">(fällig 12.09.)</span>
+					</p>
+					<p class="pb-3 text-foreground/75">
+						- [x] <span class="line-through opacity-60">Brief archivieren</span>
+					</p>
+					<p class="pb-1 text-foreground/75">## Verknüpft</p>
+					<div class="flex flex-wrap gap-1.5 pb-4">
+						{#each ['[[Techniker Krankenkasse]]', '[[Einkommensnachweis]]', '[[Fristen 2025]]', '[[Steuer 2023]]'] as link (link)}
 							<span
-								class="rounded-full bg-[#7e6ead]/10 px-2.5 py-1 font-mono text-[#655687] text-[0.625rem]"
+								class="cursor-pointer rounded-md bg-[#7e6ead]/10 px-2 py-0.5 text-[#655687] text-xs"
+								>{link}</span
 							>
-								{link}
-							</span>
 						{/each}
+					</div>
+					<div class="border-border border-t pt-3">
+						<p
+							class="pb-1 font-sans font-semibold text-foreground/50 text-xs uppercase tracking-wide"
+						>
+							Backlinks · 3
+						</p>
+						<p class="text-foreground/55 text-xs">
+							[[Krankenkasse: Nachweis bis 15.09.]] · [[Steuer 2023]] · [[Post-Eingang August]]
+						</p>
 					</div>
 				</div>
 			{/if}
@@ -744,20 +922,9 @@ const DOT: Record<string, string> = {
 									<p class="font-medium text-xs">{entry.card.title}</p>
 									<p class="pt-1 text-foreground/55 text-xs leading-relaxed">{entry.card.text}</p>
 									{#if entry.hitl}
-										<div class="flex gap-2 pt-3">
-											<button
-												type="button"
-												class="rounded-full bg-primary px-4 py-1.5 font-medium text-primary-foreground text-xs"
-											>
-												Freigeben
-											</button>
-											<button
-												type="button"
-												class="rounded-full border border-foreground/10 px-4 py-1.5 font-medium text-foreground/60 text-xs"
-											>
-												Ablehnen
-											</button>
-										</div>
+										<p class="pt-2 font-mono text-[#9c4832] text-[0.625rem]">
+											→ wartet in der globalen Freigabe-Leiste über der Voice-Pill
+										</p>
 									{/if}
 								</div>
 							{/if}

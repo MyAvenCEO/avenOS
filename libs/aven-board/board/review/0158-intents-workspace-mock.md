@@ -50,6 +50,16 @@ Mock only: hardcoded data, no bus/skills imports (like the current placeholder).
 
 ## Progress log
 
+- `2026-08-20` — Iteration 4 (Samuel): TEMPLATE ↔ INSTANCE SYNC — the skill flows in the
+  intent screen are now the REAL templates from lib/skills/registry (docs/calendar/brain/
+  abgleich added as declared SkillDefs → the catalog holds all 6 epic skills); clicking a
+  skill renders its actual workflow via SvelteFlow with the SAME FlowNode cards as the
+  Skills viewer, instance state overlaid per node (✓ done / amber running / red waiting —
+  SkillStatus now carries workflow/done/current instead of a step counter). Brain artifact
+  preview is an Obsidian-style markdown note (frontmatter, wikilinks, checkboxes,
+  backlinks). PENDING HITL moved into the GLOBAL confirm bar above the voice pill (seeded
+  into the real hitlQueue; the log keeps the entry as history with a pointer). The mock now
+  deliberately imports the skills templates + hitl queue — instances stay mocked.
 - `2026-08-20` — Iteration 3 (Samuel): activity log TYPED per skill (each entry carries
   a clickable skill chip); skill cards match artifact-card roundedness; clicking a skill
   opens its FLOW STEPPER in the center (canonical steps, current position ringed, plus

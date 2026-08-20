@@ -11,11 +11,23 @@ import type { FlowNodeDef } from './skill'
 const {
 	data
 }: {
-	data: { node: FlowNodeDef; selected: boolean; door?: boolean }
+	data: {
+		node: FlowNodeDef
+		selected: boolean
+		door?: boolean
+		/** Instance overlay: this node's state in a RUNNING skill instance. */
+		instance?: 'done' | 'running' | 'waiting'
+	}
 } = $props()
 
 const n = $derived(data.node)
 const verb = $derived(n.type.split(':')[0])
+
+const INSTANCE_RING: Record<string, string> = {
+	done: 'ring-2 ring-[#2f5d50]/30',
+	running: 'ring-2 ring-[#a06818]/40',
+	waiting: 'ring-2 ring-[#c15b40]/40'
+}
 
 const BADGE: Record<string, string> = {
 	trigger: 'bg-[#2f5d50]/12 text-[#2f5d50]',
@@ -34,7 +46,7 @@ const BADGE: Record<string, string> = {
 			? 'border border-[#2f5d50]/40 bg-[#fffdf7]'
 			: 'border border-foreground/5 bg-[#fffdf7]'} {data.selected
 		? 'border-primary ring-2 ring-primary/20'
-		: ''}"
+		: (data.instance && INSTANCE_RING[data.instance]) || ''}"
 >
 	<Handle type="target" position={Position.Left} />
 	<div class="flex items-center gap-1.5 pb-1">
@@ -46,7 +58,29 @@ const BADGE: Record<string, string> = {
 			{data.door ? 'skill' : verb}
 		</span>
 		<span class="font-medium text-sm leading-tight">{data.door ? `→ ${n.name}` : n.name}</span>
-		{#if n.live}
+		{#if data.instance === 'done'}
+			<!-- the instance overlay: this node already ran for the intent -->
+			<span
+				class="ml-auto flex size-4 items-center justify-center rounded-full bg-[#2f5d50] text-white"
+				title="erledigt"
+			>
+				<svg
+					viewBox="0 0 24 24"
+					class="size-2.5"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="3.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="m5 13 4 4L19 7" />
+				</svg>
+			</span>
+		{:else if data.instance === 'running'}
+			<span class="ml-auto size-2 animate-pulse rounded-full bg-[#a06818]" title="läuft"></span>
+		{:else if data.instance === 'waiting'}
+			<span class="ml-auto size-2 rounded-full bg-[#c15b40]" title="wartet"></span>
+		{:else if n.live}
 			<span class="ml-auto size-1.5 rounded-full bg-status-success" title="live"></span>
 		{/if}
 	</div>
