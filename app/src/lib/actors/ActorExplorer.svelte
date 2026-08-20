@@ -3,7 +3,6 @@ import ActorGraph from './ActorGraph.svelte'
 import { type Actor, functor } from './actor'
 import { bus, type Run, type TraceEntry } from './bus'
 import { registryTick } from './reactivity.svelte'
-import { isVariable, resolve } from './term'
 import { isWindow } from './window.actor.svelte'
 
 /**

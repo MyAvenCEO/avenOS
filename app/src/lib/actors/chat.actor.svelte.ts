@@ -4,12 +4,9 @@ import type { Activity } from './activity.svelte'
 import { activity } from './activity.svelte'
 import { Actor } from './actor'
 import { bus } from './bus'
-import { catalog } from './catalog'
 import { LlmActor } from './llm.actor'
-import { NegotiatorActor } from './negotiator.actor'
 import { RegistryActor } from './registry.actor'
 import { singleton } from './singleton'
-import { isWindow } from './window.actor.svelte'
 import { WorkItemsActor, workItems } from './workitems.svelte'
 
 /**
@@ -97,21 +94,6 @@ export class ChatActor extends Actor {
 						return result
 					}
 					const result = await bus.dispatch('chat', name, payload)
-					// A drafted bridge takes the stage: the review gate must be SEEN,
-					// not hunted for — same single-active rule as every window.
-					if (name === 'negotiate') {
-						try {
-							if ((JSON.parse(result.record) as { ok?: boolean }).ok) {
-								for (const other of bus.actors()) {
-									if (isWindow(other)) other.open = false
-								}
-								const gate = bus.get('negotiator-window')
-								if (gate && isWindow(gate)) gate.open = true
-							}
-						} catch {
-							// unreadable result stages nothing
-						}
-					}
 					activity.show(summarizeCall(name, result.record))
 					return result
 				}
@@ -207,52 +189,6 @@ bus.register(workItems)
 // The task list may exist many times — "make me a list for the move" spawns
 // a fresh instance with its own sandbox state and windows.
 bus.spawnable('workitem', () => new WorkItemsActor())
-/**
- * The catalog, live: every manifest declared in code joins the mesh at boot
- * — registered before the chat actor so the derived tool list carries them
- * from the first turn. The codebase is the source of truth. Reactive here
- * (not in the base): windows re-render when the sandbox reduces.
- */
-class ReactiveActor extends Actor {
-	state = $state<Record<string, unknown>>({})
-}
-export const catalogActors = catalog.map((manifest) =>
-	singleton(`aven.actor.${manifest.id}`, () => new ReactiveActor(manifest))
-)
-for (const actor of catalogActors) bus.register(actor)
-/**
- * The host seams both draft actors share: the live turn's abort signal (the
- * Stop button must stop the PROCESS, not just the reply stream — chatActor
- * is declared below, the closures evaluate lazily at call time) and the
- * activity strip as progress line ("the process is visible, not magic").
- */
-/**
- * The WORK signal — deliberately NOT the chat turn's abort. Barge-in fires
- * `interrupted` on voice activity alone (~64ms, even a cough) and stops the
- * REPLY; if long-running work (a negotiation draft) hung on the same
- * controller, speaking while the model designs killed the whole run. Work
- * dies only on the explicit Stop button, which calls stopWork() alongside
- * chat.stop().
- */
-let workController: AbortController | null = null
-const workSignal = () => {
-	workController ??= new AbortController()
-	return workController.signal
-}
-export function stopWork(): void {
-	workController?.abort()
-	workController = null
-}
-const showProgress = (note: string) => activity.show({ kind: 'doing', titles: [], note })
-/** The Negotiator (0131): drafts bridges between incompatible actors, HITL-gated. */
-class ReactiveNegotiator extends NegotiatorActor {
-	state = $state<Record<string, unknown>>({})
-}
-export const negotiatorActor = singleton(
-	'aven.negotiator',
-	() => new ReactiveNegotiator(bus, { signal: workSignal, onProgress: showProgress })
-)
-bus.register(negotiatorActor)
 export const registryActor = singleton('aven.registry', () => new RegistryActor(bus))
 bus.register(registryActor)
 export const chatActor = singleton('aven.chat', () => new ChatActor())

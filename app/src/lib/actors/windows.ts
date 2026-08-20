@@ -1,6 +1,5 @@
 import AvenUiView from './AvenUiView.svelte'
 import { bus } from './bus'
-import { catalogActors, negotiatorActor } from './chat.actor.svelte'
 import { instanceWindows } from './instance-windows'
 import { registryTick } from './reactivity.svelte'
 import { singleton } from './singleton'
@@ -46,39 +45,6 @@ bus.register(boardWindow)
 bus.onChange = () => {
 	registryTick.v++
 }
-
-// One window per catalog actor, plus one per extra named view. Closed on
-// boot: the stage belongs to whoever the user asks for.
-for (const actor of catalogActors) {
-	if (!bus.get(`${actor.manifest.id}-window`)) {
-		bus.register(new WindowActor(actor, AvenUiView, { open: false }))
-	}
-	for (const named of actor.manifest.views ?? []) {
-		const id = `${actor.manifest.id}-${named.key}-window`
-		if (!bus.get(id)) {
-			bus.register(
-				new WindowActor(actor, AvenUiView, {
-					key: `${actor.manifest.id}-${named.key}`,
-					name: named.name,
-					props: { view: named.view, style: named.style },
-					open: false
-				})
-			)
-		}
-	}
-}
-
-// The negotiator paints its own review gate — a window like any other.
-export const negotiatorWindow = singleton(
-	'aven.window.negotiator',
-	() =>
-		new WindowActor(negotiatorActor, AvenUiView, {
-			key: 'negotiator',
-			name: 'Negotiator',
-			open: false
-		})
-)
-bus.register(negotiatorWindow)
 
 // Spawned instances get their windows the moment they exist — same views,
 // their own state; dispose takes the windows with it (0133). The first

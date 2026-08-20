@@ -56,10 +56,6 @@ const SYSTEM_PROMPT =
 	'template=workitem and a short name. Address a specific instance by adding ' +
 	'to=<name or uuid from registry_list> on any tool; without it the default ' +
 	'instance is meant. dispose removes a spawned instance on explicit request. ' +
-	'When two actors cannot understand each other (vocabulary mismatch), call ' +
-	'negotiate with from=<producer> and to=<consumer> — a translator proxy is ' +
-	'drafted and shown in the Negotiator window; approval happens ONLY by a ' +
-	'button press — there is no approve tool, so never claim you approved. ' +
 	'Destructive actions (deleting tasks, disposing instances) are HELD the ' +
 	'same way: the call returns held=..., a bar appears for the human, and ' +
 	'only their button press executes it. Say that you have prepared it and ' +
@@ -184,7 +180,7 @@ export class Chat {
 
 	/**
 	 * The live turn's abort signal — the REPLY scope only. Long-running work
-	 * (the negotiator's draft lane) deliberately hangs on the separate work signal
+	 * (long-running work) deliberately hangs on the separate work signal
 	 * in the actor wiring: barge-in fires on any voice activity and must not
 	 * kill a design run.
 	 */

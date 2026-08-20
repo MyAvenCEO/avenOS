@@ -603,21 +603,13 @@ describe('per-actor llm lane (manifest llm settings)', () => {
 })
 
 describe('catalog (code is the source of truth, reduced — 0130)', () => {
-	test('the demo actors are gone and every entry is logic + views', async () => {
-		const { catalog } = await import('../src/lib/actors/catalog')
-		const { validateStyleDef, validateViewDef } = await import('@avenos/aven-ui')
-		const ids = catalog.map((m) => m.id)
-		for (const gone of ['calendar', 'habits', 'notes']) {
-			expect(ids).not.toContain(gone)
-		}
-		// whatever the catalog declares must arrive as logic + validating views
-		for (const manifest of catalog) {
-			expect(typeof manifest.logic).toBe('string')
-			expect(manifest.view).toBeDefined()
-			// biome-ignore lint/style/noNonNullAssertion: asserted above
-			expect(() => validateViewDef(manifest.view!)).not.toThrow()
-			expect(() => validateStyleDef(manifest.style ?? {})).not.toThrow()
-		}
+	test('no declared catalog remains: the demo pair and its bridge are gone', async () => {
+		// The metric/imperial pair existed ONLY to give the Negotiator
+		// something incompatible to bridge; with the negotiator retired the
+		// pair had no reason to exist either. What ships is the real mesh —
+		// the work items actor and the voice/chat lane, wired in code.
+		const catalog = await import('../src/lib/actors/catalog').catch(() => null)
+		expect(catalog).toBeNull()
 	})
 
 	test('a successful llm execution is remembered by a record-keeping actor', async () => {

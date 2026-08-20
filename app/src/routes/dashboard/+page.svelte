@@ -4,7 +4,7 @@ import { onMount } from 'svelte'
 import ActorExplorer from '$lib/actors/ActorExplorer.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
 import { bus } from '$lib/actors/bus'
-import { chatActor, negotiatorActor, stopWork, summarizeCall } from '$lib/actors/chat.actor.svelte'
+import { chatActor, summarizeCall } from '$lib/actors/chat.actor.svelte'
 import { confirmHeld, hitlQueue, rejectHeld } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
@@ -86,7 +86,6 @@ function endConversation() {
 	// was ended, otherwise the logo is not reliably the way back.
 	typing = false
 	chat.stop()
-	stopWork()
 	speaker.silence()
 	listener.stop()
 }
@@ -483,37 +482,6 @@ $effect(() => {
 			</button>
 		</div>
 	{/each}
-	{#if negotiatorActor.state.pending}
-		{@const draftPending = negotiatorActor.state.pending as { id: string; description: string }}
-		<div
-			class="mx-auto mb-2 flex w-full max-w-2xl items-center gap-3 rounded-2xl border border-foreground/10 bg-[#fffdf7] px-4 py-2.5 shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
-		>
-			<div class="min-w-0 flex-1">
-				<p class="font-medium text-sm">
-					Bridge draft: <span class="font-mono">{draftPending.id}</span>
-				</p>
-				<p class="truncate text-[0.75rem] text-foreground/50">{draftPending.description}</p>
-			</div>
-			<button
-				type="button"
-				onclick={() => {
-					void bus.uiEvent('hitl', 'negotiator', { send: 'APPROVE' })
-				}}
-				class="shrink-0 rounded-full bg-primary px-4 py-1.5 font-medium text-primary-foreground text-sm"
-			>
-				Approve
-			</button>
-			<button
-				type="button"
-				onclick={() => {
-					void bus.uiEvent('hitl', 'negotiator', { send: 'REJECT' })
-				}}
-				class="shrink-0 rounded-full border border-foreground/10 px-4 py-1.5 font-medium text-foreground/60 text-sm"
-			>
-				Reject
-			</button>
-		</div>
-	{/if}
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 	<div
@@ -651,11 +619,9 @@ $effect(() => {
 					<button
 						type="button"
 						onclick={() => {
-							// The button stops EVERYTHING: the reply stream AND the work
-							// lane (compose chains, negotiation drafts). Barge-in by voice
-							// stops only the reply — work survives the user talking.
+							// Stops the reply stream and the voice; the ears stay open,
+							// because interrupting is allowed — that is what this is for.
 							chat.stop()
-							stopWork()
 							speaker.silence()
 						}}
 						title="Stop"
