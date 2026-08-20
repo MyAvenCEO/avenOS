@@ -11,8 +11,6 @@ import { registryTick } from '$lib/actors/reactivity.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import { isWindow } from '$lib/actors/window.actor.svelte'
 import { windowsBound } from '$lib/actors/windows'
-import FibuExplorer from '$lib/fibu/FibuExplorer.svelte'
-import MeshCockpit from '$lib/mesh/MeshCockpit.svelte'
 import MeshFlow from '$lib/mesh/MeshFlow.svelte'
 
 /**
@@ -40,10 +38,10 @@ const listener = listenerActor.core
  * gets asked for. The view is the default because the workspace is the
  * point.
  */
-let tab = $state<'views' | 'actors' | 'chat' | 'fibu' | 'skills' | 'intents'>('views')
+let tab = $state<'views' | 'actors' | 'chat' | 'skills'>('views')
 
 /** The workspaces that want the whole window rather than reading width. */
-const wide = $derived(tab === 'fibu' || tab === 'skills' || tab === 'intents')
+const wide = $derived(tab === 'skills')
 
 /**
  * Voice is the default, except where there is no voice.
@@ -54,6 +52,15 @@ const wide = $derived(tab === 'fibu' || tab === 'skills' || tab === 'intents')
  */
 let typing = $state(!isTauri())
 
+/**
+ * Whether the conversation is running at all — on by default, because
+ * hands-free IS the product. Deliberately separate from `typing`: that
+ * switches the INPUT, this ends the session. Ending means the ears close
+ * (the OS mic indicator goes dark), the voice goes silent, and the pill
+ * shrinks to the logo — one tap to come back.
+ */
+let conversing = $state(isTauri())
+
 // Hands-free by default: the mic opens as soon as the page does.
 //
 // `onMount`, emphatically not `$effect`. An effect tracks what its body reads,
@@ -63,9 +70,32 @@ let typing = $state(!isTauri())
 // showed the orange indicator), but the worklet never survived long enough to
 // deliver a single batch.
 onMount(() => {
-	void listener.start()
+	if (conversing) void listener.start()
 	return () => listener.stop()
 })
+
+/**
+ * Leaving the conversation stops everything that could still make noise or
+ * listen: the reply stream, the work lane, the voice, the ears. Coming back
+ * reopens the ears — and only then, so the mic is never live while the
+ * conversation is off.
+ */
+function endConversation() {
+	conversing = false
+	// Also out of typing mode: "ended" must look the same from wherever it
+	// was ended, otherwise the logo is not reliably the way back.
+	typing = false
+	chat.stop()
+	stopWork()
+	speaker.silence()
+	listener.stop()
+}
+
+function beginConversation() {
+	conversing = true
+	typing = false
+	void listener.start()
+}
 
 // The recognizer needs to know when its own voice is in the room. Reading
 // `speaker.speaking` is the tracked dependency; `setOutputActive` writes no
@@ -83,6 +113,9 @@ $effect(() => {
  * out, and hearing wins over everything because interrupting is allowed.
  */
 const phase = $derived.by(() => {
+	// Off wins over everything: with the ears closed, every other status is
+	// a leftover from the session that just ended.
+	if (!conversing && !typing) return { key: 'off', label: 'Conversation ended' }
 	if (listener.status === 'denied') return { key: 'denied', label: 'No microphone' }
 	if (listener.status === 'error' || speaker.status === 'error')
 		return { key: 'error', label: 'Error' }
@@ -190,7 +223,7 @@ $effect(() => {
 	<header class="flex flex-col items-center">
 		<!-- Compact tabs, centred: the skills workspace and the conversation. -->
 		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
-			{#each [{ id: 'views' as const, label: 'Views' }, { id: 'actors' as const, label: 'Actors' }, { id: 'chat' as const, label: 'Chat' }, { id: 'fibu' as const, label: 'Buchhaltung' }, { id: 'skills' as const, label: 'Skills' }, { id: 'intents' as const, label: 'Intents' }] as t (t.id)}
+			{#each [{ id: 'views' as const, label: 'Views' }, { id: 'actors' as const, label: 'Actors' }, { id: 'chat' as const, label: 'Chat' }, { id: 'skills' as const, label: 'Skills' }] as t (t.id)}
 				<button
 					type="button"
 					onclick={() => {
@@ -305,20 +338,6 @@ $effect(() => {
 					</p>
 				{/if}
 			</div>
-		</div>
-	{:else if tab === 'fibu'}
-		<!-- FiBu, hardcoded and read-only (board 0139): the lowest booking
-		     primitive — Rechnungsposition → Buchungszeilen — over mock data,
-		     deliberately outside the actor/vibe world. -->
-		<div class="flex min-h-0 w-full flex-1 flex-col">
-			<FibuExplorer />
-		</div>
-	{:else if tab === 'intents'}
-		<!-- The mesh cockpit (first-principles collapse): intents are actors
-		     born from events; everything on screen derives from message
-		     threads — states, boards, paths, faces. -->
-		<div class="flex min-h-0 w-full flex-1 flex-col">
-			<MeshCockpit />
 		</div>
 	{:else if tab === 'skills'}
 		<!-- The declared mesh on the canvas: one primitive (actor),
@@ -498,12 +517,42 @@ $effect(() => {
 	<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 	<div
-		class="mx-auto w-full rounded-full bg-primary py-2.5 pr-2.5 pl-5 text-primary-foreground {typing
-			? 'max-w-lg'
-			: 'max-w-72'}"
+		class="mx-auto rounded-full bg-primary text-primary-foreground {phase.key === 'off'
+			? 'w-fit p-2'
+			: typing
+				? 'w-full max-w-lg p-2.5'
+				: 'w-full max-w-80 p-2.5'}"
 		title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
 	>
-		<div class="flex items-center gap-3">
+		<div class="flex items-center {phase.key === 'off' ? '' : 'gap-3'}">
+			<!-- Ending the conversation is its own act, distinct from the stop
+			     button above: that one interrupts a reply and leaves the ears
+			     open, this one closes them. Hidden once ended — the logo is the
+			     way back. -->
+			{#if isTauri() && phase.key !== 'off'}
+				<button
+					type="button"
+					onclick={endConversation}
+					title="End conversation"
+					aria-label="End conversation"
+					class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:border-status-error/60 hover:bg-status-error/20"
+				>
+					<!-- power: leave the conversation -->
+					<svg
+						viewBox="0 0 24 24"
+						class="size-4"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M12 3v9" />
+						<path d="M6.6 6.6a8 8 0 1 0 10.8 0" />
+					</svg>
+				</button>
+			{/if}
+
 			{#if typing}
 				<form bind:this={form} onsubmit={submit} class="flex flex-1 items-center gap-2">
 					<textarea
@@ -537,6 +586,32 @@ $effect(() => {
 						</svg>
 					</button>
 				</form>
+			{:else if phase.key === 'off'}
+				<!-- Ended: the pill shrinks to the mark itself. One target, one
+				     meaning — tap the logo and the conversation is back. Nothing
+				     else is offered here, because nothing else applies. -->
+				<button
+					type="button"
+					onclick={beginConversation}
+					title="Start conversation"
+					aria-label="Start conversation"
+					class="group flex items-center gap-3 pr-4 text-left"
+				>
+					<!-- The mark itself is the button: no ring, no inner box — just
+					     the circle, breathing evenly inside the pill. -->
+					<span class="block size-10 shrink-0 overflow-hidden rounded-full">
+						<img
+							src="/aven-logo.svg"
+							alt=""
+							class="size-full object-cover transition-transform group-hover:scale-105"
+						>
+					</span>
+					<!-- A button label, not a status line: full weight, full contrast,
+					     because this is the one thing to press. -->
+					<span class="whitespace-nowrap font-medium text-sm tracking-tight">
+						Start conversation
+					</span>
+				</button>
 			{:else}
 				<!-- While listening the dot follows the microphone level, so a dead
 				     input is visible as a dot that never moves. -->
@@ -597,13 +672,16 @@ $effect(() => {
 			<!-- Only where there is something to switch to. In the browser there is
 			     no recognizer at all, so text is not a mode there — it is the whole
 			     interface, and a button offering to leave it leads nowhere. -->
-			{#if isTauri()}
+			{#if isTauri() && phase.key !== 'off'}
 				<!-- An icon rather than a word: it sits next to live status text, and a
 				     second label there reads as another thing to be understood. -->
 				<button
 					type="button"
 					onclick={() => {
 						typing = !typing
+						// Coming back from text: the ears may have been closed, so
+						// reopening them is part of the switch, not a separate act.
+						if (!typing && !conversing) beginConversation()
 					}}
 					class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
 					title={typing ? 'Back to voice' : 'Type instead'}
