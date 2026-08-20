@@ -12,9 +12,8 @@ import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import { isWindow } from '$lib/actors/window.actor.svelte'
 import { windowsBound } from '$lib/actors/windows'
 import FibuExplorer from '$lib/fibu/FibuExplorer.svelte'
-import RecipeFlow from '$lib/fibu/RecipeFlow.svelte'
 import MeshCockpit from '$lib/mesh/MeshCockpit.svelte'
-import MeshRegistry from '$lib/mesh/MeshRegistry.svelte'
+import MeshFlow from '$lib/mesh/MeshFlow.svelte'
 
 /**
  * Dashboard — a chat against RedPill's confidential Gemma
@@ -322,10 +321,11 @@ $effect(() => {
 			<MeshCockpit />
 		</div>
 	{:else if tab === 'skills'}
-		<!-- The declared mesh: one primitive (actor), coordinators as
-		     "skills", wiring derived from provides ∩ requires. -->
+		<!-- The declared mesh on the canvas: one primitive (actor),
+		     coordinators as "skills", every wire derived from
+		     provides ∩ requires at render time. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
-			<MeshRegistry />
+			<MeshFlow />
 		</div>
 	{:else if tab === 'actors'}
 		<!-- The actor explorer: everything the registry knows about every actor,

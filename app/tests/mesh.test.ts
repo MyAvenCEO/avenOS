@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { validateStyleDef, validateViewDef } from '@avenos/aven-ui'
 import { faces } from '../src/lib/mesh/faces'
+import { layoutCoordinator } from '../src/lib/mesh/mesh-layout'
 import {
 	actorState,
 	ask,
@@ -171,6 +172,20 @@ describe('mesh: everything else is derived', () => {
 			for (const m of t.log) {
 				expect(known.has(m.from) || sources.has(m.from)).toBe(true)
 				if (m.to) expect(known.has(m.to) || sources.has(m.to)).toBe(true)
+			}
+		}
+	})
+
+	test('the canvas lays out derivation: every member placed, every wire inferred', () => {
+		for (const c of registry.filter((a) => (a.members?.length ?? 0) > 0)) {
+			const laid = layoutCoordinator(registry, c.id)
+			// Every member gets a position …
+			expect(laid.nodes.map((n) => n.id).sort()).toEqual([...(c.members ?? [])].sort())
+			// … and the wires on screen are exactly the derived edges.
+			expect(laid.edges.length).toBe(edges(registry, c.id).length)
+			for (const e of laid.edges) {
+				expect(c.members).toContain(e.source)
+				expect(c.members).toContain(e.target)
 			}
 		}
 	})
