@@ -4,7 +4,6 @@ import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import { SPARKS, todoActor } from '$lib/actors/todo.svelte'
 import { shell } from '$lib/intents/talk.svelte'
-import { query } from '$lib/query/query.svelte'
 
 /**
  * The dashboard shell: the spark rail on the left, the route's surface on the
@@ -33,30 +32,6 @@ function leaveSettings() {
 
 <div class="flex h-dvh">
 	<aside class="flex w-16 shrink-0 flex-col items-center gap-3 border-border border-r py-4">
-		<!-- The mark opens the ANSWER SURFACE. It is no longer a context beside
-		     ME and TEAM — asking is not a place you go, it is a thing you do from
-		     wherever you are, so this and ⌘K are the same door. -->
-		<button
-			type="button"
-			onclick={() => {
-				leaveSettings()
-				shell.tab = 'intents'
-				query.toggle()
-			}}
-			title="Fragen (⌘K)"
-			aria-label="Fragen"
-			class="relative flex size-11 items-center justify-center p-1 transition-all {query.open &&
-			!onSettings
-				? 'rounded-2xl bg-surface-card ring-2 ring-primary/40'
-				: 'rounded-full border border-border opacity-80 hover:rounded-2xl hover:opacity-100'}"
-		>
-			<img src="/aven-logo.svg" alt="" class="size-full rounded-full object-cover">
-			{#if query.open && !onSettings}
-				<span class="-left-[13px] absolute h-6 w-1 rounded-full bg-primary"></span>
-			{/if}
-		</button>
-		<!-- a quiet line between the chat context and the spark contexts -->
-		<div class="h-px w-8 shrink-0 bg-border"></div>
 		{#each SPARKS as spark (spark.id)}
 			{@const active =
 				todoActor.state.active === spark.id && !onSettings && shell.tab === 'intents'}
