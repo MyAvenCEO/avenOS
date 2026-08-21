@@ -928,11 +928,57 @@ const gates = $derived(
 	hitlQueue.items.filter((h) => h.context === undefined || h.context === selectedId)
 )
 
+/**
+ * The log, minus the entry that only announces a pending gate. With the gate
+ * card right below, that line said the same thing twice — and the weaker of
+ * the two, since it cannot be acted on. Once the gate is answered the entry
+ * comes back, because then it IS history.
+ */
+const logEntries = $derived(gates.length > 0 ? selected.log.filter((e) => !e.hitl) : selected.log)
+
 let centerEl: HTMLElement | null = $state(null)
-$effect(() => {
-	void selected.log.length
-	void registryTick.v
+/** Whether the reader is riding the bottom; scrolling up deliberately parks it. */
+let stick = $state(true)
+
+/**
+ * The log ends at its end, so the newest entry sits right above the gate.
+ *
+ * Synchronous, deliberately. An earlier version scrolled inside
+ * `requestAnimationFrame` and never ran at all in a tab that is not
+ * compositing — a hidden or background tab has no animation frames, so the
+ * log would still be at the top when you came back to it. `$effect` already
+ * runs after the DOM is updated, so the frame bought nothing.
+ *
+ * The dependencies are PASSED IN rather than touched with `void`, so the read
+ * the compiler tracks is the same one the reader sees.
+ */
+function scrollToBottom(_deps: unknown): void {
 	centerEl?.scrollTo({ top: centerEl.scrollHeight })
+}
+
+// Switching intent is a fresh start: whatever was scrolled to belonged to the
+// intent just left.
+$effect(() => {
+	stick = true
+	scrollToBottom(selectedId)
+})
+
+// New content, or the gate appearing and taking height away.
+$effect(() => {
+	const deps = [logEntries.length, gates.length, registryTick.v]
+	if (stick) scrollToBottom(deps)
+})
+
+// The gate is a SIBLING that renders in the same tick and then changes how
+// much room the log has, so the box can settle after any scroll we time.
+$effect(() => {
+	const el = centerEl
+	if (!el) return
+	const observer = new ResizeObserver(() => {
+		if (stick) el.scrollTo({ top: el.scrollHeight })
+	})
+	observer.observe(el)
+	return () => observer.disconnect()
 })
 
 const DOT: Record<string, string> = {
@@ -1069,7 +1115,13 @@ const DOT: Record<string, string> = {
 		</h2>
 		<main
 			bind:this={centerEl}
-			class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			onscroll={() => {
+				if (centerEl) stick = centerEl.scrollHeight - centerEl.clientHeight - centerEl.scrollTop < 48
+			}}
+			class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {gates.length >
+			0
+				? 'rounded-b-none border-b-0'
+				: ''}"
 		>
 			{#if skillView}
 				<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
@@ -1315,7 +1367,7 @@ const DOT: Record<string, string> = {
 				</header>
 
 				<ol class="flex flex-col">
-					{#each selected.log as entry, i (entry.step + i)}
+					{#each logEntries as entry, i (entry.step + i)}
 						<li class="relative flex gap-3 pb-5">
 							{#if i < selected.log.length - 1}
 								<span class="absolute top-6 bottom-0 left-[11px] w-px bg-foreground/10"></span>
@@ -1408,8 +1460,13 @@ const DOT: Record<string, string> = {
 		     workspace — the overlay dims it and lies over it like everything
 		     else — but it is a separate thing being asked of you, and nesting it
 		     inside the log made it read as one more log entry. -->
+		<!-- Flush against the log, which loses its bottom corners for as long as a
+		     gate is there: the log reads as running on BEHIND the decision rather
+		     than stopping short of it. -->
 		{#each gates as held (held.id)}
-			<GatePreview {held} />
+			<div class="-mt-2">
+				<GatePreview {held} />
+			</div>
 		{/each}
 	</div>
 
