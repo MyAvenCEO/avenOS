@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import type { HeldMessage } from '../src/lib/actors/bus'
 import {
 	type Answer,
 	clearSources,
-	gateAnswers,
 	type QueryContext,
 	registerSource,
 	rowsAnswer,
@@ -96,21 +94,14 @@ describe('the engine knows nothing about what it is answering', () => {
 		expect(out[0]?.kind === 'rows' && out[0].rows[0]?.shape).toBe('quantum-widget')
 	})
 
-	test('all four answer shapes travel the same pipe', () => {
-		const held: HeldMessage = {
-			id: 'h1',
-			actor: 'docs',
-			method: 'draft_approve',
-			label: 'Antwortentwurf freigeben'
-		}
+	test('all three answer shapes travel the same pipe', () => {
 		registerSource('mixed', () => [
 			rowsAnswer('mixed', [{ id: 'r', label: 'Zeile', shape: 'check' }]),
 			{ kind: 'view', id: 'view:board', window: 'board', title: 'Board' },
-			{ kind: 'say', id: 's1', role: 'assistant', text: 'Hier ist es.' },
-			...gateAnswers([held])
+			{ kind: 'say', id: 's1', role: 'assistant', text: 'Hier ist es.' }
 		])
 
-		expect(runQuery('alles', GLOBAL).map((a) => a.kind)).toEqual(['rows', 'view', 'say', 'gate'])
+		expect(runQuery('alles', GLOBAL).map((a) => a.kind)).toEqual(['rows', 'view', 'say'])
 	})
 })
 
@@ -143,21 +134,5 @@ describe('context', () => {
 		runQuery('  Zeig mir das Board  ', GLOBAL)
 
 		expect(seen).toBe('  Zeig mir das Board  ')
-	})
-})
-
-describe('gates', () => {
-	test('a held message becomes an answer, keeping its id', () => {
-		const held: HeldMessage = { id: 'h9', actor: 'mail', method: 'send', label: 'Mail senden' }
-
-		const [answer] = gateAnswers([held])
-
-		expect(answer?.kind).toBe('gate')
-		expect(answer?.id).toBe('h9')
-		expect(answer?.kind === 'gate' && answer.held.label).toBe('Mail senden')
-	})
-
-	test('no gates, no answers', () => {
-		expect(gateAnswers([])).toEqual([])
 	})
 })

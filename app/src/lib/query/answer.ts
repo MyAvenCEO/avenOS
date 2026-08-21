@@ -1,14 +1,16 @@
-import type { HeldMessage } from '$lib/actors/bus'
-
 /**
  * THE answer model (0159).
  *
- * The app had five surfaces that all meant "the system answered you" — a chat
- * aside, a window surface, a live-transcription toast and a 414-line human-gate
- * card — each with its own layout code. They are not five features. A search
- * hit, a rendered board, a sentence and a gate are four SHAPES of one thing,
- * so there is one stream of `Answer`s and one renderer that dispatches on
- * `kind`.
+ * The app had several surfaces that all meant "the system answered you" — a
+ * chat aside, a window surface, a live-transcription toast — each with its own
+ * layout code. A search hit, a rendered board and a sentence are three SHAPES
+ * of one thing, so there is one stream of `Answer`s and one renderer that
+ * dispatches on `kind`.
+ *
+ * The human gate is deliberately NOT one of them. It keeps its own place above
+ * the voice pill: a gate is not something you asked for, it is something the
+ * system is waiting on, and burying it in a surface you can dismiss would make
+ * it missable.
  *
  * This module is deliberately Svelte-free: it is the model and the registry,
  * so it can be tested without a DOM.
@@ -36,7 +38,6 @@ export type Answer =
 	| { kind: 'rows'; id: string; source: string; rows: AnswerRow[] }
 	| { kind: 'view'; id: string; window: string; title: string }
 	| { kind: 'say'; id: string; role: 'user' | 'assistant'; text: string }
-	| { kind: 'gate'; id: string; held: HeldMessage }
 
 /**
  * A source answers a query. It returns `Answer`s rather than rows so that a
@@ -94,13 +95,4 @@ export function runQuery(query: string, ctx: QueryContext): Answer[] {
 		}
 	}
 	return out
-}
-
-/**
- * Held messages become answers like everything else. The gate keeps its own
- * shape — it is the one answer that cannot be resolved by talking — but it no
- * longer needs a surface of its own.
- */
-export function gateAnswers(held: HeldMessage[]): Answer[] {
-	return held.map((h) => ({ kind: 'gate' as const, id: h.id, held: h }))
 }

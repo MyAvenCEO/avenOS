@@ -121,10 +121,10 @@ artifact attachment to the selected intent, calendar/docs/brain sources.
 - [x] `bun test app/tests` green, incl. `query.test.ts` — 81 pass / 0 fail across 11 files
 - [x] The registry has no hardcoded result kinds — `rg -n "=== 'person'|=== 'todo'" app/src/lib/query` finds nothing; `query.test.ts` also round-trips an invented shape (`quantum-widget`)
 - [x] `talk.open` is gone — `rg -n 'talk\.open' app/src` finds nothing
-- [x] The dock no longer carries the HITL card — `rg -c 'HeldPreview|hitlQueue' app/src/routes/dashboard/+page.svelte` finds nothing
+- [x] ~~The dock no longer carries the HITL card~~ **REVERSED on Samuel's call (2026-08-21)**: the gate keeps its legacy place above the pill. Only its 186 lines of layout left the dock, into `GatePreview.svelte`; the dock renders that component in eight lines. A gate is not something you asked for — putting it inside a surface you can dismiss made it missable.
 - [x] The dock sheds 169 net lines — `git diff --numstat` on `+page.svelte`: +36 / −205
 - [x] `bun run check` 0 errors / 471 files, `bun run lint` exit 0
-- [x] Live: ⌘K opens the modal over the dimmed workspace; the gate renders inside it; typing `krank` returns three differently-shaped row groups (contacts · calendar · docs) and `board` loads the Kanban view — proven by DOM reads in the transcript. NOT proven by screenshot: the Browser pane was hidden, so the page stopped compositing frames.
+- [x] Live: ⌘K opens the modal over the dimmed workspace (scrim covers the rail too; the dock and its gate stay above it); typing `krank` returns three differently-shaped row groups (contacts · calendar · docs) and `board` loads the Kanban view — proven by DOM reads in the transcript. NOT proven by screenshot: the Browser pane was hidden, so the page stopped compositing frames.
 
 ## Verification
 
@@ -144,6 +144,8 @@ git diff --shortstat main
 ```
 
 ## Progress log
+
+- `2026-08-21` — Review feedback, same session. Five corrections: (1) the rail's avenNAME logo — the legacy chat route — is gone, ⌘K is the only door; (2) **the human gate leaves the modal and returns to the dock**, and with it the `gate` arm of the `Answer` union and its tests: nothing produced it any more, and a dead arm is worse than none; (3) the dock rises to `z-50` so the voice/text pill stays above the scrim — you must be able to talk to what you opened; (4) the scrim goes `fixed` so it dims the left rail as well; (5) the modal grows to `min(72rem, 94%)` wide and takes every pixel above the dock, capped at 82vh — a flat 82vh plus the dock clearance overflowed off the top of the screen. NOTE: with a gate raised the modal is ~305px tall on a 720px viewport, because the gate sits below it and is not covered. That is the cost of keeping the gate outside.
 
 - `2026-08-21` — Build, slice 1 complete. `answer.ts` (the union + source registry) TDD-first with 11 tests; `QueryModal.svelte` (two bands, four-arm dispatcher); `GatePreview.svelte` (the gate card moved out of the dock verbatim); `sources.mock.ts`. Triggers: ⌘K, Esc, the rail mark. Deleted: `talk.open`, the 25/75 split, the MAIA rail context, the dock's 184-line gate block. Gate scoping moved from `talk.intentContext` onto `query.intent`. **Amended the completion condition** — see Goal. Two pre-existing lint failures cleared on the way, both unrelated: three hollow `describe` blocks in `actors.test.ts` (helpers, zero tests, green-but-asserting-nothing since #68) and the vendored `app/static/webcm` bundle, now in biome's ignore list beside ARCHIVE. Moved build → review.
 
