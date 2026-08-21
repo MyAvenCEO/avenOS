@@ -2,8 +2,8 @@ import { derived, type Readable } from 'svelte/store'
 import { api } from '$lib/api.js'
 import { authClient } from '$lib/auth-client.js'
 import { createProofOfWorkHeader } from '$lib/proof-of-work.js'
-import type { AppRuntime, AppSession } from './contract.js'
 import type { MetaInfo, NameAvailability, NameHoldResult, PasskeyStatus } from '$lib/types.js'
+import type { AppRuntime, AppSession } from './contract.js'
 
 let sessionStore: Readable<AppSession> | undefined
 

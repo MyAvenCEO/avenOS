@@ -1,7 +1,7 @@
 <script lang="ts">
+import { appRuntime } from 'virtual:aven-app-runtime'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import { appRuntime } from 'virtual:aven-app-runtime'
 
 const initial = appRuntime.initial.login(page.url)
 let busy = $state(initial.busy)
