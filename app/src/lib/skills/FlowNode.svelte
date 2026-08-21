@@ -36,7 +36,7 @@ const INSTANCE_RING: Record<string, string> = {
 
 /** Node KINDS are a categorical palette, not states — hence the roles vary. */
 const BADGE: Record<string, string> = {
-	trigger: 'bg-status-success/35 text-status-success-ink',
+	trigger: 'bg-status-progress/35 text-status-progress-ink',
 	llm: 'bg-status-error/12 text-status-error-ink',
 	route: 'bg-status-warning/18 text-status-warning-ink',
 	op: 'bg-status-quiet/15 text-status-quiet-ink',
@@ -47,9 +47,9 @@ const BADGE: Record<string, string> = {
 
 <div
 	class="w-60 rounded-xl px-3.5 py-3 font-sans text-foreground shadow-[0_1px_3px_rgba(30,41,59,0.06)] transition-all {data.door
-		? 'border-2 border-accent/50 border-dashed bg-accent/[0.05]'
+		? 'border-2 border-status-success/50 border-dashed bg-status-success/[0.05]'
 		: n.kind === 'trigger'
-			? 'border border-status-success/60 bg-surface-raised'
+			? 'border border-status-progress/60 bg-surface-raised'
 			: 'border border-foreground/5 bg-surface-raised'} {data.selected
 		? 'border-primary ring-2 ring-primary/20'
 		: (data.instance && INSTANCE_RING[data.instance]) || ''}"
@@ -58,7 +58,7 @@ const BADGE: Record<string, string> = {
 	<div class="flex items-center gap-1.5 pb-1">
 		<span
 			class="rounded-md px-1.5 py-0.5 font-mono text-[0.625rem] {data.door
-				? 'bg-accent/12 text-accent-ink'
+				? 'bg-status-success/12 text-status-success-ink'
 				: (BADGE[verb] ?? BADGE.op)}"
 		>
 			{data.door ? 'skill' : verb}
