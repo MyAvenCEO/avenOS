@@ -10,6 +10,7 @@
 import { page } from '$app/state'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
+import SiteFooter from '$lib/components/SiteFooter.svelte'
 import SkillMarketplaceCard from '$lib/components/SkillMarketplaceCard.svelte'
 import { PLANS, type PlanId, planIncludes, priceLabel, VAT_NOTE } from '$lib/pricing/plans'
 import { loadSkills, loadSkillsByPlan, skillDetailHref, skillsIncludedIn } from '$lib/skills/loader'
@@ -284,9 +285,5 @@ const chainSteps = [
 		</div>
 	</section>
 
-	<footer
-		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] text-foreground/30"
-	>
-		avenCEO · avenOS · Own your life
-	</footer>
+	<SiteFooter />
 </div>
