@@ -215,7 +215,7 @@ export const VAT_NOTE = 'Alle Preise verstehen sich zzgl. der gesetzlichen Umsat
 /** Book it, or apply for it — avenCOOP is a decision we make together. */
 export function ctaLabel(p: Plan): string {
 	if (p.applyOnly) return 'Bewerben'
-	return p.id === 'avenid' ? 'avenID sichern' : 'Jetzt reservieren'
+	return p.id === 'avenid' ? 'avenID sichern' : 'Jetzt Namen reservieren'
 }
 
 export function ctaHref(p: Plan): string {

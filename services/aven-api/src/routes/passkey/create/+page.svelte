@@ -10,8 +10,17 @@ let busy = $state(initial.busy)
 let error = $state(initial.error)
 let firefoxLinux = $state(false)
 
-onMount(() => {
+onMount(async () => {
 	firefoxLinux = appRuntime.auth.passkeyWarning(page.url)
+	// Name the passkey after the aven it unlocks, so nobody has to invent a
+	// label for a thing they just named. Only ever fills an empty field.
+	if (name.trim()) return
+	try {
+		const [own] = await appRuntime.names.mine()
+		if (own && !name.trim()) name = own
+	} catch {
+		// A missing name is not worth an error here — the field stays empty.
+	}
 })
 
 async function create() {

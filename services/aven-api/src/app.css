@@ -153,9 +153,9 @@ label {
 
 input {
 	min-height: 2.75rem;
-	padding: 0.65rem 0.9rem;
+	padding: 0.65rem 1.125rem;
 	border: 1px solid var(--border);
-	border-radius: 0.75rem;
+	border-radius: 9999px;
 	background: var(--porcelain);
 	font: inherit;
 }
@@ -241,9 +241,9 @@ button:disabled {
 
 textarea {
 	min-height: 6rem;
-	padding: 0.65rem 0.9rem;
+	padding: 0.85rem 1.125rem;
 	border: 1px solid var(--border);
-	border-radius: 0.75rem;
+	border-radius: 1.25rem;
 	background: var(--porcelain);
 	font: inherit;
 	resize: vertical;
@@ -291,6 +291,13 @@ textarea:focus-visible {
 	background: var(--sunflower);
 }
 
+.field {
+	display: grid;
+	gap: 0.5rem;
+	width: 100%;
+	text-align: left;
+}
+
 .actions {
 	display: flex;
 	align-items: center;
@@ -300,6 +307,9 @@ textarea:focus-visible {
 }
 
 .ghost {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	min-height: 2.75rem;
 	padding: 0 1.25rem;
 	border: 1px solid var(--border);
@@ -308,8 +318,10 @@ textarea:focus-visible {
 	color: var(--muted);
 	font: inherit;
 	font-size: 0.8125rem;
-	line-height: 2.6;
+	font-weight: 500;
+	line-height: 1;
 	text-decoration: none;
+	white-space: nowrap;
 	cursor: pointer;
 }
 
