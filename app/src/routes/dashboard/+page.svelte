@@ -166,6 +166,14 @@ let draft = $state('')
  * screen bottom underneath it. */
 let dockH = $state(0)
 
+/**
+ * How far the dock floats off the bottom edge, in px — the `bottom-2`/`left-2`/
+ * `right-2` on the dock below, named so the clearance above it can use the SAME
+ * number. It was hard-coded as 16 while the dock sat at 8, which is why the gap
+ * over the pill read as twice the gap under it.
+ */
+const DOCK_INSET = 8
+
 let form: HTMLFormElement | null = $state(null)
 let textareaEl: HTMLTextAreaElement | null = $state(null)
 
@@ -274,7 +282,7 @@ function onKeydown(event: KeyboardEvent) {
      reading width. -->
 <main
 	class="relative mx-auto flex min-h-0 min-w-0 w-full max-w-none flex-1 flex-col gap-2 p-2"
-	style="--dock-h: {dockH + 16}px"
+	style="--dock-h: {dockH + DOCK_INSET}px"
 >
 	{#if shell.tab === 'intents'}
 		<!-- The intents workspace fills everything between the tabs and the
