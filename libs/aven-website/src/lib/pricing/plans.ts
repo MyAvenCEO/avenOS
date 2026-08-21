@@ -31,17 +31,20 @@ export interface Plan {
 	 */
 	eurPrice: number
 	billing: 'once' | 'monthly'
-	/** Revenue share in percent, on top of the fee. 0 on the lower tiers. */
-	revenueSharePct: number
-	/** What the revenue share covers, where that needs saying. */
-	revenueShareNote?: string
+	/**
+	 * What we keep to run the platform — every payment fee (Stripe, Creem &
+	 * Co.) already inside it. 0 on the tiers that sell you nothing.
+	 */
+	platformFeePct: number
+	/**
+	 * The other half of the share, and the reason it is not called a fee: it
+	 * leaves us again as an INVESTMENT into other founders' avenCOOPs, and the
+	 * shares it buys are yours. This is the compounding engine — your revenue
+	 * buys you a slice of everyone else's.
+	 */
+	reinvestPct: number
 	/** Company shares we take — avenCOOP only. */
 	equitySharePct?: number
-	/**
-	 * Shares of OUR company the partner gets back — avenCOOP only. The deal
-	 * runs both ways, so the number is stated on the card, not in a footnote.
-	 */
-	reciprocalSharePct?: number
 	/** avenCOOP is not bookable: you apply and we decide together. */
 	applyOnly?: boolean
 	/** Who the tier is open to — stated, so nobody has to guess. */
@@ -62,7 +65,8 @@ export const PLANS: Plan[] = [
 		role: 'Dein Name — der Anfang von allem',
 		eurPrice: 30,
 		billing: 'once',
-		revenueSharePct: 0,
+		platformFeePct: 0,
+		reinvestPct: 0,
 		features: [
 			'Dein avenID‑Name — für 1 Jahr für dich gesichert',
 			'Dein Platz auf der Warteliste',
@@ -75,7 +79,8 @@ export const PLANS: Plan[] = [
 		role: 'Dein Leben — organisiert, jeden Tag',
 		eurPrice: 42,
 		billing: 'monthly',
-		revenueSharePct: 0,
+		platformFeePct: 0,
+		reinvestPct: 0,
 		features: [
 			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
 			'E‑Mail‑Inbox',
@@ -91,8 +96,8 @@ export const PLANS: Plan[] = [
 		role: 'Deine Firma — alles Geschäftliche',
 		eurPrice: 326,
 		billing: 'monthly',
-		revenueSharePct: 8,
-		revenueShareNote: 'inklusive aller Zahlungsgebühren (Stripe, Creem & Co.)',
+		platformFeePct: 6,
+		reinvestPct: 6,
 		highlight: true,
 		features: [
 			'Vorbuchhaltung',
@@ -101,6 +106,7 @@ export const PLANS: Plan[] = [
 			'Website',
 			'Stripe‑Shop',
 			'Blog',
+			'Dein Aven und deine Produkte im aven Marketplace gelistet',
 			'Company Spark zusätzlich zu deinem Personal Spark'
 		]
 	},
@@ -110,17 +116,16 @@ export const PLANS: Plan[] = [
 		role: 'Wir werden dein technischer Co‑Founder',
 		eurPrice: 1895,
 		billing: 'monthly',
-		revenueSharePct: 15,
-		revenueShareNote: 'zzgl. beel‑Gebühren',
+		platformFeePct: 6,
+		reinvestPct: 12,
 		equitySharePct: 5,
-		reciprocalSharePct: 0.5,
 		applyOnly: true,
 		eligibility: 'Nur für Pre‑Seed‑Startups mit weniger als 300.000 € Investment.',
 		features: [
 			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
 			'5 % Firmenanteile an deiner Firma, digitalisiert über beel.com',
-			'0,5 % Beteiligung an der avenCEO GmbH — die Partnerschaft geht in beide Richtungen',
+			'Du wählst selbst, in welche avenCOOPs dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
 			'Community‑Investments über beel',
 			'Wir führen dein beel‑Syndikat an'
 		],
@@ -148,6 +153,15 @@ export function euro(amount: number): string {
 /** "25 € einmalig" · "326 €/Monat" — the whole price in one string. */
 export function priceLabel(p: Plan): string {
 	return p.billing === 'once' ? `${euro(p.eurPrice)} € einmalig` : `${euro(p.eurPrice)} €/Monat`
+}
+
+/**
+ * Platform fee plus reinvest — the share a founder actually sees leave the
+ * account. The two halves are printed under it, because they are different
+ * things: one is a price, the other buys shares that stay yours.
+ */
+export function totalSharePct(p: Plan): number {
+	return p.platformFeePct + p.reinvestPct
 }
 
 /**
