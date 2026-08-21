@@ -11,7 +11,7 @@ let { skill, variant = 'default' }: Props = $props()
 
 const cardClass = $derived.by(() =>
 	skill.comingSoon
-		? 'group flex min-w-0 flex-col rounded-2xl border border-dashed border-border/50 bg-surface-soft/60 p-5 opacity-75 transition-all hover:opacity-100 hover:border-border/70 sm:p-6'
+		? 'group flex min-w-0 flex-col rounded-2xl border-2 border-dashed border-quiet/55 bg-surface-soft/70 p-5 opacity-85 transition-all hover:border-quiet/80 hover:opacity-100 sm:p-6'
 		: variant === 'spotlight'
 			? 'group flex min-w-0 flex-col rounded-2xl border-2 border-accent/35 bg-surface-raised p-6 ring-1 ring-accent/15 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:border-accent/55  sm:p-7'
 			: 'group flex min-w-0 flex-col rounded-2xl border border-border/40 bg-surface-raised p-5 transition-all hover:border-border/70 hover:bg-surface-soft  sm:p-6'
