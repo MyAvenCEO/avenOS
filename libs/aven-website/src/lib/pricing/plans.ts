@@ -101,7 +101,7 @@ export const PLANS: Plan[] = [
 		role: 'Deine Firma — alles Geschäftliche',
 		eurPrice: 326,
 		billing: 'monthly',
-		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
+		runtime: { hoursPerDay: 4, centsPerExtraMinute: 10 },
 		platformFeePct: 6,
 		reinvestPct: 6,
 		highlight: true,
@@ -122,7 +122,7 @@ export const PLANS: Plan[] = [
 		role: 'Wir werden dein technischer Co‑Founder',
 		eurPrice: 1895,
 		billing: 'monthly',
-		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
+		runtime: { hoursPerDay: 12, centsPerExtraMinute: 10 },
 		platformFeePct: 6,
 		reinvestPct: 12,
 		equitySharePct: 5,
@@ -170,12 +170,11 @@ export function totalSharePct(p: Plan): number {
 }
 
 /**
- * The word above the number on a plan card. Every price on the site is NET,
- * so the label carries it — a VAT note that only exists as a footnote under
- * the grid is a note half the readers never reach.
+ * The cadence and the VAT clause, on the same line as the number — a price
+ * reads as one statement, not as a label stacked on a figure.
  */
-export function billingLabel(p: Plan): string {
-	return p.billing === 'once' ? 'Einmalig · zzgl. USt.' : 'Monatlich · zzgl. USt.'
+export function priceSuffix(p: Plan): string {
+	return p.billing === 'once' ? 'einmalig · zzgl. USt.' : '/Monat · zzgl. USt.'
 }
 
 /**
