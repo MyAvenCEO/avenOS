@@ -52,7 +52,7 @@ const chainLabels: Record<string, string> = {
 		</span>
 	</div>
 
-	<h3 class="mt-3 font-sans text-[15px] tracking-[0.06em] text-foreground sm:text-[16px]">
+	<h3 class="mt-3 text-[15px] font-bold tracking-[0.06em] text-foreground sm:text-[16px]">
 		{skillLabel(skill.slug)}
 	</h3>
 
