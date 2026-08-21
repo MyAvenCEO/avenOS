@@ -144,7 +144,7 @@ export class ChatActor extends Actor {
 		return {
 			turns: this.core.turns.length,
 			streaming: this.core.streaming ? 'yes' : 'no',
-			model: 'qwen3.5-122b-a10b'
+			model: 'deepseek-v4-flash-0731'
 		}
 	}
 }
@@ -185,7 +185,7 @@ export const llmActor = singleton(
 				{
 					// Default lane = the fast voice model; a manifest's own llm
 					// settings override it per actor.
-					model: settings?.model ?? 'qwen/qwen3.5-122b-a10b',
+					model: settings?.model ?? 'deepseek/deepseek-v4-flash-0731',
 					temperature: settings?.temperature,
 					json: settings?.json,
 					// Host ride-alongs: Stop aborts the fetch, progress streams out.
