@@ -272,6 +272,12 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
 				</span>
 			</p>
+			<p
+				class="mx-auto mt-8 max-w-xl text-pretty text-[16px] leading-relaxed text-foreground/72 sm:text-[17px]"
+			>
+				Und jetzt stell dir vor, eine Million Menschen bauen ihren Spark — gemeinsam.
+				<strong class="font-medium text-accent-ink">Was können wir damit alles erreichen?</strong>
+			</p>
 		</div>
 	</section>
 
