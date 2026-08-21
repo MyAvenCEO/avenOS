@@ -280,7 +280,7 @@ function onKeydown(event: KeyboardEvent) {
 	     workspace, so the side columns can run to the bottom of the screen. -->
 	<div
 		bind:clientHeight={dockH}
-		class="pointer-events-none absolute right-2 bottom-2 left-2 z-20 flex flex-col gap-1.5 [&>*]:pointer-events-auto"
+		class="pointer-events-none absolute right-2 bottom-2 left-2 z-20 flex flex-col gap-1 [&>*]:pointer-events-auto"
 	>
 		{#if listener.partial !== '' || activity.current}
 			<div class="mx-auto flex w-full max-w-lg items-end justify-center">
