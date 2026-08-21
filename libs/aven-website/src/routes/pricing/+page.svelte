@@ -20,7 +20,7 @@ import {
 	totalSharePct,
 	VAT_NOTE
 } from '$lib/pricing/plans'
-import { skillDetailHref, skillsIncludedIn } from '$lib/skills/loader'
+import { skillDetailHref, skillLabel, skillsIncludedIn } from '$lib/skills/loader'
 
 const openSourceGithubHref = 'https://github.com/jaensen/avenOS'
 
@@ -259,7 +259,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 													href={skillDetailHref(feature.skill, 'de')}
 													class="font-medium text-foreground underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
 												>
-													{feature.skill}
+													{skillLabel(feature.skill)}
 												</a>
 												<span class="text-foreground/55"> · {feature.label}</span>
 											</li>
