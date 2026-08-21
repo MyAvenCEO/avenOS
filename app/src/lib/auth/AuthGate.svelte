@@ -25,7 +25,7 @@ interface AuthStatus {
 const { children }: { children: Snippet } = $props()
 let ready = $state(!isTauri())
 let busy = $state(isTauri())
-let message = $state('Starting secure sign-in…')
+let message = $state('Anmeldung wird vorbereitet …')
 let verificationUrl = $state('')
 let userCode = $state('')
 let authWebview: Webview | null = null
@@ -53,7 +53,7 @@ async function openInBrowser() {
 	if (!verificationUrl) return
 	await openUrl(verificationUrl)
 	browserOpened = true
-	message = 'Finish signing in in your browser. This app will continue automatically.'
+	message = 'Schließe die Anmeldung im Browser ab — die App macht dann von allein weiter.'
 }
 
 async function openEmbedded() {
@@ -121,7 +121,7 @@ async function finish() {
  */
 async function skip() {
 	await teardown()
-	message = 'Signed out — you are using the app unauthenticated.'
+	message = 'Nicht angemeldet — du nutzt die App ohne Konto.'
 	ready = true
 }
 
@@ -144,13 +144,13 @@ function schedulePoll(interval: number) {
 
 async function begin() {
 	busy = true
-	message = 'Starting secure sign-in…'
+	message = 'Anmeldung wird vorbereitet …'
 	browserOpened = false
 	try {
 		const authorization = await invoke<BeginAuthorization>('auth_begin')
 		verificationUrl = authorization.verificationUriComplete
 		userCode = authorization.userCode.replace(/(.{4})(?=.)/g, '$1-')
-		message = 'Sign in with your passkey, then approve this app.'
+		message = 'Melde dich mit deinem Passkey an und bestätige dieses Gerät.'
 		try {
 			await openEmbedded()
 		} catch {
@@ -188,52 +188,65 @@ onMount(() => {
 {#if ready}
 	{@render children()}
 {:else}
-	<main class="fixed inset-0 grid place-items-center bg-slate-950 p-6 text-slate-100">
-		<section class="w-full max-w-lg text-center" aria-live="polite">
-			<p class="avenos-wordmark mb-6 text-white">
-				<span class="wm-aven">aven</span><span class="wm-os">OS</span>
-			</p>
-			<h1 class="text-xl font-semibold">Sign in to continue</h1>
-			<p class="mt-3 text-sm text-slate-300">{message}</p>
+	<!-- The gate is the first thing anyone sees of avenOS, so it wears the
+	     brand rather than raw slate: the cream ground, the marine ink, and the
+	     one card idiom the rest of the app uses. -->
+	<main class="fixed inset-0 grid place-items-center bg-surface-cream p-6 text-foreground">
+		<section class="w-full max-w-md text-center" aria-live="polite">
+			<img src="/aven-logo.svg" alt="" class="mx-auto size-14" width="56" height="56">
+			<h1 class="mt-6 font-semibold text-foreground text-xl tracking-tight">Willkommen zurück</h1>
+			<p class="mx-auto mt-2 max-w-sm text-foreground/60 text-sm leading-relaxed">{message}</p>
+
 			{#if userCode}
-				<p class="mt-3 font-mono text-sm tracking-wider text-slate-400">{userCode}</p>
+				<div
+					class="mt-6 rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+				>
+					<p class="font-semibold text-[10px] text-foreground/45 uppercase tracking-[0.14em]">
+						Gerätecode
+					</p>
+					<p class="mt-2 font-mono font-semibold text-2xl text-foreground tracking-[0.18em]">
+						{userCode}
+					</p>
+				</div>
 			{/if}
+
 			<div class="mt-6 flex justify-center gap-3">
 				{#if verificationUrl}
 					<button
 						type="button"
-						class="rounded-md border border-slate-600 px-4 py-2 text-sm hover:bg-slate-800"
+						class="min-h-11 rounded-full border border-border px-6 font-medium text-foreground text-sm transition-colors hover:bg-surface-soft"
 						onclick={openInBrowser}
 					>
-						Use browser
+						Im Browser öffnen
 					</button>
 				{/if}
 				{#if !busy}
 					<button
 						type="button"
-						class="rounded-md bg-white px-4 py-2 text-sm font-medium text-slate-950"
+						class="min-h-11 rounded-full bg-primary px-6 font-semibold text-primary-foreground text-sm transition-opacity hover:opacity-90"
 						onclick={begin}
 					>
-						Try again
+						Erneut versuchen
 					</button>
 				{/if}
 			</div>
 		</section>
+
 		<!-- Temporary: see `skip()`. Lives in the footer strip the auth webview
 		     leaves free, so it stays clickable while sign-in is on screen.
 		     Goes away when passkeys are dependable. -->
 		<div
-			class="fixed inset-x-0 bottom-0 flex h-20 items-center justify-center gap-4 bg-slate-950/95 px-6"
+			class="fixed inset-x-0 bottom-0 flex h-20 items-center justify-center gap-4 border-border/60 border-t bg-surface-cream px-6"
 		>
-			<p class="text-xs text-slate-500">
-				Not enforced yet — passkeys in the desktop webview are still being stabilised.
+			<p class="text-foreground/45 text-xs">
+				Anmeldung ist noch nicht verpflichtend — Passkeys im Desktop‑Webview sind noch in Arbeit.
 			</p>
 			<button
 				type="button"
-				class="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+				class="min-h-9 shrink-0 rounded-full border border-border px-4 font-medium text-foreground/70 text-xs transition-colors hover:bg-surface-soft"
 				onclick={skip}
 			>
-				Continue without signing in
+				Ohne Anmeldung fortfahren
 			</button>
 		</div>
 	</main>
