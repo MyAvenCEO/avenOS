@@ -122,13 +122,6 @@ const STATES: Role[] = [
 		token: '--color-state-done',
 		toneToken: '--color-status-success',
 		note: 'abgeschlossen'
-	},
-	{
-		role: 'archive',
-		tone: 'status quiet',
-		token: '--color-state-archive',
-		toneToken: '--color-status-quiet',
-		note: 'abgelegt'
 	}
 ]
 
