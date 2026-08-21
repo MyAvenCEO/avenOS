@@ -97,6 +97,7 @@ export const PLANS: Plan[] = [
 		reinvestPct: 0,
 		features: [
 			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
+			{ skill: 'inbox-router', label: 'Ein Eingang für alles' },
 			{ skill: 'email-manager', label: 'E‑Mail‑Inbox' },
 			'Digitaler Briefkasten — deine Papierpost digitalisiert (exkl. Nachsendeauftrag der Deutschen Post: 31,90 € / 6 Monate, inkl. USt.)',
 			{ skill: 'docs-organizer', label: 'Dokumentenverwaltung' },
@@ -104,6 +105,7 @@ export const PLANS: Plan[] = [
 			{ skill: 'human-reviewer', label: 'Du entscheidest, wenn es zählt' },
 			{ skill: 'calendar-organizer', label: 'Dein Kalender denkt mit' },
 			{ skill: 'todo-shuffler', label: 'Deine Liste sortiert sich selbst' },
+			{ skill: 'bookmark-champion', label: 'Links und Lesezeichen, wiederfindbar' },
 			'Personal Spark'
 		]
 	},
