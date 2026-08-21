@@ -20,8 +20,9 @@ function linkCls(isActive: boolean) {
 	<div
 		class="mx-auto flex {maxW} flex-wrap items-center justify-center gap-x-10 gap-y-2 px-5 py-5 sm:justify-between sm:px-8"
 	>
-		<a href="/" class="text-[17px] font-light tracking-[-0.01em] opacity-85 hover:opacity-100">
-			avenCEO
+		<a href="/" class="flex items-center gap-2.5">
+			<img src="/aven-logo.svg" alt="" class="size-7 shrink-0" width="28" height="28">
+			<span class="text-[17px] font-semibold tracking-tight text-foreground">avenCEO</span>
 		</a>
 		<nav
 			class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70"
