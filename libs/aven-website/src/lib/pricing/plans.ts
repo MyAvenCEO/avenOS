@@ -187,13 +187,10 @@ export function priceSuffix(p: Plan): string {
 }
 
 /**
- * The one VAT sentence, spelled once. "Netto" alone does not carry it: the
- * clause German price disclosures are expected to use is the explicit one,
- * and a publicly reachable page is read as a price disclosure even when the
- * offer is meant for businesses — hence the second sentence.
+ * The one VAT sentence, spelled once. "Netto" alone does not carry it — the
+ * explicit clause does.
  */
-export const VAT_NOTE =
-	'Alle Preise verstehen sich zzgl. der gesetzlichen Umsatzsteuer. Unsere Angebote richten sich ausschließlich an Unternehmer im Sinne des § 14 BGB.'
+export const VAT_NOTE = 'Alle Preise verstehen sich zzgl. der gesetzlichen Umsatzsteuer.'
 
 /** Book it, or apply for it — avenCOOP is a decision we make together. */
 export function ctaLabel(p: Plan): string {
