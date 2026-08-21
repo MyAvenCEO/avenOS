@@ -55,12 +55,20 @@ final class IosPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
     }
   }
 
-  @available(iOS 16.0, *)
+  // No @available here, deliberately. This delegate method dates back to
+  // iOS 13, and Swift refuses a witness that is less available than the
+  // requirement it satisfies — annotating it iOS 16 fails the build outright.
+  // The version gate belongs around the passkey types inside, which are the
+  // part that actually needs iOS 16.
   func authorizationController(
     controller: ASAuthorizationController,
     didCompleteWithAuthorization authorization: ASAuthorization
   ) {
     defer { clearPending() }
+    guard #available(iOS 16.0, *) else {
+      pending?.reject("NATIVE_PASSKEY_UNAVAILABLE: Native passkeys require iOS 16 or later.")
+      return
+    }
     guard
       let credential = authorization.credential
         as? ASAuthorizationPlatformPublicKeyCredentialAssertion,

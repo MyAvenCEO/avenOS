@@ -135,6 +135,174 @@
           "type": "object",
           "allOf": [
             {
+              "if": {
+                "properties": {
+                  "identifier": {
+                    "anyOf": [
+                      {
+                        "description": "This permission set allows opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application\nas well as reveal file in directories using default file explorer\n#### This default permission set includes:\n\n- `allow-open-url`\n- `allow-reveal-item-in-dir`\n- `allow-default-urls`",
+                        "type": "string",
+                        "const": "opener:default",
+                        "markdownDescription": "This permission set allows opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application\nas well as reveal file in directories using default file explorer\n#### This default permission set includes:\n\n- `allow-open-url`\n- `allow-reveal-item-in-dir`\n- `allow-default-urls`"
+                      },
+                      {
+                        "description": "This enables opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application.",
+                        "type": "string",
+                        "const": "opener:allow-default-urls",
+                        "markdownDescription": "This enables opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application."
+                      },
+                      {
+                        "description": "Enables the open_path command without any pre-configured scope.",
+                        "type": "string",
+                        "const": "opener:allow-open-path",
+                        "markdownDescription": "Enables the open_path command without any pre-configured scope."
+                      },
+                      {
+                        "description": "Enables the open_url command without any pre-configured scope.",
+                        "type": "string",
+                        "const": "opener:allow-open-url",
+                        "markdownDescription": "Enables the open_url command without any pre-configured scope."
+                      },
+                      {
+                        "description": "Enables the reveal_item_in_dir command without any pre-configured scope.",
+                        "type": "string",
+                        "const": "opener:allow-reveal-item-in-dir",
+                        "markdownDescription": "Enables the reveal_item_in_dir command without any pre-configured scope."
+                      },
+                      {
+                        "description": "Denies the open_path command without any pre-configured scope.",
+                        "type": "string",
+                        "const": "opener:deny-open-path",
+                        "markdownDescription": "Denies the open_path command without any pre-configured scope."
+                      },
+                      {
+                        "description": "Denies the open_url command without any pre-configured scope.",
+                        "type": "string",
+                        "const": "opener:deny-open-url",
+                        "markdownDescription": "Denies the open_url command without any pre-configured scope."
+                      },
+                      {
+                        "description": "Denies the reveal_item_in_dir command without any pre-configured scope.",
+                        "type": "string",
+                        "const": "opener:deny-reveal-item-in-dir",
+                        "markdownDescription": "Denies the reveal_item_in_dir command without any pre-configured scope."
+                      }
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "allow": {
+                    "items": {
+                      "title": "OpenerScopeEntry",
+                      "description": "Opener scope entry.",
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "url"
+                          ],
+                          "properties": {
+                            "app": {
+                              "description": "An application to open this url with, for example: firefox.",
+                              "allOf": [
+                                {
+                                  "$ref": "#/definitions/Application"
+                                }
+                              ]
+                            },
+                            "url": {
+                              "description": "A URL that can be opened by the webview when using the Opener APIs.\n\nWildcards can be used following the UNIX glob pattern.\n\nExamples:\n\n- \"https://*\" : allows all HTTPS origin\n\n- \"https://*.github.com/tauri-apps/tauri\": allows any subdomain of \"github.com\" with the \"tauri-apps/api\" path\n\n- \"https://myapi.service.com/users/*\": allows access to any URLs that begins with \"https://myapi.service.com/users/\"",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "path"
+                          ],
+                          "properties": {
+                            "app": {
+                              "description": "An application to open this path with, for example: xdg-open.",
+                              "allOf": [
+                                {
+                                  "$ref": "#/definitions/Application"
+                                }
+                              ]
+                            },
+                            "path": {
+                              "description": "A path that can be opened by the webview when using the Opener APIs.\n\nThe pattern can start with a variable that resolves to a system base directory. The variables are: `$AUDIO`, `$CACHE`, `$CONFIG`, `$DATA`, `$LOCALDATA`, `$DESKTOP`, `$DOCUMENT`, `$DOWNLOAD`, `$EXE`, `$FONT`, `$HOME`, `$PICTURE`, `$PUBLIC`, `$RUNTIME`, `$TEMPLATE`, `$VIDEO`, `$RESOURCE`, `$APP`, `$LOG`, `$TEMP`, `$APPCONFIG`, `$APPDATA`, `$APPLOCALDATA`, `$APPCACHE`, `$APPLOG`.",
+                              "type": "string"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "deny": {
+                    "items": {
+                      "title": "OpenerScopeEntry",
+                      "description": "Opener scope entry.",
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "url"
+                          ],
+                          "properties": {
+                            "app": {
+                              "description": "An application to open this url with, for example: firefox.",
+                              "allOf": [
+                                {
+                                  "$ref": "#/definitions/Application"
+                                }
+                              ]
+                            },
+                            "url": {
+                              "description": "A URL that can be opened by the webview when using the Opener APIs.\n\nWildcards can be used following the UNIX glob pattern.\n\nExamples:\n\n- \"https://*\" : allows all HTTPS origin\n\n- \"https://*.github.com/tauri-apps/tauri\": allows any subdomain of \"github.com\" with the \"tauri-apps/api\" path\n\n- \"https://myapi.service.com/users/*\": allows access to any URLs that begins with \"https://myapi.service.com/users/\"",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "path"
+                          ],
+                          "properties": {
+                            "app": {
+                              "description": "An application to open this path with, for example: xdg-open.",
+                              "allOf": [
+                                {
+                                  "$ref": "#/definitions/Application"
+                                }
+                              ]
+                            },
+                            "path": {
+                              "description": "A path that can be opened by the webview when using the Opener APIs.\n\nThe pattern can start with a variable that resolves to a system base directory. The variables are: `$AUDIO`, `$CACHE`, `$CONFIG`, `$DATA`, `$LOCALDATA`, `$DESKTOP`, `$DOCUMENT`, `$DOWNLOAD`, `$EXE`, `$FONT`, `$HOME`, `$PICTURE`, `$PUBLIC`, `$RUNTIME`, `$TEMPLATE`, `$VIDEO`, `$RESOURCE`, `$APP`, `$LOG`, `$TEMP`, `$APPCONFIG`, `$APPDATA`, `$APPLOCALDATA`, `$APPCACHE`, `$APPLOG`.",
+                              "type": "string"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "properties": {
+                "identifier": {
+                  "description": "Identifier of the permission or permission set.",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Identifier"
+                    }
+                  ]
+                }
+              }
+            },
+            {
               "properties": {
                 "identifier": {
                   "description": "Identifier of the permission or permission set.",
@@ -176,84 +344,6 @@
     "Identifier": {
       "description": "Permission identifier",
       "oneOf": [
-        {
-          "description": "No features are enabled by default, as we believe\nthe clipboard can be inherently dangerous and it is \napplication specific if read and/or write access is needed.\n\nClipboard interaction needs to be explicitly enabled.\n",
-          "type": "string",
-          "const": "clipboard-manager:default",
-          "markdownDescription": "No features are enabled by default, as we believe\nthe clipboard can be inherently dangerous and it is \napplication specific if read and/or write access is needed.\n\nClipboard interaction needs to be explicitly enabled.\n"
-        },
-        {
-          "description": "Enables the clear command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:allow-clear",
-          "markdownDescription": "Enables the clear command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the read_image command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:allow-read-image",
-          "markdownDescription": "Enables the read_image command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the read_text command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:allow-read-text",
-          "markdownDescription": "Enables the read_text command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the write_html command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:allow-write-html",
-          "markdownDescription": "Enables the write_html command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the write_image command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:allow-write-image",
-          "markdownDescription": "Enables the write_image command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the write_text command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:allow-write-text",
-          "markdownDescription": "Enables the write_text command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the clear command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:deny-clear",
-          "markdownDescription": "Denies the clear command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the read_image command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:deny-read-image",
-          "markdownDescription": "Denies the read_image command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the read_text command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:deny-read-text",
-          "markdownDescription": "Denies the read_text command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the write_html command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:deny-write-html",
-          "markdownDescription": "Denies the write_html command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the write_image command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:deny-write-image",
-          "markdownDescription": "Denies the write_image command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the write_text command without any pre-configured scope.",
-          "type": "string",
-          "const": "clipboard-manager:deny-write-text",
-          "markdownDescription": "Denies the write_text command without any pre-configured scope."
-        },
         {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
@@ -2271,340 +2361,70 @@
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`\n- `allow-run-tool`",
+          "description": "Allow the native iOS passkey assertion\n#### This default permission set includes:\n\n- `allow-login`",
           "type": "string",
-          "const": "sandbox-quickjs:default",
-          "markdownDescription": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`\n- `allow-run-tool`"
+          "const": "ios-passkey:default",
+          "markdownDescription": "Allow the native iOS passkey assertion\n#### This default permission set includes:\n\n- `allow-login`"
         },
         {
-          "description": "Enables the run_tool command without any pre-configured scope.",
+          "description": "Enables the login command without any pre-configured scope.",
           "type": "string",
-          "const": "sandbox-quickjs:allow-run-tool",
-          "markdownDescription": "Enables the run_tool command without any pre-configured scope."
+          "const": "ios-passkey:allow-login",
+          "markdownDescription": "Enables the login command without any pre-configured scope."
         },
         {
-          "description": "Enables the session_dispatch command without any pre-configured scope.",
+          "description": "Denies the login command without any pre-configured scope.",
           "type": "string",
-          "const": "sandbox-quickjs:allow-session-dispatch",
-          "markdownDescription": "Enables the session_dispatch command without any pre-configured scope."
+          "const": "ios-passkey:deny-login",
+          "markdownDescription": "Denies the login command without any pre-configured scope."
         },
         {
-          "description": "Enables the session_mount command without any pre-configured scope.",
+          "description": "This permission set allows opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application\nas well as reveal file in directories using default file explorer\n#### This default permission set includes:\n\n- `allow-open-url`\n- `allow-reveal-item-in-dir`\n- `allow-default-urls`",
           "type": "string",
-          "const": "sandbox-quickjs:allow-session-mount",
-          "markdownDescription": "Enables the session_mount command without any pre-configured scope."
+          "const": "opener:default",
+          "markdownDescription": "This permission set allows opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application\nas well as reveal file in directories using default file explorer\n#### This default permission set includes:\n\n- `allow-open-url`\n- `allow-reveal-item-in-dir`\n- `allow-default-urls`"
         },
         {
-          "description": "Enables the session_unmount command without any pre-configured scope.",
+          "description": "This enables opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application.",
           "type": "string",
-          "const": "sandbox-quickjs:allow-session-unmount",
-          "markdownDescription": "Enables the session_unmount command without any pre-configured scope."
+          "const": "opener:allow-default-urls",
+          "markdownDescription": "This enables opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application."
         },
         {
-          "description": "Denies the run_tool command without any pre-configured scope.",
+          "description": "Enables the open_path command without any pre-configured scope.",
           "type": "string",
-          "const": "sandbox-quickjs:deny-run-tool",
-          "markdownDescription": "Denies the run_tool command without any pre-configured scope."
+          "const": "opener:allow-open-path",
+          "markdownDescription": "Enables the open_path command without any pre-configured scope."
         },
         {
-          "description": "Denies the session_dispatch command without any pre-configured scope.",
+          "description": "Enables the open_url command without any pre-configured scope.",
           "type": "string",
-          "const": "sandbox-quickjs:deny-session-dispatch",
-          "markdownDescription": "Denies the session_dispatch command without any pre-configured scope."
+          "const": "opener:allow-open-url",
+          "markdownDescription": "Enables the open_url command without any pre-configured scope."
         },
         {
-          "description": "Denies the session_mount command without any pre-configured scope.",
+          "description": "Enables the reveal_item_in_dir command without any pre-configured scope.",
           "type": "string",
-          "const": "sandbox-quickjs:deny-session-mount",
-          "markdownDescription": "Denies the session_mount command without any pre-configured scope."
+          "const": "opener:allow-reveal-item-in-dir",
+          "markdownDescription": "Enables the reveal_item_in_dir command without any pre-configured scope."
         },
         {
-          "description": "Denies the session_unmount command without any pre-configured scope.",
+          "description": "Denies the open_path command without any pre-configured scope.",
           "type": "string",
-          "const": "sandbox-quickjs:deny-session-unmount",
-          "markdownDescription": "Denies the session_unmount command without any pre-configured scope."
+          "const": "opener:deny-open-path",
+          "markdownDescription": "Denies the open_path command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-signer-did`\n- `allow-signing-public-key`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`\n- `allow-vault-ui-settings-get`\n- `allow-vault-ui-settings-set-locale`",
+          "description": "Denies the open_url command without any pre-configured scope.",
           "type": "string",
-          "const": "self:default",
-          "markdownDescription": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-signer-did`\n- `allow-signing-public-key`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`\n- `allow-vault-ui-settings-get`\n- `allow-vault-ui-settings-set-locale`"
+          "const": "opener:deny-open-url",
+          "markdownDescription": "Denies the open_url command without any pre-configured scope."
         },
         {
-          "description": "Read-only self IPC for the isolated vault webview\n#### This permission set includes:\n\n- `allow-peer-status`\n- `allow-active-identity`",
+          "description": "Denies the reveal_item_in_dir command without any pre-configured scope.",
           "type": "string",
-          "const": "self:vault-webview-self",
-          "markdownDescription": "Read-only self IPC for the isolated vault webview\n#### This permission set includes:\n\n- `allow-peer-status`\n- `allow-active-identity`"
-        },
-        {
-          "description": "Enables the active_identity command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-active-identity",
-          "markdownDescription": "Enables the active_identity command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the host_device_label command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-host-device-label",
-          "markdownDescription": "Enables the host_device_label command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the lock command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-lock",
-          "markdownDescription": "Enables the lock command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the peer_status command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-peer-status",
-          "markdownDescription": "Enables the peer_status command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the public_key command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-public-key",
-          "markdownDescription": "Enables the public_key command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the register command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-register",
-          "markdownDescription": "Enables the register command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the sign command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-sign",
-          "markdownDescription": "Enables the sign command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the signer_did command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-signer-did",
-          "markdownDescription": "Enables the signer_did command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the signing_public_key command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-signing-public-key",
-          "markdownDescription": "Enables the signing_public_key command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the unlock command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-unlock",
-          "markdownDescription": "Enables the unlock command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the vault_create command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-vault-create",
-          "markdownDescription": "Enables the vault_create command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the vault_list command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-vault-list",
-          "markdownDescription": "Enables the vault_list command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the vault_select command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-vault-select",
-          "markdownDescription": "Enables the vault_select command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the vault_selected_slug command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-vault-selected-slug",
-          "markdownDescription": "Enables the vault_selected_slug command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the vault_slug_preview command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-vault-slug-preview",
-          "markdownDescription": "Enables the vault_slug_preview command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the vault_ui_settings_get command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-vault-ui-settings-get",
-          "markdownDescription": "Enables the vault_ui_settings_get command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the vault_ui_settings_set_locale command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-vault-ui-settings-set-locale",
-          "markdownDescription": "Enables the vault_ui_settings_set_locale command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the verify command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:allow-verify",
-          "markdownDescription": "Enables the verify command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the active_identity command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-active-identity",
-          "markdownDescription": "Denies the active_identity command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the host_device_label command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-host-device-label",
-          "markdownDescription": "Denies the host_device_label command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the lock command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-lock",
-          "markdownDescription": "Denies the lock command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the peer_status command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-peer-status",
-          "markdownDescription": "Denies the peer_status command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the public_key command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-public-key",
-          "markdownDescription": "Denies the public_key command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the register command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-register",
-          "markdownDescription": "Denies the register command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the sign command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-sign",
-          "markdownDescription": "Denies the sign command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the signer_did command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-signer-did",
-          "markdownDescription": "Denies the signer_did command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the signing_public_key command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-signing-public-key",
-          "markdownDescription": "Denies the signing_public_key command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the unlock command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-unlock",
-          "markdownDescription": "Denies the unlock command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the vault_create command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-vault-create",
-          "markdownDescription": "Denies the vault_create command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the vault_list command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-vault-list",
-          "markdownDescription": "Denies the vault_list command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the vault_select command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-vault-select",
-          "markdownDescription": "Denies the vault_select command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the vault_selected_slug command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-vault-selected-slug",
-          "markdownDescription": "Denies the vault_selected_slug command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the vault_slug_preview command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-vault-slug-preview",
-          "markdownDescription": "Denies the vault_slug_preview command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the vault_ui_settings_get command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-vault-ui-settings-get",
-          "markdownDescription": "Denies the vault_ui_settings_get command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the vault_ui_settings_set_locale command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-vault-ui-settings-set-locale",
-          "markdownDescription": "Denies the vault_ui_settings_set_locale command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the verify command without any pre-configured scope.",
-          "type": "string",
-          "const": "self:deny-verify",
-          "markdownDescription": "Denies the verify command without any pre-configured scope."
-        },
-        {
-          "description": "Default permissions for tauri-plugin-vault\n#### This default permission set includes:\n\n- `allow-secrets-list`\n- `allow-secrets-set`\n- `allow-secrets-reveal`\n- `allow-secrets-delete`",
-          "type": "string",
-          "const": "vault:default",
-          "markdownDescription": "Default permissions for tauri-plugin-vault\n#### This default permission set includes:\n\n- `allow-secrets-list`\n- `allow-secrets-set`\n- `allow-secrets-reveal`\n- `allow-secrets-delete`"
-        },
-        {
-          "description": "Enables the secrets_delete command without any pre-configured scope.",
-          "type": "string",
-          "const": "vault:allow-secrets-delete",
-          "markdownDescription": "Enables the secrets_delete command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the secrets_list command without any pre-configured scope.",
-          "type": "string",
-          "const": "vault:allow-secrets-list",
-          "markdownDescription": "Enables the secrets_list command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the secrets_reveal command without any pre-configured scope.",
-          "type": "string",
-          "const": "vault:allow-secrets-reveal",
-          "markdownDescription": "Enables the secrets_reveal command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the secrets_set command without any pre-configured scope.",
-          "type": "string",
-          "const": "vault:allow-secrets-set",
-          "markdownDescription": "Enables the secrets_set command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the secrets_delete command without any pre-configured scope.",
-          "type": "string",
-          "const": "vault:deny-secrets-delete",
-          "markdownDescription": "Denies the secrets_delete command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the secrets_list command without any pre-configured scope.",
-          "type": "string",
-          "const": "vault:deny-secrets-list",
-          "markdownDescription": "Denies the secrets_list command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the secrets_reveal command without any pre-configured scope.",
-          "type": "string",
-          "const": "vault:deny-secrets-reveal",
-          "markdownDescription": "Denies the secrets_reveal command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the secrets_set command without any pre-configured scope.",
-          "type": "string",
-          "const": "vault:deny-secrets-set",
-          "markdownDescription": "Denies the secrets_set command without any pre-configured scope."
+          "const": "opener:deny-reveal-item-in-dir",
+          "markdownDescription": "Denies the reveal_item_in_dir command without any pre-configured scope."
         }
       ]
     },
@@ -2699,6 +2519,23 @@
           "enum": [
             "iOS"
           ]
+        }
+      ]
+    },
+    "Application": {
+      "description": "Opener scope application.",
+      "anyOf": [
+        {
+          "description": "Open in default application.",
+          "type": "null"
+        },
+        {
+          "description": "If true, allow open with any application.",
+          "type": "boolean"
+        },
+        {
+          "description": "Allow specific application to open with.",
+          "type": "string"
         }
       ]
     }
