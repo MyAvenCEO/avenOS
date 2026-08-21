@@ -54,6 +54,53 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		</div>
 	</section>
 
+	<!-- The thesis: the company of the future, named. -->
+	<section
+		class="border-b border-border/40 bg-linear-to-b from-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
+		aria-labelledby="spark-heading"
+	>
+		<div class="mx-auto max-w-3xl text-center">
+			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
+				Die Firma der Zukunft
+			</p>
+			<h2
+				id="spark-heading"
+				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
+			>
+				1&nbsp;Mensch + 1&nbsp;Aven =
+				<span class="text-accent">ein Spark</span>.
+			</h2>
+			<div
+				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
+			>
+				<p class="text-pretty">
+					Die Firma der Zukunft hat kein Büro, keine Abteilungen, keine vierzig Angestellten. Sie
+					ist ein Funke:
+					<strong class="font-medium text-foreground/88">ein Mensch mit einer Vision</strong>
+					und
+					<strong class="font-medium text-foreground/88"
+						>ein Aven, der die ganze Firma dazu betreibt</strong
+					>
+					— Operations, Technik, Markt, Produkt.
+				</p>
+				<p class="text-pretty">
+					Das nennen wir einen
+					<strong class="font-medium text-foreground/88">Spark</strong>
+					— dein erster ist dein Leben selbst.
+				</p>
+			</div>
+			<p
+				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
+			>
+				Jeder Mensch wird Gründer.
+				<span class="mt-2 block">
+					Alles, was du dazu brauchst, ist
+					<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
+				</span>
+			</p>
+		</div>
+	</section>
+
 	<!-- The shift: the FOMO that is simply true — post-AGI touches everyone. -->
 	<section
 		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
@@ -220,53 +267,6 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				Und dann passiert das Eigentliche:
 				<strong class="font-medium text-foreground/85">was du baust, bleibt deins</strong>. Nicht
 				deine Stunde ist das Asset — du und dein Aven seid es.
-			</p>
-		</div>
-	</section>
-
-	<!-- The thesis: the company of the future, named. -->
-	<section
-		class="border-b border-border/40 bg-linear-to-b from-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
-		aria-labelledby="spark-heading"
-	>
-		<div class="mx-auto max-w-3xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-				Die Firma der Zukunft
-			</p>
-			<h2
-				id="spark-heading"
-				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
-			>
-				1&nbsp;Mensch + 1&nbsp;Aven =
-				<span class="text-accent">ein Spark</span>.
-			</h2>
-			<div
-				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
-			>
-				<p class="text-pretty">
-					Die Firma der Zukunft hat kein Büro, keine Abteilungen, keine vierzig Angestellten. Sie
-					ist ein Funke:
-					<strong class="font-medium text-foreground/88">ein Mensch mit einer Vision</strong>
-					und
-					<strong class="font-medium text-foreground/88"
-						>ein Aven, der die ganze Firma dazu betreibt</strong
-					>
-					— Operations, Technik, Markt, Produkt.
-				</p>
-				<p class="text-pretty">
-					Das nennen wir einen
-					<strong class="font-medium text-foreground/88">Spark</strong>
-					— dein erster ist dein Leben selbst.
-				</p>
-			</div>
-			<p
-				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
-			>
-				Jeder Mensch wird Gründer.
-				<span class="mt-2 block">
-					Alles, was du dazu brauchst, ist
-					<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
-				</span>
 			</p>
 		</div>
 	</section>
