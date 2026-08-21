@@ -282,8 +282,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 						>
 							Kein Produkt ohne Haltung&nbsp;— das ist kein Satz aus dem Handbuch. Deine Daten
 							gehören dir. Deine Arbeitsintelligenz gehört dir. Ende‑zu‑Ende‑verschlüsselt,
-							Schlüssel bei dir&nbsp;— wir haben keinen Hinterzugang, und wir wollen keinen. Das
-							wäre kein Geschäftsmodell. Das wäre Verrat.
+							Schlüssel bei dir&nbsp;— wir haben keinen Hinterzugang, und wir wollen keinen.
 						</p>
 						<p
 							class="mt-5 max-w-none text-[14px] leading-[1.65] text-foreground/73 sm:text-[15px] sm:leading-[1.7]"
