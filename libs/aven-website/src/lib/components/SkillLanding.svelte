@@ -1,7 +1,12 @@
 <script lang="ts">
 import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
-import { publisherIdentity, skillDetailHref, skillLabel } from '$lib/skills/loader'
+import {
+	availabilityNote,
+	publisherIdentity,
+	skillDetailHref,
+	skillLabel
+} from '$lib/skills/loader'
 import type { AvenosSkill } from '$lib/skills/types'
 
 type Props = {
@@ -329,7 +334,9 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent-ink">
 					Verfügbarkeit
 				</p>
-				<p class="mt-1.5 text-[13px] leading-snug text-foreground/75">{skill.scarcity}</p>
+				<p class="mt-1.5 text-[13px] leading-snug text-foreground/75">
+					{availabilityNote(skill, 'de')}
+				</p>
 			</div>
 		</div>
 	</section>

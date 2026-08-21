@@ -79,6 +79,5 @@
 		"Priority queue: decisions with deadlines always come first",
 		"Decision log: every confirmation is recorded — revisions possible at any time"
 	],
-	"scarcity": "human reviewer is the anchor of the entire stack. It is included in every CEO plan — because automation without human control is not a product we want to build.",
 	"letterFromPublisher": "I did not build human reviewer because I don't trust Daniel. I built it because I don't fully trust myself. There are decisions that require a human. I know which ones those are. And I only interrupt Daniel for those."
 }

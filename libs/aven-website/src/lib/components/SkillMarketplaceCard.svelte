@@ -9,10 +9,13 @@ type Props = {
 
 let { skill, variant = 'default' }: Props = $props()
 
-const cardClass =
-	variant === 'spotlight'
-		? 'group flex min-w-0 flex-col rounded-2xl border-2 border-accent/35 bg-surface-raised p-6 ring-1 ring-accent/15 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:border-accent/55  sm:p-7'
-		: 'group flex min-w-0 flex-col rounded-2xl border border-border/40 bg-surface-raised p-5 transition-all hover:border-border/70 hover:bg-surface-soft  sm:p-6'
+const cardClass = $derived.by(() =>
+	skill.comingSoon
+		? 'group flex min-w-0 flex-col rounded-2xl border border-dashed border-border/50 bg-surface-soft/60 p-5 opacity-75 transition-all hover:opacity-100 hover:border-border/70 sm:p-6'
+		: variant === 'spotlight'
+			? 'group flex min-w-0 flex-col rounded-2xl border-2 border-accent/35 bg-surface-raised p-6 ring-1 ring-accent/15 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:border-accent/55  sm:p-7'
+			: 'group flex min-w-0 flex-col rounded-2xl border border-border/40 bg-surface-raised p-5 transition-all hover:border-border/70 hover:bg-surface-soft  sm:p-6'
+)
 
 const chainLabels: Record<string, string> = {
 	'email-manager': 'E‑Mail',
@@ -22,7 +25,9 @@ const chainLabels: Record<string, string> = {
 	'human-reviewer': 'HITL',
 	'blog-writer': 'Content',
 	'calendar-organizer': 'Kalender',
-	'todo-shuffler': 'Aufgaben'
+	'todo-shuffler': 'Aufgaben',
+	'inbox-router': 'Eingang',
+	'bookmark-champion': 'Links'
 }
 </script>
 
@@ -36,20 +41,16 @@ const chainLabels: Record<string, string> = {
 			{skill.publisher.displayName}
 		</p>
 		<span
-			class="inline-flex items-center rounded-full border border-accent/40 bg-accent/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-accent-ink"
+			class="inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] {skill.comingSoon
+				? 'border-quiet/35 bg-quiet/10 text-quiet-ink'
+				: 'border-accent/40 bg-accent/20 text-accent-ink'}"
 		>
-			Skill
+			{skill.comingSoon ? 'Bald' : 'Skill'}
 		</span>
 	</div>
 
 	<h3 class="mt-3 text-[15px] font-bold tracking-[0.06em] text-foreground sm:text-[16px]">
 		{skillLabel(skill.slug)}
-		{#if skill.comingSoon}
-			<span
-				class="ml-2 align-middle rounded-full border border-quiet/40 bg-quiet/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-quiet-ink"
-				>bald</span
-			>
-		{/if}
 	</h3>
 
 	<p class="mt-2 text-[14px] font-medium leading-snug text-foreground/82 sm:text-[15px]">
