@@ -150,11 +150,6 @@ describe('execution engine', () => {
 	})
 })
 
-describe('backward chaining (SLD)', () => {
-	const contract = (id: string, requires: string[], produces: string[]) =>
-		new Actor({ id, name: id, description: '', tags: [], methods: [], requires, produces })
-})
-
 describe('supervision', () => {
 	test('a handler that throws once is retried and succeeds silently', async () => {
 		let calls = 0
@@ -252,31 +247,6 @@ describe('registry actor (0128)', () => {
 	})
 })
 
-describe('execution engine (0129)', () => {
-	/** A producer whose clause-body handler is named after what it produces. */
-	function producer(
-		id: string,
-		requires: string[],
-		produces: string,
-		body: (p: Record<string, unknown>) => { record: string; wire: string }
-	) {
-		return new Actor(
-			{
-				id,
-				name: id,
-				description: `Erzeugt ${produces}.`,
-				tags: ['test'],
-				methods: [],
-				requires,
-				produces: [produces]
-			},
-			{ [functor(produces)]: body }
-		)
-	}
-})
-
-describe('per-actor llm lane (manifest llm settings)', () => {})
-
 describe('catalog (code is the source of truth, reduced — 0130)', () => {
 	test('no declared catalog remains: the demo pair and its bridge are gone', async () => {
 		// The metric/imperial pair existed ONLY to give the Negotiator
@@ -307,27 +277,6 @@ describe('the UI event door reduces through the sandbox', () => {
 		await bus.uiEvent('ui', actor.uuid, { send: 'BUMP' })
 		expect(actor.state.n).toBe(1)
 	})
-})
-
-describe('the membrane seam (0130): actors shape their own model text', () => {
-	function shaper(shapeBody: string) {
-		// A real logic actor: shape() runs IN the sandbox, not on a subclass.
-		return new Actor({
-			id: 'shaping',
-			name: 'Shaping',
-			description: 'Shapes its own model output.',
-			tags: [],
-			methods: [],
-			requires: [],
-			produces: ['thing(T)'],
-			llm: true,
-			logic: `
-				function initState() { return {} }
-				function reduce(state, ev) { return state }
-				function shape(state, rawText) { ${shapeBody} }
-			`
-		})
-	}
 })
 
 describe('one primitive (0130): declared events serve tools, UI and the proof engine', () => {

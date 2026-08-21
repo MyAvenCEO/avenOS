@@ -352,7 +352,6 @@
 	--color-border: color-mix(in srgb, var(--color-marine) 14%, transparent);
 	--color-input: color-mix(in srgb, #ffffff 65%, var(--color-surface-cream));
 
-
 	--radius-lg: 1rem;
 	--radius-xl: 1.5rem;
 	--radius-2xl: 2rem;
