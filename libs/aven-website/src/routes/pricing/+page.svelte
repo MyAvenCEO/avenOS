@@ -114,8 +114,14 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 				{#each tiers as p, i (p.id)}
 					{@const previous = i === 0 ? avenId : tiers[i - 1]}
 					{@const skillCount = skillsIncludedIn(p.id, 'de').length}
-					{@const plain = p.features.filter((f) => typeof f === 'string')}
-					{@const skills = p.features.filter((f) => typeof f !== 'string')}
+					{@const plain = p.features.filter((f) => typeof f === 'string' || 'href' in f)}
+					{@const skills = p.features
+						.filter((f) => typeof f !== 'string' && 'skill' in f)
+						.sort(
+							(a, b) =>
+								Number(loadSkill(a.skill, 'de')?.comingSoon ?? false) -
+								Number(loadSkill(b.skill, 'de')?.comingSoon ?? false)
+						)}
 					<div
 						id={p.id}
 						class="flex min-w-0 scroll-mt-28 flex-col rounded-2xl p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {p.highlight
@@ -189,23 +195,6 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							</div>
 						{/if}
 
-						{#if p.runtime}
-							<div
-								class="mt-4 rounded-xl border border-border/60 bg-surface-card px-4 py-3 text-left"
-							>
-								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-									KI‑Laufzeit
-								</p>
-								<p class="mt-1 text-[13px] font-medium leading-snug text-foreground/85">
-									Bis zu {p.runtime.hoursPerDay}&nbsp;Std/Tag Agent‑Laufzeit
-									<span class="font-normal text-foreground/55">(Fair Use)</span>
-								</p>
-								<p class="mt-0.5 text-[12px] leading-snug text-foreground/55">
-									danach {p.runtime.centsPerExtraMinute}&nbsp;Cent pro Minute
-								</p>
-							</div>
-						{/if}
-
 						<ul
 							class="mt-4 flex-1 space-y-2 border-t border-border/50 pt-4 text-left text-[13px] leading-snug text-foreground/75"
 						>
@@ -218,7 +207,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								></span>
 								<span>Alles aus {previous.name}</span>
 							</li>
-							{#each plain as feature (feature)}
+							{#each plain as feature (typeof feature === 'string' ? feature : feature.label)}
 								<li class="flex gap-2">
 									<span
 										aria-hidden="true"
@@ -226,23 +215,24 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 											? 'bg-accent'
 											: 'bg-foreground/25'}"
 									></span>
-									<span>{feature}</span>
+									{#if typeof feature === 'string'}
+										<span>{feature}</span>
+									{:else}
+										<span>
+											<a
+												href={feature.href}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+											>
+												{feature.label}
+												→
+											</a>
+										</span>
+									{/if}
 								</li>
 							{/each}
 						</ul>
-
-						{#if p.link}
-							<p class="mt-4 text-[12px] text-foreground/55">
-								<a
-									href={p.link.href}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="underline underline-offset-4 hover:text-foreground/80"
-								>
-									Syndikat auf {p.link.label} →
-								</a>
-							</p>
-						{/if}
 
 						<!-- Skills are their own category, not more bullets: a feature is
 						     something the tier does, a skill is a thing you can go read. -->
@@ -290,6 +280,23 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							</div>
 						{/if}
 
+						{#if p.runtime}
+							<div
+								class="mt-4 rounded-xl border border-border/60 bg-surface-card px-4 py-3 text-left"
+							>
+								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+									KI‑Laufzeit
+								</p>
+								<p class="mt-1 text-[13px] font-medium leading-snug text-foreground/85">
+									Bis zu {p.runtime.hoursPerDay}&nbsp;Std/Tag Agent‑Laufzeit
+									<span class="font-normal text-foreground/55">(Fair Use)</span>
+								</p>
+								<p class="mt-0.5 text-[12px] leading-snug text-foreground/55">
+									danach {p.runtime.centsPerExtraMinute}&nbsp;Cent pro Minute
+								</p>
+							</div>
+						{/if}
+
 						<div class="mt-5 lg:mt-auto lg:pt-5">
 							<a
 								href={ctaHref(p)}
@@ -302,11 +309,13 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 						</div>
 
 						{#if p.referralPct}
-							<p class="mt-3 text-center text-[12px] leading-snug text-foreground/55">
-								<strong class="font-semibold text-accent-ink"
-									>{p.referralPct}&nbsp;% Provision</strong
-								>
-								auf jedes aven‑Abo, das du vermittelst — monatlich, solange es läuft.
+							<p class="mt-4 text-center">
+								<span class="text-xl font-semibold tracking-tight text-accent">
+									{p.referralPct}&nbsp;% Provision
+								</span>
+								<span class="mt-1 block text-[12px] leading-snug text-foreground/55">
+									auf jedes aven‑Abo, das du vermittelst — monatlich, solange es läuft.
+								</span>
 							</p>
 						{/if}
 					</div>
