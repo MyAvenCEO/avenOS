@@ -16,7 +16,7 @@ export const serverConfigSchema = z
 		NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 		PUBLIC_BASE_URL: z.url(),
 		WEBAUTHN_RP_ID: z.string().min(1),
-		REQUIRE_PASSKEY_PRF: bool.default(true),
+		REQUIRE_PASSKEY_PRF: bool.default(false),
 		DOWNLOAD_URL: z.string().default(''),
 		LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 		APPLICATION_VERSION: z.string().min(1).default('0.1.0'),

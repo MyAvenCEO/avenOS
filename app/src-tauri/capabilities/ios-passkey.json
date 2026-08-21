@@ -1,0 +1,8 @@
+{
+	"$schema": "../gen/schemas/iOS-schema.json",
+	"identifier": "ios-passkey",
+	"description": "Allow the main window to use the native iOS passkey sheet",
+	"windows": ["main"],
+	"platforms": ["iOS"],
+	"permissions": ["ios-passkey:default"]
+}

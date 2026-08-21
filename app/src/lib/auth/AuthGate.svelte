@@ -1,8 +1,5 @@
 <script lang="ts">
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi'
-import { Webview } from '@tauri-apps/api/webview'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { onMount, type Snippet } from 'svelte'
 import { goto } from '$app/navigation'
@@ -22,119 +19,42 @@ interface AuthStatus {
 	authenticated: boolean
 }
 
-/**
- * The frame the embedded sign-in webview sits inside, in logical pixels.
- *
- * It used to start 16px from the top and run to 80px off the bottom, which
- * covered the gate completely — the app's own screen existed but nobody ever
- * saw it. The webview is a panel INSIDE our screen now: brand and device code
- * above it, the escape hatch below, sign-in in the middle.
- *
- * These numbers are the layout in both directions — the CSS below reads them,
- * so the hole and the thing filling it cannot drift apart.
- */
-const FRAME = { top: 232, side: 24, bottom: 80 }
+interface BeginPasskeyAuthentication {
+	available: boolean
+	command: string
+	rpId: string
+	challenge: number[]
+}
+
+interface NativePasskeyAssertion {
+	id: string
+	raw_id: string
+	client_data_json: string
+	authenticator_data: string
+	signature: string
+	user_handle: string
+}
 
 const { children }: { children: Snippet } = $props()
 let ready = $state(!isTauri())
 let busy = $state(isTauri())
-let message = $state('Anmeldung wird vorbereitet …')
+let message = $state('Sichere Anmeldung wird vorbereitet …')
 let verificationUrl = $state('')
 let userCode = $state('')
-let authWebview: Webview | null = null
 let pollTimer: ReturnType<typeof setTimeout> | undefined
-let unlistenResize: (() => void) | undefined
 let mounted = false
-let browserOpened = false
-
-async function fitWebview() {
-	if (!authWebview) return
-	const window = getCurrentWindow()
-	const [physical, scale] = await Promise.all([window.innerSize(), window.scaleFactor()])
-	const size = physical.toLogical(scale)
-	await Promise.all([
-		authWebview.setPosition(new LogicalPosition(FRAME.side, FRAME.top)),
-		authWebview.setSize(
-			new LogicalSize(
-				Math.max(320, size.width - FRAME.side * 2),
-				Math.max(280, size.height - FRAME.top - FRAME.bottom)
-			)
-		)
-	])
-}
 
 async function openInBrowser() {
 	if (!verificationUrl) return
 	await openUrl(verificationUrl)
-	browserOpened = true
-	message = 'Schließe die Anmeldung im Browser ab — die App macht dann von allein weiter.'
-}
-
-async function openEmbedded() {
-	const window = getCurrentWindow()
-	unlistenResize?.()
-	unlistenResize = undefined
-	const physical = await window.innerSize()
-	const scale = await window.scaleFactor()
-	const size = physical.toLogical(scale)
-	const existing = await Webview.getByLabel('aven-auth')
-	if (existing) await existing.close()
-	authWebview = new Webview(window, 'aven-auth', {
-		url: verificationUrl,
-		x: FRAME.side,
-		y: FRAME.top,
-		width: Math.max(320, size.width - FRAME.side * 2),
-		height: Math.max(280, size.height - FRAME.top - FRAME.bottom),
-		focus: true,
-		dragDropEnabled: false
-	})
-	await authWebview.once('tauri://created', () => {
-		void authWebview?.setFocus()
-	})
-	await authWebview.once('tauri://error', () => {
-		authWebview = null
-		if (!browserOpened) void openInBrowser()
-	})
-	unlistenResize = await window.onResized(() => void fitWebview())
-}
-
-/** Tear down whatever the sign-in attempt is holding, however it ended. */
-async function teardown() {
-	if (pollTimer) clearTimeout(pollTimer)
-	unlistenResize?.()
-	unlistenResize = undefined
-	if (authWebview) await authWebview.close().catch(() => undefined)
-	authWebview = null
-	busy = false
+	message = 'Schließe die sichere Anmeldung im Browser ab. avenOS kann geöffnet bleiben.'
 }
 
 async function finish() {
-	await teardown()
+	if (pollTimer) clearTimeout(pollTimer)
 	ready = true
+	busy = false
 	await goto('/dashboard', { replaceState: true })
-}
-
-/**
- * TEMPORARY — the gate shows, it just does not hold the door.
- *
- * The passkey itself is fine; what is not dependable yet is WebAuthn inside
- * the embedded Tauri webview — which is the only path this gate uses, so a
- * failed native prompt would lock the whole desktop app behind a screen with
- * no way past it. (Browser development never reaches here: `ready` starts
- * true when `isTauri()` is false.)
- *
- * Until the native flow is trustworthy you can walk in unauthenticated,
- * deliberately and visibly: sign-in still runs and still wins when it works,
- * but declining it lets you through.
- *
- * This is NOT the intended security model. When the Tauri webview handles
- * passkeys reliably, delete `skip()` and the button that calls it — the gate
- * enforces again with no other change.
- */
-async function skip() {
-	await teardown()
-	message = 'Nicht angemeldet — du nutzt die App ohne Konto.'
-	ready = true
 }
 
 function schedulePoll(interval: number) {
@@ -154,24 +74,49 @@ function schedulePoll(interval: number) {
 	}, interval * 1000)
 }
 
-async function begin() {
+async function beginWeb() {
 	busy = true
-	message = 'Anmeldung wird vorbereitet …'
-	browserOpened = false
+	message = 'Browser-Anmeldung wird vorbereitet …'
+	verificationUrl = ''
+	userCode = ''
+	if (pollTimer) clearTimeout(pollTimer)
 	try {
 		const authorization = await invoke<BeginAuthorization>('auth_begin')
 		verificationUrl = authorization.verificationUriComplete
 		userCode = authorization.userCode.replace(/(.{4})(?=.)/g, '$1-')
-		message = 'Melde dich mit deinem Passkey an und bestätige dieses Gerät.'
-		try {
-			await openEmbedded()
-		} catch {
-			await openInBrowser()
-		}
+		await openInBrowser()
 		schedulePoll(Math.max(authorization.interval, 1))
 	} catch (cause) {
 		busy = false
 		message = cause instanceof Error ? cause.message : String(cause)
+	}
+}
+
+async function begin() {
+	busy = true
+	message = 'Dein Aven-Passkey wird gesucht …'
+	try {
+		const request = await invoke<BeginPasskeyAuthentication>('auth_passkey_begin')
+		if (!request.available) {
+			await beginWeb()
+			return
+		}
+		message = 'Verwende deinen systemverwalteten Aven-Passkey, um fortzufahren.'
+		const assertion = await invoke<NativePasskeyAssertion>(request.command, {
+			domain: request.rpId,
+			challenge: request.challenge,
+			salt: []
+		})
+		await invoke<AuthStatus>('auth_passkey_finish', { assertion })
+		await finish()
+	} catch (cause) {
+		const detail = cause instanceof Error ? cause.message : String(cause)
+		if (detail.includes('NATIVE_PASSKEY_UNAVAILABLE')) {
+			await beginWeb()
+			return
+		}
+		busy = false
+		message = detail
 	}
 }
 
@@ -191,8 +136,6 @@ onMount(() => {
 	return () => {
 		mounted = false
 		if (pollTimer) clearTimeout(pollTimer)
-		unlistenResize?.()
-		if (authWebview) void authWebview.close().catch(() => undefined)
 	}
 })
 </script>
@@ -200,70 +143,117 @@ onMount(() => {
 {#if ready}
 	{@render children()}
 {:else}
-	<!-- The gate is the first thing anyone sees of avenOS, so it wears the
-	     brand: cream ground, marine ink, the app's card idiom. The embedded
-	     sign-in webview is a panel INSIDE this screen — it fills the band
-	     between the header and the footer, both sized from FRAME. -->
-	<main class="fixed inset-0 flex flex-col bg-surface-cream text-foreground">
-		<header
-			class="flex flex-col items-center justify-center px-6 text-center"
-			style="height: {FRAME.top}px"
-			aria-live="polite"
-		>
-			<img src="/aven-logo.svg" alt="" class="size-12" width="48" height="48">
-			<h1 class="mt-4 font-semibold text-foreground text-xl tracking-tight">Willkommen zurück</h1>
-			<p class="mx-auto mt-1.5 max-w-sm text-foreground/60 text-sm leading-relaxed">{message}</p>
+	<main class="fixed inset-0 overflow-hidden bg-surface-cream text-foreground">
+		<div
+			class="-right-32 -top-40 pointer-events-none absolute size-[34rem] rounded-full bg-status-pairing/12 blur-3xl"
+		></div>
+		<div
+			class="-bottom-48 -left-32 pointer-events-none absolute size-[32rem] rounded-full bg-status-info/14 blur-3xl"
+		></div>
 
-			{#if userCode}
-				<p class="mt-3 flex items-baseline gap-2">
-					<span class="font-semibold text-[10px] text-foreground/45 uppercase tracking-[0.14em]">
-						Gerätecode
-					</span>
-					<span class="font-mono font-semibold text-base text-foreground tracking-[0.18em]">
-						{userCode}
-					</span>
-				</p>
-			{/if}
+		<header class="absolute inset-x-0 top-0 flex items-center justify-between px-8 py-7">
+			<p class="avenos-wordmark !text-[1.7rem] text-primary">
+				<span class="wm-aven">aven</span><span class="wm-os">OS</span>
+			</p>
+			<div class="flex items-center gap-2 text-foreground/55 text-xs">
+				<svg
+					viewBox="0 0 24 24"
+					class="size-3.5"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.6"
+				>
+					<rect x="5" y="10" width="14" height="10" rx="2" />
+					<path d="M8 10V7a4 4 0 0 1 8 0v3" />
+				</svg>
+				<span>id.next.aven.ceo</span>
+			</div>
 		</header>
 
-		<!-- The hole the webview fills. Empty on purpose: when sign-in has not
-		     started (or failed) this is where the retry lives instead. -->
-		<div class="flex flex-1 items-center justify-center px-6">
-			{#if !busy && !verificationUrl}
-				<button
-					type="button"
-					class="min-h-11 rounded-full bg-primary px-6 font-semibold text-primary-foreground text-sm transition-opacity hover:opacity-90"
-					onclick={begin}
-				>
-					Erneut versuchen
-				</button>
-			{/if}
-		</div>
-
-		<div
-			class="flex shrink-0 items-center justify-center gap-4 border-border/60 border-t px-6"
-			style="height: {FRAME.bottom}px"
-		>
-			{#if verificationUrl}
-				<button
-					type="button"
-					class="min-h-9 rounded-full border border-border px-4 font-medium text-foreground/70 text-xs transition-colors hover:bg-surface-soft"
-					onclick={openInBrowser}
-				>
-					Im Browser öffnen
-				</button>
-			{/if}
-			<p class="text-foreground/45 text-xs">
-				Anmeldung ist noch nicht verpflichtend — Passkeys im Desktop‑Webview sind noch in Arbeit.
-			</p>
-			<!-- Temporary: see `skip()`. Goes away when passkeys are dependable. -->
-			<button
-				type="button"
-				class="min-h-9 shrink-0 rounded-full border border-border px-4 font-medium text-foreground/70 text-xs transition-colors hover:bg-surface-soft"
-				onclick={skip}
+		<div class="relative grid min-h-dvh place-items-center px-6 py-24">
+			<section
+				class="w-full max-w-md rounded-[2rem] border border-primary/10 bg-white/72 p-8 text-center shadow-[0_30px_90px_rgba(30,41,59,0.12)] backdrop-blur-xl sm:p-10"
+				aria-live="polite"
 			>
-				Ohne Anmeldung fortfahren
-			</button>
+				<div
+					class="mx-auto mb-7 grid size-16 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/15"
+				>
+					{#if busy}
+						<svg viewBox="0 0 24 24" class="size-7 animate-spin" fill="none">
+							<circle
+								cx="12"
+								cy="12"
+								r="9"
+								stroke="currentColor"
+								stroke-opacity=".25"
+								stroke-width="1.8"
+							/>
+							<path
+								d="M12 3a9 9 0 0 1 9 9"
+								stroke="currentColor"
+								stroke-linecap="round"
+								stroke-width="1.8"
+							/>
+						</svg>
+					{:else}
+						<svg
+							viewBox="0 0 24 24"
+							class="size-7"
+							fill="none"
+							stroke="currentColor"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="1.6"
+						>
+							<path d="M14.5 5.5a4.5 4.5 0 1 0-3.2 7.7L14 16h2v2h2v2h3v-3l-6.3-6.3" />
+							<circle cx="10" cy="10" r=".7" fill="currentColor" stroke="none" />
+						</svg>
+					{/if}
+				</div>
+
+				<p class="mb-3 font-medium text-primary/55 text-xs uppercase tracking-[0.18em]">
+					{verificationUrl ? 'Browser-Anmeldung' : 'Sicherer Zugang'}
+				</p>
+				<h1 class="font-display font-semibold text-3xl tracking-tight">
+					{verificationUrl ? 'Im Browser fortfahren' : 'Willkommen bei avenOS'}
+				</h1>
+				<p class="mx-auto mt-4 max-w-sm text-foreground/65 text-sm leading-6">{message}</p>
+
+				{#if userCode}
+					<div class="mt-7 rounded-2xl border border-primary/10 bg-surface-card/70 px-5 py-4">
+						<p class="mb-1.5 text-foreground/45 text-[0.68rem] uppercase tracking-[0.17em]">
+							Gerätecode
+						</p>
+						<p class="font-mono font-semibold text-primary text-xl tracking-[0.2em]">{userCode}</p>
+					</div>
+				{/if}
+
+				<div class="mt-7 grid gap-3">
+					{#if verificationUrl}
+						<button
+							type="button"
+							class="min-h-12 rounded-xl bg-primary px-5 font-medium text-primary-foreground text-sm shadow-lg shadow-primary/10 transition hover:bg-primary/90"
+							onclick={openInBrowser}
+						>
+							Sichere Anmeldung öffnen
+						</button>
+					{/if}
+					{#if !busy}
+						<button
+							type="button"
+							class="min-h-12 rounded-xl border border-primary/15 bg-white/60 px-5 font-medium text-primary text-sm transition hover:bg-surface-card"
+							onclick={begin}
+						>
+							Erneut versuchen
+						</button>
+					{/if}
+				</div>
+
+				<p class="mt-7 flex items-center justify-center gap-2 text-foreground/40 text-xs">
+					<span class="size-1.5 rounded-full bg-status-success"></span>
+					Passkey und Sitzung bleiben durch dein Gerät geschützt
+				</p>
+			</section>
 		</div>
 	</main>
 {/if}

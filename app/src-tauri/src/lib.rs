@@ -186,9 +186,15 @@ pub fn run() {
 
 	init_logging();
 
-	tauri::Builder::default()
+	let builder = tauri::Builder::default()
 		// Open external URLs in the system browser so the game window stays put.
-		.plugin(tauri_plugin_opener::init())
+		.plugin(tauri_plugin_opener::init());
+	#[cfg(target_os = "macos")]
+	let builder = builder.plugin(tauri_plugin_macos_passkey::init());
+	#[cfg(target_os = "ios")]
+	let builder = builder.plugin(tauri_plugin_ios_passkey::init());
+
+	builder
 		// On-device German speech, both directions. Both engines are built lazily
 		// on first use, so a session that never speaks or listens pays nothing.
 		.manage(tts::TtsState::default())
@@ -196,6 +202,8 @@ pub fn run() {
 		.manage(auth::AuthState::default())
 		.invoke_handler(tauri::generate_handler![
 			auth::auth_status,
+			auth::auth_passkey_begin,
+			auth::auth_passkey_finish,
 			auth::auth_begin,
 			auth::auth_poll,
 			auth::auth_logout,

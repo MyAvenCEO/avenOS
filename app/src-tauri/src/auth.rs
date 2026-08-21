@@ -1,9 +1,13 @@
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const DEVICE_CLIENT_ID: &str = "ceo.aven.os";
 const DEVICE_GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:device_code";
+const PASSKEY_RP_ID: &str = "id.next.aven.ceo";
+const PASSKEY_ORIGIN: &str = "https://id.next.aven.ceo";
 const IDENTITY_BASE_URL: &str = match option_env!("AVEN_IDENTITY_BASE_URL") {
 	Some(url) => url,
 	None => "https://id.next.aven.ceo",
@@ -15,6 +19,7 @@ pub struct AuthState(Mutex<AuthInner>);
 #[derive(Default)]
 struct AuthInner {
 	pending: Option<PendingAuthorization>,
+	pending_passkey: Option<PendingPasskeyAuthentication>,
 	session: Option<NativeSession>,
 }
 
@@ -25,6 +30,11 @@ struct PendingAuthorization {
 	user_code: String,
 	expires_at: Instant,
 	interval_seconds: u64,
+}
+
+struct PendingPasskeyAuthentication {
+	cookie: String,
+	expires_at: Instant,
 }
 
 struct NativeSession {
@@ -61,6 +71,42 @@ pub struct BeginAuthorization {
 pub struct PollAuthorization {
 	status: &'static str,
 	user: Option<AuthUser>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BeginPasskeyAuthentication {
+	available: bool,
+	command: String,
+	rp_id: String,
+	challenge: Vec<u8>,
+}
+
+#[derive(Deserialize)]
+pub struct NativePasskeyAssertion {
+	id: String,
+	raw_id: String,
+	client_data_json: String,
+	authenticator_data: String,
+	signature: String,
+	user_handle: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PasskeyAuthenticationOptions {
+	challenge: String,
+	rp_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProofOfWorkChallenge {
+	id: String,
+	nonce: String,
+	purpose: String,
+	difficulty_bits: u32,
+	expires_at: u64,
 }
 
 #[derive(Deserialize)]
@@ -100,6 +146,32 @@ fn endpoint(path: &str) -> String {
 	format!("{}/api/auth{path}", IDENTITY_BASE_URL.trim_end_matches('/'))
 }
 
+fn api_endpoint(path: &str) -> String {
+	format!("{}{path}", IDENTITY_BASE_URL.trim_end_matches('/'))
+}
+
+#[cfg(target_os = "macos")]
+fn native_passkeys_available() -> bool {
+	std::process::Command::new("/usr/bin/sw_vers")
+		.arg("-productVersion")
+		.output()
+		.ok()
+		.filter(|output| output.status.success())
+		.and_then(|output| String::from_utf8(output.stdout).ok())
+		.and_then(|version| version.split('.').next()?.parse::<u32>().ok())
+		.is_some_and(|major| major >= 15)
+}
+
+#[cfg(target_os = "ios")]
+fn native_passkeys_available() -> bool {
+	true
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "macos")))]
+fn native_passkeys_available() -> bool {
+	false
+}
+
 fn agent() -> ureq::Agent {
 	ureq::AgentBuilder::new()
 		.timeout(Duration::from_secs(15))
@@ -125,6 +197,157 @@ fn error_message(response: ureq::Response, fallback: &str) -> (Option<String>, S
 		.and_then(|body| body.error_description.or(body.message))
 		.unwrap_or_else(|| fallback.to_string());
 	(code, message)
+}
+
+fn now_millis() -> u64 {
+	SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.unwrap_or_default()
+		.as_millis() as u64
+}
+
+fn has_leading_zero_bits(digest: &[u8], bits: u32) -> bool {
+	let complete_bytes = (bits / 8) as usize;
+	if digest.iter().take(complete_bytes).any(|byte| *byte != 0) {
+		return false;
+	}
+	let remaining_bits = bits % 8;
+	remaining_bits == 0
+		|| digest
+			.get(complete_bytes)
+			.is_some_and(|byte| byte & (0xff << (8 - remaining_bits)) == 0)
+}
+
+fn solve_proof_of_work(challenge: &ProofOfWorkChallenge) -> Result<String, String> {
+	if challenge.purpose != "sign-in" || challenge.difficulty_bits > 28 {
+		return Err(
+			"The identity service returned an invalid proof-of-work challenge.".to_string(),
+		);
+	}
+	let prefix = format!(
+		"{}:{}:{}:",
+		challenge.id, challenge.nonce, challenge.purpose
+	);
+	for counter in 0_u64.. {
+		if now_millis() >= challenge.expires_at {
+			return Err("The sign-in challenge expired. Try again.".to_string());
+		}
+		let digest = Sha256::digest(format!("{prefix}{counter}").as_bytes());
+		if has_leading_zero_bits(&digest, challenge.difficulty_bits) {
+			return Ok(format!("{}.{counter}", challenge.id));
+		}
+	}
+	unreachable!()
+}
+
+fn proof_of_work() -> Result<String, String> {
+	let response = agent()
+		.get(&api_endpoint("/api/pow/challenge?purpose=sign-in"))
+		.call()
+		.map_err(|error| match error {
+			ureq::Error::Status(_, response) => {
+				error_message(response, "Could not create a sign-in challenge.").1
+			}
+			ureq::Error::Transport(error) => format!("Identity service unavailable: {error}"),
+		})?;
+	let challenge: ProofOfWorkChallenge = parse_json(response)?;
+	solve_proof_of_work(&challenge)
+}
+
+fn passkey_cookie(response: &ureq::Response) -> Option<String> {
+	response
+		.all("set-cookie")
+		.into_iter()
+		.filter_map(|header| header.split(';').next())
+		.find(|cookie| cookie.contains("better-auth-passkey="))
+		.map(str::to_string)
+}
+
+fn request_passkey_authentication() -> Result<(BeginPasskeyAuthentication, String), String> {
+	if IDENTITY_BASE_URL.trim_end_matches('/') != PASSKEY_ORIGIN {
+		return Err(format!(
+			"Native passkeys require the identity origin {PASSKEY_ORIGIN}."
+		));
+	}
+	let response = agent()
+		.get(&endpoint("/passkey/generate-authenticate-options"))
+		.set("origin", PASSKEY_ORIGIN)
+		.call()
+		.map_err(|error| match error {
+			ureq::Error::Status(_, response) => {
+				error_message(response, "Could not request a passkey challenge.").1
+			}
+			ureq::Error::Transport(error) => format!("Identity service unavailable: {error}"),
+		})?;
+	let cookie = passkey_cookie(&response).ok_or_else(|| {
+		"The identity service did not return passkey challenge state.".to_string()
+	})?;
+	let options: PasskeyAuthenticationOptions = parse_json(response)?;
+	if options.rp_id != PASSKEY_RP_ID {
+		return Err(format!(
+			"The identity service returned RP ID {}, expected {PASSKEY_RP_ID}.",
+			options.rp_id
+		));
+	}
+	let challenge = URL_SAFE_NO_PAD
+		.decode(options.challenge)
+		.map_err(|_| "The identity service returned an invalid passkey challenge.".to_string())?;
+	Ok((
+		BeginPasskeyAuthentication {
+			available: true,
+			command: String::new(),
+			rp_id: PASSKEY_RP_ID.to_string(),
+			challenge,
+		},
+		cookie,
+	))
+}
+
+fn passkey_response(assertion: &NativePasskeyAssertion) -> serde_json::Value {
+	serde_json::json!({
+		"id": assertion.id,
+		"rawId": assertion.raw_id,
+		"type": "public-key",
+		"response": {
+			"clientDataJSON": assertion.client_data_json,
+			"authenticatorData": assertion.authenticator_data,
+			"signature": assertion.signature,
+			"userHandle": assertion.user_handle
+		},
+		"clientExtensionResults": {},
+		"authenticatorAttachment": "platform"
+	})
+}
+
+fn verify_passkey_authentication(
+	pending: PendingPasskeyAuthentication,
+	assertion: NativePasskeyAssertion,
+) -> Result<(String, AuthUser), String> {
+	if Instant::now() >= pending.expires_at {
+		return Err("The passkey challenge expired. Try again.".to_string());
+	}
+	let proof = proof_of_work()?;
+	let body = serde_json::json!({ "response": passkey_response(&assertion) }).to_string();
+	let response = agent()
+		.post(&endpoint("/passkey/verify-authentication"))
+		.set("content-type", "application/json")
+		.set("origin", PASSKEY_ORIGIN)
+		.set("cookie", &pending.cookie)
+		.set("x-proof-of-work", &proof)
+		.send_string(&body)
+		.map_err(|error| match error {
+			ureq::Error::Status(_, response) => {
+				error_message(response, "The passkey could not be verified.").1
+			}
+			ureq::Error::Transport(error) => format!("Identity service unavailable: {error}"),
+		})?;
+	let token = response
+		.header("set-auth-token")
+		.filter(|token| !token.is_empty())
+		.map(str::to_string)
+		.ok_or_else(|| "The identity service did not return an app session.".to_string())?;
+	let user = parse_json::<SessionResponse>(response)?.user;
+	Ok((token, user))
 }
 
 fn issue_device_code() -> Result<PendingAuthorization, String> {
@@ -221,6 +444,72 @@ pub fn auth_status(state: tauri::State<'_, AuthState>) -> Result<AuthStatus, Str
 }
 
 #[tauri::command]
+pub async fn auth_passkey_begin(
+	state: tauri::State<'_, AuthState>,
+) -> Result<BeginPasskeyAuthentication, String> {
+	if !native_passkeys_available() {
+		return Ok(BeginPasskeyAuthentication {
+			available: false,
+			command: String::new(),
+			rp_id: PASSKEY_RP_ID.to_string(),
+			challenge: Vec::new(),
+		});
+	}
+	let (response, cookie) = tauri::async_runtime::spawn_blocking(request_passkey_authentication)
+		.await
+		.map_err(|error| format!("Could not start native passkey authentication: {error}"))??;
+	let mut inner = state
+		.0
+		.lock()
+		.map_err(|_| "Authentication state is unavailable.".to_string())?;
+	inner.pending = None;
+	inner.pending_passkey = Some(PendingPasskeyAuthentication {
+		cookie,
+		expires_at: Instant::now() + Duration::from_secs(300),
+	});
+	inner.session = None;
+	Ok(BeginPasskeyAuthentication {
+		command: if cfg!(target_os = "ios") {
+			"plugin:ios-passkey|login".to_string()
+		} else {
+			"plugin:macos-passkey|login_passkey".to_string()
+		},
+		..response
+	})
+}
+
+#[tauri::command]
+pub async fn auth_passkey_finish(
+	assertion: NativePasskeyAssertion,
+	state: tauri::State<'_, AuthState>,
+) -> Result<AuthStatus, String> {
+	let pending = state
+		.0
+		.lock()
+		.map_err(|_| "Authentication state is unavailable.".to_string())?
+		.pending_passkey
+		.take()
+		.ok_or_else(|| "No native passkey authentication is pending.".to_string())?;
+	let (token, user) = tauri::async_runtime::spawn_blocking(move || {
+		verify_passkey_authentication(pending, assertion)
+	})
+	.await
+	.map_err(|error| format!("Could not finish native passkey authentication: {error}"))??;
+	let mut inner = state
+		.0
+		.lock()
+		.map_err(|_| "Authentication state is unavailable.".to_string())?;
+	inner.session = Some(NativeSession {
+		token,
+		user: user.clone(),
+	});
+	Ok(AuthStatus {
+		authenticated: true,
+		user: Some(user),
+	})
+}
+
+#[tauri::command]
 pub async fn auth_begin(state: tauri::State<'_, AuthState>) -> Result<BeginAuthorization, String> {
 	let pending = tauri::async_runtime::spawn_blocking(issue_device_code)
 		.await
@@ -228,7 +517,10 @@ pub async fn auth_begin(state: tauri::State<'_, AuthState>) -> Result<BeginAutho
 	let response = BeginAuthorization {
 		verification_uri_complete: pending.verification_uri_complete.clone(),
 		user_code: pending.user_code.clone(),
-		expires_in: pending.expires_at.saturating_duration_since(Instant::now()).as_secs(),
+		expires_in: pending
+			.expires_at
+			.saturating_duration_since(Instant::now())
+			.as_secs(),
 		interval: pending.interval_seconds,
 	};
 	let mut inner = state
@@ -236,6 +528,7 @@ pub async fn auth_begin(state: tauri::State<'_, AuthState>) -> Result<BeginAutho
 		.lock()
 		.map_err(|_| "Authentication state is unavailable.".to_string())?;
 	inner.pending = Some(pending);
+	inner.pending_passkey = None;
 	inner.session = None;
 	Ok(response)
 }
@@ -283,6 +576,7 @@ pub async fn auth_logout(state: tauri::State<'_, AuthState>) -> Result<(), Strin
 			.lock()
 			.map_err(|_| "Authentication state is unavailable.".to_string())?;
 		inner.pending = None;
+		inner.pending_passkey = None;
 		inner.session.take().map(|session| session.token)
 	};
 	if let Some(token) = token {
@@ -297,4 +591,30 @@ pub async fn auth_logout(state: tauri::State<'_, AuthState>) -> Result<(), Strin
 		.map_err(|error| format!("Could not finish logout: {error}"))?;
 	}
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn native_assertion_matches_webauthn_json_shape() {
+		let response = passkey_response(&NativePasskeyAssertion {
+			id: "credential".to_string(),
+			raw_id: "credential".to_string(),
+			client_data_json: "client".to_string(),
+			authenticator_data: "authenticator".to_string(),
+			signature: "signature".to_string(),
+			user_handle: "user".to_string(),
+		});
+		assert_eq!(response["type"], "public-key");
+		assert_eq!(response["rawId"], "credential");
+		assert_eq!(response["response"]["userHandle"], "user");
+	}
+
+	#[test]
+	fn proof_of_work_bit_check_handles_partial_bytes() {
+		assert!(has_leading_zero_bits(&[0, 0b0000_1111], 12));
+		assert!(!has_leading_zero_bits(&[0, 0b0001_0000], 12));
+	}
 }

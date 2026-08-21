@@ -1,0 +1,8 @@
+{
+	"$schema": "../gen/schemas/macOS-schema.json",
+	"identifier": "macos-passkey",
+	"description": "Allow the main window to use the native macOS passkey sheet",
+	"windows": ["main"],
+	"platforms": ["macOS"],
+	"permissions": ["macos-passkey:default"]
+}

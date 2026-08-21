@@ -49,7 +49,9 @@ Env for the **marketing site** and **OCR CLI**: keep **`.env`** at the **repo ro
 
 ### Native passkey authentication
 
-The Tauri app is gated on launch. It asks the identity service for a short-lived device code, opens the HTTPS passkey and approval screen inside the app where child WebViews are supported, and keeps a system-browser fallback. After approval the native Rust process exchanges the one-time code for a revocable Better Auth bearer session and opens the existing `/dashboard`. The bearer token is not exposed to the frontend or persisted in browser storage; this spike requires authentication again after an app restart.
+The Tauri app is gated on launch. On supported Apple devices it requests a challenge for `id.next.aven.ceo`, opens the native system passkey sheet, and exchanges the assertion for a revocable Better Auth bearer session. Only platforms or OS versions without that native mechanism fall back to the HTTPS device-code approval flow in the system browser while avenOS shows a waiting screen. The bearer token is not exposed to the frontend or persisted in browser storage; this spike requires authentication again after an app restart.
+
+The authentication spike accepts ordinary passkeys; WebAuthn PRF is optional until encrypted client data needs it. Firefox on Linux exposes WebAuthn but has no built-in platform passkey provider, so enrollment there requires a FIDO2 security key or a passkey-provider extension. The same setup link can instead be opened on a browser or device with a platform passkey provider.
 
 For local development, run the identity API and compile the app with its local origin:
 

@@ -9,6 +9,10 @@ import { type SetupSignInVerifiers, setupSignIn } from './sign-in.js'
 
 export const AVENOS_DEVICE_CLIENT_ID = 'ceo.aven.os'
 
+export function requirePasskeyUserVerification(userVerified: boolean): void {
+	if (!userVerified) throw new Error('Passkey authentication requires user verification.')
+}
+
 // There is deliberately NO email-initiated sign-in: accounts are created by a
 // completed purchase (identity.ensureVerifiedUser, called from the grant),
 // whose confirmation email carries the reusable access link (setup-token) —
@@ -56,7 +60,11 @@ export function createAuth(
 				rpID: config.WEBAUTHN_RP_ID,
 				rpName: 'Aven',
 				origin: config.PUBLIC_BASE_URL,
-				authenticatorSelection: { residentKey: 'required', userVerification: 'required' }
+				authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+				authentication: {
+					afterVerification: ({ verification }) =>
+						requirePasskeyUserVerification(verification.authenticationInfo.userVerified)
+				}
 			}),
 			setupSignIn(verifiers)
 		]

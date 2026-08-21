@@ -1,0 +1,5 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Allow the native iOS passkey assertion"
+permissions = ["allow-login"]
