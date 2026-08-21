@@ -86,15 +86,43 @@ async function openEmbedded() {
 	unlistenResize = await window.onResized(() => void fitWebview())
 }
 
-async function finish() {
+/** Tear down whatever the sign-in attempt is holding, however it ended. */
+async function teardown() {
 	if (pollTimer) clearTimeout(pollTimer)
 	unlistenResize?.()
 	unlistenResize = undefined
 	if (authWebview) await authWebview.close().catch(() => undefined)
 	authWebview = null
-	ready = true
 	busy = false
+}
+
+async function finish() {
+	await teardown()
+	ready = true
 	await goto('/dashboard', { replaceState: true })
+}
+
+/**
+ * TEMPORARY — the gate shows, it just does not hold the door.
+ *
+ * The passkey itself is fine; what is not dependable yet is WebAuthn inside
+ * the embedded Tauri webview — which is the only path this gate uses, so a
+ * failed native prompt would lock the whole desktop app behind a screen with
+ * no way past it. (Browser development never reaches here: `ready` starts
+ * true when `isTauri()` is false.)
+ *
+ * Until the native flow is trustworthy you can walk in unauthenticated,
+ * deliberately and visibly: sign-in still runs and still wins when it works,
+ * but declining it lets you through.
+ *
+ * This is NOT the intended security model. When the Tauri webview handles
+ * passkeys reliably, delete `skip()` and the button that calls it — the gate
+ * enforces again with no other change.
+ */
+async function skip() {
+	await teardown()
+	message = 'Signed out — you are using the app unauthenticated.'
+	ready = true
 }
 
 function schedulePoll(interval: number) {
@@ -191,5 +219,22 @@ onMount(() => {
 				{/if}
 			</div>
 		</section>
+		<!-- Temporary: see `skip()`. Lives in the footer strip the auth webview
+		     leaves free, so it stays clickable while sign-in is on screen.
+		     Goes away when passkeys are dependable. -->
+		<div
+			class="fixed inset-x-0 bottom-0 flex h-20 items-center justify-center gap-4 bg-slate-950/95 px-6"
+		>
+			<p class="text-xs text-slate-500">
+				Not enforced yet — passkeys in the desktop webview are still being stabilised.
+			</p>
+			<button
+				type="button"
+				class="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+				onclick={skip}
+			>
+				Continue without signing in
+			</button>
+		</div>
 	</main>
 {/if}
