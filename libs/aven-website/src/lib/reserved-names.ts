@@ -27,7 +27,17 @@ export const RESERVED_NAMES: ReservedName[] = [
 	{ slug: 'tin', since: '2026-01-01', holder: 'avenTIN' }
 ]
 
-/** Newest first — the row reads as a feed, so the last one taken leads. */
-export function latestReserved(limit = 8): ReservedName[] {
-	return [...RESERVED_NAMES].sort((a, b) => b.since.localeCompare(a.since)).slice(0, limit)
+/**
+ * The waiting list, in the order it was actually formed — oldest first, so a
+ * name's position IS its place in the queue. "Wer zuerst kommt, gründet
+ * zuerst" is the whole promise; a feed sorted newest-first would show the
+ * queue backwards.
+ */
+export function reservedInOrder(): ReservedName[] {
+	return [...RESERVED_NAMES].sort((a, b) => a.since.localeCompare(b.since))
+}
+
+/** The next free place — one past the last one taken. */
+export function nextPosition(): number {
+	return RESERVED_NAMES.length + 1
 }
