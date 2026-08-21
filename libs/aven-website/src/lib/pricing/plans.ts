@@ -20,6 +20,15 @@
 
 export type PlanId = 'avenid' | 'avenme' | 'avenceo' | 'avencoop'
 
+/**
+ * A line on a plan card. Most are plain text — but where a feature IS a
+ * shipped skill, it names the skill and links to its page, so the card stops
+ * describing a capability in the abstract and points at the thing that does
+ * it. The slug stays a plain string: `skills/loader` imports THIS file, so an
+ * import the other way would close a cycle.
+ */
+export type PlanFeature = string | { skill: string; label: string }
+
 export interface Plan {
 	id: PlanId
 	name: string
@@ -54,7 +63,7 @@ export interface Plan {
 	 */
 	runtime?: { hoursPerDay: number; centsPerExtraMinute: number }
 	/** What this tier adds; the tiers below are always included. */
-	features: string[]
+	features: PlanFeature[]
 	/** One outbound reference, where the tier depends on one. */
 	link?: { href: string; label: string }
 	/** Marks the tier we lead with. */
@@ -88,9 +97,9 @@ export const PLANS: Plan[] = [
 		reinvestPct: 0,
 		features: [
 			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
-			'E‑Mail‑Inbox',
+			{ skill: 'email-ingestor', label: 'E‑Mail‑Inbox' },
 			'POST‑Inbox — deine Papierpost digitalisiert (ohne Post‑Weiterleitung)',
-			'Dokumentenverwaltung',
+			{ skill: 'document-extractor', label: 'Dokumentenverwaltung' },
 			'Dein Brain: Notizen, Kontakte, Kalender',
 			'Personal Spark'
 		]
