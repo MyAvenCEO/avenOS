@@ -37,6 +37,19 @@ const SHAPE: Record<string, { glyph: string; tone: string }> = {
 }
 const FALLBACK = { glyph: '·', tone: 'text-foreground/40' }
 
+/**
+ * The conversation follows itself: a reply arriving below the fold is a reply
+ * you did not read. It tracks the streamed content too, not just the turn
+ * count, so a long answer keeps its own tail in view as it lands.
+ */
+let chatEl: HTMLElement | null = $state(null)
+$effect(() => {
+	void chat.turns.length
+	void chat.turns.at(-1)?.content
+	void listener.partial
+	chatEl?.scrollTo({ top: chatEl.scrollHeight })
+})
+
 /** Resolve a view answer to its window actor, if that window still exists. */
 function windowFor(key: string) {
 	return bus
@@ -126,6 +139,7 @@ function windowFor(key: string) {
 		<!-- ── Band 2: the conversation, under the answers ── -->
 		{#if chat.turns.length > 0 || listener.partial !== ''}
 			<div
+				bind:this={chatEl}
 				class="max-h-[38%] shrink-0 overflow-y-auto border-foreground/10 border-t bg-surface-soft px-3 py-2.5"
 			>
 				<div class="flex flex-col gap-1.5">
