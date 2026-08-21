@@ -39,13 +39,6 @@ const ROLES: Role[] = [
 		note: 'Buttons, Rail, HITL-Rahmen'
 	},
 	{
-		role: 'primary soft',
-		tone: 'Hafen',
-		token: '--color-primary-soft',
-		toneToken: '--color-harbour',
-		note: 'Chrom, wo Marine erschlägt'
-	},
-	{
 		role: 'secondary',
 		tone: 'Pergament',
 		token: '--color-secondary',
@@ -53,67 +46,96 @@ const ROLES: Role[] = [
 		note: 'die warme zweite Aktion'
 	},
 	{
-		role: 'error',
+		role: 'accent',
+		tone: 'Paradise Water',
+		token: '--color-accent',
+		toneToken: '--color-paradise-water',
+		note: 'der eine helle Ton der Marke'
+	},
+	{
+		role: 'primary soft',
+		tone: 'Hafen',
+		token: '--color-primary-soft',
+		toneToken: '--color-harbour',
+		note: 'Chrom, wo Marine erschlägt'
+	},
+	{
+		role: 'status error',
 		tone: 'Terracotta',
 		token: '--color-status-error',
 		toneToken: '--color-terracotta',
-		note: 'ein Gate ist gescheitert'
+		note: 'etwas ist gescheitert'
 	},
 	{
-		role: 'warning',
+		role: 'status warning',
 		tone: 'Tuscan Sun',
 		token: '--color-status-warning',
 		toneToken: '--color-tuscan-sun',
-		note: 'working — es bewegt sich etwas'
+		note: 'Achtung — aber nichts ist kaputt'
 	},
 	{
-		role: 'info',
+		role: 'status info',
 		tone: 'Sonnenblume',
 		token: '--color-status-info',
 		toneToken: '--color-sunflower',
-		note: 'Hinweis ohne Handlung'
+		note: 'Hinweis; oft: du bist dran'
 	},
 	{
-		role: 'success',
-		tone: 'Moos',
+		role: 'status success',
+		tone: 'Salbei',
 		token: '--color-status-success',
-		toneToken: '--color-moss',
+		toneToken: '--color-sage',
 		note: 'erledigt, abgelegt'
 	},
 	{
-		role: 'working',
-		tone: 'Salbei',
-		token: '--color-status-working',
-		toneToken: '--color-sage',
-		note: 'Fläche in Arbeit (dunkler Text darauf)'
+		role: 'status quiet',
+		tone: 'Hafen',
+		token: '--color-status-quiet',
+		toneToken: '--color-harbour',
+		note: 'aus dem Weg, noch lesbar'
+	}
+]
+
+/**
+ * Block 4: the intent states. A state is a MEANING that borrows a role — this
+ * is the only place the two are tied together, so the whole stream re-reads by
+ * editing one line here. Nothing in this table introduces a colour.
+ */
+const STATES: Role[] = [
+	{
+		role: 'error',
+		tone: 'status error',
+		token: '--color-state-error',
+		toneToken: '--color-status-error',
+		note: 'ein Gate ist gescheitert'
 	},
 	{
 		role: 'waiting',
-		tone: 'Paradise Water',
-		token: '--color-status-waiting',
-		toneToken: '--color-paradise-water',
-		note: 'offenes Human-Gate (HITL)'
+		tone: 'status info',
+		token: '--color-state-waiting',
+		toneToken: '--color-status-info',
+		note: 'offenes Human-Gate — du bist dran'
 	},
 	{
-		role: 'pairing',
-		tone: 'Iris',
-		token: '--color-status-pairing',
-		toneToken: '--color-iris',
-		note: 'Geräte-Pairing'
+		role: 'working',
+		tone: 'accent',
+		token: '--color-state-working',
+		toneToken: '--color-accent',
+		note: 'in Bewegung'
+	},
+	{
+		role: 'done',
+		tone: 'status success',
+		token: '--color-state-done',
+		toneToken: '--color-status-success',
+		note: 'abgeschlossen'
 	},
 	{
 		role: 'archive',
-		tone: 'Driftwood',
-		token: '--color-status-archive',
-		toneToken: '--color-driftwood',
-		note: 'aus dem Weg, noch lesbar'
-	},
-	{
-		role: 'neutral',
-		tone: 'Stein',
-		token: '--color-neutral',
-		toneToken: '--color-stone',
-		note: 'ruhiges Chrom'
+		tone: 'status quiet',
+		token: '--color-state-archive',
+		toneToken: '--color-status-quiet',
+		note: 'abgelegt'
 	}
 ]
 
@@ -123,14 +145,10 @@ const TONES: Tone[] = [
 	{ name: 'Hafen', token: '--color-harbour', note: 'Stahlblau — Marine, einen Schritt zurück' },
 	{ name: 'Pergament', token: '--color-parchment', note: 'Cremegelb — die warme Fläche' },
 	{ name: 'Sonnenblume', token: '--color-sunflower', note: 'warmes Bernstein-Tan' },
-	{ name: 'Tuscan Sun', token: '--color-tuscan-sun', note: 'gebranntes Gold — liest sich als Text' },
+	{ name: 'Tuscan Sun', token: '--color-tuscan-sun', note: 'klares Gold' },
 	{ name: 'Terracotta', token: '--color-terracotta', note: 'gebranntes Orange' },
-	{ name: 'Moos', token: '--color-moss', note: 'tiefes Grün' },
-	{ name: 'Salbei', token: '--color-sage', note: 'blasses Grün — nur als Fläche' },
-	{ name: 'Paradise Water', token: '--color-paradise-water', note: 'Türkis' },
-	{ name: 'Iris', token: '--color-iris', note: 'Violett' },
-	{ name: 'Driftwood', token: '--color-driftwood', note: 'Graublau' },
-	{ name: 'Stein', token: '--color-stone', note: 'warmes Grau' }
+	{ name: 'Salbei', token: '--color-sage', note: 'weiches Grün — Text nutzt die Tinte' },
+	{ name: 'Paradise Water', token: '--color-paradise-water', note: 'Türkis — der Akzent' }
 ]
 
 /**
@@ -173,28 +191,14 @@ const SURFACES: Role[] = [
 		tone: 'Eierschale',
 		token: '--color-surface-soft',
 		toneToken: '--color-eggshell',
-		note: 'Activity-Log, Display-Panel, Vibe-Apps'
+		note: 'Display-Flächen UND Hover — ein Name, nicht zwei'
 	},
 	{
-		role: 'card hover',
-		tone: 'Eierschale',
-		token: '--color-surface-card-hover',
-		toneToken: '--color-eggshell',
-		note: 'Zeiger darüber — die Fläche hebt an'
-	},
-	{
-		role: 'card',
+		role: 'surface card',
 		tone: 'Elfenbein',
 		token: '--color-surface-card',
 		toneToken: '--color-ivory',
-		note: 'Ruhezustand'
-	},
-	{
-		role: 'card selected',
-		tone: 'Elfenbein',
-		token: '--color-surface-card-selected',
-		toneToken: '--color-ivory',
-		note: 'Auswahl — der Rand trägt sie, nicht die Fläche'
+		note: 'Karten in Ruhe UND ausgewählt — der Rand trägt die Auswahl'
 	}
 ]
 
@@ -207,7 +211,7 @@ $effect(() => {
 	const read = (token: string) => {
 		next[token] = style.getPropertyValue(token).trim()
 	}
-	for (const r of [...ROLES, ...SURFACES]) {
+	for (const r of [...ROLES, ...STATES, ...SURFACES]) {
 		read(r.token)
 		read(r.toneToken)
 	}
@@ -285,11 +289,11 @@ const collisions = $derived.by(() => {
 		</p>
 	</div>
 
-	<!-- ── Roles: the mapping, and the reason the rest exists ── -->
+	<!-- ── Roles: the design-system layer everything speaks ── -->
 	<section class="flex flex-col gap-2">
 		<div>
 			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-				Rolle → Brand-Ton
+				Brand-Token → Ton
 			</h3>
 			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
 				Die Design-System-Rolle links, der Ton der sie trägt rechts. Eine Rolle hier umhängen färbt
@@ -303,12 +307,30 @@ const collisions = $derived.by(() => {
 		</ul>
 	</section>
 
+	<!-- ── States: meaning borrowing a role, one layer up ── -->
+	<section class="flex flex-col gap-2">
+		<div>
+			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+				Zustand → Brand-Token
+			</h3>
+			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
+				Ein Zustand ist keine Farbe, sondern eine Bedeutung, die sich eine leiht. Nur hier sind beide
+				verknüpft — der ganze Intent-Stream liest sich um, wenn eine Zeile wechselt.
+			</p>
+		</div>
+		<ul class="grid gap-2 lg:grid-cols-2">
+			{#each STATES as s (s.role)}
+				{@render roleRow(s)}
+			{/each}
+		</ul>
+	</section>
+
 	<!-- ── Tones: the paint ── -->
 	<section class="flex flex-col gap-2">
 		<div>
 			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">Brand-Töne</h3>
 			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
-				Die zwölf Farben, die die Marke besitzt — jede genau einmal als Hex geschrieben, jede mit
+				Die acht Farben, die die Marke besitzt — jede genau einmal als Hex geschrieben, jede mit
 				genau einem Namen.
 			</p>
 		</div>

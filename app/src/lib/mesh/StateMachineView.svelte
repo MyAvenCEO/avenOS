@@ -35,7 +35,7 @@ $effect.pre(() => {
 		type: 'bezier',
 		style: 'stroke: rgba(47,93,80,0.5); stroke-width: 1.5;',
 		labelStyle: 'font-size: 10px; fill: rgba(30,41,59,0.7);',
-		labelBgStyle: 'fill: #f8f6ef;',
+		labelBgStyle: 'fill: var(--color-linen);',
 		labelBgPadding: [4, 2] as [number, number],
 		labelBgBorderRadius: 4
 	}))
