@@ -1,35 +1,24 @@
 <script lang="ts">
+import { onMount } from 'svelte'
 import { goto } from '$app/navigation'
-import { api } from '$lib/api.js'
-import { authClient } from '$lib/auth-client.js'
+import { page } from '$app/state'
+import { appRuntime } from 'virtual:aven-app-runtime'
 
-let name = $state('')
-let busy = $state(false)
-let error = $state('')
+const initial = appRuntime.initial.passkey(page.url)
+let name = $state(initial.name)
+let busy = $state(initial.busy)
+let error = $state(initial.error)
+let firefoxLinux = $state(false)
+
+onMount(() => {
+	firefoxLinux = appRuntime.auth.passkeyWarning(page.url)
+})
 
 async function create() {
 	busy = true
 	error = ''
 	try {
-		if (!window.PublicKeyCredential) throw new Error('Passkeys unavailable.')
-		const result = await authClient.passkey.addPasskey({
-			name: name.trim() || undefined,
-			extensions: { prf: {} } as never,
-			returnWebAuthnResponse: true
-		})
-		if (result?.error) throw new Error(result.error.message ?? 'Passkey creation failed.')
-		const extensions = (
-			'webauthn' in result ? result.webauthn.clientExtensionResults : undefined
-		) as { prf?: { enabled?: boolean } } | undefined
-		const prf = extensions?.prf as { enabled?: boolean } | undefined
-		const data = result?.data as Record<string, unknown> | undefined
-		await api('/passkeys', {
-			method: 'POST',
-			body: JSON.stringify({
-				credentialId: typeof data?.id === 'string' ? data.id : undefined,
-				prfEnabled: prf?.enabled === true
-			})
-		})
+		await appRuntime.auth.createPasskey(name, firefoxLinux)
 		void goto('/dashboard')
 	} catch (cause) {
 		error = cause instanceof Error ? cause.message : 'Passkey creation failed.'
@@ -43,6 +32,13 @@ async function create() {
 <section class="panel auth">
 	<h1>Create passkey</h1>
 	<label>Passkey name<input bind:value={name} maxlength="64"></label>
+	{#if firefoxLinux}
+		<div class="alert">
+			Firefox on Linux has no built-in platform passkey provider. Connect a FIDO2 security key or
+			use a passkey-provider extension. Otherwise, open the original setup link on a browser or
+			device that has one.
+		</div>
+	{/if}
 	{#if error}
 		<div class="alert">{error}</div>
 	{/if}

@@ -1,13 +1,15 @@
 <script lang="ts">
 import { onMount } from 'svelte'
 import { goto } from '$app/navigation'
-import { api } from '$lib/api.js'
+import { page } from '$app/state'
+import { appRuntime } from 'virtual:aven-app-runtime'
 import type { PageData } from './$types.js'
 
 let { data }: { data: PageData } = $props()
 let checkoutFrame = $state<HTMLIFrameElement>()
-let checkoutState = $state<'loading' | 'ready' | 'paying' | 'confirming'>('loading')
-let paymentError = $state('')
+const initial = appRuntime.initial.checkout(page.url)
+let checkoutState = $state(initial.state)
+let paymentError = $state(initial.error)
 const creemEmbedOrigins = new Set([
 	'https://creem.io',
 	'https://checkout.creem.io',
@@ -31,10 +33,7 @@ async function payFake() {
 	checkoutState = 'paying'
 	paymentError = ''
 	try {
-		const result = await api<{ paid: boolean; redirect: string }>('/billing/fake-pay', {
-			method: 'POST',
-			body: JSON.stringify(fakeParams)
-		})
+		const result = await appRuntime.billing.pay(fakeParams)
 		await goto(result.redirect)
 	} catch (error) {
 		paymentError = error instanceof Error ? error.message : 'Payment failed.'
@@ -44,7 +43,7 @@ async function payFake() {
 
 onMount(() => {
 	if (data.provider === 'fake') {
-		checkoutState = 'ready'
+		if (checkoutState === 'loading') checkoutState = 'ready'
 		return
 	}
 

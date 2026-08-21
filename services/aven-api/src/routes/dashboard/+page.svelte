@@ -1,26 +1,20 @@
 <script lang="ts">
 import { onMount } from 'svelte'
 import { goto } from '$app/navigation'
-import { api } from '$lib/api.js'
-import type { MetaInfo, PasskeyStatus } from '$lib/types.js'
+import { page } from '$app/state'
+import { appRuntime } from 'virtual:aven-app-runtime'
 
 let downloadUrl = $state('')
 let error = $state('')
 
 onMount(async () => {
 	try {
-		const [status, meta] = await Promise.all([
-			api<PasskeyStatus>('/passkeys'),
-			api<MetaInfo>('/meta')
-		])
-		const complete = status.passkeys.some(
-			(passkey) => !meta.requirePasskeyPrf || passkey.prf_enabled
-		)
-		if (!complete) {
+		const result = await appRuntime.dashboard.load(page.url)
+		if (result.needsPasskey) {
 			void goto('/passkey/create')
 			return
 		}
-		downloadUrl = meta.downloadUrl
+		downloadUrl = result.downloadUrl
 	} catch (cause) {
 		error = cause instanceof Error ? cause.message : 'Load failed.'
 	}

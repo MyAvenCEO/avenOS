@@ -1,36 +1,22 @@
 <script lang="ts">
 import { page } from '$app/state'
-import { authClient } from '$lib/auth-client.js'
+import { appRuntime } from 'virtual:aven-app-runtime'
 
-const session = authClient.useSession()
+const session = appRuntime.session(page.url)
 const userCode = $derived(page.url.searchParams.get('user_code')?.replaceAll('-', '') ?? '')
 const displayCode = $derived(userCode.replace(/(.{4})(?=.)/g, '$1-'))
-let signedIn = $state(false)
-let busy = $state(false)
-let approved = $state(false)
-let message = $state('')
-const authenticated = $derived(Boolean($session.data) || signedIn)
-
-async function responseJson(response: Response): Promise<Record<string, unknown>> {
-	const body = (await response.json().catch(() => ({}))) as Record<string, unknown>
-	if (!response.ok) {
-		throw new Error(
-			typeof body.message === 'string'
-				? body.message
-				: typeof body.error_description === 'string'
-					? body.error_description
-					: 'Device authorization failed.'
-		)
-	}
-	return body
-}
+const initial = appRuntime.initial.device(page.url)
+let signedIn = $state(initial.signedIn)
+let busy = $state(initial.busy)
+let approved = $state(initial.approved)
+let message = $state(initial.message)
+const authenticated = $derived($session.authenticated || signedIn)
 
 async function login() {
 	busy = true
 	message = ''
 	try {
-		const result = await authClient.signIn.passkey()
-		if (result?.error) throw new Error(result.error.message ?? 'Login failed.')
+		await appRuntime.auth.signIn()
 		signedIn = true
 	} catch (cause) {
 		message = cause instanceof Error ? cause.message : 'Login failed.'
@@ -44,19 +30,7 @@ async function approve() {
 	message = ''
 	try {
 		if (!userCode) throw new Error('The device code is missing.')
-		await responseJson(
-			await fetch(`/api/auth/device?user_code=${encodeURIComponent(userCode)}`, {
-				credentials: 'same-origin'
-			})
-		)
-		await responseJson(
-			await fetch('/api/auth/device/approve', {
-				method: 'POST',
-				credentials: 'same-origin',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ userCode })
-			})
-		)
+		await appRuntime.device.approve(userCode)
 		approved = true
 	} catch (cause) {
 		message = cause instanceof Error ? cause.message : 'Device authorization failed.'

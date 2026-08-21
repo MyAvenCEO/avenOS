@@ -1,10 +1,11 @@
 <script lang="ts">
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import { api } from '$lib/api.js'
+import { appRuntime } from 'virtual:aven-app-runtime'
 
-let loading = $state(false)
-let error = $state('')
+const initial = appRuntime.initial.payment(page.url)
+let loading = $state(initial.busy)
+let error = $state(initial.error)
 const params = $derived({
 	checkoutId: page.url.searchParams.get('checkoutId') ?? '',
 	holdId: page.url.searchParams.get('holdId') ?? '',
@@ -17,10 +18,7 @@ async function pay() {
 	loading = true
 	error = ''
 	try {
-		const result = await api<{ paid: boolean; redirect: string }>('/billing/fake-pay', {
-			method: 'POST',
-			body: JSON.stringify(params)
-		})
+		const result = await appRuntime.billing.pay(params)
 		void goto(result.redirect)
 	} catch (e) {
 		error = e instanceof Error ? e.message : 'Payment failed.'

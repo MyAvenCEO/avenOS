@@ -1,36 +1,26 @@
 <script lang="ts">
 import { onMount } from 'svelte'
 import { page } from '$app/state'
-import { api } from '$lib/api.js'
-import { createProofOfWorkHeader } from '$lib/proof-of-work.js'
+import { appRuntime } from 'virtual:aven-app-runtime'
 import type { NameAvailability, NameHoldResult } from '$lib/types.js'
 
-let name = $state('')
-let email = $state('')
-let info = $state<NameAvailability | null>(null)
-let hold = $state<NameHoldResult | null>(null)
-let loading = $state(false)
-let error = $state('')
+const initial = appRuntime.initial.secureName(page.url)
+let name = $state(initial.name)
+let email = $state(initial.email)
+let info = $state<NameAvailability | null>(initial.info)
+let hold = $state<NameHoldResult | null>(initial.hold)
+let loading = $state(initial.loading)
+let error = $state(initial.error)
 
 onMount(async () => {
-	name = (page.url.searchParams.get('name') ?? '').toLowerCase()
-	if (name)
-		info = await api<NameAvailability>(`/names/check?name=${encodeURIComponent(name)}`).catch(
-			() => null
-		)
+	info = await appRuntime.names.loadInfo(name, info)
 })
 
 async function secure() {
 	loading = true
 	error = ''
 	try {
-		const headers = await createProofOfWorkHeader('secure-name')
-		const result = await api<{ hold: NameHoldResult }>('/names/hold', {
-			method: 'POST',
-			headers,
-			body: JSON.stringify({ name, email })
-		})
-		hold = result.hold
+		hold = await appRuntime.names.hold(name, email)
 	} catch (e) {
 		error = e instanceof Error ? e.message : 'Request failed.'
 	} finally {

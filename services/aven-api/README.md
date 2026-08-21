@@ -6,6 +6,7 @@ Identity checkout service for name purchase, email setup login, passkey registra
 
 ```sh
 bun run dev
+bun run dev:designer
 bun run check
 bun run test
 bun run db:migrate
@@ -15,6 +16,11 @@ bun run environment:status -- <name>
 bun run environment:retry -- <name>
 bun run environment:reconcile
 ```
+
+`bun run dev:designer` starts a backend-free designer preview with mock data and a
+persistent page, state, and session switcher. Every visible state has a shareable
+`scenario` URL. `bun run build:designer` creates the equivalent designer build;
+`bun run preview:designer` rebuilds that variant before serving it locally.
 
 ## Local services
 
