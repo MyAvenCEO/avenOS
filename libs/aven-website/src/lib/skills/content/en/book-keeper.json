@@ -6,10 +6,10 @@
 		"founderName": "Daniel",
 		"scope": "Daniel Janz · aven.ceo"
 	},
-	"plan": "avencoo",
+	"plan": "avenceo",
 	"oneLineCopy": "Invoices matched with bank statements. Bookings suggested. Taxes prepared.",
 	"hero": {
-		"kicker": "Skill · avenTIN · book-keeper",
+		"kicker": "Skill · avenTIN · book keeper",
 		"headlineMain": "8 hours of bookkeeping. Reduced to 20 minutes.",
 		"headlineSerifLead": "Your Aven matches invoices with bank statements, suggests booking accounts and prepares your accountant export.",
 		"promiseHoursPerWeek": "8+ hrs/week"
@@ -26,23 +26,23 @@
 		"You close the month in 20 minutes — instead of 8 hours"
 	],
 	"howSteps": [
-		"Invoices arrive structured via email-ingestor or document-extractor",
+		"Invoices arrive structured via email manager or docs organizer",
 		"Bank statements are imported (CSV, MT940 or bank connector)",
 		"Your Aven matches transactions with invoices and suggests tax accounts",
-		"You review the booking suggestion in one click — human-reviewer only activates when unclear"
+		"You review the booking suggestion in one click — human reviewer only activates when unclear"
 	],
 	"whatMechanics": {
-		"input": "Structured invoices (from document-extractor) + bank statements (CSV/MT940)",
+		"input": "Structured invoices (from docs organizer) + bank statements (CSV/MT940)",
 		"magic": "Fuzzy matching (amount + date + sender) → booking account suggestion (SKR03/SKR04) → difference detection → accountant export format",
 		"output": "Matched booking entries · booking suggestions with confidence · DATEV-compatible export · open items list"
 	},
 	"playsWith": [
 		{
-			"slug": "email-ingestor",
+			"slug": "email-manager",
 			"relation": "Invoice mails are recognized and passed directly"
 		},
 		{
-			"slug": "document-extractor",
+			"slug": "docs-organizer",
 			"relation": "PDF invoices are extracted and matched"
 		},
 		{
@@ -72,13 +72,13 @@
 		"standaloneTotalEurPerMonth": 248,
 		"timeDelayToValue": "First booking suggestions on the next bank statement import",
 		"effortToInstall": "10 min · configure bank connection or upload CSV",
-		"proof": "Daniel has been closing his monthly accounts in under 20 minutes since launching book-keeper. Before, it was a Friday afternoon."
+		"proof": "Daniel has been closing his monthly accounts in under 20 minutes since launching book keeper. Before, it was a Friday afternoon."
 	},
 	"bonuses": [
 		"DATEV export: ready export for your accountant, automatically every month",
 		"Open items list: who still owes you money? Visible instantly",
 		"Discount monitor: invoices with payment terms are flagged proactively before expiry"
 	],
-	"scarcity": "book-keeper is included in every CEO plan. No Lexoffice subscription. No GetMyInvoices. Your accounting intelligence belongs to you.",
-	"letterFromPublisher": "Bookkeeping is the epitome of work that must be done — but that doesn't move a founder forward. Daniel doesn't hate it because he's lazy. He hates it because he knows it keeps him from what he's actually good at. book-keeper doesn't make bookkeeping prettier. It makes it invisible."
+	"scarcity": "book keeper is included in every CEO plan. No Lexoffice subscription. No GetMyInvoices. Your accounting intelligence belongs to you.",
+	"letterFromPublisher": "Bookkeeping is the epitome of work that must be done — but that doesn't move a founder forward. Daniel doesn't hate it because he's lazy. He hates it because he knows it keeps him from what he's actually good at. book keeper doesn't make bookkeeping prettier. It makes it invisible."
 }

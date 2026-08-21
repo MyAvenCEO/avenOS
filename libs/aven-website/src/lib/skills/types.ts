@@ -1,13 +1,14 @@
 import type { PlanId } from '$lib/pricing/plans'
 
 export type AvenosSkillSlug =
-	| 'email-ingestor'
-	| 'document-extractor'
+	| 'email-manager'
+	| 'calendar-organizer'
+	| 'todo-shuffler'
+	| 'docs-organizer'
 	| 'brain-memorizer'
 	| 'book-keeper'
 	| 'human-reviewer'
 	| 'blog-writer'
-	| 'golden-offer'
 
 export type SkillPublisherId = 'aventin' | 'avenmaia'
 
@@ -25,6 +26,8 @@ export type SkillPublisher = {
  */
 export type SkillJson = {
 	slug: AvenosSkillSlug
+	/** Not shipped yet — the catalogue shows it, flagged, and nobody is sold it. */
+	comingSoon?: boolean
 	publisher: SkillPublisher
 	/** The plan this skill first comes with; higher plans include it too. */
 	plan: PlanId

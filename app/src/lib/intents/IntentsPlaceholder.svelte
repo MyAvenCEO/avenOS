@@ -1,16 +1,16 @@
 <script lang="ts">
 import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
 import '@xyflow/svelte/dist/style.css'
-import { bus } from '$lib/actors/bus'
+import type { HeldPreview } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
-import { isWindow } from '$lib/actors/window.actor.svelte'
 import FitView from '$lib/mesh/FitView.svelte'
+import GatePreview from '$lib/query/GatePreview.svelte'
+import { query } from '$lib/query/query.svelte'
 import FlowNode from '$lib/skills/FlowNode.svelte'
 import { layoutWorkflow } from '$lib/skills/flow-layout'
-import { skillById } from '$lib/skills/registry'
-import { talk } from './talk.svelte'
+import { nameOf, skillById } from '$lib/skills/registry'
 
 /**
  * The Intents workspace — instances MOCKED (0158), but the skill flows are
@@ -65,27 +65,68 @@ interface MockIntent {
 	source: string
 	when: string
 	deadline?: string
-	status: 'captured' | 'running' | 'waiting' | 'collecting' | 'done'
+	status: IntentState
 	log: LogEntry[]
 	artifacts: MockArtifact[]
 	skills: SkillStatus[]
+	/**
+	 * The gate this intent is holding for the human. A gate can exist in any
+	 * state — `waiting` means the intent AS A WHOLE is blocked on it; in the
+	 * other states it is one optional confirmation beside work that runs on.
+	 */
+	hitl?: { label: string; method: string; actor: string; preview: HeldPreview }
 }
 
-const TYPE_STYLE: Record<string, string> = {
-	bezahlen: 'bg-[#2f5d50]/12 text-[#2f5d50]',
-	frist: 'bg-[#c15b40]/12 text-[#9c4832]',
-	steuer: 'bg-[#a06818]/12 text-[#a06818]',
-	abgleich: 'bg-[#5b7a9d]/15 text-[#46617f]',
-	auftrag: 'bg-[#8a6238]/15 text-[#8a6238]'
-}
+/**
+ * Intent types wear ONE quiet badge, not five coloured ones. Five hues
+ * competing down the stream drowned out the thing that actually changes —
+ * the 4px state edge — so type is now carried by the WORD alone and colour
+ * is spent only where it means something. A map of five identical values
+ * would just be a place to start re-colouring, hence a single constant.
+ */
+const TYPE_BADGE = 'bg-quiet/15 text-quiet-ink'
 
-const STATUS_LABEL: Record<string, string> = {
-	captured: 'erfasst',
-	running: 'läuft',
+/**
+ * The five states an intent can be in — each with its own accent, worn as
+ * a 4px edge on the card so the stream is readable at a glance.
+ */
+type IntentState = 'working' | 'waiting' | 'done' | 'error' | 'archive'
+
+const STATUS_LABEL: Record<IntentState, string> = {
+	working: 'läuft',
 	waiting: 'wartet auf dich',
-	collecting: 'sammelt',
-	done: 'erledigt'
+	done: 'erledigt',
+	error: 'Fehler',
+	archive: 'archiviert'
 }
+
+/**
+ * THE state→role mapping. It used to be restated in app.css as a layer of
+ * `--color-state-*` aliases; a state is just a meaning borrowing a role, so
+ * one table is enough and this is it.
+ *
+ * edge = the 4px left border, text = the status word (the `-ink` face, which
+ * is the tone darkened far enough to be read on cream).
+ *
+ * Archive is deliberately absent: archived intents are filtered out of this
+ * list into their own collapsed section, where being folded away and dimmed
+ * already says "archived". A colour for it would be a colour nobody reads.
+ */
+const STATE_ACCENT: Record<Exclude<IntentState, 'archive'>, { edge: string; text: string }> = {
+	working: { edge: 'border-l-progress', text: 'text-progress-ink' },
+	waiting: { edge: 'border-l-info', text: 'text-info-ink' },
+	done: { edge: 'border-l-success', text: 'text-success-ink' },
+	error: { edge: 'border-l-error', text: 'text-error-ink' }
+}
+
+/** What archive wears instead: the page's own ink, held well back. */
+const NO_ACCENT = { edge: 'border-l-foreground/20', text: 'text-foreground/45' }
+
+/**
+ * An archived intent never reaches the active list, but it CAN be selected
+ * out of the archive drawer — so the centre pane still has to answer for it.
+ */
+const accentFor = (status: IntentState) => (status === 'archive' ? NO_ACCENT : STATE_ACCENT[status])
 
 const KIND_LABEL: Record<string, string> = {
 	doc: 'PDF',
@@ -202,7 +243,19 @@ const INTENTS: MockIntent[] = [
 				done: ['entity-trigger', 'resolve', 'link'],
 				current: 'enrich'
 			}
-		]
+		],
+		hitl: {
+			label: 'Antwortentwurf an die TK freigeben',
+			method: 'draft_approve',
+			actor: 'docs',
+			preview: {
+				kind: 'entwurf',
+				layout: 'document',
+				title: 'An Techniker Krankenkasse · Frist 15.09.',
+				body: 'Sehr geehrte Damen und Herren,\n\nanbei der angeforderte Einkommensnachweis für den Zeitraum Januar bis Juni 2025.\n\nMit freundlichen Grüßen\nSamuel Andert',
+				attachments: ['einkommensnachweis.pdf']
+			}
+		}
 	},
 	{
 		id: 'buerostuhl',
@@ -211,7 +264,7 @@ const INTENTS: MockIntent[] = [
 		source: 'Upload · Rechnung',
 		when: 'heute · 08:44',
 		deadline: 'bis 30.08.',
-		status: 'running',
+		status: 'working',
 		log: [
 			{
 				step: 'Rechnung hochgeladen',
@@ -273,7 +326,23 @@ const INTENTS: MockIntent[] = [
 				done: [],
 				current: 'statement-trigger'
 			}
-		]
+		],
+		hitl: {
+			label: 'Zahlung freigeben',
+			method: 'payment_release',
+			actor: 'abgleich',
+			preview: {
+				kind: 'zahlung',
+				layout: 'ledger',
+				title: 'Möbelhaus Nord GmbH — Rechnung R-2025-8842',
+				rows: [
+					{ label: 'Betrag', value: '249,00 €' },
+					{ label: 'Fällig', value: '30.08.' },
+					{ label: 'IBAN', value: 'DE12 3456 7890 1234 5678 00' },
+					{ label: 'Von Konto', value: 'Giro · 4.120,55 €' }
+				]
+			}
+		}
 	},
 	{
 		id: 'steuer',
@@ -282,7 +351,7 @@ const INTENTS: MockIntent[] = [
 		source: 'Dauerauftrag',
 		when: 'seit 02.08.',
 		deadline: 'bis 30.09.',
-		status: 'collecting',
+		status: 'working',
 		log: [
 			{
 				step: 'Sammel-Intent gestartet',
@@ -347,7 +416,190 @@ const INTENTS: MockIntent[] = [
 				done: ['request-trigger'],
 				current: 'draft'
 			}
-		]
+		],
+		hitl: {
+			label: 'Dokument der Steuer 2023 zuordnen',
+			method: 'classify_confirm',
+			actor: 'brain',
+			preview: {
+				kind: 'zuordnung',
+				layout: 'choice',
+				title: 'handwerker-bad-2023.pdf — wohin gehört das?',
+				options: [
+					{ label: 'Handwerkerleistungen §35a', note: '78 %', chosen: true },
+					{ label: 'Erhaltungsaufwand', note: '19 %' },
+					{ label: 'Privat — nicht absetzbar', note: '3 %' }
+				]
+			}
+		}
+	},
+	{
+		id: 'umzug',
+		type: 'auftrag',
+		title: 'Umzugsunterlagen zusammenführen',
+		source: 'Freitext · Chat',
+		when: 'heute · 10:05',
+		status: 'waiting',
+		log: [
+			{
+				step: 'Auftrag erfasst',
+				when: 'heute · 10:05',
+				state: 'done',
+				skill: 'inbox',
+				note: '„Sammle alles zum Umzug an einem Ort"'
+			},
+			{
+				step: 'Dublette gefunden',
+				when: 'heute · 10:06',
+				state: 'waiting',
+				skill: 'brain',
+				note: 'zwei Einträge für denselben Vermieter — Zusammenführung wartet auf dich'
+			}
+		],
+		artifacts: [
+			{ kind: 'entity', title: '[[Umzug 2025]]', note: 'Brain · 9 Verknüpfungen' },
+			{ kind: 'person', title: 'Hausverwaltung Berg', note: 'Firma · Vermieter' }
+		],
+		skills: [
+			{
+				skill: 'brain',
+				state: 'waiting',
+				note: 'Dublette wartet auf Zusammenführung',
+				workflow: 'verknuepfen',
+				done: ['entity-trigger'],
+				current: 'resolve'
+			}
+		],
+		hitl: {
+			label: 'Doppelten Kontakt zusammenführen',
+			method: 'entity_merge',
+			actor: 'brain',
+			preview: {
+				kind: 'dublette',
+				layout: 'compare',
+				title: 'Ähnlichkeit 88 % — dieselbe Adresse',
+				sides: [
+					{
+						heading: 'Behalten',
+						lines: ['[[Hausverwaltung Berg]]', 'Bergstraße 14, Berlin', '9 Bezüge']
+					},
+					{
+						heading: 'Verschmelzen',
+						lines: ['[[HV Berg GmbH]]', 'Bergstr. 14, Berlin', '2 Bezüge']
+					}
+				]
+			}
+		}
+	},
+	{
+		id: 'stromabrechnung',
+		type: 'abgleich',
+		title: 'Stromabrechnung 2024 prüfen',
+		source: 'Upload · PDF',
+		when: 'heute · 08:02',
+		status: 'waiting',
+		log: [
+			{
+				step: 'Abrechnung hochgeladen',
+				when: 'heute · 08:02',
+				state: 'done',
+				skill: 'inbox',
+				note: 'stromabrechnung-2024.pdf · archiviert'
+			},
+			{
+				step: 'Duplikate erkannt',
+				when: 'heute · 08:03',
+				state: 'waiting',
+				skill: 'docs',
+				note: 'drei identische Scans derselben Abrechnung im Archiv'
+			}
+		],
+		artifacts: [
+			{ kind: 'doc', title: 'stromabrechnung-2024.pdf', note: '182,40 € Guthaben · archiviert' },
+			{ kind: 'person', title: 'Stadtwerke Nord', note: 'Firma · Energie' }
+		],
+		skills: [
+			{
+				skill: 'docs',
+				state: 'waiting',
+				note: '3 Duplikate — Löschung wartet auf dich',
+				workflow: 'respond',
+				done: ['request-trigger'],
+				current: 'approve'
+			}
+		],
+		hitl: {
+			label: 'Drei Duplikate löschen',
+			method: 'docs_delete',
+			actor: 'docs',
+			preview: {
+				kind: 'löschen',
+				layout: 'list',
+				title: 'Unwiderruflich — das Original bleibt erhalten',
+				items: [
+					{ text: 'stromabrechnung-2024.pdf', note: 'Original' },
+					{ text: 'scan-0417.pdf', note: 'identisch', struck: true },
+					{ text: 'scan-0418.pdf', note: 'identisch', struck: true },
+					{ text: 'IMG_2291.pdf', note: 'Foto derselben Seite', struck: true }
+				]
+			}
+		}
+	},
+	{
+		id: 'kita',
+		type: 'frist',
+		title: 'Kita-Anmeldung bis 01.09.',
+		source: 'E-Mail · Stadt',
+		when: 'gestern · 16:30',
+		deadline: 'bis 01.09.',
+		status: 'waiting',
+		log: [
+			{
+				step: 'E-Mail eingegangen',
+				when: 'gestern · 16:30',
+				state: 'done',
+				skill: 'inbox',
+				note: 'Einladung zum Anmeldegespräch · Frist 01.09.'
+			},
+			{
+				step: 'Terminkonflikt',
+				when: 'gestern · 16:31',
+				state: 'waiting',
+				skill: 'calendar',
+				note: 'der Vorschlag kollidiert mit einem bestehenden Termin'
+			}
+		],
+		artifacts: [
+			{ kind: 'calendar', title: 'Anmeldegespräch Kita', note: '28.08. · 10:00–11:00' },
+			{ kind: 'doc', title: 'kita-einladung.pdf', note: 'archiviert' }
+		],
+		skills: [
+			{
+				skill: 'calendar',
+				state: 'waiting',
+				note: 'Konflikt am 28.08. — Entscheidung offen',
+				workflow: 'frist',
+				done: ['date-trigger'],
+				current: 'schedule'
+			}
+		],
+		hitl: {
+			label: 'Termin trotz Konflikt eintragen?',
+			method: 'calendar_conflict',
+			actor: 'calendar',
+			preview: {
+				kind: 'konflikt',
+				layout: 'compare',
+				title: 'Donnerstag, 28.08. — zwei Termine zur selben Zeit',
+				sides: [
+					{
+						heading: 'Neu',
+						lines: ['Anmeldegespräch Kita', '10:00 – 11:00', 'Stadt · Kita Sonnenblume']
+					},
+					{ heading: 'Bestehend', lines: ['Team-Review', '10:30 – 11:30', 'überschneidet 30 Min'] }
+				]
+			}
+		}
 	},
 	{
 		id: 'kontoauszug',
@@ -355,7 +607,7 @@ const INTENTS: MockIntent[] = [
 		title: 'Kontoauszug Juli abgleichen',
 		source: 'Upload · CSV',
 		when: 'gestern · 18:40',
-		status: 'done',
+		status: 'archive',
 		log: [
 			{
 				step: 'Kontoauszug hochgeladen',
@@ -401,7 +653,80 @@ const INTENTS: MockIntent[] = [
 				workflow: 'capture',
 				done: ['voice-trigger', 'create', 'list-view', 'board-view']
 			}
-		]
+		],
+		hitl: {
+			label: 'Zahlung der Rechnung zuordnen',
+			method: 'match_confirm',
+			actor: 'abgleich',
+			preview: {
+				kind: 'abgleich',
+				layout: 'compare',
+				title: 'Score 91 % — knapp unter der Auto-Schwelle',
+				sides: [
+					{
+						heading: 'Buchung',
+						lines: ['28.07. · −1.150,00 €', 'Hausverwaltung Berg', 'Dauerauftrag']
+					},
+					{ heading: 'Offener Posten', lines: ['Miete 08/2025', '1.150,00 €', 'fällig 03.08.'] }
+				]
+			}
+		}
+	},
+	{
+		id: 'handyvertrag',
+		type: 'frist',
+		title: 'Handyvertrag rechtzeitig gekündigt',
+		source: 'Post-Scan · Brief',
+		when: 'heute · 07:20',
+		status: 'done',
+		log: [
+			{
+				step: 'Kündigungsfrist erkannt',
+				when: '05.08. · 09:10',
+				state: 'done',
+				skill: 'inbox',
+				note: 'Vertrag läuft am 31.08. aus · Frist 4 Wochen'
+			},
+			{
+				step: 'Kündigung freigegeben und versendet',
+				when: 'heute · 07:20',
+				state: 'done',
+				skill: 'docs',
+				note: 'Bestätigung liegt im Archiv'
+			}
+		],
+		artifacts: [
+			{ kind: 'doc', title: 'kuendigung-handyvertrag.pdf', note: 'versendet 07:20 · archiviert' },
+			{ kind: 'person', title: 'Telekom Deutschland', note: 'Firma · Mobilfunk' }
+		],
+		skills: [
+			{
+				skill: 'docs',
+				state: 'done',
+				note: 'Kündigung versendet',
+				workflow: 'respond',
+				done: ['request-trigger', 'draft', 'approve', 'finish']
+			},
+			{
+				skill: 'inbox',
+				state: 'done',
+				note: 'Frist erkannt · Intent extrahiert',
+				workflow: 'intake',
+				done: ['mail-trigger', 'upload-trigger', 'normalize', 'classify', 'route']
+			}
+		],
+		hitl: {
+			label: 'Kündigungsbestätigung ablegen',
+			method: 'archive_confirm',
+			actor: 'docs',
+			preview: {
+				kind: 'ablage',
+				layout: 'document',
+				title: 'Ablage in [[Verträge]] / Mobilfunk',
+				body: 'Telekom Deutschland bestätigt die Kündigung zum 31.08.2025. Vertragsnummer 4412-88231. Eine weitere Rechnung folgt für den letzten Abrechnungszeitraum.',
+				attachments: ['bestaetigung-telekom.pdf']
+			}
+		}
 	},
 	{
 		id: 'fitnessstudio',
@@ -409,7 +734,7 @@ const INTENTS: MockIntent[] = [
 		title: '„Kündige das Fitnessstudio"',
 		source: 'Freitext · Chat',
 		when: 'gestern · 21:15',
-		status: 'captured',
+		status: 'error',
 		log: [
 			{
 				step: 'Auftrag erfasst',
@@ -426,19 +751,19 @@ const INTENTS: MockIntent[] = [
 				note: 'Kündigung: Vertrag finden, Frist prüfen, Schreiben aufsetzen'
 			},
 			{
-				step: 'Vertrag wird gesucht',
+				step: 'Vertrag nicht gefunden',
 				when: 'seit gestern',
-				state: 'running',
+				state: 'waiting',
 				skill: 'docs',
-				note: 'Archiv-Suche nach dem FitX-Vertrag läuft'
+				note: 'kein FitX-Vertrag im Archiv — lade ihn hoch oder sag mir, wo er liegt'
 			}
 		],
 		artifacts: [{ kind: 'entity', title: '[[FitX Vertrag]]', note: 'Brain · gesucht…' }],
 		skills: [
 			{
 				skill: 'docs',
-				state: 'running',
-				note: 'durchsucht das Archiv',
+				state: 'waiting',
+				note: 'Archiv-Suche ohne Treffer',
 				workflow: 'respond',
 				done: ['request-trigger'],
 				current: 'draft'
@@ -451,7 +776,22 @@ const INTENTS: MockIntent[] = [
 				done: [],
 				current: 'entity-trigger'
 			}
-		]
+		],
+		hitl: {
+			label: 'Vertrag manuell nachreichen',
+			method: 'upload_request',
+			actor: 'docs',
+			preview: {
+				kind: 'fehlt',
+				layout: 'choice',
+				title: 'Kein FitX-Vertrag im Archiv — 428 Dokumente durchsucht',
+				options: [
+					{ label: 'Vertrag jetzt hochladen', note: 'empfohlen', chosen: true },
+					{ label: 'Ohne Vertrag kündigen', note: 'Frist unbekannt' },
+					{ label: 'Ich sage dir, wo er liegt', note: 'Freitext' }
+				]
+			}
+		}
 	}
 ]
 
@@ -469,8 +809,20 @@ const chat = chatActor.core
 
 /** Done intents rest in the archive — a toggle, closed by default. */
 let archiveOpen = $state(false)
-const activeIntents = $derived(INTENTS.filter((i) => i.status !== 'done'))
-const archivedIntents = $derived(INTENTS.filter((i) => i.status === 'done'))
+/** What needs you first: broken, then blocked, then moving, then settled. */
+const STATE_ORDER: Record<IntentState, number> = {
+	error: 0,
+	waiting: 1,
+	working: 2,
+	done: 3,
+	archive: 4
+}
+const activeIntents = $derived(
+	INTENTS.filter((i) => i.status !== 'archive').sort(
+		(a, b) => STATE_ORDER[a.status] - STATE_ORDER[b.status]
+	)
+)
+const archivedIntents = $derived(INTENTS.filter((i) => i.status === 'archive'))
 
 /**
  * The center shows ONE of three things: the activity log (default), an
@@ -481,18 +833,26 @@ let preview = $state<MockArtifact | null>(null)
 let skillView = $state<SkillStatus | null>(null)
 
 /**
- * The pending HITL of the mock surfaces where every held message lives:
- * the GLOBAL bar above the voice pill. Seeded once; Confirm/Reject there
- * simply clears it (the mock has nothing to execute).
+ * Every intent's gate goes into the REAL queue, tagged with its intent —
+ * the bar above the pill shows only the one whose intent is on screen.
  */
-if (!hitlQueue.items.some((h) => h.id === 'mock-docs-tk')) {
+// The queue is an HMR-surviving singleton: drop gates from earlier mock
+// generations, or a stale one without its preview shadows the real thing.
+const mockIds = new Set(INTENTS.filter((i) => i.hitl).map((i) => `mock-${i.id}`))
+hitlQueue.items = hitlQueue.items.filter((h) => !h.id.startsWith('mock-') || mockIds.has(h.id))
+
+for (const intent of INTENTS) {
+	if (!intent.hitl) continue
+	const id = `mock-${intent.id}`
+	if (hitlQueue.items.some((h) => h.id === id)) continue
 	hitlQueue.items.push({
-		id: 'mock-docs-tk',
-		actor: 'docs',
-		method: 'draft_approve',
-		label: 'Antwortentwurf an die TK freigeben',
-		detail: 'Intent „Krankenkasse: Nachweis bis 15.09." · Entwurf bereit',
-		context: 'krankenkasse'
+		id,
+		actor: intent.hitl.actor,
+		method: intent.hitl.method,
+		label: intent.hitl.label,
+		detail: intent.hitl.preview.title,
+		context: intent.id,
+		preview: intent.hitl.preview
 	})
 }
 
@@ -543,7 +903,7 @@ $effect.pre(() => {
 		type: 'smoothstep',
 		style: 'stroke: rgba(47,93,80,0.5); stroke-width: 1.5;',
 		labelStyle: 'font-size: 10px; fill: rgba(30,41,59,0.7);',
-		labelBgStyle: 'fill: #f8f6ef;',
+		labelBgStyle: 'fill: var(--color-linen);',
 		labelBgPadding: [4, 2] as [number, number],
 		labelBgBorderRadius: 4
 	}))
@@ -557,27 +917,74 @@ let sfH = $state(0)
  * a fresh log entry, a streamed reply, an opened inline view — is always
  * in sight at the bottom.
  */
-// HITL gates scope to what is on screen: the selected intent, or the talk.
+// The answer surface answers ABOUT what is on screen: selecting an intent is
+// what makes the modal intent-aware, and it is the whole handshake.
 $effect(() => {
-	talk.intentContext = talk.open ? null : selectedId
+	query.intent = selectedId
 })
 
+/** The gates this intent is holding; one raised without a context is global. */
+const gates = $derived(
+	hitlQueue.items.filter((h) => h.context === undefined || h.context === selectedId)
+)
+
+/**
+ * The log, minus the entry that only announces a pending gate. With the gate
+ * card right below, that line said the same thing twice — and the weaker of
+ * the two, since it cannot be acted on. Once the gate is answered the entry
+ * comes back, because then it IS history.
+ */
+const logEntries = $derived(gates.length > 0 ? selected.log.filter((e) => !e.hitl) : selected.log)
+
 let centerEl: HTMLElement | null = $state(null)
-let transcriptEl: HTMLElement | null = $state(null)
+/** Whether the reader is riding the bottom; scrolling up deliberately parks it. */
+let stick = $state(true)
+
+/**
+ * The log ends at its end, so the newest entry sits right above the gate.
+ *
+ * Synchronous, deliberately. An earlier version scrolled inside
+ * `requestAnimationFrame` and never ran at all in a tab that is not
+ * compositing — a hidden or background tab has no animation frames, so the
+ * log would still be at the top when you came back to it. `$effect` already
+ * runs after the DOM is updated, so the frame bought nothing.
+ *
+ * The dependencies are PASSED IN rather than touched with `void`, so the read
+ * the compiler tracks is the same one the reader sees.
+ */
+function scrollToBottom(_deps: unknown): void {
+	centerEl?.scrollTo({ top: centerEl.scrollHeight })
+}
+
+// Switching intent is a fresh start: whatever was scrolled to belonged to the
+// intent just left.
 $effect(() => {
-	void chat.turns.length
-	void chat.turns.at(-1)?.content
-	void selected.log.length
-	void talk.open
-	void registryTick.v
-	const el = talk.open ? transcriptEl : centerEl
-	el?.scrollTo({ top: el.scrollHeight })
+	stick = true
+	scrollToBottom(selectedId)
+})
+
+// New content, or the gate appearing and taking height away.
+$effect(() => {
+	const deps = [logEntries.length, gates.length, registryTick.v]
+	if (stick) scrollToBottom(deps)
+})
+
+// The gate is a SIBLING that renders in the same tick and then changes how
+// much room the log has, so the box can settle after any scroll we time.
+$effect(() => {
+	const el = centerEl
+	if (!el) return
+	const observer = new ResizeObserver(() => {
+		if (stick) el.scrollTo({ top: el.scrollHeight })
+	})
+	observer.observe(el)
+	return () => observer.disconnect()
 })
 
 const DOT: Record<string, string> = {
-	done: 'bg-[#2f5d50] text-white',
-	running: 'bg-[#a06818] text-white',
-	waiting: 'bg-[#c15b40] text-white'
+	done: 'bg-success text-success-foreground',
+	running: 'bg-progress text-progress-foreground',
+	waiting: 'bg-info text-info-foreground'
 }
 </script>
 
@@ -594,198 +1001,127 @@ const DOT: Record<string, string> = {
 	</button>
 {/snippet}
 
+<!-- The 85% UI scale lives on `html` (app.css), not on a zoom wrapper here:
+     rem sizes shrink, px borders stay honest, and the dock clearance needs no
+     dividing back out because nothing is scaled relative to anything else. -->
 <div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden">
-	{#if talk.open}
-		<!-- TALK CONTEXT (global, from the spark rail): the conversation is a
-		     25% aside on the left; the right 75% is the VIEW surface — every
-		     window the model opens renders there full width. -->
-		<aside
-			bind:this={transcriptEl}
-			class="flex w-1/4 min-w-72 shrink-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+	<!-- LEFT: the intent stream — compact cards, cream selection. -->
+	<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
+		<h2
+			class="px-1 pt-1 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
 		>
-			{#if chat.turns.length === 0}
-				<p class="pt-6 text-center text-foreground/40 text-sm">
-					Sprich oder tippe unten — Fragen, Aufträge, oder „zeig mir die Todos".
-				</p>
-			{/if}
-			{#each chat.turns as turn (turn.id)}
-				<div class="flex" class:justify-end={turn.role === 'user'}>
-					<div
-						class="max-w-[90%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed {turn.role ===
-						'user'
-							? 'bg-primary text-primary-foreground'
-							: 'border border-border bg-surface-card'}"
-					>
-						{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
-							<span class="flex items-center gap-1 py-1" aria-label="Thinking">
-								<span class="size-1.5 animate-bounce rounded-full bg-current opacity-40"></span>
-								<span
-									class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
-								></span>
-								<span
-									class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
-								></span>
-							</span>
-						{:else}
-							{turn.content}
-						{/if}
-					</div>
-				</div>
-			{/each}
-		</aside>
-
-		<main
-			class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-			style="margin-bottom: var(--dock-h, 0px)"
-		>
-			{#if registryTick.v >= 0}
-				{@const openWindows = bus
-					.actors()
-					.filter(isWindow)
-					.filter((w) => w.open && w.subject.manifest.id !== 'chat')}
-				{#if openWindows.length === 0}
-					<div class="flex h-full flex-col items-center justify-center gap-3 text-center">
-						<span class="block size-12 overflow-hidden rounded-full border border-border">
-							<img src="/aven-logo.svg" alt="" class="size-full object-cover">
-						</span>
-						<p class="text-foreground/40 text-sm">
-							„Zeig mir die Todos" — die Ansicht erscheint hier.
-						</p>
-					</div>
-				{:else}
-					{#each openWindows as w (w.manifest.id)}
-						{@const Face = w.component as import('svelte').Component<{ actor: typeof w.subject }>}
-						<button
-							type="button"
-							onclick={() => {
-								w.open = false
-								registryTick.v++
-							}}
-							title="Ansicht schließen"
-							aria-label="Ansicht schließen"
-							class="absolute top-2 right-3 z-10 text-foreground/30 transition-colors hover:text-foreground"
-						>
-							×
-						</button>
-						<Face actor={w.subject} {...w.props} />
-					{/each}
-				{/if}
-			{/if}
-		</main>
-	{:else}
-		<!-- LEFT: the intent stream — compact cards, cream selection. -->
-		<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
-			<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-				Intents · {activeIntents.length}
-			</h2>
-			{#each activeIntents as intent (intent.id)}
-				{@const sel = selectedId === intent.id && !talk.open}
-				<button
-					type="button"
-					onclick={() => {
-					selectedId = intent.id
-					preview = null
-					skillView = null
-					talk.open = false
-				}}
-					class="rounded-xl border px-3.5 py-2.5 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
-					? 'border-foreground/15 bg-surface-card-selected'
-					: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
-				>
-					<div class="flex items-center gap-2">
-						<span
-							class="rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_STYLE[intent.type]}"
-						>
-							{intent.type}
-						</span>
-						<span class="ml-auto font-mono text-[0.5625rem] text-foreground/35">{intent.when}</span>
-					</div>
-					<p class="pt-1 font-semibold text-[13px] leading-snug">{intent.title}</p>
-					<div class="flex items-center gap-2 pt-1">
-						<span class="text-[0.625rem] text-foreground/45">{intent.source}</span>
-						{#if intent.deadline}
-							<span
-								class="rounded-full bg-[#c15b40]/10 px-1.5 py-0.5 font-mono text-[#9c4832] text-[0.5625rem]"
-							>
-								{intent.deadline}
-							</span>
-						{/if}
-						<span
-							class="ml-auto font-mono text-[0.5625rem] {intent.status === 'waiting'
-							? 'text-[#9c4832]'
-							: intent.status === 'done'
-								? 'text-[#2f5d50]'
-								: 'text-foreground/40'}"
-						>
-							{STATUS_LABEL[intent.status]}
-						</span>
-					</div>
-				</button>
-			{/each}
-
-			<!-- The archive: done intents rest here, folded away by default. -->
+			Intents · {activeIntents.length}
+		</h2>
+		{#each activeIntents as intent (intent.id)}
+			{@const sel = selectedId === intent.id}
+			{@const accent = accentFor(intent.status)}
+			<!-- Hover shifts the FILL, never the border: `hover:border-*` paints all
+			     four sides and, sitting in a later cascade layer, greyed out the 4px
+			     state edge — the one thing the card exists to show. -->
 			<button
 				type="button"
 				onclick={() => {
-				archiveOpen = !archiveOpen
-			}}
-				class="flex items-center gap-1.5 px-1 pt-3 text-left font-semibold text-foreground/50 text-xs uppercase tracking-wide transition-colors hover:text-foreground/80"
+					selectedId = intent.id
+					preview = null
+					skillView = null
+					
+				}}
+				class="rounded-xl border border-l-[4px] px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {accent.edge} {sel
+					? 'border-foreground/15 bg-surface-card-selected'
+					: 'border-foreground/5 bg-surface-raised hover:bg-surface-card-hover'}"
 			>
-				<svg
-					viewBox="0 0 24 24"
-					class="size-3 transition-transform {archiveOpen ? 'rotate-90' : ''}"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<path d="m9 6 6 6-6 6" />
-				</svg>
-				Archiv · {archivedIntents.length}
+				<!-- row 1: what it is — title, with its type on the right -->
+				<div class="flex items-baseline gap-2">
+					<p class="min-w-0 flex-1 font-medium text-xs leading-snug">{intent.title}</p>
+					<span class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_BADGE}">
+						{intent.type}
+					</span>
+				</div>
+				<!-- row 2: where it came from, when, and where it stands -->
+				<div class="flex items-center gap-2 pt-1">
+					<span class="truncate text-[0.6875rem] text-foreground/45">{intent.source}</span>
+					<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
+						{intent.when}
+					</span>
+					{#if intent.deadline}
+						<span
+							class="shrink-0 rounded-full bg-error/10 px-1.5 py-0.5 font-mono text-error-ink text-[0.5625rem]"
+						>
+							{intent.deadline}
+						</span>
+					{/if}
+				</div>
 			</button>
-			{#if archiveOpen}
-				{#each archivedIntents as intent (intent.id)}
-					{@const sel = selectedId === intent.id && !talk.open}
-					<button
-						type="button"
-						onclick={() => {
+		{/each}
+
+		<!-- The archive: done intents rest here, folded away by default. -->
+		<button
+			type="button"
+			onclick={() => {
+			archiveOpen = !archiveOpen
+		}}
+			class="flex items-center gap-1.5 px-1 pt-3 text-left font-semibold text-foreground/50 text-xs uppercase tracking-wide transition-colors hover:text-foreground/80"
+		>
+			<svg
+				viewBox="0 0 24 24"
+				class="size-3 transition-transform {archiveOpen ? 'rotate-90' : ''}"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path d="m9 6 6 6-6 6" />
+			</svg>
+			Archiv · {archivedIntents.length}
+		</button>
+		{#if archiveOpen}
+			{#each archivedIntents as intent (intent.id)}
+				{@const sel = selectedId === intent.id}
+				<button
+					type="button"
+					onclick={() => {
 						selectedId = intent.id
 						preview = null
 						skillView = null
-						talk.open = false
 					}}
-						class="rounded-xl border px-3.5 py-2.5 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
+					class="rounded-xl border border-l-[4px] border-l-foreground/20 px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
 						? 'border-foreground/15 bg-surface-card-selected opacity-100'
-						: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
-					>
-						<div class="flex items-center gap-2">
-							<span
-								class="rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_STYLE[intent.type]}"
-							>
-								{intent.type}
-							</span>
-							<span class="ml-auto font-mono text-[0.5625rem] text-foreground/35"
-								>{intent.when}</span
-							>
-						</div>
-						<p class="pt-1 font-semibold text-[13px] leading-snug">{intent.title}</p>
-						<div class="flex items-center gap-2 pt-1">
-							<span class="text-[0.625rem] text-foreground/45">{intent.source}</span>
-							<span class="ml-auto font-mono text-[#2f5d50] text-[0.5625rem]">erledigt</span>
-						</div>
-					</button>
-				{/each}
-			{/if}
-		</aside>
+						: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
+				>
+					<div class="flex items-baseline gap-2">
+						<p class="min-w-0 flex-1 font-medium text-xs leading-snug">{intent.title}</p>
+						<span class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_BADGE}">
+							{intent.type}
+						</span>
+					</div>
+					<div class="flex items-center gap-2 pt-1">
+						<span class="truncate text-[0.6875rem] text-foreground/45">{intent.source}</span>
+					</div>
+				</button>
+			{/each}
+		{/if}
+	</aside>
 
-		<!-- CENTER: activity log / artifact preview / skill stepper. -->
+	<!-- CENTER: activity log / artifact preview / skill stepper. -->
+	<!-- The center column wears the intent's STATE as its header — the same
+	     uppercase line as INTENTS and SKILLS beside it, so all three
+	     columns start their cards on one line. -->
+	<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-2" style="margin-bottom: var(--dock-h, 0px)">
+		<h2
+			class="px-1 pt-1 text-center font-semibold text-xs uppercase tracking-wide {accentFor(selected.status).text}"
+		>
+			{STATUS_LABEL[selected.status]}
+		</h2>
 		<main
 			bind:this={centerEl}
-			class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)] {talk.open
-			? ''
-			: 'gap-4 overflow-y-auto p-6'}"
-			style="margin-bottom: var(--dock-h, 0px)"
+			onscroll={() => {
+				if (centerEl) stick = centerEl.scrollHeight - centerEl.clientHeight - centerEl.scrollTop < 48
+			}}
+			class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {gates.length >
+			0
+				? 'rounded-b-none border-b-0'
+				: ''}"
 		>
 			{#if skillView}
 				<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
@@ -793,13 +1129,13 @@ const DOT: Record<string, string> = {
 				<header class="flex items-center gap-3">
 					<span
 						class="size-2 shrink-0 rounded-full {skillView.state === 'done'
-						? 'bg-[#2f5d50]'
-						: skillView.state === 'waiting'
-							? 'bg-[#c15b40]'
-							: 'bg-[#a06818]'}"
+					? 'bg-success'
+					: skillView.state === 'waiting'
+						? 'bg-info'
+						: 'bg-progress'}"
 					></span>
 					<div class="min-w-0">
-						<h1 class="font-mono font-semibold text-lg leading-tight">{skillView.skill}</h1>
+						<h1 class="font-semibold text-lg leading-tight">{nameOf(skillView.skill)}</h1>
 						<p class="text-foreground/45 text-xs">{skillView.note}</p>
 					</div>
 					{@render backButton()}
@@ -807,7 +1143,7 @@ const DOT: Record<string, string> = {
 				<div class="border-border border-b"></div>
 
 				<!-- the ACTUAL template workflow (same cards as the Skills viewer),
-			     the instance state overlaid: ✓ done, amber running, red waiting -->
+		     the instance state overlaid: ✓ done, amber running, red waiting -->
 				<div
 					bind:clientWidth={sfW}
 					bind:clientHeight={sfH}
@@ -816,7 +1152,7 @@ const DOT: Record<string, string> = {
 					{#key skillView.skill}
 						{#if sfNodes.length === 0}
 							<p class="flex h-full items-center justify-center text-foreground/40 text-sm">
-								{skillView.skill}
+								{nameOf(skillView.skill)}
 								— Template folgt; die Instanz läuft als Teil der Inbox-Pipeline.
 							</p>
 						{:else}
@@ -847,10 +1183,10 @@ const DOT: Record<string, string> = {
 								<span class="min-w-0 flex-1">{entry.step}</span>
 								<span
 									class="font-mono text-[0.625rem] {entry.state === 'done'
-									? 'text-[#2f5d50]'
-									: entry.state === 'waiting'
-										? 'text-[#9c4832]'
-										: 'text-[#a06818]'}"
+								? 'text-success-ink'
+								: entry.state === 'waiting'
+									? 'text-error-ink'
+									: 'text-progress-ink'}"
 								>
 									{entry.state === 'done' ? '✓' : entry.state === 'waiting' ? '⏸' : '⟳'}
 								</span>
@@ -883,8 +1219,8 @@ const DOT: Record<string, string> = {
 						{#each [92, 100, 78, 96, 60] as w, i (i)}
 							<div class="mb-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
 						{/each}
-						<div class="mt-5 rounded-lg border border-[#a06818]/30 bg-[#a06818]/8 px-4 py-3">
-							<p class="font-mono text-[#a06818] text-[0.625rem] uppercase tracking-wide">
+						<div class="mt-5 rounded-lg border border-warning/35 bg-warning/12 px-4 py-3">
+							<p class="font-mono text-warning-ink text-[0.625rem] uppercase tracking-wide">
 								Extrahiert
 							</p>
 							<p class="pt-1 text-xs leading-relaxed">{preview.note}</p>
@@ -909,7 +1245,7 @@ const DOT: Record<string, string> = {
 				{:else if preview.kind === 'calendar'}
 					<div class="flex w-full items-center gap-4 pt-2">
 						<div
-							class="flex size-14 flex-col items-center justify-center rounded-xl bg-[#c15b40]/10 text-[#9c4832]"
+							class="flex size-14 flex-col items-center justify-center rounded-xl bg-error/10 text-error-ink"
 						>
 							<span class="font-semibold text-lg leading-none">15</span>
 							<span class="pt-0.5 font-mono text-[0.5625rem] uppercase">Sep</span>
@@ -923,7 +1259,7 @@ const DOT: Record<string, string> = {
 					<div class="w-full pt-2">
 						<div class="flex items-center gap-4">
 							<span
-								class="flex size-12 items-center justify-center rounded-full bg-[#7e6ead]/15 font-semibold text-[#655687] text-sm"
+								class="flex size-12 items-center justify-center rounded-full bg-primary/12 font-semibold text-primary text-sm"
 							>
 								{preview.title.slice(0, 2).toUpperCase()}
 							</span>
@@ -947,7 +1283,7 @@ const DOT: Record<string, string> = {
 							<div class="flex items-center gap-3 border-border/60 border-b py-2.5 text-sm">
 								<span class="w-14 font-mono text-foreground/40 text-xs">{row.d}</span>
 								<span class="min-w-0 flex-1 truncate">{row.t}</span>
-								<span class="font-mono {row.a.startsWith('+') ? 'text-[#2f5d50]' : ''}"
+								<span class="font-mono {row.a.startsWith('+') ? 'text-success-ink' : ''}"
 									>{row.a}</span
 								>
 								<span class="w-40 text-right text-[0.6875rem] text-foreground/40">{row.m}</span>
@@ -959,7 +1295,7 @@ const DOT: Record<string, string> = {
 					<div class="w-full max-w-2xl pt-2 font-mono text-[13px] leading-relaxed">
 						<p class="text-foreground/35">---</p>
 						<p class="text-foreground/55">
-							tags: <span class="text-[#a06818]">#versicherung #frist</span>
+							tags: <span class="text-warning-ink">#versicherung #frist</span>
 						</p>
 						<p class="text-foreground/55">erstellt: 2025-08-12 · quelle: inbox</p>
 						<p class="pb-3 text-foreground/35">---</p>
@@ -969,17 +1305,17 @@ const DOT: Record<string, string> = {
 						<p class="pb-3 text-foreground/75">
 							Sammelt alles rund um Versicherungen in 2025. Der Brief der
 							<span
-								class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+								class="cursor-pointer text-primary underline decoration-primary/30 underline-offset-2"
 								>[[Techniker Krankenkasse]]</span
 							>
 							verlangt einen
 							<span
-								class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+								class="cursor-pointer text-primary underline decoration-primary/30 underline-offset-2"
 								>[[Einkommensnachweis]]</span
 							>
 							bis zur Frist am 15.09. — das Todo hängt an
 							<span
-								class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+								class="cursor-pointer text-primary underline decoration-primary/30 underline-offset-2"
 								>[[Fristen 2025]]</span
 							>.
 						</p>
@@ -994,7 +1330,7 @@ const DOT: Record<string, string> = {
 						<div class="flex flex-wrap gap-1.5 pb-4">
 							{#each ['[[Techniker Krankenkasse]]', '[[Einkommensnachweis]]', '[[Fristen 2025]]', '[[Steuer 2023]]'] as link (link)}
 								<span
-									class="cursor-pointer rounded-md bg-[#7e6ead]/10 px-2 py-0.5 text-[#655687] text-xs"
+									class="cursor-pointer rounded-md bg-primary/10 px-2 py-0.5 text-primary text-xs"
 									>{link}</span
 								>
 							{/each}
@@ -1015,38 +1351,31 @@ const DOT: Record<string, string> = {
 				<!-- ACTIVITY LOG: the intent's journey, every entry typed by skill. -->
 				<header>
 					<div class="flex items-center gap-2">
-						<span
-							class="rounded-full px-2 py-0.5 font-mono text-[0.625rem] {TYPE_STYLE[selected.type]}"
-						>
+						<span class="rounded-full px-2 py-0.5 font-mono text-[0.625rem] {TYPE_BADGE}">
 							{selected.type}
 						</span>
 						{#if selected.deadline}
 							<span
-								class="rounded-full bg-[#c15b40]/10 px-2 py-0.5 font-mono text-[#9c4832] text-[0.625rem]"
+								class="rounded-full bg-error/10 px-2 py-0.5 font-mono text-error-ink text-[0.625rem]"
 							>
 								{selected.deadline}
 							</span>
 						{/if}
-						<span
-							class="ml-auto rounded-full border border-border px-2.5 py-0.5 font-mono text-[0.625rem] text-foreground/50"
-						>
-							{STATUS_LABEL[selected.status]}
-						</span>
 					</div>
 					<h1 class="pt-2 font-semibold text-xl leading-tight">{selected.title}</h1>
 					<p class="pt-1 text-foreground/45 text-xs">{selected.source} · {selected.when}</p>
 				</header>
 
 				<ol class="flex flex-col">
-					{#each selected.log as entry, i (entry.step + i)}
+					{#each logEntries as entry, i (entry.step + i)}
 						<li class="relative flex gap-3 pb-5">
 							{#if i < selected.log.length - 1}
 								<span class="absolute top-6 bottom-0 left-[11px] w-px bg-foreground/10"></span>
 							{/if}
 							<span
 								class="z-10 mt-0.5 flex size-[23px] shrink-0 items-center justify-center rounded-full {DOT[
-								entry.state
-							]}"
+							entry.state
+						]}"
 							>
 								{#if entry.state === 'done'}
 									<svg
@@ -1092,12 +1421,12 @@ const DOT: Record<string, string> = {
 									<button
 										type="button"
 										onclick={() => {
-										skillView = selected.skills.find((s) => s.skill === entry.skill) ?? null
-										preview = null
-									}}
+									skillView = selected.skills.find((s) => s.skill === entry.skill) ?? null
+									preview = null
+								}}
 										class="rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[0.5625rem] text-foreground/55 transition-colors hover:bg-surface-card-selected"
 									>
-										{entry.skill}
+										{nameOf(entry.skill)}
 									</button>
 									<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
 										{entry.when}
@@ -1109,9 +1438,11 @@ const DOT: Record<string, string> = {
 								{#if entry.card}
 									<div class="mt-2 rounded-xl border border-border bg-surface-card px-4 py-3">
 										<p class="font-medium text-xs">{entry.card.title}</p>
-										<p class="pt-1 text-foreground/55 text-xs leading-relaxed">{entry.card.text}</p>
+										<p class="pt-1 text-foreground/55 text-xs leading-relaxed">
+											{entry.card.text}
+										</p>
 										{#if entry.hitl}
-											<p class="pt-2 font-mono text-[#9c4832] text-[0.625rem]">
+											<p class="pt-2 font-mono text-error-ink text-[0.625rem]">
 												→ wartet in der globalen Freigabe-Leiste über der Voice-Pill
 											</p>
 										{/if}
@@ -1124,77 +1455,95 @@ const DOT: Record<string, string> = {
 			{/if}
 		</main>
 
-		<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
-		{#if !talk.open}
-			<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
-				<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-					Skills · {selected.skills.length}
-				</h2>
-				{#each selected.skills as s (s.skill)}
-					<button
-						type="button"
-						onclick={() => {
-					skillView = skillView?.skill === s.skill ? null : s
-					preview = null
-				}}
-						class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {skillView?.skill ===
-				s.skill
-					? 'border-foreground/15 bg-surface-card-selected'
-					: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
+		<!-- THE human gate: its own card BELOW the activity card, the same width,
+		     not a tenant inside it. It is about this intent, so it lives in the
+		     workspace — the overlay dims it and lies over it like everything
+		     else — but it is a separate thing being asked of you, and nesting it
+		     inside the log made it read as one more log entry. -->
+		<!-- Flush against the log, which loses its bottom corners for as long as a
+		     gate is there: the log reads as running on BEHIND the decision rather
+		     than stopping short of it.
+		     The wrapper puts the log's own surface BEHIND the gate so its rounded
+		     top corners sit on that white instead of cutting notches of page
+		     eggshell into the panel. It ends where the gate ends — no white strip
+		     below it; the two bottom radii coincide, so there is nothing to fill. -->
+		{#each gates as held (held.id)}
+			<div class="-mt-2 rounded-b-2xl border border-foreground/5 border-t-0 bg-surface-raised">
+				<GatePreview {held} />
+			</div>
+		{/each}
+	</div>
+
+	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
+	<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
+		<h2
+			class="px-1 pt-1 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
+		>
+			Skills · {selected.skills.length}
+		</h2>
+		{#each selected.skills as s (s.skill)}
+			<button
+				type="button"
+				onclick={() => {
+			skillView = skillView?.skill === s.skill ? null : s
+			preview = null
+		}}
+				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {skillView?.skill ===
+		s.skill
+			? 'border-foreground/15 bg-surface-card-selected'
+			: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
+			>
+				<div class="flex items-center gap-2">
+					<span
+						class="size-1.5 shrink-0 rounded-full {s.state === 'done'
+					? 'bg-success'
+					: s.state === 'waiting'
+						? 'bg-info'
+						: 'bg-progress'}"
+					></span>
+					<span class="font-medium text-xs">{nameOf(s.skill)}</span>
+					<span class="ml-auto font-mono text-[0.625rem] text-foreground/40">
+						{s.state === 'done' ? 'fertig' : s.state === 'waiting' ? 'wartet' : 'läuft'}
+					</span>
+				</div>
+				<p class="pt-1 text-[0.6875rem] text-foreground/50 leading-relaxed">{s.note}</p>
+			</button>
+		{/each}
+
+		<h2
+			class="px-1 pt-3 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
+		>
+			Artefakte · {selected.artifacts.length}
+		</h2>
+		{#each selected.artifacts as artifact (artifact.title)}
+			<button
+				type="button"
+				onclick={() => {
+			preview = preview?.title === artifact.title ? null : artifact
+			skillView = null
+		}}
+				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
+		artifact.title
+			? 'border-foreground/15 bg-surface-card-selected'
+			: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
+			>
+				<div class="flex items-center gap-2">
+					<span
+						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
 					>
-						<div class="flex items-center gap-2">
-							<span
-								class="size-1.5 shrink-0 rounded-full {s.state === 'done'
-							? 'bg-[#2f5d50]'
-							: s.state === 'waiting'
-								? 'bg-[#c15b40]'
-								: 'bg-[#a06818]'}"
-							></span>
-							<span class="font-medium font-mono text-xs">{s.skill}</span>
-							<span class="ml-auto font-mono text-[0.625rem] text-foreground/40">
-								{s.state === 'done' ? 'fertig' : s.state === 'waiting' ? 'wartet' : 'läuft'}
-							</span>
-						</div>
-						<p class="pt-1 text-[0.6875rem] text-foreground/50 leading-relaxed">{s.note}</p>
-					</button>
-				{/each}
+						{KIND_LABEL[artifact.kind]}
+					</span>
+					<div class="min-w-0">
+						<p class="truncate font-medium text-xs">{artifact.title}</p>
+						<p class="truncate text-[0.6875rem] text-foreground/45">{artifact.note}</p>
+					</div>
+				</div>
+			</button>
+		{/each}
 
-				{#if !talk.open}
-					<h2 class="px-1 pt-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-						Artefakte · {selected.artifacts.length}
-					</h2>
-					{#each selected.artifacts as artifact (artifact.title)}
-						<button
-							type="button"
-							onclick={() => {
-						preview = preview?.title === artifact.title ? null : artifact
-						skillView = null
-					}}
-							class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
-					artifact.title
-						? 'border-foreground/15 bg-surface-card-selected'
-						: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
-						>
-							<div class="flex items-center gap-2">
-								<span
-									class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
-								>
-									{KIND_LABEL[artifact.kind]}
-								</span>
-								<div class="min-w-0">
-									<p class="truncate font-medium text-xs">{artifact.title}</p>
-									<p class="truncate text-[0.6875rem] text-foreground/45">{artifact.note}</p>
-								</div>
-							</div>
-						</button>
-					{/each}
-				{/if}
-
-				<p class="px-1 pt-2 text-[0.625rem] text-foreground/35 leading-relaxed">
-					Ein Intent kombiniert Artefakte und Skill-Flows, um eine Aufgabe zu lösen. Alles hier ist
-					ein Mock — die Pipeline (ingest → classify → intents → skill-flows) kommt später.
-				</p>
-			</aside>
-		{/if}
-	{/if}
+		<p class="px-1 pt-2 text-[0.625rem] text-foreground/35 leading-relaxed">
+			Ein Intent kombiniert Artefakte und Skill-Flows, um eine Aufgabe zu lösen. Alles hier ist ein
+			Mock — die Pipeline (ingest → classify → intents → skill-flows) kommt später.
+		</p>
+	</aside>
 </div>

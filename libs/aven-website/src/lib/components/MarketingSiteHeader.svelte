@@ -20,10 +20,7 @@ function linkCls(isActive: boolean) {
 	<div
 		class="mx-auto flex {maxW} flex-wrap items-center justify-center gap-x-10 gap-y-2 px-5 py-5 sm:justify-between sm:px-8"
 	>
-		<a
-			href="/"
-			class="font-serif text-[17px] font-light tracking-[-0.01em] opacity-85 hover:opacity-100"
-		>
+		<a href="/" class="text-[17px] font-light tracking-[-0.01em] opacity-85 hover:opacity-100">
 			avenCEO
 		</a>
 		<nav
@@ -33,9 +30,9 @@ function linkCls(isActive: boolean) {
 			<a href="/pricing" class={linkCls(active === 'pricing')}>Preise</a>
 			<a
 				href="/waitlist"
-				class="rounded-full border border-border/80 bg-white/15 px-3 py-1 normal-case opacity-95 transition-opacity hover:opacity-100"
+				class="rounded-full bg-primary px-4 py-1.5 normal-case font-semibold text-primary-foreground transition-opacity hover:opacity-90"
 			>
-				avenID sichern
+				Sichere dir deinen Aven
 			</a>
 		</nav>
 	</div>

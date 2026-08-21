@@ -1,20 +1,23 @@
+import { skillBySlug } from '@avenos/aven-skills'
 import { PLANS, type Plan, type PlanId, planIncludes } from '$lib/pricing/plans'
 import deBlogWriter from './content/de/blog-writer.json'
 import deBookKeeper from './content/de/book-keeper.json'
 import deBrainMemorizer from './content/de/brain-memorizer.json'
-import deDocumentExtractor from './content/de/document-extractor.json'
+import deCalendarOrganizer from './content/de/calendar-organizer.json'
+import deDocsOrganizer from './content/de/docs-organizer.json'
 // ── DE ────────────────────────────────────────────────────────────────────────
-import deEmailIngestor from './content/de/email-ingestor.json'
-import deGoldenOffer from './content/de/golden-offer.json'
+import deEmailManager from './content/de/email-manager.json'
 import deHumanReviewer from './content/de/human-reviewer.json'
+import deTodoShuffler from './content/de/todo-shuffler.json'
 import enBlogWriter from './content/en/blog-writer.json'
 import enBookKeeper from './content/en/book-keeper.json'
 import enBrainMemorizer from './content/en/brain-memorizer.json'
-import enDocumentExtractor from './content/en/document-extractor.json'
+import enCalendarOrganizer from './content/en/calendar-organizer.json'
+import enDocsOrganizer from './content/en/docs-organizer.json'
 // ── EN (source of truth) ──────────────────────────────────────────────────────
-import enEmailIngestor from './content/en/email-ingestor.json'
-import enGoldenOffer from './content/en/golden-offer.json'
+import enEmailManager from './content/en/email-manager.json'
 import enHumanReviewer from './content/en/human-reviewer.json'
+import enTodoShuffler from './content/en/todo-shuffler.json'
 import dePubAvenmaia from './publishers/de/avenmaia.json'
 import dePubAventin from './publishers/de/aventin.json'
 import enPubAvenmaia from './publishers/en/avenmaia.json'
@@ -30,25 +33,40 @@ import type {
 	SupportedLang
 } from './types'
 
+/**
+ * Which tier a skill comes with is decided ONCE, in the shared catalog that
+ * the app reads too — not eight times over, in two languages. The content
+ * files still carry a `plan`, because they are self-contained documents, but
+ * the catalog is what wins: a JSON that disagrees is out of date, not right.
+ */
+function withCatalogPlan(list: SkillJson[]): SkillJson[] {
+	return list.map((s) => {
+		const entry = skillBySlug(s.slug)
+		return entry ? { ...s, plan: entry.plan } : s
+	})
+}
+
 const registry: Record<SupportedLang, SkillJson[]> = {
-	en: [
-		enEmailIngestor,
-		enDocumentExtractor,
+	en: withCatalogPlan([
+		enEmailManager,
+		enDocsOrganizer,
 		enBrainMemorizer,
 		enBookKeeper,
 		enHumanReviewer,
-		enBlogWriter,
-		enGoldenOffer
-	] as SkillJson[],
-	de: [
-		deEmailIngestor,
-		deDocumentExtractor,
+		enCalendarOrganizer,
+		enTodoShuffler,
+		enBlogWriter
+	] as SkillJson[]),
+	de: withCatalogPlan([
+		deEmailManager,
+		deDocsOrganizer,
 		deBrainMemorizer,
 		deBookKeeper,
 		deHumanReviewer,
-		deBlogWriter,
-		deGoldenOffer
-	] as SkillJson[]
+		deCalendarOrganizer,
+		deTodoShuffler,
+		deBlogWriter
+	] as SkillJson[])
 }
 
 const publisherRegistry: Record<SupportedLang, PublisherIdentityJson[]> = {
@@ -122,6 +140,16 @@ export function loadSkill(slug: string, lang: SupportedLang = 'de'): AvenosSkill
 }
 
 /** Detail URL honoring publisher (`/skills/aventin/…` vs `/skills/avenmaia/…`). */
+/**
+ * How a skill's name is written for humans: no hyphens. The slug stays
+ * hyphenated because it is a URL segment and a file name — but nothing the
+ * reader sees should look like one, so every surface that prints a skill
+ * name goes through here.
+ */
+export function skillLabel(slug: string): string {
+	return slug.replaceAll('-', ' ')
+}
+
 export function skillDetailHref(slug: string, lang: SupportedLang = 'de'): string {
 	const skill = loadSkill(slug, lang)
 	if (!skill) return '/skills'

@@ -6,10 +6,10 @@
 		"founderName": "Daniel",
 		"scope": "Daniel Janz · aven.ceo"
 	},
-	"plan": "avencoo",
+	"plan": "avenceo",
 	"oneLineCopy": "Rechnungen mit Kontoauszügen abgeglichen. Buchungen vorgeschlagen. Steuern vorbereitet.",
 	"hero": {
-		"kicker": "Skill · avenTIN · book-keeper",
+		"kicker": "Skill · avenTIN · book keeper",
 		"headlineMain": "8 Stunden Buchhaltung. Auf 20 Minuten reduziert.",
 		"headlineSerifLead": "Dein Aven matcht Rechnungen mit Kontoauszügen, schlägt Buchungskonten vor und bereitet deinen Steuerberater‑Export vor.",
 		"promiseHoursPerWeek": "8+ Std/Woche"
@@ -26,23 +26,23 @@
 		"Du schliesst den Monat in 20 Minuten ab — statt in 8 Stunden"
 	],
 	"howSteps": [
-		"Rechnungen kommen via email-ingestor oder document-extractor strukturiert rein",
+		"Rechnungen kommen via email manager oder docs organizer strukturiert rein",
 		"Kontoauszüge werden importiert (CSV, MT940 oder Banken‑Connector)",
 		"Dein Aven matcht Buchungen mit Rechnungen und schlägt Steuerkonten vor",
-		"Du prüfst den Buchungsvorschlag mit einem Klick — human-reviewer wird nur bei Unklarheiten aktiv"
+		"Du prüfst den Buchungsvorschlag mit einem Klick — human reviewer wird nur bei Unklarheiten aktiv"
 	],
 	"whatMechanics": {
-		"input": "Strukturierte Rechnungen (aus document-extractor) + Kontoauszüge (CSV/MT940)",
+		"input": "Strukturierte Rechnungen (aus docs organizer) + Kontoauszüge (CSV/MT940)",
 		"magic": "Fuzzy‑Matching (Betrag + Datum + Absender) → Buchungskonto‑Vorschlag (SKR03/SKR04) → Differenz‑Erkennung → Steuerberater‑Export‑Format",
 		"output": "Gematchte Buchungssätze · Buchungsvorschläge mit Konfidenz · DATEV‑kompatibler Export · offene Posten‑Liste"
 	},
 	"playsWith": [
 		{
-			"slug": "email-ingestor",
+			"slug": "email-manager",
 			"relation": "Rechnungsmails werden direkt erkannt und übergeben"
 		},
 		{
-			"slug": "document-extractor",
+			"slug": "docs-organizer",
 			"relation": "PDF‑Rechnungen werden extrahiert und gematcht"
 		},
 		{
@@ -72,13 +72,13 @@
 		"standaloneTotalEurPerMonth": 248,
 		"timeDelayToValue": "Erste Buchungsvorschläge beim nächsten Kontoauszugs‑Import",
 		"effortToInstall": "10 Min · Bankverbindung konfigurieren oder CSV hochladen",
-		"proof": "Daniel schliesst seinen Monatsabschluss seit dem Start von book-keeper in unter 20 Minuten ab. Vorher war es ein Freitagnachmittag."
+		"proof": "Daniel schliesst seinen Monatsabschluss seit dem Start von book keeper in unter 20 Minuten ab. Vorher war es ein Freitagnachmittag."
 	},
 	"bonuses": [
 		"DATEV‑Export: fertiger Export für deinen Steuerberater, jeden Monat automatisch",
 		"Offene‑Posten‑Liste: wer schuldet dir noch Geld? Sofort sichtbar",
 		"Skonto‑Monitor: Rechnungen mit Zahlungsziel werden vor Ablauf proaktiv gemeldet"
 	],
-	"scarcity": "book-keeper ist in jedem CEO‑Plan enthalten. Kein Lexoffice‑Abo. Kein GetMyInvoices. Deine Buchhaltungsintelligenz gehört dir.",
-	"letterFromPublisher": "Buchhaltung ist das Sinnbild für Arbeit, die getan werden muss — aber die einen Gründer nicht voranbringt. Daniel hasst sie nicht, weil er faul ist. Er hasst sie, weil er weiss, dass sie ihn von dem abhält, was er eigentlich kann. book-keeper macht Buchhaltung nicht schöner. Er macht sie unsichtbar."
+	"scarcity": "book keeper ist in jedem CEO‑Plan enthalten. Kein Lexoffice‑Abo. Kein GetMyInvoices. Deine Buchhaltungsintelligenz gehört dir.",
+	"letterFromPublisher": "Buchhaltung ist das Sinnbild für Arbeit, die getan werden muss — aber die einen Gründer nicht voranbringt. Daniel hasst sie nicht, weil er faul ist. Er hasst sie, weil er weiss, dass sie ihn von dem abhält, was er eigentlich kann. book keeper macht Buchhaltung nicht schöner. Er macht sie unsichtbar."
 }

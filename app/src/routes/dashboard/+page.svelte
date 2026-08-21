@@ -1,16 +1,15 @@
 <script lang="ts">
 import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
-import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
-import { bus } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
-import { confirmHeld, hitlQueue, rejectHeld } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
-import { registryTick } from '$lib/actors/reactivity.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
-import { windowsBound } from '$lib/actors/windows'
+import '$lib/actors/windows'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
-import { talk } from '$lib/intents/talk.svelte'
+import { shell } from '$lib/intents/talk.svelte'
+import QueryModal from '$lib/query/QueryModal.svelte'
+import { query } from '$lib/query/query.svelte'
+import { registerMockSources } from '$lib/query/sources.mock'
 import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
 
 /**
@@ -32,13 +31,10 @@ const chat = chatActor.core
 const listener = listenerActor.core
 
 /**
- * Which surface fills the middle of the screen. Views are exactly that in
- * the actor world: renderings over actor state, owning nothing — the work
- * items view is the first. Actors is the registry itself; Chat is how work
- * gets asked for. The view is the default because the workspace is the
- * point.
+ * Which surface fills the middle of the screen — driven by the left rail
+ * now that the tab bar is gone: the intents workspace, or the skills
+ * platform. One store, so the rail and the shell never disagree.
  */
-let tab = $state<'skills' | 'intents'>('intents')
 
 /**
  * Voice is the default, except where there is no voice.
@@ -109,15 +105,17 @@ $effect(() => {
 	listener.setOutputActive(speaker.speaking)
 })
 
-// Any conversation activity — typed or spoken — lands the user in the one
-// conversation surface: the Talk-to-MAIA view on the Intents tab, where the
-// reply (and any inline view it opens) appears.
+// Any conversation activity — typed or spoken — opens the one answer surface,
+// where the reply and anything it renders appear together.
 $effect(() => {
 	if (chat.turns.length > 0) {
-		talk.open = true
-		tab = 'intents'
+		query.show()
+		shell.tab = 'intents'
 	}
 })
+
+// The mocked slice-1 sources; slice 2 registers one per skill instead.
+registerMockSources()
 
 /**
  * One state for the whole conversation, instead of one per component.
@@ -168,6 +166,14 @@ let draft = $state('')
  * screen bottom underneath it. */
 let dockH = $state(0)
 
+/**
+ * How far the dock floats off the bottom edge, in px — the `bottom-2`/`left-2`/
+ * `right-2` on the dock below, named so the clearance above it can use the SAME
+ * number. It was hard-coded as 16 while the dock sat at 8, which is why the gap
+ * over the pill read as twice the gap under it.
+ */
+const DOCK_INSET = 8
+
 let form: HTMLFormElement | null = $state(null)
 let textareaEl: HTMLTextAreaElement | null = $state(null)
 
@@ -191,8 +197,17 @@ function enterTyping(seed = '') {
 	speaker.muted = true
 }
 
-/** Back to voice: unmute the mouth and reopen the ears. */
+/**
+ * Back to voice: unmute the mouth and reopen the ears.
+ *
+ * Unless there is no voice to go back to. In a plain browser tab the
+ * recognizer never runs, so dropping out of text mode left the panel with no
+ * input at all — and `enterTyping` could not rescue it, because the keystroke
+ * that calls it is gated on the conversation being live. One message, then
+ * silence. Text is the only mode there, so stay in it.
+ */
 function leaveTyping() {
+	if (!conversing) return
 	typing = false
 	speaker.muted = false
 	if (conversing) void listener.start()
@@ -204,6 +219,18 @@ function leaveTyping() {
  * with that very character.
  */
 function onGlobalKeydown(event: KeyboardEvent) {
+	// The two keys every spotlight already answers to, before anything else
+	// claims them — including while typing, which is when you most want out.
+	if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+		event.preventDefault()
+		query.toggle()
+		return
+	}
+	if (event.key === 'Escape' && query.open) {
+		event.preventDefault()
+		query.close()
+		return
+	}
 	if (typing || !conversing) return
 	if (event.metaKey || event.ctrlKey || event.altKey) return
 	if (event.key.length !== 1) return
@@ -225,6 +252,8 @@ function submit(event: SubmitEvent) {
 	speaker.resumeAudio()
 	const text = draft
 	draft = ''
+	query.text = text
+	query.show()
 	chat.send(text)
 	// Submitting hands the turn back to the voice: hands-free is the default.
 	leaveTyping()
@@ -253,35 +282,16 @@ function onKeydown(event: KeyboardEvent) {
      reading width. -->
 <main
 	class="relative mx-auto flex min-h-0 min-w-0 w-full max-w-none flex-1 flex-col gap-2 p-2"
-	style="--dock-h: {dockH + 16}px"
+	style="--dock-h: {dockH + DOCK_INSET}px"
 >
-	<header class="flex flex-col items-center">
-		<!-- Compact tabs, centred: the workspace, the registry, the conversation. -->
-		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
-			{#each [{ id: 'intents' as const, label: 'Intents' }, { id: 'skills' as const, label: 'Skills' }] as t (t.id)}
-				<button
-					type="button"
-					onclick={() => {
-						tab = t.id
-					}}
-					class="rounded-full px-3 py-1 transition-colors {tab === t.id
-						? 'bg-primary text-primary-foreground'
-						: 'opacity-60 hover:opacity-100'}"
-				>
-					{t.label}
-				</button>
-			{/each}
-		</nav>
-	</header>
-
-	{#if tab === 'intents'}
+	{#if shell.tab === 'intents'}
 		<!-- The intents workspace fills everything between the tabs and the
 		     HITL bar — the wrapper carries the flex-1 so the three columns
 		     stretch to the full available height. -->
 		<div class="flex min-h-0 w-full flex-1">
 			<IntentsPlaceholder />
 		</div>
-	{:else if tab === 'skills'}
+	{:else if shell.tab === 'skills'}
 		<!-- The skills platform: a skill is a collection of composable
 		     workflows; the canvas draws them n8n-style, every wire derived. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
@@ -289,74 +299,25 @@ function onKeydown(event: KeyboardEvent) {
 		</div>
 	{/if}
 
-	<!-- What the tools just did, as a toast. One at a time, three seconds: a
-	     glance to confirm the list changed the way you meant, not a log to read.
-	     Reserving the space keeps the input panel still as toasts come and go;
-	     bottom-aligned in it, so the toast hugs the panel it belongs to. The
-	     toast carries the content, so it keeps the full width; in voice mode the
-	     panel below it narrows instead, holding only a status word and two
-	     buttons. The FiBu workspace drops the strip entirely — the inbox layout
-	     wants every pixel of height, and even an empty flex child would double
-	     the gap between the view and the panel. -->
-	<!-- The floating dock: toast, errors, HITL, and the pill hover OVER the
-	     workspace, so the side columns can run to the bottom of the screen. -->
+	<!-- THE answer surface: it floats over the workspace rather than replacing
+	     it, so the selected intent it answers about stays in view behind. -->
+	<QueryModal />
+
+	<!-- The floating dock: errors and the pill hover OVER the workspace, so the
+	     side columns can run to the bottom of the screen. What the tools DID is
+	     not here — a tool result is part of the conversation that asked for it,
+	     so it renders inline in the modal's chat band. -->
 	<div
 		bind:clientHeight={dockH}
-		class="pointer-events-none absolute right-2 bottom-2 left-2 z-20 flex flex-col gap-2 [&>*]:pointer-events-auto"
+		class="pointer-events-none absolute right-2 bottom-2 left-2 z-50 flex flex-col gap-1.5 [&>*]:pointer-events-auto"
 	>
-		{#if listener.partial !== '' || activity.current}
-			<div class="mx-auto flex w-full max-w-lg items-end justify-center">
-				{#if listener.partial !== ''}
-					<!-- What is being heard, as it is being heard — the live recognizer
-			     output, so you can watch your words arrive while the list view is
-			     open. Dashed like the transcript's own pending bubble. -->
-					<div
-						class="w-full rounded-xl border border-border border-dashed bg-surface-card px-4 py-3 text-xs opacity-70"
-					>
-						{listener.partial}
-					</div>
-				{:else if activity.current}
-					{@const entry = activity.current}
-					<div
-						class="flex w-full gap-2 rounded-xl border border-border bg-surface-card px-4 py-3 text-xs"
-					>
-						<span
-							class="w-3 shrink-0 text-center font-mono"
-							class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
-							class:text-status-working={entry.kind === 'doing'}
-							class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
-							class:opacity-30={entry.kind === 'read' ||
-						entry.kind === 'reopened' ||
-						entry.kind === 'renamed'}
-						>
-							{ACTIVITY_LABELS[entry.kind].mark}
-						</span>
-						<div class="min-w-0 flex-1">
-							<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
-							{#if entry.titles.length > 0}
-								<!-- One per line. Run together with separators, five items became
-						     a sentence that ran off the edge and told you nothing. -->
-								<ul class="pt-0.5">
-									{#each entry.titles as title (title)}
-										<li class="leading-relaxed">{title}</li>
-									{/each}
-								</ul>
-							{:else if entry.note}
-								<span class="opacity-40">· {entry.note}</span>
-							{/if}
-						</div>
-					</div>
-				{/if}
-			</div>
-		{/if}
-
 		<!-- Errors surface HERE, above the voice area — the same universal band as
 	     the human gate, so a failed reply (a dead lane, an unset key) is visible
 	     from any tab and in voice mode, not buried in the chat stream. The × or
 	     the next successful turn clears it. -->
 		{#if chat.failure || speaker.failure || listener.failure}
 			<div
-				class="mx-auto mb-2 flex w-full max-w-2xl items-start gap-3 rounded-2xl border border-status-error/40 bg-status-error-muted px-4 py-2.5 text-status-error-strong shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
+				class="mx-auto mb-2 flex w-full max-w-2xl items-start gap-3 rounded-2xl border border-error/40 bg-error-muted px-4 py-2.5 text-error-strong shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
 			>
 				<span class="shrink-0 pt-0.5 font-mono text-sm">✗</span>
 				<p class="min-w-0 flex-1 text-sm leading-snug">
@@ -367,7 +328,7 @@ function onKeydown(event: KeyboardEvent) {
 					onclick={dismissError}
 					title="Dismiss"
 					aria-label="Dismiss error"
-					class="-mr-1 shrink-0 rounded-full p-1 transition-colors hover:bg-status-error/15"
+					class="-mr-1 shrink-0 rounded-full p-1 transition-colors hover:bg-error/15"
 				>
 					<svg
 						viewBox="0 0 24 24"
@@ -383,43 +344,6 @@ function onKeydown(event: KeyboardEvent) {
 			</div>
 		{/if}
 
-		<!-- THE human gate, universal: every held message — a destructive tool
-	     call, a drafted bridge — surfaces HERE, above the voice pill, and
-	     resolves only by a physical button press. Voice cannot confirm. -->
-		<!-- THE human gate, inverted like the voice pill itself: the same dark
-	     marine surface, full main width, the question centred on top and the
-	     two physical buttons centred underneath. -->
-		{#each hitlQueue.items.filter((h) =>
-		tab === 'intents' && (h.context ? !talk.open && talk.intentContext === h.context : talk.open)
-	) as held (held.id)}
-			<div
-				class="mx-auto mb-2 flex min-h-36 w-full max-w-[calc(100%-37.5rem)] flex-col items-center justify-between gap-4 rounded-2xl bg-primary px-6 py-5 text-primary-foreground shadow-[0_4px_16px_rgba(30,41,59,0.15)]"
-			>
-				<div class="min-w-0 text-center">
-					<p class="font-medium text-base">{held.label}</p>
-					<p class="pt-1 font-mono text-[0.6875rem] text-primary-foreground/50">
-						{held.actor}
-						· {held.method} · {held.detail}
-					</p>
-				</div>
-				<div class="flex items-center gap-3">
-					<button
-						type="button"
-						onclick={() => confirmHeld(held.id)}
-						class="rounded-full bg-primary-foreground px-6 py-2 font-medium text-primary text-sm transition-opacity hover:opacity-90"
-					>
-						Confirm
-					</button>
-					<button
-						type="button"
-						onclick={() => rejectHeld(held.id)}
-						class="rounded-full border border-primary-foreground/30 px-6 py-2 font-medium text-primary-foreground/70 text-sm transition-colors hover:bg-primary-foreground/10"
-					>
-						Reject
-					</button>
-				</div>
-			</div>
-		{/each}
 		<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 		<div
@@ -485,6 +409,10 @@ function onKeydown(event: KeyboardEvent) {
 						<textarea
 							bind:this={textareaEl}
 							bind:value={draft}
+							oninput={() => {
+							query.text = draft
+							if (draft !== '') query.show()
+						}}
 							onkeydown={onKeydown}
 							rows="1"
 							placeholder="Write…"
@@ -552,9 +480,9 @@ function onKeydown(event: KeyboardEvent) {
 				     input is visible as a dot that never moves. -->
 					<span
 						class="inline-block size-2 shrink-0 rounded-full transition-transform"
-						class:bg-status-error={phase.key === 'hearing' || phase.key === 'idle'}
-						class:bg-status-success={phase.key === 'speaking'}
-						class:bg-status-working={phase.key === 'thinking' ||
+						class:bg-error={phase.key === 'hearing' || phase.key === 'idle'}
+						class:bg-success={phase.key === 'speaking'}
+						class:bg-progress={phase.key === 'thinking' ||
 						phase.key === 'loading' ||
 						phase.key === 'starting'}
 						class:bg-primary-foreground={phase.key === 'denied' || phase.key === 'text'}
@@ -608,7 +536,7 @@ function onKeydown(event: KeyboardEvent) {
 						}}
 							title="Stop"
 							aria-label="Stop"
-							class="shrink-0 rounded-full bg-status-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
+							class="shrink-0 rounded-full bg-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
 						>
 							<svg viewBox="0 0 24 24" class="size-4" fill="currentColor">
 								<rect x="7" y="7" width="10" height="10" rx="1.5" />
@@ -628,7 +556,7 @@ function onKeydown(event: KeyboardEvent) {
 						onclick={endConversation}
 						title="End conversation"
 						aria-label="End conversation"
-						class="shrink-0 rounded-full bg-status-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
+						class="shrink-0 rounded-full bg-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
 					>
 						<!-- hang-up: the handset rotated OFF the hook — disconnect, not dial -->
 						<svg

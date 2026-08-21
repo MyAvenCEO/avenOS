@@ -29,6 +29,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		preferredName:
 			typeof body.preferredName === 'string' ? body.preferredName.trim().slice(0, 48) : '',
 		tier: typeof body.tier === 'string' ? body.tier.slice(0, 32) : '',
+		// Free text: what they want to build. This is what we read when we hand
+		// out a wildcard invite ahead of the queue, so it gets real room.
+		idea: typeof body.idea === 'string' ? body.idea.trim().slice(0, 2000) : '',
 		ts: new Date().toISOString()
 	}
 

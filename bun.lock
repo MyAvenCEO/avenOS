@@ -15,8 +15,9 @@
     },
     "app": {
       "name": "@AvenOS/app",
-      "version": "26.8.20-next.8",
+      "version": "26.8.21-next.3",
       "dependencies": {
+        "@avenos/aven-skills": "workspace:*",
         "@avenos/aven-ui": "workspace:*",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-opener": "^2.5.4",
@@ -49,7 +50,7 @@
     },
     "libs/aven-board": {
       "name": "@avenos/aven-board",
-      "version": "26.8.20-next.8",
+      "version": "26.8.21-next.3",
       "dependencies": {
         "dompurify": "^3",
         "github-slugger": "^2",
@@ -60,9 +61,13 @@
         "typescript": "^6.0.2",
       },
     },
+    "libs/aven-skills": {
+      "name": "@avenos/aven-skills",
+      "version": "26.8.20-next.8",
+    },
     "libs/aven-ui": {
       "name": "@avenos/aven-ui",
-      "version": "26.8.20-next.8",
+      "version": "26.8.21-next.3",
       "dependencies": {
         "dompurify": "^3.3.3",
         "marked": "^15.0.12",
@@ -70,7 +75,10 @@
     },
     "libs/aven-website": {
       "name": "@avenos/aven-website",
-      "version": "26.8.20-next.8",
+      "version": "26.8.21-next.3",
+      "dependencies": {
+        "@avenos/aven-skills": "workspace:*",
+      },
       "devDependencies": {
         "@biomejs/biome": "^2.4.14",
         "@sveltejs/adapter-auto": "^7.0.1",
@@ -120,6 +128,8 @@
     "@avenos/aven-api": ["@avenos/aven-api@workspace:services/aven-api"],
 
     "@avenos/aven-board": ["@avenos/aven-board@workspace:libs/aven-board"],
+
+    "@avenos/aven-skills": ["@avenos/aven-skills@workspace:libs/aven-skills"],
 
     "@avenos/aven-ui": ["@avenos/aven-ui@workspace:libs/aven-ui"],
 

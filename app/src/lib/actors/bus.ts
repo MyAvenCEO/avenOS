@@ -40,6 +40,38 @@ export interface HeldMessage {
 	detail: string
 	/** The intent this gate belongs to; absent = it belongs to the conversation. */
 	context?: string
+	/**
+	 * The thing being decided, carried WITH the gate so the human sees it
+	 * where they answer — a draft's text, a payment's figures, a proposed
+	 * classification. Data only: the bar renders title/body/rows generically,
+	 * never anything domain-shaped.
+	 */
+	preview?: HeldPreview
+}
+
+/**
+ * What a gate shows while it waits. `layout` is STRUCTURAL, never domain —
+ * a draft and a filing both read as `document`, a payment as a `ledger`,
+ * a classification as a `choice`, a match or a merge as a `compare`, a
+ * deletion as a `list`. The bar owns those five shapes; skills own which
+ * one their gate speaks in.
+ */
+export interface HeldPreview {
+	kind: string
+	layout: 'document' | 'ledger' | 'choice' | 'compare' | 'list'
+	title: string
+	/** document: the text itself. */
+	body?: string
+	/** document: what rides along. */
+	attachments?: string[]
+	/** ledger: the figures, the first one lead. */
+	rows?: { label: string; value: string }[]
+	/** choice: what is proposed against what else is possible. */
+	options?: { label: string; note?: string; chosen?: boolean }[]
+	/** compare: exactly two sides, held against each other. */
+	sides?: { heading: string; lines: string[] }[]
+	/** list: what goes, what stays. */
+	items?: { text: string; note?: string; struck?: boolean }[]
 }
 
 export class MessageBus {
