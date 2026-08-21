@@ -1,3 +1,11 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.9...v) (2026-08-21)
+
+
+### Features
+
+* **app:** the Abrechnung pane — the whole Creem relationship, self-served (0160 ph.3) ([c68abaf](https://github.com/MyAvenCEO/avenOS/commit/c68abaf91e9cb10642429440ebac64745304a50b))
+* **billing:** avenME + avenCEO become recurring Creem products (0160 ph.1–2) ([8412a4b](https://github.com/MyAvenCEO/avenOS/commit/8412a4b6ce8c34c398a50a7f8c0d6b09df0b6b47))
+* **billing:** invoices render in-app; the official PDFs open in an app window (0160) ([09ffeeb](https://github.com/MyAvenCEO/avenOS/commit/09ffeebd77091d5a24262be23c394f19cc43663c))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.8...v) (2026-08-21)
 
 
