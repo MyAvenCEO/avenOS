@@ -27,7 +27,10 @@ export type PlanId = 'avenid' | 'avenme' | 'avenceo' | 'avencoop'
  * it. The slug stays a plain string: `skills/loader` imports THIS file, so an
  * import the other way would close a cycle.
  */
-export type PlanFeature = string | { skill: string; label: string }
+export type PlanFeature =
+	| string
+	| { skill: string; label: string }
+	| { href: string; label: string }
 
 export interface Plan {
 	id: PlanId
@@ -69,8 +72,6 @@ export interface Plan {
 	runtime?: { hoursPerDay: number; centsPerExtraMinute: number }
 	/** What this tier adds; the tiers below are always included. */
 	features: PlanFeature[]
-	/** One outbound reference, where the tier depends on one. */
-	link?: { href: string; label: string }
 	/** Marks the tier we lead with. */
 	highlight?: boolean
 }
@@ -155,11 +156,12 @@ export const PLANS: Plan[] = [
 			'10 Company Sparks',
 			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
-			'5 % Firmenanteile an deiner Firma, digitalisiert über beel.com',
 			'Du wählst selbst, in welche avenCOOPs dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
-			'Wir führen dein beel‑Syndikat an — mit Community‑Investments deiner Unterstützer'
-		],
-		link: { href: 'https://beel.com/de', label: 'beel.com' }
+			{
+				href: 'https://beel.com/de',
+				label: 'Wir führen dein beel‑Syndikat an — mit Community‑Investments deiner Unterstützer'
+			}
+		]
 	}
 ]
 
