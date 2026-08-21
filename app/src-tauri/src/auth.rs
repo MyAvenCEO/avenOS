@@ -129,6 +129,18 @@ struct SessionResponse {
 	user: AuthUser,
 }
 
+/// `/api/names/mine` returns the rows themselves, not bare strings — the extra
+/// columns are ignored here, the settings pane only shows which name it is.
+#[derive(Deserialize)]
+struct NamesResponse {
+	names: Vec<OwnedName>,
+}
+
+#[derive(Deserialize)]
+struct OwnedName {
+	name: String,
+}
+
 #[derive(Deserialize)]
 struct ErrorResponse {
 	error: Option<String>,
@@ -168,23 +180,22 @@ fn macos_supports_native_passkeys() -> bool {
 /// as a bare "Login failed". `tauri dev` runs an ad-hoc, linker-signed binary
 /// with no team and no entitlements, so this is never satisfied in dev.
 ///
-/// Asking the signature directly beats guessing from the build profile: a
-/// properly signed local build gets native passkeys, and everything else falls
-/// back to the browser device flow instead of dead-ending on a useless error.
+/// The entitlement is granted by a provisioning profile, which is embedded in
+/// the bundle at `Contents/embedded.provisionprofile` — present in App Store,
+/// TestFlight and development builds, absent from a bare `cargo run` binary.
+/// Reading our own bundle beats shelling out to `codesign`: the shipped app is
+/// sandboxed, and a blocked subprocess would read as "unsigned" and push a
+/// perfectly good build onto the browser fallback.
 #[cfg(target_os = "macos")]
 fn has_application_identifier() -> bool {
 	let Ok(executable) = std::env::current_exe() else {
 		return false;
 	};
-	std::process::Command::new("/usr/bin/codesign")
-		.args(["--display", "--entitlements", "-", "--xml"])
-		.arg(executable)
-		.output()
-		.ok()
-		.filter(|output| output.status.success())
-		.is_some_and(|output| {
-			String::from_utf8_lossy(&output.stdout).contains("com.apple.application-identifier")
-		})
+	// …/avenOS.app/Contents/MacOS/aven-os-app → …/avenOS.app/Contents
+	executable
+		.parent()
+		.and_then(|macos| macos.parent())
+		.is_some_and(|contents| contents.join("embedded.provisionprofile").is_file())
 }
 
 #[cfg(target_os = "macos")]
@@ -471,6 +482,42 @@ pub fn auth_status(state: tauri::State<'_, AuthState>) -> Result<AuthStatus, Str
 		authenticated: inner.session.is_some(),
 		user: inner.session.as_ref().map(|session| session.user.clone()),
 	})
+}
+
+/// The names reserved for whoever is signed in. Settings shows them so the
+/// account you are looking at is the account you are actually in — the session
+/// alone answers "who", not "which aven".
+#[tauri::command]
+pub async fn auth_names(state: tauri::State<'_, AuthState>) -> Result<Vec<String>, String> {
+	let token = state
+		.0
+		.lock()
+		.map_err(|_| "Authentication state is unavailable.".to_string())?
+		.session
+		.as_ref()
+		.map(|session| session.token.clone())
+		.ok_or_else(|| "No session is signed in.".to_string())?;
+	tauri::async_runtime::spawn_blocking(move || {
+		let response = agent()
+			.get(&api_endpoint("/api/names/mine"))
+			.set("authorization", &format!("Bearer {token}"))
+			.call()
+			.map_err(|error| match error {
+				ureq::Error::Status(_, response) => {
+					error_message(response, "Your reserved names could not be loaded.").1
+				}
+				ureq::Error::Transport(error) => format!("Identity service unavailable: {error}"),
+			})?;
+		Ok::<Vec<String>, String>(
+			parse_json::<NamesResponse>(response)?
+				.names
+				.into_iter()
+				.map(|owned| owned.name)
+				.collect(),
+		)
+	})
+	.await
+	.map_err(|error| format!("Could not load your reserved names: {error}"))?
 }
 
 #[tauri::command]
