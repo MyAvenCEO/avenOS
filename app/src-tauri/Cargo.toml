@@ -30,7 +30,7 @@ incremental = false
 
 [package]
 name = "aven-os-app"
-version = "26.8.21-next.7"
+version = "26.8.21-next.8"
 description = "avenCITY desktop shell"
 authors = ["Aven"]
 edition = "2021"

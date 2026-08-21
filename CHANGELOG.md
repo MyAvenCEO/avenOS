@@ -1,3 +1,24 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.7...v) (2026-08-21)
+
+
+### Bug Fixes
+
+* **app:** link the Swift runtime so the macOS build actually starts ([23d0839](https://github.com/MyAvenCEO/avenOS/commit/23d0839de85d28532a19bee537365215f6195e48))
+* **app:** unsigned dev builds fall back to the browser login ([da46417](https://github.com/MyAvenCEO/avenOS/commit/da4641756a36c79c6119879430bab6dcd1f28d58))
+* **auth:** improve passkey enrollment diagnostics ([16818ee](https://github.com/MyAvenCEO/avenOS/commit/16818ee61d197242120a9a2a82c1d24c69a42757))
+* avenID is 25 €, the tiers reserve rather than buy, and the flow card gets room ([25b9f06](https://github.com/MyAvenCEO/avenOS/commit/25b9f06d7eef51b9e0ec4af0b644730e51a7f855))
+* **id:** the passkey is named after the aven, not by hand ([95b4571](https://github.com/MyAvenCEO/avenOS/commit/95b45717d3dc2c3d3453c9bbb6516ddb29beee48))
+
+
+### Features
+
+* **app:** settings opens on who is signed in ([d7f9bc6](https://github.com/MyAvenCEO/avenOS/commit/d7f9bc6d9b1b7a13ccf9ddb5cd2013a924fec909))
+* **id:** availability answers while you type, one question per screen ([32f05ed](https://github.com/MyAvenCEO/avenOS/commit/32f05ed57d0e47360bd5915b477bc63c75308ab6))
+* **id:** the Creem checkout is the page, not a column beside it ([b4fefa0](https://github.com/MyAvenCEO/avenOS/commit/b4fefa0ae2f01fd3863f3196f4d21d645642faa5))
+* **id:** the dashboard shows where you stand in the queue ([df59b86](https://github.com/MyAvenCEO/avenOS/commit/df59b863d0311225967450676d6d7bbd6e06d91d))
+* **id:** the flow asks about your aven, and names the passkey after it ([615c0f6](https://github.com/MyAvenCEO/avenOS/commit/615c0f627f6786d9d9824118b30a929532cbd641))
+* **id:** the waitlist becomes a list you can see yourself in ([6c3e34c](https://github.com/MyAvenCEO/avenOS/commit/6c3e34c36ad4fc284b19602203816f78a3f57cc9))
+* the avenID funnel moves to the id service, carrying the tier ([d1e1aae](https://github.com/MyAvenCEO/avenOS/commit/d1e1aaec4e0df8b9741706d3a04ad4f6aab4f92c))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.6...v) (2026-08-21)
 
 
