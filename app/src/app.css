@@ -183,30 +183,16 @@
 }
 
 /*
- * Brand & semantic status palette (documented hex):
- * — Primary / brand navy: #1E293B
- * — Success: #2F5D50
- * — Working (sage): #A4B69A
- * — Info / connectivity / connecting (sand): #D4A373
- * — Pairing handshake (distinct from info): #7E6EAD — violet, reads as invitation flow
- * — Error terracotta (chosen): #C15B40 — saturated, readable vs sage/cream surrounds
- * — Cream page surface — slightly lighter near-white. The page reads as the
- *   neutral base while card surfaces sit slightly warmer/darker on top:
- *     · #F8F6EF  (--color-surface-cream)
- * — Soft eggshell display surface — one notch lighter than the card rest tone,
- *   used by the Activity log panel, the Display (vibe-app sandbox) iframe
- *   wrapper, and the embedded vibe-app `<body>` so the inner display surface
- *   sits visually BETWEEN the page cream and the card eggshell (cards still
- *   anchor most-saturated; this surface reads as a softer step):
- *     · #F9F5E6  (--color-surface-soft)
- * — Eggshell card surface — three-step ladder shared by intent + skill cards, the
- *   ALL filter chip, the cost cell at rest, the IntentComposer typing pill, and the
- *   Re-train / Accept pill buttons. Rest is a warmer eggshell so cards anchor
- *   slightly more saturated than the lighter page background; hover/selected
- *   shift progressively into deeper eggshell territory:
- *     · Rest:     #F6F1E2  (--color-surface-card)               — softened eggshell
- *     · Hover:    #F6F3E8  (--color-surface-card-hover)         — sibling eggshell tone
- *     · Selected: #EFEADA  (--color-surface-card-selected)      — slightly more saturated eggshell
+ * The palette lives in @theme below, in four numbered blocks: the TONES (the
+ * paint), the SURFACES (the cream ladder), the ROLES (what a colour means),
+ * and the intent STATES (which role each state borrows). Read those; this
+ * file is the source of truth and the Brand-Farben settings page renders it
+ * back by resolving the very same variables.
+ *
+ * A prose inventory used to sit here listing every hex by hand. It outlived
+ * three palette changes and was documenting colours that no longer existed
+ * (moss #2F5D50, violet #7E6EAD, sage working, two extra cream rungs), which
+ * is the argument against keeping one at all.
  */
 @theme {
 	/* Inter is the single typeface across body, UI, titles and badges — one
@@ -237,17 +223,16 @@
 	 * The paint itself. Every colour the app owns is written as a hex
 	 * EXACTLY ONCE, here, under exactly ONE name. Nothing below this
 	 * block spells a hex — everything else points at a tone. That is the
-	 * whole discipline: to restyle the brand you edit these ten lines.
+	 * whole discipline: to restyle the brand you edit these eight lines.
 	 *
-	 * Down from twelve: violet (iris), grey-blue (driftwood) and warm grey
-	 * (stone) are gone, and so is the deep moss green — success is carried by
-	 * sage now. Driftwood was a hair from harbour anyway; everything that
-	 * wore it wears harbour. */
-	/* Row one — the cool half: the brand's own colours. */
+	 * Down from twelve: violet, grey-blue, warm grey and the deep moss green
+	 * are gone; so is the sage that briefly carried "in motion" — tidal blue
+	 * does that now, and being dark it reads as text without help. */
+	/* Row one — the cool half: the brand's own colours, deepest first. */
 	--color-marine: #1e293b; /* deep navy — the brand's ink and its fill */
+	--color-tidal-blue: #1b6d7f; /* deep teal-blue — work in motion */
 	--color-harbour: #5b6f8b; /* steel blue — everything held back */
 	--color-paradise-water: #3d8b84; /* turquoise — the bright note; settled work */
-	--color-sage: #a4b69a; /* soft green — in motion; pale, so text uses its ink */
 	/* Row two — the warm half: the signals. */
 	--color-tuscan-sun: #d2a24a; /* clean gold — brighter and yellower than the old #a06818 */
 	--color-terracotta: #c15b40; /* burnt orange — the failure tone */
@@ -311,15 +296,21 @@
 	 *
 	 *   ROLE             TONE            WHERE IT SPEAKS
 	 *   primary          marine          buttons, the rail, the HITL frame
-	 *   status-quiet     harbour         held back, still readable
+	 *   status-progress  tidal blue      in motion
+	 *   status-quiet     harbour         held back — every type badge, archive
 	 *   status-success   paradise water  settled — the brand's bright note
-	 *   status-progress  sage            in motion
 	 *   status-warning   tuscan sun      careful — but nothing is broken
 	 *   status-error     terracotta      something failed
 	 *   status-info      sunflower       notice; often: your turn
 	 *   secondary        parchment       the warm second action */
 	--color-primary: var(--color-marine);
 	--color-primary-foreground: var(--color-chalk);
+
+	/* Tidal blue is dark enough to read as text unaided — unlike the sage it
+	 * replaced, whose ink had to be mixed halfway to black. */
+	--color-status-progress: var(--color-tidal-blue);
+	--color-status-progress-foreground: var(--color-chalk);
+	--color-status-progress-ink: var(--color-tidal-blue);
 
 	--color-status-quiet: var(--color-harbour);
 	--color-status-quiet-foreground: var(--color-chalk);
@@ -328,12 +319,6 @@
 	--color-status-success: var(--color-paradise-water);
 	--color-status-success-foreground: #fafaf9;
 	--color-status-success-ink: var(--color-paradise-water);
-
-	/* Sage is pale by design — a fill you can read dark text on. As TEXT or a
-	 * hairline it needs the ink, which is why every role carries both. */
-	--color-status-progress: var(--color-sage);
-	--color-status-progress-foreground: #1a2520;
-	--color-status-progress-ink: color-mix(in oklab, var(--color-sage) 52%, black);
 
 	--color-status-warning: var(--color-tuscan-sun);
 	--color-status-warning-foreground: #2b2313;

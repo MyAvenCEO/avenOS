@@ -79,17 +79,13 @@ interface MockIntent {
 }
 
 /**
- * Intent TYPES are a categorical palette — what a thing is about, not how it
- * is going. Distinct from the state accents below on purpose, and drawn from
- * the same role tokens so nothing here names a colour.
+ * Intent types wear ONE quiet badge, not five coloured ones. Five hues
+ * competing down the stream drowned out the thing that actually changes —
+ * the 3px state edge — so type is now carried by the WORD alone and colour
+ * is spent only where it means something. A map of five identical values
+ * would just be a place to start re-colouring, hence a single constant.
  */
-const TYPE_STYLE: Record<string, string> = {
-	bezahlen: 'bg-status-progress/35 text-status-progress-ink',
-	frist: 'bg-status-error/12 text-status-error-ink',
-	steuer: 'bg-status-warning/18 text-status-warning-ink',
-	abgleich: 'bg-status-quiet/15 text-status-quiet-ink',
-	auftrag: 'bg-status-info/20 text-status-info-ink'
-}
+const TYPE_BADGE = 'bg-status-quiet/15 text-status-quiet-ink'
 
 /**
  * The five states an intent can be in — each with its own accent, worn as
@@ -1064,9 +1060,7 @@ const DOT: Record<string, string> = {
 					<div class="flex items-baseline gap-2">
 						<p class="min-w-0 flex-1 font-medium text-xs leading-snug">{intent.title}</p>
 						<span
-							class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_STYLE[
-								intent.type
-							]}"
+							class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_BADGE}"
 						>
 							{intent.type}
 						</span>
@@ -1127,9 +1121,7 @@ const DOT: Record<string, string> = {
 						<div class="flex items-baseline gap-2">
 							<p class="min-w-0 flex-1 font-medium text-xs leading-snug">{intent.title}</p>
 							<span
-								class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_STYLE[
-									intent.type
-								]}"
+								class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_BADGE}"
 							>
 								{intent.type}
 							</span>
@@ -1390,7 +1382,7 @@ const DOT: Record<string, string> = {
 					<header>
 						<div class="flex items-center gap-2">
 							<span
-								class="rounded-full px-2 py-0.5 font-mono text-[0.625rem] {TYPE_STYLE[selected.type]}"
+								class="rounded-full px-2 py-0.5 font-mono text-[0.625rem] {TYPE_BADGE}"
 							>
 								{selected.type}
 							</span>
