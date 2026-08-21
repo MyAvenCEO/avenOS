@@ -81,7 +81,7 @@ interface MockIntent {
 /**
  * Intent types wear ONE quiet badge, not five coloured ones. Five hues
  * competing down the stream drowned out the thing that actually changes —
- * the 3px state edge — so type is now carried by the WORD alone and colour
+ * the 4px state edge — so type is now carried by the WORD alone and colour
  * is spent only where it means something. A map of five identical values
  * would just be a place to start re-colouring, hence a single constant.
  */
@@ -89,7 +89,7 @@ const TYPE_BADGE = 'bg-status-quiet/15 text-status-quiet-ink'
 
 /**
  * The five states an intent can be in — each with its own accent, worn as
- * a 3px edge on the card so the stream is readable at a glance.
+ * a 4px edge on the card so the stream is readable at a glance.
  */
 type IntentState = 'working' | 'waiting' | 'done' | 'error' | 'archive'
 
@@ -107,7 +107,7 @@ const STATUS_LABEL: Record<IntentState, string> = {
  * swapping what working and done read as is one line in the theme, not a
  * sweep through this file.
  *
- * edge = the 3px left border, text = the status word (the `-ink` face, which
+ * edge = the 4px left border, text = the status word (the `-ink` face, which
  * is the tone darkened far enough to be read on cream).
  *
  * Archive is deliberately absent: archived intents are filtered out of this
@@ -1055,7 +1055,7 @@ const DOT: Record<string, string> = {
 				{@const sel = selectedId === intent.id && !talk.open}
 				{@const accent = accentFor(intent.status)}
 				<!-- Hover shifts the FILL, never the border: `hover:border-*` paints all
-				     four sides and, sitting in a later cascade layer, greyed out the 3px
+				     four sides and, sitting in a later cascade layer, greyed out the 4px
 				     state edge — the one thing the card exists to show. -->
 				<button
 					type="button"
@@ -1065,7 +1065,7 @@ const DOT: Record<string, string> = {
 						skillView = null
 						talk.open = false
 					}}
-					class="rounded-xl border border-l-[3px] px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {accent.edge} {sel
+					class="rounded-xl border border-l-[4px] px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {accent.edge} {sel
 						? 'border-foreground/15 bg-surface-card-selected'
 						: 'border-foreground/5 bg-surface-raised hover:bg-surface-card-hover'}"
 				>
@@ -1127,7 +1127,7 @@ const DOT: Record<string, string> = {
 							skillView = null
 							talk.open = false
 						}}
-						class="rounded-xl border border-l-[3px] border-l-foreground/20 px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
+						class="rounded-xl border border-l-[4px] border-l-foreground/20 px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
 							? 'border-foreground/15 bg-surface-card-selected opacity-100'
 							: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
 					>
