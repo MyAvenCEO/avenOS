@@ -2,7 +2,7 @@ DO $$
 BEGIN
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'aven_server') THEN
     GRANT USAGE ON SCHEMA public TO aven_server;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON "user", "session", account, verification, proof_of_work_challenges TO aven_server;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON "user", "session", account, verification, proof_of_work_challenges, device_code TO aven_server;
     GRANT SELECT, INSERT, UPDATE, DELETE ON passkey, setup_links TO aven_server;
     GRANT SELECT, INSERT, UPDATE, DELETE ON names, name_holds, purchase_sessions TO aven_server;
     GRANT SELECT, INSERT ON payment_events TO aven_server;

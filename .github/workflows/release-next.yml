@@ -360,6 +360,13 @@ jobs:
           test "$overall" = "healthy"
           curl --fail "$PUBLIC_BASE_URL/api/meta"
           curl --fail "$PUBLIC_BASE_URL/.well-known/apple-app-site-association"
+          device_grant="$(curl --fail --silent --show-error \
+            -X POST "$PUBLIC_BASE_URL/api/auth/device/code" \
+            -H 'content-type: application/json' \
+            --data '{"client_id":"ceo.aven.os"}')"
+          verification_uri="$(jq -r .verification_uri_complete <<<"$device_grant")"
+          [[ "$verification_uri" == "$PUBLIC_BASE_URL/device?user_code="* ]]
+          curl --fail --silent --show-error "$verification_uri" >/dev/null
 
   release-macos:
     name: macOS build → TestFlight
@@ -453,9 +460,9 @@ jobs:
           AVEN_PKG_INSTALLER_IDENTITY: ${{ secrets.AVEN_PKG_INSTALLER_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          # Point the shipped next build at the deployed auth API (baked into the Vite bundle
-          # via the PUBLIC_ prefix). A real env var, so it wins over any .env file.
+          # Point both the web bundle and native Rust device flow at the deployed identity API.
           PUBLIC_BETTER_AUTH_URL: ${{ vars.PUBLIC_BASE_URL }}
+          AVEN_IDENTITY_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
           # Bake the native-sign-in Google Desktop client into the Rust binary (network.rs
           # option_env!), so the shipped app has it without a process env. Must be the SAME
           # client the auth server verifies the idToken audience against.
@@ -562,9 +569,9 @@ jobs:
           APPLE_CERTS_P12_PASSWORD: ${{ secrets.APPLE_CERTS_P12_PASSWORD }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          # Point the shipped next build at the deployed auth API (baked into the Vite bundle
-          # via the PUBLIC_ prefix). A real env var, so it wins over any .env file.
+          # Point both the web bundle and native Rust device flow at the deployed identity API.
           PUBLIC_BETTER_AUTH_URL: ${{ vars.PUBLIC_BASE_URL }}
+          AVEN_IDENTITY_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
           # Bake the native-sign-in Google Desktop client into the Rust binary (network.rs
           # option_env!), so the shipped app has it without a process env. Must be the SAME
           # client the auth server verifies the idToken audience against.
@@ -605,12 +612,12 @@ jobs:
           key: linux
 
       - name: Build the Linux app (.deb + AppImage)
-        # Same env baking as the macOS/iOS jobs: PUBLIC_BETTER_AUTH_URL into the Vite bundle,
-        # the Google Desktop client into the Rust binary. APPIMAGE_EXTRACT_AND_RUN avoids the
-        # FUSE requirement on the CI runner. No App Store signing — Linux ships via this asset.
+        # Same env baking as the macOS/iOS jobs. APPIMAGE_EXTRACT_AND_RUN avoids the FUSE
+        # requirement on the CI runner. No App Store signing — Linux ships via this asset.
         run: bun run build:app:linux
         env:
           PUBLIC_BETTER_AUTH_URL: ${{ vars.PUBLIC_BASE_URL }}
+          AVEN_IDENTITY_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           APPIMAGE_EXTRACT_AND_RUN: "1"

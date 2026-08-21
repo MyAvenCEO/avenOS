@@ -1,11 +1,11 @@
 <script lang="ts">
 import '../app.css'
+import AuthGate from '$lib/auth/AuthGate.svelte'
 
 /**
  * The whole shell. avenCITY renders full-screen and owns its own scene, so the
- * layout's only jobs are loading the stylesheet (fonts + the game's tokens) and
- * naming the window — there is still no gate and no chrome. The world moved to
- * /game and `/` is now a selector, so each page sets its own title.
+ * layout loads the stylesheet and keeps native routes behind the first-launch
+ * passkey gate. Browser development remains ungated.
  */
 const { children } = $props()
 </script>
@@ -16,4 +16,4 @@ const { children } = $props()
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="128x128">
 </svelte:head>
 
-{@render children()}
+<AuthGate>{@render children()}</AuthGate>

@@ -1,6 +1,7 @@
 // One file per module so a future extraction can lift a module's tables (and
 // its grants in migrations/grants.sql) wholesale.
 export * from './auth.js'
+export * from './device.js'
 export * from './email.js'
 export * from './environments.js'
 export * from './names.js'
@@ -8,6 +9,7 @@ export * from './ops.js'
 export * from './passkeys.js'
 
 import { account, proofOfWorkChallenges, session, user, verification } from './auth.js'
+import { deviceCode } from './device.js'
 import { emailQueue } from './email.js'
 import {
 	customerEnvironmentJobs,
@@ -23,6 +25,7 @@ export const schema = {
 	session,
 	account,
 	verification,
+	deviceCode,
 	passkey,
 	setupLinks,
 	proofOfWorkChallenges,
