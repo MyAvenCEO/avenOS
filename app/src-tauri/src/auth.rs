@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
+use tauri::Manager as _;
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -633,7 +634,50 @@ pub async fn billing_resume(
 	.map_err(|error| format!("Could not resume: {error}"))?
 }
 
-/// The member's invoice history (provider-hosted receipt links).
+/// The provider-hosted billing portal, shown INSIDE the app: Creem is
+/// merchant of record and its portal is the only place the official invoice
+/// PDFs exist (the API carries none), so we mint the link server-side for
+/// the session's own customer and open it in a dedicated app window — the
+/// URL never passes through the frontend.
+#[tauri::command]
+pub async fn billing_portal(
+	app: tauri::AppHandle,
+	state: tauri::State<'_, AuthState>,
+) -> Result<(), String> {
+	let token = session_token(&state)?;
+	let response = tauri::async_runtime::spawn_blocking(move || {
+		identity_api_call(
+			token,
+			"POST",
+			"/api/billing/portal",
+			Some(serde_json::json!({})),
+		)
+	})
+	.await
+	.map_err(|error| format!("Could not open the billing portal: {error}"))??;
+	let url = response
+		.get("url")
+		.and_then(|value| value.as_str())
+		.ok_or_else(|| "The identity service returned no portal link.".to_string())?
+		.parse::<tauri::Url>()
+		.map_err(|error| format!("The portal link is invalid: {error}"))?;
+	if url.scheme() != "https" {
+		return Err("The portal link must be https.".to_string());
+	}
+	// Reuse the window on repeat clicks instead of stacking copies.
+	if let Some(existing) = app.get_webview_window("billing-portal") {
+		let _ = existing.set_focus();
+		return Ok(());
+	}
+	tauri::WebviewWindowBuilder::new(&app, "billing-portal", tauri::WebviewUrl::External(url))
+		.title("Rechnungen · avenOS")
+		.inner_size(1000.0, 760.0)
+		.build()
+		.map_err(|error| format!("Could not open the billing window: {error}"))?;
+	Ok(())
+}
+
+/// The member's invoice history (dates, amounts, tax — documents live in the portal).
 #[tauri::command]
 pub async fn billing_invoices(
 	state: tauri::State<'_, AuthState>,

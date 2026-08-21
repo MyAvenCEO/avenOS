@@ -33,9 +33,11 @@ interface Invoice {
 	id: string
 	createdAt: string
 	amountCents: number
+	taxCents: number
 	currency: string
 	status: string
-	receiptUrl: string | null
+	periodStart: string | null
+	periodEnd: string | null
 }
 
 const TIER_PLANS: Plan[] = PLANS.filter((p) => p.id === 'avenme' || p.id === 'avenceo')
@@ -62,18 +64,22 @@ function fixtures(scenario: string): { standing: Standing | null; invoices: Invo
 		{
 			id: 'tx_demo_2',
 			createdAt: '2026-08-14T09:12:00.000Z',
-			amountCents: 4200,
+			amountCents: 4998,
+			taxCents: 798,
 			currency: 'EUR',
 			status: 'paid',
-			receiptUrl: 'https://creem.io/receipt/tx_demo_2'
+			periodStart: '2026-08-14T09:12:00.000Z',
+			periodEnd: '2026-09-14T09:12:00.000Z'
 		},
 		{
 			id: 'tx_demo_1',
 			createdAt: '2026-07-14T09:12:00.000Z',
-			amountCents: 4200,
+			amountCents: 4998,
+			taxCents: 798,
 			currency: 'EUR',
 			status: 'paid',
-			receiptUrl: 'https://creem.io/receipt/tx_demo_1'
+			periodStart: '2026-07-14T09:12:00.000Z',
+			periodEnd: '2026-08-14T09:12:00.000Z'
 		}
 	]
 	return {
@@ -175,10 +181,21 @@ async function resume() {
 	})
 }
 
-async function openReceipt(url: string) {
-	if (isTauri()) await openUrl(url)
-	else window.open(url, '_blank', 'noopener')
+/** Which invoice row is expanded into its in-app rendered detail. */
+let openInvoice = $state<string | null>(null)
+
+/** Creem (merchant of record) issues the official invoice PDFs; its hosted
+ * portal is the only place they exist — the API carries none. The command
+ * mints the link server-side for the caller's own customer record and opens
+ * it in a dedicated APP window, so the documents display inside avenOS. */
+async function openPortal() {
+	await act('portal', async () => {
+		if (!isTauri()) return
+		await invoke('billing_portal')
+	})
 }
+
+const cents = (value: number) => (value / 100).toLocaleString('de-DE', { minimumFractionDigits: 2 })
 
 const dateOf = (iso: string) =>
 	new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -401,7 +418,10 @@ onDestroy(() => {
 			</div>
 		</div>
 
-		<!-- Rechnungen -->
+		<!-- Rechnungen: the detail renders IN-APP from real transaction data
+		     (net/USt./gross, period). The official document stays Creem's — as
+		     merchant of record it issues the invoices; the portal button leads
+		     there for downloads, Rechnungsadresse and USt.-Angaben. -->
 		{#if invoices.length}
 			<div class="flex flex-col gap-2">
 				<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Rechnungen</p>
@@ -409,32 +429,67 @@ onDestroy(() => {
 					class="flex flex-col divide-y divide-foreground/5 rounded-xl border border-foreground/5 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 				>
 					{#each invoices as invoice (invoice.id)}
-						<li class="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
-							<span class="opacity-60">{dateOf(invoice.createdAt)}</span>
-							<span class="font-medium">
-								{(invoice.amountCents / 100).toLocaleString('de-DE', {
-									minimumFractionDigits: 2
-								})}
-								{invoice.currency === 'EUR' ? '€' : invoice.currency}
-							</span>
-							<span class="opacity-50"
-								>{invoice.status === 'paid' ? 'Bezahlt' : invoice.status}</span
+						<li class="flex flex-col">
+							<button
+								type="button"
+								onclick={() => (openInvoice = openInvoice === invoice.id ? null : invoice.id)}
+								class="flex items-center justify-between gap-3 px-4 py-2.5 text-left text-xs transition-colors hover:bg-primary/5"
 							>
-							{#if invoice.receiptUrl}
-								{@const url = invoice.receiptUrl}
-								<button
-									type="button"
-									onclick={() => openReceipt(url)}
-									class="rounded-full border border-border px-3 py-1 font-medium transition-colors hover:bg-primary/5"
+								<span class="opacity-60">{dateOf(invoice.createdAt)}</span>
+								<span class="font-medium">
+									{cents(invoice.amountCents)}
+									{invoice.currency === 'EUR' ? '€' : invoice.currency}
+								</span>
+								<span class="opacity-50"
+									>{invoice.status === 'paid' ? 'Bezahlt' : invoice.status}</span
 								>
-									PDF
-								</button>
-							{:else}
-								<span class="px-3 opacity-30">—</span>
+								<span class="opacity-30">{openInvoice === invoice.id ? '▴' : '▾'}</span>
+							</button>
+							{#if openInvoice === invoice.id}
+								<div
+									class="flex flex-col gap-1.5 border-t border-foreground/5 bg-primary/[0.02] px-4 py-3 text-xs"
+								>
+									{#if invoice.periodStart && invoice.periodEnd}
+										<div class="flex justify-between gap-4">
+											<span class="opacity-40">Zeitraum</span>
+											<span>{dateOf(invoice.periodStart)} – {dateOf(invoice.periodEnd)}</span>
+										</div>
+									{/if}
+									<div class="flex justify-between gap-4">
+										<span class="opacity-40">Netto</span>
+										<span>{cents(invoice.amountCents - invoice.taxCents)} €</span>
+									</div>
+									<div class="flex justify-between gap-4">
+										<span class="opacity-40">USt.</span>
+										<span>{cents(invoice.taxCents)} €</span>
+									</div>
+									<div class="flex justify-between gap-4 font-medium">
+										<span class="opacity-40">Gesamt</span>
+										<span>{cents(invoice.amountCents)} €</span>
+									</div>
+									<div class="flex justify-between gap-4">
+										<span class="opacity-40">Beleg-Nr.</span>
+										<span class="font-mono opacity-60">{invoice.id}</span>
+									</div>
+								</div>
 							{/if}
 						</li>
 					{/each}
 				</ul>
+				<div class="flex flex-col gap-1">
+					<button
+						type="button"
+						onclick={openPortal}
+						disabled={busy !== '' || !isTauri()}
+						class="self-start rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/5 disabled:opacity-40"
+					>
+						{busy === 'portal' ? 'Einen Moment …' : 'Offizielle Rechnungen (PDF) öffnen'}
+					</button>
+					<p class="text-[0.6875rem] opacity-40">
+						Die offiziellen Rechnungsdokumente stellt Creem als Händler aus — Download,
+						Rechnungsadresse und USt.-Angaben verwaltest du im Creem-Portal.
+					</p>
+				</div>
 			</div>
 		{/if}
 	{/if}

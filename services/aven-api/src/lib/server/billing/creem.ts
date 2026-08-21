@@ -156,12 +156,27 @@ export class CreemProvider implements PaymentProvider {
 		)
 		return (result.items ?? []).map((tx) => ({
 			id: String(tx.id ?? ''),
-			createdAt: String(tx.created_at ?? tx.createdAt ?? ''),
+			// Creem sends created_at as a unix-ms timestamp on transactions.
+			createdAt: new Date(Number(tx.created_at ?? tx.createdAt ?? 0)).toISOString(),
 			amountCents: Number(tx.amount ?? 0),
+			taxCents: Number(tx.tax_amount ?? tx.taxAmount ?? 0),
 			currency: String(tx.currency ?? 'EUR'),
 			status: String(tx.status ?? ''),
-			receiptUrl: (tx.receipt_url ?? tx.receiptUrl ?? null) as string | null
+			periodStart: tx.period_start ? new Date(Number(tx.period_start)).toISOString() : null,
+			periodEnd: tx.period_end ? new Date(Number(tx.period_end)).toISOString() : null
 		}))
+	}
+
+	async customerPortalUrl(providerCustomerId: string): Promise<string> {
+		const result = await this.api<{ customer_portal_link?: string; customerPortalLink?: string }>(
+			'POST',
+			'/v1/customers/billing',
+			{ customer_id: providerCustomerId }
+		)
+		const url = result.customer_portal_link ?? result.customerPortalLink
+		if (!url)
+			throw new AppError(502, 'BILLING_PROVIDER_ERROR', 'No customer portal link was returned.')
+		return url
 	}
 
 	verifyWebhook(rawBody: string, signature: string | null): PaymentEvent {

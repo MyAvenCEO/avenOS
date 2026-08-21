@@ -43,15 +43,18 @@ export interface SubscriptionCheckoutInput {
 }
 
 /** One line in the customer's invoice history, already reduced to what the
- * portal shows. The receipt stays a provider-hosted URL — we link, never
- * render, invoices. */
+ * pane shows. Creem's transactions API carries NO per-row receipt URL
+ * (verified against the SDK's TransactionEntity) — the official invoice
+ * documents live behind the hosted customer portal link instead. */
 export interface InvoiceRow {
 	id: string
 	createdAt: string
 	amountCents: number
+	taxCents: number
 	currency: string
 	status: string
-	receiptUrl: string | null
+	periodStart: string | null
+	periodEnd: string | null
 }
 
 export interface PaymentProvider {
@@ -67,6 +70,9 @@ export interface PaymentProvider {
 	cancelSubscription(providerSubscriptionId: string, immediate: boolean): Promise<void>
 	resumeSubscription(providerSubscriptionId: string): Promise<void>
 	listInvoices(providerCustomerId: string): Promise<InvoiceRow[]>
+	/** The provider-hosted portal: the one place customers get their official
+	 * invoice documents — Creem (merchant of record) issues them, not us. */
+	customerPortalUrl(providerCustomerId: string): Promise<string>
 }
 
 /** The normalized shape of a `subscription.*` webhook. Field names on the

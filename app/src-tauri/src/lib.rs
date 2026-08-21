@@ -209,6 +209,7 @@ pub fn run() {
 			auth::billing_cancel,
 			auth::billing_resume,
 			auth::billing_invoices,
+			auth::billing_portal,
 			auth::auth_passkey_begin,
 			auth::auth_passkey_finish,
 			auth::auth_begin,

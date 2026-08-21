@@ -165,6 +165,19 @@ export class SubscriptionService {
 		return this.payments.listInvoices(providerCustomerId)
 	}
 
+	/** The hosted portal for the caller's OWN customer record — where Creem
+	 * (merchant of record) serves the official invoice documents. */
+	async portalUrl(userId: string): Promise<string> {
+		const customer = await this.pool.query(
+			'SELECT creem_customer_id FROM billing_customers WHERE user_id=$1',
+			[userId]
+		)
+		const providerCustomerId = customer.rows[0]?.creem_customer_id as string | undefined
+		if (!providerCustomerId)
+			throw new AppError(404, 'BILLING_CUSTOMER_MISSING', 'There is no billing account yet.')
+		return this.payments.customerPortalUrl(providerCustomerId)
+	}
+
 	private async requireActive(userId: string): Promise<SubscriptionRow> {
 		const row = await this.mine(userId)
 		if (!row || ['canceled', 'expired'].includes(row.status))

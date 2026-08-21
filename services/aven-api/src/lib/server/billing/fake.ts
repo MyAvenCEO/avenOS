@@ -63,6 +63,10 @@ export class FakePaymentProvider implements PaymentProvider {
 		return []
 	}
 
+	async customerPortalUrl(): Promise<string> {
+		return new URL('/purchase/fake-checkout', this.config.PUBLIC_BASE_URL).toString()
+	}
+
 	buildCompletedWebhookBody(input: {
 		checkoutId: string
 		holdId: string
