@@ -1,7 +1,6 @@
 <script lang="ts">
 import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
-import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
@@ -292,62 +291,18 @@ function onKeydown(event: KeyboardEvent) {
 		</div>
 	{/if}
 
-	<!-- What the tools just did, as a toast. One at a time, three seconds: a
-	     glance to confirm the list changed the way you meant, not a log to read.
-	     Reserving the space keeps the input panel still as toasts come and go;
-	     bottom-aligned in it, so the toast hugs the panel it belongs to. The
-	     toast carries the content, so it keeps the full width; in voice mode the
-	     panel below it narrows instead, holding only a status word and two
-	     buttons. The FiBu workspace drops the strip entirely — the inbox layout
-	     wants every pixel of height, and even an empty flex child would double
-	     the gap between the view and the panel. -->
 	<!-- THE answer surface: it floats over the workspace rather than replacing
 	     it, so the selected intent it answers about stays in view behind. -->
 	<QueryModal />
 
-	<!-- The floating dock: the toast, errors and the pill hover OVER the
-	     workspace, so the side columns can run to the bottom of the screen. -->
+	<!-- The floating dock: errors and the pill hover OVER the workspace, so the
+	     side columns can run to the bottom of the screen. What the tools DID is
+	     not here — a tool result is part of the conversation that asked for it,
+	     so it renders inline in the modal's chat band. -->
 	<div
 		bind:clientHeight={dockH}
 		class="pointer-events-none absolute right-2 bottom-2 left-2 z-50 flex flex-col gap-1.5 [&>*]:pointer-events-auto"
 	>
-		{#if activity.current}
-			<div class="mx-auto flex w-full max-w-lg items-end justify-center">
-				{#if activity.current}
-					{@const entry = activity.current}
-					<div
-						class="flex w-full gap-2 rounded-xl border border-border bg-surface-card px-4 py-3 text-xs"
-					>
-						<span
-							class="w-3 shrink-0 text-center font-mono"
-							class:text-success={entry.kind === 'done' || entry.kind === 'created'}
-							class:text-progress-ink={entry.kind === 'doing'}
-							class:text-error={entry.kind === 'deleted' || entry.kind === 'failed'}
-							class:opacity-30={entry.kind === 'read' ||
-						entry.kind === 'reopened' ||
-						entry.kind === 'renamed'}
-						>
-							{ACTIVITY_LABELS[entry.kind].mark}
-						</span>
-						<div class="min-w-0 flex-1">
-							<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
-							{#if entry.titles.length > 0}
-								<!-- One per line. Run together with separators, five items became
-						     a sentence that ran off the edge and told you nothing. -->
-								<ul class="pt-0.5">
-									{#each entry.titles as title (title)}
-										<li class="leading-relaxed">{title}</li>
-									{/each}
-								</ul>
-							{:else if entry.note}
-								<span class="opacity-40">· {entry.note}</span>
-							{/if}
-						</div>
-					</div>
-				{/if}
-			</div>
-		{/if}
-
 		<!-- Errors surface HERE, above the voice area — the same universal band as
 	     the human gate, so a failed reply (a dead lane, an unset key) is visible
 	     from any tab and in voice mode, not buried in the chat stream. The × or
