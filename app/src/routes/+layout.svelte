@@ -4,8 +4,13 @@ import AuthGate from '$lib/auth/AuthGate.svelte'
 
 /**
  * The whole shell. avenCITY renders full-screen and owns its own scene, so the
- * layout loads the stylesheet and keeps native routes behind the first-launch
+ * layout loads the stylesheet and puts native routes behind the first-launch
  * passkey gate. Browser development remains ungated.
+ *
+ * The gate currently SHOWS but does not HOLD — see `skip()` in AuthGate: while
+ * WebAuthn inside the Tauri webview is still being stabilised, declining
+ * sign-in lets you into the app rather than trapping you on a screen you
+ * cannot get past.
  */
 const { children } = $props()
 </script>
