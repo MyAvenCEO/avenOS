@@ -73,6 +73,10 @@ export const appRuntime: AppRuntime = {
 			name
 				? api<NameAvailability>(`/names/check?name=${encodeURIComponent(name)}`).catch(() => null)
 				: Promise.resolve(null),
+		async mine() {
+			const result = await api<{ names: Array<{ name: string }> }>('/names/mine')
+			return result.names.map((entry) => entry.name)
+		},
 		async hold(name, email, origin) {
 			const headers = await createProofOfWorkHeader('secure-name')
 			const result = await api<{ hold: NameHoldResult }>('/names/hold', {

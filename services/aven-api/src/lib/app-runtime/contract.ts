@@ -60,6 +60,8 @@ export interface AppRuntime {
 		check(name: string): Promise<NameAvailability>
 		loadInfo(name: string, current: NameAvailability | null): Promise<NameAvailability | null>
 		hold(name: string, email: string, origin?: HoldOrigin): Promise<NameHoldResult>
+		/** The signed-in user's own names — used to name a passkey after them. */
+		mine(): Promise<string[]>
 	}
 	auth: {
 		signIn(): Promise<void>
