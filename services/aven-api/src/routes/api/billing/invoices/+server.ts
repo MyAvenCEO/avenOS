@@ -4,5 +4,5 @@ import { api, requireUser } from '$lib/server/api.js'
 // hosted receipt URL.
 export const GET = api(async (event, rt) => {
 	const user = await requireUser(event)
-	return { body: { invoices: await rt.subscriptions.invoices(user.id) } }
+	return { body: { invoices: await rt.subscriptions.invoices(user) } }
 })

@@ -73,6 +73,8 @@ export interface PaymentProvider {
 	/** The provider-hosted portal: the one place customers get their official
 	 * invoice documents — Creem (merchant of record) issues them, not us. */
 	customerPortalUrl(providerCustomerId: string): Promise<string>
+	/** Look up the provider's customer for an email; null when none exists. */
+	findCustomerByEmail(email: string): Promise<string | null>
 }
 
 /** The normalized shape of a `subscription.*` webhook. Field names on the

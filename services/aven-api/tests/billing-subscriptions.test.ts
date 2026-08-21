@@ -39,8 +39,44 @@ function stubFetch(responses: Array<{ status?: number; body: unknown }>) {
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('product seeding', () => {
-	it('creates both tiers from PLANS with net cents and metadata.tier', async () => {
+describe('product resolution', () => {
+	it('pinned config ids win without any provider call', async () => {
+		const calls = stubFetch([])
+		const provider = new CreemProvider(
+			testConfig({
+				CREEM_API_KEY: 'creem_test_fake',
+				CREEM_PRODUCT_ID: 'prod_avenid',
+				CREEM_PRODUCT_AVENME: 'prod_6ALajlETScD2v0dv10n618',
+				CREEM_PRODUCT_AVENCEO: 'prod_7NVWk3DxOD4bXpipTSeE3s',
+				CREEM_WEBHOOK_SECRET: 'whsec_test_secret'
+			})
+		)
+		const map = await provider.ensureSubscriptionProducts(subscriptionPlanSeeds())
+		expect(map).toEqual({
+			avenme: 'prod_6ALajlETScD2v0dv10n618',
+			avenceo: 'prod_7NVWk3DxOD4bXpipTSeE3s'
+		})
+		expect(calls).toHaveLength(0)
+	})
+
+	it('adopts existing products by NAME — Creem products carry no metadata', async () => {
+		const calls = stubFetch([
+			{
+				body: {
+					items: [
+						{ id: 'prod_me', name: 'avenME' },
+						{ id: 'prod_ceo', name: 'avenCEO' }
+					]
+				}
+			}
+		])
+		const provider = new CreemProvider(creemConfig())
+		const map = await provider.ensureSubscriptionProducts(subscriptionPlanSeeds())
+		expect(map).toEqual({ avenme: 'prod_me', avenceo: 'prod_ceo' })
+		expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0)
+	})
+
+	it('creates missing tiers from PLANS with net cents and NO metadata field', async () => {
 		const calls = stubFetch([
 			{ body: { items: [] } },
 			{ body: { id: 'prod_me' } },
@@ -52,38 +88,23 @@ describe('product seeding', () => {
 
 		const creations = calls.filter((c) => c.method === 'POST')
 		expect(creations).toHaveLength(2)
-		const byTier = Object.fromEntries(
-			creations.map((c) => [(c.body as { metadata: { tier: string } }).metadata.tier, c.body])
+		const byName = Object.fromEntries(
+			creations.map((c) => [(c.body as { name: string }).name, c.body])
 		) as Record<string, Record<string, unknown>>
 		// Prices come from the SSOT, in NET cents, recurring monthly, tax-exclusive.
 		const avenme = PLANS.find((p) => p.id === 'avenme')
 		const avenceo = PLANS.find((p) => p.id === 'avenceo')
-		expect(byTier.avenme?.price).toBe((avenme?.eurPrice ?? 0) * 100)
-		expect(byTier.avenceo?.price).toBe((avenceo?.eurPrice ?? 0) * 100)
-		for (const body of Object.values(byTier)) {
+		expect(byName.avenME?.price).toBe((avenme?.eurPrice ?? 0) * 100)
+		expect(byName.avenCEO?.price).toBe((avenceo?.eurPrice ?? 0) * 100)
+		for (const body of Object.values(byName)) {
 			expect(body.billing_type).toBe('recurring')
 			expect(body.tax_mode).toBe('exclusive')
 			expect(body.currency).toBe('EUR')
+			// Creem rejects unknown fields: create-product has NO metadata.
+			expect('metadata' in body).toBe(false)
 		}
 		// Every call authenticated — and only via the header, never a URL param.
 		for (const call of calls) expect(call.headers.get('x-api-key')).toBe('creem_test_fake')
-	})
-
-	it('is idempotent: existing tagged products are reused, none created', async () => {
-		const calls = stubFetch([
-			{
-				body: {
-					items: [
-						{ id: 'prod_me', metadata: { tier: 'avenme' } },
-						{ id: 'prod_ceo', metadata: { tier: 'avenceo' } }
-					]
-				}
-			}
-		])
-		const provider = new CreemProvider(creemConfig())
-		const map = await provider.ensureSubscriptionProducts(subscriptionPlanSeeds())
-		expect(map).toEqual({ avenme: 'prod_me', avenceo: 'prod_ceo' })
-		expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0)
 	})
 })
 
@@ -201,8 +222,8 @@ describe('subscription state', () => {
 			{
 				body: {
 					items: [
-						{ id: 'prod_me', metadata: { tier: 'avenme' } },
-						{ id: 'prod_ceo', metadata: { tier: 'avenceo' } }
+						{ id: 'prod_me', name: 'avenME' },
+						{ id: 'prod_ceo', name: 'avenCEO' }
 					]
 				}
 			},
@@ -244,7 +265,7 @@ describe('subscription state', () => {
 				}
 			}
 		])
-		const invoices = await service.invoices(alice.id)
+		const invoices = await service.invoices(alice)
 		expect(invoices).toEqual([
 			{
 				id: 'tx_1',
@@ -260,7 +281,7 @@ describe('subscription state', () => {
 		expect(invoiceCalls[0]?.url).toContain(`customer_id=cust_${alice.id.slice(0, 8)}`)
 		// Bob has no customer row → empty history, no provider call with a
 		// guessed id.
-		expect(await service.invoices(bob.id)).toEqual([])
+		expect(await service.invoices(bob)).toEqual([])
 
 		// The portal link — the only place official invoice documents exist —
 		// is minted for the caller's own customer id; bob has none and is
@@ -268,11 +289,11 @@ describe('subscription state', () => {
 		const portalCalls = stubFetch([
 			{ body: { customer_portal_link: 'https://creem.io/portal/abc' } }
 		])
-		expect(await service.portalUrl(alice.id)).toBe('https://creem.io/portal/abc')
+		expect(await service.portalUrl(alice)).toBe('https://creem.io/portal/abc')
 		expect((portalCalls[0]?.body as { customer_id: string } | undefined)?.customer_id).toBe(
 			`cust_${alice.id.slice(0, 8)}`
 		)
-		await expect(service.portalUrl(bob.id)).rejects.toMatchObject({
+		await expect(service.portalUrl(bob)).rejects.toMatchObject({
 			code: 'BILLING_CUSTOMER_MISSING'
 		})
 	})

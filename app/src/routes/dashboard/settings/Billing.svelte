@@ -103,10 +103,10 @@ async function refresh() {
 	}
 	const me = await invoke<{ subscription: Standing | null }>('billing_me')
 	standing = me.subscription
-	if (standing) {
-		const history = await invoke<{ invoices: Invoice[] }>('billing_invoices')
-		invoices = history.invoices
-	}
+	// History exists even without a subscription — the one-off avenID purchase
+	// is a Creem transaction too, resolved via the session's own email.
+	const history = await invoke<{ invoices: Invoice[] }>('billing_invoices')
+	invoices = history.invoices
 }
 
 /** After an action: watch for the webhook to land, then stop announcing. */
@@ -422,9 +422,9 @@ onDestroy(() => {
 		     (net/USt./gross, period). The official document stays Creem's — as
 		     merchant of record it issues the invoices; the portal button leads
 		     there for downloads, Rechnungsadresse and USt.-Angaben. -->
-		{#if invoices.length}
-			<div class="flex flex-col gap-2">
-				<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Rechnungen</p>
+		<div class="flex flex-col gap-2">
+			<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Rechnungen</p>
+			{#if invoices.length}
 				<ul
 					class="flex flex-col divide-y divide-foreground/5 rounded-xl border border-foreground/5 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 				>
@@ -476,22 +476,28 @@ onDestroy(() => {
 						</li>
 					{/each}
 				</ul>
-				<div class="flex flex-col gap-1">
-					<button
-						type="button"
-						onclick={openPortal}
-						disabled={busy !== '' || !isTauri()}
-						class="self-start rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/5 disabled:opacity-40"
-					>
-						{busy === 'portal' ? 'Einen Moment …' : 'Offizielle Rechnungen (PDF) öffnen'}
-					</button>
-					<p class="text-[0.6875rem] opacity-40">
-						Die offiziellen Rechnungsdokumente stellt Creem als Händler aus — Download,
-						Rechnungsadresse und USt.-Angaben verwaltest du im Creem-Portal.
-					</p>
-				</div>
+			{:else}
+				<p
+					class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-50 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+				>
+					Noch keine Zahlungen — sobald du etwas buchst, steht hier deine Historie.
+				</p>
+			{/if}
+			<div class="flex flex-col gap-1">
+				<button
+					type="button"
+					onclick={openPortal}
+					disabled={busy !== '' || !isTauri()}
+					class="self-start rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/5 disabled:opacity-40"
+				>
+					{busy === 'portal' ? 'Einen Moment …' : 'Offizielle Rechnungen (PDF) öffnen'}
+				</button>
+				<p class="text-[0.6875rem] opacity-40">
+					Die offiziellen Rechnungsdokumente stellt Creem als Händler aus — Download,
+					Rechnungsadresse und USt.-Angaben verwaltest du im Creem-Portal.
+				</p>
 			</div>
-		{/if}
+		</div>
 	{/if}
 
 	{#if failure}

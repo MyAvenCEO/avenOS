@@ -6,5 +6,5 @@ import { api, requireUser } from '$lib/server/api.js'
 // fields we could collect ourselves).
 export const POST = api(async (event, rt) => {
 	const user = await requireUser(event)
-	return { body: { url: await rt.subscriptions.portalUrl(user.id) } }
+	return { body: { url: await rt.subscriptions.portalUrl(user) } }
 })
