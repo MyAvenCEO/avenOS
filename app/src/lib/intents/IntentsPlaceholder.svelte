@@ -109,14 +109,27 @@ const STATUS_LABEL: Record<IntentState, string> = {
  *
  * edge = the 3px left border, text = the status word (the `-ink` face, which
  * is the tone darkened far enough to be read on cream).
+ *
+ * Archive is deliberately absent: archived intents are filtered out of this
+ * list into their own collapsed section, where being folded away and dimmed
+ * already says "archived". A colour for it would be a colour nobody reads.
  */
-const STATE_ACCENT: Record<IntentState, { edge: string; text: string }> = {
+const STATE_ACCENT: Record<Exclude<IntentState, 'archive'>, { edge: string; text: string }> = {
 	working: { edge: 'border-l-state-working', text: 'text-state-working-ink' },
 	waiting: { edge: 'border-l-state-waiting', text: 'text-state-waiting-ink' },
 	done: { edge: 'border-l-state-done', text: 'text-state-done-ink' },
-	error: { edge: 'border-l-state-error', text: 'text-state-error-ink' },
-	archive: { edge: 'border-l-state-archive', text: 'text-state-archive-ink' }
+	error: { edge: 'border-l-state-error', text: 'text-state-error-ink' }
 }
+
+/** What archive wears instead: the page's own ink, held well back. */
+const NO_ACCENT = { edge: 'border-l-foreground/20', text: 'text-foreground/45' }
+
+/**
+ * An archived intent never reaches the active list, but it CAN be selected
+ * out of the archive drawer — so the centre pane still has to answer for it.
+ */
+const accentFor = (status: IntentState) =>
+	status === 'archive' ? NO_ACCENT : STATE_ACCENT[status]
 
 const KIND_LABEL: Record<string, string> = {
 	doc: 'PDF',
@@ -1040,7 +1053,7 @@ const DOT: Record<string, string> = {
 			</h2>
 			{#each activeIntents as intent (intent.id)}
 				{@const sel = selectedId === intent.id && !talk.open}
-				{@const accent = STATE_ACCENT[intent.status]}
+				{@const accent = accentFor(intent.status)}
 				<!-- Hover shifts the FILL, never the border: `hover:border-*` paints all
 				     four sides and, sitting in a later cascade layer, greyed out the 3px
 				     state edge — the one thing the card exists to show. -->
@@ -1114,7 +1127,7 @@ const DOT: Record<string, string> = {
 							skillView = null
 							talk.open = false
 						}}
-						class="rounded-xl border border-l-[3px] border-l-state-archive px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
+						class="rounded-xl border border-l-[3px] border-l-foreground/20 px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
 							? 'border-foreground/15 bg-surface-card-selected opacity-100'
 							: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
 					>
@@ -1143,9 +1156,7 @@ const DOT: Record<string, string> = {
 			style="margin-bottom: calc(var(--dock-h, 0px) / {WS_ZOOM})"
 		>
 			<h2
-				class="px-1 pt-1 text-center font-semibold text-xs uppercase tracking-wide {STATE_ACCENT[
-					selected.status
-				].text}"
+				class="px-1 pt-1 text-center font-semibold text-xs uppercase tracking-wide {accentFor(selected.status).text}"
 			>
 				{STATUS_LABEL[selected.status]}
 			</h2>
