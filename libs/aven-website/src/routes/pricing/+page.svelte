@@ -138,47 +138,42 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							{/if}
 						</div>
 						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{p.role}</p>
-						{#if p.eligibility}
-							<p class="mt-2 text-[12px] leading-snug font-medium text-quiet-ink">
-								{p.eligibility}
-							</p>
-						{/if}
 
-						<div class="mt-5 border-y border-border/50 py-4">
-							<div class="flex items-baseline justify-between gap-2">
-								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
-									{billingLabel(p)}
-								</p>
-								{#if totalSharePct(p) > 0}
+						<!-- The monthly price stands alone. What comes off the revenue is a
+						     different question, so it gets its own block rather than hanging
+						     off the right edge of the price. -->
+						<div class="mt-5 border-t border-border/50 pt-4">
+							<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
+								{billingLabel(p)}
+							</p>
+							<p class="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-foreground">
+								{euro(p.eurPrice)}&nbsp;€<span class="text-base font-medium text-foreground/55">
+									/Monat</span
+								>
+							</p>
+						</div>
+
+						{#if totalSharePct(p) > 0}
+							<div class="mt-4 border-t border-border/50 pt-4">
+								<div class="flex items-baseline justify-between gap-2">
 									<p
 										class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45"
 									>
 										Vom Umsatz
 									</p>
-								{/if}
-							</div>
-							<div class="mt-1 flex items-baseline justify-between gap-2">
-								<p class="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
-									{euro(p.eurPrice)}&nbsp;€<span class="text-base font-medium text-foreground/55">
-										/Monat</span
-									>
-								</p>
-								{#if totalSharePct(p) > 0}
 									<p class="text-xl font-semibold tabular-nums tracking-tight text-accent-ink">
 										{totalSharePct(p)}&nbsp;%
 									</p>
-								{/if}
-							</div>
-							{#if totalSharePct(p) > 0}
+								</div>
 								<!-- The split is the whole point: half is a price, half buys you shares. -->
-								<dl class="mt-3 space-y-1 text-[11px] leading-snug">
-									<div class="flex items-baseline justify-between gap-3">
+								<dl class="mt-2 space-y-1 text-[11px] leading-snug">
+									<div>
 										<dt class="text-foreground/55">
 											{p.platformFeePct}&nbsp;% Plattform
 											<span class="text-foreground/40">· inkl. Stripe &amp; Co.</span>
 										</dt>
 									</div>
-									<div class="flex items-baseline justify-between gap-3">
+									<div>
 										<dt class="font-medium text-accent-ink">
 											{p.reinvestPct}&nbsp;% Reinvest
 											<span class="font-normal text-foreground/55">
@@ -187,15 +182,17 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 										</dt>
 									</div>
 								</dl>
-							{/if}
-							{#if p.equitySharePct}
-								<p class="mt-3 text-[12px] font-medium text-foreground/70">
-									+&nbsp;{p.equitySharePct}&nbsp;% Firmenanteile an deiner Firma
-								</p>
-							{/if}
-						</div>
+								{#if p.equitySharePct}
+									<p class="mt-3 text-[12px] font-medium text-foreground/70">
+										+&nbsp;{p.equitySharePct}&nbsp;% Firmenanteile an deiner Firma
+									</p>
+								{/if}
+							</div>
+						{/if}
 
-						<ul class="mt-5 flex-1 space-y-2 text-left text-[13px] leading-snug text-foreground/75">
+						<ul
+							class="mt-4 flex-1 space-y-2 border-t border-border/50 pt-4 text-left text-[13px] leading-snug text-foreground/75"
+						>
 							<li class="flex gap-2 font-medium text-foreground/85">
 								<span
 									aria-hidden="true"
