@@ -45,10 +45,10 @@ const wrapperClass =
 		Wie eine Domain — aber für deinen Aven:
 		<strong class="font-medium text-foreground/82">maia.aven.ceo</strong>. Sie ist zugleich dein
 		Platz auf der Warteliste: Eingeladen wird der Reihe nach,
-		<strong class="font-medium text-foreground/82">wer zuerst kommt, gründet zuerst</strong>. Jeden
-		Namen gibt es genau einmal: ist er vergeben, ist er weg. Dazu bekommst du den
-		<strong class="font-medium text-foreground/82">Open‑Source‑Code von avenOS</strong>
-		und
+		<strong class="font-medium text-foreground/82">wer zuerst kommt, gründet zuerst</strong>. Der
+		Name ist damit
+		<strong class="font-medium text-foreground/82">für 1 Jahr für dich gesichert</strong>
+		— solange ihn niemand anders hält. Dazu bekommst du
 		<strong class="font-medium text-foreground/82">20 Min Test‑Zugang</strong>, sobald du eingeladen
 		bist.
 	</p>

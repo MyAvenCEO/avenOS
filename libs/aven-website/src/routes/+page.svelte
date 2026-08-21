@@ -261,7 +261,7 @@ const roadmap = [
 				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
 			>
 				1&nbsp;Mensch + 1&nbsp;Aven =
-				<span class="text-accent-ink">ein Spark</span>.
+				<span class="text-accent">ein Spark</span>.
 			</h2>
 			<div
 				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
