@@ -19,7 +19,7 @@ const { held }: { held: HeldMessage } = $props()
 </script>
 
 <div
-	class="w-full overflow-hidden rounded-2xl border-[3px] border-primary bg-surface-raised shadow-[0_4px_16px_rgba(30,41,59,0.12)]"
+	class="w-full overflow-hidden rounded-2xl border-2 border-primary bg-surface-raised shadow-[0_4px_16px_rgba(30,41,59,0.12)]"
 >
 	<div class="px-5 pt-4 pb-4">
 		<div class="flex items-baseline gap-2">
