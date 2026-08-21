@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.6...v) (2026-08-21)
+
+
+### Features
+
+* **auth:** add native Apple passkey golden path ([84fd1b3](https://github.com/MyAvenCEO/avenOS/commit/84fd1b35147f45fe4d687408a09fafc74f7318f5))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.5...v) (2026-08-21)
 
 
