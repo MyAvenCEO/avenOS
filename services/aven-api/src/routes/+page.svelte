@@ -1,7 +1,7 @@
 <script lang="ts">
+import { appRuntime } from 'virtual:aven-app-runtime'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import { appRuntime } from 'virtual:aven-app-runtime'
 import type { NameAvailability } from '$lib/types.js'
 
 const initial = appRuntime.initial.nameSearch(page.url)
@@ -22,6 +22,10 @@ async function check() {
 		busy = false
 	}
 }
+
+function continueToCheckout() {
+	if (result) void goto(`/secure?name=${encodeURIComponent(result.name)}`)
+}
 </script>
 
 <svelte:head><title>Check name</title></svelte:head>
@@ -37,9 +41,7 @@ async function check() {
 	{#if result}
 		{#if result.available}
 			<p>{result.name} · {result.priceEur} €</p>
-			<button onclick={() => goto(`/secure?name=${encodeURIComponent(result!.name)}`)}>
-				Continue
-			</button>
+			<button onclick={continueToCheckout}>Continue</button>
 		{:else}
 			<p>Unavailable</p>
 		{/if}

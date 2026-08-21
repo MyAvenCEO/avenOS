@@ -1,6 +1,6 @@
 <script lang="ts">
-import { page } from '$app/state'
 import { appRuntime } from 'virtual:aven-app-runtime'
+import { page } from '$app/state'
 
 const session = appRuntime.session(page.url)
 const userCode = $derived(page.url.searchParams.get('user_code')?.replaceAll('-', '') ?? '')
