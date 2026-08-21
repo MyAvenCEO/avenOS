@@ -1,7 +1,7 @@
 import { readable } from 'svelte/store'
-import { scenario } from './designer-scenarios.js'
-import type { AppRuntime } from './contract.js'
 import type { MetaInfo, NameAvailability, NameHoldResult } from '$lib/types.js'
+import type { AppRuntime } from './contract.js'
+import { scenario } from './designer-scenarios.js'
 
 const meta: MetaInfo = {
 	priceEur: 25,
@@ -134,7 +134,8 @@ export const appRuntime: AppRuntime = {
 		}
 	},
 	names: {
-		check: async (name) => (name.trim().toLowerCase() === 'taken' ? unavailable() : available(name)),
+		check: async (name) =>
+			name.trim().toLowerCase() === 'taken' ? unavailable() : available(name),
 		loadInfo: async (name, current) => current ?? (name ? available(name) : null),
 		hold: async (name) => hold(name)
 	},

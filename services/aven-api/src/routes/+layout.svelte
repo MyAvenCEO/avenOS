@@ -1,9 +1,9 @@
 <script lang="ts">
 import '../app.css'
-import { goto } from '$app/navigation'
-import { page } from '$app/state'
 import { appRuntime } from 'virtual:aven-app-runtime'
 import BuildChrome from 'virtual:aven-build-chrome'
+import { goto } from '$app/navigation'
+import { page } from '$app/state'
 
 let { children } = $props()
 const session = $derived(appRuntime.session(page.url))

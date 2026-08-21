@@ -56,10 +56,26 @@ export const designerPages: DesignerPage[] = [
 		label: 'Connect device',
 		path: '/device',
 		scenarios: [
-			{ id: 'signed-out', label: 'Sign-in required', href: '/device?user_code=AVEN-2026&scenario=signed-out' },
-			{ id: 'signing-in', label: 'Signing in', href: '/device?user_code=AVEN-2026&scenario=signing-in' },
-			{ id: 'approval', label: 'Approval required', href: '/device?user_code=AVEN-2026&scenario=approval' },
-			{ id: 'approving', label: 'Approving', href: '/device?user_code=AVEN-2026&scenario=approving' },
+			{
+				id: 'signed-out',
+				label: 'Sign-in required',
+				href: '/device?user_code=AVEN-2026&scenario=signed-out'
+			},
+			{
+				id: 'signing-in',
+				label: 'Signing in',
+				href: '/device?user_code=AVEN-2026&scenario=signing-in'
+			},
+			{
+				id: 'approval',
+				label: 'Approval required',
+				href: '/device?user_code=AVEN-2026&scenario=approval'
+			},
+			{
+				id: 'approving',
+				label: 'Approving',
+				href: '/device?user_code=AVEN-2026&scenario=approving'
+			},
 			{ id: 'approved', label: 'Approved', href: '/device?user_code=AVEN-2026&scenario=approved' },
 			{ id: 'error', label: 'Error', href: '/device?user_code=AVEN-2026&scenario=error' },
 			{ id: 'missing', label: 'Missing code', href: '/device?scenario=missing' }
@@ -89,12 +105,36 @@ export const designerPages: DesignerPage[] = [
 		label: 'Checkout',
 		path: '/purchase/checkout',
 		scenarios: [
-			{ id: 'creem-loading', label: 'Creem loading', href: '/purchase/checkout?token=designer&scenario=creem-loading' },
-			{ id: 'fake-ready', label: 'Fake ready', href: '/purchase/checkout?token=designer&scenario=fake-ready' },
-			{ id: 'fake-paying', label: 'Fake paying', href: '/purchase/checkout?token=designer&scenario=fake-paying' },
-			{ id: 'fake-error', label: 'Fake error', href: '/purchase/checkout?token=designer&scenario=fake-error' },
-			{ id: 'creem-ready', label: 'Creem ready', href: '/purchase/checkout?token=designer&scenario=creem-ready' },
-			{ id: 'creem-confirming', label: 'Creem confirming', href: '/purchase/checkout?token=designer&scenario=creem-confirming' }
+			{
+				id: 'creem-loading',
+				label: 'Creem loading',
+				href: '/purchase/checkout?token=designer&scenario=creem-loading'
+			},
+			{
+				id: 'fake-ready',
+				label: 'Fake ready',
+				href: '/purchase/checkout?token=designer&scenario=fake-ready'
+			},
+			{
+				id: 'fake-paying',
+				label: 'Fake paying',
+				href: '/purchase/checkout?token=designer&scenario=fake-paying'
+			},
+			{
+				id: 'fake-error',
+				label: 'Fake error',
+				href: '/purchase/checkout?token=designer&scenario=fake-error'
+			},
+			{
+				id: 'creem-ready',
+				label: 'Creem ready',
+				href: '/purchase/checkout?token=designer&scenario=creem-ready'
+			},
+			{
+				id: 'creem-confirming',
+				label: 'Creem confirming',
+				href: '/purchase/checkout?token=designer&scenario=creem-confirming'
+			}
 		]
 	},
 	{
@@ -106,7 +146,11 @@ export const designerPages: DesignerPage[] = [
 				label: 'Ready',
 				href: '/purchase/fake-checkout?checkoutId=designer&holdId=designer-hold&name=aurora&email=alex%40example.com&successUrl=%2Fpurchase%2Fsuccess%3Fname%3Daurora&scenario=ready'
 			},
-			{ id: 'missing', label: 'Missing input', href: '/purchase/fake-checkout?name=aurora&email=alex%40example.com&scenario=missing' },
+			{
+				id: 'missing',
+				label: 'Missing input',
+				href: '/purchase/fake-checkout?name=aurora&email=alex%40example.com&scenario=missing'
+			},
 			{
 				id: 'processing',
 				label: 'Processing',
@@ -123,8 +167,16 @@ export const designerPages: DesignerPage[] = [
 		label: 'Payment complete',
 		path: '/purchase/success',
 		scenarios: [
-			{ id: 'confirming', label: 'Confirming', href: '/purchase/success?name=aurora&pt=designer&scenario=confirming' },
-			{ id: 'fallback', label: 'Email fallback', href: '/purchase/success?name=aurora&pt=designer&scenario=fallback' }
+			{
+				id: 'confirming',
+				label: 'Confirming',
+				href: '/purchase/success?name=aurora&pt=designer&scenario=confirming'
+			},
+			{
+				id: 'fallback',
+				label: 'Email fallback',
+				href: '/purchase/success?name=aurora&pt=designer&scenario=fallback'
+			}
 		]
 	},
 	{

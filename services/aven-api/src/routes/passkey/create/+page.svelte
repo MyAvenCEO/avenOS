@@ -1,8 +1,8 @@
 <script lang="ts">
+import { appRuntime } from 'virtual:aven-app-runtime'
 import { onMount } from 'svelte'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import { appRuntime } from 'virtual:aven-app-runtime'
 
 const initial = appRuntime.initial.passkey(page.url)
 let name = $state(initial.name)

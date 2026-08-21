@@ -1,7 +1,7 @@
 <script lang="ts">
+import { appRuntime } from 'virtual:aven-app-runtime'
 import { onMount } from 'svelte'
 import { page } from '$app/state'
-import { appRuntime } from 'virtual:aven-app-runtime'
 import type { NameAvailability, NameHoldResult } from '$lib/types.js'
 
 const initial = appRuntime.initial.secureName(page.url)

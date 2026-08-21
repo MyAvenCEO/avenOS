@@ -15,6 +15,11 @@ function withSession(href: string): string {
 	return `${target.pathname}${target.search}`
 }
 
+function firstScenarioHref(item: (typeof designerPages)[number] | undefined): string {
+	const href = item?.scenarios[0]?.href
+	return href ? withSession(href) : ''
+}
+
 function setSession(value: string) {
 	const target = new URL(page.url)
 	if (value) target.searchParams.set('session', value)
@@ -32,11 +37,11 @@ function navigate(href: string) {
 	<label>
 		<span>Page</span>
 		<select
-			value={selectedPage ? withSession(selectedPage.scenarios[0]!.href) : ''}
+			value={firstScenarioHref(selectedPage)}
 			onchange={(event) => navigate((event.currentTarget as HTMLSelectElement).value)}
 		>
 			{#each designerPages as item}
-				<option value={withSession(item.scenarios[0]!.href)}>{item.label}</option>
+				<option value={firstScenarioHref(item)}>{item.label}</option>
 			{/each}
 		</select>
 	</label>
