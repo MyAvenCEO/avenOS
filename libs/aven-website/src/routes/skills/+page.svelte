@@ -12,7 +12,7 @@ import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SkillMarketplaceCard from '$lib/components/SkillMarketplaceCard.svelte'
 import { PLANS, type PlanId, planIncludes, priceLabel, VAT_NOTE } from '$lib/pricing/plans'
-import { loadSkills, loadSkillsByPlan, skillDetailHref } from '$lib/skills/loader'
+import { loadSkills, loadSkillsByPlan, skillDetailHref, skillsIncludedIn } from '$lib/skills/loader'
 
 const skills = loadSkills('de')
 const byPlan = loadSkillsByPlan('de')
@@ -82,8 +82,11 @@ const chainSteps = [
 				<p class="mt-1 text-[11px] leading-snug text-foreground/45">
 					Jeder Plan enthält alles aus den Plänen darunter.
 				</p>
+				<!-- Only plans that actually carry skills: avenID sat here forever
+				     showing an empty catalogue, which is a filter that can only
+				     disappoint. -->
 				<div class="mt-4 space-y-2">
-					{#each PLANS as p (p.id)}
+					{#each PLANS.filter((pl) => skillsIncludedIn(pl.id, 'de').length > 0) as p (p.id)}
 						{@const included = planIncludes(selected, p.id)}
 						{@const isSelected = selected === p.id}
 						<button

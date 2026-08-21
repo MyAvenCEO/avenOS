@@ -44,10 +44,6 @@
 		{
 			"slug": "human-reviewer",
 			"relation": "Drafts come to you for final sign-off"
-		},
-		{
-			"slug": "golden-offer",
-			"relation": "Articles can end with converting offers"
 		}
 	],
 	"valueStack": {
