@@ -6,15 +6,19 @@
 	"scripts": {
 		"dev": "vite dev",
 		"dev:designer": "vite dev --mode designer",
-		"build": "vite build",
+		"build": "bun run email:check && vite build",
 		"build:designer": "vite build --mode designer",
 		"preview": "vite preview",
 		"preview:designer": "vite build --mode designer && vite preview --mode designer",
 		"start": "bun build/index.js",
+		"email:studio": "bun tools/email/studio.ts",
+		"email:preview": "maizzle serve",
+		"email:compile": "bun tools/email/build.ts",
+		"email:check": "bun tools/email/check.ts",
 		"worker:email": "bun scripts/email-worker.ts",
 		"worker:environment": "bun scripts/environment-worker.ts",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"test": "vitest run",
+		"test": "bun run email:check && vitest run",
 		"test:watch": "vitest",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "bun scripts/migrate.ts",
@@ -35,6 +39,8 @@
 		"zod": "4.4.3"
 	},
 	"devDependencies": {
+		"@maizzle/framework": "6.1.0",
+		"@maizzle/tailwindcss": "1.5.6",
 		"@sveltejs/adapter-node": "^5.5.0",
 		"@sveltejs/kit": "2.69.3",
 		"@sveltejs/vite-plugin-svelte": "7.0.0",
@@ -42,10 +48,13 @@
 		"@types/nodemailer": "7.0.11",
 		"@types/pg": "8.15.6",
 		"drizzle-kit": "0.31.10",
+		"shiki": "^4.4.3",
 		"svelte": "5.56.5",
 		"svelte-check": "4.4.6",
+		"tailwind-merge": "^3.6.0",
 		"typescript": "6.0.3",
 		"vite": "8.1.4",
-		"vitest": "4.1.10"
+		"vitest": "4.1.10",
+		"vue": "^3.5.41"
 	}
 }
