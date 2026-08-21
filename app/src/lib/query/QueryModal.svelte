@@ -112,9 +112,15 @@ function windowFor(key: string) {
 				{:else if answer.kind === 'view'}
 					{@const win = registryTick.v >= 0 ? windowFor(answer.window) : undefined}
 					{#if win}
-						<div class="overflow-hidden rounded-xl border border-foreground/10 bg-surface-soft">
+						<!-- A view fills the band. AvenUiView's host is already `flex-1`, but
+						     it can only grow inside a flex column that HAS a height — without
+						     these two the board collapsed to its content and left the rest of
+						     the surface empty. -->
+						<div
+							class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-foreground/10 bg-surface-soft"
+						>
 							<p
-								class="border-foreground/5 border-b px-3 py-1.5 font-mono text-[0.5625rem] text-foreground/40 uppercase tracking-wide"
+								class="shrink-0 border-foreground/5 border-b px-3 py-1.5 font-mono text-[0.5625rem] text-foreground/40 uppercase tracking-wide"
 							>
 								{answer.title}
 							</p>
@@ -140,7 +146,7 @@ function windowFor(key: string) {
 		{#if chat.turns.length > 0 || listener.partial !== ''}
 			<div
 				bind:this={chatEl}
-				class="max-h-[38%] shrink-0 overflow-y-auto border-foreground/10 border-t bg-surface-soft px-3 py-2.5"
+				class="max-h-[26%] shrink-0 overflow-y-auto border-foreground/10 border-t bg-surface-soft px-3 py-2.5"
 			>
 				<div class="flex flex-col gap-1.5">
 					{#each chat.turns as turn (turn.id)}
