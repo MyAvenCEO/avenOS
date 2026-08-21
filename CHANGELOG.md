@@ -1,3 +1,74 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.5...v) (2026-08-21)
+
+
+### Bug Fixes
+
+* **api:** the image build can see the aven-skills workspace ([ad3a5c4](https://github.com/MyAvenCEO/avenOS/commit/ad3a5c4ba09cd87dee7903aea1ab5a777946d6b0))
+* **intents:** log runs behind the gate, ends at its end, and stops repeating it ([c627aa4](https://github.com/MyAvenCEO/avenOS/commit/c627aa4418ac21fce8633abc683472ee807fc207))
+* **query:** chat band back to 30%, font back to 13px ([97185cb](https://github.com/MyAvenCEO/avenOS/commit/97185cbc5c9d7ad9b4128c9ae26679f4b0470edd))
+* **query:** gate back to the dock, rail logo out, modal above and bigger ([c704b6e](https://github.com/MyAvenCEO/avenOS/commit/c704b6ea15a7074fea59f6db8afc3012a9c5131a))
+* **query:** gate into the intents column; chat autoscroll; one-message input bug ([f07792f](https://github.com/MyAvenCEO/avenOS/commit/f07792f0ed3c986a2201479fb97e095efd63b2f6))
+* **shell:** make the rail one exclusive group; fold the cream family to four ([c8e3aae](https://github.com/MyAvenCEO/avenOS/commit/c8e3aae86424e941f4b236d2d22103cba464c303)), closes [#f9f5e6](https://github.com/MyAvenCEO/avenOS/issues/f9f5e6) [#f6f3e8](https://github.com/MyAvenCEO/avenOS/issues/f6f3e8) [#efeada](https://github.com/MyAvenCEO/avenOS/issues/efeada) [#f6f1e2](https://github.com/MyAvenCEO/avenOS/issues/f6f1e2) [#fffdf7](https://github.com/MyAvenCEO/avenOS/issues/fffdf7)
+* **skills:** restore the catalog reconciliation the linearisation dropped ([535362b](https://github.com/MyAvenCEO/avenOS/commit/535362b63c977f872141df93a269285a99b43eb5))
+* **skills:** the app shows the catalog's names, not its own ids ([9db456e](https://github.com/MyAvenCEO/avenOS/commit/9db456e3630dcdfe298480a03e5c50cb4e834973))
+* **ui:** revive two colour classes left dead by the role renames ([ddb31cf](https://github.com/MyAvenCEO/avenOS/commit/ddb31cf695ad6aab5ec53e7cba8ab6df7803d747))
+* **ui:** scale the app by its root font size, not by zoom ([4613665](https://github.com/MyAvenCEO/avenOS/commit/4613665bef1a0a2d7ea451b7a5dbd924f8787c6c)), closes [#217e91](https://github.com/MyAvenCEO/avenOS/issues/217e91)
+* **website:** a visible dashed edge, and sparks that say how many ([362f8a3](https://github.com/MyAvenCEO/avenOS/commit/362f8a344f6b39d93ccb4707ab37bf9af9d9375f))
+* **website:** meet the two Sparks before reading the formula ([b55dc35](https://github.com/MyAvenCEO/avenOS/commit/b55dc35c79c8a60d7ddb51807ffac67785f7ef07))
+* **website:** net prices on every number, "Alles aus X" as a real bullet ([bcee019](https://github.com/MyAvenCEO/avenOS/commit/bcee019ae9220c5d3077a9fc19a5efa29fb7ccb0))
+* **website:** one beel bullet in avenCOOP, not two ([17b0b09](https://github.com/MyAvenCEO/avenOS/commit/17b0b09b5157db252f3f21dc653dda9fffcc8216))
+* **website:** one hero paragraph, and the two Sparks under the formula ([56fa47e](https://github.com/MyAvenCEO/avenOS/commit/56fa47e3abbc9997222e3ce033ccb5c7ca8c3e4d))
+* **website:** runtime scales with the tier, and a price is one line ([a3b196b](https://github.com/MyAvenCEO/avenOS/commit/a3b196be8a9161922407b8edb31314a3a74adc63))
+* **website:** shipped skills first, runtime after the list, commission as a number ([65c2b71](https://github.com/MyAvenCEO/avenOS/commit/65c2b715e28c6a9ced8200694522fa68c9a433c7))
+* **website:** stakes before the day, and two hero lines instead of four ([12d08b7](https://github.com/MyAvenCEO/avenOS/commit/12d08b7bf02384c46638b0ca39a4a5487f4f0b4d))
+* **website:** sunflower everywhere, a hero of two beats, and a warmer card ([744e3ff](https://github.com/MyAvenCEO/avenOS/commit/744e3ff308307102b5fc4b482f5546d6e634e9a2))
+* **website:** sunflower on the display line, a name held for a year, two cuts ([0e9094b](https://github.com/MyAvenCEO/avenOS/commit/0e9094b90c6fd93bc49186dc5a4ebb385c07f355)), closes [#d2a24a](https://github.com/MyAvenCEO/avenOS/issues/d2a24a)
+* **website:** the collective section is a vision, not a pricing explainer ([558abab](https://github.com/MyAvenCEO/avenOS/commit/558ababe509c67eb8673990e62519ac66cea7c4d))
+* **website:** the contrast in one breath, and the asset is the pair ([0f2ca61](https://github.com/MyAvenCEO/avenOS/commit/0f2ca61a8dccf6beef3fd25ea5446eb8cf4ed39f))
+* **website:** the headline stops at the potential ([05bd768](https://github.com/MyAvenCEO/avenOS/commit/05bd7685867fe71a2306cae1736230a657299381))
+* **website:** the hero promise ends on why, not on blame ([7df6a3d](https://github.com/MyAvenCEO/avenOS/commit/7df6a3d2e785f85926a0bf3bf023511dfb9e0f10))
+* **website:** the hero says it in four lines ([846a4c9](https://github.com/MyAvenCEO/avenOS/commit/846a4c9bca4c817fb263f7c8ee98ed9946d4f8d2))
+* **website:** the hero says what an Aven IS, in the first line ([ead5082](https://github.com/MyAvenCEO/avenOS/commit/ead50823f3b41219901f407cc8b20a8d6f155882))
+* **website:** the hero sub-header reads in ink, sunflower marks one phrase ([0fc83c1](https://github.com/MyAvenCEO/avenOS/commit/0fc83c1174fa795e09763bcd688fbb6e6f20e610))
+* **website:** the revenue share is its own block on the card ([ddf11c1](https://github.com/MyAvenCEO/avenOS/commit/ddf11c1e8bb3403601070456c485c65ee13f1b9c))
+* **website:** the Spark line is the headline of the movement ([b234ba6](https://github.com/MyAvenCEO/avenOS/commit/b234ba64f3dead0f30012dc505102583c46f0b9a))
+* **website:** the Spark section hands over with a question ([0645b5e](https://github.com/MyAvenCEO/avenOS/commit/0645b5eb38596b44291121dc88cacffd85551f98))
+
+
+### Features
+
+* **auth:** the passkey gate shows, but does not hold the door ([caa1c14](https://github.com/MyAvenCEO/avenOS/commit/caa1c1473f6d4d05d671995d9fa64cae119d0f36))
+* **hitl:** one layout per decision shape; intents sort by urgency; centered column heads ([b4349cf](https://github.com/MyAvenCEO/avenOS/commit/b4349cf58c9d2db0a3acec5a36be08089fc14f20))
+* **hitl:** the gate carries what it decides — eggshell card, marine footer, nine scenarios ([b62adb0](https://github.com/MyAvenCEO/avenOS/commit/b62adb0c6b31a7ff76d9287323188e4f7b8ab4c8))
+* **intents:** five color-coded intent states; two-row cards; skills moves into the rail ([6a66107](https://github.com/MyAvenCEO/avenOS/commit/6a66107e69773687b828761b4d413ed878a7a07d))
+* **query:** one answer surface — the universal query modal (0159, slice 1) ([65c0e7e](https://github.com/MyAvenCEO/avenOS/commit/65c0e7ee6ea87b43a0830a42a921df768f9cec24)), closes [#68](https://github.com/MyAvenCEO/avenOS/issues/68)
+* **query:** tool results inline in the chat; bigger chat text; gate as its own card ([8e3f412](https://github.com/MyAvenCEO/avenOS/commit/8e3f41247e1767cd0d011cf6ff867a581ebcbbae))
+* **settings:** category nav and a brand-colour surface; centre the intent state header ([5702840](https://github.com/MyAvenCEO/avenOS/commit/5702840672b856d5f425e6966f77cdb1c4ff51dc))
+* **skills:** one catalog for the website and the app ([8712245](https://github.com/MyAvenCEO/avenOS/commit/8712245c1296e3f12db1bdea5830812ab752dd3b))
+* **website:** "Sichere dir deinen Aven" in the nav, coming-soon skills, no golden offer ([d47678d](https://github.com/MyAvenCEO/avenOS/commit/d47678de012711668b52e3d108a0218516b3ecec))
+* **website:** a board of taken avenIDs under every call to action ([27bc155](https://github.com/MyAvenCEO/avenOS/commit/27bc1559d9525217e78ebd6ddeca0b7d0cc5b31f))
+* **website:** a commission block on every tier that earns one ([be6179a](https://github.com/MyAvenCEO/avenOS/commit/be6179a85e22337385d30162ae825bf55b614964))
+* **website:** a global footer, the aven mark in the navbar, and named subjects ([eee9602](https://github.com/MyAvenCEO/avenOS/commit/eee9602db0010657f0c3b26cbc0b49cd94be425a))
+* **website:** a runtime block on every tier, and the VAT clause instead of "netto" ([bef9ec7](https://github.com/MyAvenCEO/avenOS/commit/bef9ec7fa1b3145f59deb97ff030816516cbc553))
+* **website:** avenCEO's features are skills too, and the commission sits under the CTA ([b1cfebd](https://github.com/MyAvenCEO/avenOS/commit/b1cfebdd0b9d6b1b01d0e14e858a5e1d580c03cf))
+* **website:** calendar organizer + todo shuffler, and the Post's real price ([671d26e](https://github.com/MyAvenCEO/avenOS/commit/671d26e61f31d45e5e1e2bc317a013dd497af431))
+* **website:** inbox router, bookmark champion, and availability from one source ([b5a6fba](https://github.com/MyAvenCEO/avenOS/commit/b5a6fbabbc0d37133114df47f2c6c265d7c398c3))
+* **website:** lead with the potential, not the funeral — and name the collective ([8eda1cf](https://github.com/MyAvenCEO/avenOS/commit/8eda1cf4b832ba19898a2ce401f7a1f9daaf37be))
+* **website:** one hero promise, pain before ownership, sunflower eyebrows ([acb7ac8](https://github.com/MyAvenCEO/avenOS/commit/acb7ac8dbf902417696f6f7ab5bf666353e0f27c))
+* **website:** one section between hero and thesis, and a hero that promises ([d4eaa3e](https://github.com/MyAvenCEO/avenOS/commit/d4eaa3e52c320b07efdc3fe69a41e76fafd33cdb))
+* **website:** Petit Formal Script carries the titles ([9ee40a7](https://github.com/MyAvenCEO/avenOS/commit/9ee40a71a0625c1bdd8d67b1968ad26c940a5edd))
+* **website:** plan features can BE a skill, and link to it ([4dc1d02](https://github.com/MyAvenCEO/avenOS/commit/4dc1d02512d734531f1cbd3fc6f3fba254f01798))
+* **website:** runtime gets cheaper up the ladder, commission gets richer ([738984e](https://github.com/MyAvenCEO/avenOS/commit/738984ef49fafa74afa9ce93c2695f7e531a78a9))
+* **website:** sync the marketing site to the brand tokens, collapse five tiers to three ([509545b](https://github.com/MyAvenCEO/avenOS/commit/509545b04011240c8289adba80826c1a945ced65)), closes [#e8ede1](https://github.com/MyAvenCEO/avenOS/issues/e8ede1) [#2c5f6b](https://github.com/MyAvenCEO/avenOS/issues/2c5f6b)
+* **website:** tell us what you want to build — the wildcard step ([20edeb5](https://github.com/MyAvenCEO/avenOS/commit/20edeb514dcf9affd4da3147d6258f4ed9d9cb8a))
+* **website:** the board is the queue, with your place open at the bottom ([6d5a20e](https://github.com/MyAvenCEO/avenOS/commit/6d5a20e86cae73ec7d9b935323341eba9023475f))
+* **website:** the share is a reinvest — and the vision is 1 million founders ([66578fa](https://github.com/MyAvenCEO/avenOS/commit/66578fab75cd963b0c666e6213820d4571dd00f2))
+* **website:** the waitlist explains why the avenID comes first, and drops the newsletter ([3d1f9b1](https://github.com/MyAvenCEO/avenOS/commit/3d1f9b1598e97c507c00a6e8888f4b4433825fd6))
+
+
+### Reverts
+
+* Revert "feat(website): Petit Formal Script carries the titles" ([16838ad](https://github.com/MyAvenCEO/avenOS/commit/16838adfcf9bd3900950e516f6bc906a5385aabe))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.4...v) (2026-08-21)
 
 
