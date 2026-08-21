@@ -37,8 +37,8 @@ async function create() {
 	{#if firefoxLinux}
 		<div class="alert">
 			Firefox unter Linux hat keinen eingebauten Passkey‑Anbieter. Nutze einen
-			FIDO2‑Sicherheitsschlüssel oder eine Passkey‑Erweiterung — oder öffne den ursprünglichen
-			Link auf einem Gerät, das einen hat.
+			FIDO2‑Sicherheitsschlüssel oder eine Passkey‑Erweiterung — oder öffne den ursprünglichen Link
+			auf einem Gerät, das einen hat.
 		</div>
 	{/if}
 	{#if error}
