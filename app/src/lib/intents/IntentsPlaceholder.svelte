@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
 import '@xyflow/svelte/dist/style.css'
+import type { HeldPreview } from '$lib/actors/bus'
 import { bus } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
@@ -74,17 +75,7 @@ interface MockIntent {
 	 * state — `waiting` means the intent AS A WHOLE is blocked on it; in the
 	 * other states it is one optional confirmation beside work that runs on.
 	 */
-	hitl?: {
-		label: string
-		method: string
-		actor: string
-		preview: {
-			kind: string
-			title: string
-			body?: string
-			rows?: { label: string; value: string }[]
-		}
-	}
+	hitl?: { label: string; method: string; actor: string; preview: HeldPreview }
 }
 
 const TYPE_STYLE: Record<string, string> = {
@@ -245,12 +236,10 @@ const INTENTS: MockIntent[] = [
 			actor: 'docs',
 			preview: {
 				kind: 'entwurf',
-				title: 'Brief an Techniker Krankenkasse · 1 Anhang',
-				body: 'Sehr geehrte Damen und Herren, anbei der angeforderte Einkommensnachweis für den Zeitraum Januar bis Juni 2025. Mit freundlichen Grüßen, Samuel Andert',
-				rows: [
-					{ label: 'Anhang', value: 'einkommensnachweis.pdf' },
-					{ label: 'Frist', value: '15.09.' }
-				]
+				layout: 'document',
+				title: 'An Techniker Krankenkasse · Frist 15.09.',
+				body: 'Sehr geehrte Damen und Herren,\n\nanbei der angeforderte Einkommensnachweis für den Zeitraum Januar bis Juni 2025.\n\nMit freundlichen Grüßen\nSamuel Andert',
+				attachments: ['einkommensnachweis.pdf']
 			}
 		}
 	},
@@ -330,12 +319,13 @@ const INTENTS: MockIntent[] = [
 			actor: 'abgleich',
 			preview: {
 				kind: 'zahlung',
+				layout: 'ledger',
 				title: 'Möbelhaus Nord GmbH — Rechnung R-2025-8842',
 				rows: [
 					{ label: 'Betrag', value: '249,00 €' },
 					{ label: 'Fällig', value: '30.08.' },
 					{ label: 'IBAN', value: 'DE12 3456 7890 1234 5678 00' },
-					{ label: 'Konto', value: 'Giro · 4.120,55 €' }
+					{ label: 'Von Konto', value: 'Giro · 4.120,55 €' }
 				]
 			}
 		}
@@ -419,11 +409,12 @@ const INTENTS: MockIntent[] = [
 			actor: 'brain',
 			preview: {
 				kind: 'zuordnung',
-				title: 'handwerker-bad-2023.pdf → Handwerkerleistungen',
-				rows: [
-					{ label: 'Vorschlag', value: 'Handwerkerleistungen §35a' },
-					{ label: 'Zuversicht', value: '78 % — unter der Schwelle' },
-					{ label: 'Alternative', value: 'Erhaltungsaufwand' }
+				layout: 'choice',
+				title: 'handwerker-bad-2023.pdf — wohin gehört das?',
+				options: [
+					{ label: 'Handwerkerleistungen §35a', note: '78 %', chosen: true },
+					{ label: 'Erhaltungsaufwand', note: '19 %' },
+					{ label: 'Privat — nicht absetzbar', note: '3 %' }
 				]
 			}
 		}
@@ -471,11 +462,17 @@ const INTENTS: MockIntent[] = [
 			actor: 'brain',
 			preview: {
 				kind: 'dublette',
-				title: '[[Hausverwaltung Berg]] ↔ [[HV Berg GmbH]]',
-				rows: [
-					{ label: 'Ähnlichkeit', value: '88 % — Adresse identisch' },
-					{ label: 'Behalten', value: 'Hausverwaltung Berg (9 Bezüge)' },
-					{ label: 'Verschmelzen', value: 'HV Berg GmbH (2 Bezüge)' }
+				layout: 'compare',
+				title: 'Ähnlichkeit 88 % — dieselbe Adresse',
+				sides: [
+					{
+						heading: 'Behalten',
+						lines: ['[[Hausverwaltung Berg]]', 'Bergstraße 14, Berlin', '9 Bezüge']
+					},
+					{
+						heading: 'Verschmelzen',
+						lines: ['[[HV Berg GmbH]]', 'Bergstr. 14, Berlin', '2 Bezüge']
+					}
 				]
 			}
 		}
@@ -523,11 +520,13 @@ const INTENTS: MockIntent[] = [
 			actor: 'docs',
 			preview: {
 				kind: 'löschen',
+				layout: 'list',
 				title: 'Unwiderruflich — das Original bleibt erhalten',
-				rows: [
-					{ label: 'Behalten', value: 'stromabrechnung-2024.pdf' },
-					{ label: 'Löschen', value: 'scan-0417.pdf · scan-0418.pdf' },
-					{ label: 'Löschen', value: 'IMG_2291.pdf' }
+				items: [
+					{ text: 'stromabrechnung-2024.pdf', note: 'Original' },
+					{ text: 'scan-0417.pdf', note: 'identisch', struck: true },
+					{ text: 'scan-0418.pdf', note: 'identisch', struck: true },
+					{ text: 'IMG_2291.pdf', note: 'Foto derselben Seite', struck: true }
 				]
 			}
 		}
@@ -576,11 +575,14 @@ const INTENTS: MockIntent[] = [
 			actor: 'calendar',
 			preview: {
 				kind: 'konflikt',
+				layout: 'compare',
 				title: 'Donnerstag, 28.08. — zwei Termine zur selben Zeit',
-				rows: [
-					{ label: 'Neu', value: 'Anmeldegespräch Kita · 10:00–11:00' },
-					{ label: 'Bestehend', value: 'Team-Review · 10:30–11:30' },
-					{ label: 'Alternative', value: '28.08. · 14:00 frei' }
+				sides: [
+					{
+						heading: 'Neu',
+						lines: ['Anmeldegespräch Kita', '10:00 – 11:00', 'Stadt · Kita Sonnenblume']
+					},
+					{ heading: 'Bestehend', lines: ['Team-Review', '10:30 – 11:30', 'überschneidet 30 Min'] }
 				]
 			}
 		}
@@ -644,11 +646,14 @@ const INTENTS: MockIntent[] = [
 			actor: 'abgleich',
 			preview: {
 				kind: 'abgleich',
-				title: 'Miete August −1.150,00 € ↔ Dauerauftrag Vermieter',
-				rows: [
-					{ label: 'Score', value: '91 % — unter Auto-Schwelle' },
-					{ label: 'Buchung', value: '28.07. · −1.150,00 €' },
-					{ label: 'Offener Posten', value: 'Miete 08/2025' }
+				layout: 'compare',
+				title: 'Score 91 % — knapp unter der Auto-Schwelle',
+				sides: [
+					{
+						heading: 'Buchung',
+						lines: ['28.07. · −1.150,00 €', 'Hausverwaltung Berg', 'Dauerauftrag']
+					},
+					{ heading: 'Offener Posten', lines: ['Miete 08/2025', '1.150,00 €', 'fällig 03.08.'] }
 				]
 			}
 		}
@@ -702,11 +707,10 @@ const INTENTS: MockIntent[] = [
 			actor: 'docs',
 			preview: {
 				kind: 'ablage',
-				title: 'bestaetigung-telekom.pdf → [[Verträge]] / Mobilfunk',
-				rows: [
-					{ label: 'Erkannt', value: 'Kündigungsbestätigung' },
-					{ label: 'Vertragsende', value: '31.08.' }
-				]
+				layout: 'document',
+				title: 'Ablage in [[Verträge]] / Mobilfunk',
+				body: 'Telekom Deutschland bestätigt die Kündigung zum 31.08.2025. Vertragsnummer 4412-88231. Eine weitere Rechnung folgt für den letzten Abrechnungszeitraum.',
+				attachments: ['bestaetigung-telekom.pdf']
 			}
 		}
 	},
@@ -765,11 +769,12 @@ const INTENTS: MockIntent[] = [
 			actor: 'docs',
 			preview: {
 				kind: 'fehlt',
-				title: 'Kein FitX-Vertrag im Archiv gefunden',
-				rows: [
-					{ label: 'Gesucht in', value: 'Archiv · 428 Dokumente' },
-					{ label: 'Treffer', value: 'keine' },
-					{ label: 'Nächster Schritt', value: 'Vertrag hochladen oder Ort nennen' }
+				layout: 'choice',
+				title: 'Kein FitX-Vertrag im Archiv — 428 Dokumente durchsucht',
+				options: [
+					{ label: 'Vertrag jetzt hochladen', note: 'empfohlen', chosen: true },
+					{ label: 'Ohne Vertrag kündigen', note: 'Frist unbekannt' },
+					{ label: 'Ich sage dir, wo er liegt', note: 'Freitext' }
 				]
 			}
 		}
@@ -790,7 +795,19 @@ const chat = chatActor.core
 
 /** Done intents rest in the archive — a toggle, closed by default. */
 let archiveOpen = $state(false)
-const activeIntents = $derived(INTENTS.filter((i) => i.status !== 'archive'))
+/** What needs you first: broken, then blocked, then moving, then settled. */
+const STATE_ORDER: Record<IntentState, number> = {
+	error: 0,
+	waiting: 1,
+	working: 2,
+	done: 3,
+	archive: 4
+}
+const activeIntents = $derived(
+	INTENTS.filter((i) => i.status !== 'archive').sort(
+		(a, b) => STATE_ORDER[a.status] - STATE_ORDER[b.status]
+	)
+)
 const archivedIntents = $derived(INTENTS.filter((i) => i.status === 'archive'))
 
 /**
@@ -805,6 +822,11 @@ let skillView = $state<SkillStatus | null>(null)
  * Every intent's gate goes into the REAL queue, tagged with its intent —
  * the bar above the pill shows only the one whose intent is on screen.
  */
+// The queue is an HMR-surviving singleton: drop gates from earlier mock
+// generations, or a stale one without its preview shadows the real thing.
+const mockIds = new Set(INTENTS.filter((i) => i.hitl).map((i) => `mock-${i.id}`))
+hitlQueue.items = hitlQueue.items.filter((h) => !h.id.startsWith('mock-') || mockIds.has(h.id))
+
 for (const intent of INTENTS) {
 	if (!intent.hitl) continue
 	const id = `mock-${intent.id}`
@@ -1007,7 +1029,9 @@ const DOT: Record<string, string> = {
 	{:else}
 		<!-- LEFT: the intent stream — compact cards, cream selection. -->
 		<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
-			<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+			<h2
+				class="px-1 pt-1 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
+			>
 				Intents · {activeIntents.length}
 			</h2>
 			{#each activeIntents as intent (intent.id)}
@@ -1039,6 +1063,9 @@ const DOT: Record<string, string> = {
 					<!-- row 2: where it came from, when, and where it stands -->
 					<div class="flex items-center gap-2 pt-1">
 						<span class="truncate text-[0.6875rem] text-foreground/45">{intent.source}</span>
+						<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
+							{intent.when}
+						</span>
 						{#if intent.deadline}
 							<span
 								class="shrink-0 rounded-full bg-[#c15b40]/10 px-1.5 py-0.5 font-mono text-[#9c4832] text-[0.5625rem]"
@@ -1046,9 +1073,6 @@ const DOT: Record<string, string> = {
 								{intent.deadline}
 							</span>
 						{/if}
-						<span class="ml-auto shrink-0 font-mono text-[0.625rem] {accent.text}">
-							{STATUS_LABEL[intent.status]}
-						</span>
 					</div>
 				</button>
 			{/each}
@@ -1101,9 +1125,6 @@ const DOT: Record<string, string> = {
 						</div>
 						<div class="flex items-center gap-2 pt-1">
 							<span class="truncate text-[0.6875rem] text-foreground/45">{intent.source}</span>
-							<span class="ml-auto shrink-0 font-mono text-[#46617f] text-[0.625rem]">
-								{STATUS_LABEL[intent.status]}
-							</span>
 						</div>
 					</button>
 				{/each}
@@ -1472,7 +1493,9 @@ const DOT: Record<string, string> = {
 		<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
 		{#if !talk.open}
 			<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
-				<h2 class="px-1 pt-1 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+				<h2
+					class="px-1 pt-1 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
+				>
 					Skills · {selected.skills.length}
 				</h2>
 				{#each selected.skills as s (s.skill)}
@@ -1505,7 +1528,9 @@ const DOT: Record<string, string> = {
 				{/each}
 
 				{#if !talk.open}
-					<h2 class="px-1 pt-3 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+					<h2
+						class="px-1 pt-3 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
+					>
 						Artefakte · {selected.artifacts.length}
 					</h2>
 					{#each selected.artifacts as artifact (artifact.title)}
