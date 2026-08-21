@@ -65,7 +65,7 @@ interface MockIntent {
 	source: string
 	when: string
 	deadline?: string
-	status: 'captured' | 'running' | 'waiting' | 'collecting' | 'done'
+	status: IntentState
 	log: LogEntry[]
 	artifacts: MockArtifact[]
 	skills: SkillStatus[]
@@ -79,12 +79,32 @@ const TYPE_STYLE: Record<string, string> = {
 	auftrag: 'bg-[#8a6238]/15 text-[#8a6238]'
 }
 
-const STATUS_LABEL: Record<string, string> = {
-	captured: 'erfasst',
-	running: 'läuft',
+/**
+ * The five states an intent can be in — each with its own accent, worn as
+ * a 3px edge on the card so the stream is readable at a glance.
+ */
+type IntentState = 'working' | 'waiting' | 'done' | 'error' | 'archive'
+
+const STATUS_LABEL: Record<IntentState, string> = {
+	working: 'läuft',
 	waiting: 'wartet auf dich',
-	collecting: 'sammelt',
-	done: 'erledigt'
+	done: 'erledigt',
+	error: 'Fehler',
+	archive: 'archiviert'
+}
+
+/** edge = the 3px left border, text = the status word. */
+const STATE_ACCENT: Record<IntentState, { edge: string; text: string }> = {
+	// brand amber — something is moving
+	working: { edge: 'border-l-[#a06818]', text: 'text-[#a06818]' },
+	// paradise turquoise — the human gate (HITL)
+	waiting: { edge: 'border-l-[#3d8b84]', text: 'text-[#3d8b84]' },
+	// brand green — settled
+	done: { edge: 'border-l-[#2f5d50]', text: 'text-[#2f5d50]' },
+	// terracotta — the HITL failure
+	error: { edge: 'border-l-[#c15b40]', text: 'text-[#9c4832]' },
+	// grey-blue — out of the way
+	archive: { edge: 'border-l-[#5b7a9d]', text: 'text-[#46617f]' }
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -211,7 +231,7 @@ const INTENTS: MockIntent[] = [
 		source: 'Upload · Rechnung',
 		when: 'heute · 08:44',
 		deadline: 'bis 30.08.',
-		status: 'running',
+		status: 'working',
 		log: [
 			{
 				step: 'Rechnung hochgeladen',
@@ -282,7 +302,7 @@ const INTENTS: MockIntent[] = [
 		source: 'Dauerauftrag',
 		when: 'seit 02.08.',
 		deadline: 'bis 30.09.',
-		status: 'collecting',
+		status: 'working',
 		log: [
 			{
 				step: 'Sammel-Intent gestartet',
@@ -355,7 +375,7 @@ const INTENTS: MockIntent[] = [
 		title: 'Kontoauszug Juli abgleichen',
 		source: 'Upload · CSV',
 		when: 'gestern · 18:40',
-		status: 'done',
+		status: 'archive',
 		log: [
 			{
 				step: 'Kontoauszug hochgeladen',
@@ -404,12 +424,56 @@ const INTENTS: MockIntent[] = [
 		]
 	},
 	{
+		id: 'handyvertrag',
+		type: 'frist',
+		title: 'Handyvertrag rechtzeitig gekündigt',
+		source: 'Post-Scan · Brief',
+		when: 'heute · 07:20',
+		status: 'done',
+		log: [
+			{
+				step: 'Kündigungsfrist erkannt',
+				when: '05.08. · 09:10',
+				state: 'done',
+				skill: 'inbox',
+				note: 'Vertrag läuft am 31.08. aus · Frist 4 Wochen'
+			},
+			{
+				step: 'Kündigung freigegeben und versendet',
+				when: 'heute · 07:20',
+				state: 'done',
+				skill: 'docs',
+				note: 'Bestätigung liegt im Archiv'
+			}
+		],
+		artifacts: [
+			{ kind: 'doc', title: 'kuendigung-handyvertrag.pdf', note: 'versendet 07:20 · archiviert' },
+			{ kind: 'person', title: 'Telekom Deutschland', note: 'Firma · Mobilfunk' }
+		],
+		skills: [
+			{
+				skill: 'docs',
+				state: 'done',
+				note: 'Kündigung versendet',
+				workflow: 'respond',
+				done: ['request-trigger', 'draft', 'approve', 'finish']
+			},
+			{
+				skill: 'inbox',
+				state: 'done',
+				note: 'Frist erkannt · Intent extrahiert',
+				workflow: 'intake',
+				done: ['mail-trigger', 'upload-trigger', 'normalize', 'classify', 'route']
+			}
+		]
+	},
+	{
 		id: 'fitnessstudio',
 		type: 'auftrag',
 		title: '„Kündige das Fitnessstudio"',
 		source: 'Freitext · Chat',
 		when: 'gestern · 21:15',
-		status: 'captured',
+		status: 'error',
 		log: [
 			{
 				step: 'Auftrag erfasst',
@@ -426,11 +490,11 @@ const INTENTS: MockIntent[] = [
 				note: 'Kündigung: Vertrag finden, Frist prüfen, Schreiben aufsetzen'
 			},
 			{
-				step: 'Vertrag wird gesucht',
+				step: 'Vertrag nicht gefunden',
 				when: 'seit gestern',
-				state: 'running',
+				state: 'waiting',
 				skill: 'docs',
-				note: 'Archiv-Suche nach dem FitX-Vertrag läuft'
+				note: 'kein FitX-Vertrag im Archiv — lade ihn hoch oder sag mir, wo er liegt'
 			}
 		],
 		artifacts: [{ kind: 'entity', title: '[[FitX Vertrag]]', note: 'Brain · gesucht…' }],
@@ -469,8 +533,8 @@ const chat = chatActor.core
 
 /** Done intents rest in the archive — a toggle, closed by default. */
 let archiveOpen = $state(false)
-const activeIntents = $derived(INTENTS.filter((i) => i.status !== 'done'))
-const archivedIntents = $derived(INTENTS.filter((i) => i.status === 'done'))
+const activeIntents = $derived(INTENTS.filter((i) => i.status !== 'archive'))
+const archivedIntents = $derived(INTENTS.filter((i) => i.status === 'archive'))
 
 /**
  * The center shows ONE of three things: the activity log (default), an
@@ -688,43 +752,41 @@ const DOT: Record<string, string> = {
 			</h2>
 			{#each activeIntents as intent (intent.id)}
 				{@const sel = selectedId === intent.id && !talk.open}
+				{@const accent = STATE_ACCENT[intent.status]}
 				<button
 					type="button"
 					onclick={() => {
-					selectedId = intent.id
-					preview = null
-					skillView = null
-					talk.open = false
-				}}
-					class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
-					? 'border-foreground/15 bg-surface-card-selected'
-					: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
+						selectedId = intent.id
+						preview = null
+						skillView = null
+						talk.open = false
+					}}
+					class="rounded-xl border border-l-[3px] px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {accent.edge} {sel
+						? 'border-foreground/15 bg-surface-card-selected'
+						: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
 				>
-					<div class="flex items-center gap-2">
+					<!-- row 1: what it is — title, with its type on the right -->
+					<div class="flex items-baseline gap-2">
+						<p class="min-w-0 flex-1 font-medium text-xs leading-snug">{intent.title}</p>
 						<span
-							class="rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_STYLE[intent.type]}"
+							class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_STYLE[
+								intent.type
+							]}"
 						>
 							{intent.type}
 						</span>
-						<span class="ml-auto font-mono text-[0.625rem] text-foreground/35">{intent.when}</span>
 					</div>
-					<p class="pt-1 font-medium text-xs leading-snug">{intent.title}</p>
+					<!-- row 2: where it came from, when, and where it stands -->
 					<div class="flex items-center gap-2 pt-1">
-						<span class="text-[0.6875rem] text-foreground/45">{intent.source}</span>
+						<span class="truncate text-[0.6875rem] text-foreground/45">{intent.source}</span>
 						{#if intent.deadline}
 							<span
-								class="rounded-full bg-[#c15b40]/10 px-1.5 py-0.5 font-mono text-[#9c4832] text-[0.5625rem]"
+								class="shrink-0 rounded-full bg-[#c15b40]/10 px-1.5 py-0.5 font-mono text-[#9c4832] text-[0.5625rem]"
 							>
 								{intent.deadline}
 							</span>
 						{/if}
-						<span
-							class="ml-auto font-mono text-[0.5625rem] {intent.status === 'waiting'
-							? 'text-[#9c4832]'
-							: intent.status === 'done'
-								? 'text-[#2f5d50]'
-								: 'text-foreground/40'}"
-						>
+						<span class="ml-auto shrink-0 font-mono text-[0.625rem] {accent.text}">
 							{STATUS_LABEL[intent.status]}
 						</span>
 					</div>
@@ -758,29 +820,30 @@ const DOT: Record<string, string> = {
 					<button
 						type="button"
 						onclick={() => {
-						selectedId = intent.id
-						preview = null
-						skillView = null
-						talk.open = false
-					}}
-						class="rounded-xl border px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
-						? 'border-foreground/15 bg-surface-card-selected opacity-100'
-						: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
+							selectedId = intent.id
+							preview = null
+							skillView = null
+							talk.open = false
+						}}
+						class="rounded-xl border border-l-[3px] border-l-[#5b7a9d] px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
+							? 'border-foreground/15 bg-surface-card-selected opacity-100'
+							: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
 					>
-						<div class="flex items-center gap-2">
+						<div class="flex items-baseline gap-2">
+							<p class="min-w-0 flex-1 font-medium text-xs leading-snug">{intent.title}</p>
 							<span
-								class="rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_STYLE[intent.type]}"
+								class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_STYLE[
+									intent.type
+								]}"
 							>
 								{intent.type}
 							</span>
-							<span class="ml-auto font-mono text-[0.5625rem] text-foreground/35"
-								>{intent.when}</span
-							>
 						</div>
-						<p class="pt-1 font-medium text-xs leading-snug">{intent.title}</p>
 						<div class="flex items-center gap-2 pt-1">
-							<span class="text-[0.6875rem] text-foreground/45">{intent.source}</span>
-							<span class="ml-auto font-mono text-[#2f5d50] text-[0.625rem]">erledigt</span>
+							<span class="truncate text-[0.6875rem] text-foreground/45">{intent.source}</span>
+							<span class="ml-auto shrink-0 font-mono text-[#46617f] text-[0.625rem]">
+								{STATUS_LABEL[intent.status]}
+							</span>
 						</div>
 					</button>
 				{/each}
