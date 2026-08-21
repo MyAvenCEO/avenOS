@@ -24,7 +24,6 @@ export const POST: RequestHandler = async ({ request }) => {
 	const payload = {
 		email,
 		name: typeof body.name === 'string' ? body.name.trim().slice(0, 120) : '',
-		newsletter: Boolean(body.newsletter),
 		intent: typeof body.intent === 'string' ? body.intent.slice(0, 64) : '',
 		preferredName:
 			typeof body.preferredName === 'string' ? body.preferredName.trim().slice(0, 48) : '',
