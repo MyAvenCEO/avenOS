@@ -11,6 +11,7 @@
  * Milestone 1: tags + changelog only. NO app build, NO upload, NO deploy.
  */
 import { execSync } from 'node:child_process'
+import { appendFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -25,7 +26,41 @@ function capture(cmd: string): string {
 	return execSync(cmd, { cwd: repoRoot, encoding: 'utf8' }).trim()
 }
 
+function fetchRemoteNext(): string {
+	run('git fetch --quiet origin +refs/heads/next:refs/remotes/origin/next')
+	return capture('git rev-parse refs/remotes/origin/next')
+}
+
+function emitReleaseOutcome(released: boolean, tag?: string, commit?: string): void {
+	const outputFile = process.env.GITHUB_OUTPUT
+	if (!outputFile) return
+
+	appendFileSync(outputFile, `released=${released}\n`)
+	if (tag) appendFileSync(outputFile, `tag=${tag}\n`)
+	if (commit) appendFileSync(outputFile, `commit=${commit}\n`)
+}
+
+function skipSupersededRelease(sourceSha: string, remoteSha: string): void {
+	console.log(
+		`[release-next] superseded: origin/next moved from ${sourceSha} to ${remoteSha}; skipping this release.`
+	)
+	emitReleaseOutcome(false)
+}
+
 function main(): void {
+	const sourceSha = dryRun ? undefined : process.env.GITHUB_SHA?.trim()
+	if (!dryRun) {
+		if (!sourceSha) {
+			throw new Error('GITHUB_SHA is required for a non-dry-run release')
+		}
+
+		const remoteSha = fetchRemoteNext()
+		if (remoteSha !== sourceSha) {
+			skipSupersededRelease(sourceSha, remoteSha)
+			return
+		}
+	}
+
 	const version = capture('bun ./scripts/next-version.ts --channel next')
 	const tag = `v${version}`
 	console.log(`[release-next] ${dryRun ? 'DRY RUN — would release' : 'releasing'} ${tag}`)
@@ -48,15 +83,27 @@ function main(): void {
 
 	run('git add -A')
 	run(`git commit -m "chore(release): ${tag} [skip ci]"`)
-	// Annotated tag + EXPLICIT tag push: `--follow-tags` skips lightweight tags, so
-	// push the ref and the tag separately to guarantee the tag lands before the release.
+	const releaseSha = capture('git rev-parse HEAD')
+	// Publish the branch and annotated tag atomically so neither can land without the
+	// other. A newer push may still win after the freshness check; detect that specific
+	// race and let the newer workflow run release the now-current commit.
 	run(`git tag -a ${tag} -m ${tag}`)
-	run('git push origin HEAD')
-	run(`git push origin ${tag}`)
+	try {
+		run(`git push --atomic origin HEAD:refs/heads/next refs/tags/${tag}`)
+	} catch (error) {
+		if (!sourceSha) throw error
+		const remoteSha = fetchRemoteNext()
+		if (remoteSha !== sourceSha) {
+			skipSupersededRelease(sourceSha, remoteSha)
+			return
+		}
+		throw error
+	}
 
 	// GitHub prerelease for the `next` channel (gh is preinstalled on GitHub runners).
 	run(`gh release create ${tag} --prerelease --title ${tag} --generate-notes`)
 
+	emitReleaseOutcome(true, tag, releaseSha)
 	console.log(`[release-next] done → ${tag}`)
 }
 
