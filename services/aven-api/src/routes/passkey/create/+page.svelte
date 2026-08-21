@@ -39,12 +39,14 @@ async function create() {
 }
 </script>
 
-<svelte:head><title>Create passkey</title></svelte:head>
+<svelte:head><title>Passkey anlegen · avenCEO</title></svelte:head>
 <section class="panel auth">
-	<h1>Create passkey</h1>
-	<label>Passkey name<input bind:value={name} maxlength="64"></label>
+	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
+	<h1>Passkey anlegen</h1>
+	<p>Ein Passkey ersetzt dein Passwort — er bleibt auf deinem Gerät.</p>
+	<label>Name des Passkeys<input bind:value={name} maxlength="64"></label>
 	{#if error}
 		<div class="alert">{error}</div>
 	{/if}
-	<button disabled={busy} onclick={create}>{busy ? "Waiting" : "Create passkey"}</button>
+	<button disabled={busy} onclick={create}>{busy ? 'Einen Moment …' : 'Passkey anlegen'}</button>
 </section>

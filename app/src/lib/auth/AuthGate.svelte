@@ -22,6 +22,19 @@ interface AuthStatus {
 	authenticated: boolean
 }
 
+/**
+ * The frame the embedded sign-in webview sits inside, in logical pixels.
+ *
+ * It used to start 16px from the top and run to 80px off the bottom, which
+ * covered the gate completely — the app's own screen existed but nobody ever
+ * saw it. The webview is a panel INSIDE our screen now: brand and device code
+ * above it, the escape hatch below, sign-in in the middle.
+ *
+ * These numbers are the layout in both directions — the CSS below reads them,
+ * so the hole and the thing filling it cannot drift apart.
+ */
+const FRAME = { top: 232, side: 24, bottom: 80 }
+
 const { children }: { children: Snippet } = $props()
 let ready = $state(!isTauri())
 let busy = $state(isTauri())
@@ -39,12 +52,13 @@ async function fitWebview() {
 	const window = getCurrentWindow()
 	const [physical, scale] = await Promise.all([window.innerSize(), window.scaleFactor()])
 	const size = physical.toLogical(scale)
-	const margin = 16
-	const footer = 80
 	await Promise.all([
-		authWebview.setPosition(new LogicalPosition(margin, margin)),
+		authWebview.setPosition(new LogicalPosition(FRAME.side, FRAME.top)),
 		authWebview.setSize(
-			new LogicalSize(Math.max(320, size.width - margin * 2), Math.max(320, size.height - footer))
+			new LogicalSize(
+				Math.max(320, size.width - FRAME.side * 2),
+				Math.max(280, size.height - FRAME.top - FRAME.bottom)
+			)
 		)
 	])
 }
@@ -63,16 +77,14 @@ async function openEmbedded() {
 	const physical = await window.innerSize()
 	const scale = await window.scaleFactor()
 	const size = physical.toLogical(scale)
-	const margin = 16
-	const footer = 80
 	const existing = await Webview.getByLabel('aven-auth')
 	if (existing) await existing.close()
 	authWebview = new Webview(window, 'aven-auth', {
 		url: verificationUrl,
-		x: margin,
-		y: margin,
-		width: Math.max(320, size.width - margin * 2),
-		height: Math.max(320, size.height - footer),
+		x: FRAME.side,
+		y: FRAME.top,
+		width: Math.max(320, size.width - FRAME.side * 2),
+		height: Math.max(280, size.height - FRAME.top - FRAME.bottom),
 		focus: true,
 		dragDropEnabled: false
 	})
@@ -189,58 +201,62 @@ onMount(() => {
 	{@render children()}
 {:else}
 	<!-- The gate is the first thing anyone sees of avenOS, so it wears the
-	     brand rather than raw slate: the cream ground, the marine ink, and the
-	     one card idiom the rest of the app uses. -->
-	<main class="fixed inset-0 grid place-items-center bg-surface-cream p-6 text-foreground">
-		<section class="w-full max-w-md text-center" aria-live="polite">
-			<img src="/aven-logo.svg" alt="" class="mx-auto size-14" width="56" height="56">
-			<h1 class="mt-6 font-semibold text-foreground text-xl tracking-tight">Willkommen zurück</h1>
-			<p class="mx-auto mt-2 max-w-sm text-foreground/60 text-sm leading-relaxed">{message}</p>
+	     brand: cream ground, marine ink, the app's card idiom. The embedded
+	     sign-in webview is a panel INSIDE this screen — it fills the band
+	     between the header and the footer, both sized from FRAME. -->
+	<main class="fixed inset-0 flex flex-col bg-surface-cream text-foreground">
+		<header
+			class="flex flex-col items-center justify-center px-6 text-center"
+			style="height: {FRAME.top}px"
+			aria-live="polite"
+		>
+			<img src="/aven-logo.svg" alt="" class="size-12" width="48" height="48">
+			<h1 class="mt-4 font-semibold text-foreground text-xl tracking-tight">Willkommen zurück</h1>
+			<p class="mx-auto mt-1.5 max-w-sm text-foreground/60 text-sm leading-relaxed">{message}</p>
 
 			{#if userCode}
-				<div
-					class="mt-6 rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-				>
-					<p class="font-semibold text-[10px] text-foreground/45 uppercase tracking-[0.14em]">
+				<p class="mt-3 flex items-baseline gap-2">
+					<span class="font-semibold text-[10px] text-foreground/45 uppercase tracking-[0.14em]">
 						Gerätecode
-					</p>
-					<p class="mt-2 font-mono font-semibold text-2xl text-foreground tracking-[0.18em]">
+					</span>
+					<span class="font-mono font-semibold text-base text-foreground tracking-[0.18em]">
 						{userCode}
-					</p>
-				</div>
+					</span>
+				</p>
 			{/if}
+		</header>
 
-			<div class="mt-6 flex justify-center gap-3">
-				{#if verificationUrl}
-					<button
-						type="button"
-						class="min-h-11 rounded-full border border-border px-6 font-medium text-foreground text-sm transition-colors hover:bg-surface-soft"
-						onclick={openInBrowser}
-					>
-						Im Browser öffnen
-					</button>
-				{/if}
-				{#if !busy}
-					<button
-						type="button"
-						class="min-h-11 rounded-full bg-primary px-6 font-semibold text-primary-foreground text-sm transition-opacity hover:opacity-90"
-						onclick={begin}
-					>
-						Erneut versuchen
-					</button>
-				{/if}
-			</div>
-		</section>
+		<!-- The hole the webview fills. Empty on purpose: when sign-in has not
+		     started (or failed) this is where the retry lives instead. -->
+		<div class="flex flex-1 items-center justify-center px-6">
+			{#if !busy && !verificationUrl}
+				<button
+					type="button"
+					class="min-h-11 rounded-full bg-primary px-6 font-semibold text-primary-foreground text-sm transition-opacity hover:opacity-90"
+					onclick={begin}
+				>
+					Erneut versuchen
+				</button>
+			{/if}
+		</div>
 
-		<!-- Temporary: see `skip()`. Lives in the footer strip the auth webview
-		     leaves free, so it stays clickable while sign-in is on screen.
-		     Goes away when passkeys are dependable. -->
 		<div
-			class="fixed inset-x-0 bottom-0 flex h-20 items-center justify-center gap-4 border-border/60 border-t bg-surface-cream px-6"
+			class="flex shrink-0 items-center justify-center gap-4 border-border/60 border-t px-6"
+			style="height: {FRAME.bottom}px"
 		>
+			{#if verificationUrl}
+				<button
+					type="button"
+					class="min-h-9 rounded-full border border-border px-4 font-medium text-foreground/70 text-xs transition-colors hover:bg-surface-soft"
+					onclick={openInBrowser}
+				>
+					Im Browser öffnen
+				</button>
+			{/if}
 			<p class="text-foreground/45 text-xs">
 				Anmeldung ist noch nicht verpflichtend — Passkeys im Desktop‑Webview sind noch in Arbeit.
 			</p>
+			<!-- Temporary: see `skip()`. Goes away when passkeys are dependable. -->
 			<button
 				type="button"
 				class="min-h-9 shrink-0 rounded-full border border-border px-4 font-medium text-foreground/70 text-xs transition-colors hover:bg-surface-soft"

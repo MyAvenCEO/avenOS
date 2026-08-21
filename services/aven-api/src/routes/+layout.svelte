@@ -12,13 +12,16 @@ async function logout() {
 </script>
 
 <header class="site">
-	<a href="/" class="brand">Aven</a>
+	<a href="/" class="brand">
+		<img src="/aven-logo.svg" alt="">
+		<span>avenCEO</span>
+	</a>
 	<nav>
 		{#if $session.data}
 			<a href="/dashboard">Dashboard</a>
-			<button class="link" onclick={logout}>Log out</button>
+			<button class="link" onclick={logout}>Abmelden</button>
 		{:else}
-			<a href="/login">Login</a>
+			<a href="/login">Anmelden</a>
 		{/if}
 	</nav>
 </header>
