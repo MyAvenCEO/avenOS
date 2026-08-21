@@ -254,20 +254,25 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								{#if skills.length > 0}
 									<ul class="mt-2 space-y-1.5 text-[13px] leading-snug">
 										{#each skills as feature (feature.skill)}
-											<li>
+											{@const soon = loadSkill(feature.skill, 'de')?.comingSoon}
+											<li class={soon ? 'opacity-70' : ''}>
 												<a
 													href={skillDetailHref(feature.skill, 'de')}
-													class="font-medium text-foreground underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+													class="font-medium underline underline-offset-4 transition-colors {soon
+														? 'text-quiet-ink decoration-dashed decoration-quiet/40 hover:decoration-quiet/70'
+														: 'text-foreground decoration-foreground/25 hover:decoration-foreground/60'}"
 												>
 													{skillLabel(feature.skill)}
 												</a>
-												{#if loadSkill(feature.skill, 'de')?.comingSoon}
+												{#if soon}
 													<span
-														class="ml-1 rounded-full border border-quiet/40 bg-quiet/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-quiet-ink"
+														class="ml-1 rounded-full border border-quiet/45 bg-quiet/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-quiet-ink"
 														>bald</span
 													>
 												{/if}
-												<span class="text-foreground/55"> · {feature.label}</span>
+												<span class={soon ? 'text-foreground/45' : 'text-foreground/55'}>
+													· {feature.label}</span
+												>
 											</li>
 										{/each}
 									</ul>
