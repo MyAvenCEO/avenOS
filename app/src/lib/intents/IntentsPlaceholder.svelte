@@ -574,6 +574,10 @@ $effect(() => {
 	el?.scrollTo({ top: el.scrollHeight })
 })
 
+/** The workspace scale — 85%: compact enough to see the whole stream,
+ * large enough to read it comfortably. */
+const WS_ZOOM = 0.85
+
 const DOT: Record<string, string> = {
 	done: 'bg-[#2f5d50] text-white',
 	running: 'bg-[#a06818] text-white',
@@ -594,7 +598,11 @@ const DOT: Record<string, string> = {
 	</button>
 {/snippet}
 
-<div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden">
+<!-- The workspace runs at 85% scale: more of the stream, the log and the
+     views fit on one screen. `zoom` scales the layout itself (not just the
+     paint), so every measurement below stays honest — only the dock
+     clearance is divided back out, since it is measured OUTSIDE this box. -->
+<div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden" style="zoom: {WS_ZOOM}">
 	{#if talk.open}
 		<!-- TALK CONTEXT (global, from the spark rail): the conversation is a
 		     25% aside on the left; the right 75% is the VIEW surface — every
@@ -636,7 +644,7 @@ const DOT: Record<string, string> = {
 
 		<main
 			class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-			style="margin-bottom: var(--dock-h, 0px)"
+			style="margin-bottom: calc(var(--dock-h, 0px) / {WS_ZOOM})"
 		>
 			{#if registryTick.v >= 0}
 				{@const openWindows = bus
@@ -688,7 +696,7 @@ const DOT: Record<string, string> = {
 					skillView = null
 					talk.open = false
 				}}
-					class="rounded-xl border px-3.5 py-2.5 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
+					class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
 					? 'border-foreground/15 bg-surface-card-selected'
 					: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
 				>
@@ -698,11 +706,11 @@ const DOT: Record<string, string> = {
 						>
 							{intent.type}
 						</span>
-						<span class="ml-auto font-mono text-[0.5625rem] text-foreground/35">{intent.when}</span>
+						<span class="ml-auto font-mono text-[0.625rem] text-foreground/35">{intent.when}</span>
 					</div>
-					<p class="pt-1 font-semibold text-[13px] leading-snug">{intent.title}</p>
+					<p class="pt-1 font-medium text-xs leading-snug">{intent.title}</p>
 					<div class="flex items-center gap-2 pt-1">
-						<span class="text-[0.625rem] text-foreground/45">{intent.source}</span>
+						<span class="text-[0.6875rem] text-foreground/45">{intent.source}</span>
 						{#if intent.deadline}
 							<span
 								class="rounded-full bg-[#c15b40]/10 px-1.5 py-0.5 font-mono text-[#9c4832] text-[0.5625rem]"
@@ -755,7 +763,7 @@ const DOT: Record<string, string> = {
 						skillView = null
 						talk.open = false
 					}}
-						class="rounded-xl border px-3.5 py-2.5 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
+						class="rounded-xl border px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
 						? 'border-foreground/15 bg-surface-card-selected opacity-100'
 						: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
 					>
@@ -769,10 +777,10 @@ const DOT: Record<string, string> = {
 								>{intent.when}</span
 							>
 						</div>
-						<p class="pt-1 font-semibold text-[13px] leading-snug">{intent.title}</p>
+						<p class="pt-1 font-medium text-xs leading-snug">{intent.title}</p>
 						<div class="flex items-center gap-2 pt-1">
-							<span class="text-[0.625rem] text-foreground/45">{intent.source}</span>
-							<span class="ml-auto font-mono text-[#2f5d50] text-[0.5625rem]">erledigt</span>
+							<span class="text-[0.6875rem] text-foreground/45">{intent.source}</span>
+							<span class="ml-auto font-mono text-[#2f5d50] text-[0.625rem]">erledigt</span>
 						</div>
 					</button>
 				{/each}
@@ -785,7 +793,7 @@ const DOT: Record<string, string> = {
 			class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)] {talk.open
 			? ''
 			: 'gap-4 overflow-y-auto p-6'}"
-			style="margin-bottom: var(--dock-h, 0px)"
+			style="margin-bottom: calc(var(--dock-h, 0px) / {WS_ZOOM})"
 		>
 			{#if skillView}
 				<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
