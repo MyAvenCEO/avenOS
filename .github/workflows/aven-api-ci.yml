@@ -114,5 +114,11 @@ jobs:
       - name: Validate Compose
         working-directory: services/aven-api
         run: |
-          IDENTITY_DOMAIN=id.example AVEN_API_IMAGE=aven-api:check docker compose -f docker-compose.yml -f docker-compose.deploy.yml config --quiet
+          set -euo pipefail
+          compose_json="$(IDENTITY_DOMAIN=id.example AVEN_API_IMAGE=aven-api:check docker compose -f docker-compose.yml -f docker-compose.deploy.yml config --format json)"
+          jq -e 'all(.services[]; .logging.driver == "local" and .logging.options["max-size"] == "10m" and .logging.options["max-file"] == "5" and .logging.options.compress == "true")' <<<"$compose_json"
+
+          compose_json="$(DOCKER_LOG_MAX_SIZE=25m DOCKER_LOG_MAX_FILE=7 DOCKER_LOG_COMPRESS=false IDENTITY_DOMAIN=id.example AVEN_API_IMAGE=aven-api:check docker compose -f docker-compose.yml -f docker-compose.deploy.yml config --format json)"
+          jq -e 'all(.services[]; .logging.driver == "local" and .logging.options["max-size"] == "25m" and .logging.options["max-file"] == "7" and .logging.options.compress == "false")' <<<"$compose_json"
+
           docker run --rm -e DOMAIN=id.example -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10.2-alpine caddy validate --config /etc/caddy/Caddyfile

@@ -1,3 +1,10 @@
+x-local-logging: &local-logging
+  driver: local
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+    compress: "${DOCKER_LOG_COMPRESS:-true}"
+
 services:
   db:
     volumes:
@@ -36,7 +43,4 @@ services:
     cap_drop: [ALL]
     cap_add: [NET_BIND_SERVICE]
     security_opt: [no-new-privileges:true]
-    logging:
-      options:
-        max-size: 10m
-        max-file: "3"
+    logging: *local-logging

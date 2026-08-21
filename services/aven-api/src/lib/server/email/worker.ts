@@ -57,6 +57,26 @@ export async function claimEmails(
 }
 
 export type SmtpFailureKind = 'retry' | 'dead'
+export interface SmtpEndpoint {
+	protocol: 'smtp' | 'smtps'
+	host: string
+	port: number
+	secure: boolean
+}
+
+export function describeSmtpEndpoint(value: string): SmtpEndpoint {
+	const url = new URL(value)
+	if (url.protocol !== 'smtp:' && url.protocol !== 'smtps:')
+		throw new Error('SMTP_URL must use smtp:// or smtps://.')
+	const secure = url.protocol === 'smtps:'
+	return {
+		protocol: secure ? 'smtps' : 'smtp',
+		host: url.hostname,
+		port: url.port ? Number(url.port) : secure ? 465 : 587,
+		secure
+	}
+}
+
 export function retryDelaySeconds(
 	attempt: number,
 	base: number,
@@ -94,7 +114,27 @@ export class EmailWorker {
 	) {}
 
 	start() {
-		void recoverExpiredLeases(this.pool).catch(() => {})
+		const smtp = describeSmtpEndpoint(this.config.SMTP_URL)
+		this.logger.info(
+			{
+				instanceId: this.owner,
+				applicationVersion: this.config.APPLICATION_VERSION,
+				pollIntervalMs: this.config.EMAIL_WORKER_POLL_INTERVAL_MS,
+				batchSize: this.config.EMAIL_WORKER_BATCH_SIZE,
+				leaseSeconds: this.config.EMAIL_WORKER_LEASE_SECONDS,
+				smtp
+			},
+			'email worker started'
+		)
+		void recoverExpiredLeases(this.pool)
+			.then((count) => {
+				if (count > 0) this.logger.warn({ count }, 'expired email leases recovered')
+				else this.logger.debug('no expired email leases found')
+			})
+			.catch((error) => {
+				this.logger.error({ err: sanitizeError(error) }, 'email lease recovery failed')
+			})
+		void this.verifyTransport(smtp)
 		void this.heartbeat()
 		this.timer = setInterval(() => {
 			void this.tick()
@@ -112,6 +152,20 @@ export class EmailWorker {
 		if (this.timer) clearInterval(this.timer)
 		if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
 		this.transport.close()
+		this.logger.info({ instanceId: this.owner }, 'email worker stopped')
+	}
+
+	private async verifyTransport(smtp: SmtpEndpoint) {
+		const started = Date.now()
+		try {
+			await this.transport.verify()
+			this.logger.info({ smtp, durationMs: Date.now() - started }, 'SMTP connection verified')
+		} catch (error) {
+			this.logger.warn(
+				{ smtp, err: sanitizeError(error), durationMs: Date.now() - started },
+				'SMTP connection verification failed'
+			)
+		}
 	}
 
 	async heartbeat() {
@@ -142,6 +196,11 @@ export class EmailWorker {
 				this.config.EMAIL_WORKER_BATCH_SIZE,
 				this.config.EMAIL_WORKER_LEASE_SECONDS
 			)
+			if (messages.length > 0)
+				this.logger.info(
+					{ count: messages.length, emailQueueIds: messages.map((message) => message.id) },
+					'email batch claimed'
+				)
 			await Promise.all(messages.map((message) => this.deliver(message)))
 		} catch (error) {
 			this.logger.error({ err: sanitizeError(error) }, 'email worker tick failed')
@@ -152,6 +211,13 @@ export class EmailWorker {
 
 	private async deliver(row: ClaimedEmail) {
 		const started = Date.now()
+		const context = {
+			emailQueueId: row.id,
+			templateKey: row.template_key,
+			attempt: row.attempts,
+			maxAttempts: row.max_attempts
+		}
+		this.logger.info(context, 'email delivery started')
 		try {
 			const data = decryptPayload<TemplateDataMap[SystemEmailTemplate]>(
 				row.payload_encrypted,
@@ -168,43 +234,73 @@ export class EmailWorker {
 				headers: { 'X-Aven-Queue-ID': row.id }
 			})
 			const now = new Date()
-			await this.pool.query(
+			const updated = await this.pool.query(
 				"UPDATE email_queue SET status='sent',payload_encrypted=NULL,smtp_message_id=$1,sent_at=$2,updated_at=$2,lease_owner=NULL,lease_expires_at=NULL,last_error_code=NULL,last_error_message=NULL WHERE id=$3 AND lease_owner=$4",
 				[info.messageId ?? null, now, row.id, this.owner]
 			)
-			this.logger.info({ emailQueueId: row.id, durationMs: Date.now() - started }, 'email sent')
+			if (updated.rowCount !== 1) {
+				this.logger.error(
+					{ ...context, durationMs: Date.now() - started },
+					'email sent but queue lease was lost'
+				)
+				return
+			}
+			this.logger.info({ ...context, durationMs: Date.now() - started }, 'email sent')
 		} catch (error) {
-			await this.failure(row, error)
+			await this.failure(row, error, started)
 		}
 	}
 
-	private async failure(row: ClaimedEmail, error: unknown) {
+	private async failure(row: ClaimedEmail, error: unknown, started: number) {
 		const kind = classifySmtpFailure(error)
 		const exhausted = row.attempts >= row.max_attempts
 		const now = new Date()
 		const message = sanitizeError(error)
+		const context = {
+			emailQueueId: row.id,
+			templateKey: row.template_key,
+			attempt: row.attempts,
+			maxAttempts: row.max_attempts,
+			kind,
+			exhausted,
+			err: message,
+			durationMs: Date.now() - started
+		}
 		if (kind === 'dead' || exhausted) {
-			await this.pool.query(
+			const errorCode = kind === 'dead' ? 'EMAIL_PERMANENT_FAILURE' : 'EMAIL_ATTEMPTS_EXHAUSTED'
+			const updated = await this.pool.query(
 				"UPDATE email_queue SET status='dead',dead_at=$1,updated_at=$1,lease_owner=NULL,lease_expires_at=NULL,last_error_code=$2,last_error_message=$3 WHERE id=$4 AND lease_owner=$5",
-				[
-					now,
-					kind === 'dead' ? 'EMAIL_PERMANENT_FAILURE' : 'EMAIL_ATTEMPTS_EXHAUSTED',
-					message,
-					row.id,
-					this.owner
-				]
+				[now, errorCode, message, row.id, this.owner]
 			)
+			if (updated.rowCount !== 1) {
+				this.logger.error(context, 'email failure state discarded because queue lease was lost')
+				return
+			}
+			this.logger.error({ ...context, errorCode }, 'email delivery abandoned')
 		} else {
 			const seconds = retryDelaySeconds(
 				row.attempts,
 				this.config.EMAIL_RETRY_BASE_SECONDS,
 				this.config.EMAIL_RETRY_MAX_SECONDS
 			)
-			await this.pool.query(
+			const nextAttemptAt = new Date(now.getTime() + seconds * 1000)
+			const updated = await this.pool.query(
 				"UPDATE email_queue SET status='retry_wait',available_at=$1,updated_at=$2,lease_owner=NULL,lease_expires_at=NULL,last_error_code='EMAIL_TRANSIENT_FAILURE',last_error_message=$3 WHERE id=$4 AND lease_owner=$5",
-				[new Date(now.getTime() + seconds * 1000), now, message, row.id, this.owner]
+				[nextAttemptAt, now, message, row.id, this.owner]
+			)
+			if (updated.rowCount !== 1) {
+				this.logger.error(context, 'email retry state discarded because queue lease was lost')
+				return
+			}
+			this.logger.warn(
+				{
+					...context,
+					errorCode: 'EMAIL_TRANSIENT_FAILURE',
+					retryInSeconds: seconds,
+					nextAttemptAt
+				},
+				'email delivery retry scheduled'
 			)
 		}
-		this.logger.warn({ emailQueueId: row.id, kind, exhausted }, 'email delivery failed')
 	}
 }

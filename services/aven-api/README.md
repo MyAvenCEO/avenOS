@@ -30,4 +30,10 @@ docker compose up --build
 
 The migrator, API, email worker, and environment worker use separate database roles. The environment worker creates one `cust_*` database and one `NOLOGIN` owner role per purchased name.
 
+All Compose services use Docker's `local` logging driver. Logs rotate at 10 MiB
+per file with five files per container and compression enabled. Override
+`DOCKER_LOG_MAX_SIZE`, `DOCKER_LOG_MAX_FILE`, or `DOCKER_LOG_COMPRESS` in the
+Compose environment when a different local retention budget is required. The
+`next` release workflow reads the same names from GitHub environment variables.
+
 The production RP ID is configured with `WEBAUTHN_RP_ID`. The matching origin serves `/.well-known/apple-app-site-association` for the signed Tauri application.
