@@ -38,7 +38,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				class="mx-auto max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
 				Tief in deinem Herzen weißt du es:
-				<span class="mt-1 block">in dir steckt so viel mehr, als Zeit gegen Geld zu tauschen.</span>
+				<span class="mt-1 block">in dir steckt so viel mehr.</span>
 			</h1>
 			<div class="mx-auto mt-8 max-w-2xl">
 				<p class="text-pretty text-[19px] font-semibold leading-snug text-accent sm:text-[22px]">
