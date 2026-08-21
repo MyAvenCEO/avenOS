@@ -20,7 +20,7 @@ import {
 	totalSharePct,
 	VAT_NOTE
 } from '$lib/pricing/plans'
-import { skillsIncludedIn } from '$lib/skills/loader'
+import { skillDetailHref, skillsIncludedIn } from '$lib/skills/loader'
 
 const openSourceGithubHref = 'https://github.com/jaensen/avenOS'
 
@@ -216,7 +216,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								></span>
 								<span>Alles aus {previous.name}</span>
 							</li>
-							{#each p.features as feature (feature)}
+							{#each p.features as feature (typeof feature === 'string' ? feature : feature.skill)}
 								<li class="flex gap-2">
 									<span
 										aria-hidden="true"
@@ -224,7 +224,19 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 											? 'bg-accent'
 											: 'bg-foreground/25'}"
 									></span>
-									<span>{feature}</span>
+									{#if typeof feature === 'string'}
+										<span>{feature}</span>
+									{:else}
+										<span>
+											<a
+												href={skillDetailHref(feature.skill, 'de')}
+												class="font-medium text-foreground underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+											>
+												{feature.skill}
+											</a>
+											<span class="text-foreground/55"> · {feature.label}</span>
+										</span>
+									{/if}
 								</li>
 							{/each}
 						</ul>
