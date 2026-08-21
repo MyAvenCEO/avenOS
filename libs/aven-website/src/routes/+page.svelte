@@ -228,117 +228,6 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		</div>
 	</section>
 
-	<!-- The thesis: the company of the future, named. -->
-	<section
-		class="border-b border-border/40 bg-linear-to-b from-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
-		aria-labelledby="spark-heading"
-	>
-		<div class="mx-auto max-w-3xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-				Die Firma der Zukunft
-			</p>
-			<h2
-				id="spark-heading"
-				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
-			>
-				1&nbsp;Mensch + 1&nbsp;Aven =
-				<span class="text-accent">ein Spark</span>.
-			</h2>
-			<div
-				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
-			>
-				<p class="text-pretty">
-					Die Firma der Zukunft hat kein Büro, keine Abteilungen, keine vierzig Angestellten. Sie
-					ist ein Funke:
-					<strong class="font-medium text-foreground/88">ein Mensch mit einer Vision</strong>
-					und
-					<strong class="font-medium text-foreground/88"
-						>ein Aven, der die ganze Firma dazu betreibt</strong
-					>
-					— Operations, Technik, Markt, Produkt.
-				</p>
-				<p class="text-pretty">
-					Das nennen wir einen
-					<strong class="font-medium text-foreground/88">Spark</strong>
-					— dein erster ist dein Leben selbst.
-				</p>
-			</div>
-			<p
-				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
-			>
-				Jeder Mensch wird Gründer.
-				<span class="mt-2 block">
-					Alles, was du dazu brauchst, ist
-					<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
-				</span>
-			</p>
-			<p
-				class="mx-auto mt-8 max-w-xl text-pretty text-[16px] leading-relaxed text-foreground/72 sm:text-[17px]"
-			>
-				Und jetzt stell dir vor, eine Million Menschen bauen ihren Spark — gemeinsam.
-				<strong class="font-medium text-accent-ink">Was können wir damit alles erreichen?</strong>
-			</p>
-		</div>
-	</section>
-
-	<!-- From I to We — the VISION beat, not the pricing page. A first-time
-	     reader has never heard the word avenCOOP; explaining reinvest splits
-	     and syndicate lists here answered a question nobody had yet. The
-	     mechanics live on /pricing, where someone is actually asking. -->
-	<section
-		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
-		aria-labelledby="collective-heading"
-	>
-		<div class="mx-auto max-w-3xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-				Von Ich zu Wir · Die Bewegung
-			</p>
-			<h2
-				id="collective-heading"
-				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
-			>
-				1 Million Gründer bauen die Startups der Zukunft — und besitzen sie gemeinsam.
-			</h2>
-			<p
-				class="mx-auto mt-5 max-w-xl text-[1.125rem] font-light leading-snug text-pretty text-foreground sm:text-[1.3125rem]"
-			>
-				Ein Spark trägt ein Leben. Eine Million Sparks tragen eine Zivilisation.
-			</p>
-
-			<div
-				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/68 sm:text-base"
-			>
-				<p class="text-pretty">
-					Stell dir vor, was passiert, wenn eine Million Menschen aufhören, ihre Zeit zu verkaufen,
-					und anfangen zu bauen, woran sie glauben — und einander daran beteiligen. Jeder mit seiner
-					eigenen Firma. Keiner mehr Angestellter im Leben eines Konzerns.
-				</p>
-				<p class="text-pretty">
-					Das ist die Welt, an die wir glauben:
-					<strong class="font-medium text-foreground/88"
-						>Solarpunk‑Utopie statt Cyberpunk‑Dystopie</strong
-					>. Sie entsteht nicht dadurch, dass die Technologie besser wird — sondern nur, wenn die
-					neuen Werkzeuge jedem Einzelnen wirklich gehören.
-				</p>
-				<p class="text-pretty">
-					Keine Plattform, die dazwischen steht und Miete nimmt.
-					<strong class="font-medium text-foreground/85"
-						>Uns gehört, was wir gemeinsam bauen.</strong
-					>
-				</p>
-			</div>
-
-			<p class="mt-8">
-				<a
-					href="/pricing#avencoop"
-					class="inline-flex min-h-11 items-center justify-center rounded-full border border-primary/45 px-8 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
-				>
-					Wie wir mitbauen: avenCOOP →
-				</a>
-			</p>
-		</div>
-	</section>
-
 	<section
 		class="border-b border-border/40 bg-linear-to-b from-surface-soft/50 to-transparent px-5 py-9 sm:px-8 sm:py-11"
 		id="founders"
@@ -513,6 +402,117 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					</p>
 				</div>
 			</div>
+		</div>
+	</section>
+
+	<!-- The thesis: the company of the future, named. -->
+	<section
+		class="border-b border-border/40 bg-linear-to-b from-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
+		aria-labelledby="spark-heading"
+	>
+		<div class="mx-auto max-w-3xl text-center">
+			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
+				Die Firma der Zukunft
+			</p>
+			<h2
+				id="spark-heading"
+				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
+			>
+				1&nbsp;Mensch + 1&nbsp;Aven =
+				<span class="text-accent">ein Spark</span>.
+			</h2>
+			<div
+				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
+			>
+				<p class="text-pretty">
+					Die Firma der Zukunft hat kein Büro, keine Abteilungen, keine vierzig Angestellten. Sie
+					ist ein Funke:
+					<strong class="font-medium text-foreground/88">ein Mensch mit einer Vision</strong>
+					und
+					<strong class="font-medium text-foreground/88"
+						>ein Aven, der die ganze Firma dazu betreibt</strong
+					>
+					— Operations, Technik, Markt, Produkt.
+				</p>
+				<p class="text-pretty">
+					Das nennen wir einen
+					<strong class="font-medium text-foreground/88">Spark</strong>
+					— dein erster ist dein Leben selbst.
+				</p>
+			</div>
+			<p
+				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
+			>
+				Jeder Mensch wird Gründer.
+				<span class="mt-2 block">
+					Alles, was du dazu brauchst, ist
+					<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
+				</span>
+			</p>
+			<p
+				class="mx-auto mt-8 max-w-xl text-pretty text-[16px] leading-relaxed text-foreground/72 sm:text-[17px]"
+			>
+				Und jetzt stell dir vor, eine Million Menschen bauen ihren Spark — gemeinsam.
+				<strong class="font-medium text-accent-ink">Was können wir damit alles erreichen?</strong>
+			</p>
+		</div>
+	</section>
+
+	<!-- From I to We — the VISION beat, not the pricing page. A first-time
+	     reader has never heard the word avenCOOP; explaining reinvest splits
+	     and syndicate lists here answered a question nobody had yet. The
+	     mechanics live on /pricing, where someone is actually asking. -->
+	<section
+		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
+		aria-labelledby="collective-heading"
+	>
+		<div class="mx-auto max-w-3xl text-center">
+			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
+				Von Ich zu Wir · Die Bewegung
+			</p>
+			<h2
+				id="collective-heading"
+				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+			>
+				1 Million Gründer bauen die Startups der Zukunft — und besitzen sie gemeinsam.
+			</h2>
+			<p
+				class="mx-auto mt-5 max-w-xl text-[1.125rem] font-light leading-snug text-pretty text-foreground sm:text-[1.3125rem]"
+			>
+				Ein Spark trägt ein Leben. Eine Million Sparks tragen eine Zivilisation.
+			</p>
+
+			<div
+				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/68 sm:text-base"
+			>
+				<p class="text-pretty">
+					Stell dir vor, was passiert, wenn eine Million Menschen aufhören, ihre Zeit zu verkaufen,
+					und anfangen zu bauen, woran sie glauben — und einander daran beteiligen. Jeder mit seiner
+					eigenen Firma. Keiner mehr Angestellter im Leben eines Konzerns.
+				</p>
+				<p class="text-pretty">
+					Das ist die Welt, an die wir glauben:
+					<strong class="font-medium text-foreground/88"
+						>Solarpunk‑Utopie statt Cyberpunk‑Dystopie</strong
+					>. Sie entsteht nicht dadurch, dass die Technologie besser wird — sondern nur, wenn die
+					neuen Werkzeuge jedem Einzelnen wirklich gehören.
+				</p>
+				<p class="text-pretty">
+					Keine Plattform, die dazwischen steht und Miete nimmt.
+					<strong class="font-medium text-foreground/85"
+						>Uns gehört, was wir gemeinsam bauen.</strong
+					>
+				</p>
+			</div>
+
+			<p class="mt-8">
+				<a
+					href="/pricing#avencoop"
+					class="inline-flex min-h-11 items-center justify-center rounded-full border border-primary/45 px-8 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
+				>
+					Wie wir mitbauen: avenCOOP →
+				</a>
+			</p>
 		</div>
 	</section>
 
