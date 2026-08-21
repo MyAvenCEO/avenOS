@@ -2,8 +2,9 @@
 import { goto } from '$app/navigation'
 import { api } from '$lib/api.js'
 import { authClient } from '$lib/auth-client.js'
+import { designerMode } from '$lib/designer.js'
 
-let name = $state('')
+let name = $state(designerMode ? 'MacBook Touch ID' : '')
 let busy = $state(false)
 let error = $state('')
 
@@ -11,6 +12,10 @@ async function create() {
 	busy = true
 	error = ''
 	try {
+		if (designerMode) {
+			await goto('/dashboard')
+			return
+		}
 		if (!window.PublicKeyCredential) throw new Error('Passkeys unavailable.')
 		const result = await authClient.passkey.addPasskey({
 			name: name.trim() || undefined,

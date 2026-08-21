@@ -3,6 +3,7 @@ import { onMount } from 'svelte'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import { authClient } from '$lib/auth-client.js'
+import { designerMode } from '$lib/designer.js'
 
 let busy = $state(false)
 let message = $state('')
@@ -16,6 +17,10 @@ async function login() {
 	busy = true
 	message = ''
 	try {
+		if (designerMode) {
+			await goto('/dashboard')
+			return
+		}
 		const result = await authClient.signIn.passkey()
 		if (result?.error) throw new Error(result.error.message ?? 'Login failed.')
 		void goto('/dashboard')

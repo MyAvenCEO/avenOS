@@ -3,9 +3,15 @@ import { svelteKitHandler } from 'better-auth/svelte-kit'
 import { building } from '$app/environment'
 import { ProofOfWorkError, protectedAuthPaths } from '$lib/server/proof-of-work.js'
 import { runtime } from '$lib/server/runtime.js'
+import { designerMode } from '$lib/designer.js'
 
 export const handle: Handle = async ({ event, resolve }) => {
 	if (building) return resolve(event)
+	if (designerMode) {
+		const response = await resolve(event)
+		response.headers.set('X-Designer-Preview', 'true')
+		return response
+	}
 	const { pathname } = event.url
 	if (pathname === '/.well-known/apple-app-site-association') {
 		const response = await resolve(event)

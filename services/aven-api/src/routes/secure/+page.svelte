@@ -3,6 +3,7 @@ import { onMount } from 'svelte'
 import { page } from '$app/state'
 import { api } from '$lib/api.js'
 import { createProofOfWorkHeader } from '$lib/proof-of-work.js'
+import { designerMode } from '$lib/designer.js'
 import type { NameAvailability, NameHoldResult } from '$lib/types.js'
 
 let name = $state('')
@@ -24,7 +25,7 @@ async function secure() {
 	loading = true
 	error = ''
 	try {
-		const headers = await createProofOfWorkHeader('secure-name')
+		const headers = designerMode ? {} : await createProofOfWorkHeader('secure-name')
 		const result = await api<{ hold: NameHoldResult }>('/names/hold', {
 			method: 'POST',
 			headers,

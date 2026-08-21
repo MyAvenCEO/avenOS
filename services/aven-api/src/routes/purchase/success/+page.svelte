@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onMount } from 'svelte'
 import { page } from '$app/state'
+import { designerMode } from '$lib/designer.js'
 
 const name = $derived(page.url.searchParams.get('name') ?? '')
 let state = $state<'confirming' | 'fallback'>('confirming')
@@ -10,6 +11,10 @@ let state = $state<'confirming' | 'fallback'>('confirming')
 // it signs the buyer in and we go straight to the dashboard. The emailed
 // access link stays as the fallback.
 onMount(() => {
+	if (designerMode) {
+		state = 'fallback'
+		return
+	}
 	const token = page.url.searchParams.get('pt')
 	const deadline = Date.now() + 60_000
 	const poll = async () => {

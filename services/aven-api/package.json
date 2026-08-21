@@ -5,8 +5,11 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
+		"dev:designer": "vite dev --mode designer",
 		"build": "vite build",
+		"build:designer": "vite build --mode designer",
 		"preview": "vite preview",
+		"preview:designer": "vite preview --mode designer",
 		"start": "bun build/index.js",
 		"worker:email": "bun scripts/email-worker.ts",
 		"worker:environment": "bun scripts/environment-worker.ts",

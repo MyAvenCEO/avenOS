@@ -2,6 +2,7 @@ import { error as httpError, redirect } from '@sveltejs/kit'
 import { AppError } from '$lib/server/errors.js'
 import { rateLimit } from '$lib/server/rate-limit.js'
 import { runtime } from '$lib/server/runtime.js'
+import { designerCheckout, designerMode } from '$lib/designer.js'
 import type { PageServerLoad } from './$types.js'
 
 // The emailed token is the sole credential for this page. Resolving it proves
@@ -9,6 +10,7 @@ import type { PageServerLoad } from './$types.js'
 // session. The provider URL is safe to expose in the browser, but never appears
 // in the email or the public hold API.
 export const load: PageServerLoad = async (event) => {
+	if (designerMode) return designerCheckout
 	if (!rateLimit(`names-claim:${event.getClientAddress()}`, 20, 60_000))
 		redirect(303, '/purchase/expired')
 

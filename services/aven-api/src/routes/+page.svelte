@@ -1,11 +1,16 @@
 <script lang="ts">
 import { goto } from '$app/navigation'
 import { api } from '$lib/api.js'
+import { designerMode } from '$lib/designer.js'
 import type { NameAvailability } from '$lib/types.js'
 
-let name = $state('')
+let name = $state(designerMode ? 'aurora' : '')
 let busy = $state(false)
-let result = $state<NameAvailability | null>(null)
+let result = $state<NameAvailability | null>(
+	designerMode
+		? { name: 'aurora', available: true, priceEur: 25, reservationMinutes: 15 }
+		: null
+)
 let error = $state('')
 
 async function check() {

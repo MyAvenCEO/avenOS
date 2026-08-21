@@ -1,8 +1,12 @@
 <script lang="ts">
 import { page } from '$app/state'
+import { readable } from 'svelte/store'
 import { authClient } from '$lib/auth-client.js'
+import { designerMode } from '$lib/designer.js'
 
-const session = authClient.useSession()
+const session = designerMode
+	? readable({ data: { user: { name: 'Alex Morgan', email: 'alex@example.com' } } })
+	: authClient.useSession()
 const userCode = $derived(page.url.searchParams.get('user_code')?.replaceAll('-', '') ?? '')
 const displayCode = $derived(userCode.replace(/(.{4})(?=.)/g, '$1-'))
 let signedIn = $state(false)
@@ -29,6 +33,10 @@ async function login() {
 	busy = true
 	message = ''
 	try {
+		if (designerMode) {
+			signedIn = true
+			return
+		}
 		const result = await authClient.signIn.passkey()
 		if (result?.error) throw new Error(result.error.message ?? 'Login failed.')
 		signedIn = true
@@ -44,6 +52,10 @@ async function approve() {
 	message = ''
 	try {
 		if (!userCode) throw new Error('The device code is missing.')
+		if (designerMode) {
+			approved = true
+			return
+		}
 		await responseJson(
 			await fetch(`/api/auth/device?user_code=${encodeURIComponent(userCode)}`, {
 				credentials: 'same-origin'
