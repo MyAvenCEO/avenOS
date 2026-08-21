@@ -27,7 +27,10 @@ const chainLabels: Record<string, string> = {
 	'calendar-organizer': 'Kalender',
 	'todo-shuffler': 'Aufgaben',
 	'inbox-router': 'Eingang',
-	'bookmark-champion': 'Links'
+	'bookmark-champion': 'Links',
+	'finance-brain': 'Finanzen',
+	'website-creator': 'Website',
+	'checkout-builder': 'Checkout'
 }
 </script>
 

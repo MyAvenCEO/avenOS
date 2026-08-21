@@ -189,20 +189,6 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							</div>
 						{/if}
 
-						{#if p.referralPct}
-							<div class="mt-4 rounded-xl border border-accent/45 bg-accent/10 px-4 py-3 text-left">
-								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-									Provision
-								</p>
-								<p class="mt-1 text-[13px] font-medium leading-snug text-foreground/85">
-									{p.referralPct}&nbsp;% auf jedes aven‑Abo, das du vermittelst
-								</p>
-								<p class="mt-0.5 text-[12px] leading-snug text-foreground/55">
-									monatlich wiederkehrend, solange das Abo läuft
-								</p>
-							</div>
-						{/if}
-
 						{#if p.runtime}
 							<div
 								class="mt-4 rounded-xl border border-border/60 bg-surface-card px-4 py-3 text-left"
@@ -314,6 +300,15 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								{ctaLabel(p)}
 							</a>
 						</div>
+
+						{#if p.referralPct}
+							<p class="mt-3 text-center text-[12px] leading-snug text-foreground/55">
+								<strong class="font-semibold text-accent-ink"
+									>{p.referralPct}&nbsp;% Provision</strong
+								>
+								auf jedes aven‑Abo, das du vermittelst — monatlich, solange es läuft.
+							</p>
+						{/if}
 					</div>
 				{/each}
 			</div>
