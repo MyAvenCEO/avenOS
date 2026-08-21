@@ -65,6 +65,17 @@ export interface NameAvailability {
 // unique claim link emailed to the buyer, which confirms the address.
 // expiresAt is the claim link's validity — the name itself is reserved only
 // once that link is clicked, for reservationMinutes.
+/**
+ * What the funnel knows about a hold beyond name and email: which tier's CTA
+ * sent them, how to address them, and what they want to build. All optional —
+ * a hold is still valid without any of it.
+ */
+export interface HoldOrigin {
+	tier?: string
+	salutation?: string
+	idea?: string
+}
+
 export interface NameHoldResult {
 	name: string
 	expiresAt: string

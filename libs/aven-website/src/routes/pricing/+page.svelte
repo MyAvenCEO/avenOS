@@ -11,6 +11,7 @@ import { page } from '$app/stores'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SiteFooter from '$lib/components/SiteFooter.svelte'
+import { idFunnelHref } from '$lib/id-service'
 import {
 	ctaHref,
 	ctaLabel,
@@ -100,7 +101,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 					<div class="lg:shrink-0">
 						<a
 							href={claimedName
-								? `/waitlist?intent=aven-id&preferred=${encodeURIComponent(claimedName)}`
+								? idFunnelHref('avenid', claimedName)
 								: ctaHref(avenId)}
 							class="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-primary px-8 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 lg:w-auto"
 						>

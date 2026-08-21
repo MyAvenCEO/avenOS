@@ -2,6 +2,7 @@
 import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import SiteFooter from '$lib/components/SiteFooter.svelte'
+import { idFunnelHref } from '$lib/id-service'
 import {
 	availabilityNote,
 	publisherIdentity,
@@ -45,7 +46,7 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 
 				<a href="/pricing" class="transition-opacity hover:opacity-100">Preise</a>
 				<a
-					href="/waitlist"
+					href={idFunnelHref()}
 					class="rounded-full bg-primary px-4 py-1.5 normal-case font-semibold text-primary-foreground transition-opacity hover:opacity-90"
 				>
 					Sichere dir deinen Aven

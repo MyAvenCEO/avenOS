@@ -1,5 +1,5 @@
 import type { Readable } from 'svelte/store'
-import type { MetaInfo, NameAvailability, NameHoldResult } from '$lib/types.js'
+import type { HoldOrigin, MetaInfo, NameAvailability, NameHoldResult } from '$lib/types.js'
 
 export interface AppSession {
 	authenticated: boolean
@@ -59,7 +59,7 @@ export interface AppRuntime {
 	names: {
 		check(name: string): Promise<NameAvailability>
 		loadInfo(name: string, current: NameAvailability | null): Promise<NameAvailability | null>
-		hold(name: string, email: string): Promise<NameHoldResult>
+		hold(name: string, email: string, origin?: HoldOrigin): Promise<NameHoldResult>
 	}
 	auth: {
 		signIn(): Promise<void>

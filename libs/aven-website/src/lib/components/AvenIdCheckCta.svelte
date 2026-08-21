@@ -1,6 +1,6 @@
 <script lang="ts">
-import { goto } from '$app/navigation'
 import ReservedNamesBoard from '$lib/components/ReservedNamesBoard.svelte'
+import { idFunnelHref } from '$lib/id-service'
 import { euro, plan } from '$lib/pricing/plans'
 
 type Props = {
@@ -24,7 +24,7 @@ const slug = $derived(
 function submit(e: SubmitEvent) {
 	e.preventDefault()
 	if (!slug) return
-	goto(`/waitlist?intent=aven-id&preferred=${encodeURIComponent(slug)}`)
+	window.location.href = idFunnelHref('avenid', slug)
 }
 
 const wrapperClass =

@@ -50,6 +50,13 @@
 			"when": 1787328000000,
 			"tag": "0006_device_authorization",
 			"breakpoints": true
+		},
+		{
+			"idx": 7,
+			"version": "7",
+			"when": 1787414400000,
+			"tag": "0007_name_hold_origin",
+			"breakpoints": true
 		}
 	]
 }
