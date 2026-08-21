@@ -16,12 +16,13 @@ const preferredFromUrl = $derived(
 	$page.url.searchParams.get('preferred') ?? $page.url.searchParams.get('name') ?? ''
 )
 
-const TOTAL_STEPS = 4
+const TOTAL_STEPS = 5
 
 let step = $state(1)
 let email = $state('')
 let name = $state('')
 let preferredName = $state('')
+let idea = $state('')
 let newsletter = $state(true)
 let honeypot = $state('')
 let busy = $state(false)
@@ -93,6 +94,11 @@ function nextFromStep3() {
 	step = 4
 }
 
+function nextFromStep4() {
+	error = ''
+	step = 5
+}
+
 async function finish(newsletterChoice: boolean) {
 	error = ''
 	if (honeypot) return
@@ -111,6 +117,7 @@ async function finish(newsletterChoice: boolean) {
 				email: email.trim(),
 				name: name.trim(),
 				preferredName: preferredSlug,
+				idea: idea.trim(),
 				newsletter,
 				intent,
 				tier,
@@ -140,6 +147,9 @@ function onStepKeydown(e: KeyboardEvent, stage: 1 | 2 | 3) {
 	if (stage === 2) nextFromStep2()
 	if (stage === 3) nextFromStep3()
 }
+
+/** The tier they came in on, named — so the note back to us is unambiguous. */
+const tierPlan = $derived(PLANS.find((p) => p.id === tier) ?? null)
 </script>
 
 <div lang="de" class="min-h-screen bg-background text-foreground font-sans antialiased">
@@ -185,7 +195,7 @@ function onStepKeydown(e: KeyboardEvent, stage: 1 | 2 | 3) {
 					Dann geht es los — und du bist als Erster dabei.
 				</p>
 				<p class="mt-2 text-[13px] leading-snug text-foreground/50">
-					Vier kurze Schritte · wir melden uns zur Beta.<br>
+					Fünf kurze Schritte · wir melden uns zur Beta.<br>
 					Optional: wöchentliche Labor‑Updates aus dem Bau.
 				</p>
 			</div>
@@ -372,10 +382,55 @@ function onStepKeydown(e: KeyboardEvent, stage: 1 | 2 | 3) {
 						</div>
 					{/if}
 
-					<!-- Step 4: Newsletter -->
+					<!-- Step 4: the idea. Optional — but this is the one we read when we
+					     hand out a wildcard invite ahead of the queue. -->
 					{#if step === 4}
 						<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/45">
-							Schritt 4 · Labor‑Updates
+							Schritt 4 · Deine Idee
+						</p>
+						<p class="mt-2 text-[14px] leading-snug text-foreground/78">
+							{#if tierPlan}
+								Du interessierst dich für
+								<strong class="font-medium text-foreground">{tierPlan.name}</strong>. Was willst du
+								damit bauen — und warum?
+							{:else}
+								Was willst du mit deinem Aven bauen — und warum?
+							{/if}
+						</p>
+						<p class="mt-2 text-[13px] leading-snug text-foreground/55">
+							Ein paar Sätze reichen. Wir vergeben
+							<strong class="font-medium text-accent-ink">Wildcard‑Einladungen</strong>
+							an die Ideen, die uns umhauen — unabhängig vom Platz in der Warteliste.
+						</p>
+						<textarea
+							bind:value={idea}
+							name="idea"
+							rows="5"
+							placeholder="Ich will …"
+							class="mt-4 w-full rounded-xl border border-border/55 bg-surface-raised px-4 py-3 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-foreground/28 focus:border-accent/50"
+						></textarea>
+						<div class="mt-4 flex items-center justify-between gap-3">
+							<button
+								type="button"
+								onclick={() => { step = 3; error = '' }}
+								class="text-[12px] font-semibold text-foreground/40 underline-offset-4 hover:text-foreground/70 hover:underline"
+							>
+								Zurück
+							</button>
+							<button
+								type="button"
+								onclick={nextFromStep4}
+								class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-primary px-5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+							>
+								{idea.trim() ? 'Weiter' : 'Überspringen'}
+							</button>
+						</div>
+					{/if}
+
+					<!-- Step 5: Newsletter -->
+					{#if step === 5}
+						<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/45">
+							Schritt 5 · Labor‑Updates
 						</p>
 						<p class="mt-2 text-[14px] leading-snug text-foreground/78">
 							<strong class="font-medium text-foreground/82">Wöchentliche Labor‑Updates</strong>
@@ -402,7 +457,7 @@ function onStepKeydown(e: KeyboardEvent, stage: 1 | 2 | 3) {
 						<div class="mt-5 flex justify-center">
 							<button
 								type="button"
-								onclick={() => { step = 3; error = '' }}
+								onclick={() => { step = 4; error = '' }}
 								class="text-[12px] font-semibold text-foreground/50 hover:text-foreground/75"
 							>
 								Zurück
