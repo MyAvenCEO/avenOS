@@ -10,3 +10,4 @@ ALTER TABLE name_holds ADD COLUMN IF NOT EXISTS salutation text NOT NULL DEFAULT
 ALTER TABLE name_holds ADD COLUMN IF NOT EXISTS idea text NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS name_holds_tier_idx ON name_holds (tier);
+

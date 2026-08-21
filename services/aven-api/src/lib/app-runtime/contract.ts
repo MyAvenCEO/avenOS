@@ -1,5 +1,11 @@
 import type { Readable } from 'svelte/store'
-import type { HoldOrigin, MetaInfo, NameAvailability, NameHoldResult } from '$lib/types.js'
+import type {
+	HoldOrigin,
+	MetaInfo,
+	NameAvailability,
+	NameHoldResult,
+	QueueStanding
+} from '$lib/types.js'
 
 export interface AppSession {
 	authenticated: boolean
@@ -74,6 +80,12 @@ export interface AppRuntime {
 	}
 	dashboard: {
 		load(url: URL): Promise<{ downloadUrl: string; needsPasskey: boolean }>
+		/**
+		 * Where the holder stands in the queue. `null` means we cannot say yet —
+		 * the production runtime returns null until the backend lands, and the
+		 * dashboard simply omits the panel rather than guessing.
+		 */
+		queue(): Promise<QueueStanding | null>
 	}
 	billing: {
 		pay(input: Record<string, string>): Promise<{ redirect: string }>

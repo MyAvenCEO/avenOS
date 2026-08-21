@@ -76,6 +76,25 @@ export interface HoldOrigin {
 	idea?: string
 }
 
+/**
+ * A holder's place in the invite queue.
+ *
+ * Deliberately has no estimated date: invitations do not go out on a cadence,
+ * so "you are up in ~3 weeks" would be invented. Position, who is ahead, and
+ * when the last invites actually went out are all things we can know.
+ */
+export interface QueueStanding {
+	name: string
+	reservedAt: string
+	position: number
+	ahead: number
+	total: number
+	/** How many ahead of you have already been invited. */
+	invited: number
+	/** When the most recent invite went out, if any ever has. */
+	lastInvitedAt: string | null
+}
+
 export interface NameHoldResult {
 	name: string
 	expiresAt: string
