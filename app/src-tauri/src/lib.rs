@@ -203,6 +203,12 @@ pub fn run() {
 		.invoke_handler(tauri::generate_handler![
 			auth::auth_status,
 			auth::auth_names,
+			auth::billing_me,
+			auth::billing_subscribe,
+			auth::billing_upgrade,
+			auth::billing_cancel,
+			auth::billing_resume,
+			auth::billing_invoices,
 			auth::auth_passkey_begin,
 			auth::auth_passkey_finish,
 			auth::auth_begin,

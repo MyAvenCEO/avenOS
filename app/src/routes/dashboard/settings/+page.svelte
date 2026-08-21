@@ -2,6 +2,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { settings, VOICES, type Voice } from '$lib/settings.svelte'
 import Account from './Account.svelte'
+import Billing from './Billing.svelte'
 import BrandColors from './BrandColors.svelte'
 
 /**
@@ -16,13 +17,14 @@ import BrandColors from './BrandColors.svelte'
 /** Settings has categories now — one surface per concern, chosen on the left. */
 const CATEGORIES = [
 	{ id: 'account' as const, label: 'Konto' },
+	{ id: 'billing' as const, label: 'Abrechnung' },
 	{ id: 'general' as const, label: 'Models' },
 	{ id: 'voice' as const, label: 'Stimme' },
 	{ id: 'colors' as const, label: 'Brand-Farben' }
 ]
 // Account opens first: before anything is configured, the question is whose
 // app this is.
-let category = $state<'account' | 'general' | 'voice' | 'colors'>('account')
+let category = $state<'account' | 'billing' | 'general' | 'voice' | 'colors'>('account')
 
 /** The voice currently sounding a preview, if any. */
 let playing = $state<Voice | null>(null)
@@ -94,6 +96,8 @@ async function preview(voice: Voice) {
 		<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto pb-4">
 			{#if category === 'account'}
 				<Account />
+			{:else if category === 'billing'}
+				<Billing />
 			{:else if category === 'colors'}
 				<BrandColors />
 			{:else if category === 'voice'}

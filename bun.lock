@@ -19,6 +19,7 @@
       "dependencies": {
         "@avenos/aven-skills": "workspace:*",
         "@avenos/aven-ui": "workspace:*",
+        "@avenos/aven-website": "workspace:*",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-opener": "^2.5.4",
         "@xyflow/svelte": "^1.6.2",
