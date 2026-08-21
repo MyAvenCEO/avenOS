@@ -47,8 +47,6 @@ export interface Plan {
 	equitySharePct?: number
 	/** avenCOOP is not bookable: you apply and we decide together. */
 	applyOnly?: boolean
-	/** Who the tier is open to — stated, so nobody has to guess. */
-	eligibility?: string
 	/** What this tier adds; the tiers below are always included. */
 	features: string[]
 	/** One outbound reference, where the tier depends on one. */
@@ -120,7 +118,6 @@ export const PLANS: Plan[] = [
 		reinvestPct: 12,
 		equitySharePct: 5,
 		applyOnly: true,
-		eligibility: 'Nur für Pre‑Seed‑Startups mit weniger als 300.000 € Investment.',
 		features: [
 			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
