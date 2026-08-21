@@ -44,6 +44,8 @@ export interface Plan {
 	reciprocalSharePct?: number
 	/** avenCOOP is not bookable: you apply and we decide together. */
 	applyOnly?: boolean
+	/** Who the tier is open to — stated, so nobody has to guess. */
+	eligibility?: string
 	/** What this tier adds; the tiers below are always included. */
 	features: string[]
 	/** One outbound reference, where the tier depends on one. */
@@ -58,7 +60,7 @@ export const PLANS: Plan[] = [
 		id: 'avenid',
 		name: 'avenID',
 		role: 'Dein Name — der Anfang von allem',
-		eurPrice: 25,
+		eurPrice: 30,
 		billing: 'once',
 		revenueSharePct: 0,
 		features: [
@@ -112,10 +114,11 @@ export const PLANS: Plan[] = [
 		equitySharePct: 5,
 		reciprocalSharePct: 0.5,
 		applyOnly: true,
+		eligibility: 'Nur für Pre‑Seed‑Startups mit weniger als 300.000 € Investment.',
 		features: [
 			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
-			'5 % Firmenanteile an deiner Firma, tokenisiert über beel.com',
+			'5 % Firmenanteile an deiner Firma, digitalisiert über beel.com',
 			'0,5 % Beteiligung an der avenCEO GmbH — die Partnerschaft geht in beide Richtungen',
 			'Community‑Investments über beel',
 			'Wir führen dein beel‑Syndikat an'
