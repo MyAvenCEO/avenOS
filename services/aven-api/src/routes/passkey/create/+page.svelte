@@ -14,12 +14,12 @@ onMount(async () => {
 	firefoxLinux = appRuntime.auth.passkeyWarning(page.url)
 	// Name the passkey after the aven it unlocks, so nobody has to invent a
 	// label for a thing they just named. Only ever fills an empty field.
-	if (name.trim()) return
 	try {
 		const [own] = await appRuntime.names.mine()
-		if (own && !name.trim()) name = own
+		if (own) name = own
 	} catch {
-		// A missing name is not worth an error here — the field stays empty.
+		// If we cannot read it, creation still works with whatever the runtime
+		// handed us; the passkey just carries a less useful label.
 	}
 })
 
@@ -42,7 +42,10 @@ async function create() {
 	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
 	<h1>Passkey anlegen</h1>
 	<p>Ein Passkey ersetzt dein Passwort — er bleibt auf deinem Gerät.</p>
-	<label>Name des Passkeys<input bind:value={name} maxlength="64"></label>
+	<div class="code">
+		<p class="eyebrow">Passkey für</p>
+		<p class="digits">{name || '…'}</p>
+	</div>
 	{#if firefoxLinux}
 		<div class="alert">
 			Firefox unter Linux hat keinen eingebauten Passkey‑Anbieter. Nutze einen
