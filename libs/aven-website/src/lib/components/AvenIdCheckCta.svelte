@@ -33,7 +33,7 @@ const wrapperClass =
 </script>
 
 <form onsubmit={submit} class={wrapperClass} aria-label="avenID sichern">
-	<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent-ink">
+	<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 		Warteliste · Invite only
 	</p>
 	<h3

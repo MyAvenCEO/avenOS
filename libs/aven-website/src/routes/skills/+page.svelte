@@ -48,7 +48,7 @@ const chainSteps = [
 	<!-- Hero -->
 	<section class="border-b border-border/40 px-5 py-24 sm:px-8 sm:py-32 md:py-40">
 		<div class="mx-auto max-w-3xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 				Skill Marketplace · Aven
 			</p>
 			<h1
@@ -183,9 +183,7 @@ const chainSteps = [
 	>
 		<div class="mx-auto max-w-4xl">
 			<div class="text-center">
-				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-					Das System
-				</p>
+				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Das System</p>
 				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
 					Kein Skill steht allein — sie komponieren.
 				</h2>
@@ -241,7 +239,7 @@ const chainSteps = [
 	<!-- Bundled-pricing band -->
 	<section class="border-b border-border/40 px-5 py-12 sm:px-8 sm:py-14">
 		<div class="mx-auto max-w-3xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">Pricing</p>
+			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Pricing</p>
 			<h2 class="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
 				Alle {skills.length} Skills. In jedem Plan ab avenME enthalten.
 			</h2>
