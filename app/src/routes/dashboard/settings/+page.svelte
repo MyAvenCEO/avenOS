@@ -166,7 +166,7 @@ async function preview(voice: Voice) {
 
 					{#if failure}
 						<p
-							class="rounded-xl border border-status-error/30 bg-status-error-muted px-4 py-3 text-xs text-status-error-strong"
+							class="rounded-xl border border-error/30 bg-error-muted px-4 py-3 text-xs text-error-strong"
 						>
 							{failure}
 						</p>

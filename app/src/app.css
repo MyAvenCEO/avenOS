@@ -230,7 +230,7 @@
 	 * does that now, and being dark it reads as text without help. */
 	/* Row one — the cool half: the brand's own colours, deepest first. */
 	--color-marine: #1e293b; /* deep navy — the brand's ink and its fill */
-	--color-anchor: #4d76a3; /* steel blue, off the violet side — everything held back */
+	--color-anchor: #57789e; /* steel blue, off the violet side — everything held back */
 	--color-tidal-blue: #2489a0; /* teal-blue — work in motion */
 	--color-paradise-water: #449c94; /* turquoise — the bright note; settled work */
 	/* Row two — the warm half: the signals. */
@@ -280,7 +280,7 @@
 	/* ══ 3 · THE ROLES ═════════════════════════════════════════════════
 	 * The design-system layer: what a colour MEANS, pointed at the tone
 	 * that carries the meaning. Components speak roles (`bg-primary`,
-	 * `text-status-error`) and never tones, so re-assigning a role below
+	 * `text-error`) and never tones, so re-assigning a role below
 	 * re-skins every surface that uses it.
 	 *
 	 * Each role has up to three faces:
@@ -289,21 +289,24 @@
 	 *   --color-X-ink          the tone used AS text, on the cream page
 	 *                          (darkened where the raw tone is too light)
 	 *
-	 * ONE TONE, ONE ROLE — eight of each. The steel blue once answered to
-	 * three names (primary-soft, status-quiet, archive), which is how the last
-	 * drift started; it is `anchor` now, carries `status-quiet` alone, and its
-	 * old Denglish pairing (token `harbour`, label "Hafen") is gone. There is
-	 * no `accent` either: paradise water IS success.
+	 * ONE TONE, ONE ROLE — eight of each. Roles are named for what they mean
+	 * and nothing else: `error`, not `status-error`. The prefix said only that
+	 * a token was a token.
 	 *
-	 *   ROLE             TONE            WHERE IT SPEAKS
-	 *   primary          marine          buttons, the rail, the HITL frame
-	 *   status-quiet     anchor          held back — every type badge
-	 *   status-progress  tidal blue      in motion
-	 *   status-success   paradise water  settled — the brand's bright note
-	 *   status-error     terracotta      something failed
-	 *   status-warning   sunflower       careful — but nothing is broken
-	 *   status-info      earth           notice; often: your turn
-	 *   secondary        sand            the warm second action */
+	 * There is no separate state layer either. An intent's state maps onto one
+	 * of these roles in STATE_ACCENT (IntentsPlaceholder) — waiting reads as
+	 * info, working as progress, done as success — so the mapping lives in one
+	 * place instead of being restated here as a second set of aliases.
+	 *
+	 *   ROLE       TONE            WHERE IT SPEAKS
+	 *   primary    marine          buttons, the rail, the HITL frame
+	 *   quiet      anchor          held back — every type badge
+	 *   progress   tidal blue      in motion (state: working)
+	 *   success    paradise water  settled — the bright note (state: done)
+	 *   error      terracotta      something failed (state: error)
+	 *   warning    sunflower       careful — but nothing is broken
+	 *   info       earth           notice (state: waiting — your turn)
+	 *   secondary  sand            the warm second action */
 	--color-primary: var(--color-marine);
 	--color-primary-foreground: var(--color-chalk);
 
@@ -311,31 +314,31 @@
 	 * replaced, whose ink had to be mixed halfway to black. It stays separate
 	 * from anchor: motion and stillness are different things to say, and the
 	 * two blues are far enough apart to say them. */
-	--color-status-quiet: var(--color-anchor);
-	--color-status-quiet-foreground: var(--color-chalk);
-	--color-status-quiet-ink: color-mix(in oklab, var(--color-anchor) 82%, black);
+	--color-quiet: var(--color-anchor);
+	--color-quiet-foreground: var(--color-chalk);
+	--color-quiet-ink: color-mix(in oklab, var(--color-anchor) 82%, black);
 
-	--color-status-progress: var(--color-tidal-blue);
-	--color-status-progress-foreground: var(--color-chalk);
-	--color-status-progress-ink: var(--color-tidal-blue);
+	--color-progress: var(--color-tidal-blue);
+	--color-progress-foreground: var(--color-chalk);
+	--color-progress-ink: var(--color-tidal-blue);
 
-	--color-status-success: var(--color-paradise-water);
-	--color-status-success-foreground: #fafaf9;
-	--color-status-success-ink: var(--color-paradise-water);
+	--color-success: var(--color-paradise-water);
+	--color-success-foreground: #fafaf9;
+	--color-success-ink: var(--color-paradise-water);
 
-	--color-status-warning: var(--color-sunflower);
-	--color-status-warning-foreground: #2b2313;
-	--color-status-warning-ink: color-mix(in oklab, var(--color-sunflower) 74%, black);
+	--color-warning: var(--color-sunflower);
+	--color-warning-foreground: #2b2313;
+	--color-warning-ink: color-mix(in oklab, var(--color-sunflower) 74%, black);
 
-	--color-status-error: var(--color-terracotta);
-	--color-status-error-foreground: #fffefb;
-	--color-status-error-ink: color-mix(in oklab, var(--color-terracotta) 85%, black);
-	--color-status-error-muted: color-mix(in oklab, var(--color-terracotta) 22%, white);
-	--color-status-error-strong: color-mix(in oklab, var(--color-terracotta) 78%, black);
+	--color-error: var(--color-terracotta);
+	--color-error-foreground: #fffefb;
+	--color-error-ink: color-mix(in oklab, var(--color-terracotta) 85%, black);
+	--color-error-muted: color-mix(in oklab, var(--color-terracotta) 22%, white);
+	--color-error-strong: color-mix(in oklab, var(--color-terracotta) 78%, black);
 
-	--color-status-info: var(--color-earth);
-	--color-status-info-foreground: #2b231c;
-	--color-status-info-ink: color-mix(in oklab, var(--color-earth) 72%, black);
+	--color-info: var(--color-earth);
+	--color-info-foreground: #2b231c;
+	--color-info-ink: color-mix(in oklab, var(--color-earth) 72%, black);
 
 	--color-secondary: var(--color-sand);
 	--color-secondary-foreground: var(--color-marine);
@@ -349,27 +352,6 @@
 	--color-border: color-mix(in srgb, var(--color-marine) 14%, transparent);
 	--color-input: color-mix(in srgb, #ffffff 65%, var(--color-surface-cream));
 
-	/* ══ 4 · THE INTENT STATES ═════════════════════════════════════════
-	 * A state is not a colour, it is a MEANING that borrows one. This is the
-	 * only place the two are tied together, so the whole stream re-reads by
-	 * editing five lines — and nothing here introduces a tone.
-	 *
-	 *   STATE     ROLE             READS AS
-	 *   error     status-error     a gate that failed
-	 *   waiting   status-info      open human gate — your turn
-	 *   working   status-progress  in motion
-	 *   done      status-success   settled
-	 *
-	 * Archive has no entry: the archived section is folded away and dimmed,
-	 * which says it better than a colour nobody looks at. */
-	--color-state-error: var(--color-status-error);
-	--color-state-error-ink: var(--color-status-error-ink);
-	--color-state-waiting: var(--color-status-info);
-	--color-state-waiting-ink: var(--color-status-info-ink);
-	--color-state-working: var(--color-status-progress);
-	--color-state-working-ink: var(--color-status-progress-ink);
-	--color-state-done: var(--color-status-success);
-	--color-state-done-ink: var(--color-status-success-ink);
 
 	--radius-lg: 1rem;
 	--radius-xl: 1.5rem;
