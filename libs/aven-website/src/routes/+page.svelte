@@ -47,109 +47,16 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<p
 					class="mx-auto mt-6 max-w-xl text-pretty text-[16px] leading-relaxed text-foreground/72 sm:text-[17px]"
 				>
-					Zeit gegen Geld zu tauschen stirbt. Gemeinsam zu bauen und zu besitzen, woran du wirklich
-					glaubst — Asset für Asset — ist die Zukunft.
+					Wenn Zeit gegen Geld zu tauschen stirbt, ist
+					<strong class="font-medium text-foreground/88">Ownership</strong>
+					das Einzige, was dir bleibt.
 				</p>
 				<p
-					class="mx-auto mt-6 max-w-xl border-t border-border/40 pt-6 text-pretty text-[17px] font-medium leading-snug text-foreground/90 sm:text-[18px]"
+					class="mx-auto mt-5 max-w-xl text-pretty text-[17px] font-medium leading-snug text-foreground/90 sm:text-[18px]"
 				>
-					<strong class="font-semibold text-foreground">Ownership ist die einzige Lösung.</strong>
-					<span class="mt-2 block text-[15px] font-normal text-foreground/68 sm:text-base">
-						Wir schieben dich Schritt für Schritt hinein, ab dieser Woche.
-					</span>
+					Gemeinsam zu bauen, woran du wirklich glaubst, ist die Zukunft, die glücklich macht.
 				</p>
 			</div>
-		</div>
-	</section>
-
-	<!-- ONE section between the hero and the Spark thesis: the day-sized change,
-	     what an Aven actually is, and the thesis that ties them together. The
-	     separate "Vision" block said the same thing a second time, one level of
-	     abstraction higher, and the page was better without it. -->
-	<section
-		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
-		aria-labelledby="personal-heading"
-	>
-		<div class="mx-auto max-w-2xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-				Deine Transformation · Ganz persönlich
-			</p>
-			<h2
-				id="personal-heading"
-				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
-			>
-				Erst ändert sich dein Tag. Dann dein Jahrzehnt.
-			</h2>
-
-			<p class="mx-auto mt-6 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-				Heute verkaufst du Stunden. Acht gehören jemand anderem, die neunte meistens auch — und was
-				am Monatsende übrig bleibt, hat jemand anderes festgelegt.
-			</p>
-
-			<p
-				class="mt-7 text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[21px]"
-			>
-				Ein Aven ist eine KI, die dir gehört.
-			</p>
-
-			<p class="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-				Deiner sortiert deine Post, bevor du aufstehst. Bereitet die Rechnung vor, bevor du sie
-				suchst. Erledigt den Papierkram, der dich seit Monaten anschweigt — während du an dem
-				arbeitest, wofür du eigentlich angetreten bist.
-			</p>
-
-			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-				Und dann passiert das Eigentliche:
-				<strong class="font-medium text-foreground/85">was du baust, bleibt deins</strong>. Nicht
-				deine Stunde ist das Asset — du und dein Aven seid es.
-			</p>
-		</div>
-	</section>
-
-	<!-- The thesis: the company of the future, named. -->
-	<section
-		class="border-b border-border/40 bg-linear-to-b from-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
-		aria-labelledby="spark-heading"
-	>
-		<div class="mx-auto max-w-3xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-				Die Firma der Zukunft
-			</p>
-			<h2
-				id="spark-heading"
-				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
-			>
-				1&nbsp;Mensch + 1&nbsp;Aven =
-				<span class="text-accent">ein Spark</span>.
-			</h2>
-			<div
-				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
-			>
-				<p class="text-pretty">
-					Die Firma der Zukunft hat kein Büro, keine Abteilungen, keine vierzig Angestellten. Sie
-					ist ein Funke:
-					<strong class="font-medium text-foreground/88">ein Mensch mit einer Vision</strong>
-					und
-					<strong class="font-medium text-foreground/88"
-						>ein Aven, der die ganze Firma dazu betreibt</strong
-					>
-					— Operations, Technik, Markt, Produkt.
-				</p>
-				<p class="text-pretty">
-					Das nennen wir einen
-					<strong class="font-medium text-foreground/88">Spark</strong>
-					— dein erster ist dein Leben selbst.
-				</p>
-			</div>
-			<p
-				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
-			>
-				Jeder Mensch wird Gründer.
-				<span class="mt-2 block">
-					Alles, was du dazu brauchst, ist
-					<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
-				</span>
-			</p>
 		</div>
 	</section>
 
@@ -272,7 +179,98 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				class="mx-auto mt-10 max-w-xl text-center text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
 			>
 				Beide Drehbücher beginnen heute — und du schreibst eines davon sowieso.
-				<strong class="font-sans font-semibold text-accent-ink">Nimm den Stift in die Hand.</strong>
+				<strong class="font-sans font-semibold text-accent">Nimm den Stift in die Hand.</strong>
+			</p>
+		</div>
+	</section>
+
+	<!-- ONE section between the hero and the Spark thesis: the day-sized change,
+	     what an Aven actually is, and the thesis that ties them together. The
+	     separate "Vision" block said the same thing a second time, one level of
+	     abstraction higher, and the page was better without it. -->
+	<section
+		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
+		aria-labelledby="personal-heading"
+	>
+		<div class="mx-auto max-w-2xl text-center">
+			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
+				Deine Transformation · Ganz persönlich
+			</p>
+			<h2
+				id="personal-heading"
+				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+			>
+				Erst ändert sich dein Tag. Dann dein Jahrzehnt.
+			</h2>
+
+			<p class="mx-auto mt-6 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
+				Heute verkaufst du Stunden. Acht gehören jemand anderem, die neunte meistens auch — und was
+				am Monatsende übrig bleibt, hat jemand anderes festgelegt.
+			</p>
+
+			<p
+				class="mt-7 text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[21px]"
+			>
+				Dein Aven ist eine KI, die dir gehört und deine Privatsphäre schützt.
+			</p>
+
+			<p class="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
+				Deiner sortiert deine Post, bevor du aufstehst. Bereitet die Rechnung vor, bevor du sie
+				suchst. Erledigt den Papierkram, der dich seit Monaten anschweigt — während du an dem
+				arbeitest, wofür du eigentlich angetreten bist.
+			</p>
+
+			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
+				Und dann passiert das Eigentliche:
+				<strong class="font-medium text-foreground/85">was du baust, bleibt deins</strong>. Nicht
+				deine Stunde ist das Asset — du und dein Aven seid es.
+			</p>
+		</div>
+	</section>
+
+	<!-- The thesis: the company of the future, named. -->
+	<section
+		class="border-b border-border/40 bg-linear-to-b from-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
+		aria-labelledby="spark-heading"
+	>
+		<div class="mx-auto max-w-3xl text-center">
+			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
+				Die Firma der Zukunft
+			</p>
+			<h2
+				id="spark-heading"
+				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
+			>
+				1&nbsp;Mensch + 1&nbsp;Aven =
+				<span class="text-accent">ein Spark</span>.
+			</h2>
+			<div
+				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
+			>
+				<p class="text-pretty">
+					Die Firma der Zukunft hat kein Büro, keine Abteilungen, keine vierzig Angestellten. Sie
+					ist ein Funke:
+					<strong class="font-medium text-foreground/88">ein Mensch mit einer Vision</strong>
+					und
+					<strong class="font-medium text-foreground/88"
+						>ein Aven, der die ganze Firma dazu betreibt</strong
+					>
+					— Operations, Technik, Markt, Produkt.
+				</p>
+				<p class="text-pretty">
+					Das nennen wir einen
+					<strong class="font-medium text-foreground/88">Spark</strong>
+					— dein erster ist dein Leben selbst.
+				</p>
+			</div>
+			<p
+				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
+			>
+				Jeder Mensch wird Gründer.
+				<span class="mt-2 block">
+					Alles, was du dazu brauchst, ist
+					<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
+				</span>
 			</p>
 		</div>
 	</section>
