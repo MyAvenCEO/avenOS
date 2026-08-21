@@ -43,7 +43,8 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 			<div class="mx-auto mt-8 max-w-2xl">
 				<p class="text-pretty text-[19px] font-semibold leading-snug text-accent sm:text-[22px]">
 					Wir sind da, um dich endlich in dein souveränes Gründerleben zu katapultieren, von dem du
-					schon immer träumst, aber dich nie getraut hast.
+					schon immer träumst. Gemeinsam zu bauen, woran du wirklich glaubst, ist die Zukunft, die
+					uns alle glücklich macht.
 				</p>
 			</div>
 		</div>
