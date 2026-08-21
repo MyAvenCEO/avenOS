@@ -47,10 +47,10 @@ const ROLES: Role[] = [
 	},
 	{
 		role: 'status quiet',
-		tone: 'Hafen',
+		tone: 'Anchor',
 		token: '--color-status-quiet',
-		toneToken: '--color-harbour',
-		note: 'zurückgenommen — jedes Typ-Badge, archive'
+		toneToken: '--color-anchor',
+		note: 'zurückgenommen — jedes Typ-Badge'
 	},
 	{
 		role: 'status success',
@@ -60,13 +60,6 @@ const ROLES: Role[] = [
 		note: 'erledigt — der helle Ton der Marke'
 	},
 	{
-		role: 'status warning',
-		tone: 'Tuscan Sun',
-		token: '--color-status-warning',
-		toneToken: '--color-tuscan-sun',
-		note: 'Achtung — aber nichts ist kaputt'
-	},
-	{
 		role: 'status error',
 		tone: 'Terracotta',
 		token: '--color-status-error',
@@ -74,15 +67,22 @@ const ROLES: Role[] = [
 		note: 'etwas ist gescheitert'
 	},
 	{
+		role: 'status warning',
+		tone: 'Tuscan Sun',
+		token: '--color-status-warning',
+		toneToken: '--color-tuscan-sun',
+		note: 'Achtung — aber nichts ist kaputt'
+	},
+	{
 		role: 'status info',
-		tone: 'Sonnenblume',
+		tone: 'Sunflower',
 		token: '--color-status-info',
 		toneToken: '--color-sunflower',
 		note: 'Hinweis; oft: du bist dran'
 	},
 	{
 		role: 'secondary',
-		tone: 'Pergament',
+		tone: 'Parchment',
 		token: '--color-secondary',
 		toneToken: '--color-parchment',
 		note: 'die warme zweite Aktion'
@@ -126,16 +126,20 @@ const STATES: Role[] = [
 ]
 
 /** Block 1: the paint itself, each hex written exactly once in app.css. */
-const TONES: Tone[] = [
+const TONES_COOL: Tone[] = [
 	{ name: 'Marine', token: '--color-marine', note: 'tiefes Navy — Tinte und Fläche' },
 	{ name: 'Tidal Blue', token: '--color-tidal-blue', note: 'tiefes Blaugrün — in Bewegung' },
-	{ name: 'Hafen', token: '--color-harbour', note: 'Stahlblau — alles Zurückgenommene' },
-	{ name: 'Paradise Water', token: '--color-paradise-water', note: 'Türkis — der helle Ton' },
-	{ name: 'Tuscan Sun', token: '--color-tuscan-sun', note: 'klares Gold' },
-	{ name: 'Terracotta', token: '--color-terracotta', note: 'gebranntes Orange' },
-	{ name: 'Sonnenblume', token: '--color-sunflower', note: 'warmes Bernstein-Tan' },
-	{ name: 'Pergament', token: '--color-parchment', note: 'Cremegelb — die warme Fläche' }
+	{ name: 'Anchor', token: '--color-anchor', note: 'Stahlblau — alles Zurückgenommene' },
+	{ name: 'Paradise Water', token: '--color-paradise-water', note: 'Türkis — der helle Ton' }
 ]
+
+const TONES_WARM: Tone[] = [
+	{ name: 'Terracotta', token: '--color-terracotta', note: 'gebranntes Orange' },
+	{ name: 'Tuscan Sun', token: '--color-tuscan-sun', note: 'klares Gold' },
+	{ name: 'Sunflower', token: '--color-sunflower', note: 'warmes Bernstein-Tan' },
+	{ name: 'Parchment', token: '--color-parchment', note: 'Cremegelb — die warme Fläche' }
+]
+
 
 
 /**
@@ -145,44 +149,44 @@ const TONES: Tone[] = [
  * the markup, which is why it never appeared on this page before.
  */
 const CREAMS: Tone[] = [
-	{ name: 'Porzellan', token: '--color-porcelain', note: 'Karten, die von der Seite abheben' },
-	{ name: 'Leinen', token: '--color-linen', note: 'der Grund, auf dem alles liegt' },
-	{ name: 'Eierschale', token: '--color-eggshell', note: 'Display-Flächen und Hover' },
-	{ name: 'Elfenbein', token: '--color-ivory', note: 'Karten in Ruhe und ausgewählt' }
+	{ name: 'Porcelain', token: '--color-porcelain', note: 'Karten, die von der Seite abheben' },
+	{ name: 'Linen', token: '--color-linen', note: 'der Grund, auf dem alles liegt' },
+	{ name: 'Eggshell', token: '--color-eggshell', note: 'Display-Flächen und Hover' },
+	{ name: 'Ivory', token: '--color-ivory', note: 'Karten in Ruhe und ausgewählt' }
 ]
 
 /** The two text tones, so the page shows the whole ground. */
 const INKS: Tone[] = [
-	{ name: 'Tinte', token: '--color-ink', note: 'Fließtext — nie reines Schwarz' },
-	{ name: 'Kreide', token: '--color-chalk', note: 'Text auf dunklem Ton' }
+	{ name: 'Ink', token: '--color-ink', note: 'Fließtext — nie reines Schwarz' },
+	{ name: 'Chalk', token: '--color-chalk', note: 'Text auf dunklem Ton' }
 ]
 
 /** Block 2: which rung of the cream family each surface stands on. */
 const SURFACES: Role[] = [
 	{
 		role: 'surface raised',
-		tone: 'Porzellan',
+		tone: 'Porcelain',
 		token: '--color-surface-raised',
 		toneToken: '--color-porcelain',
 		note: 'Intent-Karten, Settings-Panels, Flow-Nodes'
 	},
 	{
 		role: 'surface cream',
-		tone: 'Leinen',
+		tone: 'Linen',
 		token: '--color-surface-cream',
 		toneToken: '--color-linen',
 		note: 'der Seitengrund'
 	},
 	{
 		role: 'surface soft',
-		tone: 'Eierschale',
+		tone: 'Eggshell',
 		token: '--color-surface-soft',
 		toneToken: '--color-eggshell',
 		note: 'Display-Flächen UND Hover — ein Name, nicht zwei'
 	},
 	{
 		role: 'surface card',
-		tone: 'Elfenbein',
+		tone: 'Ivory',
 		token: '--color-surface-card',
 		toneToken: '--color-ivory',
 		note: 'Karten in Ruhe UND ausgewählt — der Rand trägt die Auswahl'
@@ -202,7 +206,7 @@ $effect(() => {
 		read(r.token)
 		read(r.toneToken)
 	}
-	for (const t of [...TONES, ...CREAMS, ...INKS]) read(t.token)
+	for (const t of [...TONES_COOL, ...TONES_WARM, ...CREAMS, ...INKS]) read(t.token)
 	resolved = next
 })
 
@@ -213,7 +217,7 @@ $effect(() => {
  */
 const collisions = $derived.by(() => {
 	const seen = new Map<string, string[]>()
-	for (const t of [...TONES, ...CREAMS, ...INKS]) {
+	for (const t of [...TONES_COOL, ...TONES_WARM, ...CREAMS, ...INKS]) {
 		const value = resolved[t.token]
 		if (!value) continue
 		seen.set(value, [...(seen.get(value) ?? []), t.name])
@@ -318,11 +322,19 @@ const collisions = $derived.by(() => {
 			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">Brand-Töne</h3>
 			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
 				Die acht Farben, die die Marke besitzt — jede genau einmal als Hex geschrieben, jede mit
-				genau einem Namen.
+				genau einem Namen. Kühle Hälfte oben, warme unten.
 			</p>
 		</div>
+		<!-- Two explicit rows rather than one grid: three cool tones and four
+		     warm ones would otherwise wrap into a ragged line and lose the
+		     split that makes the palette legible. -->
 		<ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-			{#each TONES as t (t.token)}
+			{#each TONES_COOL as t (t.token)}
+				{@render swatch(t)}
+			{/each}
+		</ul>
+		<ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+			{#each TONES_WARM as t (t.token)}
 				{@render swatch(t)}
 			{/each}
 		</ul>
