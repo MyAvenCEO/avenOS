@@ -202,6 +202,7 @@ pub fn run() {
 		.manage(auth::AuthState::default())
 		.invoke_handler(tauri::generate_handler![
 			auth::auth_status,
+			auth::auth_names,
 			auth::auth_passkey_begin,
 			auth::auth_passkey_finish,
 			auth::auth_begin,
