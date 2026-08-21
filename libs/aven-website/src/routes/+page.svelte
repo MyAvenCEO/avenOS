@@ -41,24 +41,25 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<span class="mt-1 block">in dir steckt so viel mehr.</span>
 			</h1>
 			<div class="mx-auto mt-8 max-w-2xl">
-				<p
-					class="text-pretty text-[17px] font-medium leading-snug text-foreground/85 sm:text-[19px]"
-				>
-					Dein avenCEO holt dich aus dem alten Deal heraus — und baut mit dir den neuen.
+				<p class="text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[22px]">
+					Ein Aven ist eine KI, die dir gehört.
+				</p>
+				<p class="mt-3 text-pretty text-[15px] leading-relaxed text-foreground/65 sm:text-base">
+					Kein Chatbot, den du mietest. Kein Konzern, der mitliest.
 				</p>
 				<p
-					class="mt-6 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[17px] font-semibold tracking-tight sm:text-[19px]"
+					class="mx-auto mt-6 max-w-xl text-pretty text-[15px] leading-relaxed text-foreground/68 sm:text-base"
 				>
-					<span class="text-foreground/50 line-through decoration-foreground/30"
-						>Zeit gegen Geld</span
+					Deiner sortiert deine Post, führt deine Bücher und baut deine Firma mit — nachts, am
+					Wochenende, und während du einfach dein Leben lebst.
+				</p>
+				<p
+					class="mx-auto mt-7 max-w-xl border-t border-border/40 pt-7 text-pretty text-[17px] font-medium leading-snug text-foreground/85 sm:text-[19px]"
+				>
+					So kippt der Deal deines Lebens: von Zeit gegen Geld zu —
+					<strong class="font-semibold text-accent-ink"
+						>uns gehört, was wir gemeinsam bauen.</strong
 					>
-					<span aria-hidden="true" class="text-accent">→</span>
-					<span class="text-foreground">uns gehört, was wir gemeinsam bauen</span>
-				</p>
-				<p class="mt-6 text-pretty text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-					Aus einer Gehaltsabrechnung werden
-					<strong class="font-medium text-foreground/85">10+ Assets, die dir gehören</strong>
-					— aufgebaut von dem Aven, der für dich arbeitet und nicht für einen Konzern.
 				</p>
 			</div>
 		</div>
