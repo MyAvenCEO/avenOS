@@ -10,6 +10,7 @@
 import { page } from '$app/stores'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
+import SiteFooter from '$lib/components/SiteFooter.svelte'
 import {
 	ctaHref,
 	ctaLabel,
@@ -419,9 +420,5 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 		</div>
 	</section>
 
-	<footer
-		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] uppercase tracking-[0.14em] text-foreground/35"
-	>
-		avenCEO · avenOS · Own your life
-	</footer>
+	<SiteFooter />
 </div>
