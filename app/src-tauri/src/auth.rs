@@ -180,22 +180,50 @@ fn macos_supports_native_passkeys() -> bool {
 /// as a bare "Login failed". `tauri dev` runs an ad-hoc, linker-signed binary
 /// with no team and no entitlements, so this is never satisfied in dev.
 ///
-/// The entitlement is granted by a provisioning profile, which is embedded in
-/// the bundle at `Contents/embedded.provisionprofile` — present in App Store,
-/// TestFlight and development builds, absent from a bare `cargo run` binary.
-/// Reading our own bundle beats shelling out to `codesign`: the shipped app is
-/// sandboxed, and a blocked subprocess would read as "unsigned" and push a
-/// perfectly good build onto the browser fallback.
+/// Ask the running process's own code signature, via the same Security
+/// framework AuthenticationServices consults. Two tempting shortcuts are both
+/// wrong: shelling out to `codesign` can be blocked by the App Sandbox, and
+/// looking for `Contents/embedded.provisionprofile` fails on exactly the
+/// builds that matter — Apple strips the profile from App Store and TestFlight
+/// copies while keeping the entitlements in the signature, so a perfectly
+/// entitled build would be pushed onto the browser fallback.
 #[cfg(target_os = "macos")]
 fn has_application_identifier() -> bool {
-	let Ok(executable) = std::env::current_exe() else {
-		return false;
-	};
-	// …/avenOS.app/Contents/MacOS/aven-os-app → …/avenOS.app/Contents
-	executable
-		.parent()
-		.and_then(|macos| macos.parent())
-		.is_some_and(|contents| contents.join("embedded.provisionprofile").is_file())
+	use core_foundation::base::{CFType, CFTypeRef, TCFType};
+	use core_foundation::string::{CFString, CFStringRef};
+	use std::ffi::c_void;
+
+	type SecTaskRef = *mut c_void;
+
+	#[link(name = "Security", kind = "framework")]
+	unsafe extern "C" {
+		fn SecTaskCreateFromSelf(allocator: CFTypeRef) -> SecTaskRef;
+		fn SecTaskCopyValueForEntitlement(
+			task: SecTaskRef,
+			entitlement: CFStringRef,
+			error: *mut CFTypeRef,
+		) -> CFTypeRef;
+	}
+
+	unsafe {
+		let task = SecTaskCreateFromSelf(std::ptr::null());
+		if task.is_null() {
+			return false;
+		}
+		// Owns the task: released when this wrapper drops.
+		let _task = CFType::wrap_under_create_rule(task as CFTypeRef);
+		let key = CFString::new("com.apple.application-identifier");
+		let mut error: CFTypeRef = std::ptr::null();
+		let value = SecTaskCopyValueForEntitlement(task, key.as_concrete_TypeRef(), &mut error);
+		if !error.is_null() {
+			let _error = CFType::wrap_under_create_rule(error);
+		}
+		if value.is_null() {
+			return false;
+		}
+		let _value = CFType::wrap_under_create_rule(value);
+		true
+	}
 }
 
 #[cfg(target_os = "macos")]
