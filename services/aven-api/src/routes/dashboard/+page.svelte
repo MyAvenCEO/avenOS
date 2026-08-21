@@ -21,12 +21,15 @@ onMount(async () => {
 })
 </script>
 
-<svelte:head><title>Download</title></svelte:head>
+<svelte:head><title>Download · avenCEO</title></svelte:head>
 <section class="panel auth">
+	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
+	<h1>Dein avenOS</h1>
 	{#if error}
 		<div class="alert">{error}</div>
 	{/if}
 	{#if downloadUrl}
-		<a href={downloadUrl}><button>Download AvenOS</button></a>
+		<p>Lade die App und melde dich darin mit deinem Passkey an.</p>
+		<a href={downloadUrl}><button>avenOS herunterladen</button></a>
 	{/if}
 </section>

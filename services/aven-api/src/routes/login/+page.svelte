@@ -14,19 +14,22 @@ async function login() {
 		await appRuntime.auth.signIn()
 		void goto('/dashboard')
 	} catch (cause) {
-		message = cause instanceof Error ? cause.message : 'Login failed.'
+		message = cause instanceof Error ? cause.message : 'Anmeldung fehlgeschlagen.'
 	} finally {
 		busy = false
 	}
 }
 </script>
 
-<svelte:head><title>Login</title></svelte:head>
+<svelte:head><title>Anmelden · avenCEO</title></svelte:head>
 <section class="panel auth">
-	<h1>Login</h1>
+	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
+	<h1>Willkommen zurück</h1>
 	{#if message}
 		<div class="alert">{message}</div>
 	{/if}
-	<button disabled={busy} onclick={login}>{busy ? "Waiting" : "Sign in with passkey"}</button>
-	<p>Email login works until a passkey is created.</p>
+	<p>Melde dich mit dem Passkey deines Aven‑Kontos an.</p>
+	<button disabled={busy} onclick={login}>
+		{busy ? 'Einen Moment …' : 'Mit Passkey anmelden'}
+	</button>
 </section>
