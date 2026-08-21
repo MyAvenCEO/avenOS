@@ -28,22 +28,37 @@ function continueToCheckout() {
 }
 </script>
 
-<svelte:head><title>Check name</title></svelte:head>
+<svelte:head><title>avenID sichern · avenCEO</title></svelte:head>
 <section class="panel auth">
-	<h1>Check name</h1>
+	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
+	<h1>Sichere dir deine avenID</h1>
+	<p>Wie eine Domain — aber für deinen Aven. Jeden Namen gibt es genau einmal.</p>
 	<form onsubmit={(event) => { event.preventDefault(); void check(); }}>
-		<label>Name<input bind:value={name} maxlength="32" autocomplete="off"></label>
-		<button disabled={busy || name.trim().length < 3}>{busy ? "Checking" : "Check"}</button>
+		<label
+			>Dein Name<input
+				bind:value={name}
+				maxlength="32"
+				autocomplete="off"
+				placeholder="maia"
+			></label
+		>
+		<button disabled={busy || name.trim().length < 3}>
+			{busy ? 'Wird geprüft …' : 'Verfügbarkeit prüfen'}
+		</button>
 	</form>
 	{#if error}
 		<div class="alert">{error}</div>
 	{/if}
 	{#if result}
 		{#if result.available}
-			<p>{result.name} · {result.priceEur} €</p>
-			<button onclick={continueToCheckout}>Continue</button>
+			<div class="code">
+				<p class="eyebrow">Frei</p>
+				<p class="digits">{result.name}.aven.ceo</p>
+			</div>
+			<p>{result.priceEur} € einmalig, zzgl. USt.</p>
+			<button onclick={continueToCheckout}>Weiter</button>
 		{:else}
-			<p>Unavailable</p>
+			<div class="alert">Dieser Name ist schon vergeben. Probier einen anderen.</div>
 		{/if}
 	{/if}
 </section>
