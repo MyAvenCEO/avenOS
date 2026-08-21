@@ -228,6 +228,36 @@ button:disabled {
 	letter-spacing: 0.18em;
 }
 
+/* Quiet supporting text: consent lines, the wildcard note, the alpha caveat. */
+.fine {
+	color: var(--quiet);
+	font-size: 0.75rem;
+	line-height: 1.55;
+}
+
+.eyebrow {
+	color: var(--quiet);
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+textarea {
+	min-height: 6rem;
+	padding: 0.65rem 0.9rem;
+	border: 1px solid var(--border);
+	border-radius: 0.75rem;
+	background: var(--porcelain);
+	font: inherit;
+	resize: vertical;
+}
+
+textarea:focus-visible {
+	border-color: rgba(31, 42, 61, 0.4);
+	outline: none;
+}
+
 .mark {
 	width: 3.5rem;
 	height: 3.5rem;

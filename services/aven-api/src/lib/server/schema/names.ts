@@ -37,6 +37,12 @@ export const nameHolds = pgTable(
 		id: text('id').primaryKey(),
 		name: text('name').notNull(),
 		email: text('email').notNull(),
+		/** Which tier's CTA sent them here — avenid | avenme | avenceo | avencoop. */
+		tier: text('tier').notNull().default(''),
+		/** What to call them. */
+		salutation: text('salutation').notNull().default(''),
+		/** Free text: what they want to build. Read when deciding a wildcard invite. */
+		idea: text('idea').notNull().default(''),
 		claimTokenHash: text('claim_token_hash').notNull().default(''),
 		successTokenHash: text('success_token_hash').notNull().default(''),
 		emailConfirmedAt: timestamp('email_confirmed_at', { withTimezone: true }),
@@ -50,6 +56,7 @@ export const nameHolds = pgTable(
 		index('name_holds_name_idx').on(t.name),
 		index('name_holds_expiry_idx').on(t.expiresAt),
 		index('name_holds_email_idx').on(t.email),
+		index('name_holds_tier_idx').on(t.tier),
 		index('name_holds_claim_token_idx').on(t.claimTokenHash),
 		index('name_holds_reserved_idx').on(t.reservedUntil)
 	]

@@ -18,6 +18,8 @@
  * is which plan a skill comes with, not which of us built it.
  */
 
+import { idFunnelHref } from '$lib/id-service'
+
 export type PlanId = 'avenid' | 'avenme' | 'avenceo' | 'avencoop'
 
 /**
@@ -217,6 +219,5 @@ export function ctaLabel(p: Plan): string {
 }
 
 export function ctaHref(p: Plan): string {
-	if (p.applyOnly) return `/waitlist?intent=coop-application&tier=${p.id}`
-	return p.id === 'avenid' ? '/waitlist?intent=aven-id' : `/waitlist?intent=ceo-plan&tier=${p.id}`
+	return idFunnelHref(p.id)
 }

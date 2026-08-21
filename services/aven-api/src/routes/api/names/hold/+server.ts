@@ -17,5 +17,10 @@ export const POST = api(async (event, rt) => {
 		throw error
 	}
 	const input = secureNameSchema.parse(await readJson(event))
-	return { status: 201, body: { hold: await rt.names.secure(input.name, input.email) } }
+	const hold = await rt.names.secure(input.name, input.email, {
+		tier: input.tier,
+		salutation: input.salutation,
+		idea: input.idea
+	})
+	return { status: 201, body: { hold } }
 })
