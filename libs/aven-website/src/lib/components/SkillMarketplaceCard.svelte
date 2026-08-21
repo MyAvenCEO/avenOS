@@ -20,8 +20,7 @@ const chainLabels: Record<string, string> = {
 	'brain-memorizer': 'Gedächtnis',
 	'book-keeper': 'Buchhaltung',
 	'human-reviewer': 'HITL',
-	'blog-writer': 'Content',
-	'golden-offer': 'Angebote'
+	'blog-writer': 'Content'
 }
 </script>
 
@@ -43,6 +42,12 @@ const chainLabels: Record<string, string> = {
 
 	<h3 class="mt-3 text-[15px] font-bold tracking-[0.06em] text-foreground sm:text-[16px]">
 		{skillLabel(skill.slug)}
+		{#if skill.comingSoon}
+			<span
+				class="ml-2 align-middle rounded-full border border-quiet/40 bg-quiet/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-quiet-ink"
+				>bald</span
+			>
+		{/if}
 	</h3>
 
 	<p class="mt-2 text-[14px] font-medium leading-snug text-foreground/82 sm:text-[15px]">

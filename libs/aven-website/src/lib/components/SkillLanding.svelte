@@ -15,7 +15,10 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 </script>
 
 <svelte:head>
-	<title>{skillLabel(skill.slug)} — aven.ceo · {skill.publisher.displayName} Skills</title>
+	<title>
+		{skill.comingSoon ? 'Bald · ' : ''}{skillLabel(skill.slug)}
+		— aven.ceo · {skill.publisher.displayName} Skills
+	</title>
 	<meta name="description" content={skill.oneLineCopy}>
 </svelte:head>
 
@@ -36,9 +39,9 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 				<a href="/pricing" class="transition-opacity hover:opacity-100">Preise</a>
 				<a
 					href="/waitlist"
-					class="rounded-full border border-border/80 bg-surface-raised px-3 py-1 normal-case opacity-95 hover:opacity-100 transition-opacity"
+					class="rounded-full bg-primary px-4 py-1.5 normal-case font-semibold text-primary-foreground transition-opacity hover:opacity-90"
 				>
-					avenID sichern
+					Sichere dir deinen Aven
 				</a>
 			</nav>
 		</div>
@@ -50,6 +53,15 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 				{skill.hero.kicker}
 			</p>
+			{#if skill.comingSoon}
+				<p class="mt-3">
+					<span
+						class="inline-flex items-center rounded-full border border-quiet/40 bg-quiet/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-quiet-ink"
+					>
+						Bald verfügbar
+					</span>
+				</p>
+			{/if}
 			<h1
 				class="mt-4 text-[1.55rem] font-semibold tracking-[-0.03em] text-pretty leading-snug text-foreground sm:text-3xl md:text-[2.35rem] md:leading-[1.15]"
 			>

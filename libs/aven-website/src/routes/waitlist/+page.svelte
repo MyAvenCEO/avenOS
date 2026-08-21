@@ -167,9 +167,9 @@ const tierPlan = $derived(PLANS.find((p) => p.id === tier) ?? null)
 				<a href="/pricing" class="transition-opacity hover:opacity-100">Preise</a>
 				<a
 					href="/waitlist"
-					class="rounded-full border border-border/80 bg-surface-raised px-3 py-1 normal-case opacity-95 hover:opacity-100 transition-opacity"
+					class="rounded-full bg-primary px-4 py-1.5 normal-case font-semibold text-primary-foreground transition-opacity hover:opacity-90"
 				>
-					Warteliste
+					Sichere dir deinen Aven
 				</a>
 			</nav>
 		</div>

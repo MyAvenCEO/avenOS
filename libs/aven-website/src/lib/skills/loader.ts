@@ -5,7 +5,6 @@ import deBrainMemorizer from './content/de/brain-memorizer.json'
 import deDocsOrganizer from './content/de/docs-organizer.json'
 // ── DE ────────────────────────────────────────────────────────────────────────
 import deEmailIngestor from './content/de/email-ingestor.json'
-import deGoldenOffer from './content/de/golden-offer.json'
 import deHumanReviewer from './content/de/human-reviewer.json'
 import enBlogWriter from './content/en/blog-writer.json'
 import enBookKeeper from './content/en/book-keeper.json'
@@ -13,7 +12,6 @@ import enBrainMemorizer from './content/en/brain-memorizer.json'
 import enDocsOrganizer from './content/en/docs-organizer.json'
 // ── EN (source of truth) ──────────────────────────────────────────────────────
 import enEmailIngestor from './content/en/email-ingestor.json'
-import enGoldenOffer from './content/en/golden-offer.json'
 import enHumanReviewer from './content/en/human-reviewer.json'
 import dePubAvenmaia from './publishers/de/avenmaia.json'
 import dePubAventin from './publishers/de/aventin.json'
@@ -37,8 +35,7 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		enBrainMemorizer,
 		enBookKeeper,
 		enHumanReviewer,
-		enBlogWriter,
-		enGoldenOffer
+		enBlogWriter
 	] as SkillJson[],
 	de: [
 		deEmailIngestor,
@@ -46,8 +43,7 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		deBrainMemorizer,
 		deBookKeeper,
 		deHumanReviewer,
-		deBlogWriter,
-		deGoldenOffer
+		deBlogWriter
 	] as SkillJson[]
 }
 
