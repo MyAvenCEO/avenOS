@@ -28,13 +28,13 @@ const REDPILL_CHAT_URL = 'https://api.redpill.ai/v1/chat/completions'
  *
  * Chosen by benchmark against the dashboard's own payload. Gemma corrupted
  * its stream and wrote calls as Python; the 3B-active qwen3.6-35b-a3b matched
- * Gemma's speed but not its judgement. This one is both the strongest and the
- * fastest measured: 122B with 10B active, ttft 1.1-1.3s, tool call complete
- * in 1.3s — against 1.7-2.6s for glm-5.2 and 2.6-4.4s for kimi-k2.5, the next
- * models up. Thinking is disabled below; with it on, Qwen routes spend many
- * seconds deliberating before the first token.
+ * Gemma's speed but not its judgement. qwen3.5-122b-a10b held this slot on
+ * those numbers (ttft 1.1-1.3s, tool call complete in 1.3s) until Phala
+ * retired it on 2026-08-27; deepseek-v4-flash is their named successor and
+ * inherits the slot. Thinking stays disabled below — with it on, these routes
+ * spend many seconds deliberating before the first token.
  */
-const MODEL = 'qwen/qwen3.5-122b-a10b'
+const MODEL = 'deepseek/deepseek-v4-flash-0731'
 
 /**
  * Second lane: the slower, stronger model, for work an actor's manifest pins

@@ -1,87 +1,147 @@
 <script lang="ts">
 /**
- * The brand palette, read from the running theme rather than retyped: each
+ * The brand palette, read from the running theme rather than retyped: every
  * swatch paints itself with its own CSS variable and reports the value the
  * browser actually resolved. Change a token in app.css and this page tells
  * the truth on the next reload — a surface for shaping the palette, not a
  * copy of it that drifts.
+ *
+ * It is laid out the way the palette is now built (app.css, blocks 1–4):
+ * tones are the paint, roles are the meaning, surfaces are the ground. The
+ * mapping table comes first because that is the part worth arguing about.
  */
 
-interface Token {
+interface Role {
+	role: string
+	tone: string
 	token: string
-	name: string
+	toneToken: string
 	note: string
 }
 
-interface Group {
-	title: string
-	about: string
-	tokens: Token[]
+interface Tone {
+	name: string
+	token: string
+	note: string
 }
 
-const GROUPS: Group[] = [
+/**
+ * Block 3 of app.css, mirrored: the design-system role on the left, the brand
+ * tone that carries it on the right. One tone may serve several roles; no role
+ * may name a hex.
+ */
+const ROLES: Role[] = [
 	{
-		title: 'Primär',
-		about: 'Was die Marke trägt — Navy führt, Creme hält den Grund.',
-		tokens: [
-			{
-				token: '--color-brand-navy',
-				name: 'Marine',
-				note: 'primary · Voice-Pill, HITL, aktive Chips'
-			},
-			{
-				token: '--color-primary-soft',
-				name: 'Marine soft',
-				note: 'Akzent-Chrom, wo Navy erschlägt'
-			},
-			{
-				token: '--color-secondary',
-				name: 'Creme-Gelb',
-				note: 'secondary · warme Aktion auf Navy-Text'
-			},
-			{
-				token: '--color-surface-cream',
-				name: 'Seiten-Creme',
-				note: 'der Grund, auf dem alles liegt'
-			},
-			{ token: '--color-surface-soft', name: 'Eierschale weich', note: 'Display-Flächen' },
-			{ token: '--color-surface-card', name: 'Karte', note: 'Ruhezustand' },
-			{ token: '--color-surface-card-selected', name: 'Karte gewählt', note: 'Auswahl-Highlight' }
-		]
+		role: 'primary',
+		tone: 'Marine',
+		token: '--color-primary',
+		toneToken: '--color-marine',
+		note: 'Buttons, Rail, HITL-Rahmen'
 	},
 	{
-		title: 'Status',
-		about: 'Die Zustände, die der Intent-Stream als 3px-Kante trägt.',
-		tokens: [
-			{ token: '--color-status-success-base', name: 'Moos', note: 'done · erledigt' },
-			{
-				token: '--color-status-working-base',
-				name: 'Salbei',
-				note: 'working — heute nutzt der Stream Amber'
-			},
-			{ token: '--color-status-error-base', name: 'Terracotta', note: 'error · abgelehnt' },
-			{ token: '--color-status-info-base', name: 'Sand', note: 'info · Spark „Me"' },
-			{
-				token: '--color-status-pairing-base',
-				name: 'Violett',
-				note: 'pairing · Spark „Team", Brain'
-			}
-		]
+		role: 'primary soft',
+		tone: 'Hafen',
+		token: '--color-primary-soft',
+		toneToken: '--color-harbour',
+		note: 'Chrom, wo Marine erschlägt'
 	},
 	{
-		title: 'Benannte Töne',
-		about: 'Die Namen, die wir sprechen — mehrere zeigen auf dieselbe Basis.',
-		tokens: [
-			{ token: '--color-marine', name: 'marine', note: '→ primary' },
-			{ token: '--color-tuscan-sun', name: 'tuscan sun', note: '→ coffee (war: Sonnengelb)' },
-			{ token: '--color-paradise-water', name: 'paradise water', note: '→ shadow (war: Türkis)' },
-			{ token: '--color-moss', name: 'moss', note: '→ lunar green' },
-			{ token: '--color-terracotta', name: 'terracotta', note: '→ nutmeg' },
-			{ token: '--color-coffee', name: 'coffee', note: '→ brand navy' },
-			{ token: '--color-driftwood', name: 'driftwood', note: '→ archive / mercury' },
-			{ token: '--color-palette-shadow', name: 'shadow', note: 'warmes Grau' }
-		]
+		role: 'secondary',
+		tone: 'Pergament',
+		token: '--color-secondary',
+		toneToken: '--color-parchment',
+		note: 'die warme zweite Aktion'
+	},
+	{
+		role: 'error',
+		tone: 'Terracotta',
+		token: '--color-status-error',
+		toneToken: '--color-terracotta',
+		note: 'ein Gate ist gescheitert'
+	},
+	{
+		role: 'warning',
+		tone: 'Tuscan Sun',
+		token: '--color-status-warning',
+		toneToken: '--color-tuscan-sun',
+		note: 'working — es bewegt sich etwas'
+	},
+	{
+		role: 'info',
+		tone: 'Sonnenblume',
+		token: '--color-status-info',
+		toneToken: '--color-sunflower',
+		note: 'Hinweis ohne Handlung'
+	},
+	{
+		role: 'success',
+		tone: 'Moos',
+		token: '--color-status-success',
+		toneToken: '--color-moss',
+		note: 'erledigt, abgelegt'
+	},
+	{
+		role: 'working',
+		tone: 'Salbei',
+		token: '--color-status-working',
+		toneToken: '--color-sage',
+		note: 'Fläche in Arbeit (dunkler Text darauf)'
+	},
+	{
+		role: 'waiting',
+		tone: 'Paradise Water',
+		token: '--color-status-waiting',
+		toneToken: '--color-paradise-water',
+		note: 'offenes Human-Gate (HITL)'
+	},
+	{
+		role: 'pairing',
+		tone: 'Iris',
+		token: '--color-status-pairing',
+		toneToken: '--color-iris',
+		note: 'Geräte-Pairing'
+	},
+	{
+		role: 'archive',
+		tone: 'Driftwood',
+		token: '--color-status-archive',
+		toneToken: '--color-driftwood',
+		note: 'aus dem Weg, noch lesbar'
+	},
+	{
+		role: 'neutral',
+		tone: 'Stein',
+		token: '--color-neutral',
+		toneToken: '--color-stone',
+		note: 'ruhiges Chrom'
 	}
+]
+
+/** Block 1: the paint itself, each hex written exactly once in app.css. */
+const TONES: Tone[] = [
+	{ name: 'Marine', token: '--color-marine', note: 'tiefes Navy — Tinte und Fläche' },
+	{ name: 'Hafen', token: '--color-harbour', note: 'Stahlblau — Marine, einen Schritt zurück' },
+	{ name: 'Pergament', token: '--color-parchment', note: 'Cremegelb — die warme Fläche' },
+	{ name: 'Sonnenblume', token: '--color-sunflower', note: 'warmes Bernstein-Tan' },
+	{ name: 'Tuscan Sun', token: '--color-tuscan-sun', note: 'gebranntes Gold — liest sich als Text' },
+	{ name: 'Terracotta', token: '--color-terracotta', note: 'gebranntes Orange' },
+	{ name: 'Moos', token: '--color-moss', note: 'tiefes Grün' },
+	{ name: 'Salbei', token: '--color-sage', note: 'blasses Grün — nur als Fläche' },
+	{ name: 'Paradise Water', token: '--color-paradise-water', note: 'Türkis' },
+	{ name: 'Iris', token: '--color-iris', note: 'Violett' },
+	{ name: 'Driftwood', token: '--color-driftwood', note: 'Graublau' },
+	{ name: 'Stein', token: '--color-stone', note: 'warmes Grau' }
+]
+
+/** Block 2: the cream ladder, lightest first. */
+const SURFACES: Tone[] = [
+	{ name: 'Seiten-Creme', token: '--color-surface-cream', note: 'der Grund, auf dem alles liegt' },
+	{ name: 'Eierschale weich', token: '--color-surface-soft', note: 'Display-Flächen' },
+	{ name: 'Karte', token: '--color-surface-card', note: 'Ruhezustand' },
+	{ name: 'Karte hover', token: '--color-surface-card-hover', note: 'Zeiger darüber' },
+	{ name: 'Karte gewählt', token: '--color-surface-card-selected', note: 'Auswahl-Highlight' },
+	{ name: 'Tinte', token: '--color-ink', note: 'Fließtext — nie reines Schwarz' },
+	{ name: 'Kreide', token: '--color-chalk', note: 'Text auf dunklem Ton' }
 ]
 
 /** What the browser resolved, per token — the honest value. */
@@ -90,89 +150,156 @@ let resolved = $state<Record<string, string>>({})
 $effect(() => {
 	const style = getComputedStyle(document.documentElement)
 	const next: Record<string, string> = {}
-	for (const group of GROUPS) {
-		for (const t of group.tokens) next[t.token] = style.getPropertyValue(t.token).trim()
+	const read = (token: string) => {
+		next[token] = style.getPropertyValue(token).trim()
 	}
+	for (const r of ROLES) {
+		read(r.token)
+		read(r.toneToken)
+	}
+	for (const t of [...TONES, ...SURFACES]) read(t.token)
 	resolved = next
 })
 
 /**
- * Two tokens that resolve to the same value are the same colour wearing two
- * names — worth seeing while shaping the palette.
+ * Two TONES resolving to the same value would mean one colour wearing two
+ * names — the drift this consolidation set out to end. Roles are excluded:
+ * several roles sharing a tone is the design, not a duplicate.
  */
-const duplicates = $derived.by(() => {
+const collisions = $derived.by(() => {
 	const seen = new Map<string, string[]>()
-	for (const [token, value] of Object.entries(resolved)) {
+	for (const t of TONES) {
+		const value = resolved[t.token]
 		if (!value) continue
-		seen.set(value, [...(seen.get(value) ?? []), token])
+		seen.set(value, [...(seen.get(value) ?? []), t.name])
 	}
-	return [...seen.entries()].filter(([, tokens]) => tokens.length > 1)
+	return [...seen.entries()].filter(([, names]) => names.length > 1)
 })
 </script>
 
-<div class="flex flex-col gap-6">
+{#snippet swatch(item: Tone)}
+	<li
+		class="overflow-hidden rounded-xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+	>
+		<!-- The colour gets the room: a full-width field, not a chip. -->
+		<span
+			class="block h-24 w-full border-foreground/10 border-b"
+			style="background: var({item.token})"
+		></span>
+		<div class="px-3 py-2.5">
+			<div class="flex items-baseline gap-2">
+				<span class="font-medium text-xs">{item.name}</span>
+				<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/45">
+					{resolved[item.token] || '—'}
+				</span>
+			</div>
+			<p class="truncate text-[0.625rem] text-foreground/40">{item.note}</p>
+			<p class="truncate font-mono text-[0.5625rem] text-foreground/30">{item.token}</p>
+		</div>
+	</li>
+{/snippet}
+
+<div class="flex flex-col gap-8">
 	<div>
 		<h2 class="font-semibold text-sm">Brand-Farben</h2>
 		<p class="pt-1 text-foreground/50 text-xs">
-			Gelesen aus dem laufenden Theme — jede Fläche malt sich mit ihrem eigenen Token.
+			Gelesen aus dem laufenden Theme — jede Fläche malt sich mit ihrem eigenen Token. Töne tragen
+			die Farbe, Rollen tragen die Bedeutung; kein Bauteil nennt je einen Hex-Wert.
 		</p>
 	</div>
 
-	{#each GROUPS as group (group.title)}
-		<section class="flex flex-col gap-2">
-			<div>
-				<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-					{group.title}
-				</h3>
-				<p class="pt-0.5 text-[0.6875rem] text-foreground/40">{group.about}</p>
-			</div>
-			<ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-				{#each group.tokens as t (t.token)}
-					<li
-						class="flex items-center gap-3 rounded-xl border border-foreground/5 bg-[#fffdf7] px-3 py-2.5 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-					>
-						<span
-							class="size-9 shrink-0 rounded-lg border border-foreground/10"
-							style="background: var({t.token})"
-						></span>
-						<div class="min-w-0 flex-1">
-							<div class="flex items-baseline gap-2">
-								<span class="font-medium text-xs">{t.name}</span>
-								<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/45">
-									{resolved[t.token] || '—'}
-								</span>
-							</div>
-							<p class="truncate text-[0.625rem] text-foreground/40">{t.note}</p>
-							<p class="truncate font-mono text-[0.5625rem] text-foreground/30">{t.token}</p>
+	<!-- ── Roles: the mapping, and the reason the rest exists ── -->
+	<section class="flex flex-col gap-2">
+		<div>
+			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+				Rolle → Brand-Ton
+			</h3>
+			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
+				Die Design-System-Rolle links, der Ton der sie trägt rechts. Eine Rolle hier umhängen färbt
+				jede Fläche, die sie spricht.
+			</p>
+		</div>
+		<ul class="grid gap-2 lg:grid-cols-2">
+			{#each ROLES as r (r.role)}
+				<li
+					class="flex items-stretch gap-3 overflow-hidden rounded-xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+				>
+					<span
+						class="w-24 shrink-0 self-stretch border-foreground/10 border-r"
+						style="background: var({r.token})"
+					></span>
+					<div class="min-w-0 flex-1 py-2.5 pr-3">
+						<div class="flex items-baseline gap-2">
+							<span class="font-mono font-medium text-xs">{r.role}</span>
+							<span class="text-[0.625rem] text-foreground/30">→</span>
+							<span class="truncate text-xs text-foreground/70">{r.tone}</span>
+							<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/45">
+								{resolved[r.token] || '—'}
+							</span>
 						</div>
-					</li>
-				{/each}
-			</ul>
-		</section>
-	{/each}
+						<p class="truncate text-[0.625rem] text-foreground/40">{r.note}</p>
+						<p class="truncate font-mono text-[0.5625rem] text-foreground/30">{r.token}</p>
+					</div>
+				</li>
+			{/each}
+		</ul>
+	</section>
 
-	{#if duplicates.length > 0}
+	<!-- ── Tones: the paint ── -->
+	<section class="flex flex-col gap-2">
+		<div>
+			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">Brand-Töne</h3>
+			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
+				Die zwölf Farben, die die Marke besitzt — jede genau einmal als Hex geschrieben, jede mit
+				genau einem Namen.
+			</p>
+		</div>
+		<ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+			{#each TONES as t (t.token)}
+				{@render swatch(t)}
+			{/each}
+		</ul>
+	</section>
+
+	<!-- ── Surfaces: the ground ── -->
+	<section class="flex flex-col gap-2">
+		<div>
+			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+				Flächen & Tinte
+			</h3>
+			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
+				Die Creme-Leiter, auf der die App liegt — hellste zuerst.
+			</p>
+		</div>
+		<ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+			{#each SURFACES as s (s.token)}
+				{@render swatch(s)}
+			{/each}
+		</ul>
+	</section>
+
+	{#if collisions.length > 0}
 		<section class="flex flex-col gap-2">
 			<div>
-				<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-					Gleiche Farbe, mehrere Namen
+				<h3 class="font-semibold text-status-error-ink text-xs uppercase tracking-wide">
+					Zwei Namen, eine Farbe
 				</h3>
 				<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
-					Kandidaten fürs Aufräumen — oder für eigene Töne.
+					Sollte leer sein — ein Ton ist ein Name. Was hier auftaucht, gehört zusammengelegt.
 				</p>
 			</div>
 			<ul class="flex flex-col gap-1.5">
-				{#each duplicates as [value, tokens] (value)}
+				{#each collisions as [value, names] (value)}
 					<li
 						class="flex items-center gap-3 rounded-xl border border-foreground/5 bg-[#fffdf7] px-3 py-2"
 					>
 						<span
-							class="size-5 shrink-0 rounded-md border border-foreground/10"
+							class="size-6 shrink-0 rounded-md border border-foreground/10"
 							style="background: {value}"
 						></span>
 						<span class="shrink-0 font-mono text-[0.625rem] text-foreground/45">{value}</span>
-						<span class="min-w-0 flex-1 truncate font-mono text-[0.625rem] text-foreground/35">
-							{tokens.join(' · ')}
+						<span class="min-w-0 flex-1 truncate text-[0.625rem] text-foreground/35">
+							{names.join(' · ')}
 						</span>
 					</li>
 				{/each}

@@ -101,17 +101,23 @@ const STATUS_LABEL: Record<IntentState, string> = {
 }
 
 /** edge = the 3px left border, text = the status word. */
+/**
+ * The five intent states, each speaking a design-system ROLE rather than a
+ * hex — the tones live in app.css, one name apiece, and the Brand-Farben
+ * settings page reads the same tokens back out. `-ink` is the tone darkened
+ * enough to be read as text on cream.
+ */
 const STATE_ACCENT: Record<IntentState, { edge: string; text: string }> = {
-	// brand amber — something is moving
-	working: { edge: 'border-l-[#a06818]', text: 'text-[#a06818]' },
-	// paradise turquoise — the human gate (HITL)
-	waiting: { edge: 'border-l-[#3d8b84]', text: 'text-[#3d8b84]' },
-	// brand green — settled
-	done: { edge: 'border-l-[#2f5d50]', text: 'text-[#2f5d50]' },
-	// terracotta — the HITL failure
-	error: { edge: 'border-l-[#c15b40]', text: 'text-[#9c4832]' },
-	// grey-blue — out of the way
-	archive: { edge: 'border-l-[#5b7a9d]', text: 'text-[#46617f]' }
+	// warning · tuscan sun — something is moving
+	working: { edge: 'border-l-status-warning', text: 'text-status-warning-ink' },
+	// waiting · paradise water — the human gate (HITL)
+	waiting: { edge: 'border-l-status-waiting', text: 'text-status-waiting-ink' },
+	// success · moss — settled
+	done: { edge: 'border-l-status-success', text: 'text-status-success-ink' },
+	// error · terracotta — the HITL failure
+	error: { edge: 'border-l-status-error', text: 'text-status-error-ink' },
+	// archive · driftwood — out of the way
+	archive: { edge: 'border-l-status-archive', text: 'text-status-archive-ink' }
 }
 
 const KIND_LABEL: Record<string, string> = {
