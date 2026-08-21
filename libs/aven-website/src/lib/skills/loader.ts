@@ -1,3 +1,4 @@
+import { skillBySlug } from '@avenos/aven-skills'
 import { PLANS, type Plan, type PlanId, planIncludes } from '$lib/pricing/plans'
 import deBlogWriter from './content/de/blog-writer.json'
 import deBookKeeper from './content/de/book-keeper.json'
@@ -32,8 +33,21 @@ import type {
 	SupportedLang
 } from './types'
 
+/**
+ * Which tier a skill comes with is decided ONCE, in the shared catalog that
+ * the app reads too — not eight times over, in two languages. The content
+ * files still carry a `plan`, because they are self-contained documents, but
+ * the catalog is what wins: a JSON that disagrees is out of date, not right.
+ */
+function withCatalogPlan(list: SkillJson[]): SkillJson[] {
+	return list.map((s) => {
+		const entry = skillBySlug(s.slug)
+		return entry ? { ...s, plan: entry.plan } : s
+	})
+}
+
 const registry: Record<SupportedLang, SkillJson[]> = {
-	en: [
+	en: withCatalogPlan([
 		enEmailManager,
 		enDocsOrganizer,
 		enBrainMemorizer,
@@ -42,8 +56,8 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		enCalendarOrganizer,
 		enTodoShuffler,
 		enBlogWriter
-	] as SkillJson[],
-	de: [
+	] as SkillJson[]),
+	de: withCatalogPlan([
 		deEmailManager,
 		deDocsOrganizer,
 		deBrainMemorizer,
@@ -52,7 +66,7 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		deCalendarOrganizer,
 		deTodoShuffler,
 		deBlogWriter
-	] as SkillJson[]
+	] as SkillJson[])
 }
 
 const publisherRegistry: Record<SupportedLang, PublisherIdentityJson[]> = {
