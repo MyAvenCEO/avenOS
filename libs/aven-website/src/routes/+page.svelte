@@ -42,15 +42,8 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 			</h1>
 			<div class="mx-auto mt-8 max-w-2xl">
 				<p class="text-pretty text-[19px] font-semibold leading-snug text-accent sm:text-[22px]">
-					Wir sind da, um dich endlich in dein souveränes Gründerleben zu katapultieren.
-				</p>
-				<p
-					class="mx-auto mt-6 max-w-xl text-pretty text-[17px] leading-relaxed text-foreground/80 sm:text-[18px]"
-				>
-					Wenn Zeit gegen Geld zu tauschen stirbt, ist
-					<strong class="font-medium text-foreground">Ownership</strong>
-					das Einzige, was dir bleibt. Gemeinsam zu bauen, woran du wirklich glaubst, ist die
-					Zukunft, die glücklich macht.
+					Wir sind da, um dich endlich in dein souveränes Gründerleben zu katapultieren, von dem du
+					schon immer träumst, aber dich nie getraut hast.
 				</p>
 			</div>
 		</div>
@@ -141,8 +134,15 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/30"
 								aria-hidden="true"
 							></span>
+							<span>Deine KI arbeitet rund um die Uhr — für dich, nicht für einen Konzern.</span>
+						</li>
+						<li class="flex gap-2.5">
 							<span
-								>Dein avenCEO arbeitet rund um die Uhr — für dich, nicht für einen Konzern.</span
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/30"
+								aria-hidden="true"
+							></span>
+							<span
+								>Was du baust, gehört dir. Und an dem, was die anderen bauen, bist du beteiligt.</span
 							>
 						</li>
 						<li class="flex gap-2.5">
@@ -151,22 +151,15 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 								aria-hidden="true"
 							></span>
 							<span
-								>Ein Portfolio aus 10+ Assets: Firmen, geboren aus deinen Visionen und betrieben von
-								deinem Aven — plus Beteiligungen an denen anderer Gründer.</span
+								>Du gestaltest wieder: deine Vision, deine Beziehungen, das Leben, das wirklich
+								zählt.</span
 							>
-						</li>
-						<li class="flex gap-2.5">
-							<span
-								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/30"
-								aria-hidden="true"
-							></span>
-							<span>Du gestaltest — Vision, Beziehungen, das Leben, das wirklich zählt.</span>
 						</li>
 					</ul>
 					<p
 						class="mt-5 border-t border-foreground/10 pt-4 text-[1.25rem] font-light leading-snug text-foreground sm:text-[1.4rem]"
 					>
-						Dein volles Potenzial, in deiner Hand.
+						Gemeinsam etwas bauen, das dir gehört — das macht glücklich.
 					</p>
 				</div>
 			</div>
@@ -355,9 +348,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">
 								KI‑AGENT
 							</p>
-							<p
-								class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent-ink sm:text-[13px]"
-							>
+							<p class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent sm:text-[13px]">
 								avenMAIA
 							</p>
 							<p
@@ -368,7 +359,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 						</div>
 					</div>
 					<p
-						class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent-ink sm:text-[11px]"
+						class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent sm:text-[11px]"
 					>
 						= Maia Holding Spark
 					</p>
@@ -426,9 +417,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">
 								KI‑AGENT
 							</p>
-							<p
-								class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent-ink sm:text-[13px]"
-							>
+							<p class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent sm:text-[13px]">
 								avenTIN
 							</p>
 							<p
@@ -439,7 +428,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 						</div>
 					</div>
 					<p
-						class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent-ink sm:text-[11px]"
+						class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent sm:text-[11px]"
 					>
 						= avenCEO Spark
 					</p>
@@ -450,7 +439,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 			class="mx-auto mt-8 max-w-xl text-pretty text-[16px] leading-relaxed text-foreground/72 sm:text-[17px]"
 		>
 			Und jetzt stell dir vor, eine Million Menschen bauen ihren Spark — gemeinsam.
-			<strong class="font-medium text-accent-ink">Was können wir damit alles erreichen?</strong>
+			<strong class="font-medium text-accent">Was können wir damit alles erreichen?</strong>
 		</p>
 	</section>
 
