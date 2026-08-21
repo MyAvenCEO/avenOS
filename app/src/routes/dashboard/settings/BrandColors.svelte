@@ -39,44 +39,44 @@ const ROLES: Role[] = [
 		note: 'Buttons, Rail, HITL-Rahmen, Wikilinks'
 	},
 	{
-		role: 'status quiet',
+		role: 'quiet',
 		tone: 'Anchor',
-		token: '--color-status-quiet',
+		token: '--color-quiet',
 		toneToken: '--color-anchor',
 		note: 'zurückgenommen — jedes Typ-Badge'
 	},
 	{
-		role: 'status progress',
+		role: 'progress',
 		tone: 'Tidal Blue',
-		token: '--color-status-progress',
+		token: '--color-progress',
 		toneToken: '--color-tidal-blue',
 		note: 'in Bewegung'
 	},
 	{
-		role: 'status success',
+		role: 'success',
 		tone: 'Paradise Water',
-		token: '--color-status-success',
+		token: '--color-success',
 		toneToken: '--color-paradise-water',
 		note: 'erledigt — der helle Ton der Marke'
 	},
 	{
-		role: 'status error',
+		role: 'error',
 		tone: 'Terracotta',
-		token: '--color-status-error',
+		token: '--color-error',
 		toneToken: '--color-terracotta',
 		note: 'etwas ist gescheitert'
 	},
 	{
-		role: 'status warning',
+		role: 'warning',
 		tone: 'Sunflower',
-		token: '--color-status-warning',
+		token: '--color-warning',
 		toneToken: '--color-sunflower',
 		note: 'Achtung — aber nichts ist kaputt'
 	},
 	{
-		role: 'status info',
+		role: 'info',
 		tone: 'Earth',
-		token: '--color-status-info',
+		token: '--color-info',
 		toneToken: '--color-earth',
 		note: 'Hinweis; oft: du bist dran'
 	},
@@ -86,42 +86,6 @@ const ROLES: Role[] = [
 		token: '--color-secondary',
 		toneToken: '--color-sand',
 		note: 'die warme zweite Aktion'
-	}
-]
-
-/**
- * Block 4: the intent states. A state is a MEANING that borrows a role — this
- * is the only place the two are tied together, so the whole stream re-reads by
- * editing one line here. Nothing in this table introduces a colour.
- */
-const STATES: Role[] = [
-	{
-		role: 'error',
-		tone: 'status error',
-		token: '--color-state-error',
-		toneToken: '--color-status-error',
-		note: 'ein Gate ist gescheitert'
-	},
-	{
-		role: 'waiting',
-		tone: 'status info',
-		token: '--color-state-waiting',
-		toneToken: '--color-status-info',
-		note: 'offenes Human-Gate — du bist dran'
-	},
-	{
-		role: 'working',
-		tone: 'status progress',
-		token: '--color-state-working',
-		toneToken: '--color-status-progress',
-		note: 'in Bewegung'
-	},
-	{
-		role: 'done',
-		tone: 'status success',
-		token: '--color-state-done',
-		toneToken: '--color-status-success',
-		note: 'abgeschlossen'
 	}
 ]
 
@@ -202,7 +166,7 @@ $effect(() => {
 	const read = (token: string) => {
 		next[token] = style.getPropertyValue(token).trim()
 	}
-	for (const r of [...ROLES, ...STATES, ...SURFACES]) {
+	for (const r of [...ROLES, ...SURFACES]) {
 		read(r.token)
 		read(r.toneToken)
 	}
@@ -288,30 +252,13 @@ const collisions = $derived.by(() => {
 			</h3>
 			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
 				Die Design-System-Rolle links, der Ton der sie trägt rechts. Eine Rolle hier umhängen färbt
-				jede Fläche, die sie spricht.
+				jede Fläche, die sie spricht. Intent-Zustände leihen sich diese Rollen direkt — waiting
+				liest sich als info, working als progress, done als success.
 			</p>
 		</div>
 		<ul class="grid gap-2 lg:grid-cols-2">
 			{#each ROLES as r (r.role)}
 				{@render roleRow(r)}
-			{/each}
-		</ul>
-	</section>
-
-	<!-- ── States: meaning borrowing a role, one layer up ── -->
-	<section class="flex flex-col gap-2">
-		<div>
-			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-				Zustand → Brand-Token
-			</h3>
-			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
-				Ein Zustand ist keine Farbe, sondern eine Bedeutung, die sich eine leiht. Nur hier sind beide
-				verknüpft — der ganze Intent-Stream liest sich um, wenn eine Zeile wechselt.
-			</p>
-		</div>
-		<ul class="grid gap-2 lg:grid-cols-2">
-			{#each STATES as s (s.role)}
-				{@render roleRow(s)}
 			{/each}
 		</ul>
 	</section>
@@ -378,7 +325,7 @@ const collisions = $derived.by(() => {
 	{#if collisions.length > 0}
 		<section class="flex flex-col gap-2">
 			<div>
-				<h3 class="font-semibold text-status-error-ink text-xs uppercase tracking-wide">
+				<h3 class="font-semibold text-error-ink text-xs uppercase tracking-wide">
 					Zwei Namen, eine Farbe
 				</h3>
 				<p class="pt-0.5 text-[0.6875rem] text-foreground/40">

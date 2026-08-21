@@ -85,7 +85,7 @@ interface MockIntent {
  * is spent only where it means something. A map of five identical values
  * would just be a place to start re-colouring, hence a single constant.
  */
-const TYPE_BADGE = 'bg-status-quiet/15 text-status-quiet-ink'
+const TYPE_BADGE = 'bg-quiet/15 text-quiet-ink'
 
 /**
  * The five states an intent can be in — each with its own accent, worn as
@@ -102,10 +102,9 @@ const STATUS_LABEL: Record<IntentState, string> = {
 }
 
 /**
- * Each state names ITSELF, not a colour and not even a role — `state-working`
- * resolves through app.css block 4, where the state→role mapping lives. So
- * swapping what working and done read as is one line in the theme, not a
- * sweep through this file.
+ * THE state→role mapping. It used to be restated in app.css as a layer of
+ * `--color-state-*` aliases; a state is just a meaning borrowing a role, so
+ * one table is enough and this is it.
  *
  * edge = the 4px left border, text = the status word (the `-ink` face, which
  * is the tone darkened far enough to be read on cream).
@@ -115,10 +114,10 @@ const STATUS_LABEL: Record<IntentState, string> = {
  * already says "archived". A colour for it would be a colour nobody reads.
  */
 const STATE_ACCENT: Record<Exclude<IntentState, 'archive'>, { edge: string; text: string }> = {
-	working: { edge: 'border-l-state-working', text: 'text-state-working-ink' },
-	waiting: { edge: 'border-l-state-waiting', text: 'text-state-waiting-ink' },
-	done: { edge: 'border-l-state-done', text: 'text-state-done-ink' },
-	error: { edge: 'border-l-state-error', text: 'text-state-error-ink' }
+	working: { edge: 'border-l-progress', text: 'text-progress-ink' },
+	waiting: { edge: 'border-l-info', text: 'text-info-ink' },
+	done: { edge: 'border-l-success', text: 'text-success-ink' },
+	error: { edge: 'border-l-error', text: 'text-error-ink' }
 }
 
 /** What archive wears instead: the page's own ink, held well back. */
@@ -938,9 +937,9 @@ $effect(() => {
 })
 
 const DOT: Record<string, string> = {
-	done: 'bg-state-done text-status-success-foreground',
-	running: 'bg-state-working text-primary-foreground',
-	waiting: 'bg-state-waiting text-status-info-foreground'
+	done: 'bg-success text-success-foreground',
+	running: 'bg-progress text-progress-foreground',
+	waiting: 'bg-info text-info-foreground'
 }
 </script>
 
@@ -1081,7 +1080,7 @@ const DOT: Record<string, string> = {
 						</span>
 						{#if intent.deadline}
 							<span
-								class="shrink-0 rounded-full bg-status-error/10 px-1.5 py-0.5 font-mono text-status-error-ink text-[0.5625rem]"
+								class="shrink-0 rounded-full bg-error/10 px-1.5 py-0.5 font-mono text-error-ink text-[0.5625rem]"
 							>
 								{intent.deadline}
 							</span>
@@ -1165,10 +1164,10 @@ const DOT: Record<string, string> = {
 					<header class="flex items-center gap-3">
 						<span
 							class="size-2 shrink-0 rounded-full {skillView.state === 'done'
-						? 'bg-state-done'
+						? 'bg-success'
 						: skillView.state === 'waiting'
-							? 'bg-state-waiting'
-							: 'bg-state-working'}"
+							? 'bg-info'
+							: 'bg-progress'}"
 						></span>
 						<div class="min-w-0">
 							<h1 class="font-mono font-semibold text-lg leading-tight">{skillView.skill}</h1>
@@ -1219,10 +1218,10 @@ const DOT: Record<string, string> = {
 									<span class="min-w-0 flex-1">{entry.step}</span>
 									<span
 										class="font-mono text-[0.625rem] {entry.state === 'done'
-									? 'text-state-done-ink'
+									? 'text-success-ink'
 									: entry.state === 'waiting'
-										? 'text-state-error-ink'
-										: 'text-state-working-ink'}"
+										? 'text-error-ink'
+										: 'text-progress-ink'}"
 									>
 										{entry.state === 'done' ? '✓' : entry.state === 'waiting' ? '⏸' : '⟳'}
 									</span>
@@ -1255,8 +1254,8 @@ const DOT: Record<string, string> = {
 							{#each [92, 100, 78, 96, 60] as w, i (i)}
 								<div class="mb-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
 							{/each}
-							<div class="mt-5 rounded-lg border border-status-warning/35 bg-status-warning/12 px-4 py-3">
-								<p class="font-mono text-status-warning-ink text-[0.625rem] uppercase tracking-wide">
+							<div class="mt-5 rounded-lg border border-warning/35 bg-warning/12 px-4 py-3">
+								<p class="font-mono text-warning-ink text-[0.625rem] uppercase tracking-wide">
 									Extrahiert
 								</p>
 								<p class="pt-1 text-xs leading-relaxed">{preview.note}</p>
@@ -1281,7 +1280,7 @@ const DOT: Record<string, string> = {
 					{:else if preview.kind === 'calendar'}
 						<div class="flex w-full items-center gap-4 pt-2">
 							<div
-								class="flex size-14 flex-col items-center justify-center rounded-xl bg-status-error/10 text-status-error-ink"
+								class="flex size-14 flex-col items-center justify-center rounded-xl bg-error/10 text-error-ink"
 							>
 								<span class="font-semibold text-lg leading-none">15</span>
 								<span class="pt-0.5 font-mono text-[0.5625rem] uppercase">Sep</span>
@@ -1319,7 +1318,7 @@ const DOT: Record<string, string> = {
 								<div class="flex items-center gap-3 border-border/60 border-b py-2.5 text-sm">
 									<span class="w-14 font-mono text-foreground/40 text-xs">{row.d}</span>
 									<span class="min-w-0 flex-1 truncate">{row.t}</span>
-									<span class="font-mono {row.a.startsWith('+') ? 'text-state-done-ink' : ''}"
+									<span class="font-mono {row.a.startsWith('+') ? 'text-success-ink' : ''}"
 										>{row.a}</span
 									>
 									<span class="w-40 text-right text-[0.6875rem] text-foreground/40">{row.m}</span>
@@ -1331,7 +1330,7 @@ const DOT: Record<string, string> = {
 						<div class="w-full max-w-2xl pt-2 font-mono text-[13px] leading-relaxed">
 							<p class="text-foreground/35">---</p>
 							<p class="text-foreground/55">
-								tags: <span class="text-status-warning-ink">#versicherung #frist</span>
+								tags: <span class="text-warning-ink">#versicherung #frist</span>
 							</p>
 							<p class="text-foreground/55">erstellt: 2025-08-12 · quelle: inbox</p>
 							<p class="pb-3 text-foreground/35">---</p>
@@ -1394,7 +1393,7 @@ const DOT: Record<string, string> = {
 							</span>
 							{#if selected.deadline}
 								<span
-									class="rounded-full bg-status-error/10 px-2 py-0.5 font-mono text-status-error-ink text-[0.625rem]"
+									class="rounded-full bg-error/10 px-2 py-0.5 font-mono text-error-ink text-[0.625rem]"
 								>
 									{selected.deadline}
 								</span>
@@ -1480,7 +1479,7 @@ const DOT: Record<string, string> = {
 												{entry.card.text}
 											</p>
 											{#if entry.hitl}
-												<p class="pt-2 font-mono text-status-error-ink text-[0.625rem]">
+												<p class="pt-2 font-mono text-error-ink text-[0.625rem]">
 													→ wartet in der globalen Freigabe-Leiste über der Voice-Pill
 												</p>
 											{/if}
@@ -1517,10 +1516,10 @@ const DOT: Record<string, string> = {
 						<div class="flex items-center gap-2">
 							<span
 								class="size-1.5 shrink-0 rounded-full {s.state === 'done'
-							? 'bg-state-done'
+							? 'bg-success'
 							: s.state === 'waiting'
-								? 'bg-state-waiting'
-								: 'bg-state-working'}"
+								? 'bg-info'
+								: 'bg-progress'}"
 							></span>
 							<span class="font-medium font-mono text-xs">{s.skill}</span>
 							<span class="ml-auto font-mono text-[0.625rem] text-foreground/40">
