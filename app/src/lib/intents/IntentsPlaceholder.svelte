@@ -10,7 +10,7 @@ import GatePreview from '$lib/query/GatePreview.svelte'
 import { query } from '$lib/query/query.svelte'
 import FlowNode from '$lib/skills/FlowNode.svelte'
 import { layoutWorkflow } from '$lib/skills/flow-layout'
-import { skillById } from '$lib/skills/registry'
+import { nameOf, skillById } from '$lib/skills/registry'
 
 /**
  * The Intents workspace — instances MOCKED (0158), but the skill flows are
@@ -1135,7 +1135,7 @@ const DOT: Record<string, string> = {
 						: 'bg-progress'}"
 					></span>
 					<div class="min-w-0">
-						<h1 class="font-mono font-semibold text-lg leading-tight">{skillView.skill}</h1>
+						<h1 class="font-semibold text-lg leading-tight">{nameOf(skillView.skill)}</h1>
 						<p class="text-foreground/45 text-xs">{skillView.note}</p>
 					</div>
 					{@render backButton()}
@@ -1152,7 +1152,7 @@ const DOT: Record<string, string> = {
 					{#key skillView.skill}
 						{#if sfNodes.length === 0}
 							<p class="flex h-full items-center justify-center text-foreground/40 text-sm">
-								{skillView.skill}
+								{nameOf(skillView.skill)}
 								— Template folgt; die Instanz läuft als Teil der Inbox-Pipeline.
 							</p>
 						{:else}
@@ -1426,7 +1426,7 @@ const DOT: Record<string, string> = {
 								}}
 										class="rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[0.5625rem] text-foreground/55 transition-colors hover:bg-surface-card-selected"
 									>
-										{entry.skill}
+										{nameOf(entry.skill)}
 									</button>
 									<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
 										{entry.when}
@@ -1501,7 +1501,7 @@ const DOT: Record<string, string> = {
 						? 'bg-info'
 						: 'bg-progress'}"
 					></span>
-					<span class="font-medium font-mono text-xs">{s.skill}</span>
+					<span class="font-medium text-xs">{nameOf(s.skill)}</span>
 					<span class="ml-auto font-mono text-[0.625rem] text-foreground/40">
 						{s.state === 'done' ? 'fertig' : s.state === 'waiting' ? 'wartet' : 'läuft'}
 					</span>
