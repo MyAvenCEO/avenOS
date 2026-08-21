@@ -279,7 +279,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "aven-os-app"
-version = "26.8.21-next.6"
+version = "26.8.21-next.7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4425,7 +4425,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-ios-passkey"
-version = "0.1.0"
+version = "26.8.21-next.7"
 dependencies = [
  "serde",
  "serde_json",
