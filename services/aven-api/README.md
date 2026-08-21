@@ -37,3 +37,5 @@ Compose environment when a different local retention budget is required. The
 `next` release workflow reads the same names from GitHub environment variables.
 
 The production RP ID is configured with `WEBAUTHN_RP_ID`. The matching origin serves `/.well-known/apple-app-site-association` for the signed Tauri application.
+
+The Tauri shell uses the RFC 8628 endpoints under `/api/auth/device`: `ceo.aven.os` is the only accepted public client, approval requires an existing passkey session and an owned name, and the device code is consumed once when exchanged for a bearer session. Run the `0006_device_authorization` migration before deploying this flow.

@@ -80,9 +80,11 @@ jobs:
         run: |
           set -euo pipefail
           PGPASSWORD=server-ci psql -h 127.0.0.1 -U aven_server -d aven -c 'SELECT 1 FROM names LIMIT 1'
+          PGPASSWORD=server-ci psql -h 127.0.0.1 -U aven_server -d aven -c 'SELECT 1 FROM device_code LIMIT 1'
           PGPASSWORD=email-ci psql -h 127.0.0.1 -U aven_email_worker -d aven -c 'SELECT 1 FROM email_queue LIMIT 1'
           PGPASSWORD=environment-ci psql -h 127.0.0.1 -U aven_environment_worker -d aven -c 'SELECT 1 FROM customer_environment_jobs LIMIT 1'
           if PGPASSWORD=email-ci psql -h 127.0.0.1 -U aven_email_worker -d aven -c 'SELECT 1 FROM "user" LIMIT 1'; then exit 1; fi
+          if PGPASSWORD=email-ci psql -h 127.0.0.1 -U aven_email_worker -d aven -c 'SELECT 1 FROM device_code LIMIT 1'; then exit 1; fi
           if PGPASSWORD=environment-ci psql -h 127.0.0.1 -U aven_environment_worker -d aven -c 'SELECT 1 FROM "session" LIMIT 1'; then exit 1; fi
           if PGPASSWORD=server-ci psql -h 127.0.0.1 -U aven_server -d aven -c 'CREATE TABLE forbidden(id int)'; then exit 1; fi
       - run: bun run build:api

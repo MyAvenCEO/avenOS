@@ -1,10 +1,13 @@
 import { passkey } from '@better-auth/passkey'
 import { type Auth, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { bearer, deviceAuthorization } from 'better-auth/plugins'
 import type { ServerConfig } from './config.js'
 import type { DatabaseContext } from './db.js'
 import { schema } from './schema/index.js'
 import { type SetupSignInVerifiers, setupSignIn } from './sign-in.js'
+
+export const AVENOS_DEVICE_CLIENT_ID = 'ceo.aven.os'
 
 // There is deliberately NO email-initiated sign-in: accounts are created by a
 // completed purchase (identity.ensureVerifiedUser, called from the grant),
@@ -32,6 +35,9 @@ export function createAuth(
 			window: 60,
 			max: 60,
 			customRules: {
+				'/device/code': { window: 60, max: 10 },
+				'/device/token': { window: 60, max: 30 },
+				'/device/approve': { window: 60, max: 10 },
 				'/passkey/generate-authenticate-options': { window: 60, max: 20 },
 				'/passkey/verify-authentication': { window: 60, max: 10 },
 				'/passkey/generate-register-options': { window: 3600, max: 10 },
@@ -39,6 +45,13 @@ export function createAuth(
 			}
 		},
 		plugins: [
+			bearer(),
+			deviceAuthorization({
+				expiresIn: '10m',
+				interval: '3s',
+				verificationUri: '/device',
+				validateClient: (clientId) => clientId === AVENOS_DEVICE_CLIENT_ID
+			}),
 			passkey({
 				rpID: config.WEBAUTHN_RP_ID,
 				rpName: 'Aven',

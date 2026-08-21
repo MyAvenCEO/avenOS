@@ -47,6 +47,19 @@ cd libs/aven-website && bun run dev
 
 Env for the **marketing site** and **OCR CLI**: keep **`.env`** at the **repo root** (see **`.env.example`**). `libs/aven-website` loads it via Bun **`--env-file=../../.env`**; Python also reads that path plus optional **`ARCHIVE/ocr-example/.env`** overrides (see `ARCHIVE/ocr-example/README.md`).
 
+### Native passkey authentication
+
+The Tauri app is gated on launch. It asks the identity service for a short-lived device code, opens the HTTPS passkey and approval screen inside the app where child WebViews are supported, and keeps a system-browser fallback. After approval the native Rust process exchanges the one-time code for a revocable Better Auth bearer session and opens the existing `/dashboard`. The bearer token is not exposed to the frontend or persisted in browser storage; this spike requires authentication again after an app restart.
+
+For local development, run the identity API and compile the app with its local origin:
+
+```sh
+bun run dev:api
+AVEN_IDENTITY_BASE_URL=http://localhost:5173 bun run dev:app:linux
+```
+
+The intended next layer is name-scoped authorization: the authenticated dashboard lists every owned name, selecting one establishes that name as the active context, and API endpoints—not direct client PostgreSQL credentials—enforce the user's entitlement for every read and write. Name selection and customer-data operations are intentionally outside the current authentication spike.
+
 ## Scripts
 
 See **[`scripts/README.md`](scripts/README.md)** for which root scripts are active vs manual maintenance.
@@ -114,4 +127,3 @@ Infrastructure validation runs with `bun run test:infra`. Provisioning and deplo
 ```sh
 bunx sv@0.15.2 create --template minimal --types ts --install bun .
 ```
- 
