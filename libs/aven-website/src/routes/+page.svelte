@@ -2,7 +2,7 @@
 	<title>aven.ceo — In dir steckt so viel mehr · avenCEO</title>
 	<meta
 		name="description"
-		content="Tief in deinem Herzen weißt du es: in dir steckt so viel mehr. Von Zeit gegen Geld zu: uns gehört, was wir gemeinsam bauen. Dein eigener avenCEO betreibt deine Firma — 1 Mensch + 1 Aven = ein Spark. Und viele Sparks tragen eine Zivilisation."
+		content="Ein Aven ist eine KI, die dir gehört: er sortiert deine Post, führt deine Bücher und baut deine Firma mit. Von Zeit gegen Geld zu 10+ Assets, die dir gehören — und 1 Million Gründer, die gemeinsam die Startups der Zukunft bauen und besitzen."
 	>
 </svelte:head>
 
@@ -41,14 +41,22 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<span class="mt-1 block">in dir steckt so viel mehr.</span>
 			</h1>
 			<div class="mx-auto mt-8 max-w-2xl">
-				<p class="text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[22px]">
-					Ein Aven ist eine KI, die dir gehört.
-				</p>
-				<p class="mt-3 text-pretty text-[15px] leading-relaxed text-foreground/65 sm:text-base">
-					Kein Chatbot, den du mietest. Kein Konzern, der mitliest.
+				<p class="text-pretty text-[17px] leading-relaxed text-foreground/72 sm:text-[18px]">
+					Mehr, als in einen Feierabend passt. Mehr, als ein Gehalt je bezahlen wird.
 				</p>
 				<p
-					class="mx-auto mt-6 max-w-xl text-pretty text-[15px] leading-relaxed text-foreground/68 sm:text-base"
+					class="mx-auto mt-5 max-w-xl text-pretty text-[15px] leading-relaxed text-foreground/68 sm:text-base"
+				>
+					Was fehlt, ist nicht dein Talent. Es ist jemand, der dir den ganzen Rest abnimmt — damit
+					du endlich baust, statt zu verwalten.
+				</p>
+				<p
+					class="mt-7 text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[22px]"
+				>
+					Dieser Jemand heißt Aven. Eine KI, die dir gehört.
+				</p>
+				<p
+					class="mx-auto mt-4 max-w-xl text-pretty text-[15px] leading-relaxed text-foreground/68 sm:text-base"
 				>
 					Deiner sortiert deine Post, führt deine Bücher und baut deine Firma mit — nachts, am
 					Wochenende, und während du einfach dein Leben lebst.
@@ -56,10 +64,15 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<p
 					class="mx-auto mt-7 max-w-xl border-t border-border/40 pt-7 text-pretty text-[17px] font-medium leading-snug text-foreground/85 sm:text-[19px]"
 				>
-					So kippt der Deal deines Lebens: von Zeit gegen Geld zu —
-					<strong class="font-semibold text-accent-ink"
-						>uns gehört, was wir gemeinsam bauen.</strong
-					>
+					So kippt der Deal deines Lebens: von Zeit gegen Geld zu
+					<strong class="font-semibold text-foreground">10+ Assets, die dir gehören</strong>.
+				</p>
+				<p
+					class="mx-auto mt-4 max-w-xl text-pretty text-[17px] font-medium leading-snug sm:text-[19px]"
+				>
+					Und jetzt stell dir
+					<strong class="font-semibold text-accent-ink">1 Million Gründer</strong>
+					vor, die dasselbe tun — und aneinander beteiligt sind.
 				</p>
 			</div>
 		</div>
@@ -313,8 +326,9 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		</div>
 	</section>
 
-	<!-- From I to We: one spark is a life, many sparks are a civilization. This
-	     is where avenCOOP stops being a price tier and becomes the collective. -->
+	<!-- From I to We. This is the big one: the revenue share is not a price,
+	     it is an investment engine, and the section has to say so plainly or
+	     the number on the pricing page reads as a tax. -->
 	<section
 		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
 		aria-labelledby="collective-heading"
@@ -327,24 +341,33 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				id="collective-heading"
 				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 			>
-				Ein Spark trägt ein Leben. Viele Sparks tragen eine Zivilisation.
+				1 Million Gründer bauen die Startups der Zukunft — und besitzen sie gemeinsam.
 			</h2>
+			<p
+				class="mx-auto mt-5 max-w-xl text-[1.125rem] font-light leading-snug text-pretty text-foreground sm:text-[1.3125rem]"
+			>
+				Ein Spark trägt ein Leben. Eine Million Sparks tragen eine Zivilisation.
+			</p>
 
 			<div
-				class="mx-auto mt-6 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/68 sm:text-base"
+				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/68 sm:text-base"
 			>
 				<p class="text-pretty">
-					Allein bist du ein Funke. Verbunden seid ihr ein Feuer: Sparks, die sich gegenseitig
-					beauftragen, beliefern und beteiligen — jeder mit seiner eigenen Firma, alle an den Firmen
-					der anderen beteiligt.
+					Deshalb ist der Anteil an deinem Umsatz kein Preis, sondern ein
+					<strong class="font-medium text-foreground/88">Reinvest</strong>. Ein Teil trägt die
+					Plattform — Zahlungsgebühren inklusive. Der andere fließt als Investment in die avenCOOPs
+					anderer Gründer, und die Anteile, die er kauft,
+					<strong class="font-medium text-foreground/88">gehören dir</strong>.
 				</p>
 				<p class="text-pretty">
-					Genau da steigen wir mit
-					<strong class="font-medium text-foreground/88">avenCOOP</strong>
-					selbst ein: als dein technischer Co‑Founder. Wir bauen mit, wir halten Anteile an deiner
-					Firma — und du hältst welche an unserer. Über
+					Du wählst selbst, in wen. Wir führen dein Syndikat über
 					<strong class="font-medium text-foreground/88">beel</strong>
-					führen wir dein Syndikat, und deine Community investiert mit.
+					— und stehen mit unserer eigenen avenCEO GmbH auf derselben Liste wie alle anderen.
+				</p>
+				<p class="text-pretty">
+					Ab da arbeitet der Zinseszins für dich: Jedes Mal, wenn irgendwo in diesem Netz jemand
+					gewinnt, wächst dein Portfolio mit. Aus einem Asset werden zehn, ohne dass du eine einzige
+					Stunde mehr verkaufst.
 				</p>
 				<p class="text-pretty">
 					Keine Plattform, die zwischen euch steht und Miete nimmt.
