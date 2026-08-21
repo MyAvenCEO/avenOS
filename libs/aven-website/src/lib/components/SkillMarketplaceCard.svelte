@@ -15,7 +15,7 @@ const cardClass =
 		: 'group flex min-w-0 flex-col rounded-2xl border border-border/40 bg-surface-raised p-5 transition-all hover:border-border/70 hover:bg-surface-soft  sm:p-6'
 
 const chainLabels: Record<string, string> = {
-	'email-ingestor': 'E‑Mail',
+	'email-manager': 'E‑Mail',
 	'docs-organizer': 'Dokumente',
 	'brain-memorizer': 'Gedächtnis',
 	'book-keeper': 'Buchhaltung',

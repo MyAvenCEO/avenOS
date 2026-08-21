@@ -33,7 +33,7 @@
 		"Du bekommst die drei nächsten Dinge, nicht die ganze Wand"
 	],
 	"whatMechanics": {
-		"input": "Aufgaben aus email ingestor, docs organizer und deinen eigenen Zurufen",
+		"input": "Aufgaben aus email manager, docs organizer und deinen eigenen Zurufen",
 		"magic": "Aufwands‑Schätzung → Fristen und Abhängigkeiten → verfügbare Zeit aus dem Kalender → laufende Neusortierung",
 		"output": "Eine Tagesliste, die in den Tag passt · der Rest, geordnet und nicht vergessen"
 	},
@@ -43,7 +43,7 @@
 			"relation": "Was heute dran ist, bekommt einen echten Block im Kalender"
 		},
 		{
-			"slug": "email-ingestor",
+			"slug": "email-manager",
 			"relation": "Aus Mails entstehen Aufgaben, ohne dass du sie abtippst"
 		},
 		{
