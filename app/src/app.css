@@ -237,24 +237,20 @@
 	 * The paint itself. Every colour the app owns is written as a hex
 	 * EXACTLY ONCE, here, under exactly ONE name. Nothing below this
 	 * block spells a hex — everything else points at a tone. That is the
-	 * whole discipline: to restyle the brand you edit these twelve lines.
+	 * whole discipline: to restyle the brand you edit these ten lines.
 	 *
-	 * The names had drifted badly (tuscan sun and coffee both resolved to
-	 * navy; paradise water to a warm grey; driftwood to cream), so the
-	 * mapping below is the corrected one — each name now means the colour
-	 * it says. Roles come next, in block 3. */
+	 * Down from twelve: violet (iris), grey-blue (driftwood) and warm grey
+	 * (stone) are gone, and so is the deep moss green — success is carried by
+	 * sage now. Driftwood was a hair from harbour anyway; everything that
+	 * wore it wears harbour. */
 	--color-marine: #1e293b; /* deep navy — the brand's ink and its fill */
-	--color-harbour: #5b6f8b; /* steel blue — marine, one step back */
+	--color-harbour: #5b6f8b; /* steel blue — marine, one step back; also the quiet role */
 	--color-parchment: #f3e7c6; /* cream yellow — the warm fill */
-	--color-sunflower: #d4a373; /* warm amber-tan — the soft attention tone */
-	--color-tuscan-sun: #a06818; /* burnt gold — attention that must read AS text */
+	--color-sunflower: #d4a373; /* warm amber-tan — notice */
+	--color-tuscan-sun: #d2a24a; /* clean gold — brighter and yellower than the old #a06818 */
 	--color-terracotta: #c15b40; /* burnt orange — the failure tone */
-	--color-moss: #2f5d50; /* deep green — settled, finished */
-	--color-sage: #a4b69a; /* pale green — a fill, needs dark text on it */
-	--color-paradise-water: #3d8b84; /* turquoise — the human gate */
-	--color-iris: #7e6ead; /* violet — pairing */
-	--color-driftwood: #5b7a9d; /* grey blue — out of the way */
-	--color-stone: #57534e; /* warm grey — quiet neutral */
+	--color-sage: #a4b69a; /* soft green — settled; pale, so text uses its ink */
+	--color-paradise-water: #3d8b84; /* turquoise — the brand accent, and work in motion */
 	--color-chalk: #f8fafc; /* near-white — text on a dark tone */
 	--color-ink: #1f2a3d; /* dark slate-blue — body copy, never pure black */
 
@@ -271,24 +267,23 @@
 
 	/* ══ 2 · THE SURFACES ══════════════════════════════════════════════
 	 * Which rung of the cream family each part of the app stands on. */
+	/* Four rungs, four names. `surface-card-hover` and `surface-card-selected`
+	 * are gone: once hover shared its value with `surface-soft` and selection
+	 * shared its value with `surface-card`, a second name for the same rung
+	 * was just a place for drift to start again. */
 	/* Raised — cards that lift off the page: the intent list, the settings
 	 * panels, the flow nodes. */
 	--color-surface-raised: var(--color-porcelain);
 	/* The page ground everything else is measured against. */
 	--color-surface-cream: var(--color-linen);
-	/* Display surfaces — the Activity log panel, the Display panel iframe
-	 * wrapper, the vibe-app `<body>`. Vibe apps mirror this value via their own
-	 * `:root --bg-a`, being bundled into the sandbox without access to these
-	 * variables. */
+	/* Display surfaces AND hover — the Activity log panel, the Display panel
+	 * iframe wrapper, the vibe-app `<body>`, and any raised card under the
+	 * pointer. Vibe apps mirror this value via their own `:root --bg-a`, being
+	 * bundled into the sandbox without access to these variables. */
 	--color-surface-soft: var(--color-eggshell);
-	/* Cards at rest — warmer than the page, so they read as objects on it. */
+	/* Cards at rest AND selected — warmer than the page, so they read as
+	 * objects on it. Selection is carried by the border, not by the fill. */
 	--color-surface-card: var(--color-ivory);
-	/* Hover — a lift toward eggshell. Shares its rung with the display
-	 * surfaces: one perceptible step is worth more than two invisible ones. */
-	--color-surface-card-hover: var(--color-eggshell);
-	/* Selected — the fill stays at rest and the BORDER carries the state; the
-	 * old dedicated tone (#efeada) was a half-step nobody could see. */
-	--color-surface-card-selected: var(--color-ivory);
 
 	--color-background: var(--color-surface-cream);
 	--color-card: #ffffff;
@@ -307,20 +302,16 @@
 	 *   --color-X-ink          the tone used AS text, on the cream page
 	 *                          (darkened where the raw tone is too light)
 	 *
-	 *   ROLE            TONE           WHERE IT SPEAKS
-	 *   primary         marine         buttons, the rail, the HITL frame
-	 *   primary-soft    harbour        accent chrome too heavy in marine
-	 *   secondary       parchment      the warm second action
-	 *   accent          marine         emphasis on cream
-	 *   error           terracotta     a gate that failed
-	 *   warning         tuscan sun     working — something is moving
-	 *   info            sunflower      notice, no action required
-	 *   success         moss           done, settled
-	 *   working         sage           an in-progress FILL (dark text on it)
-	 *   waiting         paradise water a human gate, open (HITL)
-	 *   pairing         iris           device pairing
-	 *   archive         driftwood      out of the way, still readable
-	 *   neutral         stone          quiet chrome */
+	 *   ROLE            TONE            WHERE IT SPEAKS
+	 *   primary         marine          buttons, the rail, the HITL frame
+	 *   primary-soft    harbour         chrome too heavy in marine
+	 *   secondary       parchment       the warm second action
+	 *   accent          paradise water  the brand's one bright note
+	 *   status-error    terracotta      something failed
+	 *   status-warning  tuscan sun      careful — but nothing is broken
+	 *   status-info     sunflower       notice; often: your turn
+	 *   status-success  sage            settled
+	 *   status-quiet    harbour         out of the way, still readable */
 	--color-primary: var(--color-marine);
 	--color-primary-foreground: var(--color-chalk);
 	--color-primary-soft: var(--color-harbour);
@@ -328,8 +319,9 @@
 	--color-secondary: var(--color-parchment);
 	--color-secondary-foreground: var(--color-marine);
 
-	--color-accent: var(--color-marine);
-	--color-accent-foreground: var(--color-surface-cream);
+	--color-accent: var(--color-paradise-water);
+	--color-accent-foreground: var(--color-chalk);
+	--color-accent-ink: var(--color-paradise-water);
 
 	--color-foreground: var(--color-ink);
 	--color-card-foreground: var(--color-foreground);
@@ -341,35 +333,22 @@
 	--color-status-error-strong: color-mix(in oklab, var(--color-terracotta) 78%, black);
 
 	--color-status-warning: var(--color-tuscan-sun);
-	--color-status-warning-foreground: var(--color-chalk);
-	--color-status-warning-ink: var(--color-tuscan-sun);
+	--color-status-warning-foreground: #2b2313;
+	--color-status-warning-ink: color-mix(in oklab, var(--color-tuscan-sun) 74%, black);
 
 	--color-status-info: var(--color-sunflower);
 	--color-status-info-foreground: #2b231c;
 	--color-status-info-ink: color-mix(in oklab, var(--color-sunflower) 72%, black);
 
-	--color-status-success: var(--color-moss);
-	--color-status-success-foreground: #f4faf8;
-	--color-status-success-ink: var(--color-moss);
+	/* Sage is pale by design — a fill you can read dark text on. As TEXT or a
+	 * hairline it needs the ink, which is why every role carries both. */
+	--color-status-success: var(--color-sage);
+	--color-status-success-foreground: #1a2520;
+	--color-status-success-ink: color-mix(in oklab, var(--color-sage) 52%, black);
 
-	--color-status-working: var(--color-sage);
-	--color-status-working-foreground: #1a2520;
-	--color-status-working-ink: color-mix(in oklab, var(--color-sage) 62%, black);
-
-	--color-status-waiting: var(--color-paradise-water);
-	--color-status-waiting-foreground: #fafaf9;
-	--color-status-waiting-ink: var(--color-paradise-water);
-
-	--color-status-pairing: var(--color-iris);
-	--color-status-pairing-foreground: #f4f3fc;
-	--color-status-pairing-ink: color-mix(in oklab, var(--color-iris) 82%, black);
-
-	--color-status-archive: var(--color-driftwood);
-	--color-status-archive-foreground: var(--color-chalk);
-	--color-status-archive-ink: color-mix(in oklab, var(--color-driftwood) 82%, black);
-
-	--color-neutral: var(--color-stone);
-	--color-neutral-foreground: #fafaf9;
+	--color-status-quiet: var(--color-harbour);
+	--color-status-quiet-foreground: var(--color-chalk);
+	--color-status-quiet-ink: color-mix(in oklab, var(--color-harbour) 82%, black);
 
 	--color-muted: color-mix(in srgb, var(--color-marine) 6%, var(--color-surface-cream));
 	--color-muted-foreground: color-mix(in srgb, var(--color-marine) 42%, transparent);
@@ -377,23 +356,27 @@
 	--color-border: color-mix(in srgb, var(--color-marine) 14%, transparent);
 	--color-input: color-mix(in srgb, #ffffff 65%, var(--color-surface-cream));
 
-	/* ══ 4 · LEGACY NAMES ══════════════════════════════════════════════
-	 * Older aliases kept so existing markup keeps resolving. Nothing new
-	 * should reach for these — every one of them has a role above. */
-	--color-brand-navy: var(--color-marine);
-	--color-coffee: var(--color-marine);
-	--color-archive: var(--color-status-archive);
-	--color-archive-foreground: var(--color-status-archive-foreground);
-	--color-status-success-base: var(--color-status-success);
-	--color-status-working-base: var(--color-status-working);
-	--color-status-pairing-base: var(--color-status-pairing);
-	--color-status-info-base: var(--color-status-info);
-	--color-status-error-base: var(--color-status-error);
-	--color-palette-mercury: var(--color-surface-cream);
-	--color-palette-shadow: var(--color-stone);
-	--color-palette-coffee: var(--color-marine);
-	--color-palette-nutmeg: var(--color-terracotta);
-	--color-palette-lunar-green: var(--color-moss);
+	/* ══ 4 · THE INTENT STATES ═════════════════════════════════════════
+	 * A state is not a colour, it is a MEANING that borrows one. This is the
+	 * only place the two are tied together, so the whole stream re-reads by
+	 * editing five lines — and nothing here introduces a tone.
+	 *
+	 *   STATE     ROLE            READS AS
+	 *   error     status-error    a gate that failed
+	 *   waiting   status-info     open human gate — your turn
+	 *   working   accent          in motion
+	 *   done      status-success  settled
+	 *   archive   status-quiet    filed away */
+	--color-state-error: var(--color-status-error);
+	--color-state-error-ink: var(--color-status-error-ink);
+	--color-state-waiting: var(--color-status-info);
+	--color-state-waiting-ink: var(--color-status-info-ink);
+	--color-state-working: var(--color-accent);
+	--color-state-working-ink: var(--color-accent-ink);
+	--color-state-done: var(--color-status-success);
+	--color-state-done-ink: var(--color-status-success-ink);
+	--color-state-archive: var(--color-status-quiet);
+	--color-state-archive-ink: var(--color-status-quiet-ink);
 
 	--radius-lg: 1rem;
 	--radius-xl: 1.5rem;

@@ -502,8 +502,8 @@ function onKeydown(event: KeyboardEvent) {
 									>
 										<span
 											class="font-mono text-[0.625rem] {item.struck
-											? 'text-[#9c4832]'
-											: 'text-[#2f5d50]'}"
+											? 'text-state-error-ink'
+											: 'text-state-done-ink'}"
 										>
 											{item.struck ? '✕' : '✓'}
 										</span>
