@@ -16,6 +16,7 @@ Open the URL printed in the terminal. The studio lets you:
 
 - edit the subject, preview fixture, and Vue source;
 - preview HTML or plaintext at desktop and mobile widths;
+- update the preview automatically after a 500 ms typing pause;
 - switch the preview canvas between light and dark;
 - validate, save, and compile with one action.
 
@@ -117,8 +118,8 @@ arbitrary files.
   generated TypeScript file with the source changes.
 - **Fixture contract error:** make the JSON fixture keys exactly match the
   fields declared for that template.
-- **Preview does not update:** use the studio's **Preview** button after editing,
-  or restart the native Maizzle preview after changing its configuration.
+- **Preview reports invalid input:** finish the JSON or Vue expression you are
+  typing and the debounced live preview will retry, or use **Preview now**.
 - **Port already in use:** run
   `bun run email:studio --port=4180` with another loopback port.
 

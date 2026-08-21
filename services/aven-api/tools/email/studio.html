@@ -227,7 +227,7 @@
 			<select id="template" aria-label="Email template"></select>
 			<div id="status" class="status">Loading templates…</div>
 			<div class="spacer"></div>
-			<button id="preview" type="button">Preview</button>
+			<button id="preview" type="button">Preview now</button>
 			<button id="save" class="primary" type="button">Save and compile</button>
 		</header>
 		<main class="workspace">
@@ -262,6 +262,7 @@
 		</main>
 		<script type="module">
 		const token = __EMAIL_STUDIO_TOKEN__
+		const previewDelayMs = 500
 		const elements = Object.fromEntries(
 			[
 				'template',
@@ -284,18 +285,33 @@
 		)
 		let currentKey = ''
 		let dirty = false
-		let busy = false
+		let operationBusy = false
+		let previewTimer
+		let previewRequest = 0
+		let previewController
 
 		function setStatus(message, error = false) {
 			elements.status.textContent = message
 			elements.status.className = `status${error ? ' error' : ''}${dirty ? ' dirty' : ''}`
 		}
 
-		function setBusy(value) {
-			busy = value
+		function setOperationBusy(value) {
+			operationBusy = value
 			elements.preview.disabled = value
 			elements.save.disabled = value
 			elements.template.disabled = value
+			elements.subject.disabled = value
+			elements.fixture.disabled = value
+			elements.source.disabled = value
+		}
+
+		function cancelPreview() {
+			clearTimeout(previewTimer)
+			previewTimer = undefined
+			previewRequest += 1
+			previewController?.abort()
+			previewController = undefined
+			elements.preview.disabled = operationBusy
 		}
 
 		async function api(path, options = {}) {
@@ -324,26 +340,48 @@
 			})
 		}
 
-		async function renderPreview() {
-			if (busy) return
-			setBusy(true)
-			setStatus('Compiling preview…')
+		async function renderPreview(automatic = false) {
+			if (operationBusy) return
+			clearTimeout(previewTimer)
+			previewTimer = undefined
+			previewController?.abort()
+			const controller = new AbortController()
+			previewController = controller
+			const request = ++previewRequest
+			elements.preview.disabled = true
+			setStatus(automatic ? 'Compiling live preview…' : 'Compiling preview…')
 			try {
-				const result = await api('/api/preview', { method: 'POST', body: payload() })
+				const result = await api('/api/preview', {
+					method: 'POST',
+					body: payload(),
+					signal: controller.signal
+				})
+				if (request !== previewRequest) return
 				elements.frame.srcdoc = result.html
 				elements.plaintext.textContent = result.text
 				elements['subject-preview'].textContent = result.subject
-				setStatus(dirty ? 'Preview compiled' : 'Ready')
+				setStatus(automatic ? 'Live preview updated' : 'Preview updated')
 			} catch (error) {
+				if (error.name === 'AbortError' || request !== previewRequest) return
 				setStatus(error.message, true)
 			} finally {
-				setBusy(false)
+				if (request === previewRequest) {
+					previewController = undefined
+					elements.preview.disabled = operationBusy
+				}
 			}
 		}
 
+		function schedulePreview() {
+			cancelPreview()
+			setStatus('Live preview waiting for you to pause…')
+			previewTimer = setTimeout(() => void renderPreview(true), previewDelayMs)
+		}
+
 		async function save() {
-			if (busy) return
-			setBusy(true)
+			if (operationBusy) return
+			cancelPreview()
+			setOperationBusy(true)
 			setStatus('Validating, saving and compiling…')
 			let saved = false
 			try {
@@ -354,7 +392,7 @@
 			} catch (error) {
 				setStatus(error.message, true)
 			} finally {
-				setBusy(false)
+				setOperationBusy(false)
 			}
 			if (saved) await renderPreview()
 		}
@@ -364,7 +402,8 @@
 				elements.template.value = currentKey
 				return
 			}
-			setBusy(true)
+			cancelPreview()
+			setOperationBusy(true)
 			try {
 				const template = await api(`/api/template?key=${encodeURIComponent(key)}`)
 				currentKey = template.key
@@ -377,7 +416,7 @@
 			} catch (error) {
 				setStatus(error.message, true)
 			} finally {
-				setBusy(false)
+				setOperationBusy(false)
 			}
 			await renderPreview()
 		}
@@ -385,11 +424,11 @@
 		for (const input of [elements.subject, elements.fixture, elements.source]) {
 			input.addEventListener('input', () => {
 				dirty = true
-				setStatus('Changed')
+				schedulePreview()
 			})
 		}
 		elements.template.addEventListener('change', (event) => loadTemplate(event.currentTarget.value))
-		elements.preview.addEventListener('click', renderPreview)
+		elements.preview.addEventListener('click', () => renderPreview())
 		elements.save.addEventListener('click', save)
 		elements['html-tab'].addEventListener('click', () => {
 			elements.canvas.classList.remove('plaintext')
