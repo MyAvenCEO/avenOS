@@ -36,7 +36,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		<div class="mx-auto max-w-3xl text-center">
 			<h1
 				id="home-hero-heading"
-				class="mx-auto max-w-3xl text-3xl leading-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
+				class="mx-auto max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
 				Tief in deinem Herzen weißt du es:
 				<span class="mt-1 block">in dir steckt so viel mehr.</span>
@@ -65,7 +65,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 			</p>
 			<h2
 				id="spark-heading"
-				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] leading-tight text-foreground"
+				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
 			>
 				1&nbsp;Mensch + 1&nbsp;Aven =
 				<span class="text-accent">ein Spark</span>.
@@ -111,7 +111,10 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
 					Post‑AGI · Warum jetzt
 				</p>
-				<h2 id="shift-heading" class="mt-4 text-2xl text-pretty text-foreground sm:text-3xl">
+				<h2
+					id="shift-heading"
+					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+				>
 					JETZT ist der perfekte Moment, der Creator deines vollen Lebenspotenzials zu sein.
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
@@ -136,7 +139,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					<p class="text-[9px] font-bold uppercase tracking-[0.24em] text-primary-foreground/45">
 						Ohne Assets
 					</p>
-					<h3 class="mt-2 text-lg text-primary-foreground sm:text-xl">
+					<h3 class="mt-2 text-lg font-semibold tracking-tight text-primary-foreground sm:text-xl">
 						Das fremdbestimmte Drehbuch
 					</h3>
 					<ul class="mt-4 space-y-2.5 text-[14px] leading-snug text-primary-foreground/72">
@@ -176,7 +179,9 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					<p class="text-[9px] font-bold uppercase tracking-[0.24em] text-foreground/45">
 						Mit deinen Assets
 					</p>
-					<h3 class="mt-2 text-lg text-foreground sm:text-xl">Das selbstbestimmte Drehbuch</h3>
+					<h3 class="mt-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+						Das selbstbestimmte Drehbuch
+					</h3>
 					<ul class="mt-4 space-y-2.5 text-[14px] leading-snug text-foreground/75">
 						<li class="flex gap-2.5">
 							<span
@@ -234,7 +239,10 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
 				Deine Transformation · Ganz persönlich
 			</p>
-			<h2 id="personal-heading" class="mt-4 text-2xl text-pretty text-foreground sm:text-3xl">
+			<h2
+				id="personal-heading"
+				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+			>
 				Erst ändert sich dein Tag. Dann dein Jahrzehnt.
 			</h2>
 
@@ -272,7 +280,9 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<p class="text-[9px] font-bold uppercase tracking-[0.26em] text-accent">
 					Die ersten zwei Sparks
 				</p>
-				<h2 class="mt-2 text-[clamp(1.5rem,4vw,2.15rem)] leading-tight text-foreground/90">
+				<h2
+					class="mt-2 text-[clamp(1.5rem,4vw,2.15rem)] font-light leading-tight tracking-tight text-foreground/90"
+				>
 					Hallo, wir sind avenMAIA und avenTIN.
 				</h2>
 				<p
@@ -446,7 +456,10 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
 				Von Ich zu Wir · Die Bewegung
 			</p>
-			<h2 id="collective-heading" class="mt-4 text-2xl text-pretty text-foreground sm:text-3xl">
+			<h2
+				id="collective-heading"
+				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+			>
 				Ein Spark trägt ein Leben. Eine Million Sparks tragen eine Zivilisation.
 			</h2>
 
@@ -494,7 +507,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">Aven Skills</p>
 				<h2
 					id="skills-preview-heading"
-					class="mt-4 text-2xl text-pretty text-foreground sm:text-3xl"
+					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
 					Fertige Skills für deinen Aven.
 				</h2>
@@ -526,7 +539,9 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 					Starte jetzt · First come, first serve
 				</p>
-				<h2 class="mt-3 text-2xl text-pretty text-foreground sm:text-3xl">
+				<h2
+					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+				>
 					So fängt dein souveränes Gründerleben an.
 				</h2>
 				<p class="mx-auto mt-3 max-w-lg text-[15px] leading-snug text-foreground/68 sm:text-base">

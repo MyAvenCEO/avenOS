@@ -1,23 +1,6 @@
 @import "tailwindcss";
 
 /*
- * The title face, served by us. It is SIL Open Font License 1.1 — the licence
- * text ships beside the file at /fonts/PetitFormalScript-OFL.txt, which is
- * what the OFL asks for when you redistribute it.
- *
- * Self-hosted rather than pulled from Google: a font request carries the
- * visitor's IP to a third party, and this site is about to publish a
- * Datenschutzerklärung.
- */
-@font-face {
-	font-family: "Petit Formal Script";
-	src: url("/fonts/PetitFormalScript-Regular.ttf") format("truetype");
-	font-weight: 400;
-	font-style: normal;
-	font-display: swap;
-}
-
-/*
  * THE MARKETING SITE'S THEME — a mirror of `app/src/app.css`.
  *
  * The site and the app are one brand, so the palette is the app's palette,
@@ -32,17 +15,12 @@
  * there carries emphasis here.
  */
 @theme {
-	/* TWO faces, each with one job. Inter carries everything you read to get
-	 * something done — body, UI, labels, eyebrows. Petit Formal Script carries
-	 * the titles, and only the titles: it is the brand signing its name, not a
-	 * typeface for paragraphs.
-	 *
-	 * It ships in ONE weight (400) and joins its letters, so the base rule
-	 * below refuses to fake a bold or tighten the tracking. Anything that must
-	 * stay readable at a glance — a skill's name, a plan's name — opts back to
-	 * `font-sans` deliberately. */
+	/* Inter is the single typeface — body, UI, titles, eyebrows — exactly as
+	 * in the app. `--font-display` and `--font-serif` stay SEPARATE tokens so a
+	 * dedicated display or editorial face can be brought back by editing one
+	 * line here, without touching a single component. */
 	--font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--font-display: "Petit Formal Script", ui-serif, Georgia, cursive;
+	--font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
 	--font-serif: "Inter", ui-sans-serif, system-ui, sans-serif;
 	--font-mono: "Inter", ui-sans-serif, system-ui, sans-serif;
 
@@ -156,10 +134,7 @@
 		font-weight: 400;
 	}
 
-	/* Titles are the script face. A script has no bold and no business being
-	 * tracked in, so weight and letter-spacing are pinned here — utilities on
-	 * the elements would otherwise fake both. Leading is looser than Inter's
-	 * because the ascenders and descenders in this face actually collide. */
+	/* Titles match the app: Inter semibold, gently tightened, balanced. */
 	h1,
 	h2,
 	h3,
@@ -167,18 +142,10 @@
 	h5,
 	h6 {
 		font-family: var(--font-display);
-		font-weight: 400;
-		letter-spacing: 0;
-		line-height: 1.3;
-		text-wrap: balance;
-	}
-
-	/* An identifier is not a title: skill and plan names stay in Inter, where
-	 * they can be read at 15px and recognised in a URL. */
-	:where(h1, h2, h3, h4, h5, h6).font-sans {
 		font-weight: 600;
 		letter-spacing: -0.015em;
 		line-height: 1.15;
+		text-wrap: balance;
 	}
 }
 

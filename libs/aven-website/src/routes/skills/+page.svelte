@@ -57,7 +57,7 @@ const chainSteps = [
 				Skill Marketplace · Aven
 			</p>
 			<h1
-				class="mt-4 text-[1.55rem] tracking-[-0.03em] text-pretty leading-snug text-foreground sm:text-3xl md:text-[2.35rem] md:leading-[1.15]"
+				class="mt-4 text-[1.55rem] font-semibold tracking-[-0.03em] text-pretty leading-snug text-foreground sm:text-3xl md:text-[2.35rem] md:leading-[1.15]"
 			>
 				Aven Skills, die echte Probleme lösen.
 				<span
@@ -162,7 +162,7 @@ const chainSteps = [
 								<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/38">
 									Ab {group.plan.name}
 								</p>
-								<h2 class="mt-1 text-xl text-foreground sm:text-2xl">
+								<h2 class="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
 									{group.plan.role}
 								</h2>
 								<p class="mt-1 text-[12px] text-foreground/52">
@@ -204,7 +204,7 @@ const chainSteps = [
 		<div class="mx-auto max-w-4xl">
 			<div class="text-center">
 				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Das System</p>
-				<h2 class="mt-3 text-2xl text-foreground sm:text-3xl">
+				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
 					Kein Skill steht allein — sie komponieren.
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/65">
@@ -260,7 +260,7 @@ const chainSteps = [
 	<section class="border-b border-border/40 px-5 py-12 sm:px-8 sm:py-14">
 		<div class="mx-auto max-w-3xl text-center">
 			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Pricing</p>
-			<h2 class="mt-3 text-xl text-foreground sm:text-2xl">
+			<h2 class="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
 				Alle {skills.length} Skills. In jedem Plan ab avenME enthalten.
 			</h2>
 			<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/65">

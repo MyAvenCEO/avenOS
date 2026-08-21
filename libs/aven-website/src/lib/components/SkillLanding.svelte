@@ -70,7 +70,7 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 				</p>
 			{/if}
 			<h1
-				class="mt-4 text-[1.55rem] tracking-[-0.03em] text-pretty leading-snug text-foreground sm:text-3xl md:text-[2.35rem] md:leading-[1.15]"
+				class="mt-4 text-[1.55rem] font-semibold tracking-[-0.03em] text-pretty leading-snug text-foreground sm:text-3xl md:text-[2.35rem] md:leading-[1.15]"
 			>
 				{skill.hero.headlineMain}
 				<span
@@ -114,7 +114,9 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 		<div class="mx-auto max-w-2xl">
 			<div class="text-center">
 				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Was du gewinnst</p>
-				<h2 class="mt-3 text-2xl text-pretty text-foreground sm:text-3xl">
+				<h2
+					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+				>
 					Dein Leben nach {skillLabel(skill.slug)}.
 				</h2>
 				<p
@@ -141,7 +143,9 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 				So funktioniert es
 			</p>
-			<h2 class="mt-3 text-2xl text-pretty text-foreground sm:text-3xl">
+			<h2
+				class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+			>
 				In deinem Alltag — vier Schritte.
 			</h2>
 			<ol class="mt-10 mx-auto max-w-xl list-none space-y-0 p-0">
@@ -170,7 +174,7 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 		<div class="mx-auto max-w-3xl">
 			<div class="text-center">
 				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Die Mechanik</p>
-				<h2 class="mt-3 text-2xl text-foreground sm:text-3xl">
+				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
 					Was genau passiert — ehrlich erklärt.
 				</h2>
 			</div>
@@ -206,7 +210,7 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 					Kein Skill steht allein
 				</p>
-				<h2 class="mt-3 text-xl text-foreground sm:text-2xl">
+				<h2 class="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
 					{skillLabel(skill.slug)}
 					arbeitet zusammen mit:
 				</h2>
@@ -241,7 +245,7 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 					Was es kosten würde
 				</p>
-				<h2 class="mt-3 text-2xl text-foreground sm:text-3xl">
+				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
 					Einzeln kaufen vs. einfach drin haben.
 				</h2>
 			</div>

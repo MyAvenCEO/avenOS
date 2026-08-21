@@ -37,7 +37,9 @@ const wrapperClass =
 	<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 		Warteliste · Invite only
 	</p>
-	<h3 class="mt-2 text-xl text-pretty text-foreground sm:text-2xl md:text-[1.65rem]">
+	<h3
+		class="mt-2 text-xl font-semibold tracking-tight text-pretty text-foreground sm:text-2xl md:text-[1.65rem]"
+	>
 		Sichere dir deine avenID für einmalig {euro(avenId.eurPrice)}&nbsp;€
 	</h3>
 	<p class="mt-3 max-w-2xl text-[14px] leading-snug text-foreground/68 sm:text-[15px]">
