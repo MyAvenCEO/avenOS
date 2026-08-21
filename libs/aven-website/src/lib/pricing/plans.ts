@@ -99,7 +99,7 @@ export const PLANS: Plan[] = [
 			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
 			{ skill: 'email-ingestor', label: 'E‑Mail‑Inbox' },
 			'POST‑Inbox — deine Papierpost digitalisiert (ohne Post‑Weiterleitung)',
-			{ skill: 'document-extractor', label: 'Dokumentenverwaltung' },
+			{ skill: 'docs-organizer', label: 'Dokumentenverwaltung' },
 			'Dein Brain: Notizen, Kontakte, Kalender',
 			'Personal Spark'
 		]

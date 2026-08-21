@@ -1,7 +1,7 @@
 <script lang="ts">
 import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
-import { publisherIdentity, skillDetailHref } from '$lib/skills/loader'
+import { publisherIdentity, skillDetailHref, skillLabel } from '$lib/skills/loader'
 import type { AvenosSkill } from '$lib/skills/types'
 
 type Props = {
@@ -12,20 +12,10 @@ let { skill }: Props = $props()
 
 const pubIdentity = $derived(publisherIdentity(skill.publisher.id, 'de'))
 const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
-
-const slugLabels: Record<string, string> = {
-	'email-ingestor': 'email-ingestor',
-	'document-extractor': 'document-extractor',
-	'brain-memorizer': 'brain-memorizer',
-	'book-keeper': 'book-keeper',
-	'human-reviewer': 'human-reviewer',
-	'blog-writer': 'blog-writer',
-	'golden-offer': 'golden-offer'
-}
 </script>
 
 <svelte:head>
-	<title>{skill.slug} — aven.ceo · {skill.publisher.displayName} Skills</title>
+	<title>{skillLabel(skill.slug)} — aven.ceo · {skill.publisher.displayName} Skills</title>
 	<meta name="description" content={skill.oneLineCopy}>
 </svelte:head>
 
@@ -108,7 +98,7 @@ const slugLabels: Record<string, string> = {
 				<h2
 					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					Dein Leben nach {skill.slug}.
+					Dein Leben nach {skillLabel(skill.slug)}.
 				</h2>
 				<p
 					class="mx-auto mt-3 max-w-md text-[11px] font-bold uppercase tracking-[0.18em] text-accent-ink"
@@ -202,7 +192,7 @@ const slugLabels: Record<string, string> = {
 					Kein Skill steht allein
 				</p>
 				<h2 class="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-					{skill.slug}
+					{skillLabel(skill.slug)}
 					arbeitet zusammen mit:
 				</h2>
 			</div>
@@ -216,7 +206,7 @@ const slugLabels: Record<string, string> = {
 							<span class="mt-0.5 text-[11px] font-bold text-accent-ink">→</span>
 							<div>
 								<p class="text-[11px] font-bold tracking-[0.1em] text-foreground/80">
-									{slugLabels[slug] ?? slug}
+									{skillLabel(slug)}
 								</p>
 								<p class="mt-0.5 text-[12px] leading-snug text-foreground/55">{relation}</p>
 							</div>
@@ -358,7 +348,7 @@ const slugLabels: Record<string, string> = {
 						</div>
 					</div>
 					<p class="text-[9px] font-bold uppercase tracking-[0.18em] text-foreground/38">
-						{skill.slug}
+						{skillLabel(skill.slug)}
 					</p>
 				</header>
 				<p

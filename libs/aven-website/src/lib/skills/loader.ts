@@ -2,7 +2,7 @@ import { PLANS, type Plan, type PlanId, planIncludes } from '$lib/pricing/plans'
 import deBlogWriter from './content/de/blog-writer.json'
 import deBookKeeper from './content/de/book-keeper.json'
 import deBrainMemorizer from './content/de/brain-memorizer.json'
-import deDocumentExtractor from './content/de/document-extractor.json'
+import deDocsOrganizer from './content/de/docs-organizer.json'
 // ── DE ────────────────────────────────────────────────────────────────────────
 import deEmailIngestor from './content/de/email-ingestor.json'
 import deGoldenOffer from './content/de/golden-offer.json'
@@ -10,7 +10,7 @@ import deHumanReviewer from './content/de/human-reviewer.json'
 import enBlogWriter from './content/en/blog-writer.json'
 import enBookKeeper from './content/en/book-keeper.json'
 import enBrainMemorizer from './content/en/brain-memorizer.json'
-import enDocumentExtractor from './content/en/document-extractor.json'
+import enDocsOrganizer from './content/en/docs-organizer.json'
 // ── EN (source of truth) ──────────────────────────────────────────────────────
 import enEmailIngestor from './content/en/email-ingestor.json'
 import enGoldenOffer from './content/en/golden-offer.json'
@@ -33,7 +33,7 @@ import type {
 const registry: Record<SupportedLang, SkillJson[]> = {
 	en: [
 		enEmailIngestor,
-		enDocumentExtractor,
+		enDocsOrganizer,
 		enBrainMemorizer,
 		enBookKeeper,
 		enHumanReviewer,
@@ -42,7 +42,7 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 	] as SkillJson[],
 	de: [
 		deEmailIngestor,
-		deDocumentExtractor,
+		deDocsOrganizer,
 		deBrainMemorizer,
 		deBookKeeper,
 		deHumanReviewer,
@@ -122,6 +122,16 @@ export function loadSkill(slug: string, lang: SupportedLang = 'de'): AvenosSkill
 }
 
 /** Detail URL honoring publisher (`/skills/aventin/…` vs `/skills/avenmaia/…`). */
+/**
+ * How a skill's name is written for humans: no hyphens. The slug stays
+ * hyphenated because it is a URL segment and a file name — but nothing the
+ * reader sees should look like one, so every surface that prints a skill
+ * name goes through here.
+ */
+export function skillLabel(slug: string): string {
+	return slug.replaceAll('-', ' ')
+}
+
 export function skillDetailHref(slug: string, lang: SupportedLang = 'de'): string {
 	const skill = loadSkill(slug, lang)
 	if (!skill) return '/skills'

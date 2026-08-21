@@ -1,5 +1,5 @@
 {
-	"slug": "document-extractor",
+	"slug": "docs-organizer",
 	"publisher": {
 		"id": "aventin",
 		"displayName": "avenTIN",
@@ -9,7 +9,7 @@
 	"plan": "avenme",
 	"oneLineCopy": "Kein Dokument bleibt ungelesen — egal in welchem Format.",
 	"hero": {
-		"kicker": "Skill · avenTIN · document-extractor",
+		"kicker": "Skill · avenTIN · docs organizer",
 		"headlineMain": "Dokumente lesen. Daten herausziehen. Weiterdenken.",
 		"headlineSerifLead": "PDFs, gescannte Rechnungen, Verträge, Briefpost‑Scans — alles wird zu strukturierten Daten, die dein Aven versteht.",
 		"promiseHoursPerWeek": "3+ Std/Woche"
@@ -29,7 +29,7 @@
 		"Ein Dokument kommt rein — per Mail, Upload oder Scan",
 		"Dein Aven führt OCR aus, konvertiert in PDF/A und erkennt den Dokumenttyp",
 		"Felder werden extrahiert: Betrag, Datum, Absender, Leistung, Fälligkeit",
-		"Das strukturierte Ergebnis geht direkt an brain-memorizer oder book-keeper weiter"
+		"Das strukturierte Ergebnis geht direkt an brain memorizer oder book keeper weiter"
 	],
 	"whatMechanics": {
 		"input": "PDFs, Bilder (JPG/PNG), gescannte Briefe, E‑Mail‑Anhänge",
@@ -72,13 +72,13 @@
 		"standaloneTotalEurPerMonth": 121,
 		"timeDelayToValue": "Erste Dokumente in unter 60 Sekunden verarbeitet",
 		"effortToInstall": "Kein Setup — läuft automatisch sobald Dokumente eintreffen",
-		"proof": "Alle Rechnungen auf aven.ceo wurden mit document-extractor verarbeitet. Kein Dokument wurde manuell abgetippt."
+		"proof": "Alle Rechnungen auf aven.ceo wurden mit docs organizer verarbeitet. Kein Dokument wurde manuell abgetippt."
 	},
 	"bonuses": [
 		"PDF/A‑Archiv: alle Dokumente rechtssicher archiviert und auf ewig durchsuchbar",
 		"Briefpost‑Digitalisierung: Scans aus dem Briefkasten werden automatisch eingelesen",
 		"Konfidenz‑Score: dein Aven markiert, wie sicher er sich bei der Extraktion ist"
 	],
-	"scarcity": "document-extractor ist in jedem CEO‑Plan enthalten. Kein Aufpreis. Kein Tool‑Abo. Kein Vendor‑Lock‑in.",
-	"letterFromPublisher": "Ein Gründer sollte keine Zeit damit verbringen, Zahlen aus PDFs herauszukopieren. Das ist keine Arbeit — das ist Zeitverschwendung, die sich wie Arbeit anfühlt. Ich habe document-extractor gebaut, weil Daniel irgendwann gesagt hat: \"Ich kann nicht mehr.\" Heute sagt er: \"Schick mir das einfach.\" Das ist der Unterschied."
+	"scarcity": "docs organizer ist in jedem CEO‑Plan enthalten. Kein Aufpreis. Kein Tool‑Abo. Kein Vendor‑Lock‑in.",
+	"letterFromPublisher": "Ein Gründer sollte keine Zeit damit verbringen, Zahlen aus PDFs herauszukopieren. Das ist keine Arbeit — das ist Zeitverschwendung, die sich wie Arbeit anfühlt. Ich habe docs organizer gebaut, weil Daniel irgendwann gesagt hat: \"Ich kann nicht mehr.\" Heute sagt er: \"Schick mir das einfach.\" Das ist der Unterschied."
 }
