@@ -1,22 +1,26 @@
 import { skillBySlug } from '@avenos/aven-skills'
-import { PLANS, type Plan, type PlanId, planIncludes } from '$lib/pricing/plans'
+import { PLANS, type Plan, type PlanId, plan as planById, planIncludes } from '$lib/pricing/plans'
 import deBlogWriter from './content/de/blog-writer.json'
 import deBookKeeper from './content/de/book-keeper.json'
+import deBookmarkChampion from './content/de/bookmark-champion.json'
 import deBrainMemorizer from './content/de/brain-memorizer.json'
 import deCalendarOrganizer from './content/de/calendar-organizer.json'
 import deDocsOrganizer from './content/de/docs-organizer.json'
 // ── DE ────────────────────────────────────────────────────────────────────────
 import deEmailManager from './content/de/email-manager.json'
 import deHumanReviewer from './content/de/human-reviewer.json'
+import deInboxRouter from './content/de/inbox-router.json'
 import deTodoShuffler from './content/de/todo-shuffler.json'
 import enBlogWriter from './content/en/blog-writer.json'
 import enBookKeeper from './content/en/book-keeper.json'
+import enBookmarkChampion from './content/en/bookmark-champion.json'
 import enBrainMemorizer from './content/en/brain-memorizer.json'
 import enCalendarOrganizer from './content/en/calendar-organizer.json'
 import enDocsOrganizer from './content/en/docs-organizer.json'
 // ── EN (source of truth) ──────────────────────────────────────────────────────
 import enEmailManager from './content/en/email-manager.json'
 import enHumanReviewer from './content/en/human-reviewer.json'
+import enInboxRouter from './content/en/inbox-router.json'
 import enTodoShuffler from './content/en/todo-shuffler.json'
 import dePubAvenmaia from './publishers/de/avenmaia.json'
 import dePubAventin from './publishers/de/aventin.json'
@@ -48,6 +52,7 @@ function withCatalogPlan(list: SkillJson[]): SkillJson[] {
 
 const registry: Record<SupportedLang, SkillJson[]> = {
 	en: withCatalogPlan([
+		enInboxRouter,
 		enEmailManager,
 		enDocsOrganizer,
 		enBrainMemorizer,
@@ -55,9 +60,11 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		enHumanReviewer,
 		enCalendarOrganizer,
 		enTodoShuffler,
+		enBookmarkChampion,
 		enBlogWriter
 	] as SkillJson[]),
 	de: withCatalogPlan([
+		deInboxRouter,
 		deEmailManager,
 		deDocsOrganizer,
 		deBrainMemorizer,
@@ -65,6 +72,7 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		deHumanReviewer,
 		deCalendarOrganizer,
 		deTodoShuffler,
+		deBookmarkChampion,
 		deBlogWriter
 	] as SkillJson[])
 }
@@ -148,6 +156,29 @@ export function loadSkill(slug: string, lang: SupportedLang = 'de'): AvenosSkill
  */
 export function skillLabel(slug: string): string {
 	return slug.replaceAll('-', ' ')
+}
+
+/**
+ * WHERE a skill is available, written from the plan data rather than from a
+ * sentence typed into each JSON. Those sentences said "in jedem CEO-Plan
+ * enthalten" and kept saying it through two pricing rewrites — a claim about
+ * the plans that lived outside the plans. Now `plan` on the skill is the one
+ * source and this is the only place the sentence exists.
+ */
+export function availabilityNote(skill: AvenosSkill, lang: SupportedLang = 'de'): string {
+	const home = planById(skill.plan)
+	const above = PLANS.filter((p) => planIncludes(p.id, skill.plan) && p.id !== skill.plan)
+	const name = skillLabel(skill.slug)
+	if (lang === 'en') {
+		const inc = above.length > 0 ? ` — and in ${above.map((p) => p.name).join(' and ')}.` : '.'
+		return skill.comingSoon
+			? `${name} is coming with ${home.name}${inc} Still being built — you get it automatically the day it ships.`
+			: `${name} is included in ${home.name}${inc} No surcharge, no separate licence.`
+	}
+	const inc = above.length > 0 ? ` — und in ${above.map((p) => p.name).join(' und ')}.` : '.'
+	return skill.comingSoon
+		? `${name} kommt mit ${home.name}${inc} Noch im Bau — du bekommst ihn automatisch, sobald er live ist.`
+		: `${name} ist in ${home.name} enthalten${inc} Kein Aufpreis, keine zweite Lizenz.`
 }
 
 export function skillDetailHref(slug: string, lang: SupportedLang = 'de'): string {
