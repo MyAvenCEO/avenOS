@@ -20,7 +20,7 @@ import {
 	totalSharePct,
 	VAT_NOTE
 } from '$lib/pricing/plans'
-import { skillDetailHref, skillLabel, skillsIncludedIn } from '$lib/skills/loader'
+import { loadSkill, skillDetailHref, skillLabel, skillsIncludedIn } from '$lib/skills/loader'
 
 const openSourceGithubHref = 'https://github.com/jaensen/avenOS'
 
@@ -261,6 +261,12 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 												>
 													{skillLabel(feature.skill)}
 												</a>
+												{#if loadSkill(feature.skill, 'de')?.comingSoon}
+													<span
+														class="ml-1 rounded-full border border-quiet/40 bg-quiet/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-quiet-ink"
+														>bald</span
+													>
+												{/if}
 												<span class="text-foreground/55"> · {feature.label}</span>
 											</li>
 										{/each}
