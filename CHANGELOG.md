@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.1...v) (2026-08-21)
+
+
+### Features
+
+* **ops:** improve stack observability and release safety ([#77](https://github.com/MyAvenCEO/avenOS/issues/77)) ([42af6d0](https://github.com/MyAvenCEO/avenOS/commit/42af6d0ea74d86cc4998022f322d8ac95795c65b))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.9...v) (2026-08-21)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.20-next.8...v) (2026-08-20)
 
