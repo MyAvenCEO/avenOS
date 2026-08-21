@@ -1,6 +1,6 @@
 <script lang="ts">
 import { appRuntime } from 'virtual:aven-app-runtime'
-import { onMount } from 'svelte'
+import { onMount, tick } from 'svelte'
 import { page } from '$app/state'
 import { greetingFor, tierFrom } from '$lib/tiers.js'
 import type { NameAvailability, NameHoldResult } from '$lib/types.js'
@@ -68,6 +68,36 @@ async function secure() {
 	}
 }
 
+/**
+ * Each step puts the cursor where the answer goes. Without this you land on a
+ * question with the keyboard pointing nowhere and have to click the field —
+ * three times across the flow.
+ */
+let panel = $state<HTMLElement | null>(null)
+
+$effect(() => {
+	// Both are read HERE so the effect tracks them: `step` to move focus on
+	// every step, and `panel` because on first paint the binding is still null
+	// and the effect must run again once it lands.
+	void step
+	// `info` too: it arrives from the server after first paint and re-renders
+	// this block, which drops whatever focus we had just set.
+	void info
+	const host = panel
+	if (!host) return
+	// After paint, not just after tick: `loadInfo` resolves shortly after mount
+	// and re-renders this block, which would drop a focus set any earlier.
+	void tick().then(() => {
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				host
+					.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea')
+					?.focus({ preventScroll: true })
+			})
+		})
+	})
+})
+
 function onKey(event: KeyboardEvent) {
 	if (event.key !== 'Enter') return
 	event.preventDefault()
@@ -111,44 +141,46 @@ function onKey(event: KeyboardEvent) {
 			</div>
 			<p class="eyebrow">Schritt {step + 1} von {TOTAL_STEPS}</p>
 
-			{#if step === 1}
-				<label
-					>E‑Mail<input
-						bind:value={email}
-						type="email"
-						autocomplete="email"
-						placeholder="du@beispiel.de"
-						onkeydown={onKey}
-					></label
-				>
-				<p class="fine">Hierhin schicken wir deinen Link — und sonst nichts.</p>
-			{:else if step === 2}
-				<label
-					>Wie dürfen wir dich nennen?<input
-						bind:value={salutation}
-						maxlength="120"
-						autocomplete="name"
-						placeholder="z. B. Samuel"
-						onkeydown={onKey}
-					></label
-				>
-				<p class="fine">
-					Damit wir dich anschreiben können wie ein Mensch, nicht wie ein Formular.
-				</p>
-			{:else}
-				<label
-					>Was willst du bauen — und warum?<textarea
-						bind:value={idea}
-						rows="5"
-						maxlength="2000"
-						placeholder="Ich will …"
-					></textarea></label
-				>
-				<p class="fine">
-					Ein paar Sätze reichen. Wir vergeben <strong>Wildcard‑Einladungen</strong> an die Ideen,
-					die uns umhauen — unabhängig vom Platz in der Warteliste.
-				</p>
-			{/if}
+			<div class="field" bind:this={panel}>
+				{#if step === 1}
+					<label
+						>E‑Mail<input
+							bind:value={email}
+							type="email"
+							autocomplete="email"
+							placeholder="du@beispiel.de"
+							onkeydown={onKey}
+						></label
+					>
+					<p class="fine">Hierhin schicken wir deinen Link — und sonst nichts.</p>
+				{:else if step === 2}
+					<label
+						>Wie dürfen wir dich nennen?<input
+							bind:value={salutation}
+							maxlength="120"
+							autocomplete="name"
+							placeholder="z. B. Samuel"
+							onkeydown={onKey}
+						></label
+					>
+					<p class="fine">
+						Damit wir dich anschreiben können wie ein Mensch, nicht wie ein Formular.
+					</p>
+				{:else}
+					<label
+						>Was wünschst du dir, dass {name} für dich tut?<textarea
+							bind:value={idea}
+							rows="5"
+							maxlength="2000"
+							placeholder="{name} soll …"
+						></textarea></label
+					>
+					<p class="fine">
+						Ein paar Sätze reichen. Wir vergeben <strong>Wildcard‑Einladungen</strong> an die Ideen,
+						die uns umhauen — unabhängig vom Platz in der Warteliste.
+					</p>
+				{/if}
+			</div>
 
 			{#if error}
 				<div class="alert">{error}</div>

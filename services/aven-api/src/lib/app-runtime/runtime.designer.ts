@@ -137,6 +137,7 @@ export const appRuntime: AppRuntime = {
 		check: async (name) =>
 			name.trim().toLowerCase() === 'taken' ? unavailable() : available(name),
 		loadInfo: async (name, current) => current ?? (name ? available(name) : null),
+		mine: async () => ['aurora'],
 		hold: async (name) => hold(name)
 	},
 	auth: {
