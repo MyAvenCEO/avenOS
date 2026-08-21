@@ -1,3 +1,10 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.8...v) (2026-08-21)
+
+
+### Bug Fixes
+
+* **app:** native passkeys, by asking the signature instead of the bundle ([6fd06ef](https://github.com/MyAvenCEO/avenOS/commit/6fd06ef1b3238025eae4aa366f0219849f0db8e2))
+* **ios:** the passkey delegate may not be narrower than what it implements ([f761d55](https://github.com/MyAvenCEO/avenOS/commit/f761d5519ce481564b494878fa2492259a2ceac1))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.7...v) (2026-08-21)
 
 
