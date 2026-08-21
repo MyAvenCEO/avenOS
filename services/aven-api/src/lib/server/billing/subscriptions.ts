@@ -7,8 +7,8 @@
 // cancel, resume) call the provider and return; the row updates when the
 // provider's event lands, so the UI shows a pending state instead of a lie.
 import { randomUUID } from 'node:crypto'
-import type pg from 'pg'
 import { PLANS, type Plan } from '@avenos/aven-website/pricing'
+import type pg from 'pg'
 import { writeAudit } from '../audit.js'
 import { AppError } from '../errors.js'
 import { ensureVerifiedUser } from '../identity.js'

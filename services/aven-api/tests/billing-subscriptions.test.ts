@@ -3,8 +3,8 @@
 // webhooks persist idempotently, and every read/action is scoped to the
 // session's own user — a stranger's id never reaches provider or row.
 import { randomUUID } from 'node:crypto'
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PLANS } from '@avenos/aven-website/pricing'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { CreemProvider } from '../src/lib/server/billing/creem.js'
 import { parseCreemSubscriptionEvent } from '../src/lib/server/billing/provider.js'
 import {
@@ -58,8 +58,8 @@ describe('product seeding', () => {
 		// Prices come from the SSOT, in NET cents, recurring monthly, tax-exclusive.
 		const avenme = PLANS.find((p) => p.id === 'avenme')
 		const avenceo = PLANS.find((p) => p.id === 'avenceo')
-		expect(byTier.avenme.price).toBe((avenme?.eurPrice ?? 0) * 100)
-		expect(byTier.avenceo.price).toBe((avenceo?.eurPrice ?? 0) * 100)
+		expect(byTier.avenme?.price).toBe((avenme?.eurPrice ?? 0) * 100)
+		expect(byTier.avenceo?.price).toBe((avenceo?.eurPrice ?? 0) * 100)
 		for (const body of Object.values(byTier)) {
 			expect(body.billing_type).toBe('recurring')
 			expect(body.tax_mode).toBe('exclusive')
@@ -250,7 +250,7 @@ describe('subscription state', () => {
 				receiptUrl: 'https://creem.io/receipt/tx_1'
 			}
 		])
-		expect(invoiceCalls[0].url).toContain(`customer_id=cust_${alice.id.slice(0, 8)}`)
+		expect(invoiceCalls[0]?.url).toContain(`customer_id=cust_${alice.id.slice(0, 8)}`)
 		// Bob has no customer row → empty history, no provider call with a
 		// guessed id.
 		expect(await service.invoices(bob.id)).toEqual([])

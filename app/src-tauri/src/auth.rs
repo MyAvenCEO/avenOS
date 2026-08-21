@@ -512,6 +512,140 @@ pub fn auth_status(state: tauri::State<'_, AuthState>) -> Result<AuthStatus, Str
 	})
 }
 
+fn session_token(state: &tauri::State<'_, AuthState>) -> Result<String, String> {
+	state
+		.0
+		.lock()
+		.map_err(|_| "Authentication state is unavailable.".to_string())?
+		.session
+		.as_ref()
+		.map(|session| session.token.clone())
+		.ok_or_else(|| "No session is signed in.".to_string())
+}
+
+/// One authenticated round-trip to the identity API. Every billing command
+/// goes through here with a HARDCODED path — the webview never chooses URLs,
+/// and the Creem key never leaves the id service at all.
+fn identity_api_call(
+	token: String,
+	method: &'static str,
+	path: &'static str,
+	body: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+	let request = agent()
+		.request(method, &api_endpoint(path))
+		.set("authorization", &format!("Bearer {token}"));
+	let response = match body {
+		Some(json) => request
+			.set("content-type", "application/json")
+			.send_string(&json.to_string()),
+		None => request.call(),
+	}
+	.map_err(|error| match error {
+		ureq::Error::Status(_, response) => error_message(response, "The request failed.").1,
+		ureq::Error::Transport(error) => format!("Identity service unavailable: {error}"),
+	})?;
+	parse_json::<serde_json::Value>(response)
+}
+
+/// The signed-in member's subscription standing (`null` before any tier).
+#[tauri::command]
+pub async fn billing_me(state: tauri::State<'_, AuthState>) -> Result<serde_json::Value, String> {
+	let token = session_token(&state)?;
+	tauri::async_runtime::spawn_blocking(move || {
+		identity_api_call(token, "GET", "/api/billing/me", None)
+	})
+	.await
+	.map_err(|error| format!("Could not load your subscription: {error}"))?
+}
+
+/// Open a checkout for a tier; returns the URL for the system browser.
+#[tauri::command]
+pub async fn billing_subscribe(
+	tier: String,
+	state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+	let token = session_token(&state)?;
+	tauri::async_runtime::spawn_blocking(move || {
+		identity_api_call(
+			token,
+			"POST",
+			"/api/billing/subscribe",
+			Some(serde_json::json!({ "tier": tier })),
+		)
+	})
+	.await
+	.map_err(|error| format!("Could not start the checkout: {error}"))?
+}
+
+/// Up- or downgrade to the other tier (proration charged immediately).
+#[tauri::command]
+pub async fn billing_upgrade(
+	tier: String,
+	state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+	let token = session_token(&state)?;
+	tauri::async_runtime::spawn_blocking(move || {
+		identity_api_call(
+			token,
+			"POST",
+			"/api/billing/upgrade",
+			Some(serde_json::json!({ "tier": tier })),
+		)
+	})
+	.await
+	.map_err(|error| format!("Could not change the plan: {error}"))?
+}
+
+/// Cancel at period end (Kündigungsbutton semantics — never silently immediate).
+#[tauri::command]
+pub async fn billing_cancel(
+	state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+	let token = session_token(&state)?;
+	tauri::async_runtime::spawn_blocking(move || {
+		identity_api_call(
+			token,
+			"POST",
+			"/api/billing/cancel",
+			Some(serde_json::json!({})),
+		)
+	})
+	.await
+	.map_err(|error| format!("Could not cancel: {error}"))?
+}
+
+/// Undo a scheduled cancel / resume a paused subscription.
+#[tauri::command]
+pub async fn billing_resume(
+	state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+	let token = session_token(&state)?;
+	tauri::async_runtime::spawn_blocking(move || {
+		identity_api_call(
+			token,
+			"POST",
+			"/api/billing/resume",
+			Some(serde_json::json!({})),
+		)
+	})
+	.await
+	.map_err(|error| format!("Could not resume: {error}"))?
+}
+
+/// The member's invoice history (provider-hosted receipt links).
+#[tauri::command]
+pub async fn billing_invoices(
+	state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+	let token = session_token(&state)?;
+	tauri::async_runtime::spawn_blocking(move || {
+		identity_api_call(token, "GET", "/api/billing/invoices", None)
+	})
+	.await
+	.map_err(|error| format!("Could not load your invoices: {error}"))?
+}
+
 /// The names reserved for whoever is signed in. Settings shows them so the
 /// account you are looking at is the account you are actually in — the session
 /// alone answers "who", not "which aven".

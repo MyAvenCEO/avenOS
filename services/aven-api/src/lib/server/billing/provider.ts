@@ -118,9 +118,13 @@ export function parseCreemSubscriptionEvent(rawBody: string): SubscriptionEvent 
 					: null,
 		status: String(object.status ?? ''),
 		currentPeriodEnd:
-			object.current_period_end_date ?? object.currentPeriodEndDate ?? object.current_period_end ?? null,
+			object.current_period_end_date ??
+			object.currentPeriodEndDate ??
+			object.current_period_end ??
+			null,
 		cancelAtPeriodEnd:
-			object.status === 'scheduled_cancel' || Boolean(object.canceled_at ?? object.cancel_at_period_end),
+			object.status === 'scheduled_cancel' ||
+			Boolean(object.canceled_at ?? object.cancel_at_period_end),
 		priceCents: Number.isFinite(priceCents) ? priceCents : null
 	}
 }

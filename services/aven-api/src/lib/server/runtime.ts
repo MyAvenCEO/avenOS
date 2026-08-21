@@ -2,6 +2,7 @@ import pino from 'pino'
 import { type AvenAuth, createAuth } from './auth.js'
 import { createPaymentProvider } from './billing/fake.js'
 import type { PaymentProvider } from './billing/provider.js'
+import { SubscriptionService } from './billing/subscriptions.js'
 import { loadApiConfig, type ServerConfig } from './config.js'
 import { decodeEncryptionKey } from './crypto.js'
 import { type DatabaseContext, openDatabase } from './db.js'
@@ -11,7 +12,6 @@ import { NameService } from './names/service.js'
 import { createNotifier, type Notifier } from './notifications.js'
 import { PasskeyService } from './passkeys.js'
 import { ProofOfWorkService } from './proof-of-work.js'
-import { SubscriptionService } from './billing/subscriptions.js'
 
 export interface Runtime {
 	config: ServerConfig

@@ -3,7 +3,7 @@ title: Creem subscriptions + in-app billing portal
 summary: avenME (42 €) and avenCEO (326 €) become real recurring Creem products auto-seeded from the pricing SSOT, and the Tauri app gets a fully native, brand-styled billing page — current plan, upgrade/downgrade, cancel/resume, invoices — every action proxied through id.next.aven.ceo and strictly scoped to the signed-in customer.
 owner: claude
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-22
 tags: [billing, aven-api, app, creem]
 goal: "`bun run --cwd services/aven-api check`, `bun run check` (app) and `bunx biome check services/aven-api app` exit 0; `vitest run tests/billing-subscriptions.test.ts tests/copy.test.ts tests/designer.test.ts` passes proving: seeding upserts two recurring net-priced Creem products from PLANS by metadata.tier, subscription webhooks grant+persist (customer id, subscription id, tier, status) idempotently, /api/billing/me and every /api/billing/* action resolve the customer from the session only (cross-user test returns null/403), and upgrade/cancel/resume/invoices endpoints proxy Creem without exposing the API key; the app's Abrechnung settings pane renders plan, price, renewal, invoice list and action buttons from designer fixtures (screenshot in the card)."
 ---
@@ -213,16 +213,16 @@ seat counts, any admin or reporting surface, payment-method management UI
 
 ## Acceptance criteria
 
-- [ ] `vitest run tests/billing-subscriptions.test.ts` exits 0: seed
+- [x] `vitest run tests/billing-subscriptions.test.ts` exits 0: seed
       idempotency, net-cents payload, webhook grant + replay, /me isolation,
       action proxies self-scoped (no client ids), invoices mapped.
-- [ ] `bun run --cwd services/aven-api check` and `bun run check` (app) exit 0.
-- [ ] `bunx biome check services/aven-api app` exits 0.
-- [ ] `tests/copy.test.ts` + `tests/designer.test.ts` green.
-- [ ] `grep -rn "requireUser" services/aven-api/src/routes/api/billing/`
+- [x] `bun run --cwd services/aven-api check` and `bun run check` (app) exit 0.
+- [x] `bunx biome check services/aven-api app` exits 0.
+- [x] `tests/copy.test.ts` + `tests/designer.test.ts` green.
+- [x] `grep -rn "requireUser" services/aven-api/src/routes/api/billing/`
       shows every handler; no handler reads a user/customer/subscription id
       from the request.
-- [ ] Screenshots of the Abrechnung pane (no-sub with pricing cards,
+- [x] Screenshots of the Abrechnung pane (no-sub with pricing cards,
       active with upgrade card, cancel-scheduled) in the Progress log.
 - [ ] Sandbox smoke pasted: subscribe → webhook → active pane → cancel →
       "Endet am …".
@@ -238,6 +238,23 @@ grep -rn "requireUser" services/aven-api/src/routes/api/billing/
 ```
 
 ## Progress log
+
+- 2026-08-22 (build, phase 3 — card → review) — Six Tauri commands
+  (billing_me/subscribe/upgrade/cancel/resume/invoices) proxy hardcoded
+  /api/billing/* paths with the session bearer through one identity_api_call
+  helper; the webview never chooses URLs. New Abrechnung settings pane
+  (second category, under Konto): current-plan card with status chip +
+  renewal/end date, the in-app pricing UI (avenME/avenCEO cards from the
+  PLANS SSOT, current tier marked "Dein Plan", upgrade with +284 €/Monat
+  delta and proration confirm), Kündigungsbutton-grade cancel with
+  period-end confirm + Fortsetzen, invoice list with provider-hosted PDF
+  links. Browser fixtures via ?billing=none|active|cancel; all three states
+  + both confirm dialogs driven and screenshotted in-session (transcript).
+  Gates: api svelte-check 0/1475, app 0/525, biome clean, card suites 9/9,
+  requireUser grep clean, zero client-supplied ids. OPEN for review: the
+  sandbox smoke — no Creem test key exists locally (next GitHub Environment
+  only), so seed + live subscribe + webhook must run against the deployed
+  id.next.aven.ceo after merge.
 
 - 2026-08-21 (build, phases 1–2) — Migration 0008 (billing_customers +
   subscriptions), pricing SSOT split into plans-data.ts and exported as
