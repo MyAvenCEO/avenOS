@@ -114,6 +114,8 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 				{#each tiers as p, i (p.id)}
 					{@const previous = i === 0 ? avenId : tiers[i - 1]}
 					{@const skillCount = skillsIncludedIn(p.id, 'de').length}
+					{@const plain = p.features.filter((f) => typeof f === 'string')}
+					{@const skills = p.features.filter((f) => typeof f !== 'string')}
 					<div
 						id={p.id}
 						class="flex min-w-0 scroll-mt-28 flex-col rounded-2xl p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {p.highlight
@@ -216,7 +218,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								></span>
 								<span>Alles aus {previous.name}</span>
 							</li>
-							{#each p.features as feature (typeof feature === 'string' ? feature : feature.skill)}
+							{#each plain as feature (feature)}
 								<li class="flex gap-2">
 									<span
 										aria-hidden="true"
@@ -224,19 +226,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 											? 'bg-accent'
 											: 'bg-foreground/25'}"
 									></span>
-									{#if typeof feature === 'string'}
-										<span>{feature}</span>
-									{:else}
-										<span>
-											<a
-												href={skillDetailHref(feature.skill, 'de')}
-												class="font-medium text-foreground underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
-											>
-												{feature.skill}
-											</a>
-											<span class="text-foreground/55"> · {feature.label}</span>
-										</span>
-									{/if}
+									<span>{feature}</span>
 								</li>
 							{/each}
 						</ul>
@@ -254,16 +244,39 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							</p>
 						{/if}
 
-						{#if skillCount > 0}
-							<p class="mt-4 border-t border-border/50 pt-3 text-[12px] text-foreground/50">
-								<a
-									href={`/skills?plan=${p.id}`}
-									class="underline underline-offset-4 hover:text-foreground/75"
-								>
-									{skillCount}
-									Skills enthalten →
-								</a>
-							</p>
+						<!-- Skills are their own category, not more bullets: a feature is
+						     something the tier does, a skill is a thing you can go read. -->
+						{#if skills.length > 0 || skillCount > 0}
+							<div class="mt-4 border-t border-border/50 pt-4 text-left">
+								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+									Skills
+								</p>
+								{#if skills.length > 0}
+									<ul class="mt-2 space-y-1.5 text-[13px] leading-snug">
+										{#each skills as feature (feature.skill)}
+											<li>
+												<a
+													href={skillDetailHref(feature.skill, 'de')}
+													class="font-medium text-foreground underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+												>
+													{feature.skill}
+												</a>
+												<span class="text-foreground/55"> · {feature.label}</span>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+								{#if skillCount > 0}
+									<p class="mt-2 text-[12px] text-foreground/50">
+										<a
+											href={`/skills?plan=${p.id}`}
+											class="underline underline-offset-4 hover:text-foreground/75"
+										>
+											Alle {skillCount} Skills ansehen →
+										</a>
+									</p>
+								{/if}
+							</div>
 						{/if}
 
 						<div class="mt-5 lg:mt-auto lg:pt-5">
