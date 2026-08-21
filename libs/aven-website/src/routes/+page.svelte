@@ -41,10 +41,13 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<span class="mt-1 block">in dir steckt so viel mehr.</span>
 			</h1>
 			<div class="mx-auto mt-8 max-w-2xl">
-				<p class="text-pretty text-[19px] font-semibold leading-snug text-accent sm:text-[22px]">
-					Wir sind da, um dich endlich in dein souveränes Gründerleben zu katapultieren, von dem du
-					schon immer träumst. Gemeinsam zu bauen, woran du wirklich glaubst, ist die Zukunft, die
-					uns alle glücklich macht.
+				<p
+					class="text-pretty text-[19px] font-medium leading-snug text-foreground/85 sm:text-[22px]"
+				>
+					Wir sind da, um dich endlich in dein
+					<strong class="font-semibold text-accent">souveränes Gründerleben</strong>
+					zu katapultieren, von dem du schon immer träumst. Gemeinsam zu bauen, woran du wirklich
+					glaubst, ist die Zukunft, die uns alle glücklich macht.
 				</p>
 			</div>
 		</div>
