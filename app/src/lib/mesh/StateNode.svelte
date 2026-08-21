@@ -26,9 +26,9 @@ const {
 		class="flex flex-col items-center justify-center rounded-full border-2 bg-surface-raised text-center font-medium text-foreground shadow-[0_1px_3px_rgba(30,41,59,0.06)] {data.compact
 			? 'size-14 text-[0.6875rem]'
 			: 'size-24 text-sm'} {data.terminal
-			? 'border-status-success ring-2 ring-status-success/45 ring-offset-2 ring-offset-surface-soft'
+			? 'border-success ring-2 ring-success/45 ring-offset-2 ring-offset-surface-soft'
 			: data.initial
-				? 'border-status-success'
+				? 'border-success'
 				: 'border-foreground/15'}"
 	>
 		<Handle type="target" position={Position.Left} />
@@ -36,9 +36,9 @@ const {
 		<span>{data.label}</span>
 		{#if !data.compact}
 			{#if data.initial}
-				<span class="font-mono text-status-success-ink text-[0.5625rem] uppercase tracking-wide">start</span>
+				<span class="font-mono text-success-ink text-[0.5625rem] uppercase tracking-wide">start</span>
 			{:else if data.terminal}
-				<span class="font-mono text-status-success-ink text-[0.5625rem] uppercase tracking-wide">end</span>
+				<span class="font-mono text-success-ink text-[0.5625rem] uppercase tracking-wide">end</span>
 			{/if}
 		{/if}
 		<Handle type="source" position={Position.Right} />
