@@ -46,8 +46,8 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				>
 					Wir sind da, um dich endlich in dein
 					<strong class="font-semibold text-accent">souveränes Gründerleben</strong>
-					zu katapultieren, von dem du schon immer träumst. Gemeinsam zu bauen, woran du wirklich
-					glaubst, ist die Zukunft, die uns alle glücklich macht.
+					zu katapultieren, von dem du schon immer träumst. Gemeinsam zu bauen, woran wir wirklich
+					glauben, ist die Zukunft, die uns alle glücklich macht.
 				</p>
 			</div>
 		</div>
@@ -76,10 +76,12 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					— kollabiert, sobald KI fast jede Arbeit so gut erledigt wie ein Mensch: Kopfarbeit heute,
 					mit Robotern bald auch Handarbeit, rund um die Uhr,
 					<strong class="font-medium text-foreground/85">zum Preis von Strom</strong>. Dann bleibt
-					nur eine Einkommensquelle — das, was dir gehört — und nur eine Frage:
-					<strong class="font-medium text-foreground/85"
-						>Besitzt du die KI, die die neue Arbeit leistet — oder nicht?</strong
-					>
+					nur eine Einkommensquelle — das, was dir gehört.
+				</p>
+				<p
+					class="mx-auto mt-6 max-w-xl text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[22px]"
+				>
+					Besitzt du die KI, die die neue Arbeit leistet — oder nicht?
 				</p>
 			</div>
 
@@ -471,8 +473,8 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 			>
 				<p class="text-pretty">
 					Stell dir vor, was passiert, wenn eine Million Menschen aufhören, ihre Zeit zu verkaufen,
-					und anfangen zu bauen, woran sie glauben — und einander daran beteiligen. Jeder mit seiner
-					eigenen Firma. Keiner mehr Angestellter im Leben eines Konzerns.
+					und anfangen, Sparks zu bauen, an die sie glauben — und einander daran zu beteiligen.
+					Jeder mit seinem eigenen avenCEO. Keiner mehr Angestellter im Leben eines Konzerns.
 				</p>
 				<p class="text-pretty">
 					Das ist die Welt, an die wir glauben:
