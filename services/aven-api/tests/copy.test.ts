@@ -9,7 +9,7 @@ describe('functional web copy', () => {
 	// The point of this test is that every page still NAMES its action rather
 	// than gesturing at it. The strings are German now; the rule is unchanged.
 	it('keeps the retained actions explicit', () => {
-		expect(route('+page.svelte')).toContain('Verfügbarkeit prüfen')
+		expect(route('+page.svelte')).toContain('ist frei')
 		expect(route('secure/+page.svelte')).toContain('Platz sichern')
 		expect(route('login/+page.svelte')).toContain('Mit Passkey anmelden')
 		expect(route('device/+page.svelte')).toContain('avenOS verbinden')
