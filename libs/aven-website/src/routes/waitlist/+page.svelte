@@ -1,8 +1,8 @@
 <svelte:head>
-	<title>Warteliste — avenCEO Beta &amp; Labor‑Updates · aven.ceo</title>
+	<title>Warteliste — avenID sichern · aven.ceo</title>
 	<meta
 		name="description"
-		content="Trage dich für die avenCEO Beta‑Warteliste ein: Aven‑Name, E‑Mail, Ansprache, optionale wöchentliche Labor‑Updates."
+		content="Sichere dir deine avenID und damit deinen Platz auf der Warteliste — der Weg in avenME, avenCEO und avenCOOP. Eingeladen wird der Reihe nach."
 	>
 </svelte:head>
 
@@ -16,14 +16,13 @@ const preferredFromUrl = $derived(
 	$page.url.searchParams.get('preferred') ?? $page.url.searchParams.get('name') ?? ''
 )
 
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 4
 
 let step = $state(1)
 let email = $state('')
 let name = $state('')
 let preferredName = $state('')
 let idea = $state('')
-let newsletter = $state(true)
 let honeypot = $state('')
 let busy = $state(false)
 let done = $state(false)
@@ -73,6 +72,26 @@ const introHeadline = $derived.by(() => {
 	}
 })
 
+/**
+ * Why anyone is standing here, in their own words. Every tier is invite-only
+ * and the avenID is the door to all of them: it is the name AND the position
+ * in the queue, so reserving it is what turns "interessiert" into a place we
+ * can actually invite. The text says that plainly, from wherever they came.
+ */
+const introBody = $derived.by(() => {
+	const planName = PLANS.find((p) => p.id === tier)?.name ?? ''
+	switch (intent) {
+		case 'coop-application':
+			return `avenCOOP vergeben wir nicht der Reihe nach, sondern nach Passung — wir steigen als technischer Co‑Founder bei dir ein, und das entscheiden wir gemeinsam. Der Weg dahin führt trotzdem über deine avenID: Sie reserviert deinen Namen, hält deinen Platz auf der Warteliste und zeigt uns, dass es dir ernst ist. Deine Bewerbung lesen wir danach persönlich.`
+		case 'ceo-plan':
+			return `${planName || 'Dein Plan'} startet invite‑only — buchen kannst du erst, wenn du eingeladen bist. Deinen Platz sicherst du dir jetzt über deine avenID: Der Name gehört dir, und die Reihenfolge der Warteliste ist die Reihenfolge der Einladungen. Sobald du dran bist, schalten wir ${planName || 'deinen Plan'} für dich frei.`
+		case 'aven-id':
+			return `Deine avenID ist zweierlei auf einmal: der Name, unter dem dein Aven erreichbar ist — und dein Platz in der Warteliste. Eingeladen wird der Reihe nach, und jeden Namen gibt es genau einmal.`
+		default:
+			return `Deine avenID ist der Anfang von allem: der Name, unter dem dein Aven erreichbar ist, und zugleich dein Platz auf der Warteliste. Eingeladen wird der Reihe nach.`
+	}
+})
+
 const emailOk = $derived(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
 
 function nextFromStep1() {
@@ -94,12 +113,7 @@ function nextFromStep3() {
 	step = 4
 }
 
-function nextFromStep4() {
-	error = ''
-	step = 5
-}
-
-async function finish(newsletterChoice: boolean) {
+async function finish() {
 	error = ''
 	if (honeypot) return
 	if (!emailOk) {
@@ -107,7 +121,6 @@ async function finish(newsletterChoice: boolean) {
 		step = 2
 		return
 	}
-	newsletter = newsletterChoice
 	busy = true
 	try {
 		const res = await fetch('/api/waitlist', {
@@ -118,7 +131,6 @@ async function finish(newsletterChoice: boolean) {
 				name: name.trim(),
 				preferredName: preferredSlug,
 				idea: idea.trim(),
-				newsletter,
 				intent,
 				tier,
 				website: honeypot
@@ -186,6 +198,7 @@ const tierPlan = $derived(PLANS.find((p) => p.id === tier) ?? null)
 				<h1 class="mt-2 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
 					{introHeadline}
 				</h1>
+				<p class="mt-3 text-[14px] leading-relaxed text-foreground/68">{introBody}</p>
 				<p class="mt-3 text-[14px] leading-relaxed text-foreground/68">
 					Wir sind noch in der Early Alpha — avenMAIA und avenTIN laufen gerade auf uns selbst:
 					echte Posteingänge, echte Dokumente, echter Alltag. Wir schleifen, bis wir sagen können:
@@ -195,8 +208,7 @@ const tierPlan = $derived(PLANS.find((p) => p.id === tier) ?? null)
 					Dann geht es los — und du bist als Erster dabei.
 				</p>
 				<p class="mt-2 text-[13px] leading-snug text-foreground/50">
-					Fünf kurze Schritte · wir melden uns zur Beta.<br>
-					Optional: wöchentliche Labor‑Updates aus dem Bau.
+					Vier kurze Schritte · wir melden uns, sobald du dran bist.
 				</p>
 			</div>
 
@@ -207,12 +219,7 @@ const tierPlan = $derived(PLANS.find((p) => p.id === tier) ?? null)
 					<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent-ink">Danke</p>
 					<p class="mt-3 text-[16px] font-semibold text-foreground">Du bist auf der Liste.</p>
 					<p class="mt-2 text-[14px] leading-relaxed text-foreground/68">
-						Wir melden uns per Mail, sobald die Beta startet.
-						{#if newsletter}
-							Wöchentliche Labor‑Updates sind aktiv — Abmeldung mit einem Klick in jeder Ausgabe.
-						{:else}
-							Du erhältst nur Beta‑relevante Einladungen und Rückfragen, keine Labor‑Updates.
-						{/if}
+						Dein Platz ist notiert. Wir melden uns per Mail, sobald du dran bist — und sonst nicht.
 					</p>
 					<p class="mt-6">
 						<a
@@ -419,48 +426,11 @@ const tierPlan = $derived(PLANS.find((p) => p.id === tier) ?? null)
 							</button>
 							<button
 								type="button"
-								onclick={nextFromStep4}
-								class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-primary px-5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-							>
-								{idea.trim() ? 'Weiter' : 'Überspringen'}
-							</button>
-						</div>
-					{/if}
-
-					<!-- Step 5: Newsletter -->
-					{#if step === 5}
-						<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/45">
-							Schritt 5 · Labor‑Updates
-						</p>
-						<p class="mt-2 text-[14px] leading-snug text-foreground/78">
-							<strong class="font-medium text-foreground/82">Wöchentliche Labor‑Updates</strong>
-							zu Beta, Skills &amp; Dogfooding — oder nur das Nötigste per Mail?
-						</p>
-						<div class="mt-6 grid gap-3 sm:grid-cols-2">
-							<button
-								type="button"
 								disabled={busy}
-								onclick={() => finish(true)}
-								class="inline-flex min-h-12 items-center justify-center rounded-full bg-primary px-6 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+								onclick={() => finish()}
+								class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-primary px-6 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
 							>
-								{busy ? 'Senden …' : 'Ja, wöchentliche Labor‑Updates'}
-							</button>
-							<button
-								type="button"
-								disabled={busy}
-								onclick={() => finish(false)}
-								class="inline-flex min-h-12 items-center justify-center rounded-full border border-border/60 bg-surface-raised px-6 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft disabled:opacity-50"
-							>
-								{busy ? 'Senden …' : 'Nein, nur Beta‑Infos'}
-							</button>
-						</div>
-						<div class="mt-5 flex justify-center">
-							<button
-								type="button"
-								onclick={() => { step = 4; error = '' }}
-								class="text-[12px] font-semibold text-foreground/50 hover:text-foreground/75"
-							>
-								Zurück
+								{busy ? 'Senden …' : idea.trim() ? 'Platz sichern' : 'Ohne Idee absenden'}
 							</button>
 						</div>
 					{/if}
@@ -470,10 +440,8 @@ const tierPlan = $derived(PLANS.find((p) => p.id === tier) ?? null)
 					{/if}
 
 					<p class="mt-6 text-center text-[10px] leading-snug text-foreground/42">
-						Mit Abschluss erklärst du dich einverstanden mit Kontakt zur Beta
-						<span class="text-foreground/38">
-							— wöchentliche Labor‑Updates nur wenn du Ja wählst.</span
-						>
+						Mit Abschluss erklärst du dich einverstanden, dass wir dich zur Beta kontaktieren.
+						<span class="text-foreground/38">Keine Newsletter, kein Weiterverkauf.</span>
 					</p>
 				</form>
 			{/if}
