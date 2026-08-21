@@ -104,8 +104,6 @@ const TONES_WARM: Tone[] = [
 	{ name: 'Sand', token: '--color-sand', note: 'Cremegelb — die warme Fläche' }
 ]
 
-
-
 /**
  * The cream family — four rungs, lightest first. Was six near-identical
  * values; #f9f5e6 and #efeada were half-steps nobody could see and were
@@ -294,8 +292,8 @@ const collisions = $derived.by(() => {
 				Creme-Familie
 			</h3>
 			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
-				Vier Sprossen, hellste zuerst — aus sechs zusammengelegt. Ein spürbarer Schritt ist mehr wert
-				als zwei unsichtbare.
+				Vier Sprossen, hellste zuerst — aus sechs zusammengelegt. Ein spürbarer Schritt ist mehr
+				wert als zwei unsichtbare.
 			</p>
 		</div>
 		<ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">

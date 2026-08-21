@@ -22,7 +22,10 @@
 			"// SVGs here are design assets (the app icon and the logo), not markup we",
 			"// author. a11y rules want a <title> in them, which would mean editing the",
 			"// artwork to satisfy a linter.",
-			"!!**/*.svg"
+			"!!**/*.svg",
+			"// Emscripten glue shipped beside its .wasm — vendored build output that",
+			"// happens to live under static/, not source anyone edits here.",
+			"!!app/static/webcm"
 		]
 	},
 	"formatter": {
