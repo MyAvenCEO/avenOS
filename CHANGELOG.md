@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.10...v) (2026-08-21)
+
+
+### Bug Fixes
+
+* **billing:** adopt the dashboard-created Creem products; history without a subscription ([6190405](https://github.com/MyAvenCEO/avenOS/commit/619040564ae0ac05c3271251d90e4d8ea42d15cc)), closes [#if](https://github.com/MyAvenCEO/avenOS/issues/if)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.9...v) (2026-08-21)
 
 
