@@ -97,7 +97,7 @@ export const PLANS: Plan[] = [
 		reinvestPct: 0,
 		features: [
 			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
-			{ skill: 'email-ingestor', label: 'E‑Mail‑Inbox' },
+			{ skill: 'email-manager', label: 'E‑Mail‑Inbox' },
 			'Digitaler Briefkasten — deine Papierpost digitalisiert (exkl. Nachsendeauftrag der Deutschen Post: 31,90 € / 6 Monate, inkl. USt.)',
 			{ skill: 'docs-organizer', label: 'Dokumentenverwaltung' },
 			{ skill: 'brain-memorizer', label: 'Notizen, Kontakte, Beziehungen' },

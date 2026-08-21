@@ -26,7 +26,7 @@
 		"Du schliesst den Monat in 20 Minuten ab — statt in 8 Stunden"
 	],
 	"howSteps": [
-		"Rechnungen kommen via email ingestor oder docs organizer strukturiert rein",
+		"Rechnungen kommen via email manager oder docs organizer strukturiert rein",
 		"Kontoauszüge werden importiert (CSV, MT940 oder Banken‑Connector)",
 		"Dein Aven matcht Buchungen mit Rechnungen und schlägt Steuerkonten vor",
 		"Du prüfst den Buchungsvorschlag mit einem Klick — human reviewer wird nur bei Unklarheiten aktiv"
@@ -38,7 +38,7 @@
 	},
 	"playsWith": [
 		{
-			"slug": "email-ingestor",
+			"slug": "email-manager",
 			"relation": "Rechnungsmails werden direkt erkannt und übergeben"
 		},
 		{

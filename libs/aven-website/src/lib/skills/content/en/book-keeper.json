@@ -26,7 +26,7 @@
 		"You close the month in 20 minutes — instead of 8 hours"
 	],
 	"howSteps": [
-		"Invoices arrive structured via email ingestor or docs organizer",
+		"Invoices arrive structured via email manager or docs organizer",
 		"Bank statements are imported (CSV, MT940 or bank connector)",
 		"Your Aven matches transactions with invoices and suggests tax accounts",
 		"You review the booking suggestion in one click — human reviewer only activates when unclear"
@@ -38,7 +38,7 @@
 	},
 	"playsWith": [
 		{
-			"slug": "email-ingestor",
+			"slug": "email-manager",
 			"relation": "Invoice mails are recognized and passed directly"
 		},
 		{

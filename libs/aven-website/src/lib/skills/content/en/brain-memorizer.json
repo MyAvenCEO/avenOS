@@ -32,13 +32,13 @@
 		"The full context is immediately available to all of your Aven's other skills"
 	],
 	"whatMechanics": {
-		"input": "Structured objects from email ingestor, docs organizer, book keeper and manual inputs",
+		"input": "Structured objects from email manager, docs organizer, book keeper and manual inputs",
 		"magic": "Entity resolution (name / email / IBAN / UID matching) → deduplication → context graph construction → long-term memory persistence in CoValues",
 		"output": "Deduplicated entity graph · enriched contact profile · context for all downstream skills"
 	},
 	"playsWith": [
 		{
-			"slug": "email-ingestor",
+			"slug": "email-manager",
 			"relation": "Senders are identified and placed in historical context"
 		},
 		{

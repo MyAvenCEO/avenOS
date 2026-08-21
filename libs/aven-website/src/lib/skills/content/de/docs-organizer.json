@@ -38,7 +38,7 @@
 	},
 	"playsWith": [
 		{
-			"slug": "email-ingestor",
+			"slug": "email-manager",
 			"relation": "Anhänge aus Mails werden direkt übergeben"
 		},
 		{
