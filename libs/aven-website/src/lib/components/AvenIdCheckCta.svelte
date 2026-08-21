@@ -39,7 +39,7 @@ const wrapperClass =
 	<h3
 		class="mt-2 text-xl font-semibold tracking-tight text-pretty text-foreground sm:text-2xl md:text-[1.65rem]"
 	>
-		Sichere dir deine avenID für einmalig {euro(avenId.eurPrice)}&nbsp;€
+		Sichere dir deine avenID für einmalig {euro(avenId.eurPrice)}&nbsp;€ netto
 	</h3>
 	<p class="mt-3 max-w-2xl text-[14px] leading-snug text-foreground/68 sm:text-[15px]">
 		Wie eine Domain — aber für deinen Aven:
@@ -78,6 +78,6 @@ const wrapperClass =
 	<p class="mt-3 text-[12px] leading-snug text-foreground/55">
 		Beispiel: <strong class="font-semibold text-foreground/75">maia.aven.ceo</strong>
 		<span class="text-foreground/45"> · </span>
-		einmalig {euro(avenId.eurPrice)}&nbsp;€ netto
+		einmalig {euro(avenId.eurPrice)}&nbsp;€ netto, zzgl. USt.
 	</p>
 </form>
