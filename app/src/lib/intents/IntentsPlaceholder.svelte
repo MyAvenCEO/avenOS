@@ -84,7 +84,7 @@ interface MockIntent {
  * the same role tokens so nothing here names a colour.
  */
 const TYPE_STYLE: Record<string, string> = {
-	bezahlen: 'bg-status-success/35 text-status-success-ink',
+	bezahlen: 'bg-status-progress/35 text-status-progress-ink',
 	frist: 'bg-status-error/12 text-status-error-ink',
 	steuer: 'bg-status-warning/18 text-status-warning-ink',
 	abgleich: 'bg-status-quiet/15 text-status-quiet-ink',
@@ -108,8 +108,8 @@ const STATUS_LABEL: Record<IntentState, string> = {
 /**
  * Each state names ITSELF, not a colour and not even a role — `state-working`
  * resolves through app.css block 4, where the state→role mapping lives. So
- * re-deciding that working reads as the accent rather than as a warning is
- * one line in the theme, not a sweep through this file.
+ * swapping what working and done read as is one line in the theme, not a
+ * sweep through this file.
  *
  * edge = the 3px left border, text = the status word (the `-ink` face, which
  * is the tone darkened far enough to be read on cream).
@@ -1297,7 +1297,7 @@ const DOT: Record<string, string> = {
 						<div class="w-full pt-2">
 							<div class="flex items-center gap-4">
 								<span
-									class="flex size-12 items-center justify-center rounded-full bg-accent/15 font-semibold text-accent-ink text-sm"
+									class="flex size-12 items-center justify-center rounded-full bg-primary/12 font-semibold text-primary text-sm"
 								>
 									{preview.title.slice(0, 2).toUpperCase()}
 								</span>
@@ -1343,17 +1343,17 @@ const DOT: Record<string, string> = {
 							<p class="pb-3 text-foreground/75">
 								Sammelt alles rund um Versicherungen in 2025. Der Brief der
 								<span
-									class="cursor-pointer text-accent-ink underline decoration-accent/40 underline-offset-2"
+									class="cursor-pointer text-primary underline decoration-primary/30 underline-offset-2"
 									>[[Techniker Krankenkasse]]</span
 								>
 								verlangt einen
 								<span
-									class="cursor-pointer text-accent-ink underline decoration-accent/40 underline-offset-2"
+									class="cursor-pointer text-primary underline decoration-primary/30 underline-offset-2"
 									>[[Einkommensnachweis]]</span
 								>
 								bis zur Frist am 15.09. — das Todo hängt an
 								<span
-									class="cursor-pointer text-accent-ink underline decoration-accent/40 underline-offset-2"
+									class="cursor-pointer text-primary underline decoration-primary/30 underline-offset-2"
 									>[[Fristen 2025]]</span
 								>.
 							</p>
@@ -1368,7 +1368,7 @@ const DOT: Record<string, string> = {
 							<div class="flex flex-wrap gap-1.5 pb-4">
 								{#each ['[[Techniker Krankenkasse]]', '[[Einkommensnachweis]]', '[[Fristen 2025]]', '[[Steuer 2023]]'] as link (link)}
 									<span
-										class="cursor-pointer rounded-md bg-accent/12 px-2 py-0.5 text-accent-ink text-xs"
+										class="cursor-pointer rounded-md bg-primary/10 px-2 py-0.5 text-primary text-xs"
 										>{link}</span
 									>
 								{/each}

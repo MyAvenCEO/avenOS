@@ -36,35 +36,28 @@ const ROLES: Role[] = [
 		tone: 'Marine',
 		token: '--color-primary',
 		toneToken: '--color-marine',
-		note: 'Buttons, Rail, HITL-Rahmen'
+		note: 'Buttons, Rail, HITL-Rahmen, Wikilinks'
 	},
 	{
-		role: 'secondary',
-		tone: 'Pergament',
-		token: '--color-secondary',
-		toneToken: '--color-parchment',
-		note: 'die warme zweite Aktion'
-	},
-	{
-		role: 'accent',
-		tone: 'Paradise Water',
-		token: '--color-accent',
-		toneToken: '--color-paradise-water',
-		note: 'der eine helle Ton der Marke'
-	},
-	{
-		role: 'primary soft',
+		role: 'status quiet',
 		tone: 'Hafen',
-		token: '--color-primary-soft',
+		token: '--color-status-quiet',
 		toneToken: '--color-harbour',
-		note: 'Chrom, wo Marine erschlägt'
+		note: 'zurückgenommen — war auch primary soft und archive'
 	},
 	{
-		role: 'status error',
-		tone: 'Terracotta',
-		token: '--color-status-error',
-		toneToken: '--color-terracotta',
-		note: 'etwas ist gescheitert'
+		role: 'status success',
+		tone: 'Paradise Water',
+		token: '--color-status-success',
+		toneToken: '--color-paradise-water',
+		note: 'erledigt — der helle Ton der Marke'
+	},
+	{
+		role: 'status progress',
+		tone: 'Salbei',
+		token: '--color-status-progress',
+		toneToken: '--color-sage',
+		note: 'in Bewegung'
 	},
 	{
 		role: 'status warning',
@@ -74,6 +67,13 @@ const ROLES: Role[] = [
 		note: 'Achtung — aber nichts ist kaputt'
 	},
 	{
+		role: 'status error',
+		tone: 'Terracotta',
+		token: '--color-status-error',
+		toneToken: '--color-terracotta',
+		note: 'etwas ist gescheitert'
+	},
+	{
 		role: 'status info',
 		tone: 'Sonnenblume',
 		token: '--color-status-info',
@@ -81,18 +81,11 @@ const ROLES: Role[] = [
 		note: 'Hinweis; oft: du bist dran'
 	},
 	{
-		role: 'status success',
-		tone: 'Salbei',
-		token: '--color-status-success',
-		toneToken: '--color-sage',
-		note: 'erledigt, abgelegt'
-	},
-	{
-		role: 'status quiet',
-		tone: 'Hafen',
-		token: '--color-status-quiet',
-		toneToken: '--color-harbour',
-		note: 'aus dem Weg, noch lesbar'
+		role: 'secondary',
+		tone: 'Pergament',
+		token: '--color-secondary',
+		toneToken: '--color-parchment',
+		note: 'die warme zweite Aktion'
 	}
 ]
 
@@ -118,9 +111,9 @@ const STATES: Role[] = [
 	},
 	{
 		role: 'working',
-		tone: 'accent',
+		tone: 'status progress',
 		token: '--color-state-working',
-		toneToken: '--color-accent',
+		toneToken: '--color-status-progress',
 		note: 'in Bewegung'
 	},
 	{
@@ -142,14 +135,15 @@ const STATES: Role[] = [
 /** Block 1: the paint itself, each hex written exactly once in app.css. */
 const TONES: Tone[] = [
 	{ name: 'Marine', token: '--color-marine', note: 'tiefes Navy — Tinte und Fläche' },
-	{ name: 'Hafen', token: '--color-harbour', note: 'Stahlblau — Marine, einen Schritt zurück' },
-	{ name: 'Pergament', token: '--color-parchment', note: 'Cremegelb — die warme Fläche' },
-	{ name: 'Sonnenblume', token: '--color-sunflower', note: 'warmes Bernstein-Tan' },
+	{ name: 'Hafen', token: '--color-harbour', note: 'Stahlblau — alles Zurückgenommene' },
+	{ name: 'Paradise Water', token: '--color-paradise-water', note: 'Türkis — der helle Ton' },
+	{ name: 'Salbei', token: '--color-sage', note: 'weiches Grün — Text nutzt die Tinte' },
 	{ name: 'Tuscan Sun', token: '--color-tuscan-sun', note: 'klares Gold' },
 	{ name: 'Terracotta', token: '--color-terracotta', note: 'gebranntes Orange' },
-	{ name: 'Salbei', token: '--color-sage', note: 'weiches Grün — Text nutzt die Tinte' },
-	{ name: 'Paradise Water', token: '--color-paradise-water', note: 'Türkis — der Akzent' }
+	{ name: 'Sonnenblume', token: '--color-sunflower', note: 'warmes Bernstein-Tan' },
+	{ name: 'Pergament', token: '--color-parchment', note: 'Cremegelb — die warme Fläche' }
 ]
+
 
 /**
  * The cream family — four rungs, lightest first. Was six near-identical
