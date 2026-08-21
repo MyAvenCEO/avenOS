@@ -106,7 +106,7 @@ export const PLANS: Plan[] = [
 			{ skill: 'calendar-organizer', label: 'Dein Kalender denkt mit' },
 			{ skill: 'todo-shuffler', label: 'Deine Liste sortiert sich selbst' },
 			{ skill: 'bookmark-champion', label: 'Links und Lesezeichen, wiederfindbar' },
-			'Personal Spark'
+			'1 Personal Spark'
 		]
 	},
 	{
@@ -128,7 +128,7 @@ export const PLANS: Plan[] = [
 			'Blog',
 			'Digitaler Briefkasten für Geschäftskunden (exkl. Nachsendeauftrag der Deutschen Post: 51,90 € / 6 Monate, inkl. USt.)',
 			'Dein Aven und deine Produkte im aven Marketplace gelistet',
-			'Company Spark zusätzlich zu deinem Personal Spark'
+			'3 Company Sparks — zusätzlich zu deinem Personal Spark'
 		]
 	},
 	{
@@ -143,6 +143,8 @@ export const PLANS: Plan[] = [
 		equitySharePct: 5,
 		applyOnly: true,
 		features: [
+			'1× avenCEO inklusive — avenCEO gilt pro Mensch, avenCOOP pro Firma',
+			'10 Company Sparks',
 			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
 			'5 % Firmenanteile an deiner Firma, digitalisiert über beel.com',
