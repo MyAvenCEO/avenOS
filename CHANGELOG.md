@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.4...v) (2026-08-21)
+
+
+### Bug Fixes
+
+* **aven-api:** satisfy Biome checks ([187fbdd](https://github.com/MyAvenCEO/avenOS/commit/187fbdd41a17cbd264b698dc827c3a8048104919))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.3...v) (2026-08-21)
 
 
