@@ -298,6 +298,38 @@ textarea:focus-visible {
 	text-align: left;
 }
 
+/* Three numbers side by side: place, ahead, already in. */
+.facts {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 0.5rem;
+	width: 100%;
+	margin: 0;
+}
+
+.facts div {
+	padding: 0.75rem 0.5rem;
+	border: 1px solid var(--border);
+	border-radius: 0.75rem;
+	background: var(--eggshell);
+	text-align: center;
+}
+
+.facts dt {
+	color: var(--quiet);
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.facts dd {
+	margin: 0.25rem 0 0;
+	font-size: 1.375rem;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+}
+
 .actions {
 	display: flex;
 	align-items: center;
