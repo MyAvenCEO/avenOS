@@ -233,13 +233,33 @@
 	--font-weight-semibold: 600;
 	--font-weight-bold: 700;
 
-	--color-brand-navy: #1e293b;
-	--color-status-success-base: #2f5d50;
-	--color-status-working-base: #a4b69a;
-	--color-status-pairing-base: #7e6ead;
-	--color-status-info-base: #d4a373;
-	/* Terracotta error: #C15B40 */
-	--color-status-error-base: #c15b40;
+	/* ══ 1 · THE BRAND TONES ═══════════════════════════════════════════
+	 * The paint itself. Every colour the app owns is written as a hex
+	 * EXACTLY ONCE, here, under exactly ONE name. Nothing below this
+	 * block spells a hex — everything else points at a tone. That is the
+	 * whole discipline: to restyle the brand you edit these twelve lines.
+	 *
+	 * The names had drifted badly (tuscan sun and coffee both resolved to
+	 * navy; paradise water to a warm grey; driftwood to cream), so the
+	 * mapping below is the corrected one — each name now means the colour
+	 * it says. Roles come next, in block 3. */
+	--color-marine: #1e293b; /* deep navy — the brand's ink and its fill */
+	--color-harbour: #5b6f8b; /* steel blue — marine, one step back */
+	--color-parchment: #f3e7c6; /* cream yellow — the warm fill */
+	--color-sunflower: #d4a373; /* warm amber-tan — the soft attention tone */
+	--color-tuscan-sun: #a06818; /* burnt gold — attention that must read AS text */
+	--color-terracotta: #c15b40; /* burnt orange — the failure tone */
+	--color-moss: #2f5d50; /* deep green — settled, finished */
+	--color-sage: #a4b69a; /* pale green — a fill, needs dark text on it */
+	--color-paradise-water: #3d8b84; /* turquoise — the human gate */
+	--color-iris: #7e6ead; /* violet — pairing */
+	--color-driftwood: #5b7a9d; /* grey blue — out of the way */
+	--color-stone: #57534e; /* warm grey — quiet neutral */
+	--color-chalk: #f8fafc; /* near-white — text on a dark tone */
+	--color-ink: #1f2a3d; /* dark slate-blue — body copy, never pure black */
+
+	/* ══ 2 · THE SURFACES ══════════════════════════════════════════════
+	 * The cream ladder the whole app sits on, lightest first. */
 	/* Cream page surface — slightly lighter near-white. The page background reads
 	 * as the lighter neutral base, with card surfaces anchoring slightly warmer
 	 * and more saturated on top. */
@@ -264,83 +284,109 @@
 	--color-surface-card-selected: #efeada;
 
 	--color-background: var(--color-surface-cream);
-	/* Default text ink — a dark slate-blue (NOT pure black), tinted toward the
-	 * brand navy so body copy reads warm-cool rather than harsh black. Mirrors
-	 * the vibe `ink`/`text` token in brand.style.json. */
-	--color-foreground: #1f2a3d;
+	--color-card: #ffffff;
 	/* Preview host behind sandbox iframe — slight contrast vs. card surface */
 	--color-sandbox-host: color-mix(in srgb, var(--color-background) 94%, var(--color-foreground));
 
-	/* Legacy palette slots — hex values aligned to new semantic roles */
-	--color-palette-mercury: var(--color-surface-cream);
-	--color-palette-shadow: #57534e;
-	--color-palette-coffee: var(--color-brand-navy);
-	--color-palette-nutmeg: var(--color-status-error-base);
-	--color-palette-lunar-green: var(--color-status-success-base);
+	/* ══ 3 · THE ROLES ═════════════════════════════════════════════════
+	 * The design-system layer: what a colour MEANS, pointed at the tone
+	 * that carries the meaning. Components speak roles (`bg-primary`,
+	 * `text-status-error`) and never tones, so re-assigning a role below
+	 * re-skins every surface that uses it.
+	 *
+	 * Each role has up to three faces:
+	 *   --color-X              the tone itself — fills, borders, dots
+	 *   --color-X-foreground   text placed ON that fill
+	 *   --color-X-ink          the tone used AS text, on the cream page
+	 *                          (darkened where the raw tone is too light)
+	 *
+	 *   ROLE            TONE           WHERE IT SPEAKS
+	 *   primary         marine         buttons, the rail, the HITL frame
+	 *   primary-soft    harbour        accent chrome too heavy in marine
+	 *   secondary       parchment      the warm second action
+	 *   accent          marine         emphasis on cream
+	 *   error           terracotta     a gate that failed
+	 *   warning         tuscan sun     working — something is moving
+	 *   info            sunflower      notice, no action required
+	 *   success         moss           done, settled
+	 *   working         sage           an in-progress FILL (dark text on it)
+	 *   waiting         paradise water a human gate, open (HITL)
+	 *   pairing         iris           device pairing
+	 *   archive         driftwood      out of the way, still readable
+	 *   neutral         stone          quiet chrome */
+	--color-primary: var(--color-marine);
+	--color-primary-foreground: var(--color-chalk);
+	--color-primary-soft: var(--color-harbour);
 
-	--color-primary: var(--color-brand-navy);
-	--color-primary-foreground: #f8fafc;
-	/* Secondary button — the light cream/yellow fill (cf. the invoice
-	 * "Rechnung ansehen" action). Primary stays brand navy; secondary is this
-	 * warm cream with navy text. Mirrors brand.style.json `secondary`. */
-	--color-secondary: #f3e7c6;
-	--color-secondary-foreground: var(--color-brand-navy);
-	/* Lighter, slightly desaturated steel/slate blue derived from the brand navy
-	 * (#1E293B). Used for accent chrome (e.g. the mic button's 3px side borders)
-	 * where the deep navy fill would visually overpower the surrounding cream UI. */
-	--color-primary-soft: #5b6f8b;
+	--color-secondary: var(--color-parchment);
+	--color-secondary-foreground: var(--color-marine);
 
-	--color-archive: var(--color-palette-mercury);
-	--color-archive-foreground: #3d3830;
-	--color-driftwood: var(--color-archive);
-	--color-driftwood-foreground: var(--color-archive-foreground);
-
-	--color-tuscan-sun: var(--color-palette-coffee);
-	--color-tuscan-sun-foreground: var(--color-primary-foreground);
-
-	--color-marine: var(--color-primary);
-	--color-marine-foreground: var(--color-primary-foreground);
-
-	--color-paradise-water: var(--color-palette-shadow);
-	--color-paradise-water-foreground: #fafaf9;
-
-	--color-moss: var(--color-palette-lunar-green);
-	--color-moss-foreground: var(--color-status-success-foreground);
-
-	--color-terracotta: var(--color-palette-nutmeg);
-	--color-terracotta-foreground: var(--color-status-error-foreground);
-
-	--color-coffee: var(--color-palette-coffee);
-	--color-coffee-foreground: var(--color-primary-foreground);
-
-	--color-status-success: var(--color-status-success-base);
-	--color-status-success-foreground: #f4faf8;
-
-	--color-status-working: var(--color-status-working-base);
-	--color-status-working-foreground: #1a2520;
-
-	--color-status-info: var(--color-status-info-base);
-	--color-status-info-foreground: #2b231c;
-
-	--color-status-pairing: var(--color-status-pairing-base);
-	--color-status-pairing-foreground: #f4f3fc;
-
-	--color-status-error: var(--color-status-error-base);
-	--color-status-error-foreground: #fffefb;
-	--color-status-error-muted: color-mix(in oklab, var(--color-status-error) 22%, white);
-	--color-status-error-strong: color-mix(in oklab, var(--color-status-error) 78%, black);
-
-	--color-card: #ffffff;
-	--color-card-foreground: var(--color-foreground);
-
-	--color-accent: var(--color-brand-navy);
+	--color-accent: var(--color-marine);
 	--color-accent-foreground: var(--color-surface-cream);
 
-	--color-muted: color-mix(in srgb, var(--color-brand-navy) 6%, var(--color-surface-cream));
-	--color-muted-foreground: color-mix(in srgb, var(--color-brand-navy) 42%, transparent);
+	--color-foreground: var(--color-ink);
+	--color-card-foreground: var(--color-foreground);
 
-	--color-border: color-mix(in srgb, var(--color-brand-navy) 14%, transparent);
+	--color-status-error: var(--color-terracotta);
+	--color-status-error-foreground: #fffefb;
+	--color-status-error-ink: color-mix(in oklab, var(--color-terracotta) 85%, black);
+	--color-status-error-muted: color-mix(in oklab, var(--color-terracotta) 22%, white);
+	--color-status-error-strong: color-mix(in oklab, var(--color-terracotta) 78%, black);
+
+	--color-status-warning: var(--color-tuscan-sun);
+	--color-status-warning-foreground: var(--color-chalk);
+	--color-status-warning-ink: var(--color-tuscan-sun);
+
+	--color-status-info: var(--color-sunflower);
+	--color-status-info-foreground: #2b231c;
+	--color-status-info-ink: color-mix(in oklab, var(--color-sunflower) 72%, black);
+
+	--color-status-success: var(--color-moss);
+	--color-status-success-foreground: #f4faf8;
+	--color-status-success-ink: var(--color-moss);
+
+	--color-status-working: var(--color-sage);
+	--color-status-working-foreground: #1a2520;
+	--color-status-working-ink: color-mix(in oklab, var(--color-sage) 62%, black);
+
+	--color-status-waiting: var(--color-paradise-water);
+	--color-status-waiting-foreground: #fafaf9;
+	--color-status-waiting-ink: var(--color-paradise-water);
+
+	--color-status-pairing: var(--color-iris);
+	--color-status-pairing-foreground: #f4f3fc;
+	--color-status-pairing-ink: color-mix(in oklab, var(--color-iris) 82%, black);
+
+	--color-status-archive: var(--color-driftwood);
+	--color-status-archive-foreground: var(--color-chalk);
+	--color-status-archive-ink: color-mix(in oklab, var(--color-driftwood) 82%, black);
+
+	--color-neutral: var(--color-stone);
+	--color-neutral-foreground: #fafaf9;
+
+	--color-muted: color-mix(in srgb, var(--color-marine) 6%, var(--color-surface-cream));
+	--color-muted-foreground: color-mix(in srgb, var(--color-marine) 42%, transparent);
+
+	--color-border: color-mix(in srgb, var(--color-marine) 14%, transparent);
 	--color-input: color-mix(in srgb, #ffffff 65%, var(--color-surface-cream));
+
+	/* ══ 4 · LEGACY NAMES ══════════════════════════════════════════════
+	 * Older aliases kept so existing markup keeps resolving. Nothing new
+	 * should reach for these — every one of them has a role above. */
+	--color-brand-navy: var(--color-marine);
+	--color-coffee: var(--color-marine);
+	--color-archive: var(--color-status-archive);
+	--color-archive-foreground: var(--color-status-archive-foreground);
+	--color-status-success-base: var(--color-status-success);
+	--color-status-working-base: var(--color-status-working);
+	--color-status-pairing-base: var(--color-status-pairing);
+	--color-status-info-base: var(--color-status-info);
+	--color-status-error-base: var(--color-status-error);
+	--color-palette-mercury: var(--color-surface-cream);
+	--color-palette-shadow: var(--color-stone);
+	--color-palette-coffee: var(--color-marine);
+	--color-palette-nutmeg: var(--color-terracotta);
+	--color-palette-lunar-green: var(--color-moss);
 
 	--radius-lg: 1rem;
 	--radius-xl: 1.5rem;

@@ -60,7 +60,9 @@ async function preview(voice: Voice) {
 	<title>Settings · avenOS</title>
 </svelte:head>
 
-<main class="mx-auto flex min-h-0 min-w-0 max-w-5xl flex-1 flex-col gap-6 p-4 sm:p-6">
+<!-- Full width: the palette wants every column it can get, and the category
+     nav already gives the page its left edge. -->
+<main class="flex min-h-0 min-w-0 flex-1 flex-col gap-6 p-4 sm:p-6">
 	<header class="relative flex flex-col items-center gap-1.5">
 		<!-- The same quiet route stamp the dashboard wears. -->
 		<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Settings</p>
@@ -183,7 +185,7 @@ async function preview(voice: Voice) {
 					<p
 						class="rounded-xl border border-foreground/5 bg-[#fffdf7] px-4 py-3 font-mono text-xs opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 					>
-						qwen/qwen3.5-122b-a10b · RedPill TEE
+						deepseek/deepseek-v4-flash-0731 · RedPill TEE
 					</p>
 				</section>
 			{/if}
