@@ -197,7 +197,7 @@ const tierPlan = $derived(PLANS.find((p) => p.id === tier) ?? null)
 						{intentLabel}
 					</p>
 				{/if}
-				<h1 class="mt-2 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+				<h1 class="mt-2 text-xl text-foreground sm:text-2xl">
 					{introHeadline}
 				</h1>
 				<p class="mt-3 text-[14px] leading-relaxed text-foreground/68">{introBody}</p>
