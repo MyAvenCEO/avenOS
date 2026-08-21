@@ -1401,18 +1401,16 @@ const DOT: Record<string, string> = {
 					{/each}
 				</ol>
 			{/if}
-
-			<!-- THE human gate lives HERE, in the workspace it belongs to — not in
-			     the floating dock and not in the query modal. It is content about
-			     this intent, so the overlay dims it and lies over it like it does
-			     everything else. Sticky, because a gate you scrolled past is a gate
-			     you did not answer. -->
-			{#each gates as held (held.id)}
-				<div class="sticky bottom-0 mt-auto pt-2">
-					<GatePreview {held} />
-				</div>
-			{/each}
 		</main>
+
+		<!-- THE human gate: its own card BELOW the activity card, the same width,
+		     not a tenant inside it. It is about this intent, so it lives in the
+		     workspace — the overlay dims it and lies over it like everything
+		     else — but it is a separate thing being asked of you, and nesting it
+		     inside the log made it read as one more log entry. -->
+		{#each gates as held (held.id)}
+			<GatePreview {held} />
+		{/each}
 	</div>
 
 	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
