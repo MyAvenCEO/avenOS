@@ -68,23 +68,23 @@ const ROLES: Role[] = [
 	},
 	{
 		role: 'status warning',
-		tone: 'Tuscan Sun',
+		tone: 'Sunflower',
 		token: '--color-status-warning',
-		toneToken: '--color-tuscan-sun',
+		toneToken: '--color-sunflower',
 		note: 'Achtung — aber nichts ist kaputt'
 	},
 	{
 		role: 'status info',
-		tone: 'Sunflower',
+		tone: 'Earth',
 		token: '--color-status-info',
-		toneToken: '--color-sunflower',
+		toneToken: '--color-earth',
 		note: 'Hinweis; oft: du bist dran'
 	},
 	{
 		role: 'secondary',
-		tone: 'Parchment',
+		tone: 'Sand',
 		token: '--color-secondary',
-		toneToken: '--color-parchment',
+		toneToken: '--color-sand',
 		note: 'die warme zweite Aktion'
 	}
 ]
@@ -135,9 +135,9 @@ const TONES_COOL: Tone[] = [
 
 const TONES_WARM: Tone[] = [
 	{ name: 'Terracotta', token: '--color-terracotta', note: 'gebranntes Orange' },
-	{ name: 'Tuscan Sun', token: '--color-tuscan-sun', note: 'klares Gold' },
-	{ name: 'Sunflower', token: '--color-sunflower', note: 'warmes Bernstein-Tan' },
-	{ name: 'Parchment', token: '--color-parchment', note: 'Cremegelb — die warme Fläche' }
+	{ name: 'Sunflower', token: '--color-sunflower', note: 'klares Gold' },
+	{ name: 'Earth', token: '--color-earth', note: 'warmes Bernstein-Tan' },
+	{ name: 'Sand', token: '--color-sand', note: 'Cremegelb — die warme Fläche' }
 ]
 
 
