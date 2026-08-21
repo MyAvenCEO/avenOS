@@ -2,7 +2,7 @@
 	<title>Preise — aven.ceo · avenCEO</title>
 	<meta
 		name="description"
-		content="Ein Name als Anfang, drei Stufen darauf: avenID 30 € einmalig, avenME 42 €/Monat für dein Leben, avenCEO 326 €/Monat für deine Firma, avenCOOP als technischer Co‑Founder — auf Bewerbung."
+		content="Ein Name als Anfang, drei Stufen darauf: avenID 25 € einmalig, avenME 42 €/Monat für dein Leben, avenCEO 326 €/Monat für deine Firma, avenCOOP als technischer Co‑Founder — auf Bewerbung."
 	>
 </svelte:head>
 

@@ -105,7 +105,7 @@ main.site {
 
 /* The one card: a raised cream panel on a hairline border. */
 .panel {
-	width: min(100%, 26rem);
+	width: min(100%, 34rem);
 	margin-inline: auto;
 	padding: 2.5rem 2rem;
 	border: 1px solid var(--border-soft);
