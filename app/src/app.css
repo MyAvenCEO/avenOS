@@ -234,10 +234,10 @@
 	--color-tidal-blue: #2489a0; /* teal-blue — work in motion */
 	--color-paradise-water: #449c94; /* turquoise — the bright note; settled work */
 	/* Row two — the warm half: the signals. */
-	--color-tuscan-sun: #d2a24a; /* clean gold — brighter and yellower than the old #a06818 */
 	--color-terracotta: #c15b40; /* burnt orange — the failure tone */
-	--color-sunflower: #d4a373; /* warm amber-tan — notice */
-	--color-parchment: #f3e7c6; /* cream yellow — the warm fill */
+	--color-sunflower: #d2a24a; /* clean gold — brighter and yellower than the old #a06818 */
+	--color-earth: #d4a373; /* warm amber-tan — notice */
+	--color-sand: #f3e7c6; /* cream yellow — the warm fill */
 	--color-chalk: #f8fafc; /* near-white — text on a dark tone */
 	--color-ink: #1f2a3d; /* dark slate-blue — body copy, never pure black */
 
@@ -300,10 +300,10 @@
 	 *   status-quiet     anchor          held back — every type badge
 	 *   status-progress  tidal blue      in motion
 	 *   status-success   paradise water  settled — the brand's bright note
-	 *   status-warning   tuscan sun      careful — but nothing is broken
 	 *   status-error     terracotta      something failed
-	 *   status-info      sunflower       notice; often: your turn
-	 *   secondary        parchment       the warm second action */
+	 *   status-warning   sunflower       careful — but nothing is broken
+	 *   status-info      earth           notice; often: your turn
+	 *   secondary        sand            the warm second action */
 	--color-primary: var(--color-marine);
 	--color-primary-foreground: var(--color-chalk);
 
@@ -323,9 +323,9 @@
 	--color-status-success-foreground: #fafaf9;
 	--color-status-success-ink: var(--color-paradise-water);
 
-	--color-status-warning: var(--color-tuscan-sun);
+	--color-status-warning: var(--color-sunflower);
 	--color-status-warning-foreground: #2b2313;
-	--color-status-warning-ink: color-mix(in oklab, var(--color-tuscan-sun) 74%, black);
+	--color-status-warning-ink: color-mix(in oklab, var(--color-sunflower) 74%, black);
 
 	--color-status-error: var(--color-terracotta);
 	--color-status-error-foreground: #fffefb;
@@ -333,11 +333,11 @@
 	--color-status-error-muted: color-mix(in oklab, var(--color-terracotta) 22%, white);
 	--color-status-error-strong: color-mix(in oklab, var(--color-terracotta) 78%, black);
 
-	--color-status-info: var(--color-sunflower);
+	--color-status-info: var(--color-earth);
 	--color-status-info-foreground: #2b231c;
-	--color-status-info-ink: color-mix(in oklab, var(--color-sunflower) 72%, black);
+	--color-status-info-ink: color-mix(in oklab, var(--color-earth) 72%, black);
 
-	--color-secondary: var(--color-parchment);
+	--color-secondary: var(--color-sand);
 	--color-secondary-foreground: var(--color-marine);
 
 	--color-foreground: var(--color-ink);
