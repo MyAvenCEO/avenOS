@@ -301,7 +301,7 @@ function onKeydown(event: KeyboardEvent) {
 						<span
 							class="w-3 shrink-0 text-center font-mono"
 							class:text-success={entry.kind === 'done' || entry.kind === 'created'}
-							class:text-status-working={entry.kind === 'doing'}
+							class:text-progress-ink={entry.kind === 'doing'}
 							class:text-error={entry.kind === 'deleted' || entry.kind === 'failed'}
 							class:opacity-30={entry.kind === 'read' ||
 						entry.kind === 'reopened' ||
@@ -679,7 +679,7 @@ function onKeydown(event: KeyboardEvent) {
 						class="inline-block size-2 shrink-0 rounded-full transition-transform"
 						class:bg-error={phase.key === 'hearing' || phase.key === 'idle'}
 						class:bg-success={phase.key === 'speaking'}
-						class:bg-status-working={phase.key === 'thinking' ||
+						class:bg-progress={phase.key === 'thinking' ||
 						phase.key === 'loading' ||
 						phase.key === 'starting'}
 						class:bg-primary-foreground={phase.key === 'denied' || phase.key === 'text'}
