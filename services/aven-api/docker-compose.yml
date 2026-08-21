@@ -11,16 +11,20 @@ x-app-environment: &app-environment
   NAME_HOLD_TTL_HOURS: ${NAME_HOLD_TTL_HOURS:-24}
   NAME_RESERVATION_TTL_MINUTES: ${NAME_RESERVATION_TTL_MINUTES:-5}
 
+x-local-logging: &local-logging
+  driver: local
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+    compress: "${DOCKER_LOG_COMPRESS:-true}"
+
 x-runtime-security: &runtime-security
   read_only: true
   tmpfs:
     - /tmp:size=64m,mode=1777
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
-  logging:
-    options:
-      max-size: 10m
-      max-file: "3"
+  logging: *local-logging
 
 x-aven-image: &aven-image
   image: aven-api:local
@@ -31,6 +35,7 @@ x-aven-image: &aven-image
 services:
   db:
     image: postgres:17-alpine
+    logging: *local-logging
     environment:
       POSTGRES_DB: aven
       POSTGRES_USER: postgres
@@ -53,6 +58,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:v1.27
+    logging: *local-logging
     ports:
       - "${MAILPIT_BIND:-127.0.0.1}:${MAILPIT_HTTP_PORT:-8025}:8025"
 
