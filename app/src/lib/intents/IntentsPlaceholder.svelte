@@ -78,12 +78,17 @@ interface MockIntent {
 	hitl?: { label: string; method: string; actor: string; preview: HeldPreview }
 }
 
+/**
+ * Intent TYPES are a categorical palette — what a thing is about, not how it
+ * is going. Distinct from the state accents below on purpose, and drawn from
+ * the same role tokens so nothing here names a colour.
+ */
 const TYPE_STYLE: Record<string, string> = {
-	bezahlen: 'bg-[#2f5d50]/12 text-[#2f5d50]',
-	frist: 'bg-[#c15b40]/12 text-[#9c4832]',
-	steuer: 'bg-[#a06818]/12 text-[#a06818]',
-	abgleich: 'bg-[#5b7a9d]/15 text-[#46617f]',
-	auftrag: 'bg-[#8a6238]/15 text-[#8a6238]'
+	bezahlen: 'bg-status-success/35 text-status-success-ink',
+	frist: 'bg-status-error/12 text-status-error-ink',
+	steuer: 'bg-status-warning/18 text-status-warning-ink',
+	abgleich: 'bg-status-quiet/15 text-status-quiet-ink',
+	auftrag: 'bg-status-info/20 text-status-info-ink'
 }
 
 /**
@@ -100,24 +105,21 @@ const STATUS_LABEL: Record<IntentState, string> = {
 	archive: 'archiviert'
 }
 
-/** edge = the 3px left border, text = the status word. */
 /**
- * The five intent states, each speaking a design-system ROLE rather than a
- * hex — the tones live in app.css, one name apiece, and the Brand-Farben
- * settings page reads the same tokens back out. `-ink` is the tone darkened
- * enough to be read as text on cream.
+ * Each state names ITSELF, not a colour and not even a role — `state-working`
+ * resolves through app.css block 4, where the state→role mapping lives. So
+ * re-deciding that working reads as the accent rather than as a warning is
+ * one line in the theme, not a sweep through this file.
+ *
+ * edge = the 3px left border, text = the status word (the `-ink` face, which
+ * is the tone darkened far enough to be read on cream).
  */
 const STATE_ACCENT: Record<IntentState, { edge: string; text: string }> = {
-	// warning · tuscan sun — something is moving
-	working: { edge: 'border-l-status-warning', text: 'text-status-warning-ink' },
-	// waiting · paradise water — the human gate (HITL)
-	waiting: { edge: 'border-l-status-waiting', text: 'text-status-waiting-ink' },
-	// success · moss — settled
-	done: { edge: 'border-l-status-success', text: 'text-status-success-ink' },
-	// error · terracotta — the HITL failure
-	error: { edge: 'border-l-status-error', text: 'text-status-error-ink' },
-	// archive · driftwood — out of the way
-	archive: { edge: 'border-l-status-archive', text: 'text-status-archive-ink' }
+	working: { edge: 'border-l-state-working', text: 'text-state-working-ink' },
+	waiting: { edge: 'border-l-state-waiting', text: 'text-state-waiting-ink' },
+	done: { edge: 'border-l-state-done', text: 'text-state-done-ink' },
+	error: { edge: 'border-l-state-error', text: 'text-state-error-ink' },
+	archive: { edge: 'border-l-state-archive', text: 'text-state-archive-ink' }
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -895,7 +897,7 @@ $effect.pre(() => {
 		type: 'smoothstep',
 		style: 'stroke: rgba(47,93,80,0.5); stroke-width: 1.5;',
 		labelStyle: 'font-size: 10px; fill: rgba(30,41,59,0.7);',
-		labelBgStyle: 'fill: #f8f6ef;',
+		labelBgStyle: 'fill: var(--color-linen);',
 		labelBgPadding: [4, 2] as [number, number],
 		labelBgBorderRadius: 4
 	}))
@@ -931,9 +933,9 @@ $effect(() => {
 const WS_ZOOM = 0.85
 
 const DOT: Record<string, string> = {
-	done: 'bg-[#2f5d50] text-white',
-	running: 'bg-[#a06818] text-white',
-	waiting: 'bg-[#c15b40] text-white'
+	done: 'bg-state-done text-status-success-foreground',
+	running: 'bg-state-working text-primary-foreground',
+	waiting: 'bg-state-waiting text-status-info-foreground'
 }
 </script>
 
@@ -1077,7 +1079,7 @@ const DOT: Record<string, string> = {
 						</span>
 						{#if intent.deadline}
 							<span
-								class="shrink-0 rounded-full bg-[#c15b40]/10 px-1.5 py-0.5 font-mono text-[#9c4832] text-[0.5625rem]"
+								class="shrink-0 rounded-full bg-status-error/10 px-1.5 py-0.5 font-mono text-status-error-ink text-[0.5625rem]"
 							>
 								{intent.deadline}
 							</span>
@@ -1118,7 +1120,7 @@ const DOT: Record<string, string> = {
 							skillView = null
 							talk.open = false
 						}}
-						class="rounded-xl border border-l-[3px] border-l-[#5b7a9d] px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
+						class="rounded-xl border border-l-[3px] border-l-state-archive px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
 							? 'border-foreground/15 bg-surface-card-selected opacity-100'
 							: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
 					>
@@ -1165,10 +1167,10 @@ const DOT: Record<string, string> = {
 					<header class="flex items-center gap-3">
 						<span
 							class="size-2 shrink-0 rounded-full {skillView.state === 'done'
-						? 'bg-[#2f5d50]'
+						? 'bg-state-done'
 						: skillView.state === 'waiting'
-							? 'bg-[#c15b40]'
-							: 'bg-[#a06818]'}"
+							? 'bg-state-waiting'
+							: 'bg-state-working'}"
 						></span>
 						<div class="min-w-0">
 							<h1 class="font-mono font-semibold text-lg leading-tight">{skillView.skill}</h1>
@@ -1219,10 +1221,10 @@ const DOT: Record<string, string> = {
 									<span class="min-w-0 flex-1">{entry.step}</span>
 									<span
 										class="font-mono text-[0.625rem] {entry.state === 'done'
-									? 'text-[#2f5d50]'
+									? 'text-state-done-ink'
 									: entry.state === 'waiting'
-										? 'text-[#9c4832]'
-										: 'text-[#a06818]'}"
+										? 'text-state-error-ink'
+										: 'text-state-working-ink'}"
 									>
 										{entry.state === 'done' ? '✓' : entry.state === 'waiting' ? '⏸' : '⟳'}
 									</span>
@@ -1255,8 +1257,8 @@ const DOT: Record<string, string> = {
 							{#each [92, 100, 78, 96, 60] as w, i (i)}
 								<div class="mb-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
 							{/each}
-							<div class="mt-5 rounded-lg border border-[#a06818]/30 bg-[#a06818]/8 px-4 py-3">
-								<p class="font-mono text-[#a06818] text-[0.625rem] uppercase tracking-wide">
+							<div class="mt-5 rounded-lg border border-status-warning/35 bg-status-warning/12 px-4 py-3">
+								<p class="font-mono text-status-warning-ink text-[0.625rem] uppercase tracking-wide">
 									Extrahiert
 								</p>
 								<p class="pt-1 text-xs leading-relaxed">{preview.note}</p>
@@ -1281,7 +1283,7 @@ const DOT: Record<string, string> = {
 					{:else if preview.kind === 'calendar'}
 						<div class="flex w-full items-center gap-4 pt-2">
 							<div
-								class="flex size-14 flex-col items-center justify-center rounded-xl bg-[#c15b40]/10 text-[#9c4832]"
+								class="flex size-14 flex-col items-center justify-center rounded-xl bg-status-error/10 text-status-error-ink"
 							>
 								<span class="font-semibold text-lg leading-none">15</span>
 								<span class="pt-0.5 font-mono text-[0.5625rem] uppercase">Sep</span>
@@ -1295,7 +1297,7 @@ const DOT: Record<string, string> = {
 						<div class="w-full pt-2">
 							<div class="flex items-center gap-4">
 								<span
-									class="flex size-12 items-center justify-center rounded-full bg-[#7e6ead]/15 font-semibold text-[#655687] text-sm"
+									class="flex size-12 items-center justify-center rounded-full bg-accent/15 font-semibold text-accent-ink text-sm"
 								>
 									{preview.title.slice(0, 2).toUpperCase()}
 								</span>
@@ -1319,7 +1321,7 @@ const DOT: Record<string, string> = {
 								<div class="flex items-center gap-3 border-border/60 border-b py-2.5 text-sm">
 									<span class="w-14 font-mono text-foreground/40 text-xs">{row.d}</span>
 									<span class="min-w-0 flex-1 truncate">{row.t}</span>
-									<span class="font-mono {row.a.startsWith('+') ? 'text-[#2f5d50]' : ''}"
+									<span class="font-mono {row.a.startsWith('+') ? 'text-state-done-ink' : ''}"
 										>{row.a}</span
 									>
 									<span class="w-40 text-right text-[0.6875rem] text-foreground/40">{row.m}</span>
@@ -1331,7 +1333,7 @@ const DOT: Record<string, string> = {
 						<div class="w-full max-w-2xl pt-2 font-mono text-[13px] leading-relaxed">
 							<p class="text-foreground/35">---</p>
 							<p class="text-foreground/55">
-								tags: <span class="text-[#a06818]">#versicherung #frist</span>
+								tags: <span class="text-status-warning-ink">#versicherung #frist</span>
 							</p>
 							<p class="text-foreground/55">erstellt: 2025-08-12 · quelle: inbox</p>
 							<p class="pb-3 text-foreground/35">---</p>
@@ -1341,17 +1343,17 @@ const DOT: Record<string, string> = {
 							<p class="pb-3 text-foreground/75">
 								Sammelt alles rund um Versicherungen in 2025. Der Brief der
 								<span
-									class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+									class="cursor-pointer text-accent-ink underline decoration-accent/40 underline-offset-2"
 									>[[Techniker Krankenkasse]]</span
 								>
 								verlangt einen
 								<span
-									class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+									class="cursor-pointer text-accent-ink underline decoration-accent/40 underline-offset-2"
 									>[[Einkommensnachweis]]</span
 								>
 								bis zur Frist am 15.09. — das Todo hängt an
 								<span
-									class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+									class="cursor-pointer text-accent-ink underline decoration-accent/40 underline-offset-2"
 									>[[Fristen 2025]]</span
 								>.
 							</p>
@@ -1366,7 +1368,7 @@ const DOT: Record<string, string> = {
 							<div class="flex flex-wrap gap-1.5 pb-4">
 								{#each ['[[Techniker Krankenkasse]]', '[[Einkommensnachweis]]', '[[Fristen 2025]]', '[[Steuer 2023]]'] as link (link)}
 									<span
-										class="cursor-pointer rounded-md bg-[#7e6ead]/10 px-2 py-0.5 text-[#655687] text-xs"
+										class="cursor-pointer rounded-md bg-accent/12 px-2 py-0.5 text-accent-ink text-xs"
 										>{link}</span
 									>
 								{/each}
@@ -1394,7 +1396,7 @@ const DOT: Record<string, string> = {
 							</span>
 							{#if selected.deadline}
 								<span
-									class="rounded-full bg-[#c15b40]/10 px-2 py-0.5 font-mono text-[#9c4832] text-[0.625rem]"
+									class="rounded-full bg-status-error/10 px-2 py-0.5 font-mono text-status-error-ink text-[0.625rem]"
 								>
 									{selected.deadline}
 								</span>
@@ -1480,7 +1482,7 @@ const DOT: Record<string, string> = {
 												{entry.card.text}
 											</p>
 											{#if entry.hitl}
-												<p class="pt-2 font-mono text-[#9c4832] text-[0.625rem]">
+												<p class="pt-2 font-mono text-status-error-ink text-[0.625rem]">
 													→ wartet in der globalen Freigabe-Leiste über der Voice-Pill
 												</p>
 											{/if}
@@ -1517,10 +1519,10 @@ const DOT: Record<string, string> = {
 						<div class="flex items-center gap-2">
 							<span
 								class="size-1.5 shrink-0 rounded-full {s.state === 'done'
-							? 'bg-[#2f5d50]'
+							? 'bg-state-done'
 							: s.state === 'waiting'
-								? 'bg-[#c15b40]'
-								: 'bg-[#a06818]'}"
+								? 'bg-state-waiting'
+								: 'bg-state-working'}"
 							></span>
 							<span class="font-medium font-mono text-xs">{s.skill}</span>
 							<span class="ml-auto font-mono text-[0.625rem] text-foreground/40">

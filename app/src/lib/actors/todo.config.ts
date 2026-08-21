@@ -22,8 +22,8 @@ export interface Spark {
 }
 
 export const SPARKS: Spark[] = [
-	{ id: 'me', name: 'Me', color: '#d4a373' },
-	{ id: 'team', name: 'Team', color: '#7e6ead' }
+	{ id: 'me', name: 'Me', color: 'var(--color-status-info)' },
+	{ id: 'team', name: 'Team', color: 'var(--color-status-quiet)' }
 ]
 
 export interface Todo {
