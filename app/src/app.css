@@ -258,30 +258,37 @@
 	--color-chalk: #f8fafc; /* near-white — text on a dark tone */
 	--color-ink: #1f2a3d; /* dark slate-blue — body copy, never pure black */
 
+	/* The cream family, lightest to warmest. Four rungs, four names — down
+	 * from six near-identical values, two of which (#f9f5e6, #efeada) sat so
+	 * close to their neighbours that no one could see the difference they
+	 * were paying for. Porcelain had been hiding as a raw #fffdf7 in eighteen
+	 * places of markup; it is the most-used surface in the app and now says
+	 * its name. */
+	--color-porcelain: #fffdf7; /* the raised card — lightest, lifts off the page */
+	--color-linen: #f8f6ef; /* the page ground everything rests on */
+	--color-eggshell: #f6f3e8; /* one step warmer — display panels, hover */
+	--color-ivory: #f6f1e2; /* warmest — cards at rest, and selection */
+
 	/* ══ 2 · THE SURFACES ══════════════════════════════════════════════
-	 * The cream ladder the whole app sits on, lightest first. */
-	/* Cream page surface — slightly lighter near-white. The page background reads
-	 * as the lighter neutral base, with card surfaces anchoring slightly warmer
-	 * and more saturated on top. */
-	--color-surface-cream: #f8f6ef;
-	/* Soft eggshell display surface (#F9F5E6) — one notch lighter than the card
-	 * rest tone (#F6F1E2) and one notch warmer than the page cream (#F8F6EF).
-	 * Used by the Activity log panel, the Display panel iframe wrapper, and the
-	 * vibe-app `<body>` background so the inner display surface sits between the
-	 * page cream and the card eggshell. Vibe apps mirror this hex via their
-	 * `:root --bg-a` since they're bundled into the sandbox without access to
-	 * app's CSS variables. */
-	--color-surface-soft: #f9f5e6;
-	/* Eggshell card surface — three-step ladder. Rest is a warmer eggshell tone
-	 * so intent/skill cards, the IntentComposer typing pill, and the Re-train /
-	 * Accept HITL pill buttons anchor visually warmer than the lighter page
-	 * background. Hover and selected shift further into eggshell territory. */
-	/* Rest — softened eggshell (#F6F1E2), slightly more saturated than the page cream. */
-	--color-surface-card: #f6f1e2;
-	/* Hover — one notch warmer/darker than rest. */
-	--color-surface-card-hover: #f6f3e8;
-	/* Selected — slightly more saturated/darker eggshell for state emphasis. */
-	--color-surface-card-selected: #efeada;
+	 * Which rung of the cream family each part of the app stands on. */
+	/* Raised — cards that lift off the page: the intent list, the settings
+	 * panels, the flow nodes. */
+	--color-surface-raised: var(--color-porcelain);
+	/* The page ground everything else is measured against. */
+	--color-surface-cream: var(--color-linen);
+	/* Display surfaces — the Activity log panel, the Display panel iframe
+	 * wrapper, the vibe-app `<body>`. Vibe apps mirror this value via their own
+	 * `:root --bg-a`, being bundled into the sandbox without access to these
+	 * variables. */
+	--color-surface-soft: var(--color-eggshell);
+	/* Cards at rest — warmer than the page, so they read as objects on it. */
+	--color-surface-card: var(--color-ivory);
+	/* Hover — a lift toward eggshell. Shares its rung with the display
+	 * surfaces: one perceptible step is worth more than two invisible ones. */
+	--color-surface-card-hover: var(--color-eggshell);
+	/* Selected — the fill stays at rest and the BORDER carries the state; the
+	 * old dedicated tone (#efeada) was a half-step nobody could see. */
+	--color-surface-card-selected: var(--color-ivory);
 
 	--color-background: var(--color-surface-cream);
 	--color-card: #ffffff;

@@ -961,7 +961,7 @@ const DOT: Record<string, string> = {
 		     window the model opens renders there full width. -->
 		<aside
 			bind:this={transcriptEl}
-			class="flex w-1/4 min-w-72 shrink-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="flex w-1/4 min-w-72 shrink-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			{#if chat.turns.length === 0}
 				<p class="pt-6 text-center text-foreground/40 text-sm">
@@ -995,7 +995,7 @@ const DOT: Record<string, string> = {
 		</aside>
 
 		<main
-			class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			style="margin-bottom: calc(var(--dock-h, 0px) / {WS_ZOOM})"
 		>
 			{#if registryTick.v >= 0}
@@ -1043,6 +1043,9 @@ const DOT: Record<string, string> = {
 			{#each activeIntents as intent (intent.id)}
 				{@const sel = selectedId === intent.id && !talk.open}
 				{@const accent = STATE_ACCENT[intent.status]}
+				<!-- Hover shifts the FILL, never the border: `hover:border-*` paints all
+				     four sides and, sitting in a later cascade layer, greyed out the 3px
+				     state edge — the one thing the card exists to show. -->
 				<button
 					type="button"
 					onclick={() => {
@@ -1053,7 +1056,7 @@ const DOT: Record<string, string> = {
 					}}
 					class="rounded-xl border border-l-[3px] px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {accent.edge} {sel
 						? 'border-foreground/15 bg-surface-card-selected'
-						: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
+						: 'border-foreground/5 bg-surface-raised hover:bg-surface-card-hover'}"
 				>
 					<!-- row 1: what it is — title, with its type on the right -->
 					<div class="flex items-baseline gap-2">
@@ -1117,7 +1120,7 @@ const DOT: Record<string, string> = {
 						}}
 						class="rounded-xl border border-l-[3px] border-l-[#5b7a9d] px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
 							? 'border-foreground/15 bg-surface-card-selected opacity-100'
-							: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
+							: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
 					>
 						<div class="flex items-baseline gap-2">
 							<p class="min-w-0 flex-1 font-medium text-xs leading-snug">{intent.title}</p>
@@ -1154,7 +1157,7 @@ const DOT: Record<string, string> = {
 			</h2>
 			<main
 				bind:this={centerEl}
-				class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+				class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			>
 				{#if skillView}
 					<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
@@ -1509,7 +1512,7 @@ const DOT: Record<string, string> = {
 						class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {skillView?.skill ===
 				s.skill
 					? 'border-foreground/15 bg-surface-card-selected'
-					: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
+					: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
 					>
 						<div class="flex items-center gap-2">
 							<span
@@ -1544,7 +1547,7 @@ const DOT: Record<string, string> = {
 							class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
 					artifact.title
 						? 'border-foreground/15 bg-surface-card-selected'
-						: 'border-foreground/5 bg-[#fffdf7] hover:border-foreground/15'}"
+						: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
 						>
 							<div class="flex items-center gap-2">
 								<span
