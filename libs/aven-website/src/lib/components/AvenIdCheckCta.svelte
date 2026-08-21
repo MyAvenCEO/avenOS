@@ -1,5 +1,6 @@
 <script lang="ts">
 import { goto } from '$app/navigation'
+import ReservedNamesBoard from '$lib/components/ReservedNamesBoard.svelte'
 import { euro, plan } from '$lib/pricing/plans'
 
 type Props = {
@@ -80,4 +81,5 @@ const wrapperClass =
 		<span class="text-foreground/45"> · </span>
 		einmalig {euro(avenId.eurPrice)}&nbsp;€ netto, zzgl. USt.
 	</p>
+	<ReservedNamesBoard />
 </form>
