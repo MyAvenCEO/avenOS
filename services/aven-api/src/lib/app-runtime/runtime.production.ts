@@ -1,6 +1,12 @@
 import { derived, type Readable } from 'svelte/store'
 import { api } from '$lib/api.js'
 import { authClient } from '$lib/auth-client.js'
+import {
+	passkeyDiagnosticLog,
+	passkeyPlatform,
+	passkeyProcessTrace,
+	passkeyRegistrationDiagnostic
+} from '$lib/passkey-diagnostics.js'
 import { createProofOfWorkHeader } from '$lib/proof-of-work.js'
 import type { MetaInfo, NameAvailability, NameHoldResult, PasskeyStatus } from '$lib/types.js'
 import type { AppRuntime, AppSession } from './contract.js'
@@ -92,8 +98,23 @@ export const appRuntime: AppRuntime = {
 			await authClient.signOut()
 		},
 		async createPasskey(name, firefoxLinux) {
-			if (!window.PublicKeyCredential) throw new Error('Passkeys unavailable.')
+			const context = {
+				firefoxLinux,
+				android: /Android/.test(navigator.userAgent)
+			}
+			const platform = passkeyPlatform(context)
+			const webAuthnAvailable = Boolean(window.PublicKeyCredential)
+			passkeyProcessTrace('Registration started', { platform })
+			passkeyProcessTrace('Capability check', { platform, webAuthnAvailable })
+			if (!webAuthnAvailable) throw new Error('Passkeys unavailable.')
+
+			passkeyProcessTrace('Loading server policy', { platform })
 			const meta = await api<MetaInfo>('/meta')
+			passkeyProcessTrace('Server policy loaded', {
+				platform,
+				prfRequired: meta.requirePasskeyPrf
+			})
+			passkeyProcessTrace('Starting browser and authenticator ceremony', { platform })
 			const result = await authClient.passkey.addPasskey({
 				name: name.trim() || undefined,
 				...(meta.requirePasskeyPrf
@@ -101,28 +122,51 @@ export const appRuntime: AppRuntime = {
 					: {})
 			})
 			if (result?.error) {
-				if (
-					firefoxLinux &&
-					'code' in result.error &&
-					result.error.code === 'ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY'
-				) {
-					throw new Error(
-						'Firefox on Linux could not access a passkey provider. Connect a FIDO2 security key or open the original setup link on a browser or device with a passkey provider.'
-					)
-				}
-				throw new Error(result.error.message ?? 'Passkey creation failed.')
+				console.error('[passkey] Registration failed', passkeyDiagnosticLog(result.error, context))
+				throw passkeyRegistrationDiagnostic(result.error, context)
 			}
 			const extensions = (
 				'webauthn' in result ? result.webauthn.clientExtensionResults : undefined
 			) as { prf?: { enabled?: boolean } } | undefined
 			const data = result?.data as Record<string, unknown> | undefined
-			await api('/passkeys', {
-				method: 'POST',
-				body: JSON.stringify({
-					credentialId: typeof data?.id === 'string' ? data.id : undefined,
-					prfEnabled: extensions?.prf?.enabled === true
-				})
+			const credentialReturned = typeof data?.id === 'string'
+			const prfEnabled = extensions?.prf?.enabled === true
+			passkeyProcessTrace('Credential created and verified', {
+				platform,
+				credentialReturned,
+				prfEnabled
 			})
+			passkeyProcessTrace('Finalizing enrollment', {
+				platform,
+				endpoint: 'enrollment-finalization',
+				method: 'POST'
+			})
+			const startedAt = Date.now()
+			try {
+				await api('/passkeys', {
+					method: 'POST',
+					body: JSON.stringify({
+						credentialId: credentialReturned ? data.id : undefined,
+						prfEnabled
+					})
+				})
+			} catch (error) {
+				console.error('[passkey] Enrollment finalization failed', {
+					stage: 'enrollment-finalization',
+					platform,
+					durationMs: Date.now() - startedAt,
+					errorName: error instanceof Error ? error.name : 'UnknownError',
+					message: error instanceof Error ? error.message : String(error)
+				})
+				throw error
+			}
+			passkeyProcessTrace('Enrollment finalized', {
+				platform,
+				endpoint: 'enrollment-finalization',
+				method: 'POST',
+				durationMs: Date.now() - startedAt
+			})
+			passkeyProcessTrace('Registration completed', { platform })
 		},
 		passkeyWarning: () => /Firefox\//.test(navigator.userAgent) && /Linux/.test(navigator.userAgent)
 	},

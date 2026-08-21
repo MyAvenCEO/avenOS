@@ -88,6 +88,16 @@ export const designerPages: DesignerPage[] = [
 			{ id: 'default', label: 'Default', href: '/passkey/create?scenario=default' },
 			{ id: 'waiting', label: 'Waiting', href: '/passkey/create?scenario=waiting' },
 			{ id: 'firefox', label: 'Firefox/Linux warning', href: '/passkey/create?scenario=firefox' },
+			{
+				id: 'firefox-error',
+				label: 'Firefox/YubiKey error',
+				href: '/passkey/create?scenario=firefox-error'
+			},
+			{
+				id: 'android-error',
+				label: 'Android provider error',
+				href: '/passkey/create?scenario=android-error'
+			},
 			{ id: 'unsupported', label: 'Unsupported', href: '/passkey/create?scenario=unsupported' },
 			{ id: 'error', label: 'Error', href: '/passkey/create?scenario=error' }
 		]

@@ -1,4 +1,5 @@
 import { readable } from 'svelte/store'
+import { passkeyRegistrationDiagnostic } from '$lib/passkey-diagnostics.js'
 import type { MetaInfo, NameAvailability, NameHoldResult } from '$lib/types.js'
 import type { AppRuntime } from './contract.js'
 import { scenario } from './designer-scenarios.js'
@@ -101,15 +102,38 @@ export const appRuntime: AppRuntime = {
 		},
 		passkey(url) {
 			const state = scenario(url, 'default')
+			const diagnostic =
+				state === 'firefox-error'
+					? passkeyRegistrationDiagnostic(
+							{
+								code: 'ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY',
+								message: 'The operation either timed out or was not allowed.',
+								status: 400
+							},
+							{ firefoxLinux: true, android: false }
+						).message
+					: state === 'android-error'
+						? passkeyRegistrationDiagnostic(
+								{
+									code: 'ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY',
+									message: 'The service could not complete the request',
+									status: 400
+								},
+								{ firefoxLinux: false, android: true }
+							).message
+						: ''
 			return {
-				name: ['waiting', 'error'].includes(state) ? 'MacBook Touch ID' : '',
+				name: ['waiting', 'error', 'firefox-error', 'android-error'].includes(state)
+					? 'MacBook Touch ID'
+					: '',
 				busy: state === 'waiting',
 				error:
-					state === 'unsupported'
+					diagnostic ||
+					(state === 'unsupported'
 						? 'Passkeys unavailable.'
 						: state === 'error'
 							? 'Passkey creation failed.'
-							: ''
+							: '')
 			}
 		},
 		checkout(url) {
@@ -143,7 +167,7 @@ export const appRuntime: AppRuntime = {
 		signIn: async () => {},
 		signOut: async () => {},
 		createPasskey: async () => {},
-		passkeyWarning: (url) => scenario(url, 'default') === 'firefox'
+		passkeyWarning: (url) => ['firefox', 'firefox-error'].includes(scenario(url, 'default'))
 	},
 	device: { approve: async () => {} },
 	dashboard: {
