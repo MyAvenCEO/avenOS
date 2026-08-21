@@ -20,13 +20,15 @@
 		"db:migrate": "bun scripts/migrate.ts",
 		"environment:status": "bun scripts/environment.ts status",
 		"environment:retry": "bun scripts/environment.ts retry",
-		"environment:reconcile": "bun scripts/environment.ts reconcile"
+		"environment:reconcile": "bun scripts/environment.ts reconcile",
+		"db:seed:billing": "bun scripts/seed-billing.ts"
 	},
 	"dependencies": {
+		"@avenos/aven-website": "workspace:*",
 		"@better-auth/passkey": "1.6.23",
 		"better-auth": "1.6.23",
-		"drizzle-orm": "0.45.2",
 		"dotenv": "17.3.1",
+		"drizzle-orm": "0.45.2",
 		"nodemailer": "9.0.3",
 		"pg": "8.16.3",
 		"pino": "10.3.1",

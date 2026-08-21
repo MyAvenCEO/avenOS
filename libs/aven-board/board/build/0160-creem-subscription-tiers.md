@@ -239,6 +239,20 @@ grep -rn "requireUser" services/aven-api/src/routes/api/billing/
 
 ## Progress log
 
+- 2026-08-21 (build, phases 1–2) — Migration 0008 (billing_customers +
+  subscriptions), pricing SSOT split into plans-data.ts and exported as
+  `@avenos/aven-website/pricing` (plans.ts had a `$lib` import — the spec's
+  "no Svelte imports" assumption was false; ctaHref/ctaLabel stay behind in
+  plans.ts). CreemProvider gained ensureSubscriptionProducts / subscription
+  checkout / change / cancel / resume / listInvoices behind one authed api()
+  helper; fake provider mirrors it. SubscriptionService with session-scoped
+  me/subscribe/change/cancel/resume/invoices + idempotent applyEvent; six
+  /api/billing/* routes (requireUser only); webhook routes subscription.*
+  events and no longer misroutes tier checkouts into the name grant.
+  `tests/billing-subscriptions.test.ts` 4/4 green against a local PG 15
+  (seed net-cents + idempotency, webhook replay, /me isolation, action
+  proxying with the caller's own provider id). svelte-check 0/1474.
+
 - 2026-08-21 (later still) — Samuel: avenCOOP is not a Creem product at
   all and is handled individually — removed from the pane entirely; the
   in-app ladder is avenME/avenCEO only.

@@ -3,6 +3,9 @@
 	"private": true,
 	"version": "26.8.21-next.9",
 	"type": "module",
+	"exports": {
+		"./pricing": "./src/lib/pricing/plans-data.ts"
+	},
 	"scripts": {
 		"dev": "bun --env-file=../../.env x --bun vite dev --port 1421 --strictPort",
 		"build": "bun --env-file=../../.env x --bun vite build",
