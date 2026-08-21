@@ -10,6 +10,9 @@ export type AvenosSkillSlug =
 	| 'brain-memorizer'
 	| 'book-keeper'
 	| 'human-reviewer'
+	| 'finance-brain'
+	| 'website-creator'
+	| 'checkout-builder'
 	| 'blog-writer'
 
 export type SkillPublisherId = 'aventin' | 'avenmaia'

@@ -4,23 +4,29 @@ import deBookKeeper from './content/de/book-keeper.json'
 import deBookmarkChampion from './content/de/bookmark-champion.json'
 import deBrainMemorizer from './content/de/brain-memorizer.json'
 import deCalendarOrganizer from './content/de/calendar-organizer.json'
+import deCheckoutBuilder from './content/de/checkout-builder.json'
 import deDocsOrganizer from './content/de/docs-organizer.json'
 // ── DE ────────────────────────────────────────────────────────────────────────
 import deEmailManager from './content/de/email-manager.json'
+import deFinanceBrain from './content/de/finance-brain.json'
 import deHumanReviewer from './content/de/human-reviewer.json'
 import deInboxRouter from './content/de/inbox-router.json'
 import deTodoShuffler from './content/de/todo-shuffler.json'
+import deWebsiteCreator from './content/de/website-creator.json'
 import enBlogWriter from './content/en/blog-writer.json'
 import enBookKeeper from './content/en/book-keeper.json'
 import enBookmarkChampion from './content/en/bookmark-champion.json'
 import enBrainMemorizer from './content/en/brain-memorizer.json'
 import enCalendarOrganizer from './content/en/calendar-organizer.json'
+import enCheckoutBuilder from './content/en/checkout-builder.json'
 import enDocsOrganizer from './content/en/docs-organizer.json'
 // ── EN (source of truth) ──────────────────────────────────────────────────────
 import enEmailManager from './content/en/email-manager.json'
+import enFinanceBrain from './content/en/finance-brain.json'
 import enHumanReviewer from './content/en/human-reviewer.json'
 import enInboxRouter from './content/en/inbox-router.json'
 import enTodoShuffler from './content/en/todo-shuffler.json'
+import enWebsiteCreator from './content/en/website-creator.json'
 import dePubAvenmaia from './publishers/de/avenmaia.json'
 import dePubAventin from './publishers/de/aventin.json'
 import enPubAvenmaia from './publishers/en/avenmaia.json'
@@ -47,6 +53,9 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		enCalendarOrganizer,
 		enTodoShuffler,
 		enBookmarkChampion,
+		enFinanceBrain,
+		enWebsiteCreator,
+		enCheckoutBuilder,
 		enBlogWriter
 	] as SkillJson[],
 	de: [
@@ -59,6 +68,9 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		deCalendarOrganizer,
 		deTodoShuffler,
 		deBookmarkChampion,
+		deFinanceBrain,
+		deWebsiteCreator,
+		deCheckoutBuilder,
 		deBlogWriter
 	] as SkillJson[]
 }
