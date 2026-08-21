@@ -20,6 +20,33 @@ let idea = $state('')
 const tier = $derived(tierFrom(page.url))
 const greeting = $derived(greetingFor(tier))
 
+/**
+ * One question per screen, the way the old waitlist asked them.
+ *
+ * A single form with four fields reads as paperwork; asked one at a time the
+ * same questions read as a conversation, and each answer is a small
+ * commitment that makes the next one likelier. The name was step 1 on the
+ * page before this, so the counter starts at 2 and the bar shows all four.
+ */
+const TOTAL_STEPS = 4
+let step = $state(1)
+
+const emailOk = $derived(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
+
+function next() {
+	error = ''
+	if (step === 1 && !emailOk) {
+		error = 'Bitte gib eine gültige E‑Mail‑Adresse ein.'
+		return
+	}
+	step += 1
+}
+
+function back() {
+	error = ''
+	step -= 1
+}
+
 onMount(async () => {
 	info = await appRuntime.names.loadInfo(name, info)
 })
@@ -34,10 +61,17 @@ async function secure() {
 			idea: idea.trim() || undefined
 		})
 	} catch (e) {
-		error = e instanceof Error ? e.message : 'Request failed.'
+		error =
+			e instanceof Error ? e.message : 'Das hat nicht geklappt. Versuch es gleich noch einmal.'
 	} finally {
 		loading = false
 	}
+}
+
+function onKey(event: KeyboardEvent) {
+	if (event.key !== 'Enter') return
+	event.preventDefault()
+	next()
 }
 </script>
 
@@ -66,43 +100,75 @@ async function secure() {
 			<p class="digits">{name}.aven.ceo</p>
 		</div>
 		<p>{info?.priceEur ?? 30} € einmalig, zzgl. USt.</p>
+
 		{#if info && !info.available}
 			<div class="alert">Dieser Name ist nicht mehr frei. <a href="/">Anderen wählen</a></div>
 		{:else}
-			<label
-				>E‑Mail<input
-					bind:value={email}
-					type="email"
-					autocomplete="email"
-					placeholder="du@beispiel.de"
-				></label
-			>
-			<label
-				>Wie dürfen wir dich nennen?<input
-					bind:value={salutation}
-					maxlength="120"
-					autocomplete="name"
-					placeholder="z. B. Samuel"
-				></label
-			>
-			<label
-				>Was willst du bauen — und warum?<textarea
-					bind:value={idea}
-					rows="4"
-					maxlength="2000"
-					placeholder="Ich will …"
-				></textarea></label
-			>
-			<p class="fine">
-				Ein paar Sätze reichen. Wir vergeben <strong>Wildcard‑Einladungen</strong> an die Ideen, die
-				uns umhauen — unabhängig vom Platz in der Warteliste.
-			</p>
+			<div class="steps" aria-hidden="true">
+				{#each Array(TOTAL_STEPS) as _, i (i)}
+					<span class="step {i <= step ? 'done' : ''}"></span>
+				{/each}
+			</div>
+			<p class="eyebrow">Schritt {step + 1} von {TOTAL_STEPS}</p>
+
+			{#if step === 1}
+				<label
+					>E‑Mail<input
+						bind:value={email}
+						type="email"
+						autocomplete="email"
+						placeholder="du@beispiel.de"
+						onkeydown={onKey}
+					></label
+				>
+				<p class="fine">Hierhin schicken wir deinen Link — und sonst nichts.</p>
+			{:else if step === 2}
+				<label
+					>Wie dürfen wir dich nennen?<input
+						bind:value={salutation}
+						maxlength="120"
+						autocomplete="name"
+						placeholder="z. B. Samuel"
+						onkeydown={onKey}
+					></label
+				>
+				<p class="fine">
+					Damit wir dich anschreiben können wie ein Mensch, nicht wie ein Formular.
+				</p>
+			{:else}
+				<label
+					>Was willst du bauen — und warum?<textarea
+						bind:value={idea}
+						rows="5"
+						maxlength="2000"
+						placeholder="Ich will …"
+					></textarea></label
+				>
+				<p class="fine">
+					Ein paar Sätze reichen. Wir vergeben <strong>Wildcard‑Einladungen</strong> an die Ideen,
+					die uns umhauen — unabhängig vom Platz in der Warteliste.
+				</p>
+			{/if}
+
 			{#if error}
 				<div class="alert">{error}</div>
 			{/if}
-			<button disabled={loading || !email || !name} onclick={secure}>
-				{loading ? 'Einen Moment …' : 'Platz sichern'}
-			</button>
+
+			<div class="actions">
+				{#if step > 1}
+					<button class="ghost" type="button" onclick={back}>Zurück</button>
+				{:else}
+					<a class="ghost" href="/">Anderer Name</a>
+				{/if}
+				{#if step < 3}
+					<button type="button" disabled={step === 1 && !emailOk} onclick={next}>Weiter</button>
+				{:else}
+					<button type="button" disabled={loading || !email || !name} onclick={secure}>
+						{loading ? 'Einen Moment …' : idea.trim() ? 'Platz sichern' : 'Ohne Idee absenden'}
+					</button>
+				{/if}
+			</div>
+
 			<p class="fine">
 				Mit Abschluss erklärst du dich einverstanden, dass wir dich anschreiben, sobald du dran
 				bist. Keine Newsletter, kein Weiterverkauf.
