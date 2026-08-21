@@ -1,5 +1,5 @@
 {
-	"slug": "document-extractor",
+	"slug": "docs-organizer",
 	"publisher": {
 		"id": "aventin",
 		"displayName": "avenTIN",
@@ -9,7 +9,7 @@
 	"plan": "avenme",
 	"oneLineCopy": "No document goes unread — whatever format it comes in.",
 	"hero": {
-		"kicker": "Skill · avenTIN · document-extractor",
+		"kicker": "Skill · avenTIN · docs organizer",
 		"headlineMain": "Read documents. Extract data. Move on.",
 		"headlineSerifLead": "PDFs, scanned invoices, contracts, postal scans — everything becomes structured data that your Aven understands.",
 		"promiseHoursPerWeek": "3+ hrs/week"
@@ -29,7 +29,7 @@
 		"A document arrives — via mail, upload or scan",
 		"Your Aven runs OCR, converts to PDF/A and identifies the document type",
 		"Fields are extracted: amount, date, sender, service, due date",
-		"The structured result goes directly to brain-memorizer or book-keeper"
+		"The structured result goes directly to brain memorizer or book keeper"
 	],
 	"whatMechanics": {
 		"input": "PDFs, images (JPG/PNG), scanned letters, email attachments",
@@ -72,13 +72,13 @@
 		"standaloneTotalEurPerMonth": 121,
 		"timeDelayToValue": "First documents processed in under 60 seconds",
 		"effortToInstall": "No setup — runs automatically as soon as documents arrive",
-		"proof": "All invoices on aven.ceo were processed with document-extractor. Not a single document was typed manually."
+		"proof": "All invoices on aven.ceo were processed with docs organizer. Not a single document was typed manually."
 	},
 	"bonuses": [
 		"PDF/A archive: all documents archived compliantly and searchable forever",
 		"Physical mail digitization: scans from the mailbox are automatically ingested",
 		"Confidence score: your Aven flags how certain it is about each extraction"
 	],
-	"scarcity": "document-extractor is included in every CEO plan. No extra cost. No tool subscription. No vendor lock-in.",
-	"letterFromPublisher": "A founder should not spend time copying numbers out of PDFs. That is not work — it is time waste that feels like work. I built document-extractor because Daniel said at some point: \"I can't do this anymore.\" Today he says: \"Just send it to me.\" That is the difference."
+	"scarcity": "docs organizer is included in every CEO plan. No extra cost. No tool subscription. No vendor lock-in.",
+	"letterFromPublisher": "A founder should not spend time copying numbers out of PDFs. That is not work — it is time waste that feels like work. I built docs organizer because Daniel said at some point: \"I can't do this anymore.\" Today he says: \"Just send it to me.\" That is the difference."
 }

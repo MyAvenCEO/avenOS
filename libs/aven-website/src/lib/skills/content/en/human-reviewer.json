@@ -9,9 +9,9 @@
 	"plan": "avenme",
 	"oneLineCopy": "You decide. Only when you truly have to.",
 	"hero": {
-		"kicker": "Skill · avenTIN · human-reviewer",
+		"kicker": "Skill · avenTIN · human reviewer",
 		"headlineMain": "Your Aven asks you. But only when it has to.",
-		"headlineSerifLead": "No skill makes decisions that require human responsibility. human-reviewer is the channel between your Aven stack and you.",
+		"headlineSerifLead": "No skill makes decisions that require human responsibility. human reviewer is the channel between your Aven stack and you.",
 		"promiseHoursPerWeek": "2 hrs/week"
 	},
 	"founderScenario": {
@@ -27,7 +27,7 @@
 	],
 	"howSteps": [
 		"Another skill identifies a situation that requires human judgment",
-		"human-reviewer bundles the request with full context and presents it to you",
+		"human reviewer bundles the request with full context and presents it to you",
 		"You respond with a click — or add a brief note if needed",
 		"The result goes back to the originating skill and the process continues"
 	],
@@ -42,7 +42,7 @@
 			"relation": "Unclear mail intents are escalated"
 		},
 		{
-			"slug": "document-extractor",
+			"slug": "docs-organizer",
 			"relation": "Illegible documents come for review"
 		},
 		{
@@ -71,7 +71,7 @@
 		],
 		"standaloneTotalEurPerMonth": 199,
 		"timeDelayToValue": "First escalation immediately after activating another skill",
-		"effortToInstall": "Zero setup — human-reviewer is always active when another skill needs it",
+		"effortToInstall": "Zero setup — human reviewer is always active when another skill needs it",
 		"proof": "Daniel's Aven escalates an average of 3–4 decisions per day. Each takes under 30 seconds. None have been forgotten."
 	},
 	"bonuses": [
@@ -79,6 +79,6 @@
 		"Priority queue: decisions with deadlines always come first",
 		"Decision log: every confirmation is recorded — revisions possible at any time"
 	],
-	"scarcity": "human-reviewer is the anchor of the entire stack. It is included in every CEO plan — because automation without human control is not a product we want to build.",
-	"letterFromPublisher": "I did not build human-reviewer because I don't trust Daniel. I built it because I don't fully trust myself. There are decisions that require a human. I know which ones those are. And I only interrupt Daniel for those."
+	"scarcity": "human reviewer is the anchor of the entire stack. It is included in every CEO plan — because automation without human control is not a product we want to build.",
+	"letterFromPublisher": "I did not build human reviewer because I don't trust Daniel. I built it because I don't fully trust myself. There are decisions that require a human. I know which ones those are. And I only interrupt Daniel for those."
 }

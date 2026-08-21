@@ -1,5 +1,5 @@
 <script lang="ts">
-import { skillDetailHref } from '$lib/skills/loader'
+import { skillDetailHref, skillLabel } from '$lib/skills/loader'
 import type { AvenosSkill } from '$lib/skills/types'
 
 type Props = {
@@ -16,7 +16,7 @@ const cardClass =
 
 const chainLabels: Record<string, string> = {
 	'email-ingestor': 'E‑Mail',
-	'document-extractor': 'Dokumente',
+	'docs-organizer': 'Dokumente',
 	'brain-memorizer': 'Gedächtnis',
 	'book-keeper': 'Buchhaltung',
 	'human-reviewer': 'HITL',
@@ -28,7 +28,7 @@ const chainLabels: Record<string, string> = {
 <a
 	href={skillDetailHref(skill.slug, 'de')}
 	class={cardClass}
-	aria-label={`${skill.slug} — ${skill.oneLineCopy}`}
+	aria-label={`${skillLabel(skill.slug)} — ${skill.oneLineCopy}`}
 >
 	<div class="flex items-start justify-between gap-3">
 		<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
@@ -42,7 +42,7 @@ const chainLabels: Record<string, string> = {
 	</div>
 
 	<h3 class="mt-3 text-[15px] font-bold tracking-[0.06em] text-foreground sm:text-[16px]">
-		{skill.slug}
+		{skillLabel(skill.slug)}
 	</h3>
 
 	<p class="mt-2 text-[14px] font-medium leading-snug text-foreground/82 sm:text-[15px]">
