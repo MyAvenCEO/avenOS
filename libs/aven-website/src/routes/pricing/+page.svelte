@@ -11,12 +11,12 @@ import { page } from '$app/stores'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import {
-	billingLabel,
 	ctaHref,
 	ctaLabel,
 	euro,
 	PLANS,
 	plan,
+	priceSuffix,
 	totalSharePct,
 	VAT_NOTE
 } from '$lib/pricing/plans'
@@ -80,7 +80,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{avenId.role}</p>
 						<p class="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-foreground">
 							{euro(avenId.eurPrice)}&nbsp;€
-							<span class="text-[13px] font-medium text-foreground/55">einmalig · zzgl. USt.</span>
+							<span class="text-[13px] font-medium text-foreground/55">{priceSuffix(avenId)}</span>
 						</p>
 					</div>
 					<ul
@@ -143,12 +143,9 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 						     different question, so it gets its own block rather than hanging
 						     off the right edge of the price. -->
 						<div class="mt-5 border-t border-border/50 pt-4">
-							<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
-								{billingLabel(p)}
-							</p>
-							<p class="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-foreground">
-								{euro(p.eurPrice)}&nbsp;€<span class="text-base font-medium text-foreground/55">
-									/Monat</span
+							<p class="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
+								{euro(p.eurPrice)}&nbsp;€<span class="text-base font-medium text-foreground/55"
+									>{priceSuffix(p)}</span
 								>
 							</p>
 						</div>
