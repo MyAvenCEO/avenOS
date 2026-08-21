@@ -169,7 +169,7 @@ function onStepKeydown(e: KeyboardEvent, stage: 1 | 2 | 3) {
 		<div class="mx-auto max-w-lg">
 			<div>
 				{#if intentLabel}
-					<p class="text-[10px] font-bold uppercase tracking-[0.14em] text-accent-ink">
+					<p class="text-[10px] font-bold uppercase tracking-[0.14em] text-accent">
 						{intentLabel}
 					</p>
 				{/if}
