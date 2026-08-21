@@ -6,6 +6,7 @@ import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
 import FitView from '$lib/mesh/FitView.svelte'
+import GatePreview from '$lib/query/GatePreview.svelte'
 import { query } from '$lib/query/query.svelte'
 import FlowNode from '$lib/skills/FlowNode.svelte'
 import { layoutWorkflow } from '$lib/skills/flow-layout'
@@ -922,6 +923,11 @@ $effect(() => {
 	query.intent = selectedId
 })
 
+/** The gates this intent is holding; one raised without a context is global. */
+const gates = $derived(
+	hitlQueue.items.filter((h) => h.context === undefined || h.context === selectedId)
+)
+
 let centerEl: HTMLElement | null = $state(null)
 $effect(() => {
 	void selected.log.length
@@ -1395,6 +1401,17 @@ const DOT: Record<string, string> = {
 					{/each}
 				</ol>
 			{/if}
+
+			<!-- THE human gate lives HERE, in the workspace it belongs to — not in
+			     the floating dock and not in the query modal. It is content about
+			     this intent, so the overlay dims it and lies over it like it does
+			     everything else. Sticky, because a gate you scrolled past is a gate
+			     you did not answer. -->
+			{#each gates as held (held.id)}
+				<div class="sticky bottom-0 mt-auto pt-2">
+					<GatePreview {held} />
+				</div>
+			{/each}
 		</main>
 	</div>
 

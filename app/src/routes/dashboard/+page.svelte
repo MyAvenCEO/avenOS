@@ -3,13 +3,11 @@ import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
-import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import '$lib/actors/windows'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
 import { shell } from '$lib/intents/talk.svelte'
-import GatePreview from '$lib/query/GatePreview.svelte'
 import QueryModal from '$lib/query/QueryModal.svelte'
 import { query } from '$lib/query/query.svelte'
 import { registerMockSources } from '$lib/query/sources.mock'
@@ -192,8 +190,17 @@ function enterTyping(seed = '') {
 	speaker.muted = true
 }
 
-/** Back to voice: unmute the mouth and reopen the ears. */
+/**
+ * Back to voice: unmute the mouth and reopen the ears.
+ *
+ * Unless there is no voice to go back to. In a plain browser tab the
+ * recognizer never runs, so dropping out of text mode left the panel with no
+ * input at all — and `enterTyping` could not rescue it, because the keystroke
+ * that calls it is gated on the conversation being live. One message, then
+ * silence. Text is the only mode there, so stay in it.
+ */
 function leaveTyping() {
+	if (!conversing) return
 	typing = false
 	speaker.muted = false
 	if (conversing) void listener.start()
@@ -373,17 +380,6 @@ function onKeydown(event: KeyboardEvent) {
 				</button>
 			</div>
 		{/if}
-
-		<!-- THE human gate keeps this place, deliberately outside the query modal:
-	     a gate is not something you asked for, it is something the system is
-	     waiting on, so it must not sit inside a surface you can dismiss. It
-	     scopes to the intent in view; a gate raised without one is global.
-	     Only its 186 lines of layout moved, into GatePreview. -->
-		{#each hitlQueue.items.filter((h) => shell.tab === 'intents' && (h.context === undefined || h.context === query.intent)) as held (held.id)}
-			<div class="mx-auto w-full max-w-[calc(100%-37.5rem)]">
-				<GatePreview {held} />
-			</div>
-		{/each}
 
 		<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
