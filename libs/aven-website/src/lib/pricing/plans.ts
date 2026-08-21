@@ -111,6 +111,7 @@ export const PLANS: Plan[] = [
 		eurPrice: 1895,
 		billing: 'monthly',
 		revenueSharePct: 15,
+		revenueShareNote: 'zzgl. beel‑Gebühren',
 		equitySharePct: 5,
 		reciprocalSharePct: 0.5,
 		applyOnly: true,

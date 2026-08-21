@@ -31,7 +31,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 	>
 		<div class="mx-auto max-w-6xl">
 			<div class="mx-auto max-w-2xl text-center">
-				<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-ink">Pricing</p>
+				<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">Pricing</p>
 				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
 					Ein Name als Anfang. Drei Stufen darauf.
 				</h2>
@@ -59,7 +59,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 				{/if}
 				<div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-10">
 					<div class="lg:w-64 lg:shrink-0">
-						<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-ink">
+						<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
 							Der Anfang
 						</p>
 						<p class="mt-1 text-xl font-semibold tracking-tight text-foreground">{avenId.name}</p>
@@ -244,7 +244,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 					<div
 						class="shrink-0 border-b border-border/50 pb-8 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-10"
 					>
-						<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground/45">
+						<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
 							Optional · Eigenes Hosting
 						</p>
 						<h3 class="mt-2 text-lg font-semibold text-foreground sm:text-xl">avenOS</h3>

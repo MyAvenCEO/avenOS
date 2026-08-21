@@ -57,7 +57,7 @@ const slugLabels: Record<string, string> = {
 	<!-- 1. WHY — Daniel scenario -->
 	<section class="border-b border-border/40 px-5 py-24 sm:px-8 sm:py-32 md:py-40">
 		<div class="mx-auto max-w-3xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 				{skill.hero.kicker}
 			</p>
 			<h1
@@ -104,9 +104,7 @@ const slugLabels: Record<string, string> = {
 	>
 		<div class="mx-auto max-w-2xl">
 			<div class="text-center">
-				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-					Was du gewinnst
-				</p>
+				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Was du gewinnst</p>
 				<h2
 					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
@@ -133,7 +131,7 @@ const slugLabels: Record<string, string> = {
 	<!-- 3. HOW — plain-language steps -->
 	<section class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20">
 		<div class="mx-auto max-w-2xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 				So funktioniert es
 			</p>
 			<h2
@@ -166,9 +164,7 @@ const slugLabels: Record<string, string> = {
 	>
 		<div class="mx-auto max-w-3xl">
 			<div class="text-center">
-				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-					Die Mechanik
-				</p>
+				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Die Mechanik</p>
 				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
 					Was genau passiert — ehrlich erklärt.
 				</h2>
@@ -202,7 +198,7 @@ const slugLabels: Record<string, string> = {
 	<section class="border-b border-border/40 px-5 py-12 sm:px-8 sm:py-16">
 		<div class="mx-auto max-w-3xl">
 			<div class="text-center">
-				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 					Kein Skill steht allein
 				</p>
 				<h2 class="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
@@ -237,7 +233,7 @@ const slugLabels: Record<string, string> = {
 	>
 		<div class="mx-auto max-w-2xl">
 			<div class="text-center">
-				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 					Was es kosten würde
 				</p>
 				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
@@ -353,7 +349,7 @@ const slugLabels: Record<string, string> = {
 							{@html beamAvatarSvg(pubIdentity.beamAvatarLabel, paletteKi, 48, `letter-${skill.slug}`)}
 						</div>
 						<div>
-							<p class="text-[8px] font-bold uppercase tracking-[0.24em] text-foreground/40">
+							<p class="text-[8px] font-bold uppercase tracking-[0.24em] text-accent">
 								Geschrieben von
 							</p>
 							<p class="mt-0.5 text-[13px] font-bold tracking-[0.1em] text-accent-ink">
