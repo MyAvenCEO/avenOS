@@ -1,22 +1,13 @@
 import { singleton } from '$lib/actors/singleton'
 
 /**
- * The one Talk-to-MAIA switch, shared between the shell and the intents
- * workspace: any chat activity (typed or spoken, from the global pill)
- * flips it on, so the conversation surface is ALWAYS where the answer —
- * including inline views like the todo list — appears.
- */
-class TalkState {
-	open = $state(false)
-	/** The intent currently in view (null while talking) — HITL gates scope to it. */
-	intentContext = $state<string | null>(null)
-}
-
-export const talk = singleton('aven.talk', () => new TalkState())
-
-/**
- * The shell's one surface switch, now that the top tab bar is gone: the
- * left rail drives it — intents (the default) or the skills platform.
+ * The shell's one surface switch: the left rail drives it — intents (the
+ * default) or the skills platform.
+ *
+ * `talk` used to live here too, a boolean for "the chat is showing" that had
+ * quietly become a scoping rule for HITL gates as well. Both jobs moved to
+ * `$lib/query` (0159), where the answer surface owns its own state and its
+ * intent context IS the scope.
  */
 class ShellState {
 	tab = $state<'intents' | 'skills'>('intents')
