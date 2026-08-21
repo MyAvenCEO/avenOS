@@ -11,8 +11,8 @@ import { page } from '$app/state'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SkillMarketplaceCard from '$lib/components/SkillMarketplaceCard.svelte'
-import { euro, PLANS, type PlanId, planIncludes } from '$lib/pricing/plans'
-import { loadSkills, loadSkillsByPlan, skillDetailHref } from '$lib/skills/loader'
+import { PLANS, type PlanId, planIncludes, priceLabel, VAT_NOTE } from '$lib/pricing/plans'
+import { loadSkills, loadSkillsByPlan, skillDetailHref, skillsIncludedIn } from '$lib/skills/loader'
 
 const skills = loadSkills('de')
 const byPlan = loadSkillsByPlan('de')
@@ -35,8 +35,8 @@ const visibleByPlan = $derived(
 )
 
 const chainSteps = [
-	{ slug: 'email-ingestor', label: 'E‑Mail', description: 'Liest & klassifiziert' },
-	{ slug: 'document-extractor', label: 'Dokumente', description: 'OCR & Extraktion' },
+	{ slug: 'email-manager', label: 'E‑Mail', description: 'Liest & klassifiziert' },
+	{ slug: 'docs-organizer', label: 'Dokumente', description: 'OCR & Extraktion' },
 	{ slug: 'brain-memorizer', label: 'Gedächtnis', description: 'Identität & Kontext' },
 	{ slug: 'book-keeper', label: 'Buchhaltung', description: 'Matching & Buchung' }
 ]
@@ -48,7 +48,7 @@ const chainSteps = [
 	<!-- Hero -->
 	<section class="border-b border-border/40 px-5 py-24 sm:px-8 sm:py-32 md:py-40">
 		<div class="mx-auto max-w-3xl text-center">
-			<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
 				Skill Marketplace · Aven
 			</p>
 			<h1
@@ -56,7 +56,7 @@ const chainSteps = [
 			>
 				Aven Skills, die echte Probleme lösen.
 				<span
-					class="mt-2 block font-serif text-[clamp(1.25rem,3.85vw,2.05rem)] font-light leading-[1.08] tracking-tight text-foreground/88"
+					class="mt-2 block text-[clamp(1.25rem,3.85vw,2.05rem)] font-light leading-[1.08] tracking-tight text-foreground/88"
 				>
 					Weil wir als Founder sie selbst haben.
 				</span>
@@ -75,19 +75,18 @@ const chainSteps = [
 		<div class="mx-auto flex max-w-6xl flex-col gap-10 lg:flex-row lg:gap-12">
 			<!-- Filters -->
 			<aside class="lg:w-56 lg:shrink-0">
-				<p class="font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-foreground/35">
-					Filter
-				</p>
-				<p
-					class="mt-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-foreground/55"
-				>
+				<p class="text-[9px] font-bold uppercase tracking-[0.26em] text-foreground/35">Filter</p>
+				<p class="mt-2 text-[11px] font-bold uppercase tracking-[0.14em] text-foreground/55">
 					Enthalten in
 				</p>
 				<p class="mt-1 text-[11px] leading-snug text-foreground/45">
 					Jeder Plan enthält alles aus den Plänen darunter.
 				</p>
+				<!-- Only plans that actually carry skills: avenID sat here forever
+				     showing an empty catalogue, which is a filter that can only
+				     disappoint. -->
 				<div class="mt-4 space-y-2">
-					{#each PLANS as p (p.id)}
+					{#each PLANS.filter((pl) => skillsIncludedIn(pl.id, 'de').length > 0) as p (p.id)}
 						{@const included = planIncludes(selected, p.id)}
 						{@const isSelected = selected === p.id}
 						<button
@@ -96,26 +95,24 @@ const chainSteps = [
 								picked = p.id
 							}}
 							class="flex w-full items-start gap-3 rounded-xl border p-3 text-left ring-1 transition-colors {isSelected
-								? 'border-tuscan-sun/60 bg-tuscan-sun/12 ring-tuscan-sun/25'
+								? 'border-accent/60 bg-accent/12 ring-accent/25'
 								: included
-									? 'border-border/45 bg-white/65 ring-black/4 hover:bg-white/80'
-									: 'border-border/25 bg-white/35 ring-black/2 opacity-55 hover:opacity-85'}"
+									? 'border-border/45 bg-surface-raised hover:bg-surface-soft'
+									: 'border-border/25 bg-surface-card opacity-55 hover:opacity-85'}"
 						>
 							<span
 								class="mt-1 size-3.5 shrink-0 rounded-full border {included
-									? 'border-tuscan-sun bg-tuscan-sun'
+									? 'border-accent bg-accent'
 									: 'border-foreground/25'}"
 								aria-hidden="true"
 							></span>
 							<span class="min-w-0 flex-1">
 								<span class="flex items-baseline justify-between gap-2">
-									<span
-										class="font-mono text-[12px] font-bold tracking-[0.08em] text-foreground/80"
-									>
+									<span class="text-[12px] font-bold tracking-[0.08em] text-foreground/80">
 										{p.name}
 									</span>
-									<span class="font-semibold text-[11px] tabular-nums text-foreground/55">
-										{euro(p.eurPerMonth)}&nbsp;€
+									<span class="shrink-0 text-[11px] font-semibold tabular-nums text-foreground/55">
+										{priceLabel(p)}
 									</span>
 								</span>
 								<span class="mt-0.5 block text-[10px] leading-snug text-foreground/48">
@@ -125,7 +122,8 @@ const chainSteps = [
 						</button>
 					{/each}
 				</div>
-				<p class="mt-4 font-mono text-[10px] font-semibold tabular-nums text-foreground/42">
+				<p class="mt-3 text-[10px] leading-snug text-foreground/42">{VAT_NOTE}</p>
+				<p class="mt-3 text-[10px] font-semibold tabular-nums text-foreground/42">
 					{visibleSkills.length}
 					von {skills.length} Skills enthalten
 				</p>
@@ -144,9 +142,7 @@ const chainSteps = [
 							class="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-border/30 pb-4"
 						>
 							<div>
-								<p
-									class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/38"
-								>
+								<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/38">
 									Ab {group.plan.name}
 								</p>
 								<h2 class="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
@@ -156,7 +152,7 @@ const chainSteps = [
 									{group.skills.length}
 									Skill{group.skills.length === 1 ? '' : 's'}
 									· ab
-									{euro(group.plan.eurPerMonth)}&nbsp;€/Monat
+									{priceLabel(group.plan)}
 								</p>
 							</div>
 							<a
@@ -175,7 +171,7 @@ const chainSteps = [
 					</div>
 				{:else}
 					<p
-						class="rounded-xl border border-border/35 bg-white/45 px-4 py-6 text-center text-[14px] text-foreground/55"
+						class="rounded-xl border border-border/35 bg-surface-card px-4 py-6 text-center text-[14px] text-foreground/55"
 					>
 						Für diese Auswahl sind noch keine Skills hinterlegt.
 					</p>
@@ -190,9 +186,7 @@ const chainSteps = [
 	>
 		<div class="mx-auto max-w-4xl">
 			<div class="text-center">
-				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-					Das System
-				</p>
+				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Das System</p>
 				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
 					Kein Skill steht allein — sie komponieren.
 				</h2>
@@ -208,10 +202,10 @@ const chainSteps = [
 				{#each chainSteps as step, i (step.slug)}
 					<a
 						href={skillDetailHref(step.slug, 'de')}
-						class="group flex min-w-0 flex-col items-center rounded-xl border border-border/35 bg-white/55 px-4 py-4 text-center ring-1 ring-black/4 transition-colors hover:border-border/65 hover:bg-white/70 sm:w-36"
+						class="group flex min-w-0 flex-col items-center rounded-xl border border-border/35 bg-surface-raised px-4 py-4 text-center transition-colors hover:border-border/65 hover:bg-surface-soft sm:w-36"
 					>
 						<p
-							class="font-mono text-[10px] font-bold tracking-[0.1em] text-foreground/70 group-hover:text-foreground/90"
+							class="text-[10px] font-bold tracking-[0.1em] text-foreground/70 group-hover:text-foreground/90"
 						>
 							{step.label}
 						</p>
@@ -229,14 +223,12 @@ const chainSteps = [
 			</div>
 
 			<div
-				class="mx-auto mt-6 max-w-sm rounded-xl border border-tuscan-sun/30 bg-tuscan-sun/10 px-4 py-3 text-center ring-1 ring-tuscan-sun/20"
+				class="mx-auto mt-6 max-w-sm rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-center ring-1 ring-accent/20"
 			>
-				<p class="font-mono text-[9px] font-bold uppercase tracking-[0.22em] text-tuscan-sun">
-					HITL Layer
-				</p>
+				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent-ink">HITL Layer</p>
 				<a
 					href={skillDetailHref('human-reviewer', 'de')}
-					class="mt-1 block font-mono text-[12px] font-bold tracking-[0.08em] text-foreground/75 hover:text-foreground/95"
+					class="mt-1 block text-[12px] font-bold tracking-[0.08em] text-foreground/75 hover:text-foreground/95"
 				>
 					human-reviewer
 				</a>
@@ -250,11 +242,9 @@ const chainSteps = [
 	<!-- Bundled-pricing band -->
 	<section class="border-b border-border/40 px-5 py-12 sm:px-8 sm:py-14">
 		<div class="mx-auto max-w-3xl text-center">
-			<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-				Pricing
-			</p>
+			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Pricing</p>
 			<h2 class="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-				Alle {skills.length} Skills. In jedem CEO‑Plan enthalten.
+				Alle {skills.length} Skills. In jedem Plan ab avenME enthalten.
 			</h2>
 			<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/65">
 				Kein Skill‑Marktplatz‑Lock‑in. Kein Abo pro Skill. Kein Vendor, der deine Arbeitsintelligenz
@@ -263,7 +253,7 @@ const chainSteps = [
 			<div class="mt-6">
 				<a
 					href="/pricing"
-					class="inline-flex min-h-11 items-center justify-center rounded-full border border-border/60 bg-white/55 px-7 text-[13px] font-semibold text-foreground transition-colors hover:bg-white/85"
+					class="inline-flex min-h-11 items-center justify-center rounded-full border border-border/60 bg-surface-raised px-7 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
 				>
 					Alle Pläne ansehen →
 				</a>
@@ -279,14 +269,8 @@ const chainSteps = [
 	</section>
 
 	<footer
-		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] font-mono text-foreground/30"
+		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] text-foreground/30"
 	>
 		avenCEO · avenOS · Own your life
 	</footer>
 </div>
-
-<style>
-:global(body) {
-	background-color: #e8ede1;
-}
-</style>

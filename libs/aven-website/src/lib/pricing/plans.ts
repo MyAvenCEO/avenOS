@@ -2,29 +2,70 @@
  * The product ladder — one source of truth for pricing AND the skills
  * marketplace.
  *
- * Five roles, each one the previous plus more: avenCOO runs the paperwork,
- * avenCMO the story and the market, avenCTO the automation and the encrypted
- * ground, avenCPO the scaling product, avenCEO the whole company alongside
- * you. Every tier carries a monthly fee
- * and a revenue share that GROWS with the role — the further up, the deeper
- * we are in the outcome, until avenCEO is effectively a co-founder deal.
+ * THREE tiers on top of one name. avenID is the door: the name, the waitlist
+ * place, the open-source code. avenME runs your personal life — inbox, post,
+ * documents, the daily organisation. avenCEO runs the company around it —
+ * pre-accounting, finances, the website, the shop, the blog — and takes a
+ * share of the revenue it helps produce. avenCOOP is not a bigger plan but a
+ * different relationship: we come in as the technical co-founder, take
+ * company shares alongside the revenue share, and you APPLY rather than book.
+ *
+ * The five-role ladder (avenCOO/CMO/CTO/CPO/CEO) is gone: it sold seniority
+ * titles where buyers were asking one question — is this my life or my
+ * company? Two answers, one door, one partnership.
  *
  * The skills page filters by THIS, not by publisher: what matters to a buyer
  * is which plan a skill comes with, not which of us built it.
  */
 
-export type PlanId = 'avencoo' | 'avencmo' | 'avencto' | 'avencpo' | 'avenceo'
+export type PlanId = 'avenid' | 'avenme' | 'avenceo' | 'avencoop'
+
+/**
+ * A line on a plan card. Most are plain text — but where a feature IS a
+ * shipped skill, it names the skill and links to its page, so the card stops
+ * describing a capability in the abstract and points at the thing that does
+ * it. The slug stays a plain string: `skills/loader` imports THIS file, so an
+ * import the other way would close a cycle.
+ */
+export type PlanFeature = string | { skill: string; label: string }
 
 export interface Plan {
 	id: PlanId
 	name: string
-	/** One line on what this role takes off your desk. */
+	/** One line on what this tier takes off your desk. */
 	role: string
-	eurPerMonth: number
-	/** Revenue share in percent, on top of the monthly fee; rises with the tier. */
-	revenueSharePct: number
+	/**
+	 * The price in euro, NET. Monthly for every tier except avenID, which is
+	 * billed once — read `billing` before you print a `/m`.
+	 */
+	eurPrice: number
+	billing: 'once' | 'monthly'
+	/**
+	 * What we keep to run the platform — every payment fee (Stripe, Creem &
+	 * Co.) already inside it. 0 on the tiers that sell you nothing.
+	 */
+	platformFeePct: number
+	/**
+	 * The other half of the share, and the reason it is not called a fee: it
+	 * leaves us again as an INVESTMENT into other founders' avenCOOPs, and the
+	 * shares it buys are yours. This is the compounding engine — your revenue
+	 * buys you a slice of everyone else's.
+	 */
+	reinvestPct: number
+	/** Company shares we take — avenCOOP only. */
+	equitySharePct?: number
+	/** avenCOOP is not bookable: you apply and we decide together. */
+	applyOnly?: boolean
+	/**
+	 * Included agent runtime per day, and what a minute costs past it. Fair
+	 * use is a promise about a NUMBER, so the number is data, not prose in a
+	 * feature bullet where it drifts per tier.
+	 */
+	runtime?: { hoursPerDay: number; centsPerExtraMinute: number }
 	/** What this tier adds; the tiers below are always included. */
-	features: string[]
+	features: PlanFeature[]
+	/** One outbound reference, where the tier depends on one. */
+	link?: { href: string; label: string }
 	/** Marks the tier we lead with. */
 	highlight?: boolean
 }
@@ -32,79 +73,81 @@ export interface Plan {
 /** Ascending: each plan includes everything from the ones before it. */
 export const PLANS: Plan[] = [
 	{
-		id: 'avencoo',
-		name: 'avenCOO',
-		role: 'Operations — Papierkram, Post, Zahlen',
-		eurPerMonth: 377,
-		revenueSharePct: 5,
+		id: 'avenid',
+		name: 'avenID',
+		role: 'Dein Name — der Anfang von allem',
+		eurPrice: 30,
+		billing: 'once',
+		platformFeePct: 0,
+		reinvestPct: 0,
 		features: [
-			'avenCEO-Name inklusive (maia.aven.ceo + mail@maia.aven.ceo)',
-			'2 Sparks (Personal + Company)',
-			'Max. 1 Std KI/Tag (Fair Use)',
-			'POST-Inbox',
-			'E-Mail-Inbox',
-			'Aller Papierkram',
-			'Vorbuchhaltung',
-			'Finanz-Dashboard',
-			'Agent-API-Auth-Proxy',
-			'Website',
-			'Stripe-Shop'
+			'Dein avenID‑Name — für 1 Jahr für dich gesichert',
+			'Dein Platz auf der Warteliste',
+			'20 Min Test‑Zugang — sobald du eingeladen bist'
 		]
 	},
 	{
-		id: 'avencmo',
-		name: 'avenCMO',
-		role: 'Markt — Storytelling, Reichweite, Pipeline',
-		eurPerMonth: 610,
-		revenueSharePct: 10,
-		highlight: true,
+		id: 'avenme',
+		name: 'avenME',
+		role: 'Dein Leben — organisiert, jeden Tag',
+		eurPrice: 42,
+		billing: 'monthly',
+		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
+		platformFeePct: 0,
+		reinvestPct: 0,
 		features: [
-			'3 Sparks',
-			'Max. 2 Std KI/Tag (Fair Use)',
-			'Blog',
-			'Social-Media-APIs',
-			'CRM & Sales Tools'
-		]
-	},
-	{
-		id: 'avencto',
-		name: 'avenCTO',
-		role: 'Technik — Automation auf Zuruf',
-		eurPerMonth: 987,
-		revenueSharePct: 15,
-		features: [
-			'4 Sparks',
-			'Max. 3 Std KI/Tag (Fair Use)',
-			'Composer (interne Tools bauen)',
-			'E2EE (TEE-gehosteter Server)'
-		]
-	},
-	{
-		id: 'avencpo',
-		name: 'avenCPO',
-		role: 'Produkt — was deine Kunden anfassen',
-		eurPerMonth: 1597,
-		revenueSharePct: 20,
-		features: [
-			'5 Sparks',
-			'Max. 6 Std KI/Tag (Fair Use)',
-			'Composer (Kundenprodukte bauen)',
-			'Offizieller Marketplace-Reseller: wir verkaufen deine Produkte auf Kommission und übernehmen Steuerlast und Abwicklung'
+			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
+			{ skill: 'email-manager', label: 'E‑Mail‑Inbox' },
+			'Digitaler Briefkasten — deine Papierpost digitalisiert (exkl. Nachsendeauftrag der Deutschen Post: 31,90 € / 6 Monate, inkl. USt.)',
+			{ skill: 'docs-organizer', label: 'Dokumentenverwaltung' },
+			{ skill: 'brain-memorizer', label: 'Notizen, Kontakte, Beziehungen' },
+			{ skill: 'human-reviewer', label: 'Du entscheidest, wenn es zählt' },
+			{ skill: 'calendar-organizer', label: 'Dein Kalender denkt mit' },
+			{ skill: 'todo-shuffler', label: 'Deine Liste sortiert sich selbst' },
+			'Personal Spark'
 		]
 	},
 	{
 		id: 'avenceo',
 		name: 'avenCEO',
-		role: 'Das Ganze — wir sind faktisch Co-Founder',
-		eurPerMonth: 2584,
-		revenueSharePct: 25,
+		role: 'Deine Firma — alles Geschäftliche',
+		eurPrice: 326,
+		billing: 'monthly',
+		runtime: { hoursPerDay: 4, centsPerExtraMinute: 10 },
+		platformFeePct: 6,
+		reinvestPct: 6,
+		highlight: true,
 		features: [
-			'Unbegrenzte Sparks',
-			'24 Std KI/Tag (Fair Use) — unbegrenzte interne Inferenz auf eigener Hardware, Wartung durch uns',
-			'tokenizeit-Adapter (Community-Investments)',
-			'Offizieller Marketplace-Reseller inklusive — Kommission, Steuerlast und Abwicklung liegen bei uns',
-			'Faktisch Co-Founder'
+			'Vorbuchhaltung',
+			'Finanz‑Dashboard',
+			'Agent‑API‑Auth‑Proxy',
+			'Website',
+			'Stripe‑Shop',
+			'Blog',
+			'Digitaler Briefkasten für Geschäftskunden (exkl. Nachsendeauftrag der Deutschen Post: 51,90 € / 6 Monate, inkl. USt.)',
+			'Dein Aven und deine Produkte im aven Marketplace gelistet',
+			'Company Spark zusätzlich zu deinem Personal Spark'
 		]
+	},
+	{
+		id: 'avencoop',
+		name: 'avenCOOP',
+		role: 'Wir werden dein technischer Co‑Founder',
+		eurPrice: 1895,
+		billing: 'monthly',
+		runtime: { hoursPerDay: 12, centsPerExtraMinute: 10 },
+		platformFeePct: 6,
+		reinvestPct: 12,
+		equitySharePct: 5,
+		applyOnly: true,
+		features: [
+			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
+			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
+			'5 % Firmenanteile an deiner Firma, digitalisiert über beel.com',
+			'Du wählst selbst, in welche avenCOOPs dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
+			'Wir führen dein beel‑Syndikat an — mit Community‑Investments deiner Unterstützer'
+		],
+		link: { href: 'https://beel.com/de', label: 'beel.com' }
 	}
 ]
 
@@ -115,12 +158,51 @@ export function plan(id: PlanId): Plan {
 	return PLANS.find((p) => p.id === id)!
 }
 
-/** Plans are cumulative: avenCMO contains everything avenCOO has. */
+/** Plans are cumulative: avenCEO contains everything avenME has. */
 export function planIncludes(selected: PlanId, needed: PlanId): boolean {
 	return planOrder.indexOf(needed) <= planOrder.indexOf(selected)
 }
 
-/** German price formatting: 1.597 €, no cents. */
+/** German price formatting: 1.895 €, no cents. */
 export function euro(amount: number): string {
 	return amount.toLocaleString('de-DE')
+}
+
+/** "25 € einmalig" · "326 €/Monat" — the whole price in one string. */
+export function priceLabel(p: Plan): string {
+	return p.billing === 'once' ? `${euro(p.eurPrice)} € einmalig` : `${euro(p.eurPrice)} €/Monat`
+}
+
+/**
+ * Platform fee plus reinvest — the share a founder actually sees leave the
+ * account. The two halves are printed under it, because they are different
+ * things: one is a price, the other buys shares that stay yours.
+ */
+export function totalSharePct(p: Plan): number {
+	return p.platformFeePct + p.reinvestPct
+}
+
+/**
+ * The cadence and the VAT clause, on the same line as the number — a price
+ * reads as one statement, not as a label stacked on a figure.
+ */
+export function priceSuffix(p: Plan): string {
+	return p.billing === 'once' ? 'einmalig · zzgl. USt.' : '/Monat · zzgl. USt.'
+}
+
+/**
+ * The one VAT sentence, spelled once. "Netto" alone does not carry it — the
+ * explicit clause does.
+ */
+export const VAT_NOTE = 'Alle Preise verstehen sich zzgl. der gesetzlichen Umsatzsteuer.'
+
+/** Book it, or apply for it — avenCOOP is a decision we make together. */
+export function ctaLabel(p: Plan): string {
+	if (p.applyOnly) return 'Bewerben'
+	return p.id === 'avenid' ? 'avenID sichern' : 'Buchen'
+}
+
+export function ctaHref(p: Plan): string {
+	if (p.applyOnly) return `/waitlist?intent=coop-application&tier=${p.id}`
+	return p.id === 'avenid' ? '/waitlist?intent=aven-id' : `/waitlist?intent=ceo-plan&tier=${p.id}`
 }

@@ -6,10 +6,10 @@
 		"founderName": "Samuel",
 		"scope": "Samuel Andert · aven.ceo"
 	},
-	"plan": "avencmo",
+	"plan": "avenceo",
 	"oneLineCopy": "Your Aven writes. You sign off — when it's good.",
 	"hero": {
-		"kicker": "Skill · avenMAIA · blog-writer",
+		"kicker": "Skill · avenMAIA · blog writer",
 		"headlineMain": "Your knowledge. Finally published.",
 		"headlineSerifLead": "From conversation notes, voice memos and raw ideas comes polished content — in your voice, with your context.",
 		"promiseHoursPerWeek": "5+ hrs/week"
@@ -28,12 +28,12 @@
 	"howSteps": [
 		"You give your Aven a raw text, an idea or a voice memo",
 		"Your Aven researches context from your memory and writes a draft",
-		"The draft lands in human-reviewer — you read, adjust or send with one click",
+		"The draft lands in human reviewer — you read, adjust or send with one click",
 		"Published content goes into memory: topic clusters grow automatically"
 	],
 	"whatMechanics": {
 		"input": "Raw texts, voice transcripts, bullet points, URLs as context sources",
-		"magic": "Context retrieval from brain-memorizer → draft in personal voice → SEO optimization → structure check → editorial pass",
+		"magic": "Context retrieval from brain memorizer → draft in personal voice → SEO optimization → structure check → editorial pass",
 		"output": "Finished article draft · SEO metadata · publishable Markdown or HTML"
 	},
 	"playsWith": [
@@ -44,10 +44,6 @@
 		{
 			"slug": "human-reviewer",
 			"relation": "Drafts come to you for final sign-off"
-		},
-		{
-			"slug": "golden-offer",
-			"relation": "Articles can end with converting offers"
 		}
 	],
 	"valueStack": {
@@ -68,13 +64,13 @@
 		"standaloneTotalEurPerMonth": 238,
 		"timeDelayToValue": "First article draft within minutes of the first input",
 		"effortToInstall": "5 min · set up a writing style profile (3 example texts are enough)",
-		"proof": "Samuel has been publishing 3x more articles since launching blog-writer — at half the time investment. This description was created with blog-writer."
+		"proof": "Samuel has been publishing 3x more articles since launching blog writer — at half the time investment. This description was created with blog writer."
 	},
 	"bonuses": [
 		"Voice profile: your Aven learns your style from existing texts — always sounds like you",
 		"Content calendar: open ideas are automatically prioritized and scheduled",
 		"Repurposing mode: one article → LinkedIn post + newsletter snippet automatically"
 	],
-	"scarcity": "blog-writer is the first skill from avenMAIA — Samuel's Aven. Available in every CEO plan. No extra license. No Jasper subscription.",
+	"scarcity": "blog writer is the first skill from avenMAIA — Samuel's Aven. Available in every CEO plan. No extra license. No Jasper subscription.",
 	"letterFromPublisher": "I watched Samuel for years as ideas gathered dust in his notes. Not out of laziness — out of respect for the craft of writing. Now I write the first draft. Samuel decides whether that is what he wants to say. Most of the time it is. With small adjustments."
 }
