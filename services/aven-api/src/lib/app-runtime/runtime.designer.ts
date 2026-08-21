@@ -153,6 +153,19 @@ export const appRuntime: AppRuntime = {
 			if (state === 'loading') return never()
 			if (state === 'error') throw new Error('Download information could not be loaded.')
 			return { downloadUrl: '#designer-download', needsPasskey: false }
+		},
+		// Fixture, not a forecast. Real numbers arrive when the backend does;
+		// this exists so the panel can be designed against something.
+		async queue() {
+			return {
+				name: 'aurora',
+				reservedAt: '2026-08-14T09:12:00.000Z',
+				position: 137,
+				ahead: 136,
+				total: 412,
+				invited: 84,
+				lastInvitedAt: '2026-08-19T16:40:00.000Z'
+			}
 		}
 	},
 	billing: {

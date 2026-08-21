@@ -148,6 +148,12 @@ export const appRuntime: AppRuntime = {
 		}
 	},
 	dashboard: {
+		// TODO(backend): queue standing is not served yet — Daniel wires
+		// `names.invited_at` and the position query in a later pass. Returning
+		// null keeps the panel off rather than showing a number we invented.
+		async queue() {
+			return null
+		},
 		async load() {
 			const [status, meta] = await Promise.all([
 				api<PasskeyStatus>('/passkeys'),

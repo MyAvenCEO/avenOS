@@ -13,7 +13,7 @@ describe('functional web copy', () => {
 		expect(route('secure/+page.svelte')).toContain('Platz sichern')
 		expect(route('login/+page.svelte')).toContain('Mit Passkey anmelden')
 		expect(route('device/+page.svelte')).toContain('avenOS verbinden')
-		expect(route('passkey/create/+page.svelte')).toContain('Name des Passkeys')
+		expect(route('passkey/create/+page.svelte')).toContain('Passkey anlegen')
 		// The Firefox-on-Linux warning stays asserted; it is translated, not dropped.
 		expect(route('passkey/create/+page.svelte')).toContain(
 			'Firefox unter Linux hat keinen eingebauten Passkey‑Anbieter.'
