@@ -132,8 +132,8 @@ export const appRuntime: AppRuntime = {
 			const extensions = (
 				'webauthn' in result ? result.webauthn.clientExtensionResults : undefined
 			) as { prf?: { enabled?: boolean } } | undefined
-			const data = result?.data as Record<string, unknown> | undefined
-			const credentialReturned = typeof data?.id === 'string'
+			const credentialId = result.data?.credentialID
+			const credentialReturned = typeof credentialId === 'string'
 			const prfEnabled = extensions?.prf?.enabled === true
 			passkeyProcessTrace('Credential created and verified', {
 				platform,
@@ -150,7 +150,7 @@ export const appRuntime: AppRuntime = {
 				await api('/passkeys', {
 					method: 'POST',
 					body: JSON.stringify({
-						credentialId: credentialReturned ? data.id : undefined,
+						credentialId: credentialReturned ? credentialId : undefined,
 						prfEnabled
 					})
 				})
