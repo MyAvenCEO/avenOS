@@ -230,8 +230,8 @@
 	 * does that now, and being dark it reads as text without help. */
 	/* Row one — the cool half: the brand's own colours, deepest first. */
 	--color-marine: #1e293b; /* deep navy — the brand's ink and its fill */
-	--color-tidal-blue: #217e91; /* deep teal-blue — work in motion */
 	--color-anchor: #4a6e91; /* steel blue, off the violet side — everything held back */
+	--color-tidal-blue: #2489a0; /* teal-blue — work in motion */
 	--color-paradise-water: #449c94; /* turquoise — the bright note; settled work */
 	/* Row two — the warm half: the signals. */
 	--color-tuscan-sun: #d2a24a; /* clean gold — brighter and yellower than the old #a06818 */
@@ -297,8 +297,8 @@
 	 *
 	 *   ROLE             TONE            WHERE IT SPEAKS
 	 *   primary          marine          buttons, the rail, the HITL frame
-	 *   status-progress  tidal blue      in motion
 	 *   status-quiet     anchor          held back — every type badge
+	 *   status-progress  tidal blue      in motion
 	 *   status-success   paradise water  settled — the brand's bright note
 	 *   status-warning   tuscan sun      careful — but nothing is broken
 	 *   status-error     terracotta      something failed
@@ -311,13 +311,13 @@
 	 * replaced, whose ink had to be mixed halfway to black. It stays separate
 	 * from anchor: motion and stillness are different things to say, and the
 	 * two blues are far enough apart to say them. */
-	--color-status-progress: var(--color-tidal-blue);
-	--color-status-progress-foreground: var(--color-chalk);
-	--color-status-progress-ink: var(--color-tidal-blue);
-
 	--color-status-quiet: var(--color-anchor);
 	--color-status-quiet-foreground: var(--color-chalk);
 	--color-status-quiet-ink: color-mix(in oklab, var(--color-anchor) 82%, black);
+
+	--color-status-progress: var(--color-tidal-blue);
+	--color-status-progress-foreground: var(--color-chalk);
+	--color-status-progress-ink: var(--color-tidal-blue);
 
 	--color-status-success: var(--color-paradise-water);
 	--color-status-success-foreground: #fafaf9;
@@ -380,6 +380,16 @@
 @layer base {
 	html {
 		@apply scroll-smooth antialiased;
+		/* THE UI SCALE. The workspace used to sit inside `zoom: 0.85`, which
+		 * shrinks everything indiscriminately — a 4px border arrived as 3.53px,
+		 * hairlines landed off the pixel grid, and anything measured outside the
+		 * box had to be divided back out by hand.
+		 *
+		 * Scaling the root instead makes every rem-based size (Tailwind's whole
+		 * spacing and type scale) 85% by definition, while px values stay the
+		 * pixels they say they are: borders stay crisp, text is laid out at its
+		 * real size rather than resampled. One number, no compensation. */
+		font-size: 85%;
 	}
 
 	body {
