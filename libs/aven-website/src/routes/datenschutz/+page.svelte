@@ -17,9 +17,7 @@ import SiteFooter from '$lib/components/SiteFooter.svelte'
 	<section class="flex-1 px-5 py-16 sm:px-8 sm:py-20">
 		<div class="mx-auto max-w-2xl">
 			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Rechtliches</p>
-			<h1 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-				Datenschutzerklärung
-			</h1>
+			<h1 class="mt-3 text-2xl text-foreground sm:text-3xl">Datenschutzerklärung</h1>
 			<p class="mt-3 text-[15px] leading-relaxed text-foreground/68">
 				Wie wir mit deinen Daten umgehen.
 			</p>
