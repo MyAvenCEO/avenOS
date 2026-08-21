@@ -20,7 +20,9 @@ const chainLabels: Record<string, string> = {
 	'brain-memorizer': 'Gedächtnis',
 	'book-keeper': 'Buchhaltung',
 	'human-reviewer': 'HITL',
-	'blog-writer': 'Content'
+	'blog-writer': 'Content',
+	'calendar-organizer': 'Kalender',
+	'todo-shuffler': 'Aufgaben'
 }
 </script>
 

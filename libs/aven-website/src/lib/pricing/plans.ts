@@ -98,9 +98,12 @@ export const PLANS: Plan[] = [
 		features: [
 			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
 			{ skill: 'email-ingestor', label: 'E‑Mail‑Inbox' },
-			'POST‑Inbox — deine Papierpost digitalisiert (ohne Post‑Weiterleitung)',
+			'Digitaler Briefkasten — deine Papierpost digitalisiert (exkl. Nachsendeauftrag der Deutschen Post: 31,90 € / 6 Monate, inkl. USt.)',
 			{ skill: 'docs-organizer', label: 'Dokumentenverwaltung' },
-			'Dein Brain: Notizen, Kontakte, Kalender',
+			{ skill: 'brain-memorizer', label: 'Notizen, Kontakte, Beziehungen' },
+			{ skill: 'human-reviewer', label: 'Du entscheidest, wenn es zählt' },
+			{ skill: 'calendar-organizer', label: 'Dein Kalender denkt mit' },
+			{ skill: 'todo-shuffler', label: 'Deine Liste sortiert sich selbst' },
 			'Personal Spark'
 		]
 	},
@@ -121,6 +124,7 @@ export const PLANS: Plan[] = [
 			'Website',
 			'Stripe‑Shop',
 			'Blog',
+			'Digitaler Briefkasten für Geschäftskunden (exkl. Nachsendeauftrag der Deutschen Post: 51,90 € / 6 Monate, inkl. USt.)',
 			'Dein Aven und deine Produkte im aven Marketplace gelistet',
 			'Company Spark zusätzlich zu deinem Personal Spark'
 		]

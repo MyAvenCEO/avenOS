@@ -2,17 +2,21 @@ import { PLANS, type Plan, type PlanId, planIncludes } from '$lib/pricing/plans'
 import deBlogWriter from './content/de/blog-writer.json'
 import deBookKeeper from './content/de/book-keeper.json'
 import deBrainMemorizer from './content/de/brain-memorizer.json'
+import deCalendarOrganizer from './content/de/calendar-organizer.json'
 import deDocsOrganizer from './content/de/docs-organizer.json'
 // ── DE ────────────────────────────────────────────────────────────────────────
 import deEmailIngestor from './content/de/email-ingestor.json'
 import deHumanReviewer from './content/de/human-reviewer.json'
+import deTodoShuffler from './content/de/todo-shuffler.json'
 import enBlogWriter from './content/en/blog-writer.json'
 import enBookKeeper from './content/en/book-keeper.json'
 import enBrainMemorizer from './content/en/brain-memorizer.json'
+import enCalendarOrganizer from './content/en/calendar-organizer.json'
 import enDocsOrganizer from './content/en/docs-organizer.json'
 // ── EN (source of truth) ──────────────────────────────────────────────────────
 import enEmailIngestor from './content/en/email-ingestor.json'
 import enHumanReviewer from './content/en/human-reviewer.json'
+import enTodoShuffler from './content/en/todo-shuffler.json'
 import dePubAvenmaia from './publishers/de/avenmaia.json'
 import dePubAventin from './publishers/de/aventin.json'
 import enPubAvenmaia from './publishers/en/avenmaia.json'
@@ -35,6 +39,8 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		enBrainMemorizer,
 		enBookKeeper,
 		enHumanReviewer,
+		enCalendarOrganizer,
+		enTodoShuffler,
 		enBlogWriter
 	] as SkillJson[],
 	de: [
@@ -43,6 +49,8 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		deBrainMemorizer,
 		deBookKeeper,
 		deHumanReviewer,
+		deCalendarOrganizer,
+		deTodoShuffler,
 		deBlogWriter
 	] as SkillJson[]
 }
