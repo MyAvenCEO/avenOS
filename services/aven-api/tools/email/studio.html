@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<title>Aven email studio</title>
+		<style>
+		:root {
+			font-family:
+				Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			color: #111827;
+			background: #e5e7eb;
+		}
+		* {
+			box-sizing: border-box;
+		}
+		body {
+			margin: 0;
+			min-width: 980px;
+		}
+		button,
+		input,
+		select,
+		textarea {
+			font: inherit;
+		}
+		button,
+		select,
+		input {
+			height: 38px;
+			border-radius: 8px;
+			border: 1px solid #d1d5db;
+		}
+		button {
+			cursor: pointer;
+			padding: 0 14px;
+			background: white;
+			color: #111827;
+			font-weight: 600;
+		}
+		button:hover {
+			background: #f9fafb;
+		}
+		button:disabled {
+			cursor: wait;
+			opacity: 0.55;
+		}
+		button.primary {
+			border-color: #111827;
+			background: #111827;
+			color: white;
+		}
+		button.primary:hover {
+			background: #1f2937;
+		}
+		.topbar {
+			height: 64px;
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			padding: 0 18px;
+			background: white;
+			border-bottom: 1px solid #d1d5db;
+		}
+		.brand {
+			margin-right: 12px;
+			font-size: 17px;
+			font-weight: 750;
+			letter-spacing: -0.02em;
+		}
+		.topbar select {
+			min-width: 220px;
+			padding: 0 10px;
+			background: white;
+		}
+		.spacer {
+			flex: 1;
+		}
+		.status {
+			max-width: 420px;
+			overflow: hidden;
+			color: #6b7280;
+			font-size: 13px;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.status.error {
+			color: #b91c1c;
+		}
+		.workspace {
+			height: calc(100vh - 64px);
+			display: grid;
+			grid-template-columns: minmax(440px, 46%) 1fr;
+		}
+		.editor {
+			min-height: 0;
+			display: grid;
+			grid-template-rows: auto auto 1fr;
+			gap: 14px;
+			padding: 18px;
+			overflow: auto;
+			background: #f9fafb;
+			border-right: 1px solid #d1d5db;
+		}
+		.field {
+			display: grid;
+			gap: 6px;
+		}
+		.field label {
+			color: #4b5563;
+			font-size: 12px;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+		}
+		.field input {
+			width: 100%;
+			padding: 0 11px;
+			background: white;
+		}
+		textarea {
+			width: 100%;
+			resize: vertical;
+			border: 1px solid #d1d5db;
+			border-radius: 9px;
+			padding: 11px;
+			background: #111827;
+			color: #e5e7eb;
+			font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+			font-size: 13px;
+			line-height: 1.55;
+			tab-size: 2;
+		}
+		#fixture {
+			min-height: 130px;
+		}
+		.source-field {
+			min-height: 360px;
+			grid-template-rows: auto 1fr;
+		}
+		#source {
+			height: 100%;
+			min-height: 360px;
+			resize: none;
+		}
+		.preview {
+			min-width: 0;
+			min-height: 0;
+			display: grid;
+			grid-template-rows: 50px 1fr;
+			background: #d1d5db;
+		}
+		.previewbar {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 0 12px;
+			background: white;
+			border-bottom: 1px solid #d1d5db;
+		}
+		.previewbar button {
+			height: 32px;
+			padding: 0 10px;
+			font-size: 13px;
+		}
+		.previewbar button.active {
+			border-color: #111827;
+			background: #f3f4f6;
+		}
+		.subject-preview {
+			margin-left: 8px;
+			overflow: hidden;
+			color: #6b7280;
+			font-size: 13px;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.canvas {
+			min-height: 0;
+			display: grid;
+			place-items: start center;
+			padding: 24px;
+			overflow: auto;
+			transition: background 0.15s ease;
+		}
+		.canvas.dark {
+			background: #111827;
+		}
+		iframe {
+			width: min(100%, 720px);
+			height: calc(100vh - 138px);
+			border: 0;
+			border-radius: 10px;
+			background: white;
+			box-shadow: 0 12px 30px rgb(15 23 42 / 18%);
+		}
+		iframe.mobile {
+			width: 390px;
+		}
+		pre {
+			display: none;
+			width: min(100%, 720px);
+			min-height: calc(100vh - 138px);
+			margin: 0;
+			padding: 24px;
+			overflow: auto;
+			border-radius: 10px;
+			background: #111827;
+			color: #e5e7eb;
+			white-space: pre-wrap;
+		}
+		.canvas.plaintext iframe {
+			display: none;
+		}
+		.canvas.plaintext pre {
+			display: block;
+		}
+		.dirty::after {
+			content: " • unsaved";
+			color: #b45309;
+		}
+		</style>
+	</head>
+	<body>
+		<header class="topbar">
+			<div class="brand">Aven email studio</div>
+			<select id="template" aria-label="Email template"></select>
+			<div id="status" class="status">Loading templates…</div>
+			<div class="spacer"></div>
+			<button id="preview" type="button">Preview</button>
+			<button id="save" class="primary" type="button">Save and compile</button>
+		</header>
+		<main class="workspace">
+			<section class="editor">
+				<div class="field">
+					<label for="subject">Subject</label>
+					<input id="subject" autocomplete="off">
+				</div>
+				<div class="field">
+					<label for="fixture">Preview fixture (JSON)</label>
+					<textarea id="fixture" spellcheck="false"></textarea>
+				</div>
+				<div class="field source-field">
+					<label for="source">Maizzle Vue source</label>
+					<textarea id="source" spellcheck="false"></textarea>
+				</div>
+			</section>
+			<section class="preview">
+				<div class="previewbar">
+					<button id="html-tab" class="active" type="button">HTML</button>
+					<button id="text-tab" type="button">Plaintext</button>
+					<button id="desktop" class="active" type="button">Desktop</button>
+					<button id="mobile" type="button">Mobile</button>
+					<button id="dark" type="button">Dark canvas</button>
+					<div id="subject-preview" class="subject-preview"></div>
+				</div>
+				<div id="canvas" class="canvas">
+					<iframe id="frame" title="Email preview" sandbox="" referrerpolicy="no-referrer"></iframe>
+					<pre id="plaintext"></pre>
+				</div>
+			</section>
+		</main>
+		<script type="module">
+		const token = __EMAIL_STUDIO_TOKEN__
+		const elements = Object.fromEntries(
+			[
+				'template',
+				'status',
+				'preview',
+				'save',
+				'subject',
+				'fixture',
+				'source',
+				'canvas',
+				'frame',
+				'plaintext',
+				'subject-preview',
+				'html-tab',
+				'text-tab',
+				'desktop',
+				'mobile',
+				'dark'
+			].map((id) => [id, document.getElementById(id)])
+		)
+		let currentKey = ''
+		let dirty = false
+		let busy = false
+
+		function setStatus(message, error = false) {
+			elements.status.textContent = message
+			elements.status.className = `status${error ? ' error' : ''}${dirty ? ' dirty' : ''}`
+		}
+
+		function setBusy(value) {
+			busy = value
+			elements.preview.disabled = value
+			elements.save.disabled = value
+			elements.template.disabled = value
+		}
+
+		async function api(path, options = {}) {
+			const response = await fetch(path, {
+				...options,
+				headers: {
+					'content-type': 'application/json',
+					'x-email-studio-token': token,
+					...(options.headers || {})
+				}
+			})
+			const body = await response.json()
+			if (!response.ok) throw new Error(body.message || 'Request failed.')
+			return body
+		}
+
+		function metadata() {
+			return { subject: elements.subject.value, fixture: JSON.parse(elements.fixture.value) }
+		}
+
+		function payload() {
+			return JSON.stringify({
+				key: currentKey,
+				source: elements.source.value,
+				metadata: metadata()
+			})
+		}
+
+		async function renderPreview() {
+			if (busy) return
+			setBusy(true)
+			setStatus('Compiling preview…')
+			try {
+				const result = await api('/api/preview', { method: 'POST', body: payload() })
+				elements.frame.srcdoc = result.html
+				elements.plaintext.textContent = result.text
+				elements['subject-preview'].textContent = result.subject
+				setStatus(dirty ? 'Preview compiled' : 'Ready')
+			} catch (error) {
+				setStatus(error.message, true)
+			} finally {
+				setBusy(false)
+			}
+		}
+
+		async function save() {
+			if (busy) return
+			setBusy(true)
+			setStatus('Validating, saving and compiling…')
+			let saved = false
+			try {
+				await api('/api/save', { method: 'POST', body: payload() })
+				dirty = false
+				saved = true
+				setStatus('Saved; generated production templates are current')
+			} catch (error) {
+				setStatus(error.message, true)
+			} finally {
+				setBusy(false)
+			}
+			if (saved) await renderPreview()
+		}
+
+		async function loadTemplate(key) {
+			if (dirty && !confirm('Discard unsaved changes?')) {
+				elements.template.value = currentKey
+				return
+			}
+			setBusy(true)
+			try {
+				const template = await api(`/api/template?key=${encodeURIComponent(key)}`)
+				currentKey = template.key
+				elements.template.value = template.key
+				elements.subject.value = template.metadata.subject
+				elements.fixture.value = JSON.stringify(template.metadata.fixture, null, 2)
+				elements.source.value = template.source
+				dirty = false
+				setStatus('Ready')
+			} catch (error) {
+				setStatus(error.message, true)
+			} finally {
+				setBusy(false)
+			}
+			await renderPreview()
+		}
+
+		for (const input of [elements.subject, elements.fixture, elements.source]) {
+			input.addEventListener('input', () => {
+				dirty = true
+				setStatus('Changed')
+			})
+		}
+		elements.template.addEventListener('change', (event) => loadTemplate(event.currentTarget.value))
+		elements.preview.addEventListener('click', renderPreview)
+		elements.save.addEventListener('click', save)
+		elements['html-tab'].addEventListener('click', () => {
+			elements.canvas.classList.remove('plaintext')
+			elements['html-tab'].classList.add('active')
+			elements['text-tab'].classList.remove('active')
+		})
+		elements['text-tab'].addEventListener('click', () => {
+			elements.canvas.classList.add('plaintext')
+			elements['text-tab'].classList.add('active')
+			elements['html-tab'].classList.remove('active')
+		})
+		elements.desktop.addEventListener('click', () => {
+			elements.frame.classList.remove('mobile')
+			elements.desktop.classList.add('active')
+			elements.mobile.classList.remove('active')
+		})
+		elements.mobile.addEventListener('click', () => {
+			elements.frame.classList.add('mobile')
+			elements.mobile.classList.add('active')
+			elements.desktop.classList.remove('active')
+		})
+		elements.dark.addEventListener('click', () => {
+			elements.canvas.classList.toggle('dark')
+			elements.dark.classList.toggle('active')
+		})
+		window.addEventListener('beforeunload', (event) => {
+			if (dirty) event.preventDefault()
+		})
+		window.addEventListener('keydown', (event) => {
+			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+				event.preventDefault()
+				void save()
+			}
+		})
+
+		const listing = await api('/api/templates')
+		for (const template of listing.templates) {
+			const option = document.createElement('option')
+			option.value = template.key
+			option.textContent = `${template.label} · ${template.key}`
+			elements.template.append(option)
+		}
+		if (listing.templates.length) await loadTemplate(listing.templates[0].key)
+		</script>
+	</body>
+</html>

@@ -17,6 +17,8 @@ node_modules
 /build
 /ARCHIVE/*/build
 /app/build
+/services/aven-api/email-templates/.maizzle/
+/services/aven-api/email-templates/.maizzle-dist/
 
 # OS
 .DS_Store

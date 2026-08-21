@@ -9,6 +9,8 @@ bun run dev
 bun run dev:designer
 bun run check
 bun run test
+bun run email:studio
+bun run email:compile
 bun run db:migrate
 bun run worker:email
 bun run worker:environment
@@ -21,6 +23,39 @@ bun run environment:reconcile
 persistent page, state, and session switcher. Every visible state has a shareable
 `scenario` URL. `bun run build:designer` creates the equivalent designer build;
 `bun run preview:designer` rebuilds that variant before serving it locally.
+
+## Email templates
+
+Email source lives in `email-templates/` and is compiled with Maizzle. From the
+repository root, start the local editor with:
+
+```sh
+bun run email:studio
+```
+
+The same command also works from this service directory.
+
+See [email-templates/README.md](email-templates/README.md) for the complete
+editing workflow, template structure, placeholder contract, and instructions
+for adding new emails.
+
+Open the printed loopback URL. The editor provides HTML and plaintext previews,
+desktop and mobile widths, fixture data, subject editing, and the Maizzle Vue
+source. **Save and compile** validates the template, overwrites its `.vue` and
+`.json` source files, and regenerates
+`src/lib/server/email/templates.generated.ts`. Git remains the review and undo
+mechanism for every saved edit.
+
+Run `bun run email:preview` for Maizzle's own development preview, or
+`bun run email:compile` after editing source files directly. `bun run
+email:check` verifies that the committed generated file is current and is also
+part of the test command. Do not edit the generated TypeScript file by hand.
+
+Template metadata contains the subject and preview fixture. Fixture fields and
+`{{field}}` subject placeholders must match the typed contract in
+`src/lib/server/email/template-contract.ts`. Maizzle is only a development
+dependency: production sends the committed, precompiled HTML and plaintext and
+performs escaped token substitution at runtime.
 
 ## Local services
 
