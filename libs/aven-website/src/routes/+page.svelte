@@ -11,7 +11,7 @@ import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SkillMarketplaceCard from '$lib/components/SkillMarketplaceCard.svelte'
-import { plan, priceLabel } from '$lib/pricing/plans'
+import { plan, priceLabel, VAT_NOTE } from '$lib/pricing/plans'
 import { loadSkills } from '$lib/skills/loader'
 import danielPhoto from '../images/daniel.png'
 import samuelPhoto from '../images/samuel.jpg'
@@ -531,6 +531,7 @@ const roadmap = [
 						>mehr verdient, als die nächste Stufe kostet</strong
 					>.
 				</p>
+				<p class="mt-3 text-[12px] text-foreground/45">{VAT_NOTE}</p>
 			</div>
 
 			<ol class="relative mt-14">

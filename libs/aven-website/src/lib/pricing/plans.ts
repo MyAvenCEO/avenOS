@@ -146,10 +146,17 @@ export function priceLabel(p: Plan): string {
 	return p.billing === 'once' ? `${euro(p.eurPrice)} € einmalig` : `${euro(p.eurPrice)} €/Monat`
 }
 
-/** The word above the number on a plan card. */
+/**
+ * The word above the number on a plan card. Every price on the site is NET,
+ * so the label carries it — a VAT note that only exists as a footnote under
+ * the grid is a note half the readers never reach.
+ */
 export function billingLabel(p: Plan): string {
-	return p.billing === 'once' ? 'Einmalig' : 'Monatlich'
+	return p.billing === 'once' ? 'Einmalig · netto' : 'Monatlich · netto'
 }
+
+/** The one VAT sentence, spelled once. */
+export const VAT_NOTE = 'Alle Preise netto, zzgl. gesetzlicher Umsatzsteuer.'
 
 /** Book it, or apply for it — avenCOOP is a decision we make together. */
 export function ctaLabel(p: Plan): string {
