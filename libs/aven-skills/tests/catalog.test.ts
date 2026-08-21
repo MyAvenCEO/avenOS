@@ -89,10 +89,19 @@ describe('the app agrees with the catalog', () => {
 		const promisedButAbsent = CATALOG.filter((s) => !s.comingSoon && !built.has(s.id)).map(
 			(s) => s.id
 		)
-		// `human-reviewer` and `blog-writer` are sold but not skills in the app —
-		// the first is the HITL gate itself, the second has no runtime yet. They
-		// are named here rather than quietly excluded, so the day one is built
-		// this list is what tells us to shorten it.
-		expect(promisedButAbsent).toEqual(['human-reviewer', 'blog-writer'])
+		// Sold, with no workflow behind them yet. Named here rather than quietly
+		// excluded, so the day one is built this list is what tells us to shorten
+		// it — and so the length of it stays uncomfortable on purpose:
+		//
+		//   inbox-router      the triage entrance; the site sells it as live
+		//   human-reviewer    the HITL gate itself, not a skill in the registry
+		//   website-creator   built BY us today, not yet a workflow you run
+		//   checkout-builder  same — the avenID checkout exists, the skill does not
+		expect(promisedButAbsent).toEqual([
+			'inbox-router',
+			'human-reviewer',
+			'website-creator',
+			'checkout-builder'
+		])
 	})
 })
