@@ -146,11 +146,19 @@ Pane, brand-styled like Konto (porcelain cards, eyebrow labels):
 
 1. **Aktueller Plan** — tier name, net price + "zzgl. USt.", status chip,
    renewal date ("Verlängert sich am …" / "Endet am …" when cancel is
-   scheduled). No subscription → the three tiers from `/api/billing/me`'s
-   catalog block with "Jetzt abonnieren" → opens the checkout URL in the
-   system browser; the pane polls `/me` and flips when the webhook lands.
-2. **Plan ändern** — the other tier as up/downgrade card with price delta;
-   confirm dialog states the proration; pending state until the webhook.
+   scheduled).
+2. **Plan wählen / Plan ändern — the in-app pricing UI.** The avenME and
+   avenCEO tiers rendered as brand pricing cards side by side (name, role
+   line, net price + "zzgl. USt.", the headline features from `PLANS` —
+   the same SSOT the website renders), with the current tier marked
+   "Dein Plan". With no subscription both carry "Jetzt abonnieren" →
+   checkout in the system browser, pane polls `/me` and flips when the
+   webhook lands. With one active, the other card becomes "Upgrade" /
+   "Wechseln" with the price delta; the confirm dialog states the
+   proration ("Differenz wird sofort berechnet" up; down per Creem's
+   semantics) and the pane shows a pending state until the webhook.
+   avenCOOP appears as a card too, but "Bewerben"-only, linking out —
+   never a self-serve checkout.
 3. **Kündigen / Fortsetzen** — one obvious button (Kündigungsbutton law:
    as easy to cancel as to subscribe), default period-end, confirm dialog
    states the end date; a scheduled cancel shows "Fortsetzen".
@@ -212,8 +220,8 @@ seat counts, any admin or reporting surface, payment-method management UI
 - [ ] `grep -rn "requireUser" services/aven-api/src/routes/api/billing/`
       shows every handler; no handler reads a user/customer/subscription id
       from the request.
-- [ ] Screenshots of the Abrechnung pane (no-sub, active, cancel-scheduled)
-      in the Progress log.
+- [ ] Screenshots of the Abrechnung pane (no-sub with pricing cards,
+      active with upgrade card, cancel-scheduled) in the Progress log.
 - [ ] Sandbox smoke pasted: subscribe → webhook → active pane → cancel →
       "Endet am …".
 
@@ -229,6 +237,10 @@ grep -rn "requireUser" services/aven-api/src/routes/api/billing/
 
 ## Progress log
 
+- 2026-08-21 (later) — Sharpened on Samuel's follow-up: the upgrade view
+  is a full in-app pricing UI — tier cards from the PLANS SSOT with the
+  current plan marked, upgrade/switch with price delta and proration
+  dialog, avenCOOP shown apply-only. Not just a button.
 - 2026-08-21 — Discovered with Samuel: real goal = billing runs itself
   (zero manual Creem-dashboard work for routine cases). Decisions: fully
   native portal (no hosted-portal link), auto-seed products from plans.ts
