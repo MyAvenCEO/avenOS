@@ -40,6 +40,18 @@ export interface HeldMessage {
 	detail: string
 	/** The intent this gate belongs to; absent = it belongs to the conversation. */
 	context?: string
+	/**
+	 * The thing being decided, carried WITH the gate so the human sees it
+	 * where they answer — a draft's text, a payment's figures, a proposed
+	 * classification. Data only: the bar renders title/body/rows generically,
+	 * never anything domain-shaped.
+	 */
+	preview?: {
+		kind: string
+		title: string
+		body?: string
+		rows?: { label: string; value: string }[]
+	}
 }
 
 export class MessageBus {

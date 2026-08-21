@@ -364,36 +364,74 @@ function onKeydown(event: KeyboardEvent) {
 		<!-- THE human gate, universal: every held message — a destructive tool
 	     call, a drafted bridge — surfaces HERE, above the voice pill, and
 	     resolves only by a physical button press. Voice cannot confirm. -->
-		<!-- THE human gate, inverted like the voice pill itself: the same dark
-	     marine surface, full main width, the question centred on top and the
-	     two physical buttons centred underneath. -->
+		<!-- THE human gate: an eggshell card ringed in marine, carrying the thing
+	     being decided (draft, figures, proposal) right where it is answered —
+	     and a marine footer bar for the two physical buttons, Confirm right. -->
 		{#each hitlQueue.items.filter((h) =>
-		shell.tab === 'intents' && (h.context ? !talk.open && talk.intentContext === h.context : talk.open)
+		shell.tab === 'intents' &&
+		(h.context ? !talk.open && talk.intentContext === h.context : talk.open)
 	) as held (held.id)}
 			<div
-				class="mx-auto mb-2 flex min-h-36 w-full max-w-[calc(100%-37.5rem)] flex-col items-center justify-between gap-4 rounded-2xl bg-primary px-6 py-5 text-primary-foreground shadow-[0_4px_16px_rgba(30,41,59,0.15)]"
+				class="mx-auto mb-2 w-full max-w-[calc(100%-37.5rem)] overflow-hidden rounded-2xl border-[3px] border-primary bg-[#fffdf7] shadow-[0_4px_16px_rgba(30,41,59,0.12)]"
 			>
-				<div class="min-w-0 text-center">
-					<p class="font-medium text-base">{held.label}</p>
-					<p class="pt-1 font-mono text-[0.6875rem] text-primary-foreground/50">
-						{held.actor}
-						· {held.method} · {held.detail}
-					</p>
+				<div class="px-5 pt-4 pb-3">
+					<div class="flex items-baseline gap-2">
+						{#if held.preview}
+							<span
+								class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[0.5625rem] text-primary uppercase tracking-wide"
+							>
+								{held.preview.kind}
+							</span>
+						{/if}
+						<p class="min-w-0 flex-1 font-medium text-sm">{held.label}</p>
+						<span class="shrink-0 font-mono text-[0.625rem] text-foreground/40">
+							{held.actor}
+							· {held.method}
+						</span>
+					</div>
+
+					{#if held.preview}
+						<p class="pt-2 font-medium text-foreground/70 text-xs">{held.preview.title}</p>
+						{#if held.preview.body}
+							<!-- the artifact itself, quoted -->
+							<p
+								class="mt-2 rounded-xl border border-border bg-surface-card px-4 py-3 text-foreground/75 text-xs leading-relaxed"
+							>
+								{held.preview.body}
+							</p>
+						{/if}
+						{#if held.preview.rows}
+							<dl class="mt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+								{#each held.preview.rows as row (row.label)}
+									<div
+										class="flex items-baseline justify-between gap-3 border-border/60 border-b py-1"
+									>
+										<dt class="text-[0.6875rem] text-foreground/45">{row.label}</dt>
+										<dd class="truncate font-medium text-xs">{row.value}</dd>
+									</div>
+								{/each}
+							</dl>
+						{/if}
+					{:else}
+						<p class="pt-1 font-mono text-[0.6875rem] text-foreground/45">{held.detail}</p>
+					{/if}
 				</div>
-				<div class="flex items-center gap-3">
-					<button
-						type="button"
-						onclick={() => confirmHeld(held.id)}
-						class="rounded-full bg-primary-foreground px-6 py-2 font-medium text-primary text-sm transition-opacity hover:opacity-90"
-					>
-						Confirm
-					</button>
+
+				<!-- the footer: the only place the gate opens -->
+				<div class="flex items-center justify-end gap-3 bg-primary px-5 py-3">
 					<button
 						type="button"
 						onclick={() => rejectHeld(held.id)}
-						class="rounded-full border border-primary-foreground/30 px-6 py-2 font-medium text-primary-foreground/70 text-sm transition-colors hover:bg-primary-foreground/10"
+						class="rounded-full border border-primary-foreground/30 px-5 py-1.5 font-medium text-primary-foreground/70 text-sm transition-colors hover:bg-primary-foreground/10"
 					>
 						Reject
+					</button>
+					<button
+						type="button"
+						onclick={() => confirmHeld(held.id)}
+						class="rounded-full bg-primary-foreground px-6 py-1.5 font-medium text-primary text-sm transition-opacity hover:opacity-90"
+					>
+						Confirm
 					</button>
 				</div>
 			</div>
