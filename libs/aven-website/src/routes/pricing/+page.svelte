@@ -10,7 +10,16 @@
 import { page } from '$app/stores'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
-import { billingLabel, ctaHref, ctaLabel, euro, PLANS, plan, VAT_NOTE } from '$lib/pricing/plans'
+import {
+	billingLabel,
+	ctaHref,
+	ctaLabel,
+	euro,
+	PLANS,
+	plan,
+	totalSharePct,
+	VAT_NOTE
+} from '$lib/pricing/plans'
 import { skillsIncludedIn } from '$lib/skills/loader'
 
 const openSourceGithubHref = 'https://github.com/jaensen/avenOS'
@@ -42,6 +51,11 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 					führt deine Firma, und mit
 					<strong class="font-medium text-foreground/85">avenCOOP</strong>
 					werden wir dein technischer Co‑Founder. Jede Stufe enthält alles aus der darunter.
+				</p>
+				<p class="mx-auto mt-4 max-w-xl text-[14px] leading-snug text-foreground/55">
+					Der Anteil am Umsatz ist zur Hälfte Plattform und zur Hälfte
+					<strong class="font-medium text-accent-ink">Reinvest</strong>: Er kauft dir Anteile an den
+					avenCOOPs anderer Gründer — du wählst selbst, an welchen.
 				</p>
 			</div>
 
@@ -135,11 +149,11 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
 									{billingLabel(p)}
 								</p>
-								{#if p.revenueSharePct > 0}
+								{#if totalSharePct(p) > 0}
 									<p
 										class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45"
 									>
-										Umsatzbeteiligung
+										Vom Umsatz
 									</p>
 								{/if}
 							</div>
@@ -149,26 +163,34 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 										/Monat</span
 									>
 								</p>
-								{#if p.revenueSharePct > 0}
+								{#if totalSharePct(p) > 0}
 									<p class="text-xl font-semibold tabular-nums tracking-tight text-accent-ink">
-										+{p.revenueSharePct}&nbsp;%
+										{totalSharePct(p)}&nbsp;%
 									</p>
 								{/if}
 							</div>
-							{#if p.revenueShareNote}
-								<p class="mt-1.5 text-right text-[11px] leading-snug text-foreground/50">
-									{p.revenueShareNote}
-								</p>
+							{#if totalSharePct(p) > 0}
+								<!-- The split is the whole point: half is a price, half buys you shares. -->
+								<dl class="mt-3 space-y-1 text-[11px] leading-snug">
+									<div class="flex items-baseline justify-between gap-3">
+										<dt class="text-foreground/55">
+											{p.platformFeePct}&nbsp;% Plattform
+											<span class="text-foreground/40">· inkl. Stripe &amp; Co.</span>
+										</dt>
+									</div>
+									<div class="flex items-baseline justify-between gap-3">
+										<dt class="font-medium text-accent-ink">
+											{p.reinvestPct}&nbsp;% Reinvest
+											<span class="font-normal text-foreground/55">
+												· in avenCOOPs anderer Gründer, die Anteile bleiben deine</span
+											>
+										</dt>
+									</div>
+								</dl>
 							{/if}
 							{#if p.equitySharePct}
-								<p class="mt-2 text-right text-[12px] font-medium text-foreground/70">
-									+{p.equitySharePct}&nbsp;% Firmenanteile
-								</p>
-							{/if}
-							{#if p.reciprocalSharePct}
-								<p class="text-right text-[12px] font-medium text-accent-ink">
-									…und {p.reciprocalSharePct.toLocaleString('de-DE')}&nbsp;% der avenCEO GmbH für
-									dich
+								<p class="mt-3 text-[12px] font-medium text-foreground/70">
+									+&nbsp;{p.equitySharePct}&nbsp;% Firmenanteile an deiner Firma
 								</p>
 							{/if}
 						</div>
