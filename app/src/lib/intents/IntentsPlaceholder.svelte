@@ -1462,9 +1462,15 @@ const DOT: Record<string, string> = {
 		     inside the log made it read as one more log entry. -->
 		<!-- Flush against the log, which loses its bottom corners for as long as a
 		     gate is there: the log reads as running on BEHIND the decision rather
-		     than stopping short of it. -->
+		     than stopping short of it.
+		     The wrapper carries the log's own surface DOWN past the gate and closes
+		     the panel underneath it, so the gate's rounded corners sit on that white
+		     instead of cutting notches of page eggshell into it. One panel, one
+		     bottom edge. -->
 		{#each gates as held (held.id)}
-			<div class="-mt-2">
+			<div
+				class="-mt-2 rounded-b-2xl border border-foreground/5 border-t-0 bg-surface-raised pb-2 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
 				<GatePreview {held} />
 			</div>
 		{/each}
