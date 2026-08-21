@@ -11,8 +11,8 @@ let { skill, variant = 'default' }: Props = $props()
 
 const cardClass =
 	variant === 'spotlight'
-		? 'group flex min-w-0 flex-col rounded-2xl border-2 border-tuscan-sun/35 bg-linear-to-br from-white/90 via-white/72 to-white/58 p-6 ring-1 ring-tuscan-sun/15 shadow-[0_14px_40px_-24px_rgb(0_0_0/0.35)] transition-all hover:border-tuscan-sun/55 hover:shadow-[0_18px_44px_-22px_rgb(0_0_0/0.4)] sm:p-7'
-		: 'group flex min-w-0 flex-col rounded-2xl border border-border/40 bg-white/55 p-5 ring-1 ring-black/5 transition-all hover:border-border/70 hover:bg-white/70 hover:shadow-[0_8px_28px_-12px_rgb(0_0_0/0.22)] sm:p-6'
+		? 'group flex min-w-0 flex-col rounded-2xl border-2 border-accent/35 bg-surface-raised p-6 ring-1 ring-accent/15 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:border-accent/55  sm:p-7'
+		: 'group flex min-w-0 flex-col rounded-2xl border border-border/40 bg-surface-raised p-5 transition-all hover:border-border/70 hover:bg-surface-soft  sm:p-6'
 
 const chainLabels: Record<string, string> = {
 	'email-ingestor': 'E‑Mail',
@@ -31,17 +31,17 @@ const chainLabels: Record<string, string> = {
 	aria-label={`${skill.slug} — ${skill.oneLineCopy}`}
 >
 	<div class="flex items-start justify-between gap-3">
-		<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+		<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
 			{skill.publisher.displayName}
 		</p>
 		<span
-			class="inline-flex items-center rounded-full border border-tuscan-sun/40 bg-tuscan-sun/20 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-tuscan-sun"
+			class="inline-flex items-center rounded-full border border-accent/40 bg-accent/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-accent-ink"
 		>
 			Skill
 		</span>
 	</div>
 
-	<h3 class="mt-3 font-mono text-[15px] font-bold tracking-[0.06em] text-foreground sm:text-[16px]">
+	<h3 class="mt-3 text-[15px] font-bold tracking-[0.06em] text-foreground sm:text-[16px]">
 		{skill.slug}
 	</h3>
 
@@ -49,7 +49,7 @@ const chainLabels: Record<string, string> = {
 		{skill.oneLineCopy}
 	</p>
 
-	<p class="mt-3 font-serif text-[13px] italic leading-snug text-foreground/58 sm:text-[14px]">
+	<p class="mt-3 text-[13px] italic leading-snug text-foreground/58 sm:text-[14px]">
 		"{skill.founderScenario.timestamp}
 		— {skill.founderScenario.story.slice(0, 100)}&hellip;"
 	</p>
@@ -57,7 +57,7 @@ const chainLabels: Record<string, string> = {
 	<div class="mt-4 flex flex-wrap gap-1.5">
 		{#each skill.playsWith as { slug } (slug)}
 			<span
-				class="inline-flex items-center rounded-full border border-border/40 bg-background/70 px-2 py-0.5 font-mono text-[9px] font-semibold text-foreground/50"
+				class="inline-flex items-center rounded-full border border-border/40 bg-background/70 px-2 py-0.5 text-[9px] font-semibold text-foreground/50"
 			>
 				→ {chainLabels[slug] ?? slug}
 			</span>
@@ -66,13 +66,13 @@ const chainLabels: Record<string, string> = {
 
 	<div class="mt-5 flex items-center justify-between border-t border-border/30 pt-4">
 		<div>
-			<p class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-tuscan-sun">
+			<p class="text-[9px] font-bold uppercase tracking-[0.2em] text-accent-ink">
 				{skill.hero.promiseHoursPerWeek}
 				gespart
 			</p>
 		</div>
 		<span
-			class="font-mono text-[12px] font-semibold text-foreground/55 transition-colors group-hover:text-foreground/80"
+			class="text-[12px] font-semibold text-foreground/55 transition-colors group-hover:text-foreground/80"
 		>
 			Skill ansehen →
 		</span>
