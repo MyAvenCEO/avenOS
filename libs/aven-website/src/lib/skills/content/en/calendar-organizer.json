@@ -33,13 +33,13 @@
 		"On real conflicts it asks you; everything else it sorts quietly"
 	],
 	"whatMechanics": {
-		"input": "Calendar feeds, invites from email ingestor, tasks from todo shuffler, contacts from brain memorizer",
+		"input": "Calendar feeds, invites from email manager, tasks from todo shuffler, contacts from brain memorizer",
 		"magic": "Travel-time estimation → buffer and prep rules → conflict detection → focus-block protection → propose, never overrule",
 		"output": "A day that adds up · proposals for incoming requests · defended focus blocks"
 	},
 	"playsWith": [
 		{
-			"slug": "email-ingestor",
+			"slug": "email-manager",
 			"relation": "Invites from mail land in the right slot"
 		},
 		{

@@ -1,7 +1,7 @@
 import type { PlanId } from '$lib/pricing/plans'
 
 export type AvenosSkillSlug =
-	| 'email-ingestor'
+	| 'email-manager'
 	| 'calendar-organizer'
 	| 'todo-shuffler'
 	| 'docs-organizer'

@@ -33,13 +33,13 @@
 		"Bei echten Konflikten fragt er dich; alles andere sortiert er still"
 	],
 	"whatMechanics": {
-		"input": "Kalender‑Feeds, Termin‑Einladungen aus email ingestor, Aufgaben aus todo shuffler, Kontakte aus brain memorizer",
+		"input": "Kalender‑Feeds, Termin‑Einladungen aus email manager, Aufgaben aus todo shuffler, Kontakte aus brain memorizer",
 		"magic": "Reisezeit‑Schätzung → Puffer‑ und Vorbereitungsregeln → Konflikt‑Erkennung → Schutz der Fokusblöcke → Vorschlag statt Alleingang",
 		"output": "Ein Tag, der aufgeht · Vorschläge für Terminanfragen · verteidigte Fokusblöcke"
 	},
 	"playsWith": [
 		{
-			"slug": "email-ingestor",
+			"slug": "email-manager",
 			"relation": "Termin‑Einladungen aus Mails landen direkt im richtigen Slot"
 		},
 		{

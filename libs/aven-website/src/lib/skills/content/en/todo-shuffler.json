@@ -33,7 +33,7 @@
 		"You get the next three things, not the whole wall"
 	],
 	"whatMechanics": {
-		"input": "Tasks from email ingestor, docs organizer and whatever you hand your Aven",
+		"input": "Tasks from email manager, docs organizer and whatever you hand your Aven",
 		"magic": "Effort estimation → deadlines and dependencies → available time from the calendar → continuous re-ranking",
 		"output": "A daily list that fits the day · the rest, ordered and not forgotten"
 	},
@@ -43,7 +43,7 @@
 			"relation": "Whatever is due today gets a real block in the calendar"
 		},
 		{
-			"slug": "email-ingestor",
+			"slug": "email-manager",
 			"relation": "Mails become tasks without you retyping them"
 		},
 		{
