@@ -62,9 +62,8 @@ export const PLANS: Plan[] = [
 		billing: 'once',
 		revenueSharePct: 0,
 		features: [
-			'Dein avenID‑Name — einmalig vergeben und für dich reserviert',
+			'Dein avenID‑Name — für 1 Jahr für dich gesichert',
 			'Dein Platz auf der Warteliste',
-			'Zugang zum Open‑Source‑Code von avenOS',
 			'20 Min Test‑Zugang — sobald du eingeladen bist'
 		]
 	},
