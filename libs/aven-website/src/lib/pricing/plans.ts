@@ -84,7 +84,7 @@ export const PLANS: Plan[] = [
 		id: 'avenid',
 		name: 'avenID',
 		role: 'Dein Name — der Anfang von allem',
-		eurPrice: 30,
+		eurPrice: 25,
 		billing: 'once',
 		platformFeePct: 0,
 		reinvestPct: 0,
@@ -215,7 +215,7 @@ export const VAT_NOTE = 'Alle Preise verstehen sich zzgl. der gesetzlichen Umsat
 /** Book it, or apply for it — avenCOOP is a decision we make together. */
 export function ctaLabel(p: Plan): string {
 	if (p.applyOnly) return 'Bewerben'
-	return p.id === 'avenid' ? 'avenID sichern' : 'Buchen'
+	return p.id === 'avenid' ? 'avenID sichern' : 'Jetzt reservieren'
 }
 
 export function ctaHref(p: Plan): string {
