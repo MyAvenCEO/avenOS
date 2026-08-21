@@ -2,12 +2,10 @@
 import AvenUiView from '$lib/actors/AvenUiView.svelte'
 import { bus } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
-import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
 import { isWindow } from '$lib/actors/window.actor.svelte'
-import { gateAnswers, runQuery } from './answer'
-import GatePreview from './GatePreview.svelte'
+import { runQuery } from './answer'
 import { query } from './query.svelte'
 
 /**
@@ -17,25 +15,16 @@ import { query } from './query.svelte'
  * and a standalone gate card, which were four places for one idea.
  *
  * Two bands, top to bottom (never side by side): answers above, conversation
- * below. The voice pill stays outside and beneath — it is how you speak, not
- * something the system said.
+ * below. The voice pill stays outside and beneath, and ABOVE the scrim — it is
+ * how you speak, so it must never be behind the thing it is speaking to.
  */
 
 const chat = chatActor.core
 const listener = listenerActor.core
 
-/**
- * The answers on screen: gates first — they block — then what was asked for.
- *
- * A gate scopes to the intent it belongs to; one raised without a context is
- * global and always shows. This is the rule `talk.intentContext` used to hold,
- * and it lives here now because the surface that displays a gate is the only
- * thing that knows what it is currently about.
- */
-const gates = $derived(
-	hitlQueue.items.filter((h) => h.context === undefined || h.context === query.intent)
-)
-const answers = $derived([...gateAnswers(gates), ...runQuery(query.text, { intent: query.intent })])
+/** What was asked for. Human gates are NOT here — they keep their own place
+ * above the voice pill, where they cannot be dismissed by closing a search. */
+const answers = $derived(runQuery(query.text, { intent: query.intent }))
 
 /** How a row draws itself. A map, not a branch: adding a shape is adding a key,
  * and the engine that produced the row never learns what any of them mean. */
@@ -65,11 +54,13 @@ function windowFor(key: string) {
 		type="button"
 		aria-label="Schließen"
 		onclick={() => query.close()}
-		class="absolute inset-0 z-30 cursor-default bg-marine/25 backdrop-blur-[2px]"
+		class="fixed inset-0 z-30 cursor-default bg-marine/25 backdrop-blur-[2px]"
 	></button>
 
+	<!-- It takes every pixel above the dock, capped so it never becomes the whole
+	     screen: a fixed 82vh plus the dock clearance overflowed off the top. -->
 	<div
-		class="-translate-x-1/2 absolute bottom-2 left-1/2 z-40 flex max-h-[78vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-surface-raised shadow-[0_12px_40px_rgba(30,41,59,0.22)]"
+		class="-translate-x-1/2 absolute bottom-2 left-1/2 z-40 flex h-[calc(100dvh-var(--dock-h,0px)-1.5rem)] max-h-[82vh] w-[min(72rem,94%)] max-w-none flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-surface-raised shadow-[0_12px_40px_rgba(30,41,59,0.22)]"
 		style="margin-bottom: var(--dock-h, 0px)"
 	>
 		<!-- ── Band 1: the answers ── -->
@@ -83,9 +74,7 @@ function windowFor(key: string) {
 			{/if}
 
 			{#each answers as answer (answer.kind + answer.id)}
-				{#if answer.kind === 'gate'}
-					<GatePreview held={answer.held} />
-				{:else if answer.kind === 'rows'}
+				{#if answer.kind === 'rows'}
 					<div>
 						<p
 							class="px-2 pb-1 font-mono text-[0.5625rem] text-foreground/35 uppercase tracking-wide"
@@ -137,7 +126,7 @@ function windowFor(key: string) {
 		<!-- ── Band 2: the conversation, under the answers ── -->
 		{#if chat.turns.length > 0 || listener.partial !== ''}
 			<div
-				class="max-h-52 shrink-0 overflow-y-auto border-foreground/10 border-t bg-surface-soft px-3 py-2.5"
+				class="max-h-[38%] shrink-0 overflow-y-auto border-foreground/10 border-t bg-surface-soft px-3 py-2.5"
 			>
 				<div class="flex flex-col gap-1.5">
 					{#each chat.turns as turn (turn.id)}
