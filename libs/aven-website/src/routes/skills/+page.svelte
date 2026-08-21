@@ -33,6 +33,10 @@ const visibleSkills = $derived(skills.filter((s) => planIncludes(selected, s.pla
 const visibleByPlan = $derived(
 	byPlan.filter((g) => planIncludes(selected, g.plan.id) && g.skills.length > 0)
 )
+const selectedPlan = $derived(PLANS.find((p) => p.id === selected) ?? PLANS[0])
+/** What this plan brings itself, versus what it inherits from below it. */
+const ownCount = $derived(visibleSkills.filter((s) => s.plan === selected).length)
+const inheritedCount = $derived(visibleSkills.length - ownCount)
 
 const chainSteps = [
 	{ slug: 'email-manager', label: 'E‑Mail', description: 'Liest & klassifiziert' },
@@ -136,6 +140,18 @@ const chainSteps = [
 			</aside>
 
 			<div class="min-w-0 flex-1 space-y-12">
+				{#if visibleByPlan.length > 1}
+					<p
+						class="rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-[13px] leading-snug text-foreground/75"
+					>
+						<strong class="font-semibold text-foreground">{selectedPlan.name}</strong>
+						enthält alle {visibleSkills.length} Skills — die
+						{inheritedCount}
+						aus den Stufen darunter genauso wie die
+						{ownCount}
+						eigenen.
+					</p>
+				{/if}
 				{#each visibleByPlan as group (group.plan.id)}
 					<div>
 						<div
