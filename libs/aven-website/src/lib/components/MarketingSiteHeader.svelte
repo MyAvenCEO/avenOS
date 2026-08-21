@@ -1,4 +1,6 @@
 <script lang="ts">
+import { idFunnelHref } from '$lib/id-service'
+
 type NavActive = 'skills' | 'pricing'
 
 let {
@@ -30,7 +32,7 @@ function linkCls(isActive: boolean) {
 			<a href="/skills" class={linkCls(active === 'skills')}>Skills</a>
 			<a href="/pricing" class={linkCls(active === 'pricing')}>Preise</a>
 			<a
-				href="/waitlist"
+				href={idFunnelHref()}
 				class="rounded-full bg-primary px-4 py-1.5 normal-case font-semibold text-primary-foreground transition-opacity hover:opacity-90"
 			>
 				Sichere dir deinen Aven

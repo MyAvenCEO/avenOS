@@ -1,4 +1,6 @@
 <script lang="ts">
+import { idFunnelHref } from '$lib/id-service'
+
 /**
  * THE footer, on every page. It carries the two things a German site owes a
  * visitor — the legal pages and a way back into the site — instead of the
@@ -14,7 +16,7 @@ const legal = [
 const nav = [
 	{ href: '/skills', label: 'Skills' },
 	{ href: '/pricing', label: 'Preise' },
-	{ href: '/waitlist', label: 'Sichere dir deinen Aven' }
+	{ href: idFunnelHref(), label: 'Sichere dir deinen Aven' }
 ]
 
 const year = 2026

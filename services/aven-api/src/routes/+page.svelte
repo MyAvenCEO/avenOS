@@ -2,6 +2,7 @@
 import { appRuntime } from 'virtual:aven-app-runtime'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
+import { greetingFor, tierFrom } from '$lib/tiers.js'
 import type { NameAvailability } from '$lib/types.js'
 
 const initial = appRuntime.initial.nameSearch(page.url)
@@ -23,8 +24,16 @@ async function check() {
 	}
 }
 
+// The tier rides along the whole way: it is how we know which button sent
+// someone here, and it is what the hold records.
+const tier = $derived(tierFrom(page.url))
+const greeting = $derived(greetingFor(tier))
+
 function continueToCheckout() {
-	if (result) void goto(`/secure?name=${encodeURIComponent(result.name)}`)
+	if (!result) return
+	const query = new URLSearchParams({ name: result.name })
+	if (tier) query.set('tier', tier)
+	void goto(`/secure?${query}`)
 }
 </script>
 
@@ -32,7 +41,17 @@ function continueToCheckout() {
 <section class="panel auth">
 	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
 	<h1>Sichere dir deine avenID</h1>
-	<p>Wie eine Domain — aber für deinen Aven. Jeden Namen gibt es genau einmal.</p>
+	{#if greeting}
+		<p class="eyebrow">Warteliste · {greeting.name}</p>
+		<p>{greeting.lead}</p>
+	{:else}
+		<p>Wie eine Domain — aber für deinen Aven. Jeden Namen gibt es genau einmal.</p>
+	{/if}
+	<p class="fine">
+		Wir sind noch in der Early Alpha — avenMAIA und avenTIN laufen gerade auf uns selbst: echte
+		Posteingänge, echte Dokumente, echter Alltag. Wir schleifen, bis wir sagen können: das gibt dir
+		nachweislich Zeit zurück.
+	</p>
 	<form onsubmit={(event) => { event.preventDefault(); void check(); }}>
 		<label
 			>Dein Name<input

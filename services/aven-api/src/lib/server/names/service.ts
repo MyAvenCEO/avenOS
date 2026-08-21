@@ -10,7 +10,7 @@
 // before payment is reachable. Refunds revoke AND lock the name.
 import { randomUUID } from 'node:crypto'
 import type pg from 'pg'
-import type { NameAvailability, NameHoldResult } from '$lib/types.js'
+import type { HoldOrigin, NameAvailability, NameHoldResult } from '$lib/types.js'
 import { normalizeName, validateName } from '$lib/validation.js'
 import { writeAudit } from '../audit.js'
 import type { PaymentEvent, PaymentProvider } from '../billing/provider.js'
@@ -132,7 +132,7 @@ export class NameService {
 	// reserved yet — the click is both the email confirmation and the start of
 	// the short reservation window. Re-requesting rotates the token (the latest
 	// email wins).
-	async secure(raw: string, email: string): Promise<NameHoldResult> {
+	async secure(raw: string, email: string, origin: HoldOrigin = {}): Promise<NameHoldResult> {
 		const name = normalizeName(raw)
 		const check = await this.availability(name)
 		if (!check.available && check.reason !== 'NAME_HELD')
@@ -155,8 +155,19 @@ export class NameService {
 			await this.lockName(client, name)
 			const rotated = (
 				await client.query(
-					'UPDATE name_holds SET claim_token_hash=$1 WHERE name=$2 AND lower(email)=lower($3) AND expires_at >= now() RETURNING expires_at',
-					[sha256Hex(token), name, email]
+					`UPDATE name_holds SET claim_token_hash=$1,
+					   tier = COALESCE(NULLIF($4, ''), tier),
+					   salutation = COALESCE(NULLIF($5, ''), salutation),
+					   idea = COALESCE(NULLIF($6, ''), idea)
+					 WHERE name=$2 AND lower(email)=lower($3) AND expires_at >= now() RETURNING expires_at`,
+					[
+						sha256Hex(token),
+						name,
+						email,
+						origin.tier ?? '',
+						origin.salutation ?? '',
+						origin.idea ?? ''
+					]
 				)
 			).rows[0] as { expires_at: Date } | undefined
 			let expiresAt = rotated?.expires_at
@@ -164,10 +175,23 @@ export class NameService {
 				expiresAt = new Date(Date.now() + this.config.NAME_HOLD_TTL_HOURS * 3_600_000)
 				const holdId = randomUUID()
 				await client.query(
-					'INSERT INTO name_holds (id,name,email,claim_token_hash,created_at,expires_at) VALUES ($1,$2,$3,$4,now(),$5)',
-					[holdId, name, email, sha256Hex(token), expiresAt]
+					`INSERT INTO name_holds (id,name,email,claim_token_hash,created_at,expires_at,tier,salutation,idea)
+					 VALUES ($1,$2,$3,$4,now(),$5,$6,$7,$8)`,
+					[
+						holdId,
+						name,
+						email,
+						sha256Hex(token),
+						expiresAt,
+						origin.tier ?? '',
+						origin.salutation ?? '',
+						origin.idea ?? ''
+					]
 				)
-				await writeAudit(client, { eventType: 'name.requested', metadata: { name, holdId } })
+				await writeAudit(client, {
+					eventType: 'name.requested',
+					metadata: { name, holdId, tier: origin.tier ?? '' }
+				})
 			}
 			await this.notifier.namePurchaseLink(client, {
 				email,

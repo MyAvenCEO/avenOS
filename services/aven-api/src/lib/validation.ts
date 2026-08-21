@@ -55,7 +55,13 @@ export function validateName(value: string): 'NAME_INVALID' | 'NAME_RESERVED' | 
 
 export const secureNameSchema = z.object({
 	name: z.string().trim().toLowerCase().min(3).max(32),
-	email: emailAddress
+	email: emailAddress,
+	// Where they came from and what they told us. Optional so an older client
+	// (or a direct API call) still holds a name without them; bounded so the
+	// free-text field cannot be used as storage.
+	tier: z.enum(['avenid', 'avenme', 'avenceo', 'avencoop']).optional(),
+	salutation: z.string().trim().max(120).optional(),
+	idea: z.string().trim().max(2000).optional()
 })
 
 export function sanitizeError(value: unknown): string {
