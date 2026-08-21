@@ -277,16 +277,17 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		</div>
 	</section>
 
-	<!-- From I to We. This is the big one: the revenue share is not a price,
-	     it is an investment engine, and the section has to say so plainly or
-	     the number on the pricing page reads as a tax. -->
+	<!-- From I to We — the VISION beat, not the pricing page. A first-time
+	     reader has never heard the word avenCOOP; explaining reinvest splits
+	     and syndicate lists here answered a question nobody had yet. The
+	     mechanics live on /pricing, where someone is actually asking. -->
 	<section
 		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
 		aria-labelledby="collective-heading"
 	>
 		<div class="mx-auto max-w-3xl text-center">
 			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-				Von Ich zu Wir · avenCOOP
+				Von Ich zu Wir · Die Bewegung
 			</p>
 			<h2
 				id="collective-heading"
@@ -304,24 +305,19 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/68 sm:text-base"
 			>
 				<p class="text-pretty">
-					Deshalb ist der Anteil an deinem Umsatz kein Preis, sondern ein
-					<strong class="font-medium text-foreground/88">Reinvest</strong>. Ein Teil trägt die
-					Plattform — Zahlungsgebühren inklusive. Der andere fließt als Investment in die avenCOOPs
-					anderer Gründer, und die Anteile, die er kauft,
-					<strong class="font-medium text-foreground/88">gehören dir</strong>.
+					Stell dir vor, was passiert, wenn eine Million Menschen aufhören, ihre Zeit zu verkaufen,
+					und anfangen zu bauen, woran sie glauben — und einander daran beteiligen. Jeder mit seiner
+					eigenen Firma. Keiner mehr Angestellter im Leben eines Konzerns.
 				</p>
 				<p class="text-pretty">
-					Du wählst selbst, in wen. Wir führen dein Syndikat über
-					<strong class="font-medium text-foreground/88">beel</strong>
-					— und stehen mit unserer eigenen avenCEO GmbH auf derselben Liste wie alle anderen.
+					Das ist die Welt, an die wir glauben:
+					<strong class="font-medium text-foreground/88"
+						>Solarpunk‑Utopie statt Cyberpunk‑Dystopie</strong
+					>. Sie entsteht nicht dadurch, dass die Technologie besser wird — sondern nur, wenn die
+					neuen Werkzeuge jedem Einzelnen wirklich gehören.
 				</p>
 				<p class="text-pretty">
-					Ab da arbeitet der Zinseszins für dich: Jedes Mal, wenn irgendwo in diesem Netz jemand
-					gewinnt, wächst dein Portfolio mit. Aus einem Asset werden zehn, ohne dass du eine einzige
-					Stunde mehr verkaufst.
-				</p>
-				<p class="text-pretty">
-					Keine Plattform, die zwischen euch steht und Miete nimmt.
+					Keine Plattform, die dazwischen steht und Miete nimmt.
 					<strong class="font-medium text-foreground/85"
 						>Uns gehört, was wir gemeinsam bauen.</strong
 					>
@@ -333,7 +329,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					href="/pricing#avencoop"
 					class="inline-flex min-h-11 items-center justify-center rounded-full border border-primary/45 px-8 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
 				>
-					avenCOOP ansehen →
+					Wie wir mitbauen: avenCOOP →
 				</a>
 			</p>
 		</div>
