@@ -230,9 +230,9 @@
 	 * does that now, and being dark it reads as text without help. */
 	/* Row one — the cool half: the brand's own colours, deepest first. */
 	--color-marine: #1e293b; /* deep navy — the brand's ink and its fill */
-	--color-tidal-blue: #1b6d7f; /* deep teal-blue — work in motion */
-	--color-harbour: #5b6f8b; /* steel blue — everything held back */
-	--color-paradise-water: #3d8b84; /* turquoise — the bright note; settled work */
+	--color-tidal-blue: #217e91; /* deep teal-blue — work in motion */
+	--color-harbour: #4a6e91; /* steel blue, off the violet side — everything held back */
+	--color-paradise-water: #449c94; /* turquoise — the bright note; settled work */
 	/* Row two — the warm half: the signals. */
 	--color-tuscan-sun: #d2a24a; /* clean gold — brighter and yellower than the old #a06818 */
 	--color-terracotta: #c15b40; /* burnt orange — the failure tone */
@@ -356,7 +356,9 @@
 	 *   waiting   status-info      open human gate — your turn
 	 *   working   status-progress  in motion
 	 *   done      status-success   settled
-	 *   archive   status-quiet     filed away */
+	 *
+	 * Archive has no entry: the archived section is folded away and dimmed,
+	 * which says it better than a colour nobody looks at. */
 	--color-state-error: var(--color-status-error);
 	--color-state-error-ink: var(--color-status-error-ink);
 	--color-state-waiting: var(--color-status-info);
@@ -365,8 +367,6 @@
 	--color-state-working-ink: var(--color-status-progress-ink);
 	--color-state-done: var(--color-status-success);
 	--color-state-done-ink: var(--color-status-success-ink);
-	--color-state-archive: var(--color-status-quiet);
-	--color-state-archive-ink: var(--color-status-quiet-ink);
 
 	--radius-lg: 1rem;
 	--radius-xl: 1.5rem;
