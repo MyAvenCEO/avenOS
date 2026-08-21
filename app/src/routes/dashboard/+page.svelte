@@ -10,7 +10,7 @@ import { registryTick } from '$lib/actors/reactivity.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import { windowsBound } from '$lib/actors/windows'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
-import { talk } from '$lib/intents/talk.svelte'
+import { shell, talk } from '$lib/intents/talk.svelte'
 import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
 
 /**
@@ -32,13 +32,10 @@ const chat = chatActor.core
 const listener = listenerActor.core
 
 /**
- * Which surface fills the middle of the screen. Views are exactly that in
- * the actor world: renderings over actor state, owning nothing — the work
- * items view is the first. Actors is the registry itself; Chat is how work
- * gets asked for. The view is the default because the workspace is the
- * point.
+ * Which surface fills the middle of the screen — driven by the left rail
+ * now that the tab bar is gone: the intents workspace, or the skills
+ * platform. One store, so the rail and the shell never disagree.
  */
-let tab = $state<'skills' | 'intents'>('intents')
 
 /**
  * Voice is the default, except where there is no voice.
@@ -115,7 +112,7 @@ $effect(() => {
 $effect(() => {
 	if (chat.turns.length > 0) {
 		talk.open = true
-		tab = 'intents'
+		shell.tab = 'intents'
 	}
 })
 
@@ -255,33 +252,14 @@ function onKeydown(event: KeyboardEvent) {
 	class="relative mx-auto flex min-h-0 min-w-0 w-full max-w-none flex-1 flex-col gap-2 p-2"
 	style="--dock-h: {dockH + 16}px"
 >
-	<header class="flex flex-col items-center">
-		<!-- Compact tabs, centred: the workspace, the registry, the conversation. -->
-		<nav class="flex gap-0.5 rounded-full border border-border p-0.5 text-xs">
-			{#each [{ id: 'intents' as const, label: 'Intents' }, { id: 'skills' as const, label: 'Skills' }] as t (t.id)}
-				<button
-					type="button"
-					onclick={() => {
-						tab = t.id
-					}}
-					class="rounded-full px-3 py-1 transition-colors {tab === t.id
-						? 'bg-primary text-primary-foreground'
-						: 'opacity-60 hover:opacity-100'}"
-				>
-					{t.label}
-				</button>
-			{/each}
-		</nav>
-	</header>
-
-	{#if tab === 'intents'}
+	{#if shell.tab === 'intents'}
 		<!-- The intents workspace fills everything between the tabs and the
 		     HITL bar — the wrapper carries the flex-1 so the three columns
 		     stretch to the full available height. -->
 		<div class="flex min-h-0 w-full flex-1">
 			<IntentsPlaceholder />
 		</div>
-	{:else if tab === 'skills'}
+	{:else if shell.tab === 'skills'}
 		<!-- The skills platform: a skill is a collection of composable
 		     workflows; the canvas draws them n8n-style, every wire derived. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
@@ -390,7 +368,7 @@ function onKeydown(event: KeyboardEvent) {
 	     marine surface, full main width, the question centred on top and the
 	     two physical buttons centred underneath. -->
 		{#each hitlQueue.items.filter((h) =>
-		tab === 'intents' && (h.context ? !talk.open && talk.intentContext === h.context : talk.open)
+		shell.tab === 'intents' && (h.context ? !talk.open && talk.intentContext === h.context : talk.open)
 	) as held (held.id)}
 			<div
 				class="mx-auto mb-2 flex min-h-36 w-full max-w-[calc(100%-37.5rem)] flex-col items-center justify-between gap-4 rounded-2xl bg-primary px-6 py-5 text-primary-foreground shadow-[0_4px_16px_rgba(30,41,59,0.15)]"

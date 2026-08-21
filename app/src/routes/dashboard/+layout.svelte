@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { Snippet } from 'svelte'
 import { SPARKS, todoActor } from '$lib/actors/todo.svelte'
-import { talk } from '$lib/intents/talk.svelte'
+import { shell, talk } from '$lib/intents/talk.svelte'
 
 /**
  * The dashboard shell: the spark rail on the left, the route's surface on the
@@ -21,6 +21,7 @@ const { children }: { children: Snippet } = $props()
 			type="button"
 			onclick={() => {
 				talk.open = true
+				shell.tab = 'intents'
 			}}
 			title="Talk to MAIA"
 			aria-label="Talk to MAIA"
@@ -36,7 +37,7 @@ const { children }: { children: Snippet } = $props()
 		<!-- a quiet line between the chat context and the spark contexts -->
 		<div class="h-px w-8 shrink-0 bg-border"></div>
 		{#each SPARKS as spark (spark.id)}
-			{@const active = todoActor.state.active === spark.id && !talk.open}
+			{@const active = todoActor.state.active === spark.id && !talk.open && shell.tab === 'intents'}
 			<button
 				type="button"
 				onclick={() => {
@@ -44,6 +45,7 @@ const { children }: { children: Snippet } = $props()
 					// through the SHOW event, the same door the voice tool uses.
 					// Picking a spark leaves the chat context.
 					talk.open = false
+					shell.tab = 'intents'
 					void todoActor.applyEvent({ send: 'SHOW', payload: { spark: spark.id } })
 				}}
 				title={spark.name}
@@ -62,11 +64,39 @@ const { children }: { children: Snippet } = $props()
 		<!-- The rail's foot: settings, below the contexts. The way "back" went
 		     with the game — the dashboard is the root now; there is nothing
 		     behind it. -->
+		<!-- The skills platform lives in the rail too — a surface, not a tab. -->
+		<button
+			type="button"
+			onclick={() => {
+				shell.tab = shell.tab === 'skills' ? 'intents' : 'skills'
+			}}
+			title="Skills"
+			aria-label="Skills"
+			class="mt-auto flex size-11 items-center justify-center transition-all {shell.tab === 'skills'
+				? 'rounded-2xl bg-primary text-primary-foreground'
+				: 'rounded-full border border-border bg-surface-card opacity-60 hover:rounded-2xl hover:opacity-100'}"
+		>
+			<!-- three linked nodes: the flow canvas, in miniature -->
+			<svg
+				viewBox="0 0 24 24"
+				class="size-4"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<circle cx="5" cy="12" r="2.5" />
+				<circle cx="19" cy="6" r="2.5" />
+				<circle cx="19" cy="18" r="2.5" />
+				<path d="M7.2 10.8 16.8 7.2M7.2 13.2l9.6 3.6" />
+			</svg>
+		</button>
 		<a
 			href="/dashboard/settings"
 			title="Einstellungen"
 			aria-label="Einstellungen"
-			class="mt-auto flex size-11 items-center justify-center rounded-full border border-border bg-surface-card opacity-60 transition-all hover:rounded-2xl hover:opacity-100"
+			class="flex size-11 items-center justify-center rounded-full border border-border bg-surface-card opacity-60 transition-all hover:rounded-2xl hover:opacity-100"
 		>
 			<!-- gear -->
 			<svg
