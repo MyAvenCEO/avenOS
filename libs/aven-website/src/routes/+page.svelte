@@ -41,32 +41,26 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<span class="mt-1 block">in dir steckt so viel mehr, als Zeit gegen Geld zu tauschen.</span>
 			</h1>
 			<div class="mx-auto mt-8 max-w-2xl">
-				<p class="text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[22px]">
-					Ein Aven ist eine KI, die dir gehört.
+				<p
+					class="text-pretty text-[19px] font-semibold leading-snug text-accent-ink sm:text-[22px]"
+				>
+					Wir sind da, um dich endlich in dein Gründerleben zu katapultieren.
 				</p>
 				<p
-					class="mx-auto mt-4 max-w-xl text-pretty text-[15px] leading-relaxed text-foreground/68 sm:text-base"
+					class="mx-auto mt-5 max-w-xl text-pretty text-[16px] leading-relaxed text-foreground/72 sm:text-[17px]"
 				>
-					Deiner sortiert deine Post, führt deine Bücher und baut deine Firma mit — während du
-					einfach dein Leben lebst.
-				</p>
-				<p
-					class="mx-auto mt-6 max-w-xl text-pretty text-[17px] font-medium leading-snug text-foreground/85 sm:text-[19px]"
-				>
-					So werden aus einer Gehaltsabrechnung
-					<strong class="font-semibold text-foreground">10+ Assets, die dir gehören</strong>.
-				</p>
-				<p
-					class="mx-auto mt-3 max-w-xl text-pretty text-[17px] font-semibold leading-snug text-accent-ink sm:text-[19px]"
-				>
-					Wir sind da, um dich in dein Gründerleben zu katapultieren!
+					Ein Asset. Dann zehn. Dann ein Portfolio, das sich verzinst und weiterwächst, während du
+					schläfst — weil Ownership für uns keine Marketing‑Vokabel ist, sondern das Einzige, was in
+					dieser neuen Welt wirklich trägt.
 				</p>
 			</div>
 		</div>
 	</section>
 
-	<!-- Personal first: the transformation the reader can feel THIS week. The
-	     civilizational arc only earns attention after the day-sized promise. -->
+	<!-- ONE section between the hero and the Spark thesis: the day-sized change,
+	     what an Aven actually is, and the thesis that ties them together. The
+	     separate "Vision" block said the same thing a second time, one level of
+	     abstraction higher, and the page was better without it. -->
 	<section
 		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
 		aria-labelledby="personal-heading"
@@ -87,11 +81,16 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				am Monatsende übrig bleibt, hat jemand anderes festgelegt.
 			</p>
 
-			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-				Mit deinem Aven fängt es klein an, und es fängt sofort an: Die Post ist sortiert, bevor du
-				aufstehst. Die Rechnung ist vorbereitet, bevor du sie suchst. Der Papierkram, der dich seit
-				Monaten anschweigt, ist erledigt, während du an dem arbeitest, wofür du eigentlich
-				angetreten bist.
+			<p
+				class="mt-7 text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[21px]"
+			>
+				Ein Aven ist eine KI, die dir gehört.
+			</p>
+
+			<p class="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
+				Deiner sortiert deine Post, bevor du aufstehst. Bereitet die Rechnung vor, bevor du sie
+				suchst. Erledigt den Papierkram, der dich seit Monaten anschweigt — während du an dem
+				arbeitest, wofür du eigentlich angetreten bist.
 			</p>
 
 			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
@@ -100,44 +99,15 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				deine Stunde ist das Asset. Du bist es.
 			</p>
 
-			<p class="mt-8 text-[16px] font-medium text-foreground/90 sm:text-[17px]">
-				<strong class="font-semibold text-foreground"
-					>Wir schieben dich in dein volles Potenzial — Schritt für Schritt, ab dieser Woche.</strong
-				>
-			</p>
-		</div>
-	</section>
-
-	<!-- Vision: the grand arc — survival mode to abundance, solarpunk over cyberpunk. -->
-	<section
-		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
-		aria-labelledby="vision-heading"
-	>
-		<div class="mx-auto max-w-2xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-				Vision · Von dir zu uns allen
-			</p>
 			<p
-				id="vision-heading"
-				class="mt-6 text-[1.35rem] font-light leading-snug text-pretty text-foreground sm:text-[1.6rem]"
+				class="mx-auto mt-8 max-w-xl border-t border-border/40 pt-7 text-[17px] font-medium leading-snug text-foreground/90 sm:text-[18px]"
 			>
-				Und was bei dir anfängt, hört bei dir nicht auf.
-			</p>
-			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-				Du spürst es: Die Welt verändert sich schneller als in jedem Moment der Geschichte — und
-				genau deshalb ist jetzt die beste Zeit, am Leben zu sein.
-			</p>
-			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-				Wir können unsere Zivilisation endlich vom Überlebensmodus in die Fülle führen —
-				<strong class="font-medium text-foreground/85"
-					>Solarpunk‑Utopie statt Cyberpunk‑Dystopie</strong
-				>
-				— jedoch nur, wenn die neuen Werkzeuge jedem Einzelnen wirklich gehören.
-			</p>
-			<p class="mt-5 text-[16px] font-medium text-foreground/90 sm:text-[17px]">
 				<strong class="font-semibold text-foreground"
 					>Ownership — statt Zeit gegen Geld — ist die einzige Lösung.</strong
 				>
+				<span class="mt-2 block text-[15px] font-normal text-foreground/68 sm:text-base">
+					Wir schieben dich Schritt für Schritt hinein, ab dieser Woche.
+				</span>
 			</p>
 		</div>
 	</section>
