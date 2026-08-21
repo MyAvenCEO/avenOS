@@ -300,9 +300,9 @@ function onKeydown(event: KeyboardEvent) {
 					>
 						<span
 							class="w-3 shrink-0 text-center font-mono"
-							class:text-status-success={entry.kind === 'done' || entry.kind === 'created'}
+							class:text-success={entry.kind === 'done' || entry.kind === 'created'}
 							class:text-status-working={entry.kind === 'doing'}
-							class:text-status-error={entry.kind === 'deleted' || entry.kind === 'failed'}
+							class:text-error={entry.kind === 'deleted' || entry.kind === 'failed'}
 							class:opacity-30={entry.kind === 'read' ||
 						entry.kind === 'reopened' ||
 						entry.kind === 'renamed'}
@@ -334,7 +334,7 @@ function onKeydown(event: KeyboardEvent) {
 	     the next successful turn clears it. -->
 		{#if chat.failure || speaker.failure || listener.failure}
 			<div
-				class="mx-auto mb-2 flex w-full max-w-2xl items-start gap-3 rounded-2xl border border-status-error/40 bg-status-error-muted px-4 py-2.5 text-status-error-strong shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
+				class="mx-auto mb-2 flex w-full max-w-2xl items-start gap-3 rounded-2xl border border-error/40 bg-error-muted px-4 py-2.5 text-error-strong shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
 			>
 				<span class="shrink-0 pt-0.5 font-mono text-sm">✗</span>
 				<p class="min-w-0 flex-1 text-sm leading-snug">
@@ -345,7 +345,7 @@ function onKeydown(event: KeyboardEvent) {
 					onclick={dismissError}
 					title="Dismiss"
 					aria-label="Dismiss error"
-					class="-mr-1 shrink-0 rounded-full p-1 transition-colors hover:bg-status-error/15"
+					class="-mr-1 shrink-0 rounded-full p-1 transition-colors hover:bg-error/15"
 				>
 					<svg
 						viewBox="0 0 24 24"
@@ -502,8 +502,8 @@ function onKeydown(event: KeyboardEvent) {
 									>
 										<span
 											class="font-mono text-[0.625rem] {item.struck
-											? 'text-state-error-ink'
-											: 'text-state-done-ink'}"
+											? 'text-error-ink'
+											: 'text-success-ink'}"
 										>
 											{item.struck ? '✕' : '✓'}
 										</span>
@@ -677,8 +677,8 @@ function onKeydown(event: KeyboardEvent) {
 				     input is visible as a dot that never moves. -->
 					<span
 						class="inline-block size-2 shrink-0 rounded-full transition-transform"
-						class:bg-status-error={phase.key === 'hearing' || phase.key === 'idle'}
-						class:bg-status-success={phase.key === 'speaking'}
+						class:bg-error={phase.key === 'hearing' || phase.key === 'idle'}
+						class:bg-success={phase.key === 'speaking'}
 						class:bg-status-working={phase.key === 'thinking' ||
 						phase.key === 'loading' ||
 						phase.key === 'starting'}
@@ -733,7 +733,7 @@ function onKeydown(event: KeyboardEvent) {
 						}}
 							title="Stop"
 							aria-label="Stop"
-							class="shrink-0 rounded-full bg-status-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
+							class="shrink-0 rounded-full bg-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
 						>
 							<svg viewBox="0 0 24 24" class="size-4" fill="currentColor">
 								<rect x="7" y="7" width="10" height="10" rx="1.5" />
@@ -753,7 +753,7 @@ function onKeydown(event: KeyboardEvent) {
 						onclick={endConversation}
 						title="End conversation"
 						aria-label="End conversation"
-						class="shrink-0 rounded-full bg-status-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
+						class="shrink-0 rounded-full bg-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
 					>
 						<!-- hang-up: the handset rotated OFF the hook — disconnect, not dial -->
 						<svg
