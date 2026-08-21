@@ -15,7 +15,7 @@
     },
     "app": {
       "name": "@AvenOS/app",
-      "version": "26.8.21-next.4",
+      "version": "26.8.21-next.5",
       "dependencies": {
         "@avenos/aven-skills": "workspace:*",
         "@avenos/aven-ui": "workspace:*",
@@ -50,7 +50,7 @@
     },
     "libs/aven-board": {
       "name": "@avenos/aven-board",
-      "version": "26.8.21-next.4",
+      "version": "26.8.21-next.5",
       "dependencies": {
         "dompurify": "^3",
         "github-slugger": "^2",
@@ -67,7 +67,7 @@
     },
     "libs/aven-ui": {
       "name": "@avenos/aven-ui",
-      "version": "26.8.21-next.4",
+      "version": "26.8.21-next.5",
       "dependencies": {
         "dompurify": "^3.3.3",
         "marked": "^15.0.12",
@@ -75,7 +75,7 @@
     },
     "libs/aven-website": {
       "name": "@avenos/aven-website",
-      "version": "26.8.21-next.4",
+      "version": "26.8.21-next.5",
       "dependencies": {
         "@avenos/aven-skills": "workspace:*",
       },

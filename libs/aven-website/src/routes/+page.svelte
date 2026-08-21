@@ -47,8 +47,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				>
 					Wir sind da, um dich endlich in dein
 					<strong class="font-medium text-accent">souveränes Gründerleben</strong>
-					zu katapultieren, von dem du schon immer träumst. Gemeinsam zu bauen, woran wir wirklich
-					glauben, ist die Zukunft, die uns alle glücklich macht.
+					zu katapultieren, von dem du schon immer träumst.
 				</p>
 			</div>
 		</div>
