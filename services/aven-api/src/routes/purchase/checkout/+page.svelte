@@ -73,19 +73,8 @@ onMount(() => {
 <svelte:head><title>Checkout</title></svelte:head>
 
 <section class="checkout-page">
-	<aside class="checkout-summary">
-		<h1>Checkout</h1>
-		<dl>
-			<div>
-				<dt>Name</dt>
-				<dd>{data.name}</dd>
-			</div>
-			<div>
-				<dt>Price</dt>
-				<dd>{data.priceEur} €</dd>
-			</div>
-		</dl>
-	</aside>
+	<!-- Which name is being paid for — the one fact the Creem embed cannot show. -->
+	<p class="checkout-subject"><span>Du sicherst</span> {data.name}.aven.ceo</p>
 
 	<div class="checkout-container">
 		{#if fakeParams}
@@ -114,36 +103,27 @@ onMount(() => {
 </section>
 
 <style>
+/* One centred column: the Creem embed is the page. */
 .checkout-page {
 	display: grid;
-	grid-template-columns: minmax(14rem, 20rem) minmax(24rem, 36rem);
-	align-items: start;
+	grid-template-columns: minmax(0, 40rem);
 	justify-content: center;
 	gap: 1rem;
 }
-.checkout-summary,
-.checkout-container {
-	padding: 1rem;
-	background: #fff;
-	border: 1px solid #ccc;
-}
-.checkout-summary h1 {
-	margin-bottom: 1rem;
-}
-dl {
+.checkout-subject {
 	margin: 0;
+	font-size: 0.9375rem;
+	text-align: center;
 }
-dl div {
-	display: flex;
-	justify-content: space-between;
-	gap: 1rem;
-	padding-block: 0.5rem;
-}
-dd {
-	margin: 0;
+.checkout-subject span {
+	color: var(--quiet);
 }
 .checkout-container {
 	min-height: 36rem;
+	padding: 1rem;
+	border: 1px solid var(--border-soft);
+	border-radius: 1.5rem;
+	background: var(--porcelain);
 }
 .checkout-container iframe {
 	display: block;
@@ -166,9 +146,6 @@ dd {
 	width: 100%;
 }
 @media (max-width: 900px) {
-	.checkout-page {
-		grid-template-columns: minmax(0, 36rem);
-	}
 	.checkout-container {
 		min-height: 0;
 	}
