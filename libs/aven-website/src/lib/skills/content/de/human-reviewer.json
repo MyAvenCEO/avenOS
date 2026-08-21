@@ -9,9 +9,9 @@
 	"plan": "avenme",
 	"oneLineCopy": "Du entscheidest. Nur dann, wenn du wirklich musst.",
 	"hero": {
-		"kicker": "Skill · avenTIN · human-reviewer",
+		"kicker": "Skill · avenTIN · human reviewer",
 		"headlineMain": "Dein Aven fragt dich. Aber nur, wenn er muss.",
-		"headlineSerifLead": "Kein Skill trifft Entscheidungen, für die ein Mensch verantwortlich ist. human-reviewer ist der Kanal zwischen deinem Aven‑Stack und dir.",
+		"headlineSerifLead": "Kein Skill trifft Entscheidungen, für die ein Mensch verantwortlich ist. human reviewer ist der Kanal zwischen deinem Aven‑Stack und dir.",
 		"promiseHoursPerWeek": "2 Std/Woche"
 	},
 	"founderScenario": {
@@ -27,7 +27,7 @@
 	],
 	"howSteps": [
 		"Ein anderer Skill erkennt eine Situation, die menschliches Urteilsvermögen braucht",
-		"human-reviewer bündelt die Anfrage mit vollem Kontext und stellt sie dir vor",
+		"human reviewer bündelt die Anfrage mit vollem Kontext und stellt sie dir vor",
 		"Du beantwortest mit einem Klick — oder gibst eine kurze Erklärung wenn nötig",
 		"Das Ergebnis geht zurück an den ursprünglichen Skill, der Prozess läuft weiter"
 	],
@@ -42,7 +42,7 @@
 			"relation": "Unklare Mail‑Intentionen werden eskaliert"
 		},
 		{
-			"slug": "document-extractor",
+			"slug": "docs-organizer",
 			"relation": "Unleserliche Dokumente kommen zur Prüfung"
 		},
 		{
@@ -71,7 +71,7 @@
 		],
 		"standaloneTotalEurPerMonth": 199,
 		"timeDelayToValue": "Erste Eskalation sofort nach Aktivierung eines anderen Skills",
-		"effortToInstall": "Null Setup — human-reviewer ist immer aktiv wenn ein anderer Skill ihn braucht",
+		"effortToInstall": "Null Setup — human reviewer ist immer aktiv wenn ein anderer Skill ihn braucht",
 		"proof": "Daniels Aven eskaliert durchschnittlich 3–4 Entscheidungen pro Tag. Jede dauert unter 30 Sekunden. Keine wurde vergessen."
 	},
 	"bonuses": [
@@ -79,6 +79,6 @@
 		"Priorisierungs‑Queue: Entscheidungen mit Fristen kommen immer zuerst",
 		"Entscheidungs‑Log: jede Bestätigung wird protokolliert — Revisionen jederzeit möglich"
 	],
-	"scarcity": "human-reviewer ist der Anker des gesamten Stacks. Er ist in jedem CEO‑Plan enthalten — weil Automatisierung ohne menschliche Kontrolle kein Produkt ist, das wir bauen wollen.",
-	"letterFromPublisher": "Ich habe human-reviewer nicht gebaut, weil ich Daniel nicht traue. Ich habe ihn gebaut, weil ich mir selbst nicht zu 100 % traue. Es gibt Entscheidungen, die einen Menschen brauchen. Ich weiss, welche das sind. Und ich unterbreche Daniel nur für diese."
+	"scarcity": "human reviewer ist der Anker des gesamten Stacks. Er ist in jedem CEO‑Plan enthalten — weil Automatisierung ohne menschliche Kontrolle kein Produkt ist, das wir bauen wollen.",
+	"letterFromPublisher": "Ich habe human reviewer nicht gebaut, weil ich Daniel nicht traue. Ich habe ihn gebaut, weil ich mir selbst nicht zu 100 % traue. Es gibt Entscheidungen, die einen Menschen brauchen. Ich weiss, welche das sind. Und ich unterbreche Daniel nur für diese."
 }

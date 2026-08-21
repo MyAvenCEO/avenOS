@@ -9,7 +9,7 @@
 	"plan": "avenme",
 	"oneLineCopy": "Kein Geld-Mail geht mehr verloren — ever.",
 	"hero": {
-		"kicker": "Skill · avenTIN · email-ingestor",
+		"kicker": "Skill · avenTIN · email ingestor",
 		"headlineMain": "Dein Posteingang. Endlich unter Kontrolle.",
 		"headlineSerifLead": "Jede Mail an deine avenCEO‑Adresse wird von deinem Aven verstanden, eingeordnet und — wenn nötig — direkt zu dir weitergeleitet.",
 		"promiseHoursPerWeek": "6+ Std/Woche"
@@ -38,7 +38,7 @@
 	},
 	"playsWith": [
 		{
-			"slug": "document-extractor",
+			"slug": "docs-organizer",
 			"relation": "Anhänge (PDFs, Rechnungen) werden direkt übergeben"
 		},
 		{

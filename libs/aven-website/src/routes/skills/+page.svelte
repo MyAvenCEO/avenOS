@@ -36,7 +36,7 @@ const visibleByPlan = $derived(
 
 const chainSteps = [
 	{ slug: 'email-ingestor', label: 'E‑Mail', description: 'Liest & klassifiziert' },
-	{ slug: 'document-extractor', label: 'Dokumente', description: 'OCR & Extraktion' },
+	{ slug: 'docs-organizer', label: 'Dokumente', description: 'OCR & Extraktion' },
 	{ slug: 'brain-memorizer', label: 'Gedächtnis', description: 'Identität & Kontext' },
 	{ slug: 'book-keeper', label: 'Buchhaltung', description: 'Matching & Buchung' }
 ]
