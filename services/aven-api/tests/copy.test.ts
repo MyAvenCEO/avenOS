@@ -6,13 +6,15 @@ const route = (path: string) =>
 	readFileSync(resolve(import.meta.dirname, '../src/routes', path), 'utf8')
 
 describe('functional web copy', () => {
+	// The point of this test is that every page still NAMES its action rather
+	// than gesturing at it. The strings are German now; the rule is unchanged.
 	it('keeps the retained actions explicit', () => {
-		expect(route('+page.svelte')).toContain('<h1>Check name</h1>')
+		expect(route('+page.svelte')).toContain('Verfügbarkeit prüfen')
 		expect(route('secure/+page.svelte')).toContain('Send checkout link')
-		expect(route('login/+page.svelte')).toContain('Sign in with passkey')
-		expect(route('device/+page.svelte')).toContain('Connect avenOS')
-		expect(route('passkey/create/+page.svelte')).toContain('Passkey name')
-		expect(route('dashboard/+page.svelte')).toContain('Download AvenOS')
+		expect(route('login/+page.svelte')).toContain('Mit Passkey anmelden')
+		expect(route('device/+page.svelte')).toContain('avenOS verbinden')
+		expect(route('passkey/create/+page.svelte')).toContain('Name des Passkeys')
+		expect(route('dashboard/+page.svelte')).toContain('avenOS herunterladen')
 	})
 
 	it('does not add product or release-stage copy', () => {
