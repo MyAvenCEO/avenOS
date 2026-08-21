@@ -3,6 +3,7 @@ WORKDIR /repo
 COPY package.json bun.lock ./
 COPY app/package.json app/package.json
 COPY libs/aven-board/package.json libs/aven-board/package.json
+COPY libs/aven-skills/package.json libs/aven-skills/package.json
 COPY libs/aven-ui/package.json libs/aven-ui/package.json
 COPY libs/aven-website/package.json libs/aven-website/package.json
 COPY infrastructure/identity/package.json infrastructure/identity/package.json
