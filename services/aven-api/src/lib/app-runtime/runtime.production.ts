@@ -149,8 +149,9 @@ export const appRuntime: AppRuntime = {
 	},
 	dashboard: {
 		// TODO(backend): queue standing is not served yet — Daniel wires
-		// `names.invited_at` and the position query in a later pass. Returning
-		// null keeps the panel off rather than showing a number we invented.
+		// `names.invited_at`, the position query and the surrounding rows in a
+		// later pass. Returning null keeps the panel and the leaderboard off
+		// rather than showing names and numbers we invented.
 		async queue() {
 			return null
 		},

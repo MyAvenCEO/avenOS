@@ -164,7 +164,49 @@ export const appRuntime: AppRuntime = {
 				ahead: 136,
 				total: 412,
 				invited: 84,
-				lastInvitedAt: '2026-08-19T16:40:00.000Z'
+				lastInvitedAt: '2026-08-19T16:40:00.000Z',
+				board: [
+					{ position: 134, name: 'kestrel', reservedAt: '2026-08-14T08:02:00.000Z', invited: true },
+					{ position: 135, name: 'lumen', reservedAt: '2026-08-14T08:31:00.000Z', invited: false },
+					{ position: 136, name: 'fjord', reservedAt: '2026-08-14T08:58:00.000Z', invited: false },
+					{
+						position: 137,
+						name: 'aurora',
+						reservedAt: '2026-08-14T09:12:00.000Z',
+						invited: false,
+						you: true
+					},
+					{
+						position: 138,
+						name: 'tessera',
+						reservedAt: '2026-08-14T09:40:00.000Z',
+						invited: false
+					},
+					{
+						position: 139,
+						name: 'nordlicht',
+						reservedAt: '2026-08-14T10:05:00.000Z',
+						invited: false
+					},
+					{ position: 140, name: 'salz', reservedAt: '2026-08-14T11:19:00.000Z', invited: false }
+				],
+				latest: [
+					{
+						position: 412,
+						name: 'wolkenbau',
+						reservedAt: '2026-08-21T14:22:00.000Z',
+						invited: false
+					},
+					{ position: 411, name: 'mira', reservedAt: '2026-08-21T11:03:00.000Z', invited: false },
+					{ position: 410, name: 'hafen', reservedAt: '2026-08-20T19:47:00.000Z', invited: false },
+					{
+						position: 409,
+						name: 'zinnober',
+						reservedAt: '2026-08-20T16:12:00.000Z',
+						invited: false
+					},
+					{ position: 408, name: 'kolibri', reservedAt: '2026-08-20T09:35:00.000Z', invited: false }
+				]
 			}
 		}
 	},
