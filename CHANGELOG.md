@@ -1,3 +1,15 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.11...v) (2026-08-21)
+
+
+### Bug Fixes
+
+* **auth:** finalize the registered passkey ([b601981](https://github.com/MyAvenCEO/avenOS/commit/b601981093eaa2f2364e34ecf591e16ce88f267b))
+
+
+### Features
+
+* **email:** add live template previews ([2e2ae8e](https://github.com/MyAvenCEO/avenOS/commit/2e2ae8ec71971adb0c0e80155c62314dd4937b30))
+* **email:** add Maizzle template studio ([c39804f](https://github.com/MyAvenCEO/avenOS/commit/c39804fb77eed52ad4f368df07d52f72ad945c97))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.10...v) (2026-08-21)
 
 
