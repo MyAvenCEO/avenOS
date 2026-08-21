@@ -43,8 +43,8 @@ const BADGE: Record<string, string> = {
 	class="w-60 rounded-xl px-3.5 py-3 font-sans text-foreground shadow-[0_1px_3px_rgba(30,41,59,0.06)] transition-all {data.door
 		? 'border-2 border-[#2f5d50]/50 border-dashed bg-[#2f5d50]/[0.04]'
 		: n.kind === 'trigger'
-			? 'border border-[#2f5d50]/40 bg-[#fffdf7]'
-			: 'border border-foreground/5 bg-[#fffdf7]'} {data.selected
+			? 'border border-[#2f5d50]/40 bg-surface-raised'
+			: 'border border-foreground/5 bg-surface-raised'} {data.selected
 		? 'border-primary ring-2 ring-primary/20'
 		: (data.instance && INSTANCE_RING[data.instance]) || ''}"
 >
