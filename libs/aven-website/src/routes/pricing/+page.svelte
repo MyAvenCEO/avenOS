@@ -80,7 +80,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{avenId.role}</p>
 						<p class="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-foreground">
 							{euro(avenId.eurPrice)}&nbsp;€
-							<span class="text-[13px] font-medium text-foreground/55">einmalig · netto</span>
+							<span class="text-[13px] font-medium text-foreground/55">einmalig · zzgl. USt.</span>
 						</p>
 					</div>
 					<ul
@@ -187,6 +187,23 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 										+&nbsp;{p.equitySharePct}&nbsp;% Firmenanteile an deiner Firma
 									</p>
 								{/if}
+							</div>
+						{/if}
+
+						{#if p.runtime}
+							<div
+								class="mt-4 rounded-xl border border-border/60 bg-surface-card px-4 py-3 text-left"
+							>
+								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+									KI‑Laufzeit
+								</p>
+								<p class="mt-1 text-[13px] font-medium leading-snug text-foreground/85">
+									Bis zu {p.runtime.hoursPerDay}&nbsp;Std/Tag Agent‑Laufzeit
+									<span class="font-normal text-foreground/55">(Fair Use)</span>
+								</p>
+								<p class="mt-0.5 text-[12px] leading-snug text-foreground/55">
+									danach {p.runtime.centsPerExtraMinute}&nbsp;Cent pro Minute
+								</p>
 							</div>
 						{/if}
 
