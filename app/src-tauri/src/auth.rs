@@ -151,7 +151,7 @@ fn api_endpoint(path: &str) -> String {
 }
 
 #[cfg(target_os = "macos")]
-fn native_passkeys_available() -> bool {
+fn macos_supports_native_passkeys() -> bool {
 	std::process::Command::new("/usr/bin/sw_vers")
 		.arg("-productVersion")
 		.output()
@@ -160,6 +160,36 @@ fn native_passkeys_available() -> bool {
 		.and_then(|output| String::from_utf8(output.stdout).ok())
 		.and_then(|version| version.split('.').next()?.parse::<u32>().ok())
 		.is_some_and(|major| major >= 15)
+}
+
+/// AuthenticationServices refuses to run for a process without an
+/// `application-identifier` entitlement — it fails with "The calling process
+/// does not have an application identifier", which the passkey plugin reports
+/// as a bare "Login failed". `tauri dev` runs an ad-hoc, linker-signed binary
+/// with no team and no entitlements, so this is never satisfied in dev.
+///
+/// Asking the signature directly beats guessing from the build profile: a
+/// properly signed local build gets native passkeys, and everything else falls
+/// back to the browser device flow instead of dead-ending on a useless error.
+#[cfg(target_os = "macos")]
+fn has_application_identifier() -> bool {
+	let Ok(executable) = std::env::current_exe() else {
+		return false;
+	};
+	std::process::Command::new("/usr/bin/codesign")
+		.args(["--display", "--entitlements", "-", "--xml"])
+		.arg(executable)
+		.output()
+		.ok()
+		.filter(|output| output.status.success())
+		.is_some_and(|output| {
+			String::from_utf8_lossy(&output.stdout).contains("com.apple.application-identifier")
+		})
+}
+
+#[cfg(target_os = "macos")]
+fn native_passkeys_available() -> bool {
+	macos_supports_native_passkeys() && has_application_identifier()
 }
 
 #[cfg(target_os = "ios")]
