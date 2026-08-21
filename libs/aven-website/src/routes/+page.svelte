@@ -72,9 +72,9 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
 					<strong class="font-medium text-foreground/85">Post‑AGI‑Ökonomie</strong>
 					heißt: Die Basis der alten Wirtschaft —
-					<strong class="font-medium text-foreground/85">Zeit gegen Geld</strong>
+					<strong class="font-medium text-foreground/85">Zeit gegen Geld zu tauschen</strong>
 					— kollabiert, sobald KI fast jede Arbeit so gut erledigt wie ein Mensch: Kopfarbeit heute,
-					mit Robotern bald auch Handarbeit, rund um die Uhr,
+					Handarbeit mit Robotern morgen, rund um die Uhr,
 					<strong class="font-medium text-foreground/85">zum Preis von Strom</strong>. Dann bleibt
 					nur eine Einkommensquelle — das, was dir gehört.
 				</p>
@@ -157,8 +157,8 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 								aria-hidden="true"
 							></span>
 							<span
-								>Du gestaltest wieder: deine Vision, deine Beziehungen, das Leben, das wirklich
-								zählt.</span
+								>Du gestaltest wieder: deine Vision, deine Beziehungen, das Leben — das, was
+								wirklich zählt.</span
 							>
 						</li>
 					</ul>
@@ -441,12 +441,6 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				</div>
 			</div>
 		</div>
-		<p
-			class="mx-auto mt-8 max-w-xl text-pretty text-[16px] leading-relaxed text-foreground/72 sm:text-[17px]"
-		>
-			Und jetzt stell dir vor, eine Million Menschen bauen ihren Spark — gemeinsam.
-			<strong class="font-medium text-accent">Was können wir damit alles erreichen?</strong>
-		</p>
 	</section>
 
 	<!-- From I to We — the VISION beat, not the pricing page. A first-time
