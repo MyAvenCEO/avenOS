@@ -279,7 +279,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "aven-os-app"
-version = "26.8.21-next.4"
+version = "26.8.21-next.5"
 dependencies = [
  "anyhow",
  "env_logger",
