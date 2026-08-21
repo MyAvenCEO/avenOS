@@ -5,7 +5,7 @@ import deBrainMemorizer from './content/de/brain-memorizer.json'
 import deCalendarOrganizer from './content/de/calendar-organizer.json'
 import deDocsOrganizer from './content/de/docs-organizer.json'
 // ── DE ────────────────────────────────────────────────────────────────────────
-import deEmailIngestor from './content/de/email-ingestor.json'
+import deEmailManager from './content/de/email-manager.json'
 import deHumanReviewer from './content/de/human-reviewer.json'
 import deTodoShuffler from './content/de/todo-shuffler.json'
 import enBlogWriter from './content/en/blog-writer.json'
@@ -14,7 +14,7 @@ import enBrainMemorizer from './content/en/brain-memorizer.json'
 import enCalendarOrganizer from './content/en/calendar-organizer.json'
 import enDocsOrganizer from './content/en/docs-organizer.json'
 // ── EN (source of truth) ──────────────────────────────────────────────────────
-import enEmailIngestor from './content/en/email-ingestor.json'
+import enEmailManager from './content/en/email-manager.json'
 import enHumanReviewer from './content/en/human-reviewer.json'
 import enTodoShuffler from './content/en/todo-shuffler.json'
 import dePubAvenmaia from './publishers/de/avenmaia.json'
@@ -34,7 +34,7 @@ import type {
 
 const registry: Record<SupportedLang, SkillJson[]> = {
 	en: [
-		enEmailIngestor,
+		enEmailManager,
 		enDocsOrganizer,
 		enBrainMemorizer,
 		enBookKeeper,
@@ -44,7 +44,7 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 		enBlogWriter
 	] as SkillJson[],
 	de: [
-		deEmailIngestor,
+		deEmailManager,
 		deDocsOrganizer,
 		deBrainMemorizer,
 		deBookKeeper,
