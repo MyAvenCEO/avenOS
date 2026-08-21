@@ -210,9 +210,10 @@ describe('subscription state', () => {
 		])
 		await service.change(alice.id, 'avenceo')
 		const upgrade = calls.at(-1)
-		expect(upgrade?.url).toContain(`/v1/subscriptions/${subscriptionId}/upgrade`)
-		expect((upgrade?.body as { product_id: string }).product_id).toBe('prod_ceo')
-		expect(upgrade?.headers.get('x-api-key')).toBe('creem_test_fake')
+		if (!upgrade) throw new Error('no upgrade call was made')
+		expect(upgrade.url).toContain(`/v1/subscriptions/${subscriptionId}/upgrade`)
+		expect((upgrade.body as { product_id: string }).product_id).toBe('prod_ceo')
+		expect(upgrade.headers.get('x-api-key')).toBe('creem_test_fake')
 
 		// A stranger cannot act at all: bob holds no subscription, so the
 		// service refuses before any provider call could happen.
@@ -223,17 +224,21 @@ describe('subscription state', () => {
 
 		// Invoices: scoped by the caller's stored customer id; rows map to the
 		// portal shape with the provider's hosted receipt link.
+		// Creem sends unix-ms timestamps and NO receipt URL (TransactionEntity
+		// has none) — the official documents live behind the portal link.
 		const invoiceCalls = stubFetch([
 			{
 				body: {
 					items: [
 						{
 							id: 'tx_1',
-							created_at: '2026-08-21T10:00:00.000Z',
-							amount: 4200,
+							created_at: 1787652000000,
+							amount: 4998,
+							tax_amount: 798,
 							currency: 'EUR',
 							status: 'paid',
-							receipt_url: 'https://creem.io/receipt/tx_1'
+							period_start: 1787652000000,
+							period_end: 1790330400000
 						}
 					]
 				}
@@ -243,16 +248,32 @@ describe('subscription state', () => {
 		expect(invoices).toEqual([
 			{
 				id: 'tx_1',
-				createdAt: '2026-08-21T10:00:00.000Z',
-				amountCents: 4200,
+				createdAt: new Date(1787652000000).toISOString(),
+				amountCents: 4998,
+				taxCents: 798,
 				currency: 'EUR',
 				status: 'paid',
-				receiptUrl: 'https://creem.io/receipt/tx_1'
+				periodStart: new Date(1787652000000).toISOString(),
+				periodEnd: new Date(1790330400000).toISOString()
 			}
 		])
 		expect(invoiceCalls[0]?.url).toContain(`customer_id=cust_${alice.id.slice(0, 8)}`)
 		// Bob has no customer row → empty history, no provider call with a
 		// guessed id.
 		expect(await service.invoices(bob.id)).toEqual([])
+
+		// The portal link — the only place official invoice documents exist —
+		// is minted for the caller's own customer id; bob has none and is
+		// refused before any provider call.
+		const portalCalls = stubFetch([
+			{ body: { customer_portal_link: 'https://creem.io/portal/abc' } }
+		])
+		expect(await service.portalUrl(alice.id)).toBe('https://creem.io/portal/abc')
+		expect((portalCalls[0]?.body as { customer_id: string } | undefined)?.customer_id).toBe(
+			`cust_${alice.id.slice(0, 8)}`
+		)
+		await expect(service.portalUrl(bob.id)).rejects.toMatchObject({
+			code: 'BILLING_CUSTOMER_MISSING'
+		})
 	})
 })

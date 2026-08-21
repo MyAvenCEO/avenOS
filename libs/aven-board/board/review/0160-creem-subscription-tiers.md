@@ -239,6 +239,25 @@ grep -rn "requireUser" services/aven-api/src/routes/api/billing/
 
 ## Progress log
 
+- 2026-08-22 (build, invoice reality — Samuel's address/VAT-ID question) —
+  Verified against Creem's own SDK models (creem@latest): CustomerEntity is
+  {id, email, name, country, metadata}, CreateCheckoutRequest has NO billing
+  address or tax-id field, TransactionEntity has NO receipt/PDF URL. So (a)
+  we CANNOT collect an address or USt-IdNr ourselves — the API has nowhere
+  to put them; Creem as merchant of record captures the country at checkout,
+  computes VAT (tax_amount/tax_country ARE on transactions) and issues the
+  invoices; (b) the per-row "PDF" link built earlier could never resolve —
+  replaced. New shape: the invoice LIST renders an in-app detail per row
+  (Zeitraum, Netto/USt./Gesamt from real tax_amount data, Beleg-Nr.), and
+  the official PDFs display inside avenOS via a dedicated app window on the
+  hosted customer portal (`POST /v1/customers/billing` →
+  customer_portal_link), minted server-side for the caller's own customer —
+  the URL never passes through the frontend. OPEN QUESTION for the sandbox
+  smoke / Creem support: whether Creem's checkout or portal lets a business
+  buyer enter a VAT ID for reverse charge — neither docs nor API models say;
+  if not, B2B reverse-charge self-service does not exist on Creem and the
+  326-€ tier should surface that to Creem as a requirement.
+
 - 2026-08-22 (build, phase 3 — card → review) — Six Tauri commands
   (billing_me/subscribe/upgrade/cancel/resume/invoices) proxy hardcoded
   /api/billing/* paths with the session bearer through one identity_api_call
