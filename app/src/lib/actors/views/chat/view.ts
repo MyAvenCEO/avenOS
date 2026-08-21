@@ -38,12 +38,12 @@ const selectors: StyleDef['selectors'] = {
 		fontSize: '14px',
 		lineHeight: '1.5',
 		whiteSpace: 'pre-wrap',
-		background: '#f6f1e2',
+		background: 'var(--color-ivory)',
 		border: '1px solid rgba(30,41,59,0.1)'
 	},
 	'.ch-bubble--me': {
-		background: '#1e293b',
-		color: '#f8f6ef',
+		background: 'var(--color-marine)',
+		color: 'var(--color-linen)',
 		border: 'none'
 	},
 	'.ch-status': { fontSize: '12px', opacity: '0.5', textAlign: 'center' },
