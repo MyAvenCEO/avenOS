@@ -11,6 +11,7 @@ import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SkillMarketplaceCard from '$lib/components/SkillMarketplaceCard.svelte'
+import { plan, priceLabel } from '$lib/pricing/plans'
 import { loadSkills } from '$lib/skills/loader'
 import danielPhoto from '../images/daniel.png'
 import samuelPhoto from '../images/samuel.jpg'
@@ -25,52 +26,36 @@ const skillsPreview = loadSkills('de').slice(0, 6)
 const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 
 /**
- * The ladder builds ONE spark; every finished spark is one asset. The
- * repeat step is the point: reinvest 50/50, mint the next asset, until the
- * portfolio stands at 10+.
+ * The ladder builds ONE spark; every finished spark is one asset. Four steps
+ * now, not six: the name, your life, your company, and the partnership — the
+ * same four things the pricing page sells, in the same order and at the same
+ * prices. It reads from `plans.ts` so a price can never drift between the two
+ * pages again.
  */
 const roadmap = [
 	{
-		tier: 'avenID',
-		price: '100 €/Jahr',
+		id: 'avenid',
 		offer: 'Deine Vision bekommt einen Namen',
 		pitch:
 			'Die Entscheidung in dein souveränes Gründerleben und deinen Aven ist der Anfang von allem.'
 	},
 	{
-		tier: 'avenCOO',
-		price: '377 €/m',
+		id: 'avenme',
+		offer: 'Bring dein eigenes Leben in Ordnung',
+		pitch:
+			'Post, E‑Mail, Dokumente, Termine: dein Aven übernimmt die tägliche Organisation — der Boden, auf dem alles andere steht.'
+	},
+	{
+		id: 'avenceo',
 		offer: 'Verkaufe dein erstes Angebot',
 		pitch:
-			'Deine erste eigene Spark‑Firma mit eigenem Produkt: Du lernst verkaufen und dienen — mehr geben, als du nimmst: der No. 1 Schlüssel zu einem erfolgreichen Spark.'
+			'Deine erste eigene Spark‑Firma mit eigenem Produkt: Website, Shop, Blog, Vorbuchhaltung und Finanzen laufen — du lernst verkaufen und dienen.'
 	},
 	{
-		tier: 'avenCMO',
-		price: '610 €/m',
-		offer: 'Baue eine Brand, die dir gehört',
+		id: 'avencoop',
+		offer: 'Skaliere mit einem Co‑Founder an deiner Seite',
 		pitch:
-			'Storytelling wird Besitz: deine avenBrand wächst über Social Media und Blog — Reichweite, die dir gehört.'
-	},
-	{
-		tier: 'avenCTO',
-		price: '987 €/m',
-		offer: 'Automatisiere deinen Betrieb',
-		pitch:
-			'Das Prozess‑Gehirn: dein avenCTO optimiert sich im Loop und übernimmt Schritt für Schritt den Betrieb.'
-	},
-	{
-		tier: 'avenCPO',
-		price: '1.597 €/m',
-		offer: 'Skaliere mit deiner Community',
-		pitch:
-			'Skaliere dein Produkt, das Product‑Market‑Fit gefunden hat — der Brandbeschleuniger: Beteilige deine Community und Partner über tokenize(it).'
-	},
-	{
-		tier: 'avenCEO',
-		price: '2.584 €/m',
-		offer: 'Deine KI auf eigener Hardware',
-		pitch:
-			'Volle Souveränität: deine Intelligenz läuft auf eigener, dedizierter Hardware — dein Spark trägt sich selbst.'
+			'Wir bauen aktiv mit, führen dich durch die Gründung und dein beel‑Syndikat — Community‑Investments inklusive. Nur auf Bewerbung.'
 	}
 ] as const
 </script>
@@ -79,7 +64,7 @@ const roadmap = [
 	<MarketingSiteHeader />
 
 	<section
-		class="border-b border-border/35 bg-linear-to-b from-white/35 via-background to-background px-5 py-24 sm:px-8 sm:py-32 md:py-40"
+		class="border-b border-border/35 bg-linear-to-b from-surface-raised via-background to-background px-5 py-24 sm:px-8 sm:py-32 md:py-40"
 		aria-labelledby="home-hero-heading"
 	>
 		<div class="mx-auto max-w-3xl text-center">
@@ -112,12 +97,12 @@ const roadmap = [
 		aria-labelledby="vision-heading"
 	>
 		<div class="mx-auto max-w-2xl text-center">
-			<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
+			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
 				Vision · Das große Ganze
 			</p>
 			<p
 				id="vision-heading"
-				class="mt-6 font-serif text-[1.35rem] font-light leading-snug text-pretty text-foreground sm:text-[1.6rem]"
+				class="mt-6 text-[1.35rem] font-light leading-snug text-pretty text-foreground sm:text-[1.6rem]"
 			>
 				Du spürst es: Die Welt verändert sich schneller als in jedem Moment der Geschichte — und
 				genau deshalb ist jetzt die beste Zeit, am Leben zu sein.
@@ -144,7 +129,7 @@ const roadmap = [
 	>
 		<div class="mx-auto max-w-4xl">
 			<div class="mx-auto max-w-2xl text-center">
-				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-tuscan-sun">
+				<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent-ink">
 					Post‑AGI · Warum jetzt
 				</p>
 				<h2
@@ -169,24 +154,24 @@ const roadmap = [
 
 			<!-- The emotional fork: the same future, seen from both sides. -->
 			<div class="mt-10 grid gap-4 sm:grid-cols-2">
-				<div class="rounded-2xl bg-[#222e49] p-6 ring-1 ring-black/20 sm:p-7">
-					<p class="font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-white/40">
+				<div class="rounded-2xl bg-primary p-6 sm:p-7">
+					<p class="text-[9px] font-bold uppercase tracking-[0.24em] text-primary-foreground/45">
 						Ohne Assets
 					</p>
-					<h3 class="mt-2 text-lg font-semibold tracking-tight text-white sm:text-xl">
+					<h3 class="mt-2 text-lg font-semibold tracking-tight text-primary-foreground sm:text-xl">
 						Das fremdbestimmte Drehbuch
 					</h3>
-					<ul class="mt-4 space-y-2.5 text-[14px] leading-snug text-white/72">
+					<ul class="mt-4 space-y-2.5 text-[14px] leading-snug text-primary-foreground/72">
 						<li class="flex gap-2.5">
 							<span
-								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-white/25"
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary-foreground/25"
 								aria-hidden="true"
 							></span>
 							<span>Deine Arbeitszeit konkurriert mit dem Preis von Strom.</span>
 						</li>
 						<li class="flex gap-2.5">
 							<span
-								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-white/25"
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary-foreground/25"
 								aria-hidden="true"
 							></span>
 							<span
@@ -195,7 +180,7 @@ const roadmap = [
 						</li>
 						<li class="flex gap-2.5">
 							<span
-								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-white/25"
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary-foreground/25"
 								aria-hidden="true"
 							></span>
 							<span
@@ -204,14 +189,14 @@ const roadmap = [
 						</li>
 					</ul>
 					<p
-						class="mt-5 border-t border-white/10 pt-4 font-serif text-[1.25rem] font-light leading-snug text-white sm:text-[1.4rem]"
+						class="mt-5 border-t border-primary-foreground/15 pt-4 text-[1.25rem] font-light leading-snug text-primary-foreground sm:text-[1.4rem]"
 					>
 						Dein Leben läuft nach dem Plan von jemand anderem.
 					</p>
 				</div>
 
-				<div class="rounded-2xl bg-tuscan-sun/55 p-6 ring-1 ring-black/6 sm:p-7">
-					<p class="font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-foreground/45">
+				<div class="rounded-2xl border border-accent/45 bg-secondary p-6 sm:p-7">
+					<p class="text-[9px] font-bold uppercase tracking-[0.24em] text-foreground/45">
 						Mit deinen Assets
 					</p>
 					<h3 class="mt-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">
@@ -246,7 +231,7 @@ const roadmap = [
 						</li>
 					</ul>
 					<p
-						class="mt-5 border-t border-foreground/10 pt-4 font-serif text-[1.25rem] font-light leading-snug text-foreground sm:text-[1.4rem]"
+						class="mt-5 border-t border-foreground/10 pt-4 text-[1.25rem] font-light leading-snug text-foreground sm:text-[1.4rem]"
 					>
 						Dein volles Potenzial, in deiner Hand.
 					</p>
@@ -254,29 +239,29 @@ const roadmap = [
 			</div>
 
 			<p
-				class="mx-auto mt-10 max-w-xl text-center font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
+				class="mx-auto mt-10 max-w-xl text-center text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
 			>
 				Beide Drehbücher beginnen heute. Wähle deins,
-				<strong class="font-sans font-semibold text-tuscan-sun">bevor es alle tun</strong>.
+				<strong class="font-sans font-semibold text-accent-ink">bevor es alle tun</strong>.
 			</p>
 		</div>
 	</section>
 
 	<!-- The thesis: the company of the future, named. -->
 	<section
-		class="border-b border-border/40 bg-linear-to-b from-white/25 via-white/10 to-transparent px-5 py-16 sm:px-8 sm:py-24"
+		class="border-b border-border/40 bg-linear-to-b from-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
 		aria-labelledby="spark-heading"
 	>
 		<div class="mx-auto max-w-3xl text-center">
-			<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
+			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
 				Die Firma der Zukunft
 			</p>
 			<h2
 				id="spark-heading"
-				class="mt-5 font-serif text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
+				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
 			>
 				1&nbsp;Mensch + 1&nbsp;Aven =
-				<span class="text-tuscan-sun">ein Spark</span>.
+				<span class="text-accent-ink">ein Spark</span>.
 			</h2>
 			<div
 				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
@@ -298,7 +283,7 @@ const roadmap = [
 				</p>
 			</div>
 			<p
-				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 font-serif text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
+				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
 			>
 				Jeder Mensch wird Gründer.
 				<span class="mt-2 block">
@@ -310,16 +295,16 @@ const roadmap = [
 	</section>
 
 	<section
-		class="border-b border-border/40 bg-linear-to-b from-white/18 via-white/6 to-transparent px-5 py-9 sm:px-8 sm:py-11"
+		class="border-b border-border/40 bg-linear-to-b from-surface-soft/50 to-transparent px-5 py-9 sm:px-8 sm:py-11"
 		id="founders"
 	>
 		<div class="mx-auto max-w-5xl">
 			<header class="mx-auto max-w-2xl text-center">
-				<p class="font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-foreground/40">
+				<p class="text-[9px] font-bold uppercase tracking-[0.26em] text-foreground/40">
 					Die ersten zwei Sparks
 				</p>
 				<h2
-					class="mt-2 font-serif text-[clamp(1.5rem,4vw,2.15rem)] font-light leading-tight tracking-tight text-foreground/90"
+					class="mt-2 text-[clamp(1.5rem,4vw,2.15rem)] font-light leading-tight tracking-tight text-foreground/90"
 				>
 					Hallo, wir sind avenMAIA und avenTIN.
 				</h2>
@@ -341,7 +326,9 @@ const roadmap = [
 			</header>
 
 			<div class="mx-auto mt-8 grid max-w-4xl gap-3 sm:grid-cols-2 sm:gap-4">
-				<div class="rounded-2xl border border-border/35 bg-white/25 px-3 py-4 sm:px-4 sm:py-4">
+				<div
+					class="rounded-2xl border border-foreground/8 bg-surface-raised px-3 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:px-4 sm:py-4"
+				>
 					<div
 						class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-x-2 sm:gap-x-3"
 					>
@@ -377,7 +364,7 @@ const roadmap = [
 							aria-hidden="true"
 						>
 							<span
-								class="text-center font-serif text-2xl font-light leading-none text-foreground/30 sm:text-[1.75rem]"
+								class="text-center text-2xl font-light leading-none text-foreground/30 sm:text-[1.75rem]"
 								>+</span
 							>
 						</div>
@@ -388,13 +375,11 @@ const roadmap = [
 							>
 								{@html beamAvatarSvg('avenMAIA', paletteKi, 64, 'fnd-k-m')}
 							</div>
-							<p
-								class="mt-2 font-mono text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40"
-							>
+							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">
 								KI‑AGENT
 							</p>
 							<p
-								class="mt-0.5 font-mono text-[12px] font-bold tracking-[0.1em] text-tuscan-sun sm:text-[13px]"
+								class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent-ink sm:text-[13px]"
 							>
 								avenMAIA
 							</p>
@@ -406,13 +391,15 @@ const roadmap = [
 						</div>
 					</div>
 					<p
-						class="mt-4 border-t border-border/25 pt-3 text-center font-mono text-[10px] font-bold tracking-[0.2em] text-tuscan-sun sm:text-[11px]"
+						class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent-ink sm:text-[11px]"
 					>
 						= Maia Holding Spark
 					</p>
 				</div>
 
-				<div class="rounded-2xl border border-border/35 bg-white/25 px-3 py-4 sm:px-4 sm:py-4">
+				<div
+					class="rounded-2xl border border-foreground/8 bg-surface-raised px-3 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:px-4 sm:py-4"
+				>
 					<div
 						class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-x-2 sm:gap-x-3"
 					>
@@ -448,7 +435,7 @@ const roadmap = [
 							aria-hidden="true"
 						>
 							<span
-								class="text-center font-serif text-2xl font-light leading-none text-foreground/30 sm:text-[1.75rem]"
+								class="text-center text-2xl font-light leading-none text-foreground/30 sm:text-[1.75rem]"
 								>+</span
 							>
 						</div>
@@ -459,13 +446,11 @@ const roadmap = [
 							>
 								{@html beamAvatarSvg(beamSeedSamuelProfile, paletteHuman, 64, 'fnd-k-o')}
 							</div>
-							<p
-								class="mt-2 font-mono text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40"
-							>
+							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">
 								KI‑AGENT
 							</p>
 							<p
-								class="mt-0.5 font-mono text-[12px] font-bold tracking-[0.1em] text-tuscan-sun sm:text-[13px]"
+								class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent-ink sm:text-[13px]"
 							>
 								avenTIN
 							</p>
@@ -477,7 +462,7 @@ const roadmap = [
 						</div>
 					</div>
 					<p
-						class="mt-4 border-t border-border/25 pt-3 text-center font-mono text-[10px] font-bold tracking-[0.2em] text-tuscan-sun sm:text-[11px]"
+						class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent-ink sm:text-[11px]"
 					>
 						= avenCEO Spark
 					</p>
@@ -493,7 +478,7 @@ const roadmap = [
 	>
 		<div class="mx-auto max-w-5xl">
 			<div class="mx-auto max-w-2xl text-center">
-				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
+				<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
 					Aven Skills
 				</p>
 				<h2
@@ -516,7 +501,7 @@ const roadmap = [
 			<p class="mt-8 text-center">
 				<a
 					href="/skills"
-					class="inline-flex items-center gap-1.5 font-mono text-[12px] font-bold uppercase tracking-[0.18em] text-foreground/60 transition-colors hover:text-foreground"
+					class="inline-flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.18em] text-foreground/60 transition-colors hover:text-foreground"
 				>
 					Alle Skills ansehen →
 				</a>
@@ -526,24 +511,24 @@ const roadmap = [
 
 	<!-- The ladder builds ONE spark; every repeat mints a new asset. -->
 	<section
-		class="border-b border-border/40 bg-gradient-to-b from-transparent via-white/20 to-transparent px-5 py-16 sm:px-8 sm:py-24"
+		class="border-b border-border/40 bg-gradient-to-b from-transparent via-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
 		aria-labelledby="roadmap-heading"
 	>
 		<div class="mx-auto max-w-4xl">
 			<div class="mx-auto max-w-2xl text-center">
-				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
+				<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
 					Deine Roadmap · 0 → Hero
 				</p>
 				<h2
 					id="roadmap-heading"
 					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					Vom 1. Spark — über 6 Levels — zu 10+ Assets.
+					Vom Namen — über drei Stufen — zu 10+ Assets.
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
-					Sechs Levels bauen deinen ersten Spark — du levelst erst auf, wenn er
+					Ein Name und drei Stufen bauen deinen ersten Spark — du levelst erst auf, wenn er
 					<strong class="font-medium text-foreground/85"
-						>mehr verdient, als das nächste Level kostet</strong
+						>mehr verdient, als die nächste Stufe kostet</strong
 					>.
 				</p>
 			</div>
@@ -553,13 +538,13 @@ const roadmap = [
 					class="absolute top-1 bottom-1 left-4 w-px -translate-x-1/2 bg-border/60 sm:left-1/2"
 					aria-hidden="true"
 				></span>
-				{#each roadmap as level, i (level.tier)}
+				{#each roadmap as level, i (level.id)}
 					<li class="relative pb-12 pl-12 sm:pl-0">
 						<span
-							class="absolute top-0.5 left-4 flex size-7 -translate-x-1/2 items-center justify-center rounded-full font-mono text-[10px] font-bold sm:left-1/2 {i ===
+							class="absolute top-0.5 left-4 flex size-7 -translate-x-1/2 items-center justify-center rounded-full text-[10px] font-bold sm:left-1/2 {i ===
 							roadmap.length - 1
-								? 'bg-foreground text-background'
-								: 'bg-tuscan-sun/60 text-foreground ring-1 ring-black/6'}"
+								? 'bg-primary text-primary-foreground'
+								: 'bg-accent/60 text-foreground'}"
 							aria-hidden="true"
 						>
 							{i + 1}
@@ -574,9 +559,9 @@ const roadmap = [
 							>
 								{level.offer}
 							</h3>
-							<p class="mt-1 font-mono text-[11px] tracking-[0.06em]">
-								<span class="font-bold text-foreground/70">{level.tier}</span>
-								<span class="text-foreground/40">· {level.price}</span>
+							<p class="mt-1 text-[11px] tracking-[0.06em]">
+								<span class="font-semibold text-foreground/70">{plan(level.id).name}</span>
+								<span class="text-foreground/40">· {priceLabel(plan(level.id))}</span>
 							</p>
 							<p class="mt-2 text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
 								{level.pitch}
@@ -589,25 +574,23 @@ const roadmap = [
 			<!-- Repeat, centered below the ladder: reinvest into the other sparks. -->
 			<div class="mt-6 text-center">
 				<span
-					class="mx-auto flex size-7 items-center justify-center rounded-full bg-tuscan-sun text-[15px] text-foreground ring-1 ring-black/8"
+					class="mx-auto flex size-7 items-center justify-center rounded-full bg-accent text-[15px] text-foreground"
 					aria-hidden="true"
 				>
 					↻
 				</span>
 				<div class="mt-3 flex flex-wrap items-baseline justify-center gap-x-3 gap-y-1">
-					<span class="font-mono text-[13px] font-bold tracking-[0.06em] text-tuscan-sun">
-						Repeat
-					</span>
+					<span class="text-[13px] font-bold tracking-[0.06em] text-accent-ink"> Repeat </span>
 					<span
-						class="rounded-full bg-tuscan-sun/25 px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8a6238]"
+						class="rounded-full bg-accent/25 px-2.5 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-accent-ink"
 					>
 						Jede Beteiligung = ein neues Asset
 					</span>
 				</div>
 				<p class="mx-auto mt-2 max-w-md text-[14px] leading-snug text-foreground/72 sm:text-[15px]">
 					Dein Spark trägt sich selbst — reinvestiere über
-					<strong class="font-medium text-foreground/85">tokenize(it)</strong>
-					in die Level‑5‑Sparks anderer Gründer. So wächst dein Portfolio auf
+					<strong class="font-medium text-foreground/85">beel</strong>
+					in die Sparks anderer Gründer. So wächst dein Portfolio auf
 					<strong class="font-medium text-foreground/85">10+ Assets</strong>.
 				</p>
 			</div>
@@ -617,7 +600,7 @@ const roadmap = [
 	<section class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-16">
 		<div class="mx-auto max-w-2xl">
 			<div class="pb-6 text-center">
-				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
 					Starte jetzt · First come, first serve
 				</p>
 				<h2
@@ -636,14 +619,8 @@ const roadmap = [
 	</section>
 
 	<footer
-		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] font-mono text-foreground/30"
+		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] text-foreground/30"
 	>
 		avenCEO · avenOS · Own your life
 	</footer>
 </div>
-
-<style>
-:global(body) {
-	background-color: #e8ede1;
-}
-</style>
