@@ -10,6 +10,7 @@ describe('functional web copy', () => {
 		expect(route('+page.svelte')).toContain('<h1>Check name</h1>')
 		expect(route('secure/+page.svelte')).toContain('Send checkout link')
 		expect(route('login/+page.svelte')).toContain('Sign in with passkey')
+		expect(route('device/+page.svelte')).toContain('Connect avenOS')
 		expect(route('passkey/create/+page.svelte')).toContain('Passkey name')
 		expect(route('dashboard/+page.svelte')).toContain('Download AvenOS')
 	})
@@ -20,6 +21,7 @@ describe('functional web copy', () => {
 			'+page.svelte',
 			'secure/+page.svelte',
 			'login/+page.svelte',
+			'device/+page.svelte',
 			'passkey/create/+page.svelte',
 			'dashboard/+page.svelte',
 			'purchase/checkout/+page.svelte',

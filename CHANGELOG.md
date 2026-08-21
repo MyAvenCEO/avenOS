@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.3...v) (2026-08-21)
+
+
+### Features
+
+* **auth:** add native passkey sign-in ([#79](https://github.com/MyAvenCEO/avenOS/issues/79)) ([c9abe33](https://github.com/MyAvenCEO/avenOS/commit/c9abe339f5eeaa9e57bb558385fa855216f17d49))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.2...v) (2026-08-21)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.1...v) (2026-08-21)
 

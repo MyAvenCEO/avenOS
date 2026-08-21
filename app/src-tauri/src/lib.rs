@@ -10,6 +10,7 @@
 
 mod asr;
 mod assets;
+mod auth;
 mod tts;
 
 use tauri::Manager;
@@ -192,7 +193,12 @@ pub fn run() {
 		// on first use, so a session that never speaks or listens pays nothing.
 		.manage(tts::TtsState::default())
 		.manage(asr::AsrState::default())
+		.manage(auth::AuthState::default())
 		.invoke_handler(tauri::generate_handler![
+			auth::auth_status,
+			auth::auth_begin,
+			auth::auth_poll,
+			auth::auth_logout,
 			tts::tts_prepare,
 			tts::tts_speak,
 			asr::asr_prepare,

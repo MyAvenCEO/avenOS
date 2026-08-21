@@ -43,6 +43,13 @@
 			"when": 1787241600000,
 			"tag": "0005_reduce_to_customer_environments",
 			"breakpoints": true
+		},
+		{
+			"idx": 6,
+			"version": "7",
+			"when": 1787328000000,
+			"tag": "0006_device_authorization",
+			"breakpoints": true
 		}
 	]
 }

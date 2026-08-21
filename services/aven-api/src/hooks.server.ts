@@ -14,6 +14,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return response
 	}
 	const { auth, proofOfWork, config, names } = await runtime()
+	const normalizedPath = pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
 
 	// The origin check is CSRF protection: it defends endpoints that trust an
 	// ambient session cookie. Service-to-service endpoints carry their own
@@ -21,24 +22,33 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// a browser, and must ignore cookies entirely — an Origin header would be
 	// meaningless there, and demanding one just breaks them.
 	const serviceAuthenticated = pathname.startsWith('/api/webhooks/')
+	const publicDeviceExchange =
+		normalizedPath === '/api/auth/device/code' || normalizedPath === '/api/auth/device/token'
 	if (
 		pathname.startsWith('/api/') &&
 		!serviceAuthenticated &&
+		!publicDeviceExchange &&
 		!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method)
 	) {
 		const origin = event.request.headers.get('origin')
-		if (
-			origin !== config.PUBLIC_BASE_URL &&
-			!(config.NODE_ENV === 'development' && origin === event.url.origin)
-		) {
-			return json(
-				{ code: 'ORIGIN_NOT_ALLOWED', message: 'The request origin is not allowed.' },
-				{ status: 403 }
-			)
+		const browserOriginAllowed =
+			origin === config.PUBLIC_BASE_URL ||
+			(config.NODE_ENV === 'development' && origin === event.url.origin)
+		if (!browserOriginAllowed) {
+			// Native clients have no browser Origin. Do not let an arbitrary
+			// Authorization header bypass CSRF protection: validate it first.
+			const bearerSession = event.request.headers.get('authorization')?.startsWith('Bearer ')
+				? await auth.api.getSession({ headers: event.request.headers })
+				: null
+			if (!bearerSession) {
+				return json(
+					{ code: 'ORIGIN_NOT_ALLOWED', message: 'The request origin is not allowed.' },
+					{ status: 403 }
+				)
+			}
 		}
 	}
 
-	const normalizedPath = pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
 	const powPurpose = protectedAuthPaths.get(normalizedPath)
 	if (powPurpose && event.request.method === 'POST') {
 		try {
@@ -50,6 +60,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 			if (error instanceof ProofOfWorkError)
 				return json({ code: error.code, message: error.message }, { status: 403 })
 			throw error
+		}
+	}
+
+	// Device approval hands the native app a full user session, so retain the
+	// same purchased-name boundary as passkey enrollment.
+	if (normalizedPath === '/api/auth/device/approve' && event.request.method === 'POST') {
+		const session = await auth.api.getSession({ headers: event.request.headers })
+		if (!session || !(await names.ownsAny(session.user.id))) {
+			return json({ code: 'NAME_REQUIRED', message: 'Purchase a name first.' }, { status: 403 })
 		}
 	}
 
