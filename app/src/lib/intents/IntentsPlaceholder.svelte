@@ -1140,7 +1140,7 @@ const DOT: Record<string, string> = {
 			style="margin-bottom: calc(var(--dock-h, 0px) / {WS_ZOOM})"
 		>
 			<h2
-				class="px-1 pt-1 font-semibold text-xs uppercase tracking-wide {STATE_ACCENT[
+				class="px-1 pt-1 text-center font-semibold text-xs uppercase tracking-wide {STATE_ACCENT[
 					selected.status
 				].text}"
 			>
@@ -1390,11 +1390,6 @@ const DOT: Record<string, string> = {
 									{selected.deadline}
 								</span>
 							{/if}
-							<span
-								class="ml-auto rounded-full border border-border px-2.5 py-0.5 font-mono text-[0.625rem] text-foreground/50"
-							>
-								{STATUS_LABEL[selected.status]}
-							</span>
 						</div>
 						<h1 class="pt-2 font-semibold text-xl leading-tight">{selected.title}</h1>
 						<p class="pt-1 text-foreground/45 text-xs">{selected.source} · {selected.when}</p>
