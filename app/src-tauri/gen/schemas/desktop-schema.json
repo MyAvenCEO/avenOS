@@ -2361,6 +2361,36 @@
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
         },
         {
+          "description": "Default permissions for macos-passkey plugin\n#### This default permission set includes:\n\n- `allow-register-passkey`\n- `allow-login-passkey`",
+          "type": "string",
+          "const": "macos-passkey:default",
+          "markdownDescription": "Default permissions for macos-passkey plugin\n#### This default permission set includes:\n\n- `allow-register-passkey`\n- `allow-login-passkey`"
+        },
+        {
+          "description": "Enables the login_passkey command without any pre-configured scope.",
+          "type": "string",
+          "const": "macos-passkey:allow-login-passkey",
+          "markdownDescription": "Enables the login_passkey command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the register_passkey command without any pre-configured scope.",
+          "type": "string",
+          "const": "macos-passkey:allow-register-passkey",
+          "markdownDescription": "Enables the register_passkey command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the login_passkey command without any pre-configured scope.",
+          "type": "string",
+          "const": "macos-passkey:deny-login-passkey",
+          "markdownDescription": "Denies the login_passkey command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the register_passkey command without any pre-configured scope.",
+          "type": "string",
+          "const": "macos-passkey:deny-register-passkey",
+          "markdownDescription": "Denies the register_passkey command without any pre-configured scope."
+        },
+        {
           "description": "This permission set allows opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application\nas well as reveal file in directories using default file explorer\n#### This default permission set includes:\n\n- `allow-open-url`\n- `allow-reveal-item-in-dir`\n- `allow-default-urls`",
           "type": "string",
           "const": "opener:default",
