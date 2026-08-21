@@ -1,8 +1,8 @@
 <svelte:head>
-	<title>aven.ceo — Own your life · avenCEO</title>
+	<title>aven.ceo — In dir steckt so viel mehr · avenCEO</title>
 	<meta
 		name="description"
-		content="Der klassische Job stirbt in der Post-AGI-Welt. Sicher ist nur, was dir gehört: Werde Gründer mit deinem avenCEO — 1 Mensch + 1 Aven = ein Spark, die Firma der Zukunft. Own your life: deine Einkommensströme, deine Daten, deine KI."
+		content="Tief in deinem Herzen weißt du es: in dir steckt so viel mehr. Von Zeit gegen Geld zu: uns gehört, was wir gemeinsam bauen. Dein eigener avenCEO betreibt deine Firma — 1 Mensch + 1 Aven = ein Spark. Und viele Sparks tragen eine Zivilisation."
 	>
 </svelte:head>
 
@@ -72,22 +72,71 @@ const roadmap = [
 				id="home-hero-heading"
 				class="mx-auto max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
-				Der traditionelle Job stirbt.
-				<span class="mt-1 block">Nur wer Assets kreiert, überlebt.</span>
+				Tief in deinem Herzen weißt du es:
+				<span class="mt-1 block">in dir steckt so viel mehr.</span>
 			</h1>
+			<p
+				class="mx-auto mt-6 max-w-2xl text-pretty text-[17px] font-medium leading-snug text-foreground/85 sm:text-[19px]"
+			>
+				Wir sind hier, um dir in den Hintern zu treten — und dich in dein bestes Selbst zu schieben.
+			</p>
 			<div
-				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
+				class="mx-auto mt-10 max-w-xl border-t border-border/40 pt-8 text-[15px] leading-relaxed sm:max-w-2xl sm:text-base"
 			>
 				<p class="text-pretty text-[16px] font-medium text-foreground/85 sm:text-[17px]">
-					Die Zukunft gehört dem
-					<strong class="font-semibold text-foreground">souveränen Gründer</strong>, der mit seinem
-					avenCEO Agenten
-					<strong class="font-semibold text-foreground">10+ Assets</strong>
-					aufbaut, statt
-					<strong class="font-semibold text-foreground">1x Zeit gegen Geld</strong>
-					zu tauschen.
+					Der Deal deines bisherigen Lebens hieß:
+					<strong class="font-semibold text-foreground">Zeit gegen Geld</strong>.
+				</p>
+				<p class="mt-3 text-pretty text-[16px] font-medium text-foreground/85 sm:text-[17px]">
+					Der neue heißt:
+					<strong class="font-semibold text-accent-ink"
+						>uns gehört, was wir gemeinsam bauen</strong
+					>.
 				</p>
 			</div>
+		</div>
+	</section>
+
+	<!-- Personal first: the transformation the reader can feel THIS week. The
+	     civilizational arc only earns attention after the day-sized promise. -->
+	<section
+		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
+		aria-labelledby="personal-heading"
+	>
+		<div class="mx-auto max-w-2xl text-center">
+			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent-ink">
+				Deine Transformation · Ganz persönlich
+			</p>
+			<h2
+				id="personal-heading"
+				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+			>
+				Erst ändert sich dein Tag. Dann dein Jahrzehnt.
+			</h2>
+
+			<p class="mx-auto mt-6 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
+				Heute verkaufst du Stunden. Acht gehören jemand anderem, die neunte meistens auch — und was
+				am Monatsende übrig bleibt, hat jemand anderes festgelegt.
+			</p>
+
+			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
+				Mit deinem Aven fängt es klein an, und es fängt sofort an: Die Post ist sortiert, bevor du
+				aufstehst. Die Rechnung ist vorbereitet, bevor du sie suchst. Der Papierkram, der dich seit
+				Monaten anschweigt, ist erledigt, während du an dem arbeitest, wofür du eigentlich
+				angetreten bist.
+			</p>
+
+			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
+				Und dann passiert das Eigentliche:
+				<strong class="font-medium text-foreground/85">was du baust, bleibt deins</strong>. Nicht
+				deine Stunde ist das Asset. Du bist es.
+			</p>
+
+			<p class="mt-8 text-[16px] font-medium text-foreground/90 sm:text-[17px]">
+				<strong class="font-semibold text-foreground"
+					>Wir schieben dich in dein volles Potenzial — Schritt für Schritt, ab dieser Woche.</strong
+				>
+			</p>
 		</div>
 	</section>
 
@@ -98,12 +147,15 @@ const roadmap = [
 	>
 		<div class="mx-auto max-w-2xl text-center">
 			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-foreground/45">
-				Vision · Das große Ganze
+				Vision · Von dir zu uns allen
 			</p>
 			<p
 				id="vision-heading"
 				class="mt-6 text-[1.35rem] font-light leading-snug text-pretty text-foreground sm:text-[1.6rem]"
 			>
+				Und was bei dir anfängt, hört bei dir nicht auf.
+			</p>
+			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
 				Du spürst es: Die Welt verändert sich schneller als in jedem Moment der Geschichte — und
 				genau deshalb ist jetzt die beste Zeit, am Leben zu sein.
 			</p>
@@ -154,47 +206,6 @@ const roadmap = [
 
 			<!-- The emotional fork: the same future, seen from both sides. -->
 			<div class="mt-10 grid gap-4 sm:grid-cols-2">
-				<div class="rounded-2xl bg-primary p-6 sm:p-7">
-					<p class="text-[9px] font-bold uppercase tracking-[0.24em] text-primary-foreground/45">
-						Ohne Assets
-					</p>
-					<h3 class="mt-2 text-lg font-semibold tracking-tight text-primary-foreground sm:text-xl">
-						Das fremdbestimmte Drehbuch
-					</h3>
-					<ul class="mt-4 space-y-2.5 text-[14px] leading-snug text-primary-foreground/72">
-						<li class="flex gap-2.5">
-							<span
-								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary-foreground/25"
-								aria-hidden="true"
-							></span>
-							<span>Deine Arbeitszeit konkurriert mit dem Preis von Strom.</span>
-						</li>
-						<li class="flex gap-2.5">
-							<span
-								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary-foreground/25"
-								aria-hidden="true"
-							></span>
-							<span
-								>Jedes Gehalt ist ersetzbar — auch deins, auch wenn du es noch nicht spürst.</span
-							>
-						</li>
-						<li class="flex gap-2.5">
-							<span
-								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary-foreground/25"
-								aria-hidden="true"
-							></span>
-							<span
-								>Deine Daten, deine Aufmerksamkeit, dein Alltag gehören den Plattformen anderer.</span
-							>
-						</li>
-					</ul>
-					<p
-						class="mt-5 border-t border-primary-foreground/15 pt-4 text-[1.25rem] font-light leading-snug text-primary-foreground sm:text-[1.4rem]"
-					>
-						Dein Leben läuft nach dem Plan von jemand anderem.
-					</p>
-				</div>
-
 				<div class="rounded-2xl border border-accent/45 bg-secondary p-6 sm:p-7">
 					<p class="text-[9px] font-bold uppercase tracking-[0.24em] text-foreground/45">
 						Mit deinen Assets
@@ -236,13 +247,53 @@ const roadmap = [
 						Dein volles Potenzial, in deiner Hand.
 					</p>
 				</div>
+				<div class="rounded-2xl bg-primary p-6 sm:p-7">
+					<p class="text-[9px] font-bold uppercase tracking-[0.24em] text-primary-foreground/45">
+						Ohne Assets
+					</p>
+					<h3 class="mt-2 text-lg font-semibold tracking-tight text-primary-foreground sm:text-xl">
+						Das fremdbestimmte Drehbuch
+					</h3>
+					<ul class="mt-4 space-y-2.5 text-[14px] leading-snug text-primary-foreground/72">
+						<li class="flex gap-2.5">
+							<span
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary-foreground/25"
+								aria-hidden="true"
+							></span>
+							<span>Deine Arbeitszeit konkurriert mit dem Preis von Strom.</span>
+						</li>
+						<li class="flex gap-2.5">
+							<span
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary-foreground/25"
+								aria-hidden="true"
+							></span>
+							<span
+								>Jedes Gehalt ist ersetzbar — auch deins, auch wenn du es noch nicht spürst.</span
+							>
+						</li>
+						<li class="flex gap-2.5">
+							<span
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary-foreground/25"
+								aria-hidden="true"
+							></span>
+							<span
+								>Deine Daten, deine Aufmerksamkeit, dein Alltag gehören den Plattformen anderer.</span
+							>
+						</li>
+					</ul>
+					<p
+						class="mt-5 border-t border-primary-foreground/15 pt-4 text-[1.25rem] font-light leading-snug text-primary-foreground sm:text-[1.4rem]"
+					>
+						Dein Leben läuft nach dem Plan von jemand anderem.
+					</p>
+				</div>
 			</div>
 
 			<p
 				class="mx-auto mt-10 max-w-xl text-center text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
 			>
-				Beide Drehbücher beginnen heute. Wähle deins,
-				<strong class="font-sans font-semibold text-accent-ink">bevor es alle tun</strong>.
+				Beide Drehbücher beginnen heute — und du schreibst eines davon sowieso.
+				<strong class="font-sans font-semibold text-accent-ink">Nimm den Stift in die Hand.</strong>
 			</p>
 		</div>
 	</section>
@@ -290,6 +341,58 @@ const roadmap = [
 					Alles, was du dazu brauchst, ist
 					<strong class="font-sans font-semibold text-foreground">dein eigener avenCEO</strong>.
 				</span>
+			</p>
+		</div>
+	</section>
+
+	<!-- From I to We: one spark is a life, many sparks are a civilization. This
+	     is where avenCOOP stops being a price tier and becomes the collective. -->
+	<section
+		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
+		aria-labelledby="collective-heading"
+	>
+		<div class="mx-auto max-w-3xl text-center">
+			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent-ink">
+				Von Ich zu Wir · avenCOOP
+			</p>
+			<h2
+				id="collective-heading"
+				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+			>
+				Ein Spark trägt ein Leben. Viele Sparks tragen eine Zivilisation.
+			</h2>
+
+			<div
+				class="mx-auto mt-6 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/68 sm:text-base"
+			>
+				<p class="text-pretty">
+					Allein bist du ein Funke. Verbunden seid ihr ein Feuer: Sparks, die sich gegenseitig
+					beauftragen, beliefern und beteiligen — jeder mit seiner eigenen Firma, alle an den Firmen
+					der anderen beteiligt.
+				</p>
+				<p class="text-pretty">
+					Genau da steigen wir mit
+					<strong class="font-medium text-foreground/88">avenCOOP</strong>
+					selbst ein: als dein technischer Co‑Founder. Wir bauen mit, wir halten Anteile an deiner
+					Firma — und du hältst welche an unserer. Über
+					<strong class="font-medium text-foreground/88">beel</strong>
+					führen wir dein Syndikat, und deine Community investiert mit.
+				</p>
+				<p class="text-pretty">
+					Keine Plattform, die zwischen euch steht und Miete nimmt.
+					<strong class="font-medium text-foreground/85"
+						>Uns gehört, was wir gemeinsam bauen.</strong
+					>
+				</p>
+			</div>
+
+			<p class="mt-8">
+				<a
+					href="/pricing#avencoop"
+					class="inline-flex min-h-11 items-center justify-center rounded-full border border-primary/45 px-8 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
+				>
+					avenCOOP ansehen →
+				</a>
 			</p>
 		</div>
 	</section>

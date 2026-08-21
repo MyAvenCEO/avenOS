@@ -2,7 +2,7 @@
 	<title>Preise — aven.ceo · avenCEO</title>
 	<meta
 		name="description"
-		content="Ein Name als Anfang, drei Stufen darauf: avenID 25 € einmalig, avenME 42 €/Monat für dein Leben, avenCEO 326 €/Monat für deine Firma, avenCOOP als technischer Co‑Founder — auf Bewerbung."
+		content="Ein Name als Anfang, drei Stufen darauf: avenID 30 € einmalig, avenME 42 €/Monat für dein Leben, avenCEO 326 €/Monat für deine Firma, avenCOOP als technischer Co‑Founder — auf Bewerbung."
 	>
 </svelte:head>
 
@@ -124,6 +124,11 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							{/if}
 						</div>
 						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{p.role}</p>
+						{#if p.eligibility}
+							<p class="mt-2 text-[12px] leading-snug font-medium text-quiet-ink">
+								{p.eligibility}
+							</p>
+						{/if}
 
 						<div class="mt-5 border-y border-border/50 py-4">
 							<div class="flex items-baseline justify-between gap-2">
