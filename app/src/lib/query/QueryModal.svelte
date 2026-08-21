@@ -1,5 +1,6 @@
 <script lang="ts">
 import AvenUiView from '$lib/actors/AvenUiView.svelte'
+import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
 import { bus } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
@@ -47,6 +48,7 @@ $effect(() => {
 	void chat.turns.length
 	void chat.turns.at(-1)?.content
 	void listener.partial
+	void activity.current
 	chatEl?.scrollTo({ top: chatEl.scrollHeight })
 })
 
@@ -143,7 +145,7 @@ function windowFor(key: string) {
 		</div>
 
 		<!-- ── Band 2: the conversation, under the answers ── -->
-		{#if chat.turns.length > 0 || listener.partial !== ''}
+		{#if chat.turns.length > 0 || listener.partial !== '' || activity.current}
 			<div
 				bind:this={chatEl}
 				class="max-h-[26%] shrink-0 overflow-y-auto border-foreground/10 border-t bg-surface-soft px-3 py-2.5"
@@ -152,7 +154,7 @@ function windowFor(key: string) {
 					{#each chat.turns as turn (turn.id)}
 						<div class="flex" class:justify-end={turn.role === 'user'}>
 							<div
-								class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 text-[13px] leading-relaxed {turn.role ===
+								class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[17px] leading-relaxed {turn.role ===
 								'user'
 									? 'bg-primary text-primary-foreground'
 									: 'border border-border bg-surface-raised'}"
@@ -174,12 +176,46 @@ function windowFor(key: string) {
 						</div>
 					{/each}
 
+					<!-- What the tools just DID, inline. A tool result is part of the
+					     conversation that asked for it; as a toast under the modal it read
+					     as a notification about somewhere else. -->
+					{#if activity.current}
+						{@const entry = activity.current}
+						<div class="flex gap-2 rounded-xl border border-border bg-surface-card px-3 py-2">
+							<span
+								class="w-3 shrink-0 text-center font-mono text-[13px]"
+								class:text-success={entry.kind === 'done' || entry.kind === 'created'}
+								class:text-progress-ink={entry.kind === 'doing'}
+								class:text-error={entry.kind === 'deleted' || entry.kind === 'failed'}
+								class:opacity-30={entry.kind === 'read' ||
+								entry.kind === 'reopened' ||
+								entry.kind === 'renamed'}
+							>
+								{ACTIVITY_LABELS[entry.kind].mark}
+							</span>
+							<div class="min-w-0 flex-1 text-[15px] leading-relaxed">
+								<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
+								{#if entry.titles.length > 0}
+									<!-- One per line: run together with separators, five items became
+									     a sentence that ran off the edge and told you nothing. -->
+									<ul class="pt-0.5">
+										{#each entry.titles as title (title)}
+											<li>{title}</li>
+										{/each}
+									</ul>
+								{:else if entry.note}
+									<span class="opacity-40">· {entry.note}</span>
+								{/if}
+							</div>
+						</div>
+					{/if}
+
 					<!-- What is being heard, as it is being heard. It belongs with the
 					     conversation, not floating over the workspace as it used to. -->
 					{#if listener.partial !== ''}
 						<div class="flex justify-end">
 							<div
-								class="max-w-[85%] rounded-2xl border border-border border-dashed bg-surface-card px-3 py-1.5 text-[13px] opacity-70"
+								class="max-w-[85%] rounded-2xl border border-border border-dashed bg-surface-card px-3.5 py-2 text-[17px] opacity-70"
 							>
 								{listener.partial}
 							</div>
