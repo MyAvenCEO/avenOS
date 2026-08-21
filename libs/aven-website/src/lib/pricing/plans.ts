@@ -126,8 +126,7 @@ export const PLANS: Plan[] = [
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
 			'5 % Firmenanteile an deiner Firma, digitalisiert über beel.com',
 			'Du wählst selbst, in welche avenCOOPs dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
-			'Community‑Investments über beel',
-			'Wir führen dein beel‑Syndikat an'
+			'Wir führen dein beel‑Syndikat an — mit Community‑Investments deiner Unterstützer'
 		],
 		link: { href: 'https://beel.com/de', label: 'beel.com' }
 	}
