@@ -42,7 +42,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 		<div class="mx-auto max-w-6xl">
 			<div class="mx-auto max-w-2xl text-center">
 				<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">Pricing</p>
-				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+				<h2 class="mt-3 text-2xl text-foreground sm:text-3xl">
 					Ein Name als Anfang. Drei Stufen darauf.
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/65">
@@ -335,7 +335,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 						<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
 							Optional · Eigenes Hosting
 						</p>
-						<h3 class="mt-2 text-lg font-semibold text-foreground sm:text-xl">avenOS</h3>
+						<h3 class="mt-2 text-lg text-foreground sm:text-xl">avenOS</h3>
 						<p class="mt-1 text-[12px] leading-snug text-foreground/55">
 							Open‑Source‑Stack zum Selbsthosten
 						</p>
