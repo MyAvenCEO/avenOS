@@ -1,9 +1,10 @@
 <script lang="ts">
+import type { Snippet } from 'svelte'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import type { Snippet } from 'svelte'
 import { SPARKS, todoActor } from '$lib/actors/todo.svelte'
-import { shell, talk } from '$lib/intents/talk.svelte'
+import { shell } from '$lib/intents/talk.svelte'
+import { query } from '$lib/query/query.svelte'
 
 /**
  * The dashboard shell: the spark rail on the left, the route's surface on the
@@ -32,24 +33,25 @@ function leaveSettings() {
 
 <div class="flex h-dvh">
 	<aside class="flex w-16 shrink-0 flex-col items-center gap-3 border-border border-r py-4">
-		<!-- The global chat context: MAIA sits above the sparks — talking is a
-		     context like ME and TEAM are. -->
+		<!-- The mark opens the ANSWER SURFACE. It is no longer a context beside
+		     ME and TEAM — asking is not a place you go, it is a thing you do from
+		     wherever you are, so this and ⌘K are the same door. -->
 		<button
 			type="button"
 			onclick={() => {
 				leaveSettings()
-				talk.open = true
 				shell.tab = 'intents'
+				query.toggle()
 			}}
-			title="Talk to MAIA"
-			aria-label="Talk to MAIA"
-			class="relative flex size-11 items-center justify-center p-1 transition-all {talk.open &&
+			title="Fragen (⌘K)"
+			aria-label="Fragen"
+			class="relative flex size-11 items-center justify-center p-1 transition-all {query.open &&
 			!onSettings
-				? 'rounded-2xl bg-surface-card-selected ring-2 ring-primary/40'
+				? 'rounded-2xl bg-surface-card ring-2 ring-primary/40'
 				: 'rounded-full border border-border opacity-80 hover:rounded-2xl hover:opacity-100'}"
 		>
 			<img src="/aven-logo.svg" alt="" class="size-full rounded-full object-cover">
-			{#if talk.open && !onSettings}
+			{#if query.open && !onSettings}
 				<span class="-left-[13px] absolute h-6 w-1 rounded-full bg-primary"></span>
 			{/if}
 		</button>
@@ -57,18 +59,14 @@ function leaveSettings() {
 		<div class="h-px w-8 shrink-0 bg-border"></div>
 		{#each SPARKS as spark (spark.id)}
 			{@const active =
-				todoActor.state.active === spark.id &&
-				!talk.open &&
-				!onSettings &&
-				shell.tab === 'intents'}
+				todoActor.state.active === spark.id && !onSettings && shell.tab === 'intents'}
 			<button
 				type="button"
 				onclick={() => {
 					// The active spark is reducer state like any other — switch it
 					// through the SHOW event, the same door the voice tool uses.
-					// Picking a spark leaves the chat context — and settings.
+					// Picking a spark leaves settings.
 					leaveSettings()
-					talk.open = false
 					shell.tab = 'intents'
 					void todoActor.applyEvent({ send: 'SHOW', payload: { spark: spark.id } })
 				}}

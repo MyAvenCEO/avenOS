@@ -36,7 +36,9 @@ const {
 		<span>{data.label}</span>
 		{#if !data.compact}
 			{#if data.initial}
-				<span class="font-mono text-success-ink text-[0.5625rem] uppercase tracking-wide">start</span>
+				<span class="font-mono text-success-ink text-[0.5625rem] uppercase tracking-wide"
+					>start</span
+				>
 			{:else if data.terminal}
 				<span class="font-mono text-success-ink text-[0.5625rem] uppercase tracking-wide">end</span>
 			{/if}
