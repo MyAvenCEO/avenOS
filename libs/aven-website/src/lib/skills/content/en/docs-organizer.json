@@ -79,6 +79,5 @@
 		"Physical mail digitization: scans from the mailbox are automatically ingested",
 		"Confidence score: your Aven flags how certain it is about each extraction"
 	],
-	"scarcity": "docs organizer is included in every CEO plan. No extra cost. No tool subscription. No vendor lock-in.",
 	"letterFromPublisher": "A founder should not spend time copying numbers out of PDFs. That is not work — it is time waste that feels like work. I built docs organizer because Daniel said at some point: \"I can't do this anymore.\" Today he says: \"Just send it to me.\" That is the difference."
 }

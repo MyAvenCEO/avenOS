@@ -2,6 +2,8 @@ import type { PlanId } from '$lib/pricing/plans'
 
 export type AvenosSkillSlug =
 	| 'email-manager'
+	| 'inbox-router'
+	| 'bookmark-champion'
 	| 'calendar-organizer'
 	| 'todo-shuffler'
 	| 'docs-organizer'
@@ -58,7 +60,6 @@ export type SkillJson = {
 		proof: string
 	}
 	bonuses: string[]
-	scarcity: string
 	letterFromPublisher: string
 }
 
