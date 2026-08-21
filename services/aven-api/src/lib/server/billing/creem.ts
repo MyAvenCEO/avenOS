@@ -80,17 +80,35 @@ export class CreemProvider implements PaymentProvider {
 	}
 
 	async ensureSubscriptionProducts(seeds: SubscriptionPlanSeed[]): Promise<Record<string, string>> {
-		const found = await this.api<{ items?: Array<Record<string, any>> }>(
-			'GET',
-			'/v1/products/search?page_size=100'
-		)
-		const map: Record<string, string> = {}
-		for (const product of found.items ?? []) {
-			const tier = (product.metadata as Record<string, unknown> | undefined)?.tier
-			if (typeof tier === 'string' && product.id) map[tier] = String(product.id)
+		// Creem's create-product API accepts NO metadata (a metadata field is
+		// rejected with a 400 — learned the hard way), so tier-tagging at the
+		// provider is impossible. Resolution order instead: (1) product ids
+		// pinned in config (dashboard-created products), (2) an existing
+		// product whose NAME matches the plan, (3) create it.
+		const pinned: Record<string, string | undefined> = {
+			avenme: this.config.CREEM_PRODUCT_AVENME || undefined,
+			avenceo: this.config.CREEM_PRODUCT_AVENCEO || undefined
 		}
+		const map: Record<string, string> = {}
+		let existing: Array<Record<string, any>> | null = null
 		for (const seed of seeds) {
-			if (map[seed.tier]) continue
+			const pin = pinned[seed.tier]
+			if (pin) {
+				map[seed.tier] = pin
+				continue
+			}
+			if (existing === null) {
+				const found = await this.api<{ items?: Array<Record<string, any>> }>(
+					'GET',
+					'/v1/products/search?page_size=100'
+				)
+				existing = found.items ?? []
+			}
+			const named = existing.find((product) => product.name === seed.name && product.id)
+			if (named) {
+				map[seed.tier] = String(named.id)
+				continue
+			}
 			const created = await this.api<{ id: string }>('POST', '/v1/products', {
 				name: seed.name,
 				description: seed.description,
@@ -101,12 +119,27 @@ export class CreemProvider implements PaymentProvider {
 				billing_type: 'recurring',
 				billing_period: 'every-month',
 				tax_mode: 'exclusive',
-				tax_category: 'saas',
-				metadata: { tier: seed.tier }
+				tax_category: 'saas'
 			})
 			map[seed.tier] = created.id
 		}
 		return map
+	}
+
+	/** The provider's customer record for an email, if one exists — how a
+	 * member who bought BEFORE we started storing customer ids (the one-off
+	 * avenID) gets their history connected. */
+	async findCustomerByEmail(email: string): Promise<string | null> {
+		try {
+			const result = await this.api<{ id?: string }>(
+				'GET',
+				`/v1/customers?email=${encodeURIComponent(email)}`
+			)
+			return result.id ?? null
+		} catch {
+			// 404 = no such customer; treated as absence, not failure.
+			return null
+		}
 	}
 
 	async createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession> {

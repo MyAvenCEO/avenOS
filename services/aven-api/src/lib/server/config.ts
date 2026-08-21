@@ -61,6 +61,12 @@ export const serverConfigSchema = z
 		CREEM_API_KEY: z.string().default(''),
 		CREEM_API_BASE: z.string().default(''),
 		CREEM_PRODUCT_ID: z.string().default(''),
+		// The recurring tiers, pinned to existing Creem products. When set, the
+		// seeder adopts them instead of discovering/creating — Creem's create-
+		// product API accepts no metadata, so dashboard-created products are
+		// the reliable path.
+		CREEM_PRODUCT_AVENME: z.string().default(''),
+		CREEM_PRODUCT_AVENCEO: z.string().default(''),
 		CREEM_WEBHOOK_SECRET: z.string().min(8).default('dev-fake-webhook-secret')
 	})
 	.superRefine((config, context) => {
@@ -152,6 +158,8 @@ export type BillingConfig = Pick<
 	| 'CREEM_API_KEY'
 	| 'CREEM_API_BASE'
 	| 'CREEM_PRODUCT_ID'
+	| 'CREEM_PRODUCT_AVENME'
+	| 'CREEM_PRODUCT_AVENCEO'
 	| 'CREEM_WEBHOOK_SECRET'
 >
 export type NameServiceConfig = Pick<

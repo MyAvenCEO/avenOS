@@ -20,6 +20,8 @@ describe('CreemProvider', () => {
 			PUBLIC_BASE_URL: 'https://id.aven.ceo',
 			CREEM_API_KEY: 'creem_test_example',
 			CREEM_API_BASE: '',
+			CREEM_PRODUCT_AVENME: '',
+			CREEM_PRODUCT_AVENCEO: '',
 			CREEM_PRODUCT_ID: 'prod_example',
 			CREEM_WEBHOOK_SECRET: 'webhook-secret'
 		})

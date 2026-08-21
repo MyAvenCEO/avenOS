@@ -73,6 +73,27 @@ export class SubscriptionService {
 		private payments: PaymentProvider
 	) {}
 
+	/** The caller's provider customer id — from our table first, and for
+	 * members who paid before we stored customer ids (the one-off avenID), by
+	 * asking the provider for the SESSION's own email. Found ids are stored,
+	 * so the lookup happens once. */
+	private async customerId(user: { id: string; email: string }): Promise<string | null> {
+		const stored = await this.pool.query(
+			'SELECT creem_customer_id FROM billing_customers WHERE user_id=$1',
+			[user.id]
+		)
+		const known = stored.rows[0]?.creem_customer_id as string | undefined
+		if (known) return known
+		const found = await this.payments.findCustomerByEmail(user.email.toLowerCase())
+		if (!found) return null
+		await this.pool.query(
+			`INSERT INTO billing_customers (user_id, creem_customer_id) VALUES ($1,$2)
+			 ON CONFLICT (user_id) DO UPDATE SET creem_customer_id=EXCLUDED.creem_customer_id`,
+			[user.id, found]
+		)
+		return found
+	}
+
 	/** Ensure the recurring products exist at the provider; cached per process. */
 	ensureProducts(): Promise<Record<string, string>> {
 		this.products ??= this.payments.ensureSubscriptionProducts(subscriptionPlanSeeds())
@@ -154,25 +175,19 @@ export class SubscriptionService {
 		await this.payments.resumeSubscription(row.creem_subscription_id)
 	}
 
-	/** The caller's invoice history, straight from the provider. */
-	async invoices(userId: string): Promise<InvoiceRow[]> {
-		const customer = await this.pool.query(
-			'SELECT creem_customer_id FROM billing_customers WHERE user_id=$1',
-			[userId]
-		)
-		const providerCustomerId = customer.rows[0]?.creem_customer_id as string | undefined
+	/** The caller's invoice history, straight from the provider — including
+	 * one-off purchases like the avenID, since the customer is resolved by
+	 * the session's own email when our table does not know them yet. */
+	async invoices(user: { id: string; email: string }): Promise<InvoiceRow[]> {
+		const providerCustomerId = await this.customerId(user)
 		if (!providerCustomerId) return []
 		return this.payments.listInvoices(providerCustomerId)
 	}
 
 	/** The hosted portal for the caller's OWN customer record — where Creem
 	 * (merchant of record) serves the official invoice documents. */
-	async portalUrl(userId: string): Promise<string> {
-		const customer = await this.pool.query(
-			'SELECT creem_customer_id FROM billing_customers WHERE user_id=$1',
-			[userId]
-		)
-		const providerCustomerId = customer.rows[0]?.creem_customer_id as string | undefined
+	async portalUrl(user: { id: string; email: string }): Promise<string> {
+		const providerCustomerId = await this.customerId(user)
 		if (!providerCustomerId)
 			throw new AppError(404, 'BILLING_CUSTOMER_MISSING', 'There is no billing account yet.')
 		return this.payments.customerPortalUrl(providerCustomerId)
