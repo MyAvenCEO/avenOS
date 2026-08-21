@@ -937,10 +937,6 @@ $effect(() => {
 	el?.scrollTo({ top: el.scrollHeight })
 })
 
-/** The workspace scale — 85%: compact enough to see the whole stream,
- * large enough to read it comfortably. */
-const WS_ZOOM = 0.85
-
 const DOT: Record<string, string> = {
 	done: 'bg-state-done text-status-success-foreground',
 	running: 'bg-state-working text-primary-foreground',
@@ -961,11 +957,10 @@ const DOT: Record<string, string> = {
 	</button>
 {/snippet}
 
-<!-- The workspace runs at 85% scale: more of the stream, the log and the
-     views fit on one screen. `zoom` scales the layout itself (not just the
-     paint), so every measurement below stays honest — only the dock
-     clearance is divided back out, since it is measured OUTSIDE this box. -->
-<div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden" style="zoom: {WS_ZOOM}">
+<!-- The 85% UI scale lives on `html` (app.css), not on a zoom wrapper here:
+     rem sizes shrink, px borders stay honest, and the dock clearance needs no
+     dividing back out because nothing is scaled relative to anything else. -->
+<div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden">
 	{#if talk.open}
 		<!-- TALK CONTEXT (global, from the spark rail): the conversation is a
 		     25% aside on the left; the right 75% is the VIEW surface — every
@@ -1007,7 +1002,7 @@ const DOT: Record<string, string> = {
 
 		<main
 			class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-			style="margin-bottom: calc(var(--dock-h, 0px) / {WS_ZOOM})"
+			style="margin-bottom: var(--dock-h, 0px)"
 		>
 			{#if registryTick.v >= 0}
 				{@const openWindows = bus
@@ -1153,7 +1148,7 @@ const DOT: Record<string, string> = {
 		     columns start their cards on one line. -->
 		<div
 			class="flex min-h-0 min-w-0 flex-1 flex-col gap-2"
-			style="margin-bottom: calc(var(--dock-h, 0px) / {WS_ZOOM})"
+			style="margin-bottom: var(--dock-h, 0px)"
 		>
 			<h2
 				class="px-1 pt-1 text-center font-semibold text-xs uppercase tracking-wide {accentFor(selected.status).text}"
