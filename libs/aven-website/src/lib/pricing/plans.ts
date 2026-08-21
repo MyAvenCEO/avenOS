@@ -47,6 +47,12 @@ export interface Plan {
 	equitySharePct?: number
 	/** avenCOOP is not bookable: you apply and we decide together. */
 	applyOnly?: boolean
+	/**
+	 * Included agent runtime per day, and what a minute costs past it. Fair
+	 * use is a promise about a NUMBER, so the number is data, not prose in a
+	 * feature bullet where it drifts per tier.
+	 */
+	runtime?: { hoursPerDay: number; centsPerExtraMinute: number }
 	/** What this tier adds; the tiers below are always included. */
 	features: string[]
 	/** One outbound reference, where the tier depends on one. */
@@ -77,15 +83,16 @@ export const PLANS: Plan[] = [
 		role: 'Dein Leben — organisiert, jeden Tag',
 		eurPrice: 42,
 		billing: 'monthly',
+		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
 		platformFeePct: 0,
 		reinvestPct: 0,
 		features: [
 			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
 			'E‑Mail‑Inbox',
-			'POST‑Inbox — deine Papierpost digitalisiert',
+			'POST‑Inbox — deine Papierpost digitalisiert (ohne Post‑Weiterleitung)',
 			'Dokumentenverwaltung',
 			'Dein Brain: Notizen, Kontakte, Kalender',
-			'Personal Spark · max. 1 Std KI/Tag (Fair Use)'
+			'Personal Spark'
 		]
 	},
 	{
@@ -94,6 +101,7 @@ export const PLANS: Plan[] = [
 		role: 'Deine Firma — alles Geschäftliche',
 		eurPrice: 326,
 		billing: 'monthly',
+		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
 		platformFeePct: 6,
 		reinvestPct: 6,
 		highlight: true,
@@ -114,6 +122,7 @@ export const PLANS: Plan[] = [
 		role: 'Wir werden dein technischer Co‑Founder',
 		eurPrice: 1895,
 		billing: 'monthly',
+		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
 		platformFeePct: 6,
 		reinvestPct: 12,
 		equitySharePct: 5,
@@ -166,11 +175,17 @@ export function totalSharePct(p: Plan): number {
  * the grid is a note half the readers never reach.
  */
 export function billingLabel(p: Plan): string {
-	return p.billing === 'once' ? 'Einmalig · netto' : 'Monatlich · netto'
+	return p.billing === 'once' ? 'Einmalig · zzgl. USt.' : 'Monatlich · zzgl. USt.'
 }
 
-/** The one VAT sentence, spelled once. */
-export const VAT_NOTE = 'Alle Preise netto, zzgl. gesetzlicher Umsatzsteuer.'
+/**
+ * The one VAT sentence, spelled once. "Netto" alone does not carry it: the
+ * clause German price disclosures are expected to use is the explicit one,
+ * and a publicly reachable page is read as a price disclosure even when the
+ * offer is meant for businesses — hence the second sentence.
+ */
+export const VAT_NOTE =
+	'Alle Preise verstehen sich zzgl. der gesetzlichen Umsatzsteuer. Unsere Angebote richten sich ausschließlich an Unternehmer im Sinne des § 14 BGB.'
 
 /** Book it, or apply for it — avenCOOP is a decision we make together. */
 export function ctaLabel(p: Plan): string {
