@@ -10,6 +10,7 @@
 import { page } from '$app/stores'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
+import SiteFooter from '$lib/components/SiteFooter.svelte'
 import {
 	ctaHref,
 	ctaLabel,
@@ -114,8 +115,14 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 				{#each tiers as p, i (p.id)}
 					{@const previous = i === 0 ? avenId : tiers[i - 1]}
 					{@const skillCount = skillsIncludedIn(p.id, 'de').length}
-					{@const plain = p.features.filter((f) => typeof f === 'string')}
-					{@const skills = p.features.filter((f) => typeof f !== 'string')}
+					{@const plain = p.features.filter((f) => typeof f === 'string' || 'href' in f)}
+					{@const skills = p.features
+						.filter((f) => typeof f !== 'string' && 'skill' in f)
+						.sort(
+							(a, b) =>
+								Number(loadSkill(a.skill, 'de')?.comingSoon ?? false) -
+								Number(loadSkill(b.skill, 'de')?.comingSoon ?? false)
+						)}
 					<div
 						id={p.id}
 						class="flex min-w-0 scroll-mt-28 flex-col rounded-2xl p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {p.highlight
@@ -176,7 +183,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 										<dt class="font-medium text-accent-ink">
 											{p.reinvestPct}&nbsp;% Reinvest
 											<span class="font-normal text-foreground/55">
-												· in avenCOOPs anderer Gründer, die Anteile bleiben deine</span
+												· in avenCOOPs anderer Gründer</span
 											>
 										</dt>
 									</div>
@@ -184,6 +191,91 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								{#if p.equitySharePct}
 									<p class="mt-3 text-[12px] font-medium text-foreground/70">
 										+&nbsp;{p.equitySharePct}&nbsp;% Firmenanteile an deiner Firma
+									</p>
+								{/if}
+							</div>
+						{/if}
+
+						<ul
+							class="mt-4 flex-1 space-y-2 border-t border-border/50 pt-4 text-left text-[13px] leading-snug text-foreground/75"
+						>
+							<li class="flex gap-2 font-medium text-foreground/85">
+								<span
+									aria-hidden="true"
+									class="mt-1.5 size-1.5 shrink-0 rounded-full {p.highlight
+										? 'bg-accent'
+										: 'bg-foreground/25'}"
+								></span>
+								<span>Alles aus {previous.name}</span>
+							</li>
+							{#each plain as feature (typeof feature === 'string' ? feature : feature.label)}
+								<li class="flex gap-2">
+									<span
+										aria-hidden="true"
+										class="mt-1.5 size-1.5 shrink-0 rounded-full {p.highlight
+											? 'bg-accent'
+											: 'bg-foreground/25'}"
+									></span>
+									{#if typeof feature === 'string'}
+										<span>{feature}</span>
+									{:else}
+										<span>
+											<a
+												href={feature.href}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+											>
+												{feature.label}
+												→
+											</a>
+										</span>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+
+						<!-- Skills are their own category, not more bullets: a feature is
+						     something the tier does, a skill is a thing you can go read. -->
+						{#if skills.length > 0 || skillCount > 0}
+							<div class="mt-4 border-t border-border/50 pt-4 text-left">
+								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+									Skills
+								</p>
+								{#if skills.length > 0}
+									<ul class="mt-2 space-y-1.5 text-[13px] leading-snug">
+										{#each skills as feature (feature.skill)}
+											{@const soon = loadSkill(feature.skill, 'de')?.comingSoon}
+											<li class={soon ? 'opacity-70' : ''}>
+												<a
+													href={skillDetailHref(feature.skill, 'de')}
+													class="font-medium underline underline-offset-4 transition-colors {soon
+														? 'text-quiet-ink decoration-dashed decoration-quiet/40 hover:decoration-quiet/70'
+														: 'text-foreground decoration-foreground/25 hover:decoration-foreground/60'}"
+												>
+													{skillLabel(feature.skill)}
+												</a>
+												{#if soon}
+													<span
+														class="ml-1 rounded-full border border-quiet/45 bg-quiet/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-quiet-ink"
+														>bald</span
+													>
+												{/if}
+												<span class={soon ? 'text-foreground/45' : 'text-foreground/55'}>
+													· {feature.label}</span
+												>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+								{#if skillCount > 0}
+									<p class="mt-2 text-[12px] text-foreground/50">
+										<a
+											href={`/skills?plan=${p.id}`}
+											class="underline underline-offset-4 hover:text-foreground/75"
+										>
+											Alle {skillCount} Skills ansehen →
+										</a>
 									</p>
 								{/if}
 							</div>
@@ -206,85 +298,6 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							</div>
 						{/if}
 
-						<ul
-							class="mt-4 flex-1 space-y-2 border-t border-border/50 pt-4 text-left text-[13px] leading-snug text-foreground/75"
-						>
-							<li class="flex gap-2 font-medium text-foreground/85">
-								<span
-									aria-hidden="true"
-									class="mt-1.5 size-1.5 shrink-0 rounded-full {p.highlight
-										? 'bg-accent'
-										: 'bg-foreground/25'}"
-								></span>
-								<span>Alles aus {previous.name}</span>
-							</li>
-							{#each plain as feature (feature)}
-								<li class="flex gap-2">
-									<span
-										aria-hidden="true"
-										class="mt-1.5 size-1.5 shrink-0 rounded-full {p.highlight
-											? 'bg-accent'
-											: 'bg-foreground/25'}"
-									></span>
-									<span>{feature}</span>
-								</li>
-							{/each}
-						</ul>
-
-						{#if p.link}
-							<p class="mt-4 text-[12px] text-foreground/55">
-								<a
-									href={p.link.href}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="underline underline-offset-4 hover:text-foreground/80"
-								>
-									Syndikat auf {p.link.label} →
-								</a>
-							</p>
-						{/if}
-
-						<!-- Skills are their own category, not more bullets: a feature is
-						     something the tier does, a skill is a thing you can go read. -->
-						{#if skills.length > 0 || skillCount > 0}
-							<div class="mt-4 border-t border-border/50 pt-4 text-left">
-								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-									Skills
-								</p>
-								{#if skills.length > 0}
-									<ul class="mt-2 space-y-1.5 text-[13px] leading-snug">
-										{#each skills as feature (feature.skill)}
-											<li>
-												<a
-													href={skillDetailHref(feature.skill, 'de')}
-													class="font-medium text-foreground underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
-												>
-													{skillLabel(feature.skill)}
-												</a>
-												{#if loadSkill(feature.skill, 'de')?.comingSoon}
-													<span
-														class="ml-1 rounded-full border border-quiet/40 bg-quiet/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-quiet-ink"
-														>bald</span
-													>
-												{/if}
-												<span class="text-foreground/55"> · {feature.label}</span>
-											</li>
-										{/each}
-									</ul>
-								{/if}
-								{#if skillCount > 0}
-									<p class="mt-2 text-[12px] text-foreground/50">
-										<a
-											href={`/skills?plan=${p.id}`}
-											class="underline underline-offset-4 hover:text-foreground/75"
-										>
-											Alle {skillCount} Skills ansehen →
-										</a>
-									</p>
-								{/if}
-							</div>
-						{/if}
-
 						<div class="mt-5 lg:mt-auto lg:pt-5">
 							<a
 								href={ctaHref(p)}
@@ -295,6 +308,17 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 								{ctaLabel(p)}
 							</a>
 						</div>
+
+						{#if p.referralPct}
+							<p class="mt-4 text-center">
+								<span class="text-xl font-semibold tracking-tight text-accent">
+									{p.referralPct}&nbsp;% Provision
+								</span>
+								<span class="mt-1 block text-[12px] leading-snug text-foreground/55">
+									auf jedes aven‑Abo, das du vermittelst — monatlich, solange es läuft.
+								</span>
+							</p>
+						{/if}
 					</div>
 				{/each}
 			</div>
@@ -396,9 +420,5 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 		</div>
 	</section>
 
-	<footer
-		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] uppercase tracking-[0.14em] text-foreground/35"
-	>
-		avenCEO · avenOS · Own your life
-	</footer>
+	<SiteFooter />
 </div>

@@ -49,6 +49,12 @@ export interface SkillEntry {
  */
 export const CATALOG: SkillEntry[] = [
 	{
+		id: 'inbox-router',
+		name: 'Inbox Router',
+		tagline: 'One inbox for everything — and someone deciding what matters now.',
+		plan: 'avenme'
+	},
+	{
 		id: 'inbox',
 		slug: 'email-manager',
 		name: 'Email Manager',
@@ -92,6 +98,13 @@ export const CATALOG: SkillEntry[] = [
 		comingSoon: true
 	},
 	{
+		id: 'bookmark-champion',
+		name: 'Bookmark Champion',
+		tagline: 'Everything you ever saved — findable at last.',
+		plan: 'avenme',
+		comingSoon: true
+	},
+	{
 		id: 'abgleich',
 		slug: 'book-keeper',
 		name: 'Book Keeper',
@@ -99,10 +112,30 @@ export const CATALOG: SkillEntry[] = [
 		plan: 'avenceo'
 	},
 	{
+		id: 'finance-brain',
+		name: 'Finance Brain',
+		tagline: 'Invoices out, numbers straight — no spreadsheet, no gut feeling.',
+		plan: 'avenceo',
+		comingSoon: true
+	},
+	{
+		id: 'website-creator',
+		name: 'Website Creator',
+		tagline: 'Your website exists — and stays current without you touching it.',
+		plan: 'avenceo'
+	},
+	{
+		id: 'checkout-builder',
+		name: 'Checkout Builder',
+		tagline: 'From offer to paying customer — without a shop project.',
+		plan: 'avenceo'
+	},
+	{
 		id: 'blog-writer',
 		name: 'Blog Writer',
 		tagline: "Your Aven writes. You sign off — when it's good.",
-		plan: 'avenceo'
+		plan: 'avenceo',
+		comingSoon: true
 	}
 ]
 

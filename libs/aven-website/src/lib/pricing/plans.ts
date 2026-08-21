@@ -27,7 +27,10 @@ export type PlanId = 'avenid' | 'avenme' | 'avenceo' | 'avencoop'
  * it. The slug stays a plain string: `skills/loader` imports THIS file, so an
  * import the other way would close a cycle.
  */
-export type PlanFeature = string | { skill: string; label: string }
+export type PlanFeature =
+	| string
+	| { skill: string; label: string }
+	| { href: string; label: string }
 
 export interface Plan {
 	id: PlanId
@@ -57,6 +60,11 @@ export interface Plan {
 	/** avenCOOP is not bookable: you apply and we decide together. */
 	applyOnly?: boolean
 	/**
+	 * What you earn on every aven subscription you bring in — recurring for as
+	 * long as that subscription runs, not a one-off finder's fee.
+	 */
+	referralPct?: number
+	/**
 	 * Included agent runtime per day, and what a minute costs past it. Fair
 	 * use is a promise about a NUMBER, so the number is data, not prose in a
 	 * feature bullet where it drifts per tier.
@@ -64,8 +72,6 @@ export interface Plan {
 	runtime?: { hoursPerDay: number; centsPerExtraMinute: number }
 	/** What this tier adds; the tiers below are always included. */
 	features: PlanFeature[]
-	/** One outbound reference, where the tier depends on one. */
-	link?: { href: string; label: string }
 	/** Marks the tier we lead with. */
 	highlight?: boolean
 }
@@ -92,11 +98,13 @@ export const PLANS: Plan[] = [
 		role: 'Dein Leben — organisiert, jeden Tag',
 		eurPrice: 42,
 		billing: 'monthly',
+		referralPct: 10,
 		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
 		platformFeePct: 0,
 		reinvestPct: 0,
 		features: [
 			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
+			{ skill: 'inbox-router', label: 'Ein Eingang für alles' },
 			{ skill: 'email-manager', label: 'E‑Mail‑Inbox' },
 			'Digitaler Briefkasten — deine Papierpost digitalisiert (exkl. Nachsendeauftrag der Deutschen Post: 31,90 € / 6 Monate, inkl. USt.)',
 			{ skill: 'docs-organizer', label: 'Dokumentenverwaltung' },
@@ -104,7 +112,8 @@ export const PLANS: Plan[] = [
 			{ skill: 'human-reviewer', label: 'Du entscheidest, wenn es zählt' },
 			{ skill: 'calendar-organizer', label: 'Dein Kalender denkt mit' },
 			{ skill: 'todo-shuffler', label: 'Deine Liste sortiert sich selbst' },
-			'Personal Spark'
+			{ skill: 'bookmark-champion', label: 'Links und Lesezeichen, wiederfindbar' },
+			'1 Personal Spark'
 		]
 	},
 	{
@@ -113,20 +122,21 @@ export const PLANS: Plan[] = [
 		role: 'Deine Firma — alles Geschäftliche',
 		eurPrice: 326,
 		billing: 'monthly',
-		runtime: { hoursPerDay: 4, centsPerExtraMinute: 10 },
+		referralPct: 15,
+		runtime: { hoursPerDay: 4, centsPerExtraMinute: 8 },
 		platformFeePct: 6,
 		reinvestPct: 6,
 		highlight: true,
 		features: [
-			'Vorbuchhaltung',
-			'Finanz‑Dashboard',
+			{ skill: 'book-keeper', label: 'Vorbuchhaltung' },
+			{ skill: 'finance-brain', label: 'Finanz‑Dashboard und Rechnungen' },
 			'Agent‑API‑Auth‑Proxy',
-			'Website',
-			'Stripe‑Shop',
-			'Blog',
+			{ skill: 'website-creator', label: 'Website und Landingpages' },
+			{ skill: 'checkout-builder', label: 'Produkt‑Checkout und Shop' },
+			{ skill: 'blog-writer', label: 'Blog' },
 			'Digitaler Briefkasten für Geschäftskunden (exkl. Nachsendeauftrag der Deutschen Post: 51,90 € / 6 Monate, inkl. USt.)',
 			'Dein Aven und deine Produkte im aven Marketplace gelistet',
-			'Company Spark zusätzlich zu deinem Personal Spark'
+			'3 Company Sparks — zusätzlich zu deinem Personal Spark'
 		]
 	},
 	{
@@ -135,19 +145,23 @@ export const PLANS: Plan[] = [
 		role: 'Wir werden dein technischer Co‑Founder',
 		eurPrice: 1895,
 		billing: 'monthly',
-		runtime: { hoursPerDay: 12, centsPerExtraMinute: 10 },
+		referralPct: 20,
+		runtime: { hoursPerDay: 12, centsPerExtraMinute: 5 },
 		platformFeePct: 6,
 		reinvestPct: 12,
 		equitySharePct: 5,
 		applyOnly: true,
 		features: [
+			'1× avenCEO inklusive — avenCEO gilt pro Mensch, avenCOOP pro Firma',
+			'10 Company Sparks',
 			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
-			'5 % Firmenanteile an deiner Firma, digitalisiert über beel.com',
 			'Du wählst selbst, in welche avenCOOPs dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
-			'Wir führen dein beel‑Syndikat an — mit Community‑Investments deiner Unterstützer'
-		],
-		link: { href: 'https://beel.com/de', label: 'beel.com' }
+			{
+				href: 'https://beel.com/de',
+				label: 'Wir führen dein beel‑Syndikat an — mit Community‑Investments deiner Unterstützer'
+			}
+		]
 	}
 ]
 

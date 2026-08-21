@@ -1,7 +1,13 @@
 <script lang="ts">
 import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
-import { publisherIdentity, skillDetailHref, skillLabel } from '$lib/skills/loader'
+import SiteFooter from '$lib/components/SiteFooter.svelte'
+import {
+	availabilityNote,
+	publisherIdentity,
+	skillDetailHref,
+	skillLabel
+} from '$lib/skills/loader'
 import type { AvenosSkill } from '$lib/skills/types'
 
 type Props = {
@@ -28,8 +34,9 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 		<div
 			class="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-10 gap-y-2 px-5 py-5 sm:justify-between sm:px-8"
 		>
-			<a href="/" class="text-[17px] font-light tracking-[-0.01em] opacity-85 hover:opacity-100">
-				avenCEO
+			<a href="/" class="flex items-center gap-2.5">
+				<img src="/aven-logo.svg" alt="" class="size-7 shrink-0" width="28" height="28">
+				<span class="text-[17px] font-semibold tracking-tight text-foreground">avenCEO</span>
 			</a>
 			<nav
 				class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70"
@@ -329,7 +336,9 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent-ink">
 					Verfügbarkeit
 				</p>
-				<p class="mt-1.5 text-[13px] leading-snug text-foreground/75">{skill.scarcity}</p>
+				<p class="mt-1.5 text-[13px] leading-snug text-foreground/75">
+					{availabilityNote(skill, 'de')}
+				</p>
 			</div>
 		</div>
 	</section>
@@ -395,9 +404,5 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 		</div>
 	</section>
 
-	<footer
-		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] text-foreground/30"
-	>
-		avenCEO · avenOS · Own your life
-	</footer>
+	<SiteFooter />
 </div>
