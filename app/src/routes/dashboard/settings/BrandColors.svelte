@@ -133,15 +133,69 @@ const TONES: Tone[] = [
 	{ name: 'Stein', token: '--color-stone', note: 'warmes Grau' }
 ]
 
-/** Block 2: the cream ladder, lightest first. */
-const SURFACES: Tone[] = [
-	{ name: 'Seiten-Creme', token: '--color-surface-cream', note: 'der Grund, auf dem alles liegt' },
-	{ name: 'Eierschale weich', token: '--color-surface-soft', note: 'Display-Flächen' },
-	{ name: 'Karte', token: '--color-surface-card', note: 'Ruhezustand' },
-	{ name: 'Karte hover', token: '--color-surface-card-hover', note: 'Zeiger darüber' },
-	{ name: 'Karte gewählt', token: '--color-surface-card-selected', note: 'Auswahl-Highlight' },
+/**
+ * The cream family — four rungs, lightest first. Was six near-identical
+ * values; #f9f5e6 and #efeada were half-steps nobody could see and were
+ * folded into their neighbours. Porcelain used to hide as a raw #fffdf7 in
+ * the markup, which is why it never appeared on this page before.
+ */
+const CREAMS: Tone[] = [
+	{ name: 'Porzellan', token: '--color-porcelain', note: 'Karten, die von der Seite abheben' },
+	{ name: 'Leinen', token: '--color-linen', note: 'der Grund, auf dem alles liegt' },
+	{ name: 'Eierschale', token: '--color-eggshell', note: 'Display-Flächen und Hover' },
+	{ name: 'Elfenbein', token: '--color-ivory', note: 'Karten in Ruhe und ausgewählt' }
+]
+
+/** The two text tones, so the page shows the whole ground. */
+const INKS: Tone[] = [
 	{ name: 'Tinte', token: '--color-ink', note: 'Fließtext — nie reines Schwarz' },
 	{ name: 'Kreide', token: '--color-chalk', note: 'Text auf dunklem Ton' }
+]
+
+/** Block 2: which rung of the cream family each surface stands on. */
+const SURFACES: Role[] = [
+	{
+		role: 'surface raised',
+		tone: 'Porzellan',
+		token: '--color-surface-raised',
+		toneToken: '--color-porcelain',
+		note: 'Intent-Karten, Settings-Panels, Flow-Nodes'
+	},
+	{
+		role: 'surface cream',
+		tone: 'Leinen',
+		token: '--color-surface-cream',
+		toneToken: '--color-linen',
+		note: 'der Seitengrund'
+	},
+	{
+		role: 'surface soft',
+		tone: 'Eierschale',
+		token: '--color-surface-soft',
+		toneToken: '--color-eggshell',
+		note: 'Activity-Log, Display-Panel, Vibe-Apps'
+	},
+	{
+		role: 'card hover',
+		tone: 'Eierschale',
+		token: '--color-surface-card-hover',
+		toneToken: '--color-eggshell',
+		note: 'Zeiger darüber — die Fläche hebt an'
+	},
+	{
+		role: 'card',
+		tone: 'Elfenbein',
+		token: '--color-surface-card',
+		toneToken: '--color-ivory',
+		note: 'Ruhezustand'
+	},
+	{
+		role: 'card selected',
+		tone: 'Elfenbein',
+		token: '--color-surface-card-selected',
+		toneToken: '--color-ivory',
+		note: 'Auswahl — der Rand trägt sie, nicht die Fläche'
+	}
 ]
 
 /** What the browser resolved, per token — the honest value. */
@@ -153,11 +207,11 @@ $effect(() => {
 	const read = (token: string) => {
 		next[token] = style.getPropertyValue(token).trim()
 	}
-	for (const r of ROLES) {
+	for (const r of [...ROLES, ...SURFACES]) {
 		read(r.token)
 		read(r.toneToken)
 	}
-	for (const t of [...TONES, ...SURFACES]) read(t.token)
+	for (const t of [...TONES, ...CREAMS, ...INKS]) read(t.token)
 	resolved = next
 })
 
@@ -168,7 +222,7 @@ $effect(() => {
  */
 const collisions = $derived.by(() => {
 	const seen = new Map<string, string[]>()
-	for (const t of TONES) {
+	for (const t of [...TONES, ...CREAMS, ...INKS]) {
 		const value = resolved[t.token]
 		if (!value) continue
 		seen.set(value, [...(seen.get(value) ?? []), t.name])
@@ -179,7 +233,7 @@ const collisions = $derived.by(() => {
 
 {#snippet swatch(item: Tone)}
 	<li
-		class="overflow-hidden rounded-xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+		class="overflow-hidden rounded-xl border border-foreground/5 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 	>
 		<!-- The colour gets the room: a full-width field, not a chip. -->
 		<span
@@ -195,6 +249,29 @@ const collisions = $derived.by(() => {
 			</div>
 			<p class="truncate text-[0.625rem] text-foreground/40">{item.note}</p>
 			<p class="truncate font-mono text-[0.5625rem] text-foreground/30">{item.token}</p>
+		</div>
+	</li>
+{/snippet}
+
+{#snippet roleRow(r: Role)}
+	<li
+		class="flex items-stretch gap-3 overflow-hidden rounded-xl border border-foreground/5 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+	>
+		<span
+			class="w-24 shrink-0 self-stretch border-foreground/10 border-r"
+			style="background: var({r.token})"
+		></span>
+		<div class="min-w-0 flex-1 py-2.5 pr-3">
+			<div class="flex items-baseline gap-2">
+				<span class="font-mono font-medium text-xs">{r.role}</span>
+				<span class="text-[0.625rem] text-foreground/30">→</span>
+				<span class="truncate text-xs text-foreground/70">{r.tone}</span>
+				<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/45">
+					{resolved[r.token] || '—'}
+				</span>
+			</div>
+			<p class="truncate text-[0.625rem] text-foreground/40">{r.note}</p>
+			<p class="truncate font-mono text-[0.5625rem] text-foreground/30">{r.token}</p>
 		</div>
 	</li>
 {/snippet}
@@ -221,26 +298,7 @@ const collisions = $derived.by(() => {
 		</div>
 		<ul class="grid gap-2 lg:grid-cols-2">
 			{#each ROLES as r (r.role)}
-				<li
-					class="flex items-stretch gap-3 overflow-hidden rounded-xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-				>
-					<span
-						class="w-24 shrink-0 self-stretch border-foreground/10 border-r"
-						style="background: var({r.token})"
-					></span>
-					<div class="min-w-0 flex-1 py-2.5 pr-3">
-						<div class="flex items-baseline gap-2">
-							<span class="font-mono font-medium text-xs">{r.role}</span>
-							<span class="text-[0.625rem] text-foreground/30">→</span>
-							<span class="truncate text-xs text-foreground/70">{r.tone}</span>
-							<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/45">
-								{resolved[r.token] || '—'}
-							</span>
-						</div>
-						<p class="truncate text-[0.625rem] text-foreground/40">{r.note}</p>
-						<p class="truncate font-mono text-[0.5625rem] text-foreground/30">{r.token}</p>
-					</div>
-				</li>
+				{@render roleRow(r)}
 			{/each}
 		</ul>
 	</section>
@@ -261,19 +319,37 @@ const collisions = $derived.by(() => {
 		</ul>
 	</section>
 
-	<!-- ── Surfaces: the ground ── -->
+	<!-- ── The cream family: the ground, and the four rungs it has ── -->
 	<section class="flex flex-col gap-2">
 		<div>
 			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-				Flächen & Tinte
+				Creme-Familie
 			</h3>
 			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
-				Die Creme-Leiter, auf der die App liegt — hellste zuerst.
+				Vier Sprossen, hellste zuerst — aus sechs zusammengelegt. Ein spürbarer Schritt ist mehr wert
+				als zwei unsichtbare.
 			</p>
 		</div>
 		<ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+			{#each [...CREAMS, ...INKS] as t (t.token)}
+				{@render swatch(t)}
+			{/each}
+		</ul>
+	</section>
+
+	<!-- ── Surfaces: which rung each part of the app stands on ── -->
+	<section class="flex flex-col gap-2">
+		<div>
+			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+				Fläche → Creme-Ton
+			</h3>
+			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
+				Zwei Flächen dürfen sich eine Sprosse teilen — das ist die Entscheidung, kein Versehen.
+			</p>
+		</div>
+		<ul class="grid gap-2 lg:grid-cols-2">
 			{#each SURFACES as s (s.token)}
-				{@render swatch(s)}
+				{@render roleRow(s)}
 			{/each}
 		</ul>
 	</section>
@@ -291,7 +367,7 @@ const collisions = $derived.by(() => {
 			<ul class="flex flex-col gap-1.5">
 				{#each collisions as [value, names] (value)}
 					<li
-						class="flex items-center gap-3 rounded-xl border border-foreground/5 bg-[#fffdf7] px-3 py-2"
+						class="flex items-center gap-3 rounded-xl border border-foreground/5 bg-surface-raised px-3 py-2"
 					>
 						<span
 							class="size-6 shrink-0 rounded-md border border-foreground/10"
