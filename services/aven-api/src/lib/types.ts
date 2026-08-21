@@ -83,6 +83,17 @@ export interface HoldOrigin {
  * so "you are up in ~3 weeks" would be invented. Position, who is ahead, and
  * when the last invites actually went out are all things we can know.
  */
+export interface QueueEntry {
+	position: number
+	/** The reserved name. Public by design — it becomes `name.aven.ceo`. */
+	name: string
+	reservedAt: string
+	/** Already invited and on board. */
+	invited: boolean
+	/** The holder looking at the page. */
+	you?: boolean
+}
+
 export interface QueueStanding {
 	name: string
 	reservedAt: string
@@ -93,6 +104,10 @@ export interface QueueStanding {
 	invited: number
 	/** When the most recent invite went out, if any ever has. */
 	lastInvitedAt: string | null
+	/** The stretch of the list around you, with your own row flagged. */
+	board: QueueEntry[]
+	/** The newest names on the list — who just joined behind you. */
+	latest: QueueEntry[]
 }
 
 export interface NameHoldResult {

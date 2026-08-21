@@ -18,7 +18,10 @@ describe('functional web copy', () => {
 		expect(route('passkey/create/+page.svelte')).toContain(
 			'Firefox unter Linux hat keinen eingebauten Passkey‑Anbieter.'
 		)
-		expect(route('dashboard/+page.svelte')).toContain('avenOS herunterladen')
+		// The download CTA is gone while the app is invite-only; what the holder
+		// comes here for is their name and their place in the queue.
+		expect(route('dashboard/+page.svelte')).toContain('Für dich reserviert')
+		expect(route('dashboard/+page.svelte')).toContain('Die Liste um dich herum')
 	})
 
 	it('does not add product or release-stage copy', () => {
