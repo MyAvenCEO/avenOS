@@ -148,13 +148,13 @@ function windowFor(key: string) {
 		{#if chat.turns.length > 0 || listener.partial !== '' || activity.current}
 			<div
 				bind:this={chatEl}
-				class="max-h-[26%] shrink-0 overflow-y-auto border-foreground/10 border-t bg-surface-soft px-3 py-2.5"
+				class="max-h-[30%] shrink-0 overflow-y-auto border-foreground/10 border-t bg-surface-soft px-3 py-2.5"
 			>
 				<div class="flex flex-col gap-1.5">
 					{#each chat.turns as turn (turn.id)}
 						<div class="flex" class:justify-end={turn.role === 'user'}>
 							<div
-								class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[17px] leading-relaxed {turn.role ===
+								class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 text-[13px] leading-relaxed {turn.role ===
 								'user'
 									? 'bg-primary text-primary-foreground'
 									: 'border border-border bg-surface-raised'}"
@@ -193,7 +193,7 @@ function windowFor(key: string) {
 							>
 								{ACTIVITY_LABELS[entry.kind].mark}
 							</span>
-							<div class="min-w-0 flex-1 text-[15px] leading-relaxed">
+							<div class="min-w-0 flex-1 text-xs leading-relaxed">
 								<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
 								{#if entry.titles.length > 0}
 									<!-- One per line: run together with separators, five items became
@@ -215,7 +215,7 @@ function windowFor(key: string) {
 					{#if listener.partial !== ''}
 						<div class="flex justify-end">
 							<div
-								class="max-w-[85%] rounded-2xl border border-border border-dashed bg-surface-card px-3.5 py-2 text-[17px] opacity-70"
+								class="max-w-[85%] rounded-2xl border border-border border-dashed bg-surface-card px-3 py-1.5 text-[13px] opacity-70"
 							>
 								{listener.partial}
 							</div>
