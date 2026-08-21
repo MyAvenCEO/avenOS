@@ -36,7 +36,7 @@ const INSTANCE_RING: Record<string, string> = {
 
 /** Node KINDS are a categorical palette, not states — hence the roles vary. */
 const BADGE: Record<string, string> = {
-	trigger: 'bg-status-progress/35 text-status-progress-ink',
+	trigger: 'bg-status-progress/12 text-status-progress-ink',
 	llm: 'bg-status-error/12 text-status-error-ink',
 	route: 'bg-status-warning/18 text-status-warning-ink',
 	op: 'bg-status-quiet/15 text-status-quiet-ink',

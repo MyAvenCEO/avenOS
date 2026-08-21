@@ -39,11 +39,18 @@ const ROLES: Role[] = [
 		note: 'Buttons, Rail, HITL-Rahmen, Wikilinks'
 	},
 	{
+		role: 'status progress',
+		tone: 'Tidal Blue',
+		token: '--color-status-progress',
+		toneToken: '--color-tidal-blue',
+		note: 'in Bewegung'
+	},
+	{
 		role: 'status quiet',
 		tone: 'Hafen',
 		token: '--color-status-quiet',
 		toneToken: '--color-harbour',
-		note: 'zurückgenommen — war auch primary soft und archive'
+		note: 'zurückgenommen — jedes Typ-Badge, archive'
 	},
 	{
 		role: 'status success',
@@ -51,13 +58,6 @@ const ROLES: Role[] = [
 		token: '--color-status-success',
 		toneToken: '--color-paradise-water',
 		note: 'erledigt — der helle Ton der Marke'
-	},
-	{
-		role: 'status progress',
-		tone: 'Salbei',
-		token: '--color-status-progress',
-		toneToken: '--color-sage',
-		note: 'in Bewegung'
 	},
 	{
 		role: 'status warning',
@@ -135,9 +135,9 @@ const STATES: Role[] = [
 /** Block 1: the paint itself, each hex written exactly once in app.css. */
 const TONES: Tone[] = [
 	{ name: 'Marine', token: '--color-marine', note: 'tiefes Navy — Tinte und Fläche' },
+	{ name: 'Tidal Blue', token: '--color-tidal-blue', note: 'tiefes Blaugrün — in Bewegung' },
 	{ name: 'Hafen', token: '--color-harbour', note: 'Stahlblau — alles Zurückgenommene' },
 	{ name: 'Paradise Water', token: '--color-paradise-water', note: 'Türkis — der helle Ton' },
-	{ name: 'Salbei', token: '--color-sage', note: 'weiches Grün — Text nutzt die Tinte' },
 	{ name: 'Tuscan Sun', token: '--color-tuscan-sun', note: 'klares Gold' },
 	{ name: 'Terracotta', token: '--color-terracotta', note: 'gebranntes Orange' },
 	{ name: 'Sonnenblume', token: '--color-sunflower', note: 'warmes Bernstein-Tan' },
