@@ -11,6 +11,24 @@ let busy = $state(initial.busy)
 let approved = $state(initial.approved)
 let message = $state(initial.message)
 const authenticated = $derived($session.authenticated || signedIn)
+const heading = $derived(
+	!userCode
+		? 'Dieser Verbindungslink ist unvollständig'
+		: approved
+			? 'avenOS ist verbunden'
+			: authenticated
+				? 'Diese avenOS-App verbinden?'
+				: 'Anmelden und avenOS verbinden'
+)
+const description = $derived(
+	!userCode
+		? 'Öffne den Anmeldelink aus avenOS erneut, um einen neuen Gerätecode zu erhalten.'
+		: approved
+			? 'Du kannst diese Seite schließen und zu avenOS zurückkehren.'
+			: authenticated
+				? 'Bestätige die Verbindung, um der App Zugriff auf dein Aven-Konto zu geben.'
+				: 'Verwende den Passkey deines Aven-Kontos. Im nächsten Schritt bestätigst du die App.'
+)
 
 async function login() {
 	busy = true
@@ -41,37 +59,54 @@ async function approve() {
 </script>
 
 <svelte:head><title>avenOS verbinden</title></svelte:head>
+<section class="device-flow" aria-live="polite">
+	<div
+		class:success={approved}
+		class:error={!userCode || Boolean(message)}
+		class="device-flow__icon"
+	>
+		{#if approved}
+			<svg viewBox="0 0 24 24" aria-hidden="true">
+				<path d="m5 12.5 4.25 4.25L19 7" />
+			</svg>
+		{:else if !userCode}
+			<svg viewBox="0 0 24 24" aria-hidden="true">
+				<path d="M12 8v5M12 17h.01" />
+				<circle cx="12" cy="12" r="9" />
+			</svg>
+		{:else}
+			<svg viewBox="0 0 24 24" aria-hidden="true">
+				<rect x="5" y="10" width="14" height="10" rx="2" />
+				<path d="M8 10V7a4 4 0 0 1 8 0v3" />
+			</svg>
+		{/if}
+	</div>
 
-<!-- This page renders INSIDE the desktop app's webview, so it is the login
-     screen people actually see. It carries the brand rather than the
-     service's default grey — styles are scoped here so the other aven-api
-     pages keep the plain shell they were built with. -->
-<section class="panel auth">
-	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
-	<h1>avenOS verbinden</h1>
+	<p class="device-flow__eyebrow">Sichere App-Verbindung</p>
+	<h1>{heading}</h1>
+	<p class="device-flow__description">{description}</p>
 
 	{#if displayCode}
-		<div class="code">
-			<p class="eyebrow">Gerätecode</p>
-			<p class="digits">{displayCode}</p>
+		<div class="device-flow__code">
+			<span>Gerätecode</span>
+			<strong>{displayCode}</strong>
 		</div>
 	{/if}
-
 	{#if message}
-		<div class="alert">{message}</div>
+		<div class="alert" role="alert">{message}</div>
+	{/if}
+	{#if userCode && !approved && authenticated}
+		<button disabled={busy || !userCode} onclick={approve}>
+			{busy ? 'Wird verbunden …' : 'avenOS verbinden'}
+		</button>
+	{:else if userCode && !approved}
+		<button disabled={busy || !userCode} onclick={login}>
+			{busy ? 'Passkey wird geöffnet …' : 'Mit Passkey fortfahren'}
+		</button>
 	{/if}
 
-	{#if approved}
-		<p class="lead">avenOS ist verbunden. Du kannst zurück in die App.</p>
-	{:else if authenticated}
-		<p class="lead">Bestätige dieses Gerät, um der avenOS‑App Zugriff auf dein Konto zu geben.</p>
-		<button class="primary" disabled={busy || !userCode} onclick={approve}>
-			{busy ? 'Einen Moment …' : 'avenOS verbinden'}
-		</button>
-	{:else}
-		<p class="lead">Melde dich mit dem Passkey deines Aven‑Kontos an.</p>
-		<button class="primary" disabled={busy || !userCode} onclick={login}>
-			{busy ? 'Einen Moment …' : 'Mit Passkey anmelden'}
-		</button>
-	{/if}
+	<div class="device-flow__trust">
+		<span></span>
+		Sicher verbunden über id.next.aven.ceo
+	</div>
 </section>

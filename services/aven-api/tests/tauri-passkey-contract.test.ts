@@ -5,6 +5,15 @@ import { serverConfigSchema } from '../src/lib/server/config.js'
 import { GET as association } from '../src/routes/.well-known/apple-app-site-association/+server.js'
 
 describe('Tauri passkey contract', () => {
+	it('keeps PRF optional for the authentication spike', () => {
+		const config = serverConfigSchema.parse({
+			PUBLIC_BASE_URL: 'https://id.aven.ceo',
+			WEBAUTHN_RP_ID: 'id.aven.ceo',
+			DATABASE_URL: 'postgres://example.invalid/aven'
+		})
+		expect(config.REQUIRE_PASSKEY_PRF).toBe(false)
+	})
+
 	it('serves the signed application identifier as JSON', async () => {
 		const response = association()
 		expect(response.headers.get('content-type')).toContain('application/json')

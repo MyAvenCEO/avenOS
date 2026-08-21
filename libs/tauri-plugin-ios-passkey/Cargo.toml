@@ -1,0 +1,17 @@
+[package]
+name = "tauri-plugin-ios-passkey"
+version = "0.1.0"
+description = "Native iOS passkey assertions for avenOS"
+authors = ["Aven"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+links = "tauri-plugin-ios-passkey"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
