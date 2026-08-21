@@ -157,8 +157,9 @@ Pane, brand-styled like Konto (porcelain cards, eyebrow labels):
    "Wechseln" with the price delta; the confirm dialog states the
    proration ("Differenz wird sofort berechnet" up; down per Creem's
    semantics) and the pane shows a pending state until the webhook.
-   avenCOOP appears as a card too, but "Bewerben"-only, linking out —
-   never a self-serve checkout.
+   avenCOOP does not appear here at all — it is not a Creem product and
+   never will be; that relationship is handled individually, outside this
+   system. The in-app ladder is avenME and avenCEO only.
 3. **Kündigen / Fortsetzen** — one obvious button (Kündigungsbutton law:
    as easy to cancel as to subscribe), default period-end, confirm dialog
    states the end date; a scheduled cancel shows "Fortsetzen".
@@ -174,7 +175,8 @@ are stylable and screenshotable without a paid account.
 
 ### Out of scope — deliberately
 
-avenCOOP (apply-only, no self-serve checkout), trials, discounts/coupons,
+avenCOOP entirely — not a Creem product, not seeded, not rendered in the
+pane; handled individually outside this system. Also: trials, discounts/coupons,
 seat counts, any admin or reporting surface, payment-method management UI
 (Creem's checkout owns the card; revisit only if members ask), refunds
 (stays a Creem-dashboard act), migrating the existing 25 € avenID flow.
@@ -237,6 +239,9 @@ grep -rn "requireUser" services/aven-api/src/routes/api/billing/
 
 ## Progress log
 
+- 2026-08-21 (later still) — Samuel: avenCOOP is not a Creem product at
+  all and is handled individually — removed from the pane entirely; the
+  in-app ladder is avenME/avenCEO only.
 - 2026-08-21 (later) — Sharpened on Samuel's follow-up: the upgrade view
   is a full in-app pricing UI — tier cards from the PLANS SSOT with the
   current plan marked, upgrade/switch with price delta and proration
