@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount } from 'svelte'
 import { page } from '$app/state'
-import { designerMode } from '$lib/designer.js'
+import { appRuntime } from 'virtual:aven-app-runtime'
 
 const name = $derived(page.url.searchParams.get('name') ?? '')
 let state = $state<'confirming' | 'fallback'>('confirming')
@@ -11,33 +11,15 @@ let state = $state<'confirming' | 'fallback'>('confirming')
 // it signs the buyer in and we go straight to the dashboard. The emailed
 // access link stays as the fallback.
 onMount(() => {
-	if (designerMode) {
-		state = 'fallback'
-		return
-	}
 	const token = page.url.searchParams.get('pt')
-	const deadline = Date.now() + 60_000
-	const poll = async () => {
-		if (!token || Date.now() > deadline) {
-			state = 'fallback'
+	const finish = async () => {
+		if (await appRuntime.purchase.waitForSession(token ?? '', page.url)) {
+			window.location.assign('/dashboard')
 			return
 		}
-		try {
-			const response = await fetch('/api/auth/sign-in/purchase-token', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ token })
-			})
-			if (response.ok) {
-				window.location.assign('/dashboard')
-				return
-			}
-		} catch {
-			/* keep polling until the deadline */
-		}
-		setTimeout(() => void poll(), 1500)
+		state = 'fallback'
 	}
-	void poll()
+	void finish()
 })
 </script>
 

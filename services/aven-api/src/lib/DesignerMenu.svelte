@@ -1,11 +1,30 @@
 <script lang="ts">
-import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import { designerPages } from '$lib/designer.js'
+import { designerPages, pageFor } from '$lib/app-runtime/designer-scenarios.js'
 
-const selectedHref = $derived(
-	designerPages.find((item) => item.path === page.url.pathname)?.href ?? ''
+const selectedPage = $derived(pageFor(page.url.pathname))
+const selectedScenario = $derived(
+	selectedPage?.scenarios.find((item) => item.id === page.url.searchParams.get('scenario')) ??
+		selectedPage?.scenarios[0]
 )
+
+function withSession(href: string): string {
+	const target = new URL(href, page.url.origin)
+	const session = page.url.searchParams.get('session')
+	if (session) target.searchParams.set('session', session)
+	return `${target.pathname}${target.search}`
+}
+
+function setSession(value: string) {
+	const target = new URL(page.url)
+	if (value) target.searchParams.set('session', value)
+	else target.searchParams.delete('session')
+	window.location.assign(`${target.pathname}${target.search}`)
+}
+
+function navigate(href: string) {
+	window.location.assign(href)
+}
 </script>
 
 <div class="designer-menu">
@@ -13,12 +32,34 @@ const selectedHref = $derived(
 	<label>
 		<span>Page</span>
 		<select
-			value={selectedHref}
-			onchange={(event) => void goto((event.currentTarget as HTMLSelectElement).value)}
+			value={selectedPage ? withSession(selectedPage.scenarios[0]!.href) : ''}
+			onchange={(event) => navigate((event.currentTarget as HTMLSelectElement).value)}
 		>
 			{#each designerPages as item}
-				<option value={item.href}>{item.label}</option>
+				<option value={withSession(item.scenarios[0]!.href)}>{item.label}</option>
 			{/each}
+		</select>
+	</label>
+	<label>
+		<span>State</span>
+		<select
+			value={selectedScenario ? withSession(selectedScenario.href) : ''}
+			onchange={(event) => navigate((event.currentTarget as HTMLSelectElement).value)}
+		>
+			{#each selectedPage?.scenarios ?? [] as item}
+				<option value={withSession(item.href)}>{item.label}</option>
+			{/each}
+		</select>
+	</label>
+	<label class="session-select">
+		<span>Session</span>
+		<select
+			value={page.url.searchParams.get('session') ?? ''}
+			onchange={(event) => setSession((event.currentTarget as HTMLSelectElement).value)}
+		>
+			<option value="">Page default</option>
+			<option value="anonymous">Anonymous</option>
+			<option value="authenticated">Authenticated</option>
 		</select>
 	</label>
 	<span class="mock-badge">Mock data</span>
@@ -40,13 +81,13 @@ const selectedHref = $derived(
 }
 .designer-menu label {
 	display: flex;
-	flex: 1;
+	flex: 1 1 15rem;
 	align-items: center;
 	gap: 0.5rem;
 	font-weight: 400;
 }
 .designer-menu select {
-	width: min(100%, 22rem);
+	width: 100%;
 	min-height: 2.25rem;
 	padding: 0.35rem 2rem 0.35rem 0.65rem;
 	font: inherit;
@@ -63,7 +104,7 @@ const selectedHref = $derived(
 	background: #b8f7d4;
 	border-radius: 999px;
 }
-@media (max-width: 560px) {
+@media (max-width: 900px) {
 	.designer-menu {
 		align-items: stretch;
 		flex-wrap: wrap;
@@ -72,13 +113,18 @@ const selectedHref = $derived(
 	}
 	.designer-menu label {
 		order: 2;
-		flex-basis: 100%;
+		flex-basis: calc(50% - 0.5rem);
 	}
 	.designer-menu select {
 		flex: 1;
 	}
 	.mock-badge {
 		margin-left: auto;
+	}
+}
+@media (max-width: 560px) {
+	.designer-menu label {
+		flex-basis: 100%;
 	}
 }
 </style>

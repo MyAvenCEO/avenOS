@@ -1,26 +1,21 @@
 <script lang="ts">
 import { goto } from '$app/navigation'
-import { api } from '$lib/api.js'
-import { designerMode } from '$lib/designer.js'
+import { page } from '$app/state'
+import { appRuntime } from 'virtual:aven-app-runtime'
 import type { NameAvailability } from '$lib/types.js'
 
-let name = $state(designerMode ? 'aurora' : '')
-let busy = $state(false)
-let result = $state<NameAvailability | null>(
-	designerMode
-		? { name: 'aurora', available: true, priceEur: 25, reservationMinutes: 15 }
-		: null
-)
-let error = $state('')
+const initial = appRuntime.initial.nameSearch(page.url)
+let name = $state(initial.name)
+let busy = $state(initial.busy)
+let result = $state<NameAvailability | null>(initial.result)
+let error = $state(initial.error)
 
 async function check() {
 	busy = true
 	result = null
 	error = ''
 	try {
-		result = await api<NameAvailability>(
-			`/names/check?name=${encodeURIComponent(name.trim().toLowerCase())}`
-		)
+		result = await appRuntime.names.check(name)
 	} catch (cause) {
 		error = cause instanceof Error ? cause.message : 'Check failed.'
 	} finally {

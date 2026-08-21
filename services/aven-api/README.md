@@ -18,8 +18,9 @@ bun run environment:reconcile
 ```
 
 `bun run dev:designer` starts a backend-free designer preview with mock data and a
-persistent page switcher. `bun run build:designer` creates the equivalent designer
-build; run `bun run preview:designer` after building to inspect it.
+persistent page, state, and session switcher. Every visible state has a shareable
+`scenario` URL. `bun run build:designer` creates the equivalent designer build; run
+`bun run preview:designer` after building to inspect it.
 
 ## Local services
 

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { designerApi, designerCheckout, designerPages } from '../src/lib/designer.js'
-import type { MetaInfo, NameAvailability, NameHoldResult, PasskeyStatus } from '../src/lib/types.js'
+import { designerPages } from '../src/lib/app-runtime/designer-scenarios.js'
+import { appRuntime } from '../src/lib/app-runtime/runtime.designer.js'
+import { serverBuildRuntime } from '../src/lib/server/build-runtime/runtime.designer.js'
 
 describe('designer build fixtures', () => {
-	it('links to every UI route with the required sample parameters', () => {
+	it('links to every UI route and gives every visible state a stable URL', () => {
 		expect(designerPages.map(({ path }) => path)).toEqual([
 			'/',
 			'/secure',
@@ -16,26 +17,40 @@ describe('designer build fixtures', () => {
 			'/purchase/success',
 			'/purchase/expired'
 		])
-		expect(designerCheckout).toMatchObject({ name: 'aurora', provider: 'fake', priceEur: 25 })
+		for (const page of designerPages) {
+			expect(page.scenarios.length).toBeGreaterThan(0)
+			expect(new Set(page.scenarios.map(({ id }) => id)).size).toBe(page.scenarios.length)
+			for (const state of page.scenarios) {
+				const url = new URL(state.href, 'https://designer.aven.invalid')
+				expect(url.pathname).toBe(page.path)
+				expect(url.searchParams.get('scenario')).toBe(state.id)
+			}
+		}
 	})
 
-	it('serves the API data needed by interactive pages without a backend', async () => {
-		await expect(designerApi<NameAvailability>('/names/check?name=aurora')).resolves.toMatchObject({
+	it('serves typed application operations without a backend', async () => {
+		await expect(appRuntime.names.check('aurora')).resolves.toMatchObject({
 			name: 'aurora',
 			available: true,
 			priceEur: 25
 		})
-		await expect(
-			designerApi<{ hold: NameHoldResult }>('/names/hold', {
-				method: 'POST',
-				body: JSON.stringify({ name: 'aurora', email: 'alex@example.com' })
-			})
-		).resolves.toMatchObject({ hold: { name: 'aurora', priceEur: 25 } })
-		await expect(designerApi<PasskeyStatus>('/passkeys')).resolves.toMatchObject({
-			passkeys: [{ prf_enabled: true }]
+		await expect(appRuntime.names.hold('aurora', 'alex@example.com')).resolves.toMatchObject({
+			name: 'aurora',
+			priceEur: 25
 		})
-		await expect(designerApi<MetaInfo>('/meta')).resolves.toMatchObject({
+		await expect(appRuntime.meta()).resolves.toMatchObject({
 			downloadUrl: '#designer-download'
 		})
+	})
+
+	it('selects checkout provider fixtures from the route scenario', async () => {
+		const fake = await serverBuildRuntime.loadCheckout({
+			url: new URL('https://designer.aven.invalid/purchase/checkout?scenario=fake-ready')
+		} as never)
+		const creem = await serverBuildRuntime.loadCheckout({
+			url: new URL('https://designer.aven.invalid/purchase/checkout?scenario=creem-confirming')
+		} as never)
+		expect(fake).toMatchObject({ name: 'aurora', provider: 'fake', priceEur: 25 })
+		expect(creem).toMatchObject({ name: 'aurora', provider: 'creem', priceEur: 25 })
 	})
 })

@@ -12,6 +12,9 @@ describe('functional web copy', () => {
 		expect(route('login/+page.svelte')).toContain('Sign in with passkey')
 		expect(route('device/+page.svelte')).toContain('Connect avenOS')
 		expect(route('passkey/create/+page.svelte')).toContain('Passkey name')
+		expect(route('passkey/create/+page.svelte')).toContain(
+			'Firefox on Linux has no built-in platform passkey provider.'
+		)
 		expect(route('dashboard/+page.svelte')).toContain('Download AvenOS')
 	})
 
