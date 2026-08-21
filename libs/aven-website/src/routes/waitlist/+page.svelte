@@ -8,6 +8,7 @@
 
 <script lang="ts">
 import { page } from '$app/stores'
+import SiteFooter from '$lib/components/SiteFooter.svelte'
 import { PLANS } from '$lib/pricing/plans'
 
 const intent = $derived($page.url.searchParams.get('intent') ?? '')
@@ -169,8 +170,9 @@ const tierPlan = $derived(PLANS.find((p) => p.id === tier) ?? null)
 		<div
 			class="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-10 gap-y-2 px-5 py-5 sm:justify-between sm:px-8"
 		>
-			<a href="/" class="text-[17px] font-light tracking-[-0.01em] opacity-85 hover:opacity-100">
-				avenCEO
+			<a href="/" class="flex items-center gap-2.5">
+				<img src="/aven-logo.svg" alt="" class="size-7 shrink-0" width="28" height="28">
+				<span class="text-[17px] font-semibold tracking-tight text-foreground">avenCEO</span>
 			</a>
 			<nav
 				class="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70"
@@ -448,9 +450,5 @@ const tierPlan = $derived(PLANS.find((p) => p.id === tier) ?? null)
 		</div>
 	</section>
 
-	<footer
-		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] text-foreground/30"
-	>
-		avenCEO · avenOS · Own your life
-	</footer>
+	<SiteFooter />
 </div>

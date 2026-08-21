@@ -10,6 +10,7 @@
 import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
+import SiteFooter from '$lib/components/SiteFooter.svelte'
 import SkillMarketplaceCard from '$lib/components/SkillMarketplaceCard.svelte'
 import { loadSkills } from '$lib/skills/loader'
 import danielPhoto from '../images/daniel.png'
@@ -210,8 +211,8 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 			</p>
 
 			<p class="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-				Deiner sortiert deine Post, bevor du aufstehst. Bereitet die Rechnung vor, bevor du sie
-				suchst. Erledigt den Papierkram, der dich seit Monaten anschweigt — während du an dem
+				Dein Aven sortiert deine Post, bevor du aufstehst. Er bereitet die Rechnung vor, bevor du
+				sie suchst. Er erledigt den Papierkram, der dich seit Monaten anschweigt — während du an dem
 				arbeitest, wofür du eigentlich angetreten bist.
 			</p>
 
@@ -553,9 +554,5 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		</div>
 	</section>
 
-	<footer
-		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] text-foreground/30"
-	>
-		avenCEO · avenOS · Own your life
-	</footer>
+	<SiteFooter />
 </div>
