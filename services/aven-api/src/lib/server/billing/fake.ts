@@ -9,9 +9,12 @@ import {
 	assertWebhookSignature,
 	type CheckoutInput,
 	type CheckoutSession,
+	type InvoiceRow,
 	type PaymentEvent,
 	type PaymentProvider,
-	parseCreemEvent
+	parseCreemEvent,
+	type SubscriptionCheckoutInput,
+	type SubscriptionPlanSeed
 } from './provider.js'
 
 export class FakePaymentProvider implements PaymentProvider {
@@ -32,6 +35,32 @@ export class FakePaymentProvider implements PaymentProvider {
 	verifyWebhook(rawBody: string, signature: string | null): PaymentEvent {
 		assertWebhookSignature(rawBody, signature, this.config.CREEM_WEBHOOK_SECRET)
 		return parseCreemEvent(rawBody)
+	}
+
+	// The subscription surface in fake mode is deterministic and local: stable
+	// per-tier product ids, a checkout URL on our own fake page, and actions
+	// that succeed silently — state still only ever changes via the webhook,
+	// exactly like production.
+	async ensureSubscriptionProducts(seeds: SubscriptionPlanSeed[]): Promise<Record<string, string>> {
+		return Object.fromEntries(seeds.map((seed) => [seed.tier, `fake_prod_${seed.tier}`]))
+	}
+
+	async createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession> {
+		const checkoutId = `fake_${randomUUID()}`
+		const url = new URL('/purchase/fake-checkout', this.config.PUBLIC_BASE_URL)
+		url.searchParams.set('checkoutId', checkoutId)
+		url.searchParams.set('tier', input.tier)
+		url.searchParams.set('userId', input.userId)
+		url.searchParams.set('email', input.email)
+		url.searchParams.set('successUrl', input.successUrl)
+		return { checkoutId, checkoutUrl: url.toString() }
+	}
+
+	async changeSubscription(): Promise<void> {}
+	async cancelSubscription(): Promise<void> {}
+	async resumeSubscription(): Promise<void> {}
+	async listInvoices(): Promise<InvoiceRow[]> {
+		return []
 	}
 
 	buildCompletedWebhookBody(input: {

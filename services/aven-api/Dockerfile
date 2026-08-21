@@ -12,6 +12,10 @@ COPY services/aven-api/package.json services/aven-api/package.json
 FROM manifests AS build
 RUN bun install --frozen-lockfile --filter @avenos/aven-api
 COPY services/aven-api services/aven-api
+# The pricing SSOT: aven-api seeds its Creem products from the website's
+# plan data (@avenos/aven-website/pricing), so the source must exist where
+# the workspace symlink points.
+COPY libs/aven-website/src/lib/pricing libs/aven-website/src/lib/pricing
 RUN bun --cwd services/aven-api build
 
 FROM manifests AS production-dependencies
@@ -27,6 +31,9 @@ COPY --from=build /repo/services/aven-api/src ./src
 COPY --from=build /repo/services/aven-api/scripts ./scripts
 COPY --from=build /repo/services/aven-api/migrations ./migrations
 COPY --from=build /repo/services/aven-api/package.json ./package.json
+# scripts/ (migrate, billing seed) run unbundled and resolve the workspace
+# symlink at runtime — the pricing source must be present in the image too.
+COPY --from=build /repo/libs/aven-website/src/lib/pricing /repo/libs/aven-website/src/lib/pricing
 EXPOSE 3000
 USER bun
 HEALTHCHECK --interval=5s --timeout=3s --start-period=15s --retries=30 \

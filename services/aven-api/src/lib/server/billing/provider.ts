@@ -25,10 +25,104 @@ export interface PaymentEvent {
 	metadata: Record<string, unknown>
 }
 
+/** One recurring tier to guarantee exists at the provider. Prices are NET
+ * cents — the provider (merchant of record) adds the buyer's VAT on top. */
+export interface SubscriptionPlanSeed {
+	tier: string
+	name: string
+	description: string
+	priceCents: number
+}
+
+export interface SubscriptionCheckoutInput {
+	productId: string
+	tier: string
+	userId: string
+	email: string
+	successUrl: string
+}
+
+/** One line in the customer's invoice history, already reduced to what the
+ * portal shows. The receipt stays a provider-hosted URL — we link, never
+ * render, invoices. */
+export interface InvoiceRow {
+	id: string
+	createdAt: string
+	amountCents: number
+	currency: string
+	status: string
+	receiptUrl: string | null
+}
+
 export interface PaymentProvider {
 	readonly kind: 'creem' | 'fake'
 	createCheckout(input: CheckoutInput): Promise<CheckoutSession>
 	verifyWebhook(rawBody: string, signature: string | null): PaymentEvent
+	/** Idempotent: finds products by `metadata.tier`, creates the missing
+	 * ones, returns tier → provider product id. */
+	ensureSubscriptionProducts(seeds: SubscriptionPlanSeed[]): Promise<Record<string, string>>
+	createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession>
+	/** Change to another tier's product; proration is charged immediately. */
+	changeSubscription(providerSubscriptionId: string, productId: string): Promise<void>
+	cancelSubscription(providerSubscriptionId: string, immediate: boolean): Promise<void>
+	resumeSubscription(providerSubscriptionId: string): Promise<void>
+	listInvoices(providerCustomerId: string): Promise<InvoiceRow[]>
+}
+
+/** The normalized shape of a `subscription.*` webhook. Field names on the
+ * wire vary (snake/camel, nested product vs product_id) — this parser is the
+ * only place that knows; everything downstream sees this. */
+export interface SubscriptionEvent {
+	id: string
+	type: string
+	providerSubscriptionId: string
+	providerCustomerId: string | null
+	email: string | null
+	userId: string | null
+	tier: string | null
+	status: string
+	currentPeriodEnd: string | null
+	cancelAtPeriodEnd: boolean
+	priceCents: number | null
+}
+
+export function parseCreemSubscriptionEvent(rawBody: string): SubscriptionEvent | null {
+	let payload: Record<string, any>
+	try {
+		payload = JSON.parse(rawBody) as Record<string, any>
+	} catch {
+		throw new AppError(400, 'WEBHOOK_PAYLOAD_INVALID', 'The webhook payload is not JSON.')
+	}
+	const type = String(payload.eventType ?? payload.event_type ?? '')
+	if (!type.startsWith('subscription.')) return null
+	const object = (payload.object ?? {}) as Record<string, any>
+	const product = (object.product ?? {}) as Record<string, any>
+	const customer = (object.customer ?? {}) as Record<string, any>
+	const metadata = (object.metadata ?? {}) as Record<string, unknown>
+	const priceCents = Number(product.price ?? object.amount ?? NaN)
+	const subscriptionId = String(object.id ?? '')
+	if (!subscriptionId) return null
+	return {
+		id: String(payload.id ?? ''),
+		type,
+		providerSubscriptionId: subscriptionId,
+		providerCustomerId:
+			typeof customer === 'string' ? customer : (customer.id ?? object.customer_id ?? null),
+		email: typeof customer === 'object' ? (customer.email ?? null) : null,
+		userId: typeof metadata.userId === 'string' ? metadata.userId : null,
+		tier:
+			typeof metadata.tier === 'string'
+				? metadata.tier
+				: typeof (product.metadata as Record<string, unknown> | undefined)?.tier === 'string'
+					? String((product.metadata as Record<string, unknown>).tier)
+					: null,
+		status: String(object.status ?? ''),
+		currentPeriodEnd:
+			object.current_period_end_date ?? object.currentPeriodEndDate ?? object.current_period_end ?? null,
+		cancelAtPeriodEnd:
+			object.status === 'scheduled_cancel' || Boolean(object.canceled_at ?? object.cancel_at_period_end),
+		priceCents: Number.isFinite(priceCents) ? priceCents : null
+	}
 }
 
 export function signWebhookPayload(rawBody: string, secret: string): string {

@@ -57,6 +57,13 @@
 			"when": 1787414400000,
 			"tag": "0007_name_hold_origin",
 			"breakpoints": true
+		},
+		{
+			"idx": 8,
+			"version": "7",
+			"when": 1787500800000,
+			"tag": "0008_subscriptions",
+			"breakpoints": true
 		}
 	]
 }

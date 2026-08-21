@@ -11,6 +11,7 @@ import { NameService } from './names/service.js'
 import { createNotifier, type Notifier } from './notifications.js'
 import { PasskeyService } from './passkeys.js'
 import { ProofOfWorkService } from './proof-of-work.js'
+import { SubscriptionService } from './billing/subscriptions.js'
 
 export interface Runtime {
 	config: ServerConfig
@@ -22,6 +23,7 @@ export interface Runtime {
 	proofOfWork: ProofOfWorkService
 	payments: PaymentProvider
 	names: NameService
+	subscriptions: SubscriptionService
 	passkeys: PasskeyService
 	environments: EnvironmentService
 	shutdown(): Promise<void>
@@ -52,6 +54,7 @@ async function create(): Promise<Runtime> {
 		config.POW_CHALLENGE_TTL_SECONDS
 	)
 	const payments = createPaymentProvider(config)
+	const subscriptions = new SubscriptionService(database.pool, config, payments)
 	const passkeys = new PasskeyService(database.pool, config.REQUIRE_PASSKEY_PRF)
 	const environments = new EnvironmentService(database.pool)
 	const names = new NameService(
@@ -81,6 +84,7 @@ async function create(): Promise<Runtime> {
 		proofOfWork,
 		payments,
 		names,
+		subscriptions,
 		passkeys,
 		environments,
 		async shutdown() {

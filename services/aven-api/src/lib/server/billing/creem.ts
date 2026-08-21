@@ -4,9 +4,12 @@ import {
 	assertWebhookSignature,
 	type CheckoutInput,
 	type CheckoutSession,
+	type InvoiceRow,
 	type PaymentEvent,
 	type PaymentProvider,
-	parseCreemEvent
+	parseCreemEvent,
+	type SubscriptionCheckoutInput,
+	type SubscriptionPlanSeed
 } from './provider.js'
 
 export class CreemProvider implements PaymentProvider {
@@ -54,6 +57,111 @@ export class CreemProvider implements PaymentProvider {
 				'The payment provider returned an incomplete checkout.'
 			)
 		return { checkoutId: body.id, checkoutUrl }
+	}
+
+	/** One place for every authenticated Creem call: the x-api-key header
+	 * never leaves this module, and error surfaces read the same. */
+	private async api<T>(method: string, path: string, body?: unknown): Promise<T> {
+		const response = await fetch(`${this.base()}${path}`, {
+			method,
+			headers: { 'Content-Type': 'application/json', 'x-api-key': this.config.CREEM_API_KEY },
+			...(body === undefined ? {} : { body: JSON.stringify(body) })
+		})
+		if (!response.ok) {
+			const detail = await response.text().catch(() => '')
+			throw new AppError(
+				502,
+				'BILLING_PROVIDER_ERROR',
+				`The payment provider rejected ${method} ${path} (${response.status}).`,
+				detail.slice(0, 300)
+			)
+		}
+		return (await response.json()) as T
+	}
+
+	async ensureSubscriptionProducts(seeds: SubscriptionPlanSeed[]): Promise<Record<string, string>> {
+		const found = await this.api<{ items?: Array<Record<string, any>> }>(
+			'GET',
+			'/v1/products/search?page_size=100'
+		)
+		const map: Record<string, string> = {}
+		for (const product of found.items ?? []) {
+			const tier = (product.metadata as Record<string, unknown> | undefined)?.tier
+			if (typeof tier === 'string' && product.id) map[tier] = String(product.id)
+		}
+		for (const seed of seeds) {
+			if (map[seed.tier]) continue
+			const created = await this.api<{ id: string }>('POST', '/v1/products', {
+				name: seed.name,
+				description: seed.description,
+				// NET cents: the site says "zzgl. USt." and Creem, as merchant of
+				// record, adds the buyer's VAT on top of an exclusive price.
+				price: seed.priceCents,
+				currency: 'EUR',
+				billing_type: 'recurring',
+				billing_period: 'every-month',
+				tax_mode: 'exclusive',
+				tax_category: 'saas',
+				metadata: { tier: seed.tier }
+			})
+			map[seed.tier] = created.id
+		}
+		return map
+	}
+
+	async createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession> {
+		const body = await this.api<{ id?: string; checkoutUrl?: string; checkout_url?: string }>(
+			'POST',
+			'/v1/checkouts',
+			{
+				product_id: input.productId,
+				success_url: input.successUrl,
+				customer: { email: input.email },
+				metadata: { userId: input.userId, tier: input.tier }
+			}
+		)
+		const checkoutUrl = body.checkoutUrl ?? body.checkout_url
+		if (!body.id || !checkoutUrl)
+			throw new AppError(
+				502,
+				'CHECKOUT_CREATE_FAILED',
+				'The payment provider returned an incomplete checkout.'
+			)
+		return { checkoutId: body.id, checkoutUrl }
+	}
+
+	async changeSubscription(providerSubscriptionId: string, productId: string): Promise<void> {
+		await this.api('POST', `/v1/subscriptions/${providerSubscriptionId}/upgrade`, {
+			product_id: productId,
+			update_behavior: 'proration-charge-immediately'
+		})
+	}
+
+	async cancelSubscription(providerSubscriptionId: string, immediate: boolean): Promise<void> {
+		await this.api('POST', `/v1/subscriptions/${providerSubscriptionId}/cancel`, {
+			// German Kündigungsbutton semantics: the default keeps access until
+			// the period the member already paid for runs out.
+			mode: immediate ? 'immediately' : 'scheduled_cancel'
+		})
+	}
+
+	async resumeSubscription(providerSubscriptionId: string): Promise<void> {
+		await this.api('POST', `/v1/subscriptions/${providerSubscriptionId}/resume`, {})
+	}
+
+	async listInvoices(providerCustomerId: string): Promise<InvoiceRow[]> {
+		const result = await this.api<{ items?: Array<Record<string, any>> }>(
+			'GET',
+			`/v1/transactions/search?customer_id=${encodeURIComponent(providerCustomerId)}&page_size=100`
+		)
+		return (result.items ?? []).map((tx) => ({
+			id: String(tx.id ?? ''),
+			createdAt: String(tx.created_at ?? tx.createdAt ?? ''),
+			amountCents: Number(tx.amount ?? 0),
+			currency: String(tx.currency ?? 'EUR'),
+			status: String(tx.status ?? ''),
+			receiptUrl: (tx.receipt_url ?? tx.receiptUrl ?? null) as string | null
+		}))
 	}
 
 	verifyWebhook(rawBody: string, signature: string | null): PaymentEvent {
