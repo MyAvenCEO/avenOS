@@ -460,13 +460,8 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				id="collective-heading"
 				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 			>
-				1 Million Gründer bauen die Startups der Zukunft — und besitzen sie gemeinsam.
-			</h2>
-			<p
-				class="mx-auto mt-5 max-w-xl text-[1.125rem] font-light leading-snug text-pretty text-foreground sm:text-[1.3125rem]"
-			>
 				Ein Spark trägt ein Leben. Eine Million Sparks tragen eine Zivilisation.
-			</p>
+			</h2>
 
 			<div
 				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/68 sm:text-base"
