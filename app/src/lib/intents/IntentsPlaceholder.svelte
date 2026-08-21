@@ -69,6 +69,22 @@ interface MockIntent {
 	log: LogEntry[]
 	artifacts: MockArtifact[]
 	skills: SkillStatus[]
+	/**
+	 * The gate this intent is holding for the human. A gate can exist in any
+	 * state — `waiting` means the intent AS A WHOLE is blocked on it; in the
+	 * other states it is one optional confirmation beside work that runs on.
+	 */
+	hitl?: {
+		label: string
+		method: string
+		actor: string
+		preview: {
+			kind: string
+			title: string
+			body?: string
+			rows?: { label: string; value: string }[]
+		}
+	}
 }
 
 const TYPE_STYLE: Record<string, string> = {
@@ -222,7 +238,21 @@ const INTENTS: MockIntent[] = [
 				done: ['entity-trigger', 'resolve', 'link'],
 				current: 'enrich'
 			}
-		]
+		],
+		hitl: {
+			label: 'Antwortentwurf an die TK freigeben',
+			method: 'draft_approve',
+			actor: 'docs',
+			preview: {
+				kind: 'entwurf',
+				title: 'Brief an Techniker Krankenkasse · 1 Anhang',
+				body: 'Sehr geehrte Damen und Herren, anbei der angeforderte Einkommensnachweis für den Zeitraum Januar bis Juni 2025. Mit freundlichen Grüßen, Samuel Andert',
+				rows: [
+					{ label: 'Anhang', value: 'einkommensnachweis.pdf' },
+					{ label: 'Frist', value: '15.09.' }
+				]
+			}
+		}
 	},
 	{
 		id: 'buerostuhl',
@@ -293,7 +323,22 @@ const INTENTS: MockIntent[] = [
 				done: [],
 				current: 'statement-trigger'
 			}
-		]
+		],
+		hitl: {
+			label: 'Zahlung freigeben',
+			method: 'payment_release',
+			actor: 'abgleich',
+			preview: {
+				kind: 'zahlung',
+				title: 'Möbelhaus Nord GmbH — Rechnung R-2025-8842',
+				rows: [
+					{ label: 'Betrag', value: '249,00 €' },
+					{ label: 'Fällig', value: '30.08.' },
+					{ label: 'IBAN', value: 'DE12 3456 7890 1234 5678 00' },
+					{ label: 'Konto', value: 'Giro · 4.120,55 €' }
+				]
+			}
+		}
 	},
 	{
 		id: 'steuer',
@@ -367,7 +412,178 @@ const INTENTS: MockIntent[] = [
 				done: ['request-trigger'],
 				current: 'draft'
 			}
-		]
+		],
+		hitl: {
+			label: 'Dokument der Steuer 2023 zuordnen',
+			method: 'classify_confirm',
+			actor: 'brain',
+			preview: {
+				kind: 'zuordnung',
+				title: 'handwerker-bad-2023.pdf → Handwerkerleistungen',
+				rows: [
+					{ label: 'Vorschlag', value: 'Handwerkerleistungen §35a' },
+					{ label: 'Zuversicht', value: '78 % — unter der Schwelle' },
+					{ label: 'Alternative', value: 'Erhaltungsaufwand' }
+				]
+			}
+		}
+	},
+	{
+		id: 'umzug',
+		type: 'auftrag',
+		title: 'Umzugsunterlagen zusammenführen',
+		source: 'Freitext · Chat',
+		when: 'heute · 10:05',
+		status: 'waiting',
+		log: [
+			{
+				step: 'Auftrag erfasst',
+				when: 'heute · 10:05',
+				state: 'done',
+				skill: 'inbox',
+				note: '„Sammle alles zum Umzug an einem Ort"'
+			},
+			{
+				step: 'Dublette gefunden',
+				when: 'heute · 10:06',
+				state: 'waiting',
+				skill: 'brain',
+				note: 'zwei Einträge für denselben Vermieter — Zusammenführung wartet auf dich'
+			}
+		],
+		artifacts: [
+			{ kind: 'entity', title: '[[Umzug 2025]]', note: 'Brain · 9 Verknüpfungen' },
+			{ kind: 'person', title: 'Hausverwaltung Berg', note: 'Firma · Vermieter' }
+		],
+		skills: [
+			{
+				skill: 'brain',
+				state: 'waiting',
+				note: 'Dublette wartet auf Zusammenführung',
+				workflow: 'verknuepfen',
+				done: ['entity-trigger'],
+				current: 'resolve'
+			}
+		],
+		hitl: {
+			label: 'Doppelten Kontakt zusammenführen',
+			method: 'entity_merge',
+			actor: 'brain',
+			preview: {
+				kind: 'dublette',
+				title: '[[Hausverwaltung Berg]] ↔ [[HV Berg GmbH]]',
+				rows: [
+					{ label: 'Ähnlichkeit', value: '88 % — Adresse identisch' },
+					{ label: 'Behalten', value: 'Hausverwaltung Berg (9 Bezüge)' },
+					{ label: 'Verschmelzen', value: 'HV Berg GmbH (2 Bezüge)' }
+				]
+			}
+		}
+	},
+	{
+		id: 'stromabrechnung',
+		type: 'abgleich',
+		title: 'Stromabrechnung 2024 prüfen',
+		source: 'Upload · PDF',
+		when: 'heute · 08:02',
+		status: 'waiting',
+		log: [
+			{
+				step: 'Abrechnung hochgeladen',
+				when: 'heute · 08:02',
+				state: 'done',
+				skill: 'inbox',
+				note: 'stromabrechnung-2024.pdf · archiviert'
+			},
+			{
+				step: 'Duplikate erkannt',
+				when: 'heute · 08:03',
+				state: 'waiting',
+				skill: 'docs',
+				note: 'drei identische Scans derselben Abrechnung im Archiv'
+			}
+		],
+		artifacts: [
+			{ kind: 'doc', title: 'stromabrechnung-2024.pdf', note: '182,40 € Guthaben · archiviert' },
+			{ kind: 'person', title: 'Stadtwerke Nord', note: 'Firma · Energie' }
+		],
+		skills: [
+			{
+				skill: 'docs',
+				state: 'waiting',
+				note: '3 Duplikate — Löschung wartet auf dich',
+				workflow: 'respond',
+				done: ['request-trigger'],
+				current: 'approve'
+			}
+		],
+		hitl: {
+			label: 'Drei Duplikate löschen',
+			method: 'docs_delete',
+			actor: 'docs',
+			preview: {
+				kind: 'löschen',
+				title: 'Unwiderruflich — das Original bleibt erhalten',
+				rows: [
+					{ label: 'Behalten', value: 'stromabrechnung-2024.pdf' },
+					{ label: 'Löschen', value: 'scan-0417.pdf · scan-0418.pdf' },
+					{ label: 'Löschen', value: 'IMG_2291.pdf' }
+				]
+			}
+		}
+	},
+	{
+		id: 'kita',
+		type: 'frist',
+		title: 'Kita-Anmeldung bis 01.09.',
+		source: 'E-Mail · Stadt',
+		when: 'gestern · 16:30',
+		deadline: 'bis 01.09.',
+		status: 'waiting',
+		log: [
+			{
+				step: 'E-Mail eingegangen',
+				when: 'gestern · 16:30',
+				state: 'done',
+				skill: 'inbox',
+				note: 'Einladung zum Anmeldegespräch · Frist 01.09.'
+			},
+			{
+				step: 'Terminkonflikt',
+				when: 'gestern · 16:31',
+				state: 'waiting',
+				skill: 'calendar',
+				note: 'der Vorschlag kollidiert mit einem bestehenden Termin'
+			}
+		],
+		artifacts: [
+			{ kind: 'calendar', title: 'Anmeldegespräch Kita', note: '28.08. · 10:00–11:00' },
+			{ kind: 'doc', title: 'kita-einladung.pdf', note: 'archiviert' }
+		],
+		skills: [
+			{
+				skill: 'calendar',
+				state: 'waiting',
+				note: 'Konflikt am 28.08. — Entscheidung offen',
+				workflow: 'frist',
+				done: ['date-trigger'],
+				current: 'schedule'
+			}
+		],
+		hitl: {
+			label: 'Termin trotz Konflikt eintragen?',
+			method: 'calendar_conflict',
+			actor: 'calendar',
+			preview: {
+				kind: 'konflikt',
+				title: 'Donnerstag, 28.08. — zwei Termine zur selben Zeit',
+				rows: [
+					{ label: 'Neu', value: 'Anmeldegespräch Kita · 10:00–11:00' },
+					{ label: 'Bestehend', value: 'Team-Review · 10:30–11:30' },
+					{ label: 'Alternative', value: '28.08. · 14:00 frei' }
+				]
+			}
+		}
 	},
 	{
 		id: 'kontoauszug',
@@ -421,7 +637,21 @@ const INTENTS: MockIntent[] = [
 				workflow: 'capture',
 				done: ['voice-trigger', 'create', 'list-view', 'board-view']
 			}
-		]
+		],
+		hitl: {
+			label: 'Zahlung der Rechnung zuordnen',
+			method: 'match_confirm',
+			actor: 'abgleich',
+			preview: {
+				kind: 'abgleich',
+				title: 'Miete August −1.150,00 € ↔ Dauerauftrag Vermieter',
+				rows: [
+					{ label: 'Score', value: '91 % — unter Auto-Schwelle' },
+					{ label: 'Buchung', value: '28.07. · −1.150,00 €' },
+					{ label: 'Offener Posten', value: 'Miete 08/2025' }
+				]
+			}
+		}
 	},
 	{
 		id: 'handyvertrag',
@@ -465,7 +695,20 @@ const INTENTS: MockIntent[] = [
 				workflow: 'intake',
 				done: ['mail-trigger', 'upload-trigger', 'normalize', 'classify', 'route']
 			}
-		]
+		],
+		hitl: {
+			label: 'Kündigungsbestätigung ablegen',
+			method: 'archive_confirm',
+			actor: 'docs',
+			preview: {
+				kind: 'ablage',
+				title: 'bestaetigung-telekom.pdf → [[Verträge]] / Mobilfunk',
+				rows: [
+					{ label: 'Erkannt', value: 'Kündigungsbestätigung' },
+					{ label: 'Vertragsende', value: '31.08.' }
+				]
+			}
+		}
 	},
 	{
 		id: 'fitnessstudio',
@@ -501,8 +744,8 @@ const INTENTS: MockIntent[] = [
 		skills: [
 			{
 				skill: 'docs',
-				state: 'running',
-				note: 'durchsucht das Archiv',
+				state: 'waiting',
+				note: 'Archiv-Suche ohne Treffer',
 				workflow: 'respond',
 				done: ['request-trigger'],
 				current: 'draft'
@@ -515,7 +758,21 @@ const INTENTS: MockIntent[] = [
 				done: [],
 				current: 'entity-trigger'
 			}
-		]
+		],
+		hitl: {
+			label: 'Vertrag manuell nachreichen',
+			method: 'upload_request',
+			actor: 'docs',
+			preview: {
+				kind: 'fehlt',
+				title: 'Kein FitX-Vertrag im Archiv gefunden',
+				rows: [
+					{ label: 'Gesucht in', value: 'Archiv · 428 Dokumente' },
+					{ label: 'Treffer', value: 'keine' },
+					{ label: 'Nächster Schritt', value: 'Vertrag hochladen oder Ort nennen' }
+				]
+			}
+		}
 	}
 ]
 
@@ -545,18 +802,21 @@ let preview = $state<MockArtifact | null>(null)
 let skillView = $state<SkillStatus | null>(null)
 
 /**
- * The pending HITL of the mock surfaces where every held message lives:
- * the GLOBAL bar above the voice pill. Seeded once; Confirm/Reject there
- * simply clears it (the mock has nothing to execute).
+ * Every intent's gate goes into the REAL queue, tagged with its intent —
+ * the bar above the pill shows only the one whose intent is on screen.
  */
-if (!hitlQueue.items.some((h) => h.id === 'mock-docs-tk')) {
+for (const intent of INTENTS) {
+	if (!intent.hitl) continue
+	const id = `mock-${intent.id}`
+	if (hitlQueue.items.some((h) => h.id === id)) continue
 	hitlQueue.items.push({
-		id: 'mock-docs-tk',
-		actor: 'docs',
-		method: 'draft_approve',
-		label: 'Antwortentwurf an die TK freigeben',
-		detail: 'Intent „Krankenkasse: Nachweis bis 15.09." · Entwurf bereit',
-		context: 'krankenkasse'
+		id,
+		actor: intent.hitl.actor,
+		method: intent.hitl.method,
+		label: intent.hitl.label,
+		detail: intent.hitl.preview.title,
+		context: intent.id,
+		preview: intent.hitl.preview
 	})
 }
 
@@ -851,349 +1111,363 @@ const DOT: Record<string, string> = {
 		</aside>
 
 		<!-- CENTER: activity log / artifact preview / skill stepper. -->
-		<main
-			bind:this={centerEl}
-			class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-foreground/5 bg-[#fffdf7] shadow-[0_1px_3px_rgba(30,41,59,0.05)] {talk.open
-			? ''
-			: 'gap-4 overflow-y-auto p-6'}"
+		<!-- The center column wears the intent's STATE as its header — the same
+		     uppercase line as INTENTS and SKILLS beside it, so all three
+		     columns start their cards on one line. -->
+		<div
+			class="flex min-h-0 min-w-0 flex-1 flex-col gap-2"
 			style="margin-bottom: calc(var(--dock-h, 0px) / {WS_ZOOM})"
 		>
-			{#if skillView}
-				<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
-				{@const skillLog = selected.log.filter((e) => e.skill === skillView?.skill)}
-				<header class="flex items-center gap-3">
-					<span
-						class="size-2 shrink-0 rounded-full {skillView.state === 'done'
+			<h2
+				class="px-1 pt-1 font-semibold text-xs uppercase tracking-wide {STATE_ACCENT[
+					selected.status
+				].text}"
+			>
+				{STATUS_LABEL[selected.status]}
+			</h2>
+			<main
+				bind:this={centerEl}
+				class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-[#fffdf7] p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			>
+				{#if skillView}
+					<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
+					{@const skillLog = selected.log.filter((e) => e.skill === skillView?.skill)}
+					<header class="flex items-center gap-3">
+						<span
+							class="size-2 shrink-0 rounded-full {skillView.state === 'done'
 						? 'bg-[#2f5d50]'
 						: skillView.state === 'waiting'
 							? 'bg-[#c15b40]'
 							: 'bg-[#a06818]'}"
-					></span>
-					<div class="min-w-0">
-						<h1 class="font-mono font-semibold text-lg leading-tight">{skillView.skill}</h1>
-						<p class="text-foreground/45 text-xs">{skillView.note}</p>
-					</div>
-					{@render backButton()}
-				</header>
-				<div class="border-border border-b"></div>
+						></span>
+						<div class="min-w-0">
+							<h1 class="font-mono font-semibold text-lg leading-tight">{skillView.skill}</h1>
+							<p class="text-foreground/45 text-xs">{skillView.note}</p>
+						</div>
+						{@render backButton()}
+					</header>
+					<div class="border-border border-b"></div>
 
-				<!-- the ACTUAL template workflow (same cards as the Skills viewer),
+					<!-- the ACTUAL template workflow (same cards as the Skills viewer),
 			     the instance state overlaid: ✓ done, amber running, red waiting -->
-				<div
-					bind:clientWidth={sfW}
-					bind:clientHeight={sfH}
-					class="h-[340px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/60"
-				>
-					{#key skillView.skill}
-						{#if sfNodes.length === 0}
-							<p class="flex h-full items-center justify-center text-foreground/40 text-sm">
-								{skillView.skill}
-								— Template folgt; die Instanz läuft als Teil der Inbox-Pipeline.
-							</p>
-						{:else}
-							<SvelteFlow
-								nodes={sfNodes}
-								edges={sfEdges}
-								nodeTypes={sfNodeTypes}
-								fitView
-								minZoom={0.15}
-								proOptions={{ hideAttribution: true }}
-							>
-								<Background bgColor="transparent" patternColor="rgba(30,41,59,0.08)" />
-								<FitView w={sfW} h={sfH} />
-							</SvelteFlow>
-						{/if}
-					{/key}
-				</div>
+					<div
+						bind:clientWidth={sfW}
+						bind:clientHeight={sfH}
+						class="h-[340px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/60"
+					>
+						{#key skillView.skill}
+							{#if sfNodes.length === 0}
+								<p class="flex h-full items-center justify-center text-foreground/40 text-sm">
+									{skillView.skill}
+									— Template folgt; die Instanz läuft als Teil der Inbox-Pipeline.
+								</p>
+							{:else}
+								<SvelteFlow
+									nodes={sfNodes}
+									edges={sfEdges}
+									nodeTypes={sfNodeTypes}
+									fitView
+									minZoom={0.15}
+									proOptions={{ hideAttribution: true }}
+								>
+									<Background bgColor="transparent" patternColor="rgba(30,41,59,0.08)" />
+									<FitView w={sfW} h={sfH} />
+								</SvelteFlow>
+							{/if}
+						{/key}
+					</div>
 
-				<!-- what this skill logged into the intent's stream -->
-				{#if skillLog.length > 0}
-					<h2 class="pt-4 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
-						Log dieses Skills
-					</h2>
-					<ul class="flex flex-col gap-2">
-						{#each skillLog as entry (entry.step)}
-							<li class="flex items-baseline gap-3 text-sm">
-								<span class="font-mono text-[0.625rem] text-foreground/35">{entry.when}</span>
-								<span class="min-w-0 flex-1">{entry.step}</span>
-								<span
-									class="font-mono text-[0.625rem] {entry.state === 'done'
+					<!-- what this skill logged into the intent's stream -->
+					{#if skillLog.length > 0}
+						<h2 class="pt-4 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+							Log dieses Skills
+						</h2>
+						<ul class="flex flex-col gap-2">
+							{#each skillLog as entry (entry.step)}
+								<li class="flex items-baseline gap-3 text-sm">
+									<span class="font-mono text-[0.625rem] text-foreground/35">{entry.when}</span>
+									<span class="min-w-0 flex-1">{entry.step}</span>
+									<span
+										class="font-mono text-[0.625rem] {entry.state === 'done'
 									? 'text-[#2f5d50]'
 									: entry.state === 'waiting'
 										? 'text-[#9c4832]'
 										: 'text-[#a06818]'}"
-								>
-									{entry.state === 'done' ? '✓' : entry.state === 'waiting' ? '⏸' : '⟳'}
-								</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			{:else if preview}
-				<!-- ARTIFACT PREVIEW: full width — header, a divider, the view. -->
-				<header class="flex items-center gap-2">
-					<span
-						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
-					>
-						{KIND_LABEL[preview.kind]}
-					</span>
-					<div class="min-w-0">
-						<h1 class="truncate font-semibold text-lg leading-tight">{preview.title}</h1>
-						<p class="text-foreground/45 text-xs">{preview.note}</p>
-					</div>
-					{@render backButton()}
-				</header>
-				<div class="border-border border-b"></div>
-
-				{#if preview.kind === 'doc'}
-					<div class="w-full pt-2">
-						<div class="flex items-baseline justify-between pb-6">
-							<span class="font-semibold text-sm">{preview.title.replace('.pdf', '')}</span>
-							<span class="font-mono text-[0.625rem] text-foreground/40">Seite 1 / 2</span>
-						</div>
-						{#each [92, 100, 78, 96, 60] as w, i (i)}
-							<div class="mb-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
-						{/each}
-						<div class="mt-5 rounded-lg border border-[#a06818]/30 bg-[#a06818]/8 px-4 py-3">
-							<p class="font-mono text-[#a06818] text-[0.625rem] uppercase tracking-wide">
-								Extrahiert
-							</p>
-							<p class="pt-1 text-xs leading-relaxed">{preview.note}</p>
-						</div>
-						{#each [88, 95, 70] as w, i (i)}
-							<div class="mt-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
-						{/each}
-					</div>
-				{:else if preview.kind === 'todo'}
-					<div class="w-full pt-2">
-						<div class="flex items-center gap-3">
-							<span
-								class="flex size-5 items-center justify-center rounded-md border-2 border-foreground/20"
-							></span>
-							<span class="flex-1 font-medium text-sm">{preview.title}</span>
-							<span class="rounded-full bg-surface-soft px-2 py-0.5 font-mono text-[0.625rem]">
-								todos
-							</span>
-						</div>
-						<p class="pt-2 pl-8 text-foreground/50 text-xs">{preview.note}</p>
-					</div>
-				{:else if preview.kind === 'calendar'}
-					<div class="flex w-full items-center gap-4 pt-2">
-						<div
-							class="flex size-14 flex-col items-center justify-center rounded-xl bg-[#c15b40]/10 text-[#9c4832]"
+									>
+										{entry.state === 'done' ? '✓' : entry.state === 'waiting' ? '⏸' : '⟳'}
+									</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				{:else if preview}
+					<!-- ARTIFACT PREVIEW: full width — header, a divider, the view. -->
+					<header class="flex items-center gap-2">
+						<span
+							class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
 						>
-							<span class="font-semibold text-lg leading-none">15</span>
-							<span class="pt-0.5 font-mono text-[0.5625rem] uppercase">Sep</span>
-						</div>
+							{KIND_LABEL[preview.kind]}
+						</span>
 						<div class="min-w-0">
-							<p class="font-medium text-sm">{preview.title}</p>
-							<p class="pt-0.5 text-foreground/50 text-xs">{preview.note}</p>
+							<h1 class="truncate font-semibold text-lg leading-tight">{preview.title}</h1>
+							<p class="text-foreground/45 text-xs">{preview.note}</p>
 						</div>
-					</div>
-				{:else if preview.kind === 'person'}
-					<div class="w-full pt-2">
-						<div class="flex items-center gap-4">
-							<span
-								class="flex size-12 items-center justify-center rounded-full bg-[#7e6ead]/15 font-semibold text-[#655687] text-sm"
-							>
-								{preview.title.slice(0, 2).toUpperCase()}
-							</span>
-							<div class="min-w-0">
-								<p class="font-semibold text-sm">{preview.title}</p>
-								<p class="text-foreground/50 text-xs">{preview.note}</p>
+						{@render backButton()}
+					</header>
+					<div class="border-border border-b"></div>
+
+					{#if preview.kind === 'doc'}
+						<div class="w-full pt-2">
+							<div class="flex items-baseline justify-between pb-6">
+								<span class="font-semibold text-sm">{preview.title.replace('.pdf', '')}</span>
+								<span class="font-mono text-[0.625rem] text-foreground/40">Seite 1 / 2</span>
 							</div>
-						</div>
-						<div class="mt-4 grid grid-cols-2 gap-2 text-xs">
-							<div class="rounded-lg bg-surface-soft px-3 py-2">
-								<span class="text-foreground/40">Bezug</span><br>3 Intents · 2 Dokumente
+							{#each [92, 100, 78, 96, 60] as w, i (i)}
+								<div class="mb-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
+							{/each}
+							<div class="mt-5 rounded-lg border border-[#a06818]/30 bg-[#a06818]/8 px-4 py-3">
+								<p class="font-mono text-[#a06818] text-[0.625rem] uppercase tracking-wide">
+									Extrahiert
+								</p>
+								<p class="pt-1 text-xs leading-relaxed">{preview.note}</p>
 							</div>
-							<div class="rounded-lg bg-surface-soft px-3 py-2">
-								<span class="text-foreground/40">Zuletzt</span><br>heute · Brief eingegangen
-							</div>
-						</div>
-					</div>
-				{:else if preview.kind === 'statement'}
-					<div class="w-full pt-2">
-						{#each [{ d: '28.07.', t: 'Miete August', a: '−1.150,00 €', m: 'abgeglichen ✓' }, { d: '25.07.', t: 'Möbelhaus Nord GmbH', a: '−249,00 €', m: 'Rechnung zugeordnet ✓' }, { d: '24.07.', t: 'Gehalt', a: '+3.480,00 €', m: '' }] as row (row.d + row.t)}
-							<div class="flex items-center gap-3 border-border/60 border-b py-2.5 text-sm">
-								<span class="w-14 font-mono text-foreground/40 text-xs">{row.d}</span>
-								<span class="min-w-0 flex-1 truncate">{row.t}</span>
-								<span class="font-mono {row.a.startsWith('+') ? 'text-[#2f5d50]' : ''}"
-									>{row.a}</span
-								>
-								<span class="w-40 text-right text-[0.6875rem] text-foreground/40">{row.m}</span>
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<!-- brain entity: an Obsidian-style markdown note with wikilinks -->
-					<div class="w-full max-w-2xl pt-2 font-mono text-[13px] leading-relaxed">
-						<p class="text-foreground/35">---</p>
-						<p class="text-foreground/55">
-							tags: <span class="text-[#a06818]">#versicherung #frist</span>
-						</p>
-						<p class="text-foreground/55">erstellt: 2025-08-12 · quelle: inbox</p>
-						<p class="pb-3 text-foreground/35">---</p>
-						<h1 class="pb-2 font-sans font-semibold text-xl">
-							{preview.title.replaceAll('[', '').replaceAll(']', '')}
-						</h1>
-						<p class="pb-3 text-foreground/75">
-							Sammelt alles rund um Versicherungen in 2025. Der Brief der
-							<span
-								class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
-								>[[Techniker Krankenkasse]]</span
-							>
-							verlangt einen
-							<span
-								class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
-								>[[Einkommensnachweis]]</span
-							>
-							bis zur Frist am 15.09. — das Todo hängt an
-							<span
-								class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
-								>[[Fristen 2025]]</span
-							>.
-						</p>
-						<p class="pb-1 text-foreground/75">## Offen</p>
-						<p class="pb-0.5 text-foreground/75">
-							- [ ] Nachweis einreichen <span class="text-foreground/40">(fällig 12.09.)</span>
-						</p>
-						<p class="pb-3 text-foreground/75">
-							- [x] <span class="line-through opacity-60">Brief archivieren</span>
-						</p>
-						<p class="pb-1 text-foreground/75">## Verknüpft</p>
-						<div class="flex flex-wrap gap-1.5 pb-4">
-							{#each ['[[Techniker Krankenkasse]]', '[[Einkommensnachweis]]', '[[Fristen 2025]]', '[[Steuer 2023]]'] as link (link)}
-								<span
-									class="cursor-pointer rounded-md bg-[#7e6ead]/10 px-2 py-0.5 text-[#655687] text-xs"
-									>{link}</span
-								>
+							{#each [88, 95, 70] as w, i (i)}
+								<div class="mt-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
 							{/each}
 						</div>
-						<div class="border-border border-t pt-3">
-							<p
-								class="pb-1 font-sans font-semibold text-foreground/50 text-xs uppercase tracking-wide"
-							>
-								Backlinks · 3
-							</p>
-							<p class="text-foreground/55 text-xs">
-								[[Krankenkasse: Nachweis bis 15.09.]] · [[Steuer 2023]] · [[Post-Eingang August]]
-							</p>
+					{:else if preview.kind === 'todo'}
+						<div class="w-full pt-2">
+							<div class="flex items-center gap-3">
+								<span
+									class="flex size-5 items-center justify-center rounded-md border-2 border-foreground/20"
+								></span>
+								<span class="flex-1 font-medium text-sm">{preview.title}</span>
+								<span class="rounded-full bg-surface-soft px-2 py-0.5 font-mono text-[0.625rem]">
+									todos
+								</span>
+							</div>
+							<p class="pt-2 pl-8 text-foreground/50 text-xs">{preview.note}</p>
 						</div>
-					</div>
-				{/if}
-			{:else}
-				<!-- ACTIVITY LOG: the intent's journey, every entry typed by skill. -->
-				<header>
-					<div class="flex items-center gap-2">
-						<span
-							class="rounded-full px-2 py-0.5 font-mono text-[0.625rem] {TYPE_STYLE[selected.type]}"
-						>
-							{selected.type}
-						</span>
-						{#if selected.deadline}
-							<span
-								class="rounded-full bg-[#c15b40]/10 px-2 py-0.5 font-mono text-[#9c4832] text-[0.625rem]"
+					{:else if preview.kind === 'calendar'}
+						<div class="flex w-full items-center gap-4 pt-2">
+							<div
+								class="flex size-14 flex-col items-center justify-center rounded-xl bg-[#c15b40]/10 text-[#9c4832]"
 							>
-								{selected.deadline}
+								<span class="font-semibold text-lg leading-none">15</span>
+								<span class="pt-0.5 font-mono text-[0.5625rem] uppercase">Sep</span>
+							</div>
+							<div class="min-w-0">
+								<p class="font-medium text-sm">{preview.title}</p>
+								<p class="pt-0.5 text-foreground/50 text-xs">{preview.note}</p>
+							</div>
+						</div>
+					{:else if preview.kind === 'person'}
+						<div class="w-full pt-2">
+							<div class="flex items-center gap-4">
+								<span
+									class="flex size-12 items-center justify-center rounded-full bg-[#7e6ead]/15 font-semibold text-[#655687] text-sm"
+								>
+									{preview.title.slice(0, 2).toUpperCase()}
+								</span>
+								<div class="min-w-0">
+									<p class="font-semibold text-sm">{preview.title}</p>
+									<p class="text-foreground/50 text-xs">{preview.note}</p>
+								</div>
+							</div>
+							<div class="mt-4 grid grid-cols-2 gap-2 text-xs">
+								<div class="rounded-lg bg-surface-soft px-3 py-2">
+									<span class="text-foreground/40">Bezug</span><br>3 Intents · 2 Dokumente
+								</div>
+								<div class="rounded-lg bg-surface-soft px-3 py-2">
+									<span class="text-foreground/40">Zuletzt</span><br>heute · Brief eingegangen
+								</div>
+							</div>
+						</div>
+					{:else if preview.kind === 'statement'}
+						<div class="w-full pt-2">
+							{#each [{ d: '28.07.', t: 'Miete August', a: '−1.150,00 €', m: 'abgeglichen ✓' }, { d: '25.07.', t: 'Möbelhaus Nord GmbH', a: '−249,00 €', m: 'Rechnung zugeordnet ✓' }, { d: '24.07.', t: 'Gehalt', a: '+3.480,00 €', m: '' }] as row (row.d + row.t)}
+								<div class="flex items-center gap-3 border-border/60 border-b py-2.5 text-sm">
+									<span class="w-14 font-mono text-foreground/40 text-xs">{row.d}</span>
+									<span class="min-w-0 flex-1 truncate">{row.t}</span>
+									<span class="font-mono {row.a.startsWith('+') ? 'text-[#2f5d50]' : ''}"
+										>{row.a}</span
+									>
+									<span class="w-40 text-right text-[0.6875rem] text-foreground/40">{row.m}</span>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<!-- brain entity: an Obsidian-style markdown note with wikilinks -->
+						<div class="w-full max-w-2xl pt-2 font-mono text-[13px] leading-relaxed">
+							<p class="text-foreground/35">---</p>
+							<p class="text-foreground/55">
+								tags: <span class="text-[#a06818]">#versicherung #frist</span>
+							</p>
+							<p class="text-foreground/55">erstellt: 2025-08-12 · quelle: inbox</p>
+							<p class="pb-3 text-foreground/35">---</p>
+							<h1 class="pb-2 font-sans font-semibold text-xl">
+								{preview.title.replaceAll('[', '').replaceAll(']', '')}
+							</h1>
+							<p class="pb-3 text-foreground/75">
+								Sammelt alles rund um Versicherungen in 2025. Der Brief der
+								<span
+									class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+									>[[Techniker Krankenkasse]]</span
+								>
+								verlangt einen
+								<span
+									class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+									>[[Einkommensnachweis]]</span
+								>
+								bis zur Frist am 15.09. — das Todo hängt an
+								<span
+									class="cursor-pointer text-[#655687] underline decoration-[#655687]/30 underline-offset-2"
+									>[[Fristen 2025]]</span
+								>.
+							</p>
+							<p class="pb-1 text-foreground/75">## Offen</p>
+							<p class="pb-0.5 text-foreground/75">
+								- [ ] Nachweis einreichen <span class="text-foreground/40">(fällig 12.09.)</span>
+							</p>
+							<p class="pb-3 text-foreground/75">
+								- [x] <span class="line-through opacity-60">Brief archivieren</span>
+							</p>
+							<p class="pb-1 text-foreground/75">## Verknüpft</p>
+							<div class="flex flex-wrap gap-1.5 pb-4">
+								{#each ['[[Techniker Krankenkasse]]', '[[Einkommensnachweis]]', '[[Fristen 2025]]', '[[Steuer 2023]]'] as link (link)}
+									<span
+										class="cursor-pointer rounded-md bg-[#7e6ead]/10 px-2 py-0.5 text-[#655687] text-xs"
+										>{link}</span
+									>
+								{/each}
+							</div>
+							<div class="border-border border-t pt-3">
+								<p
+									class="pb-1 font-sans font-semibold text-foreground/50 text-xs uppercase tracking-wide"
+								>
+									Backlinks · 3
+								</p>
+								<p class="text-foreground/55 text-xs">
+									[[Krankenkasse: Nachweis bis 15.09.]] · [[Steuer 2023]] · [[Post-Eingang August]]
+								</p>
+							</div>
+						</div>
+					{/if}
+				{:else}
+					<!-- ACTIVITY LOG: the intent's journey, every entry typed by skill. -->
+					<header>
+						<div class="flex items-center gap-2">
+							<span
+								class="rounded-full px-2 py-0.5 font-mono text-[0.625rem] {TYPE_STYLE[selected.type]}"
+							>
+								{selected.type}
 							</span>
-						{/if}
-						<span
-							class="ml-auto rounded-full border border-border px-2.5 py-0.5 font-mono text-[0.625rem] text-foreground/50"
-						>
-							{STATUS_LABEL[selected.status]}
-						</span>
-					</div>
-					<h1 class="pt-2 font-semibold text-xl leading-tight">{selected.title}</h1>
-					<p class="pt-1 text-foreground/45 text-xs">{selected.source} · {selected.when}</p>
-				</header>
-
-				<ol class="flex flex-col">
-					{#each selected.log as entry, i (entry.step + i)}
-						<li class="relative flex gap-3 pb-5">
-							{#if i < selected.log.length - 1}
-								<span class="absolute top-6 bottom-0 left-[11px] w-px bg-foreground/10"></span>
+							{#if selected.deadline}
+								<span
+									class="rounded-full bg-[#c15b40]/10 px-2 py-0.5 font-mono text-[#9c4832] text-[0.625rem]"
+								>
+									{selected.deadline}
+								</span>
 							{/if}
 							<span
-								class="z-10 mt-0.5 flex size-[23px] shrink-0 items-center justify-center rounded-full {DOT[
+								class="ml-auto rounded-full border border-border px-2.5 py-0.5 font-mono text-[0.625rem] text-foreground/50"
+							>
+								{STATUS_LABEL[selected.status]}
+							</span>
+						</div>
+						<h1 class="pt-2 font-semibold text-xl leading-tight">{selected.title}</h1>
+						<p class="pt-1 text-foreground/45 text-xs">{selected.source} · {selected.when}</p>
+					</header>
+
+					<ol class="flex flex-col">
+						{#each selected.log as entry, i (entry.step + i)}
+							<li class="relative flex gap-3 pb-5">
+								{#if i < selected.log.length - 1}
+									<span class="absolute top-6 bottom-0 left-[11px] w-px bg-foreground/10"></span>
+								{/if}
+								<span
+									class="z-10 mt-0.5 flex size-[23px] shrink-0 items-center justify-center rounded-full {DOT[
 								entry.state
 							]}"
-							>
-								{#if entry.state === 'done'}
-									<svg
-										viewBox="0 0 24 24"
-										class="size-3"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="3"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<path d="m5 13 4 4L19 7" />
-									</svg>
-								{:else if entry.state === 'running'}
-									<svg
-										viewBox="0 0 24 24"
-										class="size-3"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2.5"
-										stroke-linecap="round"
-									>
-										<path d="M21 12a9 9 0 1 1-6.2-8.56" />
-									</svg>
-								{:else}
-									<svg
-										viewBox="0 0 24 24"
-										class="size-3"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2.5"
-										stroke-linecap="round"
-									>
-										<circle cx="12" cy="12" r="9" />
-										<path d="M12 7v5l3 3" />
-									</svg>
-								{/if}
-							</span>
-							<div class="min-w-0 flex-1">
-								<div class="flex items-baseline gap-2">
-									<span class="font-medium text-sm">{entry.step}</span>
-									<!-- the entry is TYPED: which skill wrote it -->
-									<button
-										type="button"
-										onclick={() => {
+								>
+									{#if entry.state === 'done'}
+										<svg
+											viewBox="0 0 24 24"
+											class="size-3"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="3"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<path d="m5 13 4 4L19 7" />
+										</svg>
+									{:else if entry.state === 'running'}
+										<svg
+											viewBox="0 0 24 24"
+											class="size-3"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.5"
+											stroke-linecap="round"
+										>
+											<path d="M21 12a9 9 0 1 1-6.2-8.56" />
+										</svg>
+									{:else}
+										<svg
+											viewBox="0 0 24 24"
+											class="size-3"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.5"
+											stroke-linecap="round"
+										>
+											<circle cx="12" cy="12" r="9" />
+											<path d="M12 7v5l3 3" />
+										</svg>
+									{/if}
+								</span>
+								<div class="min-w-0 flex-1">
+									<div class="flex items-baseline gap-2">
+										<span class="font-medium text-sm">{entry.step}</span>
+										<!-- the entry is TYPED: which skill wrote it -->
+										<button
+											type="button"
+											onclick={() => {
 										skillView = selected.skills.find((s) => s.skill === entry.skill) ?? null
 										preview = null
 									}}
-										class="rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[0.5625rem] text-foreground/55 transition-colors hover:bg-surface-card-selected"
-									>
-										{entry.skill}
-									</button>
-									<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
-										{entry.when}
-									</span>
-								</div>
-								{#if entry.note}
-									<p class="pt-0.5 text-foreground/50 text-xs leading-relaxed">{entry.note}</p>
-								{/if}
-								{#if entry.card}
-									<div class="mt-2 rounded-xl border border-border bg-surface-card px-4 py-3">
-										<p class="font-medium text-xs">{entry.card.title}</p>
-										<p class="pt-1 text-foreground/55 text-xs leading-relaxed">{entry.card.text}</p>
-										{#if entry.hitl}
-											<p class="pt-2 font-mono text-[#9c4832] text-[0.625rem]">
-												→ wartet in der globalen Freigabe-Leiste über der Voice-Pill
-											</p>
-										{/if}
+											class="rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[0.5625rem] text-foreground/55 transition-colors hover:bg-surface-card-selected"
+										>
+											{entry.skill}
+										</button>
+										<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
+											{entry.when}
+										</span>
 									</div>
-								{/if}
-							</div>
-						</li>
-					{/each}
-				</ol>
-			{/if}
-		</main>
+									{#if entry.note}
+										<p class="pt-0.5 text-foreground/50 text-xs leading-relaxed">{entry.note}</p>
+									{/if}
+									{#if entry.card}
+										<div class="mt-2 rounded-xl border border-border bg-surface-card px-4 py-3">
+											<p class="font-medium text-xs">{entry.card.title}</p>
+											<p class="pt-1 text-foreground/55 text-xs leading-relaxed">
+												{entry.card.text}
+											</p>
+											{#if entry.hitl}
+												<p class="pt-2 font-mono text-[#9c4832] text-[0.625rem]">
+													→ wartet in der globalen Freigabe-Leiste über der Voice-Pill
+												</p>
+											{/if}
+										</div>
+									{/if}
+								</div>
+							</li>
+						{/each}
+					</ol>
+				{/if}
+			</main>
+		</div>
 
 		<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
 		{#if !talk.open}
