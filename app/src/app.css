@@ -231,7 +231,7 @@
 	/* Row one — the cool half: the brand's own colours, deepest first. */
 	--color-marine: #1e293b; /* deep navy — the brand's ink and its fill */
 	--color-tidal-blue: #217e91; /* deep teal-blue — work in motion */
-	--color-harbour: #4a6e91; /* steel blue, off the violet side — everything held back */
+	--color-anchor: #4a6e91; /* steel blue, off the violet side — everything held back */
 	--color-paradise-water: #449c94; /* turquoise — the bright note; settled work */
 	/* Row two — the warm half: the signals. */
 	--color-tuscan-sun: #d2a24a; /* clean gold — brighter and yellower than the old #a06818 */
@@ -289,15 +289,16 @@
 	 *   --color-X-ink          the tone used AS text, on the cream page
 	 *                          (darkened where the raw tone is too light)
 	 *
-	 * ONE TONE, ONE ROLE. Harbour used to answer to three names — primary-soft,
-	 * status-quiet and archive — which is how the last drift started; it
-	 * answers to `status-quiet` now and nothing else. There is no `accent`
-	 * either: paradise water IS success.
+	 * ONE TONE, ONE ROLE — eight of each. The steel blue once answered to
+	 * three names (primary-soft, status-quiet, archive), which is how the last
+	 * drift started; it is `anchor` now, carries `status-quiet` alone, and its
+	 * old Denglish pairing (token `harbour`, label "Hafen") is gone. There is
+	 * no `accent` either: paradise water IS success.
 	 *
 	 *   ROLE             TONE            WHERE IT SPEAKS
 	 *   primary          marine          buttons, the rail, the HITL frame
 	 *   status-progress  tidal blue      in motion
-	 *   status-quiet     harbour         held back — every type badge, archive
+	 *   status-quiet     anchor          held back — every type badge
 	 *   status-success   paradise water  settled — the brand's bright note
 	 *   status-warning   tuscan sun      careful — but nothing is broken
 	 *   status-error     terracotta      something failed
@@ -307,14 +308,16 @@
 	--color-primary-foreground: var(--color-chalk);
 
 	/* Tidal blue is dark enough to read as text unaided — unlike the sage it
-	 * replaced, whose ink had to be mixed halfway to black. */
+	 * replaced, whose ink had to be mixed halfway to black. It stays separate
+	 * from anchor: motion and stillness are different things to say, and the
+	 * two blues are far enough apart to say them. */
 	--color-status-progress: var(--color-tidal-blue);
 	--color-status-progress-foreground: var(--color-chalk);
 	--color-status-progress-ink: var(--color-tidal-blue);
 
-	--color-status-quiet: var(--color-harbour);
+	--color-status-quiet: var(--color-anchor);
 	--color-status-quiet-foreground: var(--color-chalk);
-	--color-status-quiet-ink: color-mix(in oklab, var(--color-harbour) 82%, black);
+	--color-status-quiet-ink: color-mix(in oklab, var(--color-anchor) 82%, black);
 
 	--color-status-success: var(--color-paradise-water);
 	--color-status-success-foreground: #fafaf9;
