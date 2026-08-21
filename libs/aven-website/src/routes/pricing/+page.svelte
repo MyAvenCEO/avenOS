@@ -10,7 +10,7 @@
 import { page } from '$app/stores'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
-import { billingLabel, ctaHref, ctaLabel, euro, PLANS, plan } from '$lib/pricing/plans'
+import { billingLabel, ctaHref, ctaLabel, euro, PLANS, plan, VAT_NOTE } from '$lib/pricing/plans'
 import { skillsIncludedIn } from '$lib/skills/loader'
 
 const openSourceGithubHref = 'https://github.com/jaensen/avenOS'
@@ -66,7 +66,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{avenId.role}</p>
 						<p class="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-foreground">
 							{euro(avenId.eurPrice)}&nbsp;€
-							<span class="text-[13px] font-medium text-foreground/55">einmalig</span>
+							<span class="text-[13px] font-medium text-foreground/55">einmalig · netto</span>
 						</p>
 					</div>
 					<ul
@@ -169,7 +169,15 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 						</div>
 
 						<ul class="mt-5 flex-1 space-y-2 text-left text-[13px] leading-snug text-foreground/75">
-							<li class="font-medium text-foreground/85">Alles aus {previous.name}</li>
+							<li class="flex gap-2 font-medium text-foreground/85">
+								<span
+									aria-hidden="true"
+									class="mt-1.5 size-1.5 shrink-0 rounded-full {p.highlight
+										? 'bg-accent'
+										: 'bg-foreground/25'}"
+								></span>
+								<span>Alles aus {previous.name}</span>
+							</li>
 							{#each p.features as feature (feature)}
 								<li class="flex gap-2">
 									<span
@@ -222,9 +230,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 				{/each}
 			</div>
 
-			<p class="mt-6 text-center text-[12px] text-foreground/50">
-				Alle Preise netto, zzgl. gesetzlicher Umsatzsteuer.
-			</p>
+			<p class="mt-6 text-center text-[12px] text-foreground/50">{VAT_NOTE}</p>
 
 			<div
 				class="mx-auto mt-12 max-w-6xl rounded-2xl border border-foreground/8 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:p-7 lg:p-8"

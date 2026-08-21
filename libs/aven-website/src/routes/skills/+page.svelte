@@ -11,7 +11,7 @@ import { page } from '$app/state'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SkillMarketplaceCard from '$lib/components/SkillMarketplaceCard.svelte'
-import { PLANS, type PlanId, planIncludes, priceLabel } from '$lib/pricing/plans'
+import { PLANS, type PlanId, planIncludes, priceLabel, VAT_NOTE } from '$lib/pricing/plans'
 import { loadSkills, loadSkillsByPlan, skillDetailHref } from '$lib/skills/loader'
 
 const skills = loadSkills('de')
@@ -119,7 +119,8 @@ const chainSteps = [
 						</button>
 					{/each}
 				</div>
-				<p class="mt-4 text-[10px] font-semibold tabular-nums text-foreground/42">
+				<p class="mt-3 text-[10px] leading-snug text-foreground/42">{VAT_NOTE}</p>
+				<p class="mt-3 text-[10px] font-semibold tabular-nums text-foreground/42">
 					{visibleSkills.length}
 					von {skills.length} Skills enthalten
 				</p>
