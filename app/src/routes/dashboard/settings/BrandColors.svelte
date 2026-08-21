@@ -39,18 +39,18 @@ const ROLES: Role[] = [
 		note: 'Buttons, Rail, HITL-Rahmen, Wikilinks'
 	},
 	{
-		role: 'status progress',
-		tone: 'Tidal Blue',
-		token: '--color-status-progress',
-		toneToken: '--color-tidal-blue',
-		note: 'in Bewegung'
-	},
-	{
 		role: 'status quiet',
 		tone: 'Anchor',
 		token: '--color-status-quiet',
 		toneToken: '--color-anchor',
 		note: 'zurückgenommen — jedes Typ-Badge'
+	},
+	{
+		role: 'status progress',
+		tone: 'Tidal Blue',
+		token: '--color-status-progress',
+		toneToken: '--color-tidal-blue',
+		note: 'in Bewegung'
 	},
 	{
 		role: 'status success',
@@ -128,8 +128,8 @@ const STATES: Role[] = [
 /** Block 1: the paint itself, each hex written exactly once in app.css. */
 const TONES_COOL: Tone[] = [
 	{ name: 'Marine', token: '--color-marine', note: 'tiefes Navy — Tinte und Fläche' },
-	{ name: 'Tidal Blue', token: '--color-tidal-blue', note: 'tiefes Blaugrün — in Bewegung' },
 	{ name: 'Anchor', token: '--color-anchor', note: 'Stahlblau — alles Zurückgenommene' },
+	{ name: 'Tidal Blue', token: '--color-tidal-blue', note: 'Blaugrün — in Bewegung' },
 	{ name: 'Paradise Water', token: '--color-paradise-water', note: 'Türkis — der helle Ton' }
 ]
 
