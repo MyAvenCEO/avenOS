@@ -38,41 +38,28 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				class="mx-auto max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-pretty text-foreground sm:text-4xl md:text-[3rem] md:leading-[1.08]"
 			>
 				Tief in deinem Herzen weißt du es:
-				<span class="mt-1 block">in dir steckt so viel mehr.</span>
+				<span class="mt-1 block">in dir steckt so viel mehr, als Zeit gegen Geld zu tauschen.</span>
 			</h1>
 			<div class="mx-auto mt-8 max-w-2xl">
-				<p class="text-pretty text-[17px] leading-relaxed text-foreground/72 sm:text-[18px]">
-					Mehr, als in einen Feierabend passt. Mehr, als ein Gehalt je bezahlen wird.
-				</p>
-				<p
-					class="mx-auto mt-5 max-w-xl text-pretty text-[15px] leading-relaxed text-foreground/68 sm:text-base"
-				>
-					Was fehlt, ist nicht dein Talent. Es ist jemand, der dir den ganzen Rest abnimmt — damit
-					du endlich baust, statt zu verwalten.
-				</p>
-				<p
-					class="mt-7 text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[22px]"
-				>
-					Dieser Jemand heißt Aven. Eine KI, die dir gehört.
+				<p class="text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[22px]">
+					Ein Aven ist eine KI, die dir gehört.
 				</p>
 				<p
 					class="mx-auto mt-4 max-w-xl text-pretty text-[15px] leading-relaxed text-foreground/68 sm:text-base"
 				>
-					Deiner sortiert deine Post, führt deine Bücher und baut deine Firma mit — nachts, am
-					Wochenende, und während du einfach dein Leben lebst.
+					Deiner sortiert deine Post, führt deine Bücher und baut deine Firma mit — während du
+					einfach dein Leben lebst.
 				</p>
 				<p
-					class="mx-auto mt-7 max-w-xl border-t border-border/40 pt-7 text-pretty text-[17px] font-medium leading-snug text-foreground/85 sm:text-[19px]"
+					class="mx-auto mt-6 max-w-xl text-pretty text-[17px] font-medium leading-snug text-foreground/85 sm:text-[19px]"
 				>
-					So kippt der Deal deines Lebens: von Zeit gegen Geld zu
+					So werden aus einer Gehaltsabrechnung
 					<strong class="font-semibold text-foreground">10+ Assets, die dir gehören</strong>.
 				</p>
 				<p
-					class="mx-auto mt-4 max-w-xl text-pretty text-[17px] font-medium leading-snug sm:text-[19px]"
+					class="mx-auto mt-3 max-w-xl text-pretty text-[17px] font-semibold leading-snug text-accent-ink sm:text-[19px]"
 				>
-					Und jetzt stell dir
-					<strong class="font-semibold text-accent-ink">1 Million Gründer</strong>
-					vor, die dasselbe tun — und aneinander beteiligt sind.
+					Wir sind da, um dich in dein Gründerleben zu katapultieren!
 				</p>
 			</div>
 		</div>
