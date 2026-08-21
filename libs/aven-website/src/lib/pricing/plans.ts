@@ -57,6 +57,11 @@ export interface Plan {
 	/** avenCOOP is not bookable: you apply and we decide together. */
 	applyOnly?: boolean
 	/**
+	 * What you earn on every aven subscription you bring in — recurring for as
+	 * long as that subscription runs, not a one-off finder's fee.
+	 */
+	referralPct?: number
+	/**
 	 * Included agent runtime per day, and what a minute costs past it. Fair
 	 * use is a promise about a NUMBER, so the number is data, not prose in a
 	 * feature bullet where it drifts per tier.
@@ -92,6 +97,7 @@ export const PLANS: Plan[] = [
 		role: 'Dein Leben — organisiert, jeden Tag',
 		eurPrice: 42,
 		billing: 'monthly',
+		referralPct: 10,
 		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
 		platformFeePct: 0,
 		reinvestPct: 0,
@@ -115,6 +121,7 @@ export const PLANS: Plan[] = [
 		role: 'Deine Firma — alles Geschäftliche',
 		eurPrice: 326,
 		billing: 'monthly',
+		referralPct: 20,
 		runtime: { hoursPerDay: 4, centsPerExtraMinute: 10 },
 		platformFeePct: 6,
 		reinvestPct: 6,
@@ -137,6 +144,7 @@ export const PLANS: Plan[] = [
 		role: 'Wir werden dein technischer Co‑Founder',
 		eurPrice: 1895,
 		billing: 'monthly',
+		referralPct: 20,
 		runtime: { hoursPerDay: 12, centsPerExtraMinute: 10 },
 		platformFeePct: 6,
 		reinvestPct: 12,

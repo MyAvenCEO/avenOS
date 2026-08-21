@@ -176,7 +176,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 										<dt class="font-medium text-accent-ink">
 											{p.reinvestPct}&nbsp;% Reinvest
 											<span class="font-normal text-foreground/55">
-												· in avenCOOPs anderer Gründer, die Anteile bleiben deine</span
+												· in avenCOOPs anderer Gründer</span
 											>
 										</dt>
 									</div>
@@ -186,6 +186,20 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 										+&nbsp;{p.equitySharePct}&nbsp;% Firmenanteile an deiner Firma
 									</p>
 								{/if}
+							</div>
+						{/if}
+
+						{#if p.referralPct}
+							<div class="mt-4 rounded-xl border border-accent/45 bg-accent/10 px-4 py-3 text-left">
+								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+									Provision
+								</p>
+								<p class="mt-1 text-[13px] font-medium leading-snug text-foreground/85">
+									{p.referralPct}&nbsp;% auf jedes aven‑Abo, das du vermittelst
+								</p>
+								<p class="mt-0.5 text-[12px] leading-snug text-foreground/55">
+									monatlich wiederkehrend, solange das Abo läuft
+								</p>
 							</div>
 						{/if}
 
