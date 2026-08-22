@@ -7,6 +7,7 @@ import type { HeldPreview } from '$lib/actors/bus'
 import { bus } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
+import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
 import { isWindow } from '$lib/actors/window.actor.svelte'
 import { composer } from '$lib/intents/composer.svelte'
@@ -967,6 +968,15 @@ const gates = $derived(
  */
 const logEntries = $derived(gates.length > 0 ? selected.log.filter((e) => !e.hitl) : selected.log)
 
+/**
+ * The composer and the gate share one slot under the log. While you write,
+ * the composer has it and the gate waits — it is still held; it comes back
+ * the moment the field goes away.
+ */
+const composing = $derived(composer.composing)
+/** Words are arriving right now — the card says so instead of "Du". */
+const spokenNow = $derived(listenerActor.core.partial !== '')
+
 let centerEl: HTMLElement | null = $state(null)
 /** Whether the reader is riding the bottom; scrolling up deliberately parks it. */
 let stick = $state(true)
@@ -1173,7 +1183,7 @@ const DOT: Record<string, string> = {
 				if (centerEl) stick = centerEl.scrollHeight - centerEl.clientHeight - centerEl.scrollTop < 48
 			}}
 			class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {gates.length >
-			0
+				0 || composing
 				? 'rounded-b-none border-b-0'
 				: ''}"
 		>
@@ -1617,51 +1627,72 @@ const DOT: Record<string, string> = {
 		     top corners sit on that white instead of cutting notches of page
 		     eggshell into the panel. It ends where the gate ends — no white strip
 		     below it; the two bottom radii coincide, so there is nothing to fill. -->
-		{#each gates as held (held.id)}
-			<div class="-mt-2 rounded-b-2xl border border-foreground/5 border-t-0 bg-surface-raised">
-				<GatePreview {held} />
-			</div>
-		{/each}
+		{#if !composing}
+			{#each gates as held (held.id)}
+				<div class="-mt-2 rounded-b-2xl border border-foreground/5 border-t-0 bg-surface-raised">
+					<GatePreview {held} />
+				</div>
+			{/each}
+		{/if}
 
-		<!-- THE COMPOSER: the column's footer. Write, speak, or both — what is
-		     heard is written in here as it is heard; Enter sends a typed line,
-		     the pause sends a spoken one. It speaks into this intent's session. -->
-		<form
-			onsubmit={(e) => {
-				e.preventDefault()
-				composer.send()
-			}}
-			class="flex shrink-0 items-end gap-2 pt-1"
-		>
-			<textarea
-				bind:this={composerEl}
-				bind:value={composer.draft}
-				onkeydown={onComposerKeydown}
-				rows="1"
-				placeholder="Sprich — oder schreib…"
-				class="field-sizing-content max-h-40 min-h-10 flex-1 resize-none rounded-2xl border border-border bg-surface-raised px-3.5 py-2.5 text-sm leading-snug shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none placeholder:text-foreground/35 focus:border-foreground/25"
-			></textarea>
-			<button
-				type="submit"
-				disabled={composer.draft.trim() === ''}
-				title="Senden"
-				aria-label="Senden"
-				class="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-85 disabled:opacity-30"
-			>
-				<svg
-					viewBox="0 0 24 24"
-					class="size-5"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="1.75"
-					stroke-linecap="round"
-					stroke-linejoin="round"
+		<!-- THE COMPOSER: the same card, the same slot as the human gate — flush
+		     under the log, dark footer — because it is the same kind of thing:
+		     a moment where the stream waits on you. It is only there while you
+		     are writing or words are arriving; Enter or Send lets the stream go
+		     on, and the field goes away. -->
+		{#if composing}
+			<div class="-mt-2 rounded-b-2xl border border-foreground/5 border-t-0 bg-surface-raised">
+				<form
+					onsubmit={(e) => {
+						e.preventDefault()
+						composer.send()
+					}}
+					class="w-full overflow-hidden rounded-2xl border-2 border-primary bg-surface-raised shadow-[0_4px_16px_rgba(30,41,59,0.12)]"
 				>
-					<path d="M12 19V5" />
-					<path d="m5 12 7-7 7 7" />
-				</svg>
-			</button>
-		</form>
+					<div class="px-5 pt-4 pb-4">
+						<div class="flex items-baseline gap-2 pb-3">
+							<span
+								class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[0.5625rem] text-primary uppercase tracking-wide"
+							>
+								{spokenNow ? 'Höre zu' : 'Du'}
+							</span>
+							<p class="min-w-0 flex-1 font-medium text-sm">{selected.title}</p>
+						</div>
+						<textarea
+							bind:this={composerEl}
+							bind:value={composer.draft}
+							onkeydown={onComposerKeydown}
+							onblur={() => composer.dismiss()}
+							rows="2"
+							placeholder="Sprich — oder schreib…"
+							class="field-sizing-content max-h-60 min-h-16 w-full resize-none rounded-xl border border-border bg-white px-5 py-4 text-[13px] text-foreground/80 leading-relaxed outline-none placeholder:text-foreground/35 focus:border-foreground/25"
+						></textarea>
+					</div>
+					<!-- the footer: the same dark band as the gate's -->
+					<div class="flex items-center justify-center gap-3 bg-primary px-5 py-3">
+						<button
+							type="button"
+							onmousedown={(e) => e.preventDefault()}
+							onclick={() => {
+								composer.draft = ''
+								composer.active = false
+							}}
+							class="rounded-full border border-primary-foreground/30 px-5 py-1.5 font-medium text-primary-foreground/70 text-sm transition-colors hover:bg-primary-foreground/10"
+						>
+							Verwerfen
+						</button>
+						<button
+							type="submit"
+							disabled={composer.draft.trim() === ''}
+							onmousedown={(e) => e.preventDefault()}
+							class="rounded-full bg-primary-foreground px-6 py-1.5 font-medium text-primary text-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+						>
+							Senden
+						</button>
+					</div>
+				</form>
+			</div>
+		{/if}
 	</div>
 
 	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview).
