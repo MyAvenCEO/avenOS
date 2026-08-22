@@ -260,6 +260,11 @@ const ORB: Record<string, { orb: string; halo?: string; icon: string }> = {
 	}
 }
 
+/** The phases that carry information the orb cannot show alone — a
+ * percentage, a cause, a thing to do — get a word in the chip above the
+ * notch. The happy path (ready / hearing / thinking / speaking) stays mute. */
+const TOLD = new Set(['loading', 'starting', 'blocked', 'denied', 'error'])
+
 /** The orb acts only where the phase offers an action: interrupting, or
  * waking the audio device. Everywhere else it is a status, not a button. */
 const orbActs = $derived(
@@ -509,7 +514,7 @@ function onKeydown(event: KeyboardEvent) {
 			<div
 				class="{phase.key === 'off'
 			? 'w-fit'
-			: `rounded-full bg-primary text-primary-foreground ${typing ? 'w-full max-w-lg p-2.5' : 'w-full max-w-60 p-2.5'}`}"
+			: `rounded-full bg-primary text-primary-foreground ${typing ? 'w-full max-w-lg p-2.5' : 'w-full max-w-52 p-3'}`}"
 				title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
 			>
 				<div class="flex items-center {phase.key === 'off' ? '' : 'gap-3'}">
@@ -527,7 +532,7 @@ function onKeydown(event: KeyboardEvent) {
 							enterTyping()
 						}
 					}}
-							class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-colors hover:bg-primary-foreground/10"
+							class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 transition-colors hover:bg-primary-foreground/10"
 							title={typing ? 'Back to voice' : 'Type instead'}
 							aria-label={typing ? 'Back to voice' : 'Type instead'}
 						>
@@ -535,7 +540,7 @@ function onKeydown(event: KeyboardEvent) {
 								<!-- microphone: go back to speaking -->
 								<svg
 									viewBox="0 0 24 24"
-									class="size-4"
+									class="size-[1.125rem]"
 									fill="none"
 									stroke="currentColor"
 									stroke-width="1.5"
@@ -550,7 +555,7 @@ function onKeydown(event: KeyboardEvent) {
 								<!-- keyboard: switch to typing -->
 								<svg
 									viewBox="0 0 24 24"
-									class="size-4"
+									class="size-[1.125rem]"
 									fill="none"
 									stroke="currentColor"
 									stroke-width="1.5"
@@ -636,10 +641,11 @@ function onKeydown(event: KeyboardEvent) {
 							</span>
 						</button>
 					{:else}
-						<!-- Loading is the one phase that needs a word: which model, how far.
-						     A chip above the notch — the same eggshell tooltip the ended
-						     state wears — so the orb itself stays wordless. -->
-						{#if phase.key === 'loading' || phase.key === 'starting'}
+						<!-- The phases that need a word — how far a model is, why audio is
+						     off, what went wrong — say it in a chip above the notch, the
+						     same eggshell tooltip the ended state wears. The orb stays
+						     wordless. -->
+						{#if TOLD.has(phase.key)}
 							<span
 								class="-translate-x-1/2 pointer-events-none absolute bottom-full left-1/2 mb-5 whitespace-nowrap rounded-full border border-border bg-surface-cream px-3 py-1 font-medium text-foreground text-xs shadow-sm"
 							>
@@ -662,7 +668,7 @@ function onKeydown(event: KeyboardEvent) {
 								disabled={!orbActs}
 								title={phase.label}
 								aria-label={phase.label}
-								class="-my-4 relative flex size-16 shrink-0 items-center justify-center rounded-full border-4 border-primary shadow-[0_4px_16px_rgba(30,41,59,0.25)] transition-[transform,background-color,color] duration-150 {ORB[
+								class="-my-5 relative flex size-[4.5rem] shrink-0 items-center justify-center rounded-full border-4 border-primary shadow-[0_4px_16px_rgba(30,41,59,0.25)] transition-[transform,background-color,color] duration-150 {ORB[
 									phase.key
 								]?.orb ?? ORB.text.orb} {orbActs ? 'cursor-pointer' : 'cursor-default'}"
 								style={phase.key === 'hearing'
@@ -687,7 +693,7 @@ function onKeydown(event: KeyboardEvent) {
 								{/if}
 								<svg
 									viewBox="0 0 24 24"
-									class="relative size-7"
+									class="relative size-8"
 									fill="none"
 									stroke="currentColor"
 									stroke-width="1.75"
@@ -711,12 +717,12 @@ function onKeydown(event: KeyboardEvent) {
 							onclick={endConversation}
 							title="End conversation"
 							aria-label="End conversation"
-							class="shrink-0 rounded-full bg-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
+							class="shrink-0 rounded-full bg-error p-2.5 text-primary-foreground transition-opacity hover:opacity-80"
 						>
 							<!-- hang-up: the handset rotated OFF the hook — disconnect, not dial -->
 							<svg
 								viewBox="0 0 24 24"
-								class="size-4 rotate-[135deg]"
+								class="size-[1.125rem] rotate-[135deg]"
 								fill="none"
 								stroke="currentColor"
 								stroke-width="2"
