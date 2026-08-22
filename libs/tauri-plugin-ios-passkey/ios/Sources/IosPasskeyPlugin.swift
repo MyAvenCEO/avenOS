@@ -92,8 +92,27 @@ final class IosPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
     controller: ASAuthorizationController,
     didCompleteWithError error: Error
   ) {
-    pending?.reject(error.localizedDescription)
+    pending?.reject(Self.describe(error))
     clearPending()
+  }
+
+  /// ASAuthorizationError 1004 "Application with identifier … is not associated
+  /// with domain …" means this device's associated-domains check (swcd via
+  /// Apple's AASA CDN) has not succeeded for the passkey domain. It is NOT a
+  /// passkey/user error, so name the real cause instead of Apple's generic text.
+  /// Deliberately not mapped to NATIVE_PASSKEY_UNAVAILABLE: the passkey stays the
+  /// primary path; the gate offers the browser flow as an explicit choice only.
+  private static func describe(_ error: Error) -> String {
+    let detail = error.localizedDescription
+    let nsError = error as NSError
+    let isAssociationFailure =
+      nsError.domain == ASAuthorizationError.errorDomain
+      && nsError.code == ASAuthorizationError.failed.rawValue
+      && detail.localizedCaseInsensitiveContains("not associated with domain")
+    if isAssociationFailure {
+      return "PASSKEY_DOMAIN_NOT_ASSOCIATED: iOS has not verified the passkey domain for this app on this device. (\(detail))"
+    }
+    return detail
   }
 
   func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {

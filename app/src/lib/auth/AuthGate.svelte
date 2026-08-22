@@ -116,7 +116,9 @@ async function begin() {
 			return
 		}
 		busy = false
-		message = detail
+		message = detail.startsWith('PASSKEY_DOMAIN_NOT_ASSOCIATED:')
+			? 'iOS hat die Passkey-Domain id.next.aven.ceo für diese App noch nicht bestätigt. Das ist kein Fehler deines Passkeys – versuche es erneut oder melde dich vorerst im Browser an.'
+			: detail
 	}
 }
 
@@ -246,6 +248,15 @@ onMount(() => {
 						>
 							Erneut versuchen
 						</button>
+						{#if !verificationUrl}
+							<button
+								type="button"
+								class="min-h-9 rounded-lg px-4 text-foreground/45 text-xs transition hover:text-foreground/70"
+								onclick={beginWeb}
+							>
+								Stattdessen im Browser anmelden
+							</button>
+						{/if}
 					{/if}
 				</div>
 

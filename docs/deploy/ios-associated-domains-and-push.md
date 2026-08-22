@@ -23,6 +23,26 @@ cp app/src-tauri/ios-template/aven-os-app_iOS.entitlements \
   app/src-tauri/gen/apple/aven-os-app_iOS/aven-os-app_iOS.entitlements
 ```
 
+### The entitlements must be applied at signing time — the script does this
+
+`tauri ios build --archive-only` (manual CI signing) leaves the archived `.app` **unsigned**, so
+`xcodebuild -exportArchive` signs it from scratch with only what the provisioning profile
+implies (`application-identifier`, `team-identifier`, `beta-reports-active`, `get-task-allow`).
+The entitlements file is silently ignored — the shipped iOS binary had **no**
+`com.apple.developer.associated-domains`, which made native passkeys fail with
+"Application with identifier … is not associated with domain id.next.aven.ceo"
+(while the macOS pipeline, which codesigns with `--entitlements` explicitly, worked).
+
+`scripts/tauri-ios-asc.ts` therefore codesigns the archived `.app` with the full entitlements
+(template + `application-identifier`/`team-identifier`, `$(AppIdentifierPrefix)` resolved) before
+export, and **fails the release** if the exported `.ipa` does not carry
+`com.apple.developer.associated-domains` / `webcredentials:id.next.aven.ceo` / `aps-environment`.
+To check a build by hand:
+
+```bash
+unzip -q avenOS.ipa -d /tmp/ipa && codesign -d --entitlements - --xml /tmp/ipa/Payload/avenOS.app
+```
+
 Defaults:
 
 - **`applinks:aven.ceo`** — Universal Links under `https://aven.ceo/…`
