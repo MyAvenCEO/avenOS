@@ -184,10 +184,11 @@ export const PLANS: Plan[] = [
 			'1× avenFOUNDER — der avenCEO deiner Firma — inklusive',
 			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
-			'Du wählst selbst, in welche avenCOOPs dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
+			'Du wählst selbst, in welche Aven dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
 			{
 				href: 'https://beel.com/de',
-				label: 'Wir führen dein beel‑Syndikat an — mit Community‑Investments deiner Unterstützer'
+				label:
+					'Du wirst Featured Startup in unserem beel‑Syndikat — unsere avenFOUNDER können in dich reinvestieren (exkl. beel Produktgebühren)'
 			}
 		]
 	}

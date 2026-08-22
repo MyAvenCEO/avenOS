@@ -53,42 +53,6 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		</div>
 	</section>
 
-	<!-- The thesis: the company of the future, named. -->
-	<section
-		class="border-b border-border/40 bg-linear-to-b from-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
-		aria-labelledby="company-heading"
-	>
-		<div class="mx-auto max-w-3xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-				{t.company.eyebrow}
-			</p>
-			<h2
-				id="company-heading"
-				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
-			>
-				{t.company.heading}
-			</h2>
-			<div
-				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
-			>
-				{#each t.company.paragraphsHtml as paragraph, i (i)}
-					<p class="text-pretty">{@html paragraph}</p>
-				{/each}
-			</div>
-			<p
-				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
-			>
-				{t.company.closingLine1}
-				<span class="mt-2 block">
-					{t.company.closingLine2Before}
-					<strong class="font-sans font-semibold text-foreground"
-						>{t.company.closingLine2Strong}</strong
-					>.
-				</span>
-			</p>
-		</div>
-	</section>
-
 	<!-- The shift: the FOMO that is simply true — post-AGI touches everyone. -->
 	<section
 		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
@@ -176,42 +140,140 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		</div>
 	</section>
 
-	<!-- ONE section between the hero and the company thesis: the day-sized change,
-	     what an Aven actually is, and the thesis that ties them together. The
-	     separate "Vision" block said the same thing a second time, one level of
-	     abstraction higher, and the page was better without it. -->
+	<!-- The thesis: the company of the future, named. -->
 	<section
-		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
-		aria-labelledby="personal-heading"
+		class="border-b border-border/40 bg-linear-to-b from-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
+		aria-labelledby="company-heading"
 	>
-		<div class="mx-auto max-w-2xl text-center">
+		<div class="mx-auto max-w-3xl text-center">
 			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-				{t.personal.eyebrow}
+				{t.company.eyebrow}
 			</p>
 			<h2
-				id="personal-heading"
-				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+				id="company-heading"
+				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
 			>
-				{t.personal.heading}
+				{t.company.heading}
 			</h2>
-
-			<p class="mx-auto mt-6 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-				{t.personal.today}
+			<div
+				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
+			>
+				{#each t.company.paragraphsHtml as paragraph, i (i)}
+					<p class="text-pretty">{@html paragraph}</p>
+				{/each}
+			</div>
+			<p
+				class="mx-auto mt-9 max-w-xl border-t border-border/40 pt-7 text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
+			>
+				{t.company.closingLine1}
+				<span class="mt-2 block">
+					{t.company.closingLine2Before}
+					<strong class="font-sans font-semibold text-foreground"
+						>{t.company.closingLine2Strong}</strong
+					>.
+				</span>
 			</p>
+		</div>
+	</section>
+
+	<!-- The pitch in one picture: an Aven is something you OWN, and you end up
+	     owning several. Three rungs, not prose — the ladder is the argument. -->
+	<section
+		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
+		aria-labelledby="own-heading"
+	>
+		<div class="mx-auto max-w-4xl">
+			<div class="mx-auto max-w-2xl text-center">
+				<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">{t.own.eyebrow}</p>
+				<h2
+					id="own-heading"
+					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+				>
+					{t.own.heading}
+				</h2>
+				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
+					{t.own.lead}
+				</p>
+			</div>
+
+			<ol class="mt-10 grid gap-4 sm:grid-cols-3">
+				{#each t.own.rungs as rung (rung.title)}
+					<li
+						class="rounded-2xl border border-foreground/8 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+					>
+						<p class="text-[11px] font-bold uppercase tracking-[0.18em] text-accent">
+							{rung.count}
+						</p>
+						<p class="mt-2 text-lg font-semibold tracking-tight text-foreground">{rung.title}</p>
+						<p class="mt-2 text-[14px] leading-snug text-foreground/68">{rung.text}</p>
+					</li>
+				{/each}
+			</ol>
 
 			<p
-				class="mt-7 text-pretty text-[19px] font-medium leading-snug text-foreground sm:text-[21px]"
+				class="mx-auto mt-10 max-w-xl text-center text-[1.125rem] font-light leading-snug tracking-tight text-foreground sm:text-[1.3125rem]"
 			>
-				{t.personal.thesis}
+				{t.own.closing}
+			</p>
+		</div>
+	</section>
+
+	<!-- The compounding engine as three steps: revenue → stakes → more stakes.
+	     The percentages and the legal shape live on /pricing, where someone is
+	     actually asking; here it is only the wheel and why it turns. -->
+	<section
+		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
+		aria-labelledby="compound-heading"
+	>
+		<div class="mx-auto max-w-4xl">
+			<div class="mx-auto max-w-2xl text-center">
+				<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
+					{t.compound.eyebrow}
+				</p>
+				<h2
+					id="compound-heading"
+					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
+				>
+					{t.compound.heading}
+				</h2>
+				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
+					{t.compound.lead}
+				</p>
+			</div>
+
+			<ol class="mt-10 grid gap-3 sm:grid-cols-3">
+				{#each t.compound.steps as step, i (i)}
+					<li class="flex gap-3 rounded-2xl border border-border/50 bg-surface-card px-5 py-4">
+						<span class="text-[13px] font-bold tabular-nums text-accent">{i + 1}</span>
+						<span class="text-[14px] leading-snug text-foreground/78">{step}</span>
+					</li>
+				{/each}
+			</ol>
+
+			<p
+				class="mx-auto mt-6 max-w-xl text-center text-[15px] leading-snug text-foreground/68 sm:text-base"
+			>
+				{@html t.compound.closingHtml}
 			</p>
 
-			<p class="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-				{t.personal.day}
-			</p>
-
-			<p class="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-foreground/68 sm:text-base">
-				{@html t.personal.assetHtml}
-			</p>
+			<div class="mx-auto mt-10 max-w-2xl border-t border-border/40 pt-8 text-center">
+				<p
+					class="text-[1.125rem] font-light leading-snug tracking-tight text-pretty text-foreground sm:text-[1.3125rem]"
+				>
+					{t.compound.movement}
+				</p>
+				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-foreground/68">
+					{@html t.compound.movementHtml}
+				</p>
+				<p class="mt-6">
+					<a
+						href="{localeHref(lang, '/pricing')}#avencoop"
+						class="inline-flex min-h-11 items-center justify-center rounded-full border border-primary/45 px-8 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
+					>
+						{t.compound.link}
+					</a>
+				</p>
+			</div>
 		</div>
 	</section>
 
@@ -345,44 +407,6 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					{t.founders.sum}
 				</p>
 			</div>
-		</div>
-	</section>
-
-	<!-- From I to We — the VISION beat, not the pricing page. A first-time
-	     reader has never heard the word avenCOOP; explaining reinvest splits
-	     and syndicate lists here answered a question nobody had yet. The
-	     mechanics live on /pricing, where someone is actually asking. -->
-	<section
-		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
-		aria-labelledby="collective-heading"
-	>
-		<div class="mx-auto max-w-3xl text-center">
-			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-				{t.collective.eyebrow}
-			</p>
-			<h2
-				id="collective-heading"
-				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
-			>
-				{t.collective.heading}
-			</h2>
-
-			<div
-				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/68 sm:text-base"
-			>
-				{#each t.collective.paragraphsHtml as paragraph, i (i)}
-					<p class="text-pretty">{@html paragraph}</p>
-				{/each}
-			</div>
-
-			<p class="mt-8">
-				<a
-					href="{localeHref(lang, '/pricing')}#avencoop"
-					class="inline-flex min-h-11 items-center justify-center rounded-full border border-primary/45 px-8 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
-				>
-					{t.collective.link}
-				</a>
-			</p>
 		</div>
 	</section>
 
