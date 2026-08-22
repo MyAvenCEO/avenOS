@@ -40,7 +40,8 @@ export type HomeMessages = {
 	}
 	own: {
 		eyebrow: string
-		heading: string
+		headingLine1: string
+		headingLine2: string
 		lead: string
 		rungs: Rung[]
 		closing: string
@@ -82,7 +83,7 @@ export const home: Record<Lang, HomeMessages> = {
 			headingLine1: 'Tief in deinem Herzen weißt du es:',
 			headingLine2: 'in dir steckt so viel mehr.',
 			transformationHtml: `Vom ${s('Arbeiten ums Überleben', 'text-foreground/50')} zum ${s('souveränen Gründer von morgen', 'text-accent')}.`,
-			helper: '— dein eigener avenCEO bringt dich dorthin —'
+			helper: '— dein avenCEO bringt dich dorthin —'
 		},
 		shift: {
 			eyebrow: 'Post‑AGI · Warum jetzt',
@@ -114,7 +115,7 @@ export const home: Record<Lang, HomeMessages> = {
 		},
 		company: {
 			eyebrow: 'Die Firma der Zukunft',
-			heading: '1 Mensch + 1 avenCEO.',
+			heading: '1 Mensch + 1 avenCEO',
 			paragraphsHtml: [
 				`Kein Büro, keine Abteilungen, keine vierzig Angestellten — zwei Rollen: ${s('ein Mensch mit der Vision')} und ${s('ein avenCEO, der die ganze Firma ausführt')}.`,
 				`Jede Entscheidung, jede Korrektur fließt in seine Skills zurück. Nach fünf Jahren ist er das ${s('Gedächtnis, die Erfahrung und das Urteil')} deiner Firma — und damit ihr wertvollstes Asset.`
@@ -125,7 +126,8 @@ export const home: Record<Lang, HomeMessages> = {
 		},
 		own: {
 			eyebrow: 'Dein Portfolio · Besitzen statt mieten',
-			heading: 'Am Ende besitzt du nicht einen Aven. Sondern zehn oder mehr.',
+			headingLine1: 'Am Ende besitzt du nicht einen Aven.',
+			headingLine2: 'Sondern zehn oder mehr.',
 			lead: 'Ein Aven ist kein Abo, das du mietest. Er ist ein Asset, das arbeitet, lernt und dir gehört. Und du sammelst sie.',
 			rungs: [
 				{
@@ -237,7 +239,7 @@ export const home: Record<Lang, HomeMessages> = {
 		},
 		company: {
 			eyebrow: 'The company of the future',
-			heading: '1 human + 1 avenCEO.',
+			heading: '1 human + 1 avenCEO',
 			paragraphsHtml: [
 				`No office, no departments, no forty employees — two roles: ${s('one human with the vision')} and ${s('one avenCEO that runs the entire company')}.`,
 				`Every decision, every correction flows back into its skills. After five years it is the ${s('memory, the experience and the judgment')} of your company — and with that its most valuable asset.`
@@ -248,7 +250,8 @@ export const home: Record<Lang, HomeMessages> = {
 		},
 		own: {
 			eyebrow: 'Your portfolio · Own it, don’t rent it',
-			heading: 'In the end you do not own one Aven. You own ten or more.',
+			headingLine1: 'In the end you do not own one Aven.',
+			headingLine2: 'You own ten or more.',
 			lead: 'An Aven is not a subscription you rent. It is an asset that works, learns and belongs to you. And you collect them.',
 			rungs: [
 				{

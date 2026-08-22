@@ -18,9 +18,10 @@ export interface PricingMessages {
 	onePerPerson: string
 	/** "+ 4,8 %" — the number in the reader's number style. */
 	pct: (n: number) => string
+	/** What the percentage is taken FROM — printed under every number. */
+	ofRevenue: string
 	fee: { label: string; sub: string }
 	reinvest: { label: string; sub: string }
-	equity: { label: string; sub: string }
 	skills: string
 	soon: string
 	allSkills: (n: number) => string
@@ -67,9 +68,9 @@ export const pricing: Record<Lang, PricingMessages> = {
 		onePerCompany: 'Ein avenFOUNDER pro Firma — jede weitere Firma bekommt ihren eigenen.',
 		onePerPerson: 'Ein avenME pro Mensch — dein eigener, unabhängig von jeder Firma.',
 		pct: (n) => `+ ${n.toLocaleString('de-DE')} %`,
+		ofRevenue: 'vom Umsatz',
 		fee: { label: 'Transaktionsgebühren', sub: 'inkl. Stripe, Karten & Co.' },
 		reinvest: { label: 'Reinvest in andere Aven', sub: 'Anteile, die für dich weiterwachsen.' },
-		equity: { label: 'Firmenanteile', sub: 'Wir als Co‑Founder.' },
 		skills: 'Skills',
 		soon: 'bald',
 		allSkills: (n) => `Alle ${n} Skills ansehen →`,
@@ -117,9 +118,9 @@ export const pricing: Record<Lang, PricingMessages> = {
 		onePerCompany: 'One avenFOUNDER per company — every further company gets its own.',
 		onePerPerson: 'One avenME per human — your own, independent of any company.',
 		pct: (n) => `+ ${n.toLocaleString('en-US')} %`,
+		ofRevenue: 'of revenue',
 		fee: { label: 'transaction fees', sub: 'incl. Stripe, cards & co.' },
 		reinvest: { label: 'reinvested into other Aven', sub: 'Stakes that keep growing for you.' },
-		equity: { label: 'equity', sub: 'Us as your co-founder.' },
 		skills: 'Skills',
 		soon: 'soon',
 		allSkills: (n) => `See all ${n} skills →`,
