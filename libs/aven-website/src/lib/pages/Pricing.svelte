@@ -65,6 +65,43 @@ function skillFeatures(p: Plan): SkillFeature[] {
 const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? '') : '')
 </script>
 
+<!-- What comes off the revenue, one row per thing: the fee is a cost, the
+     Reinvest buys you stakes (so it gets the accent), the equity is us
+     joining. Three rows read as three different things, not one number. -->
+{#snippet shareRows(p: Plan)}
+	<dl class="divide-y divide-border/50 rounded-xl border border-border/50 bg-surface-card">
+		<div class="flex items-start gap-3 px-4 py-3">
+			<dt class="w-[4.5rem] shrink-0 text-base font-semibold tabular-nums text-foreground/80">
+				{t.pct(p.platformFeePct)}
+			</dt>
+			<dd class="min-w-0">
+				<p class="text-[12px] font-medium leading-snug text-foreground/80">{t.fee.label}</p>
+				<p class="text-[11px] leading-snug text-foreground/50">{t.fee.sub}</p>
+			</dd>
+		</div>
+		<div class="flex items-start gap-3 px-4 py-3">
+			<dt class="w-[4.5rem] shrink-0 text-base font-semibold tabular-nums text-accent">
+				{t.pct(p.reinvestPct)}
+			</dt>
+			<dd class="min-w-0">
+				<p class="text-[12px] font-medium leading-snug text-accent">{t.reinvest.label}</p>
+				<p class="text-[11px] leading-snug text-foreground/50">{t.reinvest.sub}</p>
+			</dd>
+		</div>
+		{#if p.equitySharePct}
+			<div class="flex items-start gap-3 px-4 py-3">
+				<dt class="w-[4.5rem] shrink-0 text-base font-semibold tabular-nums text-foreground/80">
+					{t.pct(p.equitySharePct)}
+				</dt>
+				<dd class="min-w-0">
+					<p class="text-[12px] font-medium leading-snug text-foreground/80">{t.equity.label}</p>
+					<p class="text-[11px] leading-snug text-foreground/50">{t.equity.sub}</p>
+				</dd>
+			</div>
+		{/if}
+	</dl>
+{/snippet}
+
 {#snippet skillList(items: SkillFeature[])}
 	<ul class="mt-2 space-y-1.5 text-[13px] leading-snug">
 		{#each items.slice(0, SKILL_CAP) as feature (feature.skill)}
@@ -203,35 +240,8 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						</div>
 
 						{#if totalSharePct(p) > 0}
-							<div class="mt-4 border-t border-border/50 pt-4 text-center">
-								<p class="text-[13px] font-medium text-foreground/75">
-									{t.revenueShare(totalSharePct(p))}
-								</p>
-								<!-- The split is the whole point: half is a price, half buys you shares —
-								     two equal boxes, so the reader sees two halves, not one number. -->
-								<dl
-									class="mt-3 grid grid-cols-2 divide-x divide-border/50 rounded-xl border border-border/50 bg-surface-card text-center"
-								>
-									<div class="px-3 py-2.5">
-										<dt class="text-base font-semibold tabular-nums text-foreground/80">
-											{p.platformFeePct}&nbsp;%
-										</dt>
-										<dd class="mt-0.5 text-[11px] font-medium text-foreground/70">{t.platform}</dd>
-										<dd class="text-[10px] leading-snug text-foreground/45">{t.inclFees}</dd>
-									</div>
-									<div class="px-3 py-2.5">
-										<dt class="text-base font-semibold tabular-nums text-accent">
-											{p.reinvestPct}&nbsp;%
-										</dt>
-										<dd class="mt-0.5 text-[11px] font-medium text-accent">{t.reinvest}</dd>
-										<dd class="text-[10px] leading-snug text-foreground/45">{t.reinvestInto}</dd>
-									</div>
-								</dl>
-								{#if p.equitySharePct}
-									<p class="mt-3 text-[12px] font-medium text-foreground/70">
-										{t.equity(p.equitySharePct)}
-									</p>
-								{/if}
+							<div class="mt-4 border-t border-border/50 pt-4">
+								{@render shareRows(p)}
 							</div>
 						{/if}
 
@@ -371,32 +381,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						</div>
 
 						<div class="mt-4 border-t border-border/50 pt-4">
-							<p class="text-[13px] font-medium text-foreground/75">
-								{t.revenueShare(totalSharePct(coop))}
-							</p>
-							<dl
-								class="mt-3 grid grid-cols-2 divide-x divide-border/50 rounded-xl border border-border/50 bg-surface-card text-center"
-							>
-								<div class="px-3 py-2.5">
-									<dt class="text-base font-semibold tabular-nums text-foreground/80">
-										{coop.platformFeePct}&nbsp;%
-									</dt>
-									<dd class="mt-0.5 text-[11px] font-medium text-foreground/70">{t.platform}</dd>
-									<dd class="text-[10px] leading-snug text-foreground/45">{t.inclFees}</dd>
-								</div>
-								<div class="px-3 py-2.5">
-									<dt class="text-base font-semibold tabular-nums text-accent">
-										{coop.reinvestPct}&nbsp;%
-									</dt>
-									<dd class="mt-0.5 text-[11px] font-medium text-accent">{t.reinvest}</dd>
-									<dd class="text-[10px] leading-snug text-foreground/45">{t.reinvestInto}</dd>
-								</div>
-							</dl>
-							{#if coop.equitySharePct}
-								<p class="mt-3 text-[12px] font-medium text-foreground/70">
-									{t.equity(coop.equitySharePct)}
-								</p>
-							{/if}
+							{@render shareRows(coop)}
 						</div>
 					</div>
 
