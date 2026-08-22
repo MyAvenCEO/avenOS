@@ -807,8 +807,8 @@ class IntentsActor extends Actor {
 				{
 					name: 'intent_merge',
 					description:
-						"Merges intents into one: the others' logs, artifacts and skills move into the " +
-						'target and the others are deleted. Confirm with the user first.',
+						"Merges intents into one: the others' activity logs, conversations, artifacts and " +
+						'skills move into the target and the others are deleted. Confirm with the user first.',
 					parameters: {
 						type: 'object',
 						properties: {
@@ -950,6 +950,10 @@ class IntentsActor extends Actor {
 					.filter((f): f is MockIntent => !!f && f.id !== target.id)
 				if (froms.length === 0)
 					return { record: '{"ok":false,"error":"nothing to merge"}', wire: 'Nothing to merge.' }
+				chatActor.core.mergeSessions(
+					froms.map((f) => f.id),
+					target.id
+				)
 				for (const f of froms) {
 					target.log.push(...f.log)
 					target.artifacts.push(...f.artifacts)
@@ -957,7 +961,7 @@ class IntentsActor extends Actor {
 						if (!target.skills.some((t) => t.skill === sk.skill)) target.skills.push(sk)
 					this.items = this.items.filter((i) => i.id !== f.id)
 				}
-				this.selectedId = target.id
+				this.goTo(target.id)
 				return {
 					record: JSON.stringify({ ok: true, into: target.id, merged: froms.map((f) => f.id) }),
 					wire: `Merged ${froms.map((f) => `"${f.title}"`).join(', ')} into "${target.title}".`
