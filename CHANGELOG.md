@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.22-next.3...v) (2026-08-22)
+
+
+### Bug Fixes
+
+* **ios:** sign the archived app with its entitlements so passkeys work on iOS ([#97](https://github.com/MyAvenCEO/avenOS/issues/97)) ([84de7a0](https://github.com/MyAvenCEO/avenOS/commit/84de7a03cfe93b4effafd1b05b2c8a0acac5b007))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.22-next.2...v) (2026-08-22)
 
 
