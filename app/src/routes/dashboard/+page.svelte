@@ -69,23 +69,20 @@ const mockPhase = $derived.by(() => {
 })
 const voiceUi = $derived(isTauri() || mockPhase !== null)
 
-let typing = $state(!isTauri())
-
 /**
  * Whether the conversation is running at all — on by default, because
- * hands-free IS the product. Deliberately separate from `typing`: that
- * switches the INPUT, this ends the session. Ending means the ears close
- * (the OS mic indicator goes dark), the voice goes silent, and the pill
- * shrinks to the logo — one tap to come back.
+ * hands-free IS the product. There is no separate text mode any more: the
+ * composer in the conversation's footer is always there, so you can write,
+ * speak, or both, while the ears are open. Ending means the ears close (the
+ * OS mic indicator goes dark), the voice goes silent, and the pill shrinks
+ * to the logo — one tap to come back. Writing still works while ended; the
+ * reply is then read, not heard.
  */
 let conversing = $state(isTauri())
 
-// The mock enters voice mode without opening anything.
+// The mock enters the conversation without opening anything.
 $effect.pre(() => {
-	if (mockPhase !== null) {
-		conversing = true
-		typing = false
-	}
+	if (mockPhase !== null) conversing = true
 })
 
 // Hands-free by default: the mic opens as soon as the page does.
@@ -109,18 +106,15 @@ onMount(() => {
  */
 function endConversation() {
 	conversing = false
-	// Also out of typing mode: "ended" must look the same from wherever it
-	// was ended, otherwise the logo is not reliably the way back.
-	typing = false
 	chat.stop()
 	speaker.silence()
+	// Ended is silent: a reply to something typed while off is read, not heard.
+	speaker.muted = true
 	listener.stop()
 }
 
 function beginConversation() {
 	conversing = true
-	typing = false
-	// Voice mode always speaks: clear any mute left over from a text session.
 	speaker.muted = false
 	if (mockPhase === null) void listener.start()
 }
@@ -157,11 +151,10 @@ $effect(() => {
  * out, and hearing wins over everything because interrupting is allowed.
  */
 const phase = $derived.by(() => {
-	if (mockPhase !== null && conversing && !typing)
-		return { key: mockPhase, label: MOCK_PHASES[mockPhase] }
+	if (mockPhase !== null && conversing) return { key: mockPhase, label: MOCK_PHASES[mockPhase] }
 	// Off wins over everything: with the ears closed, every other status is
 	// a leftover from the session that just ended.
-	if (!conversing && !typing) return { key: 'off', label: 'Conversation ended' }
+	if (!conversing) return { key: 'off', label: 'Conversation ended' }
 	if (listener.status === 'denied') return { key: 'denied', label: 'No microphone' }
 	if (listener.status === 'error' || speaker.status === 'error')
 		return { key: 'error', label: 'Error' }
@@ -302,50 +295,27 @@ let dockH = $state(0)
 const DOCK_INSET = 8
 
 /**
- * Text mode is silent AND deaf: the ears close, the voice mutes — a typed
- * reply is read, not heard. The models stay loaded; the way back is instant.
+ * Bring the composer up, optionally seeded with the keystroke that asked for
+ * it. Nothing else changes: the ears stay open, the voice stays on — writing
+ * and speaking are one conversation.
  */
-function enterTyping(seed = '') {
-	if (typing) return
-	typing = true
+function focusComposer(seed = '') {
 	if (seed) draft += seed
-	// The field lives in the conversation's footer now, so typing opens it.
 	query.show()
-	listener.stop()
-	speaker.silence()
-	speaker.muted = true
 }
 
 /**
- * Back to voice: unmute the mouth and reopen the ears.
- *
- * Unless there is no voice to go back to. In a plain browser tab the
- * recognizer never runs, so dropping out of text mode left the panel with no
- * input at all — and `enterTyping` could not rescue it, because the keystroke
- * that calls it is gated on the conversation being live. One message, then
- * silence. Text is the only mode there, so stay in it.
- */
-function leaveTyping() {
-	if (!conversing) return
-	typing = false
-	speaker.muted = false
-	if (conversing && mockPhase === null) void listener.start()
-}
-
-/**
- * Voice→text without a click: the first printable keystroke IS the mode
- * switch — start typing anywhere and the pill becomes the input, seeded
- * with that very character.
+ * Writing without a click: the first printable keystroke anywhere opens the
+ * conversation with the composer focused, seeded with that very character.
  */
 function onGlobalKeydown(event: KeyboardEvent) {
-	// Escape leaves the conversation, from wherever — including while typing,
-	// which is when you most want out.
+	// Escape leaves the conversation, from wherever.
 	if (event.key === 'Escape' && query.open) {
 		event.preventDefault()
 		query.close()
 		return
 	}
-	if (typing || !conversing) return
+	if (query.open) return
 	if (event.metaKey || event.ctrlKey || event.altKey) return
 	if (event.key.length !== 1) return
 	const el = document.activeElement
@@ -356,7 +326,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 	)
 		return
 	event.preventDefault()
-	enterTyping(event.key)
+	focusComposer(event.key)
 }
 
 /** Called by the composer in the conversation's footer. */
@@ -369,8 +339,6 @@ function submit() {
 	draft = ''
 	query.show()
 	chat.send(text)
-	// Submitting hands the turn back to the voice: hands-free is the default.
-	leaveTyping()
 }
 </script>
 
@@ -407,7 +375,7 @@ function submit() {
 
 	<!-- THE answer surface: it floats over the workspace rather than replacing
 	     it, so the selected intent it answers about stays in view behind. -->
-	<QueryModal {typing} bind:draft onEnterTyping={() => enterTyping()} onSubmit={submit} />
+	<QueryModal bind:draft listening={conversing && phase.key !== 'off'} onSubmit={submit} />
 
 	<!-- The floating dock: errors and the pill hover OVER the workspace, so the
 	     side columns can run to the bottom of the screen. What the tools DID is
@@ -460,7 +428,7 @@ function submit() {
 			<!-- Back and the drawer toggle hug the screen edges, not the notch:
 			     the pill stays centered on its own, and in text mode both step
 			     aside so the input gets the whole width. -->
-			{#if shell.tab === 'intents' && shell.detail && !typing}
+			{#if shell.tab === 'intents' && shell.detail}
 				<button
 					type="button"
 					onclick={() => {
@@ -490,61 +458,10 @@ function submit() {
 			<div
 				class="{phase.key === 'off'
 			? 'w-fit'
-			: `rounded-full bg-primary text-primary-foreground w-full max-w-52 px-2.5 py-2`}"
+			: `rounded-full bg-primary text-primary-foreground w-fit px-2.5 py-2`}"
 				title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
 			>
 				<div class="flex items-center {phase.key === 'off' ? '' : 'gap-3'}">
-					<!-- The input-mode switch sits LEFT: it changes how you talk, so it leads
-			     the panel; leaving the conversation is the last resort and sits at
-			     the far right. -->
-					{#if voiceUi && phase.key !== 'off'}
-						<button
-							type="button"
-							onclick={() => {
-						if (typing) {
-							if (!conversing) beginConversation()
-							else leaveTyping()
-						} else {
-							enterTyping()
-						}
-					}}
-							class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 transition-colors hover:bg-primary-foreground/10"
-							title={typing ? 'Back to voice' : 'Type instead'}
-							aria-label={typing ? 'Back to voice' : 'Type instead'}
-						>
-							{#if typing}
-								<!-- microphone: go back to speaking -->
-								<svg
-									viewBox="0 0 24 24"
-									class="size-5"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="1.5"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
-									<path d="M5 11a7 7 0 0 0 14 0" />
-									<path d="M12 18v3" />
-								</svg>
-							{:else}
-								<!-- keyboard: switch to typing -->
-								<svg
-									viewBox="0 0 24 24"
-									class="size-5"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="1.5"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<rect x="2.5" y="6" width="19" height="12" rx="2" />
-									<path d="M7 10h.01M11 10h.01M15 10h.01M17.5 10h.01M7.5 14h9" />
-								</svg>
-							{/if}
-						</button>
-					{/if}
-
 					{#if phase.key === 'off'}
 						<!-- Ended: the pill shrinks to the mark itself. One target, one
 				     meaning — tap the logo and the conversation is back. Nothing
@@ -677,7 +594,7 @@ function submit() {
 					{/if}
 				</div>
 			</div>
-			{#if shell.tab === 'intents' && shell.detail && !typing}
+			{#if shell.tab === 'intents' && shell.detail}
 				<!-- Skills & artifacts: the right column, as a drawer, bottom right. -->
 				<button
 					type="button"
