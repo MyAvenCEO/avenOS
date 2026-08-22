@@ -20,7 +20,10 @@ export const listWindow = singleton(
 	() =>
 		new WindowActor(todoActor, AvenUiView, {
 			key: 'list',
-			name: 'Todos'
+			name: 'Todos',
+			// Closed until asked for: a window renders inline in the conversation
+			// the moment the model opens it ("zeig mir die Todos").
+			open: false
 		})
 )
 export const boardWindow = singleton(
