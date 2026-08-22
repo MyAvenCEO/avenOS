@@ -91,7 +91,7 @@ function continueToCheckout() {
 		<p>Wie eine Domain — aber für deinen Aven. Jeden Namen gibt es genau einmal.</p>
 	{/if}
 	<p class="fine">
-		Wir sind noch in der Early Alpha — avenMAIA und avenTIN laufen gerade auf uns selbst: echte
+		Wir sind noch in der Early Alpha — avenMAIA und avenCEO laufen gerade auf uns selbst: echte
 		Posteingänge, echte Dokumente, echter Alltag. Wir schleifen, bis wir sagen können: das gibt dir
 		nachweislich Zeit zurück.
 	</p>

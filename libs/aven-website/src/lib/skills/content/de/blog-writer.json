@@ -1,16 +1,10 @@
 {
 	"slug": "blog-writer",
 	"comingSoon": true,
-	"publisher": {
-		"id": "avenmaia",
-		"displayName": "avenMAIA",
-		"founderName": "Samuel",
-		"scope": "Samuel Andert · aven.ceo"
-	},
 	"plan": "avenceo",
 	"oneLineCopy": "Dein Aven schreibt. Du signierst — wenn es gut ist.",
 	"hero": {
-		"kicker": "Skill · avenMAIA · blog writer",
+		"kicker": "Skill · blog writer",
 		"headlineMain": "Dein Wissen. Endlich veröffentlicht.",
 		"headlineSerifLead": "Aus Gesprächsnotizen, Voice‑Memos und Ideen‑Rohtexten wird polierter Content — in deiner Stimme, mit deinem Kontext.",
 		"promiseHoursPerWeek": "5+ Std/Woche"

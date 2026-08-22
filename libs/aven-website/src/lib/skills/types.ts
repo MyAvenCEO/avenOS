@@ -15,25 +15,16 @@ export type AvenosSkillSlug =
 	| 'checkout-builder'
 	| 'blog-writer'
 
-export type SkillPublisherId = 'aventin' | 'avenmaia'
-
-export type SkillPublisher = {
-	id: SkillPublisherId
-	displayName: string // "avenTIN" | "avenMAIA"
-	founderName: string // "Daniel" | "Samuel"
-	scope: string // "Daniel Janz · aven.ceo"
-}
-
 /**
  * The shape of every language JSON file.
- * Non-localizable metadata (slug, publisher) lives here too so each file is self-contained.
+ * Non-localizable metadata (slug, plan) lives here too so each file is self-contained.
+ * Skills are global — there is no publisher; every skill belongs to the one catalogue.
  * Numbers (eurPerMonth, total) are intentionally in the language file — prices can differ by market.
  */
 export type SkillJson = {
 	slug: AvenosSkillSlug
 	/** Not shipped yet — the catalogue shows it, flagged, and nobody is sold it. */
 	comingSoon?: boolean
-	publisher: SkillPublisher
 	/** The plan this skill first comes with; higher plans include it too. */
 	plan: PlanId
 	oneLineCopy: string
@@ -70,22 +61,3 @@ export type SkillJson = {
 export type AvenosSkill = SkillJson
 
 export type SupportedLang = 'en' | 'de'
-
-/** Marketplace / avatar identity — one JSON per publisher per language. */
-export type PublisherIdentityJson = {
-	id: SkillPublisherId
-	displayName: string
-	founderName: string
-	scope: string
-	/** Short line under the publisher name on the marketplace */
-	subtitle: string
-	/** Seed string for beam avatar SVG */
-	beamAvatarLabel: string
-	paletteCsv: string
-	featuredSlugs: AvenosSkillSlug[]
-}
-
-export type PublisherWithSkills = PublisherIdentityJson & {
-	skills: SkillJson[]
-	skillCount: number
-}

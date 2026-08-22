@@ -1,15 +1,9 @@
 {
 	"slug": "human-reviewer",
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenme",
 	"oneLineCopy": "You decide. Only when you truly have to.",
 	"hero": {
-		"kicker": "Skill · avenTIN · human reviewer",
+		"kicker": "Skill · human reviewer",
 		"headlineMain": "Your Aven asks you. But only when it has to.",
 		"headlineSerifLead": "No skill makes decisions that require human responsibility. human reviewer is the channel between your Aven stack and you.",
 		"promiseHoursPerWeek": "2 hrs/week"

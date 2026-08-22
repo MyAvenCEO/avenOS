@@ -1,15 +1,9 @@
 {
 	"slug": "checkout-builder",
-	"publisher": {
-		"id": "avenmaia",
-		"displayName": "avenMAIA",
-		"founderName": "Samuel",
-		"scope": "Samuel Andert · aven.ceo"
-	},
 	"plan": "avenceo",
 	"oneLineCopy": "Vom Angebot zum bezahlten Kunden — ohne Shop‑Projekt.",
 	"hero": {
-		"kicker": "Skill · avenMAIA · checkout builder",
+		"kicker": "Skill · checkout builder",
 		"headlineMain": "Der Knopf, der Geld verdient.",
 		"headlineSerifLead": "Produkt, Preis, Checkout und Rechnung — einmal gesagt, sofort verkaufsfertig, inklusive Steuer und Abwicklung.",
 		"promiseHoursPerWeek": "2+ Std/Woche"
