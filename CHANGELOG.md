@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.22-next.2...v) (2026-08-22)
+
+
+### Bug Fixes
+
+* **api:** sync svelte-kit before email:check so cold builds (Docker) succeed ([537c69a](https://github.com/MyAvenCEO/avenOS/commit/537c69af77930f29c7834062f57eda4c7d6535fb))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.22-next.1...v) (2026-08-22)
 
 
