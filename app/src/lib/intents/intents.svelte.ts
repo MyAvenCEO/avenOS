@@ -739,7 +739,7 @@ class IntentsActor extends Actor {
 			name: 'Intents',
 			description:
 				'The intents: every task the workspace is working on, one stream each. ' +
-				'Lists, switches, creates, merges and deletes them by message.',
+				'Lists, switches, creates, merges, archives, restores and deletes them by message.',
 			tags: ['intents'],
 			methods: [
 				{
@@ -791,6 +791,26 @@ class IntentsActor extends Actor {
 							}
 						},
 						required: ['into', 'from']
+					}
+				},
+				{
+					name: 'intent_archive',
+					description:
+						'Archives an intent: it leaves the active list and rests under ARCHIV, ' +
+						'nothing is lost. Use when the user says it is done, finished, or to put it away.',
+					parameters: {
+						type: 'object',
+						properties: { intent: { type: 'string', description: 'id, or part of the title' } },
+						required: ['intent']
+					}
+				},
+				{
+					name: 'intent_restore',
+					description: 'Brings an archived intent back to the active list and switches to it.',
+					parameters: {
+						type: 'object',
+						properties: { intent: { type: 'string', description: 'id, or part of the title' } },
+						required: ['intent']
 					}
 				},
 				{
@@ -877,6 +897,33 @@ class IntentsActor extends Actor {
 				return {
 					record: JSON.stringify({ ok: true, into: target.id, merged: froms.map((f) => f.id) }),
 					wire: `Merged ${froms.map((f) => `"${f.title}"`).join(', ')} into "${target.title}".`
+				}
+			},
+			intent_archive: (p) => {
+				const hit = this.find(String(p.intent ?? ''))
+				if (!hit) return this.miss(String(p.intent ?? ''))
+				if (hit.status === 'archive')
+					return {
+						record: '{"ok":true,"already":true}',
+						wire: `"${hit.title}" is already archived.`
+					}
+				hit.status = 'archive'
+				// The stream moves on to the next active intent, if there is one.
+				const next = this.items.find((i) => i.status !== 'archive')
+				if (this.selectedId === hit.id && next) this.selectedId = next.id
+				return {
+					record: JSON.stringify({ ok: true, archived: hit.id }),
+					wire: `Archived "${hit.title}".`
+				}
+			},
+			intent_restore: (p) => {
+				const hit = this.find(String(p.intent ?? ''))
+				if (!hit) return this.miss(String(p.intent ?? ''))
+				if (hit.status === 'archive') hit.status = 'done'
+				this.selectedId = hit.id
+				return {
+					record: JSON.stringify({ ok: true, restored: hit.id }),
+					wire: `"${hit.title}" is back on the list and on screen.`
 				}
 			},
 			intent_delete: (p) => {
