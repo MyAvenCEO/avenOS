@@ -185,10 +185,10 @@ export class Chat {
 	#live: { turns: Turn[]; wire: ChatMessage[]; fromTurn: number; fromWire: number } | null = null
 	/**
 	 * The request while it is being ROUTED: sent, but not yet a bubble in any
-	 * stream. It stays here — shown as a working state wherever you are —
-	 * until the model has understood it: the first word of the reply, or a
-	 * tool round (which may have moved the turn to another intent). Then it
-	 * settles into the stream it belongs to.
+	 * stream. It stays here — shown as a working state in the composer card
+	 * wherever you are, with the reply streaming under it — until the answer
+	 * round is complete; the tool rounds before it may have moved the turn
+	 * to another intent. Then it settles into the stream it belongs to.
 	 */
 	routing = $state<string | null>(null)
 	/** What the model has said so far while the request is still routing. */
@@ -286,9 +286,11 @@ export class Chat {
 				const calls = await this.#round(live.wire)
 				const reply = this.#reply as Turn
 				if (calls.length === 0) {
-					// No tools: the answer is the answer, and the stream it is in is
-					// the right one. (Only now — a first word before a tool call
-					// settled the request into the wrong intent.)
+					// The answer round is complete: the tools before it have had
+					// every chance to route the turn, so the stream it is in now is
+					// the right one. This is the ONE place a request settles (the
+					// safety net in `finally` aside) — settling any earlier put it
+					// into the origin stream for a moment before it moved.
 					// Said it did something, called nothing — in the WHOLE turn. The
 					// round alone is the wrong scope: the natural closing sentence
 					// after a successful tool round ("Fenster öffnen ist abgehakt.")
@@ -326,9 +328,9 @@ export class Chat {
 					;(this.#reply as Turn).calls?.push({ name: call.name, result: result.record })
 					live.wire.push({ role: 'tool', tool_call_id: call.id, content: result.wire })
 				}
-				// A tool round is the routing moment: the tools may have moved the
-				// turn to another intent; now the request settles where it belongs.
-				this.#settle()
+				// NOT settled here: a tool round may be followed by another that
+				// moves the turn (intent_list, then intent_switch). The request
+				// stays in the card until the answer round is complete.
 			}
 			this.#sink.onDone?.()
 		} catch (err) {
