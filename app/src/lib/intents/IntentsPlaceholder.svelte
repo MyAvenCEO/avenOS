@@ -1,5 +1,6 @@
 <script lang="ts">
 import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
+import { untrack } from 'svelte'
 import '@xyflow/svelte/dist/style.css'
 import AvenUiView from '$lib/actors/AvenUiView.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
@@ -931,15 +932,44 @@ $effect(() => {
 	chat.use(selectedId)
 })
 
-/** Every view the model has put on screen, in registry order. */
-const windows = $derived(
-	registryTick.v >= 0
-		? bus
-				.actors()
-				.filter(isWindow)
-				.filter((w) => w.open)
-		: []
-)
+/**
+ * THE VIEWS: the window actors (0130) — Todos, Kanban Board — every one a
+ * tab beside the activity stream, and a row under VIEWS on the right. Two
+ * ways in: click the tab, or ask ("zeig mir das Board") — the model opens
+ * the window and the center follows it.
+ */
+const allWindows = $derived(registryTick.v >= 0 ? bus.actors().filter(isWindow) : [])
+/** The tab in front: a window id, or null for the activity stream. */
+let viewId = $state<string | null>(null)
+const view = $derived(allWindows.find((w) => w.manifest.id === viewId) ?? null)
+
+/** Put a view in front — by tab, by the list on the right, or by voice. */
+function showView(id: string | null) {
+	viewId = id
+	preview = null
+	skillView = null
+	// The window flags ARE the shown/hidden truth the model reads back, so
+	// clicking keeps them honest: the one in front is open, the rest are not.
+	for (const w of allWindows) w.open = w.manifest.id === id
+}
+
+// Voice: a window the model just opened comes to the front; the one in
+// front closing (or being hidden by message) returns to the stream.
+let openBefore = new Set<string>()
+$effect(() => {
+	const openNow = allWindows.filter((w) => w.open).map((w) => w.manifest.id)
+	untrack(() => {
+		const newly = openNow.find((id) => !openBefore.has(id))
+		if (newly !== undefined && newly !== viewId) {
+			viewId = newly
+			preview = null
+			skillView = null
+		} else if (viewId !== null && !openNow.includes(viewId)) {
+			viewId = null
+		}
+		openBefore = new Set(openNow)
+	})
+})
 
 let composerEl: HTMLTextAreaElement | null = $state(null)
 $effect(() => {
@@ -1035,6 +1065,19 @@ const DOT: Record<string, string> = {
 	waiting: 'bg-info text-info-foreground'
 }
 </script>
+
+{#snippet tab(id: string | null, label: string)}
+	<button
+		type="button"
+		onclick={() => showView(id)}
+		aria-current={viewId === id ? 'page' : undefined}
+		class="rounded-full px-3 py-1 font-medium text-xs transition-colors {viewId === id
+			? 'bg-primary text-primary-foreground'
+			: 'border border-foreground/10 text-foreground/60 hover:bg-surface-card'}"
+	>
+		{label}
+	</button>
+{/snippet}
 
 {#snippet backButton()}
 	<button
@@ -1177,6 +1220,14 @@ const DOT: Record<string, string> = {
 				{STATUS_LABEL[selected.status]}
 			</h2>
 		</div>
+		<!-- The tabs: the stream, then every view. One strip, two tiers of
+		     content behind it. -->
+		<nav class="flex gap-1 px-1" aria-label="Ansicht">
+			{@render tab(null, 'Aktivität')}
+			{#each allWindows as w (w.manifest.id)}
+				{@render tab(w.manifest.id, w.manifest.name)}
+			{/each}
+		</nav>
 		<main
 			bind:this={centerEl}
 			onscroll={() => {
@@ -1187,7 +1238,12 @@ const DOT: Record<string, string> = {
 				? 'rounded-b-none border-b-0'
 				: ''}"
 		>
-			{#if skillView}
+			{#if view}
+				<!-- A VIEW in front: the window actor's surface, full height. -->
+				<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+					<AvenUiView actor={view.subject} {...view.props} />
+				</div>
+			{:else if skillView}
 				<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->
 				{@const skillLog = selected.log.filter((e) => e.skill === skillView?.skill)}
 				<header class="flex items-center gap-3">
@@ -1520,7 +1576,7 @@ const DOT: Record<string, string> = {
 				<!-- THE CONVERSATION, continuing the stream: this intent's own
 				     session — what you said and what the system said back, the
 				     views it put on screen, what its tools just did. -->
-				{#if chat.turns.length > 0 || windows.length > 0 || activity.current}
+				{#if chat.turns.length > 0 || activity.current}
 					<div class="flex flex-col gap-2 border-foreground/10 border-t pt-4">
 						{#each chat.turns as turn (turn.id)}
 							<div class="flex" class:justify-end={turn.role === 'user'}>
@@ -1546,39 +1602,6 @@ const DOT: Record<string, string> = {
 										{turn.content}
 									{/if}
 								</div>
-							</div>
-						{/each}
-
-						{#each windows as win (win.manifest.id)}
-							<div
-								class="flex h-[340px] flex-col overflow-hidden rounded-xl border border-foreground/10 bg-surface-soft"
-							>
-								<div
-									class="flex shrink-0 items-center border-foreground/5 border-b px-3 py-1.5 font-mono text-[0.5625rem] text-foreground/40 uppercase tracking-wide"
-								>
-									<span class="flex-1">{win.manifest.name}</span>
-									<button
-										type="button"
-										onclick={() => {
-											win.open = false
-										}}
-										title="Ausblenden"
-										aria-label="{win.manifest.name} ausblenden"
-										class="-mr-1 rounded-full p-1 transition-colors hover:bg-surface-card-selected"
-									>
-										<svg
-											viewBox="0 0 24 24"
-											class="size-3"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-										>
-											<path d="M6 6l12 12M18 6L6 18" />
-										</svg>
-									</button>
-								</div>
-								<AvenUiView actor={win.subject} {...win.props} />
 							</div>
 						{/each}
 
@@ -1745,6 +1768,35 @@ const DOT: Record<string, string> = {
 					</span>
 				</div>
 				<p class="pt-1 text-[0.6875rem] text-foreground/50 leading-relaxed">{s.note}</p>
+			</button>
+		{/each}
+
+		<h2
+			class="px-1 pt-3 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
+		>
+			Views · {allWindows.length}
+		</h2>
+		{#each allWindows as w (w.manifest.id)}
+			<button
+				type="button"
+				onclick={() => {
+					showView(viewId === w.manifest.id ? null : w.manifest.id)
+					shell.rightOpen = false
+				}}
+				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {viewId ===
+				w.manifest.id
+					? 'border-foreground/15 bg-surface-card-selected'
+					: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
+			>
+				<div class="flex items-center gap-2">
+					<span
+						class="size-1.5 shrink-0 rounded-full {w.open ? 'bg-success' : 'bg-foreground/20'}"
+					></span>
+					<span class="font-medium text-xs">{w.manifest.name}</span>
+					<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
+						{w.open ? 'offen' : 'zu'}
+					</span>
+				</div>
 			</button>
 		{/each}
 
