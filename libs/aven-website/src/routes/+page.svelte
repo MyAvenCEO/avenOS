@@ -56,36 +56,36 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 	<!-- The thesis: the company of the future, named. -->
 	<section
 		class="border-b border-border/40 bg-linear-to-b from-surface-soft/70 to-transparent px-5 py-16 sm:px-8 sm:py-24"
-		aria-labelledby="spark-heading"
+		aria-labelledby="company-heading"
 	>
 		<div class="mx-auto max-w-3xl text-center">
 			<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
 				Die Firma der Zukunft
 			</p>
 			<h2
-				id="spark-heading"
+				id="company-heading"
 				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
 			>
-				1&nbsp;Mensch + 1&nbsp;Aven =
-				<span class="text-accent">ein Spark</span>.
+				1&nbsp;Mensch + 1&nbsp;<span class="text-accent">avenCEO</span>.
 			</h2>
 			<div
 				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
 			>
 				<p class="text-pretty">
 					Die Firma der Zukunft hat kein Büro, keine Abteilungen, keine vierzig Angestellten. Sie
-					ist ein Funke:
-					<strong class="font-medium text-foreground/88">ein Mensch mit einer Vision</strong>
+					besteht aus zwei Rollen:
+					<strong class="font-medium text-foreground/88">ein Mensch mit der Vision</strong>
 					und
 					<strong class="font-medium text-foreground/88"
-						>ein Aven, der die ganze Firma dazu betreibt</strong
+						>ein avenCEO, der die ganze Firma ausführt</strong
 					>
 					— Operations, Technik, Markt, Produkt.
 				</p>
 				<p class="text-pretty">
-					Das nennen wir einen
-					<strong class="font-medium text-foreground/88">Spark</strong>
-					— dein erster ist dein Leben selbst.
+					Jede Firma bekommt ihren eigenen avenCEO. Jeder Mensch seinen eigenen
+					<strong class="font-medium text-foreground/88">avenME</strong>
+					— den persönlichen Aven für sein Leben und sein Wissen. Beide leben im selben Namensraum,
+					nebeneinander: Das eine ist kein Upgrade des anderen.
 				</p>
 			</div>
 			<p
@@ -226,7 +226,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		</div>
 	</section>
 
-	<!-- ONE section between the hero and the Spark thesis: the day-sized change,
+	<!-- ONE section between the hero and the company thesis: the day-sized change,
 	     what an Aven actually is, and the thesis that ties them together. The
 	     separate "Vision" block said the same thing a second time, one level of
 	     abstraction higher, and the page was better without it. -->
@@ -277,7 +277,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		<div class="mx-auto max-w-5xl">
 			<header class="mx-auto max-w-2xl text-center">
 				<p class="text-[9px] font-bold uppercase tracking-[0.26em] text-accent">
-					Die ersten zwei Sparks
+					Die ersten zwei avenCEOs
 				</p>
 				<h2
 					class="mt-2 text-[clamp(1.5rem,4vw,2.15rem)] font-light leading-tight tracking-tight text-foreground/90"
@@ -292,12 +292,24 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 						>weltweit ersten echten agentischen CEOs der Welt</strong
 					>
 					— kein Chatbot am Rand, sondern
-					<strong class="font-medium text-foreground/80">KI im Gründerteam</strong>. Zwei Sparks
-					laufen bereits: der
-					<strong class="font-medium text-foreground/82">Maia Holding Spark</strong>
-					und der
-					<strong class="font-medium text-foreground/82">avenCEO Spark</strong>
-					— die Firma, die gerade diese Seite baut.
+					<strong class="font-medium text-foreground/80">KI im Gründerteam</strong>. Zwei Firmen
+					laufen bereits so: die
+					<strong class="font-medium text-foreground/82">Maia Holding GmbH</strong>
+					mit avenMAIA und die
+					<strong class="font-medium text-foreground/82">avenCEO GmbH</strong>
+					mit avenTIN — die Firma, die gerade diese Seite baut.
+				</p>
+				<p
+					class="mx-auto mt-3 max-w-xl text-[13px] leading-relaxed text-foreground/67 sm:max-w-2xl sm:text-[15px] sm:leading-[1.52]"
+				>
+					Samuel und Daniel haben ihre eigenen persönlichen Aven —
+					<strong class="font-medium text-foreground/82">avenSAM</strong>
+					und
+					<strong class="font-medium text-foreground/82">avenDAN</strong>
+					— und trainieren mit ihnen gemeinsam die Skills der Firmen‑Aven. Was die avenCEOs dabei
+					über Jahre lernen, wird das wertvollste Asset der Firma. Und wer etwas will — Mitarbeiter,
+					Kunde, Partner — spricht im Chat, auf Social Media oder im Support direkt mit dem avenCEO:
+					eine Anlaufstelle, eine Wahrheit, das Gehirn der Firma.
 				</p>
 			</header>
 
@@ -332,7 +344,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 							<p
 								class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/52 sm:text-[10px]"
 							>
-								Chief Visionary Founder
+								Vision · avenSAM
 							</p>
 						</div>
 						<div
@@ -352,7 +364,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 								{@html beamAvatarSvg('avenMAIA', paletteKi, 64, 'fnd-k-m')}
 							</div>
 							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">
-								KI‑AGENT
+								avenCEO
 							</p>
 							<p class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent sm:text-[13px]">
 								avenMAIA
@@ -360,14 +372,14 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 							<p
 								class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/50 sm:text-[10px]"
 							>
-								avenCEO von Samuel
+								Ausführung · Maia Holding GmbH
 							</p>
 						</div>
 					</div>
 					<p
 						class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent sm:text-[11px]"
 					>
-						= Maia Holding Spark
+						= Maia Holding GmbH
 					</p>
 				</div>
 
@@ -401,7 +413,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 							<p
 								class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/52 sm:text-[10px]"
 							>
-								Chief Visionary Founder
+								Vision · avenDAN
 							</p>
 						</div>
 						<div
@@ -421,7 +433,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 								{@html beamAvatarSvg(beamSeedSamuelProfile, paletteHuman, 64, 'fnd-k-o')}
 							</div>
 							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">
-								KI‑AGENT
+								avenCEO
 							</p>
 							<p class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent sm:text-[13px]">
 								avenTIN
@@ -429,14 +441,14 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 							<p
 								class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/50 sm:text-[10px]"
 							>
-								avenCEO von Daniel
+								Ausführung · avenCEO GmbH
 							</p>
 						</div>
 					</div>
 					<p
 						class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent sm:text-[11px]"
 					>
-						= avenCEO Spark
+						= avenCEO GmbH
 					</p>
 				</div>
 			</div>
@@ -459,7 +471,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				id="collective-heading"
 				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 			>
-				Ein Spark trägt ein Leben. Eine Million Sparks tragen eine Zivilisation.
+				Ein avenCEO trägt eine Firma. Eine Million avenCEOs tragen eine Zivilisation.
 			</h2>
 
 			<div
@@ -467,8 +479,9 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 			>
 				<p class="text-pretty">
 					Stell dir vor, was passiert, wenn eine Million Menschen aufhören, ihre Zeit zu verkaufen,
-					und anfangen, Sparks zu bauen, an die sie glauben — und einander daran zu beteiligen.
-					Jeder mit seinem eigenen avenCEO. Keiner mehr Angestellter im Leben eines Konzerns.
+					und anfangen, Firmen zu bauen, an die sie glauben — und in die avenCEOs der anderen zu
+					investieren. Jede Firma mit ihrem eigenen avenCEO, jeder Mensch mit seinem eigenen avenME.
+					Keiner mehr Angestellter im Leben eines Konzerns.
 				</p>
 				<p class="text-pretty">
 					Das ist die Welt, an die wir glauben:

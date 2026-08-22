@@ -1,18 +1,25 @@
 /**
- * The product ladder — one source of truth for pricing AND the skills
- * marketplace.
+ * The products — one source of truth for pricing AND the skills marketplace.
  *
- * THREE tiers on top of one name. avenID is the door: the name, the waitlist
- * place, the open-source code. avenME runs your personal life — inbox, post,
- * documents, the daily organisation. avenCEO runs the company around it —
- * pre-accounting, finances, the website, the shop, the blog — and takes a
- * share of the revenue it helps produce. avenCOOP is not a bigger plan but a
- * different relationship: we come in as the technical co-founder, take
- * company shares alongside the revenue share, and you APPLY rather than book.
+ * NOT a ladder. avenID is the door: the name, the waitlist place, a plain
+ * account anyone can address and talk to. avenME is the personal Aven —
+ * one per HUMAN: inbox, post, documents, the daily organisation, your own
+ * knowledge base. avenCEO is the company Aven — one per COMPANY: it runs
+ * the whole business (pre-accounting, finances, website, shop, blog), is the
+ * single point every employee, customer and partner talks to, and takes a
+ * share of the revenue it helps produce. avenME and avenCEO are two
+ * different ROLES that live side by side in one shared namespace; neither is
+ * an upgrade of the other, and each company needs its own avenCEO. avenCOOP
+ * is not a bigger plan but a different relationship: we come in as the
+ * technical co-founder, take company shares alongside the revenue share, and
+ * you APPLY rather than book.
  *
- * The five-role ladder (avenCOO/CMO/CTO/CPO/CEO) is gone: it sold seniority
- * titles where buyers were asking one question — is this my life or my
- * company? Two answers, one door, one partnership.
+ * avenID is a prerequisite, not a part of any plan: a human without one buys
+ * it alongside avenME or avenCEO as a bundle.
+ *
+ * The five-role ladder (avenCOO/CMO/CTO/CPO/CEO) and the "Sparks" are gone:
+ * the company of the future is 1 human (vision) + 1 avenCEO (execution),
+ * and that needs no second noun.
  *
  * The skills page filters by THIS, not by publisher: what matters to a buyer
  * is which plan a skill comes with, not which of us built it.
@@ -39,8 +46,14 @@ export type PlanFeature =
 export interface Plan {
 	id: PlanId
 	name: string
-	/** One line on what this tier takes off your desk. */
+	/** One line on what this product takes off your desk. */
 	role: string
+	/**
+	 * Who a plan is bought FOR. One avenME per human, one avenCEO per company:
+	 * two roles that coexist, never a tier above the other. Printed on the
+	 * cards so nobody reads 42 → 326 as a ladder.
+	 */
+	per?: 'person' | 'company'
 	/**
 	 * The price in euro, NET. Monthly for every tier except avenID, which is
 	 * billed once — read `billing` before you print a `/m`.
@@ -74,18 +87,18 @@ export interface Plan {
 	 * feature bullet where it drifts per tier.
 	 */
 	runtime?: { hoursPerDay: number; centsPerExtraMinute: number }
-	/** What this tier adds; the tiers below are always included. */
+	/** What this product does. Only avenCOOP includes another plan (avenCEO). */
 	features: PlanFeature[]
-	/** Marks the tier we lead with. */
+	/** Marks the product we lead with. */
 	highlight?: boolean
 }
 
-/** Ascending: each plan includes everything from the ones before it. */
+/** Display order. Plans are NOT cumulative — see `planIncludes`. */
 export const PLANS: Plan[] = [
 	{
 		id: 'avenid',
 		name: 'avenID',
-		role: 'Dein Name — der Anfang von allem',
+		role: 'Dein Name — ein Konto, das jeder ansprechen kann',
 		eurPrice: 25,
 		billing: 'once',
 		platformFeePct: 0,
@@ -93,13 +106,15 @@ export const PLANS: Plan[] = [
 		features: [
 			'Dein avenID‑Name — für 1 Jahr für dich gesichert',
 			'Dein Platz auf der Warteliste',
-			'20 Min Test‑Zugang — sobald du eingeladen bist'
+			'20 Min Test‑Zugang — sobald du eingeladen bist',
+			'Voraussetzung für avenME und avenCEO — einmal pro Mensch'
 		]
 	},
 	{
 		id: 'avenme',
 		name: 'avenME',
-		role: 'Dein Leben — organisiert, jeden Tag',
+		role: 'Dein persönlicher Aven — dein Leben und dein Wissen',
+		per: 'person',
 		eurPrice: 42,
 		billing: 'monthly',
 		referralPct: 10,
@@ -117,13 +132,15 @@ export const PLANS: Plan[] = [
 			{ skill: 'calendar-organizer', label: 'Dein Kalender denkt mit' },
 			{ skill: 'todo-shuffler', label: 'Deine Liste sortiert sich selbst' },
 			{ skill: 'bookmark-champion', label: 'Links und Lesezeichen, wiederfindbar' },
-			'1 Personal Spark'
+			'Deine persönliche Wissensbasis — alles, was du lernst, bleibt bei deinem Aven',
+			'Trainiert zusammen mit dir die avenCEOs deiner Firmen'
 		]
 	},
 	{
 		id: 'avenceo',
 		name: 'avenCEO',
-		role: 'Deine Firma — alles Geschäftliche',
+		role: 'Der Aven deiner Firma — alles Geschäftliche',
+		per: 'company',
 		eurPrice: 326,
 		billing: 'monthly',
 		referralPct: 15,
@@ -140,7 +157,8 @@ export const PLANS: Plan[] = [
 			{ skill: 'blog-writer', label: 'Blog' },
 			'Digitaler Briefkasten für Geschäftskunden (exkl. Nachsendeauftrag der Deutschen Post: 51,90 € / 6 Monate, inkl. USt.)',
 			'Dein Aven und deine Produkte im aven Marketplace gelistet',
-			'3 Company Sparks — zusätzlich zu deinem Personal Spark'
+			'Die eine Anlaufstelle: Mitarbeiter, Kunden und Partner sprechen direkt mit deinem avenCEO — in Chat, Social Media und Support',
+			'Das Gedächtnis deiner Firma: Wissen und Erfahrung sammeln sich über Jahre im avenCEO — das wird dein wertvollstes Asset'
 		]
 	},
 	{
@@ -156,8 +174,7 @@ export const PLANS: Plan[] = [
 		equitySharePct: 5,
 		applyOnly: true,
 		features: [
-			'1× avenCEO inklusive — avenCEO gilt pro Mensch, avenCOOP pro Firma',
-			'10 Company Sparks',
+			'1× avenCEO für deine Firma inklusive',
 			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
 			'Du wählst selbst, in welche avenCOOPs dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
@@ -176,9 +193,22 @@ export function plan(id: PlanId): Plan {
 	return PLANS.find((p) => p.id === id)!
 }
 
-/** Plans are cumulative: avenCEO contains everything avenME has. */
+/**
+ * What a plan brings with it. avenME and avenCEO are separate products for
+ * separate roles (person / company) — neither contains the other, and avenID
+ * is a prerequisite rather than a part. The only inclusion is avenCOOP,
+ * which ships with the company's avenCEO.
+ */
 export function planIncludes(selected: PlanId, needed: PlanId): boolean {
-	return planOrder.indexOf(needed) <= planOrder.indexOf(selected)
+	if (selected === needed) return true
+	return selected === 'avencoop' && needed === 'avenceo'
+}
+
+/** "pro Mensch" · "pro Firma" — the role a plan is bought for. */
+export function perLabel(p: Plan): string | null {
+	if (p.per === 'person') return 'pro Mensch'
+	if (p.per === 'company') return 'pro Firma'
+	return null
 }
 
 /** German price formatting: 1.895 €, no cents. */
