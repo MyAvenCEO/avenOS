@@ -19,7 +19,7 @@ export const LANGS: readonly Lang[] = ['de', 'en']
 export const DEFAULT_LANG: Lang = 'de'
 
 /** Pages that exist in both languages; everything else stays on its DE URL. */
-const LOCALIZED_ROOTS = ['/', '/pricing', '/skills', '/aven']
+const LOCALIZED_ROOTS = ['/', '/pricing', '/skills', '/avens']
 
 /** "/pricing" for DE, "/en/pricing" for EN — always with the trailing slash the build emits. */
 export function localeHref(lang: Lang, path: string): string {
