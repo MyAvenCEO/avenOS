@@ -2,4 +2,4 @@
 import Pricing from '$lib/pages/Pricing.svelte'
 </script>
 
-<Pricing lang="de" />
+<Pricing lang="en" />

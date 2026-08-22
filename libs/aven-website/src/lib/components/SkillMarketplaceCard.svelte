@@ -1,4 +1,6 @@
 <script lang="ts">
+import { type Lang, pick } from '$lib/i18n'
+import { skills as messages } from '$lib/i18n/skills'
 import { plan } from '$lib/pricing/plans'
 import { skillDetailHref, skillLabel } from '$lib/skills/loader'
 import type { AvenosSkill } from '$lib/skills/types'
@@ -6,9 +8,12 @@ import type { AvenosSkill } from '$lib/skills/types'
 type Props = {
 	skill: AvenosSkill
 	variant?: 'default' | 'spotlight'
+	lang?: Lang
 }
 
-let { skill, variant = 'default' }: Props = $props()
+let { skill, variant = 'default', lang = 'de' }: Props = $props()
+
+const t = $derived(pick(messages, lang).card)
 
 const cardClass = $derived.by(() =>
 	skill.comingSoon
@@ -17,26 +22,10 @@ const cardClass = $derived.by(() =>
 			? 'group flex min-w-0 flex-col rounded-2xl border-2 border-accent/35 bg-surface-raised p-6 ring-1 ring-accent/15 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:border-accent/55  sm:p-7'
 			: 'group flex min-w-0 flex-col rounded-2xl border border-border/40 bg-surface-raised p-5 transition-all hover:border-border/70 hover:bg-surface-soft  sm:p-6'
 )
-
-const chainLabels: Record<string, string> = {
-	'email-manager': 'E‑Mail',
-	'docs-organizer': 'Dokumente',
-	'brain-memorizer': 'Gedächtnis',
-	'book-keeper': 'Buchhaltung',
-	'human-reviewer': 'HITL',
-	'blog-writer': 'Content',
-	'calendar-organizer': 'Kalender',
-	'todo-shuffler': 'Aufgaben',
-	'inbox-router': 'Eingang',
-	'bookmark-champion': 'Links',
-	'finance-brain': 'Finanzen',
-	'website-creator': 'Website',
-	'checkout-builder': 'Checkout'
-}
 </script>
 
 <a
-	href={skillDetailHref(skill.slug, 'de')}
+	href={skillDetailHref(skill.slug, lang)}
 	class={cardClass}
 	aria-label={`${skillLabel(skill.slug)} — ${skill.oneLineCopy}`}
 >
@@ -49,7 +38,7 @@ const chainLabels: Record<string, string> = {
 				? 'border-quiet/35 bg-quiet/10 text-quiet-ink'
 				: 'border-accent/40 bg-accent/20 text-accent'}"
 		>
-			{skill.comingSoon ? 'Bald' : 'Skill'}
+			{skill.comingSoon ? t.soon : t.skill}
 		</span>
 	</div>
 
@@ -71,7 +60,7 @@ const chainLabels: Record<string, string> = {
 			<span
 				class="inline-flex items-center rounded-full border border-border/40 bg-background/70 px-2 py-0.5 text-[9px] font-semibold text-foreground/50"
 			>
-				→ {chainLabels[slug] ?? slug}
+				→ {t.chainLabels[slug] ?? slug}
 			</span>
 		{/each}
 	</div>
@@ -80,13 +69,13 @@ const chainLabels: Record<string, string> = {
 		<div>
 			<p class="text-[9px] font-bold uppercase tracking-[0.2em] text-accent">
 				{skill.hero.promiseHoursPerWeek}
-				gespart
+				{t.saved}
 			</p>
 		</div>
 		<span
 			class="text-[12px] font-semibold text-foreground/55 transition-colors group-hover:text-foreground/80"
 		>
-			Skill ansehen →
+			{t.view}
 		</span>
 	</div>
 </a>

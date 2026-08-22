@@ -2,4 +2,4 @@
 import Skills from '$lib/pages/Skills.svelte'
 </script>
 
-<Skills lang="de" />
+<Skills lang="en" />

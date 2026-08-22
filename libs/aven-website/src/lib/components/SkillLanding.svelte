@@ -1,16 +1,21 @@
 <script lang="ts">
 import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
+import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SiteFooter from '$lib/components/SiteFooter.svelte'
-import { idFunnelHref } from '$lib/id-service'
+import { type Lang, localeHref, pick } from '$lib/i18n'
+import { skills as messages } from '$lib/i18n/skills'
 import { availabilityNote, skillDetailHref, skillLabel } from '$lib/skills/loader'
 import type { AvenosSkill } from '$lib/skills/types'
 
 type Props = {
 	skill: AvenosSkill
+	lang?: Lang
 }
 
-let { skill }: Props = $props()
+let { skill, lang = 'de' }: Props = $props()
+
+const t = $derived(pick(messages, lang).detail)
 
 /**
  * Skills are global — nobody "publishes" them. The one who speaks for them is
@@ -22,33 +27,12 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 </script>
 
 <svelte:head>
-	<title>{skill.comingSoon ? 'Bald · ' : ''}{skillLabel(skill.slug)} — aven.ceo · Skills</title>
+	<title>{skill.comingSoon ? t.titleSoonPrefix : ''}{skillLabel(skill.slug)}{t.titleSuffix}</title>
 	<meta name="description" content={skill.oneLineCopy}>
 </svelte:head>
 
-<div lang="de" class="min-h-screen bg-background text-foreground font-sans antialiased">
-	<!-- Sticky header -->
-	<header class="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
-		<div
-			class="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-10 gap-y-2 px-5 py-5 sm:justify-between sm:px-8"
-		>
-			<a href="/" class="flex items-center gap-2.5">
-				<img src="/aven-logo.svg" alt="" class="size-7 shrink-0" width="28" height="28">
-				<span class="text-[17px] font-semibold tracking-tight text-foreground">avenCEO</span>
-			</a>
-			<nav class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em]">
-				<a href="/skills" class="opacity-70 transition-opacity hover:opacity-100">Skills</a>
-
-				<a href="/pricing" class="opacity-70 transition-opacity hover:opacity-100">Preise</a>
-				<a
-					href={idFunnelHref()}
-					class="rounded-full bg-primary px-4 py-1.5 normal-case font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-				>
-					avenID sichern
-				</a>
-			</nav>
-		</div>
-	</header>
+<div {lang} class="min-h-screen bg-background text-foreground font-sans antialiased">
+	<MarketingSiteHeader active="skills" {lang} />
 
 	<!-- 1. WHY — Daniel scenario -->
 	<section class="border-b border-border/40 px-5 py-24 sm:px-8 sm:py-32 md:py-40">
@@ -61,7 +45,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					<span
 						class="inline-flex items-center rounded-full border border-quiet/40 bg-quiet/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-quiet-ink"
 					>
-						Bald verfügbar
+						{t.comingSoon}
 					</span>
 				</p>
 			{/if}
@@ -81,7 +65,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				>
 					<p class="text-[9px] font-bold uppercase tracking-[0.26em] text-foreground/38">
 						{skill.founderScenario.timestamp}
-						· Aus dem echten Alltag
+						{t.fromRealLife}
 					</p>
 					<p class="mt-3 text-[15px] italic leading-relaxed text-foreground/75 sm:text-[16px]">
 						"{skill.founderScenario.story}"
@@ -93,8 +77,8 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 						>
 							{@html beamAvatarSvg(AVEN, paletteKi, 32, `skill-aven-${skill.slug}`)}
 						</div>
-						<p class="text-[9px] font-bold tracking-[0.14em] text-accent">Dein Aven</p>
-						<p class="text-[9px] text-foreground/40">löst das.</p>
+						<p class="text-[9px] font-bold tracking-[0.14em] text-accent">{t.yourAven}</p>
+						<p class="text-[9px] text-foreground/40">{t.solvesIt}</p>
 					</div>
 				</div>
 			</div>
@@ -107,17 +91,17 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 	>
 		<div class="mx-auto max-w-2xl">
 			<div class="text-center">
-				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Was du gewinnst</p>
+				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">{t.gainEyebrow}</p>
 				<h2
 					class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					Dein Leben nach {skillLabel(skill.slug)}.
+					{t.gainHeading(skillLabel(skill.slug))}
 				</h2>
 				<p
 					class="mx-auto mt-3 max-w-md text-[11px] font-bold uppercase tracking-[0.18em] text-accent"
 				>
 					{skill.hero.promiseHoursPerWeek}
-					pro Woche zurückgewonnen
+					{t.perWeekBack}
 				</p>
 			</div>
 			<ul class="mt-8 space-y-3 text-[14px] leading-snug text-foreground/76 sm:text-[15px]">
@@ -135,12 +119,12 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 	<section class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20">
 		<div class="mx-auto max-w-2xl text-center">
 			<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
-				So funktioniert es
+				{t.howEyebrow}
 			</p>
 			<h2
 				class="mt-3 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 			>
-				In deinem Alltag — vier Schritte.
+				{t.howHeading}
 			</h2>
 			<ol class="mt-10 mx-auto max-w-xl list-none space-y-0 p-0">
 				{#each skill.howSteps as step, i (step)}
@@ -167,14 +151,18 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 	>
 		<div class="mx-auto max-w-3xl">
 			<div class="text-center">
-				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Die Mechanik</p>
+				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
+					{t.mechanicsEyebrow}
+				</p>
 				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-					Was genau passiert — ehrlich erklärt.
+					{t.mechanicsHeading}
 				</h2>
 			</div>
 			<div class="mt-8 grid gap-3 sm:grid-cols-3">
 				<div class="rounded-xl border border-border/35 bg-surface-raised px-4 py-4">
-					<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/40">Input</p>
+					<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+						{t.input}
+					</p>
 					<p class="mt-2 text-[13px] leading-snug text-foreground/78">
 						{skill.whatMechanics.input}
 					</p>
@@ -182,13 +170,15 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<div
 					class="rounded-xl border border-accent/30 bg-accent/10 px-4 py-4 ring-1 ring-accent/20"
 				>
-					<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent/70">Magic</p>
+					<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent/70">{t.magic}</p>
 					<p class="mt-2 text-[13px] leading-snug text-foreground/78">
 						{skill.whatMechanics.magic}
 					</p>
 				</div>
 				<div class="rounded-xl border border-border/35 bg-surface-raised px-4 py-4">
-					<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/40">Output</p>
+					<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+						{t.output}
+					</p>
 					<p class="mt-2 text-[13px] leading-snug text-foreground/78">
 						{skill.whatMechanics.output}
 					</p>
@@ -202,18 +192,17 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		<div class="mx-auto max-w-3xl">
 			<div class="text-center">
 				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
-					Kein Skill steht allein
+					{t.playsEyebrow}
 				</p>
 				<h2 class="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-					{skillLabel(skill.slug)}
-					arbeitet zusammen mit:
+					{t.playsHeading(skillLabel(skill.slug))}
 				</h2>
 			</div>
 			<ul class="mt-6 grid gap-2.5 sm:grid-cols-2">
 				{#each skill.playsWith as { slug, relation } (slug)}
 					<li>
 						<a
-							href={skillDetailHref(slug, 'de')}
+							href={skillDetailHref(slug, lang)}
 							class="flex items-start gap-3 rounded-xl border border-border/35 bg-surface-raised px-4 py-3 transition-colors hover:border-border/65 hover:bg-surface-soft"
 						>
 							<span class="mt-0.5 text-[11px] font-bold text-accent">→</span>
@@ -237,15 +226,15 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		<div class="mx-auto max-w-2xl">
 			<div class="text-center">
 				<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
-					Was es kosten würde
+					{t.valueEyebrow}
 				</p>
 				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-					Einzeln kaufen vs. einfach drin haben.
+					{t.valueHeading}
 				</h2>
 			</div>
 			<div class="mt-8 rounded-2xl border border-border/40 bg-surface-raised p-5 sm:p-7">
 				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-					Standalone‑Alternativen
+					{t.standalone}
 				</p>
 				<ul class="mt-4 space-y-2">
 					{#each skill.valueStack.standaloneAlternatives as alt (alt.label)}
@@ -263,14 +252,14 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 								<span
 									class="shrink-0 text-[11px] font-bold uppercase tracking-[0.12em] text-foreground/40"
 								>
-									Nicht verfügbar
+									{t.notAvailable}
 								</span>
 							{/if}
 						</li>
 					{/each}
 				</ul>
 				<div class="mt-5 flex items-baseline justify-between border-t border-border/30 pt-4">
-					<span class="text-[14px] font-semibold text-foreground/70">Gesamt standalone</span>
+					<span class="text-[14px] font-semibold text-foreground/70">{t.standaloneTotal}</span>
 					<span
 						class="text-xl font-bold tabular-nums text-foreground line-through decoration-foreground/40"
 					>
@@ -279,17 +268,17 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				</div>
 				<div class="mt-4 rounded-xl border border-accent/40 bg-accent/15 px-4 py-4">
 					<p class="text-center text-[9px] font-bold uppercase tracking-[0.22em] text-accent">
-						Im Plan enthalten
+						{t.included}
 					</p>
-					<p class="mt-2 text-center text-[15px] font-bold text-foreground">0&nbsp;€ Aufpreis</p>
+					<p class="mt-2 text-center text-[15px] font-bold text-foreground">{t.noSurcharge}</p>
 					<p class="mt-1 text-center text-[12px] text-foreground/60">
-						avenME · avenFOUNDER · avenCOOP — kein Skill‑Marktplatz‑Lock‑in
+						{t.noLockIn}
 					</p>
 				</div>
 				<div class="mt-5 grid gap-3 border-t border-border/25 pt-5 sm:grid-cols-3">
 					<div>
 						<p class="text-[9px] font-bold uppercase tracking-[0.2em] text-foreground/38">
-							Erste Entlastung
+							{t.firstRelief}
 						</p>
 						<p class="mt-1 text-[13px] font-medium text-foreground/78">
 							{skill.valueStack.timeDelayToValue}
@@ -297,14 +286,16 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					</div>
 					<div>
 						<p class="text-[9px] font-bold uppercase tracking-[0.2em] text-foreground/38">
-							Setup‑Aufwand
+							{t.setupEffort}
 						</p>
 						<p class="mt-1 text-[13px] font-medium text-foreground/78">
 							{skill.valueStack.effortToInstall}
 						</p>
 					</div>
 					<div>
-						<p class="text-[9px] font-bold uppercase tracking-[0.2em] text-foreground/38">Beweis</p>
+						<p class="text-[9px] font-bold uppercase tracking-[0.2em] text-foreground/38">
+							{t.proof}
+						</p>
 						<p class="mt-1 text-[13px] font-medium text-foreground/78">{skill.valueStack.proof}</p>
 					</div>
 				</div>
@@ -316,7 +307,9 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 	<section class="border-b border-border/40 px-5 py-12 sm:px-8 sm:py-16">
 		<div class="mx-auto max-w-2xl space-y-6">
 			<div class="rounded-2xl border border-border/40 bg-surface-raised p-5 sm:p-6">
-				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/40">Boni</p>
+				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-foreground/40">
+					{t.bonuses}
+				</p>
 				<ul class="mt-3 space-y-2">
 					{#each skill.bonuses as bonus (bonus)}
 						<li class="flex gap-3 text-[13px] leading-snug text-foreground/76 sm:text-[14px]">
@@ -327,9 +320,9 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				</ul>
 			</div>
 			<div class="rounded-xl border border-accent/35 bg-accent/12 px-5 py-4">
-				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent">Verfügbarkeit</p>
+				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent">{t.availability}</p>
 				<p class="mt-1.5 text-[13px] leading-snug text-foreground/75">
-					{availabilityNote(skill, 'de')}
+					{availabilityNote(skill, lang)}
 				</p>
 			</div>
 		</div>
@@ -353,7 +346,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 						</div>
 						<div>
 							<p class="text-[8px] font-bold uppercase tracking-[0.24em] text-accent">
-								Geschrieben von
+								{t.writtenBy}
 							</p>
 							<p class="mt-0.5 text-[13px] font-bold tracking-[0.1em] text-accent">{AVEN}</p>
 						</div>
@@ -369,7 +362,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				</p>
 				<footer class="mt-8 border-t border-foreground/[0.06] pt-6">
 					<p class="text-[8px] font-bold uppercase tracking-[0.24em] text-foreground/40">
-						Mit Überzeugung,
+						{t.signOff}
 					</p>
 					<p class="mt-1.5 text-[13px] font-bold tracking-[0.1em] text-accent">{AVEN}</p>
 				</footer>
@@ -380,17 +373,17 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 	<!-- 9. CTA -->
 	<section class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20">
 		<div class="mx-auto max-w-2xl">
-			<AvenIdCheckCta variant="banner" />
+			<AvenIdCheckCta variant="banner" {lang} />
 			<div class="mt-6 text-center">
 				<a
-					href="/skills"
+					href={localeHref(lang, '/skills')}
 					class="text-[12px] font-semibold uppercase tracking-[0.14em] text-foreground/50 transition-opacity hover:text-foreground/80"
 				>
-					← Alle Skills ansehen
+					{t.backToAll}
 				</a>
 			</div>
 		</div>
 	</section>
 
-	<SiteFooter />
+	<SiteFooter {lang} />
 </div>

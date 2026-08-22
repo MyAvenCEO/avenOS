@@ -1,4 +1,5 @@
 import { skillBySlug } from '@avenos/aven-skills'
+import { localeHref } from '$lib/i18n'
 import { PLANS, type Plan, type PlanId, plan as planById, planIncludes } from '$lib/pricing/plans'
 import deBlogWriter from './content/de/blog-writer.json'
 import deBookKeeper from './content/de/book-keeper.json'
@@ -139,5 +140,5 @@ export function availabilityNote(skill: AvenosSkill, lang: SupportedLang = 'de')
 }
 
 export function skillDetailHref(slug: string, lang: SupportedLang = 'de'): string {
-	return loadSkill(slug, lang) ? `/skills/${slug}` : '/skills'
+	return localeHref(lang, loadSkill(slug, lang) ? `/skills/${slug}` : '/skills')
 }
