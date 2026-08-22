@@ -3,6 +3,7 @@
 	"fixture": {
 		"name": "aurora",
 		"claimUrl": "https://id.next.aven.ceo/purchase/checkout?claim=designer-example",
-		"expiresAt": "Friday, 21 August 2026 at 23:59 UTC"
+		"expiresAt": "Friday, 21 August 2026 at 23:59 UTC",
+		"baseUrl": "https://id.next.aven.ceo"
 	}
 }

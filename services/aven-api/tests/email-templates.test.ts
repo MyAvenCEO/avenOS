@@ -6,7 +6,8 @@ describe('email copy', () => {
 		const checkout = renderEmail('name.purchase-link', {
 			name: 'alice',
 			claimUrl: 'https://id.example/checkout?a=1&b=2',
-			expiresAt: 'Thursday'
+			expiresAt: 'Thursday',
+			baseUrl: 'https://id.example'
 		})
 		expect(checkout.subject).toBe('Checkout link for alice')
 		expect(checkout.text).toContain('Continue to checkout')
@@ -14,13 +15,15 @@ describe('email copy', () => {
 		expect(checkout.text).toContain('This link expires Thursday.')
 		expect(checkout.html).toContain('Continue to checkout')
 		expect(checkout.html).toContain('https://id.example/checkout?a=1&amp;b=2')
+		expect(checkout.html).toContain('https://id.example/email/aven-logo.png')
 		expect(checkout.html).toContain('style=')
 		expect(checkout.html).not.toContain('@maizzle/')
 		expect(checkout.html).not.toContain('AVENEMAILTOKEN')
 
 		const login = renderEmail('name.purchased', {
 			name: 'alice',
-			accessUrl: 'https://id.example/setup'
+			accessUrl: 'https://id.example/setup',
+			baseUrl: 'https://id.example'
 		})
 		expect(login.subject).toBe('Login for alice')
 		expect(login.text).toContain('Create your passkey')
@@ -30,7 +33,11 @@ describe('email copy', () => {
 	})
 
 	it('uses the no-access state when no setup URL is available', () => {
-		const email = renderEmail('name.purchased', { name: 'alice', accessUrl: '' })
+		const email = renderEmail('name.purchased', {
+			name: 'alice',
+			accessUrl: '',
+			baseUrl: 'https://id.example'
+		})
 		expect(email.subject).toBe('Login for alice')
 		expect(email.text).toContain('Your purchase is complete.')
 		expect(email.text).not.toContain('Create your passkey')
@@ -42,7 +49,8 @@ describe('email copy', () => {
 		const email = renderEmail('name.purchase-link', {
 			name: '<alice>\r\nBcc: attacker@example.com',
 			claimUrl: 'https://id.example/checkout?value=<unsafe>',
-			expiresAt: '<Thursday>'
+			expiresAt: '<Thursday>',
+			baseUrl: 'https://id.example'
 		})
 		expect(email.subject).toBe('Checkout link for <alice> Bcc: attacker@example.com')
 		expect(email.html).toContain('&lt;alice&gt;')
