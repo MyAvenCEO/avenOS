@@ -283,18 +283,77 @@ describe('subscription state', () => {
 		// guessed id.
 		expect(await service.invoices(bob)).toEqual([])
 
-		// The portal link — the only place official invoice documents exist —
-		// is minted for the caller's own customer id; bob has none and is
-		// refused before any provider call.
-		const portalCalls = stubFetch([
-			{ body: { customer_portal_link: 'https://creem.io/portal/abc' } }
+		// Meine Bestellungen: scoped by the caller's stored customer id, mapped
+		// to the pane's breakdown. No document field exists on the provider —
+		// the official invoice is the one it mails — so none is invented.
+		const orderCalls = stubFetch([
+			{
+				body: {
+					items: [
+						{
+							id: 'ord_1',
+							created_at: 1787652000000,
+							product: 'prod_6ALajlETScD2v0dv10n618',
+							sub_total: 4200,
+							tax_amount: 798,
+							discount_amount: 0,
+							amount_paid: 4998,
+							currency: 'EUR',
+							status: 'paid'
+						}
+					]
+				}
+			}
 		])
-		expect(await service.portalUrl(alice)).toBe('https://creem.io/portal/abc')
-		expect((portalCalls[0]?.body as { customer_id: string } | undefined)?.customer_id).toBe(
-			`cust_${alice.id.slice(0, 8)}`
-		)
-		await expect(service.portalUrl(bob)).rejects.toMatchObject({
-			code: 'BILLING_CUSTOMER_MISSING'
-		})
+		expect(await service.orders(alice)).toEqual([
+			{
+				id: 'ord_1',
+				createdAt: new Date(1787652000000).toISOString(),
+				productId: 'prod_6ALajlETScD2v0dv10n618',
+				subTotalCents: 4200,
+				taxCents: 798,
+				discountCents: 0,
+				amountPaidCents: 4998,
+				currency: 'EUR',
+				status: 'paid'
+			}
+		])
+		expect(orderCalls[0]?.url).toContain(`/v1/customers/cust_${alice.id.slice(0, 8)}/orders`)
+		expect(await service.orders(bob)).toEqual([])
+
+		// Pause targets alice's OWN provider subscription id; a stranger is
+		// refused before any provider call.
+		const pauseCalls = stubFetch([{ body: { id: subscriptionId, status: 'paused' } }])
+		await service.pause(alice.id)
+		expect(pauseCalls[0]?.url).toContain(`/v1/subscriptions/${subscriptionId}/pause`)
+		await expect(service.pause(bob.id)).rejects.toMatchObject({ code: 'SUBSCRIPTION_MISSING' })
+	})
+
+	it('reports the session’s own latest checkout without accepting an id', async () => {
+		const config = creemConfig()
+		const carol = await insertUser()
+		const dave = await insertUser()
+		const service = new SubscriptionService(database.pool, config, new CreemProvider(config))
+		// subscribe: product search (pins unset → by name), then checkout creation
+		stubFetch([
+			{
+				body: {
+					items: [
+						{ id: 'prod_me', name: 'avenME' },
+						{ id: 'prod_ceo', name: 'avenCEO' }
+					]
+				}
+			},
+			{ body: { id: 'ch_carol', checkout_url: 'https://checkout.creem.io/ch_carol' } }
+		])
+		const started = await service.subscribe(carol, 'avenme')
+		expect(started.checkoutUrl).toBe('https://checkout.creem.io/ch_carol')
+
+		const statusCalls = stubFetch([{ body: { id: 'ch_carol', status: 'completed' } }])
+		expect(await service.checkoutStatus(carol.id)).toEqual({ status: 'completed' })
+		expect(statusCalls[0]?.url).toContain('checkout_id=ch_carol')
+		// dave never started one: null, and no provider call with a guessed id.
+		expect(await service.checkoutStatus(dave.id)).toBeNull()
+		expect(statusCalls).toHaveLength(1)
 	})
 })

@@ -10,6 +10,7 @@ import {
 	type CheckoutInput,
 	type CheckoutSession,
 	type InvoiceRow,
+	type OrderRow,
 	type PaymentEvent,
 	type PaymentProvider,
 	parseCreemEvent,
@@ -63,12 +64,18 @@ export class FakePaymentProvider implements PaymentProvider {
 		return []
 	}
 
-	async customerPortalUrl(): Promise<string> {
-		return new URL('/purchase/fake-checkout', this.config.PUBLIC_BASE_URL).toString()
-	}
-
 	async findCustomerByEmail(): Promise<string | null> {
 		return null
+	}
+
+	async listOrders(): Promise<OrderRow[]> {
+		return []
+	}
+
+	async pauseSubscription(): Promise<void> {}
+
+	async checkoutStatus(): Promise<string> {
+		return 'pending'
 	}
 
 	buildCompletedWebhookBody(input: {
