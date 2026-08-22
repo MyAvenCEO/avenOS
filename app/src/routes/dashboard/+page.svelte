@@ -1,6 +1,6 @@
 <script lang="ts">
 import { isTauri } from '@tauri-apps/api/core'
-import { onMount } from 'svelte'
+import { onMount, untrack } from 'svelte'
 import { dev } from '$app/environment'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
@@ -133,12 +133,19 @@ $effect(() => {
 	listener.setOutputActive(speaker.speaking)
 })
 
-// Any conversation activity — typed or spoken — opens the one answer surface,
-// where the reply and anything it renders appear together.
+// A NEW turn — typed or spoken — opens the one answer surface, where the
+// reply and anything it renders appear together. Only a new one: the effect
+// must depend on the turn count alone, and `show()` reads `query.intent`
+// for its default — tracked, that re-opened the modal on every intent click.
+let turnsSeen = 0
 $effect(() => {
-	if (chat.turns.length > 0) {
-		query.show()
-		shell.tab = 'intents'
+	const n = chat.turns.length
+	if (n > turnsSeen) {
+		turnsSeen = n
+		untrack(() => {
+			query.show()
+			shell.tab = 'intents'
+		})
 	}
 })
 
