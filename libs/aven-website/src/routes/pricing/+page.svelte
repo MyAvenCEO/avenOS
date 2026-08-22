@@ -385,70 +385,79 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						</div>
 					</div>
 
-					<!-- Right: what you get, then the decision. -->
+					<!-- Right: what you get (bullets) | skills + runtime, then the decision. -->
 					<div class="flex min-w-0 flex-col">
-						<ul
-							class="grid gap-x-8 gap-y-3 text-[13px] leading-snug text-foreground/75 sm:grid-cols-2"
-						>
-							{#each coop.features as feature (typeof feature === 'string' ? feature : feature.label)}
-								<li class="flex gap-2">
-									<span
-										aria-hidden="true"
-										class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
-									></span>
-									{#if typeof feature === 'string'}
-										<span>{feature}</span>
-									{:else if 'href' in feature}
-										<span>
-											<a
-												href={feature.href}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
-											>
-												{feature.label}
-												→
-											</a>
-										</span>
-									{:else}
-										<span>
-											<a
-												href={skillDetailHref(feature.skill, 'de')}
-												class="font-medium underline underline-offset-4"
-											>
-												{skillLabel(feature.skill)}
-											</a>
-											<span class="text-foreground/55">· {feature.label}</span>
-										</span>
-									{/if}
-								</li>
-							{/each}
-						</ul>
+						<div class="grid gap-8 sm:grid-cols-[1fr_16rem] sm:gap-10">
+							<ul class="space-y-3 text-[13px] leading-snug text-foreground/75">
+								{#each coop.features as feature (typeof feature === 'string' ? feature : feature.label)}
+									<li class="flex gap-2">
+										<span
+											aria-hidden="true"
+											class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
+										></span>
+										{#if typeof feature === 'string'}
+											<span>{feature}</span>
+										{:else if 'href' in feature}
+											<span>
+												<a
+													href={feature.href}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+												>
+													{feature.label}
+													→
+												</a>
+											</span>
+										{:else}
+											<span>
+												<a
+													href={skillDetailHref(feature.skill, 'de')}
+													class="font-medium underline underline-offset-4"
+												>
+													{skillLabel(feature.skill)}
+												</a>
+												<span class="text-foreground/55">· {feature.label}</span>
+											</span>
+										{/if}
+									</li>
+								{/each}
+							</ul>
 
-						<div
-							class="mt-6 grid gap-4 border-t border-border/50 pt-5 text-[12px] leading-snug text-foreground/55 sm:grid-cols-2"
-						>
-							{#if coopSkillCount > 0}
-								<p>
-									<span class="font-semibold uppercase tracking-[0.12em] text-accent">Skills</span>
-									·
-									<a
-										href={`/skills?plan=${coop.id}`}
-										class="underline underline-offset-4 hover:text-foreground/75"
+							<div>
+								{#if coopSkillCount > 0}
+									<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+										Skills
+									</p>
+									<p class="mt-2 text-[13px] leading-snug text-foreground/75">
+										Alle Skills aus avenFOUNDER — installiert und trainiert.
+									</p>
+									<p class="mt-2 text-[12px] text-foreground/50">
+										<a
+											href={`/skills?plan=${coop.id}`}
+											class="underline underline-offset-4 hover:text-foreground/75"
+										>
+											Alle {coopSkillCount} Skills ansehen →
+										</a>
+									</p>
+								{/if}
+								{#if coop.runtime}
+									<div
+										class="mt-4 rounded-xl border border-border/60 bg-surface-card px-4 py-3 text-left"
 									>
-										Alle {coopSkillCount} Skills ansehen →
-									</a>
-								</p>
-							{/if}
-							{#if coop.runtime}
-								<p>
-									<span class="font-semibold uppercase tracking-[0.12em] text-accent"
-										>KI‑Laufzeit</span
-									>
-									· bis zu {coop.runtime.hoursPerDay}&nbsp;Std/Tag (Fair Use), danach
-									{coop.runtime.centsPerExtraMinute}&nbsp;Cent pro Minute
-								</p>
-							{/if}
+										<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+											KI‑Laufzeit
+										</p>
+										<p class="mt-1 text-[13px] font-medium leading-snug text-foreground/85">
+											Bis zu {coop.runtime.hoursPerDay}&nbsp;Std/Tag Agent‑Laufzeit
+											<span class="font-normal text-foreground/55">(Fair Use)</span>
+										</p>
+										<p class="mt-0.5 text-[12px] leading-snug text-foreground/55">
+											danach {coop.runtime.centsPerExtraMinute}&nbsp;Cent pro Minute
+										</p>
+									</div>
+								{/if}
+							</div>
 						</div>
 
 						<div
