@@ -9,10 +9,9 @@ import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import '$lib/actors/windows'
+import { composer } from '$lib/intents/composer.svelte'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
 import { shell } from '$lib/intents/talk.svelte'
-import QueryModal from '$lib/query/QueryModal.svelte'
-import { query } from '$lib/query/query.svelte'
 import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
 
 /**
@@ -133,18 +132,17 @@ $effect(() => {
 	listener.setOutputActive(speaker.speaking)
 })
 
-// A NEW turn — typed or spoken — opens the one answer surface, where the
-// reply and anything it renders appear together. Only a new one: the effect
-// must depend on the turn count alone, and `show()` reads `query.intent`
-// for its default — tracked, that re-opened the modal on every intent click.
+// A NEW turn — typed or spoken — brings the intent's stream into view,
+// where the reply and anything it renders appear. Only a new one, and only
+// the turn count is tracked.
 let turnsSeen = 0
 $effect(() => {
 	const n = chat.turns.length
 	if (n > turnsSeen) {
 		turnsSeen = n
 		untrack(() => {
-			query.show()
 			shell.tab = 'intents'
+			shell.detail = true
 		})
 	}
 })
@@ -287,26 +285,29 @@ function onOrb() {
 	speaker.silence()
 }
 
-let draft = $state('')
-
 /**
- * What is being heard goes INTO the field, not beside it: the transcript is
- * the draft while it is spoken, and the conversation opens the moment the
- * first word lands. `spoken` is the live tail currently mirrored into the
- * draft, so a partial can replace the previous partial without touching
- * anything typed before it. On the pause the mesh delivers the utterance to
- * the chat, the partial empties, and the tail leaves the field.
+ * What is being heard goes INTO the composer, not beside it: the transcript
+ * is the draft while it is spoken, and the intent's stream comes into view
+ * the moment the first word lands. `spoken` is the live tail currently
+ * mirrored into the draft, so a partial can replace the previous partial
+ * without touching anything typed before it. On the pause the mesh delivers
+ * the utterance to the chat, the partial empties, and the tail leaves.
  */
 let spoken = ''
 $effect(() => {
 	const p = listener.partial
 	untrack(() => {
-		if (p !== '') query.show()
-		const base = spoken !== '' && draft.endsWith(spoken) ? draft.slice(0, -spoken.length) : draft
-		draft = p === '' ? base : base + p
+		if (p !== '') {
+			shell.tab = 'intents'
+			shell.detail = true
+		}
+		const d = composer.draft
+		const base = spoken !== '' && d.endsWith(spoken) ? d.slice(0, -spoken.length) : d
+		composer.draft = p === '' ? base : base + p
 		spoken = p
 	})
 })
+
 /** Height of the floating bottom dock (toast/HITL/pill) — the center column
  * of the workspaces keeps this much clearance while the asides run to the
  * screen bottom underneath it. */
@@ -320,14 +321,11 @@ let dockH = $state(0)
  */
 const DOCK_INSET = 8
 
-/**
- * Bring the composer up, optionally seeded with the keystroke that asked for
- * it. Nothing else changes: the ears stay open, the voice stays on — writing
- * and speaking are one conversation.
- */
+/** Bring the composer up, seeded with the keystroke that asked for it. */
 function focusComposer(seed = '') {
-	if (seed) draft += seed
-	query.show()
+	shell.tab = 'intents'
+	shell.detail = true
+	composer.focus(seed)
 }
 
 /**
@@ -335,13 +333,6 @@ function focusComposer(seed = '') {
  * conversation with the composer focused, seeded with that very character.
  */
 function onGlobalKeydown(event: KeyboardEvent) {
-	// Escape leaves the conversation, from wherever.
-	if (event.key === 'Escape' && query.open) {
-		event.preventDefault()
-		query.close()
-		return
-	}
-	if (query.open) return
 	if (event.metaKey || event.ctrlKey || event.altKey) return
 	if (event.key.length !== 1) return
 	const el = document.activeElement
@@ -353,18 +344,6 @@ function onGlobalKeydown(event: KeyboardEvent) {
 		return
 	event.preventDefault()
 	focusComposer(event.key)
-}
-
-/** Called by the composer in the conversation's footer. */
-function submit() {
-	const text = draft.trim()
-	if (text === '') return
-	// The send click is the user gesture the audio device needs; without it the
-	// first reply would synthesize into a suspended context and never be heard.
-	speaker.resumeAudio()
-	draft = ''
-	query.show()
-	chat.send(text)
 }
 </script>
 
@@ -401,7 +380,6 @@ function submit() {
 
 	<!-- THE answer surface: it floats over the workspace rather than replacing
 	     it, so the selected intent it answers about stays in view behind. -->
-	<QueryModal bind:draft listening={conversing && phase.key !== 'off'} onSubmit={submit} />
 
 	<!-- The floating dock: errors and the pill hover OVER the workspace, so the
 	     side columns can run to the bottom of the screen. What the tools DID is

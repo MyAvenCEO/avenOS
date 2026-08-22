@@ -149,10 +149,25 @@ export interface ChatTools {
 let nextId = 0
 const id = () => `t${nextId++}`
 
+/** One conversation: what a person sees, and what the model saw. */
+interface Session {
+	turns: Turn[]
+	wire: ChatMessage[]
+}
+
 export class Chat {
 	turns = $state<Turn[]>([])
 	streaming = $state(false)
 	failure = $state<string | null>(null)
+	/**
+	 * Which conversation `turns` currently shows. The chat is scoped per
+	 * intent: every intent has its own session stream, and selecting an
+	 * intent switches to it (`use`). Sessions are kept in memory for the
+	 * lifetime of the chat; a reply in flight keeps writing into the session
+	 * it started in, even if the view has moved on.
+	 */
+	session = $state('')
+	#sessions = new Map<string, Session>()
 
 	// The system prompt is NOT stored here — it is prepended per request, so a
 	// long-lived singleton Chat always speaks with the current prompt instead
@@ -174,6 +189,18 @@ export class Chat {
 		return !this.streaming
 	}
 
+	/** Switch the visible conversation to `key`, creating it on first use. */
+	use(key: string): void {
+		if (key === this.session) return
+		this.#sessions.set(this.session, { turns: this.turns, wire: this.#wire })
+		const next = this.#sessions.get(key) ?? { turns: [], wire: [] }
+		this.session = key
+		this.turns = next.turns
+		this.#wire = next.wire
+		this.failure = null
+		this.#sink.onTurn?.()
+	}
+
 	/**
 	 * The live turn's abort signal — the REPLY scope only. Long-running work
 	 * (long-running work) deliberately hangs on the separate work signal
@@ -189,8 +216,12 @@ export class Chat {
 		if (prompt === '' || this.streaming) return
 
 		this.failure = null
-		this.turns.push({ id: id(), role: 'user', content: prompt })
-		this.#wire.push({ role: 'user', content: prompt })
+		// Pinned for the whole turn: `use()` may swap the visible session while
+		// the reply streams, and the reply must land where it was asked.
+		const turns = this.turns
+		const wire = this.#wire
+		turns.push({ id: id(), role: 'user', content: prompt })
+		wire.push({ role: 'user', content: prompt })
 
 		// Push first, then take the reference back OUT of the array. `turns` is a
 		// `$state` proxy: it hands out a proxied view on read, and only writes
@@ -198,8 +229,12 @@ export class Chat {
 		// pushed and mutating it would update the data and tell no one — the
 		// reply would stream into a bubble that never re-renders.
 		const replyId = id()
-		this.turns.push({ id: replyId, role: 'assistant', content: '', calls: [] })
-		const reply = this.turns[this.turns.length - 1]
+		turns.push({ id: replyId, role: 'assistant', content: '', calls: [] })
+		const reply = turns[turns.length - 1]
+		const dropStub = () => {
+			const at = turns.findIndex((t) => t.id === replyId)
+			if (at >= 0) turns.splice(at, 1)
+		}
 
 		this.streaming = true
 		this.#sink.onTurn?.()
@@ -208,7 +243,7 @@ export class Chat {
 		try {
 			let nudged = false
 			for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-				const calls = await this.#round(reply)
+				const calls = await this.#round(reply, wire)
 				if (calls.length === 0) {
 					// Said it did something, called nothing — in the WHOLE turn. The
 					// round alone is the wrong scope: the natural closing sentence
@@ -221,7 +256,7 @@ export class Chat {
 						nudged = true
 						reply.content = ''
 						this.#sink.onRestart?.()
-						this.#wire.push({ role: 'user', content: NUDGE })
+						wire.push({ role: 'user', content: NUDGE })
 						continue
 					}
 					break
@@ -240,9 +275,9 @@ export class Chat {
 				// One tool message per call, addressed by id — the format the model's
 				// own template expects, so nothing here reads as conversation.
 				for (const call of calls) {
-					const { record, wire } = await this.#tools.run(call.name, call.arguments)
-					reply.calls?.push({ name: call.name, result: record })
-					this.#wire.push({ role: 'tool', tool_call_id: call.id, content: wire })
+					const result = await this.#tools.run(call.name, call.arguments)
+					reply.calls?.push({ name: call.name, result: result.record })
+					wire.push({ role: 'tool', tool_call_id: call.id, content: result.wire })
 				}
 			}
 			this.#sink.onDone?.()
@@ -252,16 +287,16 @@ export class Chat {
 				// even half-finished: the stream threw before `#round` could record
 				// it, which would leave two user turns back to back — the malformed
 				// shape that makes this model start improvising around the hole.
-				this.#wire.push({
+				wire.push({
 					role: 'assistant',
 					content: reply.content || '(unterbrochen)'
 				})
-				if (reply.content === '') this.turns = this.turns.filter((t) => t.id !== replyId)
+				if (reply.content === '') dropStub()
 			} else {
 				this.failure = err instanceof Error ? err.message : String(err)
 				// Drop the stub rather than leaving an empty bubble behind. A reply
 				// that got partway through is kept — it is still worth reading.
-				if (reply.content === '') this.turns = this.turns.filter((t) => t.id !== replyId)
+				if (reply.content === '') dropStub()
 			}
 		} finally {
 			this.streaming = false
@@ -273,13 +308,16 @@ export class Chat {
 	 * One request/response. Streams any prose into `reply` and returns the tool
 	 * calls the model asked for, which the caller runs before going round again.
 	 */
-	async #round(reply: Turn): Promise<{ id: string; name: string; arguments: string }[]> {
+	async #round(
+		reply: Turn,
+		wire: ChatMessage[]
+	): Promise<{ id: string; name: string; arguments: string }[]> {
 		let content = ''
 		// Keyed by the index the model assigns, since fragments interleave.
 		const calls = new Map<number, { id: string; name: string; arguments: string }>()
 
 		for await (const event of streamChat(
-			[{ role: 'system', content: SYSTEM_PROMPT }, ...this.#wire],
+			[{ role: 'system', content: SYSTEM_PROMPT }, ...wire],
 			this.#tools.specs,
 			this.#abort?.signal ?? undefined
 		)) {
@@ -322,7 +360,7 @@ export class Chat {
 		// content, calls in tool_calls. The synthetic fillers of the Gemma era
 		// ("Ich rufe X auf.", a bare "…") each ended up imitated as answers —
 		// what sits here is what the model learns a reply looks like.
-		this.#wire.push({
+		wire.push({
 			role: 'assistant',
 			content,
 			...(asked.length > 0 && {
