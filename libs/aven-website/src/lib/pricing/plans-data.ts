@@ -16,8 +16,9 @@
  * technical co-founder, take company shares alongside the revenue share, and
  * you APPLY rather than book.
  *
- * avenID is a prerequisite, not a part of any plan: a human without one buys
- * it alongside avenME or avenFOUNDER as a bundle.
+ * avenID is a prerequisite, not a part of any plan: every human AND every
+ * company has its own name, bought alongside avenME or avenFOUNDER as a
+ * bundle when it does not exist yet.
  *
  * The plan id `avenceo` is a WIRE KEY (API tier enum, Creem product map,
  * app billing, skills catalogue) and stays stable; only `name` changed.
@@ -103,7 +104,7 @@ export const PLANS: Plan[] = [
 	{
 		id: 'avenid',
 		name: 'avenID',
-		role: 'Dein Name — ein Konto, das jeder ansprechen kann',
+		role: 'Dein Name — ein Konto, das jeder ansprechen kann. Pro Mensch und pro Firma.',
 		eurPrice: 25,
 		billing: 'once',
 		platformFeePct: 0,
@@ -112,7 +113,7 @@ export const PLANS: Plan[] = [
 			'Dein avenID‑Name — für 1 Jahr für dich gesichert',
 			'Dein Platz auf der Warteliste',
 			'20 Min Test‑Zugang — sobald du eingeladen bist',
-			'Voraussetzung für avenME und avenFOUNDER — einmal pro Mensch'
+			'Voraussetzung für avenME und avenFOUNDER — eine pro Mensch, eine pro Firma'
 		]
 	},
 	{
