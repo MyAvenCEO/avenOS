@@ -197,6 +197,83 @@ const loadPct = $derived(
 		: Math.round((listener.status === 'preparing' ? listener.progress : speaker.progress) * 100)
 )
 
+/**
+ * The orb's wardrobe, one entry per phase: its brand color, the halo that
+ * breathes around it, and a Lucide glyph (Iconify `lucide:*`, inlined — the
+ * app draws every icon inline). Tailwind needs the class names literal, so
+ * they live here rather than being composed.
+ */
+const ORB: Record<string, { orb: string; halo?: string; icon: string }> = {
+	// lucide:mic
+	idle: {
+		orb: 'bg-surface-cream text-primary',
+		icon: '<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>'
+	},
+	// lucide:ear
+	hearing: {
+		orb: 'bg-error text-error-foreground',
+		halo: 'bg-error',
+		icon: '<path d="M6 8.5a6.5 6.5 0 1 1 13 0c0 6-6 6-6 10a3.5 3.5 0 1 1-7 0"/><path d="M15 8.5a2.5 2.5 0 0 0-5 0v1a2 2 0 1 1 0 4"/>'
+	},
+	// lucide:sparkles
+	thinking: {
+		orb: 'bg-progress text-progress-foreground',
+		halo: 'bg-progress',
+		icon: '<path d="M9.9 2.6a1 1 0 0 1 2 0l1.3 4.1a4 4 0 0 0 2.6 2.6l4.1 1.3a1 1 0 0 1 0 2l-4.1 1.3a4 4 0 0 0-2.6 2.6l-1.3 4.1a1 1 0 0 1-2 0l-1.3-4.1a4 4 0 0 0-2.6-2.6l-4.1-1.3a1 1 0 0 1 0-2l4.1-1.3a4 4 0 0 0 2.6-2.6Z"/><path d="M20 3v4"/><path d="M22 5h-4"/>'
+	},
+	// lucide:audio-lines
+	speaking: {
+		orb: 'bg-success text-success-foreground',
+		icon: '<path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/>'
+	},
+	// lucide:download
+	loading: {
+		orb: 'bg-surface-cream text-progress',
+		icon: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>'
+	},
+	// lucide:loader (the ring is the halo here)
+	starting: {
+		orb: 'bg-surface-cream text-progress',
+		halo: 'bg-progress',
+		icon: '<path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>'
+	},
+	// lucide:volume-x — tap to wake the audio device
+	blocked: {
+		orb: 'bg-warning text-warning-foreground',
+		icon: '<path d="M11 4.7a.7.7 0 0 0-1.2-.5L6 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h3l3.8 3.8a.7.7 0 0 0 1.2-.5Z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>'
+	},
+	// lucide:mic-off
+	denied: {
+		orb: 'bg-error text-error-foreground',
+		icon: '<path d="M12 19v3"/><path d="M15 9.3V6a3 3 0 0 0-5.7-1.3"/><path d="M16.9 16.9A7 7 0 0 1 5 12"/><path d="M19 12a7 7 0 0 1-.5 2.6"/><path d="M9 9v3a3 3 0 0 0 5.1 2.1"/><path d="m2 2 20 20"/>'
+	},
+	// lucide:triangle-alert
+	error: {
+		orb: 'bg-error text-error-foreground',
+		icon: '<path d="m21.7 18-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>'
+	},
+	// lucide:keyboard — no recognizer; text is the whole interface
+	text: {
+		orb: 'bg-surface-cream text-primary',
+		icon: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M17.5 10h.01M7.5 14h9"/>'
+	}
+}
+
+/** The orb acts only where the phase offers an action: interrupting, or
+ * waking the audio device. Everywhere else it is a status, not a button. */
+const orbActs = $derived(phase.key === 'blocked' || chat.streaming || speaker.speaking)
+
+function onOrb() {
+	if (phase.key === 'blocked') {
+		speaker.resumeAudio()
+		return
+	}
+	// Stops the reply stream and the voice; the ears stay open, because
+	// interrupting is allowed — that is what the orb is for while it talks.
+	chat.stop()
+	speaker.silence()
+}
+
 let draft = $state('')
 /** Height of the floating bottom dock (toast/HITL/pill) — the center column
  * of the workspaces keeps this much clearance while the asides run to the
@@ -384,7 +461,13 @@ function onKeydown(event: KeyboardEvent) {
 		<!-- The bottom row: on phones, the way back from an open intent sits to
 		     the LEFT of the pill — the pill is the one fixed landmark, so the
 		     back button lives beside it rather than anywhere in the workspace. -->
-		<div class="flex items-center justify-center gap-2">
+		<!-- The orb overhangs the pill by 1rem top and bottom; the row keeps
+		     that much air below so the overhang never meets the screen edge. -->
+		<div
+			class="flex items-center justify-center gap-2 {phase.key !== 'off' && !typing
+				? 'my-4'
+				: ''}"
+		>
 			{#if shell.tab === 'intents' && shell.detail}
 				<button
 					type="button"
@@ -542,73 +625,55 @@ function onKeydown(event: KeyboardEvent) {
 							</span>
 						</button>
 					{:else}
-						<!-- While listening the dot follows the microphone level, so a dead
-				     input is visible as a dot that never moves. -->
-						<span
-							class="inline-block size-2 shrink-0 rounded-full transition-transform"
-							class:bg-error={phase.key === 'hearing' || phase.key === 'idle'}
-							class:bg-success={phase.key === 'speaking'}
-							class:bg-progress={phase.key === 'thinking' ||
-						phase.key === 'loading' ||
-						phase.key === 'starting'}
-							class:bg-primary-foreground={phase.key === 'denied' || phase.key === 'text'}
-							class:animate-pulse={phase.key === 'thinking' ||
-						phase.key === 'loading' ||
-						phase.key === 'starting'}
-							style={phase.key === 'hearing' || phase.key === 'idle'
-						? `transform: scale(${1 + Math.min(listener.level, 1) * 2})`
-						: ''}
-						></span>
-						{#if phase.key === 'blocked'}
-							<!-- The whole label is the button. There is nothing else to do in this
-					     state, and a separate control next to it would just be a second
-					     thing to read before the obvious one. -->
+						<!-- THE state orb. No words: one circle, taller than the pill it
+						     sits in, wearing the phase as a brand color and an icon —
+						     terracotta ear while you speak, tidal blue while it thinks,
+						     paradise water while it talks, chalk when it is simply ready.
+						     It is also the one action the phase allows: tap to interrupt
+						     a reply, tap to wake a sleeping audio device. -->
+						<div class="flex flex-1 justify-center">
 							<button
 								type="button"
-								onclick={() => speaker.resumeAudio()}
-								class="flex-1 text-left text-sm underline underline-offset-4"
+								onclick={onOrb}
+								disabled={!orbActs}
+								title={phase.label}
+								aria-label={phase.label}
+								class="-my-4 relative flex size-16 shrink-0 items-center justify-center rounded-full border-4 border-primary shadow-[0_4px_16px_rgba(30,41,59,0.25)] transition-[transform,background-color,color] duration-150 {ORB[
+									phase.key
+								]?.orb ?? ORB.text.orb} {orbActs ? 'cursor-pointer' : 'cursor-default'}"
+								style={phase.key === 'hearing'
+									? `transform: scale(${1 + Math.min(listener.level, 1) * 0.25})`
+									: ''}
 							>
-								{phase.label}
-							</button>
-						{:else if phase.key === 'loading'}
-							<!-- Loading stays on the one line: the word, a thin inline bar, and the
-					     percent — never a second row that would grow the pill. -->
-							<span class="flex flex-1 items-center gap-2 text-sm">
-								<span class="shrink-0 opacity-80">{phase.label.replace(/\s*\d+%$/, '')}</span>
-								<span
-									class="h-1 min-w-6 flex-1 overflow-hidden rounded-full bg-primary-foreground/20"
-								>
+								<!-- The loading ring: progress as a sweep around the orb,
+								     never a bar with a number. -->
+								{#if phase.key === 'loading'}
 									<span
-										class="block h-full rounded-full bg-primary-foreground transition-[width]"
-										style="width: {loadPct}%"
+										class="-inset-1 pointer-events-none absolute rounded-full"
+										style="background: conic-gradient(var(--color-progress) {loadPct}%, transparent 0); mask: radial-gradient(farthest-side, transparent calc(100% - 4px), black calc(100% - 3px)); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), black calc(100% - 3px))"
 									></span>
-								</span>
-								<span class="shrink-0 text-xs tabular-nums opacity-70">{loadPct}%</span>
-							</span>
-						{:else}
-							<span class="flex-1 text-sm">{phase.label}</span>
-						{/if}
-						{#if chat.streaming || speaker.speaking}
-							<!-- Same circle as its neighbours, but filled: it is the one action
-					     that matters while the assistant is talking, so it gets the
-					     inverted colors instead of an outline. -->
-							<button
-								type="button"
-								onclick={() => {
-							// Stops the reply stream and the voice; the ears stay open,
-							// because interrupting is allowed — that is what this is for.
-							chat.stop()
-							speaker.silence()
-						}}
-								title="Stop"
-								aria-label="Stop"
-								class="shrink-0 rounded-full bg-error p-2 text-primary-foreground transition-opacity hover:opacity-80"
-							>
-								<svg viewBox="0 0 24 24" class="size-4" fill="currentColor">
-									<rect x="7" y="7" width="10" height="10" rx="1.5" />
+								{/if}
+								<!-- The breathing halo while it listens or works. -->
+								{#if phase.key === 'hearing' || phase.key === 'thinking' || phase.key === 'starting'}
+									<span
+										class="pointer-events-none absolute inset-0 animate-ping rounded-full opacity-40 {ORB[
+											phase.key
+										]?.halo}"
+									></span>
+								{/if}
+								<svg
+									viewBox="0 0 24 24"
+									class="relative size-7"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.75"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									{@html ORB[phase.key]?.icon ?? ORB.text.icon}
 								</svg>
 							</button>
-						{/if}
+						</div>
 					{/if}
 
 					<!-- Only where there is something to switch to. In the browser there is
