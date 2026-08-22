@@ -154,8 +154,8 @@ export const PLANS: Plan[] = [
 		billing: 'monthly',
 		referralPct: 15,
 		runtime: { hoursPerDay: 4, centsPerExtraMinute: 8 },
-		platformFeePct: 6,
-		reinvestPct: 6,
+		platformFeePct: 4,
+		reinvestPct: 4,
 		highlight: true,
 		features: [
 			{ skill: 'book-keeper', label: 'Vorbuchhaltung' },
