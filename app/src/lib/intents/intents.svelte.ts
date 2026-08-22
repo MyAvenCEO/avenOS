@@ -741,7 +741,7 @@ class IntentsActor extends Actor {
 			name: 'Intents',
 			description:
 				'The intents: every task the workspace is working on, one stream each. ' +
-				'Lists, switches, creates, merges, archives, restores and deletes them by message.',
+				'Lists, switches, creates, edits, merges, archives, restores and deletes them by message.',
 			tags: ['intents'],
 			methods: [
 				{
@@ -775,6 +775,32 @@ class IntentsActor extends Actor {
 							deadline: { type: 'string', description: 'e.g. "bis 30.09." — optional' }
 						},
 						required: ['title']
+					}
+				},
+				{
+					name: 'intent_update',
+					description:
+						"Edits an intent's metadata: title, type, source, deadline, status. Only the " +
+						'given fields change. Use for renaming, re-dating, re-typing, or setting the ' +
+						'state (working, waiting, done, error).',
+					parameters: {
+						type: 'object',
+						properties: {
+							intent: { type: 'string', description: 'id, or part of the title' },
+							title: { type: 'string' },
+							type: { type: 'string', description: 'one word: auftrag, frist, abgleich, …' },
+							source: { type: 'string' },
+							deadline: {
+								type: 'string',
+								description: 'e.g. "bis 30.09."; empty string removes it'
+							},
+							status: {
+								type: 'string',
+								enum: ['working', 'waiting', 'done', 'error'],
+								description: 'use intent_archive to archive'
+							}
+						},
+						required: ['intent']
 					}
 				},
 				{
@@ -878,6 +904,41 @@ class IntentsActor extends Actor {
 				return {
 					record: JSON.stringify({ ok: true, created: intent.id }),
 					wire: `Created "${title}" and switched to it.`
+				}
+			},
+			intent_update: (p) => {
+				const hit = this.find(String(p.intent ?? ''))
+				if (!hit) return this.miss(String(p.intent ?? ''))
+				const changed: string[] = []
+				if (typeof p.title === 'string' && p.title.trim() !== '') {
+					hit.title = p.title.trim()
+					changed.push('title')
+				}
+				if (typeof p.type === 'string' && p.type.trim() !== '') {
+					hit.type = p.type.trim()
+					changed.push('type')
+				}
+				if (typeof p.source === 'string' && p.source.trim() !== '') {
+					hit.source = p.source.trim()
+					changed.push('source')
+				}
+				if (typeof p.deadline === 'string') {
+					if (p.deadline.trim() === '') delete hit.deadline
+					else hit.deadline = p.deadline.trim()
+					changed.push('deadline')
+				}
+				if (
+					typeof p.status === 'string' &&
+					['working', 'waiting', 'done', 'error'].includes(p.status)
+				) {
+					hit.status = p.status as IntentState
+					changed.push('status')
+				}
+				if (changed.length === 0)
+					return { record: '{"ok":false,"error":"nothing to change"}', wire: 'Nothing to change.' }
+				return {
+					record: JSON.stringify({ ok: true, updated: hit.id, changed }),
+					wire: `Updated ${changed.join(', ')} of "${hit.title}".`
 				}
 			},
 			intent_merge: (p) => {
