@@ -183,6 +183,8 @@ export class Chat {
 	 * settles into the stream it belongs to.
 	 */
 	routing = $state<string | null>(null)
+	/** What the model has said so far while the request is still routing. */
+	routingReply = $state('')
 	#pending: { user: Turn; reply: Turn } | null = null
 	#reply: Turn | null = null
 
@@ -276,6 +278,9 @@ export class Chat {
 				const calls = await this.#round(live.wire)
 				const reply = this.#reply as Turn
 				if (calls.length === 0) {
+					// No tools: the answer is the answer, and the stream it is in is
+					// the right one. (Only now — a first word before a tool call
+					// settled the request into the wrong intent.)
 					// Said it did something, called nothing — in the WHOLE turn. The
 					// round alone is the wrong scope: the natural closing sentence
 					// after a successful tool round ("Fenster öffnen ist abgehakt.")
@@ -286,10 +291,12 @@ export class Chat {
 					if (!nudged && (reply.calls?.length ?? 0) === 0 && CLAIMS_ACTION.test(reply.content)) {
 						nudged = true
 						reply.content = ''
+						this.routingReply = ''
 						this.#sink.onRestart?.()
 						live.wire.push({ role: 'user', content: NUDGE })
 						continue
 					}
+					this.#settle()
 					break
 				}
 
@@ -300,6 +307,7 @@ export class Chat {
 				// unsaid by the speaker.
 				if (reply.content !== '') {
 					reply.content = ''
+					this.routingReply = ''
 					this.#sink.onRestart?.()
 				}
 
@@ -350,6 +358,7 @@ export class Chat {
 		if (!pending || !live) return
 		this.#pending = null
 		this.routing = null
+		this.routingReply = ''
 		live.turns.push(pending.user, pending.reply)
 		this.#reply = live.turns[live.turns.length - 1]
 	}
@@ -395,12 +404,11 @@ export class Chat {
 			this.#abort?.signal ?? undefined
 		)) {
 			if (event.kind === 'text') {
-				// The first word is the other routing moment: the model answers
-				// here, so the request belongs to the stream it is in now.
-				this.#settle()
 				const reply = this.#reply as Turn
 				content += event.text
 				reply.content += event.text
+				// Still routing: the words show in the composer card meanwhile.
+				if (this.#pending) this.routingReply += event.text
 				this.#sink.onDelta?.(event.text)
 				// The model sometimes collapses into emitting punctuation forever —
 				// `}` after `}` after `}` — and would keep going for its whole output
