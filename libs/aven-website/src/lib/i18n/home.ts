@@ -15,10 +15,10 @@ export type HomeMessages = {
 	hero: {
 		headingLine1: string
 		headingLine2: string
-		/** What an Aven IS — nobody has met the word yet at this point on the page. */
-		introHtml: string
-		/** The fork, as hard as it gets: surviving without, shaping with. */
-		contrastHtml: string
+		/** The transformation itself: from surviving to the founder of tomorrow. */
+		transformationHtml: string
+		/** The vehicle, as an aside — the Aven is how you get there. */
+		helper: string
 	}
 	shift: {
 		eyebrow: string
@@ -81,8 +81,8 @@ export const home: Record<Lang, HomeMessages> = {
 		hero: {
 			headingLine1: 'Tief in deinem Herzen weißt du es:',
 			headingLine2: 'in dir steckt so viel mehr.',
-			introHtml: `Ein Aven ist eine KI, die dir gehört — und für dich arbeitet.`,
-			contrastHtml: `Du kannst ${s('überleben', 'text-foreground')}. Oder ${s('gestalten und besitzen, was als Nächstes entsteht', 'text-accent')}.`
+			transformationHtml: `Vom ${s('Arbeiten ums Überleben', 'text-foreground/50')} zum ${s('souveränen Gründer von morgen', 'text-accent')}.`,
+			helper: '— dein eigener avenCEO bringt dich dorthin —'
 		},
 		shift: {
 			eyebrow: 'Post‑AGI · Warum jetzt',
@@ -204,8 +204,8 @@ export const home: Record<Lang, HomeMessages> = {
 		hero: {
 			headingLine1: 'Deep in your heart you know it:',
 			headingLine2: 'there is so much more in you.',
-			introHtml: `An Aven is an AI that belongs to you — and works for you.`,
-			contrastHtml: `You can ${s('survive', 'text-foreground')}. Or ${s('shape and own what gets built next', 'text-accent')}.`
+			transformationHtml: `From ${s('working to survive', 'text-foreground/50')} to the ${s('thriving founder of tomorrow', 'text-accent')}.`,
+			helper: '— your own avenCEO gets you there —'
 		},
 		shift: {
 			eyebrow: 'Post‑AGI · Why now',
