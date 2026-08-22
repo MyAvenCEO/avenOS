@@ -190,7 +190,8 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					id="own-heading"
 					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 				>
-					{t.own.heading}
+					{t.own.headingLine1}
+					<span class="mt-1 block">{t.own.headingLine2}</span>
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
 					{t.own.lead}
