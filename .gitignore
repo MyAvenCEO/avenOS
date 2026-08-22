@@ -58,6 +58,7 @@ vite.config.ts.timestamp-*
 # Vibe app sandbox + mini-app build outputs (rebuilt by `bun run build` per package).
 /libs/aven-vibe-sandbox/sandbox/dist/
 /libs/aven-vibes/*/dist/
+/libs/aven-website/build/
 
 # Upstream jazz2 mirror (local refresh only — never commit)
 /tools/jazz2-upstream/

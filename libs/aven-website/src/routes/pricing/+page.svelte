@@ -7,6 +7,7 @@
 </svelte:head>
 
 <script lang="ts">
+import { browser } from '$app/environment'
 import { page } from '$app/stores'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
@@ -30,7 +31,8 @@ const openSourceGithubHref = 'https://github.com/jaensen/avenOS'
 const avenId = plan('avenid')
 const tiers = PLANS.filter((p) => p.id !== 'avenid')
 
-const claimedName = $derived($page.url.searchParams.get('name') ?? '')
+// Static site (prerendered): the query string only exists in the browser, never at build time.
+const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? '') : '')
 </script>
 
 <div lang="de" class="min-h-screen bg-background text-foreground font-sans antialiased">

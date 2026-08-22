@@ -15,7 +15,7 @@
     },
     "app": {
       "name": "@AvenOS/app",
-      "version": "26.8.21-next.8",
+      "version": "26.8.22-next.6",
       "dependencies": {
         "@avenos/aven-skills": "workspace:*",
         "@avenos/aven-ui": "workspace:*",
@@ -51,7 +51,7 @@
     },
     "libs/aven-board": {
       "name": "@avenos/aven-board",
-      "version": "26.8.21-next.8",
+      "version": "26.8.22-next.6",
       "dependencies": {
         "dompurify": "^3",
         "github-slugger": "^2",
@@ -64,11 +64,11 @@
     },
     "libs/aven-skills": {
       "name": "@avenos/aven-skills",
-      "version": "26.8.21-next.8",
+      "version": "26.8.22-next.6",
     },
     "libs/aven-ui": {
       "name": "@avenos/aven-ui",
-      "version": "26.8.21-next.8",
+      "version": "26.8.22-next.6",
       "dependencies": {
         "dompurify": "^3.3.3",
         "marked": "^15.0.12",
@@ -76,13 +76,13 @@
     },
     "libs/aven-website": {
       "name": "@avenos/aven-website",
-      "version": "26.8.21-next.8",
+      "version": "26.8.22-next.6",
       "dependencies": {
         "@avenos/aven-skills": "workspace:*",
       },
       "devDependencies": {
         "@biomejs/biome": "^2.4.14",
-        "@sveltejs/adapter-auto": "^7.0.1",
+        "@sveltejs/adapter-static": "^3.0.10",
         "@sveltejs/kit": "^2.57.0",
         "@sveltejs/vite-plugin-svelte": "^7.0.0",
         "@tailwindcss/vite": "^4.2.4",
@@ -721,8 +721,6 @@
     "@svelte-put/shortcut": ["@svelte-put/shortcut@4.2.0", "", { "peerDependencies": { "svelte": "^5.1.0" } }, "sha512-hqNLo4yEc++SLgAkZUvuwMxIAsii9qjQtTuzfcYVf3xRxa+0HFcfaWFK7LdU3l+15s9SYVNbPB0qQj9CHFqSuw=="],
 
     "@sveltejs/acorn-typescript": ["@sveltejs/acorn-typescript@1.0.11", "", { "peerDependencies": { "acorn": "^8.9.0" } }, "sha512-LFuZUkjJ9iF7JZye/aG5XM0SFcQ5VyL0oVX4WJ9dc0Va3R3s0OauX1BESVCb+YN/ol8TAfqGDDAQsTG627Y5kw=="],
-
-    "@sveltejs/adapter-auto": ["@sveltejs/adapter-auto@7.0.1", "", { "peerDependencies": { "@sveltejs/kit": "^2.0.0" } }, "sha512-dvuPm1E7M9NI/+canIQ6KKQDU2AkEefEZ2Dp7cY6uKoPq9Z/PhOXABe526UdW2mN986gjVkuSLkOYIBnS/M2LQ=="],
 
     "@sveltejs/adapter-node": ["@sveltejs/adapter-node@5.5.7", "", { "dependencies": { "@rollup/plugin-commonjs": "^29.0.0", "@rollup/plugin-json": "^6.1.0", "@rollup/plugin-node-resolve": "^16.0.0", "@rollup/plugin-replace": "^6.0.3", "rollup": "^4.59.0" }, "peerDependencies": { "@sveltejs/kit": "^2.4.0" } }, "sha512-uOfc9eVlI3A37RRSaKcgrheBYPrfJwC9VMqDp8x/O6tlKdcLLvHThSWD0KNIbjQ/d+7bwLGx3vx6aowAcRfd2g=="],
 
