@@ -81,8 +81,8 @@ export const home: Record<Lang, HomeMessages> = {
 		hero: {
 			headingLine1: 'Tief in deinem Herzen weißt du es:',
 			headingLine2: 'in dir steckt so viel mehr.',
-			introHtml: `Ein Aven ist eine KI, die dir gehört. Er führt dein Leben, deine Firma, deine Bücher — und alles, was er erwirtschaftet, bleibt bei dir.`,
-			contrastHtml: `Ohne einen eigenen Aven kämpfst du bald ums ${s('Überleben', 'text-foreground')}. Mit deinen eigenen Aven ${s('gestaltest du, was als Nächstes entsteht', 'text-accent')}.`
+			introHtml: `Ein Aven ist eine KI, die dir gehört — und für dich arbeitet.`,
+			contrastHtml: `Du kannst ${s('überleben', 'text-foreground')}. Oder ${s('gestalten und besitzen, was als Nächstes entsteht', 'text-accent')}.`
 		},
 		shift: {
 			eyebrow: 'Post‑AGI · Warum jetzt',
@@ -204,8 +204,8 @@ export const home: Record<Lang, HomeMessages> = {
 		hero: {
 			headingLine1: 'Deep in your heart you know it:',
 			headingLine2: 'there is so much more in you.',
-			introHtml: `An Aven is an AI that belongs to you. It runs your life, your company, your books — and everything it earns stays with you.`,
-			contrastHtml: `Without an Aven of your own you will soon be fighting to ${s('survive', 'text-foreground')}. With your own Aven you ${s('shape what gets built next', 'text-accent')}.`
+			introHtml: `An Aven is an AI that belongs to you — and works for you.`,
+			contrastHtml: `You can ${s('survive', 'text-foreground')}. Or ${s('shape and own what gets built next', 'text-accent')}.`
 		},
 		shift: {
 			eyebrow: 'Post‑AGI · Why now',
