@@ -1,14 +1,18 @@
 <script lang="ts">
 import ReservedNamesBoard from '$lib/components/ReservedNamesBoard.svelte'
+import { type Lang, pick } from '$lib/i18n'
+import { common } from '$lib/i18n/common'
 import { idFunnelHref } from '$lib/id-service'
 import { euro, plan } from '$lib/pricing/plans'
 
 type Props = {
 	variant?: 'inline' | 'banner'
+	lang?: Lang
 }
 
-let { variant = 'inline' }: Props = $props()
+let { variant = 'inline', lang = 'de' }: Props = $props()
 
+const t = $derived(pick(common, lang).idCta)
 const avenId = plan('avenid')
 
 let name = $state('')
@@ -33,25 +37,16 @@ const wrapperClass =
 		: 'rounded-2xl border border-border/40 bg-surface-raised px-5 py-7 sm:px-8 sm:py-8'
 </script>
 
-<form onsubmit={submit} class={wrapperClass} aria-label="avenID sichern">
-	<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
-		Warteliste · Invite only
-	</p>
+<form onsubmit={submit} class={wrapperClass} aria-label={t.formLabel}>
+	<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-accent">{t.eyebrow}</p>
 	<h3
 		class="mt-2 text-xl font-semibold tracking-tight text-pretty text-foreground sm:text-2xl md:text-[1.65rem]"
 	>
-		Sichere dir deine avenID für einmalig {euro(avenId.eurPrice)}&nbsp;€
+		{t.title(euro(avenId.eurPrice))}
 	</h3>
+	<!-- Our own static copy with inline emphasis — not user content. -->
 	<p class="mt-3 max-w-2xl text-[14px] leading-snug text-foreground/68 sm:text-[15px]">
-		Wie eine Domain — aber für deinen Aven:
-		<strong class="font-medium text-foreground/82">maia.aven.ceo</strong>. Sie ist zugleich dein
-		Platz auf der Warteliste: Eingeladen wird der Reihe nach,
-		<strong class="font-medium text-foreground/82">wer zuerst kommt, gründet zuerst</strong>. Der
-		Name ist damit
-		<strong class="font-medium text-foreground/82">für 1 Jahr für dich gesichert</strong>
-		— solange ihn niemand anders hält. Dazu bekommst du
-		<strong class="font-medium text-foreground/82">20 Min Test‑Zugang</strong>, sobald du eingeladen
-		bist.
+		{@html t.bodyHtml}
 	</p>
 	<div class="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
 		<label
@@ -63,7 +58,7 @@ const wrapperClass =
 				name="aven-name"
 				autocomplete="off"
 				spellcheck="false"
-				placeholder="maia"
+				placeholder={t.placeholder}
 				class="min-w-0 flex-1 bg-transparent py-3 text-[15px] font-medium tracking-tight text-foreground outline-none placeholder:text-foreground/35"
 			>
 			<span class="shrink-0 text-[13px] text-foreground/55">.aven.ceo</span>
@@ -73,13 +68,13 @@ const wrapperClass =
 			disabled={!slug}
 			class="inline-flex min-h-12 shrink-0 items-center justify-center rounded-full bg-primary px-7 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40 sm:px-8"
 		>
-			avenID sichern →
+			{t.button}
 		</button>
 	</div>
 	<p class="mt-3 text-[12px] leading-snug text-foreground/55">
-		Beispiel: <strong class="font-semibold text-foreground/75">maia.aven.ceo</strong>
+		{t.exampleLabel} <strong class="font-semibold text-foreground/75">maia.aven.ceo</strong>
 		<span class="text-foreground/45"> · </span>
-		einmalig {euro(avenId.eurPrice)}&nbsp;€ zzgl. USt.
+		{t.priceNote(euro(avenId.eurPrice))}
 	</p>
-	<ReservedNamesBoard />
+	<ReservedNamesBoard {lang} />
 </form>

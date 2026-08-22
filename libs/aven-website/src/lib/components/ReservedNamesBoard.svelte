@@ -1,4 +1,6 @@
 <script lang="ts">
+import { type Lang, pick } from '$lib/i18n'
+import { common } from '$lib/i18n/common'
 import { nextPosition, reservedInOrder } from '$lib/reserved-names'
 
 /**
@@ -12,7 +14,9 @@ import { nextPosition, reservedInOrder } from '$lib/reserved-names'
  * this draws nothing, because an empty queue is the truth and a padded one
  * is not.
  */
-let { limit = 6 }: { limit?: number } = $props()
+let { limit = 6, lang = 'de' }: { limit?: number; lang?: Lang } = $props()
+
+const t = $derived(pick(common, lang).board)
 
 const taken = $derived(reservedInOrder())
 /** Show the head of the queue; a long list keeps its first places visible. */
@@ -23,7 +27,7 @@ const hidden = $derived(taken.length - shown.length)
 {#if taken.length > 0}
 	<div class="mt-6 border-t border-border/50 pt-5">
 		<p class="text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">
-			Warteliste · Platz {nextPosition()} ist frei
+			{t.eyebrow(nextPosition())}
 		</p>
 		<ol class="mt-3 space-y-1.5">
 			{#each shown as name, i (name.slug)}
@@ -41,7 +45,7 @@ const hidden = $derived(taken.length - shown.length)
 			{#if hidden > 0}
 				<li class="flex items-baseline gap-3 text-[12px] text-foreground/45">
 					<span class="w-6 shrink-0 text-right tabular-nums">⋮</span>
-					<span>und {hidden} weitere</span>
+					<span>{t.more(hidden)}</span>
 				</li>
 			{/if}
 			<li
@@ -50,13 +54,13 @@ const hidden = $derived(taken.length - shown.length)
 				<span class="w-6 shrink-0 text-right font-semibold tabular-nums text-accent">
 					{nextPosition()}
 				</span>
-				<span class="font-semibold tracking-tight text-foreground/70">dein Name</span>
+				<span class="font-semibold tracking-tight text-foreground/70">{t.yourName}</span>
 				<span class="text-[11px] text-foreground/45">.aven.ceo</span>
-				<span class="ml-auto text-[11px] font-medium text-accent">frei</span>
+				<span class="ml-auto text-[11px] font-medium text-accent">{t.free}</span>
 			</li>
 		</ol>
 		<p class="mt-3 text-[11px] leading-snug text-foreground/50">
-			Wer zuerst steht, gründet zuerst — und jeden Namen gibt es genau einmal.
+			{t.footnote}
 		</p>
 	</div>
 {/if}
