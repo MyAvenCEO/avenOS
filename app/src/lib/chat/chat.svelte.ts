@@ -50,6 +50,14 @@ const SYSTEM_PROMPT =
 	'list" means list_window_toggle, "show the board" means board_window_toggle ' +
 	'— each with open=true. todo_show only switches the spark. All of these ' +
 	'are view changes, never data changes. ' +
+	'The conversation is scoped to ONE intent — the matter on screen. The ' +
+	"user's intents are their open matters; intent_list names them. If a " +
+	'request is about another intent than the one on screen, call ' +
+	'intent_switch FIRST and only then answer — the request and your answer ' +
+	'move to that intent. Something new that belongs to no intent gets ' +
+	'intent_create; "done with" or "put away" is intent_archive; combining is ' +
+	'intent_merge; renaming, re-dating or changing the state is intent_update; ' +
+	'deleting is intent_delete and needs an explicit request. ' +
 	'Call registry_list when you are unsure which actors exist. ' +
 	'Destructive actions are HELD: the call returns held=..., a bar appears ' +
 	'for the human, and only their button press executes it. Say that you ' +
