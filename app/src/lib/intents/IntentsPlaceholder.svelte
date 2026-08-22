@@ -826,9 +826,13 @@ const STATE_ORDER: Record<IntentState, number> = {
 	archive: 4
 }
 const activeIntents = $derived(
-	INTENTS.filter((i) => i.status !== 'archive').sort(
-		(a, b) => STATE_ORDER[a.status] - STATE_ORDER[b.status]
-	)
+	INTENTS.filter((i) => i.status !== 'archive').sort((a, b) => {
+		// The selected intent always leads: it is the one the center is about,
+		// and at the top its card can join the center's surface into one.
+		if (a.id === selectedId) return -1
+		if (b.id === selectedId) return 1
+		return STATE_ORDER[a.status] - STATE_ORDER[b.status]
+	})
 )
 const archivedIntents = $derived(INTENTS.filter((i) => i.status === 'archive'))
 
@@ -1095,14 +1099,14 @@ const DOT: Record<string, string> = {
 <!-- The 85% UI scale lives on `html` (app.css), not on a zoom wrapper here:
      rem sizes shrink, px borders stay honest, and the dock clearance needs no
      dividing back out because nothing is scaled relative to anything else. -->
-<div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden">
+<div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden lg:gap-0">
 	<!-- LEFT: the intent stream — compact cards, cream selection.
 	     On phones this IS the home screen, full width; opening an intent
 	     swaps it for the detail (`shell.detail`). -->
 	<aside
 		class="{shell.detail
 			? 'hidden lg:flex'
-			: 'flex'} min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto pb-2 lg:w-72"
+			: 'flex'} min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto pb-2 lg:w-[calc(18rem+0.75rem)] lg:pr-3"
 	>
 		<!-- The side headers wear the tab strip's pill, so all three columns
 		     start their cards on one edge and read as one row. -->
@@ -1127,20 +1131,28 @@ const DOT: Record<string, string> = {
 					skillView = null
 					shell.detail = true
 				}}
-				class="rounded-xl border border-l-[4px] px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {accent.edge} {sel
-					? 'border-foreground/15 bg-surface-card-selected'
-					: 'border-foreground/5 bg-surface-raised hover:bg-surface-card-hover'}"
+				class="rounded-xl border border-l-[4px] text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {accent.edge} {sel
+					? 'border-foreground/5 bg-surface-raised px-5 py-4 lg:-mr-3 lg:rounded-r-none lg:border-r-0 lg:shadow-none'
+					: 'border-foreground/5 bg-surface-raised px-4 py-3 hover:bg-surface-card-hover'}"
 			>
+				<!-- The selected card is the intent's header: a little larger, on
+				     the center's own surface, and on desktop it runs INTO the center
+				     panel — one connected area, and the center need not repeat
+				     the title. -->
 				<!-- row 1: what it is — title, with its type on the right -->
 				<div class="flex items-baseline gap-2">
-					<p class="min-w-0 flex-1 font-medium text-xs leading-snug">{intent.title}</p>
+					<p class="min-w-0 flex-1 font-medium leading-snug {sel ? 'text-sm' : 'text-xs'}">
+						{intent.title}
+					</p>
 					<span class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_BADGE}">
 						{intent.type}
 					</span>
 				</div>
 				<!-- row 2: where it came from, when, and where it stands -->
 				<div class="flex items-center gap-2 pt-1">
-					<span class="truncate text-[0.6875rem] text-foreground/45">{intent.source}</span>
+					<span class="truncate text-foreground/45 {sel ? 'text-xs' : 'text-[0.6875rem]'}"
+						>{intent.source}</span
+					>
 					<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
 						{intent.when}
 					</span>
@@ -1228,7 +1240,7 @@ const DOT: Record<string, string> = {
 			onscroll={() => {
 				if (centerEl) stick = centerEl.scrollHeight - centerEl.clientHeight - centerEl.scrollTop < 48
 			}}
-			class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {gates.length >
+			class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] lg:rounded-tl-none {gates.length >
 				0 || composing
 				? 'rounded-b-none border-b-0'
 				: ''}"
@@ -1464,7 +1476,9 @@ const DOT: Record<string, string> = {
 				{/if}
 			{:else}
 				<!-- ACTIVITY LOG: the intent's journey, every entry typed by skill. -->
-				<header>
+				<!-- The title lives on the selected card beside this panel; only where
+				     the list is off screen (phones, tablets) is it repeated here. -->
+				<header class="lg:hidden">
 					<div class="flex items-center gap-2">
 						<span class="rounded-full px-2 py-0.5 font-mono text-[0.625rem] {TYPE_BADGE}">
 							{selected.type}
