@@ -16,7 +16,7 @@ export interface PricingMessages {
 	applyOnly: string
 	onePerCompany: string
 	onePerPerson: string
-	ofRevenue: string
+	revenueShare: (pct: number) => string
 	platform: string
 	inclFees: string
 	reinvest: string
@@ -32,7 +32,6 @@ export interface PricingMessages {
 	bundleNote: (idName: string, price: string, per: 'person' | 'company' | undefined) => string
 	referral: (pct: number) => string
 	referralNote: string
-	coopSkills: string
 	os: {
 		eyebrow: string
 		title: string
@@ -61,18 +60,18 @@ export const pricing: Record<Lang, PricingMessages> = {
 		introHtml:
 			'<strong class="font-medium text-foreground/85">avenME</strong> ist dein persönlicher AI‑CEO für dein Leben — einer pro Mensch. <strong class="font-medium text-foreground/85">avenFOUNDER</strong> ist der professionelle AI‑CEO für deine Firma — einer pro Firma. Mit <strong class="font-medium text-foreground/85">avenCOOP</strong> werden wir dein technischer Co‑Founder.',
 		shareHtml:
-			'Der Anteil am Umsatz ist zur Hälfte Plattform und zur Hälfte <strong class="font-medium text-accent">Reinvest</strong>: Er kauft dir Anteile an den avenCOOPs anderer Gründer — du wählst selbst, an welchen.',
+			'Der Anteil am Umsatz ist zur Hälfte Plattform und zur Hälfte <strong class="font-medium text-accent">Reinvest</strong>: Er kauft dir Anteile an anderen Aven — du wählst selbst, an welchen.',
 		idEyebrow: 'Der Anfang · Pro Mensch und pro Firma',
 		yourChoice: 'Deine Wahl:',
 		availability: 'Verfügbarkeit bestätigen wir bei der Buchung.',
 		applyOnly: 'Nur auf Bewerbung',
 		onePerCompany: 'Ein avenFOUNDER pro Firma — jede weitere Firma bekommt ihren eigenen.',
 		onePerPerson: 'Ein avenME pro Mensch — dein eigener, unabhängig von jeder Firma.',
-		ofRevenue: 'vom Umsatz',
+		revenueShare: (pct) => `+ ${pct} % vom Umsatz`,
 		platform: 'Plattform',
 		inclFees: 'inkl. Stripe & Co.',
 		reinvest: 'Reinvest',
-		reinvestInto: 'in avenCOOPs anderer Gründer',
+		reinvestInto: 'in andere Aven',
 		equity: (pct) => `+ ${pct} % Firmenanteile an deiner Firma`,
 		skills: 'Skills',
 		soon: 'bald',
@@ -85,7 +84,6 @@ export const pricing: Record<Lang, PricingMessages> = {
 			`+ ${idName} (${price} € einmalig) im Bundle, falls ${per === 'company' ? 'deine Firma noch keine hat' : 'du noch keine hast'} — avenID ist nicht enthalten.`,
 		referral: (pct) => `${pct} % Provision`,
 		referralNote: 'auf jedes aven‑Produkt, das du vermittelst — monatlich, solange es läuft.',
-		coopSkills: 'Alle Skills aus avenFOUNDER — installiert und trainiert.',
 		os: {
 			eyebrow: 'Optional · Eigenes Hosting',
 			title: 'avenOS',
@@ -114,18 +112,18 @@ export const pricing: Record<Lang, PricingMessages> = {
 		introHtml:
 			'<strong class="font-medium text-foreground/85">avenME</strong> is your personal AI‑CEO for your life — one per person. <strong class="font-medium text-foreground/85">avenFOUNDER</strong> is the professional AI‑CEO for your company — one per company. With <strong class="font-medium text-foreground/85">avenCOOP</strong> we become your technical co-founder.',
 		shareHtml:
-			'The revenue share is half platform and half <strong class="font-medium text-accent">Reinvest</strong>: it buys you equity in other founders’ avenCOOPs — you choose which ones.',
+			'The revenue share is half platform and half <strong class="font-medium text-accent">Reinvest</strong>: it buys you equity in other Aven — you choose which ones.',
 		idEyebrow: 'The start · Per person and per company',
 		yourChoice: 'Your choice:',
 		availability: 'We confirm availability at booking.',
 		applyOnly: 'By application only',
 		onePerCompany: 'One avenFOUNDER per company — every further company gets its own.',
 		onePerPerson: 'One avenME per person — your own, independent of any company.',
-		ofRevenue: 'of revenue',
+		revenueShare: (pct) => `+ ${pct} % of revenue`,
 		platform: 'Platform',
 		inclFees: 'incl. Stripe & Co.',
 		reinvest: 'Reinvest',
-		reinvestInto: 'into other founders’ avenCOOPs',
+		reinvestInto: 'into other Aven',
 		equity: (pct) => `+ ${pct} % equity in your company`,
 		skills: 'Skills',
 		soon: 'soon',
@@ -138,7 +136,6 @@ export const pricing: Record<Lang, PricingMessages> = {
 			`+ ${idName} (${price} € one-time) as a bundle if ${per === 'company' ? 'your company has none yet' : 'you have none yet'} — avenID is not included.`,
 		referral: (pct) => `${pct} % commission`,
 		referralNote: 'on every aven product you refer — monthly, for as long as it runs.',
-		coopSkills: 'All skills from avenFOUNDER — installed and trained.',
 		os: {
 			eyebrow: 'Optional · Self-hosting',
 			title: 'avenOS',

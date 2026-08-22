@@ -13,7 +13,15 @@ import { type Lang, localeHref, pick } from '$lib/i18n'
 import { ctaLabel, localizedPlan, perLabel, priceSuffix, vatNote } from '$lib/i18n/plans'
 import { pricing } from '$lib/i18n/pricing'
 import { idFunnelHref } from '$lib/id-service'
-import { ctaHref, euro, PLANS, plan, totalSharePct } from '$lib/pricing/plans'
+import {
+	ctaHref,
+	euro,
+	PLANS,
+	type Plan,
+	type PlanId,
+	plan,
+	totalSharePct
+} from '$lib/pricing/plans'
 import { loadSkill, skillDetailHref, skillLabel, skillsIncludedIn } from '$lib/skills/loader'
 
 let { lang }: { lang: Lang } = $props()
@@ -32,9 +40,55 @@ const products = $derived(
 const coop = $derived(localizedPlan(plan('avencoop'), lang))
 const coopSkillCount = $derived(skillsIncludedIn(coop.id, lang).length)
 
+/** A card shows at most this many skills; the rest sit behind "see all". */
+const SKILL_CAP = 7
+
+type SkillFeature = { skill: string; label: string }
+
+/**
+ * The skills a plan carries, live ones first: its own, plus — along the
+ * skill cascade — everything from the plans it includes.
+ */
+function skillFeatures(p: Plan): SkillFeature[] {
+	const cascade: PlanId[] =
+		p.id === 'avencoop' ? ['avenceo', 'avenme'] : p.id === 'avenceo' ? ['avenme'] : []
+	return [...p.features, ...cascade.flatMap((id) => localizedPlan(plan(id), lang).features)]
+		.filter((f): f is SkillFeature => typeof f !== 'string' && 'skill' in f)
+		.sort(
+			(a, b) =>
+				Number(loadSkill(a.skill, lang)?.comingSoon ?? false) -
+				Number(loadSkill(b.skill, lang)?.comingSoon ?? false)
+		)
+}
+
 // Static site (prerendered): the query string only exists in the browser, never at build time.
 const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? '') : '')
 </script>
+
+{#snippet skillList(items: SkillFeature[])}
+	<ul class="mt-2 space-y-1.5 text-[13px] leading-snug">
+		{#each items.slice(0, SKILL_CAP) as feature (feature.skill)}
+			{@const soon = loadSkill(feature.skill, lang)?.comingSoon}
+			<li class={soon ? 'opacity-70' : ''}>
+				<a
+					href={skillDetailHref(feature.skill, lang)}
+					class="font-medium underline underline-offset-4 transition-colors {soon
+						? 'text-quiet-ink decoration-dashed decoration-quiet/40 hover:decoration-quiet/70'
+						: 'text-foreground decoration-foreground/25 hover:decoration-foreground/60'}"
+				>
+					{skillLabel(feature.skill)}
+				</a>
+				{#if soon}
+					<span
+						class="ml-1 rounded-full border border-quiet/45 bg-quiet/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-quiet-ink"
+						>{t.soon}</span
+					>
+				{/if}
+				<span class={soon ? 'text-foreground/45' : 'text-foreground/55'}>· {feature.label}</span>
+			</li>
+		{/each}
+	</ul>
+{/snippet}
 
 <div {lang} class="min-h-screen bg-background text-foreground font-sans antialiased">
 	<MarketingSiteHeader active="pricing" maxWidth="6xl" {lang} />
@@ -115,16 +169,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 				{#each products as p (p.id)}
 					{@const skillCount = skillsIncludedIn(p.id, lang).length}
 					{@const plain = p.features.filter((f) => typeof f === 'string' || 'href' in f)}
-					{@const skills = [
-						...p.features,
-						...(p.id === 'avenceo' ? localizedPlan(plan('avenme'), lang).features : [])
-					]
-						.filter((f) => typeof f !== 'string' && 'skill' in f)
-						.sort(
-							(a, b) =>
-								Number(loadSkill(a.skill, lang)?.comingSoon ?? false) -
-								Number(loadSkill(b.skill, lang)?.comingSoon ?? false)
-						)}
+					{@const skills = skillFeatures(p)}
 					<div
 						id={p.id}
 						class="flex min-w-0 scroll-mt-28 flex-col rounded-2xl p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {p.highlight
@@ -159,11 +204,8 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 
 						{#if totalSharePct(p) > 0}
 							<div class="mt-4 border-t border-border/50 pt-4 text-center">
-								<p class="text-[13px] font-medium text-foreground/55">
-									<span class="text-xl font-semibold tabular-nums tracking-tight text-accent"
-										>{totalSharePct(p)}&nbsp;%</span
-									>
-									{t.ofRevenue}
+								<p class="text-[13px] font-medium text-foreground/75">
+									{t.revenueShare(totalSharePct(p))}
 								</p>
 								<!-- The split is the whole point: half is a price, half buys you shares —
 								     two equal boxes, so the reader sees two halves, not one number. -->
@@ -246,32 +288,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
 									{t.skills}
 								</p>
-								{#if skills.length > 0}
-									<ul class="mt-2 space-y-1.5 text-[13px] leading-snug">
-										{#each skills as feature (feature.skill)}
-											{@const soon = loadSkill(feature.skill, lang)?.comingSoon}
-											<li class={soon ? 'opacity-70' : ''}>
-												<a
-													href={skillDetailHref(feature.skill, lang)}
-													class="font-medium underline underline-offset-4 transition-colors {soon
-														? 'text-quiet-ink decoration-dashed decoration-quiet/40 hover:decoration-quiet/70'
-														: 'text-foreground decoration-foreground/25 hover:decoration-foreground/60'}"
-												>
-													{skillLabel(feature.skill)}
-												</a>
-												{#if soon}
-													<span
-														class="ml-1 rounded-full border border-quiet/45 bg-quiet/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-quiet-ink"
-														>{t.soon}</span
-													>
-												{/if}
-												<span class={soon ? 'text-foreground/45' : 'text-foreground/55'}>
-													· {feature.label}</span
-												>
-											</li>
-										{/each}
-									</ul>
-								{/if}
+								{@render skillList(skills)}
 								{#if skillCount > 0}
 									<p class="mt-2 text-[12px] text-foreground/50">
 										<a
@@ -354,11 +371,8 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						</div>
 
 						<div class="mt-4 border-t border-border/50 pt-4">
-							<p class="text-[13px] font-medium text-foreground/55">
-								<span class="text-xl font-semibold tabular-nums tracking-tight text-accent"
-									>{totalSharePct(coop)}&nbsp;%</span
-								>
-								{t.ofRevenue}
+							<p class="text-[13px] font-medium text-foreground/75">
+								{t.revenueShare(totalSharePct(coop))}
 							</p>
 							<dl
 								class="mt-3 grid grid-cols-2 divide-x divide-border/50 rounded-xl border border-border/50 bg-surface-card text-center"
@@ -430,9 +444,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 									<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
 										{t.skills}
 									</p>
-									<p class="mt-2 text-[13px] leading-snug text-foreground/75">
-										{t.coopSkills}
-									</p>
+									{@render skillList(skillFeatures(coop))}
 									<p class="mt-2 text-[12px] text-foreground/50">
 										<a
 											href={`${localeHref(lang, '/skills')}?plan=${coop.id}`}

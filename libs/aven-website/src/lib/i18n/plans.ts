@@ -112,7 +112,7 @@ export function vatNote(lang: Lang): string {
 /** "per person" · "per company" */
 export function perLabel(p: Plan, lang: Lang): string | null {
 	if (lang === 'de') return perLabelDe(p)
-	if (p.per === 'person') return 'per person'
+	if (p.per === 'person') return 'per human'
 	if (p.per === 'company') return 'per company'
 	return null
 }
