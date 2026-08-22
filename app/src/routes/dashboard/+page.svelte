@@ -2,6 +2,7 @@
 import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
 import { dev } from '$app/environment'
+import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
@@ -261,9 +262,19 @@ const ORB: Record<string, { orb: string; halo?: string; icon: string }> = {
 
 /** The orb acts only where the phase offers an action: interrupting, or
  * waking the audio device. Everywhere else it is a status, not a button. */
-const orbActs = $derived(phase.key === 'blocked' || chat.streaming || speaker.speaking)
+const orbActs = $derived(
+	mockPhase !== null || phase.key === 'blocked' || chat.streaming || speaker.speaking
+)
 
 function onOrb() {
+	// Dev mock: every tap walks to the next phase, so all the orb's faces can
+	// be reviewed from one button without a microphone.
+	if (mockPhase !== null) {
+		const keys = Object.keys(MOCK_PHASES)
+		const next = keys[(keys.indexOf(mockPhase) + 1) % keys.length]
+		void goto(`?voice=${next}`, { replaceState: true, noScroll: true, keepFocus: true })
+		return
+	}
 	if (phase.key === 'blocked') {
 		speaker.resumeAudio()
 		return
@@ -464,8 +475,8 @@ function onKeydown(event: KeyboardEvent) {
 		<!-- The orb overhangs the pill by 1rem top and bottom; the row keeps
 		     that much air below so the overhang never meets the screen edge. -->
 		<div
-			class="flex items-center justify-center gap-2 {phase.key !== 'off' && !typing
-				? 'my-4'
+			class="relative flex items-center justify-center gap-2 {phase.key !== 'off' && !typing
+				? 'mt-4 mb-2.5'
 				: ''}"
 		>
 			{#if shell.tab === 'intents' && shell.detail}
@@ -498,7 +509,7 @@ function onKeydown(event: KeyboardEvent) {
 			<div
 				class="{phase.key === 'off'
 			? 'w-fit'
-			: `rounded-full bg-primary text-primary-foreground ${typing ? 'w-full max-w-lg p-2.5' : 'w-full max-w-80 p-2.5'}`}"
+			: `rounded-full bg-primary text-primary-foreground ${typing ? 'w-full max-w-lg p-2.5' : 'w-full max-w-60 p-2.5'}`}"
 				title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
 			>
 				<div class="flex items-center {phase.key === 'off' ? '' : 'gap-3'}">
@@ -625,6 +636,19 @@ function onKeydown(event: KeyboardEvent) {
 							</span>
 						</button>
 					{:else}
+						<!-- Loading is the one phase that needs a word: which model, how far.
+						     A chip above the notch — the same eggshell tooltip the ended
+						     state wears — so the orb itself stays wordless. -->
+						{#if phase.key === 'loading' || phase.key === 'starting'}
+							<span
+								class="-translate-x-1/2 pointer-events-none absolute bottom-full left-1/2 mb-5 whitespace-nowrap rounded-full border border-border bg-surface-cream px-3 py-1 font-medium text-foreground text-xs shadow-sm"
+							>
+								{phase.label}
+								<span
+									class="-bottom-[5px] -translate-x-1/2 absolute left-1/2 size-2 rotate-45 border-border border-r border-b bg-surface-cream"
+								></span>
+							</span>
+						{/if}
 						<!-- THE state orb. No words: one circle, taller than the pill it
 						     sits in, wearing the phase as a brand color and an icon —
 						     terracotta ear while you speak, tidal blue while it thinks,
