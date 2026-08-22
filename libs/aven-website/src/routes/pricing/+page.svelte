@@ -163,29 +163,25 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						</div>
 
 						{#if totalSharePct(p) > 0}
-							<div class="mt-4 border-t border-border/50 pt-4">
-								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
-									Vom Umsatz
-								</p>
-								<p class="mt-1 text-xl font-semibold tabular-nums tracking-tight text-accent">
-									{totalSharePct(p)}&nbsp;%
+							<div class="mt-4 border-t border-border/50 pt-3 text-center">
+								<p class="text-[13px] font-medium text-foreground/55">
+									<span class="text-xl font-semibold tabular-nums tracking-tight text-accent"
+										>{totalSharePct(p)}&nbsp;%</span
+									>
+									vom Umsatz
 								</p>
 								<!-- The split is the whole point: half is a price, half buys you shares. -->
-								<dl class="mt-2 space-y-1 text-[11px] leading-snug">
-									<div>
-										<dt class="text-foreground/55">
-											{p.platformFeePct}&nbsp;% Plattform
-											<span class="text-foreground/40">· inkl. Stripe &amp; Co.</span>
-										</dt>
-									</div>
-									<div>
-										<dt class="font-medium text-accent">
-											{p.reinvestPct}&nbsp;% Reinvest
-											<span class="font-normal text-foreground/55">
-												· in avenCOOPs anderer Gründer</span
-											>
-										</dt>
-									</div>
+								<dl class="mt-2 flex justify-between gap-4 text-[11px] leading-snug">
+									<dt class="text-left text-foreground/55">
+										{p.platformFeePct}&nbsp;% Plattform
+										<span class="block text-foreground/40">inkl. Stripe &amp; Co.</span>
+									</dt>
+									<dt class="text-right font-medium text-accent">
+										{p.reinvestPct}&nbsp;% Reinvest
+										<span class="block font-normal text-foreground/55">
+											in avenCOOPs anderer Gründer</span
+										>
+									</dt>
 								</dl>
 								{#if p.equitySharePct}
 									<p class="mt-3 text-[12px] font-medium text-foreground/70">
@@ -356,11 +352,11 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						</div>
 
 						<div class="mt-4 border-t border-border/50 pt-4">
-							<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
-								Vom Umsatz
-							</p>
-							<p class="mt-1 text-xl font-semibold tabular-nums tracking-tight text-accent">
-								{totalSharePct(coop)}&nbsp;%
+							<p class="text-[13px] font-medium text-foreground/55">
+								<span class="text-xl font-semibold tabular-nums tracking-tight text-accent"
+									>{totalSharePct(coop)}&nbsp;%</span
+								>
+								vom Umsatz
 							</p>
 							<dl class="mt-2 space-y-1 text-[11px] leading-snug">
 								<div>
