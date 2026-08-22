@@ -21,8 +21,9 @@ const byPlan = loadSkillsByPlan('de')
 
 /**
  * The marketplace is organized by PRODUCT, not by author: a buyer asks which
- * plan a skill comes with. Plans are cumulative, so picking one shows
- * everything it includes — the tiers below it too. `?plan=` lets the pricing
+ * plan a skill comes with. avenME and avenCEO are separate products, so
+ * picking one shows exactly its skills; only avenCOOP also carries avenCEO's.
+ * `?plan=` lets the pricing
  * page link straight into the right selection.
  */
 // Static site (prerendered): the query string only exists in the browser, never at build time.
@@ -87,7 +88,8 @@ const chainSteps = [
 					Enthalten in
 				</p>
 				<p class="mt-1 text-[11px] leading-snug text-foreground/45">
-					Jeder Plan enthält alles aus den Plänen darunter.
+					avenME (pro Mensch) und avenCEO (pro Firma) sind eigene Produkte. avenCOOP enthält
+					avenCEO.
 				</p>
 				<!-- Only plans that actually carry skills: avenID sat here forever
 				     showing an empty catalogue, which is a filter that can only
@@ -150,7 +152,7 @@ const chainSteps = [
 						<strong class="font-semibold text-foreground">{selectedPlan.name}</strong>
 						enthält alle {visibleSkills.length} Skills — die
 						{inheritedCount}
-						aus den Stufen darunter genauso wie die
+						aus avenCEO genauso wie die
 						{ownCount}
 						eigenen.
 					</p>
@@ -162,7 +164,7 @@ const chainSteps = [
 						>
 							<div>
 								<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/38">
-									Ab {group.plan.name}
+									Mit {group.plan.name}
 								</p>
 								<h2 class="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
 									{group.plan.role}
