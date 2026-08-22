@@ -7,7 +7,9 @@ const { email } = useConfig()
 		<Text class="m-0 text-center text-[11px] uppercase leading-4 tracking-[0.08em] text-[#76808f]">
 			Your avenID
 		</Text>
-		<Heading class="mb-0 mt-2 text-center text-[22px] font-semibold leading-7 tracking-[-0.02em] text-[#1f2a3d]">
+		<Heading
+			class="mb-0 mt-2 text-center text-[22px] font-semibold leading-7 tracking-[-0.02em] text-[#1f2a3d]"
+		>
 			{{ email.name }}.aven.ceo is ready
 		</Heading>
 		<Text class="mt-4 text-center text-[15px] leading-6 text-[#1f2a3d]">

@@ -15,9 +15,11 @@ const { email } = useConfig()
 					width="80"
 					alt="avenCEO"
 					class="mx-auto block h-auto w-20 max-w-full"
-				/>
+				>
 			</Section>
-			<Section class="overflow-hidden rounded-3xl border border-solid border-[#e2ddd0] bg-[#fffdf7] px-8 py-8 text-center">
+			<Section
+				class="overflow-hidden rounded-3xl border border-solid border-[#e2ddd0] bg-[#fffdf7] px-8 py-8 text-center"
+			>
 				<slot />
 			</Section>
 			<AvenFooter />

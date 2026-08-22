@@ -32,7 +32,11 @@ export function createNotifier(config: NotifierConfig, settings: QueueSettings):
 			await enqueueSystemEmail(settings, connection, {
 				template: 'name.purchased',
 				to: input.ownerEmail,
-				data: { name: input.name, accessUrl: input.accessUrl ?? '', baseUrl: config.PUBLIC_BASE_URL },
+				data: {
+					name: input.name,
+					accessUrl: input.accessUrl ?? '',
+					baseUrl: config.PUBLIC_BASE_URL
+				},
 				idempotencyKey: `name-purchased:${input.name}`
 			})
 		}

@@ -33,7 +33,11 @@ describe('email copy', () => {
 	})
 
 	it('uses the no-access state when no setup URL is available', () => {
-		const email = renderEmail('name.purchased', { name: 'alice', accessUrl: '', baseUrl: 'https://id.example' })
+		const email = renderEmail('name.purchased', {
+			name: 'alice',
+			accessUrl: '',
+			baseUrl: 'https://id.example'
+		})
 		expect(email.subject).toBe('Login for alice')
 		expect(email.text).toContain('Your purchase is complete.')
 		expect(email.text).not.toContain('Create your passkey')
