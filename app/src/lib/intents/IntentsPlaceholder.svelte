@@ -1011,8 +1011,8 @@ const DOT: Record<string, string> = {
 	     swaps it for the detail (`shell.detail`). -->
 	<aside
 		class="{shell.detail
-			? 'hidden md:flex'
-			: 'flex'} min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto pb-2 md:w-72"
+			? 'hidden lg:flex'
+			: 'flex'} min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto pb-2 lg:w-72"
 	>
 		<h2
 			class="px-1 pt-1 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
@@ -1118,7 +1118,7 @@ const DOT: Record<string, string> = {
 	<div
 		class="{shell.detail
 			? 'flex'
-			: 'hidden md:flex'} relative min-h-0 min-w-0 flex-1 flex-col gap-2"
+			: 'hidden lg:flex'} relative min-h-0 min-w-0 flex-1 flex-col gap-2"
 		style="margin-bottom: var(--dock-h, 0px)"
 	>
 		<div class="relative">
@@ -1501,13 +1501,13 @@ const DOT: Record<string, string> = {
 			onclick={() => {
 				shell.rightOpen = false
 			}}
-			class="fixed inset-0 z-30 bg-foreground/30 md:hidden"
+			class="fixed inset-0 z-30 bg-foreground/30 lg:hidden"
 		></button>
 	{/if}
 	<aside
 		class="{shell.rightOpen
 			? 'fixed inset-y-0 right-0 z-40 flex w-80 max-w-[85vw] border-border border-l bg-surface-raised p-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-2xl'
-			: 'hidden'} min-h-0 shrink-0 flex-col gap-2 overflow-y-auto pb-2 md:static md:flex md:w-72 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+			: 'hidden'} min-h-0 shrink-0 flex-col gap-2 overflow-y-auto pb-2 lg:static lg:flex lg:w-72 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none"
 	>
 		<h2
 			class="px-1 pt-1 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"

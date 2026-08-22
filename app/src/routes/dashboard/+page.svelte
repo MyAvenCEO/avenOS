@@ -494,7 +494,7 @@ function onKeydown(event: KeyboardEvent) {
 				}}
 					title="Zurück zu den Intents"
 					aria-label="Zurück zu den Intents"
-					class="-translate-y-1/2 absolute top-1/2 left-0 flex size-11 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected md:hidden"
+					class="-translate-y-1/2 absolute top-1/2 left-0 flex size-11 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected lg:hidden"
 				>
 					<svg
 						viewBox="0 0 24 24"
@@ -750,7 +750,7 @@ function onKeydown(event: KeyboardEvent) {
 					title="Skills & Artefakte"
 					aria-label="Skills & Artefakte"
 					aria-expanded={shell.rightOpen}
-					class="-translate-y-1/2 absolute top-1/2 right-0 flex size-11 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected md:hidden"
+					class="-translate-y-1/2 absolute top-1/2 right-0 flex size-11 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected lg:hidden"
 				>
 					<svg
 						viewBox="0 0 24 24"
