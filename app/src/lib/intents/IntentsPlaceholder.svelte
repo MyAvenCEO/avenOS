@@ -846,13 +846,9 @@ const STATE_ORDER: Record<IntentState, number> = {
 	archive: 4
 }
 const activeIntents = $derived(
-	INTENTS.filter((i) => i.status !== 'archive').sort((a, b) => {
-		// The selected intent always leads: it is the one the center is about,
-		// and at the top its card can join the center's surface into one.
-		if (a.id === selectedId) return -1
-		if (b.id === selectedId) return 1
-		return STATE_ORDER[a.status] - STATE_ORDER[b.status]
-	})
+	INTENTS.filter((i) => i.status !== 'archive').sort(
+		(a, b) => STATE_ORDER[a.status] - STATE_ORDER[b.status]
+	)
 )
 const archivedIntents = $derived(INTENTS.filter((i) => i.status === 'archive'))
 
@@ -1152,16 +1148,14 @@ const DOT: Record<string, string> = {
 					shell.detail = true
 				}}
 				class="rounded-xl border text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
-					? `border-transparent px-5 py-4 ${accent.fill}`
+					? `border-transparent px-4 py-3 ${accent.fill}`
 					: `border-l-[4px] border-foreground/5 bg-surface-raised px-4 py-3 hover:bg-surface-card-hover ${accent.edge}`}"
 			>
-				<!-- The selected card is the intent's header: a little larger, on
-				     the center's own surface, and on desktop it runs INTO the center
-				     panel — one connected area, and the center need not repeat
-				     the title. -->
+				<!-- The selected card: same size and corners as every other, filled
+				     with its state's color. -->
 				<!-- row 1: what it is — title, with its type on the right -->
 				<div class="flex items-baseline gap-2">
-					<p class="min-w-0 flex-1 font-medium leading-snug {sel ? 'text-sm' : 'text-xs'}">
+					<p class="min-w-0 flex-1 font-medium leading-snug text-xs">
 						{intent.title}
 					</p>
 					<span
@@ -1175,8 +1169,7 @@ const DOT: Record<string, string> = {
 				<!-- row 2: where it came from, when, and where it stands. On the
 				     filled card the secondary text is the fill's foreground, dimmed. -->
 				<div class="flex items-center gap-2 pt-1 {sel ? 'text-current' : ''}">
-					<span
-						class="truncate {sel ? 'text-xs opacity-75' : 'text-[0.6875rem] text-foreground/45'}"
+					<span class="truncate text-[0.6875rem] {sel ? 'opacity-75' : 'text-foreground/45'}"
 						>{intent.source}</span
 					>
 					<span
