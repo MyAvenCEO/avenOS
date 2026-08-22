@@ -68,14 +68,8 @@ export const pricing: Record<Lang, PricingMessages> = {
 		onePerPerson: 'Ein avenME pro Mensch — dein eigener, unabhängig von jeder Firma.',
 		pct: (n) => `+ ${n.toLocaleString('de-DE')} %`,
 		fee: { label: 'Transaktionsgebühren', sub: 'inkl. Stripe, Karten & Co.' },
-		reinvest: {
-			label: 'vom Umsatz — Reinvest in andere Aven',
-			sub: 'Dein Umsatz kauft dir Anteile an anderen Aven. Die wachsen, schütten aus — und werden wieder investiert. Zinseszins, automatisch.'
-		},
-		equity: {
-			label: 'Firmenanteile — wir als Co‑Founder',
-			sub: 'Wir steigen als Mitgründer ein und bauen, als wäre es unsere eigene Firma.'
-		},
+		reinvest: { label: 'Reinvest in andere Aven', sub: 'Anteile, die für dich weiterwachsen.' },
+		equity: { label: 'Firmenanteile', sub: 'Wir als Co‑Founder.' },
 		skills: 'Skills',
 		soon: 'bald',
 		allSkills: (n) => `Alle ${n} Skills ansehen →`,
@@ -124,14 +118,8 @@ export const pricing: Record<Lang, PricingMessages> = {
 		onePerPerson: 'One avenME per human — your own, independent of any company.',
 		pct: (n) => `+ ${n.toLocaleString('en-US')} %`,
 		fee: { label: 'transaction fees', sub: 'incl. Stripe, cards & co.' },
-		reinvest: {
-			label: 'of revenue — reinvested into other Aven',
-			sub: 'Your revenue buys you stakes in other Aven. They grow, pay out — and get reinvested. Compounding, on autopilot.'
-		},
-		equity: {
-			label: 'equity — us as your co-founder',
-			sub: 'We join as co-founders and build as if it were our own company.'
-		},
+		reinvest: { label: 'reinvested into other Aven', sub: 'Stakes that keep growing for you.' },
+		equity: { label: 'equity', sub: 'Us as your co-founder.' },
 		skills: 'Skills',
 		soon: 'soon',
 		allSkills: (n) => `See all ${n} skills →`,

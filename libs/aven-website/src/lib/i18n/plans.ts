@@ -67,8 +67,8 @@ const EN: Record<PlanId, { role: string; features: string[] }> = {
 			'1× avenFOUNDER — the avenCEO of your company — included',
 			'We actively build your product with you — effectively your external CTO and co-founder',
 			'Guidance through German company formation: GmbH or UG',
-			'You choose which avenCOOPs your Reinvest flows into — our avenCEO GmbH is on the ballot too',
-			'We lead your beel syndicate — with community investments from your supporters'
+			'You choose which Aven your Reinvest flows into — our avenCEO GmbH is on the ballot too',
+			'You become a featured startup in our beel syndicate — our avenFOUNDER can reinvest into you (excl. beel product fees)'
 		]
 	}
 }
