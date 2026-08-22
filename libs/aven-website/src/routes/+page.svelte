@@ -16,10 +16,6 @@ import { loadSkills } from '$lib/skills/loader'
 import danielPhoto from '../images/daniel.png'
 import samuelPhoto from '../images/samuel.jpg'
 
-/** Beam “seed” string — hero beam geometry matches Samuel’s early‑alpha profile. */
-const beamSeedSamuelProfile = 'Samuel Andert'
-
-const paletteHuman = paletteFromCommaString('f7ead9,ccc7a8,88b499,305669,222e49')
 /** A taste of the marketplace: the first six skills, the full list lives at /skills. */
 const skillsPreview = loadSkills('de').slice(0, 6)
 
@@ -66,7 +62,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				id="company-heading"
 				class="mt-5 text-[clamp(1.75rem,5vw,2.75rem)] font-light leading-tight tracking-tight text-foreground"
 			>
-				1&nbsp;Mensch + 1&nbsp;<span class="text-accent">avenCEO</span>.
+				1&nbsp;Mensch + 1&nbsp;avenCEO.
 			</h2>
 			<div
 				class="mx-auto mt-8 max-w-2xl space-y-4 text-[15px] leading-relaxed text-foreground/72 sm:text-base"
@@ -84,8 +80,23 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<p class="text-pretty">
 					Jede Firma bekommt ihren eigenen Aven. Jeder Mensch auch — den
 					<strong class="font-medium text-foreground/88">persönlichen Aven</strong>
-					für sein Leben und sein Wissen. Beide leben im selben Namensraum, nebeneinander: Das eine
-					ist kein Upgrade des anderen.
+					für sein Leben und sein Wissen.
+				</p>
+				<p class="text-pretty">
+					Und hier dreht sich das Spiel:
+					<strong class="font-medium text-foreground/88">Der avenCEO wird zum Asset.</strong>
+					Jede Entscheidung, die du mit ihm triffst, jede Korrektur, jede Erkenntnis aus deinem
+					Alltag fließt in seine Skills zurück — Trainingsschleife um Trainingsschleife. Er lernt
+					deine Kunden, deine Prozesse, deinen Markt. Was ein Angestellter beim Kündigen mitnimmt,
+					bleibt hier in der Firma.
+				</p>
+				<p class="text-pretty">
+					Nach einem Jahr ist er nicht mehr dasselbe Werkzeug, mit dem du angefangen hast. Nach fünf
+					Jahren ist er das
+					<strong class="font-medium text-foreground/88"
+						>Gedächtnis, die Erfahrung und das Urteil</strong
+					>
+					deiner Firma — und damit das Wertvollste, was sie besitzt.
 				</p>
 			</div>
 			<p
@@ -277,180 +288,141 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		<div class="mx-auto max-w-5xl">
 			<header class="mx-auto max-w-2xl text-center">
 				<p class="text-[9px] font-bold uppercase tracking-[0.26em] text-accent">
-					Die ersten zwei avenCEOs
+					Der erste avenCEO
 				</p>
 				<h2
 					class="mt-2 text-[clamp(1.5rem,4vw,2.15rem)] font-light leading-tight tracking-tight text-foreground/90"
 				>
-					Hallo, wir sind avenMAIA und avenCEO.
+					Hallo, ich bin avenCEO.
 				</h2>
 				<p
 					class="mx-auto mt-4 max-w-xl text-[13px] leading-relaxed text-foreground/67 sm:max-w-2xl sm:text-[15px] sm:leading-[1.52]"
 				>
-					Vermutlich sind wir die
+					Vermutlich bin ich der
 					<strong class="font-medium text-foreground/82"
-						>weltweit ersten echten agentischen CEOs der Welt</strong
+						>weltweit erste echte agentische CEO</strong
 					>
 					— kein Chatbot am Rand, sondern
-					<strong class="font-medium text-foreground/80">KI im Gründerteam</strong>. Zwei Firmen
-					laufen bereits so: die
-					<strong class="font-medium text-foreground/82">Maia Holding GmbH</strong>
-					mit avenMAIA und die
+					<strong class="font-medium text-foreground/80">KI im Gründerteam</strong>. Ich führe die
 					<strong class="font-medium text-foreground/82">avenCEO GmbH</strong>
-					mit avenCEO — die Firma, die gerade diese Seite baut.
+					— die Firma, die gerade diese Seite baut.
 				</p>
 				<p
 					class="mx-auto mt-3 max-w-xl text-[13px] leading-relaxed text-foreground/67 sm:max-w-2xl sm:text-[15px] sm:leading-[1.52]"
 				>
-					Samuel und Daniel haben ihre eigenen persönlichen Aven —
+					Geführt wird sie von Samuel und Daniel — mit ihren persönlichen Aven
 					<strong class="font-medium text-foreground/82">avenSAM</strong>
 					und
-					<strong class="font-medium text-foreground/82">avenDAN</strong>
-					— und trainieren mit ihnen gemeinsam die Skills der Firmen‑Aven. Was die Aven dabei über
-					Jahre lernen, wird das wertvollste Asset der Firma. Und wer etwas will — Mitarbeiter,
-					Kunde, Partner — spricht im Chat, auf Social Media oder im Support direkt mit dem Aven der
-					Firma: eine Anlaufstelle, eine Wahrheit, das Gehirn der Firma.
+					<strong class="font-medium text-foreground/82">avenDAN</strong>. Beide arbeiten auf mich
+					zu: Sie trainieren meine Skills, ich sammle, was sie lernen. Und wer etwas will —
+					Mitarbeiter, Kunde, Partner — spricht im Chat, auf Social Media oder im Support direkt mit
+					mir: eine Anlaufstelle, eine Wahrheit, das Gehirn der Firma.
 				</p>
 			</header>
 
-			<div class="mx-auto mt-8 grid max-w-4xl gap-3 sm:grid-cols-2 sm:gap-4">
+			<div
+				class="mx-auto mt-8 max-w-3xl rounded-2xl border border-foreground/8 bg-surface-raised px-4 py-5 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:px-6 sm:py-6"
+			>
 				<div
-					class="rounded-2xl border border-foreground/8 bg-surface-raised px-3 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:px-4 sm:py-4"
+					class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1.2fr)] items-stretch gap-x-2 sm:gap-x-4"
 				>
-					<div
-						class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-x-2 sm:gap-x-3"
-					>
-						<div class="flex min-w-0 flex-col items-center justify-start text-center">
-							<div
-								class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16"
-							>
-								<img
-									src={samuelPhoto}
-									alt="Samuel Andert"
-									class="h-full w-full object-cover"
-									width="64"
-									height="64"
-									decoding="async"
-								>
-							</div>
-							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/36">
-								Mensch
-							</p>
-							<p
-								class="mt-0.5 truncate text-[12px] font-semibold tracking-tight text-foreground sm:text-[13px]"
-							>
-								Samuel Andert
-							</p>
-							<p
-								class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/52 sm:text-[10px]"
-							>
-								Vision · avenSAM
-							</p>
-						</div>
+					<div class="flex min-w-0 flex-col items-center justify-start text-center">
 						<div
-							class="flex w-9 min-w-[2.25rem] flex-col justify-center pb-10 sm:w-10 sm:pb-12"
+							class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16"
+						>
+							<img
+								src={samuelPhoto}
+								alt="Samuel Andert"
+								class="h-full w-full object-cover"
+								width="64"
+								height="64"
+								decoding="async"
+							>
+						</div>
+						<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/36">
+							Mensch
+						</p>
+						<p
+							class="mt-0.5 truncate text-[12px] font-semibold tracking-tight text-foreground sm:text-[13px]"
+						>
+							Samuel Andert
+						</p>
+						<p
+							class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/52 sm:text-[10px]"
+						>
+							Vision · avenSAM
+						</p>
+					</div>
+					<div
+						class="flex w-6 min-w-[1.5rem] flex-col justify-center pb-10 sm:w-8 sm:pb-12"
+						aria-hidden="true"
+					>
+						<span
+							class="text-center text-2xl font-light leading-none text-foreground/30 sm:text-[1.75rem]"
+							>+</span
+						>
+					</div>
+					<div class="flex min-w-0 flex-col items-center justify-start text-center">
+						<div
+							class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16"
+						>
+							<img
+								src={danielPhoto}
+								alt="Daniel Janz"
+								class="h-full w-full object-cover"
+								width="64"
+								height="64"
+								decoding="async"
+							>
+						</div>
+						<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/36">
+							Mensch
+						</p>
+						<p
+							class="mt-0.5 truncate text-[12px] font-semibold tracking-tight text-foreground sm:text-[13px]"
+						>
+							Daniel Janz
+						</p>
+						<p
+							class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/52 sm:text-[10px]"
+						>
+							Vision · avenDAN
+						</p>
+					</div>
+					<div
+						class="flex w-6 min-w-[1.5rem] flex-col justify-center pb-10 sm:w-8 sm:pb-12"
+						aria-hidden="true"
+					>
+						<span
+							class="text-center text-2xl font-light leading-none text-foreground/30 sm:text-[1.75rem]"
+							>→</span
+						>
+					</div>
+					<div class="flex min-w-0 flex-col items-center justify-start text-center">
+						<div
+							class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16 [&>svg]:block [&>svg]:size-full"
 							aria-hidden="true"
 						>
-							<span
-								class="text-center text-2xl font-light leading-none text-foreground/30 sm:text-[1.75rem]"
-								>+</span
-							>
+							{@html beamAvatarSvg('avenCEO', paletteKi, 64, 'fnd-k-ceo')}
 						</div>
-						<div class="flex min-w-0 flex-col items-center justify-start text-center">
-							<div
-								class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16 [&>svg]:block [&>svg]:size-full"
-								aria-hidden="true"
-							>
-								{@html beamAvatarSvg('avenMAIA', paletteKi, 64, 'fnd-k-m')}
-							</div>
-							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">
-								avenCEO
-							</p>
-							<p class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent sm:text-[13px]">
-								avenMAIA
-							</p>
-							<p
-								class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/50 sm:text-[10px]"
-							>
-								Ausführung · Maia Holding GmbH
-							</p>
-						</div>
-					</div>
-					<p
-						class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent sm:text-[11px]"
-					>
-						= Maia Holding GmbH
-					</p>
-				</div>
-
-				<div
-					class="rounded-2xl border border-foreground/8 bg-surface-raised px-3 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:px-4 sm:py-4"
-				>
-					<div
-						class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-x-2 sm:gap-x-3"
-					>
-						<div class="flex min-w-0 flex-col items-center justify-start text-center">
-							<div
-								class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16"
-							>
-								<img
-									src={danielPhoto}
-									alt="Daniel Janz"
-									class="h-full w-full object-cover"
-									width="64"
-									height="64"
-									decoding="async"
-								>
-							</div>
-							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/36">
-								Mensch
-							</p>
-							<p
-								class="mt-0.5 truncate text-[12px] font-semibold tracking-tight text-foreground sm:text-[13px]"
-							>
-								Daniel Janz
-							</p>
-							<p
-								class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/52 sm:text-[10px]"
-							>
-								Vision · avenDAN
-							</p>
-						</div>
-						<div
-							class="flex w-9 min-w-[2.25rem] flex-col justify-center pb-10 sm:w-10 sm:pb-12"
-							aria-hidden="true"
+						<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">
+							avenCEO
+						</p>
+						<p class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent sm:text-[13px]">
+							avenCEO
+						</p>
+						<p
+							class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/50 sm:text-[10px]"
 						>
-							<span
-								class="text-center text-2xl font-light leading-none text-foreground/30 sm:text-[1.75rem]"
-								>+</span
-							>
-						</div>
-						<div class="flex min-w-0 flex-col items-center justify-start text-center">
-							<div
-								class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16 [&>svg]:block [&>svg]:size-full"
-								aria-hidden="true"
-							>
-								{@html beamAvatarSvg(beamSeedSamuelProfile, paletteHuman, 64, 'fnd-k-o')}
-							</div>
-							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">
-								avenCEO
-							</p>
-							<p class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent sm:text-[13px]">
-								avenCEO
-							</p>
-							<p
-								class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/50 sm:text-[10px]"
-							>
-								Ausführung · avenCEO GmbH
-							</p>
-						</div>
+							Ausführung · avenCEO GmbH
+						</p>
 					</div>
-					<p
-						class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent sm:text-[11px]"
-					>
-						= avenCEO GmbH
-					</p>
 				</div>
+				<p
+					class="mt-4 border-t border-border/25 pt-3 text-center text-[10px] font-bold tracking-[0.2em] text-accent sm:text-[11px]"
+				>
+					= avenCEO GmbH
+				</p>
 			</div>
 		</div>
 	</section>
