@@ -13,7 +13,6 @@ import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
 import { shell } from '$lib/intents/talk.svelte'
 import QueryModal from '$lib/query/QueryModal.svelte'
 import { query } from '$lib/query/query.svelte'
-import { registerMockSources } from '$lib/query/sources.mock'
 import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
 
 /**
@@ -148,9 +147,6 @@ $effect(() => {
 		shell.tab = 'intents'
 	}
 })
-
-// The mocked slice-1 sources; slice 2 registers one per skill instead.
-registerMockSources()
 
 /**
  * One state for the whole conversation, instead of one per component.
@@ -305,16 +301,6 @@ let dockH = $state(0)
  */
 const DOCK_INSET = 8
 
-let form: HTMLFormElement | null = $state(null)
-let textareaEl: HTMLTextAreaElement | null = $state(null)
-
-// Switching to text mode should land the cursor in the field — no second click
-// to start writing. The effect fires when `typing` flips true and the textarea
-// has mounted; focusing an already-focused field is a harmless no-op.
-$effect(() => {
-	if (typing && textareaEl) textareaEl.focus()
-})
-
 /**
  * Text mode is silent AND deaf: the ears close, the voice mutes — a typed
  * reply is read, not heard. The models stay loaded; the way back is instant.
@@ -323,6 +309,8 @@ function enterTyping(seed = '') {
 	if (typing) return
 	typing = true
 	if (seed) draft += seed
+	// The field lives in the conversation's footer now, so typing opens it.
+	query.show()
 	listener.stop()
 	speaker.silence()
 	speaker.muted = true
@@ -350,13 +338,8 @@ function leaveTyping() {
  * with that very character.
  */
 function onGlobalKeydown(event: KeyboardEvent) {
-	// The two keys every spotlight already answers to, before anything else
-	// claims them — including while typing, which is when you most want out.
-	if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-		event.preventDefault()
-		query.toggle()
-		return
-	}
+	// Escape leaves the conversation, from wherever — including while typing,
+	// which is when you most want out.
 	if (event.key === 'Escape' && query.open) {
 		event.preventDefault()
 		query.close()
@@ -376,26 +359,18 @@ function onGlobalKeydown(event: KeyboardEvent) {
 	enterTyping(event.key)
 }
 
-function submit(event: SubmitEvent) {
-	event.preventDefault()
+/** Called by the composer in the conversation's footer. */
+function submit() {
+	const text = draft.trim()
+	if (text === '') return
 	// The send click is the user gesture the audio device needs; without it the
 	// first reply would synthesize into a suspended context and never be heard.
 	speaker.resumeAudio()
-	const text = draft
 	draft = ''
-	query.text = text
 	query.show()
 	chat.send(text)
 	// Submitting hands the turn back to the voice: hands-free is the default.
 	leaveTyping()
-}
-
-/** Enter sends, shift+enter makes a newline — the usual bargain. */
-function onKeydown(event: KeyboardEvent) {
-	if (event.key === 'Enter' && !event.shiftKey) {
-		event.preventDefault()
-		form?.requestSubmit()
-	}
 }
 </script>
 
@@ -432,7 +407,7 @@ function onKeydown(event: KeyboardEvent) {
 
 	<!-- THE answer surface: it floats over the workspace rather than replacing
 	     it, so the selected intent it answers about stays in view behind. -->
-	<QueryModal />
+	<QueryModal {typing} bind:draft onEnterTyping={() => enterTyping()} onSubmit={submit} />
 
 	<!-- The floating dock: errors and the pill hover OVER the workspace, so the
 	     side columns can run to the bottom of the screen. What the tools DID is
@@ -515,7 +490,7 @@ function onKeydown(event: KeyboardEvent) {
 			<div
 				class="{phase.key === 'off'
 			? 'w-fit'
-			: `rounded-full bg-primary text-primary-foreground ${typing ? 'w-full max-w-lg px-2.5 py-2' : 'w-full max-w-52 px-2.5 py-2'}`}"
+			: `rounded-full bg-primary text-primary-foreground w-full max-w-52 px-2.5 py-2`}"
 				title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
 			>
 				<div class="flex items-center {phase.key === 'off' ? '' : 'gap-3'}">
@@ -570,45 +545,7 @@ function onKeydown(event: KeyboardEvent) {
 						</button>
 					{/if}
 
-					{#if typing}
-						<form bind:this={form} onsubmit={submit} class="flex flex-1 items-center gap-2">
-							<textarea
-								bind:this={textareaEl}
-								bind:value={draft}
-								oninput={() => {
-							query.text = draft
-							if (draft !== '') query.show()
-						}}
-								onkeydown={onKeydown}
-								rows="1"
-								placeholder="Write…"
-								class="field-sizing-content max-h-32 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-primary-foreground/40"
-							></textarea>
-							<!-- Same shape as the mode toggle next to it, so the panel ends in a
-					     matched pair of round icon buttons rather than a word and a circle. -->
-							<button
-								type="submit"
-								disabled={draft.trim() === ''}
-								title="Send"
-								aria-label="Send"
-								class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 transition-all hover:bg-primary-foreground/10 disabled:opacity-30 disabled:hover:bg-transparent"
-							>
-								<!-- arrow up: send -->
-								<svg
-									viewBox="0 0 24 24"
-									class="size-5"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="1.5"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path d="M12 19V5" />
-									<path d="m5 12 7-7 7 7" />
-								</svg>
-							</button>
-						</form>
-					{:else if phase.key === 'off'}
+					{#if phase.key === 'off'}
 						<!-- Ended: the pill shrinks to the mark itself. One target, one
 				     meaning — tap the logo and the conversation is back. Nothing
 				     else is offered here, because nothing else applies. -->
