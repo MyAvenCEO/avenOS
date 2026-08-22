@@ -12,10 +12,29 @@ class Composer {
 	draft = $state('')
 	/** Bumped to ask the field to take focus; the field watches it. */
 	focusTick = $state(0)
+	/**
+	 * The field is up. It shows only while you are writing or words are
+	 * arriving: raised by a keystroke or a tap, lowered when it is left empty
+	 * or the draft is sent. A non-empty draft keeps it up regardless.
+	 */
+	active = $state(false)
+
+	get composing(): boolean {
+		return this.active || this.draft !== ''
+	}
+
+	/** Put the field away — unless there is still something in it. */
+	dismiss(): void {
+		if (this.draft.trim() === '') {
+			this.draft = ''
+			this.active = false
+		}
+	}
 
 	/** Bring the field up, optionally seeded with the keystroke that asked. */
 	focus(seed = ''): void {
 		if (seed) this.draft += seed
+		this.active = true
 		this.focusTick++
 	}
 
@@ -27,6 +46,7 @@ class Composer {
 		// first reply would synthesize into a suspended context and never be heard.
 		speakerActor.core.resumeAudio()
 		this.draft = ''
+		this.active = false
 		void chatActor.core.send(text)
 	}
 }
