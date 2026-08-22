@@ -154,7 +154,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						<!-- The monthly price stands alone. What comes off the revenue is a
 						     different question, so it gets its own block rather than hanging
 						     off the right edge of the price. -->
-						<div class="mt-5 border-t border-border/50 pt-4">
+						<div class="mt-5 border-t border-border/50 pt-4 text-center">
 							<p class="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
 								{euro(p.eurPrice)}&nbsp;€<span class="text-base font-medium text-foreground/55"
 									>{priceSuffix(p)}</span
@@ -348,7 +348,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						<p class="mt-3 text-xl font-semibold tracking-tight text-foreground">{coop.name}</p>
 						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{coop.role}</p>
 
-						<div class="mt-5 border-t border-border/50 pt-4">
+						<div class="mt-5 border-t border-border/50 pt-4 text-center">
 							<p class="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
 								{euro(coop.eurPrice)}&nbsp;€
 							</p>
