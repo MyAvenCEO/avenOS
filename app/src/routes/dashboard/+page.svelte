@@ -1,6 +1,8 @@
 <script lang="ts">
 import { isTauri } from '@tauri-apps/api/core'
 import { onMount } from 'svelte'
+import { dev } from '$app/environment'
+import { page } from '$app/state'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
@@ -43,6 +45,29 @@ const listener = listenerActor.core
  * mode there means an empty panel with no way to say anything until you find
  * the icon. Text is the only mode that works, so it is the one to start in.
  */
+/**
+ * Dev only: `?voice=<phase>` in a browser tab fakes the voice UI so the pill
+ * can be styled without a Tauri build — `idle`, `hearing`, `speaking`,
+ * `thinking`, `loading`, `blocked`, `denied`, `error`. No mic, no TTS: the
+ * phase is painted, not produced. Production ignores the parameter.
+ */
+const MOCK_PHASES = {
+	idle: 'Ready',
+	hearing: 'Listening',
+	speaking: 'Speaking',
+	thinking: 'Thinking',
+	loading: 'Ears loading 42%',
+	blocked: 'Enable audio',
+	denied: 'No microphone',
+	error: 'Error'
+} as const
+const mockPhase = $derived.by(() => {
+	if (!dev) return null
+	const v = page.url.searchParams.get('voice')
+	return v !== null && v in MOCK_PHASES ? (v as keyof typeof MOCK_PHASES) : null
+})
+const voiceUi = $derived(isTauri() || mockPhase !== null)
+
 let typing = $state(!isTauri())
 
 /**
@@ -54,6 +79,14 @@ let typing = $state(!isTauri())
  */
 let conversing = $state(isTauri())
 
+// The mock enters voice mode without opening anything.
+$effect.pre(() => {
+	if (mockPhase !== null) {
+		conversing = true
+		typing = false
+	}
+})
+
 // Hands-free by default: the mic opens as soon as the page does.
 //
 // `onMount`, emphatically not `$effect`. An effect tracks what its body reads,
@@ -63,7 +96,7 @@ let conversing = $state(isTauri())
 // showed the orange indicator), but the worklet never survived long enough to
 // deliver a single batch.
 onMount(() => {
-	if (conversing) void listener.start()
+	if (conversing && mockPhase === null) void listener.start()
 	return () => listener.stop()
 })
 
@@ -126,6 +159,8 @@ registerMockSources()
  * out, and hearing wins over everything because interrupting is allowed.
  */
 const phase = $derived.by(() => {
+	if (mockPhase !== null && conversing && !typing)
+		return { key: mockPhase, label: MOCK_PHASES[mockPhase] }
 	// Off wins over everything: with the ears closed, every other status is
 	// a leftover from the session that just ended.
 	if (!conversing && !typing) return { key: 'off', label: 'Conversation ended' }
@@ -157,7 +192,9 @@ const phase = $derived.by(() => {
 // the loading bar and its label can share ONE line — no second row that grows
 // the pill's height.
 const loadPct = $derived(
-	Math.round((listener.status === 'preparing' ? listener.progress : speaker.progress) * 100)
+	mockPhase === 'loading'
+		? 42
+		: Math.round((listener.status === 'preparing' ? listener.progress : speaker.progress) * 100)
 )
 
 let draft = $state('')
@@ -385,7 +422,7 @@ function onKeydown(event: KeyboardEvent) {
 					<!-- The input-mode switch sits LEFT: it changes how you talk, so it leads
 			     the panel; leaving the conversation is the last resort and sits at
 			     the far right. -->
-					{#if isTauri() && phase.key !== 'off'}
+					{#if voiceUi && phase.key !== 'off'}
 						<button
 							type="button"
 							onclick={() => {
@@ -579,7 +616,7 @@ function onKeydown(event: KeyboardEvent) {
 			     interface, and a button offering to leave it leads nowhere. -->
 					<!-- Ending the conversation: the hang-up, far right — a phone put down,
 			     not a power switch. Hidden once ended; the logo is the way back. -->
-					{#if isTauri() && phase.key !== 'off'}
+					{#if voiceUi && phase.key !== 'off'}
 						<button
 							type="button"
 							onclick={endConversation}
