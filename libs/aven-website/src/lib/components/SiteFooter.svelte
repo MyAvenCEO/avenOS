@@ -21,7 +21,7 @@ const legal = $derived([
 
 const nav = $derived([
 	{ href: localeHref(lang, '/skills'), label: t.nav.skills },
-	{ href: localeHref(lang, '/aven'), label: t.nav.aven },
+	{ href: localeHref(lang, '/avens'), label: t.nav.avens },
 	{ href: localeHref(lang, '/pricing'), label: t.nav.pricing },
 	{ href: idFunnelHref(), label: t.footer.ctaLabel }
 ])
