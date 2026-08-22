@@ -1,6 +1,6 @@
 <template>
-	<Section class="px-8 pb-8 pt-2">
-		<Text class="m-0 text-[9px] leading-[14px] text-[#1f2a3d]">
+	<Section class="px-8 pb-8 pt-8 text-center">
+		<Text class="m-0 text-center text-[9px] leading-[14px] text-[#1f2a3d]">
 			——————————<br />
 			avenCEO GmbH<br />
 			Aventinstr. 8<br />

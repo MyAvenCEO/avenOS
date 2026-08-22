@@ -7,6 +7,7 @@ import {
 } from './compiler.js'
 
 const studioHtmlPath = fileURLToPath(new URL('./studio.html', import.meta.url))
+const staticRoot = fileURLToPath(new URL('../../static/', import.meta.url))
 const sessionToken = crypto.randomUUID()
 const requestedPort = Number(
 	Bun.argv.find((argument) => argument.startsWith('--port='))?.split('=')[1]
@@ -43,6 +44,32 @@ async function requestBody(request: Request): Promise<{
 	return { key: value.key, source: value.source, metadata: value.metadata }
 }
 
+// Previews load brand assets from this studio instead of the deployed origin.
+function previewMetadata(metadata: unknown, origin: string): unknown {
+	if (!metadata || typeof metadata !== 'object') return metadata
+	const record = metadata as { fixture?: Record<string, string> }
+	if (!record.fixture || typeof record.fixture.baseUrl !== 'string') return metadata
+	return { ...record, fixture: { ...record.fixture, baseUrl: origin } }
+}
+
+// The sandboxed preview frame has an opaque origin and cannot fetch images,
+// so static brand images are inlined for the preview only.
+async function inlineStaticImages(html: string, origin: string): Promise<string> {
+	const pattern = new RegExp(`${origin.replaceAll('.', '\\.')}/email/([A-Za-z0-9._-]+)`, 'g')
+	const replacements = new Map<string, string>()
+	for (const match of html.matchAll(pattern)) {
+		const name = match[1] ?? ''
+		if (replacements.has(match[0])) continue
+		const file = Bun.file(`${staticRoot}email/${name}`)
+		if (!(await file.exists())) continue
+		const base64 = Buffer.from(await file.arrayBuffer()).toString('base64')
+		replacements.set(match[0], `data:${file.type};base64,${base64}`)
+	}
+	let output = html
+	for (const [from, to] of replacements) output = output.replaceAll(from, to)
+	return output
+}
+
 const server = Bun.serve({
 	hostname: '127.0.0.1',
 	port,
@@ -64,6 +91,11 @@ const server = Bun.serve({
 					}
 				})
 			}
+			if (request.method === 'GET' && url.pathname.startsWith('/email/')) {
+				const file = Bun.file(`${staticRoot}${url.pathname.slice(1).replaceAll('..', '')}`)
+				if (!(await file.exists())) return json({ message: 'Not found.' }, 404)
+				return new Response(file, { headers: { 'cache-control': 'no-store' } })
+			}
 			if (request.method === 'GET' && url.pathname === '/api/templates') {
 				return json({ templates: editableTemplateSummaries() })
 			}
@@ -73,7 +105,12 @@ const server = Bun.serve({
 			if (!authorized(request)) return json({ message: 'Editor session expired.' }, 403)
 			if (request.method === 'POST' && url.pathname === '/api/preview') {
 				const body = await requestBody(request)
-				return json(await previewEmailTemplate(body.key, body.source, body.metadata))
+				const preview = await previewEmailTemplate(
+					body.key,
+					body.source,
+					previewMetadata(body.metadata, url.origin)
+				)
+				return json({ ...preview, html: await inlineStaticImages(preview.html, url.origin) })
 			}
 			if (request.method === 'POST' && url.pathname === '/api/save') {
 				const body = await requestBody(request)

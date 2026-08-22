@@ -4,13 +4,13 @@ const { email } = useConfig()
 
 <template>
 	<AvenEmail :preheader="`Continue securing ${email.name}.aven.ceo`">
-		<Text class="m-0 text-[11px] uppercase leading-4 tracking-[0.08em] text-[#76808f]">
+		<Text class="m-0 text-center text-[11px] uppercase leading-4 tracking-[0.08em] text-[#76808f]">
 			Your avenID
 		</Text>
-		<Heading class="mb-0 mt-2 text-[22px] font-semibold leading-7 tracking-[-0.02em] text-[#1f2a3d]">
+		<Heading class="mb-0 mt-2 text-center text-[22px] font-semibold leading-7 tracking-[-0.02em] text-[#1f2a3d]">
 			{{ email.name }}.aven.ceo is ready
 		</Heading>
-		<Text class="mt-4 text-[15px] leading-6 text-[#1f2a3d]">
+		<Text class="mt-4 text-center text-[15px] leading-6 text-[#1f2a3d]">
 			Continue to checkout to secure <strong>{{ email.name }}.aven.ceo</strong>.
 		</Text>
 		<Button
@@ -19,7 +19,7 @@ const { email } = useConfig()
 		>
 			Continue to checkout
 		</Button>
-		<Text class="mb-0 mt-6 text-[12px] leading-5 text-[#76808f]">
+		<Text class="mb-0 mt-6 text-center text-[12px] leading-5 text-[#76808f]">
 			This link expires {{ email.expiresAt }}.
 		</Text>
 	</AvenEmail>

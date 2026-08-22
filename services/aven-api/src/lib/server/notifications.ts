@@ -13,7 +13,7 @@ export interface Notifier {
 	): Promise<void>
 }
 
-export function createNotifier(_config: NotifierConfig, settings: QueueSettings): Notifier {
+export function createNotifier(config: NotifierConfig, settings: QueueSettings): Notifier {
 	return {
 		async namePurchaseLink(connection, input) {
 			await enqueueSystemEmail(settings, connection, {
@@ -22,7 +22,8 @@ export function createNotifier(_config: NotifierConfig, settings: QueueSettings)
 				data: {
 					name: input.name,
 					claimUrl: input.claimUrl,
-					expiresAt: new Date(input.expiresAt).toUTCString()
+					expiresAt: new Date(input.expiresAt).toUTCString(),
+					baseUrl: config.PUBLIC_BASE_URL
 				},
 				priority: 10
 			})
@@ -31,7 +32,7 @@ export function createNotifier(_config: NotifierConfig, settings: QueueSettings)
 			await enqueueSystemEmail(settings, connection, {
 				template: 'name.purchased',
 				to: input.ownerEmail,
-				data: { name: input.name, accessUrl: input.accessUrl ?? '' },
+				data: { name: input.name, accessUrl: input.accessUrl ?? '', baseUrl: config.PUBLIC_BASE_URL },
 				idempotencyKey: `name-purchased:${input.name}`
 			})
 		}
