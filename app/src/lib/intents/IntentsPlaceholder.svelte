@@ -1104,10 +1104,14 @@ const DOT: Record<string, string> = {
 			? 'hidden lg:flex'
 			: 'flex'} min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto pb-2 lg:w-72"
 	>
-		<h2
-			class="px-1 pt-1 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
-		>
-			Intents · {activeIntents.length}
+		<!-- The side headers wear the tab strip's pill, so all three columns
+		     start their cards on one edge and read as one row. -->
+		<h2 class="flex justify-center px-1 pt-1">
+			<span
+				class="rounded-full border border-foreground/10 px-3 py-1 font-medium text-foreground/60 text-xs"
+			>
+				Intents · {activeIntents.length}
+			</span>
 		</h2>
 		{#each activeIntents as intent (intent.id)}
 			{@const sel = selectedId === intent.id}
@@ -1727,10 +1731,12 @@ const DOT: Record<string, string> = {
 			? 'fixed inset-y-0 right-0 z-40 flex w-80 max-w-[85vw] border-border border-l bg-surface-raised p-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-2xl'
 			: 'hidden'} min-h-0 shrink-0 flex-col gap-2 overflow-y-auto pb-2 lg:static lg:flex lg:w-72 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none"
 	>
-		<h2
-			class="px-1 pt-1 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
-		>
-			Skills · {selected.skills.length}
+		<h2 class="flex justify-center px-1 pt-1">
+			<span
+				class="rounded-full border border-foreground/10 px-3 py-1 font-medium text-foreground/60 text-xs"
+			>
+				Skills · {selected.skills.length}
+			</span>
 		</h2>
 		{#each selected.skills as s (s.skill)}
 			<button
