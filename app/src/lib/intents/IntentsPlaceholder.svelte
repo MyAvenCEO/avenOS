@@ -1211,18 +1211,9 @@ const DOT: Record<string, string> = {
 			: 'hidden lg:flex'} relative min-h-0 min-w-0 flex-1 flex-col gap-2"
 		style="margin-bottom: var(--dock-h, 0px)"
 	>
-		<div class="relative">
-			<h2
-				class="px-1 pt-1 text-center font-semibold text-xs uppercase tracking-wide {accentFor(
-					selected.status
-				).text}"
-			>
-				{STATUS_LABEL[selected.status]}
-			</h2>
-		</div>
-		<!-- The tabs: the stream, then every view. One strip, two tiers of
-		     content behind it. -->
-		<nav class="flex gap-1 px-1" aria-label="Ansicht">
+		<!-- The tabs, top center, where the status line used to be: the stream,
+		     then every view. One strip, two tiers of content behind it. -->
+		<nav class="flex justify-center gap-1 px-1 pt-1" aria-label="Ansicht">
 			{@render tab(null, 'Aktivität')}
 			{#each allWindows as w (w.manifest.id)}
 				{@render tab(w.manifest.id, w.manifest.name)}
@@ -1768,35 +1759,6 @@ const DOT: Record<string, string> = {
 					</span>
 				</div>
 				<p class="pt-1 text-[0.6875rem] text-foreground/50 leading-relaxed">{s.note}</p>
-			</button>
-		{/each}
-
-		<h2
-			class="px-1 pt-3 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
-		>
-			Views · {allWindows.length}
-		</h2>
-		{#each allWindows as w (w.manifest.id)}
-			<button
-				type="button"
-				onclick={() => {
-					showView(viewId === w.manifest.id ? null : w.manifest.id)
-					shell.rightOpen = false
-				}}
-				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {viewId ===
-				w.manifest.id
-					? 'border-foreground/15 bg-surface-card-selected'
-					: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
-			>
-				<div class="flex items-center gap-2">
-					<span
-						class="size-1.5 shrink-0 rounded-full {w.open ? 'bg-success' : 'bg-foreground/20'}"
-					></span>
-					<span class="font-medium text-xs">{w.manifest.name}</span>
-					<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
-						{w.open ? 'offen' : 'zu'}
-					</span>
-				</div>
 			</button>
 		{/each}
 
