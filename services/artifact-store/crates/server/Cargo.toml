@@ -1,0 +1,20 @@
+[package]
+name = "aven-artifact-store-server"
+description = "Standalone Aven artifact store service"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "aven-artifact-store"
+path = "src/main.rs"
+
+[dependencies]
+aven-artifact-store = { path = "../core" }
+aven-artifact-store-postgres = { path = "../postgres" }
+
+[lints]
+workspace = true
