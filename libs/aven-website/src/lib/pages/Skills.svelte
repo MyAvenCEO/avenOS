@@ -6,7 +6,8 @@ import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SiteFooter from '$lib/components/SiteFooter.svelte'
 import SkillMarketplaceCard from '$lib/components/SkillMarketplaceCard.svelte'
 import { type Lang, localeHref, pick } from '$lib/i18n'
-import { skills as messages, planRole, priceLabelFor, vatNote } from '$lib/i18n/skills'
+import { localizedPlan, priceLabel, vatNote } from '$lib/i18n/plans'
+import { skills as messages } from '$lib/i18n/skills'
 import { PLANS, type PlanId, planIncludes } from '$lib/pricing/plans'
 import { loadSkills, loadSkillsByPlan, skillDetailHref, skillsIncludedIn } from '$lib/skills/loader'
 
@@ -18,7 +19,7 @@ const byPlan = $derived(loadSkillsByPlan(lang))
 
 /**
  * The marketplace is organized by PRODUCT, not by author: a buyer asks which
- * plan a skill comes with. avenME and avenFOUNDER are separate products, so
+ * plan a skill comes with. avenFOUNDER carries every avenME skill, so
  * picking one shows exactly its skills; only avenCOOP also carries avenFOUNDER's.
  * `?plan=` lets the pricing
  * page link straight into the right selection.
@@ -116,17 +117,17 @@ const chainSteps = $derived(t.chain.steps)
 										{p.name}
 									</span>
 									<span class="shrink-0 text-[11px] font-semibold tabular-nums text-foreground/55">
-										{priceLabelFor(p, lang)}
+										{priceLabel(p, lang)}
 									</span>
 								</span>
 								<span class="mt-0.5 block text-[10px] leading-snug text-foreground/48">
-									{planRole(p, lang)}
+									{localizedPlan(p, lang).role}
 								</span>
 							</span>
 						</button>
 					{/each}
 				</div>
-				<p class="mt-3 text-[10px] leading-snug text-foreground/42">{vatNote[lang]}</p>
+				<p class="mt-3 text-[10px] leading-snug text-foreground/42">{vatNote(lang)}</p>
 				<p class="mt-3 text-[10px] font-semibold tabular-nums text-foreground/42">
 					{t.filter.count(visibleSkills.length, skills.length)}
 				</p>
@@ -156,10 +157,10 @@ const chainSteps = $derived(t.chain.steps)
 									{t.group.with(group.plan.name)}
 								</p>
 								<h2 class="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-									{planRole(group.plan, lang)}
+									{localizedPlan(group.plan, lang).role}
 								</h2>
 								<p class="mt-1 text-[12px] text-foreground/52">
-									{t.group.count(group.skills.length, priceLabelFor(group.plan, lang))}
+									{t.group.count(group.skills.length, priceLabel(group.plan, lang))}
 								</p>
 							</div>
 							<a

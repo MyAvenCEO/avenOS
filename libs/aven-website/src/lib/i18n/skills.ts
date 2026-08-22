@@ -1,4 +1,3 @@
-import { euro, type Plan, type PlanId } from '$lib/pricing/plans-data'
 import type { Lang } from './index'
 
 /**
@@ -107,13 +106,12 @@ export const skills: Record<Lang, SkillsMessages> = {
 			filter: {
 				label: 'Filter',
 				includedIn: 'Enthalten in',
-				explainer:
-					'avenME (pro Mensch) und avenFOUNDER (pro Firma) sind eigene Produkte. avenCOOP enthält avenFOUNDER.',
+				explainer: 'avenFOUNDER enthält alle Skills aus avenME. avenCOOP enthält avenFOUNDER.',
 				count: (visible, total) => `${visible} von ${total} Skills enthalten`,
 				compare: 'Pläne vergleichen →'
 			},
 			inclusion: (plan, total, inherited, own) =>
-				`${plan} enthält alle ${total} Skills — die ${inherited} aus avenFOUNDER genauso wie die ${own} eigenen.`,
+				`${plan} enthält alle ${total} Skills — die ${inherited} aus den enthaltenen Plänen genauso wie die ${own} eigenen.`,
 			group: {
 				with: (plan) => `Mit ${plan}`,
 				count: (n, price) => `${n} Skill${n === 1 ? '' : 's'} · ab ${price}`,
@@ -215,13 +213,12 @@ export const skills: Record<Lang, SkillsMessages> = {
 			filter: {
 				label: 'Filter',
 				includedIn: 'Included in',
-				explainer:
-					'avenME (per person) and avenFOUNDER (per company) are separate products. avenCOOP includes avenFOUNDER.',
+				explainer: 'avenFOUNDER includes every avenME skill. avenCOOP includes avenFOUNDER.',
 				count: (visible, total) => `${visible} of ${total} skills included`,
 				compare: 'Compare plans →'
 			},
 			inclusion: (plan, total, inherited, own) =>
-				`${plan} includes all ${total} skills — the ${inherited} from avenFOUNDER as well as its own ${own}.`,
+				`${plan} includes all ${total} skills — the ${inherited} from the included plans as well as its own ${own}.`,
 			group: {
 				with: (plan) => `With ${plan}`,
 				count: (n, price) => `${n} skill${n === 1 ? '' : 's'} · from ${price}`,
@@ -311,27 +308,3 @@ export const skills: Record<Lang, SkillsMessages> = {
 }
 
 /** "58 €/Monat" · "58 €/month" — `priceLabel` in plans-data is German-only. */
-export function priceLabelFor(p: Plan, lang: Lang): string {
-	if (lang === 'de') {
-		return p.billing === 'once' ? `${euro(p.eurPrice)} € einmalig` : `${euro(p.eurPrice)} €/Monat`
-	}
-	return p.billing === 'once' ? `${euro(p.eurPrice)} € one-time` : `${euro(p.eurPrice)} €/month`
-}
-
-/** The VAT sentence under the filter — `VAT_NOTE` in plans-data is German-only. */
-export const vatNote: Record<Lang, string> = {
-	de: 'Alle Preise verstehen sich zzgl. der gesetzlichen Umsatzsteuer.',
-	en: 'All prices excl. VAT.'
-}
-
-/** `Plan.role` is German-only in plans-data; the English line lives here. */
-const planRolesEn: Record<PlanId, string> = {
-	avenid: 'Your name — one account anyone can address. Per person and per company.',
-	avenme: 'Your personal AI‑CEO — for your life',
-	avenceo: 'Your professional AI‑CEO — for your company',
-	avencoop: 'We become your technical co‑founder'
-}
-
-export function planRole(p: Plan, lang: Lang): string {
-	return lang === 'en' ? (planRolesEn[p.id] ?? p.role) : p.role
-}

@@ -27,7 +27,8 @@ const EN: Record<PlanId, { role: string; features: string[] }> = {
 			'Your avenID name — reserved for you for 1 year',
 			'Your place on the waiting list',
 			'20 min of trial access — the moment you are invited',
-			'Required for avenME and avenFOUNDER — one per person, one per company'
+			'Required for avenME and avenFOUNDER — one per person, one per company',
+			'5 % commission on every aven product you refer — monthly, for as long as it runs'
 		]
 	},
 	avenme: {
@@ -57,7 +58,6 @@ const EN: Record<PlanId, { role: string; features: string[] }> = {
 			'Product checkout and shop',
 			'Blog',
 			'Digital mailbox for business customers (excl. Deutsche Post mail forwarding: 51.90 € / 6 months, incl. VAT)',
-			'The one point of contact: employees, customers and partners talk directly to your avenCEO — in chat, social media and support',
 			'The memory of your company: knowledge and experience accumulate in the avenCEO over the years — that becomes your most valuable asset'
 		]
 	},
@@ -93,10 +93,10 @@ function featureLabel(f: PlanFeature): string {
 	return typeof f === 'string' ? f : f.label
 }
 
-/** "/month · excl. VAT" · "one-time · excl. VAT" */
+/** "/month · incl. VAT" · "one-time · incl. VAT" */
 export function priceSuffix(p: Plan, lang: Lang): string {
 	if (lang === 'de') return priceSuffixDe(p)
-	return p.billing === 'once' ? 'one-time · excl. VAT' : '/month · excl. VAT'
+	return p.billing === 'once' ? 'one-time · incl. VAT' : '/month · incl. VAT'
 }
 
 /** "25 € one-time" · "426 €/month" */
@@ -106,7 +106,7 @@ export function priceLabel(p: Plan, lang: Lang): string {
 }
 
 export function vatNote(lang: Lang): string {
-	return lang === 'de' ? VAT_NOTE : 'All prices exclude statutory VAT.'
+	return lang === 'de' ? VAT_NOTE : 'All prices include statutory VAT.'
 }
 
 /** "per person" · "per company" */

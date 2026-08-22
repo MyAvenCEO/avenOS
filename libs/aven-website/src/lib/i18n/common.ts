@@ -4,7 +4,7 @@ import type { Lang } from './index'
 export const common: Record<
 	Lang,
 	{
-		nav: { skills: string; pricing: string; cta: string }
+		nav: { skills: string; aven: string; pricing: string; cta: string }
 		switchLabel: string
 		footer: {
 			tagline: string
@@ -36,7 +36,7 @@ export const common: Record<
 	}
 > = {
 	de: {
-		nav: { skills: 'Skills', pricing: 'Preise', cta: 'avenID sichern' },
+		nav: { skills: 'Skills', aven: 'Aven', pricing: 'Preise', cta: 'avenID sichern' },
 		switchLabel: 'Sprache',
 		footer: {
 			tagline: 'Deine eigene KI, deine eigene Firma — und das, was du damit baust, gehört dir.',
@@ -44,7 +44,7 @@ export const common: Record<
 			legalLabel: 'Rechtliches',
 			ctaLabel: 'avenID sichern',
 			copyright: 'avenCEO · avenOS — Own your life',
-			vat: 'Alle Preise zzgl. der gesetzlichen Umsatzsteuer.',
+			vat: 'Alle Preise inkl. der gesetzlichen Umsatzsteuer.',
 			legal: {
 				impressum: 'Impressum',
 				datenschutz: 'Datenschutz',
@@ -60,7 +60,7 @@ export const common: Record<
 			placeholder: 'maia',
 			button: 'avenID sichern →',
 			exampleLabel: 'Beispiel:',
-			priceNote: (price) => `einmalig ${price} € zzgl. USt.`,
+			priceNote: (price) => `einmalig ${price} € inkl. USt.`,
 			formLabel: 'avenID sichern'
 		},
 		board: {
@@ -72,7 +72,7 @@ export const common: Record<
 		}
 	},
 	en: {
-		nav: { skills: 'Skills', pricing: 'Pricing', cta: 'Claim your avenID' },
+		nav: { skills: 'Skills', aven: 'Aven', pricing: 'Pricing', cta: 'Claim your avenID' },
 		switchLabel: 'Language',
 		footer: {
 			tagline: 'Your own AI, your own company — and what you build with it belongs to you.',
@@ -80,7 +80,7 @@ export const common: Record<
 			legalLabel: 'Legal',
 			ctaLabel: 'Claim your avenID',
 			copyright: 'avenCEO · avenOS — Own your life',
-			vat: 'All prices exclude VAT.',
+			vat: 'All prices include VAT.',
 			legal: {
 				impressum: 'Imprint',
 				datenschutz: 'Privacy',
@@ -96,7 +96,7 @@ export const common: Record<
 			placeholder: 'maia',
 			button: 'Claim avenID →',
 			exampleLabel: 'Example:',
-			priceNote: (price) => `one-time ${price} € excl. VAT`,
+			priceNote: (price) => `one-time ${price} € incl. VAT`,
 			formLabel: 'Claim your avenID'
 		},
 		board: {

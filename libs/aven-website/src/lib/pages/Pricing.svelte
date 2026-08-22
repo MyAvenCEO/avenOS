@@ -115,7 +115,10 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 				{#each products as p (p.id)}
 					{@const skillCount = skillsIncludedIn(p.id, lang).length}
 					{@const plain = p.features.filter((f) => typeof f === 'string' || 'href' in f)}
-					{@const skills = p.features
+					{@const skills = [
+						...p.features,
+						...(p.id === 'avenceo' ? localizedPlan(plan('avenme'), lang).features : [])
+					]
 						.filter((f) => typeof f !== 'string' && 'skill' in f)
 						.sort(
 							(a, b) =>
@@ -155,23 +158,32 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						</div>
 
 						{#if totalSharePct(p) > 0}
-							<div class="mt-4 border-t border-border/50 pt-3 text-center">
+							<div class="mt-4 border-t border-border/50 pt-4 text-center">
 								<p class="text-[13px] font-medium text-foreground/55">
 									<span class="text-xl font-semibold tabular-nums tracking-tight text-accent"
 										>{totalSharePct(p)}&nbsp;%</span
 									>
 									{t.ofRevenue}
 								</p>
-								<!-- The split is the whole point: half is a price, half buys you shares. -->
-								<dl class="mt-2 flex justify-between gap-4 text-[11px] leading-snug">
-									<dt class="text-left text-foreground/55">
-										{p.platformFeePct}&nbsp;% {t.platform}
-										<span class="block text-foreground/40">{t.inclFees}</span>
-									</dt>
-									<dt class="text-right font-medium text-accent">
-										{p.reinvestPct}&nbsp;% {t.reinvest}
-										<span class="block font-normal text-foreground/55"> {t.reinvestInto}</span>
-									</dt>
+								<!-- The split is the whole point: half is a price, half buys you shares —
+								     two equal boxes, so the reader sees two halves, not one number. -->
+								<dl
+									class="mt-3 grid grid-cols-2 divide-x divide-border/50 rounded-xl border border-border/50 bg-surface-card text-center"
+								>
+									<div class="px-3 py-2.5">
+										<dt class="text-base font-semibold tabular-nums text-foreground/80">
+											{p.platformFeePct}&nbsp;%
+										</dt>
+										<dd class="mt-0.5 text-[11px] font-medium text-foreground/70">{t.platform}</dd>
+										<dd class="text-[10px] leading-snug text-foreground/45">{t.inclFees}</dd>
+									</div>
+									<div class="px-3 py-2.5">
+										<dt class="text-base font-semibold tabular-nums text-accent">
+											{p.reinvestPct}&nbsp;%
+										</dt>
+										<dd class="mt-0.5 text-[11px] font-medium text-accent">{t.reinvest}</dd>
+										<dd class="text-[10px] leading-snug text-foreground/45">{t.reinvestInto}</dd>
+									</div>
 								</dl>
 								{#if p.equitySharePct}
 									<p class="mt-3 text-[12px] font-medium text-foreground/70">
@@ -348,18 +360,22 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 								>
 								{t.ofRevenue}
 							</p>
-							<dl class="mt-2 space-y-1 text-[11px] leading-snug">
-								<div>
-									<dt class="text-foreground/55">
-										{coop.platformFeePct}&nbsp;% {t.platform}
-										<span class="text-foreground/40">· {t.inclFees}</span>
+							<dl
+								class="mt-3 grid grid-cols-2 divide-x divide-border/50 rounded-xl border border-border/50 bg-surface-card text-center"
+							>
+								<div class="px-3 py-2.5">
+									<dt class="text-base font-semibold tabular-nums text-foreground/80">
+										{coop.platformFeePct}&nbsp;%
 									</dt>
+									<dd class="mt-0.5 text-[11px] font-medium text-foreground/70">{t.platform}</dd>
+									<dd class="text-[10px] leading-snug text-foreground/45">{t.inclFees}</dd>
 								</div>
-								<div>
-									<dt class="font-medium text-accent">
-										{coop.reinvestPct}&nbsp;% {t.reinvest}
-										<span class="font-normal text-foreground/55"> · {t.reinvestInto}</span>
+								<div class="px-3 py-2.5">
+									<dt class="text-base font-semibold tabular-nums text-accent">
+										{coop.reinvestPct}&nbsp;%
 									</dt>
+									<dd class="mt-0.5 text-[11px] font-medium text-accent">{t.reinvest}</dd>
+									<dd class="text-[10px] leading-snug text-foreground/45">{t.reinvestInto}</dd>
 								</div>
 							</dl>
 							{#if coop.equitySharePct}
