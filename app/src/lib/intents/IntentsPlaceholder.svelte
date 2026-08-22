@@ -995,16 +995,18 @@ const DOT: Record<string, string> = {
 				class="relative w-full overflow-hidden rounded-2xl border-2 border-primary bg-surface-raised shadow-[0_4px_16px_rgba(30,41,59,0.12)]"
 			>
 				{#if chat.routing !== null}
-					<p
-						class="min-h-12 whitespace-pre-wrap py-3 pr-14 pl-4 text-[13px] text-foreground/60 leading-relaxed"
-						aria-live="polite"
-					>
-						{chat.routing}
-					</p>
+					<div class="min-h-12 py-3.5 pr-14 pl-4 text-[13px] leading-5" aria-live="polite">
+						<p class="whitespace-pre-wrap text-foreground/60">{chat.routing}</p>
+						{#if chat.routingReply !== ''}
+							<!-- The answer, as it arrives, still here: the request has
+							     not settled into a stream yet. -->
+							<p class="whitespace-pre-wrap pt-2 text-foreground/85">{chat.routingReply}</p>
+						{/if}
+					</div>
 					<span
 						title="wird zugeordnet"
 						aria-label="wird zugeordnet"
-						class="absolute right-2 bottom-2 flex size-8 items-center justify-center rounded-full bg-primary/10"
+						class="absolute right-1.5 bottom-1.5 flex size-9 items-center justify-center rounded-full bg-primary/10"
 					>
 						<span
 							class="size-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
@@ -1018,7 +1020,7 @@ const DOT: Record<string, string> = {
 						onblur={() => composer.dismiss()}
 						rows="1"
 						placeholder="Sprich — oder schreib…"
-						class="field-sizing-content max-h-60 min-h-12 w-full resize-none bg-transparent py-3 pr-14 pl-4 text-[13px] text-foreground/80 leading-relaxed outline-none placeholder:text-foreground/35"
+						class="field-sizing-content block max-h-60 min-h-12 w-full resize-none bg-transparent py-3.5 pr-14 pl-4 text-[13px] text-foreground/80 leading-5 outline-none placeholder:text-foreground/35"
 					></textarea>
 					<button
 						type="submit"
@@ -1026,7 +1028,7 @@ const DOT: Record<string, string> = {
 						onmousedown={(e) => e.preventDefault()}
 						title="Senden"
 						aria-label="Senden"
-						class="absolute right-2 bottom-2 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-85 disabled:opacity-30"
+						class="absolute right-1.5 bottom-1.5 flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-85 disabled:opacity-30"
 					>
 						<svg
 							viewBox="0 0 24 24"
