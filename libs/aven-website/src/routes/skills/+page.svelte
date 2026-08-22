@@ -246,7 +246,7 @@ const chainSteps = [
 			<div
 				class="mx-auto mt-6 max-w-sm rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-center ring-1 ring-accent/20"
 			>
-				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent-ink">HITL Layer</p>
+				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent">HITL Layer</p>
 				<a
 					href={skillDetailHref('human-reviewer', 'de')}
 					class="mt-1 block text-[12px] font-bold tracking-[0.08em] text-foreground/75 hover:text-foreground/95"

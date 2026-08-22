@@ -47,7 +47,7 @@ const chainLabels: Record<string, string> = {
 		<span
 			class="inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] {skill.comingSoon
 				? 'border-quiet/35 bg-quiet/10 text-quiet-ink'
-				: 'border-accent/40 bg-accent/20 text-accent-ink'}"
+				: 'border-accent/40 bg-accent/20 text-accent'}"
 		>
 			{skill.comingSoon ? 'Bald' : 'Skill'}
 		</span>
@@ -78,7 +78,7 @@ const chainLabels: Record<string, string> = {
 
 	<div class="mt-5 flex items-center justify-between border-t border-border/30 pt-4">
 		<div>
-			<p class="text-[9px] font-bold uppercase tracking-[0.2em] text-accent-ink">
+			<p class="text-[9px] font-bold uppercase tracking-[0.2em] text-accent">
 				{skill.hero.promiseHoursPerWeek}
 				gespart
 			</p>
