@@ -403,57 +403,42 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 					<!-- Right: what you get (bullets) | skills + runtime, then the decision. -->
 					<div class="flex min-w-0 flex-col">
 						<div class="grid gap-8 sm:grid-cols-[1fr_16rem] sm:gap-10">
-							<ul class="space-y-3 text-[13px] leading-snug text-foreground/75">
-								{#each coop.features as feature (typeof feature === 'string' ? feature : feature.label)}
-									<li class="flex gap-2">
-										<span
-											aria-hidden="true"
-											class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
-										></span>
-										{#if typeof feature === 'string'}
-											<span>{feature}</span>
-										{:else if 'href' in feature}
-											<span>
-												<a
-													href={feature.href}
-													target="_blank"
-													rel="noopener noreferrer"
-													class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
-												>
-													{feature.label}
-													→
-												</a>
-											</span>
-										{:else}
-											<span>
-												<a
-													href={skillDetailHref(feature.skill, lang)}
-													class="font-medium underline underline-offset-4"
-												>
-													{skillLabel(feature.skill)}
-												</a>
-												<span class="text-foreground/55">· {feature.label}</span>
-											</span>
-										{/if}
-									</li>
-								{/each}
-							</ul>
-
 							<div>
-								{#if coopSkillCount > 0}
-									<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-										{t.skills}
-									</p>
-									{@render skillList(skillFeatures(coop))}
-									<p class="mt-2 text-[12px] text-foreground/50">
-										<a
-											href={`${localeHref(lang, '/skills')}?plan=${coop.id}`}
-											class="underline underline-offset-4 hover:text-foreground/75"
-										>
-											{t.allSkills(coopSkillCount)}
-										</a>
-									</p>
-								{/if}
+								<ul class="space-y-3 text-[13px] leading-snug text-foreground/75">
+									{#each coop.features as feature (typeof feature === 'string' ? feature : feature.label)}
+										<li class="flex gap-2">
+											<span
+												aria-hidden="true"
+												class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
+											></span>
+											{#if typeof feature === 'string'}
+												<span>{feature}</span>
+											{:else if 'href' in feature}
+												<span>
+													<a
+														href={feature.href}
+														target="_blank"
+														rel="noopener noreferrer"
+														class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+													>
+														{feature.label}
+														→
+													</a>
+												</span>
+											{:else}
+												<span>
+													<a
+														href={skillDetailHref(feature.skill, lang)}
+														class="font-medium underline underline-offset-4"
+													>
+														{skillLabel(feature.skill)}
+													</a>
+													<span class="text-foreground/55">· {feature.label}</span>
+												</span>
+											{/if}
+										</li>
+									{/each}
+								</ul>
 								{#if coop.runtime}
 									<div
 										class="mt-4 rounded-xl border border-border/60 bg-surface-card px-4 py-3 text-left"
@@ -469,6 +454,23 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 											{t.extraMinute(coop.runtime.centsPerExtraMinute)}
 										</p>
 									</div>
+								{/if}
+							</div>
+
+							<div>
+								{#if coopSkillCount > 0}
+									<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+										{t.skills}
+									</p>
+									{@render skillList(skillFeatures(coop))}
+									<p class="mt-2 text-[12px] text-foreground/50">
+										<a
+											href={`${localeHref(lang, '/skills')}?plan=${coop.id}`}
+											class="underline underline-offset-4 hover:text-foreground/75"
+										>
+											{t.allSkills(coopSkillCount)}
+										</a>
+									</p>
 								{/if}
 							</div>
 						</div>
