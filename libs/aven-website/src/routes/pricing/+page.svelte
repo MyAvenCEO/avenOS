@@ -313,8 +313,8 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 							</a>
 							<p class="mt-2 text-center text-[11px] leading-snug text-foreground/50">
 								+ {avenId.name} ({euro(avenId.eurPrice)}&nbsp;€ einmalig) im Bundle, falls
-								{p.per === 'company' ? 'deine Firma' : 'du'}
-								noch keine hat — avenID ist nicht enthalten.
+								{p.per === 'company' ? 'deine Firma noch keine hat' : 'du noch keine hast'}
+								— avenID ist nicht enthalten.
 							</p>
 						</div>
 
