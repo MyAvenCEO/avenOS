@@ -17,9 +17,10 @@ import { query } from './query.svelte'
  *
  * One conversation, not two modes: the composer is always there, and the
  * ears are open whenever the conversation is live. Write, speak, or both —
- * a typed line goes on Enter, a spoken one goes on the pause after it. The
- * send slot says which: the arrow while there is a draft, the ear while it
- * is listening to an empty field.
+ * what is heard is written INTO the field as it is heard; a typed line goes
+ * on Enter, a spoken one on the pause after it. The send slot says which:
+ * the arrow while there is a typed draft, the ear while it listens or while
+ * words are still arriving.
  *
  * Views are window actors (0130): the model opens one by message ("zeig mir
  * das Board") and it renders here, above the messages, until it is closed.
@@ -143,7 +144,7 @@ const empty = $derived(draft.trim() === '')
 
 		<!-- ── The conversation ── -->
 		<div bind:this={chatEl} class="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-3">
-			{#if chat.turns.length === 0 && !activity.current && listener.partial === ''}
+			{#if chat.turns.length === 0 && !activity.current}
 				<p class="m-auto px-2 py-6 text-center text-foreground/40 text-sm">
 					{query.intent ? 'Frag etwas zu diesem Intent.' : 'Frag etwas — oder sag es einfach.'}
 				</p>
@@ -207,18 +208,6 @@ const empty = $derived(draft.trim() === '')
 					</div>
 				</div>
 			{/if}
-
-			<!-- What is being heard, as it is being heard: the message that is
-			     about to exist, drawn as one — dashed, because it is not yet. -->
-			{#if listener.partial !== ''}
-				<div class="flex justify-end">
-					<div
-						class="max-w-[85%] rounded-2xl border border-border border-dashed bg-surface-card px-3.5 py-2 text-[13px] leading-relaxed opacity-70"
-					>
-						{listener.partial}
-					</div>
-				</div>
-			{/if}
 		</div>
 
 		<!-- ── The composer: the modal's footer ── -->
@@ -238,10 +227,11 @@ const empty = $derived(draft.trim() === '')
 				placeholder={listening ? 'Sprich — oder schreib…' : 'Schreib…'}
 				class="field-sizing-content max-h-40 min-h-10 flex-1 resize-none rounded-2xl border border-border bg-surface-raised px-3.5 py-2.5 text-sm leading-snug outline-none placeholder:text-foreground/35 focus:border-foreground/25"
 			></textarea>
-			<!-- The send slot. With a draft it is the send button; with an empty
-			     field while listening it wears the ear — the pause sends. One
-			     circle either way, so the area never changes shape. -->
-			{#if empty && listening}
+			<!-- The send slot. With a typed draft it is the send button; while
+			     listening to an empty field, or while words are still arriving,
+			     it wears the ear — the pause sends. One circle either way, so the
+			     area never changes shape. -->
+			{#if listening && (empty || listener.partial !== '')}
 				<span
 					title="Sendet von selbst, wenn du pausierst"
 					aria-label="Sendet von selbst, wenn du pausierst"
