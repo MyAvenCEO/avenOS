@@ -15,9 +15,10 @@ export type HomeMessages = {
 	hero: {
 		headingLine1: string
 		headingLine2: string
-		leadBefore: string
-		leadStrong: string
-		leadAfter: string
+		/** What an Aven IS — nobody has met the word yet at this point on the page. */
+		introHtml: string
+		/** The fork, as hard as it gets: surviving without, shaping with. */
+		contrastHtml: string
 	}
 	shift: {
 		eyebrow: string
@@ -50,8 +51,9 @@ export type HomeMessages = {
 		lead: string
 		steps: string[]
 		closingHtml: string
+		/** The vision beat: one line, then the picture it opens. */
 		movement: string
-		movementHtml: string
+		visionHtml: string[]
 		link: string
 	}
 	founders: {
@@ -79,14 +81,13 @@ export const home: Record<Lang, HomeMessages> = {
 		hero: {
 			headingLine1: 'Tief in deinem Herzen weißt du es:',
 			headingLine2: 'in dir steckt so viel mehr.',
-			leadBefore: 'Wir sind da, um dich endlich in dein',
-			leadStrong: 'souveränes Gründerleben',
-			leadAfter: 'zu katapultieren — und dich zum Besitzer von 10+ Aven zu machen.'
+			introHtml: `Ein Aven ist eine KI, die dir gehört. Er führt dein Leben, deine Firma, deine Bücher — und alles, was er erwirtschaftet, bleibt bei dir.`,
+			contrastHtml: `Ohne einen eigenen Aven kämpfst du bald ums ${s('Überleben', 'text-foreground')}. Mit deinen eigenen Aven ${s('gestaltest du, was als Nächstes entsteht', 'text-accent')}.`
 		},
 		shift: {
 			eyebrow: 'Post‑AGI · Warum jetzt',
 			heading: 'Bald zählt nur noch, was dir gehört.',
-			bodyHtml: `${s('Zeit gegen Geld zu tauschen', 'text-foreground/85')} kollabiert, sobald KI fast jede Arbeit so gut erledigt wie ein Mensch — rund um die Uhr, ${s('zum Preis von Strom', 'text-foreground/85')}. Dann bleibt eine einzige Einkommensquelle: dein Besitz.`,
+			bodyHtml: `${s('Zeit gegen Geld zu tauschen', 'text-foreground/85')} kollabiert, sobald KI fast jede Arbeit so gut erledigt wie ein Mensch — rund um die Uhr, ${s('zum Preis von Strom', 'text-foreground/85')}. Dann bleibt nur noch eine einzige Einkommensquelle.`,
 			question: 'Besitzt du die KI, die die neue Arbeit leistet — oder nicht?',
 			without: {
 				eyebrow: 'Ohne Assets',
@@ -124,7 +125,7 @@ export const home: Record<Lang, HomeMessages> = {
 		},
 		own: {
 			eyebrow: 'Dein Portfolio · Besitzen statt mieten',
-			heading: 'Am Ende besitzt du nicht einen Aven. Sondern zehn.',
+			heading: 'Am Ende besitzt du nicht einen Aven. Sondern zehn oder mehr.',
 			lead: 'Ein Aven ist kein Abo, das du mietest. Er ist ein Asset, das arbeitet, lernt und dir gehört. Und du sammelst sie.',
 			rungs: [
 				{
@@ -157,7 +158,11 @@ export const home: Record<Lang, HomeMessages> = {
 			],
 			closingHtml: `${s('Zinseszins — nur auf Firmen statt auf Zinsen.', 'text-foreground/85')} Je mehr Aven laufen, desto schneller dreht sich das Rad.`,
 			movement: 'Ein Aven trägt eine Firma. Eine Million Aven tragen eine Zivilisation.',
-			movementHtml: `Keine Plattform, die dazwischen steht und Miete nimmt. ${s('Uns gehört, was wir gemeinsam bauen.', 'text-foreground/85')}`,
+			visionHtml: [
+				'Stell dir eine Million Gründer vor. Jeder mit seinen eigenen Aven. Jeder beteiligt an den Aven der anderen.',
+				`Was diese Million bauen kann, passt in keinen Businessplan: Häuser, die sich selbst versorgen. Werkstätten, Schulen, Kliniken, die niemandem in einem fernen Vorstand gehören. Und irgendwann eine ganze Stadt — ${s('gebaut von den Menschen, denen sie auch gehört')}.`,
+				`Keine Plattform, die dazwischen steht und Miete nimmt. ${s('Uns gehört, was wir gemeinsam bauen.', 'text-foreground/85')}`
+			],
 			link: 'Wie wir mitbauen: avenCOOP →'
 		},
 		founders: {
@@ -199,14 +204,13 @@ export const home: Record<Lang, HomeMessages> = {
 		hero: {
 			headingLine1: 'Deep in your heart you know it:',
 			headingLine2: 'there is so much more in you.',
-			leadBefore: 'We are here to finally catapult you into the',
-			leadStrong: 'sovereign founder life',
-			leadAfter: 'you have always dreamed of — and to make you the owner of 10+ Aven.'
+			introHtml: `An Aven is an AI that belongs to you. It runs your life, your company, your books — and everything it earns stays with you.`,
+			contrastHtml: `Without an Aven of your own you will soon be fighting to ${s('survive', 'text-foreground')}. With your own Aven you ${s('shape what gets built next', 'text-accent')}.`
 		},
 		shift: {
 			eyebrow: 'Post‑AGI · Why now',
 			heading: 'Soon only what you own will count.',
-			bodyHtml: `${s('Trading time for money', 'text-foreground/85')} collapses as soon as AI does almost any job as well as a human — around the clock, ${s('at the price of electricity', 'text-foreground/85')}. Then one single source of income remains: what you own.`,
+			bodyHtml: `${s('Trading time for money', 'text-foreground/85')} collapses as soon as AI does almost any job as well as a human — around the clock, ${s('at the price of electricity', 'text-foreground/85')}. Then only one single source of income remains.`,
 			question: 'Do you own the AI that does the new work — or not?',
 			without: {
 				eyebrow: 'Without assets',
@@ -244,7 +248,7 @@ export const home: Record<Lang, HomeMessages> = {
 		},
 		own: {
 			eyebrow: 'Your portfolio · Own it, don’t rent it',
-			heading: 'In the end you do not own one Aven. You own ten.',
+			heading: 'In the end you do not own one Aven. You own ten or more.',
 			lead: 'An Aven is not a subscription you rent. It is an asset that works, learns and belongs to you. And you collect them.',
 			rungs: [
 				{
@@ -277,7 +281,11 @@ export const home: Record<Lang, HomeMessages> = {
 			],
 			closingHtml: `${s('Compounding — on companies instead of interest.', 'text-foreground/85')} The more Aven run, the faster the wheel turns.`,
 			movement: 'One Aven carries a company. A million Aven carry a civilization.',
-			movementHtml: `No platform standing in between and collecting rent. ${s('We own what we build together.', 'text-foreground/85')}`,
+			visionHtml: [
+				'Imagine a million founders. Each with their own Aven. Each holding a stake in everyone else’s.',
+				`What that million can build fits into no business plan: houses that power themselves. Workshops, schools, clinics that belong to nobody in a distant boardroom. And one day a whole city — ${s('built by the people it belongs to')}.`,
+				`No platform standing in between and collecting rent. ${s('We own what we build together.', 'text-foreground/85')}`
+			],
 			link: 'How we build together: avenCOOP →'
 		},
 		founders: {

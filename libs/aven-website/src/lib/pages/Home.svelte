@@ -42,12 +42,13 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<span class="mt-1 block">{t.hero.headingLine2}</span>
 			</h1>
 			<div class="mx-auto mt-8 max-w-2xl">
+				<p class="text-pretty text-[17px] leading-relaxed text-foreground/70 sm:text-[18px]">
+					{@html t.hero.introHtml}
+				</p>
 				<p
-					class="text-pretty text-[19px] font-normal leading-snug text-foreground/75 sm:text-[21px]"
+					class="mt-6 text-pretty text-[19px] font-medium leading-snug text-foreground/80 sm:text-[22px]"
 				>
-					{t.hero.leadBefore}
-					<strong class="font-medium text-accent">{t.hero.leadStrong}</strong>
-					{t.hero.leadAfter}
+					{@html t.hero.contrastHtml}
 				</p>
 			</div>
 		</div>
@@ -262,9 +263,11 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				>
 					{t.compound.movement}
 				</p>
-				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-foreground/68">
-					{@html t.compound.movementHtml}
-				</p>
+				<div class="mx-auto mt-5 max-w-xl space-y-4 text-[15px] leading-relaxed text-foreground/68">
+					{#each t.compound.visionHtml as paragraph, i (i)}
+						<p class="text-pretty">{@html paragraph}</p>
+					{/each}
+				</div>
 				<p class="mt-6">
 					<a
 						href="{localeHref(lang, '/pricing')}#avencoop"
