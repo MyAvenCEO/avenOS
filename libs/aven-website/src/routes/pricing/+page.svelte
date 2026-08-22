@@ -83,7 +83,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 				<div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-10">
 					<div class="lg:w-64 lg:shrink-0">
 						<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
-							Der Anfang · Pflicht für beide
+							Der Anfang · Pro Mensch und pro Firma
 						</p>
 						<p class="mt-1 text-xl font-semibold tracking-tight text-foreground">{avenId.name}</p>
 						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{avenId.role}</p>
@@ -312,8 +312,9 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 								{ctaLabel(p)}
 							</a>
 							<p class="mt-2 text-center text-[11px] leading-snug text-foreground/50">
-								+ {avenId.name} ({euro(avenId.eurPrice)}&nbsp;€ einmalig) im Bundle, falls du noch
-								keine hast — avenID ist nicht enthalten.
+								+ {avenId.name} ({euro(avenId.eurPrice)}&nbsp;€ einmalig) im Bundle, falls
+								{p.per === 'company' ? 'deine Firma' : 'du'}
+								noch keine hat — avenID ist nicht enthalten.
 							</p>
 						</div>
 
