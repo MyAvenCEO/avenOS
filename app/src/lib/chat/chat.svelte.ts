@@ -431,6 +431,41 @@ export class Chat {
 		}
 	}
 
+	/**
+	 * Fold the conversations of `from` into `into`, in order, and forget the
+	 * sources — merging intents merges their streams. The turn in flight, if
+	 * it lives in one of the sources, moves along with it.
+	 */
+	mergeSessions(from: string[], into: string): void {
+		const grab = (key: string): Session | undefined => {
+			if (key === this.session) return { turns: this.turns, wire: this.#wire }
+			return this.#sessions.get(key)
+		}
+		const target = grab(into) ?? { turns: [], wire: [] }
+		if (into !== this.session) this.#sessions.set(into, target)
+		for (const key of from) {
+			if (key === into) continue
+			const src = grab(key)
+			if (!src) continue
+			if (this.#live && this.#live.turns === src.turns) {
+				this.#live.fromTurn += target.turns.length
+				this.#live.fromWire += target.wire.length
+				this.#live.turns = target.turns
+				this.#live.wire = target.wire
+			}
+			target.turns.push(...src.turns.splice(0))
+			target.wire.push(...src.wire.splice(0))
+			this.#sessions.delete(key)
+			// The visible session was a source: show the target instead.
+			if (key === this.session) {
+				this.session = into
+				this.turns = target.turns
+				this.#wire = target.wire
+			}
+		}
+		this.#sink.onTurn?.()
+	}
+
 	/** Stop mid-reply. Whatever has arrived so far stays on screen. */
 	stop(): void {
 		this.#abort?.abort()
