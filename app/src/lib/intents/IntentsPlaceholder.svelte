@@ -120,15 +120,35 @@ const STATUS_LABEL: Record<IntentState, string> = {
  * list into their own collapsed section, where being folded away and dimmed
  * already says "archived". A colour for it would be a colour nobody reads.
  */
-const STATE_ACCENT: Record<Exclude<IntentState, 'archive'>, { edge: string; text: string }> = {
-	working: { edge: 'border-l-progress', text: 'text-progress-ink' },
-	waiting: { edge: 'border-l-info', text: 'text-info-ink' },
-	done: { edge: 'border-l-success', text: 'text-success-ink' },
-	error: { edge: 'border-l-error', text: 'text-error-ink' }
+/**
+ * `fill` is the SELECTED card: the whole card in the state's color, with
+ * that color's own foreground — the one card on the list you cannot miss,
+ * and it says its state without a legend.
+ */
+const STATE_ACCENT: Record<
+	Exclude<IntentState, 'archive'>,
+	{ edge: string; text: string; fill: string }
+> = {
+	working: {
+		edge: 'border-l-progress',
+		text: 'text-progress-ink',
+		fill: 'bg-progress text-progress-foreground'
+	},
+	waiting: { edge: 'border-l-info', text: 'text-info-ink', fill: 'bg-info text-info-foreground' },
+	done: {
+		edge: 'border-l-success',
+		text: 'text-success-ink',
+		fill: 'bg-success text-success-foreground'
+	},
+	error: { edge: 'border-l-error', text: 'text-error-ink', fill: 'bg-error text-error-foreground' }
 }
 
 /** What archive wears instead: the page's own ink, held well back. */
-const NO_ACCENT = { edge: 'border-l-foreground/20', text: 'text-foreground/45' }
+const NO_ACCENT = {
+	edge: 'border-l-foreground/20',
+	text: 'text-foreground/45',
+	fill: 'bg-foreground/70 text-background'
+}
 
 /**
  * An archived intent never reaches the active list, but it CAN be selected
@@ -1131,9 +1151,9 @@ const DOT: Record<string, string> = {
 					skillView = null
 					shell.detail = true
 				}}
-				class="rounded-xl border border-l-[4px] text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {accent.edge} {sel
-					? 'border-foreground/5 bg-surface-raised px-5 py-4 lg:-mr-3 lg:rounded-r-none lg:border-r-0 lg:shadow-none'
-					: 'border-foreground/5 bg-surface-raised px-4 py-3 hover:bg-surface-card-hover'}"
+				class="rounded-xl border text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
+					? `border-transparent px-5 py-4 ${accent.fill}`
+					: `border-l-[4px] border-foreground/5 bg-surface-raised px-4 py-3 hover:bg-surface-card-hover ${accent.edge}`}"
 			>
 				<!-- The selected card is the intent's header: a little larger, on
 				     the center's own surface, and on desktop it runs INTO the center
@@ -1144,21 +1164,31 @@ const DOT: Record<string, string> = {
 					<p class="min-w-0 flex-1 font-medium leading-snug {sel ? 'text-sm' : 'text-xs'}">
 						{intent.title}
 					</p>
-					<span class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_BADGE}">
+					<span
+						class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {sel
+							? 'bg-white/20 text-current'
+							: TYPE_BADGE}"
+					>
 						{intent.type}
 					</span>
 				</div>
-				<!-- row 2: where it came from, when, and where it stands -->
-				<div class="flex items-center gap-2 pt-1">
-					<span class="truncate text-foreground/45 {sel ? 'text-xs' : 'text-[0.6875rem]'}"
+				<!-- row 2: where it came from, when, and where it stands. On the
+				     filled card the secondary text is the fill's foreground, dimmed. -->
+				<div class="flex items-center gap-2 pt-1 {sel ? 'text-current' : ''}">
+					<span
+						class="truncate {sel ? 'text-xs opacity-75' : 'text-[0.6875rem] text-foreground/45'}"
 						>{intent.source}</span
 					>
-					<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
+					<span
+						class="ml-auto shrink-0 font-mono text-[0.625rem] {sel ? 'opacity-60' : 'text-foreground/35'}"
+					>
 						{intent.when}
 					</span>
 					{#if intent.deadline}
 						<span
-							class="shrink-0 rounded-full bg-error/10 px-1.5 py-0.5 font-mono text-error-ink text-[0.5625rem]"
+							class="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[0.5625rem] {sel
+								? 'bg-white/25 text-current'
+								: 'bg-error/10 text-error-ink'}"
 						>
 							{intent.deadline}
 						</span>
