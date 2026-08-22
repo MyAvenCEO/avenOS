@@ -4,14 +4,18 @@ import { untrack } from 'svelte'
 import '@xyflow/svelte/dist/style.css'
 import AvenUiView from '$lib/actors/AvenUiView.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
-import type { HeldPreview } from '$lib/actors/bus'
 import { bus } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
-import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
 import { isWindow } from '$lib/actors/window.actor.svelte'
 import { composer } from '$lib/intents/composer.svelte'
+import {
+	type IntentState,
+	intents,
+	type MockArtifact,
+	type SkillStatus
+} from '$lib/intents/intents.svelte'
 import { shell } from '$lib/intents/talk.svelte'
 import FitView from '$lib/mesh/FitView.svelte'
 import GatePreview from '$lib/query/GatePreview.svelte'
@@ -38,53 +42,6 @@ import { nameOf, skillById } from '$lib/skills/registry'
  * keeps the entry as history. Submitted/answered gates stay log lines.
  */
 
-interface LogEntry {
-	step: string
-	when: string
-	state: 'done' | 'running' | 'waiting'
-	/** WHICH skill wrote this entry — every log line is typed. */
-	skill: string
-	note?: string
-	/** A rich entry renders as a card on the timeline (like a mail preview). */
-	card?: { title: string; text: string }
-	/** The waiting entry offers the HITL pair. */
-	hitl?: boolean
-}
-interface MockArtifact {
-	kind: 'doc' | 'todo' | 'calendar' | 'person' | 'entity' | 'statement'
-	title: string
-	note: string
-}
-interface SkillStatus {
-	skill: string
-	state: 'done' | 'running' | 'waiting'
-	note: string
-	/** Which workflow of the TEMPLATE this instance runs. */
-	workflow: string
-	/** Node ids (of the template workflow) already completed. */
-	done: string[]
-	/** The node the instance currently sits on, if any. */
-	current?: string
-}
-interface MockIntent {
-	id: string
-	type: string
-	title: string
-	source: string
-	when: string
-	deadline?: string
-	status: IntentState
-	log: LogEntry[]
-	artifacts: MockArtifact[]
-	skills: SkillStatus[]
-	/**
-	 * The gate this intent is holding for the human. A gate can exist in any
-	 * state — `waiting` means the intent AS A WHOLE is blocked on it; in the
-	 * other states it is one optional confirmation beside work that runs on.
-	 */
-	hitl?: { label: string; method: string; actor: string; preview: HeldPreview }
-}
-
 /**
  * Intent types wear ONE quiet badge, not five coloured ones. Five hues
  * competing down the stream drowned out the thing that actually changes —
@@ -98,7 +55,6 @@ const TYPE_BADGE = 'bg-quiet/15 text-quiet-ink'
  * The five states an intent can be in — each with its own accent, worn as
  * a 4px edge on the card so the stream is readable at a glance.
  */
-type IntentState = 'working' | 'waiting' | 'done' | 'error' | 'archive'
 
 const STATUS_LABEL: Record<IntentState, string> = {
 	working: 'läuft',
@@ -165,666 +121,9 @@ const KIND_LABEL: Record<string, string> = {
 	statement: 'KONTO'
 }
 
-const INTENTS: MockIntent[] = [
-	{
-		id: 'krankenkasse',
-		type: 'frist',
-		title: 'Krankenkasse: Nachweis bis 15.09.',
-		source: 'Post-Scan · Brief',
-		when: 'heute · 09:12',
-		deadline: 'bis 15.09.',
-		status: 'waiting',
-		log: [
-			{
-				step: 'Brief eingegangen',
-				when: '12.08. · 14:02',
-				state: 'done',
-				skill: 'inbox',
-				note: 'Post-Scan · als Artefakt archiviert'
-			},
-			{
-				step: 'Klassifiziert',
-				when: '12.08. · 14:02',
-				state: 'done',
-				skill: 'inbox',
-				card: {
-					title: 'Krankenversicherung · Frist erkannt',
-					text: 'Absender: Techniker Krankenkasse. Gefordert: Einkommensnachweis. Frist: 15.09. — Zuversicht 96 %.'
-				}
-			},
-			{
-				step: 'Intent extrahiert',
-				when: '12.08. · 14:03',
-				state: 'done',
-				skill: 'inbox',
-				note: '„Nachweis einreichen bis zur Frist" — ein Todo, ein Termin, ein Entwurf'
-			},
-			{
-				step: 'Todo angelegt',
-				when: '12.08. · 14:03',
-				state: 'done',
-				skill: 'todos',
-				note: '„Nachweis einreichen" · fällig 12.09. · @me'
-			},
-			{
-				step: 'Kalender-Frist eingetragen',
-				when: '12.08. · 14:03',
-				state: 'done',
-				skill: 'calendar',
-				note: '15.09. · ganztägig'
-			},
-			{
-				step: 'Antwortentwurf wartet auf Freigabe',
-				when: 'heute · 09:12',
-				state: 'waiting',
-				skill: 'docs',
-				card: {
-					title: 'Entwurf: Antwort an die TK',
-					text: 'Sehr geehrte Damen und Herren, anbei der angeforderte Einkommensnachweis für den Zeitraum…'
-				},
-				hitl: true
-			}
-		],
-		artifacts: [
-			{ kind: 'doc', title: 'krankenkasse-brief.pdf', note: 'gescannt 12.08. · archiviert' },
-			{ kind: 'todo', title: 'Nachweis einreichen', note: 'offen · fällig 12.09. · @me' },
-			{ kind: 'calendar', title: 'Frist Krankenkasse', note: '15.09. · ganztägig' },
-			{ kind: 'person', title: 'Techniker Krankenkasse', note: 'Firma · Versicherung' },
-			{ kind: 'entity', title: '[[Versicherungen 2025]]', note: 'Brain · 4 Verknüpfungen' }
-		],
-		skills: [
-			{
-				skill: 'inbox',
-				state: 'done',
-				note: 'klassifiziert · Intent extrahiert',
-				workflow: 'intake',
-				done: ['mail-trigger', 'upload-trigger', 'normalize', 'classify', 'route']
-			},
-			{
-				skill: 'todos',
-				state: 'done',
-				note: '1 Todo angelegt · offen',
-				workflow: 'capture',
-				done: ['voice-trigger', 'create', 'list-view', 'board-view']
-			},
-			{
-				skill: 'calendar',
-				state: 'done',
-				note: 'Frist 15.09. eingetragen',
-				workflow: 'frist',
-				done: ['date-trigger', 'schedule'],
-				current: 'remind'
-			},
-			{
-				skill: 'docs',
-				state: 'waiting',
-				note: 'Antwortentwurf wartet auf Freigabe',
-				workflow: 'respond',
-				done: ['request-trigger', 'draft'],
-				current: 'approve'
-			},
-			{
-				skill: 'brain',
-				state: 'running',
-				note: 'verknüpft mit [[Versicherungen 2025]]',
-				workflow: 'verknuepfen',
-				done: ['entity-trigger', 'resolve', 'link'],
-				current: 'enrich'
-			}
-		],
-		hitl: {
-			label: 'Antwortentwurf an die TK freigeben',
-			method: 'draft_approve',
-			actor: 'docs',
-			preview: {
-				kind: 'entwurf',
-				layout: 'document',
-				title: 'An Techniker Krankenkasse · Frist 15.09.',
-				body: 'Sehr geehrte Damen und Herren,\n\nanbei der angeforderte Einkommensnachweis für den Zeitraum Januar bis Juni 2025.\n\nMit freundlichen Grüßen\nSamuel Andert',
-				attachments: ['einkommensnachweis.pdf']
-			}
-		}
-	},
-	{
-		id: 'buerostuhl',
-		type: 'bezahlen',
-		title: 'Rechnung Bürostuhl bezahlen',
-		source: 'Upload · Rechnung',
-		when: 'heute · 08:44',
-		deadline: 'bis 30.08.',
-		status: 'working',
-		log: [
-			{
-				step: 'Rechnung hochgeladen',
-				when: 'heute · 08:44',
-				state: 'done',
-				skill: 'inbox',
-				note: 'rechnung-buerostuhl.pdf · archiviert'
-			},
-			{
-				step: 'Klassifiziert',
-				when: 'heute · 08:44',
-				state: 'done',
-				skill: 'inbox',
-				card: {
-					title: 'Rechnung · 249,00 €',
-					text: 'Möbelhaus Nord GmbH · Zahlungsziel 30.08. · IBAN erkannt · Skonto: keins.'
-				}
-			},
-			{
-				step: 'Todo angelegt',
-				when: 'heute · 08:45',
-				state: 'done',
-				skill: 'todos',
-				note: '„Bürostuhl bezahlen — 249 €" · fällig 30.08.'
-			},
-			{
-				step: 'Wartet auf Zahlung',
-				when: 'seit heute',
-				state: 'running',
-				skill: 'abgleich',
-				note: 'der nächste Kontoauszug hakt das Todo automatisch ab'
-			}
-		],
-		artifacts: [
-			{ kind: 'doc', title: 'rechnung-buerostuhl.pdf', note: '249,00 € · archiviert' },
-			{ kind: 'todo', title: 'Bürostuhl bezahlen', note: 'offen · fällig 30.08. · #rechnung' },
-			{ kind: 'person', title: 'Möbelhaus Nord GmbH', note: 'Firma · Lieferant' }
-		],
-		skills: [
-			{
-				skill: 'inbox',
-				state: 'done',
-				note: 'klassifiziert als Rechnung',
-				workflow: 'intake',
-				done: ['mail-trigger', 'upload-trigger', 'normalize', 'classify', 'route']
-			},
-			{
-				skill: 'todos',
-				state: 'done',
-				note: '1 Todo angelegt · offen',
-				workflow: 'capture',
-				done: ['voice-trigger', 'create', 'list-view', 'board-view']
-			},
-			{
-				skill: 'abgleich',
-				state: 'running',
-				note: 'wartet auf den nächsten Kontoauszug',
-				workflow: 'match',
-				done: [],
-				current: 'statement-trigger'
-			}
-		],
-		hitl: {
-			label: 'Zahlung freigeben',
-			method: 'payment_release',
-			actor: 'abgleich',
-			preview: {
-				kind: 'zahlung',
-				layout: 'ledger',
-				title: 'Möbelhaus Nord GmbH — Rechnung R-2025-8842',
-				rows: [
-					{ label: 'Betrag', value: '249,00 €' },
-					{ label: 'Fällig', value: '30.08.' },
-					{ label: 'IBAN', value: 'DE12 3456 7890 1234 5678 00' },
-					{ label: 'Von Konto', value: 'Giro · 4.120,55 €' }
-				]
-			}
-		}
-	},
-	{
-		id: 'steuer',
-		type: 'steuer',
-		title: 'Steuererklärung 2023 zusammenstellen',
-		source: 'Dauerauftrag',
-		when: 'seit 02.08.',
-		deadline: 'bis 30.09.',
-		status: 'working',
-		log: [
-			{
-				step: 'Sammel-Intent gestartet',
-				when: '02.08.',
-				state: 'done',
-				skill: 'brain',
-				note: 'langlaufend: alles für die Erklärung 2023'
-			},
-			{
-				step: 'Artefakte verknüpft',
-				when: 'laufend',
-				state: 'done',
-				skill: 'brain',
-				card: {
-					title: '12 Artefakte im Brain',
-					text: 'Rechnungen (7), Kontoauszüge (4), Lohnsteuerbescheinigung (1) — jedes neue Dokument wird automatisch zugeordnet.'
-				}
-			},
-			{
-				step: 'Todo hält die Frist',
-				when: '02.08.',
-				state: 'done',
-				skill: 'todos',
-				note: '„Unterlagen an Steuerberater" · fällig 20.09.'
-			},
-			{
-				step: 'Sammelt weiter',
-				when: 'laufend',
-				state: 'running',
-				skill: 'docs',
-				note: 'fehlend laut Checkliste: Spendenquittungen, Handwerkerrechnungen'
-			}
-		],
-		artifacts: [
-			{ kind: 'entity', title: '[[Steuer 2023]]', note: 'Brain · 12 Artefakte' },
-			{ kind: 'doc', title: 'lohnsteuerbescheinigung-2023.pdf', note: 'archiviert' },
-			{ kind: 'statement', title: 'Kontoauszüge Q1–Q4 2023', note: '4 Dateien' },
-			{ kind: 'todo', title: 'Unterlagen an Steuerberater', note: 'offen · fällig 20.09.' },
-			{ kind: 'person', title: 'StB Kanzlei Meier', note: 'Firma · Steuerberatung' }
-		],
-		skills: [
-			{
-				skill: 'brain',
-				state: 'running',
-				note: '12 Artefakte verknüpft · sammelt weiter',
-				workflow: 'verknuepfen',
-				done: ['entity-trigger', 'resolve', 'link'],
-				current: 'enrich'
-			},
-			{
-				skill: 'todos',
-				state: 'done',
-				note: 'Frist-Todo angelegt',
-				workflow: 'capture',
-				done: ['voice-trigger', 'create', 'list-view']
-			},
-			{
-				skill: 'docs',
-				state: 'running',
-				note: 'ordnet neue Dokumente automatisch zu',
-				workflow: 'respond',
-				done: ['request-trigger'],
-				current: 'draft'
-			}
-		],
-		hitl: {
-			label: 'Dokument der Steuer 2023 zuordnen',
-			method: 'classify_confirm',
-			actor: 'brain',
-			preview: {
-				kind: 'zuordnung',
-				layout: 'choice',
-				title: 'handwerker-bad-2023.pdf — wohin gehört das?',
-				options: [
-					{ label: 'Handwerkerleistungen §35a', note: '78 %', chosen: true },
-					{ label: 'Erhaltungsaufwand', note: '19 %' },
-					{ label: 'Privat — nicht absetzbar', note: '3 %' }
-				]
-			}
-		}
-	},
-	{
-		id: 'umzug',
-		type: 'auftrag',
-		title: 'Umzugsunterlagen zusammenführen',
-		source: 'Freitext · Chat',
-		when: 'heute · 10:05',
-		status: 'waiting',
-		log: [
-			{
-				step: 'Auftrag erfasst',
-				when: 'heute · 10:05',
-				state: 'done',
-				skill: 'inbox',
-				note: '„Sammle alles zum Umzug an einem Ort"'
-			},
-			{
-				step: 'Dublette gefunden',
-				when: 'heute · 10:06',
-				state: 'waiting',
-				skill: 'brain',
-				note: 'zwei Einträge für denselben Vermieter — Zusammenführung wartet auf dich'
-			}
-		],
-		artifacts: [
-			{ kind: 'entity', title: '[[Umzug 2025]]', note: 'Brain · 9 Verknüpfungen' },
-			{ kind: 'person', title: 'Hausverwaltung Berg', note: 'Firma · Vermieter' }
-		],
-		skills: [
-			{
-				skill: 'brain',
-				state: 'waiting',
-				note: 'Dublette wartet auf Zusammenführung',
-				workflow: 'verknuepfen',
-				done: ['entity-trigger'],
-				current: 'resolve'
-			}
-		],
-		hitl: {
-			label: 'Doppelten Kontakt zusammenführen',
-			method: 'entity_merge',
-			actor: 'brain',
-			preview: {
-				kind: 'dublette',
-				layout: 'compare',
-				title: 'Ähnlichkeit 88 % — dieselbe Adresse',
-				sides: [
-					{
-						heading: 'Behalten',
-						lines: ['[[Hausverwaltung Berg]]', 'Bergstraße 14, Berlin', '9 Bezüge']
-					},
-					{
-						heading: 'Verschmelzen',
-						lines: ['[[HV Berg GmbH]]', 'Bergstr. 14, Berlin', '2 Bezüge']
-					}
-				]
-			}
-		}
-	},
-	{
-		id: 'stromabrechnung',
-		type: 'abgleich',
-		title: 'Stromabrechnung 2024 prüfen',
-		source: 'Upload · PDF',
-		when: 'heute · 08:02',
-		status: 'waiting',
-		log: [
-			{
-				step: 'Abrechnung hochgeladen',
-				when: 'heute · 08:02',
-				state: 'done',
-				skill: 'inbox',
-				note: 'stromabrechnung-2024.pdf · archiviert'
-			},
-			{
-				step: 'Duplikate erkannt',
-				when: 'heute · 08:03',
-				state: 'waiting',
-				skill: 'docs',
-				note: 'drei identische Scans derselben Abrechnung im Archiv'
-			}
-		],
-		artifacts: [
-			{ kind: 'doc', title: 'stromabrechnung-2024.pdf', note: '182,40 € Guthaben · archiviert' },
-			{ kind: 'person', title: 'Stadtwerke Nord', note: 'Firma · Energie' }
-		],
-		skills: [
-			{
-				skill: 'docs',
-				state: 'waiting',
-				note: '3 Duplikate — Löschung wartet auf dich',
-				workflow: 'respond',
-				done: ['request-trigger'],
-				current: 'approve'
-			}
-		],
-		hitl: {
-			label: 'Drei Duplikate löschen',
-			method: 'docs_delete',
-			actor: 'docs',
-			preview: {
-				kind: 'löschen',
-				layout: 'list',
-				title: 'Unwiderruflich — das Original bleibt erhalten',
-				items: [
-					{ text: 'stromabrechnung-2024.pdf', note: 'Original' },
-					{ text: 'scan-0417.pdf', note: 'identisch', struck: true },
-					{ text: 'scan-0418.pdf', note: 'identisch', struck: true },
-					{ text: 'IMG_2291.pdf', note: 'Foto derselben Seite', struck: true }
-				]
-			}
-		}
-	},
-	{
-		id: 'kita',
-		type: 'frist',
-		title: 'Kita-Anmeldung bis 01.09.',
-		source: 'E-Mail · Stadt',
-		when: 'gestern · 16:30',
-		deadline: 'bis 01.09.',
-		status: 'waiting',
-		log: [
-			{
-				step: 'E-Mail eingegangen',
-				when: 'gestern · 16:30',
-				state: 'done',
-				skill: 'inbox',
-				note: 'Einladung zum Anmeldegespräch · Frist 01.09.'
-			},
-			{
-				step: 'Terminkonflikt',
-				when: 'gestern · 16:31',
-				state: 'waiting',
-				skill: 'calendar',
-				note: 'der Vorschlag kollidiert mit einem bestehenden Termin'
-			}
-		],
-		artifacts: [
-			{ kind: 'calendar', title: 'Anmeldegespräch Kita', note: '28.08. · 10:00–11:00' },
-			{ kind: 'doc', title: 'kita-einladung.pdf', note: 'archiviert' }
-		],
-		skills: [
-			{
-				skill: 'calendar',
-				state: 'waiting',
-				note: 'Konflikt am 28.08. — Entscheidung offen',
-				workflow: 'frist',
-				done: ['date-trigger'],
-				current: 'schedule'
-			}
-		],
-		hitl: {
-			label: 'Termin trotz Konflikt eintragen?',
-			method: 'calendar_conflict',
-			actor: 'calendar',
-			preview: {
-				kind: 'konflikt',
-				layout: 'compare',
-				title: 'Donnerstag, 28.08. — zwei Termine zur selben Zeit',
-				sides: [
-					{
-						heading: 'Neu',
-						lines: ['Anmeldegespräch Kita', '10:00 – 11:00', 'Stadt · Kita Sonnenblume']
-					},
-					{ heading: 'Bestehend', lines: ['Team-Review', '10:30 – 11:30', 'überschneidet 30 Min'] }
-				]
-			}
-		}
-	},
-	{
-		id: 'kontoauszug',
-		type: 'abgleich',
-		title: 'Kontoauszug Juli abgleichen',
-		source: 'Upload · CSV',
-		when: 'gestern · 18:40',
-		status: 'archive',
-		log: [
-			{
-				step: 'Kontoauszug hochgeladen',
-				when: 'gestern · 18:40',
-				state: 'done',
-				skill: 'inbox',
-				note: 'kontoauszug-07.csv · 38 Transaktionen'
-			},
-			{
-				step: 'Abgeglichen',
-				when: 'gestern · 18:41',
-				state: 'done',
-				skill: 'abgleich',
-				card: {
-					title: '6 Zahlungen zugeordnet, 1 nachgefragt',
-					text: '31 bekannte Daueraufträge übersprungen. 6 offene Rechnungen automatisch abgehakt; „Miete August" wurde von dir bestätigt.'
-				}
-			},
-			{
-				step: 'Todos abgehakt',
-				when: 'gestern · 18:41',
-				state: 'done',
-				skill: 'todos',
-				note: '6 Rechnungs-Todos → erledigt'
-			}
-		],
-		artifacts: [
-			{ kind: 'statement', title: 'kontoauszug-07.csv', note: '38 Transaktionen' },
-			{ kind: 'todo', title: 'Miete August überweisen', note: 'erledigt · abgeglichen' }
-		],
-		skills: [
-			{
-				skill: 'abgleich',
-				state: 'done',
-				note: '38 Transaktionen · 7 zugeordnet',
-				workflow: 'match',
-				done: ['statement-trigger', 'match', 'tick']
-			},
-			{
-				skill: 'todos',
-				state: 'done',
-				note: '6 Todos abgehakt',
-				workflow: 'capture',
-				done: ['voice-trigger', 'create', 'list-view', 'board-view']
-			}
-		],
-		hitl: {
-			label: 'Zahlung der Rechnung zuordnen',
-			method: 'match_confirm',
-			actor: 'abgleich',
-			preview: {
-				kind: 'abgleich',
-				layout: 'compare',
-				title: 'Score 91 % — knapp unter der Auto-Schwelle',
-				sides: [
-					{
-						heading: 'Buchung',
-						lines: ['28.07. · −1.150,00 €', 'Hausverwaltung Berg', 'Dauerauftrag']
-					},
-					{ heading: 'Offener Posten', lines: ['Miete 08/2025', '1.150,00 €', 'fällig 03.08.'] }
-				]
-			}
-		}
-	},
-	{
-		id: 'handyvertrag',
-		type: 'frist',
-		title: 'Handyvertrag rechtzeitig gekündigt',
-		source: 'Post-Scan · Brief',
-		when: 'heute · 07:20',
-		status: 'done',
-		log: [
-			{
-				step: 'Kündigungsfrist erkannt',
-				when: '05.08. · 09:10',
-				state: 'done',
-				skill: 'inbox',
-				note: 'Vertrag läuft am 31.08. aus · Frist 4 Wochen'
-			},
-			{
-				step: 'Kündigung freigegeben und versendet',
-				when: 'heute · 07:20',
-				state: 'done',
-				skill: 'docs',
-				note: 'Bestätigung liegt im Archiv'
-			}
-		],
-		artifacts: [
-			{ kind: 'doc', title: 'kuendigung-handyvertrag.pdf', note: 'versendet 07:20 · archiviert' },
-			{ kind: 'person', title: 'Telekom Deutschland', note: 'Firma · Mobilfunk' }
-		],
-		skills: [
-			{
-				skill: 'docs',
-				state: 'done',
-				note: 'Kündigung versendet',
-				workflow: 'respond',
-				done: ['request-trigger', 'draft', 'approve', 'finish']
-			},
-			{
-				skill: 'inbox',
-				state: 'done',
-				note: 'Frist erkannt · Intent extrahiert',
-				workflow: 'intake',
-				done: ['mail-trigger', 'upload-trigger', 'normalize', 'classify', 'route']
-			}
-		],
-		hitl: {
-			label: 'Kündigungsbestätigung ablegen',
-			method: 'archive_confirm',
-			actor: 'docs',
-			preview: {
-				kind: 'ablage',
-				layout: 'document',
-				title: 'Ablage in [[Verträge]] / Mobilfunk',
-				body: 'Telekom Deutschland bestätigt die Kündigung zum 31.08.2025. Vertragsnummer 4412-88231. Eine weitere Rechnung folgt für den letzten Abrechnungszeitraum.',
-				attachments: ['bestaetigung-telekom.pdf']
-			}
-		}
-	},
-	{
-		id: 'fitnessstudio',
-		type: 'auftrag',
-		title: '„Kündige das Fitnessstudio"',
-		source: 'Freitext · Chat',
-		when: 'gestern · 21:15',
-		status: 'error',
-		log: [
-			{
-				step: 'Auftrag erfasst',
-				when: 'gestern · 21:15',
-				state: 'done',
-				skill: 'inbox',
-				note: 'freier Auftrag aus dem Chat'
-			},
-			{
-				step: 'Intent extrahiert',
-				when: 'gestern · 21:15',
-				state: 'done',
-				skill: 'inbox',
-				note: 'Kündigung: Vertrag finden, Frist prüfen, Schreiben aufsetzen'
-			},
-			{
-				step: 'Vertrag nicht gefunden',
-				when: 'seit gestern',
-				state: 'waiting',
-				skill: 'docs',
-				note: 'kein FitX-Vertrag im Archiv — lade ihn hoch oder sag mir, wo er liegt'
-			}
-		],
-		artifacts: [{ kind: 'entity', title: '[[FitX Vertrag]]', note: 'Brain · gesucht…' }],
-		skills: [
-			{
-				skill: 'docs',
-				state: 'waiting',
-				note: 'Archiv-Suche ohne Treffer',
-				workflow: 'respond',
-				done: ['request-trigger'],
-				current: 'draft'
-			},
-			{
-				skill: 'brain',
-				state: 'waiting',
-				note: 'wartet auf den Vertrag',
-				workflow: 'verknuepfen',
-				done: [],
-				current: 'entity-trigger'
-			}
-		],
-		hitl: {
-			label: 'Vertrag manuell nachreichen',
-			method: 'upload_request',
-			actor: 'docs',
-			preview: {
-				kind: 'fehlt',
-				layout: 'choice',
-				title: 'Kein FitX-Vertrag im Archiv — 428 Dokumente durchsucht',
-				options: [
-					{ label: 'Vertrag jetzt hochladen', note: 'empfohlen', chosen: true },
-					{ label: 'Ohne Vertrag kündigen', note: 'Frist unbekannt' },
-					{ label: 'Ich sage dir, wo er liegt', note: 'Freitext' }
-				]
-			}
-		}
-	}
-]
-
-let selectedId = $state(INTENTS[0].id)
-const selected = $derived(INTENTS.find((i) => i.id === selectedId) ?? INTENTS[0])
+const selected = $derived(
+	intents.items.find((i) => i.id === intents.selectedId) ?? intents.items[0]
+)
 
 /**
  * Talk to MAIA — the REAL chat: the transcript comes from the chat actor,
@@ -846,11 +145,11 @@ const STATE_ORDER: Record<IntentState, number> = {
 	archive: 4
 }
 const activeIntents = $derived(
-	INTENTS.filter((i) => i.status !== 'archive').sort(
-		(a, b) => STATE_ORDER[a.status] - STATE_ORDER[b.status]
-	)
+	intents.items
+		.filter((i) => i.status !== 'archive')
+		.sort((a, b) => STATE_ORDER[a.status] - STATE_ORDER[b.status])
 )
-const archivedIntents = $derived(INTENTS.filter((i) => i.status === 'archive'))
+const archivedIntents = $derived(intents.items.filter((i) => i.status === 'archive'))
 
 /**
  * The center shows ONE of three things: the activity log (default), an
@@ -866,10 +165,10 @@ let skillView = $state<SkillStatus | null>(null)
  */
 // The queue is an HMR-surviving singleton: drop gates from earlier mock
 // generations, or a stale one without its preview shadows the real thing.
-const mockIds = new Set(INTENTS.filter((i) => i.hitl).map((i) => `mock-${i.id}`))
+const mockIds = new Set(intents.items.filter((i) => i.hitl).map((i) => `mock-${i.id}`))
 hitlQueue.items = hitlQueue.items.filter((h) => !h.id.startsWith('mock-') || mockIds.has(h.id))
 
-for (const intent of INTENTS) {
+for (const intent of intents.items) {
 	if (!intent.hitl) continue
 	const id = `mock-${intent.id}`
 	if (hitlQueue.items.some((h) => h.id === id)) continue
@@ -948,8 +247,8 @@ let sfH = $state(0)
 // The conversation is ABOUT what is on screen: selecting an intent switches
 // the chat to that intent's own session stream, and scopes the gates.
 $effect(() => {
-	query.intent = selectedId
-	chat.use(selectedId)
+	query.intent = intents.selectedId
+	chat.use(intents.selectedId)
 })
 
 /**
@@ -1007,7 +306,7 @@ function onComposerKeydown(event: KeyboardEvent) {
 
 /** The gates this intent is holding; one raised without a context is global. */
 const gates = $derived(
-	hitlQueue.items.filter((h) => h.context === undefined || h.context === selectedId)
+	hitlQueue.items.filter((h) => h.context === undefined || h.context === intents.selectedId)
 )
 
 /**
@@ -1024,8 +323,6 @@ const logEntries = $derived(gates.length > 0 ? selected.log.filter((e) => !e.hit
  * the moment the field goes away.
  */
 const composing = $derived(composer.composing)
-/** Words are arriving right now — the card says so instead of "Du". */
-const spokenNow = $derived(listenerActor.core.partial !== '')
 
 let centerEl: HTMLElement | null = $state(null)
 /** Whether the reader is riding the bottom; scrolling up deliberately parks it. */
@@ -1051,7 +348,7 @@ function scrollToBottom(_deps: unknown): void {
 // intent just left.
 $effect(() => {
 	stick = true
-	scrollToBottom(selectedId)
+	scrollToBottom(intents.selectedId)
 })
 
 // New content, or the gate appearing and taking height away.
@@ -1134,7 +431,7 @@ const DOT: Record<string, string> = {
 			</span>
 		</h2>
 		{#each activeIntents as intent (intent.id)}
-			{@const sel = selectedId === intent.id}
+			{@const sel = intents.selectedId === intent.id}
 			{@const accent = accentFor(intent.status)}
 			<!-- Hover shifts the FILL, never the border: `hover:border-*` paints all
 			     four sides and, sitting in a later cascade layer, greyed out the 4px
@@ -1142,7 +439,7 @@ const DOT: Record<string, string> = {
 			<button
 				type="button"
 				onclick={() => {
-					selectedId = intent.id
+					intents.selectedId = intent.id
 					preview = null
 					skillView = null
 					shell.detail = true
@@ -1213,11 +510,11 @@ const DOT: Record<string, string> = {
 		</button>
 		{#if archiveOpen}
 			{#each archivedIntents as intent (intent.id)}
-				{@const sel = selectedId === intent.id}
+				{@const sel = intents.selectedId === intent.id}
 				<button
 					type="button"
 					onclick={() => {
-						selectedId = intent.id
+						intents.selectedId = intent.id
 						preview = null
 						skillView = null
 						shell.detail = true
@@ -1242,7 +539,7 @@ const DOT: Record<string, string> = {
 
 	<!-- CENTER: activity log / artifact preview / skill stepper. -->
 	<!-- The center column wears the intent's STATE as its header — the same
-	     uppercase line as INTENTS and SKILLS beside it, so all three
+	     uppercase line as intents.items and SKILLS beside it, so all three
 	     columns start their cards on one line. -->
 	<div
 		class="{shell.detail
@@ -1610,7 +907,7 @@ const DOT: Record<string, string> = {
 						{#each chat.turns as turn (turn.id)}
 							<div class="flex" class:justify-end={turn.role === 'user'}>
 								<div
-									class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed {turn.role ===
+									class="max-w-[75%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 text-xs leading-relaxed {turn.role ===
 									'user'
 										? 'bg-primary text-primary-foreground'
 										: 'border border-border bg-surface-card'}"
@@ -1693,14 +990,6 @@ const DOT: Record<string, string> = {
 					class="w-full overflow-hidden rounded-2xl border-2 border-primary bg-surface-raised shadow-[0_4px_16px_rgba(30,41,59,0.12)]"
 				>
 					<div class="px-5 pt-4 pb-4">
-						<div class="flex items-baseline gap-2 pb-3">
-							<span
-								class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[0.5625rem] text-primary uppercase tracking-wide"
-							>
-								{spokenNow ? 'Höre zu' : 'Du'}
-							</span>
-							<p class="min-w-0 flex-1 font-medium text-sm">{selected.title}</p>
-						</div>
 						<textarea
 							bind:this={composerEl}
 							bind:value={composer.draft}
