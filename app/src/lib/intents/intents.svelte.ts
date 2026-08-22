@@ -1,5 +1,6 @@
 import { Actor } from '$lib/actors/actor'
 import { bus, type HeldPreview } from '$lib/actors/bus'
+import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { singleton } from '$lib/actors/singleton'
 
 /**
@@ -869,7 +870,7 @@ class IntentsActor extends Actor {
 			intent_switch: (p) => {
 				const hit = this.find(String(p.intent ?? ''))
 				if (!hit) return this.miss(String(p.intent ?? ''))
-				this.selectedId = hit.id
+				this.goTo(hit.id)
 				return {
 					record: JSON.stringify({ ok: true, selected: hit.id }),
 					wire: `"${hit.title}" is on screen now.`
@@ -900,7 +901,7 @@ class IntentsActor extends Actor {
 					skills: []
 				}
 				this.items.unshift(intent)
-				this.selectedId = intent.id
+				this.goTo(intent.id)
 				return {
 					record: JSON.stringify({ ok: true, created: intent.id }),
 					wire: `Created "${title}" and switched to it.`
@@ -984,7 +985,7 @@ class IntentsActor extends Actor {
 				const hit = this.find(String(p.intent ?? ''))
 				if (!hit) return this.miss(String(p.intent ?? ''))
 				if (hit.status === 'archive') hit.status = hit.before ?? 'done'
-				this.selectedId = hit.id
+				this.goTo(hit.id)
 				return {
 					record: JSON.stringify({ ok: true, restored: hit.id }),
 					wire: `"${hit.title}" is back on the list and on screen.`
@@ -1003,6 +1004,15 @@ class IntentsActor extends Actor {
 				}
 			}
 		})
+	}
+
+	/**
+	 * Put an intent on screen AND carry the conversation there: the question
+	 * that asked for it and the answer it gets belong to that intent's stream.
+	 */
+	goTo(id: string): void {
+		this.selectedId = id
+		chatActor.core.relocateTurn(id)
 	}
 
 	/** By id, else by a case-insensitive part of the title. */
