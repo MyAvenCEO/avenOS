@@ -154,8 +154,8 @@ export const PLANS: Plan[] = [
 		billing: 'monthly',
 		referralPct: 15,
 		runtime: { hoursPerDay: 4, centsPerExtraMinute: 8 },
-		platformFeePct: 4,
-		reinvestPct: 4,
+		platformFeePct: 4.8,
+		reinvestPct: 15,
 		highlight: true,
 		features: [
 			{ skill: 'book-keeper', label: 'Vorbuchhaltung' },
@@ -176,9 +176,9 @@ export const PLANS: Plan[] = [
 		billing: 'monthly',
 		referralPct: 20,
 		runtime: { hoursPerDay: 12, centsPerExtraMinute: 5 },
-		platformFeePct: 6,
-		reinvestPct: 12,
-		equitySharePct: 5,
+		platformFeePct: 4.8,
+		reinvestPct: 10,
+		equitySharePct: 8,
 		applyOnly: true,
 		features: [
 			'1× avenFOUNDER — der avenCEO deiner Firma — inklusive',

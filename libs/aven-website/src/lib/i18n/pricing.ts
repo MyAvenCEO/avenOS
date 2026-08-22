@@ -16,12 +16,11 @@ export interface PricingMessages {
 	applyOnly: string
 	onePerCompany: string
 	onePerPerson: string
-	revenueShare: (pct: number) => string
-	platform: string
-	inclFees: string
-	reinvest: string
-	reinvestInto: string
-	equity: (pct: number) => string
+	/** "+ 4,8 %" — the number in the reader's number style. */
+	pct: (n: number) => string
+	fee: { label: string; sub: string }
+	reinvest: { label: string; sub: string }
+	equity: { label: string; sub: string }
 	skills: string
 	soon: string
 	allSkills: (n: number) => string
@@ -60,19 +59,23 @@ export const pricing: Record<Lang, PricingMessages> = {
 		introHtml:
 			'<strong class="font-medium text-foreground/85">avenME</strong> ist dein persönlicher AI‑CEO für dein Leben — einer pro Mensch.<br> <strong class="font-medium text-foreground/85">avenFOUNDER</strong> ist der professionelle AI‑CEO für deine Firma — einer pro Firma.<br> Mit <strong class="font-medium text-foreground/85">avenCOOP</strong> werden wir dein technischer Co‑Founder.',
 		shareHtml:
-			'Der Anteil am Umsatz ist zur Hälfte Plattform und zur Hälfte <strong class="font-medium text-accent">Reinvest</strong>: Er kauft dir Anteile an anderen Aven — du wählst selbst, an welchen.',
+			'Vom Umsatz gehen nur die Transaktionsgebühren ab — und ein <strong class="font-medium text-accent">Reinvest</strong>, der dir Anteile an anderen Aven kauft. Du wählst selbst, an welchen.',
 		idEyebrow: 'Der Anfang · Pro Mensch und pro Firma',
 		yourChoice: 'Deine Wahl:',
 		availability: 'Verfügbarkeit bestätigen wir bei der Buchung.',
 		applyOnly: 'Nur auf Bewerbung',
 		onePerCompany: 'Ein avenFOUNDER pro Firma — jede weitere Firma bekommt ihren eigenen.',
 		onePerPerson: 'Ein avenME pro Mensch — dein eigener, unabhängig von jeder Firma.',
-		revenueShare: (pct) => `+ ${pct} % vom Umsatz`,
-		platform: 'Plattform',
-		inclFees: 'inkl. Stripe & Co.',
-		reinvest: 'Reinvest',
-		reinvestInto: 'in andere Aven',
-		equity: (pct) => `+ ${pct} % Firmenanteile an deiner Firma`,
+		pct: (n) => `+ ${n.toLocaleString('de-DE')} %`,
+		fee: { label: 'Transaktionsgebühren', sub: 'inkl. Stripe, Karten & Co.' },
+		reinvest: {
+			label: 'vom Umsatz — Reinvest in andere Aven',
+			sub: 'Dein Umsatz kauft dir Anteile an anderen Aven. Die wachsen, schütten aus — und werden wieder investiert. Zinseszins, automatisch.'
+		},
+		equity: {
+			label: 'Firmenanteile — wir als Co‑Founder',
+			sub: 'Wir steigen als Mitgründer ein und bauen, als wäre es unsere eigene Firma.'
+		},
 		skills: 'Skills',
 		soon: 'bald',
 		allSkills: (n) => `Alle ${n} Skills ansehen →`,
@@ -112,19 +115,23 @@ export const pricing: Record<Lang, PricingMessages> = {
 		introHtml:
 			'<strong class="font-medium text-foreground/85">avenME</strong> is your personal AI‑CEO for your life — one per human.<br> <strong class="font-medium text-foreground/85">avenFOUNDER</strong> is the professional AI‑CEO for your company — one per company.<br> With <strong class="font-medium text-foreground/85">avenCOOP</strong> we become your technical co-founder.',
 		shareHtml:
-			'The revenue share is half platform and half <strong class="font-medium text-accent">Reinvest</strong>: it buys you equity in other Aven — you choose which ones.',
+			'Only the transaction fees come off your revenue — plus a <strong class="font-medium text-accent">Reinvest</strong> that buys you stakes in other Aven. You choose which ones.',
 		idEyebrow: 'The start · Per human and per company',
 		yourChoice: 'Your choice:',
 		availability: 'We confirm availability at booking.',
 		applyOnly: 'By application only',
 		onePerCompany: 'One avenFOUNDER per company — every further company gets its own.',
 		onePerPerson: 'One avenME per human — your own, independent of any company.',
-		revenueShare: (pct) => `+ ${pct} % of revenue`,
-		platform: 'Platform',
-		inclFees: 'incl. Stripe & Co.',
-		reinvest: 'Reinvest',
-		reinvestInto: 'into other Aven',
-		equity: (pct) => `+ ${pct} % equity in your company`,
+		pct: (n) => `+ ${n.toLocaleString('en-US')} %`,
+		fee: { label: 'transaction fees', sub: 'incl. Stripe, cards & co.' },
+		reinvest: {
+			label: 'of revenue — reinvested into other Aven',
+			sub: 'Your revenue buys you stakes in other Aven. They grow, pay out — and get reinvested. Compounding, on autopilot.'
+		},
+		equity: {
+			label: 'equity — us as your co-founder',
+			sub: 'We join as co-founders and build as if it were our own company.'
+		},
 		skills: 'Skills',
 		soon: 'soon',
 		allSkills: (n) => `See all ${n} skills →`,
