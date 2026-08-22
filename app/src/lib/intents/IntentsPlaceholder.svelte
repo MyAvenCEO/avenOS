@@ -902,8 +902,24 @@ const DOT: Record<string, string> = {
 				<!-- THE CONVERSATION, continuing the stream: this intent's own
 				     session — what you said and what the system said back, the
 				     views it put on screen, what its tools just did. -->
-				{#if chat.turns.length > 0 || activity.current}
+				{#if chat.turns.length > 0 || activity.current || chat.routing}
 					<div class="flex flex-col gap-2 border-foreground/10 border-t pt-4">
+						<!-- The request while it is being routed: yours, but not yet a
+						     bubble in any stream — it may settle here, or in the intent
+						     the model switches to or creates for it. -->
+						{#if chat.routing}
+							<div class="flex justify-end">
+								<div
+									class="flex max-w-[75%] items-center gap-2 rounded-2xl border border-primary/30 border-dashed px-3 py-1.5 text-foreground/70 text-xs leading-relaxed"
+								>
+									<span class="whitespace-pre-wrap">{chat.routing}</span>
+									<span
+										class="size-3 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
+										aria-label="wird zugeordnet"
+									></span>
+								</div>
+							</div>
+						{/if}
 						{#each chat.turns as turn (turn.id)}
 							<div class="flex" class:justify-end={turn.role === 'user'}>
 								<div

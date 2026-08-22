@@ -754,7 +754,9 @@ class IntentsActor extends Actor {
 					name: 'intent_switch',
 					description:
 						'Switches to an intent — puts its stream on screen and scopes the conversation ' +
-						'to it. Use whenever the user asks to open, go to, or work on another intent. ' +
+						'to it; the current request and your answer move there too. Use whenever the ' +
+						'user asks to open or work on another intent, AND whenever a request is about ' +
+						'another intent than the one on screen — route it there first, then answer. ' +
 						'Accepts the id or a part of the title.',
 					parameters: {
 						type: 'object',
