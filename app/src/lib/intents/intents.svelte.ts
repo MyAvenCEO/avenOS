@@ -1050,3 +1050,20 @@ class IntentsActor extends Actor {
 
 export const intents = singleton('aven.intents', () => new IntentsActor())
 bus.register(intents)
+
+// The model decides where a request belongs BEFORE it acts, so it sees the
+// intents with every request — live data, never a vocabulary.
+chatActor.core.context = () => {
+	const on = intents.items.find((i) => i.id === intents.selectedId)
+	const rows = intents.items
+		.filter((i) => i.status !== 'archive')
+		.map((i) => `- ${i.id}: "${i.title}" (${i.type}, ${i.status})`)
+		.join('\n')
+	return (
+		`INTENTS right now:\n${rows}\n` +
+		`ON SCREEN: ${on ? `${on.id} — "${on.title}"` : 'none'}.\n` +
+		'If the request is about one of the other intents, call intent_switch with it ' +
+		'as your FIRST action, then answer. If it starts something that is none of ' +
+		'these, intent_create first.'
+	)
+}
