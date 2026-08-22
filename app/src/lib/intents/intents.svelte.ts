@@ -45,6 +45,8 @@ export interface MockIntent {
 	when: string
 	deadline?: string
 	status: IntentState
+	/** The state it had before it was archived, so restoring brings it back as it was. */
+	before?: IntentState
 	log: LogEntry[]
 	artifacts: MockArtifact[]
 	skills: SkillStatus[]
@@ -907,6 +909,7 @@ class IntentsActor extends Actor {
 						record: '{"ok":true,"already":true}',
 						wire: `"${hit.title}" is already archived.`
 					}
+				hit.before = hit.status
 				hit.status = 'archive'
 				// The stream moves on to the next active intent, if there is one.
 				const next = this.items.find((i) => i.status !== 'archive')
@@ -919,7 +922,7 @@ class IntentsActor extends Actor {
 			intent_restore: (p) => {
 				const hit = this.find(String(p.intent ?? ''))
 				if (!hit) return this.miss(String(p.intent ?? ''))
-				if (hit.status === 'archive') hit.status = 'done'
+				if (hit.status === 'archive') hit.status = hit.before ?? 'done'
 				this.selectedId = hit.id
 				return {
 					record: JSON.stringify({ ok: true, restored: hit.id }),
