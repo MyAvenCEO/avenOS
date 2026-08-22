@@ -301,6 +301,10 @@ function onComposerKeydown(event: KeyboardEvent) {
 	if (event.key === 'Enter' && !event.shiftKey) {
 		event.preventDefault()
 		composer.send()
+	} else if (event.key === 'Escape') {
+		// Escape is the discard: the draft goes, the card goes.
+		composer.draft = ''
+		composer.active = false
 	}
 }
 
@@ -322,7 +326,7 @@ const logEntries = $derived(gates.length > 0 ? selected.log.filter((e) => !e.hit
  * the composer has it and the gate waits — it is still held; it comes back
  * the moment the field goes away.
  */
-const composing = $derived(composer.composing)
+const composing = $derived(composer.composing || chat.routing !== null)
 
 let centerEl: HTMLElement | null = $state(null)
 /** Whether the reader is riding the bottom; scrolling up deliberately parks it. */
@@ -902,24 +906,8 @@ const DOT: Record<string, string> = {
 				<!-- THE CONVERSATION, continuing the stream: this intent's own
 				     session — what you said and what the system said back, the
 				     views it put on screen, what its tools just did. -->
-				{#if chat.turns.length > 0 || activity.current || chat.routing}
+				{#if chat.turns.length > 0 || activity.current}
 					<div class="flex flex-col gap-2 border-foreground/10 border-t pt-4">
-						<!-- The request while it is being routed: yours, but not yet a
-						     bubble in any stream — it may settle here, or in the intent
-						     the model switches to or creates for it. -->
-						{#if chat.routing}
-							<div class="flex justify-end">
-								<div
-									class="flex max-w-[75%] items-center gap-2 rounded-2xl border border-primary/30 border-dashed px-3 py-1.5 text-foreground/70 text-xs leading-relaxed"
-								>
-									<span class="whitespace-pre-wrap">{chat.routing}</span>
-									<span
-										class="size-3 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
-										aria-label="wird zugeordnet"
-									></span>
-								</div>
-							</div>
-						{/if}
 						{#each chat.turns as turn (turn.id)}
 							<div class="flex" class:justify-end={turn.role === 'user'}>
 								<div
@@ -992,54 +980,69 @@ const DOT: Record<string, string> = {
 		{/if}
 
 		<!-- THE COMPOSER: the same card, the same slot as the human gate — flush
-		     under the log, dark footer — because it is the same kind of thing:
-		     a moment where the stream waits on you. It is only there while you
-		     are writing or words are arriving; Enter or Send lets the stream go
-		     on, and the field goes away. -->
+		     under the log — because it is the same kind of thing: a moment
+		     where the stream waits on you. It is there while you write, while
+		     words arrive, and while a sent request is being ROUTED: then the
+		     text stays here, read-only, with the spinner in the send slot, until
+		     the model has understood it and it settles into the right stream.
+		     Compact: no footer — one round send button in the corner. -->
 		{#if composing}
-			<div>
-				<form
-					onsubmit={(e) => {
-						e.preventDefault()
-						composer.send()
-					}}
-					class="w-full overflow-hidden rounded-2xl border-2 border-primary bg-surface-raised shadow-[0_4px_16px_rgba(30,41,59,0.12)]"
-				>
-					<div class="px-5 pt-4 pb-4">
-						<textarea
-							bind:this={composerEl}
-							bind:value={composer.draft}
-							onkeydown={onComposerKeydown}
-							onblur={() => composer.dismiss()}
-							rows="2"
-							placeholder="Sprich — oder schreib…"
-							class="field-sizing-content max-h-60 min-h-16 w-full resize-none rounded-xl border border-border bg-white px-5 py-4 text-[13px] text-foreground/80 leading-relaxed outline-none placeholder:text-foreground/35 focus:border-foreground/25"
-						></textarea>
-					</div>
-					<!-- the footer: the same dark band as the gate's -->
-					<div class="flex items-center justify-center gap-3 bg-primary px-5 py-3">
-						<button
-							type="button"
-							onmousedown={(e) => e.preventDefault()}
-							onclick={() => {
-								composer.draft = ''
-								composer.active = false
-							}}
-							class="rounded-full border border-primary-foreground/30 px-5 py-1.5 font-medium text-primary-foreground/70 text-sm transition-colors hover:bg-primary-foreground/10"
+			<form
+				onsubmit={(e) => {
+					e.preventDefault()
+					composer.send()
+				}}
+				class="relative w-full overflow-hidden rounded-2xl border-2 border-primary bg-surface-raised shadow-[0_4px_16px_rgba(30,41,59,0.12)]"
+			>
+				{#if chat.routing !== null}
+					<p
+						class="min-h-12 whitespace-pre-wrap py-3 pr-14 pl-4 text-[13px] text-foreground/60 leading-relaxed"
+						aria-live="polite"
+					>
+						{chat.routing}
+					</p>
+					<span
+						title="wird zugeordnet"
+						aria-label="wird zugeordnet"
+						class="absolute right-2 bottom-2 flex size-8 items-center justify-center rounded-full bg-primary/10"
+					>
+						<span
+							class="size-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
+						></span>
+					</span>
+				{:else}
+					<textarea
+						bind:this={composerEl}
+						bind:value={composer.draft}
+						onkeydown={onComposerKeydown}
+						onblur={() => composer.dismiss()}
+						rows="1"
+						placeholder="Sprich — oder schreib…"
+						class="field-sizing-content max-h-60 min-h-12 w-full resize-none bg-transparent py-3 pr-14 pl-4 text-[13px] text-foreground/80 leading-relaxed outline-none placeholder:text-foreground/35"
+					></textarea>
+					<button
+						type="submit"
+						disabled={composer.draft.trim() === ''}
+						onmousedown={(e) => e.preventDefault()}
+						title="Senden"
+						aria-label="Senden"
+						class="absolute right-2 bottom-2 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-85 disabled:opacity-30"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
 						>
-							Verwerfen
-						</button>
-						<button
-							type="submit"
-							disabled={composer.draft.trim() === ''}
-							onmousedown={(e) => e.preventDefault()}
-							class="rounded-full bg-primary-foreground px-6 py-1.5 font-medium text-primary text-sm transition-opacity hover:opacity-90 disabled:opacity-40"
-						>
-							Senden
-						</button>
-					</div>
-				</form>
-			</div>
+							<path d="M12 19V5" />
+							<path d="m5 12 7-7 7 7" />
+						</svg>
+					</button>
+				{/if}
+			</form>
 		{/if}
 	</div>
 

@@ -828,7 +828,8 @@ class IntentsActor extends Actor {
 					name: 'intent_archive',
 					description:
 						'Archives an intent: it leaves the active list and rests under ARCHIV, ' +
-						'nothing is lost. Use when the user says it is done, finished, or to put it away.',
+						'nothing is lost; the conversation moves into it. Use when the user says it is ' +
+						'done, finished, or to put it away.',
 					parameters: {
 						type: 'object',
 						properties: { intent: { type: 'string', description: 'id, or part of the title' } },
@@ -979,9 +980,9 @@ class IntentsActor extends Actor {
 					}
 				hit.before = hit.status
 				hit.status = 'archive'
-				// The stream moves on to the next active intent, if there is one.
-				const next = this.items.find((i) => i.status !== 'archive')
-				if (this.selectedId === hit.id && next) this.selectedId = next.id
+				// The request and its answer belong to the intent being archived:
+				// they are its last exchange, so they go — and show — there.
+				this.goTo(hit.id)
 				return {
 					record: JSON.stringify({ ok: true, archived: hit.id }),
 					wire: `Archived "${hit.title}".`
