@@ -6,7 +6,7 @@
  * The site and the app are one brand, so the palette is the app's palette,
  * block for block: the TONES (the paint), the SURFACES (the cream ladder),
  * and the ROLES (what a colour means). Components speak roles (`bg-primary`,
- * `text-accent-ink`) and never tones, so re-assigning a role below re-skins
+ * `text-accent`) and never tones, so re-assigning a role below re-skins
  * every surface that uses it.
  *
  * When the app's palette moves, copy blocks 1–3 across; nothing else in this

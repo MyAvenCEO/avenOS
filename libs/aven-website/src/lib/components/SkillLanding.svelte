@@ -93,7 +93,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 						>
 							{@html beamAvatarSvg(AVEN, paletteKi, 32, `skill-aven-${skill.slug}`)}
 						</div>
-						<p class="text-[9px] font-bold tracking-[0.14em] text-accent-ink">Dein Aven</p>
+						<p class="text-[9px] font-bold tracking-[0.14em] text-accent">Dein Aven</p>
 						<p class="text-[9px] text-foreground/40">löst das.</p>
 					</div>
 				</div>
@@ -114,7 +114,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					Dein Leben nach {skillLabel(skill.slug)}.
 				</h2>
 				<p
-					class="mx-auto mt-3 max-w-md text-[11px] font-bold uppercase tracking-[0.18em] text-accent-ink"
+					class="mx-auto mt-3 max-w-md text-[11px] font-bold uppercase tracking-[0.18em] text-accent"
 				>
 					{skill.hero.promiseHoursPerWeek}
 					pro Woche zurückgewonnen
@@ -182,7 +182,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<div
 					class="rounded-xl border border-accent/30 bg-accent/10 px-4 py-4 ring-1 ring-accent/20"
 				>
-					<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent-ink/70">Magic</p>
+					<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent/70">Magic</p>
 					<p class="mt-2 text-[13px] leading-snug text-foreground/78">
 						{skill.whatMechanics.magic}
 					</p>
@@ -216,7 +216,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 							href={skillDetailHref(slug, 'de')}
 							class="flex items-start gap-3 rounded-xl border border-border/35 bg-surface-raised px-4 py-3 transition-colors hover:border-border/65 hover:bg-surface-soft"
 						>
-							<span class="mt-0.5 text-[11px] font-bold text-accent-ink">→</span>
+							<span class="mt-0.5 text-[11px] font-bold text-accent">→</span>
 							<div>
 								<p class="text-[11px] font-bold tracking-[0.1em] text-foreground/80">
 									{skillLabel(slug)}
@@ -278,7 +278,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					</span>
 				</div>
 				<div class="mt-4 rounded-xl border border-accent/40 bg-accent/15 px-4 py-4">
-					<p class="text-center text-[9px] font-bold uppercase tracking-[0.22em] text-accent-ink">
+					<p class="text-center text-[9px] font-bold uppercase tracking-[0.22em] text-accent">
 						Im Plan enthalten
 					</p>
 					<p class="mt-2 text-center text-[15px] font-bold text-foreground">0&nbsp;€ Aufpreis</p>
@@ -327,9 +327,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				</ul>
 			</div>
 			<div class="rounded-xl border border-accent/35 bg-accent/12 px-5 py-4">
-				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent-ink">
-					Verfügbarkeit
-				</p>
+				<p class="text-[9px] font-bold uppercase tracking-[0.22em] text-accent">Verfügbarkeit</p>
 				<p class="mt-1.5 text-[13px] leading-snug text-foreground/75">
 					{availabilityNote(skill, 'de')}
 				</p>
@@ -357,7 +355,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 							<p class="text-[8px] font-bold uppercase tracking-[0.24em] text-accent">
 								Geschrieben von
 							</p>
-							<p class="mt-0.5 text-[13px] font-bold tracking-[0.1em] text-accent-ink">{AVEN}</p>
+							<p class="mt-0.5 text-[13px] font-bold tracking-[0.1em] text-accent">{AVEN}</p>
 						</div>
 					</div>
 					<p class="text-[9px] font-bold uppercase tracking-[0.18em] text-foreground/38">
@@ -373,7 +371,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					<p class="text-[8px] font-bold uppercase tracking-[0.24em] text-foreground/40">
 						Mit Überzeugung,
 					</p>
-					<p class="mt-1.5 text-[13px] font-bold tracking-[0.1em] text-accent-ink">{AVEN}</p>
+					<p class="mt-1.5 text-[13px] font-bold tracking-[0.1em] text-accent">{AVEN}</p>
 				</footer>
 			</div>
 		</div>

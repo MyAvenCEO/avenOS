@@ -57,15 +57,13 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 					<strong class="font-medium text-foreground/85">avenME</strong>
 					ist dein persönlicher AI‑CEO für dein Leben — einer pro Mensch.
 					<strong class="font-medium text-foreground/85">avenFOUNDER</strong>
-					ist der professionelle AI‑CEO für deine Firma — einer pro Firma. Zwei Rollen, zwei
-					Produkte, keine Stufen: Das eine ist kein Upgrade des anderen, beide leben im selben
-					Namensraum. Mit
+					ist der professionelle AI‑CEO für deine Firma — einer pro Firma. Mit
 					<strong class="font-medium text-foreground/85">avenCOOP</strong>
 					werden wir dein technischer Co‑Founder.
 				</p>
 				<p class="mx-auto mt-4 max-w-xl text-[14px] leading-snug text-foreground/55">
 					Der Anteil am Umsatz ist zur Hälfte Plattform und zur Hälfte
-					<strong class="font-medium text-accent-ink">Reinvest</strong>: Er kauft dir Anteile an den
+					<strong class="font-medium text-accent">Reinvest</strong>: Er kauft dir Anteile an den
 					avenCOOPs anderer Gründer — du wählst selbst, an welchen.
 				</p>
 			</div>
@@ -78,7 +76,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 				{#if claimedName}
 					<p class="mb-5 text-center text-[13px] text-foreground/70">
 						Deine Wahl:
-						<strong class="font-semibold text-accent-ink">{claimedName}</strong>.aven.ceo —
+						<strong class="font-semibold text-accent">{claimedName}</strong>.aven.ceo —
 						Verfügbarkeit bestätigen wir bei der Buchung.
 					</p>
 				{/if}
@@ -144,7 +142,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 							{#if perLabel(p)}
 								<span
 									class="rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] {p.highlight
-										? 'bg-accent/20 text-accent-ink'
+										? 'bg-accent/20 text-accent'
 										: 'bg-quiet/15 text-quiet-ink'}"
 								>
 									{perLabel(p)}
@@ -166,16 +164,12 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 
 						{#if totalSharePct(p) > 0}
 							<div class="mt-4 border-t border-border/50 pt-4">
-								<div class="flex items-baseline justify-between gap-2">
-									<p
-										class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45"
-									>
-										Vom Umsatz
-									</p>
-									<p class="text-xl font-semibold tabular-nums tracking-tight text-accent-ink">
-										{totalSharePct(p)}&nbsp;%
-									</p>
-								</div>
+								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
+									Vom Umsatz
+								</p>
+								<p class="mt-1 text-xl font-semibold tabular-nums tracking-tight text-accent">
+									{totalSharePct(p)}&nbsp;%
+								</p>
 								<!-- The split is the whole point: half is a price, half buys you shares. -->
 								<dl class="mt-2 space-y-1 text-[11px] leading-snug">
 									<div>
@@ -185,7 +179,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 										</dt>
 									</div>
 									<div>
-										<dt class="font-medium text-accent-ink">
+										<dt class="font-medium text-accent">
 											{p.reinvestPct}&nbsp;% Reinvest
 											<span class="font-normal text-foreground/55">
 												· in avenCOOPs anderer Gründer</span
@@ -329,7 +323,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 									{p.referralPct}&nbsp;% Provision
 								</span>
 								<span class="mt-1 block text-[12px] leading-snug text-foreground/55">
-									auf jedes aven‑Abo, das du vermittelst — monatlich, solange es läuft.
+									auf jedes aven‑Produkt, das du vermittelst — monatlich, solange es läuft.
 								</span>
 							</p>
 						{/if}
@@ -340,10 +334,11 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 			<!-- avenCOOP: a relationship, full width. Includes the company's avenFOUNDER. -->
 			<div
 				id={coop.id}
-				class="mt-6 scroll-mt-28 rounded-2xl border border-foreground/8 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:p-7"
+				class="mt-6 scroll-mt-28 rounded-2xl border border-foreground/8 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:p-7 lg:p-8"
 			>
-				<div class="grid gap-8 lg:grid-cols-[minmax(14rem,17rem)_1fr_auto] lg:gap-10">
-					<div class="border-b border-border/50 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-10">
+				<div class="grid gap-8 lg:grid-cols-[17rem_1fr] lg:gap-12">
+					<!-- Left: who it is, what it costs, what it takes. -->
+					<div class="border-b border-border/50 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-12">
 						<span
 							class="inline-block rounded-full bg-quiet/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-quiet-ink"
 						>
@@ -351,20 +346,21 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						</span>
 						<p class="mt-3 text-xl font-semibold tracking-tight text-foreground">{coop.name}</p>
 						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{coop.role}</p>
-						<p class="mt-4 text-3xl font-semibold tabular-nums tracking-tight text-foreground">
-							{euro(coop.eurPrice)}&nbsp;€<span class="text-base font-medium text-foreground/55"
-								>{priceSuffix(coop)}</span
-							>
-						</p>
+
+						<div class="mt-5 border-t border-border/50 pt-4">
+							<p class="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
+								{euro(coop.eurPrice)}&nbsp;€
+							</p>
+							<p class="mt-0.5 text-[13px] font-medium text-foreground/55">{priceSuffix(coop)}</p>
+						</div>
+
 						<div class="mt-4 border-t border-border/50 pt-4">
-							<div class="flex items-baseline justify-between gap-2">
-								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
-									Vom Umsatz
-								</p>
-								<p class="text-xl font-semibold tabular-nums tracking-tight text-accent-ink">
-									{totalSharePct(coop)}&nbsp;%
-								</p>
-							</div>
+							<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
+								Vom Umsatz
+							</p>
+							<p class="mt-1 text-xl font-semibold tabular-nums tracking-tight text-accent">
+								{totalSharePct(coop)}&nbsp;%
+							</p>
 							<dl class="mt-2 space-y-1 text-[11px] leading-snug">
 								<div>
 									<dt class="text-foreground/55">
@@ -373,7 +369,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 									</dt>
 								</div>
 								<div>
-									<dt class="font-medium text-accent-ink">
+									<dt class="font-medium text-accent">
 										{coop.reinvestPct}&nbsp;% Reinvest
 										<span class="font-normal text-foreground/55">
 											· in avenCOOPs anderer Gründer</span
@@ -389,8 +385,11 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						</div>
 					</div>
 
-					<div class="min-w-0">
-						<ul class="grid gap-2 text-[13px] leading-snug text-foreground/75 sm:grid-cols-2">
+					<!-- Right: what you get, then the decision. -->
+					<div class="flex min-w-0 flex-col">
+						<ul
+							class="grid gap-x-8 gap-y-3 text-[13px] leading-snug text-foreground/75 sm:grid-cols-2"
+						>
 							{#each coop.features as feature (typeof feature === 'string' ? feature : feature.label)}
 								<li class="flex gap-2">
 									<span
@@ -425,44 +424,53 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 								</li>
 							{/each}
 						</ul>
-						{#if coopSkillCount > 0}
-							<p class="mt-3 text-[12px] text-foreground/50">
-								<a
-									href={`/skills?plan=${coop.id}`}
-									class="underline underline-offset-4 hover:text-foreground/75"
-								>
-									Alle {coopSkillCount} Skills ansehen →
-								</a>
-							</p>
-						{/if}
-						{#if coop.runtime}
-							<p class="mt-4 text-[12px] leading-snug text-foreground/55">
-								<span class="font-semibold uppercase tracking-[0.12em] text-accent"
-									>KI‑Laufzeit</span
-								>
-								· bis zu {coop.runtime.hoursPerDay}&nbsp;Std/Tag (Fair Use), danach
-								{coop.runtime.centsPerExtraMinute}&nbsp;Cent pro Minute
-							</p>
-						{/if}
-					</div>
 
-					<div class="flex flex-col items-stretch justify-center gap-3 lg:w-56">
-						<a
-							href={ctaHref(coop)}
-							class="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-primary/45 px-8 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
+						<div
+							class="mt-6 grid gap-4 border-t border-border/50 pt-5 text-[12px] leading-snug text-foreground/55 sm:grid-cols-2"
 						>
-							{ctaLabel(coop)}
-						</a>
-						{#if coop.referralPct}
-							<p class="text-center">
-								<span class="text-xl font-semibold tracking-tight text-accent">
-									{coop.referralPct}&nbsp;% Provision
-								</span>
-								<span class="mt-1 block text-[12px] leading-snug text-foreground/55">
-									auf jedes aven‑Abo, das du vermittelst — monatlich, solange es läuft.
-								</span>
-							</p>
-						{/if}
+							{#if coopSkillCount > 0}
+								<p>
+									<span class="font-semibold uppercase tracking-[0.12em] text-accent">Skills</span>
+									·
+									<a
+										href={`/skills?plan=${coop.id}`}
+										class="underline underline-offset-4 hover:text-foreground/75"
+									>
+										Alle {coopSkillCount} Skills ansehen →
+									</a>
+								</p>
+							{/if}
+							{#if coop.runtime}
+								<p>
+									<span class="font-semibold uppercase tracking-[0.12em] text-accent"
+										>KI‑Laufzeit</span
+									>
+									· bis zu {coop.runtime.hoursPerDay}&nbsp;Std/Tag (Fair Use), danach
+									{coop.runtime.centsPerExtraMinute}&nbsp;Cent pro Minute
+								</p>
+							{/if}
+						</div>
+
+						<div
+							class="mt-6 flex flex-col gap-4 border-t border-border/50 pt-6 sm:flex-row sm:items-center sm:justify-between"
+						>
+							{#if coop.referralPct}
+								<p class="max-w-xs">
+									<span class="text-xl font-semibold tracking-tight text-accent">
+										{coop.referralPct}&nbsp;% Provision
+									</span>
+									<span class="mt-1 block text-[12px] leading-snug text-foreground/55">
+										auf jedes aven‑Produkt, das du vermittelst — monatlich, solange es läuft.
+									</span>
+								</p>
+							{/if}
+							<a
+								href={ctaHref(coop)}
+								class="inline-flex min-h-11 items-center justify-center rounded-full border border-primary/45 px-10 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
+							>
+								{ctaLabel(coop)}
+							</a>
+						</div>
 					</div>
 				</div>
 			</div>
