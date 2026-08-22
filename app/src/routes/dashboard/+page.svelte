@@ -477,14 +477,10 @@ function onKeydown(event: KeyboardEvent) {
 		<!-- The bottom row: on phones, the way back from an open intent sits to
 		     the LEFT of the pill — the pill is the one fixed landmark, so the
 		     back button lives beside it rather than anywhere in the workspace. -->
-		<!-- The orb overhangs the pill by 0.5rem top and bottom; the row keeps
-		     exactly that much air, so the orb's lower edge lands where the text
-		     pill's lower edge does — one bottom gap in both modes. -->
-		<div
-			class="relative flex items-center justify-center gap-2 {phase.key !== 'off' && !typing
-				? 'my-2'
-				: ''}"
-		>
+		<!-- The pill sits in the same place in both modes; the orb simply
+		     overhangs it (6px each way) without pushing anything — so switching
+		     voice ↔ text never makes the notch jump. -->
+		<div class="relative flex items-center justify-center gap-2">
 			{#if shell.tab === 'intents' && shell.detail}
 				<button
 					type="button"
@@ -669,7 +665,7 @@ function onKeydown(event: KeyboardEvent) {
 								disabled={!orbActs}
 								title={phase.label}
 								aria-label={phase.label}
-								class="-my-4 relative flex size-18 shrink-0 items-center justify-center rounded-full border-4 border-primary shadow-[0_4px_16px_rgba(30,41,59,0.25)] transition-[transform,background-color,color] duration-150 {ORB[
+								class="-my-3 relative flex size-17 shrink-0 items-center justify-center rounded-full border-4 border-primary shadow-[0_4px_16px_rgba(30,41,59,0.25)] transition-[transform,background-color,color] duration-150 {ORB[
 									phase.key
 								]?.orb ?? ORB.text.orb} {orbActs ? 'cursor-pointer' : 'cursor-default'}"
 								style={phase.key === 'hearing'
@@ -718,21 +714,19 @@ function onKeydown(event: KeyboardEvent) {
 							onclick={endConversation}
 							title="End conversation"
 							aria-label="End conversation"
-							class="shrink-0 rounded-full bg-error p-2.5 text-primary-foreground transition-opacity hover:opacity-80"
+							class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 transition-colors hover:bg-primary-foreground/10"
 						>
-							<!-- hang-up: the handset rotated OFF the hook — disconnect, not dial -->
+							<!-- close: end the conversation — a quiet ✕, the same outline as
+							     the keyboard toggle opposite it, not a red alarm -->
 							<svg
 								viewBox="0 0 24 24"
-								class="size-5 rotate-[135deg]"
+								class="size-5"
 								fill="none"
 								stroke="currentColor"
-								stroke-width="2"
+								stroke-width="1.5"
 								stroke-linecap="round"
-								stroke-linejoin="round"
 							>
-								<path
-									d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"
-								/>
+								<path d="M6 6l12 12M18 6L6 18" />
 							</svg>
 						</button>
 					{/if}
