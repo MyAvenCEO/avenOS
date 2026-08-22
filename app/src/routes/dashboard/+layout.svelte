@@ -35,7 +35,7 @@ function leaveSettings() {
 	     the detail takes the full width and the rail steps out with the list. -->
 	<aside
 		class="{shell.tab === 'intents' && shell.detail
-			? 'hidden md:flex'
+			? 'hidden lg:flex'
 			: 'flex'} w-16 shrink-0 flex-col items-center gap-3 border-border border-r py-4 pt-[max(1rem,env(safe-area-inset-top))]"
 	>
 		{#each SPARKS as spark (spark.id)}
