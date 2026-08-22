@@ -2,20 +2,25 @@
  * The products — one source of truth for pricing AND the skills marketplace.
  *
  * NOT a ladder. avenID is the door: the name, the waitlist place, a plain
- * account anyone can address and talk to. avenME is the personal Aven —
- * one per HUMAN: inbox, post, documents, the daily organisation, your own
- * knowledge base. avenCEO is the company Aven — one per COMPANY: it runs
- * the whole business (pre-accounting, finances, website, shop, blog), is the
- * single point every employee, customer and partner talks to, and takes a
- * share of the revenue it helps produce. avenME and avenCEO are two
- * different ROLES that live side by side in one shared namespace; neither is
- * an upgrade of the other, and each company needs its own avenCEO. avenCOOP
+ * account anyone can address and talk to. avenME is the personal AI‑CEO for
+ * your LIFE — one per human: inbox, post, documents, the daily organisation,
+ * your own knowledge base. avenFOUNDER is the professional AI‑CEO for your
+ * COMPANY — one per company: it runs the whole business (pre-accounting,
+ * finances, website, shop, blog), is the single point every employee,
+ * customer and partner talks to, and takes a share of the revenue it helps
+ * produce. (Technically that company Aven is "the avenCEO" — avenFOUNDER is
+ * the product you buy to get one.) avenME and avenFOUNDER are two different
+ * ROLES that live side by side in one shared namespace; neither is an
+ * upgrade of the other, and each company needs its own. avenCOOP
  * is not a bigger plan but a different relationship: we come in as the
  * technical co-founder, take company shares alongside the revenue share, and
  * you APPLY rather than book.
  *
  * avenID is a prerequisite, not a part of any plan: a human without one buys
- * it alongside avenME or avenCEO as a bundle.
+ * it alongside avenME or avenFOUNDER as a bundle.
+ *
+ * The plan id `avenceo` is a WIRE KEY (API tier enum, Creem product map,
+ * app billing, skills catalogue) and stays stable; only `name` changed.
  *
  * The five-role ladder (avenCOO/CMO/CTO/CPO/CEO) and the "Sparks" are gone:
  * the company of the future is 1 human (vision) + 1 avenCEO (execution),
@@ -49,7 +54,7 @@ export interface Plan {
 	/** One line on what this product takes off your desk. */
 	role: string
 	/**
-	 * Who a plan is bought FOR. One avenME per human, one avenCEO per company:
+	 * Who a plan is bought FOR. One avenME per human, one avenFOUNDER per company:
 	 * two roles that coexist, never a tier above the other. Printed on the
 	 * cards so nobody reads 42 → 326 as a ladder.
 	 */
@@ -87,7 +92,7 @@ export interface Plan {
 	 * feature bullet where it drifts per tier.
 	 */
 	runtime?: { hoursPerDay: number; centsPerExtraMinute: number }
-	/** What this product does. Only avenCOOP includes another plan (avenCEO). */
+	/** What this product does. Only avenCOOP includes another plan (avenFOUNDER). */
 	features: PlanFeature[]
 	/** Marks the product we lead with. */
 	highlight?: boolean
@@ -107,15 +112,15 @@ export const PLANS: Plan[] = [
 			'Dein avenID‑Name — für 1 Jahr für dich gesichert',
 			'Dein Platz auf der Warteliste',
 			'20 Min Test‑Zugang — sobald du eingeladen bist',
-			'Voraussetzung für avenME und avenCEO — einmal pro Mensch'
+			'Voraussetzung für avenME und avenFOUNDER — einmal pro Mensch'
 		]
 	},
 	{
 		id: 'avenme',
 		name: 'avenME',
-		role: 'Dein persönlicher Aven — dein Leben und dein Wissen',
+		role: 'Dein persönlicher AI‑CEO — für dein Leben',
 		per: 'person',
-		eurPrice: 42,
+		eurPrice: 58,
 		billing: 'monthly',
 		referralPct: 10,
 		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
@@ -133,15 +138,15 @@ export const PLANS: Plan[] = [
 			{ skill: 'todo-shuffler', label: 'Deine Liste sortiert sich selbst' },
 			{ skill: 'bookmark-champion', label: 'Links und Lesezeichen, wiederfindbar' },
 			'Deine persönliche Wissensbasis — alles, was du lernst, bleibt bei deinem Aven',
-			'Trainiert zusammen mit dir die avenCEOs deiner Firmen'
+			'Trainiert zusammen mit dir den avenCEO deiner Firma'
 		]
 	},
 	{
 		id: 'avenceo',
-		name: 'avenCEO',
-		role: 'Der Aven deiner Firma — alles Geschäftliche',
+		name: 'avenFOUNDER',
+		role: 'Dein professioneller AI‑CEO — für deine Firma',
 		per: 'company',
-		eurPrice: 326,
+		eurPrice: 426,
 		billing: 'monthly',
 		referralPct: 15,
 		runtime: { hoursPerDay: 4, centsPerExtraMinute: 8 },
@@ -174,7 +179,7 @@ export const PLANS: Plan[] = [
 		equitySharePct: 5,
 		applyOnly: true,
 		features: [
-			'1× avenCEO für deine Firma inklusive',
+			'1× avenFOUNDER — der avenCEO deiner Firma — inklusive',
 			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
 			'Du wählst selbst, in welche avenCOOPs dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
@@ -194,7 +199,7 @@ export function plan(id: PlanId): Plan {
 }
 
 /**
- * What a plan brings with it. avenME and avenCEO are separate products for
+ * What a plan brings with it. avenME and avenFOUNDER are separate products for
  * separate roles (person / company) — neither contains the other, and avenID
  * is a prerequisite rather than a part. The only inclusion is avenCOOP,
  * which ships with the company's avenCEO.

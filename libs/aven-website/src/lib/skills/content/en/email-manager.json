@@ -1,15 +1,9 @@
 {
 	"slug": "email-manager",
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenme",
 	"oneLineCopy": "No money-mail ever gets lost — ever.",
 	"hero": {
-		"kicker": "Skill · avenTIN · email manager",
+		"kicker": "Skill · email manager",
 		"headlineMain": "Your inbox. Finally under control.",
 		"headlineSerifLead": "Every mail to your avenCEO address is understood, categorized and — when needed — escalated directly to you by your Aven.",
 		"promiseHoursPerWeek": "6+ hrs/week"

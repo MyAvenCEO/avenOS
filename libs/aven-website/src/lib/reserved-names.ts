@@ -20,13 +20,13 @@ export interface ReservedName {
 
 /**
  * Seeded with the names the site already speaks publicly: the two company
- * Aven (avenMAIA for the Maia Holding GmbH, avenTIN for the avenCEO GmbH) and
+ * Aven (avenMAIA for the Maia Holding GmbH, avenCEO for the avenCEO GmbH) and
  * the founders' personal Aven (avenSAM, avenDAN) — one shared namespace for
  * people and companies. Add real reservations underneath.
  */
 export const RESERVED_NAMES: ReservedName[] = [
 	{ slug: 'maia', since: '2026-01-01', holder: 'avenMAIA' },
-	{ slug: 'tin', since: '2026-01-01', holder: 'avenTIN' },
+	{ slug: 'ceo', since: '2026-01-01', holder: 'avenCEO' },
 	{ slug: 'sam', since: '2026-01-01', holder: 'avenSAM' },
 	{ slug: 'dan', since: '2026-01-01', holder: 'avenDAN' }
 ]

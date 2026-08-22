@@ -1,16 +1,10 @@
 {
 	"slug": "todo-shuffler",
 	"comingSoon": true,
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenme",
 	"oneLineCopy": "Deine Liste sortiert sich selbst — nach dem, was jetzt wirklich zählt.",
 	"hero": {
-		"kicker": "Skill · avenTIN · todo shuffler",
+		"kicker": "Skill · todo shuffler",
 		"headlineMain": "Eine Liste, die sich selbst sortiert.",
 		"headlineSerifLead": "Nicht mehr 43 offene Punkte und die Frage, womit du anfängst — sondern die drei, die heute den Unterschied machen.",
 		"promiseHoursPerWeek": "2+ Std/Woche"

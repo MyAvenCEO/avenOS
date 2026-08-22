@@ -28,20 +28,7 @@ import enHumanReviewer from './content/en/human-reviewer.json'
 import enInboxRouter from './content/en/inbox-router.json'
 import enTodoShuffler from './content/en/todo-shuffler.json'
 import enWebsiteCreator from './content/en/website-creator.json'
-import dePubAvenmaia from './publishers/de/avenmaia.json'
-import dePubAventin from './publishers/de/aventin.json'
-import enPubAvenmaia from './publishers/en/avenmaia.json'
-// ── Publisher identities (per language) ───────────────────────────────────────
-import enPubAventin from './publishers/en/aventin.json'
-import type {
-	AvenosSkill,
-	AvenosSkillSlug,
-	PublisherIdentityJson,
-	PublisherWithSkills,
-	SkillJson,
-	SkillPublisherId,
-	SupportedLang
-} from './types'
+import type { AvenosSkill, AvenosSkillSlug, SkillJson, SupportedLang } from './types'
 
 /**
  * Which tier a skill comes with is decided ONCE, in the shared catalog that
@@ -89,49 +76,8 @@ const registry: Record<SupportedLang, SkillJson[]> = {
 	] as SkillJson[])
 }
 
-const publisherRegistry: Record<SupportedLang, PublisherIdentityJson[]> = {
-	en: [enPubAventin, enPubAvenmaia] as PublisherIdentityJson[],
-	de: [dePubAventin, dePubAvenmaia] as PublisherIdentityJson[]
-}
-
-/** All slugs in declaration order. */
+/** All slugs in declaration order — the static routes under `/skills/[slug]`. */
 export const allSlugs: AvenosSkillSlug[] = registry.en.map((s) => s.slug)
-
-/** Slugs for static routes under `/skills/aventin/[slug]`. */
-export const aventinSkillSlugs: AvenosSkillSlug[] = registry.en
-	.filter((s) => s.publisher.id === 'aventin')
-	.map((s) => s.slug)
-
-/** Slugs for static routes under `/skills/avenmaia/[slug]`. */
-export const avenmaiaSkillSlugs: AvenosSkillSlug[] = registry.en
-	.filter((s) => s.publisher.id === 'avenmaia')
-	.map((s) => s.slug)
-
-export function publisherIdentities(lang: SupportedLang = 'de'): PublisherIdentityJson[] {
-	return publisherRegistry[lang] ?? publisherRegistry.en
-}
-
-export function publisherIdentity(
-	id: SkillPublisherId,
-	lang: SupportedLang = 'de'
-): PublisherIdentityJson {
-	const list = publisherIdentities(lang)
-	// biome-ignore lint/style/noNonNullAssertion: the en registry is the static, complete fallback — every id resolvable by construction.
-	return list.find((p) => p.id === id) ?? publisherRegistry.en.find((p) => p.id === id)!
-}
-
-/** Publishers merged with live skill counts from the skill registry (auto‑filled). */
-export function loadPublishersWithSkills(lang: SupportedLang = 'de'): PublisherWithSkills[] {
-	const list = registry[lang] ?? registry.en
-	return publisherIdentities(lang).map((p) => {
-		const skillsForPub = list.filter((s) => s.publisher.id === p.id)
-		return {
-			...p,
-			skills: skillsForPub,
-			skillCount: skillsForPub.length
-		}
-	})
-}
 
 export function loadSkills(lang: SupportedLang = 'de'): AvenosSkill[] {
 	return registry[lang] ?? registry.en
@@ -139,8 +85,8 @@ export function loadSkills(lang: SupportedLang = 'de'): AvenosSkill[] {
 
 /**
  * Skills grouped by the plan they come with, in plan order — the marketplace's
- * organizing axis. Buyers ask "what do I get for this price", not "who wrote
- * it", so the publisher stays as attribution on the card and nothing more.
+ * organizing axis. Buyers ask "what do I get for this price" — skills are
+ * global, nobody "publishes" them, so the plan is the only grouping.
  */
 export function loadSkillsByPlan(
 	lang: SupportedLang = 'de'
@@ -149,7 +95,7 @@ export function loadSkillsByPlan(
 	return PLANS.map((p) => ({ plan: p, skills: list.filter((s) => s.plan === p.id) }))
 }
 
-/** Everything a plan includes — its own skills, plus avenCEO's for avenCOOP. */
+/** Everything a plan includes — its own skills, plus avenFOUNDER's for avenCOOP. */
 export function skillsIncludedIn(planId: PlanId, lang: SupportedLang = 'de'): AvenosSkill[] {
 	return (registry[lang] ?? registry.en).filter((s) => planIncludes(planId, s.plan))
 }
@@ -159,7 +105,6 @@ export function loadSkill(slug: string, lang: SupportedLang = 'de'): AvenosSkill
 	return (registry[lang] ?? registry.en).find((s) => s.slug === slug)
 }
 
-/** Detail URL honoring publisher (`/skills/aventin/…` vs `/skills/avenmaia/…`). */
 /**
  * How a skill's name is written for humans: no hyphens. The slug stays
  * hyphenated because it is a URL segment and a file name — but nothing the
@@ -194,7 +139,5 @@ export function availabilityNote(skill: AvenosSkill, lang: SupportedLang = 'de')
 }
 
 export function skillDetailHref(slug: string, lang: SupportedLang = 'de'): string {
-	const skill = loadSkill(slug, lang)
-	if (!skill) return '/skills'
-	return `/skills/${skill.publisher.id}/${slug}`
+	return loadSkill(slug, lang) ? `/skills/${slug}` : '/skills'
 }

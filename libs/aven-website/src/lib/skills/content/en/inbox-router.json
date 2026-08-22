@@ -1,15 +1,9 @@
 {
 	"slug": "inbox-router",
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenme",
 	"oneLineCopy": "One inbox for everything — and someone deciding what matters now.",
 	"hero": {
-		"kicker": "Skill · avenTIN · inbox router",
+		"kicker": "Skill · inbox router",
 		"headlineMain": "One inbox. For all of it.",
 		"headlineSerifLead": "Mail, uploads, scanned letters — everything lands in one place, gets sorted, prioritised and handed to the skill that deals with it.",
 		"promiseHoursPerWeek": "5+ hrs/week"

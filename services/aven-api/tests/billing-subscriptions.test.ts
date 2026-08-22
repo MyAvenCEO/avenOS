@@ -39,6 +39,14 @@ function stubFetch(responses: Array<{ status?: number; body: unknown }>) {
 
 afterEach(() => vi.unstubAllGlobals())
 
+/**
+ * Creem products are adopted by NAME, so the fixtures must speak the SSOT's
+ * current names — a hardcoded "avenCEO" silently broke the day the product
+ * was renamed avenFOUNDER while the tier id stayed `avenceo`.
+ */
+const NAME_ME = PLANS.find((p) => p.id === 'avenme')?.name ?? 'avenME'
+const NAME_CEO = PLANS.find((p) => p.id === 'avenceo')?.name ?? 'avenFOUNDER'
+
 describe('product resolution', () => {
 	it('pinned config ids win without any provider call', async () => {
 		const calls = stubFetch([])
@@ -64,8 +72,8 @@ describe('product resolution', () => {
 			{
 				body: {
 					items: [
-						{ id: 'prod_me', name: 'avenME' },
-						{ id: 'prod_ceo', name: 'avenCEO' }
+						{ id: 'prod_me', name: NAME_ME },
+						{ id: 'prod_ceo', name: NAME_CEO }
 					]
 				}
 			}
@@ -94,8 +102,8 @@ describe('product resolution', () => {
 		// Prices come from the SSOT, in NET cents, recurring monthly, tax-exclusive.
 		const avenme = PLANS.find((p) => p.id === 'avenme')
 		const avenceo = PLANS.find((p) => p.id === 'avenceo')
-		expect(byName.avenME?.price).toBe((avenme?.eurPrice ?? 0) * 100)
-		expect(byName.avenCEO?.price).toBe((avenceo?.eurPrice ?? 0) * 100)
+		expect(byName[NAME_ME]?.price).toBe((avenme?.eurPrice ?? 0) * 100)
+		expect(byName[NAME_CEO]?.price).toBe((avenceo?.eurPrice ?? 0) * 100)
 		for (const body of Object.values(byName)) {
 			expect(body.billing_type).toBe('recurring')
 			expect(body.tax_mode).toBe('exclusive')
@@ -222,8 +230,8 @@ describe('subscription state', () => {
 			{
 				body: {
 					items: [
-						{ id: 'prod_me', name: 'avenME' },
-						{ id: 'prod_ceo', name: 'avenCEO' }
+						{ id: 'prod_me', name: NAME_ME },
+						{ id: 'prod_ceo', name: NAME_CEO }
 					]
 				}
 			},
@@ -339,8 +347,8 @@ describe('subscription state', () => {
 			{
 				body: {
 					items: [
-						{ id: 'prod_me', name: 'avenME' },
-						{ id: 'prod_ceo', name: 'avenCEO' }
+						{ id: 'prod_me', name: NAME_ME },
+						{ id: 'prod_ceo', name: NAME_CEO }
 					]
 				}
 			},

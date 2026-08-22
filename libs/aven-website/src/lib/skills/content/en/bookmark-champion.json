@@ -1,16 +1,10 @@
 {
 	"slug": "bookmark-champion",
 	"comingSoon": true,
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenme",
 	"oneLineCopy": "Everything you ever saved — findable at last.",
 	"hero": {
-		"kicker": "Skill · avenTIN · bookmark champion",
+		"kicker": "Skill · bookmark champion",
 		"headlineMain": "The link you definitely saved.",
 		"headlineSerifLead": "Bookmarks, shared links and open tabs get read, tagged and connected to whatever you're working on.",
 		"promiseHoursPerWeek": "1+ hrs/week"

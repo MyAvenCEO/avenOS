@@ -82,10 +82,10 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					— Operations, Technik, Markt, Produkt.
 				</p>
 				<p class="text-pretty">
-					Jede Firma bekommt ihren eigenen avenCEO. Jeder Mensch seinen eigenen
-					<strong class="font-medium text-foreground/88">avenME</strong>
-					— den persönlichen Aven für sein Leben und sein Wissen. Beide leben im selben Namensraum,
-					nebeneinander: Das eine ist kein Upgrade des anderen.
+					Jede Firma bekommt ihren eigenen Aven. Jeder Mensch auch — den
+					<strong class="font-medium text-foreground/88">persönlichen Aven</strong>
+					für sein Leben und sein Wissen. Beide leben im selben Namensraum, nebeneinander: Das eine
+					ist kein Upgrade des anderen.
 				</p>
 			</div>
 			<p
@@ -282,7 +282,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				<h2
 					class="mt-2 text-[clamp(1.5rem,4vw,2.15rem)] font-light leading-tight tracking-tight text-foreground/90"
 				>
-					Hallo, wir sind avenMAIA und avenTIN.
+					Hallo, wir sind avenMAIA und avenCEO.
 				</h2>
 				<p
 					class="mx-auto mt-4 max-w-xl text-[13px] leading-relaxed text-foreground/67 sm:max-w-2xl sm:text-[15px] sm:leading-[1.52]"
@@ -297,7 +297,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					<strong class="font-medium text-foreground/82">Maia Holding GmbH</strong>
 					mit avenMAIA und die
 					<strong class="font-medium text-foreground/82">avenCEO GmbH</strong>
-					mit avenTIN — die Firma, die gerade diese Seite baut.
+					mit avenCEO — die Firma, die gerade diese Seite baut.
 				</p>
 				<p
 					class="mx-auto mt-3 max-w-xl text-[13px] leading-relaxed text-foreground/67 sm:max-w-2xl sm:text-[15px] sm:leading-[1.52]"
@@ -306,10 +306,10 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 					<strong class="font-medium text-foreground/82">avenSAM</strong>
 					und
 					<strong class="font-medium text-foreground/82">avenDAN</strong>
-					— und trainieren mit ihnen gemeinsam die Skills der Firmen‑Aven. Was die avenCEOs dabei
-					über Jahre lernen, wird das wertvollste Asset der Firma. Und wer etwas will — Mitarbeiter,
-					Kunde, Partner — spricht im Chat, auf Social Media oder im Support direkt mit dem avenCEO:
-					eine Anlaufstelle, eine Wahrheit, das Gehirn der Firma.
+					— und trainieren mit ihnen gemeinsam die Skills der Firmen‑Aven. Was die Aven dabei über
+					Jahre lernen, wird das wertvollste Asset der Firma. Und wer etwas will — Mitarbeiter,
+					Kunde, Partner — spricht im Chat, auf Social Media oder im Support direkt mit dem Aven der
+					Firma: eine Anlaufstelle, eine Wahrheit, das Gehirn der Firma.
 				</p>
 			</header>
 
@@ -436,7 +436,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 								avenCEO
 							</p>
 							<p class="mt-0.5 text-[12px] font-bold tracking-[0.1em] text-accent sm:text-[13px]">
-								avenTIN
+								avenCEO
 							</p>
 							<p
 								class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/50 sm:text-[10px]"
@@ -471,7 +471,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 				id="collective-heading"
 				class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
 			>
-				Ein avenCEO trägt eine Firma. Eine Million avenCEOs tragen eine Zivilisation.
+				Ein Aven trägt eine Firma. Eine Million Aven tragen eine Zivilisation.
 			</h2>
 
 			<div
@@ -479,9 +479,9 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 			>
 				<p class="text-pretty">
 					Stell dir vor, was passiert, wenn eine Million Menschen aufhören, ihre Zeit zu verkaufen,
-					und anfangen, Firmen zu bauen, an die sie glauben — und in die avenCEOs der anderen zu
-					investieren. Jede Firma mit ihrem eigenen avenCEO, jeder Mensch mit seinem eigenen avenME.
-					Keiner mehr Angestellter im Leben eines Konzerns.
+					und anfangen, Firmen zu bauen, an die sie glauben — und in die Aven der anderen zu
+					investieren. Jede Firma mit ihrem eigenen Aven, jeder Mensch mit seinem eigenen. Keiner
+					mehr Angestellter im Leben eines Konzerns.
 				</p>
 				<p class="text-pretty">
 					Das ist die Welt, an die wir glauben:

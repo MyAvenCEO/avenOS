@@ -1,15 +1,9 @@
 {
 	"slug": "docs-organizer",
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenme",
 	"oneLineCopy": "No document goes unread — whatever format it comes in.",
 	"hero": {
-		"kicker": "Skill · avenTIN · docs organizer",
+		"kicker": "Skill · docs organizer",
 		"headlineMain": "Read documents. Extract data. Move on.",
 		"headlineSerifLead": "PDFs, scanned invoices, contracts, postal scans — everything becomes structured data that your Aven understands.",
 		"promiseHoursPerWeek": "3+ hrs/week"

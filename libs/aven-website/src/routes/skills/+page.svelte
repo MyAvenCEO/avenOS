@@ -2,7 +2,7 @@
 	<title>Skills Marketplace — aven.ceo · Aven Skills</title>
 	<meta
 		name="description"
-		content="Skills, die echte Probleme lösen — gebaut von avenTIN und avenMAIA, installierbar für deinen Aven."
+		content="Skills, die echte Probleme lösen — global für jeden Aven, enthalten in avenME und avenFOUNDER."
 	>
 </svelte:head>
 
@@ -21,8 +21,8 @@ const byPlan = loadSkillsByPlan('de')
 
 /**
  * The marketplace is organized by PRODUCT, not by author: a buyer asks which
- * plan a skill comes with. avenME and avenCEO are separate products, so
- * picking one shows exactly its skills; only avenCOOP also carries avenCEO's.
+ * plan a skill comes with. avenME and avenFOUNDER are separate products, so
+ * picking one shows exactly its skills; only avenCOOP also carries avenFOUNDER's.
  * `?plan=` lets the pricing
  * page link straight into the right selection.
  */
@@ -88,8 +88,8 @@ const chainSteps = [
 					Enthalten in
 				</p>
 				<p class="mt-1 text-[11px] leading-snug text-foreground/45">
-					avenME (pro Mensch) und avenCEO (pro Firma) sind eigene Produkte. avenCOOP enthält
-					avenCEO.
+					avenME (pro Mensch) und avenFOUNDER (pro Firma) sind eigene Produkte. avenCOOP enthält
+					avenFOUNDER.
 				</p>
 				<!-- Only plans that actually carry skills: avenID sat here forever
 				     showing an empty catalogue, which is a filter that can only
@@ -152,7 +152,7 @@ const chainSteps = [
 						<strong class="font-semibold text-foreground">{selectedPlan.name}</strong>
 						enthält alle {visibleSkills.length} Skills — die
 						{inheritedCount}
-						aus avenCEO genauso wie die
+						aus avenFOUNDER genauso wie die
 						{ownCount}
 						eigenen.
 					</p>

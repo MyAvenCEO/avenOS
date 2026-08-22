@@ -1,16 +1,10 @@
 {
 	"slug": "bookmark-champion",
 	"comingSoon": true,
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenme",
 	"oneLineCopy": "Alles, was du dir je gemerkt hast — endlich wiederfindbar.",
 	"hero": {
-		"kicker": "Skill · avenTIN · bookmark champion",
+		"kicker": "Skill · bookmark champion",
 		"headlineMain": "Der Link, den du sicher gespeichert hast.",
 		"headlineSerifLead": "Bookmarks, geteilte Links und offene Tabs werden gelesen, verschlagwortet und mit dem verknüpft, woran du gerade arbeitest.",
 		"promiseHoursPerWeek": "1+ Std/Woche"

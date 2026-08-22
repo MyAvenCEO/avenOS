@@ -1,16 +1,10 @@
 {
 	"slug": "finance-brain",
 	"comingSoon": true,
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenceo",
 	"oneLineCopy": "Rechnungen raus, Zahlen im Blick — ohne Tabelle, ohne Bauchgefühl.",
 	"hero": {
-		"kicker": "Skill · avenTIN · finance brain",
+		"kicker": "Skill · finance brain",
 		"headlineMain": "Deine Zahlen, jederzeit ehrlich.",
 		"headlineSerifLead": "Rechnungen schreiben, Zahlungen verfolgen, Liquidität sehen — und wissen, wie lange dein Geld noch reicht.",
 		"promiseHoursPerWeek": "4+ Std/Woche"
