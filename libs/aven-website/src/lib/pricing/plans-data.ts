@@ -182,7 +182,9 @@ export const PLANS: Plan[] = [
 		applyOnly: true,
 		features: [
 			'1× avenFOUNDER — der avenCEO deiner Firma — inklusive',
-			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder',
+			// The equity number lives in `equitySharePct` and is spelled out here, because
+			// on the card it reads as part of the deal, not as another line off the revenue.
+			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder, für 8 % Firmenanteile an deiner Firma',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
 			'Du wählst selbst, in welche Aven dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
 			{

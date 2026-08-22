@@ -71,8 +71,11 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 {#snippet shareRows(p: Plan)}
 	<dl class="divide-y divide-border/50 rounded-xl border border-border/50 bg-surface-card">
 		<div class="flex items-start gap-3 px-4 py-3">
-			<dt class="w-[4.5rem] shrink-0 text-base font-semibold tabular-nums text-foreground/80">
-				{t.pct(p.platformFeePct)}
+			<dt class="w-[5.25rem] shrink-0">
+				<span class="block text-base font-semibold tabular-nums text-foreground/80">
+					{t.pct(p.platformFeePct)}
+				</span>
+				<span class="block text-[10px] leading-snug text-foreground/45">{t.ofRevenue}</span>
 			</dt>
 			<dd class="min-w-0">
 				<p class="text-[12px] font-medium leading-snug text-foreground/80">{t.fee.label}</p>
@@ -80,25 +83,17 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 			</dd>
 		</div>
 		<div class="flex items-start gap-3 px-4 py-3">
-			<dt class="w-[4.5rem] shrink-0 text-base font-semibold tabular-nums text-accent">
-				{t.pct(p.reinvestPct)}
+			<dt class="w-[5.25rem] shrink-0">
+				<span class="block text-base font-semibold tabular-nums text-accent">
+					{t.pct(p.reinvestPct)}
+				</span>
+				<span class="block text-[10px] leading-snug text-foreground/45">{t.ofRevenue}</span>
 			</dt>
 			<dd class="min-w-0">
 				<p class="text-[12px] font-medium leading-snug text-accent">{t.reinvest.label}</p>
 				<p class="text-[11px] leading-snug text-foreground/50">{t.reinvest.sub}</p>
 			</dd>
 		</div>
-		{#if p.equitySharePct}
-			<div class="flex items-start gap-3 px-4 py-3">
-				<dt class="w-[4.5rem] shrink-0 text-base font-semibold tabular-nums text-foreground/80">
-					{t.pct(p.equitySharePct)}
-				</dt>
-				<dd class="min-w-0">
-					<p class="text-[12px] font-medium leading-snug text-foreground/80">{t.equity.label}</p>
-					<p class="text-[11px] leading-snug text-foreground/50">{t.equity.sub}</p>
-				</dd>
-			</div>
-		{/if}
 	</dl>
 {/snippet}
 
