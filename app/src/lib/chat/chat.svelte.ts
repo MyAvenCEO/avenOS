@@ -191,6 +191,13 @@ export class Chat {
 	 * to another intent. Then it settles into the stream it belongs to.
 	 */
 	routing = $state<string | null>(null)
+	/**
+	 * Live context for every request, appended to the system prompt: what the
+	 * world looks like right now (the intents, which one is on screen), so
+	 * routing decisions are made with the facts in view rather than after a
+	 * tool call. Set by whoever owns those facts.
+	 */
+	context: (() => string) | null = null
 	/** What the model has said so far while the request is still routing. */
 	routingReply = $state('')
 	#pending: { user: Turn; reply: Turn } | null = null
@@ -408,8 +415,9 @@ export class Chat {
 		// Keyed by the index the model assigns, since fragments interleave.
 		const calls = new Map<number, { id: string; name: string; arguments: string }>()
 
+		const system = this.context ? `${SYSTEM_PROMPT}\n\n${this.context()}` : SYSTEM_PROMPT
 		for await (const event of streamChat(
-			[{ role: 'system', content: SYSTEM_PROMPT }, ...wire],
+			[{ role: 'system', content: system }, ...wire],
 			this.#tools.specs,
 			this.#abort?.signal ?? undefined
 		)) {
