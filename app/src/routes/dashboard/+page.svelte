@@ -288,6 +288,25 @@ function onOrb() {
 }
 
 let draft = $state('')
+
+/**
+ * What is being heard goes INTO the field, not beside it: the transcript is
+ * the draft while it is spoken, and the conversation opens the moment the
+ * first word lands. `spoken` is the live tail currently mirrored into the
+ * draft, so a partial can replace the previous partial without touching
+ * anything typed before it. On the pause the mesh delivers the utterance to
+ * the chat, the partial empties, and the tail leaves the field.
+ */
+let spoken = ''
+$effect(() => {
+	const p = listener.partial
+	untrack(() => {
+		if (p !== '') query.show()
+		const base = spoken !== '' && draft.endsWith(spoken) ? draft.slice(0, -spoken.length) : draft
+		draft = p === '' ? base : base + p
+		spoken = p
+	})
+})
 /** Height of the floating bottom dock (toast/HITL/pill) — the center column
  * of the workspaces keeps this much clearance while the asides run to the
  * screen bottom underneath it. */
