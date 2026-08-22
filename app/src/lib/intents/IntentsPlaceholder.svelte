@@ -1115,14 +1115,14 @@ const DOT: Record<string, string> = {
 <!-- The 85% UI scale lives on `html` (app.css), not on a zoom wrapper here:
      rem sizes shrink, px borders stay honest, and the dock clearance needs no
      dividing back out because nothing is scaled relative to anything else. -->
-<div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden lg:gap-0">
+<div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden">
 	<!-- LEFT: the intent stream — compact cards, cream selection.
 	     On phones this IS the home screen, full width; opening an intent
 	     swaps it for the detail (`shell.detail`). -->
 	<aside
 		class="{shell.detail
 			? 'hidden lg:flex'
-			: 'flex'} min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto pb-2 lg:w-[calc(18rem+0.75rem)] lg:pr-3"
+			: 'flex'} min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto pb-2 lg:w-72"
 	>
 		<!-- The side headers wear the tab strip's pill, so all three columns
 		     start their cards on one edge and read as one row. -->
