@@ -7,6 +7,7 @@
 </svelte:head>
 
 <script lang="ts">
+import { browser } from '$app/environment'
 import { page } from '$app/state'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
@@ -24,7 +25,8 @@ const byPlan = loadSkillsByPlan('de')
  * everything it includes — the tiers below it too. `?plan=` lets the pricing
  * page link straight into the right selection.
  */
-const fromQuery = $derived(page.url.searchParams.get('plan') as PlanId | null)
+// Static site (prerendered): the query string only exists in the browser, never at build time.
+const fromQuery = $derived(browser ? (page.url.searchParams.get('plan') as PlanId | null) : null)
 let picked = $state<PlanId | null>(null)
 const selected = $derived<PlanId>(
 	picked ?? (fromQuery && PLANS.some((p) => p.id === fromQuery) ? fromQuery : 'avenceo')

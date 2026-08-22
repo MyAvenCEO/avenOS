@@ -22,6 +22,10 @@ side by side. Nothing here is bundled into the app.
 - Content lives as JSON in `src/lib/skills/content/{de,en}` with publisher
   profiles in `src/lib/skills/publishers/{de,en}`; adding a skill is adding
   two JSON files.
-- `/api/waitlist` posts to `WAITLIST_WEBHOOK_URL` (root `.env`) when set and
-  is a no-op otherwise, so local runs need no secrets.
+- Static site: `adapter-static` prerenders every route (`trailingSlash: 'always'`
+  → `<route>/index.html`). No server endpoints — query params are read in the
+  browser only. `bun run build` → `build/`.
+- Deployed to GitHub Pages by `.github/workflows/release-next.yml`
+  (`deploy-website` job) on every push to `next`; `static/CNAME` pins the
+  custom domain `next.aven.ceo`.
 - Brand spelling is `avenCEO` — lowercase `aven`, like `avenOS`.
