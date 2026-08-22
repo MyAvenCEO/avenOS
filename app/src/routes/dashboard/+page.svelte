@@ -481,7 +481,7 @@ function onKeydown(event: KeyboardEvent) {
 		     that much air below so the overhang never meets the screen edge. -->
 		<div
 			class="relative flex items-center justify-center gap-2 {phase.key !== 'off' && !typing
-				? 'mt-4 mb-2.5'
+				? 'mt-4 mb-1'
 				: ''}"
 		>
 			{#if shell.tab === 'intents' && shell.detail}
@@ -514,7 +514,7 @@ function onKeydown(event: KeyboardEvent) {
 			<div
 				class="{phase.key === 'off'
 			? 'w-fit'
-			: `rounded-full bg-primary text-primary-foreground ${typing ? 'w-full max-w-lg p-2.5' : 'w-full max-w-52 p-3'}`}"
+			: `rounded-full bg-primary text-primary-foreground ${typing ? 'w-full max-w-lg p-2.5' : 'w-full max-w-56 p-3'}`}"
 				title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
 			>
 				<div class="flex items-center {phase.key === 'off' ? '' : 'gap-3'}">
@@ -532,7 +532,7 @@ function onKeydown(event: KeyboardEvent) {
 							enterTyping()
 						}
 					}}
-							class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 transition-colors hover:bg-primary-foreground/10"
+							class="shrink-0 rounded-full border border-primary-foreground/25 p-3 transition-colors hover:bg-primary-foreground/10"
 							title={typing ? 'Back to voice' : 'Type instead'}
 							aria-label={typing ? 'Back to voice' : 'Type instead'}
 						>
@@ -540,7 +540,7 @@ function onKeydown(event: KeyboardEvent) {
 								<!-- microphone: go back to speaking -->
 								<svg
 									viewBox="0 0 24 24"
-									class="size-[1.125rem]"
+									class="size-5"
 									fill="none"
 									stroke="currentColor"
 									stroke-width="1.5"
@@ -555,7 +555,7 @@ function onKeydown(event: KeyboardEvent) {
 								<!-- keyboard: switch to typing -->
 								<svg
 									viewBox="0 0 24 24"
-									class="size-[1.125rem]"
+									class="size-5"
 									fill="none"
 									stroke="currentColor"
 									stroke-width="1.5"
@@ -668,7 +668,7 @@ function onKeydown(event: KeyboardEvent) {
 								disabled={!orbActs}
 								title={phase.label}
 								aria-label={phase.label}
-								class="-my-5 relative flex size-[4.5rem] shrink-0 items-center justify-center rounded-full border-4 border-primary shadow-[0_4px_16px_rgba(30,41,59,0.25)] transition-[transform,background-color,color] duration-150 {ORB[
+								class="-my-6 relative flex size-20 shrink-0 items-center justify-center rounded-full border-4 border-primary shadow-[0_4px_16px_rgba(30,41,59,0.25)] transition-[transform,background-color,color] duration-150 {ORB[
 									phase.key
 								]?.orb ?? ORB.text.orb} {orbActs ? 'cursor-pointer' : 'cursor-default'}"
 								style={phase.key === 'hearing'
@@ -693,7 +693,7 @@ function onKeydown(event: KeyboardEvent) {
 								{/if}
 								<svg
 									viewBox="0 0 24 24"
-									class="relative size-8"
+									class="relative size-9"
 									fill="none"
 									stroke="currentColor"
 									stroke-width="1.75"
@@ -717,12 +717,12 @@ function onKeydown(event: KeyboardEvent) {
 							onclick={endConversation}
 							title="End conversation"
 							aria-label="End conversation"
-							class="shrink-0 rounded-full bg-error p-2.5 text-primary-foreground transition-opacity hover:opacity-80"
+							class="shrink-0 rounded-full bg-error p-3 text-primary-foreground transition-opacity hover:opacity-80"
 						>
 							<!-- hang-up: the handset rotated OFF the hook — disconnect, not dial -->
 							<svg
 								viewBox="0 0 24 24"
-								class="size-[1.125rem] rotate-[135deg]"
+								class="size-5 rotate-[135deg]"
 								fill="none"
 								stroke="currentColor"
 								stroke-width="2"
