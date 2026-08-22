@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/aven-website",
 	"private": true,
-	"version": "26.8.21-next.12",
+	"version": "26.8.22-next.1",
 	"type": "module",
 	"exports": {
 		"./pricing": "./src/lib/pricing/plans-data.ts"

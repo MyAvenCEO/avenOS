@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.12...v) (2026-08-22)
+
+
+### Features
+
+* **billing:** the whole customer portal, ours — inline checkout, orders, pause, no Creem window (0161) ([a6a6736](https://github.com/MyAvenCEO/avenOS/commit/a6a673654cc62be39b010f42a1ba99b23ed4a77d))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.11...v) (2026-08-21)
 
 
