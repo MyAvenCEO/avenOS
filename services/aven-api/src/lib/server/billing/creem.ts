@@ -5,6 +5,7 @@ import {
 	type CheckoutInput,
 	type CheckoutSession,
 	type InvoiceRow,
+	type OrderRow,
 	type PaymentEvent,
 	type PaymentProvider,
 	parseCreemEvent,
@@ -200,16 +201,34 @@ export class CreemProvider implements PaymentProvider {
 		}))
 	}
 
-	async customerPortalUrl(providerCustomerId: string): Promise<string> {
-		const result = await this.api<{ customer_portal_link?: string; customerPortalLink?: string }>(
-			'POST',
-			'/v1/customers/billing',
-			{ customer_id: providerCustomerId }
+	async listOrders(providerCustomerId: string): Promise<OrderRow[]> {
+		const result = await this.api<{ items?: Array<Record<string, any>> }>(
+			'GET',
+			`/v1/customers/${encodeURIComponent(providerCustomerId)}/orders?page_size=100`
 		)
-		const url = result.customer_portal_link ?? result.customerPortalLink
-		if (!url)
-			throw new AppError(502, 'BILLING_PROVIDER_ERROR', 'No customer portal link was returned.')
-		return url
+		return (result.items ?? []).map((order) => ({
+			id: String(order.id ?? ''),
+			createdAt: new Date(Number(order.created_at ?? order.createdAt ?? 0)).toISOString(),
+			productId: String(order.product ?? order.product_id ?? ''),
+			subTotalCents: Number(order.sub_total ?? order.subTotal ?? order.amount ?? 0),
+			taxCents: Number(order.tax_amount ?? order.taxAmount ?? 0),
+			discountCents: Number(order.discount_amount ?? order.discountAmount ?? 0),
+			amountPaidCents: Number(order.amount_paid ?? order.amountPaid ?? order.amount ?? 0),
+			currency: String(order.currency ?? 'EUR'),
+			status: String(order.status ?? '')
+		}))
+	}
+
+	async pauseSubscription(providerSubscriptionId: string): Promise<void> {
+		await this.api('POST', `/v1/subscriptions/${providerSubscriptionId}/pause`, {})
+	}
+
+	async checkoutStatus(providerCheckoutId: string): Promise<string> {
+		const result = await this.api<{ status?: string }>(
+			'GET',
+			`/v1/checkouts?checkout_id=${encodeURIComponent(providerCheckoutId)}`
+		)
+		return String(result.status ?? 'pending')
 	}
 
 	verifyWebhook(rawBody: string, signature: string | null): PaymentEvent {

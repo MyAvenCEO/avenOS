@@ -57,6 +57,21 @@ export interface InvoiceRow {
 	periodEnd: string | null
 }
 
+/** One order, reduced to what the pane shows. Creem (merchant of record)
+ * mails the official invoice for it — the API carries no document, so the
+ * pane says where the invoice went instead of linking out. */
+export interface OrderRow {
+	id: string
+	createdAt: string
+	productId: string
+	subTotalCents: number
+	taxCents: number
+	discountCents: number
+	amountPaidCents: number
+	currency: string
+	status: string
+}
+
 export interface PaymentProvider {
 	readonly kind: 'creem' | 'fake'
 	createCheckout(input: CheckoutInput): Promise<CheckoutSession>
@@ -70,11 +85,13 @@ export interface PaymentProvider {
 	cancelSubscription(providerSubscriptionId: string, immediate: boolean): Promise<void>
 	resumeSubscription(providerSubscriptionId: string): Promise<void>
 	listInvoices(providerCustomerId: string): Promise<InvoiceRow[]>
-	/** The provider-hosted portal: the one place customers get their official
-	 * invoice documents — Creem (merchant of record) issues them, not us. */
-	customerPortalUrl(providerCustomerId: string): Promise<string>
 	/** Look up the provider's customer for an email; null when none exists. */
 	findCustomerByEmail(email: string): Promise<string | null>
+	/** The customer's orders — the real "Meine Bestellungen". */
+	listOrders(providerCustomerId: string): Promise<OrderRow[]>
+	pauseSubscription(providerSubscriptionId: string): Promise<void>
+	/** Where a checkout stands: pending | processing | completed | expired. */
+	checkoutStatus(providerCheckoutId: string): Promise<string>
 }
 
 /** The normalized shape of a `subscription.*` webhook. Field names on the

@@ -14,6 +14,7 @@ import { AppError } from '../errors.js'
 import { ensureVerifiedUser } from '../identity.js'
 import type {
 	InvoiceRow,
+	OrderRow,
 	PaymentProvider,
 	SubscriptionEvent,
 	SubscriptionPlanSeed
@@ -150,6 +151,12 @@ export class SubscriptionService {
 			email: user.email,
 			successUrl: new URL('/dashboard', this.config.PUBLIC_BASE_URL).toString()
 		})
+		// Remember the checkout so the pane can ask "where does MY checkout
+		// stand" without ever naming it.
+		await this.pool.query('INSERT INTO billing_checkouts (user_id, checkout_id) VALUES ($1,$2)', [
+			user.id,
+			session.checkoutId
+		])
 		return { checkoutUrl: session.checkoutUrl }
 	}
 
@@ -184,13 +191,30 @@ export class SubscriptionService {
 		return this.payments.listInvoices(providerCustomerId)
 	}
 
-	/** The hosted portal for the caller's OWN customer record — where Creem
-	 * (merchant of record) serves the official invoice documents. */
-	async portalUrl(user: { id: string; email: string }): Promise<string> {
+	/** The caller's orders — the one-off avenID and every subscription
+	 * charge — resolved through the same session-only customer lookup. */
+	async orders(user: { id: string; email: string }): Promise<OrderRow[]> {
 		const providerCustomerId = await this.customerId(user)
-		if (!providerCustomerId)
-			throw new AppError(404, 'BILLING_CUSTOMER_MISSING', 'There is no billing account yet.')
-		return this.payments.customerPortalUrl(providerCustomerId)
+		if (!providerCustomerId) return []
+		return this.payments.listOrders(providerCustomerId)
+	}
+
+	async pause(userId: string): Promise<void> {
+		const row = await this.requireActive(userId)
+		await this.payments.pauseSubscription(row.creem_subscription_id)
+	}
+
+	/** Where the session's LATEST checkout stands. The checkout id comes
+	 * from our own row, never from the client — the pane polls this while
+	 * the inline embed runs, so it does not depend on the iframe message. */
+	async checkoutStatus(userId: string): Promise<{ status: string } | null> {
+		const row = await this.pool.query(
+			'SELECT checkout_id FROM billing_checkouts WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1',
+			[userId]
+		)
+		const checkoutId = row.rows[0]?.checkout_id as string | undefined
+		if (!checkoutId) return null
+		return { status: await this.payments.checkoutStatus(checkoutId) }
 	}
 
 	private async requireActive(userId: string): Promise<SubscriptionRow> {
