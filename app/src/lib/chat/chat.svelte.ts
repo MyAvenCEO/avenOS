@@ -175,6 +175,16 @@ export class Chat {
 	 * into the new intent's stream, not the one it was asked from.
 	 */
 	#live: { turns: Turn[]; wire: ChatMessage[]; fromTurn: number; fromWire: number } | null = null
+	/**
+	 * The request while it is being ROUTED: sent, but not yet a bubble in any
+	 * stream. It stays here — shown as a working state wherever you are —
+	 * until the model has understood it: the first word of the reply, or a
+	 * tool round (which may have moved the turn to another intent). Then it
+	 * settles into the stream it belongs to.
+	 */
+	routing = $state<string | null>(null)
+	#pending: { user: Turn; reply: Turn } | null = null
+	#reply: Turn | null = null
 
 	// The system prompt is NOT stored here — it is prepended per request, so a
 	// long-lived singleton Chat always speaks with the current prompt instead
@@ -233,8 +243,8 @@ export class Chat {
 			fromWire: this.#wire.length
 		}
 		this.#live = live
-		live.turns.push({ id: id(), role: 'user', content: prompt })
 		live.wire.push({ role: 'user', content: prompt })
+		this.routing = prompt
 
 		// Push first, then take the reference back OUT of the array. `turns` is a
 		// `$state` proxy: it hands out a proxied view on read, and only writes
@@ -242,8 +252,15 @@ export class Chat {
 		// pushed and mutating it would update the data and tell no one — the
 		// reply would stream into a bubble that never re-renders.
 		const replyId = id()
-		live.turns.push({ id: replyId, role: 'assistant', content: '', calls: [] })
-		const reply = live.turns[live.turns.length - 1]
+		// The bubbles wait in `#pending` until the request is routed; `#settle`
+		// pushes them into the stream they belong to and re-points `#reply` at
+		// the proxied copy the array hands back — writes through the original
+		// literal would update the data and tell no one.
+		this.#pending = {
+			user: { id: id(), role: 'user', content: prompt },
+			reply: { id: replyId, role: 'assistant', content: '', calls: [] }
+		}
+		this.#reply = this.#pending.reply
 		const dropStub = () => {
 			const at = live.turns.findIndex((t) => t.id === replyId)
 			if (at >= 0) live.turns.splice(at, 1)
@@ -256,7 +273,8 @@ export class Chat {
 		try {
 			let nudged = false
 			for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-				const calls = await this.#round(reply, live.wire)
+				const calls = await this.#round(live.wire)
+				const reply = this.#reply as Turn
 				if (calls.length === 0) {
 					// Said it did something, called nothing — in the WHOLE turn. The
 					// round alone is the wrong scope: the natural closing sentence
@@ -289,12 +307,17 @@ export class Chat {
 				// own template expects, so nothing here reads as conversation.
 				for (const call of calls) {
 					const result = await this.#tools.run(call.name, call.arguments)
-					reply.calls?.push({ name: call.name, result: result.record })
+					;(this.#reply as Turn).calls?.push({ name: call.name, result: result.record })
 					live.wire.push({ role: 'tool', tool_call_id: call.id, content: result.wire })
 				}
+				// A tool round is the routing moment: the tools may have moved the
+				// turn to another intent; now the request settles where it belongs.
+				this.#settle()
 			}
 			this.#sink.onDone?.()
 		} catch (err) {
+			this.#settle()
+			const reply = this.#reply as Turn
 			if (this.#abort?.signal.aborted) {
 				// Interrupted. The assistant turn still has to go into the history,
 				// even half-finished: the stream threw before `#round` could record
@@ -312,10 +335,23 @@ export class Chat {
 				if (reply.content === '') dropStub()
 			}
 		} finally {
+			this.#settle()
 			this.streaming = false
 			this.#abort = null
 			this.#live = null
+			this.#reply = null
 		}
+	}
+
+	/** The request becomes bubbles in the stream the turn lives in now. */
+	#settle(): void {
+		const pending = this.#pending
+		const live = this.#live
+		if (!pending || !live) return
+		this.#pending = null
+		this.routing = null
+		live.turns.push(pending.user, pending.reply)
+		this.#reply = live.turns[live.turns.length - 1]
 	}
 
 	/**
@@ -348,10 +384,7 @@ export class Chat {
 	 * One request/response. Streams any prose into `reply` and returns the tool
 	 * calls the model asked for, which the caller runs before going round again.
 	 */
-	async #round(
-		reply: Turn,
-		wire: ChatMessage[]
-	): Promise<{ id: string; name: string; arguments: string }[]> {
+	async #round(wire: ChatMessage[]): Promise<{ id: string; name: string; arguments: string }[]> {
 		let content = ''
 		// Keyed by the index the model assigns, since fragments interleave.
 		const calls = new Map<number, { id: string; name: string; arguments: string }>()
@@ -362,6 +395,10 @@ export class Chat {
 			this.#abort?.signal ?? undefined
 		)) {
 			if (event.kind === 'text') {
+				// The first word is the other routing moment: the model answers
+				// here, so the request belongs to the stream it is in now.
+				this.#settle()
+				const reply = this.#reply as Turn
 				content += event.text
 				reply.content += event.text
 				this.#sink.onDelta?.(event.text)
@@ -373,7 +410,7 @@ export class Chat {
 				const looped = loopStart(content)
 				if (DEGENERATE.test(content) || looped !== -1) {
 					content = (looped !== -1 ? content.slice(0, looped) : content).replace(TRAILING_JUNK, '')
-					reply.content = content
+					;(this.#reply as Turn).content = content
 					break
 				}
 				continue
