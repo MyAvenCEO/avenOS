@@ -348,7 +348,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						<p class="mt-3 text-xl font-semibold tracking-tight text-foreground">{coop.name}</p>
 						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{coop.role}</p>
 
-						<div class="mt-5 border-t border-border/50 pt-4 text-center">
+						<div class="mt-5 border-t border-border/50 pt-4">
 							<p class="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
 								{euro(coop.eurPrice)}&nbsp;€
 							</p>
