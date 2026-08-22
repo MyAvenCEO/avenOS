@@ -3,12 +3,7 @@ import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import SiteFooter from '$lib/components/SiteFooter.svelte'
 import { idFunnelHref } from '$lib/id-service'
-import {
-	availabilityNote,
-	publisherIdentity,
-	skillDetailHref,
-	skillLabel
-} from '$lib/skills/loader'
+import { availabilityNote, skillDetailHref, skillLabel } from '$lib/skills/loader'
 import type { AvenosSkill } from '$lib/skills/types'
 
 type Props = {
@@ -17,15 +12,17 @@ type Props = {
 
 let { skill }: Props = $props()
 
-const pubIdentity = $derived(publisherIdentity(skill.publisher.id, 'de'))
-const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
+/**
+ * Skills are global — nobody "publishes" them. The one who speaks for them is
+ * avenCEO, the Aven of the avenCEO GmbH: the company's own AI‑CEO, the single
+ * point of contact everyone talks to.
+ */
+const AVEN = 'avenCEO'
+const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 </script>
 
 <svelte:head>
-	<title>
-		{skill.comingSoon ? 'Bald · ' : ''}{skillLabel(skill.slug)}
-		— aven.ceo · {skill.publisher.displayName} Skills
-	</title>
+	<title>{skill.comingSoon ? 'Bald · ' : ''}{skillLabel(skill.slug)}— aven.ceo · Skills</title>
 	<meta name="description" content={skill.oneLineCopy}>
 </svelte:head>
 
@@ -86,7 +83,7 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 				>
 					<p class="text-[9px] font-bold uppercase tracking-[0.26em] text-foreground/38">
 						{skill.founderScenario.timestamp}
-						· {skill.publisher.founderName}s Realität
+						· Aus dem echten Alltag
 					</p>
 					<p class="mt-3 text-[15px] italic leading-relaxed text-foreground/75 sm:text-[16px]">
 						"{skill.founderScenario.story}"
@@ -96,12 +93,10 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 							class="size-6 shrink-0 overflow-hidden rounded-full ring-1 ring-background [&>svg]:block [&>svg]:size-full"
 							aria-hidden="true"
 						>
-							{@html beamAvatarSvg(pubIdentity.beamAvatarLabel, paletteKi, 32, `skill-pub-${skill.slug}`)}
+							{@html beamAvatarSvg(AVEN, paletteKi, 32, `skill-aven-${skill.slug}`)}
 						</div>
-						<p class="text-[9px] font-bold tracking-[0.14em] text-accent-ink">
-							{skill.publisher.displayName}
-						</p>
-						<p class="text-[9px] text-foreground/40">hat das gelöst.</p>
+						<p class="text-[9px] font-bold tracking-[0.14em] text-accent-ink">Dein Aven</p>
+						<p class="text-[9px] text-foreground/40">löst das.</p>
 					</div>
 				</div>
 			</div>
@@ -286,11 +281,11 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 				</div>
 				<div class="mt-4 rounded-xl border border-accent/40 bg-accent/15 px-4 py-4">
 					<p class="text-center text-[9px] font-bold uppercase tracking-[0.22em] text-accent-ink">
-						In jedem Plan ab avenME enthalten
+						Im Plan enthalten
 					</p>
 					<p class="mt-2 text-center text-[15px] font-bold text-foreground">0&nbsp;€ Aufpreis</p>
 					<p class="mt-1 text-center text-[12px] text-foreground/60">
-						avenME · avenCEO · avenCOOP — kein Skill‑Marktplatz‑Lock‑in
+						avenME · avenFOUNDER · avenCOOP — kein Skill‑Marktplatz‑Lock‑in
 					</p>
 				</div>
 				<div class="mt-5 grid gap-3 border-t border-border/25 pt-5 sm:grid-cols-3">
@@ -358,15 +353,13 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 							class="size-10 shrink-0 overflow-hidden rounded-full ring-2 ring-background [&>svg]:block [&>svg]:size-full"
 							aria-hidden="true"
 						>
-							{@html beamAvatarSvg(pubIdentity.beamAvatarLabel, paletteKi, 48, `letter-${skill.slug}`)}
+							{@html beamAvatarSvg(AVEN, paletteKi, 48, `letter-${skill.slug}`)}
 						</div>
 						<div>
 							<p class="text-[8px] font-bold uppercase tracking-[0.24em] text-accent">
 								Geschrieben von
 							</p>
-							<p class="mt-0.5 text-[13px] font-bold tracking-[0.1em] text-accent-ink">
-								{skill.publisher.displayName}
-							</p>
+							<p class="mt-0.5 text-[13px] font-bold tracking-[0.1em] text-accent-ink">{AVEN}</p>
 						</div>
 					</div>
 					<p class="text-[9px] font-bold uppercase tracking-[0.18em] text-foreground/38">
@@ -382,9 +375,7 @@ const paletteKi = $derived(paletteFromCommaString(pubIdentity.paletteCsv))
 					<p class="text-[8px] font-bold uppercase tracking-[0.24em] text-foreground/40">
 						Mit Überzeugung,
 					</p>
-					<p class="mt-1.5 text-[13px] font-bold tracking-[0.1em] text-accent-ink">
-						{skill.publisher.displayName}
-					</p>
+					<p class="mt-1.5 text-[13px] font-bold tracking-[0.1em] text-accent-ink">{AVEN}</p>
 				</footer>
 			</div>
 		</div>

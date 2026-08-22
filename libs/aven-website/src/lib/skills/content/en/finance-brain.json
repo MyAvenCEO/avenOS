@@ -1,16 +1,10 @@
 {
 	"slug": "finance-brain",
 	"comingSoon": true,
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenceo",
 	"oneLineCopy": "Invoices out, numbers straight — no spreadsheet, no gut feeling.",
 	"hero": {
-		"kicker": "Skill · avenTIN · finance brain",
+		"kicker": "Skill · finance brain",
 		"headlineMain": "Your numbers, honest at any hour.",
 		"headlineSerifLead": "Write invoices, track payments, see liquidity — and know how long your money actually lasts.",
 		"promiseHoursPerWeek": "4+ hrs/week"

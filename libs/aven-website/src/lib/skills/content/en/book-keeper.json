@@ -1,15 +1,9 @@
 {
 	"slug": "book-keeper",
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenceo",
 	"oneLineCopy": "Invoices matched with bank statements. Bookings suggested. Taxes prepared.",
 	"hero": {
-		"kicker": "Skill · avenTIN · book keeper",
+		"kicker": "Skill · book keeper",
 		"headlineMain": "8 hours of bookkeeping. Reduced to 20 minutes.",
 		"headlineSerifLead": "Your Aven matches invoices with bank statements, suggests booking accounts and prepares your accountant export.",
 		"promiseHoursPerWeek": "8+ hrs/week"

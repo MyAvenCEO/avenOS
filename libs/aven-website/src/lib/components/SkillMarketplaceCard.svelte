@@ -1,4 +1,5 @@
 <script lang="ts">
+import { plan } from '$lib/pricing/plans'
 import { skillDetailHref, skillLabel } from '$lib/skills/loader'
 import type { AvenosSkill } from '$lib/skills/types'
 
@@ -41,7 +42,7 @@ const chainLabels: Record<string, string> = {
 >
 	<div class="flex items-start justify-between gap-3">
 		<p class="text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-			{skill.publisher.displayName}
+			{plan(skill.plan).name}
 		</p>
 		<span
 			class="inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] {skill.comingSoon

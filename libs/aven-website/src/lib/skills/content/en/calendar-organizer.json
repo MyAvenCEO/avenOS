@@ -1,16 +1,10 @@
 {
 	"slug": "calendar-organizer",
 	"comingSoon": true,
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenme",
 	"oneLineCopy": "Your calendar plans around your life — not the other way round.",
 	"hero": {
-		"kicker": "Skill · avenTIN · calendar organizer",
+		"kicker": "Skill · calendar organizer",
 		"headlineMain": "The calendar that thinks along.",
 		"headlineSerifLead": "Meetings, travel, buffers and the hours you actually build in — laid out so the day keeps what it promises.",
 		"promiseHoursPerWeek": "3+ hrs/week"

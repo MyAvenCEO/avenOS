@@ -1,15 +1,9 @@
 {
 	"slug": "website-creator",
-	"publisher": {
-		"id": "avenmaia",
-		"displayName": "avenMAIA",
-		"founderName": "Samuel",
-		"scope": "Samuel Andert · aven.ceo"
-	},
 	"plan": "avenceo",
 	"oneLineCopy": "Your website exists — and stays current without you touching it.",
 	"hero": {
-		"kicker": "Skill · avenMAIA · website creator",
+		"kicker": "Skill · website creator",
 		"headlineMain": "The site that finally exists.",
 		"headlineSerifLead": "Website and landing pages built from what you already say — and kept alive by your Aven instead of your weekend.",
 		"promiseHoursPerWeek": "3+ hrs/week"

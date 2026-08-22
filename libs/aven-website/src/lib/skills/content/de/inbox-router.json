@@ -1,15 +1,9 @@
 {
 	"slug": "inbox-router",
-	"publisher": {
-		"id": "aventin",
-		"displayName": "avenTIN",
-		"founderName": "Daniel",
-		"scope": "Daniel Janz · aven.ceo"
-	},
 	"plan": "avenme",
 	"oneLineCopy": "Ein Eingang für alles — und einer, der entscheidet, was jetzt zählt.",
 	"hero": {
-		"kicker": "Skill · avenTIN · inbox router",
+		"kicker": "Skill · inbox router",
 		"headlineMain": "Ein Posteingang. Für wirklich alles.",
 		"headlineSerifLead": "Mails, Uploads, gescannte Briefe — alles landet an einer Stelle, wird sortiert, priorisiert und an den richtigen Skill weitergereicht.",
 		"promiseHoursPerWeek": "5+ Std/Woche"

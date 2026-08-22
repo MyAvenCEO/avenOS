@@ -5,21 +5,11 @@
 
 export {
 	allSlugs,
-	avenmaiaSkillSlugs,
-	aventinSkillSlugs,
-	loadPublishersWithSkills,
 	loadSkill as getAvenosSkill,
 	loadSkills as avenosSkills,
 	skillDetailHref
 } from './loader'
-export type {
-	AvenosSkill,
-	AvenosSkillSlug,
-	PublisherIdentityJson,
-	PublisherWithSkills,
-	SkillPublisher,
-	SupportedLang
-} from './types'
+export type { AvenosSkill, AvenosSkillSlug, SupportedLang } from './types'
 
 // Convenience: default DE export used by most pages
 import { loadSkills } from './loader'

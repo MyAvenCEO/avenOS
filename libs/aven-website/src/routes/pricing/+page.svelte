@@ -2,7 +2,7 @@
 	<title>Preise — aven.ceo · avenCEO</title>
 	<meta
 		name="description"
-		content="Ein Name als Anfang, zwei Aven nebeneinander: avenID 25 € einmalig, avenME 42 €/Monat pro Mensch, avenCEO 326 €/Monat pro Firma — keine Stufen, zwei Rollen. avenCOOP als technischer Co‑Founder — auf Bewerbung."
+		content="Ein Name als Anfang, zwei Aven nebeneinander: avenID 25 € einmalig, avenME 58 €/Monat — der persönliche AI‑CEO für dein Leben, avenFOUNDER 426 €/Monat — der professionelle AI‑CEO für deine Firma. Keine Stufen, zwei Rollen. avenCOOP als technischer Co‑Founder — auf Bewerbung."
 	>
 </svelte:head>
 
@@ -55,10 +55,11 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/65">
 					<strong class="font-medium text-foreground/85">avenME</strong>
-					ist dein persönlicher Aven — einer pro Mensch.
-					<strong class="font-medium text-foreground/85">avenCEO</strong>
-					ist der Aven deiner Firma — einer pro Firma. Zwei Rollen, zwei Produkte, keine Stufen: Das
-					eine ist kein Upgrade des anderen, beide leben im selben Namensraum. Mit
+					ist dein persönlicher AI‑CEO für dein Leben — einer pro Mensch.
+					<strong class="font-medium text-foreground/85">avenFOUNDER</strong>
+					ist der professionelle AI‑CEO für deine Firma — einer pro Firma. Zwei Rollen, zwei
+					Produkte, keine Stufen: Das eine ist kein Upgrade des anderen, beide leben im selben
+					Namensraum. Mit
 					<strong class="font-medium text-foreground/85">avenCOOP</strong>
 					werden wir dein technischer Co‑Founder.
 				</p>
@@ -213,7 +214,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 								></span>
 								<span>
 									{#if p.per === 'company'}
-										Ein avenCEO pro Firma — jede weitere Firma bekommt ihren eigenen.
+										Ein avenFOUNDER pro Firma — jede weitere Firma bekommt ihren eigenen.
 									{:else}
 										Ein avenME pro Mensch — dein eigener, unabhängig von jeder Firma.
 									{/if}
@@ -336,7 +337,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 				{/each}
 			</div>
 
-			<!-- avenCOOP: a relationship, full width. Includes the company's avenCEO. -->
+			<!-- avenCOOP: a relationship, full width. Includes the company's avenFOUNDER. -->
 			<div
 				id={coop.id}
 				class="mt-6 scroll-mt-28 rounded-2xl border border-foreground/8 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:p-7"
