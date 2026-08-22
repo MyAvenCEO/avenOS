@@ -162,7 +162,6 @@ export const PLANS: Plan[] = [
 			{ skill: 'checkout-builder', label: 'Produkt‑Checkout und Shop' },
 			{ skill: 'blog-writer', label: 'Blog' },
 			'Digitaler Briefkasten für Geschäftskunden (exkl. Nachsendeauftrag der Deutschen Post: 51,90 € / 6 Monate, inkl. USt.)',
-			'Dein Aven und deine Produkte im aven Marketplace gelistet',
 			'Die eine Anlaufstelle: Mitarbeiter, Kunden und Partner sprechen direkt mit deinem avenCEO — in Chat, Social Media und Support',
 			'Das Gedächtnis deiner Firma: Wissen und Erfahrung sammeln sich über Jahre im avenCEO — das wird dein wertvollstes Asset'
 		]
