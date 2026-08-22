@@ -1,10 +1,15 @@
 <script lang="ts">
 import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
 import '@xyflow/svelte/dist/style.css'
+import AvenUiView from '$lib/actors/AvenUiView.svelte'
+import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
 import type { HeldPreview } from '$lib/actors/bus'
+import { bus } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
+import { isWindow } from '$lib/actors/window.actor.svelte'
+import { composer } from '$lib/intents/composer.svelte'
 import { shell } from '$lib/intents/talk.svelte'
 import FitView from '$lib/mesh/FitView.svelte'
 import GatePreview from '$lib/query/GatePreview.svelte'
@@ -918,11 +923,36 @@ let sfH = $state(0)
  * a fresh log entry, a streamed reply, an opened inline view — is always
  * in sight at the bottom.
  */
-// The answer surface answers ABOUT what is on screen: selecting an intent is
-// what makes the modal intent-aware, and it is the whole handshake.
+// The conversation is ABOUT what is on screen: selecting an intent switches
+// the chat to that intent's own session stream, and scopes the gates.
 $effect(() => {
 	query.intent = selectedId
+	chat.use(selectedId)
 })
+
+/** Every view the model has put on screen, in registry order. */
+const windows = $derived(
+	registryTick.v >= 0
+		? bus
+				.actors()
+				.filter(isWindow)
+				.filter((w) => w.open)
+		: []
+)
+
+let composerEl: HTMLTextAreaElement | null = $state(null)
+$effect(() => {
+	void composer.focusTick
+	composerEl?.focus()
+})
+
+/** Enter sends, shift+enter makes a newline — the usual bargain. */
+function onComposerKeydown(event: KeyboardEvent) {
+	if (event.key === 'Enter' && !event.shiftKey) {
+		event.preventDefault()
+		composer.send()
+	}
+}
 
 /** The gates this intent is holding; one raised without a context is global. */
 const gates = $derived(
@@ -966,7 +996,14 @@ $effect(() => {
 
 // New content, or the gate appearing and taking height away.
 $effect(() => {
-	const deps = [logEntries.length, gates.length, registryTick.v]
+	const deps = [
+		logEntries.length,
+		gates.length,
+		registryTick.v,
+		chat.turns.length,
+		chat.turns.at(-1)?.content,
+		activity.current
+	]
 	if (stick) scrollToBottom(deps)
 })
 
@@ -1469,6 +1506,102 @@ const DOT: Record<string, string> = {
 						</li>
 					{/each}
 				</ol>
+
+				<!-- THE CONVERSATION, continuing the stream: this intent's own
+				     session — what you said and what the system said back, the
+				     views it put on screen, what its tools just did. -->
+				{#if chat.turns.length > 0 || windows.length > 0 || activity.current}
+					<div class="flex flex-col gap-2 border-foreground/10 border-t pt-4">
+						{#each chat.turns as turn (turn.id)}
+							<div class="flex" class:justify-end={turn.role === 'user'}>
+								<div
+									class="max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed {turn.role ===
+									'user'
+										? 'bg-primary text-primary-foreground'
+										: 'border border-border bg-surface-card'}"
+								>
+									{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
+										<span class="flex items-center gap-1 py-1" aria-label="Denkt nach">
+											<span
+												class="size-1.5 animate-bounce rounded-full bg-current opacity-40"
+											></span>
+											<span
+												class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
+											></span>
+											<span
+												class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
+											></span>
+										</span>
+									{:else}
+										{turn.content}
+									{/if}
+								</div>
+							</div>
+						{/each}
+
+						{#each windows as win (win.manifest.id)}
+							<div
+								class="flex h-[340px] flex-col overflow-hidden rounded-xl border border-foreground/10 bg-surface-soft"
+							>
+								<div
+									class="flex shrink-0 items-center border-foreground/5 border-b px-3 py-1.5 font-mono text-[0.5625rem] text-foreground/40 uppercase tracking-wide"
+								>
+									<span class="flex-1">{win.manifest.name}</span>
+									<button
+										type="button"
+										onclick={() => {
+											win.open = false
+										}}
+										title="Ausblenden"
+										aria-label="{win.manifest.name} ausblenden"
+										class="-mr-1 rounded-full p-1 transition-colors hover:bg-surface-card-selected"
+									>
+										<svg
+											viewBox="0 0 24 24"
+											class="size-3"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+										>
+											<path d="M6 6l12 12M18 6L6 18" />
+										</svg>
+									</button>
+								</div>
+								<AvenUiView actor={win.subject} {...win.props} />
+							</div>
+						{/each}
+
+						{#if activity.current}
+							{@const entry = activity.current}
+							<div class="flex gap-2 rounded-xl border border-border bg-surface-card px-3 py-2">
+								<span
+									class="w-3 shrink-0 text-center font-mono text-[13px]"
+									class:text-success={entry.kind === 'done' || entry.kind === 'created'}
+									class:text-progress-ink={entry.kind === 'doing'}
+									class:text-error={entry.kind === 'deleted' || entry.kind === 'failed'}
+									class:opacity-30={entry.kind === 'read' ||
+									entry.kind === 'reopened' ||
+									entry.kind === 'renamed'}
+								>
+									{ACTIVITY_LABELS[entry.kind].mark}
+								</span>
+								<div class="min-w-0 flex-1 text-xs leading-relaxed">
+									<span class="opacity-40">{ACTIVITY_LABELS[entry.kind].label}</span>
+									{#if entry.titles.length > 0}
+										<ul class="pt-0.5">
+											{#each entry.titles as title (title)}
+												<li>{title}</li>
+											{/each}
+										</ul>
+									{:else if entry.note}
+										<span class="opacity-40">· {entry.note}</span>
+									{/if}
+								</div>
+							</div>
+						{/if}
+					</div>
+				{/if}
 			{/if}
 		</main>
 
@@ -1489,6 +1622,46 @@ const DOT: Record<string, string> = {
 				<GatePreview {held} />
 			</div>
 		{/each}
+
+		<!-- THE COMPOSER: the column's footer. Write, speak, or both — what is
+		     heard is written in here as it is heard; Enter sends a typed line,
+		     the pause sends a spoken one. It speaks into this intent's session. -->
+		<form
+			onsubmit={(e) => {
+				e.preventDefault()
+				composer.send()
+			}}
+			class="flex shrink-0 items-end gap-2 pt-1"
+		>
+			<textarea
+				bind:this={composerEl}
+				bind:value={composer.draft}
+				onkeydown={onComposerKeydown}
+				rows="1"
+				placeholder="Sprich — oder schreib…"
+				class="field-sizing-content max-h-40 min-h-10 flex-1 resize-none rounded-2xl border border-border bg-surface-raised px-3.5 py-2.5 text-sm leading-snug shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none placeholder:text-foreground/35 focus:border-foreground/25"
+			></textarea>
+			<button
+				type="submit"
+				disabled={composer.draft.trim() === ''}
+				title="Senden"
+				aria-label="Senden"
+				class="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-85 disabled:opacity-30"
+			>
+				<svg
+					viewBox="0 0 24 24"
+					class="size-5"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.75"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="M12 19V5" />
+					<path d="m5 12 7-7 7 7" />
+				</svg>
+			</button>
+		</form>
 	</div>
 
 	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview).
