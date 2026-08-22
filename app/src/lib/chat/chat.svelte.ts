@@ -168,6 +168,13 @@ export class Chat {
 	 */
 	session = $state('')
 	#sessions = new Map<string, Session>()
+	/**
+	 * The turn in flight: which session's arrays it writes to, and where in
+	 * them it began. A tool may move the whole turn to another session
+	 * (`relocateTurn`) — creating an intent puts the question and its answer
+	 * into the new intent's stream, not the one it was asked from.
+	 */
+	#live: { turns: Turn[]; wire: ChatMessage[]; fromTurn: number; fromWire: number } | null = null
 
 	// The system prompt is NOT stored here — it is prepended per request, so a
 	// long-lived singleton Chat always speaks with the current prompt instead
@@ -217,11 +224,17 @@ export class Chat {
 
 		this.failure = null
 		// Pinned for the whole turn: `use()` may swap the visible session while
-		// the reply streams, and the reply must land where it was asked.
-		const turns = this.turns
-		const wire = this.#wire
-		turns.push({ id: id(), role: 'user', content: prompt })
-		wire.push({ role: 'user', content: prompt })
+		// the reply streams, and the reply must land where it was asked — unless
+		// a tool relocates the turn on purpose.
+		const live = {
+			turns: this.turns,
+			wire: this.#wire,
+			fromTurn: this.turns.length,
+			fromWire: this.#wire.length
+		}
+		this.#live = live
+		live.turns.push({ id: id(), role: 'user', content: prompt })
+		live.wire.push({ role: 'user', content: prompt })
 
 		// Push first, then take the reference back OUT of the array. `turns` is a
 		// `$state` proxy: it hands out a proxied view on read, and only writes
@@ -229,11 +242,11 @@ export class Chat {
 		// pushed and mutating it would update the data and tell no one — the
 		// reply would stream into a bubble that never re-renders.
 		const replyId = id()
-		turns.push({ id: replyId, role: 'assistant', content: '', calls: [] })
-		const reply = turns[turns.length - 1]
+		live.turns.push({ id: replyId, role: 'assistant', content: '', calls: [] })
+		const reply = live.turns[live.turns.length - 1]
 		const dropStub = () => {
-			const at = turns.findIndex((t) => t.id === replyId)
-			if (at >= 0) turns.splice(at, 1)
+			const at = live.turns.findIndex((t) => t.id === replyId)
+			if (at >= 0) live.turns.splice(at, 1)
 		}
 
 		this.streaming = true
@@ -243,7 +256,7 @@ export class Chat {
 		try {
 			let nudged = false
 			for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-				const calls = await this.#round(reply, wire)
+				const calls = await this.#round(reply, live.wire)
 				if (calls.length === 0) {
 					// Said it did something, called nothing — in the WHOLE turn. The
 					// round alone is the wrong scope: the natural closing sentence
@@ -256,7 +269,7 @@ export class Chat {
 						nudged = true
 						reply.content = ''
 						this.#sink.onRestart?.()
-						wire.push({ role: 'user', content: NUDGE })
+						live.wire.push({ role: 'user', content: NUDGE })
 						continue
 					}
 					break
@@ -277,7 +290,7 @@ export class Chat {
 				for (const call of calls) {
 					const result = await this.#tools.run(call.name, call.arguments)
 					reply.calls?.push({ name: call.name, result: result.record })
-					wire.push({ role: 'tool', tool_call_id: call.id, content: result.wire })
+					live.wire.push({ role: 'tool', tool_call_id: call.id, content: result.wire })
 				}
 			}
 			this.#sink.onDone?.()
@@ -287,7 +300,7 @@ export class Chat {
 				// even half-finished: the stream threw before `#round` could record
 				// it, which would leave two user turns back to back — the malformed
 				// shape that makes this model start improvising around the hole.
-				wire.push({
+				live.wire.push({
 					role: 'assistant',
 					content: reply.content || '(unterbrochen)'
 				})
@@ -301,7 +314,34 @@ export class Chat {
 		} finally {
 			this.streaming = false
 			this.#abort = null
+			this.#live = null
 		}
+	}
+
+	/**
+	 * Move the turn in flight — its question, its reply so far, and the wire
+	 * messages behind them — into session `key`, creating it if needed. Called
+	 * by tools that change which intent the conversation is about, so the
+	 * exchange lands where it belongs. A no-op outside a turn.
+	 */
+	relocateTurn(key: string): void {
+		const live = this.#live
+		if (!live) return
+		const target =
+			key === this.session
+				? { turns: this.turns, wire: this.#wire }
+				: (this.#sessions.get(key) ?? { turns: [], wire: [] })
+		if (target.turns === live.turns) return
+		if (key !== this.session) this.#sessions.set(key, target)
+		const movedTurns = live.turns.splice(live.fromTurn)
+		const movedWire = live.wire.splice(live.fromWire)
+		live.fromTurn = target.turns.length
+		live.fromWire = target.wire.length
+		target.turns.push(...movedTurns)
+		target.wire.push(...movedWire)
+		live.turns = target.turns
+		live.wire = target.wire
+		this.#sink.onTurn?.()
 	}
 
 	/**
