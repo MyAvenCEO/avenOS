@@ -1263,10 +1263,7 @@ const DOT: Record<string, string> = {
 			onscroll={() => {
 				if (centerEl) stick = centerEl.scrollHeight - centerEl.clientHeight - centerEl.scrollTop < 48
 			}}
-			class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] lg:rounded-tl-none {gates.length >
-				0 || composing
-				? 'rounded-b-none border-b-0'
-				: ''}"
+			class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			{#if view}
 				<!-- A VIEW in front: the window actor's surface, full height. -->
@@ -1675,18 +1672,9 @@ const DOT: Record<string, string> = {
 		     workspace — the overlay dims it and lies over it like everything
 		     else — but it is a separate thing being asked of you, and nesting it
 		     inside the log made it read as one more log entry. -->
-		<!-- Flush against the log, which loses its bottom corners for as long as a
-		     gate is there: the log reads as running on BEHIND the decision rather
-		     than stopping short of it.
-		     The wrapper puts the log's own surface BEHIND the gate so its rounded
-		     top corners sit on that white instead of cutting notches of page
-		     eggshell into the panel. It ends where the gate ends — no white strip
-		     below it; the two bottom radii coincide, so there is nothing to fill. -->
 		{#if !composing}
 			{#each gates as held (held.id)}
-				<div class="-mt-2 rounded-b-2xl border border-foreground/5 border-t-0 bg-surface-raised">
-					<GatePreview {held} />
-				</div>
+				<GatePreview {held} />
 			{/each}
 		{/if}
 
@@ -1696,7 +1684,7 @@ const DOT: Record<string, string> = {
 		     are writing or words are arriving; Enter or Send lets the stream go
 		     on, and the field goes away. -->
 		{#if composing}
-			<div class="-mt-2 rounded-b-2xl border border-foreground/5 border-t-0 bg-surface-raised">
+			<div>
 				<form
 					onsubmit={(e) => {
 						e.preventDefault()
