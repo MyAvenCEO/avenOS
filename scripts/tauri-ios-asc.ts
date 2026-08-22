@@ -113,7 +113,118 @@ function readMobileProvisionName(profilePath: string): string {
 	return nameMatch[1]
 }
 
-function exportArchiveManually(profileName: string, exportDir: string): string {
+/**
+ * Tauri's `ios build --archive-only` (manual signing) leaves the archived .app UNSIGNED, and
+ * `xcodebuild -exportArchive` then signs it from scratch with only what the provisioning
+ * profile implies (application-identifier, team-identifier, beta-reports-active,
+ * get-task-allow). `aven-os-app_iOS.entitlements` never reaches the binary — no
+ * `com.apple.developer.associated-domains` (native passkeys fail with "not associated with
+ * domain"), no `aps-environment`, no keychain groups. The macOS pipeline codesigns with
+ * `--entitlements` explicitly, which is why Mac worked and iOS did not.
+ *
+ * Fix: sign the archived .app with the FULL entitlements before export. Export keeps the
+ * archive's entitlements (validated against the profile) when re-signing.
+ */
+function fullEntitlementsPlist(): string {
+	const template = readFileSync(entitlementsSrc, 'utf8').replace(
+		/\$\(AppIdentifierPrefix\)/g,
+		`${team}.`
+	)
+	const extra = `	<key>application-identifier</key>
+	<string>${team}.${BUNDLE_ID}</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>${team}</string>
+	<key>get-task-allow</key>
+	<false/>
+</dict>`
+	if (!template.includes('</dict>')) {
+		console.error(`tauri-ios-asc: ${entitlementsSrc} is not a plist dict`)
+		process.exit(1)
+	}
+	return template.replace(/<\/dict>(?![\s\S]*<\/dict>)/, extra)
+}
+
+function signArchivedApp(archivedApp: string, profilePath: string, scratchDir: string): void {
+	const entitlements = path.join(scratchDir, 'avenOS.full.entitlements')
+	writeFileSync(entitlements, fullEntitlementsPlist(), 'utf8')
+	const lint = spawnSync('plutil', ['-lint', entitlements], { stdio: 'inherit' })
+	if (lint.status !== 0) {
+		console.error('tauri-ios-asc: generated entitlements plist is invalid')
+		process.exit(1)
+	}
+	copyFileSync(profilePath, path.join(archivedApp, 'embedded.mobileprovision'))
+	const identity = process.env.AVEN_IOS_CODESIGN_IDENTITY?.trim() || 'Apple Distribution'
+	console.log(
+		'[tauri-ios-asc] codesign archived app identity=%s entitlements=%s',
+		identity,
+		entitlements
+	)
+	const r = spawnSync(
+		'codesign',
+		[
+			'--force',
+			'--sign',
+			identity,
+			'--entitlements',
+			entitlements,
+			'--timestamp=none',
+			archivedApp
+		],
+		{ stdio: 'inherit' }
+	)
+	if (r.status !== 0) {
+		console.error('tauri-ios-asc: codesign of the archived app failed')
+		process.exit(r.status ?? 1)
+	}
+}
+
+/** Entitlements the shipped iOS binary MUST carry — fail the release if any is missing. */
+const REQUIRED_IPA_ENTITLEMENTS = [
+	'com.apple.developer.associated-domains',
+	'webcredentials:id.next.aven.ceo',
+	'aps-environment'
+]
+
+function assertIpaEntitlements(ipa: string, scratchDir: string): void {
+	const dir = path.join(scratchDir, 'ipa-verify')
+	rmSync(dir, { recursive: true, force: true })
+	mkdirSync(dir, { recursive: true })
+	const unzip = spawnSync('unzip', ['-q', '-o', ipa, '-d', dir], { stdio: 'inherit' })
+	if (unzip.status !== 0) {
+		console.error('tauri-ios-asc: could not unzip the exported .ipa for verification')
+		process.exit(1)
+	}
+	const app = path.join(dir, 'Payload', 'avenOS.app')
+	const dump = spawnSync('codesign', ['-d', '--entitlements', '-', '--xml', app], {
+		encoding: 'utf8'
+	})
+	const xml = dump.stdout ?? ''
+	const missing = REQUIRED_IPA_ENTITLEMENTS.filter((needle) => !xml.includes(needle))
+	if (dump.status !== 0 || missing.length > 0) {
+		console.error(
+			`tauri-ios-asc: exported .ipa is missing required entitlements: ${missing.join(', ') || '(codesign failed)'}\n${xml}`
+		)
+		process.exit(1)
+	}
+	const verify = spawnSync('codesign', ['--verify', '--strict', '--deep', app], {
+		stdio: 'inherit'
+	})
+	if (verify.status !== 0) {
+		console.error('tauri-ios-asc: codesign --verify failed on the exported .ipa')
+		process.exit(1)
+	}
+	console.log(
+		'[tauri-ios-asc] verified .ipa entitlements: %s',
+		REQUIRED_IPA_ENTITLEMENTS.join(', ')
+	)
+	rmSync(dir, { recursive: true, force: true })
+}
+
+function exportArchiveManually(
+	profileName: string,
+	profilePath: string,
+	exportDir: string
+): string {
 	if (!existsSync(ARCHIVE_PATH)) {
 		console.error(`tauri-ios-asc: archive not found: ${ARCHIVE_PATH}`)
 		process.exit(1)
@@ -172,6 +283,12 @@ function exportArchiveManually(profileName: string, exportDir: string): string {
 		}
 	}
 
+	if (!existsSync(archivedApp)) {
+		console.error(`tauri-ios-asc: archived app not found: ${archivedApp}`)
+		process.exit(1)
+	}
+	signArchivedApp(archivedApp, profilePath, exportDir)
+
 	console.log('[tauri-ios-asc] xcodebuild -exportArchive profile=%s', profileName)
 	const r = spawnSync(
 		'xcodebuild',
@@ -195,6 +312,7 @@ function exportArchiveManually(profileName: string, exportDir: string): string {
 		console.error('tauri-ios-asc: export finished but avenOS.ipa is missing')
 		process.exit(1)
 	}
+	assertIpaEntitlements(ipa, exportDir)
 	return ipa
 }
 
@@ -713,7 +831,7 @@ async function main() {
 		)
 		const profileName = readMobileProvisionName(profilePath)
 		const exportDir = path.join(genApple, 'build/export-manual')
-		ipaSrc = exportArchiveManually(profileName, exportDir)
+		ipaSrc = exportArchiveManually(profileName, profilePath, exportDir)
 	} else {
 		ipaSrc = findIpa()
 	}
