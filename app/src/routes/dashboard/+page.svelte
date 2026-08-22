@@ -477,11 +477,12 @@ function onKeydown(event: KeyboardEvent) {
 		<!-- The bottom row: on phones, the way back from an open intent sits to
 		     the LEFT of the pill — the pill is the one fixed landmark, so the
 		     back button lives beside it rather than anywhere in the workspace. -->
-		<!-- The orb overhangs the pill by 1rem top and bottom; the row keeps
-		     that much air below so the overhang never meets the screen edge. -->
+		<!-- The orb overhangs the pill by 0.5rem top and bottom; the row keeps
+		     exactly that much air, so the orb's lower edge lands where the text
+		     pill's lower edge does — one bottom gap in both modes. -->
 		<div
 			class="relative flex items-center justify-center gap-2 {phase.key !== 'off' && !typing
-				? 'mt-4 mb-1'
+				? 'my-2'
 				: ''}"
 		>
 			{#if shell.tab === 'intents' && shell.detail}
@@ -514,7 +515,7 @@ function onKeydown(event: KeyboardEvent) {
 			<div
 				class="{phase.key === 'off'
 			? 'w-fit'
-			: `rounded-full bg-primary text-primary-foreground ${typing ? 'w-full max-w-lg p-2.5' : 'w-full max-w-56 p-3'}`}"
+			: `rounded-full bg-primary text-primary-foreground ${typing ? 'w-full max-w-lg px-2.5 py-2' : 'w-full max-w-52 px-2.5 py-2'}`}"
 				title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
 			>
 				<div class="flex items-center {phase.key === 'off' ? '' : 'gap-3'}">
@@ -532,7 +533,7 @@ function onKeydown(event: KeyboardEvent) {
 							enterTyping()
 						}
 					}}
-							class="shrink-0 rounded-full border border-primary-foreground/25 p-3 transition-colors hover:bg-primary-foreground/10"
+							class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 transition-colors hover:bg-primary-foreground/10"
 							title={typing ? 'Back to voice' : 'Type instead'}
 							aria-label={typing ? 'Back to voice' : 'Type instead'}
 						>
@@ -590,12 +591,12 @@ function onKeydown(event: KeyboardEvent) {
 								disabled={draft.trim() === ''}
 								title="Send"
 								aria-label="Send"
-								class="shrink-0 rounded-full border border-primary-foreground/25 p-2 transition-all hover:bg-primary-foreground/10 disabled:opacity-30 disabled:hover:bg-transparent"
+								class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 transition-all hover:bg-primary-foreground/10 disabled:opacity-30 disabled:hover:bg-transparent"
 							>
 								<!-- arrow up: send -->
 								<svg
 									viewBox="0 0 24 24"
-									class="size-4"
+									class="size-5"
 									fill="none"
 									stroke="currentColor"
 									stroke-width="1.5"
@@ -668,7 +669,7 @@ function onKeydown(event: KeyboardEvent) {
 								disabled={!orbActs}
 								title={phase.label}
 								aria-label={phase.label}
-								class="-my-6 relative flex size-20 shrink-0 items-center justify-center rounded-full border-4 border-primary shadow-[0_4px_16px_rgba(30,41,59,0.25)] transition-[transform,background-color,color] duration-150 {ORB[
+								class="-my-4 relative flex size-18 shrink-0 items-center justify-center rounded-full border-4 border-primary shadow-[0_4px_16px_rgba(30,41,59,0.25)] transition-[transform,background-color,color] duration-150 {ORB[
 									phase.key
 								]?.orb ?? ORB.text.orb} {orbActs ? 'cursor-pointer' : 'cursor-default'}"
 								style={phase.key === 'hearing'
@@ -693,7 +694,7 @@ function onKeydown(event: KeyboardEvent) {
 								{/if}
 								<svg
 									viewBox="0 0 24 24"
-									class="relative size-9"
+									class="relative size-8"
 									fill="none"
 									stroke="currentColor"
 									stroke-width="1.75"
@@ -717,7 +718,7 @@ function onKeydown(event: KeyboardEvent) {
 							onclick={endConversation}
 							title="End conversation"
 							aria-label="End conversation"
-							class="shrink-0 rounded-full bg-error p-3 text-primary-foreground transition-opacity hover:opacity-80"
+							class="shrink-0 rounded-full bg-error p-2.5 text-primary-foreground transition-opacity hover:opacity-80"
 						>
 							<!-- hang-up: the handset rotated OFF the hook — disconnect, not dial -->
 							<svg
