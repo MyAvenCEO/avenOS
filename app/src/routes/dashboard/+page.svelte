@@ -462,6 +462,33 @@ function submit() {
 				title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
 			>
 				<div class="flex items-center {phase.key === 'off' ? '' : 'gap-3'}">
+					<!-- Upload sits LEFT, where the input switch used to be: a
+					     placeholder for now — it is not wired yet. Same outline as the
+					     ✕ opposite, so the notch stays a matched pair. -->
+					{#if phase.key !== 'off'}
+						<button
+							type="button"
+							disabled
+							title="Hochladen — bald"
+							aria-label="Hochladen"
+							class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 opacity-60 transition-colors"
+						>
+							<!-- lucide:upload -->
+							<svg
+								viewBox="0 0 24 24"
+								class="size-5"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<path d="M12 3v12" />
+								<path d="m17 8-5-5-5 5" />
+								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							</svg>
+						</button>
+					{/if}
 					{#if phase.key === 'off'}
 						<!-- Ended: the pill shrinks to the mark itself. One target, one
 				     meaning — tap the logo and the conversation is back. Nothing
