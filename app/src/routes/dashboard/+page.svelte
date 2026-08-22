@@ -123,7 +123,7 @@ function beginConversation() {
 	typing = false
 	// Voice mode always speaks: clear any mute left over from a text session.
 	speaker.muted = false
-	void listener.start()
+	if (mockPhase === null) void listener.start()
 }
 
 /** Clear whatever error is showing above the pill; the next good turn clears it anyway. */
@@ -341,7 +341,7 @@ function leaveTyping() {
 	if (!conversing) return
 	typing = false
 	speaker.muted = false
-	if (conversing) void listener.start()
+	if (conversing && mockPhase === null) void listener.start()
 }
 
 /**
@@ -482,7 +482,10 @@ function onKeydown(event: KeyboardEvent) {
 		     overhangs it (6px each way) without pushing anything — so switching
 		     voice ↔ text never makes the notch jump. -->
 		<div class="relative flex items-center justify-center gap-2">
-			{#if shell.tab === 'intents' && shell.detail}
+			<!-- Back and the drawer toggle hug the screen edges, not the notch:
+			     the pill stays centered on its own, and in text mode both step
+			     aside so the input gets the whole width. -->
+			{#if shell.tab === 'intents' && shell.detail && !typing}
 				<button
 					type="button"
 					onclick={() => {
@@ -491,7 +494,7 @@ function onKeydown(event: KeyboardEvent) {
 				}}
 					title="Zurück zu den Intents"
 					aria-label="Zurück zu den Intents"
-					class="flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected md:hidden"
+					class="-translate-y-1/2 absolute top-1/2 left-0 flex size-11 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected md:hidden"
 				>
 					<svg
 						viewBox="0 0 24 24"
@@ -737,7 +740,7 @@ function onKeydown(event: KeyboardEvent) {
 					{/if}
 				</div>
 			</div>
-			{#if shell.tab === 'intents' && shell.detail}
+			{#if shell.tab === 'intents' && shell.detail && !typing}
 				<!-- Skills & artifacts: the right column, as a drawer, bottom right. -->
 				<button
 					type="button"
@@ -747,7 +750,7 @@ function onKeydown(event: KeyboardEvent) {
 					title="Skills & Artefakte"
 					aria-label="Skills & Artefakte"
 					aria-expanded={shell.rightOpen}
-					class="flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected md:hidden"
+					class="-translate-y-1/2 absolute top-1/2 right-0 flex size-11 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected md:hidden"
 				>
 					<svg
 						viewBox="0 0 24 24"
