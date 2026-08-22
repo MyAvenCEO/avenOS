@@ -867,7 +867,11 @@ class IntentsActor extends Actor {
 				}))
 				return {
 					record: JSON.stringify({ ok: true, intents: rows, selected: this.selectedId }),
-					wire: rows.map((r) => `${r.id}: "${r.title}" (${r.type}, ${r.status})`).join('\n')
+					wire:
+						`On screen: ${this.selectedId}.\n` +
+						rows.map((r) => `${r.id}: "${r.title}" (${r.type}, ${r.status})`).join('\n') +
+						'\nIf the request is about an intent other than the one on screen, call ' +
+						'intent_switch with it BEFORE answering.'
 				}
 			},
 			intent_switch: (p) => {
