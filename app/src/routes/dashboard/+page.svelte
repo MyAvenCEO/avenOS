@@ -5,6 +5,7 @@ import { dev } from '$app/environment'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
+import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import '$lib/actors/windows'
@@ -617,17 +618,21 @@ function onKeydown(event: KeyboardEvent) {
 						>
 							<!-- The label is a standing tooltip above the mark — a light eggshell
 					     chip with a little arrow pointing down at the circle, shown always
-					     so the one thing to press names itself. -->
-							<span
-								class="-translate-x-1/2 pointer-events-none absolute bottom-full left-1/2 mb-2.5 whitespace-nowrap rounded-full border border-border bg-surface-cream px-3 py-1 font-medium text-foreground text-xs shadow-sm"
-							>
-								Start conversation
-								<!-- The arrow: an eggshell diamond, its two lower sides bordered, so
-						     it reads as the tail of the chip pointing at the button. -->
+					     so the one thing to press names itself. Except while a human
+					     gate is open: the gate's card sits exactly where the chip would,
+					     and the decision being asked outranks the invitation. -->
+							{#if hitlQueue.items.length === 0}
 								<span
-									class="-bottom-[5px] -translate-x-1/2 absolute left-1/2 size-2 rotate-45 border-border border-r border-b bg-surface-cream"
-								></span>
-							</span>
+									class="-translate-x-1/2 pointer-events-none absolute bottom-full left-1/2 mb-2.5 whitespace-nowrap rounded-full border border-border bg-surface-cream px-3 py-1 font-medium text-foreground text-xs shadow-sm"
+								>
+									Start conversation
+									<!-- The arrow: an eggshell diamond, its two lower sides bordered, so
+						     it reads as the tail of the chip pointing at the button. -->
+									<span
+										class="-bottom-[5px] -translate-x-1/2 absolute left-1/2 size-2 rotate-45 border-border border-r border-b bg-surface-cream"
+									></span>
+								</span>
+							{/if}
 							<!-- The mark itself: a bordered circle with air between edge and logo.
 					     Hover deepens the cream a touch — the border stays exactly as it
 					     is; the whole gesture is a whisper, not a repaint. -->
