@@ -246,6 +246,15 @@ onMount(() => {
 						>
 							Erneut versuchen
 						</button>
+						{#if !verificationUrl}
+							<button
+								type="button"
+								class="min-h-12 rounded-xl px-5 font-medium text-primary/70 text-sm transition hover:text-primary"
+								onclick={beginWeb}
+							>
+								Stattdessen im Browser anmelden
+							</button>
+						{/if}
 					{/if}
 				</div>
 

@@ -92,8 +92,29 @@ final class IosPasskeyPlugin: Plugin, ASAuthorizationControllerDelegate,
     controller: ASAuthorizationController,
     didCompleteWithError error: Error
   ) {
-    pending?.reject(error.localizedDescription)
+    pending?.reject(Self.describe(error))
     clearPending()
+  }
+
+  /// iOS validates `webcredentials:` associated domains per install through
+  /// Apple's AASA CDN (swcd). When that validation has not (yet) succeeded on
+  /// this device — stale cache, failed fetch, first install before the host was
+  /// live — every native request fails with ASAuthorizationError 1004
+  /// "Application with identifier … is not associated with domain …". The
+  /// passkey itself is fine; only this device's association state is. Surface
+  /// it under the NATIVE_PASSKEY_UNAVAILABLE contract so the gate falls back to
+  /// the browser device-code flow instead of dead-ending on "retry".
+  private static func describe(_ error: Error) -> String {
+    let detail = error.localizedDescription
+    let nsError = error as NSError
+    let isAssociationFailure =
+      nsError.domain == ASAuthorizationError.errorDomain
+      && nsError.code == ASAuthorizationError.failed.rawValue
+      && detail.localizedCaseInsensitiveContains("not associated with domain")
+    if isAssociationFailure {
+      return "NATIVE_PASSKEY_UNAVAILABLE: This device has not verified the passkey domain yet (\(detail)). Reinstalling the app refreshes Apple's associated-domain check."
+    }
+    return detail
   }
 
   func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
