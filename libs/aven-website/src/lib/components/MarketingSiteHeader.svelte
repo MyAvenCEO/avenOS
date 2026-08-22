@@ -4,7 +4,7 @@ import { type Lang, localeHref, pick, switchLangHref } from '$lib/i18n'
 import { common } from '$lib/i18n/common'
 import { idFunnelHref } from '$lib/id-service'
 
-type NavActive = 'skills' | 'pricing'
+type NavActive = 'skills' | 'aven' | 'pricing'
 
 let {
 	active = null,
@@ -39,6 +39,7 @@ const otherHref = $derived(switchLangHref(lang, page.url.pathname))
 		</a>
 		<nav class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em]">
 			<a href={localeHref(lang, '/skills')} class={linkCls(active === 'skills')}>{t.nav.skills}</a>
+			<a href={localeHref(lang, '/aven')} class={linkCls(active === 'aven')}>{t.nav.aven}</a>
 			<a href={localeHref(lang, '/pricing')} class={linkCls(active === 'pricing')}>
 				{t.nav.pricing}
 			</a>

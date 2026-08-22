@@ -61,8 +61,9 @@ export interface Plan {
 	 */
 	per?: 'person' | 'company'
 	/**
-	 * The price in euro, NET. Monthly for every tier except avenID, which is
-	 * billed once — read `billing` before you print a `/m`.
+	 * The price in euro, GROSS (incl. VAT) — the number a person pays. Monthly
+	 * for every tier except avenID, which is billed once — read `billing`
+	 * before you print a `/m`.
 	 */
 	eurPrice: number
 	billing: 'once' | 'monthly'
@@ -93,7 +94,7 @@ export interface Plan {
 	 * feature bullet where it drifts per tier.
 	 */
 	runtime?: { hoursPerDay: number; centsPerExtraMinute: number }
-	/** What this product does. Only avenCOOP includes another plan (avenFOUNDER). */
+	/** What this product does. Skills cascade: avenFOUNDER carries avenME's, avenCOOP carries avenFOUNDER's. */
 	features: PlanFeature[]
 	/** Marks the product we lead with. */
 	highlight?: boolean
@@ -107,13 +108,15 @@ export const PLANS: Plan[] = [
 		role: 'Dein Name — ein Konto, das jeder ansprechen kann. Pro Mensch und pro Firma.',
 		eurPrice: 25,
 		billing: 'once',
+		referralPct: 5,
 		platformFeePct: 0,
 		reinvestPct: 0,
 		features: [
 			'Dein avenID‑Name — für 1 Jahr für dich gesichert',
 			'Dein Platz auf der Warteliste',
 			'20 Min Test‑Zugang — sobald du eingeladen bist',
-			'Voraussetzung für avenME und avenFOUNDER — eine pro Mensch, eine pro Firma'
+			'Voraussetzung für avenME und avenFOUNDER — eine pro Mensch, eine pro Firma',
+			'5 % Provision auf jedes aven‑Produkt, das du vermittelst — monatlich, solange es läuft'
 		]
 	},
 	{
@@ -162,7 +165,6 @@ export const PLANS: Plan[] = [
 			{ skill: 'checkout-builder', label: 'Produkt‑Checkout und Shop' },
 			{ skill: 'blog-writer', label: 'Blog' },
 			'Digitaler Briefkasten für Geschäftskunden (exkl. Nachsendeauftrag der Deutschen Post: 51,90 € / 6 Monate, inkl. USt.)',
-			'Die eine Anlaufstelle: Mitarbeiter, Kunden und Partner sprechen direkt mit deinem avenCEO — in Chat, Social Media und Support',
 			'Das Gedächtnis deiner Firma: Wissen und Erfahrung sammeln sich über Jahre im avenCEO — das wird dein wertvollstes Asset'
 		]
 	},
@@ -199,14 +201,17 @@ export function plan(id: PlanId): Plan {
 }
 
 /**
- * What a plan brings with it. avenME and avenFOUNDER are separate products for
- * separate roles (person / company) — neither contains the other, and avenID
- * is a prerequisite rather than a part. The only inclusion is avenCOOP,
- * which ships with the company's avenCEO.
+ * Which plan's SKILLS a plan carries. avenME and avenFOUNDER are separate
+ * products for separate roles (person / company) — you buy both if you are
+ * both — but the company's Aven has every skill the personal one has, and
+ * avenCOOP ships with the company's avenFOUNDER. avenID carries nothing.
  */
+const SKILL_CASCADE: PlanId[] = ['avenme', 'avenceo', 'avencoop']
 export function planIncludes(selected: PlanId, needed: PlanId): boolean {
 	if (selected === needed) return true
-	return selected === 'avencoop' && needed === 'avenceo'
+	const s = SKILL_CASCADE.indexOf(selected)
+	const n = SKILL_CASCADE.indexOf(needed)
+	return s >= 0 && n >= 0 && n < s
 }
 
 /** "pro Mensch" · "pro Firma" — the role a plan is bought for. */
@@ -240,11 +245,11 @@ export function totalSharePct(p: Plan): number {
  * reads as one statement, not as a label stacked on a figure.
  */
 export function priceSuffix(p: Plan): string {
-	return p.billing === 'once' ? 'einmalig · zzgl. USt.' : '/Monat · zzgl. USt.'
+	return p.billing === 'once' ? 'einmalig · inkl. USt.' : '/Monat · inkl. USt.'
 }
 
 /**
  * The one VAT sentence, spelled once. "Netto" alone does not carry it — the
  * explicit clause does.
  */
-export const VAT_NOTE = 'Alle Preise verstehen sich zzgl. der gesetzlichen Umsatzsteuer.'
+export const VAT_NOTE = 'Alle Preise verstehen sich inkl. der gesetzlichen Umsatzsteuer.'
