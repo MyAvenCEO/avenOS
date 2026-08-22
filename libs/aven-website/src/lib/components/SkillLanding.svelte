@@ -22,7 +22,7 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 </script>
 
 <svelte:head>
-	<title>{skill.comingSoon ? 'Bald · ' : ''}{skillLabel(skill.slug)}— aven.ceo · Skills</title>
+	<title>{skill.comingSoon ? 'Bald · ' : ''}{skillLabel(skill.slug)} — aven.ceo · Skills</title>
 	<meta name="description" content={skill.oneLineCopy}>
 </svelte:head>
 
