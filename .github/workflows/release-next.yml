@@ -97,6 +97,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Branch model: main → next → prod. The release commit above lands on `next` only, which
+      # would make the following main → next merge non-fast-forward. Sync it back to `main`
+      # right away (over the same ruleset-bypassing deploy key): fast-forward when main hasn't
+      # moved, otherwise merge the release commit into main. Both keep main a descendant of
+      # next, so main → next stays a clean fast-forward.
+      - name: Sync release commit back to main
+        if: steps.release.outputs.released == 'true'
+        env:
+          RELEASE_SHA: ${{ steps.release.outputs.commit }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if git merge-base --is-ancestor origin/main "$RELEASE_SHA"; then
+            echo "main fast-forwards to $RELEASE_SHA"
+            git push origin "$RELEASE_SHA:refs/heads/main"
+          else
+            echo "main moved on — merging $RELEASE_SHA into main"
+            git checkout -B main origin/main
+            git merge --no-ff "$RELEASE_SHA" -m "chore(release): sync $(git describe --tags --exact-match "$RELEASE_SHA") into main [skip ci]"
+            git push origin main:refs/heads/main
+          fi
+
   publish-identity-image:
     name: publish identity image
     needs: release
