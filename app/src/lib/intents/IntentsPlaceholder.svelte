@@ -5,6 +5,7 @@ import type { HeldPreview } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
+import { shell } from '$lib/intents/talk.svelte'
 import FitView from '$lib/mesh/FitView.svelte'
 import GatePreview from '$lib/query/GatePreview.svelte'
 import { query } from '$lib/query/query.svelte'
@@ -1005,8 +1006,14 @@ const DOT: Record<string, string> = {
      rem sizes shrink, px borders stay honest, and the dock clearance needs no
      dividing back out because nothing is scaled relative to anything else. -->
 <div class="flex min-h-0 w-full flex-1 gap-3 overflow-hidden">
-	<!-- LEFT: the intent stream — compact cards, cream selection. -->
-	<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
+	<!-- LEFT: the intent stream — compact cards, cream selection.
+	     On phones this IS the home screen, full width; opening an intent
+	     swaps it for the detail (`shell.detail`). -->
+	<aside
+		class="{shell.detail
+			? 'hidden md:flex'
+			: 'flex'} min-h-0 w-full shrink-0 flex-col gap-2 overflow-y-auto pb-2 md:w-72"
+	>
 		<h2
 			class="px-1 pt-1 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
 		>
@@ -1024,7 +1031,7 @@ const DOT: Record<string, string> = {
 					selectedId = intent.id
 					preview = null
 					skillView = null
-					
+					shell.detail = true
 				}}
 				class="rounded-xl border border-l-[4px] px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {accent.edge} {sel
 					? 'border-foreground/15 bg-surface-card-selected'
@@ -1084,6 +1091,7 @@ const DOT: Record<string, string> = {
 						selectedId = intent.id
 						preview = null
 						skillView = null
+						shell.detail = true
 					}}
 					class="rounded-xl border border-l-[4px] border-l-foreground/20 px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
 						? 'border-foreground/15 bg-surface-card-selected opacity-100'
@@ -1107,12 +1115,21 @@ const DOT: Record<string, string> = {
 	<!-- The center column wears the intent's STATE as its header — the same
 	     uppercase line as INTENTS and SKILLS beside it, so all three
 	     columns start their cards on one line. -->
-	<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-2" style="margin-bottom: var(--dock-h, 0px)">
-		<h2
-			class="px-1 pt-1 text-center font-semibold text-xs uppercase tracking-wide {accentFor(selected.status).text}"
-		>
-			{STATUS_LABEL[selected.status]}
-		</h2>
+	<div
+		class="{shell.detail
+			? 'flex'
+			: 'hidden md:flex'} relative min-h-0 min-w-0 flex-1 flex-col gap-2"
+		style="margin-bottom: var(--dock-h, 0px)"
+	>
+		<div class="relative">
+			<h2
+				class="px-1 pt-1 text-center font-semibold text-xs uppercase tracking-wide {accentFor(
+					selected.status
+				).text}"
+			>
+				{STATUS_LABEL[selected.status]}
+			</h2>
+		</div>
 		<main
 			bind:this={centerEl}
 			onscroll={() => {
@@ -1474,8 +1491,24 @@ const DOT: Record<string, string> = {
 		{/each}
 	</div>
 
-	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview). -->
-	<aside class="flex min-h-0 w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2">
+	<!-- RIGHT: SKILLS (click → stepper) above ARTIFACTS (click → preview).
+	     On phones it is a drawer sliding in from the right over the detail,
+	     opened by the header toggle; a backdrop tap closes it. -->
+	{#if shell.rightOpen}
+		<button
+			type="button"
+			aria-label="Schließen"
+			onclick={() => {
+				shell.rightOpen = false
+			}}
+			class="fixed inset-0 z-30 bg-foreground/30 md:hidden"
+		></button>
+	{/if}
+	<aside
+		class="{shell.rightOpen
+			? 'fixed inset-y-0 right-0 z-40 flex w-80 max-w-[85vw] border-border border-l bg-surface-raised p-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-2xl'
+			: 'hidden'} min-h-0 shrink-0 flex-col gap-2 overflow-y-auto pb-2 md:static md:flex md:w-72 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+	>
 		<h2
 			class="px-1 pt-1 text-center font-semibold text-foreground/50 text-xs uppercase tracking-wide"
 		>
@@ -1487,6 +1520,7 @@ const DOT: Record<string, string> = {
 				onclick={() => {
 			skillView = skillView?.skill === s.skill ? null : s
 			preview = null
+			shell.rightOpen = false
 		}}
 				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {skillView?.skill ===
 		s.skill
@@ -1521,6 +1555,7 @@ const DOT: Record<string, string> = {
 				onclick={() => {
 			preview = preview?.title === artifact.title ? null : artifact
 			skillView = null
+			shell.rightOpen = false
 		}}
 				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
 		artifact.title

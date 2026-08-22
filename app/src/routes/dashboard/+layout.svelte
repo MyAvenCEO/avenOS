@@ -31,7 +31,13 @@ function leaveSettings() {
 </script>
 
 <div class="flex h-dvh">
-	<aside class="flex w-16 shrink-0 flex-col items-center gap-3 border-border border-r py-4">
+	<!-- On phones the rail is part of the LIST screen: once an intent is open
+	     the detail takes the full width and the rail steps out with the list. -->
+	<aside
+		class="{shell.tab === 'intents' && shell.detail
+			? 'hidden md:flex'
+			: 'flex'} w-16 shrink-0 flex-col items-center gap-3 border-border border-r py-4 pt-[max(1rem,env(safe-area-inset-top))]"
+	>
 		{#each SPARKS as spark (spark.id)}
 			{@const active =
 				todoActor.state.active === spark.id && !onSettings && shell.tab === 'intents'}
@@ -43,6 +49,8 @@ function leaveSettings() {
 					// Picking a spark leaves settings.
 					leaveSettings()
 					shell.tab = 'intents'
+					// A new context starts at its list, not inside the old detail.
+					shell.detail = false
 					void todoActor.applyEvent({ send: 'SHOW', payload: { spark: spark.id } })
 				}}
 				title={spark.name}

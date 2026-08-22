@@ -11,6 +11,16 @@ import { singleton } from '$lib/actors/singleton'
  */
 class ShellState {
 	tab = $state<'intents' | 'skills'>('intents')
+	/**
+	 * Mobile only: whether an intent has been OPENED. Below `md` the intents
+	 * workspace is list-first — the rail and the intent stream fill the
+	 * screen, the center surface appears once an intent is tapped, and Back
+	 * returns to the list. Desktop ignores the flag: all three columns show.
+	 */
+	detail = $state(false)
+	/** Mobile only: the right column (skills + artifacts) drawer, toggled
+	 * from the dock's bottom-right button. */
+	rightOpen = $state(false)
 }
 
 export const shell = singleton('aven.shell', () => new ShellState())

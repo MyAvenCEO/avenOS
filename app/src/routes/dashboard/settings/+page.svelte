@@ -75,9 +75,11 @@ async function preview(voice: Voice) {
 		<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Settings</p>
 	</header>
 
-	<div class="flex min-h-0 flex-1 gap-6">
+	<!-- Phones: the categories become a row above the content instead of a
+	     column beside it. -->
+	<div class="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:gap-6">
 		<!-- The categories: one concern per surface. -->
-		<nav class="flex w-44 shrink-0 flex-col gap-1">
+		<nav class="flex shrink-0 flex-row flex-wrap gap-1 md:w-44 md:flex-col">
 			{#each CATEGORIES as c (c.id)}
 				<button
 					type="button"
