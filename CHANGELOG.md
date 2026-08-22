@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.22-next.1...v) (2026-08-22)
+
+
+### Features
+
+* **email:** brand the Maizzle templates and add the legal footer ([#95](https://github.com/MyAvenCEO/avenOS/issues/95)) ([70d7987](https://github.com/MyAvenCEO/avenOS/commit/70d7987b5b4c423fba1cc89107632db71d63c459))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.21-next.12...v) (2026-08-22)
 
 
