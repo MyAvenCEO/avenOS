@@ -189,17 +189,17 @@ dashboard), discounts, seat counts, avenCOOP, any admin surface.
 
 ## Acceptance criteria
 
-- [ ] `grep -rn "customers/billing\|billing_portal\|customerPortalUrl"
+- [x] `grep -rn "customers/billing\|billing_portal\|customerPortalUrl"
       services/aven-api/src app/src app/src-tauri/src` prints nothing.
-- [ ] `vitest run tests/billing-subscriptions.test.ts tests/creem.test.ts
+- [x] `vitest run tests/billing-subscriptions.test.ts tests/creem.test.ts
       tests/copy.test.ts tests/designer.test.ts` exits 0, including orders
       mapping, pause proxy (own id), stranger-pause refusal, checkout
       status from the stored row.
-- [ ] `bun run --cwd services/aven-api check`, `bun run check` (app),
+- [x] `bun run --cwd services/aven-api check`, `bun run check` (app),
       `bunx biome check services/aven-api app` exit 0.
-- [ ] No `/api/billing/*` handler reads a user/customer/subscription/
+- [x] No `/api/billing/*` handler reads a user/customer/subscription/
       checkout id from the request (grep on the routes dir).
-- [ ] Screenshots: inline checkout card, Meine Bestellungen with the
+- [x] Screenshots: inline checkout card, Meine Bestellungen with the
       email line, paused state with Fortsetzen, cancel-scheduled.
 - [ ] Sandbox smoke pasted: inline subscribe → `completed` → AKTIV; pause
       → resume; frame allowed or fallback fired (recorded).
@@ -216,6 +216,24 @@ grep -rn "requireUser" services/aven-api/src/routes/api/billing/
 ```
 
 ## Progress log
+
+- 2026-08-22 (build → review) — Every hosted-portal surface deleted
+  (route, Tauri command, window, provider method); the metric grep prints
+  nothing. aven-api: migration 0009 `billing_checkouts`, `subscribe`
+  stores the session's checkout, `GET /api/billing/checkout` (no params)
+  reports its status via `GET /v1/checkouts?checkout_id=`; orders from
+  `GET /v1/customers/{id}/orders`; pause via `POST /v1/subscriptions/{id}/
+  pause`. App: CSP frame-src += https://*.creem.io; commands
+  billing_orders/pause/checkout + an allow-listed (https, creem.io host)
+  billing_checkout_window for the 8-second no-`ready` fallback. Pane:
+  inline checkout card with the creem-embed listener, Meine Bestellungen
+  with per-order Netto/Rabatt/USt./Bezahlt/Bestell-Nr. and the "Creem hat
+  dir die Rechnung per E-Mail geschickt" line, Pausieren/Fortsetzen. All
+  five fixture states driven in-browser; checkout, paused and active-with-
+  order-detail-and-pause-confirm screenshotted in-session. Gates: api
+  0/1484, app 0/525, biome clean, clippy silent, suites 12/12. OPEN for
+  review: the sandbox smoke in the Mac app — inline subscribe, and
+  recording whether Creem allowed the frame or the fallback fired.
 
 - 2026-08-22 (later) — Samuel pointed at the official monorepo
   (github.com/armitage-labs/creem). Re-verified there: `creem` 1.6.0 is the
