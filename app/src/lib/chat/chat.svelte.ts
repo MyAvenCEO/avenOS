@@ -223,11 +223,24 @@ export class Chat {
 		return !this.streaming
 	}
 
+	/**
+	 * A new session. Its `turns` is born as a `$state` proxy: every array that
+	 * can end up in `this.turns` must be one, because a plain array assigned
+	 * to the field gets wrapped on the way in — and pushes through the plain
+	 * reference afterwards (a turn settling in the background) never reach
+	 * the wrapper's signals. The stream then shows a stale length: turns that
+	 * exist and are invisible.
+	 */
+	#fresh(): Session {
+		const turns = $state<Turn[]>([])
+		return { turns, wire: [] }
+	}
+
 	/** Switch the visible conversation to `key`, creating it on first use. */
 	use(key: string): void {
 		if (key === this.session) return
 		this.#sessions.set(this.session, { turns: this.turns, wire: this.#wire })
-		const next = this.#sessions.get(key) ?? { turns: [], wire: [] }
+		const next = this.#sessions.get(key) ?? this.#fresh()
 		this.session = key
 		this.turns = next.turns
 		this.#wire = next.wire
@@ -392,7 +405,7 @@ export class Chat {
 		const target =
 			key === this.session
 				? { turns: this.turns, wire: this.#wire }
-				: (this.#sessions.get(key) ?? { turns: [], wire: [] })
+				: (this.#sessions.get(key) ?? this.#fresh())
 		if (target.turns === live.turns) return
 		if (key !== this.session) this.#sessions.set(key, target)
 		const movedTurns = live.turns.splice(live.fromTurn)
@@ -504,7 +517,7 @@ export class Chat {
 			if (key === this.session) return { turns: this.turns, wire: this.#wire }
 			return this.#sessions.get(key)
 		}
-		const target = grab(into) ?? { turns: [], wire: [] }
+		const target = grab(into) ?? this.#fresh()
 		if (into !== this.session) this.#sessions.set(into, target)
 		for (const key of from) {
 			if (key === into) continue
