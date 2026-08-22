@@ -58,7 +58,7 @@ export const pricing: Record<Lang, PricingMessages> = {
 		eyebrow: 'Pricing',
 		heading: 'Ein Name als Anfang. Zwei Aven nebeneinander.',
 		introHtml:
-			'<strong class="font-medium text-foreground/85">avenME</strong> ist dein persönlicher AI‑CEO für dein Leben — einer pro Mensch. <strong class="font-medium text-foreground/85">avenFOUNDER</strong> ist der professionelle AI‑CEO für deine Firma — einer pro Firma. Mit <strong class="font-medium text-foreground/85">avenCOOP</strong> werden wir dein technischer Co‑Founder.',
+			'<strong class="font-medium text-foreground/85">avenME</strong> ist dein persönlicher AI‑CEO für dein Leben — einer pro Mensch.<br> <strong class="font-medium text-foreground/85">avenFOUNDER</strong> ist der professionelle AI‑CEO für deine Firma — einer pro Firma.<br> Mit <strong class="font-medium text-foreground/85">avenCOOP</strong> werden wir dein technischer Co‑Founder.',
 		shareHtml:
 			'Der Anteil am Umsatz ist zur Hälfte Plattform und zur Hälfte <strong class="font-medium text-accent">Reinvest</strong>: Er kauft dir Anteile an anderen Aven — du wählst selbst, an welchen.',
 		idEyebrow: 'Der Anfang · Pro Mensch und pro Firma',
@@ -110,15 +110,15 @@ export const pricing: Record<Lang, PricingMessages> = {
 		eyebrow: 'Pricing',
 		heading: 'One name to start. Two Aven side by side.',
 		introHtml:
-			'<strong class="font-medium text-foreground/85">avenME</strong> is your personal AI‑CEO for your life — one per person. <strong class="font-medium text-foreground/85">avenFOUNDER</strong> is the professional AI‑CEO for your company — one per company. With <strong class="font-medium text-foreground/85">avenCOOP</strong> we become your technical co-founder.',
+			'<strong class="font-medium text-foreground/85">avenME</strong> is your personal AI‑CEO for your life — one per human.<br> <strong class="font-medium text-foreground/85">avenFOUNDER</strong> is the professional AI‑CEO for your company — one per company.<br> With <strong class="font-medium text-foreground/85">avenCOOP</strong> we become your technical co-founder.',
 		shareHtml:
 			'The revenue share is half platform and half <strong class="font-medium text-accent">Reinvest</strong>: it buys you equity in other Aven — you choose which ones.',
-		idEyebrow: 'The start · Per person and per company',
+		idEyebrow: 'The start · Per human and per company',
 		yourChoice: 'Your choice:',
 		availability: 'We confirm availability at booking.',
 		applyOnly: 'By application only',
 		onePerCompany: 'One avenFOUNDER per company — every further company gets its own.',
-		onePerPerson: 'One avenME per person — your own, independent of any company.',
+		onePerPerson: 'One avenME per human — your own, independent of any company.',
 		revenueShare: (pct) => `+ ${pct} % of revenue`,
 		platform: 'Platform',
 		inclFees: 'incl. Stripe & Co.',

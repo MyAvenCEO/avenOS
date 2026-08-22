@@ -22,12 +22,12 @@ import type { Lang } from './index'
 /** Per plan: the role line and the feature labels, in feature order. */
 const EN: Record<PlanId, { role: string; features: string[] }> = {
 	avenid: {
-		role: 'Your name — one account anyone can address. Per person and per company.',
+		role: 'Your name — one account anyone can address. Per human and per company.',
 		features: [
 			'Your avenID name — reserved for you for 1 year',
 			'Your place on the waiting list',
 			'20 min of trial access — the moment you are invited',
-			'Required for avenME and avenFOUNDER — one per person, one per company',
+			'Required for avenME and avenFOUNDER — one per human, one per company',
 			'5 % commission on every aven product you refer — monthly, for as long as it runs'
 		]
 	},
@@ -109,7 +109,7 @@ export function vatNote(lang: Lang): string {
 	return lang === 'de' ? VAT_NOTE : 'All prices include statutory VAT.'
 }
 
-/** "per person" · "per company" */
+/** "per human" · "per company" */
 export function perLabel(p: Plan, lang: Lang): string | null {
 	if (lang === 'de') return perLabelDe(p)
 	if (p.per === 'person') return 'per human'
