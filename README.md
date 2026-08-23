@@ -47,6 +47,60 @@ cd libs/aven-website && bun run dev
 
 Env for the **marketing site** and **OCR CLI**: keep **`.env`** at the **repo root** (see **`.env.example`**). `libs/aven-website` loads it via Bun **`--env-file=../../.env`**; Python also reads that path plus optional **`ARCHIVE/ocr-example/.env`** overrides (see `ARCHIVE/ocr-example/README.md`).
 
+### Run the full local service stack
+
+Docker with Compose and Bun are required. From the repository root, start Aven
+API, its email and environment workers, Mailpit, the Artifact Store, both
+migrators, and their separate PostgreSQL databases:
+
+```sh
+bun run dev:api:artifacts
+```
+
+Leave that command running. Once the services report healthy, verify the full
+Artifact Store path from a second terminal:
+
+```sh
+bun run test:artifact-store:smoke
+```
+
+A successful run prints JSON containing `"status": "ok"` after creating an
+upload and root publication and verifying metadata, downloaded content, and
+feed replay. The default local endpoints are:
+
+| Service | Endpoint |
+|---------|----------|
+| Aven API | `http://localhost:3000` |
+| Artifact Store | `http://localhost:8087` |
+| Mailpit | `http://localhost:8025` |
+| Aven API PostgreSQL | `127.0.0.1:55432` |
+| Artifact Store PostgreSQL | `127.0.0.1:55433` |
+
+If a port is occupied, override it for both commands. For example:
+
+```sh
+APP_PORT=13000 MAILPIT_HTTP_PORT=18025 DB_PORT=15432 \
+ARTIFACT_STORE_PORT=18087 ARTIFACT_DB_PORT=15433 \
+bun run dev:api:artifacts
+
+ARTIFACT_STORE_PORT=18087 bun run test:artifact-store:smoke
+```
+
+Press Ctrl+C to stop the foreground stack. Remove its stopped containers and
+network without deleting the database volumes with:
+
+```sh
+docker compose \
+  -f services/aven-api/docker-compose.yml \
+  -f services/aven-api/docker-compose.artifact-store.yml \
+  down
+```
+
+The Tauri desktop application is run natively in a separate terminal; it is not
+part of the Docker stack. See the commands above and the
+[`services/aven-api` local-service documentation](services/aven-api/README.md#local-services)
+for additional configuration and detached operation.
+
 ### Native passkey authentication
 
 The Tauri app is gated on launch. On supported Apple devices it requests a challenge for `id.next.aven.ceo`, opens the native system passkey sheet, and exchanges the assertion for a revocable Better Auth bearer session. Only platforms or OS versions without that native mechanism fall back to the HTTPS device-code approval flow in the system browser while avenOS shows a waiting screen. The bearer token is not exposed to the frontend or persisted in browser storage; this spike requires authentication again after an app restart.

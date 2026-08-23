@@ -69,6 +69,40 @@ docker compose up --build
 - Mailpit: `http://localhost:8025`
 - PostgreSQL: `127.0.0.1:55432`
 
+To run the API and Artifact Store together, add the local-only overlay:
+
+```sh
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.artifact-store.yml \
+  up --build -d
+bun run artifact-store:smoke
+```
+
+The combined stack adds the Artifact Store at `http://localhost:8087` and its
+PostgreSQL database at `127.0.0.1:55433`. The smoke command creates an upload and
+root publication, then verifies artifact metadata, content retrieval, and feed
+replay. It is safe to rerun because every invocation uses new claim and
+publication IDs.
+
+From the repository root, the equivalent commands are `bun run
+dev:api:artifacts` and, in another terminal, `bun run
+test:artifact-store:smoke`. Stop the detached stack with:
+
+```sh
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.artifact-store.yml \
+  down
+```
+
+Override `APP_PORT`, `MAILPIT_HTTP_PORT`, `DB_PORT`, `ARTIFACT_STORE_PORT`, or
+`ARTIFACT_DB_PORT` when a host port is already occupied. The overlay injects the
+container-internal Artifact Store URL, fixed scope, and development bearer token
+into the API container. These credentials model the future Aven API authorization
+decision adapter and are strictly for local development; the API does not yet
+issue per-request Artifact Store decisions.
+
 The migrator, API, email worker, and environment worker use separate database roles. The environment worker creates one `cust_*` database and one `NOLOGIN` owner role per purchased name.
 
 All Compose services use Docker's `local` logging driver. Logs rotate at 10 MiB
