@@ -1,6 +1,6 @@
 [package]
 name = "aven-artifact-store-server"
-description = "Standalone Aven artifact store service"
+description = "Standalone HTTP service for the Aven artifact store"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -13,8 +13,23 @@ name = "aven-artifact-store"
 path = "src/main.rs"
 
 [dependencies]
-aven-artifact-store = { path = "../core" }
+aven-artifact-store-contract = { path = "../contract" }
+aven-artifact-store-core = { path = "../core" }
 aven-artifact-store-postgres = { path = "../postgres" }
+axum.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true

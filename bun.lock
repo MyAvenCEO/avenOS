@@ -49,6 +49,13 @@
         "@pulumi/pulumi": "3.256.0",
       },
     },
+    "libs/aven-artifact-store": {
+      "name": "@avenos/artifact-store",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^6.0.2",
+      },
+    },
     "libs/aven-board": {
       "name": "@avenos/aven-board",
       "version": "26.8.22-next.6",
@@ -133,6 +140,8 @@
     "@AvenOS/app": ["@AvenOS/app@workspace:app"],
 
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
+
+    "@avenos/artifact-store": ["@avenos/artifact-store@workspace:libs/aven-artifact-store"],
 
     "@avenos/aven-api": ["@avenos/aven-api@workspace:services/aven-api"],
 
