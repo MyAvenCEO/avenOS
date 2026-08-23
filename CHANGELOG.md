@@ -1,3 +1,16 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.23-next.4...v) (2026-08-23)
+
+
+### Bug Fixes
+
+* **ci:** format artifact fixture harness ([6c79e9d](https://github.com/MyAvenCEO/avenOS/commit/6c79e9d60712f25306d9de39545ceaf0b221e6ed))
+
+
+### Features
+
+* **artifact-processing:** add durable processor pipeline ([2426fba](https://github.com/MyAvenCEO/avenOS/commit/2426fba76bd4539f161ed7a427703f651e44d0f8))
+* **aven-api:** provision artifact processing per tenant ([c439250](https://github.com/MyAvenCEO/avenOS/commit/c43925042f24328d7ef12c2f1fc5364509fbb5d5))
+* **deploy:** roll out artifact processor safely ([69466b7](https://github.com/MyAvenCEO/avenOS/commit/69466b736789c9443c306adfb576583b74d3dc7e))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.23-next.3...v) (2026-08-23)
 
 
