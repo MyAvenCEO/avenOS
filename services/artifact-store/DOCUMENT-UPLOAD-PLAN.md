@@ -1,6 +1,6 @@
 # Document Upload Vertical-Slice Plan
 
-Status: spike implemented; manual desktop acceptance pending
+Status: spike implemented with per-customer database routing; manual desktop acceptance pending
 
 Date: 23 August 2026
 
@@ -57,10 +57,25 @@ credential and is the application authorization boundary. The native drop path c
 the trusted Tauri event-to-command IPC only for the duration of the call; it is never
 retained in UI state, chat history, model context, or a remote request.
 
-The initial local topology uses the configured preview scope. Name-to-scope selection
-and the final per-request Artifact Store authorization-decision adapter are follow-up
-work; request data must not be allowed to override publisher or scope context in this
-slice.
+Each customer environment database now owns one `artifact_store` schema and one stable
+initial scope. Aven API resolves the authenticated user to one exact ready environment
+and supplies its validated `cust_*` database name and scope over the private service
+boundary. Neither value is accepted from the desktop request. The Rust runtime keeps a
+bounded least-recently-used cache of small database pools; a separate internal
+provisioner applies migrations, registers built-in types, creates the scope, and grants
+the runtime role before the environment becomes ready.
+
+The component boundaries, control/data flows, lifecycle states, and existing-name
+rollout coverage are specified in
+[PER-CUSTOMER-ARCHITECTURE.md](PER-CUSTOMER-ARCHITECTURE.md). In particular, existing
+ready customer environments are upgraded automatically, while an older owned name with
+no `customer_environments` row still requires the reconciliation described there.
+
+The shared service token still represents the stable Aven API coordinator rather than
+a final short-lived signed authorization decision. Database-per-customer isolation,
+server-side routing, restricted cluster credentials, and suspension fencing are now in
+place; signed decisions and constrained security-definer SQL functions remain release
+hardening work.
 
 ## Current constraints
 
@@ -93,8 +108,9 @@ slice.
 6. Generate the publication UUID in the Tauri host before network activity. A retry
    for the same chat attachment reuses the exact publication UUID and intent while
    obtaining a fresh upload claim.
-7. Bind the root actor to the authenticated user in Aven API. The fixed preview
-   Artifact Store publisher remains the Aven API service identity.
+7. Bind the root actor to the authenticated user and resolve the exact customer
+   database/scope in Aven API. The stable Artifact Store publisher remains the Aven API
+   coordinator identity.
 8. Do not call the language model automatically when a file is dropped.
 
 ## Upload lifecycle and UI state

@@ -27,8 +27,12 @@ Implemented on `feat/artifact-store` as of 22 August 2026:
 - atomic root and run publication persistence, blob-authority rechecks, permanent
   publication replay/conflict handling and upload consumption;
 - exact artifact and whole/ranged content reads plus complete scope publication feed;
-- a fixed-service, fixed-scope bearer adapter with no anonymous or JSON-supplied
-  publisher fallback; and
+- a fixed-scope standalone adapter plus a shared per-customer runtime that accepts only
+  validated internal `cust_*` routing, uses bounded database pools, and has no anonymous
+  or JSON-supplied publisher fallback;
+- customer-environment provisioning that installs the schema, built-in types, stable
+  scope and preview runtime grants before readiness, including upgrade jobs for existing
+  databases and connection revocation on suspension; and
 - the independent `@avenos/artifact-store` TypeScript canonicalizer and root HTTP
   client, with passing Bun tests.
 
@@ -45,7 +49,8 @@ Still required before the root milestone exit gate:
   failure/concurrency injection;
 - artifact list/batch/reference/referrer/lineage reads with high-water cursors;
 - TypeScript prepared-intent outbox/result verification/projector lifecycle; and
-- the real `aven-api` authorization decision adapter.
+- short-lived signed `aven-api` authorization decisions (the current private routing
+  header is bound by Aven API but authenticated by one shared coordinator token).
 
 Complete run/graph read routes and the divergent recovery ceremony remain Slices 2 and
 3. Therefore this implementation remains explicitly non-production despite the
