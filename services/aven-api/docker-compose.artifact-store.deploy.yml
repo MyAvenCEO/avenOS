@@ -1,0 +1,63 @@
+x-artifact-deploy-logging: &artifact-deploy-logging
+  driver: local
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+    compress: "${DOCKER_LOG_COMPRESS:-true}"
+
+services:
+  artifact-store-provisioner:
+    image: ${AVEN_ARTIFACT_STORE_IMAGE}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *artifact-deploy-logging
+    environment:
+      ARTIFACT_STORE_PROVISIONER_DATABASE_URL: postgres://aven_provisioner:${AVEN_PROVISIONER_PASSWORD}@db:5432/postgres
+      ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN: ${ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN}
+      ARTIFACT_STORE_RUNTIME_ROLE: aven_artifact_store
+      ARTIFACT_STORE_PROVISIONER_LISTEN: 0.0.0.0:8088
+      ARTIFACT_STORE_HEALTH_PORT: 8088
+      RUST_LOG: ${ARTIFACT_STORE_LOG:-aven_artifact_store=info,tower_http=info}
+    command: ["serve-provisioner"]
+
+  artifact-store:
+    image: ${AVEN_ARTIFACT_STORE_IMAGE}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *artifact-deploy-logging
+    environment:
+      ARTIFACT_STORE_DATABASE_URL: postgres://aven_artifact_store:${ARTIFACT_STORE_RUNTIME_PASSWORD}@db:5432/postgres
+      ARTIFACT_STORE_TENANT_MODE: "true"
+      ARTIFACT_STORE_MAX_TENANT_POOLS: ${ARTIFACT_STORE_MAX_TENANT_POOLS:-64}
+      ARTIFACT_STORE_CONNECTIONS_PER_TENANT: ${ARTIFACT_STORE_CONNECTIONS_PER_TENANT:-2}
+      ARTIFACT_STORE_BEARER_TOKEN: ${ARTIFACT_STORE_BEARER_TOKEN}
+      ARTIFACT_STORE_PUBLISHER_ISSUER: aven-api
+      ARTIFACT_STORE_PUBLISHER_SUBJECT: artifact-coordinator
+      ARTIFACT_STORE_LISTEN: 0.0.0.0:8087
+      RUST_LOG: ${ARTIFACT_STORE_LOG:-aven_artifact_store=info,tower_http=info}
+
+  app:
+    depends_on:
+      artifact-store:
+        condition: service_healthy
+    environment:
+      ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
+      ARTIFACT_STORE_BEARER_TOKEN: ${ARTIFACT_STORE_BEARER_TOKEN}
+
+  environment-worker:
+    depends_on:
+      artifact-store-provisioner:
+        condition: service_healthy
+    environment:
+      ARTIFACT_STORE_PROVISIONER_BASE_URL: http://artifact-store-provisioner:8088
+      ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN: ${ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN}
+      ARTIFACT_STORE_RUNTIME_ROLE: aven_artifact_store
+      ARTIFACT_STORE_RUNTIME_PASSWORD: ${ARTIFACT_STORE_RUNTIME_PASSWORD}
