@@ -51,6 +51,66 @@ services:
       ARTIFACT_STORE_LISTEN: 0.0.0.0:8087
       RUST_LOG: ${ARTIFACT_STORE_LOG:-aven_artifact_store=info,tower_http=info}
 
+  artifact-processor-provisioner:
+    image: ${AVEN_ARTIFACT_STORE_IMAGE}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *artifact-deploy-logging
+    entrypoint: ["/usr/local/bin/aven-artifact-processor"]
+    environment:
+      ARTIFACT_PROCESSOR_PROVISIONER_DATABASE_URL: postgres://aven_provisioner:${AVEN_PROVISIONER_PASSWORD}@db:5432/postgres
+      ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN}
+      ARTIFACT_PROCESSOR_RUNTIME_ROLE: aven_artifact_processor
+      ARTIFACT_PROCESSOR_PROVISIONER_LISTEN: 0.0.0.0:8090
+      ARTIFACT_STORE_HEALTH_PORT: 8090
+      RUST_LOG: ${ARTIFACT_PROCESSOR_LOG:-aven_artifact_processor=info,tower_http=info}
+    command: ["serve-provisioner"]
+
+  artifact-processor:
+    image: ${AVEN_ARTIFACT_STORE_IMAGE}
+    restart: unless-stopped
+    mem_limit: ${ARTIFACT_PROCESSOR_MEMORY_LIMIT:-768m}
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *artifact-deploy-logging
+    entrypoint: ["/usr/local/bin/aven-artifact-processor"]
+    depends_on:
+      app:
+        condition: service_healthy
+      artifact-store:
+        condition: service_healthy
+    environment:
+      ARTIFACT_PROCESSOR_DATABASE_URL: postgres://aven_artifact_processor:${ARTIFACT_PROCESSOR_RUNTIME_PASSWORD}@db:5432/postgres
+      ARTIFACT_PROCESSOR_TENANT_MODE: "true"
+      ARTIFACT_PROCESSOR_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_BEARER_TOKEN}
+      ARTIFACT_PROCESSOR_DIRECTORY_URL: http://app:3000/internal/v1/artifact-processing/tenants
+      ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN}
+      ARTIFACT_PROCESSOR_MAX_TENANT_POOLS: ${ARTIFACT_PROCESSOR_MAX_TENANT_POOLS:-64}
+      ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT: ${ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT:-2}
+      ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS: ${ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS:-30}
+      ARTIFACT_PROCESSOR_VISION_ENABLED: ${ARTIFACT_PROCESSOR_VISION_ENABLED}
+      ARTIFACT_PROCESSOR_VISION_BASE_URL: ${ARTIFACT_PROCESSOR_VISION_BASE_URL}
+      ARTIFACT_PROCESSOR_VISION_MODEL: ${ARTIFACT_PROCESSOR_VISION_MODEL}
+      ARTIFACT_PROCESSOR_VISION_PROFILE: ${ARTIFACT_PROCESSOR_VISION_PROFILE}
+      ARTIFACT_PROCESSOR_VISION_AUTH_MODE: ${ARTIFACT_PROCESSOR_VISION_AUTH_MODE}
+      ARTIFACT_PROCESSOR_VISION_API_KEY: ${ARTIFACT_PROCESSOR_VISION_API_KEY}
+      ARTIFACT_PROCESSOR_VISION_MAX_PAGES: ${ARTIFACT_PROCESSOR_VISION_MAX_PAGES:-15}
+      ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS: ${ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS:-180}
+      ARTIFACT_PROCESSOR_LISTEN: 0.0.0.0:8089
+      ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
+      ARTIFACT_STORE_BEARER_TOKEN: ${ARTIFACT_STORE_BEARER_TOKEN}
+      ARTIFACT_STORE_HEALTH_PORT: 8089
+      RUST_LOG: ${ARTIFACT_PROCESSOR_LOG:-aven_artifact_processor=info,tower_http=info}
+    command: ["serve"]
+
   app:
     depends_on:
       artifact-store:
@@ -58,6 +118,9 @@ services:
     environment:
       ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
       ARTIFACT_STORE_BEARER_TOKEN: ${ARTIFACT_STORE_BEARER_TOKEN}
+      ARTIFACT_PROCESSOR_BASE_URL: http://artifact-processor:8089
+      ARTIFACT_PROCESSOR_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_BEARER_TOKEN}
+      ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN}
 
   environment-worker:
     depends_on:
@@ -68,3 +131,7 @@ services:
       ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN: ${ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN}
       ARTIFACT_STORE_RUNTIME_ROLE: aven_artifact_store
       ARTIFACT_STORE_RUNTIME_PASSWORD: ${ARTIFACT_STORE_RUNTIME_PASSWORD}
+      ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL: http://artifact-processor-provisioner:8090
+      ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN}
+      ARTIFACT_PROCESSOR_RUNTIME_ROLE: aven_artifact_processor
+      ARTIFACT_PROCESSOR_RUNTIME_PASSWORD: ${ARTIFACT_PROCESSOR_RUNTIME_PASSWORD}

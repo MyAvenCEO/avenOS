@@ -358,6 +358,11 @@ jobs:
           ARTIFACT_STORE_BEARER_TOKEN: ${{ secrets.ARTIFACT_STORE_BEARER_TOKEN }}
           ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN: ${{ secrets.ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN }}
           ARTIFACT_STORE_RUNTIME_PASSWORD: ${{ secrets.ARTIFACT_STORE_RUNTIME_PASSWORD }}
+          ARTIFACT_PROCESSOR_BEARER_TOKEN: ${{ secrets.ARTIFACT_PROCESSOR_BEARER_TOKEN }}
+          ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN: ${{ secrets.ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN }}
+          ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN: ${{ secrets.ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN }}
+          ARTIFACT_PROCESSOR_RUNTIME_PASSWORD: ${{ secrets.ARTIFACT_PROCESSOR_RUNTIME_PASSWORD }}
+          ARTIFACT_PROCESSOR_VISION_API_KEY: ${{ secrets.ARTIFACT_PROCESSOR_VISION_API_KEY }}
           ARTIFACT_STORE_MAX_TENANT_POOLS: ${{ vars.ARTIFACT_STORE_MAX_TENANT_POOLS }}
           ARTIFACT_STORE_CONNECTIONS_PER_TENANT: ${{ vars.ARTIFACT_STORE_CONNECTIONS_PER_TENANT }}
           ARTIFACT_STORE_MEMORY_LIMIT: ${{ vars.ARTIFACT_STORE_MEMORY_LIMIT }}
@@ -366,6 +371,17 @@ jobs:
           ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE: ${{ vars.ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE }}
           ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE: ${{ vars.ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE }}
           ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE: ${{ vars.ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE }}
+          ARTIFACT_PROCESSOR_MAX_TENANT_POOLS: ${{ vars.ARTIFACT_PROCESSOR_MAX_TENANT_POOLS }}
+          ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT: ${{ vars.ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT }}
+          ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS: ${{ vars.ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS }}
+          ARTIFACT_PROCESSOR_MEMORY_LIMIT: ${{ vars.ARTIFACT_PROCESSOR_MEMORY_LIMIT }}
+          ARTIFACT_PROCESSOR_VISION_ENABLED: ${{ vars.ARTIFACT_PROCESSOR_VISION_ENABLED }}
+          ARTIFACT_PROCESSOR_VISION_BASE_URL: ${{ vars.ARTIFACT_PROCESSOR_VISION_BASE_URL }}
+          ARTIFACT_PROCESSOR_VISION_MODEL: ${{ vars.ARTIFACT_PROCESSOR_VISION_MODEL }}
+          ARTIFACT_PROCESSOR_VISION_PROFILE: ${{ vars.ARTIFACT_PROCESSOR_VISION_PROFILE }}
+          ARTIFACT_PROCESSOR_VISION_AUTH_MODE: ${{ vars.ARTIFACT_PROCESSOR_VISION_AUTH_MODE }}
+          ARTIFACT_PROCESSOR_VISION_MAX_PAGES: ${{ vars.ARTIFACT_PROCESSOR_VISION_MAX_PAGES }}
+          ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS: ${{ vars.ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS }}
           SMTP_URL: ${{ secrets.SMTP_URL }}
           CREEM_API_KEY: ${{ secrets.CREEM_API_KEY }}
           CREEM_PRODUCT_ID: ${{ secrets.CREEM_PRODUCT_ID }}
@@ -391,6 +407,28 @@ jobs:
             echo "::error::Artifact Store runtime and provisioner bearer credentials must differ."
             exit 1
           fi
+          processor_credentials=(
+            "$ARTIFACT_PROCESSOR_BEARER_TOKEN"
+            "$ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN"
+            "$ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN"
+            "$ARTIFACT_PROCESSOR_RUNTIME_PASSWORD"
+          )
+          for secret in "${processor_credentials[@]}"; do
+            if [[ ! "$secret" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then
+              echo "::error::Artifact Processor credentials must be 32-128 URL-safe characters."
+              exit 1
+            fi
+          done
+          distinct_credentials=(
+            "$ARTIFACT_STORE_BEARER_TOKEN"
+            "$ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN"
+            "$ARTIFACT_STORE_RUNTIME_PASSWORD"
+            "${processor_credentials[@]}"
+          )
+          if [ "$(printf '%s\n' "${distinct_credentials[@]}" | sort -u | wc -l)" -ne "${#distinct_credentials[@]}" ]; then
+            echo "::error::Artifact Store and Processor service credentials must all differ."
+            exit 1
+          fi
           DOCKER_LOG_MAX_SIZE=${DOCKER_LOG_MAX_SIZE:-10m}
           DOCKER_LOG_MAX_FILE=${DOCKER_LOG_MAX_FILE:-5}
           DOCKER_LOG_COMPRESS=${DOCKER_LOG_COMPRESS:-true}
@@ -400,6 +438,68 @@ jobs:
           ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE=${ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE:-32}
           ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE=${ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE:-104857600}
           ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE=${ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE:-1073741824}
+          ARTIFACT_PROCESSOR_MAX_TENANT_POOLS=${ARTIFACT_PROCESSOR_MAX_TENANT_POOLS:-64}
+          ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT=${ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT:-2}
+          ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS=${ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS:-30}
+          ARTIFACT_PROCESSOR_MEMORY_LIMIT=${ARTIFACT_PROCESSOR_MEMORY_LIMIT:-768m}
+          ARTIFACT_PROCESSOR_VISION_MAX_PAGES=${ARTIFACT_PROCESSOR_VISION_MAX_PAGES:-15}
+          ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS=${ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS:-180}
+          if [ "$ARTIFACT_PROCESSOR_VISION_ENABLED" != true ]; then
+            echo "::error::ARTIFACT_PROCESSOR_VISION_ENABLED must be true for the next finance-processing rollout."
+            exit 1
+          fi
+          node <<'NODE'
+          const raw = process.env.ARTIFACT_PROCESSOR_VISION_BASE_URL ?? ''
+          let url
+          try {
+            url = new URL(raw)
+          } catch {
+            console.error('::error::ARTIFACT_PROCESSOR_VISION_BASE_URL must be an absolute HTTPS URL.')
+            process.exit(1)
+          }
+          if (
+            raw.trim() !== raw ||
+            /[\r\n]/.test(raw) ||
+            url.protocol !== 'https:' ||
+            !url.hostname ||
+            url.username ||
+            url.password ||
+            url.search ||
+            url.hash
+          ) {
+            console.error('::error::ARTIFACT_PROCESSOR_VISION_BASE_URL must be HTTPS without credentials, query, fragment, or surrounding whitespace.')
+            process.exit(1)
+          }
+          NODE
+          if [[ ! "$ARTIFACT_PROCESSOR_VISION_MODEL" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$ ]]; then
+            echo "::error::ARTIFACT_PROCESSOR_VISION_MODEL must be a 1-255 character deployment identifier without whitespace."
+            exit 1
+          fi
+          case "$ARTIFACT_PROCESSOR_VISION_PROFILE" in
+            openai-tools|openai-json-schema|qwen-tools|generic-json) ;;
+            *)
+              echo "::error::ARTIFACT_PROCESSOR_VISION_PROFILE is unsupported."
+              exit 1
+              ;;
+          esac
+          case "$ARTIFACT_PROCESSOR_VISION_AUTH_MODE" in
+            bearer)
+              if [ "${#ARTIFACT_PROCESSOR_VISION_API_KEY}" -lt 20 ] || [ "${#ARTIFACT_PROCESSOR_VISION_API_KEY}" -gt 512 ] || [[ "$ARTIFACT_PROCESSOR_VISION_API_KEY" =~ [[:space:]] ]]; then
+                echo "::error::Bearer vision auth requires an API key of 20-512 non-whitespace characters."
+                exit 1
+              fi
+              ;;
+            none)
+              if [ -n "$ARTIFACT_PROCESSOR_VISION_API_KEY" ]; then
+                echo "::error::Do not configure a vision API key when auth mode is none."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::ARTIFACT_PROCESSOR_VISION_AUTH_MODE must be bearer or none."
+              exit 1
+              ;;
+          esac
           if [[ ! "$DOCKER_LOG_MAX_SIZE" =~ ^[1-9][0-9]*[kmg]$ ]]; then
             echo "::error::DOCKER_LOG_MAX_SIZE must be a positive size such as 10m."
             exit 1
@@ -416,6 +516,24 @@ jobs:
             echo "::error::ARTIFACT_STORE_MEMORY_LIMIT must be a positive size such as 512m."
             exit 1
           fi
+          if [[ ! "$ARTIFACT_PROCESSOR_MEMORY_LIMIT" =~ ^[1-9][0-9]*[mg]$ ]]; then
+            echo "::error::ARTIFACT_PROCESSOR_MEMORY_LIMIT must be a positive size such as 768m."
+            exit 1
+          fi
+          for value in "$ARTIFACT_PROCESSOR_MAX_TENANT_POOLS" "$ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT" "$ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS"; do
+            if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::Artifact Processor limits must be positive integers."
+              exit 1
+            fi
+          done
+          if [[ ! "$ARTIFACT_PROCESSOR_VISION_MAX_PAGES" =~ ^([1-9]|[1-5][0-9]|6[0-3])$ ]]; then
+            echo "::error::ARTIFACT_PROCESSOR_VISION_MAX_PAGES must be from 1 through 63."
+            exit 1
+          fi
+          if [[ ! "$ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || [ "$ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS" -lt 5 ] || [ "$ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS" -gt 900 ]; then
+            echo "::error::ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS must be from 5 through 900."
+            exit 1
+          fi
           for value in "$ARTIFACT_STORE_MAX_UPLOAD_BYTES" "$ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS" "$ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE" "$ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE" "$ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE"; do
             if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
               echo "::error::Artifact Store admission limits must be positive integers."
@@ -427,6 +545,7 @@ jobs:
           install -m 644 services/aven-api/docker-compose.deploy.yml "$RUNNER_TEMP/identity-deploy/docker-compose.deploy.yml"
           install -m 644 services/aven-api/docker-compose.artifact-store.deploy.yml "$RUNNER_TEMP/identity-deploy/docker-compose.artifact-store.deploy.yml"
           install -m 755 services/aven-api/deploy/db-init.sh "$RUNNER_TEMP/identity-deploy/deploy/db-init.sh"
+          install -m 755 services/aven-api/deploy/rollback-previous.sh "$RUNNER_TEMP/identity-deploy/deploy/rollback-previous.sh"
           install -m 644 services/aven-api/deploy/Caddyfile "$RUNNER_TEMP/identity-deploy/deploy/Caddyfile"
           install -m 600 /dev/null "$RUNNER_TEMP/identity-deploy/.env"
           {
@@ -462,6 +581,22 @@ jobs:
             printf 'ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE=%s\n' "$ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE"
             printf 'ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE=%s\n' "$ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE"
             printf 'ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE=%s\n' "$ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE"
+            printf 'ARTIFACT_PROCESSOR_BEARER_TOKEN=%s\n' "$ARTIFACT_PROCESSOR_BEARER_TOKEN"
+            printf 'ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN=%s\n' "$ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN"
+            printf 'ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN=%s\n' "$ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN"
+            printf 'ARTIFACT_PROCESSOR_RUNTIME_PASSWORD=%s\n' "$ARTIFACT_PROCESSOR_RUNTIME_PASSWORD"
+            printf 'ARTIFACT_PROCESSOR_MAX_TENANT_POOLS=%s\n' "$ARTIFACT_PROCESSOR_MAX_TENANT_POOLS"
+            printf 'ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT=%s\n' "$ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT"
+            printf 'ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS=%s\n' "$ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS"
+            printf 'ARTIFACT_PROCESSOR_MEMORY_LIMIT=%s\n' "$ARTIFACT_PROCESSOR_MEMORY_LIMIT"
+            printf 'ARTIFACT_PROCESSOR_VISION_ENABLED=%s\n' "$ARTIFACT_PROCESSOR_VISION_ENABLED"
+            printf 'ARTIFACT_PROCESSOR_VISION_BASE_URL=%s\n' "$ARTIFACT_PROCESSOR_VISION_BASE_URL"
+            printf 'ARTIFACT_PROCESSOR_VISION_MODEL=%s\n' "$ARTIFACT_PROCESSOR_VISION_MODEL"
+            printf 'ARTIFACT_PROCESSOR_VISION_PROFILE=%s\n' "$ARTIFACT_PROCESSOR_VISION_PROFILE"
+            printf 'ARTIFACT_PROCESSOR_VISION_AUTH_MODE=%s\n' "$ARTIFACT_PROCESSOR_VISION_AUTH_MODE"
+            printf 'ARTIFACT_PROCESSOR_VISION_API_KEY=%s\n' "$ARTIFACT_PROCESSOR_VISION_API_KEY"
+            printf 'ARTIFACT_PROCESSOR_VISION_MAX_PAGES=%s\n' "$ARTIFACT_PROCESSOR_VISION_MAX_PAGES"
+            printf 'ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS=%s\n' "$ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS"
             printf 'SMTP_URL=%s\n' "$SMTP_URL"
             printf 'CREEM_API_KEY=%s\n' "$CREEM_API_KEY"
             printf 'CREEM_PRODUCT_ID=%s\n' "$CREEM_PRODUCT_ID"
@@ -516,7 +651,7 @@ jobs:
           # deliberately use database heartbeats and are verified by /api/health/status below.
           # The generated upload path is intentionally expanded by this runner.
           # shellcheck disable=SC2029
-          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' /opt/aven-api/deploy/db-init.sh && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --wait --wait-timeout 120 db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres -c 'GRANT pg_signal_backend TO aven_provisioner' && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store-provisioner artifact-store app caddy && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps email-worker environment-worker && rm -rf '$upload'"
+          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy /opt/aven-api/previous && if sudo test -f /opt/aven-api/.env; then sudo install -m 600 /opt/aven-api/.env /opt/aven-api/previous/.env && sudo install -m 644 /opt/aven-api/docker-compose.yml /opt/aven-api/docker-compose.deploy.yml /opt/aven-api/docker-compose.artifact-store.deploy.yml /opt/aven-api/previous/; fi && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' '$upload/deploy/rollback-previous.sh' /opt/aven-api/deploy/ && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --wait --wait-timeout 120 db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres -c 'GRANT pg_signal_backend TO aven_provisioner' && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store-provisioner artifact-processor-provisioner && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps environment-worker && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store app artifact-processor caddy && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps email-worker && rm -rf '$upload'"
 
       - name: Remove temporary host upload
         if: always()

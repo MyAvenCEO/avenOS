@@ -1,6 +1,9 @@
 # TLS terminator for VPS deployments (compose profile "prod").
 # Caddy provisions Let's Encrypt certificates automatically for $DOMAIN.
 {$DOMAIN} {
+	# Service-to-service control APIs are reachable only on the Compose network.
+	respond /internal/* 404
+
 	@artifact_upload {
 		method PUT
 		path /api/artifacts/files/*
