@@ -21,7 +21,7 @@ cargo run -p aven-artifact-store-server --bin aven-artifact-store -- migrate
 ```
 
 `migrate` applies the embedded migration and registers the exact source-controlled
-`core.file@1` and `core.bundle@1` definitions. Start the fixed-scope preview adapter:
+built-in type definitions. Start the fixed-scope preview adapter:
 
 ```bash
 export ARTIFACT_STORE_SCOPE_ID=11111111-1111-4111-8111-111111111111
@@ -60,12 +60,91 @@ docker compose \
   -f docker-compose.artifact-store.yml \
   up --build -d
 bun run artifact-store:smoke
+bun run artifact-processing:smoke
+bun run artifact-processing:failure-smoke
+bun run artifact-processing:real-smoke
+bun run artifact-processing:real-pdf-smoke
+bun run artifact-processing:real-unsupported-smoke
 ```
 
 See the [Aven API local services documentation](../aven-api/README.md#local-services)
 for endpoints, port overrides, and teardown. The direct smoke test uses
 `cust_artifact_local`; customer databases created by the environment worker receive the
 same schema automatically.
+
+### Local artifact processing
+
+The local overlay also starts `artifact-processor` and its one-shot schema migrator.
+The processor discovers normal `desktop-drop` uploads as well as explicit test inputs.
+With vision disabled, PDF, PNG, and JPEG files take the deterministic path:
+byte-signature inspection, logical page decomposition, native PDF word extraction with
+bounding boxes, deterministic page signals, document text assembly, and whole-file aggregation. The
+local decoder runner clears credentials, avoids a shell, uses bounded scratch/output,
+has a hard deadline, and runs inside the read-only/capability-free Compose container.
+This is not yet a separate no-network decoder sandbox; that remains required before
+enabling broader hostile-file formats.
+
+#### Optional local vision model
+
+The default local stack keeps model calls disabled. To exercise OCR, semantic
+classification, invoice extraction, and account-statement extraction against an
+OpenAI-compatible endpoint, set the profile matching that model's request and response
+template:
+
+```bash
+export ARTIFACT_PROCESSOR_VISION_ENABLED=true
+export ARTIFACT_PROCESSOR_VISION_BASE_URL=http://host.docker.internal:8000/v1
+export ARTIFACT_PROCESSOR_VISION_MODEL=Qwen/Qwen3.6-27B
+export ARTIFACT_PROCESSOR_VISION_PROFILE=qwen-tools
+export ARTIFACT_PROCESSOR_VISION_AUTH_MODE=none
+docker compose -f services/aven-api/docker-compose.yml \
+  -f services/aven-api/docker-compose.artifact-store.yml \
+  up -d --build artifact-processor
+```
+
+Local HTTP is explicitly allowed only by the local overlay; deployment requires HTTPS.
+Set auth mode to `bearer` when an API key is required, otherwise leave the local
+default `none` and omit the key. Profiles are `openai-tools`, `openai-json-schema`, `qwen-tools`, and `generic-json`.
+They share one validated finance contract but differ in tool/JSON response mode and
+model-specific request fields. Paid calls use a per-customer exact-request ledger and
+an idempotency key. Provider response bodies and document text are not logged.
+
+For a no-cost contract smoke, start `bun run --cwd services/aven-api
+artifact-processing:vision-mock`, configure the local Processor for
+`http://host.docker.internal:18080/v1` with profile `openai-json-schema`, then run
+`bun run test:artifact-processing:vision-smoke` from the repository root. The smoke
+publishes synthetic PDF invoice and statement fixtures only.
+
+The real PNG and PDF smokes deliberately lie about the declared media type and verify
+that byte signatures win. The mock success smoke still exercises all twelve semantic
+stages through the final `invoice` projection. The mock failure smoke verifies a stable
+error state and retained presentation. Files which are encrypted, malformed,
+unsupported end in `needs_review` or `failed` with a stable warning. With vision
+enabled, scanned pages are OCR'd and remain presentable at the last successful stage if
+later classification, extraction, or validation fails.
+
+The current release limit is 63 pages. This is an explicit rejection boundary, not
+truncation: one atomic decomposition publication contains all pages plus its bundle,
+and the store admits 64 artifacts. Durable multi-batch decomposition is the next step
+before raising that limit.
+
+Processor status is available directly at port 8089 for the smoke harness and through
+the authenticated Aven API route:
+
+```text
+GET /api/artifacts/{artifactId}/processing
+```
+
+The `next` deployment uses the same image for Store and Processor binaries. A separate
+Processor provisioner installs schema version 3 and the exact scope in every ready
+customer database. The runtime discovers only control-plane-approved bindings through
+the private Aven API directory, uses bounded per-customer pools, and participates in
+aggregate deployment health. Required GitHub Environment values and rollback steps are
+in the [deployment guide](../aven-api/docs/github-deployment.md#first-processor-rollout-to-next).
+
+The implementation boundary, state machines, crash semantics, actual verification
+results, and remaining work are recorded in
+[ARTIFACT-PROCESSING-IMPLEMENTATION-REPORT.md](ARTIFACT-PROCESSING-IMPLEMENTATION-REPORT.md).
 
 Available commands are `migrate`, `verify`, `serve`, and `serve-provisioner`. The implemented preview HTTP
 surface is:
