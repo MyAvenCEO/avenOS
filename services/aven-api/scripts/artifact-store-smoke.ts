@@ -8,6 +8,7 @@ const baseUrl = (
 ).replace(/\/$/, '')
 
 const authorization = `Bearer ${bearerToken}`
+const wrongScopeId = '99999999-9999-4999-8999-999999999999'
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
 	const headers = new Headers(init.headers)
@@ -22,6 +23,17 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
 
 async function json(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
 	return (await (await request(path, init)).json()) as Record<string, unknown>
+}
+
+async function expectRejected(path: string, database: string): Promise<void> {
+	const response = await fetch(`${baseUrl}${path}`, {
+		headers: {
+			authorization,
+			'x-aven-artifact-database': database
+		}
+	})
+	if (response.ok) throw new Error(`Expected ${path} with database ${database} to fail closed`)
+	await response.body?.cancel()
 }
 
 function requiredString(record: Record<string, unknown>, key: string): string {
@@ -55,41 +67,57 @@ await json(`/v1/scopes/${scopeId}/uploads/${claimId}`, {
 	body: bytes
 })
 
-const publication = await json(`/v1/scopes/${scopeId}/publications/${publicationId}`, {
+const publicationBody = JSON.stringify({
+	intent: {
+		commandVersion: 1,
+		publicationId,
+		scopeId,
+		kind: 'roots',
+		rootActor: { kind: 'service', id: 'service:aven-api-local-smoke' },
+		artifacts: [
+			{
+				localKey: 'file',
+				typeKey: 'core.file',
+				typeVersion: 1,
+				payload: {
+					originalName: 'compose-smoke.txt',
+					declaredMediaType: 'text/plain',
+					sourceKind: 'compose-smoke'
+				},
+				blob: { sha256, length: bytes.byteLength },
+				references: [],
+				output: null
+			}
+		],
+		evidence: []
+	},
+	blobAuthorities: {
+		file: { kind: 'upload-claim', claimId }
+	}
+})
+const publicationInit = {
 	method: 'PUT',
 	headers: {
 		'content-type': 'application/json',
 		'if-artifact-store-epoch': storeEpoch
 	},
-	body: JSON.stringify({
-		intent: {
-			commandVersion: 1,
-			publicationId,
-			scopeId,
-			kind: 'roots',
-			rootActor: { kind: 'service', id: 'service:aven-api-local-smoke' },
-			artifacts: [
-				{
-					localKey: 'file',
-					typeKey: 'core.file',
-					typeVersion: 1,
-					payload: {
-						originalName: 'compose-smoke.txt',
-						declaredMediaType: 'text/plain',
-						sourceKind: 'compose-smoke'
-					},
-					blob: { sha256, length: bytes.byteLength },
-					references: [],
-					output: null
-				}
-			],
-			evidence: []
-		},
-		blobAuthorities: {
-			file: { kind: 'upload-claim', claimId }
-		}
-	})
-})
+	body: publicationBody
+} satisfies RequestInit
+const publication = await json(
+	`/v1/scopes/${scopeId}/publications/${publicationId}`,
+	publicationInit
+)
+const replay = await json(`/v1/scopes/${scopeId}/publications/${publicationId}`, publicationInit)
+if (replay.replayed !== true || replay.scopeSequence !== publication.scopeSequence) {
+	throw new Error('Idempotent publication replay returned a different result')
+}
+
+await expectRejected('/v1/context', 'not_a_customer_database')
+await expectRejected('/v1/context', 'cust_missing_for_smoke')
+await expectRejected(
+	`/v1/scopes/${wrongScopeId}/publications?storeEpoch=${storeEpoch}&afterSequence=0&limit=1`,
+	databaseName
+)
 
 const artifacts = publication.artifacts
 if (!Array.isArray(artifacts) || artifacts.length !== 1) {

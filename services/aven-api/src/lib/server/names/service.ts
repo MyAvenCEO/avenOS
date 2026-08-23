@@ -319,7 +319,7 @@ export class NameService {
 					'SELECT * FROM name_holds WHERE id=$1 OR name=$2 ORDER BY (id=$1) DESC LIMIT 1',
 					[String(event.metadata.holdId ?? ''), name]
 				)
-			).rows[0] as Record<string, any> | undefined
+			).rows[0] as HoldRow | undefined
 			if (existing) {
 				// Same checkout id → a webhook replay/duplicate delivery, not a
 				// conflict; only a DIFFERENT paid checkout losing the race is one.
@@ -412,6 +412,7 @@ export class NameService {
 				)
 			).rows[0] as { name: string; owner_user_id: string } | undefined
 			if (!row) return { revoked: false }
+			await this.lockName(client, row.name)
 			await client.query(
 				"UPDATE names SET status='revoked', revoked_at=now(), revoke_reason=$1, updated_at=now() WHERE name=$2",
 				[event.type, row.name]

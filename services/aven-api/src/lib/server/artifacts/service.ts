@@ -7,7 +7,7 @@ import {
 import type { ArtifactStoreConfig } from '../config.js'
 import { AppError } from '../errors.js'
 
-export const MAX_ARTIFACT_FILE_BYTES = 100 * 1024 * 1024
+export const MAX_ARTIFACT_FILE_BYTES = 25 * 1024 * 1024
 
 export interface PublishFileInput {
 	userId: string

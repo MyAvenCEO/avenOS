@@ -19,7 +19,8 @@ BEGIN
 
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'aven_environment_worker') THEN
     GRANT USAGE ON SCHEMA public TO aven_environment_worker;
-    GRANT SELECT, UPDATE ON customer_environments TO aven_environment_worker;
+    GRANT SELECT ON names TO aven_environment_worker;
+    GRANT SELECT, INSERT, UPDATE ON customer_environments TO aven_environment_worker;
     GRANT SELECT, INSERT, UPDATE ON customer_environment_jobs TO aven_environment_worker;
     GRANT SELECT, INSERT ON customer_environment_logs TO aven_environment_worker;
     GRANT USAGE, SELECT ON SEQUENCE customer_environment_logs_id_seq TO aven_environment_worker;

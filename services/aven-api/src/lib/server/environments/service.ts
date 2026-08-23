@@ -4,6 +4,7 @@ import { writeAudit } from '../audit.js'
 import { type Queryable, withTransaction } from '../db.js'
 import { AppError } from '../errors.js'
 import { environmentNames } from './naming.js'
+import { CURRENT_ARTIFACT_STORE_SCHEMA_VERSION } from './provisioning.js'
 
 export class EnvironmentService {
 	constructor(private pool: pg.Pool) {}
@@ -67,8 +68,12 @@ export class EnvironmentService {
 	}> {
 		const rows = (
 			await this.pool.query(
-				`SELECT id,database_name,artifact_scope_id,artifact_store_status,status
-         FROM customer_environments WHERE owner_user_id=$1 ORDER BY id LIMIT 2`,
+				`SELECT environment.id,environment.database_name,environment.artifact_scope_id,environment.artifact_store_schema_version,
+				        environment.artifact_store_status,environment.status
+				 FROM customer_environments environment
+				 JOIN names name_record ON name_record.name=environment.name
+				 WHERE environment.owner_user_id=$1 AND name_record.status='owned'
+				 ORDER BY environment.id LIMIT 2`,
 				[userId]
 			)
 		).rows as Array<{
@@ -76,6 +81,7 @@ export class EnvironmentService {
 			database_name: string
 			artifact_scope_id: string
 			artifact_store_status: string
+			artifact_store_schema_version: number
 			status: string
 		}>
 		const [environment, extraEnvironment] = rows
@@ -89,7 +95,11 @@ export class EnvironmentService {
 				'Select a customer environment before storing artifacts.'
 			)
 		}
-		if (environment.status !== 'ready' || environment.artifact_store_status !== 'ready') {
+		if (
+			environment.status !== 'ready' ||
+			environment.artifact_store_status !== 'ready' ||
+			environment.artifact_store_schema_version < CURRENT_ARTIFACT_STORE_SCHEMA_VERSION
+		) {
 			throw new AppError(
 				409,
 				'ARTIFACT_ENVIRONMENT_NOT_READY',
@@ -120,7 +130,7 @@ export class EnvironmentService {
 			[now, row.id]
 		)
 		const replaced = await connection.query(
-			"UPDATE customer_environment_jobs SET operation='suspend',available_at=$1 WHERE environment_id=$2 AND status='queued'",
+			"UPDATE customer_environment_jobs SET operation='suspend',attempt=0,available_at=$1,error_code=NULL,error_message=NULL WHERE environment_id=$2 AND status='queued'",
 			[now, row.id]
 		)
 		if (replaced.rowCount === 0) await this.enqueueJob(connection, row.id, 'suspend', now)
@@ -147,7 +157,7 @@ export class EnvironmentService {
 	async status(name: string) {
 		const row = (
 			await this.pool.query(
-				`SELECT id,name,database_name,artifact_scope_id,artifact_store_status,owner_role,stack_name,contract_version,status,last_operation,
+				`SELECT id,name,database_name,artifact_scope_id,artifact_store_status,artifact_store_schema_version,owner_role,stack_name,contract_version,status,last_operation,
               last_error_code,last_error_message,queued_at,provisioning_at,ready_at,suspended_at,failed_at,updated_at
        FROM customer_environments WHERE name=$1`,
 				[environmentNames(name).name]

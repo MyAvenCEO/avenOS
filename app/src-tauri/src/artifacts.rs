@@ -9,7 +9,7 @@ use tauri::Emitter;
 
 use crate::auth::{api_endpoint, session_token, AuthState};
 
-const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
+const MAX_FILE_BYTES: u64 = 25 * 1024 * 1024;
 const HASH_BUFFER_BYTES: usize = 256 * 1024;
 
 #[derive(Clone, Serialize)]
@@ -135,7 +135,7 @@ fn upload(
     }
     let length = metadata.len();
     if length > MAX_FILE_BYTES {
-        return Err("Files may not exceed 100 MiB.".to_string());
+        return Err("Files may not exceed 25 MiB.".to_string());
     }
     let original_name = path
         .file_name()
