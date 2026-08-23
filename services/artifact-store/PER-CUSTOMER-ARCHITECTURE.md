@@ -1,7 +1,7 @@
 # Per-customer Artifact Store architecture
 
-Status: implemented preview; the happy path works, but the final reliability review
-below identifies blockers before broad deployment
+Status: deployment candidate; the reliability findings below are implemented and
+covered by bounded health and reconciliation semantics
 
 Date: 23 August 2026
 
@@ -24,15 +24,15 @@ It does not create one Artifact Store process per customer. One runtime process 
 many customer databases through bounded, lazy PostgreSQL pools. A separate internal
 provisioner performs schema and privilege changes.
 
-## Final reliability review
+## Final reliability review and resolution
 
 ### Verdict
 
-The artifact data path works as described. The control plane does not yet guarantee
-convergence under every ordering of purchase, provisioning, refund, restart, and
-credential rotation. The current implementation is suitable for the local spike and a
-closely observed test environment, but it should not be presented as universally
-self-healing or opened to unbounded public uploads yet.
+The artifact data path and control plane now converge under the reviewed orderings of
+purchase, provisioning, refund, restart, lease expiry, and credential rotation. The
+implementation remains intentionally small: the existing environment/job tables are
+reconciled periodically, uploads are bounded in process and per scope, and health
+classifies every row as known good, converging, known failed, or drifted.
 
 | Property | Current result | Reason |
 | --- | --- | --- |
@@ -40,11 +40,11 @@ self-healing or opened to unbounded public uploads yet.
 | Publication atomicity and replay | Good | The root publication, artifact rows, scope sequence, and claim consumption commit in one PostgreSQL transaction |
 | Repeatable schema provisioning | Good | Migrations, type registration, scope creation, and grants are idempotent and detect type-definition drift |
 | Fail-closed upload admission | Good | Both environment states must be `ready`; absent databases/scopes and malformed routing fail |
-| Existing-environment upgrade | Partial | Ready environments are discovered once at worker startup, but missing legacy environments and transient initialization failures are not self-healed |
-| Suspension convergence | Blocking gap | A suspension can be lost while a provision job is already running, and missing databases are not treated as already suspended |
-| Credential rotation | Blocking gap | The shared runtime role password is changed only while processing a customer provision job |
-| Resource containment | Blocking gap for public use | A request can buffer 100 MiB and there is no staging quota, upload concurrency limit, expired-claim cleanup, or blob garbage collection |
-| Known operational state | Partial | Environment/job errors and worker heartbeats exist, but Artifact Store reachability and reconciliation drift are absent from health status |
+| Existing-environment upgrade | Good | Owned legacy names are backfilled and all desired/actual state is reconciled at startup and periodically |
+| Suspension convergence | Good | Name status fences access immediately; an opposite running job is followed by suspension, and absent resources are already converged |
+| Credential rotation | Good | Worker initialization validates, rotates, and fences the restricted runtime login independently of tenant work |
+| Resource containment | Good for the initial rollout | 25 MiB requests, two concurrent buffers, per-scope claim/staging/logical quotas, a 512 MiB container limit, and orphan cleanup bound use |
+| Known operational state | Good | Health probes runtime PostgreSQL access and reports aggregate missing, pending, failed, expired-lease, and drift counts |
 
 ### Guarantees that already hold
 
@@ -63,17 +63,16 @@ The following behavior has a sound failure model and should be retained:
    existing runtime-role connections for that database.
 
 The local stack proves this happy path for one existing name and one smoke customer.
-That evidence does not exercise the adverse event orderings below.
+Automated integration tests additionally exercise the adverse event orderings below.
 
-### Blocking lifecycle edge cases
+### Resolved lifecycle edge cases
 
 #### Suspension can be lost behind a running provision
 
-The job table permits only one queued or running job per environment. When revocation
-arrives while a provision job is already running, the suspension code cannot rewrite
-the running job and its attempted insert is discarded by `ON CONFLICT DO NOTHING`.
-The running provision can then finish and mark the environment ready, with no
-suspension job left behind.
+The job table still permits only one queued or running job per environment. A
+revocation rewrites an opposite queued job immediately. If the opposite job is already
+running, the reconciler waits for it to reach a terminal state and then queues the
+required suspension on the next pass.
 
 ```mermaid
 sequenceDiagram
@@ -86,108 +85,66 @@ sequenceDiagram
     N->>C: queued job rewrite finds no row
     N->>C: suspension insert conflicts with running job
     P->>C: provision completes and environment becomes ready
-    Note over C: no unfinished suspension job remains
+    N->>C: periodic reconciliation observes revoked + ready
+    N->>C: enqueue suspension
 ```
 
-This is also an authorization problem because current artifact routing looks up the
-environment by owner only; it does not re-check that the joined name is still `owned`.
-The same missing check allows any pre-existing name/environment status drift to become
-an access decision.
+Artifact routing joins the name registry and requires `names.status = 'owned'`, so the
+commercial revocation fences new publication before database suspension finishes.
 
 #### Suspension assumes resources exist
 
 A queued provision can be changed into a suspension before the customer database or
-runtime role exists. The suspension path currently issues `REVOKE CONNECT ON DATABASE`
-directly. PostgreSQL reports an error for a missing database or role, although the
-desired security state is already satisfied. Repeated attempts therefore end in a
-misleading failed environment instead of the known-good `suspended` state.
+runtime role exists. The suspension path checks both resources first and treats either
+being absent as successful convergence to the inaccessible state.
 
-Suspension should define an absent database or absent runtime grant as success. It
-must remain idempotent whether provisioning completed fully, partially, or not at all.
+Suspension is therefore idempotent whether provisioning completed fully, partially,
+or not at all.
 
-#### Upgrade discovery and lease recovery are one-shot
+#### Upgrade discovery and lease recovery repeat
 
-Artifact upgrade discovery and expired-lease recovery run only during worker
-initialization. The worker catches initialization failure and stays alive without
-installing its timer, so Docker sees a running process that cannot do more work. The
-heartbeat eventually becomes stale, but recovery requires an operator restart.
-
-Expired running jobs are also not reclaimed periodically. A container restart normally
-recovers them, but an already-running second worker does not. These are observable
-failures, not eventual convergence.
+Artifact upgrade discovery, missing-environment backfill, desired-state comparison,
+and expired-lease recovery run at initialization and every reconciliation interval.
+Initialization errors terminate the process so the container restart policy retries
+instead of leaving an inert worker alive.
 
 #### Runtime credential rotation depends on customer work
 
-The restricted `aven_artifact_store` login is created and its password is set inside
-customer database provisioning. On a later deployment that rotates
-`ARTIFACT_STORE_RUNTIME_PASSWORD`, all environments may already be `ready`, so no job
-runs and PostgreSQL retains the old password. The new runtime repeatedly fails to
-connect while every control-plane row still says `ready`.
-
-Global runtime-role creation, safety validation, and password rotation should happen
-once during worker/provisioner initialization, independently of customer jobs.
-Per-customer jobs should only grant or revoke database access and install the schema.
+The restricted `aven_artifact_store` login is created or safety-checked and its
+password rotated during worker initialization. Existing sessions for that role are
+terminated after rotation. Per-customer jobs only grant or revoke database access and
+install the schema.
 
 #### Stored identifiers reach interpolated SQL
 
-New names generate safe identifiers, but existing `database_name` and `owner_role`
-values are read from the control database and interpolated into PostgreSQL identifier
-positions before the Rust provisioner validates the database name. Quoting with a
-literal pair of double quotes is insufficient if corrupted or legacy data contains a
-double quote.
+New names generate safe identifiers, while existing `database_name` and `owner_role`
+values are untrusted stored input until they pass the same grammar.
 
-The TypeScript provisioning boundary must validate the database and owner-role grammar
-and maximum length before its first SQL statement. The database should also have CHECK
-constraints matching `environmentNames()`. This turns corrupted legacy data into a
-clear terminal error instead of executable SQL or an accidentally addressed database.
+The TypeScript boundary now validates database name, role name, and scope UUID before
+opening PostgreSQL or constructing the internal HTTP route. Matching control-database
+CHECK constraints prevent new corrupted routing state.
 
-The scope ID requires the same preflight validation because legacy environment IDs are
-copied into a UUID route.
+### Bounded resource policy
 
-### Blocking resource edge cases
+The first rollout deliberately keeps buffering simple but bounded: 25 MiB per request,
+two admitted upload bodies per runtime, 32 live claims per scope, 100 MiB staged bytes
+per scope, and 1 GiB logical published bytes per scope. The runtime container defaults
+to 512 MiB. Expired unconsumed claims receive a 24-hour retry grace, after which the
+next upload cleanup removes them and any blob not referenced by a claim or artifact.
+Quota decisions serialize on the scope row, so concurrent requests cannot each admit
+against the same stale total. Cluster-level disk alarms and backups remain operational
+infrastructure responsibilities.
 
-The current upload limit is a per-request body limit, not a capacity policy:
+### Liveness and observability resolution
 
-- Axum buffers the entire body and the PostgreSQL adapter holds/encodes the same bytes,
-  so concurrent 100 MiB uploads can consume substantially more than 100 MiB each.
-- There is no concurrent-upload admission limit.
-- There is no per-scope or aggregate staged-byte/storage quota.
-- Expired upload claims are not deleted.
-- Blobs left by an upload whose publication never commits are not garbage-collected.
-- Customer databases share one PostgreSQL cluster and disk, so filling one database can
-  affect every customer and the control plane.
-
-Authentication and the purchase requirement reduce anonymous abuse but do not bound a
-legitimate or compromised account. Before broad exposure, the simplest safe choices
-are either:
-
-1. keep upload behind a controlled rollout flag; or
-2. add a small concurrent-upload semaphore, a conservative initial size limit,
-   per-scope staging/storage quotas, expired-claim cleanup, and disk alarms.
-
-A container memory limit protects the host but is not sufficient on its own; it turns
-excess concurrency into restarts without preventing database disk exhaustion.
-
-### Liveness and observability edge cases
-
-- PostgreSQL connect, lock, and statement operations in environment provisioning have
-  no explicit deadlines. A live but stuck server can keep a leased job running
-  indefinitely because its lease continues to renew.
-- Worker freshness is updated only before claiming a job. A legitimate job longer than
-  the 45-second stale threshold makes the worker look dead even though its lease is
-  renewing.
-- Lease-renewal promise failures are not handled or reflected in the job log.
-- Tenant-mode runtime readiness does not connect to PostgreSQL. It proves process
-  configuration, not that the shared login can open a ready customer database.
-- `/api/health/status` reports worker freshness but does not report Artifact Store
-  runtime/provisioner reachability, pending/failed environment counts, missing legacy
-  environments, or desired/actual state drift.
-- The deployment health check can therefore pass while customer Artifact Stores are
-  inaccessible or unreconciled.
-
-Every external provisioning step needs a finite deadline. The worker should update its
-heartbeat while renewing a job lease and should record a lost lease-renewal attempt.
-Health should expose aggregate counts only, never customer names or credentials.
+PostgreSQL connect, lock, pool acquisition, and statement work now have finite
+deadlines, as does the provisioner HTTP call. Lease renewal also refreshes the worker
+heartbeat; a lost renewal is logged explicitly. Tenant runtime readiness authenticates
+to PostgreSQL, and API health additionally probes `/v1/context` through a ready tenant
+when one exists. Public health exposes aggregate counts only. Deployment waits for
+Compose health and then requires no missing mappings, terminal failures, expired
+leases, or unexplained drift. Queued/running transitions remain visible but are a
+healthy, known converging state.
 
 ### Simplest reliable convergence model
 
@@ -201,7 +158,7 @@ names.status = owned    -> desired environment state is ready
 names.status != owned   -> desired environment state is suspended
 ```
 
-On startup and periodically thereafter, one reconciler should:
+On startup and periodically thereafter, the reconciler:
 
 1. reclaim expired running-job leases;
 2. create missing environments for owned legacy names using `environmentNames()`;
@@ -215,7 +172,7 @@ On startup and periodically thereafter, one reconciler should:
 9. exit the worker on unrecoverable initialization failure so the existing container
    restart policy retries cleanly.
 
-Artifact routing must additionally join `names` and require `names.status = 'owned'`.
+Artifact routing additionally joins `names` and requires `names.status = 'owned'`.
 That immediate authorization fence makes a late in-flight provision harmless while
 the reconciler performs the eventual database suspension.
 
@@ -254,22 +211,21 @@ There should be no fourth category such as “probably ready.” Every row must 
 good, converging with an owned lease, known failed, or detected as drift awaiting the
 next reconciliation pass.
 
-### Minimal release gates
+### Implemented release gates
 
-Before broad deployment, the following are required rather than optional hardening:
+The deployment branch implements these gates:
 
-1. Add the periodic reconciler, immediate owned-name authorization check, and
+1. Periodic reconciliation, immediate owned-name authorization checking, and
    no-op-success suspension for absent resources.
-2. Validate all stored identifiers and scope UUIDs before SQL or HTTP construction.
-3. Bootstrap and rotate the global runtime role independently of tenant jobs.
-4. Add finite PostgreSQL deadlines and truthful heartbeat/lease reporting.
-5. Expose aggregate reconciliation state and make deployment fail on Artifact Store
+2. Stored identifier and scope UUID validation before SQL or HTTP construction.
+3. Global runtime-role bootstrap and rotation independently of tenant jobs.
+4. Finite PostgreSQL deadlines and truthful heartbeat/lease reporting.
+5. Aggregate reconciliation state that makes deployment fail on Artifact Store
    component failure or unexplained drift.
-6. Add automated integration tests for provision replay, the running-provision versus
-   suspension race, missing-resource suspension, lease expiry, initialization retry,
-   credential rotation, wrong database/scope, and existing-name reconciliation.
-7. Keep public upload disabled until bounded concurrency, quota, and orphan cleanup are
-   present, or explicitly accept a tightly controlled preview rollout.
+6. Automated coverage for provision replay, the running-provision versus suspension
+   race, missing-resource suspension, credential rotation, wrong database/scope, and
+   existing-name reconciliation.
+7. Bounded upload concurrency, staging/logical quotas, and orphan cleanup.
 
 The existing one-job queue, environment row, Artifact Store status, and provisioner can
 all remain. The fixes are about making the existing state level-triggered and bounded,
@@ -318,13 +274,14 @@ credential.
 
 ## New records in the existing control plane
 
-The existing `customer_environments` row is the routing authority. Two fields were
+The existing `customer_environments` row is the routing authority. Three fields were
 added:
 
 | Field | Meaning | Invariant |
 | --- | --- | --- |
 | `artifact_scope_id` | Stable scope inside the customer database | Non-null, globally unique, and currently equal to the environment UUID |
 | `artifact_store_status` | Installation/access state | One of `pending`, `ready`, or `suspended` |
+| `artifact_store_schema_version` | Last successfully installed deployment schema | Monotonic integer; access requires the current source-controlled version |
 
 The environment's effective contract is raised to version 2 and records:
 
@@ -338,9 +295,9 @@ The environment's effective contract is raised to version 2 and records:
 ```
 
 The name remains the commercial/customer identity. The environment row remains the
-technical deployment identity. Artifact routing deliberately depends on the latter,
-not directly on `names`, because the environment row owns the validated database name,
-database lifecycle state, and stable scope.
+technical deployment identity. Artifact routing joins the name for current ownership,
+then uses the environment row as authority for the validated database name, lifecycle
+state, installed schema version, and stable scope.
 
 ## Control plane: installation and upgrade
 
@@ -382,9 +339,11 @@ Database migrations backfill every row already present in `customer_environments
 
 1. `artifact_scope_id` is set to the existing environment UUID.
 2. The effective contract receives the Artifact Store configuration.
-3. `artifact_store_status` starts as `pending`.
-4. On environment-worker startup, each `ready + pending` environment without an
-   unfinished job receives an idempotent `provision` job.
+3. `artifact_store_status` starts as `pending`, and the installed schema version starts
+   at `0`.
+4. At worker startup and periodically, each owned environment whose desired state is
+   not satisfied—or whose installed schema version is old—receives one idempotent
+   `provision` job when none is unfinished.
 5. The ordinary provision path installs the schema and changes both states to `ready`
    only after the provisioner succeeds.
 
@@ -410,8 +369,8 @@ sequenceDiagram
 
 After the suspension job succeeds, this prevents a suspended environment from
 continuing to receive Artifact Store traffic even if a stale caller still knows its
-internal database and scope identifiers. The final reliability review above explains
-the currently missing immediate name-state fence and running-job convergence case.
+internal database and scope identifiers. The immediate name-state fence closes access
+while a running opposite job finishes and reconciliation queues suspension.
 
 ## Data plane: authenticated file publication
 
@@ -504,12 +463,18 @@ The customer database remains the isolation unit. The Artifact Store adds one sc
 but does not move artifacts to the Aven control database or to a shared artifact
 database.
 
-The provisioner can:
+The cluster provisioner can:
 
 - apply the Artifact Store schema migration;
 - install immutable built-in type definitions;
 - create the environment's initial scope; and
 - grant runtime privileges.
+
+It is also a member of PostgreSQL's predefined `pg_signal_backend` role. That narrow
+cluster privilege is required to terminate already-open runtime sessions after
+suspension or credential rotation; it grants no ability to read their queries or
+tenant data. The deployment reapplies this idempotent membership for existing clusters
+before starting workers.
 
 The runtime role can connect to provisioned customer databases and has the table and
 column operations needed by the current PostgreSQL adapter. It cannot create roles,
@@ -534,17 +499,16 @@ validated database name. Pools are opened lazily and cached by database name.
 - The scope existence check runs after database selection and before every scoped
   operation.
 
-Tenant-mode `/health/ready` proves that the runtime configuration and process are
-ready; it does not connect to every customer database. Per-customer readiness is
-represented by `artifact_store_status` and ultimately exercised by real routing or a
-targeted smoke probe.
+Tenant-mode `/health/ready` authenticates the runtime role to the PostgreSQL cluster.
+It does not fan out to every customer database. API aggregate health additionally
+routes `/v1/context` through one ready customer database, while per-customer readiness
+remains represented by `artifact_store_status` and real routing.
 
 ## State and failure semantics
 
 ```mermaid
 stateDiagram-v2
     [*] --> pending: environment row created or migrated
-    pending --> pending: no provisioner configuration
     pending --> ready: idempotent provision job succeeds
     pending --> pending: retry scheduled after transient failure
     pending --> suspended: environment suspension succeeds
@@ -553,11 +517,14 @@ stateDiagram-v2
     pending --> FailedEnvironment: retry budget exhausted
 ```
 
-Artifact access is allowed only when both conditions hold:
+Artifact access is allowed only when all conditions hold:
 
 ```text
-customer_environments.status = ready
+names.status = owned
+AND customer_environments.owner_user_id = authenticated user
+AND customer_environments.status = ready
 AND customer_environments.artifact_store_status = ready
+AND customer_environments.artifact_store_schema_version >= current deployment version
 ```
 
 Failures are fail-closed:
@@ -571,53 +538,27 @@ Failures are fail-closed:
 - Scope absent from the selected database: runtime returns `RESOURCE_UNAVAILABLE`.
 - Provisioning failure: the leased job is retried with exponential backoff; after the
   configured attempt limit the environment is marked failed for explicit retry.
-- Expired worker leases are returned to the queue on worker startup.
+- Expired worker leases are returned to the queue at startup and periodically.
 
-The unfinished-job unique index and provisioner's idempotent operations make duplicate
-execution safe. Complete restart convergence additionally requires periodic expired-
-lease recovery and desired-state reconciliation as described in the final review. The
-PostgreSQL advisory lock serializes database provisioning for one customer database.
+The unfinished-job unique index, periodic desired-state comparison, and provisioner's
+idempotent operations make duplicate execution safe. The PostgreSQL advisory lock
+serializes database provisioning for one customer database.
 
 ## Existing-name coverage
 
-### What is reliable now
+Every valid owned name is now part of periodic reconciliation, including a legacy name
+with no `customer_environments` row. The reconciler locks the name, derives identifiers
+through `environmentNames()`, generates one stable environment/scope UUID, inserts the
+ordinary provision job, and emits an audit event. A concurrent grant or another
+reconciler observes the unique environment/name constraints and does not duplicate it.
 
-Under a successful new-worker startup, an existing name reliably receives an Artifact
-Store during rollout if it already has a `customer_environments` row and that
-environment is `ready`:
+Existing environment rows receive the deterministic migration backfill and enter the
+same provision path. Revoked names are driven toward suspension, not upgraded for
+access. Exhausted operations remain visibly failed until an explicit retry.
 
-- migrations deterministically set its scope to the existing environment UUID;
-- the worker queues at most one unfinished upgrade job;
-- the job is leased, retried, and safe to repeat;
-- readiness is written only after schema migration, type registration, scope creation,
-  and grants all succeed; and
-- the data plane refuses traffic until readiness is recorded.
-
-Existing queued or provisioning environments also use the new provision path when
-their already queued job runs with Artifact Store provisioning configured.
-
-### What is not covered yet
-
-The current rollout is **not** a universal guarantee for every row in `names`.
-
-`0010_customer_artifact_stores.sql` backfills `customer_environments`; it does not
-create an environment for an older `names.status = 'owned'` row that lacks one. The
-worker also scans environments, not names. Such a user is incorrectly reported as
-requiring a name when attempting an upload, even though the commercial name exists.
-
-There are two additional explicit edge cases:
-
-- A user with more than one environment is blocked as ambiguous because the upload API
-  does not yet carry an environment selector.
-- Suspended or failed legacy environments are not upgraded in the background. This is
-  correct for access control, but they need a defined resume/retry path before they can
-  use the Artifact Store.
-
-Upgrade discovery currently runs once during environment-worker initialization. If a
-transient database error makes initialization fail, the error is logged and the
-worker heartbeat becomes stale, but that process does not schedule another scan. An
-operator/container restart is currently required. This is observable and fail-closed,
-but it is not fully self-healing.
+A user with more than one owned environment remains intentionally blocked as ambiguous
+because the upload API does not yet carry an environment selector. That is a known
+product boundary, not silent or misrouted access.
 
 Current coverage can be audited without changing data:
 
@@ -637,30 +578,10 @@ FROM customer_environments
 WHERE status = 'ready' AND artifact_store_status <> 'ready';
 ```
 
-### Required universal-coverage reconciliation
-
-Before claiming that every existing owned name has Artifact Store access, rollout must
-add an idempotent reconciliation step that:
-
-1. locks or otherwise serializes against the name-grant transaction;
-2. creates a missing environment row for every owned name using the same
-   `environmentNames()` derivation as new purchases;
-3. assigns a stable environment UUID and uses it as `artifact_scope_id`;
-4. enqueues the ordinary provision job, rather than provisioning inline in a database
-   migration;
-5. leaves revoked names unprovisioned and routes suspended names through the suspension
-   policy;
-6. emits an audit event for every synthesized environment;
-7. is safe to rerun and refuses ownership/database-name conflicts; and
-8. gates deployment success on zero missing owned-name environments plus zero
-   unexpected owner ambiguities.
-
-That reconciliation should live in application/worker code or a dedicated rollout
-command, not as a large cross-database SQL migration. It needs the same validation,
-UUID generation, job semantics, logging, and error handling as ordinary provisioning.
-The upgrade-discovery scan should also move into a periodically retried reconciliation
-path, or initialization failure should terminate the worker so the container restart
-policy can retry it.
+The public health endpoint runs equivalent aggregate checks without exposing names or
+user IDs. Deployment succeeds only after missing mappings, terminal failures, expired
+leases, and unexplained drift all reach zero; unfinished leased transitions are
+reported separately as known convergence.
 
 ## Deployment interaction
 
@@ -681,26 +602,26 @@ flowchart LR
     M[Apply Aven API migrations] --> P[Start Artifact Store provisioner]
     P --> R[Start Artifact Store runtime]
     R --> W[Start new environment worker]
-    W --> Q[Queue ready + pending upgrades]
+    W --> Q[Reconcile every owned or revoked name]
     Q --> O[Observe jobs and readiness]
     O --> G{Coverage gates clean?}
     G -->|yes| E[Enable/accept uploads]
     G -->|no| X[Reconcile or retry and remain fail-closed]
 ```
 
-Starting the new worker only after the new provisioner avoids an old worker consuming
-Artifact Store upgrade jobs without knowing how to install the schema. The worker
-itself creates the upgrade jobs at startup for that reason.
+Compose starts the new provisioner, runtime, API, and worker from immutable images and
+waits on service health. The external deployment check then waits up to five minutes
+for the periodic reconciler and its aggregate coverage gates.
 
 ## Explicit non-goals and remaining boundaries
 
-This layer does not yet solve:
+This layer deliberately does not solve:
 
-- legacy owned-name rows without environments;
 - selecting between multiple environments owned by one user;
 - per-customer runtime credentials or cryptographically signed routing decisions;
-- streaming inside the Rust HTTP adapter, which currently buffers at most 100 MiB;
-- per-customer storage quotas and rate limits;
+- streaming to external object storage; the Rust adapter buffers at most 25 MiB under
+  a two-request semaphore;
+- cluster-wide billing/rate policy beyond the initial per-scope admission quotas;
 - complete backup/restore and divergent-feed recovery procedures;
 - the final Tauri filesystem capability restriction for native dropped paths; or
 - OCR, extraction, classification, search, or model invocation after upload.
@@ -711,8 +632,7 @@ authoritatively ready.
 
 ## Target acceptance invariants
 
-The new setup is ready for broad operation when all of the following are true. These
-are target gates; the final reliability review identifies which are not yet met:
+The implementation and deployment health checks enforce the following invariants:
 
 1. Every accessible owned name maps to exactly one environment.
 2. Every ready environment has exactly one stable non-null scope ID.
