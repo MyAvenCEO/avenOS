@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 
 use aven_artifact_store_contract::StablePublisher;
 use aven_artifact_store_core::{builtin_type_definitions, TypeCatalog};
-use aven_artifact_store_postgres::PostgresStore;
+use aven_artifact_store_postgres::{PostgresStore, UploadAdmission};
 use aven_artifact_store_server::{
     provisioner_router, router, AppState, FixedServiceAuth, ProvisionerState, TenantStoreRegistry,
 };
@@ -71,6 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 store.ensure_scope(scope_id).await?;
                 (AppState::new(store, catalog, auth), scope_id.to_string())
             };
+            let state = configure_upload_admission(state)?;
             let address = env::var("ARTIFACT_STORE_LISTEN")
                 .unwrap_or_else(|_| "127.0.0.1:8087".to_owned())
                 .parse::<SocketAddr>()?;
@@ -109,6 +110,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn optional_positive_env(name: &str, default: u32) -> Result<u32, Box<dyn std::error::Error>> {
     let value = match env::var(name) {
         Ok(value) => value.parse::<u32>()?,
+        Err(_) => default,
+    };
+    if value == 0 {
+        return Err(format!("environment variable {name} must be positive").into());
+    }
+    Ok(value)
+}
+
+fn configure_upload_admission(state: AppState) -> Result<AppState, Box<dyn std::error::Error>> {
+    let max_upload_bytes =
+        optional_positive_u64_env("ARTIFACT_STORE_MAX_UPLOAD_BYTES", 25 * 1024 * 1024)?;
+    let max_concurrent_uploads = optional_positive_env("ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS", 2)?;
+    let max_live_claims = optional_positive_env("ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE", 32)?;
+    let max_staged_bytes = optional_positive_u64_env(
+        "ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE",
+        100 * 1024 * 1024,
+    )?;
+    let max_logical_bytes = optional_positive_u64_env(
+        "ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE",
+        1024 * 1024 * 1024,
+    )?;
+    if max_upload_bytes > max_staged_bytes || max_upload_bytes > max_logical_bytes {
+        return Err(
+            "the per-upload limit must not exceed staging or logical storage quotas".into(),
+        );
+    }
+    if max_concurrent_uploads > 64 {
+        return Err("ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS must not exceed 64".into());
+    }
+    Ok(state.with_upload_admission(
+        usize::try_from(max_upload_bytes)?,
+        usize::try_from(max_concurrent_uploads)?,
+        UploadAdmission {
+            max_live_claims_per_scope: i64::from(max_live_claims),
+            max_staged_bytes_per_scope: i64::try_from(max_staged_bytes)?,
+            max_logical_bytes_per_scope: i64::try_from(max_logical_bytes)?,
+        },
+    ))
+}
+
+fn optional_positive_u64_env(name: &str, default: u64) -> Result<u64, Box<dyn std::error::Error>> {
+    let value = match env::var(name) {
+        Ok(value) => value.parse::<u64>()?,
         Err(_) => default,
     };
     if value == 0 {

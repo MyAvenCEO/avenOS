@@ -51,7 +51,7 @@ export const PUT = api(async (event, rt) => {
 		throw new AppError(400, 'VALIDATION_ERROR', 'Content-Length is invalid.')
 	}
 	if (length > MAX_ARTIFACT_FILE_BYTES) {
-		throw new AppError(413, 'FILE_TOO_LARGE', 'Files may not exceed 100 MiB.')
+		throw new AppError(413, 'FILE_TOO_LARGE', 'Files may not exceed 25 MiB.')
 	}
 	const body = event.request.body ?? new Uint8Array()
 	return {

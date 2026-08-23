@@ -9,8 +9,8 @@ use aven_artifact_store_contract::{
     RequestContext, StablePublisher, TypeKey, UploadDeclaration,
 };
 use aven_artifact_store_core::{prepare_publication, Limits, TypeCatalog};
-use aven_artifact_store_postgres::{PostgresStore, StoreError};
-use axum::body::{Body, Bytes};
+use aven_artifact_store_postgres::{PostgresStore, StoreError, UploadAdmission};
+use axum::body::{to_bytes, Body, Bytes};
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -18,11 +18,15 @@ use axum::routing::{get, put};
 use axum::{Json, Router};
 use serde::Deserialize;
 use time::{Duration, OffsetDateTime};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 use url::Url;
 use uuid::Uuid;
 
-const MAX_BODY_BYTES: usize = 100 * 1024 * 1024;
+const DEFAULT_MAX_UPLOAD_BYTES: usize = 25 * 1024 * 1024;
+const DEFAULT_MAX_CONCURRENT_UPLOADS: usize = 2;
+const DEFAULT_MAX_LIVE_CLAIMS_PER_SCOPE: i64 = 32;
+const DEFAULT_MAX_STAGED_BYTES_PER_SCOPE: i64 = 100 * 1024 * 1024;
+const DEFAULT_MAX_LOGICAL_BYTES_PER_SCOPE: i64 = 1024 * 1024 * 1024;
 pub const TENANT_DATABASE_HEADER: &str = "x-aven-artifact-database";
 
 #[derive(Clone)]
@@ -132,8 +136,11 @@ impl StoreRouter {
     }
 
     async fn ready(&self) -> Result<(), ApiError> {
-        if let Self::Fixed(store) = self {
-            store.context().await?;
+        match self {
+            Self::Fixed(store) => {
+                store.context().await?;
+            }
+            Self::Tenants(stores) => stores.ready().await?,
         }
         Ok(())
     }
@@ -182,6 +189,15 @@ impl TenantStoreRegistry {
             max_stores,
             connections_per_store,
         })
+    }
+
+    async fn ready(&self) -> Result<(), ApiError> {
+        let store = PostgresStore::connect(self.cluster_url.as_str(), 1).await?;
+        sqlx::query("SELECT 1")
+            .execute(store.pool())
+            .await
+            .map_err(StoreError::from)?;
+        Ok(())
     }
 
     async fn resolve(&self, headers: &HeaderMap) -> Result<PostgresStore, ApiError> {
@@ -267,6 +283,9 @@ pub struct AppState {
     catalog: TypeCatalog,
     limits: Limits,
     auth: FixedServiceAuth,
+    upload_slots: Arc<Semaphore>,
+    max_upload_bytes: usize,
+    upload_admission: UploadAdmission,
 }
 
 impl AppState {
@@ -277,6 +296,13 @@ impl AppState {
             catalog,
             limits: Limits::default(),
             auth,
+            upload_slots: Arc::new(Semaphore::new(DEFAULT_MAX_CONCURRENT_UPLOADS)),
+            max_upload_bytes: DEFAULT_MAX_UPLOAD_BYTES,
+            upload_admission: UploadAdmission {
+                max_live_claims_per_scope: DEFAULT_MAX_LIVE_CLAIMS_PER_SCOPE,
+                max_staged_bytes_per_scope: DEFAULT_MAX_STAGED_BYTES_PER_SCOPE,
+                max_logical_bytes_per_scope: DEFAULT_MAX_LOGICAL_BYTES_PER_SCOPE,
+            },
         }
     }
 
@@ -291,11 +317,32 @@ impl AppState {
             catalog,
             limits: Limits::default(),
             auth,
+            upload_slots: Arc::new(Semaphore::new(DEFAULT_MAX_CONCURRENT_UPLOADS)),
+            max_upload_bytes: DEFAULT_MAX_UPLOAD_BYTES,
+            upload_admission: UploadAdmission {
+                max_live_claims_per_scope: DEFAULT_MAX_LIVE_CLAIMS_PER_SCOPE,
+                max_staged_bytes_per_scope: DEFAULT_MAX_STAGED_BYTES_PER_SCOPE,
+                max_logical_bytes_per_scope: DEFAULT_MAX_LOGICAL_BYTES_PER_SCOPE,
+            },
         }
+    }
+
+    #[must_use]
+    pub fn with_upload_admission(
+        mut self,
+        max_upload_bytes: usize,
+        max_concurrent_uploads: usize,
+        admission: UploadAdmission,
+    ) -> Self {
+        self.max_upload_bytes = max_upload_bytes;
+        self.upload_slots = Arc::new(Semaphore::new(max_concurrent_uploads));
+        self.upload_admission = admission;
+        self
     }
 }
 
 pub fn router(state: AppState) -> Router {
+    let max_upload_bytes = state.max_upload_bytes;
     Router::new()
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
@@ -318,7 +365,7 @@ pub fn router(state: AppState) -> Router {
             "/v1/scopes/{scope_id}/artifacts/{artifact_id}/content",
             get(get_content).head(head_content),
         )
-        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+        .layer(DefaultBodyLimit::max(max_upload_bytes))
         .with_state(state)
 }
 
@@ -379,8 +426,13 @@ async fn stage_upload(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((scope_id, claim_id)): Path<(Uuid, Uuid)>,
-    body: Bytes,
+    body: Body,
 ) -> Result<Response, ApiError> {
+    let _permit = state
+        .upload_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| ApiError::staging_quota())?;
     let context = state.auth.authorize(&headers, scope_id)?;
     let store = scoped_store(&state, &headers, scope_id).await?;
     let sha256 = required_header(&headers, "x-expected-sha256")?.to_owned();
@@ -393,6 +445,9 @@ async fn stage_upload(
         length,
         declared_media_type,
     };
+    let body = to_bytes(body, state.max_upload_bytes)
+        .await
+        .map_err(|_| ApiError::limit("upload body exceeds the configured limit"))?;
     let result = store
         .stage_upload(
             OffsetDateTime::now_utc(),
@@ -402,6 +457,7 @@ async fn stage_upload(
             &declaration,
             &body,
             Duration::hours(24),
+            state.upload_admission,
         )
         .await?;
     Ok((StatusCode::CREATED, Json(result)).into_response())
@@ -440,7 +496,12 @@ async fn publish(
     )
     .map_err(|error| ApiError::from_core(&error))?;
     let result = store
-        .publish(OffsetDateTime::now_utc(), expected_epoch, &prepared)
+        .publish(
+            OffsetDateTime::now_utc(),
+            expected_epoch,
+            &prepared,
+            state.upload_admission,
+        )
         .await?;
     let mut response = Json(result.clone()).into_response();
     response.headers_mut().insert(
@@ -748,6 +809,22 @@ impl ApiError {
         )
     }
 
+    fn staging_quota() -> Self {
+        Self::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            ErrorCode::StagingQuotaExceeded,
+            "upload admission is temporarily exhausted",
+        )
+    }
+
+    fn limit(detail: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            ErrorCode::LimitExceeded,
+            detail,
+        )
+    }
+
     fn from_core(error: &aven_artifact_store_core::CoreError) -> Self {
         use aven_artifact_store_core::CoreError;
         match error {
@@ -806,6 +883,12 @@ impl From<StoreError> for ApiError {
             StoreError::UploadDigestMismatch => Self::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 ErrorCode::UploadDigestMismatch,
+                error.to_string(),
+            ),
+            StoreError::StagingQuotaExceeded => Self::staging_quota(),
+            StoreError::StorageQuotaExceeded => Self::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ErrorCode::LimitExceeded,
                 error.to_string(),
             ),
             StoreError::InputUnavailable => Self::new(

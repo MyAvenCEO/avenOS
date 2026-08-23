@@ -46,7 +46,8 @@ describe('checkout grant', () => {
 			hold.id
 		])
 		const checkout = await service.claim(token)
-		const checkoutId = new URL(checkout.checkoutUrl).searchParams.get('checkoutId')!
+		const checkoutId = new URL(checkout.checkoutUrl).searchParams.get('checkoutId')
+		if (!checkoutId) throw new Error('Fake checkout did not provide an id')
 		const event = parseCreemEvent(
 			payments.buildCompletedWebhookBody({
 				checkoutId,
@@ -68,7 +69,7 @@ describe('checkout grant', () => {
 		).toBe(1)
 		const environment = (
 			await database.pool.query(
-				'SELECT id,owner_user_id,status,contract_version,artifact_scope_id,artifact_store_status,effective_config FROM customer_environments WHERE name=$1',
+				'SELECT id,owner_user_id,status,contract_version,artifact_scope_id,artifact_store_status,artifact_store_schema_version,effective_config FROM customer_environments WHERE name=$1',
 				[name]
 			)
 		).rows[0]
@@ -76,6 +77,7 @@ describe('checkout grant', () => {
 		expect(environment.contract_version).toBe(2)
 		expect(environment.artifact_scope_id).toBe(environment.id)
 		expect(environment.artifact_store_status).toBe('pending')
+		expect(environment.artifact_store_schema_version).toBe(0)
 		expect(environment.effective_config.artifactStore).toEqual({
 			schemaVersion: 1,
 			scopeId: environment.id
@@ -103,7 +105,7 @@ describe('checkout grant', () => {
 		const worker = new EnvironmentWorker(database.pool, artifactConfig, pino({ level: 'silent' }))
 		expect(await worker.enqueueArtifactStoreUpgrades()).toBe(1)
 		await database.pool.query(
-			"UPDATE customer_environments SET artifact_store_status='ready' WHERE id=$1",
+			"UPDATE customer_environments SET status='ready',artifact_store_status='ready',artifact_store_schema_version=2 WHERE id=$1",
 			[environment.id]
 		)
 		expect(await environments.artifactTargetForUser(environment.owner_user_id)).toEqual({
@@ -119,18 +121,102 @@ describe('checkout grant', () => {
 				)
 			).rowCount
 		).toBe(1)
+		await database.pool.query(
+			"UPDATE customer_environment_jobs SET status='running',lease_owner='old-worker',lease_expires_at=now()+interval '5 minutes' WHERE environment_id=$1 AND status='queued'",
+			[environment.id]
+		)
 
 		const refund = { ...event, id: `refund-${randomUUID()}`, type: 'refund.created' }
 		expect(await service.revokeFromEvent(refund)).toEqual({ revoked: true })
 		expect(
 			(await database.pool.query('SELECT status FROM names WHERE name=$1', [name])).rows[0].status
 		).toBe('revoked')
+		await expect(
+			environments.artifactTargetForUser(environment.owner_user_id)
+		).rejects.toMatchObject({
+			code: 'NAME_REQUIRED'
+		})
+		await worker.reconcileDesiredState()
 		expect(
 			(
 				await database.pool.query(
-					"SELECT 1 FROM customer_environment_jobs WHERE operation='suspend'"
+					"SELECT operation FROM customer_environment_jobs WHERE environment_id=$1 AND status='running'",
+					[environment.id]
+				)
+			).rows[0].operation
+		).toBe('provision')
+		await database.pool.query(
+			"UPDATE customer_environment_jobs SET status='succeeded',lease_owner=NULL,lease_expires_at=NULL WHERE environment_id=$1 AND status='running'",
+			[environment.id]
+		)
+		await database.pool.query(
+			"UPDATE customer_environments SET status='ready',artifact_store_status='ready',last_operation='provision' WHERE id=$1",
+			[environment.id]
+		)
+		await worker.reconcileDesiredState()
+		expect(
+			(
+				await database.pool.query(
+					"SELECT 1 FROM customer_environment_jobs WHERE environment_id=$1 AND operation='suspend' AND status='queued'",
+					[environment.id]
 				)
 			).rowCount
 		).toBe(1)
+
+		const legacyName = `l${randomUUID().replaceAll('-', '').slice(0, 12)}`
+		await database.pool.query(
+			`INSERT INTO names(name,owner_user_id,status,purchased_at,created_at,updated_at)
+			 VALUES($1,$2,'owned',now(),now(),now())`,
+			[legacyName, environment.owner_user_id]
+		)
+		const reconciled = await worker.reconcileDesiredState()
+		expect(reconciled.backfilled).toBe(1)
+		expect(
+			(
+				await database.pool.query(
+					'SELECT artifact_scope_id,status FROM customer_environments WHERE name=$1',
+					[legacyName]
+				)
+			).rows[0]
+		).toMatchObject({ status: 'queued' })
+		await database.pool.query(
+			`UPDATE customer_environment_jobs
+			 SET status='running',lease_owner='dead-worker',lease_expires_at=now()-interval '1 second'
+			 WHERE environment_id=(SELECT id FROM customer_environments WHERE name=$1)`,
+			[legacyName]
+		)
+		const recovered = await worker.reconcileDesiredState()
+		expect(recovered.recoveredLeases).toBe(1)
+		expect(
+			(
+				await database.pool.query(
+					`SELECT status FROM customer_environment_jobs
+					 WHERE environment_id=(SELECT id FROM customer_environments WHERE name=$1)
+					   AND status='queued'`,
+					[legacyName]
+				)
+			).rowCount
+		).toBe(1)
+		await database.pool.query(
+			`UPDATE customer_environment_jobs SET status='failed'
+			 WHERE environment_id=(SELECT id FROM customer_environments WHERE name=$1)`,
+			[legacyName]
+		)
+		await database.pool.query(
+			"UPDATE customer_environments SET status='failed',last_operation='provision' WHERE name=$1",
+			[legacyName]
+		)
+		const terminal = await worker.reconcileDesiredState()
+		expect(terminal.terminalFailures).toBe(1)
+		expect(
+			(
+				await database.pool.query(
+					`SELECT 1 FROM customer_environment_jobs
+					 WHERE environment_id=(SELECT id FROM customer_environments WHERE name=$1)
+					   AND status IN ('queued','running')`,
+					[legacyName]
+				)
+			).rowCount
+		).toBe(0)
 	})
 })

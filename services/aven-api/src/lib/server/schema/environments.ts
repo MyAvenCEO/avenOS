@@ -26,6 +26,7 @@ export const customerEnvironments = pgTable(
 		databaseName: text('database_name').notNull().unique(),
 		artifactScopeId: text('artifact_scope_id').notNull().unique(),
 		artifactStoreStatus: text('artifact_store_status').notNull().default('pending'),
+		artifactStoreSchemaVersion: integer('artifact_store_schema_version').notNull().default(0),
 		ownerRole: text('owner_role').notNull().unique(),
 		stackName: text('stack_name').notNull().unique(),
 		contractVersion: integer('contract_version').notNull().default(1),

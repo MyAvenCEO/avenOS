@@ -5,7 +5,13 @@ import { sanitizeError } from '../../validation.js'
 import { writeAudit } from '../audit.js'
 import type { EnvironmentWorkerConfig } from '../config.js'
 import { withTransaction } from '../db.js'
-import { provisionEnvironmentDatabase, suspendEnvironmentDatabase } from './provisioning.js'
+import { environmentNames } from './naming.js'
+import {
+	CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
+	ensureArtifactRuntimeRole,
+	provisionEnvironmentDatabase,
+	suspendEnvironmentDatabase
+} from './provisioning.js'
 
 interface ClaimedJob {
 	id: string
@@ -17,11 +23,21 @@ interface ClaimedJob {
 	artifact_scope_id: string
 }
 
+interface ReconciliationSummary {
+	backfilled: number
+	queued: number
+	rewritten: number
+	recoveredLeases: number
+	terminalFailures: number
+}
+
 export class EnvironmentWorker {
 	private timer?: NodeJS.Timeout
 	private running = false
 	private readonly instanceId = randomUUID()
 	private readonly started = new Date()
+	private lastReconciledAt?: Date
+	private reconciliation?: ReconciliationSummary
 
 	constructor(
 		private pool: pg.Pool,
@@ -29,15 +45,24 @@ export class EnvironmentWorker {
 		private logger: pino.Logger
 	) {}
 
-	start(): void {
-		void this.initialize().catch((error) => {
-			this.logger.error({ err: sanitizeError(error) }, 'environment worker initialization failed')
-		})
+	async start(): Promise<void> {
+		await this.initialize()
 	}
 
 	private async initialize(): Promise<void> {
-		await this.recoverExpired()
-		await this.enqueueArtifactStoreUpgrades()
+		if (
+			this.config.ARTIFACT_STORE_RUNTIME_ROLE &&
+			this.config.ARTIFACT_STORE_RUNTIME_PASSWORD &&
+			this.config.PROVISIONER_DATABASE_URL
+		) {
+			await ensureArtifactRuntimeRole({
+				provisionerUrl: this.config.PROVISIONER_DATABASE_URL,
+				runtimeRole: this.config.ARTIFACT_STORE_RUNTIME_ROLE,
+				runtimePassword: this.config.ARTIFACT_STORE_RUNTIME_PASSWORD,
+				log: { info: (message) => this.logger.info(message) }
+			})
+		}
+		await this.reconcileDesiredState()
 		this.timer = setInterval(() => {
 			void this.tick()
 		}, this.config.ENVIRONMENT_WORKER_POLL_INTERVAL_MS)
@@ -49,58 +74,206 @@ export class EnvironmentWorker {
 		if (this.timer) clearInterval(this.timer)
 	}
 
-	async recoverExpired(): Promise<void> {
-		await this.pool.query(
+	async recoverExpired(): Promise<number> {
+		const result = await this.pool.query(
 			"UPDATE customer_environment_jobs SET status='queued',lease_owner=NULL,lease_expires_at=NULL,available_at=now() WHERE status='running' AND lease_expires_at < now()"
 		)
+		return result.rowCount ?? 0
 	}
 
 	async enqueueArtifactStoreUpgrades(): Promise<number> {
-		if (
-			!this.config.ARTIFACT_STORE_PROVISIONER_BASE_URL ||
-			!this.config.ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN ||
-			!this.config.ARTIFACT_STORE_RUNTIME_ROLE ||
-			!this.config.ARTIFACT_STORE_RUNTIME_PASSWORD
-		) {
-			return 0
+		return (await this.reconcileDesiredState()).queued
+	}
+
+	async reconcileDesiredState(): Promise<ReconciliationSummary> {
+		const summary: ReconciliationSummary = {
+			backfilled: 0,
+			queued: 0,
+			rewritten: 0,
+			recoveredLeases: await this.recoverExpired(),
+			terminalFailures: 0
 		}
-		const environments = (
-			await this.pool.query(
-				`SELECT environment.id
-         FROM customer_environments environment
-         WHERE environment.status='ready' AND environment.artifact_store_status='pending'
-           AND NOT EXISTS (
-             SELECT 1 FROM customer_environment_jobs job
-             WHERE job.environment_id=environment.id AND job.status IN ('queued','running')
-           )`
-			)
-		).rows as Array<{ id: string }>
-		let queued = 0
-		for (const environment of environments) {
-			const result = await this.pool.query(
-				`INSERT INTO customer_environment_jobs
-           (id,environment_id,operation,status,attempt,available_at,created_at)
-         VALUES ($1,$2,'provision','queued',0,now(),now())
-         ON CONFLICT DO NOTHING`,
-				[randomUUID(), environment.id]
-			)
-			queued += result.rowCount ?? 0
-			if (result.rowCount === 1) {
-				await writeAudit(this.pool, {
-					eventType: 'environment.artifact_store_upgrade_queued',
-					metadata: { environmentId: environment.id }
+		summary.backfilled = await this.backfillOwnedNames()
+		const environmentIds = (
+			await this.pool.query('SELECT id,name FROM customer_environments ORDER BY id')
+		).rows as Array<{ id: string; name: string }>
+		for (const [index, environment] of environmentIds.entries()) {
+			await withTransaction(this.pool, async (client) => {
+				await client.query("SELECT pg_advisory_xact_lock(hashtext('name:' || $1))", [
+					environment.name
+				])
+				const state = (
+					await client.query(
+						`SELECT environment.id,environment.status,environment.artifact_store_status,environment.artifact_store_schema_version,
+						        environment.last_operation,name_record.status AS name_status
+						 FROM customer_environments environment
+						 JOIN names name_record ON name_record.name=environment.name
+						 WHERE environment.id=$1 FOR UPDATE OF environment`,
+						[environment.id]
+					)
+				).rows[0] as
+					| {
+							id: string
+							status: string
+							artifact_store_status: string
+							artifact_store_schema_version: number
+							last_operation: 'provision' | 'suspend' | null
+							name_status: string
+					  }
+					| undefined
+				if (!state) return
+				const desired: 'provision' | 'suspend' =
+					state.name_status === 'owned' ? 'provision' : 'suspend'
+				const unfinished = (
+					await client.query(
+						`SELECT id,operation,status FROM customer_environment_jobs
+						 WHERE environment_id=$1 AND status IN ('queued','running')
+						 FOR UPDATE`,
+						[state.id]
+					)
+				).rows[0] as
+					| { id: string; operation: 'provision' | 'suspend'; status: 'queued' | 'running' }
+					| undefined
+				if (unfinished) {
+					if (unfinished.status === 'queued' && unfinished.operation !== desired) {
+						await client.query(
+							`UPDATE customer_environment_jobs
+							 SET operation=$1,attempt=0,available_at=now(),error_code=NULL,error_message=NULL
+							 WHERE id=$2`,
+							[desired, unfinished.id]
+						)
+						await client.query(
+							"UPDATE customer_environments SET status='queued',last_operation=$1,queued_at=now(),updated_at=now() WHERE id=$2",
+							[desired, state.id]
+						)
+						summary.rewritten += 1
+					}
+					return
+				}
+
+				const artifactConfigured = Boolean(
+					this.config.ARTIFACT_STORE_PROVISIONER_BASE_URL &&
+						this.config.ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN &&
+						this.config.ARTIFACT_STORE_RUNTIME_ROLE &&
+						this.config.ARTIFACT_STORE_RUNTIME_PASSWORD
+				)
+				const needsOperation =
+					desired === 'suspend'
+						? state.status !== 'suspended' || state.artifact_store_status !== 'suspended'
+						: state.status !== 'ready' ||
+							(artifactConfigured &&
+								(state.artifact_store_status !== 'ready' ||
+									state.artifact_store_schema_version < CURRENT_ARTIFACT_STORE_SCHEMA_VERSION))
+				if (!needsOperation) return
+				if (state.status === 'failed' && state.last_operation === desired) {
+					summary.terminalFailures += 1
+					return
+				}
+				const inserted = await client.query(
+					`INSERT INTO customer_environment_jobs
+					   (id,environment_id,operation,status,attempt,available_at,created_at)
+					 VALUES ($1,$2,$3,'queued',0,now(),now()) ON CONFLICT DO NOTHING`,
+					[randomUUID(), state.id, desired]
+				)
+				if (inserted.rowCount !== 1) return
+				await client.query(
+					`UPDATE customer_environments
+					 SET status='queued',last_operation=$1,artifact_store_status=CASE WHEN $1='provision' THEN 'pending' ELSE artifact_store_status END,
+					     queued_at=now(),updated_at=now(),last_error_code=NULL,last_error_message=NULL
+					 WHERE id=$2`,
+					[desired, state.id]
+				)
+				await writeAudit(client, {
+					eventType: 'environment.reconciled_operation_queued',
+					metadata: { environmentId: state.id, operation: desired }
 				})
-			}
+				summary.queued += 1
+			})
+			if ((index + 1) % 25 === 0) await this.heartbeat()
 		}
-		return queued
+		this.lastReconciledAt = new Date()
+		this.reconciliation = summary
+		return summary
+	}
+
+	private async backfillOwnedNames(): Promise<number> {
+		const missing = (
+			await this.pool.query(
+				`SELECT name_record.name
+				 FROM names name_record
+				 LEFT JOIN customer_environments environment ON environment.name=name_record.name
+				 WHERE name_record.status='owned' AND environment.id IS NULL
+				 ORDER BY name_record.name LIMIT 100`
+			)
+		).rows as Array<{ name: string }>
+		let backfilled = 0
+		for (const candidate of missing) {
+			await withTransaction(this.pool, async (client) => {
+				await client.query("SELECT pg_advisory_xact_lock(hashtext('name:' || $1))", [
+					candidate.name
+				])
+				const name = (
+					await client.query('SELECT name,owner_user_id,status FROM names WHERE name=$1', [
+						candidate.name
+					])
+				).rows[0] as { name: string; owner_user_id: string; status: string } | undefined
+				if (name?.status !== 'owned') return
+				const exists = await client.query('SELECT 1 FROM customer_environments WHERE name=$1', [
+					name.name
+				])
+				if (exists.rowCount) return
+				const names = environmentNames(name.name)
+				const environmentId = randomUUID()
+				const effectiveConfig = {
+					contractVersion: 2,
+					name: names.name,
+					databaseName: names.databaseName,
+					stackName: names.stackName,
+					artifactStore: { schemaVersion: 1, scopeId: environmentId },
+					applications: []
+				}
+				await client.query(
+					`INSERT INTO customer_environments
+					  (id,owner_user_id,name,database_name,artifact_scope_id,artifact_store_status,owner_role,stack_name,contract_version,effective_config,status,last_operation,queued_at,updated_at)
+					 VALUES ($1,$2,$3,$4,$1,'pending',$5,$6,2,$7,'queued','provision',now(),now())`,
+					[
+						environmentId,
+						name.owner_user_id,
+						names.name,
+						names.databaseName,
+						names.ownerRole,
+						names.stackName,
+						JSON.stringify(effectiveConfig)
+					]
+				)
+				await client.query(
+					`INSERT INTO customer_environment_jobs
+					  (id,environment_id,operation,status,attempt,available_at,created_at)
+					 VALUES ($1,$2,'provision','queued',0,now(),now())`,
+					[randomUUID(), environmentId]
+				)
+				await writeAudit(client, {
+					eventType: 'environment.legacy_name_reconciled',
+					targetUserId: name.owner_user_id,
+					metadata: { environmentId, name: name.name }
+				})
+				backfilled += 1
+			})
+		}
+		return backfilled
 	}
 
 	private async heartbeat(): Promise<void> {
+		const metadata = JSON.stringify({
+			concurrency: 1,
+			lastReconciledAt: this.lastReconciledAt?.toISOString() ?? null,
+			reconciliation: this.reconciliation ?? null
+		})
 		await this.pool.query(
 			`INSERT INTO worker_heartbeats(worker_name,instance_id,version,started_at,last_heartbeat_at,metadata)
-       VALUES('environment-worker',$1,$2,$3,now(),'{"concurrency":1}'::jsonb)
+       VALUES('environment-worker',$1,$2,$3,now(),$4::jsonb)
        ON CONFLICT(worker_name) DO UPDATE SET instance_id=EXCLUDED.instance_id,version=EXCLUDED.version,last_heartbeat_at=EXCLUDED.last_heartbeat_at,metadata=EXCLUDED.metadata`,
-			[this.instanceId, this.config.APPLICATION_VERSION, this.started]
+			[this.instanceId, this.config.APPLICATION_VERSION, this.started, metadata]
 		)
 	}
 
@@ -109,6 +282,14 @@ export class EnvironmentWorker {
 		this.running = true
 		try {
 			await this.heartbeat()
+			if (
+				!this.lastReconciledAt ||
+				Date.now() - this.lastReconciledAt.getTime() >=
+					this.config.ENVIRONMENT_RECONCILE_INTERVAL_SECONDS * 1_000
+			) {
+				await this.reconcileDesiredState()
+				await this.heartbeat()
+			}
 			const job = await this.claim()
 			if (job) await this.run(job)
 		} catch (error) {
@@ -158,14 +339,12 @@ export class EnvironmentWorker {
 	private async run(job: ClaimedJob): Promise<void> {
 		const renew = setInterval(
 			() => {
-				void this.pool.query(
-					"UPDATE customer_environment_jobs SET lease_expires_at=$1 WHERE id=$2 AND status='running' AND lease_owner=$3",
-					[
-						new Date(Date.now() + this.config.ENVIRONMENT_WORKER_LEASE_SECONDS * 1000),
-						job.id,
-						this.instanceId
-					]
-				)
+				void this.renewLease(job).catch((error) => {
+					this.logger.error(
+						{ err: sanitizeError(error), jobId: job.id },
+						'environment job lease renewal failed'
+					)
+				})
 			},
 			Math.max(1_000, this.config.ENVIRONMENT_WORKER_HEARTBEAT_SECONDS * 1000)
 		)
@@ -187,7 +366,6 @@ export class EnvironmentWorker {
 									provisionerBaseUrl: this.config.ARTIFACT_STORE_PROVISIONER_BASE_URL,
 									bearerToken: this.config.ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN,
 									runtimeRole: this.config.ARTIFACT_STORE_RUNTIME_ROLE,
-									runtimePassword: this.config.ARTIFACT_STORE_RUNTIME_PASSWORD,
 									scopeId: job.artifact_scope_id
 								}
 							: undefined,
@@ -212,6 +390,22 @@ export class EnvironmentWorker {
 		}
 	}
 
+	private async renewLease(job: ClaimedJob): Promise<void> {
+		const renewed = await this.pool.query(
+			"UPDATE customer_environment_jobs SET lease_expires_at=$1 WHERE id=$2 AND status='running' AND lease_owner=$3",
+			[
+				new Date(Date.now() + this.config.ENVIRONMENT_WORKER_LEASE_SECONDS * 1_000),
+				job.id,
+				this.instanceId
+			]
+		)
+		if (renewed.rowCount !== 1) {
+			await this.addLog(job.id, 'error', 'Worker lost the environment job lease.').catch(() => {})
+			throw new Error('Worker lost the environment job lease.')
+		}
+		await this.heartbeat()
+	}
+
 	private async complete(job: ClaimedJob): Promise<void> {
 		await withTransaction(this.pool, async (client) => {
 			const won = await client.query(
@@ -227,9 +421,21 @@ export class EnvironmentWorker {
 					: this.config.ARTIFACT_STORE_PROVISIONER_BASE_URL
 						? 'ready'
 						: 'pending'
+			const artifactStoreProvisioned =
+				job.operation === 'provision' && Boolean(this.config.ARTIFACT_STORE_PROVISIONER_BASE_URL)
 			await client.query(
-				`UPDATE customer_environments SET status=$1,artifact_store_status=$3,${timestampColumn}=now(),updated_at=now(),last_error_code=NULL,last_error_message=NULL WHERE id=$2`,
-				[status, job.environment_id, artifactStoreStatus]
+				`UPDATE customer_environments
+				 SET status=$1,artifact_store_status=$3,
+				     artifact_store_schema_version=CASE WHEN $4 THEN $5 ELSE artifact_store_schema_version END,
+				     ${timestampColumn}=now(),updated_at=now(),last_error_code=NULL,last_error_message=NULL
+				 WHERE id=$2`,
+				[
+					status,
+					job.environment_id,
+					artifactStoreStatus,
+					artifactStoreProvisioned,
+					CURRENT_ARTIFACT_STORE_SCHEMA_VERSION
+				]
 			)
 			await writeAudit(client, {
 				eventType: `environment.${status}`,
