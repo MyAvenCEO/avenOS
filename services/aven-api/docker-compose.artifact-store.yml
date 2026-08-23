@@ -36,6 +36,7 @@ services:
       PGUSER: postgres
       PGPASSWORD: ${POSTGRES_PASSWORD:-aven-dev}
       ARTIFACT_STORE_RUNTIME_PASSWORD: ${ARTIFACT_STORE_RUNTIME_PASSWORD:-artifact-local-runtime-password-0001}
+      ARTIFACT_PROCESSOR_RUNTIME_PASSWORD: ${ARTIFACT_PROCESSOR_RUNTIME_PASSWORD:-processor-local-runtime-password-0001}
     volumes:
       - ./deploy/artifact-local-bootstrap.sh:/usr/local/bin/artifact-local-bootstrap:ro
     command: ["sh", "/usr/local/bin/artifact-local-bootstrap"]
@@ -92,20 +93,94 @@ services:
     ports:
       - "${ARTIFACT_STORE_BIND:-127.0.0.1}:${ARTIFACT_STORE_PORT:-8087}:8087"
 
+  artifact-processor-migrator:
+    <<: [*artifact-runtime-security, *artifact-image]
+    depends_on:
+      artifact-store-migrator:
+        condition: service_completed_successfully
+    entrypoint: ["/usr/local/bin/aven-artifact-processor"]
+    environment:
+      ARTIFACT_PROCESSOR_DATABASE_URL: postgres://aven_provisioner:${AVEN_PROVISIONER_PASSWORD:-provisioner-dev}@db:5432/cust_artifact_local
+      ARTIFACT_PROCESSOR_RUNTIME_ROLE: aven_artifact_processor
+      ARTIFACT_PROCESSOR_SCOPE_ID: ${ARTIFACT_STORE_SCOPE_ID:-11111111-1111-4111-8111-111111111111}
+    command: ["migrate"]
+    restart: "no"
+
+  artifact-processor-provisioner:
+    <<: [*artifact-runtime-security, *artifact-image]
+    depends_on:
+      artifact-local-bootstrap:
+        condition: service_completed_successfully
+    entrypoint: ["/usr/local/bin/aven-artifact-processor"]
+    environment:
+      ARTIFACT_PROCESSOR_PROVISIONER_DATABASE_URL: postgres://aven_provisioner:${AVEN_PROVISIONER_PASSWORD:-provisioner-dev}@db:5432/postgres
+      ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN:-processor-local-provisioner-token-0001}
+      ARTIFACT_PROCESSOR_RUNTIME_ROLE: aven_artifact_processor
+      ARTIFACT_PROCESSOR_PROVISIONER_LISTEN: 0.0.0.0:8090
+      ARTIFACT_STORE_HEALTH_PORT: 8090
+      RUST_LOG: ${ARTIFACT_PROCESSOR_LOG:-aven_artifact_processor=info,tower_http=info}
+    command: ["serve-provisioner"]
+
+  artifact-processor:
+    <<: [*artifact-runtime-security, *artifact-image]
+    mem_limit: ${ARTIFACT_PROCESSOR_MEMORY_LIMIT:-512m}
+    pids_limit: 128
+    depends_on:
+      artifact-store:
+        condition: service_healthy
+      artifact-processor-migrator:
+        condition: service_completed_successfully
+    entrypoint: ["/usr/local/bin/aven-artifact-processor"]
+    environment:
+      ARTIFACT_PROCESSOR_DATABASE_URL: postgres://aven_artifact_processor:${ARTIFACT_PROCESSOR_RUNTIME_PASSWORD:-processor-local-runtime-password-0001}@db:5432/cust_artifact_local
+      ARTIFACT_PROCESSOR_SCOPE_ID: ${ARTIFACT_STORE_SCOPE_ID:-11111111-1111-4111-8111-111111111111}
+      ARTIFACT_PROCESSOR_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_BEARER_TOKEN:-processor-local-status-token-0001}
+      ARTIFACT_PROCESSOR_VISION_ENABLED: ${ARTIFACT_PROCESSOR_VISION_ENABLED:-false}
+      ARTIFACT_PROCESSOR_VISION_BASE_URL: ${ARTIFACT_PROCESSOR_VISION_BASE_URL:-http://host.docker.internal:8000/v1}
+      ARTIFACT_PROCESSOR_VISION_MODEL: ${ARTIFACT_PROCESSOR_VISION_MODEL:-local-vision-model}
+      ARTIFACT_PROCESSOR_VISION_PROFILE: ${ARTIFACT_PROCESSOR_VISION_PROFILE:-generic-json}
+      ARTIFACT_PROCESSOR_VISION_AUTH_MODE: ${ARTIFACT_PROCESSOR_VISION_AUTH_MODE:-none}
+      ARTIFACT_PROCESSOR_VISION_API_KEY: ${ARTIFACT_PROCESSOR_VISION_API_KEY:-}
+      ARTIFACT_PROCESSOR_VISION_MAX_PAGES: ${ARTIFACT_PROCESSOR_VISION_MAX_PAGES:-15}
+      ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS: ${ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS:-180}
+      ARTIFACT_PROCESSOR_VISION_ALLOW_INSECURE_HTTP: ${ARTIFACT_PROCESSOR_VISION_ALLOW_INSECURE_HTTP:-true}
+      ARTIFACT_PROCESSOR_LISTEN: 0.0.0.0:8089
+      ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
+      ARTIFACT_STORE_BEARER_TOKEN: ${ARTIFACT_STORE_BEARER_TOKEN:-artifact-local-coordinator-token-0001}
+      ARTIFACT_STORE_DATABASE_NAME: cust_artifact_local
+      RUST_LOG: ${ARTIFACT_PROCESSOR_LOG:-aven_artifact_processor=info,tower_http=info}
+      ARTIFACT_STORE_HEALTH_PORT: 8089
+    command: ["serve"]
+    ports:
+      - "${ARTIFACT_PROCESSOR_BIND:-127.0.0.1}:${ARTIFACT_PROCESSOR_PORT:-8089}:8089"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   app:
     depends_on:
       artifact-store:
         condition: service_healthy
+      artifact-processor:
+        condition: service_healthy
     environment:
       ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
       ARTIFACT_STORE_BEARER_TOKEN: ${ARTIFACT_STORE_BEARER_TOKEN:-artifact-local-coordinator-token-0001}
+      ARTIFACT_PROCESSOR_BASE_URL: http://artifact-processor:8089
+      ARTIFACT_PROCESSOR_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_BEARER_TOKEN:-processor-local-status-token-0001}
+      ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN:-processor-local-directory-token-0001}
 
   environment-worker:
     depends_on:
       artifact-store-provisioner:
+        condition: service_healthy
+      artifact-processor-provisioner:
         condition: service_healthy
     environment:
       ARTIFACT_STORE_PROVISIONER_BASE_URL: http://artifact-store-provisioner:8088
       ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN: ${ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN:-artifact-local-provisioner-token-0001}
       ARTIFACT_STORE_RUNTIME_ROLE: aven_artifact_store
       ARTIFACT_STORE_RUNTIME_PASSWORD: ${ARTIFACT_STORE_RUNTIME_PASSWORD:-artifact-local-runtime-password-0001}
+      ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL: http://artifact-processor-provisioner:8090
+      ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN:-processor-local-provisioner-token-0001}
+      ARTIFACT_PROCESSOR_RUNTIME_ROLE: aven_artifact_processor
+      ARTIFACT_PROCESSOR_RUNTIME_PASSWORD: ${ARTIFACT_PROCESSOR_RUNTIME_PASSWORD:-processor-local-runtime-password-0001}
