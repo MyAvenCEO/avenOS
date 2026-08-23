@@ -177,7 +177,11 @@ function assertFixture(name: string, status: Record<string, unknown>): string[] 
 		}
 	} else if (name.startsWith('receipt_')) {
 		if (status.state !== 'succeeded') errors.push(`expected succeeded, got ${String(status.state)}`)
-		if (!['invoice', 'receipt', 'credit-note', 'self-issued-receipt'].includes(String(status.preferredType))) {
+		if (
+			!['invoice', 'receipt', 'credit-note', 'self-issued-receipt'].includes(
+				String(status.preferredType)
+			)
+		) {
 			errors.push(`unexpected finance presentation ${String(status.preferredType)}`)
 		}
 		const derived = new Set(
@@ -241,4 +245,5 @@ for (const [index, path] of paths.entries()) {
 }
 
 console.error(JSON.stringify({ fixtures: paths.length, ...totals }))
-if (totals.failed > 0 || totals.harnessErrors > 0 || totals.assertionErrors > 0) process.exitCode = 1
+if (totals.failed > 0 || totals.harnessErrors > 0 || totals.assertionErrors > 0)
+	process.exitCode = 1
