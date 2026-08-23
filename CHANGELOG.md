@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.23-next.3...v) (2026-08-23)
+
+
+### Bug Fixes
+
+* **deploy:** allow artifact upload request bodies ([44ed110](https://github.com/MyAvenCEO/avenOS/commit/44ed1102b142de308784447242c7ff958f0717d5))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.23-next.2...v) (2026-08-23)
 
 
