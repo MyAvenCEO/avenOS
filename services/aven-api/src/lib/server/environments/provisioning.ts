@@ -8,10 +8,17 @@ export interface EnvironmentProvisionInput {
 		runtimeRole: string
 		scopeId: string
 	}
+	artifactProcessor?: {
+		provisionerBaseUrl: string
+		bearerToken: string
+		runtimeRole: string
+		scopeId: string
+	}
 	log: { info(message: string): Promise<void> | void }
 }
 
 export const CURRENT_ARTIFACT_STORE_SCHEMA_VERSION = 2
+export const CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION = 3
 
 const DATABASE_NAME = /^cust_[a-z0-9_]+$/
 const ROLE_NAME = /^[a-z][a-z0-9_]{0,62}$/
@@ -45,7 +52,8 @@ async function openProvisioner(connectionString: string) {
 
 async function assertSafeRuntimeRole(
 	cluster: Awaited<ReturnType<typeof openProvisioner>>,
-	runtimeRole: string
+	runtimeRole: string,
+	label = 'Artifact Store runtime'
 ): Promise<boolean> {
 	const runtime = (
 		await cluster.query(
@@ -69,7 +77,7 @@ async function assertSafeRuntimeRole(
 			runtime.rolcreaterole ||
 			runtime.rolreplication)
 	) {
-		throw new Error(`Existing Artifact Store role ${runtimeRole} has unsafe attributes.`)
+		throw new Error(`Existing ${label} role ${runtimeRole} has unsafe attributes.`)
 	}
 	if (
 		runtime &&
@@ -82,7 +90,7 @@ async function assertSafeRuntimeRole(
 			)
 		).rowCount
 	) {
-		throw new Error(`Existing Artifact Store role ${runtimeRole} has unsafe memberships.`)
+		throw new Error(`Existing ${label} role ${runtimeRole} has unsafe memberships.`)
 	}
 	return Boolean(runtime)
 }
@@ -117,6 +125,36 @@ export async function ensureArtifactRuntimeRole(input: {
 	}
 }
 
+export async function ensureProcessorRuntimeRole(input: {
+	provisionerUrl: string
+	runtimeRole: string
+	runtimePassword: string
+	log: { info(message: string): Promise<void> | void }
+}): Promise<void> {
+	validateRoleName(input.runtimeRole, 'Artifact Processor runtime role')
+	const cluster = await openProvisioner(input.provisionerUrl)
+	try {
+		if (!(await assertSafeRuntimeRole(cluster, input.runtimeRole, 'Artifact Processor runtime'))) {
+			await input.log.info(`Create Artifact Processor runtime role ${input.runtimeRole}.`)
+			await cluster.query(
+				`CREATE ROLE "${input.runtimeRole}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION`
+			)
+		}
+		const passwordLiteral = String(
+			(await cluster.query('SELECT quote_literal($1) AS value', [input.runtimePassword])).rows[0]
+				?.value ?? ''
+		)
+		if (!passwordLiteral) throw new Error('Could not encode Artifact Processor credential.')
+		await cluster.query(`ALTER ROLE "${input.runtimeRole}" PASSWORD ${passwordLiteral}`)
+		await cluster.query(
+			' SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename=$1 AND pid <> pg_backend_pid()',
+			[input.runtimeRole]
+		)
+	} finally {
+		await cluster.end()
+	}
+}
+
 export async function provisionEnvironmentDatabase(
 	input: EnvironmentProvisionInput
 ): Promise<void> {
@@ -125,6 +163,11 @@ export async function provisionEnvironmentDatabase(
 	if (input.artifactStore) {
 		validateRoleName(input.artifactStore.runtimeRole, 'Artifact Store runtime role')
 		if (!UUID.test(input.artifactStore.scopeId)) throw new Error('Artifact Store scope is invalid.')
+	}
+	if (input.artifactProcessor) {
+		validateRoleName(input.artifactProcessor.runtimeRole, 'Artifact Processor runtime role')
+		if (!UUID.test(input.artifactProcessor.scopeId))
+			throw new Error('Artifact Processor scope is invalid.')
 	}
 	const cluster = await openProvisioner(input.provisionerUrl)
 	try {
@@ -195,6 +238,13 @@ export async function provisionEnvironmentDatabase(
 			}
 			await cluster.query(`GRANT CONNECT ON DATABASE "${input.databaseName}" TO "${runtimeRole}"`)
 		}
+		if (input.artifactProcessor) {
+			const runtimeRole = input.artifactProcessor.runtimeRole
+			if (!(await assertSafeRuntimeRole(cluster, runtimeRole, 'Artifact Processor runtime'))) {
+				throw new Error(`Artifact Processor runtime role ${runtimeRole} is not initialized.`)
+			}
+			await cluster.query(`GRANT CONNECT ON DATABASE "${input.databaseName}" TO "${runtimeRole}"`)
+		}
 	} finally {
 		await cluster.end()
 	}
@@ -225,6 +275,20 @@ export async function provisionEnvironmentDatabase(
 		}
 		await input.log.info(`Artifact Store scope ${input.artifactStore.scopeId} ready.`)
 	}
+	if (input.artifactProcessor) {
+		const endpoint = new URL(input.artifactProcessor.provisionerBaseUrl)
+		endpoint.pathname = `/internal/v1/databases/${encodeURIComponent(input.databaseName)}/scopes/${encodeURIComponent(input.artifactProcessor.scopeId)}`
+		const response = await fetch(endpoint, {
+			method: 'PUT',
+			headers: { authorization: `Bearer ${input.artifactProcessor.bearerToken}` },
+			signal: AbortSignal.timeout(60_000)
+		})
+		if (!response.ok) {
+			await response.body?.cancel().catch(() => {})
+			throw new Error(`Artifact Processor provisioning failed with HTTP ${response.status}.`)
+		}
+		await input.log.info(`Artifact Processor scope ${input.artifactProcessor.scopeId} ready.`)
+	}
 	await input.log.info(`Database ${input.databaseName} ready.`)
 }
 
@@ -232,36 +296,44 @@ export async function suspendEnvironmentDatabase(input: {
 	provisionerUrl: string
 	databaseName: string
 	runtimeRole?: string
+	runtimeRoles?: string[]
 	log: { info(message: string): Promise<void> | void }
 }): Promise<void> {
-	if (!input.runtimeRole) {
-		await input.log.info('Environment suspended. No Artifact Store runtime is configured.')
+	const runtimeRoles = [
+		...new Set([...(input.runtimeRoles ?? []), ...(input.runtimeRole ? [input.runtimeRole] : [])])
+	]
+	if (runtimeRoles.length === 0) {
+		await input.log.info('Environment suspended. No customer-data runtime is configured.')
 		return
 	}
 	validateDatabaseName(input.databaseName)
-	validateRoleName(input.runtimeRole, 'Artifact Store runtime role')
+	for (const runtimeRole of runtimeRoles)
+		validateRoleName(runtimeRole, 'Customer-data runtime role')
 	const cluster = await openProvisioner(input.provisionerUrl)
 	try {
 		const databaseExists = Boolean(
 			(await cluster.query('SELECT 1 FROM pg_database WHERE datname=$1', [input.databaseName]))
 				.rowCount
 		)
-		const roleExists = Boolean(
-			(await cluster.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [input.runtimeRole])).rowCount
-		)
-		if (!databaseExists || !roleExists) {
-			await input.log.info('Environment suspended; no Artifact Store access existed.')
+		if (!databaseExists) {
+			await input.log.info('Environment suspended; the customer database does not exist.')
 			return
 		}
-		await cluster.query(
-			`REVOKE CONNECT ON DATABASE "${input.databaseName}" FROM "${input.runtimeRole}"`
-		)
-		await cluster.query(
-			'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1 AND usename=$2 AND pid <> pg_backend_pid()',
-			[input.databaseName, input.runtimeRole]
-		)
+		for (const runtimeRole of runtimeRoles) {
+			const roleExists = Boolean(
+				(await cluster.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [runtimeRole])).rowCount
+			)
+			if (!roleExists) continue
+			await cluster.query(
+				`REVOKE CONNECT ON DATABASE "${input.databaseName}" FROM "${runtimeRole}"`
+			)
+			await cluster.query(
+				'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1 AND usename=$2 AND pid <> pg_backend_pid()',
+				[input.databaseName, runtimeRole]
+			)
+		}
 	} finally {
 		await cluster.end()
 	}
-	await input.log.info('Environment suspended and Artifact Store connections revoked.')
+	await input.log.info('Environment suspended and customer-data runtime connections revoked.')
 }

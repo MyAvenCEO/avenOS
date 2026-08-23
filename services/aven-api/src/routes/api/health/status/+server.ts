@@ -1,5 +1,8 @@
 import { json } from '@sveltejs/kit'
-import { CURRENT_ARTIFACT_STORE_SCHEMA_VERSION } from '$lib/server/environments/provisioning.js'
+import {
+	CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
+	CURRENT_ARTIFACT_STORE_SCHEMA_VERSION
+} from '$lib/server/environments/provisioning.js'
 import { workerFreshness } from '$lib/server/ops.js'
 import { runtime } from '$lib/server/runtime.js'
 
@@ -22,6 +25,9 @@ export const GET = async () => {
 	const environmentAlive = fresh('environment-worker', config.ENVIRONMENT_WORKER_STALE_SECONDS)
 	const artifactConfigured = Boolean(
 		config.ARTIFACT_STORE_BASE_URL && config.ARTIFACT_STORE_BEARER_TOKEN
+	)
+	const processorConfigured = Boolean(
+		config.ARTIFACT_PROCESSOR_BASE_URL && config.ARTIFACT_PROCESSOR_BEARER_TOKEN
 	)
 	let environmentState: EnvironmentHealth | null = null
 	let sampleDatabase: string | null = null
@@ -50,13 +56,23 @@ export const GET = async () => {
 				        (name_record.status='owned' AND (
 				          environment.status<>'ready' OR ($1::boolean AND (
 				            environment.artifact_store_status<>'ready' OR environment.artifact_store_schema_version<$2
+				          )) OR ($3::boolean AND (
+				            environment.artifact_processor_status<>'ready' OR
+				            environment.artifact_processor_schema_version<$4
 				          ))
 				        )) OR
 				        (name_record.status<>'owned' AND (
-				          environment.status<>'suspended' OR environment.artifact_store_status<>'suspended'
+				          environment.status<>'suspended' OR
+				          environment.artifact_store_status<>'suspended' OR
+				          ($3::boolean AND environment.artifact_processor_status<>'suspended')
 				        ))
 				      )) AS drifted`,
-					[artifactConfigured, CURRENT_ARTIFACT_STORE_SCHEMA_VERSION]
+					[
+						artifactConfigured,
+						CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
+						processorConfigured,
+						CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION
+					]
 				)
 			).rows[0] ?? null
 		if (artifactConfigured) {
@@ -98,6 +114,18 @@ export const GET = async () => {
 			artifactReachable = false
 		}
 	}
+	let processorReachable = !processorConfigured
+	if (processorConfigured) {
+		try {
+			const response = await fetch(new URL('/health/ready', config.ARTIFACT_PROCESSOR_BASE_URL), {
+				signal: AbortSignal.timeout(2_000)
+			})
+			processorReachable = response.ok
+			await response.body?.cancel()
+		} catch {
+			processorReachable = false
+		}
+	}
 	const environmentKnown = Boolean(environmentState)
 	const environmentControlled = Boolean(
 		environmentState &&
@@ -107,7 +135,12 @@ export const GET = async () => {
 			environmentState.drifted === 0
 	)
 	const healthy =
-		emailAlive && environmentAlive && environmentKnown && environmentControlled && artifactReachable
+		emailAlive &&
+		environmentAlive &&
+		environmentKnown &&
+		environmentControlled &&
+		artifactReachable &&
+		processorReachable
 	return json({
 		overall: healthy ? 'healthy' : 'degraded',
 		capabilities: {
@@ -118,6 +151,11 @@ export const GET = async () => {
 			artifactStorage: !artifactConfigured
 				? 'disabled'
 				: artifactReachable
+					? 'available'
+					: 'unavailable',
+			artifactProcessing: !processorConfigured
+				? 'disabled'
+				: processorReachable
 					? 'available'
 					: 'unavailable'
 		},

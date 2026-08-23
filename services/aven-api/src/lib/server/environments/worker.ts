@@ -7,8 +7,10 @@ import type { EnvironmentWorkerConfig } from '../config.js'
 import { withTransaction } from '../db.js'
 import { environmentNames } from './naming.js'
 import {
+	CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
 	CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
 	ensureArtifactRuntimeRole,
+	ensureProcessorRuntimeRole,
 	provisionEnvironmentDatabase,
 	suspendEnvironmentDatabase
 } from './provisioning.js'
@@ -62,6 +64,18 @@ export class EnvironmentWorker {
 				log: { info: (message) => this.logger.info(message) }
 			})
 		}
+		if (
+			this.config.ARTIFACT_PROCESSOR_RUNTIME_ROLE &&
+			this.config.ARTIFACT_PROCESSOR_RUNTIME_PASSWORD &&
+			this.config.PROVISIONER_DATABASE_URL
+		) {
+			await ensureProcessorRuntimeRole({
+				provisionerUrl: this.config.PROVISIONER_DATABASE_URL,
+				runtimeRole: this.config.ARTIFACT_PROCESSOR_RUNTIME_ROLE,
+				runtimePassword: this.config.ARTIFACT_PROCESSOR_RUNTIME_PASSWORD,
+				log: { info: (message) => this.logger.info(message) }
+			})
+		}
 		await this.reconcileDesiredState()
 		this.timer = setInterval(() => {
 			void this.tick()
@@ -105,6 +119,7 @@ export class EnvironmentWorker {
 				const state = (
 					await client.query(
 						`SELECT environment.id,environment.status,environment.artifact_store_status,environment.artifact_store_schema_version,
+						        environment.artifact_processor_status,environment.artifact_processor_schema_version,
 						        environment.last_operation,name_record.status AS name_status
 						 FROM customer_environments environment
 						 JOIN names name_record ON name_record.name=environment.name
@@ -117,6 +132,8 @@ export class EnvironmentWorker {
 							status: string
 							artifact_store_status: string
 							artifact_store_schema_version: number
+							artifact_processor_status: string
+							artifact_processor_schema_version: number
 							last_operation: 'provision' | 'suspend' | null
 							name_status: string
 					  }
@@ -157,13 +174,25 @@ export class EnvironmentWorker {
 						this.config.ARTIFACT_STORE_RUNTIME_ROLE &&
 						this.config.ARTIFACT_STORE_RUNTIME_PASSWORD
 				)
+				const processorConfigured = Boolean(
+					this.config.ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL &&
+						this.config.ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN &&
+						this.config.ARTIFACT_PROCESSOR_RUNTIME_ROLE &&
+						this.config.ARTIFACT_PROCESSOR_RUNTIME_PASSWORD
+				)
 				const needsOperation =
 					desired === 'suspend'
-						? state.status !== 'suspended' || state.artifact_store_status !== 'suspended'
+						? state.status !== 'suspended' ||
+							state.artifact_store_status !== 'suspended' ||
+							state.artifact_processor_status !== 'suspended'
 						: state.status !== 'ready' ||
 							(artifactConfigured &&
 								(state.artifact_store_status !== 'ready' ||
-									state.artifact_store_schema_version < CURRENT_ARTIFACT_STORE_SCHEMA_VERSION))
+									state.artifact_store_schema_version < CURRENT_ARTIFACT_STORE_SCHEMA_VERSION)) ||
+							(processorConfigured &&
+								(state.artifact_processor_status !== 'ready' ||
+									state.artifact_processor_schema_version <
+										CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION))
 				if (!needsOperation) return
 				if (state.status === 'failed' && state.last_operation === desired) {
 					summary.terminalFailures += 1
@@ -178,7 +207,9 @@ export class EnvironmentWorker {
 				if (inserted.rowCount !== 1) return
 				await client.query(
 					`UPDATE customer_environments
-					 SET status='queued',last_operation=$1,artifact_store_status=CASE WHEN $1='provision' THEN 'pending' ELSE artifact_store_status END,
+					 SET status='queued',last_operation=$1,
+					     artifact_store_status=CASE WHEN $1='provision' THEN 'pending' ELSE artifact_store_status END,
+					     artifact_processor_status=CASE WHEN $1='provision' THEN 'pending' ELSE artifact_processor_status END,
 					     queued_at=now(),updated_at=now(),last_error_code=NULL,last_error_message=NULL
 					 WHERE id=$2`,
 					[desired, state.id]
@@ -230,6 +261,10 @@ export class EnvironmentWorker {
 					databaseName: names.databaseName,
 					stackName: names.stackName,
 					artifactStore: { schemaVersion: 1, scopeId: environmentId },
+					artifactProcessor: {
+						schemaVersion: CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
+						scopeId: environmentId
+					},
 					applications: []
 				}
 				await client.query(
@@ -369,6 +404,18 @@ export class EnvironmentWorker {
 									scopeId: job.artifact_scope_id
 								}
 							: undefined,
+					artifactProcessor:
+						this.config.ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL &&
+						this.config.ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN &&
+						this.config.ARTIFACT_PROCESSOR_RUNTIME_ROLE &&
+						this.config.ARTIFACT_PROCESSOR_RUNTIME_PASSWORD
+							? {
+									provisionerBaseUrl: this.config.ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL,
+									bearerToken: this.config.ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN,
+									runtimeRole: this.config.ARTIFACT_PROCESSOR_RUNTIME_ROLE,
+									scopeId: job.artifact_scope_id
+								}
+							: undefined,
 					log: { info: (message) => this.addLog(job.id, 'info', message) }
 				})
 			} else {
@@ -377,7 +424,10 @@ export class EnvironmentWorker {
 				await suspendEnvironmentDatabase({
 					provisionerUrl: this.config.PROVISIONER_DATABASE_URL,
 					databaseName: job.database_name,
-					runtimeRole: this.config.ARTIFACT_STORE_RUNTIME_ROLE,
+					runtimeRoles: [
+						this.config.ARTIFACT_STORE_RUNTIME_ROLE,
+						this.config.ARTIFACT_PROCESSOR_RUNTIME_ROLE
+					].filter((role): role is string => Boolean(role)),
 					log: { info: (message) => this.addLog(job.id, 'info', message) }
 				})
 			}
@@ -423,10 +473,21 @@ export class EnvironmentWorker {
 						: 'pending'
 			const artifactStoreProvisioned =
 				job.operation === 'provision' && Boolean(this.config.ARTIFACT_STORE_PROVISIONER_BASE_URL)
+			const artifactProcessorStatus =
+				job.operation === 'suspend'
+					? 'suspended'
+					: this.config.ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL
+						? 'ready'
+						: 'pending'
+			const artifactProcessorProvisioned =
+				job.operation === 'provision' &&
+				Boolean(this.config.ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL)
 			await client.query(
 				`UPDATE customer_environments
 				 SET status=$1,artifact_store_status=$3,
 				     artifact_store_schema_version=CASE WHEN $4 THEN $5 ELSE artifact_store_schema_version END,
+				     artifact_processor_status=$6,
+				     artifact_processor_schema_version=CASE WHEN $7 THEN $8 ELSE artifact_processor_schema_version END,
 				     ${timestampColumn}=now(),updated_at=now(),last_error_code=NULL,last_error_message=NULL
 				 WHERE id=$2`,
 				[
@@ -434,7 +495,10 @@ export class EnvironmentWorker {
 					job.environment_id,
 					artifactStoreStatus,
 					artifactStoreProvisioned,
-					CURRENT_ARTIFACT_STORE_SCHEMA_VERSION
+					CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
+					artifactProcessorStatus,
+					artifactProcessorProvisioned,
+					CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION
 				]
 			)
 			await writeAudit(client, {
