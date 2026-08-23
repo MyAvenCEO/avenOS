@@ -25,9 +25,11 @@
 		"environment:status": "bun scripts/environment.ts status",
 		"environment:retry": "bun scripts/environment.ts retry",
 		"environment:reconcile": "bun scripts/environment.ts reconcile",
-		"db:seed:billing": "bun scripts/seed-billing.ts"
+		"db:seed:billing": "bun scripts/seed-billing.ts",
+		"artifact-store:smoke": "bun scripts/artifact-store-smoke.ts"
 	},
 	"dependencies": {
+		"@avenos/artifact-store": "workspace:*",
 		"@avenos/aven-website": "workspace:*",
 		"@better-auth/passkey": "1.6.23",
 		"better-auth": "1.6.23",

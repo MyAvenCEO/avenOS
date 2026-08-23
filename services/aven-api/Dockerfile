@@ -2,6 +2,7 @@ FROM oven/bun:1.3.13 AS manifests
 WORKDIR /repo
 COPY package.json bun.lock ./
 COPY app/package.json app/package.json
+COPY libs/aven-artifact-store/package.json libs/aven-artifact-store/package.json
 COPY libs/aven-board/package.json libs/aven-board/package.json
 COPY libs/aven-skills/package.json libs/aven-skills/package.json
 COPY libs/aven-ui/package.json libs/aven-ui/package.json
@@ -10,8 +11,10 @@ COPY infrastructure/identity/package.json infrastructure/identity/package.json
 COPY services/aven-api/package.json services/aven-api/package.json
 
 FROM manifests AS build
-RUN bun install --frozen-lockfile --filter @avenos/aven-api
+RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
+  bun install --frozen-lockfile --filter @avenos/aven-api
 COPY services/aven-api services/aven-api
+COPY libs/aven-artifact-store libs/aven-artifact-store
 # The pricing SSOT: aven-api seeds its Creem products from the website's
 # plan data (@avenos/aven-website/pricing), so the source must exist where
 # the workspace symlink points.
@@ -19,7 +22,8 @@ COPY libs/aven-website/src/lib/pricing libs/aven-website/src/lib/pricing
 RUN bun --cwd services/aven-api build
 
 FROM manifests AS production-dependencies
-RUN bun install --frozen-lockfile --production --filter @avenos/aven-api
+RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
+  bun install --frozen-lockfile --production --filter @avenos/aven-api
 
 FROM oven/bun:1.3.13
 WORKDIR /repo/services/aven-api
@@ -31,6 +35,9 @@ COPY --from=build /repo/services/aven-api/src ./src
 COPY --from=build /repo/services/aven-api/scripts ./scripts
 COPY --from=build /repo/services/aven-api/migrations ./migrations
 COPY --from=build /repo/services/aven-api/package.json ./package.json
+# The built server imports the workspace Artifact Store SDK through Bun's
+# node_modules symlink, so the symlink target must exist in the runtime image.
+COPY --from=build /repo/libs/aven-artifact-store /repo/libs/aven-artifact-store
 # scripts/ (migrate, billing seed) run unbundled and resolve the workspace
 # symlink at runtime — the pricing source must be present in the image too.
 COPY --from=build /repo/libs/aven-website/src/lib/pricing /repo/libs/aven-website/src/lib/pricing
