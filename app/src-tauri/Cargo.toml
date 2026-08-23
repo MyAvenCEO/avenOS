@@ -59,6 +59,7 @@ tauri-plugin-opener = "2"
 env_logger = "0.11.10"
 base64 = "0.22"
 sha2 = "0.10"
+mime_guess = "2"
 
 # On-device German TTS — Supertonic-3 through ONNX Runtime (src/tts).
 # Pin the prerelease exactly so the bindings, speech wrapper, and provisioned

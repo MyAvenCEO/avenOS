@@ -126,8 +126,41 @@ export interface Turn {
 	id: string
 	role: 'user' | 'assistant'
 	content: string
+	attachment?: ArtifactAttachment
 	/** Every tool call this turn ran, with its result, for the transcript. */
 	calls?: { name: string; result: string }[]
+}
+
+export type ArtifactUploadStatus =
+	| 'queued'
+	| 'preparing'
+	| 'uploading'
+	| 'finalizing'
+	| 'committed'
+	| 'failed'
+
+export interface ArtifactAttachment {
+	readonly uploadId: string
+	readonly publicationId: string
+	originalName: string
+	length: number
+	status: ArtifactUploadStatus
+	progress: number
+	artifactId?: string
+	mediaType?: string
+	sha256?: string
+	error?: string
+}
+
+export interface UploadedArtifactReceipt {
+	publicationId: string
+	artifactId: string
+	originalName: string
+	mediaType: string
+	sha256: string
+	length: number
+	scopeSequence: number
+	replayed: boolean
 }
 
 /** Hooks for anything that wants the reply as it arrives — the speaker, today. */
@@ -176,6 +209,7 @@ export class Chat {
 	 */
 	session = $state('')
 	#sessions = new Map<string, Session>()
+	#uploads = new Map<string, { attachment: ArtifactAttachment; session: string }>()
 	/**
 	 * The turn in flight: which session's arrays it writes to, and where in
 	 * them it began. A tool may move the whole turn to another session
@@ -256,6 +290,77 @@ export class Chat {
 	 */
 	get signal(): AbortSignal | undefined {
 		return this.#abort?.signal
+	}
+
+	beginArtifactUpload(uploadId: string, publicationId: string, originalName: string): void {
+		this.failure = null
+		this.turns.push({
+			id: id(),
+			role: 'user',
+			content: '',
+			attachment: {
+				uploadId,
+				publicationId,
+				originalName,
+				length: 0,
+				status: 'queued',
+				progress: 0
+			}
+		})
+		const attachment = this.turns.at(-1)?.attachment
+		if (attachment) this.#uploads.set(uploadId, { attachment, session: this.session })
+
+		this.#sink.onTurn?.()
+	}
+
+	updateArtifactUpload(
+		uploadId: string,
+		status: Exclude<ArtifactUploadStatus, 'queued' | 'committed' | 'failed'>,
+		sent: number,
+		total: number
+	): void {
+		const attachment = this.#uploads.get(uploadId)?.attachment
+		if (!attachment || attachment.status === 'committed' || attachment.status === 'failed') return
+		attachment.status = status
+		attachment.length = total
+		attachment.progress = total === 0 ? 0 : Math.min(100, Math.floor((sent / total) * 100))
+		this.#sink.onTurn?.()
+	}
+
+	commitArtifactUpload(uploadId: string, receipt: UploadedArtifactReceipt): void {
+		const upload = this.#uploads.get(uploadId)
+		if (!upload) return
+		const { attachment } = upload
+		attachment.originalName = receipt.originalName
+		attachment.length = receipt.length
+		attachment.status = 'committed'
+		attachment.progress = 100
+		attachment.artifactId = receipt.artifactId
+		attachment.mediaType = receipt.mediaType
+		attachment.sha256 = receipt.sha256
+		attachment.error = undefined
+
+		const content =
+			`Attached file:\n` +
+			`originalName=${JSON.stringify(receipt.originalName)}\n` +
+			`artifactId=${JSON.stringify(receipt.artifactId)}`
+		// Transient uploads never enter model history. Only the authoritative
+		// committed reference is appended, and it does not trigger inference.
+		const wire =
+			upload.session === this.session ? this.#wire : this.#sessions.get(upload.session)?.wire
+		wire?.push({ role: 'user', content })
+		this.#uploads.delete(uploadId)
+		this.#sink.onTurn?.()
+	}
+
+	failArtifactUpload(uploadId: string, error: string): void {
+		const attachment = this.#uploads.get(uploadId)?.attachment
+		if (!attachment || attachment.status === 'committed') return
+		attachment.status = 'failed'
+		attachment.error = error
+		this.#uploads.delete(uploadId)
+
+		this.#sink.onTurn?.()
 	}
 
 	async send(text: string): Promise<void> {
@@ -521,6 +626,9 @@ export class Chat {
 		if (into !== this.session) this.#sessions.set(into, target)
 		for (const key of from) {
 			if (key === into) continue
+			for (const upload of this.#uploads.values()) {
+				if (upload.session === key) upload.session = into
+			}
 			const src = grab(key)
 			if (!src) continue
 			if (this.#live && this.#live.turns === src.turns) {
@@ -549,6 +657,9 @@ export class Chat {
 
 	clear(): void {
 		this.stop()
+		for (const [uploadId, upload] of this.#uploads) {
+			if (upload.session === this.session) this.#uploads.delete(uploadId)
+		}
 		this.turns = []
 		this.#wire = []
 		this.failure = null

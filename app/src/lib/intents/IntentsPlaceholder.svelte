@@ -64,6 +64,23 @@ const STATUS_LABEL: Record<IntentState, string> = {
 	archive: 'archiviert'
 }
 
+const UPLOAD_LABEL = {
+	queued: 'Waiting',
+	preparing: 'Preparing',
+	uploading: 'Uploading',
+	finalizing: 'Finalizing',
+	committed: 'Uploaded',
+	failed: 'Upload failed'
+} as const
+
+function formatBytes(bytes: number): string {
+	if (bytes <= 0) return 'Calculating size…'
+	const units = ['B', 'KB', 'MB', 'GB']
+	const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+	const value = bytes / 1024 ** unit
+	return `${value.toFixed(unit === 0 || value >= 10 ? 0 : 1)} ${units[unit]}`
+}
+
 /**
  * THE state→role mapping. It used to be restated in app.css as a layer of
  * `--color-state-*` aliases; a state is just a meaning borrowing a role, so
@@ -363,6 +380,8 @@ $effect(() => {
 		registryTick.v,
 		chat.turns.length,
 		chat.turns.at(-1)?.content,
+		chat.turns.at(-1)?.attachment?.progress,
+		chat.turns.at(-1)?.attachment?.status,
 		activity.current
 	]
 	if (stick) scrollToBottom(deps)
@@ -909,30 +928,90 @@ const DOT: Record<string, string> = {
 				{#if chat.turns.length > 0 || activity.current}
 					<div class="flex flex-col gap-2 border-foreground/10 border-t pt-4">
 						{#each chat.turns as turn (turn.id)}
-							<div class="flex" class:justify-end={turn.role === 'user'}>
-								<div
-									class="max-w-[75%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 text-xs leading-relaxed {turn.role ===
-									'user'
-										? 'bg-primary text-primary-foreground'
-										: 'border border-border bg-surface-card'}"
-								>
-									{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
-										<span class="flex items-center gap-1 py-1" aria-label="Denkt nach">
+							{#if turn.attachment}
+								{@const file = turn.attachment}
+								<div class="flex justify-end">
+									<div
+										class="w-full max-w-[28rem] overflow-hidden rounded-2xl border border-foreground/10 bg-surface-raised shadow-sm"
+									>
+										<div class="flex items-start gap-3 px-3.5 py-3">
 											<span
-												class="size-1.5 animate-bounce rounded-full bg-current opacity-40"
-											></span>
-											<span
-												class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
-											></span>
-											<span
-												class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
-											></span>
-										</span>
-									{:else}
-										{turn.content}
-									{/if}
+												class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
+												aria-hidden="true"
+												>▤</span
+											>
+											<div class="min-w-0 flex-1">
+												<p class="truncate font-medium text-[13px]" title={file.originalName}>
+													{file.originalName}
+												</p>
+												<div class="mt-0.5 flex items-center gap-2 text-[11px] text-foreground/50">
+													<span>{formatBytes(file.length)}</span>
+													<span aria-hidden="true">·</span>
+													<span
+														class:text-error={file.status === 'failed'}
+														class:text-success={file.status === 'committed'}
+														>{UPLOAD_LABEL[file.status]}</span
+													>
+												</div>
+											</div>
+											{#if file.status !== 'failed' && file.status !== 'committed'}
+												<span
+													class="shrink-0 font-mono text-[11px] tabular-nums text-foreground/55"
+												>
+													{file.progress}%
+												</span>
+											{/if}
+										</div>
+
+										{#if file.status !== 'failed' && file.status !== 'committed'}
+											<div class="h-1 bg-foreground/8">
+												<div
+													class="h-full bg-progress transition-[width] duration-150"
+													style="width: {file.progress}%"
+												></div>
+											</div>
+										{:else if file.status === 'committed' && file.artifactId}
+											<div
+												class="border-foreground/8 border-t px-3.5 py-2 text-[10px] text-foreground/45"
+											>
+												<span class="mr-1 uppercase tracking-wide">Artifact</span>
+												<span class="select-all font-mono">{file.artifactId}</span>
+											</div>
+										{:else if file.status === 'failed'}
+											<p
+												class="border-error/15 border-t bg-error-muted px-3.5 py-2 text-error-strong text-[11px]"
+											>
+												{file.error ?? 'The file could not be uploaded.'}
+											</p>
+										{/if}
+									</div>
 								</div>
-							</div>
+							{:else}
+								<div class="flex" class:justify-end={turn.role === 'user'}>
+									<div
+										class="max-w-[75%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 text-xs leading-relaxed {turn.role ===
+										'user'
+											? 'bg-primary text-primary-foreground'
+											: 'border border-border bg-surface-card'}"
+									>
+										{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
+											<span class="flex items-center gap-1 py-1" aria-label="Denkt nach">
+												<span
+													class="size-1.5 animate-bounce rounded-full bg-current opacity-40"
+												></span>
+												<span
+													class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:150ms]"
+												></span>
+												<span
+													class="size-1.5 animate-bounce rounded-full bg-current opacity-40 [animation-delay:300ms]"
+												></span>
+											</span>
+										{:else}
+											{turn.content}
+										{/if}
+									</div>
+								</div>
+							{/if}
 						{/each}
 
 						{#if activity.current}

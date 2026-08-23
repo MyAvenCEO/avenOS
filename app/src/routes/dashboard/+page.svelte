@@ -1,5 +1,6 @@
 <script lang="ts">
-import { isTauri } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { onMount, untrack } from 'svelte'
 import { dev } from '$app/environment'
 import { goto } from '$app/navigation'
@@ -31,6 +32,61 @@ import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
 const speaker = speakerActor.core
 const chat = chatActor.core
 const listener = listenerActor.core
+
+interface ArtifactUploadProgress {
+	uploadId: string
+	phase: 'preparing' | 'uploading' | 'finalizing'
+	sent: number
+	total: number
+}
+
+interface UploadedArtifactReceipt {
+	publicationId: string
+	artifactId: string
+	originalName: string
+	mediaType: string
+	sha256: string
+	length: number
+	scopeSequence: number
+	replayed: boolean
+}
+
+let fileHovering = $state(false)
+let uploadInFlight = $state(false)
+
+function basename(path: string): string {
+	return path.split(/[\\/]/).at(-1) || 'Dropped file'
+}
+
+async function uploadDroppedFile(paths: string[]): Promise<void> {
+	shell.tab = 'intents'
+	shell.detail = true
+	if (paths.length !== 1) {
+		chat.failure = 'Drop exactly one regular file at a time.'
+		return
+	}
+	if (uploadInFlight) {
+		chat.failure = 'Wait for the current file upload to finish.'
+		return
+	}
+
+	const uploadId = crypto.randomUUID()
+	const publicationId = crypto.randomUUID()
+	chat.beginArtifactUpload(uploadId, publicationId, basename(paths[0]))
+	uploadInFlight = true
+	try {
+		const receipt = await invoke<UploadedArtifactReceipt>('artifact_upload', {
+			uploadId,
+			publicationId,
+			path: paths[0]
+		})
+		chat.commitArtifactUpload(uploadId, receipt)
+	} catch (error) {
+		chat.failArtifactUpload(uploadId, error instanceof Error ? error.message : String(error))
+	} finally {
+		uploadInFlight = false
+	}
+}
 
 /**
  * Which surface fills the middle of the screen — driven by the left rail
@@ -95,6 +151,49 @@ $effect.pre(() => {
 onMount(() => {
 	if (conversing && mockPhase === null) void listener.start()
 	return () => listener.stop()
+})
+
+onMount(() => {
+	if (!isTauri()) return
+	let disposed = false
+	let stopDrop: (() => void) | undefined
+	let stopProgress: (() => void) | undefined
+	const webview = getCurrentWebview()
+
+	void webview
+		.onDragDropEvent(({ payload }) => {
+			if (payload.type === 'enter' || payload.type === 'over') {
+				fileHovering = true
+				return
+			}
+			fileHovering = false
+			if (payload.type === 'drop') void uploadDroppedFile(payload.paths)
+		})
+		.then((unlisten) => {
+			if (disposed) unlisten()
+			else stopDrop = unlisten
+		})
+		.catch((error) => {
+			chat.failure = `Could not enable file dropping: ${String(error)}`
+		})
+
+	void webview
+		.listen<ArtifactUploadProgress>('artifact-upload-progress', ({ payload }) => {
+			chat.updateArtifactUpload(payload.uploadId, payload.phase, payload.sent, payload.total)
+		})
+		.then((unlisten) => {
+			if (disposed) unlisten()
+			else stopProgress = unlisten
+		})
+		.catch((error) => {
+			chat.failure = `Could not observe file upload progress: ${String(error)}`
+		})
+
+	return () => {
+		disposed = true
+		stopDrop?.()
+		stopProgress?.()
+	}
 })
 
 /**
@@ -363,6 +462,18 @@ function onGlobalKeydown(event: KeyboardEvent) {
 	class="relative mx-auto flex min-h-0 min-w-0 w-full max-w-none flex-1 flex-col gap-2 p-2 pt-[max(0.5rem,env(safe-area-inset-top))]"
 	style="--dock-h: {dockH + DOCK_INSET}px"
 >
+	{#if fileHovering}
+		<div
+			class="pointer-events-none fixed inset-2 z-[80] flex items-center justify-center rounded-3xl border-2 border-primary border-dashed bg-surface-raised/90 text-primary shadow-xl backdrop-blur-sm"
+		>
+			<div class="flex flex-col items-center gap-3">
+				<span class="text-4xl" aria-hidden="true">⇩</span>
+				<p class="font-medium text-lg">Drop one file to upload it</p>
+				<p class="text-sm opacity-60">Any format · up to 100 MiB</p>
+			</div>
+		</div>
+	{/if}
+
 	{#if shell.tab === 'intents'}
 		<!-- The intents workspace fills everything between the tabs and the
 		     HITL bar — the wrapper carries the flex-1 so the three columns

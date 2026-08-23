@@ -9,6 +9,7 @@
 //! build undebuggable.
 
 mod asr;
+mod artifacts;
 mod assets;
 mod auth;
 mod tts;
@@ -201,6 +202,7 @@ pub fn run() {
 		.manage(asr::AsrState::default())
 		.manage(auth::AuthState::default())
 		.invoke_handler(tauri::generate_handler![
+			artifacts::artifact_upload,
 			auth::auth_status,
 			auth::auth_names,
 			auth::billing_me,

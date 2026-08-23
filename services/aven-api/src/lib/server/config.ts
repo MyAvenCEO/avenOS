@@ -27,6 +27,10 @@ export const serverConfigSchema = z
 		ENVIRONMENT_WORKER_DATABASE_URL: postgresUrl.optional(),
 		PROVISIONER_DATABASE_URL: postgresUrl.optional(),
 
+		ARTIFACT_STORE_BASE_URL: z.url().optional(),
+		ARTIFACT_STORE_SCOPE_ID: z.uuid().optional(),
+		ARTIFACT_STORE_BEARER_TOKEN: z.string().min(1).optional(),
+
 		BETTER_AUTH_SECRET: z.string().default(''),
 		BETTER_AUTH_SESSION_MAX_AGE_SECONDS: positiveInt.default(43_200),
 		BETTER_AUTH_SESSION_UPDATE_AGE_SECONDS: positiveInt.default(3_600),
@@ -70,6 +74,18 @@ export const serverConfigSchema = z
 		CREEM_WEBHOOK_SECRET: z.string().min(8).default('dev-fake-webhook-secret')
 	})
 	.superRefine((config, context) => {
+		const artifactValues = [
+			config.ARTIFACT_STORE_BASE_URL,
+			config.ARTIFACT_STORE_SCOPE_ID,
+			config.ARTIFACT_STORE_BEARER_TOKEN
+		]
+		if (artifactValues.some(Boolean) && !artifactValues.every(Boolean)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['ARTIFACT_STORE_BASE_URL'],
+				message: 'base URL, scope ID, and bearer token must be configured together'
+			})
+		}
 		const publicUrl = new URL(config.PUBLIC_BASE_URL)
 		if (publicUrl.pathname !== '/' || publicUrl.search || publicUrl.hash) {
 			context.addIssue({ code: 'custom', path: ['PUBLIC_BASE_URL'], message: 'must be an origin' })
@@ -152,6 +168,10 @@ export type EnvironmentWorkerConfig = Pick<
 	| 'ENVIRONMENT_RETRY_MAX_SECONDS'
 >
 export type NotifierConfig = Pick<ServerConfig, 'PUBLIC_BASE_URL'>
+export type ArtifactStoreConfig = Pick<
+	ServerConfig,
+	'ARTIFACT_STORE_BASE_URL' | 'ARTIFACT_STORE_SCOPE_ID' | 'ARTIFACT_STORE_BEARER_TOKEN'
+>
 export type BillingConfig = Pick<
 	ServerConfig,
 	| 'PUBLIC_BASE_URL'
