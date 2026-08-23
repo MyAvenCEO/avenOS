@@ -85,7 +85,8 @@ purchased-name environments get their own database and Artifact Store schema
 automatically. The smoke command creates an upload and
 root publication, then verifies artifact metadata, content retrieval, and feed
 replay. It is safe to rerun because every invocation uses new claim and
-publication IDs.
+publication IDs; it also verifies permanent publication replay plus fail-closed invalid
+database and scope routing.
 
 From the repository root, the equivalent commands are `bun run
 dev:api:artifacts` and, in another terminal, `bun run

@@ -68,8 +68,8 @@ the runtime role before the environment becomes ready.
 The component boundaries, control/data flows, lifecycle states, and existing-name
 rollout coverage are specified in
 [PER-CUSTOMER-ARCHITECTURE.md](PER-CUSTOMER-ARCHITECTURE.md). In particular, existing
-ready customer environments are upgraded automatically, while an older owned name with
-no `customer_environments` row still requires the reconciliation described there.
+ready customer environments and older owned names without environment rows are covered
+by the periodic reconciliation described there.
 
 The shared service token still represents the stable Aven API coordinator rather than
 a final short-lived signed authorization decision. Database-per-customer isolation,
@@ -84,9 +84,8 @@ hardening work.
   but it has no authenticated upload facade yet.
 - `@avenos/artifact-store` accepts in-memory upload bytes and needs a streaming upload
   form for the Aven API forwarding path.
-- The Artifact Store currently accepts request bodies up to 100 MiB and buffers one
-  upload in its HTTP adapter. "Any file" therefore means any file format, not an
-  unlimited file size.
+- The Artifact Store accepts request bodies up to 25 MiB and admits two concurrent
+  upload buffers. "Any file" therefore means any file format, not unlimited size.
 - Chat turns currently contain text only. They need a structured attachment state
   without exposing a local path.
 - The selected intent's inline conversation is the canonical answer surface and should
@@ -96,7 +95,7 @@ hardening work.
 
 1. Support one regular file per drop. Reject directories and multi-file drops with a
    clear message.
-2. Accept every file format up to 100 MiB.
+2. Accept every file format up to 25 MiB.
 3. Retain only the basename, byte length, declared media type, digest, publication ID,
    and artifact ID. Never place the full local path in UI or model state.
 4. Infer a media type from the filename and fall back to
@@ -194,7 +193,7 @@ The command must:
 
 1. ensure the path resolves to a regular file;
 2. extract and validate the basename;
-3. reject files larger than 100 MiB before network activity;
+3. reject files larger than 25 MiB before network activity;
 4. infer the media type;
 5. hash the file incrementally without loading it all into memory;
 6. retrieve the native Aven API session token from `AuthState`;
@@ -312,7 +311,7 @@ authenticated file PUT to Aven API
 - Active name selection and production name-to-scope routing.
 - A durable publication outbox surviving a full application restart.
 - The final per-request Artifact Store authorization-decision adapter.
-- Raising the 100 MiB limit or changing the Artifact Store's current buffering model.
+- Raising the 25 MiB limit or changing the Artifact Store's current buffering model.
 
 ## Exit criteria
 
