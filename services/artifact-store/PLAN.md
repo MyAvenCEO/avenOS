@@ -1,367 +1,604 @@
-# Artifact Store implementation plan
+# Minimal Artifact Store Implementation Plan
 
-Status: scaffold only; no artifact-store behavior is implemented on this branch.
+Status: implementation in progress; root vertical developer preview is executable
 
 Date: 22 August 2026
 
-This plan turns the reviewed immutable artifact-store design into a Rust service that
-can run as an independent process and can be consumed by the Tauri application. The
-original design remains the authority for persistence semantics: immutable typed
-artifacts, content-addressed blobs, structural references, production provenance,
-atomic publication, authorization-safe reads, a commit-ordered feed, rebuildable
-search, and explicit retention.
+Authority:
 
-## Architectural outcome
+- [Core contract](artifact-store-spec/CORE-CONTRACT.md)
+- [Security and recovery contract](artifact-store-spec/SECURITY-AND-RECOVERY.md)
+- [SDK contract](artifact-store-spec/SDK-CONTRACT.md)
+- [Conformance plan](artifact-store-spec/CONFORMANCE.md)
+- [AvenOS alignment paper](artifact-store-spec/ALIGNMENT-PAPER.md)
 
-Use one transport-neutral application kernel and compose it at the edges:
+## Implementation status
+
+Implemented on `feat/artifact-store` as of 22 August 2026:
+
+- the reduced four-crate Rust workspace and standalone `serve`/`migrate`/`verify`
+  binary;
+- raw duplicate-preserving `artifact-json-v1` parsing, canonical serialization,
+  schema validation and domain-separated type/artifact/publication digests;
+- exact source-controlled `core.file@1` and `core.bundle@1` definitions;
+- the first immutable PostgreSQL schema, including roots, runs, references, evidence,
+  upload claims, recovery exclusions, store epoch/mode and scope-local feed sequence;
+- upload claim creation/replay and digest/length/byte verification;
+- atomic root and run publication persistence, blob-authority rechecks, permanent
+  publication replay/conflict handling and upload consumption;
+- exact artifact and whole/ranged content reads plus complete scope publication feed;
+- a fixed-service, fixed-scope bearer adapter with no anonymous or JSON-supplied
+  publisher fallback; and
+- the independent `@avenos/artifact-store` TypeScript canonicalizer and root HTTP
+  client, with passing Bun tests.
+
+Verified against a disposable PostgreSQL 17 instance through context → upload → root
+publication → exact replay → artifact/content read → feed replay. Equal content still
+creates distinct occurrence UUIDs in the core tests.
+
+Still required before the root milestone exit gate:
+
+- frozen shared digest/DTO/OpenAPI fixtures and broader C-number coverage;
+- constrained security-definer SQL functions, separate role grants and privilege
+  inspection tests (the preview adapter currently uses direct table SQL);
+- streaming upload admission, aggregate quotas, expiry cleanup, response bounds and
+  failure/concurrency injection;
+- artifact list/batch/reference/referrer/lineage reads with high-water cursors;
+- TypeScript prepared-intent outbox/result verification/projector lifecycle; and
+- the real `aven-api` authorization decision adapter.
+
+Complete run/graph read routes and the divergent recovery ceremony remain Slices 2 and
+3. Therefore this implementation remains explicitly non-production despite the
+working end-to-end root path.
+
+This plan replaces the earlier broad service scaffold. It targets the finalized minimal
+version-1 kernel and deliberately separates a fast developer-usable slice from a
+conformant release.
+
+## Outcome
+
+Build one standalone Rust service backed by PostgreSQL that implements exactly:
+
+1. immutable source-controlled type versions;
+2. exact bounded blobs and expiring upload claims;
+3. immutable scoped artifact occurrences with ordered structural references;
+4. successful production runs with ordered pre-existing inputs and evidence;
+5. permanent atomic publication identity; and
+6. a complete scope-local publication feed.
+
+The implementation is complete only when the real PostgreSQL roles/functions, real HTTP
+server, reference SDK, shared fixtures, and divergent-restore drill pass C-001 through
+C-051 in [CONFORMANCE.md](artifact-store-spec/CONFORMANCE.md).
+
+There are two useful milestones:
+
+| Milestone | Meaning | Production status |
+| --- | --- | --- |
+| Root vertical | Upload → root publication → exact read/content → feed replay | Developer/integration preview only |
+| Core v1 | Roots, runs, evidence, graph reads, SDK/projector helpers and divergent recovery | Kernel-conformant; surrounding AvenOS production gates still apply |
+
+The root vertical should arrive quickly. It must not be marketed as production-ready or
+used for customer content before recovery, coordinator, authorization, backup and
+content-lifecycle work is complete.
+
+## Explicitly outside this implementation
+
+Do not implement these while building the core:
+
+- search, ranking, search mappings or vector retrieval;
+- mutable current/preferred heads, todo state, cases, gates, jobs or attempts;
+- cross-scope copy, personal-to-team movement or declassification;
+- retention, erasure, holds or purge;
+- payment, mail, calendar or other external execution;
+- a server-side procedure registry;
+- arbitrary external JSON Schema references;
+- direct worker upload/publication capabilities;
+- an alternative blob backend;
+- Tauri embedded PostgreSQL or a Tauri-specific artifact-store crate; or
+- deployment integration before the root vertical is stable.
+
+Those capabilities remain application responsibilities or documented extensions. In
+particular, the AvenOS coordinator and lifecycle extension are required for product
+rollout but are not part of the core service implementation.
+
+## Minimal repository structure
+
+Recreate the service workspace with four Rust crates, not the previous five-crate
+transport matrix:
 
 ```text
-                                   +-------------------------+
-                                   | standalone HTTP process |
-                                   +------------+------------+
-                                                |
-                                                v
-+-------------------+       +-------------------+-------------------+
-| Tauri remote mode |------>| artifact-store contract/application  |
-| (HTTP client)     |       | kernel                            |
-+-------------------+       +-------------------+-------------------+
-                                                |
-                           +--------------------+--------------------+
-                           |                                         |
-                           v                                         v
-                 +--------------------+                   +--------------------+
-                 | PostgreSQL adapter |                   | policy/job adapters |
-                 +--------------------+                   +--------------------+
-                           ^
-                           |
-                 +---------+----------+
-                 | Tauri embedded mode|
-                 | (explicit opt-in)  |
-                 +--------------------+
+services/artifact-store/
+  Cargo.toml
+  Cargo.lock
+  PLAN.md
+  artifact-store-spec/
+  crates/
+    contract/
+      src/
+    core/
+      src/
+    postgres/
+      migrations/
+      src/
+    server/
+      src/
+  conformance/
+    fixtures/
+      canonical-json/
+      schema-profile/
+      digests/
+      locators/
+      protocol/
+      cursors/
+    sql/
+    tests/
 ```
 
-The kernel must not know about Axum, Tauri, environment variables, SQLx, Docker, or a
-specific identity provider. It receives authenticated request context and uses narrow
-ports for persistence, authorization, clocks, IDs, and optional job-attempt fencing.
-Adapters own framework and deployment concerns.
-
-This separation gives us:
-
-- one implementation of publication validation, canonical hashing, idempotency, and
-  provenance rules;
-- an HTTP deployment without coupling the domain to its transport;
-- direct in-process calls from a trusted Tauri deployment without a loopback server;
-- a safe default Tauri deployment that calls a remote service and contains no
-  PostgreSQL credentials;
-- integration tests against the same public application contract in every mode.
-
-## Scaffolded crates
-
-| Crate | Kind | Intended responsibility |
-| --- | --- | --- |
-| `aven-artifact-store` | library | Domain types, versioned command/result contracts, invariant validation, canonicalization, application services, and persistence/policy ports. No framework-specific dependencies. |
-| `aven-artifact-store-postgres` | library | PostgreSQL implementation, embedded migrations, constrained transaction functions, role-aware pools, and projection repositories. |
-| `aven-artifact-store-client` | library | Versioned HTTP client used by Tauri and other Rust producers/consumers. It shares semantic contract types but never exposes database concepts. |
-| `aven-artifact-store-server` | binary | Standalone composition root: configuration, authentication adapter, HTTP routes, health endpoints, graceful shutdown, and worker subcommands. Its executable will be named `aven-artifact-store`. |
-| `aven-artifact-store-tauri` | library | Thin Tauri command/state adapter. Remote mode delegates to the HTTP client. An opt-in `embedded-postgres` mode composes the kernel with the PostgreSQL adapter for controlled desktop/test deployments. |
+| Crate | Responsibility |
+| --- | --- |
+| `aven-artifact-store-contract` | Closed wire DTOs, canonical value representation, limits, actor/publisher/scope identifiers, stable problem codes, cursor shapes and digest preimages. No HTTP or SQL. |
+| `aven-artifact-store-core` | Type/profile validation, publication preparation, topological/local-key checks, canonical hashing, application use cases and narrow persistence/authorization ports. |
+| `aven-artifact-store-postgres` | Immutable migrations, role/grant scripts, constrained publication/upload/read functions, transaction implementation and recovery administration. |
+| `aven-artifact-store-server` | Standalone binary, configuration, authentication adapter, streaming HTTP, range responses, health/readiness and process subcommands. |
 
 Dependency direction is one-way:
 
 ```text
-server ----> postgres ----> core
-   |                         ^
-   +-------------------------+
-
-tauri -----> client -------> core
-   |
-   +--------> postgres ----> core   (embedded-postgres only)
+server -> postgres -> core -> contract
+   |                    ^
+   +--------------------+
 ```
 
-The server and Tauri crates must not contain a second implementation of business
-rules. The PostgreSQL crate must not depend on either transport. If protocol DTOs
-eventually create pressure on the core API, split a small `contract` crate then; do
-not create that boundary pre-emptively.
+Add one TypeScript package after the wire contract is stable:
 
-## Supported runtime shapes
+```text
+libs/aven-artifact-store/
+  src/client/
+  src/schema/
+  src/projector/
+  tests/
+```
 
-### Standalone service
+Package name: `@avenos/artifact-store`. It is the first independent implementation of
+canonicalization and the reference SDK required by the conformance plan. It shares
+OpenAPI/JSON Schema output and golden fixtures, not Rust source code. Optional workflow
+recipes wait until application integration.
 
-The standalone binary will be the production authority. It will expose `/v1` over
-authenticated HTTPS behind the deployment proxy and connect to one PostgreSQL database
-per deployment/customer environment. That database owns one `artifact_store` schema
-containing metadata and bytes so backup and restore remain transactionally aligned.
+No Rust HTTP client is required for the core milestone. Server tests can exercise the
+wire contract directly, and the AvenOS coordinator will use the TypeScript SDK. Add a
+Rust client later only when another Rust consumer exists.
 
-The binary should eventually provide explicit process modes from the same immutable
-container image:
+## Boundary design
 
-- `serve` with only the artifact runtime database role;
-- `migrate` with the migration-owner credential;
-- `index` with the constrained indexer credential;
-- `verify` with read-only integrity privileges;
-- privileged retention operations only through a separately authorized operator path.
+### Contract crate
 
-Using one image does not mean using one credential. Each process receives only the
-role needed for its mode. The long-running web process must never receive migration,
-retention, provisioner, or backup credentials.
+The contract crate owns values whose exact shape can never be inferred from framework
+defaults:
 
-### Tauri remote mode (default)
+- `CanonicalValue`, with objects, arrays, strings, booleans, null and signed safe
+  integers only;
+- type definitions and closed ordered reference rules;
+- `PublicationIntent` and replaceable `PublicationSubmission.blobAuthorities`;
+- root/run command variants using closed tagged unions;
+- upload declarations and claim results;
+- artifact/run/feed/read envelopes;
+- stable problem details and codes;
+- pagination cursors and high-water boundaries; and
+- domain-separated digest input builders.
 
-The shipped desktop/mobile application should normally use the HTTP client through
-Tauri commands. Authentication comes from the app session and is translated into
-service credentials by the Tauri adapter. The client uses TLS, bounded timeouts,
-idempotency keys, streaming/range-aware blob transfers, and typed API errors.
+Do not deserialize arbitrary payloads first into ordinary `serde_json::Value`. The
+ingress parser must reject duplicate keys and unsafe numbers before information is
+lost. Framework JSON extractors may be used only after their behavior is proven to call
+the frozen parser without pre-normalization.
 
-This is the only mode suitable by default for a distributed application: embedding a
-remote PostgreSQL password in an app bundle would bypass the service authorization
-boundary and is not acceptable.
+All wire structs reject unknown fields. API times are RFC 3339 UTC strings; exact
+database timestamp conversion is tested. Digests use one frozen lowercase-hex lexical
+form and are never accepted as content authority.
 
-### Tauri embedded PostgreSQL mode (opt-in)
+### Core crate
 
-For a trusted desktop installation, development harness, or an environment that has a
-local PostgreSQL instance, the Tauri adapter may call the same application kernel
-directly. It must be activated by an explicit Cargo feature and runtime configuration;
-it is never an automatic fallback when the remote service is unavailable.
+The core exposes use cases rather than a generic repository:
 
-Embedded mode still requires real authenticated request context, authorization policy,
-database roles, migration compatibility checks, bounded background tasks, and graceful
-shutdown. It should not listen on a TCP port. Mobile targets must reject this feature
-until a supported PostgreSQL and credential threat model exists.
+```text
+context
+list/get types
+stage upload
+publish roots or one successful run
+list/get artifacts and content capability
+read run/graph/evidence directions
+read complete publications
+```
 
-If offline/mobile storage becomes a requirement, decide that separately. A SQLite
-implementation is not presumed equivalent to the PostgreSQL design because database-
-enforced immutability, authorization, locking, commit ordering, search, and backup
-semantics would all need a new contract and acceptance suite.
+Use separate ports for publication transactions, scoped reads, upload staging, type
+administration and clocks/UUIDs. Publication gets one transaction-capable command port;
+it must not assemble an atomic operation through a sequence of unrestricted CRUD
+repositories.
 
-## Application boundaries
+The core prepares all bounded work before the scope sequence lock:
 
-The core application facade should expose use cases rather than repositories or SQL:
+1. bind stable publisher and one authorized scope;
+2. parse and freeze the exact intent;
+3. resolve permanent publication replay/conflict identity;
+4. load exact types, inputs, reference targets and byte-reuse sources;
+5. validate payloads, reference rules, same-scope access and local-key order;
+6. resolve upload/source authority to exact declared bytes;
+7. allocate run/artifact UUIDs;
+8. compute type/artifact/publication digests and immutable row set; and
+9. call the single PostgreSQL publication command.
 
-- register/read immutable artifact type versions;
-- stage bounded blob uploads;
-- publish root artifacts or an atomic multi-output production run;
-- retrieve artifact metadata/content, references, lineage, evidence, and bounded
-  closure;
-- search through an explicit active projection generation;
-- consume whole authorized publication commits using opaque cursors;
-- administer search mappings/generations through a separate authority;
-- plan and execute retention through a privileged, audited authority.
+### PostgreSQL crate
 
-Every call carries a server-created `RequestContext` containing the authenticated
-principal, authorization decision/revision, request/deadline metadata, and optional
-job-attempt ownership. Request payloads cannot choose their publisher identity or
-inject database authorization context.
+The PostgreSQL adapter owns one `artifact_store` schema in the customer database. Use
+separate credentials/roles for:
 
-Ports should be capability-oriented. Avoid a single unrestricted repository trait.
-Publication needs one transaction-capable port that can enforce the whole atomic
-command, while read, search, feed, migration, indexing, and retention capabilities use
-separate interfaces and credentials.
+```text
+migration and source-controlled type administration
+runtime publication/upload
+runtime scoped reads
+recovery administration
+```
 
-## HTTP and Tauri contract
+Role creation/bootstrap may be a separately executed SQL file when the migration
+connection cannot create roles. Schema migrations remain embedded and immutable.
 
-The canonical external interface is HTTP `/v1`, following the reviewed design:
+Runtime roles receive no direct access to immutable tables or the global blob table.
+Expose narrow constrained functions. The publication path should converge on one
+security-definer function or equivalently constrained database command that inserts the
+prepared publication/run/artifact/graph row set and rechecks every relational invariant
+inside one transaction.
 
-- type discovery;
-- simple artifact upload and principal-bound blob staging;
-- canonical batch publication plus root/run convenience routes;
-- artifact content, provenance, reference, and evidence retrieval;
-- POST-based search with stable sealed cursors;
-- whole-commit change feed and race-free bootstrap scan;
-- liveness, readiness, and version/schema compatibility endpoints.
+Rust performs canonical JSON, JSON Schema and digest validation. PostgreSQL independently
+enforces:
 
-Tauri commands should mirror use cases, not HTTP implementation details and never SQL.
-Remote commands delegate to the client; embedded commands delegate directly to the
-facade. Both return the same versioned result and error envelopes so the webview does
-not care which composition mode is active.
+- scope-local composite foreign keys;
+- publication/publisher/semantic-digest uniqueness;
+- final non-null immutable scope sequence;
+- root versus derived shape;
+- one run per publication and one producer per output;
+- contiguous role/ordinal constraints validated by the publication function;
+- blob digest/length binding;
+- local reference/input/evidence ownership;
+- recovery mode and publication-ID exclusions; and
+- restrictive history foreign keys with no cascades.
 
-Large bytes must remain streaming at transport boundaries. Do not represent an entire
-upload/download as a Tauri JSON array, base64 string, or repeatedly copied in-memory
-buffer. Before implementation, choose the supported Tauri streaming/channel or secure
-temporary-file handoff and apply the same size, ownership, cleanup, and path-validation
-rules as the HTTP staging path.
+### Server crate
 
-## PostgreSQL ownership and migration strategy
+The server is the only production composition root. It should expose subcommands from
+one image while receiving distinct credentials:
 
-- Use a dedicated `artifact_store` schema in a dedicated deployment/customer database.
-- Keep migrations in `aven-artifact-store-postgres` and compile them into the migrator
-  so an image and its schema ledger cannot drift.
-- Use monotonically ordered, immutable migration files and a migration ledger guarded
-  by a PostgreSQL advisory lock.
-- Never auto-migrate from the runtime server or Tauri startup path. They perform a
-  compatibility check and fail readiness with a useful error when migration is needed.
-- Create distinct non-login ownership roles and login credentials for migration,
-  runtime, indexer, retention, and backup responsibilities.
-- Expose protected data to runtime roles only through constrained functions,
-  security-barrier views, or forced RLS with fail-closed authorization context.
-- Put immutable-table mutation protection and envelope/payload-or-tombstone checks
-  below the Rust repository layer.
-- Keep upload sessions, idempotency state, projector checkpoints, and other operational
-  rows explicitly separate from immutable truth.
+```text
+serve
+migrate
+verify
+recover
+```
 
-The first migration must wait for the design's unresolved canonicalization,
-authorization, retention, cursor, and size-limit decisions. Those choices affect stored
-digests and legal erasure and cannot be repaired safely with an ordinary refactor.
+`serve` never gets migration or recovery credentials. `migrate` never starts an HTTP
+listener. `recover` refuses normal application credentials and operates only while
+ordinary traffic is fenced.
 
-## Configuration and secrets
+The authentication adapter returns a server-created context containing stable
+`issuer + subject`, one allowed scope, namespace grants, request/deadline metadata and
+policy decision expiry. Request bodies cannot provide publisher or database context.
+Use a deterministic test adapter only in integration-test builds; do not ship an
+anonymous/default-scope fallback.
 
-Define typed configuration in the standalone composition root and inject resolved
-values into libraries. Environment variable parsing does not belong in core or
-persistence code.
+## Decisions to freeze in Slice 0
 
-Expected configuration groups include:
+Make these decisions once, encode them as fixtures, and do not start the first migration
+until server and TypeScript implementations agree:
 
-- bind address, public origin, request/body limits, timeouts, and graceful-shutdown
-  budget;
-- runtime/migrator/indexer database URLs supplied only to the corresponding process;
-- authentication issuer/audience or trusted internal-auth settings;
-- authorization-policy endpoint/cache lifetime and fail-closed behavior;
-- cursor sealing keys with key IDs and rotation windows;
-- idempotency retention, staging expiry/quota, feed retention, and recovery epoch;
-- tracing/logging controls that default to excluding content and bearer material.
+1. UUID version and lower-case textual form.
+2. Stable publisher representation as separate bounded `issuer` and `subject` values.
+3. Actor envelope and identifier bounds.
+4. Exact `artifact-json-v1` object-key order and safe-integer rules.
+5. Exact allowed JSON Schema 2020-12 keyword/format subset.
+6. Type-definition, artifact and publication digest domains and preimages.
+7. Exact root/run/upload/read/feed DTO schemas and error bodies.
+8. Every JSON, identifier, blob, upload, publication, graph, page and response bound.
+9. Upload-claim lifetime, logical-byte quotas, cleanup grace and concurrency limits.
+10. Cursor encodings and keyset ordering.
+11. UTF-8 byte-range and integer page-region locator envelopes.
+12. Exact `core.file@1` and `core.bundle@1` definitions and digests.
+13. Scope-sequence allocation and transaction isolation behavior.
+14. Recovery journal/exclusion payloads and supported restore horizon.
 
-Commit only safe examples. Deployment secrets, host addresses, resource IDs, Pulumi
-state, cursor keys, and database passwords belong in GitHub Environment secrets or
-variables according to the existing GitHub/Hetzner deployment rules.
-
-## Standalone deployment plan
-
-Deployment work is intentionally deferred until the service has a real vertical
-slice. When added, it should follow the existing Hetzner/GitHub model:
-
-1. Build one reproducible multi-stage Rust image and publish it to GHCR by immutable
-   commit digest.
-2. Run as a non-root user with a read-only root filesystem, bounded `/tmp`, dropped
-   capabilities, `no-new-privileges`, rotating local logs, and a defined stop timeout.
-3. Add a one-shot migrator that must succeed before `serve` or `index` becomes ready.
-4. Keep PostgreSQL on protected persistent storage; prefer a dedicated artifact
-   database/roles in the existing protected cluster over silently coupling artifact
-   tables to the identity database.
-5. Route TLS through Caddy and expose only the intended API/health surface. PostgreSQL
-   remains private.
-6. Add liveness, database/schema readiness, image-user, Compose-render, migration
-   idempotency, and public endpoint checks to CI/deployment.
-7. Implement encrypted off-volume database backups and a rehearsed restore before
-   retaining customer artifacts. Server/volume backups alone are insufficient.
-8. Treat production as a separate environment with distinct credentials, database,
-   DNS, policy, and approval controls.
-
-Do not add the empty binary to the current release or Compose workflows: deploying a
-no-op service would create a misleading operational surface. CI integration can start
-now with formatting/metadata checks; image/deployment integration starts with Slice 1.
+Use deliberately conservative initial limits. Version 1 stores blobs in PostgreSQL and
+may buffer a bounded upload once after streaming/hash verification; do not adopt the old
+100 MiB ceiling without measurement. A one-day upload spike should establish the first
+blob maximum and memory/WAL behavior.
 
 ## Implementation sequence
 
-### Phase 0: irreversible decisions and executable contracts
+### Slice 0 — executable contract
 
-- Resolve the pre-migration decisions listed below and record short ADRs.
-- Define the versioned command/result/error envelopes and size limits.
-- Choose Rust libraries only after small spikes for exact JSON parsing,
-  canonicalization, JSON Schema behavior, PostgreSQL byte streaming, and Tauri byte
-  transfer.
-- Write cross-language digest golden vectors before storing any production digest.
-- Build a PostgreSQL integration-test harness and authorization leak test matrix.
+Goal: remove semantic uncertainty before SQL exists.
 
-### Phase 1: immutable storage vertical slice
+Deliver:
 
-- Type versions, blobs, artifact envelopes/payloads, structural references, scopes,
-  idempotency records, upload claims, commits, and database-enforced immutability.
-- Canonical publication transaction and bounded `core.file@1`/`core.manifest@1` flow.
-- Standalone upload/publication/retrieval/feed endpoints and matching Rust client.
-- Tauri remote commands for that same narrow flow; embedded mode only after remote
-  contract parity is proven.
-- Backup/restore manifest and first recovery drill.
+- OpenAPI and closed JSON Schemas for every v1 command/result/error;
+- canonical JSON parser/serializer in Rust;
+- the schema-profile validator wrapper;
+- domain-separated digest implementations;
+- exact built-in definitions;
+- all golden fixtures required by Conformance section 2;
+- the TypeScript canonicalizer and fixture runner; and
+- short ADRs for the 14 decisions above.
 
-### Phase 2: derivation and evidence
+Exit gate:
 
-- Production runs, ordered inputs/outputs, locators, evidence, graph queries, and
-  atomic multi-output publication.
-- Classification and OCR types using one settled OCR storage representation.
-- Job-attempt fencing adapter without moving job state into the artifact kernel.
+- Rust and TypeScript agree byte-for-byte on every valid vector;
+- both reject every invalid vector for the same stable reason category;
+- built-in type digests are frozen; and
+- no migration exists yet.
 
-### Phase 3: rebuildable search
+Expected effort: roughly 3–5 focused engineering days. This is the highest-leverage
+place to avoid later migration and SDK rewrites.
 
-- Immutable mapping versions, shadow projection generations, text and typed indexes,
-  commit consumer/checkpointing, activation, and restartable cursors.
-- Authorization-before-ranking/faceting tests and raw-file discovery via OCR source
-  attribution.
+### Slice 1A — root artifact vertical
 
-### Phase 4: review and external action
+Goal: one real path through HTTP and PostgreSQL.
 
-- Typed decisions/evaluations, correction runs, application-owned preference
-  projections, and one complete domain request/receipt path.
-- External executor idempotency keyed by the request artifact occurrence.
+Deliver the minimal relations and functions for:
 
-### Phase 5: retention and operations
+- `store_state`, scopes and per-scope sequence head;
+- immutable type versions and migration-time built-in registration;
+- blobs and publisher/scope-bound upload claims;
+- publications and permanent replay/conflict identity;
+- artifact records/contents and ordered structural references;
+- publication-ID exclusions from the first schema;
+- context and exact type reads;
+- staged upload with streaming hash/length verification;
+- root publication for `core.file` and `core.bundle`;
+- exact artifact/content reads, including HEAD and byte ranges; and
+- complete publication feed from sequence zero.
 
-- Legal holds, tombstones or approved hard-delete closure, descendant/referrer
-  analysis, projection removal, blob garbage collection, privileged audit, and
-  integrity scrub.
-- Recovery-epoch/failover procedure, monitoring, capacity tests, and documented SLOs.
+The first end-to-end fixture is:
 
-## Verification strategy
+```text
+GET context
+  -> PUT exact file upload
+  -> durably prepared root PublicationIntent
+  -> PUT root publication
+  -> GET artifact and ranged content
+  -> GET publication feed and hydrate exact artifact
+  -> replay same publication UUID and receive original result
+```
 
-Each implementation phase should add checks at the layer that owns the guarantee:
+Add a second fixture that publishes two equal-byte file occurrences plus a bundle with
+backward local references. This proves occurrence identity, physical deduplication,
+reference digest semantics and atomic feed membership without runs yet.
 
-- pure unit/property tests for canonicalization, limits, local-reference DAGs, and
-  command validation;
-- golden vectors shared with every non-Rust SDK;
-- PostgreSQL integration tests for transaction atomicity, concurrency, cursor order,
-  idempotency races, role grants, RLS/function fail-closed behavior, purge races, and
-  restore integrity;
-- HTTP contract tests against the standalone server and client;
-- parity tests running the same use-case suite through standalone, Tauri remote, and
-  eligible embedded compositions;
-- adversarial authorization tests proving hidden IDs, counts, snippets, ranks,
-  referrers, evidence, deduplication, and feed gaps do not leak;
-- migration-up tests run twice against a fresh supported PostgreSQL version;
-- bounded-load tests at every declared blob, JSON, batch, graph, feed, and search
-  limit;
-- `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features`,
-  `cargo test --workspace --all-features`, and a dependency/license/security policy
-  gate in CI.
+Exit gate:
 
-The repository's Rust toolchain (`1.93.1`) and shared Cargo target configuration apply
-to this workspace. The service keeps its own `Cargo.lock` because it produces a
-deployable executable.
+- the real database and HTTP stack pass C-001 through C-023 where applicable to roots,
+  C-026 through C-028, C-035 through C-040 for root resources, and all negative scope/
+  authority tests;
+- runtime SQL cannot mutate history or read blobs globally; and
+- an ambiguous disconnect replays one permanent publication.
 
-## Decisions required before implementation
+Expected effort after Slice 0: roughly 7–10 focused engineering days. This is the first
+developer-usable milestone, not the conformant release.
 
-The source design lists the full decision set. These are the first blockers for code:
+### Slice 1B — complete root reads, limits and SDK lifecycle
 
-1. Exact JSON Schema 2020-12 validator/profile, supported references, and dependency
-   digest closure.
-2. Canonical JSON number profile, domain tags, UUID version, and golden vectors.
-3. Blob/JSON/string/batch/reference/locator/traversal limits and a measured streaming
-   upload strategy.
-4. Principal-bound staged/reused blob authority and garbage-collection locking.
-5. Authorization-scope resolver, database enforcement mechanism, declassification,
-   policy revision lifetime, and non-disclosure responses.
-6. Idempotency retention/tombstones, semantic request hashing, commit allocator,
-   sealed cursor format, feed retention, and recovery-epoch behavior.
-7. Retention law/product policy: which envelope, attribution, graph, locator, digest,
-   idempotency, commit, and audit facts may remain after erasure.
-8. Initial locator vocabulary, OCR blob representation, built-in schemas, and
-   procedure/actor identifier conventions.
-9. Tauri production topology: remote-only for distributed builds (recommended), plus
-   which controlled desktop builds, if any, may enable embedded PostgreSQL.
-10. Per-customer database provisioning, backup RPO/RTO, restore fencing, and whether
-    the artifact service gets its own hostname or an authenticated route on an
-    existing application origin.
+Goal: remove shortcuts from the preview slice.
 
-No database migration or public type version should be created until decisions 1-7
-are settled and covered by executable tests.
+Deliver:
 
-## Scope of this scaffold
+- all exact artifact collection and batch-get filters;
+- reference/referrer and bounded lineage pagination;
+- upload admission reservations, aggregate quotas, expiry and cleanup;
+- fixed high-water cursors and response-size enforcement;
+- TypeScript prepared intent, outbox interface and result verification;
+- universal publication replay and artifact-oriented projector bootstrap helpers; and
+- fault injection around every root publication phase.
 
-This branch intentionally contains only Cargo metadata, empty crate entry points, and
-this plan. It does not:
+Exit gate:
 
-- select web, async, database, schema, canonicalization, or Tauri libraries;
-- create migrations or register artifact types;
-- change the Tauri application or its Cargo lockfile;
-- add Docker, Compose, Pulumi, GitHub Actions, secrets, ports, DNS, or deployment
-  resources;
-- claim that the no-op standalone binary is a usable service.
+- all root-applicable C-001 through C-042 tests pass;
+- a single publication can always fit in one configured feed response; and
+- the SDK never puts transient upload/source authority into semantic identity.
 
-The next implementation branch should begin with Phase 0, turn decisions into ADRs and
-tests, and then deliver one complete Slice 1 vertical path rather than broad table and
-endpoint stubs.
+Expected effort: roughly 5–8 focused engineering days.
+
+### Slice 2 — successful runs and evidence
+
+Goal: complete the provenance kernel.
+
+Deliver:
+
+- production run, ordered input and evidence relations;
+- run publication variant with one run and one or more outputs;
+- output producer role/ordinal enforcement;
+- `artifact-root`, `json-pointer`, `byte-range` and `page-region` validation;
+- run, producer, producer-input, sibling-output, consuming-run, direct-derivation,
+  supporting-evidence and evidence-usage routes;
+- bounded directional lineage; and
+- TypeScript procedure descriptors and typed evidence builder.
+
+Use one small domain test family, not the 52-type inventory:
+
+```text
+core.file@1 root
+  -> document classification output
+  -> OCR text output with byte/page evidence
+  -> one multi-output run fixture
+```
+
+Fractional confidence uses a scaled integer or constrained decimal string under the
+final JSON profile. OCR text locators use UTF-8 byte offsets, not NFC/code-point offsets.
+
+Exit gate:
+
+- every run/evidence assertion C-017 through C-034 passes;
+- a failure at any point exposes no run/output/feed state;
+- production inputs always come from earlier publications; and
+- every graph direction paginates without later-history drift.
+
+Expected effort: roughly 5–8 focused engineering days.
+
+### Slice 3 — divergent recovery
+
+Goal: make permanent publication identity true after restore, not only during normal
+operation.
+
+Deliver:
+
+- `normal`/`reconciling` writer fence in every mutation path;
+- fresh epoch transition under recovery credentials;
+- authenticated publisher journal import and completion watermarks;
+- exact publication restoration with original IDs/sequence/time;
+- immutable publication-ID/result-ID exclusions when exact restoration is impossible;
+- causal dependency ordering and dependent exclusion;
+- cursor invalidation and pending-old-epoch behavior;
+- integrity verification and atomic reopening; and
+- a scripted PostgreSQL snapshot/restore drill predating an acknowledged publication.
+
+Do not simulate this only with mocked repository calls. The test must restore a real
+database snapshot while traffic credentials are disabled.
+
+Exit gate: C-043 through C-051 pass, including missing-publisher watermark, exact
+restore, permanent exclusion and corruption fencing cases.
+
+Expected effort: roughly 7–12 focused engineering days. This is on the critical path to
+a conformant core release.
+
+### Slice 4 — release hardening
+
+Goal: produce repeatable release evidence rather than a green developer machine.
+
+Deliver:
+
+- CI against the supported PostgreSQL version;
+- migration-up and privilege inspection tests;
+- bounded concurrency/load tests for upload, publication, graph and feed limits;
+- dependency/license/security checks;
+- reproducible server image with non-root/read-only defaults;
+- `serve`, `migrate`, `verify` and recovery smoke tests using distinct credentials; and
+- a conformance report listing every C-001 through C-051 result and fixture version.
+
+Exit gate:
+
+```text
+cargo fmt --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+bun test libs/aven-artifact-store/tests
+real PostgreSQL conformance suite C-001..C-051
+snapshot/restore recovery drill
+```
+
+Expected effort: roughly 5–8 focused engineering days, with much of it developed
+incrementally in earlier slices.
+
+## Fastest staffing and sequencing
+
+For one experienced Rust/PostgreSQL engineer:
+
+- first real root-artifact vertical: approximately 2–3 working weeks;
+- full core through runs/evidence: approximately 4–6 working weeks; and
+- conformance including divergent recovery and release evidence: approximately 6–9
+  working weeks.
+
+These are planning ranges, not delivery promises. Recovery, driver byte behavior and
+canonicalization library behavior are the largest uncertainties.
+
+With two engineers, parallelize only after Slice 0 freezes the contract:
+
+| Stream | Work |
+| --- | --- |
+| Core/database | Migrations, roles, constrained functions, publication transaction and recovery |
+| Protocol/SDK | HTTP handlers, TypeScript client/schema/projector and cross-language fixtures |
+
+Both streams share the same conformance fixtures. Avoid separate interpretations of
+the command, digest or cursor contract.
+
+## Testing strategy
+
+Treat every normative C-number as a test ID in source. Organize tests by owned layer:
+
+```text
+contract tests
+  duplicate keys, integers, canonical bytes, schema profile, digest vectors, DTO closure
+
+core tests
+  command shape, local ordering, ordinals, locators, semantic intent, response limits
+
+PostgreSQL tests
+  roles, immutable grants/triggers, scope FKs, concurrency, sequence, replay, rollback
+
+HTTP tests
+  authentication, streaming, range, problem codes, pagination, non-disclosure
+
+SDK/projector tests
+  outbox lifecycle, authority replacement, result verification, replay/checkpoint
+
+recovery tests
+  real snapshot restore, journal watermark, exact restore, exclusions, epoch fencing
+```
+
+Use two scopes and two stable publishers in the fixture database from the beginning.
+Rotate credentials for one stable publisher. This prevents a single-scope happy path
+from hiding authorization and idempotency errors until late in development.
+
+## Implementation rules that preserve speed
+
+- Write one root vertical end to end before adding all read routes.
+- Register only exact built-ins and the types required by the current test slice.
+- Keep one bounded PostgreSQL blob backend and measure before abstracting it.
+- Use one publication command; do not add per-domain endpoints.
+- Keep all structural roles ordered; do not implement a set mode.
+- Require backward local references; do not implement recursive cycle detection.
+- Keep inputs pre-existing; do not support same-publication production chains.
+- Use transparent scope-local cursors for v1; sealed multi-scope cursors are deferred.
+- Use migration-time type administration only.
+- Reject unknown/unsupported values rather than adding compatibility coercion.
+- Keep all long-running computation and byte acquisition outside the publication
+  transaction.
+- Allocate the scope sequence only in the final short locked phase.
+- Add no application convenience that cannot compile to the exact publication intent.
+
+## Risks and early spikes
+
+| Risk | Spike/mitigation |
+| --- | --- |
+| Duplicate-key and exact-integer parsing is lost by a framework extractor | Parse raw request bytes through the contract parser before framework DTO conversion |
+| JSON Schema library behavior differs across Rust/TypeScript | Freeze the subset and run shared invalid/valid fixtures before migrations |
+| PostgreSQL driver duplicates large `BYTEA` memory | Measure stream → hash/count → bounded buffer → insert; set the initial blob limit from evidence |
+| Publication SQL becomes an untestable giant function | Pass a prepared bounded row set, keep canonical logic in Rust, and give relational checks focused SQL tests |
+| Sequence allocation serializes too much work | Resolve/validate/hash before locking the scope counter; instrument lock duration |
+| Pagination drifts under concurrent writes | Bind every collection cursor to epoch, scope, filters and first-page high-water |
+| Recovery is postponed behind product features | Create state/exclusion schema in Slice 1 and schedule the real restore drill as Slice 3 release-blocking work |
+| UI mock drives kernel features back in | Test UI through projector/client fixtures; keep search, gates and current state outside the service |
+
+## Immediate first pull request
+
+The first implementation PR should contain only:
+
+1. the four-crate workspace and dependency direction checks;
+2. the conformance fixture directory and C-test naming convention;
+3. ADRs/decision records for UUID, publisher/actor, JSON, schema profile, digests, DTOs,
+   cursors and limits;
+4. Rust canonical JSON plus type/artifact/publication digest vectors;
+5. the independent TypeScript vector runner;
+6. exact `core.file@1` and `core.bundle@1` source definitions; and
+7. CI for formatting, linting and those fixture tests.
+
+It should not contain a database migration, HTTP route, Tauri command, search API,
+artifact projector or domain catalog migration. The first migration starts only after
+that PR proves the frozen bytes and schemas in two implementations.
+
+## Core handoff boundary
+
+After C-001 through C-051 pass, the next application work is intentionally separate:
+
+1. provision the artifact store and AvenOS coordinator in each customer environment;
+2. add the stable coordinator service publisher and `aven-api` scope decision contract;
+3. implement the coordinator outbox, acknowledgment journal and byte spool;
+4. build AvenOS projections/search from the publication feed;
+5. connect Tauri through typed coordinator commands; and
+6. install the lifecycle extension before real customer ingestion.
+
+Keeping this boundary explicit lets the core ship quickly without pretending that a
+standalone immutable database alone completes the AvenOS product safety model.
