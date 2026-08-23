@@ -50,8 +50,9 @@ Env for the **marketing site** and **OCR CLI**: keep **`.env`** at the **repo ro
 ### Run the full local service stack
 
 Docker with Compose and Bun are required. From the repository root, start Aven
-API, its email and environment workers, Mailpit, the Artifact Store, both
-migrators, and their separate PostgreSQL databases:
+API, its email and environment workers, Mailpit, the Artifact Store runtime and
+provisioner, and their shared PostgreSQL cluster. Each customer database contains its
+own isolated `artifact_store` schema:
 
 ```sh
 bun run dev:api:artifacts
@@ -74,13 +75,12 @@ feed replay. The default local endpoints are:
 | Artifact Store | `http://localhost:8087` |
 | Mailpit | `http://localhost:8025` |
 | Aven API PostgreSQL | `127.0.0.1:55432` |
-| Artifact Store PostgreSQL | `127.0.0.1:55433` |
 
 If a port is occupied, override it for both commands. For example:
 
 ```sh
 APP_PORT=13000 MAILPIT_HTTP_PORT=18025 DB_PORT=15432 \
-ARTIFACT_STORE_PORT=18087 ARTIFACT_DB_PORT=15433 \
+ARTIFACT_STORE_PORT=18087 \
 bun run dev:api:artifacts
 
 ARTIFACT_STORE_PORT=18087 bun run test:artifact-store:smoke

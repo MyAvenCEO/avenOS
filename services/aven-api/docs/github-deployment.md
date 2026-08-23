@@ -26,6 +26,8 @@ Variables:
 - `GHCR_USER`
 - `DEPLOY_HOST`
 - `DEPLOY_USER`
+- `ARTIFACT_STORE_MAX_TENANT_POOLS` (optional; defaults to `64`)
+- `ARTIFACT_STORE_CONNECTIONS_PER_TENANT` (optional; defaults to `2`)
 
 Secrets:
 
@@ -42,6 +44,9 @@ Secrets:
 - `AVEN_EMAIL_WORKER_PASSWORD`
 - `AVEN_ENVIRONMENT_WORKER_PASSWORD`
 - `AVEN_PROVISIONER_PASSWORD`
+- `ARTIFACT_STORE_BEARER_TOKEN` (32–128 URL-safe letters, digits, `_`, or `-`)
+- `ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN` (same constraints; use a distinct value)
+- `ARTIFACT_STORE_RUNTIME_PASSWORD` (32–128 URL-safe letters, digits, `_`, or `-`)
 - `SMTP_URL`
 - `CREEM_API_KEY`
 - `CREEM_PRODUCT_ID`
@@ -52,4 +57,11 @@ Secrets:
 
 `IDENTITY_DOMAIN` is the hostname from `PUBLIC_BASE_URL`, without a scheme or path. The deploy host must allow inbound TCP 80/443 and UDP 443.
 
-Repository workflows use the private Hetzner Object Storage bucket as Pulumi's encrypted DIY backend, apply the foundation, publish an immutable `sha-<commit>` image, and deploy by digest. Deployment writes a mode-0600 environment file, runs the one-shot migrator, starts the API, workers, and Caddy TLS ingress, and checks readiness. Customer environments stay in PostgreSQL; they are not GitHub Secrets.
+Repository workflows use the private Hetzner Object Storage bucket as Pulumi's encrypted
+DIY backend, apply the foundation, publish immutable Aven API and Artifact Store images,
+and deploy both by digest. Deployment writes a mode-0600 environment file, runs the
+central migrator, and starts the API, workers, Artifact Store runtime/provisioner, and
+Caddy TLS ingress. The new environment worker queues an idempotent Artifact Store
+installation for existing ready customer databases marked pending; new databases are
+installed before readiness.
+Customer database names and scopes stay in PostgreSQL; they are not GitHub Secrets.
