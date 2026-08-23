@@ -3,6 +3,7 @@ import { type ArtifactJson, canonicalArtifactJson, parseArtifactJson } from './c
 export interface ArtifactStoreClientOptions {
 	readonly baseUrl: string
 	readonly bearerToken: () => string | Promise<string>
+	readonly requestHeaders?: () => HeadersInit | Promise<HeadersInit>
 	readonly fetch?: typeof globalThis.fetch
 }
 
@@ -30,11 +31,13 @@ export class ArtifactStoreProblem extends Error {
 export class ArtifactStoreClient {
 	readonly #baseUrl: string
 	readonly #bearerToken: ArtifactStoreClientOptions['bearerToken']
+	readonly #requestHeaders?: ArtifactStoreClientOptions['requestHeaders']
 	readonly #fetch: typeof globalThis.fetch
 
 	constructor(options: ArtifactStoreClientOptions) {
 		this.#baseUrl = options.baseUrl.replace(/\/$/, '')
 		this.#bearerToken = options.bearerToken
+		this.#requestHeaders = options.requestHeaders
 		this.#fetch = options.fetch ?? globalThis.fetch
 	}
 
@@ -118,7 +121,8 @@ export class ArtifactStoreClient {
 
 	async #request(path: string, init: RequestInit = {}): Promise<Response> {
 		const token = await this.#bearerToken()
-		const headers = new Headers(init.headers)
+		const headers = new Headers(await this.#requestHeaders?.())
+		for (const [name, value] of new Headers(init.headers)) headers.set(name, value)
 		headers.set('authorization', `Bearer ${token}`)
 		const requestInit: RequestInit & { duplex?: 'half' } = { ...init, headers }
 		if (init.body instanceof ReadableStream) requestInit.duplex = 'half'

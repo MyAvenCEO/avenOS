@@ -1,5 +1,7 @@
 const scopeId = process.env.ARTIFACT_STORE_SCOPE_ID ?? '11111111-1111-4111-8111-111111111111'
-const bearerToken = process.env.ARTIFACT_STORE_BEARER_TOKEN ?? 'artifact-local-dev-token'
+const databaseName = process.env.ARTIFACT_STORE_DATABASE_NAME ?? 'cust_artifact_local'
+const bearerToken =
+	process.env.ARTIFACT_STORE_BEARER_TOKEN ?? 'artifact-local-coordinator-token-0001'
 const baseUrl = (
 	process.env.ARTIFACT_STORE_BASE_URL ??
 	`http://127.0.0.1:${process.env.ARTIFACT_STORE_PORT ?? '8087'}`
@@ -10,6 +12,7 @@ const authorization = `Bearer ${bearerToken}`
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
 	const headers = new Headers(init.headers)
 	headers.set('authorization', authorization)
+	headers.set('x-aven-artifact-database', databaseName)
 	const response = await fetch(`${baseUrl}${path}`, { ...init, headers })
 	if (response.ok) return response
 
@@ -135,6 +138,7 @@ console.log(
 		{
 			status: 'ok',
 			baseUrl,
+			databaseName,
 			scopeId,
 			storeEpoch,
 			publicationId,

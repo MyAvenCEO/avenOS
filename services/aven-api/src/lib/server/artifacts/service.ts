@@ -11,6 +11,8 @@ export const MAX_ARTIFACT_FILE_BYTES = 100 * 1024 * 1024
 
 export interface PublishFileInput {
 	userId: string
+	databaseName: string
+	scopeId: string
 	publicationId: string
 	originalName: string
 	mediaType: string
@@ -62,33 +64,25 @@ function booleanField(value: ArtifactJson, key: string, label: string): boolean 
 }
 
 export class ArtifactFileService {
-	readonly #scopeId: string
-	readonly #client: ArtifactStoreClient
+	readonly #baseUrl: string
+	readonly #bearerToken: string
+	readonly #fetch?: typeof globalThis.fetch
 
-	private constructor(
-		baseUrl: string,
-		scopeId: string,
-		bearerToken: string,
-		fetch?: typeof globalThis.fetch
-	) {
-		this.#scopeId = scopeId
-		this.#client = new ArtifactStoreClient({ baseUrl, bearerToken: () => bearerToken, fetch })
+	private constructor(baseUrl: string, bearerToken: string, fetch?: typeof globalThis.fetch) {
+		this.#baseUrl = baseUrl
+		this.#bearerToken = bearerToken
+		this.#fetch = fetch
 	}
 
 	static fromConfig(
 		config: ArtifactStoreConfig,
 		fetch?: typeof globalThis.fetch
 	): ArtifactFileService | null {
-		if (
-			!config.ARTIFACT_STORE_BASE_URL ||
-			!config.ARTIFACT_STORE_SCOPE_ID ||
-			!config.ARTIFACT_STORE_BEARER_TOKEN
-		) {
+		if (!config.ARTIFACT_STORE_BASE_URL || !config.ARTIFACT_STORE_BEARER_TOKEN) {
 			return null
 		}
 		return new ArtifactFileService(
 			config.ARTIFACT_STORE_BASE_URL,
-			config.ARTIFACT_STORE_SCOPE_ID,
 			config.ARTIFACT_STORE_BEARER_TOKEN,
 			fetch
 		)
@@ -96,11 +90,17 @@ export class ArtifactFileService {
 
 	async publishFile(input: PublishFileInput): Promise<PublishedFile> {
 		try {
-			const context = await this.#client.context()
+			const client = new ArtifactStoreClient({
+				baseUrl: this.#baseUrl,
+				bearerToken: () => this.#bearerToken,
+				requestHeaders: () => ({ 'x-aven-artifact-database': input.databaseName }),
+				fetch: this.#fetch
+			})
+			const context = await client.context()
 			const storeEpoch = stringField(context, 'storeEpoch', 'context')
 			const claimId = randomUUID()
-			const upload = await this.#client.uploadBody(
-				this.#scopeId,
+			const upload = await client.uploadBody(
+				input.scopeId,
 				claimId,
 				{
 					sha256: input.sha256,
@@ -120,37 +120,32 @@ export class ArtifactFileService {
 				)
 			}
 
-			const publication = await this.#client.publish(
-				this.#scopeId,
-				input.publicationId,
-				storeEpoch,
-				{
-					intent: {
-						commandVersion: 1,
-						publicationId: input.publicationId,
-						scopeId: this.#scopeId,
-						kind: 'roots',
-						rootActor: { kind: 'user', id: `user:${input.userId}` },
-						artifacts: [
-							{
-								localKey: 'file',
-								typeKey: 'core.file',
-								typeVersion: 1,
-								payload: {
-									originalName: input.originalName,
-									declaredMediaType: input.mediaType,
-									sourceKind: 'desktop-drop'
-								},
-								blob: { sha256: input.sha256, length: input.length },
-								references: [],
-								output: null
-							}
-						],
-						evidence: []
-					},
-					blobAuthorities: { file: { kind: 'upload-claim', claimId } }
-				}
-			)
+			const publication = await client.publish(input.scopeId, input.publicationId, storeEpoch, {
+				intent: {
+					commandVersion: 1,
+					publicationId: input.publicationId,
+					scopeId: input.scopeId,
+					kind: 'roots',
+					rootActor: { kind: 'user', id: `user:${input.userId}` },
+					artifacts: [
+						{
+							localKey: 'file',
+							typeKey: 'core.file',
+							typeVersion: 1,
+							payload: {
+								originalName: input.originalName,
+								declaredMediaType: input.mediaType,
+								sourceKind: 'desktop-drop'
+							},
+							blob: { sha256: input.sha256, length: input.length },
+							references: [],
+							output: null
+						}
+					],
+					evidence: []
+				},
+				blobAuthorities: { file: { kind: 'upload-claim', claimId } }
+			})
 			const artifacts = record(publication, 'publication').artifacts
 			if (!Array.isArray(artifacts) || artifacts.length !== 1) {
 				throw new AppError(

@@ -28,8 +28,23 @@ export const serverConfigSchema = z
 		PROVISIONER_DATABASE_URL: postgresUrl.optional(),
 
 		ARTIFACT_STORE_BASE_URL: z.url().optional(),
-		ARTIFACT_STORE_SCOPE_ID: z.uuid().optional(),
-		ARTIFACT_STORE_BEARER_TOKEN: z.string().min(1).optional(),
+		ARTIFACT_STORE_BEARER_TOKEN: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
+			.optional(),
+		ARTIFACT_STORE_PROVISIONER_BASE_URL: z.url().optional(),
+		ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
+			.optional(),
+		ARTIFACT_STORE_RUNTIME_ROLE: z
+			.string()
+			.regex(/^[a-z][a-z0-9_]{0,62}$/)
+			.optional(),
+		ARTIFACT_STORE_RUNTIME_PASSWORD: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
+			.optional(),
 
 		BETTER_AUTH_SECRET: z.string().default(''),
 		BETTER_AUTH_SESSION_MAX_AGE_SECONDS: positiveInt.default(43_200),
@@ -74,16 +89,25 @@ export const serverConfigSchema = z
 		CREEM_WEBHOOK_SECRET: z.string().min(8).default('dev-fake-webhook-secret')
 	})
 	.superRefine((config, context) => {
-		const artifactValues = [
-			config.ARTIFACT_STORE_BASE_URL,
-			config.ARTIFACT_STORE_SCOPE_ID,
-			config.ARTIFACT_STORE_BEARER_TOKEN
-		]
+		const artifactValues = [config.ARTIFACT_STORE_BASE_URL, config.ARTIFACT_STORE_BEARER_TOKEN]
 		if (artifactValues.some(Boolean) && !artifactValues.every(Boolean)) {
 			context.addIssue({
 				code: 'custom',
 				path: ['ARTIFACT_STORE_BASE_URL'],
-				message: 'base URL, scope ID, and bearer token must be configured together'
+				message: 'base URL and bearer token must be configured together'
+			})
+		}
+		const artifactProvisioningValues = [
+			config.ARTIFACT_STORE_PROVISIONER_BASE_URL,
+			config.ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN,
+			config.ARTIFACT_STORE_RUNTIME_ROLE,
+			config.ARTIFACT_STORE_RUNTIME_PASSWORD
+		]
+		if (artifactProvisioningValues.some(Boolean) && !artifactProvisioningValues.every(Boolean)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['ARTIFACT_STORE_PROVISIONER_BASE_URL'],
+				message: 'provisioner URL/token and runtime role/password must be configured together'
 			})
 		}
 		const publicUrl = new URL(config.PUBLIC_BASE_URL)
@@ -166,11 +190,15 @@ export type EnvironmentWorkerConfig = Pick<
 	| 'ENVIRONMENT_MAX_ATTEMPTS'
 	| 'ENVIRONMENT_RETRY_BASE_SECONDS'
 	| 'ENVIRONMENT_RETRY_MAX_SECONDS'
+	| 'ARTIFACT_STORE_PROVISIONER_BASE_URL'
+	| 'ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN'
+	| 'ARTIFACT_STORE_RUNTIME_ROLE'
+	| 'ARTIFACT_STORE_RUNTIME_PASSWORD'
 >
 export type NotifierConfig = Pick<ServerConfig, 'PUBLIC_BASE_URL'>
 export type ArtifactStoreConfig = Pick<
 	ServerConfig,
-	'ARTIFACT_STORE_BASE_URL' | 'ARTIFACT_STORE_SCOPE_ID' | 'ARTIFACT_STORE_BEARER_TOKEN'
+	'ARTIFACT_STORE_BASE_URL' | 'ARTIFACT_STORE_BEARER_TOKEN'
 >
 export type BillingConfig = Pick<
 	ServerConfig,

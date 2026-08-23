@@ -13,6 +13,7 @@ describe('artifact file coordinator', () => {
 		const fetch: typeof globalThis.fetch = async (input, init) => {
 			const request = new Request(input, init)
 			expect(request.headers.get('authorization')).toBe('Bearer service-token')
+			expect(request.headers.get('x-aven-artifact-database')).toBe('cust_acme')
 
 			if (request.url.endsWith('/v1/context')) {
 				return new Response('{"storeEpoch":"epoch-1"}')
@@ -37,7 +38,6 @@ describe('artifact file coordinator', () => {
 		const service = ArtifactFileService.fromConfig(
 			{
 				ARTIFACT_STORE_BASE_URL: 'http://artifact-store.test',
-				ARTIFACT_STORE_SCOPE_ID: scopeId,
 				ARTIFACT_STORE_BEARER_TOKEN: 'service-token'
 			},
 			fetch
@@ -46,6 +46,8 @@ describe('artifact file coordinator', () => {
 
 		const receipt = await service?.publishFile({
 			userId: 'user-7',
+			databaseName: 'cust_acme',
+			scopeId,
 			publicationId,
 			originalName: 'contract.pdf',
 			mediaType: 'text/plain',

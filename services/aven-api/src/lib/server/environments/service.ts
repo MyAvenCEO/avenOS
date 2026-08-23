@@ -23,24 +23,27 @@ export class EnvironmentService {
 			throw new Error('Customer environment owner conflict.')
 
 		const environmentId = existing?.id ?? randomUUID()
+		const artifactScopeId = environmentId
 		const now = new Date()
 		if (!existing) {
 			const effectiveConfig = {
-				contractVersion: 1,
+				contractVersion: 2,
 				name: names.name,
 				databaseName: names.databaseName,
 				stackName: names.stackName,
+				artifactStore: { schemaVersion: 1, scopeId: artifactScopeId },
 				applications: []
 			}
 			await connection.query(
 				`INSERT INTO customer_environments
-          (id,owner_user_id,name,database_name,owner_role,stack_name,contract_version,effective_config,status,last_operation,queued_at,updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,1,$7,'queued','provision',$8,$8)`,
+				  (id,owner_user_id,name,database_name,artifact_scope_id,artifact_store_status,owner_role,stack_name,contract_version,effective_config,status,last_operation,queued_at,updated_at)
+				 VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,2,$8,'queued','provision',$9,$9)`,
 				[
 					environmentId,
 					input.userId,
 					names.name,
 					names.databaseName,
+					artifactScopeId,
 					names.ownerRole,
 					names.stackName,
 					JSON.stringify(effectiveConfig),
@@ -55,6 +58,49 @@ export class EnvironmentService {
 			metadata: { environmentId, name: names.name }
 		})
 		return environmentId
+	}
+
+	async artifactTargetForUser(userId: string): Promise<{
+		environmentId: string
+		databaseName: string
+		scopeId: string
+	}> {
+		const rows = (
+			await this.pool.query(
+				`SELECT id,database_name,artifact_scope_id,artifact_store_status,status
+         FROM customer_environments WHERE owner_user_id=$1 ORDER BY id LIMIT 2`,
+				[userId]
+			)
+		).rows as Array<{
+			id: string
+			database_name: string
+			artifact_scope_id: string
+			artifact_store_status: string
+			status: string
+		}>
+		const [environment, extraEnvironment] = rows
+		if (!environment) {
+			throw new AppError(403, 'NAME_REQUIRED', 'Purchase a name before storing artifacts.')
+		}
+		if (extraEnvironment) {
+			throw new AppError(
+				409,
+				'ARTIFACT_ENVIRONMENT_AMBIGUOUS',
+				'Select a customer environment before storing artifacts.'
+			)
+		}
+		if (environment.status !== 'ready' || environment.artifact_store_status !== 'ready') {
+			throw new AppError(
+				409,
+				'ARTIFACT_ENVIRONMENT_NOT_READY',
+				'The customer environment is not ready for artifact storage.'
+			)
+		}
+		return {
+			environmentId: environment.id,
+			databaseName: environment.database_name,
+			scopeId: environment.artifact_scope_id
+		}
 	}
 
 	async enqueueSuspension(
@@ -101,7 +147,7 @@ export class EnvironmentService {
 	async status(name: string) {
 		const row = (
 			await this.pool.query(
-				`SELECT id,name,database_name,owner_role,stack_name,contract_version,status,last_operation,
+				`SELECT id,name,database_name,artifact_scope_id,artifact_store_status,owner_role,stack_name,contract_version,status,last_operation,
               last_error_code,last_error_message,queued_at,provisioning_at,ready_at,suspended_at,failed_at,updated_at
        FROM customer_environments WHERE name=$1`,
 				[environmentNames(name).name]
