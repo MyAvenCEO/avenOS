@@ -11,6 +11,7 @@
 	"scripts": {
 		"dev:app": "bun --env-file=.env run --cwd app dev",
 		"dev:api": "bun --env-file=.env run --cwd services/aven-api dev",
+		"dev:api:artifacts": "docker compose -f services/aven-api/docker-compose.yml -f services/aven-api/docker-compose.artifact-store.yml up --build",
 		"dev:api:designer": "bun run --cwd services/aven-api dev:designer",
 		"dev:website": "bun --env-file=.env run --cwd libs/aven-website dev",
 		"dev:app:all": "bun --env-file=.env ./scripts/dev-app-all.ts",
@@ -36,6 +37,7 @@
 		"build:api:designer": "bun run --cwd services/aven-api build:designer",
 		"check:api": "bun run --cwd services/aven-api check",
 		"test:api": "bun run --cwd services/aven-api test",
+		"test:artifact-store:smoke": "bun run --cwd services/aven-api artifact-store:smoke",
 		"email:studio": "bun run --cwd services/aven-api email:studio",
 		"email:preview": "bun run --cwd services/aven-api email:preview",
 		"email:compile": "bun run --cwd services/aven-api email:compile",

@@ -1,0 +1,78 @@
+# Local-only overlay. It models one provisioned customer database and must not be
+# included by the production Compose deployment.
+x-artifact-local-logging: &artifact-local-logging
+  driver: local
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+    compress: "${DOCKER_LOG_COMPRESS:-true}"
+
+x-artifact-runtime-security: &artifact-runtime-security
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: *artifact-local-logging
+
+x-artifact-image: &artifact-image
+  image: aven-artifact-store:local
+  build:
+    context: ../..
+    dockerfile: services/artifact-store/Dockerfile
+
+services:
+  artifact-db:
+    image: postgres:17-alpine
+    logging: *artifact-local-logging
+    environment:
+      POSTGRES_DB: artifact_store
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${ARTIFACT_POSTGRES_PASSWORD:-artifact-dev}
+    volumes:
+      - artifact-db-data:/var/lib/postgresql/data
+    ports:
+      - "${ARTIFACT_DB_BIND:-127.0.0.1}:${ARTIFACT_DB_PORT:-55433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d artifact_store"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  artifact-store-migrator:
+    <<: [*artifact-runtime-security, *artifact-image]
+    depends_on:
+      artifact-db:
+        condition: service_healthy
+    environment:
+      ARTIFACT_STORE_DATABASE_URL: postgres://postgres:${ARTIFACT_POSTGRES_PASSWORD:-artifact-dev}@artifact-db:5432/artifact_store
+    command: ["migrate"]
+    restart: "no"
+
+  artifact-store:
+    <<: [*artifact-runtime-security, *artifact-image]
+    depends_on:
+      artifact-store-migrator:
+        condition: service_completed_successfully
+    environment:
+      ARTIFACT_STORE_DATABASE_URL: postgres://postgres:${ARTIFACT_POSTGRES_PASSWORD:-artifact-dev}@artifact-db:5432/artifact_store
+      ARTIFACT_STORE_SCOPE_ID: ${ARTIFACT_STORE_SCOPE_ID:-11111111-1111-4111-8111-111111111111}
+      ARTIFACT_STORE_BEARER_TOKEN: ${ARTIFACT_STORE_BEARER_TOKEN:-artifact-local-dev-token}
+      ARTIFACT_STORE_PUBLISHER_ISSUER: ${ARTIFACT_STORE_PUBLISHER_ISSUER:-aven-api}
+      ARTIFACT_STORE_PUBLISHER_SUBJECT: ${ARTIFACT_STORE_PUBLISHER_SUBJECT:-service:aven-api-local}
+      ARTIFACT_STORE_LISTEN: 0.0.0.0:8087
+      RUST_LOG: ${ARTIFACT_STORE_LOG:-aven_artifact_store=info,tower_http=info}
+    ports:
+      - "${ARTIFACT_STORE_BIND:-127.0.0.1}:${ARTIFACT_STORE_PORT:-8087}:8087"
+
+  app:
+    depends_on:
+      artifact-store:
+        condition: service_healthy
+    environment:
+      ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
+      ARTIFACT_STORE_SCOPE_ID: ${ARTIFACT_STORE_SCOPE_ID:-11111111-1111-4111-8111-111111111111}
+      ARTIFACT_STORE_BEARER_TOKEN: ${ARTIFACT_STORE_BEARER_TOKEN:-artifact-local-dev-token}
+
+volumes:
+  artifact-db-data:
