@@ -105,25 +105,61 @@ jobs:
 
       # Branch model: main → next → prod. The release commit above lands on `next` only, which
       # would make the following main → next merge non-fast-forward. Sync it back to `main`
-      # right away (over the same ruleset-bypassing deploy key): fast-forward when main hasn't
-      # moved, otherwise merge the release commit into main. Both keep main a descendant of
-      # next, so main → next stays a clean fast-forward.
+      # right away (over the same ruleset-bypassing deploy key). A normal merge is unsafe here:
+      # GitHub may have rebased the same PR independently onto main and next, leaving identical
+      # trees with different histories and add/add conflicts in newly version-stamped files.
       - name: Sync release commit back to main
         if: steps.release.outputs.released == 'true'
         env:
           RELEASE_SHA: ${{ steps.release.outputs.commit }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          git fetch origin main
-          if git merge-base --is-ancestor origin/main "$RELEASE_SHA"; then
-            echo "main fast-forwards to $RELEASE_SHA"
-            git push origin "$RELEASE_SHA:refs/heads/main"
-          else
-            echo "main moved on — merging $RELEASE_SHA into main"
-            git checkout -B main origin/main
-            git merge --no-ff "$RELEASE_SHA" -m "chore(release): sync $(git describe --tags --exact-match "$RELEASE_SHA") into main [skip ci]"
-            git push origin main:refs/heads/main
-          fi
+          test "$(git rev-list --parents -n 1 "$RELEASE_SHA" | wc -w)" -eq 2
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$RELEASE_SHA"
+          release_parent="$(git rev-parse "$RELEASE_SHA^")"
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            main_sha="$(git rev-parse origin/main)"
+
+            if git merge-base --is-ancestor "$main_sha" "$RELEASE_SHA"; then
+              echo "main fast-forwards to $RELEASE_SHA"
+              candidate="$RELEASE_SHA"
+            else
+              echo "main moved to $main_sha — synthesizing release-only merge (attempt $attempt)"
+
+              # `next` must contain no source patch absent from main. Minus entries are
+              # patch-equivalent commits (for example, independently rebased PRs). Plus
+              # entries are allowed only for earlier tagged release commits; anything else
+              # would mean that an ancestry-only merge could silently lose source.
+              cherry="$(git cherry "$main_sha" "$release_parent")"
+              while read -r marker sha; do
+                [ "$marker" = "+" ] || continue
+                commit_tags="$(git tag --points-at "$sha")"
+                if ! grep -Ex '^v[0-9]+\.[0-9]+\.[0-9]+-next\.[0-9]+$' <<<"$commit_tags" >/dev/null; then
+                  echo "::error::next contains source commit $sha that is not represented on main; refusing automatic release sync."
+                  exit 1
+                fi
+              done <<<"$cherry"
+
+              git switch --detach "$main_sha"
+              git merge --strategy=ours --no-ff --no-commit "$RELEASE_SHA"
+              bun ./scripts/set-version.ts "${RELEASE_TAG#v}"
+              git restore --source="$RELEASE_SHA" -- CHANGELOG.md
+              git add -A
+              git commit -m "chore(release): sync $RELEASE_TAG into main [skip ci]"
+              candidate="$(git rev-parse HEAD)"
+            fi
+
+            if git push origin "$candidate:refs/heads/main"; then
+              exit 0
+            fi
+            echo "main advanced during sync; retrying from the new remote head"
+          done
+
+          echo "::error::main kept advancing; release sync exhausted five attempts."
+          exit 1
 
   deploy-website:
     # The public marketing site (libs/aven-website) → GitHub Pages, served at next.aven.ceo
