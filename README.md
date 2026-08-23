@@ -17,6 +17,10 @@ Bun **monorepo**: active code lives under `libs/`, `app/`, `services/`, and `doc
 | **`ARCHIVE/ocr-example`** | Python Gemini OCR/JSON extract CLI (optional; separate `pip` venv) |
 | **`ARCHIVE/tauri-plugin-passkey`** | macOS passkey Tauri plugin (archived; not wired into `app` today) |
 
+The current control-plane and per-customer database boundaries, all worker and data
+paths, their guarantees, and the proposed standard tenant runtime rail are mapped in
+[Customer data-plane architecture](CUSTOMER-DATA-PLANE-ARCHITECTURE.md).
+
 **`bun install`** also attaches **`../MaiaOS/libs/*`** as workspaces so `@MaiaOS/*` / `@AvenOS/db` resolve. Clone [MaiaOS](https://github.com/) **next to** this repo (`Development/MaiaOS` alongside `Development/AvenOS`), or edit root `package.json` `workspaces` if your layout differs.
 
 ## Install
@@ -176,7 +180,7 @@ bun run lint:fix
 
 API verification runs from the root with `bun run check:api`, `bun run test:api`, and `bun run build:api`. See [`services/aven-api/README.md`](services/aven-api/README.md) for PostgreSQL, Mailpit, migrations, and workers.
 
-Infrastructure validation runs with `bun run test:infra`. Provisioning and deployment use protected GitHub Environment values and encrypted Pulumi state in a private Hetzner Object Storage bucket; see [`infrastructure/identity/README.md`](infrastructure/identity/README.md). Do not commit deployment `.env` files, Pulumi stack configuration/state, or credentials.
+Infrastructure validation runs with `bun run test:infra`. Provisioning and deployment use protected GitHub Environment values and encrypted Pulumi state in a private Hetzner Object Storage bucket; see [`infrastructure/identity/README.md`](infrastructure/identity/README.md), the [GitHub deployment guide](services/aven-api/docs/github-deployment.md), and the [first-install checklist](GITHUB_HETZNER_DEPLOYMENT_CHECKLIST.md). Do not commit deployment `.env` files, Pulumi stack configuration/state, or credentials.
 
 ## Reference — recreate Svelte app
 
