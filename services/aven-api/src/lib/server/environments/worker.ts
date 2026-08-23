@@ -5,7 +5,7 @@ import { sanitizeError } from '../../validation.js'
 import { writeAudit } from '../audit.js'
 import type { EnvironmentWorkerConfig } from '../config.js'
 import { withTransaction } from '../db.js'
-import { provisionEnvironmentDatabase } from './provisioning.js'
+import { provisionEnvironmentDatabase, suspendEnvironmentDatabase } from './provisioning.js'
 
 interface ClaimedJob {
 	id: string
@@ -14,6 +14,7 @@ interface ClaimedJob {
 	attempt: number
 	database_name: string
 	owner_role: string
+	artifact_scope_id: string
 }
 
 export class EnvironmentWorker {
@@ -29,12 +30,19 @@ export class EnvironmentWorker {
 	) {}
 
 	start(): void {
-		void this.recoverExpired()
+		void this.initialize().catch((error) => {
+			this.logger.error({ err: sanitizeError(error) }, 'environment worker initialization failed')
+		})
+	}
+
+	private async initialize(): Promise<void> {
+		await this.recoverExpired()
+		await this.enqueueArtifactStoreUpgrades()
 		this.timer = setInterval(() => {
 			void this.tick()
 		}, this.config.ENVIRONMENT_WORKER_POLL_INTERVAL_MS)
 		this.timer.unref()
-		void this.tick()
+		await this.tick()
 	}
 
 	stop(): void {
@@ -45,6 +53,46 @@ export class EnvironmentWorker {
 		await this.pool.query(
 			"UPDATE customer_environment_jobs SET status='queued',lease_owner=NULL,lease_expires_at=NULL,available_at=now() WHERE status='running' AND lease_expires_at < now()"
 		)
+	}
+
+	async enqueueArtifactStoreUpgrades(): Promise<number> {
+		if (
+			!this.config.ARTIFACT_STORE_PROVISIONER_BASE_URL ||
+			!this.config.ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN ||
+			!this.config.ARTIFACT_STORE_RUNTIME_ROLE ||
+			!this.config.ARTIFACT_STORE_RUNTIME_PASSWORD
+		) {
+			return 0
+		}
+		const environments = (
+			await this.pool.query(
+				`SELECT environment.id
+         FROM customer_environments environment
+         WHERE environment.status='ready' AND environment.artifact_store_status='pending'
+           AND NOT EXISTS (
+             SELECT 1 FROM customer_environment_jobs job
+             WHERE job.environment_id=environment.id AND job.status IN ('queued','running')
+           )`
+			)
+		).rows as Array<{ id: string }>
+		let queued = 0
+		for (const environment of environments) {
+			const result = await this.pool.query(
+				`INSERT INTO customer_environment_jobs
+           (id,environment_id,operation,status,attempt,available_at,created_at)
+         VALUES ($1,$2,'provision','queued',0,now(),now())
+         ON CONFLICT DO NOTHING`,
+				[randomUUID(), environment.id]
+			)
+			queued += result.rowCount ?? 0
+			if (result.rowCount === 1) {
+				await writeAudit(this.pool, {
+					eventType: 'environment.artifact_store_upgrade_queued',
+					metadata: { environmentId: environment.id }
+				})
+			}
+		}
+		return queued
 	}
 
 	private async heartbeat(): Promise<void> {
@@ -74,7 +122,7 @@ export class EnvironmentWorker {
 		return withTransaction(this.pool, async (client) => {
 			const job = (
 				await client.query<ClaimedJob>(
-					`SELECT job.id,job.environment_id,job.operation,job.attempt,environment.database_name,environment.owner_role
+					`SELECT job.id,job.environment_id,job.operation,job.attempt,environment.database_name,environment.owner_role,environment.artifact_scope_id
          FROM customer_environment_jobs job
          JOIN customer_environments environment ON environment.id=job.environment_id
          WHERE job.status='queued' AND job.available_at <= now()
@@ -130,14 +178,30 @@ export class EnvironmentWorker {
 					provisionerUrl: this.config.PROVISIONER_DATABASE_URL,
 					databaseName: job.database_name,
 					ownerRole: job.owner_role,
+					artifactStore:
+						this.config.ARTIFACT_STORE_PROVISIONER_BASE_URL &&
+						this.config.ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN &&
+						this.config.ARTIFACT_STORE_RUNTIME_ROLE &&
+						this.config.ARTIFACT_STORE_RUNTIME_PASSWORD
+							? {
+									provisionerBaseUrl: this.config.ARTIFACT_STORE_PROVISIONER_BASE_URL,
+									bearerToken: this.config.ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN,
+									runtimeRole: this.config.ARTIFACT_STORE_RUNTIME_ROLE,
+									runtimePassword: this.config.ARTIFACT_STORE_RUNTIME_PASSWORD,
+									scopeId: job.artifact_scope_id
+								}
+							: undefined,
 					log: { info: (message) => this.addLog(job.id, 'info', message) }
 				})
 			} else {
-				await this.addLog(
-					job.id,
-					'info',
-					'Environment suspended. No application runtime roles exist.'
-				)
+				if (!this.config.PROVISIONER_DATABASE_URL)
+					throw new Error('PROVISIONER_DATABASE_URL is not configured.')
+				await suspendEnvironmentDatabase({
+					provisionerUrl: this.config.PROVISIONER_DATABASE_URL,
+					databaseName: job.database_name,
+					runtimeRole: this.config.ARTIFACT_STORE_RUNTIME_ROLE,
+					log: { info: (message) => this.addLog(job.id, 'info', message) }
+				})
 			}
 			await this.complete(job)
 		} catch (error) {
@@ -157,9 +221,15 @@ export class EnvironmentWorker {
 			if (won.rowCount !== 1) return
 			const status = job.operation === 'suspend' ? 'suspended' : 'ready'
 			const timestampColumn = job.operation === 'suspend' ? 'suspended_at' : 'ready_at'
+			const artifactStoreStatus =
+				job.operation === 'suspend'
+					? 'suspended'
+					: this.config.ARTIFACT_STORE_PROVISIONER_BASE_URL
+						? 'ready'
+						: 'pending'
 			await client.query(
-				`UPDATE customer_environments SET status=$1,${timestampColumn}=now(),updated_at=now(),last_error_code=NULL,last_error_message=NULL WHERE id=$2`,
-				[status, job.environment_id]
+				`UPDATE customer_environments SET status=$1,artifact_store_status=$3,${timestampColumn}=now(),updated_at=now(),last_error_code=NULL,last_error_message=NULL WHERE id=$2`,
+				[status, job.environment_id, artifactStoreStatus]
 			)
 			await writeAudit(client, {
 				eventType: `environment.${status}`,

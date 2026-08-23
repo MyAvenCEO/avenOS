@@ -1,6 +1,7 @@
 //! Stand-alone HTTP adapter for the artifact-store kernel.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use aven_artifact_store_contract::{
@@ -17,15 +18,18 @@ use axum::routing::{get, put};
 use axum::{Json, Router};
 use serde::Deserialize;
 use time::{Duration, OffsetDateTime};
+use tokio::sync::RwLock;
+use url::Url;
 use uuid::Uuid;
 
 const MAX_BODY_BYTES: usize = 100 * 1024 * 1024;
+pub const TENANT_DATABASE_HEADER: &str = "x-aven-artifact-database";
 
 #[derive(Clone)]
 pub struct FixedServiceAuth {
     bearer_token: Arc<str>,
     publisher: StablePublisher,
-    scope_id: Uuid,
+    scope_id: Option<Uuid>,
 }
 
 impl FixedServiceAuth {
@@ -49,15 +53,35 @@ impl FixedServiceAuth {
         Ok(Self {
             bearer_token,
             publisher,
-            scope_id,
+            scope_id: Some(scope_id),
         })
     }
 
-    fn authorize(
-        &self,
-        headers: &HeaderMap,
-        route_scope: Option<Uuid>,
-    ) -> Result<RequestContext, ApiError> {
+    /// Create an adapter for trusted per-customer routing. The route scope is
+    /// still checked against the scope provisioned in the selected database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an empty credential or invalid stable publisher.
+    pub fn for_tenants(
+        bearer_token: impl Into<Arc<str>>,
+        publisher: StablePublisher,
+    ) -> Result<Self, ApiError> {
+        publisher
+            .validate()
+            .map_err(|error| ApiError::malformed(error.to_string()))?;
+        let bearer_token = bearer_token.into();
+        if bearer_token.is_empty() {
+            return Err(ApiError::malformed("bearer token cannot be empty"));
+        }
+        Ok(Self {
+            bearer_token,
+            publisher,
+            scope_id: None,
+        })
+    }
+
+    fn authenticate(&self, headers: &HeaderMap) -> Result<(), ApiError> {
         let expected = format!("Bearer {}", self.bearer_token);
         let supplied = headers
             .get(header::AUTHORIZATION)
@@ -69,7 +93,16 @@ impl FixedServiceAuth {
                 "a valid bearer credential is required",
             ));
         }
-        if route_scope.is_some_and(|scope| scope != self.scope_id) {
+        Ok(())
+    }
+
+    fn authorize(
+        &self,
+        headers: &HeaderMap,
+        route_scope: Uuid,
+    ) -> Result<RequestContext, ApiError> {
+        self.authenticate(headers)?;
+        if self.scope_id.is_some_and(|scope| scope != route_scope) {
             return Err(ApiError::new(
                 StatusCode::FORBIDDEN,
                 ErrorCode::ScopeDenied,
@@ -78,15 +111,159 @@ impl FixedServiceAuth {
         }
         Ok(RequestContext {
             publisher: self.publisher.clone(),
-            scope_id: self.scope_id,
+            scope_id: route_scope,
             decision_expires_at: OffsetDateTime::now_utc() + Duration::minutes(1),
         })
     }
 }
 
 #[derive(Clone)]
-pub struct AppState {
+enum StoreRouter {
+    Fixed(PostgresStore),
+    Tenants(TenantStoreRegistry),
+}
+
+impl StoreRouter {
+    async fn resolve(&self, headers: &HeaderMap) -> Result<PostgresStore, ApiError> {
+        match self {
+            Self::Fixed(store) => Ok(store.clone()),
+            Self::Tenants(stores) => stores.resolve(headers).await,
+        }
+    }
+
+    async fn ready(&self) -> Result<(), ApiError> {
+        if let Self::Fixed(store) = self {
+            store.context().await?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct TenantStoreRegistry {
+    cluster_url: Arc<Url>,
+    stores: Arc<RwLock<BTreeMap<String, CachedStore>>>,
+    use_sequence: Arc<AtomicU64>,
+    max_stores: usize,
+    connections_per_store: u32,
+}
+
+#[derive(Clone)]
+struct CachedStore {
     store: PostgresStore,
+    last_used: u64,
+}
+
+impl TenantStoreRegistry {
+    /// Configure a bounded set of lazy per-database pools.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for a non-PostgreSQL URL or a zero pool bound.
+    pub fn new(
+        cluster_url: &str,
+        max_stores: usize,
+        connections_per_store: u32,
+    ) -> Result<Self, ApiError> {
+        let cluster_url = Url::parse(cluster_url)
+            .map_err(|_| ApiError::malformed("tenant database URL is invalid"))?;
+        if !matches!(cluster_url.scheme(), "postgres" | "postgresql") {
+            return Err(ApiError::malformed(
+                "tenant database URL must use PostgreSQL",
+            ));
+        }
+        if max_stores == 0 || connections_per_store == 0 {
+            return Err(ApiError::malformed("tenant pool limits must be positive"));
+        }
+        Ok(Self {
+            cluster_url: Arc::new(cluster_url),
+            stores: Arc::new(RwLock::new(BTreeMap::new())),
+            use_sequence: Arc::new(AtomicU64::new(0)),
+            max_stores,
+            connections_per_store,
+        })
+    }
+
+    async fn resolve(&self, headers: &HeaderMap) -> Result<PostgresStore, ApiError> {
+        let database = required_header(headers, TENANT_DATABASE_HEADER)?;
+        validate_tenant_database(database)?;
+        let last_used = self.use_sequence.fetch_add(1, Ordering::Relaxed);
+        if let Some(cached) = self.stores.write().await.get_mut(database) {
+            cached.last_used = last_used;
+            return Ok(cached.store.clone());
+        }
+
+        let database_url = database_url(&self.cluster_url, database);
+        let store = PostgresStore::connect(&database_url, self.connections_per_store).await?;
+        let mut stores = self.stores.write().await;
+        if let Some(existing) = stores.get_mut(database) {
+            existing.last_used = last_used;
+            return Ok(existing.store.clone());
+        }
+        if stores.len() >= self.max_stores {
+            if let Some(oldest) = stores
+                .iter()
+                .min_by_key(|(_, cached)| cached.last_used)
+                .map(|(database, _)| database.clone())
+            {
+                stores.remove(&oldest);
+            }
+        }
+        stores.insert(
+            database.to_owned(),
+            CachedStore {
+                store: store.clone(),
+                last_used,
+            },
+        );
+        Ok(store)
+    }
+}
+
+#[derive(Clone)]
+pub struct ProvisionerState {
+    cluster_url: Arc<Url>,
+    bearer_token: Arc<str>,
+    runtime_role: Arc<str>,
+    catalog: TypeCatalog,
+}
+
+impl ProvisionerState {
+    /// Configure the internal database provisioning endpoint.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an invalid database URL, empty credential, or unsafe role.
+    pub fn new(
+        cluster_url: &str,
+        bearer_token: impl Into<Arc<str>>,
+        runtime_role: impl Into<Arc<str>>,
+        catalog: TypeCatalog,
+    ) -> Result<Self, ApiError> {
+        let cluster_url = Url::parse(cluster_url)
+            .map_err(|_| ApiError::malformed("provisioner database URL is invalid"))?;
+        if !matches!(cluster_url.scheme(), "postgres" | "postgresql") {
+            return Err(ApiError::malformed(
+                "provisioner database URL must use PostgreSQL",
+            ));
+        }
+        let bearer_token = bearer_token.into();
+        let runtime_role = runtime_role.into();
+        if bearer_token.is_empty() || !valid_role_name(&runtime_role) {
+            return Err(ApiError::malformed("provisioner configuration is invalid"));
+        }
+        Ok(Self {
+            cluster_url: Arc::new(cluster_url),
+            bearer_token,
+            runtime_role,
+            catalog,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct AppState {
+    store: StoreRouter,
     catalog: TypeCatalog,
     limits: Limits,
     auth: FixedServiceAuth,
@@ -96,7 +273,21 @@ impl AppState {
     #[must_use]
     pub fn new(store: PostgresStore, catalog: TypeCatalog, auth: FixedServiceAuth) -> Self {
         Self {
-            store,
+            store: StoreRouter::Fixed(store),
+            catalog,
+            limits: Limits::default(),
+            auth,
+        }
+    }
+
+    #[must_use]
+    pub fn for_tenants(
+        stores: TenantStoreRegistry,
+        catalog: TypeCatalog,
+        auth: FixedServiceAuth,
+    ) -> Self {
+        Self {
+            store: StoreRouter::Tenants(stores),
             catalog,
             limits: Limits::default(),
             auth,
@@ -131,12 +322,32 @@ pub fn router(state: AppState) -> Router {
         .with_state(state)
 }
 
+pub fn provisioner_router(state: ProvisionerState) -> Router {
+    Router::new()
+        .route("/health/live", get(live))
+        .route("/health/ready", get(provisioner_ready))
+        .route(
+            "/internal/v1/databases/{database}/scopes/{scope_id}",
+            put(provision_database),
+        )
+        .with_state(state)
+}
+
 async fn live() -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
 async fn ready(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
-    state.store.context().await?;
+    state.store.ready().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn provisioner_ready(State(state): State<ProvisionerState>) -> Result<StatusCode, ApiError> {
+    let store = PostgresStore::connect(state.cluster_url.as_str(), 1).await?;
+    sqlx::query("SELECT 1")
+        .execute(store.pool())
+        .await
+        .map_err(StoreError::from)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -144,8 +355,9 @@ async fn context(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.auth.authorize(&headers, None)?;
-    Ok(Json(state.store.context().await?))
+    state.auth.authenticate(&headers)?;
+    let store = state.store.resolve(&headers).await?;
+    Ok(Json(store.context().await?))
 }
 
 async fn get_type(
@@ -153,7 +365,7 @@ async fn get_type(
     headers: HeaderMap,
     Path((type_key, version)): Path<(String, u32)>,
 ) -> Result<Response, ApiError> {
-    state.auth.authorize(&headers, None)?;
+    state.auth.authenticate(&headers)?;
     let type_key =
         TypeKey::new(type_key).map_err(|error| ApiError::malformed(error.to_string()))?;
     let registered = state
@@ -169,7 +381,8 @@ async fn stage_upload(
     Path((scope_id, claim_id)): Path<(Uuid, Uuid)>,
     body: Bytes,
 ) -> Result<Response, ApiError> {
-    let context = state.auth.authorize(&headers, Some(scope_id))?;
+    let context = state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
     let sha256 = required_header(&headers, "x-expected-sha256")?.to_owned();
     let length = required_header(&headers, "content-length")?
         .parse::<u64>()
@@ -180,8 +393,7 @@ async fn stage_upload(
         length,
         declared_media_type,
     };
-    let result = state
-        .store
+    let result = store
         .stage_upload(
             OffsetDateTime::now_utc(),
             &context.publisher,
@@ -201,7 +413,8 @@ async fn publish(
     Path((scope_id, publication_id)): Path<(Uuid, Uuid)>,
     body: Bytes,
 ) -> Result<Response, ApiError> {
-    let context = state.auth.authorize(&headers, Some(scope_id))?;
+    let context = state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
     let expected_epoch = required_header(&headers, "if-artifact-store-epoch")?
         .parse::<Uuid>()
         .map_err(|_| ApiError::malformed("If-Artifact-Store-Epoch must be a UUID"))?;
@@ -216,7 +429,7 @@ async fn publish(
         ));
     }
     let ids = external_artifact_ids(&submission);
-    let existing = state.store.existing_artifacts(scope_id, ids).await?;
+    let existing = store.existing_artifacts(scope_id, ids).await?;
     let prepared = prepare_publication(
         OffsetDateTime::now_utc(),
         context,
@@ -226,8 +439,7 @@ async fn publish(
         &state.limits,
     )
     .map_err(|error| ApiError::from_core(&error))?;
-    let result = state
-        .store
+    let result = store
         .publish(OffsetDateTime::now_utc(), expected_epoch, &prepared)
         .await?;
     let mut response = Json(result.clone()).into_response();
@@ -247,9 +459,9 @@ async fn get_artifact(
     headers: HeaderMap,
     Path((scope_id, artifact_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Response, ApiError> {
-    state.auth.authorize(&headers, Some(scope_id))?;
-    let artifact = state
-        .store
+    state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
+    let artifact = store
         .get_artifact(scope_id, artifact_id)
         .await?
         .ok_or_else(ApiError::unavailable)?;
@@ -261,9 +473,9 @@ async fn get_content(
     headers: HeaderMap,
     Path((scope_id, artifact_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Response, ApiError> {
-    state.auth.authorize(&headers, Some(scope_id))?;
-    let content = state
-        .store
+    state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
+    let content = store
         .get_content(scope_id, artifact_id)
         .await?
         .ok_or_else(ApiError::unavailable)?;
@@ -308,9 +520,9 @@ async fn head_content(
     headers: HeaderMap,
     Path((scope_id, artifact_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Response, ApiError> {
-    state.auth.authorize(&headers, Some(scope_id))?;
-    let artifact = state
-        .store
+    state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
+    let artifact = store
         .get_artifact(scope_id, artifact_id)
         .await?
         .ok_or_else(ApiError::unavailable)?;
@@ -377,9 +589,9 @@ async fn read_feed(
     Path(scope_id): Path<Uuid>,
     Query(query): Query<FeedQuery>,
 ) -> Result<Response, ApiError> {
-    state.auth.authorize(&headers, Some(scope_id))?;
-    let page = state
-        .store
+    state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
+    let page = store
         .read_feed(
             scope_id,
             query.store_epoch,
@@ -396,6 +608,69 @@ async fn read_feed(
             other => ApiError::from(other),
         })?;
     Ok(Json(page).into_response())
+}
+
+async fn scoped_store(
+    state: &AppState,
+    headers: &HeaderMap,
+    scope_id: Uuid,
+) -> Result<PostgresStore, ApiError> {
+    let store = state.store.resolve(headers).await?;
+    if !store.has_scope(scope_id).await? {
+        return Err(ApiError::unavailable());
+    }
+    Ok(store)
+}
+
+async fn provision_database(
+    State(state): State<ProvisionerState>,
+    headers: HeaderMap,
+    Path((database, scope_id)): Path<(String, Uuid)>,
+) -> Result<StatusCode, ApiError> {
+    let expected = format!("Bearer {}", state.bearer_token);
+    let supplied = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok());
+    if supplied != Some(expected.as_str()) {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            ErrorCode::AuthenticationRequired,
+            "a valid provisioning credential is required",
+        ));
+    }
+    validate_tenant_database(&database)?;
+    let store = PostgresStore::connect(&database_url(&state.cluster_url, &database), 1).await?;
+    store.migrate().await?;
+    store.register_types(state.catalog.definitions()).await?;
+    store.ensure_scope(scope_id).await?;
+    store.grant_runtime_role(&state.runtime_role).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn validate_tenant_database(database: &str) -> Result<(), ApiError> {
+    if database.len() > 63
+        || !database.starts_with("cust_")
+        || !database
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+    {
+        return Err(ApiError::malformed("tenant database identifier is invalid"));
+    }
+    Ok(())
+}
+
+fn valid_role_name(role: &str) -> bool {
+    !role.is_empty()
+        && role.len() <= 63
+        && role
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+fn database_url(cluster_url: &Url, database: &str) -> String {
+    let mut target = cluster_url.clone();
+    target.set_path(&format!("/{database}"));
+    target.to_string()
 }
 
 fn external_artifact_ids(submission: &PublicationSubmission) -> BTreeSet<Uuid> {

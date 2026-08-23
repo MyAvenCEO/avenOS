@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
+import pino from 'pino'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FakePaymentProvider } from '../src/lib/server/billing/fake.js'
 import { parseCreemEvent } from '../src/lib/server/billing/provider.js'
 import { sha256Hex } from '../src/lib/server/crypto.js'
 import { EnvironmentService } from '../src/lib/server/environments/service.js'
+import { EnvironmentWorker } from '../src/lib/server/environments/worker.js'
 import { NameService } from '../src/lib/server/names/service.js'
 import { PasskeyService } from '../src/lib/server/passkeys.js'
 import { createTestDatabase, type TestDatabase, testConfig, testNotifier } from './helpers.js'
@@ -64,10 +66,20 @@ describe('checkout grant', () => {
 				])
 			).rows[0].count
 		).toBe(1)
-		expect(
-			(await database.pool.query('SELECT status FROM customer_environments WHERE name=$1', [name]))
-				.rows[0].status
-		).toBe('queued')
+		const environment = (
+			await database.pool.query(
+				'SELECT id,owner_user_id,status,contract_version,artifact_scope_id,artifact_store_status,effective_config FROM customer_environments WHERE name=$1',
+				[name]
+			)
+		).rows[0]
+		expect(environment.status).toBe('queued')
+		expect(environment.contract_version).toBe(2)
+		expect(environment.artifact_scope_id).toBe(environment.id)
+		expect(environment.artifact_store_status).toBe('pending')
+		expect(environment.effective_config.artifactStore).toEqual({
+			schemaVersion: 1,
+			scopeId: environment.id
+		})
 		expect(
 			(
 				await database.pool.query(
@@ -75,6 +87,30 @@ describe('checkout grant', () => {
 				)
 			).rowCount
 		).toBe(1)
+		await database.pool.query(
+			"UPDATE customer_environment_jobs SET status='succeeded' WHERE environment_id=$1",
+			[environment.id]
+		)
+		await database.pool.query("UPDATE customer_environments SET status='ready' WHERE id=$1", [
+			environment.id
+		])
+		const artifactConfig = testConfig({
+			ARTIFACT_STORE_PROVISIONER_BASE_URL: 'http://artifact-provisioner.test',
+			ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN: 'artifact-provisioner-test-token-0001',
+			ARTIFACT_STORE_RUNTIME_ROLE: 'aven_artifact_store',
+			ARTIFACT_STORE_RUNTIME_PASSWORD: 'artifact-runtime-test-password-0001'
+		})
+		const worker = new EnvironmentWorker(database.pool, artifactConfig, pino({ level: 'silent' }))
+		expect(await worker.enqueueArtifactStoreUpgrades()).toBe(1)
+		await database.pool.query(
+			"UPDATE customer_environments SET artifact_store_status='ready' WHERE id=$1",
+			[environment.id]
+		)
+		expect(await environments.artifactTargetForUser(environment.owner_user_id)).toEqual({
+			environmentId: environment.id,
+			databaseName: `cust_${name}`,
+			scopeId: environment.id
+		})
 		expect((await database.pool.query('SELECT 1 FROM setup_links')).rowCount).toBe(1)
 		expect(
 			(
