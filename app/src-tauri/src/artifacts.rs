@@ -34,6 +34,51 @@ pub struct UploadedArtifact {
     replayed: bool,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactProcessingWarning {
+    code: String,
+    message: String,
+    retryable: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactProcessingStage {
+    key: String,
+    state: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactProcessingState {
+    Active,
+    Succeeded,
+    NeedsReview,
+    Failed,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactProcessingPresentation {
+    case_id: String,
+    state: ArtifactProcessingState,
+    projection_version: String,
+    preferred_type: String,
+    label: String,
+    summary: Option<String>,
+    metadata: serde_json::Map<String, serde_json::Value>,
+    warnings: Vec<ArtifactProcessingWarning>,
+    stages: Vec<ArtifactProcessingStage>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactProcessingLookup {
+    pending: bool,
+    presentation: Option<ArtifactProcessingPresentation>,
+}
+
 #[derive(Deserialize)]
 struct ApiErrorBody {
     message: Option<String>,
@@ -120,6 +165,61 @@ fn response_error(response: ureq::Response, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
+fn valid_artifact_id(value: &str) -> bool {
+    value.len() == 36
+        && value.bytes().enumerate().all(|(index, byte)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        })
+}
+
+fn processing_status(
+    token: String,
+    artifact_id: String,
+) -> Result<ArtifactProcessingLookup, String> {
+    if !valid_artifact_id(&artifact_id) {
+        return Err("The artifact ID is invalid.".to_string());
+    }
+    let result = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .get(&api_endpoint(&format!(
+            "/api/artifacts/{artifact_id}/processing"
+        )))
+        .set("authorization", &format!("Bearer {token}"))
+        .call();
+    let response = match result {
+        Ok(response) => response,
+        Err(ureq::Error::Status(404, _)) => {
+            return Ok(ArtifactProcessingLookup {
+                pending: true,
+                presentation: None,
+            });
+        }
+        Err(ureq::Error::Status(_, response)) => {
+            return Err(response_error(
+                response,
+                "Artifact processing status is unavailable.",
+            ));
+        }
+        Err(ureq::Error::Transport(error)) => {
+            return Err(format!("Aven API unavailable: {error}"));
+        }
+    };
+    let body = response
+        .into_string()
+        .map_err(|error| format!("Could not read artifact processing status: {error}"))?;
+    let presentation = serde_json::from_str(&body)
+        .map_err(|error| format!("Invalid artifact processing status: {error}"))?;
+    Ok(ArtifactProcessingLookup {
+        pending: false,
+        presentation: Some(presentation),
+    })
+}
+
 fn upload(
     app: tauri::AppHandle,
     upload_id: String,
@@ -143,7 +243,7 @@ fn upload(
         .filter(|name| !name.is_empty())
         .ok_or_else(|| "The dropped file has no valid UTF-8 filename.".to_string())?
         .to_string();
-    if original_name.as_bytes().len() > 512 {
+    if original_name.len() > 512 {
         return Err("The dropped filename is longer than 512 bytes.".to_string());
     }
     let media_type = mime_guess::from_path(&path)
@@ -221,6 +321,17 @@ pub async fn artifact_upload(
     .map_err(|error| format!("Artifact upload task failed: {error}"))?
 }
 
+#[tauri::command]
+pub async fn artifact_processing_status(
+    artifact_id: String,
+    state: tauri::State<'_, AuthState>,
+) -> Result<ArtifactProcessingLookup, String> {
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || processing_status(token, artifact_id))
+        .await
+        .map_err(|error| format!("Artifact processing status task failed: {error}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,5 +350,13 @@ mod tests {
             digest,
             "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
         );
+    }
+
+    #[test]
+    fn artifact_ids_are_restricted_to_one_uuid_path_segment() {
+        assert!(valid_artifact_id("ce31a00e-5f10-4707-ac07-e3b0cbd43ba4"));
+        assert!(valid_artifact_id("CE31A00E-5F10-4707-AC07-E3B0CBD43BA4"));
+        assert!(!valid_artifact_id("../../api/auth/get-session"));
+        assert!(!valid_artifact_id("ce31a00e5f104707ac07e3b0cbd43ba4"));
     }
 }
