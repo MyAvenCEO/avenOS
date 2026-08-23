@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/aven-skills",
 	"private": true,
-	"version": "26.8.23-next.2",
+	"version": "26.8.23-next.3",
 	"type": "module",
 	"description": "The skill catalog — one entry per skill, shared by the website and the app.",
 	"main": "./src/index.ts",
