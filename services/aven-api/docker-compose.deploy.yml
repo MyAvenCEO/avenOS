@@ -29,6 +29,7 @@ services:
         condition: service_healthy
     environment:
       DOMAIN: ${IDENTITY_DOMAIN}
+      ARTIFACT_STORE_MAX_UPLOAD_BYTES: ${ARTIFACT_STORE_MAX_UPLOAD_BYTES:-26214400}
     ports:
       - "80:80"
       - "443:443"

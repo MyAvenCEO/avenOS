@@ -81,6 +81,9 @@ services:
     environment:
       <<: *app-environment
       DATABASE_URL: postgres://aven_server:${AVEN_SERVER_PASSWORD:-server-dev}@db:5432/aven
+      # adapter-node otherwise rejects streamed bodies above its 512 KiB default
+      # before the Artifact route can apply its authenticated 25 MiB policy.
+      BODY_SIZE_LIMIT: ${ARTIFACT_STORE_MAX_UPLOAD_BYTES:-26214400}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-only-secret-change-me-for-real-deployments}
       EMAIL_QUEUE_ENCRYPTION_KEY: ${EMAIL_QUEUE_ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
       CREEM_API_KEY: ${CREEM_API_KEY:-}

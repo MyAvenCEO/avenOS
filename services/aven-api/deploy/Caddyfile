@@ -1,5 +1,20 @@
 # TLS terminator for VPS deployments (compose profile "prod").
 # Caddy provisions Let's Encrypt certificates automatically for $DOMAIN.
 {$DOMAIN} {
-	reverse_proxy app:3000
+	@artifact_upload {
+		method PUT
+		path /api/artifacts/files/*
+	}
+	handle @artifact_upload {
+		request_body {
+			max_size {$ARTIFACT_STORE_MAX_UPLOAD_BYTES:26214400}
+		}
+		reverse_proxy app:3000
+	}
+	handle {
+		request_body {
+			max_size 524288
+		}
+		reverse_proxy app:3000
+	}
 }
