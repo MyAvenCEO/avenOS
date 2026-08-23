@@ -324,6 +324,12 @@ jobs:
           ARTIFACT_STORE_RUNTIME_PASSWORD: ${{ secrets.ARTIFACT_STORE_RUNTIME_PASSWORD }}
           ARTIFACT_STORE_MAX_TENANT_POOLS: ${{ vars.ARTIFACT_STORE_MAX_TENANT_POOLS }}
           ARTIFACT_STORE_CONNECTIONS_PER_TENANT: ${{ vars.ARTIFACT_STORE_CONNECTIONS_PER_TENANT }}
+          ARTIFACT_STORE_MEMORY_LIMIT: ${{ vars.ARTIFACT_STORE_MEMORY_LIMIT }}
+          ARTIFACT_STORE_MAX_UPLOAD_BYTES: ${{ vars.ARTIFACT_STORE_MAX_UPLOAD_BYTES }}
+          ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS: ${{ vars.ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS }}
+          ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE: ${{ vars.ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE }}
+          ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE: ${{ vars.ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE }}
+          ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE: ${{ vars.ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE }}
           SMTP_URL: ${{ secrets.SMTP_URL }}
           CREEM_API_KEY: ${{ secrets.CREEM_API_KEY }}
           CREEM_PRODUCT_ID: ${{ secrets.CREEM_PRODUCT_ID }}
@@ -352,6 +358,12 @@ jobs:
           DOCKER_LOG_MAX_SIZE=${DOCKER_LOG_MAX_SIZE:-10m}
           DOCKER_LOG_MAX_FILE=${DOCKER_LOG_MAX_FILE:-5}
           DOCKER_LOG_COMPRESS=${DOCKER_LOG_COMPRESS:-true}
+          ARTIFACT_STORE_MEMORY_LIMIT=${ARTIFACT_STORE_MEMORY_LIMIT:-512m}
+          ARTIFACT_STORE_MAX_UPLOAD_BYTES=${ARTIFACT_STORE_MAX_UPLOAD_BYTES:-26214400}
+          ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS=${ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS:-2}
+          ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE=${ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE:-32}
+          ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE=${ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE:-104857600}
+          ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE=${ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE:-1073741824}
           if [[ ! "$DOCKER_LOG_MAX_SIZE" =~ ^[1-9][0-9]*[kmg]$ ]]; then
             echo "::error::DOCKER_LOG_MAX_SIZE must be a positive size such as 10m."
             exit 1
@@ -364,6 +376,16 @@ jobs:
             echo "::error::DOCKER_LOG_COMPRESS must be true or false."
             exit 1
           fi
+          if [[ ! "$ARTIFACT_STORE_MEMORY_LIMIT" =~ ^[1-9][0-9]*[mg]$ ]]; then
+            echo "::error::ARTIFACT_STORE_MEMORY_LIMIT must be a positive size such as 512m."
+            exit 1
+          fi
+          for value in "$ARTIFACT_STORE_MAX_UPLOAD_BYTES" "$ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS" "$ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE" "$ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE" "$ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE"; do
+            if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::Artifact Store admission limits must be positive integers."
+              exit 1
+            fi
+          done
           install -m 700 -d "$RUNNER_TEMP/identity-deploy/deploy"
           install -m 644 services/aven-api/docker-compose.yml "$RUNNER_TEMP/identity-deploy/docker-compose.yml"
           install -m 644 services/aven-api/docker-compose.deploy.yml "$RUNNER_TEMP/identity-deploy/docker-compose.deploy.yml"
@@ -398,6 +420,12 @@ jobs:
             printf 'ARTIFACT_STORE_RUNTIME_PASSWORD=%s\n' "$ARTIFACT_STORE_RUNTIME_PASSWORD"
             printf 'ARTIFACT_STORE_MAX_TENANT_POOLS=%s\n' "${ARTIFACT_STORE_MAX_TENANT_POOLS:-64}"
             printf 'ARTIFACT_STORE_CONNECTIONS_PER_TENANT=%s\n' "${ARTIFACT_STORE_CONNECTIONS_PER_TENANT:-2}"
+            printf 'ARTIFACT_STORE_MEMORY_LIMIT=%s\n' "$ARTIFACT_STORE_MEMORY_LIMIT"
+            printf 'ARTIFACT_STORE_MAX_UPLOAD_BYTES=%s\n' "$ARTIFACT_STORE_MAX_UPLOAD_BYTES"
+            printf 'ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS=%s\n' "$ARTIFACT_STORE_MAX_CONCURRENT_UPLOADS"
+            printf 'ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE=%s\n' "$ARTIFACT_STORE_MAX_LIVE_CLAIMS_PER_SCOPE"
+            printf 'ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE=%s\n' "$ARTIFACT_STORE_MAX_STAGED_BYTES_PER_SCOPE"
+            printf 'ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE=%s\n' "$ARTIFACT_STORE_MAX_LOGICAL_BYTES_PER_SCOPE"
             printf 'SMTP_URL=%s\n' "$SMTP_URL"
             printf 'CREEM_API_KEY=%s\n' "$CREEM_API_KEY"
             printf 'CREEM_PRODUCT_ID=%s\n' "$CREEM_PRODUCT_ID"
@@ -450,7 +478,7 @@ jobs:
           printf '%s' "$GHCR_READ_TOKEN" | ssh "${ssh_args[@]}" "$remote" "sudo docker login ghcr.io -u '$GHCR_USER' --password-stdin"
           # The generated upload path is intentionally expanded by this runner.
           # shellcheck disable=SC2029
-          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' /opt/aven-api/deploy/db-init.sh && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps artifact-store-provisioner artifact-store app email-worker environment-worker caddy && rm -rf '$upload'"
+          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' /opt/aven-api/deploy/db-init.sh && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --wait --wait-timeout 120 db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres -c 'GRANT pg_signal_backend TO aven_provisioner' && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store-provisioner artifact-store app email-worker environment-worker caddy && rm -rf '$upload'"
 
       - name: Remove temporary host upload
         if: always()
@@ -469,7 +497,7 @@ jobs:
         run: |
           curl --fail --retry 20 --retry-delay 3 --retry-all-errors "$PUBLIC_BASE_URL/api/health/ready"
           overall=""
-          for _ in $(seq 1 20); do
+          for _ in $(seq 1 100); do
             overall="$(curl --fail --silent "$PUBLIC_BASE_URL/api/health/status" | jq -r .overall || true)"
             [ "$overall" = "healthy" ] && break
             sleep 3
