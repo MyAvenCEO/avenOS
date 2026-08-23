@@ -45,6 +45,28 @@ export const serverConfigSchema = z
 			.string()
 			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
 			.optional(),
+		ARTIFACT_PROCESSOR_BASE_URL: z.url().optional(),
+		ARTIFACT_PROCESSOR_BEARER_TOKEN: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
+			.optional(),
+		ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
+			.optional(),
+		ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL: z.url().optional(),
+		ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
+			.optional(),
+		ARTIFACT_PROCESSOR_RUNTIME_ROLE: z
+			.string()
+			.regex(/^[a-z][a-z0-9_]{0,62}$/)
+			.optional(),
+		ARTIFACT_PROCESSOR_RUNTIME_PASSWORD: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
+			.optional(),
 
 		BETTER_AUTH_SECRET: z.string().default(''),
 		BETTER_AUTH_SESSION_MAX_AGE_SECONDS: positiveInt.default(43_200),
@@ -96,6 +118,31 @@ export const serverConfigSchema = z
 				code: 'custom',
 				path: ['ARTIFACT_STORE_BASE_URL'],
 				message: 'base URL and bearer token must be configured together'
+			})
+		}
+		const processorValues = [
+			config.ARTIFACT_PROCESSOR_BASE_URL,
+			config.ARTIFACT_PROCESSOR_BEARER_TOKEN
+		]
+		if (processorValues.some(Boolean) && !processorValues.every(Boolean)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['ARTIFACT_PROCESSOR_BASE_URL'],
+				message: 'processor URL and bearer token must be configured together'
+			})
+		}
+		const processorProvisioningValues = [
+			config.ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL,
+			config.ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN,
+			config.ARTIFACT_PROCESSOR_RUNTIME_ROLE,
+			config.ARTIFACT_PROCESSOR_RUNTIME_PASSWORD
+		]
+		if (processorProvisioningValues.some(Boolean) && !processorProvisioningValues.every(Boolean)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL'],
+				message:
+					'processor provisioner URL/token and runtime role/password must be configured together'
 			})
 		}
 		const artifactProvisioningValues = [
@@ -196,11 +243,19 @@ export type EnvironmentWorkerConfig = Pick<
 	| 'ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN'
 	| 'ARTIFACT_STORE_RUNTIME_ROLE'
 	| 'ARTIFACT_STORE_RUNTIME_PASSWORD'
+	| 'ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL'
+	| 'ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN'
+	| 'ARTIFACT_PROCESSOR_RUNTIME_ROLE'
+	| 'ARTIFACT_PROCESSOR_RUNTIME_PASSWORD'
 >
 export type NotifierConfig = Pick<ServerConfig, 'PUBLIC_BASE_URL'>
 export type ArtifactStoreConfig = Pick<
 	ServerConfig,
 	'ARTIFACT_STORE_BASE_URL' | 'ARTIFACT_STORE_BEARER_TOKEN'
+>
+export type ArtifactProcessorConfig = Pick<
+	ServerConfig,
+	'ARTIFACT_PROCESSOR_BASE_URL' | 'ARTIFACT_PROCESSOR_BEARER_TOKEN'
 >
 export type BillingConfig = Pick<
 	ServerConfig,

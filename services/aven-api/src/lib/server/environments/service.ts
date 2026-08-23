@@ -4,7 +4,10 @@ import { writeAudit } from '../audit.js'
 import { type Queryable, withTransaction } from '../db.js'
 import { AppError } from '../errors.js'
 import { environmentNames } from './naming.js'
-import { CURRENT_ARTIFACT_STORE_SCHEMA_VERSION } from './provisioning.js'
+import {
+	CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
+	CURRENT_ARTIFACT_STORE_SCHEMA_VERSION
+} from './provisioning.js'
 
 export class EnvironmentService {
 	constructor(private pool: pg.Pool) {}
@@ -33,6 +36,10 @@ export class EnvironmentService {
 				databaseName: names.databaseName,
 				stackName: names.stackName,
 				artifactStore: { schemaVersion: 1, scopeId: artifactScopeId },
+				artifactProcessor: {
+					schemaVersion: CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
+					scopeId: artifactScopeId
+				},
 				applications: []
 			}
 			await connection.query(
@@ -113,6 +120,31 @@ export class EnvironmentService {
 		}
 	}
 
+	async artifactProcessingTargets(): Promise<
+		Array<{ environmentId: string; databaseName: string; scopeId: string }>
+	> {
+		const rows = (
+			await this.pool.query(
+				`SELECT environment.id,environment.database_name,environment.artifact_scope_id
+				 FROM customer_environments environment
+				 JOIN names name_record ON name_record.name=environment.name
+				 WHERE name_record.status='owned'
+				   AND environment.status='ready'
+				   AND environment.artifact_store_status='ready'
+				   AND environment.artifact_store_schema_version >= $1
+				   AND environment.artifact_processor_status='ready'
+				   AND environment.artifact_processor_schema_version >= $2
+				 ORDER BY environment.id`,
+				[CURRENT_ARTIFACT_STORE_SCHEMA_VERSION, CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION]
+			)
+		).rows as Array<{ id: string; database_name: string; artifact_scope_id: string }>
+		return rows.map((row) => ({
+			environmentId: row.id,
+			databaseName: row.database_name,
+			scopeId: row.artifact_scope_id
+		}))
+	}
+
 	async enqueueSuspension(
 		connection: Queryable,
 		input: { userId: string; name: string }
@@ -157,7 +189,9 @@ export class EnvironmentService {
 	async status(name: string) {
 		const row = (
 			await this.pool.query(
-				`SELECT id,name,database_name,artifact_scope_id,artifact_store_status,artifact_store_schema_version,owner_role,stack_name,contract_version,status,last_operation,
+				`SELECT id,name,database_name,artifact_scope_id,artifact_store_status,artifact_store_schema_version,
+				        artifact_processor_status,artifact_processor_schema_version,
+				        owner_role,stack_name,contract_version,status,last_operation,
               last_error_code,last_error_message,queued_at,provisioning_at,ready_at,suspended_at,failed_at,updated_at
        FROM customer_environments WHERE name=$1`,
 				[environmentNames(name).name]

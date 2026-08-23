@@ -1,4 +1,5 @@
 import pino from 'pino'
+import { ArtifactProcessingService } from './artifacts/processing.js'
 import { ArtifactFileService } from './artifacts/service.js'
 import { type AvenAuth, createAuth } from './auth.js'
 import { createPaymentProvider } from './billing/fake.js'
@@ -28,6 +29,7 @@ export interface Runtime {
 	passkeys: PasskeyService
 	environments: EnvironmentService
 	artifacts: ArtifactFileService | null
+	artifactProcessing: ArtifactProcessingService | null
 	shutdown(): Promise<void>
 }
 
@@ -60,6 +62,7 @@ async function create(): Promise<Runtime> {
 	const passkeys = new PasskeyService(database.pool, config.REQUIRE_PASSKEY_PRF)
 	const environments = new EnvironmentService(database.pool)
 	const artifacts = ArtifactFileService.fromConfig(config)
+	const artifactProcessing = ArtifactProcessingService.fromConfig(config)
 	const names = new NameService(
 		database.pool,
 		config,
@@ -91,6 +94,7 @@ async function create(): Promise<Runtime> {
 		passkeys,
 		environments,
 		artifacts,
+		artifactProcessing,
 		async shutdown() {
 			await database.pool.end()
 		}
