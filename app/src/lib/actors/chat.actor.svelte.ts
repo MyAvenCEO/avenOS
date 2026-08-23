@@ -39,9 +39,19 @@ export class ChatActor extends Actor {
 	#project() {
 		const rows = this.core.turns.map((t) => {
 			const me = t.role === 'user'
+			const attachment = t.attachment
+			const content = attachment
+				? attachment.status === 'committed'
+					? `${attachment.originalName} · artifact ${attachment.artifactId}`
+					: attachment.status === 'failed'
+						? `${attachment.originalName} · upload failed`
+						: `${attachment.originalName} · ${attachment.progress}%`
+				: t.content === ''
+					? '…'
+					: t.content
 			return {
 				id: t.id,
-				content: t.content === '' ? '…' : t.content,
+				content,
 				rowClass: `ch-row${me ? ' ch-row--me' : ''}`,
 				bubbleClass: `ch-bubble${me ? ' ch-bubble--me' : ''}`
 			}

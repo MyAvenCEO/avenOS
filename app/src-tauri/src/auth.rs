@@ -158,7 +158,7 @@ fn endpoint(path: &str) -> String {
 	format!("{}/api/auth{path}", IDENTITY_BASE_URL.trim_end_matches('/'))
 }
 
-fn api_endpoint(path: &str) -> String {
+pub(crate) fn api_endpoint(path: &str) -> String {
 	format!("{}{path}", IDENTITY_BASE_URL.trim_end_matches('/'))
 }
 
@@ -512,7 +512,7 @@ pub fn auth_status(state: tauri::State<'_, AuthState>) -> Result<AuthStatus, Str
 	})
 }
 
-fn session_token(state: &tauri::State<'_, AuthState>) -> Result<String, String> {
+pub(crate) fn session_token(state: &tauri::State<'_, AuthState>) -> Result<String, String> {
 	state
 		.0
 		.lock()
