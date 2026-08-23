@@ -139,6 +139,7 @@ run_compose() {
 		--env-file .env \
 		-f docker-compose.yml \
 		-f docker-compose.deploy.yml \
+		-f docker-compose.artifact-store.deploy.yml \
 		"$@"
 	ssh "${ssh_args[@]}" "$TARGET" "cd $REMOTE_APP_DIR &&$quoted_args"
 }
