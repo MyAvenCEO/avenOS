@@ -21,9 +21,10 @@ RUN apt-get update \
 COPY --from=build /tmp/aven-artifact-store /usr/local/bin/aven-artifact-store
 
 USER 10001:10001
-EXPOSE 8087
+EXPOSE 8087 8088
+ENV ARTIFACT_STORE_HEALTH_PORT=8087
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=30 \
-  CMD curl --fail --silent --show-error http://127.0.0.1:8087/health/ready >/dev/null || exit 1
+  CMD curl --fail --silent --show-error "http://127.0.0.1:${ARTIFACT_STORE_HEALTH_PORT}/health/ready" >/dev/null || exit 1
 
 ENTRYPOINT ["/usr/local/bin/aven-artifact-store"]
 CMD ["serve"]

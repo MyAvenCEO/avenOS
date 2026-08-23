@@ -154,6 +154,55 @@ impl PostgresStore {
         Ok(())
     }
 
+    /// Check whether provisioning installed an exact authorized scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns a database error when the scope catalog cannot be read.
+    pub async fn has_scope(&self, scope_id: Uuid) -> Result<bool, StoreError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM artifact_store.artifact_scopes WHERE id=$1)",
+        )
+        .bind(scope_id)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    /// Grant the preview runtime role only the table privileges used by this adapter.
+    ///
+    /// Role creation and database `CONNECT` remain cluster-provisioning concerns. This
+    /// method is deliberately called by the provisioning process, never by HTTP runtime
+    /// requests.
+    ///
+    /// # Errors
+    ///
+    /// Returns an integrity error for an unsafe role name or a database error when a
+    /// grant cannot be applied.
+    pub async fn grant_runtime_role(&self, role: &str) -> Result<(), StoreError> {
+        if !valid_role_name(role) {
+            return Err(StoreError::Integrity(
+                "artifact runtime role is not a safe PostgreSQL identifier".into(),
+            ));
+        }
+        let role = format!("\"{role}\"");
+        for statement in [
+            format!("GRANT USAGE ON SCHEMA artifact_store TO {role}"),
+            format!("GRANT SELECT ON ALL TABLES IN SCHEMA artifact_store TO {role}"),
+            format!(
+                "GRANT INSERT ON artifact_store.artifact_scopes, artifact_store.artifact_blobs, artifact_store.upload_claims, artifact_store.publications, artifact_store.production_runs, artifact_store.artifact_records, artifact_store.artifact_contents, artifact_store.artifact_references, artifact_store.artifact_run_inputs, artifact_store.artifact_evidence TO {role}"
+            ),
+            format!(
+                "GRANT UPDATE (next_sequence) ON artifact_store.artifact_scopes TO {role}"
+            ),
+            format!(
+                "GRANT UPDATE (consumed_publication_id) ON artifact_store.upload_claims TO {role}"
+            ),
+        ] {
+            sqlx::query(&statement).execute(&self.pool).await?;
+        }
+        Ok(())
+    }
+
     /// Read the current epoch, write mode, and frozen protocol profiles.
     ///
     /// # Errors
@@ -202,7 +251,6 @@ impl PostgresStore {
         {
             return Err(StoreError::UploadDigestMismatch);
         }
-        self.ensure_scope(scope_id).await?;
         let mut transaction = self.pool.begin().await?;
         assert_store_normal(&mut transaction, None).await?;
         sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
@@ -330,7 +378,6 @@ impl PostgresStore {
         expected_epoch: Uuid,
         prepared: &PreparedPublication,
     ) -> Result<PublicationResult, StoreError> {
-        self.ensure_scope(prepared.context.scope_id).await?;
         let intent = &prepared.submission.intent;
         let mut transaction = self.pool.begin().await?;
         let epoch = assert_store_normal(&mut transaction, Some(expected_epoch)).await?;
@@ -518,12 +565,23 @@ impl PostgresStore {
     }
 }
 
+fn valid_role_name(role: &str) -> bool {
+    !role.is_empty()
+        && role.len() <= 63
+        && role
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
 async fn assert_store_normal(
     transaction: &mut Transaction<'_, Postgres>,
     expected: Option<Uuid>,
 ) -> Result<Uuid, StoreError> {
-    let row = sqlx::query("SELECT store_epoch, write_mode FROM artifact_store.store_state WHERE singleton=true FOR SHARE")
-        .fetch_one(&mut **transaction).await?;
+    let row = sqlx::query(
+        "SELECT store_epoch, write_mode FROM artifact_store.store_state WHERE singleton=true",
+    )
+    .fetch_one(&mut **transaction)
+    .await?;
     let epoch: Uuid = row.get("store_epoch");
     if row.get::<String, _>("write_mode") != "normal" {
         return Err(StoreError::Reconciling);

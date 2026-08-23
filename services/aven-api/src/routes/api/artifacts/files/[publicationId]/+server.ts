@@ -34,12 +34,10 @@ function decodeOriginalName(encoded: string): string {
 
 export const PUT = api(async (event, rt) => {
 	const user = await requireUser(event)
-	if (!(await rt.names.ownsAny(user.id))) {
-		throw new AppError(403, 'NAME_REQUIRED', 'Purchase a name before storing artifacts.')
-	}
 	if (!rt.artifacts) {
 		throw new AppError(503, 'ARTIFACT_STORE_UNAVAILABLE', 'Artifact Store is not configured.')
 	}
+	const target = await rt.environments.artifactTargetForUser(user.id)
 
 	const publicationId = publicationIdSchema.parse(event.params.publicationId)
 	const originalName = decodeOriginalName(requiredHeader(event.request, 'x-aven-original-name'))
@@ -59,6 +57,8 @@ export const PUT = api(async (event, rt) => {
 	return {
 		body: await rt.artifacts.publishFile({
 			userId: user.id,
+			databaseName: target.databaseName,
+			scopeId: target.scopeId,
 			publicationId,
 			originalName,
 			mediaType,

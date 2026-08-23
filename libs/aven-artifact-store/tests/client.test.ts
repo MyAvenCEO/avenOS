@@ -6,6 +6,7 @@ test('client sends canonical publication bytes and the epoch precondition', asyn
 	const client = new ArtifactStoreClient({
 		baseUrl: 'https://store.example/',
 		bearerToken: () => 'secret',
+		requestHeaders: () => ({ 'x-aven-artifact-database': 'cust_acme' }),
 		fetch: async (input, init) => {
 			captured = new Request(input, init)
 			return new Response('{"replayed":false}', {
@@ -19,6 +20,7 @@ test('client sends canonical publication bytes and the epoch precondition', asyn
 	})
 	expect(captured?.method).toBe('PUT')
 	expect(captured?.headers.get('authorization')).toBe('Bearer secret')
+	expect(captured?.headers.get('x-aven-artifact-database')).toBe('cust_acme')
 	expect(captured?.headers.get('if-artifact-store-epoch')).toBe('epoch')
 	expect(await captured?.text()).toBe('{"blobAuthorities":{},"intent":{"a":2,"z":1}}')
 })
