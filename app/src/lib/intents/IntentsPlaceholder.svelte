@@ -9,6 +9,12 @@ import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { registryTick } from '$lib/actors/reactivity.svelte'
 import { isWindow } from '$lib/actors/window.actor.svelte'
+import {
+	artifactDescription,
+	artifactMetadataHighlights,
+	artifactProcessingProgress,
+	artifactWarningText
+} from '$lib/artifacts/processing'
 import { composer } from '$lib/intents/composer.svelte'
 import {
 	type IntentState,
@@ -382,6 +388,9 @@ $effect(() => {
 		chat.turns.at(-1)?.content,
 		chat.turns.at(-1)?.attachment?.progress,
 		chat.turns.at(-1)?.attachment?.status,
+		chat.turns.at(-1)?.attachment?.processing?.state,
+		chat.turns.at(-1)?.attachment?.processing?.availability,
+		chat.turns.at(-1)?.attachment?.processing?.label,
 		activity.current
 	]
 	if (stick) scrollToBottom(deps)
@@ -930,6 +939,11 @@ const DOT: Record<string, string> = {
 						{#each chat.turns as turn (turn.id)}
 							{#if turn.attachment}
 								{@const file = turn.attachment}
+								{@const processing = file.processing}
+								{@const description = artifactDescription(file.originalName, processing)}
+								{@const processingProgress = artifactProcessingProgress(processing)}
+								{@const processingWarning = artifactWarningText(processing)}
+								{@const metadataHighlights = artifactMetadataHighlights(processing)}
 								<div class="flex justify-end">
 									<div
 										class="w-full max-w-[28rem] overflow-hidden rounded-2xl border border-foreground/10 bg-surface-raised shadow-sm"
@@ -971,11 +985,76 @@ const DOT: Record<string, string> = {
 												></div>
 											</div>
 										{:else if file.status === 'committed' && file.artifactId}
-											<div
-												class="border-foreground/8 border-t px-3.5 py-2 text-[10px] text-foreground/45"
-											>
-												<span class="mr-1 uppercase tracking-wide">Artifact</span>
-												<span class="select-all font-mono">{file.artifactId}</span>
+											<div class="border-foreground/8 border-t px-3.5 py-2.5 text-[10px]">
+												<div
+													class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-foreground/45"
+												>
+													<span class="uppercase tracking-wide">Artifact</span>
+													<span class="select-all font-mono">{file.artifactId}</span>
+													<span aria-hidden="true">·</span>
+													<span class="font-medium text-foreground/75">{description}</span>
+													{#if processingWarning !== ''}
+														<span
+															class="cursor-help text-warning-ink text-xs"
+															role="img"
+															aria-label="Artifact processing warning"
+															title={processingWarning}
+															>⚠</span
+														>
+													{/if}
+												</div>
+
+												{#if processing}
+													<div class="mt-2 flex items-center justify-between gap-3 text-[11px]">
+														<span
+															class={processing.state === 'failed'
+															? 'text-error'
+															: processing.state === 'needs_review' ||
+																processing.availability === 'unavailable'
+																? 'text-warning-ink'
+																: processing.state === 'succeeded'
+																	? 'text-success'
+																	: 'text-foreground/55'}
+															>{processingProgress.label}</span
+														>
+														{#if processingProgress.total > 0}
+															<span class="font-mono tabular-nums text-foreground/40">
+																{processingProgress.completed}/{processingProgress.total}
+															</span>
+														{/if}
+													</div>
+
+													{#if processing.state === 'active'}
+														<div class="mt-1.5 h-1 overflow-hidden rounded-full bg-foreground/8">
+															<div
+																class="h-full rounded-full bg-progress transition-[width] duration-300"
+																class:animate-pulse={processingProgress.total === 0}
+																style="width: {processingProgress.total === 0
+																? 100
+																: Math.max(
+																		6,
+																		(processingProgress.completed / processingProgress.total) * 100
+																	)}%"
+															></div>
+														</div>
+													{/if}
+
+													{#if processing.summary}
+														<p class="mt-2 text-foreground/55 text-[11px] leading-relaxed">
+															{processing.summary}
+														</p>
+													{/if}
+													{#if metadataHighlights.length > 0}
+														<div class="mt-2 flex flex-wrap gap-1.5">
+															{#each metadataHighlights as value}
+																<span
+																	class="rounded-full bg-foreground/6 px-2 py-0.5 text-foreground/55 text-[10px]"
+																	>{value}</span
+																>
+															{/each}
+														</div>
+													{/if}
+												{/if}
 											</div>
 										{:else if file.status === 'failed'}
 											<p

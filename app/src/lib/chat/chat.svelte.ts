@@ -1,3 +1,9 @@
+import {
+	type ArtifactProcessingPresentation,
+	type ArtifactProcessingView,
+	artifactDescription,
+	artifactProcessingProgress
+} from '$lib/artifacts/processing'
 import { type ChatMessage, repairCall, streamChat, type ToolSpec } from './redpill'
 
 /**
@@ -150,6 +156,7 @@ export interface ArtifactAttachment {
 	mediaType?: string
 	sha256?: string
 	error?: string
+	processing?: ArtifactProcessingView
 }
 
 export interface UploadedArtifactReceipt {
@@ -210,6 +217,7 @@ export class Chat {
 	session = $state('')
 	#sessions = new Map<string, Session>()
 	#uploads = new Map<string, { attachment: ArtifactAttachment; session: string }>()
+	#artifacts = new Map<string, ArtifactAttachment>()
 	/**
 	 * The turn in flight: which session's arrays it writes to, and where in
 	 * them it began. A tool may move the whole turn to another session
@@ -339,6 +347,19 @@ export class Chat {
 		attachment.mediaType = receipt.mediaType
 		attachment.sha256 = receipt.sha256
 		attachment.error = undefined
+		attachment.processing = {
+			availability: 'discovering',
+			caseId: '',
+			state: 'active',
+			projectionVersion: '',
+			preferredType: 'file',
+			label: 'File',
+			summary: null,
+			metadata: {},
+			warnings: [],
+			stages: []
+		}
+		this.#artifacts.set(receipt.artifactId, attachment)
 
 		const content =
 			`Attached file:\n` +
@@ -351,6 +372,60 @@ export class Chat {
 		wire?.push({ role: 'user', content })
 		this.#uploads.delete(uploadId)
 		this.#sink.onTurn?.()
+	}
+
+	hasArtifact(artifactId: string): boolean {
+		return this.#artifacts.has(artifactId)
+	}
+
+	markArtifactProcessingPending(artifactId: string): void {
+		const attachment = this.#artifacts.get(artifactId)
+		if (!attachment?.processing) return
+		attachment.processing.availability = 'discovering'
+		attachment.processing.lookupError = undefined
+		this.#sink.onTurn?.()
+	}
+
+	updateArtifactProcessing(artifactId: string, presentation: ArtifactProcessingPresentation): void {
+		const attachment = this.#artifacts.get(artifactId)
+		if (!attachment) return
+		attachment.processing = {
+			...presentation,
+			availability: 'available',
+			lookupError: undefined
+		}
+		this.#sink.onTurn?.()
+	}
+
+	markArtifactProcessingUnavailable(artifactId: string, error: string): void {
+		const attachment = this.#artifacts.get(artifactId)
+		if (!attachment?.processing) return
+		attachment.processing.availability = 'unavailable'
+		attachment.processing.lookupError = error
+		this.#sink.onTurn?.()
+	}
+
+	artifactContext(): string {
+		const rows = this.turns.flatMap((turn) => {
+			const attachment = turn.attachment
+			if (!attachment?.artifactId) return []
+			const processing = attachment.processing
+			const progress = artifactProcessingProgress(processing)
+			const processingState =
+				processing?.availability === 'available' ? processing.state : progress.label
+			const warnings = [
+				...(processing?.warnings.map((warning) => warning.code) ?? []),
+				...(processing?.lookupError ? ['processing-status-unavailable'] : [])
+			]
+			return [
+				`- artifactId=${JSON.stringify(attachment.artifactId)}, ` +
+					`originalName=${JSON.stringify(attachment.originalName)}, ` +
+					`description=${JSON.stringify(artifactDescription(attachment.originalName, processing))}, ` +
+					`processing=${JSON.stringify(processingState)}, ` +
+					`warnings=${JSON.stringify(warnings)}`
+			]
+		})
+		return rows.length === 0 ? '' : `ARTIFACTS in this conversation right now:\n${rows.join('\n')}`
 	}
 
 	failArtifactUpload(uploadId: string, error: string): void {
@@ -659,6 +734,9 @@ export class Chat {
 		this.stop()
 		for (const [uploadId, upload] of this.#uploads) {
 			if (upload.session === this.session) this.#uploads.delete(uploadId)
+		}
+		for (const turn of this.turns) {
+			if (turn.attachment?.artifactId) this.#artifacts.delete(turn.attachment.artifactId)
 		}
 		this.turns = []
 		this.#wire = []

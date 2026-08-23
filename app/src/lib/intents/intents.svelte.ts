@@ -1055,6 +1055,7 @@ bus.register(intents)
 // intents with every request — live data, never a vocabulary.
 chatActor.core.context = () => {
 	const on = intents.items.find((i) => i.id === intents.selectedId)
+	const artifactContext = chatActor.core.artifactContext()
 	const rows = intents.items
 		.filter((i) => i.status !== 'archive')
 		.map((i) => `- ${i.id}: "${i.title}" (${i.type}, ${i.status})`)
@@ -1064,6 +1065,7 @@ chatActor.core.context = () => {
 		`ON SCREEN: ${on ? `${on.id} — "${on.title}"` : 'none'}.\n` +
 		'If the request is about one of the other intents, call intent_switch with it ' +
 		'as your FIRST action, then answer. If it starts something that is none of ' +
-		'these, intent_create first.'
+		'these, intent_create first.' +
+		(artifactContext === '' ? '' : `\n\n${artifactContext}`)
 	)
 }
