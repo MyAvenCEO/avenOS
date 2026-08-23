@@ -19,5 +19,8 @@ const artifacts = new ArtifactStoreClient({
 ```
 
 The Tauri host or AvenOS coordinator should provide `bearerToken`; UI code must not
-construct publisher identity or gain direct database access. Durable outbox and
+construct publisher identity or gain direct database access. In AvenOS tenant mode,
+only the trusted server-side coordinator also supplies
+`requestHeaders: () => ({ "x-aven-artifact-database": trustedDatabaseName })`; the
+browser must never select it. Durable outbox and
 projector helpers remain part of the next implementation slice.

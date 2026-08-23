@@ -32,16 +32,26 @@ export ARTIFACT_STORE_LISTEN=127.0.0.1:8087
 cargo run -p aven-artifact-store-server --bin aven-artifact-store -- serve
 ```
 
-Every protected route requires that bearer token. The adapter binds one stable
+Every protected route requires that bearer token. The standalone adapter binds one stable
 publisher and one scope from process configuration; request JSON cannot override
-either. This is suitable for the coordinator preview, but it is not the final
-per-request `aven-api` authorization decision contract.
+either.
+
+Deployed AvenOS uses tenant mode instead: Aven API resolves the authenticated user to
+one exact customer environment, and the Artifact Store selects that environment's
+database using the private `X-Aven-Artifact-Database` header. Only validated `cust_*`
+identifiers are accepted, pools are bounded and least-recently-used entries are evicted,
+and scopes must have been installed by the separate provisioner. Client or webview code
+must never set this header.
+
+See [PER-CUSTOMER-ARCHITECTURE.md](PER-CUSTOMER-ARCHITECTURE.md) for the focused
+boundary diagrams, lifecycle and failure semantics, deployment interaction, and the
+precise coverage limits for names that existed before this rollout.
 
 ### Run with Aven API
 
 The Aven API has an opt-in Compose overlay that starts the API, both worker
-processes, the Artifact Store, their migrators, Mailpit, and separate PostgreSQL
-databases as one local stack:
+processes, the Artifact Store runtime and provisioner, Mailpit, and one PostgreSQL
+cluster as a local stack:
 
 ```bash
 cd ../aven-api
@@ -53,10 +63,11 @@ bun run artifact-store:smoke
 ```
 
 See the [Aven API local services documentation](../aven-api/README.md#local-services)
-for endpoints, port overrides, and teardown. The overlay is intentionally absent
-from the production deployment topology.
+for endpoints, port overrides, and teardown. The direct smoke test uses
+`cust_artifact_local`; customer databases created by the environment worker receive the
+same schema automatically.
 
-Available commands are `migrate`, `verify`, and `serve`. The implemented preview HTTP
+Available commands are `migrate`, `verify`, `serve`, and `serve-provisioner`. The implemented preview HTTP
 surface is:
 
 ```text

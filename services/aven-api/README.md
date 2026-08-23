@@ -79,8 +79,10 @@ docker compose \
 bun run artifact-store:smoke
 ```
 
-The combined stack adds the Artifact Store at `http://localhost:8087` and its
-PostgreSQL database at `127.0.0.1:55433`. The smoke command creates an upload and
+The combined stack adds the Artifact Store at `http://localhost:8087`. Its local smoke
+customer is the `cust_artifact_local` database in the same PostgreSQL cluster; new
+purchased-name environments get their own database and Artifact Store schema
+automatically. The smoke command creates an upload and
 root publication, then verifies artifact metadata, content retrieval, and feed
 replay. It is safe to rerun because every invocation uses new claim and
 publication IDs.
@@ -96,14 +98,16 @@ docker compose \
   down
 ```
 
-Override `APP_PORT`, `MAILPIT_HTTP_PORT`, `DB_PORT`, `ARTIFACT_STORE_PORT`, or
-`ARTIFACT_DB_PORT` when a host port is already occupied. The overlay injects the
-container-internal Artifact Store URL, fixed scope, and development bearer token
-into the API container. These credentials model the future Aven API authorization
-decision adapter and are strictly for local development; the API does not yet
-issue per-request Artifact Store decisions.
+Override `APP_PORT`, `MAILPIT_HTTP_PORT`, `DB_PORT`, or `ARTIFACT_STORE_PORT` when a
+host port is already occupied. The overlay injects the internal Artifact Store URL and
+development credentials into Aven API and the environment worker. Aven API—not request
+data—selects the exact customer database and stable scope. The shared bearer remains a
+preview precursor to short-lived signed authorization decisions.
 
-The migrator, API, email worker, and environment worker use separate database roles. The environment worker creates one `cust_*` database and one `NOLOGIN` owner role per purchased name.
+The migrator, API, email worker, environment worker, Artifact Store provisioner, and
+Artifact Store runtime have separate responsibilities. The environment worker creates
+one `cust_*` database and one `NOLOGIN` owner role per purchased name, installs the
+Artifact Store before readiness, and revokes runtime connections on suspension.
 
 All Compose services use Docker's `local` logging driver. Logs rotate at 10 MiB
 per file with five files per container and compression enabled. Override
