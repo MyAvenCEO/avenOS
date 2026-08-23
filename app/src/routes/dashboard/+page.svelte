@@ -10,6 +10,7 @@ import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import '$lib/actors/windows'
+import { type ArtifactProcessingLookup, isTerminalProcessing } from '$lib/artifacts/processing'
 import { composer } from '$lib/intents/composer.svelte'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
 import { shell } from '$lib/intents/talk.svelte'
@@ -53,6 +54,46 @@ interface UploadedArtifactReceipt {
 
 let fileHovering = $state(false)
 let uploadInFlight = $state(false)
+const processingWatchers = new Set<string>()
+
+function wait(milliseconds: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
+async function watchArtifactProcessing(artifactId: string): Promise<void> {
+	if (processingWatchers.has(artifactId)) return
+	processingWatchers.add(artifactId)
+	let delay = 300
+	let consecutiveFailures = 0
+	try {
+		while (chat.hasArtifact(artifactId)) {
+			try {
+				const lookup = await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
+					artifactId
+				})
+				consecutiveFailures = 0
+				if (lookup.pending || !lookup.presentation) {
+					chat.markArtifactProcessingPending(artifactId)
+					delay = Math.min(2_000, Math.round(delay * 1.5))
+				} else {
+					chat.updateArtifactProcessing(artifactId, lookup.presentation)
+					if (isTerminalProcessing(lookup.presentation.state)) return
+					delay = 1_500
+				}
+			} catch (error) {
+				consecutiveFailures += 1
+				chat.markArtifactProcessingUnavailable(
+					artifactId,
+					error instanceof Error ? error.message : String(error)
+				)
+				delay = Math.min(30_000, 1_000 * 2 ** Math.min(consecutiveFailures, 5))
+			}
+			await wait(delay)
+		}
+	} finally {
+		processingWatchers.delete(artifactId)
+	}
+}
 
 function basename(path: string): string {
 	return path.split(/[\\/]/).at(-1) || 'Dropped file'
@@ -81,6 +122,7 @@ async function uploadDroppedFile(paths: string[]): Promise<void> {
 			path: paths[0]
 		})
 		chat.commitArtifactUpload(uploadId, receipt)
+		void watchArtifactProcessing(receipt.artifactId)
 	} catch (error) {
 		chat.failArtifactUpload(uploadId, error instanceof Error ? error.message : String(error))
 	} finally {

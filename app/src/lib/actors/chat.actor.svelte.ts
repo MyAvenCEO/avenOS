@@ -1,3 +1,4 @@
+import { artifactDescription, artifactProcessingProgress } from '$lib/artifacts/processing'
 import { Chat } from '$lib/chat/chat.svelte'
 import { complete, extractJsonObject } from '$lib/chat/redpill'
 import type { Activity } from './activity.svelte'
@@ -40,9 +41,10 @@ export class ChatActor extends Actor {
 		const rows = this.core.turns.map((t) => {
 			const me = t.role === 'user'
 			const attachment = t.attachment
+			const processing = attachment?.processing
 			const content = attachment
 				? attachment.status === 'committed'
-					? `${attachment.originalName} · artifact ${attachment.artifactId}`
+					? `${attachment.originalName} · artifact ${attachment.artifactId} · ${artifactDescription(attachment.originalName, processing)} · ${artifactProcessingProgress(processing).label}`
 					: attachment.status === 'failed'
 						? `${attachment.originalName} · upload failed`
 						: `${attachment.originalName} · ${attachment.progress}%`
