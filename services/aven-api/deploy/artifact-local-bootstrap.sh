@@ -2,6 +2,8 @@
 set -eu
 
 psql -v ON_ERROR_STOP=1 <<'SQL'
+GRANT pg_signal_backend TO aven_provisioner;
+
 SELECT 'CREATE ROLE cust_artifact_local_owner NOLOGIN'
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cust_artifact_local_owner') \gexec
 GRANT cust_artifact_local_owner TO aven_provisioner WITH SET TRUE;
