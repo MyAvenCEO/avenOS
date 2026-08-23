@@ -5,11 +5,11 @@ service is consumed over HTTP both by deployed AvenOS services and by the Tauri 
 through [`@avenos/artifact-store`](../../libs/aven-artifact-store/README.md); there is
 deliberately no Tauri-specific persistence implementation.
 
-The current milestone is a **developer preview**, not a production release. The root
-vertical is executable and the run/evidence transaction shape exists, but least-
-privilege SQL functions, complete graph reads, quotas, the `aven-api` authorization
-decision adapter, and divergent recovery still block production use. See
-[PLAN.md](PLAN.md#implementation-status) for the exact status.
+The current milestone is a deployment-bounded first release. The root vertical is
+executable, per-customer routing is reconciled by Aven API, and upload concurrency,
+staging, logical storage, and process memory are bounded. Complete graph reads,
+per-customer runtime credentials, backups, and divergent recovery remain later work.
+See [PLAN.md](PLAN.md#implementation-status) for the core status.
 
 ## Run locally
 
@@ -85,7 +85,10 @@ GET  /v1/scopes/{scopeId}/publications
 
 Uploads require `Content-Length`, `Content-Type`, and `X-Expected-SHA256` headers.
 Publication requires `If-Artifact-Store-Epoch`, obtained from `GET /v1/context`.
-Content GET supports one standard byte range.
+Content GET supports one standard byte range. Runtime defaults admit 25 MiB per upload,
+two simultaneous upload bodies, 32 live claims, 100 MiB staged data, and 1 GiB logical
+published data per scope; each limit is configurable through the environment variables
+documented in the Compose overlay.
 
 ## Verify
 
