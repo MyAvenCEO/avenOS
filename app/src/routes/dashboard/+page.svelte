@@ -469,7 +469,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 			<div class="flex flex-col items-center gap-3">
 				<span class="text-4xl" aria-hidden="true">⇩</span>
 				<p class="font-medium text-lg">Drop one file to upload it</p>
-				<p class="text-sm opacity-60">Any format · up to 100 MiB</p>
+				<p class="text-sm opacity-60">Any format · up to 25 MiB</p>
 			</div>
 		</div>
 	{/if}

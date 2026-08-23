@@ -39,6 +39,10 @@ pub enum StoreError {
     UploadExpired,
     #[error("uploaded bytes differ from their declaration")]
     UploadDigestMismatch,
+    #[error("the scope staging quota is exhausted")]
+    StagingQuotaExceeded,
+    #[error("the scope storage quota would be exceeded")]
+    StorageQuotaExceeded,
     #[error("an input, reference, or blob source is unavailable")]
     InputUnavailable,
     #[error("immutable store invariant failed: {0}")]
@@ -50,6 +54,13 @@ pub struct PostgresStore {
     pool: PgPool,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct UploadAdmission {
+    pub max_live_claims_per_scope: i64,
+    pub max_staged_bytes_per_scope: i64,
+    pub max_logical_bytes_per_scope: i64,
+}
+
 impl PostgresStore {
     /// Connect a bounded pool to one artifact-store database.
     ///
@@ -59,6 +70,18 @@ impl PostgresStore {
     pub async fn connect(database_url: &str, max_connections: u32) -> Result<Self, StoreError> {
         let pool = PgPoolOptions::new()
             .max_connections(max_connections)
+            .acquire_timeout(std::time::Duration::from_secs(10))
+            .after_connect(|connection, _metadata| {
+                Box::pin(async move {
+                    sqlx::query("SET statement_timeout = '60s'")
+                        .execute(&mut *connection)
+                        .await?;
+                    sqlx::query("SET lock_timeout = '10s'")
+                        .execute(&mut *connection)
+                        .await?;
+                    Ok(())
+                })
+            })
             .connect(database_url)
             .await?;
         Ok(Self { pool })
@@ -197,6 +220,9 @@ impl PostgresStore {
             format!(
                 "GRANT UPDATE (consumed_publication_id) ON artifact_store.upload_claims TO {role}"
             ),
+            format!(
+                "GRANT EXECUTE ON FUNCTION artifact_store.cleanup_expired_uploads() TO {role}"
+            ),
         ] {
             sqlx::query(&statement).execute(&self.pool).await?;
         }
@@ -245,6 +271,7 @@ impl PostgresStore {
         declaration: &UploadDeclaration,
         bytes: &[u8],
         lifetime: Duration,
+        admission: UploadAdmission,
     ) -> Result<UploadClaimResult, StoreError> {
         if u64::try_from(bytes.len()).ok() != Some(declaration.length)
             || aven_artifact_store_contract::sha256_hex(bytes) != declaration.sha256
@@ -257,39 +284,36 @@ impl PostgresStore {
             .bind(claim_id.to_string())
             .execute(&mut *transaction)
             .await?;
+        sqlx::query("SELECT * FROM artifact_store.cleanup_expired_uploads()")
+            .execute(&mut *transaction)
+            .await?;
+        sqlx::query("SELECT id FROM artifact_store.artifact_scopes WHERE id=$1 FOR UPDATE")
+            .bind(scope_id)
+            .fetch_one(&mut *transaction)
+            .await?;
 
-        if let Some(row) = sqlx::query(
-            "SELECT scope_id, publisher_issuer, publisher_subject, blob_sha256::text, blob_length, declared_media_type, expires_at, consumed_publication_id \
-             FROM artifact_store.upload_claims WHERE claim_id=$1",
+        if let Some(result) = replay_upload_claim(
+            &mut transaction,
+            now,
+            publisher,
+            scope_id,
+            claim_id,
+            declaration,
         )
-        .bind(claim_id)
-        .fetch_optional(&mut *transaction)
         .await?
         {
-            let same = row.get::<Uuid, _>("scope_id") == scope_id
-                && row.get::<String, _>("publisher_issuer") == publisher.issuer
-                && row.get::<String, _>("publisher_subject") == publisher.subject
-                && row.get::<String, _>("blob_sha256") == declaration.sha256
-                && row.get::<i64, _>("blob_length") == to_i64(declaration.length, "blob length")?
-                && row.get::<String, _>("declared_media_type") == declaration.declared_media_type;
-            if !same {
-                return Err(StoreError::UploadConflict);
-            }
-            let expires_at: OffsetDateTime = row.get("expires_at");
-            if expires_at <= now || row.get::<Option<Uuid>, _>("consumed_publication_id").is_some() {
-                return Err(StoreError::UploadExpired);
-            }
             transaction.commit().await?;
-            return Ok(UploadClaimResult {
-                claim_id,
-                scope_id,
-                sha256: declaration.sha256.clone(),
-                length: declaration.length,
-                declared_media_type: declaration.declared_media_type.clone(),
-                expires_at,
-                replayed: true,
-            });
+            return Ok(result);
         }
+
+        admit_staged_upload(
+            &mut transaction,
+            scope_id,
+            now,
+            declaration.length,
+            admission,
+        )
+        .await?;
 
         sqlx::query(
             "INSERT INTO artifact_store.artifact_blobs(sha256, length, bytes) VALUES ($1,$2,$3) ON CONFLICT (sha256) DO NOTHING",
@@ -377,6 +401,7 @@ impl PostgresStore {
         now: OffsetDateTime,
         expected_epoch: Uuid,
         prepared: &PreparedPublication,
+        admission: UploadAdmission,
     ) -> Result<PublicationResult, StoreError> {
         let intent = &prepared.submission.intent;
         let mut transaction = self.pool.begin().await?;
@@ -406,6 +431,7 @@ impl PostgresStore {
             transaction.commit().await?;
             return Ok(result);
         }
+        admit_publication(&mut transaction, intent.scope_id, prepared, admission).await?;
         let excluded: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM artifact_store.publication_id_exclusions WHERE scope_id=$1 AND publication_id=$2)",
         )
@@ -595,6 +621,118 @@ async fn assert_store_normal(
         }
     }
     Ok(epoch)
+}
+
+async fn replay_upload_claim(
+    transaction: &mut Transaction<'_, Postgres>,
+    now: OffsetDateTime,
+    publisher: &StablePublisher,
+    scope_id: Uuid,
+    claim_id: Uuid,
+    declaration: &UploadDeclaration,
+) -> Result<Option<UploadClaimResult>, StoreError> {
+    let Some(row) = sqlx::query(
+        "SELECT scope_id, publisher_issuer, publisher_subject, blob_sha256::text, blob_length, declared_media_type, expires_at, consumed_publication_id \
+         FROM artifact_store.upload_claims WHERE claim_id=$1",
+    )
+    .bind(claim_id)
+    .fetch_optional(&mut **transaction)
+    .await?
+    else {
+        return Ok(None);
+    };
+    let same = row.get::<Uuid, _>("scope_id") == scope_id
+        && row.get::<String, _>("publisher_issuer") == publisher.issuer
+        && row.get::<String, _>("publisher_subject") == publisher.subject
+        && row.get::<String, _>("blob_sha256") == declaration.sha256
+        && row.get::<i64, _>("blob_length") == to_i64(declaration.length, "blob length")?
+        && row.get::<String, _>("declared_media_type") == declaration.declared_media_type;
+    if !same {
+        return Err(StoreError::UploadConflict);
+    }
+    let expires_at: OffsetDateTime = row.get("expires_at");
+    if expires_at <= now
+        || row
+            .get::<Option<Uuid>, _>("consumed_publication_id")
+            .is_some()
+    {
+        return Err(StoreError::UploadExpired);
+    }
+    Ok(Some(UploadClaimResult {
+        claim_id,
+        scope_id,
+        sha256: declaration.sha256.clone(),
+        length: declaration.length,
+        declared_media_type: declaration.declared_media_type.clone(),
+        expires_at,
+        replayed: true,
+    }))
+}
+
+async fn admit_staged_upload(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope_id: Uuid,
+    now: OffsetDateTime,
+    length: u64,
+    admission: UploadAdmission,
+) -> Result<(), StoreError> {
+    let quota = sqlx::query(
+        "SELECT COUNT(*) AS claim_count, COALESCE(SUM(blob_length),0)::bigint AS staged_bytes \
+         FROM artifact_store.upload_claims \
+         WHERE scope_id=$1 AND consumed_publication_id IS NULL AND expires_at>$2",
+    )
+    .bind(scope_id)
+    .bind(now)
+    .fetch_one(&mut **transaction)
+    .await?;
+    let declared_length = to_i64(length, "blob length")?;
+    if quota.get::<i64, _>("claim_count") >= admission.max_live_claims_per_scope
+        || quota
+            .get::<i64, _>("staged_bytes")
+            .checked_add(declared_length)
+            .is_none_or(|total| total > admission.max_staged_bytes_per_scope)
+    {
+        return Err(StoreError::StagingQuotaExceeded);
+    }
+    Ok(())
+}
+
+async fn admit_publication(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope_id: Uuid,
+    prepared: &PreparedPublication,
+    admission: UploadAdmission,
+) -> Result<(), StoreError> {
+    sqlx::query("SELECT id FROM artifact_store.artifact_scopes WHERE id=$1 FOR UPDATE")
+        .bind(scope_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+    let logical_bytes: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(blob_length),0)::bigint FROM artifact_store.artifact_contents WHERE scope_id=$1",
+    )
+    .bind(scope_id)
+    .fetch_one(&mut **transaction)
+    .await?;
+    let added_bytes = prepared
+        .artifacts
+        .iter()
+        .try_fold(0_i64, |total, artifact| {
+            let length = artifact
+                .blob_length
+                .map(|value| to_i64(value, "blob length"))
+                .transpose()?
+                .unwrap_or(0);
+            total
+                .checked_add(length)
+                .ok_or_else(|| StoreError::Integrity("logical byte total overflowed".into()))
+        })?;
+    if logical_bytes
+        .checked_add(added_bytes)
+        .is_none_or(|total| total > admission.max_logical_bytes_per_scope)
+    {
+        return Err(StoreError::StorageQuotaExceeded);
+    }
+    Ok(())
 }
 
 async fn validate_blob_authorities(

@@ -17,9 +17,21 @@ export interface DatabaseContext {
 
 export function openDatabase(
 	connectionString: string,
-	options: { max?: number; onError?: (error: Error) => void } = {}
+	options: {
+		max?: number
+		onError?: (error: Error) => void
+		connectionTimeoutMillis?: number
+		queryTimeoutMillis?: number
+		statementTimeoutMillis?: number
+	} = {}
 ): DatabaseContext {
-	const pool = new pg.Pool({ connectionString, max: options.max ?? 5 })
+	const pool = new pg.Pool({
+		connectionString,
+		max: options.max ?? 5,
+		connectionTimeoutMillis: options.connectionTimeoutMillis,
+		query_timeout: options.queryTimeoutMillis,
+		statement_timeout: options.statementTimeoutMillis
+	})
 	// Idle clients emit 'error' when the server terminates them (restart,
 	// failover, admin kill). Without a handler that crashes the process.
 	pool.on('error', (error) => options.onError?.(error))
