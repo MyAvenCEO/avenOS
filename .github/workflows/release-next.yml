@@ -43,15 +43,21 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.1
       - run: bun install --frozen-lockfile
       - run: bunx biome check services/aven-api
       - run: bunx biome check infrastructure/identity
       - run: bun run check:api
       - run: bun run test:api
       - run: bun run test:infra
+      - run: cargo test --locked --workspace
+        working-directory: services/artifact-store
       - run: bun run db:migrate:api && bun run db:migrate:api
       - run: bun run build:api
       - run: docker build -f services/aven-api/Dockerfile -t aven-api:validation .
+      - run: docker build -f services/artifact-store/Dockerfile -t aven-artifact-store:validation .
 
   release:
     name: tag + changelog
@@ -185,6 +191,34 @@ jobs:
           push: true
           tags: ghcr.io/myavenceo/aven-api:sha-${{ steps.commit.outputs.sha }}
 
+  publish-artifact-store-image:
+    name: publish Artifact Store image
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ghcr.io/myavenceo/aven-artifact-store
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release.outputs.commit }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: services/artifact-store/Dockerfile
+          push: true
+          tags: ghcr.io/myavenceo/aven-artifact-store:sha-${{ needs.release.outputs.commit }}
+
   deploy-identity-infrastructure-next:
     name: update identity infrastructure
     needs: release
@@ -253,7 +287,7 @@ jobs:
 
   deploy-identity-next:
     name: deploy identity API
-    needs: [publish-identity-image, deploy-identity-infrastructure-next]
+    needs: [publish-identity-image, publish-artifact-store-image, deploy-identity-infrastructure-next]
     runs-on: ubuntu-latest
     environment: next
     concurrency:
@@ -285,6 +319,11 @@ jobs:
           AVEN_EMAIL_WORKER_PASSWORD: ${{ secrets.AVEN_EMAIL_WORKER_PASSWORD }}
           AVEN_ENVIRONMENT_WORKER_PASSWORD: ${{ secrets.AVEN_ENVIRONMENT_WORKER_PASSWORD }}
           AVEN_PROVISIONER_PASSWORD: ${{ secrets.AVEN_PROVISIONER_PASSWORD }}
+          ARTIFACT_STORE_BEARER_TOKEN: ${{ secrets.ARTIFACT_STORE_BEARER_TOKEN }}
+          ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN: ${{ secrets.ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN }}
+          ARTIFACT_STORE_RUNTIME_PASSWORD: ${{ secrets.ARTIFACT_STORE_RUNTIME_PASSWORD }}
+          ARTIFACT_STORE_MAX_TENANT_POOLS: ${{ vars.ARTIFACT_STORE_MAX_TENANT_POOLS }}
+          ARTIFACT_STORE_CONNECTIONS_PER_TENANT: ${{ vars.ARTIFACT_STORE_CONNECTIONS_PER_TENANT }}
           SMTP_URL: ${{ secrets.SMTP_URL }}
           CREEM_API_KEY: ${{ secrets.CREEM_API_KEY }}
           CREEM_PRODUCT_ID: ${{ secrets.CREEM_PRODUCT_ID }}
@@ -292,11 +331,22 @@ jobs:
           CREEM_PRODUCT_AVENCEO: ${{ secrets.CREEM_PRODUCT_AVENCEO }}
           CREEM_WEBHOOK_SECRET: ${{ secrets.CREEM_WEBHOOK_SECRET }}
           IMAGE: ${{ needs.publish-identity-image.outputs.image }}@${{ needs.publish-identity-image.outputs.digest }}
+          ARTIFACT_IMAGE: ${{ needs.publish-artifact-store-image.outputs.image }}@${{ needs.publish-artifact-store-image.outputs.digest }}
           VERSION: ${{ needs.publish-identity-image.outputs.commit }}
         run: |
           set -euo pipefail
           if [ "$PUBLIC_BASE_URL" != "https://$IDENTITY_DOMAIN" ] || [ "$WEBAUTHN_RP_ID" != "$IDENTITY_DOMAIN" ]; then
             echo "::error::PUBLIC_BASE_URL, IDENTITY_DOMAIN, and WEBAUTHN_RP_ID do not match."
+            exit 1
+          fi
+          for secret in "$ARTIFACT_STORE_BEARER_TOKEN" "$ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN" "$ARTIFACT_STORE_RUNTIME_PASSWORD"; do
+            if [[ ! "$secret" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then
+              echo "::error::Artifact Store credentials must be 32-128 URL-safe characters."
+              exit 1
+            fi
+          done
+          if [ "$ARTIFACT_STORE_BEARER_TOKEN" = "$ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN" ]; then
+            echo "::error::Artifact Store runtime and provisioner bearer credentials must differ."
             exit 1
           fi
           DOCKER_LOG_MAX_SIZE=${DOCKER_LOG_MAX_SIZE:-10m}
@@ -317,6 +367,7 @@ jobs:
           install -m 700 -d "$RUNNER_TEMP/identity-deploy/deploy"
           install -m 644 services/aven-api/docker-compose.yml "$RUNNER_TEMP/identity-deploy/docker-compose.yml"
           install -m 644 services/aven-api/docker-compose.deploy.yml "$RUNNER_TEMP/identity-deploy/docker-compose.deploy.yml"
+          install -m 644 services/aven-api/docker-compose.artifact-store.deploy.yml "$RUNNER_TEMP/identity-deploy/docker-compose.artifact-store.deploy.yml"
           install -m 755 services/aven-api/deploy/db-init.sh "$RUNNER_TEMP/identity-deploy/deploy/db-init.sh"
           install -m 644 services/aven-api/deploy/Caddyfile "$RUNNER_TEMP/identity-deploy/deploy/Caddyfile"
           install -m 600 /dev/null "$RUNNER_TEMP/identity-deploy/.env"
@@ -333,6 +384,7 @@ jobs:
             printf 'DOCKER_LOG_COMPRESS=%s\n' "$DOCKER_LOG_COMPRESS"
             printf 'APPLICATION_VERSION=%s\n' "$VERSION"
             printf 'AVEN_API_IMAGE=%s\n' "$IMAGE"
+            printf 'AVEN_ARTIFACT_STORE_IMAGE=%s\n' "$ARTIFACT_IMAGE"
             printf 'BETTER_AUTH_SECRET=%s\n' "$BETTER_AUTH_SECRET"
             printf 'EMAIL_QUEUE_ENCRYPTION_KEY=%s\n' "$EMAIL_QUEUE_ENCRYPTION_KEY"
             printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
@@ -341,6 +393,11 @@ jobs:
             printf 'AVEN_EMAIL_WORKER_PASSWORD=%s\n' "$AVEN_EMAIL_WORKER_PASSWORD"
             printf 'AVEN_ENVIRONMENT_WORKER_PASSWORD=%s\n' "$AVEN_ENVIRONMENT_WORKER_PASSWORD"
             printf 'AVEN_PROVISIONER_PASSWORD=%s\n' "$AVEN_PROVISIONER_PASSWORD"
+            printf 'ARTIFACT_STORE_BEARER_TOKEN=%s\n' "$ARTIFACT_STORE_BEARER_TOKEN"
+            printf 'ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN=%s\n' "$ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN"
+            printf 'ARTIFACT_STORE_RUNTIME_PASSWORD=%s\n' "$ARTIFACT_STORE_RUNTIME_PASSWORD"
+            printf 'ARTIFACT_STORE_MAX_TENANT_POOLS=%s\n' "${ARTIFACT_STORE_MAX_TENANT_POOLS:-64}"
+            printf 'ARTIFACT_STORE_CONNECTIONS_PER_TENANT=%s\n' "${ARTIFACT_STORE_CONNECTIONS_PER_TENANT:-2}"
             printf 'SMTP_URL=%s\n' "$SMTP_URL"
             printf 'CREEM_API_KEY=%s\n' "$CREEM_API_KEY"
             printf 'CREEM_PRODUCT_ID=%s\n' "$CREEM_PRODUCT_ID"
@@ -393,7 +450,7 @@ jobs:
           printf '%s' "$GHCR_READ_TOKEN" | ssh "${ssh_args[@]}" "$remote" "sudo docker login ghcr.io -u '$GHCR_USER' --password-stdin"
           # The generated upload path is intentionally expanded by this runner.
           # shellcheck disable=SC2029
-          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' /opt/aven-api/deploy/db-init.sh && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml up -d db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-deps app email-worker environment-worker caddy && rm -rf '$upload'"
+          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' /opt/aven-api/deploy/db-init.sh && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps artifact-store-provisioner artifact-store app email-worker environment-worker caddy && rm -rf '$upload'"
 
       - name: Remove temporary host upload
         if: always()
