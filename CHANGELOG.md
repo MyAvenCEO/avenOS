@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.23-next.1...v) (2026-08-23)
+
+
+### Bug Fixes
+
+* **release:** make main sync race-safe ([78c090b](https://github.com/MyAvenCEO/avenOS/commit/78c090be88526fb9e2539ddfb2adad27ffdd4d00))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.22-next.7...v) (2026-08-23)
 
 
