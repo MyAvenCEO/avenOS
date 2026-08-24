@@ -21,8 +21,8 @@ export const SOCIAL_MEDIA_DE: LegalDocument = {
 					items: [
 						'https://x.com/samuelandert',
 						'https://instagram.com/samuelandert',
-						'https://www.linkedin.com/company/aven-ceo/',
-						'https://youtube.com/samuelandert'
+						'https://www.linkedin.com/in/samuel-andert-797b6211b/',
+						'https://www.youtube.com/@avenSAMUEL'
 					]
 				}
 			]
@@ -231,8 +231,8 @@ export const SOCIAL_MEDIA_EN: LegalDocument = {
 					items: [
 						'https://x.com/samuelandert',
 						'https://instagram.com/samuelandert',
-						'https://www.linkedin.com/company/aven-ceo/',
-						'https://youtube.com/samuelandert'
+						'https://www.linkedin.com/in/samuel-andert-797b6211b/',
+						'https://www.youtube.com/@avenSAMUEL'
 					]
 				}
 			]

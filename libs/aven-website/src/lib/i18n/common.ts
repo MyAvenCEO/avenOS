@@ -10,6 +10,7 @@ export const common: Record<
 			tagline: string
 			pagesLabel: string
 			legalLabel: string
+			socialLabel: string
 			ctaLabel: string
 			copyright: string
 			legal: {
@@ -47,6 +48,7 @@ export const common: Record<
 			tagline: 'Deine eigene KI, deine eigene Firma — und das, was du damit baust, gehört dir.',
 			pagesLabel: 'Seiten',
 			legalLabel: 'Rechtliches',
+			socialLabel: 'Social Media',
 			ctaLabel: 'avenID sichern',
 			copyright: 'avenCEO · avenOS — Own your life',
 			legal: {
@@ -83,6 +85,7 @@ export const common: Record<
 			tagline: 'Your own AI, your own company — and what you build with it belongs to you.',
 			pagesLabel: 'Pages',
 			legalLabel: 'Legal',
+			socialLabel: 'Social media',
 			ctaLabel: 'Claim your avenID',
 			copyright: 'avenCEO · avenOS — Own your life',
 			legal: {
