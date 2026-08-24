@@ -12,9 +12,10 @@ import { type WebsiteEnv, websiteEnvFromHostname, websiteOrigin } from './hosts.
 import { IMPRESSUM_DE, SITE_NOTICE_EN } from './imprint.js'
 import { DATENSCHUTZ_DE, PRIVACY_POLICY_EN } from './privacy.js'
 import { SOCIAL_MEDIA_DE, SOCIAL_MEDIA_EN } from './social-media.js'
+import { WIDERRUF_DE, WITHDRAWAL_EN } from './widerruf.js'
 
 export type LegalLang = 'de' | 'en'
-export type LegalSlug = 'impressum' | 'datenschutz' | 'social-media'
+export type LegalSlug = 'impressum' | 'datenschutz' | 'social-media' | 'widerruf'
 
 export interface LegalParagraph {
 	/** Bold lead line above the lines, e.g. "Vertreten durch:". */
@@ -51,6 +52,7 @@ export function legalDocument(slug: LegalSlug, lang: LegalLang): LegalDocument {
 	if (slug === 'impressum') return lang === 'de' ? IMPRESSUM_DE : SITE_NOTICE_EN
 	if (slug === 'datenschutz') return lang === 'de' ? DATENSCHUTZ_DE : PRIVACY_POLICY_EN
 	if (slug === 'social-media') return lang === 'de' ? SOCIAL_MEDIA_DE : SOCIAL_MEDIA_EN
+	if (slug === 'widerruf') return lang === 'de' ? WIDERRUF_DE : WITHDRAWAL_EN
 	throw new Error(`unknown legal document: ${slug}`)
 }
 
