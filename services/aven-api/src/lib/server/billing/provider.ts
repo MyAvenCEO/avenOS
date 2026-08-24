@@ -83,9 +83,10 @@ export interface PaymentProvider {
 	ensureProducts(seeds: ProductSeed[]): Promise<Record<string, string>>
 	createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession>
 	cancelSubscription(providerSubscriptionId: string, immediate: boolean): Promise<void>
-	/** `uncancel` reverts a scheduled cancellation; `unpause` lifts a pause. */
-	resumeSubscription(providerSubscriptionId: string, mode: 'uncancel' | 'unpause'): Promise<void>
-	pauseSubscription(providerSubscriptionId: string): Promise<void>
+	/** Reverts a scheduled cancellation. (Polar's pause API exists but
+	 * answers CannotPauseSubscription for our subscriptions — verified in
+	 * the sandbox 2026-08-24 — so pausing is not offered.) */
+	resumeSubscription(providerSubscriptionId: string): Promise<void>
 	/** Look up the provider's customer for an email; null when none exists. */
 	findCustomerByEmail(email: string): Promise<string | null>
 	/** The customer's orders — the real "Meine Bestellungen". */
