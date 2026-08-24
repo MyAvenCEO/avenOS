@@ -317,6 +317,8 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 
 						{@render runtimeCard(p)}
 
+						{@render pricePanel(p)}
+
 						<ul
 							class="mt-4 flex-1 space-y-2 border-t border-border/50 pt-4 text-left text-[13px] leading-snug text-foreground/75"
 						>
@@ -369,8 +371,6 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 							</div>
 						{/if}
 
-						{@render pricePanel(p)}
-
 						<div class="mt-4">
 							<a
 								href={ctaHref(p)}
@@ -404,6 +404,8 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 					{@render pitchLine(coop)}
 
 					{@render runtimeCard(coop)}
+
+					{@render pricePanel(coop)}
 
 					<div
 						class="mt-4 grid gap-8 border-t border-border/50 pt-4 lg:grid-cols-[1fr_15rem] lg:gap-8"
@@ -462,8 +464,6 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 							</div>
 						{/if}
 					</div>
-
-					{@render pricePanel(coop)}
 
 					<div class="mt-4">
 						<a
