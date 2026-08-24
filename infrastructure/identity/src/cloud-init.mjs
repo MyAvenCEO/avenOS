@@ -33,7 +33,6 @@ grep -q "UUID=$uuid " /etc/fstab || printf 'UUID=%s /var/lib/aven ext4 defaults,
 mountpoint -q /var/lib/aven || mount /var/lib/aven
 install -d -m 0700 /var/lib/aven/postgres
 install -d -m 0750 /var/lib/aven/caddy/data /var/lib/aven/caddy/config
-install -d -o 10003 -g 10003 -m 0750 /var/lib/aven/static-sites
 install -d -m 0700 /var/lib/aven/backups /var/lib/aven/pulumi-state
 `
 
