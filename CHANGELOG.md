@@ -1,3 +1,34 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.1...v) (2026-08-24)
+
+
+### Bug Fixes
+
+* **ci:** carry @avenos/aven-brand into the aven-api image ([935466b](https://github.com/MyAvenCEO/avenOS/commit/935466bfa706937ee7366d159c366afe20cf49ff))
+
+
+### Features
+
+* **app+website:** legal links in settings nav, withdrawal buttons unified ([3bccc94](https://github.com/MyAvenCEO/avenOS/commit/3bccc94e6f5cbd7b15542e9a7a6a0cdfbb38abb2))
+* **app:** persist intent lifecycle ([ac12de4](https://github.com/MyAvenCEO/avenOS/commit/ac12de4869574b570931f219c7292e50ba4df570))
+* **app:** restore persistent file intents ([a284e33](https://github.com/MyAvenCEO/avenOS/commit/a284e33a1ba522c5980175e915bd2f66a46094f5))
+* **app:** show live artifact processing status ([966d353](https://github.com/MyAvenCEO/avenOS/commit/966d353079d348ab88eeaa80123cfe6b119f3c92))
+* **intents:** add standalone intent service ([2d83107](https://github.com/MyAvenCEO/avenOS/commit/2d831077f97fe19772aebc69a9ef2d619f50c8ac))
+* **intents:** persist file-triggered intent projections ([b975a62](https://github.com/MyAvenCEO/avenOS/commit/b975a6209de4774a952dcf2612784671c65ba7d1))
+* **legal:** @avenos/aven-brand SSOT wired across every surface ([91b7cab](https://github.com/MyAvenCEO/avenOS/commit/91b7cabaa4ca4b3abdc90783cca0e6e642388123))
+* **legal:** statutory Widerrufsbelehrung on the withdrawal page, DE + EN ([de5f31b](https://github.com/MyAvenCEO/avenOS/commit/de5f31b4c110feca36453a177c9ea135d2c7b408))
+* **website:** Aven card meta row — Dahinter + weblink below the vision ([115b2d0](https://github.com/MyAvenCEO/avenOS/commit/115b2d05bad5a5a414749eba252672cb63c52f8c))
+* **website:** Aven card vision section splits 2/3 vision, 1/3 Dahinter+link ([98b6fbd](https://github.com/MyAvenCEO/avenOS/commit/98b6fbd7b3483d3c37faf65feebffba0dbeeb092))
+* **website:** Aven cards drop the Leistungen list, Mission becomes Vision ([7063fba](https://github.com/MyAvenCEO/avenOS/commit/7063fba3c1020c6bd8f0300c081a65221ec5a30f))
+* **website:** avenID sells the marketplace profile; Avens get link + bio ([3b9a0f6](https://github.com/MyAvenCEO/avenOS/commit/3b9a0f6174085f74825b428dc7120555913283b1))
+* **website:** english-first routing — EN at root, German under /de ([b783a83](https://github.com/MyAvenCEO/avenOS/commit/b783a8335867be71107b23a7ce85d3cbf4c31441))
+* **website:** price panel moves up — below runtime, above sovereignty ([e294168](https://github.com/MyAvenCEO/avenOS/commit/e2941689981ed4bac6de9c98113128001aff2f28))
+* **website:** revenue shares 8,2 % / 30 % (MoR), runtime joins the feature section ([3686b1b](https://github.com/MyAvenCEO/avenOS/commit/3686b1b8d1d04febb6834a118a34b1e0b0f8b728))
+* **website:** rework pricing tiers and landing story ([87892cd](https://github.com/MyAvenCEO/avenOS/commit/87892cd9f7f79896734529ceebd5ff0412d45a73))
+
+
+### Reverts
+
+* **legal:** drop the eRecht24 API sync — texts are maintained manually ([8025819](https://github.com/MyAvenCEO/avenOS/commit/8025819df7703f6011ecc4bf8f132e8451b74e83))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.23-next.5...v) (2026-08-24)
 
 
