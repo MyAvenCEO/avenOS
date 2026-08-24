@@ -1,8 +1,10 @@
 <script lang="ts">
 import { page } from '$app/state'
+import SocialIcon from '$lib/components/SocialIcon.svelte'
 import { type Lang, localeHref, pick, switchLangHref } from '$lib/i18n'
 import { common } from '$lib/i18n/common'
 import { idFunnelHref } from '$lib/id-service'
+import { SOCIAL_PROFILES } from '$lib/social'
 
 type NavActive = 'skills' | 'avens' | 'pricing'
 
@@ -33,10 +35,25 @@ const otherHref = $derived(switchLangHref(lang, page.url.pathname))
 	<div
 		class="mx-auto flex {maxW} flex-wrap items-center justify-center gap-x-10 gap-y-2 px-5 py-5 sm:justify-between sm:px-8"
 	>
-		<a href={localeHref(lang, '/')} class="flex items-center gap-2.5">
-			<img src="/aven-logo.svg" alt="" class="size-7 shrink-0" width="28" height="28">
-			<span class="text-[17px] font-semibold tracking-tight text-foreground">avenCEO</span>
-		</a>
+		<div class="flex items-center gap-4">
+			<a href={localeHref(lang, '/')} class="flex items-center gap-2.5">
+				<img src="/aven-logo.svg" alt="" class="size-7 shrink-0" width="28" height="28">
+				<span class="text-[17px] font-semibold tracking-tight text-foreground">avenCEO</span>
+			</a>
+			<span class="flex items-center gap-3" aria-label={t.footer.socialLabel}>
+				{#each SOCIAL_PROFILES as profile (profile.href)}
+					<a
+						href={profile.href}
+						target="_blank"
+						rel="noopener noreferrer"
+						aria-label={profile.name}
+						class="text-foreground/60 transition-colors hover:text-foreground"
+					>
+						<SocialIcon {profile} size={16} />
+					</a>
+				{/each}
+			</span>
+		</div>
 		<nav class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em]">
 			<a href={localeHref(lang, '/skills')} class={linkCls(active === 'skills')}>{t.nav.skills}</a>
 			<a href={localeHref(lang, '/avens')} class={linkCls(active === 'avens')}>{t.nav.avens}</a>

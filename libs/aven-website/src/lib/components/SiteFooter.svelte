@@ -1,8 +1,10 @@
 <script lang="ts">
 import { legalPath } from '@avenos/aven-brand'
+import SocialIcon from '$lib/components/SocialIcon.svelte'
 import { type Lang, localeHref, pick } from '$lib/i18n'
 import { common } from '$lib/i18n/common'
 import { idFunnelHref } from '$lib/id-service'
+import { SOCIAL_PROFILES } from '$lib/social'
 
 /**
  * THE footer, on every page. It carries the two things a German site owes a
@@ -55,6 +57,20 @@ const year = 2026
 				{#each legal as item (item.href)}
 					<a href={item.href} class="text-foreground/65 transition-colors hover:text-foreground">
 						{item.label}
+					</a>
+				{/each}
+			</nav>
+
+			<nav class="flex flex-col gap-2 text-[13px]" aria-label={t.footer.socialLabel}>
+				{#each SOCIAL_PROFILES as profile (profile.href)}
+					<a
+						href={profile.href}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="flex items-center gap-2 text-foreground/65 transition-colors hover:text-foreground"
+					>
+						<SocialIcon {profile} size={16} />
+						{profile.name}
 					</a>
 				{/each}
 			</nav>
