@@ -91,7 +91,8 @@ async function loadPersistentIntents(): Promise<void> {
 	const details = await Promise.all(summaries.map((intent) => refreshIntent(intent.id)))
 	for (const detail of details) {
 		if (
-			detail &&
+			detail?.fileSkill &&
+			detail.sourceArtifactId &&
 			(!detail.fileSkill.presentation || !isTerminalProcessing(detail.fileSkill.presentation.state))
 		) {
 			void watchArtifactProcessing(detail.sourceArtifactId, detail.id)
