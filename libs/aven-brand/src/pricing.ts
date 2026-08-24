@@ -44,16 +44,25 @@
 export type PlanId = 'avenid' | 'avenme' | 'avenceo' | 'avencoop'
 
 /**
- * A line on a plan card. Most are plain text — but where a feature IS a
- * shipped skill, it names the skill and links to its page, so the card stops
- * describing a capability in the abstract and points at the thing that does
- * it. The slug stays a plain string: `skills/loader` imports THIS file, so an
- * import the other way would close a cycle.
+ * A line on a plan card — and a REAL benefit at the payment provider: every
+ * feature becomes its own Polar benefit, titled by `title`. That is why the
+ * title is hard-capped at 42 chars (Polar's benefit description limit) and
+ * why the longer promise lives in `description`, which only our own surfaces
+ * print (the muted subline on the cards) — never the provider. Where a
+ * feature IS a shipped skill, `skill` names it and links to its page; the
+ * slug stays a plain string: `skills/loader` imports THIS file, so an import
+ * the other way would close a cycle.
  */
-export type PlanFeature =
-	| string
-	| { skill: string; label: string }
-	| { href: string; label: string }
+export interface PlanFeature {
+	/** Short punchy title, HARD ≤42 chars — it IS the Polar benefit title. */
+	title: string
+	/** One warm sentence expanding the title's promise — our surfaces only. */
+	description: string
+	/** Set where the feature is a shipped skill: the skill page slug. */
+	skill?: string
+	/** Set where the feature points at a page instead. */
+	href?: string
+}
 
 export interface Plan {
 	id: PlanId
@@ -124,10 +133,23 @@ export const PLANS: Plan[] = [
 		billing: 'once',
 		revenueSharePct: 0,
 		features: [
-			'Dein avenID‑Name — für 1 Jahr für dich gesichert',
-			'Dein Platz auf der Warteliste',
-			'20 Min Test‑Zugang — sobald du eingeladen bist',
-			'Präsentiere deine Vision oder Idee mit einem eigenen Profil im aven Marketplace'
+			{
+				title: 'Dein avenID‑Name',
+				description: 'Für 1 Jahr für dich gesichert — niemand sonst kann ihn tragen.'
+			},
+			{
+				title: 'Dein Platz auf der Warteliste',
+				description: 'Du stehst fest in der Reihe — sobald wir öffnen, bist du dran.'
+			},
+			{
+				title: '20 Min Test‑Zugang',
+				description: 'Sobald du eingeladen bist, probierst du deinen Aven 20 Minuten live aus.'
+			},
+			{
+				title: 'Dein Profil im aven Marketplace',
+				description:
+					'Präsentiere deine Vision oder Idee mit einem eigenen Profil — sichtbar für alle Avens.'
+			}
 		]
 	},
 	{
@@ -143,18 +165,73 @@ export const PLANS: Plan[] = [
 		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
 		revenueSharePct: 0,
 		features: [
-			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
-			{ skill: 'inbox-router', label: 'Ein Eingang für alles' },
-			{ skill: 'email-manager', label: 'E‑Mail‑Inbox' },
-			'Digitaler Briefkasten — deine Papierpost digitalisiert (exkl. Nachsendeauftrag der Deutschen Post: 31,90 € / 6 Monate, inkl. USt.)',
-			{ skill: 'docs-organizer', label: 'Dokumentenverwaltung' },
-			{ skill: 'brain-memorizer', label: 'Notizen, Kontakte, Beziehungen' },
-			{ skill: 'human-reviewer', label: 'Du entscheidest, wenn es zählt' },
-			{ skill: 'calendar-organizer', label: 'Dein Kalender denkt mit' },
-			{ skill: 'todo-shuffler', label: 'Deine Liste sortiert sich selbst' },
-			{ skill: 'bookmark-champion', label: 'Links und Lesezeichen, wiederfindbar' },
-			'Deine persönliche Wissensbasis — alles, was du lernst, bleibt bei deinem Aven',
-			'Trainiert zusammen mit dir den avenCEO deiner Firma'
+			{
+				title: 'Persönliche Live‑Organisation',
+				description:
+					'Aufgaben, Termine und Erinnerungen ordnen sich um deinen Tag — nicht umgekehrt.'
+			},
+			{
+				skill: 'inbox-router',
+				title: 'Ein Eingang für alles',
+				description:
+					'E‑Mail, Post, Nachrichten und Gedanken landen an einem Ort — dein Aven sortiert sie.'
+			},
+			{
+				skill: 'email-manager',
+				title: 'E‑Mail‑Inbox',
+				description:
+					'Dein Aven liest mit, antwortet in deinem Ton und hält deinen Posteingang leer.'
+			},
+			{
+				title: 'Digitaler Briefkasten',
+				description:
+					'Deine Papierpost kommt digitalisiert bei deinem Aven an (exkl. Nachsendeauftrag der Deutschen Post: 31,90 € / 6 Monate, inkl. USt.).'
+			},
+			{
+				skill: 'docs-organizer',
+				title: 'Dokumentenverwaltung',
+				description:
+					'Verträge, Rechnungen, Unterlagen — abgelegt, benannt und wiedergefunden, ohne dass du suchst.'
+			},
+			{
+				skill: 'brain-memorizer',
+				title: 'Notizen, Kontakte, Beziehungen',
+				description:
+					'Dein Aven merkt sich, wer wer ist und was euch verbindet — nichts geht mehr verloren.'
+			},
+			{
+				skill: 'human-reviewer',
+				title: 'Du entscheidest, wenn es zählt',
+				description:
+					'Bei allem, was wirklich wichtig ist, fragt dein Aven erst dich — du behältst das letzte Wort.'
+			},
+			{
+				skill: 'calendar-organizer',
+				title: 'Dein Kalender denkt mit',
+				description: 'Termine, Wege und Puffer planen sich selbst — du schaust nur noch drauf.'
+			},
+			{
+				skill: 'todo-shuffler',
+				title: 'Deine Liste sortiert sich selbst',
+				description:
+					'Was heute zählt, steht oben — dein Aven priorisiert nach dem, was wirklich ansteht.'
+			},
+			{
+				skill: 'bookmark-champion',
+				title: 'Links und Lesezeichen, wiederfindbar',
+				description:
+					'Alles, was du speicherst, ist in Sekunden wieder da — sortiert und durchsuchbar.'
+			},
+			{
+				title: 'Deine persönliche Wissensbasis',
+				description:
+					'Alles, was du lernst und sammelst, bleibt bei deinem Aven — und macht ihn jeden Tag besser.'
+			},
+			{
+				title: 'Trainiert den avenCEO deiner Firma',
+				description:
+					'Dein avenME gibt weiter, was er mit dir lernt — dein Firmen‑Aven startet nie bei null.'
+			}
 		]
 	},
 	{
@@ -171,15 +248,56 @@ export const PLANS: Plan[] = [
 		revenueSharePct: 8.2,
 		highlight: true,
 		features: [
-			{ skill: 'book-keeper', label: 'Vorbuchhaltung' },
-			{ skill: 'finance-brain', label: 'Finanz‑Dashboard und Rechnungen' },
-			'Agent‑API‑Auth‑Proxy',
-			{ skill: 'website-creator', label: 'Website und Landingpages' },
-			{ skill: 'checkout-builder', label: 'Produkt‑Checkout und Shop' },
-			{ skill: 'blog-writer', label: 'Blog' },
-			'Digitaler Briefkasten für Geschäftskunden (exkl. Nachsendeauftrag der Deutschen Post: 51,90 € / 6 Monate, inkl. USt.)',
-			'Im aven Marketplace gelistet — auffindbar für Kunden, Partner und andere Avens',
-			'Das Gedächtnis deiner Firma: Wissen und Erfahrung sammeln sich über Jahre im avenCEO — das wird dein wertvollstes Asset'
+			{
+				skill: 'book-keeper',
+				title: 'Vorbuchhaltung',
+				description:
+					'Belege, Konten, Abstimmung — vorbereitet für deine Steuerkanzlei, ohne Stapel auf dem Tisch.'
+			},
+			{
+				skill: 'finance-brain',
+				title: 'Finanz‑Dashboard und Rechnungen',
+				description:
+					'Du siehst jederzeit, wo deine Firma steht — und Rechnungen schreiben sich von selbst.'
+			},
+			{
+				title: 'Agent‑API‑Auth‑Proxy',
+				description:
+					'Dein Aven nutzt Dienste und APIs in deinem Namen — sicher, ohne deine Schlüssel preiszugeben.'
+			},
+			{
+				skill: 'website-creator',
+				title: 'Website und Landingpages',
+				description:
+					'Deine Website entsteht aus deiner Vision — und bleibt aktuell, ohne dass du sie anfasst.'
+			},
+			{
+				skill: 'checkout-builder',
+				title: 'Produkt‑Checkout und Shop',
+				description:
+					'Verkaufe Produkte und Leistungen direkt — Checkout, Zahlung und Belege laufen von allein.'
+			},
+			{
+				skill: 'blog-writer',
+				title: 'Blog',
+				description:
+					'Dein Aven schreibt und veröffentlicht in deinem Ton — deine Geschichte bleibt hörbar.'
+			},
+			{
+				title: 'Digitaler Briefkasten für deine Firma',
+				description:
+					'Die Geschäftspost deiner Firma kommt digitalisiert an (exkl. Nachsendeauftrag der Deutschen Post: 51,90 € / 6 Monate, inkl. USt.).'
+			},
+			{
+				title: 'Im aven Marketplace gelistet',
+				description:
+					'Deine Firma ist auffindbar für Kunden, Partner und andere Avens — vom ersten Tag an.'
+			},
+			{
+				title: 'Das Gedächtnis deiner Firma',
+				description:
+					'Wissen und Erfahrung sammeln sich über Jahre im avenCEO — das wird dein wertvollstes Asset.'
+			}
 		]
 	},
 	{
@@ -196,11 +314,29 @@ export const PLANS: Plan[] = [
 		revenueShareNote: 'inkl. App‑Store‑Gebühren & Co.',
 		applyOnly: true,
 		features: [
-			'Hands‑on Unterstützung, während DU dein Skillbundle baust — dein Produkt, dein Name, unsere Infrastruktur',
-			'Du verkaufst es selbst im aven Marketplace — dein Bundle, dein Preis, deine Kunden',
-			'Rundum-sorglos-Abrechnung: Wir verkaufen als offizieller Merchant of Record — App‑Store‑Gebühren & Co. stecken in den 30 %, du bekommst wöchentlich deine Auszahlung',
-			'Souveränität, die du weitergibst: deine Kunden behalten ihre eigenen Schlüssel — nicht du, nicht wir',
-			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG'
+			{
+				title: 'Hands‑on bis dein Bundle steht',
+				description:
+					'Wir arbeiten neben dir, während DU dein Skillbundle baust — dein Produkt, dein Name, unsere Infrastruktur.'
+			},
+			{
+				title: 'Verkauf im aven Marketplace',
+				description:
+					'Du verkaufst dein Bundle selbst — dein Preis, deine Kunden, dein Name auf dem Produkt.'
+			},
+			{
+				title: 'Rundum‑sorglos‑Abrechnung',
+				description:
+					'Wir verkaufen als offizieller Merchant of Record — App‑Store‑Gebühren & Co. stecken in den 30 %, du bekommst wöchentlich deine Auszahlung.'
+			},
+			{
+				title: 'Souveränität, die du weitergibst',
+				description: 'Deine Kunden behalten ihre eigenen Schlüssel — nicht du, nicht wir.'
+			},
+			{
+				title: 'Begleitung bei der Gründung',
+				description: 'Wir führen dich durch die deutsche Gründungs‑Bürokratie — GmbH oder UG.'
+			}
 		]
 	}
 ]
@@ -268,3 +404,228 @@ export function priceSuffix(p: Plan): string {
  * explicit clause does.
  */
 export const VAT_NOTE = 'Alle Preise verstehen sich inkl. der gesetzlichen Umsatzsteuer.'
+
+// ---------------------------------------------------------------------------
+// Bilingual texts. German is the AUTHORED language — the strings on the PLANS
+// above — and the English translations live right next to them so both faces
+// of every product come from this one file: the website localizes its cards
+// from here, and the Polar product descriptions are built from the German
+// originals (Polar's Localized Checkout translates the checkout chrome, not
+// our copy).
+
+export type PlanLang = 'de' | 'en'
+
+/** A feature's two lines in one language: the punchy title (≤42 chars) and
+ * the one-sentence promise underneath. */
+export interface PlanFeatureText {
+	title: string
+	description: string
+}
+
+/** Per plan: the role line, the pitch, and the feature texts, in feature order. */
+export interface PlanTexts {
+	role: string
+	pitch: string
+	features: PlanFeatureText[]
+}
+
+/** The English translations, keyed like PLANS; features in feature order. */
+const PLAN_TEXTS_EN: Record<PlanId, PlanTexts> = {
+	avenid: {
+		role: 'Your name — one account anyone can address. Per human and per company.',
+		pitch:
+			'Your name is the first step into a life where AI works for you — not for a corporation. It exists exactly once. Claim it before someone else carries it.',
+		features: [
+			{
+				title: 'Your avenID name',
+				description: 'Reserved for you for 1 year — nobody else can carry it.'
+			},
+			{
+				title: 'Your place on the waiting list',
+				description: 'Your spot in line is fixed — the moment we open, it is your turn.'
+			},
+			{
+				title: '20 min of trial access',
+				description: 'The moment you are invited, you try your Aven live for 20 minutes.'
+			},
+			{
+				title: 'Your profile in the aven Marketplace',
+				description: 'Present your vision or idea with your own profile — visible to every Aven.'
+			}
+		]
+	},
+	avenme: {
+		role: 'Your personal AI‑CEO — for your life',
+		pitch:
+			'Your life is full of ideas, appointments, projects and open threads — your avenME holds it all together. It coordinates your day, catches every thought and turns loose concepts into things that happen.',
+		features: [
+			{
+				title: 'Personal live organisation',
+				description:
+					'Tasks, appointments and reminders arrange themselves around your day — not the other way round.'
+			},
+			{
+				title: 'One inbox for everything',
+				description: 'Email, mail, messages and thoughts land in one place — your Aven sorts them.'
+			},
+			{
+				title: 'Email inbox',
+				description: 'Your Aven reads along, replies in your tone and keeps your inbox empty.'
+			},
+			{
+				title: 'Digital mailbox',
+				description:
+					'Your paper mail arrives digitised at your Aven (excl. Deutsche Post mail forwarding: 31.90 € / 6 months, incl. VAT).'
+			},
+			{
+				title: 'Document management',
+				description:
+					'Contracts, invoices, paperwork — filed, named and found again without you searching.'
+			},
+			{
+				title: 'Notes, contacts, relationships',
+				description:
+					'Your Aven remembers who is who and what connects you — nothing gets lost any more.'
+			},
+			{
+				title: 'You decide when it counts',
+				description:
+					'For everything that really matters, your Aven asks you first — you keep the last word.'
+			},
+			{
+				title: 'Your calendar thinks ahead',
+				description:
+					'Appointments, travel time and buffers plan themselves — you just glance at it.'
+			},
+			{
+				title: 'Your list sorts itself',
+				description:
+					'What counts today sits on top — your Aven prioritises by what is actually due.'
+			},
+			{
+				title: 'Links and bookmarks, findable again',
+				description: 'Everything you save is back in seconds — sorted and searchable.'
+			},
+			{
+				title: 'Your personal knowledge base',
+				description:
+					'Everything you learn and collect stays with your Aven — and makes it better every day.'
+			},
+			{
+				title: 'Trains your company’s avenCEO',
+				description:
+					'Your avenME passes on what it learns with you — your company Aven never starts from zero.'
+			}
+		]
+	},
+	avenceo: {
+		role: 'Your professional AI‑CEO — for your company',
+		pitch:
+			'You bring the vision — your avenFOUNDER turns it into a company that runs. It works while you sleep and gets better every day. This is what founding feels like when it no longer costs an 80-hour week.',
+		features: [
+			{
+				title: 'Pre-accounting',
+				description:
+					'Receipts, accounts, reconciliation — prepared for your tax advisor, no pile on the desk.'
+			},
+			{
+				title: 'Finance dashboard and invoices',
+				description:
+					'You see where your company stands at any moment — and invoices write themselves.'
+			},
+			{
+				title: 'Agent API auth proxy',
+				description:
+					'Your Aven uses services and APIs on your behalf — securely, without exposing your keys.'
+			},
+			{
+				title: 'Website and landing pages',
+				description:
+					'Your website grows out of your vision — and stays current without you touching it.'
+			},
+			{
+				title: 'Product checkout and shop',
+				description:
+					'Sell products and services directly — checkout, payment and receipts run on their own.'
+			},
+			{
+				title: 'Blog',
+				description: 'Your Aven writes and publishes in your tone — your story stays audible.'
+			},
+			{
+				title: 'Digital mailbox for your company',
+				description:
+					'Your company’s business mail arrives digitised (excl. Deutsche Post mail forwarding: 51.90 € / 6 months, incl. VAT).'
+			},
+			{
+				title: 'Listed in the aven Marketplace',
+				description:
+					'Your company is findable by customers, partners and other Avens — from day one.'
+			},
+			{
+				title: 'The memory of your company',
+				description:
+					'Knowledge and experience accumulate in the avenCEO over the years — that becomes your most valuable asset.'
+			}
+		]
+	},
+	avencoop: {
+		role: 'Hands-on support for your own sovereign Aven business',
+		pitch:
+			'You do not just want a company — you want your own Aven business. We built the infrastructure and stand beside you until your Skillbundle is live in the Marketplace. Your idea, your name, your work.',
+		features: [
+			{
+				title: 'Hands-on until your bundle is live',
+				description:
+					'We work beside you while YOU build your Skillbundle — your product, your name, our infrastructure.'
+			},
+			{
+				title: 'Selling in the aven Marketplace',
+				description:
+					'You sell your bundle yourself — your price, your customers, your name on the product.'
+			},
+			{
+				title: 'Carefree billing',
+				description:
+					'We sell as the official merchant of record — app-store fees & co. are inside the 30 %, and you receive your payout weekly.'
+			},
+			{
+				title: 'Sovereignty you hand on',
+				description: 'Your customers keep their own keys — not you, not us.'
+			},
+			{
+				title: 'Guidance through company formation',
+				description: 'We walk you through Germany’s founding bureaucracy — GmbH or UG.'
+			}
+		]
+	}
+}
+
+/**
+ * A plan's texts in one language. DE reads straight off PLANS (the
+ * originals); EN merges the translations over the feature list, so a feature
+ * added before its translation lands still prints (in German) instead of
+ * vanishing — the EN array is index-aligned with the plan's features.
+ */
+export function planTexts(id: PlanId, lang: PlanLang): PlanTexts {
+	const p = plan(id)
+	if (lang === 'de')
+		return {
+			role: p.role,
+			pitch: p.pitch,
+			features: p.features.map((f) => ({ title: f.title, description: f.description }))
+		}
+	const en = PLAN_TEXTS_EN[id]
+	return {
+		role: en.role,
+		pitch: en.pitch,
+		features: p.features.map(
+			(f, i) => en.features[i] ?? { title: f.title, description: f.description }
+		)
+	}
+}
+
+/** A plan's feature lines flattened to their short titles, in the given language. */
+export function featureLabels(id: PlanId, lang: PlanLang): string[] {
+	return planTexts(id, lang).features.map((f) => f.title)
+}

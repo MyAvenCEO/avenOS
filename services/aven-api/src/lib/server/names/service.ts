@@ -229,7 +229,9 @@ export class NameService {
 				name: hold.name,
 				email: hold.email,
 				holdId: hold.id,
-				successUrl: success.url
+				successUrl: success.url,
+				// The names funnel is German-first — the checkout chrome follows.
+				locale: 'de'
 			})
 		}
 
