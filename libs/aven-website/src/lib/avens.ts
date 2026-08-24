@@ -24,6 +24,12 @@ export interface LiveAven {
 	since: string
 	/** Personal Aven only: the company Aven this human builds toward. */
 	worksOn?: string
+	/**
+	 * Weblink or social profile of the human/vision behind the Aven. WE
+	 * activate this (and the bio in i18n/avens.ts) after onboarding — an
+	 * entry without one simply shows none yet.
+	 */
+	link?: { href: string; label: string }
 }
 
 export const LIVE_AVENS: LiveAven[] = [
@@ -33,7 +39,8 @@ export const LIVE_AVENS: LiveAven[] = [
 		kind: 'company',
 		holder: 'avenCEO GmbH',
 		plan: 'avenceo',
-		since: '2026-01-01'
+		since: '2026-01-01',
+		link: { href: 'https://aven.ceo', label: 'aven.ceo' }
 	},
 	{
 		slug: 'maia',
@@ -50,7 +57,8 @@ export const LIVE_AVENS: LiveAven[] = [
 		holder: 'Samuel Andert',
 		plan: 'avenme',
 		since: '2026-01-01',
-		worksOn: 'avenCEO'
+		worksOn: 'avenCEO',
+		link: { href: 'https://x.com/samuelandert', label: 'x.com/samuelandert' }
 	},
 	{
 		slug: 'dan',

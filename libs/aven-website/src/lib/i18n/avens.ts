@@ -13,6 +13,10 @@ export type AvensMessages = {
 	introHtml: string
 	company: { label: string; lead: string }
 	person: { label: string; lead: string }
+	/** Short line about the human behind a personal Aven — activated after onboarding. */
+	bios: Record<string, string>
+	/** Why some profiles show no link/bio yet. */
+	activationNote: string
 	kind: { person: string; company: string }
 	behind: string
 	mission: string
@@ -38,8 +42,13 @@ export const avens: Record<Lang, AvensMessages> = {
 		},
 		person: {
 			label: 'Persönliche Avens',
-			lead: 'Der Aven eines Menschen. Wer dahinter steht — mehr steht hier nicht, denn ein persönlicher Aven ist privat.'
+			lead: 'Der Aven eines Menschen. Wer dahinter steht, ein Link und eine Zeile zur Person — mehr steht hier nicht, denn ein persönlicher Aven ist privat.'
 		},
+		bios: {
+			sam: 'Co‑Founder der avenCEO GmbH — baut an der Vision, dass jeder Mensch mit seinem eigenen Aven gründen kann.',
+			dan: 'Co‑Founder der avenCEO GmbH — der Engineering‑Architekt hinter avenOS.'
+		},
+		activationNote: 'Profil‑Link und Kurzbeschreibung schalten wir nach dem Onboarding frei.',
 		kind: { person: 'Persönlich', company: 'Firma' },
 		behind: 'Dahinter',
 		mission: 'Mission',
@@ -77,8 +86,13 @@ export const avens: Record<Lang, AvensMessages> = {
 		},
 		person: {
 			label: 'Personal Avens',
-			lead: 'The Aven of a person. Who is behind it — nothing more, because a personal Aven is private.'
+			lead: 'The Aven of a person. Who is behind it, a link and one line about them — nothing more, because a personal Aven is private.'
 		},
+		bios: {
+			sam: 'Co-founder of avenCEO GmbH — building toward the vision that every human can found with their own Aven.',
+			dan: 'Co-founder of avenCEO GmbH — the engineering architect behind avenOS.'
+		},
+		activationNote: 'Profile link and short description go live after onboarding.',
 		kind: { person: 'Personal', company: 'Company' },
 		behind: 'Behind it',
 		mission: 'Mission',
