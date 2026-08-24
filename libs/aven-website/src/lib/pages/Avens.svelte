@@ -109,23 +109,6 @@ function handle(a: LiveAven) {
 								</p>
 								<p class="mt-2 text-[14px] leading-snug text-foreground/80">{profile.mission}</p>
 							</div>
-
-							<div class="mt-4 border-t border-border/50 pt-4">
-								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-									{t.services}
-								</p>
-								<ul class="mt-2 space-y-1.5 text-[13px] leading-snug text-foreground/75">
-									{#each profile.services as line (line)}
-										<li class="flex gap-2">
-											<span
-												aria-hidden="true"
-												class="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent"
-											></span>
-											<span>{line}</span>
-										</li>
-									{/each}
-								</ul>
-							</div>
 						{/if}
 					</article>
 				{/each}
