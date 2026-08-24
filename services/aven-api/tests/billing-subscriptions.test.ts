@@ -43,6 +43,11 @@ class StubProvider implements PaymentProvider {
 		return Object.fromEntries(seeds.map((seed) => [seed.tier, `prod_${seed.tier}`]))
 	}
 
+	async ensureBenefits(): Promise<Record<string, number>> {
+		this.record('ensureBenefits')
+		return {}
+	}
+
 	async createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession> {
 		this.record('createSubscriptionCheckout', input)
 		return {
@@ -355,15 +360,17 @@ describe('subscription state', () => {
 		const carol = await insertUser()
 		const dave = await insertUser()
 
-		const started = await service.subscribe(carol, 'avenme', 'http://127.0.0.1:1420')
+		const started = await service.subscribe(carol, 'avenme', 'http://127.0.0.1:1420', 'de')
 		expect(started.checkoutUrl).toContain('/checkout/avenme')
 		// The embed origin travels to the provider — Polar validates it
 		// against the org's allowlist; it authorizes nothing on our side.
+		// The locale rides along too and only picks the checkout language.
 		const checkoutCall = provider.calls.find((c) => c.method === 'createSubscriptionCheckout')
 		expect(checkoutCall?.args[0]).toMatchObject({
 			tier: 'avenme',
 			userId: carol.id,
-			embedOrigin: 'http://127.0.0.1:1420'
+			embedOrigin: 'http://127.0.0.1:1420',
+			locale: 'de'
 		})
 
 		expect(await service.checkoutStatus(carol.id)).toEqual({ status: 'completed' })

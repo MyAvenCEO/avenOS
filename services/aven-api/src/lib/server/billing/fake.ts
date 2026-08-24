@@ -45,6 +45,11 @@ export class FakePaymentProvider implements PaymentProvider {
 		return Object.fromEntries(seeds.map((seed) => [seed.tier, `fake_prod_${seed.tier}`]))
 	}
 
+	/** Benefits only exist at the real provider — nothing to sync locally. */
+	async ensureBenefits(): Promise<Record<string, number>> {
+		return {}
+	}
+
 	async createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession> {
 		const checkoutId = `fake_${randomUUID()}`
 		const url = new URL('/purchase/fake-checkout', this.config.PUBLIC_BASE_URL)

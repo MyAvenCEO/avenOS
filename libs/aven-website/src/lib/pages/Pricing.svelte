@@ -21,7 +21,16 @@ import {
 } from '$lib/i18n/plans'
 import { pricing } from '$lib/i18n/pricing'
 import { idFunnelHref } from '$lib/id-service'
-import { betaPrice, ctaHref, euro, PLANS, type Plan, type PlanId, plan } from '$lib/pricing/plans'
+import {
+	betaPrice,
+	ctaHref,
+	euro,
+	PLANS,
+	type Plan,
+	type PlanFeature,
+	type PlanId,
+	plan
+} from '$lib/pricing/plans'
 import { loadSkill, skillDetailHref, skillLabel, skillsIncludedIn } from '$lib/skills/loader'
 
 let { lang }: { lang: Lang } = $props()
@@ -43,7 +52,7 @@ const coopSkillCount = $derived(skillsIncludedIn(coop.id, lang).length)
 /** A card shows at most this many skills; the rest sit behind "see all". */
 const SKILL_CAP = 7
 
-type SkillFeature = { skill: string; label: string }
+type SkillFeature = PlanFeature & { skill: string }
 
 /**
  * The skills a plan carries, live ones first: its own, plus — along the
@@ -53,7 +62,7 @@ function skillFeatures(p: Plan): SkillFeature[] {
 	const cascade: PlanId[] =
 		p.id === 'avencoop' ? ['avenceo', 'avenme'] : p.id === 'avenceo' ? ['avenme'] : []
 	return [...p.features, ...cascade.flatMap((id) => localizedPlan(plan(id), lang).features)]
-		.filter((f): f is SkillFeature => typeof f !== 'string' && 'skill' in f)
+		.filter((f): f is SkillFeature => typeof f.skill === 'string')
 		.sort(
 			(a, b) =>
 				Number(loadSkill(a.skill, lang)?.comingSoon ?? false) -
@@ -204,7 +213,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 {/snippet}
 
 {#snippet skillList(items: SkillFeature[])}
-	<ul class="mt-2 space-y-1.5 text-[13px] leading-snug">
+	<ul class="mt-2 space-y-2 text-[13px] leading-snug">
 		{#each items.slice(0, SKILL_CAP) as feature (feature.skill)}
 			{@const soon = loadSkill(feature.skill, lang)?.comingSoon}
 			<li class={soon ? 'opacity-70' : ''}>
@@ -222,7 +231,10 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 						>{t.soon}</span
 					>
 				{/if}
-				<span class={soon ? 'text-foreground/45' : 'text-foreground/55'}>· {feature.label}</span>
+				<span class={soon ? 'text-foreground/45' : 'text-foreground/55'}>· {feature.title}</span>
+				<span class="block text-[12px] leading-snug text-foreground/50">
+					{feature.description}
+				</span>
 			</li>
 		{/each}
 	</ul>
@@ -278,13 +290,18 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 				<ul
 					class="mx-auto mt-5 grid max-w-3xl gap-x-8 gap-y-2 border-t border-border/50 pt-5 text-[13px] leading-snug text-foreground/75 sm:grid-cols-2"
 				>
-					{#each avenId.features as feature (feature)}
+					{#each avenId.features as feature (feature.title)}
 						<li class="flex gap-2">
 							<span
 								aria-hidden="true"
 								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent"
 							></span>
-							<span>{feature}</span>
+							<span>
+								<span class="font-medium text-foreground/85">{feature.title}</span>
+								<span class="block text-[12px] leading-snug text-foreground/50">
+									{feature.description}
+								</span>
+							</span>
 						</li>
 					{/each}
 				</ul>
@@ -305,7 +322,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 			<div class="mt-6 grid gap-4 lg:grid-cols-2 lg:gap-5">
 				{#each products as p (p.id)}
 					{@const skillCount = skillsIncludedIn(p.id, lang).length}
-					{@const plain = p.features.filter((f) => typeof f === 'string' || 'href' in f)}
+					{@const plain = p.features.filter((f) => !f.skill)}
 					{@const skills = skillFeatures(p)}
 					{@const per = perLabel(p, lang)}
 					<div
@@ -329,7 +346,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 							{@render runtimeCard(p)}
 							<ul class="mt-4 space-y-2 text-left text-[13px] leading-snug text-foreground/75">
 								{@render sovereigntyBullet()}
-								{#each plain as feature (typeof feature === 'string' ? feature : feature.label)}
+								{#each plain as feature (feature.title)}
 									<li class="flex gap-2">
 										<span
 											aria-hidden="true"
@@ -337,21 +354,24 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 											? 'bg-accent'
 											: 'bg-foreground/25'}"
 										></span>
-										{#if typeof feature === 'string'}
-											<span>{feature}</span>
-										{:else}
-											<span>
+										<span>
+											{#if feature.href}
 												<a
 													href={feature.href}
 													target="_blank"
 													rel="noopener noreferrer"
-													class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+													class="font-medium underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
 												>
-													{feature.label}
+													{feature.title}
 													→
 												</a>
+											{:else}
+												<span class="font-medium text-foreground/85">{feature.title}</span>
+											{/if}
+											<span class="block text-[12px] leading-snug text-foreground/50">
+												{feature.description}
 											</span>
-										{/if}
+										</span>
 									</li>
 								{/each}
 							</ul>
@@ -417,37 +437,38 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 							{@render runtimeCard(coop)}
 							<ul class="mt-4 space-y-2 text-left text-[13px] leading-snug text-foreground/75">
 								{@render sovereigntyBullet()}
-								{#each coop.features as feature (typeof feature === 'string' ? feature : feature.label)}
+								{#each coop.features as feature (feature.title)}
 									<li class="flex gap-2">
 										<span
 											aria-hidden="true"
 											class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
 										></span>
-										{#if typeof feature === 'string'}
-											<span>{feature}</span>
-										{:else if 'href' in feature}
-											<span>
+										<span>
+											{#if feature.href}
 												<a
 													href={feature.href}
 													target="_blank"
 													rel="noopener noreferrer"
-													class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+													class="font-medium underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
 												>
-													{feature.label}
+													{feature.title}
 													→
 												</a>
-											</span>
-										{:else}
-											<span>
+											{:else if feature.skill}
 												<a
 													href={skillDetailHref(feature.skill, lang)}
 													class="font-medium underline underline-offset-4"
 												>
 													{skillLabel(feature.skill)}
 												</a>
-												<span class="text-foreground/55">· {feature.label}</span>
+												<span class="text-foreground/55">· {feature.title}</span>
+											{:else}
+												<span class="font-medium text-foreground/85">{feature.title}</span>
+											{/if}
+											<span class="block text-[12px] leading-snug text-foreground/50">
+												{feature.description}
 											</span>
-										{/if}
+										</span>
 									</li>
 								{/each}
 							</ul>

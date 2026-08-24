@@ -139,7 +139,8 @@ export class SubscriptionService {
 	async subscribe(
 		user: { id: string; email: string },
 		tier: string,
-		embedOrigin: string | null = null
+		embedOrigin: string | null = null,
+		locale: string | null = null
 	): Promise<{ checkoutUrl: string }> {
 		if (!isSubscriptionTier(tier))
 			throw new AppError(400, 'VALIDATION_ERROR', 'Unknown subscription tier.')
@@ -156,7 +157,8 @@ export class SubscriptionService {
 			userId: user.id,
 			email: user.email,
 			successUrl: new URL('/dashboard', this.config.PUBLIC_BASE_URL).toString(),
-			embedOrigin
+			embedOrigin,
+			locale
 		})
 		// Remember the checkout so the pane can ask "where does MY checkout
 		// stand" without ever naming it.
