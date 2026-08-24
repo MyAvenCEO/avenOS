@@ -6,22 +6,31 @@ export interface PricingMessages {
 	description: string
 	eyebrow: string
 	heading: string
+	/** The warm bridge under the heading — the wish, before the three facts. */
+	lead: string
 	/** HTML — our own static copy, carries <strong> emphasis. */
 	introHtml: string
-	/** HTML — our own static copy, carries <strong> emphasis. */
-	shareHtml: string
 	idEyebrow: string
 	yourChoice: string
 	availability: string
 	applyOnly: string
-	onePerCompany: string
-	onePerPerson: string
-	/** "+ 4,8 %" — the number in the reader's number style. */
+	/**
+	 * The promise every paid tier makes, spelled once and printed on all of
+	 * them: the thing you buy belongs to you. `lead` carries the emphasis.
+	 */
+	sovereignty: { lead: string; text: string }
+	/** "+ 6,8 %" — the number in the reader's number style. */
 	pct: (n: number) => string
 	/** What the percentage is taken FROM — printed under every number. */
 	ofRevenue: string
-	fee: { label: string; sub: string }
-	reinvest: { label: string; sub: string }
+	/** The tiny reassurance under it: the payment fees are already inside. */
+	inclFees: string
+	/** The early-adopter window, printed under the regular price. */
+	beta: {
+		badge: string
+		headline: (pct: number) => string
+		note: (months: number, regularPrice: string) => string
+	}
 	skills: string
 	soon: string
 	allSkills: (n: number) => string
@@ -30,8 +39,6 @@ export interface PricingMessages {
 	fairUse: string
 	extraMinute: (cents: number) => string
 	bundleNote: (idName: string, price: string, per: 'person' | 'company' | undefined) => string
-	referral: (pct: number) => string
-	referralNote: string
 	os: {
 		eyebrow: string
 		title: string
@@ -54,23 +61,29 @@ export const pricing: Record<Lang, PricingMessages> = {
 	de: {
 		title: 'Preise — aven.ceo · avenCEO',
 		description:
-			'Ein Name als Anfang, zwei Aven nebeneinander: avenID 25 € einmalig, avenME 58 €/Monat — der persönliche AI‑CEO für dein Leben, avenFOUNDER 426 €/Monat — der professionelle AI‑CEO für deine Firma. Keine Stufen, zwei Rollen. avenCOOP als technischer Co‑Founder — auf Bewerbung.',
+			'Alles beginnt mit einem Namen: avenID 25 € einmalig, avenME 55 €/Monat — der persönliche AI‑CEO für dein Leben, avenFOUNDER 377 €/Monat — der professionelle AI‑CEO für deine Firma. Keine Stufen, zwei Rollen. Mit avenCOOP baust du deine eigenen Aven‑Skills und verkaufst sie auf unserem Marketplace an andere Avens — auf Bewerbung.',
 		eyebrow: 'Pricing',
-		heading: 'Ein Name als Anfang. Zwei Aven nebeneinander.',
+		heading: 'Alles beginnt mit einem Namen.',
+		lead: 'Hinter deinem Namen entsteht eine KI, die wirklich dir gehört — sie lernt dein Leben kennen, führt deine Firma und wächst mit jeder Idee, die du ihr anvertraust. Du bringst die Vision. Dein Aven bringt sie ins Laufen.',
 		introHtml:
-			'<strong class="font-medium text-foreground/85">avenME</strong> ist dein persönlicher AI‑CEO für dein Leben — einer pro Mensch.<br> <strong class="font-medium text-foreground/85">avenFOUNDER</strong> ist der professionelle AI‑CEO für deine Firma — einer pro Firma.<br> Mit <strong class="font-medium text-foreground/85">avenCOOP</strong> werden wir dein technischer Co‑Founder.',
-		shareHtml:
-			'Vom Umsatz gehen nur die Transaktionsgebühren ab — und ein <strong class="font-medium text-accent">Reinvest</strong>, der dir Anteile an anderen Aven kauft. Du wählst selbst, an welchen.',
-		idEyebrow: 'Der Anfang · Pro Mensch und pro Firma',
+			'<strong class="font-medium text-foreground/85">avenME</strong> ist dein persönlicher AI‑CEO für dein Leben — einer pro Mensch.<br> <strong class="font-medium text-foreground/85">avenFOUNDER</strong> ist der professionelle AI‑CEO für deine Firma — einer pro Firma.<br> Mit <strong class="font-medium text-foreground/85">avenCOOP</strong> baust du deine eigenen Aven‑Skills und verkaufst sie auf unserem Marketplace an andere Avens.',
+		idEyebrow: 'Der Anfang',
 		yourChoice: 'Deine Wahl:',
 		availability: 'Verfügbarkeit bestätigen wir bei der Buchung.',
 		applyOnly: 'Nur auf Bewerbung',
-		onePerCompany: 'Ein avenFOUNDER pro Firma — jede weitere Firma bekommt ihren eigenen.',
-		onePerPerson: 'Ein avenME pro Mensch — dein eigener, unabhängig von jeder Firma.',
+		sovereignty: {
+			lead: 'Deine Daten und deine KI gehören dir.',
+			text: 'Ende‑zu‑Ende verschlüsselt, die Schlüssel liegen bei dir — auch wir kommen nicht rein.'
+		},
 		pct: (n) => `+ ${n.toLocaleString('de-DE')} %`,
 		ofRevenue: 'vom Umsatz',
-		fee: { label: 'Transaktionsgebühren', sub: 'inkl. Stripe, Karten & Co.' },
-		reinvest: { label: 'Reinvest in andere Aven', sub: 'Anteile, die für dich weiterwachsen.' },
+		inclFees: 'inkl. Transaktionsgebühren',
+		beta: {
+			badge: 'Early‑Adopter‑BETA',
+			headline: (pct) => `${pct} % Rabatt`,
+			note: (months, regularPrice) =>
+				`${months === 1 ? 'den ersten Monat' : `die ersten ${months} Monate`} — danach ${regularPrice} €/Monat.`
+		},
 		skills: 'Skills',
 		soon: 'bald',
 		allSkills: (n) => `Alle ${n} Skills ansehen →`,
@@ -80,8 +93,6 @@ export const pricing: Record<Lang, PricingMessages> = {
 		extraMinute: (cents) => `danach ${cents} Cent pro Minute`,
 		bundleNote: (idName, price, per) =>
 			`+ ${idName} (${price} € einmalig) im Bundle, falls ${per === 'company' ? 'deine Firma noch keine hat' : 'du noch keine hast'} — avenID ist nicht enthalten.`,
-		referral: (pct) => `${pct} % Provision`,
-		referralNote: 'auf jedes aven‑Produkt, das du vermittelst — monatlich, solange es läuft.',
 		os: {
 			eyebrow: 'Optional · Eigenes Hosting',
 			title: 'avenOS',
@@ -104,23 +115,29 @@ export const pricing: Record<Lang, PricingMessages> = {
 	en: {
 		title: 'Pricing — aven.ceo · avenCEO',
 		description:
-			'One name to start, two Aven side by side: avenID 25 € one-time, avenME 58 €/month — the personal AI‑CEO for your life, avenFOUNDER 426 €/month — the professional AI‑CEO for your company. No tiers, two roles. avenCOOP as your technical co-founder — by application.',
+			'It all starts with a name: avenID 25 € one-time, avenME 55 €/month — the personal AI‑CEO for your life, avenFOUNDER 377 €/month — the professional AI‑CEO for your company. No tiers, two roles. With avenCOOP you build your own Aven skills and sell them on our Marketplace to other Avens — by application.',
 		eyebrow: 'Pricing',
-		heading: 'One name to start. Two Aven side by side.',
+		heading: 'It all starts with a name.',
+		lead: 'Behind your name grows an AI that truly belongs to you — it learns your life, runs your company and grows with every idea you trust it with. You bring the vision. Your Aven sets it in motion.',
 		introHtml:
-			'<strong class="font-medium text-foreground/85">avenME</strong> is your personal AI‑CEO for your life — one per human.<br> <strong class="font-medium text-foreground/85">avenFOUNDER</strong> is the professional AI‑CEO for your company — one per company.<br> With <strong class="font-medium text-foreground/85">avenCOOP</strong> we become your technical co-founder.',
-		shareHtml:
-			'Only the transaction fees come off your revenue — plus a <strong class="font-medium text-accent">Reinvest</strong> that buys you stakes in other Aven. You choose which ones.',
-		idEyebrow: 'The start · Per human and per company',
+			'<strong class="font-medium text-foreground/85">avenME</strong> is your personal AI‑CEO for your life — one per human.<br> <strong class="font-medium text-foreground/85">avenFOUNDER</strong> is the professional AI‑CEO for your company — one per company.<br> With <strong class="font-medium text-foreground/85">avenCOOP</strong> you build your own Aven skills and sell them on our Marketplace to other Avens.',
+		idEyebrow: 'The start',
 		yourChoice: 'Your choice:',
 		availability: 'We confirm availability at booking.',
 		applyOnly: 'By application only',
-		onePerCompany: 'One avenFOUNDER per company — every further company gets its own.',
-		onePerPerson: 'One avenME per human — your own, independent of any company.',
+		sovereignty: {
+			lead: 'Your data and your AI belong to you.',
+			text: 'End-to-end encrypted, the keys stay with you — not even we can get in.'
+		},
 		pct: (n) => `+ ${n.toLocaleString('en-US')} %`,
 		ofRevenue: 'of revenue',
-		fee: { label: 'transaction fees', sub: 'incl. Stripe, cards & co.' },
-		reinvest: { label: 'reinvested into other Aven', sub: 'Stakes that keep growing for you.' },
+		inclFees: 'incl. transaction fees',
+		beta: {
+			badge: 'Early adopter BETA',
+			headline: (pct) => `${pct} % off`,
+			note: (months, regularPrice) =>
+				`${months === 1 ? 'the first month' : `the first ${months} months`} — ${regularPrice} €/month after that.`
+		},
 		skills: 'Skills',
 		soon: 'soon',
 		allSkills: (n) => `See all ${n} skills →`,
@@ -130,8 +147,6 @@ export const pricing: Record<Lang, PricingMessages> = {
 		extraMinute: (cents) => `then ${cents} cents per minute`,
 		bundleNote: (idName, price, per) =>
 			`+ ${idName} (${price} € one-time) as a bundle if ${per === 'company' ? 'your company has none yet' : 'you have none yet'} — avenID is not included.`,
-		referral: (pct) => `${pct} % commission`,
-		referralNote: 'on every aven product you refer — monthly, for as long as it runs.',
 		os: {
 			eyebrow: 'Optional · Self-hosting',
 			title: 'avenOS',

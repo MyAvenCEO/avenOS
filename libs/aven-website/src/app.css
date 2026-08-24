@@ -70,6 +70,7 @@
 	 *   progress   tidal blue      in motion
 	 *   success    paradise water  settled
 	 *   error      terracotta      something failed
+	 *   offer      terracotta      the BETA window — it closes
 	 *   warning    sunflower       careful — but nothing is broken
 	 *   info       earth           notice — your turn
 	 *   secondary  sand            the warm second action */
@@ -101,6 +102,14 @@
 	--color-error: var(--color-terracotta);
 	--color-error-foreground: #fffefb;
 	--color-error-ink: color-mix(in oklab, var(--color-terracotta) 85%, black);
+
+	/* The site's second own role. Terracotta means "failed" in the app, but
+	 * nothing fails on a marketing page — here the burnt orange is the tone
+	 * of a window that CLOSES: the early-adopter BETA. It sits opposite the
+	 * gold on purpose, so an offer never reads as just another highlight. */
+	--color-offer: var(--color-terracotta);
+	--color-offer-foreground: #fffefb;
+	--color-offer-ink: color-mix(in oklab, var(--color-terracotta) 88%, black);
 
 	--color-info: var(--color-earth);
 	--color-info-foreground: #2b231c;

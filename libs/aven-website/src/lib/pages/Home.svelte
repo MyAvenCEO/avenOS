@@ -220,67 +220,6 @@ const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
 		</div>
 	</section>
 
-	<!-- The compounding engine as three steps: revenue → stakes → more stakes.
-	     The percentages and the legal shape live on /pricing, where someone is
-	     actually asking; here it is only the wheel and why it turns. -->
-	<section
-		class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-20"
-		aria-labelledby="compound-heading"
-	>
-		<div class="mx-auto max-w-4xl">
-			<div class="mx-auto max-w-2xl text-center">
-				<p class="text-[10px] font-bold uppercase tracking-[0.28em] text-accent">
-					{t.compound.eyebrow}
-				</p>
-				<h2
-					id="compound-heading"
-					class="mt-4 text-2xl font-semibold tracking-tight text-pretty text-foreground sm:text-3xl"
-				>
-					{t.compound.heading}
-				</h2>
-				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/68 sm:text-base">
-					{t.compound.lead}
-				</p>
-			</div>
-
-			<ol class="mt-10 grid gap-3 sm:grid-cols-3">
-				{#each t.compound.steps as step, i (i)}
-					<li class="flex gap-3 rounded-2xl border border-border/50 bg-surface-card px-5 py-4">
-						<span class="text-[13px] font-bold tabular-nums text-accent">{i + 1}</span>
-						<span class="text-[14px] leading-snug text-foreground/78">{step}</span>
-					</li>
-				{/each}
-			</ol>
-
-			<p
-				class="mx-auto mt-6 max-w-xl text-center text-[15px] leading-snug text-foreground/68 sm:text-base"
-			>
-				{@html t.compound.closingHtml}
-			</p>
-
-			<div class="mx-auto mt-10 max-w-2xl border-t border-border/40 pt-8 text-center">
-				<p
-					class="text-[1.125rem] font-light leading-snug tracking-tight text-pretty text-foreground sm:text-[1.3125rem]"
-				>
-					{t.compound.movement}
-				</p>
-				<div class="mx-auto mt-5 max-w-xl space-y-4 text-[15px] leading-relaxed text-foreground/68">
-					{#each t.compound.visionHtml as paragraph, i (i)}
-						<p class="text-pretty">{@html paragraph}</p>
-					{/each}
-				</div>
-				<p class="mt-6">
-					<a
-						href="{localeHref(lang, '/pricing')}#avencoop"
-						class="inline-flex min-h-11 items-center justify-center rounded-full border border-primary/45 px-8 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
-					>
-						{t.compound.link}
-					</a>
-				</p>
-			</div>
-		</div>
-	</section>
-
 	<section
 		class="border-b border-border/40 bg-linear-to-b from-surface-soft/50 to-transparent px-5 py-9 sm:px-8 sm:py-11"
 		id="founders"
