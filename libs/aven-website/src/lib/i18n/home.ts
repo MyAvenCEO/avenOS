@@ -177,7 +177,7 @@ export const home: Record<Lang, HomeMessages> = {
 		hero: {
 			headingLine1: 'Deep in your heart you know it:',
 			headingLine2: 'there is so much more in you.',
-			transformationHtml: `From ${s('working to survive', 'text-foreground/50')} to the ${s('thriving founder of tomorrow', 'text-accent')}.`,
+			transformationHtml: `From ${s('working to survive', 'text-foreground/50')} to the ${s('sovereign founder of tomorrow', 'text-accent')}.`,
 			helper: '— your own avenCEO gets you there —'
 		},
 		shift: {
