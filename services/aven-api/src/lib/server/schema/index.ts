@@ -7,6 +7,7 @@ export * from './environments.js'
 export * from './names.js'
 export * from './ops.js'
 export * from './passkeys.js'
+export * from './sites.js'
 
 import { account, proofOfWorkChallenges, session, user, verification } from './auth.js'
 import { deviceCode } from './device.js'
@@ -19,6 +20,7 @@ import {
 import { nameHolds, names, paymentEvents, purchaseSessions } from './names.js'
 import { auditEvents, workerHeartbeats } from './ops.js'
 import { passkey, setupLinks } from './passkeys.js'
+import { siteRepositories, staticSiteBindings } from './sites.js'
 
 export const schema = {
 	user,
@@ -38,5 +40,7 @@ export const schema = {
 	customerEnvironmentJobs,
 	customerEnvironmentLogs,
 	auditEvents,
-	workerHeartbeats
+	workerHeartbeats,
+	siteRepositories,
+	staticSiteBindings
 }

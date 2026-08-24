@@ -10,6 +10,7 @@ COPY libs/aven-ui/package.json libs/aven-ui/package.json
 COPY libs/aven-website/package.json libs/aven-website/package.json
 COPY infrastructure/identity/package.json infrastructure/identity/package.json
 COPY services/aven-api/package.json services/aven-api/package.json
+COPY services/static-site-host/package.json services/static-site-host/package.json
 
 FROM manifests AS build
 RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \

@@ -49,9 +49,12 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx biome check services/aven-api
       - run: bunx biome check infrastructure/identity
+      - run: bunx biome check services/static-site-host
       - run: bun run check:api
       - run: bun run test:api
       - run: bun run test:infra
+      - run: bun run --cwd services/static-site-host check
+      - run: bun run --cwd services/static-site-host test
       - run: cargo test --locked --workspace
         working-directory: services/artifact-store
       - run: cargo test --locked
@@ -61,6 +64,7 @@ jobs:
       - run: docker build -f services/aven-api/Dockerfile -t aven-api:validation .
       - run: docker build -f services/artifact-store/Dockerfile -t aven-artifact-store:validation .
       - run: docker build -f services/intent-service/Dockerfile -t aven-intent-service:validation .
+      - run: docker build -f services/static-site-host/Dockerfile -t aven-static-site-host:validation .
 
   release:
     name: tag + changelog
@@ -286,6 +290,34 @@ jobs:
           push: true
           tags: ghcr.io/myavenceo/aven-intent-service:sha-${{ needs.release.outputs.commit }}
 
+  publish-static-site-host-image:
+    name: publish static site host image
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ghcr.io/myavenceo/aven-static-site-host
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release.outputs.commit }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: services/static-site-host/Dockerfile
+          push: true
+          tags: ghcr.io/myavenceo/aven-static-site-host:sha-${{ needs.release.outputs.commit }}
+
   deploy-identity-infrastructure-next:
     name: update identity infrastructure
     needs: release
@@ -359,6 +391,7 @@ jobs:
         publish-identity-image,
         publish-artifact-store-image,
         publish-intent-service-image,
+        publish-static-site-host-image,
         deploy-identity-infrastructure-next,
       ]
     runs-on: ubuntu-latest
@@ -405,6 +438,11 @@ jobs:
           INTENT_SERVICE_PROVISIONER_BEARER_TOKEN: ${{ secrets.INTENT_SERVICE_PROVISIONER_BEARER_TOKEN }}
           INTENT_SERVICE_RUNTIME_PASSWORD: ${{ secrets.INTENT_SERVICE_RUNTIME_PASSWORD }}
           INTENT_SERVICE_PROCESSOR_BEARER_TOKEN: ${{ secrets.INTENT_SERVICE_PROCESSOR_BEARER_TOKEN }}
+          SITE_HOST_DIRECTORY_BEARER_TOKEN: ${{ secrets.SITE_HOST_DIRECTORY_BEARER_TOKEN }}
+          SITE_HOST_ALLOWED_IPV4: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-host }}
+          SITE_HOST_ALLOWED_IPV6: ${{ vars.SITE_HOST_ALLOWED_IPV6 }}
+          SITE_HOST_POLL_SECONDS: ${{ vars.SITE_HOST_POLL_SECONDS }}
+          SITE_HOST_DNS_GRACE_SECONDS: ${{ vars.SITE_HOST_DNS_GRACE_SECONDS }}
           ARTIFACT_STORE_MAX_TENANT_POOLS: ${{ vars.ARTIFACT_STORE_MAX_TENANT_POOLS }}
           ARTIFACT_STORE_CONNECTIONS_PER_TENANT: ${{ vars.ARTIFACT_STORE_CONNECTIONS_PER_TENANT }}
           ARTIFACT_STORE_MEMORY_LIMIT: ${{ vars.ARTIFACT_STORE_MEMORY_LIMIT }}
@@ -435,6 +473,7 @@ jobs:
           IMAGE: ${{ needs.publish-identity-image.outputs.image }}@${{ needs.publish-identity-image.outputs.digest }}
           ARTIFACT_IMAGE: ${{ needs.publish-artifact-store-image.outputs.image }}@${{ needs.publish-artifact-store-image.outputs.digest }}
           INTENT_IMAGE: ${{ needs.publish-intent-service-image.outputs.image }}@${{ needs.publish-intent-service-image.outputs.digest }}
+          SITE_HOST_IMAGE: ${{ needs.publish-static-site-host-image.outputs.image }}@${{ needs.publish-static-site-host-image.outputs.digest }}
           VERSION: ${{ needs.publish-identity-image.outputs.commit }}
         run: |
           set -euo pipefail
@@ -450,6 +489,14 @@ jobs:
           done
           if [ "$ARTIFACT_STORE_BEARER_TOKEN" = "$ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN" ]; then
             echo "::error::Artifact Store runtime and provisioner bearer credentials must differ."
+            exit 1
+          fi
+          if [[ ! "$SITE_HOST_DIRECTORY_BEARER_TOKEN" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then
+            echo "::error::Static site host credential must be 32-128 URL-safe characters."
+            exit 1
+          fi
+          if [[ ! "$SITE_HOST_ALLOWED_IPV4" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            echo "::error::Static site host needs the deployed host IPv4 address."
             exit 1
           fi
           processor_credentials=(
@@ -478,6 +525,7 @@ jobs:
             fi
           done
           distinct_credentials=(
+            "$SITE_HOST_DIRECTORY_BEARER_TOKEN"
             "$ARTIFACT_STORE_BEARER_TOKEN"
             "$ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN"
             "$ARTIFACT_STORE_RUNTIME_PASSWORD"
@@ -636,6 +684,7 @@ jobs:
             printf 'AVEN_API_IMAGE=%s\n' "$IMAGE"
             printf 'AVEN_ARTIFACT_STORE_IMAGE=%s\n' "$ARTIFACT_IMAGE"
             printf 'AVEN_INTENT_SERVICE_IMAGE=%s\n' "$INTENT_IMAGE"
+            printf 'AVEN_STATIC_SITE_HOST_IMAGE=%s\n' "$SITE_HOST_IMAGE"
             printf 'BETTER_AUTH_SECRET=%s\n' "$BETTER_AUTH_SECRET"
             printf 'EMAIL_QUEUE_ENCRYPTION_KEY=%s\n' "$EMAIL_QUEUE_ENCRYPTION_KEY"
             printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
@@ -644,6 +693,11 @@ jobs:
             printf 'AVEN_EMAIL_WORKER_PASSWORD=%s\n' "$AVEN_EMAIL_WORKER_PASSWORD"
             printf 'AVEN_ENVIRONMENT_WORKER_PASSWORD=%s\n' "$AVEN_ENVIRONMENT_WORKER_PASSWORD"
             printf 'AVEN_PROVISIONER_PASSWORD=%s\n' "$AVEN_PROVISIONER_PASSWORD"
+            printf 'SITE_HOST_DIRECTORY_BEARER_TOKEN=%s\n' "$SITE_HOST_DIRECTORY_BEARER_TOKEN"
+            printf 'SITE_HOST_ALLOWED_IPV4=%s\n' "$SITE_HOST_ALLOWED_IPV4"
+            printf 'SITE_HOST_ALLOWED_IPV6=%s\n' "$SITE_HOST_ALLOWED_IPV6"
+            printf 'SITE_HOST_POLL_SECONDS=%s\n' "${SITE_HOST_POLL_SECONDS:-60}"
+            printf 'SITE_HOST_DNS_GRACE_SECONDS=%s\n' "${SITE_HOST_DNS_GRACE_SECONDS:-86400}"
             printf 'ARTIFACT_STORE_BEARER_TOKEN=%s\n' "$ARTIFACT_STORE_BEARER_TOKEN"
             printf 'ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN=%s\n' "$ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN"
             printf 'ARTIFACT_STORE_RUNTIME_PASSWORD=%s\n' "$ARTIFACT_STORE_RUNTIME_PASSWORD"
@@ -732,7 +786,7 @@ jobs:
           # deliberately use database heartbeats and are verified by /api/health/status below.
           # The generated upload path is intentionally expanded by this runner.
           # shellcheck disable=SC2029
-          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy /opt/aven-api/previous && if sudo test -f /opt/aven-api/.env; then sudo install -m 600 /opt/aven-api/.env /opt/aven-api/previous/.env && sudo install -m 644 /opt/aven-api/docker-compose.yml /opt/aven-api/docker-compose.deploy.yml /opt/aven-api/docker-compose.artifact-store.deploy.yml /opt/aven-api/previous/; fi && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' '$upload/deploy/rollback-previous.sh' /opt/aven-api/deploy/ && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --wait --wait-timeout 120 db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres -c 'GRANT pg_signal_backend TO aven_provisioner' && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store-provisioner artifact-processor-provisioner intent-service-provisioner && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps environment-worker && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store app artifact-processor intent-service caddy && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps email-worker && rm -rf '$upload'"
+          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy /opt/aven-api/previous && sudo install -d -o 10003 -g 10003 -m 0750 /var/lib/aven/static-sites && if sudo test -f /opt/aven-api/.env; then sudo install -m 600 /opt/aven-api/.env /opt/aven-api/previous/.env && sudo install -m 644 /opt/aven-api/docker-compose.yml /opt/aven-api/docker-compose.deploy.yml /opt/aven-api/docker-compose.artifact-store.deploy.yml /opt/aven-api/previous/; fi && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' '$upload/deploy/rollback-previous.sh' /opt/aven-api/deploy/ && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --wait --wait-timeout 120 db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres -c 'GRANT pg_signal_backend TO aven_provisioner' && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store-provisioner artifact-processor-provisioner intent-service-provisioner && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps environment-worker && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store app artifact-processor intent-service static-site-host caddy && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps email-worker && rm -rf '$upload'"
 
       - name: Dump container logs on failure
         if: failure()
@@ -746,7 +800,7 @@ jobs:
           # The crash that made a service unhealthy is only visible inside the
           # containers — surface it in CI so nobody needs SSH to diagnose.
           ssh -i "$RUNNER_TEMP/ssh/key" -o BatchMode=yes -o ConnectTimeout=5 -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml ps && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml logs --no-color --tail=120 migrator app"
+            "cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml ps && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml logs --no-color --tail=120 migrator app static-site-host caddy"
 
       - name: Remove temporary host upload
         if: always()

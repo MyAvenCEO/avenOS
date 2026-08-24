@@ -90,6 +90,10 @@ export const serverConfigSchema = z
 			.string()
 			.regex(/^[A-Za-z0-9_-]{32,128}$/)
 			.optional(),
+		SITE_HOST_DIRECTORY_BEARER_TOKEN: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/)
+			.optional(),
 
 		BETTER_AUTH_SECRET: z.string().default(''),
 		BETTER_AUTH_SESSION_MAX_AGE_SECONDS: positiveInt.default(43_200),

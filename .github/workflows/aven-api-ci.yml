@@ -6,6 +6,7 @@ on:
       - services/aven-api/**
       - services/artifact-store/**
       - services/intent-service/**
+      - services/static-site-host/**
       - infrastructure/identity/**
       - package.json
       - bun.lock
@@ -20,6 +21,7 @@ on:
       - services/aven-api/**
       - services/artifact-store/**
       - services/intent-service/**
+      - services/static-site-host/**
       - infrastructure/identity/**
       - package.json
       - bun.lock
@@ -67,9 +69,12 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx biome check services/aven-api
       - run: bunx biome check infrastructure/identity
+      - run: bunx biome check services/static-site-host
       - run: bun run check:api
       - run: bun run test:api
       - run: bun run test:infra
+      - run: bun run --cwd services/static-site-host check
+      - run: bun run --cwd services/static-site-host test
       - run: cargo test --locked --workspace
         working-directory: services/artifact-store
       - run: cargo test --locked
@@ -92,6 +97,7 @@ jobs:
           set -euo pipefail
           PGPASSWORD=server-ci psql -h 127.0.0.1 -U aven_server -d aven -c 'SELECT 1 FROM names LIMIT 1'
           PGPASSWORD=server-ci psql -h 127.0.0.1 -U aven_server -d aven -c 'SELECT 1 FROM device_code LIMIT 1'
+          PGPASSWORD=server-ci psql -h 127.0.0.1 -U aven_server -d aven -c 'SELECT 1 FROM static_site_bindings LIMIT 1'
           PGPASSWORD=email-ci psql -h 127.0.0.1 -U aven_email_worker -d aven -c 'SELECT 1 FROM email_queue LIMIT 1'
           PGPASSWORD=environment-ci psql -h 127.0.0.1 -U aven_environment_worker -d aven -c 'SELECT 1 FROM customer_environment_jobs LIMIT 1'
           if PGPASSWORD=email-ci psql -h 127.0.0.1 -U aven_email_worker -d aven -c 'SELECT 1 FROM "user" LIMIT 1'; then exit 1; fi
@@ -105,11 +111,14 @@ jobs:
         run: docker build -f services/artifact-store/Dockerfile -t aven-artifact-store:${{ github.sha }} .
       - name: Build Intent Service image
         run: docker build -f services/intent-service/Dockerfile -t aven-intent-service:${{ github.sha }} .
+      - name: Build static site host image
+        run: docker build -f services/static-site-host/Dockerfile -t aven-static-site-host:${{ github.sha }} .
       - name: Verify non-root read-only image
         run: |
           test "$(docker image inspect aven-api:${{ github.sha }} --format '{{.Config.User}}')" = "bun"
           test "$(docker image inspect aven-artifact-store:${{ github.sha }} --format '{{.Config.User}}')" = "10001:10001"
           test "$(docker image inspect aven-intent-service:${{ github.sha }} --format '{{.Config.User}}')" = "10002:10002"
+          test "$(docker image inspect aven-static-site-host:${{ github.sha }} --format '{{.Config.User}}')" = "10003:10003"
           docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m --entrypoint bun aven-api:${{ github.sha }} --version
           docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m --entrypoint bun aven-api:${{ github.sha }} -e "await Promise.all([import('./src/lib/server/email/worker.ts'), import('./src/lib/server/environments/worker.ts')])"
       - name: Compose runtime smoke
@@ -134,13 +143,14 @@ jobs:
         working-directory: services/aven-api
         run: |
           set -euo pipefail
-          compose_json="$(IDENTITY_DOMAIN=id.example AVEN_API_IMAGE=aven-api:check docker compose -f docker-compose.yml -f docker-compose.deploy.yml config --format json)"
+          compose_json="$(IDENTITY_DOMAIN=id.example AVEN_API_IMAGE=aven-api:check AVEN_STATIC_SITE_HOST_IMAGE=site-host:check SITE_HOST_DIRECTORY_BEARER_TOKEN=site-host-directory-token-000000000 SITE_HOST_ALLOWED_IPV4=192.0.2.10 docker compose -f docker-compose.yml -f docker-compose.deploy.yml config --format json)"
           jq -e 'all(.services[]; .logging.driver == "local" and .logging.options["max-size"] == "10m" and .logging.options["max-file"] == "5" and .logging.options.compress == "true")' <<<"$compose_json"
+          jq -e '.services.caddy.depends_on == null and .services["static-site-host"].depends_on == null and .services["static-site-host"].image == "site-host:check"' <<<"$compose_json"
 
-          compose_json="$(DOCKER_LOG_MAX_SIZE=25m DOCKER_LOG_MAX_FILE=7 DOCKER_LOG_COMPRESS=false IDENTITY_DOMAIN=id.example AVEN_API_IMAGE=aven-api:check docker compose -f docker-compose.yml -f docker-compose.deploy.yml config --format json)"
+          compose_json="$(DOCKER_LOG_MAX_SIZE=25m DOCKER_LOG_MAX_FILE=7 DOCKER_LOG_COMPRESS=false IDENTITY_DOMAIN=id.example AVEN_API_IMAGE=aven-api:check AVEN_STATIC_SITE_HOST_IMAGE=site-host:check SITE_HOST_DIRECTORY_BEARER_TOKEN=site-host-directory-token-000000000 SITE_HOST_ALLOWED_IPV4=192.0.2.10 docker compose -f docker-compose.yml -f docker-compose.deploy.yml config --format json)"
           jq -e 'all(.services[]; .logging.driver == "local" and .logging.options["max-size"] == "25m" and .logging.options["max-file"] == "7" and .logging.options.compress == "false")' <<<"$compose_json"
 
-          compose_json="$(IDENTITY_DOMAIN=id.example AVEN_API_IMAGE=aven-api:check AVEN_ARTIFACT_STORE_IMAGE=artifact:check AVEN_INTENT_SERVICE_IMAGE=intent:check AVEN_PROVISIONER_PASSWORD=provision ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN=store-provision ARTIFACT_STORE_BEARER_TOKEN=store-runtime ARTIFACT_STORE_RUNTIME_PASSWORD=store-password ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN=processor-provision ARTIFACT_PROCESSOR_RUNTIME_PASSWORD=processor-password ARTIFACT_PROCESSOR_BEARER_TOKEN=processor-runtime ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN=processor-directory ARTIFACT_PROCESSOR_VISION_ENABLED=true ARTIFACT_PROCESSOR_VISION_BASE_URL=https://model.example.test/v1 ARTIFACT_PROCESSOR_VISION_MODEL=synthetic-vision ARTIFACT_PROCESSOR_VISION_PROFILE=openai-json-schema ARTIFACT_PROCESSOR_VISION_AUTH_MODE=bearer ARTIFACT_PROCESSOR_VISION_API_KEY=synthetic-api-key-for-compose INTENT_SERVICE_PROVISIONER_BEARER_TOKEN=intent-provision INTENT_SERVICE_RUNTIME_PASSWORD=intent-password INTENT_SERVICE_BEARER_TOKEN=intent-runtime INTENT_SERVICE_DIRECTORY_BEARER_TOKEN=intent-directory INTENT_SERVICE_PROCESSOR_BEARER_TOKEN=intent-processor docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml config --format json)"
+          compose_json="$(IDENTITY_DOMAIN=id.example AVEN_API_IMAGE=aven-api:check AVEN_STATIC_SITE_HOST_IMAGE=site-host:check SITE_HOST_DIRECTORY_BEARER_TOKEN=site-host-directory-token-000000000 SITE_HOST_ALLOWED_IPV4=192.0.2.10 AVEN_ARTIFACT_STORE_IMAGE=artifact:check AVEN_INTENT_SERVICE_IMAGE=intent:check AVEN_PROVISIONER_PASSWORD=provision ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN=store-provision ARTIFACT_STORE_BEARER_TOKEN=store-runtime ARTIFACT_STORE_RUNTIME_PASSWORD=store-password ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN=processor-provision ARTIFACT_PROCESSOR_RUNTIME_PASSWORD=processor-password ARTIFACT_PROCESSOR_BEARER_TOKEN=processor-runtime ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN=processor-directory ARTIFACT_PROCESSOR_VISION_ENABLED=true ARTIFACT_PROCESSOR_VISION_BASE_URL=https://model.example.test/v1 ARTIFACT_PROCESSOR_VISION_MODEL=synthetic-vision ARTIFACT_PROCESSOR_VISION_PROFILE=openai-json-schema ARTIFACT_PROCESSOR_VISION_AUTH_MODE=bearer ARTIFACT_PROCESSOR_VISION_API_KEY=synthetic-api-key-for-compose INTENT_SERVICE_PROVISIONER_BEARER_TOKEN=intent-provision INTENT_SERVICE_RUNTIME_PASSWORD=intent-password INTENT_SERVICE_BEARER_TOKEN=intent-runtime INTENT_SERVICE_DIRECTORY_BEARER_TOKEN=intent-directory INTENT_SERVICE_PROCESSOR_BEARER_TOKEN=intent-processor docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml config --format json)"
           jq -e '.services["artifact-processor"].environment.ARTIFACT_PROCESSOR_VISION_ENABLED == "true" and .services["artifact-processor"].environment.ARTIFACT_PROCESSOR_VISION_PROFILE == "openai-json-schema" and .services["intent-service"].image == "intent:check" and .services["intent-service"].environment.INTENT_SERVICE_TENANT_MODE == "true" and .services["intent-service-provisioner"].tmpfs == ["/tmp:size=64m,mode=1777"] and .services["intent-service"].tmpfs == ["/tmp:size=64m,mode=1777"]' <<<"$compose_json"
 
           docker run --rm -e DOMAIN=id.example -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10.2-alpine caddy validate --config /etc/caddy/Caddyfile

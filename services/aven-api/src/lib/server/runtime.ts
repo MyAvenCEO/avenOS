@@ -15,6 +15,7 @@ import { NameService } from './names/service.js'
 import { createNotifier, type Notifier } from './notifications.js'
 import { PasskeyService } from './passkeys.js'
 import { ProofOfWorkService } from './proof-of-work.js'
+import { SiteBindingService } from './sites/service.js'
 
 export interface Runtime {
 	config: ServerConfig
@@ -32,6 +33,7 @@ export interface Runtime {
 	artifacts: ArtifactFileService | null
 	artifactProcessing: ArtifactProcessingService | null
 	intents: IntentService | null
+	sites: SiteBindingService
 	shutdown(): Promise<void>
 }
 
@@ -66,6 +68,7 @@ async function create(): Promise<Runtime> {
 	const artifacts = ArtifactFileService.fromConfig(config)
 	const artifactProcessing = ArtifactProcessingService.fromConfig(config)
 	const intents = IntentService.fromConfig(config)
+	const sites = new SiteBindingService(database.pool)
 	const names = new NameService(
 		database.pool,
 		config,
@@ -99,6 +102,7 @@ async function create(): Promise<Runtime> {
 		artifacts,
 		artifactProcessing,
 		intents,
+		sites,
 		async shutdown() {
 			await database.pool.end()
 		}
