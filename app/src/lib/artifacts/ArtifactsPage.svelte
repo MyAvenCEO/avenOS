@@ -37,7 +37,8 @@ function extOf(fileName: string): string {
 }
 
 function sizeLabel(bytes: number): string {
-	if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB`
+	if (bytes >= 1024 * 1024)
+		return `${(bytes / (1024 * 1024)).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB`
 	return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
@@ -82,12 +83,15 @@ onMount(async () => {
 				>
 					<div class="flex items-baseline justify-between gap-2">
 						<span class="truncate font-semibold text-sm">{prettyName(artifact.fileName)}</span>
-						<span class="shrink-0 rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[0.625rem]">
+						<span
+							class="shrink-0 rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[0.625rem]"
+						>
 							{extOf(artifact.fileName)}
 						</span>
 					</div>
 					<p class="text-foreground/50 text-xs">
-						{sizeLabel(artifact.sizeBytes)} · {dateOf(artifact.modifiedMs)}
+						{sizeLabel(artifact.sizeBytes)}
+						· {dateOf(artifact.modifiedMs)}
 					</p>
 				</button>
 			{/each}

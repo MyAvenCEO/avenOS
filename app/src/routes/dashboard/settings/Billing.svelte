@@ -251,12 +251,14 @@ async function openEmbed(url: string) {
 		embed = instance
 		if (embedTimer) clearTimeout(embedTimer)
 		instance.addEventListener('confirmed', () => {
-			if (checkout) pending = { tier: checkout.tier, note: 'Zahlung bestätigt — dein Plan erscheint gleich.' }
+			if (checkout)
+				pending = { tier: checkout.tier, note: 'Zahlung bestätigt — dein Plan erscheint gleich.' }
 		})
 		instance.addEventListener('success', (event) => {
 			// Never let the embed redirect the app; the poll is the truth.
 			event.preventDefault()
-			if (checkout) pending = { tier: checkout.tier, note: 'Zahlung bestätigt — dein Plan erscheint gleich.' }
+			if (checkout)
+				pending = { tier: checkout.tier, note: 'Zahlung bestätigt — dein Plan erscheint gleich.' }
 		})
 		instance.addEventListener('close', () => {
 			embed = null
