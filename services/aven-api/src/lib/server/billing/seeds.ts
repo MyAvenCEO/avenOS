@@ -91,7 +91,8 @@ function skillFlagSpecs(p: Plan): BenefitSpec[] {
 					{
 						key: `skill:${f.skill}`,
 						kind: 'feature_flag' as const,
-						description: benefitDescription(english[index]?.title ?? f.title),
+						// Skills wear their kind on the checkout: "SKILL - <english title>".
+						description: benefitDescription(`SKILL - ${english[index]?.title ?? f.title}`),
 						runtime: null
 					}
 				]
