@@ -23,10 +23,13 @@ const { children }: { children: Snippet } = $props()
  * itself toggles. That makes Back redundant; the page dropped it.
  */
 const onSettings = $derived(page.url.pathname.startsWith('/dashboard/settings'))
+const onGit = $derived(page.url.pathname.startsWith('/dashboard/gitea'))
+/** On any ROUTE entry (settings, git) rather than a store-flag surface. */
+const onRoute = $derived(onSettings || onGit)
 
-/** Return to the workspace if a rail button was pressed while in settings. */
-function leaveSettings() {
-	if (onSettings) void goto('/dashboard')
+/** Return to the workspace if a rail button was pressed while on a route. */
+function leaveRoute() {
+	if (onRoute) void goto('/dashboard')
 }
 </script>
 
@@ -40,14 +43,14 @@ function leaveSettings() {
 	>
 		{#each SPARKS as spark (spark.id)}
 			{@const active =
-				todoActor.state.active === spark.id && !onSettings && shell.tab === 'intents'}
+				todoActor.state.active === spark.id && !onRoute && shell.tab === 'intents'}
 			<button
 				type="button"
 				onclick={() => {
 					// The active spark is reducer state like any other — switch it
 					// through the SHOW event, the same door the voice tool uses.
-					// Picking a spark leaves settings.
-					leaveSettings()
+					// Picking a spark leaves settings/git.
+					leaveRoute()
 					shell.tab = 'intents'
 					// A new context starts at its list, not inside the old detail.
 					shell.detail = false
@@ -73,9 +76,9 @@ function leaveSettings() {
 		<button
 			type="button"
 			onclick={() => {
-				// From settings, the gear's counterpart opens rather than toggles —
+				// From a route (settings, git), skills opens rather than toggles —
 				// otherwise the first press would only walk back to the workspace.
-				if (onSettings) {
+				if (onRoute) {
 					shell.tab = 'skills'
 					void goto('/dashboard')
 					return
@@ -85,7 +88,7 @@ function leaveSettings() {
 			title="Skills"
 			aria-label="Skills"
 			class="mt-auto flex size-11 items-center justify-center transition-all {shell.tab ===
-				'skills' && !onSettings
+				'skills' && !onRoute
 				? 'rounded-2xl bg-primary text-primary-foreground'
 				: 'rounded-full border border-border bg-surface-card opacity-60 hover:rounded-2xl hover:opacity-100'}"
 		>
@@ -104,6 +107,38 @@ function leaveSettings() {
 				<circle cx="19" cy="18" r="2.5" />
 				<path d="M7.2 10.8 16.8 7.2M7.2 13.2l9.6 3.6" />
 			</svg>
+		</button>
+		<!-- Git: the user's self-hosted forge (board 0162) — a route like
+		     settings, so the same open/leave treatment. -->
+		<button
+			type="button"
+			onclick={() => {
+				void goto(onGit ? '/dashboard' : '/dashboard/gitea')
+			}}
+			title="Git"
+			aria-label="Git"
+			class="relative flex size-11 items-center justify-center transition-all {onGit
+				? 'rounded-2xl bg-primary text-primary-foreground'
+				: 'rounded-full border border-border bg-surface-card opacity-60 hover:rounded-2xl hover:opacity-100'}"
+		>
+			<!-- lucide:git-branch -->
+			<svg
+				viewBox="0 0 24 24"
+				class="size-4"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<line x1="6" x2="6" y1="3" y2="15" />
+				<circle cx="18" cy="6" r="3" />
+				<circle cx="6" cy="18" r="3" />
+				<path d="M18 9a9 9 0 0 1-9 9" />
+			</svg>
+			{#if onGit}
+				<span class="-left-[13px] absolute h-6 w-1 rounded-full bg-primary"></span>
+			{/if}
 		</button>
 		<button
 			type="button"

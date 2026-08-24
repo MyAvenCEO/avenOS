@@ -98,3 +98,7 @@ ARCHIVE/tauri-plugin-passkey/swift-lib/.build/
 # that every build re-resolves.
 libs/tauri-plugin-ios-passkey/.tauri/
 libs/tauri-plugin-ios-passkey/ios/Package.resolved
+
+# aven-git dev instance: the headless Gitea's whole state (SQLite, repos,
+# token, logs) — disposable, never committed.
+libs/aven-git/.gitea-dev/

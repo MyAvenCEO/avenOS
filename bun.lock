@@ -74,6 +74,10 @@
       "name": "@avenos/aven-brand",
       "version": "26.8.23-next.5",
     },
+    "libs/aven-git": {
+      "name": "@avenos/aven-git",
+      "version": "0.0.1",
+    },
     "libs/aven-skills": {
       "name": "@avenos/aven-skills",
       "version": "26.8.23-next.5",
@@ -156,6 +160,8 @@
     "@avenos/aven-board": ["@avenos/aven-board@workspace:libs/aven-board"],
 
     "@avenos/aven-brand": ["@avenos/aven-brand@workspace:libs/aven-brand"],
+
+    "@avenos/aven-git": ["@avenos/aven-git@workspace:libs/aven-git"],
 
     "@avenos/aven-skills": ["@avenos/aven-skills@workspace:libs/aven-skills"],
 
