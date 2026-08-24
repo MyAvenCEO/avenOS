@@ -1,3 +1,24 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.6...v) (2026-08-24)
+
+
+### Bug Fixes
+
+* **billing:** purge legacy provider ids (0017) + UUID self-heal; drop pause (Polar CannotPauseSubscription) ([f6ea63c](https://github.com/MyAvenCEO/avenOS/commit/f6ea63c33d0a82fb717b9c76a3ea7ced440b2eae))
+* **hosting:** scope site credentials to deployment ([b94d474](https://github.com/MyAvenCEO/avenOS/commit/b94d474ddf7bbce4a44669dec0ebad5d0826305e))
+
+
+### Features
+
+* **app:** Abrechnung cards list the FULL SSOT benefits incl. Aven Worker Minutes ([12a7ff4](https://github.com/MyAvenCEO/avenOS/commit/12a7ff489e262696585c1ecbade16e521c5e29d9))
+* **app:** artifacts split view — pdf.js inline rendering, square tiles, terracotta Kündigen ([0cc8b02](https://github.com/MyAvenCEO/avenOS/commit/0cc8b0255dee56b77f8b1acd1d5255e1abc6e842))
+* **app:** inline invoice flow + Artefakte page; per-card billing feedback; drop pause UI (0162 smoke fixes) ([4a0a78d](https://github.com/MyAvenCEO/avenOS/commit/4a0a78dd159e627039acd811e35a6bdaf6966be2))
+* **billing:** benefit titles default to English; verified attach on both tiers ([55d0e2e](https://github.com/MyAvenCEO/avenOS/commit/55d0e2e743c7bfe9961c1a007161edf90b74ace1))
+* **billing:** bilingual benefits SSOT in aven-brand → Polar benefits + descriptions; inline light checkout with locale (0162 r3) ([18d0165](https://github.com/MyAvenCEO/avenOS/commit/18d016589bbcfb11ac48e67bea91978812aea400))
+* **billing:** pause is back, in sync — pause_at_period_end mirrored (0018), Pausieren/Fortsetzen UI, collapsed larger benefit list ([657ad02](https://github.com/MyAvenCEO/avenOS/commit/657ad02485e1ac4ac77a479c0ab6011985fb6357))
+* **billing:** runtime benefit renamed to 'Aven Worker Minutes' + benefit title drift-correction ([e30a552](https://github.com/MyAvenCEO/avenOS/commit/e30a552e7209ae1347b1763654d4168bf78ee084))
+* **billing:** skill benefits prefixed 'SKILL - <english title>' ([3c406a9](https://github.com/MyAvenCEO/avenOS/commit/3c406a911ac647d17dac0d4e20a44eb8afb7f2cd))
+* **hosting:** manage multiple sites per Aven name ([074bc6c](https://github.com/MyAvenCEO/avenOS/commit/074bc6c24dda5c9705995598648631b7e8c60421))
+* **hosting:** serve verified static site deployments ([4fa100b](https://github.com/MyAvenCEO/avenOS/commit/4fa100bc61f2fd76c25aa941fbf17c3d6548ea7d))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.5...v) (2026-08-24)
 
 
