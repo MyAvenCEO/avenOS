@@ -1,7 +1,7 @@
 import type { Lang } from './index'
 
-/** One company Aven's reason to exist and what it actually runs. */
-type CompanyProfile = { mission: string; services: string[] }
+/** One company Aven's vision — the one line it exists for. */
+type CompanyProfile = { mission: string }
 
 /** The Aven address book — page chrome plus each company Aven's profile. */
 export type AvensMessages = {
@@ -20,7 +20,6 @@ export type AvensMessages = {
 	kind: { person: string; company: string }
 	behind: string
 	mission: string
-	services: string
 	worksOn: string
 	/** Keyed by Aven slug. */
 	companies: Record<string, CompanyProfile>
@@ -51,23 +50,15 @@ export const avens: Record<Lang, AvensMessages> = {
 		activationNote: 'Profil‑Link und Kurzbeschreibung schalten wir nach dem Onboarding frei.',
 		kind: { person: 'Persönlich', company: 'Firma' },
 		behind: 'Dahinter',
-		mission: 'Mission',
-		services: 'Leistungen',
+		mission: 'Vision',
 		worksOn: 'arbeitet an',
 		companies: {
 			ceo: {
 				mission:
-					'Jeder Mensch und jede Firma bekommt einen eigenen Aven — damit Arbeitsintelligenz denen gehört, die sie aufbauen.',
-				services: [
-					'avenID, avenME und avenFOUNDER',
-					'Skills für Avens — gebaut, betrieben, weitergegeben',
-					'avenCOOP: Hands‑on Support für eigene Skillbundles im aven Marketplace',
-					'Support, Chat und Social Media für alle aven‑Kunden'
-				]
+					'Jeder Mensch und jede Firma bekommt einen eigenen Aven — damit Arbeitsintelligenz denen gehört, die sie aufbauen.'
 			},
 			maia: {
-				mission: 'Investiert in die Gründer von morgen.',
-				services: ['Community‑Investments in aven‑Gründer']
+				mission: 'Investiert in die Gründer von morgen.'
 			}
 		},
 		cta: 'Dein Aven fehlt hier noch?'
@@ -95,23 +86,15 @@ export const avens: Record<Lang, AvensMessages> = {
 		activationNote: 'Profile link and short description go live after onboarding.',
 		kind: { person: 'Personal', company: 'Company' },
 		behind: 'Behind it',
-		mission: 'Mission',
-		services: 'Services',
+		mission: 'Vision',
 		worksOn: 'works towards',
 		companies: {
 			ceo: {
 				mission:
-					'Every human and every company gets an Aven of their own — so that working intelligence belongs to the people who build it.',
-				services: [
-					'avenID, avenME and avenFOUNDER',
-					'Skills for Avens — built, run, handed on',
-					'avenCOOP: hands-on support for your own Skillbundles in the aven Marketplace',
-					'Support, chat and social media for every aven customer'
-				]
+					'Every human and every company gets an Aven of their own — so that working intelligence belongs to the people who build it.'
 			},
 			maia: {
-				mission: 'Invests into the founders of tomorrow.',
-				services: ['Community investments into aven founders']
+				mission: 'Invests into the founders of tomorrow.'
 			}
 		},
 		cta: 'Your Aven is not here yet?'
