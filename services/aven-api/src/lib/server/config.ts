@@ -1,3 +1,4 @@
+import { plan } from '@avenos/aven-brand/pricing'
 import { z } from 'zod'
 
 const bool = z.enum(['true', 'false']).transform((value) => value === 'true')
@@ -122,16 +123,14 @@ export const serverConfigSchema = z
 		NAME_PRICE_EUR: z.coerce.number().positive().default(25),
 		NAME_HOLD_TTL_HOURS: positiveInt.default(24),
 		NAME_RESERVATION_TTL_MINUTES: positiveInt.default(5),
-		CREEM_API_KEY: z.string().default(''),
-		CREEM_API_BASE: z.string().default(''),
-		CREEM_PRODUCT_ID: z.string().default(''),
-		// The recurring tiers, pinned to existing Creem products. When set, the
-		// seeder adopts them instead of discovering/creating — Creem's create-
-		// product API accepts no metadata, so dashboard-created products are
-		// the reliable path.
-		CREEM_PRODUCT_AVENME: z.string().default(''),
-		CREEM_PRODUCT_AVENCEO: z.string().default(''),
-		CREEM_WEBHOOK_SECRET: z.string().min(8).default('dev-fake-webhook-secret')
+		POLAR_API_KEY: z.string().default(''),
+		// Which Polar environment the SDK talks to — sandbox and production
+		// are fully separate orgs/tokens; flipping this IS the env switch.
+		POLAR_SERVER: z.enum(['sandbox', 'production']).default('sandbox'),
+		// Sanity anchor only: the org token already scopes every call, and
+		// create calls never pass an organization id.
+		POLAR_ORGANIZATION_ID: z.string().default(''),
+		POLAR_WEBHOOK_SECRET: z.string().min(8).default('dev-fake-webhook-secret')
 	})
 	.superRefine((config, context) => {
 		const artifactValues = [config.ARTIFACT_STORE_BASE_URL, config.ARTIFACT_STORE_BEARER_TOKEN]
@@ -236,12 +235,14 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ServerConfi
 		Buffer.from(config.EMAIL_QUEUE_ENCRYPTION_KEY, 'base64').every((byte) => byte === 0)
 	)
 		throw new Error('EMAIL_QUEUE_ENCRYPTION_KEY must not be the all-zero key.')
-	if (config.NODE_ENV === 'production' && !config.CREEM_API_KEY && !config.ALLOW_FAKE_PAYMENTS)
-		throw new Error('CREEM_API_KEY is required.')
-	if (config.CREEM_API_KEY && !config.CREEM_PRODUCT_ID)
-		throw new Error('CREEM_PRODUCT_ID is required.')
-	if (config.CREEM_API_KEY && config.CREEM_WEBHOOK_SECRET === 'dev-fake-webhook-secret')
-		throw new Error('CREEM_WEBHOOK_SECRET is required.')
+	if (config.NODE_ENV === 'production' && !config.POLAR_API_KEY && !config.ALLOW_FAKE_PAYMENTS)
+		throw new Error('POLAR_API_KEY is required.')
+	if (config.POLAR_API_KEY && config.POLAR_WEBHOOK_SECRET === 'dev-fake-webhook-secret')
+		throw new Error('POLAR_WEBHOOK_SECRET is required.')
+	// The SSOT owns the avenID price — a diverging env override would let
+	// the funnel display one number and the provider charge another.
+	if (config.NAME_PRICE_EUR !== plan('avenid').eurPrice)
+		throw new Error('NAME_PRICE_EUR must match the avenID price in @avenos/aven-brand/pricing.')
 	return config
 }
 
@@ -312,12 +313,10 @@ export type IntentServiceConfig = Pick<
 export type BillingConfig = Pick<
 	ServerConfig,
 	| 'PUBLIC_BASE_URL'
-	| 'CREEM_API_KEY'
-	| 'CREEM_API_BASE'
-	| 'CREEM_PRODUCT_ID'
-	| 'CREEM_PRODUCT_AVENME'
-	| 'CREEM_PRODUCT_AVENCEO'
-	| 'CREEM_WEBHOOK_SECRET'
+	| 'POLAR_API_KEY'
+	| 'POLAR_SERVER'
+	| 'POLAR_ORGANIZATION_ID'
+	| 'POLAR_WEBHOOK_SECRET'
 >
 export type NameServiceConfig = Pick<
 	ServerConfig,

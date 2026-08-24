@@ -1,7 +1,7 @@
 /**
  * SvelteKit-facing surface of the pricing SSOT. The data and the pure
- * helpers live in plans-data.ts (importable by the id service to seed Creem
- * products); this file re-exports them and adds only what needs `$lib`.
+ * helpers live in `@avenos/aven-brand/pricing` (re-exported via
+ * plans-data.ts); this file re-exports them and adds only what needs `$lib`.
  */
 
 import { idFunnelHref } from '$lib/id-service'

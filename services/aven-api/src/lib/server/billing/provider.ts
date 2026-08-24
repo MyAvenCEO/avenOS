@@ -1,7 +1,8 @@
 // Payment boundary. Domain code (the names module) only ever sees this
-// interface and the normalized PaymentEvent — never Creem payload shapes.
+// interface and the normalized PaymentEvent — never Polar payload shapes.
 // Swap the provider (or add one) without touching the registry.
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
+import { Webhook, WebhookVerificationError } from 'standardwebhooks'
 import { AppError } from '../errors.js'
 
 export interface CheckoutInput {
@@ -17,7 +18,7 @@ export interface CheckoutSession {
 
 export interface PaymentEvent {
 	id: string
-	type: 'checkout.completed' | 'refund.created' | 'dispute.created' | string
+	type: 'order.paid' | 'refund.created' | string
 	checkoutId: string | null
 	orderId: string | null
 	email: string | null
@@ -25,13 +26,16 @@ export interface PaymentEvent {
 	metadata: Record<string, unknown>
 }
 
-/** One recurring tier to guarantee exists at the provider. Prices are NET
- * cents — the provider (merchant of record) adds the buyer's VAT on top. */
-export interface SubscriptionPlanSeed {
+/** One product to guarantee exists at the provider, straight from the
+ * pricing SSOT. Prices are GROSS cents — Polar presents them tax-INCLUSIVE
+ * ("inkl. USt."), extracting the buyer's VAT from the total. */
+export interface ProductSeed {
 	tier: string
 	name: string
 	description: string
 	priceCents: number
+	/** `null` = one-time (the avenID), otherwise the recurring interval. */
+	interval: 'month' | null
 }
 
 export interface SubscriptionCheckoutInput {
@@ -40,63 +44,62 @@ export interface SubscriptionCheckoutInput {
 	userId: string
 	email: string
 	successUrl: string
+	/** The origin of the page that will iframe-embed the checkout. */
+	embedOrigin: string | null
 }
 
-/** One line in the customer's invoice history, already reduced to what the
- * pane shows. Creem's transactions API carries NO per-row receipt URL
- * (verified against the SDK's TransactionEntity) — the official invoice
- * documents live behind the hosted customer portal link instead. */
-export interface InvoiceRow {
-	id: string
-	createdAt: string
-	amountCents: number
-	taxCents: number
-	currency: string
-	status: string
-	periodStart: string | null
-	periodEnd: string | null
-}
-
-/** One order, reduced to what the pane shows. Creem (merchant of record)
- * mails the official invoice for it — the API carries no document, so the
- * pane says where the invoice went instead of linking out. */
+/** One order, reduced to what the pane shows. Polar (merchant of record)
+ * issues the official invoice PDF per order via API — `orderInvoiceUrl`
+ * fetches it (generating on first ask). */
 export interface OrderRow {
 	id: string
 	createdAt: string
 	productId: string
+	/** The SSOT tier, read from the product's `metadata.tier` when present. */
+	tier: string | null
 	subTotalCents: number
 	taxCents: number
 	discountCents: number
 	amountPaidCents: number
 	currency: string
 	status: string
+	/** Whether the official invoice PDF has already been generated. */
+	invoiceGenerated: boolean
+}
+
+/** The Standard-Webhooks headers a delivery carries. */
+export type WebhookHeaders = {
+	'webhook-id': string
+	'webhook-timestamp': string
+	'webhook-signature': string
 }
 
 export interface PaymentProvider {
-	readonly kind: 'creem' | 'fake'
+	readonly kind: 'polar' | 'fake'
 	createCheckout(input: CheckoutInput): Promise<CheckoutSession>
-	verifyWebhook(rawBody: string, signature: string | null): PaymentEvent
+	verifyWebhook(rawBody: string, headers: Record<string, string | null>): PaymentEvent
 	/** Idempotent: finds products by `metadata.tier`, creates the missing
-	 * ones, returns tier → provider product id. */
-	ensureSubscriptionProducts(seeds: SubscriptionPlanSeed[]): Promise<Record<string, string>>
+	 * ones, corrects drifted prices/names, returns tier → product id. */
+	ensureProducts(seeds: ProductSeed[]): Promise<Record<string, string>>
 	createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession>
-	/** Change to another tier's product; proration is charged immediately. */
-	changeSubscription(providerSubscriptionId: string, productId: string): Promise<void>
 	cancelSubscription(providerSubscriptionId: string, immediate: boolean): Promise<void>
-	resumeSubscription(providerSubscriptionId: string): Promise<void>
-	listInvoices(providerCustomerId: string): Promise<InvoiceRow[]>
+	/** `uncancel` reverts a scheduled cancellation; `unpause` lifts a pause. */
+	resumeSubscription(providerSubscriptionId: string, mode: 'uncancel' | 'unpause'): Promise<void>
+	pauseSubscription(providerSubscriptionId: string): Promise<void>
 	/** Look up the provider's customer for an email; null when none exists. */
 	findCustomerByEmail(email: string): Promise<string | null>
 	/** The customer's orders — the real "Meine Bestellungen". */
 	listOrders(providerCustomerId: string): Promise<OrderRow[]>
-	pauseSubscription(providerSubscriptionId: string): Promise<void>
+	/** The official invoice PDF for one order, generating it on first ask.
+	 * Callers MUST have verified the order belongs to the session's customer. */
+	orderInvoiceUrl(orderId: string): Promise<string>
 	/** Where a checkout stands: pending | processing | completed | expired. */
 	checkoutStatus(providerCheckoutId: string): Promise<string>
 }
 
-/** The normalized shape of a `subscription.*` webhook. Field names on the
- * wire vary (snake/camel, nested product vs product_id) — this parser is the
- * only place that knows; everything downstream sees this. */
+/** The normalized shape of a subscription-bearing webhook. Field names on
+ * the wire vary (snake/camel, nested product vs product_id) — the parsers
+ * here are the only place that knows; everything downstream sees this. */
 export interface SubscriptionEvent {
 	id: string
 	type: string
@@ -111,89 +114,142 @@ export interface SubscriptionEvent {
 	priceCents: number | null
 }
 
-export function parseCreemSubscriptionEvent(rawBody: string): SubscriptionEvent | null {
-	let payload: Record<string, any>
-	try {
-		payload = JSON.parse(rawBody) as Record<string, any>
-	} catch {
-		throw new AppError(400, 'WEBHOOK_PAYLOAD_INVALID', 'The webhook payload is not JSON.')
-	}
-	const type = String(payload.eventType ?? payload.event_type ?? '')
-	if (!type.startsWith('subscription.')) return null
-	const object = (payload.object ?? {}) as Record<string, any>
-	const product = (object.product ?? {}) as Record<string, any>
-	const customer = (object.customer ?? {}) as Record<string, any>
-	const metadata = (object.metadata ?? {}) as Record<string, unknown>
-	const priceCents = Number(product.price ?? object.amount ?? NaN)
-	const subscriptionId = String(object.id ?? '')
-	if (!subscriptionId) return null
-	return {
-		id: String(payload.id ?? ''),
-		type,
-		providerSubscriptionId: subscriptionId,
-		providerCustomerId:
-			typeof customer === 'string' ? customer : (customer.id ?? object.customer_id ?? null),
-		email: typeof customer === 'object' ? (customer.email ?? null) : null,
-		userId: typeof metadata.userId === 'string' ? metadata.userId : null,
-		tier:
-			typeof metadata.tier === 'string'
-				? metadata.tier
-				: typeof (product.metadata as Record<string, unknown> | undefined)?.tier === 'string'
-					? String((product.metadata as Record<string, unknown>).tier)
-					: null,
-		status: String(object.status ?? ''),
-		currentPeriodEnd:
-			object.current_period_end_date ??
-			object.currentPeriodEndDate ??
-			object.current_period_end ??
-			null,
-		cancelAtPeriodEnd:
-			object.status === 'scheduled_cancel' ||
-			Boolean(object.canceled_at ?? object.cancel_at_period_end),
-		priceCents: Number.isFinite(priceCents) ? priceCents : null
-	}
+// ---------------------------------------------------------------------------
+// Standard Webhooks (https://www.standardwebhooks.com) — the scheme Polar
+// signs with. The secret is treated as UTF-8 exactly like the SDK's
+// validateEvent does, so real dashboard secrets and the dev default both
+// work. Signing lives here so the fake provider and the local simulator
+// produce deliveries the verifier accepts.
+
+function standardWebhook(secret: string): Webhook {
+	return new Webhook(Buffer.from(secret, 'utf-8').toString('base64'))
 }
 
-export function signWebhookPayload(rawBody: string, secret: string): string {
-	return createHmac('sha256', secret).update(rawBody).digest('hex')
+export function signWebhookHeaders(
+	rawBody: string,
+	secret: string,
+	messageId = `msg_${randomUUID()}`
+): WebhookHeaders {
+	const timestamp = new Date()
+	return {
+		'webhook-id': messageId,
+		'webhook-timestamp': String(Math.floor(timestamp.getTime() / 1000)),
+		'webhook-signature': standardWebhook(secret).sign(messageId, timestamp, rawBody)
+	}
 }
 
 export function assertWebhookSignature(
 	rawBody: string,
-	signature: string | null,
+	headers: Record<string, string | null>,
 	secret: string
 ): void {
-	if (!signature)
-		throw new AppError(400, 'WEBHOOK_SIGNATURE_MISSING', 'The webhook signature header is missing.')
-	const expected = Buffer.from(signWebhookPayload(rawBody, secret), 'hex')
-	const provided = Buffer.from(/^[0-9a-f]+$/i.test(signature) ? signature : '00', 'hex')
-	if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
-		throw new AppError(400, 'WEBHOOK_SIGNATURE_INVALID', 'The webhook signature is invalid.')
+	const id = headers['webhook-id']
+	const timestamp = headers['webhook-timestamp']
+	const signature = headers['webhook-signature']
+	if (!id || !timestamp || !signature)
+		throw new AppError(
+			403,
+			'WEBHOOK_SIGNATURE_MISSING',
+			'The webhook signature headers are missing.'
+		)
+	try {
+		standardWebhook(secret).verify(rawBody, {
+			'webhook-id': id,
+			'webhook-timestamp': timestamp,
+			'webhook-signature': signature
+		})
+	} catch (error) {
+		if (error instanceof WebhookVerificationError)
+			throw new AppError(403, 'WEBHOOK_SIGNATURE_INVALID', 'The webhook signature is invalid.')
+		throw error
 	}
 }
 
-// Creem webhook envelope: { id, eventType, object } where object carries
-// checkout/order/customer/metadata details depending on the event.
-export function parseCreemEvent(rawBody: string): PaymentEvent {
+// ---------------------------------------------------------------------------
+// Polar webhook envelope: { type, data } where data is the order,
+// subscription or customer-state the event is about (snake_case on the
+// raw wire — we receive format `raw`).
+
+function parseEnvelope(rawBody: string): { type: string; data: Record<string, any> } {
 	let payload: Record<string, any>
 	try {
 		payload = JSON.parse(rawBody) as Record<string, any>
 	} catch {
 		throw new AppError(400, 'WEBHOOK_PAYLOAD_INVALID', 'The webhook payload is not JSON.')
 	}
-	const object = (payload.object ?? {}) as Record<string, any>
-	const order = (object.order ?? {}) as Record<string, any>
-	const amountCents = Number(order.amount ?? object.amount ?? NaN)
+	return { type: String(payload.type ?? ''), data: (payload.data ?? {}) as Record<string, any> }
+}
+
+export function parsePolarEvent(rawBody: string): PaymentEvent {
+	const { type, data } = parseEnvelope(rawBody)
+	const customer = (data.customer ?? {}) as Record<string, any>
+	const amountCents = Number(data.total_amount ?? data.amount ?? NaN)
 	return {
-		id: String(payload.id ?? ''),
-		type: String(payload.eventType ?? payload.event_type ?? ''),
-		checkoutId:
-			object.checkout_id ??
-			object.checkout?.id ??
-			(String(payload.eventType ?? '').startsWith('checkout') ? (object.id ?? null) : null),
-		orderId: order.id ?? object.order_id ?? null,
-		email: object.customer?.email ?? order.customer?.email ?? null,
+		id: String(data.id ?? ''),
+		type,
+		checkoutId: data.checkout_id ?? null,
+		orderId: type.startsWith('order.') ? (data.id ?? null) : (data.order_id ?? null),
+		email: customer.email ?? data.customer_email ?? null,
 		amountEur: Number.isFinite(amountCents) ? amountCents / 100 : null,
-		metadata: (object.metadata ?? {}) as Record<string, unknown>
+		metadata: (data.metadata ?? {}) as Record<string, unknown>
 	}
+}
+
+export function parsePolarSubscriptionEvent(rawBody: string): SubscriptionEvent | null {
+	const { type, data } = parseEnvelope(rawBody)
+	if (!type.startsWith('subscription.')) return null
+	const subscriptionId = String(data.id ?? '')
+	if (!subscriptionId) return null
+	const customer = (data.customer ?? {}) as Record<string, any>
+	const product = (data.product ?? {}) as Record<string, any>
+	const metadata = (data.metadata ?? {}) as Record<string, unknown>
+	const productMetadata = (product.metadata ?? {}) as Record<string, unknown>
+	const priceCents = Number(data.amount ?? NaN)
+	return {
+		id: subscriptionId,
+		type,
+		providerSubscriptionId: subscriptionId,
+		providerCustomerId: customer.id ?? data.customer_id ?? null,
+		email: customer.email ?? null,
+		userId:
+			typeof metadata.userId === 'string'
+				? metadata.userId
+				: typeof customer.external_id === 'string'
+					? customer.external_id
+					: null,
+		tier:
+			typeof metadata.tier === 'string'
+				? metadata.tier
+				: typeof productMetadata.tier === 'string'
+					? productMetadata.tier
+					: null,
+		status: String(data.status ?? ''),
+		currentPeriodEnd: data.current_period_end ?? null,
+		cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),
+		priceCents: Number.isFinite(priceCents) ? priceCents : null
+	}
+}
+
+/** `customer.state_changed` carries the customer plus every active
+ * subscription — enough to reconcile status/periods for rows we already
+ * know (tier stays untouched: the upsert preserves it when empty). */
+export function parsePolarCustomerState(rawBody: string): SubscriptionEvent[] {
+	const { type, data } = parseEnvelope(rawBody)
+	if (type !== 'customer.state_changed') return []
+	const subscriptions = Array.isArray(data.active_subscriptions) ? data.active_subscriptions : []
+	return subscriptions
+		.filter((sub: Record<string, any>) => sub?.id)
+		.map((sub: Record<string, any>) => ({
+			id: String(sub.id),
+			type,
+			providerSubscriptionId: String(sub.id),
+			providerCustomerId: data.id ?? null,
+			email: data.email ?? null,
+			userId: typeof data.external_id === 'string' ? data.external_id : null,
+			tier: null,
+			status: String(sub.status ?? 'active'),
+			currentPeriodEnd: sub.current_period_end ?? null,
+			cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+			priceCents: Number.isFinite(Number(sub.amount)) ? Number(sub.amount) : null
+		}))
 }

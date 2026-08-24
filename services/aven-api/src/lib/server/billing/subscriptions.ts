@@ -1,26 +1,25 @@
-// The recurring tiers (avenME / avenCEO), sold through the payment provider
-// and mirrored into two tables the portal reads. Strictly customer-self-
-// service: every method takes the SESSION's user id — none accepts a
+// The recurring tiers (avenME / avenFOUNDER), sold through the payment
+// provider and mirrored into two tables the portal reads. Strictly customer-
+// self-service: every method takes the SESSION's user id — none accepts a
 // provider id from outside, because the row lookup here is the authorization.
 //
-// The webhook is the only writer of subscription state. Actions (change,
-// cancel, resume) call the provider and return; the row updates when the
+// The tiers are INDEPENDENT products: one per human (avenME), one per
+// company (avenFOUNDER). Both can be active on one account at the same
+// time; each is booked and canceled on its own, and there is no cross-tier
+// change of any kind.
+//
+// The webhook is the only writer of subscription state. Actions (cancel,
+// pause, resume) call the provider and return; the row updates when the
 // provider's event lands, so the UI shows a pending state instead of a lie.
 import { randomUUID } from 'node:crypto'
-import { PLANS, type Plan } from '@avenos/aven-website/pricing'
 import type pg from 'pg'
 import { writeAudit } from '../audit.js'
 import { AppError } from '../errors.js'
 import { ensureVerifiedUser } from '../identity.js'
-import type {
-	InvoiceRow,
-	OrderRow,
-	PaymentProvider,
-	SubscriptionEvent,
-	SubscriptionPlanSeed
-} from './provider.js'
+import type { OrderRow, PaymentProvider, SubscriptionEvent } from './provider.js'
+import { productSeeds } from './seeds.js'
 
-/** The tiers that exist at the provider: recurring, self-serve. avenID is a
+/** The tiers that exist as recurring, self-serve subscriptions. avenID is a
  * one-off (the names flow owns it) and avenCOOP is not a product at all —
  * that relationship is handled individually, outside this system. */
 export const SUBSCRIPTION_TIERS = ['avenme', 'avenceo'] as const
@@ -30,19 +29,9 @@ export function isSubscriptionTier(value: string): value is SubscriptionTier {
 	return (SUBSCRIPTION_TIERS as readonly string[]).includes(value)
 }
 
-export function subscriptionPlanSeeds(): SubscriptionPlanSeed[] {
-	return SUBSCRIPTION_TIERS.map((tier) => {
-		// biome-ignore lint/style/noNonNullAssertion: SUBSCRIPTION_TIERS ⊂ PLANS ids.
-		const plan: Plan = PLANS.find((p) => p.id === tier)!
-		return {
-			tier,
-			name: plan.name,
-			description: plan.role,
-			// NET cents — the provider adds VAT on top ("zzgl. USt.").
-			priceCents: Math.round(plan.eurPrice * 100)
-		}
-	})
-}
+/** A subscription in one of these states is over — the tier is bookable
+ * again. Everything else counts as standing (incl. paused and past_due). */
+export const ENDED_STATUSES = ['canceled', 'expired', 'incomplete_expired', 'unpaid', 'revoked']
 
 export interface SubscriptionStanding {
 	tier: string
@@ -55,7 +44,7 @@ export interface SubscriptionStanding {
 interface SubscriptionRow {
 	id: string
 	user_id: string
-	creem_subscription_id: string
+	provider_subscription_id: string
 	tier: string
 	status: string
 	current_period_end: Date | null
@@ -80,24 +69,25 @@ export class SubscriptionService {
 	 * so the lookup happens once. */
 	private async customerId(user: { id: string; email: string }): Promise<string | null> {
 		const stored = await this.pool.query(
-			'SELECT creem_customer_id FROM billing_customers WHERE user_id=$1',
+			'SELECT provider_customer_id FROM billing_customers WHERE user_id=$1',
 			[user.id]
 		)
-		const known = stored.rows[0]?.creem_customer_id as string | undefined
+		const known = stored.rows[0]?.provider_customer_id as string | undefined
 		if (known) return known
 		const found = await this.payments.findCustomerByEmail(user.email.toLowerCase())
 		if (!found) return null
 		await this.pool.query(
-			`INSERT INTO billing_customers (user_id, creem_customer_id) VALUES ($1,$2)
-			 ON CONFLICT (user_id) DO UPDATE SET creem_customer_id=EXCLUDED.creem_customer_id`,
+			`INSERT INTO billing_customers (user_id, provider_customer_id) VALUES ($1,$2)
+			 ON CONFLICT (user_id) DO UPDATE SET provider_customer_id=EXCLUDED.provider_customer_id`,
 			[user.id, found]
 		)
 		return found
 	}
 
-	/** Ensure the recurring products exist at the provider; cached per process. */
+	/** Ensure every product (the one-off avenID and both tiers) exists at
+	 * the provider, priced from the SSOT; cached per process. */
 	ensureProducts(): Promise<Record<string, string>> {
-		this.products ??= this.payments.ensureSubscriptionProducts(subscriptionPlanSeeds())
+		this.products ??= this.payments.ensureProducts(productSeeds())
 		return this.products
 	}
 
@@ -108,48 +98,61 @@ export class SubscriptionService {
 		return id
 	}
 
-	private async mine(userId: string): Promise<SubscriptionRow | null> {
+	/** The latest row per tier for a user — each tier stands on its own. */
+	private async rows(userId: string): Promise<SubscriptionRow[]> {
 		const result = await this.pool.query(
-			'SELECT * FROM subscriptions WHERE user_id=$1 ORDER BY updated_at DESC LIMIT 1',
+			`SELECT DISTINCT ON (tier) * FROM subscriptions
+			 WHERE user_id=$1 ORDER BY tier, updated_at DESC`,
 			[userId]
+		)
+		return result.rows as SubscriptionRow[]
+	}
+
+	private async tierRow(userId: string, tier: string): Promise<SubscriptionRow | null> {
+		if (!isSubscriptionTier(tier))
+			throw new AppError(400, 'VALIDATION_ERROR', 'Unknown subscription tier.')
+		const result = await this.pool.query(
+			'SELECT * FROM subscriptions WHERE user_id=$1 AND tier=$2 ORDER BY updated_at DESC LIMIT 1',
+			[userId, tier]
 		)
 		return (result.rows[0] as SubscriptionRow | undefined) ?? null
 	}
 
-	/** The caller's standing — the session is the only selector. */
-	async me(userId: string): Promise<SubscriptionStanding | null> {
-		const row = await this.mine(userId)
-		if (!row) return null
-		return {
+	/** The caller's standing per tier — the session is the only selector. */
+	async me(userId: string): Promise<SubscriptionStanding[]> {
+		const rows = await this.rows(userId)
+		return rows.map((row) => ({
 			tier: row.tier,
 			status: row.status,
 			priceEurCents: row.price_eur_cents,
 			currentPeriodEnd: row.current_period_end?.toISOString() ?? null,
 			cancelAtPeriodEnd: row.cancel_at_period_end
-		}
+		}))
 	}
 
-	/** Start a checkout for a tier. With a live subscription the answer is
-	 * `change()`, not a second checkout. */
+	/** Start a checkout for a tier. Tiers are independent — only a live
+	 * subscription of the SAME tier blocks a second booking. */
 	async subscribe(
 		user: { id: string; email: string },
-		tier: string
+		tier: string,
+		embedOrigin: string | null = null
 	): Promise<{ checkoutUrl: string }> {
 		if (!isSubscriptionTier(tier))
 			throw new AppError(400, 'VALIDATION_ERROR', 'Unknown subscription tier.')
-		const existing = await this.mine(user.id)
-		if (existing && !['canceled', 'expired'].includes(existing.status))
+		const existing = await this.tierRow(user.id, tier)
+		if (existing && !ENDED_STATUSES.includes(existing.status))
 			throw new AppError(
 				409,
 				'SUBSCRIPTION_EXISTS',
-				'You already have a subscription — change the plan instead.'
+				'You already have an active subscription for this product.'
 			)
 		const session = await this.payments.createSubscriptionCheckout({
 			productId: await this.productId(tier),
 			tier,
 			userId: user.id,
 			email: user.email,
-			successUrl: new URL('/dashboard', this.config.PUBLIC_BASE_URL).toString()
+			successUrl: new URL('/dashboard', this.config.PUBLIC_BASE_URL).toString(),
+			embedOrigin
 		})
 		// Remember the checkout so the pane can ask "where does MY checkout
 		// stand" without ever naming it.
@@ -160,35 +163,26 @@ export class SubscriptionService {
 		return { checkoutUrl: session.checkoutUrl }
 	}
 
-	/** Up- or downgrade to the other tier. Proration is charged immediately;
-	 * the row flips when the provider's event arrives. */
-	async change(userId: string, tier: string): Promise<void> {
-		if (!isSubscriptionTier(tier))
-			throw new AppError(400, 'VALIDATION_ERROR', 'Unknown subscription tier.')
-		const row = await this.requireActive(userId)
-		if (row.tier === tier)
-			throw new AppError(409, 'SUBSCRIPTION_UNCHANGED', 'You are already on this plan.')
-		await this.payments.changeSubscription(row.creem_subscription_id, await this.productId(tier))
+	async cancel(userId: string, tier: string, immediate = false): Promise<void> {
+		const row = await this.requireActive(userId, tier)
+		await this.payments.cancelSubscription(row.provider_subscription_id, immediate)
 	}
 
-	async cancel(userId: string, immediate = false): Promise<void> {
-		const row = await this.requireActive(userId)
-		await this.payments.cancelSubscription(row.creem_subscription_id, immediate)
+	/** Fortsetzen: lifts a pause when the tier is paused, otherwise reverts
+	 * a scheduled cancellation. */
+	async resume(userId: string, tier: string): Promise<void> {
+		const row = await this.tierRow(userId, tier)
+		if (!row || ENDED_STATUSES.includes(row.status))
+			throw new AppError(404, 'SUBSCRIPTION_MISSING', 'There is no subscription to resume.')
+		await this.payments.resumeSubscription(
+			row.provider_subscription_id,
+			row.status === 'paused' ? 'unpause' : 'uncancel'
+		)
 	}
 
-	async resume(userId: string): Promise<void> {
-		const row = await this.mine(userId)
-		if (!row) throw new AppError(404, 'SUBSCRIPTION_MISSING', 'There is no subscription to resume.')
-		await this.payments.resumeSubscription(row.creem_subscription_id)
-	}
-
-	/** The caller's invoice history, straight from the provider — including
-	 * one-off purchases like the avenID, since the customer is resolved by
-	 * the session's own email when our table does not know them yet. */
-	async invoices(user: { id: string; email: string }): Promise<InvoiceRow[]> {
-		const providerCustomerId = await this.customerId(user)
-		if (!providerCustomerId) return []
-		return this.payments.listInvoices(providerCustomerId)
+	async pause(userId: string, tier: string): Promise<void> {
+		const row = await this.requireActive(userId, tier)
+		await this.payments.pauseSubscription(row.provider_subscription_id)
 	}
 
 	/** The caller's orders — the one-off avenID and every subscription
@@ -199,9 +193,13 @@ export class SubscriptionService {
 		return this.payments.listOrders(providerCustomerId)
 	}
 
-	async pause(userId: string): Promise<void> {
-		const row = await this.requireActive(userId)
-		await this.payments.pauseSubscription(row.creem_subscription_id)
+	/** The official invoice PDF for ONE of the caller's own orders. The
+	 * order id is client input, so it is only ever resolved against the
+	 * session customer's order list — a foreign id simply is not found. */
+	async orderInvoiceUrl(user: { id: string; email: string }, orderId: string): Promise<string> {
+		const owned = (await this.orders(user)).find((order) => order.id === orderId)
+		if (!owned) throw new AppError(404, 'ORDER_MISSING', 'There is no such order.')
+		return this.payments.orderInvoiceUrl(owned.id)
 	}
 
 	/** Where the session's LATEST checkout stands. The checkout id comes
@@ -217,16 +215,17 @@ export class SubscriptionService {
 		return { status: await this.payments.checkoutStatus(checkoutId) }
 	}
 
-	private async requireActive(userId: string): Promise<SubscriptionRow> {
-		const row = await this.mine(userId)
-		if (!row || ['canceled', 'expired'].includes(row.status))
+	private async requireActive(userId: string, tier: string): Promise<SubscriptionRow> {
+		const row = await this.tierRow(userId, tier)
+		if (!row || ENDED_STATUSES.includes(row.status))
 			throw new AppError(404, 'SUBSCRIPTION_MISSING', 'There is no active subscription.')
 		return row
 	}
 
-	/** Apply one verified `subscription.*` webhook. Idempotent: keyed on the
-	 * provider's subscription id, replays converge on the same row. The buyer
-	 * is resolved from checkout metadata (userId) first, their email second —
+	/** Apply one verified subscription-bearing webhook. Idempotent: keyed on
+	 * the provider's subscription id, replays converge on the same row. The
+	 * buyer is resolved from checkout metadata (userId, which Polar also
+	 * mirrors as the customer's external id) first, their email second —
 	 * the same trust chain the names grant uses. */
 	async applyEvent(event: SubscriptionEvent): Promise<{ applied: boolean }> {
 		const client = await this.pool.connect()
@@ -251,17 +250,17 @@ export class SubscriptionService {
 			}
 			if (event.providerCustomerId) {
 				await client.query(
-					`INSERT INTO billing_customers (user_id, creem_customer_id) VALUES ($1,$2)
-					 ON CONFLICT (user_id) DO UPDATE SET creem_customer_id=EXCLUDED.creem_customer_id`,
+					`INSERT INTO billing_customers (user_id, provider_customer_id) VALUES ($1,$2)
+					 ON CONFLICT (user_id) DO UPDATE SET provider_customer_id=EXCLUDED.provider_customer_id`,
 					[userId, event.providerCustomerId]
 				)
 			}
 			await client.query(
 				`INSERT INTO subscriptions
-				   (id, user_id, creem_subscription_id, tier, status, current_period_end,
+				   (id, user_id, provider_subscription_id, tier, status, current_period_end,
 				    cancel_at_period_end, price_eur_cents)
 				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-				 ON CONFLICT (creem_subscription_id) DO UPDATE SET
+				 ON CONFLICT (provider_subscription_id) DO UPDATE SET
 				   status=EXCLUDED.status,
 				   tier=COALESCE(NULLIF(EXCLUDED.tier,''), subscriptions.tier),
 				   current_period_end=COALESCE(EXCLUDED.current_period_end, subscriptions.current_period_end),

@@ -16,12 +16,10 @@ RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
   bun install --frozen-lockfile --filter @avenos/aven-api
 COPY services/aven-api services/aven-api
 COPY libs/aven-artifact-store libs/aven-artifact-store
-# The pricing SSOT: aven-api seeds its Creem products from the website's
-# plan data (@avenos/aven-website/pricing), so the source must exist where
-# the workspace symlink points.
-COPY libs/aven-website/src/lib/pricing libs/aven-website/src/lib/pricing
-# The legal SSOT: the id app's layout renders the Impressum link from
-# @avenos/aven-brand, so the lib's source must exist behind the symlink.
+# The pricing + legal SSOT: aven-api syncs its Polar products from the
+# brand's plan data (@avenos/aven-brand/pricing) and the id app's layout
+# renders the Impressum from @avenos/aven-brand, so the lib's source must
+# exist where the workspace symlink points.
 COPY libs/aven-brand libs/aven-brand
 RUN bun --cwd services/aven-api build
 
@@ -43,8 +41,7 @@ COPY --from=build /repo/services/aven-api/package.json ./package.json
 # node_modules symlink, so the symlink target must exist in the runtime image.
 COPY --from=build /repo/libs/aven-artifact-store /repo/libs/aven-artifact-store
 # scripts/ (migrate, billing seed) run unbundled and resolve the workspace
-# symlink at runtime — the pricing source must be present in the image too.
-COPY --from=build /repo/libs/aven-website/src/lib/pricing /repo/libs/aven-website/src/lib/pricing
+# symlink at runtime — the brand source must be present in the image too.
 COPY --from=build /repo/libs/aven-brand /repo/libs/aven-brand
 EXPOSE 3000
 USER bun

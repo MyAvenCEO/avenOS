@@ -87,5 +87,5 @@ test('does not put application credentials in cloud-init', () => {
 	const server = resources.find(({ name }) => name === 'identity-server')
 	assert.ok(server)
 	const serializedInputs = JSON.stringify(server.inputs)
-	assert.doesNotMatch(serializedInputs, /BETTER_AUTH|POSTGRES_PASSWORD|SMTP_URL|CREEM_API_KEY/)
+	assert.doesNotMatch(serializedInputs, /BETTER_AUTH|POSTGRES_PASSWORD|SMTP_URL|POLAR_API_KEY/)
 })
