@@ -11,6 +11,19 @@ import type { Lang } from '$lib/i18n'
 let { lang }: { lang: Lang } = $props()
 
 const doc = $derived(legalDocument('widerruf', lang))
+/**
+ * The widget upgrades exactly ONE anchor (by id). The bottom button opens
+ * the same inline modal by clicking the upgraded top anchor; only when the
+ * widget never loaded does the default href (hosted form) take over.
+ */
+function triggerRevocation(event: MouseEvent) {
+	const widgetButton = document.getElementById('eRecht24RevocationButton')
+	if (widgetButton && widgetButton.getAttribute('aria-disabled') !== 'true') {
+		event.preventDefault()
+		widgetButton.click()
+	}
+}
+
 const t = $derived(
 	lang === 'de'
 		? {
@@ -48,7 +61,7 @@ const t = $derived(
 			</h1>
 
 			<!-- Widerrufsbutton für den Shop "avenCEO GmbH" (eRecht24). -->
-			<div class="mt-8 rounded-2xl border border-border/50 bg-surface-card p-6">
+			<div class="mt-8 rounded-2xl border border-border/50 bg-surface-card p-6 text-center">
 				<p class="text-[14px] leading-relaxed text-foreground/75">{t.intro}</p>
 				<p class="mt-4">
 					<a
@@ -62,7 +75,7 @@ const t = $derived(
 						style="opacity:.5"
 						target="_blank"
 						rel="noopener noreferrer"
-						class="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-8 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+						class="inline-flex !min-h-11 items-center justify-center rounded-full bg-primary !px-8 !py-0 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
 					>
 						<span>{t.button}</span>
 					</a>
@@ -91,14 +104,15 @@ const t = $derived(
 			{/each}
 
 			<!-- The button once more, under the form text — where the reader
-			     lands after reading the Belehrung. A plain link (no widget id):
-			     the hosted form works standalone, and duplicate widget ids
-			     would confuse the upgrade script. -->
+			     lands after reading the Belehrung. It opens the SAME inline
+			     widget modal by delegating to the upgraded top anchor; the
+			     hosted-form href is only the no-script fallback. -->
 			<div class="mt-10 rounded-2xl border border-border/50 bg-surface-card p-6 text-center">
 				<a
 					href={REVOCATION_WIDGET.href}
 					target="_blank"
 					rel="noopener noreferrer"
+					onclick={triggerRevocation}
 					class="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-8 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
 				>
 					{t.button}

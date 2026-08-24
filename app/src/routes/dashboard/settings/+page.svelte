@@ -1,5 +1,5 @@
 <script lang="ts">
-import { legalHref } from '@avenos/aven-brand'
+import { legalHref, websiteOrigin } from '@avenos/aven-brand'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { settings, VOICES, type Voice } from '$lib/settings.svelte'
@@ -34,16 +34,24 @@ let failure = $state<string | null>(null)
 
 const SAMPLE = 'Hallo, ich bin deine Stimme. Milch und Brot stehen auf der Liste.'
 
-// The website's Impressum: the app has no hostname to derive an environment
-// from, so dev pairs with the local website and every build with next —
-// flipped to prod in ONE place (the brand lib) when aven.ceo goes live.
-const impressumHref = legalHref('impressum', { env: import.meta.env.DEV ? 'local' : 'next' })
+// The website's legal pages: the app has no hostname to derive an
+// environment from, so dev pairs with the local website and every build
+// with next — flipped to prod in ONE place (the brand lib) when aven.ceo
+// goes live. AGB has no brand slug yet; its German URL is spelled here.
+const legalEnv = import.meta.env.DEV ? ('local' as const) : ('next' as const)
+const LEGAL_LINKS = [
+	{ label: 'Impressum', href: legalHref('impressum', { env: legalEnv }) },
+	{ label: 'Datenschutz', href: legalHref('datenschutz', { env: legalEnv }) },
+	{ label: 'Social-Media-Datenschutz', href: legalHref('social-media', { env: legalEnv }) },
+	{ label: 'Widerrufsrecht', href: legalHref('widerruf', { env: legalEnv }) },
+	{ label: 'AGB', href: `${websiteOrigin(legalEnv)}/de/agb/` }
+]
 
 /** In Tauri the system browser opens it; in plain dev the anchor does. */
-async function openImpressum(event: MouseEvent) {
+async function openLegal(event: MouseEvent, href: string) {
 	if (!isTauri()) return
 	event.preventDefault()
-	await openUrl(impressumHref)
+	await openUrl(href)
 }
 
 let context: AudioContext | null = null
@@ -107,6 +115,29 @@ async function preview(voice: Voice) {
 					{c.label}
 				</button>
 			{/each}
+
+			<!-- The legal pages, owed from everywhere the product speaks — tiny,
+			     below the concerns, never competing with them. -->
+			<div class="mt-4 hidden border-t border-foreground/8 pt-3 lg:block">
+				<p class="px-3 text-[9px] font-semibold uppercase tracking-[0.16em] opacity-35">
+					Rechtliches
+				</p>
+				<ul class="mt-1.5 space-y-0.5">
+					{#each LEGAL_LINKS as link (link.href)}
+						<li>
+							<a
+								href={link.href}
+								target="_blank"
+								rel="noopener noreferrer"
+								onclick={(event) => openLegal(event, link.href)}
+								class="block px-3 py-0.5 text-[9px] leading-relaxed text-foreground/40 transition-colors hover:text-foreground/75"
+							>
+								{link.label}
+							</a>
+						</li>
+					{/each}
+				</ul>
+			</div>
 		</nav>
 
 		<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto pb-4">
@@ -210,18 +241,6 @@ async function preview(voice: Voice) {
 					</p>
 				</section>
 			{/if}
-
-			<footer class="mt-10 border-t border-foreground/8 pt-4 text-center">
-				<a
-					href={impressumHref}
-					target="_blank"
-					rel="noopener noreferrer"
-					onclick={openImpressum}
-					class="text-[11px] text-foreground/45 transition-colors hover:text-foreground/75"
-				>
-					Impressum
-				</a>
-			</footer>
 		</div>
 	</div>
 </main>
