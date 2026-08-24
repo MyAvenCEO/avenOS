@@ -1,3 +1,13 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.3...v) (2026-08-24)
+
+
+### Features
+
+* **billing:** Creem → Polar sandbox billing on the brand SSOT (0162) ([635e621](https://github.com/MyAvenCEO/avenOS/commit/635e621f606e65a12294a6231225344539434a87))
+* **id-service:** link all legal pages in the footer ([823e168](https://github.com/MyAvenCEO/avenOS/commit/823e1680c2aa86a8137f888f6d788d090d83cb26))
+* **website:** centered mobile header, trim footer ([7026c8b](https://github.com/MyAvenCEO/avenOS/commit/7026c8bd8f87ce543bf8667479513416f65f1398))
+* **website:** social profile links in header + footer, updated privacy URLs ([ca98f75](https://github.com/MyAvenCEO/avenOS/commit/ca98f750f9534294d200019d39efe1a86f7adffd))
+* **website:** stacked header up to tablet, sovereign-founder slogan ([111bd8d](https://github.com/MyAvenCEO/avenOS/commit/111bd8dccc98f57b429ae5cf012265a3c63c0a51))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.2...v) (2026-08-24)
 
 
