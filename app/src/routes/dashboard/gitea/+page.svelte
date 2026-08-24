@@ -57,12 +57,15 @@ let path = $state('')
 let entries = $state<Entry[]>([])
 /** A file being previewed, if any; sha is what the update API mutates against. */
 let file = $state<{ path: string; text: string | null; sha: string } | null>(null)
-/** Edit mode over the previewed file. */
-let editing = $state(false)
+/** The open file's editable buffer — text files are always editable in place. */
 let draft = $state('')
 
 const connected = $derived(token.trim() !== '')
 const crumbs = $derived(path === '' ? [] : path.split('/'))
+/** Unsaved edits: what makes the save bar appear. */
+const dirty = $derived(file?.text != null && draft !== file.text)
+/** The editor grows with the file rather than scrolling in a small box. */
+const rows = $derived(Math.min(40, Math.max(8, draft.split('\n').length + 1)))
 
 onMount(() => {
 	baseUrl = localStorage.getItem(STORE_URL) ?? baseUrl
@@ -170,7 +173,7 @@ async function switchBranch(name: string) {
 async function browse(dir: string) {
 	if (!open) return
 	file = null
-	editing = false
+	draft = ''
 	failure = null
 	try {
 		const raw = (await (
@@ -192,10 +195,9 @@ async function browse(dir: string) {
 	}
 }
 
-/** Preview a file: the contents API hands the blob back base64-encoded. */
+/** Open a file: the contents API hands the blob back base64-encoded. */
 async function preview(entry: Entry) {
 	if (entry.size > 512 * 1024) {
-		editing = false
 		file = { path: entry.path, text: null, sha: '' }
 		return
 	}
@@ -210,7 +212,6 @@ async function preview(entry: Entry) {
 async function previewPath(filePath: string): Promise<boolean> {
 	if (!open) return true
 	failure = null
-	editing = false
 	try {
 		const blob = (await (
 			await api(
@@ -220,6 +221,7 @@ async function previewPath(filePath: string): Promise<boolean> {
 		const bytes = Uint8Array.from(atob(blob.content.replace(/\n/g, '')), (c) => c.charCodeAt(0))
 		const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
 		file = { path: filePath, text, sha: blob.sha }
+		draft = text
 	} catch (err) {
 		// Undecodable = binary; missing = the caller's fallback; the rest fails.
 		if (err instanceof TypeError) file = { path: filePath, text: null, sha: '' }
@@ -227,12 +229,6 @@ async function previewPath(filePath: string): Promise<boolean> {
 		else failure = err instanceof Error ? err.message : String(err)
 	}
 	return true
-}
-
-function startEdit() {
-	if (!file || file.text === null) return
-	draft = file.text
-	editing = true
 }
 
 /**
@@ -262,7 +258,6 @@ async function saveEdit() {
 		branches = [...branches, target].sort()
 		ref = target
 		file = { path: file.path, text: draft, sha: result.content.sha }
-		editing = false
 	} catch (err) {
 		failure = err instanceof Error ? err.message : String(err)
 	} finally {
@@ -278,7 +273,7 @@ function closeRepo() {
 	entries = []
 	path = ''
 	file = null
-	editing = false
+	draft = ''
 	failure = null
 }
 
@@ -421,56 +416,49 @@ function fmtBytes(b: number): string {
 				</nav>
 
 				{#if file}
-					<!-- The file: text inline; anything undecodable or huge stays opaque. -->
+					<!-- The file: editable in place, no mode to enter. Binary or huge stays opaque. -->
 					{#if file.text === null}
 						<p
 							class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 						>
-							Binary or too large to preview.
+							Binary or too large to open.
 						</p>
-					{:else if editing}
-						<!-- The draft: saving never touches the branch being read — it
-					     lands on a fresh edit/* branch (see saveEdit). -->
+					{:else}
 						<textarea
 							bind:value={draft}
-							rows={16}
+							{rows}
 							spellcheck="false"
-							class="min-h-0 flex-1 resize-y rounded-xl border border-primary bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none"
+							class="min-h-0 flex-1 resize-y rounded-xl border bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none focus:border-primary {dirty
+								? 'border-primary'
+								: 'border-foreground/5'}"
 						></textarea>
-						<div class="flex items-center justify-end gap-2">
-							<span class="mr-auto text-[10px] opacity-40">saves to a new edit/* branch</span>
-							<button
-								type="button"
-								onclick={() => {
-								editing = false
-							}}
-								disabled={busy}
-								class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5 disabled:opacity-30"
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								onclick={() => void saveEdit()}
-								disabled={busy || draft === file.text}
-								class="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground text-xs transition-opacity disabled:opacity-30"
-							>
-								{busy ? 'Saving…' : 'Save'}
-							</button>
-						</div>
-					{:else}
-						<pre
-							class="min-h-0 flex-1 overflow-auto rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-						>{file.text}</pre>
-						<div class="flex justify-end">
-							<button
-								type="button"
-								onclick={startEdit}
-								class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5"
-							>
-								Edit
-							</button>
-						</div>
+						<!-- The save bar exists only while there is something to save; the
+						     commit lands on a fresh edit/* branch (see saveEdit). -->
+						{#if dirty}
+							<div class="flex items-center justify-end gap-2">
+								<span class="mr-auto text-[10px] opacity-40">
+									unsaved · saves to a new edit/* branch
+								</span>
+								<button
+									type="button"
+									onclick={() => {
+										draft = file?.text ?? ''
+									}}
+									disabled={busy}
+									class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5 disabled:opacity-30"
+								>
+									Revert
+								</button>
+								<button
+									type="button"
+									onclick={() => void saveEdit()}
+									disabled={busy}
+									class="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground text-xs transition-opacity disabled:opacity-30"
+								>
+									{busy ? 'Saving…' : 'Save'}
+								</button>
+							</div>
+						{/if}
 					{/if}
 				{:else}
 					<!-- The tree, one directory at a time: folders first, then files. -->
