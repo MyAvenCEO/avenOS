@@ -101,7 +101,7 @@ function runtimeSpec(p: Plan): BenefitSpec | null {
 	return {
 		key: `runtime:${p.id}`,
 		kind: 'runtime',
-		description: benefitDescription(`${p.runtime.hoursPerDay} Std. KI-Laufzeit pro Tag`),
+		description: benefitDescription(`Aven Worker Minutes — ${p.runtime.hoursPerDay} Std./Tag`),
 		runtime: p.runtime
 	}
 }
