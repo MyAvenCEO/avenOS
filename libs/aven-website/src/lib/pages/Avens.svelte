@@ -81,26 +81,8 @@ function handle(a: LiveAven) {
 								<p class="mt-0.5 text-[13px] text-foreground/55">
 									<span class="font-medium text-foreground/75">{a.slug}</span>.aven.ceo
 								</p>
-								<p class="mt-1 text-[12px] text-foreground/55">
-									{t.behind}
-									<span class="font-medium text-foreground/75">{a.holder}</span>
-								</p>
 							</div>
 						</div>
-
-						{#if a.link}
-							<p class="mt-3 text-[12px]">
-								<a
-									href={a.link.href}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="font-medium text-foreground/70 underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
-								>
-									{a.link.label}
-									↗
-								</a>
-							</p>
-						{/if}
 
 						{#if profile}
 							<div class="mt-5 border-t border-border/50 pt-4">
@@ -108,6 +90,23 @@ function handle(a: LiveAven) {
 									{t.mission}
 								</p>
 								<p class="mt-2 text-[14px] leading-snug text-foreground/80">{profile.mission}</p>
+								<!-- Who is behind it and where it lives — the meta row under the vision. -->
+								<p class="mt-3 text-[12px] text-foreground/55">
+									{t.behind}
+									<span class="font-medium text-foreground/75">{a.holder}</span>
+									{#if a.link}
+										<span class="text-foreground/35"> · </span>
+										<a
+											href={a.link.href}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="font-medium text-foreground/70 underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+										>
+											{a.link.label}
+											↗
+										</a>
+									{/if}
+								</p>
 							</div>
 						{/if}
 					</article>
