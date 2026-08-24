@@ -258,6 +258,14 @@ fn intent_json(
             .post(&url)
             .set("content-type", "application/json")
             .set("origin", &api_endpoint("")),
+        "PATCH" => agent
+            .patch(&url)
+            .set("content-type", "application/json")
+            .set("origin", &api_endpoint("")),
+        "DELETE" => agent
+            .delete(&url)
+            .set("content-type", "application/json")
+            .set("origin", &api_endpoint("")),
         _ => return Err("Unsupported intent request method.".to_string()),
     }
     .set("authorization", &format!("Bearer {token}"));
@@ -501,6 +509,78 @@ pub async fn intent_append_contribution(
     })
     .await
     .map_err(|error| format!("Intent contribution task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn intent_create(
+    intent: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&state)?;
+    let body =
+        serde_json::to_string(&intent).map_err(|error| format!("Invalid intent: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(token, "POST", "/api/intents".into(), Some(body))
+    })
+    .await
+    .map_err(|error| format!("Intent creation task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn intent_update(
+    intent_id: String,
+    update: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    intent_command(intent_id, "PATCH", None, update, &state).await
+}
+
+#[tauri::command]
+pub async fn intent_lifecycle(
+    intent_id: String,
+    action: String,
+    command: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !matches!(action.as_str(), "archive" | "restore" | "merge") {
+        return Err("The intent action is invalid.".to_string());
+    }
+    intent_command(intent_id, "POST", Some(action), command, &state).await
+}
+
+#[tauri::command]
+pub async fn intent_delete(
+    intent_id: String,
+    command: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    intent_command(intent_id, "DELETE", None, command, &state).await
+}
+
+async fn intent_command(
+    intent_id: String,
+    method: &'static str,
+    action: Option<String>,
+    command: serde_json::Value,
+    state: &tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&intent_id) {
+        return Err("The intent ID is invalid.".to_string());
+    }
+    let token = session_token(state)?;
+    let body = serde_json::to_string(&command)
+        .map_err(|error| format!("Invalid intent command: {error}"))?;
+    let suffix = action.map_or_else(String::new, |value| format!("/{value}"));
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(
+            token,
+            method,
+            format!("/api/intents/{intent_id}{suffix}"),
+            Some(body),
+        )
+    })
+    .await
+    .map_err(|error| format!("Intent command task failed: {error}"))?
 }
 
 #[tauri::command]

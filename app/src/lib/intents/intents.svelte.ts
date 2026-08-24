@@ -1,3 +1,4 @@
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { Actor } from '$lib/actors/actor'
 import { bus, type HeldPreview } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
@@ -57,6 +58,7 @@ export interface MockIntent {
 	artifacts: MockArtifact[]
 	skills: SkillStatus[]
 	persistent?: boolean
+	persistentVersion?: number
 	routingSummary?: string
 	/**
 	 * The gate this intent is holding for the human. A gate can exist in any
@@ -73,13 +75,17 @@ export interface PersistentIntentDetail {
 	title: string
 	routingSummary: string
 	state: IntentState
-	sourceArtifactId: string
+	version: number
+	intentType: string
+	sourceLabel: string
+	deadline: string | null
+	sourceArtifactId: string | null
 	createdAt: string
 	updatedAt: string
 	contributions: Array<{
 		id: string
 		sequence: number
-		contributorKind: 'human' | 'agent' | 'file-skill' | 'system'
+		contributorKind: 'human' | 'agent' | 'skill' | 'system'
 		kind: string
 		text: string | null
 		payload: Record<string, unknown>
@@ -87,22 +93,21 @@ export interface PersistentIntentDetail {
 	}>
 	artifacts: Array<{
 		artifactId: string
-		relation: 'source' | 'file-skill-output'
+		relation: 'source' | 'file-skill-output' | 'attached'
 		typeKey: string
 		typeVersion: number
 		stageKey: string | null
 		displayOrder: number
 	}>
 	fileSkill: {
-		caseId: string | null
 		state: 'waiting' | 'active' | 'succeeded' | 'needs_review' | 'failed'
 		projectionVersion: string | null
 		presentation: ArtifactProcessingPresentation | null
 		updatedAt: string
-	}
+	} | null
 }
 
-function processingNote(state: PersistentIntentDetail['fileSkill']['state']): string {
+function processingNote(state: NonNullable<PersistentIntentDetail['fileSkill']>['state']): string {
 	if (state === 'waiting') return 'Waiting for the Processor'
 	if (state === 'active') return 'Processing the file'
 	if (state === 'succeeded') return 'Processing complete'
@@ -781,6 +786,11 @@ const now = () => {
 	return `heute · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+const persistencePending = (title: string) => ({
+	record: '{"ok":false,"error":"intent persistence pending"}',
+	wire: `"${title}" is still becoming persistent. Try again in a moment.`
+})
+
 class IntentsActor extends Actor {
 	items = $state<MockIntent[]>(INTENTS)
 	selectedId = $state(INTENTS[0].id)
@@ -834,15 +844,15 @@ class IntentsActor extends Actor {
 	}
 
 	applyPersistent(detail: PersistentIntentDetail): void {
-		const presentation = detail.fileSkill.presentation
+		const presentation = detail.fileSkill?.presentation ?? null
 		const stageDone =
 			presentation?.stages
 				.filter((stage) => ['succeeded', 'skipped'].includes(stage.state))
 				.map((stage) => stage.key) ?? []
 		const skillState =
-			detail.fileSkill.state === 'succeeded'
+			detail.fileSkill?.state === 'succeeded'
 				? 'done'
-				: detail.fileSkill.state === 'needs_review' || detail.fileSkill.state === 'failed'
+				: detail.fileSkill?.state === 'needs_review' || detail.fileSkill?.state === 'failed'
 					? 'waiting'
 					: 'running'
 		const artifacts: MockArtifact[] = detail.artifacts.map((artifact, index) => ({
@@ -872,28 +882,32 @@ class IntentsActor extends Actor {
 		const existing = this.items.find((item) => item.id === detail.id)
 		const mapped: MockIntent = {
 			id: detail.id,
-			type: presentation?.preferredType ?? 'file',
+			type: presentation?.preferredType ?? detail.intentType,
 			title: presentation?.label || detail.title,
-			source: 'Upload · File',
+			source: detail.sourceLabel,
 			when: new Date(detail.createdAt).toLocaleString(),
 			status: detail.state,
 			persistent: true,
+			persistentVersion: detail.version,
+			...(detail.deadline ? { deadline: detail.deadline } : {}),
 			routingSummary: detail.routingSummary,
 			log,
 			artifacts,
-			skills: [
-				{
-					skill: 'file',
-					state: skillState,
-					note: presentation?.summary || processingNote(detail.fileSkill.state),
-					workflow: 'file',
-					done: stageDone,
-					current: presentation?.stages.find((stage) =>
-						['running', 'queued', 'pending', 'publishing'].includes(stage.state)
-					)?.key,
-					stages: presentation?.stages ?? []
-				}
-			]
+			skills: detail.fileSkill
+				? [
+						{
+							skill: 'file',
+							state: skillState,
+							note: presentation?.summary || processingNote(detail.fileSkill.state),
+							workflow: 'file',
+							done: stageDone,
+							current: presentation?.stages.find((stage) =>
+								['running', 'queued', 'pending', 'publishing'].includes(stage.state)
+							)?.key,
+							stages: presentation?.stages ?? []
+						}
+					]
+				: []
 		}
 		if (existing) Object.assign(existing, mapped)
 		else this.items.unshift(mapped)
@@ -1046,10 +1060,29 @@ class IntentsActor extends Actor {
 					wire: `"${hit.title}" is on screen now.`
 				}
 			},
-			intent_create: (p) => {
+			intent_create: async (p) => {
 				const title = String(p.title ?? '').trim()
 				if (title === '')
 					return { record: '{"ok":false,"error":"title missing"}', wire: 'A title is needed.' }
+				if (isTauri()) {
+					const id = crypto.randomUUID()
+					const detail = await invoke<PersistentIntentDetail>('intent_create', {
+						intent: {
+							id,
+							title,
+							intentType: String(p.type ?? 'auftrag'),
+							sourceLabel: String(p.source ?? 'Freitext · Chat'),
+							deadline: p.deadline ? String(p.deadline) : null,
+							routingSummary: `Intent: ${title}`
+						}
+					})
+					this.applyPersistent(detail)
+					this.goTo(id)
+					return {
+						record: JSON.stringify({ ok: true, created: id, persistent: true }),
+						wire: `Created "${title}" and switched to it.`
+					}
+				}
 				const intent: MockIntent = {
 					id: slug(title),
 					type: String(p.type ?? 'auftrag'),
@@ -1077,9 +1110,40 @@ class IntentsActor extends Actor {
 					wire: `Created "${title}" and switched to it.`
 				}
 			},
-			intent_update: (p) => {
+			intent_update: async (p) => {
 				const hit = this.find(String(p.intent ?? ''))
 				if (!hit) return this.miss(String(p.intent ?? ''))
+				if (hit.persistent && isTauri()) {
+					if (hit.persistentVersion === undefined) return persistencePending(hit.title)
+					const update: Record<string, unknown> = {
+						expectedVersion: hit.persistentVersion,
+						clearDeadline: typeof p.deadline === 'string' && p.deadline.trim() === ''
+					}
+					if (typeof p.title === 'string' && p.title.trim()) update.title = p.title.trim()
+					if (typeof p.type === 'string' && p.type.trim()) update.intentType = p.type.trim()
+					if (typeof p.source === 'string' && p.source.trim()) update.sourceLabel = p.source.trim()
+					if (typeof p.deadline === 'string' && p.deadline.trim())
+						update.deadline = p.deadline.trim()
+					if (
+						typeof p.status === 'string' &&
+						['working', 'waiting', 'done', 'error'].includes(p.status)
+					)
+						update.state = p.status
+					if (Object.keys(update).length <= 2 && update.clearDeadline === false)
+						return {
+							record: '{"ok":false,"error":"nothing to change"}',
+							wire: 'Nothing to change.'
+						}
+					const detail = await invoke<PersistentIntentDetail>('intent_update', {
+						intentId: hit.id,
+						update
+					})
+					this.applyPersistent(detail)
+					return {
+						record: JSON.stringify({ ok: true, updated: hit.id, persistent: true }),
+						wire: `Updated "${detail.title}".`
+					}
+				}
 				const changed: string[] = []
 				if (typeof p.title === 'string' && p.title.trim() !== '') {
 					hit.title = p.title.trim()
@@ -1112,7 +1176,7 @@ class IntentsActor extends Actor {
 					wire: `Updated ${changed.join(', ')} of "${hit.title}".`
 				}
 			},
-			intent_merge: (p) => {
+			intent_merge: async (p) => {
 				const target = this.find(String(p.into ?? ''))
 				if (!target) return this.miss(String(p.into ?? ''))
 				const froms = (Array.isArray(p.from) ? p.from : [p.from])
@@ -1120,6 +1184,42 @@ class IntentsActor extends Actor {
 					.filter((f): f is MockIntent => !!f && f.id !== target.id)
 				if (froms.length === 0)
 					return { record: '{"ok":false,"error":"nothing to merge"}', wire: 'Nothing to merge.' }
+				if (target.persistent || froms.some((intent) => intent.persistent)) {
+					if (!isTauri() || !target.persistent || froms.some((intent) => !intent.persistent)) {
+						return {
+							record: '{"ok":false,"error":"mixed persistence"}',
+							wire: 'Demo and persistent intents cannot be merged together.'
+						}
+					}
+					if (target.persistentVersion === undefined) return persistencePending(target.title)
+					const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
+						intentId: target.id,
+						action: 'merge',
+						command: {
+							id: target.id,
+							expectedVersion: target.persistentVersion,
+							sourceIntentIds: froms.map((intent) => intent.id)
+						}
+					})
+					chatActor.core.mergeSessions(
+						froms.map((intent) => intent.id),
+						target.id
+					)
+					this.items = this.items.filter(
+						(intent) => !froms.some((source) => source.id === intent.id)
+					)
+					this.applyPersistent(detail)
+					this.goTo(target.id)
+					return {
+						record: JSON.stringify({
+							ok: true,
+							into: target.id,
+							merged: froms.map((intent) => intent.id),
+							persistent: true
+						}),
+						wire: `Merged ${froms.map((intent) => `"${intent.title}"`).join(', ')} into "${detail.title}".`
+					}
+				}
 				chatActor.core.mergeSessions(
 					froms.map((f) => f.id),
 					target.id
@@ -1137,7 +1237,7 @@ class IntentsActor extends Actor {
 					wire: `Merged ${froms.map((f) => `"${f.title}"`).join(', ')} into "${target.title}".`
 				}
 			},
-			intent_archive: (p) => {
+			intent_archive: async (p) => {
 				const hit = this.find(String(p.intent ?? ''))
 				if (!hit) return this.miss(String(p.intent ?? ''))
 				if (hit.status === 'archive')
@@ -1145,6 +1245,20 @@ class IntentsActor extends Actor {
 						record: '{"ok":true,"already":true}',
 						wire: `"${hit.title}" is already archived.`
 					}
+				if (hit.persistent && isTauri()) {
+					if (hit.persistentVersion === undefined) return persistencePending(hit.title)
+					const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
+						intentId: hit.id,
+						action: 'archive',
+						command: { id: hit.id, expectedVersion: hit.persistentVersion }
+					})
+					this.applyPersistent(detail)
+					this.goTo(hit.id)
+					return {
+						record: JSON.stringify({ ok: true, archived: hit.id, persistent: true }),
+						wire: `Archived "${hit.title}".`
+					}
+				}
 				hit.before = hit.status
 				hit.status = 'archive'
 				// The request and its answer belong to the intent being archived:
@@ -1155,9 +1269,23 @@ class IntentsActor extends Actor {
 					wire: `Archived "${hit.title}".`
 				}
 			},
-			intent_restore: (p) => {
+			intent_restore: async (p) => {
 				const hit = this.find(String(p.intent ?? ''))
 				if (!hit) return this.miss(String(p.intent ?? ''))
+				if (hit.persistent && isTauri()) {
+					if (hit.persistentVersion === undefined) return persistencePending(hit.title)
+					const detail = await invoke<PersistentIntentDetail>('intent_lifecycle', {
+						intentId: hit.id,
+						action: 'restore',
+						command: { id: hit.id, expectedVersion: hit.persistentVersion }
+					})
+					this.applyPersistent(detail)
+					this.goTo(hit.id)
+					return {
+						record: JSON.stringify({ ok: true, restored: hit.id, persistent: true }),
+						wire: `"${hit.title}" is back on the list and on screen.`
+					}
+				}
 				if (hit.status === 'archive') hit.status = hit.before ?? 'done'
 				this.goTo(hit.id)
 				return {
@@ -1165,11 +1293,18 @@ class IntentsActor extends Actor {
 					wire: `"${hit.title}" is back on the list and on screen.`
 				}
 			},
-			intent_delete: (p) => {
+			intent_delete: async (p) => {
 				const hit = this.find(String(p.intent ?? ''))
 				if (!hit) return this.miss(String(p.intent ?? ''))
 				if (this.items.length === 1)
 					return { record: '{"ok":false,"error":"last intent"}', wire: 'The last intent stays.' }
+				if (hit.persistent && isTauri()) {
+					if (hit.persistentVersion === undefined) return persistencePending(hit.title)
+					await invoke('intent_delete', {
+						intentId: hit.id,
+						command: { id: hit.id, expectedVersion: hit.persistentVersion }
+					})
+				}
 				this.items = this.items.filter((i) => i.id !== hit.id)
 				if (this.selectedId === hit.id) this.selectedId = this.items[0].id
 				return {
