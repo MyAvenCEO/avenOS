@@ -162,7 +162,8 @@ The successful deployment contract is:
 
 - `/api/health/status` reports `overall=healthy` and
   `capabilities.artifactProcessing=available`;
-- existing owned environments converge to Processor schema version `3`;
+- existing owned environments converge to Artifact Store schema version `3` and
+  Processor schema version `4`;
 - the provisioner and directory endpoints are unreachable through public Caddy;
 - a new upload eventually has a processing status at
   `/api/artifacts/{artifactId}/processing`; and
