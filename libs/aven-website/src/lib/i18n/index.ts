@@ -40,7 +40,7 @@ function translateSlug(path: string, map: Record<string, string>): string {
 }
 
 /** DE path ↔ EN path for the legal documents that exist in both languages. */
-const LEGAL_PAIRS = (['impressum', 'datenschutz', 'social-media'] as LegalSlug[]).map(
+const LEGAL_PAIRS = (['impressum', 'datenschutz', 'social-media', 'widerruf'] as LegalSlug[]).map(
 	(slug) => [legalPath(slug, 'de'), legalPath(slug, 'en')] as const
 )
 

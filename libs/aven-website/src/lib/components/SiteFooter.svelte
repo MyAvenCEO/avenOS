@@ -19,7 +19,7 @@ const legal = $derived([
 	{ href: legalPath('datenschutz', lang), label: t.footer.legal.datenschutz },
 	{ href: legalPath('social-media', lang), label: t.footer.legal.socialMedia },
 	{ href: '/de/agb/', label: t.footer.legal.agb },
-	{ href: '/de/widerruf/', label: t.footer.legal.widerruf }
+	{ href: legalPath('widerruf', lang), label: t.footer.legal.widerruf }
 ])
 
 const nav = $derived([

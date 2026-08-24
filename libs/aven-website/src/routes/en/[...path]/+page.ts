@@ -13,7 +13,7 @@ const ALIASES: Record<string, string> = {
 	datenschutz: '/privacy-policy/',
 	'datenschutz/social-media': '/social-media-privacy/',
 	agb: '/de/agb/',
-	widerruf: '/de/widerruf/'
+	widerruf: '/withdrawal/'
 }
 
 const PAGES = [
@@ -23,7 +23,8 @@ const PAGES = [
 	'avens',
 	'site-notice',
 	'privacy-policy',
-	'social-media-privacy'
+	'social-media-privacy',
+	'withdrawal'
 ]
 
 export const entries: EntryGenerator = () => [
