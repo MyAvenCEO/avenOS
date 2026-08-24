@@ -1,6 +1,6 @@
 import { api, readJson, requireUser } from '$lib/server/api.js'
 
-// Fortsetzen — lifts a pause, or reverts a scheduled cancellation.
+// Fortsetzen — reverts a scheduled cancellation.
 export const POST = api(async (event, rt) => {
 	const user = await requireUser(event)
 	const body = (await readJson(event)) as { tier?: string }
