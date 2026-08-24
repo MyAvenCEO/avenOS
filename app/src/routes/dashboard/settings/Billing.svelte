@@ -39,6 +39,7 @@ interface Standing {
 	priceEurCents: number
 	currentPeriodEnd: string | null
 	cancelAtPeriodEnd: boolean
+	pauseAtPeriodEnd: boolean
 }
 
 interface Order {
@@ -82,6 +83,8 @@ let cardFailure = $state<{ tier: string; message: string } | null>(null)
 let invoiceFailure = $state<{ orderId: string; message: string } | null>(null)
 /** Which action is asking "wirklich?" — one confirm at a time. */
 let confirming = $state<`cancel:${string}` | null>(null)
+// Which card's benefit list is unfolded — collapsed by default.
+let benefitsOpen = $state<string | null>(null)
 /** Which order row is expanded into its in-app rendered detail. */
 let openOrder = $state<string | null>(null)
 /** The inline checkout, when one is running: `url` is the embed-flavored
@@ -133,14 +136,16 @@ function fixtures(scenario: string): { subscriptions: Standing[]; orders: Order[
 		status: scenario === 'paused' ? 'paused' : 'active',
 		priceEurCents: 4200,
 		currentPeriodEnd: '2026-09-14T09:12:00.000Z',
-		cancelAtPeriodEnd: scenario === 'cancel'
+		cancelAtPeriodEnd: scenario === 'cancel',
+		pauseAtPeriodEnd: scenario === 'paused'
 	}
 	const founder: Standing = {
 		tier: 'avenceo',
 		status: 'active',
 		priceEurCents: 37700,
 		currentPeriodEnd: '2026-09-14T09:12:00.000Z',
-		cancelAtPeriodEnd: false
+		cancelAtPeriodEnd: false,
+		pauseAtPeriodEnd: false
 	}
 	if (scenario === 'none') return { subscriptions: [], orders: [] }
 	if (scenario === 'checkout') return { subscriptions: [], orders: paidOrders.slice(1) }
@@ -338,7 +343,23 @@ async function cancel(tier: string) {
 	})
 }
 
-/** Fortsetzen — reverts a scheduled cancellation; the plan keeps running. */
+/** Pausieren — schedules a pause at period end; billing stops, the plan
+ * stays. Polar guards the preconditions (no scheduled cancel, no end date). */
+async function pause(tier: string) {
+	await act(tier, `pause:${tier}`, async () => {
+		await invoke('billing_pause', { tier })
+		watch(
+			tier,
+			(subs) => {
+				const s = standingOf(subs, tier)
+				return s?.pauseAtPeriodEnd === true || s?.status === 'paused'
+			},
+			'Pause angestoßen — dein Plan pausiert zum Ende des Zeitraums.'
+		)
+	})
+}
+
+/** Fortsetzen — lifts a (geplante) Pause oder eine geplante Kündigung. */
 async function resume(tier: string) {
 	await act(tier, `resume:${tier}`, async () => {
 		await invoke('billing_resume', { tier })
@@ -346,7 +367,7 @@ async function resume(tier: string) {
 			tier,
 			(subs) => {
 				const s = standingOf(subs, tier)
-				return s?.status === 'active' && s.cancelAtPeriodEnd === false
+				return s?.status === 'active' && !s.cancelAtPeriodEnd && !s.pauseAtPeriodEnd
 			},
 			'Fortsetzung angestoßen — dein Plan läuft gleich wieder.'
 		)
@@ -457,7 +478,11 @@ onDestroy(() => {
 						? 'bg-warning/15 text-warning-strong'
 						: 'bg-success/15 text-success-strong'}"
 				>
-					{s.cancelAtPeriodEnd ? 'Endet bald' : (STATUS_LABEL[s.status] ?? s.status)}
+					{s.cancelAtPeriodEnd
+						? 'Endet bald'
+						: s.pauseAtPeriodEnd
+							? 'Pausiert bald'
+							: (STATUS_LABEL[s.status] ?? s.status)}
 				</span>
 			{/if}
 		</div>
@@ -468,26 +493,39 @@ onDestroy(() => {
 		</p>
 		<!-- The FULL benefit list, straight from the SSOT — the same titles the
 		     website prints and the seeder pushes to Polar, plus the included
-		     Aven Worker Minutes from the plan's runtime numbers. -->
-		<ul class="flex flex-col gap-1 text-xs opacity-70">
-			{#if p.runtime}
-				<li class="flex gap-2">
-					<span class="opacity-50">·</span>
-					<span>Aven Worker Minutes — {p.runtime.hoursPerDay} Std./Tag</span>
-				</li>
-			{/if}
-			{#each p.features as feature, index (index)}
-				<li class="flex gap-2">
-					<span class="opacity-50">·</span>
-					<span>{feature.title}</span>
-				</li>
-			{/each}
-		</ul>
+		     Aven Worker Minutes. Collapsed by default; a click unfolds it. -->
+		<button
+			type="button"
+			onclick={() => (benefitsOpen = benefitsOpen === p.id ? null : p.id)}
+			class="self-start text-sm font-medium text-primary transition-opacity hover:opacity-70"
+		>
+			{benefitsOpen === p.id
+				? 'Leistungen ausblenden'
+				: `Alle Leistungen anzeigen (${p.features.length + (p.runtime ? 1 : 0)})`}
+		</button>
+		{#if benefitsOpen === p.id}
+			<ul class="flex flex-col gap-1.5 text-sm opacity-80">
+				{#if p.runtime}
+					<li class="flex gap-2">
+						<span class="opacity-50">·</span>
+						<span>Aven Worker Minutes — {p.runtime.hoursPerDay} Std./Tag</span>
+					</li>
+				{/if}
+				{#each p.features as feature, index (index)}
+					<li class="flex gap-2">
+						<span class="opacity-50">·</span>
+						<span>{feature.title}</span>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 		{#if isLive && s?.currentPeriodEnd}
 			<p class="text-xs opacity-60">
 				{s.cancelAtPeriodEnd
 					? `Endet am ${dateOf(s.currentPeriodEnd)} — bis dahin läuft alles weiter.`
-					: `Verlängert sich am ${dateOf(s.currentPeriodEnd)}.`}
+					: s.pauseAtPeriodEnd
+						? `Pausiert ab ${dateOf(s.currentPeriodEnd)} — bis dahin läuft alles weiter.`
+						: `Verlängert sich am ${dateOf(s.currentPeriodEnd)}.`}
 			</p>
 		{/if}
 		<!-- Buchen / Kündigen / Fortsetzen — each product entirely on its
@@ -503,7 +541,7 @@ onDestroy(() => {
 				>
 					{busy === `subscribe:${p.id}` ? 'Buchung startet …' : 'Jetzt buchen'}
 				</button>
-			{:else if s?.cancelAtPeriodEnd}
+			{:else if s?.cancelAtPeriodEnd || s?.pauseAtPeriodEnd || s?.status === 'paused'}
 				<button
 					type="button"
 					onclick={() => resume(p.id)}
@@ -540,14 +578,26 @@ onDestroy(() => {
 			{:else}
 				<!-- Outline in the brand terracotta (--color-terracotta, aliased
 				     as `error`): transparent ground, terracotta border + label. -->
-				<button
-					type="button"
-					onclick={() => (confirming = `cancel:${p.id}`)}
-					disabled={busy !== ''}
-					class="self-start rounded-full border border-error bg-transparent px-4 py-2 text-sm font-medium text-error-strong transition-colors hover:bg-error/5 disabled:opacity-40"
-				>
-					Kündigen
-				</button>
+				<div class="flex gap-2">
+					<button
+						type="button"
+						onclick={() => pause(p.id)}
+						disabled={busy !== ''}
+						class="rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/5 disabled:opacity-40"
+					>
+						{busy === `pause:${p.id}` ? 'Wird pausiert …' : 'Pausieren'}
+					</button>
+					<!-- Outline in the brand terracotta (--color-terracotta, aliased
+					     as `error`): transparent ground, terracotta border + label. -->
+					<button
+						type="button"
+						onclick={() => (confirming = `cancel:${p.id}`)}
+						disabled={busy !== ''}
+						class="rounded-full border border-error bg-transparent px-4 py-2 text-sm font-medium text-error-strong transition-colors hover:bg-error/5 disabled:opacity-40"
+					>
+						Kündigen
+					</button>
+				</div>
 			{/if}
 			{#if pending?.tier === p.id}
 				<p class="text-xs opacity-60">{pending.note}</p>

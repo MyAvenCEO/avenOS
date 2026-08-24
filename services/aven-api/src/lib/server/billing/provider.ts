@@ -93,10 +93,12 @@ export interface PaymentProvider {
 	ensureBenefits(): Promise<Record<string, number>>
 	createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession>
 	cancelSubscription(providerSubscriptionId: string, immediate: boolean): Promise<void>
-	/** Reverts a scheduled cancellation. (Polar's pause API exists but
-	 * answers CannotPauseSubscription for our subscriptions — verified in
-	 * the sandbox 2026-08-24 — so pausing is not offered.) */
-	resumeSubscription(providerSubscriptionId: string): Promise<void>
+	/** Schedules a pause at period end. Polar guards this (active, no
+	 * scheduled cancel, no end date) — the service surfaces its refusal. */
+	pauseSubscription(providerSubscriptionId: string): Promise<void>
+	/** `unpause` lifts a (scheduled) pause; `uncancel` reverts a scheduled
+	 * cancellation. */
+	resumeSubscription(providerSubscriptionId: string, mode: 'uncancel' | 'unpause'): Promise<void>
 	/** Look up the provider's customer for an email; null when none exists. */
 	findCustomerByEmail(email: string): Promise<string | null>
 	/** The customer's orders — the real "Meine Bestellungen". */
@@ -122,6 +124,9 @@ export interface SubscriptionEvent {
 	status: string
 	currentPeriodEnd: string | null
 	cancelAtPeriodEnd: boolean
+	/** null = the payload carried no pause information (e.g. customer state
+	 * summaries) — the upsert must then keep what it has. */
+	pauseAtPeriodEnd: boolean | null
 	priceCents: number | null
 }
 
@@ -237,6 +242,8 @@ export function parsePolarSubscriptionEvent(rawBody: string): SubscriptionEvent 
 		status: String(data.status ?? ''),
 		currentPeriodEnd: data.current_period_end ?? null,
 		cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),
+		pauseAtPeriodEnd:
+			data.pause_at_period_end === undefined ? null : Boolean(data.pause_at_period_end),
 		priceCents: Number.isFinite(priceCents) ? priceCents : null
 	}
 }
@@ -261,6 +268,8 @@ export function parsePolarCustomerState(rawBody: string): SubscriptionEvent[] {
 			status: String(sub.status ?? 'active'),
 			currentPeriodEnd: sub.current_period_end ?? null,
 			cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+			pauseAtPeriodEnd:
+				sub.pause_at_period_end === undefined ? null : Boolean(sub.pause_at_period_end),
 			priceCents: Number.isFinite(Number(sub.amount)) ? Number(sub.amount) : null
 		}))
 }

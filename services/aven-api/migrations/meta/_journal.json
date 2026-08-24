@@ -127,6 +127,13 @@
 			"when": 1788278400000,
 			"tag": "0017_purge_legacy_provider_ids",
 			"breakpoints": true
+		},
+		{
+			"idx": 18,
+			"version": "7",
+			"when": 1788364800000,
+			"tag": "0018_subscription_pause_state",
+			"breakpoints": true
 		}
 	]
 }
