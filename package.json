@@ -53,8 +53,7 @@
 		"db:migrate:api": "bun run --cwd services/aven-api db:migrate",
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
-		"format": "bunx biome format --write .",
-		"sync:legal": "bun --env-file=.env libs/aven-brand/scripts/sync-erecht24.ts"
+		"format": "bunx biome format --write ."
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14",
