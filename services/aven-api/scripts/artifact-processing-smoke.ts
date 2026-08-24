@@ -12,6 +12,11 @@ const processorUrl = (
 	process.env.ARTIFACT_PROCESSOR_BASE_URL ??
 	`http://127.0.0.1:${process.env.ARTIFACT_PROCESSOR_PORT ?? '8089'}`
 ).replace(/\/$/, '')
+const intentToken = process.env.INTENT_SERVICE_BEARER_TOKEN ?? 'intent-local-api-token-000000000001'
+const intentUrl = (
+	process.env.INTENT_SERVICE_BASE_URL ??
+	`http://127.0.0.1:${process.env.INTENT_SERVICE_PORT ?? '8091'}`
+).replace(/\/$/, '')
 const expectFailure = process.env.ARTIFACT_PROCESSING_SMOKE_CASE === 'invalid'
 
 async function storeRequest(path: string, init: RequestInit = {}): Promise<Response> {
@@ -207,18 +212,26 @@ for (const required of [
 	if (!types.has(required)) throw new Error(`Derived type ${required} is missing`)
 }
 
-const intentResponse = await fetch(`${processorUrl}/v1/scopes/${scopeId}/intents/${intentId}`, {
-	headers: {
-		authorization: `Bearer ${processorToken}`,
-		'x-aven-artifact-database': databaseName
-	}
-})
-if (!intentResponse.ok) {
-	throw new Error(
-		`Intent projection failed (${intentResponse.status}): ${await intentResponse.text()}`
-	)
+let projectedIntent: Record<string, unknown> | null = null
+let intentFailure = ''
+for (let attempt = 0; attempt < 50; attempt += 1) {
+	const response = await fetch(`${intentUrl}/v1/scopes/${scopeId}/intents/${intentId}`, {
+		headers: {
+			authorization: `Bearer ${intentToken}`,
+			'x-aven-artifact-database': databaseName
+		}
+	})
+	if (response.ok) {
+		const candidate = (await response.json()) as Record<string, unknown>
+		const skill = candidate.fileSkill as Record<string, unknown> | null
+		if (skill?.state === status.state) {
+			projectedIntent = candidate
+			break
+		}
+	} else intentFailure = `${response.status}: ${await response.text()}`
+	await Bun.sleep(200)
 }
-const projectedIntent = (await intentResponse.json()) as Record<string, unknown>
+if (!projectedIntent) throw new Error(`Intent projection did not converge: ${intentFailure}`)
 if (projectedIntent.sourceArtifactId !== artifactId)
 	throw new Error('Intent source artifact drifted')
 const intentArtifacts = projectedIntent.artifacts
@@ -231,11 +244,11 @@ if (fileSkill.state !== status.state)
 
 const contributionId = crypto.randomUUID()
 const contributionResponse = await fetch(
-	`${processorUrl}/v1/scopes/${scopeId}/intents/${intentId}`,
+	`${intentUrl}/v1/scopes/${scopeId}/intents/${intentId}/contributions`,
 	{
 		method: 'POST',
 		headers: {
-			authorization: `Bearer ${processorToken}`,
+			authorization: `Bearer ${intentToken}`,
 			'x-aven-artifact-database': databaseName,
 			'content-type': 'application/json'
 		},

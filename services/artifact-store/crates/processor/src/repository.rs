@@ -8,7 +8,6 @@ use thiserror::Error;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::intents::DiscoveredIntent;
 use crate::model::{
     CaseSnapshot, ClaimedStep, GeneratedBlob, PendingOutbox, ProcessingStatus, StepSnapshot,
     StoredOutput,
@@ -20,6 +19,10 @@ const MIGRATIONS: &[(i32, &str)] = &[
     (2, include_str!("../migrations/0002_adapter_runtime.sql")),
     (3, include_str!("../migrations/0003_scopes.sql")),
     (4, include_str!("../migrations/0004_intents.sql")),
+    (
+        5,
+        include_str!("../migrations/0005_intent_service_boundary.sql"),
+    ),
 ];
 const PLAN_KEY: &str = "artifact-understanding-local";
 const PLAN_VERSION: &str = "2";
@@ -133,8 +136,8 @@ impl ProcessingRepository {
         for statement in [
             format!("GRANT USAGE ON SCHEMA aven_processing TO {quoted_role}"),
             format!("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA aven_processing TO {quoted_role}"),
-            format!("GRANT USAGE ON SCHEMA aven_intents TO {quoted_role}"),
-            format!("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA aven_intents TO {quoted_role}"),
+            format!("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA aven_intents FROM {quoted_role}"),
+            format!("REVOKE ALL PRIVILEGES ON SCHEMA aven_intents FROM {quoted_role}"),
         ] {
             sqlx::query(&statement).execute(&self.pool).await?;
         }
@@ -142,8 +145,8 @@ impl ProcessingRepository {
     }
 
     pub async fn ready(&self) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT 1 FROM aven_processing.schema_migrations WHERE version=4")
-            .execute(&self.pool)
+        sqlx::query("SELECT 1 FROM aven_processing.schema_migrations WHERE version=5")
+            .fetch_one(&self.pool)
             .await?;
         Ok(())
     }
@@ -210,7 +213,6 @@ impl ProcessingRepository {
         expected_after: i64,
         next_after: i64,
         sources: &[Uuid],
-        intents: &[DiscoveredIntent],
     ) -> Result<Vec<Uuid>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
@@ -250,32 +252,6 @@ impl ProcessingRepository {
             if result.rows_affected() == 1 {
                 inserted.push(case_id);
             }
-        }
-        for intent in intents {
-            let routing_summary = format!("File upload: {}", intent.title);
-            let result = sqlx::query(
-                "INSERT INTO aven_intents.intents (id,scope_id,declaration_artifact_id,source_artifact_id,title,routing_summary,created_at) \
-                 VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO NOTHING",
-            )
-            .bind(intent.id).bind(scope_id).bind(intent.declaration_artifact_id)
-            .bind(intent.source_artifact_id).bind(&intent.title).bind(routing_summary)
-            .bind(intent.created_at).execute(&mut *transaction).await?;
-            if result.rows_affected() == 0 {
-                continue;
-            }
-            sqlx::query(
-                "INSERT INTO aven_intents.contributions (id,intent_id,sequence,contributor_kind,kind,text,payload,idempotency_key) \
-                 VALUES($1,$2,1,'human','file-upload',NULL,jsonb_build_object('artifactId',$3::text,'originalName',$4::text),$5)",
-            ).bind(Uuid::new_v4()).bind(intent.id).bind(intent.source_artifact_id).bind(&intent.title)
-             .bind(format!("declaration:{}", intent.declaration_artifact_id)).execute(&mut *transaction).await?;
-            sqlx::query(
-                "INSERT INTO aven_intents.artifacts (intent_id,artifact_id,scope_id,relation,type_key,type_version,display_order) \
-                 VALUES($1,$2,$3,'source','core.file',1,0)",
-            ).bind(intent.id).bind(intent.source_artifact_id).bind(scope_id).execute(&mut *transaction).await?;
-            sqlx::query(
-                "INSERT INTO aven_intents.file_skills(intent_id,case_id,state) \
-                 VALUES($1,(SELECT id FROM aven_processing.processing_cases WHERE scope_id=$2 AND source_artifact_id=$3 LIMIT 1),'waiting')",
-            ).bind(intent.id).bind(scope_id).bind(intent.source_artifact_id).execute(&mut *transaction).await?;
         }
         sqlx::query(
             "UPDATE aven_processing.processing_feed_cursors SET after_sequence=$2,updated_at=now() WHERE scope_id=$1",
@@ -980,28 +956,6 @@ impl ProcessingRepository {
         .bind(serde_json::to_value(status)?)
         .execute(&mut *transaction)
         .await?;
-        // Resolve ownership through the processing case, rather than trusting
-        // an identifier supplied at the HTTP boundary.
-        let intent_id: Option<Uuid> = sqlx::query_scalar("SELECT intent.id FROM aven_intents.intents intent JOIN aven_processing.processing_cases case_row ON case_row.scope_id=intent.scope_id AND case_row.source_artifact_id=intent.source_artifact_id WHERE case_row.id=$1")
-            .bind(case_id).fetch_optional(&mut *transaction).await?;
-        if let Some(intent_id) = intent_id {
-            sqlx::query("UPDATE aven_intents.file_skills SET case_id=$2,state=$3,projection_version=$4,presentation=$5,updated_at=clock_timestamp() WHERE intent_id=$1")
-                .bind(intent_id).bind(case_id).bind(&status.state).bind(&status.projection_version)
-                .bind(serde_json::to_value(status)?).execute(&mut *transaction).await?;
-            for (index, artifact) in status.derived_artifacts.iter().enumerate() {
-                sqlx::query("INSERT INTO aven_intents.artifacts (intent_id,artifact_id,scope_id,relation,type_key,type_version,stage_key,display_order) SELECT $1,$2,scope_id,'file-skill-output',$3,$4,$5,$6 FROM aven_intents.intents WHERE id=$1 ON CONFLICT(intent_id,artifact_id) DO UPDATE SET stage_key=excluded.stage_key,display_order=excluded.display_order")
-                    .bind(intent_id).bind(artifact.artifact_id).bind(&artifact.type_key).bind(artifact.type_version)
-                    .bind(&artifact.stage_key).bind(i64::try_from(index).unwrap_or(i64::MAX - 1) + 1)
-                    .execute(&mut *transaction).await?;
-            }
-            let intent_state = match status.state.as_str() {
-                "needs_review" => "waiting",
-                "failed" => "error",
-                _ => "working",
-            };
-            sqlx::query("UPDATE aven_intents.intents SET state=$2,updated_at=clock_timestamp(),version=version+1 WHERE id=$1")
-                .bind(intent_id).bind(intent_state).execute(&mut *transaction).await?;
-        }
         transaction.commit().await?;
         Ok(())
     }

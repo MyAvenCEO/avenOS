@@ -10,6 +10,7 @@ import { decodeEncryptionKey } from './crypto.js'
 import { type DatabaseContext, openDatabase } from './db.js'
 import type { QueueSettings } from './email/queue.js'
 import { EnvironmentService } from './environments/service.js'
+import { IntentService } from './intents/service.js'
 import { NameService } from './names/service.js'
 import { createNotifier, type Notifier } from './notifications.js'
 import { PasskeyService } from './passkeys.js'
@@ -30,6 +31,7 @@ export interface Runtime {
 	environments: EnvironmentService
 	artifacts: ArtifactFileService | null
 	artifactProcessing: ArtifactProcessingService | null
+	intents: IntentService | null
 	shutdown(): Promise<void>
 }
 
@@ -63,6 +65,7 @@ async function create(): Promise<Runtime> {
 	const environments = new EnvironmentService(database.pool)
 	const artifacts = ArtifactFileService.fromConfig(config)
 	const artifactProcessing = ArtifactProcessingService.fromConfig(config)
+	const intents = IntentService.fromConfig(config)
 	const names = new NameService(
 		database.pool,
 		config,
@@ -95,6 +98,7 @@ async function create(): Promise<Runtime> {
 		environments,
 		artifacts,
 		artifactProcessing,
+		intents,
 		async shutdown() {
 			await database.pool.end()
 		}

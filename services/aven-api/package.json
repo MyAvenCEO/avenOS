@@ -29,6 +29,7 @@
 		"artifact-store:smoke": "bun scripts/artifact-store-smoke.ts",
 		"artifact-processing:smoke": "bun scripts/artifact-processing-smoke.ts",
 		"persistent-intent:smoke": "bun scripts/artifact-processing-smoke.ts",
+		"intent-service:lifecycle-smoke": "bun scripts/intent-service-lifecycle-smoke.ts",
 		"artifact-processing:real-smoke": "bun scripts/artifact-processing-real-smoke.ts",
 		"artifact-processing:real-pdf-smoke": "ARTIFACT_PROCESSING_REAL_FORMAT=pdf bun scripts/artifact-processing-real-smoke.ts",
 		"artifact-processing:real-unsupported-smoke": "ARTIFACT_PROCESSING_REAL_FORMAT=unsupported bun scripts/artifact-processing-real-smoke.ts",

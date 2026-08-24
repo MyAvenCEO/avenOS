@@ -67,6 +67,28 @@ export const serverConfigSchema = z
 			.string()
 			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
 			.optional(),
+		INTENT_SERVICE_BASE_URL: z.url().optional(),
+		INTENT_SERVICE_BEARER_TOKEN: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/)
+			.optional(),
+		INTENT_SERVICE_DIRECTORY_BEARER_TOKEN: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/)
+			.optional(),
+		INTENT_SERVICE_PROVISIONER_BASE_URL: z.url().optional(),
+		INTENT_SERVICE_PROVISIONER_BEARER_TOKEN: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/)
+			.optional(),
+		INTENT_SERVICE_RUNTIME_ROLE: z
+			.string()
+			.regex(/^[a-z][a-z0-9_]{0,62}$/)
+			.optional(),
+		INTENT_SERVICE_RUNTIME_PASSWORD: z
+			.string()
+			.regex(/^[A-Za-z0-9_-]{32,128}$/)
+			.optional(),
 
 		BETTER_AUTH_SECRET: z.string().default(''),
 		BETTER_AUTH_SESSION_MAX_AGE_SECONDS: positiveInt.default(43_200),
@@ -143,6 +165,28 @@ export const serverConfigSchema = z
 				path: ['ARTIFACT_PROCESSOR_PROVISIONER_BASE_URL'],
 				message:
 					'processor provisioner URL/token and runtime role/password must be configured together'
+			})
+		}
+		const intentValues = [config.INTENT_SERVICE_BASE_URL, config.INTENT_SERVICE_BEARER_TOKEN]
+		if (intentValues.some(Boolean) && !intentValues.every(Boolean)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['INTENT_SERVICE_BASE_URL'],
+				message: 'intent service URL and bearer token must be configured together'
+			})
+		}
+		const intentProvisioningValues = [
+			config.INTENT_SERVICE_PROVISIONER_BASE_URL,
+			config.INTENT_SERVICE_PROVISIONER_BEARER_TOKEN,
+			config.INTENT_SERVICE_RUNTIME_ROLE,
+			config.INTENT_SERVICE_RUNTIME_PASSWORD
+		]
+		if (intentProvisioningValues.some(Boolean) && !intentProvisioningValues.every(Boolean)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['INTENT_SERVICE_PROVISIONER_BASE_URL'],
+				message:
+					'intent provisioner URL/token and runtime role/password must be configured together'
 			})
 		}
 		const artifactProvisioningValues = [
@@ -247,6 +291,10 @@ export type EnvironmentWorkerConfig = Pick<
 	| 'ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN'
 	| 'ARTIFACT_PROCESSOR_RUNTIME_ROLE'
 	| 'ARTIFACT_PROCESSOR_RUNTIME_PASSWORD'
+	| 'INTENT_SERVICE_PROVISIONER_BASE_URL'
+	| 'INTENT_SERVICE_PROVISIONER_BEARER_TOKEN'
+	| 'INTENT_SERVICE_RUNTIME_ROLE'
+	| 'INTENT_SERVICE_RUNTIME_PASSWORD'
 >
 export type NotifierConfig = Pick<ServerConfig, 'PUBLIC_BASE_URL'>
 export type ArtifactStoreConfig = Pick<
@@ -256,6 +304,10 @@ export type ArtifactStoreConfig = Pick<
 export type ArtifactProcessorConfig = Pick<
 	ServerConfig,
 	'ARTIFACT_PROCESSOR_BASE_URL' | 'ARTIFACT_PROCESSOR_BEARER_TOKEN'
+>
+export type IntentServiceConfig = Pick<
+	ServerConfig,
+	'INTENT_SERVICE_BASE_URL' | 'INTENT_SERVICE_BEARER_TOKEN'
 >
 export type BillingConfig = Pick<
 	ServerConfig,

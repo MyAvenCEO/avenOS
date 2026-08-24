@@ -36,27 +36,6 @@ export class ArtifactProcessingService {
 		)
 	}
 
-	async intents(databaseName: string, scopeId: string): Promise<unknown> {
-		return this.#json(databaseName, scopeId, '/intents')
-	}
-
-	async intent(databaseName: string, scopeId: string, intentId: string): Promise<unknown> {
-		return this.#json(databaseName, scopeId, `/intents/${encodeURIComponent(intentId)}`)
-	}
-
-	async appendContribution(
-		databaseName: string,
-		scopeId: string,
-		intentId: string,
-		body: unknown
-	): Promise<unknown> {
-		return this.#json(databaseName, scopeId, `/intents/${encodeURIComponent(intentId)}`, {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify(body)
-		})
-	}
-
 	async #json(
 		databaseName: string,
 		scopeId: string,
@@ -80,7 +59,7 @@ export class ArtifactProcessingService {
 			throw new AppError(
 				502,
 				'ARTIFACT_PROCESSOR_UNAVAILABLE',
-				'Artifact processing or intent state is unavailable.'
+				'Artifact processing state is unavailable.'
 			)
 		}
 		if (response.status === 404) {
