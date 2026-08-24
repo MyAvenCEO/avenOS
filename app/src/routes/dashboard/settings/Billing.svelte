@@ -466,8 +466,17 @@ onDestroy(() => {
 			{isLive && s ? cents(s.priceEurCents) : euro(p.eurPrice)}
 			€<span class="pl-1 text-xs font-normal opacity-50">{priceSuffix(p)}</span>
 		</p>
+		<!-- The FULL benefit list, straight from the SSOT — the same titles the
+		     website prints and the seeder pushes to Polar, plus the included
+		     Aven Worker Minutes from the plan's runtime numbers. -->
 		<ul class="flex flex-col gap-1 text-xs opacity-70">
-			{#each p.features.slice(0, 5) as feature, index (index)}
+			{#if p.runtime}
+				<li class="flex gap-2">
+					<span class="opacity-50">·</span>
+					<span>Aven Worker Minutes — {p.runtime.hoursPerDay} Std./Tag</span>
+				</li>
+			{/if}
+			{#each p.features as feature, index (index)}
 				<li class="flex gap-2">
 					<span class="opacity-50">·</span>
 					<span>{feature.title}</span>
