@@ -276,7 +276,7 @@ function fmtBytes(b: number): string {
 </svelte:head>
 
 <main
-	class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-6 overflow-y-auto p-4 sm:p-6"
+	class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-6 overflow-y-auto p-4 sm:p-6"
 >
 	<header class="flex flex-col items-center gap-1.5">
 		<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Git</p>
@@ -326,180 +326,194 @@ function fmtBytes(b: number): string {
 				</div>
 			{/if}
 
-			{#if branches.length > 0}
-				<!-- The branches: chips, the browsed one filled; clicking re-roots
-				     the tree at that ref. The default branch wears its mark. -->
-				<div class="flex flex-wrap items-center gap-1.5">
-					<!-- lucide:git-branch -->
-					<svg
-						viewBox="0 0 24 24"
-						class="size-3.5 shrink-0 opacity-40"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.75"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<line x1="6" x2="6" y1="3" y2="15" />
-						<circle cx="18" cy="6" r="3" />
-						<circle cx="6" cy="18" r="3" />
-						<path d="M18 9a9 9 0 0 1-9 9" />
-					</svg>
-					{#each branches as branch (branch)}
+			<!-- Two columns: tree/file work on the left, the branches standing
+			     top-down in their own aside on the right. -->
+			<div class="flex min-h-0 flex-1 gap-4">
+				<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+					<!-- Breadcrumb: the path INTO the tree; every segment walks back up. -->
+					<nav class="flex flex-wrap items-center gap-1 font-mono text-xs">
 						<button
 							type="button"
-							onclick={() => void switchBranch(branch)}
-							class="rounded-full border px-2.5 py-0.5 font-mono text-xs transition-colors {ref ===
-							branch
-								? 'border-primary bg-primary text-primary-foreground'
-								: 'border-border opacity-60 hover:opacity-100'}"
-						>
-							{branch}{branch === details?.default_branch ? ' ·' : ''}
-						</button>
-					{/each}
-				</div>
-			{/if}
-
-			<!-- Breadcrumb: the path INTO the tree; every segment walks back up. -->
-			<nav class="flex flex-wrap items-center gap-1 font-mono text-xs">
-				<button
-					type="button"
-					onclick={() => void browse('')}
-					class="rounded px-1 py-0.5 transition-colors hover:bg-primary/5 {path === '' && !file
+							onclick={() => void browse('')}
+							class="rounded px-1 py-0.5 transition-colors hover:bg-primary/5 {path === '' && !file
 						? 'font-semibold'
 						: 'opacity-60'}"
-				>
-					{open.name}
-				</button>
-				{#each crumbs as segment, i (i)}
-					<span class="opacity-30">/</span>
-					<button
-						type="button"
-						onclick={() => void browse(crumbs.slice(0, i + 1).join('/'))}
-						class="rounded px-1 py-0.5 transition-colors hover:bg-primary/5 {i === crumbs.length - 1 && !file
-							? 'font-semibold'
-							: 'opacity-60'}"
-					>
-						{segment}
-					</button>
-				{/each}
-				{#if file}
-					<span class="opacity-30">/</span>
-					<span class="rounded px-1 py-0.5 font-semibold">{file.path.split('/').at(-1)}</span>
-				{/if}
-			</nav>
-
-			{#if file}
-				<!-- The file: text inline; anything undecodable or huge stays opaque. -->
-				{#if file.text === null}
-					<p
-						class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-					>
-						Binary or too large to preview.
-					</p>
-				{:else if editing}
-					<!-- The draft: saving never touches the branch being read — it
-					     lands on a fresh edit/* branch (see saveEdit). -->
-					<textarea
-						bind:value={draft}
-						rows={16}
-						spellcheck="false"
-						class="min-h-0 flex-1 resize-y rounded-xl border border-primary bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none"
-					></textarea>
-					<div class="flex items-center justify-end gap-2">
-						<span class="mr-auto text-[10px] opacity-40">saves to a new edit/* branch</span>
-						<button
-							type="button"
-							onclick={() => {
-								editing = false
-							}}
-							disabled={busy}
-							class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5 disabled:opacity-30"
 						>
-							Cancel
+							{open.name}
 						</button>
-						<button
-							type="button"
-							onclick={() => void saveEdit()}
-							disabled={busy || draft === file.text}
-							class="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground text-xs transition-opacity disabled:opacity-30"
-						>
-							{busy ? 'Saving…' : 'Save'}
-						</button>
-					</div>
-				{:else}
-					<pre
-						class="min-h-0 flex-1 overflow-auto rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-					>{file.text}</pre>
-					<div class="flex justify-end">
-						<button
-							type="button"
-							onclick={startEdit}
-							class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5"
-						>
-							Edit
-						</button>
-					</div>
-				{/if}
-			{:else}
-				<!-- The tree, one directory at a time: folders first, then files. -->
-				<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
-					{#each entries as entry (entry.path)}
-						<li>
+						{#each crumbs as segment, i (i)}
+							<span class="opacity-30">/</span>
 							<button
 								type="button"
-								onclick={() => (entry.type === 'dir' ? void browse(entry.path) : void preview(entry))}
-								class="flex w-full items-center gap-2.5 rounded-xl border border-foreground/5 bg-surface-raised px-3 py-2 text-left font-mono text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-colors hover:bg-primary/5"
+								onclick={() => void browse(crumbs.slice(0, i + 1).join('/'))}
+								class="rounded px-1 py-0.5 transition-colors hover:bg-primary/5 {i === crumbs.length - 1 && !file
+							? 'font-semibold'
+							: 'opacity-60'}"
 							>
-								{#if entry.type === 'dir'}
-									<!-- lucide:folder -->
-									<svg
-										viewBox="0 0 24 24"
-										class="size-4 shrink-0 opacity-60"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.5"
-										stroke-linejoin="round"
-									>
-										<path
-											d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
-										/>
-									</svg>
-								{:else}
-									<!-- lucide:file -->
-									<svg
-										viewBox="0 0 24 24"
-										class="size-4 shrink-0 opacity-40"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.5"
-										stroke-linejoin="round"
-									>
-										<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-										<path d="M14 2v4a2 2 0 0 0 2 2h4" />
-									</svg>
-								{/if}
-								<span class="min-w-0 flex-1 truncate">{entry.name}</span>
-								{#if entry.type !== 'dir'}
-									<span class="shrink-0 text-[10px] opacity-40">{fmtBytes(entry.size)}</span>
-								{/if}
+								{segment}
 							</button>
-						</li>
-					{:else}
-						<li class="px-3 py-2 text-xs opacity-40">
-							{details?.empty ? 'Empty repository — no commits yet.' : 'Empty directory.'}
-						</li>
-					{/each}
-				</ul>
-			{/if}
+						{/each}
+						{#if file}
+							<span class="opacity-30">/</span>
+							<span class="rounded px-1 py-0.5 font-semibold">{file.path.split('/').at(-1)}</span>
+						{/if}
+					</nav>
 
-			{#if failure}
-				<p
-					class="rounded-xl border border-error/30 bg-error-muted px-4 py-3 text-error-strong text-xs"
-				>
-					{failure}
-				</p>
-			{/if}
+					{#if file}
+						<!-- The file: text inline; anything undecodable or huge stays opaque. -->
+						{#if file.text === null}
+							<p
+								class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+							>
+								Binary or too large to preview.
+							</p>
+						{:else if editing}
+							<!-- The draft: saving never touches the branch being read — it
+					     lands on a fresh edit/* branch (see saveEdit). -->
+							<textarea
+								bind:value={draft}
+								rows={16}
+								spellcheck="false"
+								class="min-h-0 flex-1 resize-y rounded-xl border border-primary bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none"
+							></textarea>
+							<div class="flex items-center justify-end gap-2">
+								<span class="mr-auto text-[10px] opacity-40">saves to a new edit/* branch</span>
+								<button
+									type="button"
+									onclick={() => {
+								editing = false
+							}}
+									disabled={busy}
+									class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5 disabled:opacity-30"
+								>
+									Cancel
+								</button>
+								<button
+									type="button"
+									onclick={() => void saveEdit()}
+									disabled={busy || draft === file.text}
+									class="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground text-xs transition-opacity disabled:opacity-30"
+								>
+									{busy ? 'Saving…' : 'Save'}
+								</button>
+							</div>
+						{:else}
+							<pre
+								class="min-h-0 flex-1 overflow-auto rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+							>{file.text}</pre>
+							<div class="flex justify-end">
+								<button
+									type="button"
+									onclick={startEdit}
+									class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5"
+								>
+									Edit
+								</button>
+							</div>
+						{/if}
+					{:else}
+						<!-- The tree, one directory at a time: folders first, then files. -->
+						<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
+							{#each entries as entry (entry.path)}
+								<li>
+									<button
+										type="button"
+										onclick={() => (entry.type === 'dir' ? void browse(entry.path) : void preview(entry))}
+										class="flex w-full items-center gap-2.5 rounded-xl border border-foreground/5 bg-surface-raised px-3 py-2 text-left font-mono text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-colors hover:bg-primary/5"
+									>
+										{#if entry.type === 'dir'}
+											<!-- lucide:folder -->
+											<svg
+												viewBox="0 0 24 24"
+												class="size-4 shrink-0 opacity-60"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="1.5"
+												stroke-linejoin="round"
+											>
+												<path
+													d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+												/>
+											</svg>
+										{:else}
+											<!-- lucide:file -->
+											<svg
+												viewBox="0 0 24 24"
+												class="size-4 shrink-0 opacity-40"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="1.5"
+												stroke-linejoin="round"
+											>
+												<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+												<path d="M14 2v4a2 2 0 0 0 2 2h4" />
+											</svg>
+										{/if}
+										<span class="min-w-0 flex-1 truncate">{entry.name}</span>
+										{#if entry.type !== 'dir'}
+											<span class="shrink-0 text-[10px] opacity-40">{fmtBytes(entry.size)}</span>
+										{/if}
+									</button>
+								</li>
+							{:else}
+								<li class="px-3 py-2 text-xs opacity-40">
+									{details?.empty ? 'Empty repository — no commits yet.' : 'Empty directory.'}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+
+					{#if failure}
+						<p
+							class="rounded-xl border border-error/30 bg-error-muted px-4 py-3 text-error-strong text-xs"
+						>
+							{failure}
+						</p>
+					{/if}
+				</div>
+
+				{#if branches.length > 0}
+					<!-- The branches, top-down: the browsed one filled, the default
+				     marked; clicking re-roots the tree at that ref. -->
+					<aside class="flex w-44 shrink-0 flex-col gap-1.5">
+						<p
+							class="flex items-center gap-1.5 px-1 text-[0.625rem] uppercase tracking-[0.16em] opacity-40"
+						>
+							<!-- lucide:git-branch -->
+							<svg
+								viewBox="0 0 24 24"
+								class="size-3"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.75"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<line x1="6" x2="6" y1="3" y2="15" />
+								<circle cx="18" cy="6" r="3" />
+								<circle cx="6" cy="18" r="3" />
+								<path d="M18 9a9 9 0 0 1-9 9" />
+							</svg>
+							Branches
+						</p>
+						<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
+							{#each branches as branch (branch)}
+								<li>
+									<button
+										type="button"
+										onclick={() => void switchBranch(branch)}
+										class="w-full truncate rounded-xl border px-3 py-1.5 text-left font-mono text-xs transition-colors {ref === branch
+										? 'border-primary bg-primary text-primary-foreground'
+										: 'border-border opacity-60 hover:bg-primary/5 hover:opacity-100'}"
+									>
+										{branch}{branch === details?.default_branch ? ' ·' : ''}
+									</button>
+								</li>
+							{/each}
+						</ul>
+					</aside>
+				{/if}
+			</div>
 		</section>
 	{:else}
 		<!-- The server: where YOUR Gitea lives and the token that opens it. Local
