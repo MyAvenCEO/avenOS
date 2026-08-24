@@ -1,7 +1,7 @@
 /**
  * Datenschutzerklärung / Privacy Policy — GENERATED from the counsel-provided
- * HTML (scratch: privacy-de.html / privacy-en.html) by a one-shot parser, so
- * the published text is byte-faithful to what counsel wrote. Maintained
+ * HTML (scratch: privacy-de.html / privacy-en.html) by gen-legal.py, so the
+ * published text is byte-faithful to what counsel wrote. Maintained
  * MANUALLY: paste updated counsel HTML and re-run the converter; structural
  * changes belong in legal.ts.
  *
@@ -579,6 +579,27 @@ export const DATENSCHUTZ_DE: LegalDocument = {
 				{
 					lines: [
 						'Grundlage für die Datenverarbeitung ist Art. 6 Abs. 1 lit. b DSGVO, der die Verarbeitung von Daten zur Erfüllung eines Vertrags oder vorvertraglicher Maßnahmen gestattet.'
+					]
+				}
+			]
+		},
+		{
+			level: 3,
+			title: 'eRecht24 Widerrufsbutton',
+			blocks: [
+				{
+					lines: [
+						'Wir haben auf unserer Website einen Widerrufs-Button eingebunden, um den gesetzlichen Vorgaben des Verbraucherrechts nachzukommen. Der Widerrufsbutton wird von der eRecht24 GmbH & Co. KG, Lietzenburger Straße 93-95, 10719 Berlin, Deutschland (nachfolgend „eRecht24“) bereitgestellt. eRecht24 verarbeitet die eingehenden Widerrufe ausschließlich in unserem Auftrag und verwendet die Daten nicht für eigene Zwecke. Ein Vertrag zur Auftragsverarbeitung (AVV) mit eRecht24 wurde abgeschlossen.'
+					]
+				},
+				{
+					lines: [
+						'Als Subunternehmer setzt eRecht24 den Cyber-Security-Dienst Friendly Captcha GmbH, Am Anger 3–5, 82237 Wörthsee, Deutschland, zur Absicherung des Widerrufsformulars sowie den Mailing-Dienstleister MailPace Ltd., Unit G32, 111 Power Rd, Chiswick, London W4 5PY, Vereinigtes Königreich, für den Versand der Bestätigungs-E-Mails ein.'
+					]
+				},
+				{
+					lines: [
+						'Die Dienstleister wurden sorgfältig unter Datenschutzgesichtspunkten ausgewählt. eRecht24 hat mit beiden Dienstleistern einen Vertrag zur Auftragsverarbeitung abgeschlossen. Die Datenverarbeitung im Rahmen des Widerrufsbuttons erfolgt auf Grundlage von Art. 6 Abs. 1 lit. c DSGVO (Erfüllung einer gesetzlichen Pflicht) und auf Art. 6 Abs. 1 lit. b DSGVO (Vertrag).'
 					]
 				}
 			]
@@ -1235,6 +1256,27 @@ export const PRIVACY_POLICY_EN: LegalDocument = {
 				{
 					lines: [
 						'The basis for the processing of data is Art. 6(1)(b) GDPR, which permits the processing of data for the fulfilment of a contract or for pre-contractual actions.'
+					]
+				}
+			]
+		},
+		{
+			level: 3,
+			title: 'eRecht24 Revocation Button',
+			blocks: [
+				{
+					lines: [
+						'We have integrated a revocation button on our website to comply with the legal requirements of consumer law. The revocation button is provided by eRecht24 GmbH & Co. KG, Lietzenburger Straße 93-95, 10719 Berlin, Germany (hereinafter referred to as “eRecht24”). eRecht24 processes incoming cancellations exclusively on our behalf and does not use the data for its own purposes. A data processing agreement (DPA) has been concluded with eRecht24.'
+					]
+				},
+				{
+					lines: [
+						'As a subcontractor, eRecht24 uses the cybersecurity service Friendly Captcha GmbH, Am Anger 3–5, 82237 Wörthsee, Germany, to secure the withdrawal form, as well as the mailing service provider MailPace Ltd., Unit G32, 111 Power Rd, Chiswick, London W4 5PY, United Kingdom, for sending confirmation emails.'
+					]
+				},
+				{
+					lines: [
+						'The service providers were carefully selected with data protection considerations in mind. eRecht24 has entered into a data processing agreement with both service providers. Data processing in connection with the cancellation button is based on Art. 6(1)(c) GDPR (compliance with a legal obligation) and Art. 6(1)(b) GDPR (contract).'
 					]
 				}
 			]
