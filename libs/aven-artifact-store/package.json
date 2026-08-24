@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/artifact-store",
 	"private": true,
-	"version": "26.8.24-next.4",
+	"version": "26.8.24-next.5",
 	"type": "module",
 	"description": "Artifact Store v1 canonical JSON and HTTP SDK",
 	"main": "./src/index.ts",

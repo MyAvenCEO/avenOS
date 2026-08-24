@@ -1,3 +1,19 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.4...v) (2026-08-24)
+
+
+### Bug Fixes
+
+* **billing:** purge legacy provider ids (0017) + UUID self-heal; drop pause (Polar CannotPauseSubscription) ([189ba3d](https://github.com/MyAvenCEO/avenOS/commit/189ba3df24f8efc1ac48261f94e85fd909cb351b))
+
+
+### Features
+
+* **app:** inline invoice flow + Artefakte page; per-card billing feedback; drop pause UI (0162 smoke fixes) ([ef0533f](https://github.com/MyAvenCEO/avenOS/commit/ef0533f018e0ba68b6e8b86693270701c6d32b9c))
+* **billing:** Creem → Polar sandbox billing on the brand SSOT (0162) ([e30d31c](https://github.com/MyAvenCEO/avenOS/commit/e30d31c68e336a770f0d574705c87e7a0d2c4065))
+* **id-service:** link all legal pages in the footer ([120ec1e](https://github.com/MyAvenCEO/avenOS/commit/120ec1e396290e69e584fc918ed6215ed465039f))
+* **website:** centered mobile header, trim footer ([0241208](https://github.com/MyAvenCEO/avenOS/commit/0241208f139a2404fd0f0d112a2b79d2387a23a2))
+* **website:** social profile links in header + footer, updated privacy URLs ([6339d1f](https://github.com/MyAvenCEO/avenOS/commit/6339d1fcc4219f7252664a30ed27e69d85536778))
+* **website:** stacked header up to tablet, sovereign-founder slogan ([264a0dd](https://github.com/MyAvenCEO/avenOS/commit/264a0dd5e1c8126a6b4c3fdf762e65ad6eba1a56))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.3...v) (2026-08-24)
 
 
