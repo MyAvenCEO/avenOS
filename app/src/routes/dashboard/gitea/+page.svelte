@@ -21,15 +21,105 @@ interface Repo {
 	owner: string
 }
 
+/**
+ * The repo as the API reports it. Gitea returns ~70 fields; these are the
+ * ones that describe how the repository is SET UP — what the settings tab
+ * reads out.
+ */
 interface RepoDetails {
 	full_name: string
 	description: string
 	private: boolean
+	internal?: boolean
+	fork?: boolean
+	mirror?: boolean
+	mirror_interval?: string
+	template?: boolean
+	archived?: boolean
+	empty: boolean
 	default_branch: string
 	size: number
+	created_at?: string
 	updated_at: string
 	clone_url: string
-	empty: boolean
+	ssh_url?: string
+	object_format_name?: string
+	language?: string
+	website?: string
+	topics?: string[]
+	projects_mode?: string
+	branch_count?: number
+	open_issues_count?: number
+	open_pr_counter?: number
+	release_counter?: number
+	permissions?: { admin?: boolean; push?: boolean; pull?: boolean }
+	// what the repo offers
+	has_code?: boolean
+	has_issues?: boolean
+	has_pull_requests?: boolean
+	has_wiki?: boolean
+	has_projects?: boolean
+	has_releases?: boolean
+	has_packages?: boolean
+	has_actions?: boolean
+	// how pull requests may land
+	allow_merge_commits?: boolean
+	allow_rebase?: boolean
+	allow_rebase_explicit?: boolean
+	allow_squash_merge?: boolean
+	allow_fast_forward_only_merge?: boolean
+	allow_manual_merge?: boolean
+	autodetect_manual_merge?: boolean
+	allow_merge_update?: boolean
+	allow_rebase_update?: boolean
+	default_merge_style?: string
+	default_update_style?: string
+	default_delete_branch_after_merge?: boolean
+	default_allow_maintainer_edit?: boolean
+	ignore_whitespace_conflicts?: boolean
+}
+
+/** One branch-protection rule, as `/branch_protections` reports it. */
+interface Protection {
+	rule_name: string
+	priority?: number
+	enable_push?: boolean
+	enable_push_whitelist?: boolean
+	push_whitelist_usernames?: string[]
+	push_whitelist_teams?: string[]
+	push_whitelist_deploy_keys?: boolean
+	enable_force_push?: boolean
+	enable_force_push_allowlist?: boolean
+	force_push_allowlist_usernames?: string[]
+	required_approvals?: number
+	enable_approvals_whitelist?: boolean
+	approvals_whitelist_username?: string[]
+	dismiss_stale_approvals?: boolean
+	ignore_stale_approvals?: boolean
+	block_on_rejected_reviews?: boolean
+	block_on_official_review_requests?: boolean
+	block_on_outdated_branch?: boolean
+	block_admin_merge_override?: boolean
+	enable_merge_whitelist?: boolean
+	merge_whitelist_usernames?: string[]
+	enable_status_check?: boolean
+	status_check_contexts?: string[]
+	require_signed_commits?: boolean
+	protected_file_patterns?: string
+	unprotected_file_patterns?: string
+	enable_bypass_allowlist?: boolean
+	bypass_allowlist_usernames?: string[]
+}
+
+interface TagProtection {
+	name_pattern: string
+	whitelist_usernames?: string[]
+	whitelist_teams?: string[]
+}
+
+interface Collaborator {
+	login: string
+	permissions?: { admin?: boolean; push?: boolean; pull?: boolean }
 }
 
 interface Entry {
@@ -52,6 +142,13 @@ let details = $state<RepoDetails | null>(null)
 /** The repo's branches, and the one the tree is browsed at. */
 let branches = $state<string[]>([])
 let ref = $state('')
+/** Which face of the open repo is showing. */
+let tab = $state<'files' | 'settings'>('files')
+/** How the repo is set up — read-only, loaded when the tab is first opened. */
+let protections = $state<Protection[]>([])
+let tagProtections = $state<TagProtection[]>([])
+let collaborators = $state<Collaborator[]>([])
+let settingsLoaded = $state(false)
 /** Directory currently shown inside the open repo ('' = root). */
 let path = $state('')
 let entries = $state<Entry[]>([])
@@ -136,6 +233,11 @@ async function openRepo(repo: Repo) {
 	details = null
 	file = null
 	branches = []
+	tab = 'files'
+	protections = []
+	tagProtections = []
+	collaborators = []
+	settingsLoaded = false
 	busy = true
 	failure = null
 	try {
@@ -151,6 +253,32 @@ async function openRepo(repo: Repo) {
 	} finally {
 		busy = false
 	}
+}
+
+/**
+ * Read how the repo is configured. Three independent calls: the rules that
+ * govern branches and tags, and who may touch the repo. Each is tolerated
+ * separately — a token without admin scope still gets the rest, so a partial
+ * answer beats an empty panel.
+ */
+async function loadSettings() {
+	if (!open || settingsLoaded) return
+	settingsLoaded = true
+	const repo = `/repos/${open.owner}/${open.name}`
+	const [p, t, c] = await Promise.all([
+		api(`${repo}/branch_protections`)
+			.then((r) => r.json() as Promise<Protection[]>)
+			.catch(() => []),
+		api(`${repo}/tag_protections`)
+			.then((r) => r.json() as Promise<TagProtection[]>)
+			.catch(() => []),
+		api(`${repo}/collaborators`)
+			.then((r) => r.json() as Promise<Collaborator[]>)
+			.catch(() => [])
+	])
+	protections = p ?? []
+	tagProtections = t ?? []
+	collaborators = c ?? []
 }
 
 /**
@@ -277,6 +405,81 @@ function closeRepo() {
 	failure = null
 }
 
+/** The merge styles the repo actually allows, in the order Gitea lists them. */
+const mergeStyles = $derived(
+	details
+		? ([
+				['merge', details.allow_merge_commits],
+				['rebase', details.allow_rebase],
+				['rebase-merge', details.allow_rebase_explicit],
+				['squash', details.allow_squash_merge],
+				['fast-forward-only', details.allow_fast_forward_only_merge],
+				['manual', details.allow_manual_merge]
+			] as Array<[string, boolean | undefined]>)
+		: []
+)
+
+/** What the repo offers at all — the feature switches. */
+const features = $derived(
+	details
+		? ([
+				['code', details.has_code],
+				['issues', details.has_issues],
+				['pull requests', details.has_pull_requests],
+				['wiki', details.has_wiki],
+				['projects', details.has_projects],
+				['releases', details.has_releases],
+				['packages', details.has_packages],
+				['actions', details.has_actions]
+			] as Array<[string, boolean | undefined]>)
+		: []
+)
+
+/** Everything a protection rule asserts, as label/value pairs worth showing. */
+function ruleFacts(rule: Protection): Array<[string, string]> {
+	const named = (list?: string[]) => (list?.length ? list.join(', ') : '')
+	const facts: Array<[string, string]> = [
+		[
+			'push',
+			rule.enable_push ? (rule.enable_push_whitelist ? 'allowlist only' : 'allowed') : 'blocked'
+		],
+		[
+			'force push',
+			rule.enable_force_push
+				? rule.enable_force_push_allowlist
+					? 'allowlist only'
+					: 'allowed'
+				: 'blocked'
+		]
+	]
+	if (rule.required_approvals) facts.push(['approvals required', String(rule.required_approvals)])
+	if (rule.enable_status_check)
+		facts.push(['status checks', named(rule.status_check_contexts) || 'required'])
+	if (rule.require_signed_commits) facts.push(['signed commits', 'required'])
+	if (rule.block_on_rejected_reviews) facts.push(['rejected reviews', 'block merge'])
+	if (rule.block_on_official_review_requests) facts.push(['open review requests', 'block merge'])
+	if (rule.block_on_outdated_branch) facts.push(['outdated branch', 'block merge'])
+	if (rule.block_admin_merge_override) facts.push(['admin override', 'blocked'])
+	if (rule.dismiss_stale_approvals) facts.push(['stale approvals', 'dismissed'])
+	if (rule.ignore_stale_approvals) facts.push(['stale approvals', 'ignored'])
+	if (rule.enable_merge_whitelist)
+		facts.push(['merge allowlist', named(rule.merge_whitelist_usernames) || 'set'])
+	if (rule.enable_push_whitelist)
+		facts.push(['push allowlist', named(rule.push_whitelist_usernames) || 'set'])
+	if (rule.enable_bypass_allowlist)
+		facts.push(['bypass', named(rule.bypass_allowlist_usernames) || 'set'])
+	if (rule.protected_file_patterns) facts.push(['protected files', rule.protected_file_patterns])
+	if (rule.unprotected_file_patterns)
+		facts.push(['unprotected files', rule.unprotected_file_patterns])
+	return facts
+}
+
+function permissionOf(who: { permissions?: { admin?: boolean; push?: boolean } }): string {
+	if (who.permissions?.admin) return 'admin'
+	if (who.permissions?.push) return 'write'
+	return 'read'
+}
+
 function fmtSize(kb: number): string {
 	return kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`
 }
@@ -386,130 +589,303 @@ function fmtBytes(b: number): string {
 					</div>
 				{/if}
 
-				<!-- Breadcrumb: the path INTO the tree; every segment walks back up. -->
-				<nav class="flex flex-wrap items-center gap-1 font-mono text-xs">
+				<!-- The repo has two faces: its contents, and how it is configured. -->
+				<div class="flex gap-1">
 					<button
 						type="button"
-						onclick={() => void browse('')}
-						class="rounded px-1 py-0.5 transition-colors hover:bg-primary/5 {path === '' && !file
-						? 'font-semibold'
-						: 'opacity-60'}"
+						onclick={() => {
+							tab = 'files'
+						}}
+						class="rounded-lg px-3 py-1.5 text-xs transition-colors {tab === 'files'
+							? 'bg-surface-raised font-medium shadow-[0_1px_3px_rgba(30,41,59,0.05)]'
+							: 'opacity-50 hover:opacity-100'}"
 					>
-						{open.name}
+						Files
 					</button>
-					{#each crumbs as segment, i (i)}
-						<span class="opacity-30">/</span>
+					<button
+						type="button"
+						onclick={() => {
+							tab = 'settings'
+							void loadSettings()
+						}}
+						class="rounded-lg px-3 py-1.5 text-xs transition-colors {tab === 'settings'
+							? 'bg-surface-raised font-medium shadow-[0_1px_3px_rgba(30,41,59,0.05)]'
+							: 'opacity-50 hover:opacity-100'}"
+					>
+						Settings
+					</button>
+				</div>
+
+				{#if tab === 'files'}
+					<!-- Breadcrumb: the path INTO the tree; every segment walks back up. -->
+					<nav class="flex flex-wrap items-center gap-1 font-mono text-xs">
 						<button
 							type="button"
-							onclick={() => void browse(crumbs.slice(0, i + 1).join('/'))}
-							class="rounded px-1 py-0.5 transition-colors hover:bg-primary/5 {i === crumbs.length - 1 && !file
+							onclick={() => void browse('')}
+							class="rounded px-1 py-0.5 transition-colors hover:bg-primary/5 {path === '' && !file
+						? 'font-semibold'
+						: 'opacity-60'}"
+						>
+							{open.name}
+						</button>
+						{#each crumbs as segment, i (i)}
+							<span class="opacity-30">/</span>
+							<button
+								type="button"
+								onclick={() => void browse(crumbs.slice(0, i + 1).join('/'))}
+								class="rounded px-1 py-0.5 transition-colors hover:bg-primary/5 {i === crumbs.length - 1 && !file
 							? 'font-semibold'
 							: 'opacity-60'}"
-						>
-							{segment}
-						</button>
-					{/each}
-					{#if file}
-						<span class="opacity-30">/</span>
-						<span class="rounded px-1 py-0.5 font-semibold">{file.path.split('/').at(-1)}</span>
-					{/if}
-				</nav>
+							>
+								{segment}
+							</button>
+						{/each}
+						{#if file}
+							<span class="opacity-30">/</span>
+							<span class="rounded px-1 py-0.5 font-semibold">{file.path.split('/').at(-1)}</span>
+						{/if}
+					</nav>
 
-				{#if file}
-					<!-- The file: editable in place, no mode to enter. Binary or huge stays opaque. -->
-					{#if file.text === null}
-						<p
-							class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-						>
-							Binary or too large to open.
-						</p>
-					{:else}
-						<textarea
-							bind:value={draft}
-							{rows}
-							spellcheck="false"
-							class="min-h-0 flex-1 resize-y rounded-xl border bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none focus:border-primary {dirty
+					{#if file}
+						<!-- The file: editable in place, no mode to enter. Binary or huge stays opaque. -->
+						{#if file.text === null}
+							<p
+								class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+							>
+								Binary or too large to open.
+							</p>
+						{:else}
+							<textarea
+								bind:value={draft}
+								{rows}
+								spellcheck="false"
+								class="min-h-0 flex-1 resize-y rounded-xl border bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none focus:border-primary {dirty
 								? 'border-primary'
 								: 'border-foreground/5'}"
-						></textarea>
-						<!-- The save bar exists only while there is something to save; the
+							></textarea>
+							<!-- The save bar exists only while there is something to save; the
 						     commit lands on a fresh edit/* branch (see saveEdit). -->
-						{#if dirty}
-							<div class="flex items-center justify-end gap-2">
-								<span class="mr-auto text-[10px] opacity-40">
-									unsaved · saves to a new edit/* branch
-								</span>
-								<button
-									type="button"
-									onclick={() => {
+							{#if dirty}
+								<div class="flex items-center justify-end gap-2">
+									<span class="mr-auto text-[10px] opacity-40">
+										unsaved · saves to a new edit/* branch
+									</span>
+									<button
+										type="button"
+										onclick={() => {
 										draft = file?.text ?? ''
 									}}
-									disabled={busy}
-									class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5 disabled:opacity-30"
-								>
-									Revert
-								</button>
-								<button
-									type="button"
-									onclick={() => void saveEdit()}
-									disabled={busy}
-									class="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground text-xs transition-opacity disabled:opacity-30"
-								>
-									{busy ? 'Saving…' : 'Save'}
-								</button>
-							</div>
+										disabled={busy}
+										class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5 disabled:opacity-30"
+									>
+										Revert
+									</button>
+									<button
+										type="button"
+										onclick={() => void saveEdit()}
+										disabled={busy}
+										class="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground text-xs transition-opacity disabled:opacity-30"
+									>
+										{busy ? 'Saving…' : 'Save'}
+									</button>
+								</div>
+							{/if}
 						{/if}
+					{:else}
+						<!-- The tree, one directory at a time: folders first, then files. -->
+						<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
+							{#each entries as entry (entry.path)}
+								<li>
+									<button
+										type="button"
+										onclick={() => (entry.type === 'dir' ? void browse(entry.path) : void preview(entry))}
+										class="flex w-full items-center gap-2.5 rounded-xl border border-foreground/5 bg-surface-raised px-3 py-2 text-left font-mono text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-colors hover:bg-primary/5"
+									>
+										{#if entry.type === 'dir'}
+											<!-- lucide:folder -->
+											<svg
+												viewBox="0 0 24 24"
+												class="size-4 shrink-0 opacity-60"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="1.5"
+												stroke-linejoin="round"
+											>
+												<path
+													d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+												/>
+											</svg>
+										{:else}
+											<!-- lucide:file -->
+											<svg
+												viewBox="0 0 24 24"
+												class="size-4 shrink-0 opacity-40"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="1.5"
+												stroke-linejoin="round"
+											>
+												<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+												<path d="M14 2v4a2 2 0 0 0 2 2h4" />
+											</svg>
+										{/if}
+										<span class="min-w-0 flex-1 truncate">{entry.name}</span>
+										{#if entry.type !== 'dir'}
+											<span class="shrink-0 text-[10px] opacity-40">{fmtBytes(entry.size)}</span>
+										{/if}
+									</button>
+								</li>
+							{:else}
+								<li class="px-3 py-2 text-xs opacity-40">
+									{details?.empty ? 'Empty repository — no commits yet.' : 'Empty directory.'}
+								</li>
+							{/each}
+						</ul>
 					{/if}
-				{:else}
-					<!-- The tree, one directory at a time: folders first, then files. -->
-					<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
-						{#each entries as entry (entry.path)}
-							<li>
-								<button
-									type="button"
-									onclick={() => (entry.type === 'dir' ? void browse(entry.path) : void preview(entry))}
-									class="flex w-full items-center gap-2.5 rounded-xl border border-foreground/5 bg-surface-raised px-3 py-2 text-left font-mono text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-colors hover:bg-primary/5"
+				{:else if details}
+					<!-- How the repo is SET UP — read-only. Everything here comes
+					     straight from the API; nothing on this tab writes. -->
+					<div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-2">
+						{#snippet row(label: string, value: string)}
+							<div class="flex gap-3 text-xs">
+								<span class="w-40 shrink-0 opacity-40">{label}</span>
+								<span class="min-w-0 flex-1 break-all font-mono">{value}</span>
+							</div>
+						{/snippet}
+						{#snippet chip(label: string, on: boolean | undefined)}
+							<span
+								class="rounded-full border px-2.5 py-0.5 text-[11px] {on
+									? 'border-primary/30 bg-primary/5'
+									: 'border-border opacity-30 line-through'}"
+							>
+								{label}
+							</span>
+						{/snippet}
+
+						<section class="flex flex-col gap-2">
+							<h3 class="text-[0.625rem] uppercase tracking-[0.16em] opacity-40">Repository</h3>
+							<div
+								class="flex flex-col gap-1.5 rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+							>
+								{@render row('visibility', details.private ? 'private' : details.internal ? 'internal' : 'public')}
+								{@render row('default branch', details.default_branch)}
+								{@render row('object format', details.object_format_name ?? 'sha1')}
+								{@render row('size', fmtSize(details.size))}
+								{@render row('branches', String(details.branch_count ?? branches.length))}
+								{@render row('open issues / PRs', `${details.open_issues_count ?? 0} / ${details.open_pr_counter ?? 0}`)}
+								{@render row('releases', String(details.release_counter ?? 0))}
+								{@render row('created', details.created_at ? new Date(details.created_at).toLocaleString() : '—')}
+								{@render row('updated', new Date(details.updated_at).toLocaleString())}
+								{@render row('clone (http)', details.clone_url)}
+								{@render row('clone (ssh)', details.ssh_url || 'ssh disabled')}
+								{@render row('your access', permissionOf(details))}
+								{#if details.website}
+									{@render row('website', details.website)}
+								{/if}
+								{#if details.language}
+									{@render row('language', details.language)}
+								{/if}
+								{#if details.topics?.length}
+									{@render row('topics', details.topics.join(', '))}
+								{/if}
+								{#if details.mirror}
+									{@render row('mirror', `every ${details.mirror_interval || '—'}`)}
+								{/if}
+								<div class="flex flex-wrap gap-1.5 pt-1">
+									{@render chip('template', details.template)}
+									{@render chip('fork', details.fork)}
+									{@render chip('mirror', details.mirror)}
+									{@render chip('archived', details.archived)}
+									{@render chip('empty', details.empty)}
+								</div>
+							</div>
+						</section>
+
+						<section class="flex flex-col gap-2">
+							<h3 class="text-[0.625rem] uppercase tracking-[0.16em] opacity-40">Features</h3>
+							<div
+								class="flex flex-wrap gap-1.5 rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+							>
+								{#each features as [label, on] (label)}
+									{@render chip(label, on)}
+								{/each}
+							</div>
+						</section>
+
+						<section class="flex flex-col gap-2">
+							<h3 class="text-[0.625rem] uppercase tracking-[0.16em] opacity-40">Pull requests</h3>
+							<div
+								class="flex flex-col gap-2 rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+							>
+								<div class="flex flex-wrap gap-1.5">
+									{#each mergeStyles as [label, on] (label)}
+										{@render chip(label, on)}
+									{/each}
+								</div>
+								{@render row('default merge style', details.default_merge_style ?? '—')}
+								{@render row('default update style', details.default_update_style ?? '—')}
+								{@render row('update by', [details.allow_merge_update ? 'merge' : '', details.allow_rebase_update ? 'rebase' : ''].filter(Boolean).join(', ') || 'blocked')}
+								{@render row('delete branch after merge', details.default_delete_branch_after_merge ? 'yes' : 'no')}
+								{@render row('maintainer edit by default', details.default_allow_maintainer_edit ? 'yes' : 'no')}
+								{@render row('ignore whitespace conflicts', details.ignore_whitespace_conflicts ? 'yes' : 'no')}
+								{@render row('autodetect manual merge', details.autodetect_manual_merge ? 'yes' : 'no')}
+							</div>
+						</section>
+
+						<section class="flex flex-col gap-2">
+							<h3 class="text-[0.625rem] uppercase tracking-[0.16em] opacity-40">
+								Branch protection
+							</h3>
+							{#each protections as rule (rule.rule_name)}
+								<div
+									class="flex flex-col gap-1.5 rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 								>
-									{#if entry.type === 'dir'}
-										<!-- lucide:folder -->
-										<svg
-											viewBox="0 0 24 24"
-											class="size-4 shrink-0 opacity-60"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="1.5"
-											stroke-linejoin="round"
-										>
-											<path
-												d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
-											/>
-										</svg>
-									{:else}
-										<!-- lucide:file -->
-										<svg
-											viewBox="0 0 24 24"
-											class="size-4 shrink-0 opacity-40"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="1.5"
-											stroke-linejoin="round"
-										>
-											<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-											<path d="M14 2v4a2 2 0 0 0 2 2h4" />
-										</svg>
-									{/if}
-									<span class="min-w-0 flex-1 truncate">{entry.name}</span>
-									{#if entry.type !== 'dir'}
-										<span class="shrink-0 text-[10px] opacity-40">{fmtBytes(entry.size)}</span>
-									{/if}
-								</button>
-							</li>
-						{:else}
-							<li class="px-3 py-2 text-xs opacity-40">
-								{details?.empty ? 'Empty repository — no commits yet.' : 'Empty directory.'}
-							</li>
-						{/each}
-					</ul>
+									<p class="font-mono text-xs">
+										{rule.rule_name}
+										{#if rule.priority}
+											<span class="pl-2 text-[10px] opacity-40"> priority {rule.priority} </span>
+										{/if}
+									</p>
+									{#each ruleFacts(rule) as [label, value], i (i)}
+										{@render row(label, value)}
+									{/each}
+								</div>
+							{:else}
+								<p
+									class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-50 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+								>
+									No protection rules — every branch accepts pushes and force pushes.
+								</p>
+							{/each}
+						</section>
+
+						{#if tagProtections.length > 0}
+							<section class="flex flex-col gap-2">
+								<h3 class="text-[0.625rem] uppercase tracking-[0.16em] opacity-40">
+									Tag protection
+								</h3>
+								<div
+									class="flex flex-col gap-1.5 rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+								>
+									{#each tagProtections as t (t.name_pattern)}
+										{@render row(t.name_pattern, t.whitelist_usernames?.join(', ') || 'no one')}
+									{/each}
+								</div>
+							</section>
+						{/if}
+
+						<section class="flex flex-col gap-2">
+							<h3 class="text-[0.625rem] uppercase tracking-[0.16em] opacity-40">Access</h3>
+							<div
+								class="flex flex-col gap-1.5 rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+							>
+								{@render row(`${open.owner} (owner)`, 'admin')}
+								{#each collaborators as c (c.login)}
+									{@render row(c.login, permissionOf(c))}
+								{/each}
+							</div>
+						</section>
+					</div>
 				{/if}
 
 				{#if failure}
@@ -521,7 +897,7 @@ function fmtBytes(b: number): string {
 				{/if}
 			</section>
 
-			{#if branches.length > 0}
+			{#if branches.length > 0 && tab === 'files'}
 				<!-- The branches, top-down: the browsed one filled, the default
 				     marked; clicking re-roots the tree at that ref. -->
 				<aside class="flex w-44 shrink-0 flex-col gap-1.5">
