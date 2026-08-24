@@ -1,7 +1,7 @@
 // The products that exist at the provider, straight from the brand's
 // pricing SSOT. The tier IS the wire key: it lands in the Polar product's
 // `metadata.tier` and is how products are found again — never pinned ids.
-import { PLANS, type Plan, type PlanFeature, plan, planIncludes } from '@avenos/aven-brand/pricing'
+import { PLANS, type Plan, plan, planIncludes, planTexts } from '@avenos/aven-brand/pricing'
 import type { ProductSeed } from './provider.js'
 
 /** Every provider product: the one-off avenID plus the recurring tiers.
@@ -73,21 +73,25 @@ export interface BenefitSpec {
 	/** `skill:<slug>` | `runtime:<tier>` */
 	key: string
 	kind: 'feature_flag' | 'runtime'
-	/** The short German title shown on the product — capped at 42 chars. */
+	/** The short ENGLISH title shown on the product — capped at 42 chars.
+	 * English is the benefit default (Samuel, 2026-08-24); localized German
+	 * titles live on the website, not at the provider. */
 	description: string
 	/** runtime kind only — the SSOT numbers the benefit is built from. */
 	runtime: { hoursPerDay: number; centsPerExtraMinute: number } | null
 }
 
-/** The skill features of ONE plan as feature-flag specs, in feature order. */
+/** The skill features of ONE plan as feature-flag specs, in feature order —
+ * titled in English (index-aligned with the German features). */
 function skillFlagSpecs(p: Plan): BenefitSpec[] {
-	return p.features.flatMap((f: PlanFeature) =>
+	const english = planTexts(p.id, 'en').features
+	return p.features.flatMap((f, index) =>
 		f.skill
 			? [
 					{
 						key: `skill:${f.skill}`,
 						kind: 'feature_flag' as const,
-						description: benefitDescription(f.title),
+						description: benefitDescription(english[index]?.title ?? f.title),
 						runtime: null
 					}
 				]
@@ -101,7 +105,7 @@ function runtimeSpec(p: Plan): BenefitSpec | null {
 	return {
 		key: `runtime:${p.id}`,
 		kind: 'runtime',
-		description: benefitDescription(`Aven Worker Minutes — ${p.runtime.hoursPerDay} Std./Tag`),
+		description: benefitDescription(`Aven Worker Minutes — ${p.runtime.hoursPerDay} h/day`),
 		runtime: p.runtime
 	}
 }
