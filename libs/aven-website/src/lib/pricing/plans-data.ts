@@ -123,7 +123,7 @@ export const PLANS: Plan[] = [
 			'Dein avenID‑Name — für 1 Jahr für dich gesichert',
 			'Dein Platz auf der Warteliste',
 			'20 Min Test‑Zugang — sobald du eingeladen bist',
-			'Voraussetzung für avenME und avenFOUNDER — eine pro Mensch, eine pro Firma'
+			'Präsentiere deine Vision oder Idee mit einem eigenen Profil im aven Marketplace'
 		]
 	},
 	{

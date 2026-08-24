@@ -29,7 +29,7 @@ const EN: Record<PlanId, { role: string; pitch: string; features: string[] }> = 
 			'Your avenID name — reserved for you for 1 year',
 			'Your place on the waiting list',
 			'20 min of trial access — the moment you are invited',
-			'Required for avenME and avenFOUNDER — one per human, one per company'
+			'Present your vision or idea with your own profile in the aven Marketplace'
 		]
 	},
 	avenme: {

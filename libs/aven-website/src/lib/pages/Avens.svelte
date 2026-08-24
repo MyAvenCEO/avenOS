@@ -88,6 +88,20 @@ function handle(a: LiveAven) {
 							</div>
 						</div>
 
+						{#if a.link}
+							<p class="mt-3 text-[12px]">
+								<a
+									href={a.link.href}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="font-medium text-foreground/70 underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+								>
+									{a.link.label}
+									↗
+								</a>
+							</p>
+						{/if}
+
 						{#if profile}
 							<div class="mt-5 border-t border-border/50 pt-4">
 								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
@@ -127,6 +141,7 @@ function handle(a: LiveAven) {
 					{t.person.label}
 				</p>
 				<p class="mt-2 text-[15px] leading-snug text-foreground/65">{t.person.lead}</p>
+				<p class="mt-1 text-[12px] leading-snug text-foreground/45">{t.activationNote}</p>
 			</header>
 
 			<ul
@@ -140,9 +155,27 @@ function handle(a: LiveAven) {
 						>
 							{@html beamAvatarSvg(a.name, palettePerson, 40, `aven-${a.slug}`)}
 						</div>
-						<div class="min-w-0">
+						<div class="min-w-0 flex-1">
 							<p class="text-[15px] font-semibold tracking-tight text-foreground">{a.name}</p>
 							<p class="text-[12px] text-foreground/50">{handle(a)}</p>
+							{#if t.bios[a.slug] || a.link}
+								<p class="mt-1 max-w-xl text-[12px] leading-snug text-foreground/60">
+									{#if t.bios[a.slug]}
+										{t.bios[a.slug]}
+									{/if}
+									{#if a.link}
+										<a
+											href={a.link.href}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="font-medium text-foreground/70 underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+										>
+											{a.link.label}
+											↗
+										</a>
+									{/if}
+								</p>
+							{/if}
 						</div>
 						<p class="ml-auto text-right text-[12px] leading-snug text-foreground/55">
 							{t.behind}
