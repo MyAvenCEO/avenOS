@@ -1,5 +1,7 @@
 <script lang="ts">
+import { legalHref } from '@avenos/aven-brand'
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { settings, VOICES, type Voice } from '$lib/settings.svelte'
 import Account from './Account.svelte'
 import Billing from './Billing.svelte'
@@ -31,6 +33,18 @@ let playing = $state<Voice | null>(null)
 let failure = $state<string | null>(null)
 
 const SAMPLE = 'Hallo, ich bin deine Stimme. Milch und Brot stehen auf der Liste.'
+
+// The website's Impressum: the app has no hostname to derive an environment
+// from, so dev pairs with the local website and every build with next —
+// flipped to prod in ONE place (the brand lib) when aven.ceo goes live.
+const impressumHref = legalHref('impressum', { env: import.meta.env.DEV ? 'local' : 'next' })
+
+/** In Tauri the system browser opens it; in plain dev the anchor does. */
+async function openImpressum(event: MouseEvent) {
+	if (!isTauri()) return
+	event.preventDefault()
+	await openUrl(impressumHref)
+}
 
 let context: AudioContext | null = null
 
@@ -196,6 +210,18 @@ async function preview(voice: Voice) {
 					</p>
 				</section>
 			{/if}
+
+			<footer class="mt-10 border-t border-foreground/8 pt-4 text-center">
+				<a
+					href={impressumHref}
+					target="_blank"
+					rel="noopener noreferrer"
+					onclick={openImpressum}
+					class="text-[11px] text-foreground/45 transition-colors hover:text-foreground/75"
+				>
+					Impressum
+				</a>
+			</footer>
 		</div>
 	</div>
 </main>
