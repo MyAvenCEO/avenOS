@@ -7,6 +7,7 @@ on:
       - services/artifact-store/**
       - services/intent-service/**
       - services/static-site-host/**
+      - libs/aven-hosting/**
       - infrastructure/identity/**
       - package.json
       - bun.lock
@@ -22,6 +23,7 @@ on:
       - services/artifact-store/**
       - services/intent-service/**
       - services/static-site-host/**
+      - libs/aven-hosting/**
       - infrastructure/identity/**
       - package.json
       - bun.lock
@@ -70,11 +72,14 @@ jobs:
       - run: bunx biome check services/aven-api
       - run: bunx biome check infrastructure/identity
       - run: bunx biome check services/static-site-host
+      - run: bunx biome check libs/aven-hosting
       - run: bun run check:api
       - run: bun run test:api
       - run: bun run test:infra
       - run: bun run --cwd services/static-site-host check
       - run: bun run --cwd services/static-site-host test
+      - run: bun run --cwd libs/aven-hosting check
+      - run: bun run --cwd libs/aven-hosting test
       - run: cargo test --locked --workspace
         working-directory: services/artifact-store
       - run: cargo test --locked

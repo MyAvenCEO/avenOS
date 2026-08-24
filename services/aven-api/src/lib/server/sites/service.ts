@@ -1,100 +1,177 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import type { SiteBinding, SiteBindingDraft, SiteRuntimeStatus } from '@avenos/aven-hosting'
 import type pg from 'pg'
-import { withTransaction } from '../db.js'
+import { type Queryable, withTransaction } from '../db.js'
 import { AppError } from '../errors.js'
 
-export type SiteRuntimeStatus = 'awaiting_dns' | 'syncing' | 'active' | 'dns_invalid' | 'failed'
-
-export interface SiteBindingInput {
+interface SiteRow {
+	id: string
 	name: string
 	hostname: string
 	repository: string
-	sourceBranch: string
-	deploymentBranch: string
+	source_ref: string
+	artifact_ref: string
+	runtime_status: SiteRuntimeStatus
+	active_artifact_revision: string | null
+	active_source_revision: string | null
+	last_error: string | null
+	verified_at: Date | string | null
+	last_synced_at: Date | string | null
+}
+
+const iso = (value: Date | string | null): string | null =>
+	value instanceof Date ? value.toISOString() : value
+const branchOf = (ref: string): string => ref.replace(/^refs\/heads\//, '')
+
+function siteOf(row: SiteRow): SiteBinding {
+	return {
+		id: row.id,
+		name: row.name,
+		hostname: row.hostname,
+		repository: row.repository,
+		sourceBranch: branchOf(row.source_ref),
+		deploymentBranch: branchOf(row.artifact_ref),
+		status: row.runtime_status,
+		activeArtifactRevision: row.active_artifact_revision,
+		activeSourceRevision: row.active_source_revision,
+		lastError: row.last_error,
+		verifiedAt: iso(row.verified_at),
+		lastSyncedAt: iso(row.last_synced_at)
+	}
 }
 
 export const hashVerificationToken = (token: string) =>
 	createHash('sha256').update(token).digest('hex')
 
 export class SiteBindingService {
-	constructor(private pool: pg.Pool) {}
+	constructor(
+		private pool: pg.Pool,
+		private publicAddresses: { ipv4: string | null; ipv6: string[] } = { ipv4: null, ipv6: [] }
+	) {}
 
-	async listForUser(userId: string) {
-		const result = await this.pool.query(
-			`SELECT e.name, b.hostname, r.repository_full_name AS repository,
-			        b.source_ref, b.artifact_ref, b.runtime_status,
-			        b.active_artifact_revision, b.active_source_revision,
-			        b.last_error, b.verified_at, b.last_synced_at
+	private async ownedEnvironment(connection: Queryable, userId: string, name: string) {
+		const environment = await connection.query<{ id: string }>(
+			`SELECT e.id FROM customer_environments e
+			 JOIN names n ON n.name=e.name
+			 WHERE e.name=$1 AND e.owner_user_id=$2 AND n.status='owned'
+			 FOR UPDATE`,
+			[name, userId]
+		)
+		const id = environment.rows[0]?.id
+		if (!id) throw new AppError(404, 'NAME_NOT_FOUND', 'No owned Aven name has that value.')
+		return id
+	}
+
+	private async repository(connection: Queryable, fullName: string, now: Date) {
+		const result = await connection.query<{ id: string }>(
+			`INSERT INTO site_repositories
+			 (id,provider,repository_full_name,clone_url,created_at,updated_at)
+			 VALUES ($1,'github',$2,$3,$4,$4)
+			 ON CONFLICT (repository_full_name) DO UPDATE SET updated_at=EXCLUDED.updated_at
+			 RETURNING id`,
+			[randomUUID(), fullName, `https://github.com/${fullName}.git`, now]
+		)
+		const id = result.rows[0]?.id
+		if (!id) throw new Error('repository upsert returned no id')
+		return id
+	}
+
+	private async site(connection: Queryable, userId: string, id: string): Promise<SiteBinding> {
+		const result = await connection.query<SiteRow>(
+			`SELECT b.id,e.name,b.hostname,r.repository_full_name AS repository,
+			        b.source_ref,b.artifact_ref,b.runtime_status,
+			        b.active_artifact_revision,b.active_source_revision,b.last_error,
+			        b.verified_at,b.last_synced_at
 			 FROM static_site_bindings b
 			 JOIN customer_environments e ON e.id=b.environment_id
 			 JOIN site_repositories r ON r.id=b.repository_id
-			 WHERE e.owner_user_id=$1 ORDER BY e.name`,
-			[userId]
+			 WHERE b.id=$1 AND e.owner_user_id=$2`,
+			[id, userId]
 		)
-		return result.rows
+		const row = result.rows[0]
+		if (!row) throw new AppError(404, 'SITE_NOT_FOUND', 'No site has that id.')
+		return siteOf(row)
 	}
 
-	async configure(userId: string, input: SiteBindingInput) {
+	async listForUser(userId: string): Promise<SiteBinding[]> {
+		const result = await this.pool.query<SiteRow>(
+			`SELECT b.id,e.name,b.hostname,r.repository_full_name AS repository,
+			        b.source_ref,b.artifact_ref,b.runtime_status,
+			        b.active_artifact_revision,b.active_source_revision,b.last_error,
+			        b.verified_at,b.last_synced_at
+			 FROM static_site_bindings b
+			 JOIN customer_environments e ON e.id=b.environment_id
+			 JOIN site_repositories r ON r.id=b.repository_id
+			 WHERE e.owner_user_id=$1 ORDER BY e.name,b.hostname`,
+			[userId]
+		)
+		return result.rows.map(siteOf)
+	}
+
+	async create(userId: string, input: SiteBindingDraft) {
+		return this.persist(userId, null, input)
+	}
+
+	async update(userId: string, id: string, input: SiteBindingDraft) {
+		return this.persist(userId, id, input)
+	}
+
+	private async persist(userId: string, id: string | null, input: SiteBindingDraft) {
 		const token = randomBytes(32).toString('base64url')
 		const tokenHash = hashVerificationToken(token)
 		try {
-			const binding = await withTransaction(this.pool, async (client) => {
-				const environment = await client.query<{ id: string }>(
-					`SELECT e.id FROM customer_environments e
-					 JOIN names n ON n.name=e.name
-					 WHERE e.name=$1 AND e.owner_user_id=$2 AND n.status='owned'
-					 FOR UPDATE`,
-					[input.name, userId]
-				)
-				const environmentId = environment.rows[0]?.id
-				if (!environmentId)
-					throw new AppError(404, 'NAME_NOT_FOUND', 'No owned Aven name has that value.')
+			const site = await withTransaction(this.pool, async (client) => {
+				if (id) {
+					const owned = await client.query(
+						`SELECT 1 FROM static_site_bindings b
+						 JOIN customer_environments e ON e.id=b.environment_id
+						 WHERE b.id=$1 AND e.owner_user_id=$2 FOR UPDATE OF b`,
+						[id, userId]
+					)
+					if (!owned.rowCount) throw new AppError(404, 'SITE_NOT_FOUND', 'No site has that id.')
+				}
+				const environmentId = await this.ownedEnvironment(client, userId, input.name)
 				const now = new Date()
-				const repositoryId = randomUUID()
-				const cloneUrl = `https://github.com/${input.repository}.git`
-				const repo = await client.query<{ id: string }>(
-					`INSERT INTO site_repositories
-					 (id,provider,repository_full_name,clone_url,created_at,updated_at)
-					 VALUES ($1,'github',$2,$3,$4,$4)
-					 ON CONFLICT (repository_full_name) DO UPDATE SET updated_at=EXCLUDED.updated_at
-					 RETURNING id`,
-					[repositoryId, input.repository, cloneUrl, now]
-				)
-				const persistedRepositoryId = repo.rows[0]?.id
-				if (!persistedRepositoryId) throw new Error('repository upsert returned no id')
-				const result = await client.query(
-					`INSERT INTO static_site_bindings
-					 (id,environment_id,repository_id,hostname,source_ref,artifact_ref,artifact_path,
-					  verification_token_hash,desired_status,runtime_status,created_at,updated_at)
-					 VALUES ($1,$2,$3,$4,$5,$6,'dist',$7,'active','awaiting_dns',$8,$8)
-					 ON CONFLICT (environment_id) DO UPDATE SET
-					  repository_id=EXCLUDED.repository_id, hostname=EXCLUDED.hostname,
-					  source_ref=EXCLUDED.source_ref, artifact_ref=EXCLUDED.artifact_ref,
-					  verification_token_hash=EXCLUDED.verification_token_hash,
-					  desired_status='active', runtime_status='awaiting_dns',
-					  active_artifact_revision=NULL, active_source_revision=NULL,
-					  last_error=NULL, verified_at=NULL, last_dns_check_at=NULL,
-					  last_synced_at=NULL, updated_at=EXCLUDED.updated_at
-					 RETURNING id,hostname,runtime_status`,
-					[
-						randomUUID(),
-						environmentId,
-						persistedRepositoryId,
-						input.hostname,
-						`refs/heads/${input.sourceBranch}`,
-						`refs/heads/${input.deploymentBranch}`,
-						tokenHash,
-						now
-					]
-				)
-				return result.rows[0]
+				const repositoryId = await this.repository(client, input.repository, now)
+				const values = [
+					environmentId,
+					repositoryId,
+					input.hostname,
+					`refs/heads/${input.sourceBranch}`,
+					`refs/heads/${input.deploymentBranch}`,
+					tokenHash,
+					now
+				]
+				let bindingId = id
+				if (bindingId) {
+					await client.query(
+						`UPDATE static_site_bindings SET
+						 environment_id=$1,repository_id=$2,hostname=$3,source_ref=$4,artifact_ref=$5,
+						 verification_token_hash=$6,desired_status='active',runtime_status='awaiting_dns',
+						 active_artifact_revision=NULL,active_source_revision=NULL,last_error=NULL,
+						 verified_at=NULL,last_dns_check_at=NULL,last_synced_at=NULL,updated_at=$7
+						 WHERE id=$8`,
+						[...values, bindingId]
+					)
+				} else {
+					bindingId = randomUUID()
+					await client.query(
+						`INSERT INTO static_site_bindings
+						 (id,environment_id,repository_id,hostname,source_ref,artifact_ref,artifact_path,
+						  verification_token_hash,desired_status,runtime_status,created_at,updated_at)
+						 VALUES ($8,$1,$2,$3,$4,$5,'dist',$6,'active','awaiting_dns',$7,$7)`,
+						[...values, bindingId]
+					)
+				}
+				return this.site(client, userId, bindingId)
 			})
 			return {
-				...binding,
+				site,
 				dns: {
 					txtName: `_aven-site.${input.hostname}`,
 					txtValue: token,
-					hostname: input.hostname
+					hostname: input.hostname,
+					...this.publicAddresses
 				}
 			}
 		} catch (error) {
@@ -109,11 +186,11 @@ export class SiteBindingService {
 		}
 	}
 
-	async remove(userId: string, name: string): Promise<boolean> {
+	async remove(userId: string, id: string): Promise<boolean> {
 		const result = await this.pool.query(
 			`DELETE FROM static_site_bindings b USING customer_environments e
-			 WHERE b.environment_id=e.id AND e.owner_user_id=$1 AND e.name=$2`,
-			[userId, name]
+			 WHERE b.environment_id=e.id AND e.owner_user_id=$1 AND b.id=$2`,
+			[userId, id]
 		)
 		return (result.rowCount ?? 0) > 0
 	}

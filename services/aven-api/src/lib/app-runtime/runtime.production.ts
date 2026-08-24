@@ -1,3 +1,4 @@
+import { createSiteHostingClient } from '@avenos/aven-hosting'
 import { derived, type Readable } from 'svelte/store'
 import { api } from '$lib/api.js'
 import { authClient } from '$lib/auth-client.js'
@@ -212,6 +213,7 @@ export const appRuntime: AppRuntime = {
 			}
 		}
 	},
+	sites: createSiteHostingClient(api),
 	billing: {
 		pay: (input) =>
 			api<{ paid: boolean; redirect: string }>('/billing/fake-pay', {

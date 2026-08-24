@@ -39,6 +39,7 @@ async function logout() {
 	<nav>
 		{#if $session.authenticated}
 			<a href="/dashboard">Dashboard</a>
+			<a href="/sites">Websites</a>
 			<button class="link" onclick={logout}>Abmelden</button>
 		{:else}
 			<a href="/login">Anmelden</a>

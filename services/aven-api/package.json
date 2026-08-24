@@ -41,6 +41,7 @@
 	"dependencies": {
 		"@avenos/artifact-store": "workspace:*",
 		"@avenos/aven-brand": "workspace:*",
+		"@avenos/aven-hosting": "workspace:*",
 		"@avenos/aven-website": "workspace:*",
 		"@better-auth/passkey": "1.6.23",
 		"@polar-sh/sdk": "^0.49.0",

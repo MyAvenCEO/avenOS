@@ -27,7 +27,6 @@ export const staticSiteBindings = pgTable(
 		id: text('id').primaryKey(),
 		environmentId: text('environment_id')
 			.notNull()
-			.unique()
 			.references(() => customerEnvironments.id, { onDelete: 'cascade' }),
 		repositoryId: text('repository_id')
 			.notNull()
@@ -66,6 +65,7 @@ export const staticSiteBindings = pgTable(
 			'static_site_bindings_runtime_status',
 			sql`${table.runtimeStatus} IN ('awaiting_dns','syncing','active','dns_invalid','failed')`
 		),
+		index('static_site_bindings_environment_idx').on(table.environmentId),
 		uniqueIndex('static_site_bindings_artifact_ref_unique').on(
 			table.repositoryId,
 			table.artifactRef

@@ -68,7 +68,12 @@ async function create(): Promise<Runtime> {
 	const artifacts = ArtifactFileService.fromConfig(config)
 	const artifactProcessing = ArtifactProcessingService.fromConfig(config)
 	const intents = IntentService.fromConfig(config)
-	const sites = new SiteBindingService(database.pool)
+	const sites = new SiteBindingService(database.pool, {
+		ipv4: config.SITE_HOST_PUBLIC_IPV4 || null,
+		ipv6: config.SITE_HOST_PUBLIC_IPV6.split(',')
+			.map((address) => address.trim())
+			.filter(Boolean)
+	})
 	const names = new NameService(
 		database.pool,
 		config,
