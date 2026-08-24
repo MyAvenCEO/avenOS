@@ -1,4 +1,7 @@
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine as _,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::File;
@@ -25,6 +28,8 @@ struct UploadProgress {
 #[serde(rename_all = "camelCase")]
 pub struct UploadedArtifact {
     publication_id: String,
+    intent_id: String,
+    intent_declaration_artifact_id: String,
     artifact_id: String,
     original_name: String,
     media_type: String,
@@ -50,6 +55,15 @@ pub struct ArtifactProcessingStage {
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DerivedArtifact {
+    artifact_id: String,
+    type_key: String,
+    type_version: i32,
+    stage_key: String,
+}
+
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArtifactProcessingState {
     Active,
@@ -70,6 +84,7 @@ pub struct ArtifactProcessingPresentation {
     metadata: serde_json::Map<String, serde_json::Value>,
     warnings: Vec<ArtifactProcessingWarning>,
     stages: Vec<ArtifactProcessingStage>,
+    derived_artifacts: Vec<DerivedArtifact>,
 }
 
 #[derive(Serialize)]
@@ -77,6 +92,13 @@ pub struct ArtifactProcessingPresentation {
 pub struct ArtifactProcessingLookup {
     pending: bool,
     presentation: Option<ArtifactProcessingPresentation>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactContent {
+    media_type: String,
+    base64: String,
 }
 
 #[derive(Deserialize)]
@@ -220,10 +242,81 @@ fn processing_status(
     })
 }
 
+fn intent_json(
+    token: String,
+    method: &str,
+    path: String,
+    body: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(20))
+        .build();
+    let url = api_endpoint(&path);
+    let request = match method {
+        "GET" => agent.get(&url),
+        "POST" => agent
+            .post(&url)
+            .set("content-type", "application/json")
+            .set("origin", &api_endpoint("")),
+        _ => return Err("Unsupported intent request method.".to_string()),
+    }
+    .set("authorization", &format!("Bearer {token}"));
+    let result = match body {
+        Some(body) => request.send_string(&body),
+        None => request.call(),
+    };
+    let response = result.map_err(|error| match error {
+        ureq::Error::Status(_, response) => {
+            response_error(response, "The intent request was rejected.")
+        }
+        ureq::Error::Transport(error) => format!("Aven API unavailable: {error}"),
+    })?;
+    let body = response
+        .into_string()
+        .map_err(|error| format!("Could not read intent state: {error}"))?;
+    serde_json::from_str(&body).map_err(|error| format!("Invalid intent state: {error}"))
+}
+
+fn artifact_content(token: String, artifact_id: String) -> Result<ArtifactContent, String> {
+    let response = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .get(&api_endpoint(&format!(
+            "/api/artifacts/{artifact_id}/content"
+        )))
+        .set("authorization", &format!("Bearer {token}"))
+        .call()
+        .map_err(|error| match error {
+            ureq::Error::Status(_, response) => {
+                response_error(response, "Artifact content is unavailable.")
+            }
+            ureq::Error::Transport(error) => format!("Aven API unavailable: {error}"),
+        })?;
+    let media_type = response
+        .header("content-type")
+        .unwrap_or("application/octet-stream")
+        .to_string();
+    let mut bytes = Vec::new();
+    response
+        .into_reader()
+        .take(MAX_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("Could not read artifact content: {error}"))?;
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return Err("Artifact content exceeds the desktop preview limit.".to_string());
+    }
+    Ok(ArtifactContent {
+        media_type,
+        base64: STANDARD.encode(bytes),
+    })
+}
+
 fn upload(
     app: tauri::AppHandle,
     upload_id: String,
     publication_id: String,
+    intent_id: String,
+    observed_at: String,
     path: PathBuf,
     token: String,
 ) -> Result<UploadedArtifact, String> {
@@ -292,6 +385,8 @@ fn upload(
         .set("content-length", &length.to_string())
         .set("x-expected-sha256", &sha256)
         .set("x-aven-original-name", &encoded_name)
+        .set("x-aven-intent-id", &intent_id)
+        .set("x-aven-observed-at", &observed_at)
         .send(reader)
         .map_err(|error| match error {
             ureq::Error::Status(_, response) => {
@@ -309,13 +404,39 @@ fn upload(
 pub async fn artifact_upload(
     upload_id: String,
     publication_id: String,
+    intent_id: String,
+    observed_at: String,
     path: PathBuf,
     app: tauri::AppHandle,
     state: tauri::State<'_, AuthState>,
 ) -> Result<UploadedArtifact, String> {
     let token = session_token(&state)?;
     tauri::async_runtime::spawn_blocking(move || {
-        upload(app, upload_id, publication_id, path, token)
+        let first = upload(
+            app.clone(),
+            upload_id.clone(),
+            publication_id.clone(),
+            intent_id.clone(),
+            observed_at.clone(),
+            path.clone(),
+            token.clone(),
+        );
+        if first
+            .as_ref()
+            .is_err_and(|error| error.starts_with("Aven API unavailable:"))
+        {
+            upload(
+                app,
+                upload_id,
+                publication_id,
+                intent_id,
+                observed_at,
+                path,
+                token,
+            )
+        } else {
+            first
+        }
     })
     .await
     .map_err(|error| format!("Artifact upload task failed: {error}"))?
@@ -330,6 +451,86 @@ pub async fn artifact_processing_status(
     tauri::async_runtime::spawn_blocking(move || processing_status(token, artifact_id))
         .await
         .map_err(|error| format!("Artifact processing status task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn intent_list(state: tauri::State<'_, AuthState>) -> Result<serde_json::Value, String> {
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(token, "GET", "/api/intents".into(), None)
+    })
+    .await
+    .map_err(|error| format!("Intent list task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn intent_get(
+    intent_id: String,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&intent_id) {
+        return Err("The intent ID is invalid.".to_string());
+    }
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(token, "GET", format!("/api/intents/{intent_id}"), None)
+    })
+    .await
+    .map_err(|error| format!("Intent detail task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn intent_append_contribution(
+    intent_id: String,
+    contribution: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&intent_id) {
+        return Err("The intent ID is invalid.".to_string());
+    }
+    let token = session_token(&state)?;
+    let body = serde_json::to_string(&contribution)
+        .map_err(|error| format!("Invalid contribution: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(
+            token,
+            "POST",
+            format!("/api/intents/{intent_id}"),
+            Some(body),
+        )
+    })
+    .await
+    .map_err(|error| format!("Intent contribution task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn artifact_content_get(
+    artifact_id: String,
+    state: tauri::State<'_, AuthState>,
+) -> Result<ArtifactContent, String> {
+    if !valid_artifact_id(&artifact_id) {
+        return Err("The artifact ID is invalid.".to_string());
+    }
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || artifact_content(token, artifact_id))
+        .await
+        .map_err(|error| format!("Artifact content task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn artifact_get(
+    artifact_id: String,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&artifact_id) {
+        return Err("The artifact ID is invalid.".to_string());
+    }
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(token, "GET", format!("/api/artifacts/{artifact_id}"), None)
+    })
+    .await
+    .map_err(|error| format!("Artifact lookup task failed: {error}"))?
 }
 
 #[cfg(test)]

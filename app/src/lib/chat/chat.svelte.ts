@@ -161,6 +161,8 @@ export interface ArtifactAttachment {
 
 export interface UploadedArtifactReceipt {
 	publicationId: string
+	intentId: string
+	intentDeclarationArtifactId: string
 	artifactId: string
 	originalName: string
 	mediaType: string
@@ -194,8 +196,7 @@ export interface ChatTools {
 	) => { record: string; wire: string } | Promise<{ record: string; wire: string }>
 }
 
-let nextId = 0
-const id = () => `t${nextId++}`
+const id = () => crypto.randomUUID()
 
 /** One conversation: what a person sees, and what the model saw. */
 interface Session {
@@ -224,7 +225,14 @@ export class Chat {
 	 * (`relocateTurn`) — creating an intent puts the question and its answer
 	 * into the new intent's stream, not the one it was asked from.
 	 */
-	#live: { turns: Turn[]; wire: ChatMessage[]; fromTurn: number; fromWire: number } | null = null
+	#live: {
+		turns: Turn[]
+		wire: ChatMessage[]
+		fromTurn: number
+		fromWire: number
+		session: string
+	} | null = null
+	onExchange: ((session: string, user: Turn, assistant: Turn) => void) | null = null
 	/**
 	 * The request while it is being ROUTED: sent, but not yet a bubble in any
 	 * stream. It stays here — shown as a working state in the composer card
@@ -288,6 +296,25 @@ export class Chat {
 		this.#wire = next.wire
 		this.failure = null
 		this.#sink.onTurn?.()
+	}
+
+	hydrate(key: string, turns: Turn[]): void {
+		const existing =
+			key === this.session ? { turns: this.turns, wire: this.#wire } : this.#sessions.get(key)
+		if (existing && existing.turns.length > 0) return
+		const session = this.#fresh()
+		session.turns.push(...turns)
+		session.wire.push(
+			...turns
+				.filter((turn) => turn.content !== '')
+				.map((turn) => ({ role: turn.role, content: turn.content }) as ChatMessage)
+		)
+		this.#sessions.set(key, session)
+		if (key === this.session) {
+			this.turns = session.turns
+			this.#wire = session.wire
+			this.#sink.onTurn?.()
+		}
 	}
 
 	/**
@@ -357,7 +384,8 @@ export class Chat {
 			summary: null,
 			metadata: {},
 			warnings: [],
-			stages: []
+			stages: [],
+			derivedArtifacts: []
 		}
 		this.#artifacts.set(receipt.artifactId, attachment)
 
@@ -450,7 +478,8 @@ export class Chat {
 			turns: this.turns,
 			wire: this.#wire,
 			fromTurn: this.turns.length,
-			fromWire: this.#wire.length
+			fromWire: this.#wire.length,
+			session: this.session
 		}
 		this.#live = live
 		live.wire.push({ role: 'user', content: prompt })
@@ -571,6 +600,7 @@ export class Chat {
 		this.routingReply = ''
 		live.turns.push(pending.user, pending.reply)
 		this.#reply = live.turns[live.turns.length - 1]
+		this.onExchange?.(live.session, pending.user, pending.reply)
 	}
 
 	/**
@@ -596,6 +626,7 @@ export class Chat {
 		target.wire.push(...movedWire)
 		live.turns = target.turns
 		live.wire = target.wire
+		live.session = key
 		this.#sink.onTurn?.()
 	}
 

@@ -13,6 +13,13 @@ export interface ArtifactProcessingStage {
 	state: string
 }
 
+export interface DerivedArtifact {
+	artifactId: string
+	typeKey: string
+	typeVersion: number
+	stageKey: string
+}
+
 export interface ArtifactProcessingPresentation {
 	caseId: string
 	state: ArtifactProcessingState
@@ -23,6 +30,7 @@ export interface ArtifactProcessingPresentation {
 	metadata: Record<string, unknown>
 	warnings: ArtifactProcessingWarning[]
 	stages: ArtifactProcessingStage[]
+	derivedArtifacts: DerivedArtifact[]
 }
 
 export interface ArtifactProcessingLookup {

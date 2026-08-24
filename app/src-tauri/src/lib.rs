@@ -204,6 +204,11 @@ pub fn run() {
 		.invoke_handler(tauri::generate_handler![
 			artifacts::artifact_upload,
 			artifacts::artifact_processing_status,
+			artifacts::intent_list,
+			artifacts::intent_get,
+			artifacts::intent_append_contribution,
+			artifacts::artifact_content_get,
+			artifacts::artifact_get,
 			auth::auth_status,
 			auth::auth_names,
 			auth::billing_me,

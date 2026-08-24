@@ -13,6 +13,7 @@ import '$lib/actors/windows'
 import { type ArtifactProcessingLookup, isTerminalProcessing } from '$lib/artifacts/processing'
 import { composer } from '$lib/intents/composer.svelte'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
+import { intents, type PersistentIntentDetail } from '$lib/intents/intents.svelte'
 import { shell } from '$lib/intents/talk.svelte'
 import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
 
@@ -43,6 +44,8 @@ interface ArtifactUploadProgress {
 
 interface UploadedArtifactReceipt {
 	publicationId: string
+	intentId: string
+	intentDeclarationArtifactId: string
 	artifactId: string
 	originalName: string
 	mediaType: string
@@ -56,11 +59,51 @@ let fileHovering = $state(false)
 let uploadInFlight = $state(false)
 const processingWatchers = new Set<string>()
 
+function persistentTurns(detail: PersistentIntentDetail) {
+	return detail.contributions.flatMap((entry) => {
+		if ((entry.contributorKind !== 'human' && entry.contributorKind !== 'agent') || !entry.text)
+			return []
+		return [
+			{
+				id: entry.id,
+				role: entry.contributorKind === 'human' ? ('user' as const) : ('assistant' as const),
+				content: entry.text
+			}
+		]
+	})
+}
+
+async function refreshIntent(intentId: string): Promise<PersistentIntentDetail | null> {
+	try {
+		const detail = await invoke<PersistentIntentDetail>('intent_get', { intentId })
+		intents.applyPersistent(detail)
+		chat.hydrate(detail.id, persistentTurns(detail))
+		return detail
+	} catch {
+		// Projection follows the immutable publication asynchronously. The
+		// provisional intent stays present while the processing watcher retries.
+		return null
+	}
+}
+
+async function loadPersistentIntents(): Promise<void> {
+	const summaries = await invoke<Array<{ id: string }>>('intent_list')
+	const details = await Promise.all(summaries.map((intent) => refreshIntent(intent.id)))
+	for (const detail of details) {
+		if (
+			detail &&
+			(!detail.fileSkill.presentation || !isTerminalProcessing(detail.fileSkill.presentation.state))
+		) {
+			void watchArtifactProcessing(detail.sourceArtifactId, detail.id)
+		}
+	}
+}
+
 function wait(milliseconds: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
-async function watchArtifactProcessing(artifactId: string): Promise<void> {
+async function watchArtifactProcessing(artifactId: string, intentId?: string): Promise<void> {
 	if (processingWatchers.has(artifactId)) return
 	processingWatchers.add(artifactId)
 	let delay = 300
@@ -77,6 +120,12 @@ async function watchArtifactProcessing(artifactId: string): Promise<void> {
 					delay = Math.min(2_000, Math.round(delay * 1.5))
 				} else {
 					chat.updateArtifactProcessing(artifactId, lookup.presentation)
+					const owner =
+						intentId ??
+						intents.items.find((intent) =>
+							intent.artifacts.some((artifact) => artifact.artifactId === artifactId)
+						)?.id
+					if (owner) await refreshIntent(owner)
 					if (isTerminalProcessing(lookup.presentation.state)) return
 					delay = 1_500
 				}
@@ -113,18 +162,28 @@ async function uploadDroppedFile(paths: string[]): Promise<void> {
 
 	const uploadId = crypto.randomUUID()
 	const publicationId = crypto.randomUUID()
+	const intentId = crypto.randomUUID()
+	const observedAt = new Date().toISOString()
+	intents.beginFileIntent(intentId, basename(paths[0]))
 	chat.beginArtifactUpload(uploadId, publicationId, basename(paths[0]))
 	uploadInFlight = true
 	try {
 		const receipt = await invoke<UploadedArtifactReceipt>('artifact_upload', {
 			uploadId,
 			publicationId,
+			intentId,
+			observedAt,
 			path: paths[0]
 		})
 		chat.commitArtifactUpload(uploadId, receipt)
-		void watchArtifactProcessing(receipt.artifactId)
+		await refreshIntent(receipt.intentId)
+		void watchArtifactProcessing(receipt.artifactId, receipt.intentId)
 	} catch (error) {
-		chat.failArtifactUpload(uploadId, error instanceof Error ? error.message : String(error))
+		const message = error instanceof Error ? error.message : String(error)
+		chat.failArtifactUpload(uploadId, message)
+		intents.failFileIntent(intentId, message)
+		await wait(1_000)
+		void loadPersistentIntents()
 	} finally {
 		uploadInFlight = false
 	}
@@ -201,6 +260,30 @@ onMount(() => {
 	let stopDrop: (() => void) | undefined
 	let stopProgress: (() => void) | undefined
 	const webview = getCurrentWebview()
+	void loadPersistentIntents().catch((error) => {
+		chat.failure = `Could not load persistent intents: ${String(error)}`
+	})
+	chat.onExchange = (session, user, assistant) => {
+		if (!intents.items.find((intent) => intent.id === session)?.persistent) return
+		void (async () => {
+			for (const turn of [user, assistant]) {
+				if (turn.content === '') continue
+				await invoke('intent_append_contribution', {
+					intentId: session,
+					contribution: {
+						id: turn.id,
+						contributorKind: turn.role === 'user' ? 'human' : 'agent',
+						kind: 'message',
+						text: turn.content,
+						payload: {}
+					}
+				})
+			}
+			await refreshIntent(session)
+		})().catch((error) => {
+			chat.failure = `Could not persist the conversation: ${String(error)}`
+		})
+	}
 
 	void webview
 		.onDragDropEvent(({ payload }) => {
@@ -235,6 +318,7 @@ onMount(() => {
 		disposed = true
 		stopDrop?.()
 		stopProgress?.()
+		chat.onExchange = null
 	}
 })
 
