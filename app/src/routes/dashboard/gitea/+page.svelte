@@ -55,8 +55,11 @@ let ref = $state('')
 /** Directory currently shown inside the open repo ('' = root). */
 let path = $state('')
 let entries = $state<Entry[]>([])
-/** A file being previewed, if any. */
-let file = $state<{ path: string; text: string | null } | null>(null)
+/** A file being previewed, if any; sha is what the update API mutates against. */
+let file = $state<{ path: string; text: string | null; sha: string } | null>(null)
+/** Edit mode over the previewed file. */
+let editing = $state(false)
+let draft = $state('')
 
 const connected = $derived(token.trim() !== '')
 const crumbs = $derived(path === '' ? [] : path.split('/'))
@@ -157,6 +160,7 @@ async function switchBranch(name: string) {
 async function browse(dir: string) {
 	if (!open) return
 	file = null
+	editing = false
 	failure = null
 	try {
 		const raw = (await (
@@ -182,8 +186,9 @@ async function browse(dir: string) {
 async function preview(entry: Entry) {
 	if (!open) return
 	failure = null
+	editing = false
 	if (entry.size > 512 * 1024) {
-		file = { path: entry.path, text: null }
+		file = { path: entry.path, text: null, sha: '' }
 		return
 	}
 	try {
@@ -191,14 +196,55 @@ async function preview(entry: Entry) {
 			await api(
 				`/repos/${open.owner}/${open.name}/contents/${entry.path}?ref=${encodeURIComponent(ref)}`
 			)
-		).json()) as { content: string }
+		).json()) as { content: string; sha: string }
 		const bytes = Uint8Array.from(atob(blob.content.replace(/\n/g, '')), (c) => c.charCodeAt(0))
 		const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-		file = { path: entry.path, text }
+		file = { path: entry.path, text, sha: blob.sha }
 	} catch (err) {
 		// Undecodable = binary; anything else is a real failure.
-		if (err instanceof TypeError) file = { path: entry.path, text: null }
+		if (err instanceof TypeError) file = { path: entry.path, text: null, sha: '' }
 		else failure = err instanceof Error ? err.message : String(err)
+	}
+}
+
+function startEdit() {
+	if (!file || file.text === null) return
+	draft = file.text
+	editing = true
+}
+
+/**
+ * Save the draft — never onto the branch being read: the update API's
+ * `new_branch` makes Gitea commit onto a fresh branch in one call, so every
+ * save is an isolated proposal (the germ of a PR flow), not a mutation of
+ * what was browsed. Afterwards the view follows the new branch.
+ */
+async function saveEdit() {
+	if (!open || !file || busy) return
+	busy = true
+	failure = null
+	const target = `edit/${file.path.split('/').at(-1)}-${Date.now()}`
+	try {
+		const result = (await (
+			await api(`/repos/${open.owner}/${open.name}/contents/${file.path}`, {
+				method: 'PUT',
+				body: JSON.stringify({
+					content: btoa(String.fromCharCode(...new TextEncoder().encode(draft))),
+					message: `edit ${file.path} via avenOS`,
+					sha: file.sha,
+					branch: ref,
+					new_branch: target
+				})
+			})
+		).json()) as { content: { sha: string } }
+		branches = [...branches, target].sort()
+		ref = target
+		file = { path: file.path, text: draft, sha: result.content.sha }
+		editing = false
+	} catch (err) {
+		failure = err instanceof Error ? err.message : String(err)
+	} finally {
+		busy = false
 	}
 }
 
@@ -210,6 +256,7 @@ function closeRepo() {
 	entries = []
 	path = ''
 	file = null
+	editing = false
 	failure = null
 }
 
@@ -350,10 +397,49 @@ function fmtBytes(b: number): string {
 					>
 						Binary or too large to preview.
 					</p>
+				{:else if editing}
+					<!-- The draft: saving never touches the branch being read — it
+					     lands on a fresh edit/* branch (see saveEdit). -->
+					<textarea
+						bind:value={draft}
+						rows={16}
+						spellcheck="false"
+						class="min-h-0 flex-1 resize-y rounded-xl border border-primary bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)] outline-none"
+					></textarea>
+					<div class="flex items-center justify-end gap-2">
+						<span class="mr-auto text-[10px] opacity-40">saves to a new edit/* branch</span>
+						<button
+							type="button"
+							onclick={() => {
+								editing = false
+							}}
+							disabled={busy}
+							class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5 disabled:opacity-30"
+						>
+							Cancel
+						</button>
+						<button
+							type="button"
+							onclick={() => void saveEdit()}
+							disabled={busy || draft === file.text}
+							class="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground text-xs transition-opacity disabled:opacity-30"
+						>
+							{busy ? 'Saving…' : 'Save'}
+						</button>
+					</div>
 				{:else}
 					<pre
 						class="min-h-0 flex-1 overflow-auto rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 font-mono text-xs leading-relaxed shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 					>{file.text}</pre>
+					<div class="flex justify-end">
+						<button
+							type="button"
+							onclick={startEdit}
+							class="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-primary/5"
+						>
+							Edit
+						</button>
+					</div>
 				{/if}
 			{:else}
 				<!-- The tree, one directory at a time: folders first, then files. -->

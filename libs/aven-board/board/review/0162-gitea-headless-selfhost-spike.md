@@ -165,6 +165,14 @@ git status --short
 
 ## Progress log
 
+- `2026-08-24` — More client surface on Samuel's request: branch chips on the
+  repo detail (browse any ref; default marked) and FILE EDITING — Save commits
+  via the contents API with `new_branch`, so every save lands on a fresh
+  `edit/<file>-<ts>` branch and the view follows it; the browsed branch is
+  never mutated. Verified live: edited README.md, new branch chip active,
+  `main` raw content unchanged, edit branch carries the change. Committed as
+  `a48b504d` + this increment.
+
 - `2026-08-24` — Follow-ups on Samuel's request (beyond the original spike
   scope): Git rail entry in the dashboard nav (route-style like settings, incl.
   generalized leave-route handling), and a repo DETAIL view — metadata (private/
