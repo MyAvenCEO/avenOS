@@ -20,8 +20,8 @@ const legal = $derived([
 	{ href: legalPath('impressum', lang), label: t.footer.legal.impressum },
 	{ href: legalPath('datenschutz', lang), label: t.footer.legal.datenschutz },
 	{ href: legalPath('social-media', lang), label: t.footer.legal.socialMedia },
-	{ href: legalPath('widerruf', lang), label: t.footer.legal.widerruf },
-	{ href: '/de/agb/', label: t.footer.legal.agb }
+	{ href: legalPath('widerruf', lang), label: t.footer.legal.widerruf }
+	// AGB/Terms deliberately absent while the page is still a placeholder.
 ])
 
 const nav = $derived([
@@ -69,7 +69,7 @@ const year = 2026
 						rel="noopener noreferrer"
 						class="flex items-center gap-2 text-foreground/65 transition-colors hover:text-foreground"
 					>
-						<SocialIcon {profile} size={16} />
+						<SocialIcon {profile} />
 						{profile.name}
 					</a>
 				{/each}
