@@ -503,7 +503,7 @@ const PLAN_TEXTS_EN: Record<PlanId, PlanTexts> = {
 					'What counts today sits on top — your Aven prioritises by what is actually due.'
 			},
 			{
-				title: 'Links and bookmarks, findable again',
+				title: 'Links & bookmarks, findable again',
 				description: 'Everything you save is back in seconds — sorted and searchable.'
 			},
 			{
