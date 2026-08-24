@@ -4,6 +4,7 @@ COPY package.json bun.lock ./
 COPY app/package.json app/package.json
 COPY libs/aven-artifact-store/package.json libs/aven-artifact-store/package.json
 COPY libs/aven-board/package.json libs/aven-board/package.json
+COPY libs/aven-brand/package.json libs/aven-brand/package.json
 COPY libs/aven-skills/package.json libs/aven-skills/package.json
 COPY libs/aven-ui/package.json libs/aven-ui/package.json
 COPY libs/aven-website/package.json libs/aven-website/package.json
@@ -19,6 +20,9 @@ COPY libs/aven-artifact-store libs/aven-artifact-store
 # plan data (@avenos/aven-website/pricing), so the source must exist where
 # the workspace symlink points.
 COPY libs/aven-website/src/lib/pricing libs/aven-website/src/lib/pricing
+# The legal SSOT: the id app's layout renders the Impressum link from
+# @avenos/aven-brand, so the lib's source must exist behind the symlink.
+COPY libs/aven-brand libs/aven-brand
 RUN bun --cwd services/aven-api build
 
 FROM manifests AS production-dependencies
@@ -41,6 +45,7 @@ COPY --from=build /repo/libs/aven-artifact-store /repo/libs/aven-artifact-store
 # scripts/ (migrate, billing seed) run unbundled and resolve the workspace
 # symlink at runtime — the pricing source must be present in the image too.
 COPY --from=build /repo/libs/aven-website/src/lib/pricing /repo/libs/aven-website/src/lib/pricing
+COPY --from=build /repo/libs/aven-brand /repo/libs/aven-brand
 EXPOSE 3000
 USER bun
 HEALTHCHECK --interval=5s --timeout=3s --start-period=15s --retries=30 \
