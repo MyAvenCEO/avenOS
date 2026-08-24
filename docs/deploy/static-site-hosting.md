@@ -2,7 +2,7 @@
 
 ## Scope
 
-The first release hosts one public GitHub `deploy/*` branch for one purchased Aven name on one customer-owned, fully qualified domain. The customer points that domain to the Hetzner host. `aven.ceo` and every subdomain below it remain operator-owned and cannot be registered through this API.
+The first release hosts public GitHub `deploy/*` branches on customer-owned, fully qualified domains. One purchased Aven name may own multiple independent site bindings; every binding has its own repository/deployment branch and its own domain or subdomain. The customer points each domain to the Hetzner host. `aven.ceo` and every subdomain below it remain operator-owned and cannot be registered through this API.
 
 The expected repository contract is:
 
@@ -43,10 +43,12 @@ If the domain has AAAA records, every address must be listed in `SITE_HOST_ALLOW
 
 ## Configure a binding
 
-With an authenticated, email-verified identity session:
+The authenticated identity webapp exposes the manager at `/sites`. Mutations require completed passkey enrollment. Its transport-neutral types and client live in `@avenos/aven-hosting`, so the Tauri app can reuse the same contract later.
+
+To create a binding directly:
 
 ```http
-PUT /api/sites
+POST /api/sites
 Content-Type: application/json
 
 {
@@ -58,11 +60,12 @@ Content-Type: application/json
 }
 ```
 
-The response contains `dns.txtName` and the one-time `dns.txtValue`. Reconfiguring the name rotates the token and temporarily returns it to `awaiting_dns`.
+The response contains a stable `site.id`, `dns.txtName`, the one-time `dns.txtValue`, and the host A/AAAA addresses. Editing a binding rotates the token and temporarily returns that binding to `awaiting_dns`.
 
 - `GET /api/sites` returns current status and active revisions.
-- `DELETE /api/sites` with `{ "name": "purchased-name" }` withdraws the mapping.
-- Revoking the purchased name automatically removes it from the host directory and therefore from Caddy authorization.
+- `PUT /api/sites/:siteId` edits exactly one binding.
+- `DELETE /api/sites/:siteId` withdraws exactly one binding.
+- Revoking the purchased name automatically removes all of that name's bindings from the host directory and therefore from Caddy authorization.
 
 ## GitHub `next` environment
 
@@ -81,11 +84,12 @@ The workflow obtains `SITE_HOST_ALLOWED_IPV4` from the Pulumi host output. Persi
 ## Next smoke test
 
 1. Merge the branch through the normal `main` to `next` path and confirm all four immutable images deploy.
-2. Configure a purchased test name through `PUT /api/sites`, using the public `avenCEO` repository's `next` and `deploy/next` branches.
+2. Open `/sites` in the next identity webapp and configure a purchased test name using the public `avenCEO` repository's `next` and `deploy/next` branches.
 3. Add the returned TXT record and point a customer-controlled test domain's A record to the next Hetzner IPv4. Do not use `next.aven.ceo`; it is intentionally reserved as an operator origin.
 4. Wait for one poll interval, then confirm `GET /api/sites` reports `active` and that source/artifact revisions match the repository.
 5. Request the site over HTTPS and directly request a client-side SPA route. Both must return the site. `/internal/*` must return 404, and an unknown host must either be refused during TLS issuance or return 404 if it already has a cached certificate.
 6. Stop `aven-api`, restart Caddy and `static-site-host`, and confirm the active static site remains available from the persisted snapshot.
-7. Restore identity, remove the binding, wait one poll interval, and confirm the host is no longer authorized.
+7. Add a second repository/domain under the same purchased name and confirm both are served independently.
+8. Restore identity, remove one binding, wait one poll interval, and confirm only that host is no longer authorized.
 
 The first live certificate request should happen only after DNS has propagated; Let's Encrypt issuance is externally rate-limited.

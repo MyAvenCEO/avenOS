@@ -1,3 +1,4 @@
+import type { SiteBinding, SiteBindingDraft } from '@avenos/aven-hosting'
 import { readable } from 'svelte/store'
 import { passkeyRegistrationDiagnostic } from '$lib/passkey-diagnostics.js'
 import type { MetaInfo, NameAvailability, NameHoldResult } from '$lib/types.js'
@@ -38,11 +39,41 @@ function authenticatedByDefault(url: URL): boolean {
 	if (url.pathname === '/device') {
 		return !['signed-out', 'signing-in', 'missing'].includes(scenario(url, 'signed-out'))
 	}
-	return ['/dashboard', '/passkey/create'].includes(url.pathname)
+	return ['/dashboard', '/passkey/create', '/sites'].includes(url.pathname)
 }
 
 function never<T>(): Promise<T> {
 	return new Promise(() => {})
+}
+
+let designerSites: SiteBinding[] = [
+	{
+		id: '018f1f89-7950-77a8-b824-ffcd1743ab11',
+		name: 'aurora',
+		hostname: 'www.aurora.example',
+		repository: 'myavenceo/avenceo',
+		sourceBranch: 'next',
+		deploymentBranch: 'deploy/next',
+		status: 'active',
+		activeArtifactRevision: '0be4335d9fc1b2c4d44922c27a2112fc50bdf7a4',
+		activeSourceRevision: '030f17e7125956056bab7de1a51b46d2eca9050f',
+		lastError: null,
+		verifiedAt: '2026-08-24T20:15:00.000Z',
+		lastSyncedAt: '2026-08-24T20:16:00.000Z'
+	}
+]
+
+function designerSite(input: SiteBindingDraft, id: string = crypto.randomUUID()): SiteBinding {
+	return {
+		id,
+		...input,
+		status: 'awaiting_dns',
+		activeArtifactRevision: null,
+		activeSourceRevision: null,
+		lastError: null,
+		verifiedAt: null,
+		lastSyncedAt: null
+	}
 }
 
 export const appRuntime: AppRuntime = {
@@ -173,6 +204,8 @@ export const appRuntime: AppRuntime = {
 	device: { approve: async () => {} },
 	dashboard: {
 		async load(url) {
+			if (url.pathname === '/sites' && !url.searchParams.has('scenario'))
+				return { downloadUrl: '#designer-download', needsPasskey: false }
 			const state = scenario(url, 'loading')
 			if (state === 'loading') return never()
 			if (state === 'error') throw new Error('Download information could not be loaded.')
@@ -232,6 +265,42 @@ export const appRuntime: AppRuntime = {
 					{ position: 408, name: 'kolibri', reservedAt: '2026-08-20T09:35:00.000Z', invited: false }
 				]
 			}
+		}
+	},
+	sites: {
+		async list() {
+			return designerSites
+		},
+		async create(input) {
+			const site = designerSite(input)
+			designerSites = [...designerSites, site]
+			return {
+				site,
+				dns: {
+					txtName: `_aven-site.${input.hostname}`,
+					txtValue: 'designer-verification-token',
+					hostname: input.hostname,
+					ipv4: '192.0.2.10',
+					ipv6: []
+				}
+			}
+		},
+		async update(id, input) {
+			const site = designerSite(input, id)
+			designerSites = designerSites.map((entry) => (entry.id === id ? site : entry))
+			return {
+				site,
+				dns: {
+					txtName: `_aven-site.${input.hostname}`,
+					txtValue: 'designer-verification-token',
+					hostname: input.hostname,
+					ipv4: '192.0.2.10',
+					ipv6: []
+				}
+			}
+		},
+		async remove(id) {
+			designerSites = designerSites.filter((entry) => entry.id !== id)
 		}
 	},
 	billing: {

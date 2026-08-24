@@ -94,6 +94,8 @@ export const serverConfigSchema = z
 			.string()
 			.regex(/^[A-Za-z0-9_-]{32,128}$/)
 			.optional(),
+		SITE_HOST_PUBLIC_IPV4: z.union([z.ipv4(), z.literal('')]).default(''),
+		SITE_HOST_PUBLIC_IPV6: z.string().default(''),
 
 		BETTER_AUTH_SECRET: z.string().default(''),
 		BETTER_AUTH_SESSION_MAX_AGE_SECONDS: positiveInt.default(43_200),

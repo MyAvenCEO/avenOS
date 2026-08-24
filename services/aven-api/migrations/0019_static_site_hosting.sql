@@ -11,7 +11,7 @@ CREATE TABLE "site_repositories" (
 --> statement-breakpoint
 CREATE TABLE "static_site_bindings" (
 	"id" text PRIMARY KEY NOT NULL,
-	"environment_id" text NOT NULL UNIQUE REFERENCES "customer_environments"("id") ON DELETE CASCADE,
+	"environment_id" text NOT NULL REFERENCES "customer_environments"("id") ON DELETE CASCADE,
 	"repository_id" text NOT NULL REFERENCES "site_repositories"("id"),
 	"hostname" text NOT NULL UNIQUE,
 	"source_ref" text NOT NULL,
@@ -35,5 +35,7 @@ CREATE TABLE "static_site_bindings" (
 	CONSTRAINT "static_site_bindings_desired_status" CHECK ("desired_status" IN ('active','suspended')),
 	CONSTRAINT "static_site_bindings_runtime_status" CHECK ("runtime_status" IN ('awaiting_dns','syncing','active','dns_invalid','failed'))
 );
+--> statement-breakpoint
+CREATE INDEX "static_site_bindings_environment_idx" ON "static_site_bindings" ("environment_id");
 --> statement-breakpoint
 CREATE INDEX "static_site_bindings_status_idx" ON "static_site_bindings" ("desired_status", "runtime_status");

@@ -1,3 +1,4 @@
+import type { SiteHostingClient } from '@avenos/aven-hosting'
 import type { Readable } from 'svelte/store'
 import type {
 	HoldOrigin,
@@ -87,6 +88,7 @@ export interface AppRuntime {
 		 */
 		queue(): Promise<QueueStanding | null>
 	}
+	sites: SiteHostingClient
 	billing: {
 		pay(input: Record<string, string>): Promise<{ redirect: string }>
 	}

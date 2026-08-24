@@ -178,7 +178,8 @@ label {
 	text-align: left;
 }
 
-input {
+input,
+select {
 	min-height: 2.75rem;
 	padding: 0.65rem 1.125rem;
 	border: 1px solid var(--border);
@@ -187,7 +188,8 @@ input {
 	font: inherit;
 }
 
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
 	border-color: rgba(31, 42, 61, 0.4);
 	outline: none;
 }
@@ -485,6 +487,242 @@ textarea:focus-visible {
 
 .ghost:hover {
 	color: var(--ink);
+}
+
+.hosting-shell {
+	display: grid;
+	gap: 1.5rem;
+	width: min(100%, 68rem);
+	margin-inline: auto;
+}
+
+.hosting-intro {
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+	gap: 2rem;
+}
+
+.hosting-intro > p {
+	max-width: 38rem;
+	color: var(--muted);
+	font-size: 0.875rem;
+	line-height: 1.6;
+}
+
+.hosting-intro .eyebrow,
+.hosting-card .eyebrow,
+.site-list-heading .eyebrow,
+.dns-card .eyebrow {
+	margin-bottom: 0.35rem;
+}
+
+.hosting-grid {
+	display: grid;
+	grid-template-columns: minmax(18rem, 0.8fr) minmax(22rem, 1.2fr);
+	gap: 1.25rem;
+	align-items: start;
+}
+
+.hosting-card,
+.dns-card,
+.site-card,
+.empty-site {
+	border: 1px solid var(--border-soft);
+	border-radius: 1.25rem;
+	background: var(--porcelain);
+	box-shadow: 0 1px 3px rgba(30, 41, 59, 0.04);
+}
+
+.hosting-card {
+	display: grid;
+	gap: 1.25rem;
+	padding: 1.5rem;
+}
+
+.hosting-card form {
+	display: grid;
+	gap: 1rem;
+}
+
+.branch-fields {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.75rem;
+}
+
+.hosting-card label {
+	font-size: 0.8125rem;
+}
+
+.hosting-card code,
+.dns-card code,
+.site-card dd {
+	font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.dns-card {
+	display: grid;
+	gap: 0.75rem;
+	padding: 1.25rem;
+	border-color: color-mix(in oklab, var(--sunflower) 55%, var(--border));
+	background: color-mix(in oklab, var(--sunflower) 8%, var(--porcelain));
+}
+
+.dns-record {
+	display: grid;
+	grid-template-columns: 3.25rem minmax(10rem, 0.7fr) minmax(12rem, 1.3fr) auto;
+	gap: 0.75rem;
+	align-items: center;
+	padding: 0.65rem 0.75rem;
+	border-radius: 0.75rem;
+	background: rgba(255, 253, 247, 0.8);
+	font-size: 0.75rem;
+}
+
+.dns-record > span {
+	color: var(--quiet);
+	font-weight: 700;
+}
+
+.dns-record code {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.site-list {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.site-list-heading,
+.site-card > header,
+.site-card > footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+.site-card,
+.empty-site {
+	padding: 1.25rem;
+}
+
+.empty-site {
+	color: var(--quiet);
+	font-size: 0.875rem;
+	text-align: center;
+}
+
+.site-card {
+	display: grid;
+	gap: 1rem;
+}
+
+.site-card header a {
+	font-weight: 650;
+	text-decoration: none;
+}
+
+.site-card header p {
+	margin-top: 0.25rem;
+	color: var(--quiet);
+	font-size: 0.75rem;
+}
+
+.site-status {
+	padding: 0.3rem 0.6rem;
+	border-radius: 999px;
+	background: var(--eggshell);
+	color: var(--muted);
+	font-size: 0.6875rem;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.site-status.active {
+	background: rgba(47, 122, 99, 0.1);
+	color: #2f7a63;
+}
+
+.site-status.error-state {
+	background: rgba(193, 91, 64, 0.1);
+	color: var(--terracotta);
+}
+
+.site-card dl {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.5rem;
+	margin: 0;
+}
+
+.site-card dl > div {
+	padding: 0.65rem 0.75rem;
+	border-radius: 0.7rem;
+	background: var(--eggshell);
+}
+
+.site-card dt {
+	color: var(--quiet);
+	font-size: 0.625rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.site-card dd {
+	overflow: hidden;
+	margin: 0.25rem 0 0;
+	font-size: 0.6875rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.site-error {
+	padding: 0.6rem 0.75rem;
+	border-radius: 0.7rem;
+	background: rgba(193, 91, 64, 0.07);
+	color: var(--terracotta);
+	font-size: 0.75rem;
+}
+
+.compact {
+	min-height: 2rem;
+	padding-inline: 0.8rem;
+	font-size: 0.6875rem;
+}
+
+.danger {
+	color: var(--terracotta);
+}
+
+@media (max-width: 48rem) {
+	.hosting-intro {
+		display: grid;
+	}
+
+	.hosting-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.dns-record {
+		grid-template-columns: 3rem 1fr;
+	}
+
+	.dns-record .compact {
+		grid-column: 2;
+		justify-self: start;
+	}
+}
+
+@media (max-width: 30rem) {
+	.branch-fields,
+	.site-card dl {
+		grid-template-columns: 1fr;
+	}
 }
 
 .mark {

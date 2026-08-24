@@ -25,33 +25,76 @@ describe('static site bindings', () => {
 			 VALUES($1,$2,$3,$4,$5,$6,$7,'{}','ready',now(),now())`,
 			[randomUUID(), userId, name, `cust_${name}`, randomUUID(), `role_${name}`, `stack_${name}`]
 		)
-		sites = new SiteBindingService(database.pool)
+		sites = new SiteBindingService(database.pool, { ipv4: '192.0.2.10', ipv6: [] })
 	})
 
 	afterAll(async () => database.teardown())
 
-	test('stores only the verification token hash and exposes the active directory', async () => {
-		const configured = await sites.configure(userId, {
+	test('supports multiple independently managed sites for one purchased name', async () => {
+		const first = await sites.create(userId, {
 			name,
-			hostname: 'customer.example',
+			hostname: 'www.customer.example',
 			repository: 'myavenceo/avenceo',
 			sourceBranch: 'next',
 			deploymentBranch: 'deploy/next'
 		})
-		const directory = await sites.directory()
-		expect(directory.bindings).toHaveLength(1)
-		expect(directory.bindings[0]).toMatchObject({
-			hostname: 'customer.example',
-			repository_full_name: 'myavenceo/avenceo',
-			artifact_ref: 'refs/heads/deploy/next'
+		const second = await sites.create(userId, {
+			name,
+			hostname: 'docs.customer.example',
+			repository: 'myavenceo/documentation',
+			sourceBranch: 'main',
+			deploymentBranch: 'deploy/production'
 		})
-		expect(directory.bindings[0].verification_token_hash).toBe(
-			hashVerificationToken(configured.dns.txtValue)
-		)
-		expect(JSON.stringify(directory)).not.toContain(configured.dns.txtValue)
+		expect(first.site.id).not.toBe(second.site.id)
+		expect(first.dns.ipv4).toBe('192.0.2.10')
+		expect(await sites.listForUser(userId)).toMatchObject([
+			{ id: second.site.id, name, hostname: 'docs.customer.example' },
+			{ id: first.site.id, name, hostname: 'www.customer.example' }
+		])
+		const directory = await sites.directory()
+		expect(directory.bindings).toHaveLength(2)
+		const firstDirectory = directory.bindings.find((binding) => binding.id === first.site.id)
+		expect(firstDirectory).toBeDefined()
+		expect(firstDirectory?.verification_token_hash).toBe(hashVerificationToken(first.dns.txtValue))
+		expect(JSON.stringify(directory)).not.toContain(first.dns.txtValue)
+
+		const updated = await sites.update(userId, first.site.id, {
+			name,
+			hostname: 'app.customer.example',
+			repository: 'myavenceo/avenceo',
+			sourceBranch: 'production',
+			deploymentBranch: 'deploy/next'
+		})
+		expect(updated.site).toMatchObject({
+			id: first.site.id,
+			hostname: 'app.customer.example',
+			sourceBranch: 'production'
+		})
+		expect(await sites.remove(userId, first.site.id)).toBe(true)
+		expect(await sites.listForUser(userId)).toMatchObject([
+			{ id: second.site.id, hostname: 'docs.customer.example' }
+		])
 	})
 
-	test('removes the host authorization when the name is revoked', async () => {
+	test('does not let another user mutate a site', async () => {
+		const other = await insertUser(database)
+		const [site] = await sites.listForUser(userId)
+		expect(site).toBeDefined()
+		if (!site) throw new Error('expected a site fixture')
+		await expect(
+			sites.update(other.id, site.id, {
+				name,
+				hostname: 'stolen.customer.example',
+				repository: 'myavenceo/documentation',
+				sourceBranch: 'main',
+				deploymentBranch: 'deploy/stolen'
+			})
+		).rejects.toMatchObject({ code: 'SITE_NOT_FOUND' })
+		expect(await sites.remove(other.id, site.id)).toBe(false)
+	})
+
+	test('removes every site authorization when the shared name is revoked', async () => {
+		expect((await sites.directory()).bindings).toHaveLength(1)
 		await database.pool.query("UPDATE names SET status='revoked' WHERE name=$1", [name])
 		expect((await sites.directory()).bindings).toHaveLength(0)
 	})

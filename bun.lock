@@ -75,6 +75,14 @@
       "name": "@avenos/aven-brand",
       "version": "26.8.24-next.6",
     },
+    "libs/aven-hosting": {
+      "name": "@avenos/aven-hosting",
+      "version": "26.8.24-next.6",
+      "devDependencies": {
+        "@types/bun": "^1.3.13",
+        "typescript": "6.0.3",
+      },
+    },
     "libs/aven-skills": {
       "name": "@avenos/aven-skills",
       "version": "26.8.24-next.6",
@@ -114,6 +122,7 @@
       "dependencies": {
         "@avenos/artifact-store": "workspace:*",
         "@avenos/aven-brand": "workspace:*",
+        "@avenos/aven-hosting": "workspace:*",
         "@avenos/aven-website": "workspace:*",
         "@better-auth/passkey": "1.6.23",
         "@polar-sh/sdk": "^0.49.0",
@@ -167,6 +176,8 @@
     "@avenos/aven-board": ["@avenos/aven-board@workspace:libs/aven-board"],
 
     "@avenos/aven-brand": ["@avenos/aven-brand@workspace:libs/aven-brand"],
+
+    "@avenos/aven-hosting": ["@avenos/aven-hosting@workspace:libs/aven-hosting"],
 
     "@avenos/aven-skills": ["@avenos/aven-skills@workspace:libs/aven-skills"],
 

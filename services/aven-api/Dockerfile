@@ -5,6 +5,7 @@ COPY app/package.json app/package.json
 COPY libs/aven-artifact-store/package.json libs/aven-artifact-store/package.json
 COPY libs/aven-board/package.json libs/aven-board/package.json
 COPY libs/aven-brand/package.json libs/aven-brand/package.json
+COPY libs/aven-hosting/package.json libs/aven-hosting/package.json
 COPY libs/aven-skills/package.json libs/aven-skills/package.json
 COPY libs/aven-ui/package.json libs/aven-ui/package.json
 COPY libs/aven-website/package.json libs/aven-website/package.json
@@ -22,6 +23,7 @@ COPY libs/aven-artifact-store libs/aven-artifact-store
 # renders the Impressum from @avenos/aven-brand, so the lib's source must
 # exist where the workspace symlink points.
 COPY libs/aven-brand libs/aven-brand
+COPY libs/aven-hosting libs/aven-hosting
 RUN bun --cwd services/aven-api build
 
 FROM manifests AS production-dependencies
@@ -44,6 +46,7 @@ COPY --from=build /repo/libs/aven-artifact-store /repo/libs/aven-artifact-store
 # scripts/ (migrate, billing seed) run unbundled and resolve the workspace
 # symlink at runtime — the brand source must be present in the image too.
 COPY --from=build /repo/libs/aven-brand /repo/libs/aven-brand
+COPY --from=build /repo/libs/aven-hosting /repo/libs/aven-hosting
 EXPOSE 3000
 USER bun
 HEALTHCHECK --interval=5s --timeout=3s --start-period=15s --retries=30 \
