@@ -39,6 +39,7 @@
 		"@tauri-apps/plugin-opener": "^2.5.4",
 		"@xyflow/svelte": "^1.6.2",
 		"quickjs-emscripten": "^0.31.0",
-		"three": "^0.185.1"
+		"three": "^0.185.1",
+		"@avenos/aven-brand": "workspace:*"
 	}
 }
