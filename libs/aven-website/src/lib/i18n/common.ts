@@ -50,7 +50,7 @@ export const common: Record<
 			legalLabel: 'Rechtliches',
 			socialLabel: 'Social Media',
 			ctaLabel: 'avenID sichern',
-			copyright: 'avenCEO · avenOS — Own your life',
+			copyright: 'avenCEO — Own your life',
 			legal: {
 				impressum: 'Impressum',
 				datenschutz: 'Datenschutz',
@@ -87,7 +87,7 @@ export const common: Record<
 			legalLabel: 'Legal',
 			socialLabel: 'Social media',
 			ctaLabel: 'Claim your avenID',
-			copyright: 'avenCEO · avenOS — Own your life',
+			copyright: 'avenCEO — Own your life',
 			legal: {
 				impressum: 'Imprint',
 				datenschutz: 'Privacy',
