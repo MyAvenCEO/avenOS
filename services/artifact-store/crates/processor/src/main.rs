@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use aven_artifact_processor::{
+    intents::{AppendContribution, IntentRepository},
     ArtifactStoreClient, ProcessingEngine, ProcessingRepository, VisionAdapter,
 };
 use axum::extract::{Path, State};
@@ -163,6 +164,11 @@ async fn serve_fixed() -> Result<(), Box<dyn std::error::Error>> {
             "/v1/scopes/{scope_id}/artifacts/{artifact_id}/processing",
             get(fixed_status),
         )
+        .route("/v1/scopes/{scope_id}/intents", get(fixed_intents))
+        .route(
+            "/v1/scopes/{scope_id}/intents/{intent_id}",
+            get(fixed_intent).post(fixed_append_contribution),
+        )
         .with_state(state);
     tokio::spawn(run_fixed_engine(engine));
     let listen = listen("ARTIFACT_PROCESSOR_LISTEN", "0.0.0.0:8089")?;
@@ -222,6 +228,11 @@ async fn serve_tenants() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/v1/scopes/{scope_id}/artifacts/{artifact_id}/processing",
             get(tenant_status),
+        )
+        .route("/v1/scopes/{scope_id}/intents", get(tenant_intents))
+        .route(
+            "/v1/scopes/{scope_id}/intents/{intent_id}",
+            get(tenant_intent).post(tenant_append_contribution),
         )
         .with_state(state);
     tokio::spawn(supervisor_loop(supervisor));
@@ -513,6 +524,154 @@ async fn status_response(
     }
 }
 
+async fn fixed_intents(
+    State(state): State<FixedApiState>,
+    Path(scope_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Response {
+    if !authorized(&headers, &state.bearer_token) {
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+    }
+    if scope_id != state.scope_id {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    intent_list_response(&state.repository, scope_id).await
+}
+
+async fn fixed_intent(
+    State(state): State<FixedApiState>,
+    Path((scope_id, intent_id)): Path<(Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Response {
+    if !authorized(&headers, &state.bearer_token) {
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+    }
+    if scope_id != state.scope_id {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    intent_detail_response(&state.repository, scope_id, intent_id).await
+}
+
+async fn fixed_append_contribution(
+    State(state): State<FixedApiState>,
+    Path((scope_id, intent_id)): Path<(Uuid, Uuid)>,
+    headers: HeaderMap,
+    Json(input): Json<AppendContribution>,
+) -> Response {
+    if !authorized(&headers, &state.bearer_token) {
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+    }
+    if scope_id != state.scope_id {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    intent_append_response(&state.repository, scope_id, intent_id, input).await
+}
+
+async fn tenant_intents(
+    State(state): State<TenantApiState>,
+    Path(scope_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(runtime) = tenant_runtime(&state, scope_id, &headers).await else {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    };
+    intent_list_response(&runtime.repository, scope_id).await
+}
+
+async fn tenant_intent(
+    State(state): State<TenantApiState>,
+    Path((scope_id, intent_id)): Path<(Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(runtime) = tenant_runtime(&state, scope_id, &headers).await else {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    };
+    intent_detail_response(&runtime.repository, scope_id, intent_id).await
+}
+
+async fn tenant_append_contribution(
+    State(state): State<TenantApiState>,
+    Path((scope_id, intent_id)): Path<(Uuid, Uuid)>,
+    headers: HeaderMap,
+    Json(input): Json<AppendContribution>,
+) -> Response {
+    let Some(runtime) = tenant_runtime(&state, scope_id, &headers).await else {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    };
+    intent_append_response(&runtime.repository, scope_id, intent_id, input).await
+}
+
+async fn tenant_runtime(
+    state: &TenantApiState,
+    scope_id: Uuid,
+    headers: &HeaderMap,
+) -> Option<Arc<TenantRuntime>> {
+    if !authorized(headers, &state.bearer_token) {
+        return None;
+    }
+    let database_name = headers.get(DATABASE_HEADER)?.to_str().ok()?;
+    let binding = state.supervisor.binding(scope_id, database_name).await?;
+    state.supervisor.runtime_for(&binding).await.ok()
+}
+
+async fn intent_list_response(repository: &ProcessingRepository, scope_id: Uuid) -> Response {
+    match IntentRepository::new(repository.pool().clone())
+        .list(scope_id)
+        .await
+    {
+        Ok(values) => Json(values).into_response(),
+        Err(error) => {
+            error!(%error, "intent list failed");
+            (StatusCode::INTERNAL_SERVER_ERROR, "intent list unavailable").into_response()
+        }
+    }
+}
+
+async fn intent_detail_response(
+    repository: &ProcessingRepository,
+    scope_id: Uuid,
+    intent_id: Uuid,
+) -> Response {
+    match IntentRepository::new(repository.pool().clone())
+        .detail(scope_id, intent_id)
+        .await
+    {
+        Ok(Some(value)) => Json(value).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "not found").into_response(),
+        Err(error) => {
+            error!(%error, "intent detail failed");
+            (StatusCode::INTERNAL_SERVER_ERROR, "intent unavailable").into_response()
+        }
+    }
+}
+
+async fn intent_append_response(
+    repository: &ProcessingRepository,
+    scope_id: Uuid,
+    intent_id: Uuid,
+    input: AppendContribution,
+) -> Response {
+    match IntentRepository::new(repository.pool().clone())
+        .append(scope_id, intent_id, &input)
+        .await
+    {
+        Ok(Some(value)) => (StatusCode::CREATED, Json(value)).into_response(),
+        Ok(None) => (
+            StatusCode::BAD_REQUEST,
+            "invalid or unknown intent contribution",
+        )
+            .into_response(),
+        Err(error) => {
+            error!(%error, "intent contribution failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "intent contribution unavailable",
+            )
+                .into_response()
+        }
+    }
+}
+
 async fn provisioner_ready(State(state): State<ProvisionerState>) -> Response {
     match ProcessingRepository::connect(&state.cluster_database_url, 1).await {
         Ok(_) => Json(json!({ "status": "ready" })).into_response(),
@@ -539,7 +698,7 @@ async fn provision_scope(
     match result {
         Ok(()) => Ok(Json(json!({
             "status": "ready",
-            "schemaVersion": 3,
+            "schemaVersion": 4,
             "scopeId": scope_id
         }))),
         Err(error) => {

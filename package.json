@@ -39,6 +39,7 @@
 		"test:api": "bun run --cwd services/aven-api test",
 		"test:artifact-store:smoke": "bun run --cwd services/aven-api artifact-store:smoke",
 		"test:artifact-processing:smoke": "bun run --cwd services/aven-api artifact-processing:smoke",
+		"test:persistent-intent:smoke": "bun run --cwd services/aven-api persistent-intent:smoke",
 		"test:artifact-processing:real-smoke": "bun run --cwd services/aven-api artifact-processing:real-smoke",
 		"test:artifact-processing:real-pdf-smoke": "bun run --cwd services/aven-api artifact-processing:real-pdf-smoke",
 		"test:artifact-processing:real-unsupported-smoke": "bun run --cwd services/aven-api artifact-processing:real-unsupported-smoke",

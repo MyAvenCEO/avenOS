@@ -4,6 +4,9 @@ import { ArtifactFileService } from '../src/lib/server/artifacts/service'
 const scopeId = '11111111-1111-4111-8111-111111111111'
 const publicationId = '22222222-2222-4222-8222-222222222222'
 const artifactId = '33333333-3333-4333-8333-333333333333'
+const intentId = '44444444-4444-4444-8444-444444444444'
+const intentArtifactId = '55555555-5555-4555-8555-555555555555'
+const observedAt = '2026-08-24T12:00:00.000Z'
 const sha256 = '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
 
 describe('artifact file coordinator', () => {
@@ -29,7 +32,7 @@ describe('artifact file coordinator', () => {
 				expect(request.headers.get('if-artifact-store-epoch')).toBe('epoch-1')
 				published = JSON.parse(await request.text()) as Record<string, unknown>
 				return new Response(
-					`{"artifacts":[{"artifactId":"${artifactId}","localKey":"file"}],` +
+					`{"artifacts":[{"artifactId":"${artifactId}","localKey":"file"},{"artifactId":"${intentArtifactId}","localKey":"intent"}],` +
 						`"publicationId":"${publicationId}","replayed":false,"scopeSequence":7}`
 				)
 			}
@@ -49,6 +52,8 @@ describe('artifact file coordinator', () => {
 			databaseName: 'cust_acme',
 			scopeId,
 			publicationId,
+			intentId,
+			observedAt,
 			originalName: 'contract.pdf',
 			mediaType: 'text/plain',
 			sha256,
@@ -64,6 +69,8 @@ describe('artifact file coordinator', () => {
 		expect(uploaded).toBe('hello')
 		expect(receipt).toEqual({
 			publicationId,
+			intentId,
+			intentDeclarationArtifactId: intentArtifactId,
 			artifactId,
 			originalName: 'contract.pdf',
 			mediaType: 'text/plain',
@@ -86,6 +93,15 @@ describe('artifact file coordinator', () => {
 					sourceKind: 'desktop-drop'
 				},
 				blob: { sha256, length: 5 },
+				references: [],
+				output: null
+			},
+			{
+				localKey: 'intent',
+				typeKey: 'intent.declaration',
+				typeVersion: 1,
+				payload: { intentId, title: 'contract.pdf', triggerKind: 'file-upload', observedAt },
+				blob: null,
 				references: [],
 				output: null
 			}

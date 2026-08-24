@@ -14,6 +14,8 @@ export interface PublishFileInput {
 	databaseName: string
 	scopeId: string
 	publicationId: string
+	intentId: string
+	observedAt: string
 	originalName: string
 	mediaType: string
 	sha256: string
@@ -23,6 +25,8 @@ export interface PublishFileInput {
 
 export interface PublishedFile {
 	publicationId: string
+	intentId: string
+	intentDeclarationArtifactId: string
 	artifactId: string
 	originalName: string
 	mediaType: string
@@ -88,14 +92,26 @@ export class ArtifactFileService {
 		)
 	}
 
+	#client(databaseName: string): ArtifactStoreClient {
+		return new ArtifactStoreClient({
+			baseUrl: this.#baseUrl,
+			bearerToken: () => this.#bearerToken,
+			requestHeaders: () => ({ 'x-aven-artifact-database': databaseName }),
+			fetch: this.#fetch
+		})
+	}
+
+	async artifact(databaseName: string, scopeId: string, artifactId: string): Promise<ArtifactJson> {
+		return this.#client(databaseName).artifact(scopeId, artifactId)
+	}
+
+	async content(databaseName: string, scopeId: string, artifactId: string): Promise<Uint8Array> {
+		return this.#client(databaseName).content(scopeId, artifactId)
+	}
+
 	async publishFile(input: PublishFileInput): Promise<PublishedFile> {
 		try {
-			const client = new ArtifactStoreClient({
-				baseUrl: this.#baseUrl,
-				bearerToken: () => this.#bearerToken,
-				requestHeaders: () => ({ 'x-aven-artifact-database': input.databaseName }),
-				fetch: this.#fetch
-			})
+			const client = this.#client(input.databaseName)
 			const context = await client.context()
 			const storeEpoch = stringField(context, 'storeEpoch', 'context')
 			const claimId = randomUUID()
@@ -140,6 +156,20 @@ export class ArtifactFileService {
 							blob: { sha256: input.sha256, length: input.length },
 							references: [],
 							output: null
+						},
+						{
+							localKey: 'intent',
+							typeKey: 'intent.declaration',
+							typeVersion: 1,
+							payload: {
+								intentId: input.intentId,
+								title: input.originalName,
+								triggerKind: 'file-upload',
+								observedAt: input.observedAt
+							},
+							blob: null,
+							references: [],
+							output: null
 						}
 					],
 					evidence: []
@@ -147,11 +177,11 @@ export class ArtifactFileService {
 				blobAuthorities: { file: { kind: 'upload-claim', claimId } }
 			})
 			const artifacts = record(publication, 'publication').artifacts
-			if (!Array.isArray(artifacts) || artifacts.length !== 1) {
+			if (!Array.isArray(artifacts) || artifacts.length !== 2) {
 				throw new AppError(
 					502,
 					'ARTIFACT_STORE_INVALID_RESPONSE',
-					'Artifact Store did not return exactly one file artifact.'
+					'Artifact Store did not return the file and intent declaration.'
 				)
 			}
 			const artifact = artifacts[0] as ArtifactJson
@@ -162,8 +192,18 @@ export class ArtifactFileService {
 					'Artifact Store returned an unexpected local key.'
 				)
 			}
+			const intentArtifact = artifacts[1] as ArtifactJson
+			if (stringField(intentArtifact, 'localKey', 'intentArtifact') !== 'intent') {
+				throw new AppError(
+					502,
+					'ARTIFACT_STORE_INVALID_RESPONSE',
+					'Artifact Store returned an unexpected intent local key.'
+				)
+			}
 			return {
 				publicationId: stringField(publication, 'publicationId', 'publication'),
+				intentId: input.intentId,
+				intentDeclarationArtifactId: stringField(intentArtifact, 'artifactId', 'intentArtifact'),
 				artifactId: stringField(artifact, 'artifactId', 'artifact'),
 				originalName: input.originalName,
 				mediaType: input.mediaType,

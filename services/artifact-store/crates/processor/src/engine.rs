@@ -6,6 +6,7 @@ use time::Duration;
 use uuid::Uuid;
 
 use crate::executor::{execute, generated_uploads, ExecutorError, MaterializedInput};
+use crate::intents::DiscoveredIntent;
 use crate::model::{
     CaseSnapshot, DerivedArtifact, ProcessingStage, ProcessingStatus, ProcessingWarning,
     StepSnapshot, StoredOutput,
@@ -141,27 +142,76 @@ impl ProcessingEngine {
             .read_feed(self.scope_id, context.store_epoch, after, FEED_LIMIT)
             .await?;
         let mut sources = Vec::new();
-        for artifact in page.items.iter().flat_map(|item| &item.artifacts) {
-            if artifact.type_key.as_str() != "core.file" {
-                continue;
+        let mut intents = Vec::new();
+        for item in &page.items {
+            let source = item
+                .artifacts
+                .iter()
+                .find(|artifact| artifact.type_key.as_str() == "core.file");
+            let declaration = item
+                .artifacts
+                .iter()
+                .find(|artifact| artifact.type_key.as_str() == "intent.declaration");
+            let mut accepted_source = None;
+            if let Some(artifact) = source {
+                let envelope = self
+                    .store
+                    .get_artifact(self.scope_id, artifact.artifact_id)
+                    .await?;
+                let payload = serde_json::to_value(&envelope.payload)
+                    .map_err(|error| EngineError::Invariant(error.to_string()))?;
+                if matches!(
+                    payload.get("sourceKind").and_then(Value::as_str),
+                    Some("processing-mock" | "processing-real" | "desktop-drop")
+                ) {
+                    sources.push(artifact.artifact_id);
+                    accepted_source = Some(artifact.artifact_id);
+                }
             }
-            let envelope = self
-                .store
-                .get_artifact(self.scope_id, artifact.artifact_id)
-                .await?;
-            let payload = serde_json::to_value(&envelope.payload)
-                .map_err(|error| EngineError::Invariant(error.to_string()))?;
-            if matches!(
-                payload.get("sourceKind").and_then(Value::as_str),
-                Some("processing-mock" | "processing-real" | "desktop-drop")
-            ) {
-                sources.push(artifact.artifact_id);
+            if let (Some(source_artifact_id), Some(declaration)) = (accepted_source, declaration) {
+                let envelope = self
+                    .store
+                    .get_artifact(self.scope_id, declaration.artifact_id)
+                    .await?;
+                let payload = serde_json::to_value(&envelope.payload)
+                    .map_err(|error| EngineError::Invariant(error.to_string()))?;
+                let id = payload
+                    .get("intentId")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        EngineError::Invariant("intent declaration has no intentId".into())
+                    })?
+                    .parse()
+                    .map_err(|_| {
+                        EngineError::Invariant("intent declaration has an invalid intentId".into())
+                    })?;
+                let title = payload
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        EngineError::Invariant("intent declaration has no title".into())
+                    })?
+                    .to_owned();
+                intents.push(DiscoveredIntent {
+                    id,
+                    declaration_artifact_id: declaration.artifact_id,
+                    source_artifact_id,
+                    title,
+                    created_at: item.committed_at,
+                });
             }
         }
         let next = page.next_after_sequence.unwrap_or(after);
         let inserted = self
             .repository
-            .record_feed_page(self.scope_id, context.store_epoch, after, next, &sources)
+            .record_feed_page(
+                self.scope_id,
+                context.store_epoch,
+                after,
+                next,
+                &sources,
+                &intents,
+            )
             .await?;
         Ok(inserted.len())
     }
@@ -1327,15 +1377,18 @@ fn build_presentation(snapshot: &CaseSnapshot, source: &Value) -> ProcessingStat
         })
         .collect();
     let mut deduplicated = BTreeMap::new();
-    for output in snapshot.steps.iter().flat_map(|step| &step.outputs) {
-        deduplicated.insert(
-            output.artifact_id,
-            DerivedArtifact {
-                artifact_id: output.artifact_id,
-                type_key: output.type_key.clone(),
-                type_version: output.type_version,
-            },
-        );
+    for step in &snapshot.steps {
+        for output in &step.outputs {
+            deduplicated.insert(
+                output.artifact_id,
+                DerivedArtifact {
+                    artifact_id: output.artifact_id,
+                    type_key: output.type_key.clone(),
+                    type_version: output.type_version,
+                    stage_key: step.step_key.clone(),
+                },
+            );
+        }
     }
     ProcessingStatus {
         source_artifact_id: snapshot.source_artifact_id,

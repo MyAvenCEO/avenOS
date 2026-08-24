@@ -114,6 +114,7 @@ pub struct DerivedArtifact {
     pub artifact_id: Uuid,
     pub type_key: String,
     pub type_version: i32,
+    pub stage_key: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]

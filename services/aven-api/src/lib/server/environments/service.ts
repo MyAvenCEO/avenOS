@@ -35,7 +35,10 @@ export class EnvironmentService {
 				name: names.name,
 				databaseName: names.databaseName,
 				stackName: names.stackName,
-				artifactStore: { schemaVersion: 1, scopeId: artifactScopeId },
+				artifactStore: {
+					schemaVersion: CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
+					scopeId: artifactScopeId
+				},
 				artifactProcessor: {
 					schemaVersion: CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
 					scopeId: artifactScopeId
