@@ -289,10 +289,11 @@ worth keeping. It is not yet a reliable routing boundary because:
 
 ## 3. Recommended boundary
 
-Introduce an **Intent component** as a bounded tenant-data service. It owns an
-`aven_intents` schema in each customer database and exposes domain HTTP operations. It
-may begin as one small deployable/module, but its repository and permissions must remain
-separate so it can later move processes or databases without changing the Tauri client.
+Introduce an **Intent Service** as a bounded tenant-data service. It owns an
+`aven_intent_service` schema in each customer database and exposes domain HTTP
+operations. It is a separate Rust deployable with its own restricted database role,
+tenant-directory credential, provisioner, migrations, health checks, and release image.
+Neither the Processor nor Aven API writes its tables.
 
 ```mermaid
 flowchart LR
@@ -949,7 +950,7 @@ Recommended defaults are included so these need not block the first slice.
 | File upload routing | Always creates a new intent |
 | Initial title | Sanitized original filename |
 | Automatic rename | Allowed only while title source is automatic |
-| Intent storage | Dedicated `aven_intents` bounded schema in customer DB |
+| Intent storage | Dedicated `aven_intent_service` bounded schema in customer DB |
 | Artifact storage | Artifact Store remains authoritative |
 | First live transport | Cursor/version polling |
 | Agent concurrency | One active agent turn per intent |

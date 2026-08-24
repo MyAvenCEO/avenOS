@@ -54,10 +54,13 @@ jobs:
       - run: bun run test:infra
       - run: cargo test --locked --workspace
         working-directory: services/artifact-store
+      - run: cargo test --locked
+        working-directory: services/intent-service
       - run: bun run db:migrate:api && bun run db:migrate:api
       - run: bun run build:api
       - run: docker build -f services/aven-api/Dockerfile -t aven-api:validation .
       - run: docker build -f services/artifact-store/Dockerfile -t aven-artifact-store:validation .
+      - run: docker build -f services/intent-service/Dockerfile -t aven-intent-service:validation .
 
   release:
     name: tag + changelog
@@ -255,6 +258,34 @@ jobs:
           push: true
           tags: ghcr.io/myavenceo/aven-artifact-store:sha-${{ needs.release.outputs.commit }}
 
+  publish-intent-service-image:
+    name: publish Intent Service image
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ghcr.io/myavenceo/aven-intent-service
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release.outputs.commit }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: services/intent-service/Dockerfile
+          push: true
+          tags: ghcr.io/myavenceo/aven-intent-service:sha-${{ needs.release.outputs.commit }}
+
   deploy-identity-infrastructure-next:
     name: update identity infrastructure
     needs: release
@@ -323,7 +354,13 @@ jobs:
 
   deploy-identity-next:
     name: deploy identity API
-    needs: [publish-identity-image, publish-artifact-store-image, deploy-identity-infrastructure-next]
+    needs:
+      [
+        publish-identity-image,
+        publish-artifact-store-image,
+        publish-intent-service-image,
+        deploy-identity-infrastructure-next,
+      ]
     runs-on: ubuntu-latest
     environment: next
     concurrency:
@@ -363,6 +400,11 @@ jobs:
           ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN: ${{ secrets.ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN }}
           ARTIFACT_PROCESSOR_RUNTIME_PASSWORD: ${{ secrets.ARTIFACT_PROCESSOR_RUNTIME_PASSWORD }}
           ARTIFACT_PROCESSOR_VISION_API_KEY: ${{ secrets.ARTIFACT_PROCESSOR_VISION_API_KEY }}
+          INTENT_SERVICE_BEARER_TOKEN: ${{ secrets.INTENT_SERVICE_BEARER_TOKEN }}
+          INTENT_SERVICE_DIRECTORY_BEARER_TOKEN: ${{ secrets.INTENT_SERVICE_DIRECTORY_BEARER_TOKEN }}
+          INTENT_SERVICE_PROVISIONER_BEARER_TOKEN: ${{ secrets.INTENT_SERVICE_PROVISIONER_BEARER_TOKEN }}
+          INTENT_SERVICE_RUNTIME_PASSWORD: ${{ secrets.INTENT_SERVICE_RUNTIME_PASSWORD }}
+          INTENT_SERVICE_PROCESSOR_BEARER_TOKEN: ${{ secrets.INTENT_SERVICE_PROCESSOR_BEARER_TOKEN }}
           ARTIFACT_STORE_MAX_TENANT_POOLS: ${{ vars.ARTIFACT_STORE_MAX_TENANT_POOLS }}
           ARTIFACT_STORE_CONNECTIONS_PER_TENANT: ${{ vars.ARTIFACT_STORE_CONNECTIONS_PER_TENANT }}
           ARTIFACT_STORE_MEMORY_LIMIT: ${{ vars.ARTIFACT_STORE_MEMORY_LIMIT }}
@@ -382,6 +424,10 @@ jobs:
           ARTIFACT_PROCESSOR_VISION_AUTH_MODE: ${{ vars.ARTIFACT_PROCESSOR_VISION_AUTH_MODE }}
           ARTIFACT_PROCESSOR_VISION_MAX_PAGES: ${{ vars.ARTIFACT_PROCESSOR_VISION_MAX_PAGES }}
           ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS: ${{ vars.ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS }}
+          INTENT_SERVICE_MAX_TENANT_POOLS: ${{ vars.INTENT_SERVICE_MAX_TENANT_POOLS }}
+          INTENT_SERVICE_CONNECTIONS_PER_TENANT: ${{ vars.INTENT_SERVICE_CONNECTIONS_PER_TENANT }}
+          INTENT_SERVICE_TENANT_REFRESH_SECONDS: ${{ vars.INTENT_SERVICE_TENANT_REFRESH_SECONDS }}
+          INTENT_SERVICE_MEMORY_LIMIT: ${{ vars.INTENT_SERVICE_MEMORY_LIMIT }}
           SMTP_URL: ${{ secrets.SMTP_URL }}
           CREEM_API_KEY: ${{ secrets.CREEM_API_KEY }}
           CREEM_PRODUCT_ID: ${{ secrets.CREEM_PRODUCT_ID }}
@@ -390,6 +436,7 @@ jobs:
           CREEM_WEBHOOK_SECRET: ${{ secrets.CREEM_WEBHOOK_SECRET }}
           IMAGE: ${{ needs.publish-identity-image.outputs.image }}@${{ needs.publish-identity-image.outputs.digest }}
           ARTIFACT_IMAGE: ${{ needs.publish-artifact-store-image.outputs.image }}@${{ needs.publish-artifact-store-image.outputs.digest }}
+          INTENT_IMAGE: ${{ needs.publish-intent-service-image.outputs.image }}@${{ needs.publish-intent-service-image.outputs.digest }}
           VERSION: ${{ needs.publish-identity-image.outputs.commit }}
         run: |
           set -euo pipefail
@@ -413,6 +460,19 @@ jobs:
             "$ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN"
             "$ARTIFACT_PROCESSOR_RUNTIME_PASSWORD"
           )
+          intent_credentials=(
+            "$INTENT_SERVICE_BEARER_TOKEN"
+            "$INTENT_SERVICE_DIRECTORY_BEARER_TOKEN"
+            "$INTENT_SERVICE_PROVISIONER_BEARER_TOKEN"
+            "$INTENT_SERVICE_RUNTIME_PASSWORD"
+            "$INTENT_SERVICE_PROCESSOR_BEARER_TOKEN"
+          )
+          for secret in "${intent_credentials[@]}"; do
+            if [[ ! "$secret" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then
+              echo "::error::Intent Service credentials must be 32-128 URL-safe characters."
+              exit 1
+            fi
+          done
           for secret in "${processor_credentials[@]}"; do
             if [[ ! "$secret" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then
               echo "::error::Artifact Processor credentials must be 32-128 URL-safe characters."
@@ -424,9 +484,10 @@ jobs:
             "$ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN"
             "$ARTIFACT_STORE_RUNTIME_PASSWORD"
             "${processor_credentials[@]}"
+            "${intent_credentials[@]}"
           )
           if [ "$(printf '%s\n' "${distinct_credentials[@]}" | sort -u | wc -l)" -ne "${#distinct_credentials[@]}" ]; then
-            echo "::error::Artifact Store and Processor service credentials must all differ."
+            echo "::error::Customer-data service credentials must all differ."
             exit 1
           fi
           DOCKER_LOG_MAX_SIZE=${DOCKER_LOG_MAX_SIZE:-10m}
@@ -444,6 +505,10 @@ jobs:
           ARTIFACT_PROCESSOR_MEMORY_LIMIT=${ARTIFACT_PROCESSOR_MEMORY_LIMIT:-768m}
           ARTIFACT_PROCESSOR_VISION_MAX_PAGES=${ARTIFACT_PROCESSOR_VISION_MAX_PAGES:-15}
           ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS=${ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS:-180}
+          INTENT_SERVICE_MAX_TENANT_POOLS=${INTENT_SERVICE_MAX_TENANT_POOLS:-64}
+          INTENT_SERVICE_CONNECTIONS_PER_TENANT=${INTENT_SERVICE_CONNECTIONS_PER_TENANT:-2}
+          INTENT_SERVICE_TENANT_REFRESH_SECONDS=${INTENT_SERVICE_TENANT_REFRESH_SECONDS:-30}
+          INTENT_SERVICE_MEMORY_LIMIT=${INTENT_SERVICE_MEMORY_LIMIT:-512m}
           if [ "$ARTIFACT_PROCESSOR_VISION_ENABLED" != true ]; then
             echo "::error::ARTIFACT_PROCESSOR_VISION_ENABLED must be true for the next finance-processing rollout."
             exit 1
@@ -520,6 +585,16 @@ jobs:
             echo "::error::ARTIFACT_PROCESSOR_MEMORY_LIMIT must be a positive size such as 768m."
             exit 1
           fi
+          if [[ ! "$INTENT_SERVICE_MEMORY_LIMIT" =~ ^[1-9][0-9]*[mg]$ ]]; then
+            echo "::error::INTENT_SERVICE_MEMORY_LIMIT must be a positive size such as 512m."
+            exit 1
+          fi
+          for value in "$INTENT_SERVICE_MAX_TENANT_POOLS" "$INTENT_SERVICE_CONNECTIONS_PER_TENANT" "$INTENT_SERVICE_TENANT_REFRESH_SECONDS"; do
+            if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::Intent Service limits must be positive integers."
+              exit 1
+            fi
+          done
           for value in "$ARTIFACT_PROCESSOR_MAX_TENANT_POOLS" "$ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT" "$ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS"; do
             if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
               echo "::error::Artifact Processor limits must be positive integers."
@@ -562,6 +637,7 @@ jobs:
             printf 'APPLICATION_VERSION=%s\n' "$VERSION"
             printf 'AVEN_API_IMAGE=%s\n' "$IMAGE"
             printf 'AVEN_ARTIFACT_STORE_IMAGE=%s\n' "$ARTIFACT_IMAGE"
+            printf 'AVEN_INTENT_SERVICE_IMAGE=%s\n' "$INTENT_IMAGE"
             printf 'BETTER_AUTH_SECRET=%s\n' "$BETTER_AUTH_SECRET"
             printf 'EMAIL_QUEUE_ENCRYPTION_KEY=%s\n' "$EMAIL_QUEUE_ENCRYPTION_KEY"
             printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
@@ -597,6 +673,15 @@ jobs:
             printf 'ARTIFACT_PROCESSOR_VISION_API_KEY=%s\n' "$ARTIFACT_PROCESSOR_VISION_API_KEY"
             printf 'ARTIFACT_PROCESSOR_VISION_MAX_PAGES=%s\n' "$ARTIFACT_PROCESSOR_VISION_MAX_PAGES"
             printf 'ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS=%s\n' "$ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS"
+            printf 'INTENT_SERVICE_BEARER_TOKEN=%s\n' "$INTENT_SERVICE_BEARER_TOKEN"
+            printf 'INTENT_SERVICE_DIRECTORY_BEARER_TOKEN=%s\n' "$INTENT_SERVICE_DIRECTORY_BEARER_TOKEN"
+            printf 'INTENT_SERVICE_PROVISIONER_BEARER_TOKEN=%s\n' "$INTENT_SERVICE_PROVISIONER_BEARER_TOKEN"
+            printf 'INTENT_SERVICE_RUNTIME_PASSWORD=%s\n' "$INTENT_SERVICE_RUNTIME_PASSWORD"
+            printf 'INTENT_SERVICE_PROCESSOR_BEARER_TOKEN=%s\n' "$INTENT_SERVICE_PROCESSOR_BEARER_TOKEN"
+            printf 'INTENT_SERVICE_MAX_TENANT_POOLS=%s\n' "$INTENT_SERVICE_MAX_TENANT_POOLS"
+            printf 'INTENT_SERVICE_CONNECTIONS_PER_TENANT=%s\n' "$INTENT_SERVICE_CONNECTIONS_PER_TENANT"
+            printf 'INTENT_SERVICE_TENANT_REFRESH_SECONDS=%s\n' "$INTENT_SERVICE_TENANT_REFRESH_SECONDS"
+            printf 'INTENT_SERVICE_MEMORY_LIMIT=%s\n' "$INTENT_SERVICE_MEMORY_LIMIT"
             printf 'SMTP_URL=%s\n' "$SMTP_URL"
             printf 'CREEM_API_KEY=%s\n' "$CREEM_API_KEY"
             printf 'CREEM_PRODUCT_ID=%s\n' "$CREEM_PRODUCT_ID"
@@ -651,7 +736,7 @@ jobs:
           # deliberately use database heartbeats and are verified by /api/health/status below.
           # The generated upload path is intentionally expanded by this runner.
           # shellcheck disable=SC2029
-          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy /opt/aven-api/previous && if sudo test -f /opt/aven-api/.env; then sudo install -m 600 /opt/aven-api/.env /opt/aven-api/previous/.env && sudo install -m 644 /opt/aven-api/docker-compose.yml /opt/aven-api/docker-compose.deploy.yml /opt/aven-api/docker-compose.artifact-store.deploy.yml /opt/aven-api/previous/; fi && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' '$upload/deploy/rollback-previous.sh' /opt/aven-api/deploy/ && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --wait --wait-timeout 120 db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres -c 'GRANT pg_signal_backend TO aven_provisioner' && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store-provisioner artifact-processor-provisioner && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps environment-worker && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store app artifact-processor caddy && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps email-worker && rm -rf '$upload'"
+          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy /opt/aven-api/previous && if sudo test -f /opt/aven-api/.env; then sudo install -m 600 /opt/aven-api/.env /opt/aven-api/previous/.env && sudo install -m 644 /opt/aven-api/docker-compose.yml /opt/aven-api/docker-compose.deploy.yml /opt/aven-api/docker-compose.artifact-store.deploy.yml /opt/aven-api/previous/; fi && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' '$upload/deploy/rollback-previous.sh' /opt/aven-api/deploy/ && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --wait --wait-timeout 120 db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres -c 'GRANT pg_signal_backend TO aven_provisioner' && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store-provisioner artifact-processor-provisioner intent-service-provisioner && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps environment-worker && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store app artifact-processor intent-service caddy && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps email-worker && rm -rf '$upload'"
 
       - name: Remove temporary host upload
         if: always()
@@ -695,7 +780,6 @@ jobs:
     # repo secrets stay available inside an environment-scoped job, so this is additive.
     environment: next
     steps:
-
       - name: Checkout next at the release commit (full history + tags)
         uses: actions/checkout@v5
         with:

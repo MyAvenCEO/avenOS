@@ -48,6 +48,10 @@ Variables:
 - `ARTIFACT_PROCESSOR_VISION_AUTH_MODE` (required; `bearer` or `none`)
 - `ARTIFACT_PROCESSOR_VISION_MAX_PAGES` (optional; defaults to `15`, maximum `63`)
 - `ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS` (optional; defaults to `180`, maximum `900`)
+- `INTENT_SERVICE_MAX_TENANT_POOLS` (optional; defaults to `64`)
+- `INTENT_SERVICE_CONNECTIONS_PER_TENANT` (optional; defaults to `2`)
+- `INTENT_SERVICE_TENANT_REFRESH_SECONDS` (optional; defaults to `30`)
+- `INTENT_SERVICE_MEMORY_LIMIT` (optional; defaults to `512m`)
 
 Secrets:
 
@@ -72,6 +76,11 @@ Secrets:
 - `ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN` (environment-worker-to-provisioner credential)
 - `ARTIFACT_PROCESSOR_RUNTIME_PASSWORD` (password for the restricted shared Processor DB role)
 - `ARTIFACT_PROCESSOR_VISION_API_KEY` (required in `bearer` mode; 20–512 non-whitespace characters; omit in `none` mode)
+- `INTENT_SERVICE_BEARER_TOKEN` (API-to-Intent-Service credential; 32–128 URL-safe characters)
+- `INTENT_SERVICE_DIRECTORY_BEARER_TOKEN` (Intent-Service-to-API directory credential)
+- `INTENT_SERVICE_PROVISIONER_BEARER_TOKEN` (environment-worker-to-provisioner credential)
+- `INTENT_SERVICE_RUNTIME_PASSWORD` (restricted Intent Service database role)
+- `INTENT_SERVICE_PROCESSOR_BEARER_TOKEN` (dedicated Intent-Service-to-Processor read credential)
 - `SMTP_URL`
 - `CREEM_API_KEY`
 - `CREEM_PRODUCT_ID`
@@ -83,17 +92,38 @@ Secrets:
 `IDENTITY_DOMAIN` is the hostname from `PUBLIC_BASE_URL`, without a scheme or path. The deploy host must allow inbound TCP 80/443 and UDP 443.
 
 Repository workflows use the private Hetzner Object Storage bucket as Pulumi's encrypted
-DIY backend, apply the foundation, publish immutable Aven API and Artifact Store images,
-and deploy both by digest. The Artifact Store image also contains the Processor binary.
-Deployment writes a mode-0600 environment file, runs the central migrator, and starts
-the API, workers, Artifact Store and Processor runtimes/provisioners, and Caddy TLS
-ingress. The environment worker queues idempotent Store and Processor installations for
-existing customer databases marked pending; new databases are installed before
-readiness. Processor tenant discovery is an authenticated Compose-network-only API;
-Caddy returns 404 for every `/internal/*` request.
+DIY backend, apply the foundation, publish immutable Aven API, Artifact Store, and Intent
+Service images, and deploy all three by digest. The Artifact Store image also contains
+the Processor binary. Deployment writes a mode-0600 environment file, runs the central
+migrator, and starts the API, workers, Store, Processor, and Intent Service
+runtimes/provisioners plus Caddy TLS ingress. The environment worker queues idempotent,
+independent Store, Processor, and Intent Service installations for existing customer
+databases; new databases receive all three before readiness. Processor and Intent
+Service tenant discovery use authenticated Compose-network-only APIs; Caddy returns 404
+for every `/internal/*` request.
 Customer database names and scopes stay in PostgreSQL; they are not GitHub Secrets.
 
-## First Processor rollout to `next`
+## First Processor and Intent Service rollout to `next`
+
+The Intent Service rollout additionally requires five independently generated secrets:
+
+```sh
+for name in \
+  INTENT_SERVICE_BEARER_TOKEN \
+  INTENT_SERVICE_DIRECTORY_BEARER_TOKEN \
+  INTENT_SERVICE_PROVISIONER_BEARER_TOKEN \
+  INTENT_SERVICE_RUNTIME_PASSWORD \
+  INTENT_SERVICE_PROCESSOR_BEARER_TOKEN
+do
+  value="$(openssl rand -hex 32)"
+  gh secret set "$name" --env next --body "$value"
+done
+
+gh variable set INTENT_SERVICE_MAX_TENANT_POOLS --env next --body 64
+gh variable set INTENT_SERVICE_CONNECTIONS_PER_TENANT --env next --body 2
+gh variable set INTENT_SERVICE_TENANT_REFRESH_SECONDS --env next --body 30
+gh variable set INTENT_SERVICE_MEMORY_LIMIT --env next --body 512m
+```
 
 Generate four independent credentials locally without printing or committing them:
 
@@ -163,7 +193,7 @@ The successful deployment contract is:
 - `/api/health/status` reports `overall=healthy` and
   `capabilities.artifactProcessing=available`;
 - existing owned environments converge to Artifact Store schema version `3` and
-  Processor schema version `4`;
+  Processor schema version `5` and Intent Service schema version `1`;
 - the provisioner and directory endpoints are unreachable through public Caddy;
 - a new upload eventually has a processing status at
   `/api/artifacts/{artifactId}/processing`; and
@@ -171,7 +201,7 @@ The successful deployment contract is:
   OCR, document classification, grounded invoice or account-statement extraction, and
   deterministic validation; and
 - suspending an environment removes it from discovery and revokes both Store and
-  Processor database connections.
+  Processor and Intent Service database connections.
 
 Before overwriting a live deployment, the workflow saves the previous `.env` (including
 its immutable image digests) and three Compose files under root-owned
@@ -182,7 +212,8 @@ runtime set on the host:
 sudo /opt/aven-api/deploy/rollback-previous.sh
 ```
 
-The rollback removes newly introduced orphan services but deliberately does not reverse
-central or customer schema migrations; migrations in this rollout are additive and old
-code ignores them. Investigate and retain the failed deployment logs before the next
+The rollback removes newly introduced orphan services and restores the previous
+Processor's access to its empty prototype intent schema. It deliberately does not
+reverse central or customer schema migrations; the old code otherwise ignores the
+forward additions. Investigate and retain the failed deployment logs before the next
 release overwrites the one-generation snapshot.
