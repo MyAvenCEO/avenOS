@@ -2,6 +2,8 @@
 // config, Standard-Webhooks signatures round-trip (and tampering is caught),
 // and the raw-wire parsers normalize Polar envelopes into the shapes the
 // rest of the service sees.
+
+import { type PlanId, plan } from '@avenos/aven-brand/pricing'
 import { describe, expect, it } from 'vitest'
 import { createPaymentProvider, FakePaymentProvider } from '../src/lib/server/billing/fake.js'
 import { PolarProvider } from '../src/lib/server/billing/polar.js'
@@ -12,7 +14,7 @@ import {
 	parsePolarSubscriptionEvent,
 	signWebhookHeaders
 } from '../src/lib/server/billing/provider.js'
-import { productSeeds } from '../src/lib/server/billing/seeds.js'
+import { productBenefitSpecs, productSeeds } from '../src/lib/server/billing/seeds.js'
 import { testConfig } from './helpers.js'
 
 const SECRET = 'whsec_test_secret'
@@ -50,6 +52,48 @@ describe('product seeds', () => {
 		expect(byTier.avenid?.priceCents).toBe(2500)
 		expect(byTier.avenme?.priceCents).toBe(5500)
 		expect(byTier.avenceo?.priceCents).toBe(37700)
+	})
+
+	it('describes every product from the SSOT: role line, then plain-title bullets', () => {
+		for (const seed of productSeeds()) {
+			const p = plan(seed.tier as PlanId)
+			// The German role line opens the description...
+			expect(seed.description.startsWith(p.role)).toBe(true)
+			// ...followed by markdown bullets of the plain features' titles.
+			expect(seed.description).toContain('\n- ')
+			for (const feature of p.features) {
+				// Skills stay OUT — they render as visible benefits instead.
+				if (feature.skill) expect(seed.description).not.toContain(`- ${feature.title}`)
+				else expect(seed.description).toContain(`- ${feature.title}`)
+			}
+			// Comfortably within the length budget for the checkout page.
+			expect(seed.description.length).toBeLessThanOrEqual(1000)
+		}
+	})
+})
+
+describe('product benefit specs', () => {
+	it('derives cascaded skill flags and the runtime benefit per tier', () => {
+		const specs = productBenefitSpecs()
+		// avenID sells the name, not skills or runtime.
+		expect(specs.avenid).toEqual([])
+		const meKeys = specs.avenme.map((spec) => spec.key)
+		expect(meKeys).toContain('skill:inbox-router')
+		expect(meKeys).toContain('runtime:avenme')
+		expect(specs.avenme.filter((spec) => spec.kind === 'feature_flag')).toHaveLength(8)
+		// The company Aven carries every personal skill (the skill cascade)...
+		const ceoKeys = specs.avenceo.map((spec) => spec.key)
+		for (const key of meKeys.filter((k) => k.startsWith('skill:'))) expect(ceoKeys).toContain(key)
+		// ...plus its own, and its own runtime.
+		expect(ceoKeys).toContain('skill:book-keeper')
+		expect(ceoKeys).toContain('runtime:avenceo')
+		expect(specs.avenceo.filter((spec) => spec.kind === 'feature_flag')).toHaveLength(13)
+		for (const spec of Object.values(specs).flat()) {
+			// Every title fits Polar's 42-char benefit description cap.
+			expect(spec.description.length).toBeLessThanOrEqual(42)
+			// Runtime specs carry the SSOT numbers; flags carry none.
+			expect(spec.runtime !== null).toBe(spec.kind === 'runtime')
+		}
 	})
 })
 

@@ -10,6 +10,9 @@ export interface CheckoutInput {
 	email: string
 	holdId: string
 	successUrl: string
+	/** Checkout-chrome language ('de' | 'en'), null = the provider's default.
+	 * Localizes Polar's checkout UI only — the product copy stays authored. */
+	locale: string | null
 }
 export interface CheckoutSession {
 	checkoutId: string
@@ -46,6 +49,8 @@ export interface SubscriptionCheckoutInput {
 	successUrl: string
 	/** The origin of the page that will iframe-embed the checkout. */
 	embedOrigin: string | null
+	/** Checkout-chrome language ('de' | 'en'), null = the provider's default. */
+	locale: string | null
 }
 
 /** One order, reduced to what the pane shows. Polar (merchant of record)
@@ -81,6 +86,11 @@ export interface PaymentProvider {
 	/** Idempotent: finds products by `metadata.tier`, creates the missing
 	 * ones, corrects drifted prices/names, returns tier → product id. */
 	ensureProducts(seeds: ProductSeed[]): Promise<Record<string, string>>
+	/** Idempotent like ensureProducts: ensures every SSOT benefit (skill
+	 * feature flags, per-tier AI-runtime) exists at the provider — found by
+	 * `metadata.key` — and attaches the full set per product. Returns tier →
+	 * attached benefit count. The fake provider no-ops. */
+	ensureBenefits(): Promise<Record<string, number>>
 	createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession>
 	cancelSubscription(providerSubscriptionId: string, immediate: boolean): Promise<void>
 	/** Reverts a scheduled cancellation. (Polar's pause API exists but

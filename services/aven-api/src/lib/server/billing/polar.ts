@@ -17,7 +17,7 @@ import {
 	parsePolarEvent,
 	type SubscriptionCheckoutInput
 } from './provider.js'
-import { productSeeds } from './seeds.js'
+import { type BenefitSpec, productBenefitSpecs, productSeeds } from './seeds.js'
 
 /** Polar checkout statuses, mapped onto the pane's vocabulary. */
 const CHECKOUT_STATUS: Record<string, string> = {
@@ -33,6 +33,8 @@ export class PolarProvider implements PaymentProvider {
 	private polar: Polar
 	// tier → product id, synced once per process (idempotent at Polar).
 	private products: Promise<Record<string, string>> | null = null
+	// tier → attached benefit count, synced once per process.
+	private benefits: Promise<Record<string, number>> | null = null
 
 	constructor(private config: BillingConfig) {
 		this.polar = new Polar({
@@ -75,13 +77,15 @@ export class PolarProvider implements PaymentProvider {
 			const found = existing.find((product) => product.metadata?.tier === seed.tier)
 			if (found) {
 				map[seed.tier] = found.id
-				// Correct drift: the SSOT is the truth for name and gross price.
+				// Correct drift: the SSOT is the truth for name, description and
+				// gross price.
 				const price = found.prices.find((p) => 'priceAmount' in p && p.amountType === 'fixed') as
 					| { priceAmount: number }
 					| undefined
 				const priceDrifted = price ? price.priceAmount !== seed.priceCents : true
 				const nameDrifted = found.name !== seed.name
-				if (priceDrifted || nameDrifted) {
+				const descriptionDrifted = (found.description ?? '') !== seed.description
+				if (priceDrifted || nameDrifted || descriptionDrifted) {
 					await this.call(`update-product ${seed.tier}`, () =>
 						this.polar.products.update({
 							id: found.id,
@@ -126,6 +130,103 @@ export class PolarProvider implements PaymentProvider {
 		return map
 	}
 
+	/** Memoized per process, like the products. */
+	ensureBenefits(): Promise<Record<string, number>> {
+		this.benefits ??= this.syncBenefits()
+		return this.benefits
+	}
+
+	/** The SSOT benefits at Polar: every benefit is found by its
+	 * `metadata.key` (`skill:<slug>` / `runtime:<tier>`), created VISIBLE when
+	 * missing, and the full set is attached per product — so the checkout
+	 * shows exactly what the pricing page promises. */
+	private async syncBenefits(): Promise<Record<string, number>> {
+		const products = await this.ensureProducts(productSeeds())
+		const specs = productBenefitSpecs()
+		const listed = await this.call('list-benefits', () => this.polar.benefits.list({ limit: 100 }))
+		const idByKey = new Map<string, string>()
+		for (const benefit of listed.result.items) {
+			const key = benefit.metadata?.key
+			if (typeof key === 'string' && benefit.metadata?.source === 'ssot')
+				idByKey.set(key, benefit.id)
+		}
+		for (const spec of Object.values(specs).flat()) {
+			if (idByKey.has(spec.key)) continue
+			idByKey.set(spec.key, await this.createBenefit(spec))
+		}
+		const counts: Record<string, number> = {}
+		for (const [tier, tierSpecs] of Object.entries(specs)) {
+			const productId = products[tier]
+			if (!productId) continue
+			const benefits = tierSpecs
+				.map((spec) => idByKey.get(spec.key))
+				.filter((id): id is string => Boolean(id))
+			await this.call(`update-product-benefits ${tier}`, () =>
+				this.polar.products.updateBenefits({
+					id: productId,
+					productBenefitsUpdate: { benefits }
+				})
+			)
+			counts[tier] = benefits.length
+		}
+		return counts
+	}
+
+	private async createBenefit(spec: BenefitSpec): Promise<string> {
+		const base = {
+			description: spec.description,
+			metadata: { source: 'ssot', key: spec.key },
+			// Explicitly visible: these ARE the product's public feature list.
+			visibility: 'public' as const
+		}
+		if (spec.kind === 'feature_flag') {
+			const created = await this.call(`create-benefit ${spec.key}`, () =>
+				this.polar.benefits.create({ ...base, type: 'feature_flag', properties: {} })
+			)
+			return created.id
+		}
+		// Runtime: PREFER a real meter-credit benefit (the included minutes as
+		// credits on the shared ai-minutes meter). Meter features are gated per
+		// organization, so probe — and fall back to a plain custom benefit
+		// carrying the same short title when the org has them disabled.
+		try {
+			const meterId = await this.ensureAiMinutesMeter()
+			const minutesPerMonth = (spec.runtime?.hoursPerDay ?? 0) * 60 * 30
+			const created = await this.call(`create-benefit ${spec.key}`, () =>
+				this.polar.benefits.create({
+					...base,
+					type: 'meter_credit',
+					properties: { units: minutesPerMonth, rollover: false, meterId }
+				})
+			)
+			return created.id
+		} catch {
+			const created = await this.call(`create-benefit ${spec.key} (custom fallback)`, () =>
+				this.polar.benefits.create({ ...base, type: 'custom', properties: {} })
+			)
+			return created.id
+		}
+	}
+
+	/** The one shared usage meter the runtime credits draw from. */
+	private async ensureAiMinutesMeter(): Promise<string> {
+		const listed = await this.call('list-meters', () => this.polar.meters.list({ limit: 100 }))
+		const found = listed.result.items.find((meter) => meter.name === 'ai-minutes')
+		if (found) return found.id
+		const created = await this.call('create-meter ai-minutes', () =>
+			this.polar.meters.create({
+				name: 'ai-minutes',
+				metadata: { source: 'ssot' },
+				filter: {
+					conjunction: 'and',
+					clauses: [{ property: 'name', operator: 'eq', value: 'ai-minutes' }]
+				},
+				aggregation: { func: 'sum', property: 'minutes' }
+			})
+		)
+		return created.id
+	}
+
 	/** The one-off avenID checkout for the names funnel. */
 	async createCheckout(input: CheckoutInput): Promise<CheckoutSession> {
 		const products = await this.ensureProducts(productSeeds())
@@ -138,6 +239,9 @@ export class PolarProvider implements PaymentProvider {
 				customerEmail: input.email,
 				successUrl: input.successUrl,
 				embedOrigin: new URL(this.config.PUBLIC_BASE_URL).origin,
+				// Pre-selects the checkout chrome's language (Localized Checkout);
+				// our product copy stays the authored German either way.
+				locale: input.locale,
 				metadata: { holdId: input.holdId, name: input.name }
 			})
 		)
@@ -153,6 +257,8 @@ export class PolarProvider implements PaymentProvider {
 				externalCustomerId: input.userId,
 				successUrl: input.successUrl,
 				embedOrigin: input.embedOrigin,
+				// Pre-selects the checkout chrome's language (Localized Checkout).
+				locale: input.locale,
 				metadata: { userId: input.userId, tier: input.tier }
 			})
 		)

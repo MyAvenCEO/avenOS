@@ -43,7 +43,6 @@
 		"@avenos/aven-brand": "workspace:*",
 		"@avenos/aven-website": "workspace:*",
 		"@better-auth/passkey": "1.6.23",
-		"@polar-sh/checkout": "^0.4.1",
 		"@polar-sh/sdk": "^0.49.0",
 		"better-auth": "1.6.23",
 		"dotenv": "17.3.1",

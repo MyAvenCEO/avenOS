@@ -570,6 +570,7 @@ pub async fn billing_me(state: tauri::State<'_, AuthState>) -> Result<serde_json
 pub async fn billing_subscribe(
 	tier: String,
 	embed_origin: Option<String>,
+	locale: Option<String>,
 	state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {
 	let token = session_token(&state)?;
@@ -578,7 +579,9 @@ pub async fn billing_subscribe(
 			token,
 			"POST",
 			"/api/billing/subscribe",
-			Some(serde_json::json!({ "tier": tier, "embedOrigin": embed_origin })),
+			Some(
+				serde_json::json!({ "tier": tier, "embedOrigin": embed_origin, "locale": locale }),
+			),
 		)
 	})
 	.await
