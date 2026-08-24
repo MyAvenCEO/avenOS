@@ -7,7 +7,7 @@ export const prerender = true
 export const entries = () => allSlugs.map((slug) => ({ slug }))
 
 export const load = ({ params }: { params: { slug: string } }) => {
-	const skill = loadSkill(params.slug, 'de')
-	if (!skill) throw error(404, 'Skill nicht gefunden')
+	const skill = loadSkill(params.slug, 'en')
+	if (!skill) throw error(404, 'Skill not found')
 	return { skill }
 }
