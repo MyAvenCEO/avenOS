@@ -7,12 +7,7 @@ export default {
 			mode: 'auto',
 			directives: {
 				'script-src': ['self'],
-				'frame-src': [
-					'self',
-					'https://creem.io',
-					'https://checkout.creem.io',
-					'https://www.creem.io'
-				],
+				'frame-src': ['self', 'https://polar.sh', 'https://*.polar.sh'],
 				'frame-ancestors': ['none'],
 				'object-src': ['none'],
 				'base-uri': ['self']

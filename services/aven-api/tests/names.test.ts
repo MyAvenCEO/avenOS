@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import pino from 'pino'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FakePaymentProvider } from '../src/lib/server/billing/fake.js'
-import { parseCreemEvent } from '../src/lib/server/billing/provider.js'
+import { parsePolarEvent } from '../src/lib/server/billing/provider.js'
 import { sha256Hex } from '../src/lib/server/crypto.js'
 import { CURRENT_ARTIFACT_STORE_SCHEMA_VERSION } from '../src/lib/server/environments/provisioning.js'
 import { EnvironmentService } from '../src/lib/server/environments/service.js'
@@ -49,7 +49,7 @@ describe('checkout grant', () => {
 		const checkout = await service.claim(token)
 		const checkoutId = new URL(checkout.checkoutUrl).searchParams.get('checkoutId')
 		if (!checkoutId) throw new Error('Fake checkout did not provide an id')
-		const event = parseCreemEvent(
+		const event = parsePolarEvent(
 			payments.buildCompletedWebhookBody({
 				checkoutId,
 				holdId: hold.id,

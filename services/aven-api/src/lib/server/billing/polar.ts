@@ -1,0 +1,267 @@
+// Polar behind the PaymentProvider boundary — one SDK client, environment
+// from POLAR_SERVER (sandbox|production), never hardcoded. Products are
+// resolved by `metadata.tier` (the SSOT wire key) and synced from the seeds:
+// created when missing, price/name corrected when drifted. The org access
+// token already scopes every call to our organization.
+import { Polar } from '@polar-sh/sdk'
+import type { BillingConfig } from '../config.js'
+import { AppError } from '../errors.js'
+import {
+	assertWebhookSignature,
+	type CheckoutInput,
+	type CheckoutSession,
+	type OrderRow,
+	type PaymentEvent,
+	type PaymentProvider,
+	type ProductSeed,
+	parsePolarEvent,
+	type SubscriptionCheckoutInput
+} from './provider.js'
+import { productSeeds } from './seeds.js'
+
+/** Polar checkout statuses, mapped onto the pane's vocabulary. */
+const CHECKOUT_STATUS: Record<string, string> = {
+	open: 'pending',
+	confirmed: 'processing',
+	succeeded: 'completed',
+	failed: 'failed',
+	expired: 'expired'
+}
+
+export class PolarProvider implements PaymentProvider {
+	readonly kind = 'polar' as const
+	private polar: Polar
+	// tier → product id, synced once per process (idempotent at Polar).
+	private products: Promise<Record<string, string>> | null = null
+
+	constructor(private config: BillingConfig) {
+		this.polar = new Polar({
+			accessToken: config.POLAR_API_KEY,
+			server: config.POLAR_SERVER
+		})
+	}
+
+	/** One place for every Polar call: error surfaces read the same and the
+	 * token never leaves the SDK client. */
+	private async call<T>(label: string, fn: () => Promise<T>): Promise<T> {
+		try {
+			return await fn()
+		} catch (error) {
+			if (error instanceof AppError) throw error
+			const detail = error instanceof Error ? error.message : String(error)
+			throw new AppError(
+				502,
+				'BILLING_PROVIDER_ERROR',
+				`The payment provider rejected ${label}.`,
+				detail.slice(0, 300)
+			)
+		}
+	}
+
+	/** Memoized per process — the names funnel and the subscription service
+	 * both sync the same SSOT seeds, so one pass serves both. */
+	ensureProducts(seeds: ProductSeed[]): Promise<Record<string, string>> {
+		this.products ??= this.syncProducts(seeds)
+		return this.products
+	}
+
+	private async syncProducts(seeds: ProductSeed[]): Promise<Record<string, string>> {
+		const listed = await this.call('list-products', () =>
+			this.polar.products.list({ limit: 100, isArchived: false })
+		)
+		const existing = listed.result.items
+		const map: Record<string, string> = {}
+		for (const seed of seeds) {
+			const found = existing.find((product) => product.metadata?.tier === seed.tier)
+			if (found) {
+				map[seed.tier] = found.id
+				// Correct drift: the SSOT is the truth for name and gross price.
+				const price = found.prices.find((p) => 'priceAmount' in p && p.amountType === 'fixed') as
+					| { priceAmount: number }
+					| undefined
+				const priceDrifted = price ? price.priceAmount !== seed.priceCents : true
+				const nameDrifted = found.name !== seed.name
+				if (priceDrifted || nameDrifted) {
+					await this.call(`update-product ${seed.tier}`, () =>
+						this.polar.products.update({
+							id: found.id,
+							productUpdate: {
+								name: seed.name,
+								description: seed.description,
+								prices: [
+									{
+										amountType: 'fixed',
+										priceAmount: seed.priceCents,
+										priceCurrency: 'eur' as const,
+										taxBehavior: 'inclusive'
+									}
+								]
+							}
+						})
+					)
+				}
+				continue
+			}
+			const base = {
+				name: seed.name,
+				description: seed.description,
+				metadata: { tier: seed.tier },
+				prices: [
+					{
+						amountType: 'fixed' as const,
+						priceAmount: seed.priceCents,
+						priceCurrency: 'eur' as const,
+						// GROSS: the listed price IS what the buyer pays, VAT inside.
+						taxBehavior: 'inclusive' as const
+					}
+				]
+			}
+			const created = await this.call(`create-product ${seed.tier}`, () =>
+				this.polar.products.create(
+					seed.interval ? { ...base, recurringInterval: seed.interval } : base
+				)
+			)
+			map[seed.tier] = created.id
+		}
+		return map
+	}
+
+	/** The one-off avenID checkout for the names funnel. */
+	async createCheckout(input: CheckoutInput): Promise<CheckoutSession> {
+		const products = await this.ensureProducts(productSeeds())
+		const productId = products.avenid
+		if (!productId)
+			throw new AppError(502, 'BILLING_PRODUCT_MISSING', 'No provider product exists for avenid.')
+		const checkout = await this.call('create-checkout', () =>
+			this.polar.checkouts.create({
+				products: [productId],
+				customerEmail: input.email,
+				successUrl: input.successUrl,
+				embedOrigin: new URL(this.config.PUBLIC_BASE_URL).origin,
+				metadata: { holdId: input.holdId, name: input.name }
+			})
+		)
+		return { checkoutId: checkout.id, checkoutUrl: checkout.url }
+	}
+
+	async createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession> {
+		const checkout = await this.call('create-subscription-checkout', () =>
+			this.polar.checkouts.create({
+				products: [input.productId],
+				customerEmail: input.email,
+				// Our user id at the provider — webhooks resolve it straight back.
+				externalCustomerId: input.userId,
+				successUrl: input.successUrl,
+				embedOrigin: input.embedOrigin,
+				metadata: { userId: input.userId, tier: input.tier }
+			})
+		)
+		return { checkoutId: checkout.id, checkoutUrl: checkout.url }
+	}
+
+	async cancelSubscription(providerSubscriptionId: string, immediate: boolean): Promise<void> {
+		if (immediate) {
+			await this.call('revoke-subscription', () =>
+				this.polar.subscriptions.revoke({ id: providerSubscriptionId })
+			)
+			return
+		}
+		// German Kündigungsbutton semantics: the default keeps access until
+		// the period the member already paid for runs out.
+		await this.call('cancel-subscription', () =>
+			this.polar.subscriptions.update({
+				id: providerSubscriptionId,
+				subscriptionUpdate: { cancelAtPeriodEnd: true }
+			})
+		)
+	}
+
+	async resumeSubscription(
+		providerSubscriptionId: string,
+		mode: 'uncancel' | 'unpause'
+	): Promise<void> {
+		await this.call('resume-subscription', () =>
+			this.polar.subscriptions.update({
+				id: providerSubscriptionId,
+				subscriptionUpdate: mode === 'unpause' ? { resume: true } : { cancelAtPeriodEnd: false }
+			})
+		)
+	}
+
+	async pauseSubscription(providerSubscriptionId: string): Promise<void> {
+		await this.call('pause-subscription', () =>
+			this.polar.subscriptions.update({
+				id: providerSubscriptionId,
+				subscriptionUpdate: { pauseAtPeriodEnd: true }
+			})
+		)
+	}
+
+	/** The provider's customer record for an email, if one exists — how a
+	 * member who bought BEFORE we started storing customer ids (the one-off
+	 * avenID) gets their history connected. */
+	async findCustomerByEmail(email: string): Promise<string | null> {
+		const listed = await this.call('find-customer', () =>
+			this.polar.customers.list({ email, limit: 1 })
+		)
+		return listed.result.items[0]?.id ?? null
+	}
+
+	async listOrders(providerCustomerId: string): Promise<OrderRow[]> {
+		const listed = await this.call('list-orders', () =>
+			this.polar.orders.list({ customerId: providerCustomerId, limit: 100 })
+		)
+		return listed.result.items.map((order) => ({
+			id: order.id,
+			createdAt: order.createdAt.toISOString(),
+			productId: order.productId ?? '',
+			tier:
+				typeof order.product?.metadata?.tier === 'string'
+					? String(order.product.metadata.tier)
+					: null,
+			subTotalCents: order.subtotalAmount,
+			taxCents: order.taxAmount,
+			discountCents: order.discountAmount,
+			amountPaidCents: order.totalAmount,
+			currency: order.currency,
+			status: String(order.status),
+			invoiceGenerated: order.isInvoiceGenerated
+		}))
+	}
+
+	/** The official invoice PDF for one order — generated on first ask,
+	 * then fetched (generation is asynchronous at Polar, so poll briefly). */
+	async orderInvoiceUrl(orderId: string): Promise<string> {
+		const fetchUrl = () => this.polar.orders.invoice({ id: orderId }).then((invoice) => invoice.url)
+		try {
+			return await fetchUrl()
+		} catch {
+			await this.call('generate-invoice', () => this.polar.orders.generateInvoice({ id: orderId }))
+		}
+		for (let attempt = 0; attempt < 5; attempt++) {
+			await new Promise((resolve) => setTimeout(resolve, 1_000))
+			try {
+				return await fetchUrl()
+			} catch {
+				// Not ready yet — keep polling within the small window.
+			}
+		}
+		throw new AppError(
+			502,
+			'BILLING_INVOICE_PENDING',
+			'The invoice is still being generated — try again in a moment.'
+		)
+	}
+
+	async checkoutStatus(providerCheckoutId: string): Promise<string> {
+		const checkout = await this.call('checkout-status', () =>
+			this.polar.checkouts.get({ id: providerCheckoutId })
+		)
+		return CHECKOUT_STATUS[String(checkout.status)] ?? String(checkout.status)
+	}
+
+	verifyWebhook(rawBody: string, headers: Record<string, string | null>): PaymentEvent {
+		assertWebhookSignature(rawBody, headers, this.config.POLAR_WEBHOOK_SECRET)
+		return parsePolarEvent(rawBody)
+	}
+}

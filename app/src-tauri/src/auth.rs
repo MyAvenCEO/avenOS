@@ -525,7 +525,7 @@ pub(crate) fn session_token(state: &tauri::State<'_, AuthState>) -> Result<Strin
 
 /// One authenticated round-trip to the identity API. Every billing command
 /// goes through here with a HARDCODED path — the webview never chooses URLs,
-/// and the Creem key never leaves the id service at all.
+/// and the Polar key never leaves the id service at all.
 fn identity_api_call(
 	token: String,
 	method: &'static str,
@@ -548,7 +548,8 @@ fn identity_api_call(
 	parse_json::<serde_json::Value>(response)
 }
 
-/// The signed-in member's subscription standing (`null` before any tier).
+/// The signed-in member's standing per tier (an array — the tiers are
+/// independent products and can stand at once).
 #[tauri::command]
 pub async fn billing_me(state: tauri::State<'_, AuthState>) -> Result<serde_json::Value, String> {
 	let token = session_token(&state)?;
@@ -559,10 +560,12 @@ pub async fn billing_me(state: tauri::State<'_, AuthState>) -> Result<serde_json
 	.map_err(|error| format!("Could not load your subscription: {error}"))?
 }
 
-/// Open a checkout for a tier; returns the URL for the system browser.
+/// Open a checkout for a tier; the optional embed origin is the pane's own
+/// origin, so Polar accepts the page as the embedding frame.
 #[tauri::command]
 pub async fn billing_subscribe(
 	tier: String,
+	embed_origin: Option<String>,
 	state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {
 	let token = session_token(&state)?;
@@ -571,35 +574,19 @@ pub async fn billing_subscribe(
 			token,
 			"POST",
 			"/api/billing/subscribe",
-			Some(serde_json::json!({ "tier": tier })),
+			Some(serde_json::json!({ "tier": tier, "embedOrigin": embed_origin })),
 		)
 	})
 	.await
 	.map_err(|error| format!("Could not start the checkout: {error}"))?
 }
 
-/// Up- or downgrade to the other tier (proration charged immediately).
-#[tauri::command]
-pub async fn billing_upgrade(
-	tier: String,
-	state: tauri::State<'_, AuthState>,
-) -> Result<serde_json::Value, String> {
-	let token = session_token(&state)?;
-	tauri::async_runtime::spawn_blocking(move || {
-		identity_api_call(
-			token,
-			"POST",
-			"/api/billing/upgrade",
-			Some(serde_json::json!({ "tier": tier })),
-		)
-	})
-	.await
-	.map_err(|error| format!("Could not change the plan: {error}"))?
-}
-
-/// Cancel at period end (Kündigungsbutton semantics — never silently immediate).
+/// Cancel ONE tier at period end (Kündigungsbutton semantics — never
+/// silently immediate).
 #[tauri::command]
 pub async fn billing_cancel(
+	tier: String,
+	immediate: bool,
 	state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {
 	let token = session_token(&state)?;
@@ -608,16 +595,17 @@ pub async fn billing_cancel(
 			token,
 			"POST",
 			"/api/billing/cancel",
-			Some(serde_json::json!({})),
+			Some(serde_json::json!({ "tier": tier, "immediate": immediate })),
 		)
 	})
 	.await
 	.map_err(|error| format!("Could not cancel: {error}"))?
 }
 
-/// Undo a scheduled cancel / resume a paused subscription.
+/// Undo a scheduled cancel / resume a paused subscription of ONE tier.
 #[tauri::command]
 pub async fn billing_resume(
+	tier: String,
 	state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {
 	let token = session_token(&state)?;
@@ -626,7 +614,7 @@ pub async fn billing_resume(
 			token,
 			"POST",
 			"/api/billing/resume",
-			Some(serde_json::json!({})),
+			Some(serde_json::json!({ "tier": tier })),
 		)
 	})
 	.await
@@ -644,7 +632,7 @@ pub async fn billing_checkout_window(app: tauri::AppHandle, url: String) -> Resu
 		.parse::<tauri::Url>()
 		.map_err(|error| format!("The checkout link is invalid: {error}"))?;
 	let host = parsed.host_str().unwrap_or_default();
-	if parsed.scheme() != "https" || !(host == "creem.io" || host.ends_with(".creem.io")) {
+	if parsed.scheme() != "https" || !(host == "polar.sh" || host.ends_with(".polar.sh")) {
 		return Err("Only the payment provider's checkout may open here.".to_string());
 	}
 	if let Some(existing) = app.get_webview_window("billing-checkout") {
@@ -672,9 +660,10 @@ pub async fn billing_orders(
 	.map_err(|error| format!("Could not load your orders: {error}"))?
 }
 
-/// Pause the subscription; resume lifts it again.
+/// Pause ONE tier's subscription; resume lifts it again.
 #[tauri::command]
 pub async fn billing_pause(
+	tier: String,
 	state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {
 	let token = session_token(&state)?;
@@ -683,7 +672,7 @@ pub async fn billing_pause(
 			token,
 			"POST",
 			"/api/billing/pause",
-			Some(serde_json::json!({})),
+			Some(serde_json::json!({ "tier": tier })),
 		)
 	})
 	.await
@@ -704,17 +693,53 @@ pub async fn billing_checkout(
 	.map_err(|error| format!("Could not read the checkout status: {error}"))?
 }
 
-/// The member's invoice history (dates, amounts, tax — documents live in the portal).
+/// The official invoice PDF URL for ONE of the member's own orders — the id
+/// service resolves the order against the session and asks Polar (generating
+/// the document on first ask, which can take a few seconds).
 #[tauri::command]
-pub async fn billing_invoices(
+pub async fn billing_invoice_url(
+	order_id: String,
 	state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {
 	let token = session_token(&state)?;
 	tauri::async_runtime::spawn_blocking(move || {
-		identity_api_call(token, "GET", "/api/billing/invoices", None)
+		identity_api_call(
+			token,
+			"POST",
+			"/api/billing/invoices",
+			Some(serde_json::json!({ "orderId": order_id })),
+		)
 	})
 	.await
-	.map_err(|error| format!("Could not load your invoices: {error}"))?
+	.map_err(|error| format!("Could not load the invoice: {error}"))?
+}
+
+/// Open one invoice PDF in a dedicated avenOS window — never the system
+/// browser. The URL comes straight from our own API's invoice response; the
+/// PDF may be hosted on Polar's storage domain, so only the scheme is pinned.
+#[tauri::command]
+pub async fn billing_invoice_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
+	use tauri::Manager as _;
+	let parsed = url
+		.parse::<tauri::Url>()
+		.map_err(|error| format!("The invoice link is invalid: {error}"))?;
+	if parsed.scheme() != "https" {
+		return Err("Only a secure invoice link may open here.".to_string());
+	}
+	if let Some(existing) = app.get_webview_window("billing-invoice") {
+		// A window from an earlier invoice: steer it to the new PDF.
+		existing
+			.navigate(parsed)
+			.map_err(|error| format!("Could not open the invoice window: {error}"))?;
+		let _ = existing.set_focus();
+		return Ok(());
+	}
+	tauri::WebviewWindowBuilder::new(&app, "billing-invoice", tauri::WebviewUrl::External(parsed))
+		.title("Rechnung")
+		.inner_size(960.0, 760.0)
+		.build()
+		.map_err(|error| format!("Could not open the invoice window: {error}"))?;
+	Ok(())
 }
 
 /// The names reserved for whoever is signed in. Settings shows them so the

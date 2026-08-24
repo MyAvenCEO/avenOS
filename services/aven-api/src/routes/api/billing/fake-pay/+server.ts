@@ -1,5 +1,5 @@
 // Dev/e2e only: the "Pay" button of the local mock checkout. Builds a signed,
-// Creem-shaped webhook and delivers it to our own webhook endpoint so the
+// Polar-shaped webhook and delivers it to our own webhook endpoint so the
 // production grant path is exercised end to end. 404s when a real payment
 // provider is configured.
 
@@ -7,7 +7,7 @@ import type { RequestEvent } from '@sveltejs/kit'
 import { json } from '@sveltejs/kit'
 import { z } from 'zod'
 import { FakePaymentProvider } from '$lib/server/billing/fake.js'
-import { signWebhookPayload } from '$lib/server/billing/provider.js'
+import { signWebhookHeaders } from '$lib/server/billing/provider.js'
 import { runtime } from '$lib/server/runtime.js'
 import { emailAddress } from '$lib/validation.js'
 
@@ -28,11 +28,11 @@ export const POST = async (event: RequestEvent) => {
 		...input,
 		amountEur: rt.config.NAME_PRICE_EUR
 	})
-	const response = await fetch(new URL('/api/webhooks/creem', rt.config.PUBLIC_BASE_URL), {
+	const response = await fetch(new URL('/api/webhooks/polar', rt.config.PUBLIC_BASE_URL), {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
-			'creem-signature': signWebhookPayload(rawBody, rt.config.CREEM_WEBHOOK_SECRET)
+			...signWebhookHeaders(rawBody, rt.config.POLAR_WEBHOOK_SECRET)
 		},
 		body: rawBody
 	})

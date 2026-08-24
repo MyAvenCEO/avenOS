@@ -82,9 +82,8 @@ Secrets:
 - `INTENT_SERVICE_RUNTIME_PASSWORD` (restricted Intent Service database role)
 - `INTENT_SERVICE_PROCESSOR_BEARER_TOKEN` (dedicated Intent-Service-to-Processor read credential)
 - `SMTP_URL`
-- `CREEM_API_KEY`
-- `CREEM_PRODUCT_ID`
-- `CREEM_WEBHOOK_SECRET`
+- `POLAR_API_KEY`
+- `POLAR_WEBHOOK_SECRET`
 - `DEPLOY_SSH_KEY`
 - `DEPLOY_KNOWN_HOSTS`
 - `GHCR_READ_TOKEN`

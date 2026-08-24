@@ -1,120 +1,116 @@
-// The recurring tiers, proven end to end at the unit seam: products are
-// seeded from the pricing SSOT (net cents, tagged by tier), subscription
-// webhooks persist idempotently, and every read/action is scoped to the
-// session's own user — a stranger's id never reaches provider or row.
+// The recurring tiers, proven end to end at the unit seam: subscription
+// webhooks persist idempotently PER TIER (avenME and avenFOUNDER are
+// independent products that coexist on one account), every read/action is
+// scoped to the session's own user — a stranger's id never reaches provider
+// or row — and the invoice URL only ever resolves the caller's own orders.
 import { randomUUID } from 'node:crypto'
-import { PLANS } from '@avenos/aven-website/pricing'
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { CreemProvider } from '../src/lib/server/billing/creem.js'
-import { parseCreemSubscriptionEvent } from '../src/lib/server/billing/provider.js'
-import {
-	SubscriptionService,
-	subscriptionPlanSeeds
-} from '../src/lib/server/billing/subscriptions.js'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type {
+	CheckoutInput,
+	CheckoutSession,
+	OrderRow,
+	PaymentEvent,
+	PaymentProvider,
+	ProductSeed,
+	SubscriptionCheckoutInput
+} from '../src/lib/server/billing/provider.js'
+import { parsePolarSubscriptionEvent } from '../src/lib/server/billing/provider.js'
+import { SubscriptionService } from '../src/lib/server/billing/subscriptions.js'
 import { createTestDatabase, type TestDatabase, testConfig } from './helpers.js'
 
-const creemConfig = () =>
-	testConfig({
-		CREEM_API_KEY: 'creem_test_fake',
-		CREEM_PRODUCT_ID: 'prod_avenid',
-		CREEM_WEBHOOK_SECRET: 'whsec_test_secret'
-	})
+/** Records every provider call, so the tests can assert WHICH provider
+ * subscription id an action targeted — always the caller's own row. */
+class StubProvider implements PaymentProvider {
+	readonly kind = 'polar' as const
+	calls: Array<{ method: string; args: unknown[] }> = []
+	ordersByCustomer: Record<string, OrderRow[]> = {}
 
-/** Collects every fetch the provider makes; answers from a scripted queue. */
-function stubFetch(responses: Array<{ status?: number; body: unknown }>) {
-	const calls: Array<{ method: string; url: string; body: unknown; headers: Headers }> = []
-	const stub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-		calls.push({
-			method: init?.method ?? 'GET',
-			url: String(input),
-			body: init?.body ? JSON.parse(String(init.body)) : null,
-			headers: new Headers(init?.headers)
-		})
-		const next = responses.shift() ?? { body: {} }
-		return new Response(JSON.stringify(next.body), { status: next.status ?? 200 })
-	})
-	vi.stubGlobal('fetch', stub)
-	return calls
+	private record(method: string, ...args: unknown[]) {
+		this.calls.push({ method, args })
+	}
+
+	async createCheckout(input: CheckoutInput): Promise<CheckoutSession> {
+		this.record('createCheckout', input)
+		return { checkoutId: `ch_${input.holdId}`, checkoutUrl: 'https://sandbox.polar.sh/checkout' }
+	}
+
+	verifyWebhook(): PaymentEvent {
+		throw new Error('not used in these tests')
+	}
+
+	async ensureProducts(seeds: ProductSeed[]): Promise<Record<string, string>> {
+		this.record('ensureProducts', seeds)
+		return Object.fromEntries(seeds.map((seed) => [seed.tier, `prod_${seed.tier}`]))
+	}
+
+	async createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<CheckoutSession> {
+		this.record('createSubscriptionCheckout', input)
+		return {
+			checkoutId: `ch_${input.tier}_${input.userId.slice(0, 8)}`,
+			checkoutUrl: `https://sandbox.polar.sh/checkout/${input.tier}`
+		}
+	}
+
+	async cancelSubscription(id: string, immediate: boolean): Promise<void> {
+		this.record('cancelSubscription', id, immediate)
+	}
+
+	async resumeSubscription(id: string, mode: 'uncancel' | 'unpause'): Promise<void> {
+		this.record('resumeSubscription', id, mode)
+	}
+
+	async pauseSubscription(id: string): Promise<void> {
+		this.record('pauseSubscription', id)
+	}
+
+	async findCustomerByEmail(email: string): Promise<string | null> {
+		this.record('findCustomerByEmail', email)
+		return null
+	}
+
+	async listOrders(customerId: string): Promise<OrderRow[]> {
+		this.record('listOrders', customerId)
+		return this.ordersByCustomer[customerId] ?? []
+	}
+
+	async orderInvoiceUrl(orderId: string): Promise<string> {
+		this.record('orderInvoiceUrl', orderId)
+		return `https://polar.sh/invoices/${orderId}.pdf`
+	}
+
+	async checkoutStatus(checkoutId: string): Promise<string> {
+		this.record('checkoutStatus', checkoutId)
+		return 'completed'
+	}
 }
 
-afterEach(() => vi.unstubAllGlobals())
-
-/**
- * Creem products are adopted by NAME, so the fixtures must speak the SSOT's
- * current names — a hardcoded "avenCEO" silently broke the day the product
- * was renamed avenFOUNDER while the tier id stayed `avenceo`.
- */
-const NAME_ME = PLANS.find((p) => p.id === 'avenme')?.name ?? 'avenME'
-const NAME_CEO = PLANS.find((p) => p.id === 'avenceo')?.name ?? 'avenFOUNDER'
-
-describe('product resolution', () => {
-	it('pinned config ids win without any provider call', async () => {
-		const calls = stubFetch([])
-		const provider = new CreemProvider(
-			testConfig({
-				CREEM_API_KEY: 'creem_test_fake',
-				CREEM_PRODUCT_ID: 'prod_avenid',
-				CREEM_PRODUCT_AVENME: 'prod_6ALajlETScD2v0dv10n618',
-				CREEM_PRODUCT_AVENCEO: 'prod_7NVWk3DxOD4bXpipTSeE3s',
-				CREEM_WEBHOOK_SECRET: 'whsec_test_secret'
-			})
-		)
-		const map = await provider.ensureSubscriptionProducts(subscriptionPlanSeeds())
-		expect(map).toEqual({
-			avenme: 'prod_6ALajlETScD2v0dv10n618',
-			avenceo: 'prod_7NVWk3DxOD4bXpipTSeE3s'
-		})
-		expect(calls).toHaveLength(0)
-	})
-
-	it('adopts existing products by NAME — Creem products carry no metadata', async () => {
-		const calls = stubFetch([
-			{
-				body: {
-					items: [
-						{ id: 'prod_me', name: NAME_ME },
-						{ id: 'prod_ceo', name: NAME_CEO }
-					]
-				}
-			}
-		])
-		const provider = new CreemProvider(creemConfig())
-		const map = await provider.ensureSubscriptionProducts(subscriptionPlanSeeds())
-		expect(map).toEqual({ avenme: 'prod_me', avenceo: 'prod_ceo' })
-		expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0)
-	})
-
-	it('creates missing tiers from PLANS with net cents and NO metadata field', async () => {
-		const calls = stubFetch([
-			{ body: { items: [] } },
-			{ body: { id: 'prod_me' } },
-			{ body: { id: 'prod_ceo' } }
-		])
-		const provider = new CreemProvider(creemConfig())
-		const map = await provider.ensureSubscriptionProducts(subscriptionPlanSeeds())
-		expect(map).toEqual({ avenme: 'prod_me', avenceo: 'prod_ceo' })
-
-		const creations = calls.filter((c) => c.method === 'POST')
-		expect(creations).toHaveLength(2)
-		const byName = Object.fromEntries(
-			creations.map((c) => [(c.body as { name: string }).name, c.body])
-		) as Record<string, Record<string, unknown>>
-		// Prices come from the SSOT, in NET cents, recurring monthly, tax-exclusive.
-		const avenme = PLANS.find((p) => p.id === 'avenme')
-		const avenceo = PLANS.find((p) => p.id === 'avenceo')
-		expect(byName[NAME_ME]?.price).toBe((avenme?.eurPrice ?? 0) * 100)
-		expect(byName[NAME_CEO]?.price).toBe((avenceo?.eurPrice ?? 0) * 100)
-		for (const body of Object.values(byName)) {
-			expect(body.billing_type).toBe('recurring')
-			expect(body.tax_mode).toBe('exclusive')
-			expect(body.currency).toBe('EUR')
-			// Creem rejects unknown fields: create-product has NO metadata.
-			expect('metadata' in body).toBe(false)
+function subscriptionWebhook(input: {
+	subscriptionId: string
+	userId: string
+	email: string
+	tier: string
+	status: string
+	cancelAtPeriodEnd?: boolean
+	amount?: number
+}): string {
+	return JSON.stringify({
+		type: 'subscription.active',
+		data: {
+			id: input.subscriptionId,
+			status: input.status,
+			amount: input.amount ?? 5500,
+			current_period_end: '2026-09-21T00:00:00.000Z',
+			cancel_at_period_end: input.cancelAtPeriodEnd ?? false,
+			customer: {
+				id: `cust_${input.userId.slice(0, 8)}`,
+				email: input.email,
+				external_id: input.userId
+			},
+			product: { id: `prod_${input.tier}`, metadata: { tier: input.tier } },
+			metadata: { userId: input.userId, tier: input.tier }
 		}
-		// Every call authenticated — and only via the header, never a URL param.
-		for (const call of calls) expect(call.headers.get('x-api-key')).toBe('creem_test_fake')
 	})
-})
+}
 
 describe('subscription state', () => {
 	let database: TestDatabase
@@ -136,232 +132,247 @@ describe('subscription state', () => {
 		return { id, email }
 	}
 
-	function subscriptionWebhook(input: {
-		eventId: string
-		subscriptionId: string
-		userId: string
-		email: string
-		tier: string
-		status: string
-	}): string {
-		return JSON.stringify({
-			id: input.eventId,
-			eventType: 'subscription.active',
-			object: {
-				id: input.subscriptionId,
-				status: input.status,
-				customer: { id: `cust_${input.userId.slice(0, 8)}`, email: input.email },
-				product: { id: 'prod_me', price: 4200, metadata: { tier: input.tier } },
-				current_period_end_date: '2026-09-21T00:00:00.000Z',
-				metadata: { userId: input.userId, tier: input.tier }
-			}
-		})
+	async function applyWebhook(
+		service: SubscriptionService,
+		input: Parameters<typeof subscriptionWebhook>[0]
+	) {
+		const event = parsePolarSubscriptionEvent(subscriptionWebhook(input))
+		if (!event) throw new Error('event did not parse')
+		return service.applyEvent(event)
 	}
 
 	it('applies a subscription webhook idempotently and scopes /me to the owner', async () => {
-		const service = new SubscriptionService(
-			database.pool,
-			testConfig(),
-			new CreemProvider(creemConfig())
-		)
-		const alice = await insertUser()
-		const bob = await insertUser()
-		const event = parseCreemSubscriptionEvent(
-			subscriptionWebhook({
-				eventId: `evt_${randomUUID()}`,
-				subscriptionId: `sub_${randomUUID()}`,
-				userId: alice.id,
-				email: alice.email,
-				tier: 'avenme',
-				status: 'active'
-			})
-		)
-		if (!event) throw new Error('event did not parse')
-
-		expect(await service.applyEvent(event)).toEqual({ applied: true })
-		// Replay: same event twice → still exactly one row, same state.
-		expect(await service.applyEvent(event)).toEqual({ applied: true })
-		const rows = await database.pool.query('SELECT * FROM subscriptions WHERE user_id=$1', [
-			alice.id
-		])
-		expect(rows.rows).toHaveLength(1)
-		expect(rows.rows[0].tier).toBe('avenme')
-		expect(rows.rows[0].price_eur_cents).toBe(4200)
-
-		// The customer key was captured — the handle every portal call hangs on.
-		const customer = await database.pool.query(
-			'SELECT creem_customer_id FROM billing_customers WHERE user_id=$1',
-			[alice.id]
-		)
-		expect(customer.rows[0].creem_customer_id).toBe(`cust_${alice.id.slice(0, 8)}`)
-
-		// Self-service isolation: the owner sees their standing, a stranger sees
-		// null — there is no parameter with which bob could reach alice's row.
-		const mine = await service.me(alice.id)
-		expect(mine?.tier).toBe('avenme')
-		expect(mine?.status).toBe('active')
-		expect(await service.me(bob.id)).toBeNull()
-	})
-
-	it('actions resolve the provider id from the caller’s own row and proxy with the api key', async () => {
-		const config = creemConfig()
+		const provider = new StubProvider()
+		const service = new SubscriptionService(database.pool, testConfig(), provider)
 		const alice = await insertUser()
 		const bob = await insertUser()
 		const subscriptionId = `sub_${randomUUID()}`
-		const provider = new CreemProvider(config)
-		const service = new SubscriptionService(database.pool, config, provider)
-		const event = parseCreemSubscriptionEvent(
-			subscriptionWebhook({
-				eventId: `evt_${randomUUID()}`,
+
+		expect(
+			await applyWebhook(service, {
 				subscriptionId,
 				userId: alice.id,
 				email: alice.email,
 				tier: 'avenme',
 				status: 'active'
 			})
-		)
-		if (!event) throw new Error('event did not parse')
-		await service.applyEvent(event)
-
-		// Upgrade: the search answers the product map, then the change call must
-		// target alice's OWN provider subscription id — taken from her row, not
-		// from any client input.
-		const calls = stubFetch([
-			{
-				body: {
-					items: [
-						{ id: 'prod_me', name: NAME_ME },
-						{ id: 'prod_ceo', name: NAME_CEO }
-					]
-				}
-			},
-			{ body: { id: subscriptionId, status: 'active' } }
+		).toEqual({ applied: true })
+		// Replay: same event twice → still exactly one row, same state.
+		expect(
+			await applyWebhook(service, {
+				subscriptionId,
+				userId: alice.id,
+				email: alice.email,
+				tier: 'avenme',
+				status: 'active'
+			})
+		).toEqual({ applied: true })
+		const rows = await database.pool.query('SELECT * FROM subscriptions WHERE user_id=$1', [
+			alice.id
 		])
-		await service.change(alice.id, 'avenceo')
-		const upgrade = calls.at(-1)
-		if (!upgrade) throw new Error('no upgrade call was made')
-		expect(upgrade.url).toContain(`/v1/subscriptions/${subscriptionId}/upgrade`)
-		expect((upgrade.body as { product_id: string }).product_id).toBe('prod_ceo')
-		expect(upgrade.headers.get('x-api-key')).toBe('creem_test_fake')
+		expect(rows.rows).toHaveLength(1)
+		expect(rows.rows[0].tier).toBe('avenme')
+		expect(rows.rows[0].price_eur_cents).toBe(5500)
 
-		// A stranger cannot act at all: bob holds no subscription, so the
-		// service refuses before any provider call could happen.
-		await expect(service.change(bob.id, 'avenceo')).rejects.toMatchObject({
+		// The customer key was captured — the handle every portal call hangs on.
+		const customer = await database.pool.query(
+			'SELECT provider_customer_id FROM billing_customers WHERE user_id=$1',
+			[alice.id]
+		)
+		expect(customer.rows[0].provider_customer_id).toBe(`cust_${alice.id.slice(0, 8)}`)
+
+		// Self-service isolation: the owner sees their standing, a stranger
+		// sees nothing — there is no parameter that reaches alice's row.
+		const mine = await service.me(alice.id)
+		expect(mine).toHaveLength(1)
+		expect(mine[0]).toMatchObject({ tier: 'avenme', status: 'active' })
+		expect(await service.me(bob.id)).toEqual([])
+	})
+
+	it('tiers are independent: both can be active, only a same-tier duplicate is refused', async () => {
+		const provider = new StubProvider()
+		const service = new SubscriptionService(database.pool, testConfig(), provider)
+		const alice = await insertUser()
+
+		await applyWebhook(service, {
+			subscriptionId: `sub_${randomUUID()}`,
+			userId: alice.id,
+			email: alice.email,
+			tier: 'avenme',
+			status: 'active'
+		})
+		await applyWebhook(service, {
+			subscriptionId: `sub_${randomUUID()}`,
+			userId: alice.id,
+			email: alice.email,
+			tier: 'avenceo',
+			status: 'active',
+			amount: 37700
+		})
+
+		// Both tiers stand side by side on one account.
+		const mine = await service.me(alice.id)
+		expect(mine.map((standing) => standing.tier).sort()).toEqual(['avenceo', 'avenme'])
+		expect(mine.find((standing) => standing.tier === 'avenceo')?.priceEurCents).toBe(37700)
+
+		// A second booking of the SAME tier is refused; there is no cross-tier
+		// change of any kind — the other tier is simply its own product.
+		await expect(service.subscribe(alice, 'avenme')).rejects.toMatchObject({
+			code: 'SUBSCRIPTION_EXISTS'
+		})
+		await expect(service.subscribe(alice, 'avenceo')).rejects.toMatchObject({
+			code: 'SUBSCRIPTION_EXISTS'
+		})
+		// An ended subscription frees the tier again.
+		const endedId = `sub_${randomUUID()}`
+		const carol = await insertUser()
+		await applyWebhook(service, {
+			subscriptionId: endedId,
+			userId: carol.id,
+			email: carol.email,
+			tier: 'avenme',
+			status: 'canceled'
+		})
+		const started = await service.subscribe(carol, 'avenme')
+		expect(started.checkoutUrl).toContain('/checkout/avenme')
+	})
+
+	it('actions are tier-scoped and resolve the provider id from the caller’s own row', async () => {
+		const provider = new StubProvider()
+		const service = new SubscriptionService(database.pool, testConfig(), provider)
+		const alice = await insertUser()
+		const bob = await insertUser()
+		const meId = `sub_me_${randomUUID()}`
+		const ceoId = `sub_ceo_${randomUUID()}`
+		await applyWebhook(service, {
+			subscriptionId: meId,
+			userId: alice.id,
+			email: alice.email,
+			tier: 'avenme',
+			status: 'active'
+		})
+		await applyWebhook(service, {
+			subscriptionId: ceoId,
+			userId: alice.id,
+			email: alice.email,
+			tier: 'avenceo',
+			status: 'paused'
+		})
+
+		// Cancel hits the avenME row only — the id comes from HER row.
+		await service.cancel(alice.id, 'avenme')
+		expect(provider.calls.at(-1)).toEqual({ method: 'cancelSubscription', args: [meId, false] })
+		await service.cancel(alice.id, 'avenme', true)
+		expect(provider.calls.at(-1)).toEqual({ method: 'cancelSubscription', args: [meId, true] })
+
+		// Resume picks the mode from the row: paused → unpause; scheduled
+		// cancel → uncancel.
+		await service.resume(alice.id, 'avenceo')
+		expect(provider.calls.at(-1)).toEqual({
+			method: 'resumeSubscription',
+			args: [ceoId, 'unpause']
+		})
+		await service.resume(alice.id, 'avenme')
+		expect(provider.calls.at(-1)).toEqual({
+			method: 'resumeSubscription',
+			args: [meId, 'uncancel']
+		})
+
+		// Pause targets the named tier's own subscription.
+		await service.pause(alice.id, 'avenceo')
+		expect(provider.calls.at(-1)).toEqual({ method: 'pauseSubscription', args: [ceoId] })
+
+		// A stranger cannot act at all: bob holds nothing, so the service
+		// refuses before any provider call could happen.
+		await expect(service.cancel(bob.id, 'avenme')).rejects.toMatchObject({
 			code: 'SUBSCRIPTION_MISSING'
 		})
-		await expect(service.cancel(bob.id)).rejects.toMatchObject({ code: 'SUBSCRIPTION_MISSING' })
+		await expect(service.pause(bob.id, 'avenceo')).rejects.toMatchObject({
+			code: 'SUBSCRIPTION_MISSING'
+		})
+		// And an unknown tier never reaches the database.
+		await expect(service.cancel(alice.id, 'avencoop')).rejects.toMatchObject({
+			code: 'VALIDATION_ERROR'
+		})
+	})
 
-		// Invoices: scoped by the caller's stored customer id; rows map to the
-		// portal shape with the provider's hosted receipt link.
-		// Creem sends unix-ms timestamps and NO receipt URL (TransactionEntity
-		// has none) — the official documents live behind the portal link.
-		const invoiceCalls = stubFetch([
-			{
-				body: {
-					items: [
-						{
-							id: 'tx_1',
-							created_at: 1787652000000,
-							amount: 4998,
-							tax_amount: 798,
-							currency: 'EUR',
-							status: 'paid',
-							period_start: 1787652000000,
-							period_end: 1790330400000
-						}
-					]
-				}
-			}
-		])
-		const invoices = await service.invoices(alice)
-		expect(invoices).toEqual([
-			{
-				id: 'tx_1',
-				createdAt: new Date(1787652000000).toISOString(),
-				amountCents: 4998,
-				taxCents: 798,
-				currency: 'EUR',
-				status: 'paid',
-				periodStart: new Date(1787652000000).toISOString(),
-				periodEnd: new Date(1790330400000).toISOString()
-			}
-		])
-		expect(invoiceCalls[0]?.url).toContain(`customer_id=cust_${alice.id.slice(0, 8)}`)
-		// Bob has no customer row → empty history, no provider call with a
-		// guessed id.
-		expect(await service.invoices(bob)).toEqual([])
-
-		// Meine Bestellungen: scoped by the caller's stored customer id, mapped
-		// to the pane's breakdown. No document field exists on the provider —
-		// the official invoice is the one it mails — so none is invented.
-		const orderCalls = stubFetch([
-			{
-				body: {
-					items: [
-						{
-							id: 'ord_1',
-							created_at: 1787652000000,
-							product: 'prod_6ALajlETScD2v0dv10n618',
-							sub_total: 4200,
-							tax_amount: 798,
-							discount_amount: 0,
-							amount_paid: 4998,
-							currency: 'EUR',
-							status: 'paid'
-						}
-					]
-				}
-			}
-		])
-		expect(await service.orders(alice)).toEqual([
+	it('orders and the invoice URL resolve strictly against the caller’s own customer', async () => {
+		const provider = new StubProvider()
+		const service = new SubscriptionService(database.pool, testConfig(), provider)
+		const alice = await insertUser()
+		const bob = await insertUser()
+		await applyWebhook(service, {
+			subscriptionId: `sub_${randomUUID()}`,
+			userId: alice.id,
+			email: alice.email,
+			tier: 'avenme',
+			status: 'active'
+		})
+		const customerId = `cust_${alice.id.slice(0, 8)}`
+		provider.ordersByCustomer[customerId] = [
 			{
 				id: 'ord_1',
-				createdAt: new Date(1787652000000).toISOString(),
-				productId: 'prod_6ALajlETScD2v0dv10n618',
-				subTotalCents: 4200,
-				taxCents: 798,
+				createdAt: '2026-08-24T00:00:00.000Z',
+				productId: 'prod_avenme',
+				tier: 'avenme',
+				subTotalCents: 4622,
+				taxCents: 878,
 				discountCents: 0,
-				amountPaidCents: 4998,
-				currency: 'EUR',
-				status: 'paid'
+				amountPaidCents: 5500,
+				currency: 'eur',
+				status: 'paid',
+				invoiceGenerated: false
 			}
-		])
-		expect(orderCalls[0]?.url).toContain(`/v1/customers/cust_${alice.id.slice(0, 8)}/orders`)
-		expect(await service.orders(bob)).toEqual([])
+		]
 
-		// Pause targets alice's OWN provider subscription id; a stranger is
-		// refused before any provider call.
-		const pauseCalls = stubFetch([{ body: { id: subscriptionId, status: 'paused' } }])
-		await service.pause(alice.id)
-		expect(pauseCalls[0]?.url).toContain(`/v1/subscriptions/${subscriptionId}/pause`)
-		await expect(service.pause(bob.id)).rejects.toMatchObject({ code: 'SUBSCRIPTION_MISSING' })
+		const orders = await service.orders(alice)
+		expect(orders).toHaveLength(1)
+		expect(orders[0]).toMatchObject({ id: 'ord_1', tier: 'avenme', amountPaidCents: 5500 })
+		expect(provider.calls.at(-1)).toEqual({ method: 'listOrders', args: [customerId] })
+
+		// The invoice URL: an owned order id resolves; a foreign or invented
+		// one is simply not found — it never reaches the provider.
+		const url = await service.orderInvoiceUrl(alice, 'ord_1')
+		expect(url).toBe('https://polar.sh/invoices/ord_1.pdf')
+		const before = provider.calls.length
+		await expect(service.orderInvoiceUrl(alice, 'ord_foreign')).rejects.toMatchObject({
+			code: 'ORDER_MISSING'
+		})
+		expect(
+			provider.calls.slice(before).filter((call) => call.method === 'orderInvoiceUrl')
+		).toHaveLength(0)
+
+		// Bob has no customer row → empty history, no provider call with a
+		// guessed id (the only lookup is by his own email).
+		expect(await service.orders(bob)).toEqual([])
+		expect(provider.calls.at(-1)).toEqual({ method: 'findCustomerByEmail', args: [bob.email] })
 	})
 
 	it('reports the session’s own latest checkout without accepting an id', async () => {
-		const config = creemConfig()
+		const provider = new StubProvider()
+		const service = new SubscriptionService(database.pool, testConfig(), provider)
 		const carol = await insertUser()
 		const dave = await insertUser()
-		const service = new SubscriptionService(database.pool, config, new CreemProvider(config))
-		// subscribe: product search (pins unset → by name), then checkout creation
-		stubFetch([
-			{
-				body: {
-					items: [
-						{ id: 'prod_me', name: NAME_ME },
-						{ id: 'prod_ceo', name: NAME_CEO }
-					]
-				}
-			},
-			{ body: { id: 'ch_carol', checkout_url: 'https://checkout.creem.io/ch_carol' } }
-		])
-		const started = await service.subscribe(carol, 'avenme')
-		expect(started.checkoutUrl).toBe('https://checkout.creem.io/ch_carol')
 
-		const statusCalls = stubFetch([{ body: { id: 'ch_carol', status: 'completed' } }])
+		const started = await service.subscribe(carol, 'avenme', 'http://127.0.0.1:1420')
+		expect(started.checkoutUrl).toContain('/checkout/avenme')
+		// The embed origin travels to the provider — Polar validates it
+		// against the org's allowlist; it authorizes nothing on our side.
+		const checkoutCall = provider.calls.find((c) => c.method === 'createSubscriptionCheckout')
+		expect(checkoutCall?.args[0]).toMatchObject({
+			tier: 'avenme',
+			userId: carol.id,
+			embedOrigin: 'http://127.0.0.1:1420'
+		})
+
 		expect(await service.checkoutStatus(carol.id)).toEqual({ status: 'completed' })
-		expect(statusCalls[0]?.url).toContain('checkout_id=ch_carol')
+		expect(provider.calls.at(-1)).toEqual({
+			method: 'checkoutStatus',
+			args: [`ch_avenme_${carol.id.slice(0, 8)}`]
+		})
 		// dave never started one: null, and no provider call with a guessed id.
+		const before = provider.calls.length
 		expect(await service.checkoutStatus(dave.id)).toBeNull()
-		expect(statusCalls).toHaveLength(1)
+		expect(provider.calls.length).toBe(before)
 	})
 })

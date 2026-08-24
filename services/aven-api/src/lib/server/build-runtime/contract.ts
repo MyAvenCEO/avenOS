@@ -3,7 +3,7 @@ import type { Handle, RequestEvent } from '@sveltejs/kit'
 export interface CheckoutData {
 	checkoutUrl: string
 	name: string
-	provider: 'fake' | 'creem'
+	provider: 'fake' | 'polar'
 	priceEur: number
 	reservationMinutes: number
 }

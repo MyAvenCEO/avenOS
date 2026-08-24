@@ -137,7 +137,7 @@ export const appRuntime: AppRuntime = {
 			}
 		},
 		checkout(url) {
-			const state = scenario(url, 'creem-loading')
+			const state = scenario(url, 'polar-loading')
 			return {
 				state: state.includes('paying')
 					? 'paying'

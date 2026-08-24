@@ -1,21 +1,20 @@
-// Local stand-in for Creem when no API key is configured: the "checkout" is a
+// Local stand-in for Polar when no API key is configured: the "checkout" is a
 // page served by this app, and paying there posts a correctly signed,
-// Creem-shaped webhook back to our own webhook endpoint — so development and
+// Polar-shaped webhook back to our own webhook endpoint — so development and
 // e2e exercise the identical grant path as production.
 import { randomUUID } from 'node:crypto'
 import type { BillingConfig } from '../config.js'
-import { CreemProvider } from './creem.js'
+import { PolarProvider } from './polar.js'
 import {
 	assertWebhookSignature,
 	type CheckoutInput,
 	type CheckoutSession,
-	type InvoiceRow,
 	type OrderRow,
 	type PaymentEvent,
 	type PaymentProvider,
-	parseCreemEvent,
-	type SubscriptionCheckoutInput,
-	type SubscriptionPlanSeed
+	type ProductSeed,
+	parsePolarEvent,
+	type SubscriptionCheckoutInput
 } from './provider.js'
 
 export class FakePaymentProvider implements PaymentProvider {
@@ -33,16 +32,16 @@ export class FakePaymentProvider implements PaymentProvider {
 		return { checkoutId, checkoutUrl: url.toString() }
 	}
 
-	verifyWebhook(rawBody: string, signature: string | null): PaymentEvent {
-		assertWebhookSignature(rawBody, signature, this.config.CREEM_WEBHOOK_SECRET)
-		return parseCreemEvent(rawBody)
+	verifyWebhook(rawBody: string, headers: Record<string, string | null>): PaymentEvent {
+		assertWebhookSignature(rawBody, headers, this.config.POLAR_WEBHOOK_SECRET)
+		return parsePolarEvent(rawBody)
 	}
 
 	// The subscription surface in fake mode is deterministic and local: stable
 	// per-tier product ids, a checkout URL on our own fake page, and actions
 	// that succeed silently — state still only ever changes via the webhook,
 	// exactly like production.
-	async ensureSubscriptionProducts(seeds: SubscriptionPlanSeed[]): Promise<Record<string, string>> {
+	async ensureProducts(seeds: ProductSeed[]): Promise<Record<string, string>> {
 		return Object.fromEntries(seeds.map((seed) => [seed.tier, `fake_prod_${seed.tier}`]))
 	}
 
@@ -57,12 +56,9 @@ export class FakePaymentProvider implements PaymentProvider {
 		return { checkoutId, checkoutUrl: url.toString() }
 	}
 
-	async changeSubscription(): Promise<void> {}
 	async cancelSubscription(): Promise<void> {}
 	async resumeSubscription(): Promise<void> {}
-	async listInvoices(): Promise<InvoiceRow[]> {
-		return []
-	}
+	async pauseSubscription(): Promise<void> {}
 
 	async findCustomerByEmail(): Promise<string | null> {
 		return null
@@ -72,12 +68,15 @@ export class FakePaymentProvider implements PaymentProvider {
 		return []
 	}
 
-	async pauseSubscription(): Promise<void> {}
+	async orderInvoiceUrl(): Promise<string> {
+		return new URL('/purchase/fake-checkout', this.config.PUBLIC_BASE_URL).toString()
+	}
 
 	async checkoutStatus(): Promise<string> {
 		return 'pending'
 	}
 
+	/** A Polar-shaped `order.paid` body for the local grant path. */
 	buildCompletedWebhookBody(input: {
 		checkoutId: string
 		holdId: string
@@ -86,16 +85,15 @@ export class FakePaymentProvider implements PaymentProvider {
 		amountEur: number
 	}): string {
 		return JSON.stringify({
-			id: `evt_fake_${randomUUID()}`,
-			eventType: 'checkout.completed',
-			object: {
-				id: input.checkoutId,
-				order: {
-					id: `ord_fake_${randomUUID()}`,
-					amount: Math.round(input.amountEur * 100),
-					customer: { email: input.email }
-				},
-				customer: { email: input.email },
+			type: 'order.paid',
+			data: {
+				id: `ord_fake_${randomUUID()}`,
+				checkout_id: input.checkoutId,
+				status: 'paid',
+				paid: true,
+				total_amount: Math.round(input.amountEur * 100),
+				currency: 'eur',
+				customer: { id: `cus_fake_${randomUUID()}`, email: input.email },
 				metadata: { holdId: input.holdId, name: input.name }
 			}
 		})
@@ -103,5 +101,5 @@ export class FakePaymentProvider implements PaymentProvider {
 }
 
 export function createPaymentProvider(config: BillingConfig): PaymentProvider {
-	return config.CREEM_API_KEY ? new CreemProvider(config) : new FakePaymentProvider(config)
+	return config.POLAR_API_KEY ? new PolarProvider(config) : new FakePaymentProvider(config)
 }

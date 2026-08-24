@@ -47,10 +47,10 @@ describe('designer build fixtures', () => {
 		const fake = await serverBuildRuntime.loadCheckout({
 			url: new URL('https://designer.aven.invalid/purchase/checkout?scenario=fake-ready')
 		} as never)
-		const creem = await serverBuildRuntime.loadCheckout({
-			url: new URL('https://designer.aven.invalid/purchase/checkout?scenario=creem-confirming')
+		const polar = await serverBuildRuntime.loadCheckout({
+			url: new URL('https://designer.aven.invalid/purchase/checkout?scenario=polar-confirming')
 		} as never)
 		expect(fake).toMatchObject({ name: 'aurora', provider: 'fake', priceEur: 25 })
-		expect(creem).toMatchObject({ name: 'aurora', provider: 'creem', priceEur: 25 })
+		expect(polar).toMatchObject({ name: 'aurora', provider: 'polar', priceEur: 25 })
 	})
 })
