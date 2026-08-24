@@ -19,20 +19,23 @@ import {
 } from '$lib/pricing/plans'
 import type { Lang } from './index'
 
-/** Per plan: the role line and the feature labels, in feature order. */
-const EN: Record<PlanId, { role: string; features: string[] }> = {
+/** Per plan: the role line, the pitch, and the feature labels, in feature order. */
+const EN: Record<PlanId, { role: string; pitch: string; features: string[] }> = {
 	avenid: {
 		role: 'Your name — one account anyone can address. Per human and per company.',
+		pitch:
+			'Your name is the first step into a life where AI works for you — not for a corporation. It exists exactly once. Claim it before someone else carries it.',
 		features: [
 			'Your avenID name — reserved for you for 1 year',
 			'Your place on the waiting list',
 			'20 min of trial access — the moment you are invited',
-			'Required for avenME and avenFOUNDER — one per human, one per company',
-			'5 % commission on every aven product you refer — monthly, for as long as it runs'
+			'Required for avenME and avenFOUNDER — one per human, one per company'
 		]
 	},
 	avenme: {
 		role: 'Your personal AI‑CEO — for your life',
+		pitch:
+			'Your life is full of ideas, appointments, projects and open threads — your avenME holds it all together. It coordinates your day, catches every thought and turns loose concepts into things that happen.',
 		features: [
 			'Personal live organisation: tasks, appointments, reminders',
 			'One inbox for everything',
@@ -50,6 +53,8 @@ const EN: Record<PlanId, { role: string; features: string[] }> = {
 	},
 	avenceo: {
 		role: 'Your professional AI‑CEO — for your company',
+		pitch:
+			'You bring the vision — your avenFOUNDER turns it into a company that runs. It works while you sleep and gets better every day. This is what founding feels like when it no longer costs an 80-hour week.',
 		features: [
 			'Pre-accounting',
 			'Finance dashboard and invoices',
@@ -58,17 +63,19 @@ const EN: Record<PlanId, { role: string; features: string[] }> = {
 			'Product checkout and shop',
 			'Blog',
 			'Digital mailbox for business customers (excl. Deutsche Post mail forwarding: 51.90 € / 6 months, incl. VAT)',
+			'Listed in the aven Marketplace — findable by customers, partners and other Avens',
 			'The memory of your company: knowledge and experience accumulate in the avenCEO over the years — that becomes your most valuable asset'
 		]
 	},
 	avencoop: {
-		role: 'We become your technical co-founder',
+		role: 'Hands-on support for your own sovereign Aven business',
+		pitch:
+			'You do not just want a company — you want your own Aven business. We built the infrastructure and stand beside you until your Skillbundle is live in the Marketplace. Your idea, your name, your work.',
 		features: [
-			'1× avenFOUNDER — the avenCEO of your company — included',
-			'We actively build your product with you — effectively your external CTO and co-founder, for 8 % equity in your company',
-			'Guidance through German company formation: GmbH or UG',
-			'You choose which Aven your Reinvest flows into — our avenCEO GmbH is on the ballot too',
-			'You become a featured startup in our beel syndicate — our avenFOUNDER can reinvest into you (excl. beel product fees)'
+			'Hands-on support while YOU build your Skillbundle — your product, your name, our infrastructure',
+			'You sell it yourself in the aven Marketplace — your bundle, your price, your customers',
+			'Sovereignty you hand on: your customers keep their own keys — not you, not us',
+			'Guidance through German company formation: GmbH or UG'
 		]
 	}
 }
@@ -85,6 +92,7 @@ export function localizedPlan(p: Plan, lang: Lang): Plan {
 	return {
 		...p,
 		role: en.role,
+		pitch: en.pitch,
 		features: p.features.map((f, i) => relabel(f, en.features[i] ?? featureLabel(f)))
 	}
 }
@@ -99,10 +107,20 @@ export function priceSuffix(p: Plan, lang: Lang): string {
 	return p.billing === 'once' ? 'one-time · incl. VAT' : '/month · incl. VAT'
 }
 
-/** "25 € one-time" · "426 €/month" */
+/** "25 € one-time" · "377 €/month" */
 export function priceLabel(p: Plan, lang: Lang): string {
 	if (lang === 'de') return priceLabelDe(p)
 	return p.billing === 'once' ? `${euro(p.eurPrice)} € one-time` : `${euro(p.eurPrice)} €/month`
+}
+
+/** A euro amount in the reader's number style — "188,50" vs "188.50". */
+export function money(amount: number, lang: Lang): string {
+	if (lang === 'de') return euro(amount)
+	const cents = Number.isInteger(amount) ? 0 : 2
+	return amount.toLocaleString('en-US', {
+		minimumFractionDigits: cents,
+		maximumFractionDigits: cents
+	})
 }
 
 export function vatNote(lang: Lang): string {
@@ -121,5 +139,5 @@ export function perLabel(p: Plan, lang: Lang): string | null {
 export function ctaLabel(p: Plan, lang: Lang): string {
 	if (lang === 'de') return ctaLabelDe(p)
 	if (p.applyOnly) return 'Apply'
-	return p.id === 'avenid' ? 'Claim avenID' : 'Reserve your name now'
+	return p.id === 'avenid' ? 'Claim avenID' : 'Join the waiting list'
 }

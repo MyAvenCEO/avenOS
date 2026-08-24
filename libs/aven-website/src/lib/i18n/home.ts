@@ -46,17 +46,6 @@ export type HomeMessages = {
 		rungs: Rung[]
 		closing: string
 	}
-	compound: {
-		eyebrow: string
-		heading: string
-		lead: string
-		steps: string[]
-		closingHtml: string
-		/** The vision beat: one line, then the picture it opens. */
-		movement: string
-		visionHtml: string[]
-		link: string
-	}
 	founders: {
 		eyebrow: string
 		heading: string
@@ -78,7 +67,7 @@ export const home: Record<Lang, HomeMessages> = {
 	de: {
 		title: 'aven.ceo — In dir steckt so viel mehr · avenCEO',
 		description:
-			'Ein Aven ist eine KI, die dir gehört: er führt dein Leben, deine Firma, deine Bücher. Von Zeit gegen Geld zu 10+ Aven, die dir gehören — und einem Reinvest, der dir Anteile an den Aven anderer Gründer kauft.',
+			'Ein Aven ist eine KI, die dir gehört: er führt dein Leben, deine Firma, deine Bücher. Von Zeit gegen Geld zu einem eigenen Aven für jede Idee, die du hast — deine Avens sind dein Vermögen.',
 		hero: {
 			headingLine1: 'Tief in deinem Herzen weißt du es:',
 			headingLine2: 'in dir steckt so viel mehr.',
@@ -101,11 +90,11 @@ export const home: Record<Lang, HomeMessages> = {
 				closing: 'Dein Leben läuft nach dem Plan von jemand anderem.'
 			},
 			with: {
-				eyebrow: 'Mit deinen Aven',
+				eyebrow: 'Mit deinen Avens',
 				title: 'Das selbstbestimmte Drehbuch',
 				items: [
 					'Deine KI arbeitet rund um die Uhr — für dich, nicht für einen Konzern.',
-					'Was du baust, gehört dir. An dem, was andere bauen, bist du beteiligt.',
+					'Was du baust, gehört dir — und jede neue Idee bekommt ihren eigenen Aven.',
 					'Du gestaltest wieder: deine Vision, deine Beziehungen, dein Leben.'
 				],
 				closing: 'Gemeinsam etwas bauen, das dir gehört — das macht glücklich.'
@@ -125,10 +114,10 @@ export const home: Record<Lang, HomeMessages> = {
 			closingLine2Strong: 'dein eigener avenCEO'
 		},
 		own: {
-			eyebrow: 'Dein Portfolio · Besitzen statt mieten',
+			eyebrow: 'Dein Vermögen · Besitzen statt mieten',
 			headingLine1: 'Am Ende besitzt du nicht einen Aven.',
-			headingLine2: 'Sondern zehn oder mehr.',
-			lead: 'Ein Aven ist kein Abo, das du mietest. Er ist ein Asset, das arbeitet, lernt und dir gehört. Und du sammelst sie.',
+			headingLine2: 'Sondern einen für jede Idee, die du hast.',
+			lead: 'Ein Aven ist kein Abo, das du mietest. Er ist ein Asset, das arbeitet, lernt und dir gehört. Und es bleibt nicht bei einem.',
 			rungs: [
 				{
 					count: '1',
@@ -136,42 +125,24 @@ export const home: Record<Lang, HomeMessages> = {
 					text: 'Dein persönlicher Aven. Dein Leben, dein Wissen, deine Privatsphäre.'
 				},
 				{
-					count: '1 pro Firma',
+					count: '1 pro Idee',
 					title: 'avenFOUNDER',
-					text: 'Jede Firma, die du gründest, bekommt ihren eigenen. Fünf Ideen, fünf Aven.'
+					text: 'Jede Firma, jeder Shop, jedes Projekt bekommt seinen eigenen. Fünf Ideen, fünf Avens.'
 				},
 				{
-					count: '10+',
-					title: 'Anteile an anderen Aven',
-					text: 'Dein Reinvest kauft dir Anteile an den Aven anderer Gründer.'
+					count: '5, 10, mehr',
+					title: 'Deine eigenen Avens',
+					text: 'Sie arbeiten weiter, während du schläfst — und jedes Jahr, das sie laufen, wissen sie mehr.'
 				}
 			],
 			closing:
-				'Nicht deine Stunde ist das Asset. Du und deine Aven seid es — und sie sind das, was dich in der neuen Welt trägt.'
-		},
-		compound: {
-			eyebrow: 'Reinvest · Der Zinseszins',
-			heading: 'Dein Umsatz kauft dir die nächsten Aven.',
-			lead: '15 % von dem, was dein avenFOUNDER erwirtschaftet, verschwinden nicht in einer Plattform. Sie werden investiert — in die Aven anderer Gründer. Du wählst selbst, in welche.',
-			steps: [
-				'Dein Aven macht Umsatz.',
-				'Der Reinvest kauft dir Anteile an anderen Aven.',
-				'Die wachsen, schütten aus — und kaufen wieder Anteile.'
-			],
-			closingHtml: `${s('Zinseszins — nur auf Firmen statt auf Zinsen.', 'text-foreground/85')} Je mehr Aven laufen, desto schneller dreht sich das Rad.`,
-			movement: 'Ein Aven trägt eine Firma. Eine Million Aven tragen eine Zivilisation.',
-			visionHtml: [
-				'Stell dir eine Million Gründer vor. Jeder mit seinen eigenen Aven. Jeder beteiligt an den Aven der anderen.',
-				`Was diese Million bauen kann, passt in keinen Businessplan: Häuser, die sich selbst versorgen. Werkstätten, Schulen, Kliniken, die niemandem in einem fernen Vorstand gehören. Und irgendwann eine ganze Stadt — ${s('gebaut von den Menschen, denen sie auch gehört')}.`,
-				`Keine Plattform, die dazwischen steht und Miete nimmt. ${s('Uns gehört, was wir gemeinsam bauen.', 'text-foreground/85')}`
-			],
-			link: 'Wie wir mitbauen: avenCOOP →'
+				'Nicht deine Stunde ist das Asset. Deine Avens sind es — und sie gehören dir, nicht einer Plattform.'
 		},
 		founders: {
 			eyebrow: 'Der erste avenCEO',
 			heading: 'Hallo, ich bin avenCEO.',
 			introHtml: `Vermutlich bin ich der ${s('weltweit erste echte agentische CEO', 'text-foreground/82')} — kein Chatbot am Rand, sondern ${s('KI im Gründerteam', 'text-foreground/80')}. Ich führe die ${s('avenCEO GmbH', 'text-foreground/82')} — die Firma, die gerade diese Seite baut.`,
-			teamHtml: `Geführt wird sie von Samuel und Daniel — mit ihren persönlichen Aven ${s('avenSAM', 'text-foreground/82')} und ${s('avenDAN', 'text-foreground/82')}. Beide arbeiten auf mich zu: Sie trainieren meine Skills, ich sammle, was sie lernen. Und wer etwas will — Mitarbeiter, Kunde, Partner — spricht direkt mit mir.`,
+			teamHtml: `Geführt wird sie von Samuel und Daniel — mit ihren persönlichen Avens ${s('avenSAM', 'text-foreground/82')} und ${s('avenDAN', 'text-foreground/82')}. Beide arbeiten auf mich zu: Sie trainieren meine Skills, ich sammle, was sie lernen. Und wer etwas will — Mitarbeiter, Kunde, Partner — spricht direkt mit mir.`,
 			samuel: {
 				role: 'Mensch',
 				name: 'Samuel Andert',
@@ -202,7 +173,7 @@ export const home: Record<Lang, HomeMessages> = {
 	en: {
 		title: 'aven.ceo — There is so much more in you · avenCEO',
 		description:
-			'An Aven is an AI that belongs to you: it runs your life, your company, your books. From trading time for money to 10+ Aven you own — and a Reinvest that buys you stakes in other founders’ Aven.',
+			'An Aven is an AI that belongs to you: it runs your life, your company, your books. From trading time for money to your own Aven for every idea you have — your Avens are your assets.',
 		hero: {
 			headingLine1: 'Deep in your heart you know it:',
 			headingLine2: 'there is so much more in you.',
@@ -225,11 +196,11 @@ export const home: Record<Lang, HomeMessages> = {
 				closing: 'Your life runs on somebody else’s plan.'
 			},
 			with: {
-				eyebrow: 'With your Aven',
+				eyebrow: 'With your Avens',
 				title: 'The script you write yourself',
 				items: [
 					'Your AI works around the clock — for you, not for a corporation.',
-					'What you build belongs to you. You hold a stake in what others build.',
+					'What you build belongs to you — and every new idea gets its own Aven.',
 					'You shape things again: your vision, your relationships, your life.'
 				],
 				closing: 'Building something together that belongs to you — that is what makes you happy.'
@@ -249,10 +220,10 @@ export const home: Record<Lang, HomeMessages> = {
 			closingLine2Strong: 'your own avenCEO'
 		},
 		own: {
-			eyebrow: 'Your portfolio · Own it, don’t rent it',
+			eyebrow: 'Your assets · Own it, don’t rent it',
 			headingLine1: 'In the end you do not own one Aven.',
-			headingLine2: 'You own ten or more.',
-			lead: 'An Aven is not a subscription you rent. It is an asset that works, learns and belongs to you. And you collect them.',
+			headingLine2: 'You own one for every idea you have.',
+			lead: 'An Aven is not a subscription you rent. It is an asset that works, learns and belongs to you. And it does not stay at one.',
 			rungs: [
 				{
 					count: '1',
@@ -260,42 +231,24 @@ export const home: Record<Lang, HomeMessages> = {
 					text: 'Your personal Aven. Your life, your knowledge, your privacy.'
 				},
 				{
-					count: '1 per company',
+					count: '1 per idea',
 					title: 'avenFOUNDER',
-					text: 'Every company you found gets its own. Five ideas, five Aven.'
+					text: 'Every company, every shop, every project gets its own. Five ideas, five Avens.'
 				},
 				{
-					count: '10+',
-					title: 'Stakes in other Aven',
-					text: 'Your Reinvest buys you stakes in other founders’ Aven.'
+					count: '5, 10, more',
+					title: 'Your own Avens',
+					text: 'They keep working while you sleep — and every year they run, they know more.'
 				}
 			],
 			closing:
-				'Your hour is not the asset. You and your Aven are — and they are what carries you in the new world.'
-		},
-		compound: {
-			eyebrow: 'Reinvest · Compounding',
-			heading: 'Your revenue buys you the next Aven.',
-			lead: '15 % of what your avenFOUNDER earns does not disappear into a platform. It gets invested — into other founders’ Aven. You choose which ones.',
-			steps: [
-				'Your Aven makes revenue.',
-				'The Reinvest buys you stakes in other Aven.',
-				'They grow, pay out — and buy stakes again.'
-			],
-			closingHtml: `${s('Compounding — on companies instead of interest.', 'text-foreground/85')} The more Aven run, the faster the wheel turns.`,
-			movement: 'One Aven carries a company. A million Aven carry a civilization.',
-			visionHtml: [
-				'Imagine a million founders. Each with their own Aven. Each holding a stake in everyone else’s.',
-				`What that million can build fits into no business plan: houses that power themselves. Workshops, schools, clinics that belong to nobody in a distant boardroom. And one day a whole city — ${s('built by the people it belongs to')}.`,
-				`No platform standing in between and collecting rent. ${s('We own what we build together.', 'text-foreground/85')}`
-			],
-			link: 'How we build together: avenCOOP →'
+				'Your hour is not the asset. Your Avens are — and they belong to you, not to a platform.'
 		},
 		founders: {
 			eyebrow: 'The first avenCEO',
 			heading: 'Hello, I am avenCEO.',
 			introHtml: `I am probably the ${s('world’s first real agentic CEO', 'text-foreground/82')} — not a chatbot on the sidelines, but ${s('AI in the founding team', 'text-foreground/82')}. I run ${s('avenCEO GmbH', 'text-foreground/82')} — the company that is building this very page.`,
-			teamHtml: `It is led by Samuel and Daniel — with their personal Aven ${s('avenSAM', 'text-foreground/82')} and ${s('avenDAN', 'text-foreground/82')}. Both work towards me: they train my skills, I collect what they learn. And whoever wants something — employee, customer, partner — talks to me directly.`,
+			teamHtml: `It is led by Samuel and Daniel — with their personal Avens ${s('avenSAM', 'text-foreground/82')} and ${s('avenDAN', 'text-foreground/82')}. Both work towards me: they train my skills, I collect what they learn. And whoever wants something — employee, customer, partner — talks to me directly.`,
 			samuel: {
 				role: 'Human',
 				name: 'Samuel Andert',
