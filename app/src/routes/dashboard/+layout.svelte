@@ -105,6 +105,39 @@ function leaveSettings() {
 				<path d="M7.2 10.8 16.8 7.2M7.2 13.2l9.6 3.6" />
 			</svg>
 		</button>
+		<!-- The artifacts shelf — locally stored files, same rail pattern as
+		     the skills surface. -->
+		<button
+			type="button"
+			onclick={() => {
+				if (onSettings) {
+					shell.tab = 'artifacts'
+					void goto('/dashboard')
+					return
+				}
+				shell.tab = shell.tab === 'artifacts' ? 'intents' : 'artifacts'
+			}}
+			title="Artefakte"
+			aria-label="Artefakte"
+			class="flex size-11 items-center justify-center transition-all {shell.tab === 'artifacts' &&
+			!onSettings
+				? 'rounded-2xl bg-primary text-primary-foreground'
+				: 'rounded-full border border-border bg-surface-card opacity-60 hover:rounded-2xl hover:opacity-100'}"
+		>
+			<!-- a document sheet with a folded corner: the artifact, in miniature -->
+			<svg
+				viewBox="0 0 24 24"
+				class="size-4"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path d="M14 3H7a1.5 1.5 0 0 0-1.5 1.5v15A1.5 1.5 0 0 0 7 21h10a1.5 1.5 0 0 0 1.5-1.5V7.5z" />
+				<path d="M14 3v4.5h4.5M9 12.5h6M9 16h6" />
+			</svg>
+		</button>
 		<button
 			type="button"
 			onclick={() => {
