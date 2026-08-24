@@ -3,6 +3,12 @@
 Status: discovery and implementation proposal
 Date: 24 August 2026
 
+Typed lineage that crosses Intent Service and Artifact Store is specified separately in
+[`INTENT-ARTIFACT-LINEAGE-ARCHITECTURE.md`](INTENT-ARTIFACT-LINEAGE-ARCHITECTURE.md).
+This paper remains authoritative for the intent-local aggregate and file-trigger flow;
+model-provider access and usage accounting are owned by the independent
+[`LLM-SERVICE-AND-METERING-ARCHITECTURE.md`](LLM-SERVICE-AND-METERING-ARCHITECTURE.md).
+
 ## Executive assessment
 
 An avenOS intent should be a durable, ordered conversation around one matter. Its

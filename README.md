@@ -20,6 +20,12 @@ Bun **monorepo**: active code lives under `libs/`, `app/`, `services/`, and `doc
 The current control-plane and per-customer database boundaries, all worker and data
 paths, their guarantees, and the proposed standard tenant runtime rail are mapped in
 [Customer data-plane architecture](CUSTOMER-DATA-PLANE-ARCHITECTURE.md).
+The shared model-provider boundary, tenant usage accounting, and billing attribution
+are specified in
+[LLM Service and metering architecture](LLM-SERVICE-AND-METERING-ARCHITECTURE.md).
+Typed provenance across intents, contributions, production runs, and artifacts is
+specified independently in
+[Intent and artifact lineage architecture](INTENT-ARTIFACT-LINEAGE-ARCHITECTURE.md).
 
 **`bun install`** also attaches **`../MaiaOS/libs/*`** as workspaces so `@MaiaOS/*` / `@AvenOS/db` resolve. Clone [MaiaOS](https://github.com/) **next to** this repo (`Development/MaiaOS` alongside `Development/AvenOS`), or edit root `package.json` `workspaces` if your layout differs.
 

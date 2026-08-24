@@ -3,6 +3,11 @@
 Status: implemented for local verification and the `next` deployment path on
 2026-08-23.
 
+This report describes the current direct provider adapter. Its target migration to a
+shared, tenant-metered provider boundary is specified in
+[`LLM-SERVICE-AND-METERING-ARCHITECTURE.md`](../../LLM-SERVICE-AND-METERING-ARCHITECTURE.md).
+Processor schema validation and materialization remain local after that migration.
+
 ## Donor backtest
 
 The current `/home/daniel/src/jaensen/avenCEO-tools` checkout does not contain an

@@ -11,6 +11,12 @@ authenticated directory exposes only ready `(database, scope)` bindings, and the
 runtime uses bounded per-tenant pools. Static service credentials remain an explicitly
 accepted transitional limitation; short-lived tenant grants are still the target.
 
+The LLM-specific use of those grants, workload identity, and tenant billing accounts
+are defined in
+[`LLM-SERVICE-AND-METERING-ARCHITECTURE.md`](LLM-SERVICE-AND-METERING-ARCHITECTURE.md).
+The separately owned Intent/Artifact provenance model is defined in
+[`INTENT-ARTIFACT-LINEAGE-ARCHITECTURE.md`](INTENT-ARTIFACT-LINEAGE-ARCHITECTURE.md).
+
 ## Executive assessment
 
 avenOS currently has a sensible, deliberately small foundation:
