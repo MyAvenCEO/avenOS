@@ -3,8 +3,10 @@ import { euro, PLANS, type Plan, priceSuffix } from '@avenos/aven-brand/pricing'
 import { PolarEmbedCheckout } from '@polar-sh/checkout/embed'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { onDestroy, onMount } from 'svelte'
+import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import ArtifactPreview from '$lib/artifacts/ArtifactPreview.svelte'
+import { artifactsState } from '$lib/artifacts/state.svelte'
+import { shell } from '$lib/intents/talk.svelte'
 
 /**
  * Abrechnung — the member's whole Polar relationship, entirely in our brand.
@@ -13,8 +15,8 @@ import ArtifactPreview from '$lib/artifacts/ArtifactPreview.svelte'
  * checkout overlays this view), orders are the provider's real orders, and
  * the subscription lifecycle — book, cancel, resume a scheduled cancel — is
  * all native. Polar is the merchant of record; each paid order's official
- * invoice PDF is downloaded into local app storage and previewed INLINE —
- * never a separate window.
+ * invoice PDF is downloaded into local app storage and opened on the
+ * Artefakte shelf (deep-linked, preselected) — never a separate window.
  *
  * Everything routes through the id service with the session token (the
  * Polar key never reaches this binary), and every call acts on the
@@ -72,8 +74,6 @@ let failure = $state<string | null>(null)
 let cardFailure = $state<{ tier: string; message: string } | null>(null)
 /** An invoice failure, rendered inside the order row that asked. */
 let invoiceFailure = $state<{ orderId: string; message: string } | null>(null)
-/** The inline invoice preview — a blob iframe overlay, never a window. */
-let preview = $state<{ fileName: string; title: string } | null>(null)
 /** Which action is asking "wirklich?" — one confirm at a time. */
 let confirming = $state<`cancel:${string}` | null>(null)
 /** Which order row is expanded into its in-app rendered detail. */
@@ -343,7 +343,8 @@ const INVOICE_RETRY_PAUSE_MS = 3000
 
 /** The official invoice PDF for one paid order: the id service asks Polar
  * (generating the document on first ask — that can take up to ~30s), the
- * PDF lands in local app storage, and the preview opens INLINE. */
+ * PDF lands in local app storage, and the Artefakte shelf opens with it
+ * preselected. */
 async function downloadInvoice(order: Order) {
 	if (!isTauri()) return
 	busy = `invoice:${order.id}`
@@ -366,7 +367,10 @@ async function downloadInvoice(order: Order) {
 				await new Promise((resolve) => setTimeout(resolve, INVOICE_RETRY_PAUSE_MS))
 			}
 		}
-		preview = { fileName: result.fileName, title: `Rechnung · ${dateOf(order.createdAt)}` }
+		// Deep link: the shelf shows the fresh invoice already selected.
+		artifactsState.selected = result.fileName
+		shell.tab = 'artifacts'
+		await goto('/dashboard')
 	} catch (cause) {
 		invoiceFailure = {
 			orderId: order.id,
@@ -456,7 +460,7 @@ onDestroy(() => {
 				</li>
 			{/each}
 		</ul>
-		{#if isLive && s && s.currentPeriodEnd}
+		{#if isLive && s?.currentPeriodEnd}
 			<p class="text-xs opacity-60">
 				{s.cancelAtPeriodEnd
 					? `Endet am ${dateOf(s.currentPeriodEnd)} — bis dahin läuft alles weiter.`
@@ -511,11 +515,13 @@ onDestroy(() => {
 					</div>
 				</div>
 			{:else}
+				<!-- Outline in the brand terracotta (--color-terracotta, aliased
+				     as `error`): transparent ground, terracotta border + label. -->
 				<button
 					type="button"
 					onclick={() => (confirming = `cancel:${p.id}`)}
 					disabled={busy !== ''}
-					class="self-start rounded-full border border-border px-4 py-2 text-sm font-medium opacity-70 transition-colors hover:bg-error/5 hover:opacity-100 disabled:opacity-40"
+					class="self-start rounded-full border border-error bg-transparent px-4 py-2 text-sm font-medium text-error-strong transition-colors hover:bg-error/5 disabled:opacity-40"
 				>
 					Kündigen
 				</button>
@@ -644,6 +650,16 @@ onDestroy(() => {
 											</button>
 										</div>
 									{/if}
+									{#if busy === `invoice:${order.id}`}
+										<!-- Generating can take up to ~30s — say what is happening,
+										     right where it happens. -->
+										<p class="flex items-center gap-2 pt-1 text-xs opacity-60">
+											<span
+												class="size-3 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
+											></span>
+											Rechnung wird erstellt und direkt in deinen Dokumentenspeicher geladen …
+										</p>
+									{/if}
 									{#if invoiceFailure?.orderId === order.id}
 										<p class="text-xs text-error-strong">{invoiceFailure.message}</p>
 									{/if}
@@ -667,13 +683,5 @@ onDestroy(() => {
 		<p class="rounded-xl border border-error/30 bg-error-muted px-4 py-3 text-xs text-error-strong">
 			{failure}
 		</p>
-	{/if}
-
-	{#if preview}
-		<ArtifactPreview
-			fileName={preview.fileName}
-			title={preview.title}
-			onclose={() => (preview = null)}
-		/>
 	{/if}
 </section>
