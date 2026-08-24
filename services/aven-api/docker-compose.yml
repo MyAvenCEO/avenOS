@@ -89,6 +89,7 @@ services:
       POLAR_API_KEY: ${POLAR_API_KEY:-}
       POLAR_SERVER: ${POLAR_SERVER:-sandbox}
       POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-dev-fake-webhook-secret}
+      SITE_HOST_DIRECTORY_BEARER_TOKEN: ${SITE_HOST_DIRECTORY_BEARER_TOKEN:-}
     ports:
       - "${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000"
 

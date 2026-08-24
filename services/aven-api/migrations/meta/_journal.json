@@ -134,6 +134,13 @@
 			"when": 1788364800000,
 			"tag": "0018_subscription_pause_state",
 			"breakpoints": true
+		},
+		{
+			"idx": 19,
+			"version": "7",
+			"when": 1788451200000,
+			"tag": "0019_static_site_hosting",
+			"breakpoints": true
 		}
 	]
 }

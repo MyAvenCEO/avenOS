@@ -9,6 +9,7 @@ BEGIN
     GRANT SELECT, INSERT, UPDATE ON customer_environments, customer_environment_jobs TO aven_server;
     GRANT SELECT, INSERT ON email_queue, audit_events TO aven_server;
     GRANT SELECT ON worker_heartbeats TO aven_server;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON site_repositories, static_site_bindings TO aven_server;
   END IF;
 
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'aven_email_worker') THEN

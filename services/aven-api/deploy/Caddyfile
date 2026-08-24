@@ -1,5 +1,11 @@
-# TLS terminator for VPS deployments (compose profile "prod").
-# Caddy provisions Let's Encrypt certificates automatically for $DOMAIN.
+{
+	on_demand_tls {
+		ask http://static-site-host:8093/internal/caddy/ask
+	}
+}
+
+# Exact identity origin. Its availability and health do not gate Caddy or the
+# independently served customer sites below.
 {$DOMAIN} {
 	# Service-to-service control APIs are reachable only on the Compose network.
 	respond /internal/* 404
@@ -20,4 +26,14 @@
 		}
 		reverse_proxy app:3000
 	}
+}
+
+# Caddy obtains a certificate only after the host confirms that this exact
+# customer domain has passed TXT and address verification.
+https:// {
+	tls {
+		on_demand
+	}
+	respond /internal/* 404
+	reverse_proxy static-site-host:8093
 }

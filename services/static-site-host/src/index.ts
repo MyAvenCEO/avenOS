@@ -1,0 +1,29 @@
+import { mkdir } from 'node:fs/promises'
+import { loadConfig } from './config.js'
+import { StaticSiteHost } from './host.js'
+
+const config = loadConfig()
+await mkdir(config.dataRoot, { recursive: true })
+const host = new StaticSiteHost(config)
+
+await host.loadSnapshot().catch(() => {})
+
+Bun.serve({ hostname: config.hostname, port: config.port, fetch: host.handle })
+console.info(JSON.stringify({ message: 'static site host listening', port: config.port }))
+
+await host
+	.reconcile()
+	.catch((error) =>
+		console.error(
+			JSON.stringify({ message: 'initial reconciliation failed', error: String(error) })
+		)
+	)
+setInterval(
+	() =>
+		host
+			.reconcile()
+			.catch((error) =>
+				console.error(JSON.stringify({ message: 'reconciliation failed', error: String(error) }))
+			),
+	config.pollMilliseconds
+)
