@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.7...v) (2026-08-24)
+
+
+### Bug Fixes
+
+* **hosting:** avoid replacing the protected host ([c135c45](https://github.com/MyAvenCEO/avenOS/commit/c135c45915d48d1f296486ac574b2fef2b820dec))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.6...v) (2026-08-24)
 
 
