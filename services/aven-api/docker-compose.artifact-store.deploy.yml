@@ -116,7 +116,8 @@ services:
     image: ${AVEN_INTENT_SERVICE_IMAGE}
     restart: unless-stopped
     read_only: true
-    tmpfs: [/tmp:size=64m,mode=1777]
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     logging: *artifact-deploy-logging
@@ -134,7 +135,8 @@ services:
     mem_limit: ${INTENT_SERVICE_MEMORY_LIMIT:-512m}
     pids_limit: 128
     read_only: true
-    tmpfs: [/tmp:size=64m,mode=1777]
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     logging: *artifact-deploy-logging
