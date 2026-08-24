@@ -2,7 +2,8 @@
  * Social-Media-Datenschutz / social media privacy — GENERATED from the
  * counsel-provided HTML (scratch: social-de.html / social-en.html) by
  * gen-legal.py, so the published text is byte-faithful to what counsel
- * wrote. Edit the source text, not this file's prose.
+ * wrote. Maintained MANUALLY: paste updated counsel HTML and re-run the
+ * converter.
  */
 import type { LegalDocument } from './legal.js'
 

@@ -184,17 +184,6 @@ jobs:
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
-      # Silent deploy side effect: pull the current legal texts from the
-      # eRecht24 Projekt-API into the build, so the deployed pages always
-      # match what counsel maintains there. Best-effort — if the API or the
-      # keys are unavailable, the committed texts ship instead.
-      - name: Sync legal texts from eRecht24 (best-effort)
-        env:
-          E_RECHT_API_KEY: ${{ secrets.E_RECHT_API_KEY }}
-          E_RECHT_PLUGIN_KEY: ${{ secrets.E_RECHT_PLUGIN_KEY }}
-        run: >-
-          bun libs/aven-brand/scripts/sync-erecht24.ts ||
-          echo "::warning::eRecht24 sync failed — deploying the committed legal texts"
       - name: Build the static site
         run: bun run --cwd libs/aven-website build
       - name: Verify the custom-domain marker survived the build
