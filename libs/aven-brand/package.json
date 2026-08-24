@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/aven-brand",
 	"private": true,
-	"version": "26.8.23-next.5",
+	"version": "26.8.24-next.1",
 	"type": "module",
 	"description": "The brand's single source of truth shared by every surface: company facts, the legal documents built from them, and the website hosts they live on.",
 	"main": "./src/index.ts",

@@ -1,3 +1,29 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.23-next.5...v) (2026-08-24)
+
+
+### Bug Fixes
+
+* **ci:** carry @avenos/aven-brand into the aven-api image ([cbac41d](https://github.com/MyAvenCEO/avenOS/commit/cbac41da639a242ecda08b878ee9d697d66e5527))
+
+
+### Features
+
+* **app+website:** legal links in settings nav, withdrawal buttons unified ([9f98b62](https://github.com/MyAvenCEO/avenOS/commit/9f98b6262783c9c951dc6a95bb5925c6e5b8f6be))
+* **legal:** @avenos/aven-brand SSOT wired across every surface ([df14a7d](https://github.com/MyAvenCEO/avenOS/commit/df14a7df3f5bef7d3e6d95b4f7cec1f0ec224651))
+* **legal:** statutory Widerrufsbelehrung on the withdrawal page, DE + EN ([0892745](https://github.com/MyAvenCEO/avenOS/commit/08927458b65987ead207af1a933b88494b61dfb3))
+* **website:** Aven card meta row — Dahinter + weblink below the vision ([5b0ed98](https://github.com/MyAvenCEO/avenOS/commit/5b0ed98cb577c317813130adadd18833b681b470))
+* **website:** Aven card vision section splits 2/3 vision, 1/3 Dahinter+link ([25b9e06](https://github.com/MyAvenCEO/avenOS/commit/25b9e06829c47fbddfa833558eb689fa1d3cdb66))
+* **website:** Aven cards drop the Leistungen list, Mission becomes Vision ([ee73ff9](https://github.com/MyAvenCEO/avenOS/commit/ee73ff91908f70e8d9c32934889a629572357411))
+* **website:** avenID sells the marketplace profile; Avens get link + bio ([7558b83](https://github.com/MyAvenCEO/avenOS/commit/7558b8315c7311d37a29700d5a99b9175adb06c5))
+* **website:** english-first routing — EN at root, German under /de ([9bb55b9](https://github.com/MyAvenCEO/avenOS/commit/9bb55b982360d9875e363777fc3c1840390fb5b4))
+* **website:** price panel moves up — below runtime, above sovereignty ([df64cce](https://github.com/MyAvenCEO/avenOS/commit/df64cce2c419da2a82d7ac42569feeb7d612e9f7))
+* **website:** revenue shares 8,2 % / 30 % (MoR), runtime joins the feature section ([d754b96](https://github.com/MyAvenCEO/avenOS/commit/d754b9688b4d4775260bb0256c0571caf6b97f4e))
+* **website:** rework pricing tiers and landing story ([ffc2366](https://github.com/MyAvenCEO/avenOS/commit/ffc2366cb3d9c18503a45fc5b19cf9f001c2a0e6))
+
+
+### Reverts
+
+* **legal:** drop the eRecht24 API sync — texts are maintained manually ([6967a09](https://github.com/MyAvenCEO/avenOS/commit/6967a09b50465c08be6e0f84e0717b951bf76dc1))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.23-next.4...v) (2026-08-23)
 
 
