@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.2...v) (2026-08-24)
+
+
+### Bug Fixes
+
+* **ci:** unblock next promotion and intent deployment ([57dde40](https://github.com/MyAvenCEO/avenOS/commit/57dde4006a719c9df3762ad59f091bda8eb59bbc))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.1...v) (2026-08-24)
 
 
