@@ -62,6 +62,7 @@ export class FakePaymentProvider implements PaymentProvider {
 	}
 
 	async cancelSubscription(): Promise<void> {}
+	async pauseSubscription(): Promise<void> {}
 	async resumeSubscription(): Promise<void> {}
 
 	async findCustomerByEmail(): Promise<string | null> {

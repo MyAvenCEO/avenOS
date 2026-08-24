@@ -41,6 +41,7 @@ export interface SubscriptionStanding {
 	priceEurCents: number
 	currentPeriodEnd: string | null
 	cancelAtPeriodEnd: boolean
+	pauseAtPeriodEnd: boolean
 }
 
 interface SubscriptionRow {
@@ -51,6 +52,7 @@ interface SubscriptionRow {
 	status: string
 	current_period_end: Date | null
 	cancel_at_period_end: boolean
+	pause_at_period_end: boolean
 	price_eur_cents: number
 }
 
@@ -130,7 +132,8 @@ export class SubscriptionService {
 			status: row.status,
 			priceEurCents: row.price_eur_cents,
 			currentPeriodEnd: row.current_period_end?.toISOString() ?? null,
-			cancelAtPeriodEnd: row.cancel_at_period_end
+			cancelAtPeriodEnd: row.cancel_at_period_end,
+			pauseAtPeriodEnd: row.pause_at_period_end
 		}))
 	}
 
@@ -174,12 +177,23 @@ export class SubscriptionService {
 		await this.payments.cancelSubscription(row.provider_subscription_id, immediate)
 	}
 
-	/** Fortsetzen: reverts a scheduled cancellation. */
+	/** Fortsetzen: lifts a (scheduled) pause, otherwise reverts a scheduled
+	 * cancellation. */
 	async resume(userId: string, tier: string): Promise<void> {
 		const row = await this.tierRow(userId, tier)
 		if (!row || ENDED_STATUSES.includes(row.status))
 			throw new AppError(404, 'SUBSCRIPTION_MISSING', 'There is no subscription to resume.')
-		await this.payments.resumeSubscription(row.provider_subscription_id)
+		const paused = row.status === 'paused' || row.pause_at_period_end
+		await this.payments.resumeSubscription(
+			row.provider_subscription_id,
+			paused ? 'unpause' : 'uncancel'
+		)
+	}
+
+	/** Pausieren: schedules a pause at period end. */
+	async pause(userId: string, tier: string): Promise<void> {
+		const row = await this.requireActive(userId, tier)
+		await this.payments.pauseSubscription(row.provider_subscription_id)
 	}
 
 	/** The caller's orders — the one-off avenID and every subscription
@@ -255,13 +269,15 @@ export class SubscriptionService {
 			await client.query(
 				`INSERT INTO subscriptions
 				   (id, user_id, provider_subscription_id, tier, status, current_period_end,
-				    cancel_at_period_end, price_eur_cents)
-				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+				    cancel_at_period_end, price_eur_cents, pause_at_period_end)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 				 ON CONFLICT (provider_subscription_id) DO UPDATE SET
 				   status=EXCLUDED.status,
 				   tier=COALESCE(NULLIF(EXCLUDED.tier,''), subscriptions.tier),
 				   current_period_end=COALESCE(EXCLUDED.current_period_end, subscriptions.current_period_end),
 				   cancel_at_period_end=EXCLUDED.cancel_at_period_end,
+				   pause_at_period_end=CASE WHEN $10 THEN EXCLUDED.pause_at_period_end
+				     ELSE subscriptions.pause_at_period_end END,
 				   price_eur_cents=CASE WHEN EXCLUDED.price_eur_cents > 0
 				     THEN EXCLUDED.price_eur_cents ELSE subscriptions.price_eur_cents END,
 				   updated_at=now()`,
@@ -273,7 +289,11 @@ export class SubscriptionService {
 					event.status,
 					event.currentPeriodEnd,
 					event.cancelAtPeriodEnd,
-					event.priceCents ?? 0
+					event.priceCents ?? 0,
+					// A payload without pause information keeps the stored flag —
+					// $10 says whether $9 is authoritative.
+					event.pauseAtPeriodEnd ?? false,
+					event.pauseAtPeriodEnd !== null
 				]
 			)
 			await writeAudit(client, {

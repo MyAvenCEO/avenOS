@@ -60,8 +60,12 @@ class StubProvider implements PaymentProvider {
 		this.record('cancelSubscription', id, immediate)
 	}
 
-	async resumeSubscription(id: string): Promise<void> {
-		this.record('resumeSubscription', id)
+	async pauseSubscription(id: string): Promise<void> {
+		this.record('pauseSubscription', id)
+	}
+
+	async resumeSubscription(id: string, mode: 'uncancel' | 'unpause'): Promise<void> {
+		this.record('resumeSubscription', id, mode)
 	}
 
 	async findCustomerByEmail(email: string): Promise<string | null> {
@@ -92,6 +96,7 @@ function subscriptionWebhook(input: {
 	tier: string
 	status: string
 	cancelAtPeriodEnd?: boolean
+	pauseAtPeriodEnd?: boolean
 	amount?: number
 }): string {
 	return JSON.stringify({
@@ -102,6 +107,7 @@ function subscriptionWebhook(input: {
 			amount: input.amount ?? 5500,
 			current_period_end: '2026-09-21T00:00:00.000Z',
 			cancel_at_period_end: input.cancelAtPeriodEnd ?? false,
+			pause_at_period_end: input.pauseAtPeriodEnd ?? false,
 			customer: {
 				// Polar customer ids are UUIDs — the UUID guard in customerId()
 				// must accept them, so the fixture reuses the user's own UUID.
@@ -269,11 +275,35 @@ describe('subscription state', () => {
 		await service.cancel(alice.id, 'avenme', true)
 		expect(provider.calls.at(-1)).toEqual({ method: 'cancelSubscription', args: [meId, true] })
 
-		// Resume reverts a scheduled cancellation, per tier.
+		// Resume picks the mode from the row: a scheduled cancel → uncancel.
 		await service.resume(alice.id, 'avenceo')
-		expect(provider.calls.at(-1)).toEqual({ method: 'resumeSubscription', args: [ceoId] })
+		expect(provider.calls.at(-1)).toEqual({
+			method: 'resumeSubscription',
+			args: [ceoId, 'uncancel']
+		})
 		await service.resume(alice.id, 'avenme')
-		expect(provider.calls.at(-1)).toEqual({ method: 'resumeSubscription', args: [meId] })
+		expect(provider.calls.at(-1)).toEqual({
+			method: 'resumeSubscription',
+			args: [meId, 'uncancel']
+		})
+
+		// Pause targets the named tier's own subscription; a pause-scheduled
+		// row resumes as unpause.
+		await service.pause(alice.id, 'avenme')
+		expect(provider.calls.at(-1)).toEqual({ method: 'pauseSubscription', args: [meId] })
+		await applyWebhook(service, {
+			subscriptionId: meId,
+			userId: alice.id,
+			email: alice.email,
+			tier: 'avenme',
+			status: 'active',
+			pauseAtPeriodEnd: true
+		})
+		expect((await service.me(alice.id)).find((x) => x.tier === 'avenme')?.pauseAtPeriodEnd).toBe(
+			true
+		)
+		await service.resume(alice.id, 'avenme')
+		expect(provider.calls.at(-1)).toEqual({ method: 'resumeSubscription', args: [meId, 'unpause'] })
 
 		// A stranger cannot act at all: bob holds nothing, so the service
 		// refuses before any provider call could happen.
