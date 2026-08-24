@@ -98,7 +98,9 @@ function subscriptionWebhook(input: {
 			current_period_end: '2026-09-21T00:00:00.000Z',
 			cancel_at_period_end: input.cancelAtPeriodEnd ?? false,
 			customer: {
-				id: `cust_${input.userId.slice(0, 8)}`,
+				// Polar customer ids are UUIDs — the UUID guard in customerId()
+				// must accept them, so the fixture reuses the user's own UUID.
+				id: input.userId,
 				email: input.email,
 				external_id: input.userId
 			},
@@ -175,7 +177,7 @@ describe('subscription state', () => {
 			'SELECT provider_customer_id FROM billing_customers WHERE user_id=$1',
 			[alice.id]
 		)
-		expect(customer.rows[0].provider_customer_id).toBe(`cust_${alice.id.slice(0, 8)}`)
+		expect(customer.rows[0].provider_customer_id).toBe(alice.id)
 
 		// Self-service isolation: the owner sees their standing, a stranger
 		// sees nothing — there is no parameter that reaches alice's row.
@@ -294,7 +296,7 @@ describe('subscription state', () => {
 			tier: 'avenme',
 			status: 'active'
 		})
-		const customerId = `cust_${alice.id.slice(0, 8)}`
+		const customerId = alice.id
 		provider.ordersByCustomer[customerId] = [
 			{
 				id: 'ord_1',
