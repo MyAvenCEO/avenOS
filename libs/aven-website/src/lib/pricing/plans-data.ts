@@ -82,6 +82,12 @@ export interface Plan {
 	 * nothing.
 	 */
 	revenueSharePct: number
+	/**
+	 * What the share already contains, when it is more than the default
+	 * transaction-fee note — avenCOOP's 30 % swallows app-store fees & co.
+	 * because we sell as the official merchant of record.
+	 */
+	revenueShareNote?: string
 	/** avenCOOP is not bookable: you apply and we decide together. */
 	applyOnly?: boolean
 	/**
@@ -158,7 +164,7 @@ export const PLANS: Plan[] = [
 		billing: 'monthly',
 		beta: { discountPct: 50, months: 3 },
 		runtime: { hoursPerDay: 4, centsPerExtraMinute: 8 },
-		revenueSharePct: 6.8,
+		revenueSharePct: 8.2,
 		highlight: true,
 		features: [
 			{ skill: 'book-keeper', label: 'Vorbuchhaltung' },
@@ -182,11 +188,13 @@ export const PLANS: Plan[] = [
 		billing: 'monthly',
 		beta: { discountPct: 50, months: 6 },
 		runtime: { hoursPerDay: 12, centsPerExtraMinute: 5 },
-		revenueSharePct: 9.5,
+		revenueSharePct: 30,
+		revenueShareNote: 'inkl. App‑Store‑Gebühren & Co.',
 		applyOnly: true,
 		features: [
 			'Hands‑on Unterstützung, während DU dein Skillbundle baust — dein Produkt, dein Name, unsere Infrastruktur',
 			'Du verkaufst es selbst im aven Marketplace — dein Bundle, dein Preis, deine Kunden',
+			'Rundum-sorglos-Abrechnung: Wir verkaufen als offizieller Merchant of Record — App‑Store‑Gebühren & Co. stecken in den 30 %, du bekommst wöchentlich deine Auszahlung',
 			'Souveränität, die du weitergibst: deine Kunden behalten ihre eigenen Schlüssel — nicht du, nicht wir',
 			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG'
 		]
