@@ -8,10 +8,22 @@ import { page } from '$app/state'
 
 let { children } = $props()
 const session = $derived(appRuntime.session(page.url))
-// The website's Impressum, host-matched to where THIS app runs: localhost
+// The website's legal pages, host-matched to where THIS app runs: localhost
 // pairs with the local website, id.next.aven.ceo with next.aven.ceo, prod
 // with aven.ceo — the brand lib derives it from our own hostname.
-const impressum = $derived(legalHref('impressum', { hostname: page.url.hostname }))
+const legal = $derived(
+	(
+		[
+			['impressum', 'Impressum'],
+			['datenschutz', 'Datenschutz'],
+			['social-media', 'Social-Media-Datenschutz'],
+			['widerruf', 'Widerrufsrecht']
+		] as const
+	).map(([slug, label]) => ({
+		label,
+		href: legalHref(slug, { hostname: page.url.hostname })
+	}))
+)
 async function logout() {
 	await appRuntime.auth.signOut()
 	void goto('/')
@@ -35,5 +47,7 @@ async function logout() {
 </header>
 <main class="site">{@render children()}</main>
 <footer class="site">
-	<a href={impressum} target="_blank" rel="noopener noreferrer">Impressum</a>
+	{#each legal as item (item.href)}
+		<a href={item.href} target="_blank" rel="noopener noreferrer">{item.label}</a>
+	{/each}
 </footer>

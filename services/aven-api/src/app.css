@@ -109,6 +109,11 @@ main.site {
 
 /* The one line the site owes every visitor — tiny, centered, out of the way. */
 footer.site {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	column-gap: 1.25rem;
+	row-gap: 0.5rem;
 	padding-block: 1.25rem;
 	border-top: 1px solid var(--border-soft);
 	text-align: center;
