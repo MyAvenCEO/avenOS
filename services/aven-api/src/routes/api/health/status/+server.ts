@@ -1,7 +1,8 @@
 import { json } from '@sveltejs/kit'
 import {
 	CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
-	CURRENT_ARTIFACT_STORE_SCHEMA_VERSION
+	CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
+	CURRENT_INTENT_SERVICE_SCHEMA_VERSION
 } from '$lib/server/environments/provisioning.js'
 import { workerFreshness } from '$lib/server/ops.js'
 import { runtime } from '$lib/server/runtime.js'
@@ -28,6 +29,9 @@ export const GET = async () => {
 	)
 	const processorConfigured = Boolean(
 		config.ARTIFACT_PROCESSOR_BASE_URL && config.ARTIFACT_PROCESSOR_BEARER_TOKEN
+	)
+	const intentConfigured = Boolean(
+		config.INTENT_SERVICE_BASE_URL && config.INTENT_SERVICE_BEARER_TOKEN
 	)
 	let environmentState: EnvironmentHealth | null = null
 	let sampleDatabase: string | null = null
@@ -58,20 +62,26 @@ export const GET = async () => {
 				            environment.artifact_store_status<>'ready' OR environment.artifact_store_schema_version<$2
 				          )) OR ($3::boolean AND (
 				            environment.artifact_processor_status<>'ready' OR
-				            environment.artifact_processor_schema_version<$4
-				          ))
+			            environment.artifact_processor_schema_version<$4
+			          )) OR ($5::boolean AND (
+			            environment.intent_service_status<>'ready' OR
+			            environment.intent_service_schema_version<$6
+			          ))
 				        )) OR
 				        (name_record.status<>'owned' AND (
 				          environment.status<>'suspended' OR
 				          environment.artifact_store_status<>'suspended' OR
-				          ($3::boolean AND environment.artifact_processor_status<>'suspended')
+			          ($3::boolean AND environment.artifact_processor_status<>'suspended')
+			          OR ($5::boolean AND environment.intent_service_status<>'suspended')
 				        ))
 				      )) AS drifted`,
 					[
 						artifactConfigured,
 						CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
 						processorConfigured,
-						CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION
+						CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
+						intentConfigured,
+						CURRENT_INTENT_SERVICE_SCHEMA_VERSION
 					]
 				)
 			).rows[0] ?? null
@@ -126,6 +136,18 @@ export const GET = async () => {
 			processorReachable = false
 		}
 	}
+	let intentReachable = !intentConfigured
+	if (intentConfigured) {
+		try {
+			const response = await fetch(new URL('/health/ready', config.INTENT_SERVICE_BASE_URL), {
+				signal: AbortSignal.timeout(2_000)
+			})
+			intentReachable = response.ok
+			await response.body?.cancel()
+		} catch {
+			intentReachable = false
+		}
+	}
 	const environmentKnown = Boolean(environmentState)
 	const environmentControlled = Boolean(
 		environmentState &&
@@ -140,7 +162,8 @@ export const GET = async () => {
 		environmentKnown &&
 		environmentControlled &&
 		artifactReachable &&
-		processorReachable
+		processorReachable &&
+		intentReachable
 	return json({
 		overall: healthy ? 'healthy' : 'degraded',
 		capabilities: {
@@ -157,7 +180,8 @@ export const GET = async () => {
 				? 'disabled'
 				: processorReachable
 					? 'available'
-					: 'unavailable'
+					: 'unavailable',
+			intents: !intentConfigured ? 'disabled' : intentReachable ? 'available' : 'unavailable'
 		},
 		environments: environmentState ?? {
 			missing: null,

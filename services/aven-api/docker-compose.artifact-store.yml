@@ -22,6 +22,12 @@ x-artifact-image: &artifact-image
     context: ../..
     dockerfile: services/artifact-store/Dockerfile
 
+x-intent-image: &intent-image
+  image: aven-intent-service:local
+  build:
+    context: ../..
+    dockerfile: services/intent-service/Dockerfile
+
 services:
   artifact-local-bootstrap:
     image: postgres:17-alpine
@@ -37,6 +43,7 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:-aven-dev}
       ARTIFACT_STORE_RUNTIME_PASSWORD: ${ARTIFACT_STORE_RUNTIME_PASSWORD:-artifact-local-runtime-password-0001}
       ARTIFACT_PROCESSOR_RUNTIME_PASSWORD: ${ARTIFACT_PROCESSOR_RUNTIME_PASSWORD:-processor-local-runtime-password-0001}
+      INTENT_SERVICE_RUNTIME_PASSWORD: ${INTENT_SERVICE_RUNTIME_PASSWORD:-intent-local-runtime-password-0001}
     volumes:
       - ./deploy/artifact-local-bootstrap.sh:/usr/local/bin/artifact-local-bootstrap:ro
     command: ["sh", "/usr/local/bin/artifact-local-bootstrap"]
@@ -135,6 +142,7 @@ services:
       ARTIFACT_PROCESSOR_DATABASE_URL: postgres://aven_artifact_processor:${ARTIFACT_PROCESSOR_RUNTIME_PASSWORD:-processor-local-runtime-password-0001}@db:5432/cust_artifact_local
       ARTIFACT_PROCESSOR_SCOPE_ID: ${ARTIFACT_STORE_SCOPE_ID:-11111111-1111-4111-8111-111111111111}
       ARTIFACT_PROCESSOR_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_BEARER_TOKEN:-processor-local-status-token-0001}
+      INTENT_SERVICE_PROCESSOR_BEARER_TOKEN: ${INTENT_SERVICE_PROCESSOR_BEARER_TOKEN:-intent-local-processor-token-0001}
       ARTIFACT_PROCESSOR_VISION_ENABLED: ${ARTIFACT_PROCESSOR_VISION_ENABLED:-false}
       ARTIFACT_PROCESSOR_VISION_BASE_URL: ${ARTIFACT_PROCESSOR_VISION_BASE_URL:-http://host.docker.internal:8000/v1}
       ARTIFACT_PROCESSOR_VISION_MODEL: ${ARTIFACT_PROCESSOR_VISION_MODEL:-local-vision-model}
@@ -156,11 +164,61 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  intent-service-migrator:
+    <<: [*artifact-runtime-security, *intent-image]
+    depends_on:
+      artifact-local-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      INTENT_SERVICE_DATABASE_URL: postgres://aven_provisioner:${AVEN_PROVISIONER_PASSWORD:-provisioner-dev}@db:5432/cust_artifact_local
+      INTENT_SERVICE_RUNTIME_ROLE: aven_intent_service
+      INTENT_SERVICE_SCOPE_ID: ${ARTIFACT_STORE_SCOPE_ID:-11111111-1111-4111-8111-111111111111}
+    command: ["migrate"]
+    restart: "no"
+
+  intent-service-provisioner:
+    <<: [*artifact-runtime-security, *intent-image]
+    depends_on:
+      artifact-local-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      INTENT_SERVICE_PROVISIONER_DATABASE_URL: postgres://aven_provisioner:${AVEN_PROVISIONER_PASSWORD:-provisioner-dev}@db:5432/postgres
+      INTENT_SERVICE_PROVISIONER_BEARER_TOKEN: ${INTENT_SERVICE_PROVISIONER_BEARER_TOKEN:-intent-local-provisioner-token-0001}
+      INTENT_SERVICE_RUNTIME_ROLE: aven_intent_service
+      INTENT_SERVICE_PROVISIONER_LISTEN: 0.0.0.0:8092
+      INTENT_SERVICE_HEALTH_PORT: 8092
+    command: ["serve-provisioner"]
+
+  intent-service:
+    <<: [*artifact-runtime-security, *intent-image]
+    depends_on:
+      artifact-store:
+        condition: service_healthy
+      artifact-processor:
+        condition: service_healthy
+      intent-service-migrator:
+        condition: service_completed_successfully
+    environment:
+      INTENT_SERVICE_DATABASE_URL: postgres://aven_intent_service:${INTENT_SERVICE_RUNTIME_PASSWORD:-intent-local-runtime-password-0001}@db:5432/cust_artifact_local
+      INTENT_SERVICE_SCOPE_ID: ${ARTIFACT_STORE_SCOPE_ID:-11111111-1111-4111-8111-111111111111}
+      INTENT_SERVICE_BEARER_TOKEN: ${INTENT_SERVICE_BEARER_TOKEN:-intent-local-api-token-000000000001}
+      INTENT_SERVICE_PROCESSOR_BEARER_TOKEN: ${INTENT_SERVICE_PROCESSOR_BEARER_TOKEN:-intent-local-processor-token-0001}
+      INTENT_SERVICE_LISTEN: 0.0.0.0:8091
+      INTENT_SERVICE_HEALTH_PORT: 8091
+      ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
+      ARTIFACT_STORE_BEARER_TOKEN: ${ARTIFACT_STORE_BEARER_TOKEN:-artifact-local-coordinator-token-0001}
+      ARTIFACT_STORE_DATABASE_NAME: cust_artifact_local
+      ARTIFACT_PROCESSOR_BASE_URL: http://artifact-processor:8089
+    ports:
+      - "${INTENT_SERVICE_BIND:-127.0.0.1}:${INTENT_SERVICE_PORT:-8091}:8091"
+
   app:
     depends_on:
       artifact-store:
         condition: service_healthy
       artifact-processor:
+        condition: service_healthy
+      intent-service:
         condition: service_healthy
     environment:
       ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
@@ -168,12 +226,17 @@ services:
       ARTIFACT_PROCESSOR_BASE_URL: http://artifact-processor:8089
       ARTIFACT_PROCESSOR_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_BEARER_TOKEN:-processor-local-status-token-0001}
       ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_DIRECTORY_BEARER_TOKEN:-processor-local-directory-token-0001}
+      INTENT_SERVICE_BASE_URL: http://intent-service:8091
+      INTENT_SERVICE_BEARER_TOKEN: ${INTENT_SERVICE_BEARER_TOKEN:-intent-local-api-token-000000000001}
+      INTENT_SERVICE_DIRECTORY_BEARER_TOKEN: ${INTENT_SERVICE_DIRECTORY_BEARER_TOKEN:-intent-local-directory-token-0001}
 
   environment-worker:
     depends_on:
       artifact-store-provisioner:
         condition: service_healthy
       artifact-processor-provisioner:
+        condition: service_healthy
+      intent-service-provisioner:
         condition: service_healthy
     environment:
       ARTIFACT_STORE_PROVISIONER_BASE_URL: http://artifact-store-provisioner:8088
@@ -184,3 +247,7 @@ services:
       ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN: ${ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN:-processor-local-provisioner-token-0001}
       ARTIFACT_PROCESSOR_RUNTIME_ROLE: aven_artifact_processor
       ARTIFACT_PROCESSOR_RUNTIME_PASSWORD: ${ARTIFACT_PROCESSOR_RUNTIME_PASSWORD:-processor-local-runtime-password-0001}
+      INTENT_SERVICE_PROVISIONER_BASE_URL: http://intent-service-provisioner:8092
+      INTENT_SERVICE_PROVISIONER_BEARER_TOKEN: ${INTENT_SERVICE_PROVISIONER_BEARER_TOKEN:-intent-local-provisioner-token-0001}
+      INTENT_SERVICE_RUNTIME_ROLE: aven_intent_service
+      INTENT_SERVICE_RUNTIME_PASSWORD: ${INTENT_SERVICE_RUNTIME_PASSWORD:-intent-local-runtime-password-0001}

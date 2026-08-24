@@ -6,7 +6,8 @@ import { AppError } from '../errors.js'
 import { environmentNames } from './naming.js'
 import {
 	CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
-	CURRENT_ARTIFACT_STORE_SCHEMA_VERSION
+	CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
+	CURRENT_INTENT_SERVICE_SCHEMA_VERSION
 } from './provisioning.js'
 
 export class EnvironmentService {
@@ -41,6 +42,10 @@ export class EnvironmentService {
 				},
 				artifactProcessor: {
 					schemaVersion: CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
+					scopeId: artifactScopeId
+				},
+				intentService: {
+					schemaVersion: CURRENT_INTENT_SERVICE_SCHEMA_VERSION,
 					scopeId: artifactScopeId
 				},
 				applications: []
@@ -148,6 +153,59 @@ export class EnvironmentService {
 		}))
 	}
 
+	async intentTargetForUser(userId: string): Promise<{
+		environmentId: string
+		databaseName: string
+		scopeId: string
+	}> {
+		const target = await this.artifactTargetForUser(userId)
+		const row = (
+			await this.pool.query(
+				`SELECT intent_service_status,intent_service_schema_version
+				 FROM customer_environments WHERE id=$1`,
+				[target.environmentId]
+			)
+		).rows[0] as { intent_service_status: string; intent_service_schema_version: number }
+		if (
+			row.intent_service_status !== 'ready' ||
+			row.intent_service_schema_version < CURRENT_INTENT_SERVICE_SCHEMA_VERSION
+		) {
+			throw new AppError(
+				409,
+				'INTENT_ENVIRONMENT_NOT_READY',
+				'The customer environment is not ready for intents.'
+			)
+		}
+		return target
+	}
+
+	async intentServiceTargets(): Promise<
+		Array<{ environmentId: string; databaseName: string; scopeId: string }>
+	> {
+		const rows = (
+			await this.pool.query(
+				`SELECT environment.id,environment.database_name,environment.artifact_scope_id
+				 FROM customer_environments environment
+				 JOIN names name_record ON name_record.name=environment.name
+				 WHERE name_record.status='owned' AND environment.status='ready'
+				   AND environment.artifact_store_status='ready' AND environment.artifact_store_schema_version >= $1
+				   AND environment.artifact_processor_status='ready' AND environment.artifact_processor_schema_version >= $2
+				   AND environment.intent_service_status='ready' AND environment.intent_service_schema_version >= $3
+				 ORDER BY environment.id`,
+				[
+					CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
+					CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
+					CURRENT_INTENT_SERVICE_SCHEMA_VERSION
+				]
+			)
+		).rows as Array<{ id: string; database_name: string; artifact_scope_id: string }>
+		return rows.map((row) => ({
+			environmentId: row.id,
+			databaseName: row.database_name,
+			scopeId: row.artifact_scope_id
+		}))
+	}
+
 	async enqueueSuspension(
 		connection: Queryable,
 		input: { userId: string; name: string }
@@ -194,6 +252,7 @@ export class EnvironmentService {
 			await this.pool.query(
 				`SELECT id,name,database_name,artifact_scope_id,artifact_store_status,artifact_store_schema_version,
 				        artifact_processor_status,artifact_processor_schema_version,
+				        intent_service_status,intent_service_schema_version,
 				        owner_role,stack_name,contract_version,status,last_operation,
               last_error_code,last_error_message,queued_at,provisioning_at,ready_at,suspended_at,failed_at,updated_at
        FROM customer_environments WHERE name=$1`,

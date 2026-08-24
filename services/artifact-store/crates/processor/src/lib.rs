@@ -2,7 +2,6 @@
 
 pub mod engine;
 pub mod executor;
-pub mod intents;
 pub mod model;
 mod real_adapters;
 pub mod repository;

@@ -14,11 +14,18 @@ export interface EnvironmentProvisionInput {
 		runtimeRole: string
 		scopeId: string
 	}
+	intentService?: {
+		provisionerBaseUrl: string
+		bearerToken: string
+		runtimeRole: string
+		scopeId: string
+	}
 	log: { info(message: string): Promise<void> | void }
 }
 
 export const CURRENT_ARTIFACT_STORE_SCHEMA_VERSION = 3
-export const CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION = 4
+export const CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION = 5
+export const CURRENT_INTENT_SERVICE_SCHEMA_VERSION = 1
 
 const DATABASE_NAME = /^cust_[a-z0-9_]+$/
 const ROLE_NAME = /^[a-z][a-z0-9_]{0,62}$/
@@ -155,6 +162,36 @@ export async function ensureProcessorRuntimeRole(input: {
 	}
 }
 
+export async function ensureIntentRuntimeRole(input: {
+	provisionerUrl: string
+	runtimeRole: string
+	runtimePassword: string
+	log: { info(message: string): Promise<void> | void }
+}): Promise<void> {
+	validateRoleName(input.runtimeRole, 'Intent Service runtime role')
+	const cluster = await openProvisioner(input.provisionerUrl)
+	try {
+		if (!(await assertSafeRuntimeRole(cluster, input.runtimeRole, 'Intent Service runtime'))) {
+			await input.log.info(`Create Intent Service runtime role ${input.runtimeRole}.`)
+			await cluster.query(
+				`CREATE ROLE "${input.runtimeRole}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION`
+			)
+		}
+		const passwordLiteral = String(
+			(await cluster.query('SELECT quote_literal($1) AS value', [input.runtimePassword])).rows[0]
+				?.value ?? ''
+		)
+		if (!passwordLiteral) throw new Error('Could not encode Intent Service credential.')
+		await cluster.query(`ALTER ROLE "${input.runtimeRole}" PASSWORD ${passwordLiteral}`)
+		await cluster.query(
+			'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename=$1 AND pid <> pg_backend_pid()',
+			[input.runtimeRole]
+		)
+	} finally {
+		await cluster.end()
+	}
+}
+
 export async function provisionEnvironmentDatabase(
 	input: EnvironmentProvisionInput
 ): Promise<void> {
@@ -168,6 +205,10 @@ export async function provisionEnvironmentDatabase(
 		validateRoleName(input.artifactProcessor.runtimeRole, 'Artifact Processor runtime role')
 		if (!UUID.test(input.artifactProcessor.scopeId))
 			throw new Error('Artifact Processor scope is invalid.')
+	}
+	if (input.intentService) {
+		validateRoleName(input.intentService.runtimeRole, 'Intent Service runtime role')
+		if (!UUID.test(input.intentService.scopeId)) throw new Error('Intent Service scope is invalid.')
 	}
 	const cluster = await openProvisioner(input.provisionerUrl)
 	try {
@@ -245,6 +286,13 @@ export async function provisionEnvironmentDatabase(
 			}
 			await cluster.query(`GRANT CONNECT ON DATABASE "${input.databaseName}" TO "${runtimeRole}"`)
 		}
+		if (input.intentService) {
+			const runtimeRole = input.intentService.runtimeRole
+			if (!(await assertSafeRuntimeRole(cluster, runtimeRole, 'Intent Service runtime'))) {
+				throw new Error(`Intent Service runtime role ${runtimeRole} is not initialized.`)
+			}
+			await cluster.query(`GRANT CONNECT ON DATABASE "${input.databaseName}" TO "${runtimeRole}"`)
+		}
 	} finally {
 		await cluster.end()
 	}
@@ -288,6 +336,20 @@ export async function provisionEnvironmentDatabase(
 			throw new Error(`Artifact Processor provisioning failed with HTTP ${response.status}.`)
 		}
 		await input.log.info(`Artifact Processor scope ${input.artifactProcessor.scopeId} ready.`)
+	}
+	if (input.intentService) {
+		const endpoint = new URL(input.intentService.provisionerBaseUrl)
+		endpoint.pathname = `/internal/v1/databases/${encodeURIComponent(input.databaseName)}/scopes/${encodeURIComponent(input.intentService.scopeId)}`
+		const response = await fetch(endpoint, {
+			method: 'PUT',
+			headers: { authorization: `Bearer ${input.intentService.bearerToken}` },
+			signal: AbortSignal.timeout(60_000)
+		})
+		if (!response.ok) {
+			await response.body?.cancel().catch(() => {})
+			throw new Error(`Intent Service provisioning failed with HTTP ${response.status}.`)
+		}
+		await input.log.info(`Intent Service scope ${input.intentService.scopeId} ready.`)
 	}
 	await input.log.info(`Database ${input.databaseName} ready.`)
 }
