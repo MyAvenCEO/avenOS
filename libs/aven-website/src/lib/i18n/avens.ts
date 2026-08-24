@@ -18,7 +18,6 @@ export type AvensMessages = {
 	mission: string
 	services: string
 	worksOn: string
-	runsOn: string
 	/** Keyed by Aven slug. */
 	companies: Record<string, CompanyProfile>
 	cta: string
@@ -46,7 +45,6 @@ export const avens: Record<Lang, AvensMessages> = {
 		mission: 'Mission',
 		services: 'Leistungen',
 		worksOn: 'arbeitet an',
-		runsOn: 'läuft auf',
 		companies: {
 			ceo: {
 				mission:
@@ -86,7 +84,6 @@ export const avens: Record<Lang, AvensMessages> = {
 		mission: 'Mission',
 		services: 'Services',
 		worksOn: 'works towards',
-		runsOn: 'runs on',
 		companies: {
 			ceo: {
 				mission:

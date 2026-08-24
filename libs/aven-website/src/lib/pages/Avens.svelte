@@ -4,9 +4,8 @@ import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SiteFooter from '$lib/components/SiteFooter.svelte'
-import { type Lang, localeHref, pick } from '$lib/i18n'
+import { type Lang, pick } from '$lib/i18n'
 import { avens } from '$lib/i18n/avens'
-import { plan } from '$lib/pricing/plans'
 
 let { lang }: { lang: Lang } = $props()
 
@@ -60,7 +59,6 @@ function handle(a: LiveAven) {
 			<div class="mt-6 grid gap-4 lg:grid-cols-2">
 				{#each companies as a (a.slug)}
 					{@const profile = t.companies[a.slug]}
-					{@const runsOn = plan(a.plan)}
 					<article
 						class="flex min-w-0 flex-col rounded-2xl border border-foreground/8 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 					>
@@ -86,14 +84,6 @@ function handle(a: LiveAven) {
 								<p class="mt-1 text-[12px] text-foreground/55">
 									{t.behind}
 									<span class="font-medium text-foreground/75">{a.holder}</span>
-									<span class="text-foreground/35"> · </span>
-									{t.runsOn}
-									<a
-										href={`${localeHref(lang, '/pricing')}#${runsOn.id}`}
-										class="font-medium text-foreground/75 underline decoration-foreground/25 underline-offset-4 hover:decoration-foreground/60"
-									>
-										{runsOn.name}
-									</a>
 								</p>
 							</div>
 						</div>
