@@ -15,6 +15,20 @@ let embedFailed = $state(false)
 /** If the embed hasn't reported `loaded`, this is how long we wait before
  * offering the redirect instead. */
 const EMBED_READY_TIMEOUT_MS = 8000
+/** The only origins the checkout iframe may message from — replicated from
+ * the official Polar embed lib (dist/embed.js): prod + sandbox, exact match. */
+const POLAR_ORIGINS = ['https://polar.sh', 'https://sandbox.polar.sh']
+/** The embed lib's own permissions policy for its iframe, verbatim. */
+const POLAR_EMBED_ALLOW = `payment 'self' ${POLAR_ORIGINS.join(' ')}; publickey-credentials-get 'self' ${POLAR_ORIGINS.join(' ')};`
+
+/** The embed-flavored checkout URL our INLINE iframe renders (no fullscreen
+ * overlay) — the exact params the official lib appends, theme hard-coded
+ * light to match the page. */
+let embedUrl = $state('')
+/** Bumped to remount a fresh iframe after the checkout reports `close`. */
+let embedNonce = $state(0)
+let checkoutFrame = $state<HTMLIFrameElement | null>(null)
+let fallbackTimer: ReturnType<typeof setTimeout> | undefined
 
 const fakeParams = (() => {
 	if (data.provider !== 'fake') return null
@@ -41,47 +55,60 @@ async function payFake() {
 	}
 }
 
-/** Launch Polar's embedded checkout over this page. It reports back through
- * its own message channel; the iframe callback is UX-only — fulfilment
- * still comes exclusively from the verified webhook. */
-async function launchEmbed() {
+/** Render Polar's checkout INLINE in this page's container: our own iframe
+ * speaking the embed's postMessage protocol. The iframe callback is UX-only
+ * — fulfilment still comes exclusively from the verified webhook. */
+function launchEmbed() {
 	embedFailed = false
 	checkoutState = 'loading'
-	let loaded = false
-	const fallback = setTimeout(() => {
-		// No `loaded` from the embed: offer the plain redirect instead.
-		if (!loaded) {
+	const url = new URL(data.checkoutUrl)
+	url.searchParams.set('embed', 'true')
+	url.searchParams.set('embed_origin', window.location.origin)
+	url.searchParams.set('theme', 'light')
+	embedUrl = url.toString()
+	if (fallbackTimer) clearTimeout(fallbackTimer)
+	fallbackTimer = setTimeout(() => {
+		// No `loaded` from the iframe: offer the plain redirect instead.
+		if (checkoutState === 'loading') {
+			embedUrl = ''
 			embedFailed = true
 			checkoutState = 'ready'
 		}
 	}, EMBED_READY_TIMEOUT_MS)
-	try {
-		const { PolarEmbedCheckout } = await import('@polar-sh/checkout/embed')
-		const embed = await PolarEmbedCheckout.create(data.checkoutUrl, { theme: 'light' })
-		loaded = true
-		clearTimeout(fallback)
-		checkoutState = 'ready'
-		embed.addEventListener('confirmed', () => {
+}
+
+/** The embed's message channel, replicated: only Polar's exact origins,
+ * only from OUR iframe's window, only POLAR_CHECKOUT envelopes. */
+function onCheckoutMessage(event: MessageEvent) {
+	if (!embedUrl) return
+	if (!POLAR_ORIGINS.includes(event.origin)) return
+	if (!checkoutFrame || event.source !== checkoutFrame.contentWindow) return
+	const message = event.data as { type?: string; event?: string; successURL?: string } | null
+	if (message?.type !== 'POLAR_CHECKOUT') return
+	switch (message.event) {
+		case 'loaded':
+			if (fallbackTimer) clearTimeout(fallbackTimer)
+			if (checkoutState === 'loading') checkoutState = 'ready'
+			break
+		case 'confirmed':
 			checkoutState = 'confirming'
-		})
-		embed.addEventListener('success', (event) => {
+			break
+		case 'success': {
+			checkoutState = 'confirming'
 			// Only follow our own minted success URL, and follow it ourselves.
-			event.preventDefault()
-			checkoutState = 'confirming'
-			const target = new URL(event.detail.successURL, window.location.origin)
+			const target = new URL(message.successURL ?? '', window.location.origin)
 			if (target.origin === window.location.origin && target.pathname === '/purchase/success') {
-				embed.close()
 				window.location.assign(target.toString())
 			}
-		})
-		embed.addEventListener('close', () => {
-			// Closed without paying: the page stays, the checkout can reopen.
-			if (checkoutState !== 'confirming') checkoutState = 'ready'
-		})
-	} catch {
-		clearTimeout(fallback)
-		embedFailed = true
-		checkoutState = 'ready'
+			break
+		}
+		case 'close':
+			// Closed without paying: remount a fresh frame, the page stays.
+			if (checkoutState !== 'confirming') {
+				embedNonce += 1
+				checkoutState = 'ready'
+			}
+			break
 	}
 }
 
@@ -91,9 +118,14 @@ onMount(() => {
 		return
 	}
 	// Designer scenarios seed a non-loading state — render it without an embed.
-	if (initial.state === 'loading') void launchEmbed()
+	if (initial.state === 'loading') launchEmbed()
+	return () => {
+		if (fallbackTimer) clearTimeout(fallbackTimer)
+	}
 })
 </script>
+
+<svelte:window onmessage={onCheckoutMessage} />
 
 <svelte:head><title>Checkout</title></svelte:head>
 
@@ -114,14 +146,33 @@ onMount(() => {
 			</div>
 		{:else}
 			<div class="polar-checkout">
-				<p class="checkout-state" aria-live="polite">
-					{checkoutState === "confirming" ? "Confirming" : checkoutState === "ready" ? "Ready" : "Loading"}
-				</p>
 				{#if embedFailed}
 					<!-- The embed never loaded: same checkout, plain redirect. -->
 					<a class="checkout-link" href={data.checkoutUrl}>Zum Checkout</a>
-				{:else if checkoutState === "ready"}
-					<button type="button" onclick={launchEmbed}>Checkout öffnen</button>
+				{:else if embedUrl}
+					<!-- The checkout, inline in the page — no overlay. -->
+					{#if checkoutState === "loading" || checkoutState === "confirming"}
+						<p class="checkout-state" aria-live="polite">
+							{checkoutState === "confirming" ? "Confirming" : "Loading"}
+						</p>
+					{/if}
+					{#key embedNonce}
+						<iframe
+							bind:this={checkoutFrame}
+							src={embedUrl}
+							title="Checkout"
+							allow={POLAR_EMBED_ALLOW}
+							class="checkout-frame"
+						></iframe>
+					{/key}
+				{:else}
+					<!-- Designer-seeded states render without a live frame. -->
+					<p class="checkout-state" aria-live="polite">
+						{checkoutState === "confirming" ? "Confirming" : checkoutState === "ready" ? "Ready" : "Loading"}
+					</p>
+					{#if checkoutState === "ready"}
+						<button type="button" onclick={launchEmbed}>Checkout öffnen</button>
+					{/if}
 				{/if}
 			</div>
 		{/if}
@@ -129,7 +180,7 @@ onMount(() => {
 </section>
 
 <style>
-/* One centred column: the Polar embed overlays the page. */
+/* One centred column: the checkout renders INLINE in this container. */
 .checkout-page {
 	display: grid;
 	grid-template-columns: minmax(0, 40rem);
@@ -157,10 +208,17 @@ onMount(() => {
 }
 .polar-checkout {
 	display: grid;
-	align-content: center;
+	align-content: start;
 	gap: 1rem;
 	min-height: 32rem;
 	padding: 1rem;
+}
+.checkout-frame {
+	width: 100%;
+	min-height: 40rem;
+	border: 0;
+	border-radius: 1rem;
+	background: #fff;
 }
 .polar-checkout button,
 .checkout-link {

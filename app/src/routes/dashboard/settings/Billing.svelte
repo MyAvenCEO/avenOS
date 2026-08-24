@@ -1,6 +1,5 @@
 <script lang="ts">
 import { euro, PLANS, type Plan, priceSuffix } from '@avenos/aven-brand/pricing'
-import { PolarEmbedCheckout } from '@polar-sh/checkout/embed'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { onDestroy, onMount } from 'svelte'
 import { goto } from '$app/navigation'
@@ -11,8 +10,10 @@ import { shell } from '$lib/intents/talk.svelte'
 /**
  * Abrechnung — the member's whole Polar relationship, entirely in our brand.
  *
- * Nothing here leaves the pane: the checkout runs INLINE (Polar's embedded
- * checkout overlays this view), orders are the provider's real orders, and
+ * Nothing here leaves the pane: the checkout runs INLINE as our own iframe
+ * inside the checkout card (no fullscreen overlay — we speak the embed's
+ * URL-param + postMessage protocol ourselves, hard-coded light theme),
+ * orders are the provider's real orders, and
  * the subscription lifecycle — book, cancel, resume a scheduled cancel — is
  * all native. Polar is the merchant of record; each paid order's official
  * invoice PDF is downloaded into local app storage and opened on the
@@ -61,6 +62,11 @@ const ENDED = ['canceled', 'expired', 'incomplete_expired', 'unpaid', 'revoked']
 /** If the embed hasn't reported `loaded`, this is how long we wait before
  * falling back to the dedicated in-app window. */
 const EMBED_READY_TIMEOUT_MS = 8000
+/** The only origins the checkout iframe may message from — replicated from
+ * the official Polar embed lib (dist/embed.js): prod + sandbox, exact match. */
+const POLAR_ORIGINS = ['https://polar.sh', 'https://sandbox.polar.sh']
+/** The embed lib's own permissions policy for its iframe, verbatim. */
+const POLAR_EMBED_ALLOW = `payment 'self' ${POLAR_ORIGINS.join(' ')}; publickey-credentials-get 'self' ${POLAR_ORIGINS.join(' ')};`
 
 let subscriptions = $state<Standing[]>([])
 let orders = $state<Order[]>([])
@@ -78,10 +84,14 @@ let invoiceFailure = $state<{ orderId: string; message: string } | null>(null)
 let confirming = $state<`cancel:${string}` | null>(null)
 /** Which order row is expanded into its in-app rendered detail. */
 let openOrder = $state<string | null>(null)
-/** The inline checkout, when one is running (the embed overlays the pane). */
-let checkout = $state<{ tier: string } | null>(null)
-/** The live embed instance — set once Polar reports `loaded`. */
-let embed: PolarEmbedCheckout | null = null
+/** The inline checkout, when one is running: `url` is the embed-flavored
+ * checkout URL our iframe renders, `fallbackUrl` the plain one for the
+ * dedicated-window fallback. Fixtures leave `url` empty. */
+let checkout = $state<{ tier: string; url: string; fallbackUrl: string } | null>(null)
+/** Set once the iframe posts `loaded` — disarms the window fallback. */
+let embedLoaded = $state(false)
+/** Our own inline iframe — the only window we accept messages from. */
+let checkoutFrame = $state<HTMLIFrameElement | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | undefined
 let embedTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -149,7 +159,8 @@ async function refresh() {
 		const fixture = fixtures(fixtureScenario)
 		subscriptions = fixture.subscriptions
 		orders = fixture.orders
-		if (fixtureScenario === 'checkout' && !checkout) checkout = { tier: 'avenme' }
+		if (fixtureScenario === 'checkout' && !checkout)
+			checkout = { tier: 'avenme', url: '', fallbackUrl: '' }
 		return
 	}
 	// Defensive against foreign shapes (an older server, an error body): a
@@ -218,19 +229,32 @@ function standingOf(subs: Standing[], tier: string): Standing | null {
 	return subs.find((s) => s.tier === tier) ?? null
 }
 
-/** Start a checkout INLINE: Polar's embedded checkout overlays the pane and
- * reports back through its own message channel. The url came from the id
- * service; the pane never builds one. */
+/** The embed flavor of a checkout URL — the exact params the official lib
+ * appends (embed, embed_origin, theme). Theme is HARD-CODED light: a brand
+ * decision, the checkout card is light in every app theme. */
+function embedUrlOf(checkoutUrl: string): string {
+	const url = new URL(checkoutUrl)
+	url.searchParams.set('embed', 'true')
+	url.searchParams.set('embed_origin', window.location.origin)
+	url.searchParams.set('theme', 'light')
+	return url.toString()
+}
+
+/** Start a checkout INLINE: our own iframe inside the checkout card speaks
+ * the embed's postMessage protocol. The url came from the id service; the
+ * pane only adds the embed params. */
 async function subscribe(tier: string) {
 	await act(tier, `subscribe:${tier}`, async () => {
 		const result = await invoke<{ checkoutUrl: string }>('billing_subscribe', {
 			tier,
 			// Our own origin, so Polar accepts this page as the embedding frame.
-			embedOrigin: window.location.origin
+			embedOrigin: window.location.origin,
+			// The checkout speaks the member's language (the app is German).
+			locale: 'de'
 		})
-		checkout = { tier }
+		embedLoaded = false
+		checkout = { tier, url: embedUrlOf(result.checkoutUrl), fallbackUrl: result.checkoutUrl }
 		armEmbedFallback(result.checkoutUrl)
-		void openEmbed(result.checkoutUrl)
 		watch(
 			tier,
 			(subs) => {
@@ -242,42 +266,45 @@ async function subscribe(tier: string) {
 	})
 }
 
-async function openEmbed(url: string) {
-	try {
-		const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-		// Resolves only once Polar reports `loaded` — until then the armed
-		// fallback below owns the timeout.
-		const instance = await PolarEmbedCheckout.create(url, { theme })
-		embed = instance
-		if (embedTimer) clearTimeout(embedTimer)
-		instance.addEventListener('confirmed', () => {
-			if (checkout)
-				pending = { tier: checkout.tier, note: 'Zahlung bestätigt — dein Plan erscheint gleich.' }
-		})
-		instance.addEventListener('success', (event) => {
-			// Never let the embed redirect the app; the poll is the truth.
-			event.preventDefault()
-			if (checkout)
-				pending = { tier: checkout.tier, note: 'Zahlung bestätigt — dein Plan erscheint gleich.' }
-		})
-		instance.addEventListener('close', () => {
-			embed = null
-			checkout = null
-		})
-	} catch {
-		// The embed could not mount at all — the armed fallback takes over.
+/** The embed's message channel, replicated: only Polar's exact origins,
+ * only from OUR iframe's window, only POLAR_CHECKOUT envelopes. */
+function onCheckoutMessage(event: MessageEvent) {
+	if (!checkout) return
+	if (!POLAR_ORIGINS.includes(event.origin)) return
+	if (!checkoutFrame || event.source !== checkoutFrame.contentWindow) return
+	const message = event.data as { type?: string; event?: string } | null
+	if (message?.type !== 'POLAR_CHECKOUT') return
+	switch (message.event) {
+		case 'loaded':
+			embedLoaded = true
+			if (embedTimer) clearTimeout(embedTimer)
+			break
+		case 'confirmed':
+		case 'success':
+			// Never follow the embed's redirect; the webhook poll is the truth.
+			pending = { tier: checkout.tier, note: 'Zahlung bestätigt — dein Plan erscheint gleich.' }
+			break
+		case 'close':
+			closeCheckout()
+			break
 	}
 }
+
+$effect(() => {
+	if (!checkout) return
+	window.addEventListener('message', onCheckoutMessage)
+	return () => window.removeEventListener('message', onCheckoutMessage)
+})
 
 function armEmbedFallback(url: string) {
 	if (embedTimer) clearTimeout(embedTimer)
 	embedTimer = setTimeout(async () => {
-		// No `loaded` from the embed: the provider refused the frame (or the
+		// No `loaded` from the iframe: the provider refused the frame (or the
 		// network is slow). Same checkout, dedicated avenOS window — never
 		// the system browser. Polling keeps running either way.
-		if (checkout && !embed && isTauri()) {
+		if (checkout && !embedLoaded && isTauri()) {
 			const tier = checkout.tier
-			sweepEmbedDom()
+			checkout = null
 			try {
 				await invoke('billing_checkout_window', { url })
 				pending = {
@@ -291,19 +318,9 @@ function armEmbedFallback(url: string) {
 	}, EMBED_READY_TIMEOUT_MS)
 }
 
-/** The embed injects its iframe and spinner before it ever loads; if we bail
- * out earlier than `loaded`, that DOM is still ours to sweep up. */
-function sweepEmbedDom() {
-	for (const frame of document.querySelectorAll('iframe[src*="embed=true"]')) frame.remove()
-	document.querySelector('.polar-loader-spinner')?.parentElement?.remove()
-	document.body.classList.remove('polar-no-scroll')
-}
-
 function closeCheckout() {
 	if (embedTimer) clearTimeout(embedTimer)
-	embed?.close()
-	embed = null
-	sweepEmbedDom()
+	embedLoaded = false
 	checkout = null
 }
 
@@ -420,9 +437,6 @@ onMount(async () => {
 onDestroy(() => {
 	if (pollTimer) clearInterval(pollTimer)
 	if (embedTimer) clearTimeout(embedTimer)
-	embed?.close()
-	embed = null
-	sweepEmbedDom()
 })
 </script>
 
@@ -456,7 +470,7 @@ onDestroy(() => {
 			{#each p.features.slice(0, 5) as feature, index (index)}
 				<li class="flex gap-2">
 					<span class="opacity-50">·</span>
-					<span>{typeof feature === 'string' ? feature : feature.label}</span>
+					<span>{feature.title}</span>
 				</li>
 			{/each}
 		</ul>
@@ -547,8 +561,9 @@ onDestroy(() => {
 		</p>
 	{:else}
 		{#if checkout}
-			<!-- Inline checkout: Polar's embed overlays the pane; this card is
-			     what remains visible behind it and after a fallback. -->
+			<!-- Inline checkout: OUR iframe, right here in the card — no
+			     fullscreen overlay, hard-coded light, Polar's embed protocol
+			     spoken directly. -->
 			<div
 				class="flex flex-col gap-2 rounded-xl border border-foreground/5 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			>
@@ -564,6 +579,22 @@ onDestroy(() => {
 						Abbrechen
 					</button>
 				</div>
+				{#if checkout.url}
+					<iframe
+						bind:this={checkoutFrame}
+						src={checkout.url}
+						title="Checkout"
+						allow={POLAR_EMBED_ALLOW}
+						class="min-h-[640px] w-full rounded-xl border-0 bg-white"
+					></iframe>
+				{:else}
+					<!-- Browser fixture: the card without a live provider frame. -->
+					<div
+						class="flex min-h-[640px] w-full items-center justify-center rounded-xl bg-white/70 text-xs opacity-40"
+					>
+						Checkout‑Vorschau
+					</div>
+				{/if}
 				<p class="text-xs opacity-60">
 					Sobald die Zahlung bestätigt ist, erscheint dein Plan hier.
 				</p>
