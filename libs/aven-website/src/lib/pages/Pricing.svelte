@@ -10,7 +10,15 @@ import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SiteFooter from '$lib/components/SiteFooter.svelte'
 import { type Lang, localeHref, pick } from '$lib/i18n'
-import { ctaLabel, localizedPlan, money, perLabel, priceSuffix, vatNote } from '$lib/i18n/plans'
+import {
+	ctaLabel,
+	localizedPlan,
+	money,
+	perLabel,
+	priceSuffix,
+	shareNote,
+	vatNote
+} from '$lib/i18n/plans'
 import { pricing } from '$lib/i18n/pricing'
 import { idFunnelHref } from '$lib/id-service'
 import { betaPrice, ctaHref, euro, PLANS, type Plan, type PlanId, plan } from '$lib/pricing/plans'
@@ -114,7 +122,7 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 					</span>
 					<span class="block text-[10px] leading-snug text-foreground/45">{t.ofRevenue}</span>
 					<span class="mt-0.5 block text-[10px] leading-snug text-foreground/40">
-						{t.inclFees}
+						{shareNote(p, lang) ?? t.inclFees}
 					</span>
 				</div>
 			{/if}
@@ -315,40 +323,39 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 
 						{@render pitchLine(p)}
 
-						{@render runtimeCard(p)}
-
 						{@render pricePanel(p)}
 
-						<ul
-							class="mt-4 flex-1 space-y-2 border-t border-border/50 pt-4 text-left text-[13px] leading-snug text-foreground/75"
-						>
-							{@render sovereigntyBullet()}
-							{#each plain as feature (typeof feature === 'string' ? feature : feature.label)}
-								<li class="flex gap-2">
-									<span
-										aria-hidden="true"
-										class="mt-1.5 size-1.5 shrink-0 rounded-full {p.highlight
+						<div class="mt-4 flex-1 border-t border-border/50">
+							{@render runtimeCard(p)}
+							<ul class="mt-4 space-y-2 text-left text-[13px] leading-snug text-foreground/75">
+								{@render sovereigntyBullet()}
+								{#each plain as feature (typeof feature === 'string' ? feature : feature.label)}
+									<li class="flex gap-2">
+										<span
+											aria-hidden="true"
+											class="mt-1.5 size-1.5 shrink-0 rounded-full {p.highlight
 											? 'bg-accent'
 											: 'bg-foreground/25'}"
-									></span>
-									{#if typeof feature === 'string'}
-										<span>{feature}</span>
-									{:else}
-										<span>
-											<a
-												href={feature.href}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
-											>
-												{feature.label}
-												→
-											</a>
-										</span>
-									{/if}
-								</li>
-							{/each}
-						</ul>
+										></span>
+										{#if typeof feature === 'string'}
+											<span>{feature}</span>
+										{:else}
+											<span>
+												<a
+													href={feature.href}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+												>
+													{feature.label}
+													→
+												</a>
+											</span>
+										{/if}
+									</li>
+								{/each}
+							</ul>
+						</div>
 
 						<!-- Skills are their own category, not more bullets: a feature is
 						     something the tier does, a skill is a thing you can go read. -->
@@ -403,52 +410,51 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 
 					{@render pitchLine(coop)}
 
-					{@render runtimeCard(coop)}
-
 					{@render pricePanel(coop)}
 
-					<div
-						class="mt-4 grid gap-8 border-t border-border/50 pt-4 lg:grid-cols-[1fr_15rem] lg:gap-8"
-					>
-						<ul class="space-y-2 text-left text-[13px] leading-snug text-foreground/75">
-							{@render sovereigntyBullet()}
-							{#each coop.features as feature (typeof feature === 'string' ? feature : feature.label)}
-								<li class="flex gap-2">
-									<span
-										aria-hidden="true"
-										class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
-									></span>
-									{#if typeof feature === 'string'}
-										<span>{feature}</span>
-									{:else if 'href' in feature}
-										<span>
-											<a
-												href={feature.href}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
-											>
-												{feature.label}
-												→
-											</a>
-										</span>
-									{:else}
-										<span>
-											<a
-												href={skillDetailHref(feature.skill, lang)}
-												class="font-medium underline underline-offset-4"
-											>
-												{skillLabel(feature.skill)}
-											</a>
-											<span class="text-foreground/55">· {feature.label}</span>
-										</span>
-									{/if}
-								</li>
-							{/each}
-						</ul>
+					<div class="mt-4 grid gap-8 border-t border-border/50 lg:grid-cols-[1fr_15rem] lg:gap-8">
+						<div>
+							{@render runtimeCard(coop)}
+							<ul class="mt-4 space-y-2 text-left text-[13px] leading-snug text-foreground/75">
+								{@render sovereigntyBullet()}
+								{#each coop.features as feature (typeof feature === 'string' ? feature : feature.label)}
+									<li class="flex gap-2">
+										<span
+											aria-hidden="true"
+											class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
+										></span>
+										{#if typeof feature === 'string'}
+											<span>{feature}</span>
+										{:else if 'href' in feature}
+											<span>
+												<a
+													href={feature.href}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+												>
+													{feature.label}
+													→
+												</a>
+											</span>
+										{:else}
+											<span>
+												<a
+													href={skillDetailHref(feature.skill, lang)}
+													class="font-medium underline underline-offset-4"
+												>
+													{skillLabel(feature.skill)}
+												</a>
+												<span class="text-foreground/55">· {feature.label}</span>
+											</span>
+										{/if}
+									</li>
+								{/each}
+							</ul>
+						</div>
 
 						{#if coopSkillCount > 0}
-							<div class="text-left lg:border-l lg:border-border/50 lg:pl-8">
+							<div class="pt-4 text-left lg:border-l lg:border-border/50 lg:pl-8">
 								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
 									{t.skills}
 								</p>

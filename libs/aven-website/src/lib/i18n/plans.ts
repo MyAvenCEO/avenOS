@@ -74,6 +74,7 @@ const EN: Record<PlanId, { role: string; pitch: string; features: string[] }> = 
 		features: [
 			'Hands-on support while YOU build your Skillbundle — your product, your name, our infrastructure',
 			'You sell it yourself in the aven Marketplace — your bundle, your price, your customers',
+			'Carefree billing: we sell as the official merchant of record — app-store fees & co. are inside the 30 %, and you receive your payout weekly',
 			'Sovereignty you hand on: your customers keep their own keys — not you, not us',
 			'Guidance through German company formation: GmbH or UG'
 		]
@@ -111,6 +112,12 @@ export function priceSuffix(p: Plan, lang: Lang): string {
 export function priceLabel(p: Plan, lang: Lang): string {
 	if (lang === 'de') return priceLabelDe(p)
 	return p.billing === 'once' ? `${euro(p.eurPrice)} € one-time` : `${euro(p.eurPrice)} €/month`
+}
+
+/** The share note in the reader's language — the DE string lives in plans-data. */
+export function shareNote(p: Plan, lang: Lang): string | null {
+	if (!p.revenueShareNote) return null
+	return lang === 'de' ? p.revenueShareNote : 'incl. app-store fees & co.'
 }
 
 /** A euro amount in the reader's number style — "188,50" vs "188.50". */
