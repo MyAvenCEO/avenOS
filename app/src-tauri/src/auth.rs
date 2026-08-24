@@ -1,6 +1,10 @@
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{
+	engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+	Engine as _,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::io::Read as _;
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -602,7 +606,7 @@ pub async fn billing_cancel(
 	.map_err(|error| format!("Could not cancel: {error}"))?
 }
 
-/// Undo a scheduled cancel / resume a paused subscription of ONE tier.
+/// Undo a scheduled cancel of ONE tier — the plan simply keeps running.
 #[tauri::command]
 pub async fn billing_resume(
 	tier: String,
@@ -660,25 +664,6 @@ pub async fn billing_orders(
 	.map_err(|error| format!("Could not load your orders: {error}"))?
 }
 
-/// Pause ONE tier's subscription; resume lifts it again.
-#[tauri::command]
-pub async fn billing_pause(
-	tier: String,
-	state: tauri::State<'_, AuthState>,
-) -> Result<serde_json::Value, String> {
-	let token = session_token(&state)?;
-	tauri::async_runtime::spawn_blocking(move || {
-		identity_api_call(
-			token,
-			"POST",
-			"/api/billing/pause",
-			Some(serde_json::json!({ "tier": tier })),
-		)
-	})
-	.await
-	.map_err(|error| format!("Could not pause: {error}"))?
-}
-
 /// Where the member's latest checkout stands — polled while the inline
 /// embed runs; the id stays server-side.
 #[tauri::command]
@@ -693,53 +678,121 @@ pub async fn billing_checkout(
 	.map_err(|error| format!("Could not read the checkout status: {error}"))?
 }
 
-/// The official invoice PDF URL for ONE of the member's own orders — the id
+/// A downloaded invoice may not exceed this — an official PDF is small.
+const MAX_INVOICE_BYTES: u64 = 20 * 1024 * 1024;
+
+/// The local artifact shelf — for now the downloaded invoice PDFs; later
+/// this folds into the artifact store proper.
+fn artifacts_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+	use tauri::Manager as _;
+	let dir = app
+		.path()
+		.app_data_dir()
+		.map_err(|error| format!("No app data dir: {error}"))?
+		.join("artifacts");
+	std::fs::create_dir_all(&dir).map_err(|error| format!("Could not create {dir:?}: {error}"))?;
+	Ok(dir)
+}
+
+/// The official invoice PDF for ONE of the member's own orders: the id
 /// service resolves the order against the session and asks Polar (generating
-/// the document on first ask, which can take a few seconds).
+/// the document on first ask — that can take a while), then the PDF is
+/// downloaded into local app storage. No window, no system browser — the
+/// pane previews the stored file inline.
 #[tauri::command]
-pub async fn billing_invoice_url(
+pub async fn billing_invoice_download(
+	app: tauri::AppHandle,
 	order_id: String,
 	state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {
 	let token = session_token(&state)?;
+	let dir = artifacts_dir(&app)?;
 	tauri::async_runtime::spawn_blocking(move || {
-		identity_api_call(
+		let answer = identity_api_call(
 			token,
 			"POST",
 			"/api/billing/invoices",
 			Some(serde_json::json!({ "orderId": order_id })),
-		)
+		)?;
+		let url = answer
+			.get("url")
+			.and_then(|value| value.as_str())
+			.ok_or_else(|| "The invoice response carried no URL.".to_string())?;
+		if !url.starts_with("https://") {
+			return Err("Only a secure invoice link may be downloaded.".to_string());
+		}
+		let response = agent()
+			.get(url)
+			.call()
+			.map_err(|error| format!("Could not download the invoice: {error}"))?;
+		let mut bytes = Vec::new();
+		response
+			.into_reader()
+			.take(MAX_INVOICE_BYTES + 1)
+			.read_to_end(&mut bytes)
+			.map_err(|error| format!("Could not read the invoice: {error}"))?;
+		if bytes.len() as u64 > MAX_INVOICE_BYTES {
+			return Err("The invoice is unreasonably large.".to_string());
+		}
+		// The order id names the file; only its filesystem-safe part does.
+		let safe: String = order_id
+			.chars()
+			.filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+			.collect();
+		let file_name = format!("rechnung-{safe}.pdf");
+		std::fs::write(dir.join(&file_name), &bytes)
+			.map_err(|error| format!("Could not store the invoice: {error}"))?;
+		Ok(serde_json::json!({ "fileName": file_name }))
 	})
 	.await
 	.map_err(|error| format!("Could not load the invoice: {error}"))?
 }
 
-/// Open one invoice PDF in a dedicated avenOS window — never the system
-/// browser. The URL comes straight from our own API's invoice response; the
-/// PDF may be hosted on Polar's storage domain, so only the scheme is pinned.
+/// Every artifact on the local shelf — name, size, modified. Flat: the
+/// shelf holds files, never subdirectories.
 #[tauri::command]
-pub async fn billing_invoice_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
-	use tauri::Manager as _;
-	let parsed = url
-		.parse::<tauri::Url>()
-		.map_err(|error| format!("The invoice link is invalid: {error}"))?;
-	if parsed.scheme() != "https" {
-		return Err("Only a secure invoice link may open here.".to_string());
+pub async fn artifacts_list(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+	let dir = artifacts_dir(&app)?;
+	let mut list = Vec::new();
+	let entries =
+		std::fs::read_dir(&dir).map_err(|error| format!("Could not read {dir:?}: {error}"))?;
+	for entry in entries.flatten() {
+		let Ok(meta) = entry.metadata() else { continue };
+		if !meta.is_file() {
+			continue;
+		}
+		let Ok(file_name) = entry.file_name().into_string() else {
+			continue;
+		};
+		let modified_ms = meta
+			.modified()
+			.ok()
+			.and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+			.map(|since| since.as_millis() as u64)
+			.unwrap_or(0);
+		list.push(serde_json::json!({
+			"fileName": file_name,
+			"sizeBytes": meta.len(),
+			"modifiedMs": modified_ms,
+		}));
 	}
-	if let Some(existing) = app.get_webview_window("billing-invoice") {
-		// A window from an earlier invoice: steer it to the new PDF.
-		existing
-			.navigate(parsed)
-			.map_err(|error| format!("Could not open the invoice window: {error}"))?;
-		let _ = existing.set_focus();
-		return Ok(());
+	Ok(list)
+}
+
+/// One stored artifact's bytes, base64 — the webview builds a Blob for the
+/// inline preview from this; the file itself never leaves app storage.
+#[tauri::command]
+pub async fn artifact_read_base64(
+	app: tauri::AppHandle,
+	file_name: String,
+) -> Result<String, String> {
+	if file_name.contains('/') || file_name.contains('\\') || file_name.contains("..") {
+		return Err("Invalid artifact name.".to_string());
 	}
-	tauri::WebviewWindowBuilder::new(&app, "billing-invoice", tauri::WebviewUrl::External(parsed))
-		.title("Rechnung")
-		.inner_size(960.0, 760.0)
-		.build()
-		.map_err(|error| format!("Could not open the invoice window: {error}"))?;
-	Ok(())
+	let path = artifacts_dir(&app)?.join(&file_name);
+	let bytes =
+		std::fs::read(&path).map_err(|error| format!("Could not read the artifact: {error}"))?;
+	Ok(STANDARD.encode(bytes))
 }
 
 /// The names reserved for whoever is signed in. Settings shows them so the

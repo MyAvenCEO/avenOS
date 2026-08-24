@@ -734,6 +734,20 @@ jobs:
           # shellcheck disable=SC2029
           ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy /opt/aven-api/previous && if sudo test -f /opt/aven-api/.env; then sudo install -m 600 /opt/aven-api/.env /opt/aven-api/previous/.env && sudo install -m 644 /opt/aven-api/docker-compose.yml /opt/aven-api/docker-compose.deploy.yml /opt/aven-api/docker-compose.artifact-store.deploy.yml /opt/aven-api/previous/; fi && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' '$upload/deploy/rollback-previous.sh' /opt/aven-api/deploy/ && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --wait --wait-timeout 120 db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres -c 'GRANT pg_signal_backend TO aven_provisioner' && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store-provisioner artifact-processor-provisioner intent-service-provisioner && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps environment-worker && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store app artifact-processor intent-service caddy && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps email-worker && rm -rf '$upload'"
 
+      - name: Dump container logs on failure
+        if: failure()
+        continue-on-error: true
+        env:
+          DEPLOY_HOST: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-host }}
+          DEPLOY_USER: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-user }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          # The crash that made a service unhealthy is only visible inside the
+          # containers — surface it in CI so nobody needs SSH to diagnose.
+          ssh -i "$RUNNER_TEMP/ssh/key" -o BatchMode=yes -o ConnectTimeout=5 -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml ps && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml logs --no-color --tail=120 migrator app"
+
       - name: Remove temporary host upload
         if: always()
         continue-on-error: true

@@ -10,6 +10,7 @@ import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import '$lib/actors/windows'
+import ArtifactsPage from '$lib/artifacts/ArtifactsPage.svelte'
 import { type ArtifactProcessingLookup, isTerminalProcessing } from '$lib/artifacts/processing'
 import { composer } from '$lib/intents/composer.svelte'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
@@ -613,6 +614,12 @@ function onGlobalKeydown(event: KeyboardEvent) {
 		     workflows; the canvas draws them n8n-style, every wire derived. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
 			<SkillsPlatform />
+		</div>
+	{:else if shell.tab === 'artifacts'}
+		<!-- The artifacts shelf: locally stored files (invoices for now),
+		     each opening the inline preview. -->
+		<div class="flex min-h-0 w-full flex-1 flex-col">
+			<ArtifactsPage />
 		</div>
 	{/if}
 

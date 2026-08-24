@@ -1,24 +1,28 @@
 <script lang="ts">
-import { euro, PLANS, type Plan } from '@avenos/aven-brand/pricing'
+import { euro, PLANS, type Plan, priceSuffix } from '@avenos/aven-brand/pricing'
 import { PolarEmbedCheckout } from '@polar-sh/checkout/embed'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { onDestroy, onMount } from 'svelte'
 import { page } from '$app/state'
+import ArtifactPreview from '$lib/artifacts/ArtifactPreview.svelte'
 
 /**
  * Abrechnung — the member's whole Polar relationship, entirely in our brand.
  *
  * Nothing here leaves the pane: the checkout runs INLINE (Polar's embedded
  * checkout overlays this view), orders are the provider's real orders, and
- * the subscription lifecycle — book, pause, resume, cancel — is all native.
- * Polar is the merchant of record; each paid order's official invoice PDF
- * is fetched per order and opened in a dedicated avenOS window.
+ * the subscription lifecycle — book, cancel, resume a scheduled cancel — is
+ * all native. Polar is the merchant of record; each paid order's official
+ * invoice PDF is downloaded into local app storage and previewed INLINE —
+ * never a separate window.
  *
  * Everything routes through the id service with the session token (the
  * Polar key never reaches this binary), and every call acts on the
  * session's OWN records — the pane never handles a customer, subscription
  * or checkout id. The webhook is the only writer of state: after an action
- * the pane shows a pending note and polls until the event lands.
+ * the pane shows a pending note IN THE CARD it belongs to and polls until
+ * the event lands; action errors land in the same card. The page-level
+ * banner is only for load errors that belong to no card.
  *
  * avenME and avenFOUNDER are INDEPENDENT products — one per human, one per
  * company. Both can stand at once; each is booked and canceled on its own,
@@ -60,10 +64,18 @@ let subscriptions = $state<Standing[]>([])
 let orders = $state<Order[]>([])
 let loading = $state(true)
 let busy = $state('')
-let pending = $state('')
+/** The webhook watch, reported INSIDE the tier card it belongs to. */
+let pending = $state<{ tier: string; note: string } | null>(null)
+/** Page-level failures only — a load that belongs to no card. */
 let failure = $state<string | null>(null)
+/** An action's failure, rendered inside the tier card that asked. */
+let cardFailure = $state<{ tier: string; message: string } | null>(null)
+/** An invoice failure, rendered inside the order row that asked. */
+let invoiceFailure = $state<{ orderId: string; message: string } | null>(null)
+/** The inline invoice preview — a blob iframe overlay, never a window. */
+let preview = $state<{ fileName: string; title: string } | null>(null)
 /** Which action is asking "wirklich?" — one confirm at a time. */
-let confirming = $state<`cancel:${string}` | `pause:${string}` | null>(null)
+let confirming = $state<`cancel:${string}` | null>(null)
 /** Which order row is expanded into its in-app rendered detail. */
 let openOrder = $state<string | null>(null)
 /** The inline checkout, when one is running (the embed overlays the pane). */
@@ -152,9 +164,10 @@ async function refresh() {
 
 /** After an action: watch for the webhook to land, then stop announcing.
  * While a checkout runs, the checkout status is polled alongside — the
- * webhook stays the only state writer, the poll only reads. */
-function watch(until: (subs: Standing[]) => boolean, note: string) {
-	pending = note
+ * webhook stays the only state writer, the poll only reads. The note (and
+ * any failure) reports into the tier's own card. */
+function watch(tier: string, until: (subs: Standing[]) => boolean, note: string) {
+	pending = { tier, note }
 	if (pollTimer) clearInterval(pollTimer)
 	pollTimer = setInterval(async () => {
 		try {
@@ -163,18 +176,21 @@ function watch(until: (subs: Standing[]) => boolean, note: string) {
 				const latest = await invoke<{ checkout: { status: string } | null }>('billing_checkout')
 				const status = latest.checkout?.status
 				if (status === 'failed' || status === 'expired') {
-					failure =
-						status === 'failed'
-							? 'Die Zahlung ist fehlgeschlagen — bitte versuche es noch einmal.'
-							: 'Der Checkout ist abgelaufen — bitte starte ihn neu.'
-					pending = ''
+					cardFailure = {
+						tier,
+						message:
+							status === 'failed'
+								? 'Die Zahlung ist fehlgeschlagen — bitte versuche es noch einmal.'
+								: 'Der Checkout ist abgelaufen — bitte starte ihn neu.'
+					}
+					pending = null
 					closeCheckout()
 					if (pollTimer) clearInterval(pollTimer)
 					return
 				}
 			}
 			if (until(subscriptions)) {
-				pending = ''
+				pending = null
 				closeCheckout()
 				if (pollTimer) clearInterval(pollTimer)
 			}
@@ -184,15 +200,15 @@ function watch(until: (subs: Standing[]) => boolean, note: string) {
 	}, 5000)
 }
 
-async function act(label: string, run: () => Promise<void>) {
+async function act(tier: string, label: string, run: () => Promise<void>) {
 	busy = label
-	failure = null
+	cardFailure = null
 	confirming = null
 	try {
 		await run()
 	} catch (cause) {
-		failure = cause instanceof Error ? cause.message : String(cause)
-		pending = ''
+		cardFailure = { tier, message: cause instanceof Error ? cause.message : String(cause) }
+		pending = null
 	} finally {
 		busy = ''
 	}
@@ -206,7 +222,7 @@ function standingOf(subs: Standing[], tier: string): Standing | null {
  * reports back through its own message channel. The url came from the id
  * service; the pane never builds one. */
 async function subscribe(tier: string) {
-	await act(`subscribe:${tier}`, async () => {
+	await act(tier, `subscribe:${tier}`, async () => {
 		const result = await invoke<{ checkoutUrl: string }>('billing_subscribe', {
 			tier,
 			// Our own origin, so Polar accepts this page as the embedding frame.
@@ -215,10 +231,14 @@ async function subscribe(tier: string) {
 		checkout = { tier }
 		armEmbedFallback(result.checkoutUrl)
 		void openEmbed(result.checkoutUrl)
-		watch((subs) => {
-			const s = standingOf(subs, tier)
-			return s !== null && !ENDED.includes(s.status)
-		}, 'Sobald die Zahlung bestätigt ist, erscheint dein Plan hier.')
+		watch(
+			tier,
+			(subs) => {
+				const s = standingOf(subs, tier)
+				return s !== null && !ENDED.includes(s.status)
+			},
+			'Sobald die Zahlung bestätigt ist, erscheint dein Plan hier.'
+		)
 	})
 }
 
@@ -231,12 +251,12 @@ async function openEmbed(url: string) {
 		embed = instance
 		if (embedTimer) clearTimeout(embedTimer)
 		instance.addEventListener('confirmed', () => {
-			pending = 'Zahlung bestätigt — dein Plan erscheint gleich.'
+			if (checkout) pending = { tier: checkout.tier, note: 'Zahlung bestätigt — dein Plan erscheint gleich.' }
 		})
 		instance.addEventListener('success', (event) => {
 			// Never let the embed redirect the app; the poll is the truth.
 			event.preventDefault()
-			pending = 'Zahlung bestätigt — dein Plan erscheint gleich.'
+			if (checkout) pending = { tier: checkout.tier, note: 'Zahlung bestätigt — dein Plan erscheint gleich.' }
 		})
 		instance.addEventListener('close', () => {
 			embed = null
@@ -254,13 +274,16 @@ function armEmbedFallback(url: string) {
 		// network is slow). Same checkout, dedicated avenOS window — never
 		// the system browser. Polling keeps running either way.
 		if (checkout && !embed && isTauri()) {
+			const tier = checkout.tier
 			sweepEmbedDom()
 			try {
 				await invoke('billing_checkout_window', { url })
-				pending =
-					'Der Checkout läuft in einem eigenen avenOS‑Fenster weiter — dein Plan erscheint hier, sobald die Zahlung bestätigt ist.'
+				pending = {
+					tier,
+					note: 'Der Checkout läuft in einem eigenen avenOS‑Fenster weiter — dein Plan erscheint hier, sobald die Zahlung bestätigt ist.'
+				}
 			} catch (cause) {
-				failure = cause instanceof Error ? cause.message : String(cause)
+				cardFailure = { tier, message: cause instanceof Error ? cause.message : String(cause) }
 			}
 		}
 	}, EMBED_READY_TIMEOUT_MS)
@@ -283,45 +306,73 @@ function closeCheckout() {
 }
 
 async function cancel(tier: string) {
-	await act(`cancel:${tier}`, async () => {
+	await act(tier, `cancel:${tier}`, async () => {
 		await invoke('billing_cancel', { tier, immediate: false })
-		watch((subs) => {
-			const s = standingOf(subs, tier)
-			return s?.cancelAtPeriodEnd === true || ENDED.includes(s?.status ?? '')
-		}, 'Kündigung angestoßen — gleich steht hier dein Enddatum.')
-	})
-}
-
-async function pause(tier: string) {
-	await act(`pause:${tier}`, async () => {
-		await invoke('billing_pause', { tier })
 		watch(
-			(subs) => standingOf(subs, tier)?.status === 'paused',
-			'Pause angestoßen — dein Plan ruht gleich.'
+			tier,
+			(subs) => {
+				const s = standingOf(subs, tier)
+				return s?.cancelAtPeriodEnd === true || ENDED.includes(s?.status ?? '')
+			},
+			'Kündigung angestoßen — gleich steht hier dein Enddatum.'
 		)
 	})
 }
 
-/** Fortsetzen — lifts a pause, or reverts a scheduled cancellation. */
+/** Fortsetzen — reverts a scheduled cancellation; the plan keeps running. */
 async function resume(tier: string) {
-	await act(`resume:${tier}`, async () => {
+	await act(tier, `resume:${tier}`, async () => {
 		await invoke('billing_resume', { tier })
-		watch((subs) => {
-			const s = standingOf(subs, tier)
-			return s?.status === 'active' && s.cancelAtPeriodEnd === false
-		}, 'Fortsetzung angestoßen — dein Plan läuft gleich wieder.')
+		watch(
+			tier,
+			(subs) => {
+				const s = standingOf(subs, tier)
+				return s?.status === 'active' && s.cancelAtPeriodEnd === false
+			},
+			'Fortsetzung angestoßen — dein Plan läuft gleich wieder.'
+		)
 	})
 }
 
+/** Polar may still be rendering the PDF on first ask — retry this often,
+ * this far apart, while the row button keeps its busy state. */
+const INVOICE_RETRIES = 5
+const INVOICE_RETRY_PAUSE_MS = 3000
+
 /** The official invoice PDF for one paid order: the id service asks Polar
- * (generating the document on first ask — that can take a few seconds),
- * then the PDF opens in a dedicated avenOS window. */
-async function downloadInvoice(orderId: string) {
+ * (generating the document on first ask — that can take up to ~30s), the
+ * PDF lands in local app storage, and the preview opens INLINE. */
+async function downloadInvoice(order: Order) {
 	if (!isTauri()) return
-	await act(`invoice:${orderId}`, async () => {
-		const result = await invoke<{ url: string }>('billing_invoice_url', { orderId })
-		await invoke('billing_invoice_window', { url: result.url })
-	})
+	busy = `invoice:${order.id}`
+	invoiceFailure = null
+	try {
+		let attempt = 0
+		let result: { fileName: string }
+		for (;;) {
+			try {
+				result = await invoke<{ fileName: string }>('billing_invoice_download', {
+					orderId: order.id
+				})
+				break
+			} catch (cause) {
+				const message = cause instanceof Error ? cause.message : String(cause)
+				const stillGenerating =
+					message.includes('still being generated') || message.includes('BILLING_INVOICE_PENDING')
+				if (!stillGenerating || attempt >= INVOICE_RETRIES) throw cause
+				attempt += 1
+				await new Promise((resolve) => setTimeout(resolve, INVOICE_RETRY_PAUSE_MS))
+			}
+		}
+		preview = { fileName: result.fileName, title: `Rechnung · ${dateOf(order.createdAt)}` }
+	} catch (cause) {
+		invoiceFailure = {
+			orderId: order.id,
+			message: cause instanceof Error ? cause.message : String(cause)
+		}
+	} finally {
+		busy = ''
+	}
 }
 
 const cents = (value: number) => (value / 100).toLocaleString('de-DE', { minimumFractionDigits: 2 })
@@ -393,7 +444,7 @@ onDestroy(() => {
 		<p class="text-xs opacity-60">{p.role}</p>
 		<p class="text-lg font-semibold">
 			{isLive && s ? cents(s.priceEurCents) : euro(p.eurPrice)}
-			€<span class="pl-1 text-xs font-normal opacity-50">/Monat · zzgl. USt.</span>
+			€<span class="pl-1 text-xs font-normal opacity-50">{priceSuffix(p)}</span>
 		</p>
 		<ul class="flex flex-col gap-1 text-xs opacity-70">
 			{#each p.features.slice(0, 5) as feature, index (index)}
@@ -403,20 +454,17 @@ onDestroy(() => {
 				</li>
 			{/each}
 		</ul>
-		{#if isLive && s}
-			{#if s.status === 'paused'}
-				<p class="text-xs opacity-60">Pausiert — es wird nichts abgebucht, bis du fortsetzt.</p>
-			{:else if s.currentPeriodEnd}
-				<p class="text-xs opacity-60">
-					{s.cancelAtPeriodEnd
-						? `Endet am ${dateOf(s.currentPeriodEnd)} — bis dahin läuft alles weiter.`
-						: `Verlängert sich am ${dateOf(s.currentPeriodEnd)}.`}
-				</p>
-			{/if}
+		{#if isLive && s && s.currentPeriodEnd}
+			<p class="text-xs opacity-60">
+				{s.cancelAtPeriodEnd
+					? `Endet am ${dateOf(s.currentPeriodEnd)} — bis dahin läuft alles weiter.`
+					: `Verlängert sich am ${dateOf(s.currentPeriodEnd)}.`}
+			</p>
 		{/if}
-		<!-- Buchen / Pausieren / Kündigen / Fortsetzen — each product entirely
-		     on its own; both can stand at once. -->
-		<div class="mt-auto pt-2">
+		<!-- Buchen / Kündigen / Fortsetzen — each product entirely on its
+		     own; both can stand at once. Progress and errors live HERE, in
+		     the card the action belongs to. -->
+		<div class="mt-auto flex flex-col gap-2 pt-2">
 			{#if !isLive}
 				<button
 					type="button"
@@ -424,40 +472,17 @@ onDestroy(() => {
 					disabled={busy !== ''}
 					class="w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
 				>
-					{busy === `subscribe:${p.id}` ? 'Einen Moment …' : 'Jetzt buchen'}
+					{busy === `subscribe:${p.id}` ? 'Buchung startet …' : 'Jetzt buchen'}
 				</button>
-			{:else if s && (s.cancelAtPeriodEnd || s.status === 'paused')}
+			{:else if s?.cancelAtPeriodEnd}
 				<button
 					type="button"
 					onclick={() => resume(p.id)}
 					disabled={busy !== ''}
 					class="w-full rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/5 disabled:opacity-40"
 				>
-					{busy === `resume:${p.id}` ? 'Einen Moment …' : 'Fortsetzen'}
+					{busy === `resume:${p.id}` ? 'Wird fortgesetzt …' : 'Fortsetzen'}
 				</button>
-			{:else if confirming === `pause:${p.id}`}
-				<div class="flex flex-col gap-2">
-					<p class="text-xs opacity-70">
-						Dein Plan ruht: keine Abbuchung, kein Zugang — und jederzeit mit einem Klick wieder da.
-					</p>
-					<div class="flex gap-2">
-						<button
-							type="button"
-							onclick={() => pause(p.id)}
-							disabled={busy !== ''}
-							class="flex-1 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-40"
-						>
-							{busy === `pause:${p.id}` ? 'Einen Moment …' : 'Pause bestätigen'}
-						</button>
-						<button
-							type="button"
-							onclick={() => (confirming = null)}
-							class="rounded-full border border-border px-4 py-2 text-sm"
-						>
-							Abbrechen
-						</button>
-					</div>
-				</div>
 			{:else if confirming === `cancel:${p.id}`}
 				<div class="flex flex-col gap-2">
 					<p class="text-xs opacity-70">
@@ -472,7 +497,7 @@ onDestroy(() => {
 							disabled={busy !== ''}
 							class="rounded-full bg-error px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
 						>
-							{busy === `cancel:${p.id}` ? 'Einen Moment …' : 'Kündigung bestätigen'}
+							{busy === `cancel:${p.id}` ? 'Wird gekündigt …' : 'Kündigung bestätigen'}
 						</button>
 						<button
 							type="button"
@@ -484,24 +509,20 @@ onDestroy(() => {
 					</div>
 				</div>
 			{:else}
-				<div class="flex flex-wrap gap-2">
-					<button
-						type="button"
-						onclick={() => (confirming = `pause:${p.id}`)}
-						disabled={busy !== ''}
-						class="rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/5 disabled:opacity-40"
-					>
-						Pausieren
-					</button>
-					<button
-						type="button"
-						onclick={() => (confirming = `cancel:${p.id}`)}
-						disabled={busy !== ''}
-						class="rounded-full border border-border px-4 py-2 text-sm font-medium opacity-70 transition-colors hover:bg-error/5 hover:opacity-100 disabled:opacity-40"
-					>
-						Kündigen
-					</button>
-				</div>
+				<button
+					type="button"
+					onclick={() => (confirming = `cancel:${p.id}`)}
+					disabled={busy !== ''}
+					class="self-start rounded-full border border-border px-4 py-2 text-sm font-medium opacity-70 transition-colors hover:bg-error/5 hover:opacity-100 disabled:opacity-40"
+				>
+					Kündigen
+				</button>
+			{/if}
+			{#if pending?.tier === p.id}
+				<p class="text-xs opacity-60">{pending.note}</p>
+			{/if}
+			{#if cardFailure?.tier === p.id}
+				<p class="text-xs text-error-strong">{cardFailure.message}</p>
 			{/if}
 		</div>
 	</article>
@@ -517,14 +538,6 @@ onDestroy(() => {
 			Deine Abrechnung wird geladen …
 		</p>
 	{:else}
-		{#if pending}
-			<p
-				class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
-			>
-				{pending}
-			</p>
-		{/if}
-
 		{#if checkout}
 			<!-- Inline checkout: Polar's embed overlays the pane; this card is
 			     what remains visible behind it and after a fallback. -->
@@ -619,7 +632,7 @@ onDestroy(() => {
 										<div class="pt-1">
 											<button
 												type="button"
-												onclick={() => downloadInvoice(order.id)}
+												onclick={() => downloadInvoice(order)}
 												disabled={busy !== ''}
 												class="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/5 disabled:opacity-40"
 											>
@@ -628,6 +641,9 @@ onDestroy(() => {
 													: 'Rechnung herunterladen'}
 											</button>
 										</div>
+									{/if}
+									{#if invoiceFailure?.orderId === order.id}
+										<p class="text-xs text-error-strong">{invoiceFailure.message}</p>
 									{/if}
 								</div>
 							{/if}
@@ -644,9 +660,18 @@ onDestroy(() => {
 		</div>
 	{/if}
 
+	<!-- Page-level banner: ONLY for load failures that belong to no card. -->
 	{#if failure}
 		<p class="rounded-xl border border-error/30 bg-error-muted px-4 py-3 text-xs text-error-strong">
 			{failure}
 		</p>
+	{/if}
+
+	{#if preview}
+		<ArtifactPreview
+			fileName={preview.fileName}
+			title={preview.title}
+			onclose={() => (preview = null)}
+		/>
 	{/if}
 </section>
