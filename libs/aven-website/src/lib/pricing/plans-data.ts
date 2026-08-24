@@ -7,14 +7,16 @@
  * your own knowledge base. avenFOUNDER is the professional AI‑CEO for your
  * COMPANY — one per company: it runs the whole business (pre-accounting,
  * finances, website, shop, blog), is the single point every employee,
- * customer and partner talks to, and takes a share of the revenue it helps
- * produce. (Technically that company Aven is "the avenCEO" — avenFOUNDER is
+ * customer and partner talks to. (Technically that company Aven is
+ * "the avenCEO" — avenFOUNDER is
  * the product you buy to get one.) avenME and avenFOUNDER are two different
  * ROLES that live side by side in one shared namespace; neither is an
  * upgrade of the other, and each company needs its own. avenCOOP
- * is not a bigger plan but a different relationship: we come in as the
- * technical co-founder, take company shares alongside the revenue share, and
- * you APPLY rather than book.
+ * is not a bigger plan but a different relationship: YOU build your own
+ * sovereign Aven BUSINESS — your Skillbundle, sold under your name on our
+ * infrastructure — and we sit next to you with hands-on support while you
+ * do. We do not build it for you and we take no equity; the only thing we
+ * take is a share of the revenue it makes. You APPLY rather than book.
  *
  * avenID is a prerequisite, not a part of any plan: every human AND every
  * company has its own name, bought alongside avenME or avenFOUNDER as a
@@ -55,6 +57,12 @@ export interface Plan {
 	/** One line on what this product takes off your desk. */
 	role: string
 	/**
+	 * The transformation, not the feature list: 1–2 warm sentences on what
+	 * this tier changes in the buyer's life. Printed between the role line
+	 * and the hard facts — people buy the transformation, never the product.
+	 */
+	pitch: string
+	/**
 	 * Who a plan is bought FOR. One avenME per human, one avenFOUNDER per company:
 	 * two roles that coexist, never a tier above the other. Printed on the
 	 * cards so nobody reads 42 → 326 as a ladder.
@@ -68,26 +76,20 @@ export interface Plan {
 	eurPrice: number
 	billing: 'once' | 'monthly'
 	/**
-	 * What we keep to run the platform — every payment fee (Stripe, Creem &
-	 * Co.) already inside it. 0 on the tiers that sell you nothing.
+	 * The share of the revenue your Aven produces that we keep — every payment
+	 * fee (Stripe, Creem & Co.) already INSIDE it, not on top. It is the only
+	 * thing we take: no equity, no second line. 0 on the tiers that sell you
+	 * nothing.
 	 */
-	platformFeePct: number
-	/**
-	 * The other half of the share, and the reason it is not called a fee: it
-	 * leaves us again as an INVESTMENT into other founders' avenCOOPs, and the
-	 * shares it buys are yours. This is the compounding engine — your revenue
-	 * buys you a slice of everyone else's.
-	 */
-	reinvestPct: number
-	/** Company shares we take — avenCOOP only. */
-	equitySharePct?: number
+	revenueSharePct: number
 	/** avenCOOP is not bookable: you apply and we decide together. */
 	applyOnly?: boolean
 	/**
-	 * What you earn on every aven subscription you bring in — recurring for as
-	 * long as that subscription runs, not a one-off finder's fee.
+	 * The early-adopter BETA deal: a percentage off `eurPrice` for the first
+	 * N months. `eurPrice` stays the regular price — the discount is a
+	 * limited window on top of it, never a second price to maintain.
 	 */
-	referralPct?: number
+	beta?: { discountPct: number; months: number }
 	/**
 	 * Included agent runtime per day, and what a minute costs past it. Fair
 	 * use is a promise about a NUMBER, so the number is data, not prose in a
@@ -106,30 +108,30 @@ export const PLANS: Plan[] = [
 		id: 'avenid',
 		name: 'avenID',
 		role: 'Dein Name — ein Konto, das jeder ansprechen kann. Pro Mensch und pro Firma.',
+		pitch:
+			'Dein Name ist der erste Schritt in ein Leben, in dem KI für dich arbeitet — nicht für einen Konzern. Es gibt ihn genau einmal. Sichere ihn dir, bevor ihn jemand anderes trägt.',
 		eurPrice: 25,
 		billing: 'once',
-		referralPct: 5,
-		platformFeePct: 0,
-		reinvestPct: 0,
+		revenueSharePct: 0,
 		features: [
 			'Dein avenID‑Name — für 1 Jahr für dich gesichert',
 			'Dein Platz auf der Warteliste',
 			'20 Min Test‑Zugang — sobald du eingeladen bist',
-			'Voraussetzung für avenME und avenFOUNDER — eine pro Mensch, eine pro Firma',
-			'5 % Provision auf jedes aven‑Produkt, das du vermittelst — monatlich, solange es läuft'
+			'Voraussetzung für avenME und avenFOUNDER — eine pro Mensch, eine pro Firma'
 		]
 	},
 	{
 		id: 'avenme',
 		name: 'avenME',
 		role: 'Dein persönlicher AI‑CEO — für dein Leben',
+		pitch:
+			'Dein Leben ist voller Ideen, Termine, Projekte und offener Enden — dein avenME hält alles zusammen. Er koordiniert deinen Alltag, fängt jeden Gedanken auf und macht aus losen Konzepten Dinge, die passieren.',
 		per: 'person',
-		eurPrice: 58,
+		eurPrice: 55,
 		billing: 'monthly',
-		referralPct: 10,
+		beta: { discountPct: 50, months: 1 },
 		runtime: { hoursPerDay: 1, centsPerExtraMinute: 10 },
-		platformFeePct: 0,
-		reinvestPct: 0,
+		revenueSharePct: 0,
 		features: [
 			'Persönliche Live‑Organisation: Aufgaben, Termine, Erinnerungen',
 			{ skill: 'inbox-router', label: 'Ein Eingang für alles' },
@@ -149,13 +151,14 @@ export const PLANS: Plan[] = [
 		id: 'avenceo',
 		name: 'avenFOUNDER',
 		role: 'Dein professioneller AI‑CEO — für deine Firma',
+		pitch:
+			'Du hast die Vision — dein avenFOUNDER macht daraus eine Firma, die läuft. Er arbeitet, während du schläfst, und wird jeden Tag besser. So fühlt sich Gründen an, wenn es keine 80‑Stunden‑Woche mehr kostet.',
 		per: 'company',
-		eurPrice: 426,
+		eurPrice: 377,
 		billing: 'monthly',
-		referralPct: 15,
+		beta: { discountPct: 50, months: 3 },
 		runtime: { hoursPerDay: 4, centsPerExtraMinute: 8 },
-		platformFeePct: 4.8,
-		reinvestPct: 15,
+		revenueSharePct: 6.8,
 		highlight: true,
 		features: [
 			{ skill: 'book-keeper', label: 'Vorbuchhaltung' },
@@ -165,33 +168,27 @@ export const PLANS: Plan[] = [
 			{ skill: 'checkout-builder', label: 'Produkt‑Checkout und Shop' },
 			{ skill: 'blog-writer', label: 'Blog' },
 			'Digitaler Briefkasten für Geschäftskunden (exkl. Nachsendeauftrag der Deutschen Post: 51,90 € / 6 Monate, inkl. USt.)',
+			'Im aven Marketplace gelistet — auffindbar für Kunden, Partner und andere Avens',
 			'Das Gedächtnis deiner Firma: Wissen und Erfahrung sammeln sich über Jahre im avenCEO — das wird dein wertvollstes Asset'
 		]
 	},
 	{
 		id: 'avencoop',
 		name: 'avenCOOP',
-		role: 'Wir werden dein technischer Co‑Founder',
-		eurPrice: 1895,
+		role: 'Hands‑on Unterstützung für dein eigenes souveränes Aven‑Business',
+		pitch:
+			'Du willst nicht nur eine Firma — du willst dein eigenes Aven‑Business. Wir haben die Infrastruktur gebaut und stehen neben dir, bis dein Skillbundle im Marketplace steht. Deine Idee, dein Name, dein Werk.',
+		eurPrice: 987,
 		billing: 'monthly',
-		referralPct: 20,
+		beta: { discountPct: 50, months: 6 },
 		runtime: { hoursPerDay: 12, centsPerExtraMinute: 5 },
-		platformFeePct: 4.8,
-		reinvestPct: 10,
-		equitySharePct: 8,
+		revenueSharePct: 9.5,
 		applyOnly: true,
 		features: [
-			'1× avenFOUNDER — der avenCEO deiner Firma — inklusive',
-			// The equity number lives in `equitySharePct` and is spelled out here, because
-			// on the card it reads as part of the deal, not as another line off the revenue.
-			'Wir bauen aktiv an deinem Produkt mit — faktisch dein externer CTO und Co‑Founder, für 8 % Firmenanteile an deiner Firma',
-			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG',
-			'Du wählst selbst, in welche Aven dein Reinvest fließt — unsere avenCEO GmbH steht mit zur Wahl',
-			{
-				href: 'https://beel.com/de',
-				label:
-					'Du wirst Featured Startup in unserem beel‑Syndikat — unsere avenFOUNDER können in dich reinvestieren (exkl. beel Produktgebühren)'
-			}
+			'Hands‑on Unterstützung, während DU dein Skillbundle baust — dein Produkt, dein Name, unsere Infrastruktur',
+			'Du verkaufst es selbst im aven Marketplace — dein Bundle, dein Preis, deine Kunden',
+			'Souveränität, die du weitergibst: deine Kunden behalten ihre eigenen Schlüssel — nicht du, nicht wir',
+			'Begleitung durch die deutsche Gründungs‑Bürokratie: GmbH oder UG'
 		]
 	}
 ]
@@ -224,23 +221,26 @@ export function perLabel(p: Plan): string | null {
 	return null
 }
 
-/** German price formatting: 1.895 €, no cents. */
+/** German price formatting: 1.234,50 €, cents only when there are any. */
 export function euro(amount: number): string {
-	return amount.toLocaleString('de-DE')
+	// Whole euros stay whole (25 €, 377 €); a half-euro BETA price prints its
+	// cents in full (188,50 €), never as a stray "188,5".
+	const cents = Number.isInteger(amount) ? 0 : 2
+	return amount.toLocaleString('de-DE', {
+		minimumFractionDigits: cents,
+		maximumFractionDigits: cents
+	})
 }
 
-/** "25 € einmalig" · "326 €/Monat" — the whole price in one string. */
+/** What an early adopter actually pays during the BETA window. */
+export function betaPrice(p: Plan): number | null {
+	if (!p.beta) return null
+	return Math.round(p.eurPrice * (1 - p.beta.discountPct / 100) * 100) / 100
+}
+
+/** "25 € einmalig" · "377 €/Monat" — the whole price in one string. */
 export function priceLabel(p: Plan): string {
 	return p.billing === 'once' ? `${euro(p.eurPrice)} € einmalig` : `${euro(p.eurPrice)} €/Monat`
-}
-
-/**
- * Platform fee plus reinvest — the share a founder actually sees leave the
- * account. The two halves are printed under it, because they are different
- * things: one is a price, the other buys shares that stay yours.
- */
-export function totalSharePct(p: Plan): number {
-	return p.platformFeePct + p.reinvestPct
 }
 
 /**

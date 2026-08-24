@@ -10,18 +10,10 @@ import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SiteFooter from '$lib/components/SiteFooter.svelte'
 import { type Lang, localeHref, pick } from '$lib/i18n'
-import { ctaLabel, localizedPlan, perLabel, priceSuffix, vatNote } from '$lib/i18n/plans'
+import { ctaLabel, localizedPlan, money, perLabel, priceSuffix, vatNote } from '$lib/i18n/plans'
 import { pricing } from '$lib/i18n/pricing'
 import { idFunnelHref } from '$lib/id-service'
-import {
-	ctaHref,
-	euro,
-	PLANS,
-	type Plan,
-	type PlanId,
-	plan,
-	totalSharePct
-} from '$lib/pricing/plans'
+import { betaPrice, ctaHref, euro, PLANS, type Plan, type PlanId, plan } from '$lib/pricing/plans'
 import { loadSkill, skillDetailHref, skillLabel, skillsIncludedIn } from '$lib/skills/loader'
 
 let { lang }: { lang: Lang } = $props()
@@ -65,36 +57,142 @@ function skillFeatures(p: Plan): SkillFeature[] {
 const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? '') : '')
 </script>
 
-<!-- What comes off the revenue, one row per thing: the fee is a cost, the
-     Reinvest buys you stakes (so it gets the accent), the equity is us
-     joining. Three rows read as three different things, not one number. -->
-{#snippet shareRows(p: Plan)}
-	<dl class="divide-y divide-border/50 rounded-xl border border-border/50 bg-surface-card">
-		<div class="flex items-start gap-3 px-4 py-3">
-			<dt class="w-[5.25rem] shrink-0">
-				<span class="block text-base font-semibold tabular-nums text-foreground/80">
-					{t.pct(p.platformFeePct)}
-				</span>
-				<span class="block text-[10px] leading-snug text-foreground/45">{t.ofRevenue}</span>
-			</dt>
-			<dd class="min-w-0">
-				<p class="text-[12px] font-medium leading-snug text-foreground/80">{t.fee.label}</p>
-				<p class="text-[11px] leading-snug text-foreground/50">{t.fee.sub}</p>
-			</dd>
+<!-- What the plan costs, in ONE panel: the monthly price on the left, the
+     revenue share that comes off what it earns on the right, and — when the
+     window is open — the BETA strip across the bottom. Every plan uses this
+     same panel, so a reader learns the layout once.
+
+     Container queries, not viewport ones: the panel sits in a half-width
+     product card on one plan and in avenCOOP's narrow left column on
+     another, and it has to split or stack by its OWN width. -->
+{#snippet pricePanel(p: Plan)}
+	{@const discounted = betaPrice(p)}
+	<div class="@container mt-5 overflow-hidden rounded-2xl border border-border/50 bg-surface-card">
+		<div class="flex flex-col @md:flex-row @md:items-stretch">
+			<!-- With no share cell beside it (avenID), the lone price stays
+			     centred instead of clinging to the left edge of a wide panel. -->
+			<div
+				class="min-w-0 flex-1 px-5 py-4 text-center {p.revenueSharePct > 0
+					? '@md:text-left'
+					: ''}"
+			>
+				<div
+					class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 {p.revenueSharePct > 0
+						? '@md:justify-start'
+						: ''}"
+				>
+					<p
+						class="text-3xl font-semibold tabular-nums tracking-tight {discounted !== null
+							? 'text-foreground/40 line-through decoration-offer/60 decoration-2'
+							: 'text-foreground'}"
+					>
+						{euro(p.eurPrice)}&nbsp;€
+					</p>
+					{#if discounted !== null}
+						<!-- Tilted on purpose: a sticker slapped over the price, not
+						     another number in the same row. -->
+						<span
+							class="-rotate-3 rounded-full bg-offer px-3 py-1 text-[15px] font-bold tabular-nums tracking-tight text-offer-foreground shadow-sm"
+						>
+							{money(discounted, lang)}&nbsp;€/m
+						</span>
+					{/if}
+				</div>
+				<p class="mt-1 text-[12px] font-medium leading-snug text-foreground/55">
+					{priceSuffix(p, lang)}
+				</p>
+			</div>
+			{#if p.revenueSharePct > 0}
+				<!-- The number, what it is taken from, and the one reassurance —
+				     vertically centred so it sits level with the price, however
+				     tall the discount sticker makes that cell. -->
+				<div
+					class="flex min-w-0 flex-col justify-center border-t border-border/50 px-5 py-4 text-center @md:basis-[12rem] @md:border-t-0 @md:border-l"
+				>
+					<span class="block text-base font-semibold tabular-nums text-foreground/80">
+						{t.pct(p.revenueSharePct)}
+					</span>
+					<span class="block text-[10px] leading-snug text-foreground/45">{t.ofRevenue}</span>
+					<span class="mt-0.5 block text-[10px] leading-snug text-foreground/40">
+						{t.inclFees}
+					</span>
+				</div>
+			{/if}
 		</div>
-		<div class="flex items-start gap-3 px-4 py-3">
-			<dt class="w-[5.25rem] shrink-0">
-				<span class="block text-base font-semibold tabular-nums text-accent">
-					{t.pct(p.reinvestPct)}
+		{#if p.beta && discounted !== null}
+			<!-- Terracotta, not gold: the gold highlight says "this is the good
+			     one", the burnt orange says "this window closes". -->
+			<div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 bg-offer px-5 py-3">
+				<span
+					class="rounded-full bg-offer-foreground/18 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-offer-foreground"
+				>
+					{t.beta.badge}
 				</span>
-				<span class="block text-[10px] leading-snug text-foreground/45">{t.ofRevenue}</span>
-			</dt>
-			<dd class="min-w-0">
-				<p class="text-[12px] font-medium leading-snug text-accent">{t.reinvest.label}</p>
-				<p class="text-[11px] leading-snug text-foreground/50">{t.reinvest.sub}</p>
-			</dd>
+				<span class="text-[15px] font-bold tabular-nums tracking-tight text-offer-foreground">
+					{t.beta.headline(p.beta.discountPct)}
+				</span>
+				<span class="text-[12px] leading-snug text-offer-foreground/85">
+					{t.beta.note(p.beta.months, money(p.eurPrice, lang))}
+				</span>
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
+<!-- The promise that outranks every feature below it. It speaks in the
+     brand's turquoise — the settled, bright note — and drops the bullet
+     dot: this is a statement, not a list item. -->
+{#snippet sovereigntyBullet()}
+	<li class="rounded-lg bg-success/10 px-3 py-2">
+		<span class="leading-snug text-foreground/80">
+			<strong class="font-semibold text-success-ink">{t.sovereignty.lead}</strong>
+			{t.sovereignty.text}
+		</span>
+	</li>
+{/snippet}
+
+<!-- The transformation, before any fact: what changes in your life. This is
+     the one block on a card allowed to be warm — everything below it earns
+     trust with numbers, this line earns the wish. -->
+{#snippet pitchLine(p: Plan)}
+	<p
+		class="mx-auto mt-4 max-w-md text-center text-[13.5px] leading-relaxed text-foreground/72 italic"
+	>
+		{p.pitch}
+	</p>
+{/snippet}
+
+<!-- What the plan gives you per day. It sits at the TOP of a card now: what
+     an Aven can DO is the first question, the price is the last one. -->
+{#snippet runtimeCard(p: Plan)}
+	{#if p.runtime}
+		<div class="mt-4 rounded-xl border border-border/60 bg-surface-card px-4 py-3 text-left">
+			<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+				{t.runtime}
+			</p>
+			<p class="mt-1 text-[13px] font-medium leading-snug text-foreground/85">
+				{t.runtimeHours(p.runtime.hoursPerDay)}
+				<span class="font-normal text-foreground/55">{t.fairUse}</span>
+			</p>
+			<p class="mt-0.5 text-[12px] leading-snug text-foreground/55">
+				{t.extraMinute(p.runtime.centsPerExtraMinute)}
+			</p>
 		</div>
-	</dl>
+	{/if}
+{/snippet}
+
+<!-- Who the plan is for, as a tab riding the card's top border — half in,
+     half out. `top-0 -translate-y-1/2` centres it on the edge whatever the
+     badge's own height turns out to be, and the solid card background cuts
+     the border line behind it. -->
+{#snippet edgeBadge(label: string, highlight: boolean)}
+	<span
+		class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border bg-surface-raised px-3 py-1 text-[10px] font-semibold whitespace-nowrap uppercase tracking-[0.12em] {highlight
+			? 'border-accent/60 text-accent'
+			: 'border-border text-quiet-ink'}"
+	>
+		{label}
+	</span>
 {/snippet}
 
 {#snippet skillList(items: SkillFeature[])}
@@ -135,64 +233,63 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
 					{t.heading}
 				</h2>
-				<!-- {@html}: our own static copy, carries <strong> emphasis. -->
-				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-snug text-foreground/65">
-					{@html t.introHtml}
+				<!-- The wish first, the three facts after — same order as on the cards. -->
+				<p class="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-foreground/75">
+					{t.lead}
 				</p>
-				<p class="mx-auto mt-4 max-w-xl text-[14px] leading-snug text-foreground/55">
-					{@html t.shareHtml}
+				<!-- {@html}: our own static copy, carries <strong> emphasis. -->
+				<p class="mx-auto mt-5 max-w-xl text-[14px] leading-snug text-foreground/60">
+					{@html t.introHtml}
 				</p>
 			</div>
 
-			<!-- avenID: the door. One line, one price, the things you get. -->
+			<!-- avenID: the door — and the same card language as everything below
+			     it: badge riding the edge, centred name, the pitch, then facts.
+			     Gold border and gold bullets keep it the lead-in, not a fourth
+			     product. -->
 			<div
 				id={avenId.id}
-				class="mt-12 scroll-mt-28 rounded-2xl border border-accent/45 bg-surface-card p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:p-7"
+				class="relative mt-12 scroll-mt-28 rounded-2xl border border-accent/45 bg-surface-card p-6 pt-8 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:p-7 sm:pt-8"
 			>
+				{@render edgeBadge(t.idEyebrow, true)}
+				<p class="text-center text-xl font-semibold tracking-tight text-foreground">
+					{avenId.name}
+				</p>
+				<p class="mt-1 text-center text-[12px] leading-snug text-foreground/55">{avenId.role}</p>
+
+				{@render pitchLine(avenId)}
+
 				{#if claimedName}
-					<p class="mb-5 text-center text-[13px] text-foreground/70">
+					<p class="mt-4 text-center text-[13px] text-foreground/70">
 						{t.yourChoice}
 						<strong class="font-semibold text-accent">{claimedName}</strong>.aven.ceo —
 						{t.availability}
 					</p>
 				{/if}
-				<div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-10">
-					<div class="lg:w-64 lg:shrink-0">
-						<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
-							{t.idEyebrow}
-						</p>
-						<p class="mt-1 text-xl font-semibold tracking-tight text-foreground">{avenId.name}</p>
-						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{avenId.role}</p>
-						<p class="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-foreground">
-							{euro(avenId.eurPrice)}&nbsp;€
-							<span class="text-[13px] font-medium text-foreground/55"
-								>{priceSuffix(avenId, lang)}</span
-							>
-						</p>
-					</div>
-					<ul
-						class="grid flex-1 gap-2 text-[13px] leading-snug text-foreground/75 sm:grid-cols-2 lg:border-l lg:border-border/50 lg:pl-10"
+
+				<ul
+					class="mx-auto mt-5 grid max-w-3xl gap-x-8 gap-y-2 border-t border-border/50 pt-5 text-[13px] leading-snug text-foreground/75 sm:grid-cols-2"
+				>
+					{#each avenId.features as feature (feature)}
+						<li class="flex gap-2">
+							<span
+								aria-hidden="true"
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent"
+							></span>
+							<span>{feature}</span>
+						</li>
+					{/each}
+				</ul>
+
+				{@render pricePanel(avenId)}
+
+				<div class="mt-4">
+					<a
+						href={claimedName ? idFunnelHref('avenid', claimedName) : ctaHref(avenId)}
+						class="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-primary px-8 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
 					>
-						{#each avenId.features as feature (feature)}
-							<li class="flex gap-2">
-								<span
-									aria-hidden="true"
-									class="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent"
-								></span>
-								<span>{feature}</span>
-							</li>
-						{/each}
-					</ul>
-					<div class="lg:shrink-0">
-						<a
-							href={claimedName
-								? idFunnelHref('avenid', claimedName)
-								: ctaHref(avenId)}
-							class="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-primary px-8 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 lg:w-auto"
-						>
-							{ctaLabel(avenId, lang)}
-						</a>
-					</div>
+						{ctaLabel(avenId, lang)}
+					</a>
 				</div>
 			</div>
 
@@ -202,63 +299,28 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 					{@const skillCount = skillsIncludedIn(p.id, lang).length}
 					{@const plain = p.features.filter((f) => typeof f === 'string' || 'href' in f)}
 					{@const skills = skillFeatures(p)}
+					{@const per = perLabel(p, lang)}
 					<div
 						id={p.id}
-						class="flex min-w-0 scroll-mt-28 flex-col rounded-2xl p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {p.highlight
+						class="relative flex min-w-0 scroll-mt-28 flex-col rounded-2xl p-6 pt-8 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {p.highlight
 							? 'border-2 border-accent/60 bg-surface-raised'
 							: 'border border-foreground/8 bg-surface-raised'}"
 					>
-						<div class="flex items-baseline justify-between gap-2">
-							<!-- No `uppercase`: the brand is spelled avenME, not AVENME. -->
-							<p class="text-xl font-semibold tracking-tight text-foreground">{p.name}</p>
-							{#if perLabel(p, lang)}
-								<span
-									class="rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] {p.highlight
-										? 'bg-accent/20 text-accent'
-										: 'bg-quiet/15 text-quiet-ink'}"
-								>
-									{perLabel(p, lang)}
-								</span>
-							{/if}
-						</div>
-						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{p.role}</p>
-
-						<!-- The monthly price stands alone. What comes off the revenue is a
-						     different question, so it gets its own block rather than hanging
-						     off the right edge of the price. -->
-						<div class="mt-5 border-t border-border/50 pt-4 text-center">
-							<p class="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
-								{euro(p.eurPrice)}&nbsp;€<span class="text-base font-medium text-foreground/55"
-									>{priceSuffix(p, lang)}</span
-								>
-							</p>
-						</div>
-
-						{#if totalSharePct(p) > 0}
-							<div class="mt-4 border-t border-border/50 pt-4">
-								{@render shareRows(p)}
-							</div>
+						{#if per}
+							{@render edgeBadge(per, p.highlight ?? false)}
 						{/if}
+						<!-- No `uppercase`: the brand is spelled avenME, not AVENME. -->
+						<p class="text-center text-xl font-semibold tracking-tight text-foreground">{p.name}</p>
+						<p class="mt-1 text-center text-[12px] leading-snug text-foreground/55">{p.role}</p>
+
+						{@render pitchLine(p)}
+
+						{@render runtimeCard(p)}
 
 						<ul
 							class="mt-4 flex-1 space-y-2 border-t border-border/50 pt-4 text-left text-[13px] leading-snug text-foreground/75"
 						>
-							<!-- Not "Alles aus …": nothing is inherited. Say who it is for instead. -->
-							<li class="flex gap-2 font-medium text-foreground/85">
-								<span
-									aria-hidden="true"
-									class="mt-1.5 size-1.5 shrink-0 rounded-full {p.highlight
-										? 'bg-accent'
-										: 'bg-foreground/25'}"
-								></span>
-								<span>
-									{#if p.per === 'company'}
-										{t.onePerCompany}
-									{:else}
-										{t.onePerPerson}
-									{/if}
-								</span>
-							</li>
+							{@render sovereigntyBullet()}
 							{#each plain as feature (typeof feature === 'string' ? feature : feature.label)}
 								<li class="flex gap-2">
 									<span
@@ -307,24 +369,9 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 							</div>
 						{/if}
 
-						{#if p.runtime}
-							<div
-								class="mt-4 rounded-xl border border-border/60 bg-surface-card px-4 py-3 text-left"
-							>
-								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-									{t.runtime}
-								</p>
-								<p class="mt-1 text-[13px] font-medium leading-snug text-foreground/85">
-									{t.runtimeHours(p.runtime.hoursPerDay)}
-									<span class="font-normal text-foreground/55">{t.fairUse}</span>
-								</p>
-								<p class="mt-0.5 text-[12px] leading-snug text-foreground/55">
-									{t.extraMinute(p.runtime.centsPerExtraMinute)}
-								</p>
-							</div>
-						{/if}
+						{@render pricePanel(p)}
 
-						<div class="mt-5 lg:mt-auto lg:pt-5">
+						<div class="mt-4">
 							<a
 								href={ctaHref(p)}
 								class="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-primary px-8 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
@@ -335,231 +382,177 @@ const claimedName = $derived(browser ? ($page.url.searchParams.get('name') ?? ''
 								{t.bundleNote(avenId.name, euro(avenId.eurPrice), p.per)}
 							</p>
 						</div>
-
-						{#if p.referralPct}
-							<p class="mt-4 text-center">
-								<span class="text-xl font-semibold tracking-tight text-accent">
-									{t.referral(p.referralPct)}
-								</span>
-								<span class="mt-1 block text-[12px] leading-snug text-foreground/55">
-									{t.referralNote}
-								</span>
-							</p>
-						{/if}
 					</div>
 				{/each}
 			</div>
 
-			<!-- avenCOOP: a relationship, full width. Includes the company's avenFOUNDER. -->
-			<div
-				id={coop.id}
-				class="mt-6 scroll-mt-28 rounded-2xl border border-foreground/8 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:p-7 lg:p-8"
-			>
-				<div class="grid gap-8 lg:grid-cols-[17rem_1fr] lg:gap-12">
-					<!-- Left: who it is, what it costs, what it takes. -->
-					<div class="border-b border-border/50 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-12">
-						<span
-							class="inline-block rounded-full bg-quiet/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-quiet-ink"
-						>
-							{t.applyOnly}
-						</span>
-						<p class="mt-3 text-xl font-semibold tracking-tight text-foreground">{coop.name}</p>
-						<p class="mt-1 text-[12px] leading-snug text-foreground/55">{coop.role}</p>
+			<!-- The last row, 2/3–1/3: avenCOOP (the business) next to avenOS (the
+			     open door). Both wear the same card language as everything above. -->
+			<div class="mt-6 grid items-stretch gap-4 md:grid-cols-5 lg:grid-cols-3 lg:gap-5">
+				<!-- avenCOOP: badge on the edge, centred header, runtime, then what
+				     you get. Only the body splits in two — this card has the room. -->
+				<div
+					id={coop.id}
+					class="relative flex scroll-mt-28 flex-col rounded-2xl border border-foreground/8 bg-surface-raised p-6 pt-8 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:p-7 sm:pt-8 md:col-span-3 lg:col-span-2"
+				>
+					{@render edgeBadge(t.applyOnly, false)}
+					<p class="text-center text-xl font-semibold tracking-tight text-foreground">
+						{coop.name}
+					</p>
+					<p class="mt-1 text-center text-[12px] leading-snug text-foreground/55">{coop.role}</p>
 
-						<div class="mt-5 border-t border-border/50 pt-4">
-							<p class="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
-								{euro(coop.eurPrice)}&nbsp;€
-							</p>
-							<p class="mt-0.5 text-[13px] font-medium text-foreground/55">
-								{priceSuffix(coop, lang)}
-							</p>
-						</div>
+					{@render pitchLine(coop)}
 
-						<div class="mt-4 border-t border-border/50 pt-4">
-							{@render shareRows(coop)}
-						</div>
+					{@render runtimeCard(coop)}
+
+					<div
+						class="mt-4 grid gap-8 border-t border-border/50 pt-4 lg:grid-cols-[1fr_15rem] lg:gap-8"
+					>
+						<ul class="space-y-2 text-left text-[13px] leading-snug text-foreground/75">
+							{@render sovereigntyBullet()}
+							{#each coop.features as feature (typeof feature === 'string' ? feature : feature.label)}
+								<li class="flex gap-2">
+									<span
+										aria-hidden="true"
+										class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
+									></span>
+									{#if typeof feature === 'string'}
+										<span>{feature}</span>
+									{:else if 'href' in feature}
+										<span>
+											<a
+												href={feature.href}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+											>
+												{feature.label}
+												→
+											</a>
+										</span>
+									{:else}
+										<span>
+											<a
+												href={skillDetailHref(feature.skill, lang)}
+												class="font-medium underline underline-offset-4"
+											>
+												{skillLabel(feature.skill)}
+											</a>
+											<span class="text-foreground/55">· {feature.label}</span>
+										</span>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+
+						{#if coopSkillCount > 0}
+							<div class="text-left lg:border-l lg:border-border/50 lg:pl-8">
+								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+									{t.skills}
+								</p>
+								{@render skillList(skillFeatures(coop))}
+								<p class="mt-2 text-[12px] text-foreground/50">
+									<a
+										href={`${localeHref(lang, '/skills')}?plan=${coop.id}`}
+										class="underline underline-offset-4 hover:text-foreground/75"
+									>
+										{t.allSkills(coopSkillCount)}
+									</a>
+								</p>
+							</div>
+						{/if}
 					</div>
 
-					<!-- Right: what you get (bullets) | skills + runtime, then the decision. -->
-					<div class="flex min-w-0 flex-col">
-						<div class="grid gap-8 sm:grid-cols-[1fr_16rem] sm:gap-10">
-							<div>
-								<ul class="space-y-3 text-[13px] leading-snug text-foreground/75">
-									{#each coop.features as feature (typeof feature === 'string' ? feature : feature.label)}
-										<li class="flex gap-2">
-											<span
-												aria-hidden="true"
-												class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
-											></span>
-											{#if typeof feature === 'string'}
-												<span>{feature}</span>
-											{:else if 'href' in feature}
-												<span>
-													<a
-														href={feature.href}
-														target="_blank"
-														rel="noopener noreferrer"
-														class="underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
-													>
-														{feature.label}
-														→
-													</a>
-												</span>
-											{:else}
-												<span>
-													<a
-														href={skillDetailHref(feature.skill, lang)}
-														class="font-medium underline underline-offset-4"
-													>
-														{skillLabel(feature.skill)}
-													</a>
-													<span class="text-foreground/55">· {feature.label}</span>
-												</span>
-											{/if}
-										</li>
-									{/each}
-								</ul>
-								{#if coop.runtime}
-									<div
-										class="mt-4 rounded-xl border border-border/60 bg-surface-card px-4 py-3 text-left"
-									>
-										<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-											{t.runtime}
-										</p>
-										<p class="mt-1 text-[13px] font-medium leading-snug text-foreground/85">
-											{t.runtimeHours(coop.runtime.hoursPerDay)}
-											<span class="font-normal text-foreground/55">{t.fairUse}</span>
-										</p>
-										<p class="mt-0.5 text-[12px] leading-snug text-foreground/55">
-											{t.extraMinute(coop.runtime.centsPerExtraMinute)}
-										</p>
-									</div>
-								{/if}
-							</div>
+					{@render pricePanel(coop)}
 
-							<div>
-								{#if coopSkillCount > 0}
-									<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-										{t.skills}
-									</p>
-									{@render skillList(skillFeatures(coop))}
-									<p class="mt-2 text-[12px] text-foreground/50">
-										<a
-											href={`${localeHref(lang, '/skills')}?plan=${coop.id}`}
-											class="underline underline-offset-4 hover:text-foreground/75"
-										>
-											{t.allSkills(coopSkillCount)}
-										</a>
-									</p>
-								{/if}
-							</div>
-						</div>
-
-						<div
-							class="mt-6 flex flex-col gap-4 border-t border-border/50 pt-6 sm:flex-row sm:items-center sm:justify-between"
+					<div class="mt-4">
+						<a
+							href={ctaHref(coop)}
+							class="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-primary px-10 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
 						>
-							{#if coop.referralPct}
-								<p class="max-w-xs">
-									<span class="text-xl font-semibold tracking-tight text-accent">
-										{t.referral(coop.referralPct)}
-									</span>
-									<span class="mt-1 block text-[12px] leading-snug text-foreground/55">
-										{t.referralNote}
-									</span>
-								</p>
-							{/if}
-							<a
-								href={ctaHref(coop)}
-								class="inline-flex min-h-11 items-center justify-center rounded-full border border-primary/45 px-10 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-soft"
+							{ctaLabel(coop, lang)}
+						</a>
+					</div>
+				</div>
+
+				<!-- avenOS: the open door, compacted into the 1/3 column — same
+				     card grammar, single column, the manifesto in small print. -->
+				<div
+					class="relative flex min-w-0 flex-col rounded-2xl border border-foreground/8 bg-surface-raised p-6 pt-8 shadow-[0_1px_3px_rgba(30,41,59,0.05)] md:col-span-2 lg:col-span-1"
+				>
+					{@render edgeBadge(t.os.eyebrow, false)}
+					<p class="text-center text-xl font-semibold tracking-tight text-foreground">
+						{t.os.title}
+					</p>
+					<p class="mt-1 text-center text-[12px] leading-snug text-foreground/55">
+						{t.os.subtitle}
+					</p>
+
+					<div
+						class="mt-5 rounded-2xl border border-border/50 bg-surface-card px-5 py-4 text-center"
+					>
+						<p class="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
+							0&nbsp;€
+						</p>
+					</div>
+
+					<ul
+						class="mt-4 space-y-2 border-t border-border/50 pt-4 text-left text-[13px] leading-snug text-foreground/72"
+						aria-label={t.os.listLabel}
+					>
+						<li class="flex gap-2">
+							<span
+								aria-hidden="true"
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
+							></span><span>{t.os.sync}</span>
+						</li>
+						<li class="flex gap-2">
+							<span
+								aria-hidden="true"
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
+							></span><span>{t.os.byok}</span>
+						</li>
+						<li class="flex gap-2">
+							<span
+								aria-hidden="true"
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
+							></span>
+							<span
+								>{t.os.noBackups}
+								<span class="text-foreground/55"> {t.os.noBackupsNote}</span></span
 							>
-								{ctaLabel(coop, lang)}
-							</a>
-						</div>
+						</li>
+						<li class="flex gap-2">
+							<span
+								aria-hidden="true"
+								class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
+							></span><span>{t.os.support}</span>
+						</li>
+					</ul>
+
+					<div
+						class="mt-4 flex-1 space-y-3 border-t border-border/50 pt-4 text-left text-[12px] leading-relaxed text-foreground/65"
+					>
+						<p class="font-light italic text-foreground/75">{t.os.quote}</p>
+						<p>{t.os.noTrap}</p>
+						<!-- {@html}: our own static copy, carries <strong> emphasis. -->
+						<p>{@html t.os.selfHostingHtml}</p>
+					</div>
+
+					<div class="mt-4">
+						<a
+							href={openSourceGithubHref}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-8 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+						>
+							{t.os.github}</a
+						>
 					</div>
 				</div>
 			</div>
 
 			<p class="mt-6 text-center text-[12px] text-foreground/50">{vatNote(lang)}</p>
-
-			<div
-				class="mx-auto mt-12 max-w-6xl rounded-2xl border border-foreground/8 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)] sm:p-7 lg:p-8"
-			>
-				<div class="grid gap-10 lg:grid-cols-[minmax(13.5rem,17rem)_1fr] lg:gap-14 lg:items-start">
-					<div
-						class="shrink-0 border-b border-border/50 pb-8 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-10"
-					>
-						<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
-							{t.os.eyebrow}
-						</p>
-						<h3 class="mt-2 text-lg font-semibold text-foreground sm:text-xl">{t.os.title}</h3>
-						<p class="mt-1 text-[12px] leading-snug text-foreground/55">
-							{t.os.subtitle}
-						</p>
-						<p class="mt-1 text-lg font-semibold tabular-nums text-foreground">0&nbsp;€</p>
-						<ul
-							class="mt-5 space-y-2 border-t border-border/50 pt-5 text-[13px] leading-snug text-foreground/72"
-							aria-label={t.os.listLabel}
-						>
-							<li class="flex gap-2">
-								<span
-									aria-hidden="true"
-									class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
-								></span><span>{t.os.sync}</span>
-							</li>
-							<li class="flex gap-2">
-								<span
-									aria-hidden="true"
-									class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
-								></span><span>{t.os.byok}</span>
-							</li>
-							<li class="flex gap-2">
-								<span
-									aria-hidden="true"
-									class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
-								></span>
-								<span
-									>{t.os.noBackups}
-									<span class="text-foreground/55"> {t.os.noBackupsNote}</span></span
-								>
-							</li>
-							<li class="flex gap-2">
-								<span
-									aria-hidden="true"
-									class="mt-1.5 size-1.5 shrink-0 rounded-full bg-foreground/25"
-								></span><span>{t.os.support}</span>
-							</li>
-						</ul>
-					</div>
-					<div class="min-w-0 lg:max-w-none">
-						<p
-							class="max-w-none text-[1.0625rem] font-light italic leading-snug text-foreground/84 sm:text-[1.125rem] sm:leading-snug"
-						>
-							{t.os.quote}
-						</p>
-						<p
-							class="mt-5 max-w-none text-[14px] leading-[1.65] text-foreground/73 sm:text-[15px] sm:leading-[1.7]"
-						>
-							{t.os.noTrap}
-						</p>
-						<p
-							class="mt-5 max-w-none text-[14px] font-medium leading-[1.6] text-foreground/78 sm:text-[15px] sm:leading-[1.68]"
-						>
-							<!-- {@html}: our own static copy, carries <strong> emphasis. -->
-							{@html t.os.selfHostingHtml}
-						</p>
-					</div>
-				</div>
-				<div class="mt-8 flex justify-center border-t border-border/50 pt-6">
-					<a
-						href={openSourceGithubHref}
-						target="_blank"
-						rel="noopener noreferrer"
-						class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-8 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-					>
-						{t.os.github}</a
-					>
-				</div>
-			</div>
 		</div>
 	</section>
 
