@@ -1,6 +1,6 @@
 # Persistent intents: current state and missing work
 
-Status: discovery and implementation proposal  
+Status: discovery and implementation proposal
 Date: 24 August 2026
 
 ## Executive assessment
