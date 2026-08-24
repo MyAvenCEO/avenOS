@@ -9,7 +9,7 @@
 // change of any kind.
 //
 // The webhook is the only writer of subscription state. Actions (cancel,
-// pause, resume) call the provider and return; the row updates when the
+// resume) call the provider and return; the row updates when the
 // provider's event lands, so the UI shows a pending state instead of a lie.
 import { randomUUID } from 'node:crypto'
 import type pg from 'pg'
@@ -30,8 +30,10 @@ export function isSubscriptionTier(value: string): value is SubscriptionTier {
 }
 
 /** A subscription in one of these states is over — the tier is bookable
- * again. Everything else counts as standing (incl. paused and past_due). */
+ * again. Everything else counts as standing (incl. past_due). */
 export const ENDED_STATUSES = ['canceled', 'expired', 'incomplete_expired', 'unpaid', 'revoked']
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export interface SubscriptionStanding {
 	tier: string
@@ -73,7 +75,9 @@ export class SubscriptionService {
 			[user.id]
 		)
 		const known = stored.rows[0]?.provider_customer_id as string | undefined
-		if (known) return known
+		// Only a Polar UUID may reach the provider — a legacy id from the
+		// Creem era (or any junk) self-heals via the email lookup below.
+		if (known && UUID_PATTERN.test(known)) return known
 		const found = await this.payments.findCustomerByEmail(user.email.toLowerCase())
 		if (!found) return null
 		await this.pool.query(
@@ -168,21 +172,12 @@ export class SubscriptionService {
 		await this.payments.cancelSubscription(row.provider_subscription_id, immediate)
 	}
 
-	/** Fortsetzen: lifts a pause when the tier is paused, otherwise reverts
-	 * a scheduled cancellation. */
+	/** Fortsetzen: reverts a scheduled cancellation. */
 	async resume(userId: string, tier: string): Promise<void> {
 		const row = await this.tierRow(userId, tier)
 		if (!row || ENDED_STATUSES.includes(row.status))
 			throw new AppError(404, 'SUBSCRIPTION_MISSING', 'There is no subscription to resume.')
-		await this.payments.resumeSubscription(
-			row.provider_subscription_id,
-			row.status === 'paused' ? 'unpause' : 'uncancel'
-		)
-	}
-
-	async pause(userId: string, tier: string): Promise<void> {
-		const row = await this.requireActive(userId, tier)
-		await this.payments.pauseSubscription(row.provider_subscription_id)
+		await this.payments.resumeSubscription(row.provider_subscription_id)
 	}
 
 	/** The caller's orders — the one-off avenID and every subscription

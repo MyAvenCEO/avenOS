@@ -176,23 +176,11 @@ export class PolarProvider implements PaymentProvider {
 		)
 	}
 
-	async resumeSubscription(
-		providerSubscriptionId: string,
-		mode: 'uncancel' | 'unpause'
-	): Promise<void> {
+	async resumeSubscription(providerSubscriptionId: string): Promise<void> {
 		await this.call('resume-subscription', () =>
 			this.polar.subscriptions.update({
 				id: providerSubscriptionId,
-				subscriptionUpdate: mode === 'unpause' ? { resume: true } : { cancelAtPeriodEnd: false }
-			})
-		)
-	}
-
-	async pauseSubscription(providerSubscriptionId: string): Promise<void> {
-		await this.call('pause-subscription', () =>
-			this.polar.subscriptions.update({
-				id: providerSubscriptionId,
-				subscriptionUpdate: { pauseAtPeriodEnd: true }
+				subscriptionUpdate: { cancelAtPeriodEnd: false }
 			})
 		)
 	}

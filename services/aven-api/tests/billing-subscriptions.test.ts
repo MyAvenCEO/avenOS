@@ -55,12 +55,8 @@ class StubProvider implements PaymentProvider {
 		this.record('cancelSubscription', id, immediate)
 	}
 
-	async resumeSubscription(id: string, mode: 'uncancel' | 'unpause'): Promise<void> {
-		this.record('resumeSubscription', id, mode)
-	}
-
-	async pauseSubscription(id: string): Promise<void> {
-		this.record('pauseSubscription', id)
+	async resumeSubscription(id: string): Promise<void> {
+		this.record('resumeSubscription', id)
 	}
 
 	async findCustomerByEmail(email: string): Promise<string | null> {
@@ -256,7 +252,8 @@ describe('subscription state', () => {
 			userId: alice.id,
 			email: alice.email,
 			tier: 'avenceo',
-			status: 'paused'
+			status: 'active',
+			cancelAtPeriodEnd: true
 		})
 
 		// Cancel hits the avenME row only — the id comes from HER row.
@@ -265,29 +262,18 @@ describe('subscription state', () => {
 		await service.cancel(alice.id, 'avenme', true)
 		expect(provider.calls.at(-1)).toEqual({ method: 'cancelSubscription', args: [meId, true] })
 
-		// Resume picks the mode from the row: paused → unpause; scheduled
-		// cancel → uncancel.
+		// Resume reverts a scheduled cancellation, per tier.
 		await service.resume(alice.id, 'avenceo')
-		expect(provider.calls.at(-1)).toEqual({
-			method: 'resumeSubscription',
-			args: [ceoId, 'unpause']
-		})
+		expect(provider.calls.at(-1)).toEqual({ method: 'resumeSubscription', args: [ceoId] })
 		await service.resume(alice.id, 'avenme')
-		expect(provider.calls.at(-1)).toEqual({
-			method: 'resumeSubscription',
-			args: [meId, 'uncancel']
-		})
-
-		// Pause targets the named tier's own subscription.
-		await service.pause(alice.id, 'avenceo')
-		expect(provider.calls.at(-1)).toEqual({ method: 'pauseSubscription', args: [ceoId] })
+		expect(provider.calls.at(-1)).toEqual({ method: 'resumeSubscription', args: [meId] })
 
 		// A stranger cannot act at all: bob holds nothing, so the service
 		// refuses before any provider call could happen.
 		await expect(service.cancel(bob.id, 'avenme')).rejects.toMatchObject({
 			code: 'SUBSCRIPTION_MISSING'
 		})
-		await expect(service.pause(bob.id, 'avenceo')).rejects.toMatchObject({
+		await expect(service.resume(bob.id, 'avenceo')).rejects.toMatchObject({
 			code: 'SUBSCRIPTION_MISSING'
 		})
 		// And an unknown tier never reaches the database.
@@ -346,6 +332,19 @@ describe('subscription state', () => {
 		// guessed id (the only lookup is by his own email).
 		expect(await service.orders(bob)).toEqual([])
 		expect(provider.calls.at(-1)).toEqual({ method: 'findCustomerByEmail', args: [bob.email] })
+
+		// A legacy Creem-era id in the column never reaches the provider —
+		// the lookup self-heals via the session's own email instead.
+		const carl = await insertUser()
+		await database.pool.query(
+			'INSERT INTO billing_customers (user_id, provider_customer_id) VALUES ($1,$2)',
+			[carl.id, 'cus_creem_legacy']
+		)
+		expect(await service.orders(carl)).toEqual([])
+		expect(
+			provider.calls.filter((c) => c.method === 'listOrders' && c.args[0] === 'cus_creem_legacy')
+		).toHaveLength(0)
+		expect(provider.calls.at(-1)).toEqual({ method: 'findCustomerByEmail', args: [carl.email] })
 	})
 
 	it('reports the session’s own latest checkout without accepting an id', async () => {
