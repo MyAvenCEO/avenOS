@@ -150,10 +150,20 @@ async function openRepo(repo: Repo) {
 	}
 }
 
-/** Switch the browsed branch: back to the root of the tree at that ref. */
+/**
+ * Switch the browsed branch WITHOUT losing place: an open file re-opens at
+ * the new ref (its whole point is comparing versions); if the branch does not
+ * have it, the view falls back to the file's folder. With no file open the
+ * current directory is kept.
+ */
 async function switchBranch(name: string) {
 	ref = name
-	await browse('')
+	if (file) {
+		const keep = file.path
+		if (!(await previewPath(keep))) await browse(keep.split('/').slice(0, -1).join('/'))
+		return
+	}
+	await browse(path)
 }
 
 /** Show one directory of the open repo; dirs first, then files, alphabetical. */
@@ -184,27 +194,39 @@ async function browse(dir: string) {
 
 /** Preview a file: the contents API hands the blob back base64-encoded. */
 async function preview(entry: Entry) {
-	if (!open) return
-	failure = null
-	editing = false
 	if (entry.size > 512 * 1024) {
+		editing = false
 		file = { path: entry.path, text: null, sha: '' }
 		return
 	}
+	await previewPath(entry.path)
+}
+
+/**
+ * Load one path as the previewed file at the current ref. Returns false when
+ * the branch simply does not have it (so callers can fall back), true for
+ * every handled outcome including binary.
+ */
+async function previewPath(filePath: string): Promise<boolean> {
+	if (!open) return true
+	failure = null
+	editing = false
 	try {
 		const blob = (await (
 			await api(
-				`/repos/${open.owner}/${open.name}/contents/${entry.path}?ref=${encodeURIComponent(ref)}`
+				`/repos/${open.owner}/${open.name}/contents/${filePath}?ref=${encodeURIComponent(ref)}`
 			)
 		).json()) as { content: string; sha: string }
 		const bytes = Uint8Array.from(atob(blob.content.replace(/\n/g, '')), (c) => c.charCodeAt(0))
 		const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-		file = { path: entry.path, text, sha: blob.sha }
+		file = { path: filePath, text, sha: blob.sha }
 	} catch (err) {
-		// Undecodable = binary; anything else is a real failure.
-		if (err instanceof TypeError) file = { path: entry.path, text: null, sha: '' }
+		// Undecodable = binary; missing = the caller's fallback; the rest fails.
+		if (err instanceof TypeError) file = { path: filePath, text: null, sha: '' }
+		else if (err instanceof Error && err.message.includes('HTTP 404')) return false
 		else failure = err instanceof Error ? err.message : String(err)
 	}
+	return true
 }
 
 function startEdit() {
