@@ -1,9 +1,8 @@
 /**
- * Impressum / Site Notice — the one legal document still TEMPLATED from
- * [[COMPANY]] rather than fetched: its content IS the company facts. The
- * eRecht24 sync (`bun run sync:legal`) OVERWRITES this file with the
- * API-served text once a project key is configured; until then the
- * COMPANY-derived version below is the shipped truth.
+ * Impressum / Site Notice — the one legal document TEMPLATED from
+ * [[COMPANY]] rather than transcribed: its content IS the company facts.
+ * Legal texts are maintained manually — updated counsel text goes through
+ * the same HTML-to-structure conversion the other documents used.
  */
 import { COMPANY } from './company.js'
 import type { LegalDocument } from './legal.js'

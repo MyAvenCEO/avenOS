@@ -1,8 +1,9 @@
 /**
  * Datenschutzerklärung / Privacy Policy — GENERATED from the counsel-provided
  * HTML (scratch: privacy-de.html / privacy-en.html) by a one-shot parser, so
- * the published text is byte-faithful to what counsel wrote. Edit the source
- * text, not this file's prose; structural changes belong in legal.ts.
+ * the published text is byte-faithful to what counsel wrote. Maintained
+ * MANUALLY: paste updated counsel HTML and re-run the converter; structural
+ * changes belong in legal.ts.
  *
  * Bare URLs inside lines are rendered as links by the website's LegalDoc
  * renderer — the source documents never use link text that differs from the
