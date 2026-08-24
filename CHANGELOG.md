@@ -1,3 +1,15 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.5...v) (2026-08-24)
+
+
+### Features
+
+* **app:** Abrechnung cards list the FULL SSOT benefits incl. Aven Worker Minutes ([ec9962c](https://github.com/MyAvenCEO/avenOS/commit/ec9962cf8b06d762af92c867ad325495e8156e76))
+* **app:** artifacts split view — pdf.js inline rendering, square tiles, terracotta Kündigen ([a9ae063](https://github.com/MyAvenCEO/avenOS/commit/a9ae0636e7ba7258b08f25a71799afa7a1ff33b1))
+* **billing:** benefit titles default to English; verified attach on both tiers ([efe8e32](https://github.com/MyAvenCEO/avenOS/commit/efe8e32c5afe8784b50544155c927e0bec47268c))
+* **billing:** bilingual benefits SSOT in aven-brand → Polar benefits + descriptions; inline light checkout with locale (0162 r3) ([d97d6f1](https://github.com/MyAvenCEO/avenOS/commit/d97d6f194578b82f40ab2231d6561239e803e0a8))
+* **billing:** pause is back, in sync — pause_at_period_end mirrored (0018), Pausieren/Fortsetzen UI, collapsed larger benefit list ([2706bd5](https://github.com/MyAvenCEO/avenOS/commit/2706bd5dfab6efe4647116423e5b10c8b2002521))
+* **billing:** runtime benefit renamed to 'Aven Worker Minutes' + benefit title drift-correction ([fed5453](https://github.com/MyAvenCEO/avenOS/commit/fed5453b6a0a5c43d6342d847c6ced7ee738f8a7))
+* **billing:** skill benefits prefixed 'SKILL - <english title>' ([3a020b4](https://github.com/MyAvenCEO/avenOS/commit/3a020b4d84b11abc1d0d0e05e420a5e41f3a7934))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.4...v) (2026-08-24)
 
 
