@@ -85,28 +85,37 @@ function handle(a: LiveAven) {
 						</div>
 
 						{#if profile}
-							<div class="mt-5 border-t border-border/50 pt-4">
-								<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-									{t.mission}
-								</p>
-								<p class="mt-2 text-[14px] leading-snug text-foreground/80">{profile.mission}</p>
-								<!-- Who is behind it and where it lives — the meta row under the vision. -->
-								<p class="mt-3 text-[12px] text-foreground/55">
-									{t.behind}
-									<span class="font-medium text-foreground/75">{a.holder}</span>
+							<!-- Vision left (2/3), who-and-where right (1/3). -->
+							<div class="mt-5 grid gap-4 border-t border-border/50 pt-4 lg:grid-cols-3 lg:gap-6">
+								<div class="lg:col-span-2">
+									<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+										{t.mission}
+									</p>
+									<p class="mt-2 text-[14px] leading-snug text-foreground/80">
+										{profile.mission}
+									</p>
+								</div>
+								<div
+									class="text-[12px] leading-snug text-foreground/55 lg:border-l lg:border-border/50 lg:pl-5"
+								>
+									<p>
+										{t.behind}
+										<span class="block font-medium text-foreground/75">{a.holder}</span>
+									</p>
 									{#if a.link}
-										<span class="text-foreground/35"> · </span>
-										<a
-											href={a.link.href}
-											target="_blank"
-											rel="noopener noreferrer"
-											class="font-medium text-foreground/70 underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
-										>
-											{a.link.label}
-											↗
-										</a>
+										<p class="mt-2">
+											<a
+												href={a.link.href}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="font-medium text-foreground/70 underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground/60"
+											>
+												{a.link.label}
+												↗
+											</a>
+										</p>
 									{/if}
-								</p>
+								</div>
 							</div>
 						{/if}
 					</article>
