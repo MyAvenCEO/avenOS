@@ -15,6 +15,10 @@ services:
   app:
     image: ${AVEN_API_IMAGE}
     restart: unless-stopped
+    environment:
+      SITE_HOST_DIRECTORY_BEARER_TOKEN: ${SITE_HOST_DIRECTORY_BEARER_TOKEN}
+      SITE_HOST_PUBLIC_IPV4: ${SITE_HOST_ALLOWED_IPV4}
+      SITE_HOST_PUBLIC_IPV6: ${SITE_HOST_ALLOWED_IPV6:-}
   email-worker:
     image: ${AVEN_API_IMAGE}
     restart: unless-stopped
