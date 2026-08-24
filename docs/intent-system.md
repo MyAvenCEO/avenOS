@@ -22,8 +22,9 @@ stages of that skill, not separate skills.
 flowchart LR
     UI[Desktop UI] -->|authenticated upload| API[Aven API]
     API -->|file and intent declaration| Store[Artifact Store]
-    Store -->|publication feed| Processor[Processor]
-    Processor -->|project intent and progress| DB[(Customer database)]
+    Store -->|publication feed| Intent[Intent Service]
+    Processor -->|read-only presentation API| Intent
+    Intent -->|intent state| DB[(Customer database)]
     Processor -->|publish derived artifacts| Store
     DB --> API
     API --> UI
@@ -36,12 +37,12 @@ flowchart LR
 3. Aven API atomically publishes the source file and an `intent.declaration@1` artifact.
    A retry uses the same identities, so an ambiguous network response cannot create a
    duplicate intent.
-4. The Processor consumes the Artifact Store publication feed and projects the intent
-   into the `aven_intents` schema in the customer's database. Projection writes and
+4. The Intent Service consumes the Artifact Store publication feed and projects the intent
+   into the `aven_intent_service` schema in the customer's database. Projection writes and
    feed-cursor advancement share one transaction, making replay safe.
-5. The existing file-processing pipeline runs. Each immutable output is linked to the
-   intent, while the single File skill records the current stage, presentation, and
-   warnings.
+5. The existing file-processing pipeline runs independently. The Intent Service polls
+   its read-only presentation endpoint and links each immutable output to the intent,
+   while the single File skill records the current stage, presentation, and warnings.
 6. The UI refreshes the authoritative projection. It shows the narrowest known label
    (for example, `PDF`, then `Document`, then `Invoice`), live processing state, and all
    source and derived artifacts.
@@ -54,7 +55,8 @@ reload with the intent after an application restart.
 | Part | Owns |
 | --- | --- |
 | Artifact Store | Immutable source bytes, derived artifact payloads, artifact types, and publication order |
-| Processor Intent component | Intent projection, ordered contributions, artifact membership, File-skill state, and feed cursor |
+| Intent Service | Intent lifecycle, ordered contributions, artifact membership, File-skill projection, and feed cursor |
+| Processor | Artifact processing cases and their current read-only presentations |
 | Aven API | User authentication, tenant/scope resolution, authorization boundary, and calls to internal services |
 | Tauri bridge | Authenticated desktop transport and bounded artifact preview; no service credentials |
 | UI | Presentation plus temporary upload progress until persistent state is readable |
@@ -78,12 +80,12 @@ customer data and Artifact Store publications.
 
 ## Current boundary
 
-File-triggered intents, their contribution history, File skill, and artifact list are
-persistent. The preinstalled sample intents, their other skills, gates, and unrelated
-workflows remain demo data. General intent lifecycle actions such as arbitrary create,
-merge, archive, restore, and delete still modify the in-memory prototype and are not
-yet durable. Autonomous agent or skill execution beyond chat and the current artifact
-processor is also outside this slice.
+File-triggered intents, arbitrary creation, metadata updates, ordered contributions,
+archive/restore, merge, tombstone deletion, File skill state, and artifact membership
+are persistent. Version preconditions prevent lost updates. The preinstalled sample
+intents, their other skills, gates, and unrelated workflows remain UI-only demo data;
+the UI refuses mixed demo/persistent merges. Autonomous agent or skill execution beyond
+chat and the current artifact processor remains outside this slice.
 
 ## Run it locally
 

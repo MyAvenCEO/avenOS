@@ -4,7 +4,12 @@ Status: implemented as a locally runnable vertical slice on `feat/persistent-int
 
 ## What is real now
 
-A desktop file drop creates one stable intent ID before upload starts. The file and an immutable `intent.declaration@1` artifact are then committed in one idempotent Artifact Store publication. The Processor consumes that publication and projects a tenant-local intent into the customer database.
+A desktop file drop creates one stable intent ID before upload starts. The file and an
+immutable `intent.declaration@1` artifact are committed in one idempotent Artifact Store
+publication. The standalone Intent Service consumes that publication and projects a
+tenant-local intent into the customer database. The Processor remains independently
+responsible for processing and exposes its current presentation read-only to the Intent
+Service.
 
 The persistent intent contains:
 
@@ -22,10 +27,11 @@ flowchart LR
     T --> A[Aven API]
     A -->|atomic publication| S[Artifact Store]
     S -->|file + intent declaration| F[Publication feed]
-    F --> P[Processor]
-    P -->|projection| I[(aven_intents schema)]
+    F --> I[Intent Service]
+    I -->|projection| D[(aven_intent_service schema)]
+    P[Processor] -->|read-only processing presentation| I
     P -->|derived artifacts| S
-    I --> A
+    D --> A
     A --> T
     T --> U[Intent UI]
 ```
@@ -33,12 +39,18 @@ flowchart LR
 ## Ownership boundaries
 
 - Artifact Store owns immutable bytes, artifact payloads, types, and publication ordering.
-- The Processor deployment owns the new `aven_intents` schema and the projection cursor. Intent projection and feed advancement happen in the same database transaction.
+- The Intent Service owns the `aven_intent_service` schema, lifecycle state,
+  contributions, membership, File-skill projection, and feed cursor. Projection and
+  cursor advancement happen in the same database transaction.
+- The Processor owns only `aven_processing` and its processing cases. A dedicated,
+  read-only bearer credential lets the Intent Service observe current presentations.
 - Aven API authenticates the user, resolves the user's customer database and scope, and proxies only that tenant's intent/artifact operations.
 - Tauri holds no service credential. It calls Aven API with the existing user session.
 - The UI holds provisional upload state only until the authoritative intent projection is readable.
 
-Customer separation remains database-per-customer. Processor schema version is now 4. Artifact Store schema/catalog version is now 3 so existing customer databases are reconciled and receive `intent.declaration@1`, not only newly provisioned databases.
+Customer separation remains database-per-customer. Artifact Store schema version is 3,
+Processor schema version is 5, and Intent Service schema version is 1. Existing customer
+databases are reconciled independently for all three bounded schemas.
 
 ## Known-state behavior
 
@@ -54,7 +66,7 @@ Customer separation remains database-per-customer. Processor schema version is n
 
 ## Run and verify locally
 
-Start or rebuild the API + Artifact Store + Processor stack:
+Start or rebuild the API + Artifact Store + Processor + Intent Service stack:
 
 ```bash
 bun run dev:api:artifacts
@@ -64,9 +76,14 @@ In another terminal, run the automated persistent-intent smoke test:
 
 ```bash
 bun run test:persistent-intent:smoke
+bun run test:intent-service:lifecycle
 ```
 
-It publishes a mock invoice and declaration atomically, waits for all 12 processing stages, verifies all 18 derived artifacts belong to the intent, and appends a durable conversation contribution. A successful run ends with JSON containing `"status": "ok"`, an `intentId`, and an `artifactId`.
+The first command publishes a mock invoice and declaration atomically, waits for all 12
+processing stages, verifies all 18 derived artifacts belong to the intent, and appends a
+durable conversation contribution. The lifecycle smoke separately verifies create,
+optimistic update and stale-write rejection, archive, restore, merge, and tombstone
+delete.
 
 Then start the desktop application:
 
@@ -94,6 +111,8 @@ docker compose \
 
 ## Deliberately still mocked
 
-The preinstalled sample intents, their unrelated skills, gates, and workflow actions remain demo data. For a persistent file intent, only the File skill and artifact rail are authoritative. General intent create/update/archive/merge/delete tool calls still operate on the in-memory prototype; they must not yet be presented as durable operations. Automatic agent actions beyond the current chat and artifact-processing pipeline are also outside this slice.
-
-The next persistence increment should move those intent lifecycle commands behind the same authenticated Intent API, with optimistic version checks and an explicit archive/delete retention policy.
+The preinstalled sample intents, their unrelated skills, gates, and workflow actions
+remain demo data. For persistent intents, create/update/archive/restore/merge/delete and
+contributions are authoritative and survive restart. The UI intentionally refuses to
+merge demo and persistent intents. Automatic agent actions beyond chat and the current
+artifact-processing pipeline remain outside this slice.

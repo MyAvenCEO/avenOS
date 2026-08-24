@@ -70,6 +70,11 @@ ssh-keygen -t ed25519 -N '' -f ./aven-identity-next-deploy -C aven-identity-next
 | `ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN` | Environment-worker-to-Processor-provisioner credential | 32–128 URL-safe characters; unique |
 | `ARTIFACT_PROCESSOR_RUNTIME_PASSWORD` | Restricted Processor database role | 32–128 URL-safe characters; unique |
 | `ARTIFACT_PROCESSOR_VISION_API_KEY` | Authenticates the Processor to the configured OpenAI-compatible vision endpoint | Required only in `bearer` auth mode; 20–512 non-whitespace characters; dedicated to `next` |
+| `INTENT_SERVICE_BEARER_TOKEN` | API-to-Intent-Service credential | 32–128 URL-safe characters; unique |
+| `INTENT_SERVICE_DIRECTORY_BEARER_TOKEN` | Intent-Service-to-API tenant directory | 32–128 URL-safe characters; unique |
+| `INTENT_SERVICE_PROVISIONER_BEARER_TOKEN` | Environment-worker-to-Intent-provisioner | 32–128 URL-safe characters; unique |
+| `INTENT_SERVICE_RUNTIME_PASSWORD` | Restricted Intent Service database role | 32–128 URL-safe characters; unique |
+| `INTENT_SERVICE_PROCESSOR_BEARER_TOKEN` | Intent-Service-to-Processor read API | 32–128 URL-safe characters; unique |
 | `SMTP_URL` | SMTP transport used by the email worker | Full URL such as `smtps://USER:PASSWORD@HOST:465`; URL-encode credentials |
 | `CREEM_API_KEY` | Creates Creem checkout sessions | `next` test key |
 | `CREEM_PRODUCT_ID` | Product used for name checkout | Product ID from the same Creem environment as the API key |
@@ -123,6 +128,10 @@ GitHub-hosted runner egress addresses are dynamic. For unattended deployment fro
 | `ARTIFACT_PROCESSOR_VISION_AUTH_MODE` | `bearer` | `bearer` for an API key or `none` for an authentication-free open-model endpoint |
 | `ARTIFACT_PROCESSOR_VISION_MAX_PAGES` | `15` | Optional paid-stage page ceiling, from `1` through `63`; defaults to `15` |
 | `ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS` | `180` | Optional per-call timeout, from `5` through `900`; defaults to `180` |
+| `INTENT_SERVICE_MAX_TENANT_POOLS` | `64` | Optional bounded customer pool cache |
+| `INTENT_SERVICE_CONNECTIONS_PER_TENANT` | `2` | Optional per-customer SQL pool size |
+| `INTENT_SERVICE_TENANT_REFRESH_SECONDS` | `30` | Directory refresh and suspension convergence interval |
+| `INTENT_SERVICE_MEMORY_LIMIT` | `512m` | Compose memory limit |
 
 The vision endpoint receives rendered customer document pages and extracted text. Do
 not enable it until the provider project, processing region, retention settings, access
@@ -293,6 +302,7 @@ Each paid customer receives a database and a `NOLOGIN` owner role in this cluste
 - [ ] Complete a test checkout, receive the email, use `Login` before enrollment, create the passkey, verify the email link is then rejected, and confirm the dashboard shows only `Download AvenOS`.
 - [ ] Confirm the environment worker is `ready` and created exactly one `cust_*` database for the purchased name.
 - [ ] Add the four distinct `ARTIFACT_PROCESSOR_*` secrets listed in section 2.
+- [ ] Add the five distinct `INTENT_SERVICE_*` secrets listed in section 2.
 - [ ] Confirm `/api/health/status` reports `artifactProcessing=available`.
 - [ ] Upload a test file and confirm its authenticated processing endpoint reaches a terminal or explicitly warned presentation.
 - [ ] Confirm `https://id.next.aven.ceo/internal/v1/artifact-processing/tenants` returns 404.

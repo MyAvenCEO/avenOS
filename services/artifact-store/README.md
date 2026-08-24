@@ -61,6 +61,7 @@ docker compose \
   up --build -d
 bun run artifact-store:smoke
 bun run artifact-processing:smoke
+bun run intent-service:lifecycle-smoke
 bun run artifact-processing:failure-smoke
 bun run artifact-processing:real-smoke
 bun run artifact-processing:real-pdf-smoke
@@ -74,7 +75,8 @@ same schema automatically.
 
 ### Local artifact processing
 
-The local overlay also starts `artifact-processor` and its one-shot schema migrator.
+The local overlay also starts `artifact-processor`, the independent Intent Service,
+their provisioners, and their one-shot schema migrators.
 The processor discovers normal `desktop-drop` uploads as well as explicit test inputs.
 With vision disabled, PDF, PNG, and JPEG files take the deterministic path:
 byte-signature inspection, logical page decomposition, native PDF word extraction with
@@ -135,10 +137,12 @@ the authenticated Aven API route:
 GET /api/artifacts/{artifactId}/processing
 ```
 
-The `next` deployment uses the same image for Store and Processor binaries. A separate
-Processor provisioner installs schema version 3 and the exact scope in every ready
-customer database. The runtime discovers only control-plane-approved bindings through
-the private Aven API directory, uses bounded per-customer pools, and participates in
+The `next` deployment uses the same image for Store and Processor binaries and a
+separate image for the Intent Service. A separate Processor provisioner installs schema
+version 5 and the exact scope in every ready
+customer database; the Intent provisioner installs its own schema version 1. Both
+runtimes discover only control-plane-approved bindings through
+the private Aven API directory, use bounded per-customer pools, and participate in
 aggregate deployment health. Required GitHub Environment values and rollback steps are
 in the [deployment guide](../aven-api/docs/github-deployment.md#first-processor-rollout-to-next).
 

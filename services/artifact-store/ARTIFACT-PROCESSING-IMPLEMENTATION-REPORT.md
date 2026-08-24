@@ -13,13 +13,15 @@ pools with the restricted `aven_artifact_processor` role, and reports not-ready 
 listed tenant has not passed or is failing its runtime probe.
 
 The environment worker creates and rotates the Processor role, installs schema version
-3 and the exact scope through a separate provisioner credential, records rollout state,
+5 and the exact scope through a separate provisioner credential, records rollout state,
 and revokes/terminates both Store and Processor access on suspension. The production
 Compose overlay, `release-next` workflow, aggregate health endpoint, Caddy internal-path
-deny rule, and GitHub Environment documentation now include the Processor.
+deny rule, and GitHub Environment documentation now include the Processor. Version 5
+preserves the old intent projection only for the Intent Service handoff and revokes the
+Processor runtime's access to it.
 
 The verified existing-data upgrade converged an already-owned local customer to schema
-version 3, produced a one-entry tenant directory, passed tenant-mode routing checks,
+version 5, produced a one-entry tenant directory, passed tenant-mode routing checks,
 and returned `artifactProcessing=available` with no pending, failed, expired, or drifted
 environments.
 
