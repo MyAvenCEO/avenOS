@@ -63,6 +63,7 @@ const storeEpoch = context.storeEpoch
 if (typeof storeEpoch !== 'string') throw new Error('Store context has no epoch')
 const claimId = crypto.randomUUID()
 const publicationId = crypto.randomUUID()
+const intentId = crypto.randomUUID()
 
 await storeRequest(`/v1/scopes/${scopeId}/uploads/${claimId}`, {
 	method: 'PUT',
@@ -99,6 +100,20 @@ const publication = await storeJson(`/v1/scopes/${scopeId}/publications/${public
 					blob: { sha256, length: bytes.byteLength },
 					references: [],
 					output: null
+				},
+				{
+					localKey: 'intent',
+					typeKey: 'intent.declaration',
+					typeVersion: 1,
+					payload: {
+						intentId,
+						title: 'mock-acme-invoice.pdf',
+						triggerKind: 'file-upload',
+						observedAt: new Date().toISOString()
+					},
+					blob: null,
+					references: [],
+					output: null
 				}
 			],
 			evidence: []
@@ -107,7 +122,7 @@ const publication = await storeJson(`/v1/scopes/${scopeId}/publications/${public
 	})
 })
 const artifacts = publication.artifacts
-if (!Array.isArray(artifacts) || artifacts.length !== 1)
+if (!Array.isArray(artifacts) || artifacts.length !== 2)
 	throw new Error('Source publication failed')
 const artifactId = (artifacts[0] as Record<string, unknown>).artifactId
 if (typeof artifactId !== 'string') throw new Error('Source artifact id is missing')
@@ -192,11 +207,59 @@ for (const required of [
 	if (!types.has(required)) throw new Error(`Derived type ${required} is missing`)
 }
 
+const intentResponse = await fetch(`${processorUrl}/v1/scopes/${scopeId}/intents/${intentId}`, {
+	headers: {
+		authorization: `Bearer ${processorToken}`,
+		'x-aven-artifact-database': databaseName
+	}
+})
+if (!intentResponse.ok) {
+	throw new Error(
+		`Intent projection failed (${intentResponse.status}): ${await intentResponse.text()}`
+	)
+}
+const projectedIntent = (await intentResponse.json()) as Record<string, unknown>
+if (projectedIntent.sourceArtifactId !== artifactId)
+	throw new Error('Intent source artifact drifted')
+const intentArtifacts = projectedIntent.artifacts
+if (!Array.isArray(intentArtifacts) || intentArtifacts.length !== derived.length + 1) {
+	throw new Error('Intent does not contain the original and every derived artifact')
+}
+const fileSkill = projectedIntent.fileSkill as Record<string, unknown>
+if (fileSkill.state !== status.state)
+	throw new Error('File skill did not reach the processor state')
+
+const contributionId = crypto.randomUUID()
+const contributionResponse = await fetch(
+	`${processorUrl}/v1/scopes/${scopeId}/intents/${intentId}`,
+	{
+		method: 'POST',
+		headers: {
+			authorization: `Bearer ${processorToken}`,
+			'x-aven-artifact-database': databaseName,
+			'content-type': 'application/json'
+		},
+		body: JSON.stringify({
+			id: contributionId,
+			contributorKind: 'human',
+			kind: 'message',
+			text: 'Persistent smoke contribution',
+			payload: {}
+		})
+	}
+)
+if (!contributionResponse.ok) {
+	throw new Error(
+		`Intent contribution failed (${contributionResponse.status}): ${await contributionResponse.text()}`
+	)
+}
+
 console.log(
 	JSON.stringify(
 		{
 			status: 'ok',
 			artifactId,
+			intentId,
 			caseId: status.caseId,
 			preferredType: status.preferredType,
 			stages: stages.length,

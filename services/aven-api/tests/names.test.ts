@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FakePaymentProvider } from '../src/lib/server/billing/fake.js'
 import { parseCreemEvent } from '../src/lib/server/billing/provider.js'
 import { sha256Hex } from '../src/lib/server/crypto.js'
+import { CURRENT_ARTIFACT_STORE_SCHEMA_VERSION } from '../src/lib/server/environments/provisioning.js'
 import { EnvironmentService } from '../src/lib/server/environments/service.js'
 import { EnvironmentWorker } from '../src/lib/server/environments/worker.js'
 import { NameService } from '../src/lib/server/names/service.js'
@@ -79,7 +80,7 @@ describe('checkout grant', () => {
 		expect(environment.artifact_store_status).toBe('pending')
 		expect(environment.artifact_store_schema_version).toBe(0)
 		expect(environment.effective_config.artifactStore).toEqual({
-			schemaVersion: 1,
+			schemaVersion: CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
 			scopeId: environment.id
 		})
 		expect(
@@ -105,8 +106,8 @@ describe('checkout grant', () => {
 		const worker = new EnvironmentWorker(database.pool, artifactConfig, pino({ level: 'silent' }))
 		expect(await worker.enqueueArtifactStoreUpgrades()).toBe(1)
 		await database.pool.query(
-			"UPDATE customer_environments SET status='ready',artifact_store_status='ready',artifact_store_schema_version=2 WHERE id=$1",
-			[environment.id]
+			"UPDATE customer_environments SET status='ready',artifact_store_status='ready',artifact_store_schema_version=$2 WHERE id=$1",
+			[environment.id, CURRENT_ARTIFACT_STORE_SCHEMA_VERSION]
 		)
 		expect(await environments.artifactTargetForUser(environment.owner_user_id)).toEqual({
 			environmentId: environment.id,

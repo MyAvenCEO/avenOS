@@ -17,8 +17,8 @@ export interface EnvironmentProvisionInput {
 	log: { info(message: string): Promise<void> | void }
 }
 
-export const CURRENT_ARTIFACT_STORE_SCHEMA_VERSION = 2
-export const CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION = 3
+export const CURRENT_ARTIFACT_STORE_SCHEMA_VERSION = 3
+export const CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION = 4
 
 const DATABASE_NAME = /^cust_[a-z0-9_]+$/
 const ROLE_NAME = /^[a-z][a-z0-9_]{0,62}$/

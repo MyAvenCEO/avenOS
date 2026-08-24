@@ -4,7 +4,9 @@ import { MAX_ARTIFACT_FILE_BYTES } from '$lib/server/artifacts/service.js'
 import { AppError } from '$lib/server/errors.js'
 
 const publicationIdSchema = z.uuid()
+const intentIdSchema = z.uuid()
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/)
+const observedAtSchema = z.iso.datetime({ offset: true })
 
 function requiredHeader(request: Request, name: string): string {
 	const value = request.headers.get(name)
@@ -40,6 +42,8 @@ export const PUT = api(async (event, rt) => {
 	const target = await rt.environments.artifactTargetForUser(user.id)
 
 	const publicationId = publicationIdSchema.parse(event.params.publicationId)
+	const intentId = intentIdSchema.parse(requiredHeader(event.request, 'x-aven-intent-id'))
+	const observedAt = observedAtSchema.parse(requiredHeader(event.request, 'x-aven-observed-at'))
 	const originalName = decodeOriginalName(requiredHeader(event.request, 'x-aven-original-name'))
 	const mediaType = requiredHeader(event.request, 'content-type')
 	if (mediaType.length > 255 || !mediaType.includes('/')) {
@@ -60,6 +64,8 @@ export const PUT = api(async (event, rt) => {
 			databaseName: target.databaseName,
 			scopeId: target.scopeId,
 			publicationId,
+			intentId,
+			observedAt,
 			originalName,
 			mediaType,
 			sha256,

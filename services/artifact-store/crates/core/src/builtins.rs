@@ -41,6 +41,8 @@ const BANKING_ACCOUNT_STATEMENT_CANDIDATE_JSON: &[u8] = include_bytes!(
 );
 const BANKING_STATEMENT_VALIDATION_JSON: &[u8] =
     include_bytes!("../../../conformance/fixtures/protocol/banking.statement-validation.v1.json");
+const INTENT_DECLARATION_JSON: &[u8] =
+    include_bytes!("../../../conformance/fixtures/protocol/intent.declaration.v1.json");
 
 /// Exact source-controlled built-ins registered by the first migration.
 ///
@@ -64,6 +66,7 @@ pub fn builtin_type_definitions() -> Result<Vec<TypeDefinition>, crate::CoreErro
         BOOKKEEPING_INVOICE_DETAILS_JSON,
         BANKING_ACCOUNT_STATEMENT_CANDIDATE_JSON,
         BANKING_STATEMENT_VALIDATION_JSON,
+        INTENT_DECLARATION_JSON,
     ]
     .into_iter()
     .map(|bytes| {

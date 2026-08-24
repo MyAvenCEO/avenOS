@@ -260,7 +260,10 @@ export class EnvironmentWorker {
 					name: names.name,
 					databaseName: names.databaseName,
 					stackName: names.stackName,
-					artifactStore: { schemaVersion: 1, scopeId: environmentId },
+					artifactStore: {
+						schemaVersion: CURRENT_ARTIFACT_STORE_SCHEMA_VERSION,
+						scopeId: environmentId
+					},
 					artifactProcessor: {
 						schemaVersion: CURRENT_ARTIFACT_PROCESSOR_SCHEMA_VERSION,
 						scopeId: environmentId
