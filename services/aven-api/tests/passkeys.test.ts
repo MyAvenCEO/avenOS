@@ -16,18 +16,18 @@ describe('passkey setup link', () => {
 		const user = await insertUser(database)
 		const service = new PasskeyService(database.pool, true)
 		const token = await service.issueSetupLink(database.pool, user.id)
-		expect(token).toBeTruthy()
-		expect(await service.verifySetupLogin(token!)).toEqual({ userId: user.id })
-		expect(await service.verifySetupLogin(token!)).toEqual({ userId: user.id })
+		if (!token) throw new Error('no setup link was issued')
+		expect(await service.verifySetupLogin(token)).toEqual({ userId: user.id })
+		expect(await service.verifySetupLogin(token)).toEqual({ userId: user.id })
 
 		const id = randomUUID()
 		await database.pool.query(
 			"INSERT INTO passkey(id,name,public_key,user_id,credential_id,counter,device_type,backed_up,created_at,prf_enabled) VALUES($1,'test','key',$2,$3,0,'singleDevice',false,now(),false)",
 			[id, user.id, `credential-${id}`]
 		)
-		expect(await service.verifySetupLogin(token!)).toEqual({ userId: user.id })
+		expect(await service.verifySetupLogin(token)).toEqual({ userId: user.id })
 		await service.finishEnrollment(user.id, true, `credential-${id}`)
-		expect(await service.verifySetupLogin(token!)).toBeNull()
+		expect(await service.verifySetupLogin(token)).toBeNull()
 		expect((await service.status(user.id)).passkeys[0].prf_enabled).toBe(true)
 	})
 })

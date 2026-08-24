@@ -76,9 +76,8 @@ ssh-keygen -t ed25519 -N '' -f ./aven-identity-next-deploy -C aven-identity-next
 | `INTENT_SERVICE_RUNTIME_PASSWORD` | Restricted Intent Service database role | 32–128 URL-safe characters; unique |
 | `INTENT_SERVICE_PROCESSOR_BEARER_TOKEN` | Intent-Service-to-Processor read API | 32–128 URL-safe characters; unique |
 | `SMTP_URL` | SMTP transport used by the email worker | Full URL such as `smtps://USER:PASSWORD@HOST:465`; URL-encode credentials |
-| `CREEM_API_KEY` | Creates Creem checkout sessions | `next` test key |
-| `CREEM_PRODUCT_ID` | Product used for name checkout | Product ID from the same Creem environment as the API key |
-| `CREEM_WEBHOOK_SECRET` | Verifies Creem webhook signatures | Signing secret for the configured endpoint |
+| `POLAR_API_KEY` | Polar org access token (checkouts, products, orders, subscriptions) | sandbox org token |
+| `POLAR_WEBHOOK_SECRET` | Verifies Polar webhook signatures (Standard Webhooks) | Signing secret for the configured endpoint |
 
 Do not reuse database passwords. Hex values avoid URL and shell encoding ambiguity.
 
@@ -248,16 +247,16 @@ If the local private key was already deleted, perform the last check from an app
 
 The workflow logs into the S3-compatible backend at `s3://<bucket>/avenos/identity` using the location endpoint in `PULUMI_STATE_S3_REGION`. Pulumi stores project-scoped state, checkpoint history, and lock objects below that prefix. Secret fields are encrypted with `PULUMI_CONFIG_PASSPHRASE`; the bucket itself must also remain private. `Pulumi.<stack>.yaml`, `.pulumi/`, exported state, backend credentials, and the passphrase must never be committed.
 
-## 8. SMTP and Creem
+## 8. SMTP and Polar
 
 - [x] Create the SMTP account and store its URL in `SMTP_URL`.
 - [ ] Authorize `SMTP_FROM` and configure SPF and DKIM.
 - [ ] Confirm the Hetzner host may reach the SMTP endpoint and port.
-- [ ] Create a Creem test product matching `NAME_PRICE_EUR`.
-- [x] Store non-empty Creem API key and product ID values in GitHub.
-- [ ] Configure `https://id.next.aven.ceo/api/webhooks/creem` for the checkout-completion, refund, and dispute events consumed by the API.
-- [x] Store that endpoint's signing secret in `CREEM_WEBHOOK_SECRET`.
-- [ ] Confirm Creem preserves the checkout metadata and customer email used by the grant transaction.
+- [x] Products sync themselves from the pricing SSOT (`db:seed:billing`, matched by `metadata.tier`).
+- [x] Store a non-empty Polar org token in GitHub (`POLAR_API_KEY`).
+- [x] Configure `https://id.next.aven.ceo/api/webhooks/polar` (format raw) for the order, subscription, customer-state and refund events consumed by the API.
+- [x] Store that endpoint's signing secret in `POLAR_WEBHOOK_SECRET`.
+- [ ] Confirm Polar preserves the checkout metadata and customer email used by the grant transaction (order.paid carries them).
 
 ## 9. DNS, TLS, passkeys, and app association
 
@@ -316,5 +315,5 @@ After this bootstrap, ordinary `next` releases apply infrastructure changes and 
 - Independent backup/restore rehearsal and availability monitoring for the Pulumi state bucket beyond its enabled object versioning.
 - Rotation and emergency revocation procedures for GitHub Environment secrets.
 - Customer application/Pulumi provisioning beyond the reserved database and stack name.
-- Production `id.aven.ceo` infrastructure, credentials, DNS, Creem product, SMTP configuration, and approval policy.
+- Production `id.aven.ceo` infrastructure, credentials, DNS, Polar production org, SMTP configuration, and approval policy.
 - Deliberate retirement of the former host after the new foundation is verified.

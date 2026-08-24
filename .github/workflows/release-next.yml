@@ -429,11 +429,9 @@ jobs:
           INTENT_SERVICE_TENANT_REFRESH_SECONDS: ${{ vars.INTENT_SERVICE_TENANT_REFRESH_SECONDS }}
           INTENT_SERVICE_MEMORY_LIMIT: ${{ vars.INTENT_SERVICE_MEMORY_LIMIT }}
           SMTP_URL: ${{ secrets.SMTP_URL }}
-          CREEM_API_KEY: ${{ secrets.CREEM_API_KEY }}
-          CREEM_PRODUCT_ID: ${{ secrets.CREEM_PRODUCT_ID }}
-          CREEM_PRODUCT_AVENME: ${{ secrets.CREEM_PRODUCT_AVENME }}
-          CREEM_PRODUCT_AVENCEO: ${{ secrets.CREEM_PRODUCT_AVENCEO }}
-          CREEM_WEBHOOK_SECRET: ${{ secrets.CREEM_WEBHOOK_SECRET }}
+          POLAR_API_KEY: ${{ secrets.POLAR_API_KEY }}
+          POLAR_SERVER: ${{ vars.POLAR_SERVER || 'sandbox' }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
           IMAGE: ${{ needs.publish-identity-image.outputs.image }}@${{ needs.publish-identity-image.outputs.digest }}
           ARTIFACT_IMAGE: ${{ needs.publish-artifact-store-image.outputs.image }}@${{ needs.publish-artifact-store-image.outputs.digest }}
           INTENT_IMAGE: ${{ needs.publish-intent-service-image.outputs.image }}@${{ needs.publish-intent-service-image.outputs.digest }}
@@ -683,11 +681,9 @@ jobs:
             printf 'INTENT_SERVICE_TENANT_REFRESH_SECONDS=%s\n' "$INTENT_SERVICE_TENANT_REFRESH_SECONDS"
             printf 'INTENT_SERVICE_MEMORY_LIMIT=%s\n' "$INTENT_SERVICE_MEMORY_LIMIT"
             printf 'SMTP_URL=%s\n' "$SMTP_URL"
-            printf 'CREEM_API_KEY=%s\n' "$CREEM_API_KEY"
-            printf 'CREEM_PRODUCT_ID=%s\n' "$CREEM_PRODUCT_ID"
-            printf 'CREEM_PRODUCT_AVENME=%s\n' "$CREEM_PRODUCT_AVENME"
-            printf 'CREEM_PRODUCT_AVENCEO=%s\n' "$CREEM_PRODUCT_AVENCEO"
-            printf 'CREEM_WEBHOOK_SECRET=%s\n' "$CREEM_WEBHOOK_SECRET"
+            printf 'POLAR_API_KEY=%s\n' "$POLAR_API_KEY"
+            printf 'POLAR_SERVER=%s\n' "$POLAR_SERVER"
+            printf 'POLAR_WEBHOOK_SECRET=%s\n' "$POLAR_WEBHOOK_SECRET"
           } > "$RUNNER_TEMP/identity-deploy/.env"
 
       - name: Configure SSH

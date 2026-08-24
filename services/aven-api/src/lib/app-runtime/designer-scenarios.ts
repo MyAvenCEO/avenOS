@@ -116,9 +116,9 @@ export const designerPages: DesignerPage[] = [
 		path: '/purchase/checkout',
 		scenarios: [
 			{
-				id: 'creem-loading',
-				label: 'Creem loading',
-				href: '/purchase/checkout?token=designer&scenario=creem-loading'
+				id: 'polar-loading',
+				label: 'Polar loading',
+				href: '/purchase/checkout?token=designer&scenario=polar-loading'
 			},
 			{
 				id: 'fake-ready',
@@ -136,14 +136,14 @@ export const designerPages: DesignerPage[] = [
 				href: '/purchase/checkout?token=designer&scenario=fake-error'
 			},
 			{
-				id: 'creem-ready',
-				label: 'Creem ready',
-				href: '/purchase/checkout?token=designer&scenario=creem-ready'
+				id: 'polar-ready',
+				label: 'Polar ready',
+				href: '/purchase/checkout?token=designer&scenario=polar-ready'
 			},
 			{
-				id: 'creem-confirming',
-				label: 'Creem confirming',
-				href: '/purchase/checkout?token=designer&scenario=creem-confirming'
+				id: 'polar-confirming',
+				label: 'Polar confirming',
+				href: '/purchase/checkout?token=designer&scenario=polar-confirming'
 			}
 		]
 	},

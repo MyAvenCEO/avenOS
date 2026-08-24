@@ -73,6 +73,15 @@
 	},
 	"overrides": [
 		{
+			"includes": [
+				"artifact-types/**/*.json",
+				"services/artifact-store/conformance/fixtures/**/*.json"
+			],
+			"formatter": {
+				"enabled": false
+			}
+		},
+		{
 			"includes": ["**/*.svelte"],
 			"linter": {
 				"rules": {
