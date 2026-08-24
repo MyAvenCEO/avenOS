@@ -2,6 +2,7 @@ import { Actor } from '$lib/actors/actor'
 import { bus, type HeldPreview } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { singleton } from '$lib/actors/singleton'
+import type { ArtifactProcessingPresentation } from '$lib/artifacts/processing'
 
 /**
  * THE INTENTS — the workspace's subjects, MOCKED (0158) but owned by an
@@ -26,6 +27,9 @@ export interface MockArtifact {
 	kind: 'doc' | 'todo' | 'calendar' | 'person' | 'entity' | 'statement'
 	title: string
 	note: string
+	artifactId?: string
+	typeKey?: string
+	stageKey?: string
 }
 export interface SkillStatus {
 	skill: string
@@ -37,6 +41,7 @@ export interface SkillStatus {
 	done: string[]
 	/** The node the instance currently sits on, if any. */
 	current?: string
+	stages?: { key: string; state: string }[]
 }
 export interface MockIntent {
 	id: string
@@ -51,6 +56,8 @@ export interface MockIntent {
 	log: LogEntry[]
 	artifacts: MockArtifact[]
 	skills: SkillStatus[]
+	persistent?: boolean
+	routingSummary?: string
 	/**
 	 * The gate this intent is holding for the human. A gate can exist in any
 	 * state — `waiting` means the intent AS A WHOLE is blocked on it; in the
@@ -60,6 +67,48 @@ export interface MockIntent {
 }
 
 export type IntentState = 'working' | 'waiting' | 'done' | 'error' | 'archive'
+
+export interface PersistentIntentDetail {
+	id: string
+	title: string
+	routingSummary: string
+	state: IntentState
+	sourceArtifactId: string
+	createdAt: string
+	updatedAt: string
+	contributions: Array<{
+		id: string
+		sequence: number
+		contributorKind: 'human' | 'agent' | 'file-skill' | 'system'
+		kind: string
+		text: string | null
+		payload: Record<string, unknown>
+		createdAt: string
+	}>
+	artifacts: Array<{
+		artifactId: string
+		relation: 'source' | 'file-skill-output'
+		typeKey: string
+		typeVersion: number
+		stageKey: string | null
+		displayOrder: number
+	}>
+	fileSkill: {
+		caseId: string | null
+		state: 'waiting' | 'active' | 'succeeded' | 'needs_review' | 'failed'
+		projectionVersion: string | null
+		presentation: ArtifactProcessingPresentation | null
+		updatedAt: string
+	}
+}
+
+function processingNote(state: PersistentIntentDetail['fileSkill']['state']): string {
+	if (state === 'waiting') return 'Waiting for the Processor'
+	if (state === 'active') return 'Processing the file'
+	if (state === 'succeeded') return 'Processing complete'
+	if (state === 'needs_review') return 'Processing finished with a warning'
+	return 'Processing failed at the last known stage'
+}
 
 const INTENTS: MockIntent[] = [
 	{
@@ -736,6 +785,120 @@ class IntentsActor extends Actor {
 	items = $state<MockIntent[]>(INTENTS)
 	selectedId = $state(INTENTS[0].id)
 
+	beginFileIntent(id: string, title: string): void {
+		const intent: MockIntent = {
+			id,
+			type: 'file',
+			title,
+			source: 'Upload · File',
+			when: now(),
+			status: 'working',
+			persistent: true,
+			routingSummary: `File upload: ${title}`,
+			log: [
+				{ step: 'File upload started', when: now(), state: 'running', skill: 'file', note: title }
+			],
+			artifacts: [{ kind: 'doc', title, note: 'Uploading…', typeKey: 'core.file' }],
+			skills: [
+				{
+					skill: 'file',
+					state: 'running',
+					note: 'Waiting for upload',
+					workflow: 'file',
+					done: [],
+					stages: []
+				}
+			]
+		}
+		this.items.unshift(intent)
+		this.selectedId = id
+		chatActor.core.use(id)
+	}
+
+	failFileIntent(id: string, message: string): void {
+		const intent = this.items.find((item) => item.id === id && item.persistent)
+		if (!intent) return
+		intent.status = 'error'
+		intent.log.push({
+			step: 'File upload failed',
+			when: now(),
+			state: 'waiting',
+			skill: 'file',
+			note: message
+		})
+		if (intent.artifacts[0]) intent.artifacts[0].note = 'Upload failed'
+		if (intent.skills[0]) {
+			intent.skills[0].state = 'waiting'
+			intent.skills[0].note = message
+		}
+	}
+
+	applyPersistent(detail: PersistentIntentDetail): void {
+		const presentation = detail.fileSkill.presentation
+		const stageDone =
+			presentation?.stages
+				.filter((stage) => ['succeeded', 'skipped'].includes(stage.state))
+				.map((stage) => stage.key) ?? []
+		const skillState =
+			detail.fileSkill.state === 'succeeded'
+				? 'done'
+				: detail.fileSkill.state === 'needs_review' || detail.fileSkill.state === 'failed'
+					? 'waiting'
+					: 'running'
+		const artifacts: MockArtifact[] = detail.artifacts.map((artifact, index) => ({
+			kind: artifact.typeKey === 'banking.account-statement-candidate' ? 'statement' : 'doc',
+			title: index === 0 ? detail.title : artifact.typeKey,
+			note: artifact.stageKey
+				? `${artifact.typeKey} · ${artifact.stageKey}`
+				: `${artifact.typeKey} · original`,
+			artifactId: artifact.artifactId,
+			typeKey: artifact.typeKey,
+			stageKey: artifact.stageKey ?? undefined
+		}))
+		const log: LogEntry[] = detail.contributions.map((entry) => ({
+			step:
+				entry.kind === 'file-upload'
+					? 'File uploaded'
+					: entry.contributorKind === 'human'
+						? 'Human message'
+						: 'Agent response',
+			when: new Date(entry.createdAt).toLocaleString(),
+			state: 'done',
+			skill: entry.kind === 'file-upload' ? 'file' : entry.contributorKind,
+			note:
+				entry.text ??
+				(typeof entry.payload.originalName === 'string' ? entry.payload.originalName : undefined)
+		}))
+		const existing = this.items.find((item) => item.id === detail.id)
+		const mapped: MockIntent = {
+			id: detail.id,
+			type: presentation?.preferredType ?? 'file',
+			title: presentation?.label || detail.title,
+			source: 'Upload · File',
+			when: new Date(detail.createdAt).toLocaleString(),
+			status: detail.state,
+			persistent: true,
+			routingSummary: detail.routingSummary,
+			log,
+			artifacts,
+			skills: [
+				{
+					skill: 'file',
+					state: skillState,
+					note: presentation?.summary || processingNote(detail.fileSkill.state),
+					workflow: 'file',
+					done: stageDone,
+					current: presentation?.stages.find((stage) =>
+						['running', 'queued', 'pending', 'publishing'].includes(stage.state)
+					)?.key,
+					stages: presentation?.stages ?? []
+				}
+			]
+		}
+		if (existing) Object.assign(existing, mapped)
+		else this.items.unshift(mapped)
+	}
+
 	constructor() {
 		super({
 			id: 'intents',
@@ -1058,7 +1221,11 @@ chatActor.core.context = () => {
 	const artifactContext = chatActor.core.artifactContext()
 	const rows = intents.items
 		.filter((i) => i.status !== 'archive')
-		.map((i) => `- ${i.id}: "${i.title}" (${i.type}, ${i.status})`)
+		.map(
+			(i) =>
+				`- ${i.id}: "${i.title}" (${i.type}, ${i.status})` +
+				(i.routingSummary ? ` — ${i.routingSummary}` : '')
+		)
 		.join('\n')
 	return (
 		`INTENTS right now:\n${rows}\n` +

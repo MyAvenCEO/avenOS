@@ -1,6 +1,7 @@
 <script lang="ts">
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
-import { untrack } from 'svelte'
+import { onDestroy, untrack } from 'svelte'
 import '@xyflow/svelte/dist/style.css'
 import AvenUiView from '$lib/actors/AvenUiView.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
@@ -181,6 +182,51 @@ const archivedIntents = $derived(intents.items.filter((i) => i.status === 'archi
  */
 let preview = $state<MockArtifact | null>(null)
 let skillView = $state<SkillStatus | null>(null)
+let previewUrl = $state<string | null>(null)
+let previewMediaType = $state<string | null>(null)
+let previewText = $state<string | null>(null)
+let previewLoading = $state(false)
+let previewError = $state<string | null>(null)
+
+function clearArtifactContent() {
+	if (previewUrl) URL.revokeObjectURL(previewUrl)
+	previewUrl = null
+	previewMediaType = null
+	previewText = null
+	previewError = null
+	previewLoading = false
+}
+onDestroy(clearArtifactContent)
+
+async function openArtifact(artifact: MockArtifact): Promise<void> {
+	clearArtifactContent()
+	preview = artifact
+	if (!artifact.artifactId || !isTauri()) return
+	previewLoading = true
+	try {
+		const content = await invoke<{ mediaType: string; base64: string }>('artifact_content_get', {
+			artifactId: artifact.artifactId
+		})
+		const binary = atob(content.base64)
+		const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+		previewMediaType = content.mediaType
+		if (content.mediaType.startsWith('text/') || content.mediaType.includes('json'))
+			previewText = new TextDecoder().decode(bytes)
+		else previewUrl = URL.createObjectURL(new Blob([bytes], { type: content.mediaType }))
+	} catch (error) {
+		try {
+			const envelope = await invoke<{ payload: unknown }>('artifact_get', {
+				artifactId: artifact.artifactId
+			})
+			previewMediaType = 'application/json'
+			previewText = JSON.stringify(envelope.payload, null, 2)
+		} catch {
+			previewError = error instanceof Error ? error.message : String(error)
+		}
+	} finally {
+		previewLoading = false
+	}
+}
 
 /**
  * Every intent's gate goes into the REAL queue, tagged with its intent —
@@ -620,32 +666,46 @@ const DOT: Record<string, string> = {
 
 				<!-- the ACTUAL template workflow (same cards as the Skills viewer),
 		     the instance state overlaid: ✓ done, amber running, red waiting -->
-				<div
-					bind:clientWidth={sfW}
-					bind:clientHeight={sfH}
-					class="h-[340px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/60"
-				>
-					{#key skillView.skill}
-						{#if sfNodes.length === 0}
-							<p class="flex h-full items-center justify-center text-foreground/40 text-sm">
-								{nameOf(skillView.skill)}
-								— Template folgt; die Instanz läuft als Teil der Inbox-Pipeline.
-							</p>
-						{:else}
-							<SvelteFlow
-								nodes={sfNodes}
-								edges={sfEdges}
-								nodeTypes={sfNodeTypes}
-								fitView
-								minZoom={0.15}
-								proOptions={{ hideAttribution: true }}
-							>
-								<Background bgColor="transparent" patternColor="rgba(30,41,59,0.08)" />
-								<FitView w={sfW} h={sfH} />
-							</SvelteFlow>
-						{/if}
-					{/key}
-				</div>
+				{#if skillView.skill === 'file' && skillView.stages}
+					<ol class="flex flex-col gap-2 rounded-xl border border-border bg-surface-soft/60 p-4">
+						{#each skillView.stages as stage (stage.key)}
+							<li class="flex items-center gap-3 text-sm">
+								<span
+									class="size-2 rounded-full {stage.state === 'succeeded' || stage.state === 'skipped' ? 'bg-success' : stage.state === 'failed' || stage.state === 'needs_review' ? 'bg-error' : stage.state === 'running' || stage.state === 'publishing' ? 'bg-progress' : 'bg-foreground/20'}"
+								></span>
+								<span class="min-w-0 flex-1 font-mono text-xs">{stage.key}</span>
+								<span class="font-mono text-[0.625rem] text-foreground/45">{stage.state}</span>
+							</li>
+						{/each}
+					</ol>
+				{:else}
+					<div
+						bind:clientWidth={sfW}
+						bind:clientHeight={sfH}
+						class="h-[340px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/60"
+					>
+						{#key skillView.skill}
+							{#if sfNodes.length === 0}
+								<p class="flex h-full items-center justify-center text-foreground/40 text-sm">
+									{nameOf(skillView.skill)}
+									— Template folgt; die Instanz läuft als Teil der Inbox-Pipeline.
+								</p>
+							{:else}
+								<SvelteFlow
+									nodes={sfNodes}
+									edges={sfEdges}
+									nodeTypes={sfNodeTypes}
+									fitView
+									minZoom={0.15}
+									proOptions={{ hideAttribution: true }}
+								>
+									<Background bgColor="transparent" patternColor="rgba(30,41,59,0.08)" />
+									<FitView w={sfW} h={sfH} />
+								</SvelteFlow>
+							{/if}
+						{/key}
+					</div>
+				{/if}
 
 				<!-- what this skill logged into the intent's stream -->
 				{#if skillLog.length > 0}
@@ -686,7 +746,44 @@ const DOT: Record<string, string> = {
 				</header>
 				<div class="border-border border-b"></div>
 
-				{#if preview.kind === 'doc'}
+				{#if preview.artifactId}
+					<div class="flex w-full flex-col gap-3 pt-2">
+						<div
+							class="rounded-lg bg-surface-soft px-4 py-3 font-mono text-[0.6875rem] text-foreground/60"
+						>
+							<div>artifact {preview.artifactId}</div>
+							<div>{preview.typeKey}{preview.stageKey ? ` · ${preview.stageKey}` : ''}</div>
+						</div>
+						{#if previewLoading}
+							<p class="text-sm text-foreground/45">Loading artifact view…</p>
+						{:else if previewText !== null}
+							<pre
+								class="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-4 text-xs"
+							>{previewText}</pre>
+						{:else if previewUrl && previewMediaType?.startsWith('image/')}
+							<img
+								src={previewUrl}
+								alt={preview.title}
+								class="max-h-[65vh] max-w-full self-center rounded-xl object-contain"
+							>
+						{:else if previewUrl && previewMediaType === 'application/pdf'}
+							<iframe
+								src={previewUrl}
+								title={preview.title}
+								class="h-[65vh] w-full rounded-xl border border-border"
+							></iframe>
+						{:else if previewError}
+							<div class="rounded-lg border border-warning/35 bg-warning/12 px-4 py-3 text-xs">
+								<p class="font-semibold">No direct content view</p>
+								<p class="pt-1 text-foreground/60">{previewError}</p>
+							</div>
+						{:else}
+							<p class="text-sm text-foreground/45">
+								This artifact has no supported single-file view.
+							</p>
+						{/if}
+					</div>
+				{:else if preview.kind === 'doc'}
 					<div class="w-full pt-2">
 						<div class="flex items-baseline justify-between pb-6">
 							<span class="font-semibold text-sm">{preview.title.replace('.pdf', '')}</span>
@@ -1270,7 +1367,8 @@ const DOT: Record<string, string> = {
 			<button
 				type="button"
 				onclick={() => {
-			preview = preview?.title === artifact.title ? null : artifact
+			if (preview?.title === artifact.title) { preview = null; clearArtifactContent() }
+			else void openArtifact(artifact)
 			skillView = null
 			shell.rightOpen = false
 		}}
@@ -1288,14 +1386,19 @@ const DOT: Record<string, string> = {
 					<div class="min-w-0">
 						<p class="truncate font-medium text-xs">{artifact.title}</p>
 						<p class="truncate text-[0.6875rem] text-foreground/45">{artifact.note}</p>
+						{#if artifact.artifactId}
+							<p class="truncate font-mono text-[0.5625rem] text-foreground/35">
+								{artifact.artifactId}
+							</p>
+						{/if}
 					</div>
 				</div>
 			</button>
 		{/each}
 
 		<p class="px-1 pt-2 text-[0.625rem] text-foreground/35 leading-relaxed">
-			Ein Intent kombiniert Artefakte und Skill-Flows, um eine Aufgabe zu lösen. Alles hier ist ein
-			Mock — die Pipeline (ingest → classify → intents → skill-flows) kommt später.
+			Ein Intent kombiniert Beiträge, Artefakte und Skills. Hochgeladene Dateien und ihre
+			Verarbeitung sind persistent; die vorinstallierten Demo-Intents bleiben Vorschau-Daten.
 		</p>
 	</aside>
 </div>
