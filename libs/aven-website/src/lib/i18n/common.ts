@@ -12,8 +12,13 @@ export const common: Record<
 			legalLabel: string
 			ctaLabel: string
 			copyright: string
-			vat: string
-			legal: { impressum: string; datenschutz: string; agb: string; widerruf: string }
+			legal: {
+				impressum: string
+				datenschutz: string
+				socialMedia: string
+				agb: string
+				widerruf: string
+			}
 		}
 		idCta: {
 			eyebrow: string
@@ -44,10 +49,10 @@ export const common: Record<
 			legalLabel: 'Rechtliches',
 			ctaLabel: 'avenID sichern',
 			copyright: 'avenCEO · avenOS — Own your life',
-			vat: 'Alle Preise inkl. der gesetzlichen Umsatzsteuer.',
 			legal: {
 				impressum: 'Impressum',
 				datenschutz: 'Datenschutz',
+				socialMedia: 'Social-Media-Datenschutz',
 				agb: 'AGB',
 				widerruf: 'Widerrufsrecht'
 			}
@@ -80,10 +85,10 @@ export const common: Record<
 			legalLabel: 'Legal',
 			ctaLabel: 'Claim your avenID',
 			copyright: 'avenCEO · avenOS — Own your life',
-			vat: 'All prices include VAT.',
 			legal: {
 				impressum: 'Imprint',
 				datenschutz: 'Privacy',
+				socialMedia: 'Social media privacy',
 				agb: 'Terms',
 				widerruf: 'Right of withdrawal'
 			}

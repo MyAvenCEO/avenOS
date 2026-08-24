@@ -1,4 +1,5 @@
 <script lang="ts">
+import { legalPath } from '@avenos/aven-brand'
 import { type Lang, localeHref, pick } from '$lib/i18n'
 import { common } from '$lib/i18n/common'
 import { idFunnelHref } from '$lib/id-service'
@@ -13,10 +14,12 @@ let { lang = 'de' }: { lang?: Lang } = $props()
 const t = $derived(pick(common, lang))
 
 const legal = $derived([
-	{ href: '/impressum/', label: t.footer.legal.impressum },
-	{ href: '/datenschutz/', label: t.footer.legal.datenschutz },
-	{ href: '/agb/', label: t.footer.legal.agb },
-	{ href: '/widerruf/', label: t.footer.legal.widerruf }
+	// The impressum follows the reader's language; the rest is German-only for now.
+	{ href: legalPath('impressum', lang), label: t.footer.legal.impressum },
+	{ href: legalPath('datenschutz', lang), label: t.footer.legal.datenschutz },
+	{ href: legalPath('social-media', lang), label: t.footer.legal.socialMedia },
+	{ href: '/de/agb/', label: t.footer.legal.agb },
+	{ href: '/de/widerruf/', label: t.footer.legal.widerruf }
 ])
 
 const nav = $derived([
@@ -61,7 +64,6 @@ const year = 2026
 			class="flex flex-col gap-2 border-t border-border/40 pt-6 text-[11px] text-foreground/40 sm:flex-row sm:items-center sm:justify-between"
 		>
 			<p>© {year} {t.footer.copyright}</p>
-			<p>{t.footer.vat}</p>
 		</div>
 	</div>
 </footer>

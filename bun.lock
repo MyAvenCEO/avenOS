@@ -15,8 +15,9 @@
     },
     "app": {
       "name": "@AvenOS/app",
-      "version": "26.8.22-next.6",
+      "version": "26.8.23-next.5",
       "dependencies": {
+        "@avenos/aven-brand": "workspace:*",
         "@avenos/aven-skills": "workspace:*",
         "@avenos/aven-ui": "workspace:*",
         "@avenos/aven-website": "workspace:*",
@@ -51,14 +52,14 @@
     },
     "libs/aven-artifact-store": {
       "name": "@avenos/artifact-store",
-      "version": "0.1.0",
+      "version": "26.8.23-next.5",
       "devDependencies": {
         "typescript": "^6.0.2",
       },
     },
     "libs/aven-board": {
       "name": "@avenos/aven-board",
-      "version": "26.8.22-next.6",
+      "version": "26.8.23-next.5",
       "dependencies": {
         "dompurify": "^3",
         "github-slugger": "^2",
@@ -69,13 +70,17 @@
         "typescript": "^6.0.2",
       },
     },
+    "libs/aven-brand": {
+      "name": "@avenos/aven-brand",
+      "version": "26.8.23-next.5",
+    },
     "libs/aven-skills": {
       "name": "@avenos/aven-skills",
-      "version": "26.8.22-next.6",
+      "version": "26.8.23-next.5",
     },
     "libs/aven-ui": {
       "name": "@avenos/aven-ui",
-      "version": "26.8.22-next.6",
+      "version": "26.8.23-next.5",
       "dependencies": {
         "dompurify": "^3.3.3",
         "marked": "^15.0.12",
@@ -83,8 +88,9 @@
     },
     "libs/aven-website": {
       "name": "@avenos/aven-website",
-      "version": "26.8.22-next.6",
+      "version": "26.8.23-next.5",
       "dependencies": {
+        "@avenos/aven-brand": "workspace:*",
         "@avenos/aven-skills": "workspace:*",
       },
       "devDependencies": {
@@ -105,6 +111,8 @@
       "name": "@avenos/aven-api",
       "version": "0.1.0",
       "dependencies": {
+        "@avenos/artifact-store": "workspace:*",
+        "@avenos/aven-brand": "workspace:*",
         "@avenos/aven-website": "workspace:*",
         "@better-auth/passkey": "1.6.23",
         "better-auth": "1.6.23",
@@ -146,6 +154,8 @@
     "@avenos/aven-api": ["@avenos/aven-api@workspace:services/aven-api"],
 
     "@avenos/aven-board": ["@avenos/aven-board@workspace:libs/aven-board"],
+
+    "@avenos/aven-brand": ["@avenos/aven-brand@workspace:libs/aven-brand"],
 
     "@avenos/aven-skills": ["@avenos/aven-skills@workspace:libs/aven-skills"],
 

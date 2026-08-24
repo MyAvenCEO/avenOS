@@ -107,6 +107,24 @@ main.site {
 	padding-block: 4rem;
 }
 
+/* The one line the site owes every visitor — tiny, centered, out of the way. */
+footer.site {
+	padding-block: 1.25rem;
+	border-top: 1px solid var(--border-soft);
+	text-align: center;
+	font-size: 0.75rem;
+}
+
+footer.site a {
+	color: var(--muted);
+	text-decoration: none;
+	transition: color 0.15s ease;
+}
+
+footer.site a:hover {
+	color: var(--ink);
+}
+
 /* The one card: a raised cream panel on a hairline border. */
 .panel {
 	width: min(100%, 34rem);
