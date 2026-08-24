@@ -2,4 +2,4 @@
 import Avens from '$lib/pages/Avens.svelte'
 </script>
 
-<Avens lang="en" />
+<Avens lang="de" />

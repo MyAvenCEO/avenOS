@@ -2,4 +2,4 @@
 import Home from '$lib/pages/Home.svelte'
 </script>
 
-<Home lang="en" />
+<Home lang="de" />
