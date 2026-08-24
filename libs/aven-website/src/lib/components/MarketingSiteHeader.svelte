@@ -32,16 +32,16 @@ const otherHref = $derived(switchLangHref(lang, page.url.pathname))
 </script>
 
 <header class="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
-	<!-- Mobile: three centered lines (logo · social icons · nav); sm+: one row. -->
+	<!-- Below lg (phone + tablet): four centered lines — logo · social icons · nav+DE|EN · CTA. lg+: one row. -->
 	<div
-		class="mx-auto flex {maxW} flex-col items-center gap-y-3 px-5 py-5 sm:flex-row sm:flex-wrap sm:justify-between sm:gap-x-10 sm:gap-y-2 sm:px-8"
+		class="mx-auto flex {maxW} flex-col items-center gap-y-3 px-5 py-5 lg:flex-row lg:flex-wrap lg:justify-between lg:gap-x-10 lg:gap-y-2 lg:px-8"
 	>
-		<div class="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
+		<div class="flex flex-col items-center gap-3 lg:flex-row lg:gap-4">
 			<a href={localeHref(lang, '/')} class="flex items-center gap-2.5">
 				<img src="/aven-logo.svg" alt="" class="size-7 shrink-0" width="28" height="28">
 				<span class="text-[17px] font-semibold tracking-tight text-foreground">avenCEO</span>
 			</a>
-			<span class="flex items-center gap-4 sm:gap-3" aria-label={t.footer.socialLabel}>
+			<span class="flex items-center gap-4 lg:gap-3" aria-label={t.footer.socialLabel}>
 				{#each SOCIAL_PROFILES as profile (profile.href)}
 					<a
 						href={profile.href}
@@ -50,7 +50,7 @@ const otherHref = $derived(switchLangHref(lang, page.url.pathname))
 						aria-label={profile.name}
 						class="text-foreground/60 transition-colors hover:text-foreground"
 					>
-						<SocialIcon {profile} class="size-5 sm:size-4" />
+						<SocialIcon {profile} class="size-5 lg:size-4" />
 					</a>
 				{/each}
 			</span>
@@ -63,13 +63,15 @@ const otherHref = $derived(switchLangHref(lang, page.url.pathname))
 			<a href={localeHref(lang, '/pricing')} class={linkCls(active === 'pricing')}>
 				{t.nav.pricing}
 			</a>
-			<!-- On mobile the CTA drops to its own line so DE|EN shares the row with the nav links. -->
-			<a
-				href={idFunnelHref()}
-				class="order-last rounded-full bg-primary px-4 py-1.5 normal-case font-semibold text-primary-foreground transition-opacity hover:opacity-90 sm:order-none"
-			>
-				{t.nav.cta}
-			</a>
+			<!-- Below lg the CTA takes its own full-width line so DE|EN shares the row with the nav links. -->
+			<span class="order-last flex w-full justify-center lg:order-none lg:w-auto">
+				<a
+					href={idFunnelHref()}
+					class="rounded-full bg-primary px-4 py-1.5 normal-case font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+				>
+					{t.nav.cta}
+				</a>
+			</span>
 			<!-- DE | EN: the current language is the solid one, the other is the link. -->
 			<span class="flex items-center gap-1.5 tabular-nums" aria-label={t.switchLabel}>
 				<a
