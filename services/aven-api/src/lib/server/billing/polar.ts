@@ -145,13 +145,35 @@ export class PolarProvider implements PaymentProvider {
 		const specs = productBenefitSpecs()
 		const listed = await this.call('list-benefits', () => this.polar.benefits.list({ limit: 100 }))
 		const idByKey = new Map<string, string>()
+		const existingByKey = new Map<string, { id: string; type: string; description: string }>()
 		for (const benefit of listed.result.items) {
 			const key = benefit.metadata?.key
-			if (typeof key === 'string' && benefit.metadata?.source === 'ssot')
+			if (typeof key === 'string' && benefit.metadata?.source === 'ssot') {
 				idByKey.set(key, benefit.id)
+				existingByKey.set(key, {
+					id: benefit.id,
+					type: String(benefit.type),
+					description: benefit.description
+				})
+			}
 		}
 		for (const spec of Object.values(specs).flat()) {
-			if (idByKey.has(spec.key)) continue
+			const existing = existingByKey.get(spec.key)
+			if (existing) {
+				// The SSOT owns the title — correct drift on rename.
+				if (existing.description !== spec.description) {
+					await this.call(`update-benefit ${spec.key}`, () =>
+						this.polar.benefits.update({
+							id: existing.id,
+							requestBody: {
+								type: existing.type,
+								description: spec.description
+							} as Parameters<typeof this.polar.benefits.update>[0]['requestBody']
+						})
+					)
+				}
+				continue
+			}
 			idByKey.set(spec.key, await this.createBenefit(spec))
 		}
 		const counts: Record<string, number> = {}
