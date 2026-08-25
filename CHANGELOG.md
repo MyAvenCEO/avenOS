@@ -1,3 +1,11 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.25-next.3...v) (2026-08-25)
+
+
+### Features
+
+* **app:** add grounded artifact viewers ([5cf5759](https://github.com/MyAvenCEO/avenOS/commit/5cf575997198d02320fb7a25ed6669af66777fd4))
+* **app:** browse artifact lineage as a tree grid ([781cf89](https://github.com/MyAvenCEO/avenOS/commit/781cf8960ef4abafa179613a10b0a13f31da827f))
+* **artifact-store:** expose lineage evidence reads ([1f2339c](https://github.com/MyAvenCEO/avenOS/commit/1f2339c6dfe23090c6262f345eb7ae4fabb8cd2e))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.25-next.2...v) (2026-08-25)
 
 
