@@ -1,7 +1,7 @@
 // The products that exist at the provider, straight from the brand's
 // pricing SSOT. The tier IS the wire key: it lands in the Polar product's
 // `metadata.tier` and is how products are found again — never pinned ids.
-import { PLANS, type Plan, plan, planIncludes, planTexts } from '@avenos/aven-brand/pricing'
+import { PLANS, type Plan, plan, planIncludes, planTexts } from '@myavenceo/aven-ceo/pricing'
 import type { ProductSeed } from './provider.js'
 
 /** Every provider product: the one-off avenID plus the recurring tiers.

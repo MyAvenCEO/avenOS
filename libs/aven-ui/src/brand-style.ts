@@ -1,13 +1,19 @@
-import brandJson from './brand.style.json'
+import { vibeTokens } from '@myavenceo/aven-ceo/tokens'
 import type { StyleDef } from './engine/types.js'
 
 /**
  * Shared brand design system for all vibe views.
  *
- * `brandTokens` is the flat token map from `brand.style.json` (codified from the
- * canonical reference card). The StyleEngine flattens each entry onto `:host` as
- * a CSS custom property (`text` -> `--text`), so any vibe selector can reference
+ * `brandTokens` is the flat token map the StyleEngine flattens onto `:host` as
+ * CSS custom properties (`text` -> `--text`), so any vibe selector can reference
  * `var(--text)`, `var(--radius-card)`, `var(--pad-card)`, etc.
+ *
+ * It used to be a local `brand.style.json` described as "a mirror of the app's
+ * app.css tokens" and kept in step by hand. It was not: the vibe layer sat on
+ * the retired Chillax stack long after the app moved to Inter, on a gold
+ * (`#e6b34d`) that was not the brand's sunflower, and on a green (`#2e7d52`)
+ * that existed in no palette at all. The map is now derived from the one
+ * palette in `@myavenceo/aven-ceo`, so those three cannot come back.
  *
  * `brandBaseSelectors` are the reset + `:host` + reusable primitives (`.card`,
  * `.eyebrow`, `.btn`/`.btn-secondary`) every vibe shares so cards, paddings,
@@ -16,9 +22,7 @@ import type { StyleDef } from './engine/types.js'
  * Vibes compose with `withBrand({ tokens, selectors })`, which merges the brand
  * tokens/selectors UNDER the vibe's own (vibe values win on conflict).
  */
-export const brandTokens: Record<string, string> = Object.fromEntries(
-	Object.entries(brandJson as Record<string, string>).filter(([k]) => !k.startsWith('$'))
-)
+export const brandTokens: Record<string, string> = vibeTokens
 
 export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 	'*, *::before, *::after': { boxSizing: 'border-box' },

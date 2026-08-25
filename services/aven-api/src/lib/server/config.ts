@@ -1,4 +1,4 @@
-import { plan } from '@avenos/aven-brand/pricing'
+import { plan } from '@myavenceo/aven-ceo/pricing'
 import { z } from 'zod'
 
 const bool = z.enum(['true', 'false']).transform((value) => value === 'true')
@@ -248,7 +248,7 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ServerConfi
 	// The SSOT owns the avenID price — a diverging env override would let
 	// the funnel display one number and the provider charge another.
 	if (config.NAME_PRICE_EUR !== plan('avenid').eurPrice)
-		throw new Error('NAME_PRICE_EUR must match the avenID price in @avenos/aven-brand/pricing.')
+		throw new Error('NAME_PRICE_EUR must match the avenID price in @myavenceo/aven-ceo/pricing.')
 	return config
 }
 

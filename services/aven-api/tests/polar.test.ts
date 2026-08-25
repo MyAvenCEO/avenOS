@@ -3,7 +3,7 @@
 // and the raw-wire parsers normalize Polar envelopes into the shapes the
 // rest of the service sees.
 
-import { type PlanId, plan } from '@avenos/aven-brand/pricing'
+import { type PlanId, plan } from '@myavenceo/aven-ceo/pricing'
 import { describe, expect, it } from 'vitest'
 import { createPaymentProvider, FakePaymentProvider } from '../src/lib/server/billing/fake.js'
 import { PolarProvider } from '../src/lib/server/billing/polar.js'
