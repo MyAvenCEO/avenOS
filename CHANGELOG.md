@@ -1,3 +1,17 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.25-next.4...v) (2026-08-25)
+
+
+### Bug Fixes
+
+* **aven-api:** stop copying a workspace dir that no longer exists ([e4a1ade](https://github.com/MyAvenCEO/avenOS/commit/e4a1ade524b8748603864625b869276e91f2915a))
+* **brand:** resolve the logo through the module graph, not a node_modules path ([ddd2ee7](https://github.com/MyAvenCEO/avenOS/commit/ddd2ee70827c3271ad56ac62acf9a79507161268))
+* **shell:** give the left rail one source of truth, and CI a registry token ([8452f43](https://github.com/MyAvenCEO/avenOS/commit/8452f430d4bf9b856f8d94bde2073e4dd7908315))
+
+
+### Features
+
+* **artifacts:** one store, one ingest door, and a file-first browser ([d7e73f6](https://github.com/MyAvenCEO/avenOS/commit/d7e73f6779b9e72f22e3a8f5dc05691f62023be1))
+* **brand:** consume @myavenceo/aven-ceo as the single source of truth ([2e7069d](https://github.com/MyAvenCEO/avenOS/commit/2e7069d8c49732eed53bc7e62521e3fb11259b9b)), closes [#e6b34d](https://github.com/MyAvenCEO/avenOS/issues/e6b34d) [#2e7d52](https://github.com/MyAvenCEO/avenOS/issues/2e7d52) [#17251d](https://github.com/MyAvenCEO/avenOS/issues/17251d)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.25-next.3...v) (2026-08-25)
 
 
