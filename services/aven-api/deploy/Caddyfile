@@ -8,6 +8,7 @@
 # independently served customer sites below.
 {$DOMAIN} {
 	# Service-to-service control APIs are reachable only on the Compose network.
+	header Strict-Transport-Security "max-age=31536000"
 	respond /internal/* 404
 
 	@artifact_upload {
@@ -34,6 +35,7 @@ https:// {
 	tls {
 		on_demand
 	}
+	encode zstd gzip
 	respond /internal/* 404
 	reverse_proxy static-site-host:8093
 }

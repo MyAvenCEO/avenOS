@@ -61,6 +61,7 @@ services:
       SITE_HOST_DNS_GRACE_SECONDS: ${SITE_HOST_DNS_GRACE_SECONDS:-86400}
       SITE_HOST_MAX_FILES: ${SITE_HOST_MAX_FILES:-10000}
       SITE_HOST_MAX_BYTES: ${SITE_HOST_MAX_BYTES:-268435456}
+      SITE_HOST_MAX_CONCURRENT_SYNCS: ${SITE_HOST_MAX_CONCURRENT_SYNCS:-4}
     volumes:
       - /var/lib/aven/static-sites:/var/lib/aven/static-sites
     read_only: true

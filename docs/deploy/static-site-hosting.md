@@ -65,7 +65,7 @@ The response contains a stable `site.id`, `dns.txtName`, the one-time `dns.txtVa
 - `GET /api/sites` returns current status and active revisions.
 - `PUT /api/sites/:siteId` edits exactly one binding.
 - `DELETE /api/sites/:siteId` withdraws exactly one binding.
-- Revoking the purchased name automatically removes all of that name's bindings from the host directory and therefore from Caddy authorization.
+- Revoking the purchased name removes all of that name's bindings from the host directory and therefore from Caddy authorization on the host's next successful reconciliation.
 
 ## GitHub `next` environment
 
@@ -78,6 +78,9 @@ Optional environment variables are:
 - `SITE_HOST_ALLOWED_IPV6`: comma-separated Hetzner IPv6 addresses; leave empty if the service should reject all AAAA records.
 - `SITE_HOST_POLL_SECONDS`: defaults to `60`.
 - `SITE_HOST_DNS_GRACE_SECONDS`: defaults to `86400` for already verified sites.
+- `SITE_HOST_MAX_FILES`: defaults to `10000` files per deployed `dist` tree.
+- `SITE_HOST_MAX_BYTES`: defaults to `268435456` bytes (256 MiB) per deployed `dist` tree.
+- `SITE_HOST_MAX_CONCURRENT_SYNCS`: defaults to `4` to bound concurrent Git and DNS work.
 
 The workflow obtains `SITE_HOST_ALLOWED_IPV4` from the Pulumi host output. Persistent releases live in `/var/lib/aven/static-sites`, owned by container UID/GID `10003`.
 

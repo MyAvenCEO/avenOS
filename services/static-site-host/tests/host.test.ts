@@ -45,7 +45,8 @@ test('loads and serves a last-known-good site without the identity API', async (
 		pollMilliseconds: 60_000,
 		dnsGraceMilliseconds: 86_400_000,
 		maxFiles: 10_000,
-		maxBytes: 268_435_456
+		maxBytes: 268_435_456,
+		maxConcurrentSyncs: 4
 	}
 	const host = new StaticSiteHost(config)
 	await host.loadSnapshot()

@@ -24,4 +24,9 @@ describe('static site binding validation', () => {
 		expect(normalizeBranch('deploy/next', true)).toBe('deploy/next')
 		expect(() => normalizeBranch('next', true)).toThrow(/deploy/)
 	})
+
+	test.each(['-next', 'feature/.hidden', 'feature/release.lock', '@'])(
+		'rejects a Git-invalid branch name %s',
+		(branch) => expect(() => normalizeBranch(branch)).toThrow(/invalid Git branch/)
+	)
 })
