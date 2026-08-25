@@ -497,17 +497,18 @@ textarea:focus-visible {
 }
 
 .hosting-intro {
-	display: flex;
+	display: grid;
+	grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
 	align-items: end;
-	justify-content: space-between;
-	gap: 2rem;
+	gap: 1.25rem;
 }
 
 .hosting-intro > p {
-	max-width: 38rem;
+	max-width: 40rem;
 	color: var(--muted);
 	font-size: 0.875rem;
 	line-height: 1.6;
+	text-wrap: pretty;
 }
 
 .hosting-intro .eyebrow,
@@ -519,9 +520,16 @@ textarea:focus-visible {
 
 .hosting-grid {
 	display: grid;
-	grid-template-columns: minmax(18rem, 0.8fr) minmax(22rem, 1.2fr);
+	grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
 	gap: 1.25rem;
 	align-items: start;
+}
+
+.hosting-grid > *,
+.hosting-card form,
+.hosting-card label,
+.branch-fields > * {
+	min-width: 0;
 }
 
 .hosting-card,
@@ -540,6 +548,11 @@ textarea:focus-visible {
 	padding: 1.5rem;
 }
 
+.hosting-card.editor {
+	position: sticky;
+	top: 1.5rem;
+}
+
 .hosting-card form {
 	display: grid;
 	gap: 1rem;
@@ -553,6 +566,24 @@ textarea:focus-visible {
 
 .hosting-card label {
 	font-size: 0.8125rem;
+}
+
+.hosting-card input,
+.hosting-card select {
+	width: 100%;
+	min-width: 0;
+}
+
+.hosting-shell input:focus-visible,
+.hosting-shell select:focus-visible {
+	border-color: rgba(31, 42, 61, 0.42);
+	box-shadow: 0 0 0 3px rgba(31, 42, 61, 0.08);
+}
+
+.hosting-shell button:focus-visible,
+.hosting-shell a:focus-visible {
+	outline: 2px solid color-mix(in oklab, var(--sunflower) 72%, var(--ink));
+	outline-offset: 3px;
 }
 
 .hosting-card code,
@@ -571,7 +602,7 @@ textarea:focus-visible {
 
 .dns-record {
 	display: grid;
-	grid-template-columns: 3.25rem minmax(10rem, 0.7fr) minmax(12rem, 1.3fr) auto;
+	grid-template-columns: 3.25rem minmax(0, 0.7fr) minmax(0, 1.3fr) auto;
 	gap: 0.75rem;
 	align-items: center;
 	padding: 0.65rem 0.75rem;
@@ -594,6 +625,7 @@ textarea:focus-visible {
 .site-list {
 	display: grid;
 	gap: 0.75rem;
+	min-width: 0;
 }
 
 .site-list-heading,
@@ -616,14 +648,41 @@ textarea:focus-visible {
 	text-align: center;
 }
 
+.empty-site strong {
+	display: block;
+	color: var(--ink);
+	font-size: 0.875rem;
+	font-weight: 600;
+}
+
+.empty-site p {
+	max-width: 28rem;
+	margin: 0.35rem auto 0;
+	line-height: 1.55;
+	text-wrap: pretty;
+}
+
+.loading-site {
+	min-height: 4.25rem;
+	display: grid;
+	place-items: center;
+}
+
 .site-card {
 	display: grid;
 	gap: 1rem;
+	overflow: hidden;
 }
 
 .site-card header a {
 	font-weight: 650;
 	text-decoration: none;
+}
+
+.site-card header a:hover,
+.site-card dd a:hover {
+	text-decoration: underline;
+	text-underline-offset: 0.18em;
 }
 
 .site-card header p {
@@ -632,7 +691,14 @@ textarea:focus-visible {
 	font-size: 0.75rem;
 }
 
+.site-card header p a {
+	font-weight: inherit;
+}
+
 .site-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
 	padding: 0.3rem 0.6rem;
 	border-radius: 999px;
 	background: var(--eggshell);
@@ -640,6 +706,15 @@ textarea:focus-visible {
 	font-size: 0.6875rem;
 	font-weight: 700;
 	white-space: nowrap;
+}
+
+.site-status::before {
+	width: 0.4rem;
+	height: 0.4rem;
+	border-radius: 999px;
+	background: currentColor;
+	content: "";
+	opacity: 0.75;
 }
 
 .site-status.active {
@@ -681,12 +756,34 @@ textarea:focus-visible {
 	white-space: nowrap;
 }
 
+.site-card dd a {
+	color: inherit;
+	text-decoration: none;
+}
+
+.site-timestamp {
+	color: var(--quiet);
+	font-size: 0.6875rem;
+}
+
 .site-error {
 	padding: 0.6rem 0.75rem;
 	border-radius: 0.7rem;
 	background: rgba(193, 91, 64, 0.07);
 	color: var(--terracotta);
 	font-size: 0.75rem;
+}
+
+.remove-confirmation {
+	color: var(--terracotta);
+	font-size: 0.75rem;
+	font-weight: 600;
+}
+
+.site-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
 }
 
 .compact {
@@ -701,19 +798,28 @@ textarea:focus-visible {
 
 @media (max-width: 48rem) {
 	.hosting-intro {
-		display: grid;
+		grid-template-columns: 1fr;
+		align-items: start;
 	}
 
 	.hosting-grid {
 		grid-template-columns: 1fr;
 	}
 
+	.hosting-card.editor {
+		position: static;
+	}
+
 	.dns-record {
 		grid-template-columns: 3rem 1fr;
 	}
 
+	.dns-record > code,
 	.dns-record .compact {
 		grid-column: 2;
+	}
+
+	.dns-record .compact {
 		justify-self: start;
 	}
 }
@@ -722,6 +828,16 @@ textarea:focus-visible {
 	.branch-fields,
 	.site-card dl {
 		grid-template-columns: 1fr;
+	}
+
+	.site-card > footer {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+
+	.site-card > header {
+		align-items: flex-start;
+		flex-direction: column;
 	}
 }
 

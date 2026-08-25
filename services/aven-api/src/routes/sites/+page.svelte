@@ -6,7 +6,7 @@ import type {
 	SiteDnsVerification,
 	SiteRuntimeStatus
 } from '@avenos/aven-hosting'
-import { onMount } from 'svelte'
+import { onMount, tick } from 'svelte'
 import { goto } from '$app/navigation'
 
 const emptyDraft = (name = ''): SiteBindingDraft => ({
@@ -31,15 +31,41 @@ let draft = $state<SiteBindingDraft>(emptyDraft())
 let editingId = $state<string | null>(null)
 let verification = $state<SiteDnsVerification | null>(null)
 let loading = $state(true)
+let sitesLoaded = $state(false)
+let refreshing = $state(false)
 let saving = $state(false)
 let removingId = $state<string | null>(null)
+let confirmingRemoveId = $state<string | null>(null)
 let error = $state('')
 let copied = $state('')
+let hostnameInput = $state<HTMLInputElement>()
 
 const shortRevision = (revision: string | null) => revision?.slice(0, 10) ?? '–'
+const timestamp = new Intl.DateTimeFormat('de-DE', {
+	dateStyle: 'medium',
+	timeStyle: 'short'
+})
+const lastPublished = (site: SiteBinding) =>
+	site.lastSyncedAt ? `Veröffentlicht ${timestamp.format(new Date(site.lastSyncedAt))}` : null
+const commitUrl = (site: SiteBinding, revision: string | null) =>
+	revision ? `https://github.com/${site.repository}/commit/${revision}` : null
 
 async function loadSites() {
 	sites = await appRuntime.sites.list()
+	sitesLoaded = true
+}
+
+async function refreshSites() {
+	if (refreshing || loading) return
+	refreshing = true
+	error = ''
+	try {
+		await loadSites()
+	} catch (cause) {
+		error = cause instanceof Error ? cause.message : 'Websites konnten nicht aktualisiert werden.'
+	} finally {
+		refreshing = false
+	}
 }
 
 onMount(async () => {
@@ -50,6 +76,7 @@ onMount(async () => {
 			return
 		}
 		;[names, sites] = await Promise.all([appRuntime.names.mine(), appRuntime.sites.list()])
+		sitesLoaded = true
 		draft = emptyDraft(names[0] ?? '')
 	} catch (cause) {
 		error = cause instanceof Error ? cause.message : 'Websites konnten nicht geladen werden.'
@@ -60,6 +87,7 @@ onMount(async () => {
 
 function edit(site: SiteBinding) {
 	editingId = site.id
+	confirmingRemoveId = null
 	verification = null
 	error = ''
 	draft = {
@@ -69,11 +97,15 @@ function edit(site: SiteBinding) {
 		sourceBranch: site.sourceBranch,
 		deploymentBranch: site.deploymentBranch
 	}
-	window.scrollTo({ top: 0, behavior: 'smooth' })
+	void tick().then(() => {
+		hostnameInput?.focus({ preventScroll: true })
+		window.scrollTo({ top: 0, behavior: 'smooth' })
+	})
 }
 
 function reset() {
 	editingId = null
+	confirmingRemoveId = null
 	verification = null
 	error = ''
 	draft = emptyDraft(names[0] ?? '')
@@ -100,7 +132,6 @@ async function save(event: SubmitEvent) {
 }
 
 async function remove(site: SiteBinding) {
-	if (!window.confirm(`${site.hostname} wirklich entfernen?`)) return
 	removingId = site.id
 	error = ''
 	try {
@@ -111,15 +142,20 @@ async function remove(site: SiteBinding) {
 		error = cause instanceof Error ? cause.message : 'Website konnte nicht entfernt werden.'
 	} finally {
 		removingId = null
+		confirmingRemoveId = null
 	}
 }
 
 async function copy(value: string, key: string) {
-	await navigator.clipboard.writeText(value)
-	copied = key
-	setTimeout(() => {
-		if (copied === key) copied = ''
-	}, 1500)
+	try {
+		await navigator.clipboard.writeText(value)
+		copied = key
+		setTimeout(() => {
+			if (copied === key) copied = ''
+		}, 1500)
+	} catch {
+		error = 'Der Eintrag konnte nicht in die Zwischenablage kopiert werden.'
+	}
 }
 </script>
 
@@ -138,38 +174,55 @@ async function copy(value: string, key: string) {
 	</header>
 
 	{#if error}
-		<div class="alert">{error}</div>
+		<div class="alert" role="alert">{error}</div>
 	{/if}
 
 	{#if verification}
 		{@const dns = verification}
-		<section class="dns-card" aria-live="polite">
+		<section class="dns-card" aria-live="polite" aria-labelledby="dns-heading">
 			<div>
 				<p class="eyebrow">Jetzt im DNS eintragen</p>
-				<h2>{dns.hostname}</h2>
+				<h2 id="dns-heading">{dns.hostname}</h2>
 				<p class="fine">Der TXT-Wert wird nur jetzt vollständig angezeigt.</p>
 			</div>
 			<div class="dns-record">
 				<span>TXT</span>
-				<code>{dns.txtName}</code>
-				<code>{dns.txtValue}</code>
-				<button class="ghost compact" onclick={() => copy(dns.txtValue, 'txt')}>
-					{copied === 'txt' ? 'Kopiert' : 'Wert kopieren'}
+				<code title={dns.txtName}>{dns.txtName}</code>
+				<code title={dns.txtValue}>{dns.txtValue}</code>
+				<button
+					type="button"
+					class="ghost compact"
+					onclick={() => copy(`${dns.txtName}\tTXT\t${dns.txtValue}`, 'txt')}
+				>
+					{copied === 'txt' ? 'Kopiert' : 'Eintrag kopieren'}
 				</button>
 			</div>
 			{#if dns.ipv4}
 				<div class="dns-record">
 					<span>A</span>
-					<code>{dns.hostname}</code>
-					<code>{dns.ipv4}</code>
-					<button class="ghost compact" onclick={() => copy(dns.ipv4 ?? '', 'ipv4')}>
-						{copied === 'ipv4' ? 'Kopiert' : 'IP kopieren'}
+					<code title={dns.hostname}>{dns.hostname}</code>
+					<code title={dns.ipv4}>{dns.ipv4}</code>
+					<button
+						type="button"
+						class="ghost compact"
+						onclick={() => copy(`${dns.hostname}\tA\t${dns.ipv4}`, 'ipv4')}
+					>
+						{copied === 'ipv4' ? 'Kopiert' : 'Eintrag kopieren'}
 					</button>
 				</div>
 			{/if}
 			{#each dns.ipv6 as address (address)}
 				<div class="dns-record">
-					<span>AAAA</span><code>{dns.hostname}</code><code>{address}</code>
+					<span>AAAA</span>
+					<code title={dns.hostname}>{dns.hostname}</code>
+					<code title={address}>{address}</code>
+					<button
+						type="button"
+						class="ghost compact"
+						onclick={() => copy(`${dns.hostname}\tAAAA\t${address}`, `ipv6-${address}`)}
+					>
+						{copied === `ipv6-${address}` ? 'Kopiert' : 'Eintrag kopieren'}
+					</button>
 				</div>
 			{/each}
 			<p class="fine">
@@ -179,10 +232,10 @@ async function copy(value: string, key: string) {
 	{/if}
 
 	<div class="hosting-grid">
-		<section class="hosting-card editor">
+		<section class="hosting-card editor" aria-labelledby="site-editor-heading">
 			<div>
 				<p class="eyebrow">{editingId ? 'Verbindung bearbeiten' : 'Website hinzufügen'}</p>
-				<h2>{editingId ? draft.hostname : 'Neue Verbindung'}</h2>
+				<h2 id="site-editor-heading">{editingId ? draft.hostname : 'Neue Verbindung'}</h2>
 			</div>
 
 			{#if loading}
@@ -190,7 +243,7 @@ async function copy(value: string, key: string) {
 			{:else if !names.length}
 				<div class="alert">Für Static Hosting brauchst du zuerst einen gekauften Aven-Namen.</div>
 			{:else}
-				<form onsubmit={save}>
+				<form onsubmit={save} aria-busy={saving}>
 					<label>
 						Aven-Name
 						<select bind:value={draft.name}>
@@ -202,10 +255,14 @@ async function copy(value: string, key: string) {
 					<label>
 						Domain oder Subdomain
 						<input
+							bind:this={hostnameInput}
 							bind:value={draft.hostname}
 							placeholder="www.deine-domain.de"
 							required
 							autocomplete="off"
+							autocapitalize="none"
+							inputmode="url"
+							spellcheck="false"
 						>
 					</label>
 					<label>
@@ -215,12 +272,21 @@ async function copy(value: string, key: string) {
 							placeholder="organisation/repository"
 							required
 							autocomplete="off"
+							autocapitalize="none"
+							spellcheck="false"
 						>
 					</label>
 					<div class="branch-fields">
 						<label>
 							Quell-Branch
-							<input bind:value={draft.sourceBranch} placeholder="next" required autocomplete="off">
+							<input
+								bind:value={draft.sourceBranch}
+								placeholder="next"
+								required
+								autocomplete="off"
+								autocapitalize="none"
+								spellcheck="false"
+							>
 						</label>
 						<label>
 							Deployment-Branch
@@ -229,10 +295,13 @@ async function copy(value: string, key: string) {
 								placeholder="deploy/next"
 								required
 								autocomplete="off"
+								autocapitalize="none"
+								aria-describedby="deployment-contract"
+								spellcheck="false"
 							>
 						</label>
 					</div>
-					<p class="fine">
+					<p class="fine" id="deployment-contract">
 						Der Deployment-Branch muss <code>dist/index.html</code> und eine passende
 						<code>dist/.source-revision</code>
 						enthalten.
@@ -249,26 +318,58 @@ async function copy(value: string, key: string) {
 			{/if}
 		</section>
 
-		<section class="site-list" aria-busy={loading}>
+		<section
+			class="site-list"
+			aria-busy={loading || refreshing}
+			aria-labelledby="site-list-heading"
+		>
 			<div class="site-list-heading">
 				<div>
 					<p class="eyebrow">Verbindungen</p>
-					<h2>{sites.length} {sites.length === 1 ? 'Website' : 'Websites'}</h2>
+					<h2 id="site-list-heading">
+						{sites.length} {sites.length === 1 ? 'Website' : 'Websites'}
+					</h2>
 				</div>
-				<button class="ghost compact" onclick={loadSites} disabled={loading}>Aktualisieren</button>
+				<button
+					type="button"
+					class="ghost compact"
+					onclick={refreshSites}
+					disabled={loading || refreshing}
+				>
+					{refreshing ? 'Wird aktualisiert …' : 'Aktualisieren'}
+				</button>
 			</div>
 
-			{#if !loading && !sites.length}
-				<div class="empty-site">Noch keine Website verbunden.</div>
+			{#if loading}
+				<div class="empty-site loading-site" aria-live="polite">Websites werden geladen …</div>
+			{:else if sitesLoaded && !sites.length}
+				<div class="empty-site">
+					<strong>Noch keine Website verbunden</strong>
+					<p>Fülle das Formular aus. Anschließend erhältst du die passenden DNS-Einträge.</p>
+				</div>
 			{/if}
 			{#each sites as site (site.id)}
 				<article class="site-card">
 					<header>
 						<div>
-							<a href={`https://${site.hostname}`} target="_blank" rel="noopener noreferrer"
+							<a
+								href={`https://${site.hostname}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								aria-label={`${site.hostname} in einem neuen Tab öffnen`}
 								>{site.hostname}</a
 							>
-							<p>{site.name} · {site.repository}</p>
+							<p>
+								{site.name}
+								·
+								<a
+									href={`https://github.com/${site.repository}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									aria-label={`${site.repository} auf GitHub öffnen`}
+									>{site.repository}</a
+								>
+							</p>
 						</div>
 						<span
 							class:active={site.status === 'active'}
@@ -281,25 +382,78 @@ async function copy(value: string, key: string) {
 					<dl>
 						<div>
 							<dt>Quelle</dt>
-							<dd>{site.sourceBranch} · {shortRevision(site.activeSourceRevision)}</dd>
+							<dd>
+								{site.sourceBranch}
+								·
+								{#if commitUrl(site, site.activeSourceRevision)}
+									<a
+										href={commitUrl(site, site.activeSourceRevision) ?? undefined}
+										target="_blank"
+										rel="noopener noreferrer"
+										>{shortRevision(site.activeSourceRevision)}</a
+									>
+								{:else}
+									{shortRevision(site.activeSourceRevision)}
+								{/if}
+							</dd>
 						</div>
 						<div>
 							<dt>Deployment</dt>
-							<dd>{site.deploymentBranch} · {shortRevision(site.activeArtifactRevision)}</dd>
+							<dd>
+								{site.deploymentBranch}
+								·
+								{#if commitUrl(site, site.activeArtifactRevision)}
+									<a
+										href={commitUrl(site, site.activeArtifactRevision) ?? undefined}
+										target="_blank"
+										rel="noopener noreferrer"
+										>{shortRevision(site.activeArtifactRevision)}</a
+									>
+								{:else}
+									{shortRevision(site.activeArtifactRevision)}
+								{/if}
+							</dd>
 						</div>
 					</dl>
+					{#if lastPublished(site)}
+						<p class="site-timestamp">{lastPublished(site)}</p>
+					{/if}
 					{#if site.lastError}
-						<div class="site-error">{site.lastError}</div>
+						<div class="site-error" role="status">{site.lastError}</div>
 					{/if}
 					<footer>
-						<button class="ghost compact" onclick={() => edit(site)}>Bearbeiten</button>
-						<button
-							class="ghost compact danger"
-							disabled={removingId === site.id}
-							onclick={() => remove(site)}
-						>
-							{removingId === site.id ? 'Wird entfernt …' : 'Entfernen'}
-						</button>
+						{#if confirmingRemoveId === site.id}
+							<p class="remove-confirmation" role="alert">Diese Verbindung entfernen?</p>
+							<div class="site-actions">
+								<button
+									type="button"
+									class="ghost compact"
+									disabled={removingId === site.id}
+									onclick={() => (confirmingRemoveId = null)}
+								>
+									Abbrechen
+								</button>
+								<button
+									type="button"
+									class="ghost compact danger"
+									disabled={removingId === site.id}
+									onclick={() => remove(site)}
+								>
+									{removingId === site.id ? 'Wird entfernt …' : 'Jetzt entfernen'}
+								</button>
+							</div>
+						{:else}
+							<button type="button" class="ghost compact" onclick={() => edit(site)}>
+								Bearbeiten
+							</button>
+							<button
+								type="button"
+								class="ghost compact danger"
+								onclick={() => (confirmingRemoveId = site.id)}
+							>
+								Entfernen
+							</button>
+						{/if}
 					</footer>
 				</article>
 			{/each}
