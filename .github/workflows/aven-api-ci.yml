@@ -69,6 +69,8 @@ jobs:
         with:
           toolchain: 1.93.1
       - run: bun install --frozen-lockfile
+      - name: Validate deployment scripts
+        run: sh -n services/aven-api/deploy/*.sh
       - run: bunx biome check services/aven-api
       - run: bunx biome check infrastructure/identity
       - run: bunx biome check services/static-site-host
