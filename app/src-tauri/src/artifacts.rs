@@ -622,6 +622,27 @@ pub async fn artifact_get(
 }
 
 #[tauri::command]
+pub async fn artifact_evidence_get(
+    artifact_id: String,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&artifact_id) {
+        return Err("The artifact ID is invalid.".to_string());
+    }
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(
+            token,
+            "GET",
+            format!("/api/artifacts/{artifact_id}/evidence"),
+            None,
+        )
+    })
+    .await
+    .map_err(|error| format!("Artifact evidence task failed: {error}"))?
+}
+
+#[tauri::command]
 pub async fn artifact_store_list(
     state: tauri::State<'_, AuthState>,
 ) -> Result<serde_json::Value, String> {

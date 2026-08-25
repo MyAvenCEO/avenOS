@@ -62,10 +62,9 @@ describe('artifact lineage tree-grid', () => {
 			artifact('root', 1),
 			artifact('unrelated', 3)
 		]
-		expect(artifactTreeRows(artifacts, new Set(['root'])).map((row) => row.artifact.artifactId)).toEqual([
-			'unrelated',
-			'root'
-		])
+		expect(
+			artifactTreeRows(artifacts, new Set(['root'])).map((row) => row.artifact.artifactId)
+		).toEqual(['unrelated', 'root'])
 		expect(
 			artifactTreeRows(artifacts, new Set(['root']), 'test.child').map(
 				(row) => row.artifact.artifactId
