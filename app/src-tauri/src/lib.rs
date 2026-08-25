@@ -213,6 +213,7 @@ pub fn run() {
 			artifacts::intent_delete,
 			artifacts::artifact_content_get,
 			artifacts::artifact_get,
+			artifacts::artifact_evidence_get,
 			artifacts::artifact_store_list,
 			auth::auth_status,
 			auth::auth_names,
