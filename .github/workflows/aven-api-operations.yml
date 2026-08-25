@@ -60,9 +60,9 @@ jobs:
             status|retry)
               # Values are validated above and intentionally expanded by this runner.
               # shellcheck disable=SC2029
-              ssh "${ssh_args[@]}" "$remote" "cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml exec -T app bun scripts/environment.ts '$OPERATION' '$CUSTOMER_NAME'"
+              ssh "${ssh_args[@]}" "$remote" "cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml exec -T app bun build/scripts/environment.js '$OPERATION' '$CUSTOMER_NAME'"
               ;;
             reconcile)
-              ssh "${ssh_args[@]}" "$remote" "cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml exec -T app bun scripts/environment.ts reconcile"
+              ssh "${ssh_args[@]}" "$remote" "cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml exec -T app bun build/scripts/environment.js reconcile"
               ;;
           esac

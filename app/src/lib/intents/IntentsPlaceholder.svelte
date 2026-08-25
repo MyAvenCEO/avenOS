@@ -1483,7 +1483,12 @@ const DOT: Record<string, string> = {
 		>
 			Artefakte · {selected.artifacts.length}
 		</h2>
-		{#each selected.artifacts as artifact (artifact.title)}
+		<!-- Keyed by ID, not title: `applyPersistent` names every artifact after
+		     the first by its typeKey, and one intent routinely produces several
+		     of a kind (two docs.extracted-text, two docs.text-layout), so titles
+		     collide and Svelte throws `each_key_duplicate`. Same key the stage
+		     list at the top of this file already uses. -->
+		{#each selected.artifacts as artifact (artifact.artifactId ?? artifact.title)}
 			<button
 				type="button"
 				onclick={() => {

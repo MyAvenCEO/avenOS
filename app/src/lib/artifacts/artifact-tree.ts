@@ -73,6 +73,54 @@ function searchableText(artifact: BrowsedArtifact): string {
  * parent. The newest available input is the visual parent, while parentCount and
  * the retained input list keep every causal edge visible to the UI.
  */
+/**
+ * The artifacts nothing else produced — the top of every lineage.
+ *
+ * Exported so the grid of uploaded files and the lineage tree agree on what a
+ * root IS, instead of each deciding for itself. Newest first, like the tree.
+ */
+export function artifactRoots(artifacts: readonly BrowsedArtifact[]): BrowsedArtifact[] {
+	const artifactsById = new Map(artifacts.map((artifact) => [artifact.artifactId, artifact]))
+	return artifacts
+		.filter((artifact) => !newestAvailableParent(artifact, artifactsById))
+		.sort((left, right) => chronology(right, left))
+}
+
+/**
+ * Everything downstream of one root, including the root itself.
+ *
+ * The lineage view is per-FILE now: you pick an uploaded document and see what
+ * was made from it, rather than one flat list of every artifact in the store
+ * where the thing you care about is a needle. Follows the same primary-parent
+ * chain the tree draws, so what you get is exactly the subtree it would render.
+ */
+export function artifactSubtree(
+	artifacts: readonly BrowsedArtifact[],
+	rootId: string | null
+): BrowsedArtifact[] {
+	if (!rootId) return []
+	const artifactsById = new Map(artifacts.map((artifact) => [artifact.artifactId, artifact]))
+	const childrenById = new Map<string, BrowsedArtifact[]>()
+	for (const artifact of artifacts) {
+		const parent = newestAvailableParent(artifact, artifactsById)
+		if (!parent) continue
+		const children = childrenById.get(parent.artifactId) ?? []
+		children.push(artifact)
+		childrenById.set(parent.artifactId, children)
+	}
+	const kept: BrowsedArtifact[] = []
+	const seen = new Set<string>()
+	const walk = (id: string): void => {
+		if (seen.has(id)) return
+		seen.add(id)
+		const artifact = artifactsById.get(id)
+		if (artifact) kept.push(artifact)
+		for (const child of childrenById.get(id) ?? []) walk(child.artifactId)
+	}
+	walk(rootId)
+	return kept
+}
+
 export function artifactTreeRows(
 	artifacts: readonly BrowsedArtifact[],
 	collapsedIds: ReadonlySet<string> = new Set(),

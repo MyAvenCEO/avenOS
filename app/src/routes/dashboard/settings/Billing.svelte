@@ -4,7 +4,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { onDestroy, onMount } from 'svelte'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import { artifactsState } from '$lib/artifacts/state.svelte'
+import { ingestFile } from '$lib/artifacts/ingest.svelte'
 import { shell } from '$lib/intents/talk.svelte'
 
 /**
@@ -389,10 +389,10 @@ async function downloadInvoice(order: Order) {
 	invoiceFailure = null
 	try {
 		let attempt = 0
-		let result: { fileName: string }
+		let result: { fileName: string; path: string }
 		for (;;) {
 			try {
-				result = await invoke<{ fileName: string }>('billing_invoice_download', {
+				result = await invoke<{ fileName: string; path: string }>('billing_invoice_download', {
 					orderId: order.id
 				})
 				break
@@ -405,10 +405,13 @@ async function downloadInvoice(order: Order) {
 				await new Promise((resolve) => setTimeout(resolve, INVOICE_RETRY_PAUSE_MS))
 			}
 		}
-		// Deep link: the shelf shows the fresh invoice already selected.
-		artifactsState.selected = result.fileName
-		shell.tab = 'artifacts'
+		// The invoice goes in the SAME door as a dropped file: one ingest, one
+		// intent, one skill flow. It used to be written to a local shelf that
+		// sat outside all of that — a second store with no lineage, no
+		// processing, and nothing to navigate to. `ingestFile` leaves the shell
+		// on the conversation, where the ingest is watched as it happens.
 		await goto('/dashboard')
+		await ingestFile(result.path)
 	} catch (cause) {
 		invoiceFailure = {
 			orderId: order.id,
