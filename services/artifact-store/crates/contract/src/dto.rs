@@ -314,6 +314,33 @@ pub struct FeedArtifact {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ArtifactEvidence {
+    pub ordinal: u32,
+    pub output_artifact_id: Uuid,
+    pub output_locator: Locator,
+    pub input_role: Role,
+    pub input_ordinal: u32,
+    pub input_artifact_id: Uuid,
+    pub input_locator: Locator,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProducerInputs {
+    pub artifact_id: Uuid,
+    pub producer_run_id: Option<Uuid>,
+    pub inputs: Vec<RunInput>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SupportingEvidence {
+    pub artifact_id: Uuid,
+    pub evidence: Vec<ArtifactEvidence>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PublicationFeedItem {
     pub scope_id: Uuid,
     pub publication_id: Uuid,
@@ -323,10 +350,6 @@ pub struct PublicationFeedItem {
     pub kind: String,
     pub publisher: StablePublisher,
     pub run_id: Option<Uuid>,
-    /// Ordered immutable inputs for `run` publications. Root publications have none.
-    /// Defaulting keeps newer readers compatible with retained v1 feed responses.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub inputs: Vec<RunInput>,
     #[serde(with = "time::serde::rfc3339")]
     pub committed_at: OffsetDateTime,
     pub artifacts: Vec<FeedArtifact>,
@@ -373,31 +396,23 @@ mod tests {
     }
 
     #[test]
-    fn feed_inputs_are_additive_and_keep_old_responses_readable() {
-        let json = r#"{
-            "scopeId": "11111111-1111-4111-8111-111111111111",
-            "publicationId": "22222222-2222-4222-8222-222222222222",
-            "scopeSequence": 7,
-            "committedStoreEpoch": "33333333-3333-4333-8333-333333333333",
-            "publicationRequestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "kind": "run",
-            "publisher": {"issuer": "aven", "subject": "processor"},
-            "runId": "44444444-4444-4444-8444-444444444444",
-            "committedAt": "2026-08-25T12:00:00Z",
-            "artifacts": []
-        }"#;
-        let mut item: PublicationFeedItem = serde_json::from_str(json).unwrap();
-        assert!(item.inputs.is_empty());
-        item.inputs.push(RunInput {
-            role: Role::new("source".to_owned()).unwrap(),
-            ordinal: 0,
-            artifact_id: Uuid::parse_str("55555555-5555-4555-8555-555555555555").unwrap(),
-        });
-        let encoded = serde_json::to_value(item).unwrap();
-        assert_eq!(encoded["inputs"][0]["role"], "source");
+    fn graph_read_resources_use_camel_case() {
+        let artifact_id = Uuid::parse_str("55555555-5555-4555-8555-555555555555").unwrap();
+        let resource = ProducerInputs {
+            artifact_id,
+            producer_run_id: Some(Uuid::parse_str("44444444-4444-4444-8444-444444444444").unwrap()),
+            inputs: vec![RunInput {
+                role: Role::new("source".to_owned()).unwrap(),
+                ordinal: 0,
+                artifact_id,
+            }],
+        };
+        let encoded = serde_json::to_value(resource).unwrap();
+        assert_eq!(encoded["artifactId"], artifact_id.to_string());
         assert_eq!(
-            encoded["inputs"][0]["artifactId"],
-            "55555555-5555-4555-8555-555555555555"
+            encoded["producerRunId"],
+            "44444444-4444-4444-8444-444444444444"
         );
+        assert_eq!(encoded["inputs"][0]["artifactId"], artifact_id.to_string());
     }
 }

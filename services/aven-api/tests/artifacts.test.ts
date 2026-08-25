@@ -135,9 +135,6 @@ describe('artifact file coordinator', () => {
 								scopeSequence: 2,
 								kind: 'run',
 								runId: intentId,
-								inputs: [
-									{ role: 'source', ordinal: 0, artifactId: intentArtifactId }
-								],
 								committedAt: observedAt,
 								artifacts: [
 									{
@@ -153,6 +150,15 @@ describe('artifact file coordinator', () => {
 								]
 							}
 						]
+					})
+				)
+			}
+			if (request.url.endsWith(`/artifacts/${artifactId}/producer-inputs`)) {
+				return new Response(
+					JSON.stringify({
+						artifactId,
+						producerRunId: intentId,
+						inputs: [{ role: 'source', ordinal: 0, artifactId: intentArtifactId }]
 					})
 				)
 			}
@@ -189,5 +195,60 @@ describe('artifact file coordinator', () => {
 				}
 			]
 		})
+	})
+
+	test('loads direct supporting evidence separately from the feed', async () => {
+		const fetch: typeof globalThis.fetch = async (input) => {
+			const request = new Request(input)
+			expect(request.url).toContain(`/artifacts/${artifactId}/supporting-evidence`)
+			return new Response(
+				JSON.stringify({
+					artifactId,
+					evidence: [
+						{
+							ordinal: 0,
+							outputArtifactId: artifactId,
+							outputLocator: { kind: 'json-pointer', pointer: '/supplier' },
+							inputRole: 'source',
+							inputOrdinal: 0,
+							inputArtifactId: intentArtifactId,
+							inputLocator: {
+								kind: 'page-region',
+								page: 1,
+								x: 100,
+								y: 200,
+								width: 300,
+								height: 400
+							}
+						}
+					]
+				})
+			)
+		}
+		const service = ArtifactFileService.fromConfig(
+			{
+				ARTIFACT_STORE_BASE_URL: 'http://artifact-store.test',
+				ARTIFACT_STORE_BEARER_TOKEN: 'service-token'
+			},
+			fetch
+		)
+		expect(await service?.evidence('cust_acme', scopeId, artifactId)).toEqual([
+			{
+				ordinal: 0,
+				outputArtifactId: artifactId,
+				outputLocator: { kind: 'json-pointer', pointer: '/supplier' },
+				inputRole: 'source',
+				inputOrdinal: 0,
+				inputArtifactId: intentArtifactId,
+				inputLocator: {
+					kind: 'page-region',
+					page: 1,
+					x: 100,
+					y: 200,
+					width: 300,
+					height: 400
+				}
+			}
+		])
 	})
 })

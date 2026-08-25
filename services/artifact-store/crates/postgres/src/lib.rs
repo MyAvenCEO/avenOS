@@ -3,10 +3,11 @@
 use std::collections::BTreeMap;
 
 use aven_artifact_store_contract::{
-    ArtifactEnvelope, ArtifactResult, BlobAuthority, DeclaredBlob, FeedArtifact, OutputBinding,
-    PublicationBody, PublicationFeedItem, PublicationFeedPage, PublicationResult,
-    RegisteredTypeDefinition, RunInput, StablePublisher, StoreContext, TypeKey, UploadClaimResult,
-    UploadDeclaration, COMMAND_VERSION, JSON_PROFILE_ID, SCHEMA_PROFILE_ID,
+    ArtifactEnvelope, ArtifactEvidence, ArtifactResult, BlobAuthority, DeclaredBlob, FeedArtifact,
+    OutputBinding, ProducerInputs, PublicationBody, PublicationFeedItem, PublicationFeedPage,
+    PublicationResult, RegisteredTypeDefinition, RunInput, StablePublisher, StoreContext,
+    SupportingEvidence, TypeKey, UploadClaimResult, UploadDeclaration, COMMAND_VERSION,
+    JSON_PROFILE_ID, SCHEMA_PROFILE_ID,
 };
 use aven_artifact_store_core::{ExistingArtifact, PreparedPublication};
 use sqlx::postgres::{PgPoolOptions, PgRow};
@@ -522,6 +523,92 @@ impl PostgresStore {
         .await?)
     }
 
+    /// Retrieve the immutable producer inputs for one exact artifact occurrence.
+    ///
+    /// Root artifacts have no producer run and therefore return an empty input list.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid retained data or a database failure.
+    pub async fn get_producer_inputs(
+        &self,
+        scope_id: Uuid,
+        artifact_id: Uuid,
+    ) -> Result<Option<ProducerInputs>, StoreError> {
+        let producer_run_id = sqlx::query_scalar::<_, Option<Uuid>>(
+            "SELECT producer_run_id FROM artifact_store.artifact_records WHERE scope_id=$1 AND id=$2",
+        )
+        .bind(scope_id)
+        .bind(artifact_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(producer_run_id) = producer_run_id else {
+            return Ok(None);
+        };
+        let inputs = if let Some(run_id) = producer_run_id {
+            sqlx::query(
+                "SELECT role, ordinal, input_artifact_id FROM artifact_store.artifact_run_inputs \
+                 WHERE scope_id=$1 AND run_id=$2 ORDER BY role, ordinal",
+            )
+            .bind(scope_id)
+            .bind(run_id)
+            .fetch_all(&self.pool)
+            .await?
+            .iter()
+            .map(run_input_from_row)
+            .collect::<Result<Vec<_>, _>>()?
+        } else {
+            Vec::new()
+        };
+        Ok(Some(ProducerInputs {
+            artifact_id,
+            producer_run_id,
+            inputs,
+        }))
+    }
+
+    /// Retrieve direct supporting-evidence edges for one exact artifact occurrence.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid retained data or a database failure.
+    pub async fn get_supporting_evidence(
+        &self,
+        scope_id: Uuid,
+        artifact_id: Uuid,
+    ) -> Result<Option<SupportingEvidence>, StoreError> {
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM artifact_store.artifact_records WHERE scope_id=$1 AND id=$2)",
+        )
+        .bind(scope_id)
+        .bind(artifact_id)
+        .fetch_one(&self.pool)
+        .await?;
+        if !exists {
+            return Ok(None);
+        }
+        let evidence = sqlx::query(
+            "SELECT e.ordinal, e.output_artifact_id, e.output_locator, \
+                    e.input_role, e.input_ordinal, i.input_artifact_id, e.input_locator \
+             FROM artifact_store.artifact_evidence e \
+             JOIN artifact_store.artifact_run_inputs i \
+               ON i.scope_id=e.scope_id AND i.run_id=e.run_id \
+              AND i.role=e.input_role AND i.ordinal=e.input_ordinal \
+             WHERE e.scope_id=$1 AND e.output_artifact_id=$2 ORDER BY e.ordinal LIMIT 1024",
+        )
+        .bind(scope_id)
+        .bind(artifact_id)
+        .fetch_all(&self.pool)
+        .await?
+        .iter()
+        .map(evidence_from_row)
+        .collect::<Result<Vec<_>, _>>()?;
+        Ok(Some(SupportingEvidence {
+            artifact_id,
+            evidence,
+        }))
+    }
+
     /// Read increasing whole publications after one scope-local sequence.
     ///
     /// # Errors
@@ -550,27 +637,6 @@ impl PostgresStore {
         .bind(i64::from(limit.min(1_000)))
         .fetch_all(&self.pool)
         .await?;
-        let run_ids = rows
-            .iter()
-            .filter_map(|row| row.get::<Option<Uuid>, _>("run_id"))
-            .collect::<Vec<_>>();
-        let mut inputs_by_run = BTreeMap::<Uuid, Vec<RunInput>>::new();
-        if !run_ids.is_empty() {
-            let input_rows = sqlx::query(
-                "SELECT run_id, role, ordinal, input_artifact_id FROM artifact_store.artifact_run_inputs \
-                 WHERE scope_id=$1 AND run_id=ANY($2) ORDER BY run_id, role, ordinal",
-            )
-            .bind(scope_id)
-            .bind(&run_ids)
-            .fetch_all(&self.pool)
-            .await?;
-            for input_row in &input_rows {
-                inputs_by_run
-                    .entry(input_row.get("run_id"))
-                    .or_default()
-                    .push(run_input_from_row(input_row)?);
-            }
-        }
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
             let publication_id: Uuid = row.get("publication_id");
@@ -588,9 +654,6 @@ impl PostgresStore {
                 .iter()
                 .map(feed_artifact_from_row)
                 .collect::<Result<Vec<_>, _>>()?;
-            let inputs = run_id
-                .and_then(|run_id| inputs_by_run.remove(&run_id))
-                .unwrap_or_default();
             items.push(PublicationFeedItem {
                 scope_id,
                 publication_id,
@@ -603,7 +666,6 @@ impl PostgresStore {
                     subject: row.get("publisher_subject"),
                 },
                 run_id,
-                inputs,
                 committed_at: row.get("committed_at"),
                 artifacts,
             });
@@ -1000,6 +1062,19 @@ fn run_input_from_row(row: &PgRow) -> Result<RunInput, StoreError> {
             .map_err(|error| StoreError::Integrity(error.to_string()))?,
         ordinal: to_u32(row.get("ordinal"), "run input ordinal")?,
         artifact_id: row.get("input_artifact_id"),
+    })
+}
+
+fn evidence_from_row(row: &PgRow) -> Result<ArtifactEvidence, StoreError> {
+    Ok(ArtifactEvidence {
+        ordinal: to_u32(row.get("ordinal"), "evidence ordinal")?,
+        output_artifact_id: row.get("output_artifact_id"),
+        output_locator: serde_json::from_value(row.get("output_locator"))?,
+        input_role: aven_artifact_store_contract::Role::new(row.get::<String, _>("input_role"))
+            .map_err(|error| StoreError::Integrity(error.to_string()))?,
+        input_ordinal: to_u32(row.get("input_ordinal"), "evidence input ordinal")?,
+        input_artifact_id: row.get("input_artifact_id"),
+        input_locator: serde_json::from_value(row.get("input_locator"))?,
     })
 }
 

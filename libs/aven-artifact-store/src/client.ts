@@ -100,6 +100,14 @@ export class ArtifactStoreClient {
 		return this.#json(`/v1/scopes/${scopeId}/artifacts/${artifactId}`)
 	}
 
+	producerInputs(scopeId: string, artifactId: string): Promise<ArtifactJson> {
+		return this.#json(`/v1/scopes/${scopeId}/artifacts/${artifactId}/producer-inputs`)
+	}
+
+	supportingEvidence(scopeId: string, artifactId: string): Promise<ArtifactJson> {
+		return this.#json(`/v1/scopes/${scopeId}/artifacts/${artifactId}/supporting-evidence`)
+	}
+
 	async content(scopeId: string, artifactId: string): Promise<Uint8Array> {
 		const response = await this.#request(`/v1/scopes/${scopeId}/artifacts/${artifactId}/content`)
 		return new Uint8Array(await response.arrayBuffer())

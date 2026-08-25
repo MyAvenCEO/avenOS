@@ -59,6 +59,22 @@ export interface ArtifactLineageInput {
 	artifactId: string
 }
 
+export type ArtifactLocator =
+	| { kind: 'artifact-root' }
+	| { kind: 'json-pointer'; pointer: string }
+	| { kind: 'byte-range'; start: number; endExclusive: number }
+	| { kind: 'page-region'; page: number; x: number; y: number; width: number; height: number }
+
+export interface ArtifactEvidence {
+	ordinal: number
+	outputArtifactId: string
+	outputLocator: ArtifactLocator
+	inputRole: string
+	inputOrdinal: number
+	inputArtifactId: string
+	inputLocator: ArtifactLocator
+}
+
 export interface ArtifactBrowseResult {
 	storeEpoch: string
 	artifacts: BrowsedArtifact[]
@@ -111,6 +127,58 @@ function lineageInputs(value: ArtifactJson | undefined): ArtifactLineageInput[] 
 	})
 }
 
+function locator(value: ArtifactJson | undefined, label: string): ArtifactLocator {
+	const source = record(value ?? null, label)
+	const kind = stringField(source, 'kind', label)
+	if (kind === 'artifact-root') return { kind }
+	if (kind === 'json-pointer') {
+		return { kind, pointer: stringField(source, 'pointer', label) }
+	}
+	if (kind === 'byte-range') {
+		return {
+			kind,
+			start: numberField(source, 'start', label),
+			endExclusive: numberField(source, 'endExclusive', label)
+		}
+	}
+	if (kind === 'page-region') {
+		return {
+			kind,
+			page: numberField(source, 'page', label),
+			x: numberField(source, 'x', label),
+			y: numberField(source, 'y', label),
+			width: numberField(source, 'width', label),
+			height: numberField(source, 'height', label)
+		}
+	}
+	throw new AppError(502, 'ARTIFACT_STORE_INVALID_RESPONSE', `${label}.kind was invalid.`)
+}
+
+function artifactEvidence(value: ArtifactJson | undefined): ArtifactEvidence[] {
+	if (value === undefined) return []
+	if (!Array.isArray(value)) {
+		throw new AppError(502, 'ARTIFACT_STORE_INVALID_RESPONSE', 'supporting evidence was invalid.')
+	}
+	return value.map((evidenceValue) => {
+		const evidence = record(evidenceValue, 'artifact evidence')
+		return {
+			ordinal: numberField(evidence, 'ordinal', 'artifact evidence'),
+			outputArtifactId: stringField(evidence, 'outputArtifactId', 'artifact evidence'),
+			outputLocator: locator(evidence.outputLocator, 'artifact evidence.outputLocator'),
+			inputRole: stringField(evidence, 'inputRole', 'artifact evidence'),
+			inputOrdinal: numberField(evidence, 'inputOrdinal', 'artifact evidence'),
+			inputArtifactId: stringField(evidence, 'inputArtifactId', 'artifact evidence'),
+			inputLocator: locator(evidence.inputLocator, 'artifact evidence.inputLocator')
+		}
+	})
+}
+
+async function inChunks<T>(values: T[], size: number, work: (value: T) => Promise<void>) {
+	for (let offset = 0; offset < values.length; offset += size) {
+		await Promise.all(values.slice(offset, offset + size).map(work))
+	}
+}
+
 export class ArtifactFileService {
 	readonly #baseUrl: string
 	readonly #bearerToken: string
@@ -151,6 +219,25 @@ export class ArtifactFileService {
 
 	async content(databaseName: string, scopeId: string, artifactId: string): Promise<Uint8Array> {
 		return this.#client(databaseName).content(scopeId, artifactId)
+	}
+
+	async evidence(
+		databaseName: string,
+		scopeId: string,
+		artifactId: string
+	): Promise<ArtifactEvidence[]> {
+		const resource = record(
+			await this.#client(databaseName).supportingEvidence(scopeId, artifactId),
+			'supporting evidence'
+		)
+		if (stringField(resource, 'artifactId', 'supporting evidence') !== artifactId) {
+			throw new AppError(
+				502,
+				'ARTIFACT_STORE_INVALID_RESPONSE',
+				'Supporting evidence named a different artifact.'
+			)
+		}
+		return artifactEvidence(resource.evidence)
 	}
 
 	/**
@@ -196,7 +283,6 @@ export class ArtifactFileService {
 			}
 			for (const itemValue of items) {
 				const item = record(itemValue, 'publication')
-				const inputs = lineageInputs(item.inputs)
 				const published = item.artifacts
 				if (!Array.isArray(published)) continue
 				for (const artifactValue of published) {
@@ -211,7 +297,7 @@ export class ArtifactFileService {
 						producerRunId:
 							typeof artifact.producerRunId === 'string' ? artifact.producerRunId : null,
 						output: artifact.output ?? null,
-						inputs,
+						inputs: [],
 						publicationId: stringField(item, 'publicationId', 'publication'),
 						scopeSequence: numberField(item, 'scopeSequence', 'publication'),
 						publicationKind: stringField(item, 'kind', 'publication'),
@@ -228,6 +314,36 @@ export class ArtifactFileService {
 			if (typeof next !== 'number' || next <= afterSequence || items.length === 0) break
 			afterSequence = next
 			if (publicationsRead >= maximumPublications) truncated = true
+		}
+
+		const representativeByRun = new Map<string, BrowsedArtifact>()
+		for (const artifact of artifacts) {
+			if (artifact.producerRunId && !representativeByRun.has(artifact.producerRunId)) {
+				representativeByRun.set(artifact.producerRunId, artifact)
+			}
+		}
+		const inputsByRun = new Map<string, ArtifactLineageInput[]>()
+		await inChunks([...representativeByRun.entries()], 16, async ([runId, artifact]) => {
+			const resource = record(
+				await client.producerInputs(scopeId, artifact.artifactId),
+				'producer inputs'
+			)
+			if (
+				stringField(resource, 'artifactId', 'producer inputs') !== artifact.artifactId ||
+				stringField(resource, 'producerRunId', 'producer inputs') !== runId
+			) {
+				throw new AppError(
+					502,
+					'ARTIFACT_STORE_INVALID_RESPONSE',
+					'Producer inputs named a different artifact or run.'
+				)
+			}
+			inputsByRun.set(runId, lineageInputs(resource.inputs))
+		})
+		for (const artifact of artifacts) {
+			artifact.inputs = artifact.producerRunId
+				? (inputsByRun.get(artifact.producerRunId) ?? [])
+				: []
 		}
 
 		return { storeEpoch, artifacts: artifacts.reverse(), truncated }
