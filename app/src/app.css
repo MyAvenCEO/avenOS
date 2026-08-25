@@ -196,7 +196,7 @@
  * which is the argument against keeping one at all; the generator is that
  * inventory now, and it cannot go stale.
  *
- * To re-theme: edit `packages/aven-brand/src/tokens.ts` in avenCEO, publish,
+ * To re-theme: edit `packages/aven-ceo/src/tokens.ts` in avenCEO, publish,
  * then run `bun run brand:generate` here and commit the regenerated files.
  * The Brand-Farben settings page renders these very same variables back.
  */

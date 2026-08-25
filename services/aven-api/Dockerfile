@@ -10,6 +10,15 @@ COPY infrastructure/identity/package.json infrastructure/identity/package.json
 COPY services/aven-api/package.json services/aven-api/package.json
 COPY services/static-site-host/package.json services/static-site-host/package.json
 
+# @myavenceo/aven-ceo lives in GitHub Packages, which needs a token even to read.
+# Done once HERE because both installing stages derive `FROM manifests`, so they
+# inherit it rather than each repeating the step. Passed as a BuildKit secret so
+# the credential never lands in a layer, and appended to the .npmrc copied above
+# (which pins the registry but deliberately carries no token). Build with:
+#   docker build --secret id=npm_token,env=NODE_AUTH_TOKEN .
+RUN --mount=type=secret,id=npm_token,required=true \
+  printf '//npm.pkg.github.com/:_authToken=%s\n' "$(cat /run/secrets/npm_token)" >> /repo/.npmrc
+
 FROM manifests AS build
 RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
   bun install --frozen-lockfile --filter @avenos/aven-api
@@ -41,9 +50,10 @@ COPY --from=build /repo/services/aven-api/package.json ./package.json
 # The built server imports the workspace Artifact Store SDK through Bun's
 # node_modules symlink, so the symlink target must exist in the runtime image.
 COPY --from=build /repo/libs/aven-artifact-store /repo/libs/aven-artifact-store
-# scripts/ (migrate, billing seed) run unbundled and resolve the workspace
-# symlink at runtime — the brand source must be present in the image too.
-COPY --from=build /repo/libs/aven-brand /repo/libs/aven-brand
+# The brand SSOT is no longer a workspace directory to copy: @myavenceo/aven-ceo
+# arrives through node_modules above, which the production-dependencies stage
+# already installs (root node_modules carries bun's store, the service's carries
+# the link into it). scripts/ resolve it from there like any other dependency.
 COPY --from=build /repo/libs/aven-hosting /repo/libs/aven-hosting
 EXPOSE 3000
 USER bun
