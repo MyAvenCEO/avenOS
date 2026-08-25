@@ -69,7 +69,12 @@ jobs:
         working-directory: services/intent-service
       - run: bun run db:migrate:api && bun run db:migrate:api
       - run: bun run build:api
-      - run: docker build -f services/aven-api/Dockerfile -t aven-api:validation .
+      - name: Validate the aven-api image builds
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DOCKER_BUILDKIT=1 docker build --secret id=npm_token,env=NODE_AUTH_TOKEN \
+            -f services/aven-api/Dockerfile -t aven-api:validation .
       - run: docker build -f services/artifact-store/Dockerfile -t aven-artifact-store:validation .
       - run: docker build -f services/intent-service/Dockerfile -t aven-intent-service:validation .
       - run: docker build -f services/static-site-host/Dockerfile -t aven-static-site-host:validation .

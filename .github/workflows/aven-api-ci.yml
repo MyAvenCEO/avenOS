@@ -116,7 +116,13 @@ jobs:
           if PGPASSWORD=server-ci psql -h 127.0.0.1 -U aven_server -d aven -c 'CREATE TABLE forbidden(id int)'; then exit 1; fi
       - run: bun run build:api
       - name: Build hardened image
-        run: docker build -f services/aven-api/Dockerfile -t aven-api:${{ github.sha }} .
+        # The image installs @myavenceo/aven-ceo from GitHub Packages; the token
+        # goes in as a build secret so it never lands in a layer.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DOCKER_BUILDKIT=1 docker build --secret id=npm_token,env=NODE_AUTH_TOKEN \
+            -f services/aven-api/Dockerfile -t aven-api:${{ github.sha }} .
       - name: Build Artifact Store and Processor image
         run: docker build -f services/artifact-store/Dockerfile -t aven-artifact-store:${{ github.sha }} .
       - name: Build Intent Service image
