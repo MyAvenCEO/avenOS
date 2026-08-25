@@ -621,6 +621,18 @@ pub async fn artifact_get(
     .map_err(|error| format!("Artifact lookup task failed: {error}"))?
 }
 
+#[tauri::command]
+pub async fn artifact_store_list(
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(token, "GET", "/api/artifacts".into(), None)
+    })
+    .await
+    .map_err(|error| format!("Artifact list task failed: {error}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

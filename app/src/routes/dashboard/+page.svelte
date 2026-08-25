@@ -616,8 +616,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 			<SkillsPlatform />
 		</div>
 	{:else if shell.tab === 'artifacts'}
-		<!-- The artifacts shelf: locally stored files (invoices for now),
-		     each opening the inline preview. -->
+		<!-- Artifact Store debugger plus the retained local-download shelf. -->
 		<div class="flex min-h-0 w-full flex-1 flex-col">
 			<ArtifactsPage />
 		</div>
