@@ -1,3 +1,14 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.8...v) (2026-08-25)
+
+
+### Bug Fixes
+
+* **hosting:** harden hosting boundaries ([2ca02b6](https://github.com/MyAvenCEO/avenOS/commit/2ca02b67ea0f64dd6c2a101f2128354be242d746))
+
+
+### Features
+
+* **hosting:** refine the static site manager ([ad1c4af](https://github.com/MyAvenCEO/avenOS/commit/ad1c4af1f53794de0e92b3be3efd9c303bb33b73))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.7...v) (2026-08-24)
 
 
