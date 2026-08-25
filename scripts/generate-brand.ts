@@ -20,9 +20,17 @@ import { appIconSvg, faviconSvg, themeCss } from '@myavenceo/aven-ceo/generate'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-/** The package's own copy of the mark — the one file every icon derives from. */
+/**
+ * The package's own copy of the mark — the one file every icon derives from.
+ *
+ * Resolved through the module graph rather than by joining a `node_modules`
+ * path: bun installs workspace dependencies UNDER each workspace, so the
+ * package lives in `app/node_modules` and `services/aven-api/node_modules`,
+ * never at the repo root. Asking the resolver is also the only version that
+ * keeps working if the store layout changes.
+ */
 const logo = readFileSync(
-	path.join(repoRoot, 'node_modules/@myavenceo/aven-ceo/assets/logo.svg'),
+	fileURLToPath(import.meta.resolve('@myavenceo/aven-ceo/assets/logo.svg')),
 	'utf8'
 )
 
