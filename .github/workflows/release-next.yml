@@ -207,6 +207,11 @@ jobs:
           file: services/aven-api/Dockerfile
           push: true
           tags: ghcr.io/myavenceo/aven-api:sha-${{ steps.commit.outputs.sha }}
+          # The image installs @myavenceo/aven-ceo from GitHub Packages, which
+          # needs a token even to read. A build secret, so it is never baked
+          # into a layer; the job already carries `packages: read`.
+          secrets: |
+            npm_token=${{ secrets.GITHUB_TOKEN }}
 
   publish-artifact-store-image:
     name: publish Artifact Store image
