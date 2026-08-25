@@ -45,11 +45,18 @@ export interface BrowsedArtifact {
 	artifactSha256: string
 	producerRunId: string | null
 	output: ArtifactJson
+	inputs: ArtifactLineageInput[]
 	publicationId: string
 	scopeSequence: number
 	publicationKind: string
 	runId: string | null
 	committedAt: string
+}
+
+export interface ArtifactLineageInput {
+	role: string
+	ordinal: number
+	artifactId: string
 }
 
 export interface ArtifactBrowseResult {
@@ -87,6 +94,21 @@ function booleanField(value: ArtifactJson, key: string, label: string): boolean 
 		throw new AppError(502, 'ARTIFACT_STORE_INVALID_RESPONSE', `${label}.${key} was invalid.`)
 	}
 	return field
+}
+
+function lineageInputs(value: ArtifactJson | undefined): ArtifactLineageInput[] {
+	if (value === undefined) return []
+	if (!Array.isArray(value)) {
+		throw new AppError(502, 'ARTIFACT_STORE_INVALID_RESPONSE', 'publication.inputs was invalid.')
+	}
+	return value.map((inputValue) => {
+		const input = record(inputValue, 'run input')
+		return {
+			role: stringField(input, 'role', 'run input'),
+			ordinal: numberField(input, 'ordinal', 'run input'),
+			artifactId: stringField(input, 'artifactId', 'run input')
+		}
+	})
 }
 
 export class ArtifactFileService {
@@ -174,6 +196,7 @@ export class ArtifactFileService {
 			}
 			for (const itemValue of items) {
 				const item = record(itemValue, 'publication')
+				const inputs = lineageInputs(item.inputs)
 				const published = item.artifacts
 				if (!Array.isArray(published)) continue
 				for (const artifactValue of published) {
@@ -188,6 +211,7 @@ export class ArtifactFileService {
 						producerRunId:
 							typeof artifact.producerRunId === 'string' ? artifact.producerRunId : null,
 						output: artifact.output ?? null,
+						inputs,
 						publicationId: stringField(item, 'publicationId', 'publication'),
 						scopeSequence: numberField(item, 'scopeSequence', 'publication'),
 						publicationKind: stringField(item, 'kind', 'publication'),

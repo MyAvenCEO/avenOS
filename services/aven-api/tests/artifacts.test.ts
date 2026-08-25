@@ -135,6 +135,9 @@ describe('artifact file coordinator', () => {
 								scopeSequence: 2,
 								kind: 'run',
 								runId: intentId,
+								inputs: [
+									{ role: 'source', ordinal: 0, artifactId: intentArtifactId }
+								],
 								committedAt: observedAt,
 								artifacts: [
 									{
@@ -177,6 +180,7 @@ describe('artifact file coordinator', () => {
 					artifactSha256: sha256,
 					producerRunId: intentId,
 					output: { role: 'result', ordinal: 0 },
+					inputs: [{ role: 'source', ordinal: 0, artifactId: intentArtifactId }],
 					publicationId,
 					scopeSequence: 2,
 					publicationKind: 'run',

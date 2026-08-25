@@ -323,6 +323,10 @@ pub struct PublicationFeedItem {
     pub kind: String,
     pub publisher: StablePublisher,
     pub run_id: Option<Uuid>,
+    /// Ordered immutable inputs for `run` publications. Root publications have none.
+    /// Defaulting keeps newer readers compatible with retained v1 feed responses.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inputs: Vec<RunInput>,
     #[serde(with = "time::serde::rfc3339")]
     pub committed_at: OffsetDateTime,
     pub artifacts: Vec<FeedArtifact>,
@@ -366,5 +370,34 @@ mod tests {
             "surprise": true
         }"#;
         assert!(serde_json::from_str::<PublicationIntent>(json).is_err());
+    }
+
+    #[test]
+    fn feed_inputs_are_additive_and_keep_old_responses_readable() {
+        let json = r#"{
+            "scopeId": "11111111-1111-4111-8111-111111111111",
+            "publicationId": "22222222-2222-4222-8222-222222222222",
+            "scopeSequence": 7,
+            "committedStoreEpoch": "33333333-3333-4333-8333-333333333333",
+            "publicationRequestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "run",
+            "publisher": {"issuer": "aven", "subject": "processor"},
+            "runId": "44444444-4444-4444-8444-444444444444",
+            "committedAt": "2026-08-25T12:00:00Z",
+            "artifacts": []
+        }"#;
+        let mut item: PublicationFeedItem = serde_json::from_str(json).unwrap();
+        assert!(item.inputs.is_empty());
+        item.inputs.push(RunInput {
+            role: Role::new("source".to_owned()).unwrap(),
+            ordinal: 0,
+            artifact_id: Uuid::parse_str("55555555-5555-4555-8555-555555555555").unwrap(),
+        });
+        let encoded = serde_json::to_value(item).unwrap();
+        assert_eq!(encoded["inputs"][0]["role"], "source");
+        assert_eq!(
+            encoded["inputs"][0]["artifactId"],
+            "55555555-5555-4555-8555-555555555555"
+        );
     }
 }
