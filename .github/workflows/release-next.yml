@@ -1,7 +1,7 @@
 name: release-next
 
-# CalVer staging channel: validate the identity API, cut the release, publish
-# and deploy its immutable image, then build the signed app artifacts.
+# CalVer staging channel: validate the identity stack, cut the release, publish
+# and deploy its immutable images, then build the signed app artifacts.
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   identity-validate:
-    name: identity API validation
+    name: identity stack validation
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -388,7 +388,7 @@ jobs:
           comment-on-summary: true
 
   deploy-identity-next:
-    name: deploy identity API
+    name: deploy identity stack
     needs:
       [
         publish-identity-image,
@@ -759,7 +759,7 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
           chmod 600 "$RUNNER_TEMP/ssh/key" "$RUNNER_TEMP/ssh/known_hosts"
 
-      - name: Install and start immutable image
+      - name: Install and start immutable stack
         env:
           DEPLOY_HOST: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-host }}
           DEPLOY_USER: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-user }}
