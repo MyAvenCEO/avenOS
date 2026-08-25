@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { namePattern, normalizeName } from '$lib/validation.js'
 
 const label = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/
-const branch = /^(?![./])(?!.*(?:\.\.|\/\/|@\{|\\))[A-Za-z0-9._/-]{1,200}(?<![./])$/
+const branch = /^(?![./-])(?!.*(?:\.\.|\/\/|@\{|\\))[A-Za-z0-9._/-]{1,200}(?<![./])$/
+const branchComponent = /^(?!\.)(?!.*\.lock$)[A-Za-z0-9._-]+$/
 const repository = /^[A-Za-z0-9_.-]{1,100}\/[-A-Za-z0-9_.]{1,100}$/
 
 export function normalizeSiteHostname(input: string): string {
@@ -24,7 +25,12 @@ export function normalizeRepository(input: string): string {
 }
 
 export function normalizeBranch(input: string, deployment = false): string {
-	if (!branch.test(input)) throw new Error('invalid Git branch name')
+	if (
+		!branch.test(input) ||
+		input === '@' ||
+		input.split('/').some((component) => !branchComponent.test(component))
+	)
+		throw new Error('invalid Git branch name')
 	if (deployment && !input.startsWith('deploy/'))
 		throw new Error('deploymentBranch must start with deploy/')
 	return input

@@ -69,7 +69,12 @@ export class StaticSiteHost {
 		const configured = new Set(payload.bindings.map((binding) => binding.hostname))
 		for (const hostname of this.active.keys())
 			if (!configured.has(hostname)) this.active.delete(hostname)
-		await Promise.all(payload.bindings.map((binding) => this.reconcileOne(binding)))
+		for (let index = 0; index < payload.bindings.length; index += this.config.maxConcurrentSyncs)
+			await Promise.all(
+				payload.bindings
+					.slice(index, index + this.config.maxConcurrentSyncs)
+					.map((binding) => this.reconcileOne(binding))
+			)
 		await this.saveSnapshot()
 		this.ready = true
 	}
@@ -116,17 +121,20 @@ export class StaticSiteHost {
 	}
 
 	private async report(payload: Record<string, unknown>) {
-		await fetch(this.config.statusUrl, {
-			method: 'POST',
-			headers: {
-				authorization: `Bearer ${this.config.bearerToken}`,
-				'content-type': 'application/json'
-			},
-			body: JSON.stringify(payload),
-			signal: AbortSignal.timeout(10_000)
-		}).catch((error) =>
+		try {
+			const response = await fetch(this.config.statusUrl, {
+				method: 'POST',
+				headers: {
+					authorization: `Bearer ${this.config.bearerToken}`,
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify(payload),
+				signal: AbortSignal.timeout(10_000)
+			})
+			if (!response.ok) throw new Error(`site status endpoint returned ${response.status}`)
+		} catch (error) {
 			console.warn(JSON.stringify({ message: 'status report failed', error: String(error) }))
-		)
+		}
 	}
 
 	handle = async (request: Request): Promise<Response> => {
