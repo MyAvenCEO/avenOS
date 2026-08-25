@@ -203,16 +203,18 @@ The successful deployment contract is:
   Processor and Intent Service database connections.
 
 Before overwriting a live deployment, the workflow saves the previous `.env` (including
-its immutable image digests) and three Compose files under root-owned
-`/opt/aven-api/previous`. If the rollout fails after migration, restore that exact
-runtime set on the host:
+its immutable image digests), three Compose files, and Caddyfile under root-owned
+`/opt/aven-api/previous`. Every rollout feeds the newly installed Caddyfile to the
+running Caddy admin API over stdin. This makes configuration changes effective without
+TLS listener downtime and avoids stale file-bind mounts. If the rollout fails after
+migration, restore that exact runtime set on the host:
 
 ```sh
 sudo /opt/aven-api/deploy/rollback-previous.sh
 ```
 
-The rollback removes newly introduced orphan services and restores the previous
-Processor's access to its empty prototype intent schema. It deliberately does not
-reverse central or customer schema migrations; the old code otherwise ignores the
-forward additions. Investigate and retain the failed deployment logs before the next
-release overwrites the one-generation snapshot.
+The rollback removes newly introduced orphan services, restores and reloads the previous
+Caddyfile, and restores the previous Processor's access to its empty prototype intent
+schema. It deliberately does not reverse central or customer schema migrations; the old
+code otherwise ignores the forward additions. Investigate and retain the failed
+deployment logs before the next release overwrites the one-generation snapshot.
