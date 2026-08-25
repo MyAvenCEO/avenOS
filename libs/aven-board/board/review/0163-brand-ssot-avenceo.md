@@ -259,6 +259,40 @@ curl -s https://next.aven.ceo/ | grep -c 'svelte-logo'   # must be 0
 
 Newest entry first.
 
+- `2026-08-25` — **Round 4: published, promoted, and installed for real.**
+
+  **avenCEO is shipped.** Tag `aven-ceo-v0.2.0` pushed → `publish-ceo.yml` green,
+  log confirms `+ @myavenceo/aven-ceo@0.2.0`. PR #8 merged to `next` (`d06135e`);
+  `Publish static site` completed success, so the custom hosting has it.
+
+  **avenOS now installs the published package, not a symlink to the checkout.**
+  `bun.lock` records the registry download and the sha `44884cab…`, which matches
+  the `npm pack` shasum exactly — same artifact. `node_modules/@myavenceo/aven-ceo`
+  contains only `dist/` + `assets/` (no `src/`), i.e. the tarball. It is a symlink
+  into bun's own `.bun` content-addressed store, which is how bun links every
+  dependency — not a link to another working tree.
+
+  **The real install exposed a bug the symlink had been masking.**
+  `scripts/generate-brand.ts` read the logo from
+  `<repoRoot>/node_modules/@myavenceo/aven-ceo/assets/logo.svg`. Bun installs
+  workspace dependencies UNDER each workspace, so the package lives in
+  `app/node_modules`, `services/aven-api/node_modules` and
+  `libs/aven-ui/node_modules` — never at the repo root. With the symlink gone,
+  `brand:generate` failed outright: `Cannot find module`. Fixed two ways: the root
+  workspace now DECLARES the dependency, and the asset is resolved through the
+  module graph (`import.meta.resolve`) instead of a hand-joined path, so it
+  survives any future change to the store layout. Insisting on a real install
+  rather than trusting the symlink is what caught this.
+
+  **Verified against the published package:** avenOS `check` 613/0,
+  `check:api` 2387/0, `lint` 0, `icons` regenerate, determinism EMPTY.
+
+  Left clean: `~/.npmrc` restored, no hardcoded token committed or left behind
+  (the registry token belongs in the environment, not in a file).
+
+  **Remaining:** avenOS PR → `main` → `next`.
+
+
 - `2026-08-25` — **Round 3: avenCEO shipped to main; two gates hit.**
 
   **Landed.** avenCEO PR [#7](https://github.com/MyAvenCEO/avenCEO/pull/7)
