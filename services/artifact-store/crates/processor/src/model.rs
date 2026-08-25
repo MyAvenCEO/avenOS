@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+pub const PROCESSING_PROJECTION_VERSION: &str = "artifact-presentation-v3";
+
 #[derive(Clone, Debug)]
 pub struct ClaimedStep {
     pub id: Uuid,
@@ -60,7 +62,10 @@ pub struct CaseSnapshot {
 pub struct StepSnapshot {
     pub id: Uuid,
     pub step_key: String,
+    pub procedure_key: String,
     pub state: String,
+    pub dependencies: Vec<String>,
+    pub attempt_count: i32,
     pub terminal_code: Option<String>,
     pub receipt: Option<Value>,
     pub outputs: Vec<StoredOutput>,
@@ -106,6 +111,14 @@ pub struct ProcessingWarning {
 pub struct ProcessingStage {
     pub key: String,
     pub state: String,
+    #[serde(default)]
+    pub procedure_key: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<String>,
+    #[serde(default)]
+    pub attempt_count: i32,
+    #[serde(default)]
+    pub terminal_code: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

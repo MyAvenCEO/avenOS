@@ -3,7 +3,10 @@ import { Actor } from '$lib/actors/actor'
 import { bus, type HeldPreview } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { singleton } from '$lib/actors/singleton'
-import type { ArtifactProcessingPresentation } from '$lib/artifacts/processing'
+import type {
+	ArtifactProcessingPresentation,
+	ArtifactProcessingStage
+} from '$lib/artifacts/processing'
 
 /**
  * THE INTENTS — the workspace's subjects, MOCKED (0158) but owned by an
@@ -42,7 +45,7 @@ export interface SkillStatus {
 	done: string[]
 	/** The node the instance currently sits on, if any. */
 	current?: string
-	stages?: { key: string; state: string }[]
+	stages?: ArtifactProcessingStage[]
 }
 export interface MockIntent {
 	id: string

@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::executor::{execute, generated_uploads, ExecutorError, MaterializedInput};
 use crate::model::{
     CaseSnapshot, DerivedArtifact, ProcessingStage, ProcessingStatus, ProcessingWarning,
-    StepSnapshot, StoredOutput,
+    StepSnapshot, StoredOutput, PROCESSING_PROJECTION_VERSION,
 };
 use crate::repository::{ModelCallLease, ProcessingRepository, RepositoryError};
 use crate::store::{ArtifactStoreClient, ArtifactStoreClientError};
@@ -1327,6 +1327,10 @@ fn build_presentation(snapshot: &CaseSnapshot, source: &Value) -> ProcessingStat
         .map(|step| ProcessingStage {
             key: step.step_key.clone(),
             state: step.state.clone(),
+            procedure_key: step.procedure_key.clone(),
+            depends_on: step.dependencies.clone(),
+            attempt_count: step.attempt_count,
+            terminal_code: step.terminal_code.clone(),
         })
         .collect();
     let mut deduplicated = BTreeMap::new();
@@ -1349,7 +1353,7 @@ fn build_presentation(snapshot: &CaseSnapshot, source: &Value) -> ProcessingStat
         state: snapshot.state.clone(),
         plan_key: snapshot.plan_key.clone(),
         plan_version: snapshot.plan_version.clone(),
-        projection_version: "artifact-presentation-v2".into(),
+        projection_version: PROCESSING_PROJECTION_VERSION.into(),
         preferred_type,
         label,
         summary,
@@ -1378,5 +1382,50 @@ mod tests {
         let status = build_presentation(&snapshot, &json!({"originalName":"scan.pdf"}));
         assert_eq!(status.preferred_type, "file");
         assert_eq!(status.label, "scan.pdf");
+    }
+
+    #[test]
+    fn projection_exposes_the_runtime_step_graph() {
+        let snapshot = CaseSnapshot {
+            id: Uuid::new_v4(),
+            scope_id: Uuid::new_v4(),
+            source_artifact_id: Uuid::new_v4(),
+            plan_key: "artifact-understanding-local".into(),
+            plan_version: "2".into(),
+            state: "active".into(),
+            steps: vec![
+                StepSnapshot {
+                    id: Uuid::new_v4(),
+                    step_key: "inspect".into(),
+                    procedure_key: "core.inspect-file".into(),
+                    state: "succeeded".into(),
+                    dependencies: vec![],
+                    attempt_count: 1,
+                    terminal_code: None,
+                    receipt: None,
+                    outputs: vec![],
+                },
+                StepSnapshot {
+                    id: Uuid::new_v4(),
+                    step_key: "decompose-pages".into(),
+                    procedure_key: "docs.decompose-pages".into(),
+                    state: "running".into(),
+                    dependencies: vec!["inspect".into()],
+                    attempt_count: 2,
+                    terminal_code: None,
+                    receipt: None,
+                    outputs: vec![],
+                },
+            ],
+        };
+        let status = build_presentation(&snapshot, &json!({"originalName":"scan.pdf"}));
+        assert_eq!(status.projection_version, PROCESSING_PROJECTION_VERSION);
+        assert_eq!(status.stages[1].depends_on, vec!["inspect"]);
+        assert_eq!(status.stages[1].procedure_key, "docs.decompose-pages");
+        assert_eq!(status.stages[1].attempt_count, 2);
+
+        let json = serde_json::to_value(status).expect("processing status serializes");
+        assert_eq!(json["stages"][1]["dependsOn"][0], "inspect");
+        assert!(json["stages"][0].get("dependsOn").is_none());
     }
 }
