@@ -70,7 +70,7 @@ services:
     environment:
       <<: *app-environment
       DATABASE_URL: postgres://aven_migrator:${AVEN_MIGRATOR_PASSWORD:-migrator-dev}@db:5432/aven
-    command: ["bun", "scripts/migrate.ts"]
+    command: ["bun", "build/scripts/migrate.js"]
     restart: "no"
 
   app:
@@ -107,7 +107,7 @@ services:
       EMAIL_QUEUE_ENCRYPTION_KEY: ${EMAIL_QUEUE_ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
       SMTP_URL: ${SMTP_URL:-smtp://mailpit:1025}
       SMTP_FROM: ${SMTP_FROM:-Aven <no-reply@aven.local>}
-    command: ["bun", "scripts/email-worker.ts"]
+    command: ["bun", "build/scripts/email-worker.js"]
 
   environment-worker:
     <<: [*runtime-security, *aven-image]
@@ -120,7 +120,7 @@ services:
       <<: *app-environment
       DATABASE_URL: postgres://aven_environment_worker:${AVEN_ENVIRONMENT_WORKER_PASSWORD:-environment-dev}@db:5432/aven
       PROVISIONER_DATABASE_URL: postgres://aven_provisioner:${AVEN_PROVISIONER_PASSWORD:-provisioner-dev}@db:5432/postgres
-    command: ["bun", "scripts/environment-worker.ts"]
+    command: ["bun", "build/scripts/environment-worker.js"]
 
 volumes:
   db-data:

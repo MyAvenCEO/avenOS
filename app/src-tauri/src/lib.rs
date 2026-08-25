@@ -223,8 +223,6 @@ pub fn run() {
 			auth::billing_resume,
 			auth::billing_invoice_download,
 			auth::billing_orders,
-			auth::artifacts_list,
-			auth::artifact_read_base64,
 			auth::billing_checkout,
 			auth::billing_checkout_window,
 			auth::auth_passkey_begin,

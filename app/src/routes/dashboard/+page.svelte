@@ -11,10 +11,15 @@ import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import '$lib/actors/windows'
 import ArtifactsPage from '$lib/artifacts/ArtifactsPage.svelte'
-import { type ArtifactProcessingLookup, isTerminalProcessing } from '$lib/artifacts/processing'
+import {
+	ingestDroppedFiles,
+	loadPersistentIntents,
+	refreshIntent,
+	watchArtifactProcessing
+} from '$lib/artifacts/ingest.svelte'
 import { composer } from '$lib/intents/composer.svelte'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
-import { intents, type PersistentIntentDetail } from '$lib/intents/intents.svelte'
+import { intents } from '$lib/intents/intents.svelte'
 import { shell } from '$lib/intents/talk.svelte'
 import SkillsPlatform from '$lib/skills/SkillsPlatform.svelte'
 
@@ -43,153 +48,7 @@ interface ArtifactUploadProgress {
 	total: number
 }
 
-interface UploadedArtifactReceipt {
-	publicationId: string
-	intentId: string
-	intentDeclarationArtifactId: string
-	artifactId: string
-	originalName: string
-	mediaType: string
-	sha256: string
-	length: number
-	scopeSequence: number
-	replayed: boolean
-}
-
 let fileHovering = $state(false)
-let uploadInFlight = $state(false)
-const processingWatchers = new Set<string>()
-
-function persistentTurns(detail: PersistentIntentDetail) {
-	return detail.contributions.flatMap((entry) => {
-		if ((entry.contributorKind !== 'human' && entry.contributorKind !== 'agent') || !entry.text)
-			return []
-		return [
-			{
-				id: entry.id,
-				role: entry.contributorKind === 'human' ? ('user' as const) : ('assistant' as const),
-				content: entry.text
-			}
-		]
-	})
-}
-
-async function refreshIntent(intentId: string): Promise<PersistentIntentDetail | null> {
-	try {
-		const detail = await invoke<PersistentIntentDetail>('intent_get', { intentId })
-		intents.applyPersistent(detail)
-		chat.hydrate(detail.id, persistentTurns(detail))
-		return detail
-	} catch {
-		// Projection follows the immutable publication asynchronously. The
-		// provisional intent stays present while the processing watcher retries.
-		return null
-	}
-}
-
-async function loadPersistentIntents(): Promise<void> {
-	const summaries = await invoke<Array<{ id: string }>>('intent_list')
-	const details = await Promise.all(summaries.map((intent) => refreshIntent(intent.id)))
-	for (const detail of details) {
-		if (
-			detail?.fileSkill &&
-			detail.sourceArtifactId &&
-			(!detail.fileSkill.presentation || !isTerminalProcessing(detail.fileSkill.presentation.state))
-		) {
-			void watchArtifactProcessing(detail.sourceArtifactId, detail.id)
-		}
-	}
-}
-
-function wait(milliseconds: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, milliseconds))
-}
-
-async function watchArtifactProcessing(artifactId: string, intentId?: string): Promise<void> {
-	if (processingWatchers.has(artifactId)) return
-	processingWatchers.add(artifactId)
-	let delay = 300
-	let consecutiveFailures = 0
-	try {
-		while (chat.hasArtifact(artifactId)) {
-			try {
-				const lookup = await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
-					artifactId
-				})
-				consecutiveFailures = 0
-				if (lookup.pending || !lookup.presentation) {
-					chat.markArtifactProcessingPending(artifactId)
-					delay = Math.min(2_000, Math.round(delay * 1.5))
-				} else {
-					chat.updateArtifactProcessing(artifactId, lookup.presentation)
-					const owner =
-						intentId ??
-						intents.items.find((intent) =>
-							intent.artifacts.some((artifact) => artifact.artifactId === artifactId)
-						)?.id
-					if (owner) await refreshIntent(owner)
-					if (isTerminalProcessing(lookup.presentation.state)) return
-					delay = 1_500
-				}
-			} catch (error) {
-				consecutiveFailures += 1
-				chat.markArtifactProcessingUnavailable(
-					artifactId,
-					error instanceof Error ? error.message : String(error)
-				)
-				delay = Math.min(30_000, 1_000 * 2 ** Math.min(consecutiveFailures, 5))
-			}
-			await wait(delay)
-		}
-	} finally {
-		processingWatchers.delete(artifactId)
-	}
-}
-
-function basename(path: string): string {
-	return path.split(/[\\/]/).at(-1) || 'Dropped file'
-}
-
-async function uploadDroppedFile(paths: string[]): Promise<void> {
-	shell.tab = 'intents'
-	shell.detail = true
-	if (paths.length !== 1) {
-		chat.failure = 'Drop exactly one regular file at a time.'
-		return
-	}
-	if (uploadInFlight) {
-		chat.failure = 'Wait for the current file upload to finish.'
-		return
-	}
-
-	const uploadId = crypto.randomUUID()
-	const publicationId = crypto.randomUUID()
-	const intentId = crypto.randomUUID()
-	const observedAt = new Date().toISOString()
-	intents.beginFileIntent(intentId, basename(paths[0]))
-	chat.beginArtifactUpload(uploadId, publicationId, basename(paths[0]))
-	uploadInFlight = true
-	try {
-		const receipt = await invoke<UploadedArtifactReceipt>('artifact_upload', {
-			uploadId,
-			publicationId,
-			intentId,
-			observedAt,
-			path: paths[0]
-		})
-		chat.commitArtifactUpload(uploadId, receipt)
-		await refreshIntent(receipt.intentId)
-		void watchArtifactProcessing(receipt.artifactId, receipt.intentId)
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error)
-		chat.failArtifactUpload(uploadId, message)
-		intents.failFileIntent(intentId, message)
-		await wait(1_000)
-		void loadPersistentIntents()
-	} finally {
-		uploadInFlight = false
-	}
-}
 
 /**
  * Which surface fills the middle of the screen — driven by the left rail
@@ -294,7 +153,7 @@ onMount(() => {
 				return
 			}
 			fileHovering = false
-			if (payload.type === 'drop') void uploadDroppedFile(payload.paths)
+			if (payload.type === 'drop') void ingestDroppedFiles(payload.paths)
 		})
 		.then((unlisten) => {
 			if (disposed) unlisten()

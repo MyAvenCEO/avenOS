@@ -1,5 +1,5 @@
 use base64::{
-	engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+	engine::general_purpose::URL_SAFE_NO_PAD,
 	Engine as _,
 };
 use serde::{Deserialize, Serialize};
@@ -700,8 +700,10 @@ fn artifacts_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 /// The official invoice PDF for ONE of the member's own orders: the id
 /// service resolves the order against the session and asks Polar (generating
 /// the document on first ask — that can take a while), then the PDF is
-/// downloaded into local app storage. No window, no system browser — the
-/// pane previews the stored file inline.
+/// downloaded into local app storage and its PATH returned. No window, no
+/// system browser: the caller feeds that path straight into the artifact
+/// ingest, so the invoice lands in the store as an intent rather than on a
+/// second, parallel shelf that knew nothing about provenance.
 #[tauri::command]
 pub async fn billing_invoice_download(
 	app: tauri::AppHandle,
@@ -743,59 +745,20 @@ pub async fn billing_invoice_download(
 			.filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
 			.collect();
 		let file_name = format!("rechnung-{safe}.pdf");
-		std::fs::write(dir.join(&file_name), &bytes)
+		let path = dir.join(&file_name);
+		std::fs::write(&path, &bytes)
 			.map_err(|error| format!("Could not store the invoice: {error}"))?;
-		Ok(serde_json::json!({ "fileName": file_name }))
+		// The PATH is the point: the pane does not show this file itself, it
+		// hands it to the same ingest the window's drop handler uses, so an
+		// invoice becomes an intent with a skill flow and lineage like any
+		// other document. The file on disk is just the handover.
+		Ok(serde_json::json!({
+			"fileName": file_name,
+			"path": path.to_string_lossy(),
+		}))
 	})
 	.await
 	.map_err(|error| format!("Could not load the invoice: {error}"))?
-}
-
-/// Every artifact on the local shelf — name, size, modified. Flat: the
-/// shelf holds files, never subdirectories.
-#[tauri::command]
-pub async fn artifacts_list(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
-	let dir = artifacts_dir(&app)?;
-	let mut list = Vec::new();
-	let entries =
-		std::fs::read_dir(&dir).map_err(|error| format!("Could not read {dir:?}: {error}"))?;
-	for entry in entries.flatten() {
-		let Ok(meta) = entry.metadata() else { continue };
-		if !meta.is_file() {
-			continue;
-		}
-		let Ok(file_name) = entry.file_name().into_string() else {
-			continue;
-		};
-		let modified_ms = meta
-			.modified()
-			.ok()
-			.and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-			.map(|since| since.as_millis() as u64)
-			.unwrap_or(0);
-		list.push(serde_json::json!({
-			"fileName": file_name,
-			"sizeBytes": meta.len(),
-			"modifiedMs": modified_ms,
-		}));
-	}
-	Ok(list)
-}
-
-/// One stored artifact's bytes, base64 — the webview builds a Blob for the
-/// inline preview from this; the file itself never leaves app storage.
-#[tauri::command]
-pub async fn artifact_read_base64(
-	app: tauri::AppHandle,
-	file_name: String,
-) -> Result<String, String> {
-	if file_name.contains('/') || file_name.contains('\\') || file_name.contains("..") {
-		return Err("Invalid artifact name.".to_string());
-	}
-	let path = artifacts_dir(&app)?.join(&file_name);
-	let bytes =
-		std::fs::read(&path).map_err(|error| format!("Could not read the artifact: {error}"))?;
-	Ok(STANDARD.encode(bytes))
 }
 
 /// The names reserved for whoever is signed in. Settings shows them so the

@@ -32,6 +32,18 @@ COPY libs/aven-artifact-store libs/aven-artifact-store
 # bun which registry to fetch it from.
 COPY libs/aven-hosting libs/aven-hosting
 RUN bun --cwd services/aven-api build
+# The four entrypoints compose and operations run inside this image. They are
+# bundled for the same reason the server is: a bundle carries its imports, so
+# nothing has to resolve a workspace symlink at runtime and no lib source needs
+# to be dragged into the runtime stage. That is the rule the brand already
+# follows from the other side — shared ACROSS repos becomes a published package,
+# shared WITHIN the repo gets bundled here. Nothing resolves source at runtime.
+RUN cd services/aven-api && bun build \
+  scripts/migrate.ts \
+  scripts/email-worker.ts \
+  scripts/environment-worker.ts \
+  scripts/environment.ts \
+  --target=bun --outdir=build/scripts
 
 FROM manifests AS production-dependencies
 RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
@@ -44,17 +56,12 @@ COPY --from=production-dependencies /repo/node_modules /repo/node_modules
 COPY --from=production-dependencies /repo/services/aven-api/node_modules ./node_modules
 COPY --from=build /repo/services/aven-api/build ./build
 COPY --from=build /repo/services/aven-api/src ./src
-COPY --from=build /repo/services/aven-api/scripts ./scripts
 COPY --from=build /repo/services/aven-api/migrations ./migrations
 COPY --from=build /repo/services/aven-api/package.json ./package.json
-# The built server imports the workspace Artifact Store SDK through Bun's
-# node_modules symlink, so the symlink target must exist in the runtime image.
-COPY --from=build /repo/libs/aven-artifact-store /repo/libs/aven-artifact-store
 # The brand SSOT is no longer a workspace directory to copy: @myavenceo/aven-ceo
 # arrives through node_modules above, which the production-dependencies stage
 # already installs (root node_modules carries bun's store, the service's carries
 # the link into it). scripts/ resolve it from there like any other dependency.
-COPY --from=build /repo/libs/aven-hosting /repo/libs/aven-hosting
 EXPOSE 3000
 USER bun
 HEALTHCHECK --interval=5s --timeout=3s --start-period=15s --retries=30 \
