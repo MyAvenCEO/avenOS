@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.25-next.1...v) (2026-08-25)
+
+
+### Bug Fixes
+
+* **deploy:** reload Caddy configuration ([b943ea9](https://github.com/MyAvenCEO/avenOS/commit/b943ea9fab4271a51f8ebb05515877b0050a5002))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.24-next.8...v) (2026-08-25)
 
 
