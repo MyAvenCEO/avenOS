@@ -362,6 +362,14 @@ pub fn router(state: AppState) -> Router {
             get(get_artifact),
         )
         .route(
+            "/v1/scopes/{scope_id}/artifacts/{artifact_id}/producer-inputs",
+            get(get_producer_inputs),
+        )
+        .route(
+            "/v1/scopes/{scope_id}/artifacts/{artifact_id}/supporting-evidence",
+            get(get_supporting_evidence),
+        )
+        .route(
             "/v1/scopes/{scope_id}/artifacts/{artifact_id}/content",
             get(get_content).head(head_content),
         )
@@ -527,6 +535,34 @@ async fn get_artifact(
         .await?
         .ok_or_else(ApiError::unavailable)?;
     Ok(Json(artifact).into_response())
+}
+
+async fn get_producer_inputs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((scope_id, artifact_id)): Path<(Uuid, Uuid)>,
+) -> Result<Response, ApiError> {
+    state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
+    let inputs = store
+        .get_producer_inputs(scope_id, artifact_id)
+        .await?
+        .ok_or_else(ApiError::unavailable)?;
+    Ok(Json(inputs).into_response())
+}
+
+async fn get_supporting_evidence(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((scope_id, artifact_id)): Path<(Uuid, Uuid)>,
+) -> Result<Response, ApiError> {
+    state.auth.authorize(&headers, scope_id)?;
+    let store = scoped_store(&state, &headers, scope_id).await?;
+    let evidence = store
+        .get_supporting_evidence(scope_id, artifact_id)
+        .await?
+        .ok_or_else(ApiError::unavailable)?;
+    Ok(Json(evidence).into_response())
 }
 
 async fn get_content(

@@ -17,10 +17,13 @@ export const GET = async (event) => {
 	)) as Record<string, unknown>
 	if (!envelope.blob) return new Response('This artifact has no blob content.', { status: 404 })
 	const payload = envelope.payload as Record<string, unknown> | undefined
+	const typeKey = typeof envelope.typeKey === 'string' ? envelope.typeKey : ''
 	const mediaType =
 		typeof payload?.declaredMediaType === 'string'
 			? payload.declaredMediaType
-			: 'application/octet-stream'
+			: typeKey === 'docs.extracted-text'
+				? 'text/plain; charset=utf-8'
+				: 'application/octet-stream'
 	const content = await rt.artifacts.content(target.databaseName, target.scopeId, artifactId)
 	return new Response(Uint8Array.from(content).buffer, {
 		headers: {
