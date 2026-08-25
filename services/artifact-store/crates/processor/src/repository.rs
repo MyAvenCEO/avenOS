@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::model::{
     CaseSnapshot, ClaimedStep, GeneratedBlob, PendingOutbox, ProcessingStatus, StepSnapshot,
-    StoredOutput,
+    StoredOutput, PROCESSING_PROJECTION_VERSION,
 };
 use crate::vision::{CompletedModelCall, PreparedModelCall};
 
@@ -26,7 +26,6 @@ const MIGRATIONS: &[(i32, &str)] = &[
 ];
 const PLAN_KEY: &str = "artifact-understanding-local";
 const PLAN_VERSION: &str = "2";
-const PROJECTION_VERSION: &str = "artifact-presentation-v2";
 
 #[derive(Clone)]
 pub struct ProcessingRepository {
@@ -840,7 +839,12 @@ impl ProcessingRepository {
         .fetch_one(&self.pool)
         .await?;
         let step_rows = sqlx::query(
-            "SELECT step.id,step.step_key,step.state,step.terminal_code, \
+            "SELECT step.id,step.step_key,step.procedure_key,step.state,step.attempt_count,step.terminal_code, \
+                    ARRAY(SELECT required.step_key \
+                          FROM aven_processing.processing_step_dependencies dependency \
+                          JOIN aven_processing.processing_steps required ON required.id=dependency.dependency_step_id \
+                          WHERE dependency.step_id=step.id \
+                          ORDER BY required.created_at,required.step_key) AS dependencies, \
                     outbox.submission #> '{intent,run,receipt}' AS receipt \
              FROM aven_processing.processing_steps step \
              LEFT JOIN aven_processing.processing_outbox outbox ON outbox.step_id=step.id \
@@ -870,7 +874,10 @@ impl ProcessingRepository {
             steps.push(StepSnapshot {
                 id: step_id,
                 step_key: step.get("step_key"),
+                procedure_key: step.get("procedure_key"),
                 state: step.get("state"),
+                dependencies: step.get("dependencies"),
+                attempt_count: step.get("attempt_count"),
                 terminal_code: step.get("terminal_code"),
                 receipt: step.get("receipt"),
                 outputs,
@@ -952,7 +959,7 @@ impl ProcessingRepository {
         )
         .bind(case_id)
         .bind(source_artifact_id)
-        .bind(PROJECTION_VERSION)
+        .bind(PROCESSING_PROJECTION_VERSION)
         .bind(serde_json::to_value(status)?)
         .execute(&mut *transaction)
         .await?;

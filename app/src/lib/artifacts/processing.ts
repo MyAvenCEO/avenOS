@@ -11,6 +11,11 @@ export interface ArtifactProcessingWarning {
 export interface ArtifactProcessingStage {
 	key: string
 	state: string
+	/** Exact runtime DAG edges. Absent on presentations created before v3. */
+	dependsOn?: string[]
+	procedureKey?: string
+	attemptCount?: number
+	terminalCode?: string | null
 }
 
 export interface DerivedArtifact {
@@ -72,8 +77,10 @@ const STAGE_LABELS: Array<[prefix: string, label: string]> = [
 	['extract-native-page-', 'Reading embedded text'],
 	['analyze-page-', 'Understanding pages'],
 	['classify-page-', 'Classifying pages'],
+	['represent-page-', 'Representing pages'],
+	['assemble-document', 'Assembling document'],
 	['assemble-text', 'Assembling document text'],
-	['aggregate-layout', 'Combining page layouts'],
+	['aggregate-content', 'Combining page results'],
 	['classify-content-', 'Understanding content'],
 	['classify-document', 'Classifying document'],
 	['extract-invoice', 'Extracting invoice fields'],
@@ -114,11 +121,12 @@ export function isTerminalProcessing(state: ArtifactProcessingState): boolean {
 	return state === 'succeeded' || state === 'needs_review' || state === 'failed'
 }
 
-function stageLabel(key: string): string {
-	return (
+export function artifactProcessingStageLabel(key: string): string {
+	const label =
 		STAGE_LABELS.find(([prefix]) => key === prefix || key.startsWith(prefix))?.[1] ??
 		artifactTypeLabel(key)
-	)
+	const page = key.match(/page-(\d+)$/)?.[1]
+	return page ? `${label} · Page ${Number(page)}` : label
 }
 
 export interface ArtifactProcessingProgress {
@@ -153,8 +161,8 @@ export function artifactProcessingProgress(
 	return {
 		label: current
 			? current.state === 'retry_wait'
-				? `${stageLabel(current.key)} · retry scheduled`
-				: stageLabel(current.key)
+				? `${artifactProcessingStageLabel(current.key)} · retry scheduled`
+				: artifactProcessingStageLabel(current.key)
 			: 'Processing',
 		completed,
 		total: stages.length

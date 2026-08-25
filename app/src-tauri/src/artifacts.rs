@@ -52,6 +52,14 @@ pub struct ArtifactProcessingWarning {
 pub struct ArtifactProcessingStage {
     key: String,
     state: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    depends_on: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    procedure_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    attempt_count: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    terminal_code: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -639,5 +647,22 @@ mod tests {
         assert!(valid_artifact_id("CE31A00E-5F10-4707-AC07-E3B0CBD43BA4"));
         assert!(!valid_artifact_id("../../api/auth/get-session"));
         assert!(!valid_artifact_id("ce31a00e5f104707ac07e3b0cbd43ba4"));
+    }
+
+    #[test]
+    fn processing_stage_keeps_runtime_graph_metadata() {
+        let stage: ArtifactProcessingStage = serde_json::from_value(serde_json::json!({
+            "key": "decompose-pages",
+            "state": "running",
+            "dependsOn": ["inspect"],
+            "procedureKey": "docs.decompose-pages",
+            "attemptCount": 2,
+            "terminalCode": null
+        }))
+        .unwrap();
+        let encoded = serde_json::to_value(stage).unwrap();
+        assert_eq!(encoded["dependsOn"][0], "inspect");
+        assert_eq!(encoded["procedureKey"], "docs.decompose-pages");
+        assert_eq!(encoded["attemptCount"], 2);
     }
 }

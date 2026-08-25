@@ -13,7 +13,7 @@ function presentation(overrides: Partial<ArtifactProcessingView> = {}): Artifact
 		availability: 'available',
 		caseId: 'case-1',
 		state: 'active',
-		projectionVersion: 'artifact-presentation-v2',
+		projectionVersion: 'artifact-presentation-v3',
 		preferredType: 'application/pdf',
 		label: 'sample.pdf',
 		summary: null,

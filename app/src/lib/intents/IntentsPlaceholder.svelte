@@ -14,8 +14,10 @@ import {
 	artifactDescription,
 	artifactMetadataHighlights,
 	artifactProcessingProgress,
+	artifactProcessingStageLabel,
 	artifactWarningText
 } from '$lib/artifacts/processing'
+import { processingFlowGraph } from '$lib/artifacts/processing-flow'
 import { composer } from '$lib/intents/composer.svelte'
 import {
 	type IntentState,
@@ -182,11 +184,35 @@ const archivedIntents = $derived(intents.items.filter((i) => i.status === 'archi
  */
 let preview = $state<MockArtifact | null>(null)
 let skillView = $state<SkillStatus | null>(null)
+let selectedStageKey = $state<string | null>(null)
 let previewUrl = $state<string | null>(null)
 let previewMediaType = $state<string | null>(null)
 let previewText = $state<string | null>(null)
 let previewLoading = $state(false)
 let previewError = $state<string | null>(null)
+
+// Persistent refreshes replace the intent's projected skill object. Keep an
+// opened graph attached to that latest projection so its nodes move live.
+$effect(() => {
+	if (!skillView) return
+	const latest = selected.skills.find((skill) => skill.skill === skillView?.skill) ?? null
+	if (latest !== skillView) skillView = latest
+})
+
+const selectedStage = $derived(
+	skillView?.skill === 'file'
+		? (skillView.stages?.find((stage) => stage.key === selectedStageKey) ?? null)
+		: null
+)
+const selectedStageArtifacts = $derived(
+	selectedStage
+		? selected.artifacts.filter((artifact) => artifact.stageKey === selectedStage.key)
+		: []
+)
+
+$effect(() => {
+	if (selectedStageKey && !selectedStage) selectedStageKey = null
+})
 
 function clearArtifactContent() {
 	if (previewUrl) URL.revokeObjectURL(previewUrl)
@@ -264,6 +290,31 @@ $effect.pre(() => {
 	if (!view) {
 		sfNodes = []
 		sfEdges = []
+		return
+	}
+	if (view.skill === 'file' && view.stages) {
+		const graph = processingFlowGraph(view.stages, selected.artifacts)
+		sfNodes = graph.nodes.map((n) => ({
+			id: n.id,
+			type: 'flow',
+			position: n.position,
+			draggable: false,
+			data: {
+				node: n.node,
+				selected: selectedStageKey === n.id,
+				instance: n.instance,
+				outputCount: n.outputCount
+			}
+		}))
+		sfEdges = graph.edges.map((edge, index) => ({
+			id: `${edge.from}-${edge.to}-${index}`,
+			source: edge.from,
+			target: edge.to,
+			type: 'smoothstep',
+			animated: view.stages?.find((stage) => stage.key === edge.to)?.state === 'running',
+			style:
+				'stroke: color-mix(in srgb, var(--color-progress) 55%, transparent); stroke-width: 1.5;'
+		}))
 		return
 	}
 	const template = skillById(view.skill)
@@ -664,47 +715,116 @@ const DOT: Record<string, string> = {
 				</header>
 				<div class="border-border border-b"></div>
 
-				<!-- the ACTUAL template workflow (same cards as the Skills viewer),
-		     the instance state overlaid: ✓ done, amber running, red waiting -->
-				{#if skillView.skill === 'file' && skillView.stages}
-					<ol class="flex flex-col gap-2 rounded-xl border border-border bg-surface-soft/60 p-4">
+				<!-- The actual workflow: static skill templates and the File skill's
+				     runtime DAG share the same canvas and node cards. -->
+				<div
+					bind:clientWidth={sfW}
+					bind:clientHeight={sfH}
+					class="h-[420px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/60"
+				>
+					{#key skillView.skill}
+						{#if sfNodes.length === 0}
+							<p class="flex h-full items-center justify-center text-foreground/40 text-sm">
+								{nameOf(skillView.skill)}
+								— wartet auf den ersten Verarbeitungsschritt.
+							</p>
+						{:else}
+							<SvelteFlow
+								nodes={sfNodes}
+								edges={sfEdges}
+								nodeTypes={sfNodeTypes}
+								fitView
+								minZoom={0.12}
+								maxZoom={1.5}
+								nodesConnectable={false}
+								nodesDraggable={false}
+								proOptions={{ hideAttribution: true }}
+								onnodeclick={({ node }) => {
+									if (skillView?.skill === 'file')
+										selectedStageKey = selectedStageKey === node.id ? null : node.id
+								}}
+								onpaneclick={() => {
+									selectedStageKey = null
+								}}
+							>
+								<Background bgColor="transparent" patternColor="rgba(30,41,59,0.08)" />
+								<FitView w={sfW} h={sfH} revision={sfNodes.map((node) => node.id).join('|')} />
+							</SvelteFlow>
+						{/if}
+					{/key}
+				</div>
+
+				{#if selectedStage}
+					<section class="rounded-xl border border-border bg-surface-card px-4 py-3 text-xs">
+						<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+							<h2 class="font-semibold">{artifactProcessingStageLabel(selectedStage.key)}</h2>
+							<span class="font-mono text-[0.625rem] text-foreground/40">{selectedStage.key}</span>
+							<span
+								class="ml-auto rounded-md bg-surface-soft px-2 py-0.5 font-mono text-[0.625rem]"
+							>
+								{selectedStage.state}
+							</span>
+						</div>
+						<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-foreground/55">
+							{#if selectedStage.procedureKey}
+								<span>Procedure · <span class="font-mono">{selectedStage.procedureKey}</span></span>
+							{/if}
+							{#if selectedStage.attemptCount}
+								<span>Attempts · {selectedStage.attemptCount}</span>
+							{/if}
+							{#if selectedStage.terminalCode}
+								<span class="text-error-ink">Result · {selectedStage.terminalCode}</span>
+							{/if}
+						</div>
+						{#if selectedStage.dependsOn?.length}
+							<p class="mt-2 text-foreground/55">
+								Needs · <span class="font-mono">{selectedStage.dependsOn.join(' · ')}</span>
+							</p>
+						{/if}
+						{#if selectedStageArtifacts.length}
+							<div class="mt-2 border-border/70 border-t pt-2">
+								<p class="font-semibold text-foreground/45 text-[0.625rem] uppercase tracking-wide">
+									Outputs
+								</p>
+								<ul class="mt-1 flex flex-wrap gap-1.5">
+									{#each selectedStageArtifacts as artifact (artifact.artifactId ?? artifact.title)}
+										<li class="rounded-md bg-surface-soft px-2 py-1">
+											{artifact.title}
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+					</section>
+				{/if}
+
+				{#if skillView.skill === 'file' && skillView.stages?.length}
+					<h2 class="pt-2 font-semibold text-foreground/50 text-xs uppercase tracking-wide">
+						Schritte · {skillView.done.length}/{skillView.stages.length}
+					</h2>
+					<ol class="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
 						{#each skillView.stages as stage (stage.key)}
-							<li class="flex items-center gap-3 text-sm">
-								<span
-									class="size-2 rounded-full {stage.state === 'succeeded' || stage.state === 'skipped' ? 'bg-success' : stage.state === 'failed' || stage.state === 'needs_review' ? 'bg-error' : stage.state === 'running' || stage.state === 'publishing' ? 'bg-progress' : 'bg-foreground/20'}"
-								></span>
-								<span class="min-w-0 flex-1 font-mono text-xs">{stage.key}</span>
-								<span class="font-mono text-[0.625rem] text-foreground/45">{stage.state}</span>
+							<li>
+								<button
+									type="button"
+									onclick={() => {
+										selectedStageKey = selectedStageKey === stage.key ? null : stage.key
+									}}
+									class="flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors {selectedStageKey === stage.key ? 'border-primary/30 bg-surface-card-selected' : 'border-border/70 bg-surface-soft/45 hover:bg-surface-card'}"
+								>
+									<span
+										class="size-2 shrink-0 rounded-full {stage.state === 'succeeded' ? 'bg-success' : stage.state === 'failed' ? 'bg-error' : stage.state === 'needs_review' ? 'bg-info' : stage.state === 'running' || stage.state === 'publishing' ? 'animate-pulse bg-progress' : stage.state === 'retry_wait' ? 'animate-pulse bg-warning' : 'bg-foreground/20'}"
+									></span>
+									<span class="min-w-0 flex-1 truncate"
+										>{artifactProcessingStageLabel(stage.key)}</span
+									>
+									<span class="shrink-0 font-mono text-[0.625rem] text-foreground/40"
+										>{stage.state}</span
+									>
+								</button>
 							</li>
 						{/each}
 					</ol>
-				{:else}
-					<div
-						bind:clientWidth={sfW}
-						bind:clientHeight={sfH}
-						class="h-[340px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/60"
-					>
-						{#key skillView.skill}
-							{#if sfNodes.length === 0}
-								<p class="flex h-full items-center justify-center text-foreground/40 text-sm">
-									{nameOf(skillView.skill)}
-									— Template folgt; die Instanz läuft als Teil der Inbox-Pipeline.
-								</p>
-							{:else}
-								<SvelteFlow
-									nodes={sfNodes}
-									edges={sfEdges}
-									nodeTypes={sfNodeTypes}
-									fitView
-									minZoom={0.15}
-									proOptions={{ hideAttribution: true }}
-								>
-									<Background bgColor="transparent" patternColor="rgba(30,41,59,0.08)" />
-									<FitView w={sfW} h={sfH} />
-								</SvelteFlow>
-							{/if}
-						{/key}
-					</div>
 				{/if}
 
 				<!-- what this skill logged into the intent's stream -->
