@@ -362,7 +362,14 @@ $effect(() => {
 // A NEW turn — typed or spoken — brings the intent's stream into view,
 // where the reply and anything it renders appear. Only a new one, and only
 // the turn count is tracked.
-let turnsSeen = 0
+//
+// Seeded from the CURRENT count, not from zero. `chat` is a singleton that
+// outlives this page, but this counter is component-local: a trip to settings
+// unmounts the page and reset it, so coming back looked like every existing
+// turn had just arrived and the effect yanked the rail to intents — stealing
+// whichever surface had just been picked. Starting level with the singleton
+// means only turns that arrive WHILE the page is mounted count as new.
+let turnsSeen = chat.turns.length
 $effect(() => {
 	const n = chat.turns.length
 	if (n > turnsSeen) {

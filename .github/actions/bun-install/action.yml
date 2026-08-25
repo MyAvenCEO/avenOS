@@ -1,0 +1,26 @@
+name: Install dependencies
+description: >-
+  Authenticate to GitHub Packages, then install with a frozen lockfile.
+  One place, because @myavenceo/aven-ceo needs a registry token and four
+  workflows install — repeating the auth step in each is how they drift.
+
+  Assumes bun is already set up: every caller pins its own bun-version, so
+  installing it again here would only duplicate that decision.
+
+inputs:
+  token:
+    description: >-
+      Token used to read @myavenceo/* from GitHub Packages. Pass the calling
+      job's secrets.GITHUB_TOKEN; the job needs `permissions: packages: read`.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to GitHub Packages
+      shell: bash
+      # Appended at run time rather than committed, so the repo never carries a
+      # credential and a developer's own ~/.npmrc login is not overridden.
+      run: printf '//npm.pkg.github.com/:_authToken=%s\n' '${{ inputs.token }}' >> .npmrc
+    - shell: bash
+      run: bun install --frozen-lockfile
