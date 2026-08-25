@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use aven_artifact_store_contract::{
     ArtifactEnvelope, ArtifactResult, BlobAuthority, DeclaredBlob, FeedArtifact, OutputBinding,
     PublicationBody, PublicationFeedItem, PublicationFeedPage, PublicationResult,
-    RegisteredTypeDefinition, StablePublisher, StoreContext, TypeKey, UploadClaimResult,
+    RegisteredTypeDefinition, RunInput, StablePublisher, StoreContext, TypeKey, UploadClaimResult,
     UploadDeclaration, COMMAND_VERSION, JSON_PROFILE_ID, SCHEMA_PROFILE_ID,
 };
 use aven_artifact_store_core::{ExistingArtifact, PreparedPublication};
@@ -550,9 +550,31 @@ impl PostgresStore {
         .bind(i64::from(limit.min(1_000)))
         .fetch_all(&self.pool)
         .await?;
+        let run_ids = rows
+            .iter()
+            .filter_map(|row| row.get::<Option<Uuid>, _>("run_id"))
+            .collect::<Vec<_>>();
+        let mut inputs_by_run = BTreeMap::<Uuid, Vec<RunInput>>::new();
+        if !run_ids.is_empty() {
+            let input_rows = sqlx::query(
+                "SELECT run_id, role, ordinal, input_artifact_id FROM artifact_store.artifact_run_inputs \
+                 WHERE scope_id=$1 AND run_id=ANY($2) ORDER BY run_id, role, ordinal",
+            )
+            .bind(scope_id)
+            .bind(&run_ids)
+            .fetch_all(&self.pool)
+            .await?;
+            for input_row in &input_rows {
+                inputs_by_run
+                    .entry(input_row.get("run_id"))
+                    .or_default()
+                    .push(run_input_from_row(input_row)?);
+            }
+        }
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
             let publication_id: Uuid = row.get("publication_id");
+            let run_id: Option<Uuid> = row.get("run_id");
             let artifact_rows = sqlx::query(
                 "SELECT r.id, r.local_key, r.publication_ordinal, r.producer_run_id, r.output_role, r.output_ordinal, c.type_key, c.type_version, c.artifact_sha256::text \
                  FROM artifact_store.artifact_records r JOIN artifact_store.artifact_contents c ON c.scope_id=r.scope_id AND c.artifact_id=r.id \
@@ -566,6 +588,9 @@ impl PostgresStore {
                 .iter()
                 .map(feed_artifact_from_row)
                 .collect::<Result<Vec<_>, _>>()?;
+            let inputs = run_id
+                .and_then(|run_id| inputs_by_run.remove(&run_id))
+                .unwrap_or_default();
             items.push(PublicationFeedItem {
                 scope_id,
                 publication_id,
@@ -577,7 +602,8 @@ impl PostgresStore {
                     issuer: row.get("publisher_issuer"),
                     subject: row.get("publisher_subject"),
                 },
-                run_id: row.get("run_id"),
+                run_id,
+                inputs,
                 committed_at: row.get("committed_at"),
                 artifacts,
             });
@@ -965,6 +991,15 @@ fn feed_artifact_from_row(row: &PgRow) -> Result<FeedArtifact, StoreError> {
         artifact_sha256: row.get("artifact_sha256"),
         producer_run_id: row.get("producer_run_id"),
         output: output_from_row(row)?,
+    })
+}
+
+fn run_input_from_row(row: &PgRow) -> Result<RunInput, StoreError> {
+    Ok(RunInput {
+        role: aven_artifact_store_contract::Role::new(row.get::<String, _>("role"))
+            .map_err(|error| StoreError::Integrity(error.to_string()))?,
+        ordinal: to_u32(row.get("ordinal"), "run input ordinal")?,
+        artifact_id: row.get("input_artifact_id"),
     })
 }
 
