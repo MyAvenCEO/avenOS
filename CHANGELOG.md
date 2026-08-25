@@ -1,3 +1,10 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.25-next.2...v) (2026-08-25)
+
+
+### Features
+
+* **app:** add Artifact Store debugger ([de7d9b6](https://github.com/MyAvenCEO/avenOS/commit/de7d9b635bc9fdc9da7ea9031380db6421741977))
+* **app:** visualize file processing runs ([fb8434d](https://github.com/MyAvenCEO/avenOS/commit/fb8434d48dcf71060a3571f6d63f04ef227a5d0f))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.25-next.1...v) (2026-08-25)
 
 
