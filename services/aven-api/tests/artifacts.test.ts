@@ -107,4 +107,83 @@ describe('artifact file coordinator', () => {
 			}
 		])
 	})
+
+	test('browses the committed artifact feed newest first', async () => {
+		const fetch: typeof globalThis.fetch = async (input, init) => {
+			const request = new Request(input, init)
+			expect(request.headers.get('authorization')).toBe('Bearer service-token')
+			if (request.url.endsWith('/v1/context')) {
+				return new Response(`{"storeEpoch":"${publicationId}"}`)
+			}
+			if (request.url.includes('/publications?')) {
+				if (new URL(request.url).searchParams.get('afterSequence') !== '0') {
+					return new Response(
+						JSON.stringify({
+							storeEpoch: publicationId,
+							nextAfterSequence: null,
+							items: []
+						})
+					)
+				}
+				return new Response(
+					JSON.stringify({
+						storeEpoch: publicationId,
+						nextAfterSequence: 2,
+						items: [
+							{
+								publicationId,
+								scopeSequence: 2,
+								kind: 'run',
+								runId: intentId,
+								committedAt: observedAt,
+								artifacts: [
+									{
+										artifactId,
+										localKey: 'result',
+										publicationOrdinal: 0,
+										typeKey: 'docs.extracted-text',
+										typeVersion: 1,
+										artifactSha256: sha256,
+										producerRunId: intentId,
+										output: { role: 'result', ordinal: 0 }
+									}
+								]
+							}
+						]
+					})
+				)
+			}
+			throw new Error(`Unexpected Artifact Store request: ${request.url}`)
+		}
+		const service = ArtifactFileService.fromConfig(
+			{
+				ARTIFACT_STORE_BASE_URL: 'http://artifact-store.test',
+				ARTIFACT_STORE_BEARER_TOKEN: 'service-token'
+			},
+			fetch
+		)
+
+		const result = await service?.browse('cust_acme', scopeId)
+		expect(result).toEqual({
+			storeEpoch: publicationId,
+			truncated: false,
+			artifacts: [
+				{
+					artifactId,
+					localKey: 'result',
+					publicationOrdinal: 0,
+					typeKey: 'docs.extracted-text',
+					typeVersion: 1,
+					artifactSha256: sha256,
+					producerRunId: intentId,
+					output: { role: 'result', ordinal: 0 },
+					publicationId,
+					scopeSequence: 2,
+					publicationKind: 'run',
+					runId: intentId,
+					committedAt: observedAt
+				}
+			]
+		})
+	})
 })

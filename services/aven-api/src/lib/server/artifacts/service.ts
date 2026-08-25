@@ -36,6 +36,28 @@ export interface PublishedFile {
 	replayed: boolean
 }
 
+export interface BrowsedArtifact {
+	artifactId: string
+	localKey: string
+	publicationOrdinal: number
+	typeKey: string
+	typeVersion: number
+	artifactSha256: string
+	producerRunId: string | null
+	output: ArtifactJson
+	publicationId: string
+	scopeSequence: number
+	publicationKind: string
+	runId: string | null
+	committedAt: string
+}
+
+export interface ArtifactBrowseResult {
+	storeEpoch: string
+	artifacts: BrowsedArtifact[]
+	truncated: boolean
+}
+
 function record(value: ArtifactJson, label: string): { readonly [key: string]: ArtifactJson } {
 	if (value === null || Array.isArray(value) || typeof value !== 'object') {
 		throw new AppError(502, 'ARTIFACT_STORE_INVALID_RESPONSE', `${label} was not an object.`)
@@ -107,6 +129,84 @@ export class ArtifactFileService {
 
 	async content(databaseName: string, scopeId: string, artifactId: string): Promise<Uint8Array> {
 		return this.#client(databaseName).content(scopeId, artifactId)
+	}
+
+	/**
+	 * Debug-oriented scope browser. The store feed is forward-only, so walk it
+	 * in large pages and retain a bounded tail of the newest artifacts.
+	 */
+	async browse(databaseName: string, scopeId: string): Promise<ArtifactBrowseResult> {
+		try {
+			return await this.#browse(databaseName, scopeId)
+		} catch (error) {
+			if (error instanceof AppError) throw error
+			if (error instanceof ArtifactStoreProblem) {
+				throw new AppError(502, error.code, error.message)
+			}
+			throw new AppError(502, 'ARTIFACT_STORE_UNAVAILABLE', 'Artifact Store is unavailable.')
+		}
+	}
+
+	async #browse(databaseName: string, scopeId: string): Promise<ArtifactBrowseResult> {
+		const client = this.#client(databaseName)
+		const context = record(await client.context(), 'context')
+		const storeEpoch = stringField(context, 'storeEpoch', 'context')
+		const artifacts: BrowsedArtifact[] = []
+		let afterSequence = 0
+		let publicationsRead = 0
+		let truncated = false
+		const pageLimit = 1_000
+		const maximumPublications = 10_000
+		const maximumArtifacts = 2_000
+
+		while (publicationsRead < maximumPublications) {
+			const page = record(
+				await client.feed(scopeId, storeEpoch, afterSequence, pageLimit),
+				'publication feed'
+			)
+			const items = page.items
+			if (!Array.isArray(items)) {
+				throw new AppError(
+					502,
+					'ARTIFACT_STORE_INVALID_RESPONSE',
+					'Artifact Store publication feed was invalid.'
+				)
+			}
+			for (const itemValue of items) {
+				const item = record(itemValue, 'publication')
+				const published = item.artifacts
+				if (!Array.isArray(published)) continue
+				for (const artifactValue of published) {
+					const artifact = record(artifactValue, 'feed artifact')
+					artifacts.push({
+						artifactId: stringField(artifact, 'artifactId', 'feed artifact'),
+						localKey: stringField(artifact, 'localKey', 'feed artifact'),
+						publicationOrdinal: numberField(artifact, 'publicationOrdinal', 'feed artifact'),
+						typeKey: stringField(artifact, 'typeKey', 'feed artifact'),
+						typeVersion: numberField(artifact, 'typeVersion', 'feed artifact'),
+						artifactSha256: stringField(artifact, 'artifactSha256', 'feed artifact'),
+						producerRunId:
+							typeof artifact.producerRunId === 'string' ? artifact.producerRunId : null,
+						output: artifact.output ?? null,
+						publicationId: stringField(item, 'publicationId', 'publication'),
+						scopeSequence: numberField(item, 'scopeSequence', 'publication'),
+						publicationKind: stringField(item, 'kind', 'publication'),
+						runId: typeof item.runId === 'string' ? item.runId : null,
+						committedAt: stringField(item, 'committedAt', 'publication')
+					})
+				}
+			}
+			if (artifacts.length > maximumArtifacts) {
+				artifacts.splice(0, artifacts.length - maximumArtifacts)
+			}
+			publicationsRead += items.length
+			const next = page.nextAfterSequence
+			if (typeof next !== 'number' || next <= afterSequence || items.length === 0) break
+			afterSequence = next
+			if (publicationsRead >= maximumPublications) truncated = true
+		}
+
+		return { storeEpoch, artifacts: artifacts.reverse(), truncated }
 	}
 
 	async publishFile(input: PublishFileInput): Promise<PublishedFile> {
