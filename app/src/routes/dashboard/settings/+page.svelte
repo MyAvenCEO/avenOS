@@ -1,5 +1,5 @@
 <script lang="ts">
-import { legalHref, websiteOrigin } from '@avenos/aven-brand'
+import { legalHref, websiteOrigin } from '@myavenceo/aven-ceo'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { settings, VOICES, type Voice } from '$lib/settings.svelte'

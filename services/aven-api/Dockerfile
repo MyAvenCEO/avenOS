@@ -1,14 +1,11 @@
 FROM oven/bun:1.3.13 AS manifests
 WORKDIR /repo
-COPY package.json bun.lock ./
+COPY package.json bun.lock .npmrc ./
 COPY app/package.json app/package.json
 COPY libs/aven-artifact-store/package.json libs/aven-artifact-store/package.json
 COPY libs/aven-board/package.json libs/aven-board/package.json
-COPY libs/aven-brand/package.json libs/aven-brand/package.json
 COPY libs/aven-hosting/package.json libs/aven-hosting/package.json
-COPY libs/aven-skills/package.json libs/aven-skills/package.json
 COPY libs/aven-ui/package.json libs/aven-ui/package.json
-COPY libs/aven-website/package.json libs/aven-website/package.json
 COPY infrastructure/identity/package.json infrastructure/identity/package.json
 COPY services/aven-api/package.json services/aven-api/package.json
 COPY services/static-site-host/package.json services/static-site-host/package.json
@@ -18,11 +15,12 @@ RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
   bun install --frozen-lockfile --filter @avenos/aven-api
 COPY services/aven-api services/aven-api
 COPY libs/aven-artifact-store libs/aven-artifact-store
-# The pricing + legal SSOT: aven-api syncs its Polar products from the
-# brand's plan data (@avenos/aven-brand/pricing) and the id app's layout
-# renders the Impressum from @avenos/aven-brand, so the lib's source must
-# exist where the workspace symlink points.
-COPY libs/aven-brand libs/aven-brand
+# The pricing + legal SSOT: aven-api syncs its Polar products from the brand's
+# plan data (@myavenceo/aven-ceo/pricing) and the id app's layout renders the
+# Impressum from @myavenceo/aven-ceo. That package is now a PUBLISHED
+# dependency resolved into node_modules by the install above, not a workspace
+# source directory, so there is nothing to COPY for it — the .npmrc below tells
+# bun which registry to fetch it from.
 COPY libs/aven-hosting libs/aven-hosting
 RUN bun --cwd services/aven-api build
 

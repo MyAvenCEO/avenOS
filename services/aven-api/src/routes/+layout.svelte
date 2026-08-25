@@ -2,7 +2,7 @@
 import '../app.css'
 import { appRuntime } from 'virtual:aven-app-runtime'
 import BuildChrome from 'virtual:aven-build-chrome'
-import { legalHref } from '@avenos/aven-brand'
+import { legalHref } from '@myavenceo/aven-ceo'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { euro, PLANS, type Plan, priceSuffix } from '@avenos/aven-brand/pricing'
+import { euro, PLANS, type Plan, priceSuffix } from '@myavenceo/aven-ceo/pricing'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { onDestroy, onMount } from 'svelte'
 import { goto } from '$app/navigation'

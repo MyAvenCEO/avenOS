@@ -13,7 +13,6 @@
 		"dev:api": "bun --env-file=.env run --cwd services/aven-api dev",
 		"dev:api:artifacts": "docker compose -f services/aven-api/docker-compose.yml -f services/aven-api/docker-compose.artifact-store.yml up --build",
 		"dev:api:designer": "bun run --cwd services/aven-api dev:designer",
-		"dev:website": "bun --env-file=.env run --cwd libs/aven-website dev",
 		"dev:app:all": "bun --env-file=.env ./scripts/dev-app-all.ts",
 		"dev:app:mac": "AVENOS_ENV_FILE=.env.samuel AVENOS_APP_ENV_FILE=../.env.samuel bun --env-file=.env.samuel ./scripts/dev-app-macos.ts",
 		"dev:app:ios": "bun --env-file=.env ./scripts/dev-app-ios.ts",
@@ -55,7 +54,8 @@
 		"db:migrate:api": "bun run --cwd services/aven-api db:migrate",
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
-		"format": "bunx biome format --write ."
+		"format": "bunx biome format --write .",
+		"brand:generate": "bun ./scripts/generate-brand.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14",
