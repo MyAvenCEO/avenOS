@@ -313,6 +313,11 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
+      # A job-level `permissions` block REPLACES the workflow-level one rather
+      # than merging with it, so the workflow-wide `packages: read` never
+      # reached this job and its install 403'd on @myavenceo/aven-ceo. Every
+      # job that installs needs the grant spelled out where it overrides.
+      packages: read
     outputs:
       deploy-host: ${{ steps.infrastructure.outputs.ipv4Address }}
       deploy-user: ${{ steps.infrastructure.outputs.deployUser }}
