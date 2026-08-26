@@ -2,32 +2,32 @@ mod engine;
 mod repository;
 mod store;
 
-use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-use std::net::SocketAddr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+use async_trait::async_trait;
+use aven_tenant_runtime::{
+    authorized, env_bool, env_u32, env_u64, env_usize, listen, provisioner_router, required,
+    routed_database, validated_secret, ManagedTenantRuntime, ProvisionerAdapter, ProvisionerConfig,
+    RailResult, TenantBinding, TenantRuntimeFactory, TenantSupervisor, TenantSupervisorConfig,
+};
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use engine::IntentEngine;
 use repository::{
     AppendContribution, CreateIntent, IntentRepository, MergeCommand, UpdateIntent, VersionCommand,
 };
-use reqwest::Client;
-use serde::Deserialize;
 use serde_json::json;
 use store::{ArtifactStoreClient, ProcessorClient};
-use tokio::sync::{Mutex, RwLock};
 use tokio::time::MissedTickBehavior;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 use uuid::Uuid;
 
-const DATABASE_HEADER: &str = "x-aven-artifact-database";
+const INTENT_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Clone)]
 enum ApiState {
@@ -38,56 +38,95 @@ enum ApiState {
         bearer_token: Arc<str>,
     },
     Tenant {
-        supervisor: Arc<TenantSupervisor>,
+        supervisor: Arc<IntentSupervisor>,
         bearer_token: Arc<str>,
     },
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TenantBinding {
-    #[serde(rename = "environmentId")]
-    _environment_id: String,
-    database_name: String,
-    scope_id: Uuid,
-}
-
-struct TenantRuntime {
+struct IntentTenantRuntime {
     repository: IntentRepository,
     engine: IntentEngine,
 }
 
-struct DirectoryState {
-    bindings: BTreeMap<Uuid, TenantBinding>,
-    unchecked_tenants: BTreeSet<Uuid>,
-    tenant_errors: BTreeMap<Uuid, String>,
-    last_success: Instant,
-    last_error: Option<String>,
+#[async_trait]
+impl ManagedTenantRuntime for IntentTenantRuntime {
+    async fn tick(&self) -> RailResult<()> {
+        self.engine.tick().await?;
+        Ok(())
+    }
 }
 
-struct TenantSupervisor {
-    client: Client,
-    directory_url: String,
-    directory_token: String,
-    cluster_database_url: String,
+struct IntentRuntimeFactory {
     store_base_url: String,
     store_bearer_token: String,
     processor_base_url: String,
     processor_bearer_token: String,
     connections_per_tenant: u32,
-    max_tenant_pools: usize,
-    refresh_interval: Duration,
-    directory: RwLock<DirectoryState>,
-    runtimes: Mutex<BTreeMap<Uuid, Arc<TenantRuntime>>>,
-    next_tenant: AtomicUsize,
 }
 
 #[derive(Clone)]
-struct ProvisionerState {
-    cluster_database_url: String,
+struct IntentProvisioner {
     runtime_role: String,
-    bearer_token: Arc<str>,
 }
+
+#[async_trait]
+impl TenantRuntimeFactory for IntentRuntimeFactory {
+    type Runtime = IntentTenantRuntime;
+
+    async fn open(&self, binding: &TenantBinding, database_url: &str) -> RailResult<Self::Runtime> {
+        let repository =
+            IntentRepository::connect(database_url, self.connections_per_tenant).await?;
+        repository.ready().await?;
+        if !repository.has_scope(binding.scope_id).await? {
+            return Err("intent scope is not provisioned in the selected database".into());
+        }
+        let store = ArtifactStoreClient::new(
+            &self.store_base_url,
+            &self.store_bearer_token,
+            &binding.database_name,
+        )?;
+        store.context().await?;
+        Ok(IntentTenantRuntime {
+            engine: IntentEngine::new(
+                repository.clone(),
+                store,
+                ProcessorClient::new(
+                    &self.processor_base_url,
+                    &self.processor_bearer_token,
+                    &binding.database_name,
+                )?,
+                binding.scope_id,
+            ),
+            repository,
+        })
+    }
+}
+
+#[async_trait]
+impl ProvisionerAdapter for IntentProvisioner {
+    fn component_name(&self) -> &'static str {
+        "intent-service"
+    }
+
+    fn schema_version(&self) -> u32 {
+        INTENT_SCHEMA_VERSION
+    }
+
+    async fn ready(&self, cluster_database_url: &str) -> RailResult<()> {
+        IntentRepository::connect(cluster_database_url, 1).await?;
+        Ok(())
+    }
+
+    async fn provision(&self, database_url: &str, scope_id: Uuid) -> RailResult<()> {
+        let repository = IntentRepository::connect(database_url, 2).await?;
+        repository.migrate(&self.runtime_role).await?;
+        repository.ensure_scope(scope_id).await?;
+        repository.ready().await?;
+        Ok(())
+    }
+}
+
+type IntentSupervisor = TenantSupervisor<IntentRuntimeFactory>;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -154,28 +193,28 @@ async fn serve_fixed() -> Result<(), Box<dyn std::error::Error>> {
 async fn serve_tenants() -> Result<(), Box<dyn std::error::Error>> {
     let refresh_interval =
         Duration::from_secs(env_u64("INTENT_SERVICE_TENANT_REFRESH_SECONDS", 30)?);
-    let supervisor = Arc::new(TenantSupervisor {
-        client: Client::builder().timeout(Duration::from_secs(10)).build()?,
-        directory_url: required("INTENT_SERVICE_DIRECTORY_URL")?,
-        directory_token: validated_secret("INTENT_SERVICE_DIRECTORY_BEARER_TOKEN")?,
-        cluster_database_url: required("INTENT_SERVICE_DATABASE_URL")?,
+    let factory = IntentRuntimeFactory {
         store_base_url: required("ARTIFACT_STORE_BASE_URL")?,
         store_bearer_token: validated_secret("ARTIFACT_STORE_BEARER_TOKEN")?,
         processor_base_url: required("ARTIFACT_PROCESSOR_BASE_URL")?,
         processor_bearer_token: validated_secret("INTENT_SERVICE_PROCESSOR_BEARER_TOKEN")?,
         connections_per_tenant: env_u32("INTENT_SERVICE_CONNECTIONS_PER_TENANT", 2)?,
-        max_tenant_pools: env_usize("INTENT_SERVICE_MAX_TENANT_POOLS", 64)?,
-        refresh_interval,
-        directory: RwLock::new(DirectoryState {
-            bindings: BTreeMap::new(),
-            unchecked_tenants: BTreeSet::new(),
-            tenant_errors: BTreeMap::new(),
-            last_success: Instant::now(),
-            last_error: None,
-        }),
-        runtimes: Mutex::new(BTreeMap::new()),
-        next_tenant: AtomicUsize::new(0),
-    });
+    };
+    let supervisor = Arc::new(
+        TenantSupervisor::new(
+            TenantSupervisorConfig {
+                service_name: "intent-service",
+                directory_url: required("INTENT_SERVICE_DIRECTORY_URL")?,
+                directory_token: validated_secret("INTENT_SERVICE_DIRECTORY_BEARER_TOKEN")?,
+                cluster_database_url: required("INTENT_SERVICE_DATABASE_URL")?,
+                max_tenant_pools: env_usize("INTENT_SERVICE_MAX_TENANT_POOLS", 64)?,
+                refresh_interval,
+                tick_interval: Duration::from_millis(500),
+            },
+            factory,
+        )
+        .map_err(|error| error.to_string())?,
+    );
     supervisor
         .refresh_directory()
         .await
@@ -184,7 +223,7 @@ async fn serve_tenants() -> Result<(), Box<dyn std::error::Error>> {
         supervisor: supervisor.clone(),
         bearer_token: validated_secret("INTENT_SERVICE_BEARER_TOKEN")?.into(),
     };
-    tokio::spawn(supervisor_loop(supervisor));
+    tokio::spawn(supervisor.clone().run());
     serve_api(state, "multi-tenant").await
 }
 
@@ -235,161 +274,6 @@ async fn run_fixed_engine(engine: IntentEngine) {
     }
 }
 
-impl TenantSupervisor {
-    async fn refresh_directory(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let response = self
-            .client
-            .get(&self.directory_url)
-            .bearer_auth(&self.directory_token)
-            .send()
-            .await?;
-        if !response.status().is_success() {
-            return Err(format!("tenant directory returned HTTP {}", response.status()).into());
-        }
-        let bindings: Vec<TenantBinding> = response.json().await?;
-        let mut next = BTreeMap::new();
-        for binding in bindings {
-            validate_database_name(&binding.database_name)?;
-            if next.insert(binding.scope_id, binding).is_some() {
-                return Err("tenant directory returned a duplicate scope".into());
-            }
-        }
-        let active = next.keys().copied().collect::<BTreeSet<_>>();
-        {
-            let mut directory = self.directory.write().await;
-            let old = directory.bindings.keys().copied().collect::<BTreeSet<_>>();
-            directory
-                .unchecked_tenants
-                .retain(|scope| active.contains(scope));
-            directory
-                .tenant_errors
-                .retain(|scope, _| active.contains(scope));
-            directory
-                .unchecked_tenants
-                .extend(active.difference(&old).copied());
-            directory.bindings = next;
-            directory.last_success = Instant::now();
-            directory.last_error = None;
-        }
-        self.runtimes
-            .lock()
-            .await
-            .retain(|scope, _| active.contains(scope));
-        Ok(())
-    }
-
-    async fn binding(&self, scope_id: Uuid, database_name: &str) -> Option<TenantBinding> {
-        self.directory
-            .read()
-            .await
-            .bindings
-            .get(&scope_id)
-            .filter(|binding| binding.database_name == database_name)
-            .cloned()
-    }
-
-    async fn runtime_for(
-        &self,
-        binding: &TenantBinding,
-    ) -> Result<Arc<TenantRuntime>, Box<dyn std::error::Error + Send + Sync>> {
-        if let Some(runtime) = self.runtimes.lock().await.get(&binding.scope_id).cloned() {
-            return Ok(runtime);
-        }
-        let database_url = tenant_database_url(&self.cluster_database_url, &binding.database_name)?;
-        let repository =
-            IntentRepository::connect(&database_url, self.connections_per_tenant).await?;
-        repository.ready().await?;
-        if !repository.has_scope(binding.scope_id).await? {
-            return Err("intent scope is not provisioned in the selected database".into());
-        }
-        let store = ArtifactStoreClient::new(
-            &self.store_base_url,
-            &self.store_bearer_token,
-            &binding.database_name,
-        )?;
-        store.context().await?;
-        let runtime = Arc::new(TenantRuntime {
-            engine: IntentEngine::new(
-                repository.clone(),
-                store,
-                ProcessorClient::new(
-                    &self.processor_base_url,
-                    &self.processor_bearer_token,
-                    &binding.database_name,
-                )?,
-                binding.scope_id,
-            ),
-            repository,
-        });
-        let mut runtimes = self.runtimes.lock().await;
-        if runtimes.len() >= self.max_tenant_pools {
-            if let Some(scope) = runtimes.keys().next().copied() {
-                runtimes.remove(&scope);
-            }
-        }
-        runtimes.insert(binding.scope_id, runtime.clone());
-        Ok(runtime)
-    }
-
-    async fn tick_one(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let bindings = self
-            .directory
-            .read()
-            .await
-            .bindings
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        if bindings.is_empty() {
-            return Ok(());
-        }
-        let binding = &bindings[self.next_tenant.fetch_add(1, Ordering::Relaxed) % bindings.len()];
-        let result = async {
-            let runtime = self.runtime_for(binding).await?;
-            self.directory
-                .write()
-                .await
-                .unchecked_tenants
-                .remove(&binding.scope_id);
-            runtime.engine.tick().await?;
-            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-        }
-        .await;
-        let mut directory = self.directory.write().await;
-        match result {
-            Ok(()) => {
-                directory.tenant_errors.remove(&binding.scope_id);
-                Ok(())
-            }
-            Err(error) => {
-                directory
-                    .tenant_errors
-                    .insert(binding.scope_id, error.to_string());
-                Err(error)
-            }
-        }
-    }
-}
-
-async fn supervisor_loop(supervisor: Arc<TenantSupervisor>) {
-    let mut tick = tokio::time::interval(Duration::from_millis(500));
-    let mut refresh = tokio::time::interval(supervisor.refresh_interval);
-    tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    refresh.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    refresh.tick().await;
-    loop {
-        tokio::select! {
-            _ = refresh.tick() => if let Err(error) = supervisor.refresh_directory().await {
-                warn!(%error, "intent tenant directory refresh failed");
-                supervisor.directory.write().await.last_error = Some(error.to_string());
-            },
-            _ = tick.tick() => if let Err(error) = supervisor.tick_one().await {
-                error!(%error, "intent tenant tick failed");
-            },
-        }
-    }
-}
-
 async fn live() -> Json<serde_json::Value> {
     Json(json!({ "status": "live" }))
 }
@@ -406,29 +290,7 @@ async fn ready(State(state): State<ApiState>) -> Response {
             )
                 .into_response(),
         },
-        ApiState::Tenant { supervisor, .. } => {
-            let directory = supervisor.directory.read().await;
-            let fresh =
-                directory.last_success.elapsed() <= supervisor.refresh_interval.saturating_mul(3);
-            let is_ready = fresh
-                && directory.unchecked_tenants.is_empty()
-                && directory.tenant_errors.is_empty();
-            (
-                if is_ready {
-                    StatusCode::OK
-                } else {
-                    StatusCode::SERVICE_UNAVAILABLE
-                },
-                Json(json!({
-                    "status": if is_ready { "ready" } else { "not-ready" },
-                    "tenantCount": directory.bindings.len(),
-                    "uncheckedTenantCount": directory.unchecked_tenants.len(),
-                    "failedTenantCount": directory.tenant_errors.len(),
-                    "directoryError": directory.last_error,
-                })),
-            )
-                .into_response()
-        }
+        ApiState::Tenant { supervisor, .. } => supervisor.readiness().await.into_response(),
     }
 }
 
@@ -458,10 +320,7 @@ async fn repository_for(
             }
         }
         ApiState::Tenant { supervisor, .. } => {
-            let Some(database_name) = headers
-                .get(DATABASE_HEADER)
-                .and_then(|value| value.to_str().ok())
-            else {
+            let Some(database_name) = routed_database(headers) else {
                 return Err((
                     StatusCode::BAD_REQUEST,
                     "database routing header is required",
@@ -677,146 +536,19 @@ fn internal(error: &repository::RepositoryError, message: &'static str) -> Respo
 }
 
 async fn serve_provisioner() -> Result<(), Box<dyn std::error::Error>> {
-    let state = ProvisionerState {
-        cluster_database_url: required("INTENT_SERVICE_PROVISIONER_DATABASE_URL")?,
-        runtime_role: required("INTENT_SERVICE_RUNTIME_ROLE")?,
-        bearer_token: validated_secret("INTENT_SERVICE_PROVISIONER_BEARER_TOKEN")?.into(),
-    };
-    let app = Router::new()
-        .route("/health/live", get(live))
-        .route("/health/ready", get(provisioner_ready))
-        .route(
-            "/internal/v1/databases/{database_name}/scopes/{scope_id}",
-            put(provision_scope),
-        )
-        .with_state(state);
+    let app = provisioner_router(
+        ProvisionerConfig {
+            cluster_database_url: required("INTENT_SERVICE_PROVISIONER_DATABASE_URL")?,
+            bearer_token: validated_secret("INTENT_SERVICE_PROVISIONER_BEARER_TOKEN")?,
+        },
+        IntentProvisioner {
+            runtime_role: required("INTENT_SERVICE_RUNTIME_ROLE")?,
+        },
+    )
+    .map_err(|error| error.to_string())?;
     let listen = listen("INTENT_SERVICE_PROVISIONER_LISTEN", "0.0.0.0:8092")?;
     let listener = tokio::net::TcpListener::bind(listen).await?;
     info!(%listen, "intent provisioner listening");
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-async fn provisioner_ready(State(state): State<ProvisionerState>) -> Response {
-    match IntentRepository::connect(&state.cluster_database_url, 1).await {
-        Ok(_) => Json(json!({ "status": "ready" })).into_response(),
-        Err(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "status": "not-ready" })),
-        )
-            .into_response(),
-    }
-}
-
-async fn provision_scope(
-    State(state): State<ProvisionerState>,
-    headers: HeaderMap,
-    Path((database_name, scope_id)): Path<(String, Uuid)>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    if !authorized(&headers, &state.bearer_token) {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
-    if validate_database_name(&database_name).is_err() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-    let url = tenant_database_url(&state.cluster_database_url, &database_name)
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
-    let repository = IntentRepository::connect(&url, 2)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    repository
-        .migrate(&state.runtime_role)
-        .await
-        .map_err(|error| {
-            error!(%error, %database_name, "intent migration failed");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-    repository
-        .ensure_scope(scope_id)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    repository
-        .ready()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(
-        json!({ "status": "ready", "schemaVersion": 1, "scopeId": scope_id }),
-    ))
-}
-
-fn authorized(headers: &HeaderMap, token: &str) -> bool {
-    let expected = format!("Bearer {token}");
-    headers
-        .get("authorization")
-        .and_then(|value| value.to_str().ok())
-        == Some(expected.as_str())
-}
-
-fn tenant_database_url(
-    cluster_url: &str,
-    database_name: &str,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    validate_database_name(database_name)?;
-    let mut url = reqwest::Url::parse(cluster_url)?;
-    url.set_path(&format!("/{database_name}"));
-    url.set_query(None);
-    url.set_fragment(None);
-    Ok(url.to_string())
-}
-
-fn validate_database_name(value: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if value.len() > 63
-        || !value.starts_with("cust_")
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-    {
-        return Err("invalid customer database name".into());
-    }
-    Ok(())
-}
-
-fn validated_secret(name: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let value = required(name)?;
-    if !(32..=128).contains(&value.len())
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
-    {
-        return Err(format!("{name} must be 32-128 URL-safe characters").into());
-    }
-    Ok(value)
-}
-
-fn required(name: &str) -> Result<String, Box<dyn std::error::Error>> {
-    env::var(name).map_err(|_| format!("required environment variable {name} is missing").into())
-}
-
-fn env_bool(name: &str) -> bool {
-    env::var(name).is_ok_and(|value| value == "true")
-}
-
-fn env_u64(name: &str, default: u64) -> Result<u64, Box<dyn std::error::Error>> {
-    let value = env::var(name).map_or(Ok(default), |value| value.parse())?;
-    if value == 0 {
-        return Err(format!("{name} must be a positive integer").into());
-    }
-    Ok(value)
-}
-
-fn env_u32(name: &str, default: u32) -> Result<u32, Box<dyn std::error::Error>> {
-    u32::try_from(env_u64(name, u64::from(default))?)
-        .map_err(|_| format!("{name} is too large").into())
-}
-
-fn env_usize(name: &str, default: usize) -> Result<usize, Box<dyn std::error::Error>> {
-    let value = env::var(name).map_or(Ok(default), |value| value.parse())?;
-    if value == 0 {
-        return Err(format!("{name} must be a positive integer").into());
-    }
-    Ok(value)
-}
-
-fn listen(name: &str, default: &str) -> Result<SocketAddr, Box<dyn std::error::Error>> {
-    Ok(env::var(name).unwrap_or_else(|_| default.into()).parse()?)
 }
