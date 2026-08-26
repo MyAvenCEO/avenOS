@@ -39,13 +39,20 @@
 }
 
 /*
- * `.eyebrow` and `.panel` are NOT defined here any more.
+ * `.eyebrow`, `.panel`, `.ghost` and `.field` are NOT defined here any more.
  *
- * Both existed locally AND in the shared component sheet imported above, and
- * because this file's rules came second, the local pair silently won — the
- * shared design system was loaded and then overridden. The local eyebrow was
- * 10px at 0.14em; the shared one is 11px at 0.08em. That gap is precisely what
- * having one definition is supposed to close, so the local copies are gone.
+ * `.panel` went the other way round from the rest: this service's version was
+ * the BETTER one — a 34rem centred sheet with generous asymmetric padding, a
+ * hairline and the lightest lift — and it is what the sign-in, passkey and
+ * purchase screens are built from. It was promoted into the package as the
+ * canonical page card, and the small inset region that briefly held the name
+ * was renamed `.well`. `.ghost` and `.field` were promoted verbatim; property
+ * parity was checked before deleting them, so nothing was lost.
+ *
+ * `.eyebrow` was the opposite case: it existed locally AND in the shared sheet,
+ * and because this file's rules came second the local copy silently won — the
+ * design system was loaded and then overridden. Local was 10px at 0.14em, the
+ * shared one 11px at 0.08em. That gap is precisely what one definition closes.
  */
 
 * {
@@ -327,13 +334,6 @@ textarea:focus-visible {
 	background: var(--sunflower);
 }
 
-.field {
-	display: grid;
-	gap: 0.5rem;
-	width: 100%;
-	text-align: left;
-}
-
 /* Three numbers side by side: place, ahead, already in. */
 .facts {
 	display: grid;
@@ -471,25 +471,6 @@ textarea:focus-visible {
 	justify-content: space-between;
 	gap: 1rem;
 	width: 100%;
-}
-
-.ghost {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-height: 2.75rem;
-	padding: 0 1.25rem;
-	border: 1px solid var(--border);
-	border-radius: 9999px;
-	background: transparent;
-	color: var(--muted);
-	font: inherit;
-	font-size: 0.8125rem;
-	font-weight: 500;
-	line-height: 1;
-	text-decoration: none;
-	white-space: nowrap;
-	cursor: pointer;
 }
 
 .ghost:hover {

@@ -75,9 +75,52 @@
 	}
 
 	.panel {
+		width: min(100%, 34rem);
+		margin-inline: auto;
+		padding: 2.5rem 2rem;
+		border: 1px solid color-mix(in srgb, var(--color-ink) 8%, transparent);
+		border-radius: var(--radius-card);
+		background: var(--color-surface-raised);
+		box-shadow: var(--shadow-raised);
+	}
+
+	.stack {
+		display: grid;
+		gap: var(--space-comfortable);
+		justify-items: center;
+		text-align: center;
+	}
+
+	.well {
 		border-radius: var(--radius-inner);
 		background: var(--color-surface-soft);
 		padding: var(--space-comfortable);
+	}
+
+	.field {
+		display: grid;
+		gap: var(--space-tight);
+		width: 100%;
+		text-align: left;
+	}
+
+	.ghost {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 2.75rem;
+		padding: 0 1.25rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-pill);
+		background: transparent;
+		color: color-mix(in srgb, var(--color-foreground) 65%, transparent);
+		font: inherit;
+		font-size: var(--fs-body);
+		font-weight: 500;
+		line-height: 1;
+		text-decoration: none;
+		white-space: nowrap;
+		cursor: pointer;
 	}
 
 	.meta {

@@ -79,16 +79,16 @@
 	--radius-2xl: 2rem;
 	--radius-full: 9999px;
 	/* ══ 4 · THE SCALES — type, tracking, emphasis, elevation, geometry ══
- * A value that is not on a scale is not available. Before these, one
- * idiom was written fourteen ways and the type ramp was thirty arbitrary
- * sizes mixing px and rem by eye.
- *
- * Deliberately in `:root` and NOT in `@theme`. Tailwind v4 tree-shakes
- * `@theme` variables it sees no utility for, which silently dropped half
- * of these — a scale that only exists once something already uses it is
- * not a scale, and the next author reaching for `var(--fs-body)` would
- * have got nothing. Colours stay in `@theme` above so Tailwind can still
- * generate `bg-primary` and friends. */
+	 * A value that is not on a scale is not available. Before these, one
+	 * idiom was written fourteen ways and the type ramp was thirty arbitrary
+	 * sizes mixing px and rem by eye.
+	 *
+	 * Deliberately in `:root` and NOT in `@theme`. Tailwind v4 tree-shakes
+	 * `@theme` variables it sees no utility for, which silently dropped half
+	 * of these — a scale that only exists once something already uses it is
+	 * not a scale, and the next author reaching for `var(--fs-body)` would
+	 * have got nothing. Colours stay in `@theme` above so Tailwind can still
+	 * generate `bg-primary` and friends. */
 	--fs-nano: 9px;
 	--fs-micro: 10px;
 	--fs-eyebrow: 11px;

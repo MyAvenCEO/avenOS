@@ -5,7 +5,6 @@ import { onDestroy, onMount } from 'svelte'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import { ingestFile } from '$lib/artifacts/ingest.svelte'
-import { shell } from '$lib/intents/talk.svelte'
 
 /**
  * Abrechnung — the member's whole Polar relationship, entirely in our brand.
