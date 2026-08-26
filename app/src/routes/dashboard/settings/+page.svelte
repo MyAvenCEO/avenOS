@@ -5,7 +5,6 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { settings, VOICES, type Voice } from '$lib/settings.svelte'
 import Account from './Account.svelte'
 import Billing from './Billing.svelte'
-import BrandColors from './BrandColors.svelte'
 
 /**
  * Settings — today, one decision: which voice speaks.
@@ -21,12 +20,11 @@ const CATEGORIES = [
 	{ id: 'account' as const, label: 'Konto' },
 	{ id: 'billing' as const, label: 'Abrechnung' },
 	{ id: 'general' as const, label: 'Models' },
-	{ id: 'voice' as const, label: 'Stimme' },
-	{ id: 'colors' as const, label: 'Brand-Farben' }
+	{ id: 'voice' as const, label: 'Stimme' }
 ]
 // Account opens first: before anything is configured, the question is whose
 // app this is.
-let category = $state<'account' | 'billing' | 'general' | 'voice' | 'colors'>('account')
+let category = $state<'account' | 'billing' | 'general' | 'voice'>('account')
 
 /** The voice currently sounding a preview, if any. */
 let playing = $state<Voice | null>(null)
@@ -88,8 +86,10 @@ async function preview(voice: Voice) {
 	<title>Settings · avenOS</title>
 </svelte:head>
 
-<!-- Full width: the palette wants every column it can get, and the category
-     nav already gives the page its left edge. -->
+<!-- The page is full width; its CONTENT is not. Settings used to run edge to
+     edge because the palette page wanted every column it could get. That page
+     is gone, and a settings form stretched across a 27-inch display reads as a
+     mistake — four words on a row, and two feet of gap after them. -->
 <main class="flex min-h-0 min-w-0 flex-1 flex-col gap-6 p-4 sm:p-6">
 	<header class="flex flex-col items-center gap-1.5">
 		<!-- The same quiet route stamp the dashboard wears. No Back link: the rail
@@ -142,13 +142,13 @@ async function preview(voice: Voice) {
 			</div>
 		</nav>
 
-		<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto pb-4">
+		<div
+			class="mx-auto flex min-h-0 w-full min-w-0 max-w-3xl flex-1 flex-col gap-6 overflow-y-auto pb-4"
+		>
 			{#if category === 'account'}
 				<Account />
 			{:else if category === 'billing'}
 				<Billing />
-			{:else if category === 'colors'}
-				<BrandColors />
 			{:else if category === 'voice'}
 				<section class="flex min-h-0 flex-col gap-3">
 					<div class="flex items-baseline justify-between">
