@@ -73,6 +73,22 @@ export async function refreshIntent(intentId: string): Promise<PersistentIntentD
 		const detail = await invoke<PersistentIntentDetail>('intent_get', { intentId })
 		intents.applyPersistent(detail)
 		chat.hydrate(detail.id, persistentTurns(detail))
+		// Bring the persisted source file back into the chat's in-memory
+		// registry: the processing watcher loops on `hasArtifact`, and the
+		// model's artifact manifest reads through the same map. Without this
+		// a restart left the file invisible to both.
+		const source = detail.artifacts.find((artifact) => artifact.relation === 'source')
+		if (source) {
+			chat.adoptArtifact(
+				source.artifactId,
+				detail.title,
+				undefined,
+				undefined,
+				detail.fileSkill?.presentation
+					? { ...detail.fileSkill.presentation, availability: 'available' }
+					: undefined
+			)
+		}
 		return detail
 	} catch {
 		// Projection follows the immutable publication asynchronously. The

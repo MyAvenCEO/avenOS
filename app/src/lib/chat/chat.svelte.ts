@@ -1,8 +1,6 @@
-import {
-	type ArtifactProcessingPresentation,
-	type ArtifactProcessingView,
-	artifactDescription,
-	artifactProcessingProgress
+import type {
+	ArtifactProcessingPresentation,
+	ArtifactProcessingView
 } from '$lib/artifacts/processing'
 import { type ChatMessage, repairCall, streamChat, type ToolSpec } from './redpill'
 
@@ -64,6 +62,10 @@ const SYSTEM_PROMPT =
 	'intent_create; "done with" or "put away" is intent_archive; combining is ' +
 	'intent_merge; renaming, re-dating or changing the state is intent_update; ' +
 	'deleting is intent_delete and needs an explicit request. ' +
+	'The files in this conversation are listed under ARTIFACTS in your context, ' +
+	'one line each with kind and current state. When a question is about a ' +
+	'file, call artifact_detail with its name or id first and answer only ' +
+	'from what it returns — never guess file contents or figures. ' +
 	'Call registry_list when you are unsure which actors exist. ' +
 	'Destructive actions are HELD: the call returns held=..., a bar appears ' +
 	'for the human, and only their button press executes it. Say that you ' +
@@ -433,27 +435,48 @@ export class Chat {
 		this.#sink.onTurn?.()
 	}
 
-	artifactContext(): string {
-		const rows = this.turns.flatMap((turn) => {
-			const attachment = turn.attachment
-			if (!attachment?.artifactId) return []
-			const processing = attachment.processing
-			const progress = artifactProcessingProgress(processing)
-			const processingState =
-				processing?.availability === 'available' ? processing.state : progress.label
-			const warnings = [
-				...(processing?.warnings.map((warning) => warning.code) ?? []),
-				...(processing?.lookupError ? ['processing-status-unavailable'] : [])
-			]
-			return [
-				`- artifactId=${JSON.stringify(attachment.artifactId)}, ` +
-					`originalName=${JSON.stringify(attachment.originalName)}, ` +
-					`description=${JSON.stringify(artifactDescription(attachment.originalName, processing))}, ` +
-					`processing=${JSON.stringify(processingState)}, ` +
-					`warnings=${JSON.stringify(warnings)}`
-			]
+	/**
+	 * What the model can see of one committed artifact: name, size, media type
+	 * and its live processing view. The artifact manifest in the system
+	 * context and the artifact_detail tool both read through here, so the
+	 * in-memory registry — not the rendered turns — is the source of truth.
+	 */
+	artifactInfo(artifactId: string): ArtifactAttachment | undefined {
+		return this.#artifacts.get(artifactId)
+	}
+
+	/**
+	 * Adopt a persisted artifact into the in-memory registry without a turn —
+	 * the restart path. `commitArtifactUpload` does this for fresh uploads;
+	 * this brings back what the backend already knows, so the processing
+	 * watcher (and the model's artifact view) have something to hold onto.
+	 */
+	adoptArtifact(
+		artifactId: string,
+		originalName: string,
+		mediaType?: string,
+		length?: number,
+		processing?: ArtifactProcessingView
+	): void {
+		const existing = this.#artifacts.get(artifactId)
+		if (existing) {
+			if (mediaType) existing.mediaType = mediaType
+			if (length) existing.length = length
+			if (processing)
+				existing.processing = { ...processing, availability: 'available', lookupError: undefined }
+			return
+		}
+		this.#artifacts.set(artifactId, {
+			uploadId: '',
+			publicationId: '',
+			originalName,
+			length: length ?? 0,
+			status: 'committed',
+			progress: 100,
+			artifactId,
+			mediaType,
+			processing: processing ? { ...processing, availability: 'available' } : undefined
 		})
-		return rows.length === 0 ? '' : `ARTIFACTS in this conversation right now:\n${rows.join('\n')}`
 	}
 
 	failArtifactUpload(uploadId: string, error: string): void {
