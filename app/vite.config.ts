@@ -2,8 +2,8 @@ import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { sveltekit } from '@sveltejs/kit/vite'
 import { avenUtilities } from '@myavenceo/aven-ceo/vite'
+import { sveltekit } from '@sveltejs/kit/vite'
 import { defineConfig, loadEnv } from 'vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
