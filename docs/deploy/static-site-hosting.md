@@ -2,7 +2,7 @@
 
 ## Scope
 
-The first release hosts public GitHub `deploy/*` branches on customer-owned, fully qualified domains. One purchased Aven name may own multiple independent site bindings; every binding has its own repository/deployment branch and its own domain or subdomain. The customer points each domain to the Hetzner host. `aven.ceo` and every subdomain below it remain operator-owned and cannot be registered through this API.
+The first release hosts public GitHub `deploy/*` branches on customer-owned, fully qualified domains. One purchased Aven name may own multiple independent site bindings; every binding has its own repository/deployment branch and its own domain or subdomain. The customer points each domain to the Hetzner host. `aven.ceo` remains reserved. Its subdomains can only be registered through this API by an account whose canonical identity role is `admin`.
 
 The expected repository contract is:
 
@@ -26,7 +26,7 @@ flowchart LR
     Host --> Disk[(atomic releases and snapshot)]
 ```
 
-The host has no database, Caddy-admin, Hetzner, or DNS-provider credential. It receives a narrow bearer-protected directory from `aven-api`. Caddy's on-demand TLS ask endpoint authorizes only a currently active exact hostname.
+The host has no database, Caddy-admin, Hetzner, or DNS-provider credential. It receives a narrow bearer-protected directory from `aven-api`. That directory carries an API-derived `owner_is_admin` authorization bit, which the host requires independently for `.aven.ceo` subdomains. Demoting the owner removes those bindings from the next directory reconciliation: Caddy authorization is withdrawn and the sites go offline, although their bindings and artifacts remain recoverable by re-promoting the owner. The account-administration tool therefore inventories these dependencies and requires an explicit resource-suspension override. Caddy's on-demand TLS ask endpoint authorizes only a currently active exact hostname.
 
 Caddy does not depend on the identity container health check. The site host persists its last-known-good active routing set and release paths, so an already deployed site can be served after restart while identity is unavailable. Identity availability is required only to add, remove, or update a mapping. A failed fetch or invalid new artifact never replaces the active release.
 
@@ -88,7 +88,7 @@ The workflow obtains `SITE_HOST_ALLOWED_IPV4` from the Pulumi host output. Persi
 
 1. Merge the branch through the normal `main` to `next` path and confirm all four immutable images deploy.
 2. Open `/sites` in the next identity webapp and configure a purchased test name using the public `avenCEO` repository's `next` and `deploy/next` branches.
-3. Add the returned TXT record and point a customer-controlled test domain's A record to the next Hetzner IPv4. Do not use `next.aven.ceo`; it is intentionally reserved as an operator origin.
+3. Add the returned TXT record and point a customer-controlled test domain's A record to the next Hetzner IPv4. For the operator path, promote the test account with `tools/account-admin`, bind a non-infrastructure `.aven.ceo` subdomain, and create the equivalent records in the operator-managed `aven.ceo` zone. Keep `next.aven.ceo` reserved as the identity environment origin.
 4. Wait for one poll interval, then confirm `GET /api/sites` reports `active` and that source/artifact revisions match the repository.
 5. Request the site over HTTPS and directly request a client-side SPA route. Both must return the site. `/internal/*` must return 404, and an unknown host must either be refused during TLS issuance or return 404 if it already has a cached certificate.
 6. Stop `aven-api`, restart Caddy and `static-site-host`, and confirm the active static site remains available from the persisted snapshot.

@@ -8,7 +8,9 @@ export const PUT = api(async (event, rt) => {
 	await requireSiteManagementPasskey(rt, user.id)
 	const siteId = event.params.siteId
 	if (!siteId) throw new AppError(404, 'SITE_NOT_FOUND', 'No site has that id.')
-	const input = siteBindingInputSchema.parse(await readJson(event))
+	const input = siteBindingInputSchema({ allowOperatorSubdomains: user.role === 'admin' }).parse(
+		await readJson(event)
+	)
 	return { body: await rt.sites.update(user.id, siteId, input) }
 })
 

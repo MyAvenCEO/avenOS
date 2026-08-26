@@ -1,8 +1,9 @@
 import { readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { extname, join, normalize, resolve, sep } from 'node:path'
+import { type DirectoryBinding, validateBinding } from './binding.js'
 import type { SiteHostConfig } from './config.js'
 import { verifyDns } from './dns.js'
-import { type DirectoryBinding, materialize, validateBinding } from './repository.js'
+import { materialize } from './repository.js'
 
 type ActiveSite = { binding: DirectoryBinding; root: string }
 
@@ -66,7 +67,18 @@ export class StaticSiteHost {
 		if (!response.ok) throw new Error(`site directory returned ${response.status}`)
 		const payload = (await response.json()) as { bindings?: DirectoryBinding[] }
 		if (!Array.isArray(payload.bindings)) throw new Error('invalid site directory response')
-		const configured = new Set(payload.bindings.map((binding) => binding.hostname))
+		const configured = new Set(
+			payload.bindings
+				.filter((binding) => {
+					try {
+						validateBinding(binding)
+						return true
+					} catch {
+						return false
+					}
+				})
+				.map((binding) => binding.hostname)
+		)
 		for (const hostname of this.active.keys())
 			if (!configured.has(hostname)) this.active.delete(hostname)
 		for (let index = 0; index < payload.bindings.length; index += this.config.maxConcurrentSyncs)

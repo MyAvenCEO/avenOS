@@ -70,13 +70,25 @@ describe('avenOS device authorization', () => {
 			await auth.api.getSession({
 				headers: new Headers({ authorization: `Bearer ${token.access_token}` })
 			})
-		).toMatchObject({ user: { id: user.id } })
+		).toMatchObject({ user: { id: user.id, role: 'user' } })
+
+		await database.pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ['admin', user.id])
+		expect(
+			await auth.api.getSession({
+				headers: new Headers({ authorization: `Bearer ${token.access_token}` })
+			})
+		).toMatchObject({ user: { id: user.id, role: 'admin' } })
+		await expect(
+			database.pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ['owner', user.id])
+		).rejects.toMatchObject({ code: '23514' })
 
 		const session = await auth.handler(
 			request('/get-session', undefined, { authorization: `Bearer ${token.access_token}` })
 		)
 		expect(session.status).toBe(200)
-		expect(await session.json()).toMatchObject({ user: { id: user.id, email: user.email } })
+		expect(await session.json()).toMatchObject({
+			user: { id: user.id, email: user.email, role: 'admin' }
+		})
 
 		const replay = await auth.handler(
 			request('/device/token', {

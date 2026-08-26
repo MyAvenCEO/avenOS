@@ -10,6 +10,8 @@ export const GET = api(async (event, rt) => {
 export const POST = api(async (event, rt) => {
 	const user = await requireUser(event)
 	await requireSiteManagementPasskey(rt, user.id)
-	const input = siteBindingInputSchema.parse(await readJson(event))
+	const input = siteBindingInputSchema({ allowOperatorSubdomains: user.role === 'admin' }).parse(
+		await readJson(event)
+	)
 	return { body: await rt.sites.create(user.id, input), status: 201 }
 })

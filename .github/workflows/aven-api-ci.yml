@@ -7,6 +7,7 @@ on:
       - services/artifact-store/**
       - services/intent-service/**
       - services/static-site-host/**
+      - tools/account-admin/**
       - libs/aven-hosting/**
       - infrastructure/identity/**
       - package.json
@@ -23,6 +24,7 @@ on:
       - services/artifact-store/**
       - services/intent-service/**
       - services/static-site-host/**
+      - tools/account-admin/**
       - libs/aven-hosting/**
       - infrastructure/identity/**
       - package.json
@@ -73,7 +75,9 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Validate deployment scripts
-        run: sh -n services/aven-api/deploy/*.sh
+        run: |
+          sh -n services/aven-api/deploy/*.sh
+          bash -n tools/account-admin/*.sh
       - run: bunx biome check services/aven-api
       - run: bunx biome check infrastructure/identity
       - run: bunx biome check services/static-site-host
@@ -114,6 +118,8 @@ jobs:
           if PGPASSWORD=email-ci psql -h 127.0.0.1 -U aven_email_worker -d aven -c 'SELECT 1 FROM device_code LIMIT 1'; then exit 1; fi
           if PGPASSWORD=environment-ci psql -h 127.0.0.1 -U aven_environment_worker -d aven -c 'SELECT 1 FROM "session" LIMIT 1'; then exit 1; fi
           if PGPASSWORD=server-ci psql -h 127.0.0.1 -U aven_server -d aven -c 'CREATE TABLE forbidden(id int)'; then exit 1; fi
+      - name: Account admin least-privilege smoke
+        run: bun run test:account-admin-local
       - run: bun run build:api
       - name: Build hardened image
         # The image installs @myavenceo/aven-ceo from GitHub Packages; the token
