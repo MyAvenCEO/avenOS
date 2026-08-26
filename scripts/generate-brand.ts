@@ -16,7 +16,13 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { appIconSvg, componentCss, faviconSvg, themeCss } from '@myavenceo/aven-ceo/generate'
+import {
+	appIconSvg,
+	componentCss,
+	elementCss,
+	faviconSvg,
+	themeCss
+} from '@myavenceo/aven-ceo/generate'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -52,6 +58,8 @@ const outputs: Array<[string, string]> = [
 	   background moved. */
 	['services/aven-api/src/brand-theme.css', themeCss('plain')],
 	['services/aven-api/src/brand-components.css', componentCss()],
+	/* Element defaults, for a surface that styles bare tags rather than classes. */
+	['services/aven-api/src/brand-elements.css', elementCss()],
 	['app/static/aven-logo.svg', logo],
 	['app/static/favicon.svg', favicon],
 	['services/aven-api/static/aven-logo.svg', logo],

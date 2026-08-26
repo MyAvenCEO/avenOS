@@ -1,5 +1,6 @@
 @import "./brand-theme.css";
 @import "./brand-components.css";
+@import "./brand-elements.css";
 
 /*
  * The identity service's theme.
@@ -175,13 +176,6 @@ footer.site a:hover {
 	width: 100%;
 }
 
-h1 {
-	margin-block: 0;
-	font-size: 1.25rem;
-	font-weight: 600;
-	letter-spacing: -0.015em;
-}
-
 h2,
 p {
 	margin-block: 0;
@@ -191,13 +185,6 @@ p {
 	color: var(--muted);
 	font-size: 0.875rem;
 	line-height: 1.6;
-}
-
-label {
-	display: grid;
-	gap: 0.4rem;
-	font-weight: 600;
-	text-align: left;
 }
 
 input,
@@ -214,29 +201,6 @@ input:focus-visible,
 select:focus-visible {
 	border-color: rgba(31, 42, 61, 0.4);
 	outline: none;
-}
-
-button {
-	min-height: 2.75rem;
-	padding: 0 1.75rem;
-	border: 0;
-	border-radius: 9999px;
-	background: var(--marine);
-	color: var(--chalk);
-	font: inherit;
-	font-weight: 600;
-	font-size: 0.875rem;
-	cursor: pointer;
-	transition: opacity 0.15s ease;
-}
-
-button:hover:not(:disabled) {
-	opacity: 0.9;
-}
-
-button:disabled {
-	cursor: default;
-	opacity: 0.45;
 }
 
 /* Something went wrong — terracotta, the failure tone. */

@@ -42,6 +42,26 @@
 		color: color-mix(in srgb, var(--color-foreground) 35%, transparent);
 	}
 
+	.section-title {
+		font-size: var(--fs-amount);
+		font-weight: 600;
+		letter-spacing: var(--tracking-tight);
+		color: var(--color-foreground);
+	}
+
+	.section-band {
+		border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 25%, transparent);
+		padding: 3.5rem 1.25rem;
+	}
+
+	.app-shell {
+		min-height: 100vh;
+		background: var(--color-background);
+		color: var(--color-foreground);
+		font-family: var(--font-sans);
+		-webkit-font-smoothing: antialiased;
+	}
+
 	.mono-meta {
 		font-family: var(--font-mono);
 		font-size: var(--fs-micro);
@@ -57,19 +77,43 @@
 		background: color-mix(in srgb, var(--color-foreground) 25%, transparent);
 	}
 
+	.title {
+		margin: 0;
+		font-size: var(--fs-hero);
+		font-weight: 600;
+		letter-spacing: var(--tracking-tight);
+	}
+
+	.lede {
+		margin: 0;
+		font-size: var(--fs-section);
+		line-height: 1.6;
+		color: color-mix(in srgb, var(--color-foreground) 65%, transparent);
+	}
+
+	.label {
+		display: grid;
+		gap: 0.4rem;
+		font-weight: 600;
+		text-align: left;
+	}
+
 	.btn {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		gap: var(--space-tight);
+		min-height: 2.75rem;
+		padding: 0 1.75rem;
+		border: 0;
 		border-radius: var(--radius-pill);
 		background: var(--color-primary);
 		color: var(--color-primary-foreground);
-		font-size: var(--fs-meta);
-		font-weight: 500;
-		padding: 0.5rem 1rem;
-		border: none;
+		font: inherit;
+		font-size: var(--fs-section);
+		font-weight: 600;
 		cursor: pointer;
+		transition: opacity 0.15s ease;
 	}
 
 	.btn-secondary {
@@ -77,14 +121,17 @@
 		align-items: center;
 		justify-content: center;
 		gap: var(--space-tight);
+		min-height: 2.75rem;
+		padding: 0 1.75rem;
+		border: 1px solid var(--color-border);
 		border-radius: var(--radius-pill);
 		background: var(--color-secondary);
 		color: var(--color-secondary-foreground);
-		font-size: var(--fs-meta);
-		font-weight: 500;
-		padding: 0.5rem 1rem;
-		border: 1px solid var(--color-border);
+		font: inherit;
+		font-size: var(--fs-section);
+		font-weight: 600;
 		cursor: pointer;
+		transition: opacity 0.15s ease;
 	}
 
 	.chip {

@@ -629,9 +629,7 @@ onDestroy(() => {
 				class="flex flex-col gap-2 rounded-xl border border-foreground/8 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			>
 				<div class="flex items-baseline justify-between gap-2">
-					<p
-						class="text-[length:var(--fs-micro)] uppercase tracking-[var(--tracking-widest)] opacity-35"
-					>
+					<p class="eyebrow-quiet">
 						Checkout · {TIER_PLANS.find((p) => p.id === checkout?.tier)?.name ?? checkout.tier}
 					</p>
 					<button
@@ -671,11 +669,7 @@ onDestroy(() => {
 		<!-- Zwei unabhängige Produkte, aus demselben SSOT wie die Website —
 		     settings und Website können sich beim Preis nicht widersprechen. -->
 		<div class="flex flex-col gap-2">
-			<p
-				class="text-[length:var(--fs-micro)] uppercase tracking-[var(--tracking-widest)] opacity-35"
-			>
-				Deine Produkte
-			</p>
+			<p class="eyebrow-quiet">Deine Produkte</p>
 			<div class="flex flex-col gap-3 sm:flex-row">
 				{#each TIER_PLANS as p (p.id)}
 					{@render planCard(p)}
@@ -686,11 +680,7 @@ onDestroy(() => {
 		<!-- Meine Bestellungen: each order expands into its in-app detail from
 		     real order data; the official Polar invoice PDF is one click away. -->
 		<div class="flex flex-col gap-2">
-			<p
-				class="text-[length:var(--fs-micro)] uppercase tracking-[var(--tracking-widest)] opacity-35"
-			>
-				Meine Bestellungen
-			</p>
+			<p class="eyebrow-quiet">Meine Bestellungen</p>
 			{#if orders.length}
 				<ul
 					class="flex flex-col divide-y divide-foreground/8 rounded-xl border border-foreground/8 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
