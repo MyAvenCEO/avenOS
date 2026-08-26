@@ -111,9 +111,7 @@ onMount(async () => {
 		<div
 			class="flex flex-col gap-2 rounded-xl border border-foreground/8 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
-			<p
-				class="text-[length:var(--fs-micro)] uppercase tracking-[var(--tracking-widest)] opacity-35"
-			>
+			<p class="eyebrow-quiet">
 				{names.length > 1 ? 'Deine Aven' : 'Dein Aven'}
 			</p>
 			{#if names.length}
