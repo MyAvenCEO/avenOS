@@ -37,10 +37,10 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
  * source for all of this, so it is written where the definitions live.
  *
  * The RENDERING happens here because this is where aven-ui is; the ARTIFACT
- * belongs next to the configs it documents. `AVEN_CEO_PATH` overrides the
+ * belongs next to the configs it documents. `AVEN_BRANDS_PATH` overrides the
  * location for a checkout that is not the sibling default.
  */
-const brandRepo = process.env.AVEN_CEO_PATH ?? path.resolve(repoRoot, '../../../../avenCEO')
+const brandRepo = process.env.AVEN_BRANDS_PATH ?? path.resolve(repoRoot, '../../../../aven-brands')
 const out = path.join(brandRepo, 'packages/aven-ceo/kitchen-sink.html')
 
 /**
