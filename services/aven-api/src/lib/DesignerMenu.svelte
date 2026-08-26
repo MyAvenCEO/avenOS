@@ -56,7 +56,7 @@ function navigate(href: string) {
 			{/each}
 		</select>
 	</label>
-	<label class="session-select">
+	<label>
 		<span>Session</span>
 		<select
 			value={page.url.searchParams.get('session') ?? ''}

@@ -147,10 +147,10 @@ onMount(() => {
 {:else}
 	<main class="fixed inset-0 overflow-hidden bg-surface-cream text-foreground">
 		<div
-			class="-right-32 -top-40 pointer-events-none absolute size-[34rem] rounded-full bg-status-pairing/15 blur-3xl"
+			class="-right-32 -top-40 pointer-events-none absolute size-[34rem] rounded-full bg-progress/15 blur-3xl"
 		></div>
 		<div
-			class="-bottom-48 -left-32 pointer-events-none absolute size-[32rem] rounded-full bg-status-info/15 blur-3xl"
+			class="-bottom-48 -left-32 pointer-events-none absolute size-[32rem] rounded-full bg-info/15 blur-3xl"
 		></div>
 
 		<header class="absolute inset-x-0 top-0 flex items-center justify-between px-8 py-7">
@@ -269,7 +269,7 @@ onMount(() => {
 				</div>
 
 				<p class="mt-7 flex items-center justify-center gap-2 text-foreground/35 text-xs">
-					<span class="size-1.5 rounded-full bg-status-success"></span>
+					<span class="size-1.5 rounded-full bg-success"></span>
 					Passkey und Sitzung bleiben durch dein Gerät geschützt
 				</p>
 			</section>

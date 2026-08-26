@@ -1,5 +1,5 @@
 import { vibeTokens } from '@myavenceo/aven-ceo/tokens'
-import type { StyleDef } from './engine/types.js'
+import type { StyleDef } from '@myavenceo/aven-vibes'
 
 /**
  * Shared brand design system for all vibe views.

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { AvenUiEngine, type StyleDef, type UiEvent, type ViewDef } from '@avenos/aven-ui'
+import { type StyleDef, type UiEvent, VibeEngine, type ViewDef } from '@avenos/aven-ui'
 import { onDestroy } from 'svelte'
 import type { Actor } from './actor'
 import { bus } from './bus'
@@ -26,7 +26,7 @@ const {
 const viewDef = $derived(viewOverride ?? actor.manifest.view)
 const styleDef = $derived(styleOverride ?? actor.manifest.style ?? {})
 
-let engine: AvenUiEngine | null = null
+let engine: VibeEngine | null = null
 let mounted = $state(false)
 let renderError = $state<string | null>(null)
 
@@ -45,7 +45,7 @@ async function mount(element: HTMLElement): Promise<void> {
 	if (!viewDef) return
 	renderError = null
 	try {
-		engine = new AvenUiEngine({
+		engine = new VibeEngine({
 			container: element,
 			onEvent: (event: UiEvent) => {
 				// Through the bus, never behind its back — the click becomes a
@@ -75,7 +75,7 @@ onDestroy(() => {
 </script>
 
 {#if renderError}
-	<p class="shrink-0 px-1 text-sm text-red-600" role="alert">{renderError}</p>
+	<p class="shrink-0 px-1 text-sm text-error-strong" role="alert">{renderError}</p>
 {/if}
 {#if viewDef}
 	<div {@attach attachHost} class="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto"></div>

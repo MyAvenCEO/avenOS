@@ -17,7 +17,7 @@ COPY services/static-site-host/package.json services/static-site-host/package.js
 # (which pins the registry but deliberately carries no token). Build with:
 #   docker build --secret id=npm_token,env=NODE_AUTH_TOKEN .
 RUN --mount=type=secret,id=npm_token,required=true \
-  printf '//npm.pkg.github.com/:_authToken=%s\n' "$(cat /run/secrets/npm_token)" >> /repo/.npmrc
+  printf '//npm.pkg.github.com/:_authToken=%s\n' "$(cat /run/secrets/npm_token)" >> "$HOME/.npmrc"
 
 FROM manifests AS build
 RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \

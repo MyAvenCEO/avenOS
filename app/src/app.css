@@ -1,12 +1,10 @@
-@import "tailwindcss";
 @import "./brand-theme.css";
 @import "./brand-components.css";
 
-/* Source-aliased workspace libs live outside app/ (see svelte.config.js),
- * so Tailwind v4's automatic content detection never scans them. Register
- * them explicitly — otherwise classes used ONLY in these libs (e.g. the
- * board column's w-80) are silently dropped and layouts break. */
-@source "../../libs/aven-city/src";
+/* The reset and the utility layer, generated from this surface's own
+ * markup by @myavenceo/aven-ceo. Must follow the imports: a rule before
+ * an @import makes the browser drop the import. */
+@aven-utilities;
 
 @font-face {
 	font-family: "Ouroboros";

@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sveltekit } from '@sveltejs/kit/vite'
-import tailwindcss from '@tailwindcss/vite'
+import { avenUtilities } from '@myavenceo/aven-ceo/vite'
 import { defineConfig, loadEnv } from 'vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -80,14 +80,7 @@ export default defineConfig(({ mode }) => {
 		envPrefix: ['VITE_', 'PUBLIC_', 'TAURI_ENV_'],
 		cacheDir,
 		clearScreen: false,
-		// Pre-bundle @storagesdk/core (+ its /adapter subpath), used by the in-app composer. Without
-		// this, Vite discovers it at runtime (the composer view is behind auth/routing, not in the
-		// startup crawl), then re-optimizes + reloads — a reload the Tauri WKWebView fails to ride on
-		// a cold cache ("Importing a module script failed"). Eager pre-bundling avoids that churn.
-		optimizeDeps: {
-			include: ['@storagesdk/core', '@storagesdk/core/adapter']
-		},
-		plugins: [tailwindcss(), sveltekit()],
+		plugins: [avenUtilities({ content: ['src', '../libs/aven-city/src'] }), sveltekit()],
 		preview: {
 			headers: crossOriginIsolationHeaders
 		},

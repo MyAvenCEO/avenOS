@@ -33,7 +33,7 @@ onMount(async () => {
 
 	{#if standing}
 		<div class="columns">
-			<div class="standing">
+			<div>
 				<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
 				<h1>Dein avenOS</h1>
 				<div class="code">
@@ -72,7 +72,7 @@ onMount(async () => {
 				</p>
 			</div>
 
-			<div class="boards">
+			<div>
 				{#if standing.board.length}
 					<div class="board">
 						<p class="eyebrow">Die Liste um dich herum</p>
