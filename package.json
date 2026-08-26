@@ -64,7 +64,7 @@
 		"@biomejs/biome": "^2.4.14",
 		"@commitlint/cli": "^21.0.2",
 		"@commitlint/config-conventional": "^21.0.2",
-		"@myavenceo/aven-ceo": "^0.4.1",
+		"@myavenceo/aven-ceo": "^0.6.0",
 		"@myavenceo/aven-vibes": "^0.1.0",
 		"conventional-changelog-cli": "^5.0.0",
 		"semver": "^7.8.4",

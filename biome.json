@@ -73,6 +73,10 @@
 	},
 	"overrides": [
 		{
+			"includes": ["app/src/app.css", "services/aven-api/src/app.css"],
+			"linter": { "rules": { "suspicious": { "noUnknownAtRules": "off" } } }
+		},
+		{
 			"includes": [
 				"artifact-types/**/*.json",
 				"services/artifact-store/conformance/fixtures/**/*.json"
