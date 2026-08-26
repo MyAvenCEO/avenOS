@@ -18,6 +18,7 @@ import {
 	artifactWarningText
 } from '$lib/artifacts/processing'
 import { processingFlowGraph } from '$lib/artifacts/processing-flow'
+import ChatDebug from '$lib/chat/ChatDebug.svelte'
 import { composer } from '$lib/intents/composer.svelte'
 import {
 	type IntentState,
@@ -382,11 +383,15 @@ const allWindows = $derived(registryTick.v >= 0 ? bus.actors().filter(isWindow) 
 let viewId = $state<string | null>(null)
 const view = $derived(allWindows.find((w) => w.manifest.id === viewId) ?? null)
 
+/** The chat debug overlay: the model's exact last request (context + tools). */
+let debugOpen = $state(false)
+
 /** Put a view in front — by tab, by the list on the right, or by voice. */
 function showView(id: string | null) {
 	viewId = id
 	preview = null
 	skillView = null
+	debugOpen = false
 	// The window flags ARE the shown/hidden truth the model reads back, so
 	// clicking keeps them honest: the one in front is open, the rest are not.
 	for (const w of allWindows) w.open = w.manifest.id === id
@@ -683,7 +688,32 @@ const DOT: Record<string, string> = {
 	>
 		<!-- The tabs, top center, where the status line used to be: the stream,
 		     then every view. One strip, two tiers of content behind it. -->
-		<nav class="flex justify-center gap-1 px-1 pt-1" aria-label="Ansicht">
+		<nav class="relative flex justify-center gap-1 px-1 pt-1" aria-label="Ansicht">
+			<!-- Debug: what the model actually sees — last request, verbatim. -->
+			<button
+				type="button"
+				onclick={() => (debugOpen = !debugOpen)}
+				title="Chat debug: context & tools"
+				aria-label="Chat debug"
+				aria-pressed={debugOpen}
+				class="absolute right-1 top-1 rounded-full p-1.5 text-foreground/35 transition-colors hover:bg-foreground/8 hover:text-foreground {debugOpen
+				? 'bg-primary/15 text-primary'
+				: ''}"
+			>
+				<!-- lucide:terminal -->
+				<svg
+					viewBox="0 0 24 24"
+					class="size-4"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.75"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="m4 17 6-6-6-6" />
+					<path d="M12 19h8" />
+				</svg>
+			</button>
 			{@render tab(null, 'Aktivität')}
 			{#each allWindows as w (w.manifest.id)}
 				{@render tab(w.manifest.id, w.manifest.name)}
@@ -1051,6 +1081,9 @@ const DOT: Record<string, string> = {
 						</div>
 					</div>
 				{/if}
+			{:else if debugOpen}
+				<!-- CHAT DEBUG: the exact last request to the model. -->
+				<ChatDebug />
 			{:else}
 				<!-- ACTIVITY LOG: the intent's journey, every entry typed by skill. -->
 				<!-- The title lives on the selected card beside this panel; only where

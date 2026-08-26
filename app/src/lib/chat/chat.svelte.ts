@@ -252,6 +252,18 @@ export class Chat {
 	context: (() => string) | null = null
 	/** What the model has said so far while the request is still routing. */
 	routingReply = $state('')
+	/**
+	 * The last request to the model, exactly as sent: the system prompt with
+	 * the live context appended, the full message history, and the tool set.
+	 * Captured per round in `#round`; the debug view renders this, so what is
+	 * shown is byte-for-byte what the model saw, never a reconstruction.
+	 */
+	lastRequest = $state<{
+		at: string
+		session: string
+		messages: ChatMessage[]
+		tools: ToolSpec[]
+	} | null>(null)
 	#pending: { user: Turn; reply: Turn } | null = null
 	#reply: Turn | null = null
 
@@ -663,8 +675,15 @@ export class Chat {
 		const calls = new Map<number, { id: string; name: string; arguments: string }>()
 
 		const system = this.context ? `${SYSTEM_PROMPT}\n\n${this.context()}` : SYSTEM_PROMPT
+		const messages: ChatMessage[] = [{ role: 'system', content: system }, ...wire]
+		this.lastRequest = {
+			at: new Date().toISOString(),
+			session: this.session,
+			messages,
+			tools: this.#tools.specs
+		}
 		for await (const event of streamChat(
-			[{ role: 'system', content: system }, ...wire],
+			messages,
 			this.#tools.specs,
 			this.#abort?.signal ?? undefined
 		)) {
