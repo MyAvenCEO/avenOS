@@ -1,8 +1,8 @@
 name: Install dependencies
 description: >-
   Authenticate to GitHub Packages, then install with a frozen lockfile.
-  One place, because @myavenceo/aven-ceo needs a registry token and four
-  workflows install — repeating the auth step in each is how they drift.
+  One place, because @myavenceo/* needs a registry token and four workflows
+  install — repeating the auth step in each is how they drift.
 
   Assumes bun is already set up: every caller pins its own bun-version, so
   installing it again here would only duplicate that decision.
@@ -19,31 +19,46 @@ runs:
   steps:
     - name: Authenticate to GitHub Packages
       shell: bash
-      # Written to the RUNNER'S HOME, never to the repo.
+      # The token goes in the PROJECT .npmrc, because that is the only file bun
+      # reads it from. Moving it to $HOME/.npmrc looked strictly safer and was
+      # not: bun ignored it, every install 401'd, and the failure looked like a
+      # permissions problem for long enough to be worth this comment.
       #
-      # This previously appended to the tracked `.npmrc`, which the release job
-      # then swept up with `git add -A` — putting the token into two commits on
-      # a public repository. They were ephemeral GITHUB_TOKENs and were revoked
-      # when their jobs ended, but the pattern would have leaked any longer-lived
-      # credential, and a stale one in a tracked file also outranks a
-      # developer's own login and 401s their installs.
+      # `${NODE_AUTH_TOKEN}` in the tracked file is not the answer either — a
+      # project .npmrc outranks ~/.npmrc, so an empty value on a developer's
+      # machine would override their real login. See the note in .npmrc itself.
       #
-      # $HOME/.npmrc is outside the checkout, so there is nothing for `git add`
-      # to find.
-      run: printf '//npm.pkg.github.com/:_authToken=%s\n' '${{ inputs.token }}' >> "$HOME/.npmrc"
+      # What made the old leak possible was not the location. It was that a
+      # release job ran `git add -A` and swept the modified file into a commit.
+      # `skip-worktree` closes that: git treats the file as unchanged, so
+      # `git add -A` cannot stage it, and an explicit `git add .npmrc` is not
+      # something any job does by accident.
+      run: |
+        set -euo pipefail
+        printf '//npm.pkg.github.com/:_authToken=%s\n' '${{ inputs.token }}' >> .npmrc
+        git update-index --skip-worktree .npmrc
     - shell: bash
       run: bun install --frozen-lockfile
     - name: Refuse to proceed if a credential reached the checkout
       shell: bash
-      # The failure this repo already had: a token written into the tracked
-      # .npmrc, swept into a release commit by `git add -A`, pushed public.
-      # Cheap to check, and the check is what makes the fix durable.
+      # Belt and braces for the failure this repo already had: a token written
+      # into .npmrc, swept into a release commit by `git add -A`, pushed public.
+      # `skip-worktree` above is the mechanism; this is the check that the
+      # mechanism held, and it looks at what git would actually COMMIT rather
+      # than at the working tree, which now legitimately holds the token.
       run: |
+        set -euo pipefail
         # The pattern is written as a character class so this file does not
         # match itself — a literal would make the guard permanently red.
         pattern='_authToken=[a-z]\{2,4\}_'
-        if git grep -nI "$pattern" -- . >/dev/null 2>&1; then
-          echo "::error::A registry token is present in a tracked file. Credentials belong in \$HOME/.npmrc."
-          git grep -nI "$pattern" -- . | sed 's/_authToken=.*/_authToken=***/'
+        if git diff --cached --name-only | grep -q .; then
+          if git diff --cached | grep -q "$pattern"; then
+            echo "::error::A registry token is staged for commit. It must never leave the runner."
+            exit 1
+          fi
+        fi
+        if git grep --cached -nI "$pattern" -- . >/dev/null 2>&1; then
+          echo "::error::A registry token is committed in a tracked file."
+          git grep --cached -nI "$pattern" -- . | sed 's/_authToken=.*/_authToken=***/'
           exit 1
         fi
