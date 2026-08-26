@@ -50,6 +50,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 roxmltree = "0.21"
 tempfile = "3"
 wait-timeout = "0.2"
+aven-tenant-runtime = { path = "../tenant-runtime" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
