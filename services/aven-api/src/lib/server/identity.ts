@@ -3,13 +3,19 @@
 // Auth itself. When the app is split, these functions become the identity
 // service's API.
 import { randomUUID } from 'node:crypto'
+import type { AccountRole } from '$lib/types.js'
 import { writeAudit } from './audit.js'
 import type { Queryable } from './db.js'
+
+export function isAdminRole(role: unknown): role is 'admin' {
+	return role === 'admin'
+}
 
 export interface IdentityUser {
 	id: string
 	name: string
 	email: string
+	role: AccountRole
 }
 
 export async function findUserByEmail(
@@ -17,9 +23,10 @@ export async function findUserByEmail(
 	email: string
 ): Promise<IdentityUser | null> {
 	const row = (
-		await connection.query('SELECT id, name, email FROM "user" WHERE lower(email)=lower($1)', [
-			email
-		])
+		await connection.query(
+			'SELECT id, name, email, role FROM "user" WHERE lower(email)=lower($1)',
+			[email]
+		)
 	).rows[0] as IdentityUser | undefined
 	return row ?? null
 }
@@ -56,5 +63,5 @@ export async function ensureVerifiedUser(
 		targetUserId: id,
 		metadata: { source }
 	})
-	return { id, name, email }
+	return { id, name, email, role: 'user' }
 }

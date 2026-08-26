@@ -24,11 +24,14 @@ export interface HealthStatus {
 	}
 }
 
+export type AccountRole = 'user' | 'admin'
+
 export interface SessionUser {
 	id: string
 	name: string
 	email: string
 	emailVerified: boolean
+	role: AccountRole
 }
 
 export interface PasskeyRecord {

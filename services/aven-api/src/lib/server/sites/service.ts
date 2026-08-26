@@ -199,12 +199,15 @@ export class SiteBindingService {
 		const result = await this.pool.query(
 			`SELECT b.id, b.hostname, r.repository_full_name, r.clone_url,
 			        b.source_ref, b.artifact_ref, b.artifact_path,
-			        b.verification_token_hash, b.verified_at
+			        b.verification_token_hash, b.verified_at,
+			        (u.role='admin') AS owner_is_admin
 			 FROM static_site_bindings b
 			 JOIN site_repositories r ON r.id=b.repository_id
 			 JOIN customer_environments e ON e.id=b.environment_id
 			 JOIN names n ON n.name=e.name
+			 JOIN "user" u ON u.id=e.owner_user_id
 			 WHERE b.desired_status='active' AND n.status='owned'
+			   AND (b.hostname NOT LIKE '%.aven.ceo' OR u.role='admin')
 			 ORDER BY b.hostname`
 		)
 		return { bindings: result.rows }

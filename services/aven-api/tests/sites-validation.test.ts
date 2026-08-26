@@ -15,6 +15,12 @@ describe('static site binding validation', () => {
 		(hostname) => expect(() => normalizeSiteHostname(hostname)).toThrow(/reserved/)
 	)
 
+	test('lets admins use operator subdomains but never the apex', () => {
+		expect(normalizeSiteHostname('docs.aven.ceo', true)).toBe('docs.aven.ceo')
+		expect(normalizeSiteHostname('preview.next.aven.ceo', true)).toBe('preview.next.aven.ceo')
+		expect(() => normalizeSiteHostname('aven.ceo', true)).toThrow(/apex.*reserved/)
+	})
+
 	test('accepts only owner/repository GitHub identifiers', () => {
 		expect(normalizeRepository('MyAvenCEO/avenCEO')).toBe('myavenceo/avenceo')
 		expect(() => normalizeRepository('https://example.test/repository')).toThrow()

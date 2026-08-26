@@ -30,6 +30,18 @@ describe('directory binding validation', () => {
 	})
 	test('rejects non-deployment artifact branches', () =>
 		expect(() => validateBinding({ ...valid, artifact_ref: 'refs/heads/main' })).toThrow())
+	test('accepts aven.ceo subdomains only with identity-service admin authorization', () => {
+		expect(() =>
+			validateBinding({ ...valid, hostname: 'docs.aven.ceo', owner_is_admin: true })
+		).not.toThrow()
+		expect(() => validateBinding({ ...valid, hostname: 'docs.aven.ceo' })).toThrow(/reserved/)
+		expect(() =>
+			validateBinding({ ...valid, hostname: 'docs.aven.ceo', owner_is_admin: false })
+		).toThrow(/reserved/)
+		expect(() => validateBinding({ ...valid, hostname: 'aven.ceo', owner_is_admin: true })).toThrow(
+			/reserved/
+		)
+	})
 	test.each(['refs/heads/-next', 'refs/heads/feature/.hidden', 'refs/heads/deploy/release.lock'])(
 		'rejects a Git-invalid ref %s',
 		(source_ref) => expect(() => validateBinding({ ...valid, source_ref })).toThrow()

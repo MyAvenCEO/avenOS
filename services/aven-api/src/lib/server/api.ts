@@ -2,6 +2,7 @@ import { isRedirect, json, type RequestEvent, type RequestHandler } from '@svelt
 import { ZodError } from 'zod'
 import type { SessionUser } from '$lib/types.js'
 import { AppError } from './errors.js'
+import { isAdminRole } from './identity.js'
 import { type Runtime, runtime } from './runtime.js'
 
 // Wraps an API handler so AppError and ZodError map to structured JSON error
@@ -51,7 +52,8 @@ export async function requireUser(event: RequestEvent): Promise<SessionUser> {
 		id: session.user.id,
 		name: session.user.name,
 		email: session.user.email,
-		emailVerified: session.user.emailVerified
+		emailVerified: session.user.emailVerified,
+		role: isAdminRole(session.user.role) ? 'admin' : 'user'
 	}
 }
 

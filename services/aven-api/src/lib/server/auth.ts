@@ -1,5 +1,5 @@
 import { passkey } from '@better-auth/passkey'
-import { type Auth, betterAuth } from 'better-auth'
+import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { bearer, deviceAuthorization } from 'better-auth/plugins'
 import type { ServerConfig } from './config.js'
@@ -21,7 +21,7 @@ export function createAuth(
 	config: ServerConfig,
 	database: DatabaseContext,
 	verifiers: SetupSignInVerifiers
-): Auth<any> {
+) {
 	return betterAuth({
 		appName: 'Aven',
 		baseURL: config.PUBLIC_BASE_URL,
@@ -29,6 +29,17 @@ export function createAuth(
 		secret: config.BETTER_AUTH_SECRET,
 		trustedOrigins: [config.PUBLIC_BASE_URL],
 		database: drizzleAdapter(database.db, { provider: 'pg', schema }),
+		user: {
+			additionalFields: {
+				role: {
+					type: 'string',
+					fieldName: 'role',
+					required: true,
+					defaultValue: 'user',
+					input: false
+				}
+			}
+		},
 		session: {
 			expiresIn: config.BETTER_AUTH_SESSION_MAX_AGE_SECONDS,
 			updateAge: config.BETTER_AUTH_SESSION_UPDATE_AGE_SECONDS
@@ -70,4 +81,4 @@ export function createAuth(
 		]
 	})
 }
-export type AvenAuth = Auth<any>
+export type AvenAuth = ReturnType<typeof createAuth>

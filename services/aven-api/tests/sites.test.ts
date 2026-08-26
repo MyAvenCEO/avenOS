@@ -56,6 +56,7 @@ describe('static site bindings', () => {
 		const firstDirectory = directory.bindings.find((binding) => binding.id === first.site.id)
 		expect(firstDirectory).toBeDefined()
 		expect(firstDirectory?.verification_token_hash).toBe(hashVerificationToken(first.dns.txtValue))
+		expect(firstDirectory?.owner_is_admin).toBe(false)
 		expect(JSON.stringify(directory)).not.toContain(first.dns.txtValue)
 
 		const updated = await sites.update(userId, first.site.id, {
@@ -74,6 +75,25 @@ describe('static site bindings', () => {
 		expect(await sites.listForUser(userId)).toMatchObject([
 			{ id: second.site.id, hostname: 'docs.customer.example' }
 		])
+	})
+
+	test('publishes operator subdomains only while their owner is an admin', async () => {
+		await database.pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ['admin', userId])
+		const operatorSite = await sites.create(userId, {
+			name,
+			hostname: 'preview.aven.ceo',
+			repository: 'myavenceo/operator-site',
+			sourceBranch: 'next',
+			deploymentBranch: 'deploy/operator'
+		})
+		expect(
+			(await sites.directory()).bindings.find((binding) => binding.id === operatorSite.site.id)
+		).toMatchObject({ hostname: 'preview.aven.ceo', owner_is_admin: true })
+
+		await database.pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ['user', userId])
+		expect(
+			(await sites.directory()).bindings.find((binding) => binding.id === operatorSite.site.id)
+		).toBeUndefined()
 	})
 
 	test('does not let another user mutate a site', async () => {

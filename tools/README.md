@@ -5,6 +5,7 @@ security model, ignored local profiles, and detailed usage documentation.
 
 | Tool | Purpose | Entry point |
 | --- | --- | --- |
+| [Account administration](account-admin/README.md) | List identity accounts and promote or demote admins through a least-privileged SSH tunnel | `./tools/account-admin/account-admin.sh` |
 | [Database tunnel](db-tunnel/README.md) | Forward a local port to PostgreSQL through a restricted, per-operator SSH account | `./tools/db-tunnel/connect.sh` |
 | [Stack observer](stack-observe/README.md) | Inspect the deployed Compose stack, public health, and bounded service logs | `./tools/stack-observe/observe.sh` |
 

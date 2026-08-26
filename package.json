@@ -51,6 +51,7 @@
 		"email:compile": "bun run --cwd services/aven-api email:compile",
 		"email:check": "bun run --cwd services/aven-api email:check",
 		"test:infra": "bun run --cwd infrastructure/identity test",
+		"test:account-admin-local": "bash tools/account-admin/local-stack-smoke.sh",
 		"db:migrate:api": "bun run --cwd services/aven-api db:migrate",
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
