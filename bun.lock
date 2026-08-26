@@ -9,8 +9,8 @@
         "@biomejs/biome": "^2.4.14",
         "@commitlint/cli": "^21.0.2",
         "@commitlint/config-conventional": "^21.0.2",
-        "@myavenceo/aven-ceo": "^0.4.1",
-        "@myavenceo/aven-vibes": "^0.1.0",
+        "@myavenceo/aven-ceo": "^0.6.0",
+        "@myavenceo/aven-vibes": "^0.2.1",
         "conventional-changelog-cli": "^5.0.0",
         "semver": "^7.8.4",
         "sharp": "^0.35.3",
@@ -21,7 +21,7 @@
       "version": "26.8.25-next.6",
       "dependencies": {
         "@avenos/aven-ui": "workspace:*",
-        "@myavenceo/aven-ceo": "^0.4.1",
+        "@myavenceo/aven-ceo": "^0.6.0",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-opener": "^2.5.4",
         "@xyflow/svelte": "^1.6.2",
@@ -33,13 +33,11 @@
         "@sveltejs/adapter-static": "^3.0.10",
         "@sveltejs/kit": "^2.57.0",
         "@sveltejs/vite-plugin-svelte": "^7.0.0",
-        "@tailwindcss/vite": "^4.2.4",
         "@tauri-apps/cli": "^2",
         "@types/bun": "^1.3.14",
         "@types/node": "^22.13.9",
         "svelte": "^5.55.2",
         "svelte-check": "^4.4.6",
-        "tailwindcss": "^4.2.4",
         "typescript": "^6.0.2",
         "vite": "^8.0.7",
       },
@@ -84,8 +82,8 @@
       "name": "@avenos/aven-ui",
       "version": "26.8.25-next.6",
       "dependencies": {
-        "@myavenceo/aven-ceo": "^0.4.1",
-        "@myavenceo/aven-vibes": "^0.1.0",
+        "@myavenceo/aven-ceo": "^0.6.0",
+        "@myavenceo/aven-vibes": "^0.2.0",
       },
     },
     "services/aven-api": {
@@ -95,7 +93,7 @@
         "@avenos/artifact-store": "workspace:*",
         "@avenos/aven-hosting": "workspace:*",
         "@better-auth/passkey": "1.6.23",
-        "@myavenceo/aven-ceo": "^0.4.1",
+        "@myavenceo/aven-ceo": "^0.6.0",
         "@polar-sh/sdk": "^0.49.0",
         "better-auth": "1.6.23",
         "dotenv": "17.3.1",
@@ -432,9 +430,9 @@
 
     "@mdit-vue/types": ["@mdit-vue/types@3.0.2", "", {}, "sha512-00aAZ0F0NLik6I6Yba2emGbHLxv+QYrPH00qQ5dFKXlAo1Ll2RHDXwY7nN2WAfrx2pP+WrvSRFTGFCNGdzBDHw=="],
 
-    "@myavenceo/aven-ceo": ["@myavenceo/aven-ceo@0.4.1", "https://npm.pkg.github.com/download/@myavenceo/aven-ceo/0.4.1/1966fb662f2b737b21cb8f934212d4a5cc177880", {}, "sha512-ACBqokpIyyX+puBpvlwdVuOl3Sqq+qPd7L6Cb+Dwp+rEiXbaiPrmTl4MDlwtX/BqqVfQtUldWsVf4QuOS5lfmw=="],
+    "@myavenceo/aven-ceo": ["@myavenceo/aven-ceo@0.6.0", "https://npm.pkg.github.com/download/@myavenceo/aven-ceo/0.6.0/99f0412cc64a32148376f0ab01b51df7e3227364", { "dependencies": { "@myavenceo/aven-vibes": "^0.2.0" } }, "sha512-0K1bULVgua0BJaWvE9fFzBp+zMmSy7AiJuqyYJgdGR3V/L/bNT2lAE11rxld89/jiuAGbENd0KUlg7mK5dlYTw=="],
 
-    "@myavenceo/aven-vibes": ["@myavenceo/aven-vibes@0.1.0", "https://npm.pkg.github.com/download/@myavenceo/aven-vibes/0.1.0/a697786417047c0f54f88c1f6bf0e5d7e5a87d28", { "dependencies": { "dompurify": "^3.3.3", "marked": "^15.0.12" } }, "sha512-f3L/gVSUQe1WYaLZA5FPnElqXeCQ/eGAKSEWjXxMvag6FjzxAcQlBUeH+ftv7ZMQ1DSToIozDSiArYJljNcL/g=="],
+    "@myavenceo/aven-vibes": ["@myavenceo/aven-vibes@0.2.1", "https://npm.pkg.github.com/download/@myavenceo/aven-vibes/0.2.1/12a42803c5eb20eb774816f218da1f5964bf261a", { "dependencies": { "dompurify": "^3.3.3", "marked": "^15.0.12" } }, "sha512-rWt58kQNrY6dzrk+5kZHxUcJ+9vsVugs6WJQ1i4a94SbG7s7/65+0zEWKig5eKdHJcqAZq1KziuHFNB+broKMw=="],
 
     "@napi-rs/canvas": ["@napi-rs/canvas@1.0.8", "", { "optionalDependencies": { "@napi-rs/canvas-android-arm64": "1.0.8", "@napi-rs/canvas-darwin-arm64": "1.0.8", "@napi-rs/canvas-darwin-x64": "1.0.8", "@napi-rs/canvas-linux-arm-gnueabihf": "1.0.8", "@napi-rs/canvas-linux-arm64-gnu": "1.0.8", "@napi-rs/canvas-linux-arm64-musl": "1.0.8", "@napi-rs/canvas-linux-riscv64-gnu": "1.0.8", "@napi-rs/canvas-linux-x64-gnu": "1.0.8", "@napi-rs/canvas-linux-x64-musl": "1.0.8", "@napi-rs/canvas-win32-arm64-msvc": "1.0.8", "@napi-rs/canvas-win32-x64-msvc": "1.0.8" } }, "sha512-/SaLcvlqGWdm0HSCWMgHu7cjJiQXfP8/mOY+6dUyV9flQz7sPBBZ+ed2zYtoukojPmxOaL7bm+d/G4GeWWoN7g=="],
 
