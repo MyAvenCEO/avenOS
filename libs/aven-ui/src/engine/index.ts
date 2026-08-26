@@ -76,6 +76,7 @@ export class AvenUiEngine {
 }
 
 export { StateStore } from './state-store.js'
+export { renderViewToString, type StringRenderOptions } from './string-renderer.js'
 export { validateStyleDef } from './style-validator.js'
 export type {
 	InterfaceDef,
