@@ -28,7 +28,7 @@ onMount(() => {
 <!-- The passkey-linking card's shape: mark, title, lede, then the subject of
      the screen in a `.well` — there the name being linked, here the name being
      bought. The step rail shows the two stages of the confirmation. -->
-<section class="panel stack">
+<section class="panel stack stack-center">
 	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
 	<h1>Zahlung abgeschlossen</h1>
 	<p>Danke — der Kauf ist bei uns angekommen.</p>

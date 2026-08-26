@@ -32,7 +32,7 @@ async function pay() {
 
 <!-- Same card as passkey linking: mark, title, and the subject in a `.well`
      rather than as a bare line of text. -->
-<section class="panel stack">
+<section class="panel stack stack-center">
 	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
 	<h1>Checkout</h1>
 	<div class="well">

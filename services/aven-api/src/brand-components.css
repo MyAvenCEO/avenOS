@@ -6,6 +6,83 @@
  * nothing here needs `!important`. Order is the priority order. */
 @layer tokens, primitives, components, utilities;
 
+@layer primitives {
+	/* The shapes almost every layout is made of. Each is one idea, tuned
+	 * at the call site through a custom property rather than by adding a
+	 * class per value — the native answer to gap-2/gap-4/gap-6. */
+	.stack {
+		display: grid;
+		gap: var(--gap, var(--space-comfortable));
+	}
+
+	.stack-center {
+		justify-items: center;
+		text-align: center;
+	}
+
+	.cluster {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--gap, var(--space-tight));
+		align-items: var(--align, center);
+	}
+
+	.center {
+		box-sizing: content-box;
+		max-inline-size: var(--measure, 34rem);
+		margin-inline: auto;
+		padding-inline: var(--gutter, 0);
+	}
+
+	.grid-auto {
+		display: grid;
+		gap: var(--gap, var(--space-loose));
+		grid-template-columns: repeat(auto-fit, minmax(min(var(--min, 16rem), 100%), 1fr));
+	}
+
+	.sidebar {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--gap, var(--space-loose));
+
+		& > :first-child {
+			flex-basis: var(--side, 16rem);
+			flex-grow: 1;
+		}
+		& > :last-child {
+			flex-basis: 0;
+			flex-grow: 999;
+			min-inline-size: var(--min, 50%);
+		}
+	}
+
+	.switcher {
+		container-type: inline-size;
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--gap, var(--space-loose));
+
+		& > * {
+			flex-grow: 1;
+			flex-basis: calc((var(--threshold, 30rem) - 100%) * 999);
+		}
+	}
+
+	.frame {
+		aspect-ratio: var(--ratio, 16 / 9);
+		overflow: hidden;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+
+		& > * {
+			inline-size: 100%;
+			block-size: 100%;
+			object-fit: cover;
+		}
+	}
+}
+
 @layer components {
 	.card {
 		border-radius: var(--radius-card);
@@ -179,13 +256,6 @@
 		border-radius: var(--radius-card);
 		background: var(--color-surface-raised);
 		box-shadow: var(--shadow-raised);
-	}
-
-	.stack {
-		display: grid;
-		gap: var(--space-comfortable);
-		justify-items: center;
-		text-align: center;
 	}
 
 	.well {
