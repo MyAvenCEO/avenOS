@@ -26,6 +26,36 @@ function capture(cmd: string): string {
 	return execSync(cmd, { cwd: repoRoot, encoding: 'utf8' }).trim()
 }
 
+/**
+ * Stage the release, and refuse to stage a credential.
+ *
+ * `git add -A` is what a release wants — the version bump touches a dozen
+ * manifests and listing them by hand goes stale. It is also indiscriminate,
+ * and CI writes a registry token into `.npmrc` before this ever runs. Three
+ * release commits reached a PUBLIC main carrying a `ghs_` token before anyone
+ * looked, because nothing in the release path did.
+ *
+ * `.npmrc` is excluded explicitly rather than left to `skip-worktree`, which
+ * lives in the runner's index and is one `git checkout` from irrelevance. The
+ * scan after it is the part that matters: it fails the release rather than
+ * publishing the secret.
+ */
+function stageWithoutCredentials(): void {
+	run('git add -A -- . ":(exclude).npmrc"')
+
+	if (capture('git diff --cached --name-only').split('\n').includes('.npmrc')) {
+		throw new Error(
+			'release: .npmrc is staged; it holds the registry token and must never be committed'
+		)
+	}
+
+	// Built at runtime so this source file cannot match its own pattern.
+	const token = new RegExp(`_authToken=[a-z]{2,4}${'_'}`)
+	if (token.test(capture('git diff --cached'))) {
+		throw new Error('release: a registry token is staged for commit; refusing to cut a release')
+	}
+}
+
 function fetchRemoteNext(): string {
 	run('git fetch --quiet origin +refs/heads/next:refs/remotes/origin/next')
 	return capture('git rev-parse refs/remotes/origin/next')
@@ -81,7 +111,7 @@ function main(): void {
 		return
 	}
 
-	run('git add -A')
+	stageWithoutCredentials()
 	run(`git commit -m "chore(release): ${tag} [skip ci]"`)
 	const releaseSha = capture('git rev-parse HEAD')
 	// Publish the branch and annotated tag atomically so neither can land without the

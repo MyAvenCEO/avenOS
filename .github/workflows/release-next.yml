@@ -159,7 +159,18 @@ jobs:
               git merge --strategy=ours --no-ff --no-commit "$RELEASE_SHA"
               bun ./scripts/set-version.ts "${RELEASE_TAG#v}"
               git restore --source="$RELEASE_SHA" -- CHANGELOG.md
-              git add -A
+              # `.npmrc` carries the registry token in CI and `git add -A` does not
+              # discriminate. Excluding it is the fix; the scan is what makes the
+              # fix verifiable rather than assumed.
+              git add -A -- . ':(exclude).npmrc'
+              if git diff --cached --name-only | grep -qx '.npmrc'; then
+                echo "::error::.npmrc is staged; it holds the registry token and must never be committed."
+                exit 1
+              fi
+              if git diff --cached | grep -q '_authToken=[a-z]\{2,4\}_'; then
+                echo "::error::A registry token is staged for commit; refusing to sync a release."
+                exit 1
+              fi
               git commit -m "chore(release): sync $RELEASE_TAG into main [skip ci]"
               candidate="$(git rev-parse HEAD)"
             fi
