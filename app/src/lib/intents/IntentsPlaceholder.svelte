@@ -763,9 +763,7 @@ const DOT: Record<string, string> = {
 					<section class="rounded-xl border border-border bg-surface-card px-4 py-3 text-xs">
 						<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
 							<h2 class="font-semibold">{artifactProcessingStageLabel(selectedStage.key)}</h2>
-							<span class="font-mono text-[length:var(--fs-micro)] text-foreground/35"
-								>{selectedStage.key}</span
-							>
+							<span class="mono-meta">{selectedStage.key}</span>
 							<span
 								class="ml-auto rounded-md bg-surface-soft px-2 py-0.5 font-mono text-[length:var(--fs-micro)]"
 							>
@@ -827,9 +825,7 @@ const DOT: Record<string, string> = {
 									<span class="min-w-0 flex-1 truncate"
 										>{artifactProcessingStageLabel(stage.key)}</span
 									>
-									<span class="shrink-0 font-mono text-[length:var(--fs-micro)] text-foreground/35"
-										>{stage.state}</span
-									>
+									<span class="shrink-0 mono-meta">{stage.state}</span>
 								</button>
 							</li>
 						{/each}
@@ -844,9 +840,7 @@ const DOT: Record<string, string> = {
 					<ul class="flex flex-col gap-2">
 						{#each skillLog as entry (entry.step)}
 							<li class="flex items-baseline gap-3 text-sm">
-								<span class="font-mono text-[length:var(--fs-micro)] text-foreground/35"
-									>{entry.when}</span
-								>
+								<span class="mono-meta">{entry.when}</span>
 								<span class="min-w-0 flex-1">{entry.step}</span>
 								<span
 									class="font-mono text-[length:var(--fs-micro)] {entry.state === 'done'
@@ -918,9 +912,7 @@ const DOT: Record<string, string> = {
 					<div class="w-full pt-2">
 						<div class="flex items-baseline justify-between pb-6">
 							<span class="font-semibold text-sm">{preview.title.replace('.pdf', '')}</span>
-							<span class="font-mono text-[length:var(--fs-micro)] text-foreground/35"
-								>Seite 1 / 2</span
-							>
+							<span class="mono-meta">Seite 1 / 2</span>
 						</div>
 						{#each [92, 100, 78, 96, 60] as w, i (i)}
 							<div class="mb-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
@@ -1144,9 +1136,7 @@ const DOT: Record<string, string> = {
 									>
 										{nameOf(entry.skill)}
 									</button>
-									<span
-										class="ml-auto shrink-0 font-mono text-[length:var(--fs-micro)] text-foreground/35"
-									>
+									<span class="ml-auto shrink-0 mono-meta">
 										{entry.when}
 									</span>
 								</div>
@@ -1507,7 +1497,7 @@ const DOT: Record<string, string> = {
 						: 'bg-progress'}"
 					></span>
 					<span class="font-medium text-xs">{nameOf(s.skill)}</span>
-					<span class="ml-auto font-mono text-[length:var(--fs-micro)] text-foreground/35">
+					<span class="ml-auto mono-meta">
 						{s.state === 'done' ? 'fertig' : s.state === 'waiting' ? 'wartet' : 'läuft'}
 					</span>
 				</div>

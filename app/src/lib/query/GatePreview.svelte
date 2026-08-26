@@ -31,10 +31,7 @@ const { held }: { held: HeldMessage } = $props()
 				</span>
 			{/if}
 			<p class="min-w-0 flex-1 font-medium text-sm">{held.label}</p>
-			<span class="shrink-0 font-mono text-[length:var(--fs-micro)] text-foreground/35">
-				{held.actor}
-				· {held.method}
-			</span>
+			<span class="shrink-0 mono-meta"> {held.actor}· {held.method} </span>
 		</div>
 
 		{#if held.preview}

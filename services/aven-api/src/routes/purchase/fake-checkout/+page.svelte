@@ -30,9 +30,16 @@ async function pay() {
 
 <svelte:head><title>Checkout</title></svelte:head>
 
-<section class="panel auth">
+<!-- Same card as passkey linking: mark, title, and the subject in a `.well`
+     rather than as a bare line of text. -->
+<section class="panel stack">
+	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
 	<h1>Checkout</h1>
-	<p>{params.name} · {params.email}</p>
+	<div class="well">
+		<p class="eyebrow">Kauf für</p>
+		<p class="digits">{params.name}</p>
+		<p class="meta">{params.email}</p>
+	</div>
 	{#if error}
 		<div class="alert">{error}</div>
 	{/if}
