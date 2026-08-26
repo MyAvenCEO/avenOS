@@ -1,35 +1,52 @@
+@import "./brand-theme.css";
+@import "./brand-components.css";
+
 /*
- * The identity service's theme — the brand, not a default stylesheet.
+ * The identity service's theme.
  *
- * These pages are the browser half of avenOS sign-in, so they carry the same
- * palette as the app and the marketing site: the cream ladder, marine ink,
- * one card idiom, pill buttons, Inter.
+ * The palette is no longer spelled here. This file used to open with a `:root`
+ * block of hand-copied hexes under its own names (`--ink`, `--linen`), with a
+ * comment promising "when the brand moves, this block is what changes". It did
+ * not: the block still carried a moss green and a violet that the brand retired
+ * (a moss #2F5D50 and a violet #7E6EAD), and a `--linen` from before the background moved.
  *
- * Tokens are spelled here because this service has no theme layer of its own
- * and needs exactly one. When the brand moves, this block is what changes.
+ * The generated theme above is the source now. What stays below is the ALIASES
+ * this service's own 139 class selectors are written against — each one points
+ * at the canonical token rather than restating a value, so nothing had to be
+ * rewritten to make the brand single-source.
  */
 :root {
-	--ink: #1f2a3d;
-	--marine: #1e293b;
-	--chalk: #f8fafc;
-	--terracotta: #c15b40;
-	--sunflower: #d2a24a;
+	--ink: var(--color-ink);
+	--marine: var(--color-marine);
+	--chalk: var(--color-chalk);
+	--terracotta: var(--color-terracotta);
+	--sunflower: var(--color-sunflower);
 
-	--linen: #f8f6ef;
-	--porcelain: #fffdf7;
-	--eggshell: #f6f3e8;
+	--linen: var(--color-linen);
+	--porcelain: var(--color-porcelain);
+	--eggshell: var(--color-eggshell);
 
-	--border: rgba(31, 42, 61, 0.14);
-	--border-soft: rgba(31, 42, 61, 0.08);
-	--muted: rgba(31, 42, 61, 0.6);
-	--quiet: rgba(31, 42, 61, 0.45);
+	--border: color-mix(in srgb, var(--color-ink) 14%, transparent);
+	--border-soft: color-mix(in srgb, var(--color-ink) var(--tint-hairline-pct, 8%), transparent);
+	--muted: color-mix(in srgb, var(--color-ink) 65%, transparent);
+	--quiet: color-mix(in srgb, var(--color-ink) 50%, transparent);
 
-	font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+	font-family: var(--font-sans);
 	color: var(--ink);
 	background: var(--linen);
 	font-synthesis: none;
 	-webkit-font-smoothing: antialiased;
 }
+
+/*
+ * `.eyebrow` and `.panel` are NOT defined here any more.
+ *
+ * Both existed locally AND in the shared component sheet imported above, and
+ * because this file's rules came second, the local pair silently won — the
+ * shared design system was loaded and then overridden. The local eyebrow was
+ * 10px at 0.14em; the shared one is 11px at 0.08em. That gap is precisely what
+ * having one definition is supposed to close, so the local copies are gone.
+ */
 
 * {
 	box-sizing: border-box;
@@ -40,8 +57,16 @@ body {
 	min-width: 20rem;
 	min-height: 100vh;
 	background:
-		radial-gradient(circle at 90% 5%, rgba(126, 110, 173, 0.1), transparent 28rem),
-		radial-gradient(circle at 5% 95%, rgba(210, 162, 74, 0.1), transparent 30rem);
+		radial-gradient(
+			circle at 90% 5%,
+			color-mix(in srgb, var(--color-anchor) 10%, transparent),
+			transparent 28rem
+		),
+		radial-gradient(
+			circle at 5% 95%,
+			color-mix(in srgb, var(--color-sunflower) 10%, transparent),
+			transparent 30rem
+		);
 }
 
 a {
@@ -131,16 +156,6 @@ footer.site a:hover {
 }
 
 /* The one card: a raised cream panel on a hairline border. */
-.panel {
-	width: min(100%, 34rem);
-	margin-inline: auto;
-	padding: 2.5rem 2rem;
-	border: 1px solid var(--border-soft);
-	border-radius: 1.5rem;
-	background: var(--porcelain);
-	box-shadow: 0 1px 3px rgba(30, 41, 59, 0.05);
-}
-
 .auth,
 .auth form {
 	display: grid;
@@ -260,14 +275,6 @@ button:disabled {
 	line-height: 1.55;
 }
 
-.eyebrow {
-	color: var(--quiet);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
-}
-
 textarea {
 	min-height: 6rem;
 	padding: 0.85rem 1.125rem;
@@ -293,7 +300,7 @@ textarea:focus-visible {
 }
 
 .status .free {
-	color: #2f7a63;
+	color: var(--color-paradise-water);
 	font-weight: 600;
 }
 
@@ -719,7 +726,7 @@ textarea:focus-visible {
 
 .site-status.active {
 	background: rgba(47, 122, 99, 0.1);
-	color: #2f7a63;
+	color: var(--color-paradise-water);
 }
 
 .site-status.error-state {
@@ -875,7 +882,7 @@ textarea:focus-visible {
 }
 
 .device-flow__icon.success {
-	background: #2f5d50;
+	background: var(--color-paradise-water);
 }
 
 .device-flow__icon.error {
@@ -965,7 +972,7 @@ textarea:focus-visible {
 	width: 0.4rem;
 	height: 0.4rem;
 	border-radius: 999px;
-	background: #2f5d50;
+	background: var(--color-paradise-water);
 }
 
 @media (max-width: 40rem) {

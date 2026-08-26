@@ -94,7 +94,9 @@ async function preview(voice: Voice) {
 	<header class="flex flex-col items-center gap-1.5">
 		<!-- The same quiet route stamp the dashboard wears. No Back link: the rail
 		     is one exclusive group, so the gear (or any other entry) leaves. -->
-		<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Settings</p>
+		<p class="text-[length:var(--fs-micro)] uppercase tracking-[var(--tracking-widest)] opacity-35">
+			Settings
+		</p>
 	</header>
 
 	<!-- Phones: the categories become a row above the content instead of a
@@ -109,7 +111,7 @@ async function preview(voice: Voice) {
 						category = c.id
 					}}
 					class="rounded-xl px-3 py-2 text-left text-sm transition-colors {category === c.id
-						? 'border border-foreground/5 bg-surface-raised font-medium shadow-[0_1px_3px_rgba(30,41,59,0.05)]'
+						? 'border border-foreground/8 bg-surface-raised font-medium shadow-[0_1px_3px_rgba(30,41,59,0.05)]'
 						: 'opacity-60 hover:opacity-100'}"
 				>
 					{c.label}
@@ -119,7 +121,9 @@ async function preview(voice: Voice) {
 			<!-- The legal pages, owed from everywhere the product speaks — tiny,
 			     below the concerns, never competing with them. -->
 			<div class="mt-4 hidden border-t border-foreground/8 pt-3 lg:block">
-				<p class="px-3 text-[9px] font-semibold uppercase tracking-[0.16em] opacity-35">
+				<p
+					class="px-3 text-[length:var(--fs-nano)] font-semibold uppercase tracking-[var(--tracking-wider)] opacity-35"
+				>
 					Rechtliches
 				</p>
 				<ul class="mt-1.5 space-y-0.5">
@@ -130,7 +134,7 @@ async function preview(voice: Voice) {
 								target="_blank"
 								rel="noopener noreferrer"
 								onclick={(event) => openLegal(event, link.href)}
-								class="block px-3 py-0.5 text-[9px] leading-relaxed text-foreground/40 transition-colors hover:text-foreground/75"
+								class="block px-3 py-0.5 text-[length:var(--fs-nano)] leading-relaxed text-foreground/35 transition-colors hover:text-foreground/80"
 							>
 								{link.label}
 							</a>
@@ -156,7 +160,7 @@ async function preview(voice: Voice) {
 
 					{#if !isTauri()}
 						<p
-							class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+							class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 						>
 							The voice only runs in the app — there is nothing to hear in the browser.
 						</p>
@@ -168,7 +172,7 @@ async function preview(voice: Voice) {
 								class="group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-colors {settings.voice ===
 							voice
 								? 'border-primary bg-surface-raised'
-								: 'border-foreground/5 bg-surface-raised'}"
+								: 'border-foreground/8 bg-surface-raised'}"
 							>
 								<button
 									type="button"
@@ -202,7 +206,7 @@ async function preview(voice: Voice) {
 										disabled={playing !== null}
 										title="Play"
 										aria-label="Play voice {voice}"
-										class="shrink-0 rounded-full border border-border p-2 transition-colors hover:bg-primary/5 disabled:opacity-30"
+										class="shrink-0 rounded-full border border-border p-2 transition-colors hover:bg-primary/8 disabled:opacity-30"
 									>
 										{#if playing === voice}
 											<!-- sounding: a small filled square, same as stop elsewhere -->
@@ -223,7 +227,7 @@ async function preview(voice: Voice) {
 
 					{#if failure}
 						<p
-							class="rounded-xl border border-error/30 bg-error-muted px-4 py-3 text-xs text-error-strong"
+							class="rounded-xl border border-error/25 bg-error-muted px-4 py-3 text-xs text-error-strong"
 						>
 							{failure}
 						</p>
@@ -235,7 +239,7 @@ async function preview(voice: Voice) {
 				<section class="flex flex-col gap-3">
 					<h2 class="text-sm">Model</h2>
 					<p
-						class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 font-mono text-xs opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+						class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 font-mono text-xs opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 					>
 						deepseek/deepseek-v4-flash-0731 · RedPill TEE
 					</p>

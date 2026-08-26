@@ -127,9 +127,9 @@ const STATE_ACCENT: Record<
 
 /** What archive wears instead: the page's own ink, held well back. */
 const NO_ACCENT = {
-	edge: 'border-l-foreground/20',
-	text: 'text-foreground/45',
-	fill: 'bg-foreground/70 text-background'
+	edge: 'border-l-foreground/15',
+	text: 'text-foreground/50',
+	fill: 'bg-foreground/25 text-background'
 }
 
 /**
@@ -519,7 +519,7 @@ const DOT: Record<string, string> = {
 		aria-current={viewId === id ? 'page' : undefined}
 		class="rounded-full px-3 py-1 font-medium text-xs transition-colors {viewId === id
 			? 'bg-primary text-primary-foreground'
-			: 'border border-foreground/10 text-foreground/60 hover:bg-surface-card'}"
+			: 'border border-foreground/8 text-foreground/65 hover:bg-surface-card'}"
 	>
 		{label}
 	</button>
@@ -532,7 +532,7 @@ const DOT: Record<string, string> = {
 			preview = null
 			skillView = null
 		}}
-		class="ml-auto shrink-0 rounded-full border border-foreground/10 px-3 py-1 text-foreground/60 text-xs transition-colors hover:bg-surface-card"
+		class="ml-auto shrink-0 rounded-full border border-foreground/8 px-3 py-1 text-foreground/65 text-xs transition-colors hover:bg-surface-card"
 	>
 		← Zurück zum Verlauf
 	</button>
@@ -554,7 +554,7 @@ const DOT: Record<string, string> = {
 		     start their cards on one edge and read as one row. -->
 		<h2 class="flex justify-center px-1 pt-1">
 			<span
-				class="rounded-full border border-foreground/10 px-3 py-1 font-medium text-foreground/60 text-xs"
+				class="rounded-full border border-foreground/8 px-3 py-1 font-medium text-foreground/65 text-xs"
 			>
 				Intents · {activeIntents.length}
 			</span>
@@ -575,7 +575,7 @@ const DOT: Record<string, string> = {
 				}}
 				class="rounded-xl border text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
 					? `border-transparent px-4 py-3 ${accent.fill}`
-					: `border-l-[4px] border-foreground/5 bg-surface-raised px-4 py-3 hover:bg-surface-card-hover ${accent.edge}`}"
+					: `border-l-[4px] border-foreground/8 bg-surface-raised px-4 py-3 hover:bg-surface-card-hover ${accent.edge}`}"
 			>
 				<!-- The selected card: same size and corners as every other, filled
 				     with its state's color. -->
@@ -585,8 +585,8 @@ const DOT: Record<string, string> = {
 						{intent.title}
 					</p>
 					<span
-						class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {sel
-							? 'bg-white/20 text-current'
+						class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[length:var(--fs-nano)] {sel
+							? 'bg-white/15 text-current'
 							: TYPE_BADGE}"
 					>
 						{intent.type}
@@ -595,19 +595,20 @@ const DOT: Record<string, string> = {
 				<!-- row 2: where it came from, when, and where it stands. On the
 				     filled card the secondary text is the fill's foreground, dimmed. -->
 				<div class="flex items-center gap-2 pt-1 {sel ? 'text-current' : ''}">
-					<span class="truncate text-[0.6875rem] {sel ? 'opacity-75' : 'text-foreground/45'}"
+					<span
+						class="truncate text-[length:var(--fs-eyebrow)] {sel ? 'opacity-75' : 'text-foreground/50'}"
 						>{intent.source}</span
 					>
 					<span
-						class="ml-auto shrink-0 font-mono text-[0.625rem] {sel ? 'opacity-60' : 'text-foreground/35'}"
+						class="ml-auto shrink-0 font-mono text-[length:var(--fs-micro)] {sel ? 'opacity-60' : 'text-foreground/35'}"
 					>
 						{intent.when}
 					</span>
 					{#if intent.deadline}
 						<span
-							class="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[0.5625rem] {sel
+							class="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[length:var(--fs-nano)] {sel
 								? 'bg-white/25 text-current'
-								: 'bg-error/10 text-error-ink'}"
+								: 'bg-error/8 text-error-ink'}"
 						>
 							{intent.deadline}
 						</span>
@@ -648,18 +649,22 @@ const DOT: Record<string, string> = {
 						skillView = null
 						shell.detail = true
 					}}
-					class="rounded-xl border border-l-[4px] border-l-foreground/20 px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
+					class="rounded-xl border border-l-[4px] border-l-foreground/15 px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
 						? 'border-foreground/15 bg-surface-card-selected opacity-100'
-						: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
+						: 'border-foreground/8 bg-surface-raised hover:border-foreground/15'}"
 				>
 					<div class="flex items-baseline gap-2">
 						<p class="min-w-0 flex-1 font-medium text-xs leading-snug">{intent.title}</p>
-						<span class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[0.5625rem] {TYPE_BADGE}">
+						<span
+							class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[length:var(--fs-nano)] {TYPE_BADGE}"
+						>
 							{intent.type}
 						</span>
 					</div>
 					<div class="flex items-center gap-2 pt-1">
-						<span class="truncate text-[0.6875rem] text-foreground/45">{intent.source}</span>
+						<span class="truncate text-[length:var(--fs-eyebrow)] text-foreground/50"
+							>{intent.source}</span
+						>
 					</div>
 				</button>
 			{/each}
@@ -689,7 +694,7 @@ const DOT: Record<string, string> = {
 			onscroll={() => {
 				if (centerEl) stick = centerEl.scrollHeight - centerEl.clientHeight - centerEl.scrollTop < 48
 			}}
-			class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/5 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-foreground/8 bg-surface-raised p-6 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			{#if view}
 				<!-- A VIEW in front: the window actor's surface, full height. -->
@@ -709,7 +714,7 @@ const DOT: Record<string, string> = {
 					></span>
 					<div class="min-w-0">
 						<h1 class="font-semibold text-lg leading-tight">{nameOf(skillView.skill)}</h1>
-						<p class="text-foreground/45 text-xs">{skillView.note}</p>
+						<p class="text-foreground/50 text-xs">{skillView.note}</p>
 					</div>
 					{@render backButton()}
 				</header>
@@ -720,11 +725,11 @@ const DOT: Record<string, string> = {
 				<div
 					bind:clientWidth={sfW}
 					bind:clientHeight={sfH}
-					class="h-[420px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/60"
+					class="h-[420px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/25"
 				>
 					{#key skillView.skill}
 						{#if sfNodes.length === 0}
-							<p class="flex h-full items-center justify-center text-foreground/40 text-sm">
+							<p class="flex h-full items-center justify-center text-foreground/35 text-sm">
 								{nameOf(skillView.skill)}
 								— wartet auf den ersten Verarbeitungsschritt.
 							</p>
@@ -758,14 +763,16 @@ const DOT: Record<string, string> = {
 					<section class="rounded-xl border border-border bg-surface-card px-4 py-3 text-xs">
 						<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
 							<h2 class="font-semibold">{artifactProcessingStageLabel(selectedStage.key)}</h2>
-							<span class="font-mono text-[0.625rem] text-foreground/40">{selectedStage.key}</span>
+							<span class="font-mono text-[length:var(--fs-micro)] text-foreground/35"
+								>{selectedStage.key}</span
+							>
 							<span
-								class="ml-auto rounded-md bg-surface-soft px-2 py-0.5 font-mono text-[0.625rem]"
+								class="ml-auto rounded-md bg-surface-soft px-2 py-0.5 font-mono text-[length:var(--fs-micro)]"
 							>
 								{selectedStage.state}
 							</span>
 						</div>
-						<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-foreground/55">
+						<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-foreground/50">
 							{#if selectedStage.procedureKey}
 								<span>Procedure · <span class="font-mono">{selectedStage.procedureKey}</span></span>
 							{/if}
@@ -777,13 +784,15 @@ const DOT: Record<string, string> = {
 							{/if}
 						</div>
 						{#if selectedStage.dependsOn?.length}
-							<p class="mt-2 text-foreground/55">
+							<p class="mt-2 text-foreground/50">
 								Needs · <span class="font-mono">{selectedStage.dependsOn.join(' · ')}</span>
 							</p>
 						{/if}
 						{#if selectedStageArtifacts.length}
-							<div class="mt-2 border-border/70 border-t pt-2">
-								<p class="font-semibold text-foreground/45 text-[0.625rem] uppercase tracking-wide">
+							<div class="mt-2 border-border/25 border-t pt-2">
+								<p
+									class="font-semibold text-foreground/50 text-[length:var(--fs-micro)] uppercase tracking-wide"
+								>
 									Outputs
 								</p>
 								<ul class="mt-1 flex flex-wrap gap-1.5">
@@ -810,15 +819,15 @@ const DOT: Record<string, string> = {
 									onclick={() => {
 										selectedStageKey = selectedStageKey === stage.key ? null : stage.key
 									}}
-									class="flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors {selectedStageKey === stage.key ? 'border-primary/30 bg-surface-card-selected' : 'border-border/70 bg-surface-soft/45 hover:bg-surface-card'}"
+									class="flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors {selectedStageKey === stage.key ? 'border-primary/25 bg-surface-card-selected' : 'border-border/25 bg-surface-soft/25 hover:bg-surface-card'}"
 								>
 									<span
-										class="size-2 shrink-0 rounded-full {stage.state === 'succeeded' ? 'bg-success' : stage.state === 'failed' ? 'bg-error' : stage.state === 'needs_review' ? 'bg-info' : stage.state === 'running' || stage.state === 'publishing' ? 'animate-pulse bg-progress' : stage.state === 'retry_wait' ? 'animate-pulse bg-warning' : 'bg-foreground/20'}"
+										class="size-2 shrink-0 rounded-full {stage.state === 'succeeded' ? 'bg-success' : stage.state === 'failed' ? 'bg-error' : stage.state === 'needs_review' ? 'bg-info' : stage.state === 'running' || stage.state === 'publishing' ? 'animate-pulse bg-progress' : stage.state === 'retry_wait' ? 'animate-pulse bg-warning' : 'bg-foreground/15'}"
 									></span>
 									<span class="min-w-0 flex-1 truncate"
 										>{artifactProcessingStageLabel(stage.key)}</span
 									>
-									<span class="shrink-0 font-mono text-[0.625rem] text-foreground/40"
+									<span class="shrink-0 font-mono text-[length:var(--fs-micro)] text-foreground/35"
 										>{stage.state}</span
 									>
 								</button>
@@ -835,10 +844,12 @@ const DOT: Record<string, string> = {
 					<ul class="flex flex-col gap-2">
 						{#each skillLog as entry (entry.step)}
 							<li class="flex items-baseline gap-3 text-sm">
-								<span class="font-mono text-[0.625rem] text-foreground/35">{entry.when}</span>
+								<span class="font-mono text-[length:var(--fs-micro)] text-foreground/35"
+									>{entry.when}</span
+								>
 								<span class="min-w-0 flex-1">{entry.step}</span>
 								<span
-									class="font-mono text-[0.625rem] {entry.state === 'done'
+									class="font-mono text-[length:var(--fs-micro)] {entry.state === 'done'
 								? 'text-success-ink'
 								: entry.state === 'waiting'
 									? 'text-error-ink'
@@ -854,13 +865,13 @@ const DOT: Record<string, string> = {
 				<!-- ARTIFACT PREVIEW: full width — header, a divider, the view. -->
 				<header class="flex items-center gap-2">
 					<span
-						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
+						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[length:var(--fs-nano)] text-foreground/50"
 					>
 						{KIND_LABEL[preview.kind]}
 					</span>
 					<div class="min-w-0">
 						<h1 class="truncate font-semibold text-lg leading-tight">{preview.title}</h1>
-						<p class="text-foreground/45 text-xs">{preview.note}</p>
+						<p class="text-foreground/50 text-xs">{preview.note}</p>
 					</div>
 					{@render backButton()}
 				</header>
@@ -869,13 +880,13 @@ const DOT: Record<string, string> = {
 				{#if preview.artifactId}
 					<div class="flex w-full flex-col gap-3 pt-2">
 						<div
-							class="rounded-lg bg-surface-soft px-4 py-3 font-mono text-[0.6875rem] text-foreground/60"
+							class="rounded-lg bg-surface-soft px-4 py-3 font-mono text-[length:var(--fs-eyebrow)] text-foreground/65"
 						>
 							<div>artifact {preview.artifactId}</div>
 							<div>{preview.typeKey}{preview.stageKey ? ` · ${preview.stageKey}` : ''}</div>
 						</div>
 						{#if previewLoading}
-							<p class="text-sm text-foreground/45">Loading artifact view…</p>
+							<p class="text-sm text-foreground/50">Loading artifact view…</p>
 						{:else if previewText !== null}
 							<pre
 								class="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-4 text-xs"
@@ -893,12 +904,12 @@ const DOT: Record<string, string> = {
 								class="h-[65vh] w-full rounded-xl border border-border"
 							></iframe>
 						{:else if previewError}
-							<div class="rounded-lg border border-warning/35 bg-warning/12 px-4 py-3 text-xs">
+							<div class="rounded-lg border border-warning/25 bg-warning/15 px-4 py-3 text-xs">
 								<p class="font-semibold">No direct content view</p>
-								<p class="pt-1 text-foreground/60">{previewError}</p>
+								<p class="pt-1 text-foreground/65">{previewError}</p>
 							</div>
 						{:else}
-							<p class="text-sm text-foreground/45">
+							<p class="text-sm text-foreground/50">
 								This artifact has no supported single-file view.
 							</p>
 						{/if}
@@ -907,13 +918,17 @@ const DOT: Record<string, string> = {
 					<div class="w-full pt-2">
 						<div class="flex items-baseline justify-between pb-6">
 							<span class="font-semibold text-sm">{preview.title.replace('.pdf', '')}</span>
-							<span class="font-mono text-[0.625rem] text-foreground/40">Seite 1 / 2</span>
+							<span class="font-mono text-[length:var(--fs-micro)] text-foreground/35"
+								>Seite 1 / 2</span
+							>
 						</div>
 						{#each [92, 100, 78, 96, 60] as w, i (i)}
 							<div class="mb-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
 						{/each}
-						<div class="mt-5 rounded-lg border border-warning/35 bg-warning/12 px-4 py-3">
-							<p class="font-mono text-warning-ink text-[0.625rem] uppercase tracking-wide">
+						<div class="mt-5 rounded-lg border border-warning/25 bg-warning/15 px-4 py-3">
+							<p
+								class="font-mono text-warning-ink text-[length:var(--fs-micro)] uppercase tracking-wide"
+							>
 								Extrahiert
 							</p>
 							<p class="pt-1 text-xs leading-relaxed">{preview.note}</p>
@@ -926,10 +941,12 @@ const DOT: Record<string, string> = {
 					<div class="w-full pt-2">
 						<div class="flex items-center gap-3">
 							<span
-								class="flex size-5 items-center justify-center rounded-md border-2 border-foreground/20"
+								class="flex size-5 items-center justify-center rounded-md border-2 border-foreground/15"
 							></span>
 							<span class="flex-1 font-medium text-sm">{preview.title}</span>
-							<span class="rounded-full bg-surface-soft px-2 py-0.5 font-mono text-[0.625rem]">
+							<span
+								class="rounded-full bg-surface-soft px-2 py-0.5 font-mono text-[length:var(--fs-micro)]"
+							>
 								todos
 							</span>
 						</div>
@@ -938,10 +955,10 @@ const DOT: Record<string, string> = {
 				{:else if preview.kind === 'calendar'}
 					<div class="flex w-full items-center gap-4 pt-2">
 						<div
-							class="flex size-14 flex-col items-center justify-center rounded-xl bg-error/10 text-error-ink"
+							class="flex size-14 flex-col items-center justify-center rounded-xl bg-error/8 text-error-ink"
 						>
 							<span class="font-semibold text-lg leading-none">15</span>
-							<span class="pt-0.5 font-mono text-[0.5625rem] uppercase">Sep</span>
+							<span class="pt-0.5 font-mono text-[length:var(--fs-nano)] uppercase">Sep</span>
 						</div>
 						<div class="min-w-0">
 							<p class="font-medium text-sm">{preview.title}</p>
@@ -952,7 +969,7 @@ const DOT: Record<string, string> = {
 					<div class="w-full pt-2">
 						<div class="flex items-center gap-4">
 							<span
-								class="flex size-12 items-center justify-center rounded-full bg-primary/12 font-semibold text-primary text-sm"
+								class="flex size-12 items-center justify-center rounded-full bg-primary/15 font-semibold text-primary text-sm"
 							>
 								{preview.title.slice(0, 2).toUpperCase()}
 							</span>
@@ -963,39 +980,41 @@ const DOT: Record<string, string> = {
 						</div>
 						<div class="mt-4 grid grid-cols-2 gap-2 text-xs">
 							<div class="rounded-lg bg-surface-soft px-3 py-2">
-								<span class="text-foreground/40">Bezug</span><br>3 Intents · 2 Dokumente
+								<span class="text-foreground/35">Bezug</span><br>3 Intents · 2 Dokumente
 							</div>
 							<div class="rounded-lg bg-surface-soft px-3 py-2">
-								<span class="text-foreground/40">Zuletzt</span><br>heute · Brief eingegangen
+								<span class="text-foreground/35">Zuletzt</span><br>heute · Brief eingegangen
 							</div>
 						</div>
 					</div>
 				{:else if preview.kind === 'statement'}
 					<div class="w-full pt-2">
 						{#each [{ d: '28.07.', t: 'Miete August', a: '−1.150,00 €', m: 'abgeglichen ✓' }, { d: '25.07.', t: 'Möbelhaus Nord GmbH', a: '−249,00 €', m: 'Rechnung zugeordnet ✓' }, { d: '24.07.', t: 'Gehalt', a: '+3.480,00 €', m: '' }] as row (row.d + row.t)}
-							<div class="flex items-center gap-3 border-border/60 border-b py-2.5 text-sm">
-								<span class="w-14 font-mono text-foreground/40 text-xs">{row.d}</span>
+							<div class="flex items-center gap-3 border-border/25 border-b py-2.5 text-sm">
+								<span class="w-14 font-mono text-foreground/35 text-xs">{row.d}</span>
 								<span class="min-w-0 flex-1 truncate">{row.t}</span>
 								<span class="font-mono {row.a.startsWith('+') ? 'text-success-ink' : ''}"
 									>{row.a}</span
 								>
-								<span class="w-40 text-right text-[0.6875rem] text-foreground/40">{row.m}</span>
+								<span class="w-40 text-right text-[length:var(--fs-eyebrow)] text-foreground/35"
+									>{row.m}</span
+								>
 							</div>
 						{/each}
 					</div>
 				{:else}
 					<!-- brain entity: an Obsidian-style markdown note with wikilinks -->
-					<div class="w-full max-w-2xl pt-2 font-mono text-[13px] leading-relaxed">
+					<div class="w-full max-w-2xl pt-2 font-mono text-[length:var(--fs-body)] leading-relaxed">
 						<p class="text-foreground/35">---</p>
-						<p class="text-foreground/55">
+						<p class="text-foreground/50">
 							tags: <span class="text-warning-ink">#versicherung #frist</span>
 						</p>
-						<p class="text-foreground/55">erstellt: 2025-08-12 · quelle: inbox</p>
+						<p class="text-foreground/50">erstellt: 2025-08-12 · quelle: inbox</p>
 						<p class="pb-3 text-foreground/35">---</p>
 						<h1 class="pb-2 font-sans font-semibold text-xl">
 							{preview.title.replaceAll('[', '').replaceAll(']', '')}
 						</h1>
-						<p class="pb-3 text-foreground/75">
+						<p class="pb-3 text-foreground/80">
 							Sammelt alles rund um Versicherungen in 2025. Der Brief der
 							<span
 								class="cursor-pointer text-primary underline decoration-primary/30 underline-offset-2"
@@ -1012,18 +1031,18 @@ const DOT: Record<string, string> = {
 								>[[Fristen 2025]]</span
 							>.
 						</p>
-						<p class="pb-1 text-foreground/75">## Offen</p>
-						<p class="pb-0.5 text-foreground/75">
-							- [ ] Nachweis einreichen <span class="text-foreground/40">(fällig 12.09.)</span>
+						<p class="pb-1 text-foreground/80">## Offen</p>
+						<p class="pb-0.5 text-foreground/80">
+							- [ ] Nachweis einreichen <span class="text-foreground/35">(fällig 12.09.)</span>
 						</p>
-						<p class="pb-3 text-foreground/75">
+						<p class="pb-3 text-foreground/80">
 							- [x] <span class="line-through opacity-60">Brief archivieren</span>
 						</p>
-						<p class="pb-1 text-foreground/75">## Verknüpft</p>
+						<p class="pb-1 text-foreground/80">## Verknüpft</p>
 						<div class="flex flex-wrap gap-1.5 pb-4">
 							{#each ['[[Techniker Krankenkasse]]', '[[Einkommensnachweis]]', '[[Fristen 2025]]', '[[Steuer 2023]]'] as link (link)}
 								<span
-									class="cursor-pointer rounded-md bg-primary/10 px-2 py-0.5 text-primary text-xs"
+									class="cursor-pointer rounded-md bg-primary/8 px-2 py-0.5 text-primary text-xs"
 									>{link}</span
 								>
 							{/each}
@@ -1034,7 +1053,7 @@ const DOT: Record<string, string> = {
 							>
 								Backlinks · 3
 							</p>
-							<p class="text-foreground/55 text-xs">
+							<p class="text-foreground/50 text-xs">
 								[[Krankenkasse: Nachweis bis 15.09.]] · [[Steuer 2023]] · [[Post-Eingang August]]
 							</p>
 						</div>
@@ -1046,26 +1065,28 @@ const DOT: Record<string, string> = {
 				     the list is off screen (phones, tablets) is it repeated here. -->
 				<header class="lg:hidden">
 					<div class="flex items-center gap-2">
-						<span class="rounded-full px-2 py-0.5 font-mono text-[0.625rem] {TYPE_BADGE}">
+						<span
+							class="rounded-full px-2 py-0.5 font-mono text-[length:var(--fs-micro)] {TYPE_BADGE}"
+						>
 							{selected.type}
 						</span>
 						{#if selected.deadline}
 							<span
-								class="rounded-full bg-error/10 px-2 py-0.5 font-mono text-error-ink text-[0.625rem]"
+								class="rounded-full bg-error/8 px-2 py-0.5 font-mono text-error-ink text-[length:var(--fs-micro)]"
 							>
 								{selected.deadline}
 							</span>
 						{/if}
 					</div>
 					<h1 class="pt-2 font-semibold text-xl leading-tight">{selected.title}</h1>
-					<p class="pt-1 text-foreground/45 text-xs">{selected.source} · {selected.when}</p>
+					<p class="pt-1 text-foreground/50 text-xs">{selected.source} · {selected.when}</p>
 				</header>
 
 				<ol class="flex flex-col">
 					{#each logEntries as entry, i (entry.step + i)}
 						<li class="relative flex gap-3 pb-5">
 							{#if i < selected.log.length - 1}
-								<span class="absolute top-6 bottom-0 left-[11px] w-px bg-foreground/10"></span>
+								<span class="absolute top-6 bottom-0 left-[11px] w-px bg-foreground/8"></span>
 							{/if}
 							<span
 								class="z-10 mt-0.5 flex size-[23px] shrink-0 items-center justify-center rounded-full {DOT[
@@ -1119,11 +1140,13 @@ const DOT: Record<string, string> = {
 									skillView = selected.skills.find((s) => s.skill === entry.skill) ?? null
 									preview = null
 								}}
-										class="rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[0.5625rem] text-foreground/55 transition-colors hover:bg-surface-card-selected"
+										class="rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[length:var(--fs-nano)] text-foreground/50 transition-colors hover:bg-surface-card-selected"
 									>
 										{nameOf(entry.skill)}
 									</button>
-									<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/35">
+									<span
+										class="ml-auto shrink-0 font-mono text-[length:var(--fs-micro)] text-foreground/35"
+									>
 										{entry.when}
 									</span>
 								</div>
@@ -1133,11 +1156,11 @@ const DOT: Record<string, string> = {
 								{#if entry.card}
 									<div class="mt-2 rounded-xl border border-border bg-surface-card px-4 py-3">
 										<p class="font-medium text-xs">{entry.card.title}</p>
-										<p class="pt-1 text-foreground/55 text-xs leading-relaxed">
+										<p class="pt-1 text-foreground/50 text-xs leading-relaxed">
 											{entry.card.text}
 										</p>
 										{#if entry.hitl}
-											<p class="pt-2 font-mono text-error-ink text-[0.625rem]">
+											<p class="pt-2 font-mono text-error-ink text-[length:var(--fs-micro)]">
 												→ wartet in der globalen Freigabe-Leiste über der Voice-Pill
 											</p>
 										{/if}
@@ -1152,7 +1175,7 @@ const DOT: Record<string, string> = {
 				     session — what you said and what the system said back, the
 				     views it put on screen, what its tools just did. -->
 				{#if chat.turns.length > 0 || activity.current}
-					<div class="flex flex-col gap-2 border-foreground/10 border-t pt-4">
+					<div class="flex flex-col gap-2 border-foreground/8 border-t pt-4">
 						{#each chat.turns as turn (turn.id)}
 							{#if turn.attachment}
 								{@const file = turn.attachment}
@@ -1163,19 +1186,24 @@ const DOT: Record<string, string> = {
 								{@const metadataHighlights = artifactMetadataHighlights(processing)}
 								<div class="flex justify-end">
 									<div
-										class="w-full max-w-[28rem] overflow-hidden rounded-2xl border border-foreground/10 bg-surface-raised shadow-sm"
+										class="w-full max-w-[28rem] overflow-hidden rounded-2xl border border-foreground/8 bg-surface-raised shadow-sm"
 									>
 										<div class="flex items-start gap-3 px-3.5 py-3">
 											<span
-												class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
+												class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary"
 												aria-hidden="true"
 												>▤</span
 											>
 											<div class="min-w-0 flex-1">
-												<p class="truncate font-medium text-[13px]" title={file.originalName}>
+												<p
+													class="truncate font-medium text-[length:var(--fs-body)]"
+													title={file.originalName}
+												>
 													{file.originalName}
 												</p>
-												<div class="mt-0.5 flex items-center gap-2 text-[11px] text-foreground/50">
+												<div
+													class="mt-0.5 flex items-center gap-2 text-[length:var(--fs-eyebrow)] text-foreground/50"
+												>
 													<span>{formatBytes(file.length)}</span>
 													<span aria-hidden="true">·</span>
 													<span
@@ -1187,7 +1215,7 @@ const DOT: Record<string, string> = {
 											</div>
 											{#if file.status !== 'failed' && file.status !== 'committed'}
 												<span
-													class="shrink-0 font-mono text-[11px] tabular-nums text-foreground/55"
+													class="shrink-0 font-mono text-[length:var(--fs-eyebrow)] tabular-nums text-foreground/50"
 												>
 													{file.progress}%
 												</span>
@@ -1202,14 +1230,16 @@ const DOT: Record<string, string> = {
 												></div>
 											</div>
 										{:else if file.status === 'committed' && file.artifactId}
-											<div class="border-foreground/8 border-t px-3.5 py-2.5 text-[10px]">
+											<div
+												class="border-foreground/8 border-t px-3.5 py-2.5 text-[length:var(--fs-micro)]"
+											>
 												<div
-													class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-foreground/45"
+													class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-foreground/50"
 												>
 													<span class="uppercase tracking-wide">Artifact</span>
 													<span class="select-all font-mono">{file.artifactId}</span>
 													<span aria-hidden="true">·</span>
-													<span class="font-medium text-foreground/75">{description}</span>
+													<span class="font-medium text-foreground/80">{description}</span>
 													{#if processingWarning !== ''}
 														<span
 															class="cursor-help text-warning-ink text-xs"
@@ -1222,7 +1252,9 @@ const DOT: Record<string, string> = {
 												</div>
 
 												{#if processing}
-													<div class="mt-2 flex items-center justify-between gap-3 text-[11px]">
+													<div
+														class="mt-2 flex items-center justify-between gap-3 text-[length:var(--fs-eyebrow)]"
+													>
 														<span
 															class={processing.state === 'failed'
 															? 'text-error'
@@ -1231,11 +1263,11 @@ const DOT: Record<string, string> = {
 																? 'text-warning-ink'
 																: processing.state === 'succeeded'
 																	? 'text-success'
-																	: 'text-foreground/55'}
+																	: 'text-foreground/50'}
 															>{processingProgress.label}</span
 														>
 														{#if processingProgress.total > 0}
-															<span class="font-mono tabular-nums text-foreground/40">
+															<span class="font-mono tabular-nums text-foreground/35">
 																{processingProgress.completed}/{processingProgress.total}
 															</span>
 														{/if}
@@ -1257,7 +1289,9 @@ const DOT: Record<string, string> = {
 													{/if}
 
 													{#if processing.summary}
-														<p class="mt-2 text-foreground/55 text-[11px] leading-relaxed">
+														<p
+															class="mt-2 text-foreground/50 text-[length:var(--fs-eyebrow)] leading-relaxed"
+														>
 															{processing.summary}
 														</p>
 													{/if}
@@ -1265,7 +1299,7 @@ const DOT: Record<string, string> = {
 														<div class="mt-2 flex flex-wrap gap-1.5">
 															{#each metadataHighlights as value}
 																<span
-																	class="rounded-full bg-foreground/6 px-2 py-0.5 text-foreground/55 text-[10px]"
+																	class="rounded-full bg-foreground/8 px-2 py-0.5 text-foreground/50 text-[length:var(--fs-micro)]"
 																	>{value}</span
 																>
 															{/each}
@@ -1275,7 +1309,7 @@ const DOT: Record<string, string> = {
 											</div>
 										{:else if file.status === 'failed'}
 											<p
-												class="border-error/15 border-t bg-error-muted px-3.5 py-2 text-error-strong text-[11px]"
+												class="border-error/15 border-t bg-error-muted px-3.5 py-2 text-error-strong text-[length:var(--fs-eyebrow)]"
 											>
 												{file.error ?? 'The file could not be uploaded.'}
 											</p>
@@ -1314,7 +1348,7 @@ const DOT: Record<string, string> = {
 							{@const entry = activity.current}
 							<div class="flex gap-2 rounded-xl border border-border bg-surface-card px-3 py-2">
 								<span
-									class="w-3 shrink-0 text-center font-mono text-[13px]"
+									class="w-3 shrink-0 text-center font-mono text-[length:var(--fs-body)]"
 									class:text-success={entry.kind === 'done' || entry.kind === 'created'}
 									class:text-progress-ink={entry.kind === 'doing'}
 									class:text-error={entry.kind === 'deleted' || entry.kind === 'failed'}
@@ -1370,21 +1404,24 @@ const DOT: Record<string, string> = {
 				class="relative w-full overflow-hidden rounded-2xl border-2 border-primary bg-surface-raised shadow-[0_4px_16px_rgba(30,41,59,0.12)]"
 			>
 				{#if chat.routing !== null}
-					<div class="min-h-12 py-3.5 pr-14 pl-4 text-[13px] leading-5" aria-live="polite">
-						<p class="whitespace-pre-wrap text-foreground/60">{chat.routing}</p>
+					<div
+						class="min-h-12 py-3.5 pr-14 pl-4 text-[length:var(--fs-body)] leading-5"
+						aria-live="polite"
+					>
+						<p class="whitespace-pre-wrap text-foreground/65">{chat.routing}</p>
 						{#if chat.routingReply !== ''}
 							<!-- The answer, as it arrives, still here: the request has
 							     not settled into a stream yet. -->
-							<p class="whitespace-pre-wrap pt-2 text-foreground/85">{chat.routingReply}</p>
+							<p class="whitespace-pre-wrap pt-2 text-foreground/80">{chat.routingReply}</p>
 						{/if}
 					</div>
 					<span
 						title="wird zugeordnet"
 						aria-label="wird zugeordnet"
-						class="absolute right-1.5 bottom-1.5 flex size-9 items-center justify-center rounded-full bg-primary/10"
+						class="absolute right-1.5 bottom-1.5 flex size-9 items-center justify-center rounded-full bg-primary/8"
 					>
 						<span
-							class="size-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
+							class="size-4 animate-spin rounded-full border-2 border-primary/25 border-t-primary"
 						></span>
 					</span>
 				{:else}
@@ -1395,7 +1432,7 @@ const DOT: Record<string, string> = {
 						onblur={() => composer.dismiss()}
 						rows="1"
 						placeholder="Sprich — oder schreib…"
-						class="field-sizing-content block max-h-60 min-h-12 w-full resize-none bg-transparent py-3.5 pr-14 pl-4 text-[13px] text-foreground/80 leading-5 outline-none placeholder:text-foreground/35"
+						class="field-sizing-content block max-h-60 min-h-12 w-full resize-none bg-transparent py-3.5 pr-14 pl-4 text-[length:var(--fs-body)] text-foreground/80 leading-5 outline-none placeholder:text-foreground/35"
 					></textarea>
 					<button
 						type="submit"
@@ -1433,7 +1470,7 @@ const DOT: Record<string, string> = {
 			onclick={() => {
 				shell.rightOpen = false
 			}}
-			class="fixed inset-0 z-30 bg-foreground/30 lg:hidden"
+			class="fixed inset-0 z-30 bg-foreground/25 lg:hidden"
 		></button>
 	{/if}
 	<aside
@@ -1443,7 +1480,7 @@ const DOT: Record<string, string> = {
 	>
 		<h2 class="flex justify-center px-1 pt-1">
 			<span
-				class="rounded-full border border-foreground/10 px-3 py-1 font-medium text-foreground/60 text-xs"
+				class="rounded-full border border-foreground/8 px-3 py-1 font-medium text-foreground/65 text-xs"
 			>
 				Skills · {selected.skills.length}
 			</span>
@@ -1459,7 +1496,7 @@ const DOT: Record<string, string> = {
 				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {skillView?.skill ===
 		s.skill
 			? 'border-foreground/15 bg-surface-card-selected'
-			: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
+			: 'border-foreground/8 bg-surface-raised hover:border-foreground/15'}"
 			>
 				<div class="flex items-center gap-2">
 					<span
@@ -1470,11 +1507,13 @@ const DOT: Record<string, string> = {
 						: 'bg-progress'}"
 					></span>
 					<span class="font-medium text-xs">{nameOf(s.skill)}</span>
-					<span class="ml-auto font-mono text-[0.625rem] text-foreground/40">
+					<span class="ml-auto font-mono text-[length:var(--fs-micro)] text-foreground/35">
 						{s.state === 'done' ? 'fertig' : s.state === 'waiting' ? 'wartet' : 'läuft'}
 					</span>
 				</div>
-				<p class="pt-1 text-[0.6875rem] text-foreground/50 leading-relaxed">{s.note}</p>
+				<p class="pt-1 text-[length:var(--fs-eyebrow)] text-foreground/50 leading-relaxed">
+					{s.note}
+				</p>
 			</button>
 		{/each}
 
@@ -1500,19 +1539,21 @@ const DOT: Record<string, string> = {
 				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
 		artifact.title
 			? 'border-foreground/15 bg-surface-card-selected'
-			: 'border-foreground/5 bg-surface-raised hover:border-foreground/15'}"
+			: 'border-foreground/8 bg-surface-raised hover:border-foreground/15'}"
 			>
 				<div class="flex items-center gap-2">
 					<span
-						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[0.5625rem] text-foreground/50"
+						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[length:var(--fs-nano)] text-foreground/50"
 					>
 						{KIND_LABEL[artifact.kind]}
 					</span>
 					<div class="min-w-0">
 						<p class="truncate font-medium text-xs">{artifact.title}</p>
-						<p class="truncate text-[0.6875rem] text-foreground/45">{artifact.note}</p>
+						<p class="truncate text-[length:var(--fs-eyebrow)] text-foreground/50">
+							{artifact.note}
+						</p>
 						{#if artifact.artifactId}
-							<p class="truncate font-mono text-[0.5625rem] text-foreground/35">
+							<p class="truncate font-mono text-[length:var(--fs-nano)] text-foreground/35">
 								{artifact.artifactId}
 							</p>
 						{/if}
@@ -1521,7 +1562,7 @@ const DOT: Record<string, string> = {
 			</button>
 		{/each}
 
-		<p class="px-1 pt-2 text-[0.625rem] text-foreground/35 leading-relaxed">
+		<p class="px-1 pt-2 text-[length:var(--fs-micro)] text-foreground/35 leading-relaxed">
 			Ein Intent kombiniert Beiträge, Artefakte und Skills. Hochgeladene Dateien und ihre
 			Verarbeitung sind persistent; die vorinstallierten Demo-Intents bleiben Vorschau-Daten.
 		</p>

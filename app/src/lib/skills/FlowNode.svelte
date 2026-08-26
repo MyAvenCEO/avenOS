@@ -30,40 +30,40 @@ const verb = $derived(n.type.split(':')[0])
  * meaning, so they must not be two colours.
  */
 const INSTANCE_RING: Record<FlowInstanceState, string> = {
-	done: 'ring-2 ring-success/45',
-	running: 'ring-2 ring-progress/40',
+	done: 'ring-2 ring-success/25',
+	running: 'ring-2 ring-progress/25',
 	waiting: 'ring-2 ring-foreground/15',
-	retrying: 'ring-2 ring-warning/55',
-	error: 'ring-2 ring-error/55',
-	review: 'ring-2 ring-info/55',
-	skipped: 'opacity-60 ring-1 ring-foreground/10'
+	retrying: 'ring-2 ring-warning/25',
+	error: 'ring-2 ring-error/25',
+	review: 'ring-2 ring-info/25',
+	skipped: 'opacity-60 ring-1 ring-foreground/8'
 }
 
 /** Node KINDS are a categorical palette, not states — hence the roles vary. */
 const BADGE: Record<string, string> = {
-	trigger: 'bg-progress/12 text-progress-ink',
-	llm: 'bg-error/12 text-error-ink',
-	route: 'bg-warning/18 text-warning-ink',
+	trigger: 'bg-progress/15 text-progress-ink',
+	llm: 'bg-error/15 text-error-ink',
+	route: 'bg-warning/15 text-warning-ink',
 	op: 'bg-quiet/15 text-quiet-ink',
-	view: 'bg-primary/10 text-primary',
-	human: 'bg-info/20 text-info-ink'
+	view: 'bg-primary/8 text-primary',
+	human: 'bg-info/15 text-info-ink'
 }
 </script>
 
 <div
 	class="w-60 rounded-xl px-3.5 py-3 font-sans text-foreground shadow-[0_1px_3px_rgba(30,41,59,0.06)] transition-all {data.door
-		? 'border-2 border-success/50 border-dashed bg-success/[0.05]'
+		? 'border-2 border-success/25 border-dashed bg-success/[0.05]'
 		: n.kind === 'trigger'
-			? 'border border-progress/60 bg-surface-raised'
-			: 'border border-foreground/5 bg-surface-raised'} {data.selected
-		? 'border-primary ring-2 ring-primary/20'
+			? 'border border-progress/25 bg-surface-raised'
+			: 'border border-foreground/8 bg-surface-raised'} {data.selected
+		? 'border-primary ring-2 ring-primary/15'
 		: (data.instance && INSTANCE_RING[data.instance]) || ''}"
 >
 	<Handle type="target" position={Position.Left} />
 	<div class="flex items-center gap-1.5 pb-1">
 		<span
-			class="rounded-md px-1.5 py-0.5 font-mono text-[0.625rem] {data.door
-				? 'bg-success/12 text-success-ink'
+			class="rounded-md px-1.5 py-0.5 font-mono text-[length:var(--fs-micro)] {data.door
+				? 'bg-success/15 text-success-ink'
 				: (BADGE[verb] ?? BADGE.op)}"
 		>
 			{data.door ? 'skill' : verb}
@@ -105,14 +105,14 @@ const BADGE: Record<string, string> = {
 		{:else if data.instance === 'skipped'}
 			<span class="ml-auto text-foreground/35 text-xs" title="übersprungen">—</span>
 		{:else if data.instance === 'waiting'}
-			<span class="ml-auto size-2 rounded-full bg-foreground/20" title="wartet"></span>
+			<span class="ml-auto size-2 rounded-full bg-foreground/15" title="wartet"></span>
 		{:else if n.live}
 			<span class="ml-auto size-1.5 rounded-full bg-success" title="live"></span>
 		{/if}
 	</div>
-	<p class="pb-1.5 text-[0.6875rem] text-foreground/50 leading-snug">{n.about}</p>
+	<p class="pb-1.5 text-[length:var(--fs-eyebrow)] text-foreground/50 leading-snug">{n.about}</p>
 	{#if data.outputCount}
-		<p class="pb-1.5 font-mono text-[0.625rem] text-foreground/40">
+		<p class="pb-1.5 font-mono text-[length:var(--fs-micro)] text-foreground/35">
 			{data.outputCount} {data.outputCount === 1 ? 'Artefakt' : 'Artefakte'}
 		</p>
 	{/if}
@@ -120,7 +120,7 @@ const BADGE: Record<string, string> = {
 		<ul class="flex min-w-0 flex-1 flex-col items-start gap-1">
 			{#each n.requires ?? [] as f (f)}
 				<li
-					class="max-w-full truncate rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[0.625rem]"
+					class="max-w-full truncate rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[length:var(--fs-micro)]"
 				>
 					→ {f}
 				</li>
@@ -129,7 +129,7 @@ const BADGE: Record<string, string> = {
 		<ul class="flex min-w-0 flex-1 flex-col items-end gap-1">
 			{#each n.provides ?? [] as f (f)}
 				<li
-					class="max-w-full truncate rounded-md bg-surface-cream px-1.5 py-0.5 font-mono text-[0.625rem]"
+					class="max-w-full truncate rounded-md bg-surface-cream px-1.5 py-0.5 font-mono text-[length:var(--fs-micro)]"
 				>
 					{f}
 					→

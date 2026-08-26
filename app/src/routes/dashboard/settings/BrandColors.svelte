@@ -190,45 +190,45 @@ const collisions = $derived.by(() => {
 
 {#snippet swatch(item: Tone)}
 	<li
-		class="overflow-hidden rounded-xl border border-foreground/5 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+		class="overflow-hidden rounded-xl border border-foreground/8 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 	>
 		<!-- The colour gets the room: a full-width field, not a chip. -->
 		<span
-			class="block h-24 w-full border-foreground/10 border-b"
+			class="block h-24 w-full border-foreground/8 border-b"
 			style="background: var({item.token})"
 		></span>
 		<div class="px-3 py-2.5">
 			<div class="flex items-baseline gap-2">
 				<span class="font-medium text-xs">{item.name}</span>
-				<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/45">
+				<span class="ml-auto shrink-0 font-mono text-[length:var(--fs-micro)] text-foreground/50">
 					{resolved[item.token] || '—'}
 				</span>
 			</div>
-			<p class="truncate text-[0.625rem] text-foreground/40">{item.note}</p>
-			<p class="truncate font-mono text-[0.5625rem] text-foreground/30">{item.token}</p>
+			<p class="truncate text-[length:var(--fs-micro)] text-foreground/35">{item.note}</p>
+			<p class="truncate font-mono text-[length:var(--fs-nano)] text-foreground/35">{item.token}</p>
 		</div>
 	</li>
 {/snippet}
 
 {#snippet roleRow(r: Role)}
 	<li
-		class="flex items-stretch gap-3 overflow-hidden rounded-xl border border-foreground/5 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+		class="flex items-stretch gap-3 overflow-hidden rounded-xl border border-foreground/8 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 	>
 		<span
-			class="w-24 shrink-0 self-stretch border-foreground/10 border-r"
+			class="w-24 shrink-0 self-stretch border-foreground/8 border-r"
 			style="background: var({r.token})"
 		></span>
 		<div class="min-w-0 flex-1 py-2.5 pr-3">
 			<div class="flex items-baseline gap-2">
 				<span class="font-mono font-medium text-xs">{r.role}</span>
-				<span class="text-[0.625rem] text-foreground/30">→</span>
-				<span class="truncate text-xs text-foreground/70">{r.tone}</span>
-				<span class="ml-auto shrink-0 font-mono text-[0.625rem] text-foreground/45">
+				<span class="text-[length:var(--fs-micro)] text-foreground/35">→</span>
+				<span class="truncate text-xs text-foreground/65">{r.tone}</span>
+				<span class="ml-auto shrink-0 font-mono text-[length:var(--fs-micro)] text-foreground/50">
 					{resolved[r.token] || '—'}
 				</span>
 			</div>
-			<p class="truncate text-[0.625rem] text-foreground/40">{r.note}</p>
-			<p class="truncate font-mono text-[0.5625rem] text-foreground/30">{r.token}</p>
+			<p class="truncate text-[length:var(--fs-micro)] text-foreground/35">{r.note}</p>
+			<p class="truncate font-mono text-[length:var(--fs-nano)] text-foreground/35">{r.token}</p>
 		</div>
 	</li>
 {/snippet}
@@ -248,7 +248,7 @@ const collisions = $derived.by(() => {
 			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
 				Brand-Token → Ton
 			</h3>
-			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
+			<p class="pt-0.5 text-[length:var(--fs-eyebrow)] text-foreground/35">
 				Die Design-System-Rolle links, der Ton der sie trägt rechts. Eine Rolle hier umhängen färbt
 				jede Fläche, die sie spricht. Intent-Zustände leihen sich diese Rollen direkt — waiting
 				liest sich als info, working als progress, done als success.
@@ -265,7 +265,7 @@ const collisions = $derived.by(() => {
 	<section class="flex flex-col gap-2">
 		<div>
 			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">Brand-Töne</h3>
-			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
+			<p class="pt-0.5 text-[length:var(--fs-eyebrow)] text-foreground/35">
 				Die acht Farben, die die Marke besitzt — jede genau einmal als Hex geschrieben, jede mit
 				genau einem Namen. Kühle Hälfte oben, warme unten.
 			</p>
@@ -291,7 +291,7 @@ const collisions = $derived.by(() => {
 			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
 				Creme-Familie
 			</h3>
-			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
+			<p class="pt-0.5 text-[length:var(--fs-eyebrow)] text-foreground/35">
 				Vier Sprossen, hellste zuerst — aus sechs zusammengelegt. Ein spürbarer Schritt ist mehr
 				wert als zwei unsichtbare.
 			</p>
@@ -309,7 +309,7 @@ const collisions = $derived.by(() => {
 			<h3 class="font-semibold text-foreground/50 text-xs uppercase tracking-wide">
 				Fläche → Creme-Ton
 			</h3>
-			<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
+			<p class="pt-0.5 text-[length:var(--fs-eyebrow)] text-foreground/35">
 				Zwei Flächen dürfen sich eine Sprosse teilen — das ist die Entscheidung, kein Versehen.
 			</p>
 		</div>
@@ -326,21 +326,23 @@ const collisions = $derived.by(() => {
 				<h3 class="font-semibold text-error-ink text-xs uppercase tracking-wide">
 					Zwei Namen, eine Farbe
 				</h3>
-				<p class="pt-0.5 text-[0.6875rem] text-foreground/40">
+				<p class="pt-0.5 text-[length:var(--fs-eyebrow)] text-foreground/35">
 					Sollte leer sein — ein Ton ist ein Name. Was hier auftaucht, gehört zusammengelegt.
 				</p>
 			</div>
 			<ul class="flex flex-col gap-1.5">
 				{#each collisions as [value, names] (value)}
 					<li
-						class="flex items-center gap-3 rounded-xl border border-foreground/5 bg-surface-raised px-3 py-2"
+						class="flex items-center gap-3 rounded-xl border border-foreground/8 bg-surface-raised px-3 py-2"
 					>
 						<span
-							class="size-6 shrink-0 rounded-md border border-foreground/10"
+							class="size-6 shrink-0 rounded-md border border-foreground/8"
 							style="background: {value}"
 						></span>
-						<span class="shrink-0 font-mono text-[0.625rem] text-foreground/45">{value}</span>
-						<span class="min-w-0 flex-1 truncate text-[0.625rem] text-foreground/35">
+						<span class="shrink-0 font-mono text-[length:var(--fs-micro)] text-foreground/50"
+							>{value}</span
+						>
+						<span class="min-w-0 flex-1 truncate text-[length:var(--fs-micro)] text-foreground/35">
 							{names.join(' · ')}
 						</span>
 					</li>

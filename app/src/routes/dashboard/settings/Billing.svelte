@@ -470,13 +470,13 @@ onDestroy(() => {
 	<article
 		class="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {isLive
 			? 'border-primary bg-surface-raised'
-			: 'border-foreground/5 bg-surface-raised'}"
+			: 'border-foreground/8 bg-surface-raised'}"
 	>
 		<div class="flex items-baseline justify-between gap-2">
 			<h3 class="text-sm font-medium">{p.name}</h3>
 			{#if isLive && s}
 				<span
-					class="rounded-full px-2 py-0.5 text-[0.625rem] font-medium uppercase tracking-[0.12em] {s.cancelAtPeriodEnd ||
+					class="rounded-full px-2 py-0.5 text-[length:var(--fs-micro)] font-medium uppercase tracking-[var(--tracking-wider)] {s.cancelAtPeriodEnd ||
 					['paused', 'past_due', 'unpaid', 'incomplete'].includes(s.status)
 						? 'bg-warning/15 text-warning-strong'
 						: 'bg-success/15 text-success-strong'}"
@@ -549,7 +549,7 @@ onDestroy(() => {
 					type="button"
 					onclick={() => resume(p.id)}
 					disabled={busy !== ''}
-					class="w-full rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/5 disabled:opacity-40"
+					class="w-full rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/8 disabled:opacity-40"
 				>
 					{busy === `resume:${p.id}` ? 'Wird fortgesetzt …' : 'Fortsetzen'}
 				</button>
@@ -586,7 +586,7 @@ onDestroy(() => {
 						type="button"
 						onclick={() => pause(p.id)}
 						disabled={busy !== ''}
-						class="rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/5 disabled:opacity-40"
+						class="rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/8 disabled:opacity-40"
 					>
 						{busy === `pause:${p.id}` ? 'Wird pausiert …' : 'Pausieren'}
 					</button>
@@ -596,7 +596,7 @@ onDestroy(() => {
 						type="button"
 						onclick={() => (confirming = `cancel:${p.id}`)}
 						disabled={busy !== ''}
-						class="rounded-full border border-error bg-transparent px-4 py-2 text-sm font-medium text-error-strong transition-colors hover:bg-error/5 disabled:opacity-40"
+						class="rounded-full border border-error bg-transparent px-4 py-2 text-sm font-medium text-error-strong transition-colors hover:bg-error/8 disabled:opacity-40"
 					>
 						Kündigen
 					</button>
@@ -617,7 +617,7 @@ onDestroy(() => {
 
 	{#if loading}
 		<p
-			class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-50 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 text-xs opacity-50 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			Deine Abrechnung wird geladen …
 		</p>
@@ -627,10 +627,12 @@ onDestroy(() => {
 			     fullscreen overlay, hard-coded light, Polar's embed protocol
 			     spoken directly. -->
 			<div
-				class="flex flex-col gap-2 rounded-xl border border-foreground/5 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+				class="flex flex-col gap-2 rounded-xl border border-foreground/8 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 			>
 				<div class="flex items-baseline justify-between gap-2">
-					<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">
+					<p
+						class="text-[length:var(--fs-micro)] uppercase tracking-[var(--tracking-widest)] opacity-35"
+					>
 						Checkout · {TIER_PLANS.find((p) => p.id === checkout?.tier)?.name ?? checkout.tier}
 					</p>
 					<button
@@ -652,7 +654,7 @@ onDestroy(() => {
 				{:else}
 					<!-- Browser fixture: the card without a live provider frame. -->
 					<div
-						class="flex min-h-[640px] w-full items-center justify-center rounded-xl bg-white/70 text-xs opacity-40"
+						class="flex min-h-[640px] w-full items-center justify-center rounded-xl bg-white/25 text-xs opacity-40"
 					>
 						Checkout‑Vorschau
 					</div>
@@ -660,7 +662,7 @@ onDestroy(() => {
 				<p class="text-xs opacity-60">
 					Sobald die Zahlung bestätigt ist, erscheint dein Plan hier.
 				</p>
-				<p class="text-[0.6875rem] opacity-40">
+				<p class="text-[length:var(--fs-eyebrow)] opacity-40">
 					Sichere Zahlung über Polar, unseren Zahlungsabwickler. Die offizielle Rechnung findest du
 					anschließend unter „Meine Bestellungen“.
 				</p>
@@ -670,7 +672,11 @@ onDestroy(() => {
 		<!-- Zwei unabhängige Produkte, aus demselben SSOT wie die Website —
 		     settings und Website können sich beim Preis nicht widersprechen. -->
 		<div class="flex flex-col gap-2">
-			<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Deine Produkte</p>
+			<p
+				class="text-[length:var(--fs-micro)] uppercase tracking-[var(--tracking-widest)] opacity-35"
+			>
+				Deine Produkte
+			</p>
 			<div class="flex flex-col gap-3 sm:flex-row">
 				{#each TIER_PLANS as p (p.id)}
 					{@render planCard(p)}
@@ -681,10 +687,14 @@ onDestroy(() => {
 		<!-- Meine Bestellungen: each order expands into its in-app detail from
 		     real order data; the official Polar invoice PDF is one click away. -->
 		<div class="flex flex-col gap-2">
-			<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">Meine Bestellungen</p>
+			<p
+				class="text-[length:var(--fs-micro)] uppercase tracking-[var(--tracking-widest)] opacity-35"
+			>
+				Meine Bestellungen
+			</p>
 			{#if orders.length}
 				<ul
-					class="flex flex-col divide-y divide-foreground/5 rounded-xl border border-foreground/5 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+					class="flex flex-col divide-y divide-foreground/8 rounded-xl border border-foreground/8 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 				>
 					{#each orders as order (order.id)}
 						{@const plan = planOfOrder(order)}
@@ -692,7 +702,7 @@ onDestroy(() => {
 							<button
 								type="button"
 								onclick={() => (openOrder = openOrder === order.id ? null : order.id)}
-								class="flex items-center justify-between gap-3 px-4 py-2.5 text-left text-xs transition-colors hover:bg-primary/5"
+								class="flex items-center justify-between gap-3 px-4 py-2.5 text-left text-xs transition-colors hover:bg-primary/8"
 							>
 								<span class="opacity-60">{dateOf(order.createdAt)}</span>
 								<span class="flex-1 font-medium">{plan?.name ?? 'Bestellung'}</span>
@@ -705,7 +715,7 @@ onDestroy(() => {
 							</button>
 							{#if openOrder === order.id}
 								<div
-									class="flex flex-col gap-1.5 border-t border-foreground/5 bg-primary/[0.02] px-4 py-3 text-xs"
+									class="flex flex-col gap-1.5 border-t border-foreground/8 bg-primary/[0.02] px-4 py-3 text-xs"
 								>
 									<div class="flex justify-between gap-4">
 										<span class="opacity-40">Netto</span>
@@ -735,7 +745,7 @@ onDestroy(() => {
 												type="button"
 												onclick={() => downloadInvoice(order)}
 												disabled={busy !== ''}
-												class="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/5 disabled:opacity-40"
+												class="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/8 disabled:opacity-40"
 											>
 												{busy === `invoice:${order.id}`
 													? 'Rechnung wird erstellt …'
@@ -748,7 +758,7 @@ onDestroy(() => {
 										     right where it happens. -->
 										<p class="flex items-center gap-2 pt-1 text-xs opacity-60">
 											<span
-												class="size-3 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-primary"
+												class="size-3 shrink-0 animate-spin rounded-full border-2 border-primary/25 border-t-primary"
 											></span>
 											Rechnung wird erstellt und direkt in deinen Dokumentenspeicher geladen …
 										</p>
@@ -763,7 +773,7 @@ onDestroy(() => {
 				</ul>
 			{:else}
 				<p
-					class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-50 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+					class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 text-xs opacity-50 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 				>
 					Noch keine Bestellungen — sobald du etwas buchst, steht sie hier.
 				</p>
@@ -773,7 +783,7 @@ onDestroy(() => {
 
 	<!-- Page-level banner: ONLY for load failures that belong to no card. -->
 	{#if failure}
-		<p class="rounded-xl border border-error/30 bg-error-muted px-4 py-3 text-xs text-error-strong">
+		<p class="rounded-xl border border-error/25 bg-error-muted px-4 py-3 text-xs text-error-strong">
 			{failure}
 		</p>
 	{/if}
