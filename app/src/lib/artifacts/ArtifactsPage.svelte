@@ -378,7 +378,7 @@ onMount(() => {
 	<header class="flex items-center gap-3 px-1">
 		<h1 class="font-semibold text-sm">Artefakte</h1>
 		{#if result}
-			<span class="font-mono text-[length:var(--fs-micro)] text-foreground/35">
+			<span class="mono-meta">
 				{roots.length}
 				{roots.length === 1 ? 'Datei' : 'Dateien'}
 				· {result.artifacts.length} Artefakte · Epoch
@@ -602,9 +602,7 @@ onMount(() => {
 							<header class="border-border border-b px-4 py-3">
 								<div class="flex items-baseline gap-2">
 									<h2 class="min-w-0 flex-1 truncate font-semibold text-sm">{selected.typeKey}</h2>
-									<span class="font-mono text-[length:var(--fs-micro)] text-foreground/35"
-										>v{selected.typeVersion}</span
-									>
+									<span class="mono-meta">v{selected.typeVersion}</span>
 								</div>
 								<div class="mt-1 flex items-center gap-2">
 									<button

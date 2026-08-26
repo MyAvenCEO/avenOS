@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./brand-theme.css";
+@import "./brand-components.css";
 
 /* Source-aliased workspace libs live outside app/ (see svelte.config.js),
  * so Tailwind v4's automatic content detection never scans them. Register

@@ -112,7 +112,7 @@ const BADGE: Record<string, string> = {
 	</div>
 	<p class="pb-1.5 text-[length:var(--fs-eyebrow)] text-foreground/50 leading-snug">{n.about}</p>
 	{#if data.outputCount}
-		<p class="pb-1.5 font-mono text-[length:var(--fs-micro)] text-foreground/35">
+		<p class="pb-1.5 mono-meta">
 			{data.outputCount} {data.outputCount === 1 ? 'Artefakt' : 'Artefakte'}
 		</p>
 	{/if}
