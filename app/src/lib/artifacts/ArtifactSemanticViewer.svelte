@@ -109,7 +109,7 @@ function title(): string {
 }
 </script>
 
-<div class="min-h-0 flex-1 overflow-auto bg-surface-soft/35 p-3 sm:p-5">
+<div class="min-h-0 flex-1 overflow-auto bg-surface-soft/25 p-3 sm:p-5">
 	{#if candidateInvoice || detailedInvoice}
 		<article
 			class="mx-auto max-w-3xl overflow-hidden rounded-sm border border-border bg-white text-slate-800 shadow-[0_12px_40px_rgba(30,41,59,0.10)] dark:bg-slate-50"
@@ -117,7 +117,9 @@ function title(): string {
 			<div class="h-1.5 bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500"></div>
 			<header class="flex items-start justify-between gap-6 border-slate-200 border-b px-6 py-6">
 				<div class="min-w-0">
-					<p class="text-[0.625rem] font-semibold text-slate-400 uppercase tracking-[0.18em]">
+					<p
+						class="text-[length:var(--fs-micro)] font-semibold text-slate-400 uppercase tracking-[var(--tracking-wider)]"
+					>
 						{title()}
 					</p>
 					<button
@@ -159,7 +161,8 @@ function title(): string {
 							onclick={() => choose(`/${item[1]}`)}
 							class="bg-white px-4 py-4 text-left hover:bg-amber-50"
 						>
-							<span class="block text-[0.625rem] text-slate-400 uppercase tracking-wide"
+							<span
+								class="block text-[length:var(--fs-micro)] text-slate-400 uppercase tracking-wide"
 								>{item[0]}</span
 							>
 							<strong
@@ -176,14 +179,14 @@ function title(): string {
 				{#if buyer.name || buyer.address}
 					<div class="grid gap-6 px-6 py-5 sm:grid-cols-2">
 						<div>
-							<p class="text-[0.625rem] text-slate-400 uppercase">Von</p>
+							<p class="text-[length:var(--fs-micro)] text-slate-400 uppercase">Von</p>
 							<p class="mt-1 font-medium">{stringValue(supplier.name)}</p>
 							<p class="whitespace-pre-line text-slate-500 text-xs">
 								{stringValue(supplier.address, '')}
 							</p>
 						</div>
 						<div>
-							<p class="text-[0.625rem] text-slate-400 uppercase">An</p>
+							<p class="text-[length:var(--fs-micro)] text-slate-400 uppercase">An</p>
 							<p class="mt-1 font-medium">{stringValue(buyer.name)}</p>
 							<p class="whitespace-pre-line text-slate-500 text-xs">
 								{stringValue(buyer.address, '')}
@@ -253,7 +256,11 @@ function title(): string {
 			class="mx-auto max-w-4xl overflow-hidden rounded-xl border border-border bg-surface-raised shadow-sm"
 		>
 			<header class="bg-gradient-to-br from-slate-900 to-slate-700 px-6 py-6 text-white">
-				<p class="text-[0.625rem] text-white/55 uppercase tracking-[0.2em]">{title()}</p>
+				<p
+					class="text-[length:var(--fs-micro)] text-white/50 uppercase tracking-[var(--tracking-widest)]"
+				>
+					{title()}
+				</p>
 				<div class="mt-4 flex flex-wrap items-end justify-between gap-4">
 					<div>
 						<h3 class="font-semibold text-xl">
@@ -262,7 +269,7 @@ function title(): string {
 						<p class="mt-1 font-mono text-white/65 text-xs">{stringValue(data.accountIban)}</p>
 					</div>
 					<div class="text-right">
-						<p class="text-white/55 text-xs">Schlusssaldo</p>
+						<p class="text-white/50 text-xs">Schlusssaldo</p>
 						<p class="font-semibold text-2xl">
 							{formatMoney(data.closingBalanceMinor, data.currency)}
 						</p>
@@ -272,7 +279,8 @@ function title(): string {
 			<div class="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
 				{#each [['Zeitraum', `${stringValue(data.periodStart)} – ${stringValue(data.periodEnd)}`], ['Währung', data.currency], ['Anfang', formatMoney(data.openingBalanceMinor, data.currency)], ['Buchungen', transactions.length]] as metric}
 					<div class="bg-surface-raised p-4">
-						<span class="block text-[0.625rem] text-foreground/40 uppercase">{metric[0]}</span
+						<span class="block text-[length:var(--fs-micro)] text-foreground/35 uppercase"
+							>{metric[0]}</span
 						><strong class="mt-1 block text-sm">{displayValue(metric[1])}</strong>
 					</div>
 				{/each}
@@ -281,7 +289,7 @@ function title(): string {
 				<div class="overflow-x-auto">
 					<table class="w-full min-w-[42rem] text-xs">
 						<thead>
-							<tr class="border-border border-b text-foreground/40">
+							<tr class="border-border border-b text-foreground/35">
 								<th class="px-4 py-3 text-left">Datum</th>
 								<th class="px-4 py-3 text-left">Text</th>
 								<th class="px-4 py-3 text-left">Gegenkonto</th>
@@ -290,7 +298,7 @@ function title(): string {
 						</thead>
 						<tbody>
 							{#each transactions as transaction, index}
-								<tr class="border-border/70 border-b hover:bg-surface-soft">
+								<tr class="border-border/25 border-b hover:bg-surface-soft">
 									<td class="px-4 py-3">
 										{stringValue(transaction.bookingDate)}
 									</td>
@@ -306,7 +314,7 @@ function title(): string {
 											>
 										</button>
 									</td>
-									<td class="px-4 py-3 text-foreground/55">
+									<td class="px-4 py-3 text-foreground/50">
 										{stringValue(transaction.counterpartyName, '')}
 									</td>
 									<td class="px-4 py-3 text-right font-mono font-semibold">
@@ -324,12 +332,14 @@ function title(): string {
 			<div class="rounded-2xl border border-border bg-surface-raised p-5">
 				<div class="flex items-center justify-between gap-4">
 					<div>
-						<p class="text-[0.625rem] text-foreground/40 uppercase tracking-wide">Validierung</p>
+						<p class="text-[length:var(--fs-micro)] text-foreground/35 uppercase tracking-wide">
+							Validierung
+						</p>
 						<h3 class="mt-1 font-semibold text-lg">{stringValue(data.status)}</h3>
 					</div>
 					<div class="text-right">
 						<p class="font-semibold text-2xl">{formatConfidence(data.coverageBps)}</p>
-						<p class="text-foreground/40 text-xs">Abdeckung</p>
+						<p class="text-foreground/35 text-xs">Abdeckung</p>
 					</div>
 				</div>
 				<div class="mt-4 h-2 overflow-hidden rounded-full bg-surface-soft">
@@ -363,17 +373,21 @@ function title(): string {
 			<header class="rounded-2xl border border-border bg-surface-raised p-5">
 				<div class="flex items-start justify-between gap-4">
 					<div>
-						<p class="text-[0.625rem] text-foreground/40 uppercase tracking-[0.16em]">{typeKey}</p>
+						<p
+							class="text-[length:var(--fs-micro)] text-foreground/35 uppercase tracking-[var(--tracking-wider)]"
+						>
+							{typeKey}
+						</p>
 						<h3 class="mt-1 font-semibold text-xl capitalize">{title()}</h3>
 					</div>
 					{#if classification}
-						<span class="rounded-full bg-primary/10 px-3 py-1 font-semibold text-primary text-xs"
+						<span class="rounded-full bg-primary/8 px-3 py-1 font-semibold text-primary text-xs"
 							>{formatConfidence(data.confidenceBps)}</span
 						>
 					{/if}
 				</div>
 				{#if typeof data.summary === 'string'}
-					<p class="mt-4 max-w-2xl text-foreground/70 text-sm leading-relaxed">{data.summary}</p>
+					<p class="mt-4 max-w-2xl text-foreground/65 text-sm leading-relaxed">{data.summary}</p>
 				{/if}
 			</header>
 			<div class="grid gap-3 sm:grid-cols-2">
@@ -386,7 +400,8 @@ function title(): string {
 						disabled={!edge(pointer)}
 						class="min-w-0 rounded-xl border border-border bg-surface-raised p-4 text-left {edge(pointer) ? 'cursor-crosshair hover:border-amber-400 hover:bg-amber-50/40' : ''} {active(pointer) ? 'border-amber-400 ring-2 ring-amber-300/50' : ''}"
 					>
-						<span class="block text-[0.625rem] text-foreground/40 uppercase tracking-wide"
+						<span
+							class="block text-[length:var(--fs-micro)] text-foreground/35 uppercase tracking-wide"
 							>{labelForKey(key)}</span
 						>
 						{#if key === 'confidenceBps'}
@@ -400,7 +415,9 @@ function title(): string {
 							<span class="mt-1 block break-words text-sm">{displayValue(value)}</span>
 						{/if}
 						{#if edge(pointer)}
-							<span class="mt-2 block text-amber-700 text-[0.625rem]">▣ Quelle anzeigen</span>
+							<span class="mt-2 block text-amber-700 text-[length:var(--fs-micro)]"
+								>▣ Quelle anzeigen</span
+							>
 						{/if}
 					</button>
 				{/each}

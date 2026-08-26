@@ -122,7 +122,7 @@ $effect(() => {
 			<p class="text-error-strong text-xs">{failure}</p>
 		{/if}
 		{#if loading}
-			<p class="text-foreground/40 text-xs">PDF wird gerendert …</p>
+			<p class="text-foreground/35 text-xs">PDF wird gerendert …</p>
 		{/if}
 		<div bind:this={pages} bind:clientWidth={width} class="flex flex-col gap-3"></div>
 	</div>

@@ -458,7 +458,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 >
 	{#if fileHovering}
 		<div
-			class="pointer-events-none fixed inset-2 z-[80] flex items-center justify-center rounded-3xl border-2 border-primary border-dashed bg-surface-raised/90 text-primary shadow-xl backdrop-blur-sm"
+			class="pointer-events-none fixed inset-2 z-[80] flex items-center justify-center rounded-3xl border-2 border-primary border-dashed bg-surface-raised/25 text-primary shadow-xl backdrop-blur-sm"
 		>
 			<div class="flex flex-col items-center gap-3">
 				<span class="text-4xl" aria-hidden="true">⇩</span>
@@ -505,7 +505,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 	     the next successful turn clears it. -->
 		{#if chat.failure || speaker.failure || listener.failure}
 			<div
-				class="mx-auto mb-2 flex w-full max-w-2xl items-start gap-3 rounded-2xl border border-error/40 bg-error-muted px-4 py-2.5 text-error-strong shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
+				class="mx-auto mb-2 flex w-full max-w-2xl items-start gap-3 rounded-2xl border border-error/25 bg-error-muted px-4 py-2.5 text-error-strong shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
 			>
 				<span class="shrink-0 pt-0.5 font-mono text-sm">✗</span>
 				<p class="min-w-0 flex-1 text-sm leading-snug">
@@ -717,7 +717,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 							onclick={endConversation}
 							title="End conversation"
 							aria-label="End conversation"
-							class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 transition-colors hover:bg-primary-foreground/10"
+							class="shrink-0 rounded-full border border-primary-foreground/25 p-2.5 transition-colors hover:bg-primary-foreground/8"
 						>
 							<!-- close: end the conversation — a quiet ✕, the same outline as
 							     the keyboard toggle opposite it, not a red alarm -->

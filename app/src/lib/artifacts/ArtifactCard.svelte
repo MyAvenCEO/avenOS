@@ -118,7 +118,7 @@ $effect(() => {
 		{:else if isPdf && !failed}
 			<canvas bind:this={canvas} class="block w-full"></canvas>
 		{:else}
-			<div class="flex h-full items-center justify-center font-mono text-foreground/30 text-xs">
+			<div class="flex h-full items-center justify-center font-mono text-foreground/35 text-xs">
 				{badge}
 			</div>
 		{/if}
@@ -126,7 +126,9 @@ $effect(() => {
 	<div class="flex flex-col gap-0.5 px-2.5 pt-2 pb-1.5">
 		<div class="flex items-baseline justify-between gap-2">
 			<span class="truncate font-semibold text-sm">{title}</span>
-			<span class="shrink-0 rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[0.625rem]">
+			<span
+				class="shrink-0 rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[length:var(--fs-micro)]"
+			>
 				{badge}
 			</span>
 		</div>

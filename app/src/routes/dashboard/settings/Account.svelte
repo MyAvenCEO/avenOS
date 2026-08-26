@@ -56,31 +56,31 @@ onMount(async () => {
 
 	{#if !isTauri()}
 		<p
-			class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			Die Anmeldung gibt es nur in der App — im Browser ist keine Sitzung zu zeigen.
 		</p>
 	{:else if loading}
 		<p
-			class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-50 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 text-xs opacity-50 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			Deine Sitzung wird gelesen …
 		</p>
 	{:else if !signedIn}
 		<p
-			class="rounded-xl border border-foreground/5 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			Du bist gerade nicht angemeldet.
 		</p>
 	{:else}
 		<div
-			class="flex flex-col gap-4 rounded-xl border border-foreground/5 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="flex flex-col gap-4 rounded-xl border border-foreground/8 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
 			<div class="flex items-center gap-3">
 				<!-- Initials rather than an avatar: we have no picture, and a generic
 				     silhouette says less than the two letters of an actual name. -->
 				<span
-					class="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-medium"
+					class="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/8 text-sm font-medium"
 				>
 					{(user?.name || user?.email || '?').slice(0, 2).toUpperCase()}
 				</span>
@@ -109,9 +109,11 @@ onMount(async () => {
 		</div>
 
 		<div
-			class="flex flex-col gap-2 rounded-xl border border-foreground/5 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="flex flex-col gap-2 rounded-xl border border-foreground/8 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
 		>
-			<p class="text-[0.625rem] uppercase tracking-[0.2em] opacity-35">
+			<p
+				class="text-[length:var(--fs-micro)] uppercase tracking-[var(--tracking-widest)] opacity-35"
+			>
 				{names.length > 1 ? 'Deine Aven' : 'Dein Aven'}
 			</p>
 			{#if names.length}
@@ -127,7 +129,7 @@ onMount(async () => {
 	{/if}
 
 	{#if failure}
-		<p class="rounded-xl border border-error/30 bg-error-muted px-4 py-3 text-xs text-error-strong">
+		<p class="rounded-xl border border-error/25 bg-error-muted px-4 py-3 text-xs text-error-strong">
 			{failure}
 		</p>
 	{/if}

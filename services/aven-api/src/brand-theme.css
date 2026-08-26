@@ -2,14 +2,14 @@
  * Every value here comes from packages/aven-ceo/src/tokens.ts.
  * Re-generate with `bun run brand:generate`; edits are overwritten. */
 
-@theme {
+:root {
 	/* Inter is the single typeface — body, UI, titles, eyebrows. The four
 	 * family tokens stay SEPARATE so a dedicated display, serif or mono face
 	 * can be brought back by editing one line, with no component changes. */
-	--font-sans: "InterVariable", ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--font-display: "InterVariable", ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--font-serif: "InterVariable", ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--font-mono: "InterVariable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--font-display: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--font-serif: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--font-mono: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
 	--font-weight-medium: 500;
 	--font-weight-semibold: 600;
@@ -78,9 +78,7 @@
 	--radius-xl: 1.5rem;
 	--radius-2xl: 2rem;
 	--radius-full: 9999px;
-}
-
-/* ══ 4 · THE SCALES — type, tracking, emphasis, elevation, geometry ══
+	/* ══ 4 · THE SCALES — type, tracking, emphasis, elevation, geometry ══
  * A value that is not on a scale is not available. Before these, one
  * idiom was written fourteen ways and the type ramp was thirty arbitrary
  * sizes mixing px and rem by eye.
@@ -91,7 +89,6 @@
  * not a scale, and the next author reaching for `var(--fs-body)` would
  * have got nothing. Colours stay in `@theme` above so Tailwind can still
  * generate `bg-primary` and friends. */
-:root {
 	--fs-nano: 9px;
 	--fs-micro: 10px;
 	--fs-eyebrow: 11px;

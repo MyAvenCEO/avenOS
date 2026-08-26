@@ -45,7 +45,7 @@ $effect.pre(() => {
 <div
 	bind:clientWidth={w}
 	bind:clientHeight={h}
-	class="h-56 w-full overflow-hidden rounded-xl border border-border bg-surface-soft/60"
+	class="h-56 w-full overflow-hidden rounded-xl border border-border bg-surface-soft/25"
 >
 	{#key machine}
 		<SvelteFlow

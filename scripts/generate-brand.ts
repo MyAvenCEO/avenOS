@@ -16,7 +16,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { appIconSvg, faviconSvg, themeCss } from '@myavenceo/aven-ceo/generate'
+import { appIconSvg, componentCss, faviconSvg, themeCss } from '@myavenceo/aven-ceo/generate'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -44,6 +44,14 @@ const favicon = faviconSvg(logo)
  */
 const outputs: Array<[string, string]> = [
 	['app/src/brand-theme.css', themeCss('app')],
+	['app/src/brand-components.css', componentCss()],
+	/* The id service runs no Tailwind, so it takes the plain `:root` variant.
+	   It hand-maintained its own copy of the palette under a third set of
+	   names until now, and the copy had gone stale — a retired moss green, a
+	   retired violet in the body gradient, and a linen from before the
+	   background moved. */
+	['services/aven-api/src/brand-theme.css', themeCss('plain')],
+	['services/aven-api/src/brand-components.css', componentCss()],
 	['app/static/aven-logo.svg', logo],
 	['app/static/favicon.svg', favicon],
 	['services/aven-api/static/aven-logo.svg', logo],
