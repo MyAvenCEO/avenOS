@@ -1,3 +1,23 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.26-next.1...v) (2026-08-26)
+
+
+### Bug Fixes
+
+* **app:** recover the styles a class scanner could not see ([164ce0c](https://github.com/MyAvenCEO/avenOS/commit/164ce0c76a6382e7456328b46d43b444b09a70ca))
+* **ci:** put the registry token back where bun reads it ([83e33d6](https://github.com/MyAvenCEO/avenOS/commit/83e33d6dae2df2b96ceea0c3a9a9efb22619a492))
+
+
+### Features
+
+* **app:** drop Tailwind for the brand's own utility layer ([9eb1460](https://github.com/MyAvenCEO/avenOS/commit/9eb1460b458824259fe42179e8cde04f959f5fb7))
+* **aven-ui:** render a view to HTML text, not only to DOM ([1ee973b](https://github.com/MyAvenCEO/avenOS/commit/1ee973b87c12e5906bb939dbb022e14bc0ad6240))
+* **design:** adopt stack + stack-center on the purchase screens ([4a3e91b](https://github.com/MyAvenCEO/avenOS/commit/4a3e91b16f84ba00d1dcffebb3af525895c9ee70))
+* **design:** adopt the id service's card, and drop dead imports ([443057d](https://github.com/MyAvenCEO/avenOS/commit/443057d2489c6afb2264bf6096bf3520eef846a5))
+* **design:** adopt the structural components across the app ([b5c08ac](https://github.com/MyAvenCEO/avenOS/commit/b5c08ac2ecaf64e220557f72e05478e634336935))
+* **design:** put every surface on the shared scales, and the id service on the brand ([055508e](https://github.com/MyAvenCEO/avenOS/commit/055508e2d77ce0816b628453fe4457e0cebb9dfc)), closes [#2f5d50](https://github.com/MyAvenCEO/avenOS/issues/2f5d50)
+* **design:** regenerate onto nested CSS with states and container queries ([7e68daa](https://github.com/MyAvenCEO/avenOS/commit/7e68daa68ef3f542a3cdf1c4820c6d03c36fbf0f))
+* **design:** restyle the purchase flow onto the passkey card ([c983abb](https://github.com/MyAvenCEO/avenOS/commit/c983abb645e3eb9d27897c49d0c781ccf4235bab))
+* **hosting:** allow admin apex bindings ([c06195e](https://github.com/MyAvenCEO/avenOS/commit/c06195e5664bb07121b7cd3d5439d298b1b8957a))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.25-next.6...v) (2026-08-26)
 
 
