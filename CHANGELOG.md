@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.26-next.2...v) (2026-08-26)
+
+
+### Bug Fixes
+
+* **release:** a release cannot commit a registry token ([e582962](https://github.com/MyAvenCEO/avenOS/commit/e5829624562a2d91eb524f5a62dd30f3d696a3a7))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.26-next.1...v) (2026-08-26)
 
 
