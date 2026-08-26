@@ -14,8 +14,7 @@ import ArtifactsPage from '$lib/artifacts/ArtifactsPage.svelte'
 import {
 	ingestDroppedFiles,
 	loadPersistentIntents,
-	refreshIntent,
-	watchArtifactProcessing
+	refreshIntent
 } from '$lib/artifacts/ingest.svelte'
 import { composer } from '$lib/intents/composer.svelte'
 import IntentsPlaceholder from '$lib/intents/IntentsPlaceholder.svelte'
