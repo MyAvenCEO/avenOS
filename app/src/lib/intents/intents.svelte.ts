@@ -3,10 +3,21 @@ import { Actor } from '$lib/actors/actor'
 import { bus, type HeldPreview } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { singleton } from '$lib/actors/singleton'
-import type {
-	ArtifactProcessingPresentation,
-	ArtifactProcessingStage
+import {
+	type ArtifactProcessingLookup,
+	type ArtifactProcessingPresentation,
+	type ArtifactProcessingStage,
+	type ArtifactProcessingState,
+	type ArtifactProcessingView,
+	artifactMetadataHighlights,
+	artifactTypeLabel
 } from '$lib/artifacts/processing'
+import {
+	artifactManifest,
+	formatBytes,
+	processingStateLabel,
+	resolveArtifact
+} from './artifact-manifest'
 
 /**
  * THE INTENTS — the workspace's subjects, MOCKED (0158) but owned by an
@@ -34,6 +45,12 @@ export interface MockArtifact {
 	artifactId?: string
 	typeKey?: string
 	stageKey?: string
+	/** Last persisted processing state of this artifact (live view wins). */
+	state?: ArtifactProcessingState
+	/** One-line processing summary, if the processor produced one. */
+	summary?: string | null
+	/** Human type label from the processor, e.g. "PDF document" or "Invoice". */
+	label?: string
 }
 export interface SkillStatus {
 	skill: string
@@ -116,6 +133,17 @@ function processingNote(state: NonNullable<PersistentIntentDetail['fileSkill']>[
 	if (state === 'succeeded') return 'Processing complete'
 	if (state === 'needs_review') return 'Processing finished with a warning'
 	return 'Processing failed at the last known stage'
+}
+
+/** Hard bounds on what artifact_detail may pull into the model context. */
+const MAX_PREVIEW_BYTES = 64 * 1024
+const MAX_PREVIEW_CHARS = 1600
+
+function base64ToText(base64: string): string {
+	const binary = atob(base64)
+	const bytes = new Uint8Array(binary.length)
+	for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+	return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
 }
 
 const INTENTS: MockIntent[] = [
@@ -858,16 +886,28 @@ class IntentsActor extends Actor {
 				: detail.fileSkill?.state === 'needs_review' || detail.fileSkill?.state === 'failed'
 					? 'waiting'
 					: 'running'
-		const artifacts: MockArtifact[] = detail.artifacts.map((artifact, index) => ({
-			kind: artifact.typeKey === 'banking.account-statement-candidate' ? 'statement' : 'doc',
-			title: index === 0 ? detail.title : artifact.typeKey,
-			note: artifact.stageKey
-				? `${artifact.typeKey} · ${artifact.stageKey}`
-				: `${artifact.typeKey} · original`,
-			artifactId: artifact.artifactId,
-			typeKey: artifact.typeKey,
-			stageKey: artifact.stageKey ?? undefined
-		}))
+		const artifacts: MockArtifact[] = detail.artifacts.map((artifact, index) => {
+			const isSource = artifact.relation === 'source'
+			return {
+				kind: artifact.typeKey === 'banking.account-statement-candidate' ? 'statement' : 'doc',
+				title: index === 0 ? detail.title : artifact.typeKey,
+				note: artifact.stageKey
+					? `${artifact.typeKey} · ${artifact.stageKey}`
+					: `${artifact.typeKey} · original`,
+				artifactId: artifact.artifactId,
+				typeKey: artifact.typeKey,
+				stageKey: artifact.stageKey ?? undefined,
+				// The processing projection lives on the file-skill row; the
+				// source file carries it into the manifest and the tool result.
+				...(isSource && presentation
+					? {
+							state: presentation.state,
+							summary: presentation.summary,
+							label: artifactTypeLabel(presentation.preferredType)
+						}
+					: {})
+			}
+		})
 		const log: LogEntry[] = detail.contributions.map((entry) => ({
 			step:
 				entry.kind === 'file-upload'
@@ -1033,6 +1073,21 @@ class IntentsActor extends Actor {
 						type: 'object',
 						properties: { intent: { type: 'string', description: 'id, or part of the title' } },
 						required: ['intent']
+					}
+				},
+				{
+					name: 'artifact_detail',
+					description:
+						'Reads one file of this conversation: kind, size, processing state, summary and key ' +
+						'figures (plus a short excerpt for small text files). The files are listed under ' +
+						'ARTIFACTS in your context. Call it before answering anything about a file — never ' +
+						'guess file contents or figures.',
+					parameters: {
+						type: 'object',
+						properties: {
+							artifact: { type: 'string', description: 'file name, part of a name, or artifact id' }
+						},
+						required: ['artifact']
 					}
 				}
 			]
@@ -1314,6 +1369,79 @@ class IntentsActor extends Actor {
 					record: JSON.stringify({ ok: true, deleted: hit.id }),
 					wire: `Deleted "${hit.title}".`
 				}
+			},
+			artifact_detail: async (p) => {
+				const key = String(p.artifact ?? '')
+				const selected = this.items.find((i) => i.id === this.selectedId)
+				const hit =
+					(selected ? resolveArtifact(selected.artifacts, key) : undefined) ??
+					this.items
+						.filter((i) => !selected || i.id !== selected.id)
+						.map((i) => resolveArtifact(i.artifacts, key))
+						.find(Boolean)
+				if (!hit?.artifactId)
+					return {
+						record: JSON.stringify({ ok: false, error: `no artifact matches "${key}"` }),
+						wire: `No file matches "${key}". The files in this conversation are listed under ARTIFACTS in your context.`
+					}
+				const live = chatActor.core.artifactInfo(hit.artifactId)
+				let presentation: ArtifactProcessingView | null = live?.processing ?? null
+				if (isTauri() && presentation?.availability !== 'available') {
+					try {
+						const lookup = await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
+							artifactId: hit.artifactId
+						})
+						if (lookup.presentation)
+							presentation = { ...lookup.presentation, availability: 'available' }
+					} catch {
+						// keep what the local view already knows
+					}
+				}
+				const name = live?.originalName ?? hit.title
+				const highlights = artifactMetadataHighlights(presentation ?? undefined)
+				const state = processingStateLabel(live?.processing?.state ?? hit.state)
+				const summary = presentation?.summary ?? hit.summary ?? undefined
+				let preview: string | undefined
+				const mediaType = live?.mediaType
+				if (
+					isTauri() &&
+					mediaType &&
+					(mediaType.startsWith('text/') || mediaType.includes('json')) &&
+					(live?.length ?? 0) <= MAX_PREVIEW_BYTES
+				) {
+					try {
+						const content = await invoke<{ mediaType: string; base64: string }>(
+							'artifact_content_get',
+							{ artifactId: hit.artifactId }
+						)
+						const text = base64ToText(content.base64)
+						if (text && !text.includes('\u0000')) preview = text.slice(0, MAX_PREVIEW_CHARS)
+					} catch {
+						// a preview is a bonus; its absence never fails the lookup
+					}
+				}
+				const kind = presentation
+					? artifactTypeLabel(presentation.preferredType)
+					: (hit.label ?? artifactTypeLabel(hit.typeKey ?? ''))
+				const record = JSON.stringify({
+					ok: true,
+					artifactId: hit.artifactId,
+					name,
+					kind,
+					mediaType: mediaType ?? null,
+					length: live?.length ?? null,
+					state,
+					summary,
+					highlights,
+					...(preview ? { preview } : {})
+				})
+				const wire =
+					`"${name}" — ${kind}, ` +
+					`${live?.length ? `${formatBytes(live.length)}, ` : ''}${state}.` +
+					(summary ? ` Summary: ${summary}.` : '') +
+					(highlights.length > 0 ? ` Key figures: ${highlights.join(', ')}.` : '') +
+					(preview ? ` First part: ${preview}` : '')
+				return { record, wire }
 			}
 		})
 	}
@@ -1356,7 +1484,6 @@ bus.register(intents)
 // intents with every request — live data, never a vocabulary.
 chatActor.core.context = () => {
 	const on = intents.items.find((i) => i.id === intents.selectedId)
-	const artifactContext = chatActor.core.artifactContext()
 	const rows = intents.items
 		.filter((i) => i.status !== 'archive')
 		.map(
@@ -1365,6 +1492,20 @@ chatActor.core.context = () => {
 				(i.routingSummary ? ` — ${i.routingSummary}` : '')
 		)
 		.join('\n')
+	// The on-screen intent's files, one bounded line each: the model always
+	// sees WHAT is in the conversation without any file bytes entering context.
+	const artifactContext = artifactManifest(on?.artifacts ?? [], (artifactId) => {
+		const live = chatActor.core.artifactInfo(artifactId)
+		if (!live) return undefined
+		const processing = live.processing
+		return {
+			length: live.length,
+			mediaType: live.mediaType,
+			label: processing ? artifactTypeLabel(processing.preferredType) : undefined,
+			state: processing?.state,
+			summary: processing?.summary ?? undefined
+		}
+	})
 	return (
 		`INTENTS right now:\n${rows}\n` +
 		`ON SCREEN: ${on ? `${on.id} — "${on.title}"` : 'none'}.\n` +
