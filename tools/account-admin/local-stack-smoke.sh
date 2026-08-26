@@ -87,7 +87,7 @@ INSERT INTO static_site_bindings
    verification_token_hash,desired_status,runtime_status,created_at,updated_at)
 VALUES
   ('00000000-0000-4000-8000-000000000093','00000000-0000-4000-8000-000000000091',
-   '00000000-0000-4000-8000-000000000092','admin-smoke.aven.ceo','refs/heads/next',
+   '00000000-0000-4000-8000-000000000092','aven.ceo','refs/heads/next',
    'refs/heads/deploy/next','dist',repeat('a',64),'active','awaiting_dns',now(),now());
 SQL
 

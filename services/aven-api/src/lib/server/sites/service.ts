@@ -207,7 +207,7 @@ export class SiteBindingService {
 			 JOIN names n ON n.name=e.name
 			 JOIN "user" u ON u.id=e.owner_user_id
 			 WHERE b.desired_status='active' AND n.status='owned'
-			   AND (b.hostname NOT LIKE '%.aven.ceo' OR u.role='admin')
+			   AND (u.role='admin' OR (b.hostname <> 'aven.ceo' AND b.hostname NOT LIKE '%.aven.ceo'))
 			 ORDER BY b.hostname`
 		)
 		return { bindings: result.rows }

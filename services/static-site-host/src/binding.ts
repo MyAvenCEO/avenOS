@@ -28,8 +28,8 @@ export function validateBinding(binding: DirectoryBinding): void {
 	if (
 		!/^(?!-)[a-z0-9-]{1,63}(?<!-)(?:\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/.test(binding.hostname) ||
 		binding.hostname.length > 253 ||
-		binding.hostname === 'aven.ceo' ||
-		(binding.hostname.endsWith('.aven.ceo') && binding.owner_is_admin !== true)
+		((binding.hostname === 'aven.ceo' || binding.hostname.endsWith('.aven.ceo')) &&
+			binding.owner_is_admin !== true)
 	)
 		throw new Error('invalid or reserved hostname')
 	if (binding.owner_is_admin !== undefined && typeof binding.owner_is_admin !== 'boolean')
