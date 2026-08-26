@@ -55,13 +55,16 @@
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
 		"format": "bunx biome format --write .",
-		"brand:generate": "bun ./scripts/generate-brand.ts"
+		"brand:generate": "bun ./scripts/generate-brand.ts",
+		"design:render": "bun ./scripts/render-design-system.ts"
 	},
 	"devDependencies": {
+		"@avenos/aven-ui": "workspace:*",
 		"@biomejs/biome": "^2.4.14",
 		"@commitlint/cli": "^21.0.2",
 		"@commitlint/config-conventional": "^21.0.2",
-		"@myavenceo/aven-ceo": "^0.2.0",
+		"@myavenceo/aven-ceo": "^0.4.1",
+		"@myavenceo/aven-vibes": "^0.1.0",
 		"conventional-changelog-cli": "^5.0.0",
 		"semver": "^7.8.4",
 		"sharp": "^0.35.3"

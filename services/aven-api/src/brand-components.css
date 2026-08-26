@@ -3,8 +3,14 @@
  * Re-generate with `bun run brand:generate`; edits are overwritten. */
 
 /* Cascade layers, so a component never has to out-specify a utility and
- * nothing here needs `!important`. Order is the priority order. */
-@layer tokens, primitives, components, utilities;
+ * nothing here needs `!important`. Order is the priority order.
+ *
+ * `reset` and `base` join the list now that the reset is ours rather than
+ * Tailwind preflight. A layer used but never DECLARED here is appended
+ * after every declared one, so leaving the reset off this line would have
+ * given it the last word over every utility in the codebase — a reset that
+ * wins is not a reset. */
+@layer reset, tokens, base, primitives, components, utilities;
 
 @layer primitives {
 	/* The shapes almost every layout is made of. Each is one idea, tuned

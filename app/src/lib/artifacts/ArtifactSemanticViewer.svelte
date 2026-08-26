@@ -112,13 +112,13 @@ function title(): string {
 <div class="min-h-0 flex-1 overflow-auto bg-surface-soft/25 p-3 sm:p-5">
 	{#if candidateInvoice || detailedInvoice}
 		<article
-			class="mx-auto max-w-3xl overflow-hidden rounded-sm border border-border bg-white text-slate-800 shadow-[0_12px_40px_rgba(30,41,59,0.10)] dark:bg-slate-50"
+			class="mx-auto max-w-3xl overflow-hidden rounded-sm border border-border bg-white text-foreground shadow-[0_12px_40px_rgba(30,41,59,0.10)] dark:bg-surface-raised"
 		>
-			<div class="h-1.5 bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500"></div>
-			<header class="flex items-start justify-between gap-6 border-slate-200 border-b px-6 py-6">
+			<div class="h-1.5 bg-gradient-to-r from-evidence via-earth to-terracotta"></div>
+			<header class="flex items-start justify-between gap-6 border-border border-b px-6 py-6">
 				<div class="min-w-0">
 					<p
-						class="text-[length:var(--fs-micro)] font-semibold text-slate-400 uppercase tracking-[var(--tracking-wider)]"
+						class="text-[length:var(--fs-micro)] font-semibold text-muted-foreground uppercase tracking-[var(--tracking-wider)]"
 					>
 						{title()}
 					</p>
@@ -128,67 +128,67 @@ function title(): string {
 						class="mt-2 block max-w-full text-left {edge('/supplier') ? 'cursor-crosshair' : ''}"
 					>
 						<span
-							class="block truncate font-semibold text-lg {active('/supplier') ? 'rounded bg-amber-100 ring-2 ring-amber-400' : ''}"
+							class="block truncate font-semibold text-lg {active('/supplier') ? 'rounded bg-evidence-soft ring-2 ring-evidence' : ''}"
 							>{stringValue(candidateInvoice ? data.supplier : supplier.name, 'Unbekannter Lieferant')}</span
 						>
 					</button>
 					{#if detailedInvoice}
-						<p class="mt-1 max-w-sm whitespace-pre-line text-slate-500 text-xs">
+						<p class="mt-1 max-w-sm whitespace-pre-line text-muted-foreground text-xs">
 							{stringValue(supplier.address, '')}
 						</p>
 					{/if}
 				</div>
 				<div class="shrink-0 text-right">
-					<p class="text-slate-400 text-xs">Belegnummer</p>
+					<p class="text-muted-foreground text-xs">Belegnummer</p>
 					<button
 						type="button"
 						onclick={() => choose('/invoiceNumber')}
-						class="font-mono font-semibold text-sm {active('/invoiceNumber') ? 'rounded bg-amber-100 ring-2 ring-amber-400' : ''}"
+						class="font-mono font-semibold text-sm {active('/invoiceNumber') ? 'rounded bg-evidence-soft ring-2 ring-evidence' : ''}"
 					>
 						{stringValue(data.invoiceNumber, stringValue(data.orderNumber))}
 					</button>
 					{#if detailedInvoice}
-						<p class="mt-2 text-slate-400 text-xs">{stringValue(data.issueDate)}</p>
+						<p class="mt-2 text-muted-foreground text-xs">{stringValue(data.issueDate)}</p>
 					{/if}
 				</div>
 			</header>
 
 			{#if candidateInvoice}
-				<div class="grid grid-cols-2 gap-px bg-slate-200 sm:grid-cols-4">
+				<div class="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
 					{#each [['Netto', 'netMinor'], ['Steuer', 'taxMinor'], ['Brutto', 'grossMinor'], ['Fällig', 'dueDate']] as item}
 						<button
 							type="button"
 							onclick={() => choose(`/${item[1]}`)}
-							class="bg-white px-4 py-4 text-left hover:bg-amber-50"
+							class="bg-white px-4 py-4 text-left hover:bg-evidence-soft"
 						>
 							<span
-								class="block text-[length:var(--fs-micro)] text-slate-400 uppercase tracking-wide"
+								class="block text-[length:var(--fs-micro)] text-muted-foreground uppercase tracking-wide"
 								>{item[0]}</span
 							>
 							<strong
-								class="mt-1 block {active(`/${item[1]}`) ? 'rounded bg-amber-100 ring-2 ring-amber-400' : ''}"
+								class="mt-1 block {active(`/${item[1]}`) ? 'rounded bg-evidence-soft ring-2 ring-evidence' : ''}"
 								>{item[1] === 'dueDate' ? displayValue(data[item[1]]) : formatMoney(data[item[1]], data.currency)}</strong
 							>
 						</button>
 					{/each}
 				</div>
-				<p class="px-6 py-6 text-slate-600 text-sm leading-relaxed">
+				<p class="px-6 py-6 text-foreground text-sm leading-relaxed">
 					{stringValue(data.summary, 'Keine Zusammenfassung verfügbar.')}
 				</p>
 			{:else}
 				{#if buyer.name || buyer.address}
 					<div class="grid gap-6 px-6 py-5 sm:grid-cols-2">
 						<div>
-							<p class="text-[length:var(--fs-micro)] text-slate-400 uppercase">Von</p>
+							<p class="text-[length:var(--fs-micro)] text-muted-foreground uppercase">Von</p>
 							<p class="mt-1 font-medium">{stringValue(supplier.name)}</p>
-							<p class="whitespace-pre-line text-slate-500 text-xs">
+							<p class="whitespace-pre-line text-muted-foreground text-xs">
 								{stringValue(supplier.address, '')}
 							</p>
 						</div>
 						<div>
-							<p class="text-[length:var(--fs-micro)] text-slate-400 uppercase">An</p>
+							<p class="text-[length:var(--fs-micro)] text-muted-foreground uppercase">An</p>
 							<p class="mt-1 font-medium">{stringValue(buyer.name)}</p>
-							<p class="whitespace-pre-line text-slate-500 text-xs">
+							<p class="whitespace-pre-line text-muted-foreground text-xs">
 								{stringValue(buyer.address, '')}
 							</p>
 						</div>
@@ -198,7 +198,7 @@ function title(): string {
 					<div class="overflow-x-auto px-6 py-3">
 						<table class="w-full min-w-[34rem] text-left text-xs">
 							<thead>
-								<tr class="border-slate-300 border-b text-slate-400 uppercase tracking-wide">
+								<tr class="border-border border-b text-muted-foreground uppercase tracking-wide">
 									<th class="py-2 font-medium">Position</th>
 									<th class="py-2 text-right font-medium">Menge</th>
 									<th class="py-2 text-right font-medium">Netto</th>
@@ -207,15 +207,15 @@ function title(): string {
 							</thead>
 							<tbody>
 								{#each lineItems as item, index}
-									<tr class="border-slate-100 border-b">
+									<tr class="border-border border-b">
 										<td class="py-3">
 											<button
 												type="button"
 												onclick={() => choose(`/lineItems/${index}`)}
-												class="text-left {edge(`/lineItems/${index}`) ? 'cursor-crosshair hover:text-amber-700' : ''}"
+												class="text-left {edge(`/lineItems/${index}`) ? 'cursor-crosshair hover:text-evidence-ink' : ''}"
 											>
 												<span
-													class={active(`/lineItems/${index}`) ? 'rounded bg-amber-100 ring-2 ring-amber-400' : ''}
+													class={active(`/lineItems/${index}`) ? 'rounded bg-evidence-soft ring-2 ring-evidence' : ''}
 													>{stringValue(item.description)}</span
 												>
 											</button>
@@ -236,16 +236,16 @@ function title(): string {
 					</div>
 				{/if}
 				<div class="ml-auto grid max-w-sm grid-cols-2 gap-x-6 gap-y-2 px-6 py-6 text-sm">
-					<span class="text-slate-500">Bezahlt</span
+					<span class="text-muted-foreground">Bezahlt</span
 					><strong class="text-right">{formatMoney(payment.amountPaidMinor, currency)}</strong>
-					<span class="text-slate-500">Offen</span
+					<span class="text-muted-foreground">Offen</span
 					><strong class="text-right text-lg"
 						>{formatMoney(payment.totalOutstandingMinor, currency)}</strong
 					>
 				</div>
 			{/if}
 			{#if evidence.length > 0}
-				<footer class="border-slate-200 border-t bg-amber-50/70 px-6 py-3 text-amber-800 text-xs">
+				<footer class="border-border border-t bg-evidence-soft/70 px-6 py-3 text-evidence-ink text-xs">
 					▣ {evidence.length} belegte {evidence.length === 1 ? 'Fundstelle' : 'Fundstellen'} · Feld
 					anklicken, um die Quelle zu markieren
 				</footer>
@@ -255,7 +255,7 @@ function title(): string {
 		<article
 			class="mx-auto max-w-4xl overflow-hidden rounded-xl border border-border bg-surface-raised shadow-sm"
 		>
-			<header class="bg-gradient-to-br from-slate-900 to-slate-700 px-6 py-6 text-white">
+			<header class="bg-gradient-to-br from-primary to-quiet px-6 py-6 text-white">
 				<p
 					class="text-[length:var(--fs-micro)] text-white/50 uppercase tracking-[var(--tracking-widest)]"
 				>
@@ -309,7 +309,7 @@ function title(): string {
 											class="text-left {edge(`/transactions/${index}`) ? 'cursor-crosshair' : ''}"
 										>
 											<span
-												class={active(`/transactions/${index}`) ? 'rounded bg-amber-200/60 ring-2 ring-amber-400' : ''}
+												class={active(`/transactions/${index}`) ? 'rounded bg-evidence-soft/60 ring-2 ring-evidence' : ''}
 												>{stringValue(transaction.description)}</span
 											>
 										</button>
@@ -356,7 +356,7 @@ function title(): string {
 					class="flex w-full items-start gap-3 rounded-xl border border-border bg-surface-raised p-4 text-left hover:bg-surface-soft"
 				>
 					<span
-						class="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-xs {check.status === 'pass' ? 'bg-emerald-100 text-emerald-700' : check.status === 'fail' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}"
+						class="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-xs {check.status === 'pass' ? 'bg-success-muted text-success-strong' : check.status === 'fail' ? 'bg-error-muted text-error-strong' : 'bg-evidence-soft text-evidence-ink'}"
 						>{check.status === 'pass' ? '✓' : check.status === 'fail' ? '×' : '?'}</span
 					><span
 						><strong class="block text-sm"
@@ -398,7 +398,7 @@ function title(): string {
 						type="button"
 						onclick={() => choose(pointer)}
 						disabled={!edge(pointer)}
-						class="min-w-0 rounded-xl border border-border bg-surface-raised p-4 text-left {edge(pointer) ? 'cursor-crosshair hover:border-amber-400 hover:bg-amber-50/40' : ''} {active(pointer) ? 'border-amber-400 ring-2 ring-amber-300/50' : ''}"
+						class="min-w-0 rounded-xl border border-border bg-surface-raised p-4 text-left {edge(pointer) ? 'cursor-crosshair hover:border-evidence hover:bg-evidence-soft/40' : ''} {active(pointer) ? 'border-evidence ring-2 ring-evidence/50' : ''}"
 					>
 						<span
 							class="block text-[length:var(--fs-micro)] text-foreground/35 uppercase tracking-wide"
@@ -415,7 +415,7 @@ function title(): string {
 							<span class="mt-1 block break-words text-sm">{displayValue(value)}</span>
 						{/if}
 						{#if edge(pointer)}
-							<span class="mt-2 block text-amber-700 text-[length:var(--fs-micro)]"
+							<span class="mt-2 block text-evidence-ink text-[length:var(--fs-micro)]"
 								>▣ Quelle anzeigen</span
 							>
 						{/if}

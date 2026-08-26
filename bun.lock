@@ -5,10 +5,12 @@
     "": {
       "name": "avenos",
       "devDependencies": {
+        "@avenos/aven-ui": "workspace:*",
         "@biomejs/biome": "^2.4.14",
         "@commitlint/cli": "^21.0.2",
         "@commitlint/config-conventional": "^21.0.2",
-        "@myavenceo/aven-ceo": "^0.2.0",
+        "@myavenceo/aven-ceo": "^0.4.1",
+        "@myavenceo/aven-vibes": "^0.1.0",
         "conventional-changelog-cli": "^5.0.0",
         "semver": "^7.8.4",
         "sharp": "^0.35.3",
@@ -16,10 +18,10 @@
     },
     "app": {
       "name": "@AvenOS/app",
-      "version": "26.8.25-next.4",
+      "version": "26.8.25-next.6",
       "dependencies": {
         "@avenos/aven-ui": "workspace:*",
-        "@myavenceo/aven-ceo": "^0.2.0",
+        "@myavenceo/aven-ceo": "^0.4.1",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-opener": "^2.5.4",
         "@xyflow/svelte": "^1.6.2",
@@ -52,14 +54,14 @@
     },
     "libs/aven-artifact-store": {
       "name": "@avenos/artifact-store",
-      "version": "26.8.25-next.4",
+      "version": "26.8.25-next.6",
       "devDependencies": {
         "typescript": "^6.0.2",
       },
     },
     "libs/aven-board": {
       "name": "@avenos/aven-board",
-      "version": "26.8.25-next.4",
+      "version": "26.8.25-next.6",
       "dependencies": {
         "dompurify": "^3",
         "github-slugger": "^2",
@@ -72,7 +74,7 @@
     },
     "libs/aven-hosting": {
       "name": "@avenos/aven-hosting",
-      "version": "26.8.25-next.4",
+      "version": "26.8.25-next.6",
       "devDependencies": {
         "@types/bun": "^1.3.13",
         "typescript": "6.0.3",
@@ -80,11 +82,10 @@
     },
     "libs/aven-ui": {
       "name": "@avenos/aven-ui",
-      "version": "26.8.25-next.4",
+      "version": "26.8.25-next.6",
       "dependencies": {
-        "@myavenceo/aven-ceo": "^0.2.0",
-        "dompurify": "^3.3.3",
-        "marked": "^15.0.12",
+        "@myavenceo/aven-ceo": "^0.4.1",
+        "@myavenceo/aven-vibes": "^0.1.0",
       },
     },
     "services/aven-api": {
@@ -94,7 +95,7 @@
         "@avenos/artifact-store": "workspace:*",
         "@avenos/aven-hosting": "workspace:*",
         "@better-auth/passkey": "1.6.23",
-        "@myavenceo/aven-ceo": "^0.2.0",
+        "@myavenceo/aven-ceo": "^0.4.1",
         "@polar-sh/sdk": "^0.49.0",
         "better-auth": "1.6.23",
         "dotenv": "17.3.1",
@@ -431,7 +432,9 @@
 
     "@mdit-vue/types": ["@mdit-vue/types@3.0.2", "", {}, "sha512-00aAZ0F0NLik6I6Yba2emGbHLxv+QYrPH00qQ5dFKXlAo1Ll2RHDXwY7nN2WAfrx2pP+WrvSRFTGFCNGdzBDHw=="],
 
-    "@myavenceo/aven-ceo": ["@myavenceo/aven-ceo@0.2.0", "https://npm.pkg.github.com/download/@myavenceo/aven-ceo/0.2.0/44884cab7d50f38576cbe0f1fdac59938c8c4b89", {}, "sha512-oqgn4fP2e6JzstfogFVmVXUhKtjDh6g+uBBNkzG9eAmr+TDlLFnlO5N1wQCYdAu0M7MAqOaZ8iYs4r9B0scdjg=="],
+    "@myavenceo/aven-ceo": ["@myavenceo/aven-ceo@0.4.1", "https://npm.pkg.github.com/download/@myavenceo/aven-ceo/0.4.1/1966fb662f2b737b21cb8f934212d4a5cc177880", {}, "sha512-ACBqokpIyyX+puBpvlwdVuOl3Sqq+qPd7L6Cb+Dwp+rEiXbaiPrmTl4MDlwtX/BqqVfQtUldWsVf4QuOS5lfmw=="],
+
+    "@myavenceo/aven-vibes": ["@myavenceo/aven-vibes@0.1.0", "https://npm.pkg.github.com/download/@myavenceo/aven-vibes/0.1.0/a697786417047c0f54f88c1f6bf0e5d7e5a87d28", { "dependencies": { "dompurify": "^3.3.3", "marked": "^15.0.12" } }, "sha512-f3L/gVSUQe1WYaLZA5FPnElqXeCQ/eGAKSEWjXxMvag6FjzxAcQlBUeH+ftv7ZMQ1DSToIozDSiArYJljNcL/g=="],
 
     "@napi-rs/canvas": ["@napi-rs/canvas@1.0.8", "", { "optionalDependencies": { "@napi-rs/canvas-android-arm64": "1.0.8", "@napi-rs/canvas-darwin-arm64": "1.0.8", "@napi-rs/canvas-darwin-x64": "1.0.8", "@napi-rs/canvas-linux-arm-gnueabihf": "1.0.8", "@napi-rs/canvas-linux-arm64-gnu": "1.0.8", "@napi-rs/canvas-linux-arm64-musl": "1.0.8", "@napi-rs/canvas-linux-riscv64-gnu": "1.0.8", "@napi-rs/canvas-linux-x64-gnu": "1.0.8", "@napi-rs/canvas-linux-x64-musl": "1.0.8", "@napi-rs/canvas-win32-arm64-msvc": "1.0.8", "@napi-rs/canvas-win32-x64-msvc": "1.0.8" } }, "sha512-/SaLcvlqGWdm0HSCWMgHu7cjJiQXfP8/mOY+6dUyV9flQz7sPBBZ+ed2zYtoukojPmxOaL7bm+d/G4GeWWoN7g=="],
 

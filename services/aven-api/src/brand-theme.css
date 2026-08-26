@@ -38,7 +38,9 @@
 	--color-surface-cream: var(--color-linen);
 	--color-surface-soft: var(--color-eggshell);
 	--color-surface-card: var(--color-ivory);
+	--color-surface-card-selected: var(--color-sand);
 	--color-background: var(--color-surface-cream);
+	--color-surface-card-hover: var(--color-eggshell);
 
 	/* ══ 3 · THE ROLES — what a colour MEANS ══ */
 	--color-primary: var(--color-marine);
@@ -71,6 +73,15 @@
 	--color-input: color-mix(in srgb, #ffffff 65%, var(--color-surface-cream));
 	--color-error-muted: color-mix(in oklab, var(--color-terracotta) 22%, white);
 	--color-error-strong: color-mix(in oklab, var(--color-terracotta) 78%, black);
+	--color-success-muted: color-mix(in oklab, var(--color-paradise-water) 22%, white);
+	--color-success-strong: color-mix(in oklab, var(--color-paradise-water) 78%, black);
+	--color-warning-muted: color-mix(in oklab, var(--color-sunflower) 22%, white);
+	--color-warning-strong: color-mix(in oklab, var(--color-sunflower) 78%, black);
+	--color-info-muted: color-mix(in oklab, var(--color-earth) 22%, white);
+	--color-info-strong: color-mix(in oklab, var(--color-earth) 78%, black);
+	--color-evidence: var(--color-sunflower);
+	--color-evidence-soft: color-mix(in oklab, var(--color-sunflower) 26%, white);
+	--color-evidence-ink: color-mix(in oklab, var(--color-sunflower) 76%, black);
 	--color-card: #ffffff;
 	--color-sandbox-host: color-mix(in srgb, var(--color-background) 94%, var(--color-foreground));
 
@@ -78,17 +89,11 @@
 	--radius-xl: 1.5rem;
 	--radius-2xl: 2rem;
 	--radius-full: 9999px;
+
 	/* ══ 4 · THE SCALES — type, tracking, emphasis, elevation, geometry ══
 	 * A value that is not on a scale is not available. Before these, one
 	 * idiom was written fourteen ways and the type ramp was thirty arbitrary
-	 * sizes mixing px and rem by eye.
-	 *
-	 * Deliberately in `:root` and NOT in `@theme`. Tailwind v4 tree-shakes
-	 * `@theme` variables it sees no utility for, which silently dropped half
-	 * of these — a scale that only exists once something already uses it is
-	 * not a scale, and the next author reaching for `var(--fs-body)` would
-	 * have got nothing. Colours stay in `@theme` above so Tailwind can still
-	 * generate `bg-primary` and friends. */
+	 * sizes mixing px and rem by eye. */
 	--fs-nano: 9px;
 	--fs-micro: 10px;
 	--fs-eyebrow: 11px;

@@ -647,7 +647,7 @@ onMount(() => {
 										>
 									{:else if evidence.length > 0}
 										<span
-											class="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 text-[length:var(--fs-micro)]"
+											class="ml-auto rounded-full bg-evidence-soft px-2 py-0.5 text-evidence-ink text-[length:var(--fs-micro)]"
 											>▣ {evidence.length} Fundstellen</span
 										>
 									{/if}
@@ -711,7 +711,7 @@ onMount(() => {
 													</div>
 													{#if activeEvidence?.outputLocator.kind === 'json-pointer'}
 														<span
-															class="rounded-md bg-amber-100 px-2 py-1 font-mono text-amber-800 text-[length:var(--fs-nano)]"
+															class="rounded-md bg-evidence-soft px-2 py-1 font-mono text-evidence-ink text-[length:var(--fs-nano)]"
 															>{activeEvidence.outputLocator.pointer}</span
 														>
 													{/if}
