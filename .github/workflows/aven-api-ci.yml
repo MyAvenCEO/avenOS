@@ -12,6 +12,10 @@ on:
       - package.json
       - bun.lock
       - .dockerignore
+      # The shared install action decides how every job authenticates to the
+      # registry. Changing it and not re-running the job that depends on it is
+      # how a broken auth step sat green for two rounds.
+      - .github/actions/**
       - .github/workflows/aven-api-ci.yml
       - .github/workflows/aven-api-operations.yml
       - .github/workflows/identity-infrastructure.yml
