@@ -35,7 +35,7 @@ describe('admin static-site authorization lifecycle on the local stack', () => {
 		await database.pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ['admin', userId])
 		const created = await sites.create(userId, {
 			name,
-			hostname: 'local-stack-test.aven.ceo',
+			hostname: 'aven.ceo',
 			repository: 'myavenceo/local-stack-test',
 			sourceBranch: 'next',
 			deploymentBranch: 'deploy/next'
@@ -45,7 +45,7 @@ describe('admin static-site authorization lifecycle on the local stack', () => {
 			(binding) => binding.id === created.site.id
 		)
 		expect(authorized).toMatchObject({
-			hostname: 'local-stack-test.aven.ceo',
+			hostname: 'aven.ceo',
 			owner_is_admin: true
 		})
 		expect(() => validateBinding(authorized)).not.toThrow()
@@ -55,7 +55,7 @@ describe('admin static-site authorization lifecycle on the local stack', () => {
 			(await sites.directory()).bindings.find((binding) => binding.id === created.site.id)
 		).toBeUndefined()
 		expect(await sites.listForUser(userId)).toMatchObject([
-			{ id: created.site.id, hostname: 'local-stack-test.aven.ceo' }
+			{ id: created.site.id, hostname: 'aven.ceo' }
 		])
 
 		await database.pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ['admin', userId])
@@ -63,7 +63,7 @@ describe('admin static-site authorization lifecycle on the local stack', () => {
 			(binding) => binding.id === created.site.id
 		)
 		expect(restored).toMatchObject({
-			hostname: 'local-stack-test.aven.ceo',
+			hostname: 'aven.ceo',
 			owner_is_admin: true
 		})
 		expect(() => validateBinding(restored)).not.toThrow()

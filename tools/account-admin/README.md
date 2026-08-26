@@ -2,7 +2,7 @@
 
 This operator tool lists identity accounts and changes the canonical account role between `user` and `admin`. It reaches PostgreSQL only through the same restricted local SSH forwarding model as the [database tunnel](../db-tunnel/README.md).
 
-An admin role is returned with every authoritative Better Auth session. The API uses it to permit static-site bindings below `.aven.ceo`; the `aven.ceo` apex remains reserved.
+An admin role is returned with every authoritative Better Auth session. The API uses it to permit static-site bindings for the `aven.ceo` apex and its subdomains; non-admin accounts cannot bind either.
 
 ## Security model
 
@@ -12,7 +12,7 @@ An admin role is returned with every authoritative Better Auth session. The API 
 - The PostgreSQL role can read only the account summary columns, update only `user.role` and `user.updated_at`, and append the bounded audit-event columns.
 - The database constraint accepts only `user` and `admin`.
 - Every mutation records the PostgreSQL operator role, previous role, new role, target account, and timestamp in `audit_events`.
-- Demotion inventories admin-dependent resources first. If any active `.aven.ceo` site depends on the role, the command fails unless the operator separately acknowledges resource suspension.
+- Demotion inventories admin-dependent resources first. If any active `aven.ceo` apex or subdomain site depends on the role, the command fails unless the operator separately acknowledges resource suspension.
 - Profile files are local, ignored, and must have mode `0400` or `0600`.
 
 ## Requirements
@@ -116,7 +116,7 @@ Remove admin status:
 ./tools/account-admin/account-admin.sh next demote owner@example.com
 ```
 
-Demotion has an availability consequence: every active `.aven.ceo` site owned by that account disappears from the authenticated host directory on its next reconciliation. The binding and artifacts are retained, but Caddy authorization is withdrawn and the site is offline. The tool lists all affected resources and refuses the operation by default. After reviewing the list, explicitly acknowledge the suspension:
+Demotion has an availability consequence: every active `aven.ceo` apex or subdomain site owned by that account disappears from the authenticated host directory on its next reconciliation. The binding and artifacts are retained, but Caddy authorization is withdrawn and the site is offline. The tool lists all affected resources and refuses the operation by default. After reviewing the list, explicitly acknowledge the suspension:
 
 ```sh
 ./tools/account-admin/account-admin.sh next demote owner@example.com \
@@ -166,4 +166,4 @@ bun run --cwd services/static-site-host test
 bun run test:account-admin-local
 ```
 
-The lifecycle test uses a migrated throwaway database on the local stack and proves promotion, directory authorization, demotion withdrawal, retained binding state, and re-promotion recovery. The static-host suite proves that an API-derived `owner_is_admin: true` is required for `.aven.ceo`, while the apex is always rejected. The operator smoke test creates and removes an isolated database and PostgreSQL role, then proves exact impact reporting, fail-closed demotion, explicit suspension, audit metadata, and denial of updates to non-role account columns.
+The lifecycle test uses a migrated throwaway database on the local stack and proves promotion, apex directory authorization, demotion withdrawal, retained binding state, and re-promotion recovery. The static-host suite proves that an API-derived `owner_is_admin: true` is required for both `aven.ceo` and its subdomains. The operator smoke test creates and removes an isolated database and PostgreSQL role, then proves exact apex impact reporting, fail-closed demotion, explicit suspension, audit metadata, and denial of updates to non-role account columns.

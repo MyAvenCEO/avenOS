@@ -6,16 +6,15 @@ const branch = /^(?![./-])(?!.*(?:\.\.|\/\/|@\{|\\))[A-Za-z0-9._/-]{1,200}(?<![.
 const branchComponent = /^(?!\.)(?!.*\.lock$)[A-Za-z0-9._-]+$/
 const repository = /^[A-Za-z0-9_.-]{1,100}\/[-A-Za-z0-9_.]{1,100}$/
 
-export function normalizeSiteHostname(input: string, allowOperatorSubdomains = false): string {
+export function normalizeSiteHostname(input: string, allowOperatorHostnames = false): string {
 	const hostname = input.trim().toLowerCase().replace(/\.$/, '')
 	if (hostname !== input.toLowerCase().replace(/\.$/, '') || hostname.length > 253)
 		throw new Error('hostname must not contain surrounding whitespace')
 	const labels = hostname.split('.')
 	if (labels.length < 2 || labels.some((part) => !label.test(part)))
 		throw new Error('hostname must be an ASCII fully-qualified domain name')
-	if (hostname === 'aven.ceo') throw new Error('the aven.ceo apex is reserved')
-	if (!allowOperatorSubdomains && hostname.endsWith('.aven.ceo'))
-		throw new Error('aven.ceo and its subdomains are reserved')
+	if (!allowOperatorHostnames && (hostname === 'aven.ceo' || hostname.endsWith('.aven.ceo')))
+		throw new Error('aven.ceo and its subdomains are reserved for admins')
 	return hostname
 }
 
@@ -37,7 +36,7 @@ export function normalizeBranch(input: string, deployment = false): string {
 	return input
 }
 
-export const siteBindingInputSchema = (options: { allowOperatorSubdomains?: boolean } = {}) =>
+export const siteBindingInputSchema = (options: { allowOperatorHostnames?: boolean } = {}) =>
 	z.object({
 		name: z.string().transform((value, context) => {
 			const name = normalizeName(value)
@@ -49,7 +48,7 @@ export const siteBindingInputSchema = (options: { allowOperatorSubdomains?: bool
 		}),
 		hostname: z.string().transform((value, context) => {
 			try {
-				return normalizeSiteHostname(value, options.allowOperatorSubdomains)
+				return normalizeSiteHostname(value, options.allowOperatorHostnames)
 			} catch (error) {
 				context.addIssue({ code: 'custom', message: (error as Error).message })
 				return z.NEVER
