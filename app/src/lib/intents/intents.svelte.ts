@@ -12,6 +12,7 @@ import {
 	artifactMetadataHighlights,
 	artifactTypeLabel
 } from '$lib/artifacts/processing'
+import { persistentLogEntries } from './activity-log'
 import {
 	artifactManifest,
 	formatBytes,
@@ -90,6 +91,16 @@ export interface MockIntent {
 
 export type IntentState = 'working' | 'waiting' | 'done' | 'error' | 'archive'
 
+export interface Contribution {
+	id: string
+	sequence: number
+	contributorKind: 'human' | 'agent' | 'skill' | 'system'
+	kind: string
+	text: string | null
+	payload: Record<string, unknown>
+	createdAt: string
+}
+
 export interface PersistentIntentDetail {
 	id: string
 	title: string
@@ -102,15 +113,7 @@ export interface PersistentIntentDetail {
 	sourceArtifactId: string | null
 	createdAt: string
 	updatedAt: string
-	contributions: Array<{
-		id: string
-		sequence: number
-		contributorKind: 'human' | 'agent' | 'skill' | 'system'
-		kind: string
-		text: string | null
-		payload: Record<string, unknown>
-		createdAt: string
-	}>
+	contributions: Contribution[]
 	artifacts: Array<{
 		artifactId: string
 		relation: 'source' | 'file-skill-output' | 'attached'
@@ -908,20 +911,9 @@ class IntentsActor extends Actor {
 					: {})
 			}
 		})
-		const log: LogEntry[] = detail.contributions.map((entry) => ({
-			step:
-				entry.kind === 'file-upload'
-					? 'File uploaded'
-					: entry.contributorKind === 'human'
-						? 'Human message'
-						: 'Agent response',
-			when: new Date(entry.createdAt).toLocaleString(),
-			state: 'done',
-			skill: entry.kind === 'file-upload' ? 'file' : entry.contributorKind,
-			note:
-				entry.text ??
-				(typeof entry.payload.originalName === 'string' ? entry.payload.originalName : undefined)
-		}))
+		// Conversation messages are inlined in the chat below (persistentTurns),
+		// never in the log — mapping them here is what made them render twice.
+		const log = persistentLogEntries(detail.contributions)
 		const existing = this.items.find((item) => item.id === detail.id)
 		const mapped: MockIntent = {
 			id: detail.id,
