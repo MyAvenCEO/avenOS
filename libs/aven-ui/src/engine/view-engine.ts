@@ -19,7 +19,11 @@ import type {
 } from './types.js'
 import { Evaluator, validateViewDef } from './view-validator.js'
 
-async function renderMarkdown(rawText: unknown): Promise<string> {
+/**
+ * Shared with the string renderer, so markdown means the same thing whether a
+ * view is rendered into DOM or into a static file.
+ */
+export async function renderMarkdown(rawText: unknown): Promise<string> {
 	if (rawText == null || typeof rawText !== 'string') return ''
 	const html = await marked.parse(rawText)
 	return DOMPurify.sanitize(String(html))
