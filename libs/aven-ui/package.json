@@ -15,6 +15,6 @@
 	},
 	"dependencies": {
 		"@myavenceo/aven-ceo": "^0.6.0",
-		"@myavenceo/aven-vibes": "^0.1.0"
+		"@myavenceo/aven-vibes": "^0.2.0"
 	}
 }
