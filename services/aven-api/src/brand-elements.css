@@ -2,41 +2,47 @@
  * Every value here comes from packages/aven-ceo/src/tokens.ts.
  * Re-generate with `bun run brand:generate`; edits are overwritten. */
 
-h1 {
-	margin: 0;
-	font-size: var(--fs-hero);
-	font-weight: 600;
-	letter-spacing: var(--tracking-tight);
-}
-button {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: var(--space-tight);
-	min-height: 2.75rem;
-	padding: 0 1.75rem;
-	border: 0;
-	border-radius: var(--radius-pill);
-	background: var(--color-primary);
-	color: var(--color-primary-foreground);
-	font: inherit;
-	font-size: var(--fs-section);
-	font-weight: 600;
-	cursor: pointer;
-	transition: opacity 0.15s ease;
-}
-label {
-	display: grid;
-	gap: 0.4rem;
-	font-weight: 600;
-	text-align: left;
-}
+@layer components {
+	h1 {
+		margin: 0;
+		font-size: var(--fs-hero);
+		font-weight: 600;
+		letter-spacing: var(--tracking-tight);
+	}
 
-button:hover:not(:disabled) {
-	opacity: 0.9;
-}
+	button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-tight);
+		min-height: 2.75rem;
+		padding: 0 1.75rem;
+		border: 0;
+		border-radius: var(--radius-pill);
+		background: var(--color-primary);
+		color: var(--color-primary-foreground);
+		font: inherit;
+		font-size: var(--fs-section);
+		font-weight: 600;
+		cursor: pointer;
+		transition: opacity 0.15s ease;
 
-button:disabled {
-	cursor: default;
-	opacity: 0.55;
+		&:hover:not(:disabled) {
+			opacity: 0.9;
+		}
+		&:disabled {
+			cursor: default;
+			opacity: 0.55;
+		}
+		@container (width < 22rem) {
+			width: 100%;
+		}
+	}
+
+	label {
+		display: grid;
+		gap: 0.4rem;
+		font-weight: 600;
+		text-align: left;
+	}
 }

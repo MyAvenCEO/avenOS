@@ -2,6 +2,10 @@
  * Every value here comes from packages/aven-ceo/src/tokens.ts.
  * Re-generate with `bun run brand:generate`; edits are overwritten. */
 
+/* Cascade layers, so a component never has to out-specify a utility and
+ * nothing here needs `!important`. Order is the priority order. */
+@layer tokens, primitives, components, utilities;
+
 @layer components {
 	.card {
 		border-radius: var(--radius-card);
@@ -114,6 +118,17 @@
 		font-weight: 600;
 		cursor: pointer;
 		transition: opacity 0.15s ease;
+
+		&:hover:not(:disabled) {
+			opacity: 0.9;
+		}
+		&:disabled {
+			cursor: default;
+			opacity: 0.55;
+		}
+		@container (width < 22rem) {
+			width: 100%;
+		}
 	}
 
 	.btn-secondary {
@@ -132,6 +147,17 @@
 		font-weight: 600;
 		cursor: pointer;
 		transition: opacity 0.15s ease;
+
+		&:hover:not(:disabled) {
+			opacity: 0.9;
+		}
+		&:disabled {
+			cursor: default;
+			opacity: 0.55;
+		}
+		@container (width < 22rem) {
+			width: 100%;
+		}
 	}
 
 	.chip {
@@ -145,6 +171,7 @@
 	}
 
 	.panel {
+		container-type: inline-size;
 		width: min(100%, 34rem);
 		margin-inline: auto;
 		padding: 2.5rem 2rem;
