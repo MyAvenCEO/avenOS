@@ -14,7 +14,7 @@
 		"test": "bun test ./tests"
 	},
 	"dependencies": {
-		"@myavenceo/aven-ceo": "^0.4.1",
+		"@myavenceo/aven-ceo": "^0.6.0",
 		"@myavenceo/aven-vibes": "^0.1.0"
 	}
 }
