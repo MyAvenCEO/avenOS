@@ -1,3 +1,15 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.26-next.3...v) (2026-08-27)
+
+
+### Bug Fixes
+
+* **intents:** keep chat messages out of the activity log ([27fcaad](https://github.com/MyAvenCEO/avenOS/commit/27fcaad08d933a4a7056079d9a45cd7ffbe933b2))
+
+
+### Features
+
+* **chat:** add debug view of the model's exact request context and tools ([dd6e194](https://github.com/MyAvenCEO/avenOS/commit/dd6e194e5a7e13124a15dd72f7a2dd5ce2c12fd1)), closes [Chat.#round](https://github.com/Chat./issues/round)
+* **intents:** give the model bounded artifact awareness ([0bb7842](https://github.com/MyAvenCEO/avenOS/commit/0bb78425c40ab287aed6b40221d06973397a1702))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.26-next.2...v) (2026-08-26)
 
 
