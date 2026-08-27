@@ -186,6 +186,12 @@ API verification runs from the root with `bun run check:api`, `bun run test:api`
 
 Infrastructure validation runs with `bun run test:infra`. Provisioning and deployment use protected GitHub Environment values and encrypted Pulumi state in a private Hetzner Object Storage bucket; see [`infrastructure/identity/README.md`](infrastructure/identity/README.md), the [GitHub deployment guide](services/aven-api/docs/github-deployment.md), and the [first-install checklist](GITHUB_HETZNER_DEPLOYMENT_CHECKLIST.md). Do not commit deployment `.env` files, Pulumi stack configuration/state, or credentials.
 
+## Architecture notes
+
+- [Generic authenticated LLM gateway](docs/llm-gateway.md) documents capability-based
+  model discovery, explicit model selection, OpenAI-compatible streaming, schemas, tool
+  calls, desktop transport, provider configuration, security, and operations.
+
 ## Reference — recreate Svelte app
 
 ```sh

@@ -6,6 +6,9 @@
  * unit-tested and reused outside a component.
  */
 
+import { isTauri } from '@tauri-apps/api/core'
+import { type OpenAiChatCompletionRequest, streamOpenAiChat } from '$lib/models/gateway'
+
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool'
 
 export interface ToolCall {
@@ -41,6 +44,9 @@ export interface ToolSpec {
 	description: string
 	parameters: Record<string, unknown>
 }
+
+/** Public gateway model ID for the latency-sensitive voice/chat lane. */
+export const CHAT_MODEL = 'deepseek/deepseek-v4-flash-0731'
 
 export type StreamEvent =
 	| { kind: 'text'; text: string }
@@ -189,6 +195,102 @@ async function failureText(response: Response): Promise<string> {
 	return body || `chat failed with ${response.status}`
 }
 
+export interface ChatProxyRequest {
+	messages: ChatMessage[]
+	tools: ToolSpec[]
+	model?: string
+	temperature?: number
+	json?: boolean
+	max_tokens?: number
+}
+
+export function openAiGatewayRequest(input: ChatProxyRequest): OpenAiChatCompletionRequest {
+	const chosen = input.model ?? CHAT_MODEL
+	const maximumTokens = chosen === CHAT_MODEL ? 16_384 : 32_768
+	const requestedTokens =
+		typeof input.max_tokens === 'number'
+			? Math.max(256, Math.min(maximumTokens, input.max_tokens))
+			: maximumTokens
+	return {
+		model: chosen,
+		messages: input.messages,
+		stream: true,
+		...(chosen === CHAT_MODEL && {
+			chat_template_kwargs: { enable_thinking: false },
+			frequency_penalty: 0.3
+		}),
+		max_tokens: requestedTokens,
+		...(input.json === true && { response_format: { type: 'json_object' } }),
+		...(typeof input.temperature === 'number' && {
+			temperature: Math.max(0, Math.min(2, input.temperature))
+		}),
+		...(input.tools.length > 0 && {
+			tools: input.tools.map((tool) => ({ type: 'function', function: tool }))
+		})
+	}
+}
+
+async function* responseChunks(response: Response): AsyncGenerator<string> {
+	if (!response.body) throw new Error('chat response had no stream body')
+	const reader = response.body.getReader()
+	const decoder = new TextDecoder()
+	try {
+		while (true) {
+			const { done, value } = await reader.read()
+			if (done) break
+			yield decoder.decode(value, { stream: true })
+		}
+		const tail = decoder.decode()
+		if (tail !== '') yield tail
+	} finally {
+		reader.cancel().catch(() => {})
+	}
+}
+
+async function openChatStream(
+	request: ChatProxyRequest,
+	signal?: AbortSignal
+): Promise<AsyncIterable<string>> {
+	if (isTauri()) return streamOpenAiChat(openAiGatewayRequest(request), signal)
+
+	const response = await fetch('/api/chat', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(request),
+		signal
+	})
+	if (!response.ok || !response.body) throw new Error(await failureText(response))
+	return responseChunks(response)
+}
+
+async function* withStallWatchdog(
+	source: AsyncIterable<string>,
+	stallMs = 75_000
+): AsyncGenerator<string> {
+	const iterator = source[Symbol.asyncIterator]()
+	try {
+		while (true) {
+			let timer: ReturnType<typeof setTimeout> | undefined
+			const stalled = new Promise<never>((_, reject) => {
+				timer = setTimeout(
+					() => reject(new Error(`lane stalled \u2014 no stream frames for ${stallMs / 1000}s`)),
+					stallMs
+				)
+			})
+			let next: IteratorResult<string>
+			try {
+				next = await Promise.race([iterator.next(), stalled])
+			} finally {
+				clearTimeout(timer)
+			}
+			if (next.done) break
+			yield next.value
+		}
+	} finally {
+		await iterator.return?.()
+	}
+}
+
 /**
  * Stream one completion, yielding events as they arrive.
  *
@@ -201,57 +303,19 @@ export async function* streamChat(
 	signal?: AbortSignal,
 	model?: string
 ): AsyncGenerator<StreamEvent> {
-	const response = await fetch('/api/chat', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ messages, tools, ...(model && { model }) }),
-		signal
-	})
-
-	if (!response.ok || !response.body) {
-		throw new Error(await failureText(response))
-	}
-
-	const reader = response.body.getReader()
-	const decoder = new TextDecoder()
+	const source = await openChatStream({ messages, tools, ...(model && { model }) }, signal)
 	let buffer = ''
+	for await (const chunk of withStallWatchdog(source)) {
+		buffer += chunk
 
-	// The stall watchdog: a reasoning model streams its deliberation, so 75s
-	// of TOTAL silence is a wedged lane, not patience — fail loudly instead
-	// of hanging the step forever.
-	const STALL_MS = 75_000
-	const readWithStall = async () => {
-		let timer: ReturnType<typeof setTimeout> | undefined
-		const stall = new Promise<never>((_, reject) => {
-			timer = setTimeout(
-				() => reject(new Error(`lane stalled \u2014 no stream frames for ${STALL_MS / 1000}s`)),
-				STALL_MS
-			)
-		})
-		try {
-			return await Promise.race([reader.read(), stall])
-		} finally {
-			clearTimeout(timer)
+		// SSE frames are separated by a blank line. Anything after the last
+		// one is a partial frame — keep it in the buffer until its tail turns up.
+		const frames = buffer.split('\n\n')
+		buffer = frames.pop() ?? ''
+
+		for (const frame of frames) {
+			for (const event of eventsFromFrame(frame)) yield event
 		}
-	}
-	try {
-		while (true) {
-			const { done, value } = await readWithStall()
-			if (done) break
-
-			buffer += decoder.decode(value, { stream: true })
-
-			// SSE frames are separated by a blank line. Anything after the last
-			// one is a partial frame — keep it in the buffer until its tail turns up.
-			const frames = buffer.split('\n\n')
-			buffer = frames.pop() ?? ''
-
-			for (const frame of frames) {
-				for (const event of eventsFromFrame(frame)) yield event
-			}
-		}
-	} finally {
-		reader.cancel().catch(() => {})
 	}
 }
 
@@ -337,113 +401,82 @@ export async function complete(
 	// Rate limits heal by WAITING — an instant retry (the flow's resample)
 	// hits the same wall. The design lane is slow work anyway; two spaced
 	// attempts beat failing the whole run because a minute was busy.
-	let response: Response
 	for (let attempt = 0; ; attempt++) {
-		response = await fetch('/api/chat', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({
-				messages,
-				tools: [],
-				model: options.model ?? DESIGN_MODEL,
-				...(typeof options.temperature === 'number' && { temperature: options.temperature }),
-				...(options.json === true && { json: true }),
-				...(typeof options.maxTokens === 'number' && { max_tokens: options.maxTokens })
-			}),
-			signal: options.signal
-		})
-		if (response.ok && response.body) break
-		const failure = await failureText(response)
-		if (attempt < 2 && /rate.?limit|429/i.test(failure)) {
-			const wait = 15_000 * (attempt + 1)
-			// The wait must be VISIBLE — a silent backoff reads as a hang.
-			options.onDelta?.({ status: `rate limited \u2014 retry ${attempt + 2} in ${wait / 1000}s` })
-			await backoff(wait, options.signal)
-			continue
-		}
-		throw new Error(failure)
-	}
-
-	const reader = response.body.getReader()
-	const decoder = new TextDecoder()
-	let buffer = ''
-	let text = ''
-	// The degeneration guard watches BOTH lanes: answer text and reasoning —
-	// repetition loops usually start in the deliberation.
-	let watched = ''
-	let nextCheck = 1024
-	// Reasoning and answer share ONE completion budget. When the budget dies
-	// mid-answer the server just stops — the only witness is finish_reason,
-	// and a silently truncated JSON must be an ERROR, not a parse mystery.
-	let finishReason = ''
-	// The stall watchdog: a reasoning model streams its deliberation, so 75s
-	// of TOTAL silence is a wedged lane, not patience — fail loudly instead
-	// of hanging the step forever.
-	const STALL_MS = 75_000
-	const readWithStall = async () => {
-		let timer: ReturnType<typeof setTimeout> | undefined
-		const stall = new Promise<never>((_, reject) => {
-			timer = setTimeout(
-				() => reject(new Error(`lane stalled \u2014 no stream frames for ${STALL_MS / 1000}s`)),
-				STALL_MS
-			)
-		})
 		try {
-			return await Promise.race([reader.read(), stall])
-		} finally {
-			clearTimeout(timer)
-		}
-	}
-	try {
-		while (true) {
-			const { done, value } = await readWithStall()
-			if (done) break
-			buffer += decoder.decode(value, { stream: true })
-			const frames = buffer.split('\n\n')
-			buffer = frames.pop() ?? ''
-			for (const frame of frames) {
-				const line = frame.split('\n').find((l) => l.startsWith('data:'))
-				if (!line) continue
-				const data = line.slice('data:'.length).trim()
-				if (data === '' || data === '[DONE]') continue
-				try {
-					const choice = JSON.parse(data)?.choices?.[0]
-					const delta = choice?.delta
-					if (typeof choice?.finish_reason === 'string' && choice.finish_reason !== '') {
-						finishReason = choice.finish_reason
+			const source = await openChatStream(
+				{
+					messages,
+					tools: [],
+					model: options.model ?? DESIGN_MODEL,
+					...(typeof options.temperature === 'number' && { temperature: options.temperature }),
+					...(options.json === true && { json: true }),
+					...(typeof options.maxTokens === 'number' && { max_tokens: options.maxTokens })
+				},
+				options.signal
+			)
+			let buffer = ''
+			let text = ''
+			// Watch both answer and reasoning for repetition loops.
+			let watched = ''
+			let nextCheck = 1024
+			let finishReason = ''
+			for await (const chunk of withStallWatchdog(source)) {
+				buffer += chunk
+				const frames = buffer.split('\n\n')
+				buffer = frames.pop() ?? ''
+				for (const frame of frames) {
+					const line = frame.split('\n').find((l) => l.startsWith('data:'))
+					if (!line) continue
+					const data = line.slice('data:'.length).trim()
+					if (data === '' || data === '[DONE]') continue
+					try {
+						const choice = JSON.parse(data)?.choices?.[0]
+						const delta = choice?.delta
+						if (typeof choice?.finish_reason === 'string' && choice.finish_reason !== '') {
+							finishReason = choice.finish_reason
+						}
+						if (typeof delta?.content === 'string' && delta.content !== '') {
+							text += delta.content
+							watched += delta.content
+							options.onDelta?.({ text: delta.content })
+						}
+						if (typeof delta?.reasoning_content === 'string' && delta.reasoning_content !== '') {
+							watched += delta.reasoning_content
+							options.onDelta?.({ reasoning: delta.reasoning_content })
+						}
+					} catch {
+						// partial frames cannot occur (blank-line buffering); skip junk
 					}
-					if (typeof delta?.content === 'string' && delta.content !== '') {
-						text += delta.content
-						watched += delta.content
-						options.onDelta?.({ text: delta.content })
+				}
+				if (watched.length >= nextCheck) {
+					nextCheck = watched.length + 1024
+					if (looksDegenerate(watched)) {
+						throw new Error(
+							`degenerate model output — repetition loop after ~${Math.round(watched.length / 4)} tokens`
+						)
 					}
-					if (typeof delta?.reasoning_content === 'string' && delta.reasoning_content !== '') {
-						watched += delta.reasoning_content
-						options.onDelta?.({ reasoning: delta.reasoning_content })
-					}
-				} catch {
-					// partial frames cannot occur (blank-line buffering); skip junk
 				}
 			}
-			if (watched.length >= nextCheck) {
-				nextCheck = watched.length + 1024
-				if (looksDegenerate(watched)) {
-					throw new Error(
-						`degenerate model output — repetition loop after ~${Math.round(watched.length / 4)} tokens`
-					)
-				}
+			if (finishReason === 'length') {
+				throw new Error(
+					'completion budget exhausted (finish_reason=length) — the answer was truncated ' +
+						`after ~${Math.round(watched.length / 4)} streamed tokens (reasoning included)`
+				)
 			}
+			return text
+		} catch (error) {
+			const failure = error instanceof Error ? error.message : String(error)
+			if (attempt < 2 && /rate.?limit|429/i.test(failure)) {
+				const wait = 15_000 * (attempt + 1)
+				options.onDelta?.({
+					status: `rate limited \u2014 retry ${attempt + 2} in ${wait / 1000}s`
+				})
+				await backoff(wait, options.signal)
+				continue
+			}
+			throw error
 		}
-	} finally {
-		reader.cancel().catch(() => {})
 	}
-	if (finishReason === 'length') {
-		throw new Error(
-			'completion budget exhausted (finish_reason=length) — the answer was truncated ' +
-				`after ~${Math.round(watched.length / 4)} streamed tokens (reasoning included)`
-		)
-	}
-	return text
 }
 
 /**

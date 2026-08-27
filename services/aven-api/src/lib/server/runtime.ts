@@ -11,6 +11,7 @@ import { type DatabaseContext, openDatabase } from './db.js'
 import type { QueueSettings } from './email/queue.js'
 import { EnvironmentService } from './environments/service.js'
 import { IntentService } from './intents/service.js'
+import { LlmGatewayService } from './llm-gateway.js'
 import { NameService } from './names/service.js'
 import { createNotifier, type Notifier } from './notifications.js'
 import { PasskeyService } from './passkeys.js'
@@ -32,6 +33,7 @@ export interface Runtime {
 	environments: EnvironmentService
 	artifacts: ArtifactFileService | null
 	artifactProcessing: ArtifactProcessingService | null
+	llmGateway: LlmGatewayService | null
 	intents: IntentService | null
 	sites: SiteBindingService
 	shutdown(): Promise<void>
@@ -67,6 +69,7 @@ async function create(): Promise<Runtime> {
 	const environments = new EnvironmentService(database.pool)
 	const artifacts = ArtifactFileService.fromConfig(config)
 	const artifactProcessing = ArtifactProcessingService.fromConfig(config)
+	const llmGateway = LlmGatewayService.fromConfig(config)
 	const intents = IntentService.fromConfig(config)
 	const sites = new SiteBindingService(database.pool, {
 		ipv4: config.SITE_HOST_PUBLIC_IPV4 || null,
@@ -106,6 +109,7 @@ async function create(): Promise<Runtime> {
 		environments,
 		artifacts,
 		artifactProcessing,
+		llmGateway,
 		intents,
 		sites,
 		async shutdown() {

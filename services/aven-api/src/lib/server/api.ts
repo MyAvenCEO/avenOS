@@ -8,12 +8,16 @@ import { type Runtime, runtime } from './runtime.js'
 // Wraps an API handler so AppError and ZodError map to structured JSON error
 // responses, mirroring the express error handler in the original system.
 export function api(
-	handler: (event: RequestEvent, rt: Runtime) => Promise<{ body: unknown; status?: number }>
+	handler: (
+		event: RequestEvent,
+		rt: Runtime
+	) => Promise<{ body: unknown; status?: number } | Response>
 ): RequestHandler {
 	return async (event) => {
 		const rt = await runtime()
 		try {
 			const result = await handler(event, rt)
+			if (result instanceof Response) return result
 			return json(result.body, { status: result.status ?? 200 })
 		} catch (error) {
 			// A handler that navigates (redirect(...)) throws a control-flow signal,

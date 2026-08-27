@@ -4,9 +4,14 @@ use base64::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::time::Duration;
 use tauri::Emitter;
 
@@ -14,6 +19,12 @@ use crate::auth::{api_endpoint, session_token, AuthState};
 
 const MAX_FILE_BYTES: u64 = 25 * 1024 * 1024;
 const HASH_BUFFER_BYTES: usize = 256 * 1024;
+const MODEL_REQUEST_TIMEOUT_SECONDS: u64 = 920;
+
+#[derive(Default)]
+pub struct LlmStreamState {
+    requests: Mutex<HashMap<String, Arc<AtomicBool>>>,
+}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -256,9 +267,17 @@ fn intent_json(
     path: String,
     body: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(20))
-        .build();
+    api_json_with_timeout(token, method, path, body, Duration::from_secs(20))
+}
+
+fn api_json_with_timeout(
+    token: String,
+    method: &str,
+    path: String,
+    body: Option<String>,
+    timeout: Duration,
+) -> Result<serde_json::Value, String> {
+    let agent = ureq::AgentBuilder::new().timeout(timeout).build();
     let url = api_endpoint(&path);
     let request = match method {
         "GET" => agent.get(&url),
@@ -467,6 +486,192 @@ pub async fn artifact_processing_status(
     tauri::async_runtime::spawn_blocking(move || processing_status(token, artifact_id))
         .await
         .map_err(|error| format!("Artifact processing status task failed: {error}"))?
+}
+
+/// Lists public model descriptors matching every requested capability. Provider
+/// coordinates and credentials remain server-side.
+#[tauri::command]
+pub async fn llm_model_list(
+    capabilities: Vec<String>,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if capabilities.len() > 16
+        || capabilities.iter().any(|capability| {
+            capability.is_empty()
+                || capability.len() > 64
+                || !capability.bytes().all(|byte| {
+                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || b".-".contains(&byte)
+                })
+                || !capability
+                    .as_bytes()
+                    .first()
+                    .is_some_and(u8::is_ascii_lowercase)
+        })
+    {
+        return Err("An LLM capability is invalid.".to_string());
+    }
+    let query = capabilities
+        .iter()
+        .map(|capability| format!("capability={capability}"))
+        .collect::<Vec<_>>()
+        .join("&");
+    let path = if query.is_empty() {
+        "/api/llm/models".to_string()
+    } else {
+        format!("/api/llm/models?{query}")
+    };
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || intent_json(token, "GET", path, None))
+        .await
+        .map_err(|error| format!("LLM model discovery task failed: {error}"))?
+}
+
+/// Executes one request against the exact model id selected by the client.
+#[tauri::command]
+pub async fn llm_complete(
+    request: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&state)?;
+    let body =
+        serde_json::to_string(&request).map_err(|error| format!("Invalid LLM request: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        api_json_with_timeout(
+            token,
+            "POST",
+            "/api/llm/completions".into(),
+            Some(body),
+            Duration::from_secs(MODEL_REQUEST_TIMEOUT_SECONDS),
+        )
+    })
+    .await
+    .map_err(|error| format!("LLM completion task failed: {error}"))?
+}
+
+/// Executes one non-streaming OpenAI-compatible chat completion. The public
+/// model id is resolved by Aven API; provider coordinates stay server-side.
+#[tauri::command]
+pub async fn llm_openai_complete(
+    request: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&state)?;
+    let body = serde_json::to_string(&request)
+        .map_err(|error| format!("Invalid OpenAI-compatible LLM request: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        api_json_with_timeout(
+            token,
+            "POST",
+            "/api/llm/v1/chat/completions".into(),
+            Some(body),
+            Duration::from_secs(MODEL_REQUEST_TIMEOUT_SECONDS),
+        )
+    })
+    .await
+    .map_err(|error| format!("OpenAI-compatible LLM completion task failed: {error}"))?
+}
+
+fn valid_request_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+}
+
+/// Streams raw OpenAI-compatible SSE lines over a Tauri channel. The command
+/// promise settles when the stream ends; channel messages arrive meanwhile.
+#[tauri::command]
+pub async fn llm_openai_stream(
+    request_id: String,
+    request: serde_json::Value,
+    on_chunk: tauri::ipc::Channel<String>,
+    auth: tauri::State<'_, AuthState>,
+    streams: tauri::State<'_, LlmStreamState>,
+) -> Result<(), String> {
+    if !valid_request_id(&request_id) {
+        return Err("The LLM stream request ID is invalid.".to_string());
+    }
+    let token = session_token(&auth)?;
+    let mut request = request;
+    let object = request
+        .as_object_mut()
+        .ok_or_else(|| "The OpenAI-compatible LLM request must be an object.".to_string())?;
+    object.insert("stream".to_string(), serde_json::Value::Bool(true));
+    let body = serde_json::to_string(&request)
+        .map_err(|error| format!("Invalid OpenAI-compatible LLM request: {error}"))?;
+    let cancelled = Arc::new(AtomicBool::new(false));
+    {
+        let mut requests = streams
+            .requests
+            .lock()
+            .map_err(|_| "The LLM stream registry is unavailable.".to_string())?;
+        if requests.contains_key(&request_id) {
+            return Err("The LLM stream request ID is already active.".to_string());
+        }
+        requests.insert(request_id.clone(), cancelled.clone());
+    }
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(MODEL_REQUEST_TIMEOUT_SECONDS))
+            .build();
+        let response = agent
+            .post(&api_endpoint("/api/llm/v1/chat/completions"))
+            .set("authorization", &format!("Bearer {token}"))
+            .set("content-type", "application/json")
+            .set("origin", &api_endpoint(""))
+            .send_string(&body)
+            .map_err(|error| match error {
+                ureq::Error::Status(_, response) => {
+                    response_error(response, "The LLM stream request was rejected.")
+                }
+                ureq::Error::Transport(error) => format!("Aven API unavailable: {error}"),
+            })?;
+        let mut reader = BufReader::new(response.into_reader());
+        loop {
+            if cancelled.load(Ordering::Relaxed) {
+                break;
+            }
+            let mut line = String::new();
+            let count = reader
+                .read_line(&mut line)
+                .map_err(|error| format!("Could not read the LLM stream: {error}"))?;
+            if count == 0 {
+                break;
+            }
+            on_chunk
+                .send(line)
+                .map_err(|error| format!("Could not deliver the LLM stream: {error}"))?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|error| format!("LLM stream task failed: {error}"));
+
+    if let Ok(mut requests) = streams.requests.lock() {
+        requests.remove(&request_id);
+    }
+    result?
+}
+
+#[tauri::command]
+pub fn llm_openai_stream_cancel(
+    request_id: String,
+    streams: tauri::State<'_, LlmStreamState>,
+) -> Result<bool, String> {
+    if !valid_request_id(&request_id) {
+        return Err("The LLM stream request ID is invalid.".to_string());
+    }
+    let requests = streams
+        .requests
+        .lock()
+        .map_err(|_| "The LLM stream registry is unavailable.".to_string())?;
+    let Some(cancelled) = requests.get(&request_id) else {
+        return Ok(false);
+    };
+    cancelled.store(true, Ordering::Relaxed);
+    Ok(true)
 }
 
 #[tauri::command]

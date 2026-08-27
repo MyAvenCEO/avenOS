@@ -201,9 +201,15 @@ pub fn run() {
 		.manage(tts::TtsState::default())
 		.manage(asr::AsrState::default())
 		.manage(auth::AuthState::default())
+		.manage(artifacts::LlmStreamState::default())
 		.invoke_handler(tauri::generate_handler![
 			artifacts::artifact_upload,
 			artifacts::artifact_processing_status,
+			artifacts::llm_model_list,
+			artifacts::llm_complete,
+			artifacts::llm_openai_complete,
+			artifacts::llm_openai_stream,
+			artifacts::llm_openai_stream_cancel,
 			artifacts::intent_list,
 			artifacts::intent_get,
 			artifacts::intent_append_contribution,

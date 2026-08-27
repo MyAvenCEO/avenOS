@@ -68,6 +68,11 @@ export const serverConfigSchema = z
 			.string()
 			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
 			.optional(),
+		LLM_GATEWAY_ENABLED: bool.default(false),
+		LLM_GATEWAY_MODELS_JSON: z.string().max(131_072).default('[]'),
+		LLM_GATEWAY_CREDENTIALS_JSON: z.string().max(65_536).default('{}'),
+		LLM_GATEWAY_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(900).default(180),
+		LLM_GATEWAY_ALLOW_INSECURE_HTTP: bool.default(false),
 		INTENT_SERVICE_BASE_URL: z.url().optional(),
 		INTENT_SERVICE_BEARER_TOKEN: z
 			.string()

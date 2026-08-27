@@ -56,6 +56,9 @@ jobs:
       - run: bunx biome check infrastructure/identity
       - run: bunx biome check services/static-site-host
       - run: bunx biome check libs/aven-hosting
+      - run: bun run check
+      - run: bun test
+        working-directory: app
       - run: bun run check:api
       - run: bun run test:api
       - run: bun run test:infra
@@ -467,6 +470,11 @@ jobs:
           ARTIFACT_PROCESSOR_VISION_AUTH_MODE: ${{ vars.ARTIFACT_PROCESSOR_VISION_AUTH_MODE }}
           ARTIFACT_PROCESSOR_VISION_MAX_PAGES: ${{ vars.ARTIFACT_PROCESSOR_VISION_MAX_PAGES }}
           ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS: ${{ vars.ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS }}
+          LLM_GATEWAY_ENABLED: ${{ vars.LLM_GATEWAY_ENABLED || 'false' }}
+          LLM_GATEWAY_MODELS_JSON: ${{ vars.LLM_GATEWAY_MODELS_JSON || '[]' }}
+          LLM_GATEWAY_CREDENTIALS_JSON: ${{ secrets.LLM_GATEWAY_CREDENTIALS_JSON }}
+          LLM_GATEWAY_TIMEOUT_SECONDS: ${{ vars.LLM_GATEWAY_TIMEOUT_SECONDS || '180' }}
+          LLM_GATEWAY_ALLOW_INSECURE_HTTP: ${{ vars.LLM_GATEWAY_ALLOW_INSECURE_HTTP || 'false' }}
           INTENT_SERVICE_MAX_TENANT_POOLS: ${{ vars.INTENT_SERVICE_MAX_TENANT_POOLS }}
           INTENT_SERVICE_CONNECTIONS_PER_TENANT: ${{ vars.INTENT_SERVICE_CONNECTIONS_PER_TENANT }}
           INTENT_SERVICE_TENANT_REFRESH_SECONDS: ${{ vars.INTENT_SERVICE_TENANT_REFRESH_SECONDS }}
@@ -556,6 +564,7 @@ jobs:
           ARTIFACT_PROCESSOR_MEMORY_LIMIT=${ARTIFACT_PROCESSOR_MEMORY_LIMIT:-768m}
           ARTIFACT_PROCESSOR_VISION_MAX_PAGES=${ARTIFACT_PROCESSOR_VISION_MAX_PAGES:-15}
           ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS=${ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS:-180}
+          LLM_GATEWAY_CREDENTIALS_JSON=${LLM_GATEWAY_CREDENTIALS_JSON:-{}}
           INTENT_SERVICE_MAX_TENANT_POOLS=${INTENT_SERVICE_MAX_TENANT_POOLS:-64}
           INTENT_SERVICE_CONNECTIONS_PER_TENANT=${INTENT_SERVICE_CONNECTIONS_PER_TENANT:-2}
           INTENT_SERVICE_TENANT_REFRESH_SECONDS=${INTENT_SERVICE_TENANT_REFRESH_SECONDS:-30}
@@ -616,6 +625,45 @@ jobs:
               exit 1
               ;;
           esac
+          if [ "$LLM_GATEWAY_ENABLED" = true ]; then
+            node <<'NODE'
+          const modelsRaw = process.env.LLM_GATEWAY_MODELS_JSON ?? ''
+          const credentialsRaw = process.env.LLM_GATEWAY_CREDENTIALS_JSON ?? ''
+          if (/\r|\n/.test(modelsRaw) || /\r|\n/.test(credentialsRaw)) {
+            console.error('::error::LLM gateway configuration must be compact single-line JSON.')
+            process.exit(1)
+          }
+          let models
+          let credentials
+          try {
+            models = JSON.parse(modelsRaw)
+            credentials = JSON.parse(credentialsRaw)
+          } catch {
+            console.error('::error::LLM gateway configuration must be valid JSON.')
+            process.exit(1)
+          }
+          if (!Array.isArray(models) || !credentials || Array.isArray(credentials) || typeof credentials !== 'object') {
+            console.error('::error::LLM gateway models must be an array and credentials must be an object.')
+            process.exit(1)
+          }
+          const desktopModels = new Map([
+            ['deepseek/deepseek-v4-flash-0731', ['text-generation', 'streaming', 'tool-calling']],
+            ['moonshotai/kimi-k3', ['text-generation', 'streaming', 'structured-output', 'tool-calling']]
+          ])
+          for (const [id, required] of desktopModels) {
+            const model = models.find((candidate) => candidate?.id === id)
+            const missing = required.filter((capability) => !model?.capabilities?.includes(capability))
+            if (!model || missing.length > 0) {
+              console.error(`::error::Desktop LLM model ${id} is absent or lacks: ${missing.join(', ')}.`)
+              process.exit(1)
+            }
+            if (model.authMode !== 'none' && typeof credentials[model.credentialId] !== 'string') {
+              console.error(`::error::Desktop LLM model ${id} references an absent credential.`)
+              process.exit(1)
+            }
+          }
+          NODE
+          fi
           if [[ ! "$DOCKER_LOG_MAX_SIZE" =~ ^[1-9][0-9]*[kmg]$ ]]; then
             echo "::error::DOCKER_LOG_MAX_SIZE must be a positive size such as 10m."
             exit 1
@@ -734,6 +782,11 @@ jobs:
             printf 'ARTIFACT_PROCESSOR_VISION_API_KEY=%s\n' "$ARTIFACT_PROCESSOR_VISION_API_KEY"
             printf 'ARTIFACT_PROCESSOR_VISION_MAX_PAGES=%s\n' "$ARTIFACT_PROCESSOR_VISION_MAX_PAGES"
             printf 'ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS=%s\n' "$ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS"
+            printf 'LLM_GATEWAY_ENABLED=%s\n' "$LLM_GATEWAY_ENABLED"
+            printf 'LLM_GATEWAY_MODELS_JSON=%s\n' "$LLM_GATEWAY_MODELS_JSON"
+            printf 'LLM_GATEWAY_CREDENTIALS_JSON=%s\n' "$LLM_GATEWAY_CREDENTIALS_JSON"
+            printf 'LLM_GATEWAY_TIMEOUT_SECONDS=%s\n' "$LLM_GATEWAY_TIMEOUT_SECONDS"
+            printf 'LLM_GATEWAY_ALLOW_INSECURE_HTTP=%s\n' "$LLM_GATEWAY_ALLOW_INSECURE_HTTP"
             printf 'INTENT_SERVICE_BEARER_TOKEN=%s\n' "$INTENT_SERVICE_BEARER_TOKEN"
             printf 'INTENT_SERVICE_DIRECTORY_BEARER_TOKEN=%s\n' "$INTENT_SERVICE_DIRECTORY_BEARER_TOKEN"
             printf 'INTENT_SERVICE_PROVISIONER_BEARER_TOKEN=%s\n' "$INTENT_SERVICE_PROVISIONER_BEARER_TOKEN"
