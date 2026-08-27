@@ -649,6 +649,11 @@ fn output_worker_loop(
                             &token,
                         );
                         *active.lock().expect("output cancellation mutex poisoned") = None;
+                        let selected_after =
+                            OutputGeneration(active_generation.load(Ordering::Acquire));
+                        if preparation.active_generation != selected_after {
+                            preparation.set_generation(selected_after);
+                        }
                         update_output_levels(&preparation, &levels);
                         let event = match result {
                             Ok(prepared) => OutputWorkerEvent::Prepared {
@@ -682,6 +687,11 @@ fn output_worker_loop(
                             }
                             let result = preparation.finish_blocking(&token);
                             *active.lock().expect("output cancellation mutex poisoned") = None;
+                            let selected_after =
+                                OutputGeneration(active_generation.load(Ordering::Acquire));
+                            if preparation.active_generation != selected_after {
+                                preparation.set_generation(selected_after);
+                            }
                             update_output_levels(&preparation, &levels);
                             let event = match result {
                                 Ok(()) => OutputWorkerEvent::Finished { turn_id, generation },
