@@ -48,6 +48,10 @@ Variables:
 - `ARTIFACT_PROCESSOR_VISION_AUTH_MODE` (required; `bearer` or `none`)
 - `ARTIFACT_PROCESSOR_VISION_MAX_PAGES` (optional; defaults to `15`, maximum `63`)
 - `ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS` (optional; defaults to `180`, maximum `900`)
+- `LLM_GATEWAY_ENABLED` (optional; defaults to `false`)
+- `LLM_GATEWAY_MODELS_JSON` (required compact JSON array when the generic gateway is enabled)
+- `LLM_GATEWAY_TIMEOUT_SECONDS` (optional; defaults to `180`, maximum `900`)
+- `LLM_GATEWAY_ALLOW_INSECURE_HTTP` (must remain `false` in hosted environments)
 - `INTENT_SERVICE_MAX_TENANT_POOLS` (optional; defaults to `64`)
 - `INTENT_SERVICE_CONNECTIONS_PER_TENANT` (optional; defaults to `2`)
 - `INTENT_SERVICE_TENANT_REFRESH_SECONDS` (optional; defaults to `30`)
@@ -76,6 +80,7 @@ Secrets:
 - `ARTIFACT_PROCESSOR_PROVISIONER_BEARER_TOKEN` (environment-worker-to-provisioner credential)
 - `ARTIFACT_PROCESSOR_RUNTIME_PASSWORD` (password for the restricted shared Processor DB role)
 - `ARTIFACT_PROCESSOR_VISION_API_KEY` (required in `bearer` mode; 20–512 non-whitespace characters; omit in `none` mode)
+- `LLM_GATEWAY_CREDENTIALS_JSON` (compact JSON object mapping catalog credential IDs to provider secrets)
 - `INTENT_SERVICE_BEARER_TOKEN` (API-to-Intent-Service credential; 32–128 URL-safe characters)
 - `INTENT_SERVICE_DIRECTORY_BEARER_TOKEN` (Intent-Service-to-API directory credential)
 - `INTENT_SERVICE_PROVISIONER_BEARER_TOKEN` (environment-worker-to-provisioner credential)
@@ -178,6 +183,21 @@ Enabling this adapter sends rendered document pages and extracted text to that e
 Before setting `ARTIFACT_PROCESSOR_VISION_ENABLED=true`, approve the provider account,
 region, data-retention settings, access policy, and contractual data-processing terms.
 The deployment key should belong to a dedicated least-privilege provider project.
+
+The generic authenticated LLM catalog is configured separately. Store a compact catalog
+in a GitHub Environment variable and its credential map as a secret:
+
+```sh
+gh variable set LLM_GATEWAY_ENABLED --env next --body true
+gh variable set LLM_GATEWAY_MODELS_JSON --env next --body "$(jq -c . llm-models.json)"
+gh secret set LLM_GATEWAY_CREDENTIALS_JSON --env next
+gh variable set LLM_GATEWAY_TIMEOUT_SECONDS --env next --body 180
+gh variable set LLM_GATEWAY_ALLOW_INSECURE_HTTP --env next --body false
+```
+
+The secret command reads the compact credential JSON from standard input when `--body`
+is omitted. See the [generic LLM gateway guide](../../../docs/llm-gateway.md) for the
+catalog schema, capability matching, Tauri cutover, security boundary, and smoke test.
 
 After the PR lands on `main`, promote the exact reviewed commit through the repository's
 normal `main` → `next` release path. The workflow rejects missing or unsafe model
