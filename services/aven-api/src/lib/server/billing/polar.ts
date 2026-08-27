@@ -3,6 +3,7 @@
 // resolved by `metadata.tier` (the SSOT wire key) and synced from the seeds:
 // created when missing, price/name corrected when drifted. The org access
 // token already scopes every call to our organization.
+import { planIdOf } from '@myavenceo/aven-ceo/pricing'
 import { Polar } from '@polar-sh/sdk'
 import type { BillingConfig } from '../config.js'
 import { AppError } from '../errors.js'
@@ -74,24 +75,34 @@ export class PolarProvider implements PaymentProvider {
 		const existing = listed.result.items
 		const map: Record<string, string> = {}
 		for (const seed of seeds) {
-			const found = existing.find((product) => product.metadata?.tier === seed.tier)
+			// A product created before the kebab-case wire-key rename carries the
+			// old spelling in its metadata. Match through the SSOT's normaliser so
+			// it is FOUND rather than duplicated, and rewrite the key below — the
+			// products themselves are the same products, sold to real people.
+			const found = existing.find((product) => {
+				const stored = product.metadata?.tier
+				return typeof stored === 'string' && planIdOf(stored) === seed.tier
+			})
 			if (found) {
 				map[seed.tier] = found.id
 				// Correct drift: the SSOT is the truth for name, description and
-				// gross price.
+				// gross price — and for the wire key itself.
 				const price = found.prices.find((p) => 'priceAmount' in p && p.amountType === 'fixed') as
 					| { priceAmount: number }
 					| undefined
 				const priceDrifted = price ? price.priceAmount !== seed.priceCents : true
 				const nameDrifted = found.name !== seed.name
 				const descriptionDrifted = (found.description ?? '') !== seed.description
-				if (priceDrifted || nameDrifted || descriptionDrifted) {
+				const tierDrifted = found.metadata?.tier !== seed.tier
+				if (priceDrifted || nameDrifted || descriptionDrifted || tierDrifted) {
 					await this.call(`update-product ${seed.tier}`, () =>
 						this.polar.products.update({
 							id: found.id,
 							productUpdate: {
 								name: seed.name,
 								description: seed.description,
+								// Carry the rest of the metadata across — only `tier` is ours.
+								metadata: { ...found.metadata, tier: seed.tier },
 								prices: [
 									{
 										amountType: 'fixed',
@@ -249,12 +260,16 @@ export class PolarProvider implements PaymentProvider {
 		return created.id
 	}
 
-	/** The one-off Testride (wire key avenid) checkout for the names funnel. */
+	/** The one-off avenNAME (wire key `aven-name`) checkout for the names funnel. */
 	async createCheckout(input: CheckoutInput): Promise<CheckoutSession> {
 		const products = await this.ensureProducts(productSeeds())
-		const productId = products.avenid
+		const productId = products['aven-name']
 		if (!productId)
-			throw new AppError(502, 'BILLING_PRODUCT_MISSING', 'No provider product exists for avenid.')
+			throw new AppError(
+				502,
+				'BILLING_PRODUCT_MISSING',
+				'No provider product exists for aven-name.'
+			)
 		const checkout = await this.call('create-checkout', () =>
 			this.polar.checkouts.create({
 				products: [productId],
@@ -329,7 +344,7 @@ export class PolarProvider implements PaymentProvider {
 
 	/** The provider's customer record for an email, if one exists — how a
 	 * member who bought BEFORE we started storing customer ids (the one-off
-	 * Testride, wire key avenid) gets their history connected. */
+	 * avenNAME, wire key `aven-name`) gets their history connected. */
 	async findCustomerByEmail(email: string): Promise<string | null> {
 		const listed = await this.call('find-customer', () =>
 			this.polar.customers.list({ email, limit: 1 })
@@ -345,9 +360,11 @@ export class PolarProvider implements PaymentProvider {
 			id: order.id,
 			createdAt: order.createdAt.toISOString(),
 			productId: order.productId ?? '',
+			// Legacy wire keys resolve; an unknown one (the retired `avenme`)
+			// is kept verbatim — it is a real order, just not a live product.
 			tier:
 				typeof order.product?.metadata?.tier === 'string'
-					? String(order.product.metadata.tier)
+					? (planIdOf(order.product.metadata.tier) ?? String(order.product.metadata.tier))
 					: null,
 			subTotalCents: order.subtotalAmount,
 			taxCents: order.taxAmount,

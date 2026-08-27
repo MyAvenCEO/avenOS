@@ -1,9 +1,22 @@
 // Payment boundary. Domain code (the names module) only ever sees this
 // interface and the normalized PaymentEvent — never Polar payload shapes.
 // Swap the provider (or add one) without touching the registry.
+
 import { randomUUID } from 'node:crypto'
+import { planIdOf } from '@myavenceo/aven-ceo/pricing'
 import { Webhook, WebhookVerificationError } from 'standardwebhooks'
 import { AppError } from '../errors.js'
+
+/**
+ * A tier out of provider metadata, in the wire key we key rows by today.
+ * Legacy spellings (`avenid`, `avenceo`, `avencoop`) resolve; anything the
+ * SSOT does not know — the retired `avenme` — is passed through untouched,
+ * because an order for a product we stopped selling is still a real order.
+ */
+function normalizeTier(value: string | null): string | null {
+	if (!value) return null
+	return planIdOf(value) ?? value
+}
 
 export interface CheckoutInput {
 	name: string
@@ -37,7 +50,7 @@ export interface ProductSeed {
 	name: string
 	description: string
 	priceCents: number
-	/** `null` = one-time (the Testride, wire key avenid), otherwise the recurring interval. */
+	/** `null` = one-time (avenNAME, wire key `aven-name`), otherwise the recurring interval. */
 	interval: 'month' | null
 }
 
@@ -60,7 +73,8 @@ export interface OrderRow {
 	id: string
 	createdAt: string
 	productId: string
-	/** The SSOT tier, read from the product's `metadata.tier` when present. */
+	/** The SSOT tier, read from the product's `metadata.tier` when present,
+	 * normalised to the current wire key — see `normalizeTier`. */
 	tier: string | null
 	subTotalCents: number
 	taxCents: number
@@ -233,12 +247,18 @@ export function parsePolarSubscriptionEvent(rawBody: string): SubscriptionEvent 
 				: typeof customer.external_id === 'string'
 					? customer.external_id
 					: null,
-		tier:
+		// Normalised through the SSOT: a checkout started before the kebab-case
+		// wire-key rename still carries `avenceo` in its metadata, and the row
+		// it writes must be keyed the same way as every other row. An
+		// unrecognised value (the retired `avenme`) is kept verbatim rather
+		// than dropped — it is somebody's real history.
+		tier: normalizeTier(
 			typeof metadata.tier === 'string'
 				? metadata.tier
 				: typeof productMetadata.tier === 'string'
 					? productMetadata.tier
-					: null,
+					: null
+		),
 		status: String(data.status ?? ''),
 		currentPeriodEnd: data.current_period_end ?? null,
 		cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),
