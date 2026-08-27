@@ -1,3 +1,21 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.4...v) (2026-08-27)
+
+
+### Bug Fixes
+
+* **auth:** race IPv4 and IPv6, so sign-in works on whichever one answers ([c5342ce](https://github.com/MyAvenCEO/avenOS/commit/c5342ce17f7550e9f2054c7eb3a37f45690e28db))
+* **ui:** restore floating dock hit targets ([16d703e](https://github.com/MyAvenCEO/avenOS/commit/16d703e42a125edf7c7b6efc416f8d4126f71e1a))
+
+
+### Features
+
+* add authenticated LLM gateway ([b4af651](https://github.com/MyAvenCEO/avenOS/commit/b4af651283f92dd28aa98f5bbc281a6575f25f68))
+
+
+### Performance Improvements
+
+* **asr:** let idle ONNX workers sleep ([77ec98e](https://github.com/MyAvenCEO/avenOS/commit/77ec98ef8fecd288f3818c6599473cf5d6a0cae6))
+* **tts:** bound and park ONNX worker pools ([c3b789c](https://github.com/MyAvenCEO/avenOS/commit/c3b789c4faf5b42974451c6b8f6c44086c0d63ef))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.3...v) (2026-08-27)
 
 
