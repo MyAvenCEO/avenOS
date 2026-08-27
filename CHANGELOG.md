@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.3...v) (2026-08-27)
+
+
+### Bug Fixes
+
+* **auth:** race IPv4 and IPv6, so sign-in works on whichever one answers ([16d0050](https://github.com/MyAvenCEO/avenOS/commit/16d005037bb2705492aaad54feccfd3e3652a111))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.2...v) (2026-08-27)
 
 
