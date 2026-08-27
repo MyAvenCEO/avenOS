@@ -8,6 +8,7 @@ import { SubscriptionService } from './billing/subscriptions.js'
 import { loadApiConfig, type ServerConfig } from './config.js'
 import { decodeEncryptionKey } from './crypto.js'
 import { type DatabaseContext, openDatabase } from './db.js'
+import { DocumentModelService } from './document-model.js'
 import type { QueueSettings } from './email/queue.js'
 import { EnvironmentService } from './environments/service.js'
 import { IntentService } from './intents/service.js'
@@ -32,6 +33,7 @@ export interface Runtime {
 	environments: EnvironmentService
 	artifacts: ArtifactFileService | null
 	artifactProcessing: ArtifactProcessingService | null
+	documentModel: DocumentModelService | null
 	intents: IntentService | null
 	sites: SiteBindingService
 	shutdown(): Promise<void>
@@ -67,6 +69,7 @@ async function create(): Promise<Runtime> {
 	const environments = new EnvironmentService(database.pool)
 	const artifacts = ArtifactFileService.fromConfig(config)
 	const artifactProcessing = ArtifactProcessingService.fromConfig(config)
+	const documentModel = DocumentModelService.fromConfig(config)
 	const intents = IntentService.fromConfig(config)
 	const sites = new SiteBindingService(database.pool, {
 		ipv4: config.SITE_HOST_PUBLIC_IPV4 || null,
@@ -106,6 +109,7 @@ async function create(): Promise<Runtime> {
 		environments,
 		artifacts,
 		artifactProcessing,
+		documentModel,
 		intents,
 		sites,
 		async shutdown() {

@@ -90,7 +90,9 @@ impl IntentEngine {
                 .map_err(|error| EngineError::Invariant(error.to_string()))?;
             if !matches!(
                 source_payload.get("sourceKind").and_then(Value::as_str),
-                Some("processing-mock" | "processing-real" | "desktop-drop")
+                Some(
+                    "processing-mock" | "processing-real" | "desktop-drop" | "client-actor-ingest"
+                )
             ) {
                 continue;
             }

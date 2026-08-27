@@ -470,6 +470,60 @@ pub async fn artifact_processing_status(
 }
 
 #[tauri::command]
+pub async fn artifact_client_run_publish(
+    publication_id: String,
+    run: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&publication_id) {
+        return Err("The publication ID is invalid.".to_string());
+    }
+    let token = session_token(&state)?;
+    let body = serde_json::to_string(&run)
+        .map_err(|error| format!("Invalid client actor run: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(
+            token,
+            "POST",
+            format!("/api/artifacts/client-runs/{publication_id}"),
+            Some(body),
+        )
+    })
+    .await
+    .map_err(|error| format!("Client actor publication task failed: {error}"))?
+}
+
+/// Authenticated inference transport for the client-owned document actors.
+/// The webview owns rendering, prompts, contracts, orchestration and output
+/// materialization; this command only keeps the session token out of JavaScript.
+#[tauri::command]
+pub async fn document_model_complete(
+    request: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&state)?;
+    let body = serde_json::to_string(&request)
+        .map_err(|error| format!("Invalid document model request: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(token, "POST", "/api/model/document".into(), Some(body))
+    })
+    .await
+    .map_err(|error| format!("Document model task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn document_model_status(
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        intent_json(token, "GET", "/api/model/document".into(), None)
+    })
+    .await
+    .map_err(|error| format!("Document model status task failed: {error}"))?
+}
+
+#[tauri::command]
 pub async fn intent_list(state: tauri::State<'_, AuthState>) -> Result<serde_json::Value, String> {
     let token = session_token(&state)?;
     tauri::async_runtime::spawn_blocking(move || {

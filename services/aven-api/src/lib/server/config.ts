@@ -68,6 +68,22 @@ export const serverConfigSchema = z
 			.string()
 			.regex(/^[A-Za-z0-9_-]{32,128}$/, 'must be a URL-safe secret')
 			.optional(),
+		ARTIFACT_PROCESSOR_VISION_ENABLED: bool.default(false),
+		ARTIFACT_PROCESSOR_VISION_BASE_URL: z.url().optional(),
+		ARTIFACT_PROCESSOR_VISION_MODEL: z.string().min(1).max(255).optional(),
+		ARTIFACT_PROCESSOR_VISION_PROFILE: z
+			.enum(['openai-tools', 'openai-json-schema', 'qwen-tools', 'generic-json'])
+			.default('openai-tools'),
+		ARTIFACT_PROCESSOR_VISION_AUTH_MODE: z.enum(['bearer', 'none']).default('bearer'),
+		ARTIFACT_PROCESSOR_VISION_API_KEY: z
+			.string()
+			.min(20)
+			.max(512)
+			.regex(/^\S+$/u, 'must not contain whitespace')
+			.optional(),
+		ARTIFACT_PROCESSOR_VISION_MAX_PAGES: z.coerce.number().int().min(1).max(63).default(15),
+		ARTIFACT_PROCESSOR_VISION_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(900).default(180),
+		ARTIFACT_PROCESSOR_VISION_ALLOW_INSECURE_HTTP: bool.default(false),
 		INTENT_SERVICE_BASE_URL: z.url().optional(),
 		INTENT_SERVICE_BEARER_TOKEN: z
 			.string()
@@ -171,6 +187,63 @@ export const serverConfigSchema = z
 				message:
 					'processor provisioner URL/token and runtime role/password must be configured together'
 			})
+		}
+		if (config.ARTIFACT_PROCESSOR_VISION_ENABLED) {
+			if (!config.ARTIFACT_PROCESSOR_VISION_BASE_URL || !config.ARTIFACT_PROCESSOR_VISION_MODEL) {
+				context.addIssue({
+					code: 'custom',
+					path: ['ARTIFACT_PROCESSOR_VISION_BASE_URL'],
+					message: 'vision base URL and model are required when vision is enabled'
+				})
+			}
+			if (
+				config.ARTIFACT_PROCESSOR_VISION_AUTH_MODE === 'bearer' &&
+				!config.ARTIFACT_PROCESSOR_VISION_API_KEY
+			) {
+				context.addIssue({
+					code: 'custom',
+					path: ['ARTIFACT_PROCESSOR_VISION_API_KEY'],
+					message: 'vision API key is required in bearer auth mode'
+				})
+			}
+			if (
+				config.ARTIFACT_PROCESSOR_VISION_BASE_URL &&
+				new URL(config.ARTIFACT_PROCESSOR_VISION_BASE_URL).protocol !== 'https:' &&
+				!config.ARTIFACT_PROCESSOR_VISION_ALLOW_INSECURE_HTTP
+			) {
+				context.addIssue({
+					code: 'custom',
+					path: ['ARTIFACT_PROCESSOR_VISION_BASE_URL'],
+					message: 'vision base URL must use HTTPS unless insecure HTTP is explicitly enabled'
+				})
+			}
+			if (config.ARTIFACT_PROCESSOR_VISION_BASE_URL) {
+				const visionUrl = new URL(config.ARTIFACT_PROCESSOR_VISION_BASE_URL)
+				if (!['http:', 'https:'].includes(visionUrl.protocol)) {
+					context.addIssue({
+						code: 'custom',
+						path: ['ARTIFACT_PROCESSOR_VISION_BASE_URL'],
+						message: 'vision base URL must use HTTP or HTTPS'
+					})
+				}
+				if (visionUrl.username || visionUrl.password || visionUrl.search || visionUrl.hash) {
+					context.addIssue({
+						code: 'custom',
+						path: ['ARTIFACT_PROCESSOR_VISION_BASE_URL'],
+						message: 'vision base URL cannot contain credentials, query, or fragment'
+					})
+				}
+			}
+			if (
+				config.ARTIFACT_PROCESSOR_VISION_MODEL &&
+				/\s/u.test(config.ARTIFACT_PROCESSOR_VISION_MODEL)
+			) {
+				context.addIssue({
+					code: 'custom',
+					path: ['ARTIFACT_PROCESSOR_VISION_MODEL'],
+					message: 'vision model cannot contain whitespace'
+				})
+			}
 		}
 		const intentValues = [config.INTENT_SERVICE_BASE_URL, config.INTENT_SERVICE_BEARER_TOKEN]
 		if (intentValues.some(Boolean) && !intentValues.every(Boolean)) {

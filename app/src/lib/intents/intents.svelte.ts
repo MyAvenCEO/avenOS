@@ -948,6 +948,62 @@ class IntentsActor extends Actor {
 		else this.items.unshift(mapped)
 	}
 
+	/** Paint the client-owned document run over the persistent intent projection. */
+	updateFileProcessing(artifactId: string, presentation: ArtifactProcessingPresentation): void {
+		const intent = this.items.find((candidate) =>
+			candidate.artifacts.some((artifact) => artifact.artifactId === artifactId)
+		)
+		if (!intent) return
+		intent.type = presentation.preferredType
+		intent.status =
+			presentation.state === 'succeeded'
+				? 'done'
+				: presentation.state === 'failed'
+					? 'error'
+					: presentation.state === 'needs_review'
+						? 'waiting'
+						: 'working'
+		const source = intent.artifacts.find((artifact) => artifact.artifactId === artifactId)
+		if (source) {
+			source.state = presentation.state
+			source.summary = presentation.summary ?? undefined
+			source.label = artifactTypeLabel(presentation.preferredType)
+		}
+		for (const output of presentation.derivedArtifacts) {
+			if (intent.artifacts.some((artifact) => artifact.artifactId === output.artifactId)) continue
+			intent.artifacts.push({
+				kind: 'doc',
+				title: output.typeKey,
+				note: `${output.typeKey} · ${output.stageKey}`,
+				artifactId: output.artifactId,
+				typeKey: output.typeKey,
+				stageKey: output.stageKey
+			})
+		}
+		const fileSkill = intent.skills.find((skill) => skill.skill === 'file')
+		const runtimeSkillState =
+			presentation.state === 'succeeded'
+				? ('done' as const)
+				: presentation.state === 'active'
+					? ('running' as const)
+					: ('waiting' as const)
+		const next = {
+			skill: 'file',
+			state: runtimeSkillState,
+			note: presentation.summary ?? 'Processing locally',
+			workflow: 'file',
+			done: presentation.stages
+				.filter((stage) => stage.state === 'succeeded')
+				.map((stage) => stage.key),
+			current: presentation.stages.find((stage) =>
+				['running', 'queued', 'pending', 'publishing'].includes(stage.state)
+			)?.key,
+			stages: presentation.stages
+		}
+		if (fileSkill) Object.assign(fileSkill, next)
+		else intent.skills.push(next)
+	}
+
 	constructor() {
 		super({
 			id: 'intents',

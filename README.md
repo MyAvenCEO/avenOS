@@ -186,6 +186,17 @@ API verification runs from the root with `bun run check:api`, `bun run test:api`
 
 Infrastructure validation runs with `bun run test:infra`. Provisioning and deployment use protected GitHub Environment values and encrypted Pulumi state in a private Hetzner Object Storage bucket; see [`infrastructure/identity/README.md`](infrastructure/identity/README.md), the [GitHub deployment guide](services/aven-api/docs/github-deployment.md), and the [first-install checklist](GITHUB_HETZNER_DEPLOYMENT_CHECKLIST.md). Do not commit deployment `.env` files, Pulumi stack configuration/state, or credentials.
 
+## Architecture notes
+
+- [Actor skills and goal-directed problem solving](docs/actor-skills-and-problem-solving.md)
+  defines capabilities, generated plans, durable runs, and artifact-backed resumption.
+- [Client-owned document ingestion](docs/client-document-ingest.md) documents the
+  actor pipeline, narrow model proxy, server-parity contract, deployment configuration,
+  migration boundary, and operator smoke checklist.
+- [Document model gateway](docs/document-model-gateway.md) is the standalone HTTP and
+  service contract, including profiles, limits, receipts, security, errors, examples,
+  operations, and provider compatibility testing.
+
 ## Reference — recreate Svelte app
 
 ```sh

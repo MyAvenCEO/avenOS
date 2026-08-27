@@ -2,6 +2,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { intents, type PersistentIntentDetail } from '$lib/intents/intents.svelte'
 import { shell } from '$lib/intents/talk.svelte'
+import {
+	clientDocumentProcessingStatus,
+	isClientDocumentSource,
+	processClientDocument
+} from './client-document-processing'
 import { type ArtifactProcessingLookup, isTerminalProcessing } from './processing'
 
 /**
@@ -101,6 +106,12 @@ export async function loadPersistentIntents(): Promise<void> {
 	const summaries = await invoke<Array<{ id: string }>>('intent_list')
 	const details = await Promise.all(summaries.map((intent) => refreshIntent(intent.id)))
 	for (const detail of details) {
+		const source = detail?.artifacts.find((artifact) => artifact.relation === 'source')
+		if (detail && source && (await isClientDocumentSource(source.artifactId))) {
+			void processClientDocument(source.artifactId, detail.title)
+			void watchArtifactProcessing(source.artifactId, detail.id)
+			continue
+		}
 		if (
 			detail?.fileSkill &&
 			detail.sourceArtifactId &&
@@ -122,9 +133,12 @@ export async function watchArtifactProcessing(
 	try {
 		while (chat.hasArtifact(artifactId)) {
 			try {
-				const lookup = await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
-					artifactId
-				})
+				const local = clientDocumentProcessingStatus(artifactId)
+				const lookup =
+					local ??
+					(await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
+						artifactId
+					}))
 				consecutiveFailures = 0
 				if (lookup.pending || !lookup.presentation) {
 					chat.markArtifactProcessingPending(artifactId)
@@ -136,7 +150,7 @@ export async function watchArtifactProcessing(
 						intents.items.find((intent) =>
 							intent.artifacts.some((artifact) => artifact.artifactId === artifactId)
 						)?.id
-					if (owner) await refreshIntent(owner)
+					if (owner && !local) await refreshIntent(owner)
 					if (isTerminalProcessing(lookup.presentation.state)) return
 					delay = 1_500
 				}
@@ -193,6 +207,7 @@ export async function ingestFile(path: string): Promise<UploadedArtifactReceipt 
 		})
 		chat.commitArtifactUpload(uploadId, receipt)
 		await refreshIntent(receipt.intentId)
+		void processClientDocument(receipt.artifactId, receipt.originalName, receipt.mediaType)
 		void watchArtifactProcessing(receipt.artifactId, receipt.intentId)
 		return receipt
 	} catch (error) {

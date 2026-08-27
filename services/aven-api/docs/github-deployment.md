@@ -40,7 +40,8 @@ Variables:
 - `ARTIFACT_PROCESSOR_CONNECTIONS_PER_TENANT` (optional; defaults to `2`)
 - `ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS` (optional; defaults to `30`)
 - `ARTIFACT_PROCESSOR_MEMORY_LIMIT` (optional; defaults to `768m`)
-- `ARTIFACT_PROCESSOR_VISION_ENABLED` (required as `true` for the `next` finance rollout)
+- `ARTIFACT_PROCESSOR_VISION_ENABLED` (required as `true` for the `next` finance rollout;
+  enables the authenticated Aven API model proxy and the legacy Processor during migration)
 - `ARTIFACT_PROCESSOR_VISION_BASE_URL` (required HTTPS OpenAI-compatible base URL)
 - `ARTIFACT_PROCESSOR_VISION_MODEL` (required exact vision-capable model/deployment name)
 - `ARTIFACT_PROCESSOR_VISION_PROFILE` (required; `openai-tools`, `openai-json-schema`,
@@ -153,7 +154,9 @@ gh variable set ARTIFACT_PROCESSOR_TENANT_REFRESH_SECONDS --env next --body 30
 gh variable set ARTIFACT_PROCESSOR_MEMORY_LIMIT --env next --body 768m
 ```
 
-Configure the model adapter before promoting to `next`:
+Configure the shared document-model endpoint before promoting to `next`. The deployment
+overlay supplies these values to the Aven API model proxy and, during migration, the
+legacy Processor:
 
 ```sh
 gh secret set ARTIFACT_PROCESSOR_VISION_API_KEY --env next
@@ -175,6 +178,10 @@ tool calls that accept `temperature: 0`, and `generic-json` only for endpoints t
 support JSON-object mode but not strict schemas.
 
 Enabling this adapter sends rendered document pages and extracted text to that endpoint.
+For `client-actor-ingest`, rendering, prompting, routing, extraction, validation, and
+artifact materialization happen in AvenOS; the Aven API is only the authenticated,
+bounded provider proxy. See [client-owned document ingestion](../../../docs/client-document-ingest.md)
+for its contract and operator smoke checklist.
 Before setting `ARTIFACT_PROCESSOR_VISION_ENABLED=true`, approve the provider account,
 region, data-retention settings, access policy, and contractual data-processing terms.
 The deployment key should belong to a dedicated least-privilege provider project.
