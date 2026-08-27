@@ -249,7 +249,7 @@ export class PolarProvider implements PaymentProvider {
 		return created.id
 	}
 
-	/** The one-off avenID checkout for the names funnel. */
+	/** The one-off Testride (wire key avenid) checkout for the names funnel. */
 	async createCheckout(input: CheckoutInput): Promise<CheckoutSession> {
 		const products = await this.ensureProducts(productSeeds())
 		const productId = products.avenid
@@ -329,7 +329,7 @@ export class PolarProvider implements PaymentProvider {
 
 	/** The provider's customer record for an email, if one exists — how a
 	 * member who bought BEFORE we started storing customer ids (the one-off
-	 * avenID) gets their history connected. */
+	 * Testride, wire key avenid) gets their history connected. */
 	async findCustomerByEmail(email: string): Promise<string | null> {
 		const listed = await this.call('find-customer', () =>
 			this.polar.customers.list({ email, limit: 1 })
