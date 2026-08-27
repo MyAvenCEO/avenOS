@@ -1,12 +1,14 @@
-//! Supertonic-3 ONNX inference, vendored verbatim from the upstream
-//! reference implementation:
+//! Supertonic-3 ONNX inference, vendored from the upstream reference
+//! implementation:
 //!
 //!   https://github.com/supertone-inc/supertonic  `rust/src/helper.rs`
 //!   Copyright (c) 2025 Supertone Inc. — MIT License.
 //!
 //! Kept as a near-verbatim copy rather than rewritten so it can be diffed
-//! against upstream when Supertonic ships a new model revision. Our own
-//! code lives in `mod.rs`; treat this file as third-party.
+//! against upstream when Supertonic ships a new model revision. The only local
+//! inference change is the bounded, non-spinning ORT session policy marked
+//! below. Our own integration code lives in `mod.rs`; otherwise treat this file
+//! as third-party.
 #![allow(clippy::all, dead_code)]
 
 // ============================================================================
@@ -547,6 +549,11 @@ use ort::{
     value::Value,
 };
 
+/// TTS is an interactive burst workload. Four compute threads keep synthesis
+/// comfortably ahead of playback without letting the four model stages each
+/// claim every core in the machine. Their pools sleep between runs.
+const TTS_INTRA_THREADS: usize = 4;
+
 pub struct Style {
     pub ttl: Array3<f32>,
     pub dp: Array3<f32>,
@@ -822,14 +829,25 @@ pub fn load_text_to_speech(onnx_dir: &str) -> Result<TextToSpeech> {
     let vector_est_path = format!("{}/vector_estimator.onnx", onnx_dir);
     let vocoder_path = format!("{}/vocoder.onnx", onnx_dir);
 
-    let dp_ort = Session::builder()?
-        .commit_from_file(&dp_path)?;
-    let text_enc_ort = Session::builder()?
-        .commit_from_file(&text_enc_path)?;
-    let vector_est_ort = Session::builder()?
-        .commit_from_file(&vector_est_path)?;
-    let vocoder_ort = Session::builder()?
-        .commit_from_file(&vocoder_path)?;
+    // avenOS deviation: bound the burst workload and let ORT workers sleep
+    // between utterances. Keep this wrapper when refreshing the vendored file.
+    let session = |path: &str| -> Result<Session> {
+        let mut builder = Session::builder()?
+            .with_intra_threads(TTS_INTRA_THREADS)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .with_inter_threads(1)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .with_intra_op_spinning(false)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .with_inter_op_spinning(false)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        Ok(builder.commit_from_file(path)?)
+    };
+
+    let dp_ort = session(&dp_path)?;
+    let text_enc_ort = session(&text_enc_path)?;
+    let vector_est_ort = session(&vector_est_path)?;
+    let vocoder_ort = session(&vocoder_path)?;
 
     let unicode_indexer_path = format!("{}/unicode_indexer.json", onnx_dir);
     let text_processor = UnicodeProcessor::new(&unicode_indexer_path)?;
