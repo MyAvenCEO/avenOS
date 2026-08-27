@@ -496,7 +496,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 	     so it renders inline in the modal's chat band. -->
 	<div
 		bind:clientHeight={dockH}
-		class="pointer-events-none absolute right-2 bottom-2 left-2 z-50 flex flex-col gap-1.5 pb-[env(safe-area-inset-bottom)] [&>*]:pointer-events-auto"
+		class="pointer-events-none absolute right-2 bottom-2 left-2 z-50 flex flex-col gap-1.5 pb-[env(safe-area-inset-bottom)]"
 	>
 		<!-- Errors surface HERE, above the voice area — the same universal band as
 	     the human gate, so a failed reply (a dead lane, an unset key) is visible
@@ -504,7 +504,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 	     the next successful turn clears it. -->
 		{#if chat.failure || speaker.failure || listener.failure}
 			<div
-				class="mx-auto mb-2 flex w-full max-w-2xl items-start gap-3 rounded-2xl border border-error/25 bg-error-muted px-4 py-2.5 text-error-strong shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
+				class="pointer-events-auto mx-auto mb-2 flex w-full max-w-2xl items-start gap-3 rounded-2xl border border-error/25 bg-error-muted px-4 py-2.5 text-error-strong shadow-[0_4px_16px_rgba(30,41,59,0.08)]"
 			>
 				<span class="shrink-0 pt-0.5 font-mono text-sm">✗</span>
 				<p class="min-w-0 flex-1 text-sm leading-snug">
@@ -550,7 +550,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 				}}
 					title="Zurück zu den Intents"
 					aria-label="Zurück zu den Intents"
-					class="-translate-y-1/2 absolute top-1/2 left-0 flex size-11 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected lg:hidden"
+					class="-translate-y-1/2 pointer-events-auto absolute top-1/2 left-0 flex size-11 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected lg:hidden"
 				>
 					<svg
 						viewBox="0 0 24 24"
@@ -569,7 +569,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 			<!-- One panel: what the system is doing, and how you talk to it. Dark, so it
 	     reads as the active surface rather than another card on a pale page. -->
 			<div
-				class="{phase.key === 'off'
+				class="pointer-events-auto {phase.key === 'off'
 			? 'w-fit'
 			: `rounded-full bg-primary text-primary-foreground w-fit px-2.5 py-2`}"
 				title="Silero VAD · Nemotron 3.5 (de-DE) · Supertonic-3 M5 — all on-device"
@@ -744,7 +744,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 					title="Skills & Artefakte"
 					aria-label="Skills & Artefakte"
 					aria-expanded={shell.rightOpen}
-					class="-translate-y-1/2 absolute top-1/2 right-0 flex size-11 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected lg:hidden"
+					class="-translate-y-1/2 pointer-events-auto absolute top-1/2 right-0 flex size-11 items-center justify-center rounded-full border border-border bg-surface-card text-foreground shadow-[0_4px_16px_rgba(30,41,59,0.12)] transition-colors hover:bg-surface-card-selected lg:hidden"
 				>
 					<svg
 						viewBox="0 0 24 24"
