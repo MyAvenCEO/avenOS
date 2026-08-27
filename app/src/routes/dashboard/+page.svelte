@@ -210,13 +210,6 @@ function dismissError() {
 	listener.failure = null
 }
 
-// The recognizer needs to know when its own voice is in the room. Reading
-// `speaker.speaking` is the tracked dependency; `setOutputActive` writes no
-// reactive state, so this cannot feed back into itself.
-$effect(() => {
-	listener.setOutputActive(speaker.speaking)
-})
-
 // A NEW turn — typed or spoken — brings the intent's stream into view,
 // where the reply and anything it renders appear. Only a new one, and only
 // the turn count is tracked.

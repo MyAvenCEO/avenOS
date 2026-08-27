@@ -43,11 +43,9 @@ pub struct Vad {
 impl Vad {
 	pub fn open(model_path: &std::path::Path) -> Result<Self> {
 		let session = Session::builder()?
-			// A 576-sample VAD frame is far too small to benefit from ORT's
-			// physical-core-sized default pool. More importantly, its workers spin
-			// between our 32 ms calls and otherwise keep several cores permanently
-			// busy. One thread runs synchronously, so disabling spinning costs no
-			// wake-up latency on the barge-in path.
+			// A 576-sample VAD frame is too small to benefit from ORT's
+			// physical-core-sized default pool. Its workers must also sleep
+			// between our 32 ms calls instead of keeping CPU cores busy.
 			.with_intra_threads(1)
 			.map_err(|error| anyhow::anyhow!(error.to_string()))?
 			.with_inter_threads(1)
