@@ -43,6 +43,19 @@ pub struct Vad {
 impl Vad {
 	pub fn open(model_path: &std::path::Path) -> Result<Self> {
 		let session = Session::builder()?
+			// A 576-sample VAD frame is far too small to benefit from ORT's
+			// physical-core-sized default pool. More importantly, its workers spin
+			// between our 32 ms calls and otherwise keep several cores permanently
+			// busy. One thread runs synchronously, so disabling spinning costs no
+			// wake-up latency on the barge-in path.
+			.with_intra_threads(1)
+			.map_err(|error| anyhow::anyhow!(error.to_string()))?
+			.with_inter_threads(1)
+			.map_err(|error| anyhow::anyhow!(error.to_string()))?
+			.with_intra_op_spinning(false)
+			.map_err(|error| anyhow::anyhow!(error.to_string()))?
+			.with_inter_op_spinning(false)
+			.map_err(|error| anyhow::anyhow!(error.to_string()))?
 			.commit_from_file(model_path)
 			.context("failed to open the Silero VAD model")?;
 		Ok(Self {
