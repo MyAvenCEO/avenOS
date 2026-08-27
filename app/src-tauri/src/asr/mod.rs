@@ -18,7 +18,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result};
-use parakeet_rs::{Nemotron, NemotronMode};
+use parakeet_rs::{ExecutionConfig, Nemotron, NemotronMode};
 use serde::Serialize;
 use tauri::State;
 use crate::assets::{cache_dir, ensure_file, ensure_files, stage};
@@ -162,7 +162,12 @@ impl Engine {
 	/// `AppHandle` — which is how the recognizer gets exercised against a known
 	/// recording rather than only through a live microphone.
 	pub fn open(model_dir: &Path, vad_path: &Path) -> Result<Self> {
-		let mut model = Nemotron::from_pretrained(model_dir, None)
+		let execution = ExecutionConfig::default().with_custom_configure(|builder| {
+			Ok(builder
+				.with_intra_op_spinning(false)?
+				.with_inter_op_spinning(false)?)
+		});
+		let mut model = Nemotron::from_pretrained(model_dir, Some(execution))
 			.context("failed to open the Nemotron ONNX sessions")?;
 
 		match model.mode() {
