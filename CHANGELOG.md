@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.2...v) (2026-08-27)
+
+
+### Features
+
+* **pricing:** avenNAME + one avenCEO, on kebab-case wire keys ([08adc25](https://github.com/MyAvenCEO/avenOS/commit/08adc253f0f8166f20eeee9fad15ae5bdc60071f))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.1...v) (2026-08-27)
 
 
