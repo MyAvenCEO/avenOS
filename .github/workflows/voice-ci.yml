@@ -53,7 +53,14 @@ jobs:
         with:
           toolchain: '1.93.1'
       - uses: oven-sh/setup-bun@v2
-      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Install Linux native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+            libasound2-dev \
+            build-essential curl wget file libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev libfuse2
       - run: cargo test --locked --manifest-path libs/aven-voice-host-cpal/Cargo.toml --features cpal-host
       - run: AVEN_SPEECH_GPU=cpu bun scripts/fetch-onnxruntime.ts
       - run: cargo test --locked --manifest-path app/src-tauri/Cargo.toml
