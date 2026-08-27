@@ -1,0 +1,15 @@
+[package]
+name = "aven-voice-host-cpal"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.93"
+
+[features]
+default = []
+cpal-host = ["dep:cpal"]
+
+[dependencies]
+aven-voice-core = { path = "../aven-voice-core" }
+aven-voice-protocol = { path = "../aven-voice-protocol" }
+aven-voice-runtime = { path = "../aven-voice-runtime" }
+cpal = { version = "=0.18.2", default-features = false, optional = true }

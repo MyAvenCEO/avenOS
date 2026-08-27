@@ -8,13 +8,17 @@
 //! Logging survives on purpose: a silent Rust side is what makes a TestFlight
 //! build undebuggable.
 
-mod asr;
 mod artifacts;
+mod asr;
 mod assets;
 mod auth;
 mod tts;
+mod voice;
 
 use tauri::Manager;
+
+#[cfg(target_os = "linux")]
+const ONNXRUNTIME_LIBRARY_NAME: &str = "libonnxruntime.so";
 
 /// Load the official shared ONNX Runtime before either speech engine creates a
 /// session. Linux uses dynamic loading because the crate's static distribution
@@ -30,7 +34,7 @@ fn init_onnxruntime(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
 		.path()
 		.resource_dir()?
 		.join("onnxruntime")
-		.join("libonnxruntime.dylib");
+		.join(ONNXRUNTIME_LIBRARY_NAME);
 	let path = std::env::var_os("ORT_DYLIB_PATH")
 		.map(std::path::PathBuf::from)
 		.filter(|path| path.is_file())
@@ -38,7 +42,10 @@ fn init_onnxruntime(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
 	if !path.is_file() {
 		return Err(std::io::Error::new(
 			std::io::ErrorKind::NotFound,
-			format!("ONNX Runtime shared library not found at {}", path.display()),
+			format!(
+				"ONNX Runtime shared library not found at {}",
+				path.display()
+			),
 		)
 		.into());
 	}
@@ -80,44 +87,6 @@ fn init_onnxruntime(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
 		path.display(),
 		if try_cuda { "CUDA with CPU fallback" } else { "CPU" }
 	);
-	Ok(())
-}
-
-/// WebKitGTK does not provide permission UI for an embedded application. Its
-/// default `permission-request` handler therefore rejects `getUserMedia`, even
-/// though capture works in a normal browser. Enable the media features and
-/// grant only audio-only user-media requests from our main webview.
-#[cfg(target_os = "linux")]
-fn configure_linux_microphone(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-	let webview = app.get_webview("main").ok_or_else(|| {
-		std::io::Error::new(std::io::ErrorKind::NotFound, "main webview not found")
-	})?;
-	webview.with_webview(|webview| {
-		use webkit2gtk::glib::prelude::Cast;
-		use webkit2gtk::{
-			PermissionRequestExt, SettingsExt, UserMediaPermissionRequest,
-			UserMediaPermissionRequestExt, WebViewExt,
-		};
-
-		let inner = webview.inner();
-		if let Some(settings) = inner.settings() {
-			settings.set_enable_webrtc(true);
-			settings.set_enable_media_stream(true);
-			settings.set_media_playback_requires_user_gesture(false);
-		}
-		inner.connect_permission_request(|_, request| {
-			let Some(media) = request.downcast_ref::<UserMediaPermissionRequest>() else {
-				return false;
-			};
-			if media.is_for_audio_device() && !media.is_for_video_device() {
-				request.allow();
-				log::info!(target: "avenos::voice", "granted microphone permission");
-				true
-			} else {
-				false
-			}
-		});
-	})?;
 	Ok(())
 }
 
@@ -198,8 +167,6 @@ pub fn run() {
 	builder
 		// On-device German speech, both directions. Both engines are built lazily
 		// on first use, so a session that never speaks or listens pays nothing.
-		.manage(tts::TtsState::default())
-		.manage(asr::AsrState::default())
 		.manage(auth::AuthState::default())
 		.manage(artifacts::LlmStreamState::default())
 		.invoke_handler(tauri::generate_handler![
@@ -236,19 +203,24 @@ pub fn run() {
 			auth::auth_begin,
 			auth::auth_poll,
 			auth::auth_logout,
-			tts::tts_prepare,
-			tts::tts_speak,
-			asr::asr_prepare,
-			asr::asr_push,
-			asr::asr_reset,
-			asr::asr_output_active
+			voice::protocol::voice_prepare,
+			voice::protocol::voice_session_start,
+			voice::protocol::voice_session_stop,
+			voice::protocol::voice_speech_begin,
+			voice::protocol::voice_speech_enqueue,
+			voice::protocol::voice_speech_finish,
+			voice::protocol::voice_speech_cancel,
+			voice::protocol::voice_input_reset,
+			voice::protocol::voice_snapshot,
+			voice::protocol::voice_diagnostics_subscribe
 		])
 		.setup(|app| {
 			#[cfg(target_os = "linux")]
 			{
 				init_onnxruntime(app)?;
-				configure_linux_microphone(app)?;
 			}
+
+			app.manage(voice::VoiceService::new(app.handle().clone()));
 
 			// The webview is the whole surface, so give it focus on launch —
 			// otherwise the first click is spent activating the window.

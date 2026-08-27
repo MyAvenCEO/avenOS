@@ -62,6 +62,9 @@
 	},
 	"bundle": {
 		"active": true,
+		"resources": {
+			"resources/onnxruntime/": "onnxruntime/"
+		},
 		"category": "Productivity",
 		"targets": ["app", "dmg"],
 		"icon": [

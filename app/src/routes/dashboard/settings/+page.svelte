@@ -1,8 +1,9 @@
 <script lang="ts">
 import { legalHref, websiteOrigin } from '@myavenceo/aven-ceo'
-import { invoke, isTauri } from '@tauri-apps/api/core'
+import { isTauri } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { settings, VOICES, type Voice } from '$lib/settings.svelte'
+import { voiceController } from '$lib/voice/controller.svelte'
 import Account from './Account.svelte'
 import Billing from './Billing.svelte'
 
@@ -52,28 +53,12 @@ async function openLegal(event: MouseEvent, href: string) {
 	await openUrl(href)
 }
 
-let context: AudioContext | null = null
-
 async function preview(voice: Voice) {
 	if (playing) return
 	playing = voice
 	failure = null
 	try {
-		const wav = await invoke<ArrayBuffer>('tts_speak', {
-			text: SAMPLE,
-			lang: 'de',
-			voice
-		})
-		context ??= new AudioContext()
-		if (context.state === 'suspended') await context.resume()
-		const buffer = await context.decodeAudioData(wav)
-		const source = context.createBufferSource()
-		source.buffer = buffer
-		source.connect(context.destination)
-		await new Promise<void>((resolve) => {
-			source.onended = () => resolve()
-			source.start()
-		})
+		await voiceController.previewSpeech(SAMPLE, voice)
 	} catch (err) {
 		failure = err instanceof Error ? err.message : String(err)
 	} finally {
