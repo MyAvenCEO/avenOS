@@ -1,6 +1,6 @@
-// The recurring tiers, proven end to end at the unit seam: subscription
-// webhooks persist idempotently PER TIER (avenME and avenFOUNDER are
-// independent products that coexist on one account), every read/action is
+// The recurring subscription, proven end to end at the unit seam: subscription
+// webhooks persist idempotently PER TIER (the machinery is per-tier; the
+// self-serve set has collapsed to a single tier, avenCEO), every read/action is
 // scoped to the session's own user — a stranger's id never reaches provider
 // or row — and the invoice URL only ever resolves the caller's own orders.
 import { randomUUID } from 'node:crypto'
@@ -104,7 +104,7 @@ function subscriptionWebhook(input: {
 		data: {
 			id: input.subscriptionId,
 			status: input.status,
-			amount: input.amount ?? 5500,
+			amount: input.amount ?? 37700,
 			current_period_end: '2026-09-21T00:00:00.000Z',
 			cancel_at_period_end: input.cancelAtPeriodEnd ?? false,
 			pause_at_period_end: input.pauseAtPeriodEnd ?? false,
@@ -162,7 +162,7 @@ describe('subscription state', () => {
 				subscriptionId,
 				userId: alice.id,
 				email: alice.email,
-				tier: 'avenme',
+				tier: 'avenceo',
 				status: 'active'
 			})
 		).toEqual({ applied: true })
@@ -172,7 +172,7 @@ describe('subscription state', () => {
 				subscriptionId,
 				userId: alice.id,
 				email: alice.email,
-				tier: 'avenme',
+				tier: 'avenceo',
 				status: 'active'
 			})
 		).toEqual({ applied: true })
@@ -180,8 +180,8 @@ describe('subscription state', () => {
 			alice.id
 		])
 		expect(rows.rows).toHaveLength(1)
-		expect(rows.rows[0].tier).toBe('avenme')
-		expect(rows.rows[0].price_eur_cents).toBe(5500)
+		expect(rows.rows[0].tier).toBe('avenceo')
+		expect(rows.rows[0].price_eur_cents).toBe(37700)
 
 		// The customer key was captured — the handle every portal call hangs on.
 		const customer = await database.pool.query(
@@ -194,22 +194,19 @@ describe('subscription state', () => {
 		// sees nothing — there is no parameter that reaches alice's row.
 		const mine = await service.me(alice.id)
 		expect(mine).toHaveLength(1)
-		expect(mine[0]).toMatchObject({ tier: 'avenme', status: 'active' })
+		expect(mine[0]).toMatchObject({ tier: 'avenceo', status: 'active' })
 		expect(await service.me(bob.id)).toEqual([])
 	})
 
-	it('tiers are independent: both can be active, only a same-tier duplicate is refused', async () => {
+	it('a same-tier duplicate is refused, and an ended subscription frees the tier again', async () => {
+		// Subscriptions are keyed per tier, but the self-serve set has collapsed
+		// to a single tier (avenCEO): the old "two tiers coexist on one account"
+		// assertion can no longer be expressed, so this now proves the per-tier
+		// duplicate guard and the release-on-end path against the one tier left.
 		const provider = new StubProvider()
 		const service = new SubscriptionService(database.pool, testConfig(), provider)
 		const alice = await insertUser()
 
-		await applyWebhook(service, {
-			subscriptionId: `sub_${randomUUID()}`,
-			userId: alice.id,
-			email: alice.email,
-			tier: 'avenme',
-			status: 'active'
-		})
 		await applyWebhook(service, {
 			subscriptionId: `sub_${randomUUID()}`,
 			userId: alice.id,
@@ -219,16 +216,11 @@ describe('subscription state', () => {
 			amount: 37700
 		})
 
-		// Both tiers stand side by side on one account.
 		const mine = await service.me(alice.id)
-		expect(mine.map((standing) => standing.tier).sort()).toEqual(['avenceo', 'avenme'])
+		expect(mine.map((standing) => standing.tier)).toEqual(['avenceo'])
 		expect(mine.find((standing) => standing.tier === 'avenceo')?.priceEurCents).toBe(37700)
 
-		// A second booking of the SAME tier is refused; there is no cross-tier
-		// change of any kind — the other tier is simply its own product.
-		await expect(service.subscribe(alice, 'avenme')).rejects.toMatchObject({
-			code: 'SUBSCRIPTION_EXISTS'
-		})
+		// A second booking of the SAME tier is refused while one stands.
 		await expect(service.subscribe(alice, 'avenceo')).rejects.toMatchObject({
 			code: 'SUBSCRIPTION_EXISTS'
 		})
@@ -239,27 +231,25 @@ describe('subscription state', () => {
 			subscriptionId: endedId,
 			userId: carol.id,
 			email: carol.email,
-			tier: 'avenme',
+			tier: 'avenceo',
 			status: 'canceled'
 		})
-		const started = await service.subscribe(carol, 'avenme')
-		expect(started.checkoutUrl).toContain('/checkout/avenme')
+		const started = await service.subscribe(carol, 'avenceo')
+		expect(started.checkoutUrl).toContain('/checkout/avenceo')
 	})
 
 	it('actions are tier-scoped and resolve the provider id from the caller’s own row', async () => {
+		// The self-serve set has collapsed to a single tier (avenCEO), so the
+		// cross-tier isolation the old version asserted (an action on one tier
+		// never touching another) can no longer be expressed with two tiers.
+		// What remains — the provider id is taken from the caller's OWN row, the
+		// resume mode is picked from that row, and a stranger reaches nothing —
+		// is exercised against the one remaining tier.
 		const provider = new StubProvider()
 		const service = new SubscriptionService(database.pool, testConfig(), provider)
 		const alice = await insertUser()
 		const bob = await insertUser()
-		const meId = `sub_me_${randomUUID()}`
 		const ceoId = `sub_ceo_${randomUUID()}`
-		await applyWebhook(service, {
-			subscriptionId: meId,
-			userId: alice.id,
-			email: alice.email,
-			tier: 'avenme',
-			status: 'active'
-		})
 		await applyWebhook(service, {
 			subscriptionId: ceoId,
 			userId: alice.id,
@@ -269,11 +259,11 @@ describe('subscription state', () => {
 			cancelAtPeriodEnd: true
 		})
 
-		// Cancel hits the avenME row only — the id comes from HER row.
-		await service.cancel(alice.id, 'avenme')
-		expect(provider.calls.at(-1)).toEqual({ method: 'cancelSubscription', args: [meId, false] })
-		await service.cancel(alice.id, 'avenme', true)
-		expect(provider.calls.at(-1)).toEqual({ method: 'cancelSubscription', args: [meId, true] })
+		// Cancel targets HER row — the id comes from the row, not the caller.
+		await service.cancel(alice.id, 'avenceo')
+		expect(provider.calls.at(-1)).toEqual({ method: 'cancelSubscription', args: [ceoId, false] })
+		await service.cancel(alice.id, 'avenceo', true)
+		expect(provider.calls.at(-1)).toEqual({ method: 'cancelSubscription', args: [ceoId, true] })
 
 		// Resume picks the mode from the row: a scheduled cancel → uncancel.
 		await service.resume(alice.id, 'avenceo')
@@ -281,33 +271,31 @@ describe('subscription state', () => {
 			method: 'resumeSubscription',
 			args: [ceoId, 'uncancel']
 		})
-		await service.resume(alice.id, 'avenme')
-		expect(provider.calls.at(-1)).toEqual({
-			method: 'resumeSubscription',
-			args: [meId, 'uncancel']
-		})
 
-		// Pause targets the named tier's own subscription; a pause-scheduled
-		// row resumes as unpause.
-		await service.pause(alice.id, 'avenme')
-		expect(provider.calls.at(-1)).toEqual({ method: 'pauseSubscription', args: [meId] })
+		// Pause targets the tier's own subscription; once the row is
+		// pause-scheduled, resume switches to unpause.
+		await service.pause(alice.id, 'avenceo')
+		expect(provider.calls.at(-1)).toEqual({ method: 'pauseSubscription', args: [ceoId] })
 		await applyWebhook(service, {
-			subscriptionId: meId,
+			subscriptionId: ceoId,
 			userId: alice.id,
 			email: alice.email,
-			tier: 'avenme',
+			tier: 'avenceo',
 			status: 'active',
 			pauseAtPeriodEnd: true
 		})
-		expect((await service.me(alice.id)).find((x) => x.tier === 'avenme')?.pauseAtPeriodEnd).toBe(
+		expect((await service.me(alice.id)).find((x) => x.tier === 'avenceo')?.pauseAtPeriodEnd).toBe(
 			true
 		)
-		await service.resume(alice.id, 'avenme')
-		expect(provider.calls.at(-1)).toEqual({ method: 'resumeSubscription', args: [meId, 'unpause'] })
+		await service.resume(alice.id, 'avenceo')
+		expect(provider.calls.at(-1)).toEqual({
+			method: 'resumeSubscription',
+			args: [ceoId, 'unpause']
+		})
 
 		// A stranger cannot act at all: bob holds nothing, so the service
 		// refuses before any provider call could happen.
-		await expect(service.cancel(bob.id, 'avenme')).rejects.toMatchObject({
+		await expect(service.cancel(bob.id, 'avenceo')).rejects.toMatchObject({
 			code: 'SUBSCRIPTION_MISSING'
 		})
 		await expect(service.resume(bob.id, 'avenceo')).rejects.toMatchObject({
@@ -328,7 +316,7 @@ describe('subscription state', () => {
 			subscriptionId: `sub_${randomUUID()}`,
 			userId: alice.id,
 			email: alice.email,
-			tier: 'avenme',
+			tier: 'avenceo',
 			status: 'active'
 		})
 		const customerId = alice.id
@@ -336,12 +324,12 @@ describe('subscription state', () => {
 			{
 				id: 'ord_1',
 				createdAt: '2026-08-24T00:00:00.000Z',
-				productId: 'prod_avenme',
-				tier: 'avenme',
-				subTotalCents: 4622,
-				taxCents: 878,
+				productId: 'prod_avenceo',
+				tier: 'avenceo',
+				subTotalCents: 31681,
+				taxCents: 6019,
 				discountCents: 0,
-				amountPaidCents: 5500,
+				amountPaidCents: 37700,
 				currency: 'eur',
 				status: 'paid',
 				invoiceGenerated: false
@@ -350,7 +338,7 @@ describe('subscription state', () => {
 
 		const orders = await service.orders(alice)
 		expect(orders).toHaveLength(1)
-		expect(orders[0]).toMatchObject({ id: 'ord_1', tier: 'avenme', amountPaidCents: 5500 })
+		expect(orders[0]).toMatchObject({ id: 'ord_1', tier: 'avenceo', amountPaidCents: 37700 })
 		expect(provider.calls.at(-1)).toEqual({ method: 'listOrders', args: [customerId] })
 
 		// The invoice URL: an owned order id resolves; a foreign or invented
@@ -390,14 +378,14 @@ describe('subscription state', () => {
 		const carol = await insertUser()
 		const dave = await insertUser()
 
-		const started = await service.subscribe(carol, 'avenme', 'http://127.0.0.1:1420', 'de')
-		expect(started.checkoutUrl).toContain('/checkout/avenme')
+		const started = await service.subscribe(carol, 'avenceo', 'http://127.0.0.1:1420', 'de')
+		expect(started.checkoutUrl).toContain('/checkout/avenceo')
 		// The embed origin travels to the provider — Polar validates it
 		// against the org's allowlist; it authorizes nothing on our side.
 		// The locale rides along too and only picks the checkout language.
 		const checkoutCall = provider.calls.find((c) => c.method === 'createSubscriptionCheckout')
 		expect(checkoutCall?.args[0]).toMatchObject({
-			tier: 'avenme',
+			tier: 'avenceo',
 			userId: carol.id,
 			embedOrigin: 'http://127.0.0.1:1420',
 			locale: 'de'
@@ -406,7 +394,7 @@ describe('subscription state', () => {
 		expect(await service.checkoutStatus(carol.id)).toEqual({ status: 'completed' })
 		expect(provider.calls.at(-1)).toEqual({
 			method: 'checkoutStatus',
-			args: [`ch_avenme_${carol.id.slice(0, 8)}`]
+			args: [`ch_avenceo_${carol.id.slice(0, 8)}`]
 		})
 		// dave never started one: null, and no provider call with a guessed id.
 		const before = provider.calls.length

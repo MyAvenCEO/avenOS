@@ -37,7 +37,7 @@ export interface ProductSeed {
 	name: string
 	description: string
 	priceCents: number
-	/** `null` = one-time (the avenID), otherwise the recurring interval. */
+	/** `null` = one-time (the Testride, wire key avenid), otherwise the recurring interval. */
 	interval: 'month' | null
 }
 

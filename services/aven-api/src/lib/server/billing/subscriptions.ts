@@ -1,12 +1,12 @@
-// The recurring tiers (avenME / avenFOUNDER), sold through the payment
-// provider and mirrored into two tables the portal reads. Strictly customer-
-// self-service: every method takes the SESSION's user id — none accepts a
-// provider id from outside, because the row lookup here is the authorization.
+// The recurring subscription (avenCEO), sold through the payment provider and
+// mirrored into two tables the portal reads. Strictly customer-self-service:
+// every method takes the SESSION's user id — none accepts a provider id from
+// outside, because the row lookup here is the authorization.
 //
-// The tiers are INDEPENDENT products: one per human (avenME), one per
-// company (avenFOUNDER). Both can be active on one account at the same
-// time; each is booked and canceled on its own, and there is no cross-tier
-// change of any kind.
+// Subscriptions are keyed and tracked PER TIER, so the machinery already
+// supports several coexisting on one account; today the self-serve set has
+// collapsed to a single tier (avenCEO), each booked and canceled on its own,
+// with no cross-tier change of any kind.
 //
 // The webhook is the only writer of subscription state. Actions (cancel,
 // resume) call the provider and return; the row updates when the
@@ -19,10 +19,11 @@ import { ensureVerifiedUser } from '../identity.js'
 import type { OrderRow, PaymentProvider, SubscriptionEvent } from './provider.js'
 import { productSeeds } from './seeds.js'
 
-/** The tiers that exist as recurring, self-serve subscriptions. avenID is a
- * one-off (the names flow owns it) and avenCOOP is not a product at all —
- * that relationship is handled individually, outside this system. */
-export const SUBSCRIPTION_TIERS = ['avenme', 'avenceo'] as const
+/** The tiers that exist as recurring, self-serve subscriptions — avenCEO is
+ * the only one. The Testride (wire key avenid) is a one-off (the names flow
+ * owns it) and avenCOOP is not a product at all — that relationship is handled
+ * individually, outside this system. */
+export const SUBSCRIPTION_TIERS = ['avenceo'] as const
 export type SubscriptionTier = (typeof SUBSCRIPTION_TIERS)[number]
 
 export function isSubscriptionTier(value: string): value is SubscriptionTier {
@@ -68,7 +69,8 @@ export class SubscriptionService {
 	) {}
 
 	/** The caller's provider customer id — from our table first, and for
-	 * members who paid before we stored customer ids (the one-off avenID), by
+	 * members who paid before we stored customer ids (the one-off Testride,
+	 * wire key avenid), by
 	 * asking the provider for the SESSION's own email. Found ids are stored,
 	 * so the lookup happens once. */
 	private async customerId(user: { id: string; email: string }): Promise<string | null> {
@@ -90,8 +92,9 @@ export class SubscriptionService {
 		return found
 	}
 
-	/** Ensure every product (the one-off avenID and both tiers) exists at
-	 * the provider, priced from the SSOT; cached per process. */
+	/** Ensure every product (the one-off Testride, wire key avenid, and the
+	 * avenCEO tier) exists at the provider, priced from the SSOT; cached per
+	 * process. */
 	ensureProducts(): Promise<Record<string, string>> {
 		this.products ??= this.payments.ensureProducts(productSeeds())
 		return this.products
@@ -196,7 +199,7 @@ export class SubscriptionService {
 		await this.payments.pauseSubscription(row.provider_subscription_id)
 	}
 
-	/** The caller's orders — the one-off avenID and every subscription
+	/** The caller's orders — the one-off Testride (avenid) and every subscription
 	 * charge — resolved through the same session-only customer lookup. */
 	async orders(user: { id: string; email: string }): Promise<OrderRow[]> {
 		const providerCustomerId = await this.customerId(user)

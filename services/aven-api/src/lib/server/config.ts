@@ -245,10 +245,13 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ServerConfi
 		throw new Error('POLAR_API_KEY is required.')
 	if (config.POLAR_API_KEY && config.POLAR_WEBHOOK_SECRET === 'dev-fake-webhook-secret')
 		throw new Error('POLAR_WEBHOOK_SECRET is required.')
-	// The SSOT owns the avenID price — a diverging env override would let
-	// the funnel display one number and the provider charge another.
+	// The SSOT owns the Testride price (wire key avenid) — a diverging env
+	// override would let the funnel display one number and the provider charge
+	// another.
 	if (config.NAME_PRICE_EUR !== plan('avenid').eurPrice)
-		throw new Error('NAME_PRICE_EUR must match the avenID price in @myavenceo/aven-ceo/pricing.')
+		throw new Error(
+			'NAME_PRICE_EUR must match the Testride price (wire key avenid) in @myavenceo/aven-ceo/pricing.'
+		)
 	return config
 }
 
