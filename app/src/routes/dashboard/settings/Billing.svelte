@@ -1,5 +1,5 @@
 <script lang="ts">
-import { euro, PLANS, type Plan, priceSuffix } from '@myavenceo/aven-ceo/pricing'
+import { canBuyMore, euro, PLANS, type Plan, priceSuffix } from '@myavenceo/aven-ceo/pricing'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { onDestroy, onMount } from 'svelte'
 import { goto } from '$app/navigation'
@@ -26,10 +26,16 @@ import { ingestFile } from '$lib/artifacts/ingest.svelte'
  * the event lands; action errors land in the same card. The page-level
  * banner is only for load errors that belong to no card.
  *
- * avenME and avenFOUNDER are INDEPENDENT products — one per human, one per
- * company. Both can stand at once; each is booked and canceled on its own,
- * and there is no cross-tier change of any kind. avenID is a one-off the
- * funnel owns; avenCOOP is not a Polar product — handled individually.
+ * There is ONE subscription to manage here: avenCEO, one per account. The
+ * pane no longer knows that by heart — it reads the recurring, bookable
+ * plans out of the pricing SSOT, and asks `canBuyMore` whether a booking
+ * button belongs on the card. avenME was consolidated into avenCEO and is
+ * gone; when several avenCEO subscriptions become sellable, the SSOT's
+ * `maxPerAccount` is the only thing that changes.
+ *
+ * avenNAME (wire key `avenid`) is the one-off the names funnel owns — it
+ * shows up here as an ORDER, never as a card. avenCOOP is not a Polar
+ * product at all; that relationship is handled individually.
  */
 
 interface Standing {
@@ -55,7 +61,11 @@ interface Order {
 	invoiceGenerated: boolean
 }
 
-const TIER_PLANS: Plan[] = PLANS.filter((p) => p.id === 'avenme' || p.id === 'avenceo')
+/** The plans this pane books: recurring and self-serve. Derived, not
+ * listed — avenNAME is `billing: 'once'` (the funnel's), avenCOOP is
+ * `applyOnly` (a conversation), and what is left is avenCEO. A new
+ * subscription tier in the SSOT appears here with no edit. */
+const TIER_PLANS: Plan[] = PLANS.filter((p) => p.billing === 'monthly' && !p.applyOnly)
 /** A subscription in one of these states is over — the tier is bookable
  * again. Mirrors the server's ENDED_STATUSES, Polar vocabulary. */
 const ENDED = ['canceled', 'expired', 'incomplete_expired', 'unpaid', 'revoked']
@@ -98,7 +108,8 @@ let pollTimer: ReturnType<typeof setInterval> | undefined
 let embedTimer: ReturnType<typeof setTimeout> | undefined
 
 // In the browser the pane renders from fixtures so every state is stylable
-// without a paid account: ?billing=none|active|paused|cancel|checkout|both.
+// without a paid account: ?billing=none|active|paused|cancel|checkout.
+// (`both` is gone with avenME — there is one subscription to be in a state.)
 const fixtureScenario = $derived(page.url.searchParams.get('billing') ?? 'active')
 
 function fixtures(scenario: string): { subscriptions: Standing[]; orders: Order[] } {
@@ -107,11 +118,11 @@ function fixtures(scenario: string): { subscriptions: Standing[]; orders: Order[
 			id: 'ord_demo_2',
 			createdAt: '2026-08-14T09:12:00.000Z',
 			productId: 'prod_6ALajlETScD2v0dv10n618',
-			tier: 'avenme',
-			subTotalCents: 4200,
-			taxCents: 798,
+			tier: 'aven-ceo',
+			subTotalCents: 31681,
+			taxCents: 6019,
 			discountCents: 0,
-			amountPaidCents: 4998,
+			amountPaidCents: 37700,
 			currency: 'EUR',
 			status: 'paid',
 			invoiceGenerated: true
@@ -120,36 +131,28 @@ function fixtures(scenario: string): { subscriptions: Standing[]; orders: Order[
 			id: 'ord_demo_1',
 			createdAt: '2026-07-02T15:40:00.000Z',
 			productId: 'prod_3FJqTxDvcsUaj4YPo7lfDm',
-			tier: 'avenid',
-			subTotalCents: 2500,
-			taxCents: 475,
+			tier: 'aven-name',
+			subTotalCents: 2101,
+			taxCents: 399,
 			discountCents: 0,
-			amountPaidCents: 2975,
+			amountPaidCents: 2500,
 			currency: 'EUR',
 			status: 'paid',
 			invoiceGenerated: false
 		}
 	]
-	const me: Standing = {
-		tier: 'avenme',
+	const ceo: Standing = {
+		tier: 'aven-ceo',
 		status: scenario === 'paused' ? 'paused' : 'active',
-		priceEurCents: 4200,
+		priceEurCents: 37700,
 		currentPeriodEnd: '2026-09-14T09:12:00.000Z',
 		cancelAtPeriodEnd: scenario === 'cancel',
 		pauseAtPeriodEnd: scenario === 'paused'
 	}
-	const founder: Standing = {
-		tier: 'avenceo',
-		status: 'active',
-		priceEurCents: 37700,
-		currentPeriodEnd: '2026-09-14T09:12:00.000Z',
-		cancelAtPeriodEnd: false,
-		pauseAtPeriodEnd: false
-	}
 	if (scenario === 'none') return { subscriptions: [], orders: [] }
+	// Mid-checkout: avenNAME is already bought, avenCEO is not yet.
 	if (scenario === 'checkout') return { subscriptions: [], orders: paidOrders.slice(1) }
-	if (scenario === 'both') return { subscriptions: [me, founder], orders: paidOrders }
-	return { subscriptions: [me], orders: paidOrders }
+	return { subscriptions: [ceo], orders: paidOrders }
 }
 
 /** The plan an order bought — matched by the SSOT tier the server reads
@@ -164,14 +167,14 @@ async function refresh() {
 		subscriptions = fixture.subscriptions
 		orders = fixture.orders
 		if (fixtureScenario === 'checkout' && !checkout)
-			checkout = { tier: 'avenme', url: '', fallbackUrl: '' }
+			checkout = { tier: 'aven-ceo', url: '', fallbackUrl: '' }
 		return
 	}
 	// Defensive against foreign shapes (an older server, an error body): a
 	// missing array must degrade to "nothing", never crash the pane.
 	const me = await invoke<{ subscriptions?: Standing[] }>('billing_me')
 	subscriptions = Array.isArray(me?.subscriptions) ? me.subscriptions : []
-	// Orders exist without a subscription — the one-off avenID is an order
+	// Orders exist without a subscription — the one-off avenNAME is an order
 	// too, resolved via the session's own email.
 	const history = await invoke<{ orders?: Order[] }>('billing_orders')
 	orders = Array.isArray(history?.orders) ? history.orders : []
@@ -231,6 +234,12 @@ async function act(tier: string, label: string, run: () => Promise<void>) {
 
 function standingOf(subs: Standing[], tier: string): Standing | null {
 	return subs.find((s) => s.tier === tier) ?? null
+}
+
+/** How many subscriptions of a tier are standing — mirrors the server's own
+ * count, so both sides weigh the same number against the SSOT's limit. */
+function liveCountOf(subs: Standing[], tier: string): number {
+	return subs.filter((s) => s.tier === tier && !ENDED.includes(s.status)).length
 }
 
 /** The embed flavor of a checkout URL — the exact params the official lib
@@ -466,6 +475,11 @@ onDestroy(() => {
 {#snippet planCard(p: Plan)}
 	{@const s = standingOf(subscriptions, p.id)}
 	{@const isLive = s !== null && !ENDED.includes(s.status)}
+	<!-- Whether a booking button belongs here at all. The SSOT decides how
+	     many of one product an account may hold; the pane only counts what
+	     it has. Today that is 1, so a live avenCEO hides the button — the
+	     same answer the id service gives, from the same rule. -->
+	{@const bookable = canBuyMore(p.id, liveCountOf(subscriptions, p.id))}
 	<article
 		class="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {isLive
 			? 'border-primary bg-surface-raised'
@@ -534,7 +548,7 @@ onDestroy(() => {
 		     own; both can stand at once. Progress and errors live HERE, in
 		     the card the action belongs to. -->
 		<div class="mt-auto flex flex-col gap-2 pt-2">
-			{#if !isLive}
+			{#if !isLive && bookable}
 				<button
 					type="button"
 					onclick={() => subscribe(p.id)}
@@ -543,6 +557,13 @@ onDestroy(() => {
 				>
 					{busy === `subscribe:${p.id}` ? 'Buchung startet …' : 'Jetzt buchen'}
 				</button>
+			{:else if !isLive}
+				<!-- Held as many as the plan allows, but none of them standing:
+				     the limit is reached by a subscription in some other state,
+				     so booking would be refused rather than merely unavailable. -->
+				<p class="text-xs opacity-60">
+					Du hast {p.name} bereits gebucht — mehr als eines gibt es pro Konto nicht.
+				</p>
 			{:else if s?.cancelAtPeriodEnd || s?.pauseAtPeriodEnd || s?.status === 'paused'}
 				<button
 					type="button"

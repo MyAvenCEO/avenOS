@@ -80,10 +80,10 @@ function continueToCheckout() {
 }
 </script>
 
-<svelte:head><title>avenID sichern · avenCEO</title></svelte:head>
+<svelte:head><title>avenNAME sichern · avenCEO</title></svelte:head>
 <section class="panel auth">
 	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
-	<h1>Sichere dir deine avenID</h1>
+	<h1>Sichere dir deinen avenNAME</h1>
 	{#if greeting}
 		<p class="eyebrow">Warteliste · {greeting.name}</p>
 		<p>{greeting.lead}</p>

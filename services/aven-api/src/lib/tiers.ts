@@ -10,7 +10,7 @@
  * Only the funnel-specific `lead` copy lives here: it is about waitlist
  * mechanics, not part of the pricing SSOT.
  */
-import { type PlanId, plan, planOrder } from '@myavenceo/aven-ceo/pricing'
+import { type PlanId, plan, planIdOf, planOrder } from '@myavenceo/aven-ceo/pricing'
 
 export type TierId = PlanId
 
@@ -28,17 +28,21 @@ export interface TierGreeting {
  * funnel does not greet (or a tier removed upstream) simply yields no
  * greeting. */
 const LEADS: Partial<Record<TierId, string>> = {
-	avenid:
-		'Die Testride sichert dir deinen avenCEO‑Namen für ein Jahr — plus eine einstündige Testfahrt nach deiner Einladung. Zugleich ist sie dein Platz auf der Warteliste: Eingeladen wird der Reihe nach.',
-	avenceo:
-		'avenCEO startet invite‑only. Deinen Platz sicherst du dir über deine Testride: Der Name gehört dir, und die Reihenfolge der Warteliste ist die Reihenfolge der Einladungen.',
-	avencoop:
-		'avenCOOP vergeben wir nach Passung, nicht der Reihe nach — wir steigen als technischer Co‑Founder bei dir ein. Der Weg dahin führt trotzdem über deine Testride: Sie hält deinen Platz und zeigt uns, dass es dir ernst ist.'
+	'aven-name':
+		'avenNAME sichert dir deinen avenCEO‑Namen für ein Jahr — plus eine einstündige Testfahrt nach deiner Einladung. Zugleich ist es dein Platz auf der Warteliste: Eingeladen wird der Reihe nach.',
+	'aven-ceo':
+		'avenCEO startet invite‑only. Deinen Platz sicherst du dir über avenNAME: Der Name gehört dir, und die Reihenfolge der Warteliste ist die Reihenfolge der Einladungen.',
+	'aven-coop':
+		'avenCOOP vergeben wir nach Passung, nicht der Reihe nach — wir steigen als technischer Co‑Founder bei dir ein. Der Weg dahin führt trotzdem über avenNAME: Es hält deinen Platz und zeigt uns, dass es dir ernst ist.'
 }
 
+/**
+ * The tier a visitor arrived on. Read through the SSOT's normaliser, so a
+ * link someone bookmarked or a mail we already sent — `?tier=avenceo` — still
+ * lands on the right greeting after the kebab-case wire-key rename.
+ */
 export function tierFrom(url: URL): TierId | null {
-	const raw = url.searchParams.get('tier')
-	return TIER_IDS.includes(raw as TierId) ? (raw as TierId) : null
+	return planIdOf(url.searchParams.get('tier'))
 }
 
 export function greetingFor(tier: TierId | null): TierGreeting | null {

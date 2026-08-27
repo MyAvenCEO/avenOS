@@ -4,10 +4,10 @@
 import { PLANS, type Plan, plan, planIncludes, planTexts } from '@myavenceo/aven-ceo/pricing'
 import type { ProductSeed } from './provider.js'
 
-/** Every provider product: the one-off Testride (wire key avenid) plus the
- * recurring avenCEO tier. avenCOOP is not a product at all — that relationship
- * is handled individually, outside this system. */
-export const PRODUCT_TIERS = ['avenid', 'avenceo'] as const
+/** Every provider product: the one-off avenNAME plus the recurring avenCEO
+ * tier. avenCOOP is not a product at all — that relationship is handled
+ * individually, outside this system. */
+export const PRODUCT_TIERS = ['aven-name', 'aven-ceo'] as const
 export type ProductTier = (typeof PRODUCT_TIERS)[number]
 
 /** Keep the Polar description comfortably readable on the checkout page —
@@ -112,8 +112,7 @@ function runtimeSpec(p: Plan): BenefitSpec | null {
 }
 
 /** Per product tier: the skill flags — cascaded via the SSOT's `planIncludes`
- * law — then the runtime benefit. Deduped by key; the Testride (avenid)
- * carries none. */
+ * law — then the runtime benefit. Deduped by key; avenNAME carries none. */
 export function productBenefitSpecs(): Record<ProductTier, BenefitSpec[]> {
 	const out = {} as Record<ProductTier, BenefitSpec[]>
 	for (const tier of PRODUCT_TIERS) {
