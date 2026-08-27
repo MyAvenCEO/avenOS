@@ -8,10 +8,17 @@
 // collapsed to a single tier (avenCEO), each booked and canceled on its own,
 // with no cross-tier change of any kind.
 //
+// HOW MANY of one tier an account may hold is not decided here — it is
+// `maxPerAccount` in the pricing SSOT, asked via `canBuyMore`. It is 1 today;
+// raising it there is what makes several avenCEO subscriptions sellable,
+// without this file learning a second rule.
+//
 // The webhook is the only writer of subscription state. Actions (cancel,
 // resume) call the provider and return; the row updates when the
 // provider's event lands, so the UI shows a pending state instead of a lie.
+
 import { randomUUID } from 'node:crypto'
+import { canBuyMore, planIdOf } from '@myavenceo/aven-ceo/pricing'
 import type pg from 'pg'
 import { writeAudit } from '../audit.js'
 import { AppError } from '../errors.js'
@@ -20,14 +27,25 @@ import type { OrderRow, PaymentProvider, SubscriptionEvent } from './provider.js
 import { productSeeds } from './seeds.js'
 
 /** The tiers that exist as recurring, self-serve subscriptions — avenCEO is
- * the only one. The Testride (wire key avenid) is a one-off (the names flow
+ * the only one. avenNAME (wire key `aven-name`) is a one-off (the names flow
  * owns it) and avenCOOP is not a product at all — that relationship is handled
  * individually, outside this system. */
-export const SUBSCRIPTION_TIERS = ['avenceo'] as const
+export const SUBSCRIPTION_TIERS = ['aven-ceo'] as const
 export type SubscriptionTier = (typeof SUBSCRIPTION_TIERS)[number]
 
 export function isSubscriptionTier(value: string): value is SubscriptionTier {
 	return (SUBSCRIPTION_TIERS as readonly string[]).includes(value)
+}
+
+/**
+ * A tier as it arrives from a client, in the wire key rows are keyed by.
+ * An app binary built before the kebab-case rename still says `avenceo`, and
+ * it must go on working against a deployed service — the SSOT's legacy map
+ * decides what that means, not this file. Unknown values pass through so the
+ * caller rejects them with the same VALIDATION_ERROR as before.
+ */
+function asTier(value: string): string {
+	return planIdOf(value) ?? value
 }
 
 /** A subscription in one of these states is over — the tier is bookable
@@ -69,8 +87,8 @@ export class SubscriptionService {
 	) {}
 
 	/** The caller's provider customer id — from our table first, and for
-	 * members who paid before we stored customer ids (the one-off Testride,
-	 * wire key avenid), by
+	 * members who paid before we stored customer ids (the one-off avenNAME,
+	 * wire key `aven-name`), by
 	 * asking the provider for the SESSION's own email. Found ids are stored,
 	 * so the lookup happens once. */
 	private async customerId(user: { id: string; email: string }): Promise<string | null> {
@@ -92,9 +110,8 @@ export class SubscriptionService {
 		return found
 	}
 
-	/** Ensure every product (the one-off Testride, wire key avenid, and the
-	 * avenCEO tier) exists at the provider, priced from the SSOT; cached per
-	 * process. */
+	/** Ensure every product (the one-off avenNAME and the recurring avenCEO)
+	 * exists at the provider, priced from the SSOT; cached per process. */
 	ensureProducts(): Promise<Record<string, string>> {
 		this.products ??= this.payments.ensureProducts(productSeeds())
 		return this.products
@@ -115,6 +132,19 @@ export class SubscriptionService {
 			[userId]
 		)
 		return result.rows as SubscriptionRow[]
+	}
+
+	/** How many subscriptions of one tier the user currently HOLDS — anything
+	 * not in an ended state. The number `canBuyMore` weighs against the SSOT's
+	 * limit; counting rows rather than asking "is there one" is what lets the
+	 * limit rise past 1 without this query changing. */
+	private async liveCount(userId: string, tier: string): Promise<number> {
+		const result = await this.pool.query(
+			`SELECT count(*)::int AS live FROM subscriptions
+			 WHERE user_id=$1 AND tier=$2 AND NOT (status = ANY($3))`,
+			[userId, tier, ENDED_STATUSES]
+		)
+		return (result.rows[0]?.live as number | undefined) ?? 0
 	}
 
 	private async tierRow(userId: string, tier: string): Promise<SubscriptionRow | null> {
@@ -140,18 +170,20 @@ export class SubscriptionService {
 		}))
 	}
 
-	/** Start a checkout for a tier. Tiers are independent — only a live
-	 * subscription of the SAME tier blocks a second booking. */
+	/** Start a checkout for a tier. Tiers are independent; how many of ONE
+	 * tier may stand at once is the SSOT's `maxPerAccount` (1 today, so a
+	 * live avenCEO blocks a second). */
 	async subscribe(
 		user: { id: string; email: string },
-		tier: string,
+		rawTier: string,
 		embedOrigin: string | null = null,
 		locale: string | null = null
 	): Promise<{ checkoutUrl: string }> {
+		const tier = asTier(rawTier)
 		if (!isSubscriptionTier(tier))
 			throw new AppError(400, 'VALIDATION_ERROR', 'Unknown subscription tier.')
-		const existing = await this.tierRow(user.id, tier)
-		if (existing && !ENDED_STATUSES.includes(existing.status))
+		const held = await this.liveCount(user.id, tier)
+		if (!canBuyMore(tier, held))
 			throw new AppError(
 				409,
 				'SUBSCRIPTION_EXISTS',
@@ -176,14 +208,14 @@ export class SubscriptionService {
 	}
 
 	async cancel(userId: string, tier: string, immediate = false): Promise<void> {
-		const row = await this.requireActive(userId, tier)
+		const row = await this.requireActive(userId, asTier(tier))
 		await this.payments.cancelSubscription(row.provider_subscription_id, immediate)
 	}
 
 	/** Fortsetzen: lifts a (scheduled) pause, otherwise reverts a scheduled
 	 * cancellation. */
 	async resume(userId: string, tier: string): Promise<void> {
-		const row = await this.tierRow(userId, tier)
+		const row = await this.tierRow(userId, asTier(tier))
 		if (!row || ENDED_STATUSES.includes(row.status))
 			throw new AppError(404, 'SUBSCRIPTION_MISSING', 'There is no subscription to resume.')
 		const paused = row.status === 'paused' || row.pause_at_period_end
@@ -195,11 +227,11 @@ export class SubscriptionService {
 
 	/** Pausieren: schedules a pause at period end. */
 	async pause(userId: string, tier: string): Promise<void> {
-		const row = await this.requireActive(userId, tier)
+		const row = await this.requireActive(userId, asTier(tier))
 		await this.payments.pauseSubscription(row.provider_subscription_id)
 	}
 
-	/** The caller's orders — the one-off Testride (avenid) and every subscription
+	/** The caller's orders — the one-off avenNAME and every subscription
 	 * charge — resolved through the same session-only customer lookup. */
 	async orders(user: { id: string; email: string }): Promise<OrderRow[]> {
 		const providerCustomerId = await this.customerId(user)

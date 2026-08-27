@@ -6,7 +6,7 @@ import { onMount } from 'svelte'
  * Account — who is signed in, and which aven is theirs.
  *
  * The app never said whose session it was running under. On a machine with
- * more than one avenID that is a real question, and the honest answer needs
+ * more than one avenNAME that is a real question, and the honest answer needs
  * both halves: the person (name, mail) and the aven they reserved.
  *
  * Everything here is read-only. Changing a mail address or releasing a name

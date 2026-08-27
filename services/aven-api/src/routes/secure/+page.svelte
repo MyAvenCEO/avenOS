@@ -105,7 +105,7 @@ function onKey(event: KeyboardEvent) {
 }
 </script>
 
-<svelte:head><title>avenID sichern · avenCEO</title></svelte:head>
+<svelte:head><title>avenNAME sichern · avenCEO</title></svelte:head>
 
 {#if hold}
 	<section class="panel auth">
@@ -124,7 +124,7 @@ function onKey(event: KeyboardEvent) {
 {:else}
 	<section class="panel auth">
 		<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
-		<h1>{greeting ? `${greeting.name} sichern` : 'avenID sichern'}</h1>
+		<h1>{greeting ? `${greeting.name} sichern` : 'avenNAME sichern'}</h1>
 		<div class="code">
 			<p class="eyebrow">Dein Name</p>
 			<p class="digits">{name}.aven.ceo</p>
