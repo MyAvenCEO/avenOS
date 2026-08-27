@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.5...v) (2026-08-27)
+
+
+### Bug Fixes
+
+* **release:** preserve LLM credential JSON ([9e4647b](https://github.com/MyAvenCEO/avenOS/commit/9e4647b6fc30ad2fb3a08646f7f615e26e6893c0))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.4...v) (2026-08-27)
 
 
