@@ -105,7 +105,7 @@ function subscriptionWebhook(input: {
 		data: {
 			id: input.subscriptionId,
 			status: input.status,
-			amount: input.amount ?? 37700,
+			amount: input.amount ?? 38500,
 			current_period_end: '2026-09-21T00:00:00.000Z',
 			cancel_at_period_end: input.cancelAtPeriodEnd ?? false,
 			pause_at_period_end: input.pauseAtPeriodEnd ?? false,
@@ -182,7 +182,7 @@ describe('subscription state', () => {
 		])
 		expect(rows.rows).toHaveLength(1)
 		expect(rows.rows[0].tier).toBe('aven-ceo')
-		expect(rows.rows[0].price_eur_cents).toBe(37700)
+		expect(rows.rows[0].price_eur_cents).toBe(38500)
 
 		// The customer key was captured — the handle every portal call hangs on.
 		const customer = await database.pool.query(
@@ -214,12 +214,12 @@ describe('subscription state', () => {
 			email: alice.email,
 			tier: 'aven-ceo',
 			status: 'active',
-			amount: 37700
+			amount: 38500
 		})
 
 		const mine = await service.me(alice.id)
 		expect(mine.map((standing) => standing.tier)).toEqual(['aven-ceo'])
-		expect(mine.find((standing) => standing.tier === 'aven-ceo')?.priceEurCents).toBe(37700)
+		expect(mine.find((standing) => standing.tier === 'aven-ceo')?.priceEurCents).toBe(38500)
 
 		// A second booking of the SAME tier is refused while one stands.
 		await expect(service.subscribe(alice, 'aven-ceo')).rejects.toMatchObject({
@@ -258,7 +258,7 @@ describe('subscription state', () => {
 			email: dave.email,
 			tier: 'aven-ceo',
 			status: 'active',
-			amount: 37700
+			amount: 38500
 		})
 		expect((await service.me(dave.id)).map((standing) => standing.tier)).toEqual(['aven-ceo'])
 
@@ -431,7 +431,7 @@ describe('subscription state', () => {
 				subTotalCents: 31681,
 				taxCents: 6019,
 				discountCents: 0,
-				amountPaidCents: 37700,
+				amountPaidCents: 38500,
 				currency: 'eur',
 				status: 'paid',
 				invoiceGenerated: false
@@ -440,7 +440,7 @@ describe('subscription state', () => {
 
 		const orders = await service.orders(alice)
 		expect(orders).toHaveLength(1)
-		expect(orders[0]).toMatchObject({ id: 'ord_1', tier: 'aven-ceo', amountPaidCents: 37700 })
+		expect(orders[0]).toMatchObject({ id: 'ord_1', tier: 'aven-ceo', amountPaidCents: 38500 })
 		expect(provider.calls.at(-1)).toEqual({ method: 'listOrders', args: [customerId] })
 
 		// The invoice URL: an owned order id resolves; a foreign or invented
