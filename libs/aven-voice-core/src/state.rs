@@ -632,7 +632,10 @@ impl VoiceState {
                 ..
             } => {
                 if generation == self.route_generation && self.candidate.is_none() {
-                    let unsafe_at_start = far_end_active && echo_status != EchoStatus::Converged;
+                    let unsafe_at_start = self.far_end_interval_is_unsafe(
+                        far_end_active,
+                        echo_status == EchoStatus::Converged,
+                    );
                     self.candidate = Some(CandidateState {
                         id: candidate_id.clone(),
                         generation,
@@ -656,7 +659,7 @@ impl VoiceState {
                 safe_echo_continuous,
             } => {
                 if self.candidate_matches(&candidate_id, generation) {
-                    if far_end_active && !safe_echo_continuous {
+                    if self.far_end_interval_is_unsafe(far_end_active, safe_echo_continuous) {
                         self.candidate.as_mut().unwrap().unsafe_since_start = true;
                     }
                     let changed = self
@@ -685,7 +688,7 @@ impl VoiceState {
                 safe_echo_continuous,
             } => {
                 if self.candidate_matches(&candidate_id, generation) {
-                    if far_end_active && !safe_echo_continuous {
+                    if self.far_end_interval_is_unsafe(far_end_active, safe_echo_continuous) {
                         self.candidate.as_mut().unwrap().unsafe_since_start = true;
                     }
                     if !has_lexical_seed(&text) {
@@ -1123,6 +1126,15 @@ impl VoiceState {
         })
     }
 
+    fn far_end_interval_is_unsafe(&self, far_end_active: bool, safe_echo_continuous: bool) -> bool {
+        if !self.config.allow_full_duplex_barge_in {
+            // Guard the whole output turn so a silent render frame cannot open a feedback path.
+            self.turn.is_some() || far_end_active
+        } else {
+            far_end_active && !safe_echo_continuous
+        }
+    }
+
     fn discard_candidate(&mut self, reason: InputDiscardReason, actions: &mut Vec<Action>) {
         if let Some(candidate) = self.candidate.take() {
             self.utterance_status = UtteranceStatus::Idle;
@@ -1555,6 +1567,138 @@ mod tests {
         assert!(!actions
             .iter()
             .any(|action| matches!(action, Action::Emit(VoiceEvent::InputConfirmed { .. }))));
+    }
+
+    #[test]
+    fn release_gate_discards_far_end_candidate_after_output_becomes_silent() {
+        let (mut state, _) = active_state();
+        state.config.allow_full_duplex_barge_in = false;
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: CandidateId::parse("candidate-delayed-gate").unwrap(),
+                generation: state.route_generation,
+                far_end_active: true,
+                echo_status: EchoStatus::Converged,
+                at: MonoTimeNs(0),
+            },
+            MonoTimeNs(0),
+        );
+        let candidate = state.candidate.as_ref().unwrap().id.clone();
+
+        let actions = state.observe(
+            Observation::RecognizerFinal {
+                candidate_id: candidate,
+                generation: state.route_generation,
+                text: "Narrated answer picked up by the microphone".into(),
+                far_end_active: false,
+                safe_echo_continuous: true,
+            },
+            MonoTimeNs(1),
+        );
+
+        assert!(!actions.iter().any(|action| matches!(
+            action,
+            Action::Emit(VoiceEvent::InputConfirmed { .. } | VoiceEvent::InputFinal { .. })
+        )));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            Action::CandidateDiscarded {
+                reason: InputDiscardReason::UnsafeEcho,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn release_gate_latches_far_end_overlap_until_candidate_ends() {
+        let (mut state, _) = active_state();
+        state.config.allow_full_duplex_barge_in = false;
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: CandidateId::parse("candidate-overlap-gate").unwrap(),
+                generation: state.route_generation,
+                far_end_active: false,
+                echo_status: EchoStatus::Converged,
+                at: MonoTimeNs(0),
+            },
+            MonoTimeNs(0),
+        );
+        let candidate = state.candidate.as_ref().unwrap().id.clone();
+
+        state.observe(
+            Observation::RecognizerPartial {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                text: "Narrated answer".into(),
+                far_end_active: true,
+                safe_echo_continuous: true,
+            },
+            MonoTimeNs(1),
+        );
+        let actions = state.observe(
+            Observation::RecognizerFinal {
+                candidate_id: candidate,
+                generation: state.route_generation,
+                text: "Narrated answer continued".into(),
+                far_end_active: false,
+                safe_echo_continuous: true,
+            },
+            MonoTimeNs(2),
+        );
+
+        assert!(!actions.iter().any(|action| matches!(
+            action,
+            Action::Emit(VoiceEvent::InputConfirmed { .. } | VoiceEvent::InputFinal { .. })
+        )));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            Action::CandidateDiscarded {
+                reason: InputDiscardReason::UnsafeEcho,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn release_gate_treats_render_silence_inside_an_active_turn_as_guarded() {
+        let (mut state, session) = active_state();
+        state.config.allow_full_duplex_barge_in = false;
+        let turn = begin_turn(&mut state, &session);
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: CandidateId::parse("candidate-render-gap").unwrap(),
+                generation: state.route_generation,
+                far_end_active: false,
+                echo_status: EchoStatus::Bypassed,
+                at: MonoTimeNs(0),
+            },
+            MonoTimeNs(0),
+        );
+        let candidate = state.candidate.as_ref().unwrap().id.clone();
+
+        let actions = state.observe(
+            Observation::RecognizerFinal {
+                candidate_id: candidate,
+                generation: state.route_generation,
+                text: "Words captured during a narration pause".into(),
+                far_end_active: false,
+                safe_echo_continuous: true,
+            },
+            MonoTimeNs(1),
+        );
+
+        assert!(!actions.iter().any(|action| matches!(
+            action,
+            Action::CancelTts(_) | Action::Emit(VoiceEvent::InputFinal { .. })
+        )));
+        assert_eq!(state.turn.as_ref().map(|active| &active.id), Some(&turn));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            Action::CandidateDiscarded {
+                reason: InputDiscardReason::UnsafeEcho,
+                ..
+            }
+        )));
     }
 
     #[test]
