@@ -49,7 +49,7 @@ describe('product seeds', () => {
 		expect(byTier['aven-ceo']?.interval).toBe('month')
 		// GROSS cents straight from the SSOT — tax-inclusive at the provider.
 		expect(byTier['aven-name']?.priceCents).toBe(2500)
-		expect(byTier['aven-ceo']?.priceCents).toBe(37700)
+		expect(byTier['aven-ceo']?.priceCents).toBe(38500)
 	})
 
 	it('describes every product from the SSOT: role line, then plain-title bullets', () => {
@@ -200,7 +200,7 @@ describe('polar wire parsers', () => {
 					external_id: 'user-1',
 					active_subscriptions: [
 						{ id: 'sub_me', status: 'active', amount: 5500, cancel_at_period_end: false },
-						{ id: 'sub_ceo', status: 'active', amount: 37700, cancel_at_period_end: true }
+						{ id: 'sub_ceo', status: 'active', amount: 38500, cancel_at_period_end: true }
 					]
 				}
 			})
