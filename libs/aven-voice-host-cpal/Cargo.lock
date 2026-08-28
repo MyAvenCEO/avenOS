@@ -169,7 +169,7 @@ dependencies = [
 
 [[package]]
 name = "aven-voice-models"
-version = "26.8.28-next.3"
+version = "26.8.28-next.4"
 dependencies = [
  "anyhow",
  "aven-voice-protocol",
