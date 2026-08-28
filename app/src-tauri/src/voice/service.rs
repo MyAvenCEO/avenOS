@@ -28,6 +28,7 @@ const CAPTURE_CHUNKS: usize = 25;
 const RENDER_READY_CHUNKS: usize = 25;
 #[cfg(feature = "software-voice-cpal")]
 const RENDER_REFERENCE_CHUNKS: usize = 50;
+const FULL_DUPLEX_BARGE_IN_ENV: &str = "AVEN_VOICE_FULL_DUPLEX_BARGE_IN";
 type LiveCapture = (CapturePort, SessionId, RouteGeneration);
 
 #[derive(Clone)]
@@ -63,7 +64,14 @@ pub struct ServiceError {
 
 impl VoiceService {
     pub fn new(app: tauri::AppHandle) -> Self {
-        let config = VoiceConfigV1::default();
+        let mut config = VoiceConfigV1::default();
+        config.allow_full_duplex_barge_in = full_duplex_barge_in_opt_in();
+        if config.allow_full_duplex_barge_in {
+            log::info!(
+                target: "avenos::voice",
+                "full-duplex barge-in enabled via {FULL_DUPLEX_BARGE_IN_ENV}"
+            );
+        }
         let nonce = format!("{:016x}", rand::random::<u64>());
         let clock = Arc::new(ProductionClock::default());
         let runtime = VoiceRuntime::spawn(nonce, config.clone(), clock.clone());
@@ -212,6 +220,34 @@ impl VoiceService {
         let (lock, changed) = &*self.0.diagnostics;
         *lock.lock().expect("voice diagnostics mutex poisoned") = enabled.then_some(session_id);
         changed.notify_all();
+    }
+}
+
+fn full_duplex_barge_in_opt_in() -> bool {
+    match std::env::var(FULL_DUPLEX_BARGE_IN_ENV) {
+        Ok(value) => parse_boolean_opt_in(&value).unwrap_or_else(|| {
+            log::warn!(
+                target: "avenos::voice",
+                "unknown {FULL_DUPLEX_BARGE_IN_ENV}={value:?}; guarded turn-taking remains enabled"
+            );
+            false
+        }),
+        Err(std::env::VarError::NotPresent) => false,
+        Err(std::env::VarError::NotUnicode(_)) => {
+            log::warn!(
+                target: "avenos::voice",
+                "non-Unicode {FULL_DUPLEX_BARGE_IN_ENV}; guarded turn-taking remains enabled"
+            );
+            false
+        }
+    }
+}
+
+fn parse_boolean_opt_in(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "" | "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
     }
 }
 
@@ -1200,6 +1236,17 @@ fn publish_playback_drained_if_ready(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn full_duplex_opt_in_requires_an_explicit_boolean_value() {
+        for enabled in ["1", "true", "TRUE", " yes ", "on"] {
+            assert_eq!(parse_boolean_opt_in(enabled), Some(true));
+        }
+        for disabled in ["", "0", "false", "FALSE", " no ", "off"] {
+            assert_eq!(parse_boolean_opt_in(disabled), Some(false));
+        }
+        assert_eq!(parse_boolean_opt_in("automatic"), None);
+    }
 
     #[test]
     fn finished_turn_waits_for_all_synthesis_and_native_output() {
