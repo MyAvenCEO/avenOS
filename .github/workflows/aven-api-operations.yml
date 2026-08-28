@@ -66,7 +66,8 @@ jobs:
               ssh "${ssh_args[@]}" "$remote" "cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml exec -T app bun build/scripts/environment.js reconcile"
               ;;
             edge-status)
-              ssh "${ssh_args[@]}" "$remote" \
+              diagnostic_remote="aven-deploy@2.28.61.69"
+              ssh "${ssh_args[@]}" "$diagnostic_remote" \
                 "sudo docker inspect aven-hosting-caddy-1 --format 'image={{.Config.Image}} created={{.Created}} labels={{json .Config.Labels}} mounts={{json .Mounts}} networks={{json .NetworkSettings.Networks}}' && sudo docker ps --all --filter name=aven-hosting --format 'table {{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.Ports}}' && sudo docker exec aven-hosting-caddy-1 caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile --pretty"
               ;;
           esac
