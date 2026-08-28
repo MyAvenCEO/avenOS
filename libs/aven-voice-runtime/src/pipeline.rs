@@ -704,6 +704,125 @@ fn extract_speaker_embedding_slice(
     }
 }
 
+#[cfg(feature = "silent-audio-e2e")]
+pub(crate) fn silent_fixture_observations(
+    generation: RouteGeneration,
+) -> Result<Vec<Observation>, String> {
+    struct FixtureVad;
+
+    impl VoiceActivityDetector for FixtureVad {
+        fn reset(&mut self) {}
+
+        fn probability(&mut self, frame: &[f32; 512]) -> Result<f32, crate::ModelError> {
+            Ok(if frame.iter().any(|sample| sample.abs() > 0.01) {
+                0.9
+            } else {
+                0.0
+            })
+        }
+    }
+
+    struct FixtureRecognizer;
+
+    impl StreamingRecognizer for FixtureRecognizer {
+        fn begin(&mut self, _candidate: &CandidateId) -> Result<(), crate::ModelError> {
+            Ok(())
+        }
+
+        fn push(&mut self, _pcm_16k: &[f32]) -> Result<crate::RecognizerUpdate, crate::ModelError> {
+            Ok(crate::RecognizerUpdate {
+                cumulative_text: "Guten Tag vom stillen Audiotest".into(),
+                final_text: None,
+            })
+        }
+
+        fn finish(&mut self) -> Result<crate::RecognizerUpdate, crate::ModelError> {
+            Ok(crate::RecognizerUpdate {
+                cumulative_text: "Guten Tag vom stillen Audiotest".into(),
+                final_text: Some("Guten Tag vom stillen Audiotest".into()),
+            })
+        }
+
+        fn cancel(&mut self) {}
+    }
+
+    struct FixtureSpeaker;
+
+    impl SpeakerEmbedder for FixtureSpeaker {
+        fn embedding(&mut self, pcm_16k: &[f32]) -> Result<Vec<f32>, crate::ModelError> {
+            if pcm_16k.iter().all(|sample| sample.abs() <= 0.01) {
+                return Err(crate::ModelError {
+                    safe_message: "silent fixture contained no voiced PCM",
+                });
+            }
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+    }
+
+    let config = VoiceConfigV1 {
+        start_windows: 1,
+        end_windows: 2,
+        ..VoiceConfigV1::default()
+    };
+    let (clean_tx, clean_rx) = bounded(256);
+    let (control_tx, control_rx) = bounded(4);
+    let (observer, observations) = RuntimeObserver::test_pair(256);
+    let worker = std::thread::spawn(move || {
+        input_loop(
+            config,
+            InputModels {
+                vad: Box::new(FixtureVad),
+                recognizer: Box::new(FixtureRecognizer),
+                speaker: Some(Box::new(FixtureSpeaker)),
+            },
+            clean_rx,
+            control_rx,
+            observer,
+            generation,
+            "silent-e2e".into(),
+            DuplexMetrics::default(),
+        )
+    });
+    let frame = |index: u64, sample: f32| CleanFrame {
+        samples: [sample; 160],
+        at: MonoTimeNs::from_millis(index * 10),
+        far_end_active: false,
+        echo_status: EchoStatus::Bypassed,
+        safe_echo_continuous: true,
+        adaptation_ready: true,
+        near_end_evidence: true,
+    };
+    for index in 0..160 {
+        clean_tx
+            .send(frame(index, 0.1))
+            .map_err(|_| "silent fixture input worker stopped early".to_owned())?;
+    }
+    for index in 160..172 {
+        clean_tx
+            .send(frame(index, 0.0))
+            .map_err(|_| "silent fixture input worker stopped early".to_owned())?;
+    }
+
+    let mut produced = Vec::new();
+    loop {
+        let observation = observations
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .map_err(|_| "silent fixture timed out before final recognition".to_owned())?;
+        let finished = matches!(observation, Observation::RecognizerFinal { .. });
+        produced.push(observation);
+        if finished {
+            break;
+        }
+    }
+    control_tx
+        .send(InputControl::Stop)
+        .map_err(|_| "silent fixture could not stop its input worker".to_owned())?;
+    worker
+        .join()
+        .map_err(|_| "silent fixture input worker panicked".to_owned())?;
+    Ok(produced)
+}
+
 struct DspWorker {
     config: DuplexPipelineConfig,
     voice_config: VoiceConfigV1,

@@ -107,6 +107,12 @@ fi
 docker compose --project-name "$project" --file "$compose" config --quiet
 docker compose --project-name "$project" --file "$compose" --profile hosting up --detach --wait --wait-timeout 360
 
+E2E_SILENT_VOICE_FIXTURE=$(cargo run --quiet --locked \
+  --manifest-path "$root/libs/aven-voice-runtime/Cargo.toml" \
+  --features silent-audio-e2e \
+  --example silent_audio_fixture)
+export E2E_SILENT_VOICE_FIXTURE
+
 TEST_ACTOR_RUNNER_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
 bun run --cwd "$root/services/actor-runner" test:e2e:persistence
 
@@ -124,6 +130,7 @@ E2E_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE
 E2E_TAURI_APPLICATION="$E2E_TAURI_APPLICATION" \
 E2E_TAURI_DRIVER="$E2E_TAURI_DRIVER" \
 E2E_TAURI_FIXTURE="$E2E_TAURI_FIXTURE" \
+E2E_SILENT_VOICE_FIXTURE="$E2E_SILENT_VOICE_FIXTURE" \
 bunx playwright test --config "$root/deploy/e2e/playwright.config.ts"
 
 docker compose --project-name "$project" --file "$compose" ps

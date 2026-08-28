@@ -23,6 +23,7 @@ const databaseUrl = process.env.E2E_DATABASE_URL as string
 const tauriApplication = process.env.E2E_TAURI_APPLICATION as string
 const tauriDriver = process.env.E2E_TAURI_DRIVER as string
 const tauriFixture = process.env.E2E_TAURI_FIXTURE as string
+const silentVoiceFixtureJson = process.env.E2E_SILENT_VOICE_FIXTURE as string
 const provisioningSecret = 'identity-provisioning-secret-for-e2e-only'
 const directorySecret = 'site-host-directory-token-for-e2e-only'
 
@@ -38,9 +39,31 @@ function requireEnvironment() {
 		databaseUrl,
 		tauriApplication,
 		tauriDriver,
-		tauriFixture
+		tauriFixture,
+		silentVoiceFixtureJson
 	}))
 		if (!value) throw new Error(`${name} is required`)
+}
+
+interface SilentVoiceFixture {
+	text: string
+	session_id: string
+	speaker_id: string
+	confidence: number
+}
+
+function silentVoiceFixture(): SilentVoiceFixture {
+	const fixture = JSON.parse(silentVoiceFixtureJson) as Partial<SilentVoiceFixture>
+	if (
+		typeof fixture.text !== 'string' ||
+		typeof fixture.session_id !== 'string' ||
+		!/^speaker-[1-9]\d*$/.test(fixture.speaker_id ?? '') ||
+		typeof fixture.confidence !== 'number' ||
+		fixture.confidence < 0 ||
+		fixture.confidence > 1
+	)
+		throw new Error('silent voice fixture is invalid')
+	return fixture as SilentVoiceFixture
 }
 
 interface TauriAcceptance {
@@ -515,12 +538,18 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 		id: string
 	}[]
 	expect(firstList.map((intent) => intent.id)).not.toContain(secondIntentId)
+	const voiceFixture = silentVoiceFixture()
+	const anonymousSpeaker = {
+		session_id: voiceFixture.session_id,
+		speaker_id: voiceFixture.speaker_id,
+		confidence: voiceFixture.confidence
+	}
 	const contribution = {
 		id: crypto.randomUUID(),
 		contributorKind: 'human',
 		kind: 'message',
-		text: 'Persisted only in this customer database.',
-		payload: { speaker: 'local-passkey-user' }
+		text: voiceFixture.text,
+		payload: { anonymousSpeaker }
 	}
 	for (let attempt = 0; attempt < 2; attempt += 1) {
 		const response = await fetch(`${intentBase}/${targetIntentId}`, {
@@ -532,8 +561,13 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 	}
 	const targetDetail = (await json(
 		await fetch(`${intentBase}/${targetIntentId}`, { headers: authorizedHeaders })
-	)) as { version: number; contributions: unknown[] }
+	)) as { version: number; contributions: Array<Record<string, unknown>> }
+	expect(targetDetail.version).toBe(2)
 	expect(targetDetail.contributions).toHaveLength(2)
+	expect(targetDetail.contributions[1]).toMatchObject({
+		text: voiceFixture.text,
+		payload: { anonymousSpeaker }
+	})
 	const sourceDetail = (await json(
 		await fetch(`${intentBase}/${sourceIntentId}`, { headers: authorizedHeaders })
 	)) as { version: number }
