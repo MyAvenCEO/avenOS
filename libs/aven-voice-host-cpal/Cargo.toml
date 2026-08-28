@@ -12,4 +12,9 @@ cpal-host = ["dep:cpal"]
 aven-voice-core = { path = "../aven-voice-core" }
 aven-voice-protocol = { path = "../aven-voice-protocol" }
 aven-voice-runtime = { path = "../aven-voice-runtime" }
-cpal = { version = "=0.18.2", default-features = false, optional = true }
+cpal = { version = "=0.18.2", default-features = false, features = ["pulseaudio"], optional = true }
+
+[[bin]]
+name = "aven-voice-duplex-probe"
+path = "src/bin/duplex_probe.rs"
+required-features = ["cpal-host"]

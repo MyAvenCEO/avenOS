@@ -136,9 +136,17 @@ impl VoiceService {
                 code: VoiceErrorCode::Internal,
                 message: "The voice runtime stopped.".into(),
             })?
-            .map_err(|error| ServiceError {
-                code: error.code,
-                message: error.message.into(),
+            .map_err(|error| {
+                log::warn!(
+                    target: "avenos::voice",
+                    "voice command rejected ({:?}): {}",
+                    error.code,
+                    error.message
+                );
+                ServiceError {
+                    code: error.code,
+                    message: error.message.into(),
+                }
             })
     }
 
@@ -366,6 +374,11 @@ fn spawn_liveness_worker(
                 }
                 let callbacks = current.0.callbacks();
                 if tracker.observe(current.2, callbacks) {
+                    log::warn!(
+                        target: "avenos::voice",
+                        "capture callbacks stalled for route generation {} after {callbacks} callbacks",
+                        current.2.0
+                    );
                     let _ = observer.publish(Observation::CallbacksStalled {
                         session_id: current.1.clone(),
                         generation: current.2,
@@ -520,6 +533,9 @@ fn action_executor(context: ActionExecutorContext) {
     let mut output_rate_hz = 48_000;
     let mut active_output_generation = OutputGeneration(0);
     let mut turns = HashMap::<OutputGeneration, OutputTurnState>::new();
+    let mut reported_callback_fault_generation = None;
+    let mut reported_callback_faults =
+        HashSet::<(bool, aven_voice_runtime::HostCallbackFaultCode)>::new();
     let fade_completions = Arc::new((
         Mutex::new(HashSet::<OutputGeneration>::new()),
         Condvar::new(),
@@ -527,6 +543,17 @@ fn action_executor(context: ActionExecutorContext) {
 
     #[cfg(feature = "software-voice-cpal")]
     let mut host = aven_voice_host_cpal::CpalDuplexHost::new();
+    #[cfg(feature = "software-voice-cpal")]
+    {
+        let identity = host.diagnostic_identity();
+        log::info!(
+            target: "avenos::voice",
+            "audio host selected: backend={}, input={:?}, output={:?}",
+            identity.backend,
+            identity.input_device,
+            identity.output_device
+        );
+    }
     #[cfg(feature = "software-voice-cpal")]
     let mut open_route: Option<(
         aven_voice_protocol::RouteId,
@@ -1143,11 +1170,53 @@ fn action_executor(context: ActionExecutorContext) {
                         );
                     }
                     ExecutorFeedback::Host(aven_voice_runtime::HostEvent::Started { .. }) => {}
-                    ExecutorFeedback::Host(aven_voice_runtime::HostEvent::StreamFault { generation, recoverable, .. }) => {
+                    ExecutorFeedback::Host(aven_voice_runtime::HostEvent::StreamFault {
+                        route,
+                        generation,
+                        direction,
+                        code,
+                        recoverable,
+                    }) => {
+                        log::warn!(
+                            target: "avenos::voice",
+                            "audio callback fault on {route:?} generation {} ({direction:?}, {code:?}, recoverable={recoverable})",
+                            generation.0
+                        );
                         let _ = observer.publish(Observation::RouteFault { generation, recoverable });
                     }
-                    ExecutorFeedback::Host(aven_voice_runtime::HostEvent::RouteInvalidated { generation, .. }) => {
+                    ExecutorFeedback::Host(aven_voice_runtime::HostEvent::RouteInvalidated { route, generation, reason }) => {
+                        log::warn!(
+                            target: "avenos::voice",
+                            "audio route {route:?} generation {} invalidated ({reason:?})",
+                            generation.0
+                        );
                         let _ = observer.publish(Observation::RouteFault { generation, recoverable: true });
+                    }
+                    ExecutorFeedback::Host(aven_voice_runtime::HostEvent::CallbackFault {
+                        route,
+                        generation,
+                        direction,
+                        code,
+                        count,
+                    }) => {
+                        let render = matches!(direction, aven_voice_runtime::StreamDirection::Render);
+                        if reported_callback_fault_generation != Some(generation.0) {
+                            reported_callback_fault_generation = Some(generation.0);
+                            reported_callback_faults.clear();
+                        }
+                        if reported_callback_faults.insert((render, code)) {
+                            log::warn!(
+                                target: "avenos::voice",
+                                "audio callback reported {code:?} on {route:?} generation {} ({direction:?}, first batch={count})",
+                                generation.0
+                            );
+                        }
+                        if code.requires_route_rebuild() {
+                            let _ = observer.publish(Observation::RouteFault {
+                                generation,
+                                recoverable: code.recoverable(),
+                            });
+                        }
                     }
                     ExecutorFeedback::Host(aven_voice_runtime::HostEvent::DeviceSetChanged) => {}
                     ExecutorFeedback::HostCriticalOverflow(generation) => {

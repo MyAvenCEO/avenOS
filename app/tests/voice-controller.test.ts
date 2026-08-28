@@ -4,7 +4,8 @@ import { FakeVoiceBackend } from '../src/lib/voice/fake'
 let VoiceController: typeof import('../src/lib/voice/controller.svelte').VoiceController
 
 beforeAll(async () => {
-	;(globalThis as any).$state = <T>(value: T) => value
+	;(globalThis as typeof globalThis & { $state: <T>(value: T) => T }).$state = <T>(value: T) =>
+		value
 	VoiceController = (await import('../src/lib/voice/controller.svelte')).VoiceController
 })
 
@@ -15,7 +16,7 @@ describe('VoiceController', () => {
 		await controller.start()
 		let candidates = 0
 		let confirmations = 0
-		let finals: string[] = []
+		const finals: string[] = []
 		controller.onInput({
 			onCandidate: () => candidates++,
 			onConfirmed: () => confirmations++,
@@ -79,7 +80,8 @@ describe('VoiceController', () => {
 		const backend = new FakeVoiceBackend()
 		const controller = new VoiceController(backend)
 		await controller.start()
-		const oldSession = controller.sessionId!
+		const oldSession = controller.sessionId
+		expect(oldSession).not.toBeNull()
 		backend.emit({ type: 'status.session', status: 'suspended' })
 		await controller.start()
 		expect(controller.sessionId).not.toBe(oldSession)
@@ -93,6 +95,76 @@ describe('VoiceController', () => {
 		await controller.previewSpeech('Eine Vorschau.', 'M1')
 		expect(backend.segments.map((segment) => segment.text)).toEqual(['Eine Vorschau.'])
 		expect(controller.speaking).toBe(false)
+		controller.dispose()
+	})
+
+	test('an enqueue rejection aborts queued indices and the next turn restarts at zero', async () => {
+		class RejectFirstEnqueueBackend extends FakeVoiceBackend {
+			readonly attemptedIndices: number[] = []
+			#reject = true
+
+			override async enqueueSpeech(
+				segment: Parameters<FakeVoiceBackend['enqueueSpeech']>[0]
+			): ReturnType<FakeVoiceBackend['enqueueSpeech']> {
+				this.attemptedIndices.push(segment.segment_index)
+				if (this.#reject) {
+					this.#reject = false
+					throw new Error('synthetic queue rejection')
+				}
+				return super.enqueueSpeech(segment)
+			}
+		}
+
+		const backend = new RejectFirstEnqueueBackend()
+		const controller = new VoiceController(backend)
+		await controller.start()
+		controller.feedSpeech('Erster Satz. ', 'M1')
+		controller.feedSpeech('Zweiter Satz. ', 'M1')
+		controller.finishSpeech('M1')
+		await settleAsyncWork()
+		expect(backend.attemptedIndices).toEqual([0])
+		expect(controller.failure).toBe('synthetic queue rejection')
+
+		controller.feedSpeech('Neuer Versuch. ', 'M1')
+		controller.finishSpeech('M1')
+		await settleAsyncWork()
+		expect(backend.attemptedIndices).toEqual([0, 0])
+		expect(backend.segments.map((segment) => segment.segment_index)).toEqual([0])
+		controller.dispose()
+	})
+
+	test('waits for native capacity before enqueueing the next contiguous segment', async () => {
+		class OneSlotBackend extends FakeVoiceBackend {
+			readonly attemptedIndices: number[] = []
+
+			override async beginSpeech(
+				request: Parameters<FakeVoiceBackend['beginSpeech']>[0]
+			): ReturnType<FakeVoiceBackend['beginSpeech']> {
+				const begun = await super.beginSpeech(request)
+				return { ...begun, pending_segment_capacity: 1 }
+			}
+
+			override async enqueueSpeech(
+				segment: Parameters<FakeVoiceBackend['enqueueSpeech']>[0]
+			): ReturnType<FakeVoiceBackend['enqueueSpeech']> {
+				this.attemptedIndices.push(segment.segment_index)
+				await super.enqueueSpeech(segment)
+				return { accepted: true, idempotent: false, remaining_segment_capacity: 0 }
+			}
+		}
+
+		const backend = new OneSlotBackend()
+		const controller = new VoiceController(backend)
+		await controller.start()
+		controller.feedSpeech('Erster Satz. ', 'M1')
+		controller.feedSpeech('Zweiter Satz. ', 'M1')
+		controller.finishSpeech('M1')
+		await settleAsyncWork()
+		expect(backend.attemptedIndices).toEqual([0])
+
+		backend.emit({ type: 'capacity.changed', pending_segments: 0, synthesized_lead_ms: 0 })
+		await settleAsyncWork()
+		expect(backend.attemptedIndices).toEqual([0, 1])
 		controller.dispose()
 	})
 
@@ -126,3 +198,8 @@ describe('VoiceController', () => {
 		expect(backend.diagnostics.at(-1)?.enabled).toBe(false)
 	})
 })
+
+async function settleAsyncWork(): Promise<void> {
+	for (let index = 0; index < 8; index++) await Promise.resolve()
+	await new Promise((resolve) => setTimeout(resolve, 0))
+}
