@@ -70,3 +70,18 @@ Automated synthetic fixtures validate API contracts, delay, continuity,
 generations, cancellation, and fixed memory. Acoustic corpus, CPU, deployment
 floor, and device-route release gates require the physical qualification phase
 and are not represented as passing merely because software tests pass.
+
+## Laptop qualification opt-in
+
+Full-duplex barge-in can be enabled explicitly for physical testing without
+changing the production-safe default:
+
+```sh
+AVEN_VOICE_FULL_DUPLEX_BARGE_IN=1 bun run dev:app:linux
+```
+
+The setting may instead be added to the local `.env.daniel` file. The route
+still reports full-duplex barge-in as unavailable until software AEC reaches
+`converged`; the opt-in does not bypass echo health, generation, or lexical-ASR
+confirmation gates. Remove the variable or set it to `0` to return to guarded
+turn-taking.
