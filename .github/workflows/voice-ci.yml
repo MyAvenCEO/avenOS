@@ -1,0 +1,88 @@
+name: Voice pipeline
+
+on:
+  pull_request:
+    paths:
+      - 'libs/aven-voice-*/**'
+      - 'app/src-tauri/src/voice/**'
+      - 'app/src-tauri/src/asr/**'
+      - 'app/src-tauri/src/tts/**'
+      - 'app/src-tauri/src/lib.rs'
+      - 'app/src-tauri/Cargo.toml'
+      - 'app/src-tauri/tauri.conf.json'
+      - 'app/src/lib/voice/**'
+      - 'app/src/lib/asr/**'
+      - 'app/src/lib/tts/**'
+      - 'app/src/lib/actors/listener.actor.svelte.ts'
+      - 'app/tests/voice-*.test.ts'
+      - 'scripts/fetch-onnxruntime.ts'
+      - 'scripts/release-next.ts'
+      - 'scripts/set-version.ts'
+      - 'scripts/tauri-ios-asc.ts'
+      - 'scripts/run-duplex-voice-lab.ts'
+      - 'package.json'
+      - '.github/workflows/voice-ci.yml'
+  push:
+    branches: [main]
+
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.93.1'
+      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/bun-install
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - run: bunx biome check scripts/release-next.ts scripts/set-version.ts scripts/tauri-ios-asc.ts
+      - name: Verify the release version stamp is idempotent
+        run: |
+          version="$(node -p "require('./app/package.json').version")"
+          bun scripts/set-version.ts "$version"
+          git diff --exit-code -- . ':(exclude).npmrc'
+      - run: cargo test --locked --manifest-path libs/aven-voice-protocol/Cargo.toml --all-features
+      - run: cargo test --locked --manifest-path libs/aven-voice-core/Cargo.toml
+      - run: cargo test --locked --manifest-path libs/aven-voice-runtime/Cargo.toml --all-features
+      - run: bun test tests/voice-planner.test.ts tests/voice-controller.test.ts
+        working-directory: app
+      - name: Enforce portable crate boundaries
+        run: |
+          if rg 'cfg\((target_os|target_arch|target_family)|\b(cpal|tauri)::' \
+            libs/aven-voice-protocol/src libs/aven-voice-core/src libs/aven-voice-runtime/src; then
+            echo 'platform-specific code crossed a portable voice crate boundary'
+            exit 1
+          fi
+
+  linux-host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.93.1'
+      - uses: oven-sh/setup-bun@v2
+      - name: Install Linux native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+            libasound2-dev \
+            build-essential curl wget file libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev libfuse2
+      - run: cargo test --locked --manifest-path libs/aven-voice-host-cpal/Cargo.toml --features duplex-lab
+      - run: AVEN_SPEECH_GPU=cpu bun scripts/fetch-onnxruntime.ts
+      - run: cargo test --locked --manifest-path app/src-tauri/Cargo.toml
+
+  apple-host:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.93.1'
+          targets: aarch64-apple-ios
+      - run: cargo test --locked --manifest-path libs/aven-voice-host-cpal/Cargo.toml --features cpal-host
+      - run: cargo check --locked --manifest-path libs/aven-voice-host-cpal/Cargo.toml --features cpal-host --target aarch64-apple-ios

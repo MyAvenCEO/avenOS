@@ -241,7 +241,12 @@ fn native_passkeys_available() -> bool {
 	true
 }
 
-#[cfg(not(any(target_os = "ios", target_os = "macos")))]
+#[cfg(target_os = "android")]
+fn native_passkeys_available() -> bool {
+	true
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", target_os = "macos")))]
 fn native_passkeys_available() -> bool {
 	false
 }
@@ -935,7 +940,9 @@ pub async fn auth_passkey_begin(
 	});
 	inner.session = None;
 	Ok(BeginPasskeyAuthentication {
-		command: if cfg!(target_os = "ios") {
+		command: if cfg!(target_os = "android") {
+			"plugin:android-passkey|login".to_string()
+		} else if cfg!(target_os = "ios") {
 			"plugin:ios-passkey|login".to_string()
 		} else {
 			"plugin:macos-passkey|login_passkey".to_string()

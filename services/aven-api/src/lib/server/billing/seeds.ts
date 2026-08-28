@@ -44,7 +44,7 @@ export function productSeeds(): ProductSeed[] {
 			// GROSS cents — Polar presents the price tax-INCLUSIVE ("inkl. USt."),
 			// so the SSOT number is exactly what the buyer pays.
 			priceCents: Math.round(plan.eurPrice * 100),
-			interval: plan.billing === 'monthly' ? 'month' : null
+			interval: plan.billing === 'weekly' ? 'week' : plan.billing === 'monthly' ? 'month' : null
 		}
 	})
 }
@@ -78,7 +78,7 @@ export interface BenefitSpec {
 	 * titles live on the website, not at the provider. */
 	description: string
 	/** runtime kind only — the SSOT numbers the benefit is built from. */
-	runtime: { hoursPerDay: number; centsPerExtraMinute: number } | null
+	runtime: { mindCredits: number; per: 'once' | 'week' } | null
 }
 
 /** The skill features of ONE plan as feature-flag specs, in feature order —
@@ -106,13 +106,16 @@ function runtimeSpec(p: Plan): BenefitSpec | null {
 	return {
 		key: `runtime:${p.id}`,
 		kind: 'runtime',
-		description: benefitDescription(`Aven Worker Minutes — ${p.runtime.hoursPerDay} h/day`),
+		description: benefitDescription(
+			`MIND Credits — ${p.runtime.mindCredits} ${p.runtime.per === 'week' ? 'per week' : 'one-off'}`
+		),
 		runtime: p.runtime
 	}
 }
 
 /** Per product tier: the skill flags — cascaded via the SSOT's `planIncludes`
- * law — then the runtime benefit. Deduped by key; avenNAME carries none. */
+ * law — then the runtime benefit. Deduped by key; avenNAME carries no skills,
+ * just its one-off MIND-credit grant. */
 export function productBenefitSpecs(): Record<ProductTier, BenefitSpec[]> {
 	const out = {} as Record<ProductTier, BenefitSpec[]>
 	for (const tier of PRODUCT_TIERS) {

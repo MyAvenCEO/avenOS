@@ -1,3 +1,63 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.7...v) (2026-08-28)
+
+
+### Bug Fixes
+
+* **release:** wait for Caddy ports before restart ([12902ee](https://github.com/MyAvenCEO/avenOS/commit/12902ee9852d8ba18f6cb9591fdfe948014e0943))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.6...v) (2026-08-28)
+
+
+### Bug Fixes
+
+* **release:** recreate Caddy before verification ([c10b09e](https://github.com/MyAvenCEO/avenOS/commit/c10b09e20161266430220c72b748e1ab264d5fa1))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.5...v) (2026-08-28)
+
+
+### Features
+
+* **billing:** weekly interval and MIND credits from the 0.9.0 SSOT ([a71de6f](https://github.com/MyAvenCEO/avenOS/commit/a71de6ff36e7c6455fe973cec5ea2b1668d85e48))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.4...v) (2026-08-28)
+
+
+### Bug Fixes
+
+* **android:** exclude desktop ONNX runtime assets ([31ca816](https://github.com/MyAvenCEO/avenOS/commit/31ca8160a0ddd8176578077888fd9ed44a17cdcd))
+
+
+### Features
+
+* **voice:** add anonymous speaker diarization ([7fa44f6](https://github.com/MyAvenCEO/avenOS/commit/7fa44f6dea350f8cbce4c1d18d196f8664b3c35d))
+* **voice:** add autonomous duplex refinement lab ([1a372a6](https://github.com/MyAvenCEO/avenOS/commit/1a372a6d043f03b63c49c8c190f17bd5b8d22424))
+* **voice:** add guarded tester barge-in fallback ([936989b](https://github.com/MyAvenCEO/avenOS/commit/936989bd25c8400c1d42df9447f91058a8ca8a2f))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.3...v) (2026-08-28)
+
+
+### Features
+
+* **billing:** source avenNAME product id from AVEN_TIER_NAME secret ([980e453](https://github.com/MyAvenCEO/avenOS/commit/980e453d847460ca9fbcdbf7c956f2c56ccfeb7f))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.2...v) (2026-08-28)
+
+
+### Bug Fixes
+
+* **ios:** link native audio frameworks ([97b573a](https://github.com/MyAvenCEO/avenOS/commit/97b573aa34f8e48874f731c701ada9d1730f91b9))
+* **release:** keep Rust lockfiles versioned ([3b40d32](https://github.com/MyAvenCEO/avenOS/commit/3b40d32088c9e0ffccc0a7b9d130a4d863e9d4fa))
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.1...v) (2026-08-28)
+
+
+### Bug Fixes
+
+* clear stale output levels after cancellation ([7ae5086](https://github.com/MyAvenCEO/avenOS/commit/7ae5086d3e8ee6fc4c3d925f665c09471a8078eb))
+* **voice:** prevent guarded-mode feedback promotion ([1309454](https://github.com/MyAvenCEO/avenOS/commit/130945466b7b6055b339da78fefd6a409dbd2116))
+* **voice:** stabilize and calibrate duplex routes ([234f55e](https://github.com/MyAvenCEO/avenOS/commit/234f55e78766c22896b2c111a90de28c6e798293))
+
+
+### Features
+
+* **android:** build APK with native passkeys ([4764fc8](https://github.com/MyAvenCEO/avenOS/commit/4764fc8672230dad5bdab94e3073c4406cc13673))
+* **voice:** add full-duplex qualification opt-in ([dedd515](https://github.com/MyAvenCEO/avenOS/commit/dedd515401d233cd3c33d0eb02ba30a70660c2dc))
+* **voice:** enable full duplex for testers ([9ecc263](https://github.com/MyAvenCEO/avenOS/commit/9ecc263697bf663d1a9157466a3fffb3f574cf44))
+* **voice:** implement software-first duplex pipeline ([c75b37e](https://github.com/MyAvenCEO/avenOS/commit/c75b37e528a1771c1aaf1f818933603559b03d59))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.6...v) (2026-08-28)
 
 

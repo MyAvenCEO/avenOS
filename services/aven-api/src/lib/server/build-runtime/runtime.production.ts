@@ -11,7 +11,10 @@ export const serverBuildRuntime: ServerBuildRuntime = {
 	async handle({ event, resolve }) {
 		if (building) return resolve(event)
 		const { pathname } = event.url
-		if (pathname === '/.well-known/apple-app-site-association') {
+		if (
+			pathname === '/.well-known/apple-app-site-association' ||
+			pathname === '/.well-known/assetlinks.json'
+		) {
 			const response = await resolve(event)
 			response.headers.set('Cache-Control', 'public, max-age=3600')
 			response.headers.set('X-Content-Type-Options', 'nosniff')

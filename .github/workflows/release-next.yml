@@ -411,11 +411,20 @@ jobs:
         with:
           ref: ${{ needs.publish-identity-image.outputs.commit }}
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Materialize deployment files
         env:
           PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
           IDENTITY_DOMAIN: ${{ vars.IDENTITY_DOMAIN }}
           WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_PLAY_APP_CERT_SHA256_FINGERPRINTS: ${{ vars.ANDROID_PLAY_APP_CERT_SHA256_FINGERPRINTS }}
           DOWNLOAD_URL: ${{ vars.DOWNLOAD_URL }}
           SMTP_FROM: ${{ vars.SMTP_FROM }}
           NAME_PRICE_EUR: ${{ vars.NAME_PRICE_EUR }}
@@ -494,6 +503,38 @@ jobs:
             echo "::error::PUBLIC_BASE_URL, IDENTITY_DOMAIN, and WEBAUTHN_RP_ID do not match."
             exit 1
           fi
+          for value in "$ANDROID_KEYSTORE_BASE64" "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS"; do
+            if [ -z "$value" ]; then
+              echo "::error::The Android keystore, store password, and alias are required to publish Digital Asset Links."
+              exit 1
+            fi
+          done
+          android_keystore="$RUNNER_TEMP/aven-android-upload.p12"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$android_keystore"
+          chmod 600 "$android_keystore"
+          upload_fingerprint="$(keytool -exportcert -keystore "$android_keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" -rfc |
+            openssl x509 -noout -fingerprint -sha256 | cut -d= -f2)"
+
+          declare -a normalized_android_fingerprints=()
+          declare -A seen_android_fingerprints=()
+          configured_android_certificates="$upload_fingerprint"
+          if [ -n "${ANDROID_PLAY_APP_CERT_SHA256_FINGERPRINTS:-}" ]; then
+            configured_android_certificates+=",$ANDROID_PLAY_APP_CERT_SHA256_FINGERPRINTS"
+          fi
+          IFS=',' read -ra configured_android_fingerprints <<< "$configured_android_certificates"
+          for fingerprint in "${configured_android_fingerprints[@]}"; do
+            candidate="$(printf '%s' "$fingerprint" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
+            if [[ ! "$candidate" =~ ^([0-9A-F]{2}:){31}[0-9A-F]{2}$ ]]; then
+              echo "::error::ANDROID_APP_CERT_SHA256_FINGERPRINTS must contain comma-separated SHA-256 certificate fingerprints."
+              exit 1
+            fi
+            if [ -z "${seen_android_fingerprints[$candidate]+configured}" ]; then
+              normalized_android_fingerprints+=("$candidate")
+              seen_android_fingerprints[$candidate]=true
+            fi
+          done
+          ANDROID_APP_CERT_SHA256_FINGERPRINTS="$(IFS=,; printf '%s' "${normalized_android_fingerprints[*]}")"
+          printf 'ANDROID_APP_CERT_SHA256_FINGERPRINTS=%s\n' "$ANDROID_APP_CERT_SHA256_FINGERPRINTS" >> "$GITHUB_ENV"
           for secret in "$ARTIFACT_STORE_BEARER_TOKEN" "$ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN" "$ARTIFACT_STORE_RUNTIME_PASSWORD"; do
             if [[ ! "$secret" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then
               echo "::error::Artifact Store credentials must be 32-128 URL-safe characters."
@@ -730,6 +771,7 @@ jobs:
             printf 'PUBLIC_BASE_URL=%s\n' "$PUBLIC_BASE_URL"
             printf 'IDENTITY_DOMAIN=%s\n' "$IDENTITY_DOMAIN"
             printf 'WEBAUTHN_RP_ID=%s\n' "$WEBAUTHN_RP_ID"
+            printf 'ANDROID_APP_CERT_SHA256_FINGERPRINTS=%s\n' "$ANDROID_APP_CERT_SHA256_FINGERPRINTS"
             printf 'DOWNLOAD_URL=%s\n' "$DOWNLOAD_URL"
             printf 'SMTP_FROM=%s\n' "$SMTP_FROM"
             printf 'NAME_PRICE_EUR=%s\n' "$NAME_PRICE_EUR"
@@ -850,21 +892,7 @@ jobs:
           # deliberately use database heartbeats and are verified by /api/health/status below.
           # The generated upload path is intentionally expanded by this runner.
           # shellcheck disable=SC2029
-          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy /opt/aven-api/previous && sudo install -d -o 10003 -g 10003 -m 0750 /var/lib/aven/static-sites && if sudo test -f /opt/aven-api/.env; then sudo install -m 600 /opt/aven-api/.env /opt/aven-api/previous/.env && sudo install -m 644 /opt/aven-api/docker-compose.yml /opt/aven-api/docker-compose.deploy.yml /opt/aven-api/docker-compose.artifact-store.deploy.yml /opt/aven-api/previous/ && sudo install -m 644 /opt/aven-api/deploy/Caddyfile /opt/aven-api/previous/Caddyfile; fi && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' '$upload/deploy/reload-caddy.sh' '$upload/deploy/rollback-previous.sh' /opt/aven-api/deploy/ && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --wait --wait-timeout 120 db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres -c 'GRANT pg_signal_backend TO aven_provisioner' && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store-provisioner artifact-processor-provisioner intent-service-provisioner && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps environment-worker && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store app artifact-processor intent-service static-site-host caddy && sudo /opt/aven-api/deploy/reload-caddy.sh && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps email-worker && rm -rf '$upload'"
-
-      - name: Dump container logs on failure
-        if: failure()
-        continue-on-error: true
-        env:
-          DEPLOY_HOST: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-host }}
-          DEPLOY_USER: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-user }}
-        run: |
-          test -n "$DEPLOY_HOST"
-          test -n "$DEPLOY_USER"
-          # The crash that made a service unhealthy is only visible inside the
-          # containers — surface it in CI so nobody needs SSH to diagnose.
-          ssh -i "$RUNNER_TEMP/ssh/key" -o BatchMode=yes -o ConnectTimeout=5 -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml ps && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml logs --no-color --tail=120 migrator app static-site-host caddy"
+          ssh "${ssh_args[@]}" "$remote" "sudo install -m 700 -d /opt/aven-api/deploy /opt/aven-api/previous && sudo install -d -o 10003 -g 10003 -m 0750 /var/lib/aven/static-sites && if sudo test -f /opt/aven-api/.env; then sudo install -m 600 /opt/aven-api/.env /opt/aven-api/previous/.env && sudo install -m 644 /opt/aven-api/docker-compose.yml /opt/aven-api/docker-compose.deploy.yml /opt/aven-api/docker-compose.artifact-store.deploy.yml /opt/aven-api/previous/ && sudo install -m 644 /opt/aven-api/deploy/Caddyfile /opt/aven-api/previous/Caddyfile; fi && sudo install -m 600 '$upload/.env' /opt/aven-api/.env && sudo install -m 644 '$upload/docker-compose.yml' '$upload/docker-compose.deploy.yml' '$upload/docker-compose.artifact-store.deploy.yml' /opt/aven-api/ && sudo install -m 644 '$upload/deploy/Caddyfile' /opt/aven-api/deploy/Caddyfile && sudo install -m 755 '$upload/deploy/db-init.sh' '$upload/deploy/reload-caddy.sh' '$upload/deploy/rollback-previous.sh' /opt/aven-api/deploy/ && cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml pull && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --wait --wait-timeout 120 db && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres -c 'GRANT pg_signal_backend TO aven_provisioner' && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml run --rm migrator && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store-provisioner artifact-processor-provisioner intent-service-provisioner && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps environment-worker && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 artifact-store app artifact-processor intent-service static-site-host && (sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml stop -t 30 caddy || true) && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml rm -f caddy && sleep 5 && (sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 caddy || (sleep 5 && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps --wait --wait-timeout 180 caddy)) && sudo /opt/aven-api/deploy/reload-caddy.sh && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml up -d --no-deps email-worker && rm -rf '$upload'"
 
       - name: Remove temporary host upload
         if: always()
@@ -881,6 +909,7 @@ jobs:
         env:
           PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
         run: |
+          set -euo pipefail
           curl --fail --retry 20 --retry-delay 3 --retry-all-errors "$PUBLIC_BASE_URL/api/health/ready"
           overall=""
           for _ in $(seq 1 100); do
@@ -891,6 +920,23 @@ jobs:
           test "$overall" = "healthy"
           curl --fail "$PUBLIC_BASE_URL/api/meta"
           curl --fail "$PUBLIC_BASE_URL/.well-known/apple-app-site-association"
+          assetlinks="$RUNNER_TEMP/assetlinks.json"
+          assetlinks_headers="$RUNNER_TEMP/assetlinks.headers"
+          assetlinks_status="$(curl --silent --show-error --dump-header "$assetlinks_headers" --output "$assetlinks" --write-out '%{http_code}' "$PUBLIC_BASE_URL/.well-known/assetlinks.json")"
+          test "$assetlinks_status" = 200
+          tr -d '\r' < "$assetlinks_headers" | grep -iq '^content-type: application/json'
+          jq -e --arg expected "$ANDROID_APP_CERT_SHA256_FINGERPRINTS" '
+            ($expected | split(",") | map(gsub("\\s"; "") | ascii_upcase) | sort | unique) as $expected_fingerprints
+            | ([
+                .[]
+                | select(.target.namespace == "android_app")
+                | select(.target.package_name == "ceo.aven.os")
+                | select((.relation | index("delegate_permission/common.handle_all_urls")) != null)
+                | select((.relation | index("delegate_permission/common.get_login_creds")) != null)
+                | .target.sha256_cert_fingerprints[]
+                | ascii_upcase
+              ] | sort | unique) == $expected_fingerprints
+          ' "$assetlinks" >/dev/null
           device_grant="$(curl --fail --silent --show-error \
             -X POST "$PUBLIC_BASE_URL/api/auth/device/code" \
             -H 'content-type: application/json' \
@@ -898,6 +944,20 @@ jobs:
           verification_uri="$(jq -r .verification_uri_complete <<<"$device_grant")"
           [[ "$verification_uri" == "$PUBLIC_BASE_URL/device?user_code="* ]]
           curl --fail --silent --show-error "$verification_uri" >/dev/null
+
+      - name: Dump container logs on failure
+        if: failure()
+        continue-on-error: true
+        env:
+          DEPLOY_HOST: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-host }}
+          DEPLOY_USER: ${{ needs.deploy-identity-infrastructure-next.outputs.deploy-user }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          # The crash that made a service unhealthy is only visible inside the
+          # containers — surface it in CI so nobody needs SSH to diagnose.
+          ssh -i "$RUNNER_TEMP/ssh/key" -o BatchMode=yes -o ConnectTimeout=5 -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd /opt/aven-api && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml ps --all && sudo docker ps --all --filter publish=80 --filter publish=443 --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}' && (sudo ss -ltnp | grep -E '(:80 |:443 )' || true) && sudo docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.artifact-store.deploy.yml logs --no-color --tail=120 migrator app static-site-host caddy"
 
   release-macos:
     name: macOS build → TestFlight
@@ -1132,6 +1192,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+            libasound2-dev \
             build-essential curl wget file libssl-dev \
             libayatana-appindicator3-dev librsvg2-dev libfuse2
 
@@ -1168,3 +1229,102 @@ jobs:
           gh release upload "$TAG" "${files[@]}" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-android:
+    name: Android ARM64 APK → release asset
+    needs: [release, deploy-identity-next]
+    if: needs.release.outputs.released == 'true' && vars.ANDROID_RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: next
+    env:
+      ANDROID_NDK_VERSION: 27.2.12479018
+    steps:
+      - name: Checkout next at the release commit (full history + tags)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release.outputs.commit }}
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK and NDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' "ndk;$ANDROID_NDK_VERSION"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.93.1'
+          targets: aarch64-linux-android
+      - uses: ./.github/actions/bun-install
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Capture the full release version (incl. -next.N) for the in-app version row
+        run: echo "PUBLIC_APP_VERSION=$(node -p 'require("./app/package.json").version')" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> ../../target/rust
+          key: android-aarch64-release
+
+      - name: Materialize and validate Android release signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+        run: |
+          set -euo pipefail
+          for value in "$KEYSTORE_B64" "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" "$PUBLIC_BASE_URL"; do
+            if [ -z "$value" ]; then
+              echo '::error::Android release signing secrets and the public identity URL must be configured before enabling Android releases.'
+              exit 1
+            fi
+          done
+          keystore="$RUNNER_TEMP/aven-android-upload.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          properties=app/src-tauri/gen/android/keystore.properties
+          {
+            printf 'storeFile=%s\n' "$keystore"
+            printf 'storePassword=%s\n' "$STORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+          } > "$properties"
+
+          actual="$(keytool -exportcert -keystore "$keystore" -storepass:env STORE_PASSWORD -alias "$KEY_ALIAS" -rfc |
+            openssl x509 -noout -fingerprint -sha256 | cut -d= -f2)"
+          curl --fail --silent --show-error "$PUBLIC_BASE_URL/.well-known/assetlinks.json" |
+            jq -e --arg actual "$actual" '
+              any(.[].target;
+                .namespace == "android_app"
+                and .package_name == "ceo.aven.os"
+                and (.sha256_cert_fingerprints | index($actual)) != null
+              )
+            ' >/dev/null
+
+      - name: Build the signed release APK
+        run: NDK_HOME="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" bun run build:app:android -- --release
+        env:
+          PUBLIC_BETTER_AUTH_URL: ${{ vars.PUBLIC_BASE_URL }}
+          AVEN_IDENTITY_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+
+      - name: Verify and upload the APK to the prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apk=(dist/android/*-release-aarch64.apk)
+          test "${#apk[@]}" -eq 1
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "${apk[0]}"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "${apk[0]}"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "${apk[0]}" | grep -q "package: name='ceo.aven.os'"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "${apk[0]}" | grep -q "sdkVersion:'28'"
+          gh release upload "$TAG" "${apk[0]}" --clobber

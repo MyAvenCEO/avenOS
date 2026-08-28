@@ -5,30 +5,32 @@
 //!   Copyright (c) 2025 Supertone Inc. — MIT License.
 //!
 //! Kept as a near-verbatim copy rather than rewritten so it can be diffed
-//! against upstream when Supertonic ships a new model revision. The only local
-//! inference change is the bounded, non-spinning ORT session policy marked
-//! below. Our own integration code lives in `mod.rs`; otherwise treat this file
-//! as third-party.
+//! against upstream when Supertonic ships a new model revision. The local
+//! changes are bounded/non-spinning ORT sessions and cancellable RunOptions;
+//! integration code remains in `mod.rs`.
 #![allow(clippy::all, dead_code)]
 
 // ============================================================================
 // TTS Helper Module - All utility functions and structures
 // ============================================================================
 
+use anyhow::{bail, Context, Result};
+use hound::{SampleFormat, WavSpec, WavWriter};
 use ndarray::{Array, Array3};
+use rand_distr::{Distribution, Normal};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use anyhow::{Result, Context, bail};
 use unicode_normalization::UnicodeNormalization;
-use hound::{WavWriter, WavSpec, SampleFormat};
-use rand_distr::{Distribution, Normal};
-use regex::Regex;
 
 // Available languages for multilingual TTS
-pub const AVAILABLE_LANGS: &[&str] = &["en", "ko", "ja", "ar", "bg", "cs", "da", "de", "el", "es", "et", "fi", "fr", "hi", "hr", "hu", "id", "it", "lt", "lv", "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "tr", "uk", "vi", "na"];
+pub const AVAILABLE_LANGS: &[&str] = &[
+    "en", "ko", "ja", "ar", "bg", "cs", "da", "de", "el", "es", "et", "fi", "fr", "hi", "hr", "hu",
+    "id", "it", "lt", "lv", "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "tr", "uk", "vi", "na",
+];
 
 pub fn is_valid_lang(lang: &str) -> bool {
     AVAILABLE_LANGS.contains(&lang)
@@ -99,16 +101,18 @@ impl UnicodeProcessor {
         Ok(UnicodeProcessor { indexer })
     }
 
-    pub fn call(&self, text_list: &[String], lang_list: &[String]) -> Result<(Vec<Vec<i64>>, Array3<f32>)> {
+    pub fn call(
+        &self,
+        text_list: &[String],
+        lang_list: &[String],
+    ) -> Result<(Vec<Vec<i64>>, Array3<f32>)> {
         let mut processed_texts: Vec<String> = Vec::new();
         for (text, lang) in text_list.iter().zip(lang_list.iter()) {
             processed_texts.push(preprocess_text(text, lang)?);
         }
 
-        let text_ids_lengths: Vec<usize> = processed_texts
-            .iter()
-            .map(|t| t.chars().count())
-            .collect();
+        let text_ids_lengths: Vec<usize> =
+            processed_texts.iter().map(|t| t.chars().count()).collect();
 
         let max_len = *text_ids_lengths.iter().max().unwrap_or(&0);
 
@@ -142,23 +146,23 @@ pub fn preprocess_text(text: &str, lang: &str) -> Result<String> {
 
     // Replace various dashes and symbols
     let replacements = [
-        ("–", "-"),      // en dash
-        ("‑", "-"),      // non-breaking hyphen
-        ("—", "-"),      // em dash
-        ("_", " "),      // underscore
-        ("\u{201C}", "\""),     // left double quote
-        ("\u{201D}", "\""),     // right double quote
-        ("\u{2018}", "'"),      // left single quote
-        ("\u{2019}", "'"),      // right single quote
-        ("´", "'"),      // acute accent
-        ("`", "'"),      // grave accent
-        ("[", " "),      // left bracket
-        ("]", " "),      // right bracket
-        ("|", " "),      // vertical bar
-        ("/", " "),      // slash
-        ("#", " "),      // hash
-        ("→", " "),      // right arrow
-        ("←", " "),      // left arrow
+        ("–", "-"),         // en dash
+        ("‑", "-"),         // non-breaking hyphen
+        ("—", "-"),         // em dash
+        ("_", " "),         // underscore
+        ("\u{201C}", "\""), // left double quote
+        ("\u{201D}", "\""), // right double quote
+        ("\u{2018}", "'"),  // left single quote
+        ("\u{2019}", "'"),  // right single quote
+        ("´", "'"),         // acute accent
+        ("`", "'"),         // grave accent
+        ("[", " "),         // left bracket
+        ("]", " "),         // right bracket
+        ("|", " "),         // vertical bar
+        ("/", " "),         // slash
+        ("#", " "),         // hash
+        ("→", " "),         // right arrow
+        ("←", " "),         // left arrow
     ];
 
     for (from, to) in &replacements {
@@ -183,13 +187,34 @@ pub fn preprocess_text(text: &str, lang: &str) -> Result<String> {
     }
 
     // Fix spacing around punctuation
-    text = Regex::new(r" ,").unwrap().replace_all(&text, ",").to_string();
-    text = Regex::new(r" \.").unwrap().replace_all(&text, ".").to_string();
-    text = Regex::new(r" !").unwrap().replace_all(&text, "!").to_string();
-    text = Regex::new(r" \?").unwrap().replace_all(&text, "?").to_string();
-    text = Regex::new(r" ;").unwrap().replace_all(&text, ";").to_string();
-    text = Regex::new(r" :").unwrap().replace_all(&text, ":").to_string();
-    text = Regex::new(r" '").unwrap().replace_all(&text, "'").to_string();
+    text = Regex::new(r" ,")
+        .unwrap()
+        .replace_all(&text, ",")
+        .to_string();
+    text = Regex::new(r" \.")
+        .unwrap()
+        .replace_all(&text, ".")
+        .to_string();
+    text = Regex::new(r" !")
+        .unwrap()
+        .replace_all(&text, "!")
+        .to_string();
+    text = Regex::new(r" \?")
+        .unwrap()
+        .replace_all(&text, "?")
+        .to_string();
+    text = Regex::new(r" ;")
+        .unwrap()
+        .replace_all(&text, ";")
+        .to_string();
+    text = Regex::new(r" :")
+        .unwrap()
+        .replace_all(&text, ":")
+        .to_string();
+    text = Regex::new(r" '")
+        .unwrap()
+        .replace_all(&text, "'")
+        .to_string();
 
     // Remove duplicate quotes
     while text.contains("\"\"") {
@@ -203,12 +228,17 @@ pub fn preprocess_text(text: &str, lang: &str) -> Result<String> {
     }
 
     // Remove extra spaces
-    text = Regex::new(r"\s+").unwrap().replace_all(&text, " ").to_string();
+    text = Regex::new(r"\s+")
+        .unwrap()
+        .replace_all(&text, " ")
+        .to_string();
     text = text.trim().to_string();
 
     // If text doesn't end with punctuation, quotes, or closing brackets, add a period
     if !text.is_empty() {
-        let ends_with_punct = Regex::new(r#"[.!?;:,'"\u{201C}\u{201D}\u{2018}\u{2019})\]}…。」』】〉》›»]$"#).unwrap();
+        let ends_with_punct =
+            Regex::new(r#"[.!?;:,'"\u{201C}\u{201D}\u{2018}\u{2019})\]}…。」』】〉》›»]$"#)
+                .unwrap();
         if !ends_with_punct.is_match(&text) {
             text.push('.');
         }
@@ -216,7 +246,11 @@ pub fn preprocess_text(text: &str, lang: &str) -> Result<String> {
 
     // Validate language
     if !is_valid_lang(lang) {
-        bail!("Invalid language: {}. Available: {:?}", lang, AVAILABLE_LANGS);
+        bail!(
+            "Invalid language: {}. Available: {:?}",
+            lang,
+            AVAILABLE_LANGS
+        );
     }
 
     // Wrap text with language tags
@@ -335,15 +369,14 @@ pub fn write_wav_file<P: AsRef<Path>>(
 const MAX_CHUNK_LENGTH: usize = 300;
 
 const ABBREVIATIONS: &[&str] = &[
-    "Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Sr.", "Jr.",
-    "St.", "Ave.", "Rd.", "Blvd.", "Dept.", "Inc.", "Ltd.",
-    "Co.", "Corp.", "etc.", "vs.", "i.e.", "e.g.", "Ph.D.",
+    "Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Sr.", "Jr.", "St.", "Ave.", "Rd.", "Blvd.", "Dept.",
+    "Inc.", "Ltd.", "Co.", "Corp.", "etc.", "vs.", "i.e.", "e.g.", "Ph.D.",
 ];
 
 pub fn chunk_text(text: &str, max_len: Option<usize>) -> Vec<String> {
     let max_len = max_len.unwrap_or(MAX_CHUNK_LENGTH);
     let text = text.trim();
-    
+
     if text.is_empty() {
         return vec![String::new()];
     }
@@ -466,42 +499,42 @@ fn split_sentences(text: &str) -> Vec<String> {
     // Rust's regex doesn't support lookbehind, so we use a simpler approach
     // Split on sentence boundaries and then check if they're abbreviations
     let re = Regex::new(r"([.!?])\s+").unwrap();
-    
+
     // Find all matches
     let matches: Vec<_> = re.find_iter(text).collect();
     if matches.is_empty() {
         return vec![text.to_string()];
     }
-    
+
     let mut sentences = Vec::new();
     let mut last_end = 0;
-    
+
     for m in matches {
         // Get the text before the punctuation
         let before_punc = &text[last_end..m.start()];
-        
+
         // Check if this ends with an abbreviation
         let mut is_abbrev = false;
         for abbrev in ABBREVIATIONS {
-            let combined = format!("{}{}", before_punc.trim(), &text[m.start()..m.start()+1]);
+            let combined = format!("{}{}", before_punc.trim(), &text[m.start()..m.start() + 1]);
             if combined.ends_with(abbrev) {
                 is_abbrev = true;
                 break;
             }
         }
-        
+
         if !is_abbrev {
             // This is a real sentence boundary
             sentences.push(text[last_end..m.end()].to_string());
             last_end = m.end();
         }
     }
-    
+
     // Add the remaining text
     if last_end < text.len() {
         sentences.push(text[last_end..].to_string());
     }
-    
+
     if sentences.is_empty() {
         vec![text.to_string()]
     } else {
@@ -545,13 +578,13 @@ pub fn sanitize_filename(text: &str, max_len: usize) -> String {
 // ============================================================================
 
 use ort::{
-    session::Session,
+    session::{builder::GraphOptimizationLevel, RunOptions, Session},
     value::Value,
 };
 
 /// TTS is an interactive burst workload. Four compute threads keep synthesis
-/// comfortably ahead of playback without letting the four model stages each
-/// claim every core in the machine. Their pools sleep between runs.
+/// ahead of playback without allowing each model stage to claim every core.
+/// The configured pools sleep between runs.
 const TTS_INTRA_THREADS: usize = 4;
 
 pub struct Style {
@@ -597,12 +630,13 @@ impl TextToSpeech {
         style: &Style,
         total_step: usize,
         speed: f32,
+        run_options: &RunOptions,
     ) -> Result<(Vec<f32>, Vec<f32>)> {
         let bsz = text_list.len();
 
         // Process text
         let (text_ids, text_mask) = self.text_processor.call(text_list, lang_list)?;
-        
+
         let text_ids_array = {
             let text_ids_shape = (bsz, text_ids[0].len());
             let mut flat = Vec::new();
@@ -617,15 +651,18 @@ impl TextToSpeech {
         let style_dp_value = Value::from_array(style.dp.clone())?;
 
         // Predict duration
-        let dp_outputs = self.dp_ort.run(ort::inputs!{
+        let dp_outputs = self.dp_ort.run_with_options(
+            ort::inputs! {
             "text_ids" => &text_ids_value,
             "style_dp" => &style_dp_value,
             "text_mask" => &text_mask_value
-        })?;
+            },
+            run_options,
+        )?;
 
         let (_, duration_data) = dp_outputs["duration"].try_extract_tensor::<f32>()?;
         let mut duration: Vec<f32> = duration_data.to_vec();
-        
+
         // Apply speed factor to duration
         for dur in duration.iter_mut() {
             *dur /= speed;
@@ -633,16 +670,24 @@ impl TextToSpeech {
 
         // Encode text
         let style_ttl_value = Value::from_array(style.ttl.clone())?;
-        let text_enc_outputs = self.text_enc_ort.run(ort::inputs!{
+        let text_enc_outputs = self.text_enc_ort.run_with_options(
+            ort::inputs! {
             "text_ids" => &text_ids_value,
             "style_ttl" => &style_ttl_value,
             "text_mask" => &text_mask_value
-        })?;
+            },
+            run_options,
+        )?;
 
-        let (text_emb_shape, text_emb_data) = text_enc_outputs["text_emb"].try_extract_tensor::<f32>()?;
+        let (text_emb_shape, text_emb_data) =
+            text_enc_outputs["text_emb"].try_extract_tensor::<f32>()?;
         let text_emb = Array3::from_shape_vec(
-            (text_emb_shape[0] as usize, text_emb_shape[1] as usize, text_emb_shape[2] as usize),
-            text_emb_data.to_vec()
+            (
+                text_emb_shape[0] as usize,
+                text_emb_shape[1] as usize,
+                text_emb_shape[2] as usize,
+            ),
+            text_emb_data.to_vec(),
         )?;
 
         // Sample noisy latent
@@ -668,7 +713,8 @@ impl TextToSpeech {
             let current_step_value = Value::from_array(current_step_array)?;
             let total_step_value = Value::from_array(total_step_array.clone())?;
 
-            let vector_est_outputs = self.vector_est_ort.run(ort::inputs!{
+            let vector_est_outputs = self.vector_est_ort.run_with_options(
+                ort::inputs! {
                 "noisy_latent" => &xt_value,
                 "text_emb" => &text_emb_value,
                 "style_ttl" => &style_ttl_value,
@@ -676,20 +722,30 @@ impl TextToSpeech {
                 "text_mask" => &text_mask_value2,
                 "current_step" => &current_step_value,
                 "total_step" => &total_step_value
-            })?;
+                },
+                run_options,
+            )?;
 
-            let (denoised_shape, denoised_data) = vector_est_outputs["denoised_latent"].try_extract_tensor::<f32>()?;
+            let (denoised_shape, denoised_data) =
+                vector_est_outputs["denoised_latent"].try_extract_tensor::<f32>()?;
             xt = Array3::from_shape_vec(
-                (denoised_shape[0] as usize, denoised_shape[1] as usize, denoised_shape[2] as usize),
-                denoised_data.to_vec()
+                (
+                    denoised_shape[0] as usize,
+                    denoised_shape[1] as usize,
+                    denoised_shape[2] as usize,
+                ),
+                denoised_data.to_vec(),
             )?;
         }
 
         // Generate waveform
         let final_latent_value = Value::from_array(xt)?;
-        let vocoder_outputs = self.vocoder_ort.run(ort::inputs!{
+        let vocoder_outputs = self.vocoder_ort.run_with_options(
+            ort::inputs! {
             "latent" => &final_latent_value
-        })?;
+            },
+            run_options,
+        )?;
 
         let (_, wav_data) = vocoder_outputs["wav_tts"].try_extract_tensor::<f32>()?;
         let wav: Vec<f32> = wav_data.to_vec();
@@ -706,15 +762,48 @@ impl TextToSpeech {
         speed: f32,
         silence_duration: f32,
     ) -> Result<(Vec<f32>, f32)> {
-        let max_len = if lang == "ko" || lang == "ja" { 120 } else { 300 };
+        let run_options = RunOptions::new()?;
+        self.call_with_options(
+            text,
+            lang,
+            style,
+            total_step,
+            speed,
+            silence_duration,
+            &run_options,
+        )
+    }
+
+    pub fn call_with_options(
+        &mut self,
+        text: &str,
+        lang: &str,
+        style: &Style,
+        total_step: usize,
+        speed: f32,
+        silence_duration: f32,
+        run_options: &RunOptions,
+    ) -> Result<(Vec<f32>, f32)> {
+        let max_len = if lang == "ko" || lang == "ja" {
+            120
+        } else {
+            300
+        };
         let chunks = chunk_text(text, Some(max_len));
-        
+
         let mut wav_cat: Vec<f32> = Vec::new();
         let mut dur_cat: f32 = 0.0;
 
         for (i, chunk) in chunks.iter().enumerate() {
-            let (wav, duration) = self._infer(&[chunk.clone()], &[lang.to_string()], style, total_step, speed)?;
-            
+            let (wav, duration) = self._infer(
+                &[chunk.clone()],
+                &[lang.to_string()],
+                style,
+                total_step,
+                speed,
+                run_options,
+            )?;
+
             let dur = duration[0];
             let wav_len = (self.sample_rate as f32 * dur) as usize;
             let wav_chunk = &wav[..wav_len.min(wav.len())];
@@ -725,7 +814,7 @@ impl TextToSpeech {
             } else {
                 let silence_len = (silence_duration * self.sample_rate as f32) as usize;
                 let silence = vec![0.0f32; silence_len];
-                
+
                 wav_cat.extend_from_slice(&silence);
                 wav_cat.extend_from_slice(wav_chunk);
                 dur_cat += silence_duration + dur;
@@ -743,7 +832,8 @@ impl TextToSpeech {
         total_step: usize,
         speed: f32,
     ) -> Result<(Vec<f32>, Vec<f32>)> {
-        self._infer(text_list, lang_list, style, total_step, speed)
+        let run_options = RunOptions::new()?;
+        self._infer(text_list, lang_list, style, total_step, speed, &run_options)
     }
 }
 
@@ -756,8 +846,8 @@ pub fn load_voice_style(voice_style_paths: &[String], verbose: bool) -> Result<S
     let bsz = voice_style_paths.len();
 
     // Read first file to get dimensions
-    let first_file = File::open(&voice_style_paths[0])
-        .context("Failed to open voice style file")?;
+    let first_file =
+        File::open(&voice_style_paths[0]).context("Failed to open voice style file")?;
     let first_reader = BufReader::new(first_file);
     let first_data: VoiceStyleData = serde_json::from_reader(first_reader)?;
 
@@ -833,6 +923,8 @@ pub fn load_text_to_speech(onnx_dir: &str) -> Result<TextToSpeech> {
     // between utterances. Keep this wrapper when refreshing the vendored file.
     let session = |path: &str| -> Result<Session> {
         let mut builder = Session::builder()?
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
             .with_intra_threads(TTS_INTRA_THREADS)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?
             .with_inter_threads(1)

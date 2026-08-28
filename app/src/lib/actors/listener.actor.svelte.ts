@@ -12,7 +12,8 @@ import { singleton } from './singleton'
  */
 export class ListenerActor extends Actor {
 	readonly core = new Listener({
-		// Barge-in fires on voice activity alone, ~64ms in.
+		// Candidate UI is immediate; interruption fires only after lexical ASR
+		// evidence has been confirmed safe by the native echo state.
 		onSpeechStart: () => {
 			void bus.emit('interrupted()', {}, 'listener')
 		},
@@ -33,6 +34,11 @@ export class ListenerActor extends Actor {
 			// Flow AND contracts from the one `.pl` — produces(utterance(T)) etc.
 			machine: listenerMachineSource
 		})
+	}
+
+	override dispose(): void {
+		this.core.dispose()
+		super.dispose()
 	}
 
 	override instanceState(): Record<string, unknown> {
