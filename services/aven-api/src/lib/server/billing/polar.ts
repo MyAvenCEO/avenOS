@@ -69,12 +69,19 @@ export class PolarProvider implements PaymentProvider {
 	}
 
 	private async syncProducts(seeds: ProductSeed[]): Promise<Record<string, string>> {
+		const map: Record<string, string> = {}
+		// avenNAME's product is created and managed BY HAND at Polar; its id is
+		// supplied as a secret. Use it directly and leave `aven-name` OUT of the
+		// find/create-by-metadata sync — we neither look it up nor correct its
+		// price or name. The other tiers still sync from the SSOT seeds.
+		const manualNameId = this.config.AVEN_TIER_NAME
+		const toSync = manualNameId ? seeds.filter((seed) => seed.tier !== 'aven-name') : seeds
+		if (manualNameId) map['aven-name'] = manualNameId
 		const listed = await this.call('list-products', () =>
 			this.polar.products.list({ limit: 100, isArchived: false })
 		)
 		const existing = listed.result.items
-		const map: Record<string, string> = {}
-		for (const seed of seeds) {
+		for (const seed of toSync) {
 			// A product created before the kebab-case wire-key rename carries the
 			// old spelling in its metadata. Match through the SSOT's normaliser so
 			// it is FOUND rather than duplicated, and rewrite the key below — the
