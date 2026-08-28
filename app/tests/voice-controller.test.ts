@@ -76,6 +76,39 @@ describe('VoiceController', () => {
 		controller.dispose()
 	})
 
+	test('correlates an anonymous speaker label with the accepted final candidate', async () => {
+		const backend = new FakeVoiceBackend()
+		const controller = new VoiceController(backend)
+		await controller.start()
+		const speakers: string[] = []
+		const finals: Array<{ text: string; speaker: string | null }> = []
+		controller.onInput({
+			onSpeaker: (speaker) => speakers.push(speaker.speaker_id),
+			onFinal: (text, speaker) => finals.push({ text, speaker: speaker?.speaker_id ?? null })
+		})
+
+		backend.emit({
+			type: 'input.candidate_started',
+			candidate_id: 'candidate-speaker',
+			far_end_active: false
+		})
+		backend.emit({
+			type: 'input.speaker_identified',
+			candidate_id: 'candidate-speaker',
+			speaker: { speaker_id: 'speaker-2', confidence: 0.82 }
+		})
+		backend.emit({
+			type: 'input.final',
+			candidate_id: 'candidate-speaker',
+			text: 'Ich übernehme das.'
+		})
+
+		expect(speakers).toEqual(['speaker-2'])
+		expect(finals).toEqual([{ text: 'Ich übernehme das.', speaker: 'speaker-2' }])
+		expect(controller.speaker?.speaker_id).toBe('speaker-2')
+		controller.dispose()
+	})
+
 	test('replaces a suspended session instead of treating it as started', async () => {
 		const backend = new FakeVoiceBackend()
 		const controller = new VoiceController(backend)

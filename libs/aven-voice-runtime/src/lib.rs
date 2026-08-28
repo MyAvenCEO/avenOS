@@ -11,6 +11,7 @@ pub mod output;
 pub mod pipeline;
 pub mod ring;
 pub mod runtime;
+pub mod speaker;
 pub mod trace;
 pub mod workers;
 
@@ -25,5 +26,6 @@ pub use output::*;
 pub use pipeline::*;
 pub use ring::*;
 pub use runtime::*;
+pub use speaker::*;
 pub use trace::*;
 pub use workers::*;

@@ -95,6 +95,8 @@ pub struct CandidateState {
     assistant_text: String,
     near_end_confident: bool,
     adaptation_ready_at_start: bool,
+    speaker_embedding: Option<Vec<f32>>,
+    speaker_published: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -152,6 +154,7 @@ pub struct VoiceState {
     diagnostics_enabled: bool,
     metrics: crate::RuntimeMetrics,
     recent_errors: VecDeque<VoiceError>,
+    speaker_clusters: crate::SpeakerClusters,
     pub requests: RequestLedger,
     ids: IdGenerator,
 }
@@ -187,6 +190,7 @@ impl VoiceState {
             diagnostics_enabled: false,
             metrics: crate::RuntimeMetrics::default(),
             recent_errors: VecDeque::with_capacity(8),
+            speaker_clusters: crate::SpeakerClusters::default(),
             requests: RequestLedger::default(),
             ids: IdGenerator::new(boot_nonce).expect("voice boot nonce must be valid"),
         }
@@ -259,6 +263,7 @@ impl VoiceState {
                 self.capture_status = CaptureStatus::Starting;
                 self.route_generation.0 += 1;
                 self.candidate = None;
+                self.speaker_clusters.reset();
                 self.utterance_status = UtteranceStatus::Idle;
                 self.echo_status = EchoStatus::Bypassed;
                 self.metrics = crate::RuntimeMetrics::default();
@@ -281,6 +286,7 @@ impl VoiceState {
                 }
                 let mut actions = self.cancel_active_turn(SpeechCancelReason::SessionStopped);
                 self.discard_candidate(InputDiscardReason::Reset, &mut actions);
+                self.speaker_clusters.reset();
                 actions.push(Action::CloseRoute(self.route_generation));
                 actions.push(Action::StopSession(session_id));
                 self.last_session_id = self.session_id.take();
@@ -497,6 +503,7 @@ impl VoiceState {
                 }
                 let mut actions = Vec::new();
                 self.discard_candidate(InputDiscardReason::Reset, &mut actions);
+                self.speaker_clusters.reset();
                 actions.push(Action::ResetInput);
                 (Ok(CachedResult::Accepted), actions)
             }
@@ -666,6 +673,8 @@ impl VoiceState {
                             .unwrap_or_default(),
                         near_end_confident: false,
                         adaptation_ready_at_start: false,
+                        speaker_embedding: None,
+                        speaker_published: false,
                     });
                     self.utterance_status = UtteranceStatus::Candidate;
                     actions.push(Action::Emit(VoiceEvent::InputCandidateStarted {
@@ -741,6 +750,7 @@ impl VoiceState {
                         if !self.candidate.as_ref().unwrap().confirmed {
                             self.confirm_candidate(candidate_id.clone(), &mut actions);
                         }
+                        self.publish_candidate_speaker(&candidate_id, &mut actions);
                         actions.push(Action::Emit(VoiceEvent::InputFinal {
                             candidate_id,
                             text: text.nfkc().collect::<String>().trim().to_owned(),
@@ -750,6 +760,18 @@ impl VoiceState {
                     } else {
                         self.discard_candidate(InputDiscardReason::UnsafeEcho, &mut actions);
                     }
+                }
+            }
+            Observation::SpeakerEmbedding {
+                candidate_id,
+                generation,
+                embedding,
+            } => {
+                if self.candidate_matches(&candidate_id, generation)
+                    && !self.candidate.as_ref().unwrap().speaker_published
+                {
+                    self.candidate.as_mut().unwrap().speaker_embedding = Some(embedding);
+                    self.publish_candidate_speaker(&candidate_id, &mut actions);
                 }
             }
             Observation::CandidateOverflow {
@@ -1156,9 +1178,28 @@ impl VoiceState {
             actions.extend(self.cancel_active_turn(SpeechCancelReason::BargeIn));
         }
         actions.push(Action::Emit(VoiceEvent::InputConfirmed {
-            candidate_id,
+            candidate_id: candidate_id.clone(),
             barge_in_started,
         }));
+        self.publish_candidate_speaker(&candidate_id, actions);
+    }
+
+    fn publish_candidate_speaker(&mut self, candidate_id: &CandidateId, actions: &mut Vec<Action>) {
+        let embedding = self.candidate.as_mut().and_then(|candidate| {
+            (candidate.id == *candidate_id && candidate.confirmed && !candidate.speaker_published)
+                .then(|| candidate.speaker_embedding.take())
+                .flatten()
+        });
+        let Some(embedding) = embedding else {
+            return;
+        };
+        if let Some(speaker) = self.speaker_clusters.assign(embedding) {
+            self.candidate.as_mut().unwrap().speaker_published = true;
+            actions.push(Action::Emit(VoiceEvent::InputSpeakerIdentified {
+                candidate_id: candidate_id.clone(),
+                speaker,
+            }));
+        }
     }
 
     fn candidate_matches(&self, candidate_id: &CandidateId, generation: RouteGeneration) -> bool {
@@ -1449,8 +1490,10 @@ mod tests {
     }
 
     fn active_state() -> (VoiceState, SessionId) {
-        let mut config = VoiceConfigV1::default();
-        config.allow_full_duplex_barge_in = true;
+        let config = VoiceConfigV1 {
+            allow_full_duplex_barge_in: true,
+            ..VoiceConfigV1::default()
+        };
         let mut state = VoiceState::new("test", config);
         let (prepared, _) = state.command(
             Command::Prepare {
@@ -2187,6 +2230,171 @@ mod tests {
     }
 
     #[test]
+    fn accepted_speaker_attribution_is_ordered_before_final_text() {
+        let (mut state, _) = active_state();
+        let candidate = CandidateId::parse("candidate-speaker").unwrap();
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                far_end_active: false,
+                echo_status: EchoStatus::Bypassed,
+                at: MonoTimeNs(0),
+            },
+            MonoTimeNs(0),
+        );
+        state.observe(
+            Observation::SpeakerEmbedding {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                embedding: vec![1.0, 0.0],
+            },
+            MonoTimeNs(1),
+        );
+        let actions = state.observe(
+            Observation::RecognizerFinal {
+                candidate_id: candidate,
+                generation: state.route_generation,
+                text: "Guten Tag".into(),
+                far_end_active: false,
+                safe_echo_continuous: false,
+            },
+            MonoTimeNs(2),
+        );
+        assert!(matches!(
+            actions.as_slice(),
+            [
+                Action::Emit(VoiceEvent::InputConfirmed { .. }),
+                Action::Emit(VoiceEvent::InputSpeakerIdentified { .. }),
+                Action::Emit(VoiceEvent::InputFinal { .. })
+            ]
+        ));
+    }
+
+    #[test]
+    fn unsafe_discard_never_exposes_a_speaker_attribution() {
+        let (mut state, _) = active_state();
+        let candidate = CandidateId::parse("candidate-unsafe-speaker").unwrap();
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                far_end_active: true,
+                echo_status: EchoStatus::Adapting,
+                at: MonoTimeNs(0),
+            },
+            MonoTimeNs(0),
+        );
+        state.observe(
+            Observation::SpeakerEmbedding {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                embedding: vec![1.0, 0.0],
+            },
+            MonoTimeNs(1),
+        );
+        let actions = state.observe(
+            Observation::RecognizerFinal {
+                candidate_id: candidate,
+                generation: state.route_generation,
+                text: "Das war nur die Ausgabe".into(),
+                far_end_active: true,
+                safe_echo_continuous: false,
+            },
+            MonoTimeNs(2),
+        );
+        assert!(actions.iter().all(|action| !matches!(
+            action,
+            Action::Emit(VoiceEvent::InputSpeakerIdentified { .. })
+        )));
+        assert!(actions
+            .iter()
+            .any(|action| matches!(action, Action::Emit(VoiceEvent::InputDiscarded { .. }))));
+
+        let safe = CandidateId::parse("candidate-safe-speaker").unwrap();
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: safe.clone(),
+                generation: state.route_generation,
+                far_end_active: false,
+                echo_status: EchoStatus::Bypassed,
+                at: MonoTimeNs(3),
+            },
+            MonoTimeNs(3),
+        );
+        state.observe(
+            Observation::SpeakerEmbedding {
+                candidate_id: safe.clone(),
+                generation: state.route_generation,
+                embedding: vec![0.0, 1.0],
+            },
+            MonoTimeNs(4),
+        );
+        let safe_actions = state.observe(
+            Observation::RecognizerFinal {
+                candidate_id: safe,
+                generation: state.route_generation,
+                text: "Das ist eine echte Person".into(),
+                far_end_active: false,
+                safe_echo_continuous: false,
+            },
+            MonoTimeNs(5),
+        );
+        assert!(safe_actions.iter().any(|action| matches!(
+            action,
+            Action::Emit(VoiceEvent::InputSpeakerIdentified { speaker, .. })
+                if speaker.speaker_id.as_str() == "speaker-1"
+        )));
+    }
+
+    #[test]
+    fn embedding_that_arrives_after_confirmation_is_published_once() {
+        let (mut state, _) = active_state();
+        let candidate = CandidateId::parse("candidate-online-speaker").unwrap();
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                far_end_active: false,
+                echo_status: EchoStatus::Bypassed,
+                at: MonoTimeNs(0),
+            },
+            MonoTimeNs(0),
+        );
+        state.observe(
+            Observation::RecognizerPartial {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                text: "Hallo zusammen".into(),
+                far_end_active: false,
+                safe_echo_continuous: false,
+            },
+            MonoTimeNs(1),
+        );
+        let attributed = state.observe(
+            Observation::SpeakerEmbedding {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                embedding: vec![1.0, 0.0],
+            },
+            MonoTimeNs(2),
+        );
+        assert!(matches!(
+            attributed.as_slice(),
+            [Action::Emit(VoiceEvent::InputSpeakerIdentified { .. })]
+        ));
+        let duplicate = state.observe(
+            Observation::SpeakerEmbedding {
+                candidate_id: candidate,
+                generation: state.route_generation,
+                embedding: vec![1.0, 0.0],
+            },
+            MonoTimeNs(3),
+        );
+        assert!(duplicate.is_empty());
+    }
+
+    #[test]
     fn segment_order_conflicts_and_duplicate_text_are_deterministic() {
         let (mut state, session) = active_state();
         let turn = begin_turn(&mut state, &session);
@@ -2429,9 +2637,7 @@ mod tests {
         ));
         assert_eq!(state.session_status, SessionStatus::Recovering);
         assert_eq!(state.capture_status, CaptureStatus::Starting);
-        assert!(actions
-            .iter()
-            .any(|action| *action == Action::CloseRoute(generation)));
+        assert!(actions.contains(&Action::CloseRoute(generation)));
     }
 
     #[test]

@@ -1,5 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core'
 import { voiceController } from '$lib/voice/controller.svelte'
+import type { SpeakerAttribution } from '$lib/voice/protocol'
 
 export type ListenerStatus = 'unavailable' | 'preparing' | 'listening' | 'denied' | 'error'
 
@@ -7,7 +8,8 @@ export interface ListenerHooks {
 	/** ASR-confirmed speech that is safe to submit and interrupt with. */
 	onSpeechStart?: () => void
 	onPartial?: (text: string) => void
-	onUtterance?: (text: string) => void
+	onSpeaker?: (speaker: SpeakerAttribution) => void
+	onUtterance?: (text: string, speaker: SpeakerAttribution | null) => void
 }
 
 /**
@@ -22,6 +24,7 @@ export class Listener {
 		this.#unsubscribe = voiceController.onInput({
 			onConfirmed: hooks.onSpeechStart,
 			onPartial: hooks.onPartial,
+			onSpeaker: hooks.onSpeaker,
 			onFinal: hooks.onUtterance
 		})
 	}
@@ -49,6 +52,10 @@ export class Listener {
 
 	get partial(): string {
 		return voiceController.partial
+	}
+
+	get speaker(): SpeakerAttribution | null {
+		return voiceController.speaker
 	}
 
 	get progress(): number {

@@ -1,11 +1,13 @@
 //! Reusable local speech-model adapters shared by the app and standalone labs.
 
 pub mod asr;
+pub mod speaker;
 pub mod supertonic;
 pub mod tts;
 pub mod vad;
 
 pub use asr::{NemotronRecognizerAdapter, SileroVadAdapter};
+pub use speaker::WeSpeakerEmbedder;
 pub use tts::DirectSupertonicSynthesizer;
 
 /// Install the ONNX Runtime used by all local speech models before opening a

@@ -8,10 +8,11 @@ use aven_voice_protocol::{CandidateId, EchoStatus, SessionId};
 use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
 
 use crate::{
-    AudioFrame48k, CapturePort, ClockAligner, ClockFault, EchoProcessor, InputModelEvent,
-    InputProcessor, ProcessingFormat, RenderPort, RuntimeObserver, StreamingRecognizer,
-    StreamingSincResampler, TimestampQuality, VoiceActivityDetector, ASR_RATE_HZ,
-    MAX_CALLBACK_SAMPLES, PROCESSING_FRAME_SAMPLES, PROCESSING_RATE_HZ,
+    normalize_speaker_embedding, speaker_window, AudioFrame48k, CapturePort, ClockAligner,
+    ClockFault, EchoProcessor, InputModelEvent, InputProcessor, ProcessingFormat, RenderPort,
+    RuntimeObserver, SpeakerEmbedder, StreamingRecognizer, StreamingSincResampler,
+    TimestampQuality, VoiceActivityDetector, ASR_RATE_HZ, MAX_CALLBACK_SAMPLES,
+    MAX_SPEAKER_SAMPLES, PROCESSING_FRAME_SAMPLES, PROCESSING_RATE_HZ, TARGET_SPEAKER_SAMPLES,
 };
 
 const CLEAN_QUEUE_FRAMES: usize = 64;
@@ -211,6 +212,7 @@ fn near_end_evidence(
 pub struct InputModels {
     pub vad: Box<dyn VoiceActivityDetector>,
     pub recognizer: Box<dyn StreamingRecognizer>,
+    pub speaker: Option<Box<dyn SpeakerEmbedder>>,
 }
 
 #[derive(Clone, Debug)]
@@ -436,7 +438,17 @@ fn input_loop(
     metrics: DuplexMetrics,
 ) -> InputModels {
     let near_end_frames_required = config.tester_near_end_frames.max(1);
-    let mut processor = InputProcessor::new(config, models.vad, models.recognizer);
+    let InputModels {
+        vad,
+        recognizer,
+        mut speaker,
+    } = models;
+    let mut processor = InputProcessor::new(config, vad, recognizer);
+    let mut speaker_preroll = VecDeque::with_capacity(TARGET_SPEAKER_SAMPLES);
+    let mut speaker_audio: Option<(CandidateId, VecDeque<f32>)> = None;
+    let mut speaker_samples_seen = 0_usize;
+    let mut next_speaker_attempt = TARGET_SPEAKER_SAMPLES;
+    let mut speaker_identified = false;
     let mut next_id = 0_u64;
     let mut candidate_echo_safe = true;
     let mut candidate_near_end_frames = 0_u32;
@@ -447,6 +459,11 @@ fn input_loop(
             recv(controls) -> control => match control {
                 Ok(InputControl::Reset) => {
                     processor.reset();
+                    speaker_preroll.clear();
+                    speaker_audio = None;
+                    speaker_samples_seen = 0;
+                    next_speaker_attempt = TARGET_SPEAKER_SAMPLES;
+                    speaker_identified = false;
                     candidate_echo_safe = true;
                     candidate_near_end_frames = 0;
                     candidate_near_end_confident = false;
@@ -454,6 +471,11 @@ fn input_loop(
                 },
                 Ok(InputControl::Overflow) => {
                     if let Some(InputModelEvent::DiscardedOverflow { candidate_id }) = processor.overflow() {
+                        speaker_preroll.clear();
+                        speaker_audio = None;
+                        speaker_samples_seen = 0;
+                        next_speaker_attempt = TARGET_SPEAKER_SAMPLES;
+                        speaker_identified = false;
                         candidate_echo_safe = true;
                         candidate_near_end_frames = 0;
                         candidate_near_end_confident = false;
@@ -465,6 +487,36 @@ fn input_loop(
             },
             recv(clean) -> frame => {
                 let Ok(frame) = frame else { break };
+                for sample in frame.samples {
+                    if speaker_preroll.len() == TARGET_SPEAKER_SAMPLES {
+                        speaker_preroll.pop_front();
+                    }
+                    speaker_preroll.push_back(sample);
+                    if let Some((_, audio)) = speaker_audio.as_mut() {
+                        if audio.len() == MAX_SPEAKER_SAMPLES {
+                            audio.pop_front();
+                        }
+                        audio.push_back(sample);
+                        speaker_samples_seen = speaker_samples_seen.saturating_add(1);
+                    }
+                }
+                if !speaker_identified
+                    && speaker.is_some()
+                    && speaker_samples_seen >= next_speaker_attempt
+                {
+                    next_speaker_attempt = next_speaker_attempt
+                        .saturating_add(TARGET_SPEAKER_SAMPLES / 2);
+                    if let Some((candidate_id, audio)) = speaker_audio.as_ref() {
+                        if let Some(embedding) = extract_speaker_embedding(&mut speaker, audio) {
+                            let _ = observer.publish(Observation::SpeakerEmbedding {
+                                candidate_id: candidate_id.clone(),
+                                generation,
+                                embedding,
+                            });
+                            speaker_identified = true;
+                        }
+                    }
+                }
                 if processor.candidate_id().is_some()
                     && frame.far_end_active
                     && !frame.safe_echo_continuous
@@ -499,6 +551,16 @@ fn input_loop(
                     let mut started_candidate = None;
                     let observation = match event {
                         InputModelEvent::CandidateStarted { candidate_id, .. } => {
+                            speaker_audio = Some((
+                                candidate_id.clone(),
+                                speaker_preroll.iter().copied().collect(),
+                            ));
+                            // Pre-roll improves the eventual embedding window, but it must not
+                            // make inference fire before the current candidate has supplied the
+                            // target amount of speech.
+                            speaker_samples_seen = 0;
+                            next_speaker_attempt = TARGET_SPEAKER_SAMPLES;
+                            speaker_identified = false;
                             candidate_echo_safe = !frame.far_end_active
                                 || frame.safe_echo_continuous;
                             candidate_near_end_frames = u32::from(frame.near_end_evidence);
@@ -522,6 +584,24 @@ fn input_loop(
                             safe_echo_continuous: candidate_echo_safe,
                         },
                         InputModelEvent::Ended { candidate_id, text } => {
+                            let candidate_speaker_audio = speaker_audio
+                                .take()
+                                .filter(|(audio_candidate, _)| audio_candidate == &candidate_id)
+                                .map(|(_, audio)| audio.into_iter().collect::<Vec<_>>());
+                            let embedding = if speaker_identified || text.trim().is_empty() {
+                                None
+                            } else if let Some(audio) = candidate_speaker_audio.as_deref() {
+                                extract_speaker_embedding_slice(&mut speaker, audio)
+                            } else {
+                                None
+                            };
+                            if let Some(embedding) = embedding {
+                                let _ = observer.publish(Observation::SpeakerEmbedding {
+                                    candidate_id: candidate_id.clone(),
+                                    generation,
+                                    embedding,
+                                });
+                            }
                             let observation = Observation::RecognizerFinal {
                                 candidate_id,
                                 generation,
@@ -533,9 +613,16 @@ fn input_loop(
                             candidate_near_end_frames = 0;
                             candidate_near_end_confident = false;
                             candidate_near_end_published = false;
+                            speaker_samples_seen = 0;
+                            next_speaker_attempt = TARGET_SPEAKER_SAMPLES;
+                            speaker_identified = false;
                             observation
                         },
                         InputModelEvent::DiscardedOverflow { candidate_id } => {
+                            speaker_audio = None;
+                            speaker_samples_seen = 0;
+                            next_speaker_attempt = TARGET_SPEAKER_SAMPLES;
+                            speaker_identified = false;
                             candidate_echo_safe = true;
                             candidate_near_end_frames = 0;
                             candidate_near_end_confident = false;
@@ -546,6 +633,10 @@ fn input_loop(
                             }
                         },
                         InputModelEvent::ModelFailed { candidate_id, .. } => {
+                            speaker_audio = None;
+                            speaker_samples_seen = 0;
+                            next_speaker_attempt = TARGET_SPEAKER_SAMPLES;
+                            speaker_identified = false;
                             candidate_echo_safe = true;
                             candidate_near_end_frames = 0;
                             candidate_near_end_confident = false;
@@ -579,7 +670,38 @@ fn input_loop(
         }
     }
     let (vad, recognizer) = processor.into_models();
-    InputModels { vad, recognizer }
+    InputModels {
+        vad,
+        recognizer,
+        speaker,
+    }
+}
+
+fn extract_speaker_embedding(
+    speaker: &mut Option<Box<dyn SpeakerEmbedder>>,
+    audio: &VecDeque<f32>,
+) -> Option<Vec<f32>> {
+    let contiguous = audio.iter().copied().collect::<Vec<_>>();
+    extract_speaker_embedding_slice(speaker, &contiguous)
+}
+
+fn extract_speaker_embedding_slice(
+    speaker: &mut Option<Box<dyn SpeakerEmbedder>>,
+    audio: &[f32],
+) -> Option<Vec<f32>> {
+    let window = speaker_window(audio)?;
+    let result = speaker.as_mut()?.embedding(window);
+    match result {
+        Ok(mut embedding) => normalize_speaker_embedding(&mut embedding).then_some(embedding),
+        Err(error) => {
+            log::warn!(
+                target: "avenos::voice",
+                "speaker diarization disabled after inference failure: {error}"
+            );
+            *speaker = None;
+            None
+        }
+    }
 }
 
 struct DspWorker {
@@ -932,7 +1054,7 @@ mod tests {
     use super::*;
     use crate::{
         CallbackTime, FakeEchoProcessor, HostSampleFormat, ModelError, RecognizerUpdate,
-        StreamDescriptor, TimestampQuality,
+        SpeakerEmbedder, StreamDescriptor, TimestampQuality,
     };
 
     #[test]
@@ -1034,6 +1156,7 @@ mod tests {
             InputModels {
                 vad: Box::new(SpeechVad),
                 recognizer: Box::new(Recognizer),
+                speaker: None,
             },
             observer,
         )
@@ -1062,5 +1185,114 @@ mod tests {
         }
         assert!(candidate_at.is_some_and(|at| at > MonoTimeNs(0)));
         let _models = pipeline.stop();
+    }
+
+    struct LevelVad;
+
+    impl VoiceActivityDetector for LevelVad {
+        fn reset(&mut self) {}
+
+        fn probability(&mut self, frame: &[f32; 512]) -> Result<f32, ModelError> {
+            Ok(if frame.iter().any(|sample| sample.abs() > 0.01) {
+                0.9
+            } else {
+                0.0
+            })
+        }
+    }
+
+    struct FinalRecognizer;
+
+    impl StreamingRecognizer for FinalRecognizer {
+        fn begin(&mut self, _candidate: &CandidateId) -> Result<(), ModelError> {
+            Ok(())
+        }
+
+        fn push(&mut self, _pcm_16k: &[f32]) -> Result<RecognizerUpdate, ModelError> {
+            Ok(RecognizerUpdate {
+                cumulative_text: "Guten Tag".into(),
+                final_text: None,
+            })
+        }
+
+        fn finish(&mut self) -> Result<RecognizerUpdate, ModelError> {
+            Ok(RecognizerUpdate {
+                cumulative_text: "Guten Tag".into(),
+                final_text: Some("Guten Tag".into()),
+            })
+        }
+
+        fn cancel(&mut self) {}
+    }
+
+    struct FixedSpeaker;
+
+    impl SpeakerEmbedder for FixedSpeaker {
+        fn embedding(&mut self, _pcm_16k: &[f32]) -> Result<Vec<f32>, ModelError> {
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+    }
+
+    #[test]
+    fn accepted_post_aec_candidate_is_attributed_before_its_final_text() {
+        let config = VoiceConfigV1 {
+            start_windows: 1,
+            end_windows: 2,
+            ..VoiceConfigV1::default()
+        };
+        let (clean_tx, clean_rx) = bounded(256);
+        let (control_tx, control_rx) = bounded(4);
+        let (observer, observations) = RuntimeObserver::test_pair(256);
+        let generation = RouteGeneration(7);
+        let worker = std::thread::spawn(move || {
+            input_loop(
+                config,
+                InputModels {
+                    vad: Box::new(LevelVad),
+                    recognizer: Box::new(FinalRecognizer),
+                    speaker: Some(Box::new(FixedSpeaker)),
+                },
+                clean_rx,
+                control_rx,
+                observer,
+                generation,
+                "speaker-test".into(),
+                DuplexMetrics::default(),
+            )
+        });
+        let frame = |index: u64, sample: f32| CleanFrame {
+            samples: [sample; 160],
+            at: MonoTimeNs::from_millis(index * 10),
+            far_end_active: false,
+            echo_status: EchoStatus::Bypassed,
+            safe_echo_continuous: true,
+            adaptation_ready: true,
+            near_end_evidence: true,
+        };
+        for index in 0..160 {
+            clean_tx.send(frame(index, 0.1)).unwrap();
+        }
+        for index in 160..172 {
+            clean_tx.send(frame(index, 0.0)).unwrap();
+        }
+
+        let mut ordered = Vec::new();
+        for _ in 0..128 {
+            let observation = observations
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("input worker should finish the candidate");
+            match observation {
+                Observation::SpeakerEmbedding { .. } => ordered.push("speaker"),
+                Observation::RecognizerFinal { .. } => {
+                    ordered.push("final");
+                    break;
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(ordered, ["speaker", "final"]);
+        control_tx.send(InputControl::Stop).unwrap();
+        let returned = worker.join().unwrap();
+        assert!(returned.speaker.is_some());
     }
 }
