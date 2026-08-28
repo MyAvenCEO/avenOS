@@ -160,7 +160,12 @@ export const serverConfigSchema = z
 		// Sanity anchor only: the org token already scopes every call, and
 		// create calls never pass an organization id.
 		POLAR_ORGANIZATION_ID: z.string().default(''),
-		POLAR_WEBHOOK_SECRET: z.string().min(8).default('dev-fake-webhook-secret')
+		POLAR_WEBHOOK_SECRET: z.string().min(8).default('dev-fake-webhook-secret'),
+		// avenNAME's Polar product is created and managed BY HAND — its product
+		// id is set here as a secret. When present, the billing layer uses it
+		// directly for the aven-name funnel checkout instead of finding or
+		// creating the product by `metadata.tier` like the other tiers.
+		AVEN_TIER_NAME: z.string().default('')
 	})
 	.superRefine((config, context) => {
 		const artifactValues = [config.ARTIFACT_STORE_BASE_URL, config.ARTIFACT_STORE_BEARER_TOKEN]
@@ -350,6 +355,7 @@ export type BillingConfig = Pick<
 	| 'POLAR_SERVER'
 	| 'POLAR_ORGANIZATION_ID'
 	| 'POLAR_WEBHOOK_SECRET'
+	| 'AVEN_TIER_NAME'
 >
 export type NameServiceConfig = Pick<
 	ServerConfig,
