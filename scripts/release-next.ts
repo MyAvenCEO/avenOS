@@ -102,10 +102,10 @@ function main(): void {
 		// Show the staged effect, then restore ONLY the release-output files (never blow
 		// away other uncommitted work) — no commit/tag/push/gh.
 		run(
-			'git --no-pager diff --stat -- CHANGELOG.md "app/package.json" "docs/package.json" "libs/**/package.json" "app/src-tauri/tauri.conf.json" "app/src-tauri/Cargo.toml" "libs/**/Cargo.toml"'
+			'git --no-pager diff --stat -- CHANGELOG.md "app/package.json" "docs/package.json" "libs/**/package.json" "app/src-tauri/tauri.conf.json" "app/src-tauri/Cargo.toml" "libs/**/Cargo.toml" "app/src-tauri/Cargo.lock" "libs/**/Cargo.lock"'
 		)
 		run(
-			'git checkout -- CHANGELOG.md "app/package.json" "docs/package.json" "libs/**/package.json" "app/src-tauri/tauri.conf.json" "app/src-tauri/Cargo.toml" "libs/**/Cargo.toml"'
+			'git checkout -- CHANGELOG.md "app/package.json" "docs/package.json" "libs/**/package.json" "app/src-tauri/tauri.conf.json" "app/src-tauri/Cargo.toml" "libs/**/Cargo.toml" "app/src-tauri/Cargo.lock" "libs/**/Cargo.lock"'
 		)
 		console.log(`[release-next] dry run complete — release files restored. Would have cut ${tag}.`)
 		return

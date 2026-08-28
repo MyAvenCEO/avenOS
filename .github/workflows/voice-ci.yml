@@ -16,6 +16,8 @@ on:
       - 'app/src/lib/actors/listener.actor.svelte.ts'
       - 'app/tests/voice-*.test.ts'
       - 'scripts/fetch-onnxruntime.ts'
+      - 'scripts/release-next.ts'
+      - 'scripts/set-version.ts'
       - 'scripts/tauri-ios-asc.ts'
       - '.github/workflows/voice-ci.yml'
   push:
@@ -33,7 +35,12 @@ jobs:
       - uses: ./.github/actions/bun-install
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      - run: bunx biome check scripts/tauri-ios-asc.ts
+      - run: bunx biome check scripts/release-next.ts scripts/set-version.ts scripts/tauri-ios-asc.ts
+      - name: Verify the release version stamp is idempotent
+        run: |
+          version="$(node -p "require('./app/package.json').version")"
+          bun scripts/set-version.ts "$version"
+          git diff --exit-code -- . ':(exclude).npmrc'
       - run: cargo test --locked --manifest-path libs/aven-voice-protocol/Cargo.toml --all-features
       - run: cargo test --locked --manifest-path libs/aven-voice-core/Cargo.toml
       - run: cargo test --locked --manifest-path libs/aven-voice-runtime/Cargo.toml --all-features
