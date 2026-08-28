@@ -9,7 +9,7 @@ import type {
 	VoiceEventEnvelope,
 	VoiceSnapshot
 } from './protocol'
-import { SpeechPlanner, type PlannedSegment } from './speech-planner'
+import { type PlannedSegment, SpeechPlanner } from './speech-planner'
 import { UnavailableVoiceBackend } from './unavailable'
 
 export interface InputHooks {
@@ -51,14 +51,18 @@ export class VoiceController {
 	#confirmed = new Set<CandidateId>()
 	#planner = new SpeechPlanner()
 	#turn: TurnId | null = null
-	#playbackWaiters = new Map<
-		TurnId,
-		{ resolve: () => void; reject: (error: Error) => void }
-	>()
+	#playbackWaiters = new Map<TurnId, { resolve: () => void; reject: (error: Error) => void }>()
 	#speechEpoch = 0
 	#speechChain: Promise<void> = Promise.resolve()
+	#maxSegmentCapacity = 8
+	#remainingSegmentCapacity = 8
+	#capacityWaiters = new Set<() => void>()
 
-	constructor(backend: VoiceBackend = isTauri() ? new TauriNativeVoiceBackend() : new UnavailableVoiceBackend()) {
+	constructor(
+		backend: VoiceBackend = isTauri()
+			? new TauriNativeVoiceBackend()
+			: new UnavailableVoiceBackend()
+	) {
 		this.backend = backend
 	}
 
@@ -73,6 +77,8 @@ export class VoiceController {
 	}
 
 	dispose(): void {
+		this.#speechEpoch++
+		this.#wakeCapacityWaiters()
 		if (this.sessionId) void this.backend.setDiagnostics(this.sessionId, false).catch(() => {})
 		this.#unsubscribe?.()
 		this.#unsubscribe = null
@@ -88,6 +94,7 @@ export class VoiceController {
 	start(): Promise<void> {
 		if (this.sessionId && this.session === 'active') return Promise.resolve()
 		if (this.#starting) return this.#starting
+		if (this.sessionId || this.#turn) this.cancelSpeech('superseded')
 		this.#starting = this.#start().finally(() => {
 			this.#starting = null
 		})
@@ -98,15 +105,16 @@ export class VoiceController {
 		this.failure = null
 		this.runtime = 'preparing'
 		this.#unsubscribe ??= this.backend.subscribe((event) => this.#event(event))
-		this.#modelUnsubscribe ??= this.backend.subscribeModelStatus?.((status) => {
-			if (status.feature === 'asr') {
-				this.inputModelStage = status.stage
-				this.inputModelProgress = status.progress
-			} else {
-				this.outputModelStage = status.stage
-				this.outputModelProgress = status.progress
-			}
-		}) ?? null
+		this.#modelUnsubscribe ??=
+			this.backend.subscribeModelStatus?.((status) => {
+				if (status.feature === 'asr') {
+					this.inputModelStage = status.stage
+					this.inputModelProgress = status.progress
+				} else {
+					this.outputModelStage = status.stage
+					this.outputModelProgress = status.progress
+				}
+			}) ?? null
 		try {
 			if (this.sessionId) {
 				const stale = this.sessionId
@@ -170,16 +178,19 @@ export class VoiceController {
 	finishSpeech(voice: string, language = 'de'): void {
 		for (const segment of this.#planner.flush()) this.#enqueue(segment, voice, language)
 		const epoch = this.#speechEpoch
-		this.#speechChain = this.#speechChain.then(async () => {
-			if (epoch !== this.#speechEpoch || !this.sessionId || !this.#turn) return
-			await this.backend.finishSpeech(this.sessionId, this.#turn)
-		})
+		this.#speechChain = this.#speechChain
+			.then(async () => {
+				if (epoch !== this.#speechEpoch || !this.sessionId || !this.#turn) return
+				await this.backend.finishSpeech(this.sessionId, this.#turn)
+			})
+			.catch((error) => this.#abortSpeechEpoch(epoch, error))
 	}
 
 	/** Play a one-off sample through the same native rail as conversation speech. */
 	async previewSpeech(text: string, voice: string, language = 'de'): Promise<void> {
 		this.#speechEpoch++
 		this.#planner.reset()
+		this.#resetSegmentCapacity()
 		const prior = this.#turn
 		this.#turn = null
 		if (prior) this.#settlePlayback(prior, new Error('Speech preview was superseded.'))
@@ -193,6 +204,8 @@ export class VoiceController {
 		})
 		const begun = await this.backend.beginSpeech({ session_id: session, language, voice })
 		this.#turn = begun.turn_id
+		this.#maxSegmentCapacity = begun.pending_segment_capacity
+		this.#remainingSegmentCapacity = begun.pending_segment_capacity
 		const completed = new Promise<void>((resolve, reject) => {
 			this.#playbackWaiters.set(begun.turn_id, { resolve, reject })
 		})
@@ -214,6 +227,7 @@ export class VoiceController {
 	cancelSpeech(reason: 'manual' | 'muted' | 'session_stopped' | 'superseded' = 'manual'): void {
 		this.#speechEpoch++
 		this.#planner.reset()
+		this.#resetSegmentCapacity()
 		const session = this.sessionId
 		const turn = this.#turn
 		this.#turn = null
@@ -229,36 +243,43 @@ export class VoiceController {
 
 	#enqueue(segment: PlannedSegment, voice: string, language: string): void {
 		const epoch = this.#speechEpoch
-		this.#speechChain = this.#speechChain.then(async () => {
-			if (epoch !== this.#speechEpoch) return
-			if (!this.sessionId) await this.start()
-			const session = this.sessionId
-			if (!session || epoch !== this.#speechEpoch) return
-			if (!this.#turn) {
-				const begun = await this.backend.beginSpeech({
-					session_id: session,
-					language,
-					voice
-				})
-				if (epoch !== this.#speechEpoch) {
-					void this.backend.cancelSpeech({
+		this.#speechChain = this.#speechChain
+			.then(async () => {
+				if (epoch !== this.#speechEpoch) return
+				if (!this.sessionId) await this.start()
+				const session = this.sessionId
+				if (!session || epoch !== this.#speechEpoch) return
+				if (!this.#turn) {
+					const begun = await this.backend.beginSpeech({
 						session_id: session,
-						turn_id: begun.turn_id,
-						reason: 'superseded'
+						language,
+						voice
 					})
-					return
+					if (epoch !== this.#speechEpoch) {
+						void this.backend.cancelSpeech({
+							session_id: session,
+							turn_id: begun.turn_id,
+							reason: 'superseded'
+						})
+						return
+					}
+					this.#turn = begun.turn_id
+					this.#maxSegmentCapacity = begun.pending_segment_capacity
+					this.#remainingSegmentCapacity = begun.pending_segment_capacity
 				}
-				this.#turn = begun.turn_id
-			}
-			await this.backend.enqueueSpeech({
-				session_id: session,
-				turn_id: this.#turn,
-				segment_index: segment.index,
-				text: segment.text
+				await this.#waitForSegmentCapacity(epoch)
+				if (epoch !== this.#speechEpoch || !this.#turn) return
+				const result = await this.backend.enqueueSpeech({
+					session_id: session,
+					turn_id: this.#turn,
+					segment_index: segment.index,
+					text: segment.text
+				})
+				this.#remainingSegmentCapacity = result.remaining_segment_capacity
 			})
-		}).catch((error) => {
-			this.failure = safeMessage(error)
-		})
+			.catch((error) => {
+				this.#abortSpeechEpoch(epoch, error)
+			})
 	}
 
 	#event(envelope: VoiceEventEnvelope): void {
@@ -330,7 +351,13 @@ export class VoiceController {
 			case 'playback.synthesis_started':
 			case 'playback.synthesis_completed':
 			case 'playback.fading':
+				break
 			case 'capacity.changed':
+				this.#remainingSegmentCapacity = Math.max(
+					0,
+					this.#maxSegmentCapacity - event.pending_segments
+				)
+				this.#wakeCapacityWaiters()
 				break
 			case 'playback.completed':
 			case 'playback.cancelled':
@@ -342,6 +369,7 @@ export class VoiceController {
 				if (event.turn_id !== this.#turn) break
 				this.#turn = null
 				this.#planner.reset()
+				this.#resetSegmentCapacity()
 				this.#setSpeaking(false)
 				break
 			case 'diagnostics.snapshot':
@@ -371,6 +399,43 @@ export class VoiceController {
 		if (this.speaking === speaking) return
 		this.speaking = speaking
 		for (const hooks of this.#playbackHooks) hooks.onSpeaking?.(speaking)
+	}
+
+	async #waitForSegmentCapacity(epoch: number): Promise<void> {
+		while (epoch === this.#speechEpoch && this.#remainingSegmentCapacity === 0) {
+			await new Promise<void>((resolve) => this.#capacityWaiters.add(resolve))
+		}
+	}
+
+	#resetSegmentCapacity(): void {
+		this.#maxSegmentCapacity = 8
+		this.#remainingSegmentCapacity = 8
+		this.#wakeCapacityWaiters()
+	}
+
+	#wakeCapacityWaiters(): void {
+		for (const resolve of this.#capacityWaiters) resolve()
+		this.#capacityWaiters.clear()
+	}
+
+	#abortSpeechEpoch(epoch: number, error: unknown): void {
+		if (epoch !== this.#speechEpoch) return
+		this.failure = safeMessage(error)
+		this.#speechEpoch++
+		this.#planner.reset()
+		this.#resetSegmentCapacity()
+		const session = this.sessionId
+		const turn = this.#turn
+		this.#turn = null
+		this.#setSpeaking(false)
+		if (turn) this.#settlePlayback(turn, new Error(this.failure))
+		if (session) {
+			void this.backend.cancelSpeech({
+				session_id: session,
+				turn_id: turn ?? undefined,
+				reason: 'superseded'
+			})
+		}
 	}
 
 	#settlePlayback(turnId: TurnId, error?: Error): void {

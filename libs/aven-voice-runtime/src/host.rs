@@ -68,6 +68,59 @@ pub enum HostFaultCode {
     CallbackStalled,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[repr(u8)]
+pub enum HostCallbackFaultCode {
+    DeviceBusy,
+    DeviceChanged,
+    DeviceNotAvailable,
+    HostUnavailable,
+    InvalidInput,
+    PermissionDenied,
+    RealtimeDenied,
+    ResourceExhausted,
+    StreamInvalidated,
+    UnsupportedConfig,
+    UnsupportedOperation,
+    Xrun,
+    Backend,
+    Other,
+}
+
+impl HostCallbackFaultCode {
+    const ALL: [Self; 14] = [
+        Self::DeviceBusy,
+        Self::DeviceChanged,
+        Self::DeviceNotAvailable,
+        Self::HostUnavailable,
+        Self::InvalidInput,
+        Self::PermissionDenied,
+        Self::RealtimeDenied,
+        Self::ResourceExhausted,
+        Self::StreamInvalidated,
+        Self::UnsupportedConfig,
+        Self::UnsupportedOperation,
+        Self::Xrun,
+        Self::Backend,
+        Self::Other,
+    ];
+
+    const fn index(self) -> usize {
+        self as usize
+    }
+
+    pub const fn requires_route_rebuild(self) -> bool {
+        !matches!(self, Self::Xrun | Self::RealtimeDenied)
+    }
+
+    pub const fn recoverable(self) -> bool {
+        !matches!(
+            self,
+            Self::InvalidInput | Self::UnsupportedConfig | Self::UnsupportedOperation | Self::Other
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RouteInvalidationReason {
     DeviceRemoved,
@@ -94,6 +147,13 @@ pub enum HostEvent {
         generation: RouteGeneration,
         reason: RouteInvalidationReason,
     },
+    CallbackFault {
+        route: RouteId,
+        generation: RouteGeneration,
+        direction: StreamDirection,
+        code: HostCallbackFaultCode,
+        count: u64,
+    },
     DeviceSetChanged,
 }
 
@@ -118,7 +178,9 @@ pub struct HostEventPort {
     normal: BoundedRing<HostEvent>,
     device_changed: Arc<AtomicBool>,
     critical_overflow: Arc<AtomicBool>,
-    callback_fault: Arc<AtomicU64>,
+    callback_fault_capture: Arc<[AtomicU64; HostCallbackFaultCode::ALL.len()]>,
+    callback_fault_render: Arc<[AtomicU64; HostCallbackFaultCode::ALL.len()]>,
+    callback_fault_generation: Arc<AtomicU64>,
     bound_route: Arc<Mutex<Option<RouteId>>>,
     wake_tx: Sender<()>,
     wake_rx: Receiver<()>,
@@ -132,7 +194,9 @@ impl HostEventPort {
             normal: BoundedRing::new(normal_capacity),
             device_changed: Arc::new(AtomicBool::new(false)),
             critical_overflow: Arc::new(AtomicBool::new(false)),
-            callback_fault: Arc::new(AtomicU64::new(0)),
+            callback_fault_capture: Arc::new(std::array::from_fn(|_| AtomicU64::new(0))),
+            callback_fault_render: Arc::new(std::array::from_fn(|_| AtomicU64::new(0))),
+            callback_fault_generation: Arc::new(AtomicU64::new(0)),
             bound_route: Arc::new(Mutex::new(None)),
             wake_tx,
             wake_rx,
@@ -145,19 +209,19 @@ impl HostEventPort {
 
     /// Callback-safe fault publication: atomics only. The coordinator adds the
     /// bound route identity when it consumes the observation.
-    pub fn publish_callback_fault(&self, generation: RouteGeneration, direction: StreamDirection) {
-        let direction_bit = match direction {
-            StreamDirection::Capture => 1_u64,
-            StreamDirection::Render => 2_u64,
+    pub fn publish_callback_fault(
+        &self,
+        generation: RouteGeneration,
+        direction: StreamDirection,
+        code: HostCallbackFaultCode,
+    ) {
+        self.callback_fault_generation
+            .store(generation.0.saturating_add(1), Ordering::Release);
+        let counters = match direction {
+            StreamDirection::Capture => &self.callback_fault_capture,
+            StreamDirection::Render => &self.callback_fault_render,
         };
-        let encoded = generation.0.saturating_add(1) << 2 | direction_bit;
-        if self
-            .callback_fault
-            .compare_exchange(0, encoded, Ordering::AcqRel, Ordering::Relaxed)
-            .is_err()
-        {
-            self.critical_overflow.store(true, Ordering::Release);
-        }
+        counters[code.index()].fetch_add(1, Ordering::Relaxed);
         let _ = self.wake_tx.try_send(());
     }
 
@@ -179,29 +243,8 @@ impl HostEventPort {
     pub fn pop(&self) -> Option<HostEvent> {
         self.critical
             .pop()
-            .or_else(|| {
-                let encoded = self.callback_fault.swap(0, Ordering::AcqRel);
-                if encoded == 0 {
-                    return None;
-                }
-                let direction = if encoded & 3 == 1 {
-                    StreamDirection::Capture
-                } else {
-                    StreamDirection::Render
-                };
-                let generation = RouteGeneration((encoded >> 2).saturating_sub(1));
-                self.bound_route
-                    .lock()
-                    .expect("host route mutex poisoned")
-                    .clone()
-                    .map(|route| HostEvent::StreamFault {
-                        route,
-                        generation,
-                        direction,
-                        code: HostFaultCode::Backend,
-                        recoverable: true,
-                    })
-            })
+            .or_else(|| self.pop_callback_fault(StreamDirection::Capture))
+            .or_else(|| self.pop_callback_fault(StreamDirection::Render))
             .or_else(|| self.normal.pop())
             .or_else(|| {
                 self.device_changed
@@ -220,10 +263,22 @@ impl HostEventPort {
             normal: self.normal.clone(),
             device_changed: Arc::clone(&self.device_changed),
             critical_overflow: Arc::clone(&self.critical_overflow),
-            callback_fault: Arc::clone(&self.callback_fault),
+            callback_fault_capture: Arc::clone(&self.callback_fault_capture),
+            callback_fault_render: Arc::clone(&self.callback_fault_render),
+            callback_fault_generation: Arc::clone(&self.callback_fault_generation),
             bound_route: Arc::clone(&self.bound_route),
             wake_rx: self.wake_rx.clone(),
         }
+    }
+
+    fn pop_callback_fault(&self, direction: StreamDirection) -> Option<HostEvent> {
+        callback_fault_event(
+            direction,
+            &self.callback_fault_capture,
+            &self.callback_fault_render,
+            &self.callback_fault_generation,
+            &self.bound_route,
+        )
     }
 }
 
@@ -232,7 +287,9 @@ pub struct HostEventConsumer {
     normal: BoundedRing<HostEvent>,
     device_changed: Arc<AtomicBool>,
     critical_overflow: Arc<AtomicBool>,
-    callback_fault: Arc<AtomicU64>,
+    callback_fault_capture: Arc<[AtomicU64; HostCallbackFaultCode::ALL.len()]>,
+    callback_fault_render: Arc<[AtomicU64; HostCallbackFaultCode::ALL.len()]>,
+    callback_fault_generation: Arc<AtomicU64>,
     bound_route: Arc<Mutex<Option<RouteId>>>,
     wake_rx: Receiver<()>,
 }
@@ -250,29 +307,8 @@ impl HostEventConsumer {
     pub fn pop(&self) -> Option<HostEvent> {
         self.critical
             .pop()
-            .or_else(|| {
-                let encoded = self.callback_fault.swap(0, Ordering::AcqRel);
-                if encoded == 0 {
-                    return None;
-                }
-                let direction = if encoded & 3 == 1 {
-                    StreamDirection::Capture
-                } else {
-                    StreamDirection::Render
-                };
-                let generation = RouteGeneration((encoded >> 2).saturating_sub(1));
-                self.bound_route
-                    .lock()
-                    .expect("host route mutex poisoned")
-                    .clone()
-                    .map(|route| HostEvent::StreamFault {
-                        route,
-                        generation,
-                        direction,
-                        code: HostFaultCode::Backend,
-                        recoverable: true,
-                    })
-            })
+            .or_else(|| self.pop_callback_fault(StreamDirection::Capture))
+            .or_else(|| self.pop_callback_fault(StreamDirection::Render))
             .or_else(|| self.normal.pop())
             .or_else(|| {
                 self.device_changed
@@ -288,6 +324,45 @@ impl HostEventConsumer {
     pub fn take_critical_overflowed(&self) -> bool {
         self.critical_overflow.swap(false, Ordering::AcqRel)
     }
+
+    fn pop_callback_fault(&self, direction: StreamDirection) -> Option<HostEvent> {
+        callback_fault_event(
+            direction,
+            &self.callback_fault_capture,
+            &self.callback_fault_render,
+            &self.callback_fault_generation,
+            &self.bound_route,
+        )
+    }
+}
+
+fn callback_fault_event(
+    direction: StreamDirection,
+    capture: &[AtomicU64; HostCallbackFaultCode::ALL.len()],
+    render: &[AtomicU64; HostCallbackFaultCode::ALL.len()],
+    generation: &AtomicU64,
+    bound_route: &Mutex<Option<RouteId>>,
+) -> Option<HostEvent> {
+    let counters = match direction {
+        StreamDirection::Capture => capture,
+        StreamDirection::Render => render,
+    };
+    let (code, count) = HostCallbackFaultCode::ALL.iter().find_map(|code| {
+        let count = counters[code.index()].swap(0, Ordering::AcqRel);
+        (count > 0).then_some((*code, count))
+    })?;
+    let generation = RouteGeneration(generation.load(Ordering::Acquire).saturating_sub(1));
+    bound_route
+        .lock()
+        .expect("host route mutex poisoned")
+        .clone()
+        .map(|route| HostEvent::CallbackFault {
+            route,
+            generation,
+            direction,
+            code,
+            count,
+        })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1022,6 +1097,54 @@ mod tests {
         assert_eq!(output, [0.0; 8]);
         assert_eq!(write.underrun_frames, 4);
         assert!(!port.speaking());
+    }
+
+    #[test]
+    fn callback_faults_are_categorized_and_coalesced_without_overflow() {
+        let events = HostEventPort::new(1, 1);
+        events.bind_route(RouteId::parse("route-xrun").unwrap());
+        let consumer = events.consumer();
+        for _ in 0..3 {
+            events.publish_callback_fault(
+                RouteGeneration(7),
+                StreamDirection::Render,
+                HostCallbackFaultCode::Xrun,
+            );
+        }
+        events.publish_callback_fault(
+            RouteGeneration(7),
+            StreamDirection::Render,
+            HostCallbackFaultCode::Backend,
+        );
+        assert!(matches!(
+            consumer.pop(),
+            Some(HostEvent::CallbackFault {
+                generation: RouteGeneration(7),
+                direction: StreamDirection::Render,
+                code: HostCallbackFaultCode::Xrun,
+                count: 3,
+                ..
+            })
+        ));
+        assert!(matches!(
+            consumer.pop(),
+            Some(HostEvent::CallbackFault {
+                code: HostCallbackFaultCode::Backend,
+                count: 1,
+                ..
+            })
+        ));
+        assert!(!consumer.take_critical_overflowed());
+    }
+
+    #[test]
+    fn callback_fault_policy_only_keeps_self_recovering_streams_alive() {
+        assert!(!HostCallbackFaultCode::Xrun.requires_route_rebuild());
+        assert!(!HostCallbackFaultCode::RealtimeDenied.requires_route_rebuild());
+        assert!(HostCallbackFaultCode::DeviceChanged.requires_route_rebuild());
+        assert!(HostCallbackFaultCode::Backend.requires_route_rebuild());
+        assert!(HostCallbackFaultCode::Backend.recoverable());
+        assert!(!HostCallbackFaultCode::Other.recoverable());
     }
 
     #[test]

@@ -21,7 +21,11 @@ crate manifests and are updated only with a new qualification run.
   complete item with `force_push`.
 - `cpal = 0.18.2` (Apache-2.0): supplies the single shared duplex host. Stream
   construction and device enumeration stay on the host-control worker; streams
-  are started only after both ports and DSP state exist.
+  are started only after both ports and DSP state exist. Linux enables CPAL's
+  PulseAudio backend so PipeWire/Pulse desktop routes are used when available,
+  with ALSA retained as CPAL's fallback. Direct ALSA through the Pulse plugin is
+  not qualified: on the reference XPS it produced an unpaced output loop and a
+  backend-error storm.
 - `ts-rs = 12.0.1` (MIT): Rust protocol types generate the checked TypeScript
   contract. A drift test compares generated text byte-for-byte.
 - `ort = 2.0.0-rc.13` with ONNX Runtime `1.28.0`: Linux uses Microsoft's
@@ -85,3 +89,55 @@ still reports full-duplex barge-in as unavailable until software AEC reaches
 `converged`; the opt-in does not bypass echo health, generation, or lexical-ASR
 confirmation gates. Remove the variable or set it to `0` to return to guarded
 turn-taking.
+
+Before launching the app, run the standalone host probe from the repository
+root. It opens the real default microphone and speaker, renders silence, and
+prints one machine-readable JSON record. It does not load Tauri, ASR, TTS, or
+the AEC model.
+
+```sh
+cargo run --locked \
+  --manifest-path libs/aven-voice-host-cpal/Cargo.toml \
+  --features cpal-host \
+  --bin aven-voice-duplex-probe
+```
+
+The default run is 15 seconds. `route_usable: true` requires capture and render
+pacing within 20 percent of wall time after the backend's startup prebuffer and
+zero route-fatal callback faults. `strict_pass: true` additionally
+requires zero callback warnings, including xruns. The report includes the host
+backend, device names, formats, callback/frame counts, pacing ratio, and every
+coalesced CPAL error category so a failing machine can be diagnosed without GUI
+logs. A duration in seconds may be passed after `--` for investigation; the
+15-second default is the minimum comparable result.
+
+For an active acoustic calibration, place the laptop in its normal speaking
+position, set a comfortable system volume, keep the room quiet, and run:
+
+```sh
+cargo run --locked \
+  --manifest-path libs/aven-voice-host-cpal/Cargo.toml \
+  --features cpal-host \
+  --bin aven-voice-duplex-probe -- \
+  --calibrate --level-dbfs -24
+```
+
+Start at `-24` dBFS. If the result reports less than 3 dB
+`probe_signal_to_ambient_db` and capture is not clipping, repeat at `-18` dBFS.
+The verifier never permits a digital level above `-18` dBFS. Lower the system
+speaker volume and repeat if `clipped_fraction` reaches one percent.
+
+This is opt-in because it audibly plays three click-free deterministic streams:
+a pseudo-random probe, a logarithmic chirp, and a multitone signal. The digital
+level is clamped to the safe test range from -36 to -18 dBFS. The verifier uses
+the exact post-render reference and simultaneous microphone capture to estimate
+the route's acoustic echo delay, correlation, ambient floor, capture peak,
+clipping, and per-stream signal-to-ambient ratio. `calibrated: true` requires a
+usable duplex route, a detected probe with correlation at least 0.15 and signal
+energy at least 3 dB above ambient, a delay within the supported 500 ms reference
+history, and less than one percent clipped capture. The JSON result is the
+route-specific calibration record. `recommended_delay_hint_ms` is the measured
+starting point for diagnosing that route; it is not a permanent global override.
+Changing the microphone, speaker, system route, or acoustic layout invalidates
+the result. The application continues to align clocks and assess AEC convergence
+while it runs, so calibration never weakens the continuous echo-safety gate.

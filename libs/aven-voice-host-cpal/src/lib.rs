@@ -3,12 +3,14 @@
 
 #![cfg(feature = "cpal-host")]
 
+pub mod calibration;
+
 use aven_voice_core::{MonoTimeNs, RouteGeneration};
 use aven_voice_protocol::RouteId;
 use aven_voice_runtime::{
-    AudioPorts, CallbackTime, CaptureConditioning, DuplexHost, HostError, HostFaultCode,
-    HostSampleFormat, RouteDescriptor, RouteRequest, StreamDescriptor, StreamDirection,
-    TimestampQuality,
+    AudioPorts, CallbackTime, CaptureConditioning, DuplexHost, HostCallbackFaultCode, HostError,
+    HostFaultCode, HostSampleFormat, RouteDescriptor, RouteRequest, StreamDescriptor,
+    StreamDirection, TimestampQuality,
 };
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
@@ -37,6 +39,22 @@ impl Default for CpalDuplexHost {
 impl CpalDuplexHost {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Human-readable backend and default-device names for control-thread
+    /// diagnostics. This must not be called from an audio callback.
+    pub fn diagnostic_identity(&self) -> HostDiagnosticIdentity {
+        HostDiagnosticIdentity {
+            backend: self.host.id().name(),
+            input_device: self
+                .host
+                .default_input_device()
+                .map(|device| device.to_string()),
+            output_device: self
+                .host
+                .default_output_device()
+                .map(|device| device.to_string()),
+        }
     }
 
     /// Read the default duplex formats on the host-control worker so ports can
@@ -95,6 +113,13 @@ impl CpalDuplexHost {
         )?;
         Ok((descriptor(&input), descriptor(&output)))
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HostDiagnosticIdentity {
+    pub backend: &'static str,
+    pub input_device: Option<String>,
+    pub output_device: Option<String>,
 }
 
 impl DuplexHost for CpalDuplexHost {
@@ -187,7 +212,7 @@ impl DuplexHost for CpalDuplexHost {
         let input_events = ports.events.clone();
         let input_generation = request.generation;
         let input_channels = input_descriptor.channels;
-        let input_config: cpal::StreamConfig = input_supported.into();
+        let input_config = stream_config(input_supported);
         let input = input_device
             .build_input_stream(
                 input_config,
@@ -205,8 +230,12 @@ impl DuplexHost for CpalDuplexHost {
                         input_generation,
                     );
                 },
-                move |_error| {
-                    input_events.publish_callback_fault(input_generation, StreamDirection::Capture);
+                move |error| {
+                    input_events.publish_callback_fault(
+                        input_generation,
+                        StreamDirection::Capture,
+                        callback_fault_code(error.kind()),
+                    );
                 },
                 None,
             )
@@ -222,7 +251,7 @@ impl DuplexHost for CpalDuplexHost {
         let output_events = ports.events.clone();
         let output_generation = request.generation;
         let output_channels = output_descriptor.channels;
-        let output_config: cpal::StreamConfig = output_supported.into();
+        let output_config = stream_config(output_supported);
         let output = output_device
             .build_output_stream(
                 output_config,
@@ -240,9 +269,12 @@ impl DuplexHost for CpalDuplexHost {
                         output_generation,
                     );
                 },
-                move |_error| {
-                    output_events
-                        .publish_callback_fault(output_generation, StreamDirection::Render);
+                move |error| {
+                    output_events.publish_callback_fault(
+                        output_generation,
+                        StreamDirection::Render,
+                        callback_fault_code(error.kind()),
+                    );
                 },
                 None,
             )
@@ -332,7 +364,24 @@ fn descriptor(config: &cpal::SupportedStreamConfig) -> StreamDescriptor {
         sample_rate_hz: config.sample_rate(),
         channels: config.channels(),
         sample_format: HostSampleFormat::Float { bits: 32 },
-        nominal_callback_frames: None,
+        nominal_callback_frames: selected_buffer_frames(config),
+    }
+}
+
+fn stream_config(supported: cpal::SupportedStreamConfig) -> cpal::StreamConfig {
+    let buffer_size = selected_buffer_frames(&supported)
+        .map(cpal::BufferSize::Fixed)
+        .unwrap_or_default();
+    let mut config: cpal::StreamConfig = supported.into();
+    config.buffer_size = buffer_size;
+    config
+}
+
+fn selected_buffer_frames(config: &cpal::SupportedStreamConfig) -> Option<u32> {
+    let target = config.sample_rate().div_ceil(100);
+    match config.buffer_size() {
+        cpal::SupportedBufferSize::Range { min, max } => Some(target.clamp(*min, *max)),
+        cpal::SupportedBufferSize::Unknown => None,
     }
 }
 
@@ -363,6 +412,26 @@ fn stream_time(value: cpal::StreamInstant) -> MonoTimeNs {
     MonoTimeNs(value.as_nanos().min(u128::from(u64::MAX)) as u64)
 }
 
+fn callback_fault_code(kind: cpal::ErrorKind) -> HostCallbackFaultCode {
+    match kind {
+        cpal::ErrorKind::DeviceBusy => HostCallbackFaultCode::DeviceBusy,
+        cpal::ErrorKind::DeviceChanged => HostCallbackFaultCode::DeviceChanged,
+        cpal::ErrorKind::DeviceNotAvailable => HostCallbackFaultCode::DeviceNotAvailable,
+        cpal::ErrorKind::HostUnavailable => HostCallbackFaultCode::HostUnavailable,
+        cpal::ErrorKind::InvalidInput => HostCallbackFaultCode::InvalidInput,
+        cpal::ErrorKind::PermissionDenied => HostCallbackFaultCode::PermissionDenied,
+        cpal::ErrorKind::RealtimeDenied => HostCallbackFaultCode::RealtimeDenied,
+        cpal::ErrorKind::ResourceExhausted => HostCallbackFaultCode::ResourceExhausted,
+        cpal::ErrorKind::StreamInvalidated => HostCallbackFaultCode::StreamInvalidated,
+        cpal::ErrorKind::UnsupportedConfig => HostCallbackFaultCode::UnsupportedConfig,
+        cpal::ErrorKind::UnsupportedOperation => HostCallbackFaultCode::UnsupportedOperation,
+        cpal::ErrorKind::Xrun => HostCallbackFaultCode::Xrun,
+        cpal::ErrorKind::BackendError => HostCallbackFaultCode::Backend,
+        cpal::ErrorKind::Other => HostCallbackFaultCode::Other,
+        _ => HostCallbackFaultCode::Other,
+    }
+}
+
 fn host_error(code: HostFaultCode, user_message: &'static str, recoverable: bool) -> HostError {
     HostError {
         code,
@@ -381,5 +450,31 @@ mod tests {
             stream_time(cpal::StreamInstant::new(2, 3)),
             MonoTimeNs(2_000_000_003)
         );
+    }
+
+    #[test]
+    fn callback_buffer_targets_ten_ms_within_the_supported_range() {
+        let config = cpal::SupportedStreamConfig::new(
+            1,
+            48_000,
+            cpal::SupportedBufferSize::Range { min: 256, max: 512 },
+            cpal::SampleFormat::F32,
+        );
+        assert_eq!(selected_buffer_frames(&config), Some(480));
+        assert_eq!(
+            stream_config(config).buffer_size,
+            cpal::BufferSize::Fixed(480)
+        );
+
+        let clamped = cpal::SupportedStreamConfig::new(
+            1,
+            48_000,
+            cpal::SupportedBufferSize::Range {
+                min: 512,
+                max: 1_024,
+            },
+            cpal::SampleFormat::F32,
+        );
+        assert_eq!(selected_buffer_frames(&clamped), Some(512));
     }
 }

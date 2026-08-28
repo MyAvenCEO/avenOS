@@ -99,6 +99,7 @@ pub struct TurnState {
     pub id: TurnId,
     pub generation: OutputGeneration,
     pub segments: Vec<String>,
+    pub started_segments: usize,
     pub finished: bool,
     pub speaking: bool,
     pub language: String,
@@ -324,6 +325,7 @@ impl VoiceState {
                     id: turn_id.clone(),
                     generation: self.output_generation,
                     segments: Vec::new(),
+                    started_segments: 0,
                     finished: false,
                     speaking: false,
                     language,
@@ -349,6 +351,9 @@ impl VoiceState {
                 let Some(turn) = self.turn.as_mut().filter(|turn| turn.id == turn_id) else {
                     return self.stale_turn();
                 };
+                if turn.finished {
+                    return self.stale_turn();
+                }
                 if text.trim().is_empty() || text.chars().count() > self.config.max_segment_chars {
                     return (
                         Err(CoreError::new(
@@ -364,10 +369,9 @@ impl VoiceState {
                         (
                             Ok(CachedResult::Enqueued {
                                 idempotent: true,
-                                remaining_capacity: self
-                                    .config
-                                    .max_queued_segments
-                                    .saturating_sub(turn.segments.len()),
+                                remaining_capacity: self.config.max_queued_segments.saturating_sub(
+                                    turn.segments.len().saturating_sub(turn.started_segments),
+                                ),
                             }),
                             Vec::new(),
                         )
@@ -390,7 +394,8 @@ impl VoiceState {
                         Vec::new(),
                     );
                 }
-                if turn.segments.len() == self.config.max_queued_segments {
+                let pending_segments = turn.segments.len().saturating_sub(turn.started_segments);
+                if pending_segments == self.config.max_queued_segments {
                     return (
                         Err(CoreError::new(
                             VoiceErrorCode::QueueFull,
@@ -400,6 +405,7 @@ impl VoiceState {
                     );
                 }
                 turn.segments.push(text.clone());
+                let pending_segments = pending_segments + 1;
                 let generation = turn.generation;
                 let language = turn.language.clone();
                 let voice = turn.voice.clone();
@@ -409,7 +415,7 @@ impl VoiceState {
                         remaining_capacity: self
                             .config
                             .max_queued_segments
-                            .saturating_sub(turn.segments.len()),
+                            .saturating_sub(pending_segments),
                     }),
                     vec![
                         Action::EnqueueTts {
@@ -423,6 +429,13 @@ impl VoiceState {
                         Action::Emit(VoiceEvent::PlaybackSegmentAccepted {
                             turn_id,
                             segment_index,
+                        }),
+                        Action::Emit(VoiceEvent::CapacityChanged {
+                            pending_segments: pending_segments.min(u16::MAX as usize) as u16,
+                            synthesized_lead_ms: ((self.metrics.queued_seconds
+                                + self.metrics.buffered_seconds)
+                                * 1_000.0)
+                                .max(0.0) as u32,
                         }),
                     ],
                 )
@@ -754,15 +767,27 @@ impl VoiceState {
                 segment_index,
                 generation,
             } => {
-                if self
+                if let Some(turn) = self
                     .turn
-                    .as_ref()
-                    .is_some_and(|turn| turn.id == turn_id && turn.generation == generation)
+                    .as_mut()
+                    .filter(|turn| turn.id == turn_id && turn.generation == generation)
                 {
+                    if turn.started_segments == segment_index as usize {
+                        turn.started_segments += 1;
+                    }
+                    let pending_segments =
+                        turn.segments.len().saturating_sub(turn.started_segments);
                     self.playback_status = PlaybackStatus::Synthesizing;
                     actions.push(Action::Emit(VoiceEvent::PlaybackSynthesisStarted {
                         turn_id,
                         segment_index,
+                    }));
+                    actions.push(Action::Emit(VoiceEvent::CapacityChanged {
+                        pending_segments: pending_segments.min(u16::MAX as usize) as u16,
+                        synthesized_lead_ms: ((self.metrics.queued_seconds
+                            + self.metrics.buffered_seconds)
+                            * 1_000.0)
+                            .max(0.0) as u32,
                     }));
                 }
             }
@@ -1844,6 +1869,79 @@ mod tests {
                 .unwrap_err()
                 .code,
             VoiceErrorCode::SegmentOutOfOrder
+        );
+    }
+
+    #[test]
+    fn segment_capacity_tracks_pending_synthesis_instead_of_turn_history() {
+        let (mut state, session) = active_state();
+        let turn = begin_turn(&mut state, &session);
+        let generation = state.turn.as_ref().unwrap().generation;
+        for index in 0..8 {
+            state
+                .command(
+                    Command::EnqueueSpeech {
+                        request_id: request(&format!("pending-{index}")),
+                        session_id: session.clone(),
+                        turn_id: turn.clone(),
+                        segment_index: index,
+                        text: format!("Segment {index}."),
+                    },
+                    MonoTimeNs(0),
+                )
+                .0
+                .unwrap();
+        }
+        assert_eq!(
+            state
+                .command(
+                    Command::EnqueueSpeech {
+                        request_id: request("pending-full"),
+                        session_id: session.clone(),
+                        turn_id: turn.clone(),
+                        segment_index: 8,
+                        text: "Noch nicht.".into(),
+                    },
+                    MonoTimeNs(0),
+                )
+                .0
+                .unwrap_err()
+                .code,
+            VoiceErrorCode::QueueFull
+        );
+
+        let actions = state.observe(
+            Observation::SynthesisStarted {
+                turn_id: turn.clone(),
+                segment_index: 0,
+                generation,
+            },
+            MonoTimeNs(1),
+        );
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            Action::Emit(VoiceEvent::CapacityChanged {
+                pending_segments: 7,
+                ..
+            })
+        )));
+        assert_eq!(
+            state
+                .command(
+                    Command::EnqueueSpeech {
+                        request_id: request("pending-after-start"),
+                        session_id: session,
+                        turn_id: turn,
+                        segment_index: 8,
+                        text: "Jetzt passt es.".into(),
+                    },
+                    MonoTimeNs(2),
+                )
+                .0,
+            Ok(CachedResult::Enqueued {
+                idempotent: false,
+                remaining_capacity: 0,
+            })
         );
     }
 
