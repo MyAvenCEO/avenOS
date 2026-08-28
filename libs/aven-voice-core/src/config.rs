@@ -1,7 +1,7 @@
 #[derive(Clone, Debug, PartialEq)]
 pub struct VoiceConfigV1 {
-    /// Release gate for automatic interruption while far-end audio is audible.
-    /// It remains off until the physical AEC qualification gates pass.
+    /// Deployment policy for automatic interruption while far-end audio is audible.
+    /// Echo convergence and lexical confirmation remain mandatory when enabled.
     pub allow_full_duplex_barge_in: bool,
     pub speech_threshold: f32,
     pub start_windows: u32,
@@ -25,7 +25,7 @@ pub struct VoiceConfigV1 {
 impl Default for VoiceConfigV1 {
     fn default() -> Self {
         Self {
-            allow_full_duplex_barge_in: false,
+            allow_full_duplex_barge_in: true,
             speech_threshold: 0.5,
             start_windows: 2,
             end_windows: 28,
@@ -44,5 +44,15 @@ impl Default for VoiceConfigV1 {
             maximum_drift_ppm: 1_000,
             drift_slew_ppm_per_second: 50,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tester_deployment_enables_full_duplex_by_default() {
+        assert!(VoiceConfigV1::default().allow_full_duplex_barge_in);
     }
 }

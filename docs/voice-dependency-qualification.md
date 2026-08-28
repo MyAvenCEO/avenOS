@@ -64,9 +64,10 @@ These values are conservative initial gates. Physical qualification may make
 them stricter. It must never make the lexical confirmation or echo-safety policy
 weaker without updating the normative specification.
 
-Automatic full-duplex barge-in remains release-gated off by default until the
-physical corpus and reference-device gates below pass. The software backend is
-therefore conservative even when synthetic AEC convergence succeeds.
+The current two-user tester deployment accepts the XPS laptop calibration below
+as sufficient representative hardware evidence, so automatic full-duplex
+barge-in is enabled by default on every route. This deployment decision does not
+bypass continuous AEC convergence or lexical-ASR confirmation.
 
 ## Known qualification boundary
 
@@ -75,20 +76,26 @@ generations, cancellation, and fixed memory. Acoustic corpus, CPU, deployment
 floor, and device-route release gates require the physical qualification phase
 and are not represented as passing merely because software tests pass.
 
-## Laptop qualification opt-in
+## Tester deployment policy
 
-Full-duplex barge-in can be enabled explicitly for physical testing without
-changing the production-safe default:
+Full-duplex barge-in is enabled without an environment setting for the current
+tester deployment. A tester can temporarily force guarded turn-taking while
+diagnosing a device by setting:
 
 ```sh
-AVEN_VOICE_FULL_DUPLEX_BARGE_IN=1 bun run dev:app:linux
+AVEN_VOICE_FULL_DUPLEX_BARGE_IN=0 bun run dev:app:linux
 ```
 
-The setting may instead be added to the local `.env.daniel` file. The route
-still reports full-duplex barge-in as unavailable until software AEC reaches
-`converged`; the opt-in does not bypass echo health, generation, or lexical-ASR
-confirmation gates. Remove the variable or set it to `0` to return to guarded
-turn-taking.
+The route still reports full-duplex barge-in as unavailable until software AEC
+reaches `converged`. Default-on deployment does not bypass echo health,
+generation, or lexical-ASR confirmation gates.
+
+The initial reference calibration on the built-in PulseAudio microphone and
+speaker passed at -18 dBFS with a 5.39 dB probe-to-ambient ratio, 0.4199
+correlation, 30.60 ms estimated echo delay, zero clipping, and zero callback
+faults. For this limited tester population, that result authorizes testing on
+other devices without a per-device qualification gate. Each device's runtime
+diagnostics and tester feedback remain evidence for later production criteria.
 
 Before launching the app, run the standalone host probe from the repository
 root. It opens the real default microphone and speaker, renders silence, and
