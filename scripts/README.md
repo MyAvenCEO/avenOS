@@ -14,11 +14,13 @@ Repo-root automation for the **avenCITY Tauri app**, the Aven API, and releases.
 | `dev:app:mac` | `dev-app-macos.ts` | Tauri dev (macOS) |
 | `dev:app:linux` | `dev-app-linux.ts` | Tauri dev (Linux) |
 | `dev:app:ios` | `dev-app-ios.ts` | iOS Simulator dev |
+| `dev:app:android` | `build-app-android.ts --dev` | Android device/emulator dev |
 | `clean:app:rust` | `clean-app-tauri-target.ts` | Wipe shared `target/rust` |
 | `gc:rust` | `gc-rust-target.sh` | Reclaim space in the shared Rust target dir |
 | `icons` | `generate-app-icons.ts` | Rebuild every app icon from one svg/png/jpg source |
 | `build:app:mac` | `build-appstore-macos.ts` | Signed Mac App Store `.pkg` |
 | `build:app:linux` | `build-app-linux.ts` | Linux build with native dependency preflight |
+| `build:app:android` | `build-app-android.ts` | Signed debug APK (or explicitly signed release APK/AAB) |
 | `release:app:*` | `release-app.ts` | macOS `.pkg` / iOS `.ipa` build + altool upload |
 | `next-version` / `set-version` | `next-version.ts`, `set-version.ts` | CalVer derivation + stamping |
 | `release:next` | `release-next.ts` | Cut the `next` prerelease locally |

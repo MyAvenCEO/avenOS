@@ -20,6 +20,9 @@ Variables:
 - `PUBLIC_BASE_URL`
 - `IDENTITY_DOMAIN`
 - `WEBAUTHN_RP_ID`
+- `ANDROID_PLAY_APP_CERT_SHA256_FINGERPRINTS` (optional Play App Signing
+  certificate allowlist; CI derives the direct-release certificate from its
+  keystore; see the [Android Digital Asset Links guide](../../../docs/deploy/android-digital-asset-links.md))
 - `DOWNLOAD_URL`
 - `SMTP_FROM`
 - `NAME_PRICE_EUR`
@@ -92,6 +95,10 @@ Secrets:
 - `DEPLOY_SSH_KEY`
 - `DEPLOY_KNOWN_HOSTS`
 - `GHCR_READ_TOKEN`
+- `ANDROID_KEYSTORE_BASE64` (required by the opt-in Android release job)
+- `ANDROID_KEYSTORE_PASSWORD` (required by the opt-in Android release job)
+- `ANDROID_KEY_ALIAS` (required by the opt-in Android release job)
+- `ANDROID_KEY_PASSWORD` (required by the opt-in Android release job)
 
 `IDENTITY_DOMAIN` is the hostname from `PUBLIC_BASE_URL`, without a scheme or path. The deploy host must allow inbound TCP 80/443 and UDP 443.
 

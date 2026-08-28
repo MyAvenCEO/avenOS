@@ -8,6 +8,7 @@ Bun **monorepo**: active code lives under `libs/`, `app/`, `services/`, and `doc
 | **`libs/aven-db`** | Local-first Groove core (RocksDB, sync layer) |
 | **`libs/aven-p2p`** | Placeholder for future sync transport |
 | **`libs/tauri-plugin-self`** | Device identity Tauri plugin |
+| **`libs/tauri-plugin-android-passkey`** | Android Credential Manager passkeys and runtime platform permissions |
 | **`libs/aven-vibes`** | `@avenos/aven-vibes` — mini-app HTML catalog for intent HITL views |
 | **`libs/aven-vibe-sandbox`** | `@avenos/aven-vibe-sandbox` — MCP app sandbox host (iframe / Tauri WebView) |
 | **`docs`** | `@avenos/docs` — Markdown for in-app docs (self, network, sparks, deploy, content) |
@@ -41,9 +42,11 @@ bun run dev:ocr-example    # prints CLI help (requires Python + venv above)
 bun run dev:app:all        # Tauri desktop app (macOS or Linux — auto)
 bun run dev:app:mac        # Tauri desktop app on macOS
 bun run dev:app:ios        # Tauri in iOS Simulator — `tauri ios dev [device]` (macOS + Xcode; run ios init once)
+bun run dev:app:android    # Tauri on an Android device/emulator (Android Studio SDK + NDK)
 bun run dev:app:linux      # Tauri desktop app on Linux
 bun run dev:app            # SvelteKit only in browser (:1420), no Tauri shell
 bun run dev:api            # Identity API and checkout UI
+bun run build:app:android  # Signed debug APK in dist/android/
 
 # or from the package folder
 cd libs/aven-website && bun run dev
@@ -111,9 +114,11 @@ for additional configuration and detached operation.
 
 ### Native passkey authentication
 
-The Tauri app is gated on launch. On supported Apple devices it requests a challenge for `id.next.aven.ceo`, opens the native system passkey sheet, and exchanges the assertion for a revocable Better Auth bearer session. Only platforms or OS versions without that native mechanism fall back to the HTTPS device-code approval flow in the system browser while avenOS shows a waiting screen. The bearer token is not exposed to the frontend or persisted in browser storage; this spike requires authentication again after an app restart.
+The Tauri app is gated on launch. On supported Apple devices and Android 9+ it requests a challenge for `id.next.aven.ceo`, opens the native system passkey sheet (Authentication Services or Android Credential Manager), and exchanges the assertion for a revocable Better Auth bearer session. Only platforms or OS versions without that native mechanism fall back to the HTTPS device-code approval flow in the system browser while avenOS shows a waiting screen. The bearer token is not exposed to the frontend or persisted in browser storage; this spike requires authentication again after an app restart.
 
 The authentication spike accepts ordinary passkeys; WebAuthn PRF is optional until encrypted client data needs it. Firefox on Linux exposes WebAuthn but has no built-in platform passkey provider, so enrollment there requires a FIDO2 security key or a passkey-provider extension. The same setup link can instead be opened on a browser or device with a platform passkey provider.
+
+Android signing, Digital Asset Links, prerequisites, and the on-device checklist are in [the Android APK guide](docs/deploy/android-apk.md).
 
 For local development, run the identity API and compile the app with its local origin:
 

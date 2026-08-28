@@ -13,6 +13,8 @@
 		"tauri": "bun --bun x tauri",
 		"tauri:dev": "bun --bun x tauri dev",
 		"tauri:ios:dev:sim": "bun --bun x tauri ios dev",
+		"tauri:android:dev": "bun --bun x tauri android dev",
+		"tauri:android:build": "bun --bun x tauri android build --apk",
 		"tauri:build:macos": "bun --bun x tauri build",
 		"tauri:build:linux": "bun --bun x tauri build --bundles deb,appimage",
 		"tauri:ios:build:asc": "bun ../scripts/tauri-ios-asc.ts"

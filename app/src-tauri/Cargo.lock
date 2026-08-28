@@ -362,6 +362,7 @@ dependencies = [
  "sha2",
  "tauri",
  "tauri-build",
+ "tauri-plugin-android-passkey",
  "tauri-plugin-ios-passkey",
  "tauri-plugin-macos-passkey",
  "tauri-plugin-opener",
@@ -4855,6 +4856,16 @@ dependencies = [
  "serde_json",
  "tauri-utils",
  "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-android-passkey"
+version = "26.8.28-next.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]
