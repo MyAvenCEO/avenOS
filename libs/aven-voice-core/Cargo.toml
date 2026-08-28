@@ -1,6 +1,6 @@
 [package]
 name = "aven-voice-core"
-version = "26.8.28-next.4"
+version = "26.8.28-next.5"
 edition = "2021"
 rust-version = "1.93"
 

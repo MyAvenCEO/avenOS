@@ -1,3 +1,16 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.4...v) (2026-08-28)
+
+
+### Bug Fixes
+
+* **android:** exclude desktop ONNX runtime assets ([31ca816](https://github.com/MyAvenCEO/avenOS/commit/31ca8160a0ddd8176578077888fd9ed44a17cdcd))
+
+
+### Features
+
+* **voice:** add anonymous speaker diarization ([7fa44f6](https://github.com/MyAvenCEO/avenOS/commit/7fa44f6dea350f8cbce4c1d18d196f8664b3c35d))
+* **voice:** add autonomous duplex refinement lab ([1a372a6](https://github.com/MyAvenCEO/avenOS/commit/1a372a6d043f03b63c49c8c190f17bd5b8d22424))
+* **voice:** add guarded tester barge-in fallback ([936989b](https://github.com/MyAvenCEO/avenOS/commit/936989bd25c8400c1d42df9447f91058a8ca8a2f))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.3...v) (2026-08-28)
 
 
