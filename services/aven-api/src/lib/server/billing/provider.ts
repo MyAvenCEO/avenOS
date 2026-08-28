@@ -51,7 +51,7 @@ export interface ProductSeed {
 	description: string
 	priceCents: number
 	/** `null` = one-time (avenNAME, wire key `aven-name`), otherwise the recurring interval. */
-	interval: 'month' | null
+	interval: 'week' | 'month' | null
 }
 
 export interface SubscriptionCheckoutInput {

@@ -42,7 +42,7 @@
 		"@avenos/artifact-store": "workspace:*",
 		"@avenos/aven-hosting": "workspace:*",
 		"@better-auth/passkey": "1.6.23",
-		"@myavenceo/aven-ceo": "^0.8.1",
+		"@myavenceo/aven-ceo": "^0.9.0",
 		"@polar-sh/sdk": "^0.49.0",
 		"better-auth": "1.6.23",
 		"dotenv": "17.3.1",

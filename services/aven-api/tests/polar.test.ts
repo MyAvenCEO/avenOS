@@ -41,15 +41,15 @@ describe('provider factory', () => {
 })
 
 describe('product seeds', () => {
-	it('come from the SSOT: gross cents, avenNAME one-time, avenCEO monthly', () => {
+	it('come from the SSOT: gross cents, avenNAME one-time, avenCEO weekly', () => {
 		const seeds = productSeeds()
 		expect(seeds.map((seed) => seed.tier)).toEqual(['aven-name', 'aven-ceo'])
 		const byTier = Object.fromEntries(seeds.map((seed) => [seed.tier, seed]))
 		expect(byTier['aven-name']?.interval).toBeNull()
-		expect(byTier['aven-ceo']?.interval).toBe('month')
+		expect(byTier['aven-ceo']?.interval).toBe('week')
 		// GROSS cents straight from the SSOT — tax-inclusive at the provider.
 		expect(byTier['aven-name']?.priceCents).toBe(2500)
-		expect(byTier['aven-ceo']?.priceCents).toBe(38500)
+		expect(byTier['aven-ceo']?.priceCents).toBe(9900)
 	})
 
 	it('describes every product from the SSOT: role line, then plain-title bullets', () => {
@@ -73,8 +73,9 @@ describe('product seeds', () => {
 describe('product benefit specs', () => {
 	it('derives cascaded skill flags and the runtime benefit per tier', () => {
 		const specs = productBenefitSpecs()
-		// avenNAME sells the name, not skills or runtime.
-		expect(specs['aven-name']).toEqual([])
+		// avenNAME sells the name and carries no skills — just its one-off MIND
+		// credit grant for the early-bird test ride.
+		expect(specs['aven-name'].map((spec) => spec.key)).toEqual(['runtime:aven-name'])
 		// avenCEO consolidates the skills (personal inbox-router + company
 		// book-keeper) and carries its own runtime. The exact flag COUNT depends
 		// on the SSOT package data, so it is only asserted to be non-empty here.
@@ -200,7 +201,7 @@ describe('polar wire parsers', () => {
 					external_id: 'user-1',
 					active_subscriptions: [
 						{ id: 'sub_me', status: 'active', amount: 5500, cancel_at_period_end: false },
-						{ id: 'sub_ceo', status: 'active', amount: 38500, cancel_at_period_end: true }
+						{ id: 'sub_ceo', status: 'active', amount: 9900, cancel_at_period_end: true }
 					]
 				}
 			})
