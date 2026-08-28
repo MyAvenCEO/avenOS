@@ -16,6 +16,7 @@ on:
       - 'app/src/lib/actors/listener.actor.svelte.ts'
       - 'app/tests/voice-*.test.ts'
       - 'scripts/fetch-onnxruntime.ts'
+      - 'scripts/tauri-ios-asc.ts'
       - '.github/workflows/voice-ci.yml'
   push:
     branches: [main]
@@ -32,6 +33,7 @@ jobs:
       - uses: ./.github/actions/bun-install
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+      - run: bunx biome check scripts/tauri-ios-asc.ts
       - run: cargo test --locked --manifest-path libs/aven-voice-protocol/Cargo.toml --all-features
       - run: cargo test --locked --manifest-path libs/aven-voice-core/Cargo.toml
       - run: cargo test --locked --manifest-path libs/aven-voice-runtime/Cargo.toml --all-features
