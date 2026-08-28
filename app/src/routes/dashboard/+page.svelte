@@ -9,6 +9,7 @@ import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
+import { anonymousSpeakerPayload } from '$lib/chat/anonymous-speaker'
 import '$lib/actors/windows'
 import ArtifactsPage from '$lib/artifacts/ArtifactsPage.svelte'
 import {
@@ -144,7 +145,7 @@ onMount(() => {
 						contributorKind: turn.role === 'user' ? 'human' : 'agent',
 						kind: 'message',
 						text: turn.content,
-						payload: {}
+						payload: anonymousSpeakerPayload(turn.anonymousSpeaker)
 					}
 				})
 			}

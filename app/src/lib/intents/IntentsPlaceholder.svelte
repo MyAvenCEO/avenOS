@@ -18,6 +18,7 @@ import {
 	artifactWarningText
 } from '$lib/artifacts/processing'
 import { processingFlowGraph } from '$lib/artifacts/processing-flow'
+import { type AnonymousSpeaker, anonymousSpeakerTone } from '$lib/chat/anonymous-speaker'
 import ChatDebug from '$lib/chat/ChatDebug.svelte'
 import { composer } from '$lib/intents/composer.svelte'
 import {
@@ -89,6 +90,19 @@ function formatBytes(bytes: number): string {
 	const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
 	const value = bytes / 1024 ** unit
 	return `${value.toFixed(unit === 0 || value >= 10 ? 0 : 1)} ${units[unit]}`
+}
+
+function anonymousSpeakerStyle(speaker: AnonymousSpeaker | undefined): string | undefined {
+	const tone = speaker ? anonymousSpeakerTone(speaker) : 'one'
+	if (tone === 'two')
+		return 'background: color-mix(in srgb, var(--color-marine) 82%, var(--color-progress));'
+	if (tone === 'three')
+		return 'background: color-mix(in srgb, var(--color-marine) 82%, var(--color-success));'
+	return undefined
+}
+
+function anonymousSpeakerLabel(speaker: AnonymousSpeaker): string {
+	return `Anonymous speaker ${speaker.speaker_id.replace('speaker-', '')}`
 }
 
 /**
@@ -1346,6 +1360,13 @@ const DOT: Record<string, string> = {
 										'user'
 											? 'bg-primary text-primary-foreground'
 											: 'border border-border bg-surface-card'}"
+										style={turn.role === 'user'
+											? anonymousSpeakerStyle(turn.anonymousSpeaker)
+											: undefined}
+										data-anonymous-speaker={turn.anonymousSpeaker?.speaker_id}
+										aria-label={turn.role === 'user' && turn.anonymousSpeaker
+											? `${anonymousSpeakerLabel(turn.anonymousSpeaker)}: ${turn.content}`
+											: undefined}
 									>
 										{#if turn.content === '' && turn.role === 'assistant' && chat.streaming}
 											<span class="flex items-center gap-1 py-1" aria-label="Denkt nach">
