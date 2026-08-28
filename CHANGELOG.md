@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.5...v) (2026-08-28)
+
+
+### Features
+
+* **billing:** weekly interval and MIND credits from the 0.9.0 SSOT ([a71de6f](https://github.com/MyAvenCEO/avenOS/commit/a71de6ff36e7c6455fe973cec5ea2b1668d85e48))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.4...v) (2026-08-28)
 
 
