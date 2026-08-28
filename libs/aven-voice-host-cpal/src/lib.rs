@@ -13,6 +13,53 @@ use aven_voice_runtime::{
     StreamDirection, TimestampQuality,
 };
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+/// Immutable mono timeline owned by the duplex lab. It can be mixed either at
+/// the capture boundary (the strict near-end simulation) or into the physical
+/// speaker after the assistant-only AEC reference has been captured (the
+/// same-speaker acoustic stress mode).
+pub struct OutputInjection {
+    samples: Arc<[f32]>,
+    cursor: AtomicU64,
+}
+
+impl OutputInjection {
+    pub fn new(samples: Vec<f32>) -> Arc<Self> {
+        Arc::new(Self {
+            samples: samples.into(),
+            cursor: AtomicU64::new(0),
+        })
+    }
+
+    pub fn reset(&self) {
+        self.cursor.store(0, Ordering::Release);
+    }
+
+    pub fn consumed_frames(&self) -> u64 {
+        self.cursor.load(Ordering::Acquire)
+    }
+
+    pub fn total_frames(&self) -> usize {
+        self.samples.len()
+    }
+
+    fn mix_f32(&self, output: &mut [f32], channels: u16) {
+        let channels = usize::from(channels);
+        if channels == 0 || !output.len().is_multiple_of(channels) {
+            return;
+        }
+        let frames = output.len() / channels;
+        let start = self.cursor.fetch_add(frames as u64, Ordering::AcqRel) as usize;
+        for (index, frame) in output.chunks_exact_mut(channels).enumerate() {
+            let injected = self.samples.get(start + index).copied().unwrap_or(0.0);
+            for sample in frame {
+                *sample = (*sample + injected).clamp(-1.0, 1.0);
+            }
+        }
+    }
+}
 
 struct OpenRoute {
     id: RouteId,
@@ -25,6 +72,9 @@ struct OpenRoute {
 pub struct CpalDuplexHost {
     host: cpal::Host,
     route: Option<OpenRoute>,
+    output_injection: Option<Arc<OutputInjection>>,
+    capture_injection: Option<Arc<OutputInjection>>,
+    capture_input_gain: f32,
 }
 
 impl Default for CpalDuplexHost {
@@ -32,6 +82,9 @@ impl Default for CpalDuplexHost {
         Self {
             host: cpal::default_host(),
             route: None,
+            output_injection: None,
+            capture_injection: None,
+            capture_input_gain: 1.0,
         }
     }
 }
@@ -39,6 +92,36 @@ impl Default for CpalDuplexHost {
 impl CpalDuplexHost {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Construct a verification host whose extra speaker stream is not part of
+    /// the render reference. Production uses [`Self::new`].
+    pub fn with_output_injection(output_injection: Arc<OutputInjection>) -> Self {
+        Self {
+            host: cpal::default_host(),
+            route: None,
+            output_injection: Some(output_injection),
+            capture_injection: None,
+            capture_input_gain: 1.0,
+        }
+    }
+
+    /// Construct the standalone lab host. A capture injection models a
+    /// near-end talker at the ADC boundary while the real speaker-to-microphone
+    /// echo path remains physical. An output injection is the harsher
+    /// same-speaker acoustic mode.
+    pub fn with_lab_injections(
+        output_injection: Option<Arc<OutputInjection>>,
+        capture_injection: Option<Arc<OutputInjection>>,
+        capture_input_gain: f32,
+    ) -> Self {
+        Self {
+            host: cpal::default_host(),
+            route: None,
+            output_injection,
+            capture_injection,
+            capture_input_gain: capture_input_gain.clamp(0.0, 1.0),
+        }
     }
 
     /// Human-readable backend and default-device names for control-thread
@@ -195,6 +278,7 @@ impl DuplexHost for CpalDuplexHost {
 
         let input_descriptor = descriptor(&input_supported);
         let output_descriptor = descriptor(&output_supported);
+        let timestamp_quality = host_timestamp_quality(self.host.id().name());
         if request.require_duplex
             && (input_descriptor.channels == 0 || output_descriptor.channels == 0)
         {
@@ -209,23 +293,46 @@ impl DuplexHost for CpalDuplexHost {
         ports.events.bind_route(route_id.clone());
 
         let input_port = ports.capture.clone();
+        let capture_injection = self.capture_injection.clone();
+        let capture_input_gain = self.capture_input_gain;
         let input_events = ports.events.clone();
         let input_generation = request.generation;
         let input_channels = input_descriptor.channels;
         let input_config = stream_config(input_supported);
+        let input_timestamp_quality = timestamp_quality;
+        let mut input_scratch = [0.0_f32; aven_voice_runtime::MAX_CALLBACK_SAMPLES];
         let input = input_device
             .build_input_stream(
                 input_config,
                 move |data: &[f32], info| {
                     let timestamp = info.timestamp();
+                    let input = if capture_injection.is_some() || capture_input_gain != 1.0 {
+                        if data.len() <= input_scratch.len() {
+                            input_scratch[..data.len()].copy_from_slice(data);
+                            for sample in &mut input_scratch[..data.len()] {
+                                *sample *= capture_input_gain;
+                            }
+                            if let Some(injection) = &capture_injection {
+                                injection.mix_f32(&mut input_scratch[..data.len()], input_channels);
+                            }
+                            &input_scratch[..data.len()]
+                        } else {
+                            data
+                        }
+                    } else {
+                        data
+                    };
                     input_port.write_f32(
-                        data,
+                        input,
                         input_channels,
                         CallbackTime {
                             callback_at: stream_time(timestamp.callback),
-                            first_frame_at: Some(stream_time(timestamp.capture)),
+                            first_frame_at: stream_first_frame(
+                                timestamp.capture,
+                                input_timestamp_quality,
+                            ),
                             frame_position: None,
-                            quality: TimestampQuality::HostEstimated,
+                            quality: input_timestamp_quality,
                         },
                         input_generation,
                     );
@@ -248,10 +355,12 @@ impl DuplexHost for CpalDuplexHost {
             })?;
 
         let output_port = ports.render.clone();
+        let output_injection = self.output_injection.clone();
         let output_events = ports.events.clone();
         let output_generation = request.generation;
         let output_channels = output_descriptor.channels;
         let output_config = stream_config(output_supported);
+        let output_timestamp_quality = timestamp_quality;
         let output = output_device
             .build_output_stream(
                 output_config,
@@ -262,12 +371,18 @@ impl DuplexHost for CpalDuplexHost {
                         output_channels,
                         CallbackTime {
                             callback_at: stream_time(timestamp.callback),
-                            first_frame_at: Some(stream_time(timestamp.playback)),
+                            first_frame_at: stream_first_frame(
+                                timestamp.playback,
+                                output_timestamp_quality,
+                            ),
                             frame_position: None,
-                            quality: TimestampQuality::HostEstimated,
+                            quality: output_timestamp_quality,
                         },
                         output_generation,
                     );
+                    if let Some(injection) = &output_injection {
+                        injection.mix_f32(data, output_channels);
+                    }
                 },
                 move |error| {
                     output_events.publish_callback_fault(
@@ -291,8 +406,8 @@ impl DuplexHost for CpalDuplexHost {
             generation: request.generation,
             input: input_descriptor,
             output: output_descriptor,
-            input_timestamp_quality: TimestampQuality::HostEstimated,
-            output_timestamp_quality: TimestampQuality::HostEstimated,
+            input_timestamp_quality: timestamp_quality,
+            output_timestamp_quality: timestamp_quality,
             capture_conditioning: CaptureConditioning::Raw,
         };
         self.route = Some(OpenRoute {
@@ -318,6 +433,12 @@ impl DuplexHost for CpalDuplexHost {
                 )
             })?;
         opened.ports.capture.activate(opened.generation);
+        if let Some(injection) = &self.output_injection {
+            injection.reset();
+        }
+        if let Some(injection) = &self.capture_injection {
+            injection.reset();
+        }
         opened
             .ports
             .render
@@ -412,6 +533,22 @@ fn stream_time(value: cpal::StreamInstant) -> MonoTimeNs {
     MonoTimeNs(value.as_nanos().min(u128::from(u64::MAX)) as u64)
 }
 
+/// PulseAudio exposes capture/playback positions estimated independently by
+/// its two streams. They are useful inside one stream, but are not a shared
+/// hardware clock and produced impossible ~1% cross-stream "drift" on the
+/// qualified laptop. The callback instants do share the host monotonic clock.
+fn host_timestamp_quality(backend: &str) -> TimestampQuality {
+    if backend == "PulseAudio" {
+        TimestampQuality::CallbackOnly
+    } else {
+        TimestampQuality::HostEstimated
+    }
+}
+
+fn stream_first_frame(value: cpal::StreamInstant, quality: TimestampQuality) -> Option<MonoTimeNs> {
+    (quality != TimestampQuality::CallbackOnly).then(|| stream_time(value))
+}
+
 fn callback_fault_code(kind: cpal::ErrorKind) -> HostCallbackFaultCode {
     match kind {
         cpal::ErrorKind::DeviceBusy => HostCallbackFaultCode::DeviceBusy,
@@ -453,6 +590,25 @@ mod tests {
     }
 
     #[test]
+    fn pulseaudio_uses_the_shared_callback_clock_for_duplex_alignment() {
+        assert_eq!(
+            host_timestamp_quality("PulseAudio"),
+            TimestampQuality::CallbackOnly
+        );
+        assert_eq!(
+            stream_first_frame(
+                cpal::StreamInstant::new(2, 3),
+                TimestampQuality::CallbackOnly
+            ),
+            None
+        );
+        assert_eq!(
+            host_timestamp_quality("CoreAudio"),
+            TimestampQuality::HostEstimated
+        );
+    }
+
+    #[test]
     fn callback_buffer_targets_ten_ms_within_the_supported_range() {
         let config = cpal::SupportedStreamConfig::new(
             1,
@@ -476,5 +632,14 @@ mod tests {
             cpal::SampleFormat::F32,
         );
         assert_eq!(selected_buffer_frames(&clamped), Some(512));
+    }
+
+    #[test]
+    fn lab_injection_is_additive_mono_and_advances_by_frames() {
+        let injection = OutputInjection::new(vec![0.25, -0.5]);
+        let mut stereo = [0.1; 6];
+        injection.mix_f32(&mut stereo, 2);
+        assert_eq!(stereo, [0.35, 0.35, -0.4, -0.4, 0.1, 0.1]);
+        assert_eq!(injection.consumed_frames(), 3);
     }
 }

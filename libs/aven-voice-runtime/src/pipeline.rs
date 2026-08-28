@@ -8,10 +8,10 @@ use aven_voice_protocol::{CandidateId, EchoStatus, SessionId};
 use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
 
 use crate::{
-    AudioFrame48k, CapturePort, ClockAligner, EchoProcessor, InputModelEvent, InputProcessor,
-    ProcessingFormat, RenderPort, RuntimeObserver, StreamingRecognizer, StreamingSincResampler,
-    VoiceActivityDetector, ASR_RATE_HZ, MAX_CALLBACK_SAMPLES, PROCESSING_FRAME_SAMPLES,
-    PROCESSING_RATE_HZ,
+    AudioFrame48k, CapturePort, ClockAligner, ClockFault, EchoProcessor, InputModelEvent,
+    InputProcessor, ProcessingFormat, RenderPort, RuntimeObserver, StreamingRecognizer,
+    StreamingSincResampler, TimestampQuality, VoiceActivityDetector, ASR_RATE_HZ,
+    MAX_CALLBACK_SAMPLES, PROCESSING_FRAME_SAMPLES, PROCESSING_RATE_HZ,
 };
 
 const CLEAN_QUEUE_FRAMES: usize = 64;
@@ -30,10 +30,17 @@ struct DuplexMetricsInner {
     clean_rms: AtomicU32,
     clean_peak: AtomicU32,
     clipped_fraction: AtomicU32,
+    max_clipped_fraction: AtomicU32,
     echo_return_loss_db: AtomicU64,
     echo_return_loss_enhancement_db: AtomicU64,
     residual_echo_likelihood: AtomicU64,
     vad_probability: AtomicU32,
+    timestamp_regressions: AtomicU64,
+    delay_history_faults: AtomicU64,
+    drift_range_faults: AtomicU64,
+    capture_discontinuities: AtomicU64,
+    echo_processing_faults: AtomicU64,
+    max_alignment_error_frames: AtomicU64,
 }
 
 impl Default for DuplexMetricsInner {
@@ -48,10 +55,17 @@ impl Default for DuplexMetricsInner {
             clean_rms: AtomicU32::new(0),
             clean_peak: AtomicU32::new(0),
             clipped_fraction: AtomicU32::new(0),
+            max_clipped_fraction: AtomicU32::new(0),
             echo_return_loss_db: AtomicU64::new(f64::NAN.to_bits()),
             echo_return_loss_enhancement_db: AtomicU64::new(f64::NAN.to_bits()),
             residual_echo_likelihood: AtomicU64::new(f64::NAN.to_bits()),
             vad_probability: AtomicU32::new(0),
+            timestamp_regressions: AtomicU64::new(0),
+            delay_history_faults: AtomicU64::new(0),
+            drift_range_faults: AtomicU64::new(0),
+            capture_discontinuities: AtomicU64::new(0),
+            echo_processing_faults: AtomicU64::new(0),
+            max_alignment_error_frames: AtomicU64::new(0),
         }
     }
 }
@@ -67,10 +81,17 @@ pub struct DuplexMetricsSnapshot {
     pub clean_rms: f32,
     pub clean_peak: f32,
     pub clipped_fraction: f32,
+    pub max_clipped_fraction: f32,
     pub echo_return_loss_db: Option<f64>,
     pub echo_return_loss_enhancement_db: Option<f64>,
     pub residual_echo_likelihood: Option<f64>,
     pub vad_probability: f32,
+    pub timestamp_regressions: u64,
+    pub delay_history_faults: u64,
+    pub drift_range_faults: u64,
+    pub capture_discontinuities: u64,
+    pub echo_processing_faults: u64,
+    pub max_alignment_error_frames: u64,
 }
 
 impl DuplexMetrics {
@@ -99,6 +120,9 @@ impl DuplexMetrics {
         self.0
             .clipped_fraction
             .store(report.clipped_fraction.to_bits(), Ordering::Relaxed);
+        self.0
+            .max_clipped_fraction
+            .fetch_max(report.clipped_fraction.to_bits(), Ordering::Relaxed);
         store_optional_f64(&self.0.echo_return_loss_db, report.echo_return_loss_db);
         store_optional_f64(
             &self.0.echo_return_loss_enhancement_db,
@@ -122,6 +146,15 @@ impl DuplexMetrics {
             .store((correction_ppm as f32).to_bits(), Ordering::Relaxed);
     }
 
+    fn record_clock_fault(&self, fault: ClockFault) {
+        let counter = match fault {
+            ClockFault::TimestampRegression => &self.0.timestamp_regressions,
+            ClockFault::DelayOutsideHistory => &self.0.delay_history_faults,
+            ClockFault::DriftOutsideRange => &self.0.drift_range_faults,
+        };
+        counter.fetch_add(1, Ordering::Relaxed);
+    }
+
     pub fn snapshot(&self) -> DuplexMetricsSnapshot {
         DuplexMetricsSnapshot {
             delay_hint_ms: self.0.delay_hint_ms.load(Ordering::Relaxed),
@@ -135,12 +168,21 @@ impl DuplexMetrics {
             clean_rms: f32::from_bits(self.0.clean_rms.load(Ordering::Relaxed)),
             clean_peak: f32::from_bits(self.0.clean_peak.load(Ordering::Relaxed)),
             clipped_fraction: f32::from_bits(self.0.clipped_fraction.load(Ordering::Relaxed)),
+            max_clipped_fraction: f32::from_bits(
+                self.0.max_clipped_fraction.load(Ordering::Relaxed),
+            ),
             echo_return_loss_db: load_optional_f64(&self.0.echo_return_loss_db),
             echo_return_loss_enhancement_db: load_optional_f64(
                 &self.0.echo_return_loss_enhancement_db,
             ),
             residual_echo_likelihood: load_optional_f64(&self.0.residual_echo_likelihood),
             vad_probability: f32::from_bits(self.0.vad_probability.load(Ordering::Relaxed)),
+            timestamp_regressions: self.0.timestamp_regressions.load(Ordering::Relaxed),
+            delay_history_faults: self.0.delay_history_faults.load(Ordering::Relaxed),
+            drift_range_faults: self.0.drift_range_faults.load(Ordering::Relaxed),
+            capture_discontinuities: self.0.capture_discontinuities.load(Ordering::Relaxed),
+            echo_processing_faults: self.0.echo_processing_faults.load(Ordering::Relaxed),
+            max_alignment_error_frames: self.0.max_alignment_error_frames.load(Ordering::Relaxed),
         }
     }
 }
@@ -157,6 +199,37 @@ fn load_optional_f64(slot: &AtomicU64) -> Option<f64> {
 pub struct InputModels {
     pub vad: Box<dyn VoiceActivityDetector>,
     pub recognizer: Box<dyn StreamingRecognizer>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DiagnosticAudioFrame {
+    pub at: MonoTimeNs,
+    pub raw: AudioFrame48k,
+    pub clean: AudioFrame48k,
+}
+
+/// Optional native-only tap for qualification tools. It never runs in an audio
+/// callback, never crosses IPC, and overwrites the oldest complete frame if a
+/// diagnostic consumer falls behind.
+#[derive(Clone, Debug)]
+pub struct PipelineAudioTap {
+    frames: crate::BoundedRing<DiagnosticAudioFrame>,
+}
+
+impl PipelineAudioTap {
+    pub fn new(capacity_frames: usize) -> Self {
+        Self {
+            frames: crate::BoundedRing::new(capacity_frames),
+        }
+    }
+
+    pub fn pop(&self) -> Option<DiagnosticAudioFrame> {
+        self.frames.pop()
+    }
+
+    fn record(&self, frame: DiagnosticAudioFrame) {
+        self.frames.push_overwrite_oldest(frame);
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -193,6 +266,12 @@ pub struct DuplexPipelineConfig {
     pub input_rate_hz: u32,
     pub input_channels: u16,
     pub output_rate_hz: u32,
+    pub input_timestamp_quality: TimestampQuality,
+    pub output_timestamp_quality: TimestampQuality,
+    /// Optional route-specific acoustic delay for callback-only timestamp
+    /// backends. Hardware and host-estimated clocks ignore this override.
+    pub callback_only_delay_hint_ms: Option<u32>,
+    pub diagnostic_audio_tap: Option<PipelineAudioTap>,
     pub id_prefix: String,
 }
 
@@ -520,7 +599,8 @@ impl DspWorker {
         }
         while let Some(chunk) = self.render.pop_reference() {
             let at = chunk.time.first_frame_at.unwrap_or(chunk.time.callback_at);
-            if self.aligner.observe_render(at).is_err() {
+            if let Err(fault) = self.aligner.observe_render(at) {
+                self.metrics.record_clock_fault(fault);
                 self.publish_echo(EchoStatus::Degraded);
                 self.reset();
                 continue;
@@ -551,6 +631,10 @@ impl DspWorker {
                 }
                 self.last_render_rms = frame.rms();
                 if self.echo.process_render(&frame, frame_at, 0).is_err() {
+                    self.metrics
+                        .0
+                        .echo_processing_faults
+                        .fetch_add(1, Ordering::Relaxed);
                     self.publish_echo(EchoStatus::Degraded);
                     self.reset();
                     return;
@@ -562,6 +646,10 @@ impl DspWorker {
 
     fn drain_capture(&mut self) {
         if self.capture.take_discontinuity() {
+            self.metrics
+                .0
+                .capture_discontinuities
+                .fetch_add(1, Ordering::Relaxed);
             self.publish_echo(EchoStatus::Degraded);
             self.reset();
             let _ = self.input_overflow.try_send(InputControl::Overflow);
@@ -591,13 +679,25 @@ impl DspWorker {
                 .capture_resampled_frames
                 .saturating_add(self.resampled.len() as u64);
             let capture_end_at = advance_samples(at, self.resampled.len());
-            let queue_error_frames = alignment_error_frames(
-                self.capture_resampled_frames,
-                capture_end_at,
-                self.render_resampled_frames,
-                self.last_render_end_at,
-                &mut self.alignment_baseline_frames,
-            );
+            let callback_clock_only = self.config.input_timestamp_quality
+                == TimestampQuality::CallbackOnly
+                || self.config.output_timestamp_quality == TimestampQuality::CallbackOnly;
+            let queue_error_frames = if callback_clock_only {
+                0
+            } else {
+                let error = alignment_error_frames(
+                    self.capture_resampled_frames,
+                    capture_end_at,
+                    self.render_resampled_frames,
+                    self.last_render_end_at,
+                    &mut self.alignment_baseline_frames,
+                );
+                self.metrics
+                    .0
+                    .max_alignment_error_frames
+                    .fetch_max(u64::from(error.unsigned_abs()), Ordering::Relaxed);
+                error
+            };
             self.capture_48k.extend(self.resampled.drain(..));
             while self.capture_48k.len() >= PROCESSING_FRAME_SAMPLES {
                 let frame_at = self.capture_48k_at.unwrap_or(at);
@@ -605,11 +705,18 @@ impl DspWorker {
                 for sample in &mut raw.0 {
                     *sample = self.capture_48k.pop_front().unwrap();
                 }
-                let clock = self
-                    .aligner
-                    .observe_capture(frame_at, queue_error_frames, 10);
+                let clock = if callback_clock_only {
+                    self.aligner.observe_capture_callback_clock(
+                        frame_at,
+                        self.config.callback_only_delay_hint_ms,
+                    )
+                } else {
+                    self.aligner
+                        .observe_capture(frame_at, queue_error_frames, 10)
+                };
                 self.metrics.update_clock(clock.correction_ppm);
-                if clock.fault.is_some() {
+                if let Some(fault) = clock.fault {
+                    self.metrics.record_clock_fault(fault);
                     self.publish_echo(EchoStatus::Degraded);
                     self.reset();
                     break;
@@ -629,6 +736,13 @@ impl DspWorker {
                     .process_capture(&raw, frame_at, clock.delay_hint_ms, &mut clean)
                 {
                     Ok(report) => {
+                        if let Some(tap) = &self.config.diagnostic_audio_tap {
+                            tap.record(DiagnosticAudioFrame {
+                                at: frame_at,
+                                raw: raw.clone(),
+                                clean: clean.clone(),
+                            });
+                        }
                         self.metrics.update_echo(&report);
                         self.publish_echo(report.state);
                         self.resampled.clear();
@@ -660,6 +774,10 @@ impl DspWorker {
                         }
                     }
                     Err(_) => {
+                        self.metrics
+                            .0
+                            .echo_processing_faults
+                            .fetch_add(1, Ordering::Relaxed);
                         self.publish_echo(EchoStatus::Degraded);
                         self.reset();
                         break;
@@ -813,6 +931,10 @@ mod tests {
                 input_rate_hz: 48_000,
                 input_channels: 1,
                 output_rate_hz: 48_000,
+                input_timestamp_quality: TimestampQuality::Hardware,
+                output_timestamp_quality: TimestampQuality::Hardware,
+                callback_only_delay_hint_ms: None,
+                diagnostic_audio_tap: None,
                 id_prefix: "pipeline".into(),
             },
             VoiceConfigV1::default(),

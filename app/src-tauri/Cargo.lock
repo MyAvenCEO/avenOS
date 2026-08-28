@@ -339,6 +339,7 @@ dependencies = [
  "anyhow",
  "aven-voice-core",
  "aven-voice-host-cpal",
+ "aven-voice-models",
  "aven-voice-protocol",
  "aven-voice-runtime",
  "base64 0.22.1",
@@ -387,6 +388,26 @@ dependencies = [
  "aven-voice-protocol",
  "aven-voice-runtime",
  "cpal",
+]
+
+[[package]]
+name = "aven-voice-models"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aven-voice-protocol",
+ "aven-voice-runtime",
+ "hound",
+ "log",
+ "ndarray",
+ "ort",
+ "parakeet-rs",
+ "rand 0.8.7",
+ "rand_distr",
+ "regex",
+ "serde",
+ "serde_json",
+ "unicode-normalization",
 ]
 
 [[package]]

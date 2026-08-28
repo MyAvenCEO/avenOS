@@ -17,12 +17,11 @@
 //! sentences, so a sentence lands well inside the gap while the model writes
 //! the next one.
 
-pub(crate) mod supertonic;
-
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use aven_voice_models::supertonic;
 
 use crate::assets::{cache_dir, ensure_file, ensure_files, stage};
 

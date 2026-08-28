@@ -1143,20 +1143,24 @@ impl VoiceState {
     }
 
     fn candidate_can_confirm(&self, far_end_active: bool, safe_echo_continuous: bool) -> bool {
+        let output_turn_active = self.turn.is_some() || far_end_active;
         self.candidate.as_ref().is_some_and(|candidate| {
             !candidate.unsafe_at_start
                 && !candidate.unsafe_since_start
-                && (!far_end_active
+                && (!output_turn_active
                     || (self.config.allow_full_duplex_barge_in && safe_echo_continuous))
         })
     }
 
     fn far_end_interval_is_unsafe(&self, far_end_active: bool, safe_echo_continuous: bool) -> bool {
+        // Guard the whole semantic output turn. A brief silent render frame is
+        // only a word gap; it must not open a feedback path while narration is
+        // still active.
+        let output_turn_active = self.turn.is_some() || far_end_active;
         if !self.config.allow_full_duplex_barge_in {
-            // Guard the whole output turn so a silent render frame cannot open a feedback path.
-            self.turn.is_some() || far_end_active
+            output_turn_active
         } else {
-            far_end_active && !safe_echo_continuous
+            output_turn_active && !safe_echo_continuous
         }
     }
 
@@ -1727,6 +1731,59 @@ mod tests {
     }
 
     #[test]
+    fn unsafe_echo_cannot_confirm_during_a_render_gap_with_full_duplex_enabled() {
+        let (mut state, session) = active_state();
+        state.config.allow_full_duplex_barge_in = true;
+        let turn = begin_turn(&mut state, &session);
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: CandidateId::parse("candidate-unsafe-render-gap").unwrap(),
+                generation: state.route_generation,
+                far_end_active: false,
+                echo_status: EchoStatus::Bypassed,
+                at: MonoTimeNs(0),
+            },
+            MonoTimeNs(0),
+        );
+        let candidate = state.candidate.as_ref().unwrap().id.clone();
+
+        let partial = state.observe(
+            Observation::RecognizerPartial {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                text: "Das klingt wie ein echtes Wort".into(),
+                far_end_active: false,
+                safe_echo_continuous: false,
+            },
+            MonoTimeNs(1),
+        );
+        assert!(!partial.iter().any(|action| matches!(
+            action,
+            Action::CancelTts(_) | Action::Emit(VoiceEvent::InputConfirmed { .. })
+        )));
+        assert_eq!(state.turn.as_ref().map(|active| &active.id), Some(&turn));
+
+        let final_actions = state.observe(
+            Observation::RecognizerFinal {
+                candidate_id: candidate,
+                generation: state.route_generation,
+                text: "Das klingt wie ein echtes Wort".into(),
+                far_end_active: false,
+                safe_echo_continuous: false,
+            },
+            MonoTimeNs(2),
+        );
+        assert!(final_actions.iter().any(|action| matches!(
+            action,
+            Action::CandidateDiscarded {
+                reason: InputDiscardReason::UnsafeEcho,
+                ..
+            }
+        )));
+        assert_eq!(state.turn.as_ref().map(|active| &active.id), Some(&turn));
+    }
+
+    #[test]
     fn cancellation_is_complete_only_after_the_callback_drains_the_fade() {
         let (mut state, session) = active_state();
         let turn = begin_turn(&mut state, &session);
@@ -2242,7 +2299,7 @@ mod tests {
                 candidate_id: CandidateId::parse("duplicate-confirmation").unwrap(),
                 generation: state.route_generation,
                 far_end_active: false,
-                echo_status: EchoStatus::Bypassed,
+                echo_status: EchoStatus::Converged,
                 at: MonoTimeNs(100),
             },
             MonoTimeNs(100),

@@ -210,7 +210,7 @@ fn append_prbs(samples: &mut Vec<f32>, rate: u32, duration_ms: u32, amplitude: f
     let mut state = 0x5a17_3c9d_u32;
     for frame in 0..count {
         if frame.is_multiple_of(chip_frames) {
-            let feedback = ((state >> 0) ^ (state >> 2) ^ (state >> 3) ^ (state >> 5)) & 1;
+            let feedback = (state ^ (state >> 2) ^ (state >> 3) ^ (state >> 5)) & 1;
             state = (state >> 1) | (feedback << 31);
         }
         samples.push(if state & 1 == 0 {
