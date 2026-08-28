@@ -81,10 +81,11 @@ describe('VoiceController', () => {
 		const controller = new VoiceController(backend)
 		await controller.start()
 		const speakers: string[] = []
-		const finals: Array<{ text: string; speaker: string | null }> = []
+		const finals: Array<{ text: string; speaker: string | null; session: string | null }> = []
 		controller.onInput({
 			onSpeaker: (speaker) => speakers.push(speaker.speaker_id),
-			onFinal: (text, speaker) => finals.push({ text, speaker: speaker?.speaker_id ?? null })
+			onFinal: (text, speaker, session) =>
+				finals.push({ text, speaker: speaker?.speaker_id ?? null, session })
 		})
 
 		backend.emit({
@@ -104,7 +105,9 @@ describe('VoiceController', () => {
 		})
 
 		expect(speakers).toEqual(['speaker-2'])
-		expect(finals).toEqual([{ text: 'Ich übernehme das.', speaker: 'speaker-2' }])
+		expect(finals).toEqual([
+			{ text: 'Ich übernehme das.', speaker: 'speaker-2', session: controller.sessionId }
+		])
 		expect(controller.speaker?.speaker_id).toBe('speaker-2')
 		controller.dispose()
 	})

@@ -18,7 +18,7 @@ export interface InputHooks {
 	onPartial?: (text: string) => void
 	onConfirmed?: () => void
 	onSpeaker?: (speaker: SpeakerAttribution) => void
-	onFinal?: (text: string, speaker: SpeakerAttribution | null) => void
+	onFinal?: (text: string, speaker: SpeakerAttribution | null, sessionId: SessionId | null) => void
 	onDiscarded?: () => void
 }
 
@@ -356,7 +356,8 @@ export class VoiceController {
 				this.hearing = false
 				this.partial = ''
 				this.#candidate = null
-				for (const hooks of this.#inputHooks) hooks.onFinal?.(event.text, finalSpeaker)
+				for (const hooks of this.#inputHooks)
+					hooks.onFinal?.(event.text, finalSpeaker, this.sessionId)
 				break
 			}
 			case 'input.discarded':

@@ -47,6 +47,12 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--color-linen)',
 		border: 'none'
 	},
+	'.ch-bubble--speaker-two': {
+		background: 'color-mix(in srgb, var(--color-marine) 82%, var(--color-progress))'
+	},
+	'.ch-bubble--speaker-three': {
+		background: 'color-mix(in srgb, var(--color-marine) 82%, var(--color-success))'
+	},
 	'.ch-status': { fontSize: '12px', opacity: '0.5', textAlign: 'center' },
 	'.ch-status--hidden': { display: 'none' }
 }

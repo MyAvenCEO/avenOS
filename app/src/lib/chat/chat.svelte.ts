@@ -2,6 +2,7 @@ import type {
 	ArtifactProcessingPresentation,
 	ArtifactProcessingView
 } from '$lib/artifacts/processing'
+import type { AnonymousSpeaker } from './anonymous-speaker'
 import { type ChatMessage, repairCall, streamChat, type ToolSpec } from './redpill'
 
 /**
@@ -134,6 +135,8 @@ export interface Turn {
 	id: string
 	role: 'user' | 'assistant'
 	content: string
+	/** Local, anonymous diarization metadata; never added to the model prompt. */
+	anonymousSpeaker?: AnonymousSpeaker
 	attachment?: ArtifactAttachment
 	/** Every tool call this turn ran, with its result, for the transcript. */
 	calls?: { name: string; result: string }[]
@@ -501,7 +504,7 @@ export class Chat {
 		this.#sink.onTurn?.()
 	}
 
-	async send(text: string): Promise<void> {
+	async send(text: string, anonymousSpeaker?: AnonymousSpeaker): Promise<void> {
 		const prompt = text.trim()
 		if (prompt === '' || this.streaming) return
 
@@ -531,7 +534,7 @@ export class Chat {
 		// the proxied copy the array hands back — writes through the original
 		// literal would update the data and tell no one.
 		this.#pending = {
-			user: { id: id(), role: 'user', content: prompt },
+			user: { id: id(), role: 'user', content: prompt, anonymousSpeaker },
 			reply: { id: replyId, role: 'assistant', content: '', calls: [] }
 		}
 		this.#reply = this.#pending.reply
