@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.6...v) (2026-08-28)
+
+
+### Bug Fixes
+
+* **release:** recreate Caddy before verification ([c10b09e](https://github.com/MyAvenCEO/avenOS/commit/c10b09e20161266430220c72b748e1ab264d5fa1))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.5...v) (2026-08-28)
 
 

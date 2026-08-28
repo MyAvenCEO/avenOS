@@ -3307,7 +3307,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-sandbox-quickjs"
-version = "26.8.28-next.6"
+version = "26.8.28-next.7"
 dependencies = [
  "rquickjs",
  "serde",

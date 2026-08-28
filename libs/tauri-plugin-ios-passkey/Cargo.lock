@@ -3170,7 +3170,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-ios-passkey"
-version = "26.8.28-next.6"
+version = "26.8.28-next.7"
 dependencies = [
  "serde",
  "serde_json",
