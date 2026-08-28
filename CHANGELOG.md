@@ -1,3 +1,10 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.2...v) (2026-08-28)
+
+
+### Bug Fixes
+
+* **ios:** link native audio frameworks ([97b573a](https://github.com/MyAvenCEO/avenOS/commit/97b573aa34f8e48874f731c701ada9d1730f91b9))
+* **release:** keep Rust lockfiles versioned ([3b40d32](https://github.com/MyAvenCEO/avenOS/commit/3b40d32088c9e0ffccc0a7b9d130a4d863e9d4fa))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.1...v) (2026-08-28)
 
 

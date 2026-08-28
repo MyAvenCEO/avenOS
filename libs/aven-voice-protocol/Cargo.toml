@@ -1,6 +1,6 @@
 [package]
 name = "aven-voice-protocol"
-version = "26.8.28-next.2"
+version = "26.8.28-next.3"
 edition = "2021"
 rust-version = "1.93"
 
