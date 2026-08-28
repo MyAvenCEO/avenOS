@@ -1,6 +1,6 @@
 [package]
 name = "aven-voice-runtime"
-version = "26.8.28-next.3"
+version = "26.8.28-next.4"
 edition = "2021"
 rust-version = "1.93"
 

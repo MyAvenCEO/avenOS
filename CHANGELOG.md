@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.3...v) (2026-08-28)
+
+
+### Features
+
+* **billing:** source avenNAME product id from AVEN_TIER_NAME secret ([980e453](https://github.com/MyAvenCEO/avenOS/commit/980e453d847460ca9fbcdbf7c956f2c56ccfeb7f))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.2...v) (2026-08-28)
 
 
