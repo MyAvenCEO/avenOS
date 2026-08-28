@@ -1,6 +1,7 @@
 import type { ExecutionEnvironment } from '@avenos/actors'
 import { invoke } from '@tauri-apps/api/core'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
+import { anonymousSpeakerFromPayload } from '$lib/chat/anonymous-speaker'
 import { intents, type PersistentIntentDetail } from '$lib/intents/intents.svelte'
 import { shell } from '$lib/intents/talk.svelte'
 import {
@@ -69,11 +70,14 @@ function persistentTurns(detail: PersistentIntentDetail) {
 	return detail.contributions.flatMap((entry) => {
 		if ((entry.contributorKind !== 'human' && entry.contributorKind !== 'agent') || !entry.text)
 			return []
+		const anonymousSpeaker =
+			entry.contributorKind === 'human' ? anonymousSpeakerFromPayload(entry.payload) : null
 		return [
 			{
 				id: entry.id,
 				role: entry.contributorKind === 'human' ? ('user' as const) : ('assistant' as const),
-				content: entry.text
+				content: entry.text,
+				...(anonymousSpeaker ? { anonymousSpeaker } : {})
 			}
 		]
 	})
