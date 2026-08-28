@@ -88,10 +88,7 @@ impl IntentEngine {
                 .await?;
             let source_payload = serde_json::to_value(source_envelope.payload)
                 .map_err(|error| EngineError::Invariant(error.to_string()))?;
-            if !matches!(
-                source_payload.get("sourceKind").and_then(Value::as_str),
-                Some("processing-mock" | "processing-real" | "desktop-drop")
-            ) {
+            if !supported_source_kind(source_payload.get("sourceKind").and_then(Value::as_str)) {
                 continue;
             }
             let envelope = self
@@ -125,9 +122,28 @@ impl IntentEngine {
     }
 }
 
+fn supported_source_kind(source_kind: Option<&str>) -> bool {
+    matches!(
+        source_kind,
+        Some("processing-mock" | "processing-real" | "desktop-drop" | "client-actor-ingest")
+    )
+}
+
 fn required_string<'a>(value: &'a Value, key: &str) -> Result<&'a str, EngineError> {
     value
         .get(key)
         .and_then(Value::as_str)
         .ok_or_else(|| EngineError::Invariant(format!("intent declaration has no {key}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::supported_source_kind;
+
+    #[test]
+    fn accepts_client_actor_ingest_sources() {
+        assert!(supported_source_kind(Some("client-actor-ingest")));
+        assert!(!supported_source_kind(Some("untrusted-client-source")));
+        assert!(!supported_source_kind(None));
+    }
 }

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {
 	type ArtifactJson,
 	ArtifactStoreClient,
@@ -21,6 +21,7 @@ export interface PublishFileInput {
 	sha256: string
 	length: number
 	body: BodyInit
+	sourceKind: 'desktop-drop' | 'client-actor-ingest'
 }
 
 export interface PublishedFile {
@@ -34,6 +35,489 @@ export interface PublishedFile {
 	length: number
 	scopeSequence: number
 	replayed: boolean
+}
+
+export interface ClientRunArtifact {
+	localKey: string
+	typeKey: string
+	typeVersion: 1
+	payload: ArtifactJson
+	output: { role: string; ordinal: number }
+	blob?: { mediaType: string; base64: string }
+}
+
+export interface ClientRunEvidence {
+	ordinal: number
+	outputLocalKey: string
+	outputLocator: ArtifactJson
+	inputRole: string
+	inputOrdinal: number
+	inputLocator: ArtifactJson
+}
+
+export interface PublishClientRunInput {
+	userId: string
+	databaseName: string
+	scopeId: string
+	publicationId: string
+	procedureKey: string
+	procedureVersion: 'client-v1'
+	inputs: Array<{ role: string; ordinal: number; artifactId: string }>
+	parameters: ArtifactJson
+	artifacts: ClientRunArtifact[]
+	evidence: ClientRunEvidence[]
+}
+
+export interface PublishedClientRun {
+	publicationId: string
+	runId: string
+	replayed: boolean
+	scopeSequence: number
+	artifacts: Array<{ localKey: string; artifactId: string }>
+}
+
+interface ClientProcedureDescriptor {
+	actor: string
+	deterministic?: boolean
+	validate: (input: PublishClientRunInput) => void
+}
+
+interface ExpectedClientArtifact {
+	localKey: string
+	typeKey: string
+	role: string
+	ordinal: number
+	blob: 'required' | 'forbidden'
+}
+
+function invalidClientContract(message: string): never {
+	throw new AppError(400, 'CLIENT_PROCEDURE_CONTRACT_INVALID', message)
+}
+
+function clientRecord(value: ArtifactJson, label: string): Record<string, ArtifactJson> {
+	if (value === null || Array.isArray(value) || typeof value !== 'object') {
+		return invalidClientContract(`${label} must be an object.`)
+	}
+	return value as Record<string, ArtifactJson>
+}
+
+function expectInputs(
+	input: PublishClientRunInput,
+	expected: Record<string, { min: number; max: number }>
+): void {
+	const byRole = new Map<string, number[]>()
+	for (const item of input.inputs) {
+		if (!Object.hasOwn(expected, item.role)) {
+			invalidClientContract(`${input.procedureKey} cannot consume input role ${item.role}.`)
+		}
+		const ordinals = byRole.get(item.role) ?? []
+		ordinals.push(item.ordinal)
+		byRole.set(item.role, ordinals)
+	}
+	for (const [role, bounds] of Object.entries(expected)) {
+		const ordinals = (byRole.get(role) ?? []).sort((left, right) => left - right)
+		if (ordinals.length < bounds.min || ordinals.length > bounds.max) {
+			invalidClientContract(
+				`${input.procedureKey} requires ${bounds.min}-${bounds.max} ${role} input(s).`
+			)
+		}
+		if (ordinals.some((ordinal, index) => ordinal !== index)) {
+			invalidClientContract(`${input.procedureKey} input ordinals for ${role} must be dense.`)
+		}
+	}
+}
+
+function expectParameters(input: PublishClientRunInput, page: boolean): void {
+	const parameters = clientRecord(input.parameters, `${input.procedureKey} parameters`)
+	const keys = Object.keys(parameters)
+	if (!page) {
+		if (keys.length !== 0) invalidClientContract(`${input.procedureKey} takes no parameters.`)
+		return
+	}
+	const value = parameters.page
+	if (
+		keys.length !== 1 ||
+		typeof value !== 'number' ||
+		!Number.isInteger(value) ||
+		value < 1 ||
+		value > 63
+	) {
+		invalidClientContract(`${input.procedureKey} requires one page parameter in the range 1-63.`)
+	}
+}
+
+function expectModelParameters(input: PublishClientRunInput, page: boolean): void {
+	const parameters = clientRecord(input.parameters, `${input.procedureKey} parameters`)
+	const keys = Object.keys(parameters).sort()
+	const expected = page ? ['modelReceipt', 'page'] : ['modelReceipt']
+	if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
+		invalidClientContract(`${input.procedureKey} model parameters are invalid.`)
+	}
+	if (page) {
+		const value = parameters.page
+		if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 63) {
+			invalidClientContract(`${input.procedureKey} page parameter is invalid.`)
+		}
+	}
+	const receipt = clientRecord(
+		parameters.modelReceipt ?? null,
+		`${input.procedureKey} model receipt`
+	)
+	for (const field of ['model', 'profile', 'requestKey', 'promptDigest', 'implementationDigest']) {
+		if (typeof receipt[field] !== 'string' || receipt[field].length < 1) {
+			invalidClientContract(`${input.procedureKey} model receipt ${field} is invalid.`)
+		}
+	}
+}
+
+function expectArtifacts(input: PublishClientRunInput, expected: ExpectedClientArtifact[]): void {
+	if (input.artifacts.length !== expected.length) {
+		invalidClientContract(
+			`${input.procedureKey} must publish exactly ${expected.length} artifact(s).`
+		)
+	}
+	for (const slot of expected) {
+		const artifact = input.artifacts.find((candidate) => candidate.localKey === slot.localKey)
+		if (
+			!artifact ||
+			artifact.typeKey !== slot.typeKey ||
+			artifact.output.role !== slot.role ||
+			artifact.output.ordinal !== slot.ordinal ||
+			(slot.blob === 'required') !== Boolean(artifact.blob)
+		) {
+			invalidClientContract(`${input.procedureKey} output ${slot.localKey} violates its contract.`)
+		}
+		if (
+			artifact.blob &&
+			(artifact.typeKey !== 'docs.extracted-text' ||
+				artifact.blob.mediaType !== 'text/plain; charset=utf-8')
+		) {
+			invalidClientContract(`${input.procedureKey} output ${slot.localKey} has an invalid blob.`)
+		}
+	}
+}
+
+function expectClassificationLevel(
+	input: PublishClientRunInput,
+	level: 'file' | 'page',
+	mode: 'rule' | 'model' = 'rule'
+): void {
+	const classification = input.artifacts.find(
+		(artifact) => artifact.typeKey === 'core.content-classification'
+	)
+	const payload = classification
+		? clientRecord(classification.payload, 'classification payload')
+		: undefined
+	if (!payload || payload.subjectLevel !== level || payload.resolutionMode !== mode) {
+		invalidClientContract(
+			`${input.procedureKey} must publish a ${mode}-derived ${level}-level classification.`
+		)
+	}
+}
+
+function expectText(
+	input: PublishClientRunInput,
+	pageCount: number,
+	method: 'native' | 'ocr' | 'either' = 'native'
+): void {
+	const text = input.artifacts.find((artifact) => artifact.typeKey === 'docs.extracted-text')
+	const payload = text ? clientRecord(text.payload, 'native text payload') : undefined
+	if (
+		!payload ||
+		(method !== 'either' && payload.method !== method) ||
+		(method === 'either' && !['native', 'ocr'].includes(String(payload.method))) ||
+		payload.pageCount !== pageCount
+	) {
+		invalidClientContract(
+			`${input.procedureKey} must publish ${method} text for exactly ${pageCount} page(s).`
+		)
+	}
+}
+
+function validateCommonClientContract(input: PublishClientRunInput): void {
+	const inputSlots = new Set<string>()
+	for (const item of input.inputs) {
+		const slot = `${item.role}:${item.ordinal}`
+		if (inputSlots.has(slot)) invalidClientContract(`Duplicate client input slot ${slot}.`)
+		inputSlots.add(slot)
+	}
+	const localKeys = new Set<string>()
+	const outputSlots = new Set<string>()
+	for (const artifact of input.artifacts) {
+		if (localKeys.has(artifact.localKey)) {
+			invalidClientContract(`Duplicate client output key ${artifact.localKey}.`)
+		}
+		localKeys.add(artifact.localKey)
+		const slot = `${artifact.output.role}:${artifact.output.ordinal}`
+		if (outputSlots.has(slot)) invalidClientContract(`Duplicate client output slot ${slot}.`)
+		outputSlots.add(slot)
+	}
+	const evidenceOrdinals = new Set<number>()
+	for (const evidence of input.evidence) {
+		if (evidenceOrdinals.has(evidence.ordinal)) {
+			invalidClientContract(`Duplicate client evidence ordinal ${evidence.ordinal}.`)
+		}
+		evidenceOrdinals.add(evidence.ordinal)
+		if (!localKeys.has(evidence.outputLocalKey)) {
+			invalidClientContract(`Evidence names unknown output ${evidence.outputLocalKey}.`)
+		}
+		if (!inputSlots.has(`${evidence.inputRole}:${evidence.inputOrdinal}`)) {
+			invalidClientContract(
+				`Evidence names unknown input ${evidence.inputRole}:${evidence.inputOrdinal}.`
+			)
+		}
+	}
+	const ordinals = [...evidenceOrdinals].sort((left, right) => left - right)
+	if (ordinals.some((ordinal, index) => ordinal !== index)) {
+		invalidClientContract('Client evidence ordinals must be dense.')
+	}
+}
+
+const inspectionOutput: ExpectedClientArtifact = {
+	localKey: 'inspection',
+	typeKey: 'core.file-inspection',
+	role: 'inspection',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+const textOutput: ExpectedClientArtifact = {
+	localKey: 'text',
+	typeKey: 'docs.extracted-text',
+	role: 'text',
+	ordinal: 0,
+	blob: 'required'
+}
+const layoutOutput: ExpectedClientArtifact = {
+	localKey: 'layout',
+	typeKey: 'docs.text-layout',
+	role: 'layout',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+const classificationOutput: ExpectedClientArtifact = {
+	localKey: 'classification',
+	typeKey: 'core.content-classification',
+	role: 'classification',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+const descriptionOutput: ExpectedClientArtifact = {
+	localKey: 'description',
+	typeKey: 'core.content-description',
+	role: 'description',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+const documentClassificationOutput: ExpectedClientArtifact = {
+	localKey: 'classification',
+	typeKey: 'core.document-classification',
+	role: 'classification',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+const invoiceOutput: ExpectedClientArtifact = {
+	localKey: 'invoice',
+	typeKey: 'bookkeeping.invoice-candidate',
+	role: 'candidate',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+const invoiceDetailsOutput: ExpectedClientArtifact = {
+	localKey: 'details',
+	typeKey: 'bookkeeping.invoice-details',
+	role: 'details',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+const statementOutput: ExpectedClientArtifact = {
+	localKey: 'statement',
+	typeKey: 'banking.account-statement-candidate',
+	role: 'candidate',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+const invoiceValidationOutput: ExpectedClientArtifact = {
+	localKey: 'validation',
+	typeKey: 'bookkeeping.invoice-validation',
+	role: 'validation',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+const statementValidationOutput: ExpectedClientArtifact = {
+	localKey: 'validation',
+	typeKey: 'banking.statement-validation',
+	role: 'validation',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+
+const CLIENT_PROCEDURES: Record<string, ClientProcedureDescriptor> = {
+	'client.inspect-file': {
+		actor: 'document-inspector',
+		validate: (input) => {
+			expectInputs(input, { source: { min: 1, max: 1 } })
+			expectParameters(input, false)
+			expectArtifacts(input, [inspectionOutput])
+		}
+	},
+	'client.decompose-pages': {
+		actor: 'document-decomposer',
+		validate: (input) => {
+			expectInputs(input, { source: { min: 1, max: 1 }, inspection: { min: 1, max: 1 } })
+			expectParameters(input, false)
+			if (input.artifacts.length < 1 || input.artifacts.length > 63) {
+				invalidClientContract('client.decompose-pages must publish 1-63 page artifacts.')
+			}
+			const pages = [...input.artifacts].sort(
+				(left, right) => left.output.ordinal - right.output.ordinal
+			)
+			for (const [ordinal, page] of pages.entries()) {
+				const localKey = `page-${String(ordinal + 1).padStart(3, '0')}`
+				const payload = clientRecord(page.payload, `${localKey} payload`)
+				if (
+					page.localKey !== localKey ||
+					page.typeKey !== 'docs.page' ||
+					page.output.role !== 'page' ||
+					page.output.ordinal !== ordinal ||
+					page.blob ||
+					payload.sourcePage !== ordinal + 1
+				) {
+					invalidClientContract(`client.decompose-pages output ${localKey} violates its contract.`)
+				}
+			}
+		}
+	},
+	'client.extract-native-text': {
+		actor: 'native-text-extractor',
+		validate: (input) => {
+			expectInputs(input, { source: { min: 1, max: 1 }, page: { min: 1, max: 1 } })
+			expectParameters(input, true)
+			expectArtifacts(input, [textOutput, layoutOutput])
+			expectText(input, 1)
+		}
+	},
+	'client.classify-page-signals': {
+		actor: 'page-signal-classifier',
+		validate: (input) => {
+			expectInputs(input, {
+				source: { min: 1, max: 1 },
+				page: { min: 1, max: 1 },
+				text: { min: 1, max: 1 }
+			})
+			expectParameters(input, true)
+			expectArtifacts(input, [classificationOutput])
+			expectClassificationLevel(input, 'page')
+		}
+	},
+	'client.assemble-document-representation': {
+		actor: 'document-assembler',
+		validate: (input) => {
+			expectInputs(input, {
+				source: { min: 1, max: 1 },
+				text: { min: 1, max: 63 },
+				layout: { min: 1, max: 63 }
+			})
+			const texts = input.inputs.filter((item) => item.role === 'text').length
+			const layouts = input.inputs.filter((item) => item.role === 'layout').length
+			if (texts !== layouts) {
+				invalidClientContract('client.assemble-document-representation requires paired inputs.')
+			}
+			expectParameters(input, false)
+			expectArtifacts(input, [textOutput, layoutOutput])
+			expectText(input, texts, 'either')
+		}
+	},
+	'client.aggregate-content-classification': {
+		actor: 'content-aggregator',
+		validate: (input) => {
+			expectInputs(input, {
+				source: { min: 1, max: 1 },
+				'page-classification': { min: 1, max: 63 },
+				text: { min: 1, max: 1 },
+				layout: { min: 1, max: 1 }
+			})
+			expectParameters(input, false)
+			expectArtifacts(input, [classificationOutput])
+			expectClassificationLevel(input, 'file')
+		}
+	},
+	'client.analyze-page-model': {
+		actor: 'visual-page-analyzer',
+		deterministic: false,
+		validate: (input) => {
+			expectInputs(input, {
+				source: { min: 1, max: 1 },
+				page: { min: 1, max: 1 },
+				text: { min: 1, max: 1 },
+				layout: { min: 1, max: 1 }
+			})
+			expectModelParameters(input, true)
+			expectArtifacts(input, [textOutput, layoutOutput, classificationOutput, descriptionOutput])
+			expectText(input, 1, 'ocr')
+			expectClassificationLevel(input, 'page', 'model')
+		}
+	},
+	'client.classify-document-model': {
+		actor: 'document-kind-classifier',
+		deterministic: false,
+		validate: (input) => {
+			expectInputs(input, {
+				source: { min: 1, max: 1 },
+				text: { min: 1, max: 63 },
+				layout: { min: 1, max: 63 }
+			})
+			expectModelParameters(input, false)
+			expectArtifacts(input, [documentClassificationOutput])
+			const payload = clientRecord(input.artifacts[0]?.payload ?? null, 'classification payload')
+			if (payload.resolutionMode !== 'model') {
+				invalidClientContract('client.classify-document-model must be model-derived.')
+			}
+		}
+	},
+	'client.extract-invoice-model': {
+		actor: 'invoice-extractor',
+		deterministic: false,
+		validate: (input) => {
+			expectInputs(input, {
+				source: { min: 1, max: 1 },
+				'document-classification': { min: 1, max: 1 },
+				text: { min: 1, max: 63 },
+				layout: { min: 1, max: 63 }
+			})
+			expectModelParameters(input, false)
+			expectArtifacts(input, [invoiceOutput, invoiceDetailsOutput])
+		}
+	},
+	'client.extract-statement-model': {
+		actor: 'statement-extractor',
+		deterministic: false,
+		validate: (input) => {
+			expectInputs(input, {
+				source: { min: 1, max: 1 },
+				'document-classification': { min: 1, max: 1 },
+				text: { min: 1, max: 63 },
+				layout: { min: 1, max: 63 }
+			})
+			expectModelParameters(input, false)
+			expectArtifacts(input, [statementOutput])
+		}
+	},
+	'client.validate-invoice': {
+		actor: 'invoice-validator',
+		validate: (input) => {
+			expectInputs(input, { source: { min: 1, max: 1 }, candidate: { min: 1, max: 1 } })
+			expectParameters(input, false)
+			expectArtifacts(input, [invoiceValidationOutput])
+		}
+	},
+	'client.validate-statement': {
+		actor: 'statement-validator',
+		validate: (input) => {
+			expectInputs(input, { source: { min: 1, max: 1 }, candidate: { min: 1, max: 1 } })
+			expectParameters(input, false)
+			expectArtifacts(input, [statementValidationOutput])
+		}
+	}
 }
 
 export interface BrowsedArtifact {
@@ -349,6 +833,129 @@ export class ArtifactFileService {
 		return { storeEpoch, artifacts: artifacts.reverse(), truncated }
 	}
 
+	/**
+	 * Narrow publication bridge for the document actors running in the trusted
+	 * AvenOS client. The client owns processing; this adapter owns credentials,
+	 * scope, actor attribution, output whitelists, blob claims, and canonical
+	 * Artifact Store publication.
+	 */
+	async publishClientRun(input: PublishClientRunInput): Promise<PublishedClientRun> {
+		try {
+			const descriptor = CLIENT_PROCEDURES[input.procedureKey]
+			if (!descriptor) {
+				throw new AppError(400, 'CLIENT_PROCEDURE_INVALID', 'The client procedure is not allowed.')
+			}
+			validateCommonClientContract(input)
+			descriptor.validate(input)
+			const client = this.#client(input.databaseName)
+			const context = record(await client.context(), 'context')
+			const storeEpoch = stringField(context, 'storeEpoch', 'context')
+			const blobAuthorities: Record<string, ArtifactJson> = {}
+			const artifacts: ArtifactJson[] = []
+			let totalBlobBytes = 0
+			for (const output of input.artifacts) {
+				let blob: ArtifactJson = null
+				if (output.blob) {
+					const bytes = Buffer.from(output.blob.base64, 'base64')
+					if (bytes.toString('base64') !== output.blob.base64) {
+						throw new AppError(
+							400,
+							'CLIENT_BLOB_INVALID',
+							'A client output blob was not canonical base64.'
+						)
+					}
+					totalBlobBytes += bytes.length
+					if (totalBlobBytes > 4 * 1024 * 1024) {
+						throw new AppError(413, 'CLIENT_BLOB_TOO_LARGE', 'Client run blobs exceed 4 MiB.')
+					}
+					const sha256 = createHash('sha256').update(bytes).digest('hex')
+					const claimId = randomUUID()
+					await client.upload(
+						input.scopeId,
+						claimId,
+						{
+							sha256,
+							length: bytes.length,
+							declaredMediaType: output.blob.mediaType
+						},
+						bytes
+					)
+					blob = { sha256, length: bytes.length }
+					blobAuthorities[output.localKey] = { kind: 'upload-claim', claimId }
+				}
+				artifacts.push({
+					localKey: output.localKey,
+					typeKey: output.typeKey,
+					typeVersion: output.typeVersion,
+					payload: output.payload,
+					blob,
+					references: [],
+					output: output.output
+				})
+			}
+
+			const publication = record(
+				await client.publish(input.scopeId, input.publicationId, storeEpoch, {
+					intent: {
+						commandVersion: 1,
+						publicationId: input.publicationId,
+						scopeId: input.scopeId,
+						kind: 'run',
+						run: {
+							procedureKey: input.procedureKey,
+							procedureVersion: input.procedureVersion,
+							initiator: { kind: 'user', id: `user:${input.userId}` },
+							executor: { kind: 'agent', id: descriptor.actor },
+							inputs: input.inputs,
+							parameters: input.parameters,
+							implementation: {
+								adapter: 'avenos-client-actor',
+								version: 'client-v1',
+								deterministic: descriptor.deterministic !== false
+							},
+							receipt:
+								descriptor.deterministic === false
+									? {
+											outcome: 'succeeded',
+											model: clientRecord(input.parameters, 'model parameters').modelReceipt ?? null
+										}
+									: { outcome: 'succeeded' }
+						},
+						artifacts,
+						evidence: input.evidence as unknown as ArtifactJson
+					},
+					blobAuthorities
+				}),
+				'publication'
+			)
+			const published = publication.artifacts
+			if (!Array.isArray(published)) {
+				throw new AppError(
+					502,
+					'ARTIFACT_STORE_INVALID_RESPONSE',
+					'Artifact Store returned no client run outputs.'
+				)
+			}
+			return {
+				publicationId: stringField(publication, 'publicationId', 'publication'),
+				runId: stringField(publication, 'runId', 'publication'),
+				replayed: booleanField(publication, 'replayed', 'publication'),
+				scopeSequence: numberField(publication, 'scopeSequence', 'publication'),
+				artifacts: published.map((value) => ({
+					localKey: stringField(value, 'localKey', 'published artifact'),
+					artifactId: stringField(value, 'artifactId', 'published artifact')
+				}))
+			}
+		} catch (error) {
+			if (error instanceof AppError) throw error
+			if (error instanceof ArtifactStoreProblem) {
+				const status = error.status === 400 || error.status === 409 ? error.status : 502
+				throw new AppError(status, error.code, error.message)
+			}
+			throw new AppError(502, 'ARTIFACT_STORE_UNAVAILABLE', 'Artifact Store is unavailable.')
+		}
+	}
+
 	async publishFile(input: PublishFileInput): Promise<PublishedFile> {
 		try {
 			const client = this.#client(input.databaseName)
@@ -391,7 +998,7 @@ export class ArtifactFileService {
 							payload: {
 								originalName: input.originalName,
 								declaredMediaType: input.mediaType,
-								sourceKind: 'desktop-drop'
+								sourceKind: input.sourceKind
 							},
 							blob: { sha256: input.sha256, length: input.length },
 							references: [],

@@ -7,6 +7,7 @@ const publicationIdSchema = z.uuid()
 const intentIdSchema = z.uuid()
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/)
 const observedAtSchema = z.iso.datetime({ offset: true })
+const sourceKindSchema = z.enum(['desktop-drop', 'client-actor-ingest'])
 
 function requiredHeader(request: Request, name: string): string {
 	const value = request.headers.get(name)
@@ -44,6 +45,9 @@ export const PUT = api(async (event, rt) => {
 	const publicationId = publicationIdSchema.parse(event.params.publicationId)
 	const intentId = intentIdSchema.parse(requiredHeader(event.request, 'x-aven-intent-id'))
 	const observedAt = observedAtSchema.parse(requiredHeader(event.request, 'x-aven-observed-at'))
+	const sourceKind = sourceKindSchema.parse(
+		event.request.headers.get('x-aven-source-kind') ?? 'desktop-drop'
+	)
 	const originalName = decodeOriginalName(requiredHeader(event.request, 'x-aven-original-name'))
 	const mediaType = requiredHeader(event.request, 'content-type')
 	if (mediaType.length > 255 || !mediaType.includes('/')) {
@@ -70,7 +74,8 @@ export const PUT = api(async (event, rt) => {
 			mediaType,
 			sha256,
 			length,
-			body
+			body,
+			sourceKind
 		}),
 		status: 201
 	}

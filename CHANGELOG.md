@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.6...v) (2026-08-28)
+
+
+### Features
+
+* **aven-api:** accept client actor publications ([5a3ad0e](https://github.com/MyAvenCEO/avenOS/commit/5a3ad0e9338aab6ced3179edc53387541b6efa61))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.5...v) (2026-08-27)
 
 
