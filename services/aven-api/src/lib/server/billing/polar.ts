@@ -225,18 +225,18 @@ export class PolarProvider implements PaymentProvider {
 			)
 			return created.id
 		}
-		// Runtime: PREFER a real meter-credit benefit (the included minutes as
-		// credits on the shared ai-minutes meter). Meter features are gated per
+		// Runtime: PREFER a real meter-credit benefit (the included MIND credits
+		// on the shared mind-credits meter). Meter features are gated per
 		// organization, so probe — and fall back to a plain custom benefit
 		// carrying the same short title when the org has them disabled.
 		try {
-			const meterId = await this.ensureAiMinutesMeter()
-			const minutesPerMonth = (spec.runtime?.hoursPerDay ?? 0) * 60 * 30
+			const meterId = await this.ensureMindCreditsMeter()
+			const credits = spec.runtime?.mindCredits ?? 0
 			const created = await this.call(`create-benefit ${spec.key}`, () =>
 				this.polar.benefits.create({
 					...base,
 					type: 'meter_credit',
-					properties: { units: minutesPerMonth, rollover: false, meterId }
+					properties: { units: credits, rollover: false, meterId }
 				})
 			)
 			return created.id
@@ -249,19 +249,19 @@ export class PolarProvider implements PaymentProvider {
 	}
 
 	/** The one shared usage meter the runtime credits draw from. */
-	private async ensureAiMinutesMeter(): Promise<string> {
+	private async ensureMindCreditsMeter(): Promise<string> {
 		const listed = await this.call('list-meters', () => this.polar.meters.list({ limit: 100 }))
-		const found = listed.result.items.find((meter) => meter.name === 'ai-minutes')
+		const found = listed.result.items.find((meter) => meter.name === 'mind-credits')
 		if (found) return found.id
-		const created = await this.call('create-meter ai-minutes', () =>
+		const created = await this.call('create-meter mind-credits', () =>
 			this.polar.meters.create({
-				name: 'ai-minutes',
+				name: 'mind-credits',
 				metadata: { source: 'ssot' },
 				filter: {
 					conjunction: 'and',
-					clauses: [{ property: 'name', operator: 'eq', value: 'ai-minutes' }]
+					clauses: [{ property: 'name', operator: 'eq', value: 'mind-credits' }]
 				},
-				aggregation: { func: 'sum', property: 'minutes' }
+				aggregation: { func: 'sum', property: 'mind' }
 			})
 		)
 		return created.id
