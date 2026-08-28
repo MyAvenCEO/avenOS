@@ -88,6 +88,8 @@ struct EchoHealth {
     state: EchoStatus,
     active_since: Option<MonoTimeNs>,
     stable_since: Option<MonoTimeNs>,
+    residual_healthy_since: Option<MonoTimeNs>,
+    silent_since: Option<MonoTimeNs>,
     contiguous_frames: u64,
     saturation_streak: u32,
     faulted: bool,
@@ -104,6 +106,8 @@ impl EchoHealth {
             state: EchoStatus::Bypassed,
             active_since: None,
             stable_since: None,
+            residual_healthy_since: None,
+            silent_since: None,
             contiguous_frames: 0,
             saturation_streak: 0,
             faulted: false,
@@ -118,6 +122,8 @@ impl EchoHealth {
         self.state = EchoStatus::Bypassed;
         self.active_since = None;
         self.stable_since = None;
+        self.residual_healthy_since = None;
+        self.silent_since = None;
         self.contiguous_frames = 0;
         self.saturation_streak = 0;
         self.faulted = false;
@@ -129,14 +135,23 @@ impl EchoHealth {
     fn render(&mut self, frame: &AudioFrame48k, time: MonoTimeNs) {
         self.render_rms = frame.rms();
         if self.render_rms < self.config.render_silence_rms {
-            self.state = EchoStatus::Bypassed;
-            self.active_since = None;
-            self.stable_since = None;
+            let silent_since = *self.silent_since.get_or_insert(time);
+            self.residual_healthy_since = None;
+            if time.elapsed_since(silent_since)
+                >= u64::from(self.config.aec_stable_delay_ms) * 1_000_000
+            {
+                self.state = EchoStatus::Bypassed;
+                self.active_since = None;
+                self.stable_since = None;
+            }
         } else if self.state == EchoStatus::Bypassed {
+            self.silent_since = None;
             self.state = EchoStatus::Adapting;
             self.active_since = Some(time);
             self.stable_since = Some(time);
             self.contiguous_frames = 0;
+        } else {
+            self.silent_since = None;
         }
     }
 
@@ -145,6 +160,7 @@ impl EchoHealth {
         frame: &AudioFrame48k,
         time: MonoTimeNs,
         delay_hint_ms: u32,
+        residual_health: Option<bool>,
     ) -> (f32, EchoStatus) {
         let delay_changed =
             self.delay_initialized && self.delay_hint_ms.abs_diff(delay_hint_ms) > 2;
@@ -167,12 +183,27 @@ impl EchoHealth {
         }
         if delay_changed {
             self.stable_since = Some(time);
+            self.residual_healthy_since = None;
             if self.state != EchoStatus::Bypassed {
                 self.state = EchoStatus::Adapting;
             }
         }
+        if self.state == EchoStatus::Adapting && self.render_rms >= self.config.render_silence_rms {
+            match residual_health {
+                Some(true) => {
+                    self.residual_healthy_since.get_or_insert(time);
+                }
+                Some(false) => self.residual_healthy_since = None,
+                None => {}
+            }
+        }
+        let residual_health_stable = residual_health.is_none()
+            || self.residual_healthy_since.is_some_and(|start| {
+                time.elapsed_since(start) >= u64::from(self.config.aec_stable_delay_ms) * 1_000_000
+            });
         if !self.faulted
             && self.state == EchoStatus::Adapting
+            && residual_health_stable
             && self.active_since.is_some_and(|start| {
                 time.elapsed_since(start)
                     >= u64::from(self.config.aec_min_adaptation_ms) * 1_000_000
@@ -250,7 +281,7 @@ impl EchoProcessor for FakeEchoProcessor {
         for ((clean, capture), render) in output.0.iter_mut().zip(&frame.0).zip(&self.render.0) {
             *clean = (*capture - *render * self.attenuation).clamp(-1.0, 1.0);
         }
-        let (clipped_fraction, state) = self.health.capture(frame, time, delay_hint_ms);
+        let (clipped_fraction, state) = self.health.capture(frame, time, delay_hint_ms, None);
         Ok(EchoReport {
             state,
             route: self.health.route,
@@ -343,8 +374,13 @@ impl EchoProcessor for SoftwareAec3 {
         self.apm
             .process_capture_f32(&[&frame.0], &mut [&mut output.0])
             .map_err(|_| EchoError("AEC capture processing failed"))?;
-        let (clipped_fraction, state) = self.health.capture(frame, time, delay_hint_ms);
         let stats = self.apm.statistics();
+        let residual_health = Some(stats.echo_return_loss_enhancement.is_some_and(|value| {
+            value >= self.health.config.minimum_echo_return_loss_enhancement_db
+        }));
+        let (clipped_fraction, state) =
+            self.health
+                .capture(frame, time, delay_hint_ms, residual_health);
         Ok(EchoReport {
             state,
             route: self.health.route,
@@ -394,6 +430,39 @@ mod tests {
     }
 
     #[test]
+    fn measured_residual_health_must_be_stable_before_convergence() {
+        let mut health = EchoHealth::new(VoiceConfigV1::default());
+        health.reset(RouteGeneration(1));
+        let render = AudioFrame48k([0.25; 480]);
+        let capture = render.clone();
+        health.render(&render, MonoTimeNs::from_millis(0));
+        assert_eq!(
+            health
+                .capture(&capture, MonoTimeNs::from_millis(300), 10, Some(false))
+                .1,
+            EchoStatus::Adapting
+        );
+        assert_eq!(
+            health
+                .capture(&capture, MonoTimeNs::from_millis(400), 10, Some(true))
+                .1,
+            EchoStatus::Adapting
+        );
+        assert_eq!(
+            health
+                .capture(&capture, MonoTimeNs::from_millis(599), 10, Some(true))
+                .1,
+            EchoStatus::Adapting
+        );
+        assert_eq!(
+            health
+                .capture(&capture, MonoTimeNs::from_millis(600), 10, Some(true))
+                .1,
+            EchoStatus::Converged
+        );
+    }
+
+    #[test]
     fn sustained_saturation_degrades_immediately() {
         let mut echo = FakeEchoProcessor::new(VoiceConfigV1::default(), 0.0);
         echo.reset(ProcessingFormat::default(), RouteGeneration(1));
@@ -433,6 +502,59 @@ mod tests {
             .process_capture(&render, MonoTimeNs::from_millis(500), 30, &mut clean)
             .unwrap();
         assert_eq!(report.state, EchoStatus::Converged);
+    }
+
+    #[test]
+    fn brief_word_gaps_preserve_convergence_but_sustained_silence_bypasses() {
+        let mut echo = FakeEchoProcessor::new(VoiceConfigV1::default(), 1.0);
+        echo.reset(ProcessingFormat::default(), RouteGeneration(1));
+        let render = AudioFrame48k([0.25; 480]);
+        let silence = AudioFrame48k::default();
+        let mut clean = AudioFrame48k::default();
+        echo.process_render(&render, MonoTimeNs::from_millis(0), 10)
+            .unwrap();
+        let converged = echo
+            .process_capture(&render, MonoTimeNs::from_millis(300), 10, &mut clean)
+            .unwrap();
+        assert_eq!(converged.state, EchoStatus::Converged);
+
+        echo.process_render(&silence, MonoTimeNs::from_millis(310), 10)
+            .unwrap();
+        let brief_gap = echo
+            .process_capture(&silence, MonoTimeNs::from_millis(450), 10, &mut clean)
+            .unwrap();
+        assert_eq!(brief_gap.state, EchoStatus::Converged);
+
+        echo.process_render(&silence, MonoTimeNs::from_millis(520), 10)
+            .unwrap();
+        let sustained = echo
+            .process_capture(&silence, MonoTimeNs::from_millis(520), 10, &mut clean)
+            .unwrap();
+        assert_eq!(sustained.state, EchoStatus::Bypassed);
+    }
+
+    #[test]
+    fn sustained_silence_bypasses_an_adapter_that_never_converged() {
+        let mut echo = FakeEchoProcessor::new(VoiceConfigV1::default(), 1.0);
+        echo.reset(ProcessingFormat::default(), RouteGeneration(1));
+        let render = AudioFrame48k([0.25; 480]);
+        let silence = AudioFrame48k::default();
+        let mut clean = AudioFrame48k::default();
+        echo.process_render(&render, MonoTimeNs::from_millis(0), 10)
+            .unwrap();
+        let adapting = echo
+            .process_capture(&render, MonoTimeNs::from_millis(100), 10, &mut clean)
+            .unwrap();
+        assert_eq!(adapting.state, EchoStatus::Adapting);
+
+        echo.process_render(&silence, MonoTimeNs::from_millis(110), 10)
+            .unwrap();
+        echo.process_render(&silence, MonoTimeNs::from_millis(320), 10)
+            .unwrap();
+        let bypassed = echo
+            .process_capture(&silence, MonoTimeNs::from_millis(320), 10, &mut clean)
+            .unwrap();
+        assert_eq!(bypassed.state, EchoStatus::Bypassed);
     }
 
     #[cfg(feature = "software-aec")]

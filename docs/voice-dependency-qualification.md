@@ -53,12 +53,15 @@ crate manifests and are updated only with a new qualification run.
 - AEC minimum contiguous adaptation: 300 ms.
 - Stable delay interval before convergence: 200 ms.
 - Supported aligned delay history: 500 ms.
+- Software-AEC convergence requires at least 15 dB echo-return-loss enhancement
+  continuously for the 200 ms stability interval after initial adaptation.
 - Render silence floor: -60 dBFS RMS.
 - Saturation boundary: 1% clipped samples in a 10 ms frame; three consecutive
   saturated frames degrade the echo path.
 - Maximum drift correction: 1,000 ppm; changes are limited to 50 ppm per second.
 - Convergence requires uninterrupted reference/capture continuity, stable delay,
-  elapsed adaptation, no saturation streak, and no processor or clock fault.
+  elapsed adaptation, qualified residual-echo reduction, no saturation streak,
+  and no processor or clock fault. A timer alone cannot qualify a route.
 
 These values are conservative initial gates. Physical qualification may make
 them stricter. It must never make the lexical confirmation or echo-safety policy
@@ -90,12 +93,15 @@ The route still reports full-duplex barge-in as unavailable until software AEC
 reaches `converged`. Default-on deployment does not bypass echo health,
 generation, or lexical-ASR confirmation gates.
 
-The initial reference calibration on the built-in PulseAudio microphone and
-speaker passed at -18 dBFS with a 5.39 dB probe-to-ambient ratio, 0.4199
-correlation, 30.60 ms estimated echo delay, zero clipping, and zero callback
-faults. For this limited tester population, that result authorizes testing on
-other devices without a per-device qualification gate. Each device's runtime
-diagnostics and tester feedback remain evidence for later production criteria.
+The latest reference calibration on the built-in PulseAudio microphone and
+speaker passed at -18 dBFS with a 5.72 dB PRBS signal-to-ambient ratio, 0.3725
+correlation, 25.27 ms estimated echo delay, 0.0058 percent clipped capture, and
+zero callback faults. The raised microphone level also produced a high
+-17.44 dBFS ambient floor, so the conversational lab defaults to 6 dB of
+test-host-only capture attenuation and reports worst-frame clipping. For this
+limited tester population, that result authorizes testing on other devices
+without a per-device launch gate. It does not mark an unqualified AEC route as
+converged.
 
 Before launching the app, run the standalone host probe from the repository
 root. It opens the real default microphone and speaker, renders silence, and
@@ -148,3 +154,57 @@ starting point for diagnosing that route; it is not a permanent global override.
 Changing the microphone, speaker, system route, or acoustic layout invalidates
 the result. The application continues to align clocks and assess AEC convergence
 while it runs, so calibration never weakens the continuous echo-safety gate.
+
+### Autonomous conversational duplex lab
+
+The calibration above measures the route. The conversational lab exercises the
+complete production AEC, VAD, streaming ASR, generation filtering, lexical
+confirmation, and 80 ms cancellation fade without launching Tauri or the web
+application:
+
+```sh
+bun run test:voice-duplex --required-only
+```
+
+The lab synthesizes both sides of normal German conversations with the local
+Supertonic model; the tester never has to speak. Assistant audio enters the
+normal render port and therefore becomes the exact AEC reference. By default,
+the separately synthesized user/noise track is mixed into the physical speaker
+buffer only after that reference is recorded, so both tracks are audible. The
+microphone receives the real acoustic mixture while AEC can remove only the
+assistant stream. This is a repeatable one-laptop analogue of near-end speech
+during far-end playback, not a replacement for later human double-talk testing
+on multiple devices.
+
+For signal-path diagnosis, `--capture-boundary-near-end` injects the synthetic
+user at the native capture boundary instead of the speaker. The default
+test-host capture attenuation can be changed with `--capture-input-gain-db DB`,
+and a calibration candidate can be tested with
+`--callback-delay-hint-ms MS`. Both values are written to `report.json`; neither
+option changes production CPAL input samples or creates a global device
+override.
+
+The required corpus proves that assistant-only playback and household-like
+click/cough noise do not interrupt, clear lexical speech during an answer does
+interrupt and completes the exact fade, a follow-up after playback is submitted
+without a false barge-in, and speech that starts before echo safety converges is
+conservatively discarded. The extended corpus adds quiet, muffled, and
+telephone-band interruptions. Use `--list`, `--scenario NAME`, or no filter to
+run the entire corpus.
+
+Every run writes `assistant-reference.wav`, `injected-near-end.wav`, and
+`planned-speaker-mix.wav` per scenario plus a `report.json` containing observed
+partials/finals, confirmation and fade times, echo convergence, signal levels,
+queue faults, callback faults, AEC return-loss metrics, and clipping. Required
+failures produce exit code 2, so the same host can be used manually on tester
+laptops and as an opt-in hardware gate. The report directory defaults to a
+timestamped directory under the system temporary directory and can be selected
+with `--output-dir`.
+
+On the current Linux reference laptop, the audible clear-interruption scenario
+recognized the synthetic second track as “Stock, meinst du das”, but measured
+only 3.24 dB of echo-return-loss enhancement. The safety gate therefore kept
+full duplex disabled and did not cancel the assistant. This is a useful failed
+hardware qualification: it proves autonomous double-talk reaches ASR while an
+unqualified echo path cannot recreate the former feedback loop. It is not a
+reason to lower the 15 dB production threshold.

@@ -104,6 +104,45 @@ impl ClockAligner {
         self.report(None, stable)
     }
 
+    /// Align callback-only duplex streams without inferring oscillator drift
+    /// from their independently scheduled callback queue depths. The first
+    /// shared-clock offset is a stable route-delay hint; continuity is guarded
+    /// by timestamp regression and the bounded capture/reference ports.
+    pub fn observe_capture_callback_clock(
+        &mut self,
+        at: MonoTimeNs,
+        calibrated_delay_hint_ms: Option<u32>,
+    ) -> ClockReport {
+        if self.last_capture.is_some_and(|last| at < last) {
+            self.reset();
+            return self.report(Some(ClockFault::TimestampRegression), false);
+        }
+        self.last_capture = Some(at);
+        let Some(render) = self.last_render else {
+            return self.report(None, false);
+        };
+        if !self.delay_initialized() {
+            let delay_ms = calibrated_delay_hint_ms.unwrap_or_else(|| {
+                let delay_ns = at.0.saturating_sub(render.0);
+                (delay_ns / 1_000_000).min(u64::from(u32::MAX)) as u32
+            });
+            if delay_ms > self.config.aec_history_ms {
+                return self.report(Some(ClockFault::DelayOutsideHistory), false);
+            }
+            self.delay_hint_ms = delay_ms;
+            self.stable_since = Some(at);
+        }
+        self.correction_ppm = 0.0;
+        let stable = self.stable_since.is_some_and(|since| {
+            at.elapsed_since(since) >= u64::from(self.config.aec_stable_delay_ms) * 1_000_000
+        });
+        self.report(None, stable)
+    }
+
+    fn delay_initialized(&self) -> bool {
+        self.stable_since.is_some()
+    }
+
     pub fn resample_ratio(&self) -> f64 {
         1.0 + self.correction_ppm / 1_000_000.0
     }
@@ -148,5 +187,34 @@ mod tests {
         let report = aligner.observe_capture(MonoTimeNs::from_millis(501), 0, 10);
         assert_eq!(report.fault, Some(ClockFault::DelayOutsideHistory));
         assert!(!report.stable);
+    }
+
+    #[test]
+    fn callback_clock_freezes_route_delay_and_does_not_invent_drift_from_jitter() {
+        let mut aligner = ClockAligner::new(VoiceConfigV1::default());
+        aligner
+            .observe_render(MonoTimeNs::from_millis(100))
+            .unwrap();
+        let first = aligner.observe_capture_callback_clock(MonoTimeNs::from_millis(132), None);
+        assert_eq!(first.delay_hint_ms, 32);
+        aligner
+            .observe_render(MonoTimeNs::from_millis(250))
+            .unwrap();
+        let jittered = aligner.observe_capture_callback_clock(MonoTimeNs::from_millis(340), None);
+        assert_eq!(jittered.delay_hint_ms, 32);
+        assert_eq!(jittered.correction_ppm, 0.0);
+        assert_eq!(jittered.fault, None);
+    }
+
+    #[test]
+    fn callback_clock_accepts_a_hardware_calibrated_delay_hint() {
+        let mut aligner = ClockAligner::new(VoiceConfigV1::default());
+        aligner
+            .observe_render(MonoTimeNs::from_millis(100))
+            .unwrap();
+        let report = aligner.observe_capture_callback_clock(MonoTimeNs::from_millis(101), Some(25));
+        assert_eq!(report.delay_hint_ms, 25);
+        assert_eq!(report.correction_ppm, 0.0);
+        assert_eq!(report.fault, None);
     }
 }

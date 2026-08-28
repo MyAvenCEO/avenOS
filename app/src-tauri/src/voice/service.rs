@@ -15,11 +15,11 @@ use aven_voice_runtime::{
     OutputWorkerEvent, PassThroughEnvironment, ProductionClock, RenderActivity, RenderPort,
     RuntimeObserver, TtsWork, TtsWorker, TtsWorkerEvent, VoiceRuntime, VoiceRuntimeHandle,
 };
+use aven_voice_models::{NemotronRecognizerAdapter, SileroVadAdapter};
 #[cfg(feature = "software-voice-cpal")]
 use aven_voice_runtime::{DuplexPipelineConfig, HostEventPort, RouteRequest};
 use tauri::Emitter;
 
-use super::asr_adapter::{NemotronRecognizerAdapter, SileroVadAdapter};
 use super::tts_adapter::SupertonicSynthesizerAdapter;
 
 #[cfg(feature = "software-voice-cpal")]
@@ -586,7 +586,7 @@ fn action_executor(context: ActionExecutorContext) {
                         if wants_input && input_models.is_none() {
                             let loaded = (|| {
                                 let paths = crate::asr::prepare_model_paths(&app)?;
-                                let vad = crate::asr::vad::Vad::open(&paths.vad_path)?;
+                                let vad = aven_voice_models::vad::Vad::open(&paths.vad_path)?;
                                 let recognizer = NemotronRecognizerAdapter::open(
                                     &paths.model_dir,
                                     config.target_asr_peak,
@@ -716,6 +716,10 @@ fn action_executor(context: ActionExecutorContext) {
                                                     input_rate_hz: descriptor.input.sample_rate_hz,
                                                     input_channels: descriptor.input.channels,
                                                     output_rate_hz: descriptor.output.sample_rate_hz,
+                                                    input_timestamp_quality: descriptor.input_timestamp_quality,
+                                                    output_timestamp_quality: descriptor.output_timestamp_quality,
+                                                    callback_only_delay_hint_ms: None,
+                                                    diagnostic_audio_tap: None,
                                                     id_prefix: format!("route{}", generation.0),
                                                 },
                                                 config.clone(),

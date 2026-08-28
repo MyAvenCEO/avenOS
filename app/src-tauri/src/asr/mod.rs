@@ -6,8 +6,7 @@
 
 use crate::assets::{cache_dir, ensure_file, ensure_files, stage};
 use anyhow::Result;
-
-pub(crate) mod vad;
+use aven_voice_models::vad;
 
 const MODEL_BASE: &str =
 	"https://huggingface.co/altunenes/parakeet-rs/resolve/main/nemotron-3.5-asr-streaming-0.6b-onnx";
