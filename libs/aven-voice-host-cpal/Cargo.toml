@@ -1,6 +1,6 @@
 [package]
 name = "aven-voice-host-cpal"
-version = "0.1.0"
+version = "26.8.28-next.2"
 edition = "2021"
 rust-version = "1.93"
 

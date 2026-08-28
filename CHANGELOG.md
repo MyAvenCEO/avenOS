@@ -1,3 +1,19 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.1...v) (2026-08-28)
+
+
+### Bug Fixes
+
+* clear stale output levels after cancellation ([7ae5086](https://github.com/MyAvenCEO/avenOS/commit/7ae5086d3e8ee6fc4c3d925f665c09471a8078eb))
+* **voice:** prevent guarded-mode feedback promotion ([1309454](https://github.com/MyAvenCEO/avenOS/commit/130945466b7b6055b339da78fefd6a409dbd2116))
+* **voice:** stabilize and calibrate duplex routes ([234f55e](https://github.com/MyAvenCEO/avenOS/commit/234f55e78766c22896b2c111a90de28c6e798293))
+
+
+### Features
+
+* **android:** build APK with native passkeys ([4764fc8](https://github.com/MyAvenCEO/avenOS/commit/4764fc8672230dad5bdab94e3073c4406cc13673))
+* **voice:** add full-duplex qualification opt-in ([dedd515](https://github.com/MyAvenCEO/avenOS/commit/dedd515401d233cd3c33d0eb02ba30a70660c2dc))
+* **voice:** enable full duplex for testers ([9ecc263](https://github.com/MyAvenCEO/avenOS/commit/9ecc263697bf663d1a9157466a3fffb3f574cf44))
+* **voice:** implement software-first duplex pipeline ([c75b37e](https://github.com/MyAvenCEO/avenOS/commit/c75b37e528a1771c1aaf1f818933603559b03d59))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.27-next.6...v) (2026-08-28)
 
 
