@@ -51,6 +51,9 @@ pub struct EchoReport {
     pub echo_return_loss_db: Option<f64>,
     pub echo_return_loss_enhancement_db: Option<f64>,
     pub residual_echo_likelihood: Option<f64>,
+    /// The route has completed the minimum fault-free timing and delay
+    /// adaptation, independently of the stricter residual-echo qualification.
+    pub adaptation_ready: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -222,6 +225,18 @@ impl EchoHealth {
         self.state = EchoStatus::Degraded;
     }
 
+    fn adaptation_ready(&self, time: MonoTimeNs) -> bool {
+        !self.faulted
+            && matches!(self.state, EchoStatus::Adapting | EchoStatus::Converged)
+            && self.active_since.is_some_and(|start| {
+                time.elapsed_since(start)
+                    >= u64::from(self.config.aec_min_adaptation_ms) * 1_000_000
+            })
+            && self.stable_since.is_some_and(|start| {
+                time.elapsed_since(start) >= u64::from(self.config.aec_stable_delay_ms) * 1_000_000
+            })
+    }
+
     fn snapshot(&self) -> EchoSnapshot {
         EchoSnapshot {
             state: self.state,
@@ -296,6 +311,7 @@ impl EchoProcessor for FakeEchoProcessor {
             echo_return_loss_db: None,
             echo_return_loss_enhancement_db: None,
             residual_echo_likelihood: None,
+            adaptation_ready: self.health.adaptation_ready(time),
         })
     }
 
@@ -395,6 +411,7 @@ impl EchoProcessor for SoftwareAec3 {
             echo_return_loss_db: stats.echo_return_loss,
             echo_return_loss_enhancement_db: stats.echo_return_loss_enhancement,
             residual_echo_likelihood: stats.residual_echo_likelihood,
+            adaptation_ready: self.health.adaptation_ready(time),
         })
     }
 
@@ -422,10 +439,12 @@ mod tests {
             .process_capture(&capture, MonoTimeNs::from_millis(299), 10, &mut clean)
             .unwrap();
         assert_eq!(adapting.state, EchoStatus::Adapting);
+        assert!(!adapting.adaptation_ready);
         let converged = echo
             .process_capture(&capture, MonoTimeNs::from_millis(300), 10, &mut clean)
             .unwrap();
         assert_eq!(converged.state, EchoStatus::Converged);
+        assert!(converged.adaptation_ready);
         assert!(clean.rms() < 1.0e-6);
     }
 

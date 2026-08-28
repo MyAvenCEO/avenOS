@@ -196,6 +196,18 @@ fn load_optional_f64(slot: &AtomicU64) -> Option<f64> {
     value.is_finite().then_some(value)
 }
 
+fn near_end_evidence(
+    config: &VoiceConfigV1,
+    adaptation_ready: bool,
+    raw_rms: f32,
+    clean_rms: f32,
+) -> bool {
+    let minimum_ratio = 10.0_f32.powf(-config.tester_near_end_max_attenuation_db / 20.0);
+    adaptation_ready
+        && clean_rms >= config.tester_near_end_min_clean_rms
+        && clean_rms >= raw_rms.max(f32::EPSILON) * minimum_ratio
+}
+
 pub struct InputModels {
     pub vad: Box<dyn VoiceActivityDetector>,
     pub recognizer: Box<dyn StreamingRecognizer>,
@@ -239,6 +251,8 @@ struct CleanFrame {
     far_end_active: bool,
     echo_status: EchoStatus,
     safe_echo_continuous: bool,
+    adaptation_ready: bool,
+    near_end_evidence: bool,
 }
 
 enum InputControl {
@@ -421,19 +435,29 @@ fn input_loop(
     id_prefix: String,
     metrics: DuplexMetrics,
 ) -> InputModels {
+    let near_end_frames_required = config.tester_near_end_frames.max(1);
     let mut processor = InputProcessor::new(config, models.vad, models.recognizer);
     let mut next_id = 0_u64;
     let mut candidate_echo_safe = true;
+    let mut candidate_near_end_frames = 0_u32;
+    let mut candidate_near_end_confident = false;
+    let mut candidate_near_end_published = false;
     loop {
         crossbeam_channel::select! {
             recv(controls) -> control => match control {
                 Ok(InputControl::Reset) => {
                     processor.reset();
                     candidate_echo_safe = true;
+                    candidate_near_end_frames = 0;
+                    candidate_near_end_confident = false;
+                    candidate_near_end_published = false;
                 },
                 Ok(InputControl::Overflow) => {
                     if let Some(InputModelEvent::DiscardedOverflow { candidate_id }) = processor.overflow() {
                         candidate_echo_safe = true;
+                        candidate_near_end_frames = 0;
+                        candidate_near_end_confident = false;
+                        candidate_near_end_published = false;
                         let _ = observer.publish(Observation::CandidateOverflow { candidate_id, generation });
                     }
                 }
@@ -447,6 +471,24 @@ fn input_loop(
                 {
                     candidate_echo_safe = false;
                 }
+                if processor.candidate_id().is_some() && !candidate_near_end_confident {
+                    if frame.near_end_evidence {
+                        candidate_near_end_frames = candidate_near_end_frames.saturating_add(1);
+                        candidate_near_end_confident =
+                            candidate_near_end_frames >= near_end_frames_required;
+                    } else {
+                        candidate_near_end_frames = 0;
+                    }
+                }
+                if candidate_near_end_confident && !candidate_near_end_published {
+                    if let Some(candidate_id) = processor.candidate_id().cloned() {
+                        let _ = observer.publish(Observation::NearEndEvidence {
+                            candidate_id,
+                            generation,
+                        });
+                        candidate_near_end_published = true;
+                    }
+                }
                 let events = processor.push_clean_16k(&frame.samples, || {
                     next_id = next_id.saturating_add(1);
                     CandidateId::parse(format!("{id_prefix}-c-{next_id}"))
@@ -454,10 +496,16 @@ fn input_loop(
                 });
                 metrics.update_vad(processor.last_vad_probability());
                 for event in events {
+                    let mut started_candidate = None;
                     let observation = match event {
                         InputModelEvent::CandidateStarted { candidate_id, .. } => {
                             candidate_echo_safe = !frame.far_end_active
                                 || frame.safe_echo_continuous;
+                            candidate_near_end_frames = u32::from(frame.near_end_evidence);
+                            candidate_near_end_confident =
+                                candidate_near_end_frames >= near_end_frames_required;
+                            candidate_near_end_published = false;
+                            started_candidate = Some(candidate_id.clone());
                             Observation::VadStarted {
                                 candidate_id,
                                 generation,
@@ -482,10 +530,16 @@ fn input_loop(
                                 safe_echo_continuous: candidate_echo_safe,
                             };
                             candidate_echo_safe = true;
+                            candidate_near_end_frames = 0;
+                            candidate_near_end_confident = false;
+                            candidate_near_end_published = false;
                             observation
                         },
                         InputModelEvent::DiscardedOverflow { candidate_id } => {
                             candidate_echo_safe = true;
+                            candidate_near_end_frames = 0;
+                            candidate_near_end_confident = false;
+                            candidate_near_end_published = false;
                             Observation::CandidateOverflow {
                                 candidate_id,
                                 generation,
@@ -493,6 +547,9 @@ fn input_loop(
                         },
                         InputModelEvent::ModelFailed { candidate_id, .. } => {
                             candidate_echo_safe = true;
+                            candidate_near_end_frames = 0;
+                            candidate_near_end_confident = false;
+                            candidate_near_end_published = false;
                             Observation::InputModelFailed {
                                 candidate_id,
                                 generation,
@@ -500,6 +557,23 @@ fn input_loop(
                         },
                     };
                     let _ = observer.publish(observation);
+                    if frame.adaptation_ready {
+                        if let Some(candidate_id) = started_candidate {
+                            let _ = observer.publish(Observation::CandidateAdaptationReady {
+                                candidate_id,
+                                generation,
+                            });
+                        }
+                    }
+                    if candidate_near_end_confident && !candidate_near_end_published {
+                        if let Some(candidate_id) = processor.candidate_id().cloned() {
+                            let _ = observer.publish(Observation::NearEndEvidence {
+                                candidate_id,
+                                generation,
+                            });
+                            candidate_near_end_published = true;
+                        }
+                    }
                 }
             }
         }
@@ -764,6 +838,13 @@ impl DspWorker {
                                     >= self.voice_config.render_silence_rms,
                                 echo_status: report.state,
                                 safe_echo_continuous: report.state == EchoStatus::Converged,
+                                adaptation_ready: report.adaptation_ready,
+                                near_end_evidence: near_end_evidence(
+                                    &self.voice_config,
+                                    report.adaptation_ready,
+                                    report.raw_rms,
+                                    report.clean_rms,
+                                ),
                             };
                             if let Err(error) = self.clean_tx.try_send(message) {
                                 if matches!(error, TrySendError::Full(_)) {
@@ -853,6 +934,15 @@ mod tests {
         CallbackTime, FakeEchoProcessor, HostSampleFormat, ModelError, RecognizerUpdate,
         StreamDescriptor, TimestampQuality,
     };
+
+    #[test]
+    fn near_end_evidence_preserves_double_talk_but_rejects_suppressed_echo() {
+        let config = VoiceConfigV1::default();
+        assert!(near_end_evidence(&config, true, 0.035, 0.029));
+        assert!(!near_end_evidence(&config, true, 0.0125, 0.0034));
+        assert!(!near_end_evidence(&config, true, 0.002, 0.002));
+        assert!(!near_end_evidence(&config, false, 0.035, 0.029));
+    }
 
     struct SpeechVad;
 

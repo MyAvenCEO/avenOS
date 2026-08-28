@@ -29,6 +29,7 @@ const RENDER_READY_CHUNKS: usize = 25;
 #[cfg(feature = "software-voice-cpal")]
 const RENDER_REFERENCE_CHUNKS: usize = 50;
 const FULL_DUPLEX_BARGE_IN_ENV: &str = "AVEN_VOICE_FULL_DUPLEX_BARGE_IN";
+const TESTER_ADAPTING_BARGE_IN_ENV: &str = "AVEN_VOICE_TESTER_ADAPTING_BARGE_IN";
 type LiveCapture = (CapturePort, SessionId, RouteGeneration);
 
 #[derive(Clone)]
@@ -66,6 +67,7 @@ impl VoiceService {
     pub fn new(app: tauri::AppHandle) -> Self {
         let mut config = VoiceConfigV1::default();
         config.allow_full_duplex_barge_in = full_duplex_barge_in_enabled();
+        config.allow_tester_adapting_barge_in = tester_adapting_barge_in_enabled();
         if config.allow_full_duplex_barge_in {
             log::info!(
                 target: "avenos::voice",
@@ -75,6 +77,12 @@ impl VoiceService {
             log::info!(
                 target: "avenos::voice",
                 "full-duplex barge-in disabled via {FULL_DUPLEX_BARGE_IN_ENV}"
+            );
+        }
+        if config.allow_tester_adapting_barge_in {
+            log::warn!(
+                target: "avenos::voice",
+                "tester adapting-AEC barge-in enabled via {TESTER_ADAPTING_BARGE_IN_ENV}"
             );
         }
         let nonce = format!("{:016x}", rand::random::<u64>());
@@ -253,6 +261,19 @@ fn full_duplex_barge_in_enabled() -> bool {
             );
             true
         }
+    }
+}
+
+fn tester_adapting_barge_in_enabled() -> bool {
+    match std::env::var(TESTER_ADAPTING_BARGE_IN_ENV) {
+        Ok(value) => parse_boolean_override(&value).unwrap_or_else(|| {
+            log::warn!(
+                target: "avenos::voice",
+                "unknown {TESTER_ADAPTING_BARGE_IN_ENV}={value:?}; keeping tester fallback off"
+            );
+            false
+        }),
+        Err(_) => false,
     }
 }
 

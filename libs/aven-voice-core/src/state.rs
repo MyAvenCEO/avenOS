@@ -92,6 +92,9 @@ pub struct CandidateState {
     pub unsafe_since_start: bool,
     pub confirmed: bool,
     pub partial: String,
+    assistant_text: String,
+    near_end_confident: bool,
+    adaptation_ready_at_start: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -656,12 +659,35 @@ impl VoiceState {
                         unsafe_since_start: unsafe_at_start,
                         confirmed: false,
                         partial: String::new(),
+                        assistant_text: self
+                            .turn
+                            .as_ref()
+                            .map(|turn| turn.segments.join(" "))
+                            .unwrap_or_default(),
+                        near_end_confident: false,
+                        adaptation_ready_at_start: false,
                     });
                     self.utterance_status = UtteranceStatus::Candidate;
                     actions.push(Action::Emit(VoiceEvent::InputCandidateStarted {
                         candidate_id,
                         far_end_active,
                     }));
+                }
+            }
+            Observation::NearEndEvidence {
+                candidate_id,
+                generation,
+            } => {
+                if self.candidate_matches(&candidate_id, generation) {
+                    self.candidate.as_mut().unwrap().near_end_confident = true;
+                }
+            }
+            Observation::CandidateAdaptationReady {
+                candidate_id,
+                generation,
+            } => {
+                if self.candidate_matches(&candidate_id, generation) {
+                    self.candidate.as_mut().unwrap().adaptation_ready_at_start = true;
                 }
             }
             Observation::RecognizerPartial {
@@ -687,7 +713,7 @@ impl VoiceState {
                         }));
                     }
                     if has_lexical_seed(&text)
-                        && self.candidate_can_confirm(far_end_active, safe_echo_continuous)
+                        && self.candidate_can_confirm(&text, far_end_active, safe_echo_continuous)
                     {
                         self.confirm_candidate(candidate_id, &mut actions);
                     }
@@ -710,7 +736,7 @@ impl VoiceState {
                         .candidate
                         .as_ref()
                         .is_some_and(|candidate| candidate.confirmed)
-                        || self.candidate_can_confirm(far_end_active, safe_echo_continuous)
+                        || self.candidate_can_confirm(&text, far_end_active, safe_echo_continuous)
                     {
                         if !self.candidate.as_ref().unwrap().confirmed {
                             self.confirm_candidate(candidate_id.clone(), &mut actions);
@@ -1142,13 +1168,26 @@ impl VoiceState {
             })
     }
 
-    fn candidate_can_confirm(&self, far_end_active: bool, safe_echo_continuous: bool) -> bool {
+    fn candidate_can_confirm(
+        &self,
+        text: &str,
+        far_end_active: bool,
+        safe_echo_continuous: bool,
+    ) -> bool {
         let output_turn_active = self.turn.is_some() || far_end_active;
         self.candidate.as_ref().is_some_and(|candidate| {
-            !candidate.unsafe_at_start
+            let strictly_safe = !candidate.unsafe_at_start
                 && !candidate.unsafe_since_start
                 && (!output_turn_active
-                    || (self.config.allow_full_duplex_barge_in && safe_echo_continuous))
+                    || (self.config.allow_full_duplex_barge_in && safe_echo_continuous));
+            strictly_safe
+                || (self.config.allow_full_duplex_barge_in
+                    && self.config.allow_tester_adapting_barge_in
+                    && candidate.unsafe_since_start
+                    && candidate.adaptation_ready_at_start
+                    && candidate.near_end_confident
+                    && self.echo_status == EchoStatus::Adapting
+                    && !looks_like_narration_echo(text, &candidate.assistant_text))
         })
     }
 
@@ -1356,6 +1395,47 @@ pub fn has_lexical_seed(text: &str) -> bool {
                 .count()
                 >= 2
         })
+}
+
+fn looks_like_narration_echo(text: &str, narration: &str) -> bool {
+    let heard = compact_lexical(text);
+    let spoken = compact_lexical(narration);
+    if heard.is_empty() || spoken.is_empty() {
+        return false;
+    }
+    if spoken.windows(heard.len()).any(|window| window == heard) {
+        return true;
+    }
+    if heard.len() < 6 {
+        return false;
+    }
+    let window_len = heard.len().min(spoken.len());
+    spoken.windows(window_len).any(|window| {
+        let distance = levenshtein(&heard, window);
+        1.0 - distance as f32 / heard.len().max(window.len()) as f32 >= 0.68
+    })
+}
+
+fn compact_lexical(text: &str) -> Vec<char> {
+    text.nfkc()
+        .flat_map(|character| character.to_lowercase())
+        .filter(|character| character.is_alphanumeric())
+        .collect()
+}
+
+fn levenshtein(left: &[char], right: &[char]) -> usize {
+    let mut previous = (0..=right.len()).collect::<Vec<_>>();
+    let mut current = vec![0; right.len() + 1];
+    for (left_index, left_character) in left.iter().enumerate() {
+        current[0] = left_index + 1;
+        for (right_index, right_character) in right.iter().enumerate() {
+            current[right_index + 1] = (current[right_index] + 1)
+                .min(previous[right_index + 1] + 1)
+                .min(previous[right_index] + usize::from(left_character != right_character));
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+    previous[right.len()]
 }
 
 #[cfg(test)]
@@ -1781,6 +1861,228 @@ mod tests {
             }
         )));
         assert_eq!(state.turn.as_ref().map(|active| &active.id), Some(&turn));
+    }
+
+    #[test]
+    fn explicit_tester_fallback_interrupts_on_non_echo_near_end_speech() {
+        let (mut state, session) = active_state();
+        state.config.allow_tester_adapting_barge_in = true;
+        let turn = begin_turn(&mut state, &session);
+        state
+            .command(
+                Command::EnqueueSpeech {
+                    request_id: request("tester-segment"),
+                    session_id: session,
+                    turn_id: turn.clone(),
+                    segment_index: 0,
+                    text: "Gern. Ich fasse zuerst die wichtigsten Aufgaben zusammen.".into(),
+                },
+                MonoTimeNs(0),
+            )
+            .0
+            .unwrap();
+        state.observe(
+            Observation::EchoChanged {
+                generation: state.route_generation,
+                status: EchoStatus::Adapting,
+            },
+            MonoTimeNs(0),
+        );
+        let candidate = CandidateId::parse("candidate-tester-user").unwrap();
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                far_end_active: true,
+                echo_status: EchoStatus::Adapting,
+                at: MonoTimeNs(1),
+            },
+            MonoTimeNs(1),
+        );
+        state.observe(
+            Observation::CandidateAdaptationReady {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+            },
+            MonoTimeNs(1),
+        );
+        state.observe(
+            Observation::NearEndEvidence {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+            },
+            MonoTimeNs(2),
+        );
+
+        let actions = state.observe(
+            Observation::RecognizerPartial {
+                candidate_id: candidate,
+                generation: state.route_generation,
+                text: "Stopp, wie meinst du das?".into(),
+                far_end_active: true,
+                safe_echo_continuous: false,
+            },
+            MonoTimeNs(3),
+        );
+
+        assert!(actions
+            .iter()
+            .any(|action| matches!(action, Action::CancelTts(observed) if observed == &turn)));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            Action::Emit(VoiceEvent::InputConfirmed {
+                barge_in_started: true,
+                ..
+            })
+        )));
+    }
+
+    #[test]
+    fn explicit_tester_fallback_rejects_fuzzy_narration_echo() {
+        let (mut state, session) = active_state();
+        state.config.allow_tester_adapting_barge_in = true;
+        let turn = begin_turn(&mut state, &session);
+        state
+            .command(
+                Command::EnqueueSpeech {
+                    request_id: request("echo-segment"),
+                    session_id: session,
+                    turn_id: turn.clone(),
+                    segment_index: 0,
+                    text: "Gern. Ich fasse zuerst die wichtigsten Aufgaben zusammen.".into(),
+                },
+                MonoTimeNs(0),
+            )
+            .0
+            .unwrap();
+        state.observe(
+            Observation::EchoChanged {
+                generation: state.route_generation,
+                status: EchoStatus::Adapting,
+            },
+            MonoTimeNs(0),
+        );
+        let candidate = CandidateId::parse("candidate-tester-echo").unwrap();
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                far_end_active: true,
+                echo_status: EchoStatus::Adapting,
+                at: MonoTimeNs(1),
+            },
+            MonoTimeNs(1),
+        );
+        state.observe(
+            Observation::CandidateAdaptationReady {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+            },
+            MonoTimeNs(1),
+        );
+        state.observe(
+            Observation::NearEndEvidence {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+            },
+            MonoTimeNs(2),
+        );
+
+        let partial = state.observe(
+            Observation::RecognizerPartial {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                text: "Was er zuerst".into(),
+                far_end_active: true,
+                safe_echo_continuous: false,
+            },
+            MonoTimeNs(3),
+        );
+        assert!(!partial
+            .iter()
+            .any(|action| matches!(action, Action::CancelTts(_))));
+        let final_actions = state.observe(
+            Observation::RecognizerFinal {
+                candidate_id: candidate,
+                generation: state.route_generation,
+                text: "Was er zuerst".into(),
+                far_end_active: true,
+                safe_echo_continuous: false,
+            },
+            MonoTimeNs(4),
+        );
+        assert!(final_actions.iter().any(|action| matches!(
+            action,
+            Action::CandidateDiscarded {
+                reason: InputDiscardReason::UnsafeEcho,
+                ..
+            }
+        )));
+        assert_eq!(state.turn.as_ref().map(|active| &active.id), Some(&turn));
+    }
+
+    #[test]
+    fn tester_fallback_never_promotes_a_candidate_started_before_adaptation() {
+        let (mut state, session) = active_state();
+        state.config.allow_tester_adapting_barge_in = true;
+        let turn = begin_turn(&mut state, &session);
+        state.observe(
+            Observation::EchoChanged {
+                generation: state.route_generation,
+                status: EchoStatus::Adapting,
+            },
+            MonoTimeNs(0),
+        );
+        let candidate = CandidateId::parse("candidate-too-early").unwrap();
+        state.observe(
+            Observation::VadStarted {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+                far_end_active: true,
+                echo_status: EchoStatus::Adapting,
+                at: MonoTimeNs(1),
+            },
+            MonoTimeNs(1),
+        );
+        state.observe(
+            Observation::NearEndEvidence {
+                candidate_id: candidate.clone(),
+                generation: state.route_generation,
+            },
+            MonoTimeNs(400),
+        );
+
+        let actions = state.observe(
+            Observation::RecognizerPartial {
+                candidate_id: candidate,
+                generation: state.route_generation,
+                text: "Stopp, einen Moment bitte".into(),
+                far_end_active: true,
+                safe_echo_continuous: false,
+            },
+            MonoTimeNs(500),
+        );
+
+        assert!(!actions
+            .iter()
+            .any(|action| matches!(action, Action::CancelTts(_))));
+        assert_eq!(state.turn.as_ref().map(|active| &active.id), Some(&turn));
+    }
+
+    #[test]
+    fn narration_echo_matching_tolerates_streaming_asr_errors() {
+        assert!(looks_like_narration_echo(
+            "Was er zuerst",
+            "Gern. Ich fasse zuerst die wichtigsten Aufgaben zusammen."
+        ));
+        assert!(looks_like_narration_echo(
+            "Schauen wir heute Abend in den",
+            "Schauen wir heute Abend in den Sternenhimmel."
+        ));
+        assert!(!looks_like_narration_echo(
+            "Stopp, wie meinst du das?",
+            "Gern. Ich fasse zuerst die wichtigsten Aufgaben zusammen."
+        ));
     }
 
     #[test]
