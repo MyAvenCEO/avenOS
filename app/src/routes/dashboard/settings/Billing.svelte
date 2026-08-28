@@ -66,6 +66,16 @@ interface Order {
  * `applyOnly` (a conversation), and what is left is avenCEO. A new
  * subscription tier in the SSOT appears here with no edit. */
 const TIER_PLANS: Plan[] = PLANS.filter((p) => p.billing === 'monthly' && !p.applyOnly)
+/**
+ * ALPHA: we only sell avenNAME. The subscription half of this pane — the
+ * "Deine Produkte" cards and the inline checkout they open — is switched off
+ * rather than removed: the markup below is commented out, and this flag keeps
+ * the checkout block (which contains its own HTML comments, so it cannot be
+ * legally wrapped in one) inert. Flip to `true` and un-comment the block under
+ * "Deine Produkte" to open avenCEO back up. Orders are untouched — a paid
+ * avenNAME still appears under "Meine Bestellungen".
+ */
+const SUBSCRIPTIONS_ENABLED = false
 /** A subscription in one of these states is over — the tier is bookable
  * again. Mirrors the server's ENDED_STATUSES, Polar vocabulary. */
 const ENDED = ['canceled', 'expired', 'incomplete_expired', 'unpaid', 'revoked']
@@ -642,7 +652,7 @@ onDestroy(() => {
 			Deine Abrechnung wird geladen …
 		</p>
 	{:else}
-		{#if checkout}
+		{#if SUBSCRIPTIONS_ENABLED && checkout}
 			<!-- Inline checkout: OUR iframe, right here in the card — no
 			     fullscreen overlay, hard-coded light, Polar's embed protocol
 			     spoken directly. -->
@@ -687,8 +697,14 @@ onDestroy(() => {
 			</div>
 		{/if}
 
-		<!-- Zwei unabhängige Produkte, aus demselben SSOT wie die Website —
+		<!-- ALPHA: subscriptions are off — we only sell avenNAME, so the
+		     avenCEO product cards (and the booking button on them) are hidden.
+		     Commented out, not deleted: restore by removing the comment
+		     wrapper below and setting SUBSCRIPTIONS_ENABLED to true.
+
+		     Zwei unabhängige Produkte, aus demselben SSOT wie die Website —
 		     settings und Website können sich beim Preis nicht widersprechen. -->
+		<!--
 		<div class="flex flex-col gap-2">
 			<p class="eyebrow-quiet">Deine Produkte</p>
 			<div class="flex flex-col gap-3 sm:flex-row">
@@ -697,6 +713,7 @@ onDestroy(() => {
 				{/each}
 			</div>
 		</div>
+		-->
 
 		<!-- Meine Bestellungen: each order expands into its in-app detail from
 		     real order data; the official Polar invoice PDF is one click away. -->
