@@ -140,7 +140,7 @@ pub fn built_in_scenarios() -> Vec<Scenario> {
             injection: Injection::Speech {
                 text: "Und was ist morgen wichtig?",
                 voice: "F3",
-                timing: SpeechTiming::AfterAssistant(450),
+                timing: SpeechTiming::AfterAssistant(1_200),
                 peak_dbfs: -6.0,
                 clarity: Clarity::Clean,
             },
@@ -148,6 +148,40 @@ pub fn built_in_scenarios() -> Vec<Scenario> {
                 keywords: &["morgen", "wichtig"],
             },
             required: true,
+        },
+        Scenario {
+            name: "second_speaker_follow_up",
+            assistant_text: "Die Übersicht ist jetzt vollständig.",
+            assistant_voice: "M5",
+            assistant_peak_dbfs: CONVERSATIONAL_ASSISTANT_PEAK_DBFS,
+            injection: Injection::Speech {
+                text: "Öffne bitte als Nächstes den Kalender.",
+                voice: "M3",
+                timing: SpeechTiming::AfterAssistant(1_200),
+                peak_dbfs: -6.0,
+                clarity: Clarity::Clean,
+            },
+            expectation: Expectation::FollowUp {
+                keywords: &["kalender", "öffne", "nächstes"],
+            },
+            required: false,
+        },
+        Scenario {
+            name: "third_speaker_follow_up",
+            assistant_text: "Die Übersicht ist jetzt vollständig.",
+            assistant_voice: "M5",
+            assistant_peak_dbfs: CONVERSATIONAL_ASSISTANT_PEAK_DBFS,
+            injection: Injection::Speech {
+                text: "Welche Termine sind für Freitag geplant?",
+                voice: "F5",
+                timing: SpeechTiming::AfterAssistant(1_200),
+                peak_dbfs: -9.0,
+                clarity: Clarity::Clean,
+            },
+            expectation: Expectation::FollowUp {
+                keywords: &["termine", "freitag", "geplant"],
+            },
+            required: false,
         },
         Scenario {
             name: "speech_before_echo_is_safe",
@@ -425,7 +459,7 @@ mod tests {
         let tracks = build_tracks(&scenario, 48_000, &pcm(48_000), Some(&pcm(24_000)));
         assert_eq!(
             tracks.injection_start_frame.unwrap() - tracks.assistant_end_frame,
-            21_600
+            57_600
         );
     }
 
@@ -451,5 +485,16 @@ mod tests {
                 ..
             }
         )));
+        let voices = scenarios
+            .iter()
+            .filter_map(|scenario| match scenario.injection {
+                Injection::Speech { voice, .. } => Some(voice),
+                _ => None,
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            voices.len() >= 3,
+            "speaker corpus needs at least three voices"
+        );
     }
 }

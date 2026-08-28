@@ -392,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "aven-voice-models"
-version = "0.1.0"
+version = "26.8.28-next.3"
 dependencies = [
  "anyhow",
  "aven-voice-protocol",
@@ -405,6 +405,7 @@ dependencies = [
  "rand 0.8.7",
  "rand_distr",
  "regex",
+ "rustfft",
  "serde",
  "serde_json",
  "unicode-normalization",
@@ -427,6 +428,7 @@ dependencies = [
  "aven-voice-protocol",
  "crossbeam-channel",
  "crossbeam-queue",
+ "log",
  "rubato",
  "sonora",
  "unicode-normalization",

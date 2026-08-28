@@ -5,6 +5,7 @@ import type {
 	CandidateId,
 	EchoStatus,
 	SessionId,
+	SpeakerAttribution,
 	TurnId,
 	VoiceEventEnvelope,
 	VoiceSnapshot
@@ -16,7 +17,8 @@ export interface InputHooks {
 	onCandidate?: () => void
 	onPartial?: (text: string) => void
 	onConfirmed?: () => void
-	onFinal?: (text: string) => void
+	onSpeaker?: (speaker: SpeakerAttribution) => void
+	onFinal?: (text: string, speaker: SpeakerAttribution | null) => void
 	onDiscarded?: () => void
 }
 
@@ -32,6 +34,7 @@ export class VoiceController {
 	capture = $state<'closed' | 'starting' | 'live' | 'denied' | 'failed'>('closed')
 	echo = $state<EchoStatus>('bypassed')
 	partial = $state('')
+	speaker = $state<SpeakerAttribution | null>(null)
 	hearing = $state(false)
 	speaking = $state(false)
 	failure = $state<string | null>(null)
@@ -49,6 +52,8 @@ export class VoiceController {
 	#lastSequence = 0n
 	#routeGeneration: string | null = null
 	#confirmed = new Set<CandidateId>()
+	#candidate: CandidateId | null = null
+	#candidateSpeakers = new Map<CandidateId, SpeakerAttribution>()
 	#planner = new SpeechPlanner()
 	#turn: TurnId | null = null
 	#playbackWaiters = new Map<TurnId, { resolve: () => void; reject: (error: Error) => void }>()
@@ -152,6 +157,9 @@ export class VoiceController {
 		this.capture = 'closed'
 		this.hearing = false
 		this.partial = ''
+		this.speaker = null
+		this.#candidate = null
+		this.#candidateSpeakers.clear()
 		this.#confirmed.clear()
 		if (session) {
 			await this.backend.setDiagnostics(session, false).catch(() => {})
@@ -164,6 +172,9 @@ export class VoiceController {
 	async resetInput(): Promise<void> {
 		this.hearing = false
 		this.partial = ''
+		this.speaker = null
+		this.#candidate = null
+		this.#candidateSpeakers.clear()
 		if (this.sessionId) {
 			await this.backend.resetInput(this.sessionId, 'conversation_cleared').catch((error) => {
 				this.failure = safeMessage(error)
@@ -320,6 +331,8 @@ export class VoiceController {
 			case 'input.candidate_started':
 				this.hearing = true
 				this.partial = ''
+				this.speaker = null
+				this.#candidate = event.candidate_id
 				for (const hooks of this.#inputHooks) hooks.onCandidate?.()
 				break
 			case 'input.partial':
@@ -331,16 +344,28 @@ export class VoiceController {
 				this.#confirmed.add(event.candidate_id)
 				for (const hooks of this.#inputHooks) hooks.onConfirmed?.()
 				break
-			case 'input.final':
-				this.#confirmed.delete(event.candidate_id)
-				this.hearing = false
-				this.partial = ''
-				for (const hooks of this.#inputHooks) hooks.onFinal?.(event.text)
+			case 'input.speaker_identified':
+				this.#candidateSpeakers.set(event.candidate_id, event.speaker)
+				if (event.candidate_id === this.#candidate) this.speaker = event.speaker
+				for (const hooks of this.#inputHooks) hooks.onSpeaker?.(event.speaker)
 				break
-			case 'input.discarded':
+			case 'input.final': {
+				const finalSpeaker = this.#candidateSpeakers.get(event.candidate_id) ?? null
+				this.#candidateSpeakers.delete(event.candidate_id)
 				this.#confirmed.delete(event.candidate_id)
 				this.hearing = false
 				this.partial = ''
+				this.#candidate = null
+				for (const hooks of this.#inputHooks) hooks.onFinal?.(event.text, finalSpeaker)
+				break
+			}
+			case 'input.discarded':
+				this.#candidateSpeakers.delete(event.candidate_id)
+				this.#confirmed.delete(event.candidate_id)
+				this.hearing = false
+				this.partial = ''
+				this.speaker = null
+				this.#candidate = null
 				for (const hooks of this.#inputHooks) hooks.onDiscarded?.()
 				break
 			case 'playback.started':

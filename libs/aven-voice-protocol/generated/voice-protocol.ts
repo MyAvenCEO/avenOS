@@ -8,6 +8,8 @@ export type RouteId = string;
 
 export type CandidateId = string;
 
+export type SpeakerId = string;
+
 export type TurnId = string;
 
 export type ClientTurnKey = string;
@@ -66,6 +68,13 @@ export type SpeechTurnStarted = { turn_id: TurnId, pending_segment_capacity: num
 
 export type EnqueueResult = { accepted: boolean, idempotent: boolean, remaining_segment_capacity: number, };
 
+export type SpeakerAttribution = { speaker_id: SpeakerId,
+/**
+ * Cosine-based model confidence in the range 0..=1. A newly created
+ * anonymous cluster starts at 1 because no competing identity exists yet.
+ */
+confidence: number, };
+
 export type VoiceSnapshot = { runtime: RuntimeStatus, session: SessionSnapshot, route: RouteSnapshot | null, capture: CaptureSnapshot, echo: EchoSnapshot, utterance: UtteranceSnapshot, recognizer: WorkerSnapshot, synthesis: SynthesisSnapshot, playback: PlaybackSnapshot, queues: Array<QueueSnapshot>, workers: Array<NamedWorkerSnapshot>, recent_errors: Array<VoiceError>, };
 
 export type SessionSnapshot = { status: SessionStatus, session_id: SessionId | null, };
@@ -98,6 +107,6 @@ export type VoiceError = { code: VoiceErrorCode, severity: ErrorSeverity, retrya
 
 export type InputDiscardReason = "empty" | "unsafe_echo" | "reset" | "stale" | "overflow" | "route_changed" | "model_failed";
 
-export type VoiceEvent = { "type": "status.runtime", status: RuntimeStatus, } | { "type": "status.session", status: SessionStatus, } | { "type": "status.route", route: RouteSnapshot | null, } | { "type": "status.capture", status: CaptureStatus, } | { "type": "status.echo", status: EchoStatus, full_duplex_barge_in: boolean, } | { "type": "input.candidate_started", candidate_id: CandidateId, far_end_active: boolean, } | { "type": "input.partial", candidate_id: CandidateId, text: string, } | { "type": "input.confirmed", candidate_id: CandidateId, barge_in_started: boolean, } | { "type": "input.final", candidate_id: CandidateId, text: string, } | { "type": "input.discarded", candidate_id: CandidateId, reason: InputDiscardReason, } | { "type": "playback.turn_started", turn_id: TurnId, } | { "type": "playback.segment_accepted", turn_id: TurnId, segment_index: number, } | { "type": "playback.synthesis_started", turn_id: TurnId, segment_index: number, } | { "type": "playback.synthesis_completed", turn_id: TurnId, segment_index: number, } | { "type": "playback.started", turn_id: TurnId, } | { "type": "playback.fading", turn_id: TurnId, duration_ms: number, } | { "type": "playback.completed", turn_id: TurnId, } | { "type": "playback.cancelled", turn_id: TurnId, reason: SpeechCancelReason, } | { "type": "playback.failed", turn_id: TurnId, error: VoiceError, } | { "type": "capacity.changed", pending_segments: number, synthesized_lead_ms: number, } | { "type": "diagnostics.snapshot", snapshot: VoiceSnapshot, } | { "type": "error.raised", error: VoiceError, };
+export type VoiceEvent = { "type": "status.runtime", status: RuntimeStatus, } | { "type": "status.session", status: SessionStatus, } | { "type": "status.route", route: RouteSnapshot | null, } | { "type": "status.capture", status: CaptureStatus, } | { "type": "status.echo", status: EchoStatus, full_duplex_barge_in: boolean, } | { "type": "input.candidate_started", candidate_id: CandidateId, far_end_active: boolean, } | { "type": "input.partial", candidate_id: CandidateId, text: string, } | { "type": "input.confirmed", candidate_id: CandidateId, barge_in_started: boolean, } | { "type": "input.speaker_identified", candidate_id: CandidateId, speaker: SpeakerAttribution, } | { "type": "input.final", candidate_id: CandidateId, text: string, } | { "type": "input.discarded", candidate_id: CandidateId, reason: InputDiscardReason, } | { "type": "playback.turn_started", turn_id: TurnId, } | { "type": "playback.segment_accepted", turn_id: TurnId, segment_index: number, } | { "type": "playback.synthesis_started", turn_id: TurnId, segment_index: number, } | { "type": "playback.synthesis_completed", turn_id: TurnId, segment_index: number, } | { "type": "playback.started", turn_id: TurnId, } | { "type": "playback.fading", turn_id: TurnId, duration_ms: number, } | { "type": "playback.completed", turn_id: TurnId, } | { "type": "playback.cancelled", turn_id: TurnId, reason: SpeechCancelReason, } | { "type": "playback.failed", turn_id: TurnId, error: VoiceError, } | { "type": "capacity.changed", pending_segments: number, synthesized_lead_ms: number, } | { "type": "diagnostics.snapshot", snapshot: VoiceSnapshot, } | { "type": "error.raised", error: VoiceError, };
 
 export type VoiceEventEnvelope = { protocol_version: number, sequence: DecimalU64, session_id: SessionId | null, route_generation: DecimalU64 | null, at_mono_ms: number, event: VoiceEvent, };

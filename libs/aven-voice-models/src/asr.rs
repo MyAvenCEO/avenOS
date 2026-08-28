@@ -192,7 +192,8 @@ mod real_model_tests {
     #[test]
     #[ignore = "needs the downloaded VAD model"]
     fn loads_silero_model() {
-        SileroVadAdapter(crate::vad::Vad::open(&vad_path()).expect("VAD should open"));
+        let _adapter =
+            SileroVadAdapter(crate::vad::Vad::open(&vad_path()).expect("VAD should open"));
     }
 
     #[test]

@@ -230,3 +230,31 @@ full duplex disabled and did not cancel the assistant. This is a useful failed
 hardware qualification: it proves autonomous double-talk reaches ASR while an
 unqualified echo path cannot recreate the former feedback loop. It is not a
 reason to lower the 15 dB production threshold.
+
+### Anonymous speaker diarization
+
+The optional speaker layer uses the official WeSpeaker VoxCeleb ResNet34 ONNX
+checkpoint (`voxceleb_resnet34.onnx`, SHA-256
+`9fea6516d7ad6bf0a76c7689f5a49b65d330fad6dde96c91bb4435ffbfe056a1`).
+WeSpeaker publishes its VoxCeleb checkpoints under CC BY 4.0. The native
+frontend follows the published 16 kHz, 25 ms window, 10 ms frame-shift, 80-bin
+filterbank and mean-normalization inference path. If the optional checkpoint
+cannot be downloaded, loaded, or evaluated, transcription continues without a
+speaker label.
+
+This is session-local diarization, not speaker identification: labels are only
+`speaker-1` through `speaker-3`, embeddings never cross IPC or persist, and all
+clusters reset with the voice session or input route. The post-AEC worker emits
+an embedding observation, but the semantic core assigns it only after lexical
+confirmation. Echo, noise, stale generations, and otherwise discarded input
+therefore cannot create or update a speaker profile.
+
+Qualification evidence covers both layers. Direct inference with the real
+checkpoint and local Supertonic voices produced cosine similarity 0.836 for
+two different F3 sentences and 0.233 for the same sentence spoken by F3 and M3.
+The physical laptop lab then assigned three separately synthesized voices F3,
+M3, and F5 to three stable, distinct anonymous labels from their post-AEC
+captures. The clustering gate is deliberately bounded to three people and uses
+a 0.55 match threshold plus a 0.06 previous-speaker margin to avoid label churn.
+These are initial conversational heuristics, not biometric accuracy claims;
+multi-device tester feedback remains part of duplex qualification.

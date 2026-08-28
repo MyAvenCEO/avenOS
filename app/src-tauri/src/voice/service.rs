@@ -4,6 +4,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use aven_voice_core::{
     Action, CachedResult, Command, Observation, OutputGeneration, RouteGeneration, VoiceConfigV1,
 };
+use aven_voice_models::{NemotronRecognizerAdapter, SileroVadAdapter, WeSpeakerEmbedder};
 #[cfg(feature = "software-voice-cpal")]
 use aven_voice_protocol::{DecimalU64, RouteSnapshot};
 use aven_voice_protocol::{
@@ -15,7 +16,6 @@ use aven_voice_runtime::{
     OutputWorkerEvent, PassThroughEnvironment, ProductionClock, RenderActivity, RenderPort,
     RuntimeObserver, TtsWork, TtsWorker, TtsWorkerEvent, VoiceRuntime, VoiceRuntimeHandle,
 };
-use aven_voice_models::{NemotronRecognizerAdapter, SileroVadAdapter};
 #[cfg(feature = "software-voice-cpal")]
 use aven_voice_runtime::{DuplexPipelineConfig, HostEventPort, RouteRequest};
 use tauri::Emitter;
@@ -65,9 +65,11 @@ pub struct ServiceError {
 
 impl VoiceService {
     pub fn new(app: tauri::AppHandle) -> Self {
-        let mut config = VoiceConfigV1::default();
-        config.allow_full_duplex_barge_in = full_duplex_barge_in_enabled();
-        config.allow_tester_adapting_barge_in = tester_adapting_barge_in_enabled();
+        let config = VoiceConfigV1 {
+            allow_full_duplex_barge_in: full_duplex_barge_in_enabled(),
+            allow_tester_adapting_barge_in: tester_adapting_barge_in_enabled(),
+            ..VoiceConfigV1::default()
+        };
         if config.allow_full_duplex_barge_in {
             log::info!(
                 target: "avenos::voice",
@@ -613,9 +615,28 @@ fn action_executor(context: ActionExecutorContext) {
                                     config.target_asr_peak,
                                     config.max_asr_gain,
                                 )?;
+                                let speaker = paths.speaker_path.as_deref().and_then(|path| {
+                                    match WeSpeakerEmbedder::open(path) {
+                                        Ok(embedder) => {
+                                            log::info!(
+                                                target: "avenos::voice",
+                                                "anonymous speaker diarization ready"
+                                            );
+                                            Some(Box::new(embedder) as Box<dyn aven_voice_runtime::SpeakerEmbedder>)
+                                        }
+                                        Err(error) => {
+                                            log::warn!(
+                                                target: "avenos::voice",
+                                                "speaker model failed to load; continuing without diarization: {error:#}"
+                                            );
+                                            None
+                                        }
+                                    }
+                                });
                                 anyhow::Ok(InputModels {
                                     vad: Box::new(SileroVadAdapter(vad)),
                                     recognizer: Box::new(recognizer),
+                                    speaker,
                                 })
                             })();
                             match loaded {

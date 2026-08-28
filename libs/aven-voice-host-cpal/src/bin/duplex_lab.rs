@@ -8,22 +8,22 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, bail, Context, Result};
 use aven_voice_core::{
-    Action, CachedResult, Command, Observation, OutputGeneration, VoiceConfigV1,
+    Action, CachedResult, Command, Observation, OutputGeneration, SpeakerClusters, VoiceConfigV1,
 };
 use aven_voice_host_cpal::{CpalDuplexHost, OutputInjection};
 use aven_voice_models::{
     initialize_onnxruntime, DirectSupertonicSynthesizer, NemotronRecognizerAdapter,
-    SileroVadAdapter,
+    SileroVadAdapter, WeSpeakerEmbedder,
 };
 use aven_voice_protocol::{
     DecimalU64, EchoStatus, InputDiscardReason, RequestId, RouteSnapshot, SessionId,
     TimestampQuality as ProtocolTimestampQuality, VoiceEvent, VoiceFeature,
 };
 use aven_voice_runtime::{
-    AudioPorts, CapturePort, DuplexHost, DuplexPipeline, DuplexPipelineConfig, HostEvent,
-    HostEventPort, InputModels, ProductionClock, RenderActivity, RenderChunk, RenderPort,
-    RouteDescriptor, RouteRequest, SoftwareAec3, SynthesizedPcm, VoiceRuntime, VoiceRuntimeHandle,
-    MAX_CALLBACK_SAMPLES,
+    normalize_speaker_embedding, speaker_window, AudioPorts, CapturePort, DuplexHost,
+    DuplexPipeline, DuplexPipelineConfig, HostEvent, HostEventPort, InputModels, ProductionClock,
+    RenderActivity, RenderChunk, RenderPort, RouteDescriptor, RouteRequest, SoftwareAec3,
+    StreamingSincResampler, SynthesizedPcm, VoiceRuntime, VoiceRuntimeHandle, MAX_CALLBACK_SAMPLES,
 };
 use serde::Serialize;
 
@@ -85,12 +85,14 @@ fn run() -> Result<()> {
     let mut synthesizer = DirectSupertonicSynthesizer::open(&options.tts_model_dir, &voices)?;
     let synthesized = synthesize_scenario_audio(&selected, &mut synthesizer)?;
 
-    eprintln!("loading Silero VAD and Nemotron ASR");
+    eprintln!("loading Silero VAD, Nemotron ASR, and WeSpeaker diarization");
     let vad = aven_voice_models::vad::Vad::open(&options.vad_model)?;
     let recognizer = NemotronRecognizerAdapter::open(&options.asr_model_dir, 0.7, 8.0)?;
+    let speaker = WeSpeakerEmbedder::open(&options.speaker_model)?;
     let mut models = InputModels {
         vad: Box::new(SileroVadAdapter(vad)),
         recognizer: Box::new(recognizer),
+        speaker: Some(Box::new(speaker)),
     };
 
     eprintln!(
@@ -103,6 +105,7 @@ fn run() -> Result<()> {
     std::thread::sleep(Duration::from_secs(2));
 
     let mut reports = Vec::new();
+    let mut lab_speaker_clusters = SpeakerClusters::default();
     for scenario in selected {
         eprintln!("\n=== {} ===", scenario.name);
         let assistant = synthesized
@@ -133,6 +136,7 @@ fn run() -> Result<()> {
             &scenario,
             tracks,
             models,
+            &mut lab_speaker_clusters,
             ScenarioRunOptions {
                 acoustic_near_end: options.acoustic_near_end,
                 capture_input_gain_db: options.capture_input_gain_db,
@@ -156,6 +160,8 @@ fn run() -> Result<()> {
         .filter(|report| report.required)
         .all(|report| report.passed);
     let extended_passed = reports.iter().all(|report| report.passed);
+    let speaker_detection = evaluate_speaker_detection(&reports);
+    let speaker_detection_passed = !speaker_detection.evaluated || speaker_detection.passed;
     let report = SuiteReport {
         near_end_mode: if options.acoustic_near_end {
             "same_speaker_acoustic"
@@ -165,13 +171,14 @@ fn run() -> Result<()> {
         tester_adapting_barge_in: options.tester_adapting_barge_in,
         required_passed,
         extended_passed,
+        speaker_detection,
         scenarios: reports,
     };
     let report_path = options.output_dir.join("report.json");
     std::fs::write(&report_path, serde_json::to_vec_pretty(&report)?)?;
     println!("{}", serde_json::to_string_pretty(&report)?);
     eprintln!("report: {}", report_path.display());
-    if !required_passed {
+    if !required_passed || !speaker_detection_passed {
         std::process::exit(2);
     }
     Ok(())
@@ -233,6 +240,7 @@ fn run_scenario(
     scenario: &Scenario,
     tracks: ScenarioTracks,
     models: InputModels,
+    lab_speaker_clusters: &mut SpeakerClusters,
     options: ScenarioRunOptions,
 ) -> Result<(ScenarioReport, InputModels)> {
     let config = VoiceConfigV1 {
@@ -578,6 +586,12 @@ fn run_scenario(
                     at_ms,
                     barge_in_started,
                 }),
+                VoiceEvent::InputSpeakerIdentified { speaker, .. } => {
+                    observed.speakers.push(SpeakerObservation {
+                        speaker_id: speaker.speaker_id.0,
+                        confidence: speaker.confidence,
+                    });
+                }
                 VoiceEvent::InputFinal { text, .. } => observed.finals.push(text),
                 VoiceEvent::InputDiscarded { reason, .. } => {
                     observed.event_discards.push(format!("{reason:?}"));
@@ -610,7 +624,7 @@ fn run_scenario(
     let render_underruns = render.underruns();
     let reference_overruns = render.reference_overruns();
     host.close(&descriptor.route_id)?;
-    let returned_models = pipeline.stop();
+    let mut returned_models = pipeline.stop();
     runtime.stop();
     let mut raw_capture = Vec::new();
     let mut clean_capture = Vec::new();
@@ -629,6 +643,14 @@ fn run_scenario(
         48_000,
         &clean_capture,
     )?;
+    let lab_speaker = classify_injected_speaker(
+        scenario,
+        &tracks,
+        output_descriptor.sample_rate_hz,
+        &clean_capture,
+        &mut returned_models,
+        lab_speaker_clusters,
+    )?;
 
     let (passed, reason) = evaluate(
         scenario,
@@ -641,6 +663,7 @@ fn run_scenario(
             name: scenario.name,
             required: scenario.required,
             expectation: format!("{:?}", scenario.expectation),
+            expected_speaker_voice: expected_speaker_voice(scenario),
             passed,
             reason,
             assistant_duration_ms: frame_ms(
@@ -654,6 +677,8 @@ fn run_scenario(
             confirmations: observed.confirmations,
             partials: observed.partials,
             finals: observed.finals,
+            speakers: observed.speakers,
+            lab_speaker,
             discards: observed.event_discards,
             fade_started_at_ms: observed.fade_started_at_ms,
             fade_completed_at_ms: observed.fade_completed_at_ms,
@@ -999,6 +1024,7 @@ struct Observed {
     confirmations: Vec<Confirmation>,
     partials: Vec<String>,
     finals: Vec<String>,
+    speakers: Vec<SpeakerObservation>,
     event_discards: Vec<String>,
     action_discards: Vec<String>,
     cancellations: Vec<String>,
@@ -1021,11 +1047,18 @@ struct Confirmation {
     barge_in_started: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct SpeakerObservation {
+    speaker_id: String,
+    confidence: f32,
+}
+
 #[derive(Debug, Serialize)]
 struct ScenarioReport {
     name: &'static str,
     required: bool,
     expectation: String,
+    expected_speaker_voice: Option<&'static str>,
     passed: bool,
     reason: String,
     assistant_duration_ms: u64,
@@ -1034,6 +1067,8 @@ struct ScenarioReport {
     confirmations: Vec<Confirmation>,
     partials: Vec<String>,
     finals: Vec<String>,
+    speakers: Vec<SpeakerObservation>,
+    lab_speaker: Option<SpeakerObservation>,
     discards: Vec<String>,
     fade_started_at_ms: Option<u64>,
     fade_completed_at_ms: Option<u64>,
@@ -1073,7 +1108,134 @@ struct SuiteReport {
     tester_adapting_barge_in: bool,
     required_passed: bool,
     extended_passed: bool,
+    speaker_detection: SpeakerDetectionReport,
     scenarios: Vec<ScenarioReport>,
+}
+
+#[derive(Debug, Serialize)]
+struct SpeakerDetectionReport {
+    evaluated: bool,
+    passed: bool,
+    reason: String,
+    assignments: BTreeMap<String, Vec<String>>,
+}
+
+fn expected_speaker_voice(scenario: &Scenario) -> Option<&'static str> {
+    if !matches!(
+        scenario.expectation,
+        Expectation::Interrupt { .. } | Expectation::FollowUp { .. }
+    ) {
+        return None;
+    }
+    match scenario.injection {
+        Injection::Speech { voice, .. } => Some(voice),
+        Injection::None | Injection::HouseholdNoise { .. } => None,
+    }
+}
+
+fn evaluate_speaker_detection(reports: &[ScenarioReport]) -> SpeakerDetectionReport {
+    let mut assignments = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut missing = Vec::new();
+    for report in reports {
+        let Some(voice) = report.expected_speaker_voice else {
+            continue;
+        };
+        if report.lab_speaker.is_none() {
+            missing.push(report.name);
+        }
+        assignments.entry(voice.to_owned()).or_default().extend(
+            report
+                .lab_speaker
+                .iter()
+                .map(|speaker| speaker.speaker_id.clone()),
+        );
+    }
+    let stable = assignments.values().all(|labels| labels.len() == 1);
+    let distinct = assignments
+        .values()
+        .filter_map(|labels| labels.first())
+        .collect::<BTreeSet<_>>()
+        .len()
+        == assignments.len();
+    let evaluated = assignments.len() >= 2;
+    let passed = !evaluated || (missing.is_empty() && stable && distinct);
+    let reason = if !evaluated {
+        "not evaluated; select scenarios containing at least two ground-truth voices".into()
+    } else if !missing.is_empty() {
+        format!("missing speaker attribution in {}", missing.join(", "))
+    } else if !stable {
+        "one synthetic voice fragmented into multiple speaker labels".into()
+    } else if !distinct {
+        "different synthetic voices collapsed into one speaker label".into()
+    } else {
+        "ground-truth voices received stable, distinct anonymous labels".into()
+    };
+    SpeakerDetectionReport {
+        evaluated,
+        passed,
+        reason,
+        assignments: assignments
+            .into_iter()
+            .map(|(voice, labels)| (voice, labels.into_iter().collect()))
+            .collect(),
+    }
+}
+
+fn classify_injected_speaker(
+    scenario: &Scenario,
+    tracks: &ScenarioTracks,
+    output_rate_hz: u32,
+    clean_capture_48k: &[f32],
+    models: &mut InputModels,
+    clusters: &mut SpeakerClusters,
+) -> Result<Option<SpeakerObservation>> {
+    if expected_speaker_voice(scenario).is_none() {
+        return Ok(None);
+    }
+    let Some(active_start) = tracks
+        .injection
+        .iter()
+        .position(|sample| sample.abs() >= 1.0e-5)
+    else {
+        return Ok(None);
+    };
+    let active_end = tracks
+        .injection
+        .iter()
+        .rposition(|sample| sample.abs() >= 1.0e-5)
+        .unwrap_or(active_start)
+        + 1;
+    let capture_scale = 48_000.0 / f64::from(output_rate_hz);
+    let margin = 48_000 / 2;
+    let start = ((active_start as f64 * capture_scale) as usize).saturating_sub(margin);
+    let end = ((active_end as f64 * capture_scale) as usize + margin).min(clean_capture_48k.len());
+    if start >= end {
+        return Ok(None);
+    }
+
+    let mut resampler = StreamingSincResampler::new(48_000, 16_000)
+        .map_err(|_| anyhow!("could not create the lab speaker resampler"))?;
+    let mut pcm_16k = Vec::new();
+    resampler.process(&clean_capture_48k[start..end], &mut pcm_16k);
+    resampler.flush(&mut pcm_16k);
+    let Some(window) = speaker_window(&pcm_16k) else {
+        return Ok(None);
+    };
+    let Some(model) = models.speaker.as_mut() else {
+        return Ok(None);
+    };
+    let mut embedding = model
+        .embedding(window)
+        .map_err(|error| anyhow!(error.to_string()))?;
+    if !normalize_speaker_embedding(&mut embedding) {
+        return Ok(None);
+    }
+    Ok(clusters
+        .assign(embedding)
+        .map(|speaker| SpeakerObservation {
+            speaker_id: speaker.speaker_id.0,
+            confidence: speaker.confidence,
+        }))
 }
 
 struct Options {
@@ -1087,6 +1249,7 @@ struct Options {
     tts_model_dir: PathBuf,
     asr_model_dir: PathBuf,
     vad_model: PathBuf,
+    speaker_model: PathBuf,
     onnxruntime: PathBuf,
     output_dir: PathBuf,
 }
@@ -1105,6 +1268,7 @@ impl Options {
             tts_model_dir: cache.join("tts/supertonic-3"),
             asr_model_dir: cache.join("asr/nemotron-3.5-streaming"),
             vad_model: cache.join("asr/silero-vad/silero_vad.onnx"),
+            speaker_model: cache.join("asr/wespeaker-resnet34/voxceleb_resnet34.onnx"),
             onnxruntime: std::env::var_os("ORT_DYLIB_PATH")
                 .map(PathBuf::from)
                 .unwrap_or_default(),
@@ -1143,6 +1307,9 @@ impl Options {
                 "--vad-model" => {
                     options.vad_model = value(&args, &mut index, "--vad-model")?.into()
                 }
+                "--speaker-model" => {
+                    options.speaker_model = value(&args, &mut index, "--speaker-model")?.into()
+                }
                 "--onnxruntime" => {
                     options.onnxruntime = value(&args, &mut index, "--onnxruntime")?.into()
                 }
@@ -1150,7 +1317,7 @@ impl Options {
                     options.output_dir = value(&args, &mut index, "--output-dir")?.into()
                 }
                 "--help" | "-h" => {
-                    println!("aven-voice-duplex-lab [--required-only] [--scenario NAME] [--capture-boundary-near-end] [--tester-adapting-barge-in] [--capture-input-gain-db DB] [--callback-delay-hint-ms MS] [--onnxruntime PATH] [--output-dir DIR]");
+                    println!("aven-voice-duplex-lab [--required-only] [--scenario NAME] [--capture-boundary-near-end] [--tester-adapting-barge-in] [--capture-input-gain-db DB] [--callback-delay-hint-ms MS] [--speaker-model PATH] [--onnxruntime PATH] [--output-dir DIR]");
                     std::process::exit(0);
                 }
                 other => bail!("unknown argument {other}"),

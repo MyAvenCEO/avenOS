@@ -158,6 +158,11 @@ pub enum Observation {
         far_end_active: bool,
         safe_echo_continuous: bool,
     },
+    SpeakerEmbedding {
+        candidate_id: CandidateId,
+        generation: RouteGeneration,
+        embedding: Vec<f32>,
+    },
     NearEndEvidence {
         candidate_id: CandidateId,
         generation: RouteGeneration,

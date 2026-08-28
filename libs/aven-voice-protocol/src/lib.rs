@@ -36,6 +36,7 @@ opaque_id!(RequestId);
 opaque_id!(SessionId);
 opaque_id!(RouteId);
 opaque_id!(CandidateId);
+opaque_id!(SpeakerId);
 opaque_id!(TurnId);
 opaque_id!(ClientTurnKey);
 
@@ -331,6 +332,14 @@ pub struct EnqueueResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, TS)]
+pub struct SpeakerAttribution {
+    pub speaker_id: SpeakerId,
+    /// Cosine-based model confidence in the range 0..=1. A newly created
+    /// anonymous cluster starts at 1 because no competing identity exists yet.
+    pub confidence: f32,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, TS)]
 pub struct VoiceSnapshot {
     pub runtime: RuntimeStatus,
     pub session: SessionSnapshot,
@@ -540,6 +549,11 @@ pub enum VoiceEvent {
         candidate_id: CandidateId,
         barge_in_started: bool,
     },
+    #[serde(rename = "input.speaker_identified")]
+    InputSpeakerIdentified {
+        candidate_id: CandidateId,
+        speaker: SpeakerAttribution,
+    },
     #[serde(rename = "input.final")]
     InputFinal {
         candidate_id: CandidateId,
@@ -606,8 +620,13 @@ pub fn generate_typescript() -> String {
                 output.push_str("\n\n");
             )+
             output.truncate(output.trim_end_matches('\n').len());
-            output.push('\n');
-            output
+            let mut normalized = output
+                .lines()
+                .map(str::trim_end)
+                .collect::<Vec<_>>()
+                .join("\n");
+            normalized.push('\n');
+            normalized
         }};
     }
 
@@ -616,6 +635,7 @@ pub fn generate_typescript() -> String {
         SessionId,
         RouteId,
         CandidateId,
+        SpeakerId,
         TurnId,
         ClientTurnKey,
         DecimalU64,
@@ -645,6 +665,7 @@ pub fn generate_typescript() -> String {
         VoiceSessionStarted,
         SpeechTurnStarted,
         EnqueueResult,
+        SpeakerAttribution,
         VoiceSnapshot,
         SessionSnapshot,
         TimestampQuality,
