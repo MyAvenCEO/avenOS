@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.7...v) (2026-08-28)
+
+
+### Bug Fixes
+
+* **release:** wait for Caddy ports before restart ([12902ee](https://github.com/MyAvenCEO/avenOS/commit/12902ee9852d8ba18f6cb9591fdfe948014e0943))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.6...v) (2026-08-28)
 
 

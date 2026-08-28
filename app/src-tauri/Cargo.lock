@@ -334,7 +334,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "aven-os-app"
-version = "26.8.28-next.7"
+version = "26.8.28-next.8"
 dependencies = [
  "anyhow",
  "aven-voice-core",
@@ -373,7 +373,7 @@ dependencies = [
 
 [[package]]
 name = "aven-voice-core"
-version = "26.8.28-next.7"
+version = "26.8.28-next.8"
 dependencies = [
  "aven-voice-protocol",
  "serde",
@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "aven-voice-host-cpal"
-version = "26.8.28-next.7"
+version = "26.8.28-next.8"
 dependencies = [
  "aven-voice-core",
  "aven-voice-protocol",
@@ -392,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "aven-voice-models"
-version = "26.8.28-next.7"
+version = "26.8.28-next.8"
 dependencies = [
  "anyhow",
  "aven-voice-protocol",
@@ -413,7 +413,7 @@ dependencies = [
 
 [[package]]
 name = "aven-voice-protocol"
-version = "26.8.28-next.7"
+version = "26.8.28-next.8"
 dependencies = [
  "serde",
  "ts-rs",
@@ -421,7 +421,7 @@ dependencies = [
 
 [[package]]
 name = "aven-voice-runtime"
-version = "26.8.28-next.7"
+version = "26.8.28-next.8"
 dependencies = [
  "audioadapter-buffers",
  "aven-voice-core",
@@ -4883,7 +4883,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-android-passkey"
-version = "26.8.28-next.7"
+version = "26.8.28-next.8"
 dependencies = [
  "serde",
  "serde_json",
@@ -4893,7 +4893,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-ios-passkey"
-version = "26.8.28-next.7"
+version = "26.8.28-next.8"
 dependencies = [
  "serde",
  "serde_json",
