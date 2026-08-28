@@ -1,3 +1,10 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.8...v) (2026-08-28)
+
+
+### Features
+
+* **app:** hide the avenCEO subscription during alpha ([dc41730](https://github.com/MyAvenCEO/avenOS/commit/dc41730f7a28921118d9840a849d63efa2151e0f))
+* **aven-api:** tell buyers what happens after the name purchase ([a4cf951](https://github.com/MyAvenCEO/avenOS/commit/a4cf9519201de718a887435ecfa86c81bec3d174))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.8.28-next.7...v) (2026-08-28)
 
 
