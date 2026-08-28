@@ -73,6 +73,10 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "${apk[0]}"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "${apk[0]}" | grep -q "package: name='ceo.aven.os'"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "${apk[0]}" | grep -q "sdkVersion:'28'"
+          if unzip -Z1 "${apk[0]}" | grep -E '^assets/onnxruntime/(lib|ONNXRuntime-)'; then
+            echo 'desktop ONNX Runtime assets must not be bundled into Android packages'
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: avenOS-android-debug-arm64

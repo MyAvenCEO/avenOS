@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -79,6 +79,15 @@ function artifacts(root: string, extension: string): string[] {
 	})
 }
 
+function clearDesktopOnnxruntimeAssets(): void {
+	const directory = path.join(androidProject, 'app/src/main/assets/onnxruntime')
+	if (!existsSync(directory)) return
+	for (const entry of readdirSync(directory)) {
+		if (entry === '.gitignore' || entry === 'README.md') continue
+		rmSync(path.join(directory, entry), { recursive: true, force: true })
+	}
+}
+
 if (!existsSync(androidProject)) {
 	fail('Android project is missing. Run `CI=true bun --cwd app x tauri android init --ci`.')
 }
@@ -101,6 +110,10 @@ const env = {
 	NDK_HOME: resolveNdkHome(sdk)
 }
 
+// Android links ONNX Runtime into the Rust library. Tauri does not prune assets
+// copied by older configurations, so remove only stale desktop runtime copies.
+clearDesktopOnnxruntimeAssets()
+
 if (mode === 'dev') {
 	const command = ['bun', '--bun', 'x', 'tauri', 'android', 'dev']
 	const device = process.env.ANDROID_DEVICE?.trim()
@@ -119,6 +132,9 @@ if (mode === 'dev') {
 if (release && !existsSync(path.join(androidProject, 'keystore.properties'))) {
 	console.warn('[android] No keystore.properties found; the release artifact will be unsigned.')
 }
+
+const outputRoot = path.join(androidProject, 'app/build/outputs')
+rmSync(outputRoot, { recursive: true, force: true })
 
 const command = [
 	'bun',
@@ -147,7 +163,6 @@ const exitCode = await child.exited
 if (exitCode !== 0) process.exit(exitCode)
 
 const extension = `.${bundle}`
-const outputRoot = path.join(androidProject, 'app/build/outputs')
 const candidates = artifacts(outputRoot, extension).sort(
 	(left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs
 )
