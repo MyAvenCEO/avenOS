@@ -163,6 +163,8 @@ pub fn run() {
 	let builder = builder.plugin(tauri_plugin_macos_passkey::init());
 	#[cfg(target_os = "ios")]
 	let builder = builder.plugin(tauri_plugin_ios_passkey::init());
+	#[cfg(target_os = "android")]
+	let builder = builder.plugin(tauri_plugin_android_passkey::init());
 
 	builder
 		// On-device German speech, both directions. Both engines are built lazily

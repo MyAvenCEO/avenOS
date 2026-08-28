@@ -4,6 +4,24 @@ import { z } from 'zod'
 const bool = z.enum(['true', 'false']).transform((value) => value === 'true')
 const positiveInt = z.coerce.number().int().positive()
 const postgresUrl = z.string().regex(/^postgres(ql)?:\/\//, 'must be a postgres URL')
+const androidCertificateFingerprints = z
+	.string()
+	.default('')
+	.refine(
+		(value) =>
+			value
+				.split(',')
+				.map((fingerprint) => fingerprint.trim())
+				.filter(Boolean)
+				.every((fingerprint) => /^(?:[0-9a-fA-F]{2}:){31}[0-9a-fA-F]{2}$/.test(fingerprint)),
+		'must be comma-separated SHA-256 certificate fingerprints'
+	)
+	.transform((value) =>
+		value
+			.split(',')
+			.map((fingerprint) => fingerprint.trim().toUpperCase())
+			.filter(Boolean)
+	)
 const validEncryptionKey = (value: string) => {
 	try {
 		return Buffer.from(value, 'base64').length === 32
@@ -17,6 +35,7 @@ export const serverConfigSchema = z
 		NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 		PUBLIC_BASE_URL: z.url(),
 		WEBAUTHN_RP_ID: z.string().min(1),
+		ANDROID_APP_CERT_SHA256_FINGERPRINTS: androidCertificateFingerprints,
 		REQUIRE_PASSKEY_PRF: bool.default(false),
 		DOWNLOAD_URL: z.string().default(''),
 		LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),

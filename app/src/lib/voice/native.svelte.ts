@@ -1,20 +1,29 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type {
+	BeginSpeech,
+	CancelSpeech,
+	ModelLoadStatus,
+	SpeechSegment,
+	Unsubscribe,
+	VoiceBackend,
+	VoiceSessionOptions
+} from './backend'
+import type {
 	EnqueueResult,
 	InputResetReason,
 	PreparationSnapshot,
 	RequestId,
+	SessionId,
 	SpeechTurnStarted,
 	TurnId,
-	SessionId,
 	VoiceDiagnosticsSubscribeRequest,
 	VoiceEventEnvelope,
 	VoiceFeature,
 	VoiceInputResetRequest,
 	VoicePrepareRequest,
-	VoiceSessionStartRequest,
 	VoiceSessionStarted,
+	VoiceSessionStartRequest,
 	VoiceSessionStopRequest,
 	VoiceSnapshot,
 	VoiceSnapshotRequest,
@@ -23,15 +32,6 @@ import type {
 	VoiceSpeechEnqueueRequest,
 	VoiceSpeechFinishRequest
 } from './protocol'
-import type {
-	BeginSpeech,
-	CancelSpeech,
-	SpeechSegment,
-	ModelLoadStatus,
-	Unsubscribe,
-	VoiceBackend,
-	VoiceSessionOptions
-} from './backend'
 
 const PROTOCOL_VERSION = 1
 let nextRequest = 0
@@ -45,9 +45,12 @@ function meta(): { protocol_version: number; request_id: RequestId } {
 }
 
 export class TauriNativeVoiceBackend implements VoiceBackend {
-	prepare(features: VoiceFeature[]): Promise<PreparationSnapshot> {
+	async prepare(features: VoiceFeature[]): Promise<PreparationSnapshot> {
+		if (features.includes('input') && /Android/i.test(navigator.userAgent)) {
+			await invoke('plugin:android-passkey|request_microphone')
+		}
 		const request: VoicePrepareRequest = { ...meta(), features }
-		return invoke('voice_prepare', { request })
+		return await invoke('voice_prepare', { request })
 	}
 
 	startSession(options: VoiceSessionOptions): Promise<VoiceSessionStarted> {

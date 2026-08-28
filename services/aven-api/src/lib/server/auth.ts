@@ -9,6 +9,13 @@ import { type SetupSignInVerifiers, setupSignIn } from './sign-in.js'
 
 export const AVENOS_DEVICE_CLIENT_ID = 'ceo.aven.os'
 
+export function androidPasskeyOrigins(fingerprints: string[]): string[] {
+	return fingerprints.map((fingerprint) => {
+		const hash = Buffer.from(fingerprint.replaceAll(':', ''), 'hex').toString('base64url')
+		return `android:apk-key-hash:${hash}`
+	})
+}
+
 export function requirePasskeyUserVerification(userVerified: boolean): void {
 	if (!userVerified) throw new Error('Passkey authentication requires user verification.')
 }
@@ -22,12 +29,16 @@ export function createAuth(
 	database: DatabaseContext,
 	verifiers: SetupSignInVerifiers
 ) {
+	const passkeyOrigins = [
+		config.PUBLIC_BASE_URL,
+		...androidPasskeyOrigins(config.ANDROID_APP_CERT_SHA256_FINGERPRINTS)
+	]
 	return betterAuth({
 		appName: 'Aven',
 		baseURL: config.PUBLIC_BASE_URL,
 		basePath: '/api/auth',
 		secret: config.BETTER_AUTH_SECRET,
-		trustedOrigins: [config.PUBLIC_BASE_URL],
+		trustedOrigins: passkeyOrigins,
 		database: drizzleAdapter(database.db, { provider: 'pg', schema }),
 		user: {
 			additionalFields: {
@@ -70,7 +81,7 @@ export function createAuth(
 			passkey({
 				rpID: config.WEBAUTHN_RP_ID,
 				rpName: 'Aven',
-				origin: config.PUBLIC_BASE_URL,
+				origin: passkeyOrigins,
 				authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
 				authentication: {
 					afterVerification: ({ verification }) =>

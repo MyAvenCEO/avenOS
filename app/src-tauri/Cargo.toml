@@ -116,3 +116,6 @@ core-foundation = "0.10"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 tauri-plugin-ios-passkey = { path = "../../libs/tauri-plugin-ios-passkey" }
+
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-android-passkey = { path = "../../libs/tauri-plugin-android-passkey" }
