@@ -221,3 +221,126 @@ describe('checkout grant', () => {
 		).toBe(0)
 	})
 })
+
+/**
+ * One avenNAME per account.
+ *
+ * The rule is enforced twice on purpose — once when the funnel is asked for a
+ * name (`secure`, before any mail goes out) and once when a claim link is
+ * redeemed (`claim`, before a checkout can be reached). The second gate is not
+ * redundant: a hold can be created while the account still owns nothing and
+ * redeemed after a first name has landed, and that window is exactly where a
+ * second purchase would otherwise slip through.
+ */
+describe('one name per account', () => {
+	let database: TestDatabase
+	beforeAll(async () => {
+		database = await createTestDatabase()
+	})
+	afterAll(async () => {
+		await database.teardown()
+	})
+
+	/** A NameService wired to fakes, plus the fake provider it pays through. */
+	function build() {
+		const config = testConfig()
+		const payments = new FakePaymentProvider(config)
+		const passkeys = new PasskeyService(database.pool, true)
+		const environments = new EnvironmentService(database.pool)
+		const service = new NameService(
+			database.pool,
+			config,
+			testNotifier(config),
+			payments,
+			(connection, userId) => passkeys.issueSetupLink(connection, userId),
+			async (connection, input) => {
+				await environments.enqueueProvision(connection, input)
+			},
+			(connection, input) => environments.enqueueSuspension(connection, input)
+		)
+		return { service, payments }
+	}
+
+	/** Drives a name all the way to owned, the way a real purchase does. */
+	async function purchase(
+		service: NameService,
+		payments: FakePaymentProvider,
+		name: string,
+		email: string
+	) {
+		await service.secure(name, email)
+		const hold = (await database.pool.query('SELECT id FROM name_holds WHERE name=$1', [name]))
+			.rows[0]
+		const token = `claim-${randomUUID().replaceAll('-', '')}`
+		await database.pool.query('UPDATE name_holds SET claim_token_hash=$1 WHERE id=$2', [
+			sha256Hex(token),
+			hold.id
+		])
+		const checkout = await service.claim(token)
+		const checkoutId = new URL(checkout.checkoutUrl).searchParams.get('checkoutId')
+		if (!checkoutId) throw new Error('Fake checkout did not provide an id')
+		const event = parsePolarEvent(
+			payments.buildCompletedWebhookBody({
+				checkoutId,
+				holdId: hold.id,
+				name,
+				email,
+				amountEur: 25
+			})
+		)
+		expect(await service.grantFromEvent(event)).toEqual({ granted: true })
+	}
+
+	it('refuses a second name at both the request and the claim gate', async () => {
+		const { service, payments } = build()
+		const first = `n${randomUUID().replaceAll('-', '').slice(0, 12)}`
+		const email = `${first}@example.test`
+		await purchase(service, payments, first, email)
+		expect(
+			(await database.pool.query('SELECT status FROM names WHERE name=$1', [first])).rows[0].status
+		).toBe('owned')
+
+		// Gate 1 — the funnel refuses before an email is ever sent.
+		const second = `n${randomUUID().replaceAll('-', '').slice(0, 12)}`
+		await expect(service.secure(second, email)).rejects.toMatchObject({
+			code: 'NAME_LIMIT_REACHED',
+			status: 409
+		})
+		expect(
+			(
+				await database.pool.query('SELECT COUNT(*)::int AS count FROM name_holds WHERE name=$1', [
+					second
+				])
+			).rows[0].count
+		).toBe(0)
+
+		// Gate 2 — a hold minted BEFORE the first name landed is still refused
+		// when it is redeemed afterwards. Casing must not slip past it either.
+		const third = `n${randomUUID().replaceAll('-', '').slice(0, 12)}`
+		const holdId = randomUUID()
+		const staleToken = `claim-${randomUUID().replaceAll('-', '')}`
+		await database.pool.query(
+			`INSERT INTO name_holds (id,name,email,claim_token_hash,created_at,expires_at)
+			 VALUES ($1,$2,$3,$4,now(),now() + interval '24 hours')`,
+			[holdId, third, email.toUpperCase(), sha256Hex(staleToken)]
+		)
+		await expect(service.claim(staleToken)).rejects.toMatchObject({
+			code: 'NAME_LIMIT_REACHED',
+			status: 410
+		})
+		expect(
+			(await database.pool.query('SELECT COUNT(*)::int AS count FROM names WHERE name=$1', [third]))
+				.rows[0].count
+		).toBe(0)
+	})
+
+	it('still lets a different account buy its own name', async () => {
+		const { service, payments } = build()
+		const mine = `n${randomUUID().replaceAll('-', '').slice(0, 12)}`
+		await purchase(service, payments, mine, `${mine}@example.test`)
+		const theirs = `n${randomUUID().replaceAll('-', '').slice(0, 12)}`
+		await expect(service.secure(theirs, `${theirs}@example.test`)).resolves.toMatchObject({
+			name: theirs
+		})
+	})
+})
