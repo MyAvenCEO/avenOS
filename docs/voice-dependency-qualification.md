@@ -93,6 +93,21 @@ The route still reports full-duplex barge-in as unavailable until software AEC
 reaches `converged`. Default-on deployment does not bypass echo health,
 generation, or lexical-ASR confirmation gates.
 
+For the two known testers only, a separate default-off fallback can be enabled:
+
+```sh
+AVEN_VOICE_TESTER_ADAPTING_BARGE_IN=1 bun run dev:app:linux
+```
+
+This does not mark the route or AEC as converged. It permits cancellation in
+the `adapting` state only after the minimum fault-free adaptation interval,
+five continuous post-AEC frames whose clean signal remains within 6 dB of the
+raw microphone signal, lexical ASR evidence, and rejection of exact or fuzzy
+matches against the active narration text. Bypassed or degraded AEC remains
+blocked. This mode trades some false-interruption risk for tester feedback and
+must not be enabled in a production release without revisiting the normative
+policy.
+
 The latest reference calibration on the built-in PulseAudio microphone and
 speaker passed at -18 dBFS with a 5.72 dB PRBS signal-to-ambient ratio, 0.3725
 correlation, 25.27 ms estimated echo delay, 0.0058 percent clipped capture, and
@@ -183,6 +198,13 @@ and a calibration candidate can be tested with
 `--callback-delay-hint-ms MS`. Both values are written to `report.json`; neither
 option changes production CPAL input samples or creates a global device
 override.
+
+Pass `--tester-adapting-barge-in` to exercise the explicit tester fallback. It
+is intentionally not part of the default lab run:
+
+```sh
+bun run test:voice-duplex --required-only --tester-adapting-barge-in
+```
 
 The required corpus proves that assistant-only playback and household-like
 click/cough noise do not interrupt, clear lexical speech during an answer does

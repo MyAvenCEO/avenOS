@@ -158,6 +158,14 @@ pub enum Observation {
         far_end_active: bool,
         safe_echo_continuous: bool,
     },
+    NearEndEvidence {
+        candidate_id: CandidateId,
+        generation: RouteGeneration,
+    },
+    CandidateAdaptationReady {
+        candidate_id: CandidateId,
+        generation: RouteGeneration,
+    },
     CandidateOverflow {
         candidate_id: CandidateId,
         generation: RouteGeneration,

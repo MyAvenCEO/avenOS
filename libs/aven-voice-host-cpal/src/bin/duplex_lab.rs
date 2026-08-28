@@ -133,9 +133,12 @@ fn run() -> Result<()> {
             &scenario,
             tracks,
             models,
-            options.acoustic_near_end,
-            options.capture_input_gain_db,
-            options.callback_delay_hint_ms,
+            ScenarioRunOptions {
+                acoustic_near_end: options.acoustic_near_end,
+                capture_input_gain_db: options.capture_input_gain_db,
+                callback_delay_hint_ms: options.callback_delay_hint_ms,
+                tester_adapting_barge_in: options.tester_adapting_barge_in,
+            },
         )?;
         models = returned_models;
         eprintln!(
@@ -159,6 +162,7 @@ fn run() -> Result<()> {
         } else {
             "capture_boundary"
         },
+        tester_adapting_barge_in: options.tester_adapting_barge_in,
         required_passed,
         extended_passed,
         scenarios: reports,
@@ -216,17 +220,24 @@ fn synthesize_scenario_audio(
     Ok(clips)
 }
 
+#[derive(Clone, Copy)]
+struct ScenarioRunOptions {
+    acoustic_near_end: bool,
+    capture_input_gain_db: f32,
+    callback_delay_hint_ms: u32,
+    tester_adapting_barge_in: bool,
+}
+
 fn run_scenario(
     output_dir: &Path,
     scenario: &Scenario,
     tracks: ScenarioTracks,
     models: InputModels,
-    acoustic_near_end: bool,
-    capture_input_gain_db: f32,
-    callback_delay_hint_ms: u32,
+    options: ScenarioRunOptions,
 ) -> Result<(ScenarioReport, InputModels)> {
     let config = VoiceConfigV1 {
         allow_full_duplex_barge_in: true,
+        allow_tester_adapting_barge_in: options.tester_adapting_barge_in,
         ..VoiceConfigV1::default()
     };
     let runtime = VoiceRuntime::spawn(
@@ -306,22 +317,22 @@ fn run_scenario(
         },
         input_descriptor.sample_rate_hz,
     );
-    let injection = OutputInjection::new(if acoustic_near_end {
+    let injection = OutputInjection::new(if options.acoustic_near_end {
         tracks.injection.clone()
     } else {
         capture_injection_samples
     });
-    let (output_injection, capture_injection) = if acoustic_near_end {
+    let (output_injection, capture_injection) = if options.acoustic_near_end {
         (Some(injection.clone()), None)
     } else {
         (None, Some(injection.clone()))
     };
-    let injection_clock_rate = if acoustic_near_end {
+    let injection_clock_rate = if options.acoustic_near_end {
         output_descriptor.sample_rate_hz
     } else {
         input_descriptor.sample_rate_hz
     };
-    let capture_input_gain = 10.0_f32.powf(capture_input_gain_db / 20.0);
+    let capture_input_gain = 10.0_f32.powf(options.capture_input_gain_db / 20.0);
     let mut host = CpalDuplexHost::with_lab_injections(
         output_injection,
         capture_injection,
@@ -360,7 +371,7 @@ fn run_scenario(
             output_rate_hz: descriptor.output.sample_rate_hz,
             input_timestamp_quality: descriptor.input_timestamp_quality,
             output_timestamp_quality: descriptor.output_timestamp_quality,
-            callback_only_delay_hint_ms: Some(callback_delay_hint_ms),
+            callback_only_delay_hint_ms: Some(options.callback_delay_hint_ms),
             diagnostic_audio_tap: Some(diagnostic_tap.clone()),
             id_prefix: format!("lab-{}", scenario.name),
         },
@@ -656,8 +667,8 @@ fn run_scenario(
             capture_overruns,
             render_underruns,
             reference_overruns,
-            capture_input_gain_db,
-            callback_delay_hint_ms,
+            capture_input_gain_db: options.capture_input_gain_db,
+            callback_delay_hint_ms: options.callback_delay_hint_ms,
             delay_hint_ms: metrics.delay_hint_ms,
             render_rms: metrics.render_rms,
             raw_rms: metrics.raw_rms,
@@ -1059,6 +1070,7 @@ struct ScenarioReport {
 #[derive(Debug, Serialize)]
 struct SuiteReport {
     near_end_mode: &'static str,
+    tester_adapting_barge_in: bool,
     required_passed: bool,
     extended_passed: bool,
     scenarios: Vec<ScenarioReport>,
@@ -1070,6 +1082,7 @@ struct Options {
     acoustic_near_end: bool,
     capture_input_gain_db: f32,
     callback_delay_hint_ms: u32,
+    tester_adapting_barge_in: bool,
     scenarios: Vec<String>,
     tts_model_dir: PathBuf,
     asr_model_dir: PathBuf,
@@ -1087,6 +1100,7 @@ impl Options {
             acoustic_near_end: true,
             capture_input_gain_db: -6.0,
             callback_delay_hint_ms: 25,
+            tester_adapting_barge_in: false,
             scenarios: Vec::new(),
             tts_model_dir: cache.join("tts/supertonic-3"),
             asr_model_dir: cache.join("asr/nemotron-3.5-streaming"),
@@ -1104,6 +1118,7 @@ impl Options {
                 "--required-only" => options.required_only = true,
                 "--acoustic-near-end" => options.acoustic_near_end = true,
                 "--capture-boundary-near-end" => options.acoustic_near_end = false,
+                "--tester-adapting-barge-in" => options.tester_adapting_barge_in = true,
                 "--capture-input-gain-db" => {
                     options.capture_input_gain_db =
                         value(&args, &mut index, "--capture-input-gain-db")?
@@ -1135,7 +1150,7 @@ impl Options {
                     options.output_dir = value(&args, &mut index, "--output-dir")?.into()
                 }
                 "--help" | "-h" => {
-                    println!("aven-voice-duplex-lab [--required-only] [--scenario NAME] [--capture-boundary-near-end] [--capture-input-gain-db DB] [--callback-delay-hint-ms MS] [--onnxruntime PATH] [--output-dir DIR]");
+                    println!("aven-voice-duplex-lab [--required-only] [--scenario NAME] [--capture-boundary-near-end] [--tester-adapting-barge-in] [--capture-input-gain-db DB] [--callback-delay-hint-ms MS] [--onnxruntime PATH] [--output-dir DIR]");
                     std::process::exit(0);
                 }
                 other => bail!("unknown argument {other}"),
