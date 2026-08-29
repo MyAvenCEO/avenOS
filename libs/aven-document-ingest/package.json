@@ -1,0 +1,30 @@
+{
+	"name": "@avenos/document-ingest",
+	"private": true,
+	"version": "26.8.28-next.9",
+	"type": "module",
+	"description": "Headless document actors, model contract, and resumable Artifact Store runner.",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./actors": "./src/actors.ts",
+		"./actors/registry": "./src/actors/registry.ts",
+		"./actors/*": "./src/actors/*/index.ts",
+		"./execution": "./src/execution.ts",
+		"./llm-gateway": "./src/llm-gateway.ts",
+		"./model": "./src/model.ts",
+		"./runtime": "./src/runtime.ts"
+	},
+	"scripts": {
+		"check": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@avenos/actors": "workspace:*",
+		"@avenos/artifact-store": "workspace:*",
+		"@avenos/llm-client": "workspace:*"
+	},
+	"devDependencies": {
+		"typescript": "^6.0.2"
+	}
+}

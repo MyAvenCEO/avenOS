@@ -12,7 +12,9 @@ import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import '$lib/actors/windows'
 import ArtifactsPage from '$lib/artifacts/ArtifactsPage.svelte'
 import {
+	documentExecutionPreference,
 	ingestDroppedFiles,
+	ingestFile,
 	loadPersistentIntents,
 	refreshIntent
 } from '$lib/artifacts/ingest.svelte'
@@ -84,6 +86,13 @@ const mockPhase = $derived.by(() => {
 	return v !== null && v in MOCK_PHASES ? (v as keyof typeof MOCK_PHASES) : null
 })
 const voiceUi = $derived(isTauri() || mockPhase !== null)
+const e2eFixture = $derived(
+	import.meta.env.VITE_AVEN_E2E === 'true' ? page.url.searchParams.get('e2eFixture') : null
+)
+
+async function importE2eFixture() {
+	if (e2eFixture) await ingestFile(e2eFixture, 'local')
+}
 
 /**
  * Whether the conversation is running at all — on by default, because
@@ -94,7 +103,7 @@ const voiceUi = $derived(isTauri() || mockPhase !== null)
  * to the logo — one tap to come back. Writing still works while ended; the
  * reply is then read, not heard.
  */
-let conversing = $state(isTauri())
+let conversing = $state(isTauri() && import.meta.env.VITE_AVEN_E2E !== 'true')
 
 // The mock enters the conversation without opening anything.
 $effect.pre(() => {
@@ -434,6 +443,17 @@ function onGlobalKeydown(event: KeyboardEvent) {
 
 <svelte:window onkeydown={onGlobalKeydown} />
 
+{#if e2eFixture}
+	<button
+		type="button"
+		data-testid="e2e-import-fixture"
+		class="fixed right-2 bottom-2 z-[200] rounded bg-primary px-2 py-1 text-primary-foreground text-xs"
+		onclick={importE2eFixture}
+	>
+		Import E2E fixture
+	</button>
+{/if}
+
 <svelte:head>
 	<title>Dashboard · avenOS</title>
 </svelte:head>
@@ -531,6 +551,31 @@ function onGlobalKeydown(event: KeyboardEvent) {
 		     overhangs it (6px each way) without pushing anything — so switching
 		     voice ↔ text never makes the notch jump. -->
 		<div class="relative flex items-center justify-center gap-2">
+			{#if shell.tab === 'intents'}
+				<div
+					class="pointer-events-auto absolute bottom-full left-0 mb-2 flex items-center gap-1 rounded-full border border-border bg-surface-card p-1 text-foreground shadow-sm"
+					role="group"
+					aria-label="Run new document processes on"
+					title="Placement is fixed when an upload starts"
+				>
+					<span class="pl-2 text-[11px] opacity-60">Process on</span>
+					{#each [['local', 'Device'], ['server', 'Server']] as [environment, label]}
+						<button
+							type="button"
+							onclick={() => {
+								documentExecutionPreference.environment = environment as 'local' | 'server'
+							}}
+							aria-pressed={documentExecutionPreference.environment === environment}
+							class="rounded-full px-2.5 py-1 text-xs transition-colors {documentExecutionPreference.environment ===
+							environment
+								? 'bg-primary text-primary-foreground'
+								: 'hover:bg-surface-card-selected'}"
+						>
+							{label}
+						</button>
+					{/each}
+				</div>
+			{/if}
 			<!-- Back and the drawer toggle hug the screen edges, not the notch:
 			     the pill stays centered on its own, and in text mode both step
 			     aside so the input gets the whole width. -->

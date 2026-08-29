@@ -68,6 +68,9 @@ export class ChatActor extends Actor {
 	constructor() {
 		super({
 			id: 'chat',
+			authority: 'ceo.aven',
+			namespace: 'assistant.chat',
+			version: '1',
 			name: 'Chat',
 			description:
 				'The conversation: takes utterances, thinks with the model, calls tools ' +

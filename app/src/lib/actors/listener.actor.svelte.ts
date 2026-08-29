@@ -25,6 +25,9 @@ export class ListenerActor extends Actor {
 	constructor() {
 		super({
 			id: 'listener',
+			authority: 'os.aven',
+			namespace: 'voice',
+			version: '1',
 			name: 'Listener',
 			description:
 				'The ears: Silero VAD and Nemotron recognition on-device. Finished utterances ' +

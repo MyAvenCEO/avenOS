@@ -1,52 +1,15 @@
-export type ArtifactProcessingAvailability = 'discovering' | 'available' | 'unavailable'
+import type { ArtifactProcessingState, ArtifactProcessingView } from '@avenos/artifact-store'
 
-export type ArtifactProcessingState = 'active' | 'succeeded' | 'needs_review' | 'failed'
-
-export interface ArtifactProcessingWarning {
-	code: string
-	message: string
-	retryable: boolean
-}
-
-export interface ArtifactProcessingStage {
-	key: string
-	state: string
-	/** Exact runtime DAG edges. Absent on presentations created before v3. */
-	dependsOn?: string[]
-	procedureKey?: string
-	attemptCount?: number
-	terminalCode?: string | null
-}
-
-export interface DerivedArtifact {
-	artifactId: string
-	typeKey: string
-	typeVersion: number
-	stageKey: string
-}
-
-export interface ArtifactProcessingPresentation {
-	caseId: string
-	state: ArtifactProcessingState
-	projectionVersion: string
-	preferredType: string
-	label: string
-	summary: string | null
-	metadata: Record<string, unknown>
-	warnings: ArtifactProcessingWarning[]
-	stages: ArtifactProcessingStage[]
-	derivedArtifacts: DerivedArtifact[]
-}
-
-export interface ArtifactProcessingLookup {
-	pending: boolean
-	presentation: ArtifactProcessingPresentation | null
-}
-
-export interface ArtifactProcessingView extends ArtifactProcessingPresentation {
-	availability: ArtifactProcessingAvailability
-	lookupError?: string
-}
+export type {
+	ArtifactProcessingAvailability,
+	ArtifactProcessingLookup,
+	ArtifactProcessingPresentation,
+	ArtifactProcessingStage,
+	ArtifactProcessingState,
+	ArtifactProcessingView,
+	ArtifactProcessingWarning,
+	DerivedArtifact
+} from '@avenos/artifact-store'
 
 const TYPE_LABELS: Record<string, string> = {
 	file: 'File',
