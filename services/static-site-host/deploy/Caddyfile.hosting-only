@@ -1,0 +1,16 @@
+{
+	on_demand_tls {
+		ask http://static-site-host:8093/internal/caddy/ask
+	}
+}
+
+# The snapshot is the complete hostname allow-list. Caddy will not obtain a
+# certificate for any name the static host did not validate and persist.
+https:// {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+	respond /internal/* 404
+	reverse_proxy static-site-host:8093
+}

@@ -8,8 +8,16 @@ const validEnvironment: NodeJS.ProcessEnv = {
 }
 
 describe('site host configuration', () => {
+	test('snapshot mode has no control-plane credential or network dependency', () => {
+		const config = loadConfig({ SITE_HOST_MODE: 'snapshot' })
+		expect(config.mode).toBe('snapshot')
+		expect('directoryUrl' in config).toBe(false)
+		expect('bearerToken' in config).toBe(false)
+	})
+
 	test('derives a same-origin status endpoint and bounded concurrency', () => {
 		const config = loadConfig(validEnvironment)
+		if (config.mode !== 'managed') throw new Error('expected managed mode')
 		expect(config.statusUrl).toBe('http://app:3000/internal/v1/static-sites/status')
 		expect(config.maxConcurrentSyncs).toBe(4)
 	})
@@ -27,5 +35,9 @@ describe('site host configuration', () => {
 		expect(() =>
 			loadConfig({ ...validEnvironment, SITE_HOST_DIRECTORY_URL: 'file:///tmp/bindings' })
 		).toThrow(/HTTP or HTTPS/)
+	})
+
+	test('rejects an unknown operating mode', () => {
+		expect(() => loadConfig({ SITE_HOST_MODE: 'offline' })).toThrow(/managed or snapshot/)
 	})
 })

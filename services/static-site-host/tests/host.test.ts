@@ -23,6 +23,7 @@ test('loads and serves a last-known-good site without the identity API', async (
 		source_ref: 'refs/heads/next',
 		artifact_ref: 'refs/heads/deploy/next',
 		artifact_path: 'dist',
+		verification_mode: 'txt',
 		verification_token_hash: 'a'.repeat(64),
 		verified_at: new Date().toISOString()
 	}
@@ -34,22 +35,17 @@ test('loads and serves a last-known-good site without the identity API', async (
 		JSON.stringify({ sites: [{ binding, root }] })
 	)
 	const config: SiteHostConfig = {
+		mode: 'snapshot',
 		hostname: '127.0.0.1',
 		port: 8093,
 		dataRoot,
-		directoryUrl: 'http://identity.invalid/bindings',
-		statusUrl: 'http://identity.invalid/status',
-		bearerToken: 'a'.repeat(32),
-		allowedIpv4: new Set(['192.0.2.10']),
-		allowedIpv6: new Set(),
-		pollMilliseconds: 60_000,
-		dnsGraceMilliseconds: 86_400_000,
 		maxFiles: 10_000,
 		maxBytes: 268_435_456,
 		maxConcurrentSyncs: 4
 	}
 	const host = new StaticSiteHost(config)
 	await host.loadSnapshot()
+	await expect(host.reconcile()).rejects.toThrow(/snapshot mode/)
 
 	expect((await host.handle(new Request('http://local/health/ready'))).status).toBe(200)
 	expect(

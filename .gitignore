@@ -17,6 +17,7 @@ node_modules
 /build
 /ARCHIVE/*/build
 /app/build
+/services/*/build/
 /services/aven-api/email-templates/.maizzle/
 /services/aven-api/email-templates/.maizzle-dist/
 
@@ -70,6 +71,8 @@ target/
 # App Store / local packaging outputs (never commit)
 /dist/
 **/*.pkg
+/playwright-report/
+/test-results/
 
 # Repo-local P2p signal relay keys (relay-hyperdht.seed, bootstrap-hyperdht.seed)
 /.avenOS/

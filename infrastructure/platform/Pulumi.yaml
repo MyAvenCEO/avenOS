@@ -1,0 +1,5 @@
+name: aven-platform
+description: Two-host Hetzner foundation for aven.id and the aven.ceo platform
+runtime:
+  name: nodejs
+main: src/index.mjs

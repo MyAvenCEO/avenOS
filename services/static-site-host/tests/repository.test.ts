@@ -9,6 +9,7 @@ const valid: DirectoryBinding = {
 	source_ref: 'refs/heads/next',
 	artifact_ref: 'refs/heads/deploy/next',
 	artifact_path: 'dist',
+	verification_mode: 'txt',
 	verification_token_hash: 'a'.repeat(64),
 	verified_at: null
 }
@@ -45,6 +46,19 @@ describe('directory binding validation', () => {
 		expect(() =>
 			validateBinding({ ...valid, hostname: 'docs.aven.ceo', owner_is_admin: false })
 		).toThrow(/reserved/)
+	})
+	test('accepts operator verification only for platform-managed aven.ceo sites', () => {
+		expect(() =>
+			validateBinding({
+				...valid,
+				hostname: 'aven.ceo',
+				owner_is_admin: true,
+				verification_mode: 'operator'
+			})
+		).not.toThrow()
+		expect(() =>
+			validateBinding({ ...valid, owner_is_admin: true, verification_mode: 'operator' })
+		).toThrow(/operator verification/)
 	})
 	test.each(['refs/heads/-next', 'refs/heads/feature/.hidden', 'refs/heads/deploy/release.lock'])(
 		'rejects a Git-invalid ref %s',
