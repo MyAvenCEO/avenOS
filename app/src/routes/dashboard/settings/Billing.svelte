@@ -534,7 +534,17 @@ onDestroy(() => {
 				{#if p.runtime}
 					<li class="flex gap-2">
 						<span class="opacity-50">·</span>
-						<span>Aven Worker Minutes — {p.runtime.hoursPerDay} Std./Tag</span>
+						<!-- MIND credits, not hours. `hoursPerDay` was the runtime shape
+						     before the 0.9.0 SSOT; the app kept compiling against it only
+						     because the lockfile pinned aven-ceo 0.8.1 here while every
+						     other surface had moved on. The wording matches the website's
+						     `mindWeekly` / `mindOnce`, which is the point of a shared
+						     price list. -->
+						<span>
+							{p.runtime.per === 'week'
+								? `${p.runtime.mindCredits} MIND Credits pro Woche inklusive`
+								: `${p.runtime.mindCredits} MIND Credits — für Early-Bird-Tests`}
+						</span>
 					</li>
 				{/if}
 				{#each p.features as feature, index (index)}
