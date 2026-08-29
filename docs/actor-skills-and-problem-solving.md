@@ -287,11 +287,19 @@ The branch intentionally contains several layers at different maturity levels:
 - **`services/actor-runner` proves the remote trust boundary.** Through
   `api.aven.ceo`, it provides authenticated admission, independent identity-token
   and tenant-grant verification, subject isolation, SQL-backed idempotency, status,
-  cancellation, restart recovery, and SSE shape. Its baseline executor normally
-  completes only already-satisfied goals; it has no generic actor executor.
-- **The durable generic executor is specified, not implemented.** Its attempts,
-  leases, factories, artifact ports, continuations, and effects remain the next major
-  slice.
+  cancellation, restart recovery, and SSE shape. Its deployed host uses the generic
+  ordered registry/planner/factory executor with an empty fail-closed application
+  catalog. PostgreSQL E2E tests populate the same host ports with a deterministic
+  factory and real Artifact Store adapter.
+- **The generic executor has its first narrow slice.** It binds one artifact per
+  schema-qualified slot, repeats spawn/invoke authorization, activates step-lifetime
+  factory actors, publishes before advancing, and releases them. Instance targets,
+  wider cardinalities, attempts, leases, fencing, and effects remain subsequent slices.
+  A deterministic metadata-only secret continuation now proves postpone, restart, and
+  resume, but document/HITL integration and an ephemeral secret handle remain. Its
+  concrete Artifact Store port is composed with the
+  authenticated SQL runner in the deterministic release-gated conformance test; the
+  deployed host still needs application-specific catalog and adapter bindings.
 
 The HTTP runner is therefore a real trust and transport boundary, not yet the remote
 document-ingest runtime. The app's Device/Server selector still routes both choices to
@@ -345,15 +353,19 @@ Ready in this branch:
 - portable run and checkpoint values;
 - the working document-specific executor and its client publication/retry adapter
   (the split publication downstream remains an integration requirement);
-- the authenticated server runner boundary and memory reference backend.
+- the authenticated server runner boundary, persistent SQL run ledger, baseline
+  deployed executor, and injection seam tested with the generic deterministic core;
+- trusted Artifact Store fact projection and atomic production-run publication,
+  composed with the authenticated SQL conformance path against the real Rust service.
 
 Still required for general skill execution:
 
 - real avenCEO entitlement, artifact-grant, and admission policy integration;
 - a durable run repository with leases, fencing, and an outbox;
-- a generic slot resolver, artifact publisher, envelope executor, and fact projector;
-- dynamic factory activation and teardown in the runner;
-- durable continuations and an ephemeral secret broker;
+- application schema/procedure bindings for the tested Artifact Store adapter;
+- production factory catalogs/composition, instance targets, and longer lifetimes;
+- application continuation bindings and an ephemeral secret broker (the generic
+  metadata-only runner lifecycle is implemented);
 - checkpointed observation/replanning;
 - exploratory and hybrid goal contracts with bounded utility and stopping rules;
 - app wiring from the Server choice to the remote runner; and

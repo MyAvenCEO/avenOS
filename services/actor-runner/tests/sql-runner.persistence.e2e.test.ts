@@ -1,8 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import { ACTOR_RUN_PROTOCOL, type PlanRunRecord } from '@avenos/actors'
+import { ACTOR_RUN_PROTOCOL, type PlanRunRecord, resourceId } from '@avenos/actors'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { executeAlreadySatisfied } from '../src/execution.js'
 import { SqlPlanRunner } from '../src/sql-runner.js'
+import {
+	deterministicExecutionHarness,
+	deterministicRunRequest,
+	deterministicSecretExecutor,
+	SECRET_CONTINUATION_ID,
+	secretContinuationRunRequest
+} from './support/deterministic-execution.js'
 
 const databaseUrl = process.env.TEST_ACTOR_RUNNER_DATABASE_URL
 const describeWithPostgres = databaseUrl ? describe : describe.skip
@@ -52,7 +60,14 @@ describeWithPostgres('SQL runner persistence', () => {
 			executionEnvironment: 'server',
 			requestId: randomUUID(),
 			idempotencyKey: randomUUID(),
-			skillRef: 'ceo.aven:skill:e2e:persistence@1',
+			requestedAt: now,
+			skillRef: resourceId({
+				authority: 'ceo.aven',
+				kind: 'skill',
+				namespace: 'e2e',
+				name: 'persistence',
+				version: '1'
+			}),
 			security: {
 				principal: {
 					subjectId,
@@ -86,7 +101,7 @@ describeWithPostgres('SQL runner persistence', () => {
 			options: `-c search_path=${schema},pg_catalog`
 		})
 		try {
-			const runner = new SqlPlanRunner(secondProcess, secondProcess)
+			const runner = new SqlPlanRunner(secondProcess, secondProcess, executeAlreadySatisfied)
 			expect((await runner.status(runId))?.state).toBe('accepted')
 			expect(await runner.recoverAcceptedRuns()).toBe(1)
 			expect(await runner.status(runId)).toMatchObject({
@@ -105,4 +120,135 @@ describeWithPostgres('SQL runner persistence', () => {
 			await secondProcess.end()
 		}
 	})
+
+	test('persists a deterministic generic execution and matches the local outcome', async () => {
+		const pool = new pg.Pool({
+			connectionString: databaseUrl,
+			max: 2,
+			options: `-c search_path=${schema},pg_catalog`
+		})
+		const subjectId = randomUUID()
+		const tenantId = randomUUID()
+		const local = deterministicExecutionHarness('local')
+		const server = deterministicExecutionHarness('server')
+		const base = deterministicRunRequest('local', subjectId, tenantId)
+		try {
+			const localExecution = await local.execute(base)
+			const runner = new SqlPlanRunner(pool, pool, server.execute)
+			const started = await runner.start({
+				...base,
+				executionEnvironment: 'server',
+				requestId: randomUUID(),
+				idempotencyKey: `server-${randomUUID()}`
+			})
+			const record = await terminalRecord(runner, started.runId)
+
+			expect(record).toMatchObject({
+				state: 'succeeded',
+				executionEnvironment: 'server',
+				requestedAt: base.requestedAt,
+				checkpoints: [
+					expect.objectContaining({
+						completedStepIds: ['step-1'],
+						artifactIds: server.artifacts().map((artifact) => artifact.artifactId),
+						remainingGoals: [],
+						registryRevision: server.registryRevision()
+					})
+				]
+			})
+			expect(record.checkpoints[0]?.policyDecisionIds).toHaveLength(3)
+			expect(server.canonicalManifest()).toEqual(local.canonicalManifest())
+			expect(localExecution.remainingGoals).toEqual([])
+			expect(server.spawned()).toBe(1)
+			expect(server.released()).toBe(1)
+		} finally {
+			await pool.end()
+		}
+	})
+
+	test('survives replacement, postpones, and resumes without persisting a secret', async () => {
+		const firstPool = new pg.Pool({
+			connectionString: databaseUrl,
+			max: 1,
+			options: `-c search_path=${schema},pg_catalog`
+		})
+		const request = secretContinuationRunRequest(randomUUID(), randomUUID())
+		const firstRunner = new SqlPlanRunner(firstPool, firstPool, deterministicSecretExecutor)
+		const started = await firstRunner.start(request)
+		await recordInState(firstRunner, started.runId, 'waiting_for_input')
+		await firstPool.end()
+
+		const replacementPool = new pg.Pool({
+			connectionString: databaseUrl,
+			max: 1,
+			options: `-c search_path=${schema},pg_catalog`
+		})
+		try {
+			const replacement = new SqlPlanRunner(
+				replacementPool,
+				replacementPool,
+				deterministicSecretExecutor
+			)
+			await replacement.resume(started.runId, {
+				requestId: randomUUID(),
+				continuationId: SECRET_CONTINUATION_ID,
+				action: 'postpone'
+			})
+			expect(await replacement.status(started.runId)).toMatchObject({
+				state: 'waiting_for_input',
+				continuations: [{ continuationId: SECRET_CONTINUATION_ID, state: 'postponed' }]
+			})
+
+			await replacement.resume(started.runId, {
+				requestId: randomUUID(),
+				continuationId: SECRET_CONTINUATION_ID,
+				action: 'submit',
+				kind: 'secret',
+				value: 'correct horse battery staple'
+			})
+			const record = await replacement.status(started.runId)
+			expect(record).toMatchObject({
+				state: 'succeeded',
+				continuations: [{ continuationId: SECRET_CONTINUATION_ID, state: 'resolved' }],
+				checkpoints: [
+					expect.objectContaining({ completedStepIds: [], remainingGoals: request.goals }),
+					expect.objectContaining({ completedStepIds: ['unlock-step'], remainingGoals: [] })
+				]
+			})
+			expect(JSON.stringify(record)).not.toContain('correct horse battery staple')
+			const stored = (
+				await replacementPool.query<{ record: PlanRunRecord }>(
+					'SELECT record FROM runs WHERE id=$1',
+					[started.runId]
+				)
+			).rows[0]?.record
+			expect(JSON.stringify(stored)).not.toContain('correct horse battery staple')
+		} finally {
+			await replacementPool.end()
+		}
+	})
 })
+
+async function terminalRecord(runner: SqlPlanRunner, runId: string): Promise<PlanRunRecord> {
+	const deadline = Date.now() + 5_000
+	while (Date.now() < deadline) {
+		const record = await runner.status(runId)
+		if (record && ['succeeded', 'failed', 'cancelled'].includes(record.state)) return record
+		await new Promise((resolve) => setTimeout(resolve, 10))
+	}
+	throw new Error(`run ${runId} did not reach a terminal state`)
+}
+
+async function recordInState(
+	runner: SqlPlanRunner,
+	runId: string,
+	state: PlanRunRecord['state']
+): Promise<PlanRunRecord> {
+	const deadline = Date.now() + 5_000
+	while (Date.now() < deadline) {
+		const record = await runner.status(runId)
+		if (record?.state === state) return record
+		await new Promise((resolve) => setTimeout(resolve, 10))
+	}
+	throw new Error(`run ${runId} did not reach ${state}`)
+}

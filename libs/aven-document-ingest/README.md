@@ -75,7 +75,8 @@ publications, retries only host-declared transient failures, and preserves the s
 `DocumentExecutionRouter` chooses one `DocumentExecutionHost` per process. The present
 server host is an in-process emulation which deliberately exercises the same portable
 JSON boundary as the remote contract. A separate authenticated actor-runner service
-exists, but its memory backend does not yet execute this package. See
+has a customer-scoped SQL run ledger, restart recovery, and generic fail-closed host
+composition, but this package is not yet registered in its application catalog. See
 [`docs/actor-runtime-formal-spec.md`](../../docs/actor-runtime-formal-spec.md) for the
 wire protocol, dynamic factory target, and server cutover.
 

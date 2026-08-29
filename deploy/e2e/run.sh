@@ -15,7 +15,7 @@ export E2E_TENANT_PRIVATE_KEY E2E_TENANT_PUBLIC_KEY
 # Docker keeps the internal service ports fixed; only disposable host bindings
 # and the public browser origins vary.
 ports=$(bun -e '
-  const servers = Array.from({ length: 6 }, () =>
+  const servers = Array.from({ length: 7 }, () =>
     Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } })
   )
   console.log(servers.map((server) => server.port).join(" "))
@@ -28,8 +28,10 @@ E2E_API_HOST_PORT=$3
 E2E_DATABASE_HOST_PORT=$4
 E2E_STATIC_HOST_PORT=$5
 E2E_MAILPIT_HOST_PORT=$6
+E2E_ARTIFACT_STORE_HOST_PORT=$7
 export E2E_IDENTITY_HOST_PORT E2E_CHECKOUT_HOST_PORT E2E_API_HOST_PORT
 export E2E_DATABASE_HOST_PORT E2E_STATIC_HOST_PORT E2E_MAILPIT_HOST_PORT
+export E2E_ARTIFACT_STORE_HOST_PORT
 
 teardown() {
   docker compose --project-name "$project" --file "$compose" --profile hosting down --volumes --remove-orphans >/dev/null 2>&1 || true
@@ -108,6 +110,9 @@ docker compose --project-name "$project" --file "$compose" config --quiet
 docker compose --project-name "$project" --file "$compose" --profile hosting up --detach --wait --wait-timeout 360
 
 TEST_ACTOR_RUNNER_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
+TEST_ARTIFACT_STORE_BASE_URL="http://127.0.0.1:$E2E_ARTIFACT_STORE_HOST_PORT" \
+TEST_ARTIFACT_STORE_BEARER_TOKEN="artifact-store-runtime-conformance-token" \
+TEST_ARTIFACT_STORE_SCOPE_ID="99999999-9999-4999-8999-999999999999" \
 bun run --cwd "$root/services/actor-runner" test:e2e:persistence
 
 TEST_ADMIN_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \

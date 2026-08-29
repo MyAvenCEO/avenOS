@@ -82,7 +82,8 @@ export interface PlanRunRecord extends PlanRunHandle {
 	protocol: ProtocolId
 	requestId: string
 	idempotencyKey: string
-	skillRef: string
+	requestedAt: string
+	skillRef: SkillId
 	security: PlanRunSecurityContext
 	createdAt: string
 	updatedAt: string
@@ -94,17 +95,46 @@ export interface PlanRunRecord extends PlanRunHandle {
 	failure?: { code: string; message: string; retryable: boolean }
 }
 
+/** Portable result returned by either a local or server execution host. */
+export interface PlanRunExecutionResult {
+	artifactIds?: string[]
+	completedStepIds?: string[]
+	remainingGoals?: Predicate[]
+	registryRevision?: number
+	policyDecisionIds?: string[]
+	/** A durable request for information which the executor cannot obtain itself. */
+	continuation?: PlanRunContinuation
+}
+
+export interface PlanRunExecutionContext {
+	/** Present only for this invocation. The runner never adds it to the run record. */
+	submission?: Extract<PlanRunContinuationSubmission, { action: 'submit' }>
+}
+
+/** Shared executor contract composed by local and server runner hosts. */
+export type PlanRunExecutor = (
+	request: PlanRunStartRequest,
+	context?: PlanRunExecutionContext
+) => Promise<PlanRunExecutionResult>
+
 /**
  * A continuation value is transport data, not necessarily durable data. A
  * runner MUST discard `secret` values after the admitted attempt and MUST NOT
  * put them in PlanRunRecord, artifacts, logs, or production-run parameters.
  */
-export interface PlanRunContinuationSubmission {
-	requestId: string
-	continuationId: string
-	kind: PlanRunContinuation['kind']
-	value: unknown
-}
+export type PlanRunContinuationSubmission =
+	| {
+			requestId: string
+			continuationId: string
+			action: 'postpone'
+	  }
+	| {
+			requestId: string
+			continuationId: string
+			action: 'submit'
+			kind: PlanRunContinuation['kind']
+			value: unknown
+	  }
 
 export interface PlanRunner {
 	start(request: PlanRunStartRequest): Promise<PlanRunHandle>

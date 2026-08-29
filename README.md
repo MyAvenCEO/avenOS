@@ -147,6 +147,18 @@ Moving the Git branch from `next` to `prod` does not deploy infrastructure.
 
 ## Architecture and contribution rules
 
+Focused design references include:
+
+- [Generic authenticated LLM gateway](docs/llm-gateway.md) for capability-based model
+  discovery, streaming, schemas, tool calls, provider configuration, and operations;
+- [Actor skills and goal-directed problem solving](docs/actor-skills-and-problem-solving.md)
+  for capabilities, generated plans, durable runs, and artifact-backed resumption;
+- [Actor runtime proof strategy](docs/actor-runtime-proof-strategy.md) for deterministic
+  local/server conformance, document acceptance, placement equivalence, and live-provider
+  smoke evidence; and
+- [Client-owned document ingestion](docs/client-document-ingest.md) for the actor pipeline,
+  LLM gateway integration, durable publication boundary, and server migration plan.
+
 The normative customer-data boundary is
 [Customer databases as a first-class platform boundary](docs/customer-database-platform.md).
 The implemented topology is mapped in the

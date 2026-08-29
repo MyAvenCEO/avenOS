@@ -45,6 +45,15 @@ Methods with no guaranteed output are omitted from dataflow planning.
 The planner produces a side-effect-free ad-hoc program. It does not execute envelopes
 or persist run state; those responsibilities belong to a durable runner.
 
+`executePhysicalProgram()` is the first host-neutral executor slice. Given an
+authorized physical program, registry revision, security context, factory resolver,
+and Artifact Store ports, it binds one schema-qualified artifact per declared slot,
+rechecks spawn and invocation authorization, dynamically creates factory targets,
+dispatches their envelopes, commits outputs before advancing, and releases each actor.
+It intentionally does not yet implement instance targets, wider slot cardinalities,
+leases, fencing, retries, continuations, or the persistent run state machine. Those
+remain visible boundaries rather than behavior hidden in a document coordinator.
+
 The generic `ActorRegistry` additionally distinguishes versioned definitions,
 spawnable factory offers, and live instances. `authorizeRegistryForPlanning()` creates
 a principal-specific view, and `solveAuthorized()` returns a physical program whose
@@ -68,6 +77,13 @@ the shared Artifact Store.
 validator define the desktop/server seam. `os.aven` owns that generic protocol. All
 LLM interaction remains application behavior under `ceo.aven`, even when its HTTP
 transport is OpenAI-compatible.
+
+The deterministic conformance test in `tests/executor-conformance.test.ts` exercises
+this core for both `local` and `server` physical placements and compares canonical
+outputs. Both currently run in-process, so that test proves portable executor behavior,
+not the remote HTTP/persistence path. The latter requires the server conformance rail
+defined in
+[`docs/actor-runtime-proof-strategy.md`](../../docs/actor-runtime-proof-strategy.md).
 
 ## Import boundaries
 
