@@ -108,6 +108,102 @@ interface TauriAcceptance {
 	intentId: string
 	sourceArtifactId: string
 	extractedTextArtifactId: string
+	serverSourceArtifactId: string
+	serverExtractedTextArtifactId: string
+}
+
+interface BrowsedArtifact {
+	artifactId: string
+	localKey: string
+	typeKey: string
+	inputs: Array<{ role: string; ordinal: number; artifactId: string }>
+}
+
+async function waitForDocumentGraph(
+	artifactBase: string,
+	authorizedHeaders: Record<string, string>,
+	excludedSources: ReadonlySet<string>
+): Promise<{ sourceId: string; extractedTextId: string; graph: BrowsedArtifact[] }> {
+	let lastArtifactResponse = 'not requested'
+	const deadline = Date.now() + 120_000
+	while (Date.now() < deadline) {
+		const response = await fetch(artifactBase, { headers: authorizedHeaders })
+		lastArtifactResponse = `${response.status} ${await response.clone().text()}`
+		if (response.ok) {
+			const browse = (await response.json()) as { artifacts: BrowsedArtifact[] }
+			const source = browse.artifacts.find(
+				(artifact) => artifact.typeKey === 'core.file' && !excludedSources.has(artifact.artifactId)
+			)
+			if (source) {
+				const ids = new Set([source.artifactId])
+				let changed = true
+				while (changed) {
+					changed = false
+					for (const artifact of browse.artifacts) {
+						if (
+							!ids.has(artifact.artifactId) &&
+							artifact.inputs.some((input) => ids.has(input.artifactId))
+						) {
+							ids.add(artifact.artifactId)
+							changed = true
+						}
+					}
+				}
+				const graph = browse.artifacts.filter((artifact) => ids.has(artifact.artifactId))
+				const extracted = graph.find(
+					(artifact) => artifact.typeKey === 'docs.extracted-text' && artifact.inputs.length > 2
+				)
+				if (
+					extracted &&
+					graph.some((artifact) => artifact.typeKey === 'core.file-inspection') &&
+					graph.some((artifact) => artifact.typeKey === 'core.content-classification')
+				) {
+					return { sourceId: source.artifactId, extractedTextId: extracted.artifactId, graph }
+				}
+			}
+		}
+		await new Promise((resolve) => setTimeout(resolve, 250))
+	}
+	throw new Error(`document import did not publish its complete graph: ${lastArtifactResponse}`)
+}
+
+async function canonicalDocumentGraph(
+	artifactBase: string,
+	authorizedHeaders: Record<string, string>,
+	graph: BrowsedArtifact[]
+) {
+	const byId = new Map(graph.map((artifact) => [artifact.artifactId, artifact]))
+	const derived = graph.filter((artifact) => artifact.typeKey !== 'core.file')
+	const values = await Promise.all(
+		derived.map(async (artifact) => {
+			const envelope = (await json(
+				await fetch(`${artifactBase}/${artifact.artifactId}`, { headers: authorizedHeaders })
+			)) as { payload: unknown; blob?: unknown }
+			let content: string | null = null
+			if (envelope.blob) {
+				const response = await fetch(`${artifactBase}/${artifact.artifactId}/content`, {
+					headers: authorizedHeaders
+				})
+				expect(response.status).toBe(200)
+				content = createHash('sha256')
+					.update(new Uint8Array(await response.arrayBuffer()))
+					.digest('hex')
+			}
+			return {
+				localKey: artifact.localKey,
+				typeKey: artifact.typeKey,
+				payload: envelope.payload,
+				content,
+				inputs: artifact.inputs.map((input) => ({
+					role: input.role,
+					ordinal: input.ordinal,
+					typeKey: byId.get(input.artifactId)?.typeKey ?? 'external',
+					localKey: byId.get(input.artifactId)?.localKey ?? 'external'
+				}))
+			}
+		})
+	)
+	return values.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
 }
 
 async function tauriAcceptance(
@@ -129,42 +225,15 @@ async function tauriAcceptance(
 		const dashboard = new URL(await session.url())
 		dashboard.pathname = '/dashboard'
 		dashboard.searchParams.set('e2eFixture', tauriFixture)
+		dashboard.searchParams.set('e2ePlacement', 'local')
 		await session.navigate(dashboard.toString())
 		const importButton = await session.findEventually('[data-testid="e2e-import-fixture"]')
 		await session.click(importButton)
 
 		const artifactBase = `${api}/api/environments/${environmentId}/artifacts`
-		let sourceArtifactId = ''
-		let extractedTextArtifactId = ''
-		let lastArtifactResponse = 'not requested'
-		const artifactDeadline = Date.now() + 90_000
-		while (Date.now() < artifactDeadline) {
-			const response = await fetch(artifactBase, { headers: authorizedHeaders })
-			lastArtifactResponse = `${response.status} ${await response.clone().text()}`
-			if (response.ok) {
-				const browse = (await response.json()) as {
-					artifacts: Array<{ artifactId: string; typeKey: string }>
-				}
-				sourceArtifactId =
-					browse.artifacts.find((artifact) => artifact.typeKey === 'core.file')?.artifactId ?? ''
-				extractedTextArtifactId =
-					browse.artifacts.find((artifact) => artifact.typeKey === 'docs.extracted-text')
-						?.artifactId ?? ''
-				const types = new Set(browse.artifacts.map((artifact) => artifact.typeKey))
-				if (
-					sourceArtifactId &&
-					extractedTextArtifactId &&
-					types.has('core.file-inspection') &&
-					types.has('core.content-classification')
-				)
-					break
-			}
-			await new Promise((resolve) => setTimeout(resolve, 250))
-		}
-		if (!sourceArtifactId || !extractedTextArtifactId)
-			throw new Error(
-				`Tauri import did not publish source and derived text artifacts; artifact API: ${lastArtifactResponse}\nTauri body:\n${await session.bodyText()}`
-			)
+		const localDocument = await waitForDocumentGraph(artifactBase, authorizedHeaders, new Set())
+		const sourceArtifactId = localDocument.sourceId
+		const extractedTextArtifactId = localDocument.extractedTextId
 		const fixture = await readFile(tauriFixture, 'utf8')
 		for (const [artifactId, expected] of [
 			[sourceArtifactId, fixture],
@@ -192,6 +261,42 @@ async function tauriAcceptance(
 			await new Promise((resolve) => setTimeout(resolve, 100))
 		}
 		if (!intentId) throw new Error('Tauri import did not create its customer intent')
+
+		dashboard.searchParams.set('e2ePlacement', 'server')
+		await session.navigate(dashboard.toString())
+		await session.click(await session.findEventually('[data-testid="e2e-import-fixture"]'))
+		const serverDocument = await waitForDocumentGraph(
+			artifactBase,
+			authorizedHeaders,
+			new Set([sourceArtifactId])
+		)
+		expect(serverDocument.sourceId).not.toBe(sourceArtifactId)
+		expect(
+			await canonicalDocumentGraph(artifactBase, authorizedHeaders, serverDocument.graph)
+		).toEqual(await canonicalDocumentGraph(artifactBase, authorizedHeaders, localDocument.graph))
+		for (const [artifactId, expected] of [
+			[serverDocument.sourceId, fixture],
+			[serverDocument.extractedTextId, fixture.trim()]
+		] as const) {
+			const content = await fetch(`${artifactBase}/${artifactId}/content`, {
+				headers: authorizedHeaders
+			})
+			expect(content.status).toBe(200)
+			expect(await content.text()).toBe(expected)
+		}
+		const localIntentId = intentId
+		const serverIntentDeadline = Date.now() + 30_000
+		while (Date.now() < serverIntentDeadline) {
+			const intents = (await json(
+				await fetch(intentBase, { headers: authorizedHeaders })
+			)) as Array<{ id: string; title: string }>
+			intentId =
+				intents.find((intent) => intent.title === 'e2e-document.txt' && intent.id !== localIntentId)
+					?.id ?? ''
+			if (intentId) break
+			await new Promise((resolve) => setTimeout(resolve, 100))
+		}
+		if (!intentId) throw new Error('server import did not create its customer intent')
 
 		await session.execute(
 			"window.dispatchEvent(new KeyboardEvent('keydown', { key: 'H', bubbles: true }))"
@@ -336,7 +441,13 @@ async function tauriAcceptance(
 						confidence: duplex.follow_up.confidence
 					}
 				})
-				return { intentId, sourceArtifactId, extractedTextArtifactId }
+				return {
+					intentId,
+					sourceArtifactId,
+					extractedTextArtifactId,
+					serverSourceArtifactId: serverDocument.sourceId,
+					serverExtractedTextArtifactId: serverDocument.extractedTextId
+				}
 			}
 			await new Promise((resolve) => setTimeout(resolve, 100))
 		}
@@ -858,7 +969,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 			expect(
 				(await customer.query('SELECT count(*)::int AS count FROM aven_intents.intents')).rows[0]
 					.count
-			).toBe(3)
+			).toBe(4)
 			expect(
 				(
 					await customer.query(
@@ -883,14 +994,53 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 					await customer.query(
 						`SELECT count(*)::int AS count FROM artifact_store.artifact_records
 						 WHERE id = ANY($1::uuid[])`,
-						[[tauri.sourceArtifactId, tauri.extractedTextArtifactId]]
+						[
+							[
+								tauri.sourceArtifactId,
+								tauri.extractedTextArtifactId,
+								tauri.serverSourceArtifactId,
+								tauri.serverExtractedTextArtifactId
+							]
+						]
 					)
 				).rows[0].count
-			).toBe(2)
+			).toBe(4)
 			expect(
 				(await customer.query('SELECT count(*)::int AS count FROM aven_actor_runs.runs')).rows[0]
 					.count
-			).toBe(1)
+			).toBe(2)
+			const documentRun = (
+				await customer.query(
+					`SELECT record FROM aven_actor_runs.runs
+					 WHERE record->>'skillRef'='ceo.aven:skill:docs.ingest:document-ingest@1'`
+				)
+			).rows[0]?.record as
+				| {
+						state: string
+						checkpoints: Array<{
+							artifactIds: string[]
+							output?: { presentation?: { metadata?: Record<string, unknown> } }
+						}>
+				  }
+				| undefined
+			expect(documentRun).toMatchObject({
+				state: 'succeeded',
+				checkpoints: [
+					{
+						output: {
+							presentation: {
+								metadata: {
+									executionEnvironment: 'server',
+									runtimeHost: 'actor-runner'
+								}
+							}
+						}
+					}
+				]
+			})
+			expect(documentRun?.checkpoints[0]?.artifactIds).toContain(
+				tauri.serverExtractedTextArtifactId
+			)
 			const intentRole = databaseRoleName(environment.id, 'int_api')
 			const actorRole = databaseRoleName(environment.id, 'act_api')
 			const artifactRole = databaseRoleName(environment.id, 'art_api')

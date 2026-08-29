@@ -285,16 +285,17 @@ The current implementation contains several layers at different maturity levels:
   calls actors, publishes every successful step, retries safely, and updates the app
   projection. Its coordinator is document-specific and does not execute generated
   plans.
-- **The app's `server` document host proves the portable client seam.** It freezes
-  server placement and crosses the strict JSON boundary, but still runs inside the
-  desktop process.
+- **The app's `server` document host is remote.** It freezes server placement, submits
+  the strict JSON command through the facade, polls the persistent run, and consumes
+  only the terminal portable presentation returned by the runner.
 - **`services/actor-runner` proves the remote trust boundary.** Through
   `api.aven.ceo`, it provides authenticated admission, independent identity-token
   and tenant-grant verification, subject isolation, SQL-backed idempotency, status,
-  cancellation, restart recovery, and SSE shape. Its deployed host uses the generic
-  ordered registry/planner/factory executor with an empty fail-closed application
-  catalog. PostgreSQL E2E tests populate the same host ports with a deterministic
-  factory and real Artifact Store adapter.
+  cancellation, restart recovery, and SSE shape. Its deployed host uses an application
+  executor catalog for document ingestion and the generic ordered
+  registry/planner/factory executor as an empty fail-closed fallback. PostgreSQL E2E
+  tests exercise a deterministic generic factory and the real Artifact Store adapter;
+  document conformance tests exercise the production application executor.
 - **The generic executor has its first narrow slice.** It binds one artifact per
   schema-qualified slot, repeats spawn/invoke authorization, activates step-lifetime
   factory actors, publishes before advancing, and releases them. Instance targets,

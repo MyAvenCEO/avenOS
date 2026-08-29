@@ -91,9 +91,12 @@ const voiceUi = $derived(isTauri() || mockPhase !== null)
 const e2eFixture = $derived(
 	import.meta.env.VITE_AVEN_E2E === 'true' ? page.url.searchParams.get('e2eFixture') : null
 )
+const e2ePlacement = $derived(
+	page.url.searchParams.get('e2ePlacement') === 'server' ? 'server' : 'local'
+)
 
 async function importE2eFixture() {
-	if (e2eFixture) await ingestFile(e2eFixture, 'local')
+	if (e2eFixture) await ingestFile(e2eFixture, e2ePlacement)
 }
 
 let e2eDuplexSession: string | null = null
@@ -494,7 +497,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 			class="rounded bg-primary px-2 py-1 text-primary-foreground text-xs"
 			onclick={importE2eFixture}
 		>
-			Import E2E fixture
+			Import E2E fixture on {e2ePlacement}
 		</button>
 		<button
 			type="button"

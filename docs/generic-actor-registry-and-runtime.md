@@ -633,25 +633,26 @@ publication, suspension, replanning, and teardown. It knows nothing about PDFs,
 invoices, OCR, XRechnung, prompts, or document presentation. Domain packages own those
 capabilities, schemas, fact projections, and optional recipe hints.
 
-The current `DocumentProcessingRuntime` remains a useful reference implementation. It
-is not the general runtime, and its document-shaped branches must not leak into the
-generic contract. Its host-neutral adapter routes one frozen placement to separate
-local and server host objects through a strict JSON boundary; both still execute in
-the desktop process.
+The current `DocumentProcessingRuntime` remains a useful application executor. It is
+not the general runtime, and its document-shaped branches must not leak into the
+generic contract. Device placement executes in the desktop process. Server placement
+submits the portable run command through the facade and executes the same document
+runtime in `services/actor-runner`, using a headless decoder and tenant-scoped Artifact
+Store publisher.
 
 Separately, `services/actor-runner` implements the authenticated remote HTTP boundary
 behind `api.aven.ceo`. It independently verifies forwarded identity evidence and
 tenant grants, then stores run records in the selected customer's PostgreSQL database.
 After a process restart it reclaims accepted rows when that customer's worker pool is
-next admitted. Its deployed composition uses the portable registry/planner/factory
-executor behind an explicit server host. The application catalog and host adapters are
-empty and fail closed, so the service cannot accidentally execute an unregistered
-actor. Deterministic tests populate those same ports with a dynamic factory and persist
-its checkpoint. A concrete Artifact Store port defines trusted fact projection and
-atomic production-run publication, and the release-gated journey composes it with the
-authenticated SQL runner against the real Rust store. The formal spec describes how
-to populate the production ports and add durable attempts and effects before replacing
-the app's in-process server adapter.
+next admitted. Its deployed composition routes registered application skills through
+an application executor catalog and everything else through the portable
+registry/planner/factory executor with empty fail-closed ports. The first production
+application entry is document ingestion. It fetches only the admitted source artifact
+from the selected tenant scope and publishes every derived result with a dedicated
+runner service identity. Deterministic tests populate the generic ports with a dynamic
+factory, while document conformance tests compare the real browser and headless
+application executors. A concrete generic Artifact Store port separately proves
+trusted fact projection and atomic production-run publication.
 
 ## Documentation is part of the contract
 
@@ -696,8 +697,9 @@ The work now has a stable foundation and a deliberately unfinished execution cor
    subject isolation, customer-database isolation, durable start idempotency, status,
    cancellation, and recovery of accepted rows after restart. Its conformance
    composition executes a generic factory actor and commits output lineage through the
-   real Artifact Store. The deployed service does not yet use that composition, and the
-   app does not yet call the service for document ingest.
+   real Artifact Store. The deployed service uses that composition as its fail-closed
+   generic fallback and registers document ingestion in its application catalog. The
+   app's Server placement calls it through the facade.
 3. **Policy integration — next.** Connect the authorization contracts to avenCEO
    entitlements, assurance, artifact grants, configuration constraints, and exact
    spawn/invoke decisions. The current authorizer is only a contract and test seam.
@@ -709,9 +711,10 @@ The work now has a stable foundation and a deliberately unfinished execution cor
 5. **Dynamic activation — next.** Replace eager document singletons with authorized
    desktop and server factory offers while keeping fixture parity with the working
    document coordinator.
-6. **Remote document cutover — next.** Wire the app's Server choice to the authenticated
-   runner, use scoped Artifact Store grants, and retire the temporary in-process server
-   adapter.
+6. **Remote document cutover — implemented for deterministic inputs.** The app's Server
+   choice uses the authenticated runner and a dedicated Artifact Store service identity.
+   Text, CSV, and native-text PDF parity is release-tested. Server OCR and model-backed
+   understanding remain follow-up application capabilities.
 7. **XRechnung and encrypted-PDF proofs — after the executor.** Add recognizer and
    extractor without changing the runner; add secret continuation behavior without
    persisting the password.

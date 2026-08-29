@@ -9,13 +9,14 @@ Document import is one way an Aven brings external material into the working con
 defined by the [product model](product-model.md). avenOS executes that import as a
 graph of ordinary Actors. Before upload, the
 user chooses `local` or `server`; that placement is frozen for the process and persisted
-with its source. Both current hosts execute inside the app, with the server host
-crossing a strict JSON boundary as an explicit emulation. The adapter depends on two
-narrow authenticated avenCEO service contracts:
+with its source. Local actors execute in the app. Server placement submits the same
+document skill to the separately hosted Actor Runner through the authenticated facade.
+The adapter depends on narrow authenticated avenCEO service contracts:
 
 - the generic LLM gateway transports capability-checked model calls; and
-- the client-run publication endpoint commits actor outputs and provenance to the
-  tenant Artifact Store.
+- the client-run publication endpoint commits local actor outputs and provenance to
+  the tenant Artifact Store; and
+- the Plan Runner endpoint admits, persists, and reports remote document runs.
 
 `sourceKind: client-actor-ingest` identifies uploads resumed by this desktop adapter.
 The former feed-driven Artifact Processor has been removed, so no second processor
@@ -66,7 +67,7 @@ actor advertises an invocable method-level contract and handles one transformati
 The coordinator only advances the graph, binds input artifact IDs into the next
 envelope, publishes successful outputs, and updates the presentation projection.
 
-The current host adapter owns:
+The local host adapter owns:
 
 - magic-byte inspection and bounded PDF/PNG/JPEG decoding;
 - native PDF text and normalized-millionth layout extraction;
@@ -77,6 +78,15 @@ The current host adapter owns:
   extraction-kind conflict checks;
 - `invoice-core-v1` and `statement-core-v1` deterministic validation; and
 - the local processing projection shown by chat and intent views.
+
+The server host does not receive source bytes from the client. It receives only the
+committed source artifact ID and metadata. The Actor Runner re-reads both envelope and
+content through a tenant-routed Artifact Store client, rejects mismatched metadata,
+runs the bounded deterministic text/PDF graph, and publishes every derived artifact
+under its own Artifact Store service identity. Its small terminal presentation is
+stored in the durable run checkpoint. Server-side image decoding, OCR, and model-backed
+vision are not installed yet; unsupported or unreadable files settle honestly as
+`needs_review`.
 
 The canonical finance payload schemas are imported from Artifact Store conformance
 fixtures. The actor implementation and publication adapter therefore validate against
@@ -143,10 +153,12 @@ timeouts, redirect rejection, and the selected provider profile. See
 
 ## Durable Artifact Store communication
 
-`POST /api/artifacts/client-runs/[publicationId]` is the durable boundary between actor
-steps. It resolves the authenticated tenant, accepts only allowlisted client procedures,
-validates exact input/output slots and blob policy, uploads output blobs, and publishes
-the production run atomically.
+For local placement, `POST /api/artifacts/client-runs/[publicationId]` is the durable
+boundary between actor steps. It resolves the authenticated tenant, accepts only
+allowlisted client procedures, validates exact input/output slots and blob policy,
+uploads output blobs, and publishes the production run atomically. For server
+placement, the runner performs the equivalent atomic Artifact Store publications
+directly with a dedicated credential and stable publisher identity.
 
 For every successful step:
 
