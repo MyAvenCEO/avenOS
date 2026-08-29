@@ -32,6 +32,7 @@ Run the application unit tests separately:
 Format and lint changed files before committing:
 
 ```sh
+bun run check:docs
 bun run lint
 ```
 

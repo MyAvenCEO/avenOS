@@ -49,6 +49,11 @@ messages, and operator-facing command output.
 
 - Update the owning handbook section in the same change as a command, workflow,
   secret, public endpoint, or recovery behavior.
+- Follow the repository-wide `AGENTS.md`; it maps change types to their owning
+  documents and required checks.
 - Run the documented command or identify it as an example that was not executed.
 - Check relative links and search for references before deleting or renaming a page.
 - Do not preserve stale instructions as redirects. Git history is the archive.
+- Run `bun run check:docs`. CI verifies local links and anchors, documented root
+  commands, the authoritative document set, and coverage of deployment workflow
+  secrets and variables. Semantic accuracy remains a required pull-request review.
