@@ -598,9 +598,8 @@ their existing 20-second transport timeout.
 `completeOpenAiChat` provides non-streaming OpenAI compatibility. `streamOpenAiChat`
 returns an async generator of raw SSE text delivered through a Tauri IPC channel and
 accepts an `AbortSignal`; abort requests set the Rust stream's cancellation flag. The
-desktop chat and design lanes use this transport when `isTauri()` is true. Browser
-development continues to use `/api/chat`, whose provider-key proxy is deliberately not
-part of a static production bundle.
+desktop chat and design lanes use this transport. The static browser build has no chat
+proxy and no provider credential; interactive product chat runs through the native host.
 
 The desktop's existing behavior is therefore retained server-side: the voice lane can
 disable provider thinking, apply a frequency penalty, stream text and function-call
@@ -637,8 +636,8 @@ To run the current desktop chat through this gateway:
    deployment-level rate/concurrency controls. The gateway deliberately does not invent
    a product-specific quota policy.
 
-The legacy `PHALA_API_KEY` is only needed by the browser-development `/api/chat` route.
-The production Tauri transport uses the gateway credential map instead.
+There is no `PHALA_API_KEY` or browser-development proxy. Local and production Tauri
+use the same gateway credential map and facade boundary.
 
 ## Verification
 

@@ -79,5 +79,5 @@ exists, but its memory backend does not yet execute this package. See
 [`docs/actor-runtime-formal-spec.md`](../../docs/actor-runtime-formal-spec.md) for the
 wire protocol, dynamic factory target, and server cutover.
 
-The legacy application module paths remain compatibility re-exports while callers move
-to the package subpaths.
+The application imports these package subpaths directly; no application compatibility
+re-export remains.

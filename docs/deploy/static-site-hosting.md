@@ -115,7 +115,7 @@ The platform Compose stack receives generated secrets and Pulumi outputs:
 - `SITE_HOST_MAX_CONCURRENT_SYNCS`: defaults to 4; and
 - `SYSTEM_SITES_JSON`: operator-owned site declarations.
 
-Persistent releases and the last-known-good snapshot live in
+Persistent releases and the last-known-good managed state live in
 `/var/lib/aven/static-sites` on the protected platform volume.
 
 ## Verification
@@ -132,18 +132,7 @@ After production deployment:
 3. request the homepage and an SPA fallback path over HTTPS;
 4. confirm `/internal/*` and unknown hosts return 404; and
 5. restart Caddy and `static-site-host` while the facade is unavailable, then
-   confirm the active site still serves from the persisted snapshot.
+   confirm the active site still serves from persisted managed state.
 
-For host creation, apex promotion, rollback, and all required secrets, follow
+For host creation, initial apex publication, recovery, and all required secrets, follow
 the [zero-to-healthy infrastructure guide](../infrastructure-getting-started.md).
-
-## Hosting-only recovery
-
-`SITE_HOST_MODE=snapshot` starts from the validated local
-`active-sites.json` without a directory URL, bearer, DNS allowlist, database,
-or GitHub access. The complete recovery composition is
-`services/static-site-host/docker-compose.hosting-only.yml`.
-
-This is the rollback shape for the currently hosted apex. Keep the previous
-server, static-site volume, and Caddy state until the new platform's DNS TTL has
-expired and the apex has been verified from more than one network.
