@@ -92,7 +92,21 @@ for (const required of [
 	if (!rootReadme.includes(required)) failures.push(`README.md must link ${required}`)
 }
 
+const documentationWorkflow = read('.github/workflows/docs-ci.yml')
+for (const required of [
+	"'**/*.md'",
+	'package.json',
+	'scripts/check-doc-links.ts',
+	'scripts/check-doc-policy.ts',
+	'.github/workflows/docs-ci.yml'
+]) {
+	if (!documentationWorkflow.includes(required)) {
+		failures.push(`documentation workflow must watch ${required}`)
+	}
+}
+
 for (const workflow of [
+	'.github/workflows/docs-ci.yml',
 	'.github/workflows/platform-ci.yml',
 	'.github/workflows/platform-deploy.yml'
 ]) {

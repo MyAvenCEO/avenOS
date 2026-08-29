@@ -1,0 +1,31 @@
+name: documentation
+
+on:
+  pull_request:
+    paths:
+      - '**/*.md'
+      - package.json
+      - scripts/check-doc-links.ts
+      - scripts/check-doc-policy.ts
+      - .github/workflows/docs-ci.yml
+  push:
+    branches: [main, next]
+    paths:
+      - '**/*.md'
+      - package.json
+      - scripts/check-doc-links.ts
+      - scripts/check-doc-policy.ts
+      - .github/workflows/docs-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun run check:docs
