@@ -639,10 +639,12 @@ the desktop process.
 
 Separately, `services/actor-runner` implements the authenticated remote HTTP boundary
 behind `api.aven.ceo`. It independently verifies forwarded identity evidence and
-exposes the portable run routes, but its process-memory backend has no generic actor
-executor and normally completes only goals already present in the ingredients. The
-formal spec describes how to connect that real boundary to the durable executor and
-then replace the app's in-process server adapter.
+tenant grants, then stores run records in the selected customer's PostgreSQL database.
+After a process restart it reclaims accepted rows when that customer's worker pool is
+next admitted. This persistent baseline still has no generic actor executor and
+normally completes only goals already present in the ingredients. The formal spec
+describes how to add durable attempts and effects before replacing the app's in-process
+server adapter.
 
 ## Documentation is part of the contract
 
@@ -681,11 +683,12 @@ The work now has a stable foundation and a deliberately unfinished execution cor
    offers, principal-scoped planning views, and environment-specific physical plans
    exist in `@avenos/actors`. Observation-frontier execution is designed but not yet
    implemented.
-2. **Portable and remote boundary — implemented as a reference.** The run protocol is
+2. **Portable and persistent remote boundary — implemented as a baseline.** The run protocol is
    strict JSON. The app exposes Device/Server placement, and `services/actor-runner`
    proves authenticated routing, independent token verification, subject isolation,
-   start idempotency, status, and route shape. The app does not yet call this service
-   for document ingest, and the service backend is not durable.
+   customer-database isolation, durable start idempotency, status, cancellation, and
+   recovery of accepted rows after restart. The app does not yet call this service for
+   document ingest, and the service does not yet execute generic actors.
 3. **Policy integration — next.** Connect the authorization contracts to avenCEO
    entitlements, assurance, artifact grants, configuration constraints, and exact
    spawn/invoke decisions. The current authorizer is only a contract and test seam.

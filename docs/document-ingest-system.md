@@ -10,8 +10,9 @@ how progress returns to the UI.
 The server host currently runs as a separate in-process emulation inside the desktop
 app. That is a tested client boundary, not a claim of remote document execution. A
 separate authenticated actor-runner service now proves the remote HTTP and trust
-boundary, but its memory backend does not execute this document graph. The normative
-protocol and the steps that connect those two halves are specified in
+boundary and persists its run ledger in customer PostgreSQL, but it does not execute
+this document graph. The normative protocol and the steps that connect those two
+halves are specified in
 [`actor-runtime-formal-spec.md`](./actor-runtime-formal-spec.md).
 
 Use it to answer “where does this responsibility live?” before changing the system.

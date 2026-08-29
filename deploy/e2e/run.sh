@@ -107,6 +107,9 @@ fi
 docker compose --project-name "$project" --file "$compose" config --quiet
 docker compose --project-name "$project" --file "$compose" --profile hosting up --detach --wait --wait-timeout 360
 
+TEST_ACTOR_RUNNER_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
+bun run --cwd "$root/services/actor-runner" test:e2e:persistence
+
 TEST_ADMIN_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
 bun run --cwd "$root/services/checkout" test
 

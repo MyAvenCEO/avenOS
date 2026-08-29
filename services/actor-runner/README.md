@@ -1,36 +1,36 @@
 # Actor runner service (`os.aven`)
 
-This service is the authenticated server host for the portable
-`os.aven:protocol:actors:plan-runner@1` contract. It is a downstream of
-`api.aven.ceo`, never a route inside `aven.id` and never an open proxy.
+This service hosts the portable `os.aven:protocol:actors:plan-runner@1` contract on a
+server. It is an authenticated downstream of `api.aven.ceo`, never a route inside
+`aven.id` and never an open proxy.
 
 ## Trust boundary
 
 The public app sends its short-lived `aven-services` access token only to the
-allowlisted `/api/actor-runs` facade route. The facade:
+environment-scoped `/api/environments/{environmentId}/actor-runs` facade route. The
+facade:
 
-1. verifies issuer, audience, service scope, and passkey assurance;
+1. verifies the identity token and authorizes access to the selected customer environment;
 2. removes caller `Authorization`, cookies, and every `x-aven-*` trust header;
-3. authenticates to this service with a fixed service bearer; and
-4. forwards the original signed identity token plus its verified subject, role, and
-   session projection.
+3. derives the customer database and routing generation from trusted platform state;
+4. signs a short-lived tenant grant restricted to the actor-run component and action; and
+5. authenticates to this service with a fixed service bearer while forwarding the
+   original signed identity token and tenant grant.
 
-The runner verifies the signed token independently and requires all three projections
-to match it. A command is strict JSON and cannot contain `security`, a principal,
-entitlements, grants, a tenant/database name, or a physical storage route. The runner
-stamps `PlanRunSecurityContext` only after those checks.
+The runner independently verifies the identity token and tenant grant, including their
+subject, session, and role agreement. A command is strict JSON and cannot contain
+`security`, a principal, entitlements, grants, a tenant/database name, or a physical
+storage route. The runner stamps `PlanRunSecurityContext` only after admission.
 
-`IDENTITY_ISSUER` remains the token's immutable public issuer. Deployments MAY set
-`IDENTITY_JWKS_URL` to an internal network route for that issuer's public JWKS; this
-changes key retrieval only and never changes issuer validation.
-
-`aven.id` therefore remains responsible only for identity evidence. Product
-entitlements, actor admission, artifact grants, and tenant resolution remain future
-`ceo.aven` policy work at the application boundary.
+`IDENTITY_ISSUER` remains the token's immutable public issuer. Deployments may set
+`IDENTITY_JWKS_URL` to an internal route for the same issuer's public keys; this changes
+key retrieval, not issuer validation. `aven.id` therefore remains responsible only for
+identity evidence. Product entitlements, actor admission, and tenant resolution remain
+`ceo.aven` application concerns at the facade boundary.
 
 ## HTTP contract
 
-The service implements the formal public path shape behind the facade:
+The public facade projects its environment-scoped route to these private service paths:
 
 ```text
 POST /api/actor-runs
@@ -40,52 +40,63 @@ POST /api/actor-runs/{runId}/continuations/{continuationId}
 POST /api/actor-runs/{runId}/cancel
 ```
 
-Unknown and other-user run IDs are both returned as `404`. The events endpoint is
-currently a one-revision SSE response, ready to become a live subscription when the
-durable repository provides change notification.
+Unknown and other-user run IDs both return `404`. The events endpoint currently emits
+one revision as SSE; it is not yet a live database subscription.
 
-## Current backend and honest limits
+## Persistent backend and recovery
 
-`MemoryPlanRunner` is the first local server runtime and is intentionally labelled
-non-durable. It proves process placement, wire portability, idempotent admission,
-state transitions, subject isolation, and the split trust boundary. It does not claim
-to provide leases, fencing, restart recovery, a SQL outbox, artifact grants, dynamic
-actor execution, or secret continuations.
+`SqlPlanRunner` stores every admitted run in the selected customer's PostgreSQL
+database, under `aven_actor_runs.runs`. The database enforces subject-scoped
+idempotency; a stored material hash prevents reuse of an idempotency key for a different
+command. Status and cancellation operate on that durable record, with a revision check
+protecting concurrent cancellation.
 
-The executable refuses to start unless `ACTOR_RUNNER_STATE_BACKEND=memory` is explicit.
-That prevents this development backend from being mistaken for the production design.
-The next backend implements the repository and executor ports from
-[`docs/actor-runtime-formal-spec.md`](../../docs/actor-runtime-formal-spec.md) and uses
-the same HTTP handler unchanged.
+Execution starts only after admission commits. If the process stops in that gap, the
+row remains `accepted`. Before serving an admitted request, the runner reclaims
+accepted rows from that customer database. This lazy, per-customer recovery is enough
+for the current side-effect-free executor and avoids giving the runner control-plane
+database privileges.
+
+The executor itself is intentionally small: it succeeds when every requested goal is
+already present in the ingredients and otherwise records a terminal failure. Dynamic
+planning, actor execution, HITL continuations, distributed leases, and fencing remain
+future runtime work. They must be added before workers execute non-idempotent effects;
+the current recovery mechanism is deliberately not a distributed job queue.
 
 ## Local start
 
-Copy `.env.example` values into the root development environment, configure the facade
-entry below with the exact same bearer token, then run:
-
-```sh
-bun run dev:runner
-```
-
-Facade entry:
+Copy `.env.example` into your development environment and configure the facade with the
+same bearer token and component contract:
 
 ```json
 {
-  "prefix": "/api/actor-runs",
+  "segment": "actor-runs",
   "baseUrl": "http://127.0.0.1:3010",
   "targetPrefix": "/api/actor-runs",
   "bearerToken": "replace-with-the-same-32-byte-service-token",
+  "componentRef": "os.aven:component:actors:run-repository@1",
+  "readAction": "actor-runs:read",
+  "writeAction": "actor-runs:write",
   "roles": ["user", "admin"]
 }
 ```
 
-Run `bun run check:runner` and `bun run test:runner` from the repository root. The E2E
-suite starts real ephemeral identity/JWKS, facade, and runner HTTP servers and signs a
-real EdDSA access token; no external account or network is required.
+Then run:
+
+```sh
+bun run --cwd services/actor-runner dev
+bun run --cwd services/actor-runner check
+bun run --cwd services/actor-runner test
+```
+
+The focused HTTP E2E suite uses real ephemeral identity, facade, and runner boundaries.
+The platform E2E additionally uses its real PostgreSQL instance to commit an accepted
+run through one connection pool and recover it through a fresh runner and pool.
+
+## Container build
 
 The Docker build follows the split services' packaging convention. The project
 `.npmrc` is excluded from the build context. A GitHub Packages token is mounted as
-`--secret id=npm_token,env=NODE_AUTH_TOKEN`; the build constructs a minimal temporary
-registry config, performs a root-excluding filtered workspace install, and removes the
-config in the same build layer. The registry credential is never sent in the build
-context or copied into an image layer.
+`--secret id=npm_token,env=NODE_AUTH_TOKEN`; the build creates a minimal temporary
+registry config, performs the install, and removes the config in the same layer. The
+credential is never sent in the build context or copied into an image layer.
