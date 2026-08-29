@@ -59,11 +59,14 @@ export class LlmActor extends Actor {
 	constructor(transport: LlmTransport) {
 		super({
 			id: 'llm',
+			authority: 'ceo.aven',
+			namespace: 'ai.gateway',
+			version: '1',
 			name: 'LLM',
 			description:
 				'The model lane as an actor: relays one completion per message to the ' +
 				'inference proxy. Internal service — conversation already has its own brain.',
-			tags: ['system'],
+			tags: ['application', 'llm'],
 			methods: [
 				{
 					name: 'llm_complete',

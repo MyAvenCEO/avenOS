@@ -1,7 +1,13 @@
+import type { ExecutionEnvironment } from '@avenos/actors'
 import { invoke } from '@tauri-apps/api/core'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { intents, type PersistentIntentDetail } from '$lib/intents/intents.svelte'
 import { shell } from '$lib/intents/talk.svelte'
+import {
+	clientDocumentProcessingStatus,
+	clientDocumentSourceExecutionEnvironment,
+	processClientDocument
+} from './client-document-processing'
 import { type ArtifactProcessingLookup, isTerminalProcessing } from './processing'
 
 /**
@@ -41,6 +47,11 @@ export interface UploadedArtifactReceipt {
 /** One upload at a time — the composer shows a single upload's progress. */
 let uploadInFlight = false
 const processingWatchers = new Set<string>()
+
+/** Default placement for the next process. Each upload freezes its own value. */
+export const documentExecutionPreference = $state<{ environment: ExecutionEnvironment }>({
+	environment: 'local'
+})
 
 export function ingestBusy(): boolean {
 	return uploadInFlight
@@ -101,6 +112,15 @@ export async function loadPersistentIntents(): Promise<void> {
 	const summaries = await invoke<Array<{ id: string }>>('intent_list')
 	const details = await Promise.all(summaries.map((intent) => refreshIntent(intent.id)))
 	for (const detail of details) {
+		const source = detail?.artifacts.find((artifact) => artifact.relation === 'source')
+		const executionEnvironment = source
+			? await clientDocumentSourceExecutionEnvironment(source.artifactId)
+			: null
+		if (detail && source && executionEnvironment) {
+			void processClientDocument(source.artifactId, detail.title, undefined, executionEnvironment)
+			void watchArtifactProcessing(source.artifactId, detail.id)
+			continue
+		}
 		if (
 			detail?.fileSkill &&
 			detail.sourceArtifactId &&
@@ -122,9 +142,12 @@ export async function watchArtifactProcessing(
 	try {
 		while (chat.hasArtifact(artifactId)) {
 			try {
-				const lookup = await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
-					artifactId
-				})
+				const local = clientDocumentProcessingStatus(artifactId)
+				const lookup =
+					local ??
+					(await invoke<ArtifactProcessingLookup>('artifact_processing_status', {
+						artifactId
+					}))
 				consecutiveFailures = 0
 				if (lookup.pending || !lookup.presentation) {
 					chat.markArtifactProcessingPending(artifactId)
@@ -136,7 +159,7 @@ export async function watchArtifactProcessing(
 						intents.items.find((intent) =>
 							intent.artifacts.some((artifact) => artifact.artifactId === artifactId)
 						)?.id
-					if (owner) await refreshIntent(owner)
+					if (owner && !local) await refreshIntent(owner)
 					if (isTerminalProcessing(lookup.presentation.state)) return
 					delay = 1_500
 				}
@@ -166,7 +189,10 @@ export async function watchArtifactProcessing(
  * failures are reported through the chat and the intent, not thrown, because
  * every caller wants exactly that and none of them want a second error path.
  */
-export async function ingestFile(path: string): Promise<UploadedArtifactReceipt | null> {
+export async function ingestFile(
+	path: string,
+	executionEnvironment: ExecutionEnvironment = documentExecutionPreference.environment
+): Promise<UploadedArtifactReceipt | null> {
 	shell.tab = 'intents'
 	shell.detail = true
 
@@ -184,15 +210,32 @@ export async function ingestFile(path: string): Promise<UploadedArtifactReceipt 
 	chat.beginArtifactUpload(uploadId, publicationId, name)
 	uploadInFlight = true
 	try {
+		await invoke('intent_create', {
+			intent: {
+				id: intentId,
+				title: name,
+				intentType: 'file',
+				sourceLabel: 'Upload · File',
+				deadline: null,
+				routingSummary: `File upload: ${name}`
+			}
+		})
 		const receipt = await invoke<UploadedArtifactReceipt>('artifact_upload', {
 			uploadId,
 			publicationId,
 			intentId,
 			observedAt,
-			path
+			path,
+			executionEnvironment
 		})
 		chat.commitArtifactUpload(uploadId, receipt)
 		await refreshIntent(receipt.intentId)
+		void processClientDocument(
+			receipt.artifactId,
+			receipt.originalName,
+			receipt.mediaType,
+			executionEnvironment
+		)
 		void watchArtifactProcessing(receipt.artifactId, receipt.intentId)
 		return receipt
 	} catch (error) {
@@ -215,5 +258,7 @@ export async function ingestDroppedFiles(paths: string[]): Promise<void> {
 		chat.failure = 'Drop exactly one regular file at a time.'
 		return
 	}
-	await ingestFile(paths[0])
+	// Capture the choice before upload begins. Changing the selector while this
+	// run is active affects only a future upload.
+	await ingestFile(paths[0], documentExecutionPreference.environment)
 }

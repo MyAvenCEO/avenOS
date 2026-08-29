@@ -6,6 +6,7 @@ import { settings, VOICES, type Voice } from '$lib/settings.svelte'
 import { voiceController } from '$lib/voice/controller.svelte'
 import Account from './Account.svelte'
 import Billing from './Billing.svelte'
+import Hosting from './Hosting.svelte'
 
 /**
  * Settings — today, one decision: which voice speaks.
@@ -20,12 +21,13 @@ import Billing from './Billing.svelte'
 const CATEGORIES = [
 	{ id: 'account' as const, label: 'Konto' },
 	{ id: 'billing' as const, label: 'Abrechnung' },
+	{ id: 'hosting' as const, label: 'Hosting' },
 	{ id: 'general' as const, label: 'Models' },
 	{ id: 'voice' as const, label: 'Stimme' }
 ]
 // Account opens first: before anything is configured, the question is whose
 // app this is.
-let category = $state<'account' | 'billing' | 'general' | 'voice'>('account')
+let category = $state<'account' | 'billing' | 'hosting' | 'general' | 'voice'>('account')
 
 /** The voice currently sounding a preview, if any. */
 let playing = $state<Voice | null>(null)
@@ -134,6 +136,8 @@ async function preview(voice: Voice) {
 				<Account />
 			{:else if category === 'billing'}
 				<Billing />
+			{:else if category === 'hosting'}
+				<Hosting />
 			{:else if category === 'voice'}
 				<section class="flex min-h-0 flex-col gap-3">
 					<div class="flex items-baseline justify-between">

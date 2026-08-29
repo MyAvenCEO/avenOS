@@ -43,6 +43,7 @@ let verificationUrl = $state('')
 let userCode = $state('')
 let pollTimer: ReturnType<typeof setTimeout> | undefined
 let mounted = false
+const e2e = import.meta.env.VITE_AVEN_E2E === 'true'
 
 async function openInBrowser() {
 	if (!verificationUrl) return
@@ -54,7 +55,8 @@ async function finish() {
 	if (pollTimer) clearTimeout(pollTimer)
 	ready = true
 	busy = false
-	await goto('/dashboard', { replaceState: true })
+	const search = e2e && window.location.pathname === '/dashboard' ? window.location.search : ''
+	await goto(`/dashboard${search}`, { replaceState: true })
 }
 
 function schedulePoll(interval: number) {
@@ -84,7 +86,8 @@ async function beginWeb() {
 		const authorization = await invoke<BeginAuthorization>('auth_begin')
 		verificationUrl = authorization.verificationUriComplete
 		userCode = authorization.userCode.replace(/(.{4})(?=.)/g, '$1-')
-		await openInBrowser()
+		if (e2e) message = 'Schließe die sichere Anmeldung im Browser ab. avenOS kann geöffnet bleiben.'
+		else await openInBrowser()
 		schedulePoll(Math.max(authorization.interval, 1))
 	} catch (cause) {
 		busy = false
@@ -117,7 +120,7 @@ async function begin() {
 		}
 		busy = false
 		message = detail.startsWith('PASSKEY_DOMAIN_NOT_ASSOCIATED:')
-			? 'iOS hat die Passkey-Domain id.next.aven.ceo für diese App noch nicht bestätigt. Das ist kein Fehler deines Passkeys – versuche es erneut oder melde dich vorerst im Browser an.'
+			? 'iOS hat die Passkey-Domain aven.id für diese App noch nicht bestätigt. Das ist kein Fehler deines Passkeys – versuche es erneut oder melde dich vorerst im Browser an.'
 			: detail
 	}
 }
@@ -168,7 +171,7 @@ onMount(() => {
 					<rect x="5" y="10" width="14" height="10" rx="2" />
 					<path d="M8 10V7a4 4 0 0 1 8 0v3" />
 				</svg>
-				<span>id.next.aven.ceo</span>
+				<span>aven.id</span>
 			</div>
 		</header>
 

@@ -47,6 +47,9 @@ class StreamActor extends Actor {
 	constructor() {
 		super({
 			id: 'stream',
+			authority: 'ceo.aven',
+			namespace: 'ui.activity',
+			version: '1',
 			name: 'Aktivität',
 			description:
 				"The activity stream: the intent's log and conversation, the default tier " +
