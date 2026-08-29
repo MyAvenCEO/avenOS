@@ -26,7 +26,13 @@ start_database() {
   docker run --detach --name "$name" --network "$network" \
     --env POSTGRES_PASSWORD=recovery-test postgres:17-alpine >/dev/null
   for _ in {1..60}; do
-    if docker exec "$name" pg_isready --username postgres >/dev/null 2>&1; then return; fi
+    # The official image first starts an initialization server on its Unix socket,
+    # stops it, and only then starts the durable server on TCP. A socket-only probe
+    # can succeed during that transition and race the first createdb command.
+    if docker exec "$name" pg_isready --host 127.0.0.1 --username postgres \
+      --dbname postgres >/dev/null 2>&1; then
+      return
+    fi
     sleep 1
   done
   echo "database did not become ready: $name" >&2
