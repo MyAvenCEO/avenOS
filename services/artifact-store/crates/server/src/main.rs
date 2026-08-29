@@ -57,8 +57,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let max_stores = optional_positive_env("ARTIFACT_STORE_MAX_TENANT_POOLS", 64)?;
                 let connections =
                     optional_positive_env("ARTIFACT_STORE_CONNECTIONS_PER_TENANT", 2)?;
-                let registry =
-                    TenantStoreRegistry::new(&database_url, max_stores as usize, connections)?;
+                let registry = TenantStoreRegistry::new(
+                    &database_url,
+                    &required_env("ARTIFACT_STORE_API_DB_CREDENTIAL_ROOT")?,
+                    max_stores as usize,
+                    connections,
+                )?;
                 let auth = FixedServiceAuth::for_tenants(token, publisher)?;
                 (
                     AppState::for_tenants(registry, catalog, auth),
@@ -85,7 +89,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let state = ProvisionerState::new(
                 &required_env("ARTIFACT_STORE_PROVISIONER_DATABASE_URL")?,
                 required_env("ARTIFACT_STORE_PROVISIONER_BEARER_TOKEN")?,
-                required_env("ARTIFACT_STORE_RUNTIME_ROLE")?,
                 catalog,
             )?;
             let address = env::var("ARTIFACT_STORE_PROVISIONER_LISTEN")

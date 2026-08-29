@@ -1,10 +1,12 @@
 import { type ArtifactJson, canonicalArtifactJson, parseArtifactJson } from './canonical'
 
+export type ArtifactStoreFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+
 export interface ArtifactStoreClientOptions {
 	readonly baseUrl: string
 	readonly bearerToken: () => string | Promise<string>
 	readonly requestHeaders?: () => HeadersInit | Promise<HeadersInit>
-	readonly fetch?: typeof globalThis.fetch
+	readonly fetch?: ArtifactStoreFetch
 }
 
 export interface UploadDeclaration {
@@ -32,7 +34,7 @@ export class ArtifactStoreClient {
 	readonly #baseUrl: string
 	readonly #bearerToken: ArtifactStoreClientOptions['bearerToken']
 	readonly #requestHeaders?: ArtifactStoreClientOptions['requestHeaders']
-	readonly #fetch: typeof globalThis.fetch
+	readonly #fetch: ArtifactStoreFetch
 
 	constructor(options: ArtifactStoreClientOptions) {
 		this.#baseUrl = options.baseUrl.replace(/\/$/, '')
