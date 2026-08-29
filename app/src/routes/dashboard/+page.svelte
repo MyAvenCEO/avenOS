@@ -10,6 +10,7 @@ import { hitlQueue } from '$lib/actors/hitl.svelte'
 import { listenerActor } from '$lib/actors/listener.actor.svelte'
 import { speakerActor } from '$lib/actors/speaker.actor.svelte'
 import { anonymousSpeakerPayload } from '$lib/chat/anonymous-speaker'
+import { voiceController } from '$lib/voice/controller.svelte'
 import '$lib/actors/windows'
 import ArtifactsPage from '$lib/artifacts/ArtifactsPage.svelte'
 import {
@@ -95,6 +96,41 @@ async function importE2eFixture() {
 	if (e2eFixture) await ingestFile(e2eFixture, 'local')
 }
 
+let e2eDuplexSession: string | null = null
+
+async function beginE2eNarration() {
+	if (!e2eFixture) return
+	try {
+		speaker.muted = true
+		const fixture = await invoke<{ session_id: string }>('voice_e2e_duplex_fixture')
+		e2eDuplexSession = fixture.session_id
+		await voiceController.attachE2eSession(fixture.session_id)
+		await invoke('voice_e2e_begin_narration', { sessionId: fixture.session_id })
+	} catch (error) {
+		chat.failure = `Could not begin the silent duplex proof: ${String(error)}`
+	}
+}
+
+async function interruptE2eNarration() {
+	if (!e2eFixture) return
+	try {
+		if (!e2eDuplexSession) throw new Error('The duplex proof has no active session.')
+		await invoke('voice_e2e_inject_interruption', { sessionId: e2eDuplexSession })
+	} catch (error) {
+		chat.failure = `Could not inject the silent interruption: ${String(error)}`
+	}
+}
+
+async function injectE2eSecondSpeaker() {
+	if (!e2eFixture) return
+	try {
+		if (!e2eDuplexSession) throw new Error('The duplex proof has no active session.')
+		await invoke('voice_e2e_inject_second_speaker', { sessionId: e2eDuplexSession })
+	} catch (error) {
+		chat.failure = `Could not inject the second silent speaker: ${String(error)}`
+	}
+}
+
 /**
  * Whether the conversation is running at all — on by default, because
  * hands-free IS the product. There is no separate text mode any more: the
@@ -129,30 +165,36 @@ onMount(() => {
 	let disposed = false
 	let stopDrop: (() => void) | undefined
 	let stopProgress: (() => void) | undefined
+	let contributionPersistence = Promise.resolve()
 	const webview = getCurrentWebview()
 	void loadPersistentIntents().catch((error) => {
 		chat.failure = `Could not load persistent intents: ${String(error)}`
 	})
 	chat.onExchange = (session, user, assistant) => {
 		if (!intents.items.find((intent) => intent.id === session)?.persistent) return
-		void (async () => {
-			for (const turn of [user, assistant]) {
-				if (turn.content === '') continue
-				await invoke('intent_append_contribution', {
-					intentId: session,
-					contribution: {
-						id: turn.id,
-						contributorKind: turn.role === 'user' ? 'human' : 'agent',
-						kind: 'message',
-						text: turn.content,
-						payload: anonymousSpeakerPayload(turn.anonymousSpeaker)
-					}
-				})
-			}
-			await refreshIntent(session)
-		})().catch((error) => {
-			chat.failure = `Could not persist the conversation: ${String(error)}`
-		})
+		// Exchange callbacks can overlap when a barge-in aborts one response and
+		// immediately submits the final utterance. Preserve the chat's settled
+		// order at the Intent boundary instead of racing two append pairs.
+		contributionPersistence = contributionPersistence
+			.then(async () => {
+				for (const turn of [user, assistant]) {
+					if (turn.content === '') continue
+					await invoke('intent_append_contribution', {
+						intentId: session,
+						contribution: {
+							id: turn.id,
+							contributorKind: turn.role === 'user' ? 'human' : 'agent',
+							kind: 'message',
+							text: turn.content,
+							payload: anonymousSpeakerPayload(turn.anonymousSpeaker)
+						}
+					})
+				}
+				await refreshIntent(session)
+			})
+			.catch((error) => {
+				chat.failure = `Could not persist the conversation: ${String(error)}`
+			})
 	}
 
 	void webview
@@ -445,14 +487,47 @@ function onGlobalKeydown(event: KeyboardEvent) {
 <svelte:window onkeydown={onGlobalKeydown} />
 
 {#if e2eFixture}
-	<button
-		type="button"
-		data-testid="e2e-import-fixture"
-		class="fixed right-2 bottom-2 z-[200] rounded bg-primary px-2 py-1 text-primary-foreground text-xs"
-		onclick={importE2eFixture}
-	>
-		Import E2E fixture
-	</button>
+	<div class="fixed right-2 bottom-2 z-[200] flex gap-2">
+		<button
+			type="button"
+			data-testid="e2e-import-fixture"
+			class="rounded bg-primary px-2 py-1 text-primary-foreground text-xs"
+			onclick={importE2eFixture}
+		>
+			Import E2E fixture
+		</button>
+		<button
+			type="button"
+			data-testid="e2e-begin-narration"
+			class="rounded bg-primary px-2 py-1 text-primary-foreground text-xs"
+			onclick={beginE2eNarration}
+		>
+			Begin narration
+		</button>
+		<button
+			type="button"
+			data-testid="e2e-interrupt-narration"
+			class="rounded bg-primary px-2 py-1 text-primary-foreground text-xs"
+			onclick={interruptE2eNarration}
+		>
+			Interrupt narration
+		</button>
+		<button
+			type="button"
+			data-testid="e2e-second-speaker"
+			class="rounded bg-primary px-2 py-1 text-primary-foreground text-xs"
+			onclick={injectE2eSecondSpeaker}
+		>
+			Second speaker
+		</button>
+		<output
+			data-testid="e2e-voice-state"
+			data-speaking={voiceController.speaking ? 'true' : 'false'}
+			data-hearing={voiceController.hearing ? 'true' : 'false'}
+			class="hidden"
+			aria-label="E2E voice state"
+		></output>
+	</div>
 {/if}
 
 <svelte:head>

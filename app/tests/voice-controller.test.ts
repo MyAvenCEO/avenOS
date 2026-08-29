@@ -134,6 +134,23 @@ describe('VoiceController', () => {
 		controller.dispose()
 	})
 
+	test('authoritative playback events restore and cancel an active narrated turn', async () => {
+		const backend = new FakeVoiceBackend()
+		const controller = new VoiceController(backend)
+		await controller.start()
+		backend.emit({ type: 'playback.turn_started', turn_id: 'restored-turn' })
+		backend.emit({ type: 'playback.started', turn_id: 'restored-turn' })
+		expect(controller.speaking).toBe(true)
+		controller.cancelSpeech('manual')
+		backend.emit({
+			type: 'playback.cancelled',
+			turn_id: 'restored-turn',
+			reason: 'barge_in'
+		})
+		expect(controller.speaking).toBe(false)
+		controller.dispose()
+	})
+
 	test('an enqueue rejection aborts queued indices and the next turn restarts at zero', async () => {
 		class RejectFirstEnqueueBackend extends FakeVoiceBackend {
 			readonly attemptedIndices: number[] = []

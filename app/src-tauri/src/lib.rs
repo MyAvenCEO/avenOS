@@ -219,7 +219,12 @@ pub fn run() {
 			voice::protocol::voice_speech_cancel,
 			voice::protocol::voice_input_reset,
 			voice::protocol::voice_snapshot,
-			voice::protocol::voice_diagnostics_subscribe
+			voice::protocol::voice_diagnostics_subscribe,
+			voice::protocol::voice_e2e_inject_silent_final,
+			voice::protocol::voice_e2e_duplex_fixture,
+			voice::protocol::voice_e2e_begin_narration,
+			voice::protocol::voice_e2e_inject_interruption,
+			voice::protocol::voice_e2e_inject_second_speaker
 		])
 		.setup(|app| {
 			#[cfg(target_os = "linux")]
