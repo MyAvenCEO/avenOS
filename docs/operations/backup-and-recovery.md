@@ -79,6 +79,9 @@ providers, and the four-value recovery escrow described in
 6. Complete checkout, passkey, native-device, artifact, document, chat, Intent, Actor,
    and public-site smoke checks before declaring recovery.
 
+The restore insertion point and the convergence gates after it are defined in
+[Startup and readiness](startup-and-readiness.md#recovery-difference).
+
 The restore accepts only the internal `fresh-target-only` confirmation and refuses a
 database containing user relations. It verifies the manifest and every dump before
 restoring. Missing historical role names are created `NOLOGIN`; password hashes are

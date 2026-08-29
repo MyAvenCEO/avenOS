@@ -17,6 +17,7 @@ const authoritative = [
 	'docs/operations/incident-response.md',
 	'docs/operations/local-stack.md',
 	'docs/operations/maintenance.md',
+	'docs/operations/startup-and-readiness.md',
 	'docs/operations/workstation-setup.md'
 ]
 
