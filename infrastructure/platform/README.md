@@ -19,9 +19,9 @@ Run tests with:
 bun run test:infra
 ```
 
-Use the protected GitHub workflows for real preview/up operations. The complete
-provider, state, secret, deployment, publication, and recovery procedure is in
-[`docs/infrastructure-getting-started.md`](../../docs/infrastructure-getting-started.md).
+Use the protected GitHub workflows for real preview/up operations. The authoritative
+provider, state, secret, deployment, publication, and recovery procedures are in the
+[operations handbook](../../docs/operations/README.md).
 
 All server, volume, firewall, DNS, secret, and host-key resources are protected.
 There is deliberately no automated destroy workflow.

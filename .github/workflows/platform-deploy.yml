@@ -44,6 +44,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Static, unit, infrastructure, and deployment-source checks
         run: |
+          bun run check:docs
           bun run check
           bun run check:identity
           bun run check:api

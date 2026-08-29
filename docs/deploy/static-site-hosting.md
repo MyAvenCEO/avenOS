@@ -125,7 +125,7 @@ reserved-host rejection, forged identity-header stripping, private-directory
 authentication, a real shallow fetch of the `aven-brands` production and
 `deploy/production` branches, source-revision matching, and HTTP serving.
 
-After production deployment:
+After publishing the shared site:
 
 1. confirm the binding is `active` in the Rust application;
 2. compare its active source and artifact revisions with GitHub;
@@ -135,4 +135,4 @@ After production deployment:
    confirm the active site still serves from persisted managed state.
 
 For host creation, initial apex publication, recovery, and all required secrets, follow
-the [zero-to-healthy infrastructure guide](../infrastructure-getting-started.md).
+the authoritative [deployment handbook](../operations/deployment.md).

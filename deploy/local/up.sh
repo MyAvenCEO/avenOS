@@ -28,6 +28,8 @@ docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/ch
 docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/platform-provisioner/Dockerfile" --tag aven-e2e-platform-provisioner:local "$root"
 docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/intent-service/Dockerfile" --tag aven-e2e-intent-service:local "$root"
 docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/actor-runner/Dockerfile" --tag aven-e2e-actor-runner:local "$root"
+docker build --file "$root/services/artifact-store/Dockerfile" --tag aven-e2e-artifact-store:local "$root"
+docker build --file "$root/services/static-site-host/Dockerfile" --tag aven-e2e-static-site-host:local "$root"
 
 docker compose --project-name "$project" --file "$base" --file "$override" config --quiet
 docker compose --project-name "$project" --file "$base" --file "$override" up --detach --wait --wait-timeout 360

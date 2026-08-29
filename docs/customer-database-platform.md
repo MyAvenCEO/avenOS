@@ -72,7 +72,7 @@ provisioner image. Reconciliation is one loop backed by PostgreSQL tables and ad
 locks. Docker Compose restarts the process. Adding another host or database cluster is
 an extension seam, not work required for the first deployment.
 
-The exact planned containers, databases, roles, routes, grants, secrets, source layout,
+The exact implemented containers, databases, roles, routes, grants, secrets, source layout,
 and delivery slices are mapped in the companion
 [Planned customer-database system map](customer-database-system-map.md).
 
@@ -998,20 +998,18 @@ The first-class customer-database platform is complete when:
 - the deployment and operations guides explain how to add, roll out, inspect, repair,
   suspend, restore, and remove a component without undocumented database access.
 
-## Relationship to earlier papers
+## Relationship to the rest of the repository
 
-[Customer data-plane architecture](../CUSTOMER-DATA-PLANE-ARCHITECTURE.md) remains
-useful discovery evidence about the
-previous service-specific tenant rail. This paper is the normative design for the fresh
-split platform whenever the earlier paper describes static bearers, raw database-name
-headers, service-specific lifecycle columns, the removed document processor, or a
-shared product database.
+This paper supersedes the removed service-specific customer data-plane proposal. Git
+history retains that discovery work; keeping its obsolete static bearers, raw
+database-name headers, service-specific lifecycle columns, and document processor in
+the active documentation would make the current boundary ambiguous.
 
 The [identity/checkout/facade cut](identity-checkout-facade-cut.md) remains authoritative
 for the four public origins and the `aven.id` trust boundary. This paper completes its
 intentionally deferred product authorization, customer routing, and domain-service
 persistence layer.
 
-The actor-runtime papers on `feat/document-ingest-actors` are design inputs for the
+The actor-runtime papers in this repository are design inputs for the
 manifest, admission, idempotency, checkpoint, and effect-reconciliation semantics.
 Actor execution and customer-component provisioning remain separate runtime protocols.
