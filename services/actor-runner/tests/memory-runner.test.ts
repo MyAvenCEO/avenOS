@@ -1,6 +1,11 @@
 import { ACTOR_RUN_PROTOCOL, type PlanRunStartRequest, resourceId } from '@avenos/actors'
 import { describe, expect, test } from 'vitest'
 import { MemoryPlanRunner, PlanRunConflict } from '../src/memory-runner.js'
+import {
+	deterministicSecretExecutor,
+	SECRET_CONTINUATION_ID,
+	secretContinuationRunRequest
+} from './support/deterministic-execution.js'
 
 const request = (): PlanRunStartRequest => ({
 	protocol: ACTOR_RUN_PROTOCOL,
@@ -53,4 +58,78 @@ describe('memory plan runner protocol reference', () => {
 			})
 		).rejects.toBeInstanceOf(PlanRunConflict)
 	})
+
+	test('postpones and resolves a secret continuation without persisting its value', async () => {
+		const runner = new MemoryPlanRunner(deterministicSecretExecutor)
+		const started = await runner.start(
+			secretContinuationRunRequest(
+				'3f7b0f1e-7850-4902-a7b0-093f8604a0dd',
+				'99999999-9999-4999-8999-999999999999'
+			)
+		)
+		await waitForState(runner, started.runId, 'waiting_for_input')
+
+		await runner.resume(started.runId, {
+			requestId: crypto.randomUUID(),
+			continuationId: SECRET_CONTINUATION_ID,
+			action: 'postpone'
+		})
+		expect(await runner.status(started.runId)).toMatchObject({
+			state: 'waiting_for_input',
+			continuations: [{ continuationId: SECRET_CONTINUATION_ID, state: 'postponed' }]
+		})
+		await runner.resume(started.runId, {
+			requestId: crypto.randomUUID(),
+			continuationId: SECRET_CONTINUATION_ID,
+			action: 'submit',
+			kind: 'secret',
+			value: 'wrong password'
+		})
+		expect(await runner.status(started.runId)).toMatchObject({
+			state: 'waiting_for_input',
+			continuations: [
+				{
+					continuationId: SECRET_CONTINUATION_ID,
+					state: 'open',
+					prompt: 'That password did not unlock the fixture. Try again.'
+				}
+			]
+		})
+
+		await runner.resume(started.runId, {
+			requestId: crypto.randomUUID(),
+			continuationId: SECRET_CONTINUATION_ID,
+			action: 'submit',
+			kind: 'secret',
+			value: 'correct horse battery staple'
+		})
+		const record = await runner.status(started.runId)
+		expect(record).toMatchObject({
+			state: 'succeeded',
+			continuations: [{ continuationId: SECRET_CONTINUATION_ID, state: 'resolved' }],
+			checkpoints: [
+				expect.objectContaining({
+					completedStepIds: [],
+					remainingGoals: ['os.aven.testing.secret_unlocked(fixture_1)']
+				}),
+				expect.objectContaining({
+					completedStepIds: [],
+					remainingGoals: ['os.aven.testing.secret_unlocked(fixture_1)']
+				}),
+				expect.objectContaining({ completedStepIds: ['unlock-step'], remainingGoals: [] })
+			]
+		})
+		expect(JSON.stringify(record)).not.toContain('correct horse battery staple')
+		expect(JSON.stringify(record)).not.toContain('wrong password')
+	})
 })
+
+async function waitForState(runner: MemoryPlanRunner, runId: string, state: 'waiting_for_input') {
+	const deadline = Date.now() + 2_000
+	while (Date.now() < deadline) {
+		const record = await runner.status(runId)
+		if (record?.state === state) return record
+		await new Promise((resolve) => setTimeout(resolve, 2))
+	}
+	throw new Error(`run ${runId} did not reach ${state}`)
+}

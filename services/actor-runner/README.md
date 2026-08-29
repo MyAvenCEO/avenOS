@@ -43,6 +43,23 @@ POST /api/actor-runs/{runId}/cancel
 Unknown and other-user run IDs both return `404`. The events endpoint currently emits
 one revision as SSE; it is not yet a live database subscription.
 
+The continuation endpoint accepts one of two strict commands. Postponing keeps the
+request visible without supplying a value:
+
+```json
+{"requestId":"...","continuationId":"...","action":"postpone"}
+```
+
+Submitting carries the typed value only for that executor invocation:
+
+```json
+{"requestId":"...","continuationId":"...","action":"submit","kind":"secret","value":"..."}
+```
+
+For `secret` continuations, the value is never copied into the run record, checkpoint,
+failure message, or Artifact Store publication. A failed unlock must return another
+open metadata request; persisting the password to make retries convenient is forbidden.
+
 ## Persistent backend and recovery
 
 `SqlPlanRunner` stores every admitted run in the selected customer's PostgreSQL
@@ -57,11 +74,30 @@ accepted rows from that customer database. This lazy, per-customer recovery is e
 for the current side-effect-free executor and avoids giving the runner control-plane
 database privileges.
 
-The executor itself is intentionally small: it succeeds when every requested goal is
-already present in the ingredients and otherwise records a terminal failure. Dynamic
-planning, actor execution, HITL continuations, distributed leases, and fencing remain
-future runtime work. They must be added before workers execute non-idempotent effects;
-the current recovery mechanism is deliberately not a distributed job queue.
+`SqlPlanRunner` now accepts a host-composed `PlanRunExecutor`. Its persistence E2E test
+injects the generic executor core, plans a deterministic skill, dynamically admits and
+invokes a server factory actor, and stores the completed steps, artifact IDs, registry
+revision, and policy-decision IDs in the durable checkpoint. The same test executes the
+fixture locally and compares canonical outputs and provenance.
+
+With a PostgreSQL test URL, the split-architecture E2E test carries that same fixture
+through a signed identity token, the public facade route, a scoped tenant grant, the
+private runner HTTP route, `SqlPlanRunner`, and the injected generic executor. It reads
+the terminal record back through the facade and compares the server artifacts and
+provenance with the local executor result. The fixture shares one implementation across
+the direct-SQL and authenticated-HTTP tests, so those paths cannot quietly drift into
+different examples.
+
+The deployed composition in `src/index.ts` constructs the portable generic executor
+from `ActorExecutionHost` ports. Its default server host has an empty registry and
+fail-closed authorization, factory, and Artifact Store adapters. It can accept a valid
+zero-step plan, but cannot execute an application actor until application-owned
+catalog, policy, factory, and store adapters are supplied. `SqlPlanRunner` requires an
+executor explicitly, preventing a production caller from falling back to a special
+case. The runner protocol and SQL repository implement metadata-only continuation
+suspension, postponement, and resumption for a composed executor. They must gain
+leases/fencing before workers execute non-idempotent effects; the current recovery
+mechanism is deliberately not a distributed job queue.
 
 ## Local start
 
@@ -90,8 +126,37 @@ bun run --cwd services/actor-runner test
 ```
 
 The focused HTTP E2E suite uses real ephemeral identity, facade, and runner boundaries.
-The platform E2E additionally uses its real PostgreSQL instance to commit an accepted
-run through one connection pool and recover it through a fresh runner and pool.
+With `TEST_ACTOR_RUNNER_DATABASE_URL` set, the persistence suite additionally proves
+both process-replacement recovery and generic deterministic execution against real
+PostgreSQL. It exercises the generic executor both directly through `SqlPlanRunner` and
+through the authenticated HTTP path. With `TEST_ARTIFACT_STORE_BASE_URL`,
+`TEST_ARTIFACT_STORE_BEARER_TOKEN`, and `TEST_ARTIFACT_STORE_SCOPE_ID` also set, that
+authenticated path resolves its source and publishes its output through the real store,
+persists the returned artifact ID in the SQL checkpoint, reads the producer lineage
+back, and compares the server result with local execution.
+
+`ArtifactStoreRuntimePort` is the first concrete adapter for that next boundary. It
+resolves committed envelopes through `ArtifactStoreClient`, maps registered type
+versions to canonical runtime schemas, and accepts a fact only when a trusted projector
+derives the predicate from the validated payload. It never turns a caller-asserted
+predicate into a fact by echoing it. For outputs, explicit capability-to-procedure and
+schema-to-type bindings produce one atomic production-run publication with ordered
+inputs and a deterministic UUID derived from the stable run-step identity.
+
+`tests/artifact-store-port.test.ts` verifies the canonical HTTP request, bearer and
+epoch headers, fact-projection rejection, production-run lineage, output mapping, and
+stable publication identity. Its deterministic HTTP fake keeps malformed projection
+and wire cases fast.
+
+`tests/artifact-store-port.persistence.e2e.test.ts` runs the same adapter against the
+real Rust service and PostgreSQL. It publishes a registered source artifact, resolves
+its projected fact, commits a derived production run, reads its output and ordered
+producer inputs back, and proves replay returns the same output ID. The full-stack E2E
+harness starts a fixed-scope conformance store beside the tenant-mode application store
+so this test runs in the release gate. The authenticated split-architecture test also
+injects this port into `SqlPlanRunner`, proving both durable boundaries in one run. The
+deployed host exposes the final adapter port, but still needs the tenant-scoped
+application binding for this concrete adapter.
 
 ## Container build
 

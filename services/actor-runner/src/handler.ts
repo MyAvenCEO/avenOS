@@ -40,6 +40,51 @@ async function readJson(request: Request): Promise<unknown> {
 	return JSON.parse(new TextDecoder().decode(bytes)) as unknown
 }
 
+function parseContinuationSubmission(value: unknown): PlanRunContinuationSubmission {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new ActorRunHttpError(400, 'COMMAND_INVALID', 'The continuation command is invalid.')
+	}
+	const input = value as Record<string, unknown>
+	if (
+		typeof input.requestId !== 'string' ||
+		input.requestId.length < 1 ||
+		typeof input.continuationId !== 'string' ||
+		input.continuationId.length < 1
+	) {
+		throw new ActorRunHttpError(400, 'COMMAND_INVALID', 'Continuation identifiers are required.')
+	}
+	if (input.action === 'postpone') {
+		if (!onlyKeys(input, ['requestId', 'continuationId', 'action'])) {
+			throw new ActorRunHttpError(400, 'COMMAND_INVALID', 'The postpone command is invalid.')
+		}
+		return {
+			requestId: input.requestId,
+			continuationId: input.continuationId,
+			action: 'postpone'
+		}
+	}
+	if (
+		input.action !== 'submit' ||
+		!['input', 'secret', 'approval', 'assurance'].includes(String(input.kind)) ||
+		!Object.hasOwn(input, 'value') ||
+		!onlyKeys(input, ['requestId', 'continuationId', 'action', 'kind', 'value'])
+	) {
+		throw new ActorRunHttpError(400, 'COMMAND_INVALID', 'The submission command is invalid.')
+	}
+	return {
+		requestId: input.requestId,
+		continuationId: input.continuationId,
+		action: 'submit',
+		kind: input.kind as 'input' | 'secret' | 'approval' | 'assurance',
+		value: input.value
+	}
+}
+
+function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+	const keys = new Set(allowed)
+	return Object.keys(value).every((key) => keys.has(key))
+}
+
 function visible(record: PlanRunRecord | null, subjectId: string): PlanRunRecord | null {
 	return record?.security.principal.subjectId === subjectId ? record : null
 }
@@ -122,7 +167,7 @@ export function createActorRunnerHandler(
 				return json(202, await runner.cancel(runId, body.requestId))
 			}
 			if (segments[3] === 'continuations' && segments.length === 5 && request.method === 'POST') {
-				const submission = (await readJson(request)) as PlanRunContinuationSubmission
+				const submission = parseContinuationSubmission(await readJson(request))
 				if (submission.continuationId !== segments[4]) {
 					return json(400, { code: 'COMMAND_INVALID', message: 'continuation ID mismatch.' })
 				}

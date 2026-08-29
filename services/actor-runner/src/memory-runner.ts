@@ -1,22 +1,17 @@
 import {
 	assertPlanRunTransition,
 	type PlanRunCheckpoint,
+	type PlanRunContinuation,
 	type PlanRunContinuationSubmission,
+	type PlanRunExecutionResult,
+	type PlanRunExecutor,
 	type PlanRunHandle,
 	type PlanRunner,
 	type PlanRunRecord,
 	type PlanRunStartRequest,
 	portableRunClone
 } from '@avenos/actors/run'
-
-export interface PlanRunExecutionResult {
-	artifactIds?: string[]
-	remainingGoals?: string[]
-	registryRevision?: number
-	policyDecisionIds?: string[]
-}
-
-export type PlanRunExecutor = (request: PlanRunStartRequest) => Promise<PlanRunExecutionResult>
+import { executeAlreadySatisfied } from './execution.js'
 
 export class PlanRunConflict extends Error {}
 
@@ -84,6 +79,7 @@ export class MemoryPlanRunner implements PlanRunner {
 			executionEnvironment: admitted.executionEnvironment,
 			requestId: admitted.requestId,
 			idempotencyKey: admitted.idempotencyKey,
+			requestedAt: admitted.requestedAt,
 			skillRef: admitted.skillRef,
 			security: admitted.security,
 			createdAt: now,
@@ -105,10 +101,45 @@ export class MemoryPlanRunner implements PlanRunner {
 		return record ? portableRunClone(record) : null
 	}
 
-	async resume(runId: string, _submission: PlanRunContinuationSubmission): Promise<PlanRunHandle> {
+	async resume(runId: string, submission: PlanRunContinuationSubmission): Promise<PlanRunHandle> {
 		const record = this.#required(runId)
 		if (record.state !== 'waiting_for_input') throw new Error('the run is not waiting for input')
-		throw new Error('the memory reference runner has no continuation executor')
+		const continuation = requiredContinuation(record, submission.continuationId)
+		if (submission.action === 'postpone') {
+			continuation.state = 'postponed'
+			this.#transition(record, 'waiting_for_input')
+			return portableRunClone(handle(record))
+		}
+		if (submission.kind !== continuation.kind) throw new Error('continuation kind mismatch')
+		portableRunClone(submission)
+		this.#transition(record, 'running')
+		const revision = record.revision
+		try {
+			const result = await this.execute(this.#request(record), { submission })
+			const current = this.#required(runId)
+			if (current.state === 'cancelled') return portableRunClone(handle(current))
+			if (current.revision !== revision || current.state !== 'running') {
+				throw new PlanRunConflict('the actor run changed concurrently')
+			}
+			this.#applyResult(current, result, continuation)
+			return portableRunClone(handle(current))
+		} catch (error) {
+			const current = this.#required(runId)
+			if (current.state !== 'cancelled' && current.state === 'running') {
+				current.failure = {
+					code: 'EXECUTION_FAILED',
+					message:
+						continuation.kind === 'secret'
+							? 'Secret continuation execution failed.'
+							: error instanceof Error
+								? error.message
+								: String(error),
+					retryable: false
+				}
+				this.#transition(current, 'failed')
+			}
+			return portableRunClone(handle(current))
+		}
 	}
 
 	async cancel(runId: string, _requestId: string): Promise<PlanRunHandle> {
@@ -128,18 +159,7 @@ export class MemoryPlanRunner implements PlanRunner {
 			const result = await this.execute(portableRunClone(request))
 			const current = this.#required(runId)
 			if (current.state === 'cancelled') return
-			const checkpoint: PlanRunCheckpoint = {
-				checkpointId: crypto.randomUUID(),
-				ordinal: current.checkpoints.length,
-				committedAt: new Date().toISOString(),
-				completedStepIds: [],
-				artifactIds: [...(result.artifactIds ?? [])],
-				remainingGoals: [...(result.remainingGoals ?? [])],
-				registryRevision: result.registryRevision ?? 0,
-				policyDecisionIds: [...(result.policyDecisionIds ?? [])]
-			}
-			current.checkpoints.push(checkpoint)
-			this.#transition(current, 'succeeded')
+			this.#applyResult(current, result)
 		} catch (error) {
 			const current = this.#required(runId)
 			if (current.state === 'cancelled') return
@@ -158,6 +178,62 @@ export class MemoryPlanRunner implements PlanRunner {
 		return record
 	}
 
+	#request(record: PlanRunRecord): PlanRunStartRequest {
+		return portableRunClone({
+			protocol: record.protocol,
+			requestId: record.requestId,
+			idempotencyKey: record.idempotencyKey,
+			requestedAt: record.requestedAt,
+			skillRef: record.skillRef,
+			executionEnvironment: record.executionEnvironment,
+			ingredients: record.ingredients,
+			goals: record.goals,
+			parameters: record.parameters,
+			security: record.security
+		})
+	}
+
+	#applyResult(
+		record: PlanRunRecord,
+		result: PlanRunExecutionResult,
+		resolved?: PlanRunContinuation
+	): void {
+		const remainingGoals = result.remainingGoals ?? []
+		if (result.continuation) {
+			assertContinuation(result.continuation)
+			if (remainingGoals.length === 0) {
+				throw new Error('a continuation must retain at least one unfinished goal')
+			}
+			if (resolved && resolved.continuationId !== result.continuation.continuationId) {
+				resolved.state = 'resolved'
+			}
+			upsertContinuation(record, result.continuation)
+			this.#appendCheckpoint(record, result)
+			this.#transition(record, 'waiting_for_input')
+			return
+		}
+		if (remainingGoals.length > 0) {
+			throw new Error(`executor left unmet goals: ${remainingGoals.join(', ')}`)
+		}
+		if (resolved) resolved.state = 'resolved'
+		this.#appendCheckpoint(record, result)
+		this.#transition(record, 'succeeded')
+	}
+
+	#appendCheckpoint(record: PlanRunRecord, result: PlanRunExecutionResult): void {
+		const checkpoint: PlanRunCheckpoint = {
+			checkpointId: crypto.randomUUID(),
+			ordinal: record.checkpoints.length,
+			committedAt: new Date().toISOString(),
+			completedStepIds: [...(result.completedStepIds ?? [])],
+			artifactIds: [...(result.artifactIds ?? [])],
+			remainingGoals: [...(result.remainingGoals ?? [])],
+			registryRevision: result.registryRevision ?? 0,
+			policyDecisionIds: [...(result.policyDecisionIds ?? [])]
+		}
+		record.checkpoints.push(checkpoint)
+	}
+
 	#transition(record: PlanRunRecord, state: PlanRunRecord['state']): void {
 		assertPlanRunTransition(record.state, state)
 		record.state = state
@@ -166,13 +242,29 @@ export class MemoryPlanRunner implements PlanRunner {
 	}
 }
 
-async function executeAlreadySatisfied(
-	request: PlanRunStartRequest
-): Promise<PlanRunExecutionResult> {
-	const facts = new Set(request.ingredients.map((ingredient) => ingredient.predicate))
-	const remainingGoals = request.goals.filter((goal) => !facts.has(goal))
-	if (remainingGoals.length > 0) {
-		throw new Error('no actor executor is registered for the requested goal')
+function requiredContinuation(record: PlanRunRecord, continuationId: string): PlanRunContinuation {
+	const continuation = record.continuations.find(
+		(candidate) =>
+			candidate.continuationId === continuationId &&
+			(candidate.state === 'open' || candidate.state === 'postponed')
+	)
+	if (!continuation) throw new Error('continuation is not open')
+	return continuation
+}
+
+function assertContinuation(continuation: PlanRunContinuation): void {
+	portableRunClone(continuation)
+	if (continuation.state !== 'open') throw new Error('executor continuation must be open')
+	if (continuation.kind === 'secret' && continuation.persistence !== 'metadata-only') {
+		throw new Error('secret continuation metadata cannot request artifact persistence')
 	}
-	return { remainingGoals: [] }
+}
+
+function upsertContinuation(record: PlanRunRecord, continuation: PlanRunContinuation): void {
+	const index = record.continuations.findIndex(
+		(candidate) => candidate.continuationId === continuation.continuationId
+	)
+	const persisted = portableRunClone(continuation)
+	if (index < 0) record.continuations.push(persisted)
+	else record.continuations[index] = persisted
 }
