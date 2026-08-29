@@ -3,7 +3,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { Background, type Edge, type Node, SvelteFlow } from '@xyflow/svelte'
 import { onDestroy, untrack } from 'svelte'
 import '@xyflow/svelte/dist/style.css'
-import AvenUiView from '$lib/actors/AvenUiView.svelte'
+import AvenVibeEngine from '$lib/actors/AvenVibeEngine.svelte'
 import { ACTIVITY_LABELS, activity } from '$lib/actors/activity.svelte'
 import { bus } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
@@ -729,7 +729,7 @@ const DOT: Record<string, string> = {
 			{#if view}
 				<!-- A VIEW in front: the window actor's surface, full height. -->
 				<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-					<AvenUiView actor={view.subject} {...view.props} />
+					<AvenVibeEngine actor={view.subject} {...view.props} />
 				</div>
 			{:else if skillView}
 				<!-- SKILL FLOW STEPPER: where this skill stands for this intent. -->

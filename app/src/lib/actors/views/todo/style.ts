@@ -1,4 +1,5 @@
-import { type StyleDef, withBrand } from '@avenos/aven-ui'
+import { withBrand } from '@avenos/aven-ui'
+import type { StyleDef } from '@myavenceo/aven-vibes'
 
 /**
  * One style for both todo views, on brand tokens — the same selectors
