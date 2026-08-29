@@ -14,9 +14,11 @@ cutover requirements are specified in
 This is a target architecture informed by working code, not a claim that the target
 runner is complete. Today the branch implements the qualified catalog, generic
 registry, authorization contracts, logical and physical planners, portable run
-values, document-specific desktop executor, and authenticated server HTTP boundary.
-It does not yet implement the durable generic executor, dynamic factory activation,
-real product policy integration, encrypted-PDF continuation, or XRechnung actors.
+values, document-specific desktop executor, authenticated server HTTP boundary, and
+deterministic slices for generic execution, real-store publication, and durable secret
+continuation. It does not yet implement the complete durable generic executor,
+production factory composition, real product policy integration, encrypted-PDF actor/UI
+integration, or XRechnung actors.
 
 ## The idea in one page
 
@@ -641,10 +643,15 @@ Separately, `services/actor-runner` implements the authenticated remote HTTP bou
 behind `api.aven.ceo`. It independently verifies forwarded identity evidence and
 tenant grants, then stores run records in the selected customer's PostgreSQL database.
 After a process restart it reclaims accepted rows when that customer's worker pool is
-next admitted. This persistent baseline still has no generic actor executor and
-normally completes only goals already present in the ingredients. The formal spec
-describes how to add durable attempts and effects before replacing the app's in-process
-server adapter.
+next admitted. Its deployed composition uses the portable registry/planner/factory
+executor behind an explicit server host. The application catalog and host adapters are
+empty and fail closed, so the service cannot accidentally execute an unregistered
+actor. Deterministic tests populate those same ports with a dynamic factory and persist
+its checkpoint. A concrete Artifact Store port defines trusted fact projection and
+atomic production-run publication, and the release-gated journey composes it with the
+authenticated SQL runner against the real Rust store. The formal spec describes how
+to populate the production ports and add durable attempts and effects before replacing
+the app's in-process server adapter.
 
 ## Documentation is part of the contract
 
@@ -683,18 +690,22 @@ The work now has a stable foundation and a deliberately unfinished execution cor
    offers, principal-scoped planning views, and environment-specific physical plans
    exist in `@avenos/actors`. Observation-frontier execution is designed but not yet
    implemented.
-2. **Portable and persistent remote boundary — implemented as a baseline.** The run protocol is
-   strict JSON. The app exposes Device/Server placement, and `services/actor-runner`
-   proves authenticated routing, independent token verification, subject isolation,
-   customer-database isolation, durable start idempotency, status, cancellation, and
-   recovery of accepted rows after restart. The app does not yet call this service for
-   document ingest, and the service does not yet execute generic actors.
+2. **Portable and persistent remote boundary — implemented as a baseline.** The run
+   protocol is strict JSON. The app exposes Device/Server placement, and
+   `services/actor-runner` proves authenticated routing, independent token verification,
+   subject isolation, customer-database isolation, durable start idempotency, status,
+   cancellation, and recovery of accepted rows after restart. Its conformance
+   composition executes a generic factory actor and commits output lineage through the
+   real Artifact Store. The deployed service does not yet use that composition, and the
+   app does not yet call the service for document ingest.
 3. **Policy integration — next.** Connect the authorization contracts to avenCEO
    entitlements, assurance, artifact grants, configuration constraints, and exact
    spawn/invoke decisions. The current authorizer is only a contract and test seam.
-4. **Generic durable executor — next.** Implement attempts, leases, fencing,
-   publication outbox, slot resolution, fact projection, continuations, and
-   checkpointed replanning behind the ports above.
+4. **Generic durable executor — in progress.** Slot resolution, trusted fact projection,
+   dynamic factory execution, atomic Artifact Store publication, checkpoint evidence,
+   and a metadata-only secret continuation have executable slices. Attempts, leases,
+   fencing, a publication outbox, secret-handle integration, and checkpointed replanning
+   remain.
 5. **Dynamic activation — next.** Replace eager document singletons with authorized
    desktop and server factory offers while keeping fixture parity with the working
    document coordinator.

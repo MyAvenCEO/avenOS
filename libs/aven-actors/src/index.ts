@@ -1,6 +1,7 @@
 export * from './actor'
 export * from './authorization'
 export * from './bus'
+export * from './executor'
 export * from './factory'
 export * from './ids'
 export * from './machine'

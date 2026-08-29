@@ -8,6 +8,8 @@ artifact, model, and LLM contracts
 
 Companion: [Actors, skills, planning, and durable execution](./generic-actor-registry-and-runtime.md)
 
+Proof strategy: [Proving actor execution on device and server](./actor-runtime-proof-strategy.md)
+
 The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are normative. Code examples
 are wire shapes, not invitations to trust fields supplied by an app.
 
@@ -460,19 +462,31 @@ repository. New data has no legacy fallback or compatibility reader.
   records, revision-checked cancellation, and recovery of committed `accepted` rows
   after a process restart.
 
-This phase makes the run ledger persistent, but does not yet implement durable actor
-effects. The baseline executor can complete an already-satisfied goal and otherwise
-reports that no actor executor is registered. Recovery is lazy on the first admitted
-request for a customer and is safe only while that executor remains side-effect-free.
+This phase makes the run ledger persistent. The deployed service now composes the
+portable registry/planner/factory executor through an explicit server host. Its
+application catalog and adapters are deliberately empty and fail closed, so only a
+valid zero-step plan whose goals are already present can succeed. Recovery is lazy on
+the first admitted request for a customer and remains safe while no effectful
+application actors are registered.
 
 ### Phase C — durable generic executor
+
+The ordered executor core and SQL injection/checkpoint seam now cover the smallest
+deterministic factory path. A conditional PostgreSQL E2E test also carries that shared
+fixture through signed identity, the facade, tenant-grant admission, runner HTTP, SQL
+persistence, dynamic factory execution, real Artifact Store publication, and a
+canonical local/server comparison. The production service now uses the same generic
+executor composition, but has no application catalog, policy, factories, or scoped
+Artifact Store adapter yet. The remaining items populate those final-state ports and
+make effects durable:
 
 1. implement `RunRepository` records, compare-and-swap revisions, leases, fencing,
    attempts, and the publication outbox;
 2. connect real `ceo.aven` entitlement, configuration, assurance, and artifact-grant
    decisions to discovery, plan, spawn, invoke, read, and publish;
-3. implement generic `ArtifactResolver`, `ArtifactPublisher`, `FactProjector`, factory,
-   dispatcher, continuation, and secret-broker ports;
+3. promote the tested Artifact Store resolver/publisher composition from conformance
+   fixtures to application schema bindings and fact projectors, then add dispatcher,
+   continuation, and secret-broker ports;
 4. register document definitions and local/server factory offers as catalog data;
 5. execute discovery frontiers and replan only the unfinished suffix; and
 6. project generic run state into the current processing UX.
@@ -509,14 +523,14 @@ at cutover; no compatibility reader or data migration is built.
 | generic runtime ownership under `os.aven` | implemented | generated catalog rejects runtime contracts under `id.aven` |
 | all LLM ownership under `ceo.aven` | implemented for client/domain contracts; split downstream absent | add the dedicated downstream and reject `id.aven`/`os.aven` LLM catalog entries |
 | authorized registry and physical placement | implemented contracts/planner | wire to real application policy |
-| dynamic factory admission | implemented contracts | generic runner invokes factories |
-| portable runner protocol | implemented | durable repository implementation |
+| dynamic factory admission | implemented in the ordered executor core | compose production factories and policies in each host |
+| portable runner protocol | implemented with persistent server ledger and authenticated generic-executor test seam | compose the production local and server hosts around it |
 | Device/Server start choice | implemented | UX and restart tests remain green |
-| server runtime boundary | authenticated HTTP service plus local memory runner | add durable repository/executor, then replace the app emulator with the remote client |
-| shared Artifact Store | document client contracts/adapters implemented; split publication downstream absent | add facade downstream and issue scoped server grants |
-| slot/schema bindings | implemented in document manifests | generic resolver/publisher removes role switch |
-| durable generic runner | specified | implement ports and state machine |
-| encrypted-PDF continuation | specified | decoder secret-handle contract and HITL UI |
+| server runtime boundary | authenticated HTTP service, persistent SQL run ledger, and deployed generic host composition with an empty fail-closed application catalog | populate production registry, policy, factories, and Artifact Store ports, then replace the app emulator with the remote client |
+| shared Artifact Store | document client path is deployed; the generic runner adapter has wire and real Rust/PostgreSQL persistence/replay tests and is composed into the authenticated SQL conformance run | inject application-scoped adapter instances into deployed server and production local hosts |
+| slot/schema bindings | manifests plus one-artifact-per-slot generic executor binding implemented | add wider cardinalities and production schema/store adapters |
+| durable generic runner | ordered factory-executor core, final-state server host composition, authenticated SQL, real Artifact Store publication, checkpoints, and a metadata-only secret continuation implemented for deterministic fixtures | add application adapters, leases, fencing, retries, secret handles, and checkpointed replanning |
+| encrypted-PDF continuation | generic postpone/restart/resume lifecycle implemented and tested; document integration specified | decoder secret-handle contract, document executor binding, and HITL UI |
 | XRechnung observation/replanning | specified | recognizer/extractor package and tests |
 | former feed-driven processor | removed | do not reintroduce artifact-arrival execution |
 
@@ -526,6 +540,13 @@ in-process server emulator, current hard-coded coordinator, or unimplemented sec
 broker as production-complete.
 
 ## 13. Required conformance suite
+
+Conformance proves the portable actor infrastructure; it MUST NOT be presented as
+proof that a real document parser, OCR model, or bookkeeping extractor is correct.
+Document acceptance and live-provider smoke tests are separate proof rails. Each rail
+MUST identify the placement it exercised. The proof strategy linked above defines the
+fixtures, canonical comparison manifest, failure matrix, and incremental delivery
+order.
 
 A runner is conforming only when automated tests cover:
 
@@ -550,17 +571,46 @@ A runner is conforming only when automated tests cover:
 15. the facade strips forged identity headers, uses a fixed runner route, and the
     runner independently verifies the forwarded signed identity token.
 
-The current suite automates item 2, the protocol-authority constants needed by item 13,
-and the trust-boundary portion of item 15. It covers representative strict-JSON cases
-from item 1, but not yet every value class named there. A focused LLM actor test covers
-the central item 14 example; the exhaustive catalog rule still waits for the generated
-catalog gate.
+Items 1–15 SHOULD use deterministic test-only actors and fixtures and MUST run against
+both the production local runner core and the separately hosted persistent server
+runner. The cross-placement assertion compares portable outcomes and provenance
+semantics. It does not require equal generated identifiers or equal physical plans
+when placement and authorization expose different implementations.
+
+The current suite automates item 2; the core-level portions of items 3, 4, 8, and 12;
+the protocol-authority constants needed by item 13; and item 15's trust boundary. The
+item 4 evidence includes both pre-search removal of an unauthorized cheaper target in
+favor of a higher-cost fallback and fail-closed invocation reauthorization. The
+item 12 evidence now includes both an in-process physical-placement comparison and a
+shared deterministic fixture carried through authenticated runner HTTP, a real SQL
+repository, and the real Rust Artifact Store. The HTTP services still share a test
+process and the local side is not yet a production generic `PlanRunner`, so this is a
+durable server-conformance slice rather than the completed remote-host claim.
+Representative strict-JSON cases from item 1 are covered, but not yet every value class
+named there. A focused LLM actor test covers the central item 14 example; the exhaustive
+catalog rule still waits for the generated catalog gate.
+
+The generic part of item 10 now has a deterministic server proof: the runner persists
+only an open metadata request, survives process replacement, records postponement,
+accepts the secret through the authenticated continuation route, and stores no submitted
+value in the public record or PostgreSQL JSON. It is not yet an encrypted-PDF acceptance
+test: the decoder, attempt-scoped secret handle, and app presentation are absent.
 
 `services/actor-runner/tests/split-architecture.e2e.test.ts` starts real ephemeral
 JWKS, facade, and runner HTTP services, signs an EdDSA identity token, and proves both
 successful admission and fail-closed handling of forged projections and
-caller-supplied security. It deliberately does not count the memory repository as
-proof of items 6–12 or general actor execution.
+caller-supplied security. With `TEST_ACTOR_RUNNER_DATABASE_URL`, it additionally uses
+`SqlPlanRunner` and the shared deterministic executor fixture to persist a completed
+step and compare its canonical output with local execution. When the Artifact Store
+test variables are also present, it commits the output and lineage through the real
+service and checkpoints the returned artifact ID. This does not yet prove recovery in
+the publication/checkpoint gap, leases, or general document execution.
+
+The real document acceptance corpus separately covers native text, visual documents,
+canonical finance schemas, XRechnung recognition, encrypted-PDF continuation, and
+unsupported inputs on every supported placement. Live LLM/provider checks remain a
+third, separately reported smoke rail; model availability or a plausible answer is
+not runtime conformance.
 
 ## 14. Documentation gate
 

@@ -59,7 +59,7 @@ flowchart LR
     subgraph DataPlane["ceo.aven / os.aven downstreams"]
         LlmService["LLM gateway\ncatalog and completions"]
         ClientRuns["Client-run publication service\nprocedure validation"]
-        ActorRunner["Actor runner\nauthenticated memory reference"]
+        ActorRunner["Actor runner\npersistent run ledger\ngeneric fail-closed host"]
     end
 
     subgraph External["Protected infrastructure"]
@@ -96,7 +96,7 @@ admits the run and the server runner replaces only the in-process host transport
 | Desktop adapters | Browser decoding, Tauri transport, singleton wiring, UI projection updates | Domain contracts and actor-specific transformations |
 | Aven API facade | Authentication verification, fixed downstream routing, and credential replacement | Client UI state, actor execution, product policy, or caller-selected physical routes |
 | LLM and artifact downstreams | Model transport, tenant artifact access, publication validation, and product/data policy | Identity issuance or document orchestration |
-| Actor runner | `os.aven` run protocol, independent identity verification, and server placement; currently a process-memory reference backend | Identity issuance, product entitlement ownership, or document-specific routing |
+| Actor runner | `os.aven` run protocol, independent identity verification, customer-scoped SQL run ledger, and generic server host composition; its application catalog is currently empty | Identity issuance, product entitlement ownership, or document-specific routing |
 | Artifact Store | Immutable artifacts/blobs, evidence, production-run receipts, idempotent replay | Delivery leases, mutable progress, model selection |
 
 This layering is what allows the same actors to run in a future headless host: replace
@@ -220,10 +220,11 @@ The generic `MessageBus.unregister(ref)` operation removes an actor and calls
 `actor.dispose()`, which releases a QuickJS sandbox session when present. A future
 dynamic or headless host must explicitly unregister/dispose actors during host
 shutdown, stop admitting new envelopes, drain or reject queued work, and close its
-transport resources. Because the same document instances are currently visible on two
-buses, that host should have one owner coordinate removal from both registries and call
-dispose exactly once. `DocumentProcessingRuntime` does not yet expose `close`, drain,
-cancellation, or lease APIs.
+transport resources. Each local document **actor instance** is currently registered
+with both the application discovery bus and its host's private execution bus. The
+desktop composition root must therefore coordinate removal from both registries while
+calling `dispose` exactly once. `DocumentProcessingRuntime` does not yet expose
+`close`, drain, cancellation, or lease APIs.
 
 ```mermaid
 flowchart LR
@@ -666,6 +667,9 @@ specified in
 [`generic-actor-registry-and-runtime.md`](./generic-actor-registry-and-runtime.md). The
 normative runtime and cutover contracts are in
 [`actor-runtime-formal-spec.md`](./actor-runtime-formal-spec.md).
+The evidence model that separates portable runtime conformance, real document
+acceptance, and live-provider smoke tests is in
+[`actor-runtime-proof-strategy.md`](./actor-runtime-proof-strategy.md).
 
 Every actor method advertises `requires` and guaranteed `produces` predicates. The
 actor registry makes actors visible wholesale, and
@@ -699,7 +703,7 @@ boundary used here.
 | `app/src/lib/artifacts/client-document-processing.ts` | Desktop composition root |
 | `app/src/lib/models/gateway.ts` | Generic Tauri LLM transport |
 | `services/aven-api` | Split authenticated facade and fixed downstream allowlist |
-| `services/actor-runner` | Authenticated remote run boundary and memory reference backend |
+| `services/actor-runner` | Authenticated remote run boundary, SQL run ledger, recovery, and generic fail-closed execution host |
 | `services/artifact-store` | Artifact Store service and conformance contracts |
 
 ## Safe extension checklist
@@ -727,6 +731,7 @@ contracts change.
 
 - [Document actor catalog](../libs/aven-document-ingest/src/actors/README.md)
 - [Document ingest package](../libs/aven-document-ingest/README.md)
+- [Actor runtime proof strategy](actor-runtime-proof-strategy.md)
 - [Client-owned document ingestion](client-document-ingest.md)
 - [Generic authenticated LLM gateway](llm-gateway.md)
 - [Actor skills and ad-hoc problem solving](actor-skills-and-problem-solving.md)

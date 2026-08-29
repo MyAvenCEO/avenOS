@@ -9,6 +9,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./authorization": "./src/authorization.ts",
+		"./executor": "./src/executor.ts",
 		"./factory": "./src/factory.ts",
 		"./planner": "./src/planner.ts",
 		"./registry": "./src/registry.ts",

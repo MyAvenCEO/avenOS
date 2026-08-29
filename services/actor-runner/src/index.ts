@@ -1,8 +1,10 @@
+import { createActorPlanExecutor } from '@avenos/actors'
 import { importTenantGrantPublicKey } from '@avenos/aven-customer-contracts'
 import { TenantPoolProvider } from '@avenos/aven-customer-runtime'
 import { IdentityVerifier } from '@avenos/aven-identity'
 import { loadActorRunnerConfig } from './config.js'
 import { createActorRunnerHandler } from './handler.js'
+import { createServerActorExecutionHost } from './host.js'
 import { SqlPlanRunner } from './sql-runner.js'
 
 const config = loadActorRunnerConfig()
@@ -28,6 +30,7 @@ const workerPools = new TenantPoolProvider({
 	searchPath: ['aven_actor_runs']
 })
 const tenantGrantPublicKey = await importTenantGrantPublicKey(config.TENANT_GRANT_PUBLIC_KEY)
+const execute = createActorPlanExecutor(createServerActorExecutionHost())
 const handler = createActorRunnerHandler(
 	{
 		forGrant: async (grant) => {
@@ -35,7 +38,7 @@ const handler = createActorRunnerHandler(
 				apiPools.forGrant(grant),
 				workerPools.forGrant(grant)
 			])
-			const runner = new SqlPlanRunner(api, worker)
+			const runner = new SqlPlanRunner(api, worker, execute)
 			await runner.recoverAcceptedRuns()
 			return runner
 		}
