@@ -32,7 +32,7 @@ export interface ClientRunInput {
 export interface ClientRunPublication {
 	publicationId: string
 	procedureKey: string
-	procedureVersion: 'client-v1'
+	procedureVersion: 'client-v1' | 'server-v1'
 	inputs: ClientRunInput[]
 	parameters: Record<string, unknown>
 	artifacts: ClientArtifactDraft[]

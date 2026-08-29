@@ -296,6 +296,7 @@ function upsertContinuation(record: PlanRunRecord, continuation: PlanRunContinua
 }
 
 function checkpoint(record: PlanRunRecord, result: PlanRunExecutionResult): PlanRunCheckpoint {
+	if (result.output) portableRunClone(result.output)
 	return {
 		checkpointId: randomUUID(),
 		ordinal: record.checkpoints.length,
@@ -304,6 +305,7 @@ function checkpoint(record: PlanRunRecord, result: PlanRunExecutionResult): Plan
 		artifactIds: [...(result.artifactIds ?? [])],
 		remainingGoals: [...(result.remainingGoals ?? [])],
 		registryRevision: result.registryRevision ?? 0,
-		policyDecisionIds: [...(result.policyDecisionIds ?? [])]
+		policyDecisionIds: [...(result.policyDecisionIds ?? [])],
+		...(result.output && { output: portableRunClone(result.output) })
 	}
 }

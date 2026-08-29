@@ -14,7 +14,8 @@
 		"./execution": "./src/execution.ts",
 		"./llm-gateway": "./src/llm-gateway.ts",
 		"./model": "./src/model.ts",
-		"./runtime": "./src/runtime.ts"
+		"./runtime": "./src/runtime.ts",
+		"./server": "./src/server.ts"
 	},
 	"scripts": {
 		"check": "tsc --noEmit"
@@ -22,7 +23,8 @@
 	"dependencies": {
 		"@avenos/actors": "workspace:*",
 		"@avenos/artifact-store": "workspace:*",
-		"@avenos/llm-client": "workspace:*"
+		"@avenos/llm-client": "workspace:*",
+		"pdfjs-dist": "^6.2.108"
 	},
 	"devDependencies": {
 		"typescript": "^6.0.2"

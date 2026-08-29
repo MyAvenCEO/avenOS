@@ -43,7 +43,7 @@ for secret_name in \
   apiMigratorPassword customerProvisionerPassword intentDatabaseCredentialRoot \
   artifactStoreProvisionerDbPassword artifactApiDatabaseCredentialRoot \
   actorApiDatabaseCredentialRoot actorWorkerDatabaseCredentialRoot customerEntitlementToken \
-  intentServiceToken actorRunnerServiceToken artifactStoreServiceToken artifactStoreProvisionerToken tenantGrantPrivateKey \
+  intentServiceToken actorRunnerServiceToken artifactStoreServiceToken actorRunnerArtifactStoreToken artifactStoreProvisionerToken tenantGrantPrivateKey \
   siteHostDirectoryToken checkoutFacadeToken checkoutEmailEncryptionKey platformBackupPassword; do
   value=$(output "$secret_name")
   printf '::add-mask::%s\n' "$value"
@@ -123,6 +123,7 @@ system_sites='[{"hostname":"aven.ceo","repository":"myavenceo/aven-brands","sour
   dotenv INTENT_SERVICE_TOKEN "$intentServiceToken"
   dotenv ACTOR_RUNNER_SERVICE_TOKEN "$actorRunnerServiceToken"
   dotenv ARTIFACT_STORE_SERVICE_TOKEN "$artifactStoreServiceToken"
+  dotenv ACTOR_RUNNER_ARTIFACT_STORE_TOKEN "$actorRunnerArtifactStoreToken"
   dotenv ARTIFACT_STORE_PROVISIONER_TOKEN "$artifactStoreProvisionerToken"
   dotenv TENANT_GRANT_PRIVATE_KEY "$tenantGrantPrivateKey"
   dotenv TENANT_GRANT_PUBLIC_KEY "$(output tenantGrantPublicKey)"

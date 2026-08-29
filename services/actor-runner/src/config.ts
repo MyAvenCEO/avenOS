@@ -12,7 +12,9 @@ export const actorRunnerConfigSchema = z.object({
 	CUSTOMER_DATABASE_PORT: z.coerce.number().int().positive().default(5432),
 	CUSTOMER_DATABASE_SSL: z.stringbool().default(false),
 	ACTOR_API_DB_CREDENTIAL_ROOT: z.string().min(32),
-	ACTOR_WORKER_DB_CREDENTIAL_ROOT: z.string().min(32)
+	ACTOR_WORKER_DB_CREDENTIAL_ROOT: z.string().min(32),
+	ARTIFACT_STORE_BASE_URL: z.url(),
+	ARTIFACT_STORE_BEARER_TOKEN: z.string().min(32)
 })
 
 export type ActorRunnerConfig = z.infer<typeof actorRunnerConfigSchema>

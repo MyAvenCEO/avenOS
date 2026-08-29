@@ -1,7 +1,11 @@
 import { createActorPlanExecutor } from '@avenos/actors'
+import { ArtifactStoreClient } from '@avenos/artifact-store'
 import { importTenantGrantPublicKey } from '@avenos/aven-customer-contracts'
 import { TenantPoolProvider } from '@avenos/aven-customer-runtime'
 import { IdentityVerifier } from '@avenos/aven-identity'
+import { DOCUMENT_INGEST_SKILL } from '@avenos/document-ingest/execution'
+import { createDocumentSkillExecutor } from '@avenos/document-ingest/server'
+import { createApplicationExecutor } from './application-executor.js'
 import { loadActorRunnerConfig } from './config.js'
 import { createActorRunnerHandler } from './handler.js'
 import { createServerActorExecutionHost } from './host.js'
@@ -30,7 +34,6 @@ const workerPools = new TenantPoolProvider({
 	searchPath: ['aven_actor_runs']
 })
 const tenantGrantPublicKey = await importTenantGrantPublicKey(config.TENANT_GRANT_PUBLIC_KEY)
-const execute = createActorPlanExecutor(createServerActorExecutionHost())
 const handler = createActorRunnerHandler(
 	{
 		forGrant: async (grant) => {
@@ -38,6 +41,26 @@ const handler = createActorRunnerHandler(
 				apiPools.forGrant(grant),
 				workerPools.forGrant(grant)
 			])
+			const artifactClient = new ArtifactStoreClient({
+				baseUrl: config.ARTIFACT_STORE_BASE_URL,
+				bearerToken: () => config.ARTIFACT_STORE_BEARER_TOKEN,
+				requestHeaders: () => ({
+					'x-aven-artifact-database': grant.databaseName,
+					'x-aven-environment': grant.environmentId,
+					'x-aven-routing-generation': String(grant.routingGeneration)
+				})
+			})
+			const documents = createDocumentSkillExecutor({
+				artifactsFor: (request) => ({
+					client: artifactClient,
+					scopeId: grant.environmentId,
+					userId: request.security.principal.subjectId
+				})
+			})
+			const execute = createApplicationExecutor(
+				[{ skillRef: DOCUMENT_INGEST_SKILL, execute: documents }],
+				createActorPlanExecutor(createServerActorExecutionHost())
+			)
 			const runner = new SqlPlanRunner(api, worker, execute)
 			await runner.recoverAcceptedRuns()
 			return runner

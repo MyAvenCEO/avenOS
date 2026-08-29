@@ -172,6 +172,8 @@ pub fn run() {
 		.manage(auth::AuthState::default())
 		.manage(artifacts::LlmStreamState::default())
 		.invoke_handler(tauri::generate_handler![
+			artifacts::actor_run_start,
+			artifacts::actor_run_status,
 			artifacts::artifact_upload,
 			artifacts::artifact_processing_status,
 			artifacts::artifact_client_run_publish,

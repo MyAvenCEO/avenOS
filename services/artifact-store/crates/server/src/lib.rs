@@ -37,9 +37,14 @@ const ARTIFACT_ROLE_KIND: &str = "ceo.aven:db-role:artifacts:api@1";
 
 #[derive(Clone)]
 pub struct FixedServiceAuth {
+    credentials: Arc<[ServiceCredential]>,
+    scope_id: Option<Uuid>,
+}
+
+#[derive(Clone)]
+struct ServiceCredential {
     bearer_token: Arc<str>,
     publisher: StablePublisher,
-    scope_id: Option<Uuid>,
 }
 
 impl FixedServiceAuth {
@@ -61,8 +66,11 @@ impl FixedServiceAuth {
             return Err(ApiError::malformed("bearer token cannot be empty"));
         }
         Ok(Self {
-            bearer_token,
-            publisher,
+            credentials: vec![ServiceCredential {
+                bearer_token,
+                publisher,
+            }]
+            .into(),
             scope_id: Some(scope_id),
         })
     }
@@ -85,25 +93,65 @@ impl FixedServiceAuth {
             return Err(ApiError::malformed("bearer token cannot be empty"));
         }
         Ok(Self {
-            bearer_token,
-            publisher,
+            credentials: vec![ServiceCredential {
+                bearer_token,
+                publisher,
+            }]
+            .into(),
             scope_id: None,
         })
     }
 
-    fn authenticate(&self, headers: &HeaderMap) -> Result<(), ApiError> {
-        let expected = format!("Bearer {}", self.bearer_token);
+    /// Add another independently authenticated publisher to the same tenant router.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an empty, duplicate credential or invalid publisher.
+    pub fn with_credential(
+        mut self,
+        bearer_token: impl Into<Arc<str>>,
+        publisher: StablePublisher,
+    ) -> Result<Self, ApiError> {
+        publisher
+            .validate()
+            .map_err(|error| ApiError::malformed(error.to_string()))?;
+        let bearer_token = bearer_token.into();
+        if bearer_token.is_empty()
+            || self
+                .credentials
+                .iter()
+                .any(|credential| credential.bearer_token == bearer_token)
+        {
+            return Err(ApiError::malformed(
+                "bearer credential must be non-empty and unique",
+            ));
+        }
+        let mut credentials = self.credentials.to_vec();
+        credentials.push(ServiceCredential {
+            bearer_token,
+            publisher,
+        });
+        self.credentials = credentials.into();
+        Ok(self)
+    }
+
+    fn authenticate(&self, headers: &HeaderMap) -> Result<StablePublisher, ApiError> {
         let supplied = headers
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok());
-        if supplied != Some(expected.as_str()) {
-            return Err(ApiError::new(
-                StatusCode::UNAUTHORIZED,
-                ErrorCode::AuthenticationRequired,
-                "a valid bearer credential is required",
-            ));
-        }
-        Ok(())
+        self.credentials
+            .iter()
+            .find(|credential| {
+                supplied == Some(format!("Bearer {}", credential.bearer_token).as_str())
+            })
+            .map(|credential| credential.publisher.clone())
+            .ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::UNAUTHORIZED,
+                    ErrorCode::AuthenticationRequired,
+                    "a valid bearer credential is required",
+                )
+            })
     }
 
     fn authorize(
@@ -111,7 +159,7 @@ impl FixedServiceAuth {
         headers: &HeaderMap,
         route_scope: Uuid,
     ) -> Result<RequestContext, ApiError> {
-        self.authenticate(headers)?;
+        let publisher = self.authenticate(headers)?;
         if self.scope_id.is_some_and(|scope| scope != route_scope) {
             return Err(ApiError::new(
                 StatusCode::FORBIDDEN,
@@ -120,7 +168,7 @@ impl FixedServiceAuth {
             ));
         }
         Ok(RequestContext {
-            publisher: self.publisher.clone(),
+            publisher,
             scope_id: route_scope,
             decision_expires_at: OffsetDateTime::now_utc() + Duration::minutes(1),
         })
@@ -1022,5 +1070,48 @@ impl IntoResponse for ApiError {
             Json(self.problem),
         )
             .into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn authenticates_independent_service_publishers() {
+        let api = StablePublisher {
+            issuer: "api.aven.ceo".to_owned(),
+            subject: "service:aven-api".to_owned(),
+        };
+        let runner = StablePublisher {
+            issuer: "os.aven".to_owned(),
+            subject: "service:actor-runner".to_owned(),
+        };
+        let auth = FixedServiceAuth::for_tenants("api-token", api)
+            .unwrap()
+            .with_credential("runner-token", runner.clone())
+            .unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            "Bearer runner-token".parse().unwrap(),
+        );
+
+        let context = auth.authorize(&headers, Uuid::nil()).unwrap();
+
+        assert_eq!(context.publisher, runner);
+    }
+
+    #[test]
+    fn rejects_duplicate_service_credentials() {
+        let publisher = StablePublisher {
+            issuer: "api.aven.ceo".to_owned(),
+            subject: "service:aven-api".to_owned(),
+        };
+        let result = FixedServiceAuth::for_tenants("same-token", publisher.clone())
+            .unwrap()
+            .with_credential("same-token", publisher);
+
+        assert!(result.is_err());
     }
 }

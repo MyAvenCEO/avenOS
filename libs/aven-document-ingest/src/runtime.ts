@@ -97,8 +97,9 @@ const wait = (milliseconds: number): Promise<void> =>
 
 export interface DocumentProcessingRuntimeOptions {
 	executionEnvironment?: ExecutionEnvironment
-	/** Describes the current adapter, not the eventual physical server location. */
-	runtimeHost?: 'desktop' | 'in-process-server-emulation' | 'server'
+	/** Physical host which owns the actors for this run. */
+	runtimeHost?: 'desktop' | 'actor-runner'
+	procedureVersion?: 'client-v1' | 'server-v1'
 }
 
 /**
@@ -130,7 +131,8 @@ export class DocumentProcessingRuntime {
 		this.#modelStatus = modelStatus
 		this.#options = {
 			executionEnvironment: options.executionEnvironment ?? 'local',
-			runtimeHost: options.runtimeHost ?? 'desktop'
+			runtimeHost: options.runtimeHost ?? 'desktop',
+			procedureVersion: options.procedureVersion ?? 'client-v1'
 		}
 	}
 
@@ -154,7 +156,7 @@ export class DocumentProcessingRuntime {
 		const presentation: ArtifactProcessingPresentation = {
 			caseId: await stableUuid(`${source.artifactId}:client-document-case-v1`),
 			state: 'active',
-			projectionVersion: 'client-actor-document-v1',
+			projectionVersion: 'actor-document-v1',
 			preferredType: 'file',
 			label: source.originalName,
 			summary: null,
@@ -448,7 +450,7 @@ export class DocumentProcessingRuntime {
 				presentation.state = contentComplete ? 'succeeded' : 'needs_review'
 				presentation.preferredType = String(classification?.payload.primaryKind ?? 'file')
 				presentation.summary = contentComplete
-					? `${pageArtifacts.length} page(s) processed locally with native text extraction.`
+					? `${pageArtifacts.length} page(s) processed with native text extraction.`
 					: `${pageArtifacts.length} page(s) preserved; OCR or visual understanding is required.`
 			}
 			if (!useModel && !contentComplete) {
@@ -536,10 +538,10 @@ export class DocumentProcessingRuntime {
 			publicationId: await stableUuid(
 				`${source.artifactId}:${definition.key}:${result.procedureKey}:${definition.inputs
 					.map((item) => `${item.role}:${item.ordinal}:${item.artifactId}`)
-					.join('|')}:client-v1`
+					.join('|')}:${this.#options.procedureVersion}`
 			),
 			procedureKey: result.procedureKey,
-			procedureVersion: 'client-v1',
+			procedureVersion: this.#options.procedureVersion,
 			inputs: definition.inputs,
 			parameters: {
 				...(definition.parameters ?? {}),

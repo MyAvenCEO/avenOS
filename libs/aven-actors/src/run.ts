@@ -65,6 +65,8 @@ export interface PlanRunCheckpoint {
 	remainingGoals: Predicate[]
 	registryRevision: number
 	policyDecisionIds: string[]
+	/** Portable application result retained with the durable checkpoint. */
+	output?: Record<string, unknown>
 }
 
 export interface PlanRunContinuation {
@@ -102,6 +104,8 @@ export interface PlanRunExecutionResult {
 	remainingGoals?: Predicate[]
 	registryRevision?: number
 	policyDecisionIds?: string[]
+	/** Small portable result for the calling application; large values remain artifacts. */
+	output?: Record<string, unknown>
 	/** A durable request for information which the executor cannot obtain itself. */
 	continuation?: PlanRunContinuation
 }

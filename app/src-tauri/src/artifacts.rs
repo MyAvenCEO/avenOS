@@ -263,6 +263,7 @@ fn processing_status(
 
 const INTENT_COMPONENT: &str = "ceo.aven:component:data:intents@1";
 const ARTIFACT_COMPONENT: &str = "ceo.aven:component:data:artifacts@1";
+const ACTOR_RUN_COMPONENT: &str = "os.aven:component:actors:run-repository@1";
 
 fn customer_path(environment_id: &str, segment: &str, path: &str) -> Result<String, String> {
     let suffix = path
@@ -336,6 +337,51 @@ fn intent_json(
     body: Option<String>,
 ) -> Result<serde_json::Value, String> {
     customer_json(session, INTENT_COMPONENT, "intents", method, path, body)
+}
+
+#[tauri::command]
+pub async fn actor_run_start(
+    command: serde_json::Value,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&state)?;
+    let body = serde_json::to_string(&command)
+        .map_err(|error| format!("Invalid Actor Runner command: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        customer_json(
+            token,
+            ACTOR_RUN_COMPONENT,
+            "actor-runs",
+            "POST",
+            "/api/actor-runs".into(),
+            Some(body),
+        )
+    })
+    .await
+    .map_err(|error| format!("Actor Runner start task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn actor_run_status(
+    run_id: String,
+    state: tauri::State<'_, AuthState>,
+) -> Result<serde_json::Value, String> {
+    if !valid_artifact_id(&run_id) {
+        return Err("The Actor Runner run ID is invalid.".to_string());
+    }
+    let token = session_token(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        customer_json(
+            token,
+            ACTOR_RUN_COMPONENT,
+            "actor-runs",
+            "GET",
+            format!("/api/actor-runs/{run_id}"),
+            None,
+        )
+    })
+    .await
+    .map_err(|error| format!("Actor Runner status task failed: {error}"))?
 }
 
 fn artifact_json(

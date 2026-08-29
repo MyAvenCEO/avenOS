@@ -63,7 +63,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     max_stores as usize,
                     connections,
                 )?;
-                let auth = FixedServiceAuth::for_tenants(token, publisher)?;
+                let mut auth = FixedServiceAuth::for_tenants(token, publisher)?;
+                if let Ok(actor_token) = env::var("ARTIFACT_STORE_ACTOR_RUNNER_BEARER_TOKEN") {
+                    auth = auth.with_credential(
+                        actor_token,
+                        StablePublisher {
+                            issuer: "os.aven".to_owned(),
+                            subject: "service:actor-runner".to_owned(),
+                        },
+                    )?;
+                }
                 (
                     AppState::for_tenants(registry, catalog, auth),
                     "per-customer".to_owned(),
