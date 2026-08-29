@@ -322,10 +322,10 @@ use an `artifact_store` schema and the coordinator an application schema in that
 database, with separate migration, runtime read, runtime publication, coordinator,
 projector and recovery roles.
 
-The customer application stack is explicitly not provisioned yet, and the deployment
-checklist still marks encrypted off-volume database backup and restore rehearsal as
-unfinished
-([deployment checklist](../../../GITHUB_HETZNER_DEPLOYMENT_CHECKLIST.md)). The final
+The customer application stack is explicitly not provisioned yet, and the new
+infrastructure guide deliberately keeps encrypted off-volume database backup and
+restore rehearsal as an operator responsibility
+([infrastructure guide](../../../docs/infrastructure-getting-started.md)). The final
 contract additionally requires publisher journal retention, a write-disabled
 `reconciling` mode, exact restoration or permanent exclusions, publisher watermarks,
 cursor invalidation, and integrity fencing. A database backup alone is insufficient.
