@@ -1,14 +1,19 @@
 # AvenOS scripts
 
-Repo-root automation for the **avenCITY Tauri app**, the Aven API, and releases.
+Repo-root automation for the **avenCITY Tauri app**, the split services, and
+application releases.
 
 ## Wired in root `package.json` (daily use)
 
 | Script | File | Purpose |
 |--------|------|---------|
 | `dev:app` | — | Browser-only Vite in `app/` |
-| `dev:api` | — | Identity API development server in `services/aven-api` |
-| `build:api` / `check:api` / `test:api` | — | API build and verification |
+| `dev:api` | — | `api.aven.ceo` facade development server in `services/aven-api` |
+| `dev:identity` | — | `aven.id` identity development server |
+| `dev:checkout` | — | `my.aven.ceo` checkout development server |
+| `dev:runner` | — | Local `os.aven` actor-runner service (explicit memory backend) |
+| `build:* / check:* / test:*` | — | Split identity, checkout, facade, and app verification |
+| `check:runner` / `test:runner` | — | Runner type check and signed-token split E2E |
 | `db:migrate:api` | — | Explicit API database migration |
 | `dev:app:all` | `dev-app-all.ts` | macOS/Linux Tauri dev (dispatches to platform script) |
 | `dev:app:mac` | `dev-app-macos.ts` | Tauri dev (macOS) |
@@ -23,7 +28,7 @@ Repo-root automation for the **avenCITY Tauri app**, the Aven API, and releases.
 | `build:app:android` | `build-app-android.ts` | Signed debug APK (or explicitly signed release APK/AAB) |
 | `release:app:*` | `release-app.ts` | macOS `.pkg` / iOS `.ipa` build + altool upload |
 | `next-version` / `set-version` | `next-version.ts`, `set-version.ts` | CalVer derivation + stamping |
-| `release:next` | `release-next.ts` | Cut the `next` prerelease locally |
+| `release:next` | `release-next.ts` | Cut the application `next` prerelease; it does not deploy services |
 
 ## Called indirectly (keep)
 

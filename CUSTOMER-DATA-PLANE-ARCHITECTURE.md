@@ -4,6 +4,11 @@ Status: current-state discovery and standardization proposal
 
 Date: 23 August 2026
 
+> This paper records the previous service-specific implementation and remains useful
+> discovery evidence. The normative target for the fresh split deployment is
+> [Customer databases as a first-class platform boundary](docs/customer-database-platform.md).
+> Where the papers differ, the first-class platform paper governs.
+
 Implementation update: the first deployment rail described by this paper is now
 implemented for Artifact Processor. The control plane tracks Processor rollout state,
 the environment worker provisions and suspends both component roles, a private
