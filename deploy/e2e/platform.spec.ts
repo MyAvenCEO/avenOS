@@ -24,6 +24,7 @@ const tauriApplication = process.env.E2E_TAURI_APPLICATION as string
 const tauriDriver = process.env.E2E_TAURI_DRIVER as string
 const tauriFixture = process.env.E2E_TAURI_FIXTURE as string
 const silentVoiceFixtureJson = process.env.E2E_SILENT_VOICE_FIXTURE as string
+const silentDuplexFixtureJson = process.env.E2E_SILENT_DUPLEX_FIXTURE as string
 const provisioningSecret = 'identity-provisioning-secret-for-e2e-only'
 const directorySecret = 'site-host-directory-token-for-e2e-only'
 
@@ -40,9 +41,46 @@ function requireEnvironment() {
 		tauriApplication,
 		tauriDriver,
 		tauriFixture,
-		silentVoiceFixtureJson
+		silentVoiceFixtureJson,
+		silentDuplexFixtureJson
 	}))
 		if (!value) throw new Error(`${name} is required`)
+}
+
+interface SilentDuplexFixture {
+	session_id: string
+	turn_id: string
+	narration_text: string
+	interrupted: SilentVoiceFixture
+	follow_up: SilentVoiceFixture
+	fade_duration_ms: number
+}
+
+function silentDuplexFixture(): SilentDuplexFixture {
+	const fixture = JSON.parse(silentDuplexFixtureJson) as Partial<SilentDuplexFixture>
+	if (
+		typeof fixture.session_id !== 'string' ||
+		typeof fixture.turn_id !== 'string' ||
+		typeof fixture.narration_text !== 'string' ||
+		fixture.fade_duration_ms !== 80 ||
+		!fixture.interrupted ||
+		!fixture.follow_up ||
+		fixture.interrupted.speaker_id === fixture.follow_up.speaker_id
+	)
+		throw new Error('silent duplex fixture is invalid')
+	return fixture as SilentDuplexFixture
+}
+
+async function waitForE2eSpeaking(session: TauriSession, expected: boolean): Promise<void> {
+	const deadline = Date.now() + 10_000
+	while (Date.now() < deadline) {
+		const speaking = await session.execute<string | null>(
+			"return document.querySelector('[data-testid=\"e2e-voice-state\"]')?.getAttribute('data-speaking') ?? null"
+		)
+		if (speaking === String(expected)) return
+		await new Promise((resolve) => setTimeout(resolve, 50))
+	}
+	throw new Error(`Tauri voice playback did not become speaking=${expected}`)
 }
 
 interface SilentVoiceFixture {
@@ -163,6 +201,7 @@ async function tauriAcceptance(
 		await session.click(await session.find('button[aria-label="Senden"]'))
 		await session.waitForBodyText('E2E chat reply.')
 
+		let typedExchangePersisted = false
 		const contributionDeadline = Date.now() + 30_000
 		while (Date.now() < contributionDeadline) {
 			const detail = (await json(
@@ -177,11 +216,131 @@ async function tauriAcceptance(
 				detail.contributions.some(
 					(entry) => entry.contributorKind === 'agent' && entry.text === 'E2E chat reply.'
 				)
-			)
-				return { intentId, sourceArtifactId, extractedTextArtifactId }
+			) {
+				typedExchangePersisted = true
+				break
+			}
 			await new Promise((resolve) => setTimeout(resolve, 100))
 		}
-		throw new Error('Tauri chat exchange was not persisted to the customer intent')
+		if (!typedExchangePersisted)
+			throw new Error('Tauri chat exchange was not persisted to the customer intent')
+
+		const duplex = silentDuplexFixture()
+		await session.execute(
+			"window.dispatchEvent(new KeyboardEvent('keydown', { key: 'S', bubbles: true }))"
+		)
+		const narrationComposer = await session.findEventually(
+			'textarea[placeholder="Sprich — oder schreib…"]'
+		)
+		await session.type(narrationComposer, 'tart E2E narrated answer')
+		await session.click(await session.find('button[aria-label="Senden"]'))
+		await session.waitForBodyText('E2E narration begins.')
+		await session.click(await session.find('[data-testid="e2e-begin-narration"]'))
+		await waitForE2eSpeaking(session, true)
+		await session.click(await session.find('[data-testid="e2e-interrupt-narration"]'))
+		await waitForE2eSpeaking(session, false)
+		await session.waitForBodyText(duplex.interrupted.text)
+		await new Promise((resolve) => setTimeout(resolve, 2_300))
+		expect(await session.bodyText()).not.toContain('E2E narration tail must be cancelled.')
+
+		let interruptedPersisted = false
+		let interruptedContributions: Array<{
+			contributorKind: string
+			text: string | null
+			payload: Record<string, unknown>
+		}> = []
+		const interruptedDeadline = Date.now() + 30_000
+		while (Date.now() < interruptedDeadline) {
+			const detail = (await json(
+				await fetch(`${intentBase}/${intentId}`, { headers: authorizedHeaders })
+			)) as {
+				contributions: Array<{
+					contributorKind: string
+					text: string | null
+					payload: Record<string, unknown>
+				}>
+			}
+			interruptedContributions = detail.contributions
+			const narrationIndex = detail.contributions.findIndex(
+				(entry) => entry.contributorKind === 'human' && entry.text === 'Start E2E narrated answer'
+			)
+			const interruptedReplyIndex = detail.contributions.findIndex(
+				(entry, index) =>
+					index > narrationIndex &&
+					entry.contributorKind === 'agent' &&
+					entry.text?.startsWith('E2E narration begins.')
+			)
+			const voiceIndex = detail.contributions.findIndex(
+				(entry, index) =>
+					index > interruptedReplyIndex &&
+					entry.contributorKind === 'human' &&
+					entry.text === duplex.interrupted.text
+			)
+			if (
+				narrationIndex >= 0 &&
+				interruptedReplyIndex > narrationIndex &&
+				voiceIndex > interruptedReplyIndex &&
+				detail.contributions
+					.slice(voiceIndex + 1)
+					.some((entry) => entry.contributorKind === 'agent' && entry.text === 'E2E chat reply.')
+			) {
+				expect(detail.contributions[voiceIndex].payload).toEqual({
+					anonymousSpeaker: {
+						session_id: duplex.session_id,
+						speaker_id: duplex.interrupted.speaker_id,
+						confidence: duplex.interrupted.confidence
+					}
+				})
+				interruptedPersisted = true
+				break
+			}
+			await new Promise((resolve) => setTimeout(resolve, 100))
+		}
+		if (!interruptedPersisted)
+			throw new Error(
+				`PCM barge-in did not interrupt narration and reach the Intent Service: ${JSON.stringify(interruptedContributions)}`
+			)
+
+		await session.click(await session.find('[data-testid="e2e-second-speaker"]'))
+		await session.waitForBodyText(duplex.follow_up.text)
+		const secondSpeakerDeadline = Date.now() + 30_000
+		while (Date.now() < secondSpeakerDeadline) {
+			const detail = (await json(
+				await fetch(`${intentBase}/${intentId}`, { headers: authorizedHeaders })
+			)) as {
+				contributions: Array<{
+					contributorKind: string
+					text: string | null
+					payload: Record<string, unknown>
+				}>
+			}
+			const firstSpeakerIndex = detail.contributions.findIndex(
+				(entry) => entry.contributorKind === 'human' && entry.text === duplex.interrupted.text
+			)
+			const secondSpeakerIndex = detail.contributions.findIndex(
+				(entry, index) =>
+					index > firstSpeakerIndex &&
+					entry.contributorKind === 'human' &&
+					entry.text === duplex.follow_up.text
+			)
+			if (
+				secondSpeakerIndex > firstSpeakerIndex &&
+				detail.contributions
+					.slice(secondSpeakerIndex + 1)
+					.some((entry) => entry.contributorKind === 'agent' && entry.text === 'E2E chat reply.')
+			) {
+				expect(detail.contributions[secondSpeakerIndex].payload).toEqual({
+					anonymousSpeaker: {
+						session_id: duplex.session_id,
+						speaker_id: duplex.follow_up.speaker_id,
+						confidence: duplex.follow_up.confidence
+					}
+				})
+				return { intentId, sourceArtifactId, extractedTextArtifactId }
+			}
+			await new Promise((resolve) => setTimeout(resolve, 100))
+		}
+		throw new Error('Second PCM speaker did not reach the Intent Service with a distinct label')
 	} finally {
 		await session.close()
 	}
@@ -695,6 +854,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 			max: 1
 		})
 		try {
+			const duplex = silentDuplexFixture()
 			expect(
 				(await customer.query('SELECT count(*)::int AS count FROM aven_intents.intents')).rows[0]
 					.count
@@ -703,11 +863,21 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 				(
 					await customer.query(
 						`SELECT count(*)::int AS count FROM aven_intents.contributions
-						 WHERE intent_id=$1 AND text = ANY($2::text[])`,
-						[tauri.intentId, ['Hello from Tauri E2E', 'E2E chat reply.']]
+						 WHERE intent_id=$1
+						   AND (text = ANY($2::text[]) OR text LIKE 'E2E narration begins.%')`,
+						[
+							tauri.intentId,
+							[
+								'Hello from Tauri E2E',
+								'E2E chat reply.',
+								'Start E2E narrated answer',
+								duplex.interrupted.text,
+								duplex.follow_up.text
+							]
+						]
 					)
 				).rows[0].count
-			).toBe(2)
+			).toBe(8)
 			expect(
 				(
 					await customer.query(

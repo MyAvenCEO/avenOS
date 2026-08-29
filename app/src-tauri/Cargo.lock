@@ -430,6 +430,8 @@ dependencies = [
  "crossbeam-queue",
  "log",
  "rubato",
+ "serde",
+ "serde_json",
  "sonora",
  "unicode-normalization",
 ]

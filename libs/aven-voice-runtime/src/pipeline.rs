@@ -708,6 +708,23 @@ fn extract_speaker_embedding_slice(
 pub(crate) fn silent_fixture_observations(
     generation: RouteGeneration,
 ) -> Result<Vec<Observation>, String> {
+    scripted_fixture_observations(
+        generation,
+        "silent-e2e",
+        "Guten Tag vom stillen Audiotest",
+        vec![1.0, 0.0, 0.0],
+        false,
+    )
+}
+
+#[cfg(feature = "silent-audio-e2e")]
+pub(crate) fn scripted_fixture_observations(
+    generation: RouteGeneration,
+    scope: &str,
+    text: &str,
+    embedding: Vec<f32>,
+    far_end_active: bool,
+) -> Result<Vec<Observation>, String> {
     struct FixtureVad;
 
     impl VoiceActivityDetector for FixtureVad {
@@ -722,7 +739,9 @@ pub(crate) fn silent_fixture_observations(
         }
     }
 
-    struct FixtureRecognizer;
+    struct FixtureRecognizer {
+        text: String,
+    }
 
     impl StreamingRecognizer for FixtureRecognizer {
         fn begin(&mut self, _candidate: &CandidateId) -> Result<(), crate::ModelError> {
@@ -731,22 +750,24 @@ pub(crate) fn silent_fixture_observations(
 
         fn push(&mut self, _pcm_16k: &[f32]) -> Result<crate::RecognizerUpdate, crate::ModelError> {
             Ok(crate::RecognizerUpdate {
-                cumulative_text: "Guten Tag vom stillen Audiotest".into(),
+                cumulative_text: self.text.clone(),
                 final_text: None,
             })
         }
 
         fn finish(&mut self) -> Result<crate::RecognizerUpdate, crate::ModelError> {
             Ok(crate::RecognizerUpdate {
-                cumulative_text: "Guten Tag vom stillen Audiotest".into(),
-                final_text: Some("Guten Tag vom stillen Audiotest".into()),
+                cumulative_text: self.text.clone(),
+                final_text: Some(self.text.clone()),
             })
         }
 
         fn cancel(&mut self) {}
     }
 
-    struct FixtureSpeaker;
+    struct FixtureSpeaker {
+        embedding: Vec<f32>,
+    }
 
     impl SpeakerEmbedder for FixtureSpeaker {
         fn embedding(&mut self, pcm_16k: &[f32]) -> Result<Vec<f32>, crate::ModelError> {
@@ -755,7 +776,7 @@ pub(crate) fn silent_fixture_observations(
                     safe_message: "silent fixture contained no voiced PCM",
                 });
             }
-            Ok(vec![1.0, 0.0, 0.0])
+            Ok(self.embedding.clone())
         }
     }
 
@@ -764,6 +785,8 @@ pub(crate) fn silent_fixture_observations(
         end_windows: 2,
         ..VoiceConfigV1::default()
     };
+    let scope = scope.to_owned();
+    let text = text.to_owned();
     let (clean_tx, clean_rx) = bounded(256);
     let (control_tx, control_rx) = bounded(4);
     let (observer, observations) = RuntimeObserver::test_pair(256);
@@ -772,22 +795,26 @@ pub(crate) fn silent_fixture_observations(
             config,
             InputModels {
                 vad: Box::new(FixtureVad),
-                recognizer: Box::new(FixtureRecognizer),
-                speaker: Some(Box::new(FixtureSpeaker)),
+                recognizer: Box::new(FixtureRecognizer { text }),
+                speaker: Some(Box::new(FixtureSpeaker { embedding })),
             },
             clean_rx,
             control_rx,
             observer,
             generation,
-            "silent-e2e".into(),
+            scope,
             DuplexMetrics::default(),
         )
     });
     let frame = |index: u64, sample: f32| CleanFrame {
         samples: [sample; 160],
         at: MonoTimeNs::from_millis(index * 10),
-        far_end_active: false,
-        echo_status: EchoStatus::Bypassed,
+        far_end_active,
+        echo_status: if far_end_active {
+            EchoStatus::Converged
+        } else {
+            EchoStatus::Bypassed
+        },
         safe_echo_continuous: true,
         adaptation_ready: true,
         near_end_evidence: true,

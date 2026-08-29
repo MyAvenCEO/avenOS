@@ -71,7 +71,7 @@ VITE_AVEN_E2E=true bun run --cwd "$root/app" build
 AVEN_SPEECH_GPU=cpu bun "$root/scripts/fetch-onnxruntime.ts"
 AVEN_IDENTITY_BASE_URL="http://localhost:$E2E_IDENTITY_HOST_PORT" \
 AVEN_API_BASE_URL="http://127.0.0.1:$E2E_API_HOST_PORT" \
-cargo build --locked --release --features custom-protocol --manifest-path "$root/app/src-tauri/Cargo.toml" --bin aven-os-app
+cargo build --locked --release --features custom-protocol,e2e-voice-proof --manifest-path "$root/app/src-tauri/Cargo.toml" --bin aven-os-app
 E2E_TAURI_APPLICATION="$root/target/rust/release/aven-os-app"
 E2E_TAURI_DRIVER=${TAURI_DRIVER_BIN:-$HOME/.cargo/bin/tauri-driver}
 E2E_TAURI_FIXTURE="$root/deploy/e2e/fixtures/e2e-document.txt"
@@ -113,7 +113,11 @@ E2E_SILENT_VOICE_FIXTURE=$(cargo run --quiet --locked \
   --manifest-path "$root/libs/aven-voice-runtime/Cargo.toml" \
   --features silent-audio-e2e \
   --example silent_audio_fixture)
-export E2E_SILENT_VOICE_FIXTURE
+E2E_SILENT_DUPLEX_FIXTURE=$(cargo run --quiet --locked \
+  --manifest-path "$root/libs/aven-voice-runtime/Cargo.toml" \
+  --features silent-audio-e2e \
+  --example silent_duplex_conversation)
+export E2E_SILENT_VOICE_FIXTURE E2E_SILENT_DUPLEX_FIXTURE
 
 TEST_ACTOR_RUNNER_DATABASE_URL="postgres://postgres:platform-admin-e2e@127.0.0.1:$E2E_DATABASE_HOST_PORT/postgres" \
 TEST_ARTIFACT_STORE_BASE_URL="http://127.0.0.1:$E2E_ARTIFACT_STORE_HOST_PORT" \
@@ -136,6 +140,7 @@ E2E_TAURI_APPLICATION="$E2E_TAURI_APPLICATION" \
 E2E_TAURI_DRIVER="$E2E_TAURI_DRIVER" \
 E2E_TAURI_FIXTURE="$E2E_TAURI_FIXTURE" \
 E2E_SILENT_VOICE_FIXTURE="$E2E_SILENT_VOICE_FIXTURE" \
+E2E_SILENT_DUPLEX_FIXTURE="$E2E_SILENT_DUPLEX_FIXTURE" \
 bunx playwright test --config "$root/deploy/e2e/playwright.config.ts"
 
 docker compose --project-name "$project" --file "$compose" ps
