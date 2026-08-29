@@ -1,17 +1,12 @@
 import { isIP } from 'node:net'
 
-interface BaseSiteHostConfig {
+export interface SiteHostConfig {
 	hostname: string
 	port: number
 	dataRoot: string
-	mode: 'managed' | 'snapshot'
 	maxFiles: number
 	maxBytes: number
 	maxConcurrentSyncs: number
-}
-
-export interface ManagedSiteHostConfig extends BaseSiteHostConfig {
-	mode: 'managed'
 	directoryUrl: string
 	statusUrl: string
 	bearerToken: string
@@ -20,12 +15,6 @@ export interface ManagedSiteHostConfig extends BaseSiteHostConfig {
 	pollMilliseconds: number
 	dnsGraceMilliseconds: number
 }
-
-export interface SnapshotSiteHostConfig extends BaseSiteHostConfig {
-	mode: 'snapshot'
-}
-
-export type SiteHostConfig = ManagedSiteHostConfig | SnapshotSiteHostConfig
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
 	const value = env[key]
@@ -61,9 +50,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SiteHostConfig
 	const listen = env.SITE_HOST_LISTEN ?? '0.0.0.0:8093'
 	const separator = listen.lastIndexOf(':')
 	if (separator < 1) throw new Error('SITE_HOST_LISTEN must be host:port')
-	const mode = env.SITE_HOST_MODE ?? 'managed'
-	if (!['managed', 'snapshot'].includes(mode))
-		throw new Error('SITE_HOST_MODE must be managed or snapshot')
 	const common = {
 		hostname: listen.slice(0, separator),
 		port: positive(listen.slice(separator + 1), 8093),
@@ -72,7 +58,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SiteHostConfig
 		maxBytes: positive(env.SITE_HOST_MAX_BYTES, 268435456),
 		maxConcurrentSyncs: positive(env.SITE_HOST_MAX_CONCURRENT_SYNCS, 4)
 	}
-	if (mode === 'snapshot') return { ...common, mode }
 	const token = required(env, 'SITE_HOST_DIRECTORY_BEARER_TOKEN')
 	if (!/^[A-Za-z0-9_-]{32,128}$/.test(token)) throw new Error('invalid site host bearer token')
 	const directoryUrl = httpUrl(required(env, 'SITE_HOST_DIRECTORY_URL'), 'SITE_HOST_DIRECTORY_URL')
@@ -84,7 +69,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SiteHostConfig
 		throw new Error('SITE_HOST_DIRECTORY_URL and SITE_HOST_STATUS_URL must have the same origin')
 	return {
 		...common,
-		mode: 'managed',
 		directoryUrl: directoryUrl.toString(),
 		statusUrl: statusUrl.toString(),
 		bearerToken: token,

@@ -27,11 +27,11 @@ export class StaticSiteHost {
 
 	constructor(private config: SiteHostConfig) {}
 
-	async loadSnapshot(): Promise<void> {
-		const snapshot = JSON.parse(
+	async loadPersistedState(): Promise<void> {
+		const state = JSON.parse(
 			await readFile(join(this.config.dataRoot, 'active-sites.json'), 'utf8')
 		) as { sites: ActiveSite[] }
-		for (const site of snapshot.sites ?? []) {
+		for (const site of state.sites ?? []) {
 			try {
 				validateBinding(site.binding)
 				const expectedRoot = resolve(this.config.dataRoot, 'bindings', site.binding.id, 'releases')
@@ -44,7 +44,7 @@ export class StaticSiteHost {
 			} catch (error) {
 				console.warn(
 					JSON.stringify({
-						message: 'ignored invalid active-site snapshot entry',
+						message: 'ignored invalid persisted active-site entry',
 						error: String(error)
 					})
 				)
@@ -54,14 +54,12 @@ export class StaticSiteHost {
 	}
 
 	async reconcile(): Promise<void> {
-		if (this.config.mode !== 'managed') throw new Error('snapshot mode cannot reconcile')
 		if (this.reconciling) return this.reconciling
 		this.reconciling = this.doReconcile().finally(() => (this.reconciling = null))
 		return this.reconciling
 	}
 
 	private async doReconcile() {
-		if (this.config.mode !== 'managed') throw new Error('snapshot mode cannot reconcile')
 		const response = await fetch(this.config.directoryUrl, {
 			headers: { authorization: `Bearer ${this.config.bearerToken}` },
 			signal: AbortSignal.timeout(10_000)
@@ -89,11 +87,11 @@ export class StaticSiteHost {
 					.slice(index, index + this.config.maxConcurrentSyncs)
 					.map((binding) => this.reconcileOne(binding))
 			)
-		await this.saveSnapshot()
+		await this.savePersistedState()
 		this.ready = true
 	}
 
-	private async saveSnapshot() {
+	private async savePersistedState() {
 		const target = join(this.config.dataRoot, 'active-sites.json')
 		const staging = `${target}.next`
 		await writeFile(staging, JSON.stringify({ sites: [...this.active.values()] }), { mode: 0o600 })
@@ -101,7 +99,6 @@ export class StaticSiteHost {
 	}
 
 	private async reconcileOne(binding: DirectoryBinding) {
-		if (this.config.mode !== 'managed') throw new Error('snapshot mode cannot reconcile')
 		let report: Record<string, unknown>
 		try {
 			validateBinding(binding)
@@ -146,7 +143,6 @@ export class StaticSiteHost {
 	}
 
 	private async report(payload: Record<string, unknown>) {
-		if (this.config.mode !== 'managed') return
 		try {
 			const response = await fetch(this.config.statusUrl, {
 				method: 'POST',

@@ -3,7 +3,6 @@
 // resolved by `metadata.tier` (the SSOT wire key) and synced from the seeds:
 // created when missing, price/name corrected when drifted. The org access
 // token already scopes every call to our organization.
-import { planIdOf } from '@myavenceo/aven-ceo/pricing'
 import { Polar } from '@polar-sh/sdk'
 import type { BillingConfig } from '../config.js'
 import { AppError } from '../errors.js'
@@ -82,13 +81,11 @@ export class PolarProvider implements PaymentProvider {
 		)
 		const existing = listed.result.items
 		for (const seed of toSync) {
-			// A product created before the kebab-case wire-key rename carries the
-			// old spelling in its metadata. Match through the SSOT's normaliser so
-			// it is FOUND rather than duplicated, and rewrite the key below — the
-			// products themselves are the same products, sold to real people.
+			// Exact canonical metadata prevents an unrelated retired product from
+			// being adopted into the fresh catalog.
 			const found = existing.find((product) => {
 				const stored = product.metadata?.tier
-				return typeof stored === 'string' && planIdOf(stored) === seed.tier
+				return stored === seed.tier
 			})
 			if (found) {
 				map[seed.tier] = found.id
@@ -367,11 +364,10 @@ export class PolarProvider implements PaymentProvider {
 			id: order.id,
 			createdAt: order.createdAt.toISOString(),
 			productId: order.productId ?? '',
-			// Legacy wire keys resolve; an unknown one (the retired `avenme`)
-			// is kept verbatim — it is a real order, just not a live product.
+			// Provider history is evidence, so return its metadata verbatim.
 			tier:
 				typeof order.product?.metadata?.tier === 'string'
-					? (planIdOf(order.product.metadata.tier) ?? String(order.product.metadata.tier))
+					? String(order.product.metadata.tier)
 					: null,
 			subTotalCents: order.subtotalAmount,
 			taxCents: order.taxAmount,

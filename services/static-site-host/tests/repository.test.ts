@@ -11,7 +11,8 @@ const valid: DirectoryBinding = {
 	artifact_path: 'dist',
 	verification_mode: 'txt',
 	verification_token_hash: 'a'.repeat(64),
-	verified_at: null
+	verified_at: null,
+	owner_is_admin: false
 }
 
 describe('directory binding validation', () => {
@@ -35,14 +36,12 @@ describe('directory binding validation', () => {
 		expect(() =>
 			validateBinding({ ...valid, hostname: 'aven.ceo', owner_is_admin: true })
 		).not.toThrow()
-		expect(() => validateBinding({ ...valid, hostname: 'aven.ceo' })).toThrow(/reserved/)
 		expect(() =>
 			validateBinding({ ...valid, hostname: 'aven.ceo', owner_is_admin: false })
 		).toThrow(/reserved/)
 		expect(() =>
 			validateBinding({ ...valid, hostname: 'docs.aven.ceo', owner_is_admin: true })
 		).not.toThrow()
-		expect(() => validateBinding({ ...valid, hostname: 'docs.aven.ceo' })).toThrow(/reserved/)
 		expect(() =>
 			validateBinding({ ...valid, hostname: 'docs.aven.ceo', owner_is_admin: false })
 		).toThrow(/reserved/)

@@ -1,22 +1,24 @@
 import type { ExecutionEnvironment } from '@avenos/actors'
 import { QueuedClientArtifactGateway } from '@avenos/artifact-store'
+import { createDocumentActors } from '@avenos/document-ingest/actors'
+import {
+	documentRunStartRequest,
+	DocumentExecutionRouter,
+	InProcessDocumentExecutionHost
+} from '@avenos/document-ingest/execution'
+import {
+	type ClientArtifactGateway,
+	type ClientRunPublication,
+	DocumentProcessingRuntime,
+	type PublishedClientRun
+} from '@avenos/document-ingest/runtime'
 import { invoke } from '@tauri-apps/api/core'
 import { bus } from '$lib/actors/bus'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
-import { createDocumentActors } from '$lib/actors/document-actors'
 import { LlmDocumentModelGateway } from '$lib/actors/document-llm-gateway'
 import { singleton } from '$lib/actors/singleton'
 import { intents } from '$lib/intents/intents.svelte'
 import { BrowserDocumentDecoder } from './browser-document-decoder'
-import {
-	type ClientArtifactGateway,
-	type ClientRunPublication,
-	DocumentExecutionRouter,
-	DocumentProcessingRuntime,
-	documentRunStartRequest,
-	InProcessDocumentExecutionHost,
-	type PublishedClientRun
-} from './document-runtime'
 import type { ArtifactProcessingLookup } from './processing'
 
 interface ArtifactContent {

@@ -4,16 +4,18 @@ import {
 	type DecodedDocument,
 	type DocumentDecoder,
 	parseDocumentActorResult
-} from '../src/lib/actors/document-actors'
-import type { DocumentModelGateway, DocumentModelRequest } from '../src/lib/actors/document-model'
+} from '@avenos/document-ingest/actors'
+import type { DocumentModelGateway, DocumentModelRequest } from '@avenos/document-ingest/model'
+import {
+	DocumentExecutionRouter,
+	documentRunStartRequest,
+	InProcessDocumentExecutionHost
+} from '@avenos/document-ingest/execution'
 import {
 	type ClientArtifactGateway,
 	type ClientRunPublication,
-	DocumentExecutionRouter,
-	DocumentProcessingRuntime,
-	documentRunStartRequest,
-	InProcessDocumentExecutionHost
-} from '../src/lib/artifacts/document-runtime'
+	DocumentProcessingRuntime
+} from '@avenos/document-ingest/runtime'
 
 const DOCUMENT: DecodedDocument = {
 	outcome: 'ok',

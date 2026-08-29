@@ -1,4 +1,4 @@
-import { type PlanId, planIdOf } from '@myavenceo/aven-ceo/pricing'
+import { type PlanId, planOrder } from '@myavenceo/aven-ceo/pricing'
 import { z } from 'zod'
 
 // The single email validator. Zod's default z.email() is ASCII-only and
@@ -57,18 +57,14 @@ export function validateName(value: string): 'NAME_INVALID' | 'NAME_RESERVED' | 
 export const secureNameSchema = z.object({
 	name: z.string().trim().toLowerCase().min(3).max(32),
 	email: emailAddress,
-	// Where they came from and what they told us. Optional so an older client
-	// (or a direct API call) still holds a name without them; bounded so the
-	// free-text field cannot be used as storage.
-	// Derived from the pricing SSOT so the accepted tiers stay in lockstep with
-	// the package (a retired tier drops automatically once the package is
-	// bumped). Legacy wire keys are accepted and REWRITTEN to the current
-	// spelling — a link that predates the kebab-case rename, or an older app
-	// binary, must still be able to hold a name.
+	// Optional customer context, bounded so free text cannot become unbounded storage.
+	// Only current canonical plan identifiers from the pricing SSOT are accepted.
 	tier: z
 		.string()
-		.transform((value) => planIdOf(value))
-		.refine((value): value is PlanId => value !== null, 'Unknown tier.')
+		.refine(
+			(value): value is PlanId => (planOrder as readonly string[]).includes(value),
+			'Unknown tier.'
+		)
 		.optional(),
 	salutation: z.string().trim().max(120).optional(),
 	idea: z.string().trim().max(2000).optional()
