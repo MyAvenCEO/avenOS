@@ -6,7 +6,7 @@ import { Actor, type LlmSettings } from './actor'
  *
  * Every completion in the mesh is a MESSAGE to this actor — ask() answers,
  * llm-actor execution, all of it. The transport it wraps is the single
- * client of the server proxy (/api/chat, the TEE lane), so model ids,
+ * client of the authenticated native gateway transport, so model ids,
  * temperature clamps and JSON mode have exactly one home. The bus derives
  * its lane from this actor — no ambient model function exists anymore.
  *

@@ -1,4 +1,4 @@
-import type { DecodedDocument, DocumentSource } from '$lib/actors/document-actors'
+import type { DecodedDocument, DocumentSource } from '@avenos/document-ingest/actors'
 
 export function decodePlainText(source: DocumentSource, bytes: Uint8Array): DecodedDocument | null {
 	const textLike =

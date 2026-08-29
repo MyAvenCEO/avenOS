@@ -5,7 +5,7 @@ import {
 	type DocumentDecoder,
 	type DocumentSource,
 	MAX_DOCUMENT_PAGES
-} from '$lib/actors/document-actors'
+} from '@avenos/document-ingest/actors'
 import { base64ToBytes, loadOwnedPdf } from './pdf'
 import { decodePlainText } from './plain-text-document'
 

@@ -10,7 +10,7 @@
  * Only the funnel-specific `lead` copy lives here: it is about waitlist
  * mechanics, not part of the pricing SSOT.
  */
-import { type PlanId, plan, planIdOf, planOrder } from '@myavenceo/aven-ceo/pricing'
+import { type PlanId, plan, planOrder } from '@myavenceo/aven-ceo/pricing'
 
 export type TierId = PlanId
 
@@ -37,12 +37,12 @@ const LEADS: Partial<Record<TierId, string>> = {
 }
 
 /**
- * The tier a visitor arrived on. Read through the SSOT's normaliser, so a
- * link someone bookmarked or a mail we already sent — `?tier=avenceo` — still
- * lands on the right greeting after the kebab-case wire-key rename.
+ * The tier a visitor arrived on. Fresh deployments accept canonical current
+ * identifiers only; retired aliases are not part of the public contract.
  */
 export function tierFrom(url: URL): TierId | null {
-	return planIdOf(url.searchParams.get('tier'))
+	const value = url.searchParams.get('tier')
+	return value && (planOrder as readonly string[]).includes(value) ? (value as TierId) : null
 }
 
 export function greetingFor(tier: TierId | null): TierGreeting | null {

@@ -6,26 +6,24 @@ const config = loadConfig()
 await mkdir(config.dataRoot, { recursive: true })
 const host = new StaticSiteHost(config)
 
-await host.loadSnapshot().catch(() => {})
+await host.loadPersistedState().catch(() => {})
 
 Bun.serve({ hostname: config.hostname, port: config.port, fetch: host.handle })
 console.info(JSON.stringify({ message: 'static site host listening', port: config.port }))
 
-if (config.mode === 'managed') {
-	await host
-		.reconcile()
-		.catch((error) =>
-			console.error(
-				JSON.stringify({ message: 'initial reconciliation failed', error: String(error) })
-			)
+await host
+	.reconcile()
+	.catch((error) =>
+		console.error(
+			JSON.stringify({ message: 'initial reconciliation failed', error: String(error) })
 		)
-	setInterval(
-		() =>
-			host
-				.reconcile()
-				.catch((error) =>
-					console.error(JSON.stringify({ message: 'reconciliation failed', error: String(error) }))
-				),
-		config.pollMilliseconds
 	)
-}
+setInterval(
+	() =>
+		host
+			.reconcile()
+			.catch((error) =>
+				console.error(JSON.stringify({ message: 'reconciliation failed', error: String(error) }))
+			),
+	config.pollMilliseconds
+)

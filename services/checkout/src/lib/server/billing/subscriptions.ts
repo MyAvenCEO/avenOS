@@ -19,7 +19,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { IdentityProvisioningClient } from '@avenos/aven-identity'
-import { canBuyMore, planIdOf } from '@myavenceo/aven-ceo/pricing'
+import { canBuyMore } from '@myavenceo/aven-ceo/pricing'
 import type pg from 'pg'
 import { writeAudit } from '../audit.js'
 import { AppError } from '../errors.js'
@@ -27,7 +27,7 @@ import type { OrderRow, PaymentProvider, SubscriptionEvent } from './provider.js
 import { productSeeds } from './seeds.js'
 
 /** The tiers that exist as recurring, self-serve subscriptions — avenCEO is
- * the only one. avenNAME (wire key `aven-name`) is a one-off (the names flow
+ * the only one. avenNAME (`aven-name`) is a one-off (the names flow
  * owns it) and avenCOOP is not a product at all — that relationship is handled
  * individually, outside this system. */
 export const SUBSCRIPTION_TIERS = ['aven-ceo'] as const
@@ -37,22 +37,9 @@ export function isSubscriptionTier(value: string): value is SubscriptionTier {
 	return (SUBSCRIPTION_TIERS as readonly string[]).includes(value)
 }
 
-/**
- * A tier as it arrives from a client, in the wire key rows are keyed by.
- * An app binary built before the kebab-case rename still says `avenceo`, and
- * it must go on working against a deployed service — the SSOT's legacy map
- * decides what that means, not this file. Unknown values pass through so the
- * caller rejects them with the same VALIDATION_ERROR as before.
- */
-function asTier(value: string): string {
-	return planIdOf(value) ?? value
-}
-
 /** A subscription in one of these states is over — the tier is bookable
  * again. Everything else counts as standing (incl. past_due). */
 export const ENDED_STATUSES = ['canceled', 'expired', 'incomplete_expired', 'unpaid', 'revoked']
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export interface SubscriptionStanding {
 	tier: string
@@ -87,20 +74,15 @@ export class SubscriptionService {
 		private identity: Pick<IdentityProvisioningClient, 'provisionVerifiedAccount'>
 	) {}
 
-	/** The caller's provider customer id — from our table first, and for
-	 * members who paid before we stored customer ids (the one-off avenNAME,
-	 * wire key `aven-name`), by
-	 * asking the provider for the SESSION's own email. Found ids are stored,
-	 * so the lookup happens once. */
+	/** The caller's provider customer id — from our table first, or discovered
+	 * from the provider using the SESSION's own verified email. */
 	private async customerId(user: { id: string; email: string }): Promise<string | null> {
 		const stored = await this.pool.query(
 			'SELECT provider_customer_id FROM billing_customers WHERE user_id=$1',
 			[user.id]
 		)
 		const known = stored.rows[0]?.provider_customer_id as string | undefined
-		// Only a Polar UUID may reach the provider — a legacy id from the
-		// Creem era (or any junk) self-heals via the email lookup below.
-		if (known && UUID_PATTERN.test(known)) return known
+		if (known) return known
 		const found = await this.payments.findCustomerByEmail(user.email.toLowerCase())
 		if (!found) return null
 		await this.pool.query(
@@ -180,7 +162,7 @@ export class SubscriptionService {
 		embedOrigin: string | null = null,
 		locale: string | null = null
 	): Promise<{ checkoutUrl: string }> {
-		const tier = asTier(rawTier)
+		const tier = rawTier
 		if (!isSubscriptionTier(tier))
 			throw new AppError(400, 'VALIDATION_ERROR', 'Unknown subscription tier.')
 		const held = await this.liveCount(user.id, tier)
@@ -209,14 +191,14 @@ export class SubscriptionService {
 	}
 
 	async cancel(userId: string, tier: string, immediate = false): Promise<void> {
-		const row = await this.requireActive(userId, asTier(tier))
+		const row = await this.requireActive(userId, tier)
 		await this.payments.cancelSubscription(row.provider_subscription_id, immediate)
 	}
 
 	/** Fortsetzen: lifts a (scheduled) pause, otherwise reverts a scheduled
 	 * cancellation. */
 	async resume(userId: string, tier: string): Promise<void> {
-		const row = await this.tierRow(userId, asTier(tier))
+		const row = await this.tierRow(userId, tier)
 		if (!row || ENDED_STATUSES.includes(row.status))
 			throw new AppError(404, 'SUBSCRIPTION_MISSING', 'There is no subscription to resume.')
 		const paused = row.status === 'paused' || row.pause_at_period_end
@@ -228,7 +210,7 @@ export class SubscriptionService {
 
 	/** Pausieren: schedules a pause at period end. */
 	async pause(userId: string, tier: string): Promise<void> {
-		const row = await this.requireActive(userId, asTier(tier))
+		const row = await this.requireActive(userId, tier)
 		await this.payments.pauseSubscription(row.provider_subscription_id)
 	}
 

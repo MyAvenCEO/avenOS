@@ -253,12 +253,7 @@ describe('subscription state', () => {
 		expect(started.checkoutUrl).toContain('/checkout/aven-ceo')
 	})
 
-	it('a legacy wire key still books, and still counts against the limit', async () => {
-		// An app binary built before the kebab-case rename says `avenceo`, and
-		// it keeps talking to a service that has already moved on. The service
-		// normalises through the SSOT's legacy map, so the row it writes is
-		// keyed `aven-ceo` like every other row — and the SAME subscription is
-		// then seen by both spellings, rather than one account holding two.
+	it('rejects every non-canonical subscription tier', async () => {
 		const provider = new StubProvider()
 		const service = new SubscriptionService(
 			database.pool,
@@ -266,45 +261,9 @@ describe('subscription state', () => {
 			provider,
 			testIdentityProvisioner()
 		)
-		const dave = await insertUser()
-
-		const started = await service.subscribe(dave, 'avenceo')
-		expect(started.checkoutUrl).toContain('/checkout/aven-ceo')
-
-		await applyWebhook(service, {
-			subscriptionId: `sub_${randomUUID()}`,
-			userId: dave.id,
-			email: dave.email,
-			tier: 'aven-ceo',
-			status: 'active',
-			amount: 9900
-		})
-		expect((await service.me(dave.id)).map((standing) => standing.tier)).toEqual(['aven-ceo'])
-
-		// Both spellings hit the one live subscription, so neither can stack.
-		for (const spelling of ['avenceo', 'aven-ceo']) {
-			await expect(service.subscribe(dave, spelling)).rejects.toMatchObject({
-				code: 'SUBSCRIPTION_EXISTS'
-			})
-		}
-		// Cancelling by the old spelling reaches the row written under the new.
-		await service.cancel(dave.id, 'avenceo')
-		expect(provider.calls.at(-1)?.method).toBe('cancelSubscription')
-	})
-
-	it('a tier the SSOT never knew is still refused', async () => {
-		// The legacy map is a translation, not an amnesty: `avenme` was
-		// consolidated away and has no successor, so it resolves to nothing and
-		// falls through to the same rejection as any other unknown tier.
-		const service = new SubscriptionService(
-			database.pool,
-			testConfig(),
-			new StubProvider(),
-			testIdentityProvisioner()
-		)
-		const eve = await insertUser()
-		for (const unknown of ['avenme', 'aven-coop', 'nonsense']) {
-			await expect(service.subscribe(eve, unknown)).rejects.toMatchObject({
+		const user = await insertUser()
+		for (const unknown of ['avenceo', 'avenme', 'aven-coop', 'nonsense']) {
+			await expect(service.subscribe(user, unknown)).rejects.toMatchObject({
 				code: 'VALIDATION_ERROR'
 			})
 		}
@@ -406,7 +365,7 @@ describe('subscription state', () => {
 			{
 				id: 'ord_1',
 				createdAt: '2026-08-24T00:00:00.000Z',
-				productId: 'prod_avenceo',
+				productId: 'prod_aven_ceo',
 				tier: 'aven-ceo',
 				subTotalCents: 31681,
 				taxCents: 6019,
@@ -440,18 +399,18 @@ describe('subscription state', () => {
 		expect(await service.orders(bob)).toEqual([])
 		expect(provider.calls.at(-1)).toEqual({ method: 'findCustomerByEmail', args: [bob.email] })
 
-		// A legacy Creem-era id in the column never reaches the provider —
-		// the lookup self-heals via the session's own email instead.
+		// A stored provider id is authoritative for this fresh database.
 		const carl = await insertUser()
 		await database.pool.query(
 			'INSERT INTO billing_customers (user_id, provider_customer_id) VALUES ($1,$2)',
-			[carl.id, 'cus_creem_legacy']
+			[carl.id, '11111111-1111-4111-8111-111111111111']
 		)
 		expect(await service.orders(carl)).toEqual([])
 		expect(
-			provider.calls.filter((c) => c.method === 'listOrders' && c.args[0] === 'cus_creem_legacy')
-		).toHaveLength(0)
-		expect(provider.calls.at(-1)).toEqual({ method: 'findCustomerByEmail', args: [carl.email] })
+			provider.calls.filter(
+				(c) => c.method === 'listOrders' && c.args[0] === '11111111-1111-4111-8111-111111111111'
+			)
+		).toHaveLength(1)
 	})
 
 	it('reports the session’s own latest checkout without accepting an id', async () => {

@@ -3,20 +3,8 @@
 // Swap the provider (or add one) without touching the registry.
 
 import { randomUUID } from 'node:crypto'
-import { planIdOf } from '@myavenceo/aven-ceo/pricing'
 import { Webhook, WebhookVerificationError } from 'standardwebhooks'
 import { AppError } from '../errors.js'
-
-/**
- * A tier out of provider metadata, in the wire key we key rows by today.
- * Legacy spellings (`avenid`, `avenceo`, `avencoop`) resolve; anything the
- * SSOT does not know — the retired `avenme` — is passed through untouched,
- * because an order for a product we stopped selling is still a real order.
- */
-function normalizeTier(value: string | null): string | null {
-	if (!value) return null
-	return planIdOf(value) ?? value
-}
 
 export interface CheckoutInput {
 	name: string
@@ -73,8 +61,7 @@ export interface OrderRow {
 	id: string
 	createdAt: string
 	productId: string
-	/** The SSOT tier, read from the product's `metadata.tier` when present,
-	 * normalised to the current wire key — see `normalizeTier`. */
+	/** The exact tier stored in the product's `metadata.tier`, when present. */
 	tier: string | null
 	subTotalCents: number
 	taxCents: number
@@ -247,18 +234,13 @@ export function parsePolarSubscriptionEvent(rawBody: string): SubscriptionEvent 
 				: typeof customer.external_id === 'string'
 					? customer.external_id
 					: null,
-		// Normalised through the SSOT: a checkout started before the kebab-case
-		// wire-key rename still carries `avenceo` in its metadata, and the row
-		// it writes must be keyed the same way as every other row. An
-		// unrecognised value (the retired `avenme`) is kept verbatim rather
-		// than dropped — it is somebody's real history.
-		tier: normalizeTier(
+		// Provider history is evidence: preserve its exact metadata value.
+		tier:
 			typeof metadata.tier === 'string'
 				? metadata.tier
 				: typeof productMetadata.tier === 'string'
 					? productMetadata.tier
-					: null
-		),
+					: null,
 		status: String(data.status ?? ''),
 		currentPeriodEnd: data.current_period_end ?? null,
 		cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),

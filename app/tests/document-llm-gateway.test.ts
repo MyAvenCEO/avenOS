@@ -4,7 +4,7 @@ import {
 	documentLlmRequest,
 	LlmDocumentModelGateway
 } from '../src/lib/actors/document-llm-gateway'
-import { modelRequest } from '../src/lib/actors/document-model'
+import { modelRequest } from '@avenos/document-ingest/model'
 import type { LlmCompletionRequest } from '../src/lib/models/gateway'
 
 const models = [

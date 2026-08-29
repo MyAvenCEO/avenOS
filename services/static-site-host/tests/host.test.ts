@@ -14,7 +14,7 @@ afterEach(async () => {
 })
 
 test('loads and serves a last-known-good site without the identity API', async () => {
-	dataRoot = await mkdtemp(join(tmpdir(), 'aven-site-snapshot-'))
+	dataRoot = await mkdtemp(join(tmpdir(), 'aven-site-state-'))
 	const binding: DirectoryBinding = {
 		id: '00000000-0000-4000-8000-000000000001',
 		hostname: 'customer.example',
@@ -25,7 +25,8 @@ test('loads and serves a last-known-good site without the identity API', async (
 		artifact_path: 'dist',
 		verification_mode: 'txt',
 		verification_token_hash: 'a'.repeat(64),
-		verified_at: new Date().toISOString()
+		verified_at: new Date().toISOString(),
+		owner_is_admin: false
 	}
 	const root = join(dataRoot, 'bindings', binding.id, 'releases', 'b'.repeat(40))
 	await mkdir(join(root, '_app'), { recursive: true })
@@ -35,17 +36,22 @@ test('loads and serves a last-known-good site without the identity API', async (
 		JSON.stringify({ sites: [{ binding, root }] })
 	)
 	const config: SiteHostConfig = {
-		mode: 'snapshot',
 		hostname: '127.0.0.1',
 		port: 8093,
 		dataRoot,
 		maxFiles: 10_000,
 		maxBytes: 268_435_456,
-		maxConcurrentSyncs: 4
+		maxConcurrentSyncs: 4,
+		directoryUrl: 'http://127.0.0.1:1/internal/v1/static-sites/bindings',
+		statusUrl: 'http://127.0.0.1:1/internal/v1/static-sites/status',
+		bearerToken: 'a'.repeat(32),
+		allowedIpv4: new Set(['192.0.2.10']),
+		allowedIpv6: new Set(),
+		pollMilliseconds: 60_000,
+		dnsGraceMilliseconds: 86_400_000
 	}
 	const host = new StaticSiteHost(config)
-	await host.loadSnapshot()
-	await expect(host.reconcile()).rejects.toThrow(/snapshot mode/)
+	await host.loadPersistedState()
 
 	expect((await host.handle(new Request('http://local/health/ready'))).status).toBe(200)
 	expect(

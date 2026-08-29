@@ -37,7 +37,7 @@ export const nameHolds = pgTable(
 		id: text('id').primaryKey(),
 		name: text('name').notNull(),
 		email: text('email').notNull(),
-		/** Which tier's CTA sent them here — avenid | avenceo | avencoop. */
+		/** Which canonical plan CTA sent the customer here. */
 		tier: text('tier').notNull().default(''),
 		/** What to call them. */
 		salutation: text('salutation').notNull().default(''),
