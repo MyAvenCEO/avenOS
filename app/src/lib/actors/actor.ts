@@ -20,7 +20,7 @@
  * judgment; the derivation regenerates with the registry).
  */
 
-import type { StyleDef, ViewDef } from '@avenos/aven-ui'
+import type { StyleDef, ViewDef } from '@myavenceo/aven-vibes'
 import { contractsOf, parseProgram } from './machine'
 import {
 	type ActorEvent,

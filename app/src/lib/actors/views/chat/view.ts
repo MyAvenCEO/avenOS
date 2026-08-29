@@ -1,4 +1,5 @@
-import { type StyleDef, type ViewDef, withBrand } from '@avenos/aven-ui'
+import { withBrand } from '@avenos/aven-ui'
+import type { StyleDef, ViewDef } from '@myavenceo/aven-vibes'
 
 /**
  * The conversation as a WINDOW — the chat rendered by the same universal

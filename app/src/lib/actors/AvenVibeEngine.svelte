@@ -1,5 +1,5 @@
 <script lang="ts">
-import { type StyleDef, type UiEvent, VibeEngine, type ViewDef } from '@avenos/aven-ui'
+import { type StyleDef, type UiEvent, VibeEngine, type ViewDef } from '@myavenceo/aven-vibes'
 import { onDestroy } from 'svelte'
 import type { Actor } from './actor'
 import { bus } from './bus'
@@ -12,7 +12,7 @@ import type { ActorEvent } from './sandbox'
  * State never originates here. The actor owns its state (the sandbox
  * reduces it); this component renders that state and forwards every UI
  * event back to `applyEvent`, the same door the voice tools use. Two
- * windows over one actor (list + board) are just two AvenUiViews with
+ * windows over one actor (list + board) are just two AvenVibeEngines with
  * different view defs over the SAME state.
  */
 
