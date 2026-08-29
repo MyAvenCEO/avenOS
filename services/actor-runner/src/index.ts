@@ -30,8 +30,15 @@ const workerPools = new TenantPoolProvider({
 const tenantGrantPublicKey = await importTenantGrantPublicKey(config.TENANT_GRANT_PUBLIC_KEY)
 const handler = createActorRunnerHandler(
 	{
-		forGrant: async (grant) =>
-			new SqlPlanRunner(await apiPools.forGrant(grant), await workerPools.forGrant(grant))
+		forGrant: async (grant) => {
+			const [api, worker] = await Promise.all([
+				apiPools.forGrant(grant),
+				workerPools.forGrant(grant)
+			])
+			const runner = new SqlPlanRunner(api, worker)
+			await runner.recoverAcceptedRuns()
+			return runner
+		}
 	},
 	new IdentityVerifier({
 		issuer: config.IDENTITY_ISSUER,

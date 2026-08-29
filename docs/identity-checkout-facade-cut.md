@@ -195,16 +195,17 @@ Actor authorities remain semantic ownership boundaries rather than deployment
 hostnames. `id.aven` owns principal, assurance, and portable trust vocabulary;
 `ceo.aven` owns product entitlements, artifacts, actor capabilities, and domain
 policy. The generic `os.aven` runner calls one external product origin while
-the facade routes only the exact `/api/actor-runs` prefix to its independently
-deployable service. Document ingestion will be a skill/graph hosted by that runner,
-not another identity, checkout, or facade service. That is the target ownership;
-the current app still executes both document placements in-process, and the
-runner's memory backend has no document actor executor.
+the facade projects an environment-scoped public route onto the exact private
+`/api/actor-runs` paths of its independently deployable service. Document ingestion
+will be a skill/graph hosted by that runner, not another identity, checkout, or facade
+service. That is the target ownership; the current app still executes both document
+placements in-process, and the persistent runner has no document actor executor.
 
 The runner is now integrated into the facade and E2E topology. Its JWT audience,
 facade header stripping, dedicated downstream bearer, and independent downstream
-JWT verification are covered by the split HTTP test. This proves the trust boundary,
-not product authorization, durable run storage, or document execution.
+JWT verification are covered by the split HTTP test. SQL-backed admission, status,
+cancellation, and restart recovery are covered separately. This still does not prove
+product-level actor authorization or document execution.
 
 ## Public website
 
@@ -273,9 +274,10 @@ validated before distributing a signed build.
    forged, expired, and wrong-audience tokens fail closed.
 4. Deploy `my.aven.ceo`; exercise provider webhook replay, email delivery, and
    checkout-to-identity provisioning.
-5. Deploy the actor runner as the exact `/api/actor-runs` downstream with
-   `ACTOR_RUNNER_STATE_BACKEND=memory` only for reference environments. Do not treat
-   it as durable document execution or resurrect the former feed-driven processor.
+5. Deploy the actor runner as the exact private `/api/actor-runs` downstream with its
+   customer-database credentials and tenant-grant public key. Its SQL run records and
+   accepted-run recovery are durable, but do not yet constitute document execution;
+   do not resurrect the former feed-driven processor.
 6. Verify the `aven-brands` source/artifact pair, then explicitly run the
    infrastructure workflow with apex management enabled.
 7. Keep the old hosting-only server intact through DNS convergence and the

@@ -286,11 +286,12 @@ The branch intentionally contains several layers at different maturity levels:
   desktop process.
 - **`services/actor-runner` proves the remote trust boundary.** Through
   `api.aven.ceo`, it provides authenticated admission, independent identity-token
-  verification, subject isolation, idempotency, status, SSE shape, and
-  continuation/cancel routes. Its process-memory backend normally completes only
-  already-satisfied goals; it has no actor executor.
-- **The generic durable runner is specified, not implemented.** Its repository,
-  factories, artifact ports, continuations, and executor remain the next major slice.
+  and tenant-grant verification, subject isolation, SQL-backed idempotency, status,
+  cancellation, restart recovery, and SSE shape. Its baseline executor normally
+  completes only already-satisfied goals; it has no generic actor executor.
+- **The durable generic executor is specified, not implemented.** Its attempts,
+  leases, factories, artifact ports, continuations, and effects remain the next major
+  slice.
 
 The HTTP runner is therefore a real trust and transport boundary, not yet the remote
 document-ingest runtime. The app's Device/Server selector still routes both choices to

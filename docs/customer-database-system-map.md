@@ -916,18 +916,19 @@ and merge operations need a real command idempotency key and source versions.
 
 ## Actor Runner cut
 
-The actor branch's authenticated transport and portable command remain. The planned
-changes are:
+The actor branch's authenticated transport and portable command remain. The baseline
+integration now provides:
 
 - public paths gain explicit environment context;
 - admission receives the verified tenant grant and stamps `access.tenantId`;
-- the memory backend remains test-only;
-- the durable `RunRepository` uses the selected customer database;
+- the memory backend remains limited to focused boundary tests;
+- the SQL `RunRepository` uses the selected customer database and recovers accepted
+  rows after a process restart on the customer's next admitted request;
 - `aven_actor_runs` is provisioned through the same manifest path as intents;
 - Artifact Store reads/publications use grants for the same environment; and
 - runner idempotency keys include the environment identity.
 
-Actor execution retains its own leases and fencing because it coordinates durable
+Future effectful actor execution retains its own leases and fencing because it coordinates durable
 asynchronous work. That does not turn customer database provisioning into an actor
 workflow or require a distributed container scheduler.
 

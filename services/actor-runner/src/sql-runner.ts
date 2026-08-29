@@ -109,6 +109,18 @@ export class SqlPlanRunner implements PlanRunner {
 		return row ? portableRunClone(row.record) : null
 	}
 
+	/** Resume work that was durably admitted before this runner process started. */
+	async recoverAcceptedRuns(): Promise<number> {
+		const accepted = await this.worker.query<{ id: string }>(
+			`SELECT id FROM runs WHERE state='accepted' ORDER BY created_at,id`
+		)
+		let recovered = 0
+		for (const { id } of accepted.rows) {
+			if (await this.execute(id)) recovered += 1
+		}
+		return recovered
+	}
+
 	async resume(_runId: string, _submission: PlanRunContinuationSubmission): Promise<PlanRunHandle> {
 		throw new Error('no durable continuation executor is registered')
 	}
@@ -130,14 +142,14 @@ export class SqlPlanRunner implements PlanRunner {
 		return portableRunClone(handle(record))
 	}
 
-	private async execute(runId: string): Promise<void> {
+	private async execute(runId: string): Promise<boolean> {
 		const row = (
 			await this.worker.query<{ record: PlanRunRecord }>(
 				`SELECT record FROM runs WHERE id=$1 AND state='accepted'`,
 				[runId]
 			)
 		).rows[0]
-		if (!row) return
+		if (!row) return false
 		const record = row.record
 		const facts = new Set(record.ingredients.map((ingredient) => ingredient.predicate))
 		const remainingGoals = record.goals.filter((goal) => !facts.has(goal))
@@ -163,10 +175,11 @@ export class SqlPlanRunner implements PlanRunner {
 		}
 		record.revision += 1
 		record.updatedAt = new Date().toISOString()
-		await this.worker.query(
+		const updated = await this.worker.query(
 			`UPDATE runs SET state=$2,revision=$3,record=$4,updated_at=clock_timestamp()
 			 WHERE id=$1 AND state='accepted'`,
 			[runId, record.state, record.revision, record]
 		)
+		return Boolean(updated.rowCount)
 	}
 }

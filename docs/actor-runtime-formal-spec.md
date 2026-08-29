@@ -32,10 +32,12 @@ off-device.
 
 The repository also contains a real authenticated remote boundary in
 `services/actor-runner`. It accepts the protocol through `api.aven.ceo` and verifies
-the forwarded signed identity token independently. Its current process-memory backend
-does not execute document actors or persist runs. The cutover replaces the app's
-emulated host with a client for that boundary after the durable generic executor is
-available; it does not change the start command or document capability contracts.
+the forwarded signed identity token and tenant grant independently. It persists run
+records in the selected customer's PostgreSQL database and reclaims accepted rows on
+the first admitted request for that customer after a process restart. It does not yet
+execute document actors. The cutover replaces the app's emulated host with a client for
+that boundary after the durable generic executor is available; it does not change the
+start command or document capability contracts.
 
 ```mermaid
 sequenceDiagram
@@ -445,19 +447,23 @@ The cutover now has four independently testable increments.
 The source's execution-environment field is a temporary start hint, not a run
 repository. New data has no legacy fallback or compatibility reader.
 
-### Phase B — authenticated remote boundary (implemented as a reference)
+### Phase B — authenticated persistent boundary (implemented as a baseline)
 
-- expose the exact `/api/actor-runs` route family behind `api.aven.ceo`;
+- expose the environment-scoped public route family through `api.aven.ceo` and project
+  it to the runner's exact private `/api/actor-runs` paths;
 - replace the caller bearer with a fixed service credential at the facade;
-- forward and independently verify the original signed `aven.id` token;
+- forward and independently verify the original signed `aven.id` token and the
+  facade's short-lived tenant grant;
 - reject caller-supplied principals, grants, tenants, security contexts, and routes;
-- enforce subject isolation, start idempotency, strict JSON, and portable run records;
-  and
-- make the memory backend opt-in so it cannot be mistaken for production storage.
+- select a provisioned customer database without trusting caller routing input;
+- enforce subject isolation, SQL-backed start idempotency, strict JSON, portable run
+  records, revision-checked cancellation, and recovery of committed `accepted` rows
+  after a process restart.
 
-This phase proves transport and trust, not durable execution. The default memory
-executor can complete an already-satisfied goal and otherwise reports that no actor
-executor is registered.
+This phase makes the run ledger persistent, but does not yet implement durable actor
+effects. The baseline executor can complete an already-satisfied goal and otherwise
+reports that no actor executor is registered. Recovery is lazy on the first admitted
+request for a customer and is safe only while that executor remains side-effect-free.
 
 ### Phase C — durable generic executor
 
