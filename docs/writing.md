@@ -2,58 +2,120 @@
 
 Status: authoritative
 
-Use these rules for repository documentation, runbooks, architectural papers, error
-messages, and operator-facing command output.
+Repository documentation should make sense to somebody who cares about the work
+avenOS helps them do before it asks them to understand Tauri, tenant grants, database
+roles, or Pulumi. It must remain precise enough that a developer or operator can act
+without finding a different procedure in the next guide.
 
-## Start with the reader's decision
+These rules apply to READMEs, handbook chapters, architectural papers, examples,
+errors, and operator-facing command output. A normative specification may favor exact
+definitions over conversational prose, but it uses the same names and factual
+boundaries.
 
-- Name the audience and the outcome in the opening paragraph.
-- Put the shortest safe path before explanation and alternatives.
-- Introduce a prerequisite when the reader first needs it. Put shared prerequisites
-  up front only when every path depends on them.
-- Prefer concrete verbs: _run_, _verify_, _restore_, _reject_. Avoid vague verbs such
-  as _handle_ or _manage_ when a more precise one exists.
+## Begin with why the reader would care
 
-## Make authority visible
+- Open with the purpose in ordinary language and the experience it enables.
+- Describe what somebody can do before listing packages, processes, protocols, or
+  infrastructure.
+- Do not announce personas or begin with “this repository is a monorepo.” Write one
+  natural path that a curious reader can follow into deeper technical material.
+- Surface a genuine blocker or important limit before a fast path would run into it.
 
-- Give one document ownership of each operational process. Other documents link to
-  it instead of copying its commands or secret lists.
-- Mark normative documents `Status: authoritative`. Mark proposals and historical
-  records honestly, and remove them when they no longer aid a current decision.
-- Describe implemented behavior in the present tense. Label planned behavior and
-  unsupported paths explicitly; never turn intent into an operational claim.
-- Include stable, descriptive headings. Link to the narrowest useful section rather
-  than to the top of a long document.
+## Reveal detail in layers
+
+1. Explain the purpose and ordinary experience.
+2. Give a short map of the available capabilities.
+3. Introduce the choices, trust boundaries, and important limits.
+4. Link to the document that owns the exact procedure or rule.
+
+Start from the state a reader is likely to have. Put commands where somebody is ready
+to run something, not in a section that is still explaining what a capability does.
+Remove a section when another document already answers the question and the overview
+does not need the answer to tell its story.
+
+Use a table for repeated comparisons. Use a diagram only when it makes a sequence or
+relationship easier to understand than a short paragraph.
+
+## Give each document one job
+
+- `README.md` explains the product, current experience, boundaries, limits, repository
+  map, and shortest local path.
+- `docs/operations/` alone owns setup, build and test, local operation, deployment,
+  access, maintenance, recovery, and incident procedures.
+- Normative architecture papers own their declared platform rules. Current-state maps
+  describe implemented behavior and named gaps.
+- Component READMEs explain component internals and link to shared procedures.
+- Historical implementation plans belong in Git history.
+
+Link to deeper material when the reader first needs it. Name what the linked section
+contains; avoid bare “learn more” links.
+
+## Sound direct, relaxed, and specific
+
+- Use plain language, short sentences, and concrete verbs.
+- Introduce a technical term when it first becomes useful and explain it once.
+- State behavior instead of praising it as simple, clear, secure, reliable, or
+  production-ready.
+- Remove scene-setting filler, marketing claims, imagined interface copy, and project
+  history that does not change the reader's action.
+- Attribute actions to the component or person that performs them. Pulumi creates a
+  host; an operator approves a protected run; a workflow writes a handoff file.
+
+## State claims and limits together
+
+- Put a limitation beside the capability it qualifies instead of collecting all
+  caveats at the end.
+- Describe implemented behavior in the present tense. Label planned and unsupported
+  behavior explicitly.
+- Distinguish a tested composition from a general guarantee. Name what an E2E test
+  proves and what remains outside it.
+- Separate a platform invariant from a default, a deployment choice, and a current
+  implementation detail.
+- Do not invent fields, actors, UI messages, recovery behavior, or guarantees that the
+  code does not provide.
 
 ## Write procedures that fail safely
 
-- State the success condition and the safe stopping point.
+- State prerequisites when they become necessary, the success condition, and the safe
+  stopping point.
 - Put commands in copyable blocks and say where to run them.
 - Name destructive effects before the command. Never hide data deletion in a generic
-  “cleanup” step.
-- Separate required steps from optional diagnostics and background explanation.
+  cleanup step.
+- Separate required actions from optional diagnostics and background explanation.
 - Name secrets by identifier and purpose, never by value. State where each secret
-  belongs and who or what consumes it.
+  belongs and what consumes it.
+- Ensure examples agree with the released interface and include the guards needed to
+  avoid the obvious unsafe path.
 
-## Keep prose easy to scan
+## Keep project language consistent
 
-- Use short sentences and one idea per paragraph.
-- Prefer a small table when readers need to compare several exact choices.
-- Use lists for real sequences or sets, not for every paragraph.
-- Expand an abbreviation on first use. Avoid internal project history unless it
-  changes the reader's action.
-- Use `next` for the supported deployment target, `production` for the production
-  target, and “local” only for resources on the developer's machine.
+- Use `avenOS` for the product and `avenOS` or the repository name already present in
+  code when an identifier requires different casing.
+- Use **Intent** for the durable thread representing one piece of work and **Actor**
+  for an executable participant in that work.
+- Use **customer environment** for the stable product and lifecycle boundary and
+  **customer database** for its current physical database.
+- Use `next` for the supported shared deployment target and **production** for the
+  unsupported independent production target.
+- Use **local** only for resources on the developer's machine.
 
 ## Keep documentation correct
 
-- Update the owning handbook section in the same change as a command, workflow,
-  secret, public endpoint, or recovery behavior.
-- Follow the repository-wide `AGENTS.md`; it maps change types to their owning
-  documents and required checks.
-- Run the documented command or identify it as an example that was not executed.
-- Check relative links and search for references before deleting or renaming a page.
-- Do not preserve stale instructions as redirects. Git history is the archive.
-- Run `bun run check:docs`. CI verifies local links and anchors, documented root
-  commands, the authoritative document set, and coverage of deployment workflow
-  secrets and variables. Semantic accuracy remains a required pull-request review.
+1. Check names, defaults, routes, roles, commands, output, and lifecycle behavior
+   against the code.
+2. Search all Markdown files for the old term or claim.
+3. Update the owning document in the same change as a command, workflow, secret,
+   public endpoint, deployment, or recovery behavior.
+4. Run the documented command or identify it as an unexecuted example.
+5. Follow new relative links and search references before deleting or renaming a page.
+6. Remove stale instructions instead of preserving redirects. Git is the archive.
+7. Follow the repository-wide `AGENTS.md` and run `bun run check:docs`.
+
+CI checks links and headings, documented root commands, the authoritative document
+set, and coverage of deployment workflow secrets and variables. It cannot prove the
+meaning of prose. Semantic accuracy remains a required pull-request review.
+
+Before merging, ask whether the opening explains why the subject matters, whether
+detail arrives when it becomes useful, whether claims carry their limits, and whether
+another document tells a conflicting story. Remove any sentence that does not help a
+reader understand the system or act on it.
