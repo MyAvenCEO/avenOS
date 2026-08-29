@@ -96,7 +96,9 @@ fresh databases on dynamic loopback ports, and proves the public journey:
 - customer database provisioning and per-schema isolation;
 - artifact upload and exact readback;
 - client document import and derived artifacts;
-- authenticated LLM chat with durable Intent history;
+- authenticated LLM chat with durable Intent history, including session-local
+  anonymous speaker attribution and a duplex interruption followed by another
+  speaker;
 - focused Actor runtime conformance against fresh PostgreSQL and the production Rust
   Artifact Store image, including authenticated admission, durable checkpoints,
   lineage, idempotent publication replay, local/server outcome equivalence, and a
@@ -107,6 +109,11 @@ fresh databases on dynamic loopback ports, and proves the public journey:
 
 The test uses disposable volumes and always tears down the `hosting` profile. Setting
 `E2E_SKIP_IMAGE_BUILD=true` is useful while iterating but is not release proof.
+The voice path uses deterministic silent fixtures through the production semantic
+state machine. It proves ordering, interruption, attribution transport, and Intent
+persistence without microphone hardware; physical acoustic qualification remains the
+separate procedure in
+[Voice dependency qualification](../voice-dependency-qualification.md).
 The [Actor runtime proof strategy](../actor-runtime-proof-strategy.md) states the exact
 claims this rail establishes and the remaining evidence required for document-domain
 acceptance and independently deployed client/server parity.
