@@ -43,6 +43,8 @@ export const nameHolds = pgTable(
 		salutation: text('salutation').notNull().default(''),
 		/** Free text: what they want to build. Read when deciding a wildcard invite. */
 		idea: text('idea').notNull().default(''),
+		/** Preferred BCP 47 language declared by the browser at signup. */
+		browserLanguage: text('browser_language').notNull().default(''),
 		claimTokenHash: text('claim_token_hash').notNull().default(''),
 		successTokenHash: text('success_token_hash').notNull().default(''),
 		emailConfirmedAt: timestamp('email_confirmed_at', { withTimezone: true }),

@@ -80,7 +80,8 @@ async function create(): Promise<Runtime> {
 		config,
 		notifier,
 		payments,
-		(email, source) => identityProvisioner.provisionVerifiedAccount(email, source),
+		(email, source, browserLanguage) =>
+			identityProvisioner.provisionVerifiedAccount(email, source, browserLanguage),
 		(client, input) => enqueuePlatformEvent(client, { ...input, eventType: 'purchase_granted' }),
 		(client, input) => enqueuePlatformEvent(client, { ...input, eventType: 'purchase_revoked' })
 	)
@@ -95,7 +96,8 @@ async function create(): Promise<Runtime> {
 		config,
 		notifier,
 		payments,
-		(email, source) => identityProvisioner.provisionVerifiedAccount(email, source),
+		(email, source, browserLanguage) =>
+			identityProvisioner.provisionVerifiedAccount(email, source, browserLanguage),
 		(client, input) => enqueuePlatformEvent(client, { ...input, eventType: 'purchase_granted' }),
 		(client, input) => enqueuePlatformEvent(client, { ...input, eventType: 'purchase_revoked' })
 	)
