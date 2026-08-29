@@ -1,0 +1,111 @@
+name: aven-identity
+
+services:
+  database:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${IDENTITY_POSTGRES_PASSWORD:?required}
+      IDENTITY_AUTH_PASSWORD: ${IDENTITY_AUTH_PASSWORD:?required}
+      IDENTITY_ACCOUNTS_PASSWORD: ${IDENTITY_ACCOUNTS_PASSWORD:?required}
+      IDENTITY_AUTHORIZATION_PASSWORD: ${IDENTITY_AUTHORIZATION_PASSWORD:?required}
+      IDENTITY_MIGRATOR_PASSWORD: ${IDENTITY_MIGRATOR_PASSWORD:?required}
+    volumes:
+      - /var/lib/aven/postgres:/var/lib/postgresql/data
+      - ./db-init.sh:/docker-entrypoint-initdb.d/10-identity.sql.sh:ro
+    ports:
+      - 127.0.0.1:5432:5432
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d aven_identity]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    networks: [identity-private]
+    security_opt: [no-new-privileges:true]
+
+  database-roles:
+    image: postgres:17-alpine
+    restart: "no"
+    depends_on:
+      database:
+        condition: service_healthy
+    command: [sh, /db-init.sh]
+    environment:
+      PGHOST: database
+      PGPASSWORD: ${IDENTITY_POSTGRES_PASSWORD:?required}
+      POSTGRES_USER: postgres
+      IDENTITY_AUTH_PASSWORD: ${IDENTITY_AUTH_PASSWORD:?required}
+      IDENTITY_ACCOUNTS_PASSWORD: ${IDENTITY_ACCOUNTS_PASSWORD:?required}
+      IDENTITY_AUTHORIZATION_PASSWORD: ${IDENTITY_AUTHORIZATION_PASSWORD:?required}
+      IDENTITY_MIGRATOR_PASSWORD: ${IDENTITY_MIGRATOR_PASSWORD:?required}
+    volumes:
+      - ./db-init.sh:/db-init.sh:ro
+    networks: [identity-private]
+    security_opt: [no-new-privileges:true]
+
+  migrate:
+    image: ${IDENTITY_IMAGE:?required}
+    restart: "no"
+    depends_on:
+      database-roles:
+        condition: service_completed_successfully
+    command: [bun, build/scripts/migrate.js]
+    environment: &identity-environment
+      NODE_ENV: production
+      ORIGIN: https://${IDENTITY_DOMAIN:-aven.id}
+      PUBLIC_BASE_URL: https://${IDENTITY_DOMAIN:-aven.id}
+      WEBAUTHN_RP_ID: ${IDENTITY_DOMAIN:-aven.id}
+      TRUSTED_WEB_ORIGINS: https://aven.ceo,https://my.aven.ceo
+      ANDROID_APP_CERT_SHA256_FINGERPRINTS: ${ANDROID_APP_CERT_SHA256_FINGERPRINTS:-}
+      DATABASE_URL: postgres://aven_identity_auth:${IDENTITY_AUTH_PASSWORD}@database/aven_identity
+      ACCOUNTS_DATABASE_URL: postgres://aven_identity_accounts:${IDENTITY_ACCOUNTS_PASSWORD}@database/aven_identity
+      AUTHORIZATION_DATABASE_URL: postgres://aven_identity_authorization:${IDENTITY_AUTHORIZATION_PASSWORD}@database/aven_identity
+      MIGRATOR_DATABASE_URL: postgres://aven_identity_migrator:${IDENTITY_MIGRATOR_PASSWORD}@database/aven_identity
+      BETTER_AUTH_SECRET: ${IDENTITY_BETTER_AUTH_SECRET:?required}
+      IDENTITY_PROVISIONING_SECRET: ${IDENTITY_PROVISIONING_SECRET:?required}
+      REQUIRE_PASSKEY_PRF: "false"
+    networks: [identity-private]
+    security_opt: [no-new-privileges:true]
+
+  identity:
+    image: ${IDENTITY_IMAGE:?required}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment: *identity-environment
+    healthcheck:
+      test: [CMD, bun, -e, "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [identity-private, identity-ingress]
+    security_opt: [no-new-privileges:true]
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      identity:
+        condition: service_healthy
+    environment:
+      IDENTITY_DOMAIN: ${IDENTITY_DOMAIN:-aven.id}
+      PLATFORM_PUBLIC_IPV4: ${PLATFORM_PUBLIC_IPV4:?required}
+      PLATFORM_PUBLIC_IPV6: ${PLATFORM_PUBLIC_IPV6:?required}
+      ACME_EMAIL: ${ACME_EMAIL:?required}
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/lib/aven/caddy/data:/data
+      - /var/lib/aven/caddy/config:/config
+    networks: [identity-ingress]
+    security_opt: [no-new-privileges:true]
+
+networks:
+  identity-private:
+    internal: true
+  identity-ingress:

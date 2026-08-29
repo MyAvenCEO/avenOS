@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+required=(
+  PULUMI_STACK PULUMI_BACKEND GHCR_USER GHCR_TOKEN
+  IDENTITY_IMAGE API_IMAGE CHECKOUT_IMAGE STATIC_SITE_HOST_IMAGE
+  PLATFORM_PROVISIONER_IMAGE INTENT_SERVICE_IMAGE ACTOR_RUNNER_IMAGE ARTIFACT_STORE_IMAGE
+  POLAR_API_KEY POLAR_WEBHOOK_SECRET AVEN_TIER_NAME SMTP_URL SMTP_FROM DOWNLOAD_URL
+  LLM_GATEWAY_MODELS_JSON LLM_GATEWAY_CREDENTIALS_JSON
+)
+for name in "${required[@]}"; do
+  if [[ -z "${!name:-}" ]]; then
+    echo "$name is required" >&2
+    exit 1
+  fi
+done
+
+root=$(cd -- "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
+
+pulumi login "$PULUMI_BACKEND"
+pulumi stack select "$PULUMI_STACK" --cwd "$root/infrastructure/platform"
+output() { pulumi stack output "$1" --show-secrets --cwd "$root/infrastructure/platform"; }
+
+identity_ip=$(output identityIpv4Address)
+platform_ip=$(output platformIpv4Address)
+identity_host_key=$(output identityHostPublicKey)
+platform_host_key=$(output platformHostPublicKey)
+deploy_user=$(output deployUser)
+platform_ipv6=$(output platformIpv6Address)
+
+for secret_name in \
+  identityDeployPrivateKey platformDeployPrivateKey \
+  identityPostgresPassword identityAuthPassword identityAccountsPassword \
+  identityAuthorizationPassword identityMigratorPassword \
+  identityBetterAuthSecret identityProvisioningSecret platformPostgresPassword \
+  checkoutRuntimePassword checkoutWebhookPassword checkoutMigratorPassword checkoutEmailPassword checkoutPlatformEventsPassword \
+  apiHostingPassword apiAuthorizationPassword apiEntitlementsPassword apiReconcilerPassword \
+  apiMigratorPassword customerProvisionerPassword intentDatabaseCredentialRoot \
+  artifactStoreProvisionerDbPassword artifactApiDatabaseCredentialRoot \
+  actorApiDatabaseCredentialRoot actorWorkerDatabaseCredentialRoot customerEntitlementToken \
+  intentServiceToken actorRunnerServiceToken artifactStoreServiceToken artifactStoreProvisionerToken tenantGrantPrivateKey \
+  siteHostDirectoryToken checkoutFacadeToken checkoutEmailEncryptionKey; do
+  value=$(output "$secret_name")
+  printf '::add-mask::%s\n' "$value"
+  printf -v "$secret_name" '%s' "$value"
+done
+
+install -m 700 -d "$stage/ssh" "$stage/identity" "$stage/platform"
+install -m 600 /dev/null "$stage/ssh/identity_key" "$stage/ssh/platform_key" "$stage/ssh/known_hosts" "$stage/identity/.env" "$stage/platform/.env"
+printf '%s\n' "$identityDeployPrivateKey" > "$stage/ssh/identity_key"
+printf '%s\n' "$platformDeployPrivateKey" > "$stage/ssh/platform_key"
+printf '%s %s\n%s %s\n' "$identity_ip" "$identity_host_key" "$platform_ip" "$platform_host_key" > "$stage/ssh/known_hosts"
+
+dotenv() {
+  local name=$1 value=$2
+  value=${value//\\/\\\\}
+  value=${value//\"/\\\"}
+  value=${value//$'\n'/\\n}
+  printf '%s="%s"\n' "$name" "$value"
+}
+
+{
+  dotenv IDENTITY_IMAGE "$IDENTITY_IMAGE"
+  dotenv IDENTITY_DOMAIN aven.id
+  dotenv IDENTITY_POSTGRES_PASSWORD "$identityPostgresPassword"
+  dotenv IDENTITY_AUTH_PASSWORD "$identityAuthPassword"
+  dotenv IDENTITY_ACCOUNTS_PASSWORD "$identityAccountsPassword"
+  dotenv IDENTITY_AUTHORIZATION_PASSWORD "$identityAuthorizationPassword"
+  dotenv IDENTITY_MIGRATOR_PASSWORD "$identityMigratorPassword"
+  dotenv IDENTITY_BETTER_AUTH_SECRET "$identityBetterAuthSecret"
+  dotenv IDENTITY_PROVISIONING_SECRET "$identityProvisioningSecret"
+  dotenv ANDROID_APP_CERT_SHA256_FINGERPRINTS "${ANDROID_APP_CERT_SHA256_FINGERPRINTS:-}"
+  dotenv PLATFORM_PUBLIC_IPV4 "$platform_ip"
+  dotenv PLATFORM_PUBLIC_IPV6 "$platform_ipv6"
+  dotenv ACME_EMAIL "${ACME_EMAIL:-ops@aven.ceo}"
+} > "$stage/identity/.env"
+
+downstreams=$(printf '[{"prefix":"/api/billing","baseUrl":"http://checkout:3000","targetPrefix":"/api/billing","bearerToken":"%s","roles":["user","admin"]},{"prefix":"/api/names","baseUrl":"http://checkout:3000","targetPrefix":"/api/names","bearerToken":"%s","roles":["user","admin"]}]' "$checkoutFacadeToken" "$checkoutFacadeToken")
+customer_downstreams=$(printf '[{"segment":"artifacts","baseUrl":"http://artifact-store:8087","targetPrefix":"/v1","bearerToken":"%s","componentRef":"ceo.aven:component:data:artifacts@1","readAction":"artifacts:read","writeAction":"artifacts:write","roles":["user","admin"]},{"segment":"intents","baseUrl":"http://intent-service:3010","targetPrefix":"/api/intents","bearerToken":"%s","componentRef":"ceo.aven:component:data:intents@1","readAction":"intents:read","writeAction":"intents:write","deleteAction":"intents:delete","mergeAction":"intents:merge","roles":["user","admin"]},{"segment":"actor-runs","baseUrl":"http://actor-runner:3010","targetPrefix":"/api/actor-runs","bearerToken":"%s","componentRef":"os.aven:component:actors:run-repository@1","readAction":"actor-runs:read","writeAction":"actor-runs:write","roles":["user","admin"]}]' "$artifactStoreServiceToken" "$intentServiceToken" "$actorRunnerServiceToken")
+system_sites='[{"hostname":"aven.ceo","repository":"myavenceo/aven-brands","sourceBranch":"production","deploymentBranch":"deploy/production"}]'
+{
+  dotenv API_IMAGE "$API_IMAGE"
+  dotenv CHECKOUT_IMAGE "$CHECKOUT_IMAGE"
+  dotenv STATIC_SITE_HOST_IMAGE "$STATIC_SITE_HOST_IMAGE"
+  dotenv PLATFORM_PROVISIONER_IMAGE "$PLATFORM_PROVISIONER_IMAGE"
+  dotenv INTENT_SERVICE_IMAGE "$INTENT_SERVICE_IMAGE"
+  dotenv ACTOR_RUNNER_IMAGE "$ACTOR_RUNNER_IMAGE"
+  dotenv ARTIFACT_STORE_IMAGE "$ARTIFACT_STORE_IMAGE"
+  dotenv PLATFORM_POSTGRES_PASSWORD "$platformPostgresPassword"
+  dotenv CHECKOUT_RUNTIME_PASSWORD "$checkoutRuntimePassword"
+  dotenv CHECKOUT_WEBHOOK_PASSWORD "$checkoutWebhookPassword"
+  dotenv CHECKOUT_MIGRATOR_PASSWORD "$checkoutMigratorPassword"
+  dotenv CHECKOUT_EMAIL_PASSWORD "$checkoutEmailPassword"
+  dotenv CHECKOUT_PLATFORM_EVENTS_PASSWORD "$checkoutPlatformEventsPassword"
+  dotenv API_HOSTING_PASSWORD "$apiHostingPassword"
+  dotenv API_AUTHORIZATION_PASSWORD "$apiAuthorizationPassword"
+  dotenv API_ENTITLEMENTS_PASSWORD "$apiEntitlementsPassword"
+  dotenv API_RECONCILER_PASSWORD "$apiReconcilerPassword"
+  dotenv API_MIGRATOR_PASSWORD "$apiMigratorPassword"
+  dotenv CUSTOMER_PROVISIONER_PASSWORD "$customerProvisionerPassword"
+  dotenv ARTIFACT_STORE_PROVISIONER_DB_PASSWORD "$artifactStoreProvisionerDbPassword"
+  dotenv INTENT_DATABASE_CREDENTIAL_ROOT "$intentDatabaseCredentialRoot"
+  dotenv ARTIFACT_API_DATABASE_CREDENTIAL_ROOT "$artifactApiDatabaseCredentialRoot"
+  dotenv ACTOR_API_DATABASE_CREDENTIAL_ROOT "$actorApiDatabaseCredentialRoot"
+  dotenv ACTOR_WORKER_DATABASE_CREDENTIAL_ROOT "$actorWorkerDatabaseCredentialRoot"
+  dotenv CUSTOMER_ENTITLEMENT_TOKEN "$customerEntitlementToken"
+  dotenv INTENT_SERVICE_TOKEN "$intentServiceToken"
+  dotenv ACTOR_RUNNER_SERVICE_TOKEN "$actorRunnerServiceToken"
+  dotenv ARTIFACT_STORE_SERVICE_TOKEN "$artifactStoreServiceToken"
+  dotenv ARTIFACT_STORE_PROVISIONER_TOKEN "$artifactStoreProvisionerToken"
+  dotenv TENANT_GRANT_PRIVATE_KEY "$tenantGrantPrivateKey"
+  dotenv TENANT_GRANT_PUBLIC_KEY "$(output tenantGrantPublicKey)"
+  dotenv IDENTITY_PROVISIONING_SECRET "$identityProvisioningSecret"
+  dotenv CHECKOUT_FACADE_TOKEN "$checkoutFacadeToken"
+  dotenv CHECKOUT_EMAIL_ENCRYPTION_KEY "$checkoutEmailEncryptionKey"
+  dotenv SITE_HOST_DIRECTORY_BEARER_TOKEN "$siteHostDirectoryToken"
+  dotenv PLATFORM_PUBLIC_IPV4 "$platform_ip"
+  dotenv PLATFORM_PUBLIC_IPV6 "$platform_ipv6"
+  dotenv DOWNSTREAMS_JSON "$downstreams"
+  dotenv CUSTOMER_DOWNSTREAMS_JSON "$customer_downstreams"
+  dotenv SYSTEM_SITES_JSON "$system_sites"
+  dotenv LLM_GATEWAY_MODELS_JSON "$LLM_GATEWAY_MODELS_JSON"
+  dotenv LLM_GATEWAY_CREDENTIALS_JSON "$LLM_GATEWAY_CREDENTIALS_JSON"
+  dotenv LLM_GATEWAY_TIMEOUT_SECONDS "${LLM_GATEWAY_TIMEOUT_SECONDS:-180}"
+  dotenv DOWNLOAD_URL "$DOWNLOAD_URL"
+  dotenv POLAR_API_KEY "${POLAR_API_KEY:-}"
+  dotenv POLAR_SERVER "${POLAR_SERVER:-sandbox}"
+  dotenv POLAR_ORGANIZATION_ID "${POLAR_ORGANIZATION_ID:-}"
+  dotenv AVEN_TIER_NAME "$AVEN_TIER_NAME"
+  dotenv POLAR_WEBHOOK_SECRET "$POLAR_WEBHOOK_SECRET"
+  dotenv SMTP_URL "$SMTP_URL"
+  dotenv SMTP_FROM "$SMTP_FROM"
+  dotenv SMTP_REPLY_TO "${SMTP_REPLY_TO:-}"
+  dotenv ACME_EMAIL "${ACME_EMAIL:-ops@aven.ceo}"
+} > "$stage/platform/.env"
+
+install -m 644 "$root/deploy/identity/docker-compose.yml" "$stage/identity/docker-compose.yml"
+install -m 644 "$root/deploy/identity/Caddyfile" "$stage/identity/Caddyfile"
+install -m 755 "$root/deploy/identity/db-init.sh" "$stage/identity/db-init.sh"
+install -m 644 "$root/deploy/platform/docker-compose.yml" "$stage/platform/docker-compose.yml"
+install -m 644 "$root/deploy/platform/Caddyfile" "$stage/platform/Caddyfile"
+install -m 755 "$root/deploy/platform/db-init.sh" "$stage/platform/db-init.sh"
+
+wait_for_cloud_init() {
+  local key=$1 remote=$2
+  for _ in {1..60}; do
+    if ssh -i "$key" -o BatchMode=yes -o ConnectTimeout=10 -o UserKnownHostsFile="$stage/ssh/known_hosts" -o StrictHostKeyChecking=yes "$remote" 'test -f /var/lib/aven/cloud-init-complete'; then return 0; fi
+    sleep 5
+  done
+  echo "cloud-init did not finish on $remote" >&2
+  return 1
+}
+deploy_bundle() {
+  local host=$1 service=$2 key=$3
+  local remote="$deploy_user@$host"
+  local upload="/tmp/aven-${service}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
+  local ssh_args=(-i "$key" -o BatchMode=yes -o ConnectTimeout=10 -o UserKnownHostsFile="$stage/ssh/known_hosts" -o StrictHostKeyChecking=yes)
+  wait_for_cloud_init "$key" "$remote"
+  ssh "${ssh_args[@]}" "$remote" "install -d -m 0700 '$upload'"
+  scp "${ssh_args[@]}" -r "$stage/$service/." "$remote:$upload/"
+  cleanup_remote() {
+    ssh "${ssh_args[@]}" "$remote" "docker logout ghcr.io >/dev/null 2>&1 || true; rm -rf '$upload'" || true
+  }
+  if ! printf '%s' "$GHCR_TOKEN" |
+    ssh "${ssh_args[@]}" "$remote" "docker login ghcr.io --username '$GHCR_USER' --password-stdin"; then
+    cleanup_remote
+    return 1
+  fi
+  if ! ssh "${ssh_args[@]}" "$remote" "install -m 0600 '$upload/.env' /opt/aven/$service/.env && install -m 0644 '$upload/docker-compose.yml' /opt/aven/$service/docker-compose.yml && install -m 0644 '$upload/Caddyfile' /opt/aven/$service/Caddyfile && install -m 0755 '$upload/db-init.sh' /opt/aven/$service/db-init.sh && sudo /usr/local/sbin/aven-deploy '$service'"; then
+    cleanup_remote
+    return 1
+  fi
+  cleanup_remote
+}
+
+deploy_bundle "$identity_ip" identity "$stage/ssh/identity_key"
+for _ in {1..60}; do curl --fail --silent https://aven.id/api/health/ready >/dev/null && break; sleep 5; done
+curl --fail --show-error --silent https://aven.id/api/health/ready >/dev/null
+deploy_bundle "$platform_ip" platform "$stage/ssh/platform_key"
+for url in https://api.aven.ceo/health/live https://my.aven.ceo/api/health/ready; do
+  for _ in {1..60}; do curl --fail --silent "$url" >/dev/null && break; sleep 5; done
+  curl --fail --show-error --silent "$url" >/dev/null
+done
+
+echo "Identity and platform deployments are healthy. aven.ceo DNS was not changed by this workflow."

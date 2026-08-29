@@ -54,12 +54,14 @@ export class StaticSiteHost {
 	}
 
 	async reconcile(): Promise<void> {
+		if (this.config.mode !== 'managed') throw new Error('snapshot mode cannot reconcile')
 		if (this.reconciling) return this.reconciling
 		this.reconciling = this.doReconcile().finally(() => (this.reconciling = null))
 		return this.reconciling
 	}
 
 	private async doReconcile() {
+		if (this.config.mode !== 'managed') throw new Error('snapshot mode cannot reconcile')
 		const response = await fetch(this.config.directoryUrl, {
 			headers: { authorization: `Bearer ${this.config.bearerToken}` },
 			signal: AbortSignal.timeout(10_000)
@@ -99,6 +101,7 @@ export class StaticSiteHost {
 	}
 
 	private async reconcileOne(binding: DirectoryBinding) {
+		if (this.config.mode !== 'managed') throw new Error('snapshot mode cannot reconcile')
 		let report: Record<string, unknown>
 		try {
 			validateBinding(binding)
@@ -106,7 +109,8 @@ export class StaticSiteHost {
 				binding.hostname,
 				binding.verification_token_hash,
 				this.config.allowedIpv4,
-				this.config.allowedIpv6
+				this.config.allowedIpv6,
+				binding.verification_mode
 			)
 			if (!dns.ok) {
 				const verifiedAt = binding.verified_at ? Date.parse(binding.verified_at) : 0
@@ -127,12 +131,22 @@ export class StaticSiteHost {
 				}
 			}
 		} catch (error) {
-			report = { id: binding.id, status: 'failed', error: (error as Error).message }
+			const message = (error as Error).message
+			console.warn(
+				JSON.stringify({
+					message: 'site reconciliation failed',
+					siteId: binding.id,
+					hostname: binding.hostname,
+					error: message
+				})
+			)
+			report = { id: binding.id, status: 'failed', error: message }
 		}
 		await this.report(report)
 	}
 
 	private async report(payload: Record<string, unknown>) {
+		if (this.config.mode !== 'managed') return
 		try {
 			const response = await fetch(this.config.statusUrl, {
 				method: 'POST',

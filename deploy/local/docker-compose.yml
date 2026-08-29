@@ -1,0 +1,12 @@
+services:
+  api-migrate:
+    environment:
+      SITE_HOST_PUBLIC_IPV4: ""
+      SITE_HOST_PUBLIC_IPV6: ""
+      SYSTEM_SITES_JSON: '[]'
+
+  api:
+    environment:
+      SITE_HOST_PUBLIC_IPV4: ""
+      SITE_HOST_PUBLIC_IPV6: ""
+      SYSTEM_SITES_JSON: '[]'
