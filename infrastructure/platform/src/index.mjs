@@ -272,6 +272,9 @@ export const customerEntitlementToken = pulumi.secret(password('customer-entitle
 export const intentServiceToken = pulumi.secret(password('intent-service-token', 64))
 export const actorRunnerServiceToken = pulumi.secret(password('actor-runner-service-token', 64))
 export const artifactStoreServiceToken = pulumi.secret(password('artifact-store-service-token', 64))
+export const actorRunnerArtifactStoreToken = pulumi.secret(
+	password('actor-runner-artifact-store-token', 64)
+)
 export const artifactStoreProvisionerToken = pulumi.secret(
 	password('artifact-store-provisioner-token', 64)
 )

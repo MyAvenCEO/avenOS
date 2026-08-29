@@ -300,6 +300,7 @@ services:
       ARTIFACT_STORE_DATABASE_URL: postgres://unused:unused@database/postgres
       ARTIFACT_STORE_API_DB_CREDENTIAL_ROOT: ${ARTIFACT_API_DATABASE_CREDENTIAL_ROOT:?required}
       ARTIFACT_STORE_BEARER_TOKEN: ${ARTIFACT_STORE_SERVICE_TOKEN:?required}
+      ARTIFACT_STORE_ACTOR_RUNNER_BEARER_TOKEN: ${ACTOR_RUNNER_ARTIFACT_STORE_TOKEN:?required}
       ARTIFACT_STORE_PUBLISHER_ISSUER: api.aven.ceo
       ARTIFACT_STORE_PUBLISHER_SUBJECT: service:aven-api
       ARTIFACT_STORE_TENANT_MODE: "true"
@@ -349,6 +350,8 @@ services:
       IDENTITY_AUDIENCE: aven-services
       TENANT_GRANT_ISSUER: https://api.aven.ceo
       TENANT_GRANT_PUBLIC_KEY: ${TENANT_GRANT_PUBLIC_KEY:?required}
+      ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
+      ARTIFACT_STORE_BEARER_TOKEN: ${ACTOR_RUNNER_ARTIFACT_STORE_TOKEN:?required}
     networks: [platform-private, platform-egress]
     security_opt: [no-new-privileges:true]
 

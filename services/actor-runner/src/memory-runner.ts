@@ -229,7 +229,8 @@ export class MemoryPlanRunner implements PlanRunner {
 			artifactIds: [...(result.artifactIds ?? [])],
 			remainingGoals: [...(result.remainingGoals ?? [])],
 			registryRevision: result.registryRevision ?? 0,
-			policyDecisionIds: [...(result.policyDecisionIds ?? [])]
+			policyDecisionIds: [...(result.policyDecisionIds ?? [])],
+			...(result.output && { output: portableRunClone(result.output) })
 		}
 		record.checkpoints.push(checkpoint)
 	}

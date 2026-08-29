@@ -1,6 +1,9 @@
 import {
+	ACTOR_RUN_PROTOCOL,
 	AVEN_CEO_AUTHORITY,
 	type ExecutionEnvironment,
+	type PlanRunnerClient,
+	type PlanRunStartCommand,
 	portableRunClone,
 	resourceId
 } from '@avenos/actors'
@@ -52,6 +55,122 @@ export interface DocumentExecutionHost {
 	start(request: DocumentRunStartRequest): Promise<ArtifactProcessingPresentation>
 	status(artifactId: string): ArtifactProcessingPresentation | undefined
 	onChange?: (artifactId: string, presentation: ArtifactProcessingPresentation) => void
+}
+
+export function documentPlanRunCommand(request: DocumentRunStartRequest): PlanRunStartCommand {
+	const admitted = portableRunClone(request)
+	if (admitted.executionEnvironment !== 'server') {
+		throw new Error('remote document runs require server placement')
+	}
+	return {
+		protocol: ACTOR_RUN_PROTOCOL,
+		requestId: admitted.requestId,
+		idempotencyKey: admitted.idempotencyKey,
+		requestedAt: admitted.requestedAt,
+		skillRef: admitted.skillRef,
+		executionEnvironment: 'server',
+		ingredients: [
+			{ predicate: 'ceo.aven.docs.file(source)', artifactId: admitted.source.artifactId }
+		],
+		goals: ['ceo.aven.docs.processed(source)'],
+		parameters: { source: admitted.source }
+	}
+}
+
+/** Real remote host backed by the authenticated generic Plan Runner protocol. */
+export class RemoteDocumentExecutionHost implements DocumentExecutionHost {
+	readonly executionEnvironment = 'server' as const
+	readonly #presentations = new Map<string, ArtifactProcessingPresentation>()
+	readonly #running = new Map<string, Promise<ArtifactProcessingPresentation>>()
+	onChange?: (artifactId: string, presentation: ArtifactProcessingPresentation) => void
+
+	constructor(
+		private readonly runner: PlanRunnerClient,
+		private readonly pollIntervalMs = 250,
+		private readonly timeoutMs = 15 * 60_000
+	) {}
+
+	status(artifactId: string): ArtifactProcessingPresentation | undefined {
+		const presentation = this.#presentations.get(artifactId)
+		return presentation ? portableRunClone(presentation) : undefined
+	}
+
+	start(request: DocumentRunStartRequest): Promise<ArtifactProcessingPresentation> {
+		const artifactId = request.source.artifactId
+		const active = this.#running.get(artifactId)
+		if (active) return active
+		const run = this.#start(request).finally(() => this.#running.delete(artifactId))
+		this.#running.set(artifactId, run)
+		return run
+	}
+
+	async #start(request: DocumentRunStartRequest): Promise<ArtifactProcessingPresentation> {
+		const artifactId = request.source.artifactId
+		const handle = await this.runner.start(documentPlanRunCommand(request))
+		this.#update(artifactId, {
+			caseId: handle.runId,
+			state: 'active',
+			projectionVersion: 'actor-document-v1',
+			preferredType: 'file',
+			label: request.source.originalName,
+			summary: 'Processing on the Actor Runner.',
+			metadata: {
+				execution: 'actors',
+				executionEnvironment: 'server',
+				runtimeHost: 'actor-runner',
+				runId: handle.runId
+			},
+			warnings: [],
+			stages: [],
+			derivedArtifacts: []
+		})
+		const deadline = Date.now() + this.timeoutMs
+		while (Date.now() < deadline) {
+			const record = await this.runner.status(handle.runId)
+			if (!record) throw new Error('the Actor Runner lost the admitted document run')
+			if (record.state === 'succeeded') {
+				const output = record.checkpoints.at(-1)?.output
+				const presentation = documentPresentation(output?.presentation)
+				this.#update(artifactId, presentation)
+				return portableRunClone(presentation)
+			}
+			if (record.state === 'failed' || record.state === 'cancelled') {
+				const message = record.failure?.message ?? `document run ${record.state}`
+				const failed = this.#presentations.get(artifactId)
+				if (!failed) throw new Error(message)
+				failed.state = 'failed'
+				failed.summary = message
+				failed.warnings.push({ code: 'server-processing-failed', message, retryable: false })
+				this.#update(artifactId, failed)
+				return portableRunClone(failed)
+			}
+			await new Promise((resolve) => setTimeout(resolve, this.pollIntervalMs))
+		}
+		throw new Error('document processing on the Actor Runner timed out')
+	}
+
+	#update(artifactId: string, presentation: ArtifactProcessingPresentation): void {
+		const cloned = portableRunClone(presentation)
+		this.#presentations.set(artifactId, cloned)
+		this.onChange?.(artifactId, portableRunClone(cloned))
+	}
+}
+
+function documentPresentation(value: unknown): ArtifactProcessingPresentation {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new Error('the Actor Runner returned no document presentation')
+	}
+	const presentation = portableRunClone(value) as ArtifactProcessingPresentation
+	if (
+		!['succeeded', 'needs_review', 'failed'].includes(presentation.state) ||
+		presentation.metadata?.executionEnvironment !== 'server' ||
+		presentation.metadata?.runtimeHost !== 'actor-runner' ||
+		!Array.isArray(presentation.stages) ||
+		!Array.isArray(presentation.derivedArtifacts)
+	) {
+		throw new Error('the Actor Runner returned an invalid document presentation')
+	}
+	return presentation
 }
 
 /**

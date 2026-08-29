@@ -1,10 +1,18 @@
-import type { ExecutionEnvironment } from '@avenos/actors'
+import type {
+	ExecutionEnvironment,
+	PlanRunContinuationSubmission,
+	PlanRunHandle,
+	PlanRunnerClient,
+	PlanRunRecord,
+	PlanRunStartCommand
+} from '@avenos/actors'
 import { QueuedClientArtifactGateway } from '@avenos/artifact-store'
 import { createDocumentActors } from '@avenos/document-ingest/actors'
 import {
-	documentRunStartRequest,
 	DocumentExecutionRouter,
-	InProcessDocumentExecutionHost
+	documentRunStartRequest,
+	InProcessDocumentExecutionHost,
+	RemoteDocumentExecutionHost
 } from '@avenos/document-ingest/execution'
 import {
 	type ClientArtifactGateway,
@@ -96,38 +104,30 @@ const localDocumentRuntime = singleton(
 			runtimeHost: 'desktop'
 		})
 )
-const emulatedServerActors = singleton('aven.emulated-server-document-processing-actors', () =>
-	createDocumentActors(new BrowserDocumentDecoder(), documentModelGateway)
-)
-const emulatedServerDocumentRuntime = singleton(
-	'aven.emulated-server-document-runtime',
-	() =>
-		new DocumentProcessingRuntime(
-			emulatedServerActors,
-			publicationGateway,
-			() => documentModelGateway.status(),
-			{
-				executionEnvironment: 'server',
-				runtimeHost: 'in-process-server-emulation'
-			}
-		)
-)
+class TauriPlanRunnerClient implements PlanRunnerClient {
+	start(command: PlanRunStartCommand): Promise<PlanRunHandle> {
+		return invoke<PlanRunHandle>('actor_run_start', { command })
+	}
 
-/**
- * Both placements use the same serialized host contract. The server host is
- * deliberately in-process for now; a remote transport can replace it without
- * changing upload, restart, or status semantics.
- */
+	status(runId: string): Promise<PlanRunRecord | null> {
+		return invoke<PlanRunRecord>('actor_run_status', { runId })
+	}
+
+	resume(_runId: string, _submission: PlanRunContinuationSubmission): Promise<PlanRunHandle> {
+		throw new Error('document runs do not expose continuations')
+	}
+
+	cancel(_runId: string, _requestId: string): Promise<PlanRunHandle> {
+		throw new Error('document run cancellation is not exposed by this client')
+	}
+}
+
 export const clientDocumentRuntime = singleton(
 	'aven.document-execution-router',
 	() =>
 		new DocumentExecutionRouter({
 			local: new InProcessDocumentExecutionHost('local', localDocumentRuntime, documentSources),
-			server: new InProcessDocumentExecutionHost(
-				'server',
-				emulatedServerDocumentRuntime,
-				documentSources
-			)
+			server: new RemoteDocumentExecutionHost(new TauriPlanRunnerClient())
 		})
 )
 
