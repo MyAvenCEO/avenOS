@@ -18,6 +18,7 @@ between the direction of the product and properties the current system proves.
 | Build the code or choose the right test level | [Build and test](build-and-test.md) |
 | Run all services and the Rust client locally | [Local full stack](local-stack.md) |
 | Create or update the supported `next` installation | [Deployment](deployment.md) |
+| Understand service startup order and readiness | [Startup and readiness](startup-and-readiness.md) |
 | Understand the production deployment boundary | [Production status](deployment.md#production-status) |
 | Inspect health, logs, disk, or a database | [Maintenance](maintenance.md) |
 | Understand or restore backups | [Backup and recovery](backup-and-recovery.md) |

@@ -153,10 +153,16 @@ async function waitForDocumentGraph(
 				const extracted = graph.find(
 					(artifact) => artifact.typeKey === 'docs.extracted-text' && artifact.inputs.length > 2
 				)
+				const aggregatedClassification = graph.find(
+					(artifact) =>
+						artifact.typeKey === 'core.content-classification' &&
+						artifact.inputs.some((input) => input.role === 'page-classification')
+				)
 				if (
 					extracted &&
+					aggregatedClassification &&
 					graph.some((artifact) => artifact.typeKey === 'core.file-inspection') &&
-					graph.some((artifact) => artifact.typeKey === 'core.content-classification')
+					graph.some((artifact) => artifact.typeKey === 'docs.text-layout')
 				) {
 					return { sourceId: source.artifactId, extractedTextId: extracted.artifactId, graph }
 				}

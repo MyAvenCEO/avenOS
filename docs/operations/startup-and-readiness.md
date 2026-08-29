@@ -1,0 +1,147 @@
+# Startup and readiness
+
+Status: authoritative
+
+A deployment or recovery is ready only when the system has converged from durable
+storage to healthy public services. A running container is not enough. This chapter
+owns the startup dependencies, the meaning of each readiness gate, and the safe place
+to stop when convergence fails.
+
+The same graph applies to initial provisioning, an ordinary deployment, and disaster
+recovery. Recovery adds database restore after role initialization and before normal
+migrations; it does not introduce a second startup path.
+
+## Dependency classes
+
+The stack uses four kinds of dependency:
+
+| Kind | Meaning | Examples |
+| --- | --- | --- |
+| Durable foundation | The process is accepting connections on the listener other containers use | PostgreSQL on TCP, restored volume mounted |
+| One-shot convergence | A finite job completed successfully and may be rerun safely | role reconciliation, migrations, customer component reconciliation |
+| Internal readiness | The service can perform its required downstream work, not merely answer a socket | identity, facade, checkout, Artifact Store, Actor Runner |
+| Public readiness | TLS, routing, and the public health route work through the deployed proxy | `aven.id`, `api.aven.ceo`, `my.aven.ceo`, `aven.ceo` |
+
+Compose `service_started` is never a substitute for a dependency that needs one of
+the stronger states. Long-running services depend on successful one-shot jobs or
+healthy services. A failed one-shot job blocks its dependants and keeps traffic
+closed.
+
+## Identity host
+
+```text
+identity PostgreSQL durable TCP readiness
+└── identity role reconciliation completes
+    └── identity migrations complete
+        └── identity service becomes internally ready
+            └── Caddy exposes aven.id
+                └── public identity readiness succeeds
+```
+
+The PostgreSQL health probe uses `127.0.0.1`, not the default Unix socket. The
+official PostgreSQL image starts a temporary Unix-socket server while it runs fresh
+volume initialization and then restarts onto the durable TCP listener. Treating that
+temporary server as healthy can start role reconciliation during the restart.
+
+Identity readiness requires its schema and signing material. Caddy starting does not
+make identity ready, and certificate issuance cannot succeed until the externally
+managed `aven.id` records point to the identity host.
+
+## Platform host
+
+```text
+platform PostgreSQL durable TCP readiness
+└── platform role reconciliation completes
+    ├── checkout and facade migrations complete
+    ├── Artifact Store control migrations complete
+    └── backup role is usable
+        ├── checkout and its workers become ready
+        ├── platform provisioner becomes ready
+        └── Artifact Store provisioner becomes ready
+            └── customer reconciliation verifies mandatory components
+                ├── Intent Service becomes ready for routed customers
+                ├── Actor Runner becomes ready for routed customers
+                └── Artifact Store becomes ready for routed customers
+                    └── facade becomes internally ready
+                        ├── api.aven.ceo becomes publicly ready
+                        ├── my.aven.ceo becomes publicly ready
+                        └── managed static hosting can expose aven.ceo
+```
+
+Customer routing stays closed until the provisioner has observed the required schema
+versions, migration digests, grants, connectivity, and routing generation in that
+customer's database. A migration command returning zero does not by itself establish
+customer readiness.
+
+Checkout can record commerce facts before a customer environment exists. Its
+platform-event worker retries delivery until the facade and provisioner converge the
+environment. The facade must not route a customer request to a partial environment.
+
+The Actor Runner depends on both its customer-specific run repository and the tenant
+Artifact Store route. The Intent Service depends only on its customer-specific Intent
+schema. Neither service receives a cluster-wide customer login.
+
+## Initial deployment
+
+After Pulumi has returned host access and the external identity DNS records have been
+applied, the deployment workflow follows this order:
+
+1. install the exact deployment bundle and immutable image references;
+2. start the two PostgreSQL foundations;
+3. reconcile current login roles and credentials;
+4. run central migrations;
+5. start provisioners and reconcile customer databases;
+6. start or admit the remaining internal services and workers;
+7. verify internal health, backup health, and Compose completion; and
+8. verify public TLS and health routes before declaring the deployment available.
+
+Stop at the first failed gate. Inspect logs through the observation rail, correct the
+declarative source, and redeploy. Do not start a blocked dependant by hand or edit a
+database to make a health check pass.
+
+## Recovery difference
+
+Recovery reuses the same order with one inserted phase:
+
+```text
+fresh PostgreSQL foundations
+→ current role reconciliation
+→ verified fresh-target restore
+→ normal migrations
+→ customer reconciliation
+→ internal readiness
+→ public readiness
+```
+
+Current role reconciliation happens before restore so historical owners can be mapped
+safely. It runs again through the normal deployment path so current passwords and
+least-privilege grants win over restored metadata. Public traffic remains closed until
+the ordinary readiness graph completes.
+
+## What the pipeline proves
+
+`bun run test:e2e:platform` creates fresh volumes and exercises this dependency graph
+through real Compose conditions. It verifies role and migration completion, customer
+reconciliation, internal health, public boundaries, and profile-aware teardown. Its
+database health probes deliberately require the durable TCP listener so the test
+cannot pass through PostgreSQL's temporary initialization server.
+
+`bun run test:recovery` separately proves the restore insertion point, integrity
+checks, fresh-target refusal rules, and post-restore access controls. The deployment
+workflow runs both gates before publishing or installing a release.
+
+## When adding a service
+
+Add a service only after its dependency is expressible as a durable, one-shot,
+internal, or public readiness gate. Update this page and the Compose dependency in the
+same pull request. The service must:
+
+1. own an internal readiness check that covers its required downstream resources;
+2. use a dedicated service credential and customer-qualified database role;
+3. depend on verified customer reconciliation when it stores customer data;
+4. fail closed when its tenant route or grant is stale; and
+5. have a fresh-stack test proving both successful startup and the important blocked
+   dependency.
+
+If those conditions cannot be stated, the service is not ready to join the supported
+deployment graph.

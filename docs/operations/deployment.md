@@ -72,6 +72,9 @@ The workflow:
 6. runs migrations and customer reconciliation; and
 7. requires Compose, public readiness, and backup-container health.
 
+The exact dependency graph and the distinction between a started process and a ready
+system are defined in [Startup and readiness](startup-and-readiness.md).
+
 No operator opens SSH, writes a server file, or handles a generated database password.
 
 Verify:

@@ -15,7 +15,7 @@ services:
       - identity-postgres:/var/lib/postgresql/data
       - ../identity/db-init.sh:/docker-entrypoint-initdb.d/10-identity.sql.sh:ro
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U postgres -d aven_identity]
+      test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U postgres -d aven_identity]
       interval: 2s
       timeout: 3s
       retries: 40
@@ -105,7 +105,7 @@ services:
     ports:
       - 127.0.0.1:${E2E_DATABASE_HOST_PORT:-55439}:5432
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U postgres -d aven_api]
+      test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U postgres -d aven_api]
       interval: 2s
       timeout: 3s
       retries: 40
