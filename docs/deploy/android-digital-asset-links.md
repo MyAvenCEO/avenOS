@@ -145,8 +145,8 @@ facade. Before distributing a signed Android build:
    and login-credentials relation; and
 6. check the release certificate again before signing the APK.
 
-The current service deployment is described in
-[`../infrastructure-getting-started.md`](../infrastructure-getting-started.md).
+The current service deployment is described in the authoritative
+[deployment handbook](../operations/deployment.md).
 Android release automation must retain these checks when it is added to the
 new platform workflows.
 

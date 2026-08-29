@@ -1,6 +1,6 @@
 # Cutting identity, checkout, public web, and the API facade apart
 
-Status: implementation paper for `codex/id-auth-boundary`
+Status: current architecture decision
 Date: 2026-08-28
 
 ## Decision
@@ -129,11 +129,11 @@ facade creates the downstream request. Route prefixes, allowed coarse roles,
 target path prefixes, and upstream origins come from deployment configuration,
 never from request data.
 
-This is the narrow bridge needed by the generic actor-runner architecture.
-It is not yet an application grant. `api.aven.ceo` must eventually evaluate
-`ceo.aven` entitlements and mint short-lived, action-, audience-, tenant-, and
-resource-bound grants for Artifact Store and other domain services. `aven.id`
-must not acquire product tiers or artifact policy merely to make that possible.
+This coarse identity bridge is not itself an application grant. `api.aven.ceo`
+evaluates current product entitlements and mints short-lived, action-, audience-, and
+tenant-bound grants for Artifact Store, Intent Service, Actor Runner, and other domain
+services. `aven.id` does not acquire product tiers, customer routing, or artifact
+policy.
 
 The target grant, customer-database routing, component manifest, and deterministic
 provisioning/reconciliation contracts are specified in
@@ -241,21 +241,14 @@ validated before distributing a signed build.
 
 ## Deployment order
 
-1. Run `platform-infrastructure` preview/up with apex management disabled. It
-   creates protected identity and platform hosts/volumes and non-apex DNS.
-2. Run `platform-deploy`; it deploys the identity database and `aven.id` first.
-   Verify setup enrollment, two-passkey enrollment, sign-in, device flow,
-   token claims, JWKS, and the platform-only internal-route restriction.
-3. Deploy `api.aven.ceo` with exact checkout and actor-runner allowlists and verify
-   forged, expired, and wrong-audience tokens fail closed.
-4. Deploy `my.aven.ceo`; exercise provider webhook replay, email delivery, and
-   checkout-to-identity provisioning.
-5. Deploy the actor runner as the exact private `/api/actor-runs` downstream with its
-   customer-database credentials and tenant-grant public key. Its SQL run records and
-   accepted-run recovery are durable, but do not yet constitute document execution;
-   do not resurrect the former feed-driven processor.
-6. Verify the `aven-brands` source/artifact pair, then explicitly run the
-   infrastructure workflow with apex management enabled.
+Identity becomes healthy before checkout and the facade. Database roles initialize
+before migrations, migrations finish before traffic-serving processes become healthy,
+and customer routing remains closed until component reconciliation succeeds. The Actor
+Runner is the private `/api/actor-runs` downstream; its SQL run state and recovery are
+durable, while document import remains the client actor pipeline.
+
+The authoritative workflow inputs, DNS handoff, verification, and site-publication
+steps are in the [deployment handbook](operations/deployment.md).
 
 ## Security verification checklist
 

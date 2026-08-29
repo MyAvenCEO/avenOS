@@ -41,6 +41,7 @@ Email templates live in `email-templates/`. Use `bun run email:studio` to edit t
 
 For the complete local split stack, including fake payment callbacks, passkeys,
 customer provisioning, Intent, and Actor, use the
-[local runbook](../../deploy/local/README.md). The production deployment is defined in
-`deploy/platform`; do not resurrect the old checkout-owned environment worker,
-Artifact Store overlay, shared Intent database, or monolithic local Compose topology.
+[local full-stack guide](../../docs/operations/local-stack.md). Shared deployment is
+defined by the [operations handbook](../../docs/operations/deployment.md); do not
+resurrect the old checkout-owned environment worker, Artifact Store overlay, shared
+Intent database, or monolithic local Compose topology.

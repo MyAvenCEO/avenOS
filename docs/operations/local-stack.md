@@ -1,0 +1,114 @@
+# Run the full stack locally
+
+Status: authoritative
+
+This path runs identity, checkout, the facade, both central databases, the customer
+provisioner, Artifact Store, Intent Service, Actor Runner, workers, Mailpit, and the
+Rust/Tauri client on one workstation. It calls no deployed Aven service, payment
+provider, SMTP server, or LLM provider.
+
+## Prerequisites
+
+Complete [workstation setup](workstation-setup.md). Docker must be running and
+`NODE_AUTH_TOKEN` must be available either in the shell or the user-level
+`~/.npmrc`.
+
+## Start the server stack
+
+From the repository root:
+
+```sh
+bun run local:up
+```
+
+The command builds local service images, generates a disposable tenant signing key,
+starts the topology, waits for health, and prints these endpoints:
+
+| Surface | URL |
+| --- | --- |
+| Identity | `http://localhost:13100` |
+| Checkout | `http://localhost:13200` |
+| Facade | `http://localhost:13000` |
+| Mailpit | `http://localhost:18025` |
+
+WebAuthn uses the browser secure-context exception for the exact `localhost` origin and
+RP ID. Do not replace `localhost` with `127.0.0.1` while enrolling the passkey.
+
+## Create an account and customer environment
+
+```sh
+bun run local:account -- you@example.test
+```
+
+Open the printed setup URL, create the first passkey, and wait for the provisioner to
+finish the customer environment. The command also creates a disposable local
+entitlement; no checkout or external provider is involved in this developer shortcut.
+
+To exercise the user-facing checkout and email flow instead, begin at
+`http://localhost:13200` and inspect messages in Mailpit.
+
+## Start the Rust client
+
+On Linux:
+
+```sh
+bun run local:app -- linux
+```
+
+On macOS:
+
+```sh
+bun run local:app -- mac
+```
+
+The local desktop build intentionally uses device authorization instead of claiming a
+deployed native passkey association. It opens the local identity dashboard, shows a
+device code, and waits. Sign in with the `localhost` passkey and approve the code. The
+Rust process receives the identity session, exchanges it for short-lived service
+tokens, and selects the provisioned customer environment.
+
+You can then import a document, inspect artifacts, chat through the local facade, and
+exercise Intent and Actor features without deployed credentials.
+
+## Add another passkey
+
+Open `http://localhost:13100/dashboard`, authenticate, and use the passkey management
+section to add another passkey. Sign out and sign back in with the new credential to
+verify it independently.
+
+## Reset the local system
+
+This command removes the local containers, networks, and **all disposable local
+volumes**:
+
+```sh
+bun run local:down
+```
+
+Use it when schema or provisioning state must start fresh. It does not touch another
+Compose project, a deployed host, or any production data.
+
+## Automated equivalent
+
+Run the non-interactive proof on Linux:
+
+```sh
+bun run test:e2e:platform
+```
+
+The E2E run uses its own project name and dynamic ports, so it does not contend with
+the interactive `aven-local` stack. See [Build and test](build-and-test.md) for its
+coverage and release status.
+
+## Common failures
+
+- **Package authentication fails:** refresh the `read:packages` token and keep it in
+  `NODE_AUTH_TOKEN` or the user-level `.npmrc`.
+- **Rust client reports missing native packages:** repeat the Linux packages in
+  [workstation setup](workstation-setup.md#linux).
+- **Passkey enrollment fails:** use the printed `http://localhost` URL, not another
+  hostname or IP address.
+- **The customer route is not ready:** wait for the provisioner; inspect the platform
+  containers with `docker compose` only when debugging the disposable local stack.
+- **Ports are already in use:** stop the existing `aven-local` stack with
+  `bun run local:down` before starting another interactive stack.

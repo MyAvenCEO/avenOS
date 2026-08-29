@@ -1,8 +1,8 @@
 # Tools
 
-Repository-maintained one-off recovery tools live here. Normal platform
-operations now use the Pulumi and digest-deployment workflows documented in
-[`docs/infrastructure-getting-started.md`](../docs/infrastructure-getting-started.md).
+Repository-maintained restricted operator tools live here. The authoritative
+procedures and required access are in
+[Maintain an installation](../docs/operations/maintenance.md).
 
 | Tool | Purpose | Entry point |
 | --- | --- | --- |

@@ -89,6 +89,7 @@ jobs:
         run: bunx playwright install chromium
       - name: Static checks
         run: |
+          bun run check:docs
           bun run check
           bun run check:identity
           bun run check:api
