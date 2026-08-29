@@ -5,7 +5,9 @@ For the holistic package, desktop, server, persistence, and execution map, start
 
 ## Purpose
 
-AvenOS executes document ingestion as a graph of ordinary actors. Before upload, the
+Document import is one way an Aven brings external material into the working context
+defined by the [product model](product-model.md). avenOS executes that import as a
+graph of ordinary Actors. Before upload, the
 user chooses `local` or `server`; that placement is frozen for the process and persisted
 with its source. Both current hosts execute inside the app, with the server host
 crossing a strict JSON boundary as an explicit emulation. The adapter depends on two
@@ -17,7 +19,7 @@ narrow authenticated avenCEO service contracts:
 
 `sourceKind: client-actor-ingest` identifies uploads resumed by this desktop adapter.
 The former feed-driven Artifact Processor has been removed, so no second processor
-competes for those sources in this worktree.
+competes for those sources in the current implementation.
 
 The host-neutral protocol and remote-server cutover are in
 [Actor execution protocol and document-ingest cutover](actor-runtime-formal-spec.md).
@@ -92,7 +94,7 @@ POST /api/llm/completions
 
 The Tauri bridge keeps the Aven session token outside the webview. Provider credentials
 remain in the LLM downstream's `LLM_GATEWAY_CREDENTIALS_JSON` and never enter the app
-bundle. This split worktree contains the client contract and facade, but not the owning
+bundle. This repository contains the client contract and facade, but not the owning
 LLM downstream implementation; see [the gateway guide](llm-gateway.md) for that
 integration boundary.
 Every LLM actor, prompt, model policy, capability, and completion contract is owned by

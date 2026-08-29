@@ -12,7 +12,7 @@ cutover requirements are specified in
 [Actor execution protocol and document-ingest cutover](actor-runtime-formal-spec.md).
 
 This is a target architecture informed by working code, not a claim that the target
-runner is complete. Today the branch implements the qualified catalog, generic
+runner is complete. The current repository implements the qualified catalog, generic
 registry, authorization contracts, logical and physical planners, portable run
 values, document-specific desktop executor, authenticated server HTTP boundary, and
 deterministic slices for generic execution, real-store publication, and durable secret

@@ -89,8 +89,9 @@ contains; avoid bare “learn more” links.
 
 ## Keep project language consistent
 
-- Use `avenOS` for the product and `avenOS` or the repository name already present in
-  code when an identifier requires different casing.
+- Follow the authoritative [product model](product-model.md). Use **Aven** for the AI
+  collaborator, **avenCEO** for the current product composition, and **avenOS** for the
+  open-source foundation. They are not interchangeable.
 - Use **Intent** for the durable thread representing one piece of work and **Actor**
   for an executable participant in that work.
 - Use **customer environment** for the stable product and lifecycle boundary and
@@ -98,6 +99,8 @@ contains; avoid bare “learn more” links.
 - Use `next` for the supported shared deployment target and **production** for the
   unsupported independent production target.
 - Use **local** only for resources on the developer's machine.
+- Do not translate customer-database isolation into an end-to-end encryption claim or
+  source availability into proven portability.
 
 ## Keep documentation correct
 

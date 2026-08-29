@@ -7,6 +7,7 @@ const failures: string[] = []
 
 const authoritative = [
 	'docs/writing.md',
+	'docs/product-model.md',
 	'docs/customer-database-system-map.md',
 	'docs/operations/README.md',
 	'docs/operations/access-and-secrets.md',
@@ -73,12 +74,18 @@ for (const setting of [...settings].sort()) {
 }
 
 const rootAgents = read('AGENTS.md')
-for (const required of ['docs/writing.md', 'docs/operations/', 'bun run check:docs']) {
+for (const required of [
+	'docs/writing.md',
+	'docs/product-model.md',
+	'docs/operations/',
+	'bun run check:docs'
+]) {
 	if (!rootAgents.includes(required)) failures.push(`AGENTS.md must reference ${required}`)
 }
 
 const rootReadme = read('README.md')
 for (const required of [
+	'docs/product-model.md',
 	'docs/operations/README.md',
 	'docs/operations/workstation-setup.md',
 	'docs/operations/local-stack.md',

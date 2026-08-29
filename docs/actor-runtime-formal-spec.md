@@ -215,7 +215,7 @@ The desktop implementation presents the same `PlanRunnerClient` interface in-pro
 
 ### 3.4 Integration with the service split
 
-This branch is rebased onto the physical `aven.id` / checkout / facade extraction.
+The current architecture uses the physical `aven.id` / checkout / facade extraction.
 Ownership is resolved as follows:
 
 | Surface | Public entry | Owning downstream |
@@ -229,14 +229,14 @@ Ownership is resolved as follows:
 The native app therefore keeps two compile-time origins: `AVEN_IDENTITY_BASE_URL` for
 identity ceremonies and `AVEN_API_BASE_URL` for every product/data-plane call. The
 current Tauri artifact functions already call the shared `api_endpoint` helper; the
-domain-split branch changes that helper to the facade origin, so this feature MUST
+split architecture routes that helper through the facade origin, so this feature MUST
 retain that separation when rebased rather than reintroducing identity routing.
 
 The split topology is now the integration base. Public product paths remain facade
 paths, so the app and `PlanRunnerClient` do not acquire checkout, runner, or storage
 origins. The actor runner is its own downstream service; no runner code belongs in the
 isolated identity service. The owning LLM and client-publication downstream
-implementations are not included in this worktree; an integrated deployment MUST add
+implementations are not included in the current deployment; an integrated deployment MUST add
 them behind fixed facade routes without moving their contracts into identity.
 
 ## 4. Run state machine
@@ -517,7 +517,7 @@ at cutover; no compatibility reader or data migration is built.
 
 ## 12. Current conformance and deliberate gaps
 
-| Requirement | Branch state | Completion condition |
+| Requirement | Current state | Completion condition |
 | --- | --- | --- |
 | qualified IDs and predicates | implemented | catalog validation in CI |
 | generic runtime ownership under `os.aven` | implemented | generated catalog rejects runtime contracts under `id.aven` |

@@ -2,12 +2,16 @@
 
 Status: public `ceo.aven` service contract consumed by the Tauri client
 
-The gateway was designed as a standalone downstream. In this split-architecture
-worktree, `services/aven-api` is only the authenticated `api.aven.ceo` facade; it does
+The gateway is a standalone downstream. In the current split architecture,
+`services/aven-api` is only the authenticated `api.aven.ceo` facade; it does
 not contain the gateway implementation or model catalog. The desktop client and wire
 types are present and still call the paths below. An integrated deployment must route
 those fixed paths to a dedicated `ceo.aven` LLM downstream that satisfies this
 contract. Statements below describe that downstream, not code inside the facade.
+
+An Aven is not one language model. The [product model](product-model.md) treats models
+as replaceable capabilities; durable working context belongs in Intents, Artifacts,
+Skills, and runs rather than a provider conversation.
 
 ## Outcome
 
@@ -641,7 +645,7 @@ use the same gateway credential map and facade boundary.
 
 ## Verification
 
-This worktree can verify the client contracts and split facade, but it cannot run a
+This repository can verify the client contracts and split facade, but it cannot run a
 local gateway implementation because that downstream is not present. The LLM service
 repository or package MUST ship contract tests for catalog filtering, capability
 enforcement, OpenAI-compatible streaming, tool-call round trips, structured output,

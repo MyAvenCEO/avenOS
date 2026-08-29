@@ -4,6 +4,8 @@ Status: normative target architecture for the fresh split deployment
 
 Date: 2026-08-29
 
+Product context: [Product model](product-model.md)
+
 Implementation note: the foundation is now present in this repository and proven by
 the fresh-stack E2E suite. The exact implemented surface and the explicitly deferred
 operator/runner hardening are tracked in the
@@ -74,7 +76,7 @@ an extension seam, not work required for the first deployment.
 
 The exact implemented containers, databases, roles, routes, grants, secrets, source layout,
 and delivery slices are mapped in the companion
-[Planned customer-database system map](customer-database-system-map.md).
+[Implemented customer-database system map](customer-database-system-map.md).
 
 ## Why this is a platform primitive
 

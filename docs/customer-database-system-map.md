@@ -2,6 +2,9 @@
 
 Status: authoritative current-state map
 
+Product terms and ownership-claim boundaries are defined in the
+[product model](product-model.md).
+
 This page maps the normative
 [customer-database boundary](customer-database-platform.md) onto the code that exists
 today. It describes components and trust relationships, not operator procedures. Use
