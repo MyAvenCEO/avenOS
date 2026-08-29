@@ -1,9 +1,18 @@
 # Generic authenticated LLM gateway
 
+Status: public `ceo.aven` service contract consumed by the Tauri client
+
+The gateway was designed as a standalone downstream. In this split-architecture
+worktree, `services/aven-api` is only the authenticated `api.aven.ceo` facade; it does
+not contain the gateway implementation or model catalog. The desktop client and wire
+types are present and still call the paths below. An integrated deployment must route
+those fixed paths to a dedicated `ceo.aven` LLM downstream that satisfies this
+contract. Statements below describe that downstream, not code inside the facade.
+
 ## Outcome
 
-Aven API exposes a provider-neutral LLM catalog and completion API to every verified,
-authenticated Aven user:
+The avenCEO API surface exposes a provider-neutral LLM catalog and completion API to
+every verified, authenticated Aven user:
 
 ```text
 GET  /api/llm/models
@@ -39,7 +48,7 @@ GET model catalog -> all matching { id, label, capabilities }
        |
        | explicit modelId + bounded messages/output contract
        v
-Aven API generic LLM gateway
+ceo.aven LLM gateway, reached through api.aven.ceo
   authenticates, validates selection, protects credentials,
   normalizes provider profile, bounds input/output, returns receipt
        |
@@ -51,16 +60,28 @@ The gateway owns transport and provider compatibility. The consumer owns the tas
 instructions, conversation, model-selection policy, output schema, validation, retries,
 and any persistent side effects.
 
+The entire interaction is application behavior under `ceo.aven`: LLM actors, model
+capabilities, prompts, selection policies, invocations, and receipts. Portable run
+protocols belong to `os.aven`; identity, assurance, authorization, and grant evidence
+belong to `id.aven`. The gateway being generic or OpenAI-compatible does not move LLM
+contracts into either infrastructure namespace.
+
 The gateway does not execute model-returned tools, publish artifacts, retry calls,
 silently fail over, maintain conversation state, or choose a model on the consumer's
 behalf.
 
 ## Authentication and authorization
 
-All four routes call Aven API's `requireUser`. A caller must have a valid Aven session and a
-verified email address. There is no subscription-tier, administrator-role, or
-procedure-specific restriction: every user that passes the common authenticated-user
-gate can list and call configured models.
+The public routes are reached only through `api.aven.ceo`. The facade verifies a
+short-lived `aven-services` token from `aven.id`, strips caller-supplied trust headers,
+selects a fixed downstream, and replaces the caller bearer with a dedicated service
+credential. The gateway independently verifies the forwarded signed identity token
+before accepting the facade's subject/session projection.
+
+The product contract deliberately makes the configured catalog available to every
+verified, authenticated user. It has no administrator-only or procedure-specific
+restriction. Product quotas and model-tier entitlements may be added later in
+`ceo.aven` policy; they must not be invented as `aven.id` roles.
 
 The caller sends an Aven session credential, normally:
 
@@ -68,7 +89,8 @@ The caller sends an Aven session credential, normally:
 Authorization: Bearer <aven-session-token>
 ```
 
-Provider credentials are unrelated secrets stored only in the Aven API environment.
+Provider credentials are unrelated secrets stored only in the LLM downstream
+environment.
 They are never accepted from or returned to a caller.
 
 ## Model catalog
@@ -420,7 +442,8 @@ original schema for local validation.
 
 ## Configuration
 
-The public catalog and credentials are separate JSON environment variables.
+The owning LLM downstream reads the public catalog and credentials from separate JSON
+environment variables.
 
 ```dotenv
 LLM_GATEWAY_ENABLED=true
@@ -476,7 +499,7 @@ Model entry fields:
 Catalog IDs must be unique. Startup fails on malformed JSON, duplicate IDs, missing
 credentials, unsafe URLs, invalid capability names, or contradictory auth settings.
 
-The Compose app service forwards the five gateway environment variables. Keep
+The LLM service deployment supplies the five gateway environment variables. Keep
 `LLM_GATEWAY_CREDENTIALS_JSON` in the deployment secret store rather than a committed
 `.env` file or ordinary GitHub variable.
 
@@ -596,18 +619,21 @@ To run the current desktop chat through this gateway:
    `tool-calling`; the Kimi design lane additionally needs `structured-output`.
 3. Set `LLM_GATEWAY_ENABLED=true`. Set the global timeout and allow insecure HTTP only
    when a trusted local provider genuinely requires it.
-4. Ensure the provider base URL is reachable from the Aven API container. The configured
+4. Ensure the provider base URL is reachable from the LLM gateway container. The configured
    URL is an API root such as `https://api.redpill.ai/v1`; Aven appends
    `/chat/completions`.
-5. Deploy/restart Aven API so startup validates the complete catalog and credential map.
-6. Sign in with a verified Aven user and call `/api/llm/v1/models`. Confirm both desktop
+5. Add fixed `/api/llm` facade routing to the LLM downstream with a dedicated service
+   bearer. Never accept a caller-selected upstream URL.
+6. Deploy or restart the LLM downstream so startup validates the complete catalog and
+   credential map, then deploy the facade route.
+7. Sign in with a verified Aven user and call `/api/llm/v1/models`. Confirm both desktop
    model IDs appear with the required capabilities.
-7. Smoke-test one non-streaming request, one streaming text request, one tool-call round
+8. Smoke-test one non-streaming request, one streaming text request, one tool-call round
    followed by a tool-result message, and one `response_format: {"type":"json_object"}`
    request.
-8. Build and install the Tauri application. No provider key belongs in the desktop
+9. Build and install the Tauri application. No provider key belongs in the desktop
    environment; its existing Aven session authenticates every gateway call.
-9. Before opening expensive credentials to all users, add provider-side spend limits and
+10. Before opening expensive credentials to all users, add provider-side spend limits and
    deployment-level rate/concurrency controls. The gateway deliberately does not invent
    a product-specific quota policy.
 
@@ -616,21 +642,16 @@ The production Tauri transport uses the gateway credential map instead.
 
 ## Verification
 
-Focused service tests:
+This worktree can verify the client contracts and split facade, but it cannot run a
+local gateway implementation because that downstream is not present. The LLM service
+repository or package MUST ship contract tests for catalog filtering, capability
+enforcement, OpenAI-compatible streaming, tool-call round trips, structured output,
+authentication projection checks, provider bounds, and credential redaction.
 
-```sh
-cd services/aven-api
-bunx vitest run tests/llm-gateway.test.ts
-```
-
-Complete checks:
-
-```sh
-bun run check:api
-bun run test:api
-bun run build:api
-bun run check
-```
+In this repository, run the app checks and facade tests whenever the client wire types
+or route configuration change. The integrated E2E environment should then execute the
+provider smoke test below through `api.aven.ceo`, never by calling the downstream
+directly.
 
 Provider smoke test:
 

@@ -1,0 +1,356 @@
+# Cutting identity, checkout, public web, and the API facade apart
+
+Status: implementation paper for `codex/id-auth-boundary`
+Date: 2026-08-28
+
+## Decision
+
+The former `aven-api` application combined four unrelated trust zones. They are
+separate deployments from this cut onward:
+
+| Origin | Responsibility | Must never own |
+| --- | --- | --- |
+| `https://aven.id` | Signup/account provisioning, passkey registration, passkey authentication, browser sessions, native device authorization, and signed service authorization | Checkout, billing, names, artifacts, sites, LLMs, or tenant routing |
+| `https://my.aven.ceo` | Checkout web application, name purchase funnel, payment-provider integration, invoices/subscriptions, purchase email, and commerce records | Credentials, authenticators, sessions, signing keys, or domain-service APIs |
+| `https://api.aven.ceo` | Small authenticated facade over server-side services | Browser pages, checkout, user storage, credentials, or business persistence |
+| `https://aven.ceo` | Public static website published through avenOS static hosting | Authentication, checkout, mutable APIs, or secrets |
+
+`aven.id` is the only identity origin and WebAuthn relying-party ID. This WIP
+deployment intentionally does not carry an old-RP compatibility window.
+
+The deployment boundary is physical as well as logical. `aven.id` has its own
+Hetzner host, Caddy ingress, protected volume, PostgreSQL cluster, runtime role,
+and migrator role. `api.aven.ceo`, `my.aven.ceo`, and the static host share a
+second platform host and a different PostgreSQL cluster. No Docker network or
+database credential crosses between the hosts.
+
+## Why this cut
+
+The old service had a contradictory security shape. Its public hostname was a
+WebAuthn relying party, a checkout application, a billing webhook receiver, a
+tenant control plane, and a facade for unrelated runtimes. A vulnerability in
+any large business surface therefore sat in the same process and database role
+as passkey public keys, sessions, setup links, and signing secrets.
+
+The new boundary minimizes the identity blast radius. The identity process has
+one database, one narrow internal signup ingress, three public credential
+ceremonies, and public verification keys. No consumer receives database access
+or the signing key.
+
+## Identity surface
+
+### Browser and native endpoints
+
+| Endpoint | Purpose | Authentication |
+| --- | --- | --- |
+| `GET /login` | Start passkey authentication | Public plus proof of work at verification |
+| `GET /dashboard` | List credentials and add another passkey | Identity session cookie |
+| `/api/auth/passkey/*` | Better Auth WebAuthn registration and authentication ceremonies | Registration requires a session; authentication is public/challenge-bound |
+| `/api/auth/device/*` | RFC 8628-style native app authorization | Public code/token exchange; approval requires a session |
+| `GET /api/auth/token` | Mint a short-lived service access token | Identity session cookie |
+| `GET /api/auth/jwks` | Publish rotating Ed25519 public keys | Public and cacheable by verifiers |
+| `GET /.well-known/openid-configuration` | Publish issuer, token, and JWKS locations | Public |
+| `GET /api/passkeys` | List the current account's passkeys | Identity session cookie |
+| `POST /api/passkeys` | Finalize PRF metadata after Better Auth registration | Identity session cookie plus same-origin check |
+
+Passkey registration logic appears only in `services/identity`. The user
+dashboard deliberately exposes “Add another passkey”; registering a second or
+later authenticator does not touch a bootstrap link. A successful first
+registration invalidates the bootstrap setup link.
+
+### Internal signup endpoint
+
+`POST /internal/v1/accounts` accepts an exact constant-time Bearer secret and a
+validated `{ email, source }` body. It idempotently provisions one verified
+identity subject and returns a setup URL only while the user has no qualifying
+passkey. `my.aven.ceo` calls it after a verified payment event. No checkout code
+inserts an identity row.
+
+The first cut uses a rotatable symmetric service credential. Replace this with
+mTLS or a workload-identity token before admitting more callers; do not widen
+the endpoint to the public internet merely because the request body is small.
+
+In the two-host deployment, Caddy admits `/internal/*` only from the platform
+host's exact Pulumi-managed IPv4/IPv6 addresses. Every other source receives a
+404 before the identity process sees the request. The constant-time Bearer
+check remains mandatory as a second control.
+
+`POST /internal/v1/authorizations/roles` uses the same service boundary for a
+bounded batch of subject UUIDs. It returns only each subject's coarse
+`user`/`admin` role. Static-site directory generation uses this endpoint rather
+than reading checkout's rollback copy of the identity tables. A failed identity
+lookup fails the directory refresh closed; the static host continues serving
+its last-known-good snapshot.
+
+### Authorization tokens
+
+`aven.id` signs Ed25519 JWTs with these enforced properties:
+
+- issuer: exactly `https://aven.id`;
+- audience: exactly `aven-services`;
+- lifetime: five minutes by default and never more than fifteen minutes;
+- subject: stable identity UUID;
+- session ID, verified email, role, scopes, and authentication method;
+- `services:access` and `amr=passkey` only after a passkey exists.
+
+A setup-link session receives `account:bootstrap` and `amr=bootstrap`. It can
+finish enrollment at `aven.id`, but the shared verifier rejects it at every
+service boundary. This prevents the temporary setup link from becoming a
+general bearer credential.
+
+The reusable `@avenos/aven-identity` verifier pins issuer, audience, algorithm,
+signature, expiry, required claims, scope, and authentication method. It
+fetches only a construction-time fixed JWKS URL (the public issuer by default,
+or an explicit private-network URL locally) and therefore cannot be turned
+into an SSRF primitive by request data. JWT `iss` validation always remains the
+public issuer.
+
+## Authentication versus domain authorization
+
+Identity answers only:
+
+1. Which stable subject authenticated?
+2. Was a passkey used/established for this account?
+3. Which coarse account role and scopes may be presented?
+
+The facade verifies that answer. The downstream domain service still decides
+whether the subject owns a name, tenant, artifact, site, subscription, or other
+resource. Putting owned names into the identity token would make revocation
+stale and would couple the identity database back to every product database.
+
+The facade replaces the downstream `Authorization` header with a service
+credential. It supplies trusted `x-aven-subject`, `x-aven-role`, and
+`x-aven-session` projections and carries the original signed JWT in
+`x-aven-identity-token`. A downstream may therefore verify the `aven.id` issuer,
+audience, signature, expiry, scope, and authentication method independently
+while still requiring its own service credential. Caller-provided versions of
+all trusted headers, cookies, and authorization headers are stripped before the
+facade creates the downstream request. Route prefixes, allowed coarse roles,
+target path prefixes, and upstream origins come from deployment configuration,
+never from request data.
+
+This is the narrow bridge needed by the generic actor-runner architecture.
+It is not yet an application grant. `api.aven.ceo` must eventually evaluate
+`ceo.aven` entitlements and mint short-lived, action-, audience-, tenant-, and
+resource-bound grants for Artifact Store and other domain services. `aven.id`
+must not acquire product tiers or artifact policy merely to make that possible.
+
+The target grant, customer-database routing, component manifest, and deterministic
+provisioning/reconciliation contracts are specified in
+[Customer databases as a first-class platform boundary](customer-database-platform.md).
+
+## Checkout surface
+
+The former monolith is renamed `services/checkout` and is deployed at
+`my.aven.ceo`. Identity source files, passkey endpoints, associated-domain
+files, and credential tests have been removed from it. A checkout-owned
+`checkout_customers` table stores only `{ subject_id, email, timestamps }` as a
+commerce projection; it is not an identity cache and cannot authenticate
+anyone.
+
+On a completed payment:
+
+1. Checkout validates and idempotently records the provider event.
+2. Checkout calls the identity provisioning endpoint with the purchaser email.
+3. Identity returns the stable subject and, when needed, a bootstrap URL.
+4. Checkout stores the subject on commerce records and uses the returned URL in
+   the purchase email.
+5. The purchaser opens `aven.id`, creates the first passkey, and may add more
+   passkeys later from the identity dashboard.
+
+The old post-payment “purchase token becomes a local auth session” bridge is
+removed. It crossed the checkout/identity boundary and made payment data a
+session-issuing primitive. The success page now confirms payment and directs
+the purchaser to the setup email.
+
+Checkout applies a deny-by-default public-path gate. Only the purchase
+pages, name funnel, billing endpoints, payment webhook, and health endpoints
+are reachable. Checkout also retains one narrowly scoped `secure-name`
+proof-of-work challenge used by its public name-hold form; it is commerce abuse
+control, not an authentication ceremony. Passkey, login, artifact, intent, LLM,
+site, dashboard, and internal directory paths return 404. Their handlers,
+migrations, workers, and deployment compositions have been removed from
+checkout rather than left dormant.
+
+## Actor-runner compatibility
+
+The `feat/document-ingest-actors` worktree was used as a consumer backtest for
+the cut. Its desired trust sequence is preserved:
+
+```text
+aven.id token -> api.aven.ceo authentication and fixed routing
+              -> actor runner independently verifies signed identity evidence
+              -> future ceo.aven product policy and short-lived domain grants
+              -> Artifact Store / intent / LLM / actor service
+```
+
+The native host has two compile-time origins now:
+
+- `AVEN_IDENTITY_BASE_URL` for passkeys, device authorization, session lookup,
+  identity proof-of-work, and token issuance;
+- `AVEN_API_BASE_URL` for billing, names, artifacts, intents, LLMs, and every
+  other product API.
+
+Actor authorities remain semantic ownership boundaries rather than deployment
+hostnames. `id.aven` owns principal, assurance, and portable trust vocabulary;
+`ceo.aven` owns product entitlements, artifacts, actor capabilities, and domain
+policy. The generic `os.aven` runner calls one external product origin while
+the facade routes only the exact `/api/actor-runs` prefix to its independently
+deployable service. Document ingestion will be a skill/graph hosted by that runner,
+not another identity, checkout, or facade service. That is the target ownership;
+the current app still executes both document placements in-process, and the
+runner's memory backend has no document actor executor.
+
+The runner is now integrated into the facade and E2E topology. Its JWT audience,
+facade header stripping, dedicated downstream bearer, and independent downstream
+JWT verification are covered by the split HTTP test. This proves the trust boundary,
+not product authorization, durable run storage, or document execution.
+
+## Public website
+
+`aven.ceo` is not a SvelteKit identity or checkout process. It is static output
+published through the existing static-site-hosting path in avenOS. It may link
+to `my.aven.ceo` and `aven.id`; it does not proxy their cookies or APIs. A
+compromise of public site content therefore cannot read host-only identity
+cookies.
+
+### Hosting-only recovery mode
+
+`static-site-host` has an explicit `SITE_HOST_MODE=snapshot` mode. In that mode
+it requires no directory URL, status URL, bearer token, DNS allow-list,
+database, or GitHub access. Startup validates
+`/var/lib/aven/static-sites/active-sites.json` and each release root before
+reporting ready. It never reconciles or reports.
+
+`services/static-site-host/docker-compose.hosting-only.yml` is the complete
+apex runtime: one read-only static host and one Caddy container, both with all
+capabilities dropped except Caddy's low-port bind. Caddy's on-demand TLS ask
+endpoint admits only exact names in the validated snapshot. The snapshot volume
+is mounted read-only and existing Caddy state remains on the protected volume.
+
+The 2026-08-28 live cutover staged this project separately at
+`/opt/aven-hosting`, preflighted the actual `aven.ceo` release, exchanged Caddy
+with automatic rollback, verified the apex and SPA fallback over public HTTPS,
+and then stopped the old project. The only running containers are now
+`aven-hosting-caddy-1` and `aven-hosting-static-site-host-1`. The former
+containers, `/opt/aven-api`, Postgres files, and all Docker volumes remain
+stopped and recoverable; nothing was deleted. A rollback archive is stored at
+`/var/lib/aven/backups/hosting-cutover-20260828T192300Z.tgz`.
+
+## Fresh data cut
+
+The new deployment starts empty. The stopped development database is rollback
+evidence, not migration input. Identity creates only account, session,
+credential, setup, device-code, JWKS, and proof-of-work tables.
+
+Checkout creates only commerce, name, abuse-control, queue, and
+`checkout_customers` tables. A checkout customer stores the immutable identity
+subject plus commerce email; it cannot authenticate anyone. The API creates
+only facade-owned site-control tables. No legacy migration is replayed after
+the squashed `0000` schemas.
+
+Static content is the persistence exception: the GitHub source/artifact
+branches are authoritative and the existing hosting-only volume remains
+available until the new apex is promoted and verified.
+
+## Passkey/RP cutover
+
+WebAuthn credentials cannot move between RP IDs. Because this is a fresh WIP
+deployment, no legacy identity rows or credentials are imported. Web, Rust,
+macOS, iOS, and Android code now all pin `aven.id`; the old credential domains
+are absent from CSP, native plugin guards, mobile asset statements, and shipped
+entitlements. Apple and Android association files at `aven.id` must be live and
+validated before distributing a signed build.
+
+## Deployment order
+
+1. Run `platform-infrastructure` preview/up with apex management disabled. It
+   creates protected identity and platform hosts/volumes and non-apex DNS.
+2. Run `platform-deploy`; it deploys the identity database and `aven.id` first.
+   Verify setup enrollment, two-passkey enrollment, sign-in, device flow,
+   token claims, JWKS, and the platform-only internal-route restriction.
+3. Deploy `api.aven.ceo` with exact checkout and actor-runner allowlists and verify
+   forged, expired, and wrong-audience tokens fail closed.
+4. Deploy `my.aven.ceo`; exercise provider webhook replay, email delivery, and
+   checkout-to-identity provisioning.
+5. Deploy the actor runner as the exact `/api/actor-runs` downstream with
+   `ACTOR_RUNNER_STATE_BACKEND=memory` only for reference environments. Do not treat
+   it as durable document execution or resurrect the former feed-driven processor.
+6. Verify the `aven-brands` source/artifact pair, then explicitly run the
+   infrastructure workflow with apex management enabled.
+7. Keep the old hosting-only server intact through DNS convergence and the
+   rollback window.
+
+## Security verification checklist
+
+- A token with the right signature but wrong issuer or audience is rejected.
+- A bootstrap session token is rejected by the facade.
+- A caller cannot inject trusted identity headers or forward an identity
+  cookie to a downstream service.
+- A downstream can independently reject a forged, expired, wrong-audience, or
+  bootstrap `x-aven-identity-token` even when service authentication succeeds.
+- Unknown facade prefixes return 404 without making a network call.
+- Registration requires an identity session and allowed Origin.
+- Authentication verification consumes proof of work once.
+- User verification is required by WebAuthn.
+- Setup and provisioning tokens are never logged or stored in plaintext.
+- Adding a second passkey leaves the first passkey usable.
+- Losing one passkey does not create an email sign-in path; another registered
+  passkey or the controlled migration/support process is required.
+- JWKS rotation keeps the prior public key through the access-token grace
+  window and never publishes private key material.
+
+## Rollback boundary
+
+Rollback is per service. DNS may return checkout or facade traffic to the old
+deployment while identity remains on its new database. Do not roll identity
+back after new `aven.id` credentials are registered unless the old deployment
+can read the exact migrated identity schema and encrypted signing keys.
+
+The old stopped database is rollback material only and is never mounted by the
+new hosts. It must not become a dual-write identity store.
+
+## Local E2E verification snapshot
+
+The 2026-08-28 isolated local run uses separate identity and platform databases,
+Mailpit, the real SvelteKit applications, the Bun facade, the managed static
+host, and standards-valid virtual WebAuthn authenticators. It verifies:
+
+- account provisioning and setup-link redemption at identity;
+- first and second passkey registration on distinct authenticators, both
+  visible in the identity dashboard;
+- passkey sign-out/sign-in plus device-code claim, approval, and token exchange;
+- passkey-qualified JWT acceptance at the facade and raw facade credential
+  rejection at checkout;
+- exact five-minute JWT lifetime, pinned issuer/audience, Ed25519 JWKS, and CORS;
+- the complete fake-payment checkout, both emails, identity provisioning, and
+  the checkout `subject_id` projection;
+- absence of login, Better Auth, and passkey HTTP routes from checkout;
+- identity-backed role resolution for static-site authorization;
+- managed-site create/delete authorization, reserved-host restrictions, forged
+  identity-header stripping, and internal-directory concealment; and
+- a real shallow fetch and serve of the `aven.ceo` `production` plus
+  `deploy/production` snapshot.
+
+The database-backed checkout suite completes 60/60 tests inside this run; the
+browser journey is one complete cross-service test. Unit checks for identity,
+the shared verifier, facade, hosting contracts, static host, and Pulumi run
+separately before release.
+
+The interactive local stack uses `http://localhost:13100` as both public
+identity origin and WebAuthn RP. A developer provisions a disposable account,
+creates a real browser passkey, and runs the Rust client with compile-time local
+identity/facade origins. Desktop development uses browser device approval
+because an ad-hoc binary cannot claim the production associated domain. The
+Rust process keeps the revocable session private and exchanges it for a
+short-lived service JWT on every facade request.
+
+Every image build excludes `.npmrc` before Docker sees the context. Private
+package installation constructs a minimal temporary config inside the same
+BuildKit secret-mounted `RUN` step and deletes it there, so credentials do not
+enter source, context, cache exports, or image layers.
+
+This snapshot validates authentication/authorization, purchase, managed static
+hosting, the local Rust handoff, apex preservation, and the actor runner's trust
+boundary. The E2E topology includes the runner, but there is still no remote
+document-ingest deployment in this cut.
