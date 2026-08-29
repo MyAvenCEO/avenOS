@@ -63,6 +63,32 @@ async function waitUntilReady(origin: string, process: ChildProcess): Promise<vo
 	throw new Error('tauri-driver did not become ready')
 }
 
+async function terminate(process: ChildProcess): Promise<void> {
+	if (process.exitCode !== null || process.signalCode !== null) return
+
+	let resolveExit: (() => void) | undefined
+	const exited = new Promise<void>((resolve) => {
+		resolveExit = resolve
+		process.once('exit', resolve)
+	})
+	process.kill('SIGTERM')
+	await Promise.race([exited, new Promise<void>((resolve) => setTimeout(resolve, 5_000))])
+	if (process.exitCode === null && process.signalCode === null) {
+		process.kill('SIGKILL')
+		await exited
+	}
+	if (resolveExit) process.off('exit', resolveExit)
+}
+
+async function removeStateDirectory(stateDirectory: string): Promise<void> {
+	await rm(stateDirectory, {
+		recursive: true,
+		force: true,
+		maxRetries: 10,
+		retryDelay: 100
+	})
+}
+
 export class TauriSession {
 	private constructor(
 		private readonly origin: string,
@@ -127,11 +153,14 @@ export class TauriSession {
 			}
 			return new TauriSession(origin, sessionId, child, stateDirectory, () => output)
 		} catch (error) {
-			child.kill('SIGTERM')
-			await rm(stateDirectory, { recursive: true, force: true })
-			throw new Error(`Tauri session launch failed: ${String(error)}\ntauri-driver output:\n${output}`, {
-				cause: error
-			})
+			await terminate(child)
+			await removeStateDirectory(stateDirectory)
+			throw new Error(
+				`Tauri session launch failed: ${String(error)}\ntauri-driver output:\n${output}`,
+				{
+					cause: error
+				}
+			)
 		}
 	}
 
@@ -230,8 +259,8 @@ export class TauriSession {
 		try {
 			await request(this.origin, this.path(''), { method: 'DELETE' })
 		} finally {
-			this.process.kill('SIGTERM')
-			await rm(this.stateDirectory, { recursive: true, force: true })
+			await terminate(this.process)
+			await removeStateDirectory(this.stateDirectory)
 		}
 	}
 }
