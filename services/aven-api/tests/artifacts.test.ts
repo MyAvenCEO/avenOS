@@ -1,3 +1,4 @@
+import type { ArtifactStoreFetch } from '@avenos/artifact-store'
 import { describe, expect, test } from 'vitest'
 import { ArtifactFileService } from '../src/lib/server/artifacts/service'
 
@@ -15,7 +16,7 @@ describe('artifact file coordinator', () => {
 	test('streams bytes and publishes an authenticated core.file root', async () => {
 		let uploaded = ''
 		let published: Record<string, unknown> | undefined
-		const fetch: typeof globalThis.fetch = async (input, init) => {
+		const fetch: ArtifactStoreFetch = async (input, init) => {
 			const request = new Request(input, init)
 			expect(request.headers.get('authorization')).toBe('Bearer service-token')
 			expect(request.headers.get('x-aven-artifact-database')).toBe('cust_acme')
@@ -114,7 +115,7 @@ describe('artifact file coordinator', () => {
 	test('publishes client actor outputs with server-owned scope, attribution and blob claims', async () => {
 		let published: Record<string, unknown> | undefined
 		let uploaded = ''
-		const fetch: typeof globalThis.fetch = async (input, init) => {
+		const fetch: ArtifactStoreFetch = async (input, init) => {
 			const request = new Request(input, init)
 			if (request.url.endsWith('/v1/context')) return new Response('{"storeEpoch":"epoch-1"}')
 			if (request.url.includes('/uploads/')) {
@@ -245,7 +246,7 @@ describe('artifact file coordinator', () => {
 
 	test('records model-backed client runs as non-deterministic with their model receipt', async () => {
 		let published: Record<string, unknown> | undefined
-		const fetch: typeof globalThis.fetch = async (input, init) => {
+		const fetch: ArtifactStoreFetch = async (input, init) => {
 			const request = new Request(input, init)
 			if (request.url.endsWith('/v1/context')) return new Response('{"storeEpoch":"epoch-1"}')
 			if (request.url.endsWith(`/publications/${publicationId}`)) {
@@ -318,7 +319,7 @@ describe('artifact file coordinator', () => {
 	})
 
 	test('browses the committed artifact feed newest first', async () => {
-		const fetch: typeof globalThis.fetch = async (input, init) => {
+		const fetch: ArtifactStoreFetch = async (input, init) => {
 			const request = new Request(input, init)
 			expect(request.headers.get('authorization')).toBe('Bearer service-token')
 			if (request.url.endsWith('/v1/context')) {
@@ -407,7 +408,7 @@ describe('artifact file coordinator', () => {
 	})
 
 	test('loads direct supporting evidence separately from the feed', async () => {
-		const fetch: typeof globalThis.fetch = async (input) => {
+		const fetch: ArtifactStoreFetch = async (input) => {
 			const request = new Request(input)
 			expect(request.url).toContain(`/artifacts/${artifactId}/supporting-evidence`)
 			return new Response(

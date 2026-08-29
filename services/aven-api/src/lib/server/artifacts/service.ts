@@ -7,12 +7,15 @@ import {
 import type { ArtifactStoreConfig } from '../config.js'
 import { AppError } from '../errors.js'
 
+type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+
 export const MAX_ARTIFACT_FILE_BYTES = 25 * 1024 * 1024
 
 export interface PublishFileInput {
 	userId: string
 	databaseName: string
 	scopeId: string
+	routingGeneration?: number
 	publicationId: string
 	intentId: string
 	observedAt: string
@@ -22,6 +25,7 @@ export interface PublishFileInput {
 	length: number
 	body: BodyInit
 	sourceKind: 'desktop-drop' | 'client-actor-ingest'
+	executionEnvironment?: 'local' | 'server'
 }
 
 export interface PublishedFile {
@@ -59,6 +63,7 @@ export interface PublishClientRunInput {
 	userId: string
 	databaseName: string
 	scopeId: string
+	routingGeneration?: number
 	publicationId: string
 	procedureKey: string
 	procedureVersion: 'client-v1'
@@ -666,18 +671,15 @@ async function inChunks<T>(values: T[], size: number, work: (value: T) => Promis
 export class ArtifactFileService {
 	readonly #baseUrl: string
 	readonly #bearerToken: string
-	readonly #fetch?: typeof globalThis.fetch
+	readonly #fetch?: Fetch
 
-	private constructor(baseUrl: string, bearerToken: string, fetch?: typeof globalThis.fetch) {
+	private constructor(baseUrl: string, bearerToken: string, fetch?: Fetch) {
 		this.#baseUrl = baseUrl
 		this.#bearerToken = bearerToken
 		this.#fetch = fetch
 	}
 
-	static fromConfig(
-		config: ArtifactStoreConfig,
-		fetch?: typeof globalThis.fetch
-	): ArtifactFileService | null {
+	static fromConfig(config: ArtifactStoreConfig, fetch?: Fetch): ArtifactFileService | null {
 		if (!config.ARTIFACT_STORE_BASE_URL || !config.ARTIFACT_STORE_BEARER_TOKEN) {
 			return null
 		}
@@ -688,30 +690,48 @@ export class ArtifactFileService {
 		)
 	}
 
-	#client(databaseName: string): ArtifactStoreClient {
+	#client(databaseName: string, scopeId: string, routingGeneration: number): ArtifactStoreClient {
 		return new ArtifactStoreClient({
 			baseUrl: this.#baseUrl,
 			bearerToken: () => this.#bearerToken,
-			requestHeaders: () => ({ 'x-aven-artifact-database': databaseName }),
+			requestHeaders: () => ({
+				'x-aven-artifact-database': databaseName,
+				'x-aven-environment': scopeId,
+				'x-aven-routing-generation': String(routingGeneration)
+			}),
 			fetch: this.#fetch
 		})
 	}
 
-	async artifact(databaseName: string, scopeId: string, artifactId: string): Promise<ArtifactJson> {
-		return this.#client(databaseName).artifact(scopeId, artifactId)
+	async artifact(
+		databaseName: string,
+		scopeId: string,
+		artifactId: string,
+		routingGeneration = 1
+	): Promise<ArtifactJson> {
+		return this.#client(databaseName, scopeId, routingGeneration).artifact(scopeId, artifactId)
 	}
 
-	async content(databaseName: string, scopeId: string, artifactId: string): Promise<Uint8Array> {
-		return this.#client(databaseName).content(scopeId, artifactId)
+	async content(
+		databaseName: string,
+		scopeId: string,
+		artifactId: string,
+		routingGeneration = 1
+	): Promise<Uint8Array> {
+		return this.#client(databaseName, scopeId, routingGeneration).content(scopeId, artifactId)
 	}
 
 	async evidence(
 		databaseName: string,
 		scopeId: string,
-		artifactId: string
+		artifactId: string,
+		routingGeneration = 1
 	): Promise<ArtifactEvidence[]> {
 		const resource = record(
-			await this.#client(databaseName).supportingEvidence(scopeId, artifactId),
+			await this.#client(databaseName, scopeId, routingGeneration).supportingEvidence(
+				scopeId,
+				artifactId
+			),
 			'supporting evidence'
 		)
 		if (stringField(resource, 'artifactId', 'supporting evidence') !== artifactId) {
@@ -728,9 +748,13 @@ export class ArtifactFileService {
 	 * Debug-oriented scope browser. The store feed is forward-only, so walk it
 	 * in large pages and retain a bounded tail of the newest artifacts.
 	 */
-	async browse(databaseName: string, scopeId: string): Promise<ArtifactBrowseResult> {
+	async browse(
+		databaseName: string,
+		scopeId: string,
+		routingGeneration = 1
+	): Promise<ArtifactBrowseResult> {
 		try {
-			return await this.#browse(databaseName, scopeId)
+			return await this.#browse(databaseName, scopeId, routingGeneration)
 		} catch (error) {
 			if (error instanceof AppError) throw error
 			if (error instanceof ArtifactStoreProblem) {
@@ -740,8 +764,12 @@ export class ArtifactFileService {
 		}
 	}
 
-	async #browse(databaseName: string, scopeId: string): Promise<ArtifactBrowseResult> {
-		const client = this.#client(databaseName)
+	async #browse(
+		databaseName: string,
+		scopeId: string,
+		routingGeneration: number
+	): Promise<ArtifactBrowseResult> {
+		const client = this.#client(databaseName, scopeId, routingGeneration)
 		const context = record(await client.context(), 'context')
 		const storeEpoch = stringField(context, 'storeEpoch', 'context')
 		const artifacts: BrowsedArtifact[] = []
@@ -847,7 +875,7 @@ export class ArtifactFileService {
 			}
 			validateCommonClientContract(input)
 			descriptor.validate(input)
-			const client = this.#client(input.databaseName)
+			const client = this.#client(input.databaseName, input.scopeId, input.routingGeneration ?? 1)
 			const context = record(await client.context(), 'context')
 			const storeEpoch = stringField(context, 'storeEpoch', 'context')
 			const blobAuthorities: Record<string, ArtifactJson> = {}
@@ -958,7 +986,7 @@ export class ArtifactFileService {
 
 	async publishFile(input: PublishFileInput): Promise<PublishedFile> {
 		try {
-			const client = this.#client(input.databaseName)
+			const client = this.#client(input.databaseName, input.scopeId, input.routingGeneration ?? 1)
 			const context = await client.context()
 			const storeEpoch = stringField(context, 'storeEpoch', 'context')
 			const claimId = randomUUID()
@@ -998,7 +1026,10 @@ export class ArtifactFileService {
 							payload: {
 								originalName: input.originalName,
 								declaredMediaType: input.mediaType,
-								sourceKind: input.sourceKind
+								sourceKind: input.sourceKind,
+								...(input.executionEnvironment && {
+									executionEnvironment: input.executionEnvironment
+								})
 							},
 							blob: { sha256: input.sha256, length: input.length },
 							references: [],

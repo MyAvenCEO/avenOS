@@ -3,6 +3,8 @@ import { z } from 'zod'
 import type { ServerConfig } from './config.js'
 import { AppError } from './errors.js'
 
+type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 const MAX_TEXT_BYTES = 2 * 1024 * 1024
 const MAX_SINGLE_IMAGE_BYTES = 12 * 1024 * 1024
@@ -459,9 +461,9 @@ function resolveEndpoint(baseUrl: string, allowInsecureHttp: boolean): URL {
 export class LlmGatewayService {
 	readonly #models: ResolvedModel[]
 	readonly #modelsById: Map<string, ResolvedModel>
-	readonly #fetch: typeof globalThis.fetch
+	readonly #fetch: Fetch
 
-	private constructor(config: ServerConfig, fetch: typeof globalThis.fetch) {
+	private constructor(config: ServerConfig, fetch: Fetch) {
 		const catalog = parseConfigurationJson(
 			'LLM_GATEWAY_MODELS_JSON',
 			config.LLM_GATEWAY_MODELS_JSON,
@@ -495,7 +497,7 @@ export class LlmGatewayService {
 
 	static fromConfig(
 		config: ServerConfig,
-		fetch: typeof globalThis.fetch = globalThis.fetch
+		fetch: Fetch = globalThis.fetch
 	): LlmGatewayService | null {
 		return config.LLM_GATEWAY_ENABLED ? new LlmGatewayService(config, fetch) : null
 	}
