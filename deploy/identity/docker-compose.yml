@@ -11,6 +11,7 @@ services:
       IDENTITY_ACCOUNTS_PASSWORD: ${IDENTITY_ACCOUNTS_PASSWORD:?required}
       IDENTITY_AUTHORIZATION_PASSWORD: ${IDENTITY_AUTHORIZATION_PASSWORD:?required}
       IDENTITY_MIGRATOR_PASSWORD: ${IDENTITY_MIGRATOR_PASSWORD:?required}
+      IDENTITY_BACKUP_PASSWORD: ${IDENTITY_BACKUP_PASSWORD:?required}
     volumes:
       - /var/lib/aven/postgres:/var/lib/postgresql/data
       - ./db-init.sh:/docker-entrypoint-initdb.d/10-identity.sql.sh:ro
@@ -39,8 +40,70 @@ services:
       IDENTITY_ACCOUNTS_PASSWORD: ${IDENTITY_ACCOUNTS_PASSWORD:?required}
       IDENTITY_AUTHORIZATION_PASSWORD: ${IDENTITY_AUTHORIZATION_PASSWORD:?required}
       IDENTITY_MIGRATOR_PASSWORD: ${IDENTITY_MIGRATOR_PASSWORD:?required}
+      IDENTITY_BACKUP_PASSWORD: ${IDENTITY_BACKUP_PASSWORD:?required}
     volumes:
       - ./db-init.sh:/db-init.sh:ro
+    networks: [identity-private]
+    security_opt: [no-new-privileges:true]
+
+  backup:
+    image: ${OPERATIONS_IMAGE:?required}
+    restart: unless-stopped
+    depends_on:
+      database-roles:
+        condition: service_completed_successfully
+    environment:
+      PGHOST: database
+      PGUSER: aven_backup
+      PGPASSWORD: ${IDENTITY_BACKUP_PASSWORD:?required}
+      RESTIC_REPOSITORY: ${BACKUP_RESTIC_REPOSITORY:?required}
+      RESTIC_PASSWORD: ${BACKUP_RESTIC_PASSWORD:?required}
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:?required}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:?required}
+      AWS_REGION: ${BACKUP_S3_REGION:?required}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION:?required}
+      BACKUP_ENVIRONMENT: ${BACKUP_ENVIRONMENT:?required}
+      BACKUP_HOST: identity
+      BACKUP_RELEASE_ID: ${RELEASE_ID:-unknown}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-3600}
+      BACKUP_MAX_AGE_SECONDS: ${BACKUP_MAX_AGE_SECONDS:-7200}
+      XDG_CACHE_HOME: /tmp/restic-cache
+    volumes:
+      - /var/lib/aven/backups:/var/lib/aven-backups
+    tmpfs: [/tmp]
+    read_only: true
+    healthcheck:
+      test: [CMD, /operations/entrypoint.sh, health]
+      interval: 1m
+      timeout: 10s
+      retries: 2
+      start_period: 10m
+    networks: [identity-private]
+    security_opt: [no-new-privileges:true]
+
+  restore:
+    profiles: [recovery]
+    image: ${OPERATIONS_IMAGE:?required}
+    command: [restore]
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      PGHOST: database
+      PGUSER: postgres
+      PGPASSWORD: ${IDENTITY_POSTGRES_PASSWORD:?required}
+      RESTIC_REPOSITORY: ${BACKUP_RESTIC_REPOSITORY:?required}
+      RESTIC_PASSWORD: ${BACKUP_RESTIC_PASSWORD:?required}
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:?required}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:?required}
+      AWS_REGION: ${BACKUP_S3_REGION:?required}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION:?required}
+      RESTORE_CONFIRMATION: fresh-target-only
+      XDG_CACHE_HOME: /tmp/restic-cache
+    volumes:
+      - /var/lib/aven/backups:/var/lib/aven-backups
+    tmpfs: [/tmp]
+    read_only: true
     networks: [identity-private]
     security_opt: [no-new-privileges:true]
 

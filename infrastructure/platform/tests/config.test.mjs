@@ -7,11 +7,10 @@ const base = {
 	HETZNER_SERVER_TYPE: 'cx23',
 	HETZNER_SERVER_ARCHITECTURE: 'amd64',
 	HETZNER_OS_IMAGE: 'ubuntu-24.04',
-	HETZNER_ENABLE_BACKUPS: 'true',
 	SSH_ALLOWED_CIDRS: '192.0.2.4/32'
 }
 
-test('defines two independent hosts and defers the apex cutover', () => {
+test('defines two independent fresh hosts and explicit apex management', () => {
 	const config = loadPlatformConfig(base)
 	assert.equal(config.identityHostname, 'aven.id')
 	assert.deepEqual(config.platformHostnames, {
@@ -28,12 +27,10 @@ test('treats absent GitHub optional variables as defaults', () => {
 	const config = loadPlatformConfig({
 		...base,
 		IDENTITY_VOLUME_SIZE_GB: '',
-		PLATFORM_VOLUME_SIZE_GB: '',
-		HETZNER_ENABLE_BACKUPS: ''
+		PLATFORM_VOLUME_SIZE_GB: ''
 	})
 	assert.equal(config.identityVolumeSize, 40)
 	assert.equal(config.platformVolumeSize, 80)
-	assert.equal(config.enableBackups, true)
 })
 
 test('validates exact SSH CIDRs', () => {

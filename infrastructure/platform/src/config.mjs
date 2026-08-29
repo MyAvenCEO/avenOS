@@ -72,7 +72,6 @@ export function loadPlatformConfig(env = process.env) {
 		osImage: required(env, 'HETZNER_OS_IMAGE'),
 		identityVolumeSize,
 		platformVolumeSize,
-		enableBackups: booleanValue(env, 'HETZNER_ENABLE_BACKUPS', 'true'),
 		manageApexDns: booleanValue(env, 'MANAGE_AVEN_CEO_APEX_DNS', 'false'),
 		sshAllowedCidrs: parseSshCidrs(required(env, 'SSH_ALLOWED_CIDRS'))
 	}

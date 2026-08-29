@@ -10,6 +10,7 @@ services:
       IDENTITY_ACCOUNTS_PASSWORD: identity-accounts-e2e
       IDENTITY_AUTHORIZATION_PASSWORD: identity-authorization-e2e
       IDENTITY_MIGRATOR_PASSWORD: identity-migrator-e2e
+      IDENTITY_BACKUP_PASSWORD: identity-backup-e2e
     volumes:
       - identity-postgres:/var/lib/postgresql/data
       - ../identity/db-init.sh:/docker-entrypoint-initdb.d/10-identity.sql.sh:ro
@@ -34,6 +35,7 @@ services:
       IDENTITY_ACCOUNTS_PASSWORD: identity-accounts-e2e
       IDENTITY_AUTHORIZATION_PASSWORD: identity-authorization-e2e
       IDENTITY_MIGRATOR_PASSWORD: identity-migrator-e2e
+      IDENTITY_BACKUP_PASSWORD: identity-backup-e2e
     volumes:
       - ../identity/db-init.sh:/db-init.sh:ro
     networks: [identity-private]
@@ -95,6 +97,7 @@ services:
       API_MIGRATOR_PASSWORD: api-migrator-e2e
       CUSTOMER_PROVISIONER_PASSWORD: customer-provisioner-e2e
       ARTIFACT_STORE_PROVISIONER_DB_PASSWORD: artifact-store-provisioner-db-e2e
+      PLATFORM_BACKUP_PASSWORD: platform-backup-e2e
     volumes:
       - platform-postgres:/var/lib/postgresql/data
       - ../platform/db-init.sh:/docker-entrypoint-initdb.d/10-platform.sql.sh:ro
@@ -129,6 +132,7 @@ services:
       API_MIGRATOR_PASSWORD: api-migrator-e2e
       CUSTOMER_PROVISIONER_PASSWORD: customer-provisioner-e2e
       ARTIFACT_STORE_PROVISIONER_DB_PASSWORD: artifact-store-provisioner-db-e2e
+      PLATFORM_BACKUP_PASSWORD: platform-backup-e2e
     volumes:
       - ../platform/db-init.sh:/db-init.sh:ro
     networks: [platform-private]
@@ -255,6 +259,7 @@ services:
       ARTIFACT_STORE_PROVISIONER_URL: http://artifact-store-provisioner:8088
       ARTIFACT_STORE_PROVISIONER_TOKEN: artifact-provisioner-token-for-e2e-0001
       ARTIFACT_STORE_PROVISIONER_DATABASE_ROLE: aven_artifact_store_provisioner
+      BACKUP_DATABASE_ROLE: aven_backup
       PROVISIONER_POLL_INTERVAL_MS: "100"
       PROVISIONER_LEASE_SECONDS: "15"
     networks: [platform-private]
@@ -428,7 +433,6 @@ services:
       static-sites-init:
         condition: service_completed_successfully
     environment:
-      SITE_HOST_MODE: managed
       SITE_HOST_LISTEN: 0.0.0.0:18093
       SITE_HOST_DATA_ROOT: /data
       SITE_HOST_DIRECTORY_URL: http://api:13000/internal/v1/static-sites/bindings

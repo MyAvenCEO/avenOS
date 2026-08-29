@@ -62,7 +62,6 @@ jobs:
           PLATFORM_SERVER_TYPE: ${{ vars.PLATFORM_SERVER_TYPE }}
           IDENTITY_VOLUME_SIZE_GB: ${{ vars.IDENTITY_VOLUME_SIZE_GB }}
           PLATFORM_VOLUME_SIZE_GB: ${{ vars.PLATFORM_VOLUME_SIZE_GB }}
-          HETZNER_ENABLE_BACKUPS: ${{ vars.HETZNER_ENABLE_BACKUPS }}
           SSH_ALLOWED_CIDRS: ${{ vars.SSH_ALLOWED_CIDRS }}
           MANAGE_AVEN_CEO_APEX_DNS: ${{ inputs.manage_aven_ceo_apex }}
           PULUMI_SKIP_UPDATE_CHECK: "true"

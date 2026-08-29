@@ -137,7 +137,7 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 			location: config.location,
 			serverType: selectedServerType(serverType),
 			image: config.osImage,
-			backups: config.enableBackups,
+			backups: false,
 			deleteProtection: true,
 			rebuildProtection: true,
 			keepDisk: true,
@@ -233,11 +233,13 @@ export const identityAuthorizationPassword = pulumi.secret(
 	password('identity-authorization-password')
 )
 export const identityMigratorPassword = pulumi.secret(password('identity-migrator-password'))
+export const identityBackupPassword = pulumi.secret(password('identity-backup-password'))
 export const identityBetterAuthSecret = pulumi.secret(password('identity-better-auth-secret', 64))
 export const identityProvisioningSecret = pulumi.secret(
 	password('identity-provisioning-secret', 64)
 )
 export const platformPostgresPassword = pulumi.secret(password('platform-postgres-password'))
+export const platformBackupPassword = pulumi.secret(password('platform-backup-password'))
 export const checkoutRuntimePassword = pulumi.secret(password('checkout-runtime-password'))
 export const checkoutWebhookPassword = pulumi.secret(password('checkout-webhook-password'))
 export const checkoutMigratorPassword = pulumi.secret(password('checkout-migrator-password'))
