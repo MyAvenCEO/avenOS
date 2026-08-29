@@ -7,6 +7,10 @@ the complete architecture, continue with
 The wire format and state-machine requirements are normative in
 [Actor execution protocol and document-ingest cutover](actor-runtime-formal-spec.md).
 
+Within the [product model](product-model.md), Skills and Actors are how an Aven turns
+an intended outcome into bounded, inspectable work. Neither term is a synonym for the
+Aven itself or for the model serving one completion.
+
 ## Start with an outcome
 
 Suppose a user uploads an invoice and asks for validated invoice details. The system
@@ -126,7 +130,7 @@ provides useful enrichment.
 
 The current `solve()` and `PlanRunStartCommand.goals` implement exact predicate goals
 only. Exploratory utility, budgets, saturation, and understanding bundles are target
-contracts, not implemented behavior in this branch.
+contracts, not implemented behavior in the current runtime.
 
 An ad-hoc request does not need a stored skill first. A caller can submit ingredients,
 goals, parameters, and policy directly. If that query becomes useful, it can later be
@@ -275,7 +279,7 @@ step faster, but recovery may depend only on the run journal and immutable artif
 
 ### Current execution paths
 
-The branch intentionally contains several layers at different maturity levels:
+The current implementation contains several layers at different maturity levels:
 
 - **`DocumentProcessingRuntime` works end to end for the current document DAG.** It
   calls actors, publishes every successful step, retries safely, and updates the app
@@ -343,7 +347,7 @@ The final result of a skill is normally the goal artifact or artifacts. A specia
 
 ## What is ready, and what comes next
 
-Ready in this branch:
+Implemented now:
 
 - qualified `id.aven`, `os.aven`, and `ceo.aven` identifiers;
 - method-level capabilities and schema slots;

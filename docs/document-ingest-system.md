@@ -505,7 +505,7 @@ input, one page parameter, and exactly `text` and `layout` outputs with their ex
 types and blob rules. A client cannot relabel an arbitrary output as that procedure.
 
 The actor already returns the literal `procedureKey` expected by that contract. The
-split worktree does not contain the publication downstream or its descriptor table, so
+current repository does not contain the publication downstream or its descriptor table, so
 an integrated deployment must restore those descriptors before client publication can
 succeed. A missing or mismatched descriptor must reject the publication.
 
@@ -621,7 +621,7 @@ execution, not the source of truth for artifacts or provenance.
 
 The desktop adapters consume two generic avenCEO data-plane APIs. Their clients and
 contracts are present here; after the infrastructure split, their owning LLM and
-artifact downstream implementations are not part of this worktree and must be wired
+artifact downstream implementations are not part of the current deployment and must be wired
 back through the facade before an integrated deployment. The actor-run API is present
 as a separate service, but is not yet the document executor.
 
@@ -656,7 +656,7 @@ built-in actor.
 
 `sourceKind: client-actor-ingest` currently identifies sources whose restart behavior
 belongs to the desktop document adapter. The former feed-driven Artifact Processor has
-been removed, so there is no competing server pipeline in this worktree. The marker is
+been removed, so there is no competing server pipeline in the current system. The marker is
 removed once admitted actor runs become the sole owner of processing.
 
 ## Actor discovery and planning

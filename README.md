@@ -7,6 +7,10 @@ This repository contains the Rust client, portable Actor runtime, service bounda
 and deployment automation that make the system inspectable and independently
 operable.
 
+The [product model](docs/product-model.md) gives precise meanings to Aven, avenCEO,
+avenOS, and working intelligence, including the guarantees the current repository does
+and does not provide.
+
 In the current application, text, voice, and documents enter the same workspace. Work
 lives as an Intent with its source material, conversation, activity, artifacts, and
 the skills or Actors involved. An Intent is therefore more than a chat transcript or
@@ -171,10 +175,12 @@ bun run test:e2e:platform
 
 It builds the optimized Rust client and real service images. The test walks through
 checkout and email, first and second passkeys, native device authorization, customer
-provisioning, artifact upload, document import, chat, Intent and Actor persistence,
-raw Polar retention, tenant isolation, authorization failures, static hosting, and
-complete teardown. It is evidence for that tested composition; it does not turn the
-unsupported production target into a deployed system.
+provisioning, artifact upload, document import, chat, session-local anonymous speaker
+attribution, duplex interruption, Intent and Actor persistence, raw Polar retention,
+tenant isolation, authorization failures, static hosting, and complete teardown. It
+is evidence for that tested composition; it does not turn a synthetic voice fixture
+into acoustic-device qualification or the unsupported production target into a
+deployed system.
 
 [Build and test](docs/operations/build-and-test.md) lists the complete release gate,
 component commands, platform requirements, and the behavior covered by each test.
@@ -237,7 +243,7 @@ Start with the [operations handbook](docs/operations/README.md). Its chapters co
   and
 - [bounded incident access and response](docs/operations/incident-response.md).
 
-Production is not an independent deployment target in this branch. The workflows,
+Production is not an independent deployment target in the current automation. The workflows,
 state, backup labels, public domains, and GitHub Environment are fixed to `next`.
 Moving the Git branch from `next` to `prod` does not provision or deploy another
 installation. The production decisions and proof required before that changes are in

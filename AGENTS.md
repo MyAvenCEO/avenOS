@@ -14,6 +14,8 @@ rules for its subtree.
 ## Documentation authority
 
 - `README.md` is the broad standalone introduction and first local run.
+- `docs/product-model.md` owns product terminology, purpose, and the boundary between
+  current ownership guarantees and product direction.
 - `docs/operations/` is the sole authority for setup, build/test, local stack,
   deployment, access/secrets, maintenance, backup/recovery, and incident response.
 - `docs/customer-database-platform.md` owns the normative customer-data boundary.

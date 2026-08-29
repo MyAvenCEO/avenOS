@@ -3,6 +3,9 @@
 Status: current architecture decision
 Date: 2026-08-28
 
+Product context: [Product model](product-model.md). An Aven is product context, not an
+identity subject, passkey credential, checkout customer, or service token.
+
 ## Decision
 
 The former `aven-api` application combined four unrelated trust zones. They are
@@ -174,8 +177,8 @@ checkout rather than left dormant.
 
 ## Actor-runner compatibility
 
-The `feat/document-ingest-actors` worktree was used as a consumer backtest for
-the cut. Its desired trust sequence is preserved:
+The Actor Runtime design was used as a consumer backtest for the cut. Its trust
+sequence is preserved:
 
 ```text
 aven.id token -> api.aven.ceo authentication and fixed routing

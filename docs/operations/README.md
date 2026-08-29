@@ -1,11 +1,14 @@
-# AvenOS operations handbook
+# avenOS operations handbook
 
 Status: authoritative
 
 This handbook is for developers and operators who need to build, run, deploy, or
-recover AvenOS. It owns operational procedures. Architecture papers explain why the
+recover avenOS. It owns operational procedures. Architecture papers explain why the
 system is shaped this way; if their commands or operational claims conflict with this
 handbook, this handbook wins.
+
+The [product model](../product-model.md) owns product terminology and the boundary
+between the direction of the product and properties the current system proves.
 
 ## Start here
 

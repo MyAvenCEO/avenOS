@@ -122,7 +122,7 @@ changes a Git reference only. It does not provision or deploy infrastructure.
 
 ## Production status
 
-**There is no supported independent production deployment workflow in this branch.**
+**There is no supported independent production deployment workflow in the current automation.**
 The current workflows, concurrency groups, Pulumi stack validation, backup labels, and
 GitHub Environment are fixed to `next`. Public domains are fixed as well, so a second
 installation cannot coexist by changing only a stack name.
