@@ -84,6 +84,9 @@ export class CustomerDatabaseProvisioner {
 			await cluster.query(
 				`GRANT CONNECT,CREATE ON DATABASE ${quoteIdentifier(databaseName)} TO SESSION_USER`
 			)
+			await cluster.query(
+				`GRANT CONNECT ON DATABASE ${quoteIdentifier(databaseName)} TO ${quoteIdentifier(this.config.BACKUP_DATABASE_ROLE)}`
+			)
 			await cluster.query('RESET ROLE')
 		} finally {
 			await cluster.end()
@@ -170,6 +173,10 @@ export class CustomerDatabaseProvisioner {
 					`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname=${literal(role)})
 					 THEN CREATE ROLE ${quoteIdentifier(role)} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB
 					 NOCREATEROLE NOREPLICATION CONNECTION LIMIT ${spec.connectionLimit}; END IF; END $$`
+				)
+				await cluster.query(
+					`ALTER ROLE ${quoteIdentifier(role)} LOGIN NOINHERIT
+					 CONNECTION LIMIT ${spec.connectionLimit}`
 				)
 				await cluster.query(`ALTER ROLE ${quoteIdentifier(role)} PASSWORD ${literal(password)}`)
 				await cluster.query(`SET ROLE ${quoteIdentifier(databaseOwner)}`)

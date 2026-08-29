@@ -4,8 +4,8 @@ set -euo pipefail
 host_kind=${1:-}
 operation=${2:-ps}
 if [[ "$host_kind" != identity && "$host_kind" != platform ]] ||
-   [[ "$operation" != ps && "$operation" != logs ]]; then
-  echo "usage: $0 identity|platform ps|logs" >&2
+   [[ "$operation" != ps && "$operation" != logs && "$operation" != status && "$operation" != check ]]; then
+  echo "usage: $0 identity|platform ps|logs|status|check" >&2
   exit 64
 fi
 : "${PULUMI_STACK:?PULUMI_STACK is required}"

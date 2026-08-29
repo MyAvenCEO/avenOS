@@ -54,6 +54,7 @@
 		"email:check": "bun run --cwd services/checkout email:check",
 		"test:infra": "bun run --cwd infrastructure/platform test",
 		"test:deploy": "bash deploy/validate.sh",
+		"test:recovery": "bash deploy/operations/test-recovery.sh",
 		"test:e2e:platform": "bash deploy/e2e/run.sh",
 		"local:up": "bash deploy/local/up.sh",
 		"local:down": "bash deploy/local/down.sh",

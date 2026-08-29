@@ -38,8 +38,21 @@ test('pins a Pulumi-managed SSH host key and contains no application secret', ()
 test('creates least-privilege persistent and deployment directories', () => {
 	const cloudInit = render('/opt/aven/platform')
 	assert.match(cloudInit, /install -d -o 70 -g 70 -m 0700 \/var\/lib\/aven\/postgres/)
+	assert.match(cloudInit, /install -d -o 65532 -g 65532 -m 0700 \/var\/lib\/aven\/backups/)
 	assert.match(cloudInit, /install -d -o 10003 -g 10003 -m 0750 \/var\/lib\/aven\/static-sites/)
 	assert.match(cloudInit, /install -d -o aven-deploy -g aven-deploy -m 0750 \/opt\/aven\/platform/)
+})
+
+test('bounds logs and staggers automatic maintenance reboots', () => {
+	const identity = render('/opt/aven/identity')
+	const platform = render('/opt/aven/platform')
+	assert.match(identity, /"max-size":"10m","max-file":"5"/)
+	assert.match(identity, /MaxRetentionSec=14day/)
+	assert.match(identity, /Automatic-Reboot-Time "03:30"/)
+	assert.match(platform, /Automatic-Reboot-Time "04:00"/)
+	assert.match(platform, /aven-observe platform status/)
+	assert.match(platform, /data volume usage is \$used%/)
+	assert.match(platform, /backup container is \$health/)
 })
 
 test('creates separate deploy, observe, and database tunnel accounts without broad sudo', () => {
@@ -48,5 +61,7 @@ test('creates separate deploy, observe, and database tunnel accounts without bro
 	assert.match(cloudInit, /name: aven-tunnel/)
 	assert.match(cloudInit, /PermitOpen 127\.0\.0\.1:5432/)
 	assert.match(cloudInit, /\/usr\/local\/sbin\/aven-deploy platform/)
+	assert.match(cloudInit, /\/usr\/local\/sbin\/aven-restore platform/)
+	assert.match(cloudInit, /RESTORE_CONFIRMATION|--profile recovery/)
 	assert.doesNotMatch(cloudInit, /NOPASSWD:ALL|groups: \[sudo\]|usermod -aG docker/)
 })

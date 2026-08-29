@@ -594,6 +594,36 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 		const customerDatabase = databaseNameForEnvironment(environment.id)
 		const secondCustomerDatabase = databaseNameForEnvironment(secondEnvironment.id)
 		expect(secondCustomerDatabase).not.toBe(customerDatabase)
+		expect(
+			(
+				await admin.query("SELECT has_database_privilege('aven_backup',$1,'CONNECT') AS allowed", [
+					customerDatabase
+				])
+			).rows[0].allowed
+		).toBe(true)
+		expect(
+			(
+				await admin.query(
+					"SELECT rolcanlogin,rolinherit,pg_has_role('aven_backup','pg_read_all_data','MEMBER') AS reader FROM pg_roles WHERE rolname='aven_backup'"
+				)
+			).rows[0]
+		).toEqual({ rolcanlogin: true, rolinherit: true, reader: true })
+		const backupDatabaseUrl = new URL(databaseUrl)
+		backupDatabaseUrl.username = 'aven_backup'
+		backupDatabaseUrl.password = 'platform-backup-e2e'
+		backupDatabaseUrl.pathname = `/${customerDatabase}`
+		const backupDatabase = new pg.Pool({ connectionString: backupDatabaseUrl.toString(), max: 1 })
+		try {
+			expect(
+				(await backupDatabase.query('SELECT count(*)::int AS count FROM aven_intents.intents'))
+					.rows[0].count
+			).toBeGreaterThan(0)
+			await expect(backupDatabase.query('DELETE FROM aven_intents.intents')).rejects.toThrow(
+				/permission denied/
+			)
+		} finally {
+			await backupDatabase.end()
+		}
 		const apiDatabase = new pg.Pool({
 			connectionString: databaseUrl.replace(/\/postgres$/, '/aven_api'),
 			max: 1
@@ -765,7 +795,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 		if (hosted.ok) break
 		await new Promise((resolve) => setTimeout(resolve, 1_000))
 	}
-	if (!hosted?.ok) throw new Error(`aven.ceo snapshot was not served (${hosted?.status})`)
+	if (!hosted?.ok) throw new Error(`aven.ceo managed release was not served (${hosted?.status})`)
 	expect(hosted.text.toLowerCase()).toContain('aven')
 
 	const secondProvision = await fetch(`${identity}/internal/v1/accounts`, {

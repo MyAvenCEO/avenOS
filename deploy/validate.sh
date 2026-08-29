@@ -10,21 +10,33 @@ sh -n \
   "$root/deploy/local/account.sh" \
   "$root/deploy/local/app.sh" \
   "$root/tools/db-tunnel/open.sh" \
-  "$root/tools/stack-observe/run.sh"
-bash -n "$root/deploy/release/deploy.sh" "$root/deploy/validate.sh"
+  "$root/tools/stack-observe/run.sh" \
+  "$root/deploy/operations/backup.sh" \
+  "$root/deploy/operations/restore.sh" \
+  "$root/deploy/operations/entrypoint.sh" \
+  "$root/deploy/operations/healthcheck.sh"
+bash -n "$root/deploy/release/deploy.sh" "$root/deploy/validate.sh" "$root/deploy/operations/test-recovery.sh"
 
 env \
   IDENTITY_IMAGE=identity:test \
+  OPERATIONS_IMAGE=operations:test \
   IDENTITY_POSTGRES_PASSWORD=test \
   IDENTITY_AUTH_PASSWORD=test-auth \
   IDENTITY_ACCOUNTS_PASSWORD=test-accounts \
   IDENTITY_AUTHORIZATION_PASSWORD=test-authorization \
   IDENTITY_MIGRATOR_PASSWORD=test \
+  IDENTITY_BACKUP_PASSWORD=test-backup \
   IDENTITY_BETTER_AUTH_SECRET=01234567890123456789012345678901 \
   IDENTITY_PROVISIONING_SECRET=01234567890123456789012345678901 \
   PLATFORM_PUBLIC_IPV4=192.0.2.10 \
   PLATFORM_PUBLIC_IPV6=2001:db8::10 \
   ACME_EMAIL=test@example.test \
+  BACKUP_RESTIC_REPOSITORY=/tmp/restic/identity \
+  BACKUP_RESTIC_PASSWORD=test-backup-password \
+  BACKUP_S3_ACCESS_KEY_ID=test \
+  BACKUP_S3_SECRET_ACCESS_KEY=test \
+  BACKUP_S3_REGION=hel1 \
+  BACKUP_ENVIRONMENT=test \
   docker compose --file "$root/deploy/identity/docker-compose.yml" config --quiet
 
 env \
@@ -35,7 +47,9 @@ env \
   INTENT_SERVICE_IMAGE=intent:test \
   ACTOR_RUNNER_IMAGE=actor:test \
   ARTIFACT_STORE_IMAGE=artifact:test \
+  OPERATIONS_IMAGE=operations:test \
   PLATFORM_POSTGRES_PASSWORD=test \
+  PLATFORM_BACKUP_PASSWORD=test-backup \
   CHECKOUT_RUNTIME_PASSWORD=test \
   CHECKOUT_WEBHOOK_PASSWORD=test-webhook \
   CHECKOUT_MIGRATOR_PASSWORD=test \
@@ -74,6 +88,12 @@ env \
   SMTP_URL=smtp://example.test:25 \
   SMTP_FROM=test@example.test \
   ACME_EMAIL=test@example.test \
+  BACKUP_RESTIC_REPOSITORY=/tmp/restic/platform \
+  BACKUP_RESTIC_PASSWORD=test-backup-password \
+  BACKUP_S3_ACCESS_KEY_ID=test \
+  BACKUP_S3_SECRET_ACCESS_KEY=test \
+  BACKUP_S3_REGION=hel1 \
+  BACKUP_ENVIRONMENT=test \
   docker compose --file "$root/deploy/platform/docker-compose.yml" config --quiet
 
 docker run --rm \

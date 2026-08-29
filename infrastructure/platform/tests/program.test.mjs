@@ -43,7 +43,6 @@ Object.assign(process.env, {
 	HETZNER_SERVER_TYPE: 'cx23',
 	HETZNER_SERVER_ARCHITECTURE: 'amd64',
 	HETZNER_OS_IMAGE: 'ubuntu-24.04',
-	HETZNER_ENABLE_BACKUPS: 'true',
 	SSH_ALLOWED_CIDRS: '192.0.2.4/32',
 	HETZNER_COMPUTE_TOKEN: 'compute-token-for-tests-only',
 	HETZNER_DNS_TOKEN: 'dns-token-for-tests-only-000',

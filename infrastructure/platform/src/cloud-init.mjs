@@ -49,7 +49,7 @@ uuid=$(blkid -s UUID -o value "$device")
 grep -q "UUID=$uuid " /etc/fstab || printf 'UUID=%s /var/lib/aven ext4 defaults,nofail 0 2\\n' "$uuid" >> /etc/fstab
 mountpoint -q /var/lib/aven || mount /var/lib/aven
 install -d -o 70 -g 70 -m 0700 /var/lib/aven/postgres
-install -d -o root -g root -m 0700 /var/lib/aven/backups
+install -d -o 65532 -g 65532 -m 0700 /var/lib/aven/backups
 install -d -m 0750 /var/lib/aven/caddy/data /var/lib/aven/caddy/config
 install -d -o 10003 -g 10003 -m 0750 /var/lib/aven/static-sites
 `
@@ -83,6 +83,27 @@ packages:
   - fail2ban
   - unattended-upgrades
 write_files:
+  - path: /etc/docker/daemon.json
+    owner: root:root
+    permissions: "0644"
+    content: |
+      {"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"5"},"live-restore":true}
+  - path: /etc/systemd/journald.conf.d/99-aven-retention.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Journal]
+      SystemMaxUse=256M
+      RuntimeMaxUse=64M
+      MaxRetentionSec=14day
+      Compress=yes
+  - path: /etc/apt/apt.conf.d/52aven-unattended
+    owner: root:root
+    permissions: "0644"
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-WithUsers "false";
+      Unattended-Upgrade::Automatic-Reboot-Time "${appRoot.endsWith('/identity') ? '03:30' : '04:00'}";
   - path: /etc/ssh/ssh_host_ed25519_key
     owner: root:root
     permissions: "0600"
@@ -143,6 +164,21 @@ ${indent(mountScript.trimEnd(), 6)}
       cd "$root"
       export DOCKER_CONFIG=/home/${deployUser}/.docker
       exec /usr/bin/docker compose --env-file .env up --detach --pull always --wait --wait-timeout 240
+  - path: /usr/local/sbin/aven-restore
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -eu
+      case "\${1:-}" in
+        identity|platform) root="/opt/aven/$1" ;;
+        *) echo "invalid recovery target" >&2; exit 64 ;;
+      esac
+      cd "$root"
+      export DOCKER_CONFIG=/home/${deployUser}/.docker
+      /usr/bin/docker compose --env-file .env up --detach --pull always --wait --wait-timeout 240 database database-roles
+      /usr/bin/docker compose --env-file .env --profile recovery run --rm restore
+      exec /usr/bin/docker compose --env-file .env up --detach --pull always --wait --wait-timeout 240
   - path: /usr/local/sbin/aven-observe
     owner: root:root
     permissions: "0755"
@@ -153,6 +189,23 @@ ${indent(mountScript.trimEnd(), 6)}
       case "\${2:-}" in
         ps) exec /usr/bin/docker compose --project-directory "$root" ps --all ;;
         logs) exec /usr/bin/docker compose --project-directory "$root" logs --no-color --tail=300 ;;
+        status)
+          echo "filesystem"
+          /usr/bin/df -h /var/lib/aven
+          echo "services"
+          /usr/bin/docker compose --project-directory "$root" ps --all
+          echo "backup"
+          if [ -r /var/lib/aven/backups/last-success ]; then cat /var/lib/aven/backups/last-success; else echo missing; fi
+          ;;
+        check)
+          used=$(/usr/bin/df --output=pcent /var/lib/aven | /usr/bin/tail -1 | /usr/bin/tr -dc '0-9')
+          [ "$used" -lt 85 ] || { echo "data volume usage is $used%" >&2; exit 1; }
+          backup_id=$(/usr/bin/docker compose --project-directory "$root" ps --quiet backup)
+          [ -n "$backup_id" ] || { echo "backup container is missing" >&2; exit 1; }
+          health=$(/usr/bin/docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$backup_id")
+          [ "$health" = healthy ] || { echo "backup container is $health" >&2; exit 1; }
+          echo "host check passed"
+          ;;
         *) exit 64 ;;
       esac
   - path: /etc/sudoers.d/aven-roles
@@ -160,8 +213,10 @@ ${indent(mountScript.trimEnd(), 6)}
     permissions: "0440"
     content: |
       ${deployUser} ALL=(root) NOPASSWD: /usr/local/sbin/aven-deploy identity, /usr/local/sbin/aven-deploy platform
-      aven-observe ALL=(root) NOPASSWD: /usr/local/sbin/aven-observe identity ps, /usr/local/sbin/aven-observe identity logs, /usr/local/sbin/aven-observe platform ps, /usr/local/sbin/aven-observe platform logs
+      ${deployUser} ALL=(root) NOPASSWD: /usr/local/sbin/aven-restore identity, /usr/local/sbin/aven-restore platform
+      aven-observe ALL=(root) NOPASSWD: /usr/local/sbin/aven-observe identity ps, /usr/local/sbin/aven-observe identity logs, /usr/local/sbin/aven-observe identity status, /usr/local/sbin/aven-observe identity check, /usr/local/sbin/aven-observe platform ps, /usr/local/sbin/aven-observe platform logs, /usr/local/sbin/aven-observe platform status, /usr/local/sbin/aven-observe platform check
 runcmd:
+  - systemctl restart systemd-journald
   - systemctl enable --now docker
   - systemctl enable --now fail2ban
   - systemctl restart ssh

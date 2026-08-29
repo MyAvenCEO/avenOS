@@ -4,9 +4,11 @@ set -euo pipefail
 required=(
   PULUMI_STACK PULUMI_BACKEND GHCR_USER GHCR_TOKEN
   IDENTITY_IMAGE API_IMAGE CHECKOUT_IMAGE STATIC_SITE_HOST_IMAGE
-  PLATFORM_PROVISIONER_IMAGE INTENT_SERVICE_IMAGE ACTOR_RUNNER_IMAGE ARTIFACT_STORE_IMAGE
+  PLATFORM_PROVISIONER_IMAGE INTENT_SERVICE_IMAGE ACTOR_RUNNER_IMAGE ARTIFACT_STORE_IMAGE OPERATIONS_IMAGE
   POLAR_API_KEY POLAR_WEBHOOK_SECRET AVEN_TIER_NAME SMTP_URL SMTP_FROM DOWNLOAD_URL
-  LLM_GATEWAY_MODELS_JSON LLM_GATEWAY_CREDENTIALS_JSON
+  LLM_GATEWAY_MODELS_JSON LLM_GATEWAY_CREDENTIALS_JSON BACKUP_REPOSITORY_BASE
+  BACKUP_S3_ACCESS_KEY_ID BACKUP_S3_SECRET_ACCESS_KEY BACKUP_S3_REGION
+  BACKUP_RESTIC_PASSWORD BACKUP_ENVIRONMENT
 )
 for name in "${required[@]}"; do
   if [[ -z "${!name:-}" ]]; then
@@ -14,6 +16,7 @@ for name in "${required[@]}"; do
     exit 1
   fi
 done
+case "${RECOVER_FROM_BACKUP:-false}" in true|false) ;; *) echo 'RECOVER_FROM_BACKUP must be true or false' >&2; exit 64 ;; esac
 
 root=$(cd -- "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 stage=$(mktemp -d)
@@ -33,7 +36,7 @@ platform_ipv6=$(output platformIpv6Address)
 for secret_name in \
   identityDeployPrivateKey platformDeployPrivateKey \
   identityPostgresPassword identityAuthPassword identityAccountsPassword \
-  identityAuthorizationPassword identityMigratorPassword \
+  identityAuthorizationPassword identityMigratorPassword identityBackupPassword \
   identityBetterAuthSecret identityProvisioningSecret platformPostgresPassword \
   checkoutRuntimePassword checkoutWebhookPassword checkoutMigratorPassword checkoutEmailPassword checkoutPlatformEventsPassword \
   apiHostingPassword apiAuthorizationPassword apiEntitlementsPassword apiReconcilerPassword \
@@ -41,7 +44,7 @@ for secret_name in \
   artifactStoreProvisionerDbPassword artifactApiDatabaseCredentialRoot \
   actorApiDatabaseCredentialRoot actorWorkerDatabaseCredentialRoot customerEntitlementToken \
   intentServiceToken actorRunnerServiceToken artifactStoreServiceToken artifactStoreProvisionerToken tenantGrantPrivateKey \
-  siteHostDirectoryToken checkoutFacadeToken checkoutEmailEncryptionKey; do
+  siteHostDirectoryToken checkoutFacadeToken checkoutEmailEncryptionKey platformBackupPassword; do
   value=$(output "$secret_name")
   printf '::add-mask::%s\n' "$value"
   printf -v "$secret_name" '%s' "$value"
@@ -63,18 +66,27 @@ dotenv() {
 
 {
   dotenv IDENTITY_IMAGE "$IDENTITY_IMAGE"
+  dotenv OPERATIONS_IMAGE "$OPERATIONS_IMAGE"
   dotenv IDENTITY_DOMAIN aven.id
   dotenv IDENTITY_POSTGRES_PASSWORD "$identityPostgresPassword"
   dotenv IDENTITY_AUTH_PASSWORD "$identityAuthPassword"
   dotenv IDENTITY_ACCOUNTS_PASSWORD "$identityAccountsPassword"
   dotenv IDENTITY_AUTHORIZATION_PASSWORD "$identityAuthorizationPassword"
   dotenv IDENTITY_MIGRATOR_PASSWORD "$identityMigratorPassword"
+  dotenv IDENTITY_BACKUP_PASSWORD "$identityBackupPassword"
   dotenv IDENTITY_BETTER_AUTH_SECRET "$identityBetterAuthSecret"
   dotenv IDENTITY_PROVISIONING_SECRET "$identityProvisioningSecret"
   dotenv ANDROID_APP_CERT_SHA256_FINGERPRINTS "${ANDROID_APP_CERT_SHA256_FINGERPRINTS:-}"
   dotenv PLATFORM_PUBLIC_IPV4 "$platform_ip"
   dotenv PLATFORM_PUBLIC_IPV6 "$platform_ipv6"
   dotenv ACME_EMAIL "${ACME_EMAIL:-ops@aven.ceo}"
+  dotenv BACKUP_RESTIC_REPOSITORY "${BACKUP_REPOSITORY_BASE%/}/identity"
+  dotenv BACKUP_RESTIC_PASSWORD "$BACKUP_RESTIC_PASSWORD"
+  dotenv BACKUP_S3_ACCESS_KEY_ID "$BACKUP_S3_ACCESS_KEY_ID"
+  dotenv BACKUP_S3_SECRET_ACCESS_KEY "$BACKUP_S3_SECRET_ACCESS_KEY"
+  dotenv BACKUP_S3_REGION "$BACKUP_S3_REGION"
+  dotenv BACKUP_ENVIRONMENT "$BACKUP_ENVIRONMENT"
+  dotenv RELEASE_ID "${GITHUB_SHA:-local}"
 } > "$stage/identity/.env"
 
 downstreams=$(printf '[{"prefix":"/api/billing","baseUrl":"http://checkout:3000","targetPrefix":"/api/billing","bearerToken":"%s","roles":["user","admin"]},{"prefix":"/api/names","baseUrl":"http://checkout:3000","targetPrefix":"/api/names","bearerToken":"%s","roles":["user","admin"]}]' "$checkoutFacadeToken" "$checkoutFacadeToken")
@@ -88,7 +100,9 @@ system_sites='[{"hostname":"aven.ceo","repository":"myavenceo/aven-brands","sour
   dotenv INTENT_SERVICE_IMAGE "$INTENT_SERVICE_IMAGE"
   dotenv ACTOR_RUNNER_IMAGE "$ACTOR_RUNNER_IMAGE"
   dotenv ARTIFACT_STORE_IMAGE "$ARTIFACT_STORE_IMAGE"
+  dotenv OPERATIONS_IMAGE "$OPERATIONS_IMAGE"
   dotenv PLATFORM_POSTGRES_PASSWORD "$platformPostgresPassword"
+  dotenv PLATFORM_BACKUP_PASSWORD "$platformBackupPassword"
   dotenv CHECKOUT_RUNTIME_PASSWORD "$checkoutRuntimePassword"
   dotenv CHECKOUT_WEBHOOK_PASSWORD "$checkoutWebhookPassword"
   dotenv CHECKOUT_MIGRATOR_PASSWORD "$checkoutMigratorPassword"
@@ -134,6 +148,13 @@ system_sites='[{"hostname":"aven.ceo","repository":"myavenceo/aven-brands","sour
   dotenv SMTP_FROM "$SMTP_FROM"
   dotenv SMTP_REPLY_TO "${SMTP_REPLY_TO:-}"
   dotenv ACME_EMAIL "${ACME_EMAIL:-ops@aven.ceo}"
+  dotenv BACKUP_RESTIC_REPOSITORY "${BACKUP_REPOSITORY_BASE%/}/platform"
+  dotenv BACKUP_RESTIC_PASSWORD "$BACKUP_RESTIC_PASSWORD"
+  dotenv BACKUP_S3_ACCESS_KEY_ID "$BACKUP_S3_ACCESS_KEY_ID"
+  dotenv BACKUP_S3_SECRET_ACCESS_KEY "$BACKUP_S3_SECRET_ACCESS_KEY"
+  dotenv BACKUP_S3_REGION "$BACKUP_S3_REGION"
+  dotenv BACKUP_ENVIRONMENT "$BACKUP_ENVIRONMENT"
+  dotenv RELEASE_ID "${GITHUB_SHA:-local}"
 } > "$stage/platform/.env"
 
 install -m 644 "$root/deploy/identity/docker-compose.yml" "$stage/identity/docker-compose.yml"
@@ -168,7 +189,9 @@ deploy_bundle() {
     cleanup_remote
     return 1
   fi
-  if ! ssh "${ssh_args[@]}" "$remote" "install -m 0600 '$upload/.env' /opt/aven/$service/.env && install -m 0644 '$upload/docker-compose.yml' /opt/aven/$service/docker-compose.yml && install -m 0644 '$upload/Caddyfile' /opt/aven/$service/Caddyfile && install -m 0755 '$upload/db-init.sh' /opt/aven/$service/db-init.sh && sudo /usr/local/sbin/aven-deploy '$service'"; then
+  remote_action=aven-deploy
+  if [[ "${RECOVER_FROM_BACKUP:-false}" == true ]]; then remote_action=aven-restore; fi
+  if ! ssh "${ssh_args[@]}" "$remote" "install -m 0600 '$upload/.env' /opt/aven/$service/.env && install -m 0644 '$upload/docker-compose.yml' /opt/aven/$service/docker-compose.yml && install -m 0644 '$upload/Caddyfile' /opt/aven/$service/Caddyfile && install -m 0755 '$upload/db-init.sh' /opt/aven/$service/db-init.sh && sudo /usr/local/sbin/$remote_action '$service'"; then
     cleanup_remote
     return 1
   fi
@@ -184,4 +207,8 @@ for url in https://api.aven.ceo/health/live https://my.aven.ceo/api/health/ready
   curl --fail --show-error --silent "$url" >/dev/null
 done
 
-echo "Identity and platform deployments are healthy. aven.ceo DNS was not changed by this workflow."
+if [[ "${RECOVER_FROM_BACKUP:-false}" == true ]]; then
+  echo "Identity and platform were restored from the latest backups and are healthy."
+else
+  echo "Identity and platform deployments are healthy. aven.ceo DNS was not changed by this workflow."
+fi
