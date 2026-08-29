@@ -10,8 +10,8 @@ It also creates stable SSH host keys, the deployment key registration,
 firewalls, `aven.ceo` DNS records, and every internal runtime secret. `aven.id`
 uses an external DNS provider: the program exports `identityDnsRecords` for
 manual entry and never attempts to manage that zone. The `aven.ceo` apex records
-are absent unless `MANAGE_AVEN_CEO_APEX_DNS=true`; this preserves current public
-hosting during a fresh deployment.
+are absent unless `MANAGE_AVEN_CEO_APEX_DNS=true`, making initial publication an
+explicit gate.
 
 Run tests with:
 
@@ -20,7 +20,7 @@ bun run test:infra
 ```
 
 Use the protected GitHub workflows for real preview/up operations. The complete
-provider, state, secret, deployment, promotion, and rollback procedure is in
+provider, state, secret, deployment, publication, and recovery procedure is in
 [`docs/infrastructure-getting-started.md`](../../docs/infrastructure-getting-started.md).
 
 All server, volume, firewall, DNS, secret, and host-key resources are protected.

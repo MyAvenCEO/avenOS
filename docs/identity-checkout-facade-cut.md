@@ -78,9 +78,9 @@ check remains mandatory as a second control.
 `POST /internal/v1/authorizations/roles` uses the same service boundary for a
 bounded batch of subject UUIDs. It returns only each subject's coarse
 `user`/`admin` role. Static-site directory generation uses this endpoint rather
-than reading checkout's rollback copy of the identity tables. A failed identity
+than reading a checkout-owned identity projection. A failed identity
 lookup fails the directory refresh closed; the static host continues serving
-its last-known-good snapshot.
+its last-known-good managed release.
 
 ### Authorization tokens
 
@@ -215,33 +215,10 @@ to `my.aven.ceo` and `aven.id`; it does not proxy their cookies or APIs. A
 compromise of public site content therefore cannot read host-only identity
 cookies.
 
-### Hosting-only recovery mode
-
-`static-site-host` has an explicit `SITE_HOST_MODE=snapshot` mode. In that mode
-it requires no directory URL, status URL, bearer token, DNS allow-list,
-database, or GitHub access. Startup validates
-`/var/lib/aven/static-sites/active-sites.json` and each release root before
-reporting ready. It never reconciles or reports.
-
-`services/static-site-host/docker-compose.hosting-only.yml` is the complete
-apex runtime: one read-only static host and one Caddy container, both with all
-capabilities dropped except Caddy's low-port bind. Caddy's on-demand TLS ask
-endpoint admits only exact names in the validated snapshot. The snapshot volume
-is mounted read-only and existing Caddy state remains on the protected volume.
-
-The 2026-08-28 live cutover staged this project separately at
-`/opt/aven-hosting`, preflighted the actual `aven.ceo` release, exchanged Caddy
-with automatic rollback, verified the apex and SPA fallback over public HTTPS,
-and then stopped the old project. The only running containers are now
-`aven-hosting-caddy-1` and `aven-hosting-static-site-host-1`. The former
-containers, `/opt/aven-api`, Postgres files, and all Docker volumes remain
-stopped and recoverable; nothing was deleted. A rollback archive is stored at
-`/var/lib/aven/backups/hosting-cutover-20260828T192300Z.tgz`.
-
 ## Fresh data cut
 
-The new deployment starts empty. The stopped development database is rollback
-evidence, not migration input. Identity creates only account, session,
+The new deployment starts empty. No prior database is migration input. Identity creates
+only account, session,
 credential, setup, device-code, JWKS, and proof-of-work tables.
 
 Checkout creates only commerce, name, abuse-control, queue, and
@@ -250,9 +227,8 @@ subject plus commerce email; it cannot authenticate anyone. The API creates
 only facade-owned site-control tables. No legacy migration is replayed after
 the squashed `0000` schemas.
 
-Static content is the persistence exception: the GitHub source/artifact
-branches are authoritative and the existing hosting-only volume remains
-available until the new apex is promoted and verified.
+Static content is reconstructed from the authoritative GitHub source/artifact
+branches and the managed system-site declaration. No prior hosting volume is imported.
 
 ## Passkey/RP cutover
 
@@ -280,8 +256,6 @@ validated before distributing a signed build.
    do not resurrect the former feed-driven processor.
 6. Verify the `aven-brands` source/artifact pair, then explicitly run the
    infrastructure workflow with apex management enabled.
-7. Keep the old hosting-only server intact through DNS convergence and the
-   rollback window.
 
 ## Security verification checklist
 
@@ -302,17 +276,14 @@ validated before distributing a signed build.
 - JWKS rotation keeps the prior public key through the access-token grace
   window and never publishes private key material.
 
-## Rollback boundary
+## Recovery boundary
 
-Rollback is per service. DNS may return checkout or facade traffic to the old
-deployment while identity remains on its new database. Do not roll identity
-back after new `aven.id` credentials are registered unless the old deployment
-can read the exact migrated identity schema and encrypted signing keys.
+Code rollback redeploys a previously verified immutable image against a schema it
+supports. Data recovery uses only the tested backup/restore process. DNS is never sent
+to an old deployment, old databases are never mounted, and there is no dual-write or
+compatibility store.
 
-The old stopped database is rollback material only and is never mounted by the
-new hosts. It must not become a dual-write identity store.
-
-## Local E2E verification snapshot
+## Local E2E verification record
 
 The 2026-08-28 isolated local run uses separate identity and platform databases,
 Mailpit, the real SvelteKit applications, the Bun facade, the managed static
@@ -332,7 +303,7 @@ host, and standards-valid virtual WebAuthn authenticators. It verifies:
 - managed-site create/delete authorization, reserved-host restrictions, forged
   identity-header stripping, and internal-directory concealment; and
 - a real shallow fetch and serve of the `aven.ceo` `production` plus
-  `deploy/production` snapshot.
+  `deploy/production` managed release.
 
 The database-backed checkout suite completes 60/60 tests inside this run; the
 browser journey is one complete cross-service test. Unit checks for identity,
@@ -352,7 +323,7 @@ package installation constructs a minimal temporary config inside the same
 BuildKit secret-mounted `RUN` step and deletes it there, so credentials do not
 enter source, context, cache exports, or image layers.
 
-This snapshot validates authentication/authorization, purchase, managed static
-hosting, the local Rust handoff, apex preservation, and the actor runner's trust
+This record validates authentication/authorization, purchase, managed static
+hosting, the local Rust handoff, fresh apex publication, and the actor runner's trust
 boundary. The E2E topology includes the runner, but there is still no remote
 document-ingest deployment in this cut.

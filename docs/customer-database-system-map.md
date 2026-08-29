@@ -169,7 +169,7 @@ databases, tenant grants, product roles, and component state never enter this ho
 | `platform-provisioner` | private | control worker + cluster provisioner roles | Reconcile customer databases from the static component catalog |
 | `intent-service` | private + egress | derived per-customer Intent API role | Intent API and `aven_intents` repositories |
 | `actor-runner` | private + egress | derived per-customer admission and worker roles | Actor-run API and eventual durable runner |
-| `static-site-host` | private + ingress | none | Verified GitHub-backed static releases and host snapshot |
+| `static-site-host` | private + ingress | none | Verified GitHub-backed releases and persisted managed state |
 | `database-init` | private, one-shot | PostgreSQL bootstrap | Idempotently create/rotate central and component roles on every deploy |
 | `database` | private | PostgreSQL internal | Central and customer databases |
 

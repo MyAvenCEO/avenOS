@@ -71,9 +71,10 @@ passkey in the browser, then approve the Rust client's local device flow with
 that passkey. See [the local guide](deploy/local/README.md) and run the complete
 automated equivalent with `bun run test:e2e:platform`.
 
-The production apex currently uses only the hosting-only composition in
-`services/static-site-host/docker-compose.hosting-only.yml`. Its recovery
-preflight is documented in [the cutover tool](tools/hosting-cutover/README.md).
+Production starts from the same fresh two-host Pulumi deployment described in
+[the infrastructure guide](docs/infrastructure-getting-started.md). The managed
+static host rebuilds `aven.ceo` from Git; there is no legacy apex cutover or old
+hosting composition to preserve.
 
 ### Native passkey authentication
 

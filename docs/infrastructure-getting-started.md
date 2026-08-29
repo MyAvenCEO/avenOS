@@ -5,7 +5,7 @@ Status: implemented runbook for the two-host customer-database platform
 Date: 2026-08-29
 
 This is the complete path from an empty Hetzner project to the new Aven deployment.
-It does not import the legacy server or its databases. Git remains the source of truth
+It starts with empty databases and volumes. Git remains the source of truth
 for `aven.ceo`; the apex may stay down until the final promotion.
 
 ```text
@@ -58,6 +58,9 @@ Open **Settings → Environments → next**. Add reviewers if desired.
 | `AVEN_TIER_NAME` | Existing Polar product ID for the manually managed avenNAME product; checkout must never create or infer this product. |
 | `SMTP_URL` | Authenticated send-only SMTP connection; URL-encode credentials. |
 | `LLM_GATEWAY_CREDENTIALS_JSON` | Provider credentials keyed by the provider names referenced by the public model catalog. It remains server-side in the API container. |
+| `BACKUP_S3_ACCESS_KEY_ID` | Writes only the private off-host backup bucket/prefix. It has no compute or DNS access. |
+| `BACKUP_S3_SECRET_ACCESS_KEY` | Secret half of the restricted backup credential. Escrow it offline. |
+| `BACKUP_RESTIC_PASSWORD` | Encrypts both host-specific backup repositories. Escrow it offline; it must outlive every server and Pulumi stack. |
 
 `GITHUB_TOKEN` is supplied by Actions. There is deliberately no deploy SSH key,
 public SSH key, known-hosts value, PostgreSQL password, tenant signing key, or internal
@@ -78,7 +81,6 @@ contexts and the registry token exists only in a BuildKit secret-mounted command
 | `HETZNER_OS_IMAGE` | `ubuntu-24.04` | Fresh base image |
 | `IDENTITY_VOLUME_SIZE_GB` | `40` | At least 30 GiB |
 | `PLATFORM_VOLUME_SIZE_GB` | `80` | At least 40 GiB |
-| `HETZNER_ENABLE_BACKUPS` | `true` | Provider backup in addition to logical backups |
 | `SSH_ALLOWED_CIDRS` | office/VPN CIDRs | Comma-separated IPv4/IPv6 sources allowed to port 22 |
 | `POLAR_SERVER` | `sandbox` | Payment environment for initial deployment |
 | `POLAR_ORGANIZATION_ID` | sandbox UUID | Checkout product owner |
@@ -89,6 +91,8 @@ contexts and the registry token exists only in a BuildKit secret-mounted command
 | `ANDROID_APP_CERT_SHA256_FINGERPRINTS` | empty initially | Production Android certificates only |
 | `LLM_GATEWAY_MODELS_JSON` | provider-neutral model catalog JSON | Public IDs, capabilities, upstream base URLs/models, profiles, and credential references; never provider secret values |
 | `LLM_GATEWAY_TIMEOUT_SECONDS` | `180` | Optional bounded provider timeout |
+| `BACKUP_REPOSITORY_BASE` | `s3:https://hel1.your-objectstorage.com/bucket/avenos/next` | Private Restic repository base; deploy appends `/identity` and `/platform` |
+| `BACKUP_S3_REGION` | `hel1` | Signing region for the backup bucket's S3-compatible endpoint |
 
 The workflow rejects an empty SSH allowlist, non-amd64 images, undersized volumes,
 invalid CIDRs, or a stack other than `organization/aven-platform/next`.
@@ -109,6 +113,7 @@ bun run test:api
 bun run test:customer-platform
 bun run test:infra
 bun run test:deploy
+bun run test:recovery
 bun run test:e2e:platform
 ```
 
@@ -121,7 +126,7 @@ reads back exact source and derived artifacts, imports the document through the 
 actor graph, completes an LLM chat through the facade, and proves both chat turns
 durable in the customer Intent schema. It also provisions two customer databases,
 exercises Intent and Actor through the facade, proves cross-customer and cross-schema
-denials, retains raw Polar webhook JSON, and serves the `aven.ceo` snapshot. Every run
+denials, retains raw Polar webhook JSON, and serves the managed `aven.ceo` release. Every run
 uses dynamic loopback ports and profile-aware teardown.
 
 For interactive browser and Rust-client use, follow
@@ -146,8 +151,8 @@ Then rerun with `command: up`, still with the apex disabled. Pulumi installs:
 
 Private keys remain encrypted in Pulumi state. SSH never uses `ssh-keyscan` as a trust
 source and never accepts an interactive unknown host key. At this stage
-`api.aven.ceo` and `my.aven.ceo` point to the platform host; `aven.ceo` has not moved,
-and Pulumi has not changed `aven.id`.
+`api.aven.ceo` and `my.aven.ceo` point to the platform host; `aven.ceo` remains
+unpublished until explicitly enabled, and Pulumi has not changed `aven.id`.
 
 ## 5. Add the returned `aven.id` records
 
@@ -178,7 +183,8 @@ Caddy can obtain the certificate.
 
 ## 6. Build and deploy software
 
-Run **Actions → platform-deploy** for the exact tested commit. Its verify job repeats
+Run **Actions → platform-deploy** for the exact tested commit with **Restore newest
+backups** disabled. Its verify job repeats
 all checks and E2E. The publish job builds eight non-root images and records immutable
 GHCR digests: identity, API, checkout, static host, provisioner, Artifact Store,
 Intent, and Actor.
@@ -190,7 +196,9 @@ creates or rotates exact roles before migrations run; role setup is not limited 
 first volume initialization.
 
 Identity uses distinct auth, account-provisioning, authorization, and migration
-database logins. Checkout uses distinct HTTP, webhook, email-worker, platform-event,
+database logins. Each cluster has a read-only backup login; restore superuser access is
+present only in the dormant, explicitly invoked recovery container. Checkout uses
+distinct HTTP, webhook, email-worker, platform-event,
 and migration logins. The API uses distinct hosting, authorization, entitlement,
 reconciliation, and migration logins. Artifact Store has a dedicated cluster-level
 provisioner login plus a separately derived per-customer API login. Customer runtime
@@ -208,6 +216,17 @@ curl --fail https://my.aven.ceo/api/health/ready
 Complete a Polar sandbox purchase and passkey login before switching Polar to
 production. No deployment changes the `aven.ceo` apex unless the infrastructure
 workflow's explicit apex input is true.
+
+After this first successful new-platform deployment, `platform-operations` activates
+itself and runs hourly. Before that point its schedule is deliberately dormant, so an
+empty pre-deployment project does not create false incidents. A manual run is always
+strict. A failed public readiness, host disk, or backup-freshness check is the initial
+alert. Inspect with:
+
+```sh
+./tools/stack-observe/run.sh identity status
+./tools/stack-observe/run.sh platform status
+```
 
 ## 7. Observe and tunnel safely
 
@@ -237,15 +256,29 @@ a matching `dist/.source-revision`. Rerun **platform-infrastructure** with
 After DNS convergence verify `/`, an SPA fallback path, TLS, and A/AAAA answers from
 more than one network. GitHub remains the public site's source of truth.
 
-## 9. Rollback and recovery
+## 9. Rollback and disaster recovery
 
 - Roll back code by restoring previous immutable image digests and rerunning the fixed
   deploy wrapper. Do not automatically roll back customer schema migrations.
-- Roll back the public site by restoring its prior DNS target or Git artifact.
+- Recover the public site by rebuilding its managed release from Git and republishing DNS.
 - Replace a lost host through Pulumi and restore its protected volume or verified
   backup before reopening writes.
 - Rotate a function root or routing generation in stages so old pools drain only after
   reconciliation verifies the new credentials.
+
+For a complete loss, do not repair the old hosts:
+
+1. obtain repository/recovery-environment, Hetzner API, and DNS-provider access;
+2. run `platform-infrastructure` with `command: up` to create fresh hosts and volumes;
+3. apply the returned `aven.id` records and enable the fresh `aven.ceo` DNS records;
+4. run `platform-deploy` for the last verified commit with **Restore newest backups**
+   enabled; and
+5. complete the documented smoke checklist before declaring recovery.
+
+The recovery deployment starts only fresh PostgreSQL, restores the latest verified
+identity and platform repositories, then performs normal role initialization,
+migrations, reconciliation and health checks. It refuses populated target databases.
+See [the complete lifecycle and disaster-recovery contract](operations-lifecycle-and-disaster-recovery.md).
 
 Servers, volumes, firewalls, keys, and Pulumi-managed `aven.ceo` DNS use protection.
 The externally managed `aven.id` records are outside Pulumi state. Normal workflows
@@ -259,7 +292,7 @@ do not contain `destroy` or protection-removal paths.
 | Encrypted Pulumi state | Generated SSH keys, database credentials, roots, workload tokens, and signing keys |
 | `/opt/aven/*/.env` | One host's mode-`0600` runtime material |
 | `/var/lib/aven/postgres` | Protected PostgreSQL data on that host |
-| `/var/lib/aven/static-sites` | Verified static releases and last-known-good snapshot |
+| `/var/lib/aven/static-sites` | Verified static releases and last-known-good managed state |
 | `/var/lib/aven/caddy` | Caddy certificate and configuration state |
 | GitHub | Code and the `aven.ceo` source/artifact branches |
 
