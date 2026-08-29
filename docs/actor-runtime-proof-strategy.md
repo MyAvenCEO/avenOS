@@ -56,11 +56,12 @@ The repository starts from useful but incomplete evidence:
 
 | Executable evidence | What it proves | What it does not prove |
 | --- | --- | --- |
-| `deploy/e2e/platform.spec.ts` native Tauri import | A real client-hosted text import crosses authentication, the native file reader, local document graph, public API, and persistent Artifact Store; source and extracted bytes are exact | Generic planning, remote document execution, PDF/OCR/model behavior, placement parity |
+| `deploy/e2e/platform.spec.ts` native Tauri imports | The same deterministic text fixture crosses authentication and the native file reader on both placements. The local path runs in Tauri; the server path crosses the facade, persistent Actor Runner, and tenant Artifact Store. The test compares the complete stored derived-artifact graph, payloads, lineage, and blob hashes | PDF/OCR/model behavior and generic-planner document execution |
 | `app/tests/document-actors.test.ts` | The current document DAG, stable publications, retry behavior, model lane with deterministic fakes, and placement freezing | A separately hosted server or live providers |
+| `services/actor-runner/tests/document-lane-conformance.test.ts` | Real browser and headless server decoders run the same deterministic text, CSV, and repository PDF goldens. The suite compares canonical presentations and every publication, input, payload, blob hash, evidence item, and derived graph edge | Scanned-image OCR, live models, or independently deployed processes |
 | `libs/aven-actors/tests/executor-conformance.test.ts` | The first generic executor slice plans, admits factory actors, binds schema-qualified artifacts, publishes, releases, excludes an unauthorized cheaper actor in favor of an equivalent fallback on both placements, and produces equivalent canonical results | A remote process, persistent run state, retries, fencing, continuations, or the real Artifact Store |
-| `services/actor-runner/tests/host.test.ts` | The deployed server composition uses the portable planner/executor shape, accepts a valid zero-step plan, rejects the wrong placement, and fails closed when its application catalog is empty | A production application actor or scoped application adapters |
-| `services/actor-runner/tests/split-architecture.e2e.test.ts` | Identity, facade, tenant grant, server-runner HTTP, and anti-forgery boundaries; with PostgreSQL and the conformance Artifact Store enabled, the same deterministic skill crosses that authenticated path, commits real output lineage, persists the returned artifact ID in its SQL checkpoint, and matches the local canonical outcome | Independent service processes, a production local runner host, leases, fencing, recovery during an actor effect, or document execution |
+| `services/actor-runner/tests/host.test.ts` | The generic fallback uses the portable planner/executor shape, accepts a valid zero-step plan, rejects the wrong placement, and fails closed when its catalog is empty | Application-specific behavior, which is covered by its own executor tests |
+| `services/actor-runner/tests/split-architecture.e2e.test.ts` | Identity, facade, tenant grant, server-runner HTTP, and anti-forgery boundaries; with PostgreSQL and the conformance Artifact Store enabled, the same deterministic skill crosses that authenticated path, commits real output lineage, persists the returned artifact ID in its SQL checkpoint, and matches the local canonical outcome | Independent service processes, a production local runner host, leases, fencing, or recovery during an actor effect |
 | `services/actor-runner/tests/sql-runner.persistence.e2e.test.ts` | A committed accepted run survives process replacement; the shared deterministic executor fixture dynamically runs a server factory actor, persists its checkpoint evidence, and matches its local canonical outcome | The public trust path, the real Artifact Store, leases, fencing, or recovery during an actor effect |
 | `services/actor-runner/tests/artifact-store-port.test.ts` | The concrete runtime adapter projects facts from registered store types, rejects an unprojected caller fact, derives a stable publication UUID, and sends an atomic production-run command with ordered lineage | A real Rust/PostgreSQL commit, scoped deployment credentials, publication replay after a crash, or runner composition |
 | `services/actor-runner/tests/artifact-store-port.persistence.e2e.test.ts` | The concrete adapter commits through the real Rust service and PostgreSQL, reads the output and producer inputs back, and idempotently replays the production-run publication | Tenant-grant-derived artifact authority or crash recovery between publication and checkpoint |
@@ -178,11 +179,11 @@ Execution paths are compared separately:
   capability—the fixture is not a parity case. It is an authorization case with
   placement-specific expected outcomes.
 
-The local side MUST use the production local runner core, not direct actor calls. The
-server side MUST cross `api.aven.ceo`, reach the separately hosted actor runner, use
-its customer-scoped persistent repository, and publish through scoped Artifact Store
-access. The current desktop `in-process-server-emulation` is useful as a transport
-contract test, but it does not satisfy this server proof.
+The local side MUST use the production local document runtime. The server side MUST
+cross `api.aven.ceo`, reach the separately hosted actor runner, use its
+customer-scoped persistent repository, and publish through scoped Artifact Store
+access. A server-labelled execution inside the desktop process is forbidden and does
+not satisfy this proof.
 
 ## Failure and continuation matrix
 
@@ -309,9 +310,9 @@ A job summary records the commit, fixture-corpus revision, runner protocol versi
 catalog revision, placements exercised, and manifest comparison result. A skipped
 server or provider job is reported as missing evidence, never as a pass.
 
-Release documentation may claim only what the named jobs establish. Until the remote
-document executor exists, the accurate statement is: the native client document path,
-one deterministic generic local/server execution slice with a real-store-backed server
-publication, the remote trust/persistence boundary, and selected component contracts
-are tested. Production desktop generic-runner composition, remote document execution,
-and local/server document-result equivalence are not yet proven.
+Release documentation may claim only what the named jobs establish. The current
+evidence proves native client and authenticated remote document execution, canonical
+local/server equivalence for the deterministic text, CSV, and native-text PDF corpus,
+stored-graph equivalence for text in the fresh-stack journey, one deterministic generic
+execution slice, and the remote trust/persistence boundary. It does not prove server
+OCR, live model equivalence, generic-planner document execution, leases, or fencing.

@@ -7,12 +7,12 @@ chooses device or server placement, how the selected host runs document actors t
 the authenticated LLM gateway, how both placements publish to one Artifact Store, and
 how progress returns to the UI.
 
-The server host currently runs as a separate in-process emulation inside the desktop
-app. That is a tested client boundary, not a claim of remote document execution. A
-separate authenticated actor-runner service now proves the remote HTTP and trust
-boundary and persists its run ledger in customer PostgreSQL, but it does not execute
-this document graph. The normative protocol and the steps that connect those two
-halves are specified in
+The server host is a real remote Plan Runner client. It crosses `api.aven.ceo`, reaches
+the separately hosted Actor Runner, and stores its run ledger and document artifacts
+inside the selected customer's database. The runner keeps its generic protocol and
+repository application-neutral; its production application catalog installs the
+document-ingest skill as one application executor around the dynamic document DAG.
+The normative protocol is specified in
 [`actor-runtime-formal-spec.md`](./actor-runtime-formal-spec.md).
 
 Use it to answer “where does this responsibility live?” before changing the system.
@@ -27,10 +27,9 @@ flowchart LR
         Choice["Device / Server choice"]
         Compose["Document execution router"]
         LocalHost["Local host"]
-        ServerHost["Server host\nin-process emulation"]
+        ServerHost["Remote server host\nPlan Runner client"]
         Decoder["BrowserDocumentDecoder\nPDF.js and browser imaging"]
         LocalRuntime["DocumentProcessingRuntime\nlocal adapter"]
-        ServerRuntime["DocumentProcessingRuntime\nserver adapter"]
         Registry["Document actor definitions\nand current eager instances"]
         LlmAdapter["LlmDocumentModelGateway\ncapability selection"]
         PublishAdapter["QueuedClientArtifactGateway\nserialization and retry"]
@@ -38,17 +37,13 @@ flowchart LR
 
         UI --> Choice --> Compose
         Compose --> LocalHost --> LocalRuntime
-        Compose --> ServerHost --> ServerRuntime
+        Compose --> ServerHost
         LocalRuntime --> Decoder
-        ServerRuntime --> Decoder
         LocalRuntime --> Registry
-        ServerRuntime --> Registry
         LocalRuntime --> LlmAdapter
-        ServerRuntime --> LlmAdapter
         LocalRuntime --> PublishAdapter
-        ServerRuntime --> PublishAdapter
         LocalRuntime --> Projection
-        ServerRuntime --> Projection
+        ServerHost --> Projection
         Projection --> UI
     end
 
@@ -59,7 +54,8 @@ flowchart LR
     subgraph DataPlane["ceo.aven / os.aven downstreams"]
         LlmService["LLM gateway\ncatalog and completions"]
         ClientRuns["Client-run publication service\nprocedure validation"]
-        ActorRunner["Actor runner\npersistent run ledger\ngeneric fail-closed host"]
+        ActorRunner["Actor runner\npersistent run ledger\ndocument skill executor"]
+        ServerDecoder["Headless decoder\ntext and PDF"]
     end
 
     subgraph External["Protected infrastructure"]
@@ -73,17 +69,21 @@ flowchart LR
     PublishAdapter -->|"publish via Tauri"| Auth
     Auth --> ClientRuns
     ClientRuns --> Store
+    ServerHost -->|"start and status via Tauri"| Auth
     Auth --> ActorRunner
-    ActorRunner -. "future scoped Artifact Store grant" .-> Store
+    ActorRunner --> ServerDecoder
+    ActorRunner -->|"dedicated scoped service credential"| Store
     Store -->|"immutable artifact IDs and replay receipt"| PublishAdapter
 ```
 
-The selected host owns current orchestration and document understanding. The
+The selected host owns orchestration and document understanding. The
 `api.aven.ceo` facade verifies identity evidence and selects fixed downstreams. The LLM
 downstream owns provider credentials and model capability enforcement; the artifact
 downstream owns tenant resolution and publication validation. The Artifact Store owns
-durable values and successful provenance. In the completed remote path, the facade
-admits the run and the server runner replaces only the in-process host transport.
+durable values and successful provenance. On server placement, the facade admits the
+run and the Actor Runner owns the document runtime, decoder, publication, and durable
+checkpoint presentation. Its current server catalog is deterministic: model-backed
+vision and OCR remain local-only capabilities.
 
 ## Architectural layers
 
@@ -92,16 +92,16 @@ admits the run and the server runner replaces only the in-process host transport
 | `@avenos/actors` | Actor manifests, mailboxes, envelopes, bus, predicates, sandbox, capability planner | Document logic, Tauri, Svelte, persistence, provider transport |
 | `@avenos/llm-client` | Transport-neutral model catalog and completion contracts | Authentication implementation, model policy, prompts, provider credentials |
 | `@avenos/artifact-store` | Client-run and processing contracts, queued/retry publication decorator | Document orchestration, UI state, Tauri commands |
-| `@avenos/document-ingest` | Document actor catalog, prompts/schemas, model selection, host-neutral run adapter, current execution DAG, publication identities | Browser/PDF.js, Svelte, Tauri, direct provider or Artifact Store access |
+| `@avenos/document-ingest` | Document actor catalog, prompts/schemas, model selection, host-neutral run adapter, current execution DAG, publication identities, headless server decoder and publisher | Svelte, Tauri, caller-selected tenant routes |
 | Desktop adapters | Browser decoding, Tauri transport, singleton wiring, UI projection updates | Domain contracts and actor-specific transformations |
 | Aven API facade | Authentication verification, fixed downstream routing, and credential replacement | Client UI state, actor execution, product policy, or caller-selected physical routes |
 | LLM and artifact downstreams | Model transport, tenant artifact access, publication validation, and product/data policy | Identity issuance or document orchestration |
-| Actor runner | `os.aven` run protocol, independent identity verification, customer-scoped SQL run ledger, and generic server host composition; its application catalog is currently empty | Identity issuance, product entitlement ownership, or document-specific routing |
+| Actor runner | `os.aven` run protocol, independent identity verification, customer-scoped SQL run ledger, fail-closed generic fallback, and installed document skill executor | Identity issuance, product entitlement ownership, or document-domain contracts |
 | Artifact Store | Immutable artifacts/blobs, evidence, production-run receipts, idempotent replay | Delivery leases, mutable progress, model selection |
 
-This layering is what allows the same actors to run in a future headless host: replace
-the browser decoder and Tauri transports, not the actor implementations or lineage
-model.
+This layering is what lets the same actors run in the current headless host: the
+server supplies a decoder and Artifact Store transport without replacing actor
+implementations or the lineage model.
 
 ## Package dependency direction
 
@@ -128,16 +128,15 @@ At module initialization it:
 1. creates one `LlmDocumentModelGateway` backed by the generic Tauri LLM transport;
 2. creates local document actors and registers them on the application bus for
    wholesale discovery;
-3. creates a separate actor set for the in-process server emulation;
-4. creates one queued Artifact Store gateway around the raw Tauri publication command;
-5. constructs local and emulated-server `DocumentProcessingRuntime` adapters;
-6. wraps them in strict-JSON execution hosts and a placement-freezing router; and
+3. creates one queued Artifact Store gateway around the raw Tauri publication command;
+4. constructs the local `DocumentProcessingRuntime` adapter;
+5. constructs an authenticated Tauri Plan Runner client and remote document host;
+6. wraps the local and remote hosts in a placement-freezing router; and
 7. connects routed projection changes to the chat actor and intent store.
 
-Each processing runtime registers its own actors on a private `MessageBus`. The
-application bus exposes the local set to the current actor explorer; the private buses
-keep the two emulated placements isolated. This eager construction is transitional.
-The generic runtime will materialize authorized factory offers per plan.
+The local processing runtime registers its actors on a private `MessageBus`. The
+application bus exposes the same local set to the current actor explorer. No server
+decoder, server actor, or server runtime is constructed in the desktop process.
 
 ## Lifecycles
 
@@ -159,10 +158,10 @@ module is first evaluated:
 ```text
 client-document-processing module loads
   -> create one model gateway
-  -> create local and emulated-server actor sets
-  -> construct up to 12 Actor instances per host
+  -> create the local actor set
+  -> construct up to 12 local Actor instances
   -> register local instances on the app bus
-  -> register each host's instances on its private runtime bus
+  -> register local instances on the runtime bus
 ```
 
 The app uses `singleton(...)`, backed by `globalThis`, for the gateway, actor set,
@@ -179,14 +178,18 @@ one document's steps in an explicit order.
 
 The app always supplies a `DocumentModelGateway`, so it constructs all twelve actors.
 Whether the four model actors are used is decided per document from live catalog
-availability and the admitted page count. A headless host may omit the model gateway,
-in which case the registry constructs only the deterministic actors.
+availability and the admitted page count. The current Actor Runner omits the model
+gateway and constructs the deterministic actor set for each admitted document run.
 
 ### 3. Document run lifecycle
 
 `DocumentExecutionRouter.start(request)` first freezes the selected environment and
-routes to exactly one host. The host JSON-round-trips the request, resolves source
-bytes by artifact ID, and calls its current `DocumentProcessingRuntime`. That runtime:
+routes to exactly one host. The local host JSON-round-trips the request, resolves
+source bytes through Tauri, and calls its `DocumentProcessingRuntime`. The remote host
+turns the request into `os.aven:protocol:actors:plan-runner@1`, starts it through the
+facade, and polls the durable run record. On the server, the document application
+executor validates the stored source envelope, fetches its bytes through scoped
+Artifact Store access, and calls a server-owned `DocumentProcessingRuntime`. A runtime:
 
 1. deduplicates concurrent starts by source artifact ID;
 2. creates an in-memory processing presentation and stable case ID;
@@ -194,10 +197,11 @@ bytes by artifact ID, and calls its current `DocumentProcessingRuntime`. That ru
 4. invokes and publishes steps until a terminal case state is reached; and
 5. removes the source from the active-run map when the promise settles.
 
-Successful and `needs_review` presentations remain cached in memory and a repeated
-`start` returns that projection. A failed presentation may be started again. After a
-process restart the cache is empty, but stable publication identities make already
-committed steps replayable.
+Successful and `needs_review` local presentations remain cached in memory. The remote
+terminal presentation is also stored in the runner checkpoint, so a new desktop
+process can resubmit the stable idempotency key, read the existing run, and rebuild the
+view. A failed local presentation may be started again. Stable publication identities
+make already committed steps replayable on either host.
 
 ### 4. Envelope and step lifecycle
 
@@ -247,15 +251,16 @@ flowchart LR
 
 The current lane starts after the source file already exists as an Artifact Store
 artifact marked with `sourceKind: client-actor-ingest`. New sources also carry the
-captured `executionEnvironment` as a temporary restart hint. The eventual generic run
-record replaces both fields as the authority for execution ownership and placement.
+captured `executionEnvironment`. It is the restart route for local work; server work
+additionally has an authoritative customer-scoped Plan Runner record.
 
 ```mermaid
 sequenceDiagram
     participant UI as Chat / intent UI
     participant CR as Desktop composition root
     participant API as Tauri + Aven API
-    participant DR as DocumentProcessingRuntime
+    participant Local as Local document runtime
+    participant Runner as Actor Runner
     participant A as Document actor
     participant L as LLM gateway
     participant AS as Artifact Store
@@ -263,23 +268,35 @@ sequenceDiagram
     UI->>CR: choose Device or Server, then upload
     CR->>API: persist source + executionEnvironment
     CR->>CR: route document-run request to chosen host
-    CR->>API: artifact_content_get
-    API->>AS: read source blob
-    AS-->>CR: mediaType + base64
-    CR->>DR: start resolved source in frozen host
-    DR->>L: discover vision + structured-output models
-    L-->>DR: selected model and alternatives, or unavailable
-
-    loop Every runnable actor step
-        DR->>A: envelope(method, payload, concrete input IDs)
-        A-->>DR: artifact drafts + evidence + optional model receipt
-        DR->>API: artifact_client_run_publish(stable publicationId)
-        API->>AS: validate and atomically publish outputs + production run
-        AS-->>DR: immutable artifact IDs or idempotent replay
-        DR-->>UI: updated processing projection
+    alt Device placement
+        CR->>API: artifact_content_get
+        API->>AS: read source blob
+        AS-->>CR: mediaType + base64
+        CR->>Local: start resolved source
+        Local->>L: discover compatible model
+        loop Every local actor step
+            Local->>A: envelope + concrete input IDs
+            A-->>Local: drafts + evidence
+            Local->>API: publish stable client run
+            API->>AS: validate and atomically publish
+            AS-->>Local: immutable IDs or replay
+        end
+        Local-->>UI: terminal presentation
+    else Server placement
+        CR->>API: start document Plan Run
+        API->>Runner: verified identity + tenant grant
+        Runner->>AS: read committed source by tenant route
+        loop Every server actor step
+            Runner->>A: envelope + concrete input IDs
+            A-->>Runner: drafts + evidence
+            Runner->>AS: atomically publish with runner credential
+            AS-->>Runner: immutable IDs or replay
+        end
+        Runner->>Runner: commit checkpoint + presentation
+        CR->>API: poll run status
+        API->>Runner: read subject-owned run
+        Runner-->>UI: terminal presentation
     end
-
-    DR-->>UI: succeeded, needs_review, or failed
 ```
 
 The source bytes may be decoded locally, but every downstream dependency is bound to
@@ -504,10 +521,12 @@ For example, `client.extract-native-text` requires exactly one `source` and one 
 input, one page parameter, and exactly `text` and `layout` outputs with their expected
 types and blob rules. A client cannot relabel an arbitrary output as that procedure.
 
-The actor already returns the literal `procedureKey` expected by that contract. The
-current repository does not contain the publication downstream or its descriptor table, so
-an integrated deployment must restore those descriptors before client publication can
-succeed. A missing or mismatched descriptor must reject the publication.
+The actor already returns the literal `procedureKey` expected by that contract.
+`services/aven-api/src/lib/server/artifacts/service.ts` owns the current descriptor
+table and rejects missing or mismatched client publications. Server outputs do not
+cross that client-assertion boundary: the trusted runner publishes the same typed
+drafts through its dedicated Artifact Store credential, and the Store remains the
+durable schema authority.
 
 Actor manifests, runtime step definitions, and publication descriptors form a
 three-part protocol. The first two are present here; the third is an explicit
@@ -619,11 +638,11 @@ execution, not the source of truth for artifacts or provenance.
 
 ## Server responsibilities
 
-The desktop adapters consume two generic avenCEO data-plane APIs. Their clients and
-contracts are present here; after the infrastructure split, their owning LLM and
-artifact downstream implementations are not part of the current deployment and must be wired
-back through the facade before an integrated deployment. The actor-run API is present
-as a separate service, but is not yet the document executor.
+The desktop adapters consume avenCEO data-plane APIs through the facade. The Artifact
+Store and Actor Runner are part of the current split deployment. The Actor Runner is
+the document executor for Server placement and publishes through its own scoped
+Artifact Store credential. The LLM gateway contract remains separate; server-side
+model-backed document understanding is not yet wired.
 
 ### LLM gateway
 
@@ -680,8 +699,9 @@ The current document pipeline does **not** execute a generated plan. Its coordin
 an explicit, tested DAG because its branching, page fan-out, model admission, and
 validation policy are product behavior. The separate capability planner proves that a
 future skill runtime can synthesize ad-hoc programs from the same method contracts.
-Generated plans will still need a durable run layer and the same artifact publication
-boundary used here.
+Generated plans use the durable Plan Runner layer and the same Artifact Store
+publication boundary. The document skill remains an application executor until the
+generic planner supports its required dynamic `many` cardinalities.
 
 ## Source map
 
@@ -698,12 +718,13 @@ boundary used here.
 | `libs/aven-document-ingest/src/llm-gateway.ts` | Capability-based document model adapter |
 | `libs/aven-document-ingest/src/execution.ts` | Placement-frozen document run and host boundary |
 | `libs/aven-document-ingest/src/runtime.ts` | DAG execution, retries, publication IDs, projections |
+| `libs/aven-document-ingest/src/server.ts` | Headless decoder, tenant Artifact Store publisher, document skill executor |
 | `app/src/lib/artifacts/browser-document-decoder.ts` | PDF.js/browser host adapter |
 | `app/src/lib/actors/document-llm-gateway.ts` | Tauri LLM host adapter |
 | `app/src/lib/artifacts/client-document-processing.ts` | Desktop composition root |
 | `app/src/lib/models/gateway.ts` | Generic Tauri LLM transport |
 | `services/aven-api` | Split authenticated facade and fixed downstream allowlist |
-| `services/actor-runner` | Authenticated remote run boundary, SQL run ledger, recovery, and generic fail-closed execution host |
+| `services/actor-runner` | Authenticated remote run boundary, SQL run ledger, recovery, document application executor, and generic fail-closed fallback |
 | `services/artifact-store` | Artifact Store service and conformance contracts |
 
 ## Safe extension checklist

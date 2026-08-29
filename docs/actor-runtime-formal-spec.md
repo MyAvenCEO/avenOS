@@ -26,20 +26,20 @@ authenticated avenCEO API. Server execution receives a short-lived, scope-bound 
 from `api.aven.ceo`. Neither host accepts a database name or physical tenant route from
 the client.
 
-The app's present document `server` option is deliberately an in-process emulation. It
-creates a separate host and runtime, crosses a strict JSON round trip, resolves the
-source by artifact ID, reports placement as `server`, and publishes through the same
-gateway. It proves the client seam without pretending that document work has moved
-off-device.
+The app's document `server` option is a `PlanRunnerClient`. It submits only the
+committed source descriptor through the authenticated facade, polls the subject-owned
+durable run, and accepts a terminal presentation only when it identifies server
+placement and the `actor-runner` host. No server decoder or document actor exists in
+the client composition.
 
 The repository also contains a real authenticated remote boundary in
 `services/actor-runner`. It accepts the protocol through `api.aven.ceo` and verifies
 the forwarded signed identity token and tenant grant independently. It persists run
 records in the selected customer's PostgreSQL database and reclaims accepted rows on
-the first admitted request for that customer after a process restart. It does not yet
-execute document actors. The cutover replaces the app's emulated host with a client for
-that boundary after the durable generic executor is available; it does not change the
-start command or document capability contracts.
+the first admitted request for that customer after a process restart. Its application
+catalog installs the document-ingest skill with a tenant-routed Artifact Store adapter
+and headless deterministic decoder. Other skills still fall through to the empty,
+fail-closed generic host.
 
 ```mermaid
 sequenceDiagram
@@ -437,12 +437,12 @@ generic and MUST start work only from an admitted run command.
 
 The cutover now has four independently testable increments.
 
-### Phase A — portable local parity (implemented)
+### Phase A — portable local parity (implemented and superseded by the remote host)
 
 - use qualified IDs, domain-qualified predicates, and schema-bound capability slots;
 - expose Device/Server choice and require it on every new upload;
 - route both choices through separate document hosts and a strict JSON boundary;
-- keep the app's server document host explicitly labelled as in-process emulation; and
+- keep generated IDs and physical host metadata out of canonical parity comparisons; and
 - preserve atomic Artifact Store publication, stable publication IDs, and processing
   projection behavior.
 
@@ -462,22 +462,20 @@ repository. New data has no legacy fallback or compatibility reader.
   records, revision-checked cancellation, and recovery of committed `accepted` rows
   after a process restart.
 
-This phase makes the run ledger persistent. The deployed service now composes the
-portable registry/planner/factory executor through an explicit server host. Its
-application catalog and adapters are deliberately empty and fail closed, so only a
-valid zero-step plan whose goals are already present can succeed. Recovery is lazy on
-the first admitted request for a customer and remains safe while no effectful
-application actors are registered.
+This phase makes the run ledger persistent. Recovery is lazy on the first admitted
+request for a customer. The service retains an empty, fail-closed generic fallback;
+the later document application executor is deterministic and publishes every step
+idempotently.
 
 ### Phase C — durable generic executor
 
-The ordered executor core and SQL injection/checkpoint seam now cover the smallest
+The ordered executor core and SQL injection/checkpoint seam cover the smallest
 deterministic factory path. A conditional PostgreSQL E2E test also carries that shared
 fixture through signed identity, the facade, tenant-grant admission, runner HTTP, SQL
 persistence, dynamic factory execution, real Artifact Store publication, and a
-canonical local/server comparison. The production service now uses the same generic
-executor composition, but has no application catalog, policy, factories, or scoped
-Artifact Store adapter yet. The remaining items populate those final-state ports and
+canonical local/server comparison. The production service uses the same generic
+executor composition as its fallback and now also has one application catalog entry
+for document ingestion. The remaining items populate generic application ports and
 make effects durable:
 
 1. implement `RunRepository` records, compare-and-swap revisions, leases, fencing,
@@ -501,7 +499,8 @@ merely because an artifact appeared in a feed.
    the current `DocumentProcessingRuntime` results;
 2. prove parity for PDF, image, invoice, statement, unsupported, encrypted, retry,
    crash-after-publication, and model failure fixtures;
-3. wire the app's explicit Server choice to `PlanRunnerClient` through the facade;
+3. wire the app's explicit Server choice to `PlanRunnerClient` through the facade
+   (**implemented**);
 4. keep Device execution behind the same client contract and then move it to the same
    generic runner core;
 5. replace eager document actor singletons with authorized factory offers;
@@ -510,10 +509,10 @@ merely because an artifact appeared in a feed.
 7. remove `DocumentProcessingRuntime` and the `client-actor-ingest` ownership marker
    after parity is established. A source is an artifact; an admitted run owns work.
 
-Rollback before final removal routes new Server starts back to the emulated desktop
-adapter. Committed artifacts remain valid because both implementations use the same
-stable, idempotent production-run publications. The development database is cleared
-at cutover; no compatibility reader or data migration is built.
+There is no emulated-server rollback path. Committed artifacts remain valid because
+both implementations use stable, idempotent production-run publications. A failed
+remote deployment must be repaired or server placement disabled honestly; it must not
+silently execute server-labelled work on the device.
 
 ## 12. Current conformance and deliberate gaps
 
@@ -526,8 +525,8 @@ at cutover; no compatibility reader or data migration is built.
 | dynamic factory admission | implemented in the ordered executor core | compose production factories and policies in each host |
 | portable runner protocol | implemented with persistent server ledger and authenticated generic-executor test seam | compose the production local and server hosts around it |
 | Device/Server start choice | implemented | UX and restart tests remain green |
-| server runtime boundary | authenticated HTTP service, persistent SQL run ledger, and deployed generic host composition with an empty fail-closed application catalog | populate production registry, policy, factories, and Artifact Store ports, then replace the app emulator with the remote client |
-| shared Artifact Store | document client path is deployed; the generic runner adapter has wire and real Rust/PostgreSQL persistence/replay tests and is composed into the authenticated SQL conformance run | inject application-scoped adapter instances into deployed server and production local hosts |
+| server runtime boundary | authenticated HTTP service, persistent SQL run ledger, remote desktop client, document application executor, and empty fail-closed generic fallback | add leases/fencing before effectful generic applications |
+| shared Artifact Store | local and server document paths publish into the selected customer scope with distinct service credentials; generic adapter also has Rust/PostgreSQL persistence/replay proof | extend generic application schema bindings as services are added |
 | slot/schema bindings | manifests plus one-artifact-per-slot generic executor binding implemented | add wider cardinalities and production schema/store adapters |
 | durable generic runner | ordered factory-executor core, final-state server host composition, authenticated SQL, real Artifact Store publication, checkpoints, and a metadata-only secret continuation implemented for deterministic fixtures | add application adapters, leases, fencing, retries, secret handles, and checkpointed replanning |
 | encrypted-PDF continuation | generic postpone/restart/resume lifecycle implemented and tested; document integration specified | decoder secret-handle contract, document executor binding, and HITL UI |
@@ -536,8 +535,8 @@ at cutover; no compatibility reader or data migration is built.
 
 This table is intentional. “The architecture can satisfy the paper” means every
 feature has a named contract and replaceable boundary; it does not mislabel the
-in-process server emulator, current hard-coded coordinator, or unimplemented secret
-broker as production-complete.
+document-specific coordinator or unimplemented secret broker as a completed generic
+runtime.
 
 ## 13. Required conformance suite
 
@@ -581,11 +580,12 @@ The current suite automates item 2; the core-level portions of items 3, 4, 8, an
 the protocol-authority constants needed by item 13; and item 15's trust boundary. The
 item 4 evidence includes both pre-search removal of an unauthorized cheaper target in
 favor of a higher-cost fallback and fail-closed invocation reauthorization. The
-item 12 evidence now includes both an in-process physical-placement comparison and a
-shared deterministic fixture carried through authenticated runner HTTP, a real SQL
-repository, and the real Rust Artifact Store. The HTTP services still share a test
-process and the local side is not yet a production generic `PlanRunner`, so this is a
-durable server-conformance slice rather than the completed remote-host claim.
+item 12 evidence includes the generic deterministic fixture carried through
+authenticated runner HTTP, a real SQL repository, and the real Rust Artifact Store.
+Document-specific conformance additionally runs the real browser and headless decoders
+over text, CSV, and native-text PDF goldens and compares canonical output graphs. The
+fresh-stack Tauri proof crosses separate identity, facade, runner, and Artifact Store
+containers for both placements and requires the durable server checkpoint.
 Representative strict-JSON cases from item 1 are covered, but not yet every value class
 named there. A focused LLM actor test covers the central item 14 example; the exhaustive
 catalog rule still waits for the generated catalog gate.
@@ -604,9 +604,9 @@ caller-supplied security. With `TEST_ACTOR_RUNNER_DATABASE_URL`, it additionally
 step and compare its canonical output with local execution. When the Artifact Store
 test variables are also present, it commits the output and lineage through the real
 service and checkpoints the returned artifact ID. This does not yet prove recovery in
-the publication/checkpoint gap, leases, or general document execution.
+the publication/checkpoint gap or leases.
 
-The real document acceptance corpus separately covers native text, visual documents,
+The growing document acceptance corpus must separately cover native text, visual documents,
 canonical finance schemas, XRechnung recognition, encrypted-PDF continuation, and
 unsupported inputs on every supported placement. Live LLM/provider checks remain a
 third, separately reported smoke rail; model availability or a plausible answer is

@@ -100,7 +100,8 @@ implementation does not provide:
 - a complete, versioned export/import path for all working intelligence;
 - a provider-neutral deployment path proven outside the current Hetzner composition;
 - an independently supported production target; or
-- remote document execution through the generic Actor Runner.
+- server-side OCR and model-backed document understanding equivalent to the client's
+  optional vision lane.
 
 Documentation must state these limits beside the stronger product direction. Database
 isolation must not be called end-to-end encryption. Source availability must not be

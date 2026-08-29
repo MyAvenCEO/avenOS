@@ -199,16 +199,18 @@ hostnames. `id.aven` owns principal, assurance, and portable trust vocabulary;
 `ceo.aven` owns product entitlements, artifacts, actor capabilities, and domain
 policy. The generic `os.aven` runner calls one external product origin while
 the facade projects an environment-scoped public route onto the exact private
-`/api/actor-runs` paths of its independently deployable service. Document ingestion
-will be a skill/graph hosted by that runner, not another identity, checkout, or facade
-service. That is the target ownership; the current app still executes both document
-placements in-process, and the persistent runner has no document actor executor.
+`/api/actor-runs` paths of its independently deployable service. Document ingestion is
+a `ceo.aven` skill hosted by that runner, not another identity, checkout, or facade
+service. Local placement remains inside the app; server placement is an authenticated
+remote run with a customer-scoped ledger and Artifact Store route.
 
 The runner is now integrated into the facade and E2E topology. Its JWT audience,
 facade header stripping, dedicated downstream bearer, and independent downstream
 JWT verification are covered by the split HTTP test. SQL-backed admission, status,
-cancellation, and restart recovery are covered separately. This still does not prove
-product-level actor authorization or document execution.
+cancellation, and restart recovery are covered separately. The fresh-stack Tauri test
+also proves deterministic document execution on both placements and compares their
+stored artifact graphs. Wider product-level actor authorization and model-backed
+server documents remain separate work.
 
 ## Public website
 

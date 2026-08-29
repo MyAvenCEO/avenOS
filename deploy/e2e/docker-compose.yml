@@ -292,6 +292,7 @@ services:
       ARTIFACT_STORE_DATABASE_URL: postgres://unused:unused@platform-database/postgres
       ARTIFACT_STORE_API_DB_CREDENTIAL_ROOT: BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ
       ARTIFACT_STORE_BEARER_TOKEN: artifact-store-service-token-for-e2e-0001
+      ARTIFACT_STORE_ACTOR_RUNNER_BEARER_TOKEN: actor-runner-artifact-token-for-e2e-01
       ARTIFACT_STORE_PUBLISHER_ISSUER: api.aven.ceo
       ARTIFACT_STORE_PUBLISHER_SUBJECT: service:aven-api
       ARTIFACT_STORE_TENANT_MODE: "true"
@@ -389,6 +390,8 @@ services:
       IDENTITY_AUDIENCE: aven-services
       TENANT_GRANT_ISSUER: http://localhost:${E2E_API_HOST_PORT:-13000}
       TENANT_GRANT_PUBLIC_KEY: ${E2E_TENANT_PUBLIC_KEY}
+      ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
+      ARTIFACT_STORE_BEARER_TOKEN: actor-runner-artifact-token-for-e2e-01
     networks: [platform-private, public-test]
 
   mailpit:

@@ -167,8 +167,10 @@ proves exact encrypted fresh-target restore.
   ad hoc backup workflow.
 - Actor runs are durable; the richer generic observation/effect journal remains future
   runtime work.
-- Document import currently executes the portable actor graph in the client. The
-  remote Actor Runner is not yet the generic document executor.
+- Document import supports device and remote execution. The remote Actor Runner uses
+  the selected customer's run ledger and Artifact Store scope. Its document
+  application executor is intentionally separate from the still-narrow generic
+  planner; server OCR and model-backed understanding remain future capabilities.
 
 These gaps must stay explicit. They are not permission to add shared databases,
 cluster-wide runtime credentials, handwritten customer setup, caller-selected routing,

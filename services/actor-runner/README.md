@@ -74,7 +74,7 @@ accepted rows from that customer database. This lazy, per-customer recovery is e
 for the current side-effect-free executor and avoids giving the runner control-plane
 database privileges.
 
-`SqlPlanRunner` now accepts a host-composed `PlanRunExecutor`. Its persistence E2E test
+`SqlPlanRunner` accepts a host-composed `PlanRunExecutor`. Its persistence E2E test
 injects the generic executor core, plans a deterministic skill, dynamically admits and
 invokes a server factory actor, and stores the completed steps, artifact IDs, registry
 revision, and policy-decision IDs in the durable checkpoint. The same test executes the
@@ -88,16 +88,19 @@ provenance with the local executor result. The fixture shares one implementation
 the direct-SQL and authenticated-HTTP tests, so those paths cannot quietly drift into
 different examples.
 
-The deployed composition in `src/index.ts` constructs the portable generic executor
-from `ActorExecutionHost` ports. Its default server host has an empty registry and
-fail-closed authorization, factory, and Artifact Store adapters. It can accept a valid
-zero-step plan, but cannot execute an application actor until application-owned
-catalog, policy, factory, and store adapters are supplied. `SqlPlanRunner` requires an
-executor explicitly, preventing a production caller from falling back to a special
-case. The runner protocol and SQL repository implement metadata-only continuation
-suspension, postponement, and resumption for a composed executor. They must gain
-leases/fencing before workers execute non-idempotent effects; the current recovery
-mechanism is deliberately not a distributed job queue.
+The deployed composition in `src/index.ts` has two explicit layers. Registered
+application skills are selected by an application executor catalog. Its first entry is
+`ceo.aven:skill:document-ingest@1`, which fetches the admitted source from the selected
+tenant's Artifact Store, runs the headless document runtime, and publishes every
+derived artifact with the runner's dedicated store identity. All other skills fall
+through to the portable generic executor. That fallback has an empty registry and
+fail-closed authorization, factory, and Artifact Store ports, so an unknown skill
+cannot accidentally execute.
+
+`SqlPlanRunner` requires the composed executor explicitly. Its protocol and repository
+implement metadata-only continuation suspension, postponement, and resumption. They
+must gain leases and fencing before workers execute non-idempotent effects; the current
+recovery mechanism is deliberately not a distributed job queue.
 
 ## Local start
 
@@ -135,7 +138,16 @@ authenticated path resolves its source and publishes its output through the real
 persists the returned artifact ID in the SQL checkpoint, reads the producer lineage
 back, and compares the server result with local execution.
 
-`ArtifactStoreRuntimePort` is the first concrete adapter for that next boundary. It
+`tests/document-lane-conformance.test.ts` sends deterministic text, CSV, and a real
+repository PDF through the production browser decoder and through the production
+headless document executor. It compares the canonical presentation and the complete
+publication graph: procedure keys, ordered inputs, parameters, payloads, blob hashes,
+evidence, types, and stages. Generated IDs and physical placement metadata are the only
+excluded fields. The fresh-stack Playwright journey repeats the comparison for a text
+fixture through the real Tauri client, facade, persistent runner, PostgreSQL, and Rust
+Artifact Store.
+
+`ArtifactStoreRuntimePort` is the concrete adapter for generic executor fixtures. It
 resolves committed envelopes through `ArtifactStoreClient`, maps registered type
 versions to canonical runtime schemas, and accepts a fact only when a trusted projector
 derives the predicate from the validated payload. It never turns a caller-asserted
@@ -155,8 +167,9 @@ producer inputs back, and proves replay returns the same output ID. The full-sta
 harness starts a fixed-scope conformance store beside the tenant-mode application store
 so this test runs in the release gate. The authenticated split-architecture test also
 injects this port into `SqlPlanRunner`, proving both durable boundaries in one run. The
-deployed host exposes the final adapter port, but still needs the tenant-scoped
-application binding for this concrete adapter.
+document application executor instead uses its own tenant-bound publisher because its
+current DAG supports dynamic page fan-out and many-valued inputs that the narrow
+generic executor does not yet model.
 
 ## Container build
 

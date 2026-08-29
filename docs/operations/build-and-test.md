@@ -95,7 +95,9 @@ fresh databases on dynamic loopback ports, and proves the public journey:
 - native Tauri device authorization and short-lived service-token exchange;
 - customer database provisioning and per-schema isolation;
 - artifact upload and exact readback;
-- client document import and derived artifacts;
+- native document import on both Device and Server placement, exact source and
+  extracted bytes, and canonical stored-graph equivalence for the deterministic text
+  fixture;
 - authenticated LLM chat with durable Intent history, including session-local
   anonymous speaker attribution and a duplex interruption followed by another
   speaker;
@@ -115,8 +117,9 @@ persistence without microphone hardware; physical acoustic qualification remains
 separate procedure in
 [Voice dependency qualification](../voice-dependency-qualification.md).
 The [Actor runtime proof strategy](../actor-runtime-proof-strategy.md) states the exact
-claims this rail establishes and the remaining evidence required for document-domain
-acceptance and independently deployed client/server parity.
+claims this rail establishes. The focused document conformance suite additionally
+compares browser and headless-runner results for deterministic text, CSV, and
+native-text PDF goldens; server OCR and live-model parity remain explicit gaps.
 
 ## Complete pre-deployment gate
 

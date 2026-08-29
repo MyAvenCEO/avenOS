@@ -17,11 +17,11 @@ The package owns:
 - current DAG execution, stable publication identities, retry checkpoints, and
   processing projections.
 
-It depends only on `@avenos/actors`, `@avenos/artifact-store`, and
-`@avenos/llm-client`. It does not import Svelte, Tauri, PDF.js, or browser APIs.
-Consequently the actor definitions can run in the desktop app or a headless host. The
-current `DocumentProcessingRuntime` coordinator still has document-specific control
-flow and is not the generic durable runner.
+It depends on the portable actor, Artifact Store, and LLM contracts plus PDF.js for
+the headless deterministic decoder. It does not import Svelte, Tauri, or browser APIs.
+Consequently the actor definitions run in the desktop app and the Actor Runner. The
+current `DocumentProcessingRuntime` coordinator still has document-specific dynamic
+fan-out and is not the generic fixed-cardinality planner.
 
 ## Actor inventory
 
@@ -72,13 +72,15 @@ Artifact publication is wrapped in `QueuedClientArtifactGateway`. It serializes 
 publications, retries only host-declared transient failures, and preserves the stable
 `publicationId`, so backpressure cannot duplicate a committed production run.
 
-`DocumentExecutionRouter` chooses one `DocumentExecutionHost` per process. The present
-server host is an in-process emulation which deliberately exercises the same portable
-JSON boundary as the remote contract. A separate authenticated actor-runner service
-has a customer-scoped SQL run ledger, restart recovery, and generic fail-closed host
-composition, but this package is not yet registered in its application catalog. See
+`DocumentExecutionRouter` chooses one `DocumentExecutionHost` per process. Device
+placement uses the in-process host. Server placement uses `RemoteDocumentExecutionHost`
+to submit the document skill through the authenticated Plan Runner facade. The
+separate Actor Runner owns the customer-scoped SQL run ledger, reads and publishes
+through tenant-routed Artifact Store access, and returns the durable presentation in
+the run checkpoint. `src/server.ts` supplies its bounded text/PDF decoder, publication
+adapter, and application executor. See
 [`docs/actor-runtime-formal-spec.md`](../../docs/actor-runtime-formal-spec.md) for the
-wire protocol, dynamic factory target, and server cutover.
+wire protocol and generic executor boundary.
 
 The application imports these package subpaths directly; no application compatibility
 re-export remains.

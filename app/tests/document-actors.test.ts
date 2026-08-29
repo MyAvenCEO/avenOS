@@ -5,12 +5,13 @@ import {
 	type DocumentDecoder,
 	parseDocumentActorResult
 } from '@avenos/document-ingest/actors'
-import type { DocumentModelGateway, DocumentModelRequest } from '@avenos/document-ingest/model'
 import {
+	type DocumentExecutionHost,
 	DocumentExecutionRouter,
 	documentRunStartRequest,
 	InProcessDocumentExecutionHost
 } from '@avenos/document-ingest/execution'
+import type { DocumentModelGateway, DocumentModelRequest } from '@avenos/document-ingest/model'
 import {
 	type ClientArtifactGateway,
 	type ClientRunPublication,
@@ -458,15 +459,29 @@ describe('client document actors', () => {
 			undefined,
 			{ executionEnvironment: 'local', runtimeHost: 'desktop' }
 		)
-		const server = new DocumentProcessingRuntime(
-			createDocumentActors(new FixedDecoder()),
-			new RecordingGateway(),
-			undefined,
-			{ executionEnvironment: 'server', runtimeHost: 'in-process-server-emulation' }
-		)
+		let serverPresentation: Awaited<ReturnType<DocumentExecutionHost['start']>> | undefined
+		const server: DocumentExecutionHost = {
+			executionEnvironment: 'server',
+			async start(request) {
+				serverPresentation = {
+					caseId: request.requestId,
+					state: 'succeeded',
+					projectionVersion: 'actor-document-v1',
+					preferredType: 'document',
+					label: request.source.originalName,
+					summary: 'Remote fixture processed.',
+					metadata: { executionEnvironment: 'server', runtimeHost: 'actor-runner' },
+					warnings: [],
+					stages: [],
+					derivedArtifacts: []
+				}
+				return serverPresentation
+			},
+			status: () => serverPresentation
+		}
 		const router = new DocumentExecutionRouter({
 			local: new InProcessDocumentExecutionHost('local', local, sources),
-			server: new InProcessDocumentExecutionHost('server', server, sources)
+			server
 		})
 		const descriptor = {
 			artifactId: '99999999-9999-4999-8999-999999999999',
@@ -481,7 +496,7 @@ describe('client document actors', () => {
 		expect(router.status(descriptor.artifactId)?.state).toBe('succeeded')
 		expect(presentation.metadata).toMatchObject({
 			executionEnvironment: 'server',
-			runtimeHost: 'in-process-server-emulation'
+			runtimeHost: 'actor-runner'
 		})
 		expect(router.executionEnvironment(descriptor.artifactId)).toBe('server')
 		expect(() => router.start(documentRunStartRequest(descriptor, 'local'))).toThrow(
