@@ -40,6 +40,12 @@ export function isOpenSshPublicKey(value) {
 	)
 }
 
+export function normalizeOpenSshPublicKey(value) {
+	const normalized = value.trim()
+	if (!isOpenSshPublicKey(normalized)) throw new Error('invalid SSH public key')
+	return normalized
+}
+
 export function loadPlatformConfig(env = process.env) {
 	const target = required(env, 'DEPLOYMENT_TARGET')
 	const environment = required(env, 'DEPLOYMENT_ENVIRONMENT')

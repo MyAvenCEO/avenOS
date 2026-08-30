@@ -19,6 +19,13 @@ sh -n \
 bash -n "$root/deploy/release/deploy.sh" "$root/deploy/release/environment.sh" "$root/deploy/validate.sh" "$root/deploy/operations/test-recovery.sh"
 bun test "$root/deploy/local/llm-catalog.test.ts" "$root/deploy/e2e/llm-catalog.test.ts"
 
+grep -Fq "if: matrix.target != 'identity'" "$root/.github/workflows/platform-deploy.yml"
+if grep -Fq "if: inputs.target != 'identity'" "$root/.github/workflows/platform-deploy.yml"; then
+  echo 'bulk deployment must skip platform-only model discovery for the identity matrix job' >&2
+  exit 1
+fi
+grep -Fq "http://127.0.0.1:3010/health/ready" "$root/services/intent-service/Dockerfile"
+
 env \
   E2E_TENANT_PRIVATE_KEY=test-private-key \
   E2E_TENANT_PUBLIC_KEY=test-public-key \

@@ -310,7 +310,7 @@ jobs:
       - name: Record deployed commit
         run: echo "DEPLOYED_REF_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Resolve current Phala model catalog
-        if: inputs.target != 'identity'
+        if: matrix.target != 'identity'
         run: |
           set -euo pipefail
           catalog=$(bun run --silent models:redpill-phala)

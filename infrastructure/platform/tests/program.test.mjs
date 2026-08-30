@@ -18,7 +18,7 @@ pulumi.runtime.setMocks(
 			if (args.type === 'tls:index/privateKey:PrivateKey') {
 				state.privateKeyOpenssh =
 					'-----BEGIN OPENSSH PRIVATE KEY-----\ntest\n-----END OPENSSH PRIVATE KEY-----\n'
-				state.publicKeyOpenssh = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHost ${args.name}`
+				state.publicKeyOpenssh = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHost ${args.name}\n`
 				state.privateKeyPem = '-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n'
 				state.publicKeyPem = '-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----\n'
 			}
@@ -104,4 +104,13 @@ test('keeps the identity bootstrap root isolated', () => {
 		JSON.stringify(identity.inputs),
 		/BETTER_AUTH|POSTGRES_PASSWORD|POLAR_API_KEY|SMTP_URL/
 	)
+})
+
+test('normalizes provider-shaped deploy keys only inside cloud-init', () => {
+	const registeredKey = resources.find(({ name }) => name === 'identity-deploy-key-registration')
+	const identity = resources.find(({ name }) => name === 'identity-server')
+	const userData = identity.inputs.userData.value ?? identity.inputs.userData
+	assert.equal(registeredKey.inputs.publicKey.endsWith('\n'), true)
+	assert.match(userData, /ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHost identity-deploy-key\n/)
+	assert.doesNotMatch(userData, /identity-deploy-key\n\s*\n/)
 })

@@ -8,10 +8,10 @@ const hostPublic = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHost test\n'
 function render(appRoot) {
 	return renderCloudInit({
 		deployUser: 'aven-deploy',
-		adminPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAdmin admin',
-		deployPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDeploy deploy',
-		observePublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIObserve observe',
-		tunnelPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITunnel tunnel',
+		adminPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAdmin admin\n',
+		deployPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDeploy deploy\n',
+		observePublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIObserve observe\n',
+		tunnelPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITunnel tunnel\n',
 		sshAllowedCidrs: ['192.0.2.4/32'],
 		volumeDevice: '/dev/disk/by-id/scsi-0HC_Volume_123',
 		appRoot,
@@ -68,4 +68,5 @@ test('creates a key-only admin plus separate least-privilege service accounts', 
 	assert.match(cloudInit, /\/usr\/local\/sbin\/aven-restore platform/)
 	assert.match(cloudInit, /RESTORE_CONFIRMATION|--profile recovery/)
 	assert.doesNotMatch(cloudInit, /aven-deploy ALL=\(ALL\) NOPASSWD:ALL|usermod -aG docker/)
+	assert.doesNotMatch(cloudInit, /ssh-ed25519[^\n]*\n\s+\n/)
 })
