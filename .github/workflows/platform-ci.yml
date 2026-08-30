@@ -26,7 +26,11 @@ on:
       - .dockerignore
       - bun.lock
       - package.json
+      - scripts/deployment-bootstrap-guided.ts
       - scripts/deployment-bootstrap.ts
+      - scripts/lib/deployment-bootstrap-guided.ts
+      - scripts/lib/deployment-bootstrap-tui.ts
+      - scripts/lib/deployment-bootstrap-tui.test.ts
       - scripts/lib/deployment-bootstrap.ts
       - scripts/lib/polar-webhook.ts
       - scripts/lib/redpill-model-catalog.ts
@@ -61,7 +65,11 @@ on:
       - .dockerignore
       - bun.lock
       - package.json
+      - scripts/deployment-bootstrap-guided.ts
       - scripts/deployment-bootstrap.ts
+      - scripts/lib/deployment-bootstrap-guided.ts
+      - scripts/lib/deployment-bootstrap-tui.ts
+      - scripts/lib/deployment-bootstrap-tui.test.ts
       - scripts/lib/deployment-bootstrap.ts
       - scripts/lib/polar-webhook.ts
       - scripts/lib/redpill-model-catalog.ts

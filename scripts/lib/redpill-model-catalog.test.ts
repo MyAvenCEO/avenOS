@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { redpillPhalaCatalog } from './redpill-model-catalog.js'
+import { fetchRedpillPhalaCatalog, redpillPhalaCatalog } from './redpill-model-catalog.js'
 
 describe('RedPill Phala model catalog', () => {
 	test('keeps Phala chat models and derives only advertised capabilities', () => {
@@ -48,5 +48,25 @@ describe('RedPill Phala model catalog', () => {
 	test('rejects an empty or malformed provider response', () => {
 		expect(() => redpillPhalaCatalog({ data: [] })).toThrow('no Phala-hosted chat models')
 		expect(() => redpillPhalaCatalog({})).toThrow('data array')
+	})
+
+	test('uses the supplied API key for live catalog validation', async () => {
+		let authorization: string | null = null
+		await fetchRedpillPhalaCatalog(async (_input, init) => {
+			authorization = new Headers(init?.headers).get('authorization')
+			return new Response(
+				JSON.stringify({
+					data: [
+						{
+							id: 'phala/example',
+							name: 'Example',
+							providers: ['phala'],
+							output_modalities: ['text']
+						}
+					]
+				})
+			)
+		}, 'test-api-key')
+		expect(authorization).toBe('Bearer test-api-key')
 	})
 })

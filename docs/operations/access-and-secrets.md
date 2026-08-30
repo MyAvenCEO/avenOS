@@ -158,7 +158,9 @@ replacement Environment set is complete.
 
 ## Recovery escrow
 
-The bootstrap writes an owner-only, password-manager-compatible CSV containing:
+The bootstrap writes an owner-only password-manager CSV with `Group`, `Title`, `Username`,
+`Password`, `URL`, and `Notes` columns. Groups contain both the deployment prefix and the
+owning scope: `bootstrap`, `shared`, `identity`, `next`, or `production`. It contains:
 
 - the deployment namespace and offline storage administrator;
 - each target's deployment and observer storage credentials;

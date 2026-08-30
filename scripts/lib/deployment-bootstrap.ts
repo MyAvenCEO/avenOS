@@ -214,57 +214,74 @@ function csv(value: string): string {
 
 export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets): string {
 	const rows: string[][] = []
-	const add = (name: string, username: string, secret: string, notes: string) =>
-		rows.push(['avenOS bootstrap', '0', 'login', name, notes, '', '0', '', username, secret, ''])
+	const add = (
+		group: string,
+		name: string,
+		username: string,
+		secret: string,
+		notes: string,
+		url = ''
+	) =>
+		rows.push([`avenOS/${generated.deploymentPrefix}/${group}`, name, username, secret, url, notes])
 	add(
+		'bootstrap',
 		'avenOS deployment namespace',
 		generated.deploymentPrefix,
 		'',
 		'Prefixes the active GitHub Environments and identifies this infrastructure generation.'
 	)
 	add(
+		'bootstrap',
 		'avenOS bootstrap Pulumi passphrase',
 		'',
 		generated.bootstrapPulumiPassphrase,
 		'Encrypts the bootstrap stack state.'
 	)
 	add(
+		'bootstrap',
 		'avenOS Object Storage bootstrap',
 		input.objectStorage.bootstrapCredential.accessKeyId,
 		input.objectStorage.bootstrapCredential.secretAccessKey,
-		`Offline administrator for project ${input.objectStorage.projectId}; never add to GitHub.`
+		`Offline administrator for project ${input.objectStorage.projectId}; never add to GitHub.`,
+		`https://console.hetzner.com/projects/${input.objectStorage.projectId}/servers`
 	)
 	for (const target of TARGETS) {
 		const storage = input.objectStorage.targets[target]
 		add(
+			target,
 			`avenOS ${target} Pulumi passphrase`,
 			'',
 			generated.targets[target].pulumiPassphrase,
 			'Encrypts generated infrastructure secrets.'
 		)
 		add(
+			target,
 			`avenOS ${target} Restic password`,
 			'',
 			generated.targets[target].resticPassword,
 			'Encrypts database backups; loss makes backups unrecoverable.'
 		)
 		add(
+			target,
 			`avenOS ${target} deployment storage`,
 			storage.deploymentCredential.accessKeyId,
 			storage.deploymentCredential.secretAccessKey,
 			'Writes this target state and backup buckets only.'
 		)
 		add(
+			target,
 			`avenOS ${target} observer storage`,
 			storage.observerCredential.accessKeyId,
 			storage.observerCredential.secretAccessKey,
 			'Reads this target state bucket only.'
 		)
 		add(
+			target,
 			`avenOS ${target} Hetzner compute token`,
 			'',
 			input.providers[target].computeToken,
-			'Target-scoped compute API token.'
+			'Target-scoped compute API token.',
+			'https://console.hetzner.com/projects'
 		)
 	}
 	for (const target of ['next', 'production'] as const) {
@@ -272,44 +289,46 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 		const webhook = generated.polarWebhooks?.[target]
 		if (!webhook) throw new Error(`Polar ${target} webhook has not been provisioned.`)
 		add(
+			target,
 			`avenOS ${target} Hetzner DNS token`,
 			'',
 			provider.dnsToken,
-			'Writes the aven.ceo DNS zone.'
+			'Writes the aven.ceo DNS zone.',
+			'https://console.hetzner.com/projects'
 		)
 		add(
+			target,
 			`avenOS ${target} Polar API key`,
 			provider.polarOrganizationId,
 			provider.polarApiKey,
-			`Polar ${target} organization API key.`
+			`Polar ${target} organization API key.`,
+			'https://polar.sh'
 		)
 		add(
+			target,
 			`avenOS ${target} Polar webhook secret`,
 			webhook.id,
 			webhook.secret,
-			`Verifies every raw Polar webhook delivery sent to ${webhook.url}.`
+			`Verifies every raw Polar webhook delivery sent to ${webhook.url}.`,
+			webhook.url
 		)
-		add(`avenOS ${target} SMTP URL`, '', provider.smtpUrl, 'Send-only checkout mail transport.')
+		add(
+			target,
+			`avenOS ${target} SMTP URL`,
+			'',
+			provider.smtpUrl,
+			'Send-only checkout mail transport.'
+		)
 	}
 	add(
+		'shared',
 		'avenOS RedPill API key',
 		'',
 		input.providers.redpillApiKey,
-		'Shared inference credential for next and production.'
+		'Shared inference credential for next and production.',
+		'https://redpill.ai'
 	)
-	const header = [
-		'folder',
-		'favorite',
-		'type',
-		'name',
-		'notes',
-		'fields',
-		'reprompt',
-		'login_uri',
-		'login_username',
-		'login_password',
-		'login_totp'
-	]
+	const header = ['Group', 'Title', 'Username', 'Password', 'URL', 'Notes']
 	return `${[header, ...rows].map((row) => row.map(csv).join(',')).join('\n')}\n`
 }
 

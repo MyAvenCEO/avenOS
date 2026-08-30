@@ -170,6 +170,8 @@ test('writes password-manager recovery material owner-only', () => {
 	writeRecoveryCsv(path, recoveryCsv(input, generated))
 	assert.equal(statSync(path).mode & 0o777, 0o600)
 	const contents = readFileSync(path, 'utf8')
+	assert.match(contents, /"Group","Title","Username","Password","URL","Notes"/)
+	assert.match(contents, new RegExp(`avenOS/${generated.deploymentPrefix}/next`))
 	assert.match(contents, /avenOS next Restic password/)
 	assert.match(contents, /avenOS RedPill API key/)
 	assert.throws(() => writeRecoveryCsv(path, contents), /refusing to overwrite/)

@@ -55,6 +55,7 @@
 		"email:check": "bun run --cwd services/checkout email:check",
 		"test:infra": "bun run --cwd infrastructure/platform test",
 		"test:bootstrap": "bun run --cwd infrastructure/bootstrap test",
+		"bootstrap:deployment:guided": "bun ./scripts/deployment-bootstrap-guided.ts",
 		"bootstrap:deployment": "bun ./scripts/deployment-bootstrap.ts",
 		"models:redpill-phala": "bun ./scripts/redpill-model-catalog.ts",
 		"test:deploy": "bash deploy/validate.sh",
@@ -82,9 +83,11 @@
 		"@playwright/test": "^1.62.1",
 		"@polar-sh/sdk": "0.49.0",
 		"@types/pg": "8.15.6",
+		"@types/terminal-kit": "2.5.7",
 		"conventional-changelog-cli": "^5.0.0",
 		"pg": "8.16.3",
 		"semver": "^7.8.4",
-		"sharp": "^0.35.3"
+		"sharp": "^0.35.3",
+		"terminal-kit": "3.1.4"
 	}
 }
