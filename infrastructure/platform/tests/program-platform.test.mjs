@@ -18,7 +18,7 @@ pulumi.runtime.setMocks(
 			if (args.type === 'tls:index/privateKey:PrivateKey') {
 				state.privateKeyOpenssh =
 					'-----BEGIN OPENSSH PRIVATE KEY-----\ntest\n-----END OPENSSH PRIVATE KEY-----\n'
-				state.publicKeyOpenssh = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHost ${args.name}`
+				state.publicKeyOpenssh = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHost ${args.name}\n`
 				state.privateKeyPem = '-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n'
 				state.publicKeyPem = '-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----\n'
 			}

@@ -1,4 +1,4 @@
-import { isOpenSshPublicKey } from './config.mjs'
+import { normalizeOpenSshPublicKey } from './config.mjs'
 
 function indent(value, spaces) {
 	const prefix = ' '.repeat(spaces)
@@ -21,16 +21,11 @@ export function renderCloudInit({
 	sshHostPublicKey
 }) {
 	if (!/^[a-z][a-z0-9-]{0,30}$/.test(deployUser)) throw new Error('invalid deploy user')
-	if (
-		![
-			adminPublicKey,
-			deployPublicKey,
-			observePublicKey,
-			tunnelPublicKey,
-			sshHostPublicKey.trim()
-		].every(isOpenSshPublicKey)
-	)
-		throw new Error('invalid SSH public key')
+	const normalizedAdminPublicKey = normalizeOpenSshPublicKey(adminPublicKey)
+	const normalizedDeployPublicKey = normalizeOpenSshPublicKey(deployPublicKey)
+	const normalizedObservePublicKey = normalizeOpenSshPublicKey(observePublicKey)
+	const normalizedTunnelPublicKey = normalizeOpenSshPublicKey(tunnelPublicKey)
+	const normalizedSshHostPublicKey = normalizeOpenSshPublicKey(sshHostPublicKey)
 	if (!sshHostPrivateKey.includes('OPENSSH PRIVATE KEY')) throw new Error('invalid SSH host key')
 	if (!/^\/dev\/[A-Za-z0-9_./-]+$/.test(volumeDevice) || volumeDevice.includes('..'))
 		throw new Error('volume device must be a safe path below /dev')
@@ -68,22 +63,22 @@ users:
     groups: [sudo]
     sudo: ALL=(ALL) NOPASSWD:ALL
     ssh_authorized_keys:
-      - ${adminPublicKey}
+      - ${normalizedAdminPublicKey}
   - name: ${deployUser}
     shell: /bin/bash
     lock_passwd: true
     ssh_authorized_keys:
-      - ${deployPublicKey}
+      - ${normalizedDeployPublicKey}
   - name: aven-observe
     shell: /bin/bash
     lock_passwd: true
     ssh_authorized_keys:
-      - no-agent-forwarding,no-port-forwarding,no-X11-forwarding ${observePublicKey}
+      - no-agent-forwarding,no-port-forwarding,no-X11-forwarding ${normalizedObservePublicKey}
   - name: aven-tunnel
     shell: /usr/sbin/nologin
     lock_passwd: true
     ssh_authorized_keys:
-      - restrict,port-forwarding,permitopen="127.0.0.1:5432" ${tunnelPublicKey}
+      - restrict,port-forwarding,permitopen="127.0.0.1:5432" ${normalizedTunnelPublicKey}
 ssh_pwauth: false
 package_update: true
 package_upgrade: true
@@ -125,7 +120,7 @@ ${indent(sshHostPrivateKey.trimEnd(), 6)}
     owner: root:root
     permissions: "0644"
     content: |
-${indent(sshHostPublicKey.trimEnd(), 6)}
+${indent(normalizedSshHostPublicKey, 6)}
   - path: /etc/ssh/sshd_config.d/99-aven-hardening.conf
     owner: root:root
     permissions: "0644"

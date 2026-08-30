@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { loadPlatformConfig, parseSshCidrs } from '../src/config.mjs'
+import { loadPlatformConfig, normalizeOpenSshPublicKey, parseSshCidrs } from '../src/config.mjs'
 
 const base = {
 	DEPLOYMENT_TARGET: 'identity',
@@ -74,4 +74,12 @@ test('validates exact SSH CIDRs', () => {
 		'2001:db8::1/128'
 	])
 	assert.throws(() => parseSshCidrs('192.0.2.1/33'))
+})
+
+test('normalizes the trailing newline returned by the TLS provider', () => {
+	assert.equal(
+		normalizeOpenSshPublicKey('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIProvider\n'),
+		'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIProvider'
+	)
+	assert.throws(() => normalizeOpenSshPublicKey('not-a-key\n'))
 })
