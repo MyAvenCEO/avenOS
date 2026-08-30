@@ -39,6 +39,16 @@ const modelConfigurationSchema = z
 		upstreamModel: z.string().min(1).max(255).regex(/^\S+$/u),
 		profile: profileSchema,
 		authMode: z.enum(['bearer', 'none']).default('bearer'),
+		requestHeaders: z
+			.record(
+				z.string().regex(/^x-[a-z0-9-]+$/u),
+				z
+					.string()
+					.min(1)
+					.max(256)
+					.regex(/^[^\r\n]+$/u)
+			)
+			.default({}),
 		credentialId: z
 			.string()
 			.min(1)
@@ -75,6 +85,13 @@ const modelConfigurationSchema = z
 				code: 'custom',
 				path: ['credentialId'],
 				message: 'must be absent in unauthenticated provider mode'
+			})
+		}
+		if (Object.keys(model.requestHeaders).length > 16) {
+			context.addIssue({
+				code: 'custom',
+				path: ['requestHeaders'],
+				message: 'must contain at most 16 provider routing headers'
 			})
 		}
 	})
@@ -554,6 +571,7 @@ export class LlmGatewayService {
 			`${model.descriptor.id}\0${model.endpoint.toString()}\0${requestBody}`
 		)
 		const headers: Record<string, string> = {
+			...model.configuration.requestHeaders,
 			accept: request.stream === true ? 'text/event-stream' : 'application/json',
 			'content-type': 'application/json',
 			'idempotency-key': requestKey
@@ -727,6 +745,7 @@ export class LlmGatewayService {
 			`${model.descriptor.id}\0${model.endpoint.toString()}\0${requestBody}`
 		)
 		const headers: Record<string, string> = {
+			...model.configuration.requestHeaders,
 			accept: 'application/json',
 			'content-type': 'application/json',
 			'idempotency-key': requestKey

@@ -498,6 +498,7 @@ Model entry fields:
 | `profile` | One of the four profiles above |
 | `authMode` | `bearer` or `none`; default `bearer` |
 | `credentialId` | Required for bearer mode; key into secret credential map |
+| `requestHeaders` | Optional non-secret `x-*` routing headers; at most 16 values |
 | `timeoutSeconds` | Optional per-model override, 5–900 seconds |
 
 Catalog IDs must be unique. Startup fails on malformed JSON, duplicate IDs, missing
