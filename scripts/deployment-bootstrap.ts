@@ -40,7 +40,7 @@ const generatedPath = resolve(outputDirectory, 'bootstrap.generated.json')
 const recoveryPath = resolve(outputDirectory, 'avenos-recovery.csv')
 const generated = loadOrCreateGeneratedSecrets(generatedPath)
 
-const catalog = await fetchRedpillPhalaCatalog()
+const catalog = await fetchRedpillPhalaCatalog(fetch, input.providers.redpillApiKey)
 
 if (dryRun) {
 	const planned = {

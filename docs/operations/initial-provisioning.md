@@ -7,10 +7,13 @@ for all three deployment targets. It generates a fresh namespace, so it can prep
 replacement installation without reading, changing, or colliding with an existing set
 of GitHub Environments.
 
-The provider credentials remain the manual floor. Hetzner does not expose S3 credential
-creation through its API, and an API token cannot safely create its own replacement.
-Enter those credentials once. Do not hand-create buckets, GitHub Environments, products,
-model entries, passwords, SSH keys, database roles, or service credentials.
+The provider credentials remain the manual floor. [Hetzner exposes S3 credential
+creation only through its Console](https://docs.hetzner.com/storage/object-storage/faq/general/#is-object-storage-exclusively-managed-via-the-hetzner-s3-api),
+and an API token cannot safely create its own replacement. The guided bootstrap prints
+the project path, gives each of the seven credentials its exact description, and securely
+asks for the one-time result before it continues. Do not hand-create buckets, GitHub
+Environments, products, model entries, passwords, SSH keys, database roles, or service
+credentials.
 
 ## What the bootstrap creates
 
@@ -58,23 +61,97 @@ deployment Environments and prevents the initiating account from approving its o
 
 At the providers, create these values:
 
-1. In one Hetzner Object Storage project, generate seven S3 credentials: one offline
-   bootstrap administrator, plus deployment and observer credentials for each target.
+1. Create one Hetzner Object Storage project and record its numeric project ID. The guided
+   bootstrap will stop seven times while you generate one offline bootstrap administrator,
+   plus deployment and observer credentials for each target. Hetzner shows each secret
+   only once, so keep its result dialog open until the wizard accepts both values.
 2. Create separate Hetzner compute write tokens for `identity`, `next`, and production.
 3. Create separate Hetzner DNS write tokens for `next` and production. Both manage only
    the `aven.ceo` zone. `aven.id` stays outside Hetzner DNS.
-4. In Polar sandbox and production, create organization API keys with product and webhook
-   read/write scopes. The bootstrap creates or reconciles the endpoint and captures its
-   signing secret.
+4. In Polar sandbox and production, create organization API keys with organization read
+   and product and webhook read/write scopes. The bootstrap creates or reconciles the
+   endpoint and captures its signing secret.
 5. Create send-only SMTP credentials for `next` and production.
-6. Copy the RedPill API key. One key may serve both platform targets; the API facade keeps
-   it server-side.
+6. Fund the RedPill account and copy its active API key. One key may serve both platform
+   targets; the API facade keeps it server-side.
 
 Product creation is not a provider prerequisite. Every checkout deployment applies the
 published `@myavenceo/aven-ceo/pricing` manifest and creates or corrects avenNAME,
 avenCEO, and their benefits before checkout becomes ready.
 
-## Fill one owner-only input file
+## Run the guided bootstrap
+
+From the repository root, run:
+
+```sh
+bun run bootstrap:deployment:guided
+```
+
+The wizard opens with a complete checklist of provider access, credentials, and
+operational values needed for the run. It checks `gh` authentication and repository
+administration, generates the persistent deployment prefix, then creates an owner-only
+draft under `$HOME/avenos-bootstrap-record`. It prints the exact Hetzner project URL and
+the description to use for each S3 credential. Access keys, secret keys, provider tokens,
+SMTP URLs, and the RedPill key use hidden prompts. The draft and `credentials.csv` are
+rewritten atomically with mode `0600` after every answer, so an interruption cannot lose a
+one-time secret.
+
+The default interface is a full-screen, curses-style form that runs entirely through Bun;
+it does not require a native ncurses library or a separately installed `dialog` command.
+Use Tab or the arrow keys to move, Enter to advance, and Ctrl+C or Escape to cancel. On a
+terminal smaller than 60 columns by 20 rows it automatically uses the accessible plain
+wizard. Force that mode in any terminal with:
+
+```sh
+bun run bootstrap:deployment:guided -- --plain
+```
+
+Every run starts at the first question. For each recorded value, choose the default
+`keep` answer or replace it without displaying the old value. A failed or interrupted run
+ends with `ERROR` and asks whether to `keep` or `delete` the local credential artifacts;
+neither answer is preselected. Deletion covers the CSV, resumable input, generated secrets,
+and any completed recovery CSV because all can contain credentials. The prompt warns that
+deletion prevents resume and can strand resources if provider changes were already applied.
+Keeping them prints the preserved CSV path. A completed run ends with `SUCCESS` and the same
+path. Generated values join the file after successful provisioning; manually entered
+provider values are present throughout.
+
+The CSV uses the common `Group`, `Title`, `Username`, `Password`, `URL`, and `Notes`
+fields. Groups include the deployment prefix and scope, for example
+`avenOS/avenos-4f7c2a91b6/next`, so multiple infrastructure generations can coexist in a
+password manager. Each title names the credential role, each URL points to its provider,
+and each note records its scope and purpose. The CSV is plaintext despite its owner-only
+permissions; import it into the password manager and remove the local copy after
+verification.
+
+The wizard verifies credentials before moving to the next provider. Signed, read-only S3
+requests confirm each Object Storage pair and report the region and visible bucket count.
+Compute tokens report the number of servers visible in their Cloud project. DNS tokens
+must resolve the exact `aven.ceo` zone and report its provider ID. Each Polar pair reports
+the organization name, slug, ID, and current product and webhook counts. The authenticated
+RedPill catalog reports the number of Phala-hosted models and a few names. Failed checks can
+be retried with the same value, replaced without displaying it, or stopped; no action is
+preselected.
+
+SMTP URLs receive strict parsing and the wizard reports their host, port, and transport.
+It deliberately does not attempt SMTP authentication because a portable, non-mutating
+provider check is not available; deployment readiness tests the configured transport.
+After applying the documented infrastructure defaults, the wizard shows the dry-run
+result. Answer `yes` to its final question to create the buckets, Polar endpoints,
+generated secrets, and GitHub configuration. It never prints a secret or passes one in a
+command argument.
+
+To resume or reconcile the same infrastructure generation, run the same command again.
+To use a different owner-only location:
+
+```sh
+bun run bootstrap:deployment:guided -- \
+  --output "$HOME/another-owner-only-directory"
+```
+
+Do not place the output directory inside the repository.
+
+## Non-interactive input alternative
 
 From the repository root, copy the template outside the checkout and restrict it before
 adding values:
@@ -93,7 +170,7 @@ host.
 
 Do not put the input in the repository, chat, a ticket, or shell arguments.
 
-## Validate without changing providers
+## Validate a non-interactive input without changing providers
 
 Choose a new empty owner-only output directory:
 
@@ -110,7 +187,7 @@ checks the live RedPill catalog. It does not create buckets, Polar endpoints, th
 CSV, or GitHub configuration because the final CSV must contain the provider-generated
 webhook signing secrets.
 
-## Apply the bootstrap
+## Apply a non-interactive bootstrap
 
 Run the same command without `--dry-run`:
 
@@ -141,17 +218,21 @@ The output directory contains:
 
 | File | Purpose |
 | --- | --- |
-| `avenos-recovery.csv` | Bitwarden-compatible CSV; other password managers can map its named columns |
+| `credentials.csv` | Guided-bootstrap progress and final password-manager import using common entry fields |
+| `avenos-recovery.csv` | Equivalent final CSV produced only by the non-interactive bootstrap |
+| `bootstrap-input.json` | Owner-only resumable input created by the guided bootstrap |
 | `bootstrap.generated.json` | Repeatable generated inputs and Polar endpoint records |
 | `bootstrap-state.json` | Encrypted Pulumi state migration copy |
 | `bootstrap.remote` | Remote bootstrap backend marker |
 | `pulumi-state/` | Initial local backend retained until remote state is verified |
 
-Import `avenos-recovery.csv` into a password manager whose account recovery you have
-tested. Locate the namespace, all provider credentials, the three Pulumi passphrases, and
-the three Restic passwords from the imported record. Confirm that the bootstrap stack
-selects from the remote backend. Then securely remove the local input and output
-directory. The password manager and remote encrypted state become the recovery sources.
+Import `credentials.csv` from a guided run, or `avenos-recovery.csv` from the
+non-interactive path, into a password manager whose account recovery you have tested. Map
+the six named columns directly when its CSV importer asks. Locate the namespace, all
+provider credentials, the three Pulumi passphrases, and the three Restic passwords from
+the imported record. Confirm that the bootstrap stack selects from the remote backend.
+Then securely remove the local input and output directory. The password manager and remote
+encrypted state become the recovery sources.
 
 When a second operator becomes available, grant them recovery access and ask them to
 locate the same record. This improves continuity but does not block a solo installation.

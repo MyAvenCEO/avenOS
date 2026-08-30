@@ -94,10 +94,14 @@ export function redpillPhalaCatalog(payload: unknown): GatewayModel[] {
 }
 
 export async function fetchRedpillPhalaCatalog(
-	fetcher: typeof fetch = fetch
+	fetcher: typeof fetch = fetch,
+	apiKey?: string
 ): Promise<GatewayModel[]> {
 	const response = await fetcher('https://api.redpill.ai/v1/models', {
-		headers: { accept: 'application/json' },
+		headers: {
+			accept: 'application/json',
+			...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+		},
 		redirect: 'error',
 		signal: AbortSignal.timeout(15_000)
 	})
