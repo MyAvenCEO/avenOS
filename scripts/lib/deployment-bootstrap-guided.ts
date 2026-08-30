@@ -7,6 +7,18 @@ export interface S3CredentialStep {
 	purpose: string
 }
 
+export const POLAR_API_KEY_SCOPES = [
+	'organizations:read',
+	'products:write',
+	'benefits:write',
+	'meters:write',
+	'checkouts:write',
+	'subscriptions:write',
+	'customers:read',
+	'orders:read',
+	'webhooks:write'
+] as const
+
 export const S3_CREDENTIAL_STEPS: readonly S3CredentialStep[] = (
 	['identity', 'next', 'production'] as const
 ).flatMap((target) => [
@@ -241,11 +253,11 @@ export function guidedCredentialsCsv(
 		)
 		add(
 			target,
-			`avenOS ${target} bootstrap (Polar API key)`,
+			`avenOS ${target} billing (Polar API key)`,
 			stringValue(draft, ['providers', target, 'polarOrganizationId']),
 			stringValue(draft, ['providers', target, 'polarApiKey']),
 			target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh',
-			`Manages products and the raw webhook endpoint in the Polar ${target} organization.`
+			`Reconciles products, benefits, meters, and webhooks and serves checkout, subscription, customer, and order operations in the Polar ${target} organization.`
 		)
 		add(
 			target,

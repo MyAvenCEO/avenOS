@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
+	ensurePrivateDirectory,
 	generateBootstrapSecrets,
 	githubConfiguration,
 	githubEnvironmentProtection,
@@ -11,6 +12,16 @@ import {
 	validateBootstrapInput,
 	writeRecoveryCsv
 } from '../../../scripts/lib/deployment-bootstrap.ts'
+
+test('creates the local Pulumi backend as an owner-only directory', () => {
+	const parent = mkdtempSync(join(tmpdir(), 'aven-bootstrap-directory-test-'))
+	const directory = join(parent, 'pulumi-state')
+	ensurePrivateDirectory(directory)
+	assert.equal(statSync(directory).mode & 0o777, 0o700)
+
+	chmodSync(directory, 0o755)
+	assert.throws(() => ensurePrivateDirectory(directory), /must be owner-only/)
+})
 
 const credential = (name) => ({ accessKeyId: `${name}ACCESS1`, secretAccessKey: `${name}-secret` })
 const input = {
@@ -207,6 +218,8 @@ test('writes password-manager recovery material owner-only', () => {
 	assert.match(contents, /avenOS identity bootstrap administrator/)
 	assert.match(contents, /avenOS next bootstrap administrator/)
 	assert.match(contents, /avenOS production bootstrap administrator/)
+	assert.match(contents, /avenOS production billing \(Polar API key\)/)
+	assert.match(contents, /serves checkout, subscription, customer, and order operations/)
 	assert.match(contents, /projects\/12345\/security\/s3-credentials/)
 	assert.match(contents, /projects\/4567890\/security\/tokens/)
 	assert.match(contents, /shared aven\.ceo DNS zone in Hetzner project 4567890/)

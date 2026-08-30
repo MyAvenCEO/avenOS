@@ -1,5 +1,13 @@
 import { randomBytes } from 'node:crypto'
-import { chmodSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	renameSync,
+	statSync,
+	writeFileSync
+} from 'node:fs'
 
 export const TARGETS = ['identity', 'next', 'production'] as const
 export type Target = (typeof TARGETS)[number]
@@ -191,6 +199,14 @@ export function assertPrivateFile(path: string): void {
 	if ((mode & 0o077) !== 0) throw new Error(`${path} must be owner-only (chmod 600).`)
 }
 
+export function ensurePrivateDirectory(path: string): void {
+	if (!existsSync(path)) mkdirSync(path, { recursive: true, mode: 0o700 })
+	const details = statSync(path)
+	if (!details.isDirectory()) throw new Error(`${path} must be a directory.`)
+	const mode = details.mode & 0o777
+	if ((mode & 0o077) !== 0) throw new Error(`${path} must be owner-only (chmod 700).`)
+}
+
 export function loadOrCreateGeneratedSecrets(path: string): GeneratedSecrets {
 	if (existsSync(path)) {
 		assertPrivateFile(path)
@@ -320,10 +336,10 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 		)
 		add(
 			target,
-			`avenOS ${target} bootstrap (Polar API key)`,
+			`avenOS ${target} billing (Polar API key)`,
 			provider.polarOrganizationId,
 			provider.polarApiKey,
-			`Polar ${target} organization API key.`,
+			`Reconciles products, benefits, meters, and webhooks and serves checkout, subscription, customer, and order operations in the Polar ${target} organization.`,
 			target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh'
 		)
 		add(
