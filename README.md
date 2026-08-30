@@ -229,10 +229,16 @@ The execution design is split across a few focused references:
   resumption.
 - [Actor runtime proof strategy](docs/actor-runtime-proof-strategy.md) separates
   portable runtime conformance, document acceptance, and live-provider smoke tests.
+- [Artifact-first semantic enrichment and affordance discovery](docs/artifact-first-semantic-enrichment.md)
+  defines exhaustive non-effecting enrichment, understanding bundles, and the actions
+  enabled by supported facts.
 - [Client-owned document ingestion](docs/client-document-ingest.md) describes the
   current document pipeline and its server migration boundary.
 - [Generic authenticated LLM gateway](docs/llm-gateway.md) defines model discovery,
   streaming, schemas, tool calls, and provider configuration.
+- [HTTP resource actors and credential routing](docs/http-resource-actors.md) proposes
+  immutable request/response artifacts, byte-stream materialization, and URL-scoped
+  credential selection through a customer-scoped, session-bound Vault service.
 
 ## Deploy and operate it
 
