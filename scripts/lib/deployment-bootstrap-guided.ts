@@ -2,40 +2,53 @@ import { createHash, createHmac } from 'node:crypto'
 
 export interface S3CredentialStep {
 	path: readonly string[]
-	group: 'bootstrap' | 'identity' | 'next' | 'production'
+	target: 'identity' | 'next' | 'production'
 	description: string
 	purpose: string
 }
 
-export const S3_CREDENTIAL_STEPS: readonly S3CredentialStep[] = [
+export const S3_CREDENTIAL_STEPS: readonly S3CredentialStep[] = (
+	['identity', 'next', 'production'] as const
+).flatMap((target) => [
 	{
-		path: ['objectStorage', 'bootstrapCredential'],
-		group: 'bootstrap',
-		description: 'avenOS bootstrap administrator',
-		purpose: 'Creates buckets and installs their isolation policies; keep it offline afterwards.'
+		path: ['objectStorage', 'targets', target, 'bootstrapCredential'],
+		target,
+		description: `avenOS ${target} bootstrap administrator`,
+		purpose: `Creates and repairs only the ${target} buckets; keep it offline afterwards.`
 	},
-	...(['identity', 'next', 'production'] as const).flatMap((target) => [
-		{
-			path: ['objectStorage', 'targets', target, 'deploymentCredential'],
-			group: target,
-			description: `avenOS ${target} deployment`,
-			purpose: `Writes only the ${target} state and backup buckets after policies are applied.`
-		},
-		{
-			path: ['objectStorage', 'targets', target, 'observerCredential'],
-			group: target,
-			description: `avenOS ${target} observer`,
-			purpose: `Reads only the ${target} state bucket for unattended operations.`
-		}
-	])
-]
+	{
+		path: ['objectStorage', 'targets', target, 'deploymentCredential'],
+		target,
+		description: `avenOS ${target} deployment`,
+		purpose: `Writes only the ${target} state and backup buckets after policies are applied.`
+	},
+	{
+		path: ['objectStorage', 'targets', target, 'observerCredential'],
+		target,
+		description: `avenOS ${target} observer`,
+		purpose: `Reads only the ${target} state bucket for unattended operations.`
+	}
+])
+
+export function actionableWizardProgress(
+	steps: readonly { info?: boolean }[],
+	index: number
+): { current: number; total: number } | undefined {
+	if (!Number.isSafeInteger(index) || index < 0 || index >= steps.length)
+		throw new Error('Wizard step index is out of range.')
+	if (steps[index]?.info) return undefined
+	return {
+		current: steps.slice(0, index + 1).filter((step) => !step.info).length,
+		total: steps.filter((step) => !step.info).length
+	}
+}
 
 export function guidedBootstrapIntroduction(deploymentPrefix: string): string {
 	return `Generation: ${deploymentPrefix}
 Have these ready before you start:
   - GitHub: gh authenticated as a repository administrator
-  - Hetzner Object Storage: numeric project ID and permission to create 7 S3 credentials
-  - Hetzner: 3 Cloud write tokens and 2 aven.ceo DNS write tokens
+  - Hetzner Object Storage: 3 numeric project IDs and permission to create 9 S3 credentials
+  - Hetzner: 3 Cloud write tokens; the project ID that owns aven.ceo; and 2 DNS write tokens from that project
   - Polar: sandbox + production organization IDs and org-read/product+webhook read-write API keys
   - SMTP: send-only URLs and From addresses for next and production; Reply-To is optional
   - RedPill: 1 active, funded API key for the Phala-hosted model catalog
@@ -56,10 +69,15 @@ Cancel or error asks whether to keep or delete them, with no default. Deletion p
 `
 }
 
-export function hetznerProjectConsoleUrl(projectId: string): string {
+export function hetznerS3CredentialsUrl(projectId: string): string {
 	if (!/^\d+$/.test(projectId))
 		throw new Error('Hetzner Object Storage project ID must be numeric.')
-	return `https://console.hetzner.com/projects/${projectId}/servers`
+	return `https://console.hetzner.com/projects/${projectId}/security/s3-credentials`
+}
+
+export function hetznerProjectTokensUrl(projectId: string): string {
+	if (!/^\d+$/.test(projectId)) throw new Error('Hetzner project ID must be numeric.')
+	return `https://console.hetzner.com/projects/${projectId}/security/tokens`
 }
 
 function sha256(value: string): string {
@@ -164,13 +182,13 @@ export function guidedCredentialsCsv(
 		if (!username && !secret) return
 		rows.push([`avenOS/${deploymentPrefix}/${group}`, name, username, secret, url, notes])
 	}
-	const projectId = stringValue(draft, ['objectStorage', 'projectId'])
-	const objectStorageUrl = projectId
-		? hetznerProjectConsoleUrl(projectId)
-		: 'https://console.hetzner.com/projects'
 	for (const step of S3_CREDENTIAL_STEPS) {
+		const projectId = stringValue(draft, ['objectStorage', 'targets', step.target, 'projectId'])
+		const objectStorageUrl = projectId
+			? hetznerS3CredentialsUrl(projectId)
+			: 'https://console.hetzner.com/projects'
 		add(
-			step.group,
+			step.target,
 			step.description,
 			stringValue(draft, [...step.path, 'accessKeyId']),
 			stringValue(draft, [...step.path, 'secretAccessKey']),
@@ -179,35 +197,37 @@ export function guidedCredentialsCsv(
 		)
 	}
 	for (const target of ['identity', 'next', 'production'] as const) {
+		const projectId = stringValue(draft, ['objectStorage', 'targets', target, 'projectId'])
 		add(
 			target,
-			`avenOS ${target} Hetzner compute token`,
+			`avenOS ${target} deployment (Hetzner Cloud token)`,
 			'',
 			stringValue(draft, ['providers', target, 'computeToken']),
-			'https://console.hetzner.com/projects',
+			projectId ? hetznerProjectTokensUrl(projectId) : 'https://console.hetzner.com/projects',
 			`Target-scoped Hetzner Cloud API token used to provision the ${target} host.`
 		)
 	}
 	for (const target of ['next', 'production'] as const) {
+		const projectId = stringValue(draft, ['providers', 'dnsProjectId'])
 		add(
 			target,
-			`avenOS ${target} Hetzner DNS token`,
+			`avenOS ${target} DNS deployment (Hetzner DNS token)`,
 			'',
 			stringValue(draft, ['providers', target, 'dnsToken']),
-			'https://console.hetzner.com/projects',
-			`Writes the ${target} records in the aven.ceo DNS zone.`
+			projectId ? hetznerProjectTokensUrl(projectId) : 'https://console.hetzner.com/projects',
+			`Writes the ${target} records in the shared aven.ceo DNS zone${projectId ? ` in Hetzner project ${projectId}` : ''}.`
 		)
 		add(
 			target,
-			`avenOS ${target} Polar API key`,
+			`avenOS ${target} bootstrap (Polar API key)`,
 			stringValue(draft, ['providers', target, 'polarOrganizationId']),
 			stringValue(draft, ['providers', target, 'polarApiKey']),
-			'https://polar.sh',
+			target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh',
 			`Manages products and the raw webhook endpoint in the Polar ${target} organization.`
 		)
 		add(
 			target,
-			`avenOS ${target} SMTP URL`,
+			`avenOS ${target} SMTP`,
 			'',
 			stringValue(draft, ['providers', target, 'smtpUrl']),
 			'',
@@ -216,7 +236,7 @@ export function guidedCredentialsCsv(
 	}
 	add(
 		'shared',
-		'avenOS RedPill API key',
+		'avenOS chat bootstrap (RedPill API key)',
 		'',
 		stringValue(draft, ['providers', 'redpillApiKey']),
 		'https://redpill.ai',

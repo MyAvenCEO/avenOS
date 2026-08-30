@@ -14,46 +14,43 @@ const provider = new minio.Provider('hetzner-object-storage', {
 })
 
 const protect = { provider, protect: true }
-const targets = ['identity', 'next', 'production']
 const outputs = {}
 
-for (const target of targets) {
-	outputs[target] = {}
-	for (const kind of ['state', 'backup']) {
-		const name = `${config.prefix}-${target}-${kind}`
-		const bucket = new minio.S3Bucket(
-			`${target}-${kind}`,
-			{ bucket: name, acl: 'private', objectLocking: false, forceDestroy: false },
-			protect
-		)
-		const versioning =
-			kind === 'state'
-				? new minio.S3BucketVersioning(
-						`${target}-state-versioning`,
-						{ bucket: bucket.bucket, versioningConfiguration: { status: 'Enabled' } },
-						{ ...protect, dependsOn: [bucket] }
-					)
-				: undefined
-		new minio.S3BucketPolicy(
-			`${target}-${kind}-policy`,
-			{
-				bucket: bucket.bucket,
-				policy: bucket.bucket.apply((bucketName) =>
-					bucketPolicy({
-						bucket: bucketName,
-						projectId: config.projectId,
-						bootstrapAccessKey: config.bootstrapAccessKey,
-						deploymentAccessKey: config.credentials[target].deployment,
-						observerAccessKey: kind === 'state' ? config.credentials[target].observer : undefined
-					})
+for (const kind of ['state', 'backup']) {
+	const name = `${config.prefix}-${config.projectId}-${config.target}-${kind}`
+	const bucket = new minio.S3Bucket(
+		`${config.target}-${kind}`,
+		{ bucket: name, acl: 'private', objectLocking: false, forceDestroy: false },
+		protect
+	)
+	const versioning =
+		kind === 'state'
+			? new minio.S3BucketVersioning(
+					`${config.target}-state-versioning`,
+					{ bucket: bucket.bucket, versioningConfiguration: { status: 'Enabled' } },
+					{ ...protect, dependsOn: [bucket] }
 				)
-			},
-			{ ...protect, dependsOn: versioning ? [versioning] : [bucket] }
-		)
-		outputs[target][kind] = bucket.bucket
-	}
+			: undefined
+	new minio.S3BucketPolicy(
+		`${config.target}-${kind}-policy`,
+		{
+			bucket: bucket.bucket,
+			policy: bucket.bucket.apply((bucketName) =>
+				bucketPolicy({
+					bucket: bucketName,
+					projectId: config.projectId,
+					bootstrapAccessKey: config.bootstrapAccessKey,
+					deploymentAccessKey: config.deploymentAccessKey,
+					observerAccessKey: kind === 'state' ? config.observerAccessKey : undefined
+				})
+			)
+		},
+		{ ...protect, dependsOn: versioning ? [versioning] : [bucket] }
+	)
+	outputs[kind] = bucket.bucket
 }
 
 export const buckets = outputs
+export const target = config.target
 export const region = config.region
 export const endpoint = `https://${config.region}.your-objectstorage.com`

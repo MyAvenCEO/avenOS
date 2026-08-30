@@ -17,13 +17,13 @@ const input = {
 	repository: 'MyAvenCEO/avenOS',
 	reviewer: 'operator',
 	objectStorage: {
-		projectId: '12345',
 		region: 'hel1',
-		bootstrapCredential: credential('BOOT'),
 		targets: Object.fromEntries(
-			['identity', 'next', 'production'].map((target) => [
+			['identity', 'next', 'production'].map((target, index) => [
 				target,
 				{
+					projectId: String(12345 + index),
+					bootstrapCredential: credential(`${target}BOOT`),
 					deploymentCredential: credential(`${target}DEPLOY`),
 					observerCredential: credential(`${target}READ`)
 				}
@@ -41,6 +41,7 @@ const input = {
 		downloadUrl: 'https://example.test/download'
 	},
 	providers: {
+		dnsProjectId: '4567890',
 		identity: { computeToken: 'identity-compute-token' },
 		next: {
 			computeToken: 'next-compute-token',
@@ -83,6 +84,31 @@ test('validates the complete provider input before changing anything', () => {
 			}),
 		/template placeholder/
 	)
+	assert.throws(
+		() =>
+			validateBootstrapInput({
+				...input,
+				providers: { ...input.providers, dnsProjectId: 'not-a-project' }
+			}),
+		/providers.dnsProjectId must be numeric/
+	)
+	assert.throws(
+		() =>
+			validateBootstrapInput({
+				...input,
+				objectStorage: {
+					...input.objectStorage,
+					targets: {
+						...input.objectStorage.targets,
+						next: {
+							...input.objectStorage.targets.next,
+							projectId: input.objectStorage.targets.identity.projectId
+						}
+					}
+				}
+			}),
+		/different Hetzner project/
+	)
 })
 
 test('uses solo operation by default and enables review when requested', () => {
@@ -103,6 +129,11 @@ test('uses solo operation by default and enables review when requested', () => {
 
 test('builds all deployment and operations environment settings', () => {
 	const generated = generateBootstrapSecrets()
+	assert.equal(
+		new Set(Object.values(generated.targets).map((target) => target.bootstrapPulumiPassphrase))
+			.size,
+		3
+	)
 	generated.polarWebhooks = {
 		next: {
 			id: 'next-hook',
@@ -130,7 +161,7 @@ test('builds all deployment and operations environment settings', () => {
 	)
 	assert.equal(
 		settings[`${prefix}-next`].variables.PULUMI_STATE_S3_BUCKET,
-		`${prefix}-12345-next-state`
+		`${prefix}-12346-next-state`
 	)
 	assert.equal(
 		settings[`${prefix}-next`].secrets.BACKUP_S3_ACCESS_KEY_ID,
@@ -173,6 +204,12 @@ test('writes password-manager recovery material owner-only', () => {
 	assert.match(contents, /"Group","Title","Username","Password","URL","Notes"/)
 	assert.match(contents, new RegExp(`avenOS/${generated.deploymentPrefix}/next`))
 	assert.match(contents, /avenOS next Restic password/)
+	assert.match(contents, /avenOS identity bootstrap administrator/)
+	assert.match(contents, /avenOS next bootstrap administrator/)
+	assert.match(contents, /avenOS production bootstrap administrator/)
+	assert.match(contents, /projects\/12345\/security\/s3-credentials/)
+	assert.match(contents, /projects\/4567890\/security\/tokens/)
+	assert.match(contents, /shared aven\.ceo DNS zone in Hetzner project 4567890/)
 	assert.match(contents, /avenOS RedPill API key/)
 	assert.throws(() => writeRecoveryCsv(path, contents), /refusing to overwrite/)
 })

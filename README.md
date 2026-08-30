@@ -193,8 +193,9 @@ Operators preparing a fresh hosted installation start with
 [Initial provisioning](docs/operations/initial-provisioning.md). One local command creates
 the six private storage buckets, generates recovery passwords, and configures a fresh
 namespaced set of GitHub Environments before the three hosts are provisioned. Run
-`bun run bootstrap:deployment:guided` to collect the provider-issued credentials through
-hidden, resumable prompts and apply that bootstrap.
+`bun run bootstrap:deployment:guided` to collect the provider-issued credentials for the
+three isolated Object Storage projects through a chaptered, resumable form and apply that
+bootstrap.
 
 ## Find the code
 

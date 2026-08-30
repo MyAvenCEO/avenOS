@@ -34,19 +34,28 @@ for:
 2. one encrypted Restic repository for shared identity; and
 3. separate encrypted Restic repositories or credentials for `next` and production.
 
-Hetzner does not expose S3 credential creation through an API. Generate the seven
-provider credentials named in the bootstrap guide, then enter them once. Pulumi creates
+Hetzner does not expose S3 credential creation through an API. Use separate Object Storage
+projects for `identity`, `next`, and production. Generate the nine provider credentials
+named in the bootstrap guide, then enter them once. Pulumi creates
 and versions the buckets through S3 and installs explicit deny policies. A target's
 deployment credential writes only its state and backup buckets. A separate observer
 credential reads only its state. Reusing the deployment credential for state and backup
 does not enlarge the GitHub deployment boundary; keeping the observer separate preserves
 the unattended read-only boundary.
 
-The bootstrap administrator can repair policies on every bucket. It stays offline and
-never enters GitHub. Neither platform Environment receives identity-state or
+Each target's bootstrap administrator can repair policies only in that target project. It
+stays offline and never enters GitHub. Neither platform Environment receives identity-state or
 cross-platform-state access. The shared identity Environment receives the two platform
 observer credentials and passphrases so it can assemble their generated identity caller
 credentials.
+
+## Shared DNS project
+
+The `aven.ceo` zone belongs to exactly one Hetzner project. Create the `next` and production
+DNS deployment tokens in that same project, even when its numeric ID differs from all three
+Object Storage projects. The credentials remain separate and enter only their corresponding
+deployment Environments. The bootstrap performs an exact read of `aven.ceo` with each token;
+a 404 means the token was created in a project that does not own the zone.
 
 ## GitHub Environments
 
