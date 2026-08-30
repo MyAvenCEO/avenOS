@@ -149,6 +149,21 @@ services:
       MIGRATOR_DATABASE_URL: postgres://aven_checkout_migrator:checkout-migrator-e2e@platform-database/aven_checkout
     networks: [platform-private]
 
+  checkout-billing-sync:
+    image: aven-e2e-checkout:local
+    depends_on:
+      checkout-migrate:
+        condition: service_completed_successfully
+    command: [bun, build/scripts/seed-billing.js]
+    environment:
+      NODE_ENV: test
+      PUBLIC_BASE_URL: http://localhost:${E2E_CHECKOUT_HOST_PORT:-13200}
+      DATABASE_URL: postgres://aven_checkout_http:checkout-runtime-e2e@platform-database/aven_checkout
+      EMAIL_QUEUE_ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
+      ALLOW_FAKE_PAYMENTS: "true"
+      POLAR_WEBHOOK_SECRET: polar-webhook-e2e
+    networks: [platform-private, public-test]
+
   api-migrate:
     image: aven-e2e-api:local
     depends_on:
@@ -186,7 +201,7 @@ services:
   checkout:
     image: aven-e2e-checkout:local
     depends_on:
-      checkout-migrate:
+      checkout-billing-sync:
         condition: service_completed_successfully
       identity:
         condition: service_healthy

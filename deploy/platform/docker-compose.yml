@@ -137,6 +137,29 @@ services:
     networks: [platform-private]
     security_opt: [no-new-privileges:true]
 
+  checkout-billing-sync:
+    image: ${CHECKOUT_IMAGE:?required}
+    restart: "no"
+    depends_on:
+      checkout-migrate:
+        condition: service_completed_successfully
+    command: [bun, build/scripts/seed-billing.js]
+    environment:
+      NODE_ENV: production
+      PUBLIC_BASE_URL: https://${CHECKOUT_DOMAIN:-my.aven.ceo}
+      DATABASE_URL: postgres://aven_checkout_http:${CHECKOUT_RUNTIME_PASSWORD}@database/aven_checkout
+      WEBHOOK_DATABASE_URL: postgres://aven_checkout_webhooks:${CHECKOUT_WEBHOOK_PASSWORD}@database/aven_checkout
+      FACADE_BEARER_TOKEN: ${CHECKOUT_FACADE_TOKEN:?required}
+      DOWNLOAD_URL: ${DOWNLOAD_URL:?required}
+      EMAIL_QUEUE_ENCRYPTION_KEY: ${CHECKOUT_EMAIL_ENCRYPTION_KEY:?required}
+      ALLOW_FAKE_PAYMENTS: ${ALLOW_FAKE_PAYMENTS:-false}
+      POLAR_API_KEY: ${POLAR_API_KEY:-}
+      POLAR_SERVER: ${POLAR_SERVER:-production}
+      POLAR_ORGANIZATION_ID: ${POLAR_ORGANIZATION_ID:-}
+      POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:?required}
+    networks: [platform-private, platform-egress]
+    security_opt: [no-new-privileges:true]
+
   api-migrate:
     image: ${API_IMAGE:?required}
     restart: "no"
@@ -177,7 +200,7 @@ services:
     image: ${CHECKOUT_IMAGE:?required}
     restart: unless-stopped
     depends_on:
-      checkout-migrate:
+      checkout-billing-sync:
         condition: service_completed_successfully
     environment: &checkout-environment
       NODE_ENV: production
@@ -196,7 +219,6 @@ services:
       POLAR_SERVER: ${POLAR_SERVER:-production}
       POLAR_ORGANIZATION_ID: ${POLAR_ORGANIZATION_ID:-}
       POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:?required}
-      AVEN_TIER_NAME: ${AVEN_TIER_NAME:?required}
     networks: [platform-private, platform-ingress]
     security_opt: [no-new-privileges:true]
 

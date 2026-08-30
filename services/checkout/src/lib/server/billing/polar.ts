@@ -69,18 +69,11 @@ export class PolarProvider implements PaymentProvider {
 
 	private async syncProducts(seeds: ProductSeed[]): Promise<Record<string, string>> {
 		const map: Record<string, string> = {}
-		// avenNAME's product is created and managed BY HAND at Polar; its id is
-		// supplied as a secret. Use it directly and leave `aven-name` OUT of the
-		// find/create-by-metadata sync — we neither look it up nor correct its
-		// price or name. The other tiers still sync from the SSOT seeds.
-		const manualNameId = this.config.AVEN_TIER_NAME
-		const toSync = manualNameId ? seeds.filter((seed) => seed.tier !== 'aven-name') : seeds
-		if (manualNameId) map['aven-name'] = manualNameId
 		const listed = await this.call('list-products', () =>
 			this.polar.products.list({ limit: 100, isArchived: false })
 		)
 		const existing = listed.result.items
-		for (const seed of toSync) {
+		for (const seed of seeds) {
 			// Exact canonical metadata prevents an unrelated retired product from
 			// being adopted into the fresh catalog.
 			const found = existing.find((product) => {

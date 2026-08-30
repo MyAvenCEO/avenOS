@@ -63,8 +63,7 @@ export const serverConfigSchema = z
 		POLAR_API_KEY: z.string().default(''),
 		POLAR_SERVER: z.enum(['sandbox', 'production']).default('sandbox'),
 		POLAR_ORGANIZATION_ID: z.string().default(''),
-		POLAR_WEBHOOK_SECRET: z.string().min(8).default('dev-fake-webhook-secret'),
-		AVEN_TIER_NAME: z.string().default('')
+		POLAR_WEBHOOK_SECRET: z.string().min(8).default('dev-fake-webhook-secret')
 	})
 	.superRefine((config, context) => {
 		const publicUrl = new URL(config.PUBLIC_BASE_URL)
@@ -156,7 +155,6 @@ export type BillingConfig = Pick<
 	| 'POLAR_SERVER'
 	| 'POLAR_ORGANIZATION_ID'
 	| 'POLAR_WEBHOOK_SECRET'
-	| 'AVEN_TIER_NAME'
 >
 export type NameServiceConfig = Pick<
 	ServerConfig,

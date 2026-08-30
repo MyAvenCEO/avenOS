@@ -1,4 +1,4 @@
-// Sync every product (the one-off avenID and the recurring tiers) AND their
+// Sync every product (the one-off avenNAME and the recurring tiers) AND their
 // benefits at the payment provider — idempotent, safe to run on every deploy.
 // Products are found by `metadata.tier`, benefits by `metadata.key`; both are
 // created when missing and drift-corrected from the brand's pricing SSOT,

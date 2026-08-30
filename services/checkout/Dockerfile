@@ -23,6 +23,7 @@ RUN bun --cwd services/checkout build
 # shared WITHIN the repo gets bundled here. Nothing resolves source at runtime.
 RUN cd services/checkout && bun build \
   scripts/migrate.ts \
+  scripts/seed-billing.ts \
   scripts/email-worker.ts \
   scripts/platform-event-worker.ts \
   --target=bun --outdir=build/scripts
