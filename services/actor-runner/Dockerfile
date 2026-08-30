@@ -7,10 +7,14 @@ RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
   && bun install --frozen-lockfile --filter '!./' --filter @avenos/actor-runner-service \
   && rm -f "$HOME/.npmrc"
 RUN bun --cwd services/actor-runner build
+RUN mkdir -p /runtime-node-modules/@napi-rs \
+  && cp -RL node_modules/.bun/@napi-rs+canvas@*/node_modules/@napi-rs/canvas /runtime-node-modules/@napi-rs/canvas \
+  && cp -RL node_modules/.bun/@napi-rs+canvas-linux-x64-gnu@*/node_modules/@napi-rs/canvas-linux-x64-gnu /runtime-node-modules/@napi-rs/canvas-linux-x64-gnu
 
 FROM oven/bun:1.3.13
 WORKDIR /app
 COPY --from=build /repo/services/actor-runner/build ./build
+COPY --from=build /runtime-node-modules ./node_modules
 ENV NODE_ENV=production
 EXPOSE 3010
 USER bun
