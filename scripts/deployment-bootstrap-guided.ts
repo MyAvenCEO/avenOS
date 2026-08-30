@@ -14,7 +14,7 @@ import {
 	writeFileSync
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { Polar } from '@polar-sh/sdk'
 import {
@@ -76,7 +76,9 @@ const outputDirectory = resolve(
 const outputRelativeToRepository = relative(root, outputDirectory)
 if (
 	outputRelativeToRepository === '' ||
-	(!outputRelativeToRepository.startsWith('..') && !isAbsolute(outputRelativeToRepository))
+	(outputRelativeToRepository !== '..' &&
+		!outputRelativeToRepository.startsWith(`..${sep}`) &&
+		!isAbsolute(outputRelativeToRepository))
 )
 	failPreflight('The guided bootstrap output must be outside the repository checkout.')
 if (!process.stdin.isTTY || !process.stdout.isTTY)
@@ -451,6 +453,8 @@ function validSmtpUrl(value: string): boolean {
 
 interface WizardStep {
 	chapter: string
+	subchapter?: string
+	stationLabel?: string
 	title: string
 	description: string | (() => string)
 	path: readonly string[]
@@ -470,6 +474,10 @@ interface WizardStep {
 		optional?: boolean
 		validate?: (value: string) => string | undefined
 	}
+}
+
+function wizardLocation(step: Pick<WizardStep, 'chapter' | 'subchapter'>): string {
+	return step.subchapter ? `${step.chapter} · ${step.subchapter}` : step.chapter
 }
 
 async function navigateStep(
@@ -615,7 +623,8 @@ function wizardSteps(): WizardStep[] {
 			}
 		},
 		{
-			chapter: 'Hetzner · Object Storage',
+			chapter: 'Hetzner',
+			subchapter: 'Object Storage',
 			title: 'Storage region',
 			description:
 				'All six buckets use one Hetzner Object Storage region, while identity, next, and production remain in separate projects.',
@@ -629,12 +638,15 @@ function wizardSteps(): WizardStep[] {
 	]
 
 	for (const target of ['identity', 'next', 'production'] as const) {
+		const subchapter = `${target} project`
 		steps.push({
-			chapter: 'Hetzner · Object Storage',
-			title: `avenOS ${target} Object Storage project`,
-			description: `Create or open this Hetzner project:\n  avenOS ${target}\n\nPaste its numeric project ID below. It is isolated to ${target} state and backups and must differ from the other two target projects.`,
+			chapter: 'Hetzner',
+			subchapter,
+			title: `avenOS ${target} project`,
+			stationLabel: 'Project details',
+			description: `Open https://console.hetzner.com/projects\nName: avenOS ${target}\n\nCreate or open the dedicated project with the name above. It contains the ${target} host, state, and backup resources and must differ from the other two deployment projects. Paste its numeric project ID below.`,
 			path: ['objectStorage', 'targets', target, 'projectId'],
-			label: `${target} Object Storage project ID`,
+			label: `${target} project ID`,
 			validate: (value) => {
 				if (!/^\d+$/.test(value)) return 'The project ID must be numeric.'
 				const duplicate = (['identity', 'next', 'production'] as const).some(
@@ -654,8 +666,10 @@ function wizardSteps(): WizardStep[] {
 				return `Open: ${hetznerS3CredentialsUrl(projectId)}\nDescription: ${credential.description}\n\nGenerate the credential, then paste both values below. Keep the Hetzner result open until this check succeeds.\nPurpose: ${credential.purpose}`
 			}
 			steps.push({
-				chapter: `Hetzner · ${target} storage`,
+				chapter: 'Hetzner',
+				subchapter,
 				title: credential.description,
+				stationLabel: credential.description.replace(`avenOS ${target} `, 'S3 '),
 				description: context,
 				path: [...credential.path, 'accessKeyId'],
 				label: 'Access key',
@@ -677,12 +691,11 @@ function wizardSteps(): WizardStep[] {
 				}
 			})
 		}
-	}
-
-	for (const target of ['identity', 'next', 'production'] as const) {
 		steps.push({
-			chapter: 'Hetzner · Cloud',
+			chapter: 'Hetzner',
+			subchapter,
 			title: `avenOS ${target} deployment`,
+			stationLabel: 'Compute deployment token',
 			description: () =>
 				`Open ${hetznerProjectTokensUrl(String(valueAt(draft, ['objectStorage', 'targets', target, 'projectId'])))}\nName: avenOS ${target} deployment\n\nCreate a read/write API token with the name above and paste it below. A read-only request reports the visible server count before the wizard advances.`,
 			path: ['providers', target, 'computeToken'],
@@ -694,10 +707,12 @@ function wizardSteps(): WizardStep[] {
 	}
 
 	steps.push({
-		chapter: 'Hetzner · DNS',
+		chapter: 'Hetzner',
+		subchapter: 'aven.ceo DNS project',
 		title: 'aven.ceo DNS project',
+		stationLabel: 'Project details',
 		description:
-			'Open the Hetzner project that already contains the aven.ceo DNS zone and paste its numeric project ID. Both deployment environments use separate tokens from this one shared project.',
+			'Open https://console.hetzner.com/projects\n\nOpen the existing project that contains the aven.ceo DNS zone and paste its numeric project ID. Both deployment environments use separate tokens from this one shared project.',
 		path: ['providers', 'dnsProjectId'],
 		label: 'DNS project ID',
 		validate: (value) => (/^\d+$/.test(value) ? undefined : 'The project ID must be numeric.'),
@@ -705,43 +720,60 @@ function wizardSteps(): WizardStep[] {
 	})
 
 	for (const target of ['next', 'production'] as const) {
+		steps.push({
+			chapter: 'Hetzner',
+			subchapter: 'aven.ceo DNS project',
+			title: `avenOS ${target} DNS deployment`,
+			stationLabel: `${target} deployment token`,
+			description: () =>
+				`Open ${hetznerProjectTokensUrl(String(valueAt(draft, ['providers', 'dnsProjectId'])))}\nName: avenOS ${target} DNS deployment\n\nCreate a read/write token with the name above in this shared DNS project and paste it below. The wizard resolves the exact aven.ceo zone and displays its provider ID.`,
+			path: ['providers', target, 'dnsToken'],
+			label: 'DNS API token',
+			secret: true,
+			verify: (token) =>
+				validateHetznerToken(token, `Hetzner ${target} DNS token`, 'zones/aven.ceo')
+		})
+	}
+
+	for (const target of ['next', 'production'] as const) {
+		const subchapter = `${target} organization`
 		steps.push(
 			{
-				chapter: 'Hetzner · DNS',
-				title: `avenOS ${target} DNS deployment`,
-				description: () =>
-					`Open ${hetznerProjectTokensUrl(String(valueAt(draft, ['providers', 'dnsProjectId'])))}\nName: avenOS ${target} DNS deployment\n\nCreate a read/write token with the name above in this shared DNS project and paste it below. The wizard resolves the exact aven.ceo zone and displays its provider ID.`,
-				path: ['providers', target, 'dnsToken'],
-				label: 'DNS API token',
-				secret: true,
-				verify: (token) =>
-					validateHetznerToken(token, `Hetzner ${target} DNS token`, 'zones/aven.ceo')
+				chapter: 'Polar',
+				subchapter,
+				title: `${target} organization`,
+				stationLabel: 'Organization details',
+				description: `Open ${target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh'}\n\nUse the ${target === 'next' ? 'sandbox' : 'live'} organization that should own ${target} checkout products and webhooks. Paste its organization ID below.`,
+				path: ['providers', target, 'polarOrganizationId'],
+				label: 'Organization ID'
 			},
 			{
 				chapter: 'Polar',
+				subchapter,
 				title: `avenOS ${target} bootstrap`,
-				description: `Open ${target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh'}\nName: avenOS ${target} bootstrap\n\nIn the ${target === 'next' ? 'sandbox' : 'live'} organization, create an API key with the name above and organization read plus product/webhook read-write access. Paste it below.`,
+				stationLabel: 'Bootstrap API key',
+				description: `Open ${target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh'}\nName: avenOS ${target} bootstrap\n\nIn the organization above, create an API key with the displayed name and organization read plus product/webhook read-write access. Paste it below.`,
 				path: ['providers', target, 'polarApiKey'],
 				label: 'Polar API key',
-				secret: true
-			},
-			{
-				chapter: 'Polar',
-				title: `${target} organization`,
-				description:
-					'The wizard combines this ID with the preceding API key and reports the organization name, slug, product count, and webhook count.',
-				path: ['providers', target, 'polarOrganizationId'],
-				label: 'Organization ID',
-				verify: (organizationId) =>
+				secret: true,
+				verify: (apiKey) =>
 					validatePolarCredential({
 						target,
-						apiKey: String(valueAt(draft, ['providers', target, 'polarApiKey'])),
-						organizationId
+						apiKey,
+						organizationId: String(valueAt(draft, ['providers', target, 'polarOrganizationId']))
 					})
-			},
+			}
+		)
+	}
+
+	for (const target of ['next', 'production'] as const) {
+		const subchapter = `${target} sending`
+		steps.push(
 			{
 				chapter: 'Email',
+				subchapter,
 				title: `avenOS ${target} SMTP`,
+				stationLabel: 'SMTP credential',
 				description: `Name: avenOS ${target} SMTP\n\nCreate a send-only SMTP credential with the name above when the provider supports names. Paste a complete smtp:// or smtps:// URL containing its username and password; the endpoint structure is checked without sending mail.`,
 				path: ['providers', target, 'smtpUrl'],
 				label: 'SMTP URL',
@@ -754,6 +786,7 @@ function wizardSteps(): WizardStep[] {
 			},
 			{
 				chapter: 'Email',
+				subchapter,
 				title: `${target} sender`,
 				description: 'This is the From address customers see on checkout and account email.',
 				path: ['providers', target, 'smtpFrom'],
@@ -761,6 +794,7 @@ function wizardSteps(): WizardStep[] {
 			},
 			{
 				chapter: 'Email',
+				subchapter,
 				title: `${target} reply address`,
 				description: 'Optional. Leave this empty when replies should use the From address.',
 				path: ['providers', target, 'smtpReplyTo'],
@@ -921,15 +955,21 @@ async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'exit'> {
 
 async function collectInput(resumeSavedSetup = false): Promise<BootstrapInput> {
 	const steps = wizardSteps()
-	const stationLabels = steps
+	const stations = steps
 		.filter((step) => !step.info)
-		.map((step) => `${step.title} · ${step.chapter}`)
+		.map((step) => {
+			const scope = /^(identity|next|production)\b/.exec(step.subchapter ?? '')?.[1]
+			let item = step.stationLabel ?? step.title
+			if (scope) item = item.replace(new RegExp(`^(?:avenOS )?${scope}\\s+`, 'i'), '')
+			else item = item.replace(/^avenOS\s+/i, '')
+			return { chapter: step.chapter, subchapter: step.subchapter, item }
+		})
 	let index = resumeSavedSetup ? savedWizardResumeIndex(steps, draft) : 0
 	while (index < steps.length) {
 		const step = steps[index] as WizardStep
 		if (step.info) {
 			setUiContext(
-				step.chapter,
+				wizardLocation(step),
 				step.title,
 				typeof step.description === 'function' ? step.description() : step.description
 			)
@@ -990,10 +1030,10 @@ async function collectInput(resumeSavedSetup = false): Promise<BootstrapInput> {
 						: ''
 		const actionProgress = actionableWizardProgress(steps, index)
 		setUiContext(
-			step.chapter,
+			wizardLocation(step),
 			step.title,
 			`${typeof step.description === 'function' ? step.description() : step.description}\n\n${current}`,
-			actionProgress ? { ...actionProgress, stations: stationLabels } : undefined
+			actionProgress ? { ...actionProgress, stations } : undefined
 		)
 		const result = await navigateStep(step, initialValue, companionExistingText, index > 0)
 		if (result.direction === 'back') {
