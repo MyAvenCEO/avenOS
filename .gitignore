@@ -38,6 +38,19 @@ Thumbs.db
 **/.pulumi/
 /infrastructure/**/Pulumi.*.yaml
 
+# Deployment bootstrap recovery material (owner-only; never commit)
+avenos-bootstrap-record/
+**/bootstrap-input.json
+**/bootstrap-input.json.*.next
+**/bootstrap.generated.json
+**/bootstrap.generated.json.*.next
+**/credentials.csv
+**/credentials.csv.*.next
+**/avenos-recovery.csv
+**/bootstrap-state-*.json
+**/bootstrap.*.remote
+**/pulumi-state/
+
 # One-time identity deployment trust bootstrap files
 /aven-identity-next-deploy
 /aven-identity-next-deploy.pub
