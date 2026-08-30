@@ -16,7 +16,8 @@ const MODELS = JSON.stringify([
 		upstreamModel: 'provider-vision-fast',
 		profile: 'openai-json-schema',
 		authMode: 'bearer',
-		credentialId: 'primary'
+		credentialId: 'primary',
+		requestHeaders: { 'x-redpill-provider': 'phala' }
 	},
 	{
 		id: 'vision-accurate',
@@ -33,7 +34,8 @@ const MODELS = JSON.stringify([
 		upstreamModel: 'provider-vision-accurate',
 		profile: 'openai-json-schema',
 		authMode: 'bearer',
-		credentialId: 'primary'
+		credentialId: 'primary',
+		requestHeaders: { 'x-redpill-provider': 'phala' }
 	},
 	{
 		id: 'text-small',
@@ -117,6 +119,7 @@ describe('generic authenticated LLM gateway', () => {
 
 		expect(outbound?.url).toBe('https://models.example.test/v1/chat/completions')
 		expect(outbound?.headers.get('authorization')).toBe('Bearer generic-llm-gateway-secret')
+		expect(outbound?.headers.get('x-redpill-provider')).toBe('phala')
 		expect(outbound?.headers.get('idempotency-key')).toMatch(/^[a-f0-9]{64}$/u)
 		expect(await outbound?.json()).toMatchObject({ model: 'provider-vision-accurate' })
 		expect(result).toMatchObject({
