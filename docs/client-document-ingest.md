@@ -39,7 +39,12 @@ document-inspector
   -> content-aggregator
   -> invoice-extractor OR statement-extractor (vision + structured output)
   -> invoice-validator OR statement-validator (deterministic)
+  -> open-item-normalizer OR statement-normalizer + transaction fan-out (deterministic)
 ```
+
+The reconciliation ranker is registered in the same catalog but is not automatically run by
+this per-document graph. It requires one canonical open item plus a bounded customer-scoped
+transaction candidate set, which the reconciliation query layer must supply.
 
 The document runtime asks the LLM catalog for models containing both `vision` and
 `structured-output`. If there is no match, it does not render model images or attempt a

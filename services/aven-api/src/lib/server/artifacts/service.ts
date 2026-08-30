@@ -359,6 +359,86 @@ const statementValidationOutput: ExpectedClientArtifact = {
 	ordinal: 0,
 	blob: 'forbidden'
 }
+const openItemOutput: ExpectedClientArtifact = {
+	localKey: 'open-item',
+	typeKey: 'bookkeeping.open-item',
+	role: 'open-item',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+
+const normalizedStatementOutput: ExpectedClientArtifact = {
+	localKey: 'normalized-statement',
+	typeKey: 'banking.statement',
+	role: 'statement',
+	ordinal: 0,
+	blob: 'forbidden'
+}
+
+function statementBatchOffset(input: PublishClientRunInput): number {
+	const parameters = clientRecord(input.parameters, `${input.procedureKey} parameters`)
+	const offset = parameters.offset
+	if (
+		Object.keys(parameters).length !== 1 ||
+		typeof offset !== 'number' ||
+		!Number.isInteger(offset) ||
+		offset < 0 ||
+		offset > 127 ||
+		offset % 64 !== 0
+	) {
+		invalidClientContract(`${input.procedureKey} requires an offset of 0 or 64.`)
+	}
+	return offset
+}
+
+function expectStatementTransactionBatch(input: PublishClientRunInput, offset: number): void {
+	if (input.artifacts.length < 1 || input.artifacts.length > 64) {
+		invalidClientContract('client.fanout-statement-transactions must publish 1-64 transactions.')
+	}
+	const transactions = [...input.artifacts].sort(
+		(left, right) => left.output.ordinal - right.output.ordinal
+	)
+	for (const [ordinal, transaction] of transactions.entries()) {
+		const localKey = `transaction-${String(offset + ordinal + 1).padStart(3, '0')}`
+		const payload = clientRecord(transaction.payload, `${localKey} payload`)
+		if (
+			transaction.localKey !== localKey ||
+			transaction.typeKey !== 'banking.transaction' ||
+			transaction.typeVersion !== 1 ||
+			transaction.output.role !== 'transaction' ||
+			transaction.output.ordinal !== ordinal ||
+			payload.sourceOrdinal !== offset + ordinal ||
+			transaction.blob
+		) {
+			invalidClientContract(`client.fanout-statement-transactions output ${localKey} is invalid.`)
+		}
+	}
+}
+
+function expectReconciliationMatches(input: PublishClientRunInput): void {
+	if (input.artifacts.length < 1 || input.artifacts.length > 64) {
+		invalidClientContract('client.rank-invoice-transactions must publish 1-64 match candidates.')
+	}
+	const matches = [...input.artifacts].sort(
+		(left, right) => left.output.ordinal - right.output.ordinal
+	)
+	for (const [ordinal, match] of matches.entries()) {
+		const localKey = `match-${String(ordinal + 1).padStart(3, '0')}`
+		const payload = clientRecord(match.payload, `${localKey} payload`)
+		if (
+			match.localKey !== localKey ||
+			match.typeKey !== 'reconciliation.match-candidate' ||
+			match.typeVersion !== 1 ||
+			match.output.role !== 'match-candidate' ||
+			match.output.ordinal !== ordinal ||
+			payload.matcherVersion !== 'invoice-transaction-v1' ||
+			payload.rank !== ordinal + 1 ||
+			match.blob
+		) {
+			invalidClientContract(`client.rank-invoice-transactions output ${localKey} is invalid.`)
+		}
+	}
+}
 
 const CLIENT_PROCEDURES: Record<string, ClientProcedureDescriptor> = {
 	'client.inspect-file': {
@@ -525,6 +605,52 @@ const CLIENT_PROCEDURES: Record<string, ClientProcedureDescriptor> = {
 			expectInputs(input, { source: { min: 1, max: 1 }, candidate: { min: 1, max: 1 } })
 			expectParameters(input, false)
 			expectArtifacts(input, [statementValidationOutput])
+		}
+	},
+	'client.normalize-invoice-open-item': {
+		actor: 'open-item-normalizer',
+		validate: (input) => {
+			expectInputs(input, {
+				candidate: { min: 1, max: 1 },
+				details: { min: 1, max: 1 },
+				validation: { min: 1, max: 1 }
+			})
+			expectParameters(input, false)
+			expectArtifacts(input, [openItemOutput])
+		}
+	},
+	'client.normalize-statement': {
+		actor: 'statement-normalizer',
+		validate: (input) => {
+			expectInputs(input, {
+				candidate: { min: 1, max: 1 },
+				validation: { min: 1, max: 1 }
+			})
+			expectParameters(input, false)
+			expectArtifacts(input, [normalizedStatementOutput])
+		}
+	},
+	'client.fanout-statement-transactions': {
+		actor: 'statement-transaction-fanout',
+		validate: (input) => {
+			expectInputs(input, {
+				candidate: { min: 1, max: 1 },
+				validation: { min: 1, max: 1 },
+				statement: { min: 1, max: 1 }
+			})
+			const offset = statementBatchOffset(input)
+			expectStatementTransactionBatch(input, offset)
+		}
+	},
+	'client.rank-invoice-transactions': {
+		actor: 'reconciliation-ranker',
+		validate: (input) => {
+			expectInputs(input, {
+				'open-item': { min: 1, max: 1 },
+				transaction: { min: 1, max: 64 }
+			})
+			expectParameters(input, false)
+			expectReconciliationMatches(input)
 		}
 	}
 }

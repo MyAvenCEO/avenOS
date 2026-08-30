@@ -159,7 +159,7 @@ module is first evaluated:
 client-document-processing module loads
   -> create one model gateway
   -> create the local actor set
-  -> construct up to 12 local Actor instances
+  -> construct up to 16 local Actor instances
   -> register local instances on the app bus
   -> register local instances on the runtime bus
 ```
@@ -176,7 +176,7 @@ messages reaching the same actor instance serialize through that mailbox. Differ
 actor instances can work independently, while the current coordinator itself executes
 one document's steps in an explicit order.
 
-The app always supplies a `DocumentModelGateway`, so it constructs all twelve actors.
+The app always supplies a `DocumentModelGateway`, so it constructs all sixteen actors.
 Whether the four model actors are used is decided per document from live catalog
 availability and the admitted page count. The current Actor Runner omits the model
 gateway and constructs the deterministic actor set for each admitted document run.
@@ -332,12 +332,15 @@ flowchart TD
     Kind --> Family{"Accepted document kind"}
     Family -->|"invoice family"| Invoice["invoice-extractor"]
     Invoice --> InvoiceValidation["invoice-validator"]
+    InvoiceValidation --> OpenItem["open-item-normalizer"]
     Family -->|"statement family"| Statement["statement-extractor"]
     Statement --> StatementValidation["statement-validator"]
+    StatementValidation --> CanonicalStatement["statement-normalizer"]
+    CanonicalStatement --> Transactions["statement-transaction-fanout\nbounded batches"]
     Family -->|"unknown"| ReviewB["needs_review"]
 
-    InvoiceValidation --> Final{"consistent?"}
-    StatementValidation --> Final
+    OpenItem --> Final{"consistent?"}
+    Transactions --> Final
     Aggregate -->|"deterministic lane"| Complete{"content complete?"}
     Complete -->|"Yes"| Success["succeeded"]
     Complete -->|"No"| ReviewC["needs_review"]

@@ -339,6 +339,10 @@ Committing the payment remains an explicitly admitted effect.
 The intended experience composes many Actors, schemas, and skills without presenting
 their machinery to the user.
 
+The exact target schemas, matching algorithm, automatic-decision boundary, continuous
+operation, and rollout are specified in
+[Automatic invoice-to-bank-transaction reconciliation](invoice-statement-reconciliation.md).
+
 1. A person drops an image into the chat. The product creates an Intent, or attaches
    the image to the active Intent, and publishes the image as its immutable source
    artifact. The image remains an artifact; the Intent is the durable context that

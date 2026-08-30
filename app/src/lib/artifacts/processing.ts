@@ -48,8 +48,12 @@ const STAGE_LABELS: Array<[prefix: string, label: string]> = [
 	['classify-document', 'Classifying document'],
 	['extract-invoice', 'Extracting invoice fields'],
 	['validate-invoice', 'Checking invoice values'],
+	['normalize-invoice-open-item', 'Preparing invoice reconciliation'],
 	['extract-statement', 'Extracting statement entries'],
-	['validate-statement', 'Checking statement values']
+	['validate-statement', 'Checking statement values'],
+	['normalize-statement', 'Preparing statement reconciliation'],
+	['fanout-statement-transactions-', 'Saving statement transactions'],
+	['rank-invoice-transactions', 'Ranking reconciliation candidates']
 ]
 
 const ACTIVE_STAGE_STATES = new Set(['running', 'publishing'])

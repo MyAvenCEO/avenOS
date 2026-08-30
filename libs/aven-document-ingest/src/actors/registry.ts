@@ -9,8 +9,12 @@ import { createDocumentKindClassifierActor } from './document-kind-classifier'
 import { createInvoiceExtractorActor } from './invoice-extractor'
 import { createInvoiceValidatorActor } from './invoice-validator'
 import { createNativeTextExtractorActor } from './native-text-extractor'
+import { createOpenItemNormalizerActor } from './open-item-normalizer'
 import { createPageSignalClassifierActor } from './page-signal-classifier'
+import { createReconciliationRankerActor } from './reconciliation-ranker'
 import { createStatementExtractorActor } from './statement-extractor'
+import { createStatementNormalizerActor } from './statement-normalizer'
+import { createStatementTransactionFanoutActor } from './statement-transaction-fanout'
 import { createStatementValidatorActor } from './statement-validator'
 import { createVisualPageAnalyzerActor } from './visual-page-analyzer'
 
@@ -27,6 +31,10 @@ export interface DocumentActors {
 	extractStatement?: Actor
 	validateInvoice: Actor
 	validateStatement: Actor
+	normalizeOpenItem: Actor
+	normalizeStatement: Actor
+	fanoutStatementTransactions: Actor
+	rankReconciliation: Actor
 	all: Actor[]
 }
 
@@ -47,6 +55,10 @@ export function createDocumentActors(
 	const extractStatement = model ? createStatementExtractorActor(model) : undefined
 	const validateInvoice = createInvoiceValidatorActor()
 	const validateStatement = createStatementValidatorActor()
+	const normalizeOpenItem = createOpenItemNormalizerActor()
+	const normalizeStatement = createStatementNormalizerActor()
+	const fanoutStatementTransactions = createStatementTransactionFanoutActor()
+	const rankReconciliation = createReconciliationRankerActor()
 	const optionalModelActors = [
 		analyzePage,
 		classifyDocument,
@@ -66,6 +78,10 @@ export function createDocumentActors(
 		extractStatement,
 		validateInvoice,
 		validateStatement,
+		normalizeOpenItem,
+		normalizeStatement,
+		fanoutStatementTransactions,
+		rankReconciliation,
 		all: [
 			inspect,
 			decompose,
@@ -75,7 +91,11 @@ export function createDocumentActors(
 			aggregate,
 			...optionalModelActors,
 			validateInvoice,
-			validateStatement
+			validateStatement,
+			normalizeOpenItem,
+			normalizeStatement,
+			fanoutStatementTransactions,
+			rankReconciliation
 		]
 	}
 }

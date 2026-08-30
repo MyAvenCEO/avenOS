@@ -84,6 +84,25 @@ export const DOCUMENT_SCHEMA_BINDINGS: Readonly<Record<string, DocumentSchemaBin
 		'statement-validation',
 		'banking.statement-validation',
 		'validation'
+	),
+	'ceo.aven.bookkeeping.open_item': binding(
+		'bookkeeping',
+		'open-item',
+		'bookkeeping.open-item',
+		'open-item'
+	),
+	'ceo.aven.banking.statement': binding('banking', 'statement', 'banking.statement', 'statement'),
+	'ceo.aven.banking.transaction': binding(
+		'banking',
+		'transaction',
+		'banking.transaction',
+		'transaction'
+	),
+	'ceo.aven.reconciliation.match_candidate': binding(
+		'reconciliation',
+		'match-candidate',
+		'reconciliation.match-candidate',
+		'match-candidate'
 	)
 }
 
@@ -133,6 +152,12 @@ function slot(predicate: string, method: string, direction: 'input' | 'output'):
 		(method === 'document_decompose' &&
 			direction === 'output' &&
 			predicateFunctor.endsWith('.page')) ||
+		(method === 'document_fanout_statement_transactions' &&
+			direction === 'output' &&
+			predicateFunctor.endsWith('.transaction')) ||
+		(method === 'reconciliation_rank_invoice_transactions' &&
+			((direction === 'input' && predicateFunctor.endsWith('.transaction')) ||
+				(direction === 'output' && predicateFunctor.endsWith('.match_candidate')))) ||
 		(method === 'document_assemble' &&
 			direction === 'input' &&
 			predicateFunctor.endsWith('.extracted_text')) ||
@@ -533,15 +558,10 @@ export function textGroundedExtractionEvidence(
 	return evidence
 }
 
-function stringLeaves(
-	value: unknown,
-	pointer = ''
-): Array<{ pointer: string; value: string }> {
+function stringLeaves(value: unknown, pointer = ''): Array<{ pointer: string; value: string }> {
 	if (typeof value === 'string') {
 		const candidate = value.trim()
-		return candidate.length >= 2 && candidate.length <= 1000
-			? [{ pointer, value: candidate }]
-			: []
+		return candidate.length >= 2 && candidate.length <= 1000 ? [{ pointer, value: candidate }] : []
 	}
 	if (Array.isArray(value)) {
 		return value.flatMap((child, index) => stringLeaves(child, `${pointer}/${index}`))
