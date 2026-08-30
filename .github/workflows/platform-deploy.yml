@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: Shared identity or isolated platform environment
-        default: next
+        description: One target, or all three in identity → next → production order
+        default: all
         required: true
         type: choice
-        options: [identity, next, production]
+        options: [all, identity, next, production]
       ref:
         description: Git ref to build and deploy
         required: true
@@ -26,19 +26,37 @@ permissions:
 jobs:
   validate-environment-prefix:
     runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
     steps:
       - name: Require an activated infrastructure generation
+        id: targets
         env:
           DEPLOYMENT_ENVIRONMENT_PREFIX: ${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}
           DEPLOYMENT_TARGETS_JSON: ${{ vars.DEPLOYMENT_TARGETS_JSON }}
           REQUESTED_TARGET: ${{ inputs.target }}
+          RECOVER_FROM_BACKUP: ${{ inputs.recover_from_backup }}
         run: |
           set -euo pipefail
           [[ "$DEPLOYMENT_ENVIRONMENT_PREFIX" =~ ^avenos-[0-9a-f]{10}$ ]]
-          jq -e --arg target "$REQUESTED_TARGET" 'type == "array" and index($target) != null' <<<"$DEPLOYMENT_TARGETS_JSON" >/dev/null || {
-            echo "$REQUESTED_TARGET was not prepared by the active bootstrap" >&2
+          if [[ "$REQUESTED_TARGET" == all ]]; then
+            [[ "$RECOVER_FROM_BACKUP" == false ]] || {
+              echo 'Bulk restore is intentionally unsupported; use the recovery procedure one target at a time.' >&2
+              exit 64
+            }
+            targets='["identity","next","production"]'
+          else
+            targets=$(jq -cn --arg target "$REQUESTED_TARGET" '[$target]')
+          fi
+          jq -e --argjson requested "$targets" '
+            . as $prepared |
+            type == "array" and
+            ($requested | all(. as $target | $prepared | index($target) != null))
+          ' <<<"$DEPLOYMENT_TARGETS_JSON" >/dev/null || {
+            echo "One or more requested targets were not prepared by the active bootstrap" >&2
             exit 64
           }
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
   verify:
     needs: validate-environment-prefix
@@ -57,7 +75,7 @@ jobs:
           --health-timeout 3s
           --health-retries 30
     env:
-      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -75,7 +93,7 @@ jobs:
           cargo install tauri-driver --locked
       - uses: ./.github/actions/bun-install
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PACKAGE_READ_TOKEN }}
       - name: Static, unit, infrastructure, and deployment-source checks
         run: |
           bun run check:docs
@@ -149,7 +167,7 @@ jobs:
           push: true
           tags: ghcr.io/myavenceo/aven-identity:run-${{ github.run_id }}-${{ github.run_attempt }}
           secrets: |
-            npm_token=${{ secrets.GITHUB_TOKEN }}
+            npm_token=${{ secrets.PACKAGE_READ_TOKEN }}
       - id: api
         uses: docker/build-push-action@v6
         with:
@@ -158,7 +176,7 @@ jobs:
           push: true
           tags: ghcr.io/myavenceo/aven-api:run-${{ github.run_id }}-${{ github.run_attempt }}
           secrets: |
-            npm_token=${{ secrets.GITHUB_TOKEN }}
+            npm_token=${{ secrets.PACKAGE_READ_TOKEN }}
       - id: checkout
         uses: docker/build-push-action@v6
         with:
@@ -167,7 +185,7 @@ jobs:
           push: true
           tags: ghcr.io/myavenceo/aven-checkout:run-${{ github.run_id }}-${{ github.run_attempt }}
           secrets: |
-            npm_token=${{ secrets.GITHUB_TOKEN }}
+            npm_token=${{ secrets.PACKAGE_READ_TOKEN }}
       - id: static_host
         uses: docker/build-push-action@v6
         with:
@@ -183,7 +201,7 @@ jobs:
           push: true
           tags: ghcr.io/myavenceo/aven-platform-provisioner:run-${{ github.run_id }}-${{ github.run_attempt }}
           secrets: |
-            npm_token=${{ secrets.GITHUB_TOKEN }}
+            npm_token=${{ secrets.PACKAGE_READ_TOKEN }}
       - id: intent
         uses: docker/build-push-action@v6
         with:
@@ -192,7 +210,7 @@ jobs:
           push: true
           tags: ghcr.io/myavenceo/aven-intent-service:run-${{ github.run_id }}-${{ github.run_attempt }}
           secrets: |
-            npm_token=${{ secrets.GITHUB_TOKEN }}
+            npm_token=${{ secrets.PACKAGE_READ_TOKEN }}
       - id: actor
         uses: docker/build-push-action@v6
         with:
@@ -201,7 +219,7 @@ jobs:
           push: true
           tags: ghcr.io/myavenceo/aven-actor-runner:run-${{ github.run_id }}-${{ github.run_attempt }}
           secrets: |
-            npm_token=${{ secrets.GITHUB_TOKEN }}
+            npm_token=${{ secrets.PACKAGE_READ_TOKEN }}
       - id: artifact
         uses: docker/build-push-action@v6
         with:
@@ -218,12 +236,17 @@ jobs:
           tags: ghcr.io/myavenceo/aven-operations:run-${{ github.run_id }}-${{ github.run_attempt }}
 
   deploy:
-    needs: publish
+    needs: [validate-environment-prefix, publish]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: ${{ format('{0}-{1}', vars.DEPLOYMENT_ENVIRONMENT_PREFIX, inputs.target) }}
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        target: ${{ fromJSON(needs.validate-environment-prefix.outputs.targets) }}
+    environment: ${{ format('{0}-{1}', vars.DEPLOYMENT_ENVIRONMENT_PREFIX, matrix.target) }}
     concurrency:
-      group: aven-platform-deploy-${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}-${{ inputs.target }}
+      group: aven-platform-deploy-${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}-${{ matrix.target }}
       cancel-in-progress: false
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.PULUMI_STATE_S3_ACCESS_KEY_ID }}
@@ -272,7 +295,7 @@ jobs:
       BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
       BACKUP_S3_REGION: ${{ vars.BACKUP_S3_REGION }}
       BACKUP_RESTIC_PASSWORD: ${{ secrets.BACKUP_RESTIC_PASSWORD }}
-      DEPLOYMENT_TARGET: ${{ inputs.target }}
+      DEPLOYMENT_TARGET: ${{ matrix.target }}
       RECOVER_FROM_BACKUP: ${{ inputs.recover_from_backup }}
     steps:
       - uses: actions/checkout@v5
@@ -282,7 +305,7 @@ jobs:
         with:
           bun-version: 1.3.13
       - name: Install identity DNS lookup tool
-        if: inputs.target == 'identity'
+        if: matrix.target == 'identity'
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends dnsutils
       - name: Record deployed commit
         run: echo "DEPLOYED_REF_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"

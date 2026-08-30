@@ -100,7 +100,7 @@ jobs:
           --health-timeout 3s
           --health-retries 30
     env:
-      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -116,7 +116,7 @@ jobs:
           cargo install tauri-driver --locked
       - uses: ./.github/actions/bun-install
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PACKAGE_READ_TOKEN }}
       - name: Install Playwright Chromium
         run: bunx playwright install chromium
       - name: Static checks

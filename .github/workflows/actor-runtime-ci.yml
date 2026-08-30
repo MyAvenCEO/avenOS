@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -49,7 +49,7 @@ jobs:
           toolchain: 1.93.1
       - uses: ./.github/actions/bun-install
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PACKAGE_READ_TOKEN }}
       - name: Check actor runner formatting and contracts
         run: |
           bunx biome check services/actor-runner/src services/actor-runner/tests services/actor-runner/package.json services/actor-runner/tsconfig.json
@@ -74,4 +74,6 @@ jobs:
       - name: Build actor runner image
         run: docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file services/actor-runner/Dockerfile --tag aven-actor-runner:${{ github.sha }} .
       - name: Verify non-root runner image
-        run: test "$(docker image inspect aven-actor-runner:${{ github.sha }} --format '{{.Config.User}}')" = "bun"
+        run: |
+          test "$(docker image inspect aven-actor-runner:${{ github.sha }} --format '{{.Config.User}}')" = "bun"
+          docker run --rm aven-actor-runner:${{ github.sha }} bun -e "const { DOMMatrix } = require('@napi-rs/canvas'); new DOMMatrix()"

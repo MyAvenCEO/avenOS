@@ -15,7 +15,9 @@ import {
 	savedWizardResumeIndex,
 	setValueAt,
 	signedS3ReadRequest,
-	valueAt
+	unseenWorkflowRunId,
+	valueAt,
+	workflowRunIdFromDispatchOutput
 } from '../../../scripts/lib/deployment-bootstrap-guided.ts'
 
 test('documents the least-privilege Polar scopes used by bootstrap and checkout', () => {
@@ -40,6 +42,24 @@ test('counts only screens that require an answer', () => {
 	assert.deepEqual(actionableWizardProgress(steps, 4), { current: 3, total: 3 })
 })
 
+test('identifies a dispatched workflow without depending on exact gh prose', () => {
+	assert.equal(
+		workflowRunIdFromDispatchOutput(
+			'✓ Created workflow dispatch\nhttps://github.com/MyAvenCEO/avenOS/actions/runs/123456?check_suite_focus=true'
+		),
+		123456
+	)
+	assert.equal(workflowRunIdFromDispatchOutput('dispatch accepted; URL unavailable'), undefined)
+	assert.equal(
+		unseenWorkflowRunId(
+			[{ databaseId: 14 }, { databaseId: 13 }, { databaseId: 12 }],
+			new Set([13, 12])
+		),
+		14
+	)
+	assert.equal(unseenWorkflowRunId([{ databaseId: 12 }], new Set([12])), undefined)
+})
+
 test('resumes at the latest saved station so an unverified value is checked again', () => {
 	const steps = [
 		{ info: true, path: [] },
@@ -58,10 +78,28 @@ test('resumes at the latest saved station so an unverified value is checked agai
 	)
 })
 
+test('reopens a newly required station before later saved values', () => {
+	const steps = [
+		{ info: true, path: [] },
+		{ path: ['repository'] },
+		{ path: ['githubPackagesReadToken'] },
+		{ path: ['reviewer'], optional: true },
+		{ path: ['providers', 'next', 'dnsToken'] }
+	]
+	assert.equal(
+		savedWizardResumeIndex(steps, {
+			repository: 'MyAvenCEO/avenOS',
+			providers: { next: { dnsToken: 'saved-later-value' } }
+		}),
+		2
+	)
+})
+
 test('introduces every manual prerequisite and the incremental plaintext recovery behavior', () => {
 	const contents = guidedBootstrapIntroduction('avenos-0123456789')
 	for (const requiredText of [
 		'GitHub',
+		'read:packages',
 		'9 S3 credentials',
 		'3 target-scoped Cloud write token',
 		'the project ID that owns aven.ceo',
@@ -120,6 +158,7 @@ test('guides one administrator and two roles in each isolated target project', (
 
 test('preserves partial credentials with descriptive password-manager fields', () => {
 	const draft = {
+		githubPackagesReadToken: 'PACKAGESECRET',
 		objectStorage: {
 			targets: {
 				identity: {
@@ -140,6 +179,8 @@ test('preserves partial credentials with descriptive password-manager fields', (
 	const contents = guidedCredentialsCsv(draft, 'avenos-0123456789')
 	assert.match(contents, /"Group","Title","Username","Password","URL","Notes"/)
 	assert.match(contents, /"avenOS\/avenos-0123456789\/identity"/)
+	assert.match(contents, /avenOS GitHub Packages reader/)
+	assert.match(contents, /PACKAGESECRET/)
 	assert.match(contents, /avenOS identity bootstrap administrator/)
 	assert.match(contents, /Creates and repairs only the identity buckets/)
 	assert.match(contents, /BOOTACCESS/)

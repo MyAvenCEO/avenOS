@@ -11,7 +11,8 @@ inputs:
   token:
     description: >-
       Token used to read @myavenceo/* from GitHub Packages. Pass the calling
-      job's secrets.GITHUB_TOKEN; the job needs `permissions: packages: read`.
+      repository's PACKAGE_READ_TOKEN secret. It is a classic token scoped to
+      read:packages because the packages belong to another repository.
     required: true
 
 runs:
@@ -19,6 +20,8 @@ runs:
   steps:
     - name: Authenticate to GitHub Packages
       shell: bash
+      env:
+        PACKAGE_READ_TOKEN: ${{ inputs.token }}
       # The token goes in the PROJECT .npmrc, because that is where it is KNOWN
       # to work. Writing $HOME/.npmrc instead 401'd every install, because bun
       # DOES NOT READ $HOME/.npmrc UNDER ACTIONS — not the token, the whole
@@ -46,7 +49,11 @@ runs:
       # something any job does by accident.
       run: |
         set -euo pipefail
-        printf '//npm.pkg.github.com/:_authToken=%s\n' '${{ inputs.token }}' >> .npmrc
+        if [[ -z "$PACKAGE_READ_TOKEN" ]]; then
+          echo '::error::PACKAGE_READ_TOKEN is missing. Resume the deployment bootstrap to verify and configure it.'
+          exit 64
+        fi
+        printf '//npm.pkg.github.com/:_authToken=%s\n' "$PACKAGE_READ_TOKEN" >> .npmrc
         git update-index --skip-worktree .npmrc
     - shell: bash
       run: bun install --frozen-lockfile

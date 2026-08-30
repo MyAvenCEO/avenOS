@@ -79,6 +79,12 @@ key in state, so the bootstrap restricts these Environments to protected branche
 Each deployment Environment holds only its target's provider, state, integration, and
 backup configuration. Do not copy a production secret into `next` as a convenience.
 
+The repository also holds one secret, `PACKAGE_READ_TOKEN`. It is a classic GitHub token
+with `read:packages` only and can download the cross-repository `@myavenceo/aven-ceo` and
+`@myavenceo/aven-vibes` npm packages. The bootstrap verifies both reads before storing the
+token. It does not belong in a target Environment because CI and the shared image build
+run before a deployment Environment is selected.
+
 ## GitHub Environment secrets
 
 | Secret | Consumer and purpose |
@@ -112,9 +118,10 @@ SMTP, or LLM credential. It also needs these read-only platform-state values:
 cross-stack state values. Use Polar sandbox credentials in `next` and production
 credentials only in production.
 
-GitHub supplies `GITHUB_TOKEN` to the workflow. Do not add deploy SSH keys, SSH host
-keys, PostgreSQL passwords, tenant signing keys, internal bearers, or generated roots
-to GitHub manually; they belong in encrypted Pulumi state.
+GitHub supplies `GITHUB_TOKEN` to publish this repository's GHCR images. The separate
+`PACKAGE_READ_TOKEN` can read npm dependencies but cannot publish packages. Do not add
+deploy SSH keys, SSH host keys, PostgreSQL passwords, tenant signing keys, internal
+bearers, or generated roots to GitHub manually; they belong in encrypted Pulumi state.
 
 Pulumi also generates `actorRunnerLlmGatewayToken`. The API uses it only for
 `/internal/v1/llm`, and the Actor Runner uses it only as that route's client. It is
@@ -183,11 +190,20 @@ The bootstrap writes an owner-only password-manager CSV with `Group`, `Title`, `
 owning scope: `bootstrap`, `shared`, `identity`, `next`, or `production`. It contains:
 
 - the deployment namespace and offline storage administrator;
+- the GitHub Packages reader;
 - each target's deployment and observer storage credentials;
 - its `PULUMI_CONFIG_PASSPHRASE`;
-- its `BACKUP_RESTIC_PASSWORD`; and
-- the provider tokens, SMTP URLs, and RedPill key entered once during bootstrap; and
-- the Polar webhook endpoints and signing secrets created or reconciled by bootstrap.
+- its `BACKUP_RESTIC_PASSWORD`;
+- the provider tokens, SMTP URLs, and RedPill key entered once during bootstrap;
+- the Polar webhook endpoints and signing secrets created or reconciled by bootstrap;
+- exact state and backup bucket names and namespaced GitHub Environments; and
+- the deployed revision, GitHub workflow runs, public service origins, verification time,
+  and exact `aven.id` A and AAAA records produced during the initial rollout.
+
+The last entries are operational records rather than secrets, but they belong in the same
+import so the password-manager record is the complete handoff after setup. The guided
+bootstrap rewrites the owner-only CSV whenever a run ID or DNS value first becomes known;
+an interruption therefore preserves manual work still required from the operator.
 
 Import the CSV, verify that password-manager account recovery exposes the complete record,
 then remove the local copy as described in

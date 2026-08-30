@@ -38,7 +38,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: ./.github/actions/bun-install
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PACKAGE_READ_TOKEN }}
       - run: bunx biome check scripts/release-next.ts scripts/set-version.ts scripts/tauri-ios-asc.ts
       - name: Verify the release version stamp is idempotent
         run: |

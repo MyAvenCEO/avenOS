@@ -60,7 +60,8 @@ export function savedWizardResumeIndex(
 	steps: readonly {
 		info?: boolean
 		path: readonly string[]
-		companion?: { path: readonly string[] }
+		optional?: boolean
+		companion?: { path: readonly string[]; optional?: boolean }
 	}[],
 	draft: Record<string, unknown>
 ): number {
@@ -75,12 +76,45 @@ export function savedWizardResumeIndex(
 		if (values.some((value) => value !== undefined && value !== null && String(value) !== ''))
 			latestSaved = index
 	}
+	const firstMissing = steps.findIndex((step) => {
+		if (step.info) return false
+		const primary = valueAt(draft, step.path)
+		if (!step.optional && (primary === undefined || primary === null || String(primary) === ''))
+			return true
+		if (!step.companion?.optional) {
+			const companion = step.companion && valueAt(draft, step.companion.path)
+			if (
+				step.companion &&
+				(companion === undefined || companion === null || String(companion) === '')
+			)
+				return true
+		}
+		return false
+	})
+	if (firstMissing >= 0 && firstMissing < latestSaved) return firstMissing
 	return latestSaved
 }
 
 export function orderedDeploymentTargets(values: readonly string[]): Target[] {
 	const selected = new Set(values)
 	return TARGETS.filter((target) => selected.has(target))
+}
+
+export function workflowRunIdFromDispatchOutput(output: string): number | undefined {
+	const match = output.match(/https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/actions\/runs\/(\d+)/)
+	if (!match) return undefined
+	const runId = Number(match[1])
+	return Number.isSafeInteger(runId) && runId > 0 ? runId : undefined
+}
+
+export function unseenWorkflowRunId(
+	runs: readonly { databaseId: number }[],
+	knownRunIds: ReadonlySet<number>
+): number | undefined {
+	return runs.find(
+		(run) =>
+			Number.isSafeInteger(run.databaseId) && run.databaseId > 0 && !knownRunIds.has(run.databaseId)
+	)?.databaseId
 }
 
 export function deploymentTargetSummary(targets: readonly Target[]): string {
@@ -102,7 +136,7 @@ export function guidedBootstrapIntroduction(
 	return `Generation: ${deploymentPrefix}
 Selected targets: ${targets.join(', ')}
 Have these ready before you start:
-  - GitHub: gh authenticated as a repository administrator
+  - GitHub: gh authenticated as a repository administrator; 1 classic token with read:packages only
   - Hetzner Object Storage: ${count(targets.length, 'numeric project ID')} and permission to create ${count(targets.length * 3, 'S3 credential')}
   - Hetzner: ${count(targets.length, 'target-scoped Cloud write token')}${platformTargets.length ? `; the project ID that owns aven.ceo; and ${count(platformTargets.length, 'DNS write token')} from that project` : ''}
 ${platformTargets.length ? `  - Polar: ${count(platformTargets.length, 'organization ID')} for ${platformTargets.join(' and ')}, plus the listed billing API scopes\n  - SMTP: send-only URLs and From addresses for ${platformTargets.join(' and ')}; Reply-To is optional\n  - RedPill: 1 active, funded API key for the Phala-hosted model catalog\n` : ''}  - Settings: host, SSH, ACME email, and ${targets.includes('identity') ? 'identity volume' : ''}${targets.includes('identity') && platformTargets.length ? ' plus ' : ''}${platformTargets.length ? 'platform volume and download' : ''} defaults are offered
@@ -111,7 +145,7 @@ ${targets.includes('identity') ? '  - Later: aven.id DNS access after Pulumi ret
 }
 
 export function guidedBootstrapRecoveryNotice(inputPath: string, credentialsPath: string): string {
-	return `Created automatically: buckets, GitHub Environments, Polar webhooks, passwords, SSH keys, and database credentials.
+	return `Created automatically: buckets, GitHub configuration, Polar webhooks, hosts, passwords, SSH keys, database credentials, and the first software deployment.
 
 Every answer is saved immediately because Hetzner displays S3 secrets only once. These owner-only plaintext files contain the entered credentials:
   ${inputPath}
@@ -234,6 +268,14 @@ export function guidedCredentialsCsv(
 		if (!username && !secret) return
 		rows.push([`avenOS/${deploymentPrefix}/${group}`, name, username, secret, url, notes])
 	}
+	add(
+		'shared',
+		'avenOS GitHub Packages reader',
+		'',
+		stringValue(draft, ['githubPackagesReadToken']),
+		'https://github.com/settings/tokens',
+		'Classic GitHub token with read:packages only; CI uses it to install the cross-repository @myavenceo packages.'
+	)
 	for (const step of S3_CREDENTIAL_STEPS) {
 		const projectId = stringValue(draft, ['objectStorage', 'targets', step.target, 'projectId'])
 		const objectStorageUrl = projectId

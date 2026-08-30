@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 import { randomBytes } from 'node:crypto'
+import { resolve4, resolve6 } from 'node:dns/promises'
 import {
+	appendFileSync,
 	chmodSync,
 	closeSync,
 	existsSync,
@@ -21,7 +23,10 @@ import {
 	type BootstrapInput,
 	deploymentConfigurationTargets,
 	loadOrCreateGeneratedSecrets,
+	objectStorageBucketName,
 	parseBootstrapProgress,
+	recoveryCsv,
+	saveGeneratedSecrets,
 	TARGETS,
 	type Target,
 	validateBootstrapInput
@@ -41,7 +46,9 @@ import {
 	savedWizardResumeIndex,
 	setValueAt,
 	signedS3ReadRequest,
-	valueAt
+	unseenWorkflowRunId,
+	valueAt,
+	workflowRunIdFromDispatchOutput
 } from './lib/deployment-bootstrap-guided.js'
 import {
 	BootstrapTui,
@@ -102,12 +109,14 @@ const credentialsPath = join(outputDirectory, 'credentials.csv')
 const completedCredentialsPath = join(outputDirectory, 'avenos-recovery.csv')
 const generatedPath = join(outputDirectory, 'bootstrap.generated.json')
 const bootstrapLogPath = join(outputDirectory, 'bootstrap-apply.log')
+const rolloutLogPath = join(outputDirectory, 'initial-rollout.log')
 for (const path of [
 	inputPath,
 	credentialsPath,
 	completedCredentialsPath,
 	generatedPath,
-	bootstrapLogPath
+	bootstrapLogPath,
+	rolloutLogPath
 ]) {
 	if (existsSync(path) && (preflight(() => statSync(path)).mode & 0o077) !== 0)
 		failPreflight(`${path} must be owner-only (chmod 600).`)
@@ -148,6 +157,10 @@ function promoteCompletedCredentials(): void {
 		throw new Error(`${completedCredentialsPath} must be owner-only (chmod 600).`)
 	renameSync(completedCredentialsPath, credentialsPath)
 	chmodSync(credentialsPath, 0o600)
+}
+
+function refreshCompletedCredentials(input: BootstrapInput): void {
+	writePrivateAtomic(credentialsPath, recoveryCsv(input, generated))
 }
 
 const tuiCandidate = requestedPlainTerminal ? undefined : new BootstrapTui()
@@ -212,6 +225,7 @@ const localCredentialPaths = [
 	completedCredentialsPath,
 	generatedPath,
 	bootstrapLogPath,
+	rolloutLogPath,
 	join(outputDirectory, 'pulumi-state'),
 	...TARGETS.flatMap((target) => [
 		join(outputDirectory, `bootstrap-state-${target}.json`),
@@ -294,10 +308,12 @@ async function run(
 	command: string,
 	commandArgs: string[],
 	quiet = false,
-	timeoutMs?: number
+	timeoutMs?: number,
+	environment?: Record<string, string>
 ): Promise<string> {
 	const child = Bun.spawn([command, ...commandArgs], {
 		cwd: root,
+		env: { ...process.env, ...environment },
 		stdin: 'inherit',
 		stdout: quiet ? 'pipe' : 'inherit',
 		stderr: quiet ? 'pipe' : 'inherit'
@@ -336,6 +352,389 @@ async function withProgress<T>(
 			`${marker} [${event.current}/${event.total}] ${event.label}${event.detail ? ` — ${event.detail}` : ''}\n`
 		)
 	})
+}
+
+type RolloutRunField = 'infrastructurePreviewRunId' | 'infrastructureApplyRunId' | 'deployRunId'
+
+interface GitHubWorkflowRun {
+	status: string
+	conclusion: string | null
+	url: string
+	jobs: Array<{
+		name: string
+		status: string
+		conclusion: string | null
+		steps?: Array<{ name: string; status: string; conclusion: string | null }>
+	}>
+}
+
+function appendRolloutLog(message: string): void {
+	if (!existsSync(rolloutLogPath))
+		writeFileSync(rolloutLogPath, `avenOS initial rollout ${new Date().toISOString()}\n`, {
+			mode: 0o600,
+			flag: 'wx'
+		})
+	appendFileSync(rolloutLogPath, `${new Date().toISOString()} ${message}\n`, 'utf8')
+	chmodSync(rolloutLogPath, 0o600)
+}
+
+async function workflowRun(runId: number, repository: string): Promise<GitHubWorkflowRun> {
+	return JSON.parse(
+		await run(
+			'gh',
+			['run', 'view', String(runId), '--repo', repository, '--json', 'status,conclusion,url,jobs'],
+			true,
+			30_000
+		)
+	) as GitHubWorkflowRun
+}
+
+function workflowProgress(
+	state: GitHubWorkflowRun,
+	label: string
+): { current: number; total: number; detail: string } {
+	const jobs = state.jobs ?? []
+	const completed = jobs.filter((job) => job.status === 'completed').length
+	const active = jobs.find((job) => job.status !== 'completed')
+	const activeStep = active?.steps?.find((step) => step.status === 'in_progress')
+	return {
+		current: Math.min(completed + 1, Math.max(jobs.length, 1)),
+		total: Math.max(jobs.length, 1),
+		detail: active
+			? `${active.name}${activeStep ? ` — ${activeStep.name}` : ''}`
+			: state.status === 'completed'
+				? `${label} complete`
+				: 'Waiting for a GitHub runner'
+	}
+}
+
+async function waitForWorkflowRun(
+	runId: number,
+	repository: string,
+	label: string,
+	update: (event: TuiProgressUpdate) => void,
+	timeoutMs: number
+): Promise<GitHubWorkflowRun> {
+	const deadline = Date.now() + timeoutMs
+	let lastDetail = ''
+	for (;;) {
+		const state = await workflowRun(runId, repository)
+		const progress = workflowProgress(state, label)
+		if (progress.detail !== lastDetail) {
+			lastDetail = progress.detail
+			appendRolloutLog(`${label}: ${state.status}; ${progress.detail}; ${state.url}`)
+			update({
+				status: state.status === 'completed' ? 'complete' : 'active',
+				current: progress.current,
+				total: progress.total,
+				label,
+				detail: progress.detail
+			})
+		}
+		if (state.status === 'completed') {
+			if (state.conclusion !== 'success')
+				throw new Error(
+					`${label} ended with ${state.conclusion ?? 'no conclusion'}. Open ${state.url}`
+				)
+			return state
+		}
+		if (Date.now() >= deadline) throw new Error(`${label} timed out. Open ${state.url}`)
+		await Bun.sleep(5_000)
+	}
+}
+
+async function dispatchWorkflow(
+	workflow: string,
+	repository: string,
+	ref: string,
+	inputs: Record<string, string>
+): Promise<number> {
+	const listRuns = async (): Promise<Array<{ databaseId: number; url: string }>> =>
+		JSON.parse(
+			await run(
+				'gh',
+				[
+					'run',
+					'list',
+					'--repo',
+					repository,
+					'--workflow',
+					workflow,
+					'--branch',
+					ref,
+					'--event',
+					'workflow_dispatch',
+					'--limit',
+					'20',
+					'--json',
+					'databaseId,url'
+				],
+				true,
+				30_000
+			)
+		) as Array<{ databaseId: number; url: string }>
+	const knownRunIds = new Set((await listRuns()).map((workflowRun) => workflowRun.databaseId))
+	const args = ['workflow', 'run', workflow, '--repo', repository, '--ref', ref]
+	for (const [name, value] of Object.entries(inputs)) args.push('--raw-field', `${name}=${value}`)
+	const output = await run('gh', args, true, 30_000)
+	const immediateRunId = workflowRunIdFromDispatchOutput(output)
+	if (immediateRunId) {
+		appendRolloutLog(
+			`Dispatched ${workflow} as https://github.com/${repository}/actions/runs/${immediateRunId}.`
+		)
+		return immediateRunId
+	}
+	const deadline = Date.now() + 30_000
+	while (Date.now() < deadline) {
+		await Bun.sleep(1_000)
+		const discoveredRunId = unseenWorkflowRunId(await listRuns(), knownRunIds)
+		if (discoveredRunId) {
+			appendRolloutLog(
+				`Dispatched ${workflow} as https://github.com/${repository}/actions/runs/${discoveredRunId}.`
+			)
+			return discoveredRunId
+		}
+	}
+	throw new Error(
+		`${workflow} accepted the dispatch, but its run could not be identified. Open https://github.com/${repository}/actions/workflows/${workflow} before retrying.`
+	)
+}
+
+async function runRolloutWorkflow(input: {
+	field: RolloutRunField
+	workflow: string
+	label: string
+	repository: string
+	ref: string
+	inputs: Record<string, string>
+	timeoutMs: number
+	refreshCredentials: () => void
+}): Promise<void> {
+	await withProgress(input.label, async (update) => {
+		let runId = generated.initialRollout?.[input.field]
+		if (runId) {
+			const state = await workflowRun(runId, input.repository)
+			if (state.status === 'completed' && state.conclusion !== 'success') runId = undefined
+		}
+		if (!runId) {
+			runId = await dispatchWorkflow(input.workflow, input.repository, input.ref, input.inputs)
+			if (!generated.initialRollout) throw new Error('Initial rollout state was not initialized.')
+			generated.initialRollout[input.field] = runId
+			saveGeneratedSecrets(generatedPath, generated)
+			input.refreshCredentials()
+		}
+		await waitForWorkflowRun(runId, input.repository, input.label, update, input.timeoutMs)
+	})
+}
+
+function canonicalIp(value: string): string {
+	if (value.includes(':')) return new URL(`http://[${value}]/`).hostname.slice(1, -1)
+	return value
+}
+
+async function identityDnsRecords(input: BootstrapInput): Promise<{ ipv4: string; ipv6: string }> {
+	const target = input.objectStorage.targets.identity
+	const region = input.objectStorage.region
+	const stateBucket = objectStorageBucketName(input, generated, 'identity', 'state')
+	const backend = `s3://${stateBucket}/avenos/platform?endpoint=${region}.your-objectstorage.com&region=${region}&s3ForcePathStyle=true&awssdk=v2`
+	const environment = {
+		PULUMI_CONFIG_PASSPHRASE: generated.targets.identity.pulumiPassphrase,
+		AWS_ACCESS_KEY_ID: target.deploymentCredential.accessKeyId,
+		AWS_SECRET_ACCESS_KEY: target.deploymentCredential.secretAccessKey,
+		AWS_REGION: region,
+		AWS_DEFAULT_REGION: region,
+		AWS_EC2_METADATA_DISABLED: 'true',
+		PULUMI_SKIP_UPDATE_CHECK: 'true'
+	}
+	await run('pulumi', ['login', backend], true, 30_000, environment)
+	const records = JSON.parse(
+		await run(
+			'pulumi',
+			[
+				'stack',
+				'output',
+				'identityDnsRecords',
+				'--json',
+				'--stack',
+				'organization/aven-platform/identity',
+				'--cwd',
+				resolve(root, 'infrastructure/platform')
+			],
+			true,
+			30_000,
+			environment
+		)
+	) as Array<{ type?: string; value?: string }>
+	const ipv4 = records.find((record) => record.type === 'A')?.value
+	const ipv6 = records.find((record) => record.type === 'AAAA')?.value
+	if (!ipv4 || !ipv6) throw new Error('The identity stack did not return both DNS addresses.')
+	return { ipv4, ipv6 }
+}
+
+async function waitForIdentityDns(expected: { ipv4: string; ipv6: string }): Promise<void> {
+	for (;;) {
+		setUiContext(
+			'Initial deployment · External DNS',
+			'Point aven.id at the identity host',
+			`At the external DNS provider for aven.id, replace the apex records with exactly:\n\nA     @     ${expected.ipv4}     TTL 300\nAAAA  @     ${expected.ipv6}     TTL 300\n\nRemove old apex A or AAAA values. The setup will continue only when public DNS returns exactly these addresses.`
+		)
+		if (tui)
+			await tui.choose({
+				label: 'After saving the DNS records',
+				options: [{ label: 'Check DNS >', value: 'check' }]
+			})
+		else await question('Press Enter after saving both DNS records')
+		try {
+			const [ipv4, ipv6] = await Promise.all([resolve4('aven.id'), resolve6('aven.id')])
+			const exactV4 =
+				ipv4.length === 1 && canonicalIp(ipv4[0] as string) === canonicalIp(expected.ipv4)
+			const exactV6 =
+				ipv6.length === 1 && canonicalIp(ipv6[0] as string) === canonicalIp(expected.ipv6)
+			if (!exactV4 || !exactV6)
+				throw new Error(
+					`current A: ${ipv4.join(', ') || 'none'}; current AAAA: ${ipv6.join(', ') || 'none'}`
+				)
+			reportStatus('✓ aven.id now resolves only to the new identity host.')
+			return
+		} catch (error) {
+			reportFailure(
+				`aven.id is not ready yet: ${error instanceof Error ? error.message : 'DNS lookup failed'}. Update the records or wait for propagation, then check again.`
+			)
+		}
+	}
+}
+
+async function verifyPublicInstallation(): Promise<void> {
+	const endpoints = [
+		'https://aven.id/api/health/ready',
+		'https://api.next.aven.ceo/health/live',
+		'https://my.next.aven.ceo/api/health/ready',
+		'https://next.aven.ceo/',
+		'https://api.aven.ceo/health/live',
+		'https://my.aven.ceo/api/health/ready',
+		'https://aven.ceo/'
+	]
+	await withProgress('Verify the public installation', async (update) => {
+		for (const [index, endpoint] of endpoints.entries()) {
+			const deadline = Date.now() + 5 * 60_000
+			for (;;) {
+				update({
+					status: 'active',
+					current: index + 1,
+					total: endpoints.length,
+					label: 'Verify the public installation',
+					detail: endpoint
+				})
+				try {
+					const response = await fetch(endpoint, { signal: AbortSignal.timeout(10_000) })
+					if (response.ok) break
+				} catch {
+					// Certificate issuance and first startup can briefly lag behind the deployment job.
+				}
+				if (Date.now() >= deadline) throw new Error(`Public readiness timed out at ${endpoint}.`)
+				await Bun.sleep(5_000)
+			}
+		}
+		update({
+			status: 'complete',
+			current: endpoints.length,
+			total: endpoints.length,
+			label: 'Verify the public installation',
+			detail: 'All seven public endpoints are ready.'
+		})
+	})
+}
+
+async function completeInitialRollout(input: BootstrapInput): Promise<boolean> {
+	const completedTargets = generated.completedTargets ?? []
+	if (!TARGETS.every((target) => completedTargets.includes(target))) {
+		reportStatus(
+			`Bootstrap storage is configured for ${completedTargets.join(', ') || 'no targets'}, but a runnable first installation needs identity, next, and production. Resume the same generation and check the missing targets.`
+		)
+		return false
+	}
+	const repository = input.repository
+	const defaultBranch = await run(
+		'gh',
+		['api', `repos/${repository}`, '--jq', '.default_branch'],
+		true,
+		30_000
+	)
+	const localRef = await run('git', ['rev-parse', 'HEAD'], true, 10_000)
+	const remoteRef = await run(
+		'gh',
+		['api', `repos/${repository}/commits/${defaultBranch}`, '--jq', '.sha'],
+		true,
+		30_000
+	)
+	if (localRef !== remoteRef)
+		throw new Error(
+			`The setup code must be the current ${defaultBranch} commit before deployment. Local ${localRef.slice(0, 12)} differs from GitHub ${remoteRef.slice(0, 12)}.`
+		)
+	if (
+		!generated.initialRollout ||
+		generated.initialRollout.ref !== localRef ||
+		generated.initialRollout.targets.join(',') !== TARGETS.join(',')
+	) {
+		generated.initialRollout = { ref: localRef, targets: [...TARGETS] }
+		saveGeneratedSecrets(generatedPath, generated)
+		refreshCompletedCredentials(input)
+	}
+	setUiContext(
+		'Initial deployment',
+		'Creating the first installation',
+		`GitHub will preview and create the identity, next, and production hosts, then verify and publish ${localRef.slice(0, 12)} once before installing all three. The process is resumable. The only manual pause is the external aven.id DNS change.`
+	)
+	await runRolloutWorkflow({
+		field: 'infrastructurePreviewRunId',
+		workflow: 'platform-infrastructure.yml',
+		label: 'Preview all infrastructure',
+		repository,
+		ref: defaultBranch,
+		inputs: { target: 'all', command: 'preview' },
+		timeoutMs: 60 * 60_000,
+		refreshCredentials: () => refreshCompletedCredentials(input)
+	})
+	await runRolloutWorkflow({
+		field: 'infrastructureApplyRunId',
+		workflow: 'platform-infrastructure.yml',
+		label: 'Create all infrastructure',
+		repository,
+		ref: defaultBranch,
+		inputs: { target: 'all', command: 'up' },
+		timeoutMs: 60 * 60_000,
+		refreshCredentials: () => refreshCompletedCredentials(input)
+	})
+	const dns = await identityDnsRecords(input)
+	const savedDns = generated.initialRollout.identityDns
+	if (
+		!savedDns?.verified ||
+		canonicalIp(savedDns.ipv4) !== canonicalIp(dns.ipv4) ||
+		canonicalIp(savedDns.ipv6) !== canonicalIp(dns.ipv6)
+	) {
+		generated.initialRollout.identityDns = { ...dns, verified: false }
+		saveGeneratedSecrets(generatedPath, generated)
+		refreshCompletedCredentials(input)
+		await waitForIdentityDns(dns)
+		generated.initialRollout.identityDns = { ...dns, verified: true }
+		saveGeneratedSecrets(generatedPath, generated)
+		refreshCompletedCredentials(input)
+	}
+	await runRolloutWorkflow({
+		field: 'deployRunId',
+		workflow: 'platform-deploy.yml',
+		label: 'Verify, publish, and deploy all software',
+		repository,
+		ref: defaultBranch,
+		inputs: { target: 'all', ref: localRef, recover_from_backup: 'false' },
+		timeoutMs: 3 * 60 * 60_000,
+		refreshCredentials: () => refreshCompletedCredentials(input)
+	})
+	await verifyPublicInstallation()
+	generated.initialRollout.verifiedAt = new Date().toISOString()
+	saveGeneratedSecrets(generatedPath, generated)
+	refreshCompletedCredentials(input)
+	return true
 }
 
 async function runBootstrapApply(update: (event: TuiProgressUpdate) => void): Promise<void> {
@@ -439,8 +838,26 @@ async function validateHetznerToken(token: string, label: string, resource: stri
 	)
 }
 
+async function validateGitHubPackagesToken(token: string): Promise<void> {
+	for (const name of ['aven-ceo', 'aven-vibes']) {
+		const response = await fetch(`https://npm.pkg.github.com/@myavenceo%2f${name}`, {
+			headers: {
+				Accept: 'application/vnd.npm.install-v1+json',
+				Authorization: `Bearer ${token}`
+			},
+			signal: AbortSignal.timeout(20_000)
+		})
+		if (!response.ok)
+			throw new Error(`GitHub Packages denied @myavenceo/${name} with HTTP ${response.status}.`)
+	}
+	reportStatus(
+		'✓ GitHub Packages reader: @myavenceo/aven-ceo and @myavenceo/aven-vibes are downloadable.'
+	)
+}
+
 function redactSecrets(message: string): string {
 	const paths: readonly (readonly string[])[] = [
+		['githubPackagesReadToken'],
 		...S3_CREDENTIAL_STEPS.flatMap((step) => [
 			[...step.path, 'accessKeyId'],
 			[...step.path, 'secretAccessKey']
@@ -507,24 +924,42 @@ async function validatePolarCredential(input: {
 		accessToken: input.apiKey,
 		server: input.target === 'next' ? 'sandbox' : 'production'
 	})
-	const organization = await polar.organizations.get({ id: input.organizationId })
-	const products = await polar.products.list({ organizationId: input.organizationId, limit: 1 })
-	const webhooks = await polar.webhooks.listWebhookEndpoints({
-		organizationId: input.organizationId,
-		limit: 1
-	})
+	let organization: Awaited<ReturnType<typeof polar.organizations.get>>
+	let products: Awaited<ReturnType<typeof polar.products.list>>
+	let benefits: Awaited<ReturnType<typeof polar.benefits.list>>
+	let meters: Awaited<ReturnType<typeof polar.meters.list>>
+	let webhooks: Awaited<ReturnType<typeof polar.webhooks.listWebhookEndpoints>>
+	try {
+		organization = await polar.organizations.get({ id: input.organizationId })
+		products = await polar.products.list({ organizationId: input.organizationId, limit: 1 })
+		benefits = await polar.benefits.list({ organizationId: input.organizationId, limit: 1 })
+		meters = await polar.meters.list({ organizationId: input.organizationId, limit: 1 })
+		webhooks = await polar.webhooks.listWebhookEndpoints({
+			organizationId: input.organizationId,
+			limit: 1
+		})
+	} catch (error) {
+		const detail = error instanceof Error ? error.message : String(error)
+		if (detail.includes('insufficient_scope'))
+			throw new Error(
+				`The Polar ${input.target} key is missing a required permission. Create a replacement organization token with exactly: ${POLAR_API_KEY_SCOPES.join(', ')}.`
+			)
+		throw error
+	}
 	let productCount: number | undefined
 	let webhookCount: number | undefined
 	for await (const page of products) {
 		productCount = page.result.pagination.totalCount
 		break
 	}
+	const benefitCount = benefits.result.pagination.totalCount
+	const meterCount = meters.result.pagination.totalCount
 	for await (const page of webhooks) {
 		webhookCount = page.result.pagination.totalCount
 		break
 	}
 	reportStatus(
-		`✓ Polar ${input.target}: ${organization.name} (${organization.slug}, ${organization.id}); organization, product, and webhook read access confirmed${productCount === undefined ? '' : `, ${productCount} product(s)`}${webhookCount === undefined ? '' : `, ${webhookCount} webhook(s)`}. Mutation scopes are exercised during apply and checkout use.\n`
+		`✓ Polar ${input.target}: ${organization.name} (${organization.slug}, ${organization.id}); organization and billing-catalog access confirmed${productCount === undefined ? '' : `, ${productCount} product(s)`}, ${benefitCount} benefit(s), ${meterCount} meter(s)${webhookCount === undefined ? '' : `, ${webhookCount} webhook(s)`}. Mutation scopes are exercised during apply and checkout use.\n`
 	)
 }
 
@@ -708,6 +1143,18 @@ function wizardSteps(selectedTargets: readonly Target[]): WizardStep[] {
 					`✓ ${repositoryInfo.fullName ?? repository}: administrator access; default branch ${repositoryInfo.defaultBranch ?? 'unknown'}.`
 				)
 			}
+		},
+		{
+			chapter: 'GitHub',
+			title: 'GitHub Packages reader',
+			description:
+				'Open https://github.com/settings/tokens/new?scopes=read:packages&description=avenOS%20GitHub%20Packages%20reader\nName: avenOS GitHub Packages reader\n\nCreate a classic token with read:packages only. CI uses it only to download the cross-repository @myavenceo packages; image publishing continues to use the short-lived workflow token.',
+			path: ['githubPackagesReadToken'],
+			label: 'Packages read token',
+			secret: true,
+			validate: (value) =>
+				value.length >= 20 ? undefined : 'Enter the complete classic GitHub token.',
+			verify: validateGitHubPackagesToken
 		},
 		{
 			chapter: 'GitHub',
@@ -1295,7 +1742,7 @@ try {
 		generated
 	)
 	if (!existsSync(inputPath) || !existsSync(credentialsPath)) saveDraft()
-	await collectInput(selectedTargets, startup === 'resume')
+	const bootstrapInput = await collectInput(selectedTargets, startup === 'resume')
 	setUiContext('Review', 'Validating the plan', 'No provider state changes while this check runs.')
 	await withProgress('Validating the complete deployment plan…', () =>
 		run(
@@ -1314,7 +1761,7 @@ try {
 	setUiContext(
 		'Review',
 		'Plan validated',
-		`The input for ${selectedTargets.join(', ')} is valid. Apply creates ${selectedTargets.length * 2} private buckets, ${selectedTargets.filter((target) => target !== 'identity').length} Polar webhook(s), generated credentials, and reconciles ${configurationTargets.length * 2} namespaced GitHub Environments. Previously prepared targets are refreshed only to keep shared references current.`
+		`The input for ${selectedTargets.join(', ')} is valid. Apply creates ${selectedTargets.length * 2} private buckets, ${selectedTargets.filter((target) => target !== 'identity').length} Polar webhook(s), generated credentials, and reconciles ${configurationTargets.length * 2} namespaced GitHub Environments. When all three targets are prepared, it then provisions and deploys the first installation, pausing only for external aven.id DNS. Previously prepared targets are refreshed only to keep shared references current.`
 	)
 	const apply = tui
 		? await tui.choose({
@@ -1337,8 +1784,12 @@ try {
 		)
 		await withProgress('Starting provider reconciliation…', runBootstrapApply)
 		promoteCompletedCredentials()
+		Object.assign(generated, loadOrCreateGeneratedSecrets(generatedPath))
+		const running = await completeInitialRollout(bootstrapInput)
 		process.stdout.write(
-			`SUCCESS: bootstrap ${generated.deploymentPrefix} is configured.\nImport ${credentialsPath} into the password manager, verify it, then securely delete the local bootstrap directory.\n`
+			running
+				? `SUCCESS: the first avenOS installation for ${generated.deploymentPrefix} is running.\nImport ${credentialsPath} into the password manager, verify it, then securely delete the local bootstrap directory. Future updates run through CI.\n`
+				: `SUCCESS: bootstrap ${generated.deploymentPrefix} is configured for ${selectedTargets.join(', ')}. Resume the same generation and add every missing target to create the first running installation.\nCredentials: ${credentialsPath}\n`
 		)
 	}
 } catch (error) {

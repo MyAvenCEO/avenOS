@@ -2,8 +2,9 @@
 
 Status: authoritative
 
-The deployment system operates three protected targets through the same two GitHub
-workflows. `identity` owns the shared account and passkey service. `next` and
+The deployment system operates three protected targets through two GitHub workflows.
+Both accept `all`, which processes `identity`, `next`, and production in that fixed
+order without repeating the release proof or image build per target. `identity` owns the shared account and passkey service. `next` and
 production own separate platform hosts, databases, credentials, backups, and public
 origins. A release branch is only a candidate ref; choosing a deployment target is a
 separate protected action.
@@ -24,11 +25,11 @@ deployment receives identity-state or cross-platform-state access.
 
 ## Before the first deployment
 
-Complete [Initial provisioning](initial-provisioning.md). It creates a fresh namespaced
-pair of GitHub Environments plus state and backup buckets for every target checked in the
-wizard. A complete fresh installation checks all three, producing six Environments. You
-still need repository administration, provider-issued credentials, and access to the
-external DNS provider for `aven.id`.
+Complete [Initial provisioning](initial-provisioning.md). Its guided command owns the
+normal first rollout: it creates the fresh namespaced GitHub Environments and storage,
+dispatches the combined workflows, pauses for external `aven.id` DNS, and verifies the
+running installation. The procedures below are the independently runnable operator paths
+used by that setup and by later repair work.
 
 Prove the candidate through [Build and test](build-and-test.md). The deployment
 workflow repeats the release-critical gate before publishing images.
@@ -39,21 +40,16 @@ The workflows select physical Environments through `DEPLOYMENT_ENVIRONMENT_PREFI
 reject targets absent from `DEPLOYMENT_TARGETS_JSON`; do not type or reuse a physical
 Environment name.
 
-Run `platform-infrastructure` once for each target. Begin with `command: preview` and
-review one protected server, one protected volume, one firewall, generated SSH
-identities, and the target's expected DNS behavior. Reject an unexpected replacement,
-wider SSH ingress, an unprotected stateful resource, or the wrong target stack.
+Open **Actions → platform-infrastructure → Run workflow**. Select `target: all` and
+`command: preview`. The workflow previews `identity`, `next`, and production serially.
+Review three protected servers, three protected volumes, their firewalls, generated SSH
+identities, and each target's DNS behavior. Reject an unexpected replacement, wider SSH
+ingress, an unprotected stateful resource, or the wrong target stack.
 
-Accept the reviewed plan and repeat with `command: up` in this order:
-
-1. `target: identity`;
-2. `target: next`; and
-3. `target: production`.
-
-The order keeps the shared control plane explicit, although no software is admitted
-until all three foundations exist. The platform runs create all A and AAAA records
-for their own three origins. There is no DNS promotion flag and no legacy host to cut
-over.
+After the preview succeeds, run the same workflow once more with `target: all` and
+`command: up`. It applies the three reviewed targets serially in `identity`, `next`,
+production order. The platform targets create all A and AAAA records for their own three
+origins. There is no DNS promotion flag and no legacy host to cut over.
 
 Pulumi installs Docker and Compose, mounts the protected volume, enables UFW,
 fail2ban, bounded logs, and unattended security updates, and records cloud-init
@@ -78,13 +74,14 @@ Do not copy addresses from an earlier run or point `aven.id` at either platform 
 
 ## Deploy the software
 
-Run `platform-deploy` three times. Supply an exact verified commit or the intended
-release branch as `ref`, keep `recover_from_backup: false`, and select targets in this
-order:
+Open **Actions → platform-deploy → Run workflow** once. Select `target: all`, supply an
+exact verified commit as `ref`, and keep `recover_from_backup: false`. The workflow runs
+the complete release gate and publishes each immutable image once. It then installs
+`identity`, `next`, and production serially.
 
-1. `identity`;
-2. `next`; and
-3. `production`.
+`target: all` refuses recovery mode. Restore one target at a time through the recovery
+procedure so an accidental bulk restore cannot blur the boundary between shared identity
+and the two platform backups.
 
 Identity deployment requires the already-managed A and AAAA records and provisioned
 Pulumi stacks for both platform targets. It resolves those records, writes their exact
@@ -150,7 +147,7 @@ commerce, customer, Intent, Artifact, or Actor record exists in `next`.
 
 ## Deploy an update
 
-Run `platform-deploy` for the affected target with an exact verified ref and
+Run `platform-deploy` for one affected target with an exact verified ref and
 `recover_from_backup: false`. Deploy identity changes first when a release changes a
 shared identity contract. Deploy and smoke-test `next` before production for platform
 changes.

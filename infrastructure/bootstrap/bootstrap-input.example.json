@@ -1,6 +1,7 @@
 {
 	"deploymentTargets": ["identity", "next", "production"],
 	"repository": "MyAvenCEO/avenOS",
+	"githubPackagesReadToken": "PASTE_GITHUB_PACKAGES_READ_TOKEN",
 	"objectStorage": {
 		"region": "hel1",
 		"targets": {

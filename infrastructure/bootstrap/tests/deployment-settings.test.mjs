@@ -116,6 +116,7 @@ const credential = (name) => ({ accessKeyId: `${name}ACCESS1`, secretAccessKey: 
 const input = {
 	deploymentTargets: ['identity', 'next', 'production'],
 	repository: 'MyAvenCEO/avenOS',
+	githubPackagesReadToken: 'github-packages-read-token',
 	reviewer: 'operator',
 	objectStorage: {
 		region: 'hel1',
@@ -169,6 +170,10 @@ test('validates the complete provider input before changing anything', () => {
 	const { reviewer: _reviewer, ...soloInput } = input
 	assert.doesNotThrow(() => validateBootstrapInput(soloInput))
 	assert.throws(() => validateBootstrapInput({ ...input, reviewer: '' }), /reviewer is required/)
+	assert.throws(
+		() => validateBootstrapInput({ ...input, githubPackagesReadToken: '' }),
+		/githubPackagesReadToken is required/
+	)
 	assert.throws(
 		() =>
 			validateBootstrapInput({
@@ -286,6 +291,7 @@ test('validates and configures only the selected deployment targets', () => {
 	const nextOnly = {
 		deploymentTargets: ['next'],
 		repository: input.repository,
+		githubPackagesReadToken: input.githubPackagesReadToken,
 		objectStorage: {
 			region: input.objectStorage.region,
 			targets: { next: input.objectStorage.targets.next }
@@ -348,6 +354,7 @@ test('supports every non-empty combination without configuring an unselected tar
 		const selectedInput = {
 			deploymentTargets,
 			repository: input.repository,
+			githubPackagesReadToken: input.githubPackagesReadToken,
 			objectStorage: {
 				region: input.objectStorage.region,
 				targets: Object.fromEntries(
@@ -469,5 +476,55 @@ test('writes password-manager recovery material owner-only', () => {
 	assert.match(contents, /projects\/4567890\/security\/tokens/)
 	assert.match(contents, /shared aven\.ceo DNS zone in Hetzner project 4567890/)
 	assert.match(contents, /avenOS RedPill API key/)
+	assert.match(contents, /avenOS GitHub Packages reader/)
+	assert.match(contents, /avenOS identity recovery storage/)
+	assert.match(contents, /identity-state/)
+	assert.match(contents, /identity-backup/)
+	assert.doesNotMatch(contents, /aven\.id apex A record/)
 	assert.throws(() => writeRecoveryCsv(path, contents), /refusing to overwrite/)
+})
+
+test('adds the resumable initial rollout and manual DNS handoff to the password-manager CSV', () => {
+	const generated = generateBootstrapSecrets()
+	generated.polarWebhooks = {
+		next: {
+			id: 'next-hook',
+			url: 'https://my.next.aven.ceo/api/webhooks/polar',
+			secret: 'next-secret'
+		},
+		production: {
+			id: 'prod-hook',
+			url: 'https://my.aven.ceo/api/webhooks/polar',
+			secret: 'prod-secret'
+		}
+	}
+	generated.initialRollout = {
+		ref: '0123456789abcdef0123456789abcdef01234567',
+		targets: ['identity', 'next', 'production'],
+		infrastructurePreviewRunId: 101,
+		infrastructureApplyRunId: 102,
+		identityDns: { ipv4: '192.0.2.10', ipv6: '2001:db8::10', verified: false }
+	}
+
+	const pendingContents = recoveryCsv(input, generated)
+	assert.match(pendingContents, /aven\.id apex A record/)
+	assert.match(pendingContents, /aven\.id apex AAAA record/)
+	assert.match(pendingContents, /192\.0\.2\.10/)
+	assert.match(pendingContents, /2001:db8::10/)
+	assert.match(pendingContents, /type A, name @, TTL 300/)
+	assert.match(pendingContents, /This value still needs to be set and verified/)
+	assert.match(pendingContents, /actions\/runs\/101/)
+	assert.match(pendingContents, /actions\/runs\/102/)
+	assert.doesNotMatch(pendingContents, /actions\/runs\/103/)
+
+	generated.initialRollout.identityDns.verified = true
+	generated.initialRollout.deployRunId = 103
+	generated.initialRollout.verifiedAt = '2026-08-30T12:00:00.000Z'
+	const completedContents = recoveryCsv(input, generated)
+	assert.match(completedContents, /actions\/runs\/103/)
+	assert.match(completedContents, /commit\/0123456789abcdef0123456789abcdef01234567/)
+	assert.match(completedContents, /Public installation verified at 2026-08-30T12:00:00\.000Z/)
+	assert.match(completedContents, /https:\/\/api\.next\.aven\.ceo/)
+	assert.match(completedContents, /https:\/\/my\.aven\.ceo/)
+	assert.match(completedContents, /settings\/environments/)
 })
