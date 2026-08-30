@@ -1,14 +1,14 @@
 {
 	"repository": "MyAvenCEO/avenOS",
 	"objectStorage": {
-		"projectId": "1234567",
 		"region": "hel1",
-		"bootstrapCredential": {
-			"accessKeyId": "PASTE_BOOTSTRAP_ACCESS_KEY",
-			"secretAccessKey": "PASTE_BOOTSTRAP_SECRET_KEY"
-		},
 		"targets": {
 			"identity": {
+				"projectId": "1234567",
+				"bootstrapCredential": {
+					"accessKeyId": "PASTE_IDENTITY_BOOTSTRAP_ACCESS_KEY",
+					"secretAccessKey": "PASTE_IDENTITY_BOOTSTRAP_SECRET_KEY"
+				},
 				"deploymentCredential": {
 					"accessKeyId": "PASTE_IDENTITY_DEPLOY_ACCESS_KEY",
 					"secretAccessKey": "PASTE_IDENTITY_DEPLOY_SECRET_KEY"
@@ -19,6 +19,11 @@
 				}
 			},
 			"next": {
+				"projectId": "2345678",
+				"bootstrapCredential": {
+					"accessKeyId": "PASTE_NEXT_BOOTSTRAP_ACCESS_KEY",
+					"secretAccessKey": "PASTE_NEXT_BOOTSTRAP_SECRET_KEY"
+				},
 				"deploymentCredential": {
 					"accessKeyId": "PASTE_NEXT_DEPLOY_ACCESS_KEY",
 					"secretAccessKey": "PASTE_NEXT_DEPLOY_SECRET_KEY"
@@ -29,6 +34,11 @@
 				}
 			},
 			"production": {
+				"projectId": "3456789",
+				"bootstrapCredential": {
+					"accessKeyId": "PASTE_PRODUCTION_BOOTSTRAP_ACCESS_KEY",
+					"secretAccessKey": "PASTE_PRODUCTION_BOOTSTRAP_SECRET_KEY"
+				},
 				"deploymentCredential": {
 					"accessKeyId": "PASTE_PRODUCTION_DEPLOY_ACCESS_KEY",
 					"secretAccessKey": "PASTE_PRODUCTION_DEPLOY_SECRET_KEY"
@@ -51,6 +61,7 @@
 		"downloadUrl": "https://github.com/MyAvenCEO/avenOS/releases/latest"
 	},
 	"providers": {
+		"dnsProjectId": "4567890",
 		"identity": { "computeToken": "PASTE_IDENTITY_COMPUTE_TOKEN" },
 		"next": {
 			"computeToken": "PASTE_NEXT_COMPUTE_TOKEN",

@@ -9,8 +9,8 @@ import {
 	readFileSync,
 	readSync,
 	renameSync,
+	rmSync,
 	statSync,
-	unlinkSync,
 	writeFileSync
 } from 'node:fs'
 import { homedir } from 'node:os'
@@ -20,20 +20,27 @@ import { Polar } from '@polar-sh/sdk'
 import {
 	type BootstrapInput,
 	loadOrCreateGeneratedSecrets,
+	TARGETS,
 	validateBootstrapInput
 } from './lib/deployment-bootstrap.js'
 import {
+	actionableWizardProgress,
 	guidedBootstrapIntroduction,
 	guidedBootstrapRecoveryNotice,
 	guidedCredentialsCsv,
-	hetznerProjectConsoleUrl,
+	hetznerProjectTokensUrl,
+	hetznerS3CredentialsUrl,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
 	setValueAt,
 	signedS3ReadRequest,
 	valueAt
 } from './lib/deployment-bootstrap-guided.js'
-import { BootstrapTui, TuiInterruptedError } from './lib/deployment-bootstrap-tui.js'
+import {
+	BootstrapTui,
+	TuiInterruptedError,
+	type TuiProgress
+} from './lib/deployment-bootstrap-tui.js'
 import { fetchRedpillPhalaCatalog } from './lib/redpill-model-catalog.js'
 
 function failPreflight(error: unknown): never {
@@ -95,13 +102,6 @@ if (existsSync(credentialsPath) && (preflight(() => statSync(credentialsPath)).m
 	failPreflight(`${credentialsPath} must be owner-only (chmod 600).`)
 const generated = preflight(() => loadOrCreateGeneratedSecrets(generatedPath))
 
-class CancelledError extends Error {
-	constructor() {
-		super('cancelled before credential collection')
-		this.name = 'CancelledError'
-	}
-}
-
 function writePrivateAtomic(path: string, contents: string): void {
 	const temporary = `${path}.${randomBytes(6).toString('hex')}.next`
 	writeFileSync(temporary, contents, {
@@ -135,6 +135,10 @@ const terminal = plainTerminal
 if (!requestedPlainTerminal && !tui)
 	process.stdout.write('Terminal is smaller than 60x20; using the accessible plain wizard.\n')
 let echoDisabled = false
+let activeChild: { kill(signal?: number | NodeJS.Signals): void } | undefined
+function interruptActiveOperation(): void {
+	activeChild?.kill('SIGTERM')
+}
 function setEcho(enabled: boolean): void {
 	const result = Bun.spawnSync(['stty', enabled ? 'echo' : '-echo'], {
 		stdin: 'inherit',
@@ -152,17 +156,18 @@ function restoreEcho(): void {
 }
 process.on('exit', restoreEcho)
 let handlingInterrupt = false
-if (plainTerminal)
-	process.on('SIGINT', () => {
-		if (handlingInterrupt) return
-		handlingInterrupt = true
-		restoreEcho()
-		const resolution = resolveInterruptedRunCredentials()
-		if (resolution === 'deleted')
-			process.stderr.write('\nERROR: interrupted. Local credential artifacts deleted.\n')
-		else process.stderr.write(`\nERROR: interrupted. Progress preserved in ${credentialsPath}\n`)
-		process.exit(130)
-	})
+process.on('SIGINT', () => {
+	if (handlingInterrupt) return
+	handlingInterrupt = true
+	interruptActiveOperation()
+	restoreEcho()
+	tui?.close()
+	const resolution = resolveInterruptedRunCredentials()
+	if (resolution === 'deleted')
+		process.stderr.write('\nERROR: interrupted. Local credential artifacts deleted.\n')
+	else process.stderr.write(`\nERROR: interrupted. Progress preserved in ${credentialsPath}\n`)
+	process.exit(130)
+})
 
 async function readAnswer(): Promise<string> {
 	if (!terminal) throw new Error('The plain terminal reader is not active.')
@@ -177,28 +182,21 @@ async function question(label: string, defaultValue?: string): Promise<string> {
 	return answer || defaultValue || ''
 }
 
-async function secretQuestion(label: string): Promise<string> {
-	if (tui) return tui.ask({ label, secret: true })
-	process.stdout.write(`${label}: `)
-	setEcho(false)
-	try {
-		return await readAnswer()
-	} finally {
-		restoreEcho()
-		process.stdout.write('\n')
-	}
-}
-
 const localCredentialPaths = [
 	inputPath,
 	credentialsPath,
 	completedCredentialsPath,
-	generatedPath
+	generatedPath,
+	join(outputDirectory, 'pulumi-state'),
+	...TARGETS.flatMap((target) => [
+		join(outputDirectory, `bootstrap-state-${target}.json`),
+		join(outputDirectory, `bootstrap.${target}.remote`)
+	])
 ] as const
 
 function deleteLocalCredentialArtifacts(): void {
 	for (const path of localCredentialPaths) {
-		if (existsSync(path)) unlinkSync(path)
+		if (existsSync(path)) rmSync(path, { recursive: true, force: true })
 	}
 }
 
@@ -230,18 +228,23 @@ function resolveInterruptedRunCredentials(): 'deleted' | 'kept' {
 	}
 }
 
-function setUiContext(title: string, content: string): void {
-	if (tui) tui.setContext(title, content)
-	else process.stdout.write(`\n${content.trim()}\n`)
+function setUiContext(
+	chapter: string,
+	title: string,
+	content: string,
+	progress?: TuiProgress
+): void {
+	if (tui) tui.setContext(chapter, title, content, progress)
+	else process.stdout.write(`\n${chapter} · ${title}\n${content.trim()}\n`)
 }
 
-function reportStatus(message: string): void {
-	if (tui) tui.status(message)
+function reportStatus(message: string, chapter?: string): void {
+	if (tui) tui.status(message, 'success', chapter)
 	else process.stdout.write(`${message.trim()}\n`)
 }
 
 function reportFailure(message: string): void {
-	if (tui) tui.status(`✗ ${message}`)
+	if (tui) tui.status(`✗ ${message}`, 'error')
 	else process.stderr.write(`✗ ${message.trim()}\n`)
 }
 
@@ -262,85 +265,43 @@ async function resolveFailedRunCredentials(): Promise<'deleted' | 'kept'> {
 	}
 }
 
-async function required(
-	path: readonly string[],
-	label: string,
-	options: { defaultValue?: string; secret?: boolean; validate?: (value: string) => boolean } = {}
+async function run(
+	command: string,
+	commandArgs: string[],
+	quiet = false,
+	timeoutMs?: number
 ): Promise<string> {
-	const existing = valueAt(draft, path)
-	if (typeof existing === 'string' && existing.trim() !== '') {
-		const valid = options.validate?.(existing) ?? true
-		if (valid) {
-			const keep = (await question(`${label} is recorded. Keep it?`, 'yes')).toLowerCase()
-			if (['y', 'yes'].includes(keep)) return existing
-		} else reportStatus(`${label} is recorded but invalid and must be replaced.`)
-	}
-	for (;;) {
-		const answer = options.secret
-			? await secretQuestion(label)
-			: await question(label, options.defaultValue)
-		if (answer && (options.validate?.(answer) ?? true)) {
-			setValueAt(draft, path, answer)
-			saveDraft()
-			return answer
-		}
-		reportStatus('A valid value is required.')
-	}
-}
-
-async function optional(path: readonly string[], label: string): Promise<string | undefined> {
-	const existing = valueAt(draft, path)
-	if (typeof existing === 'string' && existing.trim() !== '') {
-		const keep = (await question(`${label} is recorded. Keep it?`, 'yes')).toLowerCase()
-		if (['y', 'yes'].includes(keep)) return existing
-	}
-	const answer = await question(`${label} (leave empty to omit)`)
-	if (!answer) {
-		if (existing !== undefined) {
-			setValueAt(draft, path, undefined)
-			saveDraft()
-		}
-		return undefined
-	}
-	setValueAt(draft, path, answer)
-	saveDraft()
-	return answer
-}
-
-async function requiredInteger(
-	path: readonly string[],
-	label: string,
-	defaultValue: number,
-	minimum: number
-): Promise<number> {
-	const existing = valueAt(draft, path)
-	if (Number.isSafeInteger(existing) && (existing as number) >= minimum) {
-		const keep = (await question(`${label} is recorded. Keep it?`, 'yes')).toLowerCase()
-		if (['y', 'yes'].includes(keep)) return existing as number
-	}
-	for (;;) {
-		const value = Number(await question(label, String(defaultValue)))
-		if (Number.isSafeInteger(value) && value >= minimum) {
-			setValueAt(draft, path, value)
-			saveDraft()
-			return value
-		}
-		reportStatus(`Enter an integer of at least ${minimum}.`)
-	}
-}
-
-async function run(command: string, commandArgs: string[], quiet = false): Promise<string> {
 	const child = Bun.spawn([command, ...commandArgs], {
 		cwd: root,
 		stdin: 'inherit',
 		stdout: quiet ? 'pipe' : 'inherit',
 		stderr: quiet ? 'pipe' : 'inherit'
 	})
-	const stdout = quiet ? await new Response(child.stdout).text() : ''
-	const stderr = quiet ? await new Response(child.stderr).text() : ''
-	if ((await child.exited) !== 0)
-		throw new Error(`${command} failed${stderr.trim() ? `: ${stderr.trim()}` : ''}`)
-	return stdout.trim()
+	activeChild = child
+	let timedOut = false
+	const timeout = timeoutMs
+		? setTimeout(() => {
+				timedOut = true
+				child.kill()
+			}, timeoutMs)
+		: undefined
+	try {
+		const stdout = quiet ? await new Response(child.stdout).text() : ''
+		const stderr = quiet ? await new Response(child.stderr).text() : ''
+		const exitCode = await child.exited
+		if (timedOut)
+			throw new Error(`${command} timed out after ${Math.ceil((timeoutMs ?? 0) / 1000)}s`)
+		if (exitCode !== 0)
+			throw new Error(`${command} failed${stderr.trim() ? `: ${stderr.trim()}` : ''}`)
+		return stdout.trim()
+	} finally {
+		if (timeout) clearTimeout(timeout)
+		if (activeChild === child) activeChild = undefined
+	}
+}
+
+async function withProgress<T>(label: string, action: () => Promise<T>): Promise<T> {
+	return tui ? tui.progress(label, action, interruptActiveOperation) : action()
 }
 
 async function validateHetznerToken(token: string, label: string, resource: string): Promise<void> {
@@ -348,7 +309,13 @@ async function validateHetznerToken(token: string, label: string, resource: stri
 		headers: { Authorization: `Bearer ${token}` },
 		signal: AbortSignal.timeout(20_000)
 	})
-	if (!response.ok) throw new Error(`Hetzner returned HTTP ${response.status}.`)
+	if (!response.ok) {
+		if (resource.startsWith('zones/') && response.status === 404)
+			throw new Error(
+				"this token's Hetzner project does not contain the aven.ceo zone. Create both DNS tokens in the project that owns that zone"
+			)
+		throw new Error(`Hetzner returned HTTP ${response.status}.`)
+	}
 	const payload = (await response.json()) as Record<string, unknown>
 	if (resource.startsWith('servers')) {
 		if (!Array.isArray(payload.servers)) throw new Error('Hetzner returned no server list.')
@@ -391,55 +358,6 @@ function redactSecrets(message: string): string {
 			redacted = redacted.replaceAll(value, '[redacted]')
 	}
 	return redacted
-}
-
-async function verificationAction(label: string): Promise<'retry' | 'replace' | 'stop'> {
-	for (;;) {
-		const action = (
-			await question(`${label} was not verified. Type "retry", "replace", or "stop" (no default)`)
-		).toLowerCase()
-		if (action === 'retry' || action === 'replace' || action === 'stop') return action
-		reportStatus('Enter exactly "retry", "replace", or "stop"; no action is preselected.')
-	}
-}
-
-async function replacement(
-	path: readonly string[],
-	label: string,
-	options: { secret?: boolean; validate?: (value: string) => boolean } = {}
-): Promise<string> {
-	for (;;) {
-		const answer = options.secret
-			? await secretQuestion(`${label} replacement`)
-			: await question(`${label} replacement`)
-		if (answer && (options.validate?.(answer) ?? true)) {
-			setValueAt(draft, path, answer)
-			saveDraft()
-			return answer
-		}
-		reportStatus('A valid replacement value is required.')
-	}
-}
-
-async function requiredVerified(
-	path: readonly string[],
-	label: string,
-	options: { secret?: boolean; validate?: (value: string) => boolean },
-	verify: (value: string) => Promise<void>
-): Promise<string> {
-	let candidate = await required(path, label, options)
-	for (;;) {
-		try {
-			await verify(candidate)
-			return candidate
-		} catch (error) {
-			const message = redactSecrets(error instanceof Error ? error.message : 'unknown failure')
-			reportFailure(`${label}: ${message}`)
-			const action = await verificationAction(label)
-			if (action === 'stop') throw error
-			if (action === 'replace') candidate = await replacement(path, label, options)
-		}
-	}
 }
 
 async function validateS3Credential(input: {
@@ -523,231 +441,561 @@ function validSmtpUrl(value: string): boolean {
 	}
 }
 
-async function collectInput(): Promise<BootstrapInput> {
-	setUiContext('Before you start', guidedBootstrapIntroduction(generated.deploymentPrefix))
-	for (;;) {
-		const start = (
-			await question('Type "start" to continue or "cancel" to stop (no default)')
-		).toLowerCase()
-		if (start === 'start') break
-		if (start === 'cancel') throw new CancelledError()
-		reportStatus('Enter exactly "start" or "cancel"; no choice is preselected.')
+interface WizardStep {
+	chapter: string
+	title: string
+	description: string | (() => string)
+	path: readonly string[]
+	label: string
+	info?: boolean
+	secret?: boolean
+	optional?: boolean
+	defaultValue?: string
+	integer?: boolean
+	validate?: (value: string) => string | undefined
+	verify?: (value: string) => Promise<void>
+	summary?: (value: string) => string
+	companion?: {
+		path: readonly string[]
+		label: string
+		secret?: boolean
+		optional?: boolean
+		validate?: (value: string) => string | undefined
 	}
-	setUiContext('Secret recovery', guidedBootstrapRecoveryNotice(inputPath, credentialsPath))
-	for (;;) {
-		const recoveryChoice = (
-			await question('Type "continue" to accept or "cancel" to stop (no default)')
-		).toLowerCase()
-		if (recoveryChoice === 'continue') break
-		if (recoveryChoice === 'cancel') throw new CancelledError()
-		reportStatus('Enter exactly "continue" or "cancel"; no choice is preselected.')
-	}
-	setUiContext(
-		'GitHub and local tools',
-		'Checking the authenticated GitHub administrator and the local Pulumi installation.'
-	)
-	await run('gh', ['auth', 'status'])
-	await run('pulumi', ['version'])
-	const repository = await required(['repository'], 'GitHub repository', {
-		defaultValue: 'MyAvenCEO/avenOS',
-		validate: (value) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)
-	})
-	const repositoryInfo = JSON.parse(
-		await run(
-			'gh',
-			[
-				'api',
-				`repos/${repository}`,
-				'--jq',
-				'{fullName: .full_name, defaultBranch: .default_branch, admin: .permissions.admin}'
-			],
-			true
-		)
-	) as { fullName?: string; defaultBranch?: string; admin?: boolean }
-	if (repositoryInfo.admin !== true)
-		throw new Error(`The authenticated GitHub account is not an administrator of ${repository}.`)
-	reportStatus(
-		`✓ GitHub repository: ${repositoryInfo.fullName ?? repository}; administrator access; default branch ${repositoryInfo.defaultBranch ?? 'unknown'}.\n`
-	)
-	const reviewer = await optional(['reviewer'], 'Optional second GitHub reviewer login')
-	if (reviewer) {
-		const resolvedReviewer = await run('gh', ['api', `users/${reviewer}`, '--jq', '.login'], true)
-		reportStatus(`✓ Optional deployment reviewer resolves to ${resolvedReviewer}.`)
-	}
+}
 
-	const projectId = await required(
-		['objectStorage', 'projectId'],
-		'Hetzner Object Storage project ID',
-		{ validate: (value) => /^\d+$/.test(value) }
-	)
-	const objectStorageRegion = await required(['objectStorage', 'region'], 'Object Storage region', {
-		defaultValue: 'hel1',
-		validate: (value) => ['fsn1', 'nbg1', 'hel1'].includes(value)
-	})
+async function navigateStep(
+	step: WizardStep,
+	initialValue: string | undefined,
+	companionInitialValue: string | undefined,
+	allowBack: boolean
+): Promise<{ direction: 'back' | 'next'; value: string; companionValue?: string }> {
+	if (tui) {
+		if (step.companion) {
+			const result = await tui.navigateFields({
+				label: 'Paste both values from the generated credential',
+				fields: [
+					{
+						key: 'primary',
+						label: `${step.label} > `,
+						initialValue: step.secret ? undefined : initialValue,
+						secret: step.secret
+					},
+					{
+						key: 'companion',
+						label: `${step.companion.label} > `,
+						initialValue: step.companion.secret ? undefined : companionInitialValue,
+						secret: step.companion.secret
+					}
+				],
+				allowBack
+			})
+			return {
+				direction: result.direction,
+				value: result.values.primary ?? '',
+				companionValue: result.values.companion ?? ''
+			}
+		}
+		const result = await tui.navigate({
+			label: step.label,
+			initialValue: step.secret ? undefined : initialValue,
+			secret: step.secret,
+			allowBack
+		})
+		return { ...result }
+	}
+	const suffix = step.secret || initialValue === undefined ? ': ' : ` [${initialValue}]: `
+	process.stdout.write(`${step.label}${allowBack ? ' (enter < to go back)' : ''}${suffix}`)
+	if (step.secret) setEcho(false)
+	try {
+		const answer = await readAnswer()
+		if (answer === '<' && allowBack) return { direction: 'back', value: '' }
+		if (!step.companion) return { direction: 'next', value: answer || initialValue || '' }
+		if (step.secret) restoreEcho()
+		process.stdout.write('\n')
+		const companionSuffix =
+			step.companion.secret || companionInitialValue === undefined
+				? ': '
+				: ` [${companionInitialValue}]: `
+		process.stdout.write(
+			`${step.companion.label}${allowBack ? ' (enter < to go back)' : ''}${companionSuffix}`
+		)
+		if (step.companion.secret) setEcho(false)
+		const companionAnswer = await readAnswer()
+		if (companionAnswer === '<' && allowBack) return { direction: 'back', value: '' }
+		return {
+			direction: 'next',
+			value: answer || initialValue || '',
+			companionValue: companionAnswer || companionInitialValue || ''
+		}
+	} finally {
+		if (step.secret || step.companion?.secret) {
+			restoreEcho()
+			process.stdout.write('\n')
+		}
+	}
+}
 
-	const consoleUrl = hetznerProjectConsoleUrl(projectId)
-	setUiContext(
-		'Hetzner Object Storage',
-		`Hetzner cannot create S3 credentials through an API.\nOpen ${consoleUrl}\nChoose Security → S3 Credentials → Generate credentials.\nOfficial instructions: https://docs.hetzner.com/storage/object-storage/getting-started/generating-s3-keys/\nKeep each result open until both values have been accepted here.`
-	)
-	for (const [index, step] of S3_CREDENTIAL_STEPS.entries()) {
-		setUiContext(
-			`S3 credential ${index + 1} of ${S3_CREDENTIAL_STEPS.length}`,
-			`Open ${consoleUrl}\nDescription: ${step.description}\nPurpose: ${step.purpose}\nBoth values are saved immediately and verified before advancing.`
-		)
-		let accessKeyId = await required(
-			[...step.path, 'accessKeyId'],
-			`${step.description} access key`,
-			{
-				secret: true
+function wizardSteps(): WizardStep[] {
+	const steps: WizardStep[] = [
+		{
+			chapter: 'Welcome',
+			title: 'Before you start',
+			description: guidedBootstrapIntroduction(generated.deploymentPrefix),
+			path: [],
+			label: '',
+			info: true
+		},
+		{
+			chapter: 'Welcome',
+			title: 'Credential recovery',
+			description: guidedBootstrapRecoveryNotice(inputPath, credentialsPath),
+			path: [],
+			label: '',
+			info: true,
+			verify: async () => {
+				await run('gh', ['auth', 'status'], true, 30_000)
+				const login = await run('gh', ['api', 'user', '--jq', '.login'], true, 30_000)
+				const pulumiVersion = await run('pulumi', ['version'], true, 30_000)
+				reportStatus(`✓ Account ${login}; Pulumi ${pulumiVersion}.`, 'GitHub')
 			}
-		)
-		let secretAccessKey = await required(
-			[...step.path, 'secretAccessKey'],
-			`${step.description} secret key`,
-			{
-				secret: true
-			}
-		)
-		for (;;) {
-			try {
-				await validateS3Credential({
-					label: step.description,
-					region: objectStorageRegion,
-					accessKeyId,
-					secretAccessKey
-				})
-				break
-			} catch (error) {
-				const message = redactSecrets(
-					error instanceof Error ? error.message : 'unknown Object Storage failure'
+		},
+		{
+			chapter: 'GitHub',
+			title: 'Repository administrator',
+			description:
+				'The authenticated GitHub account must administer the repository. The CLI checks the repository and reports its default branch.',
+			path: ['repository'],
+			label: 'Repository',
+			defaultValue: 'MyAvenCEO/avenOS',
+			validate: (value) =>
+				/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value) ? undefined : 'Use the owner/name form.',
+			verify: async (repository) => {
+				const repositoryInfo = JSON.parse(
+					await run(
+						'gh',
+						[
+							'api',
+							`repos/${repository}`,
+							'--jq',
+							'{fullName: .full_name, defaultBranch: .default_branch, admin: .permissions.admin}'
+						],
+						true
+					)
+				) as { fullName?: string; defaultBranch?: string; admin?: boolean }
+				if (repositoryInfo.admin !== true)
+					throw new Error(`The authenticated account is not an administrator of ${repository}.`)
+				reportStatus(
+					`✓ ${repositoryInfo.fullName ?? repository}: administrator access; default branch ${repositoryInfo.defaultBranch ?? 'unknown'}.`
 				)
-				reportFailure(`${step.description}: ${message}`)
-				const action = await verificationAction(step.description)
-				if (action === 'stop') throw error
-				if (action === 'replace') {
-					accessKeyId = await replacement(
-						[...step.path, 'accessKeyId'],
-						`${step.description} access key`,
-						{ secret: true }
-					)
-					secretAccessKey = await replacement(
-						[...step.path, 'secretAccessKey'],
-						`${step.description} secret key`,
-						{ secret: true }
-					)
-				}
 			}
+		},
+		{
+			chapter: 'GitHub',
+			title: 'Optional deployment reviewer',
+			description:
+				'Leave this empty for a solo installation. When set, this account must approve protected deployments and cannot be the initiating operator.',
+			path: ['reviewer'],
+			label: 'Reviewer login',
+			optional: true,
+			validate: (value) =>
+				!value || /^[A-Za-z0-9-]+$/.test(value) ? undefined : 'Enter a GitHub login.',
+			verify: async (reviewer) => {
+				if (!reviewer) return
+				const resolved = await run('gh', ['api', `users/${reviewer}`, '--jq', '.login'], true)
+				reportStatus(`✓ Reviewer account: ${resolved}.`)
+			}
+		},
+		{
+			chapter: 'Hetzner · Object Storage',
+			title: 'Storage region',
+			description:
+				'All six buckets use one Hetzner Object Storage region, while identity, next, and production remain in separate projects.',
+			path: ['objectStorage', 'region'],
+			label: 'Region',
+			defaultValue: 'hel1',
+			validate: (value) =>
+				['fsn1', 'nbg1', 'hel1'].includes(value) ? undefined : 'Choose fsn1, nbg1, or hel1.',
+			summary: (value) => `✓ Region ${value}; endpoint ${value}.your-objectstorage.com.`
+		}
+	]
+
+	for (const target of ['identity', 'next', 'production'] as const) {
+		steps.push({
+			chapter: 'Hetzner · Object Storage',
+			title: `avenOS ${target} Object Storage project`,
+			description: `Create or open this Hetzner project:\n  avenOS ${target}\n\nPaste its numeric project ID below. It is isolated to ${target} state and backups and must differ from the other two target projects.`,
+			path: ['objectStorage', 'targets', target, 'projectId'],
+			label: `${target} Object Storage project ID`,
+			validate: (value) => {
+				if (!/^\d+$/.test(value)) return 'The project ID must be numeric.'
+				const duplicate = (['identity', 'next', 'production'] as const).some(
+					(other) =>
+						other !== target &&
+						valueAt(draft, ['objectStorage', 'targets', other, 'projectId']) === value
+				)
+				return duplicate ? 'Choose a different project for every target.' : undefined
+			},
+			summary: (value) => `✓ ${target} project ${value}; ${hetznerS3CredentialsUrl(value)}.`
+		})
+		for (const credential of S3_CREDENTIAL_STEPS.filter((step) => step.target === target)) {
+			const context = () => {
+				const projectId = String(
+					valueAt(draft, ['objectStorage', 'targets', target, 'projectId']) ?? ''
+				)
+				return `Open: ${hetznerS3CredentialsUrl(projectId)}\nDescription: ${credential.description}\n\nGenerate the credential, then paste both values below. Keep the Hetzner result open until this check succeeds.\nPurpose: ${credential.purpose}`
+			}
+			steps.push({
+				chapter: `Hetzner · ${target} storage`,
+				title: credential.description,
+				description: context,
+				path: [...credential.path, 'accessKeyId'],
+				label: 'Access key',
+				secret: true,
+				validate: (value) =>
+					/^[A-Z0-9]{8,64}$/.test(value) ? undefined : 'This is not a Hetzner S3 access key.',
+				companion: {
+					path: [...credential.path, 'secretAccessKey'],
+					label: 'Secret key',
+					secret: true
+				},
+				verify: async () => {
+					await validateS3Credential({
+						label: credential.description,
+						region: String(valueAt(draft, ['objectStorage', 'region'])),
+						accessKeyId: String(valueAt(draft, [...credential.path, 'accessKeyId'])),
+						secretAccessKey: String(valueAt(draft, [...credential.path, 'secretAccessKey']))
+					})
+				}
+			})
 		}
 	}
 
 	for (const target of ['identity', 'next', 'production'] as const) {
-		setUiContext(
-			`Hetzner Cloud · ${target}`,
-			`Enter the write token for the ${target} Cloud project. A read-only server-list request confirms which project view it exposes.`
-		)
-		await requiredVerified(
-			['providers', target, 'computeToken'],
-			`Hetzner ${target} compute API token`,
-			{ secret: true },
-			(token) =>
-				validateHetznerToken(token, `Hetzner ${target} compute API token`, 'servers?per_page=1')
-		)
-	}
-	for (const target of ['next', 'production'] as const) {
-		setUiContext(
-			`Platform providers · ${target}`,
-			`Enter the ${target} DNS, Polar, and send-only SMTP credentials. Each non-mutating provider check must pass before advancing.`
-		)
-		await requiredVerified(
-			['providers', target, 'dnsToken'],
-			`Hetzner ${target} DNS token`,
-			{ secret: true },
-			(token) => validateHetznerToken(token, `Hetzner ${target} DNS token`, 'zones/aven.ceo')
-		)
-		let polarApiKey = await required(
-			['providers', target, 'polarApiKey'],
-			`Polar ${target} API key`,
-			{
-				secret: true
-			}
-		)
-		let polarOrganizationId = await required(
-			['providers', target, 'polarOrganizationId'],
-			`Polar ${target} organization ID`
-		)
-		for (;;) {
-			try {
-				await validatePolarCredential({
-					target,
-					apiKey: polarApiKey,
-					organizationId: polarOrganizationId
-				})
-				break
-			} catch (error) {
-				const message = redactSecrets(
-					error instanceof Error ? error.message : 'unknown Polar failure'
-				)
-				reportFailure(`Polar ${target}: ${message}`)
-				const action = await verificationAction(`Polar ${target} credentials`)
-				if (action === 'stop') throw error
-				if (action === 'replace') {
-					polarApiKey = await replacement(
-						['providers', target, 'polarApiKey'],
-						`Polar ${target} API key`,
-						{ secret: true }
-					)
-					polarOrganizationId = await replacement(
-						['providers', target, 'polarOrganizationId'],
-						`Polar ${target} organization ID`
-					)
-				}
-			}
-		}
-		const smtpUrl = await required(['providers', target, 'smtpUrl'], `SMTP ${target} URL`, {
+		steps.push({
+			chapter: 'Hetzner · Cloud',
+			title: `avenOS ${target} deployment`,
+			description: () =>
+				`Open ${hetznerProjectTokensUrl(String(valueAt(draft, ['objectStorage', 'targets', target, 'projectId'])))}\nCreate a read/write API token named "avenOS ${target} deployment" and paste it below. A read-only request reports the visible server count before the wizard advances.`,
+			path: ['providers', target, 'computeToken'],
+			label: 'Cloud API token',
 			secret: true,
-			validate: validSmtpUrl
+			verify: (token) =>
+				validateHetznerToken(token, `Hetzner ${target} compute token`, 'servers?per_page=1')
 		})
-		describeSmtpUrl(smtpUrl, target)
-		await required(['providers', target, 'smtpFrom'], `SMTP ${target} From address`)
-		await optional(['providers', target, 'smtpReplyTo'], `SMTP ${target} Reply-To address`)
 	}
-	await requiredVerified(
-		['providers', 'redpillApiKey'],
-		'RedPill API key',
-		{ secret: true },
-		async (apiKey) => {
-			const catalog = await fetchRedpillPhalaCatalog(fetch, apiKey)
-			const examples = catalog.slice(0, 3).map((model) => model.label)
-			reportStatus(
-				`✓ RedPill API key: authenticated catalog access; ${catalog.length} Phala-hosted model(s)${examples.length === 0 ? '' : `, including ${examples.join(', ')}`}.\n`
-			)
+
+	steps.push({
+		chapter: 'Hetzner · DNS',
+		title: 'aven.ceo DNS project',
+		description:
+			'Open the Hetzner project that already contains the aven.ceo DNS zone and paste its numeric project ID. Both deployment environments use separate tokens from this one shared project.',
+		path: ['providers', 'dnsProjectId'],
+		label: 'DNS project ID',
+		validate: (value) => (/^\d+$/.test(value) ? undefined : 'The project ID must be numeric.'),
+		summary: (value) => `✓ aven.ceo DNS project ${value}; ${hetznerProjectTokensUrl(value)}.`
+	})
+
+	for (const target of ['next', 'production'] as const) {
+		steps.push(
+			{
+				chapter: 'Hetzner · DNS',
+				title: `avenOS ${target} DNS deployment`,
+				description: () =>
+					`Open ${hetznerProjectTokensUrl(String(valueAt(draft, ['providers', 'dnsProjectId'])))}\nCreate a read/write token named "avenOS ${target} DNS deployment" in this shared DNS project and paste it below. The wizard resolves the exact aven.ceo zone and displays its provider ID.`,
+				path: ['providers', target, 'dnsToken'],
+				label: 'DNS API token',
+				secret: true,
+				verify: (token) =>
+					validateHetznerToken(token, `Hetzner ${target} DNS token`, 'zones/aven.ceo')
+			},
+			{
+				chapter: 'Polar',
+				title: `avenOS ${target} bootstrap`,
+				description: `Open ${target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh'}\nIn the ${target === 'next' ? 'sandbox' : 'live'} organization, create an API key named "avenOS ${target} bootstrap" with organization read and product/webhook read-write access. Paste it below.`,
+				path: ['providers', target, 'polarApiKey'],
+				label: 'Polar API key',
+				secret: true
+			},
+			{
+				chapter: 'Polar',
+				title: `${target} organization`,
+				description:
+					'The wizard combines this ID with the preceding API key and reports the organization name, slug, product count, and webhook count.',
+				path: ['providers', target, 'polarOrganizationId'],
+				label: 'Organization ID',
+				verify: (organizationId) =>
+					validatePolarCredential({
+						target,
+						apiKey: String(valueAt(draft, ['providers', target, 'polarApiKey'])),
+						organizationId
+					})
+			},
+			{
+				chapter: 'Email',
+				title: `avenOS ${target} SMTP`,
+				description: `Create a send-only SMTP credential. If the provider asks for a name, use "avenOS ${target} SMTP". Paste a complete smtp:// or smtps:// URL containing its username and password; the endpoint structure is checked without sending mail.`,
+				path: ['providers', target, 'smtpUrl'],
+				label: 'SMTP URL',
+				secret: true,
+				validate: (value) => (validSmtpUrl(value) ? undefined : 'Enter a complete SMTP URL.'),
+				summary: (value) => {
+					describeSmtpUrl(value, target)
+					return ''
+				}
+			},
+			{
+				chapter: 'Email',
+				title: `${target} sender`,
+				description: 'This is the From address customers see on checkout and account email.',
+				path: ['providers', target, 'smtpFrom'],
+				label: 'From address'
+			},
+			{
+				chapter: 'Email',
+				title: `${target} reply address`,
+				description: 'Optional. Leave this empty when replies should use the From address.',
+				path: ['providers', target, 'smtpReplyTo'],
+				label: 'Reply-To address',
+				optional: true
+			}
+		)
+	}
+
+	steps.push(
+		{
+			chapter: 'AI models',
+			title: 'avenOS chat bootstrap',
+			description:
+				'Open https://redpill.ai\nCreate an active, funded key named "avenOS chat bootstrap" and paste it below. The authenticated model catalog is filtered to Phala-hosted chat models and summarized before advancing.',
+			path: ['providers', 'redpillApiKey'],
+			label: 'RedPill API key',
+			secret: true,
+			verify: async (apiKey) => {
+				const catalog = await fetchRedpillPhalaCatalog(fetch, apiKey)
+				const examples = catalog.slice(0, 3).map((model) => model.label)
+				reportStatus(
+					`✓ ${catalog.length} Phala-hosted model(s)${examples.length ? `, including ${examples.join(', ')}` : ''}.`
+				)
+			}
+		},
+		{
+			chapter: 'Client release',
+			title: 'Android signing identity',
+			description:
+				'Optional. Add production Android certificate SHA-256 fingerprints for verified app links.',
+			path: ['providers', 'production', 'androidAppCertSha256Fingerprints'],
+			label: 'Certificate fingerprints',
+			optional: true
 		}
-	)
-	await optional(
-		['providers', 'production', 'androidAppCertSha256Fingerprints'],
-		'Production Android certificate SHA-256 fingerprints'
 	)
 
-	await required(['defaults', 'hetznerLocation'], 'Hetzner server location', {
-		defaultValue: 'hel1'
-	})
-	await required(['defaults', 'hetznerServerType'], 'Hetzner server type', {
-		defaultValue: 'cpx32'
-	})
-	await required(['defaults', 'hetznerOsImage'], 'Hetzner OS image', {
-		defaultValue: 'ubuntu-24.04'
-	})
-	await requiredInteger(['defaults', 'identityVolumeSizeGb'], 'Identity volume GiB', 40, 20)
-	await requiredInteger(['defaults', 'platformVolumeSizeGb'], 'Platform volume GiB', 80, 20)
-	await required(['defaults', 'sshAllowedCidrs'], 'SSH allowed CIDRs', {
-		defaultValue: '0.0.0.0/0,::/0'
-	})
-	await required(['defaults', 'acmeEmail'], 'ACME certificate contact email')
-	await required(['defaults', 'downloadUrl'], 'Client download URL', {
-		defaultValue: 'https://github.com/MyAvenCEO/avenOS/releases/latest',
-		validate: (value) => value.startsWith('https://')
-	})
+	for (const step of [
+		{
+			title: 'Server location',
+			path: ['defaults', 'hetznerLocation'],
+			label: 'Hetzner location',
+			defaultValue: 'hel1',
+			description: 'Default location for all three hosts and their attached volumes.'
+		},
+		{
+			title: 'Server size',
+			path: ['defaults', 'hetznerServerType'],
+			label: 'Hetzner server type',
+			defaultValue: 'cpx32',
+			description: 'Default compute shape for identity, next, and production.'
+		},
+		{
+			title: 'Operating system',
+			path: ['defaults', 'hetznerOsImage'],
+			label: 'Hetzner OS image',
+			defaultValue: 'ubuntu-24.04',
+			description: 'Supported base image used by the fresh-host Pulumi program.'
+		},
+		{
+			title: 'Identity volume',
+			path: ['defaults', 'identityVolumeSizeGb'],
+			label: 'Identity volume GiB',
+			defaultValue: '40',
+			integer: true,
+			validate: (value: string) =>
+				Number.isSafeInteger(Number(value)) && Number(value) >= 20
+					? undefined
+					: 'Enter an integer of at least 20.',
+			description: 'Persistent volume for shared identity data.'
+		},
+		{
+			title: 'Platform volumes',
+			path: ['defaults', 'platformVolumeSizeGb'],
+			label: 'Platform volume GiB',
+			defaultValue: '80',
+			integer: true,
+			validate: (value: string) =>
+				Number.isSafeInteger(Number(value)) && Number(value) >= 20
+					? undefined
+					: 'Enter an integer of at least 20.',
+			description: 'Persistent volume size used independently by next and production.'
+		},
+		{
+			title: 'SSH network access',
+			path: ['defaults', 'sshAllowedCidrs'],
+			label: 'Allowed CIDRs',
+			defaultValue: '0.0.0.0/0,::/0',
+			description:
+				'GitHub-hosted runners use changing source addresses. SSH still requires generated role keys and forced commands.'
+		},
+		{
+			title: 'Certificate contact',
+			path: ['defaults', 'acmeEmail'],
+			label: 'ACME email',
+			validate: (value: string) => (value.includes('@') ? undefined : 'Enter an email address.'),
+			description: 'Contact address used for automatic TLS certificate issuance.'
+		},
+		{
+			title: 'Client download',
+			path: ['defaults', 'downloadUrl'],
+			label: 'Download URL',
+			defaultValue: 'https://github.com/MyAvenCEO/avenOS/releases/latest',
+			validate: (value: string) =>
+				value.startsWith('https://') ? undefined : 'The download URL must use HTTPS.',
+			description: 'Public link checkout and account surfaces use for current client downloads.'
+		}
+	] satisfies Array<Omit<WizardStep, 'chapter'>>) {
+		steps.push({ chapter: 'Infrastructure defaults', ...step })
+	}
+	return steps
+}
+
+async function collectInput(): Promise<BootstrapInput> {
+	const steps = wizardSteps()
+	const stationLabels = steps
+		.filter((step) => !step.info)
+		.map((step) => `${step.title} · ${step.chapter}`)
+	let index = 0
+	while (index < steps.length) {
+		const step = steps[index] as WizardStep
+		if (step.info) {
+			setUiContext(
+				step.chapter,
+				step.title,
+				typeof step.description === 'function' ? step.description() : step.description
+			)
+			let direction: 'back' | 'next' = 'next'
+			if (tui) {
+				const action = await tui.choose({
+					label: '',
+					allowBack: index > 0,
+					options: [{ label: 'Next >', value: 'next' }]
+				})
+				direction = action === 'back' ? 'back' : 'next'
+			} else {
+				process.stdout.write(
+					index > 0 ? '\nPress Enter for Next, or type < for Back.\n' : '\nPress Enter for Next.\n'
+				)
+				direction = (await readAnswer()) === '<' && index > 0 ? 'back' : 'next'
+			}
+			if (direction === 'back') {
+				index -= 1
+				continue
+			}
+			if (step.verify) {
+				try {
+					await withProgress('Checking GitHub login and Pulumi…', async () => {
+						await step.verify?.('')
+					})
+				} catch (error) {
+					if (error instanceof TuiInterruptedError) throw error
+					const message = redactSecrets(error instanceof Error ? error.message : 'check failed')
+					reportFailure(message)
+					continue
+				}
+			}
+			index += 1
+			continue
+		}
+		const existing = valueAt(draft, step.path)
+		const existingText =
+			typeof existing === 'string' || typeof existing === 'number' ? String(existing) : ''
+		const companionExisting = step.companion ? valueAt(draft, step.companion.path) : undefined
+		const companionExistingText =
+			typeof companionExisting === 'string' || typeof companionExisting === 'number'
+				? String(companionExisting)
+				: ''
+		const initialValue = existingText || step.defaultValue
+		const current = step.companion
+			? existingText || companionExistingText
+				? 'Saved values remain hidden. Leave either field empty to keep its saved value.'
+				: 'Both values are required.'
+			: existingText
+				? step.secret
+					? 'A saved value is present and remains hidden. Leave the field empty to keep and recheck it.'
+					: `Current value: ${existingText}.`
+				: step.defaultValue
+					? `Suggested value: ${step.defaultValue}.`
+					: step.optional
+						? 'This value is optional.'
+						: ''
+		const actionProgress = actionableWizardProgress(steps, index)
+		setUiContext(
+			step.chapter,
+			step.title,
+			`${typeof step.description === 'function' ? step.description() : step.description}\n\n${current}`,
+			actionProgress ? { ...actionProgress, stations: stationLabels } : undefined
+		)
+		const result = await navigateStep(step, initialValue, companionExistingText, index > 0)
+		if (result.direction === 'back') {
+			index -= 1
+			continue
+		}
+		let candidate = result.value
+		if (step.secret && !candidate && existingText) candidate = existingText
+		if (!candidate && step.defaultValue) candidate = step.defaultValue
+		let companionCandidate = result.companionValue ?? ''
+		if (step.companion?.secret && !companionCandidate && companionExistingText)
+			companionCandidate = companionExistingText
+		if (!candidate && !step.optional) {
+			reportFailure(`${step.label}: a value is required.`)
+			continue
+		}
+		const invalid = step.validate?.(candidate)
+		if (invalid) {
+			reportFailure(`${step.label}: ${invalid}`)
+			continue
+		}
+		if (step.companion && !companionCandidate && !step.companion.optional) {
+			reportFailure(`${step.companion.label}: a value is required.`)
+			continue
+		}
+		const companionInvalid = step.companion?.validate?.(companionCandidate)
+		if (companionInvalid) {
+			reportFailure(`${step.companion?.label}: ${companionInvalid}`)
+			continue
+		}
+		setValueAt(
+			draft,
+			step.path,
+			candidate ? (step.integer ? Number(candidate) : candidate) : undefined
+		)
+		if (step.companion) setValueAt(draft, step.companion.path, companionCandidate || undefined)
+		saveDraft()
+		try {
+			if (step.verify)
+				await withProgress(`Checking ${step.title}…`, async () => {
+					await step.verify?.(candidate)
+				})
+		} catch (error) {
+			if (error instanceof TuiInterruptedError) throw error
+			const message = redactSecrets(error instanceof Error ? error.message : 'verification failed')
+			const punctuation = /[.!?]$/.test(message) ? '' : '.'
+			reportFailure(
+				`${step.companion ? 'Credential' : step.label}: ${message}${punctuation} Correct the value${step.companion ? 's' : ''} and try again.`
+			)
+			continue
+		}
+		const summary = step.summary?.(candidate)
+		if (summary) reportStatus(summary)
+		index += 1
+	}
 
 	validateBootstrapInput(draft)
 	return draft
@@ -756,31 +1004,53 @@ async function collectInput(): Promise<BootstrapInput> {
 try {
 	if (!existsSync(inputPath) || !existsSync(credentialsPath)) saveDraft()
 	await collectInput()
-	process.stdout.write('\nValidating the complete plan without changing providers…\n')
-	await run(process.execPath, [
-		resolve(root, 'scripts/deployment-bootstrap.ts'),
-		'--input',
-		inputPath,
-		'--output',
-		outputDirectory,
-		'--dry-run'
-	])
-	const apply = (await question('Apply this bootstrap now?', 'yes')).toLowerCase()
-	if (!['y', 'yes'].includes(apply)) {
-		process.stdout.write(
-			`SUCCESS: plan validated without provider changes. Resume with ${outputDirectory}\nCredentials: ${credentialsPath}\n`
-		)
-	} else {
-		await run(
+	setUiContext('Review', 'Validating the plan', 'No provider state changes while this check runs.')
+	await withProgress('Validating the complete deployment plan…', () =>
+		run(
 			process.execPath,
 			[
 				resolve(root, 'scripts/deployment-bootstrap.ts'),
 				'--input',
 				inputPath,
 				'--output',
-				outputDirectory
+				outputDirectory,
+				'--dry-run'
 			],
 			true
+		)
+	)
+	setUiContext(
+		'Review',
+		'Plan validated',
+		'The complete input is valid. Apply creates six buckets across three projects, Polar webhooks, generated credentials, and namespaced GitHub Environments.'
+	)
+	const apply = tui
+		? await tui.choose({
+				label: 'Choose the next action',
+				options: [
+					{ label: 'Apply now', value: 'apply' },
+					{ label: 'Stop after validation', value: 'stop' }
+				]
+			})
+		: (await question('Apply this bootstrap now?', 'yes')).toLowerCase()
+	if (!['apply', 'y', 'yes'].includes(apply)) {
+		process.stdout.write(
+			`SUCCESS: plan validated without provider changes. Resume with ${outputDirectory}\nCredentials: ${credentialsPath}\n`
+		)
+	} else {
+		setUiContext('Review', 'Applying the bootstrap', 'Provider changes are now in progress.')
+		await withProgress('Creating and reconciling provider resources…', () =>
+			run(
+				process.execPath,
+				[
+					resolve(root, 'scripts/deployment-bootstrap.ts'),
+					'--input',
+					inputPath,
+					'--output',
+					outputDirectory
+				],
+				true
+			)
 		)
 		promoteCompletedCredentials()
 		process.stdout.write(
@@ -798,6 +1068,7 @@ try {
 	)
 	if (tui)
 		tui.setContext(
+			'Recovery',
 			'Bootstrap stopped',
 			`ERROR: ${message}\n\nChoose whether to preserve the owner-only credential artifacts for a retry or delete them. Deletion prevents resume.`
 		)

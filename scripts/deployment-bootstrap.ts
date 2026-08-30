@@ -7,6 +7,7 @@ import {
 	githubConfiguration,
 	githubEnvironmentProtection,
 	loadOrCreateGeneratedSecrets,
+	objectStorageBucketName,
 	PULUMI_ORGANIZATION,
 	recoveryCsv,
 	saveGeneratedSecrets,
@@ -84,84 +85,77 @@ async function run(
 	return stdout.trim()
 }
 
-const bootstrapEnvironment = {
-	PULUMI_CONFIG_PASSPHRASE: generated.bootstrapPulumiPassphrase,
-	AWS_ACCESS_KEY_ID: input.objectStorage.bootstrapCredential.accessKeyId,
-	AWS_SECRET_ACCESS_KEY: input.objectStorage.bootstrapCredential.secretAccessKey,
-	AWS_REGION: input.objectStorage.region,
-	AWS_DEFAULT_REGION: input.objectStorage.region,
-	AWS_EC2_METADATA_DISABLED: 'true',
-	OBJECT_STORAGE_PROJECT_ID: input.objectStorage.projectId,
-	OBJECT_STORAGE_REGION: input.objectStorage.region,
-	OBJECT_STORAGE_BUCKET_PREFIX: `${generated.deploymentPrefix}-${input.objectStorage.projectId}`,
-	BOOTSTRAP_S3_ACCESS_KEY_ID: input.objectStorage.bootstrapCredential.accessKeyId,
-	BOOTSTRAP_S3_SECRET_ACCESS_KEY: input.objectStorage.bootstrapCredential.secretAccessKey,
-	...Object.fromEntries(
-		TARGETS.flatMap((target) => {
-			const storage = input.objectStorage.targets[target]
-			return [
-				[
-					`${target.toUpperCase()}_DEPLOYMENT_S3_ACCESS_KEY_ID`,
-					storage.deploymentCredential.accessKeyId
-				],
-				[
-					`${target.toUpperCase()}_OBSERVER_S3_ACCESS_KEY_ID`,
-					storage.observerCredential.accessKeyId
-				]
-			]
-		})
-	)
-}
-const stack = `${PULUMI_ORGANIZATION}/aven-bootstrap/foundation`
 const bootstrapCwd = resolve(root, 'infrastructure/bootstrap')
-const remoteBackend = `s3://${generated.deploymentPrefix}-${input.objectStorage.projectId}-identity-state/avenos/bootstrap?endpoint=${input.objectStorage.region}.your-objectstorage.com&region=${input.objectStorage.region}&s3ForcePathStyle=true&awssdk=v2`
-const migratedMarker = resolve(outputDirectory, 'bootstrap.remote')
+const localBackend = `file://${resolve(outputDirectory, 'pulumi-state')}`
 
-if (!existsSync(migratedMarker)) {
-	const localBackend = `file://${resolve(outputDirectory, 'pulumi-state')}`
-	await run('pulumi', ['login', localBackend], { env: bootstrapEnvironment })
-	try {
-		await run('pulumi', ['stack', 'init', stack, '--cwd', bootstrapCwd], {
-			env: bootstrapEnvironment,
-			quiet: true
+for (const target of TARGETS) {
+	const storage = input.objectStorage.targets[target]
+	const bootstrapEnvironment = {
+		PULUMI_CONFIG_PASSPHRASE: generated.targets[target].bootstrapPulumiPassphrase,
+		AWS_ACCESS_KEY_ID: storage.bootstrapCredential.accessKeyId,
+		AWS_SECRET_ACCESS_KEY: storage.bootstrapCredential.secretAccessKey,
+		AWS_REGION: input.objectStorage.region,
+		AWS_DEFAULT_REGION: input.objectStorage.region,
+		AWS_EC2_METADATA_DISABLED: 'true',
+		OBJECT_STORAGE_TARGET: target,
+		OBJECT_STORAGE_PROJECT_ID: storage.projectId,
+		OBJECT_STORAGE_REGION: input.objectStorage.region,
+		OBJECT_STORAGE_BUCKET_PREFIX: generated.deploymentPrefix,
+		BOOTSTRAP_S3_ACCESS_KEY_ID: storage.bootstrapCredential.accessKeyId,
+		BOOTSTRAP_S3_SECRET_ACCESS_KEY: storage.bootstrapCredential.secretAccessKey,
+		DEPLOYMENT_S3_ACCESS_KEY_ID: storage.deploymentCredential.accessKeyId,
+		OBSERVER_S3_ACCESS_KEY_ID: storage.observerCredential.accessKeyId
+	}
+	const stack = `${PULUMI_ORGANIZATION}/aven-bootstrap/${target}`
+	const stateBucket = objectStorageBucketName(input, generated, target, 'state')
+	const remoteBackend = `s3://${stateBucket}/avenos/bootstrap?endpoint=${input.objectStorage.region}.your-objectstorage.com&region=${input.objectStorage.region}&s3ForcePathStyle=true&awssdk=v2`
+	const migratedMarker = resolve(outputDirectory, `bootstrap.${target}.remote`)
+
+	if (!existsSync(migratedMarker)) {
+		await run('pulumi', ['login', localBackend], { env: bootstrapEnvironment })
+		try {
+			await run('pulumi', ['stack', 'init', stack, '--cwd', bootstrapCwd], {
+				env: bootstrapEnvironment,
+				quiet: true
+			})
+		} catch {
+			await run('pulumi', ['stack', 'select', stack, '--cwd', bootstrapCwd], {
+				env: bootstrapEnvironment
+			})
+		}
+		await run('pulumi', ['up', '--yes', '--stack', stack, '--cwd', bootstrapCwd], {
+			env: bootstrapEnvironment
 		})
-	} catch {
-		await run('pulumi', ['stack', 'select', stack, '--cwd', bootstrapCwd], {
+		const exportPath = resolve(outputDirectory, `bootstrap-state-${target}.json`)
+		await run(
+			'pulumi',
+			['stack', 'export', '--stack', stack, '--cwd', bootstrapCwd, '--file', exportPath],
+			{ env: bootstrapEnvironment }
+		)
+		chmodSync(exportPath, 0o600)
+		await run('pulumi', ['login', remoteBackend], { env: bootstrapEnvironment })
+		try {
+			await run('pulumi', ['stack', 'init', stack, '--cwd', bootstrapCwd], {
+				env: bootstrapEnvironment,
+				quiet: true
+			})
+		} catch {
+			await run('pulumi', ['stack', 'select', stack, '--cwd', bootstrapCwd], {
+				env: bootstrapEnvironment
+			})
+		}
+		await run(
+			'pulumi',
+			['stack', 'import', '--stack', stack, '--cwd', bootstrapCwd, '--file', exportPath],
+			{ env: bootstrapEnvironment }
+		)
+		writeFileSync(migratedMarker, `${remoteBackend}\n`, { mode: 0o600, flag: 'wx' })
+	} else {
+		await run('pulumi', ['login', remoteBackend], { env: bootstrapEnvironment })
+		await run('pulumi', ['up', '--yes', '--stack', stack, '--cwd', bootstrapCwd], {
 			env: bootstrapEnvironment
 		})
 	}
-	await run('pulumi', ['up', '--yes', '--stack', stack, '--cwd', bootstrapCwd], {
-		env: bootstrapEnvironment
-	})
-	const exportPath = resolve(outputDirectory, 'bootstrap-state.json')
-	await run(
-		'pulumi',
-		['stack', 'export', '--stack', stack, '--cwd', bootstrapCwd, '--file', exportPath],
-		{ env: bootstrapEnvironment }
-	)
-	chmodSync(exportPath, 0o600)
-	await run('pulumi', ['login', remoteBackend], { env: bootstrapEnvironment })
-	try {
-		await run('pulumi', ['stack', 'init', stack, '--cwd', bootstrapCwd], {
-			env: bootstrapEnvironment,
-			quiet: true
-		})
-	} catch {
-		await run('pulumi', ['stack', 'select', stack, '--cwd', bootstrapCwd], {
-			env: bootstrapEnvironment
-		})
-	}
-	await run(
-		'pulumi',
-		['stack', 'import', '--stack', stack, '--cwd', bootstrapCwd, '--file', exportPath],
-		{ env: bootstrapEnvironment }
-	)
-	writeFileSync(migratedMarker, `${remoteBackend}\n`, { mode: 0o600, flag: 'wx' })
-} else {
-	await run('pulumi', ['login', remoteBackend], { env: bootstrapEnvironment })
-	await run('pulumi', ['up', '--yes', '--stack', stack, '--cwd', bootstrapCwd], {
-		env: bootstrapEnvironment
-	})
 }
 
 generated.polarWebhooks ??= {}

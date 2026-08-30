@@ -14,12 +14,15 @@ export interface BootstrapInput {
 	repository: string
 	reviewer?: string
 	objectStorage: {
-		projectId: string
 		region: 'fsn1' | 'nbg1' | 'hel1'
-		bootstrapCredential: S3Credential
 		targets: Record<
 			Target,
-			{ deploymentCredential: S3Credential; observerCredential: S3Credential }
+			{
+				projectId: string
+				bootstrapCredential: S3Credential
+				deploymentCredential: S3Credential
+				observerCredential: S3Credential
+			}
 		>
 	}
 	defaults: {
@@ -33,6 +36,7 @@ export interface BootstrapInput {
 		downloadUrl: string
 	}
 	providers: {
+		dnsProjectId: string
 		identity: { computeToken: string }
 		next: {
 			computeToken: string
@@ -59,8 +63,10 @@ export interface BootstrapInput {
 
 export interface GeneratedSecrets {
 	deploymentPrefix: string
-	bootstrapPulumiPassphrase: string
-	targets: Record<Target, { pulumiPassphrase: string; resticPassword: string }>
+	targets: Record<
+		Target,
+		{ bootstrapPulumiPassphrase: string; pulumiPassphrase: string; resticPassword: string }
+	>
 	polarWebhooks?: Partial<Record<'next' | 'production', PolarWebhookRecord>>
 }
 
@@ -92,8 +98,6 @@ export function validateBootstrapInput(value: unknown): asserts value is Bootstr
 	if (input.reviewer !== undefined && !/^[A-Za-z0-9-]+$/.test(stringAt(input.reviewer, 'reviewer')))
 		throw new Error('reviewer must be a GitHub user login when provided.')
 	const storage = objectAt(input.objectStorage, 'objectStorage')
-	if (!/^\d+$/.test(stringAt(storage.projectId, 'objectStorage.projectId')))
-		throw new Error('objectStorage.projectId must be numeric.')
 	if (!['fsn1', 'nbg1', 'hel1'].includes(stringAt(storage.region, 'objectStorage.region')))
 		throw new Error('objectStorage.region must be fsn1, nbg1, or hel1.')
 	const credential = (candidate: unknown, path: string) => {
@@ -101,10 +105,20 @@ export function validateBootstrapInput(value: unknown): asserts value is Bootstr
 		stringAt(item.accessKeyId, `${path}.accessKeyId`)
 		stringAt(item.secretAccessKey, `${path}.secretAccessKey`)
 	}
-	credential(storage.bootstrapCredential, 'objectStorage.bootstrapCredential')
 	const storageTargets = objectAt(storage.targets, 'objectStorage.targets')
+	const projectIds = new Set<string>()
 	for (const target of TARGETS) {
 		const targetStorage = objectAt(storageTargets[target], `objectStorage.targets.${target}`)
+		const projectId = stringAt(targetStorage.projectId, `objectStorage.targets.${target}.projectId`)
+		if (!/^\d+$/.test(projectId))
+			throw new Error(`objectStorage.targets.${target}.projectId must be numeric.`)
+		if (projectIds.has(projectId))
+			throw new Error('Every Object Storage target must use a different Hetzner project.')
+		projectIds.add(projectId)
+		credential(
+			targetStorage.bootstrapCredential,
+			`objectStorage.targets.${target}.bootstrapCredential`
+		)
 		credential(
 			targetStorage.deploymentCredential,
 			`objectStorage.targets.${target}.deploymentCredential`
@@ -134,6 +148,8 @@ export function validateBootstrapInput(value: unknown): asserts value is Bootstr
 			throw new Error(`defaults.${name} must use HTTPS.`)
 	}
 	const providers = objectAt(input.providers, 'providers')
+	const dnsProjectId = stringAt(providers.dnsProjectId, 'providers.dnsProjectId')
+	if (!/^\d+$/.test(dnsProjectId)) throw new Error('providers.dnsProjectId must be numeric.')
 	stringAt(providers.redpillApiKey, 'providers.redpillApiKey')
 	const identity = objectAt(providers.identity, 'providers.identity')
 	stringAt(identity.computeToken, 'providers.identity.computeToken')
@@ -157,11 +173,14 @@ export function validateBootstrapInput(value: unknown): asserts value is Bootstr
 export function generateBootstrapSecrets(): GeneratedSecrets {
 	return {
 		deploymentPrefix: `avenos-${randomBytes(5).toString('hex')}`,
-		bootstrapPulumiPassphrase: password(),
 		targets: Object.fromEntries(
 			TARGETS.map((target) => [
 				target,
-				{ pulumiPassphrase: password(), resticPassword: password() }
+				{
+					bootstrapPulumiPassphrase: password(),
+					pulumiPassphrase: password(),
+					resticPassword: password()
+				}
 			])
 		) as GeneratedSecrets['targets']
 	}
@@ -180,6 +199,7 @@ export function loadOrCreateGeneratedSecrets(path: string): GeneratedSecrets {
 			throw new Error(`${path} contains an invalid deployment namespace.`)
 		for (const target of TARGETS) {
 			if (
+				!generated.targets?.[target]?.bootstrapPulumiPassphrase ||
 				!generated.targets?.[target]?.pulumiPassphrase ||
 				!generated.targets[target].resticPassword
 			)
@@ -230,23 +250,23 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 		'',
 		'Prefixes the active GitHub Environments and identifies this infrastructure generation.'
 	)
-	add(
-		'bootstrap',
-		'avenOS bootstrap Pulumi passphrase',
-		'',
-		generated.bootstrapPulumiPassphrase,
-		'Encrypts the bootstrap stack state.'
-	)
-	add(
-		'bootstrap',
-		'avenOS Object Storage bootstrap',
-		input.objectStorage.bootstrapCredential.accessKeyId,
-		input.objectStorage.bootstrapCredential.secretAccessKey,
-		`Offline administrator for project ${input.objectStorage.projectId}; never add to GitHub.`,
-		`https://console.hetzner.com/projects/${input.objectStorage.projectId}/servers`
-	)
 	for (const target of TARGETS) {
 		const storage = input.objectStorage.targets[target]
+		add(
+			target,
+			`avenOS ${target} bootstrap Pulumi passphrase`,
+			'',
+			generated.targets[target].bootstrapPulumiPassphrase,
+			`Encrypts the isolated ${target} storage-bootstrap state.`
+		)
+		add(
+			target,
+			`avenOS ${target} bootstrap administrator`,
+			storage.bootstrapCredential.accessKeyId,
+			storage.bootstrapCredential.secretAccessKey,
+			`Offline administrator for ${target} project ${storage.projectId}; never add to GitHub.`,
+			`https://console.hetzner.com/projects/${storage.projectId}/security/s3-credentials`
+		)
 		add(
 			target,
 			`avenOS ${target} Pulumi passphrase`,
@@ -266,22 +286,24 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 			`avenOS ${target} deployment storage`,
 			storage.deploymentCredential.accessKeyId,
 			storage.deploymentCredential.secretAccessKey,
-			'Writes this target state and backup buckets only.'
+			'Writes this target state and backup buckets only.',
+			`https://console.hetzner.com/projects/${storage.projectId}/security/s3-credentials`
 		)
 		add(
 			target,
 			`avenOS ${target} observer storage`,
 			storage.observerCredential.accessKeyId,
 			storage.observerCredential.secretAccessKey,
-			'Reads this target state bucket only.'
+			'Reads this target state bucket only.',
+			`https://console.hetzner.com/projects/${storage.projectId}/security/s3-credentials`
 		)
 		add(
 			target,
-			`avenOS ${target} Hetzner compute token`,
+			`avenOS ${target} deployment (Hetzner Cloud token)`,
 			'',
 			input.providers[target].computeToken,
 			'Target-scoped compute API token.',
-			'https://console.hetzner.com/projects'
+			`https://console.hetzner.com/projects/${storage.projectId}/security/tokens`
 		)
 	}
 	for (const target of ['next', 'production'] as const) {
@@ -290,19 +312,19 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 		if (!webhook) throw new Error(`Polar ${target} webhook has not been provisioned.`)
 		add(
 			target,
-			`avenOS ${target} Hetzner DNS token`,
+			`avenOS ${target} DNS deployment (Hetzner DNS token)`,
 			'',
 			provider.dnsToken,
-			'Writes the aven.ceo DNS zone.',
-			'https://console.hetzner.com/projects'
+			`Writes the shared aven.ceo DNS zone in Hetzner project ${input.providers.dnsProjectId}.`,
+			`https://console.hetzner.com/projects/${input.providers.dnsProjectId}/security/tokens`
 		)
 		add(
 			target,
-			`avenOS ${target} Polar API key`,
+			`avenOS ${target} bootstrap (Polar API key)`,
 			provider.polarOrganizationId,
 			provider.polarApiKey,
 			`Polar ${target} organization API key.`,
-			'https://polar.sh'
+			target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh'
 		)
 		add(
 			target,
@@ -312,13 +334,7 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 			`Verifies every raw Polar webhook delivery sent to ${webhook.url}.`,
 			webhook.url
 		)
-		add(
-			target,
-			`avenOS ${target} SMTP URL`,
-			'',
-			provider.smtpUrl,
-			'Send-only checkout mail transport.'
-		)
+		add(target, `avenOS ${target} SMTP`, '', provider.smtpUrl, 'Send-only checkout mail transport.')
 	}
 	add(
 		'shared',
@@ -342,9 +358,17 @@ export function writeRecoveryCsv(path: string, contents: string): void {
 const backend = (bucket: string, region: string) =>
 	`s3://${bucket}/avenos/platform?endpoint=${region}.your-objectstorage.com&region=${region}&s3ForcePathStyle=true&awssdk=v2`
 
+export function objectStorageBucketName(
+	input: BootstrapInput,
+	generated: GeneratedSecrets,
+	target: Target,
+	kind: 'state' | 'backup'
+): string {
+	return `${generated.deploymentPrefix}-${input.objectStorage.targets[target].projectId}-${target}-${kind}`
+}
+
 export function githubConfiguration(input: BootstrapInput, generated: GeneratedSecrets) {
 	const region = input.objectStorage.region
-	const bucketPrefix = `${generated.deploymentPrefix}-${input.objectStorage.projectId}`
 	const commonVariables = {
 		PULUMI_STATE_S3_REGION: region,
 		HETZNER_LOCATION: input.defaults.hetznerLocation,
@@ -363,9 +387,9 @@ export function githubConfiguration(input: BootstrapInput, generated: GeneratedS
 		{ secrets: Record<string, string>; variables: Record<string, string> }
 	> = {}
 	for (const target of TARGETS) {
-		const stateBucket = `${bucketPrefix}-${target}-state`
-		const backupBucket = `${bucketPrefix}-${target}-backup`
 		const storage = input.objectStorage.targets[target]
+		const stateBucket = objectStorageBucketName(input, generated, target, 'state')
+		const backupBucket = objectStorageBucketName(input, generated, target, 'backup')
 		result[`${generated.deploymentPrefix}-${target}`] = {
 			secrets: {
 				HETZNER_COMPUTE_TOKEN: input.providers[target].computeToken,
@@ -412,9 +436,15 @@ export function githubConfiguration(input: BootstrapInput, generated: GeneratedS
 	})
 	Object.assign(identity.variables, {
 		NEXT_PULUMI_STACK: `${PULUMI_ORGANIZATION}/aven-platform/next`,
-		NEXT_PULUMI_BACKEND: backend(`${bucketPrefix}-next-state`, region),
+		NEXT_PULUMI_BACKEND: backend(
+			objectStorageBucketName(input, generated, 'next', 'state'),
+			region
+		),
 		PRODUCTION_PULUMI_STACK: `${PULUMI_ORGANIZATION}/aven-platform/production`,
-		PRODUCTION_PULUMI_BACKEND: backend(`${bucketPrefix}-production-state`, region)
+		PRODUCTION_PULUMI_BACKEND: backend(
+			objectStorageBucketName(input, generated, 'production', 'state'),
+			region
+		)
 	})
 	for (const target of ['next', 'production'] as const) {
 		const provider = input.providers[target]

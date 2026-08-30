@@ -25,30 +25,27 @@ pulumi.runtime.setMocks(
 )
 
 Object.assign(process.env, {
-	OBJECT_STORAGE_BUCKET_PREFIX: 'avenos-abc123-12345',
+	OBJECT_STORAGE_TARGET: 'next',
+	OBJECT_STORAGE_BUCKET_PREFIX: 'avenos-abc123',
 	OBJECT_STORAGE_PROJECT_ID: '12345',
 	OBJECT_STORAGE_REGION: 'hel1',
 	BOOTSTRAP_S3_ACCESS_KEY_ID: 'BOOTSTRAP123',
 	BOOTSTRAP_S3_SECRET_ACCESS_KEY: 'bootstrap-secret',
-	IDENTITY_DEPLOYMENT_S3_ACCESS_KEY_ID: 'IDENTITYDEPLOY',
-	IDENTITY_OBSERVER_S3_ACCESS_KEY_ID: 'IDENTITYOBSERVE',
-	NEXT_DEPLOYMENT_S3_ACCESS_KEY_ID: 'NEXTDEPLOY123',
-	NEXT_OBSERVER_S3_ACCESS_KEY_ID: 'NEXTOBSERVE1',
-	PRODUCTION_DEPLOYMENT_S3_ACCESS_KEY_ID: 'PRODDEPLOY12',
-	PRODUCTION_OBSERVER_S3_ACCESS_KEY_ID: 'PRODOBSERVER'
+	DEPLOYMENT_S3_ACCESS_KEY_ID: 'NEXTDEPLOY123',
+	OBSERVER_S3_ACCESS_KEY_ID: 'NEXTOBSERVE1'
 })
 
 const program = await import('../src/index.mjs')
-await Promise.all(
-	Object.values(program.buckets).flatMap((target) =>
-		Object.values(target).map((output) => output.promise())
-	)
-)
+await Promise.all(Object.values(program.buckets).map((output) => output.promise()))
 await pulumi.runtime.disconnect()
 
-test('creates six private non-destructive buckets', () => {
+test('creates one target pair of private non-destructive buckets', () => {
 	const buckets = resources.filter(({ type }) => type === 'minio:index/s3Bucket:S3Bucket')
-	assert.equal(buckets.length, 6)
+	assert.equal(buckets.length, 2)
+	assert.deepEqual(buckets.map((bucket) => bucket.inputs.bucket).sort(), [
+		'avenos-abc123-12345-next-backup',
+		'avenos-abc123-12345-next-state'
+	])
 	for (const bucket of buckets) {
 		assert.equal(bucket.inputs.acl, 'private')
 		assert.equal(bucket.inputs.forceDestroy, false)
@@ -60,13 +57,13 @@ test('versions state and applies a policy to every bucket', () => {
 	assert.equal(
 		resources.filter(({ type }) => type === 'minio:index/s3BucketVersioning:S3BucketVersioning')
 			.length,
-		3,
+		1,
 		JSON.stringify([...new Set(resources.map(({ type }) => type))])
 	)
 	const policies = resources.filter(
 		({ type }) => type === 'minio:index/s3BucketPolicy:S3BucketPolicy'
 	)
-	assert.equal(policies.length, 6)
+	assert.equal(policies.length, 2)
 	for (const policy of policies) {
 		assert.match(policy.inputs.policy, /DenyEveryCredentialOutsideThisTarget/)
 	}

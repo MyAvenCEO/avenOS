@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+	actionableWizardProgress,
 	guidedBootstrapIntroduction,
 	guidedBootstrapRecoveryNotice,
 	guidedCredentialsCsv,
-	hetznerProjectConsoleUrl,
+	hetznerProjectTokensUrl,
+	hetznerS3CredentialsUrl,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
 	setValueAt,
@@ -12,13 +14,22 @@ import {
 	valueAt
 } from '../../../scripts/lib/deployment-bootstrap-guided.ts'
 
+test('counts only screens that require an answer', () => {
+	const steps = [{ info: true }, { info: true }, {}, {}, {}]
+	assert.equal(actionableWizardProgress(steps, 0), undefined)
+	assert.equal(actionableWizardProgress(steps, 1), undefined)
+	assert.deepEqual(actionableWizardProgress(steps, 2), { current: 1, total: 3 })
+	assert.deepEqual(actionableWizardProgress(steps, 4), { current: 3, total: 3 })
+})
+
 test('introduces every manual prerequisite and the incremental plaintext recovery behavior', () => {
 	const contents = guidedBootstrapIntroduction('avenos-0123456789')
 	for (const requiredText of [
 		'GitHub',
-		'7 S3 credentials',
+		'9 S3 credentials',
 		'3 Cloud write tokens',
-		'2 aven.ceo DNS write tokens',
+		'the project ID that owns aven.ceo',
+		'2 DNS write tokens from that project',
 		'Polar',
 		'SMTP',
 		'RedPill',
@@ -42,12 +53,17 @@ test('introduces every manual prerequisite and the incremental plaintext recover
 		assert.match(recovery, new RegExp(requiredText.replaceAll('.', '\\.')))
 })
 
-test('guides exactly one administrator and two roles for every target', () => {
-	assert.equal(S3_CREDENTIAL_STEPS.length, 7)
-	assert.equal(new Set(S3_CREDENTIAL_STEPS.map((step) => step.description)).size, 7)
-	assert.equal(new Set(S3_CREDENTIAL_STEPS.map((step) => step.path.join('.'))).size, 7)
-	assert.deepEqual(S3_CREDENTIAL_STEPS[0].path, ['objectStorage', 'bootstrapCredential'])
+test('guides one administrator and two roles in each isolated target project', () => {
+	assert.equal(S3_CREDENTIAL_STEPS.length, 9)
+	assert.equal(new Set(S3_CREDENTIAL_STEPS.map((step) => step.description)).size, 9)
+	assert.equal(new Set(S3_CREDENTIAL_STEPS.map((step) => step.path.join('.'))).size, 9)
 	for (const target of ['identity', 'next', 'production']) {
+		assert.equal(S3_CREDENTIAL_STEPS.filter((step) => step.target === target).length, 3)
+		assert.ok(
+			S3_CREDENTIAL_STEPS.some(
+				(step) => step.description === `avenOS ${target} bootstrap administrator`
+			)
+		)
 		assert.ok(
 			S3_CREDENTIAL_STEPS.some((step) => step.description === `avenOS ${target} deployment`)
 		)
@@ -58,30 +74,47 @@ test('guides exactly one administrator and two roles for every target', () => {
 test('preserves partial credentials with descriptive password-manager fields', () => {
 	const draft = {
 		objectStorage: {
-			projectId: '1234567',
-			bootstrapCredential: { accessKeyId: 'BOOTACCESS', secretAccessKey: 'BOOTSECRET' }
+			targets: {
+				identity: {
+					projectId: '1234567',
+					bootstrapCredential: {
+						accessKeyId: 'BOOTACCESS',
+						secretAccessKey: 'BOOTSECRET'
+					}
+				}
+			}
 		},
-		providers: { identity: { computeToken: 'COMPUTESECRET' } }
+		providers: {
+			dnsProjectId: '4567890',
+			identity: { computeToken: 'COMPUTESECRET' },
+			next: { dnsToken: 'DNSSECRET' }
+		}
 	}
 	const contents = guidedCredentialsCsv(draft, 'avenos-0123456789')
 	assert.match(contents, /"Group","Title","Username","Password","URL","Notes"/)
-	assert.match(contents, /"avenOS\/avenos-0123456789\/bootstrap"/)
 	assert.match(contents, /"avenOS\/avenos-0123456789\/identity"/)
-	assert.match(contents, /avenOS bootstrap administrator/)
-	assert.match(contents, /Creates buckets and installs their isolation policies/)
+	assert.match(contents, /avenOS identity bootstrap administrator/)
+	assert.match(contents, /Creates and repairs only the identity buckets/)
 	assert.match(contents, /BOOTACCESS/)
 	assert.match(contents, /BOOTSECRET/)
-	assert.match(contents, /avenOS identity Hetzner compute token/)
+	assert.match(contents, /avenOS identity deployment \(Hetzner Cloud token\)/)
 	assert.match(contents, /Target-scoped Hetzner Cloud API token/)
+	assert.match(contents, /avenOS next DNS deployment \(Hetzner DNS token\)/)
+	assert.match(contents, /projects\/4567890\/security\/tokens/)
+	assert.match(contents, /shared aven\.ceo DNS zone in Hetzner project 4567890/)
 	assert.doesNotMatch(contents, /avenOS next Hetzner compute token/)
 })
 
 test('builds the exact project console URL and rejects ambiguous IDs', () => {
 	assert.equal(
-		hetznerProjectConsoleUrl('1234567'),
-		'https://console.hetzner.com/projects/1234567/servers'
+		hetznerS3CredentialsUrl('1234567'),
+		'https://console.hetzner.com/projects/1234567/security/s3-credentials'
 	)
-	assert.throws(() => hetznerProjectConsoleUrl('project-1'), /must be numeric/)
+	assert.throws(() => hetznerS3CredentialsUrl('project-1'), /must be numeric/)
+	assert.equal(
+		hetznerProjectTokensUrl('1234567'),
+		'https://console.hetzner.com/projects/1234567/security/tokens'
+	)
 })
 
 test('signs read-only S3 verification requests without exposing the secret', () => {
