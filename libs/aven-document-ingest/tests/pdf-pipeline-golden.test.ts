@@ -48,9 +48,7 @@ describe('deterministic PDF pipeline golden', () => {
 				'client.assemble-document-representation',
 				'client.aggregate-content-classification'
 			])
-			expect(
-				new Set(presentation.derivedArtifacts.map((artifact) => artifact.typeKey))
-			).toEqual(
+			expect(new Set(presentation.derivedArtifacts.map((artifact) => artifact.typeKey))).toEqual(
 				new Set([
 					'core.file-inspection',
 					'docs.page',

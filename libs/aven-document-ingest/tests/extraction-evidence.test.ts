@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { textGroundedExtractionEvidence, type ExtractedPage } from '../src/shared'
+import { type ExtractedPage, textGroundedExtractionEvidence } from '../src/shared'
 
 const page: ExtractedPage = {
 	page: 1,

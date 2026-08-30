@@ -40,11 +40,9 @@ describe('identity boundary', () => {
 		let jwksRequest = ''
 		const fetcher = async (input: string | URL | Request) => {
 			jwksRequest = String(input)
-			return (
-			new Response(JSON.stringify({ keys: [{ ...publicJwk, kid: 'test', alg: 'EdDSA' }] }), {
+			return new Response(JSON.stringify({ keys: [{ ...publicJwk, kid: 'test', alg: 'EdDSA' }] }), {
 				headers: { 'content-type': 'application/json' }
 			})
-			)
 		}
 		const verifier = new IdentityVerifier({
 			issuer: 'https://aven.id',

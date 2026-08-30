@@ -26,7 +26,11 @@ export function createVisualPageAnalyzerActor(model: DocumentModelGateway): Acto
 			'Visual page analyzer',
 			'Transcribes, describes, and classifies one rendered page with the configured vision model.',
 			'document_analyze_page',
-			['ceo.aven.docs.file(F)', 'ceo.aven.docs.page(F, P)', 'ceo.aven.docs.extracted_text(F, P, T)'],
+			[
+				'ceo.aven.docs.file(F)',
+				'ceo.aven.docs.page(F, P)',
+				'ceo.aven.docs.extracted_text(F, P, T)'
+			],
 			[
 				'ceo.aven.docs.extracted_text(F, P, T)',
 				'ceo.aven.docs.text_layout(F, P, L)',

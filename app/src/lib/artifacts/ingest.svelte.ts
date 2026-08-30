@@ -3,11 +3,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { chatActor } from '$lib/actors/chat.actor.svelte'
 import { anonymousSpeakerFromPayload } from '$lib/chat/anonymous-speaker'
 import { intents, type PersistentIntentDetail } from '$lib/intents/intents.svelte'
-import { shell } from '$lib/intents/talk.svelte'
 import {
 	discoverIntentSources,
 	type ProjectionArtifact
 } from '$lib/intents/persistent-artifact-projection'
+import { shell } from '$lib/intents/talk.svelte'
 import {
 	clientDocumentProcessingStatus,
 	clientDocumentSourceExecutionEnvironment,
@@ -125,7 +125,11 @@ export async function loadPersistentIntents(): Promise<void> {
 			invoke<{ payload?: Record<string, unknown> }>('artifact_get', { artifactId })
 		)
 		for (const detail of details) {
-			if (!detail || detail.sourceArtifactId || detail.artifacts.some((a) => a.relation === 'source'))
+			if (
+				!detail ||
+				detail.sourceArtifactId ||
+				detail.artifacts.some((a) => a.relation === 'source')
+			)
 				continue
 			const source = sources.get(detail.id)
 			if (!source) continue
@@ -139,9 +143,9 @@ export async function loadPersistentIntents(): Promise<void> {
 	for (const detail of details) {
 		const source = detail
 			? (detail.artifacts.find((artifact) => artifact.relation === 'source') ??
-					intents.items
-						.find((intent) => intent.id === detail.id)
-						?.artifacts.find((artifact) => artifact.typeKey === 'core.file'))
+				intents.items
+					.find((intent) => intent.id === detail.id)
+					?.artifacts.find((artifact) => artifact.typeKey === 'core.file'))
 			: undefined
 		const executionEnvironment = source?.artifactId
 			? await clientDocumentSourceExecutionEnvironment(source.artifactId)

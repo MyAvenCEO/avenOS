@@ -62,11 +62,7 @@ export function createInvoiceExtractorActor(model: DocumentModelGateway): Actor 
 								artifact('invoice', 'bookkeeping.invoice-candidate', candidate, 'candidate'),
 								artifact('details', 'bookkeeping.invoice-details', details, 'details')
 							],
-							evidence: textGroundedExtractionEvidence(
-								pages,
-								evidenceTargets,
-								modelEvidence
-							),
+							evidence: textGroundedExtractionEvidence(pages, evidenceTargets, modelEvidence),
 							modelReceipt: completed.receipt
 						},
 						'Extracted the invoice candidate and details.'

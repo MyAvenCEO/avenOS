@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import {
 	discoverIntentSources,
-	preserveLiveFileProjection,
-	type ProjectionArtifact
+	type ProjectionArtifact,
+	preserveLiveFileProjection
 } from '../src/lib/intents/persistent-artifact-projection'
 
 const artifact = (

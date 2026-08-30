@@ -709,8 +709,8 @@ export class LlmGatewayService {
 			const schema =
 				model.configuration.profile.startsWith('openai-') ||
 				model.configuration.profile === 'qwen-tools'
-				? strictSchema(request.output.schema)
-				: request.output.schema
+					? strictSchema(request.output.schema)
+					: request.output.schema
 			if (model.configuration.profile === 'qwen-tools') {
 				// Qwen 3 enables its extended thinking lane by default. That lane is useful
 				// for conversational reasoning, but with a forced structured tool it can

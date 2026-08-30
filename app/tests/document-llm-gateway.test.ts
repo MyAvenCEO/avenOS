@@ -1,10 +1,10 @@
+import { modelRequest } from '@avenos/document-ingest/model'
 import { describe, expect, test } from 'vitest'
 import {
 	type DocumentLlmClient,
 	documentLlmRequest,
 	LlmDocumentModelGateway
 } from '../src/lib/actors/document-llm-gateway'
-import { modelRequest } from '@avenos/document-ingest/model'
 import type { LlmCompletionRequest } from '../src/lib/models/gateway'
 
 const models = [

@@ -10,13 +10,13 @@ import type {
 	ClientRunPublication,
 	PublishedClientRun
 } from '@avenos/artifact-store'
-import { createCanvas, ServerPdfCanvasFactory } from './server-pdf-canvas'
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { WorkerMessageHandler } from 'pdfjs-dist/legacy/build/pdf.worker.mjs'
 import { createDocumentActors } from './actors/registry'
 import { DOCUMENT_INGEST_SKILL, type DocumentSourceDescriptor } from './execution'
 import type { DocumentModelGateway } from './model'
 import { DocumentProcessingRuntime } from './runtime'
+import { createCanvas, ServerPdfCanvasFactory } from './server-pdf-canvas'
 import {
 	type DecodedDocument,
 	type DecodedPage,
@@ -395,11 +395,18 @@ async function decodePdf(bytes: Uint8Array, modelPageLimit: number): Promise<Dec
 	} catch (error) {
 		const kind = pdfDecodeFailureKind(error)
 		if (kind === 'encrypted') {
-			return { outcome: 'encrypted', detectedMediaType: 'application/pdf', encrypted: true, pages: [] }
+			return {
+				outcome: 'encrypted',
+				detectedMediaType: 'application/pdf',
+				encrypted: true,
+				pages: []
+			}
 		}
 		if (kind === 'malformed') return malformed('application/pdf')
 		console.warn(`PDF decoding failed because of a ${kind} decoder failure.`)
-		throw new Error('PDF processing failed before its content could be inspected.', { cause: error })
+		throw new Error('PDF processing failed before its content could be inspected.', {
+			cause: error
+		})
 	} finally {
 		await task.destroy().catch(() => undefined)
 	}
