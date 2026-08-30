@@ -562,6 +562,54 @@ real uploads and assert durable outputs. Its minimum case contains one invoice, 
 transaction, one same-amount distractor, and one unrelated row. The exact transaction should
 win for inspectable reference or party evidence, not because the fixture name is recognized.
 
+### Current validation corpus and constraints
+
+The suite committed with the first implementation slice is primarily an engineering
+regression corpus. It proves deterministic transformations, publication contracts, lineage,
+and conservative abstention. It does not measure real-world reconciliation accuracy and must
+not be used as evidence for enabling automatic decisions.
+
+At this revision the reconciliation-specific coverage consists of:
+
+- 12 hand-authored deterministic cases in
+  [`reconciliation.test.ts`](../libs/aven-document-ingest/tests/reconciliation.test.ts),
+  covering normalization, provider-ID and fallback deduplication, booked versus original FX
+  amounts, the 128-row extraction ceiling, the 64-artifact publication boundary, reference
+  boundaries, duplicate observations, IBAN-only abstention, unknown direction, unverified
+  coverage, ranking output, and input lineage;
+- document-runtime tests in
+  [`document-actors.test.ts`](../app/tests/document-actors.test.ts), including one synthetic
+  invoice path and one synthetic 65-row statement path with stable 64+1 replay identities;
+- publication allowlist and attribution tests in
+  [`artifacts.test.ts`](../services/aven-api/tests/artifacts.test.ts);
+- schema-registration and representative-payload validation inside the Artifact Store core;
+  and
+- one historical Actor Runner happy-path ranking case plus negative-route and omitted-output
+  cases in
+  [`artifact-first-enrichment.e2e.test.ts`](../services/actor-runner/tests/artifact-first-enrichment.e2e.test.ts).
+
+Those tests have important boundaries:
+
+| Constraint | Consequence |
+| --- | --- |
+| Matcher fixtures are small, synthetic, and authored from the implementation rules | They detect regressions but cannot estimate recall, precision, calibration, or performance on unseen documents |
+| The document-runtime tests use a fixed decoder, hard-coded model responses, and an in-memory recording publication gateway | They exercise the complete coordinator and provenance shape, but not real OCR/model variance, HTTP transport, database persistence, or Artifact Store service recovery |
+| The 65-row statement is a batching boundary test with mechanically generated rows | It proves 64+1 publication and replay behavior, not realistic statement diversity or row-extraction quality |
+| The API tests use a mocked Artifact Store backend | They prove server-side client-procedure allowlists and envelopes, but not a real API-to-Artifact-Store transaction or tenant database migration |
+| Artifact Store tests validate four representative payloads against registered schemas | They do not fuzz schema boundaries or publish the full actor output graph through the running service |
+| The two provider-backed goldens cover one invoice and one receipt, require external credentials, and are skipped by the ordinary suite when unavailable | There is no provider-backed statement extraction or provider-backed invoice-to-transaction pair in the merge-blocking rail |
+| Existing PDF goldens are synthetic receipt documents used mainly for decoding and rendering | They are not labeled reconciliation examples and contain no corresponding bank statements |
+| The historical Actor Runner E2E uses test-only predicates and actors | It proves planning and affordance separation, not that the production normalizers and ranker run through the generic planner |
+| Document-derived statement coverage deliberately remains `unverified` | Current document uploads can produce ranked review candidates, but cannot exercise a legitimate automatic-decision success case |
+| Customer-scoped search, global assignment, decisions, projections, and review UI are not implemented | Corpus completeness, mutual uniqueness, concurrency, stale review, supersession, and double-allocation invariants cannot yet be tested end to end |
+| Name normalization is intentionally small and mostly ASCII-oriented | The current suite does not establish multilingual party matching, legal-suffix handling, transliteration, or locale-specific reference behavior |
+
+There are also no production-labeled invoice/transaction pairs, held-out evaluation split,
+property-based allocation tests, bank-connector captures, or measured false-positive
+confidence interval. The current green suite therefore supports merging the canonicalization
+and review-ranking foundation. It does not support claims about automatic-match precision or
+launch readiness.
+
 Required deterministic cases include:
 
 - exact same-currency payable, receivable, credit note, and payment receipt;
