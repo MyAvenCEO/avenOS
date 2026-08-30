@@ -61,6 +61,7 @@
 		"test:deploy": "bash deploy/validate.sh",
 		"test:recovery": "bash deploy/operations/test-recovery.sh",
 		"test:e2e:platform": "bash deploy/e2e/run.sh",
+		"test:e2e:polar-sandbox": "bash deploy/e2e/polar-sandbox/run.sh",
 		"local:up": "bash deploy/local/up.sh",
 		"local:down": "bash deploy/local/down.sh",
 		"local:account": "bash deploy/local/account.sh",

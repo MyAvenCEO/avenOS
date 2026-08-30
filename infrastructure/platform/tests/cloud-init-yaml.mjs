@@ -4,6 +4,7 @@ import { renderCloudInit } from '../src/cloud-init.mjs'
 const parsed = parse(
 	renderCloudInit({
 		deployUser: 'aven-deploy',
+		adminPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAdmin admin',
 		deployPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDeploy deploy',
 		observePublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIObserve observe',
 		tunnelPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITunnel tunnel',

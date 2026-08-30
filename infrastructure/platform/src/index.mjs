@@ -70,6 +70,7 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 		environment: config.environment
 	}
 	const hostKey = new tls.PrivateKey(`${resource}-host-key`, { algorithm: 'ED25519' }, protect)
+	const adminKey = new tls.PrivateKey(`${resource}-admin-key`, { algorithm: 'ED25519' }, protect)
 	const deployKey = new tls.PrivateKey(`${resource}-deploy-key`, { algorithm: 'ED25519' }, protect)
 	const observeKey = new tls.PrivateKey(
 		`${resource}-observe-key`,
@@ -108,6 +109,7 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 			volume.linuxDevice,
 			hostKey.privateKeyOpenssh,
 			hostKey.publicKeyOpenssh,
+			adminKey.publicKeyOpenssh,
 			deployKey.publicKeyOpenssh,
 			observeKey.publicKeyOpenssh,
 			tunnelKey.publicKeyOpenssh
@@ -117,12 +119,14 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 				volumeDevice,
 				sshHostPrivateKey,
 				sshHostPublicKey,
+				adminPublicKey,
 				deployPublicKey,
 				observePublicKey,
 				tunnelPublicKey
 			]) =>
 				renderCloudInit({
 					deployUser: config.deployUser,
+					adminPublicKey,
 					deployPublicKey,
 					observePublicKey,
 					tunnelPublicKey,
@@ -157,7 +161,17 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 		{ serverId: server.id.apply(Number), volumeId: volume.id.apply(Number), automount: false },
 		{ ...protect, provider: computeProvider, dependsOn: [server, volume] }
 	)
-	return { server, firewall, volume, attachment, hostKey, deployKey, observeKey, tunnelKey }
+	return {
+		server,
+		firewall,
+		volume,
+		attachment,
+		hostKey,
+		adminKey,
+		deployKey,
+		observeKey,
+		tunnelKey
+	}
 }
 
 const identity =
@@ -295,6 +309,12 @@ export const platformIpv4Address = platform?.server.ipv4Address
 export const platformIpv6Address = platform?.server.ipv6Address
 export const identityHostPublicKey = identity?.hostKey.publicKeyOpenssh
 export const platformHostPublicKey = platform?.hostKey.publicKeyOpenssh
+export const identityAdminPrivateKey = identity
+	? pulumi.secret(identity.adminKey.privateKeyOpenssh)
+	: undefined
+export const platformAdminPrivateKey = platform
+	? pulumi.secret(platform.adminKey.privateKeyOpenssh)
+	: undefined
 export const identityDeployPrivateKey = identity
 	? pulumi.secret(identity.deployKey.privateKeyOpenssh)
 	: undefined

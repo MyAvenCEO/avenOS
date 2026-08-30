@@ -130,6 +130,62 @@ claims this rail establishes. The focused document conformance suite additionall
 compares browser and headless-runner results for deterministic text, CSV, and
 native-text PDF goldens; server OCR and live-model parity remain explicit gaps.
 
+## Polar Sandbox checkout E2E
+
+The required full-stack gate above keeps its signed fake-payment provider. It is the
+deterministic checkout proof and does not depend on Polar availability. A separate,
+explicitly authorized test exercises Polar's isolated Sandbox, hosted checkout, test
+card, signed webhook delivery, and local purchase projection. It expects the
+interactive local stack and a Polar webhook listener to be running; it does not start
+or remove them.
+
+Prepare a Polar Sandbox organization once:
+
+1. Create a Sandbox organization access token with product, checkout, order,
+   customer, subscription, benefit, meter, and webhook access.
+2. Create the one-time avenNAME product and retain its Sandbox product ID.
+3. Add `localhost:13200` to the organization's checkout Embed Hosts.
+4. Install the Polar CLI and authenticate it against the Sandbox organization.
+
+In one terminal, forward real Sandbox webhooks to the local checkout handler:
+
+```sh
+polar listen http://localhost:13200/api/webhooks/polar
+```
+
+The listener prints a signing secret. In a second terminal, start the local stack with
+that secret and the Sandbox-only credentials:
+
+```sh
+export POLAR_API_KEY='sandbox-organization-access-token'
+export POLAR_SERVER=sandbox
+export POLAR_WEBHOOK_SECRET='secret-printed-by-polar-listen'
+export AVEN_TIER_NAME='sandbox-aven-name-product-id'
+bun run local:up
+```
+
+Then run the opt-in test from that same environment:
+
+```sh
+POLAR_SANDBOX_E2E=true bun run test:e2e:polar-sandbox
+```
+
+The browser creates a unique name hold, follows the Mailpit checkout email, fills
+Polar's embedded checkout with the Sandbox `4242 4242 4242 4242` card, and waits for
+the success page. It then requires all of the following independent evidence:
+
+- Polar's Checkout API reports `succeeded`;
+- exactly one local payment event and processed `order.paid` delivery exist;
+- the name and checkout customer share the provisioned identity subject;
+- the purchase entitlement outbox reaches `delivered`; and
+- the identity setup email opens the new account page.
+
+The test leaves its Sandbox customer and order in Polar for provider-side diagnosis;
+the local stack remains disposable through `local:down`. Run this lane manually or
+from a secret-equipped scheduled runner with an authenticated webhook tunnel. Do not
+add it to the required per-pull-request gate: external availability, Sandbox rate
+limits, and hosted checkout changes are deliberately outside the deterministic proof.
+
 ## Complete pre-deployment gate
 
 For a clean local release candidate, run:

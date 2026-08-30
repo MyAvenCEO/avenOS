@@ -35,6 +35,21 @@ LLM_GATEWAY_ALLOW_INSECURE_HTTP=${LLM_GATEWAY_ALLOW_INSECURE_HTTP:-true}
 export LLM_GATEWAY_ENABLED LLM_GATEWAY_MODELS_JSON LLM_GATEWAY_CREDENTIALS_JSON
 export LLM_GATEWAY_TIMEOUT_SECONDS LLM_GATEWAY_ALLOW_INSECURE_HTTP
 
+if [ -n "${POLAR_API_KEY:-}" ]; then
+  if [ "${POLAR_SERVER:-sandbox}" != "sandbox" ]; then
+    echo "The interactive local stack only accepts POLAR_SERVER=sandbox." >&2
+    exit 2
+  fi
+  if [ -z "${POLAR_WEBHOOK_SECRET:-}" ] || [ -z "${AVEN_TIER_NAME:-}" ]; then
+    echo "POLAR_WEBHOOK_SECRET and AVEN_TIER_NAME are required with POLAR_API_KEY." >&2
+    exit 2
+  fi
+  ALLOW_FAKE_PAYMENTS=false
+else
+  ALLOW_FAKE_PAYMENTS=true
+fi
+export ALLOW_FAKE_PAYMENTS
+
 if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
   NODE_AUTH_TOKEN=$(sed -n 's#^//npm.pkg.github.com/:_authToken=##p' "$HOME/.npmrc" 2>/dev/null | tail -n 1)
   export NODE_AUTH_TOKEN

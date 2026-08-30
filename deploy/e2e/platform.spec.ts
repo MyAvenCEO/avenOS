@@ -729,6 +729,35 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 		authorization: `Bearer ${tokenBody.token}`,
 		origin: checkoutBrowser
 	}
+	const llmModels = await fetch(`${api}/api/llm/models`, { headers: authorizedHeaders })
+	expect(llmModels.status).toBe(200)
+	expect(await llmModels.json()).toEqual({
+		models: [
+			{
+				id: 'deepseek/deepseek-v4-flash-0731',
+				label: 'E2E Chat',
+				capabilities: ['streaming', 'text-generation', 'tool-calling']
+			}
+		]
+	})
+	const llmCompletion = await fetch(`${api}/api/llm/v1/chat/completions`, {
+		method: 'POST',
+		headers: { ...authorizedHeaders, 'content-type': 'application/json' },
+		body: JSON.stringify({
+			model: 'deepseek/deepseek-v4-flash-0731',
+			messages: [{ role: 'user', content: 'Prove the deterministic local LLM route.' }],
+			stream: false
+		})
+	})
+	expect(llmCompletion.status).toBe(200)
+	expect(await llmCompletion.json()).toMatchObject({
+		model: 'deepseek/deepseek-v4-flash-0731',
+		choices: [{ message: { role: 'assistant', content: 'E2E chat reply.' } }],
+		aven: {
+			modelId: 'deepseek/deepseek-v4-flash-0731',
+			providerReportedModel: 'e2e-chat'
+		}
+	})
 	const billing = await fetch(`${api}/api/billing/me`, { headers: authorizedHeaders })
 	await expect(billing.status).toBe(200)
 	await expect(billing.headers.get('access-control-allow-origin')).toBe(checkoutBrowser)

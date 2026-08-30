@@ -651,11 +651,11 @@ use the same gateway credential map and facade boundary.
 
 ## Verification
 
-This repository can verify the client contracts and split facade, but it cannot run a
-local gateway implementation because that downstream is not present. The LLM service
-repository or package MUST ship contract tests for catalog filtering, capability
-enforcement, OpenAI-compatible streaming, tool-call round trips, structured output,
-authentication projection checks, provider bounds, and credential redaction.
+This repository runs the gateway implementation inside Aven API. The interactive
+local stack can point it at a host-side OpenAI-compatible server; the deterministic
+E2E stack points it at the in-repository mock. Gateway tests cover catalog filtering,
+capability enforcement, OpenAI-compatible streaming, structured output, provider
+bounds, and credential redaction.
 
 In this repository, run the app checks and facade tests whenever the client wire types
 or route configuration change. The integrated E2E environment should then execute the

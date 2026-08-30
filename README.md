@@ -143,6 +143,11 @@ with the passkey and approve that code. You can then import a document, inspect 
 artifacts, chat, and exercise persistent Intent and Actor features against the local
 customer database.
 
+To use a real local model, start an OpenAI-compatible server such as LM Studio and set
+`LOCAL_LLM_MODEL` to its exact model identifier before `local:up`. The
+[local-stack guide](docs/operations/local-stack.md#use-lm-studio-or-another-local-model)
+contains the complete setup, capability requirements, and vision option.
+
 When finished, remove the disposable containers, networks, and **all local volumes**:
 
 ```sh

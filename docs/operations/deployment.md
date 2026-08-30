@@ -48,14 +48,23 @@ ingress, an unprotected stateful resource, or the wrong target stack.
 
 After the preview succeeds, run the same workflow once more with `target: all` and
 `command: up`. It applies the three reviewed targets serially in `identity`, `next`,
-production order. The platform targets create all A and AAAA records for their own three
-origins. There is no DNS promotion flag and no legacy host to cut over.
+production order. Until the VPN cutover, expect port 22 from `0.0.0.0/0` and `::/0`;
+reject any unexpected non-SSH ingress or plaintext secret. The platform targets create
+all A and AAAA records for their own three origins. There is no DNS promotion flag and
+no legacy host to cut over.
 
 Pulumi installs Docker and Compose, mounts the protected volume, enables UFW,
 fail2ban, bounded logs, and unattended security updates, and records cloud-init
 completion. Do not create or upload SSH keys manually.
 
-## Apply the external `aven.id` records
+Pulumi also generates per-host `aven-admin` identities. They permit key-only SSH from
+dynamic IPv4/IPv6 networks, including a phone SSH client, and have passwordless sudo
+for manual administration. This is deliberately broader than the deploy, observe,
+and database-tunnel roles. Import an admin private key only through the procedure in
+[Access and secrets](access-and-secrets.md). Once the VPN is available, set
+`SSH_ALLOWED_CIDRS` to its networks and apply the reviewed firewall change.
+
+## Apply the external `aven.id` DNS records
 
 Read `identityDnsRecords` from the successful identity Pulumi summary. At the
 authoritative external provider, replace the `aven.id` apex records with exactly:
@@ -109,6 +118,10 @@ The exact dependency graph is in
 server file, or handles a generated database password.
 
 ## Verify the environments
+
+Routine deployments do not require an operator to open SSH, write a server file, or
+handle a generated database password. The `aven-admin` login remains available for
+manual diagnostics and recovery.
 
 Verify shared identity and `next`:
 

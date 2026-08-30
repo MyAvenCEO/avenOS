@@ -8,6 +8,7 @@ const hostPublic = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHost test\n'
 function render(appRoot) {
 	return renderCloudInit({
 		deployUser: 'aven-deploy',
+		adminPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAdmin admin',
 		deployPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDeploy deploy',
 		observePublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIObserve observe',
 		tunnelPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITunnel tunnel',
@@ -55,13 +56,16 @@ test('bounds logs and staggers automatic maintenance reboots', () => {
 	assert.match(platform, /backup container is \$health/)
 })
 
-test('creates separate deploy, observe, and database tunnel accounts without broad sudo', () => {
+test('creates a key-only admin plus separate least-privilege service accounts', () => {
 	const cloudInit = render('/opt/aven/platform')
+	assert.match(cloudInit, /name: aven-admin/)
+	assert.match(cloudInit, /groups: \[sudo\]/)
+	assert.match(cloudInit, /aven-admin aven-deploy aven-observe aven-tunnel/)
 	assert.match(cloudInit, /name: aven-observe/)
 	assert.match(cloudInit, /name: aven-tunnel/)
 	assert.match(cloudInit, /PermitOpen 127\.0\.0\.1:5432/)
 	assert.match(cloudInit, /\/usr\/local\/sbin\/aven-deploy platform/)
 	assert.match(cloudInit, /\/usr\/local\/sbin\/aven-restore platform/)
 	assert.match(cloudInit, /RESTORE_CONFIRMATION|--profile recovery/)
-	assert.doesNotMatch(cloudInit, /NOPASSWD:ALL|groups: \[sudo\]|usermod -aG docker/)
+	assert.doesNotMatch(cloudInit, /aven-deploy ALL=\(ALL\) NOPASSWD:ALL|usermod -aG docker/)
 })

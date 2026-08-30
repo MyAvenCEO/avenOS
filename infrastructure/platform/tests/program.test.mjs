@@ -45,7 +45,7 @@ Object.assign(process.env, {
 	HETZNER_SERVER_TYPE: 'cx23',
 	HETZNER_SERVER_ARCHITECTURE: 'amd64',
 	HETZNER_OS_IMAGE: 'ubuntu-24.04',
-	SSH_ALLOWED_CIDRS: '192.0.2.4/32',
+	SSH_ALLOWED_CIDRS: '0.0.0.0/0,::/0',
 	HETZNER_COMPUTE_TOKEN: 'compute-token-for-tests-only',
 	HETZNER_DNS_TOKEN: ''
 })
@@ -63,7 +63,7 @@ test('creates only the protected shared identity foundation', () => {
 	)
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/firewall:Firewall').length, 1)
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/volume:Volume').length, 1)
-	assert.equal(resources.filter(({ type }) => type === 'tls:index/privateKey:PrivateKey').length, 4)
+	assert.equal(resources.filter(({ type }) => type === 'tls:index/privateKey:PrivateKey').length, 5)
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/sshKey:SshKey').length, 1)
 	assert.equal(
 		resources.filter(({ type }) => type === 'hcloud:index/zoneRrset:ZoneRrset').length,
@@ -73,6 +73,19 @@ test('creates only the protected shared identity foundation', () => {
 		resources.some(({ name }) => name === 'platform-identity-provisioning-secret'),
 		false
 	)
+})
+
+test('allows key-only SSH administration from dynamic IPv4 and IPv6 addresses', () => {
+	const firewalls = resources.filter(({ type }) => type === 'hcloud:index/firewall:Firewall')
+	for (const firewall of firewalls) {
+		const ssh = firewall.inputs.rules.find((rule) => rule.port === '22')
+		assert.deepEqual(ssh.sourceIps, ['0.0.0.0/0', '::/0'])
+	}
+	const identity = resources.find(({ name }) => name === 'identity-server')
+	const userData = identity.inputs.userData.value ?? identity.inputs.userData
+	assert.match(userData, /name: aven-admin/)
+	assert.match(userData, /AllowUsers aven-admin/)
+	assert.match(userData, /PasswordAuthentication no/)
 })
 
 test('returns exact aven.id records for the external DNS provider', async () => {

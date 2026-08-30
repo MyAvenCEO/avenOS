@@ -82,7 +82,7 @@ export function loadPlatformConfig(env = process.env) {
 		architecture,
 		osImage: required(env, 'HETZNER_OS_IMAGE'),
 		volumeSize,
-		sshAllowedCidrs: parseSshCidrs(required(env, 'SSH_ALLOWED_CIDRS'))
+		sshAllowedCidrs: parseSshCidrs(env.SSH_ALLOWED_CIDRS?.trim() || '0.0.0.0/0,::/0')
 	}
 }
 
