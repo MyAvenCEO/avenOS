@@ -3,6 +3,7 @@ import {
 	type PlanRunCheckpoint,
 	type PlanRunContinuation,
 	type PlanRunContinuationSubmission,
+	type PlanRunExecutionContext,
 	type PlanRunExecutionResult,
 	type PlanRunExecutor,
 	type PlanRunHandle,
@@ -54,7 +55,10 @@ export class MemoryPlanRunner implements PlanRunner {
 
 	constructor(private readonly execute: PlanRunExecutor = executeAlreadySatisfied) {}
 
-	async start(request: PlanRunStartRequest): Promise<PlanRunHandle> {
+	async start(
+		request: PlanRunStartRequest,
+		context?: PlanRunExecutionContext
+	): Promise<PlanRunHandle> {
 		const admitted = portableRunClone(request)
 		if (admitted.executionEnvironment !== 'server') {
 			throw new Error('the server runner accepts only server placement')
@@ -94,7 +98,7 @@ export class MemoryPlanRunner implements PlanRunner {
 		}
 		this.#records.set(record.runId, record)
 		this.#idempotency.set(key, { runId: record.runId, material })
-		queueMicrotask(() => void this.#run(record.runId, admitted))
+		queueMicrotask(() => void this.#run(record.runId, admitted, context))
 		return portableRunClone(handle(record))
 	}
 
@@ -103,7 +107,11 @@ export class MemoryPlanRunner implements PlanRunner {
 		return record ? portableRunClone(record) : null
 	}
 
-	async resume(runId: string, submission: PlanRunContinuationSubmission): Promise<PlanRunHandle> {
+	async resume(
+		runId: string,
+		submission: PlanRunContinuationSubmission,
+		context?: PlanRunExecutionContext
+	): Promise<PlanRunHandle> {
 		const record = this.#required(runId)
 		if (record.state !== 'waiting_for_input') throw new Error('the run is not waiting for input')
 		const continuation = requiredContinuation(record, submission.continuationId)
@@ -117,7 +125,7 @@ export class MemoryPlanRunner implements PlanRunner {
 		this.#transition(record, 'running')
 		const revision = record.revision
 		try {
-			const result = await this.execute(this.#request(record), { submission })
+			const result = await this.execute(this.#request(record), { ...context, submission })
 			const current = this.#required(runId)
 			if (current.state === 'cancelled') return portableRunClone(handle(current))
 			if (current.revision !== revision || current.state !== 'running') {
@@ -152,13 +160,17 @@ export class MemoryPlanRunner implements PlanRunner {
 		return portableRunClone(handle(record))
 	}
 
-	async #run(runId: string, request: PlanRunStartRequest): Promise<void> {
+	async #run(
+		runId: string,
+		request: PlanRunStartRequest,
+		context?: PlanRunExecutionContext
+	): Promise<void> {
 		const record = this.#required(runId)
 		try {
 			if (record.state !== 'accepted') return
 			this.#transition(record, 'planning')
 			this.#transition(record, 'running')
-			const result = await this.execute(portableRunClone(request))
+			const result = await this.execute(portableRunClone(request), context)
 			const current = this.#required(runId)
 			if (current.state === 'cancelled') return
 			this.#applyResult(current, result)

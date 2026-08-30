@@ -156,10 +156,11 @@ describe('split identity -> facade -> os.aven runner', () => {
 			issuer,
 			audience: 'aven-services'
 		})
-		const runner = new MemoryPlanRunner(async (request) => {
+		const runner = new MemoryPlanRunner(async (request, context) => {
 			expect(request.security.principal.subjectId).toBe(subject)
 			expect(request.security.principal.assurance).toContain('passkey')
 			expect(request.executionEnvironment).toBe('server')
+			expect(context?.session).toEqual({ identityToken: token, sessionId: 'session-e2e' })
 			return {
 				artifactIds: [resultArtifactId],
 				remainingGoals: [],
@@ -273,6 +274,7 @@ describe('split identity -> facade -> os.aven runner', () => {
 				remainingGoals: []
 			})
 		])
+		expect(JSON.stringify(record)).not.toContain(token)
 	})
 
 	testWithPostgres(
