@@ -68,6 +68,29 @@ describe('product seeds', () => {
 			expect(seed.description.length).toBeLessThanOrEqual(1000)
 		}
 	})
+
+	it('creates every manifest product, including avenNAME, without a pinned provider id', async () => {
+		const created: Array<Record<string, unknown>> = []
+		const provider = new PolarProvider(polarConfig())
+		;(provider as unknown as { polar: unknown }).polar = {
+			products: {
+				list: async () => ({ result: { items: [] } }),
+				create: async (product: Record<string, unknown>) => {
+					created.push(product)
+					return { id: `product-${(product.metadata as { tier: string }).tier}` }
+				}
+			}
+		}
+
+		await expect(provider.ensureProducts(productSeeds())).resolves.toEqual({
+			'aven-name': 'product-aven-name',
+			'aven-ceo': 'product-aven-ceo'
+		})
+		expect(created.map((product) => (product.metadata as { tier: string }).tier)).toEqual([
+			'aven-name',
+			'aven-ceo'
+		])
+	})
 })
 
 describe('product benefit specs', () => {
