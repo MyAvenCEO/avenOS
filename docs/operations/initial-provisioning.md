@@ -94,13 +94,17 @@ bun run bootstrap:deployment:guided
 ```
 
 The wizard opens with a complete checklist, then divides the setup into named chapters:
-GitHub, Hetzner Object Storage, Hetzner Cloud, DNS, Polar, Email, AI models, client release,
-infrastructure defaults, and review. It checks `gh` authentication and repository
-administration, generates the persistent deployment prefix, then creates an owner-only
+GitHub, Hetzner, Polar, Email, AI models, client release, infrastructure defaults, and
+review. Hetzner has one subchapter per deployment project plus the shared DNS project;
+Polar has one per organization; and Email has one per sending environment. It checks `gh`
+authentication and repository administration, generates the persistent deployment prefix,
+then creates an owner-only
 draft under `$HOME/avenos-bootstrap-record`. It prints the exact target project URL and
 labels the exact value to enter in Hetzner's S3 **Description** field. Access keys and
 secret keys share one form; provider tokens, SMTP URLs, and the RedPill key use hidden
-fields. The draft and `credentials.csv` are
+fields. The wizard refuses to place its record inside the repository, and every bootstrap
+artifact name is also ignored by Git as a second line of defense. The draft and
+`credentials.csv` are
 rewritten atomically with mode `0600` after every answer, so an interruption cannot lose a
 one-time secret.
 
@@ -111,9 +115,10 @@ high-contrast title band. Provider-side names and S3 descriptions are repeated a
 instruction lines so they can be copied without confusing them with the surrounding purpose
 text. Screens that need an answer also show their position among the
 actionable steps; introductory pages and automatic checks do not inflate that count. On a
-wide terminal, a station rail on the right lists the actionable route, highlights the
-current station, and uses top or bottom ellipses when the route does not fit. Narrow
-terminals keep the same form without the rail.
+wide terminal, a setup tree on the right groups compact item names below their chapter and
+subchapter, highlights the current path, and uses top or bottom ellipses when the route does
+not fit. Hetzner is grouped by project; Polar by organization; and Email by sending
+environment. Narrow terminals keep the same form without the tree.
 
 Use Tab or the arrow keys to move between fields and the Back/Next buttons, Enter to select,
 and Ctrl+C or Escape to cancel. An S3 access key and secret key share one form and one

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import {
 	assertPrivateFile,
 	type BootstrapInput,
@@ -28,6 +28,14 @@ const value = (name: string) => {
 const inputPath = value('--input')
 const outputDirectory = value('--output')
 const dryRun = args.includes('--dry-run')
+const outputRelativeToRepository = relative(root, outputDirectory)
+if (
+	outputRelativeToRepository === '' ||
+	(outputRelativeToRepository !== '..' &&
+		!outputRelativeToRepository.startsWith(`..${sep}`) &&
+		!isAbsolute(outputRelativeToRepository))
+)
+	throw new Error('The deployment bootstrap output must be outside the repository checkout.')
 
 assertPrivateFile(inputPath)
 const parsedInput: unknown = JSON.parse(readFileSync(inputPath, 'utf8'))
