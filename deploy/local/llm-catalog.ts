@@ -44,7 +44,7 @@ export function localLlmCatalog(environment: LocalLlmEnvironment): unknown[] {
 		throw new Error('LOCAL_LLM_BASE_URL cannot contain credentials, a query, or a fragment.')
 	}
 	const vision = boolean(environment.LOCAL_LLM_VISION, 'LOCAL_LLM_VISION')
-	const profile = /(?:^|[\/_-])qwen(?:[\d.\/_-]|$)/i.test(upstreamModel)
+	const profile = /(?:^|[/_-])qwen(?:[\d./_-]|$)/i.test(upstreamModel)
 		? 'qwen-tools'
 		: 'generic-json'
 	const shared = {

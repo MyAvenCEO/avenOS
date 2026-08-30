@@ -25,7 +25,13 @@
 			"!!**/*.svg",
 			"// Emscripten glue shipped beside its .wasm — vendored build output that",
 			"// happens to live under static/, not source anyone edits here.",
-			"!!app/static/webcm"
+			"!!app/static/webcm",
+			"// The Rust voice protocol generator owns both TypeScript copies and tests",
+			"// them byte-for-byte. Its ts-rs output is valid but not Biome-formatted.",
+			"!!libs/aven-voice-protocol/generated/voice-protocol.ts",
+			"!!app/src/lib/voice/protocol.ts",
+			"// Drizzle owns migration snapshots. Formatting them creates large semantic-free diffs.",
+			"!!**/migrations/meta/*.json"
 		]
 	},
 	"formatter": {

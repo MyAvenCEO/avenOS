@@ -11,12 +11,12 @@ describe('local LLM catalog', () => {
 				LOCAL_LLM_VISION: 'true'
 			})
 		).toEqual([
-				expect.objectContaining({
+			expect.objectContaining({
 				id: 'deepseek/deepseek-v4-flash-0731',
 				label: 'Qwen local (chat)',
 				baseUrl: 'http://100.96.61.57:8000/v1',
-					upstreamModel: 'Qwen/Qwen3.8-27B',
-					profile: 'qwen-tools',
+				upstreamModel: 'Qwen/Qwen3.8-27B',
+				profile: 'qwen-tools',
 				capabilities: [
 					'text-generation',
 					'streaming',

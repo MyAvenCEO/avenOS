@@ -14,7 +14,10 @@ export const provisionerConfigSchema = z.object({
 		.string()
 		.regex(/^[a-z][a-z0-9_]{0,62}$/)
 		.default('aven_artifact_store_provisioner'),
-	BACKUP_DATABASE_ROLE: z.string().regex(/^[a-z][a-z0-9_]{0,62}$/).default('aven_backup'),
+	BACKUP_DATABASE_ROLE: z
+		.string()
+		.regex(/^[a-z][a-z0-9_]{0,62}$/)
+		.default('aven_backup'),
 	ARTIFACT_STORE_PROVISIONER_URL: z.url(),
 	ARTIFACT_STORE_PROVISIONER_TOKEN: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/),
 	PROVISIONER_INSTANCE_ID: z.string().min(1).max(128).optional(),

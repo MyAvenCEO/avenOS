@@ -51,9 +51,7 @@ export async function discoverIntentSources(
 				if (typeof intentId !== 'string' || intentId.trim() === '') return null
 				const source = byPublication
 					.get(declaration.publicationId)
-					?.find(
-						(artifact) => artifact.typeKey === 'core.file' && artifact.localKey === 'file'
-					)
+					?.find((artifact) => artifact.typeKey === 'core.file' && artifact.localKey === 'file')
 				if (!source) return null
 				return { intentId, source }
 			} catch {

@@ -1,5 +1,5 @@
-import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import { describe, expect, test } from 'vitest'
 import manifest from '../../../fixtures/golden/document-pdf/manifest.json'
 import { ServerDocumentDecoder } from '../src/server'
@@ -21,9 +21,9 @@ describe('PDF golden corpus', () => {
 			expect(rendered.outcome).toBe('ok')
 			expect(native.pages).toHaveLength(sample.pages)
 			expect(rendered.pages).toHaveLength(sample.pages)
-			expect(
-				native.pages.map(({ image: _image, ...page }) => page)
-			).toEqual(rendered.pages.map(({ image: _image, ...page }) => page))
+			expect(native.pages.map(({ image: _image, ...page }) => page)).toEqual(
+				rendered.pages.map(({ image: _image, ...page }) => page)
+			)
 
 			const runs = native.pages.flatMap((page) => page.runs)
 			const text = runs.map((run) => run.text).join(' ')
@@ -49,11 +49,13 @@ describe('PDF golden corpus', () => {
 	test('classifies input defects without confusing them with runtime defects', async () => {
 		const malformed = new TextEncoder().encode('%PDF-1.7\nthis is not a PDF')
 		expect((await decoder.decode(source('malformed.pdf', malformed))).outcome).toBe('malformed')
-		expect(pdfDecodeFailureKind(Object.assign(new Error('bad xref'), { name: 'FormatError' }))).toBe(
-			'malformed'
-		)
 		expect(
-			pdfDecodeFailureKind(Object.assign(new Error('password required'), { name: 'PasswordException' }))
+			pdfDecodeFailureKind(Object.assign(new Error('bad xref'), { name: 'FormatError' }))
+		).toBe('malformed')
+		expect(
+			pdfDecodeFailureKind(
+				Object.assign(new Error('password required'), { name: 'PasswordException' })
+			)
 		).toBe('encrypted')
 		expect(pdfDecodeFailureKind(new Error('Worker task was terminated'))).toBe('worker-lifecycle')
 		expect(pdfDecodeFailureKind(new Error("Cannot find module './pdf.worker.mjs'"))).toBe('runtime')

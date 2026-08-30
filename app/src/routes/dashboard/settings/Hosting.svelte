@@ -154,7 +154,8 @@ const statusLabel: Record<Site['status'], string> = {
 							<div class="min-w-0">
 								<p class="truncate font-mono text-sm">{site.hostname}</p>
 								<p class="truncate text-xs opacity-45">
-									{site.repository} · {site.deploymentBranch}
+									{site.repository}
+									· {site.deploymentBranch}
 								</p>
 							</div>
 							<span
@@ -212,7 +213,7 @@ const statusLabel: Record<Site['status'], string> = {
 					bind:value={draft.hostname}
 					placeholder="www.example.com"
 					class="rounded-lg border border-foreground/10 bg-transparent px-3 py-2 outline-none focus:border-primary"
-				/>
+				>
 			</label>
 			<label class="flex flex-col gap-1 text-xs">
 				<span class="opacity-50">GitHub Repository</span>
@@ -221,7 +222,7 @@ const statusLabel: Record<Site['status'], string> = {
 					bind:value={draft.repository}
 					placeholder="owner/repository"
 					class="rounded-lg border border-foreground/10 bg-transparent px-3 py-2 outline-none focus:border-primary"
-				/>
+				>
 			</label>
 			<div class="grid gap-3 sm:grid-cols-2">
 				<label class="flex flex-col gap-1 text-xs">
@@ -230,7 +231,7 @@ const statusLabel: Record<Site['status'], string> = {
 						required
 						bind:value={draft.sourceBranch}
 						class="rounded-lg border border-foreground/10 bg-transparent px-3 py-2 font-mono outline-none focus:border-primary"
-					/>
+					>
 				</label>
 				<label class="flex flex-col gap-1 text-xs">
 					<span class="opacity-50">Deployment-Branch</span>
@@ -238,7 +239,7 @@ const statusLabel: Record<Site['status'], string> = {
 						required
 						bind:value={draft.deploymentBranch}
 						class="rounded-lg border border-foreground/10 bg-transparent px-3 py-2 font-mono outline-none focus:border-primary"
-					/>
+					>
 				</label>
 			</div>
 			<button
@@ -251,10 +252,14 @@ const statusLabel: Record<Site['status'], string> = {
 		</form>
 
 		{#if dns}
-			<div class="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-4 text-xs">
+			<div
+				class="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-4 text-xs"
+			>
 				<p class="font-medium">DNS jetzt einrichten</p>
 				<p>TXT <code>{dns.txtName}</code> = <code>{dns.txtValue}</code></p>
-				{#if dns.ipv4}<p>A <code>{dns.hostname}</code> = <code>{dns.ipv4}</code></p>{/if}
+				{#if dns.ipv4}
+					<p>A <code>{dns.hostname}</code> = <code>{dns.ipv4}</code></p>
+				{/if}
 				{#each dns.ipv6 as address (address)}
 					<p>AAAA <code>{dns.hostname}</code> = <code>{address}</code></p>
 				{/each}

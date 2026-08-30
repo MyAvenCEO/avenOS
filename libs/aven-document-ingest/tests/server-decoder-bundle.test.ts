@@ -29,7 +29,8 @@ describe('production-bundled PDF decoder', () => {
 		'syn_0066_SA_digital_messaging_qr_only_receipt.pdf'
 	]) {
 		test(`embeds the worker and coherent canvas runtime for ${file}`, async () => {
-			const path = new URL(`../../../fixtures/golden/document-pdf/${file}`, import.meta.url).pathname
+			const path = new URL(`../../../fixtures/golden/document-pdf/${file}`, import.meta.url)
+				.pathname
 			const { stdout, stderr } = await execute('bun', [executable, path])
 			expect(stderr).toBe('')
 			const decoded = JSON.parse(stdout) as {
