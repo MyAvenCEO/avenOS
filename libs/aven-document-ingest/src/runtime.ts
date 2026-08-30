@@ -421,10 +421,7 @@ export class DocumentProcessingRuntime {
 					),
 					...artifactInputs(assembled.artifacts)
 				],
-				dependsOn: [
-					...classificationStageKeys,
-					'assemble-document'
-				]
+				dependsOn: [...classificationStageKeys, 'assemble-document']
 			})
 			const classification = aggregated.artifacts.find(
 				(artifact) => artifact.typeKey === 'core.content-classification'
@@ -474,6 +471,12 @@ export class DocumentProcessingRuntime {
 							: artifact.typeKey === 'banking.account-statement-candidate'
 					)
 					if (!candidate) throw new Error('finance extractor omitted its candidate')
+					const details = invoice
+						? extraction.artifacts.find(
+								(artifact) => artifact.typeKey === 'bookkeeping.invoice-details'
+							)
+						: undefined
+					if (invoice && !details) throw new Error('invoice extractor omitted its details')
 					currentStage = invoice ? 'validate-invoice' : 'validate-statement'
 					const validation = await this.#step(source, presentation, {
 						key: currentStage,
@@ -483,7 +486,66 @@ export class DocumentProcessingRuntime {
 						dependsOn: [invoice ? 'extract-invoice' : 'extract-statement']
 					})
 					const validationArtifact = validation.artifacts[0]
+					if (!validationArtifact) throw new Error('finance validator omitted its result')
 					const status = String(validationArtifact?.payload.status ?? 'incomplete')
+					if (invoice) {
+						if (!details) throw new Error('invoice extractor omitted its details')
+						currentStage = 'normalize-invoice-open-item'
+						await this.#step(source, presentation, {
+							key: currentStage,
+							method: 'document_normalize_open_item',
+							payload: {
+								candidate: candidate.payload,
+								details: details.payload,
+								validation: validationArtifact.payload
+							},
+							inputs: [
+								input(candidate.artifactId, 'candidate'),
+								input(details.artifactId, 'details'),
+								input(validationArtifact.artifactId, 'validation')
+							],
+							dependsOn: ['validate-invoice']
+						})
+					} else {
+						currentStage = 'normalize-statement'
+						const normalized = await this.#step(source, presentation, {
+							key: currentStage,
+							method: 'document_normalize_statement',
+							payload: {
+								candidate: candidate.payload,
+								validation: validationArtifact.payload
+							},
+							inputs: [
+								input(candidate.artifactId, 'candidate'),
+								input(validationArtifact.artifactId, 'validation')
+							],
+							dependsOn: ['validate-statement']
+						})
+						const normalizedStatement = normalized.artifacts[0]
+						if (!normalizedStatement) throw new Error('statement normalizer omitted its result')
+						const transactions = candidate.payload.transactions
+						if (!Array.isArray(transactions)) throw new Error('statement transactions are invalid')
+						for (let offset = 0; offset < transactions.length; offset += 64) {
+							const batch = Math.floor(offset / 64) + 1
+							currentStage = `fanout-statement-transactions-${String(batch).padStart(3, '0')}`
+							await this.#step(source, presentation, {
+								key: currentStage,
+								method: 'document_fanout_statement_transactions',
+								payload: {
+									candidate: candidate.payload,
+									validation: validationArtifact.payload,
+									offset
+								},
+								inputs: [
+									input(candidate.artifactId, 'candidate'),
+									input(validationArtifact.artifactId, 'validation'),
+									input(normalizedStatement.artifactId, 'statement')
+								],
+								parameters: { offset },
+								dependsOn: ['normalize-statement']
+							})
+						}
+					}
 					presentation.state = status === 'inconsistent' ? 'needs_review' : 'succeeded'
 					presentation.summary = String(
 						candidate.payload.summary ?? `${kind} extracted and validated.`

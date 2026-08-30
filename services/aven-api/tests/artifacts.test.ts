@@ -4,6 +4,8 @@ import { ArtifactFileService } from '../src/lib/server/artifacts/service'
 
 const scopeId = '11111111-1111-4111-8111-111111111111'
 const publicationId = '22222222-2222-4222-8222-222222222222'
+const fanoutPublicationId = '22222222-2222-4222-8222-222222222223'
+const rankPublicationId = '22222222-2222-4222-8222-222222222224'
 const artifactId = '33333333-3333-4333-8333-333333333333'
 const intentId = '44444444-4444-4444-8444-444444444444'
 const intentArtifactId = '55555555-5555-4555-8555-555555555555'
@@ -316,6 +318,166 @@ describe('artifact file coordinator', () => {
 			implementation: { adapter: 'avenos-client-actor', deterministic: false },
 			receipt: { outcome: 'succeeded', model: modelReceipt }
 		})
+	})
+
+	test('accepts canonical statement, bounded fan-out, and ranking runs with deterministic attribution', async () => {
+		const published: Record<string, unknown>[] = []
+		const fetch: ArtifactStoreFetch = async (input, init) => {
+			const request = new Request(input, init)
+			if (request.url.endsWith('/v1/context')) return new Response('{"storeEpoch":"epoch-1"}')
+			if (request.url.includes('/publications/')) {
+				const body = JSON.parse(await request.text()) as Record<string, unknown>
+				published.push(body)
+				const intent = body.intent as {
+					publicationId: string
+					artifacts: Array<{ localKey: string }>
+				}
+				return new Response(
+					JSON.stringify({
+						publicationId: intent.publicationId,
+						runId: intentId,
+						replayed: false,
+						scopeSequence: published.length,
+						artifacts: intent.artifacts.map((artifact, index) => ({
+							localKey: artifact.localKey,
+							artifactId: index === 0 ? artifactId : layoutArtifactId
+						}))
+					})
+				)
+			}
+			throw new Error(`Unexpected Artifact Store request: ${request.url}`)
+		}
+		const service = ArtifactFileService.fromConfig(
+			{
+				ARTIFACT_STORE_BASE_URL: 'http://artifact-store.test',
+				ARTIFACT_STORE_BEARER_TOKEN: 'service-token'
+			},
+			fetch
+		)
+
+		await service?.publishClientRun({
+			userId: 'user-7',
+			databaseName: 'cust_acme',
+			scopeId,
+			publicationId,
+			procedureKey: 'client.normalize-statement',
+			procedureVersion: 'client-v1',
+			inputs: [
+				{ role: 'candidate', ordinal: 0, artifactId: pageArtifactId },
+				{ role: 'validation', ordinal: 0, artifactId: layoutArtifactId }
+			],
+			parameters: {},
+			artifacts: [
+				{
+					localKey: 'normalized-statement',
+					typeKey: 'banking.statement',
+					typeVersion: 1,
+					payload: { accountRef: 'iban:DE89' },
+					output: { role: 'statement', ordinal: 0 }
+				}
+			],
+			evidence: []
+		})
+		await service?.publishClientRun({
+			userId: 'user-7',
+			databaseName: 'cust_acme',
+			scopeId,
+			publicationId: fanoutPublicationId,
+			procedureKey: 'client.fanout-statement-transactions',
+			procedureVersion: 'client-v1',
+			inputs: [
+				{ role: 'candidate', ordinal: 0, artifactId: pageArtifactId },
+				{ role: 'validation', ordinal: 0, artifactId: layoutArtifactId },
+				{ role: 'statement', ordinal: 0, artifactId }
+			],
+			parameters: { offset: 64 },
+			artifacts: [
+				{
+					localKey: 'transaction-065',
+					typeKey: 'banking.transaction',
+					typeVersion: 1,
+					payload: { dedupKey: 'provider:tx-65', sourceOrdinal: 64 },
+					output: { role: 'transaction', ordinal: 0 }
+				}
+			],
+			evidence: [
+				{
+					ordinal: 0,
+					outputLocalKey: 'transaction-065',
+					outputLocator: { kind: 'artifact-root' },
+					inputRole: 'candidate',
+					inputOrdinal: 0,
+					inputLocator: { kind: 'json-pointer', pointer: '/transactions/64' }
+				}
+			]
+		})
+		await service?.publishClientRun({
+			userId: 'user-7',
+			databaseName: 'cust_acme',
+			scopeId,
+			publicationId: rankPublicationId,
+			procedureKey: 'client.rank-invoice-transactions',
+			procedureVersion: 'client-v1',
+			inputs: [
+				{ role: 'open-item', ordinal: 0, artifactId: pageArtifactId },
+				{ role: 'transaction', ordinal: 0, artifactId }
+			],
+			parameters: {},
+			artifacts: [
+				{
+					localKey: 'match-001',
+					typeKey: 'reconciliation.match-candidate',
+					typeVersion: 1,
+					payload: {
+						matcherVersion: 'invoice-transaction-v1',
+						rank: 1,
+						pairEligible: false
+					},
+					output: { role: 'match-candidate', ordinal: 0 }
+				}
+			],
+			evidence: [
+				{
+					ordinal: 0,
+					outputLocalKey: 'match-001',
+					outputLocator: { kind: 'artifact-root' },
+					inputRole: 'open-item',
+					inputOrdinal: 0,
+					inputLocator: { kind: 'artifact-root' }
+				},
+				{
+					ordinal: 1,
+					outputLocalKey: 'match-001',
+					outputLocator: { kind: 'json-pointer', pointer: '/transactionDedupKey' },
+					inputRole: 'transaction',
+					inputOrdinal: 0,
+					inputLocator: { kind: 'json-pointer', pointer: '/dedupKey' }
+				}
+			]
+		})
+
+		expect(
+			published.map((body) => {
+				const intent = body.intent as Record<string, unknown>
+				const run = intent.run as Record<string, unknown>
+				return run.executor
+			})
+		).toEqual([
+			{ kind: 'agent', id: 'statement-normalizer' },
+			{ kind: 'agent', id: 'statement-transaction-fanout' },
+			{ kind: 'agent', id: 'reconciliation-ranker' }
+		])
+		expect(
+			published.map((body) => {
+				const intent = body.intent as Record<string, unknown>
+				const run = intent.run as Record<string, unknown>
+				return run.implementation
+			})
+		).toEqual([
+			expect.objectContaining({ deterministic: true }),
+			expect.objectContaining({ deterministic: true }),
+			expect.objectContaining({ deterministic: true })
+		])
 	})
 
 	test('browses the committed artifact feed newest first', async () => {

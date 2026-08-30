@@ -12,7 +12,7 @@ without opening a registry or searching a monolithic source file.
 
 ## Inventory
 
-The standard pipeline contains twelve actors:
+The standard catalog contains sixteen actors:
 
 | Actor | Method | Requires | Produces | Execution |
 | --- | --- | --- | --- | --- |
@@ -28,6 +28,10 @@ The standard pipeline contains twelve actors:
 | `statement-extractor` | `document_extract_statement` | `ceo.aven.docs.file(F)`, `ceo.aven.docs.document_classification(F, C)` | `ceo.aven.bookkeeping.statement_candidate(F, S)` | Vision model |
 | `invoice-validator` | `document_validate_invoice` | `ceo.aven.bookkeeping.invoice_candidate(F, I)` | `ceo.aven.bookkeeping.invoice_validation(I, V)` | Deterministic |
 | `statement-validator` | `document_validate_statement` | `ceo.aven.bookkeeping.statement_candidate(F, S)` | `ceo.aven.bookkeeping.statement_validation(S, V)` | Deterministic |
+| `open-item-normalizer` | `document_normalize_open_item` | Invoice candidate, details, and validation | `ceo.aven.bookkeeping.open_item(I, O)` | Deterministic |
+| `statement-normalizer` | `document_normalize_statement` | Statement candidate and validation | `ceo.aven.banking.statement(S, N)` | Deterministic |
+| `statement-transaction-fanout` | `document_fanout_statement_transactions` | Statement candidate, validation, and canonical statement | `ceo.aven.banking.transaction(N, T)` | Deterministic |
+| `reconciliation-ranker` | `reconciliation_rank_invoice_transactions` | Canonical open item and transactions | `ceo.aven.reconciliation.match_candidate(O, T, M)` | Deterministic |
 
 The model-backed actors are installed only when the host supplies a compatible
 `DocumentModelGateway`. The deterministic lane remains available without an LLM.

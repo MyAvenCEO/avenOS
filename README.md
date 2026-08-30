@@ -239,6 +239,9 @@ The execution design is split across a few focused references:
 - [HTTP resource actors and credential routing](docs/http-resource-actors.md) proposes
   immutable request/response artifacts, byte-stream materialization, and URL-scoped
   credential selection through a customer-scoped, session-bound Vault service.
+- [Automatic invoice-to-bank-transaction reconciliation](docs/invoice-statement-reconciliation.md)
+  specifies how extracted invoice and statement facts become evidence-bearing matches,
+  review decisions, and a narrowly automated exact case.
 
 ## Deploy and operate it
 

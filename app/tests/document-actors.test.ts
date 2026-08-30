@@ -136,6 +136,80 @@ class InvoiceModelGateway implements DocumentModelGateway {
 	}
 }
 
+class StatementModelGateway extends InvoiceModelGateway {
+	override async complete(request: DocumentModelRequest) {
+		if (request.procedure === 'classify-document') {
+			this.requests.push(structuredClone(request))
+			return {
+				receipt: {
+					model: 'vision-test',
+					profile: 'openai-json-schema',
+					requestKey: `request-${this.requests.length}`,
+					promptDigest: 'prompt-digest',
+					implementationDigest: 'implementation-digest'
+				},
+				structured: {
+					rawKind: 'bank-statement',
+					resolvedKind: 'bank-statement',
+					family: 'statement-family',
+					confidenceBps: 9900,
+					reason: 'The pages visibly form an account statement.',
+					resolutionMode: 'model',
+					alternatives: []
+				}
+			}
+		}
+		if (request.procedure === 'extract-statement') {
+			this.requests.push(structuredClone(request))
+			const transactions = Array.from({ length: 65 }, (_, index) => ({
+				transactionId: `bank-tx-${index + 1}`,
+				bookingDate: '2026-08-18',
+				valueDate: '2026-08-18',
+				title: 'SEPA transfer',
+				amountMinor: -100,
+				counterpartyName: index === 41 ? 'ACME GmbH' : `Supplier ${index + 1}`,
+				counterpartyIban: null,
+				description: index === 41 ? 'Invoice RE-42' : `Payment ${index + 1}`,
+				originalAmountMinor: null,
+				originalCurrency: null,
+				exchangeRate: null,
+				fxSurchargeMinor: null,
+				foreignExchangeFeeBps: null,
+				balanceAfterMinor: 10_000 - (index + 1) * 100,
+				sourceRow: index + 1
+			}))
+			return {
+				receipt: {
+					model: 'vision-test',
+					profile: 'openai-json-schema',
+					requestKey: `request-${this.requests.length}`,
+					promptDigest: 'prompt-digest',
+					implementationDigest: 'implementation-digest'
+				},
+				structured: {
+					candidate: {
+						statementKind: 'monthly-statement',
+						currency: 'EUR',
+						accountHolder: 'Aven GmbH',
+						institution: { name: 'Example Bank', city: 'Berlin' },
+						accountIban: 'DE89370400440532013000',
+						accountNumber: null,
+						productName: 'Business account',
+						openingBalanceMinor: 10_000,
+						closingBalanceMinor: 3500,
+						periodStart: '2026-08-01',
+						periodEnd: '2026-08-31',
+						transactions,
+						summary: 'August account statement.'
+					},
+					evidence: []
+				}
+			}
+		}
+		return super.complete(request)
+	}
+}
+
 class FlakyInvoiceModelGateway extends InvoiceModelGateway {
 	#failedClassification = false
 
@@ -226,6 +300,14 @@ describe('client document actors', () => {
 				expect.objectContaining({ role: 'text', cardinality: 'one' })
 			],
 			outputSlots: [expect.objectContaining({ role: 'classification', cardinality: 'one' })]
+		})
+		expect(actors.rankReconciliation.manifest.methods[0]).toMatchObject({
+			name: 'reconciliation_rank_invoice_transactions',
+			inputSlots: [
+				expect.objectContaining({ role: 'open-item', cardinality: 'one' }),
+				expect.objectContaining({ role: 'transaction', cardinality: 'many' })
+			],
+			outputSlots: [expect.objectContaining({ role: 'match-candidate', cardinality: 'many' })]
 		})
 	})
 
@@ -363,7 +445,8 @@ describe('client document actors', () => {
 			'assemble-document',
 			'aggregate-content',
 			'extract-invoice',
-			'validate-invoice'
+			'validate-invoice',
+			'normalize-invoice-open-item'
 		])
 		expect(
 			publications.runs.find((run) => run.procedureKey === 'client.analyze-page-model')?.parameters
@@ -374,6 +457,77 @@ describe('client document actors', () => {
 				(artifact) => artifact.typeKey === 'bookkeeping.invoice-validation'
 			)
 		).toBe(true)
+		expect(
+			presentation.derivedArtifacts.some((artifact) => artifact.typeKey === 'bookkeeping.open-item')
+		).toBe(true)
+	})
+
+	test('runs statement extraction through canonicalization and bounded transaction fan-out', async () => {
+		const publications = new RecordingGateway()
+		const model = new StatementModelGateway()
+		const visualDocument: DecodedDocument = {
+			...structuredClone(DOCUMENT),
+			pages: DOCUMENT.pages.map((page) => ({
+				...structuredClone(page),
+				image: { mediaType: 'image/png' as const, base64: 'eA==' }
+			}))
+		}
+		const presentation = await new DocumentProcessingRuntime(
+			createDocumentActors(new FixedDecoder(visualDocument), model),
+			publications,
+			() => model.status()
+		).start({ ...SOURCE, originalName: 'statement.pdf' })
+
+		expect(presentation.state).toBe('succeeded')
+		expect(presentation.preferredType).toBe('bank-statement')
+		expect(presentation.metadata.validationStatus).toBe('consistent')
+		expect(presentation.stages.map((stage) => stage.key)).toEqual([
+			'inspect',
+			'decompose-pages',
+			'extract-native-page-001',
+			'extract-native-page-002',
+			'classify-document',
+			'analyze-page-001',
+			'analyze-page-002',
+			'assemble-document',
+			'aggregate-content',
+			'extract-statement',
+			'validate-statement',
+			'normalize-statement',
+			'fanout-statement-transactions-001',
+			'fanout-statement-transactions-002'
+		])
+		expect(
+			presentation.derivedArtifacts.filter((artifact) => artifact.typeKey === 'banking.transaction')
+		).toHaveLength(65)
+		expect(
+			presentation.derivedArtifacts.filter((artifact) => artifact.typeKey === 'banking.statement')
+		).toHaveLength(1)
+		const fanout = publications.runs.filter(
+			(run) => run.procedureKey === 'client.fanout-statement-transactions'
+		)
+		expect(fanout.map((run) => run.artifacts.length)).toEqual([64, 1])
+		expect(fanout.map((run) => run.parameters.offset)).toEqual([0, 64])
+		expect(fanout[1]?.inputs.map((value) => value.role)).toEqual([
+			'candidate',
+			'validation',
+			'statement'
+		])
+		expect(fanout[1]?.evidence[0]?.inputLocator).toEqual({
+			kind: 'json-pointer',
+			pointer: '/transactions/64'
+		})
+
+		const replayPublications = new RecordingGateway()
+		const replayModel = new StatementModelGateway()
+		await new DocumentProcessingRuntime(
+			createDocumentActors(new FixedDecoder(visualDocument), replayModel),
+			replayPublications,
+			() => replayModel.status()
+		).start({ ...SOURCE, originalName: 'statement.pdf' })
+		expect(replayPublications.runs.map((run) => run.publicationId)).toEqual(
+			publications.runs.map((run) => run.publicationId)
+		)
 	})
 
 	test('retries model-backed stages with visible attempt accounting', async () => {
@@ -429,9 +583,9 @@ describe('client document actors', () => {
 				.filter((stage) => stage.key.startsWith('classify-page-independent-'))
 				.every((stage) => stage.state === 'succeeded')
 		).toBe(true)
-		expect(publications.runs.some((run) => run.procedureKey === 'client.extract-invoice-model')).toBe(
-			true
-		)
+		expect(
+			publications.runs.some((run) => run.procedureKey === 'client.extract-invoice-model')
+		).toBe(true)
 	})
 
 	test('isolates a failed classification publication and prunes only its finance dependents', async () => {
@@ -453,9 +607,10 @@ describe('client document actors', () => {
 		expect(
 			presentation.stages.find((stage) => stage.key === 'classify-document')?.attemptCount
 		).toBe(1)
-		expect(
-			presentation.stages.find((stage) => stage.key === 'classify-document')
-		).toMatchObject({ state: 'failed', terminalCode: 'model-document-classification-failed' })
+		expect(presentation.stages.find((stage) => stage.key === 'classify-document')).toMatchObject({
+			state: 'failed',
+			terminalCode: 'model-document-classification-failed'
+		})
 		expect(
 			model.requests.filter((request) => request.procedure === 'classify-document')
 		).toHaveLength(1)

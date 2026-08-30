@@ -42,6 +42,10 @@ actor manifest ID, so listing that directory is the authoritative at-a-glance ca
 | `statement-extractor/` | `document_extract_statement` | Vision model |
 | `invoice-validator/` | `document_validate_invoice` | Deterministic |
 | `statement-validator/` | `document_validate_statement` | Deterministic |
+| `open-item-normalizer/` | `document_normalize_open_item` | Deterministic |
+| `statement-normalizer/` | `document_normalize_statement` | Deterministic |
+| `statement-transaction-fanout/` | `document_fanout_statement_transactions` | Deterministic |
+| `reconciliation-ranker/` | `reconciliation_rank_invoice_transactions` | Deterministic |
 
 Each directory exports a named factory and can be imported directly, for example:
 
