@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
 	actionableWizardProgress,
+	bootstrapFailureSummary,
 	deploymentTargetSummary,
 	guidedBootstrapIntroduction,
 	guidedBootstrapRecoveryNotice,
@@ -13,6 +14,7 @@ import {
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
 	savedWizardResumeIndex,
+	savedWizardVerificationIndexes,
 	setValueAt,
 	signedS3ReadRequest,
 	unseenWorkflowRunId,
@@ -93,6 +95,44 @@ test('reopens a newly required station before later saved values', () => {
 		}),
 		2
 	)
+})
+
+test('rechecks every saved credential on resume, including earlier Polar keys', () => {
+	const steps = [
+		{ info: true, path: [], verify: true },
+		{ path: ['repository'], verify: true },
+		{ path: ['providers', 'production', 'polarApiKey'], verify: true },
+		{ path: ['providers', 'production', 'smtpUrl'] },
+		{ path: ['providers', 'redpillApiKey'], verify: true },
+		{ path: ['reviewer'], optional: true, verify: true },
+		{
+			path: ['storage', 'accessKey'],
+			verify: true,
+			companion: { path: ['storage', 'secretKey'] }
+		}
+	]
+	const draft = {
+		repository: 'MyAvenCEO/avenOS',
+		providers: {
+			production: { polarApiKey: 'old-token', smtpUrl: 'smtps://saved' },
+			redpillApiKey: 'saved-redpill-key'
+		},
+		storage: { accessKey: 'saved-without-companion' }
+	}
+
+	assert.deepEqual(savedWizardVerificationIndexes(steps, draft), [1, 2, 4])
+})
+
+test('surfaces a concise provider error on the recovery screen', () => {
+	assert.equal(
+		bootstrapFailureSummary([
+			'error: The payment provider rejected list-benefits.',
+			'details: "API error: HTTP 403 insufficient_scope",',
+			'at async syncBenefits'
+		]),
+		'The payment provider rejected list-benefits. — API error: HTTP 403 insufficient_scope'
+	)
+	assert.equal(bootstrapFailureSummary(['stack frame only']), undefined)
 })
 
 test('introduces every manual prerequisite and the incremental plaintext recovery behavior', () => {

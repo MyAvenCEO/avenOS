@@ -173,12 +173,12 @@ bun run bootstrap:deployment:guided -- --plain
 
 When the output directory contains one or both owner-only credential CSV files plus their
 machine-readable input and generated-secret companions, startup offers **Resume** or
-**Exit**. Resume first reopens the saved target selection, then opens the latest relevant
-station containing a saved value and checks that station
-again before advancing. This deliberately rechecks a value that may have been saved just
-before a provider rejected it. Exit leaves every file untouched. A CSV without both
-companion files is preserved and produces a clear error instead of being overwritten or
-partially reconstructed.
+**Exit**. Resume first reopens the saved target selection, then rechecks every saved,
+testable credential with read-only provider calls. The current credential and check count
+remain visible. A rejected credential opens its own station immediately so it can be
+replaced before Apply; otherwise the latest relevant saved station opens. Exit leaves every
+file untouched. A CSV without both companion files is preserved and produces a clear error
+instead of being overwritten or partially reconstructed.
 
 On a fresh run, the wizard starts at the first field. A saved non-secret value is shown and
 can be edited; a saved secret remains hidden and an empty field keeps and rechecks it. A
@@ -187,7 +187,9 @@ requires a typed control word: enter exactly `keep` or `delete`, with no default
 covers the CSV, resumable input, generated secrets, encrypted bootstrap-state copies and markers, the
 local Pulumi backend, and any completed recovery CSV. The prompt warns that deletion
 prevents resume and can strand resources if provider changes were already applied. Keeping
-them prints the preserved CSV path. A completed run ends with `SUCCESS` and the same path.
+them prints the preserved CSV path. When a provider returned a concise error, the recovery
+screen shows that redacted response as well as the diagnostic-log path. A completed run
+ends with `SUCCESS` and the same path.
 Generated values join the same file as soon as they exist; manually entered provider
 values are present throughout. During the initial rollout this includes each GitHub run,
 the deployed Git revision, exact state and backup bucket names, public service origins,

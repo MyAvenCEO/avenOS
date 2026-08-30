@@ -33,6 +33,7 @@ import {
 } from './lib/deployment-bootstrap.js'
 import {
 	actionableWizardProgress,
+	bootstrapFailureSummary,
 	deploymentTargetSummary,
 	guidedBootstrapIntroduction,
 	guidedBootstrapRecoveryNotice,
@@ -44,6 +45,7 @@ import {
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
 	savedWizardResumeIndex,
+	savedWizardVerificationIndexes,
 	setValueAt,
 	signedS3ReadRequest,
 	unseenWorkflowRunId,
@@ -757,6 +759,7 @@ async function runBootstrapApply(update: (event: TuiProgressUpdate) => void): Pr
 	)
 	activeChild = child
 	const log: string[] = [`avenOS bootstrap apply ${new Date().toISOString()}`]
+	const diagnosticLines: string[] = []
 	let lastEvent: TuiProgressUpdate | undefined
 	const consume = async (
 		stream: ReadableStream<Uint8Array>,
@@ -783,7 +786,12 @@ async function runBootstrapApply(update: (event: TuiProgressUpdate) => void): Pr
 						`[stage ${event.current}/${event.total}] ${event.status}: ${event.label}${event.detail ? ` — ${event.detail}` : ''}`
 					)
 					update(event)
-				} else if (line.trim()) log.push(`[${source}] ${redactSecrets(line)}`)
+				} else if (line.trim()) {
+					const redacted = redactSecrets(line)
+					log.push(`[${source}] ${redacted}`)
+					if (source === 'stderr' && /^(error|details):/.test(redacted.trim()))
+						diagnosticLines.push(redacted.trim())
+				}
 			}
 			if (done) break
 		}
@@ -800,8 +808,9 @@ async function runBootstrapApply(update: (event: TuiProgressUpdate) => void): Pr
 			const phase = lastEvent
 				? `${lastEvent.label}${lastEvent.detail ? ` — ${lastEvent.detail}` : ''}`
 				: 'starting the provider bootstrap'
+			const diagnostic = bootstrapFailureSummary(diagnosticLines)
 			throw new Error(
-				`Bootstrap apply failed during ${phase.replace(/[.!?]+$/, '')}. Diagnostic log: ${bootstrapLogPath}`
+				`Bootstrap apply failed during ${phase.replace(/[.!?]+$/, '')}.${diagnostic ? ` Provider response: ${diagnostic}.` : ''} Diagnostic log: ${bootstrapLogPath}`
 			)
 		}
 	} finally {
@@ -1590,11 +1599,11 @@ async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'exit'> {
 
 async function collectInput(
 	selectedTargets: readonly Target[],
-	resumeSavedSetup = false
+	startIndex = 0
 ): Promise<BootstrapInput> {
 	const steps = wizardSteps(selectedTargets)
 	const stations = wizardStations(steps)
-	let index = resumeSavedSetup ? savedWizardResumeIndex(steps, draft) : 0
+	let index = startIndex
 	while (index < steps.length) {
 		const step = steps[index] as WizardStep
 		if (step.info) {
@@ -1730,6 +1739,33 @@ async function collectInput(
 	return draft
 }
 
+async function resumeIndexAfterCredentialPreflight(
+	selectedTargets: readonly Target[]
+): Promise<number> {
+	const steps = wizardSteps(selectedTargets)
+	const indexes = savedWizardVerificationIndexes(steps, draft)
+	for (const [position, index] of indexes.entries()) {
+		const step = steps[index] as WizardStep
+		const candidate = String(valueAt(draft, step.path))
+		setUiContext(
+			'Resume',
+			'Rechecking saved credentials',
+			`Read-only check ${position + 1} of ${indexes.length}: ${step.title}. A failed check opens that credential page so it can be replaced before Apply.`
+		)
+		try {
+			await withProgress(`Checking ${step.title}…`, async () => {
+				await step.verify?.(candidate)
+			})
+		} catch (error) {
+			if (error instanceof TuiInterruptedError) throw error
+			const message = redactSecrets(error instanceof Error ? error.message : 'verification failed')
+			reportFailure(`Saved ${step.title}: ${message}`)
+			return index
+		}
+	}
+	return savedWizardResumeIndex(steps, draft)
+}
+
 try {
 	const startup = await offerSavedSetupResume()
 	if (startup === 'exit') {
@@ -1742,7 +1778,9 @@ try {
 		generated
 	)
 	if (!existsSync(inputPath) || !existsSync(credentialsPath)) saveDraft()
-	const bootstrapInput = await collectInput(selectedTargets, startup === 'resume')
+	const startIndex =
+		startup === 'resume' ? await resumeIndexAfterCredentialPreflight(selectedTargets) : 0
+	const bootstrapInput = await collectInput(selectedTargets, startIndex)
 	setUiContext('Review', 'Validating the plan', 'No provider state changes while this check runs.')
 	await withProgress('Validating the complete deployment plan…', () =>
 		run(

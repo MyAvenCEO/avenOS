@@ -95,6 +95,40 @@ export function savedWizardResumeIndex(
 	return latestSaved
 }
 
+export function savedWizardVerificationIndexes(
+	steps: readonly {
+		info?: boolean
+		path: readonly string[]
+		optional?: boolean
+		verify?: unknown
+		companion?: { path: readonly string[]; optional?: boolean }
+	}[],
+	draft: Record<string, unknown>
+): number[] {
+	return steps.flatMap((step, index) => {
+		if (step.info || !step.verify) return []
+		const primary = valueAt(draft, step.path)
+		const hasPrimary = primary !== undefined && primary !== null && String(primary) !== ''
+		if (!hasPrimary) return []
+		if (step.companion) {
+			const companion = valueAt(draft, step.companion.path)
+			const hasCompanion = companion !== undefined && companion !== null && String(companion) !== ''
+			if (!hasCompanion && !step.companion.optional) return []
+		}
+		return [index]
+	})
+}
+
+export function bootstrapFailureSummary(lines: readonly string[]): string | undefined {
+	const error = [...lines].reverse().find((line) => line.startsWith('error:'))
+	const details = [...lines].reverse().find((line) => line.startsWith('details:'))
+	const summary = [error, details]
+		.filter((line): line is string => Boolean(line))
+		.map((line) => line.replace(/^(error|details):\s*/, '').replace(/^"|"[,]?$/g, ''))
+		.join(' — ')
+	return summary ? summary.slice(0, 600) : undefined
+}
+
 export function orderedDeploymentTargets(values: readonly string[]): Target[] {
 	const selected = new Set(values)
 	return TARGETS.filter((target) => selected.has(target))
