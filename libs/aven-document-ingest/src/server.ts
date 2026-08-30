@@ -1,3 +1,5 @@
+/// <reference path="./pdfjs-worker.d.ts" />
+
 import type { PlanRunExecutor, PlanRunStartRequest } from '@avenos/actors'
 import { ACTOR_RUN_PROTOCOL, portableRunClone } from '@avenos/actors'
 import type {
