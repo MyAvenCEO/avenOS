@@ -13,6 +13,28 @@ E2E_TENANT_PRIVATE_KEY=$(sed ':a;N;$!ba;s/\n/\\n/g' "$key_dir/tenant-private.pem
 E2E_TENANT_PUBLIC_KEY=$(sed ':a;N;$!ba;s/\n/\\n/g' "$key_dir/tenant-public.pem")
 export E2E_TENANT_PRIVATE_KEY E2E_TENANT_PUBLIC_KEY
 
+if [ -n "${LOCAL_LLM_MODEL:-}" ] && [ -n "${LLM_GATEWAY_MODELS_JSON:-}" ]; then
+  echo "Set LOCAL_LLM_MODEL or LLM_GATEWAY_MODELS_JSON, not both." >&2
+  exit 2
+fi
+if [ -n "${LOCAL_LLM_MODEL:-}" ]; then
+  LLM_GATEWAY_MODELS_JSON=$(bun "$root/deploy/local/llm-catalog.ts")
+  local_llm_description="local OpenAI-compatible model ${LOCAL_LLM_MODEL}"
+elif [ -n "${LLM_GATEWAY_MODELS_JSON:-}" ]; then
+  local_llm_description="custom OpenAI-compatible catalog"
+else
+  LLM_GATEWAY_MODELS_JSON='[{"id":"deepseek/deepseek-v4-flash-0731","label":"Deterministic local chat","capabilities":["text-generation","streaming","tool-calling"],"baseUrl":"http://llm-mock:8090/v1","upstreamModel":"e2e-chat","profile":"generic-json","authMode":"none"}]'
+  local_llm_description="deterministic built-in mock"
+fi
+if [ -z "${LLM_GATEWAY_CREDENTIALS_JSON:-}" ]; then
+  LLM_GATEWAY_CREDENTIALS_JSON='{}'
+fi
+LLM_GATEWAY_ENABLED=${LLM_GATEWAY_ENABLED:-true}
+LLM_GATEWAY_TIMEOUT_SECONDS=${LLM_GATEWAY_TIMEOUT_SECONDS:-180}
+LLM_GATEWAY_ALLOW_INSECURE_HTTP=${LLM_GATEWAY_ALLOW_INSECURE_HTTP:-true}
+export LLM_GATEWAY_ENABLED LLM_GATEWAY_MODELS_JSON LLM_GATEWAY_CREDENTIALS_JSON
+export LLM_GATEWAY_TIMEOUT_SECONDS LLM_GATEWAY_ALLOW_INSECURE_HTTP
+
 if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
   NODE_AUTH_TOKEN=$(sed -n 's#^//npm.pkg.github.com/:_authToken=##p' "$HOME/.npmrc" 2>/dev/null | tail -n 1)
   export NODE_AUTH_TOKEN
@@ -39,4 +61,5 @@ echo "  identity  http://localhost:13100"
 echo "  checkout  http://localhost:13200"
 echo "  facade    http://localhost:13000"
 echo "  mail      http://localhost:18025"
+echo "  llm       $local_llm_description"
 echo "Create a local account with: bun run local:account -- you@example.test"

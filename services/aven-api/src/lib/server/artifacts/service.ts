@@ -44,7 +44,7 @@ export interface PublishedFile {
 export interface ClientRunArtifact {
 	localKey: string
 	typeKey: string
-	typeVersion: 1
+	typeVersion: number
 	payload: ArtifactJson
 	output: { role: string; ordinal: number }
 	blob?: { mediaType: string; base64: string }
@@ -93,6 +93,7 @@ interface ExpectedClientArtifact {
 	role: string
 	ordinal: number
 	blob: 'required' | 'forbidden'
+	typeVersion?: number
 }
 
 function invalidClientContract(message: string): never {
@@ -186,6 +187,7 @@ function expectArtifacts(input: PublishClientRunInput, expected: ExpectedClientA
 		if (
 			!artifact ||
 			artifact.typeKey !== slot.typeKey ||
+			artifact.typeVersion !== (slot.typeVersion ?? 1) ||
 			artifact.output.role !== slot.role ||
 			artifact.output.ordinal !== slot.ordinal ||
 			(slot.blob === 'required') !== Boolean(artifact.blob)
@@ -332,14 +334,16 @@ const invoiceDetailsOutput: ExpectedClientArtifact = {
 	typeKey: 'bookkeeping.invoice-details',
 	role: 'details',
 	ordinal: 0,
-	blob: 'forbidden'
+	blob: 'forbidden',
+	typeVersion: 2
 }
 const statementOutput: ExpectedClientArtifact = {
 	localKey: 'statement',
 	typeKey: 'banking.account-statement-candidate',
 	role: 'candidate',
 	ordinal: 0,
-	blob: 'forbidden'
+	blob: 'forbidden',
+	typeVersion: 2
 }
 const invoiceValidationOutput: ExpectedClientArtifact = {
 	localKey: 'validation',

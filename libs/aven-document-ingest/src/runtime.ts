@@ -30,6 +30,7 @@ export type {
 
 interface MaterializedArtifact extends PublishedClientArtifact {
 	typeKey: string
+	typeVersion: number
 	payload: Record<string, unknown>
 	blob?: ClientArtifactDraft['blob']
 }
@@ -72,6 +73,7 @@ function materialize(
 		return {
 			...receipt,
 			typeKey: draft.typeKey,
+			typeVersion: draft.typeVersion,
 			payload: draft.payload,
 			...(draft.blob && { blob: draft.blob })
 		}
@@ -231,6 +233,8 @@ export class DocumentProcessingRuntime {
 			let representationArtifacts: MaterializedArtifact[] = []
 			const classificationArtifacts: MaterializedArtifact[] = []
 			const nativeByPage = new Map<number, MaterializedArtifact[]>()
+			const representationStageKeys: string[] = []
+			const classificationStageKeys: string[] = []
 			const useModel =
 				this.#modelEnabled && modelStatus.available && pageArtifacts.length <= modelPageLimit
 			presentation.metadata.vision = useModel ? 'model' : 'deterministic-fallback'
@@ -284,6 +288,8 @@ export class DocumentProcessingRuntime {
 					})
 					classificationArtifacts.push(...classified.artifacts)
 					pageClassifications.push(pageClassificationFrom(classified.result, page.page))
+					representationStageKeys.push(`extract-native-page-${suffix}`)
+					classificationStageKeys.push(currentStage)
 				}
 				if (index === pageArtifacts.length - 1)
 					presentation.metadata.pageCount = pageArtifacts.length
@@ -292,19 +298,33 @@ export class DocumentProcessingRuntime {
 			let documentClassification: MaterializedArtifact | undefined
 			if (useModel) {
 				currentStage = 'classify-document'
-				const classified = await this.#step(source, presentation, {
-					key: currentStage,
-					method: 'document_classify_kind',
-					payload: { document, pages: nativePages },
-					inputs: [input(source.artifactId, 'source'), ...artifactInputs(nativeArtifacts)],
-					dependsOn: nativePages.map(
-						(page) => `extract-native-page-${String(page.page).padStart(3, '0')}`
+				try {
+					const classified = await this.#step(source, presentation, {
+						key: currentStage,
+						method: 'document_classify_kind',
+						payload: { document, pages: nativePages },
+						inputs: [input(source.artifactId, 'source'), ...artifactInputs(nativeArtifacts)],
+						dependsOn: nativePages.map(
+							(page) => `extract-native-page-${String(page.page).padStart(3, '0')}`
+						)
+					})
+					documentClassification = classified.artifacts.find(
+						(artifact) => artifact.typeKey === 'core.document-classification'
 					)
-				})
-				documentClassification = classified.artifacts.find(
-					(artifact) => artifact.typeKey === 'core.document-classification'
-				)
-				if (!documentClassification) throw new Error('document classifier omitted its output')
+					if (!documentClassification) throw new Error('document classifier omitted its output')
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error)
+					const stage = presentation.stages.find((candidate) => candidate.key === currentStage)
+					if (stage) {
+						stage.state = 'failed'
+						stage.terminalCode = 'model-document-classification-failed'
+					}
+					presentation.warnings.push({
+						code: 'model-document-classification-failed',
+						message: `Document classification failed; independent page-analysis actors continued and finance extraction was pruned because its classification dependency was unavailable. ${message}`,
+						retryable: true
+					})
+				}
 
 				for (const pageArtifact of pageArtifacts) {
 					const number = pageNumber(pageArtifact)
@@ -312,31 +332,68 @@ export class DocumentProcessingRuntime {
 					const native = nativePages.find((candidate) => candidate.page === number)
 					if (!page || !native) throw new Error(`page ${number} representation is missing`)
 					const suffix = String(number).padStart(3, '0')
-					currentStage = `analyze-page-${suffix}`
-					const analyzed = await this.#step(source, presentation, {
-						key: currentStage,
-						method: 'document_analyze_page',
-						payload: { page, extracted: native },
-						inputs: [
-							input(source.artifactId, 'source'),
-							input(pageArtifact.artifactId, 'page'),
-							...artifactInputs(nativeByPage.get(number) ?? [])
-						],
-						dependsOn: [`extract-native-page-${suffix}`],
-						parameters: { page: number }
-					})
-					representationArtifacts.push(
-						...analyzed.artifacts.filter((artifact) =>
-							['docs.extracted-text', 'docs.text-layout'].includes(artifact.typeKey)
+					const analyzeStage = `analyze-page-${suffix}`
+					currentStage = analyzeStage
+					try {
+						const analyzed = await this.#step(source, presentation, {
+							key: currentStage,
+							method: 'document_analyze_page',
+							payload: { page, extracted: native },
+							inputs: [
+								input(source.artifactId, 'source'),
+								input(pageArtifact.artifactId, 'page'),
+								...artifactInputs(nativeByPage.get(number) ?? [])
+							],
+							dependsOn: [`extract-native-page-${suffix}`],
+							parameters: { page: number }
+						})
+						representationArtifacts.push(
+							...analyzed.artifacts.filter((artifact) =>
+								['docs.extracted-text', 'docs.text-layout'].includes(artifact.typeKey)
+							)
 						)
-					)
-					classificationArtifacts.push(
-						...analyzed.artifacts.filter(
-							(artifact) => artifact.typeKey === 'core.content-classification'
+						classificationArtifacts.push(
+							...analyzed.artifacts.filter(
+								(artifact) => artifact.typeKey === 'core.content-classification'
+							)
 						)
-					)
-					extractedPages.push(extractedPageFrom(analyzed.result, number))
-					pageClassifications.push(pageClassificationFrom(analyzed.result, number))
+						extractedPages.push(extractedPageFrom(analyzed.result, number))
+						pageClassifications.push(pageClassificationFrom(analyzed.result, number))
+						representationStageKeys.push(analyzeStage)
+						classificationStageKeys.push(analyzeStage)
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error)
+						const stage = presentation.stages.find((candidate) => candidate.key === analyzeStage)
+						if (stage) {
+							stage.state = 'failed'
+							stage.terminalCode = 'model-page-analysis-failed'
+						}
+						presentation.warnings.push({
+							code: 'model-page-analysis-failed',
+							message: `Page ${number} model analysis failed; independent native-text and deterministic-classification actors continued. ${message}`,
+							retryable: true
+						})
+						representationArtifacts.push(...(nativeByPage.get(number) ?? []))
+						extractedPages.push(native)
+						representationStageKeys.push(`extract-native-page-${suffix}`)
+
+						currentStage = `classify-page-independent-${suffix}`
+						const fallback = await this.#step(source, presentation, {
+							key: currentStage,
+							method: 'document_classify_page',
+							payload: { page, extracted: native, mediaType: document.detectedMediaType },
+							inputs: [
+								input(source.artifactId, 'source'),
+								input(pageArtifact.artifactId, 'page'),
+								...artifactInputs(nativeByPage.get(number) ?? [])
+							],
+							dependsOn: [`extract-native-page-${suffix}`],
+							parameters: { page: number, continuedAfterFailure: analyzeStage }
+						})
+						classificationArtifacts.push(...fallback.artifacts)
+						pageClassifications.push(pageClassificationFrom(fallback.result, number))
+						classificationStageKeys.push(currentStage)
+					}
 				}
 			} else {
 				extractedPages = nativePages
@@ -349,10 +406,7 @@ export class DocumentProcessingRuntime {
 				method: 'document_assemble',
 				payload: { pages: extractedPages },
 				inputs: [input(source.artifactId, 'source'), ...artifactInputs(representationArtifacts)],
-				dependsOn: extractedPages.map(
-					(page) =>
-						`${useModel ? 'analyze-page' : 'extract-native-page'}-${String(page.page).padStart(3, '0')}`
-				)
+				dependsOn: representationStageKeys
 			})
 
 			currentStage = 'aggregate-content'
@@ -368,10 +422,7 @@ export class DocumentProcessingRuntime {
 					...artifactInputs(assembled.artifacts)
 				],
 				dependsOn: [
-					...pageClassifications.map(
-						(page) =>
-							`${useModel ? 'analyze-page' : 'classify-page'}-${String(page.page).padStart(3, '0')}`
-					),
+					...classificationStageKeys,
 					'assemble-document'
 				]
 			})
@@ -459,6 +510,11 @@ export class DocumentProcessingRuntime {
 					message: 'No trustworthy native text was found and the vision lane was unavailable.',
 					retryable: false
 				})
+			}
+			const failedActors = presentation.stages.filter((stage) => stage.state === 'failed')
+			if (failedActors.length > 0) {
+				presentation.metadata.failedActorCount = failedActors.length
+				if (presentation.state === 'succeeded') presentation.state = 'needs_review'
 			}
 			this.#changed(source.artifactId, presentation)
 			return presentation
@@ -557,7 +613,7 @@ export class DocumentProcessingRuntime {
 				(artifact): DerivedArtifact => ({
 					artifactId: artifact.artifactId,
 					typeKey: artifact.typeKey,
-					typeVersion: 1,
+					typeVersion: artifact.typeVersion,
 					stageKey: definition.key
 				})
 			)

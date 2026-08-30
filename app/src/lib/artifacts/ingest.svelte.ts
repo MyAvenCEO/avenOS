@@ -5,6 +5,10 @@ import { anonymousSpeakerFromPayload } from '$lib/chat/anonymous-speaker'
 import { intents, type PersistentIntentDetail } from '$lib/intents/intents.svelte'
 import { shell } from '$lib/intents/talk.svelte'
 import {
+	discoverIntentSources,
+	type ProjectionArtifact
+} from '$lib/intents/persistent-artifact-projection'
+import {
 	clientDocumentProcessingStatus,
 	clientDocumentSourceExecutionEnvironment,
 	processClientDocument
@@ -115,12 +119,34 @@ export async function refreshIntent(intentId: string): Promise<PersistentIntentD
 export async function loadPersistentIntents(): Promise<void> {
 	const summaries = await invoke<Array<{ id: string }>>('intent_list')
 	const details = await Promise.all(summaries.map((intent) => refreshIntent(intent.id)))
+	try {
+		const browse = await invoke<{ artifacts: ProjectionArtifact[] }>('artifact_store_list')
+		const sources = await discoverIntentSources(browse.artifacts, (artifactId) =>
+			invoke<{ payload?: Record<string, unknown> }>('artifact_get', { artifactId })
+		)
+		for (const detail of details) {
+			if (!detail || detail.sourceArtifactId || detail.artifacts.some((a) => a.relation === 'source'))
+				continue
+			const source = sources.get(detail.id)
+			if (!source) continue
+			intents.attachFileSource(detail.id, source.artifactId, detail.title)
+			chat.adoptArtifact(source.artifactId, detail.title)
+		}
+	} catch {
+		// Intent conversations remain usable if Artifact Store is temporarily unavailable.
+		// The next reload or a fresh processing watch will try the durable projection again.
+	}
 	for (const detail of details) {
-		const source = detail?.artifacts.find((artifact) => artifact.relation === 'source')
-		const executionEnvironment = source
+		const source = detail
+			? (detail.artifacts.find((artifact) => artifact.relation === 'source') ??
+					intents.items
+						.find((intent) => intent.id === detail.id)
+						?.artifacts.find((artifact) => artifact.typeKey === 'core.file'))
+			: undefined
+		const executionEnvironment = source?.artifactId
 			? await clientDocumentSourceExecutionEnvironment(source.artifactId)
 			: null
-		if (detail && source && executionEnvironment) {
+		if (detail && source?.artifactId && executionEnvironment) {
 			void processClientDocument(source.artifactId, detail.title, undefined, executionEnvironment)
 			void watchArtifactProcessing(source.artifactId, detail.id)
 			continue
@@ -233,6 +259,7 @@ export async function ingestFile(
 			executionEnvironment
 		})
 		chat.commitArtifactUpload(uploadId, receipt)
+		intents.attachFileSource(receipt.intentId, receipt.artifactId, receipt.originalName)
 		await refreshIntent(receipt.intentId)
 		void processClientDocument(
 			receipt.artifactId,

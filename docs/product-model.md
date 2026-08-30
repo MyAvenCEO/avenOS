@@ -111,8 +111,11 @@ tested.
 
 - [Customer databases as a first-class platform boundary](customer-database-platform.md)
   defines data placement, roles, grants, provisioning, and reconciliation.
-- [Skills: from a desired outcome to a resumable run](actor-skills-and-problem-solving.md)
-  explains how an Aven turns an outcome into capabilities, a plan, and a durable run.
+- [Skills: from an artifact or desired outcome to a resumable run](actor-skills-and-problem-solving.md)
+  explains how an Aven turns source material or an exact outcome into capabilities, a
+  plan, and a durable run.
+- [Artifact-first semantic enrichment and affordance discovery](artifact-first-semantic-enrichment.md)
+  specifies how uploaded documents become typed knowledge and newly available actions.
 - [Document ingest system architecture](document-ingest-system.md) maps the current
   document pipeline and its remote-runner boundary.
 - [Identity, checkout, facade, and public-web cut](identity-checkout-facade-cut.md)

@@ -2,7 +2,7 @@
 export interface ClientArtifactDraft {
 	localKey: string
 	typeKey: string
-	typeVersion: 1
+	typeVersion: number
 	payload: Record<string, unknown>
 	output: { role: string; ordinal: number }
 	blob?: { mediaType: string; base64: string }

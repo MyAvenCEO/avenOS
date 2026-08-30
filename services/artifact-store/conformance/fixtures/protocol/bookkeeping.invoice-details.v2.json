@@ -1,12 +1,12 @@
 {
   "typeKey": "bookkeeping.invoice-details",
-  "version": 1,
+  "version": 2,
   "schemaProfileId": "artifact-json-schema-profile-v1",
   "payloadSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "additionalProperties": false,
-    "required": ["documentKind", "category", "issueDate", "customerNumber", "orderNumber", "supplier", "buyer", "lineItems", "taxBreakdown", "payment", "referenceEntries"],
+    "required": ["documentKind", "category", "issueDate", "customerNumber", "orderNumber", "supplier", "buyer", "lineItems", "taxBreakdown", "payment", "payments", "referenceEntries"],
     "properties": {
       "documentKind": { "enum": ["invoice", "credit-note", "receipt", "self-issued-receipt", "mandate", "order-confirmation", "offer", "reminder"] },
       "category": { "type": ["string", "null"], "maxLength": 64 },
@@ -19,8 +19,10 @@
         "type": "array", "maxItems": 128,
         "items": {
           "type": "object", "additionalProperties": false,
-          "required": ["description", "quantity", "unit", "unitPriceMinor", "netMinor", "taxRateBps", "taxMinor", "grossMinor", "servicePeriod"],
+          "required": ["position", "title", "description", "quantity", "unit", "unitPriceMinor", "netMinor", "taxRateBps", "taxMinor", "grossMinor", "servicePeriod"],
           "properties": {
+            "position": { "type": ["string", "null"], "maxLength": 128 },
+            "title": { "type": ["string", "null"], "maxLength": 512 },
             "description": { "type": ["string", "null"], "maxLength": 2000 },
             "quantity": { "type": ["string", "null"], "maxLength": 64 },
             "unit": { "type": ["string", "null"], "maxLength": 64 },
@@ -46,7 +48,7 @@
         }
       },
       "payment": {
-        "type": "object", "additionalProperties": false,
+        "type": ["object", "null"], "additionalProperties": false,
         "required": ["iban", "bic", "beneficiary", "amountPaidMinor", "totalOutstandingMinor", "paymentTerms"],
         "properties": {
           "iban": { "type": ["string", "null"], "maxLength": 64 },
@@ -55,6 +57,19 @@
           "amountPaidMinor": { "$ref": "#/$defs/money" },
           "totalOutstandingMinor": { "$ref": "#/$defs/money" },
           "paymentTerms": { "type": ["string", "null"], "maxLength": 1000 }
+        }
+      },
+      "payments": {
+        "type": "array", "maxItems": 128,
+        "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["date", "amountMinor", "method", "reference"],
+          "properties": {
+            "date": { "type": ["string", "null"], "maxLength": 32 },
+            "amountMinor": { "$ref": "#/$defs/money" },
+            "method": { "type": ["string", "null"], "maxLength": 128 },
+            "reference": { "type": ["string", "null"], "maxLength": 512 }
+          }
         }
       },
       "referenceEntries": {
@@ -73,14 +88,33 @@
     "$defs": {
       "money": { "type": ["integer", "null"], "minimum": -9007199254740991, "maximum": 9007199254740991 },
       "party": {
-        "type": "object", "additionalProperties": false,
-        "required": ["name", "vatId", "address", "email", "website"],
+        "type": ["object", "null"], "additionalProperties": false,
+        "required": ["name", "vatId", "taxNumber", "address", "street", "postalCode", "city", "country", "email", "phone", "website", "contactName", "bankingAccounts"],
         "properties": {
           "name": { "type": ["string", "null"], "maxLength": 255 },
           "vatId": { "type": ["string", "null"], "maxLength": 64 },
+          "taxNumber": { "type": ["string", "null"], "maxLength": 128 },
           "address": { "type": ["string", "null"], "maxLength": 2000 },
+          "street": { "type": ["string", "null"], "maxLength": 512 },
+          "postalCode": { "type": ["string", "null"], "maxLength": 64 },
+          "city": { "type": ["string", "null"], "maxLength": 255 },
+          "country": { "type": ["string", "null"], "maxLength": 128 },
           "email": { "type": ["string", "null"], "maxLength": 320 },
-          "website": { "type": ["string", "null"], "maxLength": 512 }
+          "phone": { "type": ["string", "null"], "maxLength": 128 },
+          "website": { "type": ["string", "null"], "maxLength": 512 },
+          "contactName": { "type": ["string", "null"], "maxLength": 255 },
+          "bankingAccounts": {
+            "type": "array", "maxItems": 16,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["iban", "bic", "bankName"],
+              "properties": {
+                "iban": { "type": ["string", "null"], "maxLength": 64 },
+                "bic": { "type": ["string", "null"], "maxLength": 32 },
+                "bankName": { "type": ["string", "null"], "maxLength": 255 }
+              }
+            }
+          }
         }
       }
     }

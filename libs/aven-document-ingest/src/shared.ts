@@ -18,7 +18,7 @@ export const MAX_LAYOUT_SPANS = 512
 export interface DocumentSchemaBinding {
 	schema: SchemaId
 	typeKey: string
-	typeVersion: 1
+	typeVersion: number
 	role: string
 }
 
@@ -63,7 +63,8 @@ export const DOCUMENT_SCHEMA_BINDINGS: Readonly<Record<string, DocumentSchemaBin
 		'bookkeeping',
 		'invoice-details',
 		'bookkeeping.invoice-details',
-		'details'
+		'details',
+		2
 	),
 	'ceo.aven.bookkeeping.invoice_validation': binding(
 		'bookkeeping',
@@ -75,7 +76,8 @@ export const DOCUMENT_SCHEMA_BINDINGS: Readonly<Record<string, DocumentSchemaBin
 		'bookkeeping',
 		'statement-candidate',
 		'banking.account-statement-candidate',
-		'candidate'
+		'candidate',
+		2
 	),
 	'ceo.aven.bookkeeping.statement_validation': binding(
 		'bookkeeping',
@@ -85,17 +87,17 @@ export const DOCUMENT_SCHEMA_BINDINGS: Readonly<Record<string, DocumentSchemaBin
 	)
 }
 
-function binding(namespace: string, name: string, typeKey: string, role: string) {
+function binding(namespace: string, name: string, typeKey: string, role: string, version = 1) {
 	return {
 		schema: resourceId({
 			authority: 'ceo.aven',
 			kind: 'schema',
 			namespace,
 			name,
-			version: '1'
+			version: String(version)
 		}),
 		typeKey,
-		typeVersion: 1 as const,
+		typeVersion: version,
 		role
 	}
 }
@@ -183,6 +185,29 @@ export interface DocumentDecoder {
 	decode(source: DocumentSource, options?: { modelPageLimit: number }): Promise<DecodedDocument>
 }
 
+/**
+ * pdf.js reports structural input failures and runtime/worker failures through
+ * the same rejected promises. Keep that distinction explicit: a missing
+ * worker or broken renderer is not evidence that the customer's file is bad.
+ */
+export function pdfDecodeFailureKind(
+	error: unknown
+): 'encrypted' | 'malformed' | 'worker-lifecycle' | 'runtime' {
+	if (!(error instanceof Error)) return 'runtime'
+	if (error.name === 'PasswordException') return 'encrypted'
+	if (error.name === 'InvalidPDFException' || error.name === 'FormatError') return 'malformed'
+	const message = error.message.toLowerCase()
+	if (
+		error.name === 'AbortException' ||
+		message.includes('worker task was terminated') ||
+		message.includes('worker was terminated') ||
+		message.includes('worker was destroyed')
+	) {
+		return 'worker-lifecycle'
+	}
+	return 'runtime'
+}
+
 export type { ClientArtifactDraft, ClientEvidence } from '@avenos/artifact-store'
 export type ClientLocator = ArtifactLocator
 
@@ -239,11 +264,20 @@ export function artifact(
 	return {
 		localKey,
 		typeKey,
-		typeVersion: 1,
+		typeVersion: documentTypeVersion(typeKey),
 		payload,
 		output: { role, ordinal },
 		...(blob && { blob })
 	}
+}
+
+function documentTypeVersion(typeKey: string): number {
+	return Math.max(
+		...Object.values(DOCUMENT_SCHEMA_BINDINGS)
+			.filter((binding) => binding.typeKey === typeKey)
+			.map((binding) => binding.typeVersion),
+		1
+	)
 }
 
 export function success(result: DocumentActorResult, wire: string) {
@@ -461,4 +495,86 @@ export function extractionEvidence(
 		}
 	}
 	return evidence
+}
+
+/**
+ * Supplement model evidence only where an output string occurs verbatim in
+ * native/OCR text and overlaps retained source spans. This is deterministic
+ * grounding, not inference: normalized dates, calculated money values, and
+ * paraphrases deliberately receive no synthetic provenance.
+ */
+export function textGroundedExtractionEvidence(
+	pages: ExtractedPage[],
+	targets: Record<string, { outputLocalKey: string; value: unknown }>,
+	existing: ClientEvidence[] = []
+): ClientEvidence[] {
+	const evidence = existing.slice(0, 256).map((item, ordinal) => ({ ...item, ordinal }))
+	const retained = new Set(
+		evidence.map((item) => `${item.outputLocalKey}:${JSON.stringify(item.outputLocator)}`)
+	)
+	for (const resolved of Object.values(targets)) {
+		for (const leaf of stringLeaves(resolved.value)) {
+			if (evidence.length >= 256) return evidence
+			const key = `${resolved.outputLocalKey}:${JSON.stringify({ kind: 'json-pointer', pointer: leaf.pointer })}`
+			if (retained.has(key)) continue
+			const region = sourceRegion(pages, leaf.value)
+			if (!region) continue
+			evidence.push({
+				ordinal: evidence.length,
+				outputLocalKey: resolved.outputLocalKey,
+				outputLocator: { kind: 'json-pointer', pointer: leaf.pointer },
+				inputRole: 'source',
+				inputOrdinal: 0,
+				inputLocator: region
+			})
+			retained.add(key)
+		}
+	}
+	return evidence
+}
+
+function stringLeaves(
+	value: unknown,
+	pointer = ''
+): Array<{ pointer: string; value: string }> {
+	if (typeof value === 'string') {
+		const candidate = value.trim()
+		return candidate.length >= 2 && candidate.length <= 1000
+			? [{ pointer, value: candidate }]
+			: []
+	}
+	if (Array.isArray(value)) {
+		return value.flatMap((child, index) => stringLeaves(child, `${pointer}/${index}`))
+	}
+	if (!value || typeof value !== 'object') return []
+	return Object.entries(value).flatMap(([key, child]) =>
+		stringLeaves(child, `${pointer}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`)
+	)
+}
+
+function sourceRegion(pages: ExtractedPage[], value: string): ArtifactLocator | undefined {
+	const pattern = new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'iu')
+	for (const page of pages) {
+		const match = pattern.exec(page.text)
+		if (match?.index === undefined) continue
+		const start = utf8Length(page.text.slice(0, match.index))
+		const endExclusive = start + utf8Length(match[0])
+		const spans = page.spans.filter(
+			(span) => span.start < endExclusive && span.endExclusive > start
+		)
+		if (spans.length === 0) continue
+		const x = Math.min(...spans.map((span) => span.x))
+		const y = Math.min(...spans.map((span) => span.y))
+		const right = Math.max(...spans.map((span) => span.x + span.width))
+		const bottom = Math.max(...spans.map((span) => span.y + span.height))
+		return {
+			kind: 'page-region',
+			page: page.page,
+			x,
+			y,
+			width: Math.min(1_000_000 - x, Math.max(0, right - x)),
+			height: Math.min(1_000_000 - y, Math.max(0, bottom - y))
+		}
+	}
+	return undefined
 }

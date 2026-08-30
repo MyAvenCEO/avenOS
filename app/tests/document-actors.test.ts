@@ -149,6 +149,25 @@ class FlakyInvoiceModelGateway extends InvoiceModelGateway {
 	}
 }
 
+class InvalidPageAnalysisModelGateway extends InvoiceModelGateway {
+	override async complete(request: DocumentModelRequest) {
+		if (request.procedure === 'analyze-page') {
+			this.requests.push(structuredClone(request))
+			return {
+				receipt: {
+					model: 'vision-test',
+					profile: 'generic-json',
+					requestKey: `invalid-page-${this.requests.length}`,
+					promptDigest: 'prompt-digest',
+					implementationDigest: 'implementation-digest'
+				},
+				structured: { text: null }
+			}
+		}
+		return super.complete(request)
+	}
+}
+
 class OnceFailingPublicationGateway extends RecordingGateway {
 	#failed = false
 
@@ -381,7 +400,41 @@ describe('client document actors', () => {
 		).toHaveLength(2)
 	})
 
-	test('does not repeat a successful model call when its publication fails', async () => {
+	test('tracks a failed page actor while independent actors continue', async () => {
+		const model = new InvalidPageAnalysisModelGateway()
+		const visualDocument: DecodedDocument = {
+			...structuredClone(DOCUMENT),
+			pages: DOCUMENT.pages.map((page) => ({
+				...structuredClone(page),
+				image: { mediaType: 'image/png' as const, base64: 'eA==' }
+			}))
+		}
+		const publications = new RecordingGateway()
+		const presentation = await new DocumentProcessingRuntime(
+			createDocumentActors(new FixedDecoder(visualDocument), model),
+			publications,
+			() => model.status()
+		).start(SOURCE)
+
+		expect(presentation.state).toBe('needs_review')
+		expect(presentation.metadata).toMatchObject({ documentKind: 'invoice' })
+		expect(
+			presentation.warnings.filter((warning) => warning.code === 'model-page-analysis-failed')
+		).toHaveLength(2)
+		expect(
+			presentation.stages.filter((stage) => stage.state === 'failed').map((stage) => stage.key)
+		).toEqual(['analyze-page-001', 'analyze-page-002'])
+		expect(
+			presentation.stages
+				.filter((stage) => stage.key.startsWith('classify-page-independent-'))
+				.every((stage) => stage.state === 'succeeded')
+		).toBe(true)
+		expect(publications.runs.some((run) => run.procedureKey === 'client.extract-invoice-model')).toBe(
+			true
+		)
+	})
+
+	test('isolates a failed classification publication and prunes only its finance dependents', async () => {
 		const model = new InvoiceModelGateway()
 		const visualDocument: DecodedDocument = {
 			...structuredClone(DOCUMENT),
@@ -396,13 +449,24 @@ describe('client document actors', () => {
 			() => model.status()
 		).start(SOURCE)
 
-		expect(presentation.state).toBe('failed')
+		expect(presentation.state).toBe('needs_review')
 		expect(
 			presentation.stages.find((stage) => stage.key === 'classify-document')?.attemptCount
 		).toBe(1)
 		expect(
+			presentation.stages.find((stage) => stage.key === 'classify-document')
+		).toMatchObject({ state: 'failed', terminalCode: 'model-document-classification-failed' })
+		expect(
 			model.requests.filter((request) => request.procedure === 'classify-document')
 		).toHaveLength(1)
+		expect(
+			presentation.stages
+				.filter((stage) => stage.key.startsWith('analyze-page-'))
+				.every((stage) => stage.state === 'succeeded')
+		).toBe(true)
+		expect(presentation.stages.some((stage) => stage.key === 'extract-invoice')).toBe(false)
+		expect(presentation.stages.some((stage) => stage.key === 'validate-invoice')).toBe(false)
+		expect(presentation.metadata.failedActorCount).toBe(1)
 	})
 
 	test('allows a failed presentation to be started again', async () => {

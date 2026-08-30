@@ -138,6 +138,22 @@ export function documentLlmRequest(
 			schema: request.schema
 		},
 		temperature: 0,
-		maxOutputTokens: 65_536
+		maxOutputTokens: documentOutputTokenBudget(request)
 	}
+}
+
+/**
+ * Avoid reserving the protocol maximum for every tiny classification. Local
+ * serving engines use max_tokens for admission/KV planning, so an unnecessary
+ * 65k reservation can leave a small one-page request waiting until timeout.
+ * Budgets grow with visible source text and retain the full allowance for
+ * large finance extractions.
+ */
+export function documentOutputTokenBudget(request: DocumentModelRequest): number {
+	const textTokensUpperBound = Math.ceil(new TextEncoder().encode(request.documentText).length / 2)
+	if (request.procedure === 'classify-document') return 4_096
+	if (request.procedure === 'analyze-page') {
+		return Math.min(32_768, Math.max(8_192, textTokensUpperBound * 4))
+	}
+	return Math.min(65_536, Math.max(16_384, textTokensUpperBound * 8))
 }

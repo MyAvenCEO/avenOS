@@ -191,9 +191,10 @@ services:
       ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
       ARTIFACT_STORE_BEARER_TOKEN: artifact-store-service-token-for-e2e-0001
       LLM_GATEWAY_ENABLED: "true"
-      LLM_GATEWAY_MODELS_JSON: '[{"id":"deepseek/deepseek-v4-flash-0731","label":"E2E Chat","capabilities":["text-generation","streaming","tool-calling"],"baseUrl":"http://llm-mock:8090/v1","upstreamModel":"e2e-chat","profile":"generic-json","authMode":"none"}]'
+      LLM_GATEWAY_MODELS_JSON: '[{"id":"deepseek/deepseek-v4-flash-0731","label":"E2E Chat","capabilities":["text-generation","vision","structured-output","streaming","tool-calling"],"baseUrl":"http://llm-mock:8090/v1","upstreamModel":"e2e-chat","profile":"generic-json","authMode":"none"}]'
       LLM_GATEWAY_CREDENTIALS_JSON: '{}'
       LLM_GATEWAY_ALLOW_INSECURE_HTTP: "true"
+      LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: actor-runner-llm-gateway-token-e2e-01
       DOWNSTREAMS_JSON: '[{"prefix":"/api/billing","baseUrl":"http://checkout:13200","targetPrefix":"/api/billing","bearerToken":"checkout-facade-token-for-e2e-only","roles":["user","admin"]},{"prefix":"/api/names","baseUrl":"http://checkout:13200","targetPrefix":"/api/names","bearerToken":"checkout-facade-token-for-e2e-only","roles":["user","admin"]}]'
       CUSTOMER_DOWNSTREAMS_JSON: '[{"segment":"artifacts","baseUrl":"http://artifact-store:8087","targetPrefix":"/v1","bearerToken":"artifact-store-service-token-for-e2e-0001","componentRef":"ceo.aven:component:data:artifacts@1","readAction":"artifacts:read","writeAction":"artifacts:write","roles":["user","admin"]},{"segment":"intents","baseUrl":"http://intent-service:3010","targetPrefix":"/api/intents","bearerToken":"intent-service-token-for-e2e-0001","componentRef":"ceo.aven:component:data:intents@1","readAction":"intents:read","writeAction":"intents:write","deleteAction":"intents:delete","mergeAction":"intents:merge","roles":["user","admin"]},{"segment":"actor-runs","baseUrl":"http://actor-runner:3010","targetPrefix":"/api/actor-runs","bearerToken":"actor-runner-token-for-e2e-000001","componentRef":"os.aven:component:actors:run-repository@1","readAction":"actor-runs:read","writeAction":"actor-runs:write","roles":["user","admin"]}]'
     networks: [platform-private, public-test]
@@ -407,6 +408,8 @@ services:
       TENANT_GRANT_PUBLIC_KEY: ${E2E_TENANT_PUBLIC_KEY}
       ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
       ARTIFACT_STORE_BEARER_TOKEN: actor-runner-artifact-token-for-e2e-01
+      LLM_GATEWAY_BASE_URL: http://api:13000/internal/v1/llm
+      LLM_GATEWAY_BEARER_TOKEN: actor-runner-llm-gateway-token-e2e-01
     networks: [platform-private, public-test]
 
   mailpit:

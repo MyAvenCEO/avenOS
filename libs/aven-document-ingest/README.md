@@ -68,6 +68,32 @@ The desktop implementations remain intentionally thin:
 - `app/src/lib/artifacts/client-document-processing.ts` registers actors and binds the
   Tauri Artifact Store command.
 
+The server implementations are equally thin:
+
+- `ServerDocumentDecoder` uses PDF.js plus headless canvas rendering and the same
+  file, page, pixel, and rendered-byte limits as the browser adapter;
+- `HttpLlmGatewayClient` reaches the facade's service-authenticated internal LLM
+  contract; and
+- `ArtifactStoreDocumentGateway` publishes through the Actor Runner's tenant-scoped
+  Artifact Store route.
+
+`tests/server-decoder.test.ts`, `tests/historical-capability-parity.test.ts`, and the
+Actor Runner's `document-lane-conformance.test.ts` make client/server semantic parity
+and the former server extractor's capability floor executable contracts.
+
+The extended provider rail uses the same repository invoice and production
+prompt/schema path. It is deliberately separate from deterministic conformance:
+
+```sh
+TEST_DOCUMENT_LLM_BASE_URL=https://api.example/internal/v1/llm \
+TEST_DOCUMENT_LLM_BEARER_TOKEN=... \
+TEST_DOCUMENT_MODEL_ID=optional-model-id \
+bun run --cwd libs/aven-document-ingest test:provider
+```
+
+`test:provider` requires the gateway URL and bearer and fails rather than skipping when
+they are missing. The ordinary `test` command skips this external rail.
+
 Artifact publication is wrapped in `QueuedClientArtifactGateway`. It serializes local
 publications, retries only host-declared transient failures, and preserves the stable
 `publicationId`, so backpressure cannot duplicate a committed production run.

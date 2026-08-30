@@ -101,8 +101,9 @@ records the four-origin trust boundary.
 
 The local composition runs identity, checkout, the facade, the provisioner, domain
 services, databases, email capture, and the Rust client on one Linux or macOS
-workstation. It does not call a deployed Aven service, Polar, an SMTP provider, or an
-LLM provider.
+workstation. By default it does not call a deployed Aven service, Polar, an SMTP
+provider, or an LLM provider. An operator can instead connect the local facade to a
+trusted OpenAI-compatible model server for chat and document processing.
 
 Install Git, Bun 1.3.13, Rust 1.93.1 through `rustup`, Docker with Compose v2,
 OpenSSL, the native Tauri dependencies, and a GitHub Packages token with

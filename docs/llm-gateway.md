@@ -440,9 +440,11 @@ Text output uses ordinary chat-completion content for every profile. JSON parsin
 string content, content arrays containing text parts, and one outer Markdown JSON fence.
 Tool profiles require exactly one call with the requested output name.
 
-For OpenAI profiles, unsupported `$schema`, `minLength`, `maxLength`, and `uniqueItems`
-keywords are removed recursively before provider submission. The consumer retains its
-original schema for local validation.
+For OpenAI profiles and the Qwen tool profile, unsupported `$schema`, `minLength`,
+`maxLength`, and `uniqueItems` keywords are removed recursively before provider
+submission. The consumer retains its original schema for local validation. This also
+avoids pathological grammar compilation in SGLang's Qwen tool parser for otherwise
+small document schemas.
 
 ## Configuration
 
@@ -475,6 +477,7 @@ LLM_GATEWAY_MODELS_JSON='[
   }
 ]'
 LLM_GATEWAY_CREDENTIALS_JSON='{"openai":"replace-with-provider-secret"}'
+LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN=replace-with-a-distinct-generated-service-secret
 ```
 
 The mixed HTTPS/local example additionally requires:
@@ -504,7 +507,9 @@ Model entry fields:
 Catalog IDs must be unique. Startup fails on malformed JSON, duplicate IDs, missing
 credentials, unsafe URLs, invalid capability names, or contradictory auth settings.
 
-The LLM service deployment supplies the five gateway environment variables. Keep
+The LLM service deployment supplies the gateway environment variables. Pulumi
+generates the Actor Runner bearer independently from its ingress and Artifact Store
+credentials. Keep
 `LLM_GATEWAY_CREDENTIALS_JSON` in the deployment secret store rather than a committed
 `.env` file or ordinary GitHub variable.
 

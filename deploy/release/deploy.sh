@@ -218,6 +218,7 @@ for secret_name in \
   actorApiDatabaseCredentialRoot actorWorkerDatabaseCredentialRoot \
   customerEntitlementToken intentServiceToken actorRunnerServiceToken \
   artifactStoreServiceToken actorRunnerArtifactStoreToken \
+  actorRunnerLlmGatewayToken \
   artifactStoreProvisionerToken tenantGrantPrivateKey siteHostDirectoryToken \
   checkoutFacadeToken checkoutEmailEncryptionKey; do
   load_secret "$secret_name" "$PULUMI_STACK" "$secret_name"
@@ -266,6 +267,7 @@ system_sites=$(printf '[{"hostname":"%s","repository":"myavenceo/aven-brands","s
   dotenv ACTOR_RUNNER_SERVICE_TOKEN "$actorRunnerServiceToken"
   dotenv ARTIFACT_STORE_SERVICE_TOKEN "$artifactStoreServiceToken"
   dotenv ACTOR_RUNNER_ARTIFACT_STORE_TOKEN "$actorRunnerArtifactStoreToken"
+  dotenv ACTOR_RUNNER_LLM_GATEWAY_TOKEN "$actorRunnerLlmGatewayToken"
   dotenv ARTIFACT_STORE_PROVISIONER_TOKEN "$artifactStoreProvisionerToken"
   dotenv TENANT_GRANT_PRIVATE_KEY "$tenantGrantPrivateKey"
   dotenv TENANT_GRANT_PUBLIC_KEY "$tenantGrantPublicKey"

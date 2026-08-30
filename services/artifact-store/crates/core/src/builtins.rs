@@ -35,9 +35,9 @@ const BOOKKEEPING_INVOICE_CANDIDATE_JSON: &[u8] =
 const BOOKKEEPING_INVOICE_VALIDATION_JSON: &[u8] =
     include_bytes!("../../../conformance/fixtures/protocol/bookkeeping.invoice-validation.v1.json");
 const BOOKKEEPING_INVOICE_DETAILS_JSON: &[u8] =
-    include_bytes!("../../../conformance/fixtures/protocol/bookkeeping.invoice-details.v1.json");
+    include_bytes!("../../../conformance/fixtures/protocol/bookkeeping.invoice-details.v2.json");
 const BANKING_ACCOUNT_STATEMENT_CANDIDATE_JSON: &[u8] = include_bytes!(
-    "../../../conformance/fixtures/protocol/banking.account-statement-candidate.v1.json"
+    "../../../conformance/fixtures/protocol/banking.account-statement-candidate.v2.json"
 );
 const BANKING_STATEMENT_VALIDATION_JSON: &[u8] =
     include_bytes!("../../../conformance/fixtures/protocol/banking.statement-validation.v1.json");

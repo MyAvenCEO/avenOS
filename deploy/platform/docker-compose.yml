@@ -191,6 +191,7 @@ services:
       LLM_GATEWAY_CREDENTIALS_JSON: ${LLM_GATEWAY_CREDENTIALS_JSON:?required}
       LLM_GATEWAY_TIMEOUT_SECONDS: ${LLM_GATEWAY_TIMEOUT_SECONDS:-180}
       LLM_GATEWAY_ALLOW_INSECURE_HTTP: "false"
+      LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: ${ACTOR_RUNNER_LLM_GATEWAY_TOKEN:?required}
       DOWNSTREAMS_JSON: ${DOWNSTREAMS_JSON:?required}
       CUSTOMER_DOWNSTREAMS_JSON: ${CUSTOMER_DOWNSTREAMS_JSON:?required}
     networks: [platform-private]
@@ -375,6 +376,8 @@ services:
       TENANT_GRANT_PUBLIC_KEY: ${TENANT_GRANT_PUBLIC_KEY:?required}
       ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
       ARTIFACT_STORE_BEARER_TOKEN: ${ACTOR_RUNNER_ARTIFACT_STORE_TOKEN:?required}
+      LLM_GATEWAY_BASE_URL: http://api:3000/internal/v1/llm
+      LLM_GATEWAY_BEARER_TOKEN: ${ACTOR_RUNNER_LLM_GATEWAY_TOKEN:?required}
     networks: [platform-private, platform-egress]
     security_opt: [no-new-privileges:true]
 

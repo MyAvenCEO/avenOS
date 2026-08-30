@@ -1,8 +1,18 @@
 import type { Predicate } from './actor'
+import type { AvailableAffordance } from './affordances'
 import type { ActorAccessContext, ActorPrincipal } from './authorization'
 import { AVEN_RUNTIME_AUTHORITY, type ProtocolId, resourceId, type SkillId } from './ids'
 import type { Ingredient } from './planner'
 import type { ExecutionEnvironment } from './registry'
+
+/** Legacy exact-goal wire contract retained for rolling upgrades. */
+export const ACTOR_RUN_PROTOCOL_V1 = resourceId({
+	authority: AVEN_RUNTIME_AUTHORITY,
+	kind: 'protocol',
+	namespace: 'actors',
+	name: 'plan-runner',
+	version: '1'
+})
 
 /** Wire contract shared by desktop and server plan runners. */
 export const ACTOR_RUN_PROTOCOL = resourceId({
@@ -10,7 +20,7 @@ export const ACTOR_RUN_PROTOCOL = resourceId({
 	kind: 'protocol',
 	namespace: 'actors',
 	name: 'plan-runner',
-	version: '1'
+	version: '2'
 })
 
 export type PlanRunState =
@@ -21,6 +31,33 @@ export type PlanRunState =
 	| 'succeeded'
 	| 'failed'
 	| 'cancelled'
+
+export type PlanRunGoalSpec =
+	| {
+			mode: 'explore'
+			subject: Ingredient
+			factFamilies: string[]
+	  }
+	| { mode: 'exact'; completion: 'goal_only' }
+	| {
+			mode: 'exact'
+			completion: 'goal_then_enrich'
+			subject: Ingredient
+			factFamilies: string[]
+	  }
+
+export interface PlanRunUnderstandingOutput extends Record<string, unknown> {
+	kind: 'artifact-understanding'
+	status: 'complete' | 'partial'
+	stoppingReason: 'saturated' | 'needs_review'
+	subjectArtifactId: string
+	facts: Array<{
+		predicate: Predicate
+		artifactId: string
+		schema?: string
+	}>
+	affordances: AvailableAffordance[]
+}
 
 /** Caller-controlled command. It contains no asserted identity or grants. */
 export interface PlanRunStartCommand {
@@ -33,6 +70,8 @@ export interface PlanRunStartCommand {
 	executionEnvironment: ExecutionEnvironment
 	ingredients: Ingredient[]
 	goals: Predicate[]
+	/** Absent preserves version 1 exact-goal behavior. */
+	goalSpec?: PlanRunGoalSpec
 	parameters: Record<string, unknown>
 }
 
@@ -91,6 +130,7 @@ export interface PlanRunRecord extends PlanRunHandle {
 	updatedAt: string
 	ingredients: Ingredient[]
 	goals: Predicate[]
+	goalSpec?: PlanRunGoalSpec
 	parameters: Record<string, unknown>
 	checkpoints: PlanRunCheckpoint[]
 	continuations: PlanRunContinuation[]

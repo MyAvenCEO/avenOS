@@ -6,6 +6,9 @@ Normative protocol: [Actor execution protocol and document-ingest cutover](./act
 
 System map: [Document ingest system architecture](./document-ingest-system.md)
 
+Artifact-first extension:
+[Artifact-first semantic enrichment and affordance discovery](./artifact-first-semantic-enrichment.md)
+
 ## Start with the claim
 
 “The document imported successfully” sounds like one claim. It is at least three:
@@ -23,6 +26,7 @@ prove all three. We therefore maintain three independent proof rails:
 | Runtime conformance | Can any admitted skill execute correctly on this host? | Registry, policy view, planner, factory, runner, Artifact Store |
 | Document acceptance | Do the real document capabilities produce correct domain facts? | PDF/image adapters, document actors, schemas, deterministic model fixtures |
 | Provider smoke | Can the deployed external integrations still satisfy their contracts? | LLM gateway, live model catalog, selected providers |
+| Provider-backed document acceptance | Does the selected real model still recover the expected semantics from the reviewed golden corpus? | Golden documents, production prompts and schemas, live model lane |
 
 Every supported execution model—currently client-hosted `local` and remotely hosted
 `server`—MUST pass the relevant rail. A local pass is not evidence for the server, and
@@ -44,6 +48,12 @@ fixtures, not the availability or future behavior of a live provider.
 Provider smoke tests are intentionally narrow. They prove that current credentials,
 catalog entries, modalities, streaming, structured outputs, and tool calls work
 against a live service. They do not replace deterministic acceptance tests.
+
+Provider-backed document acceptance is an extended, credentialed E2E rail. It runs
+the original golden documents through the production model path and compares their
+normalized semantic results, evidence coverage, and downstream affordances with
+reviewed expectations. It does not replace the deterministic merge gate; the two rails
+together distinguish a pipeline regression from model or prompt drift.
 
 This vocabulary should appear in test names, CI jobs, and release notes. Avoid the
 unqualified phrase “document E2E”; say which proof rail and which placement passed.
@@ -249,6 +259,26 @@ Record the gateway version, selected model ID, provider, time, request correlati
 and structural result. Do not maintain a golden prose answer for a live generative
 model.
 
+## Provider-backed document acceptance rail
+
+This extended rail runs before release and when a model, prompt, extraction schema, or
+gateway policy changes. It sends the reviewed golden documents through the actual
+production extraction route and compares canonical structured values and their
+evidence with fixture-defined expectations. It does not compare free-form prose or raw
+JSON serialization.
+
+Each run records the exact model, prompt, schema, Actor, gateway, placement, and corpus
+versions. Critical identity, date, currency, total, tax, and payment-reference fields
+match after canonical normalization. Fixtures declare tolerances for optional fields
+and evidence coverage. Repeated runs report field accuracy, whole-document pass rate,
+and intermittent failures. The detailed semantic matcher and artifact-first journey
+are defined in the
+[artifact-first specification](./artifact-first-semantic-enrichment.md#provider-backed-golden-e2e).
+
+Missing credentials, provider unavailability, or an unadvertised modality produces
+missing release evidence, not a pass. A current model result never rewrites its own
+golden expectation; expectation changes require review.
+
 ## Delivery in small slices
 
 The order below keeps every increment executable while preserving the larger design:
@@ -286,6 +316,9 @@ The order below keeps every increment executable while preserving the larger des
    XRechnung, and encrypted PDF into the document acceptance matrix one at a time.
 10. **Add provider smoke.** Keep live integration evidence distinct from merge-blocking
    deterministic tests.
+11. **Add provider-backed golden acceptance.** Run the reviewed document corpus through
+    the real model path before release and report semantic drift separately from
+    deterministic conformance.
 
 The first three slices should remain intentionally small. They do not need a general
 workflow language, every lifecycle mode, or every document actor. They do need to use
@@ -304,6 +337,7 @@ document-acceptance / local
 document-acceptance / server
 document-acceptance / parity
 provider-smoke / gateway
+provider-document-acceptance / golden-corpus
 ```
 
 A job summary records the commit, fixture-corpus revision, runner protocol version,

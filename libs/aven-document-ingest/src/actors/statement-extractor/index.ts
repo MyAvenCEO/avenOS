@@ -10,7 +10,8 @@ import {
 	object,
 	pageImage,
 	stringValue,
-	success
+	success,
+	textGroundedExtractionEvidence
 } from '../../shared'
 
 export function createStatementExtractorActor(model: DocumentModelGateway): Actor {
@@ -47,6 +48,9 @@ export function createStatementExtractorActor(model: DocumentModelGateway): Acto
 							`statement extraction kind ${extractedKind} conflicts with ${expectedKind}`
 						)
 					}
+					const evidenceTargets = {
+						candidate: { outputLocalKey: 'statement', value: candidate }
+					}
 					return success(
 						{
 							ok: true,
@@ -54,9 +58,11 @@ export function createStatementExtractorActor(model: DocumentModelGateway): Acto
 							artifacts: [
 								artifact('statement', 'banking.account-statement-candidate', candidate, 'candidate')
 							],
-							evidence: extractionEvidence(completed.structured, {
-								candidate: { outputLocalKey: 'statement', value: candidate }
-							}),
+							evidence: textGroundedExtractionEvidence(
+								pages,
+								evidenceTargets,
+								extractionEvidence(completed.structured, evidenceTargets)
+							),
 							modelReceipt: completed.receipt
 						},
 						'Extracted the statement candidate.'

@@ -165,6 +165,77 @@ describe('generic authenticated LLM gateway', () => {
 		expect(calls).toBe(1)
 	})
 
+	test('disables Qwen thinking before forcing a structured tool call', async () => {
+		let outbound: Request | undefined
+		const qwenModel = JSON.stringify([
+			{
+				id: 'qwen-local',
+				label: 'Qwen local',
+				capabilities: ['text-generation', 'structured-output', 'vision', 'tool-calling'],
+				baseUrl: 'https://qwen.example.test/v1',
+				upstreamModel: 'Qwen/Qwen3.8-27B',
+				profile: 'qwen-tools',
+				authMode: 'none'
+			}
+		])
+		const gateway = LlmGatewayService.fromConfig(
+			testConfig({
+				LLM_GATEWAY_ENABLED: 'true',
+				LLM_GATEWAY_MODELS_JSON: qwenModel,
+				LLM_GATEWAY_CREDENTIALS_JSON: '{}'
+			}),
+			async (input, init) => {
+				outbound = new Request(input, init)
+				return new Response(
+					JSON.stringify({
+						choices: [
+							{
+								finish_reason: 'tool_calls',
+								message: {
+									tool_calls: [
+										{
+											function: { name: 'answer_result', arguments: '{"answer":42}' }
+										}
+									]
+								}
+							}
+						]
+					})
+				)
+			}
+		)
+		const output = {
+			format: 'json' as const,
+			name: 'answer_result',
+			schema: {
+				type: 'object',
+				additionalProperties: false,
+				required: ['answer'],
+				properties: {
+					answer: { type: 'integer' },
+					note: { type: 'string', maxLength: 100 },
+					tags: { type: 'array', uniqueItems: true, items: { type: 'string' } }
+				}
+			}
+		}
+
+		const result = await gateway?.complete(
+			request({ modelId: 'qwen-local', output, maxOutputTokens: 4096 })
+		)
+		const body = (await outbound?.json()) as Record<string, unknown>
+
+		expect(result?.output).toEqual({ format: 'json', value: { answer: 42 } })
+		expect(body).toMatchObject({
+			model: 'Qwen/Qwen3.8-27B',
+			max_tokens: 4096,
+			chat_template_kwargs: { enable_thinking: false },
+			tool_choice: { type: 'function', function: { name: 'answer_result' } },
+			parallel_tool_calls: false
+		})
+		expect(JSON.stringify(body.tools)).not.toContain('maxLength')
+		expect(JSON.stringify(body.tools)).not.toContain('uniqueItems')
+	})
+
 	test('passes through OpenAI streaming, schemas, tools, tool results, and provider extensions', async () => {
 		let outbound: Request | undefined
 		const stream =

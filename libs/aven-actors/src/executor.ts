@@ -1,4 +1,5 @@
 import type { Actor, CapabilitySlot, HandlerResult, Predicate } from './actor'
+import { type AffordanceDefinition, discoverAffordances } from './affordances'
 import {
 	type ActorAccessContext,
 	type ActorAuthorizer,
@@ -7,10 +8,21 @@ import {
 } from './authorization'
 import type { ActorFactoryResolver, ActorSpawnRequest } from './factory'
 import type { CapabilityId, SchemaId } from './ids'
-import { type PhysicalPlanStep, type PhysicalProgram, solveAuthorized } from './physical-planner'
-import type { PlanValue } from './planner'
+import {
+	enrichAfterGoalsAuthorized,
+	enrichAuthorized,
+	type PhysicalPlanStep,
+	type PhysicalProgram,
+	solveAuthorized
+} from './physical-planner'
+import type { Ingredient, PlanValue } from './planner'
 import type { ActorRegistrySnapshot, ExecutionEnvironment, RegisteredCapability } from './registry'
-import { assertPortableRunValue, type PlanRunExecutor, type PlanRunStartRequest } from './run'
+import {
+	assertPortableRunValue,
+	type PlanRunExecutor,
+	type PlanRunStartRequest,
+	type PlanRunUnderstandingOutput
+} from './run'
 import { unifiable } from './term'
 
 /** A committed value as seen by the portable executor. */
@@ -125,6 +137,10 @@ export interface ActorExecutionHost {
 		request: PlanRunStartRequest
 	): Awaitable<RuntimeArtifactResolver & RuntimeArtifactPublisher>
 	resource?(request: PlanRunStartRequest): Awaitable<Record<string, unknown> | undefined>
+	/** Application actions considered after enrichment; definitions do not execute work. */
+	affordances?(request: PlanRunStartRequest): Awaitable<AffordanceDefinition[]>
+	/** Previously committed facts which may enable cross-artifact actions. */
+	relatedIngredients?(request: PlanRunStartRequest): Awaitable<Ingredient[]>
 }
 
 /** Compose the same generic plan executor into either a local or server runner. */
@@ -135,6 +151,7 @@ export function createActorPlanExecutor(host: ActorExecutionHost): PlanRunExecut
 				`${host.executionEnvironment} execution host cannot run ${request.executionEnvironment} placement`
 			)
 		}
+		assertGoalRequest(request)
 		const [registry, authorizer] = await Promise.all([
 			host.registry(request),
 			host.authorizer(request)
@@ -145,20 +162,48 @@ export function createActorPlanExecutor(host: ActorExecutionHost): PlanRunExecut
 			authorizer,
 			{ access: request.security.access }
 		)
-		const planned = solveAuthorized(view, request.ingredients, request.goals, {
-			executionEnvironment: host.executionEnvironment
-		})
+		const goalSpec = request.goalSpec ?? { mode: 'exact', completion: 'goal_only' as const }
+		const enrichmentSpec =
+			goalSpec.mode === 'explore' ||
+			(goalSpec.mode === 'exact' && goalSpec.completion === 'goal_then_enrich')
+				? goalSpec
+				: null
+		const planned =
+			enrichmentSpec && goalSpec.mode === 'exact'
+				? enrichAfterGoalsAuthorized(
+						view,
+						request.ingredients,
+						request.goals,
+						enrichmentSpec.factFamilies,
+						{ executionEnvironment: host.executionEnvironment }
+					)
+				: enrichmentSpec
+					? enrichAuthorized(view, request.ingredients, enrichmentSpec.factFamilies, {
+							executionEnvironment: host.executionEnvironment
+						})
+					: solveAuthorized(view, request.ingredients, request.goals, {
+							executionEnvironment: host.executionEnvironment
+						})
 		if (!planned.ok) throw new Error(planned.reason)
 
 		// A zero-step program is a valid generic plan. It needs no factory or
 		// Artifact Store connection and is useful for already-satisfied goals.
 		if (planned.program.steps.length === 0) {
+			const output = enrichmentSpec
+				? await understandingOutput(host, request, view, [], enrichmentSpec.subject)
+				: undefined
 			return {
 				artifactIds: [],
 				completedStepIds: [],
-				remainingGoals: [],
+				remainingGoals: enrichmentSpec
+					? request.goals.filter(
+							(goal) =>
+								!request.ingredients.some((ingredient) => unifiable(goal, ingredient.predicate))
+						)
+					: [],
 				registryRevision: registry.revision,
-				policyDecisionIds: []
+				policyDecisionIds: [],
+				...(output && { output })
 			}
 		}
 
@@ -179,14 +224,92 @@ export function createActorPlanExecutor(host: ActorExecutionHost): PlanRunExecut
 			parameters: request.parameters,
 			...(resource && { resource })
 		})
+		const output = enrichmentSpec
+			? await understandingOutput(host, request, view, result.artifacts, enrichmentSpec.subject)
+			: undefined
 		return {
 			artifactIds: result.artifacts.map((artifact) => artifact.artifactId),
 			completedStepIds: result.completedStepIds,
 			remainingGoals: result.remainingGoals,
 			registryRevision: result.registryRevision,
-			policyDecisionIds: result.policyDecisionIds
+			policyDecisionIds: result.policyDecisionIds,
+			...(output && { output })
 		}
 	}
+}
+
+function assertGoalRequest(request: PlanRunStartRequest): void {
+	const mode = request.goalSpec?.mode ?? 'exact'
+	if (mode === 'explore' && request.goals.length > 0) {
+		throw new Error('exploration cannot include exact goals')
+	}
+	if (mode === 'exact' && request.goals.length === 0) {
+		throw new Error('exact execution requires at least one goal')
+	}
+	const subject = request.goalSpec && 'subject' in request.goalSpec && request.goalSpec.subject
+	if (!subject) return
+	if (!subject.artifactId) throw new Error('exploration subject requires an artifact')
+	if (
+		!request.ingredients.some(
+			(ingredient) =>
+				ingredient.predicate === subject.predicate && ingredient.artifactId === subject.artifactId
+		)
+	) {
+		throw new Error('exploration subject is not an admitted ingredient')
+	}
+}
+
+async function understandingOutput(
+	host: ActorExecutionHost,
+	request: PlanRunStartRequest,
+	view: Awaited<ReturnType<typeof authorizeRegistryForPlanning>>,
+	artifacts: RuntimeArtifact[],
+	subject: Ingredient
+): Promise<PlanRunUnderstandingOutput> {
+	if (!subject.artifactId) throw new Error('exploration subject requires an artifact')
+	const currentFacts: Ingredient[] = [
+		...request.ingredients,
+		...artifacts.map((artifact) => ({
+			predicate: artifact.predicate,
+			artifactId: artifact.artifactId
+		}))
+	]
+	const [definitions, related] = await Promise.all([
+		host.affordances?.(request) ?? [],
+		host.relatedIngredients?.(request) ?? []
+	])
+	const capabilities = view.capabilities.flatMap(({ capability, targets }) =>
+		targets.some((target) => target.executionEnvironment === host.executionEnvironment)
+			? [capability]
+			: []
+	)
+	const facts = uniqueIngredients([...currentFacts, ...related])
+	return {
+		kind: 'artifact-understanding',
+		status: 'complete',
+		stoppingReason: 'saturated',
+		subjectArtifactId: subject.artifactId,
+		facts: uniqueIngredients(currentFacts).flatMap((fact) => {
+			if (!fact.artifactId) return []
+			const artifact = artifacts.find((candidate) => candidate.artifactId === fact.artifactId)
+			return [
+				{
+					predicate: fact.predicate,
+					artifactId: fact.artifactId,
+					...(artifact && { schema: artifact.schema })
+				}
+			]
+		}),
+		affordances: discoverAffordances(definitions, facts, capabilities)
+	}
+}
+
+function uniqueIngredients(ingredients: Ingredient[]): Ingredient[] {
+	const unique = new Map<string, Ingredient>()
+	for (const ingredient of ingredients) {
+		unique.set(`${ingredient.predicate}\0${ingredient.artifactId ?? ''}`, ingredient)
+	}
+	return [...unique.values()]
 }
 
 /**

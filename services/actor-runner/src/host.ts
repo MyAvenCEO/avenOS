@@ -4,6 +4,8 @@ import {
 	type ActorFactoryResolver,
 	ActorRegistry,
 	type ActorRegistrySnapshot,
+	type AffordanceDefinition,
+	type Ingredient,
 	type PlanRunStartRequest,
 	type RuntimeArtifactPublisher,
 	type RuntimeArtifactResolver
@@ -19,6 +21,8 @@ export interface ServerActorHostDependencies {
 		request: PlanRunStartRequest
 	): Awaitable<RuntimeArtifactResolver & RuntimeArtifactPublisher>
 	resourceFor?(request: PlanRunStartRequest): Awaitable<Record<string, unknown> | undefined>
+	affordancesFor?(request: PlanRunStartRequest): Awaitable<AffordanceDefinition[]>
+	relatedIngredientsFor?(request: PlanRunStartRequest): Awaitable<Ingredient[]>
 }
 
 /**
@@ -37,7 +41,11 @@ export function createServerActorExecutionHost(
 		authorizer: dependencies.authorizerFor,
 		factories: dependencies.factoriesFor,
 		artifacts: dependencies.artifactsFor,
-		...(dependencies.resourceFor && { resource: dependencies.resourceFor })
+		...(dependencies.resourceFor && { resource: dependencies.resourceFor }),
+		...(dependencies.affordancesFor && { affordances: dependencies.affordancesFor }),
+		...(dependencies.relatedIngredientsFor && {
+			relatedIngredients: dependencies.relatedIngredientsFor
+		})
 	}
 }
 

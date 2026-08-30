@@ -101,11 +101,13 @@ No LLM actor, model capability, prompt policy, or completion receipt is named un
 
 ## 3. Wire protocols
 
-The portable runner protocol is:
+The current portable runner protocol is:
 
 ```text
-os.aven:protocol:actors:plan-runner@1
+os.aven:protocol:actors:plan-runner@2
 ```
+
+Version 1 remains accepted during rollout for exact-goal commands only.
 
 The document skill adapter is:
 
@@ -131,7 +133,7 @@ An authenticated app sends a command containing intent, not asserted authority:
 
 ```ts
 interface PlanRunStartCommand {
-  protocol: 'os.aven:protocol:actors:plan-runner@1'
+  protocol: 'os.aven:protocol:actors:plan-runner@2'
   requestId: string
   idempotencyKey: string
   requestedAt: string
@@ -139,15 +141,31 @@ interface PlanRunStartCommand {
   executionEnvironment: 'local' | 'server'
   ingredients: Array<{ predicate: string; artifactId?: string }>
   goals: string[]
+  goalSpec?:
+    | { mode: 'explore'; subject: Ingredient; factFamilies: string[] }
+    | { mode: 'exact'; completion: 'goal_only' }
+    | {
+        mode: 'exact'
+        completion: 'goal_then_enrich'
+        subject: Ingredient
+        factFamilies: string[]
+      }
   parameters: Record<string, Json>
 }
 ```
 
-Version 1 supports exact goals only: the run succeeds when every entry in `goals` is
-proven by admitted ingredients or committed outputs. Exploratory and hybrid outcomes
-require a future versioned `goalSpec` containing the subject, allowed fact families,
-utility policy, budgets, confidence floor, and stopping rules. They MUST NOT be encoded
-as a magic predicate whose meaning varies by runner.
+With no `goalSpec`, or with `exact/goal_only`, the run succeeds when every entry in
+`goals` is proven by admitted ingredients or committed outputs. `explore` requires no
+exact goals and exhausts applicable, authorized, non-effecting capabilities within the
+named fact families. `exact/goal_then_enrich` preserves exact goals and then applies
+the same enrichment policy. The subject MUST name an admitted ingredient. Version 1
+rejects `goalSpec` and retains exact-only behavior.
+
+The initial policy has no caller-controlled effort or budget: it is exhaustive.
+Later protocol versions may add explicit utility, budget, confidence, privacy, or
+calibrated signal-yield limits. These outcomes MUST NOT be encoded as a magic predicate
+whose meaning varies by runner. The product interaction is specified in
+[Artifact-first semantic enrichment and affordance discovery](artifact-first-semantic-enrichment.md).
 
 The command MUST NOT contain `principal`, `tenantId`, entitlements, grants, database
 names, storage routes, or assurance claims. A server MUST ignore and reject any such
@@ -335,7 +353,7 @@ Example:
 {
   name: 'details',
   predicate: 'ceo.aven.bookkeeping.invoice_details(D)',
-  schema: 'ceo.aven:schema:bookkeeping:invoice-details@1',
+  schema: 'ceo.aven:schema:bookkeeping:invoice-details@2',
   role: 'details',
   cardinality: 'one'
 }
@@ -415,7 +433,7 @@ The extractor requires the document plus that fact and produces:
 ceo.aven.bookkeeping.invoice_details(D)
 ```
 
-bound to the same `ceo.aven:schema:bookkeeping:invoice-details@1` schema as the visual
+bound to the same `ceo.aven:schema:bookkeeping:invoice-details@2` schema as the visual
 and native-text route. The runner stops at the observer frontier, commits the report,
 then replans. It never predicts an observation outcome. Backward relevance ensures it
 does not execute every installed recognizer.

@@ -1,4 +1,4 @@
-import type { CapabilitySlot, Manifest, Predicate } from './actor'
+import { type CapabilitySlot, functor, type Manifest, type Predicate } from './actor'
 import { resourceId } from './ids'
 import { type Bindings, parseTerm, resolve, unify } from './term'
 
@@ -111,19 +111,35 @@ export interface SolveOptions {
 	maxStates?: number
 }
 
+export interface EnrichmentOptions {
+	/** Predicate functors or namespace prefixes admitted by the skill. */
+	factFamilies: string[]
+	/** Safety guard, not a cost or effort policy. */
+	maxSteps?: number
+}
+
+export type EnrichmentPlanResult =
+	| { ok: true; program: AdHocProgram; exploredInvocations: number }
+	| { ok: false; reason: string; exploredInvocations: number }
+
+export type GoalThenEnrichmentPlanResult =
+	| { ok: true; program: AdHocProgram; exploredInvocations: number; exploredStates: number }
+	| { ok: false; reason: string; exploredInvocations: number; exploredStates: number }
+
 interface SearchState {
 	facts: PlanValue[]
 	steps: PlanStep[]
 	cost: number
 }
 
-interface RequirementMatch {
+export interface RequirementMatch {
 	bindings: Bindings
 	inputs: PlanValue[]
 }
 
 const DEFAULT_MAX_STEPS = 24
 const DEFAULT_MAX_STATES = 2_000
+const DEFAULT_MAX_ENRICHMENT_STEPS = 512
 
 /**
  * Compile a goal into the cheapest program reachable from the supplied facts.
@@ -228,7 +244,147 @@ export function solve(
 	}
 }
 
-function matchRequirements(requirements: Predicate[], facts: PlanValue[]): RequirementMatch[] {
+/**
+ * Plan every applicable non-effecting capability once for each distinct input binding.
+ *
+ * Unlike `solve`, this does not choose one cheapest proof and does not stop when a
+ * predicate already exists. Independent extractors may publish the same logical fact
+ * with different evidence, so both invocations remain in the program. New outputs
+ * extend the fact set until no admitted capability can run with a new binding.
+ */
+export function planEnrichment(
+	capabilities: Capability[],
+	ingredients: Ingredient[],
+	options: EnrichmentOptions
+): EnrichmentPlanResult {
+	const facts: PlanValue[] = ingredients.map((ingredient) => ({
+		predicate: ingredient.predicate,
+		source: {
+			kind: 'ingredient',
+			...(ingredient.artifactId && { artifactId: ingredient.artifactId })
+		}
+	}))
+	return expandEnrichment(capabilities, facts, [], options, [])
+}
+
+/** Prove directed goals first, then exhaust the admitted non-effecting frontier. */
+export function planGoalThenEnrichment(
+	capabilities: Capability[],
+	ingredients: Ingredient[],
+	goals: Predicate[],
+	options: EnrichmentOptions & SolveOptions
+): GoalThenEnrichmentPlanResult {
+	const exact = solve(capabilities, ingredients, goals, options)
+	if (!exact.ok) {
+		return {
+			ok: false,
+			reason: exact.reason,
+			exploredInvocations: 0,
+			exploredStates: exact.exploredStates
+		}
+	}
+	const facts: PlanValue[] = [
+		...ingredients.map((ingredient) => ({
+			predicate: ingredient.predicate,
+			source: {
+				kind: 'ingredient' as const,
+				...(ingredient.artifactId && { artifactId: ingredient.artifactId })
+			}
+		})),
+		...exact.program.steps.flatMap((step) => step.outputs)
+	]
+	const enriched = expandEnrichment(capabilities, facts, exact.program.steps, options, goals)
+	return enriched.ok
+		? { ...enriched, exploredStates: exact.exploredStates }
+		: { ...enriched, exploredStates: exact.exploredStates }
+}
+
+function expandEnrichment(
+	capabilities: Capability[],
+	facts: PlanValue[],
+	initialSteps: PlanStep[],
+	options: EnrichmentOptions,
+	goals: Predicate[]
+): EnrichmentPlanResult {
+	const maxSteps = options.maxSteps ?? DEFAULT_MAX_ENRICHMENT_STEPS
+	const steps = [...initialSteps]
+	const invoked = new Set(
+		initialSteps.map((step) => `${step.capability}\0${step.inputs.map(planValueKey).join('\0')}`)
+	)
+	const eligible = [...capabilities]
+		.filter(
+			(capability) =>
+				capability.available !== false &&
+				(capability.mode === undefined ||
+					capability.mode === 'observe' ||
+					capability.mode === 'transform') &&
+				capability.produces.some((predicate) =>
+					belongsToFactFamilies(predicate, options.factFamilies)
+				)
+		)
+		.sort((left, right) => left.id.localeCompare(right.id))
+
+	for (;;) {
+		let changed = false
+		for (const capability of eligible) {
+			for (const match of matchRequirements(capability.requires, facts)) {
+				if (match.inputs.some((input) => hasCapabilityInAncestry(input, capability.id, steps))) {
+					continue
+				}
+				const invocation = invocationKey(capability, match.inputs)
+				if (invoked.has(invocation)) continue
+				if (steps.length >= maxSteps) {
+					return {
+						ok: false,
+						reason: `enrichment safety limit reached after ${maxSteps} steps`,
+						exploredInvocations: invoked.size
+					}
+				}
+				invoked.add(invocation)
+				const stepId = `step-${steps.length + 1}`
+				const outputs: PlanValue[] = capability.produces.map((predicate, output) => ({
+					predicate: substitute(predicate, match.bindings),
+					source: { kind: 'step', stepId, output }
+				}))
+				steps.push({
+					id: stepId,
+					capability: capability.id,
+					actor: capability.actor,
+					method: capability.method,
+					inputs: match.inputs,
+					outputs,
+					dependsOn: [
+						...new Set(
+							match.inputs.flatMap((input) =>
+								input.source.kind === 'step' ? [input.source.stepId] : []
+							)
+						)
+					],
+					cost: capability.cost ?? 1
+				})
+				facts.push(...outputs)
+				changed = true
+			}
+		}
+		if (!changed) break
+	}
+
+	return {
+		ok: true,
+		program: {
+			goals,
+			steps,
+			totalCost: steps.reduce((total, step) => total + step.cost, 0),
+			results: facts
+		},
+		exploredInvocations: invoked.size
+	}
+}
+
+export function matchRequirements(
+	requirements: Predicate[],
+	facts: PlanValue[]
+): RequirementMatch[] {
 	if (requirements.length === 0) return [{ bindings: {}, inputs: [] }]
 	const matches: RequirementMatch[] = []
 	const visit = (index: number, bindings: Bindings, inputs: PlanValue[]) => {
@@ -245,10 +401,41 @@ function matchRequirements(requirements: Predicate[], facts: PlanValue[]): Requi
 	return matches
 }
 
-function substitute(predicate: Predicate, bindings: Bindings): Predicate {
+export function substitute(predicate: Predicate, bindings: Bindings): Predicate {
 	const term = parseTerm(predicate)
 	if (!predicate.includes('(')) return term.functor
 	return `${term.functor}(${term.args.map((arg) => resolve(arg, bindings)).join(', ')})`
+}
+
+function belongsToFactFamilies(predicate: Predicate, families: string[]): boolean {
+	const name = functor(predicate)
+	return families.some((family) => name === family || name.startsWith(`${family}.`))
+}
+
+function invocationKey(capability: Capability, inputs: PlanValue[]): string {
+	return `${capability.id}\0${inputs.map(planValueKey).join('\0')}`
+}
+
+function planValueKey(value: PlanValue): string {
+	if (value.source.kind === 'step') {
+		return `${value.predicate}\0step:${value.source.stepId}:${value.source.output}`
+	}
+	return `${value.predicate}\0ingredient:${value.source.artifactId ?? ''}`
+}
+
+function hasCapabilityInAncestry(
+	value: PlanValue,
+	capabilityId: string,
+	steps: PlanStep[],
+	visited = new Set<string>()
+): boolean {
+	if (value.source.kind !== 'step' || visited.has(value.source.stepId)) return false
+	const stepId = value.source.stepId
+	visited.add(stepId)
+	const step = steps.find((candidate) => candidate.id === stepId)
+	if (!step) return false
+	if (step.capability === capabilityId) return true
+	return step.inputs.some((input) => hasCapabilityInAncestry(input, capabilityId, steps, visited))
 }
 
 function resolveGoals(goals: Predicate[], facts: PlanValue[]): PlanValue[] | null {

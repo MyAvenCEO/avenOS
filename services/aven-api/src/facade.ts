@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import type { IdentityVerifier } from '@avenos/aven-identity'
 import {
 	IdentityAuthenticationError,
@@ -10,6 +11,13 @@ import type { CustomerHandler } from './customers/handler.js'
 import type { HostingHandler } from './hosting/handler.js'
 import { AppError } from './lib/server/errors.js'
 import type { LlmGatewayService } from './lib/server/llm-gateway.js'
+
+function hasBearer(request: Request, expected: string | undefined): boolean {
+	if (!expected) return false
+	const actual = Buffer.from(request.headers.get('authorization') ?? '')
+	const wanted = Buffer.from(`Bearer ${expected}`)
+	return actual.length === wanted.length && timingSafeEqual(actual, wanted)
+}
 
 const json = (status: number, body: unknown) =>
 	new Response(JSON.stringify(body), {
@@ -91,6 +99,32 @@ export function createFacadeHandler(
 			return hosting ? hosting.internal(request) : json(404, { code: 'ROUTE_NOT_FOUND' })
 		if (url.pathname === '/internal/v1/customer-entitlement-events')
 			return customers ? customers.internal(request) : json(404, { code: 'ROUTE_NOT_FOUND' })
+		if (url.pathname === '/internal/v1/llm/models' && request.method === 'GET') {
+			if (!hasBearer(request, config.LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN))
+				return json(401, { code: 'AUTHENTICATION_REQUIRED' })
+			if (!llmGateway)
+				return json(503, {
+					code: 'LLM_GATEWAY_UNAVAILABLE',
+					message: 'The LLM gateway is not configured.'
+				})
+			return json(200, { models: llmGateway.models(url.searchParams.getAll('capability')) })
+		}
+		if (url.pathname === '/internal/v1/llm/completions' && request.method === 'POST') {
+			if (!hasBearer(request, config.LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN))
+				return json(401, { code: 'AUTHENTICATION_REQUIRED' })
+			if (!llmGateway)
+				return json(503, {
+					code: 'LLM_GATEWAY_UNAVAILABLE',
+					message: 'The LLM gateway is not configured.'
+				})
+			try {
+				return json(200, await llmGateway.complete(await request.json()))
+			} catch (error) {
+				if (error instanceof AppError)
+					return json(error.status, { code: error.code, message: error.message })
+				throw error
+			}
+		}
 		if (request.method === 'OPTIONS') {
 			const origin = request.headers.get('origin')
 			if (!origin || !allowedOrigins.has(origin)) return new Response(null, { status: 403 })

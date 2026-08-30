@@ -19,6 +19,7 @@ import {
 	processingStateLabel,
 	resolveArtifact
 } from './artifact-manifest'
+import { preserveLiveFileProjection } from './persistent-artifact-projection'
 
 /**
  * THE INTENTS — the workspace's subjects, MOCKED (0158) but owned by an
@@ -878,6 +879,7 @@ class IntentsActor extends Actor {
 	}
 
 	applyPersistent(detail: PersistentIntentDetail): void {
+		const existing = this.items.find((item) => item.id === detail.id)
 		const presentation = detail.fileSkill?.presentation ?? null
 		const stageDone =
 			presentation?.stages
@@ -914,8 +916,7 @@ class IntentsActor extends Actor {
 		// Conversation messages are inlined in the chat below (persistentTurns),
 		// never in the log — mapping them here is what made them render twice.
 		const log = persistentLogEntries(detail.contributions)
-		const existing = this.items.find((item) => item.id === detail.id)
-		const mapped: MockIntent = {
+		const persisted: MockIntent = {
 			id: detail.id,
 			type: presentation?.preferredType ?? detail.intentType,
 			title: presentation?.label || detail.title,
@@ -944,8 +945,40 @@ class IntentsActor extends Actor {
 					]
 				: []
 		}
+		const mapped = preserveLiveFileProjection(
+			persisted,
+			existing,
+			detail.artifacts.length > 0 || detail.fileSkill !== null
+		)
 		if (existing) Object.assign(existing, mapped)
 		else this.items.unshift(mapped)
+	}
+
+	attachFileSource(intentId: string, artifactId: string, title: string): void {
+		const intent = this.items.find((candidate) => candidate.id === intentId)
+		if (!intent) return
+		const source = intent.artifacts.find(
+			(artifact) => artifact.artifactId === artifactId || artifact.typeKey === 'core.file'
+		)
+		const value: MockArtifact = {
+			kind: 'doc',
+			title,
+			note: 'core.file · original',
+			artifactId,
+			typeKey: 'core.file'
+		}
+		if (source) Object.assign(source, value)
+		else intent.artifacts.unshift(value)
+		if (!intent.skills.some((skill) => skill.skill === 'file')) {
+			intent.skills.push({
+				skill: 'file',
+				state: 'running',
+				note: 'Waiting for processing',
+				workflow: 'file',
+				done: [],
+				stages: []
+			})
+		}
 	}
 
 	/** Paint the client-owned document run over the persistent intent projection. */

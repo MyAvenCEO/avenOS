@@ -72,6 +72,7 @@ export const facadeConfigSchema = z.object({
 	LLM_GATEWAY_CREDENTIALS_JSON: z.string().max(65_536).default('{}'),
 	LLM_GATEWAY_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(900).default(180),
 	LLM_GATEWAY_ALLOW_INSECURE_HTTP: z.stringbool().default(false),
+	LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: z.string().min(32).optional(),
 	DOWNSTREAMS_JSON: z
 		.string()
 		.default('[]')

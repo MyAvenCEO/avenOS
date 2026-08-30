@@ -16,6 +16,19 @@ sh -n \
   "$root/deploy/operations/entrypoint.sh" \
   "$root/deploy/operations/healthcheck.sh"
 bash -n "$root/deploy/release/deploy.sh" "$root/deploy/release/environment.sh" "$root/deploy/validate.sh" "$root/deploy/operations/test-recovery.sh"
+bun test "$root/deploy/local/llm-catalog.test.ts"
+
+env \
+  E2E_TENANT_PRIVATE_KEY=test-private-key \
+  E2E_TENANT_PUBLIC_KEY=test-public-key \
+  LLM_GATEWAY_ENABLED=true \
+  LLM_GATEWAY_MODELS_JSON='[{"id":"deepseek/deepseek-v4-flash-0731","label":"Local test","capabilities":["text-generation","streaming","tool-calling","vision","structured-output"],"baseUrl":"http://host.docker.internal:1234/v1","upstreamModel":"test","profile":"generic-json","authMode":"none"}]' \
+  LLM_GATEWAY_CREDENTIALS_JSON='{}' \
+  LLM_GATEWAY_ALLOW_INSECURE_HTTP=true \
+  docker compose \
+    --file "$root/deploy/e2e/docker-compose.yml" \
+    --file "$root/deploy/local/docker-compose.yml" \
+    config --quiet
 
 source "$root/deploy/release/environment.sh"
 configure_platform_environment next
@@ -80,6 +93,7 @@ env \
   ACTOR_RUNNER_SERVICE_TOKEN=01234567890123456789012345678901 \
   ARTIFACT_STORE_SERVICE_TOKEN=01234567890123456789012345678901 \
   ACTOR_RUNNER_ARTIFACT_STORE_TOKEN=01234567890123456789012345678901 \
+  ACTOR_RUNNER_LLM_GATEWAY_TOKEN=01234567890123456789012345678901 \
   ARTIFACT_STORE_PROVISIONER_TOKEN=01234567890123456789012345678901 \
   TENANT_GRANT_PRIVATE_KEY=test-private-key \
   TENANT_GRANT_PUBLIC_KEY=test-public-key \

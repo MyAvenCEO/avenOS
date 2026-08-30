@@ -137,10 +137,12 @@
         "@avenos/actors": "workspace:*",
         "@avenos/artifact-store": "workspace:*",
         "@avenos/llm-client": "workspace:*",
+        "@napi-rs/canvas": "1.0.8",
         "pdfjs-dist": "^6.2.108",
       },
       "devDependencies": {
         "typescript": "^6.0.2",
+        "vitest": "^4.1.10",
       },
     },
     "libs/aven-hosting": {
@@ -169,6 +171,7 @@
       "version": "26.8.28-next.9",
       "devDependencies": {
         "typescript": "^6.0.2",
+        "vitest": "^4.1.10",
       },
     },
     "libs/aven-ui": {
@@ -189,6 +192,7 @@
         "@avenos/aven-customer-runtime": "workspace:*",
         "@avenos/aven-identity": "workspace:*",
         "@avenos/document-ingest": "workspace:*",
+        "@avenos/llm-client": "workspace:*",
         "jose": "6.2.9",
         "pg": "8.16.3",
         "zod": "4.4.3",

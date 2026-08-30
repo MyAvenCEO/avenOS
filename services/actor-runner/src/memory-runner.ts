@@ -38,6 +38,7 @@ const materialCommand = (request: PlanRunStartRequest): string =>
 		executionEnvironment: request.executionEnvironment,
 		ingredients: request.ingredients,
 		goals: request.goals,
+		...(request.goalSpec && { goalSpec: request.goalSpec }),
 		parameters: request.parameters
 	})
 
@@ -86,6 +87,7 @@ export class MemoryPlanRunner implements PlanRunner {
 			updatedAt: now,
 			ingredients: admitted.ingredients,
 			goals: admitted.goals,
+			...(admitted.goalSpec && { goalSpec: admitted.goalSpec }),
 			parameters: admitted.parameters,
 			checkpoints: [],
 			continuations: []
@@ -188,6 +190,7 @@ export class MemoryPlanRunner implements PlanRunner {
 			executionEnvironment: record.executionEnvironment,
 			ingredients: record.ingredients,
 			goals: record.goals,
+			...(record.goalSpec && { goalSpec: record.goalSpec }),
 			parameters: record.parameters,
 			security: record.security
 		})
