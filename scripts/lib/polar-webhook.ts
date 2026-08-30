@@ -60,7 +60,7 @@ interface PolarWebhookApi {
 		limit: number
 	}): Promise<AsyncIterable<WebhookPage>>
 	createWebhookEndpoint(input: {
-		organizationId: string
+		organizationId?: string
 		url: string
 		name: string
 		format: 'raw'
@@ -86,6 +86,17 @@ export interface EnsurePolarWebhookInput {
 	api?: PolarWebhookApi
 }
 
+function isOrganizationTokenOrganizationIdError(error: unknown): boolean {
+	if (!error || typeof error !== 'object') return false
+	const candidate = error as { statusCode?: unknown; body?: unknown }
+	return (
+		candidate.statusCode === 422 &&
+		typeof candidate.body === 'string' &&
+		candidate.body.includes('organization_token') &&
+		candidate.body.includes('organization_id')
+	)
+}
+
 export async function ensurePolarWebhook(input: EnsurePolarWebhookInput): Promise<WebhookEndpoint> {
 	const url =
 		input.target === 'next'
@@ -107,13 +118,24 @@ export async function ensurePolarWebhook(input: EnsurePolarWebhookInput): Promis
 	if (matches.length > 1)
 		throw new Error(`Polar has multiple webhook endpoints for ${url}; remove the duplicate first.`)
 	if (matches.length === 0) {
-		return api.createWebhookEndpoint({
-			organizationId: input.organizationId,
+		const endpoint = {
 			url,
 			name,
-			format: 'raw',
+			format: 'raw' as const,
 			events: [...POLAR_WEBHOOK_EVENTS]
-		})
+		}
+		try {
+			return await api.createWebhookEndpoint({
+				organizationId: input.organizationId,
+				...endpoint
+			})
+		} catch (error) {
+			// Personal access tokens require an organization ID. Organization tokens
+			// derive it from the token and reject that same field. Retry only Polar's
+			// exact validation response; every other provider error stays fatal.
+			if (!isOrganizationTokenOrganizationIdError(error)) throw error
+			return api.createWebhookEndpoint(endpoint)
+		}
 	}
 	return api.updateWebhookEndpoint({
 		id: matches[0].id,

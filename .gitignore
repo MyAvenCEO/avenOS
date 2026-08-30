@@ -47,6 +47,7 @@ avenos-bootstrap-record/
 **/credentials.csv
 **/credentials.csv.*.next
 **/avenos-recovery.csv
+**/bootstrap-apply.log
 **/bootstrap-state-*.json
 **/bootstrap.*.remote
 **/pulumi-state/

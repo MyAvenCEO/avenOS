@@ -15,13 +15,21 @@ const provider = new minio.Provider('hetzner-object-storage', {
 
 const protect = { provider, protect: true }
 const outputs = {}
+const adoptedBuckets = new Set(
+	(process.env.OBJECT_STORAGE_ADOPT_EXISTING_BUCKETS ?? '')
+		.split(',')
+		.map((kind) => kind.trim())
+		.filter(Boolean)
+)
+if ([...adoptedBuckets].some((kind) => !['state', 'backup'].includes(kind)))
+	throw new Error('OBJECT_STORAGE_ADOPT_EXISTING_BUCKETS may contain only state or backup.')
 
 for (const kind of ['state', 'backup']) {
 	const name = `${config.prefix}-${config.projectId}-${config.target}-${kind}`
 	const bucket = new minio.S3Bucket(
 		`${config.target}-${kind}`,
 		{ bucket: name, acl: 'private', objectLocking: false, forceDestroy: false },
-		protect
+		{ ...protect, ...(adoptedBuckets.has(kind) ? { import: name } : {}) }
 	)
 	const versioning =
 		kind === 'state'

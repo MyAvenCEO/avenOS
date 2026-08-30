@@ -19,6 +19,7 @@ export interface S3Credential {
 }
 
 export interface BootstrapInput {
+	deploymentTargets: Target[]
 	repository: string
 	reviewer?: string
 	objectStorage: {
@@ -37,14 +38,14 @@ export interface BootstrapInput {
 		hetznerLocation: string
 		hetznerServerType: string
 		hetznerOsImage: string
-		identityVolumeSizeGb: number
-		platformVolumeSizeGb: number
+		identityVolumeSizeGb?: number
+		platformVolumeSizeGb?: number
 		sshAllowedCidrs: string
 		acmeEmail: string
-		downloadUrl: string
+		downloadUrl?: string
 	}
 	providers: {
-		dnsProjectId: string
+		dnsProjectId?: string
 		identity: { computeToken: string }
 		next: {
 			computeToken: string
@@ -65,12 +66,13 @@ export interface BootstrapInput {
 			smtpReplyTo?: string
 			androidAppCertSha256Fingerprints?: string
 		}
-		redpillApiKey: string
+		redpillApiKey?: string
 	}
 }
 
 export interface GeneratedSecrets {
 	deploymentPrefix: string
+	completedTargets?: Target[]
 	targets: Record<
 		Target,
 		{ bootstrapPulumiPassphrase: string; pulumiPassphrase: string; resticPassword: string }
@@ -78,10 +80,75 @@ export interface GeneratedSecrets {
 	polarWebhooks?: Partial<Record<'next' | 'production', PolarWebhookRecord>>
 }
 
+export function selectedDeploymentTargets(value: unknown): Target[] {
+	if (!Array.isArray(value) || value.length === 0)
+		throw new Error('deploymentTargets must select at least one of identity, next, or production.')
+	const selected = new Set<Target>()
+	for (const target of value) {
+		if (!TARGETS.includes(target as Target))
+			throw new Error('deploymentTargets may contain only identity, next, and production.')
+		if (selected.has(target as Target))
+			throw new Error(`deploymentTargets contains duplicate target ${String(target)}.`)
+		selected.add(target as Target)
+	}
+	return TARGETS.filter((target) => selected.has(target))
+}
+
+export function deploymentConfigurationTargets(
+	input: Pick<BootstrapInput, 'deploymentTargets'>,
+	generated: Pick<GeneratedSecrets, 'completedTargets'>
+): Target[] {
+	const requested = selectedDeploymentTargets(input.deploymentTargets)
+	const completed = generated.completedTargets ?? []
+	if (completed.length > 0) selectedDeploymentTargets(completed)
+	return TARGETS.filter((target) => requested.includes(target) || completed.includes(target))
+}
+
 export interface PolarWebhookRecord {
 	id: string
 	url: string
 	secret: string
+}
+
+export const BOOTSTRAP_PROGRESS_PREFIX = '::avenos-bootstrap-progress::'
+
+export interface BootstrapProgressEvent {
+	status: 'active' | 'complete'
+	current: number
+	total: number
+	label: string
+	detail?: string
+}
+
+export function collidingBootstrapBucketKinds(
+	output: string,
+	expected: Record<'state' | 'backup', string>
+): Array<'state' | 'backup'> {
+	const collisions = new Set<string>()
+	for (const match of output.matchAll(/bucket already exists! \(([^)]+)\)/g))
+		collisions.add(match[1] as string)
+	return (['state', 'backup'] as const).filter((kind) => collisions.has(expected[kind]))
+}
+
+export function encodeBootstrapProgress(event: BootstrapProgressEvent): string {
+	return `${BOOTSTRAP_PROGRESS_PREFIX}${JSON.stringify(event)}\n`
+}
+
+export function parseBootstrapProgress(line: string): BootstrapProgressEvent | undefined {
+	if (!line.startsWith(BOOTSTRAP_PROGRESS_PREFIX)) return undefined
+	const event = JSON.parse(line.slice(BOOTSTRAP_PROGRESS_PREFIX.length)) as BootstrapProgressEvent
+	if (
+		!['active', 'complete'].includes(event.status) ||
+		!Number.isSafeInteger(event.current) ||
+		!Number.isSafeInteger(event.total) ||
+		event.current < 1 ||
+		event.current > event.total ||
+		typeof event.label !== 'string' ||
+		!event.label.trim() ||
+		(event.detail !== undefined && typeof event.detail !== 'string')
+	)
+		throw new Error('The bootstrap emitted an invalid progress event.')
+	return event
 }
 
 const password = () => randomBytes(48).toString('base64url')
@@ -99,8 +166,15 @@ function stringAt(value: unknown, path: string): string {
 	return value
 }
 
-export function validateBootstrapInput(value: unknown): asserts value is BootstrapInput {
+export function validateBootstrapInput(
+	value: unknown,
+	requiredTargets?: readonly Target[]
+): asserts value is BootstrapInput {
 	const input = objectAt(value, 'input')
+	selectedDeploymentTargets(input.deploymentTargets)
+	const selectedTargets = requiredTargets
+		? selectedDeploymentTargets(requiredTargets)
+		: selectedDeploymentTargets(input.deploymentTargets)
 	if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(stringAt(input.repository, 'repository')))
 		throw new Error('repository must be owner/name.')
 	if (input.reviewer !== undefined && !/^[A-Za-z0-9-]+$/.test(stringAt(input.reviewer, 'reviewer')))
@@ -115,7 +189,7 @@ export function validateBootstrapInput(value: unknown): asserts value is Bootstr
 	}
 	const storageTargets = objectAt(storage.targets, 'objectStorage.targets')
 	const projectIds = new Set<string>()
-	for (const target of TARGETS) {
+	for (const target of selectedTargets) {
 		const targetStorage = objectAt(storageTargets[target], `objectStorage.targets.${target}`)
 		const projectId = stringAt(targetStorage.projectId, `objectStorage.targets.${target}.projectId`)
 		if (!/^\d+$/.test(projectId))
@@ -142,26 +216,36 @@ export function validateBootstrapInput(value: unknown): asserts value is Bootstr
 		'hetznerServerType',
 		'hetznerOsImage',
 		'sshAllowedCidrs',
-		'acmeEmail',
-		'downloadUrl'
+		'acmeEmail'
 	])
 		stringAt(defaults[name], `defaults.${name}`)
-	for (const name of ['identityVolumeSizeGb', 'platformVolumeSizeGb']) {
+	const sizeNames = [
+		...(selectedTargets.includes('identity') ? ['identityVolumeSizeGb'] : []),
+		...(selectedTargets.some((target) => target !== 'identity') ? ['platformVolumeSizeGb'] : [])
+	]
+	for (const name of sizeNames) {
 		const size = defaults[name]
 		if (!Number.isSafeInteger(size) || (size as number) < 20)
 			throw new Error(`defaults.${name} must be an integer of at least 20.`)
 	}
-	for (const name of ['downloadUrl'] as const) {
-		if (new URL(stringAt(defaults[name], `defaults.${name}`)).protocol !== 'https:')
-			throw new Error(`defaults.${name} must use HTTPS.`)
+	if (selectedTargets.some((target) => target !== 'identity')) {
+		if (new URL(stringAt(defaults.downloadUrl, 'defaults.downloadUrl')).protocol !== 'https:')
+			throw new Error('defaults.downloadUrl must use HTTPS.')
 	}
 	const providers = objectAt(input.providers, 'providers')
-	const dnsProjectId = stringAt(providers.dnsProjectId, 'providers.dnsProjectId')
-	if (!/^\d+$/.test(dnsProjectId)) throw new Error('providers.dnsProjectId must be numeric.')
-	stringAt(providers.redpillApiKey, 'providers.redpillApiKey')
-	const identity = objectAt(providers.identity, 'providers.identity')
-	stringAt(identity.computeToken, 'providers.identity.computeToken')
-	for (const target of ['next', 'production'] as const) {
+	if (selectedTargets.includes('identity')) {
+		const identity = objectAt(providers.identity, 'providers.identity')
+		stringAt(identity.computeToken, 'providers.identity.computeToken')
+	}
+	const platformTargets = selectedTargets.filter(
+		(target): target is 'next' | 'production' => target !== 'identity'
+	)
+	if (platformTargets.length > 0) {
+		const dnsProjectId = stringAt(providers.dnsProjectId, 'providers.dnsProjectId')
+		if (!/^\d+$/.test(dnsProjectId)) throw new Error('providers.dnsProjectId must be numeric.')
+		stringAt(providers.redpillApiKey, 'providers.redpillApiKey')
+	}
+	for (const target of platformTargets) {
 		const provider = objectAt(providers[target], `providers.${target}`)
 		for (const name of [
 			'computeToken',
@@ -221,6 +305,14 @@ export function loadOrCreateGeneratedSecrets(path: string): GeneratedSecrets {
 			)
 				throw new Error(`${path} is missing generated ${target} secrets.`)
 		}
+		if (generated.completedTargets !== undefined) {
+			if (!Array.isArray(generated.completedTargets))
+				throw new Error(`${path} contains invalid completed targets.`)
+			generated.completedTargets =
+				generated.completedTargets.length > 0
+					? selectedDeploymentTargets(generated.completedTargets)
+					: []
+		}
 		return generated
 	}
 	const generated = generateBootstrapSecrets()
@@ -266,7 +358,8 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 		'',
 		'Prefixes the active GitHub Environments and identifies this infrastructure generation.'
 	)
-	for (const target of TARGETS) {
+	const recoveryTargets = deploymentConfigurationTargets(input, generated)
+	for (const target of recoveryTargets) {
 		const storage = input.objectStorage.targets[target]
 		add(
 			target,
@@ -322,7 +415,9 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 			`https://console.hetzner.com/projects/${storage.projectId}/security/tokens`
 		)
 	}
-	for (const target of ['next', 'production'] as const) {
+	for (const target of recoveryTargets.filter(
+		(target): target is 'next' | 'production' => target !== 'identity'
+	)) {
 		const provider = input.providers[target]
 		const webhook = generated.polarWebhooks?.[target]
 		if (!webhook) throw new Error(`Polar ${target} webhook has not been provisioned.`)
@@ -352,14 +447,15 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 		)
 		add(target, `avenOS ${target} SMTP`, '', provider.smtpUrl, 'Send-only checkout mail transport.')
 	}
-	add(
-		'shared',
-		'avenOS RedPill API key',
-		'',
-		input.providers.redpillApiKey,
-		'Shared inference credential for next and production.',
-		'https://redpill.ai'
-	)
+	if (recoveryTargets.some((target) => target !== 'identity'))
+		add(
+			'shared',
+			'avenOS RedPill API key',
+			'',
+			input.providers.redpillApiKey as string,
+			'Shared inference credential for next and production.',
+			'https://redpill.ai'
+		)
 	const header = ['Group', 'Title', 'Username', 'Password', 'URL', 'Notes']
 	return `${[header, ...rows].map((row) => row.map(csv).join(',')).join('\n')}\n`
 }
@@ -385,6 +481,7 @@ export function objectStorageBucketName(
 
 export function githubConfiguration(input: BootstrapInput, generated: GeneratedSecrets) {
 	const region = input.objectStorage.region
+	const selectedTargets = deploymentConfigurationTargets(input, generated)
 	const commonVariables = {
 		PULUMI_STATE_S3_REGION: region,
 		HETZNER_LOCATION: input.defaults.hetznerLocation,
@@ -392,8 +489,6 @@ export function githubConfiguration(input: BootstrapInput, generated: GeneratedS
 		IDENTITY_SERVER_TYPE: input.defaults.hetznerServerType,
 		PLATFORM_SERVER_TYPE: input.defaults.hetznerServerType,
 		HETZNER_OS_IMAGE: input.defaults.hetznerOsImage,
-		IDENTITY_VOLUME_SIZE_GB: String(input.defaults.identityVolumeSizeGb),
-		PLATFORM_VOLUME_SIZE_GB: String(input.defaults.platformVolumeSizeGb),
 		SSH_ALLOWED_CIDRS: input.defaults.sshAllowedCidrs,
 		ACME_EMAIL: input.defaults.acmeEmail,
 		BACKUP_S3_REGION: region
@@ -402,7 +497,7 @@ export function githubConfiguration(input: BootstrapInput, generated: GeneratedS
 		string,
 		{ secrets: Record<string, string>; variables: Record<string, string> }
 	> = {}
-	for (const target of TARGETS) {
+	for (const target of selectedTargets) {
 		const storage = input.objectStorage.targets[target]
 		const stateBucket = objectStorageBucketName(input, generated, target, 'state')
 		const backupBucket = objectStorageBucketName(input, generated, target, 'backup')
@@ -418,6 +513,9 @@ export function githubConfiguration(input: BootstrapInput, generated: GeneratedS
 			},
 			variables: {
 				...commonVariables,
+				...(target === 'identity'
+					? { IDENTITY_VOLUME_SIZE_GB: String(input.defaults.identityVolumeSizeGb) }
+					: { PLATFORM_VOLUME_SIZE_GB: String(input.defaults.platformVolumeSizeGb) }),
 				PULUMI_STATE_S3_BUCKET: stateBucket,
 				PULUMI_STACK: `${PULUMI_ORGANIZATION}/aven-platform/${target}`,
 				BACKUP_REPOSITORY_BASE: `s3:https://${region}.your-objectstorage.com/${backupBucket}`
@@ -437,34 +535,31 @@ export function githubConfiguration(input: BootstrapInput, generated: GeneratedS
 		}
 	}
 	const identity = result[`${generated.deploymentPrefix}-identity`]
-	const next = result[`${generated.deploymentPrefix}-next`]
-	const production = result[`${generated.deploymentPrefix}-production`]
-	Object.assign(identity.secrets, {
-		NEXT_STATE_S3_ACCESS_KEY_ID: input.objectStorage.targets.next.observerCredential.accessKeyId,
-		NEXT_STATE_S3_SECRET_ACCESS_KEY:
-			input.objectStorage.targets.next.observerCredential.secretAccessKey,
-		NEXT_PULUMI_CONFIG_PASSPHRASE: generated.targets.next.pulumiPassphrase,
-		PRODUCTION_STATE_S3_ACCESS_KEY_ID:
-			input.objectStorage.targets.production.observerCredential.accessKeyId,
-		PRODUCTION_STATE_S3_SECRET_ACCESS_KEY:
-			input.objectStorage.targets.production.observerCredential.secretAccessKey,
-		PRODUCTION_PULUMI_CONFIG_PASSPHRASE: generated.targets.production.pulumiPassphrase
-	})
-	Object.assign(identity.variables, {
-		NEXT_PULUMI_STACK: `${PULUMI_ORGANIZATION}/aven-platform/next`,
-		NEXT_PULUMI_BACKEND: backend(
-			objectStorageBucketName(input, generated, 'next', 'state'),
-			region
-		),
-		PRODUCTION_PULUMI_STACK: `${PULUMI_ORGANIZATION}/aven-platform/production`,
-		PRODUCTION_PULUMI_BACKEND: backend(
-			objectStorageBucketName(input, generated, 'production', 'state'),
-			region
-		)
-	})
-	for (const target of ['next', 'production'] as const) {
+	if (identity) {
+		for (const target of selectedTargets.filter(
+			(target): target is 'next' | 'production' => target !== 'identity'
+		)) {
+			const upper = target.toUpperCase()
+			const storage = input.objectStorage.targets[target]
+			Object.assign(identity.secrets, {
+				[`${upper}_STATE_S3_ACCESS_KEY_ID`]: storage.observerCredential.accessKeyId,
+				[`${upper}_STATE_S3_SECRET_ACCESS_KEY`]: storage.observerCredential.secretAccessKey,
+				[`${upper}_PULUMI_CONFIG_PASSPHRASE`]: generated.targets[target].pulumiPassphrase
+			})
+			Object.assign(identity.variables, {
+				[`${upper}_PULUMI_STACK`]: `${PULUMI_ORGANIZATION}/aven-platform/${target}`,
+				[`${upper}_PULUMI_BACKEND`]: backend(
+					objectStorageBucketName(input, generated, target, 'state'),
+					region
+				)
+			})
+		}
+	}
+	for (const target of selectedTargets.filter(
+		(target): target is 'next' | 'production' => target !== 'identity'
+	)) {
 		const provider = input.providers[target]
-		const environment = target === 'next' ? next : production
+		const environment = result[`${generated.deploymentPrefix}-${target}`]
 		const webhookSecret = generated.polarWebhooks?.[target]?.secret
 		if (!webhookSecret) throw new Error(`Polar ${target} webhook has not been provisioned.`)
 		Object.assign(environment.secrets, {
@@ -479,7 +574,7 @@ export function githubConfiguration(input: BootstrapInput, generated: GeneratedS
 			POLAR_ORGANIZATION_ID: provider.polarOrganizationId,
 			SMTP_FROM: provider.smtpFrom,
 			SMTP_REPLY_TO: provider.smtpReplyTo ?? '',
-			DOWNLOAD_URL: input.defaults.downloadUrl,
+			DOWNLOAD_URL: input.defaults.downloadUrl as string,
 			ANDROID_APP_CERT_SHA256_FINGERPRINTS:
 				target === 'production'
 					? (input.providers.production.androidAppCertSha256Fingerprints ?? '')
@@ -498,4 +593,26 @@ export function githubEnvironmentProtection(protectedDeployment: boolean, review
 		reviewers: requiresReview ? [{ type: 'User', id: reviewerId }] : [],
 		deployment_branch_policy: { protected_branches: true, custom_branch_policies: false }
 	}
+}
+
+export function githubEnvironmentVariableChanges(
+	desired: Record<string, string>,
+	existingNames: Iterable<string>
+) {
+	const existing = new Set(existingNames)
+	return {
+		set: Object.entries(desired).filter(([, value]) => value !== ''),
+		remove: Object.entries(desired)
+			.filter(([name, value]) => value === '' && existing.has(name))
+			.map(([name]) => name)
+	}
+}
+
+export function isRetryableGitHubError(error: unknown): boolean {
+	if (!error || typeof error !== 'object') return false
+	const output = (error as { commandOutput?: unknown }).commandOutput
+	if (typeof output !== 'string') return false
+	return /(?:i\/o timeout|timed out|TLS handshake timeout|connection (?:reset|refused)|temporary failure|HTTP (?:429|5\d\d)\b)/i.test(
+		output
+	)
 }

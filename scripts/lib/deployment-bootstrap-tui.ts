@@ -2,7 +2,7 @@ import terminalKitImport from 'terminal-kit'
 
 interface FormResult {
 	submit: string
-	fields?: Record<string, string | undefined>
+	fields?: Record<string, unknown>
 }
 
 interface TerminalDocument {
@@ -23,6 +23,19 @@ interface TerminalForm {
 	}>
 }
 
+interface TerminalMultiMenu {
+	on(
+		event: 'submit',
+		listener: (
+			value: Record<string, boolean>,
+			action?: unknown,
+			menu?: unknown,
+			button?: unknown
+		) => void
+	): void
+	getValue(): Record<string, boolean>
+}
+
 interface TerminalApi {
 	width: number
 	height: number
@@ -39,6 +52,7 @@ interface TerminalKitApi {
 	terminal: TerminalApi
 	TextBox: new (options: Record<string, unknown>) => unknown
 	Form: new (options: Record<string, unknown>) => TerminalForm
+	ColumnMenuMulti: new (options: Record<string, unknown>) => TerminalMultiMenu
 }
 
 const terminalKit = terminalKitImport as unknown as TerminalKitApi
@@ -58,6 +72,14 @@ export interface TuiField {
 export interface TuiButton {
 	content: string
 	value: string
+}
+
+export interface TuiProgressUpdate {
+	status: 'active' | 'complete'
+	current: number
+	total: number
+	label: string
+	detail?: string
 }
 
 export interface TuiProgress {
@@ -238,6 +260,7 @@ export class BootstrapTui {
 		  }
 		| undefined
 	#active = false
+	#activeDocument: TerminalDocument | undefined
 
 	isSupported(): boolean {
 		return this.#terminal.width >= 60 && this.#terminal.height >= 20
@@ -324,9 +347,131 @@ export class BootstrapTui {
 		return {
 			direction: result.submit === 'back' ? 'back' : 'next',
 			values: Object.fromEntries(
-				Object.entries(result.fields ?? {}).map(([key, value]) => [key, value?.trim() ?? ''])
+				Object.entries(result.fields ?? {}).map(([key, value]) => [
+					key,
+					typeof value === 'string' ? value.trim() : ''
+				])
 			)
 		}
+	}
+
+	async chooseMany(input: {
+		label: string
+		options: Array<{ label: string; value: string }>
+		selected: readonly string[]
+		allowBack?: boolean
+	}): Promise<{ direction: 'back' | 'next'; values: string[] }> {
+		if (this.#active) throw new Error('The terminal form is already active.')
+		this.#active = true
+		const terminal = this.#terminal
+		terminal.clear()
+		terminal.hideCursor(true)
+		terminal.grabInput(true)
+		const document = terminal.createDocument()
+		this.#activeDocument = document
+		const width = Math.max(40, Math.min(100, terminal.width - 4))
+		const x = Math.max(2, Math.floor((terminal.width - width) / 2) + 1)
+		new terminalKit.TextBox({
+			parent: document,
+			x,
+			y: 2,
+			width,
+			height: 1,
+			content: `avenOS setup  ·  ${this.#chapter}${this.#progress ? `  ·  ${this.#progress}` : ''}`,
+			attr: { color: 'brightCyan', bold: true }
+		})
+		new terminalKit.TextBox({
+			parent: document,
+			x,
+			y: 3,
+			width,
+			height: 1,
+			content: ` ${truncateTerminalText(this.#title, width - 2)} `,
+			attr: { color: 'black', bgColor: 'brightCyan', bold: true }
+		})
+		const bodyLines = wrapTerminalText(this.#context, width)
+		const bodyHeight = Math.max(2, Math.min(terminal.height - 13, bodyLines.length))
+		bodyLines.slice(0, bodyHeight).forEach((line, offset) => {
+			new terminalKit.TextBox({
+				parent: document,
+				x,
+				y: 5 + offset,
+				width,
+				height: 1,
+				content: line,
+				attr: { color: 'white' }
+			})
+		})
+		const menuY = 6 + bodyHeight
+		new terminalKit.TextBox({
+			parent: document,
+			x,
+			y: menuY,
+			width,
+			height: 1,
+			content: input.label,
+			attr: { color: 'brightWhite', bold: true }
+		})
+		const menu = new terminalKit.ColumnMenuMulti({
+			parent: document,
+			x,
+			y: menuY + 2,
+			width,
+			value: Object.fromEntries(input.selected.map((value) => [value, true])),
+			items: [
+				...input.options.map((option) => ({
+					content: `☐ ${option.label}`,
+					turnedOffBlurContent: `☐ ${option.label}`,
+					turnedOffFocusContent: `☐ ${option.label}`,
+					turnedOnBlurContent: `☑ ${option.label}`,
+					turnedOnFocusContent: `☑ ${option.label}`,
+					key: option.value
+				})),
+				{ type: 'button', content: 'Next >', value: 'next' },
+				...(input.allowBack ? [{ type: 'button', content: '< Back', value: 'back' }] : [])
+			]
+		})
+		new terminalKit.TextBox({
+			parent: document,
+			x,
+			y: Math.min(terminal.height - 1, menuY + input.options.length + 4),
+			width,
+			height: 1,
+			content: 'Arrow keys move · Enter checks or continues · Ctrl+C cancels',
+			attr: { color: 'gray' }
+		})
+		return await new Promise((resolve, reject) => {
+			let settled = false
+			const finish = (callback: () => void) => {
+				if (settled) return
+				settled = true
+				terminal.off('key', onKey)
+				document.destroy()
+				this.#activeDocument = undefined
+				terminal.grabInput(false)
+				terminal.hideCursor(false)
+				terminal.styleReset()
+				this.#active = false
+				callback()
+			}
+			const onKey = (key: string) => {
+				if (key === 'CTRL_C' || key === 'ESCAPE') finish(() => reject(new TuiInterruptedError()))
+			}
+			terminal.on('key', onKey)
+			menu.on('submit', (value, _action, _menu, button) => {
+				const submitted = button as { def?: { value?: string } } | undefined
+				const direction = submitted?.def?.value === 'back' ? 'back' : 'next'
+				finish(() =>
+					resolve({
+						direction,
+						values: Object.entries(value)
+							.filter(([, enabled]) => enabled)
+							.map(([key]) => key)
+					})
+				)
+			})
+			document.giveFocusTo(menu)
+		})
 	}
 
 	async choose(input: {
@@ -367,7 +512,11 @@ export class BootstrapTui {
 		return result.fields?.answer?.trim() || input.defaultValue || ''
 	}
 
-	async progress<T>(label: string, action: () => Promise<T>, onInterrupt?: () => void): Promise<T> {
+	async progress<T>(
+		label: string,
+		action: (update: (event: TuiProgressUpdate) => void) => Promise<T>,
+		onInterrupt?: () => void
+	): Promise<T> {
 		if (this.#active) throw new Error('The terminal form is already active.')
 		this.#active = true
 		const terminal = this.#terminal
@@ -375,6 +524,7 @@ export class BootstrapTui {
 		terminal.hideCursor(true)
 		terminal.grabInput(true)
 		const document = terminal.createDocument()
+		this.#activeDocument = document
 		const width = Math.max(40, Math.min(100, terminal.width - 4))
 		const x = Math.max(2, Math.floor((terminal.width - width) / 2) + 1)
 		new terminalKit.TextBox({
@@ -395,21 +545,92 @@ export class BootstrapTui {
 			content: ` ${truncateTerminalText(this.#title, width - 2)} `,
 			attr: { color: 'black', bgColor: 'brightCyan', bold: true }
 		})
+		const contextLines = wrapTerminalText(this.#context, width).slice(0, 4)
+		if (contextLines.length > 0)
+			new terminalKit.TextBox({
+				parent: document,
+				x,
+				y: 5,
+				width,
+				height: contextLines.length,
+				content: contextLines.join('\n'),
+				attr: { color: 'white' }
+			})
+		const activityY = 6 + contextLines.length
+		const summary = new terminalKit.TextBox({
+			parent: document,
+			x,
+			y: activityY,
+			width,
+			height: 1,
+			content: 'Starting…',
+			attr: { color: 'cyan', bold: true }
+		}) as TerminalTextBox
+		const historyHeight = Math.max(3, Math.min(8, terminal.height - activityY - 6))
+		const history = new terminalKit.TextBox({
+			parent: document,
+			x,
+			y: activityY + 2,
+			width,
+			height: historyHeight,
+			content: '',
+			attr: { color: 'brightGreen' }
+		}) as TerminalTextBox
 		let frame = 0
-		const initialContent = progressChipText(label, frame)
-		const chipWidth = Math.min(width, Math.max(16, initialContent.length))
+		let currentLabel = label
+		let currentDetail = ''
+		let current = 0
+		let total = 0
+		const completed: string[] = []
+		const startedAt = Date.now()
+		const chipWidth = width
 		const progress = new terminalKit.TextBox({
 			parent: document,
 			x,
-			y: 6,
+			y: activityY + historyHeight + 3,
 			width: chipWidth,
-			height: 1,
-			content: truncateTerminalText(initialContent, chipWidth),
+			height: 2,
+			content: truncateTerminalText(progressChipText(label, frame), chipWidth),
 			attr: { color: 'white', bgColor: 'gray', bold: true }
 		}) as TerminalTextBox
+		const render = () => {
+			const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+			const elapsedText = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
+			summary.setContent(
+				truncateTerminalText(
+					total > 0
+						? `Overall ${Math.min(current, total)} of ${total}  ·  ${elapsedText}`
+						: `Working  ·  ${elapsedText}`,
+					width
+				)
+			)
+			history.setContent(
+				completed
+					.slice(-historyHeight)
+					.map((entry) => truncateTerminalText(entry, width))
+					.join('\n')
+			)
+			progress.setContent(
+				[
+					truncateTerminalText(progressChipText(currentLabel, frame), chipWidth),
+					...(currentDetail ? [truncateTerminalText(`  ${currentDetail}`, chipWidth)] : [])
+				].join('\n')
+			)
+		}
+		const update = (event: TuiProgressUpdate) => {
+			current = event.current
+			total = event.total
+			currentLabel = event.label
+			currentDetail = event.detail ?? ''
+			if (event.status === 'complete') {
+				const line = `✓ ${event.label}${event.detail ? ` — ${event.detail}` : ''}`
+				if (completed.at(-1) !== line) completed.push(line)
+			}
+			render()
+		}
 		const interval = setInterval(() => {
 			frame = (frame + 1) % TUI_PROGRESS_FRAMES.length
-			progress.setContent(truncateTerminalText(progressChipText(label, frame), chipWidth))
+			render()
 		}, 90)
 		let interrupt: ((error: Error) => void) | undefined
 		const interrupted = new Promise<never>((_resolve, reject) => {
@@ -422,11 +643,12 @@ export class BootstrapTui {
 		}
 		terminal.on('key', onKey)
 		try {
-			return await Promise.race([action(), interrupted])
+			return await Promise.race([action(update), interrupted])
 		} finally {
 			clearInterval(interval)
 			terminal.off('key', onKey)
 			document.destroy()
+			this.#activeDocument = undefined
 			terminal.grabInput(false)
 			terminal.hideCursor(false)
 			terminal.styleReset()
@@ -446,6 +668,7 @@ export class BootstrapTui {
 		terminal.clear()
 		terminal.hideCursor(true)
 		const document = terminal.createDocument()
+		this.#activeDocument = document
 		const stations = this.#progressDetails?.stations
 		const showStationRail = Boolean(stations?.length) && terminal.width >= 118
 		const stationWidth = showStationRail ? Math.min(38, Math.floor(terminal.width / 4)) : 0
@@ -620,6 +843,7 @@ export class BootstrapTui {
 					field.off('submit', inputSubmitHandlers[index] as () => void)
 				})
 				document.destroy()
+				this.#activeDocument = undefined
 				terminal.grabInput(false)
 				terminal.hideCursor(false)
 				terminal.styleReset()
@@ -653,6 +877,9 @@ export class BootstrapTui {
 	}
 
 	close(): void {
+		this.#activeDocument?.destroy()
+		this.#activeDocument = undefined
+		this.#active = false
 		this.#terminal.grabInput(false)
 		this.#terminal.hideCursor(false)
 		this.#terminal.styleReset()
