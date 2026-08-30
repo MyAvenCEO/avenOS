@@ -4,6 +4,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 compose="$root/deploy/e2e/docker-compose.yml"
 project=${COMPOSE_PROJECT_NAME:-aven-e2e-$$}
+built_images=""
 key_dir=$(mktemp -d)
 openssl genpkey -algorithm ED25519 -out "$key_dir/tenant-private.pem" >/dev/null 2>&1
 openssl pkey -in "$key_dir/tenant-private.pem" -pubout -out "$key_dir/tenant-public.pem" >/dev/null 2>&1
@@ -45,6 +46,11 @@ finish() {
     docker compose --project-name "$project" --file "$compose" logs --no-color --tail=200 || true
   fi
   teardown
+  if [ -n "$built_images" ]; then
+    for image in $built_images; do
+      docker image rm "$image" >/dev/null 2>&1 || true
+    done
+  fi
   exit "$status"
 }
 trap finish EXIT INT TERM
@@ -96,14 +102,26 @@ E2E_AVEN_CEO_IPV6=$(bun -e "import {resolve6} from 'node:dns/promises'; console.
 export E2E_AVEN_CEO_IPV4 E2E_AVEN_CEO_IPV6
 
 if [ "${E2E_SKIP_IMAGE_BUILD:-false}" != "true" ]; then
-  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/identity/Dockerfile" --tag aven-e2e-identity:local "$root"
-  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/aven-api/Dockerfile" --tag aven-e2e-api:local "$root"
-  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/checkout/Dockerfile" --tag aven-e2e-checkout:local "$root"
-  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/platform-provisioner/Dockerfile" --tag aven-e2e-platform-provisioner:local "$root"
-  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/intent-service/Dockerfile" --tag aven-e2e-intent-service:local "$root"
-  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/actor-runner/Dockerfile" --tag aven-e2e-actor-runner:local "$root"
-  docker build --file "$root/services/artifact-store/Dockerfile" --tag aven-e2e-artifact-store:local "$root"
-  docker build --file "$root/services/static-site-host/Dockerfile" --tag aven-e2e-static-site-host:local "$root"
+  E2E_IDENTITY_IMAGE="aven-e2e-identity:$project"
+  E2E_API_IMAGE="aven-e2e-api:$project"
+  E2E_CHECKOUT_IMAGE="aven-e2e-checkout:$project"
+  E2E_PLATFORM_PROVISIONER_IMAGE="aven-e2e-platform-provisioner:$project"
+  E2E_INTENT_SERVICE_IMAGE="aven-e2e-intent-service:$project"
+  E2E_ACTOR_RUNNER_IMAGE="aven-e2e-actor-runner:$project"
+  E2E_ARTIFACT_STORE_IMAGE="aven-e2e-artifact-store:$project"
+  E2E_STATIC_SITE_HOST_IMAGE="aven-e2e-static-site-host:$project"
+  export E2E_IDENTITY_IMAGE E2E_API_IMAGE E2E_CHECKOUT_IMAGE
+  export E2E_PLATFORM_PROVISIONER_IMAGE E2E_INTENT_SERVICE_IMAGE E2E_ACTOR_RUNNER_IMAGE
+  export E2E_ARTIFACT_STORE_IMAGE E2E_STATIC_SITE_HOST_IMAGE
+  built_images="$E2E_IDENTITY_IMAGE $E2E_API_IMAGE $E2E_CHECKOUT_IMAGE $E2E_PLATFORM_PROVISIONER_IMAGE $E2E_INTENT_SERVICE_IMAGE $E2E_ACTOR_RUNNER_IMAGE $E2E_ARTIFACT_STORE_IMAGE $E2E_STATIC_SITE_HOST_IMAGE"
+  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/identity/Dockerfile" --tag "$E2E_IDENTITY_IMAGE" "$root"
+  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/aven-api/Dockerfile" --tag "$E2E_API_IMAGE" "$root"
+  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/checkout/Dockerfile" --tag "$E2E_CHECKOUT_IMAGE" "$root"
+  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/platform-provisioner/Dockerfile" --tag "$E2E_PLATFORM_PROVISIONER_IMAGE" "$root"
+  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/intent-service/Dockerfile" --tag "$E2E_INTENT_SERVICE_IMAGE" "$root"
+  docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file "$root/services/actor-runner/Dockerfile" --tag "$E2E_ACTOR_RUNNER_IMAGE" "$root"
+  docker build --file "$root/services/artifact-store/Dockerfile" --tag "$E2E_ARTIFACT_STORE_IMAGE" "$root"
+  docker build --file "$root/services/static-site-host/Dockerfile" --tag "$E2E_STATIC_SITE_HOST_IMAGE" "$root"
 fi
 
 docker compose --project-name "$project" --file "$compose" config --quiet

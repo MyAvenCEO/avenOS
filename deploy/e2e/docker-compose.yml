@@ -41,7 +41,7 @@ services:
     networks: [identity-private]
 
   identity-migrate:
-    image: aven-e2e-identity:local
+    image: ${E2E_IDENTITY_IMAGE:-aven-e2e-identity:local}
     depends_on:
       identity-database-roles:
         condition: service_completed_successfully
@@ -64,7 +64,7 @@ services:
     networks: [identity-private, public-test]
 
   identity:
-    image: aven-e2e-identity:local
+    image: ${E2E_IDENTITY_IMAGE:-aven-e2e-identity:local}
     depends_on:
       identity-migrate:
         condition: service_completed_successfully
@@ -139,7 +139,7 @@ services:
     networks: [platform-private]
 
   checkout-migrate:
-    image: aven-e2e-checkout:local
+    image: ${E2E_CHECKOUT_IMAGE:-aven-e2e-checkout:local}
     depends_on:
       platform-database-roles:
         condition: service_completed_successfully
@@ -150,7 +150,7 @@ services:
     networks: [platform-private]
 
   checkout-billing-sync:
-    image: aven-e2e-checkout:local
+    image: ${E2E_CHECKOUT_IMAGE:-aven-e2e-checkout:local}
     depends_on:
       checkout-migrate:
         condition: service_completed_successfully
@@ -165,7 +165,7 @@ services:
     networks: [platform-private, public-test]
 
   api-migrate:
-    image: aven-e2e-api:local
+    image: ${E2E_API_IMAGE:-aven-e2e-api:local}
     depends_on:
       platform-database-roles:
         condition: service_completed_successfully
@@ -200,7 +200,7 @@ services:
     networks: [platform-private, public-test]
 
   checkout:
-    image: aven-e2e-checkout:local
+    image: ${E2E_CHECKOUT_IMAGE:-aven-e2e-checkout:local}
     depends_on:
       checkout-billing-sync:
         condition: service_completed_successfully
@@ -237,7 +237,7 @@ services:
       public-test:
 
   platform-event-worker:
-    image: aven-e2e-checkout:local
+    image: ${E2E_CHECKOUT_IMAGE:-aven-e2e-checkout:local}
     depends_on:
       checkout-migrate:
         condition: service_completed_successfully
@@ -260,7 +260,7 @@ services:
     networks: [platform-private]
 
   platform-provisioner:
-    image: aven-e2e-platform-provisioner:local
+    image: ${E2E_PLATFORM_PROVISIONER_IMAGE:-aven-e2e-platform-provisioner:local}
     depends_on:
       api-migrate:
         condition: service_completed_successfully
@@ -282,7 +282,7 @@ services:
     networks: [platform-private]
 
   artifact-store-provisioner:
-    image: aven-e2e-artifact-store:local
+    image: ${E2E_ARTIFACT_STORE_IMAGE:-aven-e2e-artifact-store:local}
     depends_on:
       platform-database-roles:
         condition: service_completed_successfully
@@ -300,7 +300,7 @@ services:
     networks: [platform-private]
 
   artifact-store:
-    image: aven-e2e-artifact-store:local
+    image: ${E2E_ARTIFACT_STORE_IMAGE:-aven-e2e-artifact-store:local}
     depends_on:
       artifact-store-provisioner:
         condition: service_healthy
@@ -321,7 +321,7 @@ services:
     networks: [platform-private]
 
   artifact-store-conformance-migrate:
-    image: aven-e2e-artifact-store:local
+    image: ${E2E_ARTIFACT_STORE_IMAGE:-aven-e2e-artifact-store:local}
     depends_on:
       platform-database-roles:
         condition: service_completed_successfully
@@ -337,7 +337,7 @@ services:
     networks: [platform-private]
 
   artifact-store-conformance:
-    image: aven-e2e-artifact-store:local
+    image: ${E2E_ARTIFACT_STORE_IMAGE:-aven-e2e-artifact-store:local}
     depends_on:
       artifact-store-conformance-migrate:
         condition: service_completed_successfully
@@ -366,7 +366,7 @@ services:
     networks: [platform-private]
 
   intent-service:
-    image: aven-e2e-intent-service:local
+    image: ${E2E_INTENT_SERVICE_IMAGE:-aven-e2e-intent-service:local}
     depends_on:
       platform-provisioner:
         condition: service_started
@@ -387,7 +387,7 @@ services:
     networks: [platform-private, public-test]
 
   actor-runner:
-    image: aven-e2e-actor-runner:local
+    image: ${E2E_ACTOR_RUNNER_IMAGE:-aven-e2e-actor-runner:local}
     depends_on:
       platform-provisioner:
         condition: service_started
@@ -424,7 +424,7 @@ services:
     networks: [platform-private, public-test]
 
   email-worker:
-    image: aven-e2e-checkout:local
+    image: ${E2E_CHECKOUT_IMAGE:-aven-e2e-checkout:local}
     depends_on:
       checkout-migrate:
         condition: service_completed_successfully
@@ -457,7 +457,7 @@ services:
     networks: [platform-private]
 
   api:
-    image: aven-e2e-api:local
+    image: ${E2E_API_IMAGE:-aven-e2e-api:local}
     depends_on:
       api-migrate:
         condition: service_completed_successfully
@@ -481,7 +481,7 @@ services:
 
   static-site-host:
     profiles: [hosting]
-    image: aven-e2e-static-site-host:local
+    image: ${E2E_STATIC_SITE_HOST_IMAGE:-aven-e2e-static-site-host:local}
     depends_on:
       api:
         condition: service_healthy
