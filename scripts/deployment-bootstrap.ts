@@ -22,6 +22,7 @@ import {
 	validateBootstrapInput,
 	writeRecoveryCsv
 } from './lib/deployment-bootstrap.js'
+import { ensurePolarCatalog } from './lib/polar-catalog.js'
 import { ensurePolarWebhook } from './lib/polar-webhook.js'
 import { fetchRedpillPhalaCatalog } from './lib/redpill-model-catalog.js'
 
@@ -99,6 +100,7 @@ const progressTotal =
 	(platformTargets.length > 0 ? 1 : 0) +
 	selectedTargets.length +
 	platformTargets.length +
+	1 +
 	1 +
 	configurationTargets.length * 2 +
 	1
@@ -318,7 +320,10 @@ for (const target of selectedTargets) {
 
 generated.polarWebhooks ??= {}
 for (const target of platformTargets) {
-	beginProgress(`Configure ${target} billing`, `Reconciling the raw Polar webhook endpoint.`)
+	beginProgress(
+		`Configure ${target} billing`,
+		`Reconciling the Polar webhook and published product manifest.`
+	)
 	const provider = input.providers[target]
 	const endpoint = await ensurePolarWebhook({
 		accessToken: provider.polarApiKey,
@@ -331,7 +336,19 @@ for (const target of platformTargets) {
 		url: endpoint.url,
 		secret: endpoint.secret
 	}
-	completeProgress(`${target} Polar webhook ${endpoint.id} is configured.`)
+	// Preserve the one-time signing secret before a later catalog call can fail.
+	saveGeneratedSecrets(generatedPath, generated)
+	updateProgress(`Applying the published pricing manifest to Polar ${target}.`)
+	const catalogResult = await ensurePolarCatalog({
+		accessToken: provider.polarApiKey,
+		organizationId: provider.polarOrganizationId,
+		server: target === 'next' ? 'sandbox' : 'production',
+		publicBaseUrl: target === 'next' ? 'https://my.next.aven.ceo' : 'https://my.aven.ceo',
+		webhookSecret: endpoint.secret
+	})
+	completeProgress(
+		`${target} Polar webhook ${endpoint.id}, ${Object.keys(catalogResult.products).length} product(s), and ${Object.values(catalogResult.benefits).reduce((total, count) => total + count, 0)} product-benefit attachment(s) are configured.`
+	)
 }
 saveGeneratedSecrets(generatedPath, generated)
 
@@ -348,6 +365,16 @@ else {
 completeProgress('The owner-only password-manager CSV is current.')
 
 const github = githubConfiguration(input, generated)
+
+beginProgress(
+	'Configure package reader',
+	'Storing the repository-level token used only for cross-repository npm downloads.'
+)
+await runGitHub(['secret', 'set', 'PACKAGE_READ_TOKEN', '--repo', input.repository], {
+	stdin: input.githubPackagesReadToken,
+	quiet: true
+})
+completeProgress('The GitHub Packages read token is stored as an encrypted repository secret.')
 
 const reviewerId = input.reviewer
 	? Number(await runGitHub(['api', `users/${input.reviewer}`, '--jq', '.id'], { quiet: true }))

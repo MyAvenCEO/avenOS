@@ -80,8 +80,8 @@ bun run test:recovery
 
 - `test:infra` evaluates the Pulumi program and security-sensitive cloud-init output.
 - `test:bootstrap` proves bucket-policy isolation, namespaced GitHub configuration,
-  all-event Polar webhook reconciliation, live-model catalog conversion, and mode-`0600`
-  recovery output without contacting a provider.
+  all-event Polar webhook and product-manifest reconciliation, live-model catalog
+  conversion, and mode-`0600` recovery output without contacting a provider.
 - `test:deploy` validates shell scripts, production Compose files, Caddy
   configuration, dependency order, non-root images, and secret-safe build contexts.
 - `test:recovery` creates source databases, takes encrypted backups, restores fresh

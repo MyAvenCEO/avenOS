@@ -191,13 +191,12 @@ deployment has occurred.
 component commands, platform requirements, and the behavior covered by each test.
 
 Operators preparing a fresh hosted installation start with
-[Initial provisioning](docs/operations/initial-provisioning.md). One local command prepares
-any checked combination of the three deployment targets, creates two private storage
-buckets per target, generates recovery passwords, and configures fresh namespaced GitHub
-Environments before the selected hosts are provisioned. Run
-`bun run bootstrap:deployment:guided` to collect the provider-issued credentials for the
-selected isolated Object Storage projects through a chaptered, resumable form and apply
-that bootstrap.
+[Initial provisioning](docs/operations/initial-provisioning.md). The resumable
+`bun run bootstrap:deployment:guided` command collects and verifies provider-issued
+credentials, creates isolated state and backup storage, configures GitHub, provisions the
+three hosts, pauses for the external `aven.id` DNS records, then verifies, publishes, and
+deploys the first complete installation. It ends with public readiness or a recoverable
+error. Later application and infrastructure updates run through CI.
 
 ## Find the code
 

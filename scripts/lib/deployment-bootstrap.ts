@@ -21,6 +21,7 @@ export interface S3Credential {
 export interface BootstrapInput {
 	deploymentTargets: Target[]
 	repository: string
+	githubPackagesReadToken: string
 	reviewer?: string
 	objectStorage: {
 		region: 'fsn1' | 'nbg1' | 'hel1'
@@ -73,6 +74,15 @@ export interface BootstrapInput {
 export interface GeneratedSecrets {
 	deploymentPrefix: string
 	completedTargets?: Target[]
+	initialRollout?: {
+		ref: string
+		targets: Target[]
+		infrastructurePreviewRunId?: number
+		infrastructureApplyRunId?: number
+		identityDns?: { ipv4: string; ipv6: string; verified: boolean }
+		deployRunId?: number
+		verifiedAt?: string
+	}
 	targets: Record<
 		Target,
 		{ bootstrapPulumiPassphrase: string; pulumiPassphrase: string; resticPassword: string }
@@ -177,6 +187,7 @@ export function validateBootstrapInput(
 		: selectedDeploymentTargets(input.deploymentTargets)
 	if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(stringAt(input.repository, 'repository')))
 		throw new Error('repository must be owner/name.')
+	stringAt(input.githubPackagesReadToken, 'githubPackagesReadToken')
 	if (input.reviewer !== undefined && !/^[A-Za-z0-9-]+$/.test(stringAt(input.reviewer, 'reviewer')))
 		throw new Error('reviewer must be a GitHub user login when provided.')
 	const storage = objectAt(input.objectStorage, 'objectStorage')
@@ -313,6 +324,40 @@ export function loadOrCreateGeneratedSecrets(path: string): GeneratedSecrets {
 					? selectedDeploymentTargets(generated.completedTargets)
 					: []
 		}
+		if (generated.initialRollout !== undefined) {
+			if (!generated.initialRollout || typeof generated.initialRollout !== 'object')
+				throw new Error(`${path} contains invalid initial rollout state.`)
+			selectedDeploymentTargets(generated.initialRollout.targets)
+			if (typeof generated.initialRollout.ref !== 'string' || !generated.initialRollout.ref)
+				throw new Error(`${path} contains an invalid initial rollout ref.`)
+			for (const name of [
+				'infrastructurePreviewRunId',
+				'infrastructureApplyRunId',
+				'deployRunId'
+			] as const) {
+				const runId = generated.initialRollout[name]
+				if (runId !== undefined && (!Number.isSafeInteger(runId) || runId <= 0))
+					throw new Error(`${path} contains an invalid ${name}.`)
+			}
+			const identityDns = generated.initialRollout.identityDns
+			if (
+				identityDns !== undefined &&
+				(!identityDns ||
+					typeof identityDns !== 'object' ||
+					typeof identityDns.ipv4 !== 'string' ||
+					!identityDns.ipv4 ||
+					typeof identityDns.ipv6 !== 'string' ||
+					!identityDns.ipv6 ||
+					typeof identityDns.verified !== 'boolean')
+			)
+				throw new Error(`${path} contains invalid initial rollout identity DNS records.`)
+			if (
+				generated.initialRollout.verifiedAt !== undefined &&
+				(typeof generated.initialRollout.verifiedAt !== 'string' ||
+					!generated.initialRollout.verifiedAt)
+			)
+				throw new Error(`${path} contains an invalid initial rollout verification time.`)
+		}
 		return generated
 	}
 	const generated = generateBootstrapSecrets()
@@ -356,11 +401,30 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 		'avenOS deployment namespace',
 		generated.deploymentPrefix,
 		'',
-		'Prefixes the active GitHub Environments and identifies this infrastructure generation.'
+		`Identifies this infrastructure generation. GitHub Environments: ${deploymentConfigurationTargets(
+			input,
+			generated
+		)
+			.flatMap((target) => [
+				`${generated.deploymentPrefix}-${target}`,
+				`${generated.deploymentPrefix}-${target}-operations`
+			])
+			.join(', ')}.`,
+		`https://github.com/${input.repository}/settings/environments`
+	)
+	add(
+		'shared',
+		'avenOS GitHub Packages reader',
+		'',
+		input.githubPackagesReadToken,
+		'Classic GitHub token with read:packages only; CI uses it to install the cross-repository @myavenceo packages.',
+		'https://github.com/settings/tokens'
 	)
 	const recoveryTargets = deploymentConfigurationTargets(input, generated)
 	for (const target of recoveryTargets) {
 		const storage = input.objectStorage.targets[target]
+		const stateBucket = objectStorageBucketName(input, generated, target, 'state')
+		const backupBucket = objectStorageBucketName(input, generated, target, 'backup')
 		add(
 			target,
 			`avenOS ${target} bootstrap Pulumi passphrase`,
@@ -395,7 +459,7 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 			`avenOS ${target} deployment storage`,
 			storage.deploymentCredential.accessKeyId,
 			storage.deploymentCredential.secretAccessKey,
-			'Writes this target state and backup buckets only.',
+			`Writes only state bucket ${stateBucket} and backup bucket ${backupBucket}.`,
 			`https://console.hetzner.com/projects/${storage.projectId}/security/s3-credentials`
 		)
 		add(
@@ -403,8 +467,16 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 			`avenOS ${target} observer storage`,
 			storage.observerCredential.accessKeyId,
 			storage.observerCredential.secretAccessKey,
-			'Reads this target state bucket only.',
+			`Reads only state bucket ${stateBucket}.`,
 			`https://console.hetzner.com/projects/${storage.projectId}/security/s3-credentials`
+		)
+		add(
+			target,
+			`avenOS ${target} recovery storage`,
+			stateBucket,
+			'',
+			`Pulumi state bucket. Restic backup bucket: ${backupBucket}. Region: ${input.objectStorage.region}. Project: ${storage.projectId}.`,
+			`https://console.hetzner.com/projects/${storage.projectId}/buckets`
 		)
 		add(
 			target,
@@ -456,6 +528,74 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 			'Shared inference credential for next and production.',
 			'https://redpill.ai'
 		)
+	const rollout = generated.initialRollout
+	if (rollout) {
+		const rolloutStatus = rollout.verifiedAt
+			? `Public installation verified at ${rollout.verifiedAt}.`
+			: 'Initial installation has not completed public verification yet.'
+		add(
+			'bootstrap',
+			'avenOS initial deployment revision',
+			rollout.ref,
+			'',
+			`Targets: ${rollout.targets.join(', ')}. ${rolloutStatus}`,
+			`https://github.com/${input.repository}/commit/${rollout.ref}`
+		)
+		for (const [title, runId] of [
+			['Infrastructure preview', rollout.infrastructurePreviewRunId],
+			['Infrastructure apply', rollout.infrastructureApplyRunId],
+			['Software deployment', rollout.deployRunId]
+		] as const) {
+			if (!runId) continue
+			add(
+				'bootstrap',
+				`avenOS initial ${title.toLowerCase()} run`,
+				String(runId),
+				'',
+				`${title} workflow for revision ${rollout.ref}.`,
+				`https://github.com/${input.repository}/actions/runs/${runId}`
+			)
+		}
+		if (rollout.identityDns) {
+			const dnsStatus = rollout.identityDns.verified
+				? 'Public DNS was verified against this value.'
+				: 'This value still needs to be set and verified.'
+			add(
+				'identity',
+				'aven.id apex A record',
+				'@',
+				rollout.identityDns.ipv4,
+				`At the authoritative external DNS provider, set type A, name @, TTL 300. Remove other apex A values. ${dnsStatus}`,
+				'https://aven.id/'
+			)
+			add(
+				'identity',
+				'aven.id apex AAAA record',
+				'@',
+				rollout.identityDns.ipv6,
+				`At the authoritative external DNS provider, set type AAAA, name @, TTL 300. Remove other apex AAAA values. ${dnsStatus}`,
+				'https://aven.id/'
+			)
+		}
+		for (const [group, title, url, notes] of [
+			['identity', 'avenOS identity service', 'https://aven.id/', 'Shared passkey identity.'],
+			[
+				'next',
+				'avenOS next installation',
+				'https://next.aven.ceo/',
+				'Public site. API: https://api.next.aven.ceo. Checkout: https://my.next.aven.ceo.'
+			],
+			[
+				'production',
+				'avenOS production installation',
+				'https://aven.ceo/',
+				'Public site. API: https://api.aven.ceo. Checkout: https://my.aven.ceo.'
+			]
+		] as const) {
+			if (!rollout.targets.includes(group as Target)) continue
+			add(group, title, '', '', `${notes} ${rolloutStatus}`, url)
+		}
+	}
 	const header = ['Group', 'Title', 'Username', 'Password', 'URL', 'Notes']
 	return `${[header, ...rows].map((row) => row.map(csv).join(',')).join('\n')}\n`
 }
