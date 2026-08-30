@@ -107,7 +107,9 @@ one-time secret.
 The default interface is a full-screen, curses-style form that runs entirely through Bun;
 it does not require a native ncurses library or a separately installed `dialog` command.
 Each screen identifies its chapter and puts the current credential or setting in a
-high-contrast title band. Screens that need an answer also show their position among the
+high-contrast title band. Provider-side names and S3 descriptions are repeated as bold
+instruction lines so they can be copied without confusing them with the surrounding purpose
+text. Screens that need an answer also show their position among the
 actionable steps; introductory pages and automatic checks do not inflate that count. On a
 wide terminal, a station rail on the right lists the actionable route, highlights the
 current station, and uses top or bottom ellipses when the route does not fit. Narrow
@@ -136,11 +138,19 @@ plain wizard. Force that mode in any terminal with:
 bun run bootstrap:deployment:guided -- --plain
 ```
 
-Every run starts at the first field. A saved non-secret value is shown and can be edited;
-a saved secret remains hidden and an empty field keeps and rechecks it. A failed or
-interrupted run ends with `ERROR`. This cleanup screen is the only place that requires a
-typed control word: enter exactly `keep` or `delete`, with no default. Deletion covers the
-CSV, resumable input, generated secrets, encrypted bootstrap-state copies and markers, the
+When the output directory contains one or both owner-only credential CSV files plus their
+machine-readable input and generated-secret companions, startup offers **Resume** or
+**Exit**. Resume opens the latest station containing a saved value and checks that station
+again before advancing. This deliberately rechecks a value that may have been saved just
+before a provider rejected it. Exit leaves every file untouched. A CSV without both
+companion files is preserved and produces a clear error instead of being overwritten or
+partially reconstructed.
+
+On a fresh run, the wizard starts at the first field. A saved non-secret value is shown and
+can be edited; a saved secret remains hidden and an empty field keeps and rechecks it. A
+failed or interrupted run ends with `ERROR`. This cleanup screen is the only place that
+requires a typed control word: enter exactly `keep` or `delete`, with no default. Deletion
+covers the CSV, resumable input, generated secrets, encrypted bootstrap-state copies and markers, the
 local Pulumi backend, and any completed recovery CSV. The prompt warns that deletion
 prevents resume and can strand resources if provider changes were already applied. Keeping
 them prints the preserved CSV path. A completed run ends with `SUCCESS` and the same path.

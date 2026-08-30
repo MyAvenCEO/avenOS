@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
 	addChapterEvidence,
 	choiceButtons,
+	isProviderNameLine,
 	navigationButtons,
 	progressChipText,
 	TUI_TEXT_INPUT_KEY_BINDINGS,
@@ -60,5 +61,11 @@ describe('deployment bootstrap terminal forms', () => {
 		expect(progressChipText('Checking GitHub login…', 0)).toBe(' ⠋ Checking GitHub login… ')
 		expect(progressChipText('Checking GitHub login…', 1)).toBe(' ⠙ Checking GitHub login… ')
 		expect(progressChipText('  Applying\nbootstrap  ', 10)).toBe(' ⠋ Applying bootstrap ')
+	})
+
+	test('recognizes provider-side names that the form renders in bold', () => {
+		expect(isProviderNameLine('Description: avenOS identity bootstrap administrator')).toBe(true)
+		expect(isProviderNameLine('Name: avenOS production DNS deployment')).toBe(true)
+		expect(isProviderNameLine('Purpose: Creates the identity buckets.')).toBe(false)
 	})
 })

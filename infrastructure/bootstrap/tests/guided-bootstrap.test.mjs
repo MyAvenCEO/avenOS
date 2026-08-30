@@ -9,6 +9,7 @@ import {
 	hetznerS3CredentialsUrl,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
+	savedWizardResumeIndex,
 	setValueAt,
 	signedS3ReadRequest,
 	valueAt
@@ -20,6 +21,24 @@ test('counts only screens that require an answer', () => {
 	assert.equal(actionableWizardProgress(steps, 1), undefined)
 	assert.deepEqual(actionableWizardProgress(steps, 2), { current: 1, total: 3 })
 	assert.deepEqual(actionableWizardProgress(steps, 4), { current: 3, total: 3 })
+})
+
+test('resumes at the latest saved station so an unverified value is checked again', () => {
+	const steps = [
+		{ info: true, path: [] },
+		{ path: ['repository'] },
+		{ path: ['providers', 'next', 'dnsToken'] },
+		{ path: ['providers', 'next', 'polarApiKey'] }
+	]
+	assert.equal(savedWizardResumeIndex(steps, {}), 1)
+	assert.equal(savedWizardResumeIndex(steps, { repository: 'MyAvenCEO/avenOS' }), 1)
+	assert.equal(
+		savedWizardResumeIndex(steps, {
+			repository: 'MyAvenCEO/avenOS',
+			providers: { next: { dnsToken: 'saved-but-not-yet-verified' } }
+		}),
+		2
+	)
 })
 
 test('introduces every manual prerequisite and the incremental plaintext recovery behavior', () => {

@@ -43,6 +43,28 @@ export function actionableWizardProgress(
 	}
 }
 
+export function savedWizardResumeIndex(
+	steps: readonly {
+		info?: boolean
+		path: readonly string[]
+		companion?: { path: readonly string[] }
+	}[],
+	draft: Record<string, unknown>
+): number {
+	const firstActionable = steps.findIndex((step) => !step.info)
+	let latestSaved = firstActionable < 0 ? 0 : firstActionable
+	for (const [index, step] of steps.entries()) {
+		if (step.info) continue
+		const values = [
+			valueAt(draft, step.path),
+			step.companion && valueAt(draft, step.companion.path)
+		]
+		if (values.some((value) => value !== undefined && value !== null && String(value) !== ''))
+			latestSaved = index
+	}
+	return latestSaved
+}
+
 export function guidedBootstrapIntroduction(deploymentPrefix: string): string {
 	return `Generation: ${deploymentPrefix}
 Have these ready before you start:

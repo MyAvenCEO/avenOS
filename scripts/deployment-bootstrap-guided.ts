@@ -32,6 +32,7 @@ import {
 	hetznerS3CredentialsUrl,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
+	savedWizardResumeIndex,
 	setValueAt,
 	signedS3ReadRequest,
 	valueAt
@@ -91,15 +92,22 @@ const inputPath = join(outputDirectory, 'bootstrap-input.json')
 const credentialsPath = join(outputDirectory, 'credentials.csv')
 const completedCredentialsPath = join(outputDirectory, 'avenos-recovery.csv')
 const generatedPath = join(outputDirectory, 'bootstrap.generated.json')
+for (const path of [inputPath, credentialsPath, completedCredentialsPath, generatedPath]) {
+	if (existsSync(path) && (preflight(() => statSync(path)).mode & 0o077) !== 0)
+		failPreflight(`${path} must be owner-only (chmod 600).`)
+}
+const savedCredentialCsvPaths = [credentialsPath, completedCredentialsPath].filter((path) =>
+	existsSync(path)
+)
+if (savedCredentialCsvPaths.length > 0 && (!existsSync(inputPath) || !existsSync(generatedPath)))
+	failPreflight(
+		`Found owner-only credential CSV data in ${outputDirectory}, but bootstrap-input.json or bootstrap.generated.json is missing. The CSV is preserved, but it cannot safely reconstruct every setup answer. Restore the companion files or choose another --output directory.`
+	)
 const draft = preflight(() =>
 	existsSync(inputPath)
 		? (JSON.parse(readFileSync(inputPath, 'utf8')) as Record<string, unknown>)
 		: {}
 )
-if (existsSync(inputPath) && (preflight(() => statSync(inputPath)).mode & 0o077) !== 0)
-	failPreflight(`${inputPath} must be owner-only (chmod 600).`)
-if (existsSync(credentialsPath) && (preflight(() => statSync(credentialsPath)).mode & 0o077) !== 0)
-	failPreflight(`${credentialsPath} must be owner-only (chmod 600).`)
 const generated = preflight(() => loadOrCreateGeneratedSecrets(generatedPath))
 
 function writePrivateAtomic(path: string, contents: string): void {
@@ -676,7 +684,7 @@ function wizardSteps(): WizardStep[] {
 			chapter: 'Hetzner · Cloud',
 			title: `avenOS ${target} deployment`,
 			description: () =>
-				`Open ${hetznerProjectTokensUrl(String(valueAt(draft, ['objectStorage', 'targets', target, 'projectId'])))}\nCreate a read/write API token named "avenOS ${target} deployment" and paste it below. A read-only request reports the visible server count before the wizard advances.`,
+				`Open ${hetznerProjectTokensUrl(String(valueAt(draft, ['objectStorage', 'targets', target, 'projectId'])))}\nName: avenOS ${target} deployment\n\nCreate a read/write API token with the name above and paste it below. A read-only request reports the visible server count before the wizard advances.`,
 			path: ['providers', target, 'computeToken'],
 			label: 'Cloud API token',
 			secret: true,
@@ -702,7 +710,7 @@ function wizardSteps(): WizardStep[] {
 				chapter: 'Hetzner · DNS',
 				title: `avenOS ${target} DNS deployment`,
 				description: () =>
-					`Open ${hetznerProjectTokensUrl(String(valueAt(draft, ['providers', 'dnsProjectId'])))}\nCreate a read/write token named "avenOS ${target} DNS deployment" in this shared DNS project and paste it below. The wizard resolves the exact aven.ceo zone and displays its provider ID.`,
+					`Open ${hetznerProjectTokensUrl(String(valueAt(draft, ['providers', 'dnsProjectId'])))}\nName: avenOS ${target} DNS deployment\n\nCreate a read/write token with the name above in this shared DNS project and paste it below. The wizard resolves the exact aven.ceo zone and displays its provider ID.`,
 				path: ['providers', target, 'dnsToken'],
 				label: 'DNS API token',
 				secret: true,
@@ -712,7 +720,7 @@ function wizardSteps(): WizardStep[] {
 			{
 				chapter: 'Polar',
 				title: `avenOS ${target} bootstrap`,
-				description: `Open ${target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh'}\nIn the ${target === 'next' ? 'sandbox' : 'live'} organization, create an API key named "avenOS ${target} bootstrap" with organization read and product/webhook read-write access. Paste it below.`,
+				description: `Open ${target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh'}\nName: avenOS ${target} bootstrap\n\nIn the ${target === 'next' ? 'sandbox' : 'live'} organization, create an API key with the name above and organization read plus product/webhook read-write access. Paste it below.`,
 				path: ['providers', target, 'polarApiKey'],
 				label: 'Polar API key',
 				secret: true
@@ -734,7 +742,7 @@ function wizardSteps(): WizardStep[] {
 			{
 				chapter: 'Email',
 				title: `avenOS ${target} SMTP`,
-				description: `Create a send-only SMTP credential. If the provider asks for a name, use "avenOS ${target} SMTP". Paste a complete smtp:// or smtps:// URL containing its username and password; the endpoint structure is checked without sending mail.`,
+				description: `Name: avenOS ${target} SMTP\n\nCreate a send-only SMTP credential with the name above when the provider supports names. Paste a complete smtp:// or smtps:// URL containing its username and password; the endpoint structure is checked without sending mail.`,
 				path: ['providers', target, 'smtpUrl'],
 				label: 'SMTP URL',
 				secret: true,
@@ -767,7 +775,7 @@ function wizardSteps(): WizardStep[] {
 			chapter: 'AI models',
 			title: 'avenOS chat bootstrap',
 			description:
-				'Open https://redpill.ai\nCreate an active, funded key named "avenOS chat bootstrap" and paste it below. The authenticated model catalog is filtered to Phala-hosted chat models and summarized before advancing.',
+				'Open https://redpill.ai\nName: avenOS chat bootstrap\n\nCreate an active, funded key with the name above and paste it below. The authenticated model catalog is filtered to Phala-hosted chat models and summarized before advancing.',
 			path: ['providers', 'redpillApiKey'],
 			label: 'RedPill API key',
 			secret: true,
@@ -866,12 +874,57 @@ function wizardSteps(): WizardStep[] {
 	return steps
 }
 
-async function collectInput(): Promise<BootstrapInput> {
+async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'exit'> {
+	if (savedCredentialCsvPaths.length === 0) return 'fresh'
+	const steps = wizardSteps()
+	const resumeIndex = savedWizardResumeIndex(steps, draft)
+	const resumeStep = steps[resumeIndex] as WizardStep
+	const resumeProgress = actionableWizardProgress(steps, resumeIndex)
+	const records = savedCredentialCsvPaths
+		.map((path) => `  ${path}\n    modified ${statSync(path).mtime.toISOString()}`)
+		.join('\n')
+	const context = `Owner-only saved setup data was found:\n${records}\n\nResume at ${resumeStep.title}${resumeProgress ? ` (Step ${resumeProgress.current} of ${resumeProgress.total})` : ''}. The latest saved station is reopened and checked again, so a value saved before a failed check is never skipped.`
+	for (;;) {
+		setUiContext('Welcome', 'Saved setup found', context)
+		let choice: 'exit' | 'resume'
+		if (tui) {
+			choice = (await tui.choose({
+				label: '',
+				options: [
+					{ label: 'Resume >', value: 'resume' },
+					{ label: 'Exit', value: 'exit' }
+				]
+			})) as 'exit' | 'resume'
+		} else {
+			process.stdout.write('\nEnter r to resume or e to exit: ')
+			const answer = (await readAnswer()).toLowerCase()
+			if (answer !== 'r' && answer !== 'e') {
+				reportFailure('Choose r to resume or e to exit.')
+				continue
+			}
+			choice = answer === 'r' ? 'resume' : 'exit'
+		}
+		if (choice === 'exit') return 'exit'
+		const dependencyCheck = steps.find((step) => step.title === 'Credential recovery')?.verify
+		try {
+			await withProgress('Checking GitHub login and Pulumi…', async () => {
+				await dependencyCheck?.('')
+			})
+			return 'resume'
+		} catch (error) {
+			if (error instanceof TuiInterruptedError) throw error
+			const message = redactSecrets(error instanceof Error ? error.message : 'check failed')
+			reportFailure(message)
+		}
+	}
+}
+
+async function collectInput(resumeSavedSetup = false): Promise<BootstrapInput> {
 	const steps = wizardSteps()
 	const stationLabels = steps
 		.filter((step) => !step.info)
 		.map((step) => `${step.title} · ${step.chapter}`)
-	let index = 0
+	let index = resumeSavedSetup ? savedWizardResumeIndex(steps, draft) : 0
 	while (index < steps.length) {
 		const step = steps[index] as WizardStep
 		if (step.info) {
@@ -1002,8 +1055,13 @@ async function collectInput(): Promise<BootstrapInput> {
 }
 
 try {
+	const startup = await offerSavedSetupResume()
+	if (startup === 'exit') {
+		process.stdout.write(`Saved setup preserved in ${outputDirectory}.\n`)
+		process.exit(0)
+	}
 	if (!existsSync(inputPath) || !existsSync(credentialsPath)) saveDraft()
-	await collectInput()
+	await collectInput(startup === 'resume')
 	setUiContext('Review', 'Validating the plan', 'No provider state changes while this check runs.')
 	await withProgress('Validating the complete deployment plan…', () =>
 		run(

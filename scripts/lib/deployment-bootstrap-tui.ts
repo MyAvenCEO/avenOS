@@ -98,6 +98,10 @@ export function addChapterEvidence(existing: readonly string[], message: string)
 	return [...existing.filter((entry) => entry !== normalized), normalized].slice(-3)
 }
 
+export function isProviderNameLine(value: string): boolean {
+	return /^(Description|Name):\s+\S/.test(value)
+}
+
 export function visibleStations(
 	stations: readonly string[],
 	current: number,
@@ -438,14 +442,16 @@ export class BootstrapTui {
 			content: ` ${truncateTerminalText(this.#title, width - 2)} `,
 			attr: { color: 'black', bgColor: 'brightCyan', bold: true }
 		})
-		new terminalKit.TextBox({
-			parent: document,
-			x,
-			y: 5,
-			width,
-			height: bodyHeight,
-			content: visibleBody.join('\n'),
-			attr: { color: 'white' }
+		visibleBody.forEach((line, offset) => {
+			new terminalKit.TextBox({
+				parent: document,
+				x,
+				y: 5 + offset,
+				width,
+				height: 1,
+				content: line,
+				attr: isProviderNameLine(line) ? { color: 'brightWhite', bold: true } : { color: 'white' }
+			})
 		})
 		let y = 5 + bodyHeight
 		const visibleEvidence = evidenceLines.slice(-3)
