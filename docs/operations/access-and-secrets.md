@@ -59,14 +59,17 @@ a 404 means the token was created in a project that does not own the zone.
 
 ## GitHub Environments
 
-The bootstrap creates physical Environments named `<deployment-prefix>-identity`, `-next`,
-and `-production`, restricted to protected branches. By default they have no required
+The bootstrap creates a deployment and operations Environment for every checked target,
+using names such as `<deployment-prefix>-identity`, `-next`, and `-production` and
+restricting them to protected branches. By default they have no required
 reviewer, so one administrator can dispatch a run. When the optional `reviewer` input is
 set, these three Environments require that GitHub user and prevent self-review. Matching
 `-operations` Environments never require reviewers, so scheduled health checks remain
-unattended. The repository variable `DEPLOYMENT_ENVIRONMENT_PREFIX` activates one complete
-set only after all six are filled. Workflows derive physical names; operators continue to
-select the logical targets `identity`, `next`, and production.
+unattended. `DEPLOYMENT_TARGETS_JSON` records the cumulative prepared targets and keeps
+scheduled monitoring away from absent Environments. The bootstrap switches
+`DEPLOYMENT_ENVIRONMENT_PREFIX` only after every Environment selected for that run is
+filled. Workflows derive physical names; operators continue to select the logical targets
+`identity`, `next`, and production.
 
 Each operations Environment receives only its target's `PULUMI_STACK`, backend variables, read-only
 state access key, and passphrase. It receives no compute, DNS, backup, Polar, SMTP,
@@ -166,9 +169,12 @@ not operator-entered variables.
 The infrastructure workflow also rejects an empty SSH allowlist, non-amd64 images,
 undersized volumes, and invalid CIDRs.
 
-`DEPLOYMENT_ENVIRONMENT_PREFIX` is a repository variable, not an Environment variable.
-It names the active infrastructure generation. The bootstrap changes it only after the
-replacement Environment set is complete.
+`DEPLOYMENT_ENVIRONMENT_PREFIX` and `DEPLOYMENT_TARGETS_JSON` are repository variables,
+not Environment variables. The first names the active infrastructure generation; the
+second is a JSON array containing its prepared targets. Infrastructure and deployment
+workflows reject an unprepared target, and scheduled operations build their matrix from
+that array. The bootstrap changes the prefix only after the selected Environment set is
+complete.
 
 ## Recovery escrow
 

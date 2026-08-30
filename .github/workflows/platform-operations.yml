@@ -14,21 +14,26 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       active: ${{ steps.prefix.outputs.active }}
+      targets: ${{ steps.prefix.outputs.targets }}
     steps:
       - name: Validate the active infrastructure generation
         id: prefix
         env:
           DEPLOYMENT_ENVIRONMENT_PREFIX: ${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}
+          DEPLOYMENT_TARGETS_JSON: ${{ vars.DEPLOYMENT_TARGETS_JSON }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           if [[ -z "$DEPLOYMENT_ENVIRONMENT_PREFIX" && "$EVENT_NAME" == schedule ]]; then
             echo 'active=false' >> "$GITHUB_OUTPUT"
+            echo 'targets=[]' >> "$GITHUB_OUTPUT"
             echo 'No infrastructure generation is active; scheduled monitoring is dormant.'
             exit 0
           fi
           [[ "$DEPLOYMENT_ENVIRONMENT_PREFIX" =~ ^avenos-[0-9a-f]{10}$ ]]
+          jq -e 'type == "array" and length > 0 and all(.[]; . == "identity" or . == "next" or . == "production")' <<<"$DEPLOYMENT_TARGETS_JSON" >/dev/null
           echo 'active=true' >> "$GITHUB_OUTPUT"
+          echo "targets=$(jq -c . <<<"$DEPLOYMENT_TARGETS_JSON")" >> "$GITHUB_OUTPUT"
 
   health:
     needs: validate-environment-prefix
@@ -38,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [identity, next, production]
+        target: ${{ fromJSON(needs.validate-environment-prefix.outputs.targets) }}
     environment: ${{ format('{0}-{1}-operations', vars.DEPLOYMENT_ENVIRONMENT_PREFIX, matrix.target) }}
     concurrency:
       group: aven-platform-operations-${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}-${{ matrix.target }}

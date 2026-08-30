@@ -1,4 +1,5 @@
 {
+	"deploymentTargets": ["identity", "next", "production"],
 	"repository": "MyAvenCEO/avenOS",
 	"objectStorage": {
 		"region": "hel1",

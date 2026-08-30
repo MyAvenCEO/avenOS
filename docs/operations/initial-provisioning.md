@@ -2,33 +2,34 @@
 
 Status: authoritative
 
-One local bootstrap creates the recoverable storage foundation and configures GitHub
-for all three deployment targets. It generates a fresh namespace, so it can prepare a
-replacement installation without reading, changing, or colliding with an existing set
-of GitHub Environments.
+One local bootstrap creates the recoverable storage foundation and configures GitHub for
+any checked combination of `identity`, `next`, and `production`. It generates a fresh
+namespace, so it can prepare a replacement installation without reading, changing, or
+colliding with an existing set of GitHub Environments.
 
 The provider credentials remain the manual floor. [Hetzner exposes S3 credential
 creation only through its Console](https://docs.hetzner.com/storage/object-storage/faq/general/#is-object-storage-exclusively-managed-via-the-hetzner-s3-api),
 and an API token cannot safely create its own replacement. The guided bootstrap prints
-each project path, gives each of the nine credentials its exact description, and securely
+each selected project path, gives each credential its exact description, and securely
 asks for the one-time result before it continues. Do not hand-create buckets, GitHub
 Environments, products, model entries, passwords, SSH keys, database roles, or service
 credentials.
 
 ## What the bootstrap creates
 
-One run creates:
+For each selected target, one run creates:
 
 - a random deployment namespace such as `avenos-4f7c2a91b6`;
-- versioned, private Pulumi state buckets for `identity`, `next`, and production;
-- private Restic backup buckets for the same three targets;
+- one versioned, private Pulumi state bucket;
+- one private Restic backup bucket;
 - bucket policies that isolate each target and keep observer credentials read-only;
-- raw Polar webhook endpoints for `next` and production, subscribed to every event;
-- six namespaced GitHub Environments with variables, encrypted secrets, protected-branch
-  policy, and optional deployment review;
-- three deployment Pulumi passphrases, three Restic passwords, and three isolated
-  storage-bootstrap passphrases;
-- validation of the current Phala-hosted RedPill chat catalog; and
+- a raw Polar webhook endpoint when the target is `next` or `production`, subscribed to
+  every event;
+- a deployment and operations GitHub Environment with variables, encrypted secrets,
+  protected-branch policy, and optional deployment review;
+- one deployment Pulumi passphrase, Restic password, and isolated storage-bootstrap
+  passphrase per selected target;
+- validation of the current Phala-hosted RedPill chat catalog when a platform target is selected; and
 - an owner-only CSV that common password managers can import.
 
 Identity, `next`, and production each use a different Object Storage project. Each project
@@ -56,7 +57,8 @@ When another operator becomes available, add their GitHub login as the optional 
 `reviewer` field beside `repository`. The bootstrap then requires that person to approve
 deployment Environments and prevents the initiating account from approving its own run.
 
-At the providers, create these values:
+The wizard asks only for values needed by the checked targets. At the providers, create
+these values when their target appears:
 
 1. Create separate Hetzner projects named `avenOS identity`, `avenOS next`, and
    `avenOS production`, and record their numeric IDs. In each project, generate an offline
@@ -96,7 +98,9 @@ From the repository root, run:
 bun run bootstrap:deployment:guided
 ```
 
-The wizard opens with a complete checklist, then divides the setup into named chapters:
+The first screen checks one or more targets. That choice removes every irrelevant page and
+recalculates the actionable step count and setup tree before data collection begins. The
+wizard then opens a target-specific checklist and divides the setup into named chapters:
 GitHub, Hetzner, Polar, Email, AI models, client release, infrastructure defaults, and
 review. Hetzner has one subchapter per deployment project plus the shared DNS project;
 Polar has one per organization; and Email has one per sending environment. It checks `gh`
@@ -136,8 +140,15 @@ and remains on its screen so it can be edited. The wizard never asks the operato
 
 After an answer is submitted, a small animated progress chip immediately replaces the
 form while GitHub, Hetzner, Polar, RedPill, plan validation, or provider application is
-running. Local command checks time out with a retryable error instead of leaving a stale
-button on screen.
+running. During the final apply, the screen shows the current numbered provider operation,
+its detail, elapsed time, and recent completed operations. The owner-only
+`bootstrap-apply.log` keeps redacted command diagnostics for a failed retry. Local command
+checks time out with a retryable error instead of leaving a stale button on screen.
+
+If an interrupted Pulumi update created one of this generation's deterministic buckets
+before its local checkpoint recorded ownership, the next apply recognizes only that exact
+expected bucket, imports it into the protected stack, and continues reconciliation. It
+never adopts an unrelated bucket name.
 
 On a terminal smaller than 60 columns by 20 rows it automatically uses the accessible
 plain wizard. Force that mode in any terminal with:
@@ -148,7 +159,8 @@ bun run bootstrap:deployment:guided -- --plain
 
 When the output directory contains one or both owner-only credential CSV files plus their
 machine-readable input and generated-secret companions, startup offers **Resume** or
-**Exit**. Resume opens the latest station containing a saved value and checks that station
+**Exit**. Resume first reopens the saved target selection, then opens the latest relevant
+station containing a saved value and checks that station
 again before advancing. This deliberately rechecks a value that may have been saved just
 before a provider rejected it. Exit leaves every file untouched. A CSV without both
 companion files is preserved and produces a clear error instead of being overwritten or
@@ -190,6 +202,13 @@ result. Select **Apply now** on the review screen to create the buckets, Polar e
 generated secrets, and GitHub configuration, or **Stop after validation** to leave provider
 state unchanged. It never prints a secret or passes one in a command argument.
 
+The bootstrap stores the checked targets in `deploymentTargets`. Rerunning the same saved
+generation may check a different combination; previously entered one-time credentials
+remain in the owner-only files. A fresh complete installation still needs all three targets.
+When a target is added later, the bootstrap also refreshes previously prepared GitHub
+Environments so cross-target read-only state references remain complete. It does not rerun
+their storage or external-provider changes.
+
 To resume or reconcile the same infrastructure generation, run the same command again.
 To use a different owner-only location:
 
@@ -210,7 +229,9 @@ install -m 600 infrastructure/bootstrap/bootstrap-input.example.json \
   "$HOME/avenos-bootstrap-input.json"
 ```
 
-Replace every `PASTE_...` value. Keep `sshAllowedCidrs` at `0.0.0.0/0,::/0` when using
+Set `deploymentTargets` to any non-empty combination of `identity`, `next`, and
+`production`, then remove unselected target sections. Replace every remaining `PASTE_...`
+value. Keep `sshAllowedCidrs` at `0.0.0.0/0,::/0` when using
 GitHub-hosted runners; their outbound addresses change between runs. SSH still accepts
 only Pulumi-generated Ed25519 role keys, disables passwords and root login, and binds each
 role to a fixed command or tunnel. Narrow the CIDRs only after providing a stable
@@ -246,12 +267,14 @@ bun run bootstrap:deployment -- \
   --output "$HOME/avenos-bootstrap-record"
 ```
 
-Pulumi creates each target's two buckets through that target project's S3 interface,
-stores three independently encrypted bootstrap states in their corresponding state
-buckets, and applies the isolation policies. The command then creates
-or reconciles one raw, all-event Polar endpoint for each platform, captures its signing
-secret, and writes the recovery CSV. Finally, it creates and fills all six GitHub
-Environments. Secrets enter `gh` over standard input, not command arguments. As its last
+Pulumi creates each selected target's two buckets through that target project's S3
+interface, stores independently encrypted bootstrap state in the corresponding state
+buckets, and applies the isolation policies. The command then creates or reconciles one
+raw, all-event Polar endpoint for each selected platform, captures its signing secret, and
+writes the recovery CSV. Finally, it creates and fills two GitHub
+Environments per selected target. It records the cumulative prepared target list in
+`DEPLOYMENT_TARGETS_JSON`, so scheduled monitoring ignores targets that do not exist.
+Secrets enter `gh` over standard input, not command arguments. As its last
 remote action, it sets the repository variable
 `DEPLOYMENT_ENVIRONMENT_PREFIX` to the new namespace. Until that final switch, the new
 Environments are inert. Every infrastructure, deployment, and operations workflow rejects
@@ -275,6 +298,7 @@ The output directory contains:
 | `bootstrap-state-<target>.json` | Encrypted Pulumi state migration copy for one storage project |
 | `bootstrap.<target>.remote` | Verified remote-backend marker for one storage project |
 | `pulumi-state/` | Initial local backend retained until remote state is verified |
+| `bootstrap-apply.log` | Owner-only redacted activity and command diagnostics from the latest apply |
 
 Import `credentials.csv` from a guided run, or `avenos-recovery.csv` from the
 non-interactive path, into a password manager whose account recovery you have tested. Map

@@ -4,14 +4,103 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
+	collidingBootstrapBucketKinds,
+	deploymentConfigurationTargets,
+	encodeBootstrapProgress,
 	ensurePrivateDirectory,
 	generateBootstrapSecrets,
 	githubConfiguration,
 	githubEnvironmentProtection,
+	githubEnvironmentVariableChanges,
+	isRetryableGitHubError,
+	parseBootstrapProgress,
 	recoveryCsv,
 	validateBootstrapInput,
 	writeRecoveryCsv
 } from '../../../scripts/lib/deployment-bootstrap.ts'
+
+test('reconciles empty GitHub variables by removing only stale values', () => {
+	assert.deepEqual(
+		githubEnvironmentVariableChanges(
+			{
+				SMTP_FROM: 'avenOS <hello@example.com>',
+				SMTP_REPLY_TO: '',
+				ANDROID_APP_CERT_SHA256_FINGERPRINTS: ''
+			},
+			['SMTP_REPLY_TO', 'UNRELATED_VARIABLE']
+		),
+		{
+			set: [['SMTP_FROM', 'avenOS <hello@example.com>']],
+			remove: ['SMTP_REPLY_TO']
+		}
+	)
+})
+
+test('retries only transient GitHub failures', () => {
+	for (const commandOutput of [
+		'dial tcp 140.82.121.5:443: i/o timeout',
+		'TLS handshake timeout',
+		'HTTP 429: rate limited',
+		'HTTP 503: unavailable'
+	]) {
+		assert.equal(isRetryableGitHubError({ commandOutput }), true)
+	}
+	for (const commandOutput of [
+		'HTTP 401: Bad credentials',
+		'HTTP 403: Resource not accessible',
+		'HTTP 422: Invalid request',
+		'not found'
+	]) {
+		assert.equal(isRetryableGitHubError({ commandOutput }), false)
+	}
+})
+
+test('adopts only deterministic buckets reported by an interrupted bootstrap update', () => {
+	const expected = {
+		state: 'avenos-0123456789-1234567-next-state',
+		backup: 'avenos-0123456789-1234567-next-backup'
+	}
+	assert.deepEqual(
+		collidingBootstrapBucketKinds(
+			'[FATAL] bucket already exists! (avenos-0123456789-1234567-next-state)',
+			expected
+		),
+		['state']
+	)
+	assert.deepEqual(
+		collidingBootstrapBucketKinds(
+			'[FATAL] bucket already exists! (someone-elses-bucket)',
+			expected
+		),
+		[]
+	)
+})
+
+test('round-trips machine-readable bootstrap progress without accepting ordinary output', () => {
+	const event = {
+		status: 'active',
+		current: 2,
+		total: 9,
+		label: 'Prepare next storage',
+		detail: 'Reconciling bucket policies.'
+	}
+	assert.deepEqual(parseBootstrapProgress(encodeBootstrapProgress(event).trim()), event)
+	assert.equal(parseBootstrapProgress('pulumi: updating resources'), undefined)
+	assert.throws(
+		() =>
+			parseBootstrapProgress(
+				'::avenos-bootstrap-progress::{"status":"active","current":0,"total":1,"label":"bad"}'
+			),
+		/invalid progress event/
+	)
+	assert.throws(
+		() =>
+			parseBootstrapProgress(
+				'::avenos-bootstrap-progress::{"status":"active","current":1,"total":1,"label":"bad","detail":4}'
+			),
+		/invalid progress event/
+	)
+})
 
 test('creates the local Pulumi backend as an owner-only directory', () => {
 	const parent = mkdtempSync(join(tmpdir(), 'aven-bootstrap-directory-test-'))
@@ -25,6 +114,7 @@ test('creates the local Pulumi backend as an owner-only directory', () => {
 
 const credential = (name) => ({ accessKeyId: `${name}ACCESS1`, secretAccessKey: `${name}-secret` })
 const input = {
+	deploymentTargets: ['identity', 'next', 'production'],
 	repository: 'MyAvenCEO/avenOS',
 	reviewer: 'operator',
 	objectStorage: {
@@ -189,6 +279,161 @@ test('builds all deployment and operations environment settings', () => {
 	assert.equal(
 		settings[`${prefix}-production`].secrets.LLM_GATEWAY_CREDENTIALS_JSON,
 		JSON.stringify({ redpill: 'redpill-secret-key' })
+	)
+})
+
+test('validates and configures only the selected deployment targets', () => {
+	const nextOnly = {
+		deploymentTargets: ['next'],
+		repository: input.repository,
+		objectStorage: {
+			region: input.objectStorage.region,
+			targets: { next: input.objectStorage.targets.next }
+		},
+		defaults: {
+			hetznerLocation: input.defaults.hetznerLocation,
+			hetznerServerType: input.defaults.hetznerServerType,
+			hetznerOsImage: input.defaults.hetznerOsImage,
+			platformVolumeSizeGb: input.defaults.platformVolumeSizeGb,
+			sshAllowedCidrs: input.defaults.sshAllowedCidrs,
+			acmeEmail: input.defaults.acmeEmail,
+			downloadUrl: input.defaults.downloadUrl
+		},
+		providers: {
+			dnsProjectId: input.providers.dnsProjectId,
+			next: input.providers.next,
+			redpillApiKey: input.providers.redpillApiKey
+		}
+	}
+	assert.doesNotThrow(() => validateBootstrapInput(nextOnly))
+	const generated = generateBootstrapSecrets()
+	generated.polarWebhooks = {
+		next: {
+			id: 'next-hook',
+			url: 'https://my.next.aven.ceo/api/webhooks/polar',
+			secret: 'next-secret'
+		}
+	}
+	const settings = githubConfiguration(nextOnly, generated)
+	assert.deepEqual(Object.keys(settings).sort(), [
+		`${generated.deploymentPrefix}-next`,
+		`${generated.deploymentPrefix}-next-operations`
+	])
+	assert.equal(
+		settings[`${generated.deploymentPrefix}-next`].variables.PLATFORM_VOLUME_SIZE_GB,
+		'80'
+	)
+	assert.equal(
+		settings[`${generated.deploymentPrefix}-next`].variables.IDENTITY_VOLUME_SIZE_GB,
+		undefined
+	)
+	assert.throws(
+		() => validateBootstrapInput({ ...nextOnly, deploymentTargets: [] }),
+		/select at least one/
+	)
+})
+
+test('supports every non-empty combination without configuring an unselected target', () => {
+	const combinations = [
+		['identity'],
+		['next'],
+		['production'],
+		['identity', 'next'],
+		['identity', 'production'],
+		['next', 'production'],
+		['identity', 'next', 'production']
+	]
+	for (const deploymentTargets of combinations) {
+		const platformTargets = deploymentTargets.filter((target) => target !== 'identity')
+		const selectedInput = {
+			deploymentTargets,
+			repository: input.repository,
+			objectStorage: {
+				region: input.objectStorage.region,
+				targets: Object.fromEntries(
+					deploymentTargets.map((target) => [target, input.objectStorage.targets[target]])
+				)
+			},
+			defaults: {
+				hetznerLocation: input.defaults.hetznerLocation,
+				hetznerServerType: input.defaults.hetznerServerType,
+				hetznerOsImage: input.defaults.hetznerOsImage,
+				sshAllowedCidrs: input.defaults.sshAllowedCidrs,
+				acmeEmail: input.defaults.acmeEmail,
+				...(deploymentTargets.includes('identity') && {
+					identityVolumeSizeGb: input.defaults.identityVolumeSizeGb
+				}),
+				...(platformTargets.length > 0 && {
+					platformVolumeSizeGb: input.defaults.platformVolumeSizeGb,
+					downloadUrl: input.defaults.downloadUrl
+				})
+			},
+			providers: {
+				...Object.fromEntries(deploymentTargets.map((target) => [target, input.providers[target]])),
+				...(platformTargets.length > 0 && {
+					dnsProjectId: input.providers.dnsProjectId,
+					redpillApiKey: input.providers.redpillApiKey
+				})
+			}
+		}
+		assert.doesNotThrow(() => validateBootstrapInput(selectedInput))
+		const generated = generateBootstrapSecrets()
+		generated.polarWebhooks = Object.fromEntries(
+			platformTargets.map((target) => [
+				target,
+				{
+					id: `${target}-hook`,
+					url:
+						target === 'next'
+							? 'https://my.next.aven.ceo/api/webhooks/polar'
+							: 'https://my.aven.ceo/api/webhooks/polar',
+					secret: `${target}-secret`
+				}
+			])
+		)
+		const settings = githubConfiguration(selectedInput, generated)
+		assert.deepEqual(
+			Object.keys(settings).sort(),
+			deploymentTargets
+				.flatMap((target) => [
+					`${generated.deploymentPrefix}-${target}`,
+					`${generated.deploymentPrefix}-${target}-operations`
+				])
+				.sort()
+		)
+		const csv = recoveryCsv(selectedInput, generated)
+		for (const target of ['identity', 'next', 'production']) {
+			const matcher = new RegExp(`avenOS ${target} bootstrap administrator`)
+			if (deploymentTargets.includes(target)) assert.match(csv, matcher)
+			else assert.doesNotMatch(csv, matcher)
+		}
+	}
+})
+
+test('refreshes completed environments when a later target adds shared state references', () => {
+	const generated = generateBootstrapSecrets()
+	generated.completedTargets = ['identity']
+	generated.polarWebhooks = {
+		next: {
+			id: 'next-hook',
+			url: 'https://my.next.aven.ceo/api/webhooks/polar',
+			secret: 'next-secret'
+		}
+	}
+	const stagedInput = { ...input, deploymentTargets: ['next'] }
+	const configurationTargets = deploymentConfigurationTargets(stagedInput, generated)
+	assert.deepEqual(configurationTargets, ['identity', 'next'])
+	assert.doesNotThrow(() => validateBootstrapInput(stagedInput, configurationTargets))
+	const settings = githubConfiguration(stagedInput, generated)
+	assert.deepEqual(Object.keys(settings).sort(), [
+		`${generated.deploymentPrefix}-identity`,
+		`${generated.deploymentPrefix}-identity-operations`,
+		`${generated.deploymentPrefix}-next`,
+		`${generated.deploymentPrefix}-next-operations`
+	])
+	assert.equal(
+		settings[`${generated.deploymentPrefix}-identity`].secrets.NEXT_STATE_S3_ACCESS_KEY_ID,
+		input.objectStorage.targets.next.observerCredential.accessKeyId
 	)
 })
 

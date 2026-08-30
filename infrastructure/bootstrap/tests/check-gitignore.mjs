@@ -13,6 +13,7 @@ const artifacts = [
 	'local/credentials.csv',
 	'local/credentials.csv.0123456789ab.next',
 	'local/avenos-recovery.csv',
+	'local/bootstrap-apply.log',
 	'local/bootstrap-state-identity.json',
 	'local/bootstrap.next.remote',
 	'local/pulumi-state/stacks/aven-bootstrap.json'

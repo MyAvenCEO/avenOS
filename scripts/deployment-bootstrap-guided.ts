@@ -19,17 +19,22 @@ import { createInterface } from 'node:readline/promises'
 import { Polar } from '@polar-sh/sdk'
 import {
 	type BootstrapInput,
+	deploymentConfigurationTargets,
 	loadOrCreateGeneratedSecrets,
+	parseBootstrapProgress,
 	TARGETS,
+	type Target,
 	validateBootstrapInput
 } from './lib/deployment-bootstrap.js'
 import {
 	actionableWizardProgress,
+	deploymentTargetSummary,
 	guidedBootstrapIntroduction,
 	guidedBootstrapRecoveryNotice,
 	guidedCredentialsCsv,
 	hetznerProjectTokensUrl,
 	hetznerS3CredentialsUrl,
+	orderedDeploymentTargets,
 	POLAR_API_KEY_SCOPES,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
@@ -41,7 +46,8 @@ import {
 import {
 	BootstrapTui,
 	TuiInterruptedError,
-	type TuiProgress
+	type TuiProgress,
+	type TuiProgressUpdate
 } from './lib/deployment-bootstrap-tui.js'
 import { fetchRedpillPhalaCatalog } from './lib/redpill-model-catalog.js'
 
@@ -95,7 +101,14 @@ const inputPath = join(outputDirectory, 'bootstrap-input.json')
 const credentialsPath = join(outputDirectory, 'credentials.csv')
 const completedCredentialsPath = join(outputDirectory, 'avenos-recovery.csv')
 const generatedPath = join(outputDirectory, 'bootstrap.generated.json')
-for (const path of [inputPath, credentialsPath, completedCredentialsPath, generatedPath]) {
+const bootstrapLogPath = join(outputDirectory, 'bootstrap-apply.log')
+for (const path of [
+	inputPath,
+	credentialsPath,
+	completedCredentialsPath,
+	generatedPath,
+	bootstrapLogPath
+]) {
 	if (existsSync(path) && (preflight(() => statSync(path)).mode & 0o077) !== 0)
 		failPreflight(`${path} must be owner-only (chmod 600).`)
 }
@@ -198,6 +211,7 @@ const localCredentialPaths = [
 	credentialsPath,
 	completedCredentialsPath,
 	generatedPath,
+	bootstrapLogPath,
 	join(outputDirectory, 'pulumi-state'),
 	...TARGETS.flatMap((target) => [
 		join(outputDirectory, `bootstrap-state-${target}.json`),
@@ -311,8 +325,89 @@ async function run(
 	}
 }
 
-async function withProgress<T>(label: string, action: () => Promise<T>): Promise<T> {
-	return tui ? tui.progress(label, action, interruptActiveOperation) : action()
+async function withProgress<T>(
+	label: string,
+	action: (update: (event: TuiProgressUpdate) => void) => Promise<T>
+): Promise<T> {
+	if (tui) return tui.progress(label, action, interruptActiveOperation)
+	return action((event) => {
+		const marker = event.status === 'complete' ? '✓' : '›'
+		process.stdout.write(
+			`${marker} [${event.current}/${event.total}] ${event.label}${event.detail ? ` — ${event.detail}` : ''}\n`
+		)
+	})
+}
+
+async function runBootstrapApply(update: (event: TuiProgressUpdate) => void): Promise<void> {
+	const child = Bun.spawn(
+		[
+			process.execPath,
+			resolve(root, 'scripts/deployment-bootstrap.ts'),
+			'--input',
+			inputPath,
+			'--output',
+			outputDirectory,
+			'--progress-json'
+		],
+		{
+			cwd: root,
+			stdin: 'inherit',
+			stdout: 'pipe',
+			stderr: 'pipe'
+		}
+	)
+	activeChild = child
+	const log: string[] = [`avenOS bootstrap apply ${new Date().toISOString()}`]
+	let lastEvent: TuiProgressUpdate | undefined
+	const consume = async (
+		stream: ReadableStream<Uint8Array>,
+		source: 'stdout' | 'stderr'
+	): Promise<void> => {
+		const reader = stream.getReader()
+		const decoder = new TextDecoder()
+		let pending = ''
+		for (;;) {
+			const { value, done } = await reader.read()
+			pending += decoder.decode(value, { stream: !done })
+			const lines = pending.split('\n')
+			pending = lines.pop() ?? ''
+			for (const line of lines) {
+				let event: TuiProgressUpdate | undefined
+				try {
+					event = parseBootstrapProgress(line)
+				} catch (error) {
+					log.push(`[progress] ${error instanceof Error ? error.message : 'invalid event'}`)
+				}
+				if (event) {
+					lastEvent = event
+					log.push(
+						`[stage ${event.current}/${event.total}] ${event.status}: ${event.label}${event.detail ? ` — ${event.detail}` : ''}`
+					)
+					update(event)
+				} else if (line.trim()) log.push(`[${source}] ${redactSecrets(line)}`)
+			}
+			if (done) break
+		}
+		if (pending.trim()) log.push(`[${source}] ${redactSecrets(pending)}`)
+	}
+	try {
+		const [exitCode] = await Promise.all([
+			child.exited,
+			consume(child.stdout as ReadableStream<Uint8Array>, 'stdout'),
+			consume(child.stderr as ReadableStream<Uint8Array>, 'stderr')
+		])
+		writePrivateAtomic(bootstrapLogPath, `${log.join('\n')}\n`)
+		if (exitCode !== 0) {
+			const phase = lastEvent
+				? `${lastEvent.label}${lastEvent.detail ? ` — ${lastEvent.detail}` : ''}`
+				: 'starting the provider bootstrap'
+			throw new Error(
+				`Bootstrap apply failed during ${phase.replace(/[.!?]+$/, '')}. Diagnostic log: ${bootstrapLogPath}`
+			)
+		}
+	} finally {
+		if (activeChild === child) activeChild = undefined
+	}
 }
 
 async function validateHetznerToken(token: string, label: string, resource: string): Promise<void> {
@@ -363,11 +458,15 @@ function redactSecrets(message: string): string {
 		['providers', 'redpillApiKey']
 	]
 	let redacted = message
-	for (const path of paths) {
-		const value = valueAt(draft, path)
-		if (typeof value === 'string' && value.length >= 4)
-			redacted = redacted.replaceAll(value, '[redacted]')
-	}
+	const generatedSecrets = TARGETS.flatMap((target) => [
+		generated.targets[target].bootstrapPulumiPassphrase,
+		generated.targets[target].pulumiPassphrase,
+		generated.targets[target].resticPassword
+	]).concat(Object.values(generated.polarWebhooks ?? {}).map((webhook) => webhook.secret))
+	const knownSecrets = [...paths.map((path) => valueAt(draft, path)), ...generatedSecrets].filter(
+		(value): value is string => typeof value === 'string' && value.length >= 4
+	)
+	for (const value of knownSecrets) redacted = redacted.replaceAll(value, '[redacted]')
 	return redacted
 }
 
@@ -553,12 +652,15 @@ async function navigateStep(
 	}
 }
 
-function wizardSteps(): WizardStep[] {
+function wizardSteps(selectedTargets: readonly Target[]): WizardStep[] {
+	const platformTargets = selectedTargets.filter(
+		(target): target is 'next' | 'production' => target !== 'identity'
+	)
 	const steps: WizardStep[] = [
 		{
 			chapter: 'Welcome',
 			title: 'Before you start',
-			description: guidedBootstrapIntroduction(generated.deploymentPrefix),
+			description: guidedBootstrapIntroduction(generated.deploymentPrefix, selectedTargets),
 			path: [],
 			label: '',
 			info: true
@@ -627,8 +729,7 @@ function wizardSteps(): WizardStep[] {
 			chapter: 'Hetzner',
 			subchapter: 'Object Storage',
 			title: 'Storage region',
-			description:
-				'All six buckets use one Hetzner Object Storage region, while identity, next, and production remain in separate projects.',
+			description: `${selectedTargets.length * 2} buckets use one Hetzner Object Storage region. Each selected target remains in its own project.`,
 			path: ['objectStorage', 'region'],
 			label: 'Region',
 			defaultValue: 'hel1',
@@ -638,7 +739,7 @@ function wizardSteps(): WizardStep[] {
 		}
 	]
 
-	for (const target of ['identity', 'next', 'production'] as const) {
+	for (const target of selectedTargets) {
 		const subchapter = `${target} project`
 		steps.push({
 			chapter: 'Hetzner',
@@ -650,7 +751,7 @@ function wizardSteps(): WizardStep[] {
 			label: `${target} project ID`,
 			validate: (value) => {
 				if (!/^\d+$/.test(value)) return 'The project ID must be numeric.'
-				const duplicate = (['identity', 'next', 'production'] as const).some(
+				const duplicate = selectedTargets.some(
 					(other) =>
 						other !== target &&
 						valueAt(draft, ['objectStorage', 'targets', other, 'projectId']) === value
@@ -707,20 +808,21 @@ function wizardSteps(): WizardStep[] {
 		})
 	}
 
-	steps.push({
-		chapter: 'Hetzner',
-		subchapter: 'aven.ceo DNS project',
-		title: 'aven.ceo DNS project',
-		stationLabel: 'Project details',
-		description:
-			'Open https://console.hetzner.com/projects\n\nOpen the existing project that contains the aven.ceo DNS zone and paste its numeric project ID. Both deployment environments use separate tokens from this one shared project.',
-		path: ['providers', 'dnsProjectId'],
-		label: 'DNS project ID',
-		validate: (value) => (/^\d+$/.test(value) ? undefined : 'The project ID must be numeric.'),
-		summary: (value) => `✓ aven.ceo DNS project ${value}; ${hetznerProjectTokensUrl(value)}.`
-	})
+	if (platformTargets.length > 0)
+		steps.push({
+			chapter: 'Hetzner',
+			subchapter: 'aven.ceo DNS project',
+			title: 'aven.ceo DNS project',
+			stationLabel: 'Project details',
+			description:
+				'Open https://console.hetzner.com/projects\n\nOpen the existing project that contains the aven.ceo DNS zone and paste its numeric project ID. Both deployment environments use separate tokens from this one shared project.',
+			path: ['providers', 'dnsProjectId'],
+			label: 'DNS project ID',
+			validate: (value) => (/^\d+$/.test(value) ? undefined : 'The project ID must be numeric.'),
+			summary: (value) => `✓ aven.ceo DNS project ${value}; ${hetznerProjectTokensUrl(value)}.`
+		})
 
-	for (const target of ['next', 'production'] as const) {
+	for (const target of platformTargets) {
 		steps.push({
 			chapter: 'Hetzner',
 			subchapter: 'aven.ceo DNS project',
@@ -736,7 +838,7 @@ function wizardSteps(): WizardStep[] {
 		})
 	}
 
-	for (const target of ['next', 'production'] as const) {
+	for (const target of platformTargets) {
 		const subchapter = `${target} organization`
 		steps.push(
 			{
@@ -767,7 +869,7 @@ function wizardSteps(): WizardStep[] {
 		)
 	}
 
-	for (const target of ['next', 'production'] as const) {
+	for (const target of platformTargets) {
 		const subchapter = `${target} sending`
 		steps.push(
 			{
@@ -805,33 +907,38 @@ function wizardSteps(): WizardStep[] {
 		)
 	}
 
-	steps.push(
-		{
-			chapter: 'AI models',
-			title: 'avenOS chat bootstrap',
-			description:
-				'Open https://redpill.ai\nName: avenOS chat bootstrap\n\nCreate an active, funded key with the name above and paste it below. The authenticated model catalog is filtered to Phala-hosted chat models and summarized before advancing.',
-			path: ['providers', 'redpillApiKey'],
-			label: 'RedPill API key',
-			secret: true,
-			verify: async (apiKey) => {
-				const catalog = await fetchRedpillPhalaCatalog(fetch, apiKey)
-				const examples = catalog.slice(0, 3).map((model) => model.label)
-				reportStatus(
-					`✓ ${catalog.length} Phala-hosted model(s)${examples.length ? `, including ${examples.join(', ')}` : ''}.`
-				)
-			}
-		},
-		{
-			chapter: 'Client release',
-			title: 'Android signing identity',
-			description:
-				'Optional. Add production Android certificate SHA-256 fingerprints for verified app links.',
-			path: ['providers', 'production', 'androidAppCertSha256Fingerprints'],
-			label: 'Certificate fingerprints',
-			optional: true
-		}
-	)
+	if (platformTargets.length > 0)
+		steps.push(
+			{
+				chapter: 'AI models',
+				title: 'avenOS chat bootstrap',
+				description:
+					'Open https://redpill.ai\nName: avenOS chat bootstrap\n\nCreate an active, funded key with the name above and paste it below. The authenticated model catalog is filtered to Phala-hosted chat models and summarized before advancing.',
+				path: ['providers', 'redpillApiKey'],
+				label: 'RedPill API key',
+				secret: true,
+				verify: async (apiKey) => {
+					const catalog = await fetchRedpillPhalaCatalog(fetch, apiKey)
+					const examples = catalog.slice(0, 3).map((model) => model.label)
+					reportStatus(
+						`✓ ${catalog.length} Phala-hosted model(s)${examples.length ? `, including ${examples.join(', ')}` : ''}.`
+					)
+				}
+			},
+			...(selectedTargets.includes('production')
+				? [
+						{
+							chapter: 'Client release',
+							title: 'Android signing identity',
+							description:
+								'Optional. Add production Android certificate SHA-256 fingerprints for verified app links.',
+							path: ['providers', 'production', 'androidAppCertSha256Fingerprints'],
+							label: 'Certificate fingerprints',
+							optional: true
+						} satisfies WizardStep
+					]
+				: [])
+		)
 
 	for (const step of [
 		{
@@ -855,30 +962,38 @@ function wizardSteps(): WizardStep[] {
 			defaultValue: 'ubuntu-24.04',
 			description: 'Supported base image used by the fresh-host Pulumi program.'
 		},
-		{
-			title: 'Identity volume',
-			path: ['defaults', 'identityVolumeSizeGb'],
-			label: 'Identity volume GiB',
-			defaultValue: '40',
-			integer: true,
-			validate: (value: string) =>
-				Number.isSafeInteger(Number(value)) && Number(value) >= 20
-					? undefined
-					: 'Enter an integer of at least 20.',
-			description: 'Persistent volume for shared identity data.'
-		},
-		{
-			title: 'Platform volumes',
-			path: ['defaults', 'platformVolumeSizeGb'],
-			label: 'Platform volume GiB',
-			defaultValue: '80',
-			integer: true,
-			validate: (value: string) =>
-				Number.isSafeInteger(Number(value)) && Number(value) >= 20
-					? undefined
-					: 'Enter an integer of at least 20.',
-			description: 'Persistent volume size used independently by next and production.'
-		},
+		...(selectedTargets.includes('identity')
+			? [
+					{
+						title: 'Identity volume',
+						path: ['defaults', 'identityVolumeSizeGb'],
+						label: 'Identity volume GiB',
+						defaultValue: '40',
+						integer: true,
+						validate: (value: string) =>
+							Number.isSafeInteger(Number(value)) && Number(value) >= 20
+								? undefined
+								: 'Enter an integer of at least 20.',
+						description: 'Persistent volume for shared identity data.'
+					}
+				]
+			: []),
+		...(platformTargets.length > 0
+			? [
+					{
+						title: 'Platform volumes',
+						path: ['defaults', 'platformVolumeSizeGb'],
+						label: 'Platform volume GiB',
+						defaultValue: '80',
+						integer: true,
+						validate: (value: string) =>
+							Number.isSafeInteger(Number(value)) && Number(value) >= 20
+								? undefined
+								: 'Enter an integer of at least 20.',
+						description: `Persistent volume size used independently by ${platformTargets.join(' and ')}.`
+					}
+				]
+			: []),
 		{
 			title: 'SSH network access',
 			path: ['defaults', 'sshAllowedCidrs'],
@@ -894,31 +1009,103 @@ function wizardSteps(): WizardStep[] {
 			validate: (value: string) => (value.includes('@') ? undefined : 'Enter an email address.'),
 			description: 'Contact address used for automatic TLS certificate issuance.'
 		},
-		{
-			title: 'Client download',
-			path: ['defaults', 'downloadUrl'],
-			label: 'Download URL',
-			defaultValue: 'https://github.com/MyAvenCEO/avenOS/releases/latest',
-			validate: (value: string) =>
-				value.startsWith('https://') ? undefined : 'The download URL must use HTTPS.',
-			description: 'Public link checkout and account surfaces use for current client downloads.'
-		}
+		...(platformTargets.length > 0
+			? [
+					{
+						title: 'Client download',
+						path: ['defaults', 'downloadUrl'],
+						label: 'Download URL',
+						defaultValue: 'https://github.com/MyAvenCEO/avenOS/releases/latest',
+						validate: (value: string) =>
+							value.startsWith('https://') ? undefined : 'The download URL must use HTTPS.',
+						description:
+							'Public link checkout and account surfaces use for current client downloads.'
+					}
+				]
+			: [])
 	] satisfies Array<Omit<WizardStep, 'chapter'>>) {
 		steps.push({ chapter: 'Infrastructure defaults', ...step })
 	}
 	return steps
 }
 
+function currentDeploymentTargets(): Target[] {
+	const saved = valueAt(draft, ['deploymentTargets'])
+	if (!Array.isArray(saved)) return [...TARGETS]
+	const ordered = orderedDeploymentTargets(
+		saved.filter((value): value is string => typeof value === 'string')
+	)
+	return ordered.length > 0 ? ordered : [...TARGETS]
+}
+
+function wizardStations(steps: readonly WizardStep[]) {
+	return [
+		{ chapter: 'Welcome', subchapter: 'Scope', item: 'Deployment targets' },
+		...steps
+			.filter((step) => !step.info)
+			.map((step) => {
+				const scope = /^(identity|next|production)\b/.exec(step.subchapter ?? '')?.[1]
+				let item = step.stationLabel ?? step.title
+				if (scope) item = item.replace(new RegExp(`^(?:avenOS )?${scope}\\s+`, 'i'), '')
+				else item = item.replace(/^avenOS\s+/i, '')
+				return { chapter: step.chapter, subchapter: step.subchapter, item }
+			})
+	]
+}
+
+async function chooseDeploymentTargets(): Promise<Target[]> {
+	let selectedTargets = currentDeploymentTargets()
+	for (;;) {
+		setUiContext(
+			'Welcome · Scope',
+			'Deployment targets',
+			`Check every target to prepare in this run. Only pages and provider changes needed by the checked targets will follow.\n\n${deploymentTargetSummary(TARGETS)}\n\nA complete installation eventually needs all three. You can prepare one target now and add another later with the same saved generation.`
+		)
+		let values: string[]
+		if (tui) {
+			const result = await tui.chooseMany({
+				label: 'Targets for this run',
+				options: TARGETS.map((target) => ({
+					label: target,
+					value: target
+				})),
+				selected: selectedTargets
+			})
+			values = result.values
+		} else {
+			process.stdout.write(
+				`\nSelected [${selectedTargets.join(', ')}]. Enter identity, next, production, a comma-separated combination, or all: `
+			)
+			const answer = (await readAnswer()).toLowerCase()
+			values =
+				answer === ''
+					? selectedTargets
+					: answer === 'all'
+						? [...TARGETS]
+						: answer.split(',').map((value) => value.trim())
+		}
+		const ordered = orderedDeploymentTargets(values)
+		if (ordered.length === 0 || values.some((value) => !TARGETS.includes(value as Target))) {
+			reportFailure('Check at least one of identity, next, or production.')
+			continue
+		}
+		selectedTargets = ordered
+		setValueAt(draft, ['deploymentTargets'], selectedTargets)
+		saveDraft()
+		return selectedTargets
+	}
+}
+
 async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'exit'> {
 	if (savedCredentialCsvPaths.length === 0) return 'fresh'
-	const steps = wizardSteps()
+	const steps = wizardSteps(currentDeploymentTargets())
 	const resumeIndex = savedWizardResumeIndex(steps, draft)
 	const resumeStep = steps[resumeIndex] as WizardStep
 	const resumeProgress = actionableWizardProgress(steps, resumeIndex)
 	const records = savedCredentialCsvPaths
 		.map((path) => `  ${path}\n    modified ${statSync(path).mtime.toISOString()}`)
 		.join('\n')
-	const context = `Owner-only saved setup data was found:\n${records}\n\nResume at ${resumeStep.title}${resumeProgress ? ` (Step ${resumeProgress.current} of ${resumeProgress.total})` : ''}. The latest saved station is reopened and checked again, so a value saved before a failed check is never skipped.`
+	const context = `Owner-only saved setup data was found:\n${records}\n\nResume at ${resumeStep.title}${resumeProgress ? ` (Step ${resumeProgress.current + 1} of ${resumeProgress.total + 1})` : ''}. You can change the target selection first. The latest saved station is reopened and checked again, so a value saved before a failed check is never skipped.`
 	for (;;) {
 		setUiContext('Welcome', 'Saved setup found', context)
 		let choice: 'exit' | 'resume'
@@ -954,17 +1141,12 @@ async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'exit'> {
 	}
 }
 
-async function collectInput(resumeSavedSetup = false): Promise<BootstrapInput> {
-	const steps = wizardSteps()
-	const stations = steps
-		.filter((step) => !step.info)
-		.map((step) => {
-			const scope = /^(identity|next|production)\b/.exec(step.subchapter ?? '')?.[1]
-			let item = step.stationLabel ?? step.title
-			if (scope) item = item.replace(new RegExp(`^(?:avenOS )?${scope}\\s+`, 'i'), '')
-			else item = item.replace(/^avenOS\s+/i, '')
-			return { chapter: step.chapter, subchapter: step.subchapter, item }
-		})
+async function collectInput(
+	selectedTargets: readonly Target[],
+	resumeSavedSetup = false
+): Promise<BootstrapInput> {
+	const steps = wizardSteps(selectedTargets)
+	const stations = wizardStations(steps)
 	let index = resumeSavedSetup ? savedWizardResumeIndex(steps, draft) : 0
 	while (index < steps.length) {
 		const step = steps[index] as WizardStep
@@ -1034,7 +1216,13 @@ async function collectInput(resumeSavedSetup = false): Promise<BootstrapInput> {
 			wizardLocation(step),
 			step.title,
 			`${typeof step.description === 'function' ? step.description() : step.description}\n\n${current}`,
-			actionProgress ? { ...actionProgress, stations } : undefined
+			actionProgress
+				? {
+						current: actionProgress.current + 1,
+						total: actionProgress.total + 1,
+						stations
+					}
+				: undefined
 		)
 		const result = await navigateStep(step, initialValue, companionExistingText, index > 0)
 		if (result.direction === 'back') {
@@ -1101,8 +1289,13 @@ try {
 		process.stdout.write(`Saved setup preserved in ${outputDirectory}.\n`)
 		process.exit(0)
 	}
+	const selectedTargets = await chooseDeploymentTargets()
+	const configurationTargets = deploymentConfigurationTargets(
+		{ deploymentTargets: selectedTargets },
+		generated
+	)
 	if (!existsSync(inputPath) || !existsSync(credentialsPath)) saveDraft()
-	await collectInput(startup === 'resume')
+	await collectInput(selectedTargets, startup === 'resume')
 	setUiContext('Review', 'Validating the plan', 'No provider state changes while this check runs.')
 	await withProgress('Validating the complete deployment plan…', () =>
 		run(
@@ -1121,7 +1314,7 @@ try {
 	setUiContext(
 		'Review',
 		'Plan validated',
-		'The complete input is valid. Apply creates six buckets across three projects, Polar webhooks, generated credentials, and namespaced GitHub Environments.'
+		`The input for ${selectedTargets.join(', ')} is valid. Apply creates ${selectedTargets.length * 2} private buckets, ${selectedTargets.filter((target) => target !== 'identity').length} Polar webhook(s), generated credentials, and reconciles ${configurationTargets.length * 2} namespaced GitHub Environments. Previously prepared targets are refreshed only to keep shared references current.`
 	)
 	const apply = tui
 		? await tui.choose({
@@ -1137,20 +1330,12 @@ try {
 			`SUCCESS: plan validated without provider changes. Resume with ${outputDirectory}\nCredentials: ${credentialsPath}\n`
 		)
 	} else {
-		setUiContext('Review', 'Applying the bootstrap', 'Provider changes are now in progress.')
-		await withProgress('Creating and reconciling provider resources…', () =>
-			run(
-				process.execPath,
-				[
-					resolve(root, 'scripts/deployment-bootstrap.ts'),
-					'--input',
-					inputPath,
-					'--output',
-					outputDirectory
-				],
-				true
-			)
+		setUiContext(
+			'Review',
+			'Applying the bootstrap',
+			`Preparing ${selectedTargets.join(', ')}. The activity below shows the current provider operation, completed work, and elapsed time. A redacted diagnostic log is saved at ${bootstrapLogPath}.`
 		)
+		await withProgress('Starting provider reconciliation…', runBootstrapApply)
 		promoteCompletedCredentials()
 		process.stdout.write(
 			`SUCCESS: bootstrap ${generated.deploymentPrefix} is configured.\nImport ${credentialsPath} into the password manager, verify it, then securely delete the local bootstrap directory.\n`
@@ -1165,13 +1350,14 @@ try {
 	const message = redactSecrets(
 		error instanceof Error ? error.message : 'Unknown bootstrap failure.'
 	)
-	if (tui)
+	if (tui) {
+		tui.close()
 		tui.setContext(
 			'Recovery',
 			'Bootstrap stopped',
 			`ERROR: ${message}\n\nChoose whether to preserve the owner-only credential artifacts for a retry or delete them. Deletion prevents resume.`
 		)
-	else process.stderr.write(`\nERROR: ${message}\n`)
+	} else process.stderr.write(`\nERROR: ${message}\n`)
 	try {
 		const resolution = await resolveFailedRunCredentials()
 		if (tui) process.stderr.write(`ERROR: ${message}\n`)

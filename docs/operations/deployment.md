@@ -25,17 +25,19 @@ deployment receives identity-state or cross-platform-state access.
 ## Before the first deployment
 
 Complete [Initial provisioning](initial-provisioning.md). It creates a fresh namespaced
-set of six GitHub Environments, the state and backup buckets, their policies, and the
-recovery record. You still need repository administration, provider-issued credentials,
-and access to the external DNS provider for `aven.id`.
+pair of GitHub Environments plus state and backup buckets for every target checked in the
+wizard. A complete fresh installation checks all three, producing six Environments. You
+still need repository administration, provider-issued credentials, and access to the
+external DNS provider for `aven.id`.
 
 Prove the candidate through [Build and test](build-and-test.md). The deployment
 workflow repeats the release-critical gate before publishing images.
 
 ## Provision fresh infrastructure
 
-The workflows select physical Environments through the repository variable
-`DEPLOYMENT_ENVIRONMENT_PREFIX`; do not type or reuse a physical Environment name.
+The workflows select physical Environments through `DEPLOYMENT_ENVIRONMENT_PREFIX` and
+reject targets absent from `DEPLOYMENT_TARGETS_JSON`; do not type or reuse a physical
+Environment name.
 
 Run `platform-infrastructure` once for each target. Begin with `command: preview` and
 review one protected server, one protected volume, one firewall, generated SSH

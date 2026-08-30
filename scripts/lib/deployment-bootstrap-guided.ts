@@ -1,4 +1,5 @@
 import { createHash, createHmac } from 'node:crypto'
+import { TARGETS, type Target } from './deployment-bootstrap.ts'
 
 export interface S3CredentialStep {
 	path: readonly string[]
@@ -77,19 +78,36 @@ export function savedWizardResumeIndex(
 	return latestSaved
 }
 
-export function guidedBootstrapIntroduction(deploymentPrefix: string): string {
+export function orderedDeploymentTargets(values: readonly string[]): Target[] {
+	const selected = new Set(values)
+	return TARGETS.filter((target) => selected.has(target))
+}
+
+export function deploymentTargetSummary(targets: readonly Target[]): string {
+	const descriptions: Record<Target, string> = {
+		identity: 'shared aven.id identity host',
+		next: 'next platform at *.next.aven.ceo',
+		production: 'production platform at *.aven.ceo'
+	}
+	return targets.map((target) => `${target} — ${descriptions[target]}`).join('\n')
+}
+
+export function guidedBootstrapIntroduction(
+	deploymentPrefix: string,
+	targets: readonly Target[] = TARGETS
+): string {
+	const platformTargets = targets.filter((target) => target !== 'identity')
+	const count = (amount: number, singular: string, plural = `${singular}s`) =>
+		`${amount} ${amount === 1 ? singular : plural}`
 	return `Generation: ${deploymentPrefix}
+Selected targets: ${targets.join(', ')}
 Have these ready before you start:
   - GitHub: gh authenticated as a repository administrator
-  - Hetzner Object Storage: 3 numeric project IDs and permission to create 9 S3 credentials
-  - Hetzner: 3 Cloud write tokens; the project ID that owns aven.ceo; and 2 DNS write tokens from that project
-  - Polar: sandbox + production organization IDs and org-read/product+webhook read-write API keys
-  - SMTP: send-only URLs and From addresses for next and production; Reply-To is optional
-  - RedPill: 1 active, funded API key for the Phala-hosted model catalog
-  - Settings: ACME email; host, volume, SSH, and download defaults are offered
-  - Optional: Android certificate fingerprints and a second GitHub reviewer
-  - Later: aven.id DNS access after Pulumi returns the identity addresses
-`
+  - Hetzner Object Storage: ${count(targets.length, 'numeric project ID')} and permission to create ${count(targets.length * 3, 'S3 credential')}
+  - Hetzner: ${count(targets.length, 'target-scoped Cloud write token')}${platformTargets.length ? `; the project ID that owns aven.ceo; and ${count(platformTargets.length, 'DNS write token')} from that project` : ''}
+${platformTargets.length ? `  - Polar: ${count(platformTargets.length, 'organization ID')} for ${platformTargets.join(' and ')}, plus the listed billing API scopes\n  - SMTP: send-only URLs and From addresses for ${platformTargets.join(' and ')}; Reply-To is optional\n  - RedPill: 1 active, funded API key for the Phala-hosted model catalog\n` : ''}  - Settings: host, SSH, ACME email, and ${targets.includes('identity') ? 'identity volume' : ''}${targets.includes('identity') && platformTargets.length ? ' plus ' : ''}${platformTargets.length ? 'platform volume and download' : ''} defaults are offered
+  - Optional: a second GitHub reviewer${targets.includes('production') ? ' and Android certificate fingerprints' : ''}
+${targets.includes('identity') ? '  - Later: aven.id DNS access after Pulumi returns the identity addresses\n' : ''}`
 }
 
 export function guidedBootstrapRecoveryNotice(inputPath: string, credentialsPath: string): string {

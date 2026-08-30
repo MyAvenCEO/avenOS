@@ -30,9 +30,15 @@ jobs:
       - name: Require an activated infrastructure generation
         env:
           DEPLOYMENT_ENVIRONMENT_PREFIX: ${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}
+          DEPLOYMENT_TARGETS_JSON: ${{ vars.DEPLOYMENT_TARGETS_JSON }}
+          REQUESTED_TARGET: ${{ inputs.target }}
         run: |
           set -euo pipefail
           [[ "$DEPLOYMENT_ENVIRONMENT_PREFIX" =~ ^avenos-[0-9a-f]{10}$ ]]
+          jq -e --arg target "$REQUESTED_TARGET" 'type == "array" and index($target) != null' <<<"$DEPLOYMENT_TARGETS_JSON" >/dev/null || {
+            echo "$REQUESTED_TARGET was not prepared by the active bootstrap" >&2
+            exit 64
+          }
 
   verify:
     needs: validate-environment-prefix

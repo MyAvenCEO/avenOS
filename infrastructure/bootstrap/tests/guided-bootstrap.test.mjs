@@ -2,11 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
 	actionableWizardProgress,
+	deploymentTargetSummary,
 	guidedBootstrapIntroduction,
 	guidedBootstrapRecoveryNotice,
 	guidedCredentialsCsv,
 	hetznerProjectTokensUrl,
 	hetznerS3CredentialsUrl,
+	orderedDeploymentTargets,
 	POLAR_API_KEY_SCOPES,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
@@ -61,7 +63,7 @@ test('introduces every manual prerequisite and the incremental plaintext recover
 	for (const requiredText of [
 		'GitHub',
 		'9 S3 credentials',
-		'3 Cloud write tokens',
+		'3 target-scoped Cloud write token',
 		'the project ID that owns aven.ceo',
 		'2 DNS write tokens from that project',
 		'Polar',
@@ -85,6 +87,17 @@ test('introduces every manual prerequisite and the incremental plaintext recover
 		'no default'
 	])
 		assert.match(recovery, new RegExp(requiredText.replaceAll('.', '\\.')))
+})
+
+test('orders and explains any non-empty target selection', () => {
+	assert.deepEqual(orderedDeploymentTargets(['production', 'identity']), ['identity', 'production'])
+	assert.deepEqual(orderedDeploymentTargets(['not-a-target']), [])
+	assert.match(deploymentTargetSummary(['next']), /next platform at \*\.next\.aven\.ceo/)
+	const identityOnly = guidedBootstrapIntroduction('avenos-0123456789', ['identity'])
+	assert.match(identityOnly, /Selected targets: identity/)
+	assert.match(identityOnly, /3 S3 credentials/)
+	assert.doesNotMatch(identityOnly, /Polar:/)
+	assert.doesNotMatch(identityOnly, /RedPill:/)
 })
 
 test('guides one administrator and two roles in each isolated target project', () => {
