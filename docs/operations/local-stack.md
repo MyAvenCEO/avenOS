@@ -36,22 +36,38 @@ starts the topology, waits for health, and prints these endpoints:
 WebAuthn uses the browser secure-context exception for the exact `localhost` origin and
 RP ID. Do not replace `localhost` with `127.0.0.1` while enrolling the passkey.
 
-## Use a local or trusted-network model
+## Use LM Studio or another local model
 
 The desktop always reaches models through the authenticated local facade. Provider
 coordinates and credentials stay in the API container; the webview never receives
 them. `local:up` maps the application's stable chat and design model IDs onto one
 OpenAI-compatible model.
 
-Confirm the provider and copy the exact model `id` from its response:
+In LM Studio:
+
+1. Download and load a model that supports OpenAI-style streaming, tool calls, and
+   JSON output. To process scanned or image-only documents, use a multimodal model as
+   well.
+2. Start the local API server on port `1234` and allow connections from the local
+   network. Docker reaches it through `host.docker.internal`, not through the
+   container's own `localhost`.
+3. Confirm the server and copy the exact model `id` from its response:
+
+   ```sh
+   curl http://127.0.0.1:1234/v1/models
+   ```
+
+Start avenOS with that identifier:
+
+```sh
+LOCAL_LLM_MODEL='replace-with-the-exact-lm-studio-model-id' bun run local:up
+```
+
+For another workstation or trusted-network provider, confirm `/v1/models`, copy the
+exact model `id`, and supply an address reachable from Docker:
 
 ```sh
 curl http://model-host:8000/v1/models
-```
-
-Start avenOS with that identifier and an address reachable from Docker:
-
-```sh
 LOCAL_LLM_MODEL='replace-with-the-exact-model-id' \
 LOCAL_LLM_BASE_URL='http://model-host:8000/v1' \
 bun run local:up
@@ -62,7 +78,6 @@ that additional capability so document processing can select it:
 
 ```sh
 LOCAL_LLM_MODEL='replace-with-the-exact-model-id' \
-LOCAL_LLM_BASE_URL='http://model-host:8000/v1' \
 LOCAL_LLM_VISION=true \
 bun run local:up
 ```
@@ -70,6 +85,13 @@ bun run local:up
 For a model server running on the same machine, omit `LOCAL_LLM_BASE_URL` to use
 `http://host.docker.internal:1234/v1`. The local Compose override maps that name on
 Linux and macOS.
+Override it for another host-side port when necessary:
+
+```sh
+LOCAL_LLM_MODEL='local-model-id' \
+LOCAL_LLM_BASE_URL='http://host.docker.internal:8000/v1' \
+bun run local:up
+```
 
 `LOCAL_LLM_VISION=true` is a declaration used for capability selection; it cannot add
 vision or structured output to a model that lacks them. Without it, chat and design
@@ -159,7 +181,9 @@ coverage and release status.
   `bun run local:down` before starting another interactive stack.
 - **The local model is unavailable:** confirm `/v1/models` works on the host and
   `LOCAL_LLM_MODEL` exactly matches the returned model ID. If the provider runs on the
-  same workstation, ensure it accepts local-network connections so Docker can reach it.
+  same workstation, ensure LM Studio or the selected provider accepts local-network
+  connections so Docker can reach it. `host.docker.internal` is configured by the
+  local Compose override on Linux and macOS.
 - **Chat works but tools or document processing fail:** use a model that implements
   OpenAI-compatible tool calls and JSON output. Document vision additionally requires
   `LOCAL_LLM_VISION=true` and a genuinely multimodal model.

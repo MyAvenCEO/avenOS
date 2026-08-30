@@ -5,6 +5,7 @@ root=$(cd -- "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 sh -n \
   "$root/deploy/e2e/run.sh" \
+  "$root/deploy/e2e/polar-sandbox/run.sh" \
   "$root/deploy/local/up.sh" \
   "$root/deploy/local/down.sh" \
   "$root/deploy/local/account.sh" \
@@ -35,6 +36,19 @@ configure_platform_environment next
 [[ "$public_domain $api_domain $checkout_domain" == 'next.aven.ceo api.next.aven.ceo my.next.aven.ceo' ]]
 configure_platform_environment production
 [[ "$public_domain $api_domain $checkout_domain" == 'aven.ceo api.aven.ceo my.aven.ceo' ]]
+bun test "$root/deploy/local/llm-catalog.test.ts"
+
+env \
+  E2E_TENANT_PRIVATE_KEY=test-private-key \
+  E2E_TENANT_PUBLIC_KEY=test-public-key \
+  LLM_GATEWAY_ENABLED=true \
+  LLM_GATEWAY_MODELS_JSON='[{"id":"deepseek/deepseek-v4-flash-0731","label":"Local test","capabilities":["text-generation","streaming","tool-calling"],"baseUrl":"http://host.docker.internal:1234/v1","upstreamModel":"test","profile":"generic-json","authMode":"none"}]' \
+  LLM_GATEWAY_CREDENTIALS_JSON='{}' \
+  LLM_GATEWAY_ALLOW_INSECURE_HTTP=true \
+  docker compose \
+    --file "$root/deploy/e2e/docker-compose.yml" \
+    --file "$root/deploy/local/docker-compose.yml" \
+    config --quiet
 
 env \
   IDENTITY_IMAGE=identity:test \

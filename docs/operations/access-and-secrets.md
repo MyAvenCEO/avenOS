@@ -142,7 +142,7 @@ Environment secret.
 | `HETZNER_OS_IMAGE` | Supported Ubuntu image; currently `ubuntu-24.04` |
 | `IDENTITY_VOLUME_SIZE_GB` | Identity data volume; at least 30 GiB |
 | `PLATFORM_VOLUME_SIZE_GB` | Platform data volume; at least 40 GiB |
-| `SSH_ALLOWED_CIDRS` | SSH ingress; public for ephemeral GitHub-hosted runners, narrow only with a stable runner or VPN path |
+| `SSH_ALLOWED_CIDRS` | Optional comma-separated SSH source networks; defaults to public dual-stack access (`0.0.0.0/0,::/0`) until the planned VPN exists |
 | `POLAR_SERVER` | `sandbox` in `next`; `production` in production |
 | `POLAR_ORGANIZATION_ID` | Polar organization UUID |
 | `SMTP_FROM` | Visible sender address |
@@ -173,8 +173,11 @@ its exact target. The deployment script derives domains, static-site branches,
 identity credential selection, and backup labels from the selected target; these are
 not operator-entered variables.
 
-The infrastructure workflow also rejects an empty SSH allowlist, non-amd64 images,
-undersized volumes, and invalid CIDRs.
+The infrastructure workflow rejects non-amd64 images, undersized volumes, and invalid
+explicit CIDRs. An empty `SSH_ALLOWED_CIDRS` selects public dual-stack SSH so operators
+with dynamic addresses, including a phone, can connect. When the VPN is ready, set it
+to only the VPN's IPv4/IPv6 networks and review the Pulumi firewall diff before applying
+it.
 
 `DEPLOYMENT_ENVIRONMENT_PREFIX` and `DEPLOYMENT_TARGETS_JSON` are repository variables,
 not Environment variables. The first names the active infrastructure generation; the
@@ -224,15 +227,25 @@ holder exists, include them in that check.
 
 Each host receives separate Pulumi-generated Ed25519 identities:
 
+- admin: an interactive `aven-admin` shell with passwordless sudo for emergency and
+  manual service administration;
 - deploy: invokes only the fixed deploy or fresh-target restore wrapper;
 - observe: reads fixed-scope Compose status, recent logs, disk, and backup state;
 - tunnel: forwards only to `127.0.0.1:5432`; and
 - host: pins the server identity without `ssh-keyscan` or interactive trust.
 
-Tools retrieve these keys from encrypted state into a temporary mode-`0600` directory
-and remove them on exit. The database tunnel is transport only. SQL inspection also
-requires a separately issued, time-bounded, read-only database role; automatic
-diagnostic-role issuance is not implemented yet.
+Automated tools retrieve their keys from encrypted state into a temporary mode-`0600`
+directory and remove them on exit. To install an administrative identity in a phone's
+SSH client, retrieve the appropriate `identityAdminPrivateKey` or
+`platformAdminPrivateKey` secret from the Pulumi stack on a trusted workstation and
+import it directly into the phone's protected key store. Do not send it through chat,
+email, or shared cloud storage. Connect as `aven-admin` to the host's Pulumi output
+address. Password login and direct root login remain disabled, and fail2ban remains
+enabled even while port 22 is public.
+
+The database tunnel is transport only. SQL inspection also requires a separately
+issued, time-bounded, read-only database role; automatic diagnostic-role issuance is
+not implemented yet.
 
 ## Rotation
 

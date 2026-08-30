@@ -16,6 +16,13 @@ Each platform stack generates its own identity provisioning credential. The shar
 identity deployment admits both credentials without giving either platform access to
 identity state or to the other platform's state.
 
+Until the planned VPN exists, SSH is reachable from dynamic IPv4 and IPv6
+addresses and remains protected by generated per-host keys, key-only
+authentication, disabled root login, and fail2ban. A generated `aven-admin`
+identity has administrative sudo access; deploy, observe, and database-tunnel
+identities remain separately constrained. Set `SSH_ALLOWED_CIDRS` to the VPN
+networks when that ingress path is available.
+
 Run tests with:
 
 ```sh

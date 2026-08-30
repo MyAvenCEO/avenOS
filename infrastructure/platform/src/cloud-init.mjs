@@ -10,6 +10,7 @@ function indent(value, spaces) {
 
 export function renderCloudInit({
 	deployUser,
+	adminPublicKey,
 	deployPublicKey,
 	observePublicKey,
 	tunnelPublicKey,
@@ -21,9 +22,13 @@ export function renderCloudInit({
 }) {
 	if (!/^[a-z][a-z0-9-]{0,30}$/.test(deployUser)) throw new Error('invalid deploy user')
 	if (
-		![deployPublicKey, observePublicKey, tunnelPublicKey, sshHostPublicKey.trim()].every(
-			isOpenSshPublicKey
-		)
+		![
+			adminPublicKey,
+			deployPublicKey,
+			observePublicKey,
+			tunnelPublicKey,
+			sshHostPublicKey.trim()
+		].every(isOpenSshPublicKey)
 	)
 		throw new Error('invalid SSH public key')
 	if (!sshHostPrivateKey.includes('OPENSSH PRIVATE KEY')) throw new Error('invalid SSH host key')
@@ -57,6 +62,13 @@ install -d -o 10003 -g 10003 -m 0750 /var/lib/aven/static-sites
 	return `#cloud-config
 users:
   - default
+  - name: aven-admin
+    shell: /bin/bash
+    lock_passwd: true
+    groups: [sudo]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${adminPublicKey}
   - name: ${deployUser}
     shell: /bin/bash
     lock_passwd: true
@@ -125,7 +137,7 @@ ${indent(sshHostPublicKey.trimEnd(), 6)}
       KbdInteractiveAuthentication no
       PermitEmptyPasswords no
       PermitRootLogin no
-      AllowUsers ${deployUser} aven-observe aven-tunnel
+      AllowUsers aven-admin ${deployUser} aven-observe aven-tunnel
       MaxAuthTries 3
       Match User aven-tunnel
         AllowTcpForwarding local

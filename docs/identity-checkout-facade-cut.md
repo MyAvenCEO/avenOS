@@ -82,7 +82,9 @@ a workload-identity token before admitting more callers.
 In the three-host deployment, Caddy admits `/internal/*` only from the two platform
 hosts' exact Pulumi-managed IPv4/IPv6 addresses. Every other source receives a 404
 before the identity process sees the request. The environment-specific constant-time
-Bearer check remains mandatory as a second control.
+Bearer check remains mandatory as a second control. This host-to-host application rule
+does not restrict SSH administration: port 22 separately allows key-only
+`aven-admin` access from dynamic public addresses until the planned VPN exists.
 
 `POST /internal/v1/authorizations/roles` uses the same service boundary for a
 bounded batch of subject UUIDs. It returns only each subject's coarse

@@ -23,9 +23,11 @@ test('treats absent GitHub optional variables as defaults', () => {
 	const config = loadPlatformConfig({
 		...base,
 		IDENTITY_VOLUME_SIZE_GB: '',
-		PLATFORM_VOLUME_SIZE_GB: ''
+		PLATFORM_VOLUME_SIZE_GB: '',
+		SSH_ALLOWED_CIDRS: ''
 	})
 	assert.equal(config.volumeSize, 40)
+	assert.deepEqual(config.sshAllowedCidrs, ['0.0.0.0/0', '::/0'])
 })
 
 test('derives exact next and production origins', () => {
