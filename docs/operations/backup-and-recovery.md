@@ -20,12 +20,14 @@ diagnostic evidence, not durable business data.
 ## What is backed up
 
 The identity repository contains accounts, passkeys, sessions, device state, and
-identity signing-key rows. The platform repository contains checkout, raw verified
-Polar deliveries, platform control data, and every customer database, including
-Artifact, Intent, Actor, and future component schemas.
+identity signing-key rows. Each platform has its own repository containing checkout,
+raw verified Polar deliveries, platform control data, and that environment's customer
+databases, including Artifact, Intent, Actor, and future component schemas.
 
-Identity and platform use separate Restic repository prefixes. Hetzner server backups
-are disabled because they do not form a complete or tested data-recovery path.
+Identity, `next`, and production use separate Restic credentials or prefixes. A
+restore command cannot select a snapshot carrying a different environment label.
+Hetzner server backups are disabled because they do not form a complete or tested
+data-recovery path.
 
 ## Automatic backup process
 
@@ -67,17 +69,18 @@ You need access to the protected repository environment, Hetzner API, both DNS
 providers, and the four-value recovery escrow described in
 [Access and secrets](access-and-secrets.md#recovery-escrow).
 
-1. Run `platform-infrastructure` with `command: up` to create fresh hosts and empty
-   protected volumes.
+1. Run `platform-infrastructure` with `command: up` for `identity`, `next`, and
+   `production` to create three fresh hosts and empty protected volumes.
 2. Apply the newly returned `aven.id` A/AAAA records at its external DNS provider.
-3. Enable the Pulumi-managed `aven.ceo` records when the platform host is ready.
-4. Run `platform-deploy` for the last verified commit with
+   Pulumi has already recreated both platform environments' `aven.ceo` records.
+3. Run `platform-deploy` for `identity` with the last verified ref and
    `recover_from_backup: true`.
-5. Let the workflow start only PostgreSQL and role initialization, verify and restore
-   the newest identity and platform snapshots, then perform normal migrations,
-   reconciliation, service startup, and public health checks.
+4. Run the same workflow and recovery option for `next`, then for `production`.
+5. Let each run start only PostgreSQL and role initialization, verify and restore its
+   own newest snapshot, then perform normal migrations, reconciliation, startup, and
+   public health checks.
 6. Complete checkout, passkey, native-device, artifact, document, chat, Intent, Actor,
-   and public-site smoke checks before declaring recovery.
+   environment-isolation, and public-site smoke checks before declaring recovery.
 
 The restore insertion point and the convergence gates after it are defined in
 [Startup and readiness](startup-and-readiness.md#recovery-difference).
@@ -90,17 +93,20 @@ least-privilege grants.
 
 ## Restore one lost host
 
-Use the same procedure, scoped to replacing the failed foundation. Do not attach an
-unverified old volume and reopen writes. Keep customer routing closed until the
-restored databases, component schemas, grants, and routing generation reconcile.
+Use the same target-specific infrastructure and deployment commands, scoped to the
+failed foundation. Restore identity only once even when both platform environments
+depend on it. Do not attach an unverified old volume and reopen writes. Keep customer
+routing closed until the restored databases, component schemas, grants, and routing
+generation reconcile.
 
 ## Quarterly recovery drill
 
 Before first production use and once per quarter:
 
-1. provision disposable Hetzner hosts through the real Pulumi path;
-2. restore from the real private backup repositories;
-3. run the public and customer-data smoke checklist;
+1. provision disposable identity, `next`, and production hosts through the real
+   Pulumi path;
+2. restore from all three real private backup repositories;
+3. run the public, customer-data, and cross-environment isolation checklist;
 4. record snapshot IDs, manifest digests, start/end time, achieved RPO/RTO, and any
    manual decisions; and
 5. destroy the disposable infrastructure only after recording evidence.

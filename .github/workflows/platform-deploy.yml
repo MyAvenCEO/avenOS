@@ -3,9 +3,14 @@ name: platform-deploy
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: Shared identity or isolated platform environment
+        default: next
+        required: true
+        type: choice
+        options: [identity, next, production]
       ref:
         description: Git ref to build and deploy
-        default: next
         required: true
         type: string
       recover_from_backup:
@@ -185,9 +190,9 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: next
+    environment: ${{ inputs.target }}
     concurrency:
-      group: aven-platform-deploy-next
+      group: aven-platform-deploy-${{ inputs.target }}
       cancel-in-progress: false
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.PULUMI_STATE_S3_ACCESS_KEY_ID }}
@@ -197,6 +202,16 @@ jobs:
       AWS_EC2_METADATA_DISABLED: "true"
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
       PULUMI_STACK: ${{ vars.PULUMI_STACK }}
+      NEXT_PULUMI_STACK: ${{ vars.NEXT_PULUMI_STACK }}
+      NEXT_PULUMI_BACKEND: ${{ vars.NEXT_PULUMI_BACKEND }}
+      NEXT_STATE_S3_ACCESS_KEY_ID: ${{ secrets.NEXT_STATE_S3_ACCESS_KEY_ID }}
+      NEXT_STATE_S3_SECRET_ACCESS_KEY: ${{ secrets.NEXT_STATE_S3_SECRET_ACCESS_KEY }}
+      NEXT_PULUMI_CONFIG_PASSPHRASE: ${{ secrets.NEXT_PULUMI_CONFIG_PASSPHRASE }}
+      PRODUCTION_PULUMI_STACK: ${{ vars.PRODUCTION_PULUMI_STACK }}
+      PRODUCTION_PULUMI_BACKEND: ${{ vars.PRODUCTION_PULUMI_BACKEND }}
+      PRODUCTION_STATE_S3_ACCESS_KEY_ID: ${{ secrets.PRODUCTION_STATE_S3_ACCESS_KEY_ID }}
+      PRODUCTION_STATE_S3_SECRET_ACCESS_KEY: ${{ secrets.PRODUCTION_STATE_S3_SECRET_ACCESS_KEY }}
+      PRODUCTION_PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PRODUCTION_PULUMI_CONFIG_PASSPHRASE }}
       PULUMI_BACKEND: s3://${{ vars.PULUMI_STATE_S3_BUCKET }}/avenos/platform?endpoint=${{ vars.PULUMI_STATE_S3_REGION }}.your-objectstorage.com&region=${{ vars.PULUMI_STATE_S3_REGION }}&s3ForcePathStyle=true&awssdk=v2
       POLAR_API_KEY: ${{ secrets.POLAR_API_KEY }}
       POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
@@ -228,7 +243,7 @@ jobs:
       BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
       BACKUP_S3_REGION: ${{ vars.BACKUP_S3_REGION }}
       BACKUP_RESTIC_PASSWORD: ${{ secrets.BACKUP_RESTIC_PASSWORD }}
-      BACKUP_ENVIRONMENT: next
+      DEPLOYMENT_TARGET: ${{ inputs.target }}
       RECOVER_FROM_BACKUP: ${{ inputs.recover_from_backup }}
     steps:
       - uses: actions/checkout@v5
@@ -237,8 +252,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
+      - name: Install identity DNS lookup tool
+        if: inputs.target == 'identity'
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends dnsutils
+      - name: Record deployed commit
+        run: echo "DEPLOYED_REF_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Install Pulumi CLI
         uses: pulumi/actions@8e5e406f4007fca908480587cb9893c07090f58d # v7
-      - name: Render and deploy both hosts
+      - name: Render and deploy selected target
         shell: bash
         run: bash deploy/release/deploy.sh

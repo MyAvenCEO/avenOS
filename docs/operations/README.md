@@ -17,9 +17,9 @@ between the direction of the product and properties the current system proves.
 | Prepare a Linux or macOS workstation | [Workstation setup](workstation-setup.md) |
 | Build the code or choose the right test level | [Build and test](build-and-test.md) |
 | Run all services and the Rust client locally | [Local full stack](local-stack.md) |
-| Create or update the supported `next` installation | [Deployment](deployment.md) |
+| Create or update identity, `next`, or production | [Deployment](deployment.md) |
 | Understand service startup order and readiness | [Startup and readiness](startup-and-readiness.md) |
-| Understand the production deployment boundary | [Production status](deployment.md#production-status) |
+| Understand environment isolation | [Deployment targets](deployment.md#deployment-targets) |
 | Inspect health, logs, disk, or a database | [Maintenance](maintenance.md) |
 | Understand or restore backups | [Backup and recovery](backup-and-recovery.md) |
 | Respond to an outage or security event | [Incident response](incident-response.md) |
@@ -27,7 +27,7 @@ between the direction of the product and properties the current system proves.
 
 ## System in one minute
 
-AvenOS has four public boundaries:
+AvenOS has four production public boundaries:
 
 - `aven.id` owns signup, passkeys, sessions, device authorization, service tokens,
   authentication, and authorization.
@@ -36,17 +36,17 @@ AvenOS has four public boundaries:
 - `api.aven.ceo` is the authenticated facade over server-side product services.
 - `aven.ceo` is the managed static public site rebuilt from Git.
 
+The staging platform uses `my.next.aven.ceo`, `api.next.aven.ceo`, and
+`next.aven.ceo`. It shares only the `aven.id` issuer with production.
+
 The deployed foundation is deliberately small:
 
 ```text
-identity host                       platform host
-├── Caddy                           ├── Caddy
-├── identity service                ├── facade and checkout
-└── identity PostgreSQL             ├── provisioner and domain services
-                                    ├── managed static host
-                                    └── platform PostgreSQL
-                                        ├── control databases
-                                        └── one database per customer
+shared identity host        next platform host       production platform host
+├── Caddy                   ├── Caddy                 ├── Caddy
+├── identity service        ├── application services  ├── application services
+└── identity PostgreSQL     └── platform PostgreSQL   └── platform PostgreSQL
+                                └── customer DBs          └── customer DBs
 ```
 
 Pulumi creates replaceable Hetzner hosts, protected volumes, firewalls, generated SSH
@@ -59,12 +59,13 @@ trail. Encrypted off-host logical backups are the data recovery path.
 | Target | Status | Purpose |
 | --- | --- | --- |
 | Local | Supported | Disposable development stack on one workstation |
-| `next` | Supported | Fresh two-host shared installation managed by the protected `next` GitHub Environment |
-| Production | **Not yet supported as an independent deployment target** | Requires the isolation decisions and workflow work listed in [Production status](deployment.md#production-status) |
+| `identity` | Supported | Shared `aven.id` issuer and account store managed by the protected `identity` GitHub Environment |
+| `next` | Supported | Isolated staging platform at the three `next.aven.ceo` origins |
+| Production | Supported | Isolated customer-facing platform at the three apex production origins |
 
-The Git branch named `prod` is a release reference, not proof that a production
-infrastructure target exists. Do not substitute production credentials into the
-`next` Environment or reuse its backup repository.
+The Git branch named `prod` is a release reference, not a deployment. An operator
+still selects the production target and exact ref. Never substitute production
+credentials into `next` or reuse another target's state or backup prefix.
 
 ## Operating principles
 

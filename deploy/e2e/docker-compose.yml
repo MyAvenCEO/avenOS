@@ -58,7 +58,7 @@ services:
       AUTHORIZATION_DATABASE_URL: postgres://aven_identity_authorization:identity-authorization-e2e@identity-database/aven_identity
       MIGRATOR_DATABASE_URL: postgres://aven_identity_migrator:identity-migrator-e2e@identity-database/aven_identity
       BETTER_AUTH_SECRET: identity-better-auth-secret-for-e2e-only
-      IDENTITY_PROVISIONING_SECRET: identity-provisioning-secret-for-e2e-only
+      IDENTITY_PROVISIONING_SECRETS: identity-provisioning-secret-for-e2e-only,identity-production-provisioning-secret-for-e2e-only
       POW_DIFFICULTY_BITS: "8"
       REQUIRE_PASSKEY_PRF: "false"
     networks: [identity-private, public-test]

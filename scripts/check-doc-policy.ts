@@ -68,6 +68,34 @@ const settings = new Set<string>()
 for (const match of workflowSource.matchAll(/\b(?:secrets|vars)\.([A-Z][A-Z0-9_]*)/g)) {
 	settings.add(match[1])
 }
+
+const deploymentGuide = read('docs/operations/deployment.md')
+for (const required of [
+	'organization/aven-platform/identity',
+	'organization/aven-platform/next',
+	'organization/aven-platform/production',
+	'api.next.aven.ceo',
+	'my.next.aven.ceo',
+	'next.aven.ceo',
+	'api.aven.ceo',
+	'my.aven.ceo',
+	'aven.ceo',
+	'aven.id'
+]) {
+	if (!deploymentGuide.includes(required))
+		failures.push(`deployment guide must document environment contract ${required}`)
+}
+for (const stale of [
+	'Production is not an independent deployment target',
+	'Production is not yet an isolated supported deployment target',
+	'an independently supported production target',
+	'current production limitation'
+]) {
+	for (const file of ['README.md', ...authoritative]) {
+		if (read(file).includes(stale))
+			failures.push(`${file} contains stale deployment claim: ${stale}`)
+	}
+}
 for (const setting of [...settings].sort()) {
 	if (!accessGuide.includes(`\`${setting}\``)) {
 		failures.push(`access guide does not document workflow setting ${setting}`)

@@ -2,148 +2,169 @@
 
 Status: authoritative
 
-The supported shared deployment target is `next`. It creates two fresh Hetzner hosts
-and deploys an exact verified Git commit. Production is intentionally blocked until it
-has an isolated and tested target; the Git branch named `prod` alone does not provide
-one.
+The deployment system operates three protected targets through the same two GitHub
+workflows. `identity` owns the shared account and passkey service. `next` and
+production own separate platform hosts, databases, credentials, backups, and public
+origins. A release branch is only a candidate ref; choosing a deployment target is a
+separate protected action.
+
+## Deployment targets
+
+| Target | Pulumi stack | Public origins | Static source |
+| --- | --- | --- | --- |
+| `identity` | `organization/aven-platform/identity` | `aven.id` | None |
+| `next` | `organization/aven-platform/next` | `next.aven.ceo`, `api.next.aven.ceo`, `my.next.aven.ceo` | `aven-brands` `next` and `deploy/next` |
+| `production` | `organization/aven-platform/production` | `aven.ceo`, `api.aven.ceo`, `my.aven.ceo` | `aven-brands` `production` and `deploy/production` |
+
+The platform stacks share no database, tenant-signing key, service credential,
+customer route, backup path, SSH identity, or Pulumi state. Both accept short-lived
+tokens from `https://aven.id`. Each platform stack generates its own internal
+provisioning credential. The shared identity deployment admits both; neither platform
+deployment receives identity-state or cross-platform-state access.
 
 ## Before the first deployment
 
-Complete [Access and secrets](access-and-secrets.md). You need repository
-administration, the configured protected `next` Environment, Hetzner compute and
-`aven.ceo` DNS access, and access to the external DNS provider for `aven.id`.
+Complete [Access and secrets](access-and-secrets.md) for all three GitHub
+Environments. You need repository administration, Hetzner compute access, write
+access to the Hetzner-hosted `aven.ceo` zone, access to the external DNS provider for
+`aven.id`, and the three state and backup records in recovery escrow.
 
 Prove the candidate through [Build and test](build-and-test.md). The deployment
-workflow repeats the release-critical gate before publishing an image.
+workflow repeats the release-critical gate before publishing images.
 
-## Create the `next` infrastructure
+## Provision fresh infrastructure
 
-In GitHub Actions, run `platform-infrastructure` with:
+Run `platform-infrastructure` once for each target. Begin with `command: preview` and
+review one protected server, one protected volume, one firewall, generated SSH
+identities, and the target's expected DNS behavior. Reject an unexpected replacement,
+wider SSH ingress, an unprotected stateful resource, or the wrong target stack.
 
-- `command: preview`;
-- `manage_aven_ceo_apex: false`.
+Approve and repeat with `command: up` in this order:
 
-Review exactly two protected servers, two protected volumes, two firewalls, generated
-secrets and SSH identities, non-apex `aven.ceo` records, and the external
-`identityDnsRecords` output. Reject an unexpected replacement, wider SSH ingress,
-unprotected stateful resource, or plaintext secret.
+1. `target: identity`;
+2. `target: next`; and
+3. `target: production`.
 
-Approve and rerun with:
+The order keeps the shared control plane explicit, although no software is admitted
+until all three foundations exist. The platform runs create all A and AAAA records
+for their own three origins. There is no DNS promotion flag and no legacy host to cut
+over.
 
-- `command: up`;
-- `manage_aven_ceo_apex: false`.
-
-Pulumi installs Docker and Compose, mounts the protected volumes, enables UFW,
-fail2ban, bounded logs and unattended security updates, and records cloud-init
+Pulumi installs Docker and Compose, mounts the protected volume, enables UFW,
+fail2ban, bounded logs, and unattended security updates, and records cloud-init
 completion. Do not create or upload SSH keys manually.
 
-## Apply the external `aven.id` DNS records
+## Apply the external `aven.id` records
 
-Read `identityDnsRecords` from the successful Pulumi summary. At the authoritative
-external DNS provider, replace the `aven.id` apex records with the returned values:
+Read `identityDnsRecords` from the successful identity Pulumi summary. At the
+authoritative external provider, replace the `aven.id` apex records with exactly:
 
-- `A`, name `@`, identity IPv4 address, TTL 300;
-- `AAAA`, name `@`, identity IPv6 address, TTL 300.
+- `A`, name `@`, returned identity IPv4 address, TTL 300;
+- `AAAA`, name `@`, returned identity IPv6 address, TTL 300.
 
-Verify authoritative answers before deploying software:
+Verify the authoritative answers:
 
 ```sh
 dig +short A aven.id
 dig +short AAAA aven.id
 ```
 
-Do not copy addresses from an earlier run or point `aven.id` at the platform host.
-Caddy cannot obtain the identity certificate until DNS converges.
+Do not copy addresses from an earlier run or point `aven.id` at either platform host.
 
-## Deploy `next`
+## Deploy the software
 
-Run `platform-deploy` with:
+Run `platform-deploy` three times. Supply an exact verified commit or the intended
+release branch as `ref`, keep `recover_from_backup: false`, and select targets in this
+order:
 
-- `ref`: the exact verified commit or `next` branch;
-- `recover_from_backup: false`.
+1. `identity`;
+2. `next`; and
+3. `production`.
 
-The workflow:
+Identity deployment requires the already-managed A and AAAA records and provisioned
+Pulumi stacks for both platform targets. It resolves those records, writes their exact
+addresses into Caddy's internal-route allowlist, and reads each platform's generated
+provisioning credential through the protected identity Environment.
+
+Each platform deployment selects its own generated identity credential, domains,
+static-site branches, tenant-grant issuer, backup label, and backup prefix from the target. The
+workflow does not accept those security-sensitive values as free-form inputs.
+
+Every deployment:
 
 1. repeats static, unit, Rust, infrastructure, recovery, and full-stack E2E checks;
 2. builds non-root images and records immutable GHCR digests;
-3. reads generated keys and secrets from Pulumi state;
-4. installs mode-`0600` deployment bundles through the fixed host wrapper;
+3. reads generated keys and secrets from the selected Pulumi state;
+4. installs a mode-`0600` bundle through the fixed host wrapper;
 5. creates or rotates exact database roles;
 6. runs migrations and customer reconciliation; and
-7. requires Compose, public readiness, and backup-container health.
+7. requires Compose, backup, static-site, and public readiness.
 
-The exact dependency graph and the distinction between a started process and a ready
-system are defined in [Startup and readiness](startup-and-readiness.md).
+The exact dependency graph is in
+[Startup and readiness](startup-and-readiness.md). No operator opens SSH, writes a
+server file, or handles a generated database password.
 
-No operator opens SSH, writes a server file, or handles a generated database password.
+## Verify the environments
 
-Verify:
+Verify shared identity and `next`:
 
 ```sh
 curl --fail https://aven.id/api/health/ready
-curl --fail https://api.aven.ceo/health/live
-curl --fail https://my.aven.ceo/api/health/ready
+curl --fail https://api.next.aven.ceo/health/live
+curl --fail https://my.next.aven.ceo/api/health/ready
+curl --fail https://next.aven.ceo/
 ```
 
-Complete a sandbox checkout, email, passkey, native-device, and customer-data smoke
-test. A successful first deployment automatically activates hourly operations checks.
+Complete a sandbox checkout, email, passkey, native-device, customer-data, document,
+chat, Intent, and Actor smoke test in `next` before deploying the same verified ref to
+production.
 
-## Publish `aven.ceo`
+The distributed client defaults to production. For a workstation-only `next` smoke
+build, compile the Rust shell against the staging API while retaining the shared
+identity origin:
 
-Confirm `myavenceo/aven-brands` contains the intended `production` source and
-`deploy/production` artifact, including `dist/index.html` and matching
-`dist/.source-revision`.
+```sh
+AVEN_IDENTITY_BASE_URL=https://aven.id \
+AVEN_API_BASE_URL=https://api.next.aven.ceo \
+bun run --cwd app tauri:dev
+```
 
-Run `platform-infrastructure` again with:
+Verify production:
 
-- `command: up`;
-- `manage_aven_ceo_apex: true`.
+```sh
+curl --fail https://api.aven.ceo/health/live
+curl --fail https://my.aven.ceo/api/health/ready
+curl --fail https://aven.ceo/
+```
 
-After DNS convergence, verify the homepage, an SPA fallback path, TLS, and A/AAAA
-answers from more than one network. Git remains the public site's source of truth.
+Complete one real low-risk purchase and the same authenticated application smoke
+path. Confirm that its account appears in shared identity and that no resulting
+commerce, customer, Intent, Artifact, or Actor record exists in `next`.
 
 ## Deploy an update
 
-For an existing healthy `next` installation, run only `platform-deploy` with the exact
-verified ref and `recover_from_backup: false`. The same role initialization,
-migrations, reconciliation, health checks, and backup checks run on every deployment.
+Run `platform-deploy` for the affected target with an exact verified ref and
+`recover_from_backup: false`. Deploy identity changes first when a release changes a
+shared identity contract. Deploy and smoke-test `next` before production for platform
+changes.
+
+The same role initialization, migrations, reconciliation, health checks, and backup
+checks run on every update. A production deployment never promotes or copies the
+`next` database.
 
 ## Roll back application code
 
 Redeploy a previously verified ref whose schema contract is still supported. The
-workflow rebuilds and deploys immutable images for that ref. It does not roll database
-state backward.
+workflow rebuilds immutable images for that ref. It does not roll database state
+backward.
 
-If a migration or reconciliation fails, traffic stays closed. Inspect fixed-scope
-logs, correct the problem forward, and redeploy. Never run reverse migration SQL on a
-shared installation as an improvised rollback.
+If migration or reconciliation fails, traffic stays closed. Inspect fixed-scope logs,
+correct forward, and redeploy. Never run reverse migration SQL as an improvised
+rollback.
 
 ## Promote release branches
 
 The `promote` workflow fast-forwards `main` to `next` or `next` to `prod`. Promotion
-changes a Git reference only. It does not provision or deploy infrastructure.
-
-## Production status
-
-**There is no supported independent production deployment workflow in the current automation.**
-The current workflows, concurrency groups, Pulumi stack validation, backup labels, and
-GitHub Environment are fixed to `next`. Public domains are fixed as well, so a second
-installation cannot coexist by changing only a stack name.
-
-Before production can be deployed, make and test these decisions:
-
-1. Choose whether `next` is a disposable staging installation on separate hostnames or
-   the same installation promoted in place.
-2. Give production an independent protected GitHub Environment, Pulumi stack, state
-   prefix, backup prefix, provider credentials, monitoring schedule, and recovery
-   escrow.
-3. Define non-conflicting identity, API, checkout, and static-site DNS for simultaneous
-   staging, or document and test an in-place promotion.
-4. Parameterize or duplicate infrastructure, deploy, and operations workflows without
-   allowing one environment to read another's secrets or state.
-5. Prove production provisioning, deployment, backup, restore, and public smoke checks
-   in CI and on disposable hosts.
-
-Until those changes land, do not place production provider credentials in `next`, do
-not label `next` backups as production, and do not treat `next → prod` branch promotion
-as a deployment.
+changes a Git reference only. It does not provision or deploy infrastructure. A human
+still chooses `target: production` and supplies the intended ref to
+`platform-deploy`.

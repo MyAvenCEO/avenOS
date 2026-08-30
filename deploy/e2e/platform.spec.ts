@@ -25,7 +25,7 @@ const tauriDriver = process.env.E2E_TAURI_DRIVER as string
 const tauriFixture = process.env.E2E_TAURI_FIXTURE as string
 const silentVoiceFixtureJson = process.env.E2E_SILENT_VOICE_FIXTURE as string
 const silentDuplexFixtureJson = process.env.E2E_SILENT_DUPLEX_FIXTURE as string
-const provisioningSecret = 'identity-provisioning-secret-for-e2e-only'
+const productionProvisioningSecret = 'identity-production-provisioning-secret-for-e2e-only'
 const directorySecret = 'site-host-directory-token-for-e2e-only'
 
 function requireEnvironment() {
@@ -612,6 +612,18 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 			})
 		).status
 	).toBe(401)
+	await expect(
+		(
+			await fetch(`${identity}/internal/v1/authorizations/roles`, {
+				method: 'POST',
+				headers: {
+					authorization: `Bearer ${productionProvisioningSecret}`,
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({ subjectIds: [] })
+			})
+		).status
+	).toBe(200)
 	const ignoredDeliveryId = `msg_${crypto.randomUUID()}`
 	const ignoredWebhookBody = JSON.stringify({
 		type: 'future.feature.created',
@@ -1161,7 +1173,7 @@ test('fresh split stack: checkout, identity, facade, and managed hosting', async
 	const secondProvision = await fetch(`${identity}/internal/v1/accounts`, {
 		method: 'POST',
 		headers: {
-			authorization: `Bearer ${provisioningSecret}`,
+			authorization: `Bearer ${productionProvisioningSecret}`,
 			'content-type': 'application/json'
 		},
 		body: JSON.stringify({ email, source: 'e2e-idempotence' })

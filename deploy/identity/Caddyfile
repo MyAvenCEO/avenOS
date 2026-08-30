@@ -13,7 +13,7 @@
 	}
 	@untrusted_internal {
 		path /internal/*
-		not remote_ip {$PLATFORM_PUBLIC_IPV4} {$PLATFORM_PUBLIC_IPV6}
+		not remote_ip {$NEXT_PLATFORM_PUBLIC_IPV4} {$NEXT_PLATFORM_PUBLIC_IPV6} {$PRODUCTION_PLATFORM_PUBLIC_IPV4} {$PRODUCTION_PLATFORM_PUBLIC_IPV6}
 	}
 	respond @untrusted_internal 404
 	reverse_proxy identity:3000

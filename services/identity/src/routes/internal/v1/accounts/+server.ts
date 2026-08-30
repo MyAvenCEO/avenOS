@@ -1,12 +1,12 @@
 import { json } from '@sveltejs/kit'
 import { z } from 'zod'
 import { runtime } from '$lib/server/runtime.js'
-import { constantTimeBearer } from '$lib/server/tokens.js'
+import { constantTimeAnyBearer } from '$lib/server/tokens.js'
 
 const requestSchema = z.object({ email: z.email(), source: z.string().min(1).max(80) })
 export const POST = async ({ request }) => {
 	const rt = await runtime()
-	if (!constantTimeBearer(request, rt.config.IDENTITY_PROVISIONING_SECRET))
+	if (!constantTimeAnyBearer(request, rt.config.IDENTITY_PROVISIONING_SECRETS))
 		return json({ code: 'UNAUTHORIZED' }, { status: 401 })
 	try {
 		const input = requestSchema.parse(await request.json())

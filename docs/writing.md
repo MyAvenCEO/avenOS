@@ -96,8 +96,8 @@ contains; avoid bare “learn more” links.
   for an executable participant in that work.
 - Use **customer environment** for the stable product and lifecycle boundary and
   **customer database** for its current physical database.
-- Use `next` for the supported shared deployment target and **production** for the
-  unsupported independent production target.
+- Use `next` for the staging platform environment, **production** for the customer-facing
+  platform environment, and **identity** for their shared `aven.id` control plane.
 - Use **local** only for resources on the developer's machine.
 - Do not translate customer-database isolation into an end-to-end encryption claim or
   source availability into proven portability.

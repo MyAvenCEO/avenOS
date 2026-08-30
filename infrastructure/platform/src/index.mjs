@@ -12,9 +12,12 @@ const protect = { protect: true }
 const computeProvider = new hcloud.Provider('platform-compute-provider', {
 	token: pulumi.secret(requireProviderToken(process.env, 'HETZNER_COMPUTE_TOKEN'))
 })
-const dnsProvider = new hcloud.Provider('platform-dns-provider', {
-	token: pulumi.secret(requireProviderToken(process.env, 'HETZNER_DNS_TOKEN'))
-})
+const dnsProvider =
+	config.target === 'platform'
+		? new hcloud.Provider('platform-dns-provider', {
+				token: pulumi.secret(requireProviderToken(process.env, 'HETZNER_DNS_TOKEN'))
+			})
+		: undefined
 
 const selectedServerType = (name) =>
 	hcloud.getServerTypeOutput({ name }, { provider: computeProvider }).apply((serverType) => {
@@ -157,20 +160,26 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 	return { server, firewall, volume, attachment, hostKey, deployKey, observeKey, tunnelKey }
 }
 
-const identity = createHost({
-	resource: 'identity',
-	deploymentId: config.identityDeploymentId,
-	appRoot: '/opt/aven/identity',
-	serverType: config.identityServerType,
-	volumeSize: config.identityVolumeSize
-})
-const platform = createHost({
-	resource: 'platform',
-	deploymentId: config.platformDeploymentId,
-	appRoot: '/opt/aven/platform',
-	serverType: config.platformServerType,
-	volumeSize: config.platformVolumeSize
-})
+const identity =
+	config.target === 'identity'
+		? createHost({
+				resource: 'identity',
+				deploymentId: config.identityDeploymentId,
+				appRoot: '/opt/aven/identity',
+				serverType: config.serverType,
+				volumeSize: config.volumeSize
+			})
+		: undefined
+const platform =
+	config.target === 'platform'
+		? createHost({
+				resource: 'platform',
+				deploymentId: config.platformDeploymentId,
+				appRoot: '/opt/aven/platform',
+				serverType: config.serverType,
+				volumeSize: config.volumeSize
+			})
+		: undefined
 
 const createDnsRecords = (records, dependsOn) =>
 	records.map(
@@ -189,105 +198,157 @@ const createDnsRecords = (records, dependsOn) =>
 			)
 	)
 
-const platformDns = createDnsRecords(
-	platformRecordSpecs({
-		zone: config.platformDnsZone,
-		hostnames: config.platformHostnames,
-		ipv4: platform.server.ipv4Address,
-		ipv6: platform.server.ipv6Address,
-		includeApex: config.manageApexDns
-	}),
-	[platform.server]
-)
+const platformDns = platform
+	? createDnsRecords(
+			platformRecordSpecs({
+				zone: config.platformDnsZone,
+				hostnames: config.platformHostnames,
+				ipv4: platform.server.ipv4Address,
+				ipv6: platform.server.ipv6Address
+			}),
+			[platform.server]
+		)
+	: []
 
 const password = (name, length = 48) =>
 	new random.RandomPassword(name, { length, special: false }, protect).result
 
+const identitySecrets = identity
+	? {
+			postgres: pulumi.secret(password('identity-postgres-password')),
+			auth: pulumi.secret(password('identity-auth-password')),
+			accounts: pulumi.secret(password('identity-accounts-password')),
+			authorization: pulumi.secret(password('identity-authorization-password')),
+			migrator: pulumi.secret(password('identity-migrator-password')),
+			backup: pulumi.secret(password('identity-backup-password')),
+			betterAuth: pulumi.secret(password('identity-better-auth-secret', 64))
+		}
+	: {}
+
+const platformSecrets = platform
+	? {
+			postgres: pulumi.secret(password('platform-postgres-password')),
+			backup: pulumi.secret(password('platform-backup-password')),
+			identityProvisioning: pulumi.secret(password('platform-identity-provisioning-secret', 64)),
+			checkoutRuntime: pulumi.secret(password('checkout-runtime-password')),
+			checkoutWebhook: pulumi.secret(password('checkout-webhook-password')),
+			checkoutMigrator: pulumi.secret(password('checkout-migrator-password')),
+			checkoutEmail: pulumi.secret(password('checkout-email-password')),
+			checkoutPlatformEvents: pulumi.secret(password('checkout-platform-events-password')),
+			apiHosting: pulumi.secret(password('api-hosting-password')),
+			apiAuthorization: pulumi.secret(password('api-authorization-password')),
+			apiEntitlements: pulumi.secret(password('api-entitlements-password')),
+			apiReconciler: pulumi.secret(password('api-reconciler-password')),
+			apiMigrator: pulumi.secret(password('api-migrator-password')),
+			customerProvisioner: pulumi.secret(password('customer-provisioner-password')),
+			artifactStoreProvisionerDb: pulumi.secret(password('artifact-store-provisioner-db-password')),
+			intentDatabaseCredentialRoot: pulumi.secret(password('intent-database-credential-root', 64)),
+			artifactApiDatabaseCredentialRoot: pulumi.secret(
+				password('artifact-api-database-credential-root', 64)
+			),
+			actorApiDatabaseCredentialRoot: pulumi.secret(
+				password('actor-api-database-credential-root', 64)
+			),
+			actorWorkerDatabaseCredentialRoot: pulumi.secret(
+				password('actor-worker-database-credential-root', 64)
+			),
+			customerEntitlementToken: pulumi.secret(password('customer-entitlement-token', 64)),
+			intentServiceToken: pulumi.secret(password('intent-service-token', 64)),
+			actorRunnerServiceToken: pulumi.secret(password('actor-runner-service-token', 64)),
+			artifactStoreServiceToken: pulumi.secret(password('artifact-store-service-token', 64)),
+			actorRunnerArtifactStoreToken: pulumi.secret(
+				password('actor-runner-artifact-store-token', 64)
+			),
+			artifactStoreProvisionerToken: pulumi.secret(
+				password('artifact-store-provisioner-token', 64)
+			),
+			siteHostDirectoryToken: pulumi.secret(password('site-host-directory-token', 64)),
+			checkoutFacadeToken: pulumi.secret(password('checkout-facade-token', 64)),
+			checkoutEmailEncryptionKey: pulumi.secret(
+				new random.RandomBytes('checkout-email-encryption-key', { length: 32 }, protect).base64
+			)
+		}
+	: {}
+
+const tenantGrantKey = platform
+	? new tls.PrivateKey('tenant-grant-signing-key', { algorithm: 'ED25519' }, protect)
+	: undefined
+
 export const deployUser = config.deployUser
-export const identityHostname = config.identityHostname
-export const platformApexHostname = config.platformHostnames.apex
-export const platformApiHostname = config.platformHostnames.api
-export const platformCheckoutHostname = config.platformHostnames.checkout
-export const apexDnsManaged = config.manageApexDns
-export const identityIpv4Address = identity.server.ipv4Address
-export const identityIpv6Address = identity.server.ipv6Address
-export const identityDnsRecords = pulumi
-	.all([identity.server.ipv4Address, identity.server.ipv6Address])
-	.apply(([ipv4, ipv6]) =>
-		manualIdentityRecordSpecs({ hostname: config.identityHostname, ipv4, ipv6 })
-	)
-export const platformIpv4Address = platform.server.ipv4Address
-export const platformIpv6Address = platform.server.ipv6Address
-export const identityHostPublicKey = identity.hostKey.publicKeyOpenssh
-export const platformHostPublicKey = platform.hostKey.publicKeyOpenssh
-export const identityDeployPrivateKey = pulumi.secret(identity.deployKey.privateKeyOpenssh)
-export const identityObservePrivateKey = pulumi.secret(identity.observeKey.privateKeyOpenssh)
-export const identityTunnelPrivateKey = pulumi.secret(identity.tunnelKey.privateKeyOpenssh)
-export const platformDeployPrivateKey = pulumi.secret(platform.deployKey.privateKeyOpenssh)
-export const platformObservePrivateKey = pulumi.secret(platform.observeKey.privateKeyOpenssh)
-export const platformTunnelPrivateKey = pulumi.secret(platform.tunnelKey.privateKeyOpenssh)
-export const identityPostgresPassword = pulumi.secret(password('identity-postgres-password'))
-export const identityAuthPassword = pulumi.secret(password('identity-auth-password'))
-export const identityAccountsPassword = pulumi.secret(password('identity-accounts-password'))
-export const identityAuthorizationPassword = pulumi.secret(
-	password('identity-authorization-password')
-)
-export const identityMigratorPassword = pulumi.secret(password('identity-migrator-password'))
-export const identityBackupPassword = pulumi.secret(password('identity-backup-password'))
-export const identityBetterAuthSecret = pulumi.secret(password('identity-better-auth-secret', 64))
-export const identityProvisioningSecret = pulumi.secret(
-	password('identity-provisioning-secret', 64)
-)
-export const platformPostgresPassword = pulumi.secret(password('platform-postgres-password'))
-export const platformBackupPassword = pulumi.secret(password('platform-backup-password'))
-export const checkoutRuntimePassword = pulumi.secret(password('checkout-runtime-password'))
-export const checkoutWebhookPassword = pulumi.secret(password('checkout-webhook-password'))
-export const checkoutMigratorPassword = pulumi.secret(password('checkout-migrator-password'))
-export const checkoutEmailPassword = pulumi.secret(password('checkout-email-password'))
-export const checkoutPlatformEventsPassword = pulumi.secret(
-	password('checkout-platform-events-password')
-)
-export const apiHostingPassword = pulumi.secret(password('api-hosting-password'))
-export const apiAuthorizationPassword = pulumi.secret(password('api-authorization-password'))
-export const apiEntitlementsPassword = pulumi.secret(password('api-entitlements-password'))
-export const apiReconcilerPassword = pulumi.secret(password('api-reconciler-password'))
-export const apiMigratorPassword = pulumi.secret(password('api-migrator-password'))
-export const customerProvisionerPassword = pulumi.secret(password('customer-provisioner-password'))
-export const artifactStoreProvisionerDbPassword = pulumi.secret(
-	password('artifact-store-provisioner-db-password')
-)
-export const intentDatabaseCredentialRoot = pulumi.secret(
-	password('intent-database-credential-root', 64)
-)
-export const artifactApiDatabaseCredentialRoot = pulumi.secret(
-	password('artifact-api-database-credential-root', 64)
-)
-export const actorApiDatabaseCredentialRoot = pulumi.secret(
-	password('actor-api-database-credential-root', 64)
-)
-export const actorWorkerDatabaseCredentialRoot = pulumi.secret(
-	password('actor-worker-database-credential-root', 64)
-)
-export const customerEntitlementToken = pulumi.secret(password('customer-entitlement-token', 64))
-export const intentServiceToken = pulumi.secret(password('intent-service-token', 64))
-export const actorRunnerServiceToken = pulumi.secret(password('actor-runner-service-token', 64))
-export const artifactStoreServiceToken = pulumi.secret(password('artifact-store-service-token', 64))
-export const actorRunnerArtifactStoreToken = pulumi.secret(
-	password('actor-runner-artifact-store-token', 64)
-)
-export const artifactStoreProvisionerToken = pulumi.secret(
-	password('artifact-store-provisioner-token', 64)
-)
-const tenantGrantKey = new tls.PrivateKey(
-	'tenant-grant-signing-key',
-	{ algorithm: 'ED25519' },
-	protect
-)
-export const tenantGrantPrivateKey = pulumi.secret(tenantGrantKey.privateKeyPem)
-export const tenantGrantPublicKey = tenantGrantKey.publicKeyPem
-export const siteHostDirectoryToken = pulumi.secret(password('site-host-directory-token', 64))
-export const checkoutFacadeToken = pulumi.secret(password('checkout-facade-token', 64))
-export const checkoutEmailEncryptionKey = pulumi.secret(
-	new random.RandomBytes('checkout-email-encryption-key', { length: 32 }, protect).base64
-)
+export const deploymentTarget = config.target
+export const deploymentEnvironment = config.environment
+export const identityHostname = identity ? config.identityHostname : undefined
+export const platformApexHostname = platform ? config.platformHostnames.apex : undefined
+export const platformApiHostname = platform ? config.platformHostnames.api : undefined
+export const platformCheckoutHostname = platform ? config.platformHostnames.checkout : undefined
+export const identityIpv4Address = identity?.server.ipv4Address
+export const identityIpv6Address = identity?.server.ipv6Address
+export const identityDnsRecords = identity
+	? pulumi
+			.all([identity.server.ipv4Address, identity.server.ipv6Address])
+			.apply(([ipv4, ipv6]) =>
+				manualIdentityRecordSpecs({ hostname: config.identityHostname, ipv4, ipv6 })
+			)
+	: undefined
+export const platformIpv4Address = platform?.server.ipv4Address
+export const platformIpv6Address = platform?.server.ipv6Address
+export const identityHostPublicKey = identity?.hostKey.publicKeyOpenssh
+export const platformHostPublicKey = platform?.hostKey.publicKeyOpenssh
+export const identityDeployPrivateKey = identity
+	? pulumi.secret(identity.deployKey.privateKeyOpenssh)
+	: undefined
+export const identityObservePrivateKey = identity
+	? pulumi.secret(identity.observeKey.privateKeyOpenssh)
+	: undefined
+export const identityTunnelPrivateKey = identity
+	? pulumi.secret(identity.tunnelKey.privateKeyOpenssh)
+	: undefined
+export const platformDeployPrivateKey = platform
+	? pulumi.secret(platform.deployKey.privateKeyOpenssh)
+	: undefined
+export const platformObservePrivateKey = platform
+	? pulumi.secret(platform.observeKey.privateKeyOpenssh)
+	: undefined
+export const platformTunnelPrivateKey = platform
+	? pulumi.secret(platform.tunnelKey.privateKeyOpenssh)
+	: undefined
+export const identityPostgresPassword = identitySecrets.postgres
+export const identityAuthPassword = identitySecrets.auth
+export const identityAccountsPassword = identitySecrets.accounts
+export const identityAuthorizationPassword = identitySecrets.authorization
+export const identityMigratorPassword = identitySecrets.migrator
+export const identityBackupPassword = identitySecrets.backup
+export const identityBetterAuthSecret = identitySecrets.betterAuth
+export const platformPostgresPassword = platformSecrets.postgres
+export const platformBackupPassword = platformSecrets.backup
+export const platformIdentityProvisioningSecret = platformSecrets.identityProvisioning
+export const checkoutRuntimePassword = platformSecrets.checkoutRuntime
+export const checkoutWebhookPassword = platformSecrets.checkoutWebhook
+export const checkoutMigratorPassword = platformSecrets.checkoutMigrator
+export const checkoutEmailPassword = platformSecrets.checkoutEmail
+export const checkoutPlatformEventsPassword = platformSecrets.checkoutPlatformEvents
+export const apiHostingPassword = platformSecrets.apiHosting
+export const apiAuthorizationPassword = platformSecrets.apiAuthorization
+export const apiEntitlementsPassword = platformSecrets.apiEntitlements
+export const apiReconcilerPassword = platformSecrets.apiReconciler
+export const apiMigratorPassword = platformSecrets.apiMigrator
+export const customerProvisionerPassword = platformSecrets.customerProvisioner
+export const artifactStoreProvisionerDbPassword = platformSecrets.artifactStoreProvisionerDb
+export const intentDatabaseCredentialRoot = platformSecrets.intentDatabaseCredentialRoot
+export const artifactApiDatabaseCredentialRoot = platformSecrets.artifactApiDatabaseCredentialRoot
+export const actorApiDatabaseCredentialRoot = platformSecrets.actorApiDatabaseCredentialRoot
+export const actorWorkerDatabaseCredentialRoot = platformSecrets.actorWorkerDatabaseCredentialRoot
+export const customerEntitlementToken = platformSecrets.customerEntitlementToken
+export const intentServiceToken = platformSecrets.intentServiceToken
+export const actorRunnerServiceToken = platformSecrets.actorRunnerServiceToken
+export const artifactStoreServiceToken = platformSecrets.artifactStoreServiceToken
+export const actorRunnerArtifactStoreToken = platformSecrets.actorRunnerArtifactStoreToken
+export const artifactStoreProvisionerToken = platformSecrets.artifactStoreProvisionerToken
+export const tenantGrantPrivateKey = tenantGrantKey
+	? pulumi.secret(tenantGrantKey.privateKeyPem)
+	: undefined
+export const tenantGrantPublicKey = tenantGrantKey?.publicKeyPem
+export const siteHostDirectoryToken = platformSecrets.siteHostDirectoryToken
+export const checkoutFacadeToken = platformSecrets.checkoutFacadeToken
+export const checkoutEmailEncryptionKey = platformSecrets.checkoutEmailEncryptionKey
 export const dnsRecordIds = platformDns.map((record) => record.id)

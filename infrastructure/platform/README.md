@@ -1,17 +1,20 @@
 # Aven platform infrastructure
 
-This Pulumi program creates two independent protected Hetzner foundations:
+This Pulumi program creates one selected protected Hetzner foundation per stack:
 
-- `aven-identity-v1`: `aven.id` and its identity-only PostgreSQL volume;
-- `aven-platform-v1`: `api.aven.ceo`, `my.aven.ceo`, static `aven.ceo`, and a
-  separate platform PostgreSQL volume.
+- `identity`: `aven-identity-v1`, `aven.id`, and its identity-only PostgreSQL volume;
+- `next`: `aven-platform-next-v1` at `next.aven.ceo`, `api.next.aven.ceo`, and
+  `my.next.aven.ceo`; or
+- `production`: `aven-platform-production-v1` at `aven.ceo`, `api.aven.ceo`, and
+  `my.aven.ceo`.
 
 It also creates stable SSH host keys, the deployment key registration,
-firewalls, `aven.ceo` DNS records, and every internal runtime secret. `aven.id`
-uses an external DNS provider: the program exports `identityDnsRecords` for
-manual entry and never attempts to manage that zone. The `aven.ceo` apex records
-are absent unless `MANAGE_AVEN_CEO_APEX_DNS=true`, making initial publication an
-explicit gate.
+firewalls, environment-specific `aven.ceo` DNS records, and internal runtime secrets.
+`aven.id` uses an external DNS provider: the identity stack exports
+`identityDnsRecords` for manual entry and never attempts to manage that zone. The
+Each platform stack generates its own identity provisioning credential. The shared
+identity deployment admits both credentials without giving either platform access to
+identity state or to the other platform's state.
 
 Run tests with:
 

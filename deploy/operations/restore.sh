@@ -2,7 +2,7 @@
 set -eu
 umask 077
 
-required='PGHOST PGUSER PGPASSWORD RESTIC_REPOSITORY RESTIC_PASSWORD RESTORE_CONFIRMATION'
+required='PGHOST PGUSER PGPASSWORD RESTIC_REPOSITORY RESTIC_PASSWORD BACKUP_ENVIRONMENT RESTORE_CONFIRMATION'
 for name in $required; do
   eval "value=\${$name:-}"
   [ -n "$value" ] || { echo "$name is required" >&2; exit 64; }
@@ -11,16 +11,21 @@ done
   echo 'RESTORE_CONFIRMATION must equal fresh-target-only' >&2
   exit 64
 }
+case "$BACKUP_ENVIRONMENT" in *[!A-Za-z0-9_.-]*|'') echo 'invalid backup environment' >&2; exit 64 ;; esac
 
 state_root=${BACKUP_STATE_ROOT:-/var/lib/aven-backups}
 snapshot=${RESTORE_SNAPSHOT:-latest}
 stage="$state_root/restore-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
 mkdir -p "$stage"
-restic restore "$snapshot" --target "$stage"
+restic restore "$snapshot" --tag "environment:$BACKUP_ENVIRONMENT" --target "$stage"
 manifest=$(find "$stage" -type f -name manifest.json -print | head -1)
 [ -n "$manifest" ] || { echo 'backup has no manifest' >&2; exit 1; }
 manifest_dir=$(dirname "$manifest")
+grep -Fq '"environment":"'"$BACKUP_ENVIRONMENT"'"' "$manifest" || {
+  echo "backup environment does not match $BACKUP_ENVIRONMENT" >&2
+  exit 1
+}
 expected=$(cat "$manifest_dir/manifest.sha256")
 actual=$(sha256sum "$manifest" | cut -d' ' -f1)
 [ "$expected" = "$actual" ] || { echo 'manifest integrity check failed' >&2; exit 1; }

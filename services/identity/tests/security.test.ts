@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { accessTokenExpiration, androidPasskeyOrigins } from '../src/lib/server/auth.js'
 import { identityConfigSchema } from '../src/lib/server/config.js'
-import { constantTimeBearer } from '../src/lib/server/tokens.js'
+import { constantTimeAnyBearer, constantTimeBearer } from '../src/lib/server/tokens.js'
 
 const base = {
 	PUBLIC_BASE_URL: 'https://aven.id',
@@ -10,7 +10,7 @@ const base = {
 	ACCOUNTS_DATABASE_URL: 'postgres://identity_accounts:test@db/identity',
 	AUTHORIZATION_DATABASE_URL: 'postgres://identity_authorization:test@db/identity',
 	BETTER_AUTH_SECRET: 'b'.repeat(32),
-	IDENTITY_PROVISIONING_SECRET: 'p'.repeat(32)
+	IDENTITY_PROVISIONING_SECRETS: `${'p'.repeat(32)},${'q'.repeat(32)}`
 }
 
 describe('identity security invariants', () => {
@@ -61,5 +61,28 @@ describe('identity security invariants', () => {
 				'p'.repeat(32)
 			)
 		).toBe(false)
+	})
+
+	test('accepts either isolated platform provisioning secret', () => {
+		const request = (secret: string) =>
+			new Request('https://aven.id', { headers: { authorization: `Bearer ${secret}` } })
+		expect(constantTimeAnyBearer(request('p'.repeat(32)), ['p'.repeat(32), 'q'.repeat(32)])).toBe(
+			true
+		)
+		expect(constantTimeAnyBearer(request('q'.repeat(32)), ['p'.repeat(32), 'q'.repeat(32)])).toBe(
+			true
+		)
+		expect(constantTimeAnyBearer(request('x'.repeat(32)), ['p'.repeat(32), 'q'.repeat(32)])).toBe(
+			false
+		)
+	})
+
+	test('requires distinct provisioning credentials for the platform environments', () => {
+		expect(() =>
+			identityConfigSchema.parse({
+				...base,
+				IDENTITY_PROVISIONING_SECRETS: `${'p'.repeat(32)},${'p'.repeat(32)}`
+			})
+		).toThrow(/duplicate secrets/)
 	})
 })
