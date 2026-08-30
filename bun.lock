@@ -12,6 +12,7 @@
         "@myavenceo/aven-ceo": "^0.9.0",
         "@myavenceo/aven-vibes": "^0.2.1",
         "@playwright/test": "^1.62.1",
+        "@polar-sh/sdk": "0.49.0",
         "@types/pg": "8.15.6",
         "conventional-changelog-cli": "^5.0.0",
         "pg": "8.16.3",
@@ -46,6 +47,14 @@
         "svelte-check": "^4.4.6",
         "typescript": "^6.0.2",
         "vite": "^8.0.7",
+      },
+    },
+    "infrastructure/bootstrap": {
+      "name": "@avenos/deployment-bootstrap",
+      "version": "0.1.0",
+      "dependencies": {
+        "@pulumi/minio": "0.17.1",
+        "@pulumi/pulumi": "3.256.0",
       },
     },
     "infrastructure/platform": {
@@ -92,7 +101,7 @@
     },
     "libs/aven-customer-contracts": {
       "name": "@avenos/aven-customer-contracts",
-      "version": "0.1.0",
+      "version": "26.8.28-next.9",
       "dependencies": {
         "jose": "6.2.9",
         "zod": "4.4.3",
@@ -105,7 +114,7 @@
     },
     "libs/aven-customer-runtime": {
       "name": "@avenos/aven-customer-runtime",
-      "version": "0.1.0",
+      "version": "26.8.28-next.9",
       "dependencies": {
         "@avenos/aven-customer-contracts": "workspace:*",
         "@avenos/aven-identity": "workspace:*",
@@ -126,6 +135,7 @@
         "@avenos/actors": "workspace:*",
         "@avenos/artifact-store": "workspace:*",
         "@avenos/llm-client": "workspace:*",
+        "pdfjs-dist": "^6.2.108",
       },
       "devDependencies": {
         "typescript": "^6.0.2",
@@ -141,7 +151,7 @@
     },
     "libs/aven-identity": {
       "name": "@avenos/aven-identity",
-      "version": "0.1.0",
+      "version": "26.8.28-next.9",
       "dependencies": {
         "jose": "6.2.9",
         "zod": "4.4.3",
@@ -172,9 +182,11 @@
       "version": "0.1.0",
       "dependencies": {
         "@avenos/actors": "workspace:*",
+        "@avenos/artifact-store": "workspace:*",
         "@avenos/aven-customer-contracts": "workspace:*",
         "@avenos/aven-customer-runtime": "workspace:*",
         "@avenos/aven-identity": "workspace:*",
+        "@avenos/document-ingest": "workspace:*",
         "jose": "6.2.9",
         "pg": "8.16.3",
         "zod": "4.4.3",
@@ -342,6 +354,8 @@
     "@avenos/aven-ui": ["@avenos/aven-ui@workspace:libs/aven-ui"],
 
     "@avenos/checkout": ["@avenos/checkout@workspace:services/checkout"],
+
+    "@avenos/deployment-bootstrap": ["@avenos/deployment-bootstrap@workspace:infrastructure/bootstrap"],
 
     "@avenos/document-ingest": ["@avenos/document-ingest@workspace:libs/aven-document-ingest"],
 
@@ -828,6 +842,8 @@
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.2", "", {}, "sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug=="],
 
     "@pulumi/hcloud": ["@pulumi/hcloud@1.41.0", "", { "dependencies": { "@pulumi/pulumi": "^3.142.0" } }, "sha512-I6Lrf9yIUzU7qNi/lZ4TR8d83RmwgIy3Lf0PepqQC9auJSc0HdF6ty4miOSTOGc6/xVGKW8JdWUdYZPyPenmHg=="],
+
+    "@pulumi/minio": ["@pulumi/minio@0.17.1", "", { "dependencies": { "@pulumi/pulumi": "^3.142.0" } }, "sha512-LMeiRch+bDjTyoX89tXTvsP8p14+TKD1mvSskHtZlAb2Z5zhp8k6f9hb8SxT0kPerZLoMy/lC+qYeoswQXtvxQ=="],
 
     "@pulumi/pulumi": ["@pulumi/pulumi@3.256.0", "", { "dependencies": { "@grpc/grpc-js": "^1.10.1", "@logdna/tail-file": "^2.0.6", "@npmcli/arborist": "^9.0.0", "@opentelemetry/api": "^1.9", "@opentelemetry/core": "^2.9", "@opentelemetry/exporter-trace-otlp-grpc": "^0.220", "@opentelemetry/exporter-zipkin": "^2.9", "@opentelemetry/instrumentation": "^0.220", "@opentelemetry/instrumentation-grpc": "^0.220", "@opentelemetry/resources": "^2.9", "@opentelemetry/sdk-trace-base": "^2.9", "@opentelemetry/sdk-trace-node": "^2.9", "@opentelemetry/semantic-conventions": "^1.42", "@types/google-protobuf": "^3.15.5", "@types/semver": "^7.5.6", "execa": "^5.1.0", "google-protobuf": "^3.21.4", "ini": "^2.0.0", "js-yaml": "^4.0.0", "minimist": "^1.2.6", "normalize-package-data": "^6.0.0", "require-from-string": "^2.0.1", "semver": "^7.5.2", "source-map-support": "^0.5.6", "upath": "^1.1.0" }, "peerDependencies": { "ts-node": ">= 7.0.1 < 12", "typescript": ">= 3.8.3 < 7" }, "optionalPeers": ["ts-node", "typescript"] }, "sha512-EK1TQieOmxTxbIpX5EKTPpC1WYappH3ASEZzN6Q9gs7rZjuZCATXI9Am8nszmlRdtPlAiVSW8NfQNKCnaNk34A=="],
 

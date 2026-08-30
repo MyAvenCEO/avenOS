@@ -24,9 +24,32 @@ permissions:
   packages: write
 
 jobs:
+  validate-environment-prefix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require an activated infrastructure generation
+        env:
+          DEPLOYMENT_ENVIRONMENT_PREFIX: ${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOYMENT_ENVIRONMENT_PREFIX" =~ ^avenos-[0-9a-f]{10}$ ]]
+
   verify:
+    needs: validate-environment-prefix
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    services:
+      checkout-postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: aven-dev
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
     env:
       NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -68,6 +91,7 @@ jobs:
           bun run --cwd services/actor-runner check
           bun run test:identity
           bun run test:api
+          bun run test:checkout
           bun run --cwd libs/aven-identity test
           bun run --cwd libs/aven-hosting test
           bun run --cwd services/static-site-host test
@@ -80,6 +104,7 @@ jobs:
           bun run --cwd services/intent-service test
           bun run --cwd services/actor-runner test
           bun run test:infra
+          bun run test:bootstrap
           bun run test:deploy
           bun run test:recovery
       - name: Test app integration
@@ -190,9 +215,9 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: ${{ inputs.target }}
+    environment: ${{ format('{0}-{1}', vars.DEPLOYMENT_ENVIRONMENT_PREFIX, inputs.target) }}
     concurrency:
-      group: aven-platform-deploy-${{ inputs.target }}
+      group: aven-platform-deploy-${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}-${{ inputs.target }}
       cancel-in-progress: false
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.PULUMI_STATE_S3_ACCESS_KEY_ID }}
@@ -215,7 +240,6 @@ jobs:
       PULUMI_BACKEND: s3://${{ vars.PULUMI_STATE_S3_BUCKET }}/avenos/platform?endpoint=${{ vars.PULUMI_STATE_S3_REGION }}.your-objectstorage.com&region=${{ vars.PULUMI_STATE_S3_REGION }}&s3ForcePathStyle=true&awssdk=v2
       POLAR_API_KEY: ${{ secrets.POLAR_API_KEY }}
       POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
-      AVEN_TIER_NAME: ${{ secrets.AVEN_TIER_NAME }}
       POLAR_SERVER: ${{ vars.POLAR_SERVER }}
       POLAR_ORGANIZATION_ID: ${{ vars.POLAR_ORGANIZATION_ID }}
       SMTP_URL: ${{ secrets.SMTP_URL }}
@@ -233,7 +257,6 @@ jobs:
       ACTOR_RUNNER_IMAGE: ${{ needs.publish.outputs.actor }}
       ARTIFACT_STORE_IMAGE: ${{ needs.publish.outputs.artifact }}
       OPERATIONS_IMAGE: ${{ needs.publish.outputs.operations }}
-      LLM_GATEWAY_MODELS_JSON: ${{ vars.LLM_GATEWAY_MODELS_JSON }}
       LLM_GATEWAY_CREDENTIALS_JSON: ${{ secrets.LLM_GATEWAY_CREDENTIALS_JSON }}
       LLM_GATEWAY_TIMEOUT_SECONDS: ${{ vars.LLM_GATEWAY_TIMEOUT_SECONDS }}
       GHCR_USER: ${{ github.actor }}
@@ -257,6 +280,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends dnsutils
       - name: Record deployed commit
         run: echo "DEPLOYED_REF_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Resolve current Phala model catalog
+        if: inputs.target != 'identity'
+        run: |
+          set -euo pipefail
+          catalog=$(bun run --silent models:redpill-phala)
+          test -n "$catalog"
+          echo "LLM_GATEWAY_MODELS_JSON=$catalog" >> "$GITHUB_ENV"
       - name: Install Pulumi CLI
         uses: pulumi/actions@8e5e406f4007fca908480587cb9893c07090f58d # v7
       - name: Render and deploy selected target

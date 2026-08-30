@@ -10,7 +10,7 @@ database passwords, signing keys, workload tokens, and internal encryption roots
 
 At least two authorized people should be able to recover:
 
-- repository administration and the three protected GitHub Environments;
+- repository administration and the active namespaced GitHub Environments;
 - the Hetzner Cloud project;
 - the Hetzner-managed `aven.ceo` DNS zone;
 - the external DNS provider authoritative for `aven.id`;
@@ -23,37 +23,40 @@ private key or a database administrator password.
 
 ## One-time object storage
 
-Create private S3-compatible storage for:
+The [initial bootstrap](initial-provisioning.md) creates private S3-compatible storage
+for:
 
 1. one versioned Pulumi state bucket each for `identity`, `next`, and `production`;
 2. one encrypted Restic repository for shared identity; and
 3. separate encrypted Restic repositories or credentials for `next` and production.
 
-Disable public access. Give each state credential access only to its target's bucket
-and each backup credential access only to its target's repository or prefix. Neither
-platform Environment receives identity-state or cross-platform-state access. The
-shared identity Environment receives read-only state access and the passphrase for
-both platform stacks so it can assemble their generated identity caller credentials.
-This makes the protected identity deployment the highest-trust automation boundary;
-limit its reviewers and workflow access accordingly. No storage credential needs
-compute or DNS administration.
+Hetzner does not expose S3 credential creation through an API. Generate the seven
+provider credentials named in the bootstrap guide, then enter them once. Pulumi creates
+and versions the buckets through S3 and installs explicit deny policies. A target's
+deployment credential writes only its state and backup buckets. A separate observer
+credential reads only its state. Reusing the deployment credential for state and backup
+does not enlarge the GitHub deployment boundary; keeping the observer separate preserves
+the unattended read-only boundary.
 
-Pulumi cannot create the backend that stores its own state. This is the only mandatory
-manual infrastructure bootstrap.
+The bootstrap administrator can repair policies on every bucket. It stays offline and
+never enters GitHub. Neither platform Environment receives identity-state or
+cross-platform-state access. The shared identity Environment receives the two platform
+observer credentials and passphrases so it can assemble their generated identity caller
+credentials.
 
 ## GitHub Environments
 
-Create protected GitHub Environments named `identity`, `next`, and `production`.
-Require review for infrastructure and deployment jobs. Give production a distinct
-reviewer policy from staging.
+The bootstrap creates protected physical Environments named
+`<deployment-prefix>-identity`, `-next`, and `-production`. It creates matching
+`-operations` Environments without required reviewers so scheduled health checks remain
+unattended. The repository variable `DEPLOYMENT_ENVIRONMENT_PREFIX` activates one complete
+set only after all six are filled. Workflows derive physical names; operators continue to
+select the logical targets `identity`, `next`, and production.
 
-Create `identity-operations`, `next-operations`, and `production-operations` without
-required reviewers so scheduled health checks remain unattended. Each operations
-Environment receives only its target's `PULUMI_STACK`, backend variables, read-only
+Each operations Environment receives only its target's `PULUMI_STACK`, backend variables, read-only
 state access key, and passphrase. It receives no compute, DNS, backup, Polar, SMTP,
 LLM, package-write, or deployment credential. The passphrase can decrypt the observer
-key in state, so restrict these Environments to the default branch and the operations
-workflow.
+key in state, so the bootstrap restricts these Environments to protected branches.
 
 Each deployment Environment holds only its target's provider, state, integration, and
 backup configuration. Do not copy a production secret into `next` as a convenience.
@@ -69,9 +72,8 @@ backup configuration. Do not copy a production secret into `next` as a convenien
 | `PULUMI_CONFIG_PASSPHRASE` | Encrypts generated secrets and private keys in Pulumi state |
 | `POLAR_API_KEY` | Checkout accesses the selected Polar organization |
 | `POLAR_WEBHOOK_SECRET` | Checkout verifies Polar webhook signatures |
-| `AVEN_TIER_NAME` | Existing Polar product ID for the avenNAME product |
 | `SMTP_URL` | Checkout sends account and purchase mail through a send-only account |
-| `LLM_GATEWAY_CREDENTIALS_JSON` | Server-side credentials referenced by the public model catalog |
+| `LLM_GATEWAY_CREDENTIALS_JSON` | Server-side RedPill credential referenced by the deployment-resolved model catalog |
 | `BACKUP_S3_ACCESS_KEY_ID` | Backup and restore access the private backup prefix |
 | `BACKUP_S3_SECRET_ACCESS_KEY` | Secret half of the backup credential |
 | `BACKUP_RESTIC_PASSWORD` | Encrypts the selected target's Restic repository |
@@ -110,7 +112,7 @@ to GitHub manually; they belong in encrypted Pulumi state.
 | `HETZNER_OS_IMAGE` | Supported Ubuntu image; currently `ubuntu-24.04` |
 | `IDENTITY_VOLUME_SIZE_GB` | Identity data volume; at least 30 GiB |
 | `PLATFORM_VOLUME_SIZE_GB` | Platform data volume; at least 40 GiB |
-| `SSH_ALLOWED_CIDRS` | Comma-separated office or VPN networks allowed to SSH |
+| `SSH_ALLOWED_CIDRS` | SSH ingress; public for ephemeral GitHub-hosted runners, narrow only with a stable runner or VPN path |
 | `POLAR_SERVER` | `sandbox` in `next`; `production` in production |
 | `POLAR_ORGANIZATION_ID` | Polar organization UUID |
 | `SMTP_FROM` | Visible sender address |
@@ -118,10 +120,14 @@ to GitHub manually; they belong in encrypted Pulumi state.
 | `DOWNLOAD_URL` | Client download target in checkout mail and UI |
 | `ACME_EMAIL` | Monitored certificate contact |
 | `ANDROID_APP_CERT_SHA256_FINGERPRINTS` | Production Android signing certificates; empty for initial `next` if none |
-| `LLM_GATEWAY_MODELS_JSON` | Public provider-neutral model catalog without credentials |
 | `LLM_GATEWAY_TIMEOUT_SECONDS` | Optional bounded provider timeout |
 | `BACKUP_REPOSITORY_BASE` | Private Restic base; deployment appends `/identity` or `/<environment>/platform` |
 | `BACKUP_S3_REGION` | S3 signing region for the backup endpoint |
+
+The platform deployment resolves `LLM_GATEWAY_MODELS_JSON` from RedPill's public live
+catalog. It keeps only Phala-hosted chat models, derives capabilities from provider
+metadata, and stops before changing the host when the catalog is invalid. The catalog is
+therefore not a hand-maintained GitHub variable.
 
 The `identity` Environment also defines:
 
@@ -140,14 +146,23 @@ not operator-entered variables.
 The infrastructure workflow also rejects an empty SSH allowlist, non-amd64 images,
 undersized volumes, and invalid CIDRs.
 
+`DEPLOYMENT_ENVIRONMENT_PREFIX` is a repository variable, not an Environment variable.
+It names the active infrastructure generation. The bootstrap changes it only after the
+replacement Environment set is complete.
+
 ## Recovery escrow
 
-Copy these bootstrap values into the offline company recovery record for each target:
+The bootstrap writes an owner-only, password-manager-compatible CSV containing:
 
-- its Pulumi state access key and secret;
+- the deployment namespace and offline storage administrator;
+- each target's deployment and observer storage credentials;
 - its `PULUMI_CONFIG_PASSPHRASE`;
-- its backup object-store access key and secret; and
-- its `BACKUP_RESTIC_PASSWORD`.
+- its `BACKUP_RESTIC_PASSWORD`; and
+- the provider tokens, SMTP URLs, and RedPill key entered once during bootstrap; and
+- the Polar webhook endpoints and signing secrets created or reconciled by bootstrap.
+
+Import the CSV, verify it with a second authorized person, then remove the local copy as
+described in [Initial provisioning](initial-provisioning.md).
 
 The identity GitHub Environment references the read-only variants of the two platform
 state credentials during deployment. Keep the authoritative backend credential and

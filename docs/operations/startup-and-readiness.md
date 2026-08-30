@@ -52,10 +52,12 @@ managed `aven.id` records point to the identity host.
 ```text
 platform PostgreSQL durable TCP readiness
 └── platform role reconciliation completes
-    ├── checkout and facade migrations complete
+    ├── checkout migrations complete
+    │   └── Polar product manifest converges
+    ├── facade migrations complete
     ├── Artifact Store control migrations complete
     └── backup role is usable
-        ├── checkout and its workers become ready
+        ├── checkout becomes ready after product convergence; its workers become ready
         ├── platform provisioner becomes ready
         └── Artifact Store provisioner becomes ready
             └── customer reconciliation verifies mandatory components
@@ -76,6 +78,9 @@ customer readiness.
 Checkout can record commerce facts before a customer environment exists. Its
 platform-event worker retries delivery until the facade and provisioner converge the
 environment. The facade must not route a customer request to a partial environment.
+Checkout itself stays closed when the published pricing manifest cannot be created or
+drift-corrected at Polar. The one-shot sync includes avenNAME, recurring products, and
+benefits and is safe to rerun on every deployment.
 
 This graph runs independently on `next` and production. No readiness gate in one
 platform can satisfy a dependency in the other. Both platforms depend on the shared
@@ -94,7 +99,7 @@ identity DNS records have been applied, the deployment workflow follows this ord
 1. install the exact deployment bundle and immutable image references;
 2. start the two PostgreSQL foundations;
 3. reconcile current login roles and credentials;
-4. run central migrations;
+4. run central migrations and converge the Polar product manifest;
 5. start provisioners and reconcile customer databases;
 6. start or admit the remaining internal services and workers;
 7. verify internal health, backup health, and Compose completion; and

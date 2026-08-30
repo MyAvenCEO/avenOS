@@ -20,11 +20,22 @@ permissions:
   contents: read
 
 jobs:
-  infrastructure:
+  validate-environment-prefix:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.target }}
+    steps:
+      - name: Require an activated infrastructure generation
+        env:
+          DEPLOYMENT_ENVIRONMENT_PREFIX: ${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOYMENT_ENVIRONMENT_PREFIX" =~ ^avenos-[0-9a-f]{10}$ ]]
+
+  infrastructure:
+    needs: validate-environment-prefix
+    runs-on: ubuntu-latest
+    environment: ${{ format('{0}-{1}', vars.DEPLOYMENT_ENVIRONMENT_PREFIX, inputs.target) }}
     concurrency:
-      group: aven-platform-infrastructure-${{ inputs.target }}
+      group: aven-platform-infrastructure-${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}-${{ inputs.target }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5

@@ -6,6 +6,7 @@ on:
       - app/**
       - deploy/**
       - infrastructure/platform/**
+      - infrastructure/bootstrap/**
       - libs/aven-hosting/**
       - libs/aven-identity/**
       - libs/aven-customer-contracts/**
@@ -25,6 +26,11 @@ on:
       - .dockerignore
       - bun.lock
       - package.json
+      - scripts/deployment-bootstrap.ts
+      - scripts/lib/deployment-bootstrap.ts
+      - scripts/lib/polar-webhook.ts
+      - scripts/lib/redpill-model-catalog.ts
+      - scripts/lib/redpill-model-catalog.test.ts
       - .github/workflows/platform-ci.yml
       - .github/workflows/platform-deploy.yml
       - .github/workflows/platform-infrastructure.yml
@@ -35,6 +41,7 @@ on:
       - app/**
       - deploy/**
       - infrastructure/platform/**
+      - infrastructure/bootstrap/**
       - libs/aven-hosting/**
       - libs/aven-identity/**
       - libs/aven-customer-contracts/**
@@ -54,6 +61,11 @@ on:
       - .dockerignore
       - bun.lock
       - package.json
+      - scripts/deployment-bootstrap.ts
+      - scripts/lib/deployment-bootstrap.ts
+      - scripts/lib/polar-webhook.ts
+      - scripts/lib/redpill-model-catalog.ts
+      - scripts/lib/redpill-model-catalog.test.ts
       - .github/workflows/platform-ci.yml
       - .github/workflows/platform-deploy.yml
       - .github/workflows/platform-infrastructure.yml
@@ -67,6 +79,18 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    services:
+      checkout-postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: aven-dev
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
     env:
       NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -113,6 +137,7 @@ jobs:
         run: |
           bun run test:identity
           bun run test:api
+          bun run test:checkout
           bun run --cwd libs/aven-identity test
           bun run --cwd libs/aven-hosting test
           bun run --cwd services/static-site-host test
@@ -125,6 +150,7 @@ jobs:
           bun run --cwd services/intent-service test
           bun run --cwd services/actor-runner test
           bun run test:infra
+          bun run test:bootstrap
       - name: Production builds
         run: |
           bun run --cwd app build

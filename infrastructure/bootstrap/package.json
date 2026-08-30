@@ -1,0 +1,13 @@
+{
+	"name": "@avenos/deployment-bootstrap",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"test": "node --test tests/*.test.mjs && bun test ../../scripts/lib/redpill-model-catalog.test.ts"
+	},
+	"dependencies": {
+		"@pulumi/minio": "0.17.1",
+		"@pulumi/pulumi": "3.256.0"
+	}
+}

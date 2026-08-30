@@ -17,6 +17,7 @@ between the direction of the product and properties the current system proves.
 | Prepare a Linux or macOS workstation | [Workstation setup](workstation-setup.md) |
 | Build the code or choose the right test level | [Build and test](build-and-test.md) |
 | Run all services and the Rust client locally | [Local full stack](local-stack.md) |
+| Bootstrap storage, recovery secrets, and GitHub | [Initial provisioning](initial-provisioning.md) |
 | Create or update identity, `next`, or production | [Deployment](deployment.md) |
 | Understand service startup order and readiness | [Startup and readiness](startup-and-readiness.md) |
 | Understand environment isolation | [Deployment targets](deployment.md#deployment-targets) |
@@ -59,7 +60,7 @@ trail. Encrypted off-host logical backups are the data recovery path.
 | Target | Status | Purpose |
 | --- | --- | --- |
 | Local | Supported | Disposable development stack on one workstation |
-| `identity` | Supported | Shared `aven.id` issuer and account store managed by the protected `identity` GitHub Environment |
+| `identity` | Supported | Shared `aven.id` issuer and account store managed by its namespaced protected GitHub Environment |
 | `next` | Supported | Isolated staging platform at the three `next.aven.ceo` origins |
 | Production | Supported | Isolated customer-facing platform at the three apex production origins |
 
