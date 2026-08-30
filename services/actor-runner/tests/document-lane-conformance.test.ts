@@ -314,7 +314,7 @@ describe('document execution lane conformance', () => {
 		})
 	})
 
-	test('fails both lanes without publishing invented finance facts after model failure', async () => {
+	test('isolates failed model actors in both lanes without publishing invented finance facts', async () => {
 		const source = {
 			artifactId: SOURCE_ID,
 			originalName: 'failing-model.jpg',
@@ -329,7 +329,11 @@ describe('document execution lane conformance', () => {
 			() => localModel.status(),
 			{ executionEnvironment: 'local', runtimeHost: 'desktop' }
 		).start(source)
-		expect(local.state).toBe('failed')
+		expect(local.state).toBe('needs_review')
+		expect(local.metadata.failedActorCount).toBe(2)
+		expect(
+			local.stages.filter((stage) => stage.state === 'failed').map((stage) => stage.key)
+		).toEqual(['classify-document', 'analyze-page-001'])
 		expect(localGateway.runs.some((run) => run.procedureKey.includes('extract-invoice'))).toBe(
 			false
 		)
@@ -358,9 +362,22 @@ describe('document execution lane conformance', () => {
 			)
 		)
 		const handle = await runner.start({ ...command, security: SECURITY })
-		const failed = await waitForTerminalRun(runner, handle.runId)
-		expect(failed.state).toBe('failed')
-		expect(failed.failure?.message).toContain('deterministic model failure')
+		const completed = await waitForTerminalRun(runner, handle.runId)
+		expect(completed.state).toBe('succeeded')
+		expect(completed.failure).toBeUndefined()
+		expect(completed.checkpoints.at(-1)?.output).toMatchObject({
+			kind: 'artifact-understanding',
+			status: 'partial',
+			stoppingReason: 'needs_review',
+			presentation: {
+				state: 'needs_review',
+				metadata: { failedActorCount: 2 },
+				stages: expect.arrayContaining([
+					expect.objectContaining({ key: 'classify-document', state: 'failed' }),
+					expect.objectContaining({ key: 'analyze-page-001', state: 'failed' })
+				])
+			}
+		})
 		expect(
 			store.publications.some((publication) =>
 				String(record(publication.run).procedureKey).includes('extract-invoice')
