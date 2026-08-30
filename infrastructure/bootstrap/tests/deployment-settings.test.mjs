@@ -6,6 +6,7 @@ import test from 'node:test'
 import {
 	generateBootstrapSecrets,
 	githubConfiguration,
+	githubEnvironmentProtection,
 	recoveryCsv,
 	validateBootstrapInput,
 	writeRecoveryCsv
@@ -63,6 +64,9 @@ const input = {
 
 test('validates the complete provider input before changing anything', () => {
 	assert.doesNotThrow(() => validateBootstrapInput(input))
+	const { reviewer: _reviewer, ...soloInput } = input
+	assert.doesNotThrow(() => validateBootstrapInput(soloInput))
+	assert.throws(() => validateBootstrapInput({ ...input, reviewer: '' }), /reviewer is required/)
 	assert.throws(
 		() =>
 			validateBootstrapInput({
@@ -79,6 +83,22 @@ test('validates the complete provider input before changing anything', () => {
 			}),
 		/template placeholder/
 	)
+})
+
+test('uses solo operation by default and enables review when requested', () => {
+	assert.deepEqual(githubEnvironmentProtection(true), {
+		wait_timer: 0,
+		prevent_self_review: false,
+		reviewers: [],
+		deployment_branch_policy: { protected_branches: true, custom_branch_policies: false }
+	})
+	assert.deepEqual(githubEnvironmentProtection(true, 42), {
+		wait_timer: 0,
+		prevent_self_review: true,
+		reviewers: [{ type: 'User', id: 42 }],
+		deployment_branch_policy: { protected_branches: true, custom_branch_policies: false }
+	})
+	assert.deepEqual(githubEnvironmentProtection(false, 42).reviewers, [])
 })
 
 test('builds all deployment and operations environment settings', () => {

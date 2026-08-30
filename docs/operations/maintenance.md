@@ -13,7 +13,7 @@ hourly backup runs on each host, and GitHub checks public and host health hourly
 | Continuous | Respond only to failed public, container, disk, TLS, or backup checks |
 | Each release | Deploy an exact verified ref and complete the smoke checklist |
 | Monthly | Review capacity trend, failed workflow history, provider expiry notices, and access membership |
-| Quarterly | Perform a real fresh-host recovery drill and verify recovery escrow with a second person |
+| Quarterly | Perform a real fresh-host recovery drill and verify password-manager recovery; include another recovery holder when available |
 | Before retirement | Take a final verified backup and record the data-retention decision |
 
 ## Automated maintenance

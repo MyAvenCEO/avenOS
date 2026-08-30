@@ -2,13 +2,15 @@
 
 Status: authoritative
 
-Configure human and machine access before provisioning the three deployment targets. Humans
-provide only provider bootstrap credentials and approvals. Pulumi generates SSH keys,
-database passwords, signing keys, workload tokens, and internal encryption roots.
+Configure human and machine access before provisioning the three deployment targets. A
+solo operator provides the provider bootstrap credentials and explicitly dispatches each
+change. Pulumi generates SSH keys, database passwords, signing keys, workload tokens, and
+internal encryption roots.
 
 ## Human access
 
-At least two authorized people should be able to recover:
+A single repository administrator can bootstrap, deploy, maintain, and recover the system.
+That operator must be able to recover:
 
 - repository administration and the active namespaced GitHub Environments;
 - the Hetzner Cloud project;
@@ -18,8 +20,10 @@ At least two authorized people should be able to recover:
 - backup object storage; and
 - the company password-manager recovery record.
 
-Use individual accounts with multi-factor authentication. Do not share a human SSH
-private key or a database administrator password.
+Use multi-factor authentication and test password-manager account recovery. Add a second
+individual account when another operator becomes available; this improves continuity but
+is not an installation prerequisite. Do not share a human SSH private key or a database
+administrator password.
 
 ## One-time object storage
 
@@ -46,9 +50,11 @@ credentials.
 
 ## GitHub Environments
 
-The bootstrap creates protected physical Environments named
-`<deployment-prefix>-identity`, `-next`, and `-production`. It creates matching
-`-operations` Environments without required reviewers so scheduled health checks remain
+The bootstrap creates physical Environments named `<deployment-prefix>-identity`, `-next`,
+and `-production`, restricted to protected branches. By default they have no required
+reviewer, so one administrator can dispatch a run. When the optional `reviewer` input is
+set, these three Environments require that GitHub user and prevent self-review. Matching
+`-operations` Environments never require reviewers, so scheduled health checks remain
 unattended. The repository variable `DEPLOYMENT_ENVIRONMENT_PREFIX` activates one complete
 set only after all six are filled. Workflows derive physical names; operators continue to
 select the logical targets `identity`, `next`, and production.
@@ -161,17 +167,20 @@ The bootstrap writes an owner-only, password-manager-compatible CSV containing:
 - the provider tokens, SMTP URLs, and RedPill key entered once during bootstrap; and
 - the Polar webhook endpoints and signing secrets created or reconciled by bootstrap.
 
-Import the CSV, verify it with a second authorized person, then remove the local copy as
-described in [Initial provisioning](initial-provisioning.md).
+Import the CSV, verify that password-manager account recovery exposes the complete record,
+then remove the local copy as described in
+[Initial provisioning](initial-provisioning.md). Add an independent recovery holder when
+another operator becomes available.
 
 The identity GitHub Environment references the read-only variants of the two platform
 state credentials during deployment. Keep the authoritative backend credential and
 passphrase with each target's recovery record; do not create drifting copies in the
 handbook.
 
-The record must outlive GitHub, individual laptops, and both servers. Quarterly, a
-second authorized person should prove they can locate it without copying values into
-chat, a ticket, shell history, or this handbook.
+The record must outlive GitHub, individual laptops, and both servers. Quarterly, verify
+that it remains reachable through the password manager's recovery path without copying
+values into chat, a ticket, shell history, or this handbook. When an independent recovery
+holder exists, include them in that check.
 
 ## Generated access roles
 

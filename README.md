@@ -238,8 +238,10 @@ protected volume, firewall, SSH role identities, database credentials, backup pa
 and internal secrets. GitHub Actions runs the same verified infrastructure,
 deployment, recovery, and monitoring playbook for each target.
 
-An operator still supplies the cloud and DNS credentials, approves protected runs,
-and applies the returned `aven.id` A and AAAA records at its external DNS provider.
+An operator still supplies the cloud and DNS credentials, explicitly dispatches
+infrastructure and deployment runs, and applies the returned `aven.id` A and AAAA records
+at its external DNS provider. One repository administrator can operate the installation;
+an optional second-person deployment review can be enabled later.
 The deployment does not ask an operator to invent SSH keys, copy database passwords,
 or edit files on either server.
 
@@ -253,9 +255,9 @@ Start with the [operations handbook](docs/operations/README.md). Its chapters co
   and
 - [bounded incident access and response](docs/operations/incident-response.md).
 
-The active namespaced GitHub Environments use separate Pulumi stacks and protected
-approvals. Promotion changes a Git reference; deployment still requires an explicit
-target and exact ref. Production cannot read the `next` platform state or backup path.
+The active namespaced GitHub Environments use separate Pulumi stacks and protected-branch
+policies. Promotion changes a Git reference; deployment still requires an explicit target
+and exact ref. Production cannot read the `next` platform state or backup path.
 Each platform generates its own identity provisioning token; the protected identity
 deployment reads both platform states to admit those exact callers.
 

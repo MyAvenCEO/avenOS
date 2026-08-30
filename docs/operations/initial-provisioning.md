@@ -21,8 +21,8 @@ One run creates:
 - private Restic backup buckets for the same three targets;
 - bucket policies that isolate each target and keep observer credentials read-only;
 - raw Polar webhook endpoints for `next` and production, subscribed to every event;
-- six namespaced GitHub Environments with variables, encrypted secrets, branch policy,
-  and deployment review;
+- six namespaced GitHub Environments with variables, encrypted secrets, protected-branch
+  policy, and optional deployment review;
 - three Pulumi passphrases, three Restic passwords, and a separate bootstrap-state
   passphrase;
 - validation of the current Phala-hosted RedPill chat catalog; and
@@ -48,8 +48,13 @@ pulumi version
 gh auth status
 ```
 
-The GitHub account needs repository administration. The `reviewer` in the input must be
-a second authorized GitHub user because protected deployments prevent self-review.
+The GitHub account needs repository administration. One account can bootstrap and operate
+the installation. The example input omits `reviewer`, so infrastructure and deployment
+runs require an explicit manual dispatch but no second-person approval.
+
+When another operator becomes available, add their GitHub login as the optional top-level
+`reviewer` field beside `repository`. The bootstrap then requires that person to approve
+deployment Environments and prevents the initiating account from approving its own run.
 
 At the providers, create these values:
 
@@ -142,11 +147,14 @@ The output directory contains:
 | `bootstrap.remote` | Remote bootstrap backend marker |
 | `pulumi-state/` | Initial local backend retained until remote state is verified |
 
-Import `avenos-recovery.csv` into the company password manager. Have a second authorized
-person locate the namespace, all provider credentials, the three Pulumi passphrases, and
-the three Restic passwords. Confirm that the bootstrap stack selects from the remote
-backend. Then securely remove the local input and output directory. The password manager
-and remote encrypted state become the recovery sources.
+Import `avenos-recovery.csv` into a password manager whose account recovery you have
+tested. Locate the namespace, all provider credentials, the three Pulumi passphrases, and
+the three Restic passwords from the imported record. Confirm that the bootstrap stack
+selects from the remote backend. Then securely remove the local input and output
+directory. The password manager and remote encrypted state become the recovery sources.
+
+When a second operator becomes available, grant them recovery access and ask them to
+locate the same record. This improves continuity but does not block a solo installation.
 
 ## Continue to the three hosts
 

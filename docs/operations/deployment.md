@@ -42,7 +42,7 @@ review one protected server, one protected volume, one firewall, generated SSH
 identities, and the target's expected DNS behavior. Reject an unexpected replacement,
 wider SSH ingress, an unprotected stateful resource, or the wrong target stack.
 
-Approve and repeat with `command: up` in this order:
+Accept the reviewed plan and repeat with `command: up` in this order:
 
 1. `target: identity`;
 2. `target: next`; and

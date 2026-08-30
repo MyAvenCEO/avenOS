@@ -111,8 +111,9 @@ Before first production use and once per quarter:
    manual decisions; and
 5. destroy the disposable infrastructure only after recording evidence.
 
-A second authorized person must be able to locate the escrow. A backup is not accepted
-as recoverable merely because its scheduled upload succeeded.
+The operator must prove the escrow can be recovered independently of the workstation.
+When another authorized person exists, they should also prove they can locate it. A
+backup is not accepted as recoverable merely because its scheduled upload succeeded.
 
 ## Continuous proof
 
