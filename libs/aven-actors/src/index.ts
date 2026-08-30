@@ -1,4 +1,5 @@
 export * from './actor'
+export * from './affordances'
 export * from './authorization'
 export * from './bus'
 export * from './executor'

@@ -706,9 +706,18 @@ export class LlmGatewayService {
 			...(request.maxOutputTokens !== undefined && { max_tokens: request.maxOutputTokens })
 		}
 		if (request.output.format === 'json') {
-			const schema = model.configuration.profile.startsWith('openai-')
+			const schema =
+				model.configuration.profile.startsWith('openai-') ||
+				model.configuration.profile === 'qwen-tools'
 				? strictSchema(request.output.schema)
 				: request.output.schema
+			if (model.configuration.profile === 'qwen-tools') {
+				// Qwen 3 enables its extended thinking lane by default. That lane is useful
+				// for conversational reasoning, but with a forced structured tool it can
+				// consume the entire output budget before emitting the required call.
+				// Keep this compatibility behavior scoped to qwen-tools JSON requests.
+				body.chat_template_kwargs = { enable_thinking: false }
+			}
 			if (
 				model.configuration.profile === 'openai-tools' ||
 				model.configuration.profile === 'qwen-tools'

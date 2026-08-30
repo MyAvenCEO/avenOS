@@ -4,7 +4,9 @@ import { importTenantGrantPublicKey } from '@avenos/aven-customer-contracts'
 import { TenantPoolProvider } from '@avenos/aven-customer-runtime'
 import { IdentityVerifier } from '@avenos/aven-identity'
 import { DOCUMENT_INGEST_SKILL } from '@avenos/document-ingest/execution'
+import { LlmDocumentModelGateway } from '@avenos/document-ingest/llm-gateway'
 import { createDocumentSkillExecutor } from '@avenos/document-ingest/server'
+import { HttpLlmGatewayClient } from '@avenos/llm-client/http'
 import { createApplicationExecutor } from './application-executor.js'
 import { loadActorRunnerConfig } from './config.js'
 import { createActorRunnerHandler } from './handler.js'
@@ -34,6 +36,13 @@ const workerPools = new TenantPoolProvider({
 	searchPath: ['aven_actor_runs']
 })
 const tenantGrantPublicKey = await importTenantGrantPublicKey(config.TENANT_GRANT_PUBLIC_KEY)
+const documentModel = new LlmDocumentModelGateway(
+	new HttpLlmGatewayClient({
+		baseUrl: config.LLM_GATEWAY_BASE_URL,
+		bearerToken: config.LLM_GATEWAY_BEARER_TOKEN
+	}),
+	config.DOCUMENT_MODEL_ID
+)
 const handler = createActorRunnerHandler(
 	{
 		forGrant: async (grant) => {
@@ -51,6 +60,7 @@ const handler = createActorRunnerHandler(
 				})
 			})
 			const documents = createDocumentSkillExecutor({
+				model: documentModel,
 				artifactsFor: (request) => ({
 					client: artifactClient,
 					scopeId: grant.environmentId,

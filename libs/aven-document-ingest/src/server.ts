@@ -8,21 +8,38 @@ import type {
 	ClientRunPublication,
 	PublishedClientRun
 } from '@avenos/artifact-store'
+import { createCanvas, ServerPdfCanvasFactory } from './server-pdf-canvas'
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { WorkerMessageHandler } from 'pdfjs-dist/legacy/build/pdf.worker.mjs'
 import { createDocumentActors } from './actors/registry'
 import { DOCUMENT_INGEST_SKILL, type DocumentSourceDescriptor } from './execution'
+import type { DocumentModelGateway } from './model'
 import { DocumentProcessingRuntime } from './runtime'
 import {
 	type DecodedDocument,
 	type DecodedPage,
 	type DecodedTextRun,
+	DOCUMENT_SCHEMA_BINDINGS,
 	type DocumentDecoder,
 	type DocumentSource,
-	MAX_DOCUMENT_PAGES
+	MAX_DOCUMENT_PAGES,
+	pdfDecodeFailureKind
 } from './shared'
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024
+const MAX_RENDER_BYTES = 12 * 1024 * 1024
+const MAX_IMAGE_PIXELS = 40_000_000
 const MILLION = 1_000_000
+
+// PDF.js uses a same-process "fake worker" in Bun/Node. Its default loader is
+// a runtime import of ./pdf.worker.mjs, which disappears when Actor Runner is
+// bundled into one production file. Bind the handler explicitly so Bun keeps
+// it in the bundle and PDF decoding does not depend on a sibling module that
+// the runtime image intentionally does not ship.
+const pdfjsGlobal = globalThis as typeof globalThis & {
+	pdfjsWorker?: { WorkerMessageHandler: unknown }
+}
+pdfjsGlobal.pdfjsWorker ??= { WorkerMessageHandler }
 
 /** Artifact Store route selected from an already verified customer grant. */
 export interface DocumentArtifactStoreRoute {
@@ -36,6 +53,7 @@ export interface DocumentSkillExecutorDependencies {
 		request: PlanRunStartRequest
 	): DocumentArtifactStoreRoute | Promise<DocumentArtifactStoreRoute>
 	decoder?: DocumentDecoder
+	model?: DocumentModelGateway
 }
 
 /** Production executor for the application-owned document-ingest skill. */
@@ -82,10 +100,12 @@ export function createDocumentSkillExecutor(
 			base64: bytesToBase64(bytes)
 		}
 		const gateway = new ArtifactStoreDocumentGateway(route)
+		const model = dependencies.model
+		const actors = createDocumentActors(dependencies.decoder ?? new ServerDocumentDecoder(), model)
 		const runtime = new DocumentProcessingRuntime(
-			createDocumentActors(dependencies.decoder ?? new ServerDocumentDecoder()),
+			actors,
 			gateway,
-			undefined,
+			model ? () => model.status() : undefined,
 			{
 				executionEnvironment: 'server',
 				runtimeHost: 'actor-runner',
@@ -104,7 +124,18 @@ export function createDocumentSkillExecutor(
 			remainingGoals: [],
 			registryRevision: 0,
 			policyDecisionIds: ['document-ingest:tenant-source-bound'],
-			output: { presentation: portableRunClone(presentation) }
+			output: {
+				kind: 'artifact-understanding',
+				status: presentation.state === 'succeeded' ? 'complete' : 'partial',
+				stoppingReason: presentation.state === 'succeeded' ? 'saturated' : 'needs_review',
+				subjectArtifactId: descriptor.artifactId,
+				facts: [
+					{ predicate: 'ceo.aven.docs.file(source)', artifactId: descriptor.artifactId },
+					...presentation.derivedArtifacts.flatMap(factForArtifact)
+				],
+				affordances: [],
+				presentation: portableRunClone(presentation)
+			}
 		}
 	}
 }
@@ -116,18 +147,49 @@ function assertDocumentCommand(request: PlanRunStartRequest): void {
 		throw new Error('document skill requires server placement')
 	if (!request.security.access.tenantId)
 		throw new Error('document skill requires a customer tenant')
-	if (request.goals.length !== 1 || request.goals[0] !== 'ceo.aven.docs.processed(source)') {
+	const exploration =
+		request.goals.length === 0 &&
+		request.goalSpec?.mode === 'explore' &&
+		request.goalSpec.subject.artifactId === request.ingredients[0]?.artifactId
+	const legacyExact =
+		request.goals.length === 1 && request.goals[0] === 'ceo.aven.docs.processed(source)'
+	if (!exploration && !legacyExact) {
 		throw new Error('document command has an invalid goal')
 	}
+}
+
+function bindingForType(typeKey: string, stageKey: string) {
+	if (stageKey === 'assemble-document' && typeKey === 'docs.extracted-text') {
+		return [
+			'ceo.aven.docs.document_text',
+			DOCUMENT_SCHEMA_BINDINGS['ceo.aven.docs.document_text']
+		] as const
+	}
+	if (stageKey === 'assemble-document' && typeKey === 'docs.text-layout') {
+		return [
+			'ceo.aven.docs.document_layout',
+			DOCUMENT_SCHEMA_BINDINGS['ceo.aven.docs.document_layout']
+		] as const
+	}
+	return Object.entries(DOCUMENT_SCHEMA_BINDINGS).find(([, binding]) => binding.typeKey === typeKey)
+}
+
+function factForArtifact(artifact: {
+	artifactId: string
+	typeKey: string
+	stageKey: string
+}): Array<{ predicate: string; artifactId: string; schema: string }> {
+	const binding = bindingForType(artifact.typeKey, artifact.stageKey)
+	const schema = binding?.[1]?.schema
+	if (!binding || !schema) return []
+	return [{ predicate: binding[0], artifactId: artifact.artifactId, schema }]
 }
 
 function sourceDescriptor(value: unknown): DocumentSourceDescriptor {
 	const source = object(value, 'document source')
 	const artifactId = string(source.artifactId, 'document source artifact ID')
 	if (
-		!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-			artifactId
-		)
+		!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(artifactId)
 	) {
 		throw new Error('document source artifact ID must be a UUID')
 	}
@@ -224,14 +286,27 @@ export class ArtifactStoreDocumentGateway implements ClientArtifactGateway {
 export class ServerDocumentDecoder implements DocumentDecoder {
 	async decode(
 		source: DocumentSource,
-		_options: { modelPageLimit: number } = { modelPageLimit: 0 }
+		options: { modelPageLimit: number } = { modelPageLimit: 0 }
 	): Promise<DecodedDocument> {
 		const bytes = base64ToBytes(source.base64)
 		if (bytes.byteLength > MAX_FILE_BYTES)
 			throw new Error('file exceeds the 25 MiB processing limit')
 		const plain = decodePlainText(source, bytes)
 		if (plain) return plain
-		if (hasPrefix(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return decodePdf(bytes)
+		if (hasPrefix(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d]))
+			return decodePdf(bytes, options.modelPageLimit)
+		const png = pngDimensions(bytes)
+		if (png && boundedImage(...png)) return imageDocument(source, 'image/png', png, options)
+		const jpeg = jpegDimensions(bytes)
+		const visual = jpeg ? jpegVisualBytes(bytes) : null
+		if (jpeg && visual && boundedImage(...jpeg)) {
+			return imageDocument(
+				{ ...source, base64: bytesToBase64(visual) },
+				'image/jpeg',
+				jpeg,
+				options
+			)
+		}
 		return {
 			outcome: 'unsupported',
 			detectedMediaType: 'application/octet-stream',
@@ -269,12 +344,13 @@ function decodePlainText(source: DocumentSource, bytes: Uint8Array): DecodedDocu
 	}
 }
 
-async function decodePdf(bytes: Uint8Array): Promise<DecodedDocument> {
-	const task = pdfjs.getDocument({ data: bytes.slice() })
+async function decodePdf(bytes: Uint8Array, modelPageLimit: number): Promise<DecodedDocument> {
+	const task = pdfjs.getDocument({ data: bytes.slice(), CanvasFactory: ServerPdfCanvasFactory })
 	try {
 		const pdf = await task.promise
 		if (pdf.numPages > MAX_DOCUMENT_PAGES) return unsupportedPdf()
 		const pages: DecodedPage[] = []
+		const renderForModel = modelPageLimit > 0 && pdf.numPages <= modelPageLimit
 		for (let number = 1; number <= pdf.numPages; number += 1) {
 			const page = await pdf.getPage(number)
 			const viewport = page.getViewport({ scale: 1 })
@@ -283,24 +359,130 @@ async function decodePdf(bytes: Uint8Array): Promise<DecodedDocument> {
 				const run = normalizedRun(item, viewport.width, viewport.height)
 				return run ? [run] : []
 			})
+			let image: DecodedPage['image']
+			if (renderForModel) {
+				const renderViewport = page.getViewport({ scale: 2 })
+				const width = Math.ceil(renderViewport.width)
+				const height = Math.ceil(renderViewport.height)
+				if (!boundedImage(width, height))
+					throw new Error('rendered model page exceeds 40 million pixels')
+				const canvas = createCanvas(width, height)
+				const context = canvas.getContext('2d')
+				await page.render({
+					canvas: canvas as never,
+					canvasContext: context as never,
+					viewport: renderViewport
+				}).promise
+				image = {
+					mediaType: 'image/png',
+					base64: boundedBase64(canvas.toBuffer('image/png').toString('base64'))
+				}
+			}
 			pages.push({
 				page: number,
 				rotation: normalizeRotation(page.rotate),
 				width: viewport.width,
 				height: viewport.height,
-				runs
+				runs,
+				...(image && { image })
 			})
 		}
 		return pages.length
 			? { outcome: 'ok', detectedMediaType: 'application/pdf', encrypted: false, pages }
 			: malformed('application/pdf')
 	} catch (error) {
-		return error instanceof Error && error.name === 'PasswordException'
-			? { outcome: 'encrypted', detectedMediaType: 'application/pdf', encrypted: true, pages: [] }
-			: malformed('application/pdf')
+		const kind = pdfDecodeFailureKind(error)
+		if (kind === 'encrypted') {
+			return { outcome: 'encrypted', detectedMediaType: 'application/pdf', encrypted: true, pages: [] }
+		}
+		if (kind === 'malformed') return malformed('application/pdf')
+		console.warn(`PDF decoding failed because of a ${kind} decoder failure.`)
+		throw new Error('PDF processing failed before its content could be inspected.', { cause: error })
 	} finally {
 		await task.destroy().catch(() => undefined)
 	}
+}
+
+function imageDocument(
+	source: DocumentSource,
+	mediaType: 'image/png' | 'image/jpeg',
+	dimensions: [number, number],
+	options: { modelPageLimit: number }
+): DecodedDocument {
+	return {
+		outcome: 'ok',
+		detectedMediaType: mediaType,
+		encrypted: false,
+		pages: [
+			{
+				page: 1,
+				rotation: 0,
+				width: dimensions[0],
+				height: dimensions[1],
+				runs: [],
+				...(options.modelPageLimit > 0 && {
+					image: { mediaType, base64: boundedBase64(source.base64) }
+				})
+			}
+		]
+	}
+}
+
+function pngDimensions(bytes: Uint8Array): [number, number] | null {
+	if (!hasPrefix(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) || bytes.length < 24)
+		return null
+	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+	const width = view.getUint32(16)
+	const height = view.getUint32(20)
+	return width > 0 && height > 0 ? [width, height] : null
+}
+
+function jpegDimensions(bytes: Uint8Array): [number, number] | null {
+	if (!hasPrefix(bytes, [0xff, 0xd8])) return null
+	let offset = 2
+	while (offset + 3 < bytes.length) {
+		if (bytes[offset] !== 0xff) {
+			offset += 1
+			continue
+		}
+		while (bytes[offset] === 0xff) offset += 1
+		const marker = bytes[offset++]
+		if (marker === undefined || marker === 0xd9 || marker === 0xda) break
+		if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue
+		if (offset + 1 >= bytes.length) return null
+		const length = (bytes[offset] ?? 0) * 256 + (bytes[offset + 1] ?? 0)
+		if (length < 2 || offset + length > bytes.length) return null
+		const startOfFrame =
+			(marker >= 0xc0 && marker <= 0xc3) ||
+			(marker >= 0xc5 && marker <= 0xc7) ||
+			(marker >= 0xc9 && marker <= 0xcb) ||
+			(marker >= 0xcd && marker <= 0xcf)
+		if (startOfFrame && length >= 7) {
+			const height = (bytes[offset + 3] ?? 0) * 256 + (bytes[offset + 4] ?? 0)
+			const width = (bytes[offset + 5] ?? 0) * 256 + (bytes[offset + 6] ?? 0)
+			return width > 0 && height > 0 ? [width, height] : null
+		}
+		offset += length
+	}
+	return null
+}
+
+function jpegVisualBytes(bytes: Uint8Array): Uint8Array | null {
+	for (let offset = 2; offset < bytes.length; offset += 1) {
+		if (bytes[offset - 1] === 0xff && bytes[offset] === 0xd9) return bytes.slice(0, offset + 1)
+	}
+	return null
+}
+
+function boundedImage(width: number, height: number): boolean {
+	return width * height <= MAX_IMAGE_PIXELS
+}
+
+function boundedBase64(base64: string): string {
+	const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+	const length = Math.floor((base64.length * 3) / 4) - padding
+	if (length > MAX_RENDER_BYTES) throw new Error('rendered model page exceeds 12 MiB')
+	return base64
 }
 
 function normalizedRun(

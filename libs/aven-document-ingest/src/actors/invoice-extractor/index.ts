@@ -10,7 +10,8 @@ import {
 	object,
 	pageImage,
 	stringValue,
-	success
+	success,
+	textGroundedExtractionEvidence
 } from '../../shared'
 
 export function createInvoiceExtractorActor(model: DocumentModelGateway): Actor {
@@ -29,16 +30,18 @@ export function createInvoiceExtractorActor(model: DocumentModelGateway): Actor 
 					const document = payload.document as unknown as DecodedDocument
 					const pages = payload.pages as unknown as ExtractedPage[]
 					const expectedKind = stringValue(payload.expectedKind, 'expected invoice kind')
+					const documentText = joinedText(pages)
 					const completed = await model.complete(
 						modelRequest(
 							'extract-invoice',
 							document.pages.map(pageImage),
-							joinedText(pages),
+							documentText,
 							expectedKind
 						)
 					)
 					const candidate = object(completed.structured.candidate, 'invoice candidate')
 					const details = object(completed.structured.details, 'invoice details')
+					normalizeInvoiceDates(details, documentText)
 					if (details.documentKind !== expectedKind) {
 						throw new Error(
 							`invoice extraction kind ${String(details.documentKind)} conflicts with ${expectedKind}`
@@ -46,6 +49,11 @@ export function createInvoiceExtractorActor(model: DocumentModelGateway): Actor 
 					}
 					const supplier = object(details.supplier, 'invoice supplier').name
 					if (typeof supplier === 'string' && supplier.trim()) candidate.supplier = supplier
+					const evidenceTargets = {
+						candidate: { outputLocalKey: 'invoice', value: candidate },
+						details: { outputLocalKey: 'details', value: details }
+					}
+					const modelEvidence = extractionEvidence(completed.structured, evidenceTargets)
 					return success(
 						{
 							ok: true,
@@ -54,10 +62,11 @@ export function createInvoiceExtractorActor(model: DocumentModelGateway): Actor 
 								artifact('invoice', 'bookkeeping.invoice-candidate', candidate, 'candidate'),
 								artifact('details', 'bookkeeping.invoice-details', details, 'details')
 							],
-							evidence: extractionEvidence(completed.structured, {
-								candidate: { outputLocalKey: 'invoice', value: candidate },
-								details: { outputLocalKey: 'details', value: details }
-							}),
+							evidence: textGroundedExtractionEvidence(
+								pages,
+								evidenceTargets,
+								modelEvidence
+							),
 							modelReceipt: completed.receipt
 						},
 						'Extracted the invoice candidate and details.'
@@ -68,4 +77,41 @@ export function createInvoiceExtractorActor(model: DocumentModelGateway): Actor 
 			}
 		}
 	)
+}
+
+/**
+ * Resolve a narrow class of model drift without inventing a date. The source
+ * must contain the exact ambiguous slash date, the model's ISO value must be
+ * one of its two valid interpretations, and strong Mexican markers must make
+ * DD/MM/YYYY authoritative. Otherwise the model value is left untouched.
+ */
+export function normalizeInvoiceDates(
+	details: Record<string, unknown>,
+	documentText: string
+): void {
+	const issueDate = details.issueDate
+	if (typeof issueDate !== 'string') return
+	if (!/(?:\bMX\$|\bMXN\b|\bRFC\b|\bCDMX\b)/i.test(documentText)) return
+	for (const match of documentText.matchAll(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g)) {
+		const day = Number(match[1])
+		const month = Number(match[2])
+		const year = Number(match[3])
+		if (!validDate(year, month, day) || !validDate(year, day, month) || day === month) continue
+		const dayFirst = isoDate(year, month, day)
+		const monthFirst = isoDate(year, day, month)
+		if (issueDate === monthFirst) details.issueDate = dayFirst
+		if (issueDate === dayFirst || issueDate === monthFirst) return
+	}
+}
+
+function validDate(year: number, month: number, day: number): boolean {
+	if (month < 1 || month > 12 || day < 1 || day > 31) return false
+	const date = new Date(Date.UTC(year, month - 1, day))
+	return (
+		date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+	)
+}
+
+function isoDate(year: number, month: number, day: number): string {
+	return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }

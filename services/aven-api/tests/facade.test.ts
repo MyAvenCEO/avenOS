@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import { facadeConfigSchema } from '../src/config.js'
 import { createFacadeHandler } from '../src/facade.js'
+import type { LlmGatewayService } from '../src/lib/server/llm-gateway.js'
 
 const customerSecrets = {
 	CUSTOMER_ENTITLEMENT_TOKEN: 'e'.repeat(32),
@@ -29,6 +30,69 @@ const claims = {
 }
 
 describe('api facade', () => {
+	test('serves the internal LLM contract only to the actor runner service', async () => {
+		const internalConfig = facadeConfigSchema.parse({
+			...customerSecrets,
+			DATABASE_URL: 'postgres://aven_api:test@database/aven_api',
+			SITE_HOST_DIRECTORY_BEARER_TOKEN: 'd'.repeat(32),
+			IDENTITY_ISSUER: 'https://aven.id',
+			LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: 'l'.repeat(32)
+		})
+		const verify = vi.fn(async () => claims)
+		const complete = vi.fn(async (value: unknown) => ({ output: value, receipt: {} }))
+		const llm = {
+			models: (capabilities: string[]) => [
+				{ id: 'vision', label: capabilities.join(','), capabilities }
+			],
+			complete
+		} as unknown as LlmGatewayService
+		const handler = createFacadeHandler(
+			internalConfig,
+			{ verify },
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			llm
+		)
+
+		const denied = await handler(
+			new Request('https://api.aven.ceo/internal/v1/llm/models?capability=vision')
+		)
+		expect(denied.status).toBe(401)
+		expect(verify).not.toHaveBeenCalled()
+
+		const models = await handler(
+			new Request(
+				'https://api.aven.ceo/internal/v1/llm/models?capability=vision&capability=structured-output',
+				{ headers: { authorization: `Bearer ${'l'.repeat(32)}` } }
+			)
+		)
+		expect(models.status).toBe(200)
+		expect(await models.json()).toEqual({
+			models: [
+				{
+					id: 'vision',
+					label: 'vision,structured-output',
+					capabilities: ['vision', 'structured-output']
+				}
+			]
+		})
+
+		const completed = await handler(
+			new Request('https://api.aven.ceo/internal/v1/llm/completions', {
+				method: 'POST',
+				headers: {
+					authorization: `Bearer ${'l'.repeat(32)}`,
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({ modelId: 'vision' })
+			})
+		)
+		expect(completed.status).toBe(200)
+		expect(complete).toHaveBeenCalledWith({ modelId: 'vision' })
+		expect(verify).not.toHaveBeenCalled()
+	})
 	test('fails closed before contacting a downstream', async () => {
 		const fetcher = vi.fn(async (_request: Request) => new Response('{}'))
 		const handler = createFacadeHandler(

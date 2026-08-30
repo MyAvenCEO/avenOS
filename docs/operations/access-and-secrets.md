@@ -113,6 +113,11 @@ GitHub supplies `GITHUB_TOKEN` to the workflow. Do not add deploy SSH keys, SSH 
 keys, PostgreSQL passwords, tenant signing keys, internal bearers, or generated roots
 to GitHub manually; they belong in encrypted Pulumi state.
 
+Pulumi also generates `actorRunnerLlmGatewayToken`. The API uses it only for
+`/internal/v1/llm`, and the Actor Runner uses it only as that route's client. It is
+distinct from the runner ingress and Artifact Store credentials and is never a GitHub
+Environment secret.
+
 ## GitHub Environment variables
 
 | Variable | Meaning |

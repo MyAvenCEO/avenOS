@@ -1,4 +1,4 @@
-# Skills: from a desired outcome to a resumable run
+# Skills: from an artifact or desired outcome to a resumable run
 
 This is the best starting point for understanding skill execution in avenOS. It
 explains the model from a caller's point of view and is deliberately practical. For
@@ -11,20 +11,40 @@ Within the [product model](product-model.md), Skills and Actors are how an Aven 
 an intended outcome into bounded, inspectable work. Neither term is a synonym for the
 Aven itself or for the model serving one completion.
 
-## Start with an outcome
+## Start with what is known
 
-Suppose a user uploads an invoice and asks for validated invoice details. The system
-has an ingredient—the uploaded file artifact—and a goal:
+Suppose a user uploads an invoice without knowing which operations the system offers.
+The uploaded file is the initial ingredient:
+
+```prolog
+ingredient  ceo.aven.docs.file(invoice_1)
+```
+
+By default, the document skill should enrich that artifact as far as its installed and
+authorized Actors allow. A machine-readable XRechnung can yield typed invoice fields
+directly. A text PDF can contribute native text, and a scan may need a vision-capable
+model. Validators and domain Actors can add evidence, confidence, totals checks, and
+links to known parties or records. The system then presents the actions enabled by the
+facts it actually established. It may offer to create a bookkeeping entry, compare a
+purchase order, check payment status, or prepare a payment; it does not perform those
+effects merely because they became possible.
+
+This is the artifact-first interaction specified in
+[Artifact-first semantic enrichment and affordance discovery](artifact-first-semantic-enrichment.md).
+It treats automatic understanding as eager and external effects as separately
+admitted work.
+
+Sometimes the user already names an outcome:
 
 ```prolog
 ingredient  ceo.aven.docs.file(invoice_1)
 goal        ceo.aven.bookkeeping.invoice_details(invoice_1)
 ```
 
-There may be several ways to reach that goal. A machine-readable XRechnung can be
-parsed directly. A text PDF can use native text. A scan needs a vision-capable model.
-The available route also depends on the user's entitlements, current assurance,
-artifact access, chosen execution environment, and the actors available there.
+The exact goal lets the planner prioritize only the enrichment needed to prove it. It
+does not require a different parser or execution model. The available route in either
+mode depends on the user's entitlements, current assurance, artifact access, chosen
+execution environment, and the Actors available there.
 
 A **skill** captures the desired outcome and the policy around it. That outcome may be
 exact—“produce invoice details”—or exploratory—“learn as much useful information as
@@ -75,7 +95,7 @@ produces:
 ```
 
 The output slot binds the logical fact to
-`ceo.aven:schema:bookkeeping:invoice-details@1`. Another capability may produce the
+`ceo.aven:schema:bookkeeping:invoice-details@2`. Another capability may produce the
 same fact and schema from page images. Downstream consumers depend on the meaning of
 the result, not on which actor happened to produce it.
 
@@ -104,33 +124,40 @@ An exact goal has a crisp completion condition: all requested predicates have be
 proven by authorized ingredients or committed outputs.
 
 An exploratory goal is different. “Get as much information as possible” is not one
-predicate and can never mean “invoke every actor.” It is a bounded optimization
-objective:
+predicate. The initial document policy defines it as a saturation objective:
 
 ```text
-maximize   useful, supported facts about document D
-subject to time, cost, privacy, assurance, and confidence policy
-stop when  no relevant authorized capability has sufficient expected information gain
+expand     supported facts about document D
+within     installed fact families, authorization, access, assurance, and placement
+exclude    external effects
+stop when  no applicable capability can add supported knowledge
 ```
 
-The skill should name the subject, relevant fact families, utility policy, budgets,
-minimum confidence, permitted effects, and stopping rule. The runner executes a useful
-observer, commits its evidence, replans from the richer fact set, and stops with an
-explicit reason such as `saturated`, `budget_exhausted`, `needs_input`, or
-`no_authorized_route`.
+This exhaustive policy does not invoke every installed Actor. The skill names the
+subject and relevant fact families, and the frontier contains only authorized,
+non-effecting capabilities whose requirements and applicability constraints are met.
+The runner commits each result, replans from the richer fact set, and stops with an
+explicit reason such as `saturated`, `needs_input`, or `no_authorized_route`. Future
+versions may add measured cost, effort, privacy, confidence, and information-gain
+limits without changing the artifact-first model.
 
 The durable result is an understanding bundle or report: discovered typed artifacts,
 their evidence and confidence, coverage, unresolved questions, and the stopping
 reason. It is not an untyped bag of model guesses.
 
-Most product skills will be hybrid. For example: classify the document as a mandatory
-exact goal, then maximize additional supported understanding within five seconds and
-without external effects. Exact predicates provide the success floor; exploration
-provides useful enrichment.
+Document upload uses exploration by default. A request such as “validate this invoice”
+adds exact predicates and becomes hybrid: the planner establishes those predicates
+first, then either stops or continues exhaustive enrichment according to the admitted
+completion policy. Exact predicates set priority; exploration creates reusable
+knowledge and the affordances presented afterward.
 
-The current `solve()` and `PlanRunStartCommand.goals` implement exact predicate goals
-only. Exploratory utility, budgets, saturation, and understanding bundles are target
-contracts, not implemented behavior in the current runtime.
+The exact `solve()` path remains available. Plan Runner protocol version 2 also accepts
+an explicit `goalSpec` for exploration or exact-goal-then-enrich execution. The first
+generic slice expands guaranteed outputs from every applicable authorized
+non-effecting capability, returns an understanding bundle, and discovers affordances
+whose requirements and exact execution routes are currently satisfied. Dynamic
+replanning from observation contents and production document integration remain later
+slices.
 
 An ad-hoc request does not need a stored skill first. A caller can submit ingredients,
 goals, parameters, and policy directly. If that query becomes useful, it can later be
@@ -255,11 +282,11 @@ This is how a new XRechnung package can replace image recognition without an
 `ceo.aven.docs.document_profile(D, xrechnung)`, then the structured extractor becomes
 the cheapest reachable producer of the same invoice-details schema.
 
-Exploratory planning uses the same checkpoint loop but chooses the next observer by
-expected information gain rather than solely by distance to a fixed predicate. Its
-relevance filter still begins with the subject and permitted fact families, so an
-installed payroll or medical actor does not run merely because it could emit another
-fact.
+Exploratory planning uses the same checkpoint loop but advances any eligible frontier
+invocation that can add supported knowledge about the subject. Its relevance filter
+begins with the subject and permitted fact families, so an installed payroll or
+medical Actor does not run merely because it could emit another fact. A future bounded
+policy may rank that frontier by expected information gain or measured cost.
 
 ## Executing a plan
 
@@ -372,7 +399,8 @@ Still required for general skill execution:
 - application continuation bindings and an ephemeral secret broker (the generic
   metadata-only runner lifecycle is implemented);
 - checkpointed observation/replanning;
-- exploratory and hybrid goal contracts with bounded utility and stopping rules;
+- exploratory and hybrid goal contracts with exhaustive saturation, understanding
+  bundles, and affordance discovery;
 - app wiring from the Server choice to the remote runner; and
 - XRechnung recognizer/extractor packages and parity tests.
 

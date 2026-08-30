@@ -4,7 +4,8 @@ import {
 	type DecodedTextRun,
 	type DocumentDecoder,
 	type DocumentSource,
-	MAX_DOCUMENT_PAGES
+	MAX_DOCUMENT_PAGES,
+	pdfDecodeFailureKind
 } from '@avenos/document-ingest/actors'
 import { base64ToBytes, loadOwnedPdf } from './pdf'
 import { decodePlainText } from './plain-text-document'
@@ -114,19 +115,8 @@ function rotation(value: number): DecodedPage['rotation'] {
 	return normalized === 90 || normalized === 180 || normalized === 270 ? normalized : 0
 }
 
-async function decodePdf(bytes: Uint8Array, modelPageLimit: number): Promise<DecodedDocument> {
-	let owned: Awaited<ReturnType<typeof loadOwnedPdf>>
-	try {
-		owned = await loadOwnedPdf(bytes)
-	} catch (error) {
-		const name = error instanceof Error ? error.name : ''
-		return {
-			outcome: name === 'PasswordException' ? 'encrypted' : 'malformed',
-			detectedMediaType: 'application/pdf',
-			encrypted: name === 'PasswordException',
-			pages: []
-		}
-	}
+async function decodePdfOnce(bytes: Uint8Array, modelPageLimit: number): Promise<DecodedDocument> {
+	const owned = await loadOwnedPdf(bytes)
 	const pdf = owned.document
 	try {
 		// Enforce the bound before getPage/getTextContent allocate work for every
@@ -188,19 +178,45 @@ async function decodePdf(bytes: Uint8Array, modelPageLimit: number): Promise<Dec
 			encrypted: false,
 			pages
 		}
-	} catch (error) {
-		const name = error instanceof Error ? error.name : ''
-		return {
-			outcome: name === 'PasswordException' ? 'encrypted' : 'malformed',
-			detectedMediaType: 'application/pdf',
-			encrypted: name === 'PasswordException',
-			pages: []
-		}
 	} finally {
 		// pdf.js owns a worker and retained page resources. A long-lived actor must
 		// release both after it has materialized the bounded representation.
 		await owned.destroy().catch(() => undefined)
 	}
+}
+
+async function decodePdf(bytes: Uint8Array, modelPageLimit: number): Promise<DecodedDocument> {
+	for (let attempt = 0; attempt < 2; attempt++) {
+		try {
+			return await decodePdfOnce(bytes, modelPageLimit)
+		} catch (error) {
+			const kind = pdfDecodeFailureKind(error)
+			if (kind === 'encrypted') {
+				return {
+					outcome: 'encrypted',
+					detectedMediaType: 'application/pdf',
+					encrypted: true,
+					pages: []
+				}
+			}
+			if (kind === 'malformed') {
+				return {
+					outcome: 'malformed',
+					detectedMediaType: 'application/pdf',
+					encrypted: false,
+					pages: []
+				}
+			}
+			// A webview refresh can terminate a pdf.js worker between loading and
+			// getTextContent. One fresh, bounded task is safe and fixes that race.
+			if (kind === 'worker-lifecycle' && attempt === 0) continue
+			console.warn(`PDF decoding failed because of a ${kind} decoder failure.`)
+			throw new Error('PDF processing failed before its content could be inspected.', {
+				cause: error
+			})
+		}
+	}
+	throw new Error('PDF processing exhausted its worker retry.')
 }
 
 /** Browser/webview implementation; all semantic processing stays client-side. */

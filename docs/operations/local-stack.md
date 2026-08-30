@@ -4,8 +4,10 @@ Status: authoritative
 
 This path runs identity, checkout, the facade, both central databases, the customer
 provisioner, Artifact Store, Intent Service, Actor Runner, workers, Mailpit, and the
-Rust/Tauri client on one workstation. It calls no deployed Aven service, payment
-provider, SMTP server, or LLM provider.
+Rust/Tauri client on one workstation. The default calls no deployed Aven service,
+payment provider, SMTP server, or LLM provider. It uses a deterministic chat mock;
+you can replace that mock with an OpenAI-compatible model server on the workstation or
+trusted local network.
 
 ## Prerequisites
 
@@ -33,6 +35,49 @@ starts the topology, waits for health, and prints these endpoints:
 
 WebAuthn uses the browser secure-context exception for the exact `localhost` origin and
 RP ID. Do not replace `localhost` with `127.0.0.1` while enrolling the passkey.
+
+## Use a local or trusted-network model
+
+The desktop always reaches models through the authenticated local facade. Provider
+coordinates and credentials stay in the API container; the webview never receives
+them. `local:up` maps the application's stable chat and design model IDs onto one
+OpenAI-compatible model.
+
+Confirm the provider and copy the exact model `id` from its response:
+
+```sh
+curl http://model-host:8000/v1/models
+```
+
+Start avenOS with that identifier and an address reachable from Docker:
+
+```sh
+LOCAL_LLM_MODEL='replace-with-the-exact-model-id' \
+LOCAL_LLM_BASE_URL='http://model-host:8000/v1' \
+bun run local:up
+```
+
+If the loaded model accepts images and reliably returns structured JSON, advertise
+that additional capability so document processing can select it:
+
+```sh
+LOCAL_LLM_MODEL='replace-with-the-exact-model-id' \
+LOCAL_LLM_BASE_URL='http://model-host:8000/v1' \
+LOCAL_LLM_VISION=true \
+bun run local:up
+```
+
+For a model server running on the same machine, omit `LOCAL_LLM_BASE_URL` to use
+`http://host.docker.internal:1234/v1`. The local Compose override maps that name on
+Linux and macOS.
+
+`LOCAL_LLM_VISION=true` is a declaration used for capability selection; it cannot add
+vision or structured output to a model that lacks them. Without it, chat and design
+remain available, while model-backed document vision stays disabled. For multiple
+models or authenticated endpoints, set the complete `LLM_GATEWAY_MODELS_JSON` and
+`LLM_GATEWAY_CREDENTIALS_JSON` catalog described in
+[Generic authenticated LLM gateway](../llm-gateway.md#configuration) instead of
+`LOCAL_LLM_MODEL`.
 
 ## Create an account and customer environment
 
@@ -112,3 +157,9 @@ coverage and release status.
   containers with `docker compose` only when debugging the disposable local stack.
 - **Ports are already in use:** stop the existing `aven-local` stack with
   `bun run local:down` before starting another interactive stack.
+- **The local model is unavailable:** confirm `/v1/models` works on the host and
+  `LOCAL_LLM_MODEL` exactly matches the returned model ID. If the provider runs on the
+  same workstation, ensure it accepts local-network connections so Docker can reach it.
+- **Chat works but tools or document processing fail:** use a model that implements
+  OpenAI-compatible tool calls and JSON output. Document vision additionally requires
+  `LOCAL_LLM_VISION=true` and a genuinely multimodal model.

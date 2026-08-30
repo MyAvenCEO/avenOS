@@ -641,8 +641,12 @@ execution, not the source of truth for artifacts or provenance.
 The desktop adapters consume avenCEO data-plane APIs through the facade. The Artifact
 Store and Actor Runner are part of the current split deployment. The Actor Runner is
 the document executor for Server placement and publishes through its own scoped
-Artifact Store credential. The LLM gateway contract remains separate; server-side
-model-backed document understanding is not yet wired.
+Artifact Store credential. The runner uses a distinct service bearer to call the
+facade's private LLM routes; it never persists or forwards the user's identity token
+to a provider. Its headless decoder supports bounded PNG/JPEG input and renders
+admitted PDF pages with the same limits as the browser decoder. The same document
+model adapter, prompts, structured schemas, actors, validators, and publication
+contracts therefore execute in both placements.
 
 ### LLM gateway
 
@@ -651,12 +655,40 @@ GET  /api/llm/models
 POST /api/llm/completions
 GET  /api/llm/v1/models
 POST /api/llm/v1/chat/completions
+GET  /internal/v1/llm/models
+POST /internal/v1/llm/completions
 ```
 
 It authenticates verified users, lists capability-matching models, enforces that the
 chosen public model supports the request, protects provider credentials, bounds input
 and output, and returns a provenance receipt. It does not own document prompts,
-workflow, retries, validation, artifact publication, or tool execution.
+workflow, retries, validation, artifact publication, or tool execution. The private
+routes expose only model discovery and bounded completion and accept only the Actor
+Runner's dedicated bearer; they do not invoke user identity verification or form a
+general downstream proxy.
+
+### Client/server capability parity
+
+Placement changes adapters, not the semantic result. The conformance suite runs the
+same repository goldens through the browser and headless decoders, then compares the
+canonical presentation and complete publication graph: procedure keys, ordered
+inputs, parameters, typed payloads, blob hashes, evidence, stages, and model requests.
+Generated IDs and physical-placement metadata are deliberately excluded.
+
+The required parity corpus covers native text, CSV, native-text PDF, raster invoice,
+and raster account-statement paths. It also covers model unavailability, hard model
+failure, malformed image data, oversized image declarations, JPEG trailing-data
+truncation, and PDF rendering bounds. An image without native text and without vision
+is `partial / needs_review`; recognizing the media container alone is not semantic
+completion. A failed or schema-invalid model run publishes no invented finance fact.
+
+The capability floor is the useful information surface of the former production
+server extractor, not its API or JSON shape. Contract tests retain invoice header,
+totals, line, tax, payment, party, address, contact, tax-ID, and bank-account detail,
+plus statement institution, account, balance, transaction, counterparty, foreign
+currency, exchange-rate, fee, and notes detail. The current representation additionally
+uses integer minor units, canonical validation artifacts, field evidence, immutable
+production provenance, and replay-safe publication.
 
 All catalog identities, policies, prompts, and capabilities which invoke this gateway
 belong to `ceo.aven`. The gateway's OpenAI-compatible surface does not place any LLM

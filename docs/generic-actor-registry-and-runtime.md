@@ -5,7 +5,7 @@ Status: canonical conceptual architecture for the experimental actor runtime
 Audience: contributors to avenOS, `api.aven.ceo`, desktop execution, and server
 execution
 
-Read [Skills: from a desired outcome to a resumable run](actor-skills-and-problem-solving.md)
+Read [Skills: from an artifact or desired outcome to a resumable run](actor-skills-and-problem-solving.md)
 first if the vocabulary is new. This paper explains why the pieces have their present
 boundaries. The normative wire contracts, state machine, security boundary, and
 cutover requirements are specified in
@@ -66,22 +66,23 @@ flowchart LR
 The Artifact Store is shared durable truth no matter where execution happens. Actor
 memory, a local mailbox, and a process address are never durable truth.
 
-An outcome may be exact or exploratory. Exact goals ask for named predicates.
-Exploratory goals ask the runner to maximize useful, evidence-backed facts about a
-subject within explicit cost, time, privacy, assurance, confidence, and effect bounds.
-A hybrid skill establishes mandatory predicates first and then enriches them. The
-current planner implements exact goals; exploratory utility and stopping rules remain
-part of the target design.
+The default document interaction is artifact-first: the runner derives every relevant,
+supported fact available from installed and authorized non-effecting capabilities,
+then presents the actions enabled by those facts. An explicit exact goal prioritizes a
+route through the same enrichment machinery. The target behavior is specified in
+[Artifact-first semantic enrichment and affordance discovery](artifact-first-semantic-enrichment.md).
+The current planner implements exact goals; exploratory saturation and affordance
+discovery remain part of the target design.
 
 ## Begin with one document
 
 Consider an uploaded invoice. At the beginning we know very little: there is a source
-artifact, a media type claimed by the uploader, and a goal such as “produce validated
-invoice details.” A file inspector can cheaply establish whether the bytes are a PDF,
-XML document, image, or something unsupported. A specialist recognizer can establish
-whether machine-readable XML is an XRechnung. A visual analyzer can inspect a rendered
-page. Different extractors can nevertheless publish the same canonical invoice
-schema.
+artifact and a media type claimed by the uploader. A file inspector can establish
+whether the bytes are a PDF, XML document, image, or something unsupported. A
+specialist recognizer can establish whether machine-readable XML is an XRechnung. A
+visual analyzer can inspect a rendered page. Different extractors can nevertheless
+publish the same canonical invoice schema. Those facts can then enable actions even
+when the user supplied no exact goal.
 
 No coordinator needs this decision tree in its source code. Each package contributes
 facts and transformations. The runner executes only as far as the next fact it cannot
@@ -153,7 +154,7 @@ Examples:
 
 ```text
 os.aven:protocol:actors:envelope@1
-os.aven:protocol:actors:plan-runner@1
+os.aven:protocol:actors:plan-runner@2
 os.aven:protocol:actors:run-checkpoint@1
 os.aven:actor:actors.system:human-input-broker@1
 ```
@@ -180,7 +181,7 @@ Examples:
 ceo.aven:actor:docs.ingest:document-inspector@1
 ceo.aven:skill:docs.ingest:document-ingest@1
 ceo.aven:capability:docs.ingest.xrechnung:extract@1
-ceo.aven:schema:bookkeeping:invoice-details@1
+ceo.aven:schema:bookkeeping:invoice-details@2
 ceo.aven:entitlement:product:vision-premium@1
 ceo.aven:action:artifacts:read@1
 ceo.aven:actor:ai.gateway:llm@1
@@ -215,7 +216,7 @@ ceo.aven.bookkeeping.invoice_details(D)
 
 Capability slots bind these logical facts to canonical schemas. An Artifact Store
 adapter maps a schema such as
-`ceo.aven:schema:bookkeeping:invoice-details@1` to the store’s concrete type key and
+`ceo.aven:schema:bookkeeping:invoice-details@2` to the store’s concrete type key and
 version. Planning code does not guess schema identity from a TypeScript type or an
 envelope method name.
 
@@ -423,13 +424,18 @@ The runner therefore uses checkpointed, receding-horizon planning:
 Each frozen segment and the evidence which caused the next segment are part of the run
 record. Replanning extends provenance; it does not rewrite history.
 
-Exploration uses the same mechanism with a different selection criterion. Instead of
-stopping when one fixed proof closes, it ranks relevant observers by expected
-information gain and stops when the configured utility threshold is no longer met or
-a budget is exhausted. Relevance is constrained by the subject and allowed fact
-families; “learn as much as possible” is never permission to invoke every installed
-actor. The terminal understanding report records discovered artifacts, evidence,
-coverage, unresolved questions, and the stopping reason.
+Exploration uses the same mechanism with a different completion criterion. Instead of
+stopping when one fixed proof closes, the initial exhaustive policy continues until no
+eligible non-effecting invocation can add supported knowledge about the subject.
+Relevance is constrained by the subject and allowed fact families; “learn as much as
+possible” is never permission to invoke every installed Actor. The initial generic
+slice computes this closure over declared guaranteed outputs; observation-dependent
+fact projection still requires checkpointed replanning. Future bounded policies may
+rank the frontier by a calibrated expected signal yield—the likely novel, useful,
+schema-valid information for the current context—and stop at explicit cost, effort, or
+privacy limits. Such a prediction orders or bounds work; it never establishes a fact.
+The terminal understanding report records discovered artifacts, evidence, coverage,
+unresolved questions, and the stopping reason.
 
 ## How XRechnung actually becomes automatic
 
@@ -466,7 +472,7 @@ produces:
   ceo.aven.bookkeeping.invoice_details(D)
 
 output schema:
-  ceo.aven:schema:bookkeeping:invoice-details@1
+  ceo.aven:schema:bookkeeping:invoice-details@2
 ```
 
 The OCR/native-text route produces the same logical fact and schema. Downstream

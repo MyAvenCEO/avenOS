@@ -72,7 +72,7 @@ The local host adapter owns:
 - magic-byte inspection and bounded PDF/PNG/JPEG decoding;
 - native PDF text and normalized-millionth layout extraction;
 - 144-DPI PDF rendering for admitted model work;
-- the `aven-finance-vision-v2` prompts and JSON schemas;
+- the `aven-finance-vision-v3` prompts and expanded finance schemas;
 - document-kind and invoice-versus-statement branching;
 - model result parsing, classification thresholds, grounded evidence filtering, and
   extraction-kind conflict checks;
@@ -84,9 +84,10 @@ committed source artifact ID and metadata. The Actor Runner re-reads both envelo
 content through a tenant-routed Artifact Store client, rejects mismatched metadata,
 runs the bounded deterministic text/PDF graph, and publishes every derived artifact
 under its own Artifact Store service identity. Its small terminal presentation is
-stored in the durable run checkpoint. Server-side image decoding, OCR, and model-backed
-vision are not installed yet; unsupported or unreadable files settle honestly as
-`needs_review`.
+stored in the durable run checkpoint. Its headless decoder admits bounded PNG/JPEG,
+extracts native PDF text, and renders PDF pages for the same model-backed actors used
+locally. When the model route is unavailable, an image without native text settles
+honestly as `needs_review` and publishes no finance fact.
 
 The canonical finance payload schemas are imported from Artifact Store conformance
 fixtures. The actor implementation and publication adapter therefore validate against
@@ -100,8 +101,13 @@ authenticated gateway contract:
 ```text
 GET  /api/llm/models?capability=vision&capability=structured-output
 POST /api/llm/completions
+GET  /internal/v1/llm/models?capability=vision&capability=structured-output
+POST /internal/v1/llm/completions
 ```
 
+The public pair verifies a user identity for the desktop. The internal pair accepts
+only the Actor Runner's distinct service bearer and exposes the same bounded discovery
+and completion operations; the runner never stores a user JWT for later model work.
 The Tauri bridge keeps the Aven session token outside the webview. Provider credentials
 remain in the LLM downstream's `LLM_GATEWAY_CREDENTIALS_JSON` and never enter the app
 bundle. This repository contains the client contract and facade, but not the owning

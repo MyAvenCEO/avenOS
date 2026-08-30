@@ -9,7 +9,11 @@ export function createPageSignalClassifierActor(): Actor {
 			'Page signal classifier',
 			'Classifies a page from deterministic media and native-text signals.',
 			'document_classify_page',
-			['ceo.aven.docs.file(F)', 'ceo.aven.docs.page(F, P)', 'ceo.aven.docs.extracted_text(F, P, T)'],
+			[
+				'ceo.aven.docs.file(F)',
+				'ceo.aven.docs.page(F, P)',
+				'ceo.aven.docs.extracted_text(F, P, T)'
+			],
 			['ceo.aven.docs.content_classification(P, C)']
 		),
 		{
@@ -22,7 +26,9 @@ export function createPageSignalClassifierActor(): Actor {
 					const image = mediaType === 'image/png' || mediaType === 'image/jpeg'
 					const primaryKind = hasText ? 'document' : image ? 'image' : 'unknown'
 					const facets = hasText ? ['native-text'] : []
-					const complete = primaryKind !== 'unknown'
+					// Recognizing the container as an image is not semantic understanding of
+					// its pixels. Without native text or vision, enrichment remains partial.
+					const complete = hasText
 					return success(
 						{
 							ok: true,

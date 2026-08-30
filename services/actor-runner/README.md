@@ -1,8 +1,10 @@
 # Actor runner service (`os.aven`)
 
-This service hosts the portable `os.aven:protocol:actors:plan-runner@1` contract on a
-server. It is an authenticated downstream of `api.aven.ceo`, never a route inside
-`aven.id` and never an open proxy.
+This service hosts the portable `os.aven:protocol:actors:plan-runner@2` contract on a
+server and accepts version 1 exact-goal commands during rollout. Version 2 adds
+exploratory and goal-then-enrich execution without granting effects. It is an
+authenticated downstream of `api.aven.ceo`, never a route inside `aven.id` and never
+an open proxy.
 
 ## Trust boundary
 
@@ -92,7 +94,11 @@ The deployed composition in `src/index.ts` has two explicit layers. Registered
 application skills are selected by an application executor catalog. Its first entry is
 `ceo.aven:skill:document-ingest@1`, which fetches the admitted source from the selected
 tenant's Artifact Store, runs the headless document runtime, and publishes every
-derived artifact with the runner's dedicated store identity. All other skills fall
+derived artifact with the runner's dedicated store identity. It discovers a
+vision-and-structured-output model through the API facade's service-authenticated
+internal LLM contract and uses the same model adapter and actor graph as the desktop.
+`LLM_GATEWAY_BASE_URL` and `LLM_GATEWAY_BEARER_TOKEN` configure that private edge; the
+bearer is distinct from the runner's ingress and Artifact Store identities. All other skills fall
 through to the portable generic executor. That fallback has an empty registry and
 fail-closed authorization, factory, and Artifact Store ports, so an unknown skill
 cannot accidentally execute.
@@ -138,12 +144,15 @@ authenticated path resolves its source and publishes its output through the real
 persists the returned artifact ID in the SQL checkpoint, reads the producer lineage
 back, and compares the server result with local execution.
 
-`tests/document-lane-conformance.test.ts` sends deterministic text, CSV, and a real
-repository PDF through the production browser decoder and through the production
-headless document executor. It compares the canonical presentation and the complete
+`tests/document-lane-conformance.test.ts` sends deterministic text, CSV, a real
+repository PDF, a model-backed invoice image, and a model-backed statement case
+through the production browser decoder and through the production headless document
+executor. It compares the canonical presentation and the complete
 publication graph: procedure keys, ordered inputs, parameters, payloads, blob hashes,
 evidence, types, and stages. Generated IDs and physical placement metadata are the only
-excluded fields. The fresh-stack Playwright journey repeats the comparison for a text
+excluded fields. It also proves equivalent model requests, unavailable-model fallback,
+hard-failure behavior, and absence of invented finance outputs. The fresh-stack
+Playwright journey repeats the comparison for a text
 fixture through the real Tauri client, facade, persistent runner, PostgreSQL, and Rust
 Artifact Store.
 

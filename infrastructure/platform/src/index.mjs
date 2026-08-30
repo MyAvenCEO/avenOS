@@ -259,6 +259,7 @@ const platformSecrets = platform
 			actorRunnerArtifactStoreToken: pulumi.secret(
 				password('actor-runner-artifact-store-token', 64)
 			),
+			actorRunnerLlmGatewayToken: pulumi.secret(password('actor-runner-llm-gateway-token', 64)),
 			artifactStoreProvisionerToken: pulumi.secret(
 				password('artifact-store-provisioner-token', 64)
 			),
@@ -343,6 +344,7 @@ export const intentServiceToken = platformSecrets.intentServiceToken
 export const actorRunnerServiceToken = platformSecrets.actorRunnerServiceToken
 export const artifactStoreServiceToken = platformSecrets.artifactStoreServiceToken
 export const actorRunnerArtifactStoreToken = platformSecrets.actorRunnerArtifactStoreToken
+export const actorRunnerLlmGatewayToken = platformSecrets.actorRunnerLlmGatewayToken
 export const artifactStoreProvisionerToken = platformSecrets.artifactStoreProvisionerToken
 export const tenantGrantPrivateKey = tenantGrantKey
 	? pulumi.secret(tenantGrantKey.privateKeyPem)

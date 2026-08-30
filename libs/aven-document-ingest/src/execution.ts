@@ -72,7 +72,15 @@ export function documentPlanRunCommand(request: DocumentRunStartRequest): PlanRu
 		ingredients: [
 			{ predicate: 'ceo.aven.docs.file(source)', artifactId: admitted.source.artifactId }
 		],
-		goals: ['ceo.aven.docs.processed(source)'],
+		goals: [],
+		goalSpec: {
+			mode: 'explore',
+			subject: {
+				predicate: 'ceo.aven.docs.file(source)',
+				artifactId: admitted.source.artifactId
+			},
+			factFamilies: ['ceo.aven.docs', 'ceo.aven.bookkeeping', 'ceo.aven.banking']
+		},
 		parameters: { source: admitted.source }
 	}
 }
