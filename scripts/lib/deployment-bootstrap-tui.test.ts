@@ -5,8 +5,8 @@ import {
 	isProviderNameLine,
 	navigationButtons,
 	progressChipText,
+	stationTreeRows,
 	TUI_TEXT_INPUT_KEY_BINDINGS,
-	visibleStations,
 	wrapTerminalText
 } from './deployment-bootstrap-tui.js'
 
@@ -43,18 +43,38 @@ describe('deployment bootstrap terminal forms', () => {
 		expect(evidence).toEqual(['✓ repository', '✓ region', '✓ project'])
 	})
 
-	test('centers a long station rail and marks hidden stations at both edges', () => {
-		const stations = Array.from({ length: 40 }, (_, index) => `Station ${index + 1}`)
-		const visible = visibleStations(stations, 20, 9)
-		expect(visible).toHaveLength(9)
+	test('renders a clipped chapter, subchapter, and item tree around the current station', () => {
+		const stations = Array.from({ length: 40 }, (_, index) => ({
+			chapter: index < 2 ? 'GitHub' : index < 24 ? 'Hetzner' : 'Operations',
+			subchapter:
+				index < 2
+					? undefined
+					: index < 7
+						? 'identity project'
+						: index < 12
+							? 'next project'
+							: index < 17
+								? 'production project'
+								: index < 24
+									? 'aven.ceo DNS project'
+									: undefined,
+			item: `Item ${index + 1}`
+		}))
+		const visible = stationTreeRows(stations, 20, 12)
+		expect(visible.length).toBeLessThanOrEqual(12)
 		expect(visible[0]).toEqual({ kind: 'ellipsis' })
 		expect(visible.at(-1)).toEqual({ kind: 'ellipsis' })
-		expect(visible.find((station) => station.current)).toMatchObject({ index: 20 })
-		expect(visibleStations(stations, 1, 9).at(-1)).toEqual({ kind: 'ellipsis' })
-		expect(visibleStations(stations, 40, 9)[0]).toEqual({ kind: 'ellipsis' })
-		const tallMiddle = visibleStations(stations, 20, 35)
-		expect(tallMiddle[0]).toEqual({ kind: 'ellipsis' })
-		expect(tallMiddle.at(-1)).toEqual({ kind: 'ellipsis' })
+		expect(visible.find((station) => station.kind === 'station' && station.current)).toMatchObject({
+			index: 20
+		})
+		expect(visible).toContainEqual({ kind: 'chapter', label: 'Hetzner', current: true })
+		expect(visible).toContainEqual({
+			kind: 'subchapter',
+			label: 'aven.ceo DNS project',
+			current: true
+		})
+		expect(stationTreeRows(stations, 1, 9).at(-1)).toEqual({ kind: 'ellipsis' })
+		expect(stationTreeRows(stations, 40, 9)[0]).toEqual({ kind: 'ellipsis' })
 	})
 
 	test('renders a compact progress chip with a changing spinner and stable operation label', () => {

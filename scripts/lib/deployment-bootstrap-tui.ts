@@ -63,11 +63,17 @@ export interface TuiButton {
 export interface TuiProgress {
 	current: number
 	total: number
-	stations?: readonly string[]
+	stations?: readonly TuiStation[]
 }
 
-export interface VisibleStation {
-	kind: 'station' | 'ellipsis'
+export interface TuiStation {
+	chapter: string
+	subchapter?: string
+	item: string
+}
+
+export interface StationTreeRow {
+	kind: 'chapter' | 'subchapter' | 'station' | 'ellipsis'
 	index?: number
 	label?: string
 	current?: boolean
@@ -102,39 +108,78 @@ export function isProviderNameLine(value: string): boolean {
 	return /^(Description|Name):\s+\S/.test(value)
 }
 
-export function visibleStations(
-	stations: readonly string[],
+export function stationTreeRows(
+	stations: readonly TuiStation[],
 	current: number,
 	maxRows: number
-): VisibleStation[] {
+): StationTreeRow[] {
 	if (!Number.isSafeInteger(current) || current < 1 || current > stations.length)
 		throw new Error('Current station is out of range.')
 	if (!Number.isSafeInteger(maxRows) || maxRows < 5)
 		throw new Error('Station rail needs at least five rows.')
-	const station = (index: number): VisibleStation => ({
-		kind: 'station',
-		index: index + 1,
-		label: stations[index],
-		current: index + 1 === current
-	})
-	if (stations.length <= maxRows) return stations.map((_, index) => station(index))
-	const edgeCount = maxRows - 1
-	const middleCount = maxRows - 2
-	const middleRadius = Math.floor(middleCount / 2)
-	if (current <= middleRadius + 1)
-		return [...stations.slice(0, edgeCount).map((_, index) => station(index)), { kind: 'ellipsis' }]
-	if (current > stations.length - middleRadius)
-		return [
-			{ kind: 'ellipsis' },
-			...stations
-				.slice(-edgeCount)
-				.map((_, offset) => station(stations.length - edgeCount + offset))
-		]
-	const start = current - 1 - middleRadius
+	const currentStation = stations[current - 1] as TuiStation
+	const rows: StationTreeRow[] = []
+	let previousChapter: string | undefined
+	let previousSubchapter: string | undefined
+	for (const [index, station] of stations.entries()) {
+		if (station.chapter !== previousChapter) {
+			rows.push({
+				kind: 'chapter',
+				label: station.chapter,
+				current: station.chapter === currentStation.chapter
+			})
+			previousChapter = station.chapter
+			previousSubchapter = undefined
+		}
+		if (station.subchapter && station.subchapter !== previousSubchapter) {
+			rows.push({
+				kind: 'subchapter',
+				label: station.subchapter,
+				current:
+					station.chapter === currentStation.chapter &&
+					station.subchapter === currentStation.subchapter
+			})
+			previousSubchapter = station.subchapter
+		}
+		rows.push({
+			kind: 'station',
+			index: index + 1,
+			label: station.item,
+			current: index + 1 === current
+		})
+	}
+	if (rows.length <= maxRows) return rows
+
+	const currentRow = rows.findIndex((row) => row.kind === 'station' && row.current)
+	let chapterRow = currentRow
+	let subchapterRow: number | undefined
+	for (let index = currentRow; index >= 0; index -= 1) {
+		if (subchapterRow === undefined && rows[index]?.kind === 'subchapter') subchapterRow = index
+		if (rows[index]?.kind === 'chapter') {
+			chapterRow = index
+			break
+		}
+	}
+	const contextStart = subchapterRow ?? chapterRow
+	const contextPrefix = contextStart === chapterRow ? [] : [rows[chapterRow] as StationTreeRow]
+	const hasTop = contextStart > 0
+	const available = maxRows - (hasTop ? 1 : 0) - 1
+	let body = [
+		...contextPrefix,
+		...rows.slice(contextStart, contextStart + available - contextPrefix.length)
+	]
+	if (!body.some((row) => row.kind === 'station' && row.current)) {
+		const required = [...contextPrefix, rows[contextStart] as StationTreeRow]
+		const stationCapacity = Math.max(1, available - required.length)
+		const stationStart = Math.max(contextStart + 1, currentRow - Math.floor(stationCapacity / 2))
+		body = [...required, ...rows.slice(stationStart, stationStart + stationCapacity)]
+	}
+	const lastVisible = rows.indexOf(body.at(-1) as StationTreeRow)
+	const hasBottom = lastVisible < rows.length - 1
 	return [
-		{ kind: 'ellipsis' },
-		...stations.slice(start, start + middleCount).map((_, offset) => station(start + offset)),
-		{ kind: 'ellipsis' }
+		...(hasTop ? [{ kind: 'ellipsis' } as StationTreeRow] : []),
+		...body,
+		...(hasBottom ? [{ kind: 'ellipsis' } as StationTreeRow] : [])
 	]
 }
 
@@ -523,7 +568,7 @@ export class BootstrapTui {
 
 		if (showStationRail && stations && this.#progressDetails) {
 			const stationX = x + width + 3
-			const railRows = visibleStations(
+			const railRows = stationTreeRows(
 				stations,
 				this.#progressDetails.current,
 				Math.max(5, terminal.height - 5)
@@ -534,15 +579,24 @@ export class BootstrapTui {
 				y: 2,
 				width: stationWidth,
 				height: 1,
-				content: 'STATIONS',
+				content: 'SETUP',
 				attr: { color: 'cyan', bold: true }
 			})
 			railRows.forEach((station, offset) => {
-				const marker = station.current ? '●' : '○'
-				const content =
-					station.kind === 'ellipsis'
-						? '  ⋮'
-						: `${marker} ${String(station.index).padStart(2)}  ${station.label ?? ''}`
+				const content = (() => {
+					if (station.kind === 'ellipsis') return '  ⋮'
+					if (station.kind === 'chapter') return station.label ?? ''
+					if (station.kind === 'subchapter') return `  ${station.label ?? ''}`
+					return `    ${station.current ? '●' : '○'} ${String(station.index).padStart(2)}  ${station.label ?? ''}`
+				})()
+				const attr =
+					station.kind === 'chapter'
+						? { color: station.current ? 'brightCyan' : 'brightWhite', bold: true }
+						: station.kind === 'subchapter'
+							? { color: station.current ? 'cyan' : 'gray', bold: Boolean(station.current) }
+							: station.current
+								? { color: 'brightCyan', bold: true }
+								: { color: 'gray' }
 				new terminalKit.TextBox({
 					parent: document,
 					x: stationX,
@@ -550,7 +604,7 @@ export class BootstrapTui {
 					width: stationWidth,
 					height: 1,
 					content: truncateTerminalText(content, stationWidth),
-					attr: station.current ? { color: 'brightCyan', bold: true } : { color: 'gray' }
+					attr
 				})
 			})
 		}
