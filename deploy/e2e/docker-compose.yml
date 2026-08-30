@@ -191,7 +191,7 @@ services:
       ARTIFACT_STORE_BASE_URL: http://artifact-store:8087
       ARTIFACT_STORE_BEARER_TOKEN: artifact-store-service-token-for-e2e-0001
       LLM_GATEWAY_ENABLED: "true"
-      LLM_GATEWAY_MODELS_JSON: '[{"id":"deepseek/deepseek-v4-flash-0731","label":"E2E Chat","capabilities":["text-generation","vision","structured-output","streaming","tool-calling"],"baseUrl":"http://llm-mock:8090/v1","upstreamModel":"e2e-chat","profile":"generic-json","authMode":"none"}]'
+      LLM_GATEWAY_MODELS_JSON: '[{"id":"deepseek/deepseek-v4-flash-0731","label":"E2E Chat","capabilities":["text-generation","streaming","tool-calling"],"baseUrl":"http://llm-mock:8090/v1","upstreamModel":"e2e-chat","profile":"generic-json","authMode":"none"}]'
       LLM_GATEWAY_CREDENTIALS_JSON: '{}'
       LLM_GATEWAY_ALLOW_INSECURE_HTTP: "true"
       LLM_GATEWAY_ACTOR_RUNNER_BEARER_TOKEN: actor-runner-llm-gateway-token-e2e-01

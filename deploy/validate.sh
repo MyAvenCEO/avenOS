@@ -16,7 +16,7 @@ sh -n \
   "$root/deploy/operations/entrypoint.sh" \
   "$root/deploy/operations/healthcheck.sh"
 bash -n "$root/deploy/release/deploy.sh" "$root/deploy/release/environment.sh" "$root/deploy/validate.sh" "$root/deploy/operations/test-recovery.sh"
-bun test "$root/deploy/local/llm-catalog.test.ts"
+bun test "$root/deploy/local/llm-catalog.test.ts" "$root/deploy/e2e/llm-catalog.test.ts"
 
 env \
   E2E_TENANT_PRIVATE_KEY=test-private-key \
