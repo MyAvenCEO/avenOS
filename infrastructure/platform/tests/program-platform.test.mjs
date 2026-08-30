@@ -10,8 +10,8 @@ pulumi.runtime.setMocks(
 			resources.push({ type: args.type, name: args.name, inputs: args.inputs })
 			const state = { ...args.inputs }
 			if (args.type === 'hcloud:index/server:Server') {
-				state.ipv4Address = args.name === 'identity-server' ? '192.0.2.10' : '192.0.2.20'
-				state.ipv6Address = args.name === 'identity-server' ? '2001:db8::10' : '2001:db8::20'
+				state.ipv4Address = '192.0.2.20'
+				state.ipv6Address = '2001:db8::20'
 			}
 			if (args.type === 'hcloud:index/volume:Volume')
 				state.linuxDevice = `/dev/disk/by-id/${args.name}`
@@ -34,61 +34,56 @@ pulumi.runtime.setMocks(
 		}
 	},
 	'aven-platform',
-	'identity',
+	'production',
 	false
 )
 
 Object.assign(process.env, {
-	DEPLOYMENT_TARGET: 'identity',
-	DEPLOYMENT_ENVIRONMENT: 'identity',
+	DEPLOYMENT_TARGET: 'platform',
+	DEPLOYMENT_ENVIRONMENT: 'production',
 	HETZNER_LOCATION: 'nbg1',
 	HETZNER_SERVER_TYPE: 'cx23',
 	HETZNER_SERVER_ARCHITECTURE: 'amd64',
 	HETZNER_OS_IMAGE: 'ubuntu-24.04',
 	SSH_ALLOWED_CIDRS: '192.0.2.4/32',
 	HETZNER_COMPUTE_TOKEN: 'compute-token-for-tests-only',
-	HETZNER_DNS_TOKEN: ''
+	HETZNER_DNS_TOKEN: 'dns-token-for-tests-only-000'
 })
 
 const program = await import('../src/index.mjs')
-await Promise.all([program.identityIpv4Address.promise(), program.identityDnsRecords.promise()])
+await Promise.all([
+	program.platformIpv4Address.promise(),
+	program.platformIpv6Address.promise(),
+	program.platformIdentityProvisioningSecret.promise(),
+	...program.dnsRecordIds.map((output) => output.promise())
+])
 
-test('creates only the protected shared identity foundation', () => {
+test('creates only one isolated production platform foundation and all six DNS records', () => {
 	assert.deepEqual(
-		resources
-			.filter(({ type }) => type === 'hcloud:index/server:Server')
-			.map(({ name }) => name)
-			.sort(),
-		['identity-server']
+		resources.filter(({ type }) => type === 'hcloud:index/server:Server').map(({ name }) => name),
+		['platform-server']
 	)
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/firewall:Firewall').length, 1)
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/volume:Volume').length, 1)
-	assert.equal(resources.filter(({ type }) => type === 'tls:index/privateKey:PrivateKey').length, 4)
 	assert.equal(resources.filter(({ type }) => type === 'hcloud:index/sshKey:SshKey').length, 1)
 	assert.equal(
 		resources.filter(({ type }) => type === 'hcloud:index/zoneRrset:ZoneRrset').length,
-		0
+		6
 	)
 	assert.equal(
 		resources.some(({ name }) => name === 'platform-identity-provisioning-secret'),
-		false
+		true
 	)
+	assert.equal(program.platformApexHostname, 'aven.ceo')
 })
 
-test('returns exact aven.id records for the external DNS provider', async () => {
-	assert.deepEqual(await program.identityDnsRecords.promise(), [
-		{ hostname: 'aven.id', name: '@', type: 'A', value: '192.0.2.10', ttl: 300 },
-		{ hostname: 'aven.id', name: '@', type: 'AAAA', value: '2001:db8::10', ttl: 300 }
-	])
-})
-
-test('keeps the identity bootstrap root isolated', () => {
-	const identity = resources.find(({ name }) => name === 'identity-server')
-	const identityUserData = identity.inputs.userData.value ?? identity.inputs.userData
-	assert.match(identityUserData, /\/opt\/aven\/identity/)
-	assert.doesNotMatch(identityUserData, /\/opt\/aven\/platform/)
+test('keeps platform bootstrap free of identity state', () => {
+	const platform = resources.find(({ name }) => name === 'platform-server')
+	const userData = platform.inputs.userData.value ?? platform.inputs.userData
+	assert.match(userData, /\/opt\/aven\/platform/)
+	assert.doesNotMatch(userData, /\/opt\/aven\/identity/)
 	assert.doesNotMatch(
-		JSON.stringify(identity.inputs),
+		JSON.stringify(platform.inputs),
 		/BETTER_AUTH|POSTGRES_PASSWORD|POLAR_API_KEY|SMTP_URL/
 	)
 })

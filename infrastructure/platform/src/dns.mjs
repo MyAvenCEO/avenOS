@@ -12,24 +12,32 @@ export function manualIdentityRecordSpecs({ hostname, ipv4, ipv6 }) {
 	]
 }
 
-export function platformRecordSpecs({ zone, hostnames, ipv4, ipv6, includeApex }) {
+const supportedHostnames = [
+	{ apex: 'next.aven.ceo', api: 'api.next.aven.ceo', checkout: 'my.next.aven.ceo' },
+	{ apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'my.aven.ceo' }
+]
+
+function relativeName(hostname, zone) {
+	if (hostname === zone) return '@'
+	const suffix = `.${zone}`
+	if (!hostname.endsWith(suffix)) throw new Error(`${hostname} is outside ${zone}`)
+	return hostname.slice(0, -suffix.length)
+}
+
+export function platformRecordSpecs({ zone, hostnames, ipv4, ipv6 }) {
 	if (
 		zone !== 'aven.ceo' ||
-		hostnames.apex !== 'aven.ceo' ||
-		hostnames.api !== 'api.aven.ceo' ||
-		hostnames.checkout !== 'my.aven.ceo'
-	)
-		throw new Error('platform DNS is restricted to aven.ceo, api.aven.ceo, and my.aven.ceo')
-	const records = [
-		record('platform-api-a', zone, 'api', 'A', ipv4),
-		record('platform-api-aaaa', zone, 'api', 'AAAA', ipv6),
-		record('platform-checkout-a', zone, 'my', 'A', ipv4),
-		record('platform-checkout-aaaa', zone, 'my', 'AAAA', ipv6)
-	]
-	if (includeApex)
-		records.push(
-			record('platform-apex-a', zone, '@', 'A', ipv4),
-			record('platform-apex-aaaa', zone, '@', 'AAAA', ipv6)
+		!supportedHostnames.some((supported) =>
+			Object.keys(supported).every((key) => supported[key] === hostnames[key])
 		)
-	return records
+	)
+		throw new Error('platform DNS is restricted to the next or production aven.ceo origins')
+	return [
+		record('platform-api-a', zone, relativeName(hostnames.api, zone), 'A', ipv4),
+		record('platform-api-aaaa', zone, relativeName(hostnames.api, zone), 'AAAA', ipv6),
+		record('platform-checkout-a', zone, relativeName(hostnames.checkout, zone), 'A', ipv4),
+		record('platform-checkout-aaaa', zone, relativeName(hostnames.checkout, zone), 'AAAA', ipv6),
+		record('platform-apex-a', zone, relativeName(hostnames.apex, zone), 'A', ipv4),
+		record('platform-apex-aaaa', zone, relativeName(hostnames.apex, zone), 'AAAA', ipv6)
+	]
 }

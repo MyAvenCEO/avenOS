@@ -18,14 +18,18 @@ separate deployments from this cut onward:
 | `https://api.aven.ceo` | Small authenticated facade over server-side services | Browser pages, checkout, user storage, credentials, or business persistence |
 | `https://aven.ceo` | Public static website published through avenOS static hosting | Authentication, checkout, mutable APIs, or secrets |
 
+`next` repeats the three platform responsibilities at `my.next.aven.ceo`,
+`api.next.aven.ceo`, and `next.aven.ceo`. It does not create another identity origin
+or WebAuthn relying party.
+
 `aven.id` is the only identity origin and WebAuthn relying-party ID. This WIP
 deployment intentionally does not carry an old-RP compatibility window.
 
 The deployment boundary is physical as well as logical. `aven.id` has its own
 Hetzner host, Caddy ingress, protected volume, PostgreSQL cluster, runtime role,
-and migrator role. `api.aven.ceo`, `my.aven.ceo`, and the static host share a
-second platform host and a different PostgreSQL cluster. No Docker network or
-database credential crosses between the hosts.
+and migrator role. Production and `next` each have another platform host and
+PostgreSQL cluster. No Docker network or database credential crosses between the
+three hosts. Both platform environments verify the same public identity issuer.
 
 ## Why this cut
 
@@ -63,20 +67,22 @@ registration invalidates the bootstrap setup link.
 
 ### Internal signup endpoint
 
-`POST /internal/v1/accounts` accepts an exact constant-time Bearer secret and a
+`POST /internal/v1/accounts` accepts one of two exact constant-time Bearer secrets and a
 validated `{ email, source }` body. It idempotently provisions one verified
 identity subject and returns a setup URL only while the user has no qualifying
 passkey. `my.aven.ceo` calls it after a verified payment event. No checkout code
 inserts an identity row.
 
-The first cut uses a rotatable symmetric service credential. Replace this with
-mTLS or a workload-identity token before admitting more callers; do not widen
-the endpoint to the public internet merely because the request body is small.
+Each platform stack generates its own rotatable symmetric credential. The protected
+identity deployment reads both during assembly; neither platform deployment can read
+identity state or the other platform's state. Compromise of one platform credential
+does not grant the other platform's internal identity role. Replace this with mTLS or
+a workload-identity token before admitting more callers.
 
-In the two-host deployment, Caddy admits `/internal/*` only from the platform
-host's exact Pulumi-managed IPv4/IPv6 addresses. Every other source receives a
-404 before the identity process sees the request. The constant-time Bearer
-check remains mandatory as a second control.
+In the three-host deployment, Caddy admits `/internal/*` only from the two platform
+hosts' exact Pulumi-managed IPv4/IPv6 addresses. Every other source receives a 404
+before the identity process sees the request. The environment-specific constant-time
+Bearer check remains mandatory as a second control.
 
 `POST /internal/v1/authorizations/roles` uses the same service boundary for a
 bounded batch of subject UUIDs. It returns only each subject's coarse

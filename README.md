@@ -25,11 +25,10 @@ credentials or chooses a database by name.
 
 The application is a work in progress. The current foundation proves customer-specific
 databases, bounded service roles, passkey identity, persistent Intents and Actor runs,
-and fresh-host deployment and recovery. It does not yet provide client-side
-end-to-end encryption or a complete customer export and migration path. The complete
-system runs locally and the shared `next` deployment is supported, but an independent
-production installation is not. Document processing still runs in the client process
-rather than in the generic server-side runner.
+remote document execution, and fresh-host deployment and recovery. It does not yet
+provide client-side end-to-end encryption or a complete customer export and migration
+path. The complete system runs locally and has isolated `next` and production platform
+targets behind one shared identity service.
 
 ## What the current system does
 
@@ -64,6 +63,11 @@ security boundaries. avenOS therefore gives each public origin one job:
 | `my.aven.ceo` | Checkout, billing, purchase email, subscriptions, and Polar webhooks | Passkeys, sessions, or customer domain records |
 | `api.aven.ceo` | Authentication of product requests, customer authorization, and fixed routing to server-side services | Browser pages, passkey registration, or arbitrary database access |
 | `aven.ceo` | The public static website built from its Git source | Authentication, checkout, mutable APIs, or secrets |
+
+The `next` platform uses the parallel origins `my.next.aven.ceo`,
+`api.next.aven.ceo`, and `next.aven.ceo`. Both platform environments trust the same
+`aven.id` issuer, but they have independent commerce data, customer databases,
+service credentials, tenant-signing keys, backups, and deployment approvals.
 
 The desktop client obtains a short-lived identity token from `aven.id` and sends it to
 the facade. The facade checks the current product entitlement and issues a narrower
@@ -179,8 +183,8 @@ provisioning, artifact upload, document import, chat, session-local anonymous sp
 attribution, duplex interruption, Intent and Actor persistence, raw Polar retention,
 tenant isolation, authorization failures, static hosting, and complete teardown. It
 is evidence for that tested composition; it does not turn a synthetic voice fixture
-into acoustic-device qualification or the unsupported production target into a
-deployed system.
+into acoustic-device qualification or local proof into evidence that a provider
+deployment has occurred.
 
 [Build and test](docs/operations/build-and-test.md) lists the complete release gate,
 component commands, platform requirements, and the behavior covered by each test.
@@ -222,12 +226,11 @@ The execution design is split across a few focused references:
 
 ## Deploy and operate it
 
-The supported shared target is `next`. Pulumi creates two replaceable Hetzner hosts:
-one for `aven.id` and one for the facade, checkout, customer services, databases, and
-static hosting. It also creates protected volumes, firewalls, SSH role identities,
-database credentials, and internal secrets. GitHub Actions verifies a commit, deploys
-immutable image digests, runs migrations and reconciliation, and checks public
-readiness.
+Pulumi creates three replaceable Hetzner hosts: one shared `aven.id` host and one
+isolated platform host each for `next` and production. Every target has its own
+protected volume, firewall, SSH role identities, database credentials, backup path,
+and internal secrets. GitHub Actions runs the same verified infrastructure,
+deployment, recovery, and monitoring playbook for each target.
 
 An operator still supplies the cloud and DNS credentials, approves protected runs,
 and applies the returned `aven.id` A and AAAA records at its external DNS provider.
@@ -237,17 +240,17 @@ or edit files on either server.
 Start with the [operations handbook](docs/operations/README.md). Its chapters cover:
 
 - [access, generated credentials, and secrets](docs/operations/access-and-secrets.md);
-- [deploying `next` and the current production limitation](docs/operations/deployment.md);
+- [deploying shared identity, `next`, and production](docs/operations/deployment.md);
 - [routine maintenance and observation](docs/operations/maintenance.md);
 - [backup, restore, and fresh-host recovery](docs/operations/backup-and-recovery.md);
   and
 - [bounded incident access and response](docs/operations/incident-response.md).
 
-Production is not an independent deployment target in the current automation. The workflows,
-state, backup labels, public domains, and GitHub Environment are fixed to `next`.
-Moving the Git branch from `next` to `prod` does not provision or deploy another
-installation. The production decisions and proof required before that changes are in
-[Production status](docs/operations/deployment.md#production-status).
+The `identity`, `next`, and `production` GitHub Environments use separate Pulumi
+stacks and protected approvals. Promotion changes a Git reference; deployment still
+requires an explicit target and exact ref. Production cannot read the `next` platform
+state or backup path. Each platform reads only its own generated provisioning token
+from the shared identity stack.
 
 Hosts carry no irreplaceable configuration. Git, encrypted Pulumi state, and
 encrypted off-host logical backups are the recovery sources of truth. Disaster

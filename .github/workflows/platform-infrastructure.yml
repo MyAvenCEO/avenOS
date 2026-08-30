@@ -3,16 +3,18 @@ name: platform-infrastructure
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: Shared identity or isolated platform environment
+        type: choice
+        options: [identity, next, production]
+        default: next
+        required: true
       command:
-        description: Preview or create/update the two protected Hetzner hosts
+        description: Preview or create/update the selected protected Hetzner host
         type: choice
         options: [preview, up]
         default: preview
         required: true
-      manage_aven_ceo_apex:
-        description: Move aven.ceo DNS to the new platform host (leave false until promotion)
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -20,9 +22,9 @@ permissions:
 jobs:
   infrastructure:
     runs-on: ubuntu-latest
-    environment: next
+    environment: ${{ inputs.target }}
     concurrency:
-      group: aven-platform-infrastructure-next
+      group: aven-platform-infrastructure-${{ inputs.target }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
@@ -38,11 +40,12 @@ jobs:
           STATE_BUCKET: ${{ vars.PULUMI_STATE_S3_BUCKET }}
           STATE_REGION: ${{ vars.PULUMI_STATE_S3_REGION }}
           STACK_NAME: ${{ vars.PULUMI_STACK }}
+          TARGET: ${{ inputs.target }}
         run: |
           set -euo pipefail
           [[ "$STATE_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]
           test "$STATE_REGION" = hel1
-          test "$STACK_NAME" = organization/aven-platform/next
+          test "$STACK_NAME" = "organization/aven-platform/$TARGET"
       - name: ${{ inputs.command }} infrastructure
         uses: pulumi/actions@8e5e406f4007fca908480587cb9893c07090f58d # v7
         env:
@@ -63,7 +66,8 @@ jobs:
           IDENTITY_VOLUME_SIZE_GB: ${{ vars.IDENTITY_VOLUME_SIZE_GB }}
           PLATFORM_VOLUME_SIZE_GB: ${{ vars.PLATFORM_VOLUME_SIZE_GB }}
           SSH_ALLOWED_CIDRS: ${{ vars.SSH_ALLOWED_CIDRS }}
-          MANAGE_AVEN_CEO_APEX_DNS: ${{ inputs.manage_aven_ceo_apex }}
+          DEPLOYMENT_TARGET: ${{ inputs.target == 'identity' && 'identity' || 'platform' }}
+          DEPLOYMENT_ENVIRONMENT: ${{ inputs.target }}
           PULUMI_SKIP_UPDATE_CHECK: "true"
         with:
           command: ${{ inputs.command }}

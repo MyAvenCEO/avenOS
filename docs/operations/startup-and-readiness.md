@@ -20,7 +20,7 @@ The stack uses four kinds of dependency:
 | Durable foundation | The process is accepting connections on the listener other containers use | PostgreSQL on TCP, restored volume mounted |
 | One-shot convergence | A finite job completed successfully and may be rerun safely | role reconciliation, migrations, customer component reconciliation |
 | Internal readiness | The service can perform its required downstream work, not merely answer a socket | identity, facade, checkout, Artifact Store, Actor Runner |
-| Public readiness | TLS, routing, and the public health route work through the deployed proxy | `aven.id`, `api.aven.ceo`, `my.aven.ceo`, `aven.ceo` |
+| Public readiness | TLS, routing, and the public health route work through the deployed proxy | `aven.id` and the selected platform's API, checkout, and public-site origins |
 
 Compose `service_started` is never a substitute for a dependency that needs one of
 the stronger states. Long-running services depend on successful one-shot jobs or
@@ -47,7 +47,7 @@ Identity readiness requires its schema and signing material. Caddy starting does
 make identity ready, and certificate issuance cannot succeed until the externally
 managed `aven.id` records point to the identity host.
 
-## Platform host
+## Each platform host
 
 ```text
 platform PostgreSQL durable TCP readiness
@@ -63,9 +63,9 @@ platform PostgreSQL durable TCP readiness
                 ├── Actor Runner becomes ready for routed customers
                 └── Artifact Store becomes ready for routed customers
                     └── facade becomes internally ready
-                        ├── api.aven.ceo becomes publicly ready
-                        ├── my.aven.ceo becomes publicly ready
-                        └── managed static hosting can expose aven.ceo
+                        ├── the environment API becomes publicly ready
+                        ├── the environment checkout becomes publicly ready
+                        └── managed static hosting exposes its system site
 ```
 
 Customer routing stays closed until the provisioner has observed the required schema
@@ -77,14 +77,19 @@ Checkout can record commerce facts before a customer environment exists. Its
 platform-event worker retries delivery until the facade and provisioner converge the
 environment. The facade must not route a customer request to a partial environment.
 
+This graph runs independently on `next` and production. No readiness gate in one
+platform can satisfy a dependency in the other. Both platforms depend on the shared
+identity public issuer, but their customer reconciliation, tenant grants, and data
+remain separate.
+
 The Actor Runner depends on both its customer-specific run repository and the tenant
 Artifact Store route. The Intent Service depends only on its customer-specific Intent
 schema. Neither service receives a cluster-wide customer login.
 
 ## Initial deployment
 
-After Pulumi has returned host access and the external identity DNS records have been
-applied, the deployment workflow follows this order:
+After Pulumi has returned host access, both platform DNS sets exist, and the external
+identity DNS records have been applied, the deployment workflow follows this order:
 
 1. install the exact deployment bundle and immutable image references;
 2. start the two PostgreSQL foundations;

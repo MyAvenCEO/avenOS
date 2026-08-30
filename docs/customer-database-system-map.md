@@ -38,9 +38,10 @@ clients
       └── aven.ceo ──────────── managed static host on platform host
 ```
 
-Identity and platform have separate Hetzner servers, networks, protected data volumes,
-PostgreSQL clusters, deployment bundles, SSH identities, and backup repository
-prefixes. No database credential crosses between the hosts.
+The diagram shows production. The same platform subtree exists at the three `next`
+origins. Identity, `next`, and production have separate Hetzner servers, networks,
+protected data volumes, PostgreSQL clusters, deployment bundles, SSH identities, and
+backup repository prefixes. No database credential crosses between the hosts.
 
 ## Public trust boundaries
 
@@ -158,8 +159,8 @@ proves exact encrypted fresh-target restore.
 
 ## Current deliberate gaps
 
-- Production is not yet an isolated supported deployment target; see
-  [Production status](operations/deployment.md#production-status).
+- Shared identity, `next`, and production now have isolated Pulumi stacks and
+  deployment targets; see [Deployment targets](operations/deployment.md#deployment-targets).
 - Diagnostic database roles are issued manually. The SSH tunnel itself is already
   restricted, but automatic short-lived read-only role issuance and reaping remain to
   be built.

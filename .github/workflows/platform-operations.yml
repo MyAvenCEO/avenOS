@@ -13,9 +13,13 @@ jobs:
   health:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: next
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [identity, next, production]
+    environment: ${{ format('{0}-operations', matrix.target) }}
     concurrency:
-      group: aven-platform-operations-next
+      group: aven-platform-operations-${{ matrix.target }}
       cancel-in-progress: false
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.PULUMI_STATE_S3_ACCESS_KEY_ID }}
@@ -28,40 +32,42 @@ jobs:
       PULUMI_BACKEND: s3://${{ vars.PULUMI_STATE_S3_BUCKET }}/avenos/platform?endpoint=${{ vars.PULUMI_STATE_S3_REGION }}.your-objectstorage.com&region=${{ vars.PULUMI_STATE_S3_REGION }}&s3ForcePathStyle=true&awssdk=v2
     steps:
       - uses: actions/checkout@v5
-      - name: Detect first successful new-platform deployment
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@8e5e406f4007fca908480587cb9893c07090f58d # v7
+      - name: Detect provisioned target
         id: activation
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == workflow_dispatch ]]; then
+          pulumi login "$PULUMI_BACKEND" >/dev/null
+          if pulumi stack select "$PULUMI_STACK" --cwd infrastructure/platform >/dev/null 2>&1; then
             echo 'active=true' >> "$GITHUB_OUTPUT"
-            exit 0
+          else
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            echo '${{ matrix.target }} has no provisioned stack; monitoring is dormant.'
           fi
-          active=false
-          while read -r sha; do
-            [[ -n "$sha" ]] || continue
-            if gh api "repos/$GITHUB_REPOSITORY/contents/deploy/operations/Dockerfile?ref=$sha" >/dev/null 2>&1; then
-              active=true
-              break
-            fi
-          done < <(gh run list --workflow platform-deploy.yml --status success --limit 20 --json headSha --jq '.[].headSha')
-          echo "active=$active" >> "$GITHUB_OUTPUT"
-          if [[ "$active" != true ]]; then
-            echo 'The fresh platform has not completed its first deployment; scheduled monitoring is dormant.'
-          fi
-      - name: Install Pulumi CLI
-        if: steps.activation.outputs.active == 'true'
-        uses: pulumi/actions@8e5e406f4007fca908480587cb9893c07090f58d # v7
       - name: Check public service health
         if: steps.activation.outputs.active == 'true'
         run: |
-          curl --fail --show-error --silent --max-time 20 https://aven.id/api/health/ready
-          curl --fail --show-error --silent --max-time 20 https://api.aven.ceo/health/live
-          curl --fail --show-error --silent --max-time 20 https://my.aven.ceo/api/health/ready
-          curl --fail --show-error --silent --max-time 20 https://aven.ceo/ >/dev/null
+          case '${{ matrix.target }}' in
+            identity)
+              curl --fail --show-error --silent --max-time 20 https://aven.id/api/health/ready
+              ;;
+            next)
+              curl --fail --show-error --silent --max-time 20 https://api.next.aven.ceo/health/live
+              curl --fail --show-error --silent --max-time 20 https://my.next.aven.ceo/api/health/ready
+              curl --fail --show-error --silent --max-time 20 https://next.aven.ceo/ >/dev/null
+              ;;
+            production)
+              curl --fail --show-error --silent --max-time 20 https://api.aven.ceo/health/live
+              curl --fail --show-error --silent --max-time 20 https://my.aven.ceo/api/health/ready
+              curl --fail --show-error --silent --max-time 20 https://aven.ceo/ >/dev/null
+              ;;
+          esac
       - name: Check host disk and backup health
         if: steps.activation.outputs.active == 'true'
         run: |
-          ./tools/stack-observe/run.sh identity check
-          ./tools/stack-observe/run.sh platform check
+          if [[ '${{ matrix.target }}' == identity ]]; then
+            ./tools/stack-observe/run.sh identity check
+          else
+            ./tools/stack-observe/run.sh platform check
+          fi

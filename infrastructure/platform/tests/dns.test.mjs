@@ -19,13 +19,32 @@ test('identity returns the external-provider records without managing them', () 
 	)
 })
 
-test('platform creates api and checkout first and promotes apex explicitly', () => {
-	const input = {
+test('platform creates all next records on the next subdomain', () => {
+	const records = platformRecordSpecs({
+		zone: 'aven.ceo',
+		hostnames: {
+			apex: 'next.aven.ceo',
+			api: 'api.next.aven.ceo',
+			checkout: 'my.next.aven.ceo'
+		},
+		ipv4: '192.0.2.20',
+		ipv6: '2001:db8::20'
+	})
+	assert.deepEqual(
+		records.map(({ name }) => name),
+		['api.next', 'api.next', 'my.next', 'my.next', 'next', 'next']
+	)
+})
+
+test('platform creates all production records on the apex', () => {
+	const records = platformRecordSpecs({
 		zone: 'aven.ceo',
 		hostnames: { apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'my.aven.ceo' },
 		ipv4: '192.0.2.20',
 		ipv6: '2001:db8::20'
-	}
-	assert.equal(platformRecordSpecs({ ...input, includeApex: false }).length, 4)
-	assert.equal(platformRecordSpecs({ ...input, includeApex: true }).length, 6)
+	})
+	assert.deepEqual(
+		records.map(({ name }) => name),
+		['api', 'api', 'my', 'my', '@', '@']
+	)
 })

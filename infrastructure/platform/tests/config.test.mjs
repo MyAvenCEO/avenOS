@@ -3,6 +3,8 @@ import test from 'node:test'
 import { loadPlatformConfig, parseSshCidrs } from '../src/config.mjs'
 
 const base = {
+	DEPLOYMENT_TARGET: 'identity',
+	DEPLOYMENT_ENVIRONMENT: 'identity',
 	HETZNER_LOCATION: 'nbg1',
 	HETZNER_SERVER_TYPE: 'cx23',
 	HETZNER_SERVER_ARCHITECTURE: 'amd64',
@@ -10,17 +12,11 @@ const base = {
 	SSH_ALLOWED_CIDRS: '192.0.2.4/32'
 }
 
-test('defines two independent fresh hosts and explicit apex management', () => {
+test('defines the shared identity foundation', () => {
 	const config = loadPlatformConfig(base)
+	assert.equal(config.target, 'identity')
 	assert.equal(config.identityHostname, 'aven.id')
-	assert.deepEqual(config.platformHostnames, {
-		apex: 'aven.ceo',
-		api: 'api.aven.ceo',
-		checkout: 'my.aven.ceo'
-	})
-	assert.equal(config.identityVolumeSize, 40)
-	assert.equal(config.platformVolumeSize, 80)
-	assert.equal(config.manageApexDns, false)
+	assert.equal(config.volumeSize, 40)
 })
 
 test('treats absent GitHub optional variables as defaults', () => {
@@ -29,8 +25,45 @@ test('treats absent GitHub optional variables as defaults', () => {
 		IDENTITY_VOLUME_SIZE_GB: '',
 		PLATFORM_VOLUME_SIZE_GB: ''
 	})
-	assert.equal(config.identityVolumeSize, 40)
-	assert.equal(config.platformVolumeSize, 80)
+	assert.equal(config.volumeSize, 40)
+})
+
+test('derives exact next and production origins', () => {
+	const next = loadPlatformConfig({
+		...base,
+		DEPLOYMENT_TARGET: 'platform',
+		DEPLOYMENT_ENVIRONMENT: 'next'
+	})
+	assert.deepEqual(next.platformHostnames, {
+		apex: 'next.aven.ceo',
+		api: 'api.next.aven.ceo',
+		checkout: 'my.next.aven.ceo'
+	})
+	assert.equal(next.platformDeploymentId, 'aven-platform-next-v1')
+	const production = loadPlatformConfig({
+		...base,
+		DEPLOYMENT_TARGET: 'platform',
+		DEPLOYMENT_ENVIRONMENT: 'production'
+	})
+	assert.deepEqual(production.platformHostnames, {
+		apex: 'aven.ceo',
+		api: 'api.aven.ceo',
+		checkout: 'my.aven.ceo'
+	})
+	assert.equal(production.platformDeploymentId, 'aven-platform-production-v1')
+})
+
+test('rejects invalid target and environment combinations', () => {
+	assert.throws(() =>
+		loadPlatformConfig({ ...base, DEPLOYMENT_TARGET: 'identity', DEPLOYMENT_ENVIRONMENT: 'next' })
+	)
+	assert.throws(() =>
+		loadPlatformConfig({
+			...base,
+			DEPLOYMENT_TARGET: 'platform',
+			DEPLOYMENT_ENVIRONMENT: 'identity'
+		})
+	)
 })
 
 test('validates exact SSH CIDRs', () => {

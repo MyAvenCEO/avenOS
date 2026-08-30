@@ -9,7 +9,8 @@ rails; do not improvise a permanent repair on a failed host.
 ## First ten minutes
 
 1. Open the failed GitHub operations or deployment run.
-2. Run `./tools/stack-observe/run.sh <identity|platform> status`.
+2. Select the affected target's Pulumi stack and run
+   `./tools/stack-observe/run.sh <identity|platform> status`.
 3. Capture relevant fixed-scope logs before restarting or replacing anything.
 4. Classify the event: availability, security, data integrity, capacity, or provider.
 5. Record detection time, affected surfaces, current customer impact, and the person
@@ -39,10 +40,16 @@ separate read-only SQL role.
 Check the narrowest owning boundary:
 
 - identity and passkeys: `aven.id` and the identity database;
-- checkout, email, billing, and Polar: checkout workers and checkout database;
-- authorization or routing: facade and platform control database;
+- checkout, email, billing, and Polar: the affected environment's checkout workers
+  and checkout database;
+- authorization or routing: the affected environment's facade and platform control
+  database;
 - one customer's product data: that customer database and component schema;
 - public site: managed site state, Git source/artifact revisions, and Caddy.
+
+Check whether the failure is limited to `next`, limited to production, or shared
+through `aven.id`. Do not copy data or credentials between platform environments to
+make one appear healthy.
 
 Do not put tokens, cookies, passkey challenges, database URLs, raw email, provider
 secrets, or customer documents/chat content into incident notes.

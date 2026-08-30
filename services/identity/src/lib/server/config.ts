@@ -10,6 +10,21 @@ const fingerprints = z
 			.map((entry) => entry.trim())
 			.filter(Boolean)
 	)
+const provisioningSecrets = z.string().transform((value, context) => {
+	const secrets = value
+		.split(',')
+		.map((entry) => entry.trim())
+		.filter(Boolean)
+	if (!secrets.length || secrets.some((secret) => secret.length < 32)) {
+		context.addIssue({ code: 'custom', message: 'must contain secrets of at least 32 characters' })
+		return z.NEVER
+	}
+	if (new Set(secrets).size !== secrets.length) {
+		context.addIssue({ code: 'custom', message: 'must not contain duplicate secrets' })
+		return z.NEVER
+	}
+	return secrets
+})
 
 export const identityConfigSchema = z
 	.object({
@@ -32,7 +47,7 @@ export const identityConfigSchema = z
 			.regex(/^postgres(ql)?:\/\//)
 			.optional(),
 		BETTER_AUTH_SECRET: z.string().min(32),
-		IDENTITY_PROVISIONING_SECRET: z.string().min(32),
+		IDENTITY_PROVISIONING_SECRETS: provisioningSecrets,
 		REQUIRE_PASSKEY_PRF: bool.default(false),
 		SESSION_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(43_200),
 		SESSION_UPDATE_AGE_SECONDS: z.coerce.number().int().positive().default(3_600),

@@ -75,8 +75,14 @@ docker run "${common[@]}" --env PGHOST="$source_db" --env PGUSER=aven_backup --e
   --volume "$scratch/source-state:/var/lib/aven-backups" "$image" health
 
 start_database "$target_db"
+if docker run "${common[@]}" --env PGHOST="$target_db" --env PGUSER=postgres --env PGPASSWORD=recovery-test \
+  --env BACKUP_ENVIRONMENT=production --env RESTORE_CONFIRMATION=fresh-target-only \
+  --volume "$scratch/target-state:/var/lib/aven-backups" "$image" restore; then
+  echo 'restore unexpectedly accepted another environment snapshot' >&2
+  exit 1
+fi
 docker run "${common[@]}" --env PGHOST="$target_db" --env PGUSER=postgres --env PGPASSWORD=recovery-test \
-  --env RESTORE_CONFIRMATION=fresh-target-only \
+  --env BACKUP_ENVIRONMENT=ci --env RESTORE_CONFIRMATION=fresh-target-only \
   --volume "$scratch/target-state:/var/lib/aven-backups" "$image" restore
 
 identity_label=$(docker exec "$target_db" psql --username postgres --dbname aven_identity \
@@ -96,14 +102,14 @@ restored_reader=$(docker exec "$target_db" psql --username postgres --dbname ave
 [[ "$restored_reader" == 't' ]]
 
 if docker run "${common[@]}" --env PGHOST="$target_db" --env PGUSER=postgres --env PGPASSWORD=recovery-test \
-  --env RESTORE_CONFIRMATION=fresh-target-only \
+  --env BACKUP_ENVIRONMENT=ci --env RESTORE_CONFIRMATION=fresh-target-only \
   --volume "$scratch/target-state:/var/lib/aven-backups" "$image" restore; then
   echo 'restore unexpectedly overwrote a populated target' >&2
   exit 1
 fi
 if docker run "${common[@]}" --env PGHOST="$target_db" --env PGUSER=postgres --env PGPASSWORD=recovery-test \
   --env RESTIC_PASSWORD=wrong-password \
-  --env RESTORE_CONFIRMATION=fresh-target-only \
+  --env BACKUP_ENVIRONMENT=ci --env RESTORE_CONFIRMATION=fresh-target-only \
   --volume "$scratch/target-state:/var/lib/aven-backups" "$image" restore; then
   echo 'restore unexpectedly accepted the wrong encryption key' >&2
   exit 1

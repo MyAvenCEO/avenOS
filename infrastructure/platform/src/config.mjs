@@ -13,12 +13,6 @@ function positiveInteger(env, name, fallback) {
 	return Number(value)
 }
 
-function booleanValue(env, name, fallback) {
-	const value = env[name]?.toString().trim() || fallback.toString()
-	if (value !== 'true' && value !== 'false') throw new Error(`${name} must be true or false`)
-	return value === 'true'
-}
-
 export function parseSshCidrs(value) {
 	const cidrs = value
 		.split(',')
@@ -47,32 +41,47 @@ export function isOpenSshPublicKey(value) {
 }
 
 export function loadPlatformConfig(env = process.env) {
+	const target = required(env, 'DEPLOYMENT_TARGET')
+	const environment = required(env, 'DEPLOYMENT_ENVIRONMENT')
+	if (target !== 'identity' && target !== 'platform')
+		throw new Error('DEPLOYMENT_TARGET must be identity or platform')
+	if (
+		target === 'identity'
+			? environment !== 'identity'
+			: !['next', 'production'].includes(environment)
+	)
+		throw new Error(
+			'identity targets require identity; platform targets require next or production'
+		)
 	const architecture = required(env, 'HETZNER_SERVER_ARCHITECTURE')
 	if (architecture !== 'amd64') throw new Error('published images require amd64')
-	const identityVolumeSize = positiveInteger(env, 'IDENTITY_VOLUME_SIZE_GB', 40)
-	const platformVolumeSize = positiveInteger(env, 'PLATFORM_VOLUME_SIZE_GB', 80)
-	if (identityVolumeSize < 30 || platformVolumeSize < 40)
+	const volumeSize =
+		target === 'identity'
+			? positiveInteger(env, 'IDENTITY_VOLUME_SIZE_GB', 40)
+			: positiveInteger(env, 'PLATFORM_VOLUME_SIZE_GB', 80)
+	if ((target === 'identity' && volumeSize < 30) || (target === 'platform' && volumeSize < 40))
 		throw new Error('identity volume must be >=30 GiB and platform volume >=40 GiB')
+	const hostnames =
+		environment === 'next'
+			? { apex: 'next.aven.ceo', api: 'api.next.aven.ceo', checkout: 'my.next.aven.ceo' }
+			: { apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'my.aven.ceo' }
 	return {
-		environment: env.DEPLOYMENT_ENVIRONMENT?.trim() || 'next',
+		target,
+		environment,
 		deployUser: 'aven-deploy',
 		identityDeploymentId: 'aven-identity-v1',
-		platformDeploymentId: 'aven-platform-v1',
-		identityHostname: env.IDENTITY_HOSTNAME?.trim() || 'aven.id',
-		platformHostnames: {
-			apex: 'aven.ceo',
-			api: 'api.aven.ceo',
-			checkout: 'my.aven.ceo'
-		},
+		platformDeploymentId: `aven-platform-${environment}-v1`,
+		identityHostname: 'aven.id',
+		platformHostnames: hostnames,
 		platformDnsZone: 'aven.ceo',
 		location: required(env, 'HETZNER_LOCATION'),
-		identityServerType: env.IDENTITY_SERVER_TYPE?.trim() || required(env, 'HETZNER_SERVER_TYPE'),
-		platformServerType: env.PLATFORM_SERVER_TYPE?.trim() || required(env, 'HETZNER_SERVER_TYPE'),
+		serverType:
+			target === 'identity'
+				? env.IDENTITY_SERVER_TYPE?.trim() || required(env, 'HETZNER_SERVER_TYPE')
+				: env.PLATFORM_SERVER_TYPE?.trim() || required(env, 'HETZNER_SERVER_TYPE'),
 		architecture,
 		osImage: required(env, 'HETZNER_OS_IMAGE'),
-		identityVolumeSize,
-		platformVolumeSize,
-		manageApexDns: booleanValue(env, 'MANAGE_AVEN_CEO_APEX_DNS', 'false'),
+		volumeSize,
 		sshAllowedCidrs: parseSshCidrs(required(env, 'SSH_ALLOWED_CIDRS'))
 	}
 }

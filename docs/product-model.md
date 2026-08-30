@@ -99,7 +99,6 @@ implementation does not provide:
   reading customer data;
 - a complete, versioned export/import path for all working intelligence;
 - a provider-neutral deployment path proven outside the current Hetzner composition;
-- an independently supported production target; or
 - server-side OCR and model-backed document understanding equivalent to the client's
   optional vision lane.
 

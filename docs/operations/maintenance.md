@@ -18,17 +18,19 @@ hourly backup runs on each host, and GitHub checks public and host health hourly
 
 ## Automated maintenance
 
-- `platform-operations` runs at minute 17 each hour after the first successful new
-  platform deployment.
-- It checks identity, API, checkout, and public-site HTTPS; host Compose state; data
-  volume usage; and backup freshness.
+- `platform-operations` runs an `identity`, `next`, and production job at minute 17
+  each hour once each target's Pulumi stack exists.
+- The jobs use the corresponding read-only `<target>-operations` GitHub Environment;
+  deployment approval rules never block scheduled monitoring.
+- It checks the target's public HTTPS origins, host Compose state, data volume use,
+  and backup freshness.
 - Data volume use at or above 85%, a missing/unhealthy backup container, or a backup
   older than two hours fails the workflow.
 - Docker retains five 10 MiB JSON files per container.
 - Journald is compressed, capped at 256 MiB persistent and 64 MiB runtime, and retains
   no more than 14 days.
-- Required security reboots are staggered: identity at 03:30 UTC and platform at
-  04:00 UTC.
+- Required security reboots are staggered by cloud-init: identity at 03:30 UTC and
+  each platform host at 04:00 UTC.
 
 GitHub failed-workflow notifications are the initial alert channel. A scheduled
 operations run stays dormant until the first successful deployment; a manual run is
@@ -36,8 +38,11 @@ always strict.
 
 ## Observe status and logs
 
-On a trusted workstation, export the Pulumi backend location, stack, state access
-credentials, and passphrase. Do not put secret values in repository files.
+On a trusted workstation, export the selected target's Pulumi backend location,
+stack, state access credentials, and passphrase. Do not put secret values in
+repository files. Select the `identity` stack for the identity commands, the `next`
+stack for staging platform commands, or the `production` stack for production
+platform commands.
 
 ```sh
 ./tools/stack-observe/run.sh identity ps
@@ -51,6 +56,9 @@ credentials, and passphrase. Do not put secret values in repository files.
 ./tools/stack-observe/run.sh platform check
 ```
 
+The word `platform` selects the host kind inside the chosen stack; it does not choose
+between `next` and production.
+
 The observer shows only fixed-scope Compose state, the last 300 log lines, disk use,
 and the latest backup marker. It cannot open a TTY, forward a port, or change state.
 
@@ -62,6 +70,9 @@ Open a host-key-pinned loopback tunnel:
 ./tools/db-tunnel/open.sh identity 55431
 ./tools/db-tunnel/open.sh platform 55432
 ```
+
+As with observation, `PULUMI_STACK` selects `next` or production before the
+`platform` command runs.
 
 The tunnel key permits only forwarding to host-loopback PostgreSQL. Connect through it
 with a separately issued, time-bounded, read-only database role. Do not use a runtime,

@@ -79,9 +79,10 @@ Ownership is checked against the verified `aven.id` subject on every
 mutation. Callers cannot create `aven.ceo` or its subdomains; those names are
 reserved for system-managed configuration.
 
-## The `aven.ceo` system site
+## Environment system sites
 
-The platform deployment seeds `aven.ceo` from `SYSTEM_SITES_JSON`:
+Each platform deployment seeds its reserved public site from `SYSTEM_SITES_JSON`.
+Production uses:
 
 ```json
 [
@@ -94,10 +95,11 @@ The platform deployment seeds `aven.ceo` from `SYSTEM_SITES_JSON`:
 ]
 ```
 
-System sites use operator verification, cannot be edited through the user API,
-and are visible only to an authenticated administrator in the Rust UI. The
-infrastructure workflow changes apex DNS only when its explicit **Move aven.ceo
-DNS** input is enabled.
+`next` uses `next.aven.ceo`, source branch `next`, and deployment branch
+`deploy/next`. System sites use operator verification, cannot be edited through the
+user API, and are visible only to an authenticated administrator in the Rust UI.
+Each platform Pulumi stack manages the A and AAAA records for its reserved system
+site.
 
 ## Runtime configuration
 
