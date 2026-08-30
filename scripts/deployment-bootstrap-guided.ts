@@ -30,6 +30,7 @@ import {
 	guidedCredentialsCsv,
 	hetznerProjectTokensUrl,
 	hetznerS3CredentialsUrl,
+	POLAR_API_KEY_SCOPES,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
 	savedWizardResumeIndex,
@@ -424,7 +425,7 @@ async function validatePolarCredential(input: {
 		break
 	}
 	reportStatus(
-		`✓ Polar ${input.target}: ${organization.name} (${organization.slug}, ${organization.id}); product and webhook read access confirmed${productCount === undefined ? '' : `, ${productCount} product(s)`}${webhookCount === undefined ? '' : `, ${webhookCount} webhook(s)`}.\n`
+		`✓ Polar ${input.target}: ${organization.name} (${organization.slug}, ${organization.id}); organization, product, and webhook read access confirmed${productCount === undefined ? '' : `, ${productCount} product(s)`}${webhookCount === undefined ? '' : `, ${webhookCount} webhook(s)`}. Mutation scopes are exercised during apply and checkout use.\n`
 	)
 }
 
@@ -750,9 +751,9 @@ function wizardSteps(): WizardStep[] {
 			{
 				chapter: 'Polar',
 				subchapter,
-				title: `avenOS ${target} bootstrap`,
-				stationLabel: 'Bootstrap API key',
-				description: `Open ${target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh'}\nName: avenOS ${target} bootstrap\n\nIn the organization above, create an API key with the displayed name and organization read plus product/webhook read-write access. Paste it below.`,
+				title: `avenOS ${target} billing`,
+				stationLabel: 'Billing API key',
+				description: `Open ${target === 'next' ? 'https://sandbox.polar.sh' : 'https://polar.sh'}\nName: avenOS ${target} billing\n\nSelect only these scopes:\n${POLAR_API_KEY_SCOPES.map((scope) => `  ${scope}`).join('\n')}\n\nThis backend token is used by bootstrap and the checkout service. Its expiry must cover production use and planned rotation. Paste it below.`,
 				path: ['providers', target, 'polarApiKey'],
 				label: 'Polar API key',
 				secret: true,

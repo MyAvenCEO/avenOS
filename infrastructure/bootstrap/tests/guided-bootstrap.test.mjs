@@ -7,6 +7,7 @@ import {
 	guidedCredentialsCsv,
 	hetznerProjectTokensUrl,
 	hetznerS3CredentialsUrl,
+	POLAR_API_KEY_SCOPES,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
 	savedWizardResumeIndex,
@@ -14,6 +15,20 @@ import {
 	signedS3ReadRequest,
 	valueAt
 } from '../../../scripts/lib/deployment-bootstrap-guided.ts'
+
+test('documents the least-privilege Polar scopes used by bootstrap and checkout', () => {
+	assert.deepEqual(POLAR_API_KEY_SCOPES, [
+		'organizations:read',
+		'products:write',
+		'benefits:write',
+		'meters:write',
+		'checkouts:write',
+		'subscriptions:write',
+		'customers:read',
+		'orders:read',
+		'webhooks:write'
+	])
+})
 
 test('counts only screens that require an answer', () => {
 	const steps = [{ info: true }, { info: true }, {}, {}, {}]

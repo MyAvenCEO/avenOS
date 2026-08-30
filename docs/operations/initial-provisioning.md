@@ -73,9 +73,12 @@ At the providers, create these values:
    shared `aven.ceo` zone, while their credentials and GitHub Environments remain separate.
    `aven.id` stays outside Hetzner DNS.
 5. In Polar sandbox and production, create organization API keys named
-   `avenOS next bootstrap` and `avenOS production bootstrap` with organization read and
-   product and webhook read/write scopes. The bootstrap creates or reconciles the endpoint
-   and captures its signing secret.
+   `avenOS next billing` and `avenOS production billing`. These backend tokens are used
+   by both provisioning and the checkout service. Select only `organizations:read`,
+   `products:write`, `benefits:write`, `meters:write`, `checkouts:write`,
+   `subscriptions:write`, `customers:read`, `orders:read`, and `webhooks:write`. Their
+   expiration must cover production use and planned rotation. The bootstrap creates or
+   reconciles the endpoint and captures its signing secret.
 6. Create send-only SMTP credentials named `avenOS next SMTP` and
    `avenOS production SMTP` when the provider supports names.
 7. Fund the RedPill account and create an active API key named `avenOS chat bootstrap`.

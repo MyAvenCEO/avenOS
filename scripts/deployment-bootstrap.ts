@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import {
 	assertPrivateFile,
 	type BootstrapInput,
+	ensurePrivateDirectory,
 	githubConfiguration,
 	githubEnvironmentProtection,
 	loadOrCreateGeneratedSecrets,
@@ -41,9 +42,7 @@ assertPrivateFile(inputPath)
 const parsedInput: unknown = JSON.parse(readFileSync(inputPath, 'utf8'))
 validateBootstrapInput(parsedInput)
 const input: BootstrapInput = parsedInput
-if (!existsSync(outputDirectory)) mkdirSync(outputDirectory, { recursive: true, mode: 0o700 })
-if ((statSync(outputDirectory).mode & 0o077) !== 0)
-	throw new Error(`${outputDirectory} must be owner-only (chmod 700).`)
+ensurePrivateDirectory(outputDirectory)
 
 const generatedPath = resolve(outputDirectory, 'bootstrap.generated.json')
 const recoveryPath = resolve(outputDirectory, 'avenos-recovery.csv')
@@ -94,7 +93,9 @@ async function run(
 }
 
 const bootstrapCwd = resolve(root, 'infrastructure/bootstrap')
-const localBackend = `file://${resolve(outputDirectory, 'pulumi-state')}`
+const localStateDirectory = resolve(outputDirectory, 'pulumi-state')
+ensurePrivateDirectory(localStateDirectory)
+const localBackend = `file://${localStateDirectory}`
 
 for (const target of TARGETS) {
 	const storage = input.objectStorage.targets[target]
