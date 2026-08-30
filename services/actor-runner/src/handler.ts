@@ -139,7 +139,10 @@ export function createActorRunnerHandler(
 			}
 			if (segments.length === 2 && request.method === 'POST') {
 				const command = parsePlanRunStartCommand(await readJson(request))
-				const handle = await runner.start({ ...command, security })
+				const handle = await runner.start(
+					{ ...command, security },
+					{ session: { identityToken: admitted.identityToken, sessionId: claims.sid } }
+				)
 				return json(202, handle)
 			}
 			const runId = segments[2]
@@ -171,7 +174,12 @@ export function createActorRunnerHandler(
 				if (submission.continuationId !== segments[4]) {
 					return json(400, { code: 'COMMAND_INVALID', message: 'continuation ID mismatch.' })
 				}
-				return json(202, await runner.resume(runId, submission))
+				return json(
+					202,
+					await runner.resume(runId, submission, {
+						session: { identityToken: admitted.identityToken, sessionId: claims.sid }
+					})
+				)
 			}
 			return json(404, { code: 'ROUTE_NOT_FOUND' })
 		} catch (error) {

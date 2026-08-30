@@ -4,6 +4,7 @@ import {
 	type PlanRunCheckpoint,
 	type PlanRunContinuation,
 	type PlanRunContinuationSubmission,
+	type PlanRunExecutionContext,
 	type PlanRunExecutionResult,
 	type PlanRunExecutor,
 	type PlanRunHandle,
@@ -54,7 +55,10 @@ export class SqlPlanRunner implements PlanRunner {
 		private readonly executor: PlanRunExecutor
 	) {}
 
-	async start(request: PlanRunStartRequest): Promise<PlanRunHandle> {
+	async start(
+		request: PlanRunStartRequest,
+		context?: PlanRunExecutionContext
+	): Promise<PlanRunHandle> {
 		const admitted = portableRunClone(request)
 		if (admitted.executionEnvironment !== 'server')
 			throw new Error('the server runner accepts only server placement')
@@ -104,7 +108,7 @@ export class SqlPlanRunner implements PlanRunner {
 				throw new PlanRunConflict('the idempotency key is already bound to another command')
 			return portableRunClone(handle(prior.record))
 		}
-		queueMicrotask(() => void this.execute(record.runId).catch(() => {}))
+		queueMicrotask(() => void this.execute(record.runId, context).catch(() => {}))
 		return portableRunClone(handle(record))
 	}
 
@@ -129,7 +133,11 @@ export class SqlPlanRunner implements PlanRunner {
 		return recovered
 	}
 
-	async resume(runId: string, submission: PlanRunContinuationSubmission): Promise<PlanRunHandle> {
+	async resume(
+		runId: string,
+		submission: PlanRunContinuationSubmission,
+		context?: PlanRunExecutionContext
+	): Promise<PlanRunHandle> {
 		portableRunClone(submission)
 		const row = (
 			await this.worker.query<{ record: PlanRunRecord }>(
@@ -151,7 +159,7 @@ export class SqlPlanRunner implements PlanRunner {
 		if (submission.kind !== continuation.kind) throw new Error('continuation kind mismatch')
 		try {
 			assertPlanRunTransition(record.state, 'running')
-			const result = await this.executor(this.#request(record), { submission })
+			const result = await this.executor(this.#request(record), { ...context, submission })
 			this.#applyResult(record, result, continuation)
 		} catch (error) {
 			record.state = 'failed'
@@ -189,7 +197,7 @@ export class SqlPlanRunner implements PlanRunner {
 		return portableRunClone(handle(record))
 	}
 
-	private async execute(runId: string): Promise<boolean> {
+	private async execute(runId: string, context?: PlanRunExecutionContext): Promise<boolean> {
 		const row = (
 			await this.worker.query<{ record: PlanRunRecord }>(
 				`SELECT record FROM runs WHERE id=$1 AND state='accepted'`,
@@ -199,7 +207,7 @@ export class SqlPlanRunner implements PlanRunner {
 		if (!row) return false
 		const record = row.record
 		try {
-			const result = await this.executor(this.#request(record))
+			const result = await this.executor(this.#request(record), context)
 			this.#applyResult(record, result)
 		} catch (error) {
 			record.state = 'failed'

@@ -28,7 +28,7 @@ export async function admitCustomerRequest(
 		componentRef: string
 		requiredAction: string
 	}
-): Promise<{ identity: IdentityClaims; tenant: TenantGrantClaims }> {
+): Promise<{ identity: IdentityClaims; identityToken: string; tenant: TenantGrantClaims }> {
 	const serviceBearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? ''
 	if (!equalSecret(serviceBearer, input.serviceToken)) throw new CustomerAdmissionError()
 	const identityToken = request.headers.get('x-aven-identity-token') ?? ''
@@ -53,7 +53,7 @@ export async function admitCustomerRequest(
 			tenant.role !== identity.role
 		)
 			throw new Error('identity and tenant grant binding mismatch')
-		return { identity, tenant }
+		return { identity, identityToken, tenant }
 	} catch (error) {
 		if (error instanceof IdentityAuthenticationError) throw new CustomerAdmissionError()
 		throw new CustomerAdmissionError()

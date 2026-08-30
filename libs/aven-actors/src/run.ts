@@ -153,6 +153,14 @@ export interface PlanRunExecutionResult {
 export interface PlanRunExecutionContext {
 	/** Present only for this invocation. The runner never adds it to the run record. */
 	submission?: Extract<PlanRunContinuationSubmission, { action: 'submit' }>
+	/**
+	 * Live session proof available only to the admitted in-process attempt.
+	 * It is never cloned into a command, record, checkpoint, continuation, or receipt.
+	 */
+	session?: {
+		identityToken: string
+		sessionId: string
+	}
 }
 
 /** Shared executor contract composed by local and server runner hosts. */
@@ -181,9 +189,13 @@ export type PlanRunContinuationSubmission =
 	  }
 
 export interface PlanRunner {
-	start(request: PlanRunStartRequest): Promise<PlanRunHandle>
+	start(request: PlanRunStartRequest, context?: PlanRunExecutionContext): Promise<PlanRunHandle>
 	status(runId: string): Promise<PlanRunRecord | null>
-	resume(runId: string, submission: PlanRunContinuationSubmission): Promise<PlanRunHandle>
+	resume(
+		runId: string,
+		submission: PlanRunContinuationSubmission,
+		context?: PlanRunExecutionContext
+	): Promise<PlanRunHandle>
 	cancel(runId: string, requestId: string): Promise<PlanRunHandle>
 }
 

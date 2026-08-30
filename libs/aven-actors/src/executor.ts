@@ -435,6 +435,7 @@ async function executeFactoryStep(
 			factoryId: step.target.factoryId
 		},
 		configuration: step.target.configuration,
+		inputs: authorizationInputs(inputs),
 		runId: request.runId,
 		...(request.resource && { resource: request.resource })
 	})
@@ -452,6 +453,7 @@ async function executeFactoryStep(
 			...step.target.configuration,
 			...spawnDecision.constraints?.forcedConfiguration
 		},
+		inputs: authorizationInputs(inputs),
 		...(request.resource && { resource: request.resource })
 	}
 	const admission = await factory.assess(spawnRequest)
@@ -477,6 +479,7 @@ async function executeFactoryStep(
 			method: step.method,
 			target: { kind: 'instance', instanceId: spawned.advertisement.instanceId },
 			configuration: admission.normalizedConfiguration,
+			inputs: authorizationInputs(inputs),
 			runId: request.runId,
 			...(request.resource && { resource: request.resource })
 		})
@@ -507,6 +510,19 @@ async function executeFactoryStep(
 	} finally {
 		await spawned.release()
 	}
+}
+
+function authorizationInputs(inputs: RuntimeInputBinding[]) {
+	return inputs.map(({ slot, role, artifact }) => ({
+		slot,
+		role,
+		artifactId: artifact.artifactId,
+		predicate: artifact.predicate,
+		schema: artifact.schema,
+		typeKey: artifact.typeKey,
+		schemaVersion: artifact.schemaVersion,
+		contentDigest: artifact.contentDigest
+	}))
 }
 
 async function dispatch(

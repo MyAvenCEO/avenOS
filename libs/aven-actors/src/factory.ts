@@ -1,5 +1,10 @@
 import type { Actor } from './actor'
-import type { ActorAccessContext, ActorPrincipal, AuthorizationConstraints } from './authorization'
+import type {
+	ActorAccessContext,
+	ActorAuthorizationInput,
+	ActorPrincipal,
+	AuthorizationConstraints
+} from './authorization'
 import type { ActorFactoryId, ActorOfferId, CapabilityId } from './ids'
 import type { ActorFactoryOffer, ActorInstanceAdvertisement } from './registry'
 
@@ -11,6 +16,8 @@ export interface ActorSpawnRequest {
 	offerId: ActorOfferId
 	requestedCapabilities: CapabilityId[]
 	configuration: Record<string, unknown>
+	/** Exact validated artifacts bound to the capability invocation. */
+	inputs: ActorAuthorizationInput[]
 	resource?: Record<string, unknown>
 }
 

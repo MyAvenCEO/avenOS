@@ -23,6 +23,11 @@ bun run test:checkout
 bun run test:customer-platform
 ```
 
+The customer-platform checks include the portable Actor runtime and HTTP-resource
+contracts. The HTTP-resource suite starts a loopback origin and proves authenticated
+redirect handling, exact response bytes, and ETag revalidation; it does not replace
+the full-stack customer-database isolation proof.
+
 Run the application unit tests separately:
 
 ```sh

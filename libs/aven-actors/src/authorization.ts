@@ -1,4 +1,5 @@
-import type { ActorFactoryId, ActorOfferId, CapabilityId } from './ids'
+import type { Predicate } from './actor'
+import type { ActorFactoryId, ActorOfferId, CapabilityId, SchemaId } from './ids'
 import type { Capability } from './planner'
 import type {
 	ActorAddress,
@@ -23,6 +24,18 @@ export interface ActorAccessContext {
 
 export type ActorAuthorizationAction = 'discover' | 'plan' | 'spawn' | 'invoke'
 
+/** Immutable input identity available to execution-time policy decisions. */
+export interface ActorAuthorizationInput {
+	slot: string
+	role: string
+	artifactId: string
+	predicate: Predicate
+	schema: SchemaId
+	typeKey: string
+	schemaVersion: number
+	contentDigest: string
+}
+
 export interface ActorAuthorizationRequest {
 	action: ActorAuthorizationAction
 	principal: ActorPrincipal
@@ -34,6 +47,8 @@ export interface ActorAuthorizationRequest {
 		| { kind: 'instance'; instanceId: string }
 		| { kind: 'factory'; offerId: ActorOfferId; factoryId: ActorFactoryId }
 	configuration?: Record<string, unknown>
+	/** Present only after the executor has resolved and validated the exact step inputs. */
+	inputs?: ActorAuthorizationInput[]
 	runId?: string
 	resource?: Record<string, unknown>
 }

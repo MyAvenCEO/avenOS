@@ -1,6 +1,6 @@
 # HTTP resource actors and credential routing
 
-Status: proposed architecture on the artifact-first enrichment branch
+Status: target architecture with request, Vault-matching, ETag, and live-session foundations implemented
 
 ## Purpose
 
@@ -16,13 +16,19 @@ signed URL assembled from a secret. A new customer-scoped Vault service selects 
 uses credentials immediately before the request, under a URL-scoped policy, and never
 publishes or returns the secret.
 
-This paper proposes that boundary. It extends the Actor, planner, and Artifact Store
+This paper specifies that boundary. It extends the Actor, planner, and Artifact Store
 model described in [Actors, skills, planning, and durable
 execution](generic-actor-registry-and-runtime.md) and the exploratory flow in
 [Artifact-first semantic enrichment and affordance
 discovery](artifact-first-semantic-enrichment.md). It is not a description of current
 HTTP-fetch behavior: the types, Actors, Vault component, and streaming runtime ports
-below do not exist yet.
+below are being implemented incrementally. `@avenos/http-resources` now owns the strict
+request contract, session-scoped Vault interfaces and matcher, private response-index
+port, redirect-aware acquisition core, and conditional-request behavior. Actor Runner
+also passes live identity proof to only the active execution attempt without retaining
+it. The customer-database Vault component, Artifact Store blob publication, HTTP Actor
+factory registration, response classification, and file materialization remain
+unimplemented.
 
 The current protocol-version-2 runtime slice can expand the guaranteed outputs of
 authorized non-effecting capabilities and produce an understanding bundle plus

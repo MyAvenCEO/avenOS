@@ -575,6 +575,26 @@ describe('deterministic actor runtime conformance slice', () => {
 		expect(run.factories.every((factory) => factory.spawned === factory.released)).toBe(true)
 		expect(run.authorizationCalls.filter((call) => call.action === 'spawn')).toHaveLength(3)
 		expect(run.authorizationCalls.filter((call) => call.action === 'invoke')).toHaveLength(3)
+		const inspectSpawn = run.authorizationCalls.find(
+			(call) => call.action === 'spawn' && call.method === 'inspect_fixture'
+		)
+		expect(inspectSpawn?.inputs).toEqual([
+			{
+				slot: 'source',
+				role: 'source',
+				artifactId: 'fixture-source',
+				predicate: sourcePredicate,
+				schema: SOURCE_SCHEMA,
+				typeKey: 'runtime.source',
+				schemaVersion: 1,
+				contentDigest: '899680f0bc5e21de91bcc866f1f68f47f856124939d72296b1aab18bae03a0a7'
+			}
+		])
+		expect(
+			run.authorizationCalls.find(
+				(call) => call.action === 'invoke' && call.method === 'inspect_fixture'
+			)?.inputs
+		).toEqual(inspectSpawn?.inputs)
 		expect(run.result.policyDecisionIds).toHaveLength(9)
 	})
 

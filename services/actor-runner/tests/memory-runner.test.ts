@@ -37,6 +37,21 @@ const request = (): PlanRunStartRequest => ({
 })
 
 describe('memory plan runner protocol reference', () => {
+	test('delivers live session proof to one attempt without persisting it', async () => {
+		let observedToken: string | undefined
+		const runner = new MemoryPlanRunner(async (_request, context) => {
+			observedToken = context?.session?.identityToken
+			return { remainingGoals: [] }
+		})
+		const started = await runner.start(request(), {
+			session: { identityToken: 'ephemeral.identity.jwt', sessionId: 'session-1' }
+		})
+		const record = await waitForState(runner, started.runId, 'succeeded')
+
+		expect(observedToken).toBe('ephemeral.identity.jwt')
+		expect(JSON.stringify(record)).not.toContain('ephemeral.identity.jwt')
+	})
+
 	test('replays one logical start while allowing a new request attempt ID', async () => {
 		const runner = new MemoryPlanRunner()
 		const firstRequest = { ...request(), parameters: { quality: 'standard', locale: 'de' } }
@@ -124,7 +139,11 @@ describe('memory plan runner protocol reference', () => {
 	})
 })
 
-async function waitForState(runner: MemoryPlanRunner, runId: string, state: 'waiting_for_input') {
+async function waitForState(
+	runner: MemoryPlanRunner,
+	runId: string,
+	state: 'waiting_for_input' | 'succeeded'
+) {
 	const deadline = Date.now() + 2_000
 	while (Date.now() < deadline) {
 		const record = await runner.status(runId)
