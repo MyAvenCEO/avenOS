@@ -5,6 +5,7 @@ import {
 	assertPrivateFile,
 	type BootstrapInput,
 	githubConfiguration,
+	githubEnvironmentProtection,
 	loadOrCreateGeneratedSecrets,
 	PULUMI_ORGANIZATION,
 	recoveryCsv,
@@ -192,22 +193,17 @@ else {
 
 const github = githubConfiguration(input, generated)
 
-const reviewerId = Number(
-	await run('gh', ['api', `users/${input.reviewer}`, '--jq', '.id'], { quiet: true })
-)
-if (!Number.isSafeInteger(reviewerId))
+const reviewerId = input.reviewer
+	? Number(await run('gh', ['api', `users/${input.reviewer}`, '--jq', '.id'], { quiet: true }))
+	: undefined
+if (reviewerId !== undefined && !Number.isSafeInteger(reviewerId))
 	throw new Error(`Could not resolve GitHub reviewer ${input.reviewer}.`)
 
 for (const [environment, settings] of Object.entries(github)) {
 	const protectedDeployment = TARGETS.some(
 		(target) => environment === `${generated.deploymentPrefix}-${target}`
 	)
-	const body = {
-		wait_timer: 0,
-		prevent_self_review: protectedDeployment,
-		reviewers: protectedDeployment ? [{ type: 'User', id: reviewerId }] : [],
-		deployment_branch_policy: { protected_branches: true, custom_branch_policies: false }
-	}
+	const body = githubEnvironmentProtection(protectedDeployment, reviewerId)
 	await run(
 		'gh',
 		[

@@ -12,7 +12,7 @@ export interface S3Credential {
 
 export interface BootstrapInput {
 	repository: string
-	reviewer: string
+	reviewer?: string
 	objectStorage: {
 		projectId: string
 		region: 'fsn1' | 'nbg1' | 'hel1'
@@ -89,8 +89,8 @@ export function validateBootstrapInput(value: unknown): asserts value is Bootstr
 	const input = objectAt(value, 'input')
 	if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(stringAt(input.repository, 'repository')))
 		throw new Error('repository must be owner/name.')
-	if (!/^[A-Za-z0-9-]+$/.test(stringAt(input.reviewer, 'reviewer')))
-		throw new Error('reviewer must be a GitHub user login.')
+	if (input.reviewer !== undefined && !/^[A-Za-z0-9-]+$/.test(stringAt(input.reviewer, 'reviewer')))
+		throw new Error('reviewer must be a GitHub user login when provided.')
 	const storage = objectAt(input.objectStorage, 'objectStorage')
 	if (!/^\d+$/.test(stringAt(storage.projectId, 'objectStorage.projectId')))
 		throw new Error('objectStorage.projectId must be numeric.')
@@ -423,4 +423,14 @@ export function githubConfiguration(input: BootstrapInput, generated: GeneratedS
 		})
 	}
 	return result
+}
+
+export function githubEnvironmentProtection(protectedDeployment: boolean, reviewerId?: number) {
+	const requiresReview = protectedDeployment && reviewerId !== undefined
+	return {
+		wait_timer: 0,
+		prevent_self_review: requiresReview,
+		reviewers: requiresReview ? [{ type: 'User', id: reviewerId }] : [],
+		deployment_branch_policy: { protected_branches: true, custom_branch_policies: false }
+	}
 }

@@ -1,6 +1,5 @@
 {
 	"repository": "MyAvenCEO/avenOS",
-	"reviewer": "second-github-operator",
 	"objectStorage": {
 		"projectId": "1234567",
 		"region": "hel1",
