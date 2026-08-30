@@ -189,6 +189,11 @@ deployment has occurred.
 [Build and test](docs/operations/build-and-test.md) lists the complete release gate,
 component commands, platform requirements, and the behavior covered by each test.
 
+Operators preparing a fresh hosted installation start with
+[Initial provisioning](docs/operations/initial-provisioning.md). One local command creates
+the six private storage buckets, generates recovery passwords, and configures a fresh
+namespaced set of GitHub Environments before the three hosts are provisioned.
+
 ## Find the code
 
 | Path | What it owns |
@@ -204,6 +209,7 @@ component commands, platform requirements, and the behavior covered by each test
 | `services/static-site-host/` | Verified managed static hosting |
 | `libs/` | Shared identity, customer-runtime, Actor, artifact, document, UI, and native libraries |
 | `infrastructure/platform/` | Pulumi resources for the identity and platform hosts |
+| `infrastructure/bootstrap/` | Pulumi resources for private state and backup storage |
 | `deploy/` | Local, E2E, deployment, backup, and recovery automation |
 | `docs/operations/` | The authoritative operations handbook |
 
@@ -240,17 +246,18 @@ or edit files on either server.
 Start with the [operations handbook](docs/operations/README.md). Its chapters cover:
 
 - [access, generated credentials, and secrets](docs/operations/access-and-secrets.md);
+- [bootstrapping storage and GitHub](docs/operations/initial-provisioning.md);
 - [deploying shared identity, `next`, and production](docs/operations/deployment.md);
 - [routine maintenance and observation](docs/operations/maintenance.md);
 - [backup, restore, and fresh-host recovery](docs/operations/backup-and-recovery.md);
   and
 - [bounded incident access and response](docs/operations/incident-response.md).
 
-The `identity`, `next`, and `production` GitHub Environments use separate Pulumi
-stacks and protected approvals. Promotion changes a Git reference; deployment still
-requires an explicit target and exact ref. Production cannot read the `next` platform
-state or backup path. Each platform reads only its own generated provisioning token
-from the shared identity stack.
+The active namespaced GitHub Environments use separate Pulumi stacks and protected
+approvals. Promotion changes a Git reference; deployment still requires an explicit
+target and exact ref. Production cannot read the `next` platform state or backup path.
+Each platform generates its own identity provisioning token; the protected identity
+deployment reads both platform states to admit those exact callers.
 
 Hosts carry no irreplaceable configuration. Git, encrypted Pulumi state, and
 encrypted off-host logical backups are the recovery sources of truth. Disaster

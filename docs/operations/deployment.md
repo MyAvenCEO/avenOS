@@ -24,15 +24,18 @@ deployment receives identity-state or cross-platform-state access.
 
 ## Before the first deployment
 
-Complete [Access and secrets](access-and-secrets.md) for all three GitHub
-Environments. You need repository administration, Hetzner compute access, write
-access to the Hetzner-hosted `aven.ceo` zone, access to the external DNS provider for
-`aven.id`, and the three state and backup records in recovery escrow.
+Complete [Initial provisioning](initial-provisioning.md). It creates a fresh namespaced
+set of six GitHub Environments, the state and backup buckets, their policies, and the
+recovery record. You still need repository administration, provider-issued credentials,
+and access to the external DNS provider for `aven.id`.
 
 Prove the candidate through [Build and test](build-and-test.md). The deployment
 workflow repeats the release-critical gate before publishing images.
 
 ## Provision fresh infrastructure
+
+The workflows select physical Environments through the repository variable
+`DEPLOYMENT_ENVIRONMENT_PREFIX`; do not type or reuse a physical Environment name.
 
 Run `platform-infrastructure` once for each target. Begin with `command: preview` and
 review one protected server, one protected volume, one firewall, generated SSH
@@ -93,12 +96,14 @@ workflow does not accept those security-sensitive values as free-form inputs.
 Every deployment:
 
 1. repeats static, unit, Rust, infrastructure, recovery, and full-stack E2E checks;
-2. builds non-root images and records immutable GHCR digests;
-3. reads generated keys and secrets from the selected Pulumi state;
-4. installs a mode-`0600` bundle through the fixed host wrapper;
-5. creates or rotates exact database roles;
-6. runs migrations and customer reconciliation; and
-7. requires Compose, backup, static-site, and public readiness.
+2. resolves the live Phala-hosted RedPill chat catalog and rejects invalid metadata;
+3. builds non-root images and records immutable GHCR digests;
+4. reads generated keys and secrets from the selected Pulumi state;
+5. installs a mode-`0600` bundle through the fixed host wrapper;
+6. creates or rotates exact database roles;
+7. runs migrations, Polar product-manifest convergence, and customer reconciliation;
+   and
+8. requires Compose, backup, static-site, and public readiness.
 
 The exact dependency graph is in
 [Startup and readiness](startup-and-readiness.md). No operator opens SSH, writes a

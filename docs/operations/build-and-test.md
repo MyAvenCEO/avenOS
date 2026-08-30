@@ -68,11 +68,15 @@ These tests do not contact Hetzner:
 
 ```sh
 bun run test:infra
+bun run test:bootstrap
 bun run test:deploy
 bun run test:recovery
 ```
 
 - `test:infra` evaluates the Pulumi program and security-sensitive cloud-init output.
+- `test:bootstrap` proves bucket-policy isolation, namespaced GitHub configuration,
+  all-event Polar webhook reconciliation, live-model catalog conversion, and mode-`0600`
+  recovery output without contacting a provider.
 - `test:deploy` validates shell scripts, production Compose files, Caddy
   configuration, dependency order, non-root images, and secret-safe build contexts.
 - `test:recovery` creates source databases, takes encrypted backups, restores fresh
@@ -128,6 +132,7 @@ For a clean local release candidate, run:
 ```sh
 bun install --frozen-lockfile
 bun run lint
+bun run check:docs
 bun run check
 bun run check:identity
 bun run check:api
@@ -142,6 +147,7 @@ bun run build:identity
 bun run build:api
 bun run build:checkout
 bun run test:infra
+bun run test:bootstrap
 bun run test:deploy
 bun run test:recovery
 bun run test:e2e:platform

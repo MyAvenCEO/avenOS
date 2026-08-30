@@ -10,16 +10,38 @@ permissions:
   contents: read
 
 jobs:
+  validate-environment-prefix:
+    runs-on: ubuntu-latest
+    outputs:
+      active: ${{ steps.prefix.outputs.active }}
+    steps:
+      - name: Validate the active infrastructure generation
+        id: prefix
+        env:
+          DEPLOYMENT_ENVIRONMENT_PREFIX: ${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DEPLOYMENT_ENVIRONMENT_PREFIX" && "$EVENT_NAME" == schedule ]]; then
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            echo 'No infrastructure generation is active; scheduled monitoring is dormant.'
+            exit 0
+          fi
+          [[ "$DEPLOYMENT_ENVIRONMENT_PREFIX" =~ ^avenos-[0-9a-f]{10}$ ]]
+          echo 'active=true' >> "$GITHUB_OUTPUT"
+
   health:
+    needs: validate-environment-prefix
+    if: needs.validate-environment-prefix.outputs.active == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         target: [identity, next, production]
-    environment: ${{ format('{0}-operations', matrix.target) }}
+    environment: ${{ format('{0}-{1}-operations', vars.DEPLOYMENT_ENVIRONMENT_PREFIX, matrix.target) }}
     concurrency:
-      group: aven-platform-operations-${{ matrix.target }}
+      group: aven-platform-operations-${{ vars.DEPLOYMENT_ENVIRONMENT_PREFIX }}-${{ matrix.target }}
       cancel-in-progress: false
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.PULUMI_STATE_S3_ACCESS_KEY_ID }}
