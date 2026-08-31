@@ -215,7 +215,6 @@
 	.prose {
 		display: block;
 		max-inline-size: 65ch;
-		min-inline-size: 0;
 		font-size: var(--fs-body);
 		line-height: 1.6;
 		color: var(--color-foreground-soft);
@@ -223,6 +222,7 @@
 		container-type: inline-size;
 		container-name: prose;
 		inline-size: 100%;
+		min-inline-size: 0;
 
 		& h1 {
 			font-family: var(--font-display);
@@ -420,7 +420,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-tight);
-		min-inline-size: 0;
 		padding: var(--space-loose);
 		border-radius: var(--radius-lg);
 		border: 1px solid var(--color-border);
@@ -431,6 +430,7 @@
 		container-type: inline-size;
 		container-name: card;
 		inline-size: 100%;
+		min-inline-size: 0;
 
 		&:hover:not([disabled]):not([aria-disabled="true"]) {
 			transform: translateY(-2px);
@@ -1067,7 +1067,6 @@
 
 	.claim-card {
 		display: grid;
-		min-inline-size: 0;
 		border-radius: var(--radius-xl);
 		border: var(--rule-mark) solid var(--color-accent-border);
 		background: var(--color-surface-raised);
@@ -1076,6 +1075,7 @@
 		container-type: inline-size;
 		container-name: claim-card;
 		inline-size: 100%;
+		min-inline-size: 0;
 	}
 
 	.claim-card-body {
@@ -1240,9 +1240,7 @@
 		justify-items: center;
 		gap: var(--space-tight);
 		margin-inline: auto;
-		inline-size: 100%;
 		max-inline-size: 26rem;
-		min-inline-size: 0;
 		padding: var(--space-section) var(--space-loose);
 		border-radius: var(--radius-xl);
 		border: 1px solid var(--color-border);
@@ -1251,6 +1249,8 @@
 		text-align: center;
 		container-type: inline-size;
 		container-name: flow-card;
+		inline-size: 100%;
+		min-inline-size: 0;
 	}
 
 	.flow-card-eyebrow {
@@ -1443,7 +1443,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-tight);
-		min-inline-size: 0;
 		block-size: 100%;
 		padding: var(--space-loose);
 		border-radius: var(--radius-lg);
@@ -1452,6 +1451,7 @@
 		container-type: inline-size;
 		container-name: price-tier;
 		inline-size: 100%;
+		min-inline-size: 0;
 	}
 
 	.price-tier-name {
@@ -1526,11 +1526,11 @@
 		margin: 0;
 		padding: 0;
 		list-style: none;
-		min-inline-size: 0;
 		container-type: inline-size;
+		text-align: start;
 		container-name: row-list;
 		inline-size: 100%;
-		text-align: start;
+		min-inline-size: 0;
 	}
 
 	.row-list-row {
@@ -1598,7 +1598,6 @@
 		display: flex;
 		flex-direction: column;
 		aspect-ratio: 1;
-		min-inline-size: 0;
 		min-block-size: 0;
 		padding: 0.25rem;
 		border-radius: var(--radius-xl);
@@ -1612,6 +1611,7 @@
 		container-type: inline-size;
 		container-name: media-card;
 		inline-size: 100%;
+		min-inline-size: 0;
 
 		&:hover:not([disabled]):not([aria-disabled="true"]) {
 			background: var(--color-surface-sunken);
@@ -1703,10 +1703,11 @@
 	.media-frame {
 		position: relative;
 		display: block;
-		inline-size: 100%;
 		container-type: inline-size;
-		container-name: media-frame;
 		margin: 0;
+		container-name: media-frame;
+		inline-size: 100%;
+		min-inline-size: 0;
 	}
 
 	.media-frame-crop {
@@ -1790,10 +1791,11 @@
 	.pair {
 		position: relative;
 		display: grid;
-		inline-size: 100%;
 		container-type: inline-size;
-		container-name: pair;
 		gap: var(--gap, var(--space-loose));
+		container-name: pair;
+		inline-size: 100%;
+		min-inline-size: 0;
 
 		&::before {
 			content: '';
@@ -1846,7 +1848,6 @@
 		display: grid;
 		gap: 0.15rem;
 		inline-size: 15rem;
-		min-inline-size: 0;
 		padding: var(--space-tight) var(--space-comfortable);
 		border-radius: var(--radius-md);
 		border: 1px solid var(--color-border);
@@ -1856,6 +1857,7 @@
 		transition: border-color var(--duration-quick) var(--ease-out), box-shadow var(--duration-quick) var(--ease-out);
 		container-type: inline-size;
 		container-name: flow-node;
+		min-inline-size: 0;
 
 		&:hover:not([disabled]):not([aria-disabled="true"]) {
 			border-color: var(--color-border-strong);
@@ -2154,12 +2156,12 @@
 		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: start;
 		gap: var(--space-comfortable);
-		min-inline-size: 0;
 		padding-block: var(--space-comfortable);
 		border-block-end: 1px solid var(--color-border-soft);
 		container-type: inline-size;
 		container-name: setting-row;
 		inline-size: 100%;
+		min-inline-size: 0;
 	}
 
 	.setting-row-copy {
@@ -2202,7 +2204,6 @@
 	.thread-item {
 		display: grid;
 		gap: 0.1rem;
-		min-inline-size: 0;
 		padding: var(--space-tight) var(--space-comfortable);
 		border-radius: var(--radius-sm);
 		color: inherit;
@@ -2211,6 +2212,7 @@
 		container-type: inline-size;
 		container-name: thread-item;
 		inline-size: 100%;
+		min-inline-size: 0;
 
 		&:hover:not([disabled]):not([aria-disabled="true"]) {
 			background: var(--color-muted);
@@ -2298,7 +2300,6 @@
 	.viewer-frame {
 		display: flex;
 		flex-direction: column;
-		min-inline-size: 0;
 		min-block-size: 0;
 		block-size: 100%;
 		border-radius: var(--radius-md);
@@ -2308,6 +2309,7 @@
 		container-type: inline-size;
 		container-name: viewer-frame;
 		inline-size: 100%;
+		min-inline-size: 0;
 	}
 
 	.viewer-frame-toolbar {
@@ -2584,8 +2586,6 @@
 
 	.gate-card {
 		display: grid;
-		min-inline-size: 0;
-		inline-size: 100%;
 		overflow: hidden;
 		border-radius: var(--radius-lg);
 		border: 0;
@@ -2594,6 +2594,8 @@
 		color: var(--color-foreground);
 		container-type: inline-size;
 		container-name: gate-card;
+		inline-size: 100%;
+		min-inline-size: 0;
 	}
 
 	.gate-card-head {
@@ -2683,12 +2685,12 @@
 	.prompt-bar {
 		display: grid;
 		gap: var(--space-hairline);
-		inline-size: 100%;
-		min-inline-size: 0;
 		padding: var(--space-tight);
 		padding-block-end: max(var(--space-tight), env(safe-area-inset-bottom));
 		container-type: inline-size;
 		container-name: prompt-bar;
+		inline-size: 100%;
+		min-inline-size: 0;
 
 		@media (prefers-reduced-motion: reduce) {
 			transition: none;
@@ -2771,11 +2773,11 @@
 		display: grid;
 		gap: var(--space-comfortable);
 		margin-inline: auto;
-		inline-size: 100%;
 		max-inline-size: 38rem;
-		min-inline-size: 0;
 		container-type: inline-size;
 		container-name: payment-frame;
+		inline-size: 100%;
+		min-inline-size: 0;
 	}
 
 	.payment-frame-stage {
@@ -3236,10 +3238,10 @@
 		display: grid;
 		gap: var(--space-hairline);
 		container-type: inline-size;
+		--icon-tint: var(--color-icon-tint);
 		container-name: field;
 		inline-size: 100%;
 		min-inline-size: 0;
-		--icon-tint: var(--color-icon-tint);
 	}
 
 	.field-label {
@@ -3412,10 +3414,10 @@
 		box-shadow: var(--shadow-overlay);
 		color: var(--color-foreground);
 		container-type: inline-size;
+		--icon-tint: var(--color-icon-tint);
 		container-name: toast;
 		inline-size: 100%;
 		min-inline-size: 0;
-		--icon-tint: var(--color-icon-tint);
 
 		@media (prefers-reduced-motion: reduce) {
 			transition: opacity var(--duration-quick) ease-out;
@@ -3496,10 +3498,10 @@
 
 	.table {
 		display: block;
-		inline-size: 100%;
-		min-inline-size: 0;
 		container-type: inline-size;
 		container-name: table;
+		inline-size: 100%;
+		min-inline-size: 0;
 	}
 
 	.table-scroller {
@@ -3553,8 +3555,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0;
-		inline-size: 100%;
-		min-inline-size: 0;
 		padding: var(--space-comfortable);
 		border-inline-end: 1px solid var(--color-border-soft);
 		background: var(--color-surface-raised);
@@ -3562,6 +3562,8 @@
 		padding-inline: var(--space-tight);
 		container-type: inline-size;
 		container-name: sidebar;
+		inline-size: 100%;
+		min-inline-size: 0;
 
 		& > :first-child {
 			flex-basis: auto;
@@ -3689,6 +3691,7 @@
 		box-shadow: var(--shadow-overlay);
 		container-type: inline-size;
 		container-name: modal;
+		min-inline-size: 0;
 	}
 
 	.modal-backdrop {
@@ -4053,10 +4056,10 @@
 		border-block-end: 1px solid var(--color-border-soft);
 		transition: background var(--duration-moderate) var(--ease-out), border-color var(--duration-moderate) var(--ease-out);
 		container-type: inline-size;
+		--icon-tint: var(--color-icon-tint);
 		container-name: navbar;
 		inline-size: 100%;
 		min-inline-size: 0;
-		--icon-tint: var(--color-icon-tint);
 
 		@media (prefers-reduced-motion: reduce) {
 			transition: none;
@@ -4215,15 +4218,16 @@
 	.nav-menu {
 		position: fixed;
 		inset: 0;
-		inline-size: 100%;
 		z-index: var(--z-overlay);
 		display: grid;
 		container-type: inline-size;
-		container-name: nav-menu;
 		visibility: hidden;
 		opacity: 0;
 		transition: opacity var(--duration-moderate) var(--ease-out), visibility var(--duration-moderate);
 		--icon-tint: var(--color-icon-tint);
+		container-name: nav-menu;
+		inline-size: 100%;
+		min-inline-size: 0;
 
 		&[data-open="true"] {
 			visibility: visible;
@@ -4837,6 +4841,7 @@
 		container-type: inline-size;
 		container-name: company;
 		inline-size: 100%;
+		min-inline-size: 0;
 	}
 
 	.company-head {
@@ -5227,6 +5232,7 @@
 		container-type: inline-size;
 		container-name: home-hero;
 		inline-size: 100%;
+		min-inline-size: 0;
 
 		& [data-emph='past'] {
 			color: var(--color-on-dark);
