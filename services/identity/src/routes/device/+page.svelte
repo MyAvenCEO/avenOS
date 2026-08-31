@@ -66,8 +66,23 @@ async function approve() {
 }
 </script>
 <svelte:head><title>Authorize device · aven.id</title></svelte:head>
-<section class="device-flow" aria-live="polite">
-	<div class:success={approved} class:error={!code || Boolean(message)} class="device-flow__icon">
+
+<!--
+  The `flow-card` actor. This screen is one of the three its description
+  names — avenID device authorisation, my.aven.ceo's name check and its
+  passkey sign-in are the same shape, which is what made it an actor rather
+  than a component here.
+
+  The `device-flow__*` BEM island this replaces was that shape written once,
+  by hand, in this file: a crest, an eyebrow, a heading, a description, a
+  code to read aloud, an alert, an action and a line saying who you are
+  talking to. Those are the actor's slots, one for one.
+-->
+<section
+	class="flow-card {approved ? 'flow-card--status-success' : !code || message ? 'flow-card--status-error' : ''}"
+	aria-live="polite"
+>
+	<div class="flow-card-crest">
 		{#if approved}
 			<svg viewBox="0 0 24 24" aria-hidden="true">
 				<path d="m5 12.5 4.25 4.25L19 7" />
@@ -85,31 +100,35 @@ async function approve() {
 		{/if}
 	</div>
 
-	<p class="device-flow__eyebrow">Secure app connection</p>
-	<h1>{heading}</h1>
-	<p class="device-flow__description">{description}</p>
+	<p class="flow-card-eyebrow">Secure app connection</p>
+	<h1 class="flow-card-heading">{heading}</h1>
+	<p class="flow-card-description">{description}</p>
 
 	{#if displayCode}
-		<div class="device-flow__code">
-			<span>Code: {code}</span>
-			<strong>{displayCode}</strong>
-		</div>
+		<!-- The code part IS the code: it carries `user-select: all` so one click
+		     takes the whole thing, which a label inside it would join. The old
+		     markup put "Code: ABCDEFGH" in there beside the formatted
+		     "ABCD-EFGH" — the same code twice, and a copy that picked up both.
+		     The label is a real <label>-ish line above it instead. -->
+		<p class="text text--label" id="device-code-label">Device code</p>
+		<div class="flow-card-code" aria-labelledby="device-code-label">{displayCode}</div>
 	{/if}
 	{#if message}
-		<div class="alert" role="alert">{message}</div>
+		<div class="flow-card-alert" role="alert">{message}</div>
 	{/if}
 	{#if !approved && authenticated}
-		<button disabled={busy || !code} onclick={approve}>
-			{busy ? 'Authorizing…' : 'Authorize'}
-		</button>
+		<div class="flow-card-actions">
+			<button class="btn btn--primary" disabled={busy || !code} onclick={approve}>
+				{busy ? 'Authorizing…' : 'Authorize'}
+			</button>
+		</div>
 	{:else if !approved && code}
-		<button disabled={busy} onclick={login}>
-			{busy ? 'Opening passkeys…' : 'Continue with passkey'}
-		</button>
+		<div class="flow-card-actions">
+			<button class="btn btn--primary" disabled={busy} onclick={login}>
+				{busy ? 'Opening passkeys…' : 'Continue with passkey'}
+			</button>
+		</div>
 	{/if}
 
-	<div class="device-flow__trust">
-		<span></span>
-		Securely connected through aven.id
-	</div>
+	<p class="flow-card-trust">Securely connected through aven.id</p>
 </section>

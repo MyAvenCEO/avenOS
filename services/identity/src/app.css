@@ -213,126 +213,6 @@ p {
 	width: 100%;
 }
 
-.device-flow {
-	display: grid;
-	justify-items: center;
-	width: min(100%, 32rem);
-	margin-inline: auto;
-	padding: clamp(2rem, 6vw, 3.25rem);
-	border: 1px solid var(--border-soft);
-	border-radius: 2rem;
-	background: rgba(255, 253, 247, 0.82);
-	box-shadow: 0 2rem 6rem rgba(30, 41, 59, 0.12);
-	text-align: center;
-	backdrop-filter: blur(1.25rem);
-}
-
-.device-flow__icon {
-	display: grid;
-	place-items: center;
-	width: 4rem;
-	height: 4rem;
-	margin-bottom: 1.5rem;
-	border-radius: 1rem;
-	background: var(--marine);
-	box-shadow: 0 0.8rem 2rem rgba(30, 41, 59, 0.16);
-	color: var(--chalk);
-}
-
-.device-flow__icon.success {
-	background: var(--color-paradise-water);
-}
-
-.device-flow__icon.error {
-	background: var(--terracotta);
-}
-
-.device-flow__icon svg {
-	width: 1.75rem;
-	height: 1.75rem;
-	fill: none;
-	stroke: currentColor;
-	stroke-width: 1.7;
-	stroke-linecap: round;
-	stroke-linejoin: round;
-}
-
-.device-flow__eyebrow {
-	margin-bottom: 0.7rem;
-	color: var(--quiet);
-	font-size: 0.7rem;
-	font-weight: 700;
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
-}
-
-.device-flow h1 {
-	max-width: 25rem;
-	font-size: clamp(1.75rem, 5vw, 2.35rem);
-	line-height: 1.12;
-	letter-spacing: -0.035em;
-}
-
-.device-flow__description {
-	max-width: 25rem;
-	margin-top: 1rem;
-	color: var(--muted);
-	font-size: 0.95rem;
-	line-height: 1.65;
-}
-
-.device-flow__code {
-	display: grid;
-	gap: 0.35rem;
-	width: 100%;
-	margin-top: 1.75rem;
-	padding: 1rem 1.25rem;
-	border: 1px solid var(--border-soft);
-	border-radius: 1rem;
-	background: rgba(246, 243, 232, 0.78);
-}
-
-.device-flow__code span {
-	color: var(--quiet);
-	font-size: 0.65rem;
-	font-weight: 650;
-	letter-spacing: 0.15em;
-	text-transform: uppercase;
-}
-
-.device-flow__code strong {
-	color: var(--marine);
-	font-family: "JetBrains Mono", ui-monospace, monospace;
-	font-size: 1.25rem;
-	letter-spacing: 0.17em;
-}
-
-.device-flow > .alert,
-.device-flow > button {
-	width: 100%;
-	margin-top: 1rem;
-}
-
-.device-flow > button {
-	min-height: 3.25rem;
-}
-
-.device-flow__trust {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
-	margin-top: 1.6rem;
-	color: var(--quiet);
-	font-size: 0.72rem;
-}
-
-.device-flow__trust span {
-	width: 0.4rem;
-	height: 0.4rem;
-	border-radius: 999px;
-	background: var(--color-paradise-water);
-}
-
 @media (max-width: 40rem) {
 	.site {
 		width: min(100% - 1.25rem, 72rem);
@@ -340,10 +220,6 @@ p {
 
 	main.site {
 		padding-block: 2.5rem;
-	}
-
-	.device-flow {
-		border-radius: 1.5rem;
 	}
 
 	.passkeys li {
