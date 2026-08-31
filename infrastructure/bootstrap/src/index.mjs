@@ -4,6 +4,7 @@ import { loadBootstrapConfig } from './config.mjs'
 import { bucketPolicy } from './policy.mjs'
 
 const config = loadBootstrapConfig()
+const teardown = process.env.BOOTSTRAP_TEARDOWN === 'true'
 const provider = new minio.Provider('hetzner-object-storage', {
 	minioUser: pulumi.secret(config.bootstrapAccessKey),
 	minioPassword: pulumi.secret(config.bootstrapSecretKey),
@@ -13,7 +14,7 @@ const provider = new minio.Provider('hetzner-object-storage', {
 	minioInsecure: false
 })
 
-const protect = { provider, protect: true }
+const protect = { provider, protect: !teardown }
 const outputs = {}
 const adoptedBuckets = new Set(
 	(process.env.OBJECT_STORAGE_ADOPT_EXISTING_BUCKETS ?? '')
@@ -28,8 +29,12 @@ for (const kind of ['state', 'backup']) {
 	const name = `${config.prefix}-${config.projectId}-${config.target}-${kind}`
 	const bucket = new minio.S3Bucket(
 		`${config.target}-${kind}`,
-		{ bucket: name, acl: 'private', objectLocking: false, forceDestroy: false },
-		{ ...protect, ...(adoptedBuckets.has(kind) ? { import: name } : {}) }
+		{ bucket: name, acl: 'private', objectLocking: false, forceDestroy: teardown },
+		{
+			...protect,
+			...(teardown ? { ignoreChanges: ['bucket', 'acl', 'objectLocking'] } : {}),
+			...(adoptedBuckets.has(kind) ? { import: name } : {})
+		}
 	)
 	const versioning =
 		kind === 'state'

@@ -49,9 +49,13 @@ avenos-bootstrap-record/
 **/avenos-recovery.csv
 **/bootstrap-apply.log
 **/initial-rollout.log
+**/uninstall.log
 **/bootstrap-state-*.json
 **/bootstrap.*.remote
 **/pulumi-state/
+**/uninstall-pulumi-state/
+**/uninstall-platform-*.json
+**/uninstall-bootstrap-*.json
 
 # One-time identity deployment trust bootstrap files
 /aven-identity-next-deploy

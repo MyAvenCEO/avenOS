@@ -172,8 +172,8 @@ bun run bootstrap:deployment:guided -- --plain
 ```
 
 When the output directory contains one or both owner-only credential CSV files plus their
-machine-readable input and generated-secret companions, startup offers **Resume** or
-**Exit**. Resume first reopens the saved target selection, then rechecks every saved,
+machine-readable input and generated-secret companions, startup offers **Resume**,
+**Uninstall**, or **Exit**. Resume first reopens the saved target selection, then rechecks every saved,
 testable credential with read-only provider calls. The current credential and check count
 remain visible. A rejected credential opens its own station immediately so it can be
 replaced before Apply; otherwise the latest relevant saved station opens. Exit leaves every
@@ -254,6 +254,58 @@ exact names and types, for example `next CNAME blocks A and AAAA`. Remove the ob
 CNAME at the authoritative `aven.ceo` provider, return to the still-open wizard, and enter
 `retry`. Pulumi then creates and owns the required records; the conflict does not require
 a fresh bootstrap generation.
+
+## Uninstall a saved generation
+
+Use the same guided command when a test installation must be removed completely:
+
+```sh
+bun run bootstrap:deployment:guided
+```
+
+Choose **Uninstall** on the saved-setup screen. The wizard prints the exact generation,
+targets, GitHub Environments, and destructive order. No deletion begins until the operator
+types `uninstall <deployment-prefix>` exactly; there is no default or shortened answer.
+Type `back` on that confirmation screen to return without changing provider state.
+
+The teardown is bounded by the saved record. It removes resources in dependency order:
+
+1. production, `next`, and identity Pulumi stacks in reverse order, including servers,
+   volumes, firewalls, generated SSH material and secrets, and Pulumi-managed `aven.ceo`
+   DNS;
+2. the saved Polar webhook endpoints and the exact SSOT catalog identified by its metadata;
+   Polar products and meters are archived where the provider retains them, benefits are
+   removed, and financial history remains subject to Polar retention;
+3. the generation's GitHub Environments and, only when this generation is still active,
+   its repository deployment variables and package-reader secret; and
+4. versioned Pulumi state and Restic backup buckets last, after their bootstrap state has
+   been moved into an owner-only local teardown backend.
+
+Pulumi protections and Hetzner provider deletion locks remain enabled during normal
+operation. The uninstall process disables them only for exact resource URNs already present
+in the saved stacks. It does not expose a destroy input in a GitHub workflow.
+
+If a provider call fails, the screen shows the redacted reason and `uninstall.log`. Correct
+the issue and type `retry`; completed stages are detected and skipped. Type `keep` to stop
+with the local teardown state intact. Do not delete the record while remote resources
+remain, because it contains the credentials and state needed to finish safely.
+Before deleting infrastructure, the command also refuses to continue while a platform
+workflow is active, another GitHub generation is selected, or an SSOT Polar product has an
+active subscription. Cancel or revoke a remaining subscription only after handling its
+customer, billing, and retention consequences, then retry.
+
+After success, choose one exact local cleanup action with no default:
+
+- `reuse` keeps only `bootstrap-input.json`, which contains the manually supplied provider
+  credentials, and removes generated secrets, CSVs, logs, state copies, and markers. The
+  next guided run creates a new deployment prefix and revalidates the retained input.
+- `delete` removes the complete local bootstrap record.
+
+The setup did not create the Hetzner Cloud or S3 credentials, Polar API keys, SMTP
+credentials, RedPill key, GitHub personal token, or external `aven.id` DNS records. It does
+not revoke or delete them. Remove the now-stale `aven.id` A and AAAA records at its external
+DNS provider. Reuse or revoke provider credentials according to the next installation and
+the provider's own access review.
 
 To resume or reconcile the same infrastructure generation, run the same command again.
 To use a different owner-only location:
@@ -345,6 +397,10 @@ The output directory contains:
 | `bootstrap.<target>.remote` | Verified remote-backend marker for one storage project |
 | `pulumi-state/` | Initial local backend retained until remote state is verified |
 | `bootstrap-apply.log` | Owner-only redacted activity and command diagnostics from the latest apply |
+| `uninstall.log` | Owner-only redacted activity and command diagnostics from the latest teardown attempt |
+| `uninstall-pulumi-state/` | Owner-only temporary backend used so state and backup buckets can be deleted last and retries remain possible |
+| `uninstall-platform-<target>.json` | Encrypted platform stack checkpoint used to select exact provider-lock changes |
+| `uninstall-bootstrap-<target>.json` | Encrypted storage stack copy retained beside the local teardown backend for retry |
 | `initial-rollout.log` | Owner-only stage status and GitHub run URLs for resumable first deployment |
 
 Import `credentials.csv` from a guided run, or `avenos-recovery.csv` from the

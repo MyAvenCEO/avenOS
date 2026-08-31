@@ -60,6 +60,13 @@ import {
 	type TuiProgress,
 	type TuiProgressUpdate
 } from './lib/deployment-bootstrap-tui.js'
+import {
+	githubEnvironmentNames,
+	localResetPaths,
+	uninstallConfirmation,
+	uninstallSummary,
+	uninstallTargets
+} from './lib/deployment-uninstall.js'
 import { fetchRedpillPhalaCatalog } from './lib/redpill-model-catalog.js'
 
 function failPreflight(error: unknown): never {
@@ -114,13 +121,15 @@ const completedCredentialsPath = join(outputDirectory, 'avenos-recovery.csv')
 const generatedPath = join(outputDirectory, 'bootstrap.generated.json')
 const bootstrapLogPath = join(outputDirectory, 'bootstrap-apply.log')
 const rolloutLogPath = join(outputDirectory, 'initial-rollout.log')
+const uninstallLogPath = join(outputDirectory, 'uninstall.log')
 for (const path of [
 	inputPath,
 	credentialsPath,
 	completedCredentialsPath,
 	generatedPath,
 	bootstrapLogPath,
-	rolloutLogPath
+	rolloutLogPath,
+	uninstallLogPath
 ]) {
 	if (existsSync(path) && (preflight(() => statSync(path)).mode & 0o077) !== 0)
 		failPreflight(`${path} must be owner-only (chmod 600).`)
@@ -230,7 +239,9 @@ const localCredentialPaths = [
 	generatedPath,
 	bootstrapLogPath,
 	rolloutLogPath,
+	uninstallLogPath,
 	join(outputDirectory, 'pulumi-state'),
+	...localResetPaths(outputDirectory, TARGETS),
 	...TARGETS.flatMap((target) => [
 		join(outputDirectory, `bootstrap-state-${target}.json`),
 		join(outputDirectory, `bootstrap.${target}.remote`)
@@ -239,6 +250,13 @@ const localCredentialPaths = [
 
 function deleteLocalCredentialArtifacts(): void {
 	for (const path of localCredentialPaths) {
+		if (existsSync(path)) rmSync(path, { recursive: true, force: true })
+	}
+}
+
+function resetGeneratedInstallationArtifacts(): void {
+	const targets = uninstallTargets(draft as unknown as BootstrapInput, generated)
+	for (const path of localResetPaths(outputDirectory, targets)) {
 		if (existsSync(path)) rmSync(path, { recursive: true, force: true })
 	}
 }
@@ -845,6 +863,8 @@ async function runBootstrapApply(update: (event: TuiProgressUpdate) => void): Pr
 			inputPath,
 			'--output',
 			outputDirectory,
+			'--confirmed-generation',
+			generated.deploymentPrefix,
 			'--progress-json'
 		],
 		{
@@ -912,6 +932,168 @@ async function runBootstrapApply(update: (event: TuiProgressUpdate) => void): Pr
 		}
 	} finally {
 		if (activeChild === child) activeChild = undefined
+	}
+}
+
+async function runUninstallApply(update: (event: TuiProgressUpdate) => void): Promise<void> {
+	const child = Bun.spawn(
+		[
+			process.execPath,
+			resolve(root, 'scripts/deployment-uninstall.ts'),
+			'--input',
+			inputPath,
+			'--output',
+			outputDirectory,
+			'--progress-json'
+		],
+		{
+			cwd: root,
+			stdin: 'inherit',
+			stdout: 'pipe',
+			stderr: 'pipe'
+		}
+	)
+	activeChild = child
+	const log: string[] = [`avenOS uninstall ${new Date().toISOString()}`]
+	const errors: string[] = []
+	let lastEvent: TuiProgressUpdate | undefined
+	const consume = async (
+		stream: ReadableStream<Uint8Array>,
+		source: 'stdout' | 'stderr'
+	): Promise<void> => {
+		const reader = stream.getReader()
+		const decoder = new TextDecoder()
+		let pending = ''
+		for (;;) {
+			const { value, done } = await reader.read()
+			pending += decoder.decode(value, { stream: !done })
+			const lines = pending.split('\n')
+			pending = lines.pop() ?? ''
+			for (const line of lines) {
+				let event: TuiProgressUpdate | undefined
+				try {
+					event = parseBootstrapProgress(line)
+				} catch (error) {
+					log.push(`[progress] ${error instanceof Error ? error.message : 'invalid event'}`)
+				}
+				if (event) {
+					lastEvent = event
+					log.push(
+						`[stage ${event.current}/${event.total}] ${event.status}: ${event.label}${event.detail ? ` — ${event.detail}` : ''}`
+					)
+					update(event)
+				} else if (line.trim()) {
+					const redacted = redactSecrets(line)
+					log.push(`[${source}] ${redacted}`)
+					if (source === 'stderr') errors.push(redacted.trim())
+				}
+			}
+			if (done) break
+		}
+		if (pending.trim()) {
+			const redacted = redactSecrets(pending)
+			log.push(`[${source}] ${redacted}`)
+			if (source === 'stderr') errors.push(redacted.trim())
+		}
+	}
+	try {
+		const [exitCode] = await Promise.all([
+			child.exited,
+			consume(child.stdout as ReadableStream<Uint8Array>, 'stdout'),
+			consume(child.stderr as ReadableStream<Uint8Array>, 'stderr')
+		])
+		writePrivateAtomic(uninstallLogPath, `${log.join('\n')}\n`)
+		if (exitCode !== 0) {
+			const phase = lastEvent
+				? `${lastEvent.label}${lastEvent.detail ? ` — ${lastEvent.detail}` : ''}`
+				: 'starting the uninstall'
+			const detail = errors
+				.filter((line) => !/^error: script .* exited with code/i.test(line))
+				.slice(-2)
+				.join(' — ')
+				.slice(0, 800)
+			throw new Error(
+				`Uninstall failed during ${phase.replace(/[.!?]+$/, '')}.${detail ? ` ${detail}` : ''} Diagnostic log: ${uninstallLogPath}`
+			)
+		}
+	} finally {
+		if (activeChild === child) activeChild = undefined
+	}
+}
+
+async function uninstallSavedGeneration(): Promise<void> {
+	const targets = uninstallTargets(draft as unknown as BootstrapInput, generated)
+	validateBootstrapInput(draft, targets)
+	const environmentNames = githubEnvironmentNames(generated.deploymentPrefix, targets)
+	const confirmation = uninstallConfirmation(generated.deploymentPrefix)
+	setUiContext(
+		'Uninstall',
+		`Remove ${generated.deploymentPrefix}`,
+		`${uninstallSummary(generated.deploymentPrefix, targets, environmentNames)}\n\nThis destroys customer data and backups. It cannot be undone. Type exactly:\n${confirmation}\n\nType back to return without changing anything.`
+	)
+	for (;;) {
+		const answer = await question('Confirmation (no default)')
+		if (answer === confirmation) break
+		if (answer.toLowerCase() === 'back') {
+			process.stdout.write(`Saved setup preserved in ${outputDirectory}.\n`)
+			return
+		}
+		reportFailure(`Nothing changed. Type exactly "${confirmation}" or cancel.`)
+	}
+
+	for (;;) {
+		try {
+			setUiContext(
+				'Uninstall',
+				`Removing ${generated.deploymentPrefix}`,
+				`The activity below shows the exact provider operation. Completed work is detected on retry. A redacted diagnostic log is saved at ${uninstallLogPath}.`
+			)
+			await withProgress('Starting generation teardown…', runUninstallApply)
+			break
+		} catch (error) {
+			if (error instanceof TuiInterruptedError) throw error
+			const message = redactSecrets(
+				error instanceof Error ? error.message : 'Unknown uninstall failure.'
+			)
+			tui?.close()
+			setUiContext(
+				'Recovery',
+				'Uninstall paused',
+				`ERROR: ${message}\n\nCorrect the provider issue, then retry. The uninstall reopens the saved Pulumi and provider state and skips resources that are already absent. Keeping the files lets you stop and resume; deleting them prevents automatic cleanup.`
+			)
+			const resolution = await resolveFailedRunCredentials(true)
+			if (resolution === 'retry') continue
+			if (resolution === 'deleted') process.stderr.write('Local credential artifacts deleted.\n')
+			else process.stderr.write(`Uninstall progress preserved in ${outputDirectory}.\n`)
+			process.exitCode = 1
+			return
+		}
+	}
+
+	setUiContext(
+		'Uninstall',
+		'Generation removed',
+		`Provider resources created for ${generated.deploymentPrefix} are gone. The external aven.id A and AAAA records and provider-issued credentials remain because the setup did not create them. Remove the stale aven.id records at its external DNS provider before leaving the service offline.\n\nType "reuse" to keep bootstrap-input.json and remove generated state, logs, and CSVs for a fresh generation. Type "delete" to erase the entire local bootstrap record. No default is selected.`
+	)
+	for (;;) {
+		const cleanup = (
+			await question('Local record: type "reuse" or "delete" (no default)')
+		).toLowerCase()
+		if (cleanup === 'reuse') {
+			resetGeneratedInstallationArtifacts()
+			process.stdout.write(
+				`SUCCESS: ${generated.deploymentPrefix} was uninstalled. Reusable provider input remains in ${inputPath}; the next guided run creates a new generation.\n`
+			)
+			return
+		}
+		if (cleanup === 'delete') {
+			deleteLocalCredentialArtifacts()
+			process.stdout.write(
+				`SUCCESS: ${generated.deploymentPrefix} was uninstalled and its local bootstrap record was deleted.\n`
+			)
+			return
+		}
+		reportFailure('Enter exactly "reuse" or "delete"; no choice is preselected.')
 	}
 }
 
@@ -1649,7 +1831,7 @@ async function chooseDeploymentTargets(): Promise<Target[]> {
 	}
 }
 
-async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'exit'> {
+async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'uninstall' | 'exit'> {
 	if (savedCredentialCsvPaths.length === 0) return 'fresh'
 	const steps = wizardSteps(currentDeploymentTargets())
 	const resumeIndex = savedWizardResumeIndex(steps, draft)
@@ -1661,25 +1843,27 @@ async function offerSavedSetupResume(): Promise<'fresh' | 'resume' | 'exit'> {
 	const context = `Owner-only saved setup data was found:\n${records}\n\nResume at ${resumeStep.title}${resumeProgress ? ` (Step ${resumeProgress.current + 1} of ${resumeProgress.total + 1})` : ''}. You can change the target selection first. The latest saved station is reopened and checked again, so a value saved before a failed check is never skipped.`
 	for (;;) {
 		setUiContext('Welcome', 'Saved setup found', context)
-		let choice: 'exit' | 'resume'
+		let choice: 'exit' | 'resume' | 'uninstall'
 		if (tui) {
 			choice = (await tui.choose({
 				label: '',
 				options: [
 					{ label: 'Resume >', value: 'resume' },
+					{ label: 'Uninstall…', value: 'uninstall' },
 					{ label: 'Exit', value: 'exit' }
 				]
-			})) as 'exit' | 'resume'
+			})) as 'exit' | 'resume' | 'uninstall'
 		} else {
-			process.stdout.write('\nEnter r to resume or e to exit: ')
+			process.stdout.write('\nEnter r to resume, u to uninstall this generation, or e to exit: ')
 			const answer = (await readAnswer()).toLowerCase()
-			if (answer !== 'r' && answer !== 'e') {
-				reportFailure('Choose r to resume or e to exit.')
+			if (answer !== 'r' && answer !== 'u' && answer !== 'e') {
+				reportFailure('Choose r to resume, u to uninstall, or e to exit.')
 				continue
 			}
-			choice = answer === 'r' ? 'resume' : 'exit'
+			choice = answer === 'r' ? 'resume' : answer === 'u' ? 'uninstall' : 'exit'
 		}
 		if (choice === 'exit') return 'exit'
+		if (choice === 'uninstall') return 'uninstall'
 		const dependencyCheck = steps.find((step) => step.title === 'Credential recovery')?.verify
 		try {
 			await withProgress('Checking GitHub login and Pulumi…', async () => {
@@ -1868,6 +2052,10 @@ try {
 	if (startup === 'exit') {
 		process.stdout.write(`Saved setup preserved in ${outputDirectory}.\n`)
 		process.exit(0)
+	}
+	if (startup === 'uninstall') {
+		await uninstallSavedGeneration()
+		process.exit(process.exitCode ?? 0)
 	}
 	const selectedTargets = await chooseDeploymentTargets()
 	const configurationTargets = deploymentConfigurationTargets(

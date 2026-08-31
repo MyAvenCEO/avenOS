@@ -201,7 +201,9 @@ Operators preparing a fresh hosted installation start with
 credentials, creates isolated state and backup storage, configures GitHub, provisions the
 three hosts, pauses for the external `aven.id` DNS records, then verifies, publishes, and
 deploys the first complete installation. It ends with public readiness or a recoverable
-error. Later application and infrastructure updates run through CI.
+error. The same saved-generation menu can uninstall a test installation in dependency
+order, including its backups and state, after an exact destructive confirmation. Later
+application and infrastructure updates run through CI.
 
 ## Find the code
 

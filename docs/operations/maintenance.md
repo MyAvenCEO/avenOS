@@ -123,7 +123,7 @@ growth.
 
 ## Retirement
 
-For a customer, service, or installation:
+For one customer or one service inside a retained installation:
 
 1. disable ingress and workload credentials;
 2. take and verify a final backup;
@@ -132,5 +132,13 @@ For a customer, service, or installation:
 5. destroy compute only after recovery evidence exists; and
 6. remove DNS last so stale clients fail closed.
 
-Deleting protected volumes, Pulumi state, or backup repositories requires a separate
-reviewed process. Normal workflows contain no destroy or protection-removal path.
+For a complete test installation, use the generation-bound
+[guided uninstall](initial-provisioning.md#uninstall-a-saved-generation). It requires the
+owner-only bootstrap record and an exact typed generation confirmation, removes compute and
+managed DNS before integrations, and deletes state and backup buckets last. A failed stage
+is retryable from its local teardown backend. Normal GitHub deployment and infrastructure
+workflows contain no destroy or protection-removal input.
+
+Do not use the complete uninstall for one customer, one database, one service, or routine
+capacity work. Those scopes require their own final backup, retention decision, route and
+role removal, and forward reconciliation.
