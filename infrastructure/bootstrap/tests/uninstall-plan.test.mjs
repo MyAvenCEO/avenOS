@@ -3,13 +3,16 @@ import test from 'node:test'
 import {
 	activePrefixAllowsRepositoryCleanup,
 	bootstrapBucketTargetUrns,
+	bootstrapStateContainsOnlyExpectedBuckets,
 	githubEnvironmentNames,
 	guidedUninstallArguments,
 	localResetPaths,
 	ownedPolarCatalogResources,
 	platformProtectionTargetUrns,
+	pulumiStackIsListed,
 	uninstallConfirmation,
 	uninstallFailureSummary,
+	uninstallSummary,
 	uninstallTargets
 } from '../../../scripts/lib/deployment-uninstall.ts'
 
@@ -66,6 +69,10 @@ test('names only the saved generation GitHub Environments', () => {
 	])
 	assert.equal(activePrefixAllowsRepositoryCleanup('avenos-0123456789', 'avenos-0123456789'), true)
 	assert.equal(activePrefixAllowsRepositoryCleanup('avenos-aaaaaaaaaa', 'avenos-0123456789'), false)
+	assert.match(
+		uninstallSummary('avenos-0123456789', ['identity'], ['avenos-0123456789-identity']),
+		/GitHub token.*not deleted automatically/
+	)
 })
 
 test('targets only provider resources whose deletion locks need changing', () => {
@@ -83,6 +90,45 @@ test('targets only provider resources whose deletion locks need changing', () =>
 	}
 	assert.deepEqual(platformProtectionTargetUrns(stack), ['server', 'volume', 'dns'])
 	assert.deepEqual(bootstrapBucketTargetUrns(stack), ['bucket'])
+})
+
+test('matches Pulumi DIY and fully qualified stack names', () => {
+	assert.equal(pulumiStackIsListed(['production'], 'organization/aven-bootstrap/production'), true)
+	assert.equal(
+		pulumiStackIsListed(
+			['organization/aven-bootstrap/production'],
+			'organization/aven-bootstrap/production'
+		),
+		true
+	)
+	assert.equal(pulumiStackIsListed(['next'], 'organization/aven-bootstrap/production'), false)
+})
+
+test('accepts recovery state only for the exact generation buckets', () => {
+	const deployment = (bucket) => ({
+		deployment: {
+			resources: [
+				{
+					type: 'minio:index/s3Bucket:S3Bucket',
+					id: bucket,
+					outputs: { bucket }
+				}
+			]
+		}
+	})
+	const expected = [
+		'avenos-0123456789-123-production-state',
+		'avenos-0123456789-123-production-backup'
+	]
+	assert.equal(bootstrapStateContainsOnlyExpectedBuckets(deployment(expected[0]), expected), true)
+	assert.equal(
+		bootstrapStateContainsOnlyExpectedBuckets(deployment('another-generation-backup'), expected),
+		false
+	)
+	assert.equal(
+		bootstrapStateContainsOnlyExpectedBuckets({ deployment: { resources: [] } }, expected),
+		false
+	)
 })
 
 test('selects only the exact SSOT Polar catalog', () => {

@@ -97,6 +97,37 @@ export function bootstrapBucketTargetUrns(stack: PulumiDeploymentExport): string
 	return resourceUrnsByType(stack, new Set([BOOTSTRAP_BUCKET_RESOURCE_TYPE]))
 }
 
+export function pulumiStackIsListed(names: readonly string[], expected: string): boolean {
+	const shortName = expected.split('/').at(-1)
+	return names.some((name) => name === expected || name === shortName)
+}
+
+interface PulumiBucketDeploymentExport extends PulumiDeploymentExport {
+	deployment?: {
+		resources?: Array<{
+			type?: unknown
+			id?: unknown
+			inputs?: { bucket?: unknown }
+			outputs?: { bucket?: unknown }
+		}>
+	}
+}
+
+export function bootstrapStateContainsOnlyExpectedBuckets(
+	stack: PulumiBucketDeploymentExport,
+	expectedNames: readonly string[]
+): boolean {
+	const allowed = new Set(expectedNames)
+	const buckets = (stack.deployment?.resources ?? []).filter(
+		(resource) => resource.type === BOOTSTRAP_BUCKET_RESOURCE_TYPE
+	)
+	if (buckets.length === 0) return false
+	return buckets.every((bucket) => {
+		const physicalName = bucket.outputs?.bucket ?? bucket.inputs?.bucket ?? bucket.id
+		return typeof physicalName === 'string' && allowed.has(physicalName)
+	})
+}
+
 export function localResetPaths(outputDirectory: string, targets: readonly Target[]): string[] {
 	return [
 		join(outputDirectory, 'credentials.csv'),
