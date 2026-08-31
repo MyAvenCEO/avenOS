@@ -77,7 +77,8 @@ let panel = $state<HTMLElement | null>(null)
 
 $effect(() => {
 	// Both are read HERE so the effect tracks them: `step` to move focus on
-	// every step, and `panel` because on first paint the binding is still null
+	// every step, and `panel` — the card — because on first paint the binding
+	// is still null
 	// and the effect must run again once it lands.
 	void step
 	// `info` too: it arrives from the server after first paint and re-renders
@@ -131,7 +132,7 @@ function onKey(event: KeyboardEvent) {
 		<p class="flow-card-trust">Wir melden uns per Mail, sobald du dran bist — und sonst nicht.</p>
 	</section>
 {:else}
-	<section class="flow-card">
+	<section class="flow-card" bind:this={panel}>
 		<div class="flow-card-crest">
 			<img src="/aven-logo.svg" alt="" width="56" height="56">
 		</div>
@@ -150,7 +151,6 @@ function onKey(event: KeyboardEvent) {
 			</div>
 			<p class="text text--label">Schritt {step + 1} von {TOTAL_STEPS}</p>
 
-			<div class="stack" bind:this={panel}>
 				{#if step === 1}
 					<span class="field">
 						<label class="field-label" for="secure-email">E‑Mail</label>
@@ -206,7 +206,6 @@ function onKey(event: KeyboardEvent) {
 						</span>
 					</span>
 				{/if}
-			</div>
 
 			{#if error}
 				<div class="flow-card-alert">{error}</div>

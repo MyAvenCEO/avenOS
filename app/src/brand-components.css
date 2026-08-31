@@ -3945,6 +3945,12 @@
 		}
 	}
 
+	.steps {
+		display: flex;
+		gap: var(--space-hairline);
+		inline-size: 100%;
+	}
+
 	.logo {
 		display: inline-flex;
 		align-items: center;
