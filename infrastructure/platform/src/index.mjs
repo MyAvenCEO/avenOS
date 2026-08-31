@@ -7,7 +7,10 @@ import { loadPlatformConfig, requireProviderToken } from './config.mjs'
 import { manualIdentityRecordSpecs, platformRecordSpecs } from './dns.mjs'
 
 const config = loadPlatformConfig()
-const protect = { protect: true }
+const teardown = process.env.PLATFORM_TEARDOWN === 'true'
+const protect = { protect: !teardown }
+const keepExistingDuringTeardown = (...properties) =>
+	teardown ? { ignoreChanges: properties } : {}
 
 const computeProvider = new hcloud.Provider('platform-compute-provider', {
 	token: pulumi.secret(requireProviderToken(process.env, 'HETZNER_COMPUTE_TOKEN'))
@@ -99,10 +102,14 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 			location: config.location,
 			size: volumeSize,
 			format: 'ext4',
-			deleteProtection: true,
+			deleteProtection: !teardown,
 			labels
 		},
-		{ ...protect, provider: computeProvider }
+		{
+			...protect,
+			...keepExistingDuringTeardown('name', 'location', 'size', 'format', 'labels'),
+			provider: computeProvider
+		}
 	)
 	const cloudInit = pulumi
 		.all([
@@ -145,16 +152,31 @@ function createHost({ resource, deploymentId, appRoot, serverType, volumeSize })
 			serverType: selectedServerType(serverType),
 			image: config.osImage,
 			backups: false,
-			deleteProtection: true,
-			rebuildProtection: true,
-			keepDisk: true,
+			deleteProtection: !teardown,
+			rebuildProtection: !teardown,
+			keepDisk: !teardown,
 			firewallIds: [firewall.id.apply(Number)],
 			sshKeys: [registeredDeployKey.id],
 			publicNets: [{ ipv4Enabled: true, ipv6Enabled: true }],
 			userData: pulumi.secret(cloudInit),
 			labels
 		},
-		{ ...protect, provider: computeProvider }
+		{
+			...protect,
+			...keepExistingDuringTeardown(
+				'name',
+				'location',
+				'serverType',
+				'image',
+				'backups',
+				'firewallIds',
+				'sshKeys',
+				'publicNets',
+				'userData',
+				'labels'
+			),
+			provider: computeProvider
+		}
 	)
 	const attachment = new hcloud.VolumeAttachment(
 		`${resource}-data-attachment`,
@@ -205,10 +227,15 @@ const createDnsRecords = (records, dependsOn) =>
 					name: record.name,
 					type: record.type,
 					ttl: record.ttl,
-					changeProtection: true,
+					changeProtection: !teardown,
 					records: [{ value: record.value }]
 				},
-				{ ...protect, provider: dnsProvider, dependsOn }
+				{
+					...protect,
+					...keepExistingDuringTeardown('zone', 'name', 'type', 'ttl', 'records'),
+					provider: dnsProvider,
+					dependsOn
+				}
 			)
 	)
 

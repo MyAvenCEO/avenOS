@@ -223,6 +223,13 @@ that it remains reachable through the password manager's recovery path without c
 values into chat, a ticket, shell history, or this handbook. When an independent recovery
 holder exists, include them in that check.
 
+The [guided uninstall](initial-provisioning.md#uninstall-a-saved-generation) uses this local
+record to identify one exact infrastructure generation. It removes generated remote
+resources but does not revoke provider-issued Cloud, DNS, S3, Polar, SMTP, RedPill, or
+GitHub credentials and does not edit the externally managed `aven.id` zone. After teardown,
+either retain those inputs for a fresh generation or revoke them at their providers. Never
+assume deleting a GitHub Environment revoked the underlying provider credential.
+
 ## Generated access roles
 
 Each host receives separate Pulumi-generated Ed25519 identities:

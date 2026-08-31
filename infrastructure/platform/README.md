@@ -33,5 +33,8 @@ Use the protected GitHub workflows for real preview/up operations. The authorita
 provider, state, secret, deployment, publication, and recovery procedures are in the
 [operations handbook](../../docs/operations/README.md).
 
-All server, volume, firewall, DNS, secret, and host-key resources are protected.
-There is deliberately no automated destroy workflow.
+All server, volume, firewall, DNS, secret, and host-key resources are protected during
+normal preview and update operations. The generation-bound
+[guided uninstall](../../docs/operations/initial-provisioning.md#uninstall-a-saved-generation)
+can disable deletion locks for exact resources already recorded in a saved stack and then
+remove the installation. There is no destroy input in the GitHub workflows.

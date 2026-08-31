@@ -15,9 +15,13 @@ const artifacts = [
 	'local/avenos-recovery.csv',
 	'local/bootstrap-apply.log',
 	'local/initial-rollout.log',
+	'local/uninstall.log',
 	'local/bootstrap-state-identity.json',
 	'local/bootstrap.next.remote',
-	'local/pulumi-state/stacks/aven-bootstrap.json'
+	'local/pulumi-state/stacks/aven-bootstrap.json',
+	'local/uninstall-pulumi-state/stacks/aven-bootstrap.json',
+	'local/uninstall-platform-next.json',
+	'local/uninstall-bootstrap-next.json'
 ]
 const result = spawnSync('git', ['check-ignore', '--no-index', ...artifacts], {
 	cwd: repositoryRoot,
