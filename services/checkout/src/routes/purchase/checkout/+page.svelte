@@ -126,121 +126,72 @@ onMount(() => {
 </script>
 
 <svelte:window onmessage={onCheckoutMessage} />
-
 <svelte:head><title>Checkout</title></svelte:head>
 
-<section class="checkout-page">
-	<!-- Which name is being paid for — the one fact the Polar embed cannot show. -->
-	<p class="checkout-subject"><span>Du sicherst</span> {data.name}.aven.ceo</p>
+<!--
+  The `payment-frame` actor. Its own description is this screen: the iframe's
+  inside belongs to somebody else and cannot be styled, so the only thing this
+  system controls is the FRAME around it — the height it reserves, what shows
+  while it loads, and what shows when it does not.
 
-	<div class="checkout-container">
-		{#if fakeParams}
-			<div class="mock-checkout">
-				<h2>{data.name}</h2>
-				{#if paymentError}
-					<div class="alert">{paymentError}</div>
-				{/if}
-				<button disabled={checkoutState === "paying"} onclick={payFake}>
-					{checkoutState === "paying" ? "Processing" : "Pay"}
-				</button>
-			</div>
-		{:else}
-			<div class="polar-checkout">
-				{#if embedFailed}
-					<!-- The embed never loaded: same checkout, plain redirect. -->
-					<a class="checkout-link" href={data.checkoutUrl}>Zum Checkout</a>
-				{:else if embedUrl}
-					<!-- The checkout, inline in the page — no overlay. -->
-					{#if checkoutState === "loading" || checkoutState === "confirming"}
-						<p class="checkout-state" aria-live="polite">
-							{checkoutState === "confirming" ? "Confirming" : "Loading"}
-						</p>
+  That is exactly what the deleted 63-line <style> block was doing, spelled as
+  seven local classes (checkout-page, checkout-container, checkout-frame,
+  checkout-state, checkout-link, mock-checkout, polar-checkout).
+-->
+<section class="section">
+	<div class="section-inner stack stack-center">
+		<!-- Which name is being paid for — the one fact the Polar embed cannot show. -->
+		<p class="text text--label">Du sicherst</p>
+		<p class="text text--digits">{data.name}.aven.ceo</p>
+
+		<div class="payment-frame payment-frame--height-tall">
+			{#if fakeParams}
+				<div class="payment-frame-stage stack stack-center">
+					<h2 class="text text--title">{data.name}</h2>
+					{#if paymentError}
+						<div class="flow-card-alert">{paymentError}</div>
 					{/if}
-					{#key embedNonce}
-						<iframe
-							bind:this={checkoutFrame}
-							src={embedUrl}
-							title="Checkout"
-							allow={POLAR_EMBED_ALLOW}
-							class="checkout-frame"
-						></iframe>
-					{/key}
-				{:else}
-					<!-- Designer-seeded states render without a live frame. -->
-					<p class="checkout-state" aria-live="polite">
-						{checkoutState === "confirming" ? "Confirming" : checkoutState === "ready" ? "Ready" : "Loading"}
+					<button class="btn btn--primary" disabled={checkoutState === "paying"} onclick={payFake}>
+						{checkoutState === "paying" ? "Processing" : "Pay"}
+					</button>
+				</div>
+			{:else if embedFailed}
+				<!-- The embed never loaded: same checkout, plain redirect. -->
+				<div class="payment-frame-fallback">
+					<a class="btn btn--primary" href={data.checkoutUrl}>Zum Checkout</a>
+				</div>
+			{:else if embedUrl}
+				{#if checkoutState === "loading" || checkoutState === "confirming"}
+					<p class="payment-frame-state" aria-live="polite">
+						{checkoutState === "confirming" ? "Confirming" : "Loading"}
 					</p>
-					{#if checkoutState === "ready"}
-						<button type="button" onclick={launchEmbed}>Checkout öffnen</button>
-					{/if}
 				{/if}
-			</div>
-		{/if}
+				{#key embedNonce}
+					<iframe
+						bind:this={checkoutFrame}
+						src={embedUrl}
+						title="Checkout"
+						allow={POLAR_EMBED_ALLOW}
+						class="payment-frame-stage"
+					></iframe>
+				{/key}
+			{:else}
+				<!-- Designer-seeded states render without a live frame. -->
+				<p class="payment-frame-state" aria-live="polite">
+					{checkoutState === "confirming"
+						? "Confirming"
+						: checkoutState === "ready"
+							? "Ready"
+							: "Loading"}
+				</p>
+				{#if checkoutState === "ready"}
+					<div class="payment-frame-fallback">
+						<button class="btn btn--primary" type="button" onclick={launchEmbed}>
+							Checkout öffnen
+						</button>
+					</div>
+				{/if}
+			{/if}
+		</div>
 	</div>
 </section>
-
-<style>
-/* One centred column: the checkout renders INLINE in this container. */
-.checkout-page {
-	display: grid;
-	grid-template-columns: minmax(0, 40rem);
-	justify-content: center;
-	gap: 1rem;
-}
-.checkout-subject {
-	margin: 0;
-	font-size: 0.9375rem;
-	text-align: center;
-}
-.checkout-subject span {
-	color: var(--quiet);
-}
-.checkout-container {
-	min-height: 36rem;
-	padding: 1rem;
-	border: 1px solid var(--border-soft);
-	border-radius: 1.5rem;
-	background: var(--porcelain);
-}
-.checkout-state {
-	margin-bottom: 1rem;
-	text-align: center;
-}
-.polar-checkout {
-	display: grid;
-	align-content: start;
-	gap: 1rem;
-	min-height: 32rem;
-	padding: 1rem;
-}
-.checkout-frame {
-	width: 100%;
-	min-height: 40rem;
-	border: 0;
-	border-radius: 1rem;
-	background: #fff;
-}
-.polar-checkout button,
-.checkout-link {
-	width: 100%;
-}
-.checkout-link {
-	display: block;
-	text-align: center;
-}
-.mock-checkout {
-	display: grid;
-	align-content: center;
-	gap: 1rem;
-	min-height: 32rem;
-	padding: 1rem;
-}
-.mock-checkout button {
-	width: 100%;
-}
-@media (max-width: 900px) {
-	.checkout-container {
-		min-height: 0;
-	}
-}
-</style>

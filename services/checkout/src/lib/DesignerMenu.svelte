@@ -32,104 +32,80 @@ function navigate(href: string) {
 }
 </script>
 
-<div class="designer-menu">
-	<strong>Designer preview</strong>
-	<label>
-		<span>Page</span>
-		<select
-			value={firstScenarioHref(selectedPage)}
-			onchange={(event) => navigate((event.currentTarget as HTMLSelectElement).value)}
-		>
-			{#each designerPages as item}
-				<option value={firstScenarioHref(item)}>{item.label}</option>
-			{/each}
-		</select>
-	</label>
-	<label>
-		<span>State</span>
-		<select
-			value={selectedScenario ? withSession(selectedScenario.href) : ''}
-			onchange={(event) => navigate((event.currentTarget as HTMLSelectElement).value)}
-		>
-			{#each selectedPage?.scenarios ?? [] as item}
-				<option value={withSession(item.href)}>{item.label}</option>
-			{/each}
-		</select>
-	</label>
-	<label>
-		<span>Session</span>
-		<select
-			value={page.url.searchParams.get('session') ?? ''}
-			onchange={(event) => setSession((event.currentTarget as HTMLSelectElement).value)}
-		>
-			<option value="">Page default</option>
-			<option value="anonymous">Anonymous</option>
-			<option value="authenticated">Authenticated</option>
-		</select>
-	</label>
-	<span class="mock-badge">Mock data</span>
+<!--
+  Designer-preview chrome, behind the `designer` build variant. It is not
+  product, so it says so — but it is not exempt from the system either: the
+  bar is a `surface`, each control is a `field` with a select, and the mock
+  marker is a `badge`. The 61-line <style> block this replaces styled a
+  floating bar and a pill by hand.
+-->
+<div id="designer-menu" class="surface surface--variant-lift cluster">
+	<p class="text text--label">Designer preview</p>
+
+	<span class="field field--size-sm field--control-select">
+		<label class="field-label" for="designer-page">Page</label>
+		<span class="field-shell">
+			<select
+				class="field-control"
+				id="designer-page"
+				value={firstScenarioHref(selectedPage)}
+				onchange={(event) => navigate((event.currentTarget as HTMLSelectElement).value)}
+			>
+				{#each designerPages as item (item.label)}
+					<option value={firstScenarioHref(item)}>{item.label}</option>
+				{/each}
+			</select>
+		</span>
+	</span>
+
+	<span class="field field--size-sm field--control-select">
+		<label class="field-label" for="designer-state">State</label>
+		<span class="field-shell">
+			<select
+				class="field-control"
+				id="designer-state"
+				value={selectedScenario ? withSession(selectedScenario.href) : ''}
+				onchange={(event) => navigate((event.currentTarget as HTMLSelectElement).value)}
+			>
+				{#each selectedPage?.scenarios ?? [] as item (item.href)}
+					<option value={withSession(item.href)}>{item.label}</option>
+				{/each}
+			</select>
+		</span>
+	</span>
+
+	<span class="field field--size-sm field--control-select">
+		<label class="field-label" for="designer-session">Session</label>
+		<span class="field-shell">
+			<select
+				class="field-control"
+				id="designer-session"
+				value={page.url.searchParams.get('session') ?? ''}
+				onchange={(event) => setSession((event.currentTarget as HTMLSelectElement).value)}
+			>
+				<option value="">Page default</option>
+				<option value="anonymous">Anonymous</option>
+				<option value="authenticated">Authenticated</option>
+			</select>
+		</span>
+	</span>
+
+	<span class="badge badge--tone-warning">Mock data</span>
 </div>
 
 <style>
-.designer-menu {
-	position: sticky;
-	top: 0;
-	z-index: 1000;
-	display: flex;
-	align-items: center;
-	gap: 1rem;
-	min-height: 3.5rem;
-	padding: 0.5rem max(1rem, calc((100vw - 72rem) / 2));
-	color: #fff;
-	background: #171717;
-	box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
-}
-.designer-menu label {
-	display: flex;
-	flex: 1 1 15rem;
-	align-items: center;
-	gap: 0.5rem;
-	font-weight: 400;
-}
-.designer-menu select {
-	width: 100%;
-	min-height: 2.25rem;
-	padding: 0.35rem 2rem 0.35rem 0.65rem;
-	font: inherit;
-	color: #171717;
-	background: #fff;
-	border: 0;
-	border-radius: 0.25rem;
-}
-.mock-badge {
-	padding: 0.25rem 0.55rem;
-	font-size: 0.8rem;
-	white-space: nowrap;
-	color: #171717;
-	background: #b8f7d4;
-	border-radius: 999px;
-}
-@media (max-width: 900px) {
-	.designer-menu {
-		align-items: stretch;
-		flex-wrap: wrap;
-		gap: 0.35rem 0.75rem;
-		padding-block: 0.65rem;
-	}
-	.designer-menu label {
-		order: 2;
-		flex-basis: calc(50% - 0.5rem);
-	}
-	.designer-menu select {
-		flex: 1;
-	}
-	.mock-badge {
-		margin-left: auto;
-	}
-}
-@media (max-width: 560px) {
-	.designer-menu label {
-		flex-basis: 100%;
-	}
+/*
+ * One rule, and it is placement: this bar floats above the page it is
+ * previewing. Everything else — ground, radius, shadow, the controls — comes
+ * from the actors. A bespoke class name would become a utility-scanner
+ * candidate, so this is an id.
+ */
+:global(#designer-menu) {
+	position: fixed;
+	inset-block-end: var(--space-loose);
+	inset-inline: var(--space-loose);
+	z-index: 40;
+	justify-content: center;
+	align-items: end;
 }
 </style>
