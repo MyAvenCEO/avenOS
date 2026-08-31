@@ -183,7 +183,7 @@ const statusLabel: Record<Site['status'], string> = {
 									type="button"
 									disabled={saving}
 									onclick={() => remove(site)}
-									class="rounded-lg border border-error/20 text-xs text-error-ink hover:bg-error-surface disabled:opacity-40"
+									class="rounded-lg border border-error/20 px-3 py-1.5 text-xs text-error-ink hover:bg-error-surface disabled:opacity-40"
 								>
 									Entfernen
 								</button>
@@ -269,7 +269,7 @@ const statusLabel: Record<Site['status'], string> = {
 	{/if}
 
 	{#if failure}
-		<p class="rounded-xl border border-error/25 bg-error-surface text-xs text-error-ink">
+		<p class="rounded-xl border border-error/25 bg-error-surface px-4 py-3 text-xs text-error-ink">
 			{failure}
 		</p>
 	{/if}
