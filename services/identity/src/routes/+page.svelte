@@ -8,11 +8,15 @@ $effect(() => {
 })
 </script>
 <svelte:head><title>Aven Identity</title></svelte:head>
-<section class="panel auth">
-	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
-	<h1>One small, secure identity.</h1>
-	<p>Passkey-only sign-in and short-lived authorization for Aven services.</p>
-	<div class="actions">
-		<a class="primary-action" href="/login">Sign in</a>
+<section class="flow-card">
+	<div class="flow-card-crest">
+		<img src="/aven-logo.svg" alt="" width="56" height="56">
+	</div>
+	<h1 class="flow-card-heading">One small, secure identity.</h1>
+	<p class="flow-card-description">
+		Passkey-only sign-in and short-lived authorization for Aven services.
+	</p>
+	<div class="flow-card-actions">
+		<a class="btn btn--primary" href="/login">Sign in</a>
 	</div>
 </section>
