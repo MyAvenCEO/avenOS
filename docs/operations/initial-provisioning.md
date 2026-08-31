@@ -150,7 +150,7 @@ organization, or model count in a compact evidence area belonging only to the cu
 chapter. Evidence never leaks into unrelated chapters, repeated evidence collapses, and
 only the three latest facts remain visible. An invalid value replaces the local feedback
 and remains on its screen so it can be edited. The wizard never asks the operator to type
-`continue`, `retry`, or similar control words.
+`continue`, `retry`, or similar control words during ordinary data collection.
 
 After an answer is submitted, a small animated progress chip immediately replaces the
 form while GitHub, Hetzner, Polar, RedPill, plan validation, or provider application is
@@ -182,8 +182,8 @@ instead of being overwritten or partially reconstructed.
 
 On a fresh run, the wizard starts at the first field. A saved non-secret value is shown and
 can be edited; a saved secret remains hidden and an empty field keeps and rechecks it. A
-failed or interrupted run ends with `ERROR`. This cleanup screen is the only place that
-requires a typed control word: enter exactly `keep` or `delete`, with no default. Deletion
+failed provider-bootstrap or interrupted run ends with `ERROR`. Its cleanup screen requires
+one exact typed choice: enter `keep` or `delete`, with no default. Deletion
 covers the CSV, resumable input, generated secrets, encrypted bootstrap-state copies and markers, the
 local Pulumi backend, and any completed recovery CSV. The prompt warns that deletion
 prevents resume and can strand resources if provider changes were already applied. Keeping
@@ -239,6 +239,21 @@ verification time are stored in the owner-only generated record and mirrored int
 `credentials.csv`, so rerunning resumes instead of repeating completed stages and the
 password-manager import remains the complete operator handoff. `initial-rollout.log`
 records only stage names, status, and GitHub run URLs; it contains no credential values.
+
+If a GitHub infrastructure or deployment run fails, the wizard reads its failed-step log,
+redacts known secrets, and puts the concise provider reason directly on the recovery
+screen. Enter exactly `retry`, `keep`, or `delete`; no option is selected by default.
+Correct the external issue before choosing `retry`. The wizard first checks the saved run
+and Pulumi checkpoint, reuses successful work, and dispatches only the first failed stage.
+`keep` stops with every recovery artifact intact for a later resume. `delete` removes those
+artifacts and prevents resume.
+
+A common first-installation repair is an obsolete DNS record. Hetzner rejects an A or
+AAAA record when a CNAME still owns the same name. The recovery screen identifies the
+exact names and types, for example `next CNAME blocks A and AAAA`. Remove the obsolete
+CNAME at the authoritative `aven.ceo` provider, return to the still-open wizard, and enter
+`retry`. Pulumi then creates and owns the required records; the conflict does not require
+a fresh bootstrap generation.
 
 To resume or reconcile the same infrastructure generation, run the same command again.
 To use a different owner-only location:

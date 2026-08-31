@@ -42,6 +42,7 @@ import {
 	hetznerS3CredentialsUrl,
 	orderedDeploymentTargets,
 	POLAR_API_KEY_SCOPES,
+	retryableGitHubCliFailure,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
 	savedWizardResumeIndex,
@@ -50,6 +51,7 @@ import {
 	signedS3ReadRequest,
 	unseenWorkflowRunId,
 	valueAt,
+	workflowFailureSummary,
 	workflowRunIdFromDispatchOutput
 } from './lib/deployment-bootstrap-guided.js'
 import {
@@ -289,20 +291,29 @@ function reportFailure(message: string): void {
 	else process.stderr.write(`✗ ${message.trim()}\n`)
 }
 
-async function resolveFailedRunCredentials(): Promise<'deleted' | 'kept'> {
+async function resolveFailedRunCredentials(
+	allowRetry = false
+): Promise<'deleted' | 'kept' | 'retry'> {
 	restoreEcho()
 	for (;;) {
 		const choice = (
 			await question(
-				'Delete local credential artifacts? Deleting prevents resume. Type "delete" or "keep" (no default)'
+				allowRetry
+					? 'Recovery action: type "retry", "keep", or "delete" (no default)'
+					: 'Delete local credential artifacts? Deleting prevents resume. Type "delete" or "keep" (no default)'
 			)
 		).toLowerCase()
+		if (allowRetry && choice === 'retry') return 'retry'
 		if (choice === 'delete') {
 			deleteLocalCredentialArtifacts()
 			return 'deleted'
 		}
 		if (choice === 'keep') return 'kept'
-		reportStatus('Enter exactly "delete" or "keep"; no choice is preselected.')
+		reportStatus(
+			allowRetry
+				? 'Enter exactly "retry", "keep", or "delete"; no choice is preselected.'
+				: 'Enter exactly "delete" or "keep"; no choice is preselected.'
+		)
 	}
 }
 
@@ -391,6 +402,27 @@ async function workflowRun(runId: number, repository: string): Promise<GitHubWor
 	) as GitHubWorkflowRun
 }
 
+async function workflowFailureReason(
+	runId: number,
+	repository: string
+): Promise<string | undefined> {
+	try {
+		return workflowFailureSummary(
+			await run(
+				'gh',
+				['run', 'view', String(runId), '--repo', repository, '--log-failed'],
+				true,
+				60_000
+			)
+		)
+	} catch (error) {
+		appendRolloutLog(
+			`Could not read failed workflow logs: ${redactSecrets(error instanceof Error ? error.message : String(error))}`
+		)
+		return undefined
+	}
+}
+
 function workflowProgress(
 	state: GitHubWorkflowRun,
 	label: string
@@ -434,10 +466,12 @@ async function waitForWorkflowRun(
 			})
 		}
 		if (state.status === 'completed') {
-			if (state.conclusion !== 'success')
+			if (state.conclusion !== 'success') {
+				const reason = await workflowFailureReason(runId, repository)
 				throw new Error(
-					`${label} ended with ${state.conclusion ?? 'no conclusion'}. Open ${state.url}`
+					`${label} ended with ${state.conclusion ?? 'no conclusion'}.${reason ? ` ${reason}` : ''} Open ${state.url}`
 				)
+			}
 			return state
 		}
 		if (Date.now() >= deadline) throw new Error(`${label} timed out. Open ${state.url}`)
@@ -478,7 +512,17 @@ async function dispatchWorkflow(
 	const knownRunIds = new Set((await listRuns()).map((workflowRun) => workflowRun.databaseId))
 	const args = ['workflow', 'run', workflow, '--repo', repository, '--ref', ref]
 	for (const [name, value] of Object.entries(inputs)) args.push('--raw-field', `${name}=${value}`)
-	const output = await run('gh', args, true, 30_000)
+	let output = ''
+	let dispatchFailure: Error | undefined
+	try {
+		output = await run('gh', args, true, 90_000)
+	} catch (error) {
+		dispatchFailure = error instanceof Error ? error : new Error(String(error))
+		if (!retryableGitHubCliFailure(dispatchFailure.message)) throw dispatchFailure
+		appendRolloutLog(
+			`${workflow} dispatch response was interrupted; reconciling GitHub runs before allowing another dispatch.`
+		)
+	}
 	const immediateRunId = workflowRunIdFromDispatchOutput(output)
 	if (immediateRunId) {
 		appendRolloutLog(
@@ -486,10 +530,18 @@ async function dispatchWorkflow(
 		)
 		return immediateRunId
 	}
-	const deadline = Date.now() + 30_000
+	const deadline = Date.now() + (dispatchFailure ? 120_000 : 30_000)
 	while (Date.now() < deadline) {
 		await Bun.sleep(1_000)
-		const discoveredRunId = unseenWorkflowRunId(await listRuns(), knownRunIds)
+		let discoveredRunId: number | undefined
+		try {
+			discoveredRunId = unseenWorkflowRunId(await listRuns(), knownRunIds)
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			if (!retryableGitHubCliFailure(message)) throw error
+			appendRolloutLog(`${workflow} run discovery is temporarily unavailable; retrying.`)
+			continue
+		}
 		if (discoveredRunId) {
 			appendRolloutLog(
 				`Dispatched ${workflow} as https://github.com/${repository}/actions/runs/${discoveredRunId}.`
@@ -497,6 +549,10 @@ async function dispatchWorkflow(
 			return discoveredRunId
 		}
 	}
+	if (dispatchFailure)
+		throw new Error(
+			`${workflow} dispatch was interrupted and no new run appeared after reconciliation. ${dispatchFailure.message}`
+		)
 	throw new Error(
 		`${workflow} accepted the dispatch, but its run could not be identified. Open https://github.com/${repository}/actions/workflows/${workflow} before retrying.`
 	)
@@ -737,6 +793,47 @@ async function completeInitialRollout(input: BootstrapInput): Promise<boolean> {
 	saveGeneratedSecrets(generatedPath, generated)
 	refreshCompletedCredentials(input)
 	return true
+}
+
+async function completeInitialRolloutWithRecovery(
+	input: BootstrapInput
+): Promise<boolean | undefined> {
+	for (;;) {
+		try {
+			return await completeInitialRollout(input)
+		} catch (error) {
+			if (error instanceof TuiInterruptedError) throw error
+			try {
+				promoteCompletedCredentials()
+			} catch {
+				// The incremental credentials file remains intact and owner-only.
+			}
+			const message = redactSecrets(
+				error instanceof Error ? error.message : 'Unknown initial deployment failure.'
+			)
+			appendRolloutLog(`Initial deployment paused: ${message}`)
+			tui?.close()
+			setUiContext(
+				'Recovery',
+				'Initial deployment paused',
+				`ERROR: ${message}\n\nCorrect the external issue while this screen remains open, then retry. The wizard checks the saved GitHub run and Pulumi state before it dispatches any further work. Keeping the files lets you stop and resume later; deleting them prevents resume.`
+			)
+			const resolution = await resolveFailedRunCredentials(true)
+			if (resolution === 'retry') {
+				setUiContext(
+					'Initial deployment',
+					'Reconciling the saved installation',
+					'Checking completed and in-progress GitHub runs, then continuing from the first failed operation.'
+				)
+				continue
+			}
+			if (tui) process.stderr.write(`ERROR: ${message}\n`)
+			if (resolution === 'deleted') process.stderr.write('Local credential artifacts deleted.\n')
+			else process.stderr.write(`Progress preserved in ${credentialsPath}\n`)
+			process.exitCode = 1
+			return undefined
+		}
+	}
 }
 
 async function runBootstrapApply(update: (event: TuiProgressUpdate) => void): Promise<void> {
@@ -1823,12 +1920,13 @@ try {
 		await withProgress('Starting provider reconciliation…', runBootstrapApply)
 		promoteCompletedCredentials()
 		Object.assign(generated, loadOrCreateGeneratedSecrets(generatedPath))
-		const running = await completeInitialRollout(bootstrapInput)
-		process.stdout.write(
-			running
-				? `SUCCESS: the first avenOS installation for ${generated.deploymentPrefix} is running.\nImport ${credentialsPath} into the password manager, verify it, then securely delete the local bootstrap directory. Future updates run through CI.\n`
-				: `SUCCESS: bootstrap ${generated.deploymentPrefix} is configured for ${selectedTargets.join(', ')}. Resume the same generation and add every missing target to create the first running installation.\nCredentials: ${credentialsPath}\n`
-		)
+		const running = await completeInitialRolloutWithRecovery(bootstrapInput)
+		if (running !== undefined)
+			process.stdout.write(
+				running
+					? `SUCCESS: the first avenOS installation for ${generated.deploymentPrefix} is running.\nImport ${credentialsPath} into the password manager, verify it, then securely delete the local bootstrap directory. Future updates run through CI.\n`
+					: `SUCCESS: bootstrap ${generated.deploymentPrefix} is configured for ${selectedTargets.join(', ')}. Resume the same generation and add every missing target to create the first running installation.\nCredentials: ${credentialsPath}\n`
+			)
 	}
 } catch (error) {
 	try {
