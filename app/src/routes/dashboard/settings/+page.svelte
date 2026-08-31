@@ -119,7 +119,7 @@ async function preview(voice: Voice) {
 								target="_blank"
 								rel="noopener noreferrer"
 								onclick={(event) => openLegal(event, link.href)}
-								class="block text-[length:var(--fs-nano)] leading-relaxed text-foreground/35 transition-colors hover:text-foreground/80"
+								class="block px-3 py-0.5 text-[length:var(--fs-nano)] leading-relaxed text-foreground/35 transition-colors hover:text-foreground/80"
 							>
 								{link.label}
 							</a>
@@ -156,7 +156,7 @@ async function preview(voice: Voice) {
 					<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
 						{#each VOICES as voice (voice)}
 							<li
-								class="group flex items-center gap-3 rounded-xl border text-sm transition-colors {settings.voice ===
+								class="group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-colors {settings.voice ===
 							voice
 								? 'border-primary bg-surface-raised'
 								: 'border-foreground/8 bg-surface-raised'}"
