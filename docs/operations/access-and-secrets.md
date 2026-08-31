@@ -85,6 +85,10 @@ with `read:packages` only and can download the cross-repository `@myavenceo/aven
 token. It does not belong in a target Environment because CI and the shared image build
 run before a deployment Environment is selected.
 
+The generation uninstaller retains `PACKAGE_READ_TOKEN`: it removes target Environments
+and the active deployment selection, but shared repository CI still needs this
+operator-supplied credential before another generation exists.
+
 ## GitHub Environment secrets
 
 | Secret | Consumer and purpose |

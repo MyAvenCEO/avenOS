@@ -19,10 +19,12 @@ import {
 	activePrefixAllowsRepositoryCleanup,
 	bootstrapBucketTargetUrns,
 	bootstrapStackName,
+	bootstrapStateContainsOnlyExpectedBuckets,
 	githubEnvironmentNames,
 	ownedPolarCatalogResources,
 	platformProtectionTargetUrns,
 	platformStackName,
+	pulumiStackIsListed,
 	uninstallSummary,
 	uninstallTargets
 } from './lib/deployment-uninstall.js'
@@ -337,7 +339,7 @@ async function destroyPlatform(target: Target): Promise<void> {
 	const env = platformEnvironment(target)
 	await run('pulumi', ['login', backend(target, 'platform')], { env, quiet: true })
 	const stack = platformStackName(target)
-	if (!(await stackNames(platformCwd, env)).includes(stack)) {
+	if (!pulumiStackIsListed(await stackNames(platformCwd, env), stack)) {
 		completeProgress(`${target} platform stack is already absent.`)
 		return
 	}
@@ -463,22 +465,6 @@ async function removeGitHub(): Promise<void> {
 		)
 	}
 	if (activePrefix === generated.deploymentPrefix) {
-		const repositorySecrets = new Set(
-			(
-				await runGitHub(
-					['secret', 'list', '--repo', input.repository, '--json', 'name', '--jq', '.[].name'],
-					{
-						quiet: true
-					}
-				)
-			)
-				.split('\n')
-				.filter(Boolean)
-		)
-		if (repositorySecrets.has('PACKAGE_READ_TOKEN'))
-			await runGitHub(['secret', 'delete', 'PACKAGE_READ_TOKEN', '--repo', input.repository], {
-				quiet: true
-			})
 		if (variableMap.has('DEPLOYMENT_TARGETS_JSON'))
 			await runGitHub(
 				[
@@ -534,42 +520,63 @@ async function removeStorage(target: Target): Promise<void> {
 	const stack = bootstrapStackName(target)
 	await run('pulumi', ['login', localTeardownBackend], { env, quiet: true })
 	let localStacks = await stackNames(bootstrapCwd, env)
-	if (!localStacks.includes(stack)) {
+	if (!pulumiStackIsListed(localStacks, stack)) {
 		const stateExists = await bucketExists(target, 'state')
 		const backupExists = await bucketExists(target, 'backup')
 		if (!stateExists && !backupExists) {
 			completeProgress(`${target} state and backup buckets are already absent.`)
 			return
 		}
-		if (!stateExists)
-			throw new Error(
-				`${target} backup storage still exists but its state bucket is missing. Preserve the local teardown state and retry; automatic ownership reconstruction is intentionally refused.`
-			)
 		const originalLocalBackend = `file://${resolve(outputDirectory, 'pulumi-state')}`
-		const remoteMarker = resolve(outputDirectory, `bootstrap.${target}.remote`)
-		let sourceBackend = backend(target, 'bootstrap')
-		if (!existsSync(remoteMarker) && existsSync(resolve(outputDirectory, 'pulumi-state'))) {
+		let sourceBackend: string | undefined
+		if (stateExists) {
+			const remoteBackend = backend(target, 'bootstrap')
+			await run('pulumi', ['login', remoteBackend], { env, quiet: true })
+			if (pulumiStackIsListed(await stackNames(bootstrapCwd, env), stack))
+				sourceBackend = remoteBackend
+		}
+		if (!sourceBackend && existsSync(resolve(outputDirectory, 'pulumi-state'))) {
 			await run('pulumi', ['login', originalLocalBackend], { env, quiet: true })
-			if ((await stackNames(bootstrapCwd, env)).includes(stack))
+			if (pulumiStackIsListed(await stackNames(bootstrapCwd, env), stack))
 				sourceBackend = originalLocalBackend
 		}
-		await run('pulumi', ['login', sourceBackend], { env, quiet: true })
-		if (!(await stackNames(bootstrapCwd, env)).includes(stack))
-			throw new Error(
-				`${target} bootstrap stack is missing from its saved local and remote backends while storage buckets still exist.`
-			)
 		const exportPath = resolve(outputDirectory, `uninstall-bootstrap-${target}.json`)
-		await exportStack(stack, bootstrapCwd, env, exportPath)
+		let importPath = exportPath
+		if (sourceBackend) {
+			await run('pulumi', ['login', sourceBackend], { env, quiet: true })
+			await exportStack(stack, bootstrapCwd, env, exportPath)
+		} else {
+			const savedExportPath = resolve(outputDirectory, `bootstrap-state-${target}.json`)
+			if (!existsSync(savedExportPath))
+				throw new Error(
+					`${target} bootstrap stack is missing from its remote backend, preserved local backend, and saved export while storage buckets still exist.`
+				)
+			assertPrivateFile(savedExportPath)
+			importPath = savedExportPath
+		}
+		const savedState = JSON.parse(readFileSync(importPath, 'utf8')) as unknown
+		const expectedBuckets = (['state', 'backup'] as const).map((kind) =>
+			objectStorageBucketName(input, generated, target, kind)
+		)
+		if (!bootstrapStateContainsOnlyExpectedBuckets(savedState as never, expectedBuckets))
+			throw new Error(
+				`${target} saved bootstrap state does not contain only this generation's exact storage buckets; refusing to import it.`
+			)
+		updateProgress(
+			sourceBackend
+				? 'Moving the verified bootstrap stack to the local teardown backend.'
+				: 'Recovering the verified bootstrap stack from its owner-only saved export.'
+		)
 		await run('pulumi', ['login', localTeardownBackend], { env, quiet: true })
 		await run('pulumi', ['stack', 'init', stack, '--cwd', bootstrapCwd], { env, quiet: true })
 		await run(
 			'pulumi',
-			['stack', 'import', '--stack', stack, '--cwd', bootstrapCwd, '--file', exportPath],
+			['stack', 'import', '--stack', stack, '--cwd', bootstrapCwd, '--file', importPath],
 			{ env, quiet: true }
 		)
 		localStacks = await stackNames(bootstrapCwd, env)
 	}
-	if (!localStacks.includes(stack))
+	if (!pulumiStackIsListed(localStacks, stack))
 		throw new Error(`Could not stage ${target} bootstrap state locally.`)
 	const exportPath = resolve(outputDirectory, `uninstall-bootstrap-${target}.json`)
 	const deployment = await exportStack(stack, bootstrapCwd, env, exportPath)
