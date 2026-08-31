@@ -570,7 +570,12 @@ async function deviceSession(page: import('@playwright/test').Page): Promise<str
 	}
 	await page.goto(issued.verification_uri_complete)
 	await expect(page.getByRole('heading', { name: 'Authorize this device' })).toBeVisible()
-	await expect(page.getByText(`Code: ${issued.user_code}`)).toBeVisible()
+	// The page shows the code ONCE, grouped for reading aloud — `ABCD-EFGH`, not
+	// the raw string with a `Code:` prefix beside it. It used to show both, which
+	// is the same code twice inside a `user-select: all` region, so a copy took
+	// the label with it. Group it here the way the page does.
+	const grouped = issued.user_code.replaceAll('-', '').replace(/(.{4})(?=.)/g, '$1-')
+	await expect(page.getByText(grouped, { exact: true })).toBeVisible()
 	await page.getByRole('button', { name: 'Authorize' }).click()
 	await expect(page.getByRole('heading', { name: 'Device connected' })).toBeVisible()
 	for (let attempt = 0; attempt < 10; attempt += 1) {
