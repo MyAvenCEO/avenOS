@@ -61,32 +61,43 @@ async function addPasskey() {
 }
 </script>
 <svelte:head><title>Your account · aven.id</title></svelte:head>
-<section class="panel auth">
-	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
-	<h1>Your account</h1>
-	<p class="account-email">{$session.data?.user.email ?? 'Loading…'}</p>
-	<h2 class="passkey-heading">Passkeys</h2>
+<section class="flow-card">
+	<div class="flow-card-crest">
+		<img src="/aven-logo.svg" alt="" width="56" height="56">
+	</div>
+	<h1 class="flow-card-heading">Your account</h1>
+	<p class="flow-card-description">{$session.data?.user.email ?? 'Loading…'}</p>
+
+	<p class="text text--label">Passkeys</p>
 	{#if error}
-		<div class="alert" role="alert">{error}</div>
+		<div class="flow-card-alert" role="alert">{error}</div>
 	{/if}
 	{#if passkeys.length}
-		<ul class="passkeys">
+		<!-- `row-list`: a fixed lead column, a name that shrinks, something on the
+		     trailing edge. That is what the hand-rolled `.passkeys` list was. -->
+		<ul class="row-list row-list--style-panel row-list--density-roomy" aria-label="Passkeys">
 			{#each passkeys as passkey (passkey.id)}
-				<li>
-					<span
-						><strong>{passkey.name || 'Passkey'}</strong><br>
-						<span class="muted"
-							>{passkey.device_type}{passkey.backed_up ? ' · synced' : ''}</span
-						></span
-					><span class="muted">{new Date(passkey.created_at).toLocaleDateString()}</span>
+				<li class="row-list-row">
+					<span class="row-list-lead" aria-hidden="true">
+						<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.25 4.25L19 7" /></svg>
+					</span>
+					<span class="row-list-name">
+						{passkey.name || 'Passkey'}{passkey.backed_up ? ' — synced' : ''}
+					</span>
+					<span class="row-list-meta">{new Date(passkey.created_at).toLocaleDateString()}</span>
 				</li>
 			{/each}
 		</ul>
 	{:else}
-		<div class="well"><p>No passkey has been registered yet.</p></div>
+		<div class="empty-state">
+			<p class="empty-state-title">No passkey yet</p>
+			<p class="empty-state-body">
+				Add one and this device can sign you in without a password.
+			</p>
+		</div>
 	{/if}
-	<div class="actions">
-		<button disabled={busy} onclick={addPasskey}>
+	<div class="flow-card-actions">
+		<button class="btn btn--primary" disabled={busy} onclick={addPasskey}>
 			{busy ? 'Adding…' : passkeys.length ? 'Add another passkey' : 'Add passkey'}
 		</button>
 	</div>

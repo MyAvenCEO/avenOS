@@ -1,27 +1,15 @@
+/*
+ * The app shell, and nothing else.
+ *
+ * Everything this file used to hold — the panel, the passkey list, the header,
+ * the nav, the footer, and a `:root` block aliasing brand tokens back to the
+ * short names an older stylesheet used — is now either an actor or gone. What
+ * a shell legitimately owns is the page ground, the box model, and the one
+ * place a viewport unit is allowed to appear.
+ */
 @import "./brand-theme.css";
 @import "./brand-components.css";
 @import "./brand-elements.css";
-
-:root {
-	--ink: var(--color-ink);
-	--marine: var(--color-marine);
-	--chalk: var(--color-chalk);
-	--terracotta: var(--color-terracotta);
-	--sunflower: var(--color-sunflower);
-	--linen: var(--color-linen);
-	--porcelain: var(--color-porcelain);
-	--eggshell: var(--color-eggshell);
-	--border: color-mix(in srgb, var(--color-ink) 14%, transparent);
-	--border-soft: color-mix(in srgb, var(--color-ink) var(--tint-hairline-pct, 8%), transparent);
-	--muted: color-mix(in srgb, var(--color-ink) 65%, transparent);
-	--quiet: color-mix(in srgb, var(--color-ink) 50%, transparent);
-
-	font-family: var(--font-sans);
-	color: var(--ink);
-	background: var(--linen);
-	font-synthesis: none;
-	-webkit-font-smoothing: antialiased;
-}
 
 * {
 	box-sizing: border-box;
@@ -29,8 +17,12 @@
 
 body {
 	margin: 0;
-	min-width: 20rem;
-	min-height: 100vh;
+	min-inline-size: 20rem;
+	/* The shell IS the viewport, which is the one place this is not a component
+	   reaching for the window. */
+	min-block-size: 100dvh;
+	font-family: var(--font-sans);
+	color: var(--color-foreground);
 	background:
 		radial-gradient(
 			circle at 90% 5%,
@@ -41,189 +33,12 @@ body {
 			circle at 5% 95%,
 			color-mix(in srgb, var(--color-sunflower) 10%, transparent),
 			transparent 30rem
-		);
+		),
+		var(--color-surface-page);
+	font-synthesis: none;
+	-webkit-font-smoothing: antialiased;
 }
 
 a {
 	color: inherit;
-}
-
-.site {
-	width: min(72rem, calc(100% - 2rem));
-	margin: 0 auto;
-}
-
-header.site {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	min-height: 4rem;
-	border-bottom: 1px solid var(--border-soft);
-}
-
-.brand {
-	display: flex;
-	align-items: center;
-	gap: 0.625rem;
-	font-weight: 600;
-	font-size: 1.0625rem;
-	letter-spacing: -0.015em;
-	text-decoration: none;
-}
-
-.brand img {
-	width: 1.75rem;
-	height: 1.75rem;
-}
-
-nav {
-	display: flex;
-	align-items: center;
-	gap: 1.25rem;
-	font-size: 0.875rem;
-}
-
-nav a,
-button.link {
-	color: var(--muted);
-	font: inherit;
-	text-decoration: none;
-	transition: color 0.15s ease;
-}
-
-nav a:hover,
-button.link:hover {
-	color: var(--ink);
-}
-
-button.link {
-	min-height: 0;
-	padding: 0;
-	background: transparent;
-	border: 0;
-	cursor: pointer;
-}
-
-main.site {
-	min-height: calc(100vh - 8rem);
-	padding-block: 4rem;
-}
-
-footer.site {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: center;
-	column-gap: 1.25rem;
-	row-gap: 0.5rem;
-	padding-block: 1.25rem;
-	border-top: 1px solid var(--border-soft);
-	text-align: center;
-	font-size: 0.75rem;
-}
-
-footer.site a {
-	color: var(--muted);
-	text-decoration: none;
-	transition: color 0.15s ease;
-}
-
-footer.site a:hover {
-	color: var(--ink);
-}
-
-.auth,
-.auth form {
-	display: grid;
-	gap: 1rem;
-	justify-items: center;
-	text-align: center;
-}
-
-.auth > * {
-	width: 100%;
-}
-
-h2,
-p {
-	margin-block: 0;
-}
-
-.auth p {
-	color: var(--muted);
-	font-size: 0.875rem;
-	line-height: 1.6;
-}
-
-.primary-action {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-height: 2.75rem;
-	padding: 0 1.75rem;
-	border-radius: var(--radius-pill);
-	background: var(--color-primary);
-	color: var(--color-primary-foreground);
-	font-size: var(--fs-section);
-	font-weight: 600;
-	text-decoration: none;
-}
-
-.account-email {
-	color: var(--quiet);
-	font-size: var(--fs-meta);
-}
-
-.passkey-heading {
-	margin-top: 0.75rem;
-	font-size: var(--fs-title);
-}
-
-.passkeys {
-	display: grid;
-	gap: 0.5rem;
-	width: 100%;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-	text-align: left;
-}
-
-.passkeys li {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 1rem;
-	padding: 0.75rem 1rem;
-	border: 1px solid var(--border);
-	border-radius: var(--radius-inner);
-	background: var(--eggshell);
-	font-size: var(--fs-body);
-}
-
-.muted {
-	color: var(--quiet);
-	font-size: var(--fs-meta);
-}
-
-.actions {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 1rem;
-	width: 100%;
-}
-
-@media (max-width: 40rem) {
-	.site {
-		width: min(100% - 1.25rem, 72rem);
-	}
-
-	main.site {
-		padding-block: 2.5rem;
-	}
-
-	.passkeys li {
-		align-items: flex-start;
-		flex-direction: column;
-	}
 }
