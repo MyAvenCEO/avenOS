@@ -75,7 +75,7 @@ onDestroy(() => {
 </script>
 
 {#if renderError}
-	<p class="shrink-0 px-1 text-sm text-error-strong" role="alert">{renderError}</p>
+	<p class="shrink-0 px-1 text-sm text-error-ink" role="alert">{renderError}</p>
 {/if}
 {#if viewDef}
 	<div {@attach attachHost} class="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto"></div>

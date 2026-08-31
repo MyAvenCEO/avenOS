@@ -96,7 +96,7 @@ onMount(async () => {
 			</div>
 			<div class="setting-row">
 				<span class="setting-row-copy"><p class="setting-row-label">Konto-ID</p></span>
-				<span class="setting-row-control text text--mono">{user?.id}</span>
+				<span class="setting-row-control text text--mono-meta">{user?.id}</span>
 			</div>
 		</div>
 		<div class="surface surface--raised stack">
@@ -104,7 +104,7 @@ onMount(async () => {
 			{#if names.length}
 				<ul class="stack">
 					{#each names as name (name)}
-						<li class="text text--mono">{name}.aven.ceo</li>
+						<li class="text text--mono-meta">{name}.aven.ceo</li>
 					{/each}
 				</ul>
 			{:else}

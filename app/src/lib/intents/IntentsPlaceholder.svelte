@@ -594,7 +594,7 @@ const DOT: Record<string, string> = {
 				}}
 				class="rounded-xl border text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {sel
 					? `border-transparent px-4 py-3 ${accent.fill}`
-					: `border-l-[4px] border-foreground/8 bg-surface-raised px-4 py-3 hover:bg-surface-card-hover ${accent.edge}`}"
+					: `border-l-[4px] border-foreground/8 bg-surface-raised px-4 py-3 hover:bg-surface-selected ${accent.edge}`}"
 			>
 				<!-- The selected card: same size and corners as every other, filled
 				     with its state's color. -->
@@ -669,7 +669,7 @@ const DOT: Record<string, string> = {
 						shell.detail = true
 					}}
 					class="rounded-xl border border-l-[4px] border-l-foreground/15 px-4 py-3 text-left opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all hover:opacity-100 {sel
-						? 'border-foreground/15 bg-surface-card-selected opacity-100'
+						? 'border-foreground/15 bg-surface-selected opacity-100'
 						: 'border-foreground/8 bg-surface-raised hover:border-foreground/15'}"
 				>
 					<div class="flex items-baseline gap-2">
@@ -769,7 +769,7 @@ const DOT: Record<string, string> = {
 				<div
 					bind:clientWidth={sfW}
 					bind:clientHeight={sfH}
-					class="h-[420px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-soft/25"
+					class="h-[420px] w-full shrink-0 overflow-hidden rounded-xl border border-border bg-surface-sunken/25"
 				>
 					{#key skillView.skill}
 						{#if sfNodes.length === 0}
@@ -807,9 +807,9 @@ const DOT: Record<string, string> = {
 					<section class="surface surface--size-sm text-xs">
 						<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
 							<h2 class="font-semibold">{artifactProcessingStageLabel(selectedStage.key)}</h2>
-							<span class="text text--mono">{selectedStage.key}</span>
+							<span class="text text--mono-meta">{selectedStage.key}</span>
 							<span
-								class="ml-auto rounded-md bg-surface-soft px-2 py-0.5 font-mono text-[length:var(--fs-micro)]"
+								class="ml-auto rounded-md bg-surface-sunken px-2 py-0.5 font-mono text-[length:var(--fs-micro)]"
 							>
 								{selectedStage.state}
 							</span>
@@ -839,7 +839,7 @@ const DOT: Record<string, string> = {
 								</p>
 								<ul class="mt-1 flex flex-wrap gap-1.5">
 									{#each selectedStageArtifacts as artifact (artifact.artifactId ?? artifact.title)}
-										<li class="rounded-md bg-surface-soft px-2 py-1">
+										<li class="rounded-md bg-surface-sunken px-2 py-1">
 											{artifact.title}
 										</li>
 									{/each}
@@ -861,7 +861,7 @@ const DOT: Record<string, string> = {
 									onclick={() => {
 										selectedStageKey = selectedStageKey === stage.key ? null : stage.key
 									}}
-									class="flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors {selectedStageKey === stage.key ? 'border-primary/25 bg-surface-card-selected' : 'border-border/25 bg-surface-soft/25 hover:bg-surface-card'}"
+									class="flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors {selectedStageKey === stage.key ? 'border-primary/25 bg-surface-selected' : 'border-border/25 bg-surface-sunken/25 hover:bg-surface-card'}"
 								>
 									<span
 										class="size-2 shrink-0 rounded-full {stage.state === 'succeeded' ? 'bg-success' : stage.state === 'failed' ? 'bg-error' : stage.state === 'needs_review' ? 'bg-info' : stage.state === 'running' || stage.state === 'publishing' ? 'animate-pulse bg-progress' : stage.state === 'retry_wait' ? 'animate-pulse bg-warning' : 'bg-foreground/15'}"
@@ -869,7 +869,7 @@ const DOT: Record<string, string> = {
 									<span class="min-w-0 flex-1 truncate"
 										>{artifactProcessingStageLabel(stage.key)}</span
 									>
-									<span class="shrink-0 text text--mono">{stage.state}</span>
+									<span class="shrink-0 text text--mono-meta">{stage.state}</span>
 								</button>
 							</li>
 						{/each}
@@ -884,7 +884,7 @@ const DOT: Record<string, string> = {
 					<ul class="flex flex-col gap-2">
 						{#each skillLog as entry (entry.step)}
 							<li class="flex items-baseline gap-3 text-sm">
-								<span class="text text--mono">{entry.when}</span>
+								<span class="text text--mono-meta">{entry.when}</span>
 								<span class="min-w-0 flex-1">{entry.step}</span>
 								<span
 									class="font-mono text-[length:var(--fs-micro)] {entry.state === 'done'
@@ -903,7 +903,7 @@ const DOT: Record<string, string> = {
 				<!-- ARTIFACT PREVIEW: full width — header, a divider, the view. -->
 				<header class="flex items-center gap-2">
 					<span
-						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[length:var(--fs-nano)] text-foreground/50"
+						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-sunken font-mono text-[length:var(--fs-nano)] text-foreground/50"
 					>
 						{KIND_LABEL[preview.kind]}
 					</span>
@@ -918,7 +918,7 @@ const DOT: Record<string, string> = {
 				{#if preview.artifactId}
 					<div class="flex w-full flex-col gap-3 pt-2">
 						<div
-							class="rounded-lg bg-surface-soft px-4 py-3 font-mono text-[length:var(--fs-eyebrow)] text-foreground/65"
+							class="rounded-lg bg-surface-sunken px-4 py-3 font-mono text-[length:var(--fs-eyebrow)] text-foreground/65"
 						>
 							<div>artifact {preview.artifactId}</div>
 							<div>{preview.typeKey}{preview.stageKey ? ` · ${preview.stageKey}` : ''}</div>
@@ -956,7 +956,7 @@ const DOT: Record<string, string> = {
 					<div class="w-full pt-2">
 						<div class="flex items-baseline justify-between pb-6">
 							<span class="font-semibold text-sm">{preview.title.replace('.pdf', '')}</span>
-							<span class="text text--mono">Seite 1 / 2</span>
+							<span class="text text--mono-meta">Seite 1 / 2</span>
 						</div>
 						{#each [92, 100, 78, 96, 60] as w, i (i)}
 							<div class="mb-2 h-2 rounded bg-foreground/8" style="width: {w}%"></div>
@@ -981,7 +981,7 @@ const DOT: Record<string, string> = {
 							></span>
 							<span class="flex-1 font-medium text-sm">{preview.title}</span>
 							<span
-								class="rounded-full bg-surface-soft px-2 py-0.5 font-mono text-[length:var(--fs-micro)]"
+								class="rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-[length:var(--fs-micro)]"
 							>
 								todos
 							</span>
@@ -1179,11 +1179,11 @@ const DOT: Record<string, string> = {
 									skillView = selected.skills.find((s) => s.skill === entry.skill) ?? null
 									preview = null
 								}}
-										class="rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[length:var(--fs-nano)] text-foreground/50 transition-colors hover:bg-surface-card-selected"
+										class="rounded-md bg-surface-sunken px-1.5 py-0.5 font-mono text-[length:var(--fs-nano)] text-foreground/50 transition-colors hover:bg-surface-selected"
 									>
 										{nameOf(entry.skill)}
 									</button>
-									<span class="ml-auto shrink-0 text text--mono">
+									<span class="ml-auto shrink-0 text text--mono-meta">
 										{entry.when}
 									</span>
 								</div>
@@ -1346,7 +1346,7 @@ const DOT: Record<string, string> = {
 											</div>
 										{:else if file.status === 'failed'}
 											<p
-												class="border-error/15 border-t bg-error-muted px-3.5 py-2 text-error-strong text-[length:var(--fs-eyebrow)]"
+												class="border-error/15 border-t bg-error-surface px-3.5 py-2 text-error-ink text-[length:var(--fs-eyebrow)]"
 											>
 												{file.error ?? 'The file could not be uploaded.'}
 											</p>
@@ -1539,7 +1539,7 @@ const DOT: Record<string, string> = {
 		}}
 				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {skillView?.skill ===
 		s.skill
-			? 'border-foreground/15 bg-surface-card-selected'
+			? 'border-foreground/15 bg-surface-selected'
 			: 'border-foreground/8 bg-surface-raised hover:border-foreground/15'}"
 			>
 				<div class="flex items-center gap-2">
@@ -1551,7 +1551,7 @@ const DOT: Record<string, string> = {
 						: 'bg-progress'}"
 					></span>
 					<span class="font-medium text-xs">{nameOf(s.skill)}</span>
-					<span class="ml-auto text text--mono">
+					<span class="ml-auto text text--mono-meta">
 						{s.state === 'done' ? 'fertig' : s.state === 'waiting' ? 'wartet' : 'läuft'}
 					</span>
 				</div>
@@ -1582,12 +1582,12 @@ const DOT: Record<string, string> = {
 		}}
 				class="rounded-xl border px-4 py-3 text-left shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-all {preview?.title ===
 		artifact.title
-			? 'border-foreground/15 bg-surface-card-selected'
+			? 'border-foreground/15 bg-surface-selected'
 			: 'border-foreground/8 bg-surface-raised hover:border-foreground/15'}"
 			>
 				<div class="flex items-center gap-2">
 					<span
-						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-soft font-mono text-[length:var(--fs-nano)] text-foreground/50"
+						class="flex h-8 w-10 items-center justify-center rounded-lg bg-surface-sunken font-mono text-[length:var(--fs-nano)] text-foreground/50"
 					>
 						{KIND_LABEL[artifact.kind]}
 					</span>

@@ -55,7 +55,7 @@ function toolCallsOf(message: ChatMessage) {
 					system · prompt + live context
 				</p>
 				<pre
-					class="border-border border-foreground/8 overflow-hidden whitespace-pre-wrap break-words rounded-lg bg-surface-soft px-4 py-3 font-mono text-[length:var(--fs-eyebrow)] leading-relaxed text-foreground/80"
+					class="border-border border-foreground/8 overflow-hidden whitespace-pre-wrap break-words rounded-lg bg-surface-sunken px-4 py-3 font-mono text-[length:var(--fs-eyebrow)] leading-relaxed text-foreground/80"
 				>{system.content}</pre>
 			</section>
 		{/if}
