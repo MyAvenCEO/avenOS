@@ -906,13 +906,16 @@ async function runBootstrapApply(update: (event: TuiProgressUpdate) => void): Pr
 				} else if (line.trim()) {
 					const redacted = redactSecrets(line)
 					log.push(`[${source}] ${redacted}`)
-					if (source === 'stderr' && /^(error|details):/.test(redacted.trim()))
-						diagnosticLines.push(redacted.trim())
+					if (/^(error|details):/.test(redacted.trim())) diagnosticLines.push(redacted.trim())
 				}
 			}
 			if (done) break
 		}
-		if (pending.trim()) log.push(`[${source}] ${redactSecrets(pending)}`)
+		if (pending.trim()) {
+			const redacted = redactSecrets(pending)
+			log.push(`[${source}] ${redacted}`)
+			if (/^(error|details):/.test(redacted.trim())) diagnosticLines.push(redacted.trim())
+		}
 	}
 	try {
 		const [exitCode] = await Promise.all([

@@ -120,7 +120,14 @@ export function savedWizardVerificationIndexes(
 }
 
 export function bootstrapFailureSummary(lines: readonly string[]): string | undefined {
-	const error = [...lines].reverse().find((line) => line.startsWith('error:'))
+	const errors = lines.filter((line) => line.startsWith('error:'))
+	const error =
+		[...errors]
+			.reverse()
+			.find(
+				(line) =>
+					!/^error:\s*(?:pulumi failed|update failed|script .* exited with code)\.?$/i.test(line)
+			) ?? errors.at(-1)
 	const details = [...lines].reverse().find((line) => line.startsWith('details:'))
 	const summary = [error, details]
 		.filter((line): line is string => Boolean(line))

@@ -15,6 +15,7 @@ import {
 	isRetryableGitHubError,
 	parseBootstrapProgress,
 	recoveryCsv,
+	trackedBootstrapBucketKinds,
 	validateBootstrapInput,
 	writeRecoveryCsv
 } from '../../../scripts/lib/deployment-bootstrap.ts'
@@ -73,6 +74,29 @@ test('adopts only deterministic buckets reported by an interrupted bootstrap upd
 			expected
 		),
 		[]
+	)
+})
+
+test('finds only target buckets already tracked in an interrupted bootstrap stack', () => {
+	assert.deepEqual(
+		trackedBootstrapBucketKinds(
+			{
+				deployment: {
+					resources: [
+						{
+							type: 'minio:index/s3Bucket:S3Bucket',
+							urn: 'urn:pulumi:identity::aven-bootstrap::minio:index/s3Bucket:S3Bucket::identity-backup'
+						},
+						{
+							type: 'minio:index/s3Bucket:S3Bucket',
+							urn: 'urn:pulumi:identity::aven-bootstrap::minio:index/s3Bucket:S3Bucket::next-state'
+						}
+					]
+				}
+			},
+			'identity'
+		),
+		['backup']
 	)
 })
 

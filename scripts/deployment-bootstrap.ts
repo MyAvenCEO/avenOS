@@ -19,9 +19,12 @@ import {
 	saveGeneratedSecrets,
 	selectedDeploymentTargets,
 	TARGETS,
+	type Target,
+	trackedBootstrapBucketKinds,
 	validateBootstrapInput,
 	writeRecoveryCsv
 } from './lib/deployment-bootstrap.js'
+import { signedS3ReadRequest } from './lib/deployment-bootstrap-guided.js'
 import { ensurePolarCatalog } from './lib/polar-catalog.js'
 import { ensurePolarWebhook } from './lib/polar-webhook.js'
 import { fetchRedpillPhalaCatalog } from './lib/redpill-model-catalog.js'
@@ -214,6 +217,32 @@ const localStateDirectory = resolve(outputDirectory, 'pulumi-state')
 ensurePrivateDirectory(localStateDirectory)
 const localBackend = `file://${localStateDirectory}`
 
+async function existingBootstrapBucketKinds(
+	expected: Record<'state' | 'backup', string>,
+	storage: BootstrapInput['objectStorage']['targets'][Target]
+): Promise<Array<'state' | 'backup'>> {
+	const checks = await Promise.all(
+		(['state', 'backup'] as const).map(async (kind) => {
+			const request = signedS3ReadRequest({
+				region: input.objectStorage.region,
+				accessKeyId: storage.bootstrapCredential.accessKeyId,
+				secretAccessKey: storage.bootstrapCredential.secretAccessKey,
+				bucket: expected[kind]
+			})
+			const response = await fetch(request.url, {
+				headers: request.headers,
+				signal: AbortSignal.timeout(20_000)
+			})
+			if (response.ok) return kind
+			if (response.status === 404) return undefined
+			throw new Error(
+				`Hetzner Object Storage returned HTTP ${response.status} while checking the exact ${kind} bucket for interrupted-bootstrap recovery.`
+			)
+		})
+	)
+	return checks.filter((kind): kind is 'state' | 'backup' => kind !== undefined)
+}
+
 for (const target of selectedTargets) {
 	beginProgress(`Prepare ${target} storage`, `Opening the ${target} bootstrap stack.`)
 	const storage = input.objectStorage.targets[target]
@@ -258,8 +287,21 @@ for (const target of selectedTargets) {
 			state: objectStorageBucketName(input, generated, target, 'state'),
 			backup: objectStorageBucketName(input, generated, target, 'backup')
 		}
-		let bucketsToAdopt: Array<'state' | 'backup'> = []
-		const attemptedAdoptions: Array<'state' | 'backup'> = []
+		const currentStack = JSON.parse(
+			await run('pulumi', ['stack', 'export', '--stack', stack, '--cwd', bootstrapCwd], {
+				env: bootstrapEnvironment,
+				quiet: true
+			})
+		) as unknown
+		const trackedBuckets = trackedBootstrapBucketKinds(currentStack as never, target)
+		let bucketsToAdopt = (await existingBootstrapBucketKinds(expectedBuckets, storage)).filter(
+			(kind) => !trackedBuckets.includes(kind)
+		)
+		const attemptedAdoptions = [...bucketsToAdopt]
+		if (bucketsToAdopt.length > 0)
+			updateProgress(
+				`Adopting the existing, untracked ${target} ${bucketsToAdopt.join(' and ')} bucket from this interrupted generation.`
+			)
 		for (;;) {
 			try {
 				await run('pulumi', ['up', '--yes', '--stack', stack, '--cwd', bootstrapCwd], {
@@ -277,7 +319,7 @@ for (const target of selectedTargets) {
 				const additions = collisions.filter((kind) => !attemptedAdoptions.includes(kind))
 				if (additions.length === 0) throw error
 				attemptedAdoptions.push(...additions)
-				bucketsToAdopt = additions
+				bucketsToAdopt = [...new Set([...bucketsToAdopt, ...additions])]
 				updateProgress(
 					`Adopting the existing ${target} ${additions.join(' and ')} bucket from this interrupted generation, then reconciling it.`
 				)

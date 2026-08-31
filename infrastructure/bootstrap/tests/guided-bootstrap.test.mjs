@@ -163,6 +163,14 @@ test('surfaces a concise provider error on the recovery screen', () => {
 		'The payment provider rejected list-benefits. — API error: HTTP 403 insufficient_scope'
 	)
 	assert.equal(bootstrapFailureSummary(['stack frame only']), undefined)
+	assert.equal(
+		bootstrapFailureSummary([
+			'error: update failed',
+			'error: expected non-nil error with nil state during Create of identity-state',
+			'error: pulumi failed'
+		]),
+		'expected non-nil error with nil state during Create of identity-state'
+	)
 })
 
 test('introduces every manual prerequisite and the incremental plaintext recovery behavior', () => {
