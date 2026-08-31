@@ -21,6 +21,42 @@ export function uninstallConfirmation(deploymentPrefix: string): string {
 	return `uninstall ${deploymentPrefix}`
 }
 
+export function guidedUninstallArguments(
+	scriptPath: string,
+	inputPath: string,
+	outputDirectory: string,
+	deploymentPrefix: string
+): string[] {
+	uninstallConfirmation(deploymentPrefix)
+	return [
+		scriptPath,
+		'--input',
+		inputPath,
+		'--output',
+		outputDirectory,
+		'--confirmed-generation',
+		deploymentPrefix,
+		'--progress-json'
+	]
+}
+
+export function uninstallFailureSummary(lines: readonly string[]): string | undefined {
+	const providerError = [...lines]
+		.reverse()
+		.find((line) => /^error:\s*/i.test(line) && !/^error:\s*script .* exited with code/i.test(line))
+	if (providerError) return providerError.replace(/^error:\s*/i, '').slice(0, 800)
+
+	const useful = lines.filter(
+		(line) =>
+			line.length > 0 &&
+			!/^\s*at\s+/i.test(line) &&
+			!/^bun v\d/i.test(line) &&
+			!/^\s*[\^~]+\s*$/.test(line) &&
+			!/^error:\s*script .* exited with code/i.test(line)
+	)
+	return useful.length > 0 ? useful.slice(-2).join(' — ').slice(0, 800) : undefined
+}
+
 export function uninstallTargets(
 	input: Pick<BootstrapInput, 'deploymentTargets'>,
 	generated: Pick<GeneratedSecrets, 'completedTargets'>

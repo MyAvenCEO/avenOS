@@ -4,10 +4,12 @@ import {
 	activePrefixAllowsRepositoryCleanup,
 	bootstrapBucketTargetUrns,
 	githubEnvironmentNames,
+	guidedUninstallArguments,
 	localResetPaths,
 	ownedPolarCatalogResources,
 	platformProtectionTargetUrns,
 	uninstallConfirmation,
+	uninstallFailureSummary,
 	uninstallTargets
 } from '../../../scripts/lib/deployment-uninstall.ts'
 
@@ -21,6 +23,38 @@ test('removes a generation in reverse dependency order', () => {
 	)
 	assert.equal(uninstallConfirmation('avenos-0123456789'), 'uninstall avenos-0123456789')
 	assert.throws(() => uninstallConfirmation('avenos-current'), /Invalid deployment namespace/)
+})
+
+test('passes the typed generation confirmation to the uninstall engine', () => {
+	assert.deepEqual(
+		guidedUninstallArguments(
+			'/repo/scripts/deployment-uninstall.ts',
+			'/private/bootstrap-input.json',
+			'/private/output',
+			'avenos-0123456789'
+		),
+		[
+			'/repo/scripts/deployment-uninstall.ts',
+			'--input',
+			'/private/bootstrap-input.json',
+			'--output',
+			'/private/output',
+			'--confirmed-generation',
+			'avenos-0123456789',
+			'--progress-json'
+		]
+	)
+})
+
+test('reports the provider error instead of Bun stack trailer noise', () => {
+	assert.equal(
+		uninstallFailureSummary([
+			'error: Refusing provider changes without --confirmed-generation avenos-0123456789.',
+			'      at /repo/scripts/deployment-uninstall.ts:67:12',
+			'Bun v1.3.13 (Linux x64)'
+		]),
+		'Refusing provider changes without --confirmed-generation avenos-0123456789.'
+	)
 })
 
 test('names only the saved generation GitHub Environments', () => {
