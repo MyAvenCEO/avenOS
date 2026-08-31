@@ -137,7 +137,7 @@ const statusLabel: Record<Site['status'], string> = {
 
 	{#if !isTauri()}
 		<p
-			class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="surface surface--raised text-xs opacity-60"
 		>
 			Hosting wird nur in der installierten aven.ceo App verwaltet.
 		</p>
@@ -148,7 +148,7 @@ const statusLabel: Record<Site['status'], string> = {
 			<ul class="flex flex-col gap-2">
 				{#each sites as site (site.id)}
 					<li
-						class="flex flex-col gap-3 rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+						class="flex flex-col gap-3 surface surface--raised"
 					>
 						<div class="flex items-start justify-between gap-3">
 							<div class="min-w-0">
@@ -159,7 +159,7 @@ const statusLabel: Record<Site['status'], string> = {
 								</p>
 							</div>
 							<span
-								class="shrink-0 rounded-full border border-foreground/8 px-2 py-1 text-[length:var(--fs-nano)] opacity-60"
+								class="shrink-0 rounded-full border border-foreground/8 text-[length:var(--fs-nano)] opacity-60"
 							>
 								{statusLabel[site.status]}
 							</span>
@@ -175,7 +175,7 @@ const statusLabel: Record<Site['status'], string> = {
 									type="button"
 									disabled={saving}
 									onclick={() => edit(site)}
-									class="rounded-lg border border-foreground/10 px-3 py-1.5 text-xs hover:bg-primary/8 disabled:opacity-40"
+									class="rounded-lg border border-foreground/10 text-xs hover:bg-primary/8 disabled:opacity-40"
 								>
 									Bearbeiten
 								</button>
@@ -183,7 +183,7 @@ const statusLabel: Record<Site['status'], string> = {
 									type="button"
 									disabled={saving}
 									onclick={() => remove(site)}
-									class="rounded-lg border border-error/20 px-3 py-1.5 text-xs text-error-strong hover:bg-error-muted disabled:opacity-40"
+									class="rounded-lg border border-error/20 text-xs text-error-strong hover:bg-error-muted disabled:opacity-40"
 								>
 									Entfernen
 								</button>
@@ -196,7 +196,7 @@ const statusLabel: Record<Site['status'], string> = {
 
 		<form
 			onsubmit={save}
-			class="flex flex-col gap-3 rounded-xl border border-foreground/8 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="flex flex-col gap-3 surface surface--raised"
 		>
 			<div class="flex items-center justify-between gap-3">
 				<p class="text-sm">{editing ? 'Site bearbeiten' : 'Site hinzufügen'}</p>
@@ -245,7 +245,7 @@ const statusLabel: Record<Site['status'], string> = {
 			<button
 				type="submit"
 				disabled={saving}
-				class="self-start rounded-lg bg-primary px-4 py-2 text-xs text-white disabled:opacity-40"
+				class="self-start rounded-lg bg-primary text-xs text-white disabled:opacity-40"
 			>
 				{saving ? 'Wird gespeichert …' : editing ? 'Änderung speichern' : 'Site hinzufügen'}
 			</button>
@@ -269,7 +269,7 @@ const statusLabel: Record<Site['status'], string> = {
 	{/if}
 
 	{#if failure}
-		<p class="rounded-xl border border-error/25 bg-error-muted px-4 py-3 text-xs text-error-strong">
+		<p class="rounded-xl border border-error/25 bg-error-muted text-xs text-error-strong">
 			{failure}
 		</p>
 	{/if}

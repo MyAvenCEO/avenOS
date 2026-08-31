@@ -95,8 +95,8 @@ async function preview(voice: Voice) {
 					onclick={() => {
 						category = c.id
 					}}
-					class="rounded-xl px-3 py-2 text-left text-sm transition-colors {category === c.id
-						? 'border border-foreground/8 bg-surface-raised font-medium shadow-[0_1px_3px_rgba(30,41,59,0.05)]'
+					class="rounded-xl text-left text-sm transition-colors {category === c.id
+						? 'border border-foreground/8 bg-surface-raised font-medium'
 						: 'opacity-60 hover:opacity-100'}"
 				>
 					{c.label}
@@ -119,7 +119,7 @@ async function preview(voice: Voice) {
 								target="_blank"
 								rel="noopener noreferrer"
 								onclick={(event) => openLegal(event, link.href)}
-								class="block px-3 py-0.5 text-[length:var(--fs-nano)] leading-relaxed text-foreground/35 transition-colors hover:text-foreground/80"
+								class="block text-[length:var(--fs-nano)] leading-relaxed text-foreground/35 transition-colors hover:text-foreground/80"
 							>
 								{link.label}
 							</a>
@@ -147,7 +147,7 @@ async function preview(voice: Voice) {
 
 					{#if !isTauri()}
 						<p
-							class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 text-xs opacity-60 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+							class="surface surface--raised text-xs opacity-60"
 						>
 							The voice only runs in the app — there is nothing to hear in the browser.
 						</p>
@@ -156,7 +156,7 @@ async function preview(voice: Voice) {
 					<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
 						{#each VOICES as voice (voice)}
 							<li
-								class="group flex items-center gap-3 rounded-xl border px-3 py-2 text-sm shadow-[0_1px_3px_rgba(30,41,59,0.05)] transition-colors {settings.voice ===
+								class="group flex items-center gap-3 rounded-xl border text-sm transition-colors {settings.voice ===
 							voice
 								? 'border-primary bg-surface-raised'
 								: 'border-foreground/8 bg-surface-raised'}"
@@ -214,7 +214,7 @@ async function preview(voice: Voice) {
 
 					{#if failure}
 						<p
-							class="rounded-xl border border-error/25 bg-error-muted px-4 py-3 text-xs text-error-strong"
+							class="rounded-xl border border-error/25 bg-error-muted text-xs text-error-strong"
 						>
 							{failure}
 						</p>
@@ -226,7 +226,7 @@ async function preview(voice: Voice) {
 				<section class="flex flex-col gap-3">
 					<h2 class="text-sm">Model</h2>
 					<p
-						class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 font-mono text-xs opacity-70 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+						class="surface surface--raised font-mono text-xs opacity-70"
 					>
 						deepseek/deepseek-v4-flash-0731 · RedPill TEE
 					</p>

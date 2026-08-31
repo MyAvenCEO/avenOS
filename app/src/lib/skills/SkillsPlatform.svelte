@@ -136,7 +136,7 @@ const nodeTypes = { flow: FlowNode }
 			>
 				<div class="flex items-baseline gap-2">
 					<span class="font-semibold text-sm">{s.name}</span>
-					<span class="mono-meta">
+					<span class="text text--mono">
 						{s.workflows.length}
 						{s.workflows.length === 1 ? 'workflow' : 'workflows'}
 					</span>
@@ -169,7 +169,7 @@ const nodeTypes = { flow: FlowNode }
 					</button>
 				{/each}
 			</div>
-			<span class="truncate mono-meta">
+			<span class="truncate text text--mono">
 				{boundary.requires.join(' · ')}
 				→ {boundary.produces.slice(0, 4).join(' · ')}
 			</span>
@@ -213,7 +213,7 @@ const nodeTypes = { flow: FlowNode }
 			<div>
 				<div class="flex items-baseline gap-2">
 					<span class="font-semibold text-sm">{selected.name}</span>
-					<span class="mono-meta">{selected.id}</span>
+					<span class="text text--mono">{selected.id}</span>
 					<span
 						class="ml-auto rounded-md bg-surface-soft px-1.5 py-0.5 font-mono text-[length:var(--fs-micro)]"
 					>

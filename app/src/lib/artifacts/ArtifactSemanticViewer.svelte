@@ -331,7 +331,7 @@ function title(): string {
 		</article>
 	{:else if validation}
 		<div class="mx-auto max-w-3xl space-y-3">
-			<div class="rounded-2xl border border-border bg-surface-raised p-5">
+			<div class="surface surface--raised surface--size-lg">
 				<div class="flex items-center justify-between gap-4">
 					<div>
 						<p class="text-[length:var(--fs-micro)] text-foreground/35 uppercase tracking-wide">
@@ -372,7 +372,7 @@ function title(): string {
 		</div>
 	{:else}
 		<div class="mx-auto max-w-3xl space-y-4">
-			<header class="rounded-2xl border border-border bg-surface-raised p-5">
+			<header class="surface surface--raised surface--size-lg">
 				<div class="flex items-start justify-between gap-4">
 					<div>
 						<p

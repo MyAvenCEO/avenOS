@@ -71,7 +71,7 @@ const { held }: { held: HeldMessage } = $props()
 				</div>
 			{:else if p.layout === 'ledger'}
 				<!-- figures: the first row is the amount, in full size -->
-				<div class="rounded-xl border border-border bg-surface-card px-5 py-4">
+				<div class="surface">
 					{#each p.rows ?? [] as row, i (row.label)}
 						{#if i === 0}
 							<div class="flex items-baseline justify-between pb-3">
@@ -124,7 +124,7 @@ const { held }: { held: HeldMessage } = $props()
 						{#if i > 0}
 							<span class="self-center font-mono text-foreground/35 text-sm">↔</span>
 						{/if}
-						<div class="min-w-0 flex-1 rounded-xl border border-border bg-surface-card px-4 py-3">
+						<div class="min-w-0 flex-1 surface surface--size-sm">
 							<p
 								class="pb-1.5 font-mono text-[length:var(--fs-nano)] text-foreground/50 uppercase tracking-wide"
 							>

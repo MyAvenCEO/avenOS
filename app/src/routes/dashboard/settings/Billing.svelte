@@ -491,7 +491,7 @@ onDestroy(() => {
 	     same answer the id service gives, from the same rule. -->
 	{@const bookable = canBuyMore(p.id, liveCountOf(subscriptions, p.id))}
 	<article
-		class="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)] {isLive
+		class="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border {isLive
 			? 'border-primary bg-surface-raised'
 			: 'border-foreground/8 bg-surface-raised'}"
 	>
@@ -499,7 +499,7 @@ onDestroy(() => {
 			<h3 class="text-sm font-medium">{p.name}</h3>
 			{#if isLive && s}
 				<span
-					class="rounded-full px-2 py-0.5 text-[length:var(--fs-micro)] font-medium uppercase tracking-[var(--tracking-wider)] {s.cancelAtPeriodEnd ||
+					class="rounded-full text-[length:var(--fs-micro)] font-medium uppercase tracking-[var(--tracking-wider)] {s.cancelAtPeriodEnd ||
 					['paused', 'past_due', 'unpaid', 'incomplete'].includes(s.status)
 						? 'bg-warning/15 text-warning-strong'
 						: 'bg-success/15 text-success-strong'}"
@@ -573,7 +573,7 @@ onDestroy(() => {
 					type="button"
 					onclick={() => subscribe(p.id)}
 					disabled={busy !== ''}
-					class="w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+					class="w-full rounded-full bg-primary text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
 				>
 					{busy === `subscribe:${p.id}` ? 'Buchung startet …' : 'Jetzt buchen'}
 				</button>
@@ -589,7 +589,7 @@ onDestroy(() => {
 					type="button"
 					onclick={() => resume(p.id)}
 					disabled={busy !== ''}
-					class="w-full rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/8 disabled:opacity-40"
+					class="w-full rounded-full border border-border text-sm font-medium transition-colors hover:bg-primary/8 disabled:opacity-40"
 				>
 					{busy === `resume:${p.id}` ? 'Wird fortgesetzt …' : 'Fortsetzen'}
 				</button>
@@ -605,14 +605,14 @@ onDestroy(() => {
 							type="button"
 							onclick={() => cancel(p.id)}
 							disabled={busy !== ''}
-							class="rounded-full bg-error px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+							class="rounded-full bg-error text-sm font-medium text-white disabled:opacity-40"
 						>
 							{busy === `cancel:${p.id}` ? 'Wird gekündigt …' : 'Kündigung bestätigen'}
 						</button>
 						<button
 							type="button"
 							onclick={() => (confirming = null)}
-							class="rounded-full border border-border px-4 py-2 text-sm"
+							class="rounded-full border border-border text-sm"
 						>
 							Abbrechen
 						</button>
@@ -626,7 +626,7 @@ onDestroy(() => {
 						type="button"
 						onclick={() => pause(p.id)}
 						disabled={busy !== ''}
-						class="rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/8 disabled:opacity-40"
+						class="rounded-full border border-border text-sm font-medium transition-colors hover:bg-primary/8 disabled:opacity-40"
 					>
 						{busy === `pause:${p.id}` ? 'Wird pausiert …' : 'Pausieren'}
 					</button>
@@ -636,7 +636,7 @@ onDestroy(() => {
 						type="button"
 						onclick={() => (confirming = `cancel:${p.id}`)}
 						disabled={busy !== ''}
-						class="rounded-full border border-error bg-transparent px-4 py-2 text-sm font-medium text-error-strong transition-colors hover:bg-error/8 disabled:opacity-40"
+						class="rounded-full border border-error bg-transparent text-sm font-medium text-error-strong transition-colors hover:bg-error/8 disabled:opacity-40"
 					>
 						Kündigen
 					</button>
@@ -657,7 +657,7 @@ onDestroy(() => {
 
 	{#if loading}
 		<p
-			class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 text-xs opacity-50 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+			class="surface surface--raised text-xs opacity-50"
 		>
 			Deine Abrechnung wird geladen …
 		</p>
@@ -667,7 +667,7 @@ onDestroy(() => {
 			     fullscreen overlay, hard-coded light, Polar's embed protocol
 			     spoken directly. -->
 			<div
-				class="flex flex-col gap-2 rounded-xl border border-foreground/8 bg-surface-raised px-4 py-4 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+				class="flex flex-col gap-2 surface surface--raised"
 			>
 				<div class="flex items-baseline justify-between gap-2">
 					<p class="eyebrow-quiet">
@@ -731,7 +731,7 @@ onDestroy(() => {
 			<p class="eyebrow-quiet">Meine Bestellungen</p>
 			{#if orders.length}
 				<ul
-					class="flex flex-col divide-y divide-foreground/8 rounded-xl border border-foreground/8 bg-surface-raised shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+					class="flex flex-col divide-y divide-foreground/8 surface surface--raised"
 				>
 					{#each orders as order (order.id)}
 						{@const plan = planOfOrder(order)}
@@ -739,7 +739,7 @@ onDestroy(() => {
 							<button
 								type="button"
 								onclick={() => (openOrder = openOrder === order.id ? null : order.id)}
-								class="flex items-center justify-between gap-3 px-4 py-2.5 text-left text-xs transition-colors hover:bg-primary/8"
+								class="flex items-center justify-between gap-3 text-left text-xs transition-colors hover:bg-primary/8"
 							>
 								<span class="opacity-60">{dateOf(order.createdAt)}</span>
 								<span class="flex-1 font-medium">{plan?.name ?? 'Bestellung'}</span>
@@ -752,7 +752,7 @@ onDestroy(() => {
 							</button>
 							{#if openOrder === order.id}
 								<div
-									class="flex flex-col gap-1.5 border-t border-foreground/8 bg-primary/[0.02] px-4 py-3 text-xs"
+									class="flex flex-col gap-1.5 border-t border-foreground/8 bg-primary/[0.02] text-xs"
 								>
 									<div class="flex justify-between gap-4">
 										<span class="opacity-40">Netto</span>
@@ -782,7 +782,7 @@ onDestroy(() => {
 												type="button"
 												onclick={() => downloadInvoice(order)}
 												disabled={busy !== ''}
-												class="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/8 disabled:opacity-40"
+												class="rounded-full border border-border text-xs font-medium transition-colors hover:bg-primary/8 disabled:opacity-40"
 											>
 												{busy === `invoice:${order.id}`
 													? 'Rechnung wird erstellt …'
@@ -810,7 +810,7 @@ onDestroy(() => {
 				</ul>
 			{:else}
 				<p
-					class="rounded-xl border border-foreground/8 bg-surface-raised px-4 py-3 text-xs opacity-50 shadow-[0_1px_3px_rgba(30,41,59,0.05)]"
+					class="surface surface--raised text-xs opacity-50"
 				>
 					Noch keine Bestellungen — sobald du etwas buchst, steht sie hier.
 				</p>
@@ -820,7 +820,7 @@ onDestroy(() => {
 
 	<!-- Page-level banner: ONLY for load failures that belong to no card. -->
 	{#if failure}
-		<p class="rounded-xl border border-error/25 bg-error-muted px-4 py-3 text-xs text-error-strong">
+		<p class="rounded-xl border border-error/25 bg-error-muted text-xs text-error-strong">
 			{failure}
 		</p>
 	{/if}
