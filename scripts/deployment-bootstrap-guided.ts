@@ -62,8 +62,10 @@ import {
 } from './lib/deployment-bootstrap-tui.js'
 import {
 	githubEnvironmentNames,
+	guidedUninstallArguments,
 	localResetPaths,
 	uninstallConfirmation,
+	uninstallFailureSummary,
 	uninstallSummary,
 	uninstallTargets
 } from './lib/deployment-uninstall.js'
@@ -863,8 +865,6 @@ async function runBootstrapApply(update: (event: TuiProgressUpdate) => void): Pr
 			inputPath,
 			'--output',
 			outputDirectory,
-			'--confirmed-generation',
-			generated.deploymentPrefix,
 			'--progress-json'
 		],
 		{
@@ -939,12 +939,12 @@ async function runUninstallApply(update: (event: TuiProgressUpdate) => void): Pr
 	const child = Bun.spawn(
 		[
 			process.execPath,
-			resolve(root, 'scripts/deployment-uninstall.ts'),
-			'--input',
-			inputPath,
-			'--output',
-			outputDirectory,
-			'--progress-json'
+			...guidedUninstallArguments(
+				resolve(root, 'scripts/deployment-uninstall.ts'),
+				inputPath,
+				outputDirectory,
+				generated.deploymentPrefix
+			)
 		],
 		{
 			cwd: root,
@@ -1007,11 +1007,7 @@ async function runUninstallApply(update: (event: TuiProgressUpdate) => void): Pr
 			const phase = lastEvent
 				? `${lastEvent.label}${lastEvent.detail ? ` — ${lastEvent.detail}` : ''}`
 				: 'starting the uninstall'
-			const detail = errors
-				.filter((line) => !/^error: script .* exited with code/i.test(line))
-				.slice(-2)
-				.join(' — ')
-				.slice(0, 800)
+			const detail = uninstallFailureSummary(errors)
 			throw new Error(
 				`Uninstall failed during ${phase.replace(/[.!?]+$/, '')}.${detail ? ` ${detail}` : ''} Diagnostic log: ${uninstallLogPath}`
 			)
