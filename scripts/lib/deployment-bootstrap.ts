@@ -140,6 +140,22 @@ export function collidingBootstrapBucketKinds(
 	return (['state', 'backup'] as const).filter((kind) => collisions.has(expected[kind]))
 }
 
+export function trackedBootstrapBucketKinds(
+	stack: {
+		deployment?: { resources?: Array<{ type?: unknown; urn?: unknown }> }
+	},
+	target: Target
+): Array<'state' | 'backup'> {
+	const trackedNames = new Set(
+		(stack.deployment?.resources ?? []).flatMap((resource) => {
+			if (resource.type !== 'minio:index/s3Bucket:S3Bucket' || typeof resource.urn !== 'string')
+				return []
+			return [resource.urn.split('::').at(-1)]
+		})
+	)
+	return (['state', 'backup'] as const).filter((kind) => trackedNames.has(`${target}-${kind}`))
+}
+
 export function encodeBootstrapProgress(event: BootstrapProgressEvent): string {
 	return `${BOOTSTRAP_PROGRESS_PREFIX}${JSON.stringify(event)}\n`
 }
