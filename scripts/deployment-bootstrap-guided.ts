@@ -169,6 +169,7 @@ function refreshCompletedCredentials(input: BootstrapInput): void {
 
 const tuiCandidate = requestedPlainTerminal ? undefined : new BootstrapTui()
 const tui = tuiCandidate?.isSupported() ? tuiCandidate : undefined
+await tui?.initializePalette()
 const plainTerminal = !tui
 const terminal = plainTerminal
 	? createInterface({ input: process.stdin, output: process.stdout, terminal: false })

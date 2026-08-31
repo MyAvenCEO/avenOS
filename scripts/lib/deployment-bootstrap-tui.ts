@@ -39,6 +39,7 @@ interface TerminalMultiMenu {
 interface TerminalApi {
 	width: number
 	height: number
+	getPalette(): Promise<Array<{ r: number; g: number; b: number }>>
 	clear(): void
 	hideCursor(hidden?: boolean): void
 	grabInput(enabled: boolean | { mouse?: string }): void
@@ -101,6 +102,18 @@ export interface StationTreeRow {
 	current?: boolean
 }
 
+export interface TerminalRgbColor {
+	r: number
+	g: number
+	b: number
+}
+
+export interface TuiInputColors {
+	color: number | 'brightWhite'
+	bgColor: number | 'blue'
+	contrast: number
+}
+
 export const TUI_TEXT_INPUT_KEY_BINDINGS = { ENTER: 'submit', KP_ENTER: 'submit' } as const
 export const TUI_PROGRESS_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const
 
@@ -118,6 +131,66 @@ export function navigationButtons(allowBack: boolean): TuiButton[] {
 
 export function choiceButtons(options: TuiButton[], allowBack: boolean): TuiButton[] {
 	return [...options, ...(allowBack ? [{ content: '< Back', value: 'back' }] : [])]
+}
+
+function relativeLuminance(color: TerminalRgbColor): number {
+	const channel = (value: number) => {
+		const normalized = Math.min(255, Math.max(0, value)) / 255
+		return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+	}
+	return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
+}
+
+export function terminalColorContrast(first: TerminalRgbColor, second: TerminalRgbColor): number {
+	const firstLuminance = relativeLuminance(first)
+	const secondLuminance = relativeLuminance(second)
+	const lighter = Math.max(firstLuminance, secondLuminance)
+	const darker = Math.min(firstLuminance, secondLuminance)
+	return (lighter + 0.05) / (darker + 0.05)
+}
+
+export function selectInputColors(palette: readonly TerminalRgbColor[]): TuiInputColors {
+	const background = palette[4]
+	if (
+		!background ||
+		palette.length < 16 ||
+		palette
+			.slice(0, 16)
+			.some(
+				(color) =>
+					!color ||
+					![color.r, color.g, color.b].every(
+						(channel) => Number.isFinite(channel) && channel >= 0 && channel <= 255
+					)
+			)
+	)
+		return { color: 'brightWhite', bgColor: 'blue', contrast: 0 }
+	let bestIndex = 15
+	let bestContrast = 0
+	for (const [index, candidate] of palette.entries()) {
+		if (!candidate || index === 4) continue
+		const contrast = terminalColorContrast(candidate, background)
+		if (contrast > bestContrast) {
+			bestIndex = index
+			bestContrast = contrast
+		}
+	}
+	if (bestContrast >= 7) return { color: bestIndex, bgColor: 4, contrast: bestContrast }
+
+	let bestBackgroundIndex = 4
+	for (const [backgroundIndex, backgroundCandidate] of palette.entries()) {
+		if (!backgroundCandidate) continue
+		for (const [foregroundIndex, foregroundCandidate] of palette.entries()) {
+			if (!foregroundCandidate || foregroundIndex === backgroundIndex) continue
+			const contrast = terminalColorContrast(foregroundCandidate, backgroundCandidate)
+			if (contrast > bestContrast) {
+				bestIndex = foregroundIndex
+				bestBackgroundIndex = backgroundIndex
+				bestContrast = contrast
+			}
+		}
+	}
+	return { color: bestIndex, bgColor: bestBackgroundIndex, contrast: bestContrast }
 }
 
 export function addChapterEvidence(existing: readonly string[], message: string): string[] {
@@ -245,6 +318,11 @@ export function wrapTerminalText(value: string, width: number): string[] {
 
 export class BootstrapTui {
 	readonly #terminal = terminalKit.terminal
+	#inputColors: TuiInputColors = {
+		color: 'brightWhite',
+		bgColor: 'blue',
+		contrast: 0
+	}
 	#chapter = 'Welcome'
 	#title = 'avenOS deployment bootstrap'
 	#context = ''
@@ -264,6 +342,15 @@ export class BootstrapTui {
 
 	isSupported(): boolean {
 		return this.#terminal.width >= 60 && this.#terminal.height >= 20
+	}
+
+	async initializePalette(): Promise<void> {
+		try {
+			this.#inputColors = selectInputColors(await this.#terminal.getPalette())
+		} catch {
+			// Some terminals cannot report their palette. The explicit light-on-blue fallback
+			// still avoids inheriting a foreground that can disappear into the input background.
+		}
 	}
 
 	setContext(
@@ -775,6 +862,15 @@ export class BootstrapTui {
 			x,
 			y,
 			width,
+			textAttr: {
+				color: this.#inputColors.color,
+				bgColor: this.#inputColors.bgColor,
+				bold: this.#inputColors.contrast < 7
+			},
+			voidAttr: {
+				color: this.#inputColors.color,
+				bgColor: this.#inputColors.bgColor
+			},
 			textInputKeyBindings: TUI_TEXT_INPUT_KEY_BINDINGS,
 			inputs: input.inputs,
 			buttons: input.buttons
