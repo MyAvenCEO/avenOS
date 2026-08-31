@@ -74,11 +74,10 @@
 		"brand:generate": "bun ./scripts/generate-brand.ts"
 	},
 	"devDependencies": {
-		"@avenos/aven-ui": "workspace:*",
 		"@biomejs/biome": "^2.4.14",
 		"@commitlint/cli": "^21.0.2",
 		"@commitlint/config-conventional": "^21.0.2",
-		"@myavenceo/aven-ceo": "^0.11.1",
+		"@myavenceo/aven-ceo": "^0.12.0",
 		"@myavenceo/aven-vibes": "^0.9.5",
 		"@playwright/test": "^1.62.1",
 		"@polar-sh/sdk": "0.49.0",

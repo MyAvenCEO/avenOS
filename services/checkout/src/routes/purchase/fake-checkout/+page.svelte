@@ -30,20 +30,21 @@ async function pay() {
 
 <svelte:head><title>Checkout</title></svelte:head>
 
-<!-- Same card as passkey linking: mark, title, and the subject in a `.well`
-     rather than as a bare line of text. -->
-<section class="panel stack stack-center">
-	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
-	<h1>Checkout</h1>
-	<div class="well">
-		<p class="eyebrow">Kauf für</p>
-		<p class="digits">{params.name}</p>
-		<p class="meta">{params.email}</p>
+<!-- The same `flow-card` as every other step of this funnel. -->
+<section class="flow-card">
+	<div class="flow-card-crest">
+		<img src="/aven-logo.svg" alt="" width="56" height="56">
 	</div>
+	<h1 class="flow-card-heading">Checkout</h1>
+	<p class="text text--label">Kauf für</p>
+	<div class="flow-card-code">{params.name}</div>
+	<p class="flow-card-description">{params.email}</p>
 	{#if error}
-		<div class="alert">{error}</div>
+		<div class="flow-card-alert">{error}</div>
 	{/if}
-	<button disabled={loading || !params.holdId} onclick={pay}>
-		{loading ? "Processing" : "Pay"}
-	</button>
+	<div class="flow-card-actions">
+		<button class="btn btn--primary" disabled={loading || !params.holdId} onclick={pay}>
+			{loading ? "Processing" : "Pay"}
+		</button>
+	</div>
 </section>

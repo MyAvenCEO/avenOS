@@ -55,6 +55,14 @@
 	/* The shapes almost every layout is made of. Each is one idea, tuned
 	 * at the call site through a custom property rather than by adding a
 	 * class per value — the native answer to gap-2/gap-4/gap-6. */
+	.app-shell {
+		background: var(--color-surface-page);
+		color: var(--color-foreground);
+		font-family: var(--font-sans);
+		-webkit-font-smoothing: antialiased;
+		min-block-size: 100dvh;
+	}
+
 	.stack {
 		display: grid;
 		gap: var(--gap, var(--space-comfortable));
@@ -129,322 +137,6 @@
 }
 
 @layer components {
-	.card {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-tight);
-		min-inline-size: 0;
-		padding: var(--space-loose);
-		border-radius: var(--radius-lg);
-		border: 1px solid var(--color-border);
-		background: var(--color-surface-raised);
-		color: inherit;
-		text-decoration: none;
-		transition: border-color var(--duration-quick) var(--ease-out), box-shadow var(--duration-quick) var(--ease-out), transform var(--duration-quick) var(--ease-out);
-		container-type: inline-size;
-		container-name: card;
-		inline-size: 100%;
-
-		&:hover:not([disabled]):not([aria-disabled="true"]) {
-			transform: translateY(-2px);
-			border-color: var(--color-border-strong);
-			box-shadow: var(--shadow-raised);
-		}
-		&:focus-visible {
-			outline: 1px solid var(--color-focus);
-		}
-		&:active:not([disabled]):not([aria-disabled="true"]) {
-			transform: translateY(0);
-			box-shadow: none;
-		}
-		&[disabled], &[aria-disabled="true"] {
-			opacity: 0.55;
-			cursor: default;
-			box-shadow: none;
-			transform: none;
-		}
-		&[aria-selected="true"], &[aria-pressed="true"], &[aria-current]:not([aria-current="false"]) {
-			border-color: var(--color-primary);
-			box-shadow: inset 0 0 0 1px var(--color-primary);
-		}
-		@media (prefers-reduced-motion: reduce) {
-			transition: border-color 0.01ms;
-		}
-	}
-
-	.eyebrow {
-		font-size: var(--fs-micro);
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-widest);
-		color: var(--color-eyebrow-ink);
-	}
-
-	.eyebrow-quiet {
-		font-size: var(--fs-nano);
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-widest);
-		color: var(--color-foreground-quiet);
-	}
-
-	.section-title {
-		font-size: var(--fs-amount);
-		font-weight: 600;
-		letter-spacing: var(--tracking-tight);
-		color: var(--color-foreground);
-	}
-
-	.section-band {
-		border-bottom: 1px solid var(--color-border-strong);
-		padding: 3.5rem 1.25rem;
-	}
-
-	.app-shell {
-		min-height: 100vh;
-		background: var(--color-surface-page);
-		color: var(--color-foreground);
-		font-family: var(--font-sans);
-		-webkit-font-smoothing: antialiased;
-	}
-
-	.mono-meta {
-		font-family: var(--font-mono);
-		font-size: var(--fs-micro);
-		color: var(--color-foreground-quiet);
-	}
-
-	.title {
-		margin: 0;
-		font-size: var(--fs-hero);
-		font-weight: 600;
-		letter-spacing: var(--tracking-tight);
-	}
-
-	.lede {
-		margin: 0;
-		font-size: var(--fs-section);
-		line-height: 1.6;
-		color: var(--color-foreground-quiet);
-	}
-
-	.label {
-		display: grid;
-		gap: 0.4rem;
-		font-weight: 600;
-		text-align: left;
-	}
-
-	.btn {
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: var(--space-tight);
-		min-block-size: var(--btn-block, 2.5rem);
-		padding-inline: var(--btn-pad, 1.25rem);
-		border: 0;
-		border-radius: var(--radius-full);
-		background: var(--color-primary);
-		color: var(--color-primary-foreground);
-		font: inherit;
-		font-size: var(--btn-fs, var(--fs-meta));
-		font-weight: 600;
-		line-height: 1;
-		letter-spacing: var(--tracking-tight);
-		white-space: nowrap;
-		cursor: pointer;
-		box-shadow: inset 0 0 0 3px var(--btn-ring, transparent), var(--shadow-raised);
-		transition: background var(--duration-quick) var(--ease-out), border-color var(--duration-quick) var(--ease-out), box-shadow var(--duration-quick) var(--ease-out), transform var(--duration-quick) var(--ease-out);
-		--btn-ring: var(--color-primary-ring);
-		--btn-badge: color-mix(in oklab, var(--color-primary-foreground) 22%, transparent);
-		--icon-tint: var(--color-icon-tint);
-
-		&:hover:not([disabled]):not([aria-disabled="true"]) {
-			transform: translateY(-1px);
-			box-shadow: inset 0 0 0 4px var(--btn-ring, transparent), var(--shadow-overlay);
-		}
-		&:focus-visible {
-			outline: 1px solid var(--color-focus);
-		}
-		&:active:not([disabled]):not([aria-disabled="true"]) {
-			transform: translateY(0);
-			box-shadow: inset 0 0 0 2px var(--btn-ring, transparent), none;
-		}
-		&[disabled], &[aria-disabled="true"] {
-			background: var(--color-muted);
-			color: var(--color-foreground-quiet);
-			box-shadow: none;
-			transform: none;
-			cursor: default;
-		}
-		&[aria-busy="true"] {
-			cursor: progress;
-			opacity: 1;
-			box-shadow: inset 0 0 0 3px var(--btn-ring, transparent), var(--shadow-raised);
-		}
-		@media (prefers-reduced-motion: reduce) {
-			transition: none;
-		}
-	}
-
-	.chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-		border-radius: var(--radius-xs);
-		background: var(--color-surface-sunken);
-		font-size: var(--fs-micro);
-		padding: 0.125rem 0.375rem;
-	}
-
-	.panel {
-		container-type: inline-size;
-		width: min(100%, 34rem);
-		margin-inline: auto;
-		padding: 2.5rem 2rem;
-		border: 1px solid var(--color-border-soft);
-		border-radius: var(--radius-lg);
-		background: var(--color-surface-raised);
-		box-shadow: var(--shadow-raised);
-	}
-
-	.well {
-		padding: var(--space-comfortable);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-surface-sunken);
-	}
-
-	.mark {
-		width: 3.5rem;
-		height: 3.5rem;
-		margin-inline: auto;
-	}
-
-	.digits {
-		font-size: var(--fs-amount);
-		font-weight: 500;
-		letter-spacing: var(--tracking-tight);
-		font-variant-numeric: tabular-nums;
-	}
-
-	.alert {
-		padding: 0.75rem 1rem;
-		border: 1px solid var(--color-error-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-error-surface);
-		color: var(--color-error-ink, color-mix(in oklab, var(--color-terracotta) 85%, black));
-		font-size: var(--fs-body);
-		line-height: 1.5;
-		text-align: left;
-	}
-
-	.steps {
-		display: flex;
-		gap: 0.375rem;
-		width: 100%;
-	}
-
-	.step {
-		flex: 1;
-		height: 3px;
-		border-radius: var(--radius-full);
-		background: color-mix(in srgb, var(--color-foreground) 12%, transparent);
-
-		&[aria-selected="true"], &[aria-pressed="true"], &[aria-current]:not([aria-current="false"]) {
-			background: var(--color-primary);
-			color: var(--color-primary-foreground);
-		}
-	}
-
-	.field {
-		display: grid;
-		gap: var(--space-hairline);
-		container-type: inline-size;
-		container-name: field;
-		inline-size: 100%;
-		min-inline-size: 0;
-		--icon-tint: var(--color-icon-tint);
-	}
-
-	.ghost {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 2.75rem;
-		padding: 0 1.25rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-full);
-		background: transparent;
-		color: var(--color-foreground-quiet);
-		font: inherit;
-		font-size: var(--fs-body);
-		font-weight: 500;
-		line-height: 1;
-		text-decoration: none;
-		white-space: nowrap;
-		cursor: pointer;
-	}
-
-	.meta {
-		font-size: var(--fs-meta);
-		color: var(--color-foreground-quiet);
-	}
-
-	.logo-mark {
-		inline-size: 1.75rem;
-		block-size: 1.75rem;
-		flex-shrink: 0;
-	}
-
-	.logo-wordmark {
-		display: inline-flex;
-		align-items: baseline;
-		white-space: nowrap;
-		font-size: 1.4em;
-	}
-
-	.logo-word-aven {
-		font-family: var(--font-display);
-		font-weight: 300;
-		font-size: 1em;
-		line-height: 1;
-	}
-
-	.logo-word-ceo {
-		font-family: var(--font-sans);
-		font-weight: 700;
-		font-size: 0.714em;
-		text-transform: uppercase;
-	}
-
-	.logo {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.625rem;
-		text-decoration: none;
-		color: inherit;
-		font-size: var(--fs-lead);
-		letter-spacing: var(--tracking-tight);
-	}
-
-	.logo--mark {
-		gap: 0;
-
-		& .logo-wordmark {
-			display: none;
-		}
-	}
-
-	.logo--wordmark {
-		gap: 0;
-
-		& .logo-mark {
-			display: none;
-		}
-	}
-
 	.text {
 		margin: 0;
 	}
@@ -722,6 +414,49 @@
 	.surface--size-chip {
 		border-radius: var(--radius-xl);
 		padding: var(--space-loose);
+	}
+
+	.card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-tight);
+		min-inline-size: 0;
+		padding: var(--space-loose);
+		border-radius: var(--radius-lg);
+		border: 1px solid var(--color-border);
+		background: var(--color-surface-raised);
+		color: inherit;
+		text-decoration: none;
+		transition: border-color var(--duration-quick) var(--ease-out), box-shadow var(--duration-quick) var(--ease-out), transform var(--duration-quick) var(--ease-out);
+		container-type: inline-size;
+		container-name: card;
+		inline-size: 100%;
+
+		&:hover:not([disabled]):not([aria-disabled="true"]) {
+			transform: translateY(-2px);
+			border-color: var(--color-border-strong);
+			box-shadow: var(--shadow-raised);
+		}
+		&:focus-visible {
+			outline: 1px solid var(--color-focus);
+		}
+		&:active:not([disabled]):not([aria-disabled="true"]) {
+			transform: translateY(0);
+			box-shadow: none;
+		}
+		&[disabled], &[aria-disabled="true"] {
+			opacity: 0.55;
+			cursor: default;
+			box-shadow: none;
+			transform: none;
+		}
+		&[aria-selected="true"], &[aria-pressed="true"], &[aria-current]:not([aria-current="false"]) {
+			border-color: var(--color-primary);
+			box-shadow: inset 0 0 0 1px var(--color-primary);
+		}
+		@media (prefers-reduced-motion: reduce) {
+			transition: border-color 0.01ms;
+		}
 	}
 
 	.card--emphasis-featured {
@@ -1795,6 +1530,7 @@
 		container-type: inline-size;
 		container-name: row-list;
 		inline-size: 100%;
+		text-align: start;
 	}
 
 	.row-list-row {
@@ -3094,6 +2830,59 @@
 		}
 	}
 
+	.btn {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-tight);
+		min-block-size: var(--btn-block, 2.5rem);
+		padding-inline: var(--btn-pad, 1.25rem);
+		border: 0;
+		border-radius: var(--radius-full);
+		background: var(--color-primary);
+		color: var(--color-primary-foreground);
+		font: inherit;
+		font-size: var(--btn-fs, var(--fs-meta));
+		font-weight: 600;
+		line-height: 1;
+		letter-spacing: var(--tracking-tight);
+		white-space: nowrap;
+		cursor: pointer;
+		box-shadow: inset 0 0 0 3px var(--btn-ring, transparent), var(--shadow-raised);
+		transition: background var(--duration-quick) var(--ease-out), border-color var(--duration-quick) var(--ease-out), box-shadow var(--duration-quick) var(--ease-out), transform var(--duration-quick) var(--ease-out);
+		--btn-ring: var(--color-primary-ring);
+		--btn-badge: color-mix(in oklab, var(--color-primary-foreground) 22%, transparent);
+		--icon-tint: var(--color-icon-tint);
+
+		&:hover:not([disabled]):not([aria-disabled="true"]) {
+			transform: translateY(-1px);
+			box-shadow: inset 0 0 0 4px var(--btn-ring, transparent), var(--shadow-overlay);
+		}
+		&:focus-visible {
+			outline: 1px solid var(--color-focus);
+		}
+		&:active:not([disabled]):not([aria-disabled="true"]) {
+			transform: translateY(0);
+			box-shadow: inset 0 0 0 2px var(--btn-ring, transparent), none;
+		}
+		&[disabled], &[aria-disabled="true"] {
+			background: var(--color-muted);
+			color: var(--color-foreground-quiet);
+			box-shadow: none;
+			transform: none;
+			cursor: default;
+		}
+		&[aria-busy="true"] {
+			cursor: progress;
+			opacity: 1;
+			box-shadow: inset 0 0 0 3px var(--btn-ring, transparent), var(--shadow-raised);
+		}
+		@media (prefers-reduced-motion: reduce) {
+			transition: none;
+		}
+	}
+
 	.btn-badge {
 		display: inline-flex;
 		align-items: center;
@@ -3441,6 +3230,16 @@
 
 	.tabs-panel {
 		min-inline-size: 0;
+	}
+
+	.field {
+		display: grid;
+		gap: var(--space-hairline);
+		container-type: inline-size;
+		container-name: field;
+		inline-size: 100%;
+		min-inline-size: 0;
+		--icon-tint: var(--color-icon-tint);
 	}
 
 	.field-label {
@@ -4131,6 +3930,71 @@
 		}
 	}
 
+	.step {
+		flex: 1;
+		height: 3px;
+		border-radius: var(--radius-full);
+		background: color-mix(in srgb, var(--color-foreground) 12%, transparent);
+
+		&[aria-selected="true"], &[aria-pressed="true"], &[aria-current]:not([aria-current="false"]) {
+			background: var(--color-primary);
+			color: var(--color-primary-foreground);
+		}
+	}
+
+	.logo {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.625rem;
+		text-decoration: none;
+		color: inherit;
+		font-size: var(--fs-lead);
+		letter-spacing: var(--tracking-tight);
+	}
+
+	.logo-mark {
+		inline-size: 1.75rem;
+		block-size: 1.75rem;
+		flex-shrink: 0;
+	}
+
+	.logo-wordmark {
+		display: inline-flex;
+		align-items: baseline;
+		white-space: nowrap;
+		font-size: 1.4em;
+	}
+
+	.logo-word-aven {
+		font-family: var(--font-display);
+		font-weight: 300;
+		font-size: 1em;
+		line-height: 1;
+	}
+
+	.logo-word-ceo {
+		font-family: var(--font-sans);
+		font-weight: 700;
+		font-size: 0.714em;
+		text-transform: uppercase;
+	}
+
+	.logo--mark {
+		gap: 0;
+
+		& .logo-wordmark {
+			display: none;
+		}
+	}
+
+	.logo--wordmark {
+		gap: 0;
+
+		& .logo-mark {
+			display: none;
+		}
+	}
+
 	.logo--inline {
 		gap: 0;
 		font-size: 1em;
@@ -4553,6 +4417,7 @@
 		inline-size: 100%;
 		max-inline-size: 72rem;
 		min-inline-size: 0;
+		padding-inline: var(--space-loose);
 	}
 
 	.site-footer-brand {
