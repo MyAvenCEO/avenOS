@@ -107,101 +107,127 @@ function onKey(event: KeyboardEvent) {
 
 <svelte:head><title>avenNAME sichern · avenCEO</title></svelte:head>
 
+<!--
+  Both states are the `flow-card` actor. Its description names this screen —
+  my.aven.ceo's name check is one of the three it was written for, beside
+  avenID's device authorisation and the passkey sign-in.
+
+  What this replaces is `panel auth` plus eight loose classes (mark, code,
+  eyebrow, digits, fine, steps, step, actions) that between them restated the
+  actor's crest, code, trust and actions parts by hand.
+-->
 {#if hold}
-	<section class="panel auth">
-		<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
-		<h1>Du bist auf der Liste</h1>
-		<div class="code">
-			<p class="eyebrow">Reserviert</p>
-			<p class="digits">{hold.name}.aven.ceo</p>
+	<section class="flow-card flow-card--status-success">
+		<div class="flow-card-crest">
+			<img src="/aven-logo.svg" alt="" width="56" height="56">
 		</div>
-		<p>
+		<h1 class="flow-card-heading">Du bist auf der Liste</h1>
+		<p class="text text--label">Reserviert</p>
+		<div class="flow-card-code">{hold.name}.aven.ceo</div>
+		<p class="flow-card-description">
 			Wir haben dir den Link an <strong>{email}</strong> geschickt. Er gilt bis
 			{new Date(hold.expiresAt).toLocaleString('de-DE')}.
 		</p>
-		<p class="fine">Wir melden uns per Mail, sobald du dran bist — und sonst nicht.</p>
+		<p class="flow-card-trust">Wir melden uns per Mail, sobald du dran bist — und sonst nicht.</p>
 	</section>
 {:else}
-	<section class="panel auth">
-		<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
-		<h1>{greeting ? `${greeting.name} sichern` : 'avenNAME sichern'}</h1>
-		<div class="code">
-			<p class="eyebrow">Dein Name</p>
-			<p class="digits">{name}.aven.ceo</p>
+	<section class="flow-card">
+		<div class="flow-card-crest">
+			<img src="/aven-logo.svg" alt="" width="56" height="56">
 		</div>
-		<p>{info?.priceEur ?? 30} € einmalig, zzgl. USt.</p>
+		<h1 class="flow-card-heading">{greeting ? `${greeting.name} sichern` : 'avenNAME sichern'}</h1>
+		<p class="text text--label">Dein Name</p>
+		<div class="flow-card-code">{name}.aven.ceo</div>
+		<p class="flow-card-description">{info?.priceEur ?? 30} € einmalig, zzgl. USt.</p>
 
 		{#if info && !info.available}
-			<div class="alert">Dieser Name ist nicht mehr frei. <a href="/">Anderen wählen</a></div>
+			<div class="flow-card-alert">Dieser Name ist nicht mehr frei. <a href="/">Anderen wählen</a></div>
 		{:else}
 			<div class="steps" aria-hidden="true">
 				{#each Array(TOTAL_STEPS) as _, i (i)}
-					<span class="step {i <= step ? 'done' : ''}"></span>
+					<span class="step" aria-selected={i <= step ? 'true' : 'false'}></span>
 				{/each}
 			</div>
-			<p class="eyebrow">Schritt {step + 1} von {TOTAL_STEPS}</p>
+			<p class="text text--label">Schritt {step + 1} von {TOTAL_STEPS}</p>
 
-			<div class="field" bind:this={panel}>
+			<div class="stack" bind:this={panel}>
 				{#if step === 1}
-					<label
-						>E‑Mail<input
-							bind:value={email}
-							type="email"
-							autocomplete="email"
-							placeholder="du@beispiel.de"
-							onkeydown={onKey}
-						></label
-					>
-					<p class="fine">Hierhin schicken wir deinen Link — und sonst nichts.</p>
+					<span class="field">
+						<label class="field-label" for="secure-email">E‑Mail</label>
+						<span class="field-shell">
+							<input
+								class="field-control"
+								id="secure-email"
+								bind:value={email}
+								type="email"
+								autocomplete="email"
+								placeholder="du@beispiel.de"
+								onkeydown={onKey}
+							>
+						</span>
+						<span class="field-hint">Hierhin schicken wir deinen Link — und sonst nichts.</span>
+					</span>
 				{:else if step === 2}
-					<label
-						>Wie dürfen wir dich nennen?<input
-							bind:value={salutation}
-							maxlength="120"
-							autocomplete="name"
-							placeholder="z. B. Samuel"
-							onkeydown={onKey}
-						></label
-					>
-					<p class="fine">
-						Damit wir dich anschreiben können wie ein Mensch, nicht wie ein Formular.
-					</p>
+					<span class="field">
+						<label class="field-label" for="secure-salutation">Wie dürfen wir dich nennen?</label>
+						<span class="field-shell">
+							<input
+								class="field-control"
+								id="secure-salutation"
+								bind:value={salutation}
+								maxlength="120"
+								autocomplete="name"
+								placeholder="z. B. Samuel"
+								onkeydown={onKey}
+							>
+						</span>
+						<span class="field-hint">
+							Damit wir dich anschreiben können wie ein Mensch, nicht wie ein Formular.
+						</span>
+					</span>
 				{:else}
-					<label
-						>Was wünschst du dir, dass {name} für dich tut?<textarea
-							bind:value={idea}
-							rows="5"
-							maxlength="2000"
-							placeholder="{name} soll …"
-						></textarea></label
-					>
-					<p class="fine">
-						Ein paar Sätze reichen. Wir vergeben <strong>Wildcard‑Einladungen</strong> an die Ideen,
-						die uns umhauen — unabhängig vom Platz in der Warteliste.
-					</p>
+					<span class="field field--type-multiline">
+						<label class="field-label" for="secure-idea">
+							Was wünschst du dir, dass {name} für dich tut?
+						</label>
+						<span class="field-shell">
+							<textarea
+								class="field-control"
+								id="secure-idea"
+								bind:value={idea}
+								rows="5"
+								maxlength="2000"
+								placeholder="{name} soll …"
+							></textarea>
+						</span>
+						<span class="field-hint">
+							Ein paar Sätze reichen. Wir vergeben <strong>Wildcard‑Einladungen</strong> an die
+							Ideen, die uns umhauen — unabhängig vom Platz in der Warteliste.
+						</span>
+					</span>
 				{/if}
 			</div>
 
 			{#if error}
-				<div class="alert">{error}</div>
+				<div class="flow-card-alert">{error}</div>
 			{/if}
 
-			<div class="actions">
+			<div class="flow-card-actions">
 				{#if step > 1}
-					<button class="ghost" type="button" onclick={back}>Zurück</button>
+					<button class="btn btn--ghost" type="button" onclick={back}>Zurück</button>
 				{:else}
-					<a class="ghost" href="/">Anderer Name</a>
+					<a class="btn btn--ghost" href="/">Anderer Name</a>
 				{/if}
 				{#if step < 3}
-					<button type="button" disabled={step === 1 && !emailOk} onclick={next}>Weiter</button>
+					<button class="btn btn--primary" type="button" disabled={step === 1 && !emailOk} onclick={next}>Weiter</button>
 				{:else}
-					<button type="button" disabled={loading || !email || !name} onclick={secure}>
+					<button class="btn btn--primary" type="button" disabled={loading || !email || !name} onclick={secure}>
 						{loading ? 'Einen Moment …' : idea.trim() ? 'Platz sichern' : 'Ohne Idee absenden'}
 					</button>
 				{/if}
 			</div>
 
-			<p class="fine">
+			<p class="flow-card-trust">
 				Mit Abschluss erklärst du dich einverstanden, dass wir dich anschreiben, sobald du dran
 				bist. Keine Newsletter, kein Weiterverkauf.
 			</p>
