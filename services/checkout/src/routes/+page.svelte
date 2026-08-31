@@ -81,56 +81,75 @@ function continueToCheckout() {
 </script>
 
 <svelte:head><title>avenNAME sichern · avenCEO</title></svelte:head>
-<section class="panel auth">
-	<img src="/aven-logo.svg" alt="" class="mark" width="56" height="56">
-	<h1>Sichere dir deinen avenNAME</h1>
+<section class="flow-card">
+	<div class="flow-card-crest">
+		<img src="/aven-logo.svg" alt="" width="56" height="56">
+	</div>
+	<h1 class="flow-card-heading">Sichere dir deinen avenNAME</h1>
 	{#if greeting}
-		<p class="eyebrow">Warteliste · {greeting.name}</p>
-		<p>{greeting.lead}</p>
+		<p class="text text--label">Warteliste · {greeting.name}</p>
+		<p class="flow-card-description">{greeting.lead}</p>
 	{:else}
-		<p>Wie eine Domain — aber für deinen Aven. Jeden Namen gibt es genau einmal.</p>
+		<p class="flow-card-description">
+			Wie eine Domain — aber für deinen Aven. Jeden Namen gibt es genau einmal.
+		</p>
 	{/if}
+
 	<!-- No check button: the answer arrives while you type. Enter goes straight
 	     on when the name is free, so the keyboard path still works. -->
 	<form
+		class="stack"
 		onsubmit={(event) => {
 			event.preventDefault()
 			continueToCheckout()
 		}}
 	>
-		<label
-			>Dein Name<input
-				bind:value={name}
-				maxlength="32"
-				autocomplete="off"
-				autocapitalize="none"
-				spellcheck="false"
-				placeholder="maia"
-			></label
-		>
-
-		<!-- One line that always holds the answer, so nothing jumps as it changes. -->
-		<p class="status" aria-live="polite">
+		<span class="field field--shape-affixed">
+			<label class="field-label" for="claim-name">Dein Name</label>
+			<span class="field-shell">
+				<input
+					class="field-control"
+					id="claim-name"
+					bind:value={name}
+					maxlength="32"
+					autocomplete="off"
+					autocapitalize="none"
+					spellcheck="false"
+					placeholder="maia"
+				>
+				<span class="field-suffix">.aven.ceo</span>
+			</span>
+			<!-- One line that always holds the answer, so nothing jumps as it changes.
+			     The verdict is an ICON plus words, never a bare tick or cross: a
+			     dingbat is a font-dependent glyph and reads as decoration. -->
 			{#if slug.length === 0}
-				<span class="fine">Wie eine Domain — dein Name, einmalig vergeben.</span>
+				<span class="field-hint">Wie eine Domain — dein Name, einmalig vergeben.</span>
 			{:else if slug.length < 3}
-				<span class="fine">Noch {3 - slug.length} Zeichen …</span>
+				<span class="field-hint">Noch {3 - slug.length} Zeichen …</span>
 			{:else if busy}
-				<span class="fine">{slug}.aven.ceo wird geprüft …</span>
+				<span class="field-hint" aria-live="polite">{slug}.aven.ceo wird geprüft …</span>
 			{:else if error}
-				<span class="taken">{error}</span>
+				<span class="field-error" aria-live="polite">{error}</span>
 			{:else if result?.available}
-				<span class="free">✓ {result.name}.aven.ceo ist frei</span>
+				<span class="field-hint" aria-live="polite">
+					<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.25 4.25L19 7" /></svg>
+					{result.name}.aven.ceo ist frei
+				</span>
 			{:else if result}
-				<span class="taken">✕ {result.name}.aven.ceo ist schon vergeben</span>
+				<span class="field-error" aria-live="polite">
+					<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+					{result.name}.aven.ceo ist schon vergeben
+				</span>
 			{:else}
-				<span class="fine">{slug}.aven.ceo</span>
+				<span class="field-hint">{slug}.aven.ceo</span>
 			{/if}
-		</p>
+		</span>
 
 		{#if result?.available}
-			<p>{result.priceEur} € einmalig, zzgl. USt.</p>
-			<button type="submit">Weiter</button>
+			<p class="flow-card-description">{result.priceEur} € einmalig, zzgl. USt.</p>
+			<div class="flow-card-actions">
+				<button class="btn btn--primary" type="submit">Weiter</button>
+			</div>
 		{/if}
 	</form>
 </section>
