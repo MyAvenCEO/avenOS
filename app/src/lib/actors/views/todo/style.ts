@@ -1,4 +1,4 @@
-import { withBrand } from '@avenos/aven-ui'
+import { withBrand } from '@myavenceo/aven-ceo/vibe-style'
 import type { StyleDef } from '@myavenceo/aven-vibes'
 
 /**

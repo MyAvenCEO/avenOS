@@ -34,10 +34,9 @@
 	"dependencies": {
 		"@avenos/actors": "workspace:*",
 		"@avenos/artifact-store": "workspace:*",
-		"@avenos/aven-ui": "workspace:*",
 		"@avenos/document-ingest": "workspace:*",
 		"@avenos/llm-client": "workspace:*",
-		"@myavenceo/aven-ceo": "^0.11.1",
+		"@myavenceo/aven-ceo": "^0.12.0",
 		"@tauri-apps/api": "^2",
 		"@tauri-apps/plugin-opener": "^2.5.4",
 		"@xyflow/svelte": "^1.6.2",

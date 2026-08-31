@@ -81,7 +81,7 @@ async function preview(voice: Voice) {
 	<header class="flex flex-col items-center gap-1.5">
 		<!-- The same quiet route stamp the dashboard wears. No Back link: the rail
 		     is one exclusive group, so the gear (or any other entry) leaves. -->
-		<p class="eyebrow-quiet">Settings</p>
+		<p class="text text--text--eyebrow-quiet">Settings</p>
 	</header>
 
 	<!-- Phones: the categories become a row above the content instead of a

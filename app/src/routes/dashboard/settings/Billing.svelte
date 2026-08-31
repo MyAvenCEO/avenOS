@@ -670,7 +670,7 @@ onDestroy(() => {
 				class="flex flex-col gap-2 surface surface--raised"
 			>
 				<div class="flex items-baseline justify-between gap-2">
-					<p class="eyebrow-quiet">
+					<p class="text text--text--eyebrow-quiet">
 						Checkout · {TIER_PLANS.find((p) => p.id === checkout?.tier)?.name ?? checkout.tier}
 					</p>
 					<button
@@ -716,7 +716,7 @@ onDestroy(() => {
 		     settings und Website können sich beim Preis nicht widersprechen. -->
 		<!--
 		<div class="flex flex-col gap-2">
-			<p class="eyebrow-quiet">Deine Produkte</p>
+			<p class="text text--text--eyebrow-quiet">Deine Produkte</p>
 			<div class="flex flex-col gap-3 sm:flex-row">
 				{#each TIER_PLANS as p (p.id)}
 					{@render planCard(p)}
@@ -728,7 +728,7 @@ onDestroy(() => {
 		<!-- Meine Bestellungen: each order expands into its in-app detail from
 		     real order data; the official Polar invoice PDF is one click away. -->
 		<div class="flex flex-col gap-2">
-			<p class="eyebrow-quiet">Meine Bestellungen</p>
+			<p class="text text--text--eyebrow-quiet">Meine Bestellungen</p>
 			{#if orders.length}
 				<ul
 					class="flex flex-col divide-y divide-foreground/8 surface surface--raised"

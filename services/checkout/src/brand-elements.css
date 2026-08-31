@@ -3,13 +3,6 @@
  * Re-generate with `bun run brand:generate`; edits are overwritten. */
 
 @layer components {
-	h1 {
-		margin: 0;
-		font-size: var(--fs-hero);
-		font-weight: 600;
-		letter-spacing: var(--tracking-tight);
-	}
-
 	button {
 		position: relative;
 		display: inline-flex;
@@ -61,12 +54,5 @@
 		@media (prefers-reduced-motion: reduce) {
 			transition: none;
 		}
-	}
-
-	label {
-		display: grid;
-		gap: 0.4rem;
-		font-weight: 600;
-		text-align: left;
 	}
 }
