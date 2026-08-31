@@ -151,6 +151,68 @@ export function unseenWorkflowRunId(
 	)?.databaseId
 }
 
+const ANSI_COLOR_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g')
+
+function cleanWorkflowLogLine(line: string): string {
+	return line
+		.replace(ANSI_COLOR_PATTERN, '')
+		.replace(/^.*?\t.*?\t\d{4}-\d{2}-\d{2}T[^\s]+\s*/, '')
+		.replace(/^\d{4}-\d{2}-\d{2}T[^\s]+\s*/, '')
+		.replace(/^::error(?:::[^:]*)?::/i, '')
+		.trim()
+}
+
+export function workflowFailureSummary(log: string): string | undefined {
+	const normalized = log.replace(ANSI_COLOR_PATTERN, '')
+	const conflicts = new Map<string, { name: string; type: string; required: Set<string> }>()
+	const conflictPattern =
+		/\(([^,\n()]+),\s*([A-Z][A-Z0-9]*)\) conflicts with \(([^,\n()]+),\s*([A-Z][A-Z0-9]*)\)/g
+	for (const match of normalized.matchAll(conflictPattern)) {
+		const existingName = match[1]?.trim()
+		const existingType = match[2]?.trim()
+		const requiredName = match[3]?.trim()
+		const requiredType = match[4]?.trim()
+		if (!existingName || !existingType || !requiredName || !requiredType) continue
+		const key = `${existingName}\u0000${existingType}`
+		const conflict = conflicts.get(key) ?? {
+			name: existingName,
+			type: existingType,
+			required: new Set<string>()
+		}
+		conflict.required.add(
+			existingName === requiredName ? requiredType : `${requiredName} ${requiredType}`
+		)
+		conflicts.set(key, conflict)
+	}
+	if (conflicts.size > 0) {
+		const descriptions = [...conflicts.values()].map(
+			(conflict) =>
+				`${conflict.name} ${conflict.type} blocks ${[...conflict.required].sort().join(' and ')}`
+		)
+		return `Hetzner DNS conflict: ${descriptions.join('; ')}. Remove the obsolete conflicting record(s) in the aven.ceo zone, then retry.`
+	}
+
+	const useful = normalized
+		.split(/\r?\n/)
+		.map(cleanWorkflowLogLine)
+		.filter(
+			(line) =>
+				/(?:^|\b)(?:error|failed|failure):?\b/i.test(line) &&
+				!/^Error: Process completed with exit code \d+\.?$/i.test(line) &&
+				!/^error: update failed$/i.test(line)
+		)
+		.filter((line, index, lines) => lines.indexOf(line) === index)
+		.slice(-3)
+	const summary = useful.join(' — ')
+	return summary ? summary.slice(0, 900) : undefined
+}
+
+export function retryableGitHubCliFailure(message: string): boolean {
+	return /timed out|timeout|temporar(?:y|ily)|connection (?:reset|refused)|TLS|HTTP (?:429|5\d\d)|502 Bad Gateway|503 Service Unavailable/i.test(
+		message
+	)
+}
+
 export function deploymentTargetSummary(targets: readonly Target[]): string {
 	const descriptions: Record<Target, string> = {
 		identity: 'shared aven.id identity host',

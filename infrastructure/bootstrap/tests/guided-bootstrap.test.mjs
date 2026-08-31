@@ -11,6 +11,7 @@ import {
 	hetznerS3CredentialsUrl,
 	orderedDeploymentTargets,
 	POLAR_API_KEY_SCOPES,
+	retryableGitHubCliFailure,
 	S3_CREDENTIAL_STEPS,
 	s3ErrorCode,
 	savedWizardResumeIndex,
@@ -19,6 +20,7 @@ import {
 	signedS3ReadRequest,
 	unseenWorkflowRunId,
 	valueAt,
+	workflowFailureSummary,
 	workflowRunIdFromDispatchOutput
 } from '../../../scripts/lib/deployment-bootstrap-guided.ts'
 
@@ -60,6 +62,34 @@ test('identifies a dispatched workflow without depending on exact gh prose', () 
 		14
 	)
 	assert.equal(unseenWorkflowRunId([{ databaseId: 12 }], new Set([12])), undefined)
+})
+
+test('turns repeated Hetzner DNS conflicts into one actionable workflow failure', () => {
+	const log = `next Infrastructure\tCreate DNS\t2026-08-31T10:00:00Z error: (next, CNAME) conflicts with (next, A)
+next Infrastructure\tCreate DNS\t2026-08-31T10:00:01Z error: (next, CNAME) conflicts with (next, AAAA)
+next Infrastructure\tCreate DNS\t2026-08-31T10:00:02Z error: (api.next, CNAME) conflicts with (api.next, A)
+next Infrastructure\tCreate DNS\t2026-08-31T10:00:03Z error: (api.next, CNAME) conflicts with (api.next, AAAA)
+next Infrastructure\tCreate DNS\t2026-08-31T10:00:04Z error: (next, CNAME) conflicts with (next, A)`
+	assert.equal(
+		workflowFailureSummary(log),
+		'Hetzner DNS conflict: next CNAME blocks A and AAAA; api.next CNAME blocks A and AAAA. Remove the obsolete conflicting record(s) in the aven.ceo zone, then retry.'
+	)
+})
+
+test('keeps a concise provider error when no specialized failure explanation applies', () => {
+	assert.equal(
+		workflowFailureSummary(
+			'job\tstep\t2026-08-31T10:00:00Z error: update failed\njob\tstep\t2026-08-31T10:00:01Z Error: token lacks zones:write\nError: Process completed with exit code 1.'
+		),
+		'Error: token lacks zones:write'
+	)
+	assert.equal(workflowFailureSummary('ordinary workflow output'), undefined)
+})
+
+test('recognizes transient GitHub CLI failures that are safe to reconcile', () => {
+	assert.equal(retryableGitHubCliFailure('gh timed out after 30s'), true)
+	assert.equal(retryableGitHubCliFailure('gh failed: HTTP 502 Bad Gateway'), true)
+	assert.equal(retryableGitHubCliFailure('gh failed: authentication required'), false)
 })
 
 test('resumes at the latest saved station so an unverified value is checked again', () => {

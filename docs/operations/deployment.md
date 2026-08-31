@@ -53,6 +53,12 @@ reject any unexpected non-SSH ingress or plaintext secret. The platform targets 
 all A and AAAA records for their own three origins. There is no DNS promotion flag and
 no legacy host to cut over.
 
+An existing CNAME at one of those origins cannot coexist with the required A and AAAA
+records. During guided initial provisioning, the setup recovery screen names the exact
+conflict and waits for an explicit retry after the operator removes the obsolete record.
+The retry reconciles saved GitHub and Pulumi state; do not create a new bootstrap
+generation for this repair.
+
 Pulumi installs Docker and Compose, mounts the protected volume, enables UFW,
 fail2ban, bounded logs, and unattended security updates, and records cloud-init
 completion. Do not create or upload SSH keys manually.
