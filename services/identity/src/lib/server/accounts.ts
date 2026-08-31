@@ -22,7 +22,10 @@ export class AccountService {
 		)
 	}
 
-	async provisionVerified(emailInput: string): Promise<IdentityAccount> {
+	async provisionVerified(
+		emailInput: string,
+		browserLanguage: string | undefined
+	): Promise<IdentityAccount> {
 		const email = emailInput.trim().toLowerCase()
 		const existing = (
 			await this.pool.query<IdentityAccount>(
@@ -34,8 +37,8 @@ export class AccountService {
 		const id = randomUUID()
 		const name = email.split('@')[0] || email
 		await this.pool.query(
-			'INSERT INTO "user"(id,name,email,email_verified,role,created_at,updated_at) VALUES($1,$2,$3,true,\'user\',now(),now()) ON CONFLICT(email) DO NOTHING',
-			[id, name, email]
+			'INSERT INTO "user"(id,name,email,email_verified,role,browser_language,created_at,updated_at) VALUES($1,$2,$3,true,\'user\',$4,now(),now()) ON CONFLICT(email) DO NOTHING',
+			[id, name, email, browserLanguage ?? null]
 		)
 		const account = (
 			await this.pool.query<IdentityAccount>(

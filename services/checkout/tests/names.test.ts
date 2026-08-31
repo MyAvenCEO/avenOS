@@ -19,21 +19,34 @@ describe('checkout name grant', () => {
 		const config = testConfig()
 		const payments = new FakePaymentProvider(config)
 		const subjectId = randomUUID()
+		let provisionedInput:
+			| { email: string; source: string; browserLanguage: string | undefined }
+			| undefined
 		const service = new NameService(
 			database.pool,
 			config,
 			testNotifier(config),
 			payments,
-			async (email) => ({
-				account: { id: subjectId, name: email.split('@')[0] ?? email, email, role: 'user' },
-				setupUrl: 'https://aven.id/setup/test'
-			})
+			async (email, source, browserLanguage) => {
+				provisionedInput = { email, source, browserLanguage }
+				return {
+					account: {
+						id: subjectId,
+						name: email.split('@')[0] ?? email,
+						email,
+						role: 'user'
+					},
+					setupUrl: 'https://aven.id/setup/test'
+				}
+			}
 		)
 		const name = `n${randomUUID().replaceAll('-', '').slice(0, 12)}`
 		const email = `${name}@example.test`
-		await service.secure(name, email)
-		const hold = (await database.pool.query('SELECT id FROM name_holds WHERE name=$1', [name]))
-			.rows[0]
+		await service.secure(name, email, { browserLanguage: 'de-DE' })
+		const hold = (
+			await database.pool.query('SELECT id,browser_language FROM name_holds WHERE name=$1', [name])
+		).rows[0]
+		expect(hold.browser_language).toBe('de-DE')
 		const token = `claim-${randomUUID().replaceAll('-', '')}`
 		await database.pool.query('UPDATE name_holds SET claim_token_hash=$1 WHERE id=$2', [
 			sha256Hex(token),
@@ -47,12 +60,17 @@ describe('checkout name grant', () => {
 				checkoutId,
 				holdId: hold.id,
 				name,
-				email,
+				email: 'changed-at-checkout@example.test',
 				amountEur: 25
 			})
 		)
 
 		expect(await service.grantFromEvent(event)).toEqual({ granted: true })
+		expect(provisionedInput).toEqual({
+			email,
+			source: 'name-purchase',
+			browserLanguage: 'de-DE'
+		})
 		expect(await service.grantFromEvent(event)).toEqual({ granted: false })
 		expect(await service.listForUser(subjectId)).toMatchObject([{ name, status: 'owned' }])
 		expect(
@@ -89,7 +107,12 @@ describe('checkout name grant', () => {
 			testNotifier(config),
 			payments,
 			async (email) => ({
-				account: { id: randomUUID(), name: email.split('@')[0] ?? email, email, role: 'user' },
+				account: {
+					id: randomUUID(),
+					name: email.split('@')[0] ?? email,
+					email,
+					role: 'user'
+				},
 				setupUrl: 'https://aven.id/setup/test'
 			})
 		)
@@ -137,5 +160,44 @@ describe('checkout name grant', () => {
 		await expect(service.secure(second, `${second}@example.test`)).resolves.toMatchObject({
 			name: second
 		})
+	})
+
+	it('refuses to provision an account until the email claim link was opened', async () => {
+		const config = testConfig()
+		const payments = new FakePaymentProvider(config)
+		let provisioned = false
+		const service = new NameService(
+			database.pool,
+			config,
+			testNotifier(config),
+			payments,
+			async () => {
+				provisioned = true
+				throw new Error('must not provision')
+			}
+		)
+		const name = `n${randomUUID().replaceAll('-', '').slice(0, 12)}`
+		const email = `${name}@example.test`
+		const holdId = randomUUID()
+		await database.pool.query(
+			`INSERT INTO name_holds (id,name,email,claim_token_hash,created_at,expires_at,browser_language)
+			 VALUES ($1,$2,$3,$4,now(),now() + interval '24 hours',$5)`,
+			[holdId, name, email, sha256Hex(`claim-${randomUUID()}`), 'en-GB']
+		)
+		const event = parsePolarEvent(
+			payments.buildCompletedWebhookBody({
+				checkoutId: `fake_${randomUUID()}`,
+				holdId,
+				name,
+				email,
+				amountEur: 25
+			})
+		)
+
+		await expect(service.grantFromEvent(event)).rejects.toMatchObject({
+			code: 'EMAIL_NOT_CONFIRMED',
+			status: 400
+		})
+		expect(provisioned).toBe(false)
 	})
 })

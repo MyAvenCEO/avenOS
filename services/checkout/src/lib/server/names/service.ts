@@ -21,7 +21,11 @@ import { type Queryable, withTransaction } from '../db.js'
 import { AppError } from '../errors.js'
 import type { Notifier } from '../notifications.js'
 
-export type AccountProvisioner = (email: string, source: string) => Promise<ProvisionedAccount>
+export type AccountProvisioner = (
+	email: string,
+	source: string,
+	browserLanguage?: string
+) => Promise<ProvisionedAccount>
 
 // Injected from the approval-queue module: follow-up work triggered by a
 // completed purchase (e.g. provisioning the customer database), enqueued in
@@ -44,6 +48,7 @@ interface HoldRow {
 	email_confirmed_at: Date | null
 	reserved_until: Date | null
 	expires_at: Date
+	browser_language: string
 }
 
 export class NameService {
@@ -161,7 +166,8 @@ export class NameService {
 					`UPDATE name_holds SET claim_token_hash=$1,
 					   tier = COALESCE(NULLIF($4, ''), tier),
 					   salutation = COALESCE(NULLIF($5, ''), salutation),
-					   idea = COALESCE(NULLIF($6, ''), idea)
+					   idea = COALESCE(NULLIF($6, ''), idea),
+					   browser_language = COALESCE(NULLIF($7, ''), browser_language)
 					 WHERE name=$2 AND lower(email)=lower($3) AND expires_at >= now() RETURNING expires_at`,
 					[
 						sha256Hex(token),
@@ -169,7 +175,8 @@ export class NameService {
 						email,
 						origin.tier ?? '',
 						origin.salutation ?? '',
-						origin.idea ?? ''
+						origin.idea ?? '',
+						origin.browserLanguage ?? ''
 					]
 				)
 			).rows[0] as { expires_at: Date } | undefined
@@ -178,8 +185,8 @@ export class NameService {
 				expiresAt = new Date(Date.now() + this.config.NAME_HOLD_TTL_HOURS * 3_600_000)
 				const holdId = randomUUID()
 				await client.query(
-					`INSERT INTO name_holds (id,name,email,claim_token_hash,created_at,expires_at,tier,salutation,idea)
-					 VALUES ($1,$2,$3,$4,now(),$5,$6,$7,$8)`,
+					`INSERT INTO name_holds (id,name,email,claim_token_hash,created_at,expires_at,tier,salutation,idea,browser_language)
+					 VALUES ($1,$2,$3,$4,now(),$5,$6,$7,$8,$9)`,
 					[
 						holdId,
 						name,
@@ -188,7 +195,8 @@ export class NameService {
 						expiresAt,
 						origin.tier ?? '',
 						origin.salutation ?? '',
-						origin.idea ?? ''
+						origin.idea ?? '',
+						origin.browserLanguage ?? ''
 					]
 				)
 				await writeAudit(client, {
@@ -321,8 +329,8 @@ export class NameService {
 			).rows[0] as { status: string; checkout_id: string | null } | undefined
 			const hold = (
 				await client.query(
-					'SELECT * FROM name_holds WHERE id=$1 OR name=$2 ORDER BY (id=$1) DESC LIMIT 1',
-					[String(event.metadata.holdId ?? ''), name]
+					'SELECT * FROM name_holds WHERE id=$1 OR checkout_id=$2 ORDER BY (id=$1) DESC LIMIT 1',
+					[String(event.metadata.holdId ?? ''), event.checkoutId]
 				)
 			).rows[0] as HoldRow | undefined
 			if (existing) {
@@ -341,17 +349,32 @@ export class NameService {
 				}
 				return { granted: false }
 			}
-			const email = (event.email ?? hold?.email ?? '').toLowerCase()
-			if (!email)
+			if (!hold?.email_confirmed_at || hold.name !== name || hold.checkout_id !== event.checkoutId)
 				throw new AppError(
 					400,
-					'WEBHOOK_PAYLOAD_INVALID',
-					'The payment event carries no customer email.'
+					'EMAIL_NOT_CONFIRMED',
+					'The purchase is not linked to a confirmed email address.'
 				)
+			const email = hold.email.toLowerCase()
+			if (event.email && event.email.toLowerCase() !== email)
+				await writeAudit(client, {
+					eventType: 'name.checkout_email_mismatch',
+					metadata: {
+						name,
+						eventId: event.id,
+						checkoutId: event.checkoutId,
+						confirmedEmail: email,
+						checkoutEmail: event.email.toLowerCase()
+					}
+				})
 
-			// Account creation happens exactly here: the buyer proved control of
-			// the inbox by completing the emailed checkout.
-			const provisioned = await this.provisionAccount(email, 'name-purchase')
+			// Account creation happens exactly here: the checkout can only exist
+			// after the buyer opened its emailed claim link and confirmed the inbox.
+			const provisioned = await this.provisionAccount(
+				email,
+				'name-purchase',
+				hold.browser_language || undefined
+			)
 			const user = provisioned.account
 			await client.query(
 				`INSERT INTO checkout_customers(subject_id,email,created_at,updated_at) VALUES($1,$2,now(),now())
