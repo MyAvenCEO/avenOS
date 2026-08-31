@@ -18,25 +18,25 @@ import { confirmHeld, rejectHeld } from '$lib/actors/hitl.svelte'
 const { held }: { held: HeldMessage } = $props()
 </script>
 
-<div
-	class="w-full overflow-hidden rounded-2xl border-2 border-primary bg-surface-raised shadow-[0_4px_16px_rgba(30,41,59,0.12)]"
->
-	<div class="px-5 pt-4 pb-4">
-		<div class="flex items-baseline gap-2">
+<!--
+  The `gate-card` actor: the human gate, where an autonomous process stops and
+  asks. Its own description is this component. The frame, the head and the
+  footer are the actor's; the four preview LAYOUTS below stay, because they are
+  content shapes and `gate-card-preview` is the box that holds whatever they are.
+-->
+<div class="gate-card">
+	<div class="gate-card-body">
+		<div class="gate-card-head">
 			{#if held.preview}
-				<span
-					class="shrink-0 rounded-full bg-primary/8 px-2 py-0.5 font-mono text-[length:var(--fs-nano)] text-primary uppercase tracking-wide"
-				>
-					{held.preview.kind}
-				</span>
+				<span class="gate-card-kind">{held.preview.kind}</span>
 			{/if}
-			<p class="min-w-0 flex-1 font-medium text-sm">{held.label}</p>
-			<span class="shrink-0 mono-meta"> {held.actor}· {held.method} </span>
+			<p class="gate-card-question">{held.label}</p>
+			<span class="gate-card-asked">{held.actor}· {held.method}</span>
 		</div>
 
 		{#if held.preview}
 			{@const p = held.preview}
-			<p class="pt-2 pb-3 text-foreground/65 text-xs">{p.title}</p>
+			<p class="gate-card-detail">{p.title}</p>
 
 			{#if p.layout === 'document'}
 				<!-- paper: the text as it would go out -->
@@ -163,24 +163,16 @@ const { held }: { held: HeldMessage } = $props()
 				</ul>
 			{/if}
 		{:else}
-			<p class="pt-1 font-mono text-[length:var(--fs-eyebrow)] text-foreground/50">{held.detail}</p>
+			<p class="gate-card-detail">{held.detail}</p>
 		{/if}
 	</div>
 
 	<!-- the footer: the only place the gate opens -->
-	<div class="flex items-center justify-center gap-3 bg-primary px-5 py-3">
-		<button
-			type="button"
-			onclick={() => rejectHeld(held.id)}
-			class="rounded-full border border-primary-foreground/25 px-5 py-1.5 font-medium text-primary-foreground/65 text-sm transition-colors hover:bg-primary-foreground/8"
-		>
+	<div class="gate-card-actions">
+		<button class="btn btn--ghost" type="button" onclick={() => rejectHeld(held.id)}>
 			Reject
 		</button>
-		<button
-			type="button"
-			onclick={() => confirmHeld(held.id)}
-			class="rounded-full bg-primary-foreground px-6 py-1.5 font-medium text-primary text-sm transition-opacity hover:opacity-90"
-		>
+		<button class="btn btn--primary" type="button" onclick={() => confirmHeld(held.id)}>
 			Confirm
 		</button>
 	</div>
