@@ -32,6 +32,32 @@ const verb = $derived(n.type.split(':')[0])
  * another, and the promise that "a node that is running and an intent that is
  * working are one meaning" was kept by hand.
  */
+/*
+ * The variant classes are written out, not interpolated.
+ *
+ * The utility generator scans source for class names it must emit, and
+ * `flow-node--kind-{kind}` gives it the literal prefix and nothing else — so it
+ * emitted `flow-node--kind-` and the build failed the "resolves to nothing"
+ * check, correctly. A lookup keeps the full names visible to the scanner and
+ * keeps the mapping in one place.
+ */
+const KIND_CLASS: Record<string, string> = {
+	trigger: 'flow-node--kind-trigger',
+	llm: 'flow-node--kind-llm',
+	route: 'flow-node--kind-route',
+	view: 'flow-node--kind-view',
+	human: 'flow-node--kind-human',
+	door: 'flow-node--kind-door'
+}
+const RUN_CLASS: Record<string, string> = {
+	running: 'flow-node--run-running',
+	retrying: 'flow-node--run-retrying',
+	waiting: 'flow-node--run-waiting',
+	review: 'flow-node--run-review',
+	done: 'flow-node--run-done',
+	error: 'flow-node--run-error',
+	skipped: 'flow-node--run-skipped'
+}
 const kind = $derived(data.door ? 'door' : (n.kind ?? verb))
 const RUN_LABEL: Record<string, string> = {
 	done: 'erledigt',
@@ -46,7 +72,7 @@ const runState = $derived(data.instance ?? (n.live ? 'running' : undefined))
 </script>
 
 <div
-	class="flow-node flow-node--kind-{kind}{runState ? ` flow-node--run-${runState}` : ''}"
+	class="flow-node {KIND_CLASS[kind] ?? ''} {runState ? (RUN_CLASS[runState] ?? '') : ''}"
 	aria-selected={data.selected ? 'true' : undefined}
 >
 	<Handle type="target" position={Position.Left} />

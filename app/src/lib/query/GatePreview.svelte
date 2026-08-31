@@ -52,7 +52,7 @@ const { held }: { held: HeldMessage } = $props()
 						<div class="mt-3 flex flex-wrap gap-1.5 border-border/25 border-t pt-3">
 							{#each p.attachments as file (file)}
 								<span
-									class="flex items-center gap-1.5 rounded-lg bg-surface-soft px-2 py-1 font-mono text-[length:var(--fs-micro)]"
+									class="flex items-center gap-1.5 rounded-lg bg-surface-sunken px-2 py-1 font-mono text-[length:var(--fs-micro)]"
 								>
 									<svg
 										viewBox="0 0 24 24"

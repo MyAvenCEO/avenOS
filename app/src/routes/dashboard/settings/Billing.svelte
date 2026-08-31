@@ -501,8 +501,8 @@ onDestroy(() => {
 				<span
 					class="rounded-full text-[length:var(--fs-micro)] font-medium uppercase tracking-[var(--tracking-wider)] {s.cancelAtPeriodEnd ||
 					['paused', 'past_due', 'unpaid', 'incomplete'].includes(s.status)
-						? 'bg-warning/15 text-warning-strong'
-						: 'bg-success/15 text-success-strong'}"
+						? 'bg-warning/15 text-warning-ink'
+						: 'bg-success/15 text-success-ink'}"
 				>
 					{s.cancelAtPeriodEnd
 						? 'Endet bald'
@@ -636,7 +636,7 @@ onDestroy(() => {
 						type="button"
 						onclick={() => (confirming = `cancel:${p.id}`)}
 						disabled={busy !== ''}
-						class="rounded-full border border-error bg-transparent text-sm font-medium text-error-strong transition-colors hover:bg-error/8 disabled:opacity-40"
+						class="rounded-full border border-error bg-transparent text-sm font-medium text-error-ink transition-colors hover:bg-error/8 disabled:opacity-40"
 					>
 						Kündigen
 					</button>
@@ -646,7 +646,7 @@ onDestroy(() => {
 				<p class="text-xs opacity-60">{pending.note}</p>
 			{/if}
 			{#if cardFailure?.tier === p.id}
-				<p class="text-xs text-error-strong">{cardFailure.message}</p>
+				<p class="text-xs text-error-ink">{cardFailure.message}</p>
 			{/if}
 		</div>
 	</article>
@@ -670,7 +670,7 @@ onDestroy(() => {
 				class="flex flex-col gap-2 surface surface--raised"
 			>
 				<div class="flex items-baseline justify-between gap-2">
-					<p class="text text--text--eyebrow-quiet">
+					<p class="text text--eyebrow-quiet">
 						Checkout · {TIER_PLANS.find((p) => p.id === checkout?.tier)?.name ?? checkout.tier}
 					</p>
 					<button
@@ -716,7 +716,7 @@ onDestroy(() => {
 		     settings und Website können sich beim Preis nicht widersprechen. -->
 		<!--
 		<div class="flex flex-col gap-2">
-			<p class="text text--text--eyebrow-quiet">Deine Produkte</p>
+			<p class="text text--eyebrow-quiet">Deine Produkte</p>
 			<div class="flex flex-col gap-3 sm:flex-row">
 				{#each TIER_PLANS as p (p.id)}
 					{@render planCard(p)}
@@ -728,7 +728,7 @@ onDestroy(() => {
 		<!-- Meine Bestellungen: each order expands into its in-app detail from
 		     real order data; the official Polar invoice PDF is one click away. -->
 		<div class="flex flex-col gap-2">
-			<p class="text text--text--eyebrow-quiet">Meine Bestellungen</p>
+			<p class="text text--eyebrow-quiet">Meine Bestellungen</p>
 			{#if orders.length}
 				<ul
 					class="flex flex-col divide-y divide-foreground/8 surface surface--raised"
@@ -801,7 +801,7 @@ onDestroy(() => {
 										</p>
 									{/if}
 									{#if invoiceFailure?.orderId === order.id}
-										<p class="text-xs text-error-strong">{invoiceFailure.message}</p>
+										<p class="text-xs text-error-ink">{invoiceFailure.message}</p>
 									{/if}
 								</div>
 							{/if}
@@ -820,7 +820,7 @@ onDestroy(() => {
 
 	<!-- Page-level banner: ONLY for load failures that belong to no card. -->
 	{#if failure}
-		<p class="rounded-xl border border-error/25 bg-error-muted text-xs text-error-strong">
+		<p class="rounded-xl border border-error/25 bg-error-surface text-xs text-error-ink">
 			{failure}
 		</p>
 	{/if}

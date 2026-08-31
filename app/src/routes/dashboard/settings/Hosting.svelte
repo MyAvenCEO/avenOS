@@ -165,7 +165,7 @@ const statusLabel: Record<Site['status'], string> = {
 							</span>
 						</div>
 						{#if site.lastError}
-							<p class="text-xs text-error-strong">{site.lastError}</p>
+							<p class="text-xs text-error-ink">{site.lastError}</p>
 						{/if}
 						{#if site.systemManaged}
 							<p class="text-xs opacity-45">Von der aven.ceo Infrastruktur verwaltet.</p>
@@ -183,7 +183,7 @@ const statusLabel: Record<Site['status'], string> = {
 									type="button"
 									disabled={saving}
 									onclick={() => remove(site)}
-									class="rounded-lg border border-error/20 text-xs text-error-strong hover:bg-error-muted disabled:opacity-40"
+									class="rounded-lg border border-error/20 text-xs text-error-ink hover:bg-error-surface disabled:opacity-40"
 								>
 									Entfernen
 								</button>
@@ -269,7 +269,7 @@ const statusLabel: Record<Site['status'], string> = {
 	{/if}
 
 	{#if failure}
-		<p class="rounded-xl border border-error/25 bg-error-muted text-xs text-error-strong">
+		<p class="rounded-xl border border-error/25 bg-error-surface text-xs text-error-ink">
 			{failure}
 		</p>
 	{/if}

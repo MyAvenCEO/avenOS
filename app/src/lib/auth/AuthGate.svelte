@@ -148,7 +148,7 @@ onMount(() => {
 {#if ready}
 	{@render children()}
 {:else}
-	<main class="fixed inset-0 overflow-hidden bg-surface-cream text-foreground">
+	<main class="fixed inset-0 overflow-hidden bg-surface-sunken text-foreground">
 		<div
 			class="-right-32 -top-40 pointer-events-none absolute size-[34rem] rounded-full bg-progress/15 blur-3xl"
 		></div>
