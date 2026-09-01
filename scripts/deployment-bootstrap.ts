@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 import {
 	assertPrivateFile,
 	type BootstrapInput,
+	bootstrapPulumiUpArgs,
 	collidingBootstrapBucketKinds,
 	deploymentConfigurationTargets,
 	encodeBootstrapProgress,
@@ -304,7 +305,7 @@ for (const target of selectedTargets) {
 			)
 		for (;;) {
 			try {
-				await run('pulumi', ['up', '--yes', '--stack', stack, '--cwd', bootstrapCwd], {
+				await run('pulumi', bootstrapPulumiUpArgs(stack, bootstrapCwd), {
 					env: {
 						...bootstrapEnvironment,
 						OBJECT_STORAGE_ADOPT_EXISTING_BUCKETS: bucketsToAdopt.join(',')
@@ -353,7 +354,7 @@ for (const target of selectedTargets) {
 	} else {
 		updateProgress(`Remote ${target} bootstrap state found; reconciling it in place.`)
 		await run('pulumi', ['login', remoteBackend], { env: bootstrapEnvironment })
-		await run('pulumi', ['up', '--yes', '--stack', stack, '--cwd', bootstrapCwd], {
+		await run('pulumi', bootstrapPulumiUpArgs(stack, bootstrapCwd), {
 			env: bootstrapEnvironment
 		})
 	}

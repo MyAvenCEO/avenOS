@@ -164,6 +164,10 @@ before its local checkpoint recorded ownership, the next apply recognizes only t
 expected bucket, imports it into the protected stack, and continues reconciliation. It
 never adopts an unrelated bucket name.
 
+The bootstrap applies Object Storage resources one at a time. This avoids concurrent bucket
+creation through the MinIO provider; the later targets still run in the same unattended
+bootstrap sequence.
+
 On a terminal smaller than 60 columns by 20 rows it automatically uses the accessible
 plain wizard. Force that mode in any terminal with:
 
