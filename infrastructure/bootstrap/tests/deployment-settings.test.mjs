@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
+	bootstrapPulumiUpArgs,
 	collidingBootstrapBucketKinds,
 	deploymentConfigurationTargets,
 	encodeBootstrapProgress,
@@ -97,6 +98,22 @@ test('finds only target buckets already tracked in an interrupted bootstrap stac
 			'identity'
 		),
 		['backup']
+	)
+})
+
+test('serializes bootstrap storage mutations through Pulumi', () => {
+	assert.deepEqual(
+		bootstrapPulumiUpArgs('organization/aven-bootstrap/identity', '/repo/bootstrap'),
+		[
+			'up',
+			'--yes',
+			'--parallel',
+			'1',
+			'--stack',
+			'organization/aven-bootstrap/identity',
+			'--cwd',
+			'/repo/bootstrap'
+		]
 	)
 })
 

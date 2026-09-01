@@ -156,6 +156,10 @@ export function trackedBootstrapBucketKinds(
 	return (['state', 'backup'] as const).filter((kind) => trackedNames.has(`${target}-${kind}`))
 }
 
+export function bootstrapPulumiUpArgs(stack: string, cwd: string): string[] {
+	return ['up', '--yes', '--parallel', '1', '--stack', stack, '--cwd', cwd]
+}
+
 export function encodeBootstrapProgress(event: BootstrapProgressEvent): string {
 	return `${BOOTSTRAP_PROGRESS_PREFIX}${JSON.stringify(event)}\n`
 }
