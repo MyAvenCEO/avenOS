@@ -159,14 +159,18 @@ its detail, elapsed time, and recent completed operations. The owner-only
 `bootstrap-apply.log` keeps redacted command diagnostics for a failed retry. Local command
 checks time out with a retryable error instead of leaving a stale button on screen.
 
-If an interrupted Pulumi update created one of this generation's deterministic buckets
-before its local checkpoint recorded ownership, the next apply recognizes only that exact
-expected bucket, imports it into the protected stack, and continues reconciliation. It
-never adopts an unrelated bucket name.
+If the Object Storage provider creates one of this generation's deterministic buckets but
+fails before Pulumi records ownership, the same apply exports the failed checkpoint, checks
+the two exact bucket names with a signed request, imports only an existing untracked bucket,
+and continues. A process interruption is handled by the same reconciliation when the saved
+setup resumes. Each exact bucket can enter this recovery path only once per apply, so an
+unrelated or persistent provider failure remains a visible error instead of becoming an
+unbounded retry. The setup never lists, guesses, or adopts an unrelated bucket name.
 
 The bootstrap applies Object Storage resources one at a time. This avoids concurrent bucket
-creation through the MinIO provider; the later targets still run in the same unattended
-bootstrap sequence.
+creation through the MinIO provider. The exact-state reconciliation above is still required
+because the provider can lose the result of an individual successful create. The later
+targets remain in the same unattended bootstrap sequence.
 
 On a terminal smaller than 60 columns by 20 rows it automatically uses the accessible
 plain wizard. Force that mode in any terminal with:
@@ -282,17 +286,24 @@ The teardown is bounded by the saved record. It removes resources in dependency 
    removed, and financial history remains subject to Polar retention;
 3. the generation's GitHub Environments and, only when this generation is still active,
    its repository deployment variables and package-reader secret; and
-4. versioned Pulumi state and Restic backup buckets last, after their bootstrap state has
-   been moved into an owner-only local teardown backend.
+4. versioned Pulumi state and Restic backup buckets last. For each target, the command
+   probes the two exact generation-bound names and reconstructs only the minimal local
+   ownership needed to delete the buckets that actually exist.
 
 Pulumi protections and Hetzner provider deletion locks remain enabled during normal
 operation. The uninstall process disables them only for exact resource URNs already present
 in the saved stacks. It does not expose a destroy input in a GitHub workflow.
 
+Storage teardown does not trust an old bootstrap checkpoint as proof of deletion. It imports
+each exact existing bucket into a dedicated owner-only teardown stack, enables version-aware
+deletion, and verifies that both signed bucket probes return not found before reporting the
+target complete. This also covers a partial install in which either bucket exists without
+ever reaching a Pulumi checkpoint.
+
 If a provider call fails, the screen shows the redacted reason and `uninstall.log`. Correct
 the issue and type `retry`; completed stages are detected and skipped. Type `keep` to stop
 with the local teardown state intact. Do not delete the record while remote resources
-remain, because it contains the credentials and state needed to finish safely.
+remain, because it contains the exact namespace and credentials needed to finish safely.
 Before deleting infrastructure, the command also refuses to continue while a platform
 workflow is active, another GitHub generation is selected, or an SSOT Polar product has an
 active subscription. Cancel or revoke a remaining subscription only after handling its
@@ -404,7 +415,7 @@ The output directory contains:
 | `uninstall.log` | Owner-only redacted activity and command diagnostics from the latest teardown attempt |
 | `uninstall-pulumi-state/` | Owner-only temporary backend used so state and backup buckets can be deleted last and retries remain possible |
 | `uninstall-platform-<target>.json` | Encrypted platform stack checkpoint used to select exact provider-lock changes |
-| `uninstall-bootstrap-<target>.json` | Encrypted storage stack copy retained beside the local teardown backend for retry |
+| `uninstall-bootstrap-<target>.json` | Encrypted minimal teardown checkpoint containing only exact generation-bound storage ownership |
 | `initial-rollout.log` | Owner-only stage status and GitHub run URLs for resumable first deployment |
 
 Import `credentials.csv` from a guided run, or `avenos-recovery.csv` from the

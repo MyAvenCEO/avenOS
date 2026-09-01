@@ -121,6 +121,8 @@ export interface PolarWebhookRecord {
 }
 
 export const BOOTSTRAP_PROGRESS_PREFIX = '::avenos-bootstrap-progress::'
+export const BOOTSTRAP_BUCKET_KINDS = ['state', 'backup'] as const
+export type BootstrapBucketKind = (typeof BOOTSTRAP_BUCKET_KINDS)[number]
 
 export interface BootstrapProgressEvent {
 	status: 'active' | 'complete'
@@ -132,12 +134,27 @@ export interface BootstrapProgressEvent {
 
 export function collidingBootstrapBucketKinds(
 	output: string,
-	expected: Record<'state' | 'backup', string>
-): Array<'state' | 'backup'> {
+	expected: Record<BootstrapBucketKind, string>
+): BootstrapBucketKind[] {
 	const collisions = new Set<string>()
 	for (const match of output.matchAll(/bucket already exists! \(([^)]+)\)/g))
 		collisions.add(match[1] as string)
-	return (['state', 'backup'] as const).filter((kind) => collisions.has(expected[kind]))
+	return BOOTSTRAP_BUCKET_KINDS.filter((kind) => collisions.has(expected[kind]))
+}
+
+export function providerCreatedBootstrapBucketKinds(
+	output: string,
+	target: Target
+): BootstrapBucketKind[] {
+	const logicalNames = new Set<string>()
+	for (const match of output.matchAll(
+		/expected non-nil error with nil state during Create of\s+(urn:pulumi:[^\s]+)/gi
+	)) {
+		const urn = match[1] as string
+		if (urn.includes('::aven-bootstrap::minio:index/s3Bucket:S3Bucket::'))
+			logicalNames.add(urn.split('::').at(-1) as string)
+	}
+	return BOOTSTRAP_BUCKET_KINDS.filter((kind) => logicalNames.has(`${target}-${kind}`))
 }
 
 export function trackedBootstrapBucketKinds(
@@ -145,7 +162,7 @@ export function trackedBootstrapBucketKinds(
 		deployment?: { resources?: Array<{ type?: unknown; urn?: unknown }> }
 	},
 	target: Target
-): Array<'state' | 'backup'> {
+): BootstrapBucketKind[] {
 	const trackedNames = new Set(
 		(stack.deployment?.resources ?? []).flatMap((resource) => {
 			if (resource.type !== 'minio:index/s3Bucket:S3Bucket' || typeof resource.urn !== 'string')
@@ -153,7 +170,63 @@ export function trackedBootstrapBucketKinds(
 			return [resource.urn.split('::').at(-1)]
 		})
 	)
-	return (['state', 'backup'] as const).filter((kind) => trackedNames.has(`${target}-${kind}`))
+	return BOOTSTRAP_BUCKET_KINDS.filter((kind) => trackedNames.has(`${target}-${kind}`))
+}
+
+export interface BootstrapBucketSnapshot {
+	existing: readonly BootstrapBucketKind[]
+	tracked: readonly BootstrapBucketKind[]
+}
+
+export async function reconcileBootstrapBucketUpdate(options: {
+	target: Target
+	expected: Record<BootstrapBucketKind, string>
+	inspect: () => Promise<BootstrapBucketSnapshot>
+	apply: (adopt: readonly BootstrapBucketKind[]) => Promise<void>
+	onAdopt?: (kinds: readonly BootstrapBucketKind[]) => void
+}): Promise<void> {
+	const attempted = new Set<BootstrapBucketKind>()
+	let providerReported: BootstrapBucketKind[] = []
+	let precedingError: unknown
+	let applyAttempts = 0
+
+	for (;;) {
+		const snapshot = await options.inspect()
+		const tracked = new Set(snapshot.tracked)
+		const candidates = BOOTSTRAP_BUCKET_KINDS.filter(
+			(kind) =>
+				!tracked.has(kind) && (snapshot.existing.includes(kind) || providerReported.includes(kind))
+		)
+		if (candidates.some((kind) => attempted.has(kind))) throw precedingError
+		for (const kind of candidates) attempted.add(kind)
+		if (candidates.length > 0) options.onAdopt?.(candidates)
+		if (applyAttempts >= BOOTSTRAP_BUCKET_KINDS.length + 1) throw precedingError
+		applyAttempts += 1
+
+		try {
+			await options.apply(candidates)
+			return
+		} catch (error) {
+			precedingError = error
+			const output = (error as { commandOutput?: unknown }).commandOutput
+			providerReported =
+				typeof output === 'string'
+					? [
+							...new Set([
+								...collidingBootstrapBucketKinds(output, options.expected),
+								...providerCreatedBootstrapBucketKinds(output, options.target)
+							])
+						]
+					: []
+			if (providerReported.length === 0) {
+				const afterFailure = await options.inspect()
+				const afterTracked = new Set(afterFailure.tracked)
+				const recoverable = afterFailure.existing.filter((kind) => !afterTracked.has(kind))
+				if (recoverable.length === 0 || recoverable.every((kind) => attempted.has(kind)))
+					throw error
+			}
+		}
+	}
 }
 
 export function bootstrapPulumiUpArgs(stack: string, cwd: string): string[] {

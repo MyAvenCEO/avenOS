@@ -1,5 +1,7 @@
 import { join } from 'node:path'
 import {
+	BOOTSTRAP_BUCKET_KINDS,
+	type BootstrapBucketKind,
 	type BootstrapInput,
 	deploymentConfigurationTargets,
 	type GeneratedSecrets,
@@ -72,8 +74,32 @@ export function platformStackName(target: Target): string {
 	return `${PULUMI_ORGANIZATION}/aven-platform/${target}`
 }
 
-export function bootstrapStackName(target: Target): string {
-	return `${PULUMI_ORGANIZATION}/aven-bootstrap/${target}`
+export function bootstrapTeardownStackName(target: Target): string {
+	return `${PULUMI_ORGANIZATION}/aven-bootstrap/uninstall-${target}`
+}
+
+export function bootstrapBucketUrns(
+	stack: string,
+	target: Target,
+	kinds: readonly BootstrapBucketKind[]
+): string[] {
+	const stackName = stack.split('/').at(-1)
+	return kinds.map(
+		(kind) =>
+			`urn:pulumi:${stackName}::aven-bootstrap::minio:index/s3Bucket:S3Bucket::${target}-${kind}`
+	)
+}
+
+export function bootstrapStorageTeardownPlan(
+	existing: readonly BootstrapBucketKind[],
+	tracked: readonly BootstrapBucketKind[]
+): { adopt: BootstrapBucketKind[]; remove: BootstrapBucketKind[] } {
+	const existingSet = new Set(existing)
+	const trackedSet = new Set(tracked)
+	return {
+		adopt: BOOTSTRAP_BUCKET_KINDS.filter((kind) => existingSet.has(kind) && !trackedSet.has(kind)),
+		remove: BOOTSTRAP_BUCKET_KINDS.filter((kind) => existingSet.has(kind))
+	}
 }
 
 interface PulumiDeploymentExport {
@@ -93,10 +119,6 @@ export function platformProtectionTargetUrns(stack: PulumiDeploymentExport): str
 	return resourceUrnsByType(stack, PLATFORM_PROTECTION_RESOURCE_TYPES)
 }
 
-export function bootstrapBucketTargetUrns(stack: PulumiDeploymentExport): string[] {
-	return resourceUrnsByType(stack, new Set([BOOTSTRAP_BUCKET_RESOURCE_TYPE]))
-}
-
 export function pulumiStackIsListed(names: readonly string[], expected: string): boolean {
 	const shortName = expected.split('/').at(-1)
 	return names.some((name) => name === expected || name === shortName)
@@ -113,19 +135,17 @@ interface PulumiBucketDeploymentExport extends PulumiDeploymentExport {
 	}
 }
 
-export function bootstrapStateContainsOnlyExpectedBuckets(
+export function bootstrapStateContainsNoUnexpectedBuckets(
 	stack: PulumiBucketDeploymentExport,
 	expectedNames: readonly string[]
 ): boolean {
 	const allowed = new Set(expectedNames)
-	const buckets = (stack.deployment?.resources ?? []).filter(
-		(resource) => resource.type === BOOTSTRAP_BUCKET_RESOURCE_TYPE
-	)
-	if (buckets.length === 0) return false
-	return buckets.every((bucket) => {
-		const physicalName = bucket.outputs?.bucket ?? bucket.inputs?.bucket ?? bucket.id
-		return typeof physicalName === 'string' && allowed.has(physicalName)
-	})
+	return (stack.deployment?.resources ?? [])
+		.filter((resource) => resource.type === BOOTSTRAP_BUCKET_RESOURCE_TYPE)
+		.every((bucket) => {
+			const physicalName = bucket.outputs?.bucket ?? bucket.inputs?.bucket ?? bucket.id
+			return typeof physicalName === 'string' && allowed.has(physicalName)
+		})
 }
 
 export function localResetPaths(outputDirectory: string, targets: readonly Target[]): string[] {
