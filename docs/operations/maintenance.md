@@ -136,8 +136,10 @@ For a complete test installation, use the generation-bound
 [guided uninstall](initial-provisioning.md#uninstall-a-saved-generation). It requires the
 owner-only bootstrap record and an exact typed generation confirmation, removes compute and
 managed DNS before integrations, and deletes state and backup buckets last. A failed stage
-is retryable from its local teardown backend. Normal GitHub deployment and infrastructure
-workflows contain no destroy or protection-removal input.
+is retryable from its local teardown backend. Storage cleanup is complete only after signed
+checks prove that both exact generation-bound bucket names are absent; this remains true for
+partially installed or partially tracked generations. Normal GitHub deployment and
+infrastructure workflows contain no destroy or protection-removal input.
 
 Do not use the complete uninstall for one customer, one database, one service, or routine
 capacity work. Those scopes require their own final backup, retention decision, route and

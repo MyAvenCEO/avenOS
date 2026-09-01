@@ -15,6 +15,8 @@ import {
 	githubEnvironmentVariableChanges,
 	isRetryableGitHubError,
 	parseBootstrapProgress,
+	providerCreatedBootstrapBucketKinds,
+	reconcileBootstrapBucketUpdate,
 	recoveryCsv,
 	trackedBootstrapBucketKinds,
 	validateBootstrapInput,
@@ -76,6 +78,142 @@ test('adopts only deterministic buckets reported by an interrupted bootstrap upd
 		),
 		[]
 	)
+})
+
+test('recognizes the provider nil-state defect only for an exact bootstrap bucket URN', () => {
+	const output = `error: expected non-nil error with nil state during Create of
+urn:pulumi:production::aven-bootstrap::minio:index/s3Bucket:S3Bucket::production-state`
+	assert.deepEqual(providerCreatedBootstrapBucketKinds(output, 'production'), ['state'])
+	assert.deepEqual(providerCreatedBootstrapBucketKinds(output, 'next'), [])
+	assert.deepEqual(
+		providerCreatedBootstrapBucketKinds(
+			'expected non-nil error with nil state during Create of urn:pulumi:production::other-project::minio:index/s3Bucket:S3Bucket::production-state',
+			'production'
+		),
+		[]
+	)
+})
+
+test('converges after either bucket is created without entering the failed checkpoint', async () => {
+	for (const orphan of ['state', 'backup']) {
+		const physical = new Set()
+		const tracked = new Set()
+		const calls = []
+		let first = true
+		await reconcileBootstrapBucketUpdate({
+			target: 'production',
+			expected: {
+				state: 'avenos-0123456789-123-production-state',
+				backup: 'avenos-0123456789-123-production-backup'
+			},
+			inspect: async () => ({ existing: [...physical], tracked: [...tracked] }),
+			apply: async (adopt) => {
+				calls.push([...adopt])
+				for (const kind of adopt) tracked.add(kind)
+				if (first) {
+					first = false
+					physical.add(orphan)
+					const error = new Error('provider lost create state')
+					error.commandOutput = `expected non-nil error with nil state during Create of urn:pulumi:production::aven-bootstrap::minio:index/s3Bucket:S3Bucket::production-${orphan}`
+					throw error
+				}
+				for (const kind of ['state', 'backup']) {
+					physical.add(kind)
+					tracked.add(kind)
+				}
+			}
+		})
+		assert.deepEqual(calls, [[], [orphan]])
+		assert.deepEqual([...physical].sort(), ['backup', 'state'])
+		assert.deepEqual([...tracked].sort(), ['backup', 'state'])
+	}
+})
+
+test('adopts every exact untracked bucket left by an interrupted process', async () => {
+	const calls = []
+	const tracked = new Set(['backup'])
+	await reconcileBootstrapBucketUpdate({
+		target: 'identity',
+		expected: { state: 'expected-state', backup: 'expected-backup' },
+		inspect: async () => ({ existing: ['state', 'backup'], tracked: [...tracked] }),
+		apply: async (adopt) => {
+			calls.push([...adopt])
+			for (const kind of adopt) tracked.add(kind)
+		}
+	})
+	assert.deepEqual(calls, [['state']])
+})
+
+test('derives exact adoption from every physical and checkpoint subset', async () => {
+	const subsets = [[], ['state'], ['backup'], ['state', 'backup']]
+	for (const existing of subsets) {
+		for (const tracked of subsets) {
+			const calls = []
+			await reconcileBootstrapBucketUpdate({
+				target: 'identity',
+				expected: { state: 'expected-state', backup: 'expected-backup' },
+				inspect: async () => ({ existing, tracked }),
+				apply: async (adopt) => calls.push([...adopt])
+			})
+			assert.deepEqual(calls, [existing.filter((kind) => !tracked.includes(kind))])
+		}
+	}
+})
+
+test('does not loop when adoption itself cannot establish ownership', async () => {
+	let calls = 0
+	const original = new Error('import failed')
+	await assert.rejects(
+		reconcileBootstrapBucketUpdate({
+			target: 'next',
+			expected: { state: 'expected-state', backup: 'expected-backup' },
+			inspect: async () => ({ existing: ['state'], tracked: [] }),
+			apply: async () => {
+				calls += 1
+				throw original
+			}
+		}),
+		(error) => error === original
+	)
+	assert.equal(calls, 1)
+})
+
+test('bounds retries even when a broken provider reports an already tracked create', async () => {
+	let calls = 0
+	const original = new Error('impossible repeated create')
+	original.commandOutput =
+		'expected non-nil error with nil state during Create of urn:pulumi:next::aven-bootstrap::minio:index/s3Bucket:S3Bucket::next-state'
+	await assert.rejects(
+		reconcileBootstrapBucketUpdate({
+			target: 'next',
+			expected: { state: 'expected-state', backup: 'expected-backup' },
+			inspect: async () => ({ existing: ['state'], tracked: ['state'] }),
+			apply: async () => {
+				calls += 1
+				throw original
+			}
+		}),
+		(error) => error === original
+	)
+	assert.equal(calls, 3)
+})
+
+test('does not reinterpret an unrelated provider failure as owned storage', async () => {
+	let calls = 0
+	const original = new Error('permission denied')
+	await assert.rejects(
+		reconcileBootstrapBucketUpdate({
+			target: 'next',
+			expected: { state: 'expected-state', backup: 'expected-backup' },
+			inspect: async () => ({ existing: [], tracked: [] }),
+			apply: async () => {
+				calls += 1
+				throw original
+			}
+		}),
+		(error) => error === original
+	)
+	assert.equal(calls, 1)
 })
 
 test('finds only target buckets already tracked in an interrupted bootstrap stack', () => {

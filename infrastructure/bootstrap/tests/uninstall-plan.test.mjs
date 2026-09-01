@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
 	activePrefixAllowsRepositoryCleanup,
-	bootstrapBucketTargetUrns,
-	bootstrapStateContainsOnlyExpectedBuckets,
+	bootstrapBucketUrns,
+	bootstrapStateContainsNoUnexpectedBuckets,
+	bootstrapStorageTeardownPlan,
+	bootstrapTeardownStackName,
 	githubEnvironmentNames,
 	guidedUninstallArguments,
 	localResetPaths,
@@ -75,7 +77,7 @@ test('names only the saved generation GitHub Environments', () => {
 	)
 })
 
-test('targets only provider resources whose deletion locks need changing', () => {
+test('targets only platform provider resources whose deletion locks need changing', () => {
 	const stack = {
 		deployment: {
 			resources: [
@@ -89,7 +91,6 @@ test('targets only provider resources whose deletion locks need changing', () =>
 		}
 	}
 	assert.deepEqual(platformProtectionTargetUrns(stack), ['server', 'volume', 'dns'])
-	assert.deepEqual(bootstrapBucketTargetUrns(stack), ['bucket'])
 })
 
 test('matches Pulumi DIY and fully qualified stack names', () => {
@@ -104,29 +105,70 @@ test('matches Pulumi DIY and fully qualified stack names', () => {
 	assert.equal(pulumiStackIsListed(['next'], 'organization/aven-bootstrap/production'), false)
 })
 
-test('accepts recovery state only for the exact generation buckets', () => {
-	const deployment = (bucket) => ({
-		deployment: {
-			resources: [
-				{
-					type: 'minio:index/s3Bucket:S3Bucket',
-					id: bucket,
-					outputs: { bucket }
-				}
-			]
+test('uses a dedicated local teardown stack with exact target bucket URNs', () => {
+	const stack = bootstrapTeardownStackName('production')
+	assert.equal(stack, 'organization/aven-bootstrap/uninstall-production')
+	assert.deepEqual(bootstrapBucketUrns(stack, 'production', ['state', 'backup']), [
+		'urn:pulumi:uninstall-production::aven-bootstrap::minio:index/s3Bucket:S3Bucket::production-state',
+		'urn:pulumi:uninstall-production::aven-bootstrap::minio:index/s3Bucket:S3Bucket::production-backup'
+	])
+})
+
+test('plans teardown from exact provider reality for every partial lifecycle state', () => {
+	const subsets = [[], ['state'], ['backup'], ['state', 'backup']]
+	for (const existing of subsets) {
+		for (const tracked of subsets) {
+			const plan = bootstrapStorageTeardownPlan(existing, tracked)
+			assert.deepEqual(plan.remove, existing)
+			assert.deepEqual(
+				plan.adopt,
+				existing.filter((kind) => !tracked.includes(kind))
+			)
 		}
-	})
+	}
+})
+
+test('allows an empty teardown checkpoint but rejects every foreign physical bucket', () => {
 	const expected = [
 		'avenos-0123456789-123-production-state',
 		'avenos-0123456789-123-production-backup'
 	]
-	assert.equal(bootstrapStateContainsOnlyExpectedBuckets(deployment(expected[0]), expected), true)
 	assert.equal(
-		bootstrapStateContainsOnlyExpectedBuckets(deployment('another-generation-backup'), expected),
-		false
+		bootstrapStateContainsNoUnexpectedBuckets({ deployment: { resources: [] } }, expected),
+		true
 	)
 	assert.equal(
-		bootstrapStateContainsOnlyExpectedBuckets({ deployment: { resources: [] } }, expected),
+		bootstrapStateContainsNoUnexpectedBuckets(
+			{
+				deployment: {
+					resources: [
+						{
+							type: 'minio:index/s3Bucket:S3Bucket',
+							id: expected[0],
+							outputs: { bucket: expected[0] }
+						}
+					]
+				}
+			},
+			expected
+		),
+		true
+	)
+	assert.equal(
+		bootstrapStateContainsNoUnexpectedBuckets(
+			{
+				deployment: {
+					resources: [
+						{
+							type: 'minio:index/s3Bucket:S3Bucket',
+							id: 'foreign',
+							outputs: { bucket: 'foreign' }
+						}
+					]
+				}
+			},
+			expected
+		),
 		false
 	)
 })

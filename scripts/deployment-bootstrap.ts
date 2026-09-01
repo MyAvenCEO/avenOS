@@ -3,9 +3,9 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import {
 	assertPrivateFile,
+	type BootstrapBucketKind,
 	type BootstrapInput,
 	bootstrapPulumiUpArgs,
-	collidingBootstrapBucketKinds,
 	deploymentConfigurationTargets,
 	encodeBootstrapProgress,
 	ensurePrivateDirectory,
@@ -16,6 +16,7 @@ import {
 	loadOrCreateGeneratedSecrets,
 	objectStorageBucketName,
 	PULUMI_ORGANIZATION,
+	reconcileBootstrapBucketUpdate,
 	recoveryCsv,
 	saveGeneratedSecrets,
 	selectedDeploymentTargets,
@@ -219,9 +220,9 @@ ensurePrivateDirectory(localStateDirectory)
 const localBackend = `file://${localStateDirectory}`
 
 async function existingBootstrapBucketKinds(
-	expected: Record<'state' | 'backup', string>,
+	expected: Record<BootstrapBucketKind, string>,
 	storage: BootstrapInput['objectStorage']['targets'][Target]
-): Promise<Array<'state' | 'backup'>> {
+): Promise<BootstrapBucketKind[]> {
 	const checks = await Promise.all(
 		(['state', 'backup'] as const).map(async (kind) => {
 			const request = signedS3ReadRequest({
@@ -241,7 +242,7 @@ async function existingBootstrapBucketKinds(
 			)
 		})
 	)
-	return checks.filter((kind): kind is 'state' | 'backup' => kind !== undefined)
+	return checks.filter((kind): kind is BootstrapBucketKind => kind !== undefined)
 }
 
 for (const target of selectedTargets) {
@@ -288,23 +289,22 @@ for (const target of selectedTargets) {
 			state: objectStorageBucketName(input, generated, target, 'state'),
 			backup: objectStorageBucketName(input, generated, target, 'backup')
 		}
-		const currentStack = JSON.parse(
-			await run('pulumi', ['stack', 'export', '--stack', stack, '--cwd', bootstrapCwd], {
-				env: bootstrapEnvironment,
-				quiet: true
-			})
-		) as unknown
-		const trackedBuckets = trackedBootstrapBucketKinds(currentStack as never, target)
-		let bucketsToAdopt = (await existingBootstrapBucketKinds(expectedBuckets, storage)).filter(
-			(kind) => !trackedBuckets.includes(kind)
-		)
-		const attemptedAdoptions = [...bucketsToAdopt]
-		if (bucketsToAdopt.length > 0)
-			updateProgress(
-				`Adopting the existing, untracked ${target} ${bucketsToAdopt.join(' and ')} bucket from this interrupted generation.`
-			)
-		for (;;) {
-			try {
+		await reconcileBootstrapBucketUpdate({
+			target,
+			expected: expectedBuckets,
+			inspect: async () => {
+				const currentStack = JSON.parse(
+					await run('pulumi', ['stack', 'export', '--stack', stack, '--cwd', bootstrapCwd], {
+						env: bootstrapEnvironment,
+						quiet: true
+					})
+				) as unknown
+				return {
+					existing: await existingBootstrapBucketKinds(expectedBuckets, storage),
+					tracked: trackedBootstrapBucketKinds(currentStack as never, target)
+				}
+			},
+			apply: async (bucketsToAdopt) => {
 				await run('pulumi', bootstrapPulumiUpArgs(stack, bootstrapCwd), {
 					env: {
 						...bootstrapEnvironment,
@@ -312,20 +312,12 @@ for (const target of selectedTargets) {
 					},
 					capture: true
 				})
-				break
-			} catch (error) {
-				const output = (error as { commandOutput?: unknown }).commandOutput
-				const collisions =
-					typeof output === 'string' ? collidingBootstrapBucketKinds(output, expectedBuckets) : []
-				const additions = collisions.filter((kind) => !attemptedAdoptions.includes(kind))
-				if (additions.length === 0) throw error
-				attemptedAdoptions.push(...additions)
-				bucketsToAdopt = [...new Set([...bucketsToAdopt, ...additions])]
+			},
+			onAdopt: (bucketsToAdopt) =>
 				updateProgress(
-					`Adopting the existing ${target} ${additions.join(' and ')} bucket from this interrupted generation, then reconciling it.`
+					`Adopting the exact existing, untracked ${target} ${bucketsToAdopt.join(' and ')} bucket, then continuing the same apply.`
 				)
-			}
-		}
+		})
 		const exportPath = resolve(outputDirectory, `bootstrap-state-${target}.json`)
 		await run(
 			'pulumi',
