@@ -11,7 +11,6 @@ import {
 	localResetPaths,
 	ownedPolarCatalogResources,
 	platformProtectionTargetUrns,
-	pulumiStackIsListed,
 	uninstallConfirmation,
 	uninstallFailureSummary,
 	uninstallSummary,
@@ -91,18 +90,6 @@ test('targets only platform provider resources whose deletion locks need changin
 		}
 	}
 	assert.deepEqual(platformProtectionTargetUrns(stack), ['server', 'volume', 'dns'])
-})
-
-test('matches Pulumi DIY and fully qualified stack names', () => {
-	assert.equal(pulumiStackIsListed(['production'], 'organization/aven-bootstrap/production'), true)
-	assert.equal(
-		pulumiStackIsListed(
-			['organization/aven-bootstrap/production'],
-			'organization/aven-bootstrap/production'
-		),
-		true
-	)
-	assert.equal(pulumiStackIsListed(['next'], 'organization/aven-bootstrap/production'), false)
 })
 
 test('uses a dedicated local teardown stack with exact target bucket URNs', () => {

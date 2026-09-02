@@ -16,8 +16,10 @@ import {
 	loadOrCreateGeneratedSecrets,
 	objectStorageBucketName,
 	PULUMI_ORGANIZATION,
+	pulumiStackIsListed,
 	reconcileBootstrapBucketUpdate,
 	recoveryCsv,
+	removeSaltOnlyPulumiStackConfig,
 	saveGeneratedSecrets,
 	selectedDeploymentTargets,
 	TARGETS,
@@ -245,6 +247,23 @@ async function existingBootstrapBucketKinds(
 	return checks.filter((kind): kind is BootstrapBucketKind => kind !== undefined)
 }
 
+async function openPulumiStack(
+	stack: string,
+	cwd: string,
+	env: Record<string, string>
+): Promise<void> {
+	removeSaltOnlyPulumiStackConfig(cwd, stack)
+	const listed = JSON.parse(
+		await run('pulumi', ['stack', 'ls', '--json', '--cwd', cwd], { env, quiet: true })
+	) as Array<{ name?: unknown }>
+	const stackNames = listed.flatMap(({ name }) => (typeof name === 'string' ? [name] : []))
+	if (pulumiStackIsListed(stackNames, stack)) {
+		await run('pulumi', ['stack', 'select', stack, '--cwd', cwd], { env, quiet: true })
+		return
+	}
+	await run('pulumi', ['stack', 'init', stack, '--cwd', cwd], { env, quiet: true })
+}
+
 for (const target of selectedTargets) {
 	beginProgress(`Prepare ${target} storage`, `Opening the ${target} bootstrap stack.`)
 	const storage = input.objectStorage.targets[target]
@@ -272,16 +291,7 @@ for (const target of selectedTargets) {
 	if (!existsSync(migratedMarker)) {
 		updateProgress(`Using owner-only local state while the ${target} buckets are created.`)
 		await run('pulumi', ['login', localBackend], { env: bootstrapEnvironment })
-		try {
-			await run('pulumi', ['stack', 'init', stack, '--cwd', bootstrapCwd], {
-				env: bootstrapEnvironment,
-				quiet: true
-			})
-		} catch {
-			await run('pulumi', ['stack', 'select', stack, '--cwd', bootstrapCwd], {
-				env: bootstrapEnvironment
-			})
-		}
+		await openPulumiStack(stack, bootstrapCwd, bootstrapEnvironment)
 		updateProgress(
 			`Creating or reconciling the ${target} state and backup buckets and access policies.`
 		)
@@ -327,16 +337,7 @@ for (const target of selectedTargets) {
 		chmodSync(exportPath, 0o600)
 		updateProgress(`Moving the ${target} bootstrap state into its private state bucket.`)
 		await run('pulumi', ['login', remoteBackend], { env: bootstrapEnvironment })
-		try {
-			await run('pulumi', ['stack', 'init', stack, '--cwd', bootstrapCwd], {
-				env: bootstrapEnvironment,
-				quiet: true
-			})
-		} catch {
-			await run('pulumi', ['stack', 'select', stack, '--cwd', bootstrapCwd], {
-				env: bootstrapEnvironment
-			})
-		}
+		await openPulumiStack(stack, bootstrapCwd, bootstrapEnvironment)
 		await run(
 			'pulumi',
 			['stack', 'import', '--stack', stack, '--cwd', bootstrapCwd, '--file', exportPath],

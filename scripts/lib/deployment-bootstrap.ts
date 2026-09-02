@@ -6,8 +6,10 @@ import {
 	readFileSync,
 	renameSync,
 	statSync,
+	unlinkSync,
 	writeFileSync
 } from 'node:fs'
+import { join } from 'node:path'
 
 export const TARGETS = ['identity', 'next', 'production'] as const
 export type Target = (typeof TARGETS)[number]
@@ -123,6 +125,36 @@ export interface PolarWebhookRecord {
 export const BOOTSTRAP_PROGRESS_PREFIX = '::avenos-bootstrap-progress::'
 export const BOOTSTRAP_BUCKET_KINDS = ['state', 'backup'] as const
 export type BootstrapBucketKind = (typeof BOOTSTRAP_BUCKET_KINDS)[number]
+
+export function pulumiStackIsListed(names: readonly string[], expected: string): boolean {
+	const shortName = expected.split('/').at(-1)
+	return names.some((name) => name === expected || name === shortName)
+}
+
+export function pulumiStackConfigFileName(stack: string): string {
+	const shortName = stack.split('/').at(-1)
+	if (!shortName || !/^[A-Za-z0-9_.-]+$/.test(shortName))
+		throw new Error(`Invalid Pulumi stack name ${stack}.`)
+	return `Pulumi.${shortName}.yaml`
+}
+
+export function removeSaltOnlyPulumiStackConfig(cwd: string, stack: string): boolean {
+	const path = join(cwd, pulumiStackConfigFileName(stack))
+	if (!existsSync(path)) return false
+	const meaningfulLines = readFileSync(path, 'utf8')
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0 && !line.startsWith('#'))
+	if (
+		meaningfulLines.length > 1 ||
+		(meaningfulLines.length === 1 && !/^encryptionsalt:\s+\S+$/.test(meaningfulLines[0] as string))
+	)
+		throw new Error(
+			`${path} contains Pulumi settings; refusing to remove it automatically before changing backends.`
+		)
+	unlinkSync(path)
+	return true
+}
 
 export interface BootstrapProgressEvent {
 	status: 'active' | 'complete'
