@@ -149,11 +149,13 @@ export async function adoptPlatformDns({
 	const target = requiredEnvironment('DEPLOYMENT_ENVIRONMENT', environment)
 	const stack = requiredEnvironment('PULUMI_STACK', environment)
 	const backend = requiredEnvironment('PULUMI_BACKEND_URL', environment)
-	const token = requiredEnvironment('HETZNER_DNS_TOKEN', environment)
+	const mode = environment.DNS_RECONCILIATION_MODE?.trim() || 'full'
 	if (!['next', 'production'].includes(target))
 		throw new Error(`DNS adoption cannot run for target ${target}`)
 	if (stack !== `organization/aven-platform/${target}`)
 		throw new Error(`Pulumi stack ${stack} does not match deployment target ${target}`)
+	if (!['state-only', 'full'].includes(mode))
+		throw new Error(`DNS_RECONCILIATION_MODE must be state-only or full`)
 	const providerUrn = dnsProviderUrn(stack)
 
 	run(['login', backend, '--non-interactive'], { cwd, environment })
@@ -187,6 +189,15 @@ export async function adoptPlatformDns({
 		if (legacyCheckoutResources({ environment: target, stackResources: resources }).length)
 			throw new Error(`Pulumi retained legacy ${target} checkout DNS ownership`)
 	}
+	if (mode === 'state-only') {
+		write(
+			legacyResources.length
+				? `DNS state migration complete: ${legacyResources.length} legacy RRSet(s) released without provider changes.`
+				: 'DNS state migration complete: no legacy ownership remains.'
+		)
+		return
+	}
+	const token = requiredEnvironment('HETZNER_DNS_TOKEN', environment)
 	if (!resources.some(({ urn }) => urn === providerUrn)) {
 		write(`Preparing the ${target} DNS provider in Pulumi state.`)
 		run(
