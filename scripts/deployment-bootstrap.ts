@@ -292,6 +292,7 @@ for (const target of selectedTargets) {
 			state: objectStorageBucketName(input, generated, target, 'state'),
 			backup: objectStorageBucketName(input, generated, target, 'backup')
 		}
+		const confirmedBuckets: BootstrapBucketKind[] = []
 		for (const kind of ['state', 'backup'] as const) {
 			const bucket = expectedBuckets[kind]
 			updateProgress(`Ensuring the exact private ${target} ${kind} bucket exists.`)
@@ -315,6 +316,7 @@ for (const target of selectedTargets) {
 						`Hetzner accepted the ${target} ${kind} bucket; waiting ${Math.ceil(delayMs / 1_000)}s for signed visibility (${retry}/${maxRetries}).`
 					)
 			})
+			confirmedBuckets.push(kind)
 		}
 		updateProgress(
 			`Importing both exact ${target} buckets into Pulumi and applying access policies.`
@@ -322,6 +324,7 @@ for (const target of selectedTargets) {
 		await reconcileBootstrapBucketUpdate({
 			target,
 			expected: expectedBuckets,
+			confirmedExisting: confirmedBuckets,
 			inspect: async () => {
 				const currentStack = JSON.parse(
 					await run('pulumi', ['stack', 'export', '--stack', stack, '--cwd', bootstrapCwd], {
