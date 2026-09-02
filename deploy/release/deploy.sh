@@ -172,7 +172,7 @@ if [[ "$DEPLOYMENT_TARGET" == identity ]]; then
     dotenv IDENTITY_IMAGE "$IDENTITY_IMAGE"
     dotenv OPERATIONS_IMAGE "$OPERATIONS_IMAGE"
     dotenv IDENTITY_DOMAIN aven.id
-    dotenv TRUSTED_WEB_ORIGINS 'https://next.aven.ceo,https://my.next.aven.ceo,https://aven.ceo,https://my.aven.ceo'
+    dotenv TRUSTED_WEB_ORIGINS 'https://next.aven.ceo,https://portal.next.aven.ceo,https://aven.ceo,https://portal.aven.ceo'
     dotenv IDENTITY_POSTGRES_PASSWORD "$identityPostgresPassword"
     dotenv IDENTITY_AUTH_PASSWORD "$identityAuthPassword"
     dotenv IDENTITY_ACCOUNTS_PASSWORD "$identityAccountsPassword"

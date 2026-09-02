@@ -146,7 +146,7 @@ services:
     command: [bun, build/scripts/seed-billing.js]
     environment:
       NODE_ENV: production
-      PUBLIC_BASE_URL: https://${CHECKOUT_DOMAIN:-my.aven.ceo}
+      PUBLIC_BASE_URL: https://${CHECKOUT_DOMAIN:-portal.aven.ceo}
       DATABASE_URL: postgres://aven_checkout_http:${CHECKOUT_RUNTIME_PASSWORD}@database/aven_checkout
       WEBHOOK_DATABASE_URL: postgres://aven_checkout_webhooks:${CHECKOUT_WEBHOOK_PASSWORD}@database/aven_checkout
       FACADE_BEARER_TOKEN: ${CHECKOUT_FACADE_TOKEN:?required}
@@ -205,8 +205,8 @@ services:
         condition: service_completed_successfully
     environment: &checkout-environment
       NODE_ENV: production
-      ORIGIN: https://${CHECKOUT_DOMAIN:-my.aven.ceo}
-      PUBLIC_BASE_URL: https://${CHECKOUT_DOMAIN:-my.aven.ceo}
+      ORIGIN: https://${CHECKOUT_DOMAIN:-portal.aven.ceo}
+      PUBLIC_BASE_URL: https://${CHECKOUT_DOMAIN:-portal.aven.ceo}
       DATABASE_URL: postgres://aven_checkout_http:${CHECKOUT_RUNTIME_PASSWORD}@database/aven_checkout
       WEBHOOK_DATABASE_URL: postgres://aven_checkout_webhooks:${CHECKOUT_WEBHOOK_PASSWORD}@database/aven_checkout
       IDENTITY_ISSUER: https://aven.id
@@ -237,7 +237,7 @@ services:
       retries: 12
     environment:
       NODE_ENV: production
-      PUBLIC_BASE_URL: https://${CHECKOUT_DOMAIN:-my.aven.ceo}
+      PUBLIC_BASE_URL: https://${CHECKOUT_DOMAIN:-portal.aven.ceo}
       DATABASE_URL: postgres://aven_checkout_email:${CHECKOUT_EMAIL_PASSWORD}@database/aven_checkout
       EMAIL_WORKER_DATABASE_URL: postgres://aven_checkout_email:${CHECKOUT_EMAIL_PASSWORD}@database/aven_checkout
       EMAIL_QUEUE_ENCRYPTION_KEY: ${CHECKOUT_EMAIL_ENCRYPTION_KEY:?required}
@@ -263,7 +263,7 @@ services:
       retries: 12
     environment:
       NODE_ENV: production
-      PUBLIC_BASE_URL: https://${CHECKOUT_DOMAIN:-my.aven.ceo}
+      PUBLIC_BASE_URL: https://${CHECKOUT_DOMAIN:-portal.aven.ceo}
       DATABASE_URL: postgres://aven_checkout_platform_events:${CHECKOUT_PLATFORM_EVENTS_PASSWORD}@database/aven_checkout
       PLATFORM_EVENT_WORKER_DATABASE_URL: postgres://aven_checkout_platform_events:${CHECKOUT_PLATFORM_EVENTS_PASSWORD}@database/aven_checkout
       PLATFORM_API_INTERNAL_URL: http://api:3000
@@ -430,7 +430,7 @@ services:
         condition: service_healthy
     environment:
       API_DOMAIN: ${API_DOMAIN:-api.aven.ceo}
-      CHECKOUT_DOMAIN: ${CHECKOUT_DOMAIN:-my.aven.ceo}
+      CHECKOUT_DOMAIN: ${CHECKOUT_DOMAIN:-portal.aven.ceo}
       ACME_EMAIL: ${ACME_EMAIL:?required}
     ports:
       - 80:80

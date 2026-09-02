@@ -873,13 +873,13 @@ export function recoveryCsv(input: BootstrapInput, generated: GeneratedSecrets):
 				'next',
 				'avenOS next installation',
 				'https://next.aven.ceo/',
-				'Public site. API: https://api.next.aven.ceo. Checkout: https://my.next.aven.ceo.'
+				'Public site. API: https://api.next.aven.ceo. Checkout: https://portal.next.aven.ceo.'
 			],
 			[
 				'production',
 				'avenOS production installation',
 				'https://aven.ceo/',
-				'Public site. API: https://api.aven.ceo. Checkout: https://my.aven.ceo.'
+				'Public site. API: https://api.aven.ceo. Checkout: https://portal.aven.ceo.'
 			]
 		] as const) {
 			if (!rollout.targets.includes(group as Target)) continue

@@ -76,10 +76,10 @@ for (const required of [
 	'organization/aven-platform/next',
 	'organization/aven-platform/production',
 	'api.next.aven.ceo',
-	'my.next.aven.ceo',
+	'portal.next.aven.ceo',
 	'next.aven.ceo',
 	'api.aven.ceo',
-	'my.aven.ceo',
+	'portal.aven.ceo',
 	'aven.ceo',
 	'aven.id'
 ]) {

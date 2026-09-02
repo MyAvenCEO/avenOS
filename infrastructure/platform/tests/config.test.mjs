@@ -39,7 +39,7 @@ test('derives exact next and production origins', () => {
 	assert.deepEqual(next.platformHostnames, {
 		apex: 'next.aven.ceo',
 		api: 'api.next.aven.ceo',
-		checkout: 'my.next.aven.ceo'
+		checkout: 'portal.next.aven.ceo'
 	})
 	assert.equal(next.platformDeploymentId, 'aven-platform-next-v1')
 	const production = loadPlatformConfig({
@@ -50,7 +50,7 @@ test('derives exact next and production origins', () => {
 	assert.deepEqual(production.platformHostnames, {
 		apex: 'aven.ceo',
 		api: 'api.aven.ceo',
-		checkout: 'my.aven.ceo'
+		checkout: 'portal.aven.ceo'
 	})
 	assert.equal(production.platformDeploymentId, 'aven-platform-production-v1')
 })

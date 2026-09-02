@@ -4,7 +4,7 @@ import { ensurePolarWebhook, POLAR_WEBHOOK_EVENTS } from '../../../scripts/lib/p
 
 const endpoint = (overrides = {}) => ({
 	id: 'endpoint-1',
-	url: 'https://my.next.aven.ceo/api/webhooks/polar',
+	url: 'https://portal.next.aven.ceo/api/webhooks/polar',
 	name: 'old name',
 	format: 'raw',
 	events: ['order.created'],

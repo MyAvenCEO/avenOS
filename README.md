@@ -60,11 +60,11 @@ security boundaries. avenOS therefore gives each public origin one job:
 | Address | What happens there | What does not belong there |
 | --- | --- | --- |
 | `aven.id` | Account setup, passkeys, sessions, device approval, authentication, and identity authorization | Billing, customer data, document processing, or public-site hosting |
-| `my.aven.ceo` | Checkout, billing, purchase email, subscriptions, and Polar webhooks | Passkeys, sessions, or customer domain records |
+| `portal.aven.ceo` | Checkout, billing, purchase email, subscriptions, and Polar webhooks | Passkeys, sessions, or customer domain records |
 | `api.aven.ceo` | Authentication of product requests, customer authorization, and fixed routing to server-side services | Browser pages, passkey registration, or arbitrary database access |
 | `aven.ceo` | The public static website built from its Git source | Authentication, checkout, mutable APIs, or secrets |
 
-The `next` platform uses the parallel origins `my.next.aven.ceo`,
+The `next` platform uses the parallel origins `portal.next.aven.ceo`,
 `api.next.aven.ceo`, and `next.aven.ceo`. Both platform environments trust the same
 `aven.id` issuer, but they have independent commerce data, customer databases,
 service credentials, tenant-signing keys, backups, and deployment approvals.
@@ -211,7 +211,7 @@ application and infrastructure updates run through CI.
 | --- | --- |
 | `app/` | Svelte workspace and the Rust/Tauri client |
 | `services/identity/` | The narrow `aven.id` passkey and identity service |
-| `services/checkout/` | The `my.aven.ceo` checkout and billing application |
+| `services/checkout/` | The `portal.aven.ceo` checkout and billing application |
 | `services/aven-api/` | The authenticated `api.aven.ceo` facade |
 | `services/platform-provisioner/` | Customer database creation and reconciliation |
 | `services/artifact-store/` | Customer-scoped artifact metadata and content |

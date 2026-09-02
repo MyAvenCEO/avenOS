@@ -58,7 +58,7 @@ Hetzner platform host
 └── Docker Compose
     ├── Caddy
     ├── api.aven.ceo
-    ├── my.aven.ceo
+    ├── portal.aven.ceo
     ├── one platform-provisioner worker
     ├── Intent Service
     ├── Actor Runner
@@ -169,7 +169,7 @@ with the environment over time.
 | Owner | Durable state | Responsibilities | Must not own |
 | --- | --- | --- | --- |
 | `aven.id` | Identity database | Signup, passkeys, sessions, identity JWTs, JWKS | Customer entitlements, environment selection, physical routing |
-| `my.aven.ceo` | Commerce database | Checkout, payment events, subscriptions, purchase workflow | Customer domain records or authentication credentials |
+| `portal.aven.ceo` | Commerce database | Checkout, payment events, subscriptions, purchase workflow | Customer domain records or authentication credentials |
 | `api.aven.ceo` control plane | Platform database | Environment directory, product policy, desired component state, reconciliation jobs, routing generations, audit | Customer domain records or arbitrary SQL proxying |
 | Platform provisioner | Operational state only | One Compose worker for physical database/role lifecycle and component installation | End-user APIs, domain policy, or arbitrary remote execution |
 | Domain service | Customer-owned schema | Its API, repository, validation, and runtime behavior | Other components' schemas or customer selection policy |

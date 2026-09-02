@@ -26,6 +26,25 @@ export function desiredPlatformRecords(environment) {
 	}).map(({ resourceName, zone, name, type }) => ({ resourceName, zone, name, type }))
 }
 
+export function legacyCheckoutResources({ environment, stackResources }) {
+	const legacyName = environment === 'next' ? 'my.next' : environment === 'production' ? 'my' : null
+	if (!legacyName) throw new Error(`legacy DNS ownership cannot be checked for ${environment}`)
+	const expectedTypes = new Map([
+		['platform-checkout-a', 'A'],
+		['platform-checkout-aaaa', 'AAAA']
+	])
+	return stackResources.filter((resource) => {
+		const expectedType = expectedTypes.get(logicalName(resource.urn))
+		return (
+			resource.type === RESOURCE_TYPE &&
+			expectedType !== undefined &&
+			resource.inputs?.zone === 'aven.ceo' &&
+			resource.inputs?.name === legacyName &&
+			resource.inputs?.type === expectedType
+		)
+	})
+}
+
 export function dnsReconciliationPlan({ environment, rrsets, stackResources }) {
 	const desired = desiredPlatformRecords(environment)
 	const managedNames = new Set(desired.map(({ name }) => name))
@@ -150,6 +169,24 @@ export async function adoptPlatformDns({
 		})
 
 	let resources = read(cwd, stack, environment)
+	const legacyResources = legacyCheckoutResources({
+		environment: target,
+		stackResources: resources
+	})
+	for (const resource of legacyResources) {
+		write(
+			`Releasing legacy ${resource.inputs.name} ${resource.inputs.type} from Pulumi ownership; the DNS record is kept unchanged.`
+		)
+		run(
+			['state', 'remove', resource.urn, '--stack', stack, '--force', '--yes', '--non-interactive'],
+			{ cwd, environment }
+		)
+	}
+	if (legacyResources.length) {
+		resources = read(cwd, stack, environment)
+		if (legacyCheckoutResources({ environment: target, stackResources: resources }).length)
+			throw new Error(`Pulumi retained legacy ${target} checkout DNS ownership`)
+	}
 	if (!resources.some(({ urn }) => urn === providerUrn)) {
 		write(`Preparing the ${target} DNS provider in Pulumi state.`)
 		run(
@@ -200,8 +237,8 @@ export async function adoptPlatformDns({
 		await remove('aven.ceo', name, type, token)
 	}
 	write(
-		plan.imports.length || plan.obsoleteCnames.length
-			? `DNS adoption complete: ${plan.imports.length} existing RRSet(s) adopted; ${plan.obsoleteCnames.length} obsolete CNAME RRSet(s) removed.`
+		legacyResources.length || plan.imports.length || plan.obsoleteCnames.length
+			? `DNS adoption complete: ${legacyResources.length} legacy RRSet(s) released without deletion; ${plan.imports.length} existing RRSet(s) adopted; ${plan.obsoleteCnames.length} obsolete CNAME RRSet(s) removed.`
 			: 'DNS adoption complete: no unmanaged records block this stack.'
 	)
 }

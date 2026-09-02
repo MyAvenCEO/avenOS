@@ -32,12 +32,12 @@ AvenOS has four production public boundaries:
 
 - `aven.id` owns signup, passkeys, sessions, device authorization, service tokens,
   authentication, and authorization.
-- `my.aven.ceo` owns checkout, billing, verified raw Polar webhooks, and purchase
+- `portal.aven.ceo` owns checkout, billing, verified raw Polar webhooks, and purchase
   delivery.
 - `api.aven.ceo` is the authenticated facade over server-side product services.
 - `aven.ceo` is the managed static public site rebuilt from Git.
 
-The staging platform uses `my.next.aven.ceo`, `api.next.aven.ceo`, and
+The staging platform uses `portal.next.aven.ceo`, `api.next.aven.ceo`, and
 `next.aven.ceo`. It shares only the `aven.id` issuer with production.
 
 The deployed foundation is deliberately small:

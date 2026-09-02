@@ -60,7 +60,7 @@ export const facadeConfigSchema = z.object({
 	API_PUBLIC_BASE_URL: z.url().default('https://api.aven.ceo'),
 	CUSTOMER_ENTITLEMENT_TOKEN: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/),
 	TENANT_GRANT_PRIVATE_KEY: z.string().min(80),
-	CORS_ORIGINS: z.string().default('https://my.aven.ceo,https://aven.ceo'),
+	CORS_ORIGINS: z.string().default('https://portal.aven.ceo,https://aven.ceo'),
 	SITE_HOST_DIRECTORY_BEARER_TOKEN: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/),
 	SITE_HOST_PUBLIC_IPV4: z.union([z.ipv4(), z.literal('')]).default(''),
 	SITE_HOST_PUBLIC_IPV6: z.string().default(''),

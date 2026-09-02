@@ -25,26 +25,26 @@ test('platform creates all next records on the next subdomain', () => {
 		hostnames: {
 			apex: 'next.aven.ceo',
 			api: 'api.next.aven.ceo',
-			checkout: 'my.next.aven.ceo'
+			checkout: 'portal.next.aven.ceo'
 		},
 		ipv4: '192.0.2.20',
 		ipv6: '2001:db8::20'
 	})
 	assert.deepEqual(
 		records.map(({ name }) => name),
-		['api.next', 'api.next', 'my.next', 'my.next', 'next', 'next']
+		['api.next', 'api.next', 'portal.next', 'portal.next', 'next', 'next']
 	)
 })
 
 test('platform creates all production records on the apex', () => {
 	const records = platformRecordSpecs({
 		zone: 'aven.ceo',
-		hostnames: { apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'my.aven.ceo' },
+		hostnames: { apex: 'aven.ceo', api: 'api.aven.ceo', checkout: 'portal.aven.ceo' },
 		ipv4: '192.0.2.20',
 		ipv6: '2001:db8::20'
 	})
 	assert.deepEqual(
 		records.map(({ name }) => name),
-		['api', 'api', 'my', 'my', '@', '@']
+		['api', 'api', 'portal', 'portal', '@', '@']
 	)
 })

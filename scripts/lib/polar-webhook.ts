@@ -100,8 +100,8 @@ function isOrganizationTokenOrganizationIdError(error: unknown): boolean {
 export async function ensurePolarWebhook(input: EnsurePolarWebhookInput): Promise<WebhookEndpoint> {
 	const url =
 		input.target === 'next'
-			? 'https://my.next.aven.ceo/api/webhooks/polar'
-			: 'https://my.aven.ceo/api/webhooks/polar'
+			? 'https://portal.next.aven.ceo/api/webhooks/polar'
+			: 'https://portal.aven.ceo/api/webhooks/polar'
 	const name = `avenOS ${input.target}`
 	const api =
 		input.api ??

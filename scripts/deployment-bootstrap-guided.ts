@@ -685,10 +685,10 @@ async function verifyPublicInstallation(): Promise<void> {
 	const endpoints = [
 		'https://aven.id/api/health/ready',
 		'https://api.next.aven.ceo/health/live',
-		'https://my.next.aven.ceo/api/health/ready',
+		'https://portal.next.aven.ceo/api/health/ready',
 		'https://next.aven.ceo/',
 		'https://api.aven.ceo/health/live',
-		'https://my.aven.ceo/api/health/ready',
+		'https://portal.aven.ceo/api/health/ready',
 		'https://aven.ceo/'
 	]
 	await withProgress('Verify the public installation', async (update) => {

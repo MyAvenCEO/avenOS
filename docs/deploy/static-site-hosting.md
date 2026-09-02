@@ -16,7 +16,7 @@ aven.ceo Rust app -> api.aven.ceo -> hosting control store
 
 The installed `aven.ceo` Rust application owns the management UI. It obtains
 a short-lived, passkey-qualified token from `aven.id` and calls the fixed
-`api.aven.ceo` origin from Rust. Neither `aven.id` nor `my.aven.ceo`
+`api.aven.ceo` origin from Rust. Neither `aven.id` nor `portal.aven.ceo`
 contains site-management pages or routes.
 
 The facade owns the small `site_bindings` control table. The static host has no
